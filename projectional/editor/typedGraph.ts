@@ -145,7 +145,7 @@ const pickedBy = new Map<string, Set<Id>>();
 // `key` names the window onto this graph, so redrawing keeps where you were.
 // How far down and across a page's first rows reach, in world units:
 // about a pane at the zoom a graph opens at.
-const PAGE_ROWS = 900, PAGE_COLS = 1000;
+const PAGE_ROWS = 900, PAGE_COLS = 1000, PAGE_BAND = 120;
 export function typedGraph(code: Code, pres: Presentation, info: Info | null, defId: Id, hooks: GraphHooks, key = defId): GraphView {
   const scene = build(code, pres, info, defId, hooks);
   // An action opens on its steps, the column they run down: the
@@ -162,8 +162,13 @@ export function typedGraph(code: Code, pres: Presentation, info: Info | null, de
     const els = [...scene.items.keys()].map(at).filter((e): e is Element => !!e && !e.classList.contains("rg"));
     const a = canvas.world.getScreenCTM()?.a ?? 1, bs = els.map((e) => e.getBoundingClientRect());
     const top = Math.min(...bs.map((b) => b.top));
-    const left = Math.min(...bs.filter((b) => b.top < top + PAGE_ROWS * a).map((b) => b.left));
-    return els.filter((_, i) => bs[i].left < left + PAGE_COLS * a && bs[i].top < top + PAGE_ROWS * a);
+    // The top band (main's lets, in Tumble) is kept whole: when it ends
+    // right of a pane's width from the leftmost, the window slides right
+    // to its end (QA 2026-11-01 L2, I104).
+    const rows = bs.filter((b) => b.top < top + PAGE_ROWS * a);
+    const bandEnd = Math.max(...bs.filter((b) => b.top < top + PAGE_BAND * a).map((b) => b.right));
+    const left = Math.max(Math.min(...rows.map((b) => b.left)), bandEnd - PAGE_COLS * a);
+    return els.filter((_, i) => bs[i].left >= left && bs[i].left < left + PAGE_COLS * a && bs[i].top < top + PAGE_ROWS * a);
   };
   const canvas = infiniteCanvas(key, "tgraph", () => (hooks.page ? firstRows() : steps.map(at).filter((e): e is Element => !!e)));
   const picked = pickedBy.get(key) ?? new Set<Id>();
