@@ -182,7 +182,7 @@ export const TARGETS: Record<Id, Target> = {
   [ARRAY_OPS.first]: { js: "partial", scalar: ARRAYS },
   [ARRAY_OPS.rest]: { js: "impl", scalar: ARRAYS },
   [ARRAY_OPS.pushFront]: { js: "impl", scalar: ARRAYS },
-  [ARRAY_OPS.firstIfAny]: { js: "impl", scalar: { no: "first of array if any is array of List's match, which WebAssembly and C don't take yet (C30d3c)" } },
+  [ARRAY_OPS.firstIfAny]: { js: "impl", scalar: ARRAYS },
   // A hash table changed in place (C63b): std.ts's own, on a JS Map. Not on
   // WebAssembly or C: the chooser doesn't pick it for them.
   ...Object.fromEntries(Object.entries(TABLE_OPS).map(([k, id]): [Id, Target] => [id, { js: k === "at" ? "partial" : "impl", scalar: no("a hash table is JavaScript's Map: WebAssembly and C keep the tree (C63b)") }])),
