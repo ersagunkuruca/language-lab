@@ -26,7 +26,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| E171 | A multiple selection gets a frame with a corner at each end: dragging one spreads the picked nodes apart or draws them together about the opposite corner, each keeping its size; with Shift held, the nodes that can be resized grow and shrink with it (down to their own size). One layout.json change | #PR |
+| E171 | A multiple selection gets a frame with a corner at each end: dragging one spreads the picked nodes apart or draws them together about the opposite corner, each keeping its size; with Shift held, the nodes that can be resized grow and shrink with it (down to their own size). One layout.json change | #918 |
 | E170 | Touch: every drag (a node, a wire, panning, the map, the panes' gutters, a box pick) follows its own finger only. A second finger hands over to the pinch, where before its moves were read as the first's and the dragged node jumped; a touch the browser takes over ends the drag. The resize corner is easier to hit with a finger | #917 |
 | E172 | Opening a definition in a program with a 16-part algebra (Spacetime's "combined speed") froze the editor 15–20 s: describing a value worked out the algebra's whole product, outer, inner and regressive tables first (1024 runs each). Each entry is now worked out the first time it is asked for: 14.8 s → 0.19 s (QA 2026-11-01) | #915 |
 | E169 | Resizing a node: the corner is a square drawn over the node's words and ports, so it is easy to grab; a node shrinks back as far as its own size; its wires follow while dragging, not only on release | #914 |
