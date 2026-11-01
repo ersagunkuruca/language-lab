@@ -26,6 +26,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
+| I113 | The palette (and the MCP server) reads a field as the blocks print it: `board.columns`, `z.re`, the field's projection called on what's before the dot | #880 |
 | L125-editor | The graph says Choice only on the `/`, `sqrt`, `log`, `^`, `mod` calls that can give no answer (not where L125b rules it out), and its badge says why | #876 |
 | E133b | The palette's plan check per offer starts from the program's own slots and scans only the filling (physics fall's worst hole 20 → 12.7 s, all 23 holes 67 s) | #875 |
 | E164 | Make it a definition: any function inside a definition, a picked set or a group becomes a definition of its own in the side menu, called where it was; what it uses from around it becomes its first inputs (lambda lifting, Johnsson 1985) | #873 |
