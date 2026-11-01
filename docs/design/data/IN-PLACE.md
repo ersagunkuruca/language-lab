@@ -119,6 +119,17 @@ building. If it does, routes compiled comes within about 3× of the ideal.
 *Test:* the same program that keeps an old version must not get the table.
 A program that only builds and looks up gets it, and prints the same.
 
+**Since C71 (2026-11-01):** the one-holder test is gone from the choice.
+Every version of a table stays a value (std.ts `Table`): a put writes into
+the one JS Map and the version it was given becomes the change that undoes
+it, so reading an old version first undoes the changes between (Baker's
+rerooting, as Conchon and Filliâtre's persistent arrays). A map with one
+holder still pays 1 per change; one read again after a change is still
+right and pays for the changes it walks back over. So a program where some
+maps are shared (notebook's index holds maps in a map) gets the table for
+all of them, and notebook's score maps are changed in place: 8× to 6× the
+ideal at 3000 notes. one-holder.ts stays for C56's other values.
+
 ### 3. Records and cell contents (C56's other half)
 
 STABLE-REFERENCES.md §1 makes a cell's write an edit at a path (L98). When

@@ -803,20 +803,62 @@ export const ARRAY_OPS = {
 };
 
 // A hash table changed in place (C63b, IN-PLACE.md step 2): Map's
-// representation where the compiler has seen that every map has one holder
-// (one-holder.ts), so a `put` nobody can see the old version of may write
-// into it. Keys are Ints and Texts, the ones a JS Map holds by value (an
-// Int has one spelling, int.ts). Its entries are in compare's order, so its
-// meaning is the Map it stands for.
+// representation, its keys Ints and Texts, the ones a JS Map holds by value
+// (an Int has one spelling, int.ts). Its entries are in compare's order, so
+// its meaning is the Map it stands for.
+//
+// Every version stays a value (C71): a put writes into the one JS Map and
+// gives a new newest version, and the version it was given becomes the
+// change that undoes it, pointing at the newest. Reading an older version
+// first undoes the changes between, turning the chain round so that one is
+// the newest (`reroot`). A map with one holder only ever reads its newest
+// version, so each put is constant; a map read again after a change is
+// still right, and pays for the changes it walks back over. Prior art:
+// Baker's shallow binding for functional arrays ("Shallow binding makes
+// functional arrays fast", 1991), as Conchon and Filliâtre's persistent
+// arrays ("A persistent union-find data structure", 2007).
 // `empty map` is a constant, one value every use shares: the empty table
-// it stands for is `shared`, and a put or remove on it makes a new one.
+// it stands for is `shared`, and a put or remove on it makes a new one, so
+// maps started from it don't share one chain.
 // No `tag`: it isn't a case of a data type, and nothing takes it apart.
 export class Table {
-  readonly m: Map<unknown, unknown>;
+  // The newest version holds the JS Map; an older one, the change from the
+  // version after it: `key` was absent (had false) or `old`.
+  cur: Map<unknown, unknown> | null;
+  next: Table | null = null;
+  key: unknown = undefined;
+  had = false;
+  old: unknown = undefined;
   readonly shared: boolean;
-  constructor(m: Map<unknown, unknown>, shared = false) { this.m = m; this.shared = shared; }
+  constructor(m: Map<unknown, unknown>, shared = false) { this.cur = m; this.shared = shared; }
+  get m(): Map<unknown, unknown> { reroot(this); return this.cur!; }
 }
-const own = (t: Table) => (t.shared ? new Table(new Map(t.m)) : t);
+// Make t the newest version: undo, from the newest back, each change
+// between it and t, each undone one becoming the change that redoes it.
+function reroot(t: Table) {
+  if (t.cur) return;
+  const path: Table[] = [];
+  let x = t;
+  while (!x.cur) { path.push(x); x = x.next!; }
+  for (let i = path.length - 1; i >= 0; i--) {
+    const y = path[i], m = x.cur!;
+    const had = m.has(y.key), old = m.get(y.key);
+    if (y.had) m.set(y.key, y.old); else m.delete(y.key);
+    y.cur = m; y.next = null;
+    x.cur = null; x.next = y; x.key = y.key; x.had = had; x.old = old;
+    x = y;
+  }
+}
+// A put (set) or remove: a new newest version, t the change back to it.
+function change(t: Table, key: unknown, set: boolean, v?: unknown): Table {
+  if (t.shared) { const m = new Map(t.m); if (set) m.set(key, v); else m.delete(key); return new Table(m); }
+  const m = t.m, had = m.has(key), old = m.get(key);
+  if (!set && !had) return t;
+  if (set) m.set(key, v); else m.delete(key);
+  const n = new Table(m);
+  t.cur = null; t.next = n; t.key = key; t.had = had; t.old = old;
+  return n;
+}
 const tableOf_ = (k: Type, v: Type): Type => ({ t: "con", id: TABLE, args: [k, v] });
 const ofEntry = (make: (k: Type, v: Type) => [Type[], Type], effects: Id[] = []): Sig => (s) => { const k = s.fresh(), v = s.fresh(); const [ps, r] = make(k, v); return fn(ps, r, s.freshRow(effects)); };
 // compare's order on Ints and Texts (run.ts compareValues).
@@ -825,9 +867,8 @@ const tableAt = builtin("table.at", "table value at", ofEntry((k, v) => [[tableO
 STD_MANY[tableAt] = (t: Table, key: unknown) => (t.m.has(key) ? [t.m.get(key)] : []);
 export const TABLE_OPS = {
   empty: builtin("table.empty", "empty table", ofEntry((k, v) => [[], tableOf_(k, v)]), () => new Table(new Map(), true)),
-  // Changes t itself and gives it back: only where nobody else holds t.
-  put: builtin("table.put", "table put", ofEntry((k, v) => [[tableOf_(k, v), k, v], tableOf_(k, v)]), (t: Table, key: unknown, v: unknown) => { const o = own(t); o.m.set(key, v); return o; }),
-  remove: builtin("table.remove", "table remove", ofEntry((k, v) => [[tableOf_(k, v), k], tableOf_(k, v)]), (t: Table, key: unknown) => { const o = own(t); o.m.delete(key); return o; }),
+  put: builtin("table.put", "table put", ofEntry((k, v) => [[tableOf_(k, v), k, v], tableOf_(k, v)]), (t: Table, key: unknown, v: unknown) => change(t, key, true, v)),
+  remove: builtin("table.remove", "table remove", ofEntry((k, v) => [[tableOf_(k, v), k], tableOf_(k, v)]), (t: Table, key: unknown) => change(t, key, false)),
   has: builtin("table.has", "table has", ofEntry((k, v) => [[tableOf_(k, v), k], bool]), (t: Table, key: unknown) => ({ tag: t.m.has(key) ? TRUE : FALSE, fields: [] })),
   size: builtin("table.size", "table size", ofEntry((k, v) => [[tableOf_(k, v)], int]), (t: Table) => t.m.size),
   at: tableAt,
@@ -844,8 +885,8 @@ const setOf_ = (a: Type): Type => ({ t: "con", id: HASH_SET, args: [a] });
 const ofSetItem = (make: (a: Type) => [Type[], Type]): Sig => (s) => { const a = s.fresh(); const [ps, r] = make(a); return fn(ps, r, s.freshRow([])); };
 export const HASH_SET_OPS = {
   empty: builtin("hashset.empty", "empty hash set", ofSetItem((a) => [[], setOf_(a)]), () => new Table(new Map(), true)),
-  add: builtin("hashset.add", "hash set add", ofSetItem((a) => [[setOf_(a), a], setOf_(a)]), (t: Table, x: unknown) => { const o = own(t); o.m.set(x, true); return o; }),
-  remove: builtin("hashset.remove", "hash set remove", ofSetItem((a) => [[setOf_(a), a], setOf_(a)]), (t: Table, x: unknown) => { const o = own(t); o.m.delete(x); return o; }),
+  add: builtin("hashset.add", "hash set add", ofSetItem((a) => [[setOf_(a), a], setOf_(a)]), (t: Table, x: unknown) => change(t, x, true, true)),
+  remove: builtin("hashset.remove", "hash set remove", ofSetItem((a) => [[setOf_(a), a], setOf_(a)]), (t: Table, x: unknown) => change(t, x, false)),
   has: builtin("hashset.has", "hash set has", ofSetItem((a) => [[setOf_(a), a], bool]), (t: Table, x: unknown) => ({ tag: t.m.has(x) ? TRUE : FALSE, fields: [] })),
   size: builtin("hashset.size", "hash set size", ofSetItem((a) => [[setOf_(a)], int]), (t: Table) => t.m.size),
   items: builtin("hashset.items", "hash set items", ofSetItem((a) => [[setOf_(a)], list(a)]), (t: Table) => listOf([...t.m.keys()].sort(keyOrder))),

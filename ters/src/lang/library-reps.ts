@@ -21,7 +21,6 @@ import { LIBRARY, TREES } from "./library.ts";
 import { choose, represent, uses, type Representation } from "./represent.ts";
 import { ARRAY_OPS, COMPARE, CONS, LIST, MAP, MAP_V, NIL, PAIR_V, S, SHOW_ANY, SIGS } from "./std.ts";
 import { INT, STRING, Subst, type Type } from "./types.ts";
-import { oneHolder } from "./one-holder.ts";
 
 // What equal, show and compare see of a value: these, given a stored one,
 // are its row's (byType), which go through its meaning.
@@ -268,15 +267,14 @@ function asMeanings(k: Lang, code: Code, info: Info, names: Names, chosen: Repre
 
 // A map's keys or a set's items that hold the type (a set of sets): the
 // tree orders them by compare, which would see their shapes.
-// Every value of the row's type has one holder (one-holder.ts), and its
-// keys, wherever the program's own definitions name one, are Int or Text,
-// which the table keeps as they are (a Float64's equal is near). A helper
-// generic in the key is given maps made elsewhere, where their keys are
-// named.
-const CHANGES = ["put", "update at", "remove key", "merge maps", "add item", "remove item", "set union"];
+// The table's keys, wherever the program's own definitions name one, are
+// Int or Text, which the table keeps as they are (a Float64's equal is
+// near). A helper generic in the key is given maps made elsewhere, where
+// their keys are named. Whether each map has one holder no longer decides
+// it (C71): every version of a table stays a value (std.ts Table), so a
+// map read again after a change is still right; one holder is what makes
+// each change constant.
 function inPlace(code: Code, info: Info, main: Id, defs: Id[], row: Representation): boolean {
-  const changes = new Map(CHANGES.map((n) => [prelude(n), 0]));
-  if (!oneHolder(code, info, main, new Set([row.of]), new Set(Object.keys(row.impl)), changes).ok) return false;
   for (const id of defs.flatMap((d) => subtree(code, d))) {
     const t0 = info.typeOf.get(id);
     if (!t0) continue;

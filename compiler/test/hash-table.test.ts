@@ -1,8 +1,9 @@
 // Map as a hash table changed in place (BACKLOG C63b, IN-PLACE.md step 2):
-// chosen only where every map has one holder (one-holder.ts), its keys are
-// Ints or Texts, and the program runs where std's Table is (the evaluator
-// and compiled JavaScript). A program that keeps an old version of a map
-// keeps the tree; so does one with Float64 keys.
+// chosen where its keys are Ints or Texts and the program runs where std's
+// Table is (the evaluator and compiled JavaScript). A program with Float64
+// keys keeps the tree. Since C71 every version of a table stays a value
+// (std.ts Table, rerooted), so a program that reads an old version of a
+// map after a put gets the table too and prints the same.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -84,11 +85,20 @@ test("a map listed once after its puts and lookups in a loop is a hash table too
   assert.deepEqual(printed(c.code, c.names, p.main, c.insiders).lines, printed(p.code, p.names, p.main).lines);
 });
 
-test("where there is no host Map (WebAssembly, C), or the map's old version is kept, or its keys are Float64s, it keeps the tree", () => {
+test("where there is no host Map (WebAssembly, C), or its keys are Float64s, it keeps the tree", () => {
   assert.deepEqual(chosen(program(300), false).chosen, ["Map as weight-balanced tree"]);
-  const old = program(300, { old: true });
-  assert.deepEqual(chosen(old).chosen, ["Map as weight-balanced tree"]);
   assert.deepEqual(chosen(program(300, { floats: true })).chosen, ["Map as weight-balanced tree"]);
+});
+
+// C71: the old version, read after a put and a remove on it, still says
+// what it said: the table undoes the changes to read it (std.ts reroot).
+test("a map whose old version is read again is a hash table, and prints what the definition prints (C71)", () => {
+  const p = program(300, { old: true, remove: true });
+  const c = chosen(p);
+  assert.deepEqual(c.chosen, ["Map as hash table"]);
+  const want = printed(p.code, p.names, p.main).lines;
+  assert.deepEqual(printed(c.code, c.names, p.main, c.insiders).lines, want);
+  assert.deepEqual(want.slice(3, 5), ["1000", "2"]);
 });
 
 test("compiled JavaScript on the hash table prints what the evaluator prints", async () => {
@@ -126,7 +136,7 @@ function setProgram(n: number, opts: { old?: boolean } = {}) {
   return { code: base(k.code), names: baseNames(k.names), main, own: [seen, main] };
 }
 
-test("a set only built, asked and changed by its one holder is a hash table, compiled and evaluated the same; one whose old version is kept stays a tree", async () => {
+test("a set only built, asked and changed by its one holder is a hash table, compiled and evaluated the same; one whose old version is read again too", async () => {
   const p = setProgram(400);
   const c = chosen(p);
   assert.deepEqual(c.chosen, ["Set as hash table"]);
@@ -142,5 +152,8 @@ test("a set only built, asked and changed by its one holder is a hash table, com
   defs.main();
   assert.deepEqual(got, lines);
   assert.deepEqual(chosen(setProgram(400), false).chosen, ["Set as weight-balanced tree"]);
-  assert.deepEqual(chosen(setProgram(400, { old: true })).chosen, ["Set as weight-balanced tree"]);
+  // An old version read again (C71): the table, and the same answers.
+  const old = setProgram(400, { old: true }), o = chosen(old);
+  assert.deepEqual(o.chosen, ["Set as hash table"]);
+  assert.deepEqual(printed(o.code, o.names, old.main, o.insiders).lines, printed(old.code, old.names, old.main).lines);
 });
