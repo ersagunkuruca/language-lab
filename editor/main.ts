@@ -2583,34 +2583,38 @@ function graphMenu(info: T.Info): HTMLElement | null {
   const inGraph = !m.blocks;
   // What an item does, or why it can't, is written under it: a tooltip
   // never shows on a greyed item, nor on a phone.
-  // `disabled` can be a check to run after the menu shows: an edit tried
-  // against the whole program takes a few hundred milliseconds, and a menu
-  // asks several (Ersagun 2026-11-01: the menu was slow). Until it has
-  // run the item is there to press; pressed early, the edit itself says
-  // why it can't.
-  const gen = ++menuGen, later: (() => void)[] = [];
+  // `disabled` can be a check to run when the item is pointed at: an edit
+  // tried against the whole program takes a few hundred milliseconds, and
+  // a menu asks several (Ersagun 2026-11-01: the menu was slow). Until it
+  // has run the item is there to press; pressed early, the edit itself
+  // says why it can't.
+  const gen = ++menuGen;
   const item = (label: string, act: string, hint = "", disabled?: string | (() => string | undefined)) => {
     const now = typeof disabled === "function" ? undefined : disabled;
     const why = now || hint ? h("span", { class: `ctx-why${now ? " cant" : ""}` }, now ? `Can't: ${now}` : hint) : null;
     const b = h("button", { class: "ctx-item", type: "button", role: "menuitem", "data-menu": act, "data-target": id, disabled: !!now }, label, why) as HTMLButtonElement;
-    if (typeof disabled === "function") later.push(() => {
-      // A check that throws can't do it either, and the checks after it
-      // still run (BACKLOG I123).
-      let r: string | undefined;
-      try { r = disabled(); } catch (e) { r = (e as Error).message; }
-      if (!r) return;
-      b.disabled = true;
-      if (why) { why.className = "ctx-why cant"; why.textContent = `Can't: ${r}`; } else b.append(h("span", { class: "ctx-why cant" }, `Can't: ${r}`));
-    });
+    if (typeof disabled === "function") {
+      let done = false;
+      const check = () => {
+        if (done || gen !== menuGen) return;
+        done = true;
+        // A check that throws can't do it either (BACKLOG I123).
+        let r: string | undefined;
+        try { r = disabled(); } catch (e) { r = (e as Error).message; }
+        if (!r) return;
+        b.disabled = true;
+        if (why) { why.className = "ctx-why cant"; why.textContent = `Can't: ${r}`; } else b.append(h("span", { class: "ctx-why cant" }, `Can't: ${r}`));
+      };
+      // Checked when pointed at or reached by the keyboard, not all at
+      // once: each tries the edit on the whole program, a few hundred
+      // milliseconds apiece, and a menu asked up to two seconds of them
+      // before it settled (BACKLOG I128). Pressed unchecked, the edit
+      // itself says why it can't.
+      b.addEventListener("pointerenter", check);
+      b.addEventListener("focus", check);
+    }
     return b;
   };
-  const checkLater = () => {
-    const next = later.shift();
-    if (!next || gen !== menuGen) return;
-    next();
-    setTimeout(checkLater);
-  };
-  setTimeout(checkLater);
   const why = (f: () => { ok: boolean; reason?: string }) => () => { const r = f(); return r.ok ? undefined : r.reason; };
   const rows: (HTMLElement | null)[] = [];
   const names = typedPres().names;
