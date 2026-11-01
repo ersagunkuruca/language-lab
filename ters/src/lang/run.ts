@@ -242,7 +242,8 @@ export interface Runtime {
   jets?: boolean;
   // Told each time a function written as a lambda is called, with the
   // values it's called with (the editor seeds a definition's Run with them).
-  entered?: (lambda: Id, args: Value[]) => void;
+  // `copy`: the lambda entered, when it's a copy at another number type.
+  entered?: (lambda: Id, args: Value[], copy: Id) => void;
   // Check's handler when the program has none (`lab test`, tests.ts):
   // each expect, whether it held, and what it says.
   check?: (holds: boolean, what: string) => void;
@@ -528,7 +529,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       if (rest) return this.resumeRest(rest, args[0]);
       const c = closures.get(f as Fn);
       if (c) {
-        rt.entered?.(copyOf?.get(c.lambda.id) ?? c.lambda.id, args);
+        rt.entered?.(copyOf?.get(c.lambda.id) ?? c.lambda.id, args, c.lambda.id);
         return this.eval(c.lambda.body, bind(c.env, c.lambda.params, args));
       }
       const h = HANDLED.get(f as Fn);
@@ -667,7 +668,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         try { v = answerFromHost(code, rt.names ?? {}, rt.hosts, op, args) as Value; } catch (e) { return this.perform(ABORT_OP, [(e as Error).message]); }
         return this.ret(v);
       }
-      throw new Error(`nothing handles ${op}`);
+      throw new Error(`nothing handles ${rt.names?.[op] ?? stdNames[op] ?? op}`);
     }
 
     handle(h: Id, args: Value[]): void {
@@ -989,6 +990,8 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     // tuples spread (resolveArithmetic). A caller walking the program as
     // written (trace.ts) asks it for a node it changed.
     code,
+    // What each node of a copy at another number type copies.
+    copyOf,
     value: (def: Id) => refValue(def, null),
     // Call a function value and stream its results.
     call: (f: Value, ...args: Value[]) => (f as Fn)(...args),

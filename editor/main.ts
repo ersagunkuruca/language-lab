@@ -1058,6 +1058,9 @@ const NO_EVENT: Data = { tag: HTML_V.event, fields: ["", "", 0, 0, 1 / 60] };
 // What each function was first called with when main last ran, as far as
 // it got in a few steps and MAIN_MS, in a world nothing goes out to.
 const mainRuns = new WeakMap<Code, Map<Id, Value[]>>();
+// The copy main's run entered for a lambda, when it was one at other
+// number types (arith.ts): its own values are that copy's (I125).
+const mainCopies = new WeakMap<Code, Map<Id, Id>>();
 // The world main runs in for that: nothing it does goes out. Printing is
 // swallowed, a file it writes is kept to itself and one it didn't isn't
 // there, the network answers nothing, so a program that saves or loads
@@ -1103,7 +1106,8 @@ function explore(page: Value, over: () => boolean, started: () => void) {
 function mainCalls(info: T.Info, main: Id): Map<Id, Value[]> {
   let calls = mainRuns.get(doc.code);
   if (!calls) {
-    const got = new Map<Id, Value[]>();
+    const got = new Map<Id, Value[]>(), copies = new Map<Id, Id>();
+    mainCopies.set(doc.code, copies);
     const body = defBody(main);
     // main takes nothing; a picture's function takes its pixel.
     const pixel = body?.kind === "lambda" && body.params.length ? pixelSeed(main) : [];
@@ -1115,9 +1119,9 @@ function mainCalls(info: T.Info, main: Id): Map<Id, Value[]> {
       let done = false;
       try {
         withSteps(MAIN_STEPS, () => {
-          const tr = trace(doc.code, info, main, args.map((a) => (a as { value: Value }).value), dryWorld(), (l, args) => {
+          const tr = trace(doc.code, info, main, args.map((a) => (a as { value: Value }).value), dryWorld(), (l, args, copy) => {
             if (done) return;
-            if (!got.has(l)) got.set(l, args);
+            if (!got.has(l)) { got.set(l, args); if (copy !== l) copies.set(l, copy); }
             if (performance.now() > end) throw new OutOfSteps();
           });
           // A page's views run later, as it's drawn: draw it once here, so
@@ -1282,7 +1286,8 @@ function backwardsPanel(namer: Namer, info: T.Info): HTMLElement {
   // One that reads cells or performs effects of its own isn't searched
   // either: the search can't run them, and failing it read as a fault (I102).
   const acts = forwards && dz?.t === "fn" ? dz.eff.effs.filter((e) => e !== CHOICE && e !== DIVERGE) : [];
-  let r: Backwards = (!chooses && forward()) || (missing.length || acts.length ? { answers: [], more: false } : runBackwards(info, known));
+  const handles = handledForArgs(dz);
+  let r: Backwards = (!chooses && forward()) || (missing.length || acts.length || handles.length ? { answers: [], more: false } : runBackwards(info, known));
   if (forwards && !missing.length && !r.answers.length && !r.error) {
     const f = forward();
     if (f) r = { ...r, answers: f.answers };
@@ -1323,6 +1328,7 @@ function backwardsPanel(namer: Namer, info: T.Info): HTMLElement {
   else if (r.plan && r.plan.status !== "solved") box.append(h("p", { class: "status-line warn" }, `Not enough is known: give ${r.plan.needMore} more port${r.plan.needMore === 1 ? "" : "s"}, or it is a whole family of answers.`));
   // Every input given and none found: the search missed the one answer a
   // run forwards gives (relate's limits, I39), not a contradiction.
+  else if (!r.answers.length && handles.length) box.append(h("p", { class: "hint" }, `It handles ${handles.map((e) => pres().names[e] ?? e).join(", ")} for the function it's given, so it has values only where something calls it with one: Run main to see it at work.`));
   else if (!r.answers.length && acts.length) box.append(h("p", { class: "hint" }, `It uses ${acts.map((e) => pres().names[e] ?? e).join(", ")}, so Run doesn't work it out here. Show values runs it forwards with these inputs.`));
   else if (!r.answers.length) box.append(forwards
     ? h("p", { class: "status-line warn" }, "The search found no result for these values: it works the function out as equations and can miss one a run forwards gives. Show values runs it forwards.")
@@ -2577,34 +2583,38 @@ function graphMenu(info: T.Info): HTMLElement | null {
   const inGraph = !m.blocks;
   // What an item does, or why it can't, is written under it: a tooltip
   // never shows on a greyed item, nor on a phone.
-  // `disabled` can be a check to run after the menu shows: an edit tried
-  // against the whole program takes a few hundred milliseconds, and a menu
-  // asks several (Ersagun 2026-11-01: the menu was slow). Until it has
-  // run the item is there to press; pressed early, the edit itself says
-  // why it can't.
-  const gen = ++menuGen, later: (() => void)[] = [];
+  // `disabled` can be a check to run when the item is pointed at: an edit
+  // tried against the whole program takes a few hundred milliseconds, and
+  // a menu asks several (Ersagun 2026-11-01: the menu was slow). Until it
+  // has run the item is there to press; pressed early, the edit itself
+  // says why it can't.
+  const gen = ++menuGen;
   const item = (label: string, act: string, hint = "", disabled?: string | (() => string | undefined)) => {
     const now = typeof disabled === "function" ? undefined : disabled;
     const why = now || hint ? h("span", { class: `ctx-why${now ? " cant" : ""}` }, now ? `Can't: ${now}` : hint) : null;
     const b = h("button", { class: "ctx-item", type: "button", role: "menuitem", "data-menu": act, "data-target": id, disabled: !!now }, label, why) as HTMLButtonElement;
-    if (typeof disabled === "function") later.push(() => {
-      // A check that throws can't do it either, and the checks after it
-      // still run (BACKLOG I123).
-      let r: string | undefined;
-      try { r = disabled(); } catch (e) { r = (e as Error).message; }
-      if (!r) return;
-      b.disabled = true;
-      if (why) { why.className = "ctx-why cant"; why.textContent = `Can't: ${r}`; } else b.append(h("span", { class: "ctx-why cant" }, `Can't: ${r}`));
-    });
+    if (typeof disabled === "function") {
+      let done = false;
+      const check = () => {
+        if (done || gen !== menuGen) return;
+        done = true;
+        // A check that throws can't do it either (BACKLOG I123).
+        let r: string | undefined;
+        try { r = disabled(); } catch (e) { r = (e as Error).message; }
+        if (!r) return;
+        b.disabled = true;
+        if (why) { why.className = "ctx-why cant"; why.textContent = `Can't: ${r}`; } else b.append(h("span", { class: "ctx-why cant" }, `Can't: ${r}`));
+      };
+      // Checked when pointed at or reached by the keyboard, not all at
+      // once: each tries the edit on the whole program, a few hundred
+      // milliseconds apiece, and a menu asked up to two seconds of them
+      // before it settled (BACKLOG I128). Pressed unchecked, the edit
+      // itself says why it can't.
+      b.addEventListener("pointerenter", check);
+      b.addEventListener("focus", check);
+    }
     return b;
   };
-  const checkLater = () => {
-    const next = later.shift();
-    if (!next || gen !== menuGen) return;
-    next();
-    setTimeout(checkLater);
-  };
-  setTimeout(checkLater);
   const why = (f: () => { ok: boolean; reason?: string }) => () => { const r = f(); return r.ok ? undefined : r.reason; };
   const rows: (HTMLElement | null)[] = [];
   const names = typedPres().names;
@@ -3377,6 +3387,16 @@ function traceInputs(info: T.Info): string[] | null {
   return texts.every((t) => t.trim()) ? texts : null;
 }
 
+// The effects a definition handles for a function it's given (Pig's `hold
+// at` answers the Decide its `game` performs): given main's own function,
+// a run here can't handle them, since that function performs them in
+// main's run (BACKLOG I124).
+function handledForArgs(z: Type | null): Id[] {
+  if (z?.t !== "fn") return [];
+  const own = new Set(z.eff.effs);
+  return [...new Set(z.params.flatMap((p) => (p.t === "fn" ? p.eff.effs : [])))].filter((e) => !own.has(e) && e !== CHOICE && e !== DIVERGE);
+}
+
 function traced(info: T.Info): Trace | null {
   const texts = traceInputs(info);
   if (!texts) return null;
@@ -3384,6 +3404,7 @@ function traced(info: T.Info): Trace | null {
   const t = info.typeOf.get(ui.def);
   const z = t ? info.subst.zonk(t) : null;
   if (z?.t === "fn" && needsHandling(z).some((e) => e !== CHOICE)) return null;
+  if (handledForArgs(z).length) return null;
   // One that reaches the world (prints, writes a file, fetches) runs only
   // when asked (Show values), never just because it's finished being written.
   if (z?.t === "fn" && z.eff.effs.some((e) => e !== CHOICE && e !== DIVERGE) && !doc.examples?.[ui.def]) return null;
@@ -3405,10 +3426,11 @@ function traced(info: T.Info): Trace | null {
 // the whole search (BACKLOG I23). Values you gave run to the end.
 const TRACE_MS = 200;
 function boundedTrace(info: T.Info, args: Value[]): Trace {
-  if (doc.examples?.[ui.def] || !(defBody(ui.def) as NodeOf<"lambda">).params.length) return trace(doc.code, info, ui.def, args, quietWorld());
+  const body = defBody(ui.def), copy = body ? mainCopies.get(doc.code)?.get(body.id) : undefined;
+  if (doc.examples?.[ui.def] || !(body as NodeOf<"lambda">).params.length) return trace(doc.code, info, ui.def, args, quietWorld(), undefined, !!copy);
   const end = performance.now() + TRACE_MS;
   const slow = () => Object.assign(new OutOfSteps(), { message: `it runs longer than the ${TRACE_MS} ms the graph waits; Run main runs it in full` });
-  return trace(doc.code, info, ui.def, args, quietWorld(), () => { if (performance.now() > end) throw slow(); });
+  return trace(doc.code, info, ui.def, args, quietWorld(), () => { if (performance.now() > end) throw slow(); }, !!copy);
 }
 
 // Run main in a worker (editor/runWorker.ts): the page keeps drawing, the
