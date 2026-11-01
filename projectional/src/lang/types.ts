@@ -134,6 +134,33 @@ export class FractionError extends TypeError {}
 // by `open`, Leijen 2017). `at` is the call it came from.
 export interface Sub { from: Row; to: Row; at?: Id }
 
+// A map or set read through to another that it leaves alone: what it adds
+// is its own. A trial (Subst.trial) starts with nothing of its own instead
+// of copying thousands of bindings. Nothing deletes from a substitution.
+class OverMap<K, V> extends Map<K, V> {
+  private under: ReadonlyMap<K, V>;
+  constructor(under: ReadonlyMap<K, V>) { super(); this.under = under; }
+  override get(k: K) { return super.has(k) ? super.get(k) : this.under.get(k); }
+  override has(k: K) { return super.has(k) || this.under.has(k); }
+  override get size() { let n = this.under.size; for (const k of super.keys()) if (!this.under.has(k)) n++; return n; }
+  override *entries(): MapIterator<[K, V]> { yield* super.entries(); for (const e of this.under) if (!super.has(e[0])) yield e; }
+  override *keys(): MapIterator<K> { for (const [k] of this.entries()) yield k; }
+  override *values(): MapIterator<V> { for (const [, v] of this.entries()) yield v; }
+  override [Symbol.iterator]() { return this.entries(); }
+  override forEach(f: (v: V, k: K, m: Map<K, V>) => void) { for (const [k, v] of this.entries()) f(v, k, this); }
+}
+class OverSet<K> extends Set<K> {
+  private under: ReadonlySet<K>;
+  constructor(under: ReadonlySet<K>) { super(); this.under = under; }
+  override has(k: K) { return super.has(k) || this.under.has(k); }
+  override get size() { let n = this.under.size; for (const k of super.values()) if (!this.under.has(k)) n++; return n; }
+  override *values(): SetIterator<K> { yield* super.values(); for (const k of this.under) if (!super.has(k)) yield k; }
+  override keys() { return this.values(); }
+  override *entries(): SetIterator<[K, K]> { for (const k of this.values()) yield [k, k]; }
+  override [Symbol.iterator]() { return this.values(); }
+  override forEach(f: (v: K, k: K, s: Set<K>) => void) { for (const k of this.values()) f(k, k, this); }
+}
+
 // A substitution for type and row variables. Cheap to copy, so the editor can
 // try a candidate for a hole and throw the attempt away.
 export class Subst {
@@ -183,6 +210,28 @@ export class Subst {
     s.arith = new Map(this.arith);
     s.fractional = new Set(this.fractional);
     s.whole = new Set(this.whole);
+    s.noWorld = new Set(this.noWorld);
+    s.subs = [...this.subs];
+    s.needs = new Map([...this.needs].map(([v, m]) => [v, new Map(m)]));
+    s.wanted = [...this.wanted];
+    return s;
+  }
+
+  // A copy to try something in and throw away (the editor's palette tries
+  // each candidate for a hole): it reads through to this one, which must
+  // not change while the trial is in use, and keeps only what it adds.
+  trial(): Subst {
+    const s = new Subst();
+    s.types = new OverMap(this.types);
+    s.rows = new OverMap(this.rows);
+    s.next = this.next;
+    s.plain = new OverSet(this.plain);
+    s.plainArgs = this.plainArgs;
+    s.numbers = new OverSet(this.numbers);
+    s.recordFields = this.recordFields;
+    s.arith = new OverMap(this.arith);
+    s.fractional = new OverSet(this.fractional);
+    s.whole = new OverSet(this.whole);
     s.noWorld = new Set(this.noWorld);
     s.subs = [...this.subs];
     s.needs = new Map([...this.needs].map(([v, m]) => [v, new Map(m)]));
