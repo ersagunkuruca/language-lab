@@ -47,6 +47,11 @@ const CELLS = no("cells are a runtime handler: the scalar profile has none");
 const INT = no("Int has no scalar type yet (f64 only)");
 const ARRAYS = written("scalar.ts ARRAY_RT: with `data`, runtime functions on the two-ended buffer, one copy per item type (C66)");
 
+// Float64's operations with no answer at some inputs (L125b): where the
+// checker didn't find a call always answered (info.answered), it gives no
+// answer as the evaluator does, through these, which give $no (L125c3).
+export const NO_ANSWER_JS: Record<Id, string> = { [B.div]: "$divN", [B.sqrt]: "$sqrtN", [B.log]: "$logN", [B.pow]: "$powN", [S.mod]: "$modN" };
+
 export const TARGETS: Record<Id, Target> = {
   [B.add]: { js: op(([a, b]) => `(${a} + ${b})`), scalar: "add" },
   [B.sub]: { js: op(([a, b]) => `(${a} - ${b})`), scalar: "sub" },
