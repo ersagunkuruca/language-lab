@@ -1282,7 +1282,8 @@ function backwardsPanel(namer: Namer, info: T.Info): HTMLElement {
   // One that reads cells or performs effects of its own isn't searched
   // either: the search can't run them, and failing it read as a fault (I102).
   const acts = forwards && dz?.t === "fn" ? dz.eff.effs.filter((e) => e !== CHOICE && e !== DIVERGE) : [];
-  let r: Backwards = (!chooses && forward()) || (missing.length || acts.length ? { answers: [], more: false } : runBackwards(info, known));
+  const handles = handledForArgs(dz);
+  let r: Backwards = (!chooses && forward()) || (missing.length || acts.length || handles.length ? { answers: [], more: false } : runBackwards(info, known));
   if (forwards && !missing.length && !r.answers.length && !r.error) {
     const f = forward();
     if (f) r = { ...r, answers: f.answers };
@@ -1323,6 +1324,7 @@ function backwardsPanel(namer: Namer, info: T.Info): HTMLElement {
   else if (r.plan && r.plan.status !== "solved") box.append(h("p", { class: "status-line warn" }, `Not enough is known: give ${r.plan.needMore} more port${r.plan.needMore === 1 ? "" : "s"}, or it is a whole family of answers.`));
   // Every input given and none found: the search missed the one answer a
   // run forwards gives (relate's limits, I39), not a contradiction.
+  else if (!r.answers.length && handles.length) box.append(h("p", { class: "hint" }, `It handles ${handles.map((e) => pres().names[e] ?? e).join(", ")} for the function it's given, so it has values only where something calls it with one: Run main to see it at work.`));
   else if (!r.answers.length && acts.length) box.append(h("p", { class: "hint" }, `It uses ${acts.map((e) => pres().names[e] ?? e).join(", ")}, so Run doesn't work it out here. Show values runs it forwards with these inputs.`));
   else if (!r.answers.length) box.append(forwards
     ? h("p", { class: "status-line warn" }, "The search found no result for these values: it works the function out as equations and can miss one a run forwards gives. Show values runs it forwards.")
@@ -3377,6 +3379,16 @@ function traceInputs(info: T.Info): string[] | null {
   return texts.every((t) => t.trim()) ? texts : null;
 }
 
+// The effects a definition handles for a function it's given (Pig's `hold
+// at` answers the Decide its `game` performs): given main's own function,
+// a run here can't handle them, since that function performs them in
+// main's run (BACKLOG I124).
+function handledForArgs(z: Type | null): Id[] {
+  if (z?.t !== "fn") return [];
+  const own = new Set(z.eff.effs);
+  return [...new Set(z.params.flatMap((p) => (p.t === "fn" ? p.eff.effs : [])))].filter((e) => !own.has(e) && e !== CHOICE && e !== DIVERGE);
+}
+
 function traced(info: T.Info): Trace | null {
   const texts = traceInputs(info);
   if (!texts) return null;
@@ -3384,6 +3396,7 @@ function traced(info: T.Info): Trace | null {
   const t = info.typeOf.get(ui.def);
   const z = t ? info.subst.zonk(t) : null;
   if (z?.t === "fn" && needsHandling(z).some((e) => e !== CHOICE)) return null;
+  if (handledForArgs(z).length) return null;
   // One that reaches the world (prints, writes a file, fetches) runs only
   // when asked (Show values), never just because it's finished being written.
   if (z?.t === "fn" && z.eff.effs.some((e) => e !== CHOICE && e !== DIVERGE) && !doc.examples?.[ui.def]) return null;
