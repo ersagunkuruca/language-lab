@@ -106,7 +106,7 @@ import { BOOL, CHECK, CONS, FALSE, FIXED_V, HTML_V, MAP_V, NIL, SET_V, TRUE } fr
 import { CHOICE, DIVERGE, NUMBER, STRING, WORLD, showIn, type Type } from "../src/lang/types.ts";
 import { implementationKey } from "../src/lang/infer.ts";
 import { renderBlocks } from "../src/lang/render.ts";
-import { definedAs, fromList, needsHandling, OutOfSteps, showValue, withSteps, type Data, type Value, type World } from "../src/lang/run.ts";
+import { definedAs, fromList, META, needsHandling, OutOfSteps, showValue, withSteps, type Data, type Value, type World } from "../src/lang/run.ts";
 import type { CompileAsk, CompileSays, RunAsk, RunSays } from "./runWorker.ts";
 import { searchBackwards, type BackAsk, type Found } from "./backSearch.ts";
 import { trace, type Trace } from "../src/lang/trace.ts";
@@ -1020,19 +1020,28 @@ function firstCall(info: T.Info, def: Id): Value[] | undefined {
 const PASSED = "‹what main passes›";
 
 // Calls every view in a page's Html once, outermost first, until `over`.
-function drawOnce(v: Value, over: () => boolean) {
-  const view = (f: Value): Value | undefined => { try { return evaluatorCall(f); } catch { return undefined; } };
-  const todo: Value[] = [v];
+// Returns its handlers, one for each place in the code a handler is
+// written (a board's 64 squares share one).
+function drawOnce(v: Value, over: () => boolean): Value[] {
+  const todo: Value[] = [v], handlers = new Map<unknown, Value>();
   while (todo.length && !over()) {
     const d = todo.shift() as Data;
-    if (d?.tag === HTML_V.text) view(d.fields[0]);
-    else if (d?.tag === HTML_V.part) { const inner = view(d.fields[0]); if (inner !== undefined) todo.push(inner); }
+    if (d?.tag === HTML_V.text) tryCall(d.fields[0]);
+    else if (d?.tag === HTML_V.part) { const inner = tryCall(d.fields[0]); if (inner !== undefined) todo.push(inner); }
     else if (d?.tag === HTML_V.element) {
-      for (const a of fromList(d.fields[1]) as Data[]) if (a.tag === HTML_V.property) view(a.fields[1]);
+      for (const a of fromList(d.fields[1]) as Data[]) {
+        if (a.tag === HTML_V.property) tryCall(a.fields[1]);
+        else if (a.tag === HTML_V.on) { const f = a.fields[1], m = (f as unknown as Record<symbol, { lambda?: Id }>)[META]; if (!handlers.has(m?.lambda ?? f)) handlers.set(m?.lambda ?? f, f); }
+      }
       todo.push(...fromList(d.fields[2]));
     }
   }
+  return [...handlers.values()];
 }
+const tryCall = (f: Value, ...args: Value[]): Value | undefined => { try { return evaluatorCall(f, ...args); } catch { return undefined; } };
+// What a handler is given when it's run as if its event came: a click at
+// 0, 0 with nothing typed, or a frame a sixtieth of a second on.
+const NO_EVENT: Data = { tag: HTML_V.event, fields: ["", "", 0, 0, 1 / 60] };
 
 // What each function was first called with when main last ran, as far as
 // it got in a few steps and MAIN_MS, in a world nothing goes out to.
@@ -1065,7 +1074,7 @@ function mainCalls(info: T.Info, main: Id): Map<Id, Value[]> {
     const pixel = body?.kind === "lambda" && body.params.length ? pixelSeed(main) : [];
     const args = pixel && body?.kind === "lambda" ? body.params.map((q, i) => readPort(info, q, pixel[i] ?? "")) : [];
     if (pixel && args.every((a) => !("error" in a))) {
-      const end = performance.now() + MAIN_MS;
+      let end = performance.now() + MAIN_MS;
       // A function main made (newton's slope) keeps this hook: called
       // later, from a helper's own Run, it is no longer main's run (I78).
       let done = false;
@@ -1077,8 +1086,13 @@ function mainCalls(info: T.Info, main: Id): Map<Id, Value[]> {
             if (performance.now() > end) throw new OutOfSteps();
           });
           // A page's views run later, as it's drawn: draw it once here, so
-          // what they call has values too (I29 b). Handlers wait for an event.
-          if (tr.result !== undefined) drawOnce(tr.result, () => performance.now() > end);
+          // what they call has values too (I29 b).
+          const handlers = tr.result === undefined ? [] : drawOnce(tr.result, () => performance.now() > end);
+          // Then each handler once, as if its event came, with time of its
+          // own, so what only a handler calls has values too (I29). On
+          // the dry run's own cells: nothing the page shows changes.
+          end = performance.now() + MAIN_MS;
+          for (const f of handlers) { if (performance.now() > end) break; tryCall(f, NO_EVENT); }
         });
       } finally { done = true; }
     }
