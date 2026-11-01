@@ -1,8 +1,16 @@
 # Foreign definitions: a program's own effect, answered by the host
 
-**Status (2026-10-31).** Proposal, BACKLOG L69 (from
-LANGUAGE-NEEDS-2026-10-24 §5). Steps L69a to L69d are on the row. One
-question for Ersagun at the end; nothing before L69a waits on it.
+**Status (2026-11-01).** BACKLOG L69 (from LANGUAGE-NEEDS-2026-10-24
+§5). L69a's evaluator half is built (src/lang/hosts.ts, test/hosts.test.ts):
+`lab run` and `lab test` load `hosts/js.js` beside the program, an
+operation of the program's own effect that nothing handles is answered
+by the host function under its id, the answer is checked against the
+operation's result type (Int, Float64, Text, Bool, Unit, lists and
+records of them), and a missing or wrong answer is an Abort with the
+reason. `lab hosts` prints the skeleton. A host answers at once for now;
+one that answers later (a promise) waits for L59. Left in L69a: the
+compiled JS. One question for Ersagun at the end; nothing before L69a
+waits on it.
 
 A website needs the browser's APIs, a phone app the device's (camera,
 storage, notifications), a command-line program the environment's. Today
