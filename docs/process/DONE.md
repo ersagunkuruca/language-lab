@@ -26,7 +26,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| I102 | Run: a helper with cells or effects of its own, every input given, isn't searched; it says it uses Cells (Time, …) and that Show values runs it forwards | #815 |
+| I102 | Run: a helper with cells or effects of its own, every input given, isn't searched; it says it uses Cells (Time, …) and that Show values runs it forwards | #817 |
 | I101 | Opening a big definition: wire crossings and routing skip what's apart, a builtin's type made once per check, no search when the inputs are given and it can't choose (rapidity picture 4.3 → 1.0 s, solid bodies 2.4 → 0.5 s, equal arcs 2.3 → 0.6 s) | #813 |
 | I97 | Page preview runs compiled once it's ready: interpreted at once, compiled in the run worker, swapped in (Bounce 7 → 60 fps, Spacetime slider 7.4 s → 27 ms) | #789 |
 | I94 | Editor: Spacetime in the program list (opening holds the editor ~8 s while main first runs; the products' cost is L41) | #760 |
