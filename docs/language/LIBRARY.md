@@ -218,6 +218,13 @@ A map is kept sorted by key in compare's order, so two maps with the same entrie
 - **map size** : `(Map a b) -> Int`. How many keys the map holds.
 - **smallest key** : `(Map a b) -[Choice]-> a`. The map's smallest key, in compare's order; no answer when the map is empty. value at(m, smallest key(m)) is what it holds.
 - **largest key** : `(Map a b) -[Choice]-> a`. The map's largest key, in compare's order; no answer when the map is empty.
+- **empty table** : `() -> Table a b`. A hash table with no entries: how a map is stored when the compiler sees that every map has one holder (C63b). Programs say Map; the compiler picks this.
+- **table put** : `(Table a b, a, b) -> Table a b`. The table with the key's value set. It changes the table itself, so the compiler uses it only where nobody can see the table before the change.
+- **table remove** : `(Table a b, a) -> Table a b`. The table without the key, changed in place like put.
+- **table has** : `(Table a b, a) -> Bool`. Whether the table has the key.
+- **table size** : `(Table a b) -> Int`. How many keys the table has.
+- **table value at** : `(Table a b, a) -[Choice]-> b`. The key's value, or no answer when the table doesn't have the key.
+- **table entries** : `(Table a b) -> List (Pair a b)`. The table's entries as pairs, in compare's order of their keys: the map it stands for.
 - **Set** (type). A set of items, kept sorted with none twice. Build one with empty set, as set or add item (its constructor set of is private to the library, which keeps the rule).
 - **empty set** : `Set a`. The set with no items.
 - **as set** : `(List a) -> Set a`. The set of a list's items: in compare's order, each once.
@@ -249,6 +256,7 @@ A type can be stored as another type, written as one definition (REPRESENTATIONS
 - **compare by** : `((a, a) -> Order) -> Job b a`. For a representation that isn't one spelling per value: how compare orders two of its values, through their meaning.
 - **head by** : `(a, b) -> Job c d`. For t's job that gives a list, a definition giving only its first item, as a list of one or nil, used where only the first item is read.
 - **hides** : `(a, Int) -> Job b c`. hides(case, position): that field of t's case isn't kept as a value of t at r (a list's rest, in an array, is the items after a position), so it is made only when an arm reads it, and a fold whose arms don't read it costs only its walk.
+- **in place** : `() -> Job a b`. in place(): r changes a value where t's jobs make a changed copy (a hash table's put), so it is chosen only where every value of t has one holder: nobody can see the value before the change.
 
 ## Searching: Choice
 

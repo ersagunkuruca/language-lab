@@ -25,11 +25,11 @@ import type { Names } from "../presentation.ts";
 import { Lang } from "./dsl.ts";
 import { LADDER, representationsIn, type Representation } from "./represent.ts";
 import { infer } from "./infer.ts";
-import { COMPARE, CONS, COST, JOBS, REPRESENTATION_V, FALSE, INT_OPS, MAP, MAP_V, NIL, ORDER_V, PAIR_V, S, SET_TYPE, SET_V, SHOW_ANY, TRUE } from "./std.ts";
-import { INT } from "./types.ts";
+import { COMPARE, CONS, COST, JOBS, TABLE_OPS, REPRESENTATION_V, FALSE, INT_OPS, MAP, MAP_V, NIL, ORDER_V, PAIR_V, S, SET_TYPE, SET_V, SHOW_ANY, TRUE } from "./std.ts";
+import { INT, TABLE } from "./types.ts";
 
-// `representations`: the four definitions, the tree and the sorted list
-// for Map, then for Set.
+// `representations`: the five definitions, the tree and the sorted list
+// for Map, then for Set, then Map's hash table (C63b).
 export interface Trees { representations: Id[]; defs: Id[] }
 
 // The two rows, written into `k`. `prelude` finds a prelude definition by
@@ -194,6 +194,54 @@ export function buildTrees(k: Lang, prelude: (name: string) => Id): Trees {
     show: def("tree show", ["tree"], (t) => k.call(SHOW_ANY, k.call(mapMeaning, t))),
   };
 
+  // ---- Map as a hash table changed in place (C63b, IN-PLACE.md step 2):
+  // std.ts's Table, a JS Map. Only for a program where every map has one
+  // holder (one-holder.ts), so nobody sees the version a put changed, and
+  // only on JavaScript (library-reps.ts says where). Its entries come out
+  // in compare's order, so its meaning is the same sorted Map.
+  const T = TABLE_OPS;
+  const tableEntries = def("table entries of", ["table"], (t) => k.call(T.entries, t));
+  const putAllT = (ps: Id, t0: Id) => k.fold(ps, [
+    { variant: NIL, names: [], body: () => t0 },
+    { variant: CONS, names: ["entry", "rest"], results: [null, "table"], body: ([e], [, t]) => pair(e, (key, v) => k.call(T.put, t!, key, v)) },
+  ]);
+  const tableMeaning = def("table meaning", ["table"], (t) => k.call(MAP_V, k.call(tableEntries, t)));
+  const tableOf = (f: (a: Id, b: Id) => Id, name: string) => def(name, ["a", "b"], (a, b) => f(k.call(tableMeaning, a), k.call(tableMeaning, b)));
+  const matchTable = def("match table", ["table", "map of"], (t, f) => k.call(f, k.call(tableEntries, t)));
+  const emptyTable = k.def("empty table map");
+  k.define(emptyTable, k.call(T.empty));
+  defs.push(emptyTable);
+  const tableEnd = (name: string, last: boolean) => def(name, ["table"], (t) => k.match(last ? k.call(prelude("reverse"), k.call(tableEntries, t)) : k.call(tableEntries, t), [
+    { variant: NIL, names: [], body: () => k.call(S.fail) },
+    { variant: CONS, names: ["entry", "rest"], body: ([e]) => pair(e, (key) => key) },
+  ]));
+  const tableImpl: Record<Id, Id> = {
+    [MAP_V]: def("table of entries", ["entries"], (es) => putAllT(es, k.call(T.empty))),
+    match: matchTable,
+    fold: matchTable,
+    [prelude("empty map")]: emptyTable,
+    [prelude("as map")]: def("table as map", ["pairs"], (ps) => putAllT(k.call(prelude("reverse"), ps), k.call(T.empty))),
+    [prelude("put")]: def("table put map", ["table", "key", "value"], (t, key, v) => k.call(T.put, t, key, v)),
+    // The value is read before the table is changed.
+    [prelude("update at")]: def("table update at", ["table", "key", "default", "change"], (t, key, d, f) =>
+      k.let("now", k.call(S.first, k.thunk(() => k.call(T.at, t, key)), k.thunk(() => d)), (now) => k.call(T.put, t, key, k.call(f, now)))),
+    [prelude("value at")]: def("table value at map", ["table", "key"], (t, key) => k.call(T.at, t, key)),
+    [prelude("remove key")]: def("table remove key", ["table", "key"], (t, key) => k.call(T.remove, t, key)),
+    [prelude("has key")]: def("table has key", ["table", "key"], (t, key) => k.call(T.has, t, key)),
+    [prelude("merge maps")]: def("table merge", ["first", "second"], (a, b) => putAllT(k.call(prelude("reverse"), k.call(tableEntries, b)), a)),
+    [prelude("keys of")]: def("table keys", ["table"], (t) => k.call(prelude("map"), k.call(tableEntries, t), k.fn(["entry"], (e) => pair(e, (key) => key)))),
+    [prelude("values of")]: def("table values", ["table"], (t) => k.call(prelude("map"), k.call(tableEntries, t), k.fn(["entry"], (e) => pair(e, (_, v) => v)))),
+    [prelude("entries of")]: tableEntries,
+    [prelude("map size")]: def("table size of", ["table"], (t) => k.call(T.size, t)),
+    [prelude("smallest key")]: tableEnd("table smallest key", false),
+    [prelude("largest key")]: tableEnd("table largest key", true),
+  };
+  const tableByType = {
+    equal: tableOf((a, b) => k.call(S.equal, a, b), "table equal"),
+    compare: tableOf((a, b) => k.call(COMPARE, a, b), "table compare"),
+    show: def("table show", ["table"], (t) => k.call(SHOW_ANY, k.call(tableMeaning, t))),
+  };
+
   // ---- Set
   const s = tree("Set tree", false);
   const addAll = (xs: Id, t0: Id) => k.fold(xs, [
@@ -246,6 +294,9 @@ export function buildTrees(k: Lang, prelude: (name: string) => Id): Trees {
     { name: "weight-balanced tree", of: SET_TYPE, type: s.T.def, meaning: setMeaning, canonical: false, impl: setImpl, byType: setByType, heads: setHeads,
       cost: { ...at(setLog, "log n"), ...at(setLin, "n"), ...at(["as set", "set union", "set intersection", "set difference"], "n log n"), ...at(["empty set", "set size"], "1"), [SET_V]: "n log n", space: "n" } },
     spec(SET_TYPE, SET_V, [...setLog, ...setLin, "set size", "set union", "set intersection", "set difference"], ["as set"], ["empty set"]),
+    // After the four, so their rows keep their places in LIBRARY.reps.
+    { name: "hash table", of: MAP, type: TABLE, meaning: tableMeaning, canonical: false, impl: tableImpl, byType: tableByType, oneHolder: true,
+      cost: { ...at(["put", "update at", "value at", "remove key", "has key", "empty map", "map size"], "1"), ...at([...mapLin, "smallest key", "largest key", "as map", "merge maps"], "n log n"), [MAP_V]: "n", space: "n" } },
   ];
   return { representations: rows.map(written), defs };
 
@@ -263,6 +314,7 @@ export function buildTrees(k: Lang, prelude: (name: string) => Id): Trees {
     }
     if (rep.byType) jobs.push(k.call(JOBS.equalBy, k.x(rep.byType.equal)), k.call(JOBS.showBy, k.x(rep.byType.show)), k.call(JOBS.compareBy, k.x(rep.byType.compare)));
     for (const [j, d] of Object.entries(rep.heads ?? {})) jobs.push(k.call(JOBS.headBy, k.x(j), k.x(d)));
+    if (rep.oneHolder) jobs.push(k.call(JOBS.inPlace));
     const d = k.def(rep.name);
     k.define(d, k.call(REPRESENTATION_V, rep.meaning ? k.x(rep.meaning) : k.fn(["value"], (v) => v), cost(rep.cost.space), k.list(...jobs)));
     defs.push(d);
