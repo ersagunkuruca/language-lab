@@ -2925,6 +2925,13 @@ function graphHooks(info: T.Info) {
       commit({ layout: { ...doc.layout, size: to ? { ...rest, [lkey(id)]: to } : rest } }, ["layout.json"],
         to ? "Resized a node. Its size lives in layout.json; double-click the corner to give it its own size again." : "The node has its own size again.");
     },
+    spread: (to: Record<Id, Pos>, sizes: Record<Id, { w: number; h: number } | null>) => {
+      const size = { ...(doc.layout.size ?? {}) };
+      for (const [id, z] of Object.entries(sizes)) { if (z) size[lkey(id)] = z; else delete size[lkey(id)]; }
+      const n = Object.keys(to).length, r = Object.values(sizes).filter(Boolean).length;
+      commit({ layout: { ...doc.layout, at: { ...(doc.layout.at ?? {}), ...Object.fromEntries(Object.entries(to).map(([k, v]) => [lkey(k), v])) }, size } }, ["layout.json"],
+        `Spread the picked: ${n === 1 ? "a node" : `${n} nodes`} moved${r ? `, ${r} resized` : ""}. Only layout.json changed; hold Shift while dragging a corner to resize them too.`);
+    },
     named: new Set(bindersOf(ui.def).filter(isNamed)),
     loose: looseOf(doc.code, doc.loose ?? {}, ui.def),
     home: doc.home ?? {},

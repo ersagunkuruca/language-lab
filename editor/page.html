@@ -488,6 +488,11 @@ pre.out { max-height: 260px; overflow: auto; margin: 8px 0 0; }
 .tgraph .grip-hit { fill: transparent; pointer-events: all; }
 /* A finger is wider than a pointer: the corner is grabbed within about 20 px of it. */
 @media (pointer: coarse) { .tgraph .grip-hit { stroke: transparent; stroke-width: 24; } }
+.tgraph .spread-box { fill: none; stroke: var(--accent); stroke-width: 1; stroke-dasharray: 2 4; pointer-events: none; }
+.tgraph .spread-dot { fill: var(--canvas); stroke: var(--accent); stroke-width: 1.5; pointer-events: none; }
+.tgraph .spread-grip { touch-action: none; }
+.tgraph .spread-grip.nw, .tgraph .spread-grip.se { cursor: nwse-resize; }
+.tgraph .spread-grip.ne, .tgraph .spread-grip.sw { cursor: nesw-resize; }
 .tgraph .stepn { font: 600 9px var(--mono, monospace); fill: var(--dot); pointer-events: none; }
 .tgraph path.then { fill: none; stroke: var(--dot); stroke-width: 1.2; stroke-dasharray: 3 3; }
 .tgraph path.then.head { stroke-dasharray: none; }

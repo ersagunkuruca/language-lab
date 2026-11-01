@@ -82,6 +82,9 @@ export interface GraphHooks {
   // own size again.
   sizes?: Record<Id, { w: number; h: number }>;
   resized?: (id: Id, to: { w: number; h: number } | null) => void;
+  // A multiple selection's frame dragged by a corner (E171): where the
+  // picked nodes go, and with Shift their sizes too (null: their own).
+  spread?: (at: Record<Id, Pos>, sizes: Record<Id, { w: number; h: number } | null>) => void;
   moved: (to: Record<Id, Pos>, note?: string) => void;
   // Bindings shown as a let node with get nodes instead of wires.
   named: Set<Id>;
@@ -253,14 +256,17 @@ export function typedGraph(code: Code, pres: Presentation, info: Info | null, de
   // A node being resized, drawn at the size so far with its wires: the
   // definition built again with that size, the node and its wires taken
   // from it (Ersagun 2026-11-01: the wires only caught up on release).
-  const preview = (id: Id, size: { w: number; h: number }): boolean => {
-    const next = build(code, pres, info, defId, { ...hooks, sizes: { ...hooks.sizes, [id]: size } });
-    const it = next.items.get(id), old = scene.items.get(id);
-    if (!it || !old) return false;
-    scene.items.set(id, { ...it, auto: old.auto, frame: old.frame });
-    const touches = (w: Wire) => ("item" in w.from && w.from.item === id) || ("item" in w.to && w.to.item === id);
+  // Several at once for a selection's frame dragged with Shift (E171).
+  const preview = (sizes: Record<Id, { w: number; h: number } | null>, at: Record<Id, Pos> = hooks.at): boolean => {
+    const given = { ...hooks.sizes };
+    for (const [id, z] of Object.entries(sizes)) { if (z) given[id] = z; else delete given[id]; }
+    const next = build(code, pres, info, defId, { ...hooks, sizes: given });
+    const ids = new Set(Object.keys(sizes).filter((id) => next.items.has(id) && scene.items.has(id)));
+    if (!ids.size) return false;
+    for (const id of ids) { const old = scene.items.get(id)!; scene.items.set(id, { ...next.items.get(id)!, auto: old.auto, frame: old.frame }); }
+    const touches = (w: Wire) => ("item" in w.from && ids.has(w.from.item)) || ("item" in w.to && ids.has(w.to.item));
     scene.wires = [...scene.wires.filter((w) => !touches(w)), ...next.wires.filter(touches)];
-    draw(hooks.at);
+    draw(at);
     return true;
   };
   interact(canvas, scene, hooks, picked, draw, preview);
@@ -304,6 +310,7 @@ interface Item {
   solid: boolean;       // wires running under it are drawn as tunnels
   label?: Box;          // words drawn outside it (a dot's name), relative to it
   name?: string;        // what it is called, for a folded box that holds it
+  own?: { w: number; h: number }; // its own size, when it can be resized
 }
 interface Frame { id: Id; parent: Id | null; title: string; cls: string; binders: Id[]; labels: string[]; results?: Id[]; resultLabels?: string[]; out: End | null; pad: [number, number, number, number]; minH: number; minW: number }
 interface Wire { from: End; to: End; cls: string; edge?: Id; use?: { dot: Id; ref: Id }; flow: boolean }
@@ -376,7 +383,8 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   };
   const item = (key: Id, w: number, h: number, draw: (g: SVGGElement) => void, extra: Partial<Item> = {}): Sub => {
     const drawn = (g: SVGGElement) => { draw(g); grip(g, key, w, h); };
-    items.set(key, { key, frame, w, h, auto: { x: 0, y: 0 }, draw: drawn, solid: true, ...extra });
+    const own = natural.get(key);
+    items.set(key, { key, frame, w, h, auto: { x: 0, y: 0 }, draw: drawn, solid: true, ...(own && hooks.resized ? { own } : {}), ...extra });
     return { w, h, outX: w, outY: h / 2, out: { item: key, dx: w, dy: h / 2 }, at: new Map([[key, { x: 0, y: 0 }]]) };
   };
   // A use of a binding wired into (item, dx, dy): a wire from its source,
@@ -1211,7 +1219,20 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
     // A title can't hang off a circle that's a sibling: put it inside.
     for (const c of vals.querySelectorAll("circle.val-more")) { const t = c.nextElementSibling; if (t?.tagName === "title") c.append(t); }
   }
-  return [...[false, true].flatMap((up) => [frameL(up), wireL(up), portL(up), ...(up ? [] : [marks]), itemL(up), nameL(up)]), out, vals];
+  // A multiple selection's frame, with a corner to drag at each end (E171).
+  const spread = s("g", { class: "spread" });
+  const units = hooks.spread && picked.size > 1 ? spreadUnits(scene, at, picked) : [];
+  if (units.length > 1) {
+    const b = union(units.map((u) => u.box)), m = 12;
+    spread.append(s("rect", { x: b.x - m, y: b.y - m, width: b.w + 2 * m, height: b.h + 2 * m, rx: 10, class: "spread-box" }));
+    for (const c of ["nw", "ne", "sw", "se"]) {
+      const x = c.includes("w") ? b.x - m : b.x + b.w + m, y = c.includes("n") ? b.y - m : b.y + b.h + m;
+      const g = s("g", { class: `spread-grip ${c}`, "data-spread": c });
+      g.append(s("rect", { x: x - 9, y: y - 9, width: 18, height: 18, class: "grip-hit" }), s("rect", { x: x - 4, y: y - 4, width: 8, height: 8, rx: 1.5, class: "spread-dot" }), s("title", {}, "Drag to spread the picked nodes apart or draw them together; hold Shift to resize them too"));
+      spread.append(g);
+    }
+  }
+  return [...[false, true].flatMap((up) => [frameL(up), wireL(up), portL(up), ...(up ? [] : [marks]), itemL(up), nameL(up)]), out, vals, spread];
 }
 
 // ---------------------------------------------------------------- tidy
@@ -1226,6 +1247,24 @@ function expand(scene: Scene, ids: Id[]): Set<Id> {
   }
   return out;
 }
+
+// What a multiple selection's frame moves (E171): each picked node or
+// frame that isn't inside another picked frame, its box, and the nodes it
+// carries.
+function spreadUnits(scene: Scene, at: Record<Id, Pos>, picked: Set<Id>): { id: Id; box: Box; keys: Id[] }[] {
+  const { pos, boxes } = placeAll(scene, at);
+  const parent = (id: Id) => scene.items.get(id)?.frame ?? scene.frames.get(id)?.parent ?? null;
+  const under = (id: Id) => { for (let f = parent(id); f; f = scene.frames.get(f)?.parent ?? null) if (picked.has(f)) return true; return false; };
+  return [...picked].filter((id) => !under(id)).flatMap((id) => {
+    const it = scene.items.get(id), p = pos.get(id);
+    const box = it && p ? { x: p.x, y: p.y, w: it.w, h: it.h } : boxes.get(id);
+    return box ? [{ id, box, keys: [...expand(scene, [id])] }] : [];
+  });
+}
+const union = (bs: Box[]): Box => {
+  const x = Math.min(...bs.map((b) => b.x)), y = Math.min(...bs.map((b) => b.y));
+  return { x, y, w: Math.max(...bs.map((b) => b.x + b.w)) - x, h: Math.max(...bs.map((b) => b.y + b.h)) - y };
+};
 
 // The scene as tidy and arrange see it: boxes, frames and wires.
 function asLayout(scene: Scene, at: Record<Id, Pos>) {
@@ -1314,7 +1353,7 @@ function tidyScene(scene: Scene, at: Record<Id, Pos>, only: Set<Id> | null): Rec
 // shares its value with an input; an input dragged into space is cleared;
 // shift-drag on empty space picks what the box touches. Right-click asks
 // the editor for a menu.
-function interact(canvas: Canvas, scene: Scene, hooks: GraphHooks, picked: Set<Id>, draw: (at: Record<Id, Pos>) => void, preview?: (id: Id, size: { w: number; h: number }) => boolean) {
+function interact(canvas: Canvas, scene: Scene, hooks: GraphHooks, picked: Set<Id>, draw: (at: Record<Id, Pos>) => void, preview?: (sizes: Record<Id, { w: number; h: number } | null>, at?: Record<Id, Pos>) => boolean) {
   const root = canvas.root;
   // A click on empty space deselects; a press that panned doesn't.
   let down = { x: 0, y: 0 };
@@ -1405,6 +1444,52 @@ function interact(canvas: Canvas, scene: Scene, hooks: GraphHooks, picked: Set<I
     // back down to its own size. The node and its wires follow the
     // pointer, a frame at a time; the graph is laid out at the new size on
     // release.
+    // A corner of a multiple selection's frame (E171): drag it and the
+    // picked nodes spread apart or draw together, about the opposite
+    // corner, each keeping its size; with Shift held they are resized by
+    // as much too (Ersagun 2026-11-01).
+    const corner = start.closest("[data-spread]")?.getAttribute("data-spread");
+    if (corner && hooks.spread) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const units = spreadUnits(scene, hooks.at, picked);
+      const all = union(units.map((u) => u.box));
+      const west = corner.includes("w"), north = corner.includes("n");
+      const anchor = { x: west ? all.x + all.w : all.x, y: north ? all.y + all.h : all.y };
+      const from = { x: west ? all.x : all.x + all.w, y: north ? all.y : all.y + all.h };
+      const { pos } = placeAll(scene, hooks.at);
+      let now: Record<Id, Pos> = {}, sizes: Record<Id, { w: number; h: number } | null> = {}, frame = 0, shift = ev.shiftKey;
+      const keys = (e: KeyboardEvent | PointerEvent) => { shift = e.shiftKey; };
+      window.addEventListener("keydown", keys);
+      window.addEventListener("keyup", keys);
+      window.addEventListener("pointermove", keys);
+      let d = { x: 0, y: 0 };
+      const show = () => {
+        frame = 0;
+        const ratio = (to: number, a: number, f: number) => (Math.abs(f - a) < 1 ? 1 : Math.max(0.1, (to - a) / (f - a)));
+        const sx = ratio(from.x + d.x, anchor.x, from.x), sy = ratio(from.y + d.y, anchor.y, from.y);
+        now = {}; sizes = {};
+        for (const u of units) {
+          const it = scene.items.get(u.id);
+          const own = shift && it?.own ? it.own : null;
+          const w = own ? Math.max(own.w, Math.round(u.box.w * sx)) : u.box.w, h = own ? Math.max(own.h, Math.round(u.box.h * sy)) : u.box.h;
+          if (own) sizes[u.id] = w <= own.w && h <= own.h ? null : { w, h };
+          const cx = anchor.x + (u.box.x + u.box.w / 2 - anchor.x) * sx, cy = anchor.y + (u.box.y + u.box.h / 2 - anchor.y) * sy;
+          const dx = Math.round(cx - w / 2 - u.box.x), dy = Math.round(cy - h / 2 - u.box.y);
+          for (const k of u.keys) { const p = pos.get(k)!; now[k] = { x: p.x + dx, y: p.y + dy }; }
+        }
+        const at = { ...hooks.at, ...now };
+        if (!(Object.keys(sizes).length && preview?.(sizes, at))) draw(at);
+      };
+      moveDrag(root, ev, (dx, dy) => { d = { x: dx, y: dy }; frame ||= requestAnimationFrame(show); }, (moved) => {
+        if (frame) { cancelAnimationFrame(frame); show(); }
+        window.removeEventListener("keydown", keys);
+        window.removeEventListener("keyup", keys);
+        window.removeEventListener("pointermove", keys);
+        if (moved) hooks.spread!(now, sizes);
+      }, canvas.zoom());
+      return;
+    }
     const grab = start.closest("[data-resize]");
     if (grab && hooks.resized) {
       ev.preventDefault();
@@ -1419,7 +1504,7 @@ function interact(canvas: Canvas, scene: Scene, hooks: GraphHooks, picked: Set<I
       let size = { w: w0, h: h0 }, frame = 0;
       const show = () => {
         frame = 0;
-        if (preview?.(id, size)) return;
+        if (preview?.({ [id]: size })) return;
         // Without a preview, the box alone follows.
         const g = canvas.world.querySelector(`[data-resize="${CSS.escape(id)}"]`)?.parentElement;
         const box = g?.querySelector(":scope > rect");
