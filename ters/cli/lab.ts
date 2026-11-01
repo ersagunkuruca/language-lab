@@ -157,7 +157,10 @@ function compiled(p: Program, main: Id, files: boolean): string {
   const url = (path: string) => JSON.stringify(files ? pathToFileURL(join(here, path)).href : join(here, path));
   const name = p.names[main];
   const takesArgs = (p.info.typeOf.get(main) as { params: unknown[] }).params.length === 1;
-  const program = compile(p.code, p.info, p.names, { runtime: JSON.parse(url("../../compiler/src/runtime.js")), exports: [name], steps: false });
+  // The program's hosts/js.js, if it has one (FOREIGN.md, L69a2): bundled in
+  // with the runtime, or imported from beside the program.
+  const host = hostFile && existsSync(hostFile) ? (files ? pathToFileURL(resolve(hostFile)).href : resolve(hostFile)) : undefined;
+  const program = compile(p.code, p.info, p.names, { runtime: JSON.parse(url("../../compiler/src/runtime.js")), exports: [name], steps: false, ...(host ? { hosts: host } : {}) });
   return `#!/usr/bin/env node
 // ${p.title}, compiled by lab (ters/cli/lab.ts). Run: node <this file> [arguments…]
 ${program}

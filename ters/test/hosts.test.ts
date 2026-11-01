@@ -14,6 +14,12 @@ import { hostSkeleton } from "../src/lang/hosts.ts";
 import { ABORT_OP, S } from "../src/lang/std.ts";
 import { B } from "../src/prelude.ts";
 import type { Id } from "../src/model.ts";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { compile } from "../../compiler/src/compile.ts";
+import { $setPrint } from "../../compiler/src/runtime.js";
 
 function program() {
   const k = new Lang();
@@ -81,4 +87,26 @@ test("lab hosts: a skeleton with each operation's id, name and types", () => {
   assert.match(text, /^\/\/ Answers for this program's own effects/);
   assert.ok(text.includes(`// name of, giving back string\n  ${JSON.stringify(p.dev.op["name of"])}: (id /* number | bigint */) => { throw new Error("not written yet"); },`), text);
   assert.ok(text.includes(`// ready, giving back boolean`));
+});
+
+// Compiled JavaScript (L69a2): the module imports hosts/js.js and the
+// runtime answers the same operations with the same border checks, so a
+// compiled run prints what the evaluator's does.
+test("compiled JavaScript asks the same host, checked at the same border", async () => {
+  const p = program();
+  const dir = mkdtempSync(join(tmpdir(), "hosts-"));
+  const run = async (host: string, name: string) => {
+    const hostFile = join(dir, `${name}-${Math.random().toString(36).slice(2)}.js`);
+    writeFileSync(hostFile, `export default {${host}};\n`);
+    const file = join(dir, `${name}-${Math.random().toString(36).slice(2)}.mjs`);
+    writeFileSync(file, compile(p.code, p.info, p.names, { runtime: pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href, exports: [name], hosts: pathToFileURL(hostFile).href }));
+    const out: string[] = [];
+    $setPrint((s: string) => out.push(s));
+    try { (await import(pathToFileURL(file).href)).defs[name](); } finally { $setPrint((s: string) => console.log(s)); }
+    return out;
+  };
+  const op = (name: string) => JSON.stringify(p.dev.op[name]);
+  assert.deepEqual(await run(`${op("battery")}: () => 0.5, ${op("name of")}: (id) => "phone " + id, ${op("ready")}: () => true`, "main"), ["phone 7 at 50", "ready"]);
+  assert.deepEqual(await run(`${op("name of")}: () => 42`, "careful"), ["aborted: the host's name of gave 42, not a text"]);
+  assert.deepEqual(await run(`${op("battery")}: () => 1`, "careful"), [`aborted: hosts/js.js has no answer for name of (${p.dev.op["name of"]})`]);
 });

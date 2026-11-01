@@ -37,7 +37,7 @@ import type { Code, Id, Node, NodeOf } from "../model.ts";
 import type { Info } from "./infer.ts";
 import { LIBRARY } from "./library.ts";
 import { makeRunner, type Value } from "./run.ts";
-import { ALGEBRA_V, ARITH, CONS, NIL, S, SET as S_SET, TRUE } from "./std.ts";
+import { ALGEBRA_V, ARITH, CONS, LIST, NIL, S, SET as S_SET, TRUE } from "./std.ts";
 import { B } from "../prelude.ts";
 import { MASK_TYPES, NUMBER } from "./types.ts";
 
@@ -64,6 +64,8 @@ type V =
   | { k: "alg"; alg: Algebra }
   | { k: "num"; zero: boolean }
   | { k: "closure"; lambda: NodeOf<"lambda">; env: Map<Id, V> }
+  // A list, and what its items are (null: it has none, as nil).
+  | { k: "list"; item: V | null }
   | { k: "top" };
 
 const TOP: V = { k: "top" };
@@ -152,6 +154,7 @@ export function bladeMask(code: Code, info: Info, fn: Id, given: (number | null)
   const join = (a: V, b: V): V => {
     if (a.k === "mask" && b.k === "mask" && a.alg === b.alg) return { k: "mask", alg: a.alg, m: a.m | b.m, l: a.l || b.l };
     if (a.k === "num" && b.k === "num") return { k: "num", zero: a.zero && b.zero };
+    if (a.k === "list" && b.k === "list") return { k: "list", item: a.item && b.item ? join(a.item, b.item) : a.item ?? b.item };
     return TOP;
   };
 
@@ -174,21 +177,25 @@ export function bladeMask(code: Code, info: Info, fn: Id, given: (number | null)
   // MASK_TYPES), T an algebra's record type, holds only T's vectors. A
   // value put there is checked; a value read from there has that mask.
   const declared = new Map<Id, { alg: Algebra; m: number; name: string }>();
+  // Fields of type List (Vector of T) and the others (L43e3): each item.
+  const declaredItems = new Map<Id, { alg: Algebra; m: number; name: string }>();
   for (const d of code.defs) {
     const b = (nodes[d] as NodeOf<"def">)?.body, td = b ? nodes[b] : undefined;
     if (td?.kind !== "typedef") continue;
     for (const v of td.variants) for (const f of (nodes[v] as NodeOf<"variant">)?.fields ?? []) {
-      const ty = nodes[(nodes[f] as NodeOf<"field">)?.type];
+      const outer = nodes[(nodes[f] as NodeOf<"field">)?.type];
+      const listed = outer?.kind === "tref" && outer.target === LIST && outer.args.length === 1;
+      const ty = listed ? nodes[outer.args[0]] : outer;
       const named = ty?.kind === "tref" ? MASK_TYPES[ty.target] : undefined;
       const arg = named && ty?.kind === "tref" && ty.args.length === 1 ? nodes[ty.args[0]] : undefined;
       const alg = arg?.kind === "tref" ? byType.get(arg.target) : undefined;
       if (!named || !alg) continue;
       const m = alg.blades.reduce((acc, bl, i) => ((named.grades === "even" ? bl.length % 2 === 0 : named.grades.includes(bl.length)) ? acc | (1 << i) : acc), 0);
-      declared.set(f, { alg, m, name: named.name });
+      (listed ? declaredItems : declared).set(f, { alg, m, name: listed ? `a list of ${named.name}` : named.name });
     }
   }
   const fieldsOf = (variant: Id) => (nodes[variant] as NodeOf<"variant">).fields;
-  const declares = (variant: Id) => nodes[variant]?.kind === "variant" && fieldsOf(variant).some((f) => declared.has(f));
+  const declares = (variant: Id) => nodes[variant]?.kind === "variant" && fieldsOf(variant).some((f) => declared.has(f) || declaredItems.has(f));
   // A value going where a named mask is: refused when its mask is known
   // and has a part the name doesn't allow.
   const put = (at: Id, field: Id, v: V) => {
@@ -197,6 +204,25 @@ export function bladeMask(code: Code, info: Info, fn: Id, given: (number | null)
       mistakes.set(at, `puts a value that is ${describeMask(want.alg, v.m)} where ${want.name} goes, ${describeMask(want.alg, want.m)}`);
   };
   const held = (field: Id): V => { const w = declared.get(field)!; return { k: "mask", alg: w.alg, m: w.m }; };
+  const heldItems = (field: Id): V => { const w = declaredItems.get(field)!; return { k: "list", item: { k: "mask", alg: w.alg, m: w.m } }; };
+  // A list going where each item has a named mask: each item written out
+  // in it is checked where it is, and what the rest is known to hold.
+  const putItems = (at: Id, field: Id, env: Map<Id, V>, depth: number) => {
+    const want = declaredItems.get(field)!;
+    const check = (where: Id, v: V) => {
+      if (mistakes && v.k === "mask" && v.alg === want.alg && !v.l && v.m & ~want.m && !mistakes.has(where))
+        mistakes.set(where, `puts an item that is ${describeMask(want.alg, v.m)} where ${want.name} goes, ${describeMask(want.alg, want.m)} each`);
+    };
+    let id = at;
+    for (;;) {
+      const n = nodes[id];
+      const f = n?.kind === "call" ? nodes[n.fn] : undefined;
+      if (n?.kind === "call" && f?.kind === "ref" && f.target === CONS) { check(n.args[0], ev(n.args[0], env, depth + 1)); id = n.args[1]; continue; }
+      const v = ev(id, env, depth + 1);
+      if (v.k === "list" && v.item) check(id, v.item);
+      return;
+    }
+  };
   const ev = (id: Id, env: Map<Id, V>, depth: number): V => {
     const v = ev1(id, env, depth);
     return v.k === "top" ? typed(id) : v;
@@ -210,6 +236,7 @@ export function bladeMask(code: Code, info: Info, fn: Id, given: (number | null)
       case "lambda": return { k: "closure", lambda: n, env };
       case "ref": {
         if (env.has(n.target)) return env.get(n.target)!;
+        if (n.target === NIL) return { k: "list", item: null };
         const alg = algebras.get(n.target);
         if (alg) return { k: "alg", alg };
         const t = nodes[n.target];
@@ -230,8 +257,13 @@ export function bladeMask(code: Code, info: Info, fn: Id, given: (number | null)
           return ev(arms[0].body, inner, depth + 1);
         }
         // Otherwise every arm may run: the union of what they give. A
-        // field with a named mask binds that mask.
-        const bind = (a: NodeOf<"arm">, b: Id, i: number): V => { const f = nodes[a.variant]?.kind === "variant" ? fieldsOf(a.variant)[i] : undefined; return f && declared.has(f) ? held(f) : TOP; };
+        // field with a named mask binds that mask; a list's head binds
+        // what its items are, and its tail the list.
+        const bind = (a: NodeOf<"arm">, b: Id, i: number): V => {
+          if (s.k === "list" && a.variant === CONS) return i === 0 ? s.item ?? TOP : s;
+          const f = nodes[a.variant]?.kind === "variant" ? fieldsOf(a.variant)[i] : undefined;
+          return f && declared.has(f) ? held(f) : f && declaredItems.has(f) ? heldItems(f) : TOP;
+        };
         const outs = [...arms.map((a) => ev(a.body, new Map([...env, ...a.binds.map((b, i) => [b, bind(a, b, i)] as const)]), depth + 1)), ...(n.otherwise ? [ev(n.otherwise, env, depth + 1)] : [])];
         return outs.length ? outs.reduce(join) : TOP;
       }
@@ -255,13 +287,19 @@ export function bladeMask(code: Code, info: Info, fn: Id, given: (number | null)
       return { k: "mask", alg, m: n.args.reduce((m, a, i) => { const v = ev(a, env, depth + 1); return v.k === "num" && v.zero ? m : m | (1 << i); }, 0) };
     }
     if (target && declares(target)) {
-      fieldsOf(target).forEach((f, i) => { if (declared.has(f) && n.args[i]) put(n.args[i], f, arg(i)); });
+      fieldsOf(target).forEach((f, i) => { if (declared.has(f) && n.args[i]) put(n.args[i], f, arg(i)); if (declaredItems.has(f) && n.args[i]) putItems(n.args[i], f, env, depth); });
       return TOP;
     }
     if (target && declared.has(target)) return held(target);
+    if (target && declaredItems.has(target)) return heldItems(target);
+    if (target === CONS) {
+      const [h, t] = [arg(0), arg(1)];
+      return { k: "list", item: t.k === "list" ? (t.item ? join(h, t.item) : h) : TOP };
+    }
     if (target === S_SET) {
       const fr = nodes[n.args[0]];
       if (fr?.kind === "ref" && declared.has(fr.target)) { put(n.args[2], fr.target, arg(2)); return TOP; }
+      if (fr?.kind === "ref" && declaredItems.has(fr.target)) { putItems(n.args[2], fr.target, env, depth); return TOP; }
     }
     if (target && (ADD.has(target) || SUB.has(target))) {
       const [a, b] = [arg(0), arg(1)];

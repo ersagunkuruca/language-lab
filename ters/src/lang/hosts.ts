@@ -47,7 +47,7 @@ export function hostedEffects(code: Code, hosts: Hosts | undefined): Set<Id> {
 class Border extends Error {}
 
 // A type expression's own reading, for the border: what a host may give.
-type Shape = { k: "int" } | { k: "float" } | { k: "text" } | { k: "bool" } | { k: "unit" } | { k: "list"; of: Shape } | { k: "record"; variant: Id; fields: [string, Shape][] } | { k: "any" };
+export type Shape = { k: "int" } | { k: "float" } | { k: "text" } | { k: "bool" } | { k: "unit" } | { k: "list"; of: Shape } | { k: "record"; variant: Id; fields: [string, Shape][] } | { k: "any" };
 
 function shapeOf(code: Code, names: Names, tid: Id | undefined): Shape {
   const t = tid ? code.nodes[tid] : undefined;
@@ -103,20 +103,37 @@ function outward(s: Shape, v: Value): unknown {
   }
 }
 
+// What the border needs of an operation: its name, and its fields' and
+// answer's shapes. Plain data, so compiled JavaScript carries it too.
+export interface HostOp { name: string; ins: Shape[]; out: Shape }
+export function hostOp(code: Code, names: Names, op: Id): HostOp {
+  const v = code.nodes[op] as NodeOf<"variant">;
+  return { name: names[op] ?? op, ins: v.fields.map((fid) => shapeOf(code, names, (code.nodes[fid] as NodeOf<"field">).type)), out: shapeOf(code, names, v.returns) };
+}
+
 // Answer an operation from the host: its fields out, the answer checked
 // on the way in. Throws Error with the reason when the host has no answer
-// or gives a wrong one; the runner makes that the program's Abort.
-export function answerFromHost(code: Code, names: Names, hosts: Hosts, op: Id, args: Value[]): Value {
-  const v = code.nodes[op] as NodeOf<"variant">;
-  const name = names[op] ?? op;
+// or gives a wrong one; the runner makes that the program's Abort, and so
+// does compiled JavaScript's runtime (L69a2).
+export function answerByShapes(h: HostOp, hosts: Hosts, op: Id, args: Value[]): Value {
   const f = hosts[op];
-  if (typeof f !== "function") throw new Error(`hosts/js.js has no answer for ${name} (${op})`);
-  const ins = v.fields.map((fid, i) => outward(shapeOf(code, names, (code.nodes[fid] as NodeOf<"field">).type), args[i]));
+  if (typeof f !== "function") throw new Error(`hosts/js.js has no answer for ${h.name} (${op})`);
+  const ins = h.ins.map((s, i) => outward(s, args[i]));
   let x: unknown;
-  try { x = f(...ins); } catch (e) { throw new Error(`the host's ${name} failed: ${(e as Error).message ?? e}`); }
-  if (x instanceof Promise) throw new Error(`the host's ${name} answered later (a promise); answering later is L59's, so a host answers at once for now`);
-  try { return inward(shapeOf(code, names, v.returns), x, `the host's ${name}`); }
+  try { x = f(...ins); } catch (e) { throw new Error(`the host's ${h.name} failed: ${(e as Error).message ?? e}`); }
+  if (x instanceof Promise) throw new Error(`the host's ${h.name} answered later (a promise); answering later is L59's, so a host answers at once for now`);
+  try { return inward(h.out, x, `the host's ${h.name}`); }
   catch (e) { if (e instanceof Border) throw new Error(e.message); throw e; }
+}
+export const answerFromHost = (code: Code, names: Names, hosts: Hosts, op: Id, args: Value[]): Value => answerByShapes(hostOp(code, names, op), hosts, op, args);
+
+// A program's own effects' operations, which a host may answer.
+export function ownOperations(code: Code): Id[] {
+  return code.defs.flatMap((d) => {
+    if (d.startsWith("std.") || d.startsWith("effect.")) return [];
+    const b = (code.nodes[d] as NodeOf<"def">)?.body, td = b ? code.nodes[b] : undefined;
+    return td?.kind === "typedef" && td.effect ? td.variants : [];
+  });
 }
 
 const showShape = (s: Shape): string => s.k === "list" ? `Array<${showShape(s.of)}>` : s.k === "record" ? `{ ${s.fields.map(([n, f]) => `${JSON.stringify(n)}: ${showShape(f)}`).join(", ")} }` : ({ int: "number | bigint", float: "number", text: "string", bool: "boolean", unit: "undefined", any: "unknown" } as const)[s.k];

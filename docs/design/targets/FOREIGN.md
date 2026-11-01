@@ -8,8 +8,10 @@ by the host function under its id, the answer is checked against the
 operation's result type (Int, Float64, Text, Bool, Unit, lists and
 records of them), and a missing or wrong answer is an Abort with the
 reason. `lab hosts` prints the skeleton. A host answers at once for now;
-one that answers later (a promise) waits for L59. Left in L69a: the
-compiled JS. One question for Ersagun at the end; nothing before L69a
+one that answers later (a promise) waits for L59. Compiled JavaScript
+does the same (L69a2): the module imports `hosts/js.js` and the runtime's
+`$perform` answers from it with the same border checks, and `lab compile`
+bundles it in. Left: `lab build-web`'s page. One question for Ersagun at the end; nothing before L69a
 waits on it.
 
 A website needs the browser's APIs, a phone app the device's (camera,

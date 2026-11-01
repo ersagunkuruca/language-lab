@@ -9,9 +9,10 @@
 // as in lab test (tests.ts): a T is built by T's own jobs that give one
 // (zero, succ; nil, cons; empty map, put), each run twice, once at T and
 // once at R, so both sides hold the same value and R's stays inside what
-// R's jobs make (an Int representing Nat is never negative). A job taking
-// a function (match, fold, update at) isn't tried: a function can't be
-// picked as a small value. They are the definitions' law, the same one a
+// R's jobs make (an Int representing Nat is never negative). match and fold
+// take a function per case: they are given cases that report what they get
+// (L108d2). Another job taking a function (update at) isn't tried: a
+// function can't be picked as a small value. They are the definitions' law, the same one a
 // T7 law states between two ways, checked by the evaluator like any test.
 //
 // Prior art: QuickCheck's (Claessen and Hughes, ICFP 2000) and
@@ -97,8 +98,52 @@ export function representationLaws(code: Code, info: Info, names: Names, reps: R
       }
       out.push(res);
     }
+
+    // match and fold (L108d2): each takes a function per case of T, so the
+    // law gives it cases that report what they were given. At T a case is
+    // given its fields (and, for fold, what the recursive fields fold to);
+    // at R the recursive fields are R values, read through meaning. Both
+    // sides must call the same case with the same values.
+    const td = (() => { const b = (code.nodes[rep.of] as NodeOf<"def">)?.body; const n = b ? code.nodes[b] : undefined; return n?.kind === "typedef" ? n : null; })();
+    if (td) for (const job of ["match", "fold"] as const) {
+      const at = rep.impl[job];
+      if (!at) continue;
+      const res: LawResult = { rep: rep.name, job, cases: 0, failures: [] };
+      const recursive = td.variants.map((v) => (code.nodes[v] as NodeOf<"variant">).fields.map((f) => { const t = code.nodes[(code.nodes[f] as NodeOf<"field">).type]; return t?.kind === "tref" && t.target === rep.of; }));
+      const report = (i: number, xs: Value[]): Value => ({ tag: `law.case ${i}`, fields: xs });
+      // T's own, on a T value: the case of its variant, given its fields,
+      // and (fold) each recursive field folded first.
+      const own = (v: Value): Value => {
+        const d = v as { tag: Id; fields: Value[] };
+        const i = td.variants.indexOf(d.tag);
+        return report(i, job === "fold" ? [...d.fields, ...d.fields.filter((_, j) => recursive[i][j]).map(own)] : d.fields);
+      };
+      const cases = td.variants.map((_, i) => ((...xs: Value[]) => {
+        const n = recursive[i].length;
+        return [report(i, xs.map((x, j) => (j < n && recursive[i][j] ? meaning(x) : x)))];
+      }) as unknown as Value);
+      for (const x of pool) {
+        res.cases++;
+        const want = own(x.t);
+        try {
+          const got = call(at, [given(x.r), ...cases]);
+          if (!equal(got, want)) res.failures.push({ inputs: [x.text], what: `at ${rep.name} ${job} calls ${showCase(got)}, ${names[rep.of] ?? rep.of}'s own ${showCase(want)}` });
+        } catch (e) {
+          res.failures.push({ inputs: [x.text], what: `at ${rep.name} ${job} stops: ${(e as Error).message}` });
+        }
+      }
+      out.push(res);
+    }
   }
   return out;
+
+  // A case's report, for a failure: which case, given what.
+  function showCase(v: Value): string {
+    const d = v as { tag?: string; fields?: Value[] };
+    if (!d?.tag?.startsWith("law.case ")) return showValue(v, code, names);
+    const i = Number(d.tag.slice(9));
+    return `case ${i + 1}(${(d.fields ?? []).map(showCase).join(", ")})`;
+  }
 }
 
 // A constructor's type: its fields to its type.

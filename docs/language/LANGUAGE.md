@@ -92,7 +92,10 @@ says what to do instead. The checker drops that `Choice` where it can see
 the input is fine: dividing by a literal or a let that isn't 0, inside `x >
 0`'s true branch, the square root of `x · x`. A page's view (a part, a
 text, an attribute) with no answer shows nothing there; a handler such as
-a button's handles its own. Overflow stops the program with the reason
+a button's handles its own. Several of these do have answers among the
+complex numbers: `complex sqrt(−4)` is 2i and `complex log(−1)` is iπ, and
+`complex asin` and `complex acos` answer everywhere (principal values,
+L127). Overflow stops the program with the reason
 (FLOAT-VALUES-2026-11-01.md). Where ±∞ helps (a bound with no
 end, the least of no numbers), it is ordinary data: `Extended a` is
 `minus infinity`, `finite(value)` or `plus infinity`, for any ordered
