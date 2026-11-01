@@ -1027,8 +1027,26 @@ export function useVar(code: Code, names: Names, info: Info, defId: Id, binder: 
   const cur = code.nodes[slot];
   if (cur?.kind === "ref" && cur.target === binder) return { ok: false, reason: "already that" };
   if (!scopeAt(code, defId, slot).includes(binder)) return { ok: false, reason: `${display[binder] ?? names[binder] ?? "it"} isn't in scope here` };
+  // A tuple of as many parts as the node's empty inputs fills them all.
+  const all = spreadInto(code, names, info, binder, slot);
+  if (all?.ok) return all;
   const next = collect(replace(code, slot, () => ({ kind: "ref", target: binder })));
   return guardTyped(info, next, names, slot, `Wired ${display[binder] ?? names[binder] ?? "the variable"} in. Same as picking it from the palette: by id, type-checked.`);
+}
+
+// A tuple wired onto a node whose inputs are all empty fills them all
+// (E167d, PORTS-2026-11-01.md §5): f(p) for f(x, y), as the checker reads
+// it (L128a). Null when it isn't that: not a tuple of as many parts as the
+// node has inputs, or an input already filled.
+function spreadInto(code: Code, names: Names, info: Info, binder: Id, slot: Id): TEdit | null {
+  const t = info.typeOf.get(binder), z = t && info.subst.zonk(t);
+  const at = parentOf(code, slot), p = at && code.nodes[at.parent];
+  if (z?.t !== "con" || !/^std\.tuple\d$/.test(z.id) || p?.kind !== "call" || !p.args.includes(slot)) return null;
+  if (p.args.length !== z.args.length || p.args.some((a) => code.nodes[a]?.kind !== "hole")) return null;
+  const r = freshId();
+  const next = collect(replace({ ...code, nodes: { ...code.nodes, [r]: { id: r, kind: "ref", target: binder } } }, p.id, () => ({ kind: "call", fn: p.fn, args: [r] })));
+  const nm = display[binder] ?? names[binder] ?? "it";
+  return guardTyped(info, next, names, p.id, `Wired ${nm} in as all ${p.args.length} inputs: its parts, in order.`);
 }
 
 // A call turned around (E168, PORTS-2026-11-01.md §3): one input swaps
