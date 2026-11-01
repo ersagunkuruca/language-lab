@@ -1814,7 +1814,11 @@ function groupKey(s: Subst, types: Type[]): string {
     t = s.resolve(t);
     if (t.t === "var") {
       if (!vars.has(t.v)) vars.set(t.v, vars.size);
-      return `${s.plain.has(t.v) ? "p" : "v"}${vars.get(t.v)}`;
+      // What a variable may stand for is part of the key: a filling that
+      // asks for a Number with < where another asks for nothing fails where
+      // the other passes (the calculus palette sweep, after E103c).
+      const marks = `${s.plain.has(t.v) ? "p" : ""}${s.numbers.has(t.v) ? "n" : ""}${s.arith.get(t.v) ?? ""}${s.fractional.has(t.v) ? "f" : ""}${s.whole.has(t.v) ? "w" : ""}${[...(s.needs.get(t.v)?.keys() ?? [])].join("+")}`;
+      return `${marks}v${vars.get(t.v)}`;
     }
     if (t.t === "con") return `${t.id}(${t.args.map(go).join(",")})`;
     const r = s.resolveRow(t.eff);
