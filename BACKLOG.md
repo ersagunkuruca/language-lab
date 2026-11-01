@@ -24,7 +24,7 @@ Ersagun's "take 40 more tasks" (2026-11-01 11:46): Editor 13, Compiler 13, Langu
 |---|---|---|
 | E Editor | "Editor lane" | Ersagun's "as many as you can" (until 2 Nov 17:00 UTC): C66's picture half (#892), then I29's moves in progress, E103/E133, and the next QA round's findings |
 | C Compiler and targets | "Compiler lane" | C66 on shaders (a shader's arrays in WebAssembly), C40's next step, C67's next step, C31, L125e (niche representations), L43c (after masks on record fields, L43e), C63d (Set as a hash table), then (Ersagun 16:05 "take 20 more") C30's next stage, C56, C45, C58, C59 |
-| L Language and library | "Language lane" | Ersagun's 40 (2026-11-01): L125a step 1 done (#842); L125b done, L125d done (#847), L125f done (#848), L71a done (#849), L38's open end done (#851), L71b done (#887), I118 done (#890), L127 done (#891), L69a2 done (#894), L43e3 done (#895), L108d2 done (this PR), L29, I84; Ersagun's 20 more (16:05): L71c (the world answers `await`), L59 (a page's fetch and wait resume), L44's next step, L42's next step (a PGA motor), L126 (`sameAs`), L97d. Earlier today: #809 to #823 |
+| L Language and library | "Language lane" | Ersagun's 40 (2026-11-01): L125a step 1 done (#842); L125b done, L125d done (#847), L125f done (#848), L71a done (#849), L38's open end done (#851), L71b done (#887), I118 done (#890), L127 done (#891), L69a2 done (#894), L43e3 done (#895), L108d2 done (#896), L29 and I84 put back (too big for now, see their rows); Ersagun's 20 more (16:05): L71c done (this PR), L59 (a page's fetch and wait resume), L44's next step, L42's next step (a PGA motor), L126 (`sameAs`), L97d. Earlier today: #809 to #823 |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -114,7 +114,7 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L29 | Function variables' rows checked in any order (the closing use should win either way). The other half, `inverse(f, …)` typed from f at the call, is done (#701) | L14 | P3 | M | |
+| L29 | Function variables' rows checked in any order (the closing use should win either way). The other half, `inverse(f, …)` typed from f at the call, is done (#701). Tried 2026-11-01: letting an open row be taken in by a closed one where `opened` copies it broke three effects tests (a handler's row then leaks outward), so it needs two passes: rows settled after every use is seen | L14 | P3 | M | needs two passes |
 
 ### Ersagun's current asks
 
@@ -159,7 +159,6 @@ all of these.
 | L54 | Operations answered later, at most once (ANSWERED-LATER.md): step 1 done (L54a); compiled side is C40 | EFFECTS-REVIEW §1.5, §5 | P1 | L | step 1 done |
 | L59 | A page's fetch and wait resume instead of re-running the handler; `Wait` folds into `Time` | EFFECTS-REVIEW §1.1-1.3 | P1 | M | after L54 |
 | L60 | The audio worklet's run of `main` replays the page's random numbers and clock under a handler | EFFECTS-REVIEW §1.4 | P2 | M | after L54 |
-| L71 | `together`, `race`, `within(ms, a)` as prelude handlers over `await`. Typing written down (ANSWERED-LATER.md "Typing `await` and `together`"): L71a an operation's own type variables (fresh per call, rigid in its case); L71b done (std's `Await`, `Ticket a`, `Branch`; the prelude's `together`; a branch's row is `Await` only for now); L71c the world answers `await(any of(…))`, then `race` and `within` | LANGUAGE-NEEDS Part 1 | P2 | L | typing designed |
 | L63 | Deterministic schedules: under `seeded` the scheduler's choices are seeded, so an interleaving bug is a seed in a test (FoundationDB) | LANGUAGE-NEEDS Part 1 | P2 | M | after L71, L55 |
 | L69 | Foreign definitions ([FOREIGN.md](docs/design/targets/FOREIGN.md)): a program's own effect answered by a host file per target. L69a `hosts/js.js` in the evaluator and compiled JS, results checked at the border, `lab hosts` skeleton (L, M): done (evaluator; compiled JS, L69a2; a page's build-web still to bundle it); L69b C and WebAssembly (C, M); L69c the editor's "needs its host" (E, S), done (#860); L69d optional, std's world operations as host files (L, M). Asks Ersagun: may a foreign operation be declared pure | LANGUAGE-NEEDS §5 | P2 | M | design done |
 | L62 | Branches with no world effects marked pure by a row constraint, so the runtime may run them on another core | LANGUAGE-NEEDS Part 1 | P3 | S | after L71 |
@@ -169,7 +168,7 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| I84 | Bounce's `bump pairs` is inferred Diverge: it recurses on a list it gets back inside a Pair, which the checker can't see is shorter | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B7 | P3 | L | |
+| I84 | Bounce's `bump pairs` is inferred Diverge: it recurses on a list it gets back inside a Pair, which the checker can't see is shorter. Needs a size analysis that follows a list through a record's fields (sized types), not a tweak to the structural check | [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B7 | P3 | L | needs sizes |
 | L46b | Raymarch's `march` and `shadow` count steps in an Int and `colour` drops `with fuel` (bounded counting is total since L46). Waits on Int in the scalar profile outside shaders (C66's WebAssembly int32 step; plain JS and C too), or the editor's CPU-side pictures and the scalar tests refuse it | L46 | P3 | S | |
 
 ### Grammars, modules and sharing

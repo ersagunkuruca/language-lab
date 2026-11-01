@@ -9,7 +9,7 @@ import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { library } from "./programs.ts";
-import { ABORT_OP, ARITH, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, TICKET_V, AWAIT_OP, BRANCH_V, DUAL_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, EXTENDED_V, ALGEBRAIC_OPS, CHECK_OP, std } from "./std.ts";
+import { ABORT_OP, ARITH, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, TICKET_V, AWAIT_OP, START_TIMER_OP, BRANCH_V, DUAL_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, EXTENDED_V, ALGEBRAIC_OPS, CHECK_OP, std } from "./std.ts";
 
 export function buildPrelude(): Module {
   const k = new Lang();
@@ -1207,6 +1207,8 @@ export function buildPrelude(): Module {
   const startBranch = k.def("start branch");
   k.define(startBranch, k.fn(["action"], (a) => k.handle(k.call(a), [
     { variant: AWAIT_OP, names: ["ticket", "rest"], body: ([t, rest]) => k.call(BRANCH_V.parked, k.call(ticketId, t), k.thunk(() => k.call(rest, k.call(AWAIT_OP, t)))) },
+    // Starting a timer is answered outward, and the branch goes on at once.
+    { variant: START_TIMER_OP, names: ["milliseconds"], body: ([ms]) => k.call(START_TIMER_OP, ms) },
   ], ["value", (v) => k.call(BRANCH_V.done, v)])));
   const waiting = k.def("waiting tickets");
   k.define(waiting, k.fn(["branches"], (bs) => k.fold(bs, [
@@ -1241,9 +1243,32 @@ export function buildPrelude(): Module {
   ])));
   const together = k.def("together");
   k.define(together, k.fn(["actions"], (as) => k.call(settle, k.call(map, as, startBranch))));
-  const awaitHelpers = [startBranch, waiting, goOn, finished, settle];
+  // race and within (L71c): the first action to finish wins; the others
+  // stay parked and are dropped, which is all cancelling them takes.
+  const firstDone = k.def("first done");
+  k.define(firstDone, k.fn(["branches"], (bs) => k.match(bs, [
+    { variant: NIL, names: [], body: () => k.x(NONE) },
+    { variant: CONS, names: ["branch", "others"], body: ([b, others]) => k.match(b, [
+      { variant: BRANCH_V.done, names: ["value"], body: ([v]) => k.call(SOME, v) },
+      { variant: BRANCH_V.parked, names: ["ticket", "resume"], body: () => k.call(firstDone, others) },
+    ]) },
+  ])));
+  const raceSettle = k.def("race settle");
+  k.define(raceSettle, k.fn(["branches"], (bs) => k.match(k.call(firstDone, bs), [
+    { variant: SOME, names: ["value"], body: ([v]) => v },
+    { variant: NONE, names: [], body: () => k.call(raceSettle, k.call(goOn, bs, k.call(AWAIT_OP, k.call(anyOf, k.call(waiting, bs))))) },
+  ])));
+  const race = k.def("race");
+  k.define(race, k.fn(["actions"], (as) => k.call(raceSettle, k.call(map, as, startBranch))));
+  const within = k.def("within");
+  k.define(within, k.fn(["milliseconds", "action"], (ms, a) => k.let("timer", k.call(START_TIMER_OP, ms), (t) =>
+    k.call(race, k.list(
+      k.thunk(() => k.call(SOME, k.call(a))),
+      k.thunk(() => k.seq(k.call(AWAIT_OP, t), k.x(NONE))),
+    )))));
+  const awaitHelpers = [startBranch, waiting, goOn, finished, settle, firstDone, raceSettle];
 
-  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, csqrt, clog, cpow, casin, cacos, showC, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, showDecimals, divD, slopeAt, dualTable, showD, asFixed, fixedF, showX, divX, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, ticketId, anyOf, together];
+  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, csqrt, clog, cpow, casin, cacos, showC, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, showDecimals, divD, slopeAt, dualTable, showD, asFixed, fixedF, showX, divX, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, ticketId, anyOf, together, race, within];
   const mapHelpers = [lastItem, putEntry, updateEntry, removeEntry, lookupEntry, hasEntry, pairsAsEntries, addItem_, removeItem_, hasItem_, unionItems, interItems, diffItems];
   const comments: Record<Id, string> = {
     [each]: "Runs the action on each item of the list in turn, for what it does (prints, writes a cell).",
@@ -1387,7 +1412,9 @@ export function buildPrelude(): Module {
     [ticketId]: "The same ticket with what it gives forgotten (a Ticket Unit), so tickets of different types can go in one list for any of.",
     [anyOf]: "A ticket for whichever of these tickets is ready first: await(any of(tickets)) gives its position, from 0.",
     [together]: "Runs the actions side by side: each runs until it awaits a ticket, and whichever ticket is ready first goes on, until every action has its value. The values come back in the actions' order (as JavaScript's Promise.all).",
-    ...Object.fromEntries(awaitHelpers.map((d) => [d, "A helper of together. Not offered in the palette."])),
+    [race]: "Runs the actions side by side, as together does, and gives the value of the first to finish; the others are dropped where they wait (as JavaScript's Promise.race).",
+    [within]: "The action's value as some(value) if it finishes within this many milliseconds, or none if the timer is ready first; the action is then dropped where it waits.",
+    ...Object.fromEntries(awaitHelpers.map((d) => [d, "A helper of together and race. Not offered in the palette."])),
     [applied]: "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette.",
   };
   const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, ...awaitHelpers, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarD, unpolarX, vector, asinBy, acosBy, asinF, acosF, asinX, acosX, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...laws], merge(prelude, std));

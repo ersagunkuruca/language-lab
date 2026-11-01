@@ -3,7 +3,7 @@
 // prelude's ticket id, any of and together. The world here is a handler
 // written in the language, as L55's are: it answers a timer ticket with its
 // value and says which of several is ready first by the least time. The
-// real world's answers are L71c.
+// tests after them use the real world's answers (L71c), on a fake clock.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -13,7 +13,7 @@ import { infer } from "../src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { runMain } from "../src/lang/run.ts";
-import { AWAIT_OP, CONS, INT_OPS, NIL, S, SHOW_ANY, TICKET_V } from "../src/lang/std.ts";
+import { AWAIT_OP, START_TIMER_OP, CONS, INT_OPS, NIL, S, SHOW_ANY, TICKET_V } from "../src/lang/std.ts";
 import { showType } from "../src/lang/types.ts";
 
 const lib = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
@@ -42,6 +42,8 @@ function program(actions: (k: Lang) => Id[]) {
       // A world ticket: not this world's; nothing more runs.
       { variant: TICKET_V.ticket, names: ["number"], body: () => NIL },
     ]) },
+    // This world starts no timers of its own.
+    { variant: START_TIMER_OP, names: ["milliseconds"], body: () => k.call(TICKET_V.ticket, k.int(0)) },
   ])));
   const main = k.def("main");
   k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.call(world, k.thunk(() => k.call(lib("together"), k.list(...actions(k).map((body) => k.thunk(() => body))))))))));
@@ -80,4 +82,42 @@ test("the types: one await for every ticket type, any of a Ticket Int, together'
   assert.equal(type("ticket id"), "(Ticket a) -> Ticket Unit");
   assert.equal(type("any of"), "(List (Ticket Unit)) -> Ticket Int");
   assert.equal(type("together"), "(List (() -[Await]-> a)) -[Diverge, Await]-> List a");
+});
+
+// The world answers await (L71c): a fake clock that only moves when waited on.
+function worldProgram(body: (k: Lang) => Id) {
+  const k = new Lang(LIBRARY.code);
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, body(k)))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  let clock = 1000;
+  const printed: string[] = [], waits: number[] = [];
+  const world = { now: () => clock, wait: (ms: number) => { waits.push(ms); clock += ms; } };
+  return { info, run: () => { runMain(code, info, main, { print: (s) => printed.push(s), names, world } as Parameters<typeof runMain>[3]); return { printed, waits, clock }; } };
+}
+const slow = (k: Lang, ms: number, v: string) => k.thunk(() => k.let("t", k.call(START_TIMER_OP, k.lit(ms)), (t) => k.seq(k.call(AWAIT_OP, t), k.lit(v))));
+
+test("the world: together waits on its clock until the last ticket, and gives the values in order", () => {
+  const p = worldProgram((k) => k.call(lib("together"), k.list(slow(k, 50, "slow"), slow(k, 20, "fast"))));
+  assert.deepEqual(p.info.errors.map((e) => e.message), []);
+  assert.deepEqual(p.run(), { printed: ['["slow", "fast"]'], waits: [20, 30], clock: 1050 });
+});
+
+test("the world: race gives the first to finish, and within gives none when its timer is first", () => {
+  const race = worldProgram((k) => k.call(lib("race"), k.list(slow(k, 50, "slow"), slow(k, 20, "fast"))));
+  assert.deepEqual(race.info.errors.map((e) => e.message), []);
+  assert.deepEqual(race.run(), { printed: ['"fast"'], waits: [20], clock: 1020 });
+  const late = worldProgram((k) => k.call(lib("within"), k.lit(10), slow(k, 50, "slow")));
+  assert.deepEqual(late.info.errors.map((e) => e.message), []);
+  assert.deepEqual(late.run(), { printed: ["none"], waits: [10], clock: 1010 });
+  const soon = worldProgram((k) => k.call(lib("within"), k.lit(100), slow(k, 20, "fast")));
+  assert.deepEqual(soon.run(), { printed: ['some("fast")'], waits: [20], clock: 1020 });
+});
+
+test("the types of race and within", () => {
+  const code = base(LIBRARY.code), names = baseNames(LIBRARY.names), info = infer(code, names);
+  const type = (n: string) => showType(info.typeOf.get(lib(n))!, names);
+  assert.equal(type("race"), "(List (() -[Await]-> a)) -[Diverge, Await]-> a");
+  assert.equal(type("within"), "(Float64, () -[Await]-> a) -[Diverge, Await]-> Optional a");
 });

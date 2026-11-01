@@ -325,14 +325,16 @@ Each of these puts its effect in the type of every function that uses it, so `di
 
 ## Waiting for several things: Await
 
-A Ticket a is something that will give an a later: a timer, or something the world started. await(ticket) waits for it. together runs several actions side by side, each until it awaits, and whichever ticket is ready first goes on. Something around it answers await: a test's handler, and later the world (L71c).
+A Ticket a is something that will give an a later: a timer, or something the world started. await(ticket) waits for it. start timer(ms) starts one at the world's clock. together runs several actions side by side, each until it awaits, and whichever ticket is ready first goes on; race gives the first to finish, and within gives none if a timer is ready first. Something around it answers await: a test's handler, or the world, which waits on its clock.
 
-- **Ticket** (type). Something that will give an a later: await(ticket) waits for it. A timer(milliseconds, value) gives value after that long; the world's tickets (L71c) come from what it started; first ready is any of's.
+- **Ticket** (type). Something that will give an a later: await(ticket) waits for it. A timer(milliseconds, value) gives value after that long; the world's tickets come from what it started, such as start timer; first ready is any of's.
 - **Await** (type). Waiting: await(ticket) gives the ticket's value once it is ready. A handler answers it later, at most once: a test's, together's, or the world's.
 - **Branch** (type). What together keeps of one action: done with its value, or parked on a ticket with how to go on.
 - **ticket id** : `(Ticket a) -> Ticket Unit`. The same ticket with what it gives forgotten (a Ticket Unit), so tickets of different types can go in one list for any of.
 - **any of** : `(List (Ticket Unit)) -> Ticket Int`. A ticket for whichever of these tickets is ready first: await(any of(tickets)) gives its position, from 0.
 - **together** : `(List (() -[Await]-> a)) -[Diverge, Await]-> List a`. Runs the actions side by side: each runs until it awaits a ticket, and whichever ticket is ready first goes on, until every action has its value. The values come back in the actions' order (as JavaScript's Promise.all).
+- **race** : `(List (() -[Await]-> a)) -[Diverge, Await]-> a`. Runs the actions side by side, as together does, and gives the value of the first to finish; the others are dropped where they wait (as JavaScript's Promise.race).
+- **within** : `(Float64, () -[Await]-> a) -[Diverge, Await]-> Optional a`. The action's value as some(value) if it finishes within this many milliseconds, or none if the timer is ready first; the action is then dropped where it waits.
 
 ## Cells and pages
 

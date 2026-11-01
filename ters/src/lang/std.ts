@@ -932,8 +932,11 @@ export const TICKET = typedef("std.ticket", "Ticket", ["a"], [
 export const TICKET_V = { ticket: "std.ticket.ticket", timer: "std.ticket.timer", firstReady: "std.ticket.first ready" } as const;
 export const AWAIT = typedef("std.await", "Await", [], [
   ["await", [["ticket", ([a]) => tref(TICKET, tref(a))]], ([a]) => tref(a), { later: true, own: ["a"] }],
+  // A timer the world keeps (L71c): ready this many milliseconds after it
+  // was started, whoever awaits it and however often.
+  ["start timer", [["milliseconds", () => tref(NUMBER)]], () => tref(TICKET, tref(UNIT))],
 ], true);
-export const AWAIT_OP = "std.await.await";
+export const AWAIT_OP = "std.await.await", START_TIMER_OP = "std.await.start timer";
 export const BRANCH = typedef("std.branch", "Branch", ["r"], [
   ["done", [["value", ([r]) => tref(r)]]],
   ["parked", [["ticket", () => tref(TICKET, tref(UNIT))], ["resume", ([r], self) => tfun([], tref(self, tref(r)), [AWAIT])]]],
