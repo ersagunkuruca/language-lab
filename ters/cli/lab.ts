@@ -165,7 +165,7 @@ function compiled(p: Program, main: Id, files: boolean): string {
   return `#!/usr/bin/env node
 // ${p.title}, compiled by lab (ters/cli/lab.ts). Run: node <this file> [arguments…]
 ${program}
-import { $setWorld as $$setWorld, $setPrint as $$setPrint, $toList as $$toList, $Aborted as $$Aborted } from ${url("../../compiler/src/runtime.js")};
+import { $setWorld as $$setWorld, $setPrint as $$setPrint, $toList as $$toList, $Aborted as $$Aborted, $main as $$main } from ${url("../../compiler/src/runtime.js")};
 import { nodeWorld as $$nodeWorld } from ${url("../src/lang/world.ts")};
 import { writeSync as $$writeSync } from "node:fs";
 {
@@ -187,16 +187,18 @@ import { writeSync as $$writeSync } from "node:fs";
   const error = (line) => { flush(); write(2, line + "\\n"); };
   $$setWorld({ ...world, error, log: error, input: first(world.input), readLine: first(world.readLine) });
   $$setPrint((line) => { out += line + "\\n"; if (out.length > 65536) flush(); });
-  try {
-    const code = defs[${JSON.stringify(name)}](${takesArgs ? "$$toList(process.argv.slice(2))" : ""});
-    process.exitCode = typeof code === "number" || typeof code === "bigint" ? Number(code) : 0;
-  } catch (e) {
+  // main's value, or the error that ended it. A main that waits (Await,
+  // L71c) is driven by the runtime's $main, on the world's clock (C40).
+  const done = (code) => { process.exitCode = typeof code === "number" || typeof code === "bigint" ? Number(code) : 0; flush(); };
+  const failed = (e) => {
     flush();
     if (!(e instanceof $$Aborted)) throw e;
     error(e.reason);
     process.exitCode = 1;
-  }
-  flush();
+  };
+  let code, ok = false;
+  try { code = $$main(defs[${JSON.stringify(name)}](${takesArgs ? "$$toList(process.argv.slice(2))" : ""})); ok = true; } catch (e) { failed(e); }
+  if (ok) { if (code instanceof Promise) code.then(done, failed); else done(code); }
 }
 `;
 }
