@@ -436,7 +436,8 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| L128c | The text of a function with named result ports (render.ts): `part(speed, time) → drift, drop = speed · time, time · time` when its body is the tuple written out, `→ drift, drop =` and the body otherwise, as a definition with results reads (test/result-ports.test.ts). Reading that text back (editor/typed.ts) is the Editor lane's | this PR |
+| L60 | A page with sound may read the clock and draw random numbers in main: the page's world keeps what it answered main (audio-page.ts recordingWorld), and the audio thread's run of main is answered the same, in order (audio-worklet.ts replaying), its first clock reading making the clock's cell as the page's did, so the cells still line up (test/audio.test.ts) | this PR |
+| L128c | The text of a function with named result ports (render.ts): `part(speed, time) → drift, drop = speed · time, time · time` when its body is the tuple written out, `→ drift, drop =` and the body otherwise, as a definition with results reads (test/result-ports.test.ts). Reading that text back (editor/typed.ts) is the Editor lane's | #936 |
 | L133 | `is letter`, `is digit`, `lowercase` and `uppercase` for Text (GAPS round 6 NG1), in the prelude from comes before, character code and join all, so every target has them; the English letters and digits only, as C's isalpha/isdigit in the "C" locale, other alphabets left as they are (test/round6-library.test.ts) | #935 |
 | L135 | `take` and `drop` for lists (GAPS round 6 NG3): the first count items and the rest after them, counted as `item at`'s positions are; a shorter list gives all of it (take) or [] (drop). Total, by recursion on the list (test/round6-library.test.ts) | #934 |
 | L134 | `starts with` and `ends with` for Text (GAPS round 6 NG2), in the prelude from length and slice, so every target has them; every text starts and ends with "" (test/round6-library.test.ts) | #933 |

@@ -9,10 +9,24 @@
 
 import type { Cells } from "./cells.ts";
 import { listens } from "./audio.ts";
-import { PROCESSOR, type Write } from "./audio-worklet.ts";
+import { PROCESSOR, type Answers, type Write } from "./audio-worklet.ts";
 import type { El } from "./html.ts";
-import type { Data, Value } from "./run.ts";
+import type { Data, Value, World } from "./run.ts";
 import { HTML_V } from "./std.ts";
+
+// The page's world, answering as it did, and while `keep` holds a record,
+// writing each random number and clock reading into it: main runs again on
+// the audio thread, and gets the same answers there (audio-worklet.ts
+// replaying, L60). Changed in place, before the page's runtime is given it
+// (the compiled runtime takes random() from the world when it's set).
+export function recordingWorld<W extends Pick<World, "random" | "now">>(w: W): W & { keep: Answers | null } {
+  const r = w as W & { keep: Answers | null };
+  const random = w.random.bind(w), now = w.now.bind(w);
+  r.keep = null;
+  r.random = () => { const v = random(); r.keep?.random.push(v); return v; };
+  r.now = () => { const v = now(); r.keep?.now.push(v); return v; };
+  return r;
+}
 
 // Run around main: records its cells in the order it made them, then
 // returns what draws a `listen` attribute. `worklet` is the program
@@ -20,14 +34,18 @@ import { HTML_V } from "./std.ts";
 // `base` is where a recording's address is read from (the page's own
 // address when not given): the editor's preview finds them under apps/.
 // `stop` ends everything playing and closes the audio: a page that is
-// gone, replaced or left must not keep sounding.
-export function soundPlayer(cells: Cells, worklet: string, main: () => Value, base?: string) {
+// gone, replaced or left must not keep sounding. `world` is the page's
+// world made with recordingWorld: what it answers main goes to the audio
+// thread too.
+export function soundPlayer(cells: Cells, worklet: string, main: () => Value, base?: string, world?: { keep: Answers | null }) {
   // By their place among main's cells, which is their place on the audio
   // thread too (the handler's own count may have started before main).
   const made: Value[] = [], mine = new Map<number, number>();
   cells.onCell = (c, at) => { mine.set(at, made.length); made.push(c); };
+  const answers: Answers = { random: [], now: [] };
+  if (world) world.keep = answers;
   let page: Value;
-  try { page = main(); } finally { cells.onCell = null; }
+  try { page = main(); } finally { cells.onCell = null; if (world) world.keep = null; }
   const place = new Map(listens(page).map((a, i) => [a, i]));
   const playing = new Set<{ port: MessagePort }>();
   const send = (w: Write) => {
@@ -119,7 +137,7 @@ export function soundPlayer(cells: Cells, worklet: string, main: () => Value, ba
           const from = await source(first, a.fields[0] as Data), ctx = from.ctx;
           // Mono in: a stereo input is mixed down, so a microphone on either
           // channel is heard.
-          const node = new AudioWorkletNode(ctx, PROCESSOR, { processorOptions: { index }, numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], channelCount: 1, channelCountMode: "explicit", channelInterpretation: "speakers" });
+          const node = new AudioWorkletNode(ctx, PROCESSOR, { processorOptions: { index, answers }, numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], channelCount: 1, channelCountMode: "explicit", channelInterpretation: "speakers" });
           node.port.onmessage = (m: MessageEvent<{ said: string }>) => { console.warn(`sound: ${m.data.said}`); say(m.data.said); };
           // The cells as the page has them now, before what's written next.
           for (const [cell, c] of made.entries()) { try { node.port.postMessage({ cell, value: cells.peek(c) }); } catch { /* not copied */ } }
