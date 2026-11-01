@@ -742,9 +742,11 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const base = names[def] ?? def;
       const streams = streamsFn(scheme.type, rho), t = scheme.type;
       const sus = !reflective && isFnDef(def) && laterFn(t, lat);
-      if (sus && streams) throw notYet(`${base} has Choice and performs an operation answered later`);
+      // A search that waits (C40): its generator gives its answers and its
+      // waits, told apart by $isLater; whatever walks it passes the waits on.
+      if (sus && streams && (cps || out || into || own || arr.size)) throw notYet(`${base} has Choice and performs an operation answered later`);
       const bool = !sus && !reflective && !streams && isFnDef(def) && t.t === "fn" && isBool(t.ret);
-      const single = !reflective && streams && isFnDef(def) && singleDef(def);
+      const single = !reflective && streams && !sus && isFnDef(def) && singleDef(def);
       const s: Spec = { def, rho, plain, name: ident(key, `${base}${on.length ? "$choice" : ""}${plain.size ? "$plain" : ""}${arr.size ? "$arr" : ""}${own ? "$own" : ""}${cps ? "$k" : ""}${out ? "$fields" : ""}${into ? "$into" : ""}${at.size ? `$${scheme.vars.flatMap((v) => (at.has(v) ? [typeName(at.get(v)!)] : [])).join("_")}` : ""}`), streams, bool, single, cps, arr, own, out, into, sus, lat, at: typedAt(def, at) };
       if (out && !constants.includes(GOT)) constants.push(GOT);
       specs.set(key, s);
@@ -2773,7 +2775,13 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
             const viaF = spec(callee.def, callee.rho, callee.plain, false, callee.arr, callee.own, true, null, callee.lat, keyAt(callee));
             out = `if (${viaF.name}(${args.join(", ")})) {\n${fromGot(rec, r, k)}\n}`;
           } else if (callee?.single || (kind === "builtin" && oneOf(target!))) out = `const ${r} = ${c};\nif (${r} !== $no) {\n${k(r)}\n}`;
-          else if (callee && cps) {
+          else if (callee?.sus) {
+            // A search that waits: its waits go on to whoever answers them,
+            // and the answer comes back in.
+            if (!gen) throw notYet(`${names[callee.def] ?? callee.def} has Choice and waits, called where nothing can wait`);
+            const g = temp("g"), s = temp("s"), a = temp("a");
+            out = `{\nconst ${g} = ${c};\nlet ${a};\nfor (let ${s} = ${g}.next(); !${s}.done; ${s} = ${g}.next(${a})) {\n${a} = undefined;\nif ($isLater(${s}.value)) {\n${a} = yield ${s}.value;\ncontinue;\n}\nconst ${r} = ${s}.value;\n${k(r)}\n}\n}`;
+          } else if (callee && cps) {
             const viaK = spec(callee.def, callee.rho, callee.plain, true, callee.arr, false, false, null, callee.lat, keyAt(callee)), rec = unpackOf(viaK);
             out = `if (${viaK.name}(${[...args, rec ? unpacked(rec, r, k) : `(${r}) => {\n${k(r)}\n}`].join(", ")})) return true;`;
           } else out = `for (const ${r} of ${c}) {\n${k(r)}\n}`;
@@ -2874,6 +2882,11 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         };
         return `${header} (the rest of the search as \`${k}\`${rec ? `, given the fields of each ${names[rec] ?? "answer"}` : ""})\nfunction ${sp.name}(${[...paramNames(sp), k].join(", ")}) {\n${scoped(true, () => st(lam.body, leaf))}\nreturn false;\n}`;
       }
+      if (sp.streams && sp.sus) {
+        const js = `function* ${sp.name}(${ps}) {\n${inGen(true, () => st(lam.body, (v) => `yield ${v};`))}\n}`;
+        try { new Function(`"use strict";\n${js}`); } catch { throw notYet(`${names[sp.def] ?? sp.def} has Choice and waits on an operation answered later inside a function it makes`); }
+        return `${header} (a generator of its answers and its waits)\n${js}`;
+      }
       if (sp.streams) return `${header}\nfunction* ${sp.name}(${ps}) {\n${st(lam.body, (v) => `yield ${v};`)}\n}${meta}`;
       if (sp.into) {
         // Its list pushed onto `d` (P4); a record's other field returned.
@@ -2957,7 +2970,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // as it is.
   for (const [s, b] of made) if (keep.has(s.name)) out.push(heapCalled.has(s.name) && !heapCopies.has(s.name) ? `${b}\nfunction* ${s.name}$h(...a) {\nreturn ${s.name}(...a);\n}` : b);
 
-  const helpers = ["$no", "$stream0", "$showAny", "$compare", "$int", "$text", "$impl", "$many", "$partial", "$setPath", "$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$snoc", "$fromBack", "$range", "$eq", "$show", "$mod", "$mapParts", "$zipParts", "$total", "$first", "$firstS",
+  const helpers = ["$isLater", "$no", "$stream0", "$showAny", "$compare", "$int", "$text", "$impl", "$many", "$partial", "$setPath", "$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$snoc", "$fromBack", "$range", "$eq", "$show", "$mod", "$mapParts", "$zipParts", "$total", "$first", "$firstS",
     "$all", "$count", "$oneOf", "$fail", "$lift", "$one", "$hole", "$fuel", "$enter", "$caught", "$leave", "$spend", "$spendOrThrow", "$outOfFuel", "$ok", "$clean", "$key",
     "$close", "$near", "$sameNumber", "$planned", "$solveRuntime", "$print", "$FN", "$perform", "$handle", "$handleS", "$io", "$seeded", "$seededS", "$optional", "$cells", "$listArrays", "$path", "$spread", "$self", "$foldNested", "$drive", "$rec", "$pushList", "$withInto", "$intoArray", "$later", "$handleL", "$handleLG",
     "$ORDER", "$compareN", "$numberOrder", "$intOrder", "$textOrder",

@@ -306,6 +306,28 @@ test("an operation answered later inside a search: the rest keeps the search's o
   assert.deepEqual(await p.compiled(), ["saw 1", "saw 2", "saw 3", "[10, 20, 30]"]);
 });
 
+// A definition with Choice that waits (C40): compiled, its generator gives
+// both its answers and its waits, and a search calling it passes the waits
+// on to the handler.
+test("a search defined on its own that waits: compiled, its answers and its waits apart (C40)", async () => {
+  const p = program((k) => {
+    const Y = k.effect("Yield", [["yield", [["item", () => k.tref(NUMBER)]], () => k.tref(UNIT), "later"]]);
+    const pick = k.def("pick"), twice = k.def("twice"), main = k.def("main");
+    k.define(pick, k.thunk(() => k.let("x", k.call(S.oneOf, k.list(k.lit(1), k.lit(2), k.lit(3))), (x) => k.seq(k.call(Y.op.yield, x), k.call(B.mul, x, k.lit(10))))));
+    // A search that waits calling one: both waits reach the handler.
+    k.define(twice, k.thunk(() => k.let("y", k.call(pick), (y) => k.seq(k.call(Y.op.yield, y), k.call(B.add, y, k.lit(1))))));
+    k.define(main, k.thunk(() => say(k, k.call(SHOW_ANY, k.handle(
+      k.call(S.all, k.thunk(() => k.call(twice))),
+      [{ variant: Y.op.yield, names: ["item", "rest"], body: ([item, rest]) => k.seq(say(k, k.lit("saw "), k.call(S.show, item)), k.call(rest, k.x(UNIT_V))) }],
+    )))));
+    return main;
+  });
+  assert.deepEqual(p.errors, []);
+  const want = ["saw 1", "saw 10", "saw 2", "saw 20", "saw 3", "saw 30", "[11, 21, 31]"];
+  assert.deepEqual(p.run(), want);
+  assert.deepEqual(await p.compiled(), want);
+});
+
 // Declared in the editor (BACKLOG E80): Answered later beside Gives back.
 // Every case handling the operation gets a name for the rest, kept after
 // its inputs; answered at once again, it loses it, unless a case uses it.
