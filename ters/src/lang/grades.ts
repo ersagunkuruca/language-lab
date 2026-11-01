@@ -50,9 +50,12 @@ export interface Algebra {
   // Each part's blade: the basis vectors in it, numbered from 1.
   blades: number[][];
   full: number;
-  // pairs[op][i][j]: the mask of op(eᵢ, eⱼ); unary[op][i]: of op(eᵢ).
-  pairs: Record<Binary, number[][]>;
-  unary: Record<Unary, number[]>;
+  // pair(op, i, j): the mask of op(eᵢ, eⱼ); one(op, i): of op(eᵢ).
+  // Each is worked out by running the program's own operation the first
+  // time it is asked for: a 16-part algebra has 1024 products, and
+  // describing a value needs none of them.
+  pair(op: Binary, i: number, j: number): number;
+  one(op: Unary, i: number): number;
 }
 type Binary = "product" | "outer" | "inner" | "regressive";
 type Unary = "reverse" | "involute" | "dual" | "undual";
@@ -111,11 +114,17 @@ export function algebrasOf(code: Code, info: Info): Map<Id, Algebra> {
       const el = (i: number) => elements[at[i]];
       const maskOf = (v: Value) => { const f = (v as { fields: number[] }).fields; return f.reduce((m, x, i) => (x !== 0 ? m | (1 << i) : m), 0); };
       const run = (op: string, ...xs: Value[]) => maskOf(first(r.call(r.value(CL[op]!), al, ...xs) as Iterable<Value>)!);
-      const idx = Array.from({ length: parts }, (_, i) => i);
+      const memo = new Map<string, number>();
+      // An operation that fails on a part could give any part.
+      const once = (key: string, f: () => number) => {
+        let m = memo.get(key);
+        if (m === undefined) { try { m = f(); } catch { m = (1 << parts) - 1; } memo.set(key, m); }
+        return m;
+      };
       const alg: Algebra = {
         def: d, variant: elements[0].tag, parts, blades, full: (1 << parts) - 1,
-        pairs: Object.fromEntries((["product", "outer", "inner", "regressive"] as Binary[]).map((op) => [op, idx.map((i) => idx.map((j) => run(op, el(i), el(j))))])) as Algebra["pairs"],
-        unary: Object.fromEntries((["reverse", "involute", "dual", "undual"] as Unary[]).map((op) => [op, idx.map((i) => run(op, el(i)))])) as Algebra["unary"],
+        pair: (op, i, j) => once(`${op} ${i} ${j}`, () => run(op, el(i), el(j))),
+        one: (op, i) => once(`${op} ${i}`, () => run(op, el(i))),
       };
       found.set(d, alg);
     } catch { /* an algebra that doesn't run is not read */ }
@@ -125,10 +134,10 @@ export function algebrasOf(code: Code, info: Info): Map<Id, Algebra> {
 
 const binary = (alg: Algebra, op: Binary, a: number, b: number) => {
   let m = 0;
-  for (const i of bits(a)) for (const j of bits(b)) m |= alg.pairs[op][i][j];
+  for (const i of bits(a)) for (const j of bits(b)) m |= alg.pair(op, i, j);
   return m;
 };
-const unary = (alg: Algebra, op: Unary, a: number) => bits(a).reduce((m, i) => m | alg.unary[op][i], 0);
+const unary = (alg: Algebra, op: Unary, a: number) => bits(a).reduce((m, i) => m | alg.one(op, i), 0);
 const gradeOf = (alg: Algebra, i: number) => alg.blades[i].length;
 // Every blade of the grades x has.
 const sameGrades = (alg: Algebra, x: number) => { const gs = new Set(bits(x).map((i) => gradeOf(alg, i))); return alg.blades.reduce((m, b, i) => (gs.has(b.length) ? m | (1 << i) : m), 0); };

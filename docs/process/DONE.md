@@ -26,6 +26,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
+| E172 | Opening a definition in a program with a 16-part algebra (Spacetime's "combined speed") froze the editor 15–20 s: describing a value worked out the algebra's whole product, outer, inner and regressive tables first (1024 runs each). Each entry is now worked out the first time it is asked for: 14.8 s → 0.19 s (QA 2026-11-01) | #915 |
 | E169 | Resizing a node: the corner is a square drawn over the node's words and ports, so it is easy to grab; a node shrinks back as far as its own size; its wires follow while dragging, not only on release | #914 |
 | E103d | A filled program's solves and calls (model.ts `nodesWhere`) start from the program's own lists and its changed nodes, so a palette offer's whole check no longer scans ~10,000 nodes in `useDirections` and in the jobs check. physics `fall`: 23 holes 50 → 30 s, the worst 10.6 → 4.2 s, the same offers. Test: derived-slots.test.ts | #902 |
 | I29 (later states) | Run's first values reach what only a later state of a page calls: after each handler the dry run draws the page again and runs the handlers it shows for the first time next, up to three of each place, within 250 ms; and a call into a definition generic in its number type, which runs as a copy (arith.ts), is reported as the definition's own (`Info.copyOf`). Tumble's neighbours, duration, where, three from, marks and between links now open filled. Test: ters/test/copy-entered.test.ts | #900 |
