@@ -18,7 +18,7 @@ import { unitProblems, UnitsBefore } from "../units.ts";
 import { fillHole } from "./refactor.ts";
 import { planSolve, runsBackwards, solvesInWholeNumbers } from "./solve.ts";
 import { computedForward, directionProblem, useDirections } from "./directions.ts";
-import { analyzer, determinism, oneAnswer, solveMode, type Fn } from "./modes.ts";
+import { analyzer, derivedFrom, determinism, oneAnswer, solveMode, type Fn } from "./modes.ts";
 import { smoothDerivative as hasSmoothDerivative, smoothGradient as hasSmoothGradient, recordVariant, forgetDerived } from "./derive.ts";
 import { BOOL, CELL_OPS, JOBS, S, SET, SIGS, SMART, TRUE } from "./std.ts";
 import { countedCalls } from "./counting.ts";
@@ -1483,6 +1483,7 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
     forgetNodes(scratch ??= { ...code.nodes });
     const r = fillHole(code, {}, hole, f, {}, scratch);
     undo = r.undo;
+    derivedFrom(r.code, code, subtree(r.code, hole));
     return (last = [f, r.code])[1];
   };
   let before: Problem[] | undefined;

@@ -1,6 +1,6 @@
 # Offers that don't copy the program (design note, 2026-11-01)
 
-**Status (2026-11-01).** BACKLOG E133. E133a (way 3 below) is built (#866); E133b is open. Asks
+**Status (2026-11-01).** BACKLOG E133. E133a (way 3 below) is built (#866); E133b too (this PR, "What E133b found" below). Asks
 nothing of Ersagun: the choice below is internal and changes no
 behaviour.
 
@@ -77,3 +77,22 @@ stages before it.
 |---|---|---|
 | E133a | Way 3: the scratch copy in `fillings`, guards 1 and 2 | S |
 | E133b | E103: the plan comparison keyed by what the plan sees of the offer | M |
+
+## What E133b found
+
+Measured first, on the same worst hole of physics `fall` (20 s after
+E133a): the plan comparison was 6.2 s for 1,008 offers, and almost all of
+it was not the comparing. `solveMode` builds an analyzer for each filled
+program, and the analyzer starts by scanning every node (~10,000) to join
+each variable's uses into one slot. Keying the comparison by the offer
+would not have helped much: 399 of the 1,008 offers really do change a
+plan (a call with holes for inputs makes `fall`'s search nondet), so each
+needs its own answer.
+
+So the analyzer of a filled program now starts from the slots of the
+program it was filled from and scans only the filling's nodes
+(`derivedFrom` in modes.ts, called by `fillings`). The plan comparison
+went from 6.2 s to 0.85 s, the hole from 20 s to 12.7 s, and all 23 of fall's holes take 67 s (121 s before E133a), with the same 399
+offers changing a plan. What's left is the whole checks of those 399
+(`recheck`, mostly `infer` and `useDirections`), which is the next step if
+it's worth one.
