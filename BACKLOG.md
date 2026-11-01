@@ -22,7 +22,7 @@ Ersagun's "take 20 tasks" (2026-11-01): Editor 7, Compiler 7, Language 6.
 
 | lane | thread | next, in order |
 |---|---|---|
-| E Editor | "Editor lane" | I103, I104, I99, T7d, L43d (Ersagun's 20, 2026-11-01) |
+| E Editor | "Editor lane" | I104, I99, T7d, L43d (Ersagun's 20, 2026-11-01) |
 | C Compiler and targets | "Compiler lane" | C40's next step, C64's next step, C63, L43c (store only the masked parts: L, since Bounce's vectors sit in `Body` fields carried across frames, so masks must flow through record fields program-wide), C66 on shaders. L41 is done (#724, #729) |
 | L Language and library | "Language lane" | Next up for all lanes (#809), L43e named masks on fields (#812), L38j a generic function solved at an Int given (#815), L108d representation laws (this PR), L97d (Fixed's CORDIC polar), L69a (foreign definitions, JS host), L54b. Yesterday's run ended with I100 (#805) |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
@@ -33,7 +33,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I103 | Tumble `contains` opens on a red "No answer": `holds` is ticked true though main's first call (items = []) gave false | QA12 L1 | 2026-11-01 |
 | I104 | Tumble's main still opens with ~250 px empty canvas above its first row | QA12 L2 | 2026-11-01 |
 | I99 | Drag a built point on Constructions and Compass (a crossing, a midpoint, an inverted point), not only free ones. Running the construction backwards has endless answers (either line could turn about either of its points), so it needs a rule to pick one: proposed "least movement", moving the free points it depends on as little as possible so the point lands under the pointer (a few Newton steps on the free points' coordinates); the simpler "carry the parents" slides every free point it depends on by the same amount. Ersagun was told least movement is the recommendation. | Ersagun 2026-10-31 21:08 | 2026-10-31 |
 

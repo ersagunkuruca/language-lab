@@ -919,8 +919,13 @@ function knownPorts(info: T.Info): Id[] {
   const ports = portsOfDef(ui.def);
   const chosen = doc.layout.known[ui.def];
   if (chosen) return chosen.filter((p) => ports.includes(p));
-  // A function runs forward; a predicate solves for its last parameter.
-  return returnsBool(info, ui.def) ? [...ports.slice(0, -2), "out"] : ports.slice(0, -1);
+  // A function runs forward; a predicate solves for its last parameter,
+  // keeping it true. One that opens on what main first called it with
+  // runs forward too: it says whether that holds, where holding as well
+  // could contradict the call (Tumble's contains on [], I103).
+  if (!returnsBool(info, ui.def)) return ports.slice(0, -1);
+  const inputs = ports.filter((p) => p !== "out");
+  return !doc.examples?.[ui.def] && seeded(info, ui.def)?.length === inputs.length ? inputs : [...ports.slice(0, -2), "out"];
 }
 
 // One set of values per definition, by port (its inputs, then "out"),
