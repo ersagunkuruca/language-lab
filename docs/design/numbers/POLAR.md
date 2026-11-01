@@ -11,6 +11,10 @@ come from its ways, picked by cost. This note puts the two together.
 `polar`, `unpolar`, `asin` and `acos`, and polar asked for length and
 angle answered by unpolar. Next are L97d (Fixed's CORDIC from
 its ways) and L97e (the complex laws, after T7).
+(2026-11-01) C55a is built: compiled code runs a Dual's, a Fixed's or a
+program type's polar and unpolar as a function per result it binds, so `_,
+y = polar(1, t)` computes no x (compiler/src/results.ts). C55b, results
+that share work done once, is still open.
 
 ## Short answer
 

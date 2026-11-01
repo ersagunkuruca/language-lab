@@ -48,6 +48,7 @@ import { fuseHandlers } from "./handlers.ts";
 import { expandDerivatives, recordVariant } from "../../projectional/src/lang/derive.ts";
 import { stageProgram } from "../../projectional/src/lang/stage.ts";
 import { expandInverses } from "./inverses.ts";
+import { solvesAsCalls } from "./results.ts";
 import { infer, type Info } from "../../projectional/src/lang/infer.ts";
 
 type Rho = Map<number, boolean>;
@@ -126,6 +127,13 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     code = inv.code;
     names = inv.names;
     info = infer(code, names);
+  }
+  // A solve of a definition with results, in its own direction, is a call
+  // per result it binds (results.ts, C55): `_, y = polar(1, t)` is a sine.
+  const sol = solvesAsCalls(code, names);
+  if (sol.expanded.length) {
+    const checked = infer(sol.code, sol.names);
+    if (checked.errors.length <= info.errors.length) ({ code, names, info } = { ...sol, info: checked });
   }
   // Only what the exports reach is compiled, so it is all the passes below
   // look at and check again (C67): the library's other definitions were
