@@ -123,7 +123,10 @@ What happens in each case is decided, so a program never meets a surprise:
   the rest is a wrapper that calls `next(answer)` once. JavaScript
   generators can't be resumed twice from one point, which is exactly "at
   most once". The world's handler for `await` is the browser's or Node's
-  event loop: the rest is a callback.
+  event loop: the rest is a callback. Built for main (2026-11-01): the
+  runtime's `$main` answers what main leaves unhandled of Await, sleeping
+  on the world's clock when the world can (`lab compile`'s Node world) and
+  otherwise giving a promise resumed by a timer; a page's main is next.
 - **WebAssembly and C.** Continuation-passing copies of the same
   definitions, or WebAssembly's stack-switching proposal and a stack per
   fiber in C. Each is that target's own hosting choice, and none changes

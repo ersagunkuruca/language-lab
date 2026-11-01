@@ -481,6 +481,61 @@ export const $later = (effect, op, args) => new Later(effect, op, args);
 // Is what a search's generator gave a wait rather than an answer? (C40: a
 // search that waits yields both, and whoever walks it passes waits on.)
 export const $isLater = (x) => x instanceof Later;
+
+// main's own waits (C40, L71c): what the program leaves unhandled of Await
+// reaches main's generator, and the world answers it as the evaluator's
+// runtime does (run.ts `unhandled`). `start timer(ms)` is a ticket ready
+// at the world's clock plus ms; awaiting a ticket, a timer or the first
+// ready of `any of(…)` waits until the least ready time and goes on with
+// its value (the index of the first ready, for any of). The world's `wait`
+// sleeps; a world with none (a page) gets a promise of main's value
+// instead, resumed by setTimeout. Prior art: an event loop's timers
+// (libuv, the browser's), and Promise.race.
+const timers = [];
+const AWAIT_OP = "std.await.await", START_TIMER_OP = "std.await.start timer";
+const isGenerator = (x) => Object.prototype.toString.call(x) === "[object Generator]";
+export function $main(result) {
+  return isGenerator(result) ? goOn(result, undefined) : result;
+}
+function goOn(it, send) {
+  for (;;) {
+    const r = it.next(send);
+    if (r.done) return r.value;
+    const l = r.value;
+    if (!(l instanceof Later)) throw new Error("main gave a value before it finished");
+    const now = (world.now ?? Date.now)();
+    if (l.op === START_TIMER_OP) {
+      timers.push(now + l.args[0]);
+      send = { tag: "std.ticket.ticket", fields: [timers.length - 1] };
+      continue;
+    }
+    if (l.op !== AWAIT_OP) throw new Error(`nothing handles ${l.op}`);
+    const ready = (t) => {
+      if (t.tag === "std.ticket.ticket") { const d = timers[Number(t.fields[0])]; if (d === undefined) throw new Aborted(`no ticket ${String(t.fields[0])} from this world`); return d; }
+      if (t.tag === "std.ticket.timer") return now + t.fields[0];
+      if (t.tag === "std.ticket.at") return t.fields[0];
+      throw new Aborted("any of a ticket that is itself an any of can't be awaited yet");
+    };
+    const t = l.args[0];
+    let at, value;
+    if (t.tag === "std.ticket.first ready") {
+      const ts = [];
+      for (let c = t.fields[0]; c.tag === "std.list.cons"; c = c.fields[1]) ts.push(c.fields[0]);
+      if (!ts.length) throw new Aborted("any of no tickets is never ready");
+      const times = ts.map(ready), i = times.indexOf(Math.min(...times));
+      at = times[i];
+      value = () => t.fields[1](i);
+    } else {
+      at = ready(t);
+      value = () => (t.tag === "std.ticket.timer" || t.tag === "std.ticket.at" ? t.fields[1] : $unit);
+    }
+    if (at > now) {
+      if (!world.wait) return new Promise((resolve) => setTimeout(resolve, at - now)).then(() => goOn(it, value()));
+      world.wait(at - now);
+    }
+    send = value();
+  }
+}
 // `done`: the case for the normal finish (L57), given the computation's
 // value however many rests ran before it, and not an escape's.
 export function $handleL(effect, later, ops, answers, escapes, body, done = null) {

@@ -15,6 +15,14 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { runMain } from "../src/lang/run.ts";
 import { AWAIT_OP, START_TIMER_OP, CONS, INT_OPS, NIL, S, SHOW_ANY, TICKET_V } from "../src/lang/std.ts";
 import { showType } from "../src/lang/types.ts";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { compile } from "../../compiler/src/compile.ts";
+import { $main, $setPrint, $setWorld } from "../../compiler/src/runtime.js";
+
+const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 
 const lib = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
 
@@ -96,7 +104,23 @@ function worldProgram(body: (k: Lang) => Id) {
   let clock = 1000;
   const printed: string[] = [], waits: number[] = [];
   const world = { now: () => clock, wait: (ms: number) => { waits.push(ms); clock += ms; } };
-  return { info, run: () => { runMain(code, info, main, { print: (s) => printed.push(s), names, world } as Parameters<typeof runMain>[3]); return { printed, waits, clock }; } };
+  // Compiled (C40): the runtime's $main answers main's waits from the
+  // same kind of world; with no `wait`, main's value comes as a promise.
+  const compiled = async (sleeps = true) => {
+    const file = join(mkdtempSync(join(tmpdir(), "await-")), "main.mjs");
+    writeFileSync(file, compile(code, info, names, { runtime, exports: ["main"] }));
+    let at = 1000;
+    const out: string[] = [], waited: number[] = [];
+    $setPrint((s: string) => out.push(s));
+    $setWorld(sleeps ? { now: () => at, wait: (ms: number) => { waited.push(ms); at += ms; } } : {});
+    try {
+      const r = $main((await import(pathToFileURL(file).href)).defs.main());
+      if (!sleeps) assert.ok(r instanceof Promise);
+      await r;
+    } finally { $setPrint((s: string) => console.log(s)); $setWorld({}); }
+    return { printed: out, waits: waited, clock: at };
+  };
+  return { info, compiled, run: () => { runMain(code, info, main, { print: (s) => printed.push(s), names, world } as Parameters<typeof runMain>[3]); return { printed, waits, clock }; } };
 }
 const slow = (k: Lang, ms: number, v: string) => k.thunk(() => k.let("t", k.call(START_TIMER_OP, k.lit(ms)), (t) => k.seq(k.call(AWAIT_OP, t), k.lit(v))));
 
@@ -122,4 +146,17 @@ test("the types of race and within", () => {
   const type = (n: string) => showType(info.typeOf.get(lib(n))!, names);
   assert.equal(type("race"), "(List (() -[Await]-> a)) -[Diverge, Await]-> a");
   assert.equal(type("within"), "(Float64, () -[Await]-> a) -[Diverge, Await]-> Optional a");
+});
+
+test("compiled, main's waits are the world's: together, race and within as the evaluator gives them (C40)", async () => {
+  const cases = [
+    worldProgram((k) => k.call(lib("together"), k.list(slow(k, 50, "slow"), slow(k, 20, "fast")))),
+    worldProgram((k) => k.call(lib("race"), k.list(slow(k, 50, "slow"), slow(k, 20, "fast")))),
+    worldProgram((k) => k.call(lib("within"), k.lit(10), slow(k, 50, "slow"))),
+    worldProgram((k) => k.call(lib("within"), k.lit(100), slow(k, 20, "fast"))),
+  ];
+  for (const p of cases) assert.deepEqual(await p.compiled(), p.run());
+  // A world that can't sleep (a page's): a promise, resumed by a timer.
+  const late = await cases[1].compiled(false);
+  assert.deepEqual(late.printed, ['"fast"']);
 });
