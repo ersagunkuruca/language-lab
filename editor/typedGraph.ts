@@ -250,7 +250,20 @@ export function typedGraph(code: Code, pres: Presentation, info: Info | null, de
   drawnAt.set(key, new Map([...scene.items].map(([k, it]) => [k, { ...it.auto, frame: it.frame ?? null }])));
   const draw = (at: Record<Id, Pos>) => canvas.world.replaceChildren(...render(shown(at), hooks, at, picked));
   draw(hooks.at);
-  interact(canvas, scene, hooks, picked, draw);
+  // A node being resized, drawn at the size so far with its wires: the
+  // definition built again with that size, the node and its wires taken
+  // from it (Ersagun 2026-11-01: the wires only caught up on release).
+  const preview = (id: Id, size: { w: number; h: number }): boolean => {
+    const next = build(code, pres, info, defId, { ...hooks, sizes: { ...hooks.sizes, [id]: size } });
+    const it = next.items.get(id), old = scene.items.get(id);
+    if (!it || !old) return false;
+    scene.items.set(id, { ...it, auto: old.auto, frame: old.frame });
+    const touches = (w: Wire) => ("item" in w.from && w.from.item === id) || ("item" in w.to && w.to.item === id);
+    scene.wires = [...scene.wires.filter((w) => !touches(w)), ...next.wires.filter(touches)];
+    draw(hooks.at);
+    return true;
+  };
+  interact(canvas, scene, hooks, picked, draw, preview);
   return {
     ...canvas,
     picked: () => [...picked],
@@ -341,18 +354,29 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
 
   // A node's size: what it shows, or bigger where it was made bigger by
   // hand (I49).
+  // Each resizable node's own size, what it shows (its smallest).
+  const natural = new Map<Id, { w: number; h: number }>();
   const sized = (id: Id, w: number, h: number): [number, number] => {
+    natural.set(id, { w, h });
     const z = hooks.sizes?.[id];
     return z ? [Math.max(w, z.w), Math.max(h, z.h)] : [w, h];
   };
-  // The corner a selected node is resized by: drag it, or double-click it
-  // for the node's own size again.
+  // The corner a selected node is resized by: drag it either way, down to
+  // the node's own size, or double-click it for that size again. Drawn
+  // last, over the node's words and ports, with a square to grab rather
+  // than its two thin strokes (Ersagun 2026-11-01: "I have to wiggle my
+  // mouse pixel by pixel").
   const grip = (g: SVGGElement, id: Id, w: number, h: number) => {
-    if (!hooks.resized || hooks.selected !== id) return;
-    g.append(titled(s("path", { d: `M${w - 12} ${h - 2} L${w - 2} ${h - 12} M${w - 7} ${h - 2} L${w - 2} ${h - 7}`, class: "grip", "data-resize": id, "data-w": String(w), "data-h": String(h) }), "Drag to make this node bigger; double-click for its own size"));
+    const own = natural.get(id);
+    if (!hooks.resized || hooks.selected !== id || !own) return;
+    const at = { "data-resize": id, "data-w": String(w), "data-h": String(h), "data-min-w": String(own.w), "data-min-h": String(own.h) };
+    const handle = s("g", { class: "grip", ...at });
+    handle.append(s("rect", { x: w - 16, y: h - 16, width: 18, height: 18, class: "grip-hit" }), s("path", { d: `M${w - 12} ${h - 2} L${w - 2} ${h - 12} M${w - 7} ${h - 2} L${w - 2} ${h - 7}` }));
+    g.append(titled(handle, "Drag to resize this node; double-click for its own size"));
   };
   const item = (key: Id, w: number, h: number, draw: (g: SVGGElement) => void, extra: Partial<Item> = {}): Sub => {
-    items.set(key, { key, frame, w, h, auto: { x: 0, y: 0 }, draw, solid: true, ...extra });
+    const drawn = (g: SVGGElement) => { draw(g); grip(g, key, w, h); };
+    items.set(key, { key, frame, w, h, auto: { x: 0, y: 0 }, draw: drawn, solid: true, ...extra });
     return { w, h, outX: w, outY: h / 2, out: { item: key, dx: w, dy: h / 2 }, at: new Map([[key, { x: 0, y: 0 }]]) };
   };
   // A use of a binding wired into (item, dx, dy): a wire from its source,
@@ -534,7 +558,6 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const portY = (i: number) => (portNames ? 30 + i * 20 : top + ((bh - top - plus) / (inputs.length + 1)) * (i + 1));
     item(id, bw, bh, (g) => {
       g.append(titled(s("rect", { width: bw, height: bh, rx: 7, class: `cn${eff.does.length ? " eff" : ""}${eff.handles ? " handler" : ""}${sel(id)}${errs.has(id) ? " err" : ""}`, "data-id": id, "data-move": id }), typeOf(id)));
-      grip(g, id, bw, bh);
       if (badge) g.append(titled(s("text", { x: bw / 2, y: 11, class: "badge", "text-anchor": "middle" }, badge), eff.why ? `Choice: it can give no answer, ${eff.why}` : badge));
       g.append(s("text", { x: bw / 2, y: portNames ? 19 : top + (bh - top) / 2 + 5, class: "cl", "text-anchor": "middle" }, label));
       portNames?.forEach((l, i) => g.append(s("text", { x: 9, y: portY(i) + 4, class: "portl" }, l)));
@@ -1291,7 +1314,7 @@ function tidyScene(scene: Scene, at: Record<Id, Pos>, only: Set<Id> | null): Rec
 // shares its value with an input; an input dragged into space is cleared;
 // shift-drag on empty space picks what the box touches. Right-click asks
 // the editor for a menu.
-function interact(canvas: Canvas, scene: Scene, hooks: GraphHooks, picked: Set<Id>, draw: (at: Record<Id, Pos>) => void) {
+function interact(canvas: Canvas, scene: Scene, hooks: GraphHooks, picked: Set<Id>, draw: (at: Record<Id, Pos>) => void, preview?: (id: Id, size: { w: number; h: number }) => boolean) {
   const root = canvas.root;
   // A click on empty space deselects; a press that panned doesn't.
   let down = { x: 0, y: 0 };
@@ -1378,26 +1401,39 @@ function interact(canvas: Canvas, scene: Scene, hooks: GraphHooks, picked: Set<I
   root.addEventListener("pointerdown", (ev) => {
     if (ev.button !== 0) return;
     const start = ev.target as Element;
-    // The corner of a selected node: drag to resize it (I49). The box
-    // follows the pointer; the node is laid out at its new size on release.
+    // The corner of a selected node: drag to resize it (I49), bigger or
+    // back down to its own size. The node and its wires follow the
+    // pointer, a frame at a time; the graph is laid out at the new size on
+    // release.
     const grab = start.closest("[data-resize]");
     if (grab && hooks.resized) {
       ev.preventDefault();
       ev.stopPropagation();
       const id = grab.getAttribute("data-resize")!, w0 = +grab.getAttribute("data-w")!, h0 = +grab.getAttribute("data-h")!;
+      const minW = +(grab.getAttribute("data-min-w") ?? w0), minH = +(grab.getAttribute("data-min-h") ?? h0);
       // A second press in a row (a pointerdown's detail is always 0): its
       // own size again.
       const again = lastGrip?.id === id && ev.timeStamp - lastGrip.at < 450;
       lastGrip = { id, at: ev.timeStamp };
       if (again) { lastGrip = null; hooks.resized(id, null); return; }
-      const box = grab.parentElement?.querySelector(":scope > rect") as SVGRectElement | null;
-      let size = { w: w0, h: h0 };
-      moveDrag(root, ev, (dx, dy) => {
-        size = { w: Math.round(Math.max(w0, w0 + dx)), h: Math.round(Math.max(h0, h0 + dy)) };
+      let size = { w: w0, h: h0 }, frame = 0;
+      const show = () => {
+        frame = 0;
+        if (preview?.(id, size)) return;
+        // Without a preview, the box alone follows.
+        const g = canvas.world.querySelector(`[data-resize="${CSS.escape(id)}"]`)?.parentElement;
+        const box = g?.querySelector(":scope > rect");
         box?.setAttribute("width", String(size.w));
         box?.setAttribute("height", String(size.h));
-        grab.setAttribute("transform", `translate(${size.w - w0} ${size.h - h0})`);
-      }, (moved) => { if (moved && (size.w !== w0 || size.h !== h0)) hooks.resized!(id, { w: Math.max(size.w, hooks.sizes?.[id]?.w ?? 0), h: Math.max(size.h, hooks.sizes?.[id]?.h ?? 0) }); }, canvas.zoom());
+      };
+      moveDrag(root, ev, (dx, dy) => {
+        size = { w: Math.max(minW, Math.round(w0 + dx)), h: Math.max(minH, Math.round(h0 + dy)) };
+        frame ||= requestAnimationFrame(show);
+      }, (moved) => {
+        if (frame) cancelAnimationFrame(frame);
+        if (!moved || (size.w === w0 && size.h === h0)) return;
+        hooks.resized!(id, size.w <= minW && size.h <= minH ? null : size);
+      }, canvas.zoom());
       return;
     }
     const add = start.closest("[data-add]")?.getAttribute("data-add");
