@@ -22,7 +22,7 @@ Ersagun's "take 40 more tasks" (2026-11-01 11:46): Editor 13, Compiler 13, Langu
 
 | lane | thread | next, in order |
 |---|---|---|
-| E Editor | "Editor lane" | Ersagun's 20 more (2026-11-01, 7 here): I113 (#880), I114 (#881), then I115 (reader errors name the problem), I118 (a wrong argument's error placed at it), I117 (one case its own body), I116 (Split on a new function's untyped input), I119 (one "show" in the palette); then the next QA round's findings |
+| E Editor | "Editor lane" | Ersagun's 20 more (2026-11-01, 7 here): I113 (#880), I114 (#882), then I115 (reader errors name the problem), I118 (a wrong argument's error placed at it), I117 (one case its own body), I116 (Split on a new function's untyped input), I119 (one "show" in the palette); then the next QA round's findings |
 | C Compiler and targets | "Compiler lane" | C66 on shaders (a shader's arrays in WebAssembly), C55b, C40 step 2e, C64's next step, C67's next step, C31, L125e (niche representations), L43c (after masks on record fields, L43e), C63d (Set as a hash table) |
 | L Language and library | "Language lane" | Ersagun's 40 (2026-11-01): L125a step 1 done (#842); L125b done, L125d done (#847), L125f done (#848), L71a done (#849), L38's open end done (#851), L71b (`Await` and `together`), L69a2 (hosts in the compiled JS), L43e3 (named masks on list items), L108d2 (laws of match and fold jobs), L29, I84. Earlier today: #809 to #823 |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |

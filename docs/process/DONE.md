@@ -26,7 +26,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| I114 | The palette (and the MCP server) reads `if c then a else b` as the match on a Bool the blocks print, an if inside either branch keeping its own then and else; `and` and `or` read too | #881 |
+| I114 | The palette (and the MCP server) reads `if c then a else b` as the match on a Bool the blocks print, an if inside either branch keeping its own then and else; `and` and `or` read too | #882 |
 | I113 | The palette (and the MCP server) reads a field as the blocks print it: `board.columns`, `z.re`, the field's projection called on what's before the dot | #880 |
 | L125-editor | The graph says Choice only on the `/`, `sqrt`, `log`, `^`, `mod` calls that can give no answer (not where L125b rules it out), and its badge says why | #876 |
 | E133b | The palette's plan check per offer starts from the program's own slots and scans only the filling (physics fall's worst hole 20 → 12.7 s, all 23 holes 67 s) | #875 |
