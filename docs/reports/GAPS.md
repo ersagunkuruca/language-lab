@@ -1292,6 +1292,10 @@ only looked up. This is the large one, and it needs a design note first.
 profile has lookups at 27% and node building at 20%, so the table (C63)
 matters more than reuse in place (C62).
 
+*Status (2026-11-01):* the table is built (C63b) and routes compiled takes
+it for its maps (C63c): 319 ms at 3000 towns against 654 ms on the trees,
+8.8× the ideal instead of 18×. Sets keep the tree.
+
 **M7. Lookups done twice and in closures (perf, small).** `improve`
 reads `value at(found, town)` twice: once for the test and once to
 remove the old pair. Each read is wrapped in an `(() => …)()` for its

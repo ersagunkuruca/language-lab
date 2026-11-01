@@ -1,5 +1,6 @@
 // routes: the evaluator and the compiled program, each on maps and sets as
-// defined (sorted lists) and as trees, against the ideal, on countries of
+// defined (sorted lists) and as trees, compiled with Map as a hash table
+// (C63b), against the ideal, on countries of
 // growing size. The numbers in GAPS.md, round 5, come from this.
 // Run: node gaps/bench-routes.ts   (or npm run gaps)
 
@@ -14,10 +15,10 @@ const time = (f: () => unknown, runs: number) => {
   return ts.sort((a, b) => a - b)[runs >> 1];
 };
 const ms = (x: number) => (Number.isNaN(x) ? "(skipped)" : `${x < 10 ? x.toFixed(2) : x.toFixed(0)} ms`).padStart(11);
-const cols: Name[] = ["evaluator", "evaluator, trees", "compiled", "compiled, trees", "ideal"];
+const cols: Name[] = ["evaluator", "evaluator, trees", "compiled", "compiled, trees", "compiled, table", "ideal"];
 
 console.log(`routes: summary, cheapest network and 10 trips and nears over a country kept in memory (in one process, median)\n`);
-console.log(`${"country".padEnd(22)}${cols.map((c) => c.padStart(17)).join("")}  compiled/ideal  trees/ideal`);
+console.log(`${"country".padEnd(22)}${cols.map((c) => c.padStart(17)).join("")}  compiled/ideal  trees/ideal  table/ideal`);
 for (const n of [100, 300, 1000, 3000]) {
   const files = { "c.txt": country(n) }, args = ["c.txt"];
   const want = w.ideal(args, files);
@@ -32,5 +33,5 @@ for (const n of [100, 300, 1000, 3000]) {
     return [c, time(() => w[c](args, files), k)];
   })) as Record<Name, number>;
   const label = `${n} towns, ${(files["c.txt"].length / 1024).toFixed(0)} KB`;
-  console.log(`${label.padEnd(22)}${cols.map((c) => ms(t[c]).padStart(17)).join("")}  ${Number.isNaN(t.compiled) ? "".padStart(14) : `${(t.compiled / t.ideal).toFixed(0).padStart(13)}×`}  ${(t["compiled, trees"] / t.ideal).toFixed(1).padStart(10)}×`);
+  console.log(`${label.padEnd(22)}${cols.map((c) => ms(t[c]).padStart(17)).join("")}  ${Number.isNaN(t.compiled) ? "".padStart(14) : `${(t.compiled / t.ideal).toFixed(0).padStart(13)}×`}  ${(t["compiled, trees"] / t.ideal).toFixed(1).padStart(10)}×  ${(t["compiled, table"] / t.ideal).toFixed(1).padStart(10)}×`);
 }

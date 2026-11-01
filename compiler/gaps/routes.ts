@@ -24,7 +24,7 @@ import { routes as ideal } from "./routes.ideal.js";
 
 export interface Run { out: string[]; err: string[]; code: number }
 export type Way = (args: string[], files: Record<string, string>) => Run;
-export type Name = "evaluator" | "evaluator, trees" | "compiled" | "compiled, trees" | "ideal";
+export type Name = "evaluator" | "evaluator, trees" | "compiled" | "compiled, trees" | "compiled, table" | "ideal";
 
 function reader(files: Record<string, string>) {
   return (p: string) => {
@@ -44,12 +44,21 @@ export function programs() {
   const p = load("routes");
   const own: string[] = JSON.parse(readFileSync(join(examples, "routes/code.json"), "utf8")).defs;
   const main = own.find((d) => p.pres.names[d] === "main")!;
-  const lib = withLibraryRepresentations(p.code, p.info, p.pres.names, main, own);
-  if (lib.chosen.length !== 2) throw new Error(`routes: expected trees for Map and Set, got ${lib.chosen.join(", ")}`);
   const options = p.options as Parameters<typeof infer>[3];
-  const info = infer(lib.code, lib.names, undefined, { ...options, insiders: [...(options?.insiders ?? []), ...lib.insiders] });
-  if (info.errors.length) throw new Error(`routes on trees: ${info.errors.map((e) => e.message).join("; ")}`);
-  return { main, plain: { code: p.code, info: p.info, names: p.pres.names }, trees: { code: lib.code, info, names: lib.names } };
+  // `hostMaps`: on JavaScript, where Map may be a hash table changed in
+  // place (C63b), since every map in routes has one holder.
+  const chosen = (hostMaps: boolean, want: string[]) => {
+    const lib = withLibraryRepresentations(p.code, p.info, p.pres.names, main, own, [], { hostMaps });
+    if (lib.chosen.join() !== want.join()) throw new Error(`routes: expected ${want.join(", ")}, got ${lib.chosen.join(", ")}`);
+    const info = infer(lib.code, lib.names, undefined, { ...options, insiders: [...(options?.insiders ?? []), ...lib.insiders] });
+    if (info.errors.length) throw new Error(`routes on ${want.join(", ")}: ${info.errors.map((e) => e.message).join("; ")}`);
+    return { code: lib.code, info, names: lib.names };
+  };
+  return {
+    main, plain: { code: p.code, info: p.info, names: p.pres.names },
+    trees: chosen(false, ["Map as weight-balanced tree", "Set as weight-balanced tree"]),
+    table: chosen(true, ["Map as hash table", "Set as weight-balanced tree"]),
+  };
 }
 
 // The compiled program on trees, as JS that imports the runtime.
@@ -59,7 +68,7 @@ export function treesSource(): string {
 }
 
 export async function ways(): Promise<Record<Name, Way>> {
-  const { main, plain, trees } = programs();
+  const { main, plain, trees, table } = programs();
   const dir = mkdtempSync(join(tmpdir(), "routes-"));
   const runtime = pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href;
   const built = async (p: typeof plain, file: string) => {
@@ -84,6 +93,7 @@ export async function ways(): Promise<Record<Name, Way>> {
     "evaluator, trees": evaluator(trees),
     compiled: compiled(await built(plain, "routes.js")),
     "compiled, trees": compiled(await built(trees, "routes-trees.js")),
+    "compiled, table": compiled(await built(table, "routes-table.js")),
     ideal: (args, files) => {
       const out: string[] = [], err: string[] = [];
       const code = ideal(args, { readFile: reader(files), print: (s: string) => out.push(s), printError: (s: string) => err.push(s) });
