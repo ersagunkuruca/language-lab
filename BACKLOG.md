@@ -24,7 +24,7 @@ Ersagun's "take 40 more tasks" (2026-11-01 11:46): Editor 13, Compiler 13, Langu
 |---|---|---|
 | E Editor | "Editor lane" | Ersagun's 40 (2026-11-01): I109 done (#841), I29's handler step (#845); then E103 and I40 (slow palette on physics), E133 (fillings share nodes, design), L69c (a definition whose host is missing says so; the host file in the Program tab), E160 (the mode on a solve node), I49 (resize a node), and the editor half of L125 (a `Choice` from `/` shown where it comes from) and of L125d (`Extended` values shown as ±∞); then the next QA round's findings |
 | C Compiler and targets | "Compiler lane" | L125c after L125a, L125e (niche representations), C63b (hash table), L43c, C66 on shaders, C55, C40 step 2e, C64's next step, C67's next step, C31 |
-| L Language and library | "Language lane" | Ersagun's 40 (2026-11-01): L125a step 1 done (#842); L125b (the inferred nonzero fact; asked Ersagun how a page shows no answer), L125d done (#847), L125f done, L71a (an operation's own type variables), L71b (`Await` and `together`), L69a2 (hosts in the compiled JS), L43e3 (named masks on list items), L108d2 (laws of match and fold jobs), L38's open end, L29, I84. Earlier today: #809 to #823 |
+| L Language and library | "Language lane" | Ersagun's 40 (2026-11-01): L125a step 1 done (#842); L125b (the inferred nonzero fact; asked Ersagun how a page shows no answer), L125d done (#847), L125f done (#848), L71a done, L71b (`Await` and `together`), L69a2 (hosts in the compiled JS), L43e3 (named masks on list items), L108d2 (laws of match and fold jobs), L38's open end, L29, I84. Earlier today: #809 to #823 |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
