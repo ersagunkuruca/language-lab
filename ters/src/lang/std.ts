@@ -7,7 +7,7 @@ import { discharge } from "./ledger.ts";
 import type { Code, Id, Node, NodeOf } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { B, impl } from "../prelude.ts";
-import { MASK_TYPES, NAMED_ROWS, ARRAY, CELL, PATH, JOB, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NETWORK, NUMBER, STRING, type Row, type Subst, type Type } from "./types.ts";
+import { MASK_TYPES, NAMED_ROWS, ARRAY, TABLE, CELL, PATH, JOB, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NETWORK, NUMBER, STRING, type Row, type Subst, type Type } from "./types.ts";
 import * as I from "./int.ts";
 import * as T from "./text.ts";
 import * as A from "./algebraic.ts";
@@ -18,7 +18,7 @@ const names: Names = {};
 const named = (id: Id, name: string) => ((names[id] = name), id);
 
 // --- builtin types and effects (named nodes, so they can be referenced)
-for (const [id, name] of [[NUMBER, "Float64"], [STRING, "Text"], [INT, "Int"], [CELL, "Cell"], [PATH, "Path"], [JOB, "Job"], [ARRAY, "Array"]]) named(node({ id, kind: "builtin", op: id }), name);
+for (const [id, name] of [[NUMBER, "Float64"], [STRING, "Text"], [INT, "Int"], [CELL, "Cell"], [PATH, "Path"], [JOB, "Job"], [ARRAY, "Array"], [TABLE, "Table"]]) named(node({ id, kind: "builtin", op: id }), name);
 for (const [id, { name }] of Object.entries(MASK_TYPES)) named(node({ id, kind: "builtin", op: id }), name);
 // (Console, Files and Network are effects declared below, with operations.)
 for (const [id, name] of [[CHOICE, "Choice"], [DIVERGE, "Diverge"], [CELLS, "Cells"], [UPDATE, "Update"]]) named(node({ id, kind: "builtin", op: id }), name);
@@ -586,6 +586,10 @@ export const JOBS = {
   // the items after a position, made only when read. A fold whose arms
   // never read it costs what the walk costs.
   hides: sameJob("representation.hides", "hides", (_, s) => [s.fresh(), int]),
+  // r changes a value in place where t's job makes a changed copy (a hash
+  // table's put, C63b): chosen only where every value of t has one holder,
+  // so nobody sees the old one (one-holder.ts).
+  inPlace: sameJob("representation.inPlace", "in place", () => []),
 };
 
 export const CELL_OPS = {
@@ -792,6 +796,40 @@ export const ARRAY_OPS = {
     const v = arrayView(arr);
     return v.n > 0 ? { tag: SOME, fields: [v.buf.items[v.start]] } : { tag: NONE, fields: [] };
   }),
+};
+
+// A hash table changed in place (C63b, IN-PLACE.md step 2): Map's
+// representation where the compiler has seen that every map has one holder
+// (one-holder.ts), so a `put` nobody can see the old version of may write
+// into it. Keys are Ints and Texts, the ones a JS Map holds by value (an
+// Int has one spelling, int.ts). Its entries are in compare's order, so its
+// meaning is the Map it stands for.
+// `empty map` is a constant, one value every use shares: the empty table
+// it stands for is `shared`, and a put or remove on it makes a new one.
+// No `tag`: it isn't a case of a data type, and nothing takes it apart.
+export class Table {
+  readonly m: Map<unknown, unknown>;
+  readonly shared: boolean;
+  constructor(m: Map<unknown, unknown>, shared = false) { this.m = m; this.shared = shared; }
+}
+const own = (t: Table) => (t.shared ? new Table(new Map(t.m)) : t);
+const tableOf_ = (k: Type, v: Type): Type => ({ t: "con", id: TABLE, args: [k, v] });
+const ofEntry = (make: (k: Type, v: Type) => [Type[], Type], effects: Id[] = []): Sig => (s) => { const k = s.fresh(), v = s.fresh(); const [ps, r] = make(k, v); return fn(ps, r, s.freshRow(effects)); };
+// compare's order on Ints and Texts (run.ts compareValues).
+const keyOrder = (a: unknown, b: unknown): number => (typeof a === "string" ? (a === b ? 0 : T.less(a, b as string) ? -1 : 1) : (a as number) < (b as number) ? -1 : (a as number) > (b as number) ? 1 : 0);
+const tableAt = builtin("table.at", "table value at", ofEntry((k, v) => [[tableOf_(k, v), k], v], [CHOICE]));
+STD_MANY[tableAt] = (t: Table, key: unknown) => (t.m.has(key) ? [t.m.get(key)] : []);
+export const TABLE_OPS = {
+  empty: builtin("table.empty", "empty table", ofEntry((k, v) => [[], tableOf_(k, v)]), () => new Table(new Map(), true)),
+  // Changes t itself and gives it back: only where nobody else holds t.
+  put: builtin("table.put", "table put", ofEntry((k, v) => [[tableOf_(k, v), k, v], tableOf_(k, v)]), (t: Table, key: unknown, v: unknown) => { const o = own(t); o.m.set(key, v); return o; }),
+  remove: builtin("table.remove", "table remove", ofEntry((k, v) => [[tableOf_(k, v), k], tableOf_(k, v)]), (t: Table, key: unknown) => { const o = own(t); o.m.delete(key); return o; }),
+  has: builtin("table.has", "table has", ofEntry((k, v) => [[tableOf_(k, v), k], bool]), (t: Table, key: unknown) => ({ tag: t.m.has(key) ? TRUE : FALSE, fields: [] })),
+  size: builtin("table.size", "table size", ofEntry((k, v) => [[tableOf_(k, v)], int]), (t: Table) => t.m.size),
+  at: tableAt,
+  // The entries in compare's order: the Map it stands for.
+  entries: builtin("table.entries", "table entries", ofEntry((k, v) => [[tableOf_(k, v)], list({ t: "con", id: PAIR, args: [k, v] })]),
+    (t: Table) => listOf([...t.m].sort(([a], [b]) => keyOrder(a, b)).map(([a, b]) => ({ tag: PAIR_V, fields: [a, b] })))),
 };
 
 // Algebraic's operations (src/lang/algebraic.ts). The one + − · −x <

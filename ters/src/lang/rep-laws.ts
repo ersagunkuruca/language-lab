@@ -24,6 +24,7 @@ import type { Names } from "../presentation.ts";
 import type { Info } from "./infer.ts";
 import type { Representation } from "./represent.ts";
 import { equal, makeRunner, showValue, type Value } from "./run.ts";
+import { Table } from "./std.ts";
 import { smallValues } from "./tests.ts";
 import type { Type } from "./types.ts";
 
@@ -54,6 +55,9 @@ export function representationLaws(code: Code, info: Info, names: Names, reps: R
     // Each job's plain inputs, a few small values each; null when one is a function.
     const plain = (t: Type) => { const vs = smallValues(t, code); return vs ? vs.slice(0, ARGS) : null; };
     const meaning = (x: Value) => call(rep.meaning!, [x]);
+    // A representation changed in place (a hash table) may change what
+    // its job is given: each use gets a copy, as one holder would.
+    const given = (x: Value): Value => (rep.oneHolder && x instanceof Table ? new Table(new Map(x.m)) as unknown as Value : x);
 
     // The pool: T values built by T's jobs that give one, at T and at R.
     const pool: { t: Value; r: Value; text: string }[] = [];
@@ -66,7 +70,7 @@ export function representationLaws(code: Code, info: Info, names: Names, reps: R
         for (const args of product(choices as { t: Value; r: Value; text: string }[][], 6)) {
           if (pool.length >= POOL) break;
           try {
-            const t = call(j.k, args.map((a) => a.t)), rv = call(j.at, args.map((a) => a.r));
+            const t = call(j.k, args.map((a) => a.t)), rv = call(j.at, args.map((a) => given(a.r)));
             const text = `${names[j.k] ?? j.k}(${args.map((a) => a.text).join(", ")})`;
             if (!pool.some((x) => equal(x.t, t))) pool.push({ t, r: rv, text });
           } catch { /* outside the job's inputs: not a value to build on */ }
@@ -84,7 +88,7 @@ export function representationLaws(code: Code, info: Info, names: Names, reps: R
         res.cases++;
         const inputs = args.map((a) => a.text);
         try {
-          const got0 = call(j.at, args.map((a) => a.r));
+          const got0 = call(j.at, args.map((a) => given(a.r)));
           const got = isT(j.t.ret) ? meaning(got0) : got0;
           if (!equal(got, want)) res.failures.push({ inputs, what: `at ${rep.name} gives ${show(got)}, ${names[rep.of] ?? rep.of}'s own ${show(want)}` });
         } catch (e) {
