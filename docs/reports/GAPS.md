@@ -1478,7 +1478,10 @@ whether that value has one holder. *Fix:* run the one-holder check per
 place a map is made and follow each value; let a value that fails keep
 the tree. *Estimate:* `tree update at`, `tree balance` and the GC they
 cause are about a third of the time at 3000 notes; routes' table bought
-2× (C63c).
+2× (C63c). **Done (C71), another way:** every
+version of a table stays a value (std.ts `Table`, rerooted), so the table
+no longer needs one holder per map and is chosen for the whole type. 3000
+notes compiled: 8× to 6× the ideal (940 to 688 ms in one run).
 
 **N3. Data built once and then only read (perf, C59's case).** The index
 is built in one pass (`index of`, one holder all the way) and then only
