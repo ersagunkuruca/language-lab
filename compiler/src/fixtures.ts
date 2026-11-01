@@ -656,8 +656,12 @@ export function pga() {
   const movedN = k.def("moved n times");
   k.define(movedN, k.fn(["q", "n"], (q, n) => k.if(k.call(STD.less, n, k.lit(1)), q, k.call(movedN, call("clifford sandwich", k.x(motor), q), k.call(B.sub, n, k.lit(1))))));
   const moveN = def("move n times", () => k.fn(["p", "n"], (p, n) => k.call(fromPga, k.call(movedN, k.call(toPga, p), n))));
+  // The same on a GPU, under a budget (a shader can't loop unbounded).
+  const moveNBudget = def("move n times on the GPU", () => k.fn(["p", "n"], (p, n) => within(k, 64, () => k.call(moveN, p, n), () => p)));
+  // Given any multivector from outside: every part.
+  const movedAnyBudget = def("moved n times on the GPU", () => k.fn(["q", "n"], (q, n) => within(k, 64, () => k.call(movedN, q, n), () => q)));
   const code = base(k.code), names = baseNames(k.names);
-  return { code, names, info: infer(code, names, undefined, checkOptions), pga: M.v.pga, point: P.v.point, defs: { product, moveBy, moveFixed, movePoint, moveGiven, totalGiven }, times: { movedN, moveN } };
+  return { code, names, info: infer(code, names, undefined, checkOptions), pga: M.v.pga, point: P.v.point, defs: { product, moveBy, moveFixed, movePoint, moveGiven, totalGiven }, times: { movedN, moveN, moveNBudget, movedAnyBudget } };
 }
 
 // Int held in 32 bits, for shaders (C66c): + − × negate abs, less, as

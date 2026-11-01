@@ -17,6 +17,7 @@ import { lowerScalar } from "../src/scalar.ts";
 import { emitWgsl } from "../src/wgsl.ts";
 import { pga } from "../src/fixtures.ts";
 import { CONS, NIL } from "../../ters/src/lang/std.ts";
+import type { Id } from "../../ters/src/model.ts";
 
 const runtime = pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href;
 const first = (xs: Iterable<Value>) => { for (const x of xs) return x; };
@@ -87,4 +88,16 @@ test("a multivector only its callers give is staged with the parts its blade mas
       want.forEach((w, i) => assert.ok(Math.abs(got[i] - w) < 1e-9, `${name}: ${got} vs ${want}`));
     }
   }
+});
+
+test("on the GPU too: a shader's own definitions multiply only the masked parts their callers give (L43c)", () => {
+  const p = pga();
+  const products = (roots: Id[]) => {
+    const s = emitWgsl(lowerScalar(p.code, p.info, p.names, roots, { records: true }));
+    assert.deepEqual([...s.refused.values()], []);
+    return (s.wgsl.match(/ \* /g) ?? []).length;
+  };
+  // A point moved n times, against any multivector moved n times.
+  const points = products([p.times.moveNBudget]), any = products([p.times.movedAnyBudget]);
+  assert.ok(points > 0 && points < any / 2, `${points} products, ${any} for any multivector`);
 });
