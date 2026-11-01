@@ -6,7 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Code, Id } from "../src/model.ts";
 import type { Names } from "../src/presentation.ts";
-import { Cells } from "../src/lang/cells.ts";
+import { Cells, handOver } from "../src/lang/cells.ts";
 import { counterProgram, fractionsProgram } from "../src/lang/cells-programs.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
@@ -188,4 +188,20 @@ test("the same program runs in a plain run too: a formula is a lazy, remembered 
   const show = r.value(p.defs.showTerms) as unknown as (x: Value) => Iterable<Value>;
   const first = <T,>(it: Iterable<T>) => { for (const x of it) return x; throw new Error("none"); };
   assert.equal(first(show(first(terms(first(root(7)), 9)))), "[2; 1, 1, 1, 4, 1, 1, 1, 4]");
+});
+
+// I109: what a page did, carried to the same page started again.
+test("handOver writes the changed cells to the cells made in the same order", () => {
+  const data = (n: number) => ({ tag: "t", fields: [n] }) as unknown as Value;
+  const from = new Cells(equal), to = new Cells(equal);
+  from.kept = []; to.kept = [];
+  const [a1, b1, c1, d1] = [from.cell(1), from.cell(data(1)), from.cell(5), from.cell(0n)];
+  const [a2, b2, c2, d2] = [to.cell(1), to.cell(data(1)), to.cell(6), to.cell(0)];
+  from.write(a1, 2); from.write(b1, data(3)); from.write(c1, 7); from.write(d1, 4n);
+  // a and b carried; c started different and d is held another way, so not.
+  assert.equal(handOver(from.kept, to.kept, to), 2);
+  assert.equal(to.peek(a2), 2);
+  assert.deepEqual(to.peek(b2), data(3));
+  assert.equal(to.peek(c2), 6);
+  assert.equal(to.peek(d2), 0);
 });
