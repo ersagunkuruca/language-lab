@@ -42,7 +42,7 @@
   "q0im508ic37sptd22cm4qq37a6": "Every free point's x and y, in order: what a drag may move.",
   "1mtavjpjufqjti2da93qg190uc": "The steps with the free points put at these coordinates, in order; the rest as they were.",
   "7p4fo5fvk11a95rdfeu7dk3cgr": "Where shape i is, as [x, y], when it is a point that isn't at infinity; [] otherwise.",
-  "vc3t85i56smro1dbbvs5m2t4cg": "The steps with their free points moved as little as they can be so that point i lands at (x, y): each time, how far the point moves for a small nudge of each free coordinate, then the smallest change of them all that would carry it to the pointer if it moved in straight lines (the Newton step with a pseudo-inverse, Ben-Israel 1966), and again from there.",
+  "vc3t85i56smro1dbbvs5m2t4cg": "The steps with their free points moved as little as they can be so that point i lands at (x, y): each time, how far the point moves for a small nudge of each free coordinate, then the smallest change of them all that would carry it to the pointer if it moved in straight lines, and again from there.",
   "p7hsl5uo1vqj8n5jd2jsfv2a93": "The pointer moved while dragging: a free point follows it; a built point gets there by moving the free points it is made from as little as possible.",
   "em76kq23nlftc6ip2lp9mfo395": "A click on shape i: with move, start dragging it if it is a point; with a two-click tool, remember it, or make the step if it is the second; the bisector takes three clicks.",
   "5iobi0bln8a68ua9c7i9mp2hq9": "The squared paper underneath: the axes and a rule every unit.",

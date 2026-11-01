@@ -20064,7 +20064,7 @@
     "m3dan5ueupd7794f3srrakgqo3": {
       "id": "m3dan5ueupd7794f3srrakgqo3",
       "kind": "lit",
-      "value": "Credits: conformal geometric algebra, where points, lines and circles are all vectors and a point pair is split by (T ± √(T²)) (∞ ⌋ T), is David Hestenes's (with Hongbo Li and Alyn Rockwood, 2001) as set out by Leo Dorst, Daniel Fontijne and Stephen Mann (Geometric Algebra for Computer Science, 2007), prior art. Steven De Keninck's ganja.js has conformal plane examples too (prior art). The interactive construction with dependent shapes that follow a dragged point is what Cabri Géomètre (Laborde, 1988) and GeoGebra (Hohenwarter, 2001) do (prior art), and the equilateral triangle is Euclid's (Elements I.1). Inversion in a circle is classical (Steiner, Plücker; prior art). Dragging a built point moves the free points it is made from as little as it can, by Newton steps through the pseudo-inverse of how the point moves with them (Ben-Israel, 1966; prior art). The tools, the construction and the page are ours."
+      "value": "Credits: conformal geometric algebra, where points, lines and circles are all vectors and a point pair is split by (T ± √(T²)) (∞ ⌋ T), is David Hestenes's (with Hongbo Li and Alyn Rockwood, 2001) as set out by Leo Dorst, Daniel Fontijne and Stephen Mann (Geometric Algebra for Computer Science, 2007), prior art. Steven De Keninck's ganja.js has conformal plane examples too (prior art). The equilateral triangle is Euclid's (Elements I.1). Inversion in a circle is classical (Steiner, Plücker; prior art). The tools, the construction and the page are ours."
     },
     "jmc1vv3tj3d25qm2rf01h126ee": {
       "id": "jmc1vv3tj3d25qm2rf01h126ee",
