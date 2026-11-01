@@ -9,11 +9,11 @@ gap below gets its evidence, a fix and a rank.
 
 The programs are original, written for this purpose.
 
-**Rounds so far (2026-10-30):** 1 calc, 2 Countdown and chapters, 3
-ledger, 4 the guitar pedal, 5 routes. Each round's gaps are below, as
-written then. The gaps still open are rows in BACKLOG.md, lane C (C30,
-C31, C62, C63, C64), and the next round's program is chosen when the
-weekly round is due.
+**Rounds so far (2026-11-01):** 1 calc, 2 Countdown and chapters, 3
+ledger, 4 the guitar pedal, 5 routes, 6 notebook. Each round's gaps are
+below, as written then. The gaps still open are rows in BACKLOG.md, lane
+C (C30, C31, C59, C63, C64, C70 to C73), and the next round's program
+is chosen when the weekly round is due.
 
 ## Round 1: calc (2026-10-22)
 
@@ -1358,3 +1358,192 @@ wraps a call only because the language lacks something (WORKFLOW.md,
 
 These go into BACKLOG.md's Inbox for the coordinator's triage: M1 to M7
 as C rows, and LG1 to LG3 as L rows.
+
+## Round 6: notebook (2026-11-01)
+
+`ters/examples/notebook` reads a file of notes and questions about them.
+It indexes every note's words once, prints a summary (how many notes,
+terms and different terms, the most common terms, the longest note), and
+then answers each question from the index: `find` (the notes with every
+word, best first), `any` (the notes with some of them), `like` (the other
+notes that share the most and the rarest terms with one) and `seen` (the
+terms that come most often in the notes with a word).
+
+```
+$ node ters/cli/lab.ts run ters/examples/notebook ters/examples/notebook/notes.txt
+6 notes, 58 terms, 48 different terms
+most common: tide 6, bay 2, harbour 2, make 2, moon 2
+longest: ferries, 12 terms
+find tide: lighthouse 3000, moon 3000, ferries 1500, harbour 1500
+find tide harbour: harbour 4500
+any moon bread: moon 12000, bakery 6000
+like harbour: bakery 3000, lighthouse 3000, moon 3000, ferries 1500
+seen tide: bay 2, make 2, moon 2, all 1, boat 1
+find whale: nothing
+```
+
+It has 51 definitions, against routes' 39: 3 types and 48 functions. It
+was chosen to build its data once and then read it many times (BACKLOG
+C59), and to hold maps inside maps:
+
+- the index is a record of two maps: every note by name, and an inverted
+  index `Map Text (Map Text Int)`, term → note → times;
+- each note holds its own `Map Text Int` of term counts;
+- every `any`, `like` and `seen` adds its scores up in a fresh
+  `Map Text Int` with `update at`;
+- answers are ranked with `sort by` on a `Pair Int Text`, highest first.
+
+A term's weight is inverse document frequency (Spärck Jones, 1972, prior
+art) as a whole-number ratio. `Abort` is raised in five places and handled
+once. It was written with the TypeScript DSL (`Lang`) by a script kept in
+the project's files (`gaps-round6/build.ts`), not in the editor, so this
+round says nothing about what the editor makes hard.
+
+Files:
+- `compiler/gaps/notebook.ideal.js`: the hand-written ideal, with the
+  gaps marked. Maps are JS Maps filled in place; nothing else differs.
+- `compiler/gaps/notebook.ts`: six ways in one process (the evaluator and
+  the compiled code on the program as defined and as the chooser stores
+  it, the compiled code with the hash table allowed, and the ideal), and
+  a generator of made-up notes (Zipf-like word counts, capitals,
+  punctuation, plurals, stop words).
+- `compiler/test/notebook.test.ts`: all six agree on output and exit
+  code, failures included.
+- `compiler/gaps/bench-notebook.ts`: the table below.
+
+### Results
+
+```
+notebook              evaluator   compiled   compiled,   ideal   compiled/   trees/
+                                            trees (N1)            ideal      ideal
+100 notes, 14 KB        3200 ms      95 ms       —       5.9 ms      16×        —
+300 notes, 38 KB      (skipped)     433 ms      81 ms     15 ms      29×        5×
+1000 notes, 126 KB    (skipped)    3751 ms     269 ms     44 ms      86×        6×
+3000 notes, 378 KB    (skipped)   30155 ms    1112 ms    133 ms     226×        9×
+```
+
+Each notebook has its notes (10 to 40 words each) and 100 questions,
+a quarter of each kind. The compiled columns as they are today are all
+the same: the chooser picks the trees only for the stop words' `Set`
+and keeps every `Map` as its sorted list (N1), so `put` and `update at`
+are linear and the program is quadratic. The "trees (N1)" column is the
+same program with N1's check turned off by hand in library-reps.ts, which
+then picks the weight-balanced trees for Map; it is measured, not
+estimated. Timings move by about 20% from run to run.
+
+At 3000 notes, with the trees, building the index takes 391 ms against
+the ideal's 46 ms (8.5×), and each question about 8 ms against the
+ideal's 0.8 to 1 ms (8×). The evaluator is not the compiler's, but the
+editor's Run uses it: 3.2 s for 100 notes as defined (9.3 s on a busy
+machine), 1.2 s with the trees, and 3.6 s for 300 notes with the trees.
+
+A profile of the compiled program on trees at 3000 notes (runtime only):
+`tree update at` and `tree balance` 21%, GC 14%, walking a tree into a
+list for `entries of` and `keys of` (`tree onto`) 6%, `sort by`'s merge
+and its key closures 5%, `tree put` and `tree value at` 3%.
+
+### The gaps, ranked
+
+**N1. One generic call keeps every Map as a sorted list (perf: the whole
+program quadratic).** `most common` is
+`map(entries of(postings), (e) → pair(term, total(values of(notes))))`:
+`map`'s item type is `Pair Text (Map Text Int)`, a type variable that
+holds a Map. `generic` in library-reps.ts takes any such call as a place
+where a definition might see the tree's shape (through show, equal or
+compare), so the chooser keeps Map as defined for the whole program. It
+is the only such call here; nothing tells the author. `map` never looks at
+its items. *Fix:* count only the definitions whose type variable reaches
+show, equal or compare: what M4's copies per compared type already work
+out (Spec `at`), or a scheme flag "looks at a". `first`, `map`, `keep`,
+`sort by`, `for each`, `length` and the program's own pass-through helpers
+(`ranked`, `credit`, `counted` here) then don't count. *Measured* (the
+check off): 29× to 5× at 300 notes, 86× to 6× at 1000, 226× to 9× at
+3000; the evaluator 3.2 to 1.2 s at 100 notes. The program's output is the
+same either way (the test checks it).
+
+**N2. The hash table is all or nothing for a type (perf: about a quarter
+of what's left).** Every `any`, `like` and `seen` adds its scores up in a
+fresh `Map Text Int` that has one holder: made empty, changed by
+`update at`, read once by `ranked`. The ideal changes a JS Map in place.
+The one-holder check (C63a) is asked about Map as a whole, and fails here
+for reasons that have nothing to do with the score maps: "a Map that holds
+another" (the inverted index) and "summary: all is given twice to one
+call, and taken" (a list of notes, which hold maps). So no map gets the
+table. The postings and a note's counts are `Map Text Int` too, so the
+choice can't be made per type either: it has to be per value, from where
+it is made (`empty map` in `like line`, `any line`, `seen line`) and
+whether that value has one holder. *Fix:* run the one-holder check per
+place a map is made and follow each value; let a value that fails keep
+the tree. *Estimate:* `tree update at`, `tree balance` and the GC they
+cause are about a third of the time at 3000 notes; routes' table bought
+2× (C63c).
+
+**N3. Data built once and then only read (perf, C59's case).** The index
+is built in one pass (`index of`, one holder all the way) and then only
+read by 100 questions. Today each step of the build copies a path of the
+tree and rebalances (build 8.5× the ideal), and each read walks the tree
+again (`entries of` makes a list of it: N4). A representation for "built,
+then frozen": filled in place while it has one holder (as N2), then kept
+flat, a sorted array of keys and one of values (C59, FlatBuffers-like),
+where `entries of` is the array itself and `value at` a binary search. This
+is the program C59 asked for; measure C59 on it.
+
+**N4. `entries of` and `keys of` made into a list only to be walked once
+(perf, small).** `credit` walks `entries of(postings(t))` once, front to
+back; `find hits` keeps over `keys of(…)`; `seen with` walks a note's
+`entries of`. On the trees each one is `tree_list`, a whole new list per
+call. *Fix:* where the list is consumed once by a fold or a structural
+recursion, walk the tree in order instead (the representation's own fold,
+ROADMAP 5's folds as representations; M3's `heads` did this for the first
+item only). *Measured* from the profile: `tree onto` 6% at 3000 notes, and
+part of the GC.
+
+**N5. Top five of a full sort (perf, both sides).** `hits text` takes 5
+of `ranked`, which sorts every hit. The ideal does the same, so it is not
+in the ratios, but a `take(sort by(xs, key), k)` is a selection: a heap
+of k, n log k. A law the compiler reads, as M3 did for the smallest item.
+Small here: the sort and its key closures are 5%.
+
+**N6. The evaluator (not the compiler's).** 3.2 s for 100 notes as
+defined; the profile is the evaluator's own machine (`go`, `step`,
+`resume`, `refValue`: about half). This is BACKLOG L118c (closure
+compilation), now with a program a user would write: the editor's Run of
+`main` on a notebook of a few hundred notes takes several seconds even with
+the trees.
+
+### Language gaps
+
+Where notebook defines a helper only because the language lacks something
+(WORKFLOW.md, "Language gaps, every round"):
+
+- **NG1. No case folding or character classes.** `lower`, `wordy` and
+  `between` (three definitions) exist to make `Cities` into `cities` and
+  to keep letters, digits and apostrophes, by character codes. A
+  `lowercase(text)` (and `uppercase`), and `is letter` / `is digit`, would
+  say it. calc writes its own `digit` and `letter` by comparing texts, so
+  this is the second program to work around it.
+- **NG2. No `starts with` or `ends with`.** `ends with` is written with
+  `length` and `slice`; `blank` tests `slice(line, 0, 1) = "#"`. Routes'
+  `blank` does the same.
+- **NG3. No `take` (or `drop`).** `take` is written to keep the best five.
+- **NG4. `sum` is Float64 only.** `total` adds up Ints. One `sum` for every
+  number type, as `+` is (NUMBERS.md "One `+`"), would remove it.
+- **NG5. A lookup the program knows will succeed.** `seen with` reads a
+  note it has just found in the postings and still has to say what to do
+  if it isn't there (`abort("the index has lost a note")`). No row: two
+  maps kept in step is an invariant the language can't state, and the
+  Abort is honest.
+
+### Proposed order
+
+1. N1: a small change in library-reps.ts, and the largest gain (up to 25×
+   here). Any program that maps over a list of pairs holding a map loses
+   the trees today.
+2. N2, the table per value: the next 2× or so here, and it is what C56
+   and C62 need anyway.
+3. N3 with C59: measure flat frozen maps on this program once N1 and N2
+   are in.
+4. N4 and N5 after those, when they can be measured above the noise.
+
+These are BACKLOG rows C70 (N1), C71 (N2), C72 (N4) and C73 (N5); N3 is
+added to C59. NG1 to NG4 are L133 to L136.
