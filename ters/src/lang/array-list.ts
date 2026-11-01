@@ -94,6 +94,7 @@ export function buildArrayList(k: Lang, prelude: (name: string) => Id): ArrayLis
     k.call(JOBS.asWritten, k.x(prelude("length")), cost(k, "linear")),
     k.call(JOBS.asWritten, k.x(prelude("append")), cost(k, "linear")),
     k.call(JOBS.asWritten, k.x(prelude("item at")), cost(k, "linear")),
+    k.call(JOBS.asWritten, k.x(prelude("replace at")), cost(k, "linear")),
   )));
   defs.push(spec);
   return { representations: [rep, spec], defs };
