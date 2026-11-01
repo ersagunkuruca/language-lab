@@ -5205,6 +5205,20 @@ const ARRAYS: Record<string, Omit<RtFn, "name">> = {
       array.get $items
       i32.const 0`,
   },
+  // Item k where k is known to be in the array (equal and compare's loop).
+  "array.get": {
+    params: [["a", "array"], ["k", "int"]], result: "item", locals: [], uses: [],
+    body: `
+      local.get $a
+      struct.get $arr 0
+      struct.get $buf 0
+      local.get $a
+      struct.get $arr 1
+      local.get $k
+      i32.wrap_i64
+      i32.add
+      array.get $items`,
+  },
   // The first item; no answer when empty (C30d), as `at` past the end.
   "array.first": {
     params: [["a", "array"]], result: "item", locals: [], uses: [], partial: true,
@@ -5429,11 +5443,61 @@ const ARRAYS: Record<string, Omit<RtFn, "name">> = {
       struct.new $arr`,
   },
 };
+// A shader's arrays (C66c) in WebAssembly: the same Array, its Int an i32
+// and no answer the flag $none, as in WGSL and js-scalar.ts. `of` is the
+// items written out, k of them (`array.of3.a0`).
+const SHADER_ARRAYS: Record<string, Omit<RtFn, "name">> = {
+  "array.size32": {
+    params: [["a", "array"]], result: "i32", locals: [], uses: [],
+    body: `
+      local.get $a
+      struct.get $arr 2`,
+  },
+  "array.at32": {
+    params: [["a", "array"], ["k", "i32"]], result: "item", locals: [], uses: [],
+    body: `
+      local.get $k
+      local.get $a
+      struct.get $arr 2
+      i32.ge_u
+      if void
+        i32.const 1
+        global.set $none
+        i32.const 1
+        array.new_default $items
+        i32.const 0
+        array.get $items
+        return
+      end
+      local.get $a
+      struct.get $arr 0
+      struct.get $buf 0
+      local.get $a
+      struct.get $arr 1
+      local.get $k
+      i32.add
+      array.get $items`,
+  },
+};
+const shaderOf = (k: number): Omit<RtFn, "name"> => ({
+  params: Array.from({ length: k }, (_, i) => [`x${i}`, "item"] as [string, VT]), result: "array", locals: [], uses: [],
+  body: `
+      ${Array.from({ length: k }, (_, i) => `local.get $x${i}`).join("\n      ")}
+      array.new_fixed $items ${k}
+      i32.const 0
+      i32.const ${k}
+      struct.new $buf
+      i32.const 0
+      i32.const ${k}
+      struct.new $arr`,
+});
 const hasInt = (f: Omit<RtFn, "name">) => !f.native && [...f.params.map(([, t]) => t), f.result].includes("int");
 const raw = (n: string) => { const f = R[n] ?? WASI[n] ?? MATH[n]; return f && hasInt(f) ? `${n}.i64` : n; };
 export const runtime = (name: string): RtFn => {
   // An array function's copy for one item type (C66): the template, told which.
   const at = /^(array\.\w+)\.a(\d+)(\.i64)?$/.exec(name);
+  const of = at && /^array\.of(\d+)$/.exec(at[1]);
+  if (at && (of || SHADER_ARRAYS[at[1]])) return { ...(of ? shaderOf(Number(of[1])) : SHADER_ARRAYS[at[1]]), name, array: Number(at[2]) };
   if (at) {
     const f = { ...ARRAYS[at[1]], array: Number(at[2]) };
     if (!ARRAYS[at[1]]) throw new Error(`no runtime function ${name}`);

@@ -913,7 +913,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     if (t === "i32") return { k: "op", op: "beq", args: [x, y] };
     if (t === "int32") return { k: "op", op: "ieq", args: [x, y] };
     if (isFn(t)) throw new Refused("compares functions");
-    if (isArray(t)) throw new Refused("compares arrays (not in WebAssembly yet)");
+    if (isArray(t)) return { k: "call", fn: arrayLoop(t, "="), args: [x, y], tail };
     if (t === "int") return { k: "rt", fn: "int.equal", args: [x, y] };
     if (t === "text") return { k: "rt", fn: "text.equal", args: [x, y] };
     if (t !== "f64") return { k: "call", fn: equality(t), args: [x, y], tail };
@@ -952,8 +952,38 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     if (t === "int") return pick({ k: "rt", fn: "int.equal", args: [x, y] }, { k: "rt", fn: "int.less", args: [x, y] });
     if (t === "int32") return pick({ k: "op", op: "ieq", args: [x, y] }, { k: "op", op: "iless", args: [x, y] });
     if (t === "text") return pick({ k: "rt", fn: "text.equal", args: [x, y] }, { k: "rt", fn: "text.less", args: [x, y] });
-    if (isArray(t)) throw new Refused("compares arrays (not in WebAssembly yet)");
+    if (isArray(t)) return { k: "call", fn: arrayLoop(t, "<"), args: [x, y], tail };
     return { k: "call", fn: ordering(t), args: [x, y], tail };
+  }
+  // equal ("=") or compare ("<") on two arrays, as the evaluator has them
+  // (std.ts ArrayView's fields: the length, then the items): the lengths,
+  // then the items in order by a loop of tail calls, stopping at the first
+  // that differs (C66).
+  function arrayLoop(t: AType, how: "=" | "<"): number {
+    const key = `${how}${t.key}`;
+    if (index.has(key)) return index.get(key)!;
+    if (opts.shader) throw new Refused("compares arrays (not in shaders yet)");
+    const eq = how === "=", result: LType = eq ? "i32" : "f64";
+    const g: SFunc = { def: ARRAY, name: `${t.name}.${eq ? "equal" : "compare"}`, params: [t, t], result, locals: [t, t], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
+    index.set(key, funcs.push(g) - 1);
+    const h: SFunc = { def: ARRAY, name: `${g.name}.from`, params: [t, t, "int"], result, locals: [t, t, "int"], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
+    const hi = funcs.push(h) - 1;
+    const loc = (i: number): SExpr => ({ k: "local", i }), rt = (fn: string, ...args: SExpr[]): SExpr => ({ k: "rt", fn: `${fn}.a${t.index}`, args });
+    const [a, b, k] = [loc(0), loc(1), loc(2)];
+    const done: SExpr = eq ? { k: "bool", v: true } : { k: "num", v: 0 };
+    const from = (i: SExpr): SExpr => ({ k: "call", fn: hi, args: [a, b, i], tail: true });
+    // Item k of each, then the rest from k + 1.
+    const next = from({ k: "rt", fn: "int.add", args: [k, { k: "int", v: 1n }] });
+    const items = (x: SExpr) => rt("array.get", x, k);
+    if (eq) {
+      g.body = { k: "if", cond: { k: "rt", fn: "int.equal", args: [rt("array.length", a), rt("array.length", b)] }, then: from({ k: "int", v: 0n }), else: { k: "bool", v: false }, t: "i32" };
+      h.body = { k: "if", cond: { k: "rt", fn: "int.equal", args: [k, rt("array.length", a)] }, then: done, else: { k: "if", cond: same(items(a), items(b), t.item, h, false), then: next, else: { k: "bool", v: false }, t: "i32" }, t: "i32" };
+    } else {
+      const c = g.locals.push("f64") - 1, d = h.locals.push("f64") - 1;
+      g.body = { k: "let", i: c, value: compared(rt("array.length", a), rt("array.length", b), "int", g, false), body: { k: "if", cond: { k: "op", op: "equal", args: [loc(c), { k: "num", v: 0 }] }, then: from({ k: "int", v: 0n }), else: loc(c), t: "f64" } };
+      h.body = { k: "if", cond: { k: "rt", fn: "int.equal", args: [k, rt("array.length", a)] }, then: done, else: { k: "let", i: d, value: compared(items(a), items(b), t.item, h, false), body: { k: "if", cond: { k: "op", op: "equal", args: [loc(d), { k: "num", v: 0 }] }, then: next, else: loc(d), t: "f64" } }, t: "f64" };
+    }
+    return index.get(key)!;
   }
   // compared on a record or data type, a function of its own (recursive
   // for a type that contains itself): different cases by their places,

@@ -173,7 +173,7 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string
     return j >= 0 && strict.slice(0, j).every(pure) ? strict[j] : m;
   };
   const funcs = lowered.funcs.map((f) => ({ ...f, locals: [...f.locals], body: settle(f.body) }));
-  const used = new Set<string>(["new", "free", "unused", "block", "block_end", "dup", "dec", "drop", "fields", "oom", "live", "st", "reason", "fuel", "mod", "in", "out", "bits", "run", "code", "argc", "argv", "hex", "hexd", "word", "token", ...RESERVED, ...lowered.arrays.flatMap((_, i) => ["empty", "of", "items", "length", "at", "push", "first", "rest", "pushFront"].map((op) => `array_${op}_a${i}`))]);
+  const used = new Set<string>(["new", "free", "unused", "block", "block_end", "dup", "dec", "drop", "fields", "oom", "live", "st", "reason", "fuel", "mod", "in", "out", "bits", "run", "code", "argc", "argv", "hex", "hexd", "word", "token", ...RESERVED, ...lowered.arrays.flatMap((_, i) => ["empty", "of", "items", "length", "at", "push", "first", "rest", "pushFront", "get"].map((op) => `array_${op}_a${i}`))]);
   const ident = (hint: string) => {
     const base = hint.normalize("NFKD").replace(/[^A-Za-z0-9_]+/g, "_").replace(/^_+|_+$/g, "") || "f";
     let n = base;
@@ -967,6 +967,12 @@ static lab_cell *lab__copy_a${i}(${T} *xs, uint32_t n) {
   ${V} *v = (${V} *)a;
   if (!LAB_IS_SMALL(k) || LAB_VAL(k) < 0 || LAB_VAL(k) >= (int64_t)v->n) { lab_int_drop(k); lab_drop(a); lab_st = 1; return ${zero(a.item)}; }
   ${T} x = ${cp(`((${B} *)v->b)->it[v->s + LAB_VAL(k)]`)};
+  lab_drop(a);
+  return x;
+}`);
+    // Item k where k is known to be in the array (equal and compare's loop).
+    if (has("get")) out.push(`static ${T} lab_array_get_a${i}(lab_cell *a, lab_int k) {
+  ${T} x = ${cp(`((${B} *)((${V} *)a)->b)->it[((${V} *)a)->s + LAB_VAL(k)]`)};
   lab_drop(a);
   return x;
 }`);

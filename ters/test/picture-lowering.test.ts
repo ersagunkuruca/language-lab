@@ -1,7 +1,7 @@
 // The editor's pictures are lowered as shaders are (C66c): an Int is an
 // i32 and std's Array an array<T, N>, so a picture that counts or looks
 // something up in a written-out array draws on the GPU, and on the CPU in
-// WebAssembly (Ints, C66e) or JavaScript (arrays).
+// WebAssembly (Ints, C66e; arrays, C66f) or JavaScript.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -13,7 +13,7 @@ import { B } from "../src/prelude.ts";
 import { ARRAY_OPS, INT_OPS, S } from "../src/lang/std.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { emitWgsl } from "../../compiler/src/wgsl.ts";
-import { emitWasm } from "../../compiler/src/wasm.ts";
+import { emitWasm, instantiate } from "../../compiler/src/wasm.ts";
 import { loadJs } from "../../compiler/src/js-scalar.ts";
 import { lowerPicture } from "../../editor/picture.ts";
 
@@ -34,17 +34,21 @@ function picture() {
   return { code, names, info, entries: { red, green, blue } };
 }
 
-test("a picture with an Int and an array is lowered for the GPU and draws the evaluator's colour on the CPU", () => {
+test("a picture with an Int and an array is lowered for the GPU and draws the evaluator's colour on the CPU", async () => {
   const p = picture();
   const lowered = lowerPicture(p.code, p.info, p.names, p.entries);
   const s = emitWgsl(lowered);
   assert.deepEqual([...s.refused.values()], []);
   assert.deepEqual(s.funcs.map((f) => f.name).sort(), ["blue", "green", "red"]);
   assert.match(s.wgsl, /array<f32, 3>/);
-  // WebAssembly refuses a shader's arrays, with the reason; JavaScript draws them.
-  assert.throws(() => emitWasm(lowered), /arrays/);
+  // WebAssembly (C66f) and JavaScript both draw them.
+  const w = await instantiate(emitWasm(lowered)) as unknown as Record<string, (...xs: number[]) => number>;
   const js = loadJs(lowered), r = makeRunner(p.code, p.info, { print: () => {} });
   for (const [x, y] of [[0, 0], [0.5, -0.25]]) {
-    for (const d of Object.values(p.entries)) assert.equal(js.get(d)!(x, y, 1), first(r.call(r.value(d), x as never, y as never, 1 as never)));
+    for (const d of Object.values(p.entries)) {
+      const want = first(r.call(r.value(d), x as never, y as never, 1 as never));
+      assert.equal(js.get(d)!(x, y, 1), want);
+      assert.equal(w[p.names[d]](x, y, 1), want);
+    }
   }
 });
