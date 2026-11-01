@@ -43,6 +43,7 @@ New items land here until the next triage gives them a lane and a priority.
 | I116 | A new function's inputs are generic until its body fixes their types, so Split on an input is refused at first. Let New definition (and the MCP's `define`) take an input's type, or let Split offer the data types | MCP-TRIAL-2026-11-01.md #6 | 2026-11-01 |
 | I117 | Check in the editor: after Split on a value whose cases have no fields, every case is the same copy and folds into one otherwise, and an edit to it is made in every copy (`sameEverywhere`). Can a person give one case its own body? The MCP server has `case:` for it | MCP-TRIAL-2026-11-01.md #7 | 2026-11-01 |
 | I118 | A wrong argument's error is placed at the wrong part: `nth(s, row, "x")` with s a List Float64 says "this function needs List Text here, got List Float64" about s, not "x" | MCP-TRIAL-2026-11-01.md #8 | 2026-11-01 |
+| I119 | Four builtins are named just "show": the generic one (`showAny`), and Float64's, Int's and Algebraic's own. Old PR #44 (2026-10-22) saw them as identical palette entries at a Text hole (not rechecked since) and renamed them "show number"/"show int", but programs call Float64's `show` directly (it runs backwards as read), so renaming makes printed programs read `‹show float64›(x)`. Instead, let the palette offer one "show" and pick the specific one by the value's type, or show the input type beside each entry | old PR #44, closed 2026-11-01 | 2026-11-01 |
 
 ## E: Editor
 
