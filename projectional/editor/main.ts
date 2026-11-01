@@ -101,7 +101,7 @@ import { renderLet } from "../src/render/letseq.ts";
 import { renderNested } from "../src/render/nested.ts";
 import { renderSexpr } from "../src/render/sexpr.ts";
 import { Namer } from "../src/render/namer.ts";
-import { BOOL, CONS, FALSE, FIXED_V, HTML_V, MAP_V, NIL, SET_V, TRUE } from "../src/lang/std.ts";
+import { BOOL, CHECK, CONS, FALSE, FIXED_V, HTML_V, MAP_V, NIL, SET_V, TRUE } from "../src/lang/std.ts";
 import { CHOICE, DIVERGE, NUMBER, STRING, WORLD, showIn, type Type } from "../src/lang/types.ts";
 import { implementationKey } from "../src/lang/infer.ts";
 import { renderBlocks } from "../src/lang/render.ts";
@@ -120,6 +120,7 @@ import { showPin, type Pins } from "../src/lang/signatures.ts";
 import { inlinable, inlineView, type InlineView } from "./inline.ts";
 import * as Top from "../src/lang/toplevel.ts";
 import { drawPicture, pictureEntries, type Picture } from "./picture.ts";
+import { runTests, savedFrom, type Saved, type TestResult } from "../src/lang/tests.ts";
 import { PAGE_BASE, hasSound, pageFile, pageMain, showPage, type Preview } from "../src/lang/page.ts";
 import { browserWorld } from "../src/lang/browser.ts";
 import type { Doc as PageDoc, Node_ } from "../src/lang/html.ts";
@@ -183,8 +184,10 @@ interface Doc {
   hints: Hints;
   layout: Layout;
   // Example inputs per definition, as text (src/lang/values.ts): what the
-  // graph shows values for. A side table like names: never code.
-  examples?: Record<Id, string[]>;
+  // graph shows values for. A side table like names: never code. With an
+  // answer accepted (T7d), a list of inputs and answers instead (tests.ts
+  // Saved), the first the one Run shows.
+  examples?: Record<Id, string[] | Saved[]>;
   // Changed by you since it was loaded (an example as shipped is not saved
   // as yours, so it keeps up with the shipped one).
   edited?: boolean;
@@ -235,7 +238,7 @@ const baseFor = (_typed: boolean) => BASE;
 
 // An example is a folder of the same side tables a saved file holds
 // (examples/unpack.ts writes one from a file the editor saved).
-const typedDoc = (program: Program, code: Code, names: Names, comments: Comments, more: { layout?: Partial<Layout>; examples?: Record<Id, string[]> } = {}): Doc => ({
+const typedDoc = (program: Program, code: Code, names: Names, comments: Comments, more: { layout?: Partial<Layout>; examples?: Record<Id, string[] | Saved[]> } = {}): Doc => ({
   program, typed: true,
   code: merge(BASE, code),
   names: { short: names, descriptive: {} },
@@ -931,9 +934,13 @@ function knownPorts(info: T.Info): Id[] {
 // One set of values per definition, by port (its inputs, then "out"),
 // kept in examples.json: what you give it, whichever way it runs. The
 // graph shows what every node makes of them.
+// A definition's saved inputs and accepted answers (T7d), when it has
+// the newer form; the inputs Run shows, in either form.
+const savedOf = (d: Id): Saved[] | null => { const v = doc.examples?.[d]; return v?.length && typeof v[0] === "object" ? v as Saved[] : null; };
+const exampleTexts = (d: Id): string[] | undefined => savedOf(d)?.[0].inputs ?? (doc.examples?.[d] as string[] | undefined);
 function portText(info: T.Info, p: Id): string {
   const i = portsOfDef(ui.def).indexOf(p);
-  return doc.examples?.[ui.def]?.[i] ?? seeded(info, ui.def)?.[i] ?? (p === "out" && returnsBool(info, ui.def) ? "true" : "");
+  return exampleTexts(ui.def)?.[i] ?? seeded(info, ui.def)?.[i] ?? (p === "out" && returnsBool(info, ui.def) ? "true" : "");
 }
 
 // In a program that draws a picture, a function of x, y and time is the
@@ -1094,11 +1101,23 @@ function readPort(info: T.Info, p: Id, text: string): ReturnType<typeof parseVal
 
 function setPortText(p: Id, text: string) {
   const ports = portsOfDef(ui.def);
-  const cur = ports.map((_, i) => doc.examples?.[ui.def]?.[i] ?? "");
+  const cur = ports.map((_, i) => exampleTexts(ui.def)?.[i] ?? "");
   cur[ports.indexOf(p)] = text;
   while (cur.length && cur.at(-1) === "") cur.pop();
   ui.touched = [];
-  commit({ examples: { ...(doc.examples ?? {}), [ui.def]: cur } }, ["examples.json"], "Ran it again with that value. Values live in examples.json, never in the code.");
+  // With answers accepted, new inputs go first, and the accepted ones stay.
+  const saved = savedOf(ui.def), inputs = cur.slice(0, ports.filter((q) => q !== "out").length);
+  const next = !saved ? cur : saved[0].answer === undefined ? [{ inputs }, ...saved.slice(1)] : [{ inputs }, ...saved];
+  commit({ examples: { ...(doc.examples ?? {}), [ui.def]: next } }, ["examples.json"], "Ran it again with that value. Values live in examples.json, never in the code.");
+}
+
+// Keeps this answer for these inputs (TESTS-IN-THE-LANGUAGE.md §3): from
+// now on lab test checks that the definition still gives it.
+function acceptAnswer(inputs: string[], answer: string) {
+  const same = (e: Saved) => e.inputs.length === inputs.length && e.inputs.every((x, i) => x === inputs[i]);
+  const others = (savedOf(ui.def) ?? []).filter((e) => !same(e));
+  commit({ examples: { ...(doc.examples ?? {}), [ui.def]: [{ inputs, answer }, ...others] } }, ["examples.json"],
+    `Accepted ${answer} for these inputs. lab test checks it from now on; it's kept in examples.json.`);
 }
 
 function setKnown(info: T.Info, port: Id, on: boolean) {
@@ -1265,6 +1284,21 @@ function backwardsPanel(namer: Namer, info: T.Info): HTMLElement {
     const alt = r.answers.slice(1).map((a) => wanted.map((p) => `${p === "out" ? "result" : portName(p)} ${nice(a.values[p])}`).join(", "));
     box.append(h("details", { class: "alts" }, h("summary", {}, `${r.answers.length - 1}${r.more ? "+" : ""} other answer${r.answers.length > 2 || r.more ? "s" : ""} (other branches)${r.cut ? " so far" : ""}`),
       h("ul", {}, ...alt.map((a) => h("li", {}, a)))));
+  }
+  // An answer run forwards can be accepted, and one accepted is checked
+  // against what it gives now: a tick, or both side by side (T7d).
+  const got = forwards && !missing.length ? forward()?.answers[0]?.values.out : undefined;
+  if (got !== undefined) {
+    const inputs = ports.filter((p) => p !== "out").map((p) => portText(info, p));
+    const acc = (savedOf(ui.def) ?? []).find((e) => e.answer !== undefined && e.inputs.length === inputs.length && e.inputs.every((x, i) => x === inputs[i]));
+    const accept = (label: string) => {
+      const b = h("button", { class: "btn", type: "button", title: "Keep this answer for these inputs in examples.json: lab test checks it from now on" }, label);
+      b.addEventListener("click", () => acceptAnswer(inputs, got));
+      return b;
+    };
+    if (acc?.answer === got) box.append(h("p", { class: "status-line accepted" }, "✓ The answer you accepted for these inputs."));
+    else if (acc) box.append(h("p", { class: "status-line warn" }, `Accepted: ${nice(acc.answer!)}. Now: ${nice(got)}. `, accept("Accept the new answer")));
+    else box.append(h("p", { class: "hint" }, accept("Accept this answer"), " to check it from now on."));
   }
   const residual = r.answers[0]?.residual ?? [];
   if (residual.length) box.append(h("p", { class: "hint" }, `Left over: ${residual.join("; ")}`));
@@ -2781,6 +2815,29 @@ function valueView(v: Value): HTMLElement {
   return text(v);
 }
 
+// A test's results, once per version of the code and its saved values.
+const lawRuns = new WeakMap<Code, Map<string, TestResult>>();
+function lawPanel(info: T.Info, box: HTMLElement): HTMLElement {
+  let m = lawRuns.get(prog());
+  if (!m) lawRuns.set(prog(), (m = new Map()));
+  const key = `${ui.def}\u0000${JSON.stringify(doc.examples?.[ui.def] ?? null)}`;
+  let r = m.get(key);
+  if (!r) {
+    try { r = runTests(prog(), info, pres().names, [ui.def], savedFrom(doc.examples ?? {}), { world: quietWorld() })[0]; }
+    catch (e) { r = { def: ui.def, name: "", cases: 0, failures: [], error: (e as Error).message }; }
+    m.set(key, r);
+  }
+  const cases = `${r.cases} case${r.cases === 1 ? "" : "s"}`;
+  box.append(h("p", { class: "hint" }, "A test: it performs Check. It runs on its saved inputs, then on small values of each input's type, smallest first, as lab test runs it."));
+  if (r.error) box.append(h("p", { class: "status-line bad" }, `The test stopped: ${r.error}.`));
+  else if (!r.failures.length) box.append(h("p", { class: "status-line accepted" }, `✓ Every expect held, in ${cases}.`));
+  else {
+    box.append(h("p", { class: "status-line bad" }, `${r.failures.length} of ${cases} failed. The first is the smallest.`));
+    box.append(h("ul", { class: "law-failures" }, ...r.failures.slice(0, 5).map((f) => h("li", {}, `${f.inputs.join(", ") || "no inputs"}: ${f.what.join("; ")}`))));
+  }
+  return box;
+}
+
 function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
   const box = h("div", { class: "run" });
   const t = info.typeOf.get(ui.def);
@@ -2791,6 +2848,10 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
   const value = !!z && z.t !== "fn";
   const body = defBody(ui.def);
   if (!body || body.kind === "typedef") return h("p", { class: "hint" }, body?.kind === "typedef" && body.interface ? "An interface doesn't run; each implementation says how its type does the operations, and functions call them." : body?.kind === "typedef" && body.effect ? "An effect doesn't run; functions perform its operations, and a handler answers them." : "A data type doesn't run; its constructors are called from functions.");
+  // A test (its row has Check) runs as lab test runs it: on its saved
+  // inputs, then on small values, and a failing expect shows here with the
+  // inputs it failed on (T7d).
+  if (z?.t === "fn" && z.eff.effs.includes(CHECK) && !errorsIn(info) && !holesIn(info)) return lawPanel(info, box);
   // An action that performs an effect nothing answers yet runs only inside
   // a handler: say where, instead of a Run that can only fail.
   const needs = action ? needsHandling(z).filter((e) => e !== CHOICE) : [];

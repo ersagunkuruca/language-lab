@@ -26,6 +26,8 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
+| T7d | Run: accept an answer for given inputs (kept in examples.json for lab test), a tick or both values side by side after; a test (Check) opens on its run, the failures smallest first | #829 |
+| I99 | Constructions and Compass: drag a built point; the free points it's made from move as little as they can (Newton steps through the pseudo-inverse), so it lands under the pointer | #826 |
 | I104 | Graph: a page's main opens with its top rows whole; the window slides right when the top band runs past a pane (Tumble opens on main's lets and result) | #824 |
 | I103 | Run: a predicate that opens on main's first call runs forward from it and shows whether it holds (Tumble's contains: holds false, not a red No answer) | #819 |
 | I102 | Run: a helper with cells or effects of its own, every input given, isn't searched; it says it uses Cells (Time, …) and that Show values runs it forwards | #817 |
