@@ -85,10 +85,15 @@ anything but an Int. One that nothing fixes is exact where it can be: `2 +
 by themselves: `as float64`, `whole part`, `as fraction` and `as complex`
 convert. (WHAT-NUMBER-MEANS.md.) A `Float64` is always finite, with one
 zero: NaN and ±∞ are not values. An answer outside the finite floats
-stops the program with the reason: no answer (`x / 0`, the square root of
-a negative, the log of 0 or less, 0 to a negative power) or overflow. Today
-both stop it; with L125b "no answer" becomes `Choice`, so a handler can
-catch it (FLOAT-VALUES-2026-11-01.md). Where ±∞ helps (a bound with no
+is either no answer or overflow. No answer (`x / 0`, `x mod 0`, the square
+root of a negative, the log of 0 or less, 0 to a negative power) is a
+`Choice`, like a lookup that finds nothing, so `first(() => 1 / x, () => 0)`
+says what to do instead. The checker drops that `Choice` where it can see
+the input is fine: dividing by a literal or a let that isn't 0, inside `x >
+0`'s true branch, the square root of `x · x`. A page's view (a part, a
+text, an attribute) with no answer shows nothing there; a handler such as
+a button's handles its own. Overflow stops the program with the reason
+(FLOAT-VALUES-2026-11-01.md). Where ±∞ helps (a bound with no
 end, the least of no numbers), it is ordinary data: `Extended a` is
 `minus infinity`, `finite(value)` or `plus infinity`, for any ordered
 number type, and `minimum` of no numbers is `plus infinity`.
@@ -1007,7 +1012,7 @@ builtin's type takes away exactly what its row says.
 |---|---|---|
 | a match on an effect's operations | any effect declared with operations (Abort, Log, Random, your own) | a case for each operation says what it does: the handler |
 | a page's event handler | Cells, Update, Console, Files, Abort, Diverge, Time, Network, Random, Log | the page runtime runs a handler when its event comes, under a step budget, and logs an Abort; a log line goes to the browser's console |
-| a page's text, part or attribute value | Cells, Diverge, Time, Network, Log | the page runtime runs a view in a watcher, under a step budget, after main has returned; a log line goes to the browser's console, once per run |
+| a page's text, part or attribute value | Cells, Diverge, Time, Network, Log, Choice | the page runtime runs a view in a watcher, under a step budget, after main has returned; a view with no answer shows nothing; a log line goes to the browser's console, once per run |
 | a program's main | Console, Files, Update, Cells, Diverge, Network, Log, Abort, Random, Time, Wait | the runtime handles them around main: the world, cells, the clock and the web; an Abort ends the program with its reason |
 | a shader | Diverge | only under a literal with fuel, which gives each pixel a step budget |
 | a sound's block function | Cells, Update, Random, Diverge | the audio runtime runs it on each block, under a step budget, with Random seeded; a block that doesn't finish plays silence |
@@ -1577,8 +1582,8 @@ a row's test is missing or the table here differs from the rows.
 | variable out of scope | checked | can only come from moving a subtree; reported as a scope error | "scope: a variable moved out of the case that binds it is caught" (`test/lang.test.ts`) |
 | incomplete program | allowed | holes have types and the program runs until it reaches one | "a program with a hole runs until it reaches it" (`test/errors.test.ts`) |
 | integer overflow | impossible by construction | `Int` is unbounded: machine numbers with a BigInt fallback | "Int never overflows: 2^64 + 1, 30!, and the step from safe integers to BigInt" (`test/data.test.ts`) |
-| division by zero | runtime, but typed | `Int`'s `quotient` and `remainder` are `Choice` (no answer); `evaluate` fails instead of returning NaN; Float64's `/` by 0 stops the program with the reason (L125a; `Choice` with L125b) | "Int division rounds down; dividing by zero and a negative power have no answer" (`test/data.test.ts`) |
-| other domain errors (`sqrt` of a negative) | runtime | a Float64 is always finite (L125a): `sqrt` of a negative, `log` of 0 or less, 0 to a negative power and overflow stop the program with the reason, never a NaN or ∞; `Choice` for no answer with L125b | "a Float64 is always finite: no answer and overflow stop the program with the reason" (`test/data.test.ts`) |
+| division by zero | runtime, but typed | `Int`'s `quotient` and `remainder` are `Choice` (no answer); `evaluate` fails instead of returning NaN; Float64's `/` by 0 is a `Choice` too (L125b): no answer, never a NaN or ∞ | "Int division rounds down; dividing by zero and a negative power have no answer" (`test/data.test.ts`) |
+| other domain errors (`sqrt` of a negative) | runtime | a Float64 is always finite (L125a): `sqrt` of a negative, `log` of 0 or less and 0 to a negative power have no answer (a `Choice`, L125b; dropped where the input is shown fine), and overflow stops the program with the reason, never a NaN or ∞ | "a Float64 is always finite: no answer is a Choice, and overflow stops the program with the reason" (`test/data.test.ts`) |
 | unit mismatches | checked | a unit is part of a number's type: dimension vectors (`src/units.ts`), reported by the type checker, so the editor refuses an edit that adds one | "units: declared on parameters and numbers, inferred through predicates and functions" (`test/oneworld.test.ts`) |
 | resource misuse (leaks, use after close) | not addressed | proposal: resources exist only inside their handler's scope, so they can't escape (effects again, not linear types) | no test: not addressed |
 

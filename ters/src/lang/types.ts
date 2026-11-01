@@ -78,6 +78,9 @@ export const CELL = "type.cell";
 // A list's items side by side (BACKLOG C30d, REPRESENTATIONS.md step 5):
 // Array a, read by position in constant time. Plain when its items are.
 export const ARRAY = "type.array";
+// A hash table changed in place (C63b): Map's representation where every
+// map has one holder (one-holder.ts), never written by a program.
+export const TABLE = "type.table";
 // Named blade masks (GRADES.md, BACKLOG L43e, Ersagun 2026-10-31: "each
 // blade combination a different type"): `Vector of T` is a T, a record type
 // of an algebra's multivectors, that can be nonzero only on T's vectors.

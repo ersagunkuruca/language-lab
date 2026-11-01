@@ -488,6 +488,26 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   }
 
   // ---- effects under a specialization
+  // A library definition is checked apart, so its body's types may name
+  // its rows with variables of their own: a row switched on for the copy
+  // (a Choice function given to map) is switched on under the body's name
+  // for it too, read off its lambda, as `lat` is in spec. Without this a
+  // body called its Choice parameter as if it had one answer.
+  const bodyRho = (def: Id, rho: Rho): Rho => {
+    const body = node<"def">(def).body;
+    if (!rho.size || !body || !isFnDef(def)) return rho;
+    const out = new Map(rho);
+    const pair = (a: Type, b: Type) => {
+      if (a.t === "con" && b.t === "con") a.args.forEach((x, i) => b.args[i] && pair(x, b.args[i]));
+      if (a.t !== "fn" || b.t !== "fn") return;
+      const x = sub.resolveRow(a.eff).tail, y = sub.resolveRow(b.eff).tail;
+      if (x !== null && y !== null && rho.has(x) && !out.has(y)) out.set(y, rho.get(x)!);
+      a.params.forEach((p, i) => b.params[i] && pair(p, b.params[i]));
+      pair(a.ret, b.ret);
+    };
+    pair(info.schemes.get(def)!.type, ty(body));
+    return out;
+  };
   const choice = (row: Row, rho: Rho) => {
     const r = sub.resolveRow(row);
     return r.effs.includes(CHOICE) || (r.tail !== null && rho.get(r.tail) === true);
@@ -1193,9 +1213,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     curAt = sp.at;
     // The copies this one's heap copy calls with a yield.
     const yields = new Set<string>();
-    const rho = sp.rho;
-    const memo = new Map<Id, boolean>();
     const d = node<"def">(sp.def);
+    const rho = bodyRho(sp.def, sp.rho);
+    const memo = new Map<Id, boolean>();
     // Lambdas here that are typed Choice but never choose, and are passed
     // where the callee's copy calls them plainly.
     const plainHere = new Set<Id>();
@@ -1440,7 +1460,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const f = code.nodes[n.fn];
       if (f.kind === "ref") {
         const t = code.nodes[f.target];
-        if (t.kind === "def") return defCall(n).streams;
+        // A call the checker found always answered (L125b, period(1, 9.81))
+        // takes the copy's one answer where it is.
+        if (t.kind === "def") return defCall(n).streams && !info.answered?.has(n.id);
         if (sp.plain.has(f.target) || fusePlain.has(f.target)) return false;
         if (t.kind === "variant" || t.kind === "field") return false;
         if (t.kind === "builtin") {
@@ -1723,7 +1745,8 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         if (t.kind === "field") return field(ex(n.args[0]), f.target);
         if (t.kind === "def") {
           const s = defCall(n);
-          const c = callOf(s, argsOf(n, s));
+          const called = callOf(s, argsOf(n, s));
+          const c = s.streams && info.answered?.has(n.id) ? `$answered(${called})` : called;
           const v = s.bool ? `$bool(${c})` : c;
           return spends(f.target) ? `($spendOrThrow(), ${v})` : v;
         }
@@ -2970,7 +2993,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // as it is.
   for (const [s, b] of made) if (keep.has(s.name)) out.push(heapCalled.has(s.name) && !heapCopies.has(s.name) ? `${b}\nfunction* ${s.name}$h(...a) {\nreturn ${s.name}(...a);\n}` : b);
 
-  const helpers = ["$isLater", "$no", "$stream0", "$showAny", "$compare", "$int", "$text", "$impl", "$many", "$partial", "$setPath", "$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$snoc", "$fromBack", "$range", "$eq", "$show", "$mod", "$fin", "$div", "$sqrt", "$log", "$pow", "$mapParts", "$zipParts", "$total", "$first", "$firstS",
+  const helpers = ["$isLater", "$no", "$answered", "$stream0", "$showAny", "$compare", "$int", "$text", "$impl", "$many", "$partial", "$setPath", "$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$snoc", "$fromBack", "$range", "$eq", "$show", "$mod", "$fin", "$div", "$sqrt", "$log", "$pow", "$mapParts", "$zipParts", "$total", "$first", "$firstS",
     "$all", "$count", "$oneOf", "$fail", "$lift", "$one", "$hole", "$fuel", "$enter", "$caught", "$leave", "$spend", "$spendOrThrow", "$outOfFuel", "$ok", "$clean", "$key",
     "$close", "$near", "$sameNumber", "$planned", "$solveRuntime", "$print", "$FN", "$perform", "$handle", "$handleS", "$io", "$seeded", "$seededS", "$optional", "$cells", "$listArrays", "$path", "$spread", "$self", "$foldNested", "$drive", "$rec", "$pushList", "$withInto", "$intoArray", "$later", "$handleL", "$handleLG",
     "$ORDER", "$compareN", "$numberOrder", "$intOrder", "$textOrder",

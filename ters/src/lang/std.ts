@@ -7,7 +7,7 @@ import { discharge } from "./ledger.ts";
 import type { Code, Id, Node, NodeOf } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { B, impl } from "../prelude.ts";
-import { MASK_TYPES, NAMED_ROWS, ARRAY, CELL, PATH, JOB, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NETWORK, NUMBER, STRING, type Row, type Subst, type Type } from "./types.ts";
+import { MASK_TYPES, NAMED_ROWS, ARRAY, TABLE, CELL, PATH, JOB, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NETWORK, NUMBER, STRING, type Row, type Subst, type Type } from "./types.ts";
 import * as I from "./int.ts";
 import * as T from "./text.ts";
 import * as A from "./algebraic.ts";
@@ -18,7 +18,7 @@ const names: Names = {};
 const named = (id: Id, name: string) => ((names[id] = name), id);
 
 // --- builtin types and effects (named nodes, so they can be referenced)
-for (const [id, name] of [[NUMBER, "Float64"], [STRING, "Text"], [INT, "Int"], [CELL, "Cell"], [PATH, "Path"], [JOB, "Job"], [ARRAY, "Array"]]) named(node({ id, kind: "builtin", op: id }), name);
+for (const [id, name] of [[NUMBER, "Float64"], [STRING, "Text"], [INT, "Int"], [CELL, "Cell"], [PATH, "Path"], [JOB, "Job"], [ARRAY, "Array"], [TABLE, "Table"]]) named(node({ id, kind: "builtin", op: id }), name);
 for (const [id, { name }] of Object.entries(MASK_TYPES)) named(node({ id, kind: "builtin", op: id }), name);
 // (Console, Files and Network are effects declared below, with operations.)
 for (const [id, name] of [[CHOICE, "Choice"], [DIVERGE, "Diverge"], [CELLS, "Cells"], [UPDATE, "Update"]]) named(node({ id, kind: "builtin", op: id }), name);
@@ -109,8 +109,11 @@ const tfun = (params: Id[], result: Id, effects: Id[]) => node({ id: `std.t${tn+
 // Log is in both: a log line is for whoever debugs the page, not the page,
 // so a view may log (each time it runs, which is what debugging a view
 // wants to see), where it may not print.
-export const PAGE_VIEW: readonly Id[] = discharge("a page's text, part or attribute value", [CELLS, DIVERGE, TIME, NETWORK, LOG],
-  "the page runtime runs a view in a watcher, under a step budget, after main has returned; a log line goes to the browser's console, once per run");
+// Choice too (L125b, Ersagun 2026-11-01): a view with no answer, one that
+// divides by 0, shows nothing there; a view only reads, so nothing is done
+// on a path that is abandoned. A handler still handles its own Choice.
+export const PAGE_VIEW: readonly Id[] = discharge("a page's text, part or attribute value", [CELLS, DIVERGE, TIME, NETWORK, LOG, CHOICE],
+  "the page runtime runs a view in a watcher, under a step budget, after main has returned; a view with no answer shows nothing; a log line goes to the browser's console, once per run");
 export const PAGE_HANDLER: readonly Id[] = discharge("a page's event handler", [CELLS, UPDATE, CONSOLE, FILES, ABORT, DIVERGE, TIME, NETWORK, RANDOM, LOG],
   "the page runtime runs a handler when its event comes, under a step budget, and logs an Abort; a log line goes to the browser's console");
 // A sound (AUDIO.md): a function from a block of samples to the block to
@@ -226,7 +229,8 @@ export const ALGEBRAIC_V = "std.algebraic.algebraic";
 // is resolved to the type's own function before anything runs (arith.ts).
 const TRIG_NAMES = ["sin", "cos", "tan", "exp", "log"] as const;
 export const TRIG = typedef("std.trig", "Trig", ["a"], [
-  ["trig", TRIG_NAMES.map((op): [string, TypeOf] => [op, ([a]) => tfun([tref(a)], tref(a), [])])],
+  // log has no answer at 0 or below, so it may fail (L125b).
+  ["trig", TRIG_NAMES.map((op): [string, TypeOf] => [op, ([a]) => tfun([tref(a)], tref(a), op === "log" ? [CHOICE] : [])])],
 ], false, true);
 export const TRIG_V = "std.trig.trig";
 export const TRIG_OPS = Object.fromEntries(TRIG_NAMES.map((op) => [op, `${TRIG_V}.${op}`])) as Record<(typeof TRIG_NAMES)[number], Id>;
@@ -251,11 +255,11 @@ export const TRIG_UNPOLAR = `${TRIG_V}.unpolar`;
   named(node({ id: TRIG_UNPOLAR, kind: "field", type, results: [0, 1], ports: ["length", "angle", "x", "y"] }), "unpolar");
   (nodes.find((n) => n.id === TRIG_V) as NodeOf<"variant">).fields.push(TRIG_UNPOLAR);
 }
-// asin and acos (POLAR.md, L97c3): angles read off unpolar, (a) -> a like
-// sin and cos.
+// asin and acos (POLAR.md, L97c3): angles read off unpolar, (a) -[Choice]-> a:
+// no answer outside −1 to 1 (L125b).
 export const TRIG_ASIN = `${TRIG_V}.asin`, TRIG_ACOS = `${TRIG_V}.acos`;
 for (const [id, name] of [[TRIG_ASIN, "asin"], [TRIG_ACOS, "acos"]]) {
-  const type = node({ id: `${id}.type`, kind: "tfun", params: [node({ id: `${id}.t0`, kind: "tref", target: `${TRIG}.a`, args: [] })], result: node({ id: `${id}.t1`, kind: "tref", target: `${TRIG}.a`, args: [] }), effects: [] });
+  const type = node({ id: `${id}.type`, kind: "tfun", params: [node({ id: `${id}.t0`, kind: "tref", target: `${TRIG}.a`, args: [] })], result: node({ id: `${id}.t1`, kind: "tref", target: `${TRIG}.a`, args: [] }), effects: [CHOICE] });
   named(node({ id, kind: "field", type }), name);
   (nodes.find((n) => n.id === TRIG_V) as NodeOf<"variant">).fields.push(id);
 }
@@ -356,8 +360,11 @@ function itemsOf(l: { tag: Id; fields: unknown[] }): unknown[] {
 }
 
 // The numeric builtins from prelude.ts get types here; their code stays there.
+const PARTIAL_OPS = new Set(["div", "sqrt", "log", "pow"]);
 for (const op of Object.keys(impl) as (keyof typeof impl)[]) {
-  SIGS[B[op]] = (s) => fn(Array(impl[op].length).fill(num), num, s.freshRow());
+  // `/`, `sqrt`, `log` and `^` have no answer at some inputs (L125b): Choice,
+  // dropped where the checker knows the input is fine (signs.ts).
+  SIGS[B[op]] = (s) => fn(Array(impl[op].length).fill(num), num, s.freshRow(PARTIAL_OPS.has(op) ? [CHOICE] : []));
 }
 
 const pure = (params: Type[], ret: Type): Sig => (s) => fn(params, ret, s.freshRow());
@@ -382,7 +389,7 @@ export const S = {
   // The nearest binary32 value (ties to even): what a GPU holds. The job
   // of every Float64 operation in the Float32 representation (NUMBERS.md).
   float32: builtin("float32", "round to Float32", pure([num], num), Math.fround),
-  mod: builtin("mod", "mod", pure([num, num], num), (a: number, b: number) => ((a % b) + b) % b),
+  mod: builtin("mod", "mod", (s) => fn([num, num], num, s.freshRow([CHOICE])), (a: number, b: number) => ((a % b) + b) % b),
   concat: builtin("concat", "join text", pure([str, str], str), (a: string, b: string) => a + b),
   show: builtin("show", "show", pure([num], str), (x: number) => (Number.isInteger(x) ? String(x) : String(Math.round(x * 1e9) / 1e9))),
   range: builtin("range", "range", pure([num], list(num))),
@@ -579,6 +586,10 @@ export const JOBS = {
   // the items after a position, made only when read. A fold whose arms
   // never read it costs what the walk costs.
   hides: sameJob("representation.hides", "hides", (_, s) => [s.fresh(), int]),
+  // r changes a value in place where t's job makes a changed copy (a hash
+  // table's put, C63b): chosen only where every value of t has one holder,
+  // so nobody sees the old one (one-holder.ts).
+  inPlace: sameJob("representation.inPlace", "in place", () => []),
 };
 
 export const CELL_OPS = {
@@ -785,6 +796,40 @@ export const ARRAY_OPS = {
     const v = arrayView(arr);
     return v.n > 0 ? { tag: SOME, fields: [v.buf.items[v.start]] } : { tag: NONE, fields: [] };
   }),
+};
+
+// A hash table changed in place (C63b, IN-PLACE.md step 2): Map's
+// representation where the compiler has seen that every map has one holder
+// (one-holder.ts), so a `put` nobody can see the old version of may write
+// into it. Keys are Ints and Texts, the ones a JS Map holds by value (an
+// Int has one spelling, int.ts). Its entries are in compare's order, so its
+// meaning is the Map it stands for.
+// `empty map` is a constant, one value every use shares: the empty table
+// it stands for is `shared`, and a put or remove on it makes a new one.
+// No `tag`: it isn't a case of a data type, and nothing takes it apart.
+export class Table {
+  readonly m: Map<unknown, unknown>;
+  readonly shared: boolean;
+  constructor(m: Map<unknown, unknown>, shared = false) { this.m = m; this.shared = shared; }
+}
+const own = (t: Table) => (t.shared ? new Table(new Map(t.m)) : t);
+const tableOf_ = (k: Type, v: Type): Type => ({ t: "con", id: TABLE, args: [k, v] });
+const ofEntry = (make: (k: Type, v: Type) => [Type[], Type], effects: Id[] = []): Sig => (s) => { const k = s.fresh(), v = s.fresh(); const [ps, r] = make(k, v); return fn(ps, r, s.freshRow(effects)); };
+// compare's order on Ints and Texts (run.ts compareValues).
+const keyOrder = (a: unknown, b: unknown): number => (typeof a === "string" ? (a === b ? 0 : T.less(a, b as string) ? -1 : 1) : (a as number) < (b as number) ? -1 : (a as number) > (b as number) ? 1 : 0);
+const tableAt = builtin("table.at", "table value at", ofEntry((k, v) => [[tableOf_(k, v), k], v], [CHOICE]));
+STD_MANY[tableAt] = (t: Table, key: unknown) => (t.m.has(key) ? [t.m.get(key)] : []);
+export const TABLE_OPS = {
+  empty: builtin("table.empty", "empty table", ofEntry((k, v) => [[], tableOf_(k, v)]), () => new Table(new Map(), true)),
+  // Changes t itself and gives it back: only where nobody else holds t.
+  put: builtin("table.put", "table put", ofEntry((k, v) => [[tableOf_(k, v), k, v], tableOf_(k, v)]), (t: Table, key: unknown, v: unknown) => { const o = own(t); o.m.set(key, v); return o; }),
+  remove: builtin("table.remove", "table remove", ofEntry((k, v) => [[tableOf_(k, v), k], tableOf_(k, v)]), (t: Table, key: unknown) => { const o = own(t); o.m.delete(key); return o; }),
+  has: builtin("table.has", "table has", ofEntry((k, v) => [[tableOf_(k, v), k], bool]), (t: Table, key: unknown) => ({ tag: t.m.has(key) ? TRUE : FALSE, fields: [] })),
+  size: builtin("table.size", "table size", ofEntry((k, v) => [[tableOf_(k, v)], int]), (t: Table) => t.m.size),
+  at: tableAt,
+  // The entries in compare's order: the Map it stands for.
+  entries: builtin("table.entries", "table entries", ofEntry((k, v) => [[tableOf_(k, v)], list({ t: "con", id: PAIR, args: [k, v] })]),
+    (t: Table) => listOf([...t.m].sort(([a], [b]) => keyOrder(a, b)).map(([a, b]) => ({ tag: PAIR_V, fields: [a, b] })))),
 };
 
 // Algebraic's operations (src/lang/algebraic.ts). The one + − · −x <

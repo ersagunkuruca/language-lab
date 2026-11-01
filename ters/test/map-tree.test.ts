@@ -125,13 +125,14 @@ test("on 1200 words, 400 of them different, the tree is faster than the sorted l
 });
 
 test("the library publishes both trees as representation rows, and a program stored on them prints the same", () => {
-  const [mapTree, mapList, setTree, setList] = LIBRARY.reps;
-  assert.deepEqual([mapTree.name, mapList.name, setTree.name, setList.name], ["weight-balanced tree", "sorted list", "weight-balanced tree", "sorted list"]);
+  const [mapTree, mapList, setTree, setList, mapTable] = LIBRARY.reps;
+  assert.deepEqual([mapTree.name, mapList.name, setTree.name, setList.name, mapTable.name], ["weight-balanced tree", "sorted list", "weight-balanced tree", "sorted list", "hash table"]);
+  assert.ok(mapTable.oneHolder && !mapTree.oneHolder);
   assert.equal(mapTree.canonical, false);
   // Every job the rows name is in the trees module or the library, and
   // the trees aren't in what every program is checked on (C53).
   const withTrees = merge(LIBRARY.code, TREES.code);
-  for (const r of LIBRARY.reps) for (const d of [r.type, r.meaning, ...Object.values(r.impl), ...Object.values(r.byType ?? {})]) if (d) assert.ok(withTrees.nodes[d], `${r.name} names ${d}`);
+  for (const r of LIBRARY.reps) for (const d of [...(r.oneHolder ? [] : [r.type]), r.meaning, ...Object.values(r.impl), ...Object.values(r.byType ?? {})]) if (d) assert.ok(withTrees.nodes[d], `${r.name} names ${d}`);
   assert.ok(!LIBRARY.code.nodes[mapTree.type]);
   const k = new Lang(LIBRARY.code);
   const L = lib;

@@ -37,6 +37,10 @@ export interface Representation {
   // Its laws hold only approximately (floats), so the chooser never picks
   // it by cost; a program asks for it (NUMBERS.md).
   approximate?: boolean;
+  // Chosen only where every value of T has one holder, so an update may
+  // change it in place (one-holder.ts, C63), and only for targets with a
+  // host map (JavaScript).
+  oneHolder?: boolean;
   // The same keys, plus "space". Values are on the ladder below.
   cost: Record<string, string>;
   // A representation that isn't canonical: equal, show and compare where
@@ -97,6 +101,7 @@ export function representationsIn(code: Code, info: Info, names: Record<Id, stri
       const seen = kind === JOBS.equalBy ? "equal" : kind === JOBS.showBy ? "show" : kind === JOBS.compareBy ? "compare" : null;
       if (seen && a[0]) { rep.canonical = false; (rep.byType ??= { equal: "", show: "", compare: "" })[seen] = a[0]; continue; }
       if (kind === JOBS.headBy && a[0] && a[1]) { (rep.heads ??= {})[a[0]] = a[1]; continue; }
+      if (kind === JOBS.inPlace) { rep.oneHolder = true; continue; }
       if (kind === JOBS.hides && a[0]) {
         const lit = code.nodes[j.args[1]], at = lit?.kind === "lit" ? Number(lit.value) : -1;
         if (Number.isInteger(at) && at >= 0 && at < ((code.nodes[a[0]] as NodeOf<"variant"> | undefined)?.fields.length ?? 0)) (rep.hidden ??= {})[a[0]] = [...(rep.hidden?.[a[0]] ?? []), at];

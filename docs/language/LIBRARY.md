@@ -27,13 +27,13 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 - **tan** : `(a) -> a where a has Trig`. Tangent of an angle in radians, at any type with Trig.
 - **exp** : `(a) -> a where a has Trig`. e to the power x, at any type with Trig.
 - **log** : `(a) -> a where a has Trig`. The natural logarithm, at any type with Trig (the debugging effect is Log, a different thing).
-- **divide** : `(Float64, Float64) -> Float64`. a ÷ b for Float64s (floating point, so 1 ÷ 3 is 0.333…; dividing by 0 gives infinity). For exact division use fractions.
-- **sqrt** : `(Float64) -> Float64`. The square root.
-- **power** : `(Float64, Float64) -> Float64`. a to the power b.
+- **divide** : `(Float64, Float64) -[Choice]-> Float64`. a ÷ b for Float64s (floating point, so 1 ÷ 3 is 0.333…; dividing by 0 gives infinity). For exact division use fractions.
+- **sqrt** : `(Float64) -[Choice]-> Float64`. The square root.
+- **power** : `(Float64, Float64) -[Choice]-> Float64`. a to the power b.
 - **atan2** : `(Float64, Float64) -> Float64`. The angle of the point (x, y) from the x axis, in radians: atan2(y, x).
 - **abs** : `(Float64) -> Float64`. The size of a Float64 without its sign.
 - **floor** : `(Float64) -> Float64`. The Float64 rounded down to a whole one, still a Float64. whole part gives an Int.
-- **mod** : `(Float64, Float64) -> Float64`. The remainder of a ÷ b, never negative when b is positive: mod(−1, 3) is 2.
+- **mod** : `(Float64, Float64) -[Choice]-> Float64`. The remainder of a ÷ b, never negative when b is positive: mod(−1, 3) is 2.
 - **round to Float32** : `(Float64) -> Float64`. The nearest Float64 a GPU can hold (32-bit floating point).
 - **show** : `(Float64) -> Text`. A Float64 as text: show(2.5) is "2.5".
 - **range** : `(Float64) -> List Float64`. The Float64s 0, 1, … up to n − 1, as a list.
@@ -73,8 +73,8 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 - **clifford reverse** : `(Algebra a, a) -> a`. x̃, the reverse of x in the algebra (clifford algebra makes one): each blade's vectors in the opposite order, so e₁₂ becomes −e₁₂ and vectors stay. A rotor R turns a vector v into R · v · R̃. In Cl(3, 0) the rotor that turns by θ in the e₁e₂ plane is cos(θ/2) − sin(θ/2)e₁₂, and the rotors 1, e₂₃, e₁₃, e₁₂ multiply as the quaternions do.
 - **clifford versor inverse** : `(Algebra a, a) -[Choice]-> a`. v⁻¹ for a versor v, ṽ / (v ṽ): a non-null vector's, a rotor's, a motor's or a blade's, for which v ṽ is a number. No answer when v ṽ isn't a number (v isn't a versor, such as 1 + e₁) or is 0 (a null vector such as e₀ in projective geometric algebra). clifford versor inverse(algebra, 2e₁) is ½e₁.
 - **clifford sandwich** : `(Algebra a, a, a) -> a`. r · x · r̃ in the algebra (clifford algebra makes one): how a rotor or a motor moves x. In Cl(3, 0) a rotor turns vectors; in projective geometric algebra ([1, 1, 1, 0]) a motor turns and moves points, and two motors compose by their product.
-- **clifford reflect** : `(Algebra a, a, a) -> a`. n̂ · x · n⁻¹: x reflected in the plane (in n dimensions, the hyperplane) that is perpendicular to the vector n. In projective geometric algebra, n is a plane and x a point, which comes back with weight −1, the same point.
-- **clifford project** : `(Algebra a, a, a) -> a`. The part of the vector x that lies in the blade b, ½(x − b̂ x b⁻¹): onto a line when b is a vector, onto a plane when b is a bivector such as e₁e₂. b must not be null (b b̃ ≠ 0).
+- **clifford reflect** : `(Algebra a, a, a) -[Choice]-> a`. n̂ · x · n⁻¹: x reflected in the plane (in n dimensions, the hyperplane) that is perpendicular to the vector n. In projective geometric algebra, n is a plane and x a point, which comes back with weight −1, the same point.
+- **clifford project** : `(Algebra a, a, a) -[Choice]-> a`. The part of the vector x that lies in the blade b, ½(x − b̂ x b⁻¹): onto a line when b is a vector, onto a plane when b is a bivector such as e₁e₂. b must not be null (b b̃ ≠ 0).
 - **clifford exp** : `(Algebra a, a) -> a`. e^b for a bivector b whose square is a number: a rotor when b² < 0, 1 + b when b² = 0 (a translator in projective geometric algebra) and cosh/sinh when b² > 0. The rotor turning by θ in the plane B with B² = −1 is clifford exp(algebra, −θ/2 · B). When b² isn't a number (a field with E·B ≠ 0, a screw motion), it sums the series instead, by scaling and squaring.
 - **clifford outer** : `(Algebra a, a, a) -> a`. a ∧ b, the outer product in the algebra (clifford algebra makes one): e_A ∧ e_B is e_A e_B when the blades share no vector, else 0. Two vectors span a plane (e₁ ∧ e₂ = e₁₂), and a vector with itself gives 0.
 - **clifford inner** : `(Algebra a, a, a) -> a`. a ⌋ b, the left contraction: e_A ⌋ e_B is e_A e_B when every vector of A is in B, else 0. A vector contracted with a bivector gives the vector in that plane at right angles to it (e₁ ⌋ e₁₂ = e₂); a vector with a vector is their dot product.
@@ -122,7 +122,7 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 - **cos** : `(Float64) -> Float64`. Cosine of a Float64 angle in radians: what Trig's cos is at Float64. Not offered on its own: cos is.
 - **tan** : `(Float64) -> Float64`. Tangent of a Float64 angle in radians: what Trig's tan is at Float64. Not offered on its own: tan is.
 - **exp** : `(Float64) -> Float64`. e to the power x, for a Float64: what Trig's exp is at Float64. Not offered on its own: exp is.
-- **log** : `(Float64) -> Float64`. The natural logarithm of a Float64 (the debugging effect is Log, a different thing): what Trig's log is at Float64. Not offered on its own: log is.
+- **log** : `(Float64) -[Choice]-> Float64`. The natural logarithm of a Float64 (the debugging effect is Log, a different thing): what Trig's log is at Float64. Not offered on its own: log is.
 - **add** : `(Float64, Float64) -> Float64`. a + b for Float64s: what the generic + is at Float64.
 - **subtract** : `(Float64, Float64) -> Float64`. a − b for Float64s: what the generic − is at Float64.
 - **multiply** : `(Float64, Float64) -> Float64`. a · b for Float64s: what the generic · is at Float64.
@@ -218,6 +218,13 @@ A map is kept sorted by key in compare's order, so two maps with the same entrie
 - **map size** : `(Map a b) -> Int`. How many keys the map holds.
 - **smallest key** : `(Map a b) -[Choice]-> a`. The map's smallest key, in compare's order; no answer when the map is empty. value at(m, smallest key(m)) is what it holds.
 - **largest key** : `(Map a b) -[Choice]-> a`. The map's largest key, in compare's order; no answer when the map is empty.
+- **empty table** : `() -> Table a b`. A hash table with no entries: how a map is stored when the compiler sees that every map has one holder (C63b). Programs say Map; the compiler picks this.
+- **table put** : `(Table a b, a, b) -> Table a b`. The table with the key's value set. It changes the table itself, so the compiler uses it only where nobody can see the table before the change.
+- **table remove** : `(Table a b, a) -> Table a b`. The table without the key, changed in place like put.
+- **table has** : `(Table a b, a) -> Bool`. Whether the table has the key.
+- **table size** : `(Table a b) -> Int`. How many keys the table has.
+- **table value at** : `(Table a b, a) -[Choice]-> b`. The key's value, or no answer when the table doesn't have the key.
+- **table entries** : `(Table a b) -> List (Pair a b)`. The table's entries as pairs, in compare's order of their keys: the map it stands for.
 - **Set** (type). A set of items, kept sorted with none twice. Build one with empty set, as set or add item (its constructor set of is private to the library, which keeps the rule).
 - **empty set** : `Set a`. The set with no items.
 - **as set** : `(List a) -> Set a`. The set of a list's items: in compare's order, each once.
@@ -249,6 +256,7 @@ A type can be stored as another type, written as one definition (REPRESENTATIONS
 - **compare by** : `((a, a) -> Order) -> Job b a`. For a representation that isn't one spelling per value: how compare orders two of its values, through their meaning.
 - **head by** : `(a, b) -> Job c d`. For t's job that gives a list, a definition giving only its first item, as a list of one or nil, used where only the first item is read.
 - **hides** : `(a, Int) -> Job b c`. hides(case, position): that field of t's case isn't kept as a value of t at r (a list's rest, in an array, is the items after a position), so it is made only when an arm reads it, and a fold whose arms don't read it costs only its walk.
+- **in place** : `() -> Job a b`. in place(): r changes a value where t's jobs make a changed copy (a hash table's put), so it is chosen only where every value of t has one holder: nobody can see the value before the change.
 
 ## Searching: Choice
 
@@ -379,7 +387,7 @@ A record whose fields are all Float64s (a point, a direction, a colour) can be w
 - **dot** : `(a, a) -> Float64` (vectors module). The parts' products added up: how much a and b point the same way.
 - **magnitude** : `(a) -> Float64` (vectors module). How long v is: √(v · v).
 - **distance** : `(a, a) -> Float64` (vectors module). How far a is from b.
-- **unit** : `(a) -> a` (vectors module). v scaled to length 1 (normalize on a GPU).
+- **unit** : `(a) -[Choice]-> a` (vectors module). v scaled to length 1 (normalize on a GPU).
 - **mix** : `(a, a, Float64) -> a` (vectors module). a when amount is 0, b when it is 1, and in between, part by part.
 - **clamp** : `(a, Float64, Float64) -> a` (vectors module). Every part of v kept between low and high.
 - **reflect** : `(a, a) -> a` (vectors module). A ray going this direction, bounced off a surface facing normal (normal of length 1).
