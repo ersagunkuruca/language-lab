@@ -1,6 +1,6 @@
 # Docs
 
-Every document about the language, the editor, the compilers and how we
+Every document about Ters (the language), the editor, the compilers and how we
 work lives in this folder, one subfolder per kind:
 
 | folder | what's in it |

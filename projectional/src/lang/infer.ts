@@ -16,7 +16,7 @@ import { ownerOfTypeParts, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { unitProblems, UnitsBefore } from "../units.ts";
 import { fillHole } from "./refactor.ts";
-import { planSolve, solvesInWholeNumbers } from "./solve.ts";
+import { planSolve, runsBackwards, solvesInWholeNumbers } from "./solve.ts";
 import { computedForward, directionProblem, useDirections } from "./directions.ts";
 import { analyzer, determinism, oneAnswer, solveMode, type Fn } from "./modes.ts";
 import { smoothDerivative as hasSmoothDerivative, smoothGradient as hasSmoothGradient, recordVariant } from "./derive.ts";
@@ -120,6 +120,10 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // The modes of this program, made when a call first needs them.
   let modes: ReturnType<typeof analyzer> | undefined;
   let signs: ReturnType<typeof signAnalysis> | undefined;
+  // Solves waiting on their givens' types (L38), and whether one turned out
+  // to be in whole numbers, so the program is checked again with it so.
+  const waiting: { solve: Id; givens: [Id, Type][] }[] = [];
+  let again = false;
   const effName = (e: EffectError) => e.effects.map(nm).join(", ");
   const worldMessage = (what: string, e: EffectError) => `${what} does ${effName(e)} while a Choice is open, so it would act on paths that are later abandoned: handle the Choice first (first, all, count or optional) and act on its result`;
   const worldOrEffect = (e: EffectError) => (e instanceof WorldError ? worldMessage("this", e) : `this performs ${effName(e)}, which nothing here handles`);
@@ -390,6 +394,11 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         try { if (t.t === "fn") s.unifyRow(t.eff, { effs: [DIVERGE], tail: s.next++ }); }
         catch (e) { if (e instanceof EffectError) err(d, `${nm(d)} might not finish, and it is used where only a function that surely finishes fits`); else throw e; }
       }
+    }
+    // Solves whose givens waited for the definition's types (L38).
+    for (const w of waiting.splice(0)) {
+      if (w.givens.some(([, t]) => { const r = s.resolve(t); return r.t === "con" && r.id === INT; })) { solvesInWholeNumbers(code, w.solve); again = true; }
+      else for (const [g, t] of w.givens) unifyAt(g, num, t, "a given port");
     }
     settle();
     const generalized = new Set<number>();
@@ -831,7 +840,12 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     }
     // A predicate's out = true is a Bool; every other port is a number.
     const outTrue = (k: string) => !!p?.predicate && k === "out";
-    for (const [k, g] of Object.entries(n.given)) unifyAt(g, outTrue(k) ? bool : num, givenTypes.get(k)!, "a given port");
+    // A given whose type isn't known yet may turn out an Int later in the
+    // definition (L38's open end): it waits until the definition is read,
+    // and an Int then makes this a whole-number solve, checked again.
+    const open = Object.entries(n.given).filter(([k]) => !outTrue(k) && s.resolve(givenTypes.get(k)!).t === "var");
+    if (open.length && runsBackwards(code, n.fn)) waiting.push({ solve: n.id, givens: open.map(([k, g]) => [g, givenTypes.get(k)!]) });
+    for (const [k, g] of Object.entries(n.given)) if (!open.some(([o]) => o === k) || !runsBackwards(code, n.fn)) unifyAt(g, outTrue(k) ? bool : num, givenTypes.get(k)!, "a given port");
     for (const b of Object.values(n.binds)) { inner.set(b, num); info.typeOf.set(b, num); }
     if (p) {
       const ports = p.rel!.ports;
@@ -1134,6 +1148,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       err(n.args[1], `this does ${show(of)}'s job at ${show(r)}, so its type is ${show(want)}, not ${show(by)}`);
     }
   }
+  if (again) return infer(code, names, reuse, opts);
   for (const [id, t] of info.typeOf) info.typeOf.set(id, s.zonk(t));
   for (const [id, t] of info.opAt!) info.opAt!.set(id, s.zonk(t));
   for (const h of info.holes.values()) {
@@ -1428,7 +1443,7 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
     return t.t !== "con" || !!info.implementations?.has(implementationKey(w.iface, t));
   });
   const fits = (t: Type, asCall: boolean): Subst | null => {
-    const s = info.subst.clone();
+    const s = info.subst.trial();
     const from = s.wanted.length;
     try {
       if (!asCall) { s.unify(h.expected, t); return implemented(s, from) ? s : null; }
@@ -1453,10 +1468,27 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   // the other.
   let last: [Filling, Code] | undefined;
   const filled = (f: Filling) => (last?.[0] === f ? last[1] : (last = [f, fillHole(code, {}, hole, f).code])[1]);
-  let before: number | undefined;
+  let before: Problem[] | undefined;
   const units = new UnitsBefore(code);
-  const recheck = (c: Code) => infer(c, {}, { from: info, only: affected, units }, info.options).errors.length;
-  const whole = (f: Filling) => recheck(filled(f)) <= (before ??= recheck(code));
+  const recheck = (c: Code) => infer(c, {}, { from: info, only: affected, units }, info.options).errors;
+  const baseline = () => (before ??= recheck(code));
+  const whole = (f: Filling) => recheck(filled(f)).length <= baseline().length;
+  // A function that brings Choice where the world is (or the world under
+  // a Choice) is checked against the whole program, and what that check
+  // finds about the mix is the same for every function bringing the same
+  // effects here: the first one's answer is kept for the rest (I40). A
+  // pass says the mix is fine, so the others are checked like any other
+  // filling; a failure only of the world under a Choice refuses them all.
+  const mixing = new Map<string, boolean>();
+  const mixChecked = (f: Filling, mix: string): boolean | undefined => {
+    const k = `${mix}|${f.kind}`, known = mixing.get(k);
+    if (known !== undefined) return known ? undefined : false;
+    const errs = recheck(filled(f));
+    if (errs.length <= baseline().length) { mixing.set(k, true); return true; }
+    const was = new Set(baseline().map((e) => e.message));
+    if (errs.every((e) => was.has(e.message) || e.message.includes("while a Choice is open"))) mixing.set(k, false);
+    return false;
+  };
   // Running a function backwards depends on its body, not just its type
   // (a call that may search forever makes the search Diverge, a square
   // makes the answer two). What the check makes of the body is its plan,
@@ -1504,7 +1536,8 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
     }
     return out;
   };
-  const safe = (s: Subst, f: Filling, risky: boolean) => {
+  const safe = (s: Subst, f: Filling, risky: boolean, mix?: string) => {
+    if (mix && !risky) { const m = mixChecked(f, mix); if (m !== undefined) return m; }
     const dir = directions.size ? direction(f) : "same";
     if (dir === "lost") return false;
     if (dir === "changed") return whole(f);
@@ -1542,14 +1575,15 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   const mixes = (effs: Id[]) => effs.some((e) => (e === CHOICE ? [...near].some((x) => WORLD.includes(x)) : WORLD.includes(e) && underChoice));
   const consider = (target: Id, t: Type, risky = false) => {
     const ft = info.subst.resolve(t);
-    if (ft.t === "fn" && mixes(info.subst.resolveRow(ft.eff).effs)) risky = true;
+    const effs = ft.t === "fn" ? info.subst.resolveRow(ft.eff).effs : [];
+    const mix = mixes(effs) ? [...effs].sort().join(",") : undefined;
     const asRef = fits(t, false);
     const ref: Filling = { kind: "ref", target, type: t };
-    if (asRef && safe(asRef, ref, risky)) out.push(ref);
+    if (asRef && safe(asRef, ref, risky, mix)) out.push(ref);
     const r = info.subst.resolve(t);
     const asCall = r.t === "fn" ? fits(t, true) : null;
     const call: Filling = { kind: "call", target, arity: r.t === "fn" ? r.params.length : 0, type: t };
-    if (asCall && safe(asCall, call, risky)) out.push(call);
+    if (asCall && safe(asCall, call, risky, mix)) out.push(call);
   };
   for (const b of h.scope) consider(b.id, b.type);
   // An input nothing has given a type yet can still be called: calling it

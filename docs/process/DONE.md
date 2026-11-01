@@ -26,6 +26,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
+| I40 | The palette on physics main's new step: 2.9 → 1.1 s, the same 961 offers (Subst.trial reads through instead of copying; one whole check per effect mix) | #846 |
 | I109 | The compiled preview keeps what was done on the interpreted page: changed cells handed across by place (cells.ts handOver); a page with sound says why it stays interpreted | #841 |
 | L43d | Editor: a multivector of an algebra the program writes down says what it is ("a vector", "a bivector", "even (a rotor or motor)") after Run's result and on a wire's hover | #831 |
 | T7d | Run: accept an answer for given inputs (kept in examples.json for lab test), a tick or both values side by side after; a test (Check) opens on its run, the failures smallest first | #829 |
@@ -391,7 +392,8 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| L71a | An operation's own type variables (ANSWERED-LATER.md): a variant's `params`, binders its fields and result may name besides the effect's, fresh at each call, rigid (`pin.any`) in the case that handles it, not in the row; hashed only when present. Found on the way: an effect used at two types in one scope (`Pick Int` and `Pick Text`) wasn't reported when every input fit; now it is, at the call (test/own-type-vars.test.ts) | this PR |
+| L38 | One `+ − · −x <` for every number type, its last open end: a solve whose given is an input of the enclosing definition, fixed as an Int only after the solve is read, waited for the definition's types instead of being planned as Float64's equations; an Int then marks it whole and the program is checked again (infer.ts `waiting`). Steps 1 to 4, L40h and L38j were done before | this PR |
+| L71a | An operation's own type variables (ANSWERED-LATER.md): a variant's `params`, binders its fields and result may name besides the effect's, fresh at each call, rigid (`pin.any`) in the case that handles it, not in the row; hashed only when present. Found on the way: an effect used at two types in one scope (`Pick Int` and `Pick Text`) wasn't reported when every input fit; now it is, at the call (test/own-type-vars.test.ts) | #849 |
 | L125f | Host values checked on entry: a `Float64` from `hosts/js.js` must be finite (NaN or ±∞ is refused at the border, an Abort with the reason); `float32`'s overflow stops the program ("too big for a Float32"); a pointer event with no finite position (an element scaled to nothing) reads as 0, 0. Text read as a number (`show` backwards) already refused non-finite text. No JSON or bytes reader exists yet; one checks at entry the same way | #848 |
 | L125d | `Extended a` in the library (FLOAT-VALUES-2026-11-01.md §3): std's `minus infinity \| finite(value) \| plus infinity`, declared low to high so `compare` and `sort` order it; `extended less`, `add`, `negate`, `subtract`, `multiply` by the extended reals' rules, no answer (`Choice`) for ∞ − ∞ and 0 · ∞; `minimum` and `maximum` of a list, +∞ and −∞ for none, at any ordered number type (test/extended.test.ts) | #847 |
 | I108 | `clifford inverse` was ṽ / ⟨v ṽ⟩₀, right only for versors (it gave 1 + e₁, which has no inverse, (1 + e₁)/2). Now `clifford versor inverse`, offered with a doc string: no answer (`Choice`) when v ṽ isn't a nonzero number. reflect and project, which take vectors and blades, use an unchecked `clifford blade inverse` (not offered), so their types and the demos are unchanged; a null blade stops them (x / 0, L125a). The general inverse (Hitzer and Sangwine, 2017) is not built | #844 |

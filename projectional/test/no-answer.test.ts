@@ -67,7 +67,7 @@ test("a page's view with no answer shows nothing there, and its answer when it h
   const cells = new Cells(equal);
   const root = mountHtml(runMain(code, info, main, { print: () => {}, names, cells }), { cells, doc: fakeDoc(), call: evaluatorCall }) as FakeEl;
   const shown = () => root.kids.filter((c) => !(c instanceof FakeEl && c.tag === "button")).map((c) => c.textContent).join("");
-  const click = (label: string) => root.kids.find((e) => e instanceof FakeEl && e.tag === "button" && e.textContent === label)!.fire("click");
+  const click = (label: string) => (root.kids.find((e) => e instanceof FakeEl && e.tag === "button" && e.textContent === label) as FakeEl).fire("click");
   assert.equal(shown(), "5");
   click("zero");
   assert.equal(shown(), "");
