@@ -372,6 +372,16 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
     if (!("error" in a) && alts.length) return { op: alts[0], args: [a], alts };
   }
   if (t.startsWith("(") && t.endsWith(")")) { const inner = typedOut(t.slice(1, -1), code, names, scope); if (!("error" in inner)) return inner; }
+  // A field read as the blocks print it, board.columns: the field's
+  // projection called on what's before the dot (BACKLOG I113). The last dot
+  // outside brackets and text, so a.b.c is (a.b).c.
+  const dot = lastDot(t);
+  if (dot > 0) {
+    const field = t.slice(dot + 1).trim().replace(/^‹(.*)›$/, "$1");
+    const alts = Object.keys(names).filter((id) => names[id] === field && code.nodes[id]?.kind === "field");
+    const of = typedOut(t.slice(0, dot), code, names, scope);
+    if (alts.length && !("error" in of)) return { op: alts[0], args: [of], alts };
+  }
   // A name may be several words, as fraction(3), or quoted as the blocks
   // draw it, ‹show numbers›(x).
   const call = /^‹?([^()[\],"‹›]+?)›?\s*\((.*)\)$/s.exec(t);
@@ -396,6 +406,21 @@ function isOperation(code: Code, id: Id): boolean {
   if (code.nodes[id]?.kind !== "field") return false;
   const v = Object.values(code.nodes).find((n) => n.kind === "variant" && n.fields.includes(id));
   return !!v && Object.values(code.nodes).some((n) => n.kind === "typedef" && n.interface && n.variants.includes(v.id));
+}
+
+// Where the last dot outside brackets and text is, before a name (not a
+// digit: 1.5 is a number): -1 when there's none.
+function lastDot(text: string): number {
+  let depth = 0, quoted = false, at = -1;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '"' && text[i - 1] !== "\\") quoted = !quoted;
+    if (quoted) continue;
+    if ("([".includes(c)) depth++;
+    else if (")]".includes(c)) depth--;
+    else if (c === "." && depth === 0 && /[^\s\d.]/u.test(text[i + 1] ?? "")) at = i;
+  }
+  return at;
 }
 
 // The arguments of a call, split at its own commas: none inside brackets
