@@ -15,7 +15,7 @@ import { ownerOfTypeParts, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { unitProblems, UnitsBefore } from "../units.ts";
 import { fillHole } from "./refactor.ts";
-import { planSolve } from "./solve.ts";
+import { planSolve, solvesInWholeNumbers } from "./solve.ts";
 import { computedForward, directionProblem, useDirections } from "./directions.ts";
 import { analyzer, determinism, oneAnswer, solveMode, type Fn } from "./modes.ts";
 import { smoothDerivative as hasSmoothDerivative, smoothGradient as hasSmoothGradient, recordVariant } from "./derive.ts";
@@ -66,6 +66,10 @@ export interface Info {
   // it declares, Choice when it may give several answers or none, Diverge
   // when its search may not end.
   directions?: Map<Id, Id[]>;
+  // The type each relational solve runs its function at, so arith.ts runs
+  // a generic one at that type (L38: Int's · run backwards in whole
+  // numbers).
+  solveAt?: Map<Id, Type>;
 }
 
 // An implementation's place in Info.implementations: its interface and the
@@ -772,6 +776,10 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       relationalSolve(n, env, row, inner, false, undefined, true);
       return expr(n.body, inner, row);
     }
+    // A given that is an Int makes the solve a whole-number one (L38),
+    // found from its type, not from how the function is written.
+    const givenTypes = new Map(Object.entries(n.given).map(([k, g]) => [k, expr(g, env, row)] as const));
+    if ([...givenTypes.values()].some((t) => { const r = s.resolve(t); return r.t === "con" && r.id === INT; })) solvesInWholeNumbers(code, n.id);
     let p: ReturnType<typeof planSolve> | null = null;
     try { p = planSolve(code, n); } catch (e) { err(n.id, (e as Error).message); }
     if (p?.mode === "relational") {
@@ -782,12 +790,12 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       const v = solveMode(code, n, names);
       // (A hole is a gap the editor already shows; the search runs up to it.)
       if (v?.stuck.length && !v.stuck.includes("a hole")) err(n.id, `${nm(n.fn)} can't be run this way: ${v.stuck.find((x) => x.startsWith("nothing gives")) ?? `${v.stuck[0]} never gets what it needs`}`);
-      relationalSolve(n, env, row, inner, v ? !v.ends : true, v?.loops[0], oneAnswer(code, n));
+      relationalSolve(n, env, row, inner, v ? !v.ends : true, v?.loops[0], oneAnswer(code, n), givenTypes);
       return expr(n.body, inner, row);
     }
     // A predicate's out = true is a Bool; every other port is a number.
     const outTrue = (k: string) => !!p?.predicate && k === "out";
-    for (const [k, g] of Object.entries(n.given)) unifyAt(g, outTrue(k) ? bool : num, expr(g, env, row), "a given port");
+    for (const [k, g] of Object.entries(n.given)) unifyAt(g, outTrue(k) ? bool : num, givenTypes.get(k)!, "a given port");
     for (const b of Object.values(n.binds)) { inner.set(b, num); info.typeOf.set(b, num); }
     if (p) {
       const ports = p.rel!.ports;
@@ -808,15 +816,16 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // adds Choice (any number of answers) unless its mode always gives
   // exactly one, Diverge when it may unfold forever, and whatever the
   // function itself does, except printing, which can't be undone.
-  function relationalSolve(n: NodeOf<"solve">, env: Map<Id, Type>, row: Row, inner: Map<Id, Type>, loops: boolean, why?: string, one = false) {
+  function relationalSolve(n: NodeOf<"solve">, env: Map<Id, Type>, row: Row, inner: Map<Id, Type>, loops: boolean, why?: string, one = false, givenTypes?: Map<string, Type>) {
     const ft = s.resolve(refType(n.id, n.fn, env));
     if (ft.t !== "fn") { err(n.id, `${nm(n.fn)} is not a function`); return; }
+    (info.solveAt ??= new Map()).set(n.id, ft);
     const t = code.nodes[n.fn];
     const keys = t.kind === "def" ? (code.nodes[t.body!] as NodeOf<"lambda">).params : ft.params.map((_, i) => String(i));
     const portType = (k: string) => (k === "out" ? ft.ret : keys.includes(k) ? ft.params[keys.indexOf(k)] : null);
     for (const [k, g] of Object.entries(n.given)) {
       const pt = portType(k);
-      const gt = expr(g, env, row);
+      const gt = givenTypes?.get(k) ?? expr(g, env, row);
       if (pt) unifyAt(g, pt, gt, "a given port"); else err(n.id, `${nm(n.fn)} has no port ${k}`);
     }
     for (const [k, b] of Object.entries(n.binds)) {
