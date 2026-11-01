@@ -7480,6 +7480,2158 @@
         ],
         "body": "@3sc5994e0iegdsc875vjlqvv5m:3"
       },
+      "@oquhi80b8a59m25n42qkmt292d": {
+        "id": "@oquhi80b8a59m25n42qkmt292d",
+        "kind": "def",
+        "body": "@oquhi80b8a59m25n42qkmt292d:1"
+      },
+      "@oquhi80b8a59m25n42qkmt292d:2": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:2",
+        "kind": "binder"
+      },
+      "@oquhi80b8a59m25n42qkmt292d:4": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:4",
+        "kind": "ref",
+        "target": "@oquhi80b8a59m25n42qkmt292d:2"
+      },
+      "@oquhi80b8a59m25n42qkmt292d:6": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:6",
+        "kind": "binder"
+      },
+      "@oquhi80b8a59m25n42qkmt292d:7": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:7",
+        "kind": "binder"
+      },
+      "@oquhi80b8a59m25n42qkmt292d:52": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:52",
+        "kind": "ref",
+        "target": "@poo2a71bl3s61p9glu6dh6brc8"
+      },
+      "@oquhi80b8a59m25n42qkmt292d:53": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:53",
+        "kind": "ref",
+        "target": "@oquhi80b8a59m25n42qkmt292d:2"
+      },
+      "@oquhi80b8a59m25n42qkmt292d:51": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:51",
+        "kind": "call",
+        "fn": "@oquhi80b8a59m25n42qkmt292d:52",
+        "args": [
+          "@oquhi80b8a59m25n42qkmt292d:53"
+        ]
+      },
+      "@oquhi80b8a59m25n42qkmt292d:10": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:10",
+        "kind": "binder"
+      },
+      "@oquhi80b8a59m25n42qkmt292d:46": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:46",
+        "kind": "ref",
+        "target": "builtin.sub"
+      },
+      "@oquhi80b8a59m25n42qkmt292d:47": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:47",
+        "kind": "ref",
+        "target": "@oquhi80b8a59m25n42qkmt292d:10"
+      },
+      "@oquhi80b8a59m25n42qkmt292d:48": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:48",
+        "kind": "ref",
+        "target": "@oquhi80b8a59m25n42qkmt292d:6"
+      },
+      "@oquhi80b8a59m25n42qkmt292d:45": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:45",
+        "kind": "call",
+        "fn": "@oquhi80b8a59m25n42qkmt292d:46",
+        "args": [
+          "@oquhi80b8a59m25n42qkmt292d:47",
+          "@oquhi80b8a59m25n42qkmt292d:48"
+        ]
+      },
+      "@oquhi80b8a59m25n42qkmt292d:49": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:49",
+        "kind": "lit",
+        "value": 2
+      },
+      "@oquhi80b8a59m25n42qkmt292d:44": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:44",
+        "kind": "ref",
+        "target": "builtin.div"
+      },
+      "@oquhi80b8a59m25n42qkmt292d:43": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:43",
+        "kind": "call",
+        "fn": "@oquhi80b8a59m25n42qkmt292d:44",
+        "args": [
+          "@oquhi80b8a59m25n42qkmt292d:45",
+          "@oquhi80b8a59m25n42qkmt292d:49"
+        ]
+      },
+      "@oquhi80b8a59m25n42qkmt292d:50": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:50",
+        "kind": "lit",
+        "value": 0
+      },
+      "@oquhi80b8a59m25n42qkmt292d:42": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:42",
+        "kind": "ref",
+        "target": "@7oqrouv1btl6kt56s12kr7t7k0"
+      },
+      "@oquhi80b8a59m25n42qkmt292d:41": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:41",
+        "kind": "call",
+        "fn": "@oquhi80b8a59m25n42qkmt292d:42",
+        "args": [
+          "@oquhi80b8a59m25n42qkmt292d:43",
+          "@oquhi80b8a59m25n42qkmt292d:50"
+        ]
+      },
+      "@oquhi80b8a59m25n42qkmt292d:40": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:40",
+        "kind": "ref",
+        "target": "builtin.sqrt"
+      },
+      "@oquhi80b8a59m25n42qkmt292d:39": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:39",
+        "kind": "call",
+        "fn": "@oquhi80b8a59m25n42qkmt292d:40",
+        "args": [
+          "@oquhi80b8a59m25n42qkmt292d:41"
+        ]
+      },
+      "@oquhi80b8a59m25n42qkmt292d:13": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:13",
+        "kind": "binder"
+      },
+      "@oquhi80b8a59m25n42qkmt292d:23": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:23",
+        "kind": "ref",
+        "target": "builtin.add"
+      },
+      "@oquhi80b8a59m25n42qkmt292d:24": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:24",
+        "kind": "ref",
+        "target": "@oquhi80b8a59m25n42qkmt292d:10"
+      },
+      "@oquhi80b8a59m25n42qkmt292d:25": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:25",
+        "kind": "ref",
+        "target": "@oquhi80b8a59m25n42qkmt292d:6"
+      },
+      "@oquhi80b8a59m25n42qkmt292d:22": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:22",
+        "kind": "call",
+        "fn": "@oquhi80b8a59m25n42qkmt292d:23",
+        "args": [
+          "@oquhi80b8a59m25n42qkmt292d:24",
+          "@oquhi80b8a59m25n42qkmt292d:25"
+        ]
+      },
+      "@oquhi80b8a59m25n42qkmt292d:26": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:26",
+        "kind": "lit",
+        "value": 2
+      },
+      "@oquhi80b8a59m25n42qkmt292d:21": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:21",
+        "kind": "ref",
+        "target": "builtin.div"
+      },
+      "@oquhi80b8a59m25n42qkmt292d:20": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:20",
+        "kind": "call",
+        "fn": "@oquhi80b8a59m25n42qkmt292d:21",
+        "args": [
+          "@oquhi80b8a59m25n42qkmt292d:22",
+          "@oquhi80b8a59m25n42qkmt292d:26"
+        ]
+      },
+      "@oquhi80b8a59m25n42qkmt292d:27": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:27",
+        "kind": "lit",
+        "value": 0
+      },
+      "@oquhi80b8a59m25n42qkmt292d:19": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:19",
+        "kind": "ref",
+        "target": "@7oqrouv1btl6kt56s12kr7t7k0"
+      },
+      "@oquhi80b8a59m25n42qkmt292d:18": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:18",
+        "kind": "call",
+        "fn": "@oquhi80b8a59m25n42qkmt292d:19",
+        "args": [
+          "@oquhi80b8a59m25n42qkmt292d:20",
+          "@oquhi80b8a59m25n42qkmt292d:27"
+        ]
+      },
+      "@oquhi80b8a59m25n42qkmt292d:17": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:17",
+        "kind": "ref",
+        "target": "builtin.sqrt"
+      },
+      "@oquhi80b8a59m25n42qkmt292d:16": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:16",
+        "kind": "call",
+        "fn": "@oquhi80b8a59m25n42qkmt292d:17",
+        "args": [
+          "@oquhi80b8a59m25n42qkmt292d:18"
+        ]
+      },
+      "@oquhi80b8a59m25n42qkmt292d:32": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:32",
+        "kind": "lit",
+        "value": 0
+      },
+      "@oquhi80b8a59m25n42qkmt292d:30": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:30",
+        "kind": "ref",
+        "target": "builtin.less"
+      },
+      "@oquhi80b8a59m25n42qkmt292d:31": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:31",
+        "kind": "ref",
+        "target": "@oquhi80b8a59m25n42qkmt292d:7"
+      },
+      "@oquhi80b8a59m25n42qkmt292d:29": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:29",
+        "kind": "call",
+        "fn": "@oquhi80b8a59m25n42qkmt292d:30",
+        "args": [
+          "@oquhi80b8a59m25n42qkmt292d:31",
+          "@oquhi80b8a59m25n42qkmt292d:32"
+        ]
+      },
+      "@oquhi80b8a59m25n42qkmt292d:35": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:35",
+        "kind": "ref",
+        "target": "builtin.neg"
+      },
+      "@oquhi80b8a59m25n42qkmt292d:36": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:36",
+        "kind": "ref",
+        "target": "@oquhi80b8a59m25n42qkmt292d:13"
+      },
+      "@oquhi80b8a59m25n42qkmt292d:34": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:34",
+        "kind": "call",
+        "fn": "@oquhi80b8a59m25n42qkmt292d:35",
+        "args": [
+          "@oquhi80b8a59m25n42qkmt292d:36"
+        ]
+      },
+      "@oquhi80b8a59m25n42qkmt292d:33": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:33",
+        "kind": "arm",
+        "variant": "std.bool.true",
+        "binds": [],
+        "results": [],
+        "body": "@oquhi80b8a59m25n42qkmt292d:34"
+      },
+      "@oquhi80b8a59m25n42qkmt292d:38": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:38",
+        "kind": "ref",
+        "target": "@oquhi80b8a59m25n42qkmt292d:13"
+      },
+      "@oquhi80b8a59m25n42qkmt292d:37": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:37",
+        "kind": "arm",
+        "variant": "std.bool.false",
+        "binds": [],
+        "results": [],
+        "body": "@oquhi80b8a59m25n42qkmt292d:38"
+      },
+      "@oquhi80b8a59m25n42qkmt292d:28": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:28",
+        "kind": "match",
+        "scrutinee": "@oquhi80b8a59m25n42qkmt292d:29",
+        "arms": [
+          "@oquhi80b8a59m25n42qkmt292d:33",
+          "@oquhi80b8a59m25n42qkmt292d:37"
+        ],
+        "otherwise": null
+      },
+      "@oquhi80b8a59m25n42qkmt292d:15": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:15",
+        "kind": "ref",
+        "target": "std.complex.complex"
+      },
+      "@oquhi80b8a59m25n42qkmt292d:14": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:14",
+        "kind": "call",
+        "fn": "@oquhi80b8a59m25n42qkmt292d:15",
+        "args": [
+          "@oquhi80b8a59m25n42qkmt292d:16",
+          "@oquhi80b8a59m25n42qkmt292d:28"
+        ]
+      },
+      "@oquhi80b8a59m25n42qkmt292d:12": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:12",
+        "kind": "lambda",
+        "params": [
+          "@oquhi80b8a59m25n42qkmt292d:13"
+        ],
+        "body": "@oquhi80b8a59m25n42qkmt292d:14"
+      },
+      "@oquhi80b8a59m25n42qkmt292d:11": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:11",
+        "kind": "call",
+        "fn": "@oquhi80b8a59m25n42qkmt292d:12",
+        "args": [
+          "@oquhi80b8a59m25n42qkmt292d:39"
+        ]
+      },
+      "@oquhi80b8a59m25n42qkmt292d:9": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:9",
+        "kind": "lambda",
+        "params": [
+          "@oquhi80b8a59m25n42qkmt292d:10"
+        ],
+        "body": "@oquhi80b8a59m25n42qkmt292d:11"
+      },
+      "@oquhi80b8a59m25n42qkmt292d:8": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:8",
+        "kind": "call",
+        "fn": "@oquhi80b8a59m25n42qkmt292d:9",
+        "args": [
+          "@oquhi80b8a59m25n42qkmt292d:51"
+        ]
+      },
+      "@oquhi80b8a59m25n42qkmt292d:5": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:5",
+        "kind": "arm",
+        "variant": "std.complex.complex",
+        "binds": [
+          "@oquhi80b8a59m25n42qkmt292d:6",
+          "@oquhi80b8a59m25n42qkmt292d:7"
+        ],
+        "results": [
+          null,
+          null
+        ],
+        "body": "@oquhi80b8a59m25n42qkmt292d:8"
+      },
+      "@oquhi80b8a59m25n42qkmt292d:3": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:3",
+        "kind": "match",
+        "scrutinee": "@oquhi80b8a59m25n42qkmt292d:4",
+        "arms": [
+          "@oquhi80b8a59m25n42qkmt292d:5"
+        ],
+        "otherwise": null
+      },
+      "@oquhi80b8a59m25n42qkmt292d:1": {
+        "id": "@oquhi80b8a59m25n42qkmt292d:1",
+        "kind": "lambda",
+        "params": [
+          "@oquhi80b8a59m25n42qkmt292d:2"
+        ],
+        "body": "@oquhi80b8a59m25n42qkmt292d:3"
+      },
+      "@v1c4ldqko02vai8ard6i72ejuf": {
+        "id": "@v1c4ldqko02vai8ard6i72ejuf",
+        "kind": "def",
+        "body": "@v1c4ldqko02vai8ard6i72ejuf:1"
+      },
+      "@v1c4ldqko02vai8ard6i72ejuf:2": {
+        "id": "@v1c4ldqko02vai8ard6i72ejuf:2",
+        "kind": "binder"
+      },
+      "@v1c4ldqko02vai8ard6i72ejuf:4": {
+        "id": "@v1c4ldqko02vai8ard6i72ejuf:4",
+        "kind": "ref",
+        "target": "@v1c4ldqko02vai8ard6i72ejuf:2"
+      },
+      "@v1c4ldqko02vai8ard6i72ejuf:6": {
+        "id": "@v1c4ldqko02vai8ard6i72ejuf:6",
+        "kind": "binder"
+      },
+      "@v1c4ldqko02vai8ard6i72ejuf:7": {
+        "id": "@v1c4ldqko02vai8ard6i72ejuf:7",
+        "kind": "binder"
+      },
+      "@v1c4ldqko02vai8ard6i72ejuf:13": {
+        "id": "@v1c4ldqko02vai8ard6i72ejuf:13",
+        "kind": "ref",
+        "target": "@poo2a71bl3s61p9glu6dh6brc8"
+      },
+      "@v1c4ldqko02vai8ard6i72ejuf:14": {
+        "id": "@v1c4ldqko02vai8ard6i72ejuf:14",
+        "kind": "ref",
+        "target": "@v1c4ldqko02vai8ard6i72ejuf:2"
+      },
+      "@v1c4ldqko02vai8ard6i72ejuf:12": {
+        "id": "@v1c4ldqko02vai8ard6i72ejuf:12",
+        "kind": "call",
+        "fn": "@v1c4ldqko02vai8ard6i72ejuf:13",
+        "args": [
+          "@v1c4ldqko02vai8ard6i72ejuf:14"
+        ]
+      },
+      "@v1c4ldqko02vai8ard6i72ejuf:11": {
+        "id": "@v1c4ldqko02vai8ard6i72ejuf:11",
+        "kind": "ref",
+        "target": "builtin.log"
+      },
+      "@v1c4ldqko02vai8ard6i72ejuf:10": {
+        "id": "@v1c4ldqko02vai8ard6i72ejuf:10",
+        "kind": "call",
+        "fn": "@v1c4ldqko02vai8ard6i72ejuf:11",
+        "args": [
+          "@v1c4ldqko02vai8ard6i72ejuf:12"
+        ]
+      },
+      "@v1c4ldqko02vai8ard6i72ejuf:16": {
+        "id": "@v1c4ldqko02vai8ard6i72ejuf:16",
+        "kind": "ref",
+        "target": "builtin.atan2"
+      },
+      "@v1c4ldqko02vai8ard6i72ejuf:17": {
+        "id": "@v1c4ldqko02vai8ard6i72ejuf:17",
+        "kind": "ref",
+        "target": "@v1c4ldqko02vai8ard6i72ejuf:7"
+      },
+      "@v1c4ldqko02vai8ard6i72ejuf:18": {
+        "id": "@v1c4ldqko02vai8ard6i72ejuf:18",
+        "kind": "ref",
+        "target": "@v1c4ldqko02vai8ard6i72ejuf:6"
+      },
+      "@v1c4ldqko02vai8ard6i72ejuf:15": {
+        "id": "@v1c4ldqko02vai8ard6i72ejuf:15",
+        "kind": "call",
+        "fn": "@v1c4ldqko02vai8ard6i72ejuf:16",
+        "args": [
+          "@v1c4ldqko02vai8ard6i72ejuf:17",
+          "@v1c4ldqko02vai8ard6i72ejuf:18"
+        ]
+      },
+      "@v1c4ldqko02vai8ard6i72ejuf:9": {
+        "id": "@v1c4ldqko02vai8ard6i72ejuf:9",
+        "kind": "ref",
+        "target": "std.complex.complex"
+      },
+      "@v1c4ldqko02vai8ard6i72ejuf:8": {
+        "id": "@v1c4ldqko02vai8ard6i72ejuf:8",
+        "kind": "call",
+        "fn": "@v1c4ldqko02vai8ard6i72ejuf:9",
+        "args": [
+          "@v1c4ldqko02vai8ard6i72ejuf:10",
+          "@v1c4ldqko02vai8ard6i72ejuf:15"
+        ]
+      },
+      "@v1c4ldqko02vai8ard6i72ejuf:5": {
+        "id": "@v1c4ldqko02vai8ard6i72ejuf:5",
+        "kind": "arm",
+        "variant": "std.complex.complex",
+        "binds": [
+          "@v1c4ldqko02vai8ard6i72ejuf:6",
+          "@v1c4ldqko02vai8ard6i72ejuf:7"
+        ],
+        "results": [
+          null,
+          null
+        ],
+        "body": "@v1c4ldqko02vai8ard6i72ejuf:8"
+      },
+      "@v1c4ldqko02vai8ard6i72ejuf:3": {
+        "id": "@v1c4ldqko02vai8ard6i72ejuf:3",
+        "kind": "match",
+        "scrutinee": "@v1c4ldqko02vai8ard6i72ejuf:4",
+        "arms": [
+          "@v1c4ldqko02vai8ard6i72ejuf:5"
+        ],
+        "otherwise": null
+      },
+      "@v1c4ldqko02vai8ard6i72ejuf:1": {
+        "id": "@v1c4ldqko02vai8ard6i72ejuf:1",
+        "kind": "lambda",
+        "params": [
+          "@v1c4ldqko02vai8ard6i72ejuf:2"
+        ],
+        "body": "@v1c4ldqko02vai8ard6i72ejuf:3"
+      },
+      "@qk3j9f89h64jva46f74gieccsi": {
+        "id": "@qk3j9f89h64jva46f74gieccsi",
+        "kind": "def",
+        "body": "@qk3j9f89h64jva46f74gieccsi:1"
+      },
+      "@qk3j9f89h64jva46f74gieccsi:2": {
+        "id": "@qk3j9f89h64jva46f74gieccsi:2",
+        "kind": "binder"
+      },
+      "@qk3j9f89h64jva46f74gieccsi:3": {
+        "id": "@qk3j9f89h64jva46f74gieccsi:3",
+        "kind": "binder"
+      },
+      "@qk3j9f89h64jva46f74gieccsi:10": {
+        "id": "@qk3j9f89h64jva46f74gieccsi:10",
+        "kind": "lit",
+        "value": 0
+      },
+      "@qk3j9f89h64jva46f74gieccsi:11": {
+        "id": "@qk3j9f89h64jva46f74gieccsi:11",
+        "kind": "lit",
+        "value": 0
+      },
+      "@qk3j9f89h64jva46f74gieccsi:9": {
+        "id": "@qk3j9f89h64jva46f74gieccsi:9",
+        "kind": "ref",
+        "target": "std.complex.complex"
+      },
+      "@qk3j9f89h64jva46f74gieccsi:8": {
+        "id": "@qk3j9f89h64jva46f74gieccsi:8",
+        "kind": "call",
+        "fn": "@qk3j9f89h64jva46f74gieccsi:9",
+        "args": [
+          "@qk3j9f89h64jva46f74gieccsi:10",
+          "@qk3j9f89h64jva46f74gieccsi:11"
+        ]
+      },
+      "@qk3j9f89h64jva46f74gieccsi:6": {
+        "id": "@qk3j9f89h64jva46f74gieccsi:6",
+        "kind": "ref",
+        "target": "builtin.equal"
+      },
+      "@qk3j9f89h64jva46f74gieccsi:7": {
+        "id": "@qk3j9f89h64jva46f74gieccsi:7",
+        "kind": "ref",
+        "target": "@qk3j9f89h64jva46f74gieccsi:2"
+      },
+      "@qk3j9f89h64jva46f74gieccsi:5": {
+        "id": "@qk3j9f89h64jva46f74gieccsi:5",
+        "kind": "call",
+        "fn": "@qk3j9f89h64jva46f74gieccsi:6",
+        "args": [
+          "@qk3j9f89h64jva46f74gieccsi:7",
+          "@qk3j9f89h64jva46f74gieccsi:8"
+        ]
+      },
+      "@qk3j9f89h64jva46f74gieccsi:14": {
+        "id": "@qk3j9f89h64jva46f74gieccsi:14",
+        "kind": "ref",
+        "target": "@qk3j9f89h64jva46f74gieccsi:3"
+      },
+      "@qk3j9f89h64jva46f74gieccsi:16": {
+        "id": "@qk3j9f89h64jva46f74gieccsi:16",
+        "kind": "binder"
+      },
+      "@qk3j9f89h64jva46f74gieccsi:17": {
+        "id": "@qk3j9f89h64jva46f74gieccsi:17",
+        "kind": "binder"
+      },
+      "@qk3j9f89h64jva46f74gieccsi:21": {
+        "id": "@qk3j9f89h64jva46f74gieccsi:21",
+        "kind": "lit",
+        "value": 0
+      },
+      "@qk3j9f89h64jva46f74gieccsi:20": {
+        "id": "@qk3j9f89h64jva46f74gieccsi:20",
+        "kind": "ref",
+        "target": "builtin.less"
+      },
+      "@qk3j9f89h64jva46f74gieccsi:22": {
+        "id": "@qk3j9f89h64jva46f74gieccsi:22",
+        "kind": "ref",
+        "target": "@qk3j9f89h64jva46f74gieccsi:16"
+      },
+      "@qk3j9f89h64jva46f74gieccsi:19": {
+        "id": "@qk3j9f89h64jva46f74gieccsi:19",
+        "kind": "call",
+        "fn": "@qk3j9f89h64jva46f74gieccsi:20",
+        "args": [
+          "@qk3j9f89h64jva46f74gieccsi:21",
+          "@qk3j9f89h64jva46f74gieccsi:22"
+        ]
+      },
+      "@qk3j9f89h64jva46f74gieccsi:26": {
+        "id": "@qk3j9f89h64jva46f74gieccsi:26",
+        "kind": "lit",
+        "value": 0
+      },
+      "@qk3j9f89h64jva46f74gieccsi:27": {
+        "id": "@qk3j9f89h64jva46f74gieccsi:27",
+        "kind": "lit",
+        "value": 0
+      },
+      "@qk3j9f89h64jva46f74gieccsi:25": {
+        "id": "@qk3j9f89h64jva46f74gieccsi:25",
+        "kind": "ref",
+        "target": "std.complex.complex"
+      },
+      "@qk3j9f89h64jva46f74gieccsi:24": {
+        "id": "@qk3j9f89h64jva46f74gieccsi:24",
+        "kind": "call",
+        "fn": "@qk3j9f89h64jva46f74gieccsi:25",
+        "args": [
+          "@qk3j9f89h64jva46f74gieccsi:26",
+          "@qk3j9f89h64jva46f74gieccsi:27"
+        ]
+      },
+      "@qk3j9f89h64jva46f74gieccsi:30": {
+        "id": "@qk3j9f89h64jva46f74gieccsi:30",
+        "kind": "ref",
+        "target": "builtin.fail"
+      },
+      "@qk3j9f89h64jva46f74gieccsi:29": {
+        "id": "@qk3j9f89h64jva46f74gieccsi:29",
+        "kind": "call",
+        "fn": "@qk3j9f89h64jva46f74gieccsi:30",
+        "args": []
+      },
+      "@qk3j9f89h64jva46f74gieccsi:23": {
+        "id": "@qk3j9f89h64jva46f74gieccsi:23",
+        "kind": "arm",
+        "variant": "std.bool.true",
+        "binds": [],
+        "results": [],
+        "body": "@qk3j9f89h64jva46f74gieccsi:24"
+      },
+      "@qk3j9f89h64jva46f74gieccsi:28": {
+        "id": "@qk3j9f89h64jva46f74gieccsi:28",
+        "kind": "arm",
+        "variant": "std.bool.false",
+        "binds": [],
+        "results": [],
+        "body": "@qk3j9f89h64jva46f74gieccsi:29"
+      },
+      "@qk3j9f89h64jva46f74gieccsi:18": {
+        "id": "@qk3j9f89h64jva46f74gieccsi:18",
+        "kind": "match",
+        "scrutinee": "@qk3j9f89h64jva46f74gieccsi:19",
+        "arms": [
+          "@qk3j9f89h64jva46f74gieccsi:23",
+          "@qk3j9f89h64jva46f74gieccsi:28"
+        ],
+        "otherwise": null
+      },
+      "@qk3j9f89h64jva46f74gieccsi:15": {
+        "id": "@qk3j9f89h64jva46f74gieccsi:15",
+        "kind": "arm",
+        "variant": "std.complex.complex",
+        "binds": [
+          "@qk3j9f89h64jva46f74gieccsi:16",
+          "@qk3j9f89h64jva46f74gieccsi:17"
+        ],
+        "results": [
+          null,
+          null
+        ],
+        "body": "@qk3j9f89h64jva46f74gieccsi:18"
+      },
+      "@qk3j9f89h64jva46f74gieccsi:13": {
+        "id": "@qk3j9f89h64jva46f74gieccsi:13",
+        "kind": "match",
+        "scrutinee": "@qk3j9f89h64jva46f74gieccsi:14",
+        "arms": [
+          "@qk3j9f89h64jva46f74gieccsi:15"
+        ],
+        "otherwise": null
+      },
+      "@qk3j9f89h64jva46f74gieccsi:38": {
+        "id": "@qk3j9f89h64jva46f74gieccsi:38",
+        "kind": "ref",
+        "target": "@v1c4ldqko02vai8ard6i72ejuf"
+      },
+      "@qk3j9f89h64jva46f74gieccsi:39": {
+        "id": "@qk3j9f89h64jva46f74gieccsi:39",
+        "kind": "ref",
+        "target": "@qk3j9f89h64jva46f74gieccsi:2"
+      },
+      "@qk3j9f89h64jva46f74gieccsi:37": {
+        "id": "@qk3j9f89h64jva46f74gieccsi:37",
+        "kind": "call",
+        "fn": "@qk3j9f89h64jva46f74gieccsi:38",
+        "args": [
+          "@qk3j9f89h64jva46f74gieccsi:39"
+        ]
+      },
+      "@qk3j9f89h64jva46f74gieccsi:35": {
+        "id": "@qk3j9f89h64jva46f74gieccsi:35",
+        "kind": "ref",
+        "target": "@vcmh7o2v0ms3pqmkt7lrhrb176"
+      },
+      "@qk3j9f89h64jva46f74gieccsi:36": {
+        "id": "@qk3j9f89h64jva46f74gieccsi:36",
+        "kind": "ref",
+        "target": "@qk3j9f89h64jva46f74gieccsi:3"
+      },
+      "@qk3j9f89h64jva46f74gieccsi:34": {
+        "id": "@qk3j9f89h64jva46f74gieccsi:34",
+        "kind": "call",
+        "fn": "@qk3j9f89h64jva46f74gieccsi:35",
+        "args": [
+          "@qk3j9f89h64jva46f74gieccsi:36",
+          "@qk3j9f89h64jva46f74gieccsi:37"
+        ]
+      },
+      "@qk3j9f89h64jva46f74gieccsi:33": {
+        "id": "@qk3j9f89h64jva46f74gieccsi:33",
+        "kind": "ref",
+        "target": "@3sc5994e0iegdsc875vjlqvv5m"
+      },
+      "@qk3j9f89h64jva46f74gieccsi:32": {
+        "id": "@qk3j9f89h64jva46f74gieccsi:32",
+        "kind": "call",
+        "fn": "@qk3j9f89h64jva46f74gieccsi:33",
+        "args": [
+          "@qk3j9f89h64jva46f74gieccsi:34"
+        ]
+      },
+      "@qk3j9f89h64jva46f74gieccsi:12": {
+        "id": "@qk3j9f89h64jva46f74gieccsi:12",
+        "kind": "arm",
+        "variant": "std.bool.true",
+        "binds": [],
+        "results": [],
+        "body": "@qk3j9f89h64jva46f74gieccsi:13"
+      },
+      "@qk3j9f89h64jva46f74gieccsi:31": {
+        "id": "@qk3j9f89h64jva46f74gieccsi:31",
+        "kind": "arm",
+        "variant": "std.bool.false",
+        "binds": [],
+        "results": [],
+        "body": "@qk3j9f89h64jva46f74gieccsi:32"
+      },
+      "@qk3j9f89h64jva46f74gieccsi:4": {
+        "id": "@qk3j9f89h64jva46f74gieccsi:4",
+        "kind": "match",
+        "scrutinee": "@qk3j9f89h64jva46f74gieccsi:5",
+        "arms": [
+          "@qk3j9f89h64jva46f74gieccsi:12",
+          "@qk3j9f89h64jva46f74gieccsi:31"
+        ],
+        "otherwise": null
+      },
+      "@qk3j9f89h64jva46f74gieccsi:1": {
+        "id": "@qk3j9f89h64jva46f74gieccsi:1",
+        "kind": "lambda",
+        "params": [
+          "@qk3j9f89h64jva46f74gieccsi:2",
+          "@qk3j9f89h64jva46f74gieccsi:3"
+        ],
+        "body": "@qk3j9f89h64jva46f74gieccsi:4"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f",
+        "kind": "def",
+        "body": "@qieak0btgq6c6tcotdksjr7t6f:1"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:2": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:2",
+        "kind": "binder"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:4": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:4",
+        "kind": "ref",
+        "target": "@qieak0btgq6c6tcotdksjr7t6f:2"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:6": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:6",
+        "kind": "binder"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:7": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:7",
+        "kind": "binder"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:101": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:101",
+        "kind": "lit",
+        "value": 1
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:102": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:102",
+        "kind": "lit",
+        "value": 0
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:100": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:100",
+        "kind": "ref",
+        "target": "std.complex.complex"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:99": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:99",
+        "kind": "call",
+        "fn": "@qieak0btgq6c6tcotdksjr7t6f:100",
+        "args": [
+          "@qieak0btgq6c6tcotdksjr7t6f:101",
+          "@qieak0btgq6c6tcotdksjr7t6f:102"
+        ]
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:104": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:104",
+        "kind": "ref",
+        "target": "@vcmh7o2v0ms3pqmkt7lrhrb176"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:105": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:105",
+        "kind": "ref",
+        "target": "@qieak0btgq6c6tcotdksjr7t6f:2"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:106": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:106",
+        "kind": "ref",
+        "target": "@qieak0btgq6c6tcotdksjr7t6f:2"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:103": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:103",
+        "kind": "call",
+        "fn": "@qieak0btgq6c6tcotdksjr7t6f:104",
+        "args": [
+          "@qieak0btgq6c6tcotdksjr7t6f:105",
+          "@qieak0btgq6c6tcotdksjr7t6f:106"
+        ]
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:98": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:98",
+        "kind": "ref",
+        "target": "@5qcutt1hdu2hjlgvrja609ighr"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:97": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:97",
+        "kind": "call",
+        "fn": "@qieak0btgq6c6tcotdksjr7t6f:98",
+        "args": [
+          "@qieak0btgq6c6tcotdksjr7t6f:99",
+          "@qieak0btgq6c6tcotdksjr7t6f:103"
+        ]
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:96": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:96",
+        "kind": "ref",
+        "target": "@oquhi80b8a59m25n42qkmt292d"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:95": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:95",
+        "kind": "call",
+        "fn": "@qieak0btgq6c6tcotdksjr7t6f:96",
+        "args": [
+          "@qieak0btgq6c6tcotdksjr7t6f:97"
+        ]
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:77": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:77",
+        "kind": "binder"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:84": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:84",
+        "kind": "lit",
+        "value": 0
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:82": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:82",
+        "kind": "ref",
+        "target": "builtin.equal"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:83": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:83",
+        "kind": "ref",
+        "target": "@qieak0btgq6c6tcotdksjr7t6f:7"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:81": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:81",
+        "kind": "call",
+        "fn": "@qieak0btgq6c6tcotdksjr7t6f:82",
+        "args": [
+          "@qieak0btgq6c6tcotdksjr7t6f:83",
+          "@qieak0btgq6c6tcotdksjr7t6f:84"
+        ]
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:87": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:87",
+        "kind": "lit",
+        "value": 0
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:86": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:86",
+        "kind": "ref",
+        "target": "builtin.less"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:88": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:88",
+        "kind": "ref",
+        "target": "@qieak0btgq6c6tcotdksjr7t6f:6"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:85": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:85",
+        "kind": "call",
+        "fn": "@qieak0btgq6c6tcotdksjr7t6f:86",
+        "args": [
+          "@qieak0btgq6c6tcotdksjr7t6f:87",
+          "@qieak0btgq6c6tcotdksjr7t6f:88"
+        ]
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:80": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:80",
+        "kind": "ref",
+        "target": "builtin.and"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:79": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:79",
+        "kind": "call",
+        "fn": "@qieak0btgq6c6tcotdksjr7t6f:80",
+        "args": [
+          "@qieak0btgq6c6tcotdksjr7t6f:81",
+          "@qieak0btgq6c6tcotdksjr7t6f:85"
+        ]
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:91": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:91",
+        "kind": "ref",
+        "target": "@aclg13eff4ceaebcksq8gh376d"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:92": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:92",
+        "kind": "ref",
+        "target": "@qieak0btgq6c6tcotdksjr7t6f:77"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:90": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:90",
+        "kind": "call",
+        "fn": "@qieak0btgq6c6tcotdksjr7t6f:91",
+        "args": [
+          "@qieak0btgq6c6tcotdksjr7t6f:92"
+        ]
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:89": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:89",
+        "kind": "arm",
+        "variant": "std.bool.true",
+        "binds": [],
+        "results": [],
+        "body": "@qieak0btgq6c6tcotdksjr7t6f:90"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:94": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:94",
+        "kind": "ref",
+        "target": "@qieak0btgq6c6tcotdksjr7t6f:77"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:93": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:93",
+        "kind": "arm",
+        "variant": "std.bool.false",
+        "binds": [],
+        "results": [],
+        "body": "@qieak0btgq6c6tcotdksjr7t6f:94"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:78": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:78",
+        "kind": "match",
+        "scrutinee": "@qieak0btgq6c6tcotdksjr7t6f:79",
+        "arms": [
+          "@qieak0btgq6c6tcotdksjr7t6f:89",
+          "@qieak0btgq6c6tcotdksjr7t6f:93"
+        ],
+        "otherwise": null
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:76": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:76",
+        "kind": "lambda",
+        "params": [
+          "@qieak0btgq6c6tcotdksjr7t6f:77"
+        ],
+        "body": "@qieak0btgq6c6tcotdksjr7t6f:78"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:75": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:75",
+        "kind": "call",
+        "fn": "@qieak0btgq6c6tcotdksjr7t6f:76",
+        "args": [
+          "@qieak0btgq6c6tcotdksjr7t6f:95"
+        ]
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:10": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:10",
+        "kind": "binder"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:72": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:72",
+        "kind": "ref",
+        "target": "builtin.neg"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:73": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:73",
+        "kind": "ref",
+        "target": "@qieak0btgq6c6tcotdksjr7t6f:7"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:71": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:71",
+        "kind": "call",
+        "fn": "@qieak0btgq6c6tcotdksjr7t6f:72",
+        "args": [
+          "@qieak0btgq6c6tcotdksjr7t6f:73"
+        ]
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:70": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:70",
+        "kind": "ref",
+        "target": "std.complex.complex"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:74": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:74",
+        "kind": "ref",
+        "target": "@qieak0btgq6c6tcotdksjr7t6f:6"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:69": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:69",
+        "kind": "call",
+        "fn": "@qieak0btgq6c6tcotdksjr7t6f:70",
+        "args": [
+          "@qieak0btgq6c6tcotdksjr7t6f:71",
+          "@qieak0btgq6c6tcotdksjr7t6f:74"
+        ]
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:13": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:13",
+        "kind": "binder"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:66": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:66",
+        "kind": "ref",
+        "target": "@erjqmni7ivj8ajc7tfnnhvlki8"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:67": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:67",
+        "kind": "ref",
+        "target": "@qieak0btgq6c6tcotdksjr7t6f:10"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:68": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:68",
+        "kind": "ref",
+        "target": "@qieak0btgq6c6tcotdksjr7t6f:13"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:65": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:65",
+        "kind": "call",
+        "fn": "@qieak0btgq6c6tcotdksjr7t6f:66",
+        "args": [
+          "@qieak0btgq6c6tcotdksjr7t6f:67",
+          "@qieak0btgq6c6tcotdksjr7t6f:68"
+        ]
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:62": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:62",
+        "kind": "ref",
+        "target": "@5qcutt1hdu2hjlgvrja609ighr"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:63": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:63",
+        "kind": "ref",
+        "target": "@qieak0btgq6c6tcotdksjr7t6f:10"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:64": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:64",
+        "kind": "ref",
+        "target": "@qieak0btgq6c6tcotdksjr7t6f:13"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:61": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:61",
+        "kind": "call",
+        "fn": "@qieak0btgq6c6tcotdksjr7t6f:62",
+        "args": [
+          "@qieak0btgq6c6tcotdksjr7t6f:63",
+          "@qieak0btgq6c6tcotdksjr7t6f:64"
+        ]
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:16": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:16",
+        "kind": "binder"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:19": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:19",
+        "kind": "binder"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:41": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:41",
+        "kind": "ref",
+        "target": "@poo2a71bl3s61p9glu6dh6brc8"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:42": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:42",
+        "kind": "ref",
+        "target": "@qieak0btgq6c6tcotdksjr7t6f:16"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:40": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:40",
+        "kind": "call",
+        "fn": "@qieak0btgq6c6tcotdksjr7t6f:41",
+        "args": [
+          "@qieak0btgq6c6tcotdksjr7t6f:42"
+        ]
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:44": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:44",
+        "kind": "ref",
+        "target": "@poo2a71bl3s61p9glu6dh6brc8"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:45": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:45",
+        "kind": "ref",
+        "target": "@qieak0btgq6c6tcotdksjr7t6f:19"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:43": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:43",
+        "kind": "call",
+        "fn": "@qieak0btgq6c6tcotdksjr7t6f:44",
+        "args": [
+          "@qieak0btgq6c6tcotdksjr7t6f:45"
+        ]
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:39": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:39",
+        "kind": "ref",
+        "target": "builtin.less"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:38": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:38",
+        "kind": "call",
+        "fn": "@qieak0btgq6c6tcotdksjr7t6f:39",
+        "args": [
+          "@qieak0btgq6c6tcotdksjr7t6f:40",
+          "@qieak0btgq6c6tcotdksjr7t6f:43"
+        ]
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:50": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:50",
+        "kind": "ref",
+        "target": "@v1c4ldqko02vai8ard6i72ejuf"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:51": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:51",
+        "kind": "ref",
+        "target": "@qieak0btgq6c6tcotdksjr7t6f:19"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:49": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:49",
+        "kind": "call",
+        "fn": "@qieak0btgq6c6tcotdksjr7t6f:50",
+        "args": [
+          "@qieak0btgq6c6tcotdksjr7t6f:51"
+        ]
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:48": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:48",
+        "kind": "ref",
+        "target": "@jb907f4tbjb70755s5eempgnb9"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:47": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:47",
+        "kind": "call",
+        "fn": "@qieak0btgq6c6tcotdksjr7t6f:48",
+        "args": [
+          "@qieak0btgq6c6tcotdksjr7t6f:49"
+        ]
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:54": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:54",
+        "kind": "ref",
+        "target": "@v1c4ldqko02vai8ard6i72ejuf"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:55": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:55",
+        "kind": "ref",
+        "target": "@qieak0btgq6c6tcotdksjr7t6f:16"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:53": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:53",
+        "kind": "call",
+        "fn": "@qieak0btgq6c6tcotdksjr7t6f:54",
+        "args": [
+          "@qieak0btgq6c6tcotdksjr7t6f:55"
+        ]
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:46": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:46",
+        "kind": "arm",
+        "variant": "std.bool.true",
+        "binds": [],
+        "results": [],
+        "body": "@qieak0btgq6c6tcotdksjr7t6f:47"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:52": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:52",
+        "kind": "arm",
+        "variant": "std.bool.false",
+        "binds": [],
+        "results": [],
+        "body": "@qieak0btgq6c6tcotdksjr7t6f:53"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:37": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:37",
+        "kind": "match",
+        "scrutinee": "@qieak0btgq6c6tcotdksjr7t6f:38",
+        "arms": [
+          "@qieak0btgq6c6tcotdksjr7t6f:46",
+          "@qieak0btgq6c6tcotdksjr7t6f:52"
+        ],
+        "otherwise": null
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:36": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:36",
+        "kind": "lambda",
+        "params": [],
+        "body": "@qieak0btgq6c6tcotdksjr7t6f:37"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:59": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:59",
+        "kind": "lit",
+        "value": 0
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:60": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:60",
+        "kind": "lit",
+        "value": 0
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:58": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:58",
+        "kind": "ref",
+        "target": "std.complex.complex"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:57": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:57",
+        "kind": "call",
+        "fn": "@qieak0btgq6c6tcotdksjr7t6f:58",
+        "args": [
+          "@qieak0btgq6c6tcotdksjr7t6f:59",
+          "@qieak0btgq6c6tcotdksjr7t6f:60"
+        ]
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:56": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:56",
+        "kind": "lambda",
+        "params": [],
+        "body": "@qieak0btgq6c6tcotdksjr7t6f:57"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:35": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:35",
+        "kind": "ref",
+        "target": "builtin.first"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:34": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:34",
+        "kind": "call",
+        "fn": "@qieak0btgq6c6tcotdksjr7t6f:35",
+        "args": [
+          "@qieak0btgq6c6tcotdksjr7t6f:36",
+          "@qieak0btgq6c6tcotdksjr7t6f:56"
+        ]
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:22": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:22",
+        "kind": "binder"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:24": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:24",
+        "kind": "ref",
+        "target": "@qieak0btgq6c6tcotdksjr7t6f:22"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:26": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:26",
+        "kind": "binder"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:27": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:27",
+        "kind": "binder"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:32": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:32",
+        "kind": "ref",
+        "target": "builtin.neg"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:33": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:33",
+        "kind": "ref",
+        "target": "@qieak0btgq6c6tcotdksjr7t6f:26"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:31": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:31",
+        "kind": "call",
+        "fn": "@qieak0btgq6c6tcotdksjr7t6f:32",
+        "args": [
+          "@qieak0btgq6c6tcotdksjr7t6f:33"
+        ]
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:29": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:29",
+        "kind": "ref",
+        "target": "std.complex.complex"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:30": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:30",
+        "kind": "ref",
+        "target": "@qieak0btgq6c6tcotdksjr7t6f:27"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:28": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:28",
+        "kind": "call",
+        "fn": "@qieak0btgq6c6tcotdksjr7t6f:29",
+        "args": [
+          "@qieak0btgq6c6tcotdksjr7t6f:30",
+          "@qieak0btgq6c6tcotdksjr7t6f:31"
+        ]
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:25": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:25",
+        "kind": "arm",
+        "variant": "std.complex.complex",
+        "binds": [
+          "@qieak0btgq6c6tcotdksjr7t6f:26",
+          "@qieak0btgq6c6tcotdksjr7t6f:27"
+        ],
+        "results": [
+          null,
+          null
+        ],
+        "body": "@qieak0btgq6c6tcotdksjr7t6f:28"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:23": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:23",
+        "kind": "match",
+        "scrutinee": "@qieak0btgq6c6tcotdksjr7t6f:24",
+        "arms": [
+          "@qieak0btgq6c6tcotdksjr7t6f:25"
+        ],
+        "otherwise": null
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:21": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:21",
+        "kind": "lambda",
+        "params": [
+          "@qieak0btgq6c6tcotdksjr7t6f:22"
+        ],
+        "body": "@qieak0btgq6c6tcotdksjr7t6f:23"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:20": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:20",
+        "kind": "call",
+        "fn": "@qieak0btgq6c6tcotdksjr7t6f:21",
+        "args": [
+          "@qieak0btgq6c6tcotdksjr7t6f:34"
+        ]
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:18": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:18",
+        "kind": "lambda",
+        "params": [
+          "@qieak0btgq6c6tcotdksjr7t6f:19"
+        ],
+        "body": "@qieak0btgq6c6tcotdksjr7t6f:20"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:17": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:17",
+        "kind": "call",
+        "fn": "@qieak0btgq6c6tcotdksjr7t6f:18",
+        "args": [
+          "@qieak0btgq6c6tcotdksjr7t6f:61"
+        ]
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:15": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:15",
+        "kind": "lambda",
+        "params": [
+          "@qieak0btgq6c6tcotdksjr7t6f:16"
+        ],
+        "body": "@qieak0btgq6c6tcotdksjr7t6f:17"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:14": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:14",
+        "kind": "call",
+        "fn": "@qieak0btgq6c6tcotdksjr7t6f:15",
+        "args": [
+          "@qieak0btgq6c6tcotdksjr7t6f:65"
+        ]
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:12": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:12",
+        "kind": "lambda",
+        "params": [
+          "@qieak0btgq6c6tcotdksjr7t6f:13"
+        ],
+        "body": "@qieak0btgq6c6tcotdksjr7t6f:14"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:11": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:11",
+        "kind": "call",
+        "fn": "@qieak0btgq6c6tcotdksjr7t6f:12",
+        "args": [
+          "@qieak0btgq6c6tcotdksjr7t6f:69"
+        ]
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:9": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:9",
+        "kind": "lambda",
+        "params": [
+          "@qieak0btgq6c6tcotdksjr7t6f:10"
+        ],
+        "body": "@qieak0btgq6c6tcotdksjr7t6f:11"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:8": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:8",
+        "kind": "call",
+        "fn": "@qieak0btgq6c6tcotdksjr7t6f:9",
+        "args": [
+          "@qieak0btgq6c6tcotdksjr7t6f:75"
+        ]
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:5": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:5",
+        "kind": "arm",
+        "variant": "std.complex.complex",
+        "binds": [
+          "@qieak0btgq6c6tcotdksjr7t6f:6",
+          "@qieak0btgq6c6tcotdksjr7t6f:7"
+        ],
+        "results": [
+          null,
+          null
+        ],
+        "body": "@qieak0btgq6c6tcotdksjr7t6f:8"
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:3": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:3",
+        "kind": "match",
+        "scrutinee": "@qieak0btgq6c6tcotdksjr7t6f:4",
+        "arms": [
+          "@qieak0btgq6c6tcotdksjr7t6f:5"
+        ],
+        "otherwise": null
+      },
+      "@qieak0btgq6c6tcotdksjr7t6f:1": {
+        "id": "@qieak0btgq6c6tcotdksjr7t6f:1",
+        "kind": "lambda",
+        "params": [
+          "@qieak0btgq6c6tcotdksjr7t6f:2"
+        ],
+        "body": "@qieak0btgq6c6tcotdksjr7t6f:3"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no",
+        "kind": "def",
+        "body": "@f6ohevji4f8quo0263ujl6r5no:1"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:2": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:2",
+        "kind": "binder"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:4": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:4",
+        "kind": "ref",
+        "target": "@f6ohevji4f8quo0263ujl6r5no:2"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:6": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:6",
+        "kind": "binder"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:7": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:7",
+        "kind": "binder"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:106": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:106",
+        "kind": "lit",
+        "value": 1
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:107": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:107",
+        "kind": "lit",
+        "value": 0
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:105": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:105",
+        "kind": "ref",
+        "target": "std.complex.complex"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:104": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:104",
+        "kind": "call",
+        "fn": "@f6ohevji4f8quo0263ujl6r5no:105",
+        "args": [
+          "@f6ohevji4f8quo0263ujl6r5no:106",
+          "@f6ohevji4f8quo0263ujl6r5no:107"
+        ]
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:109": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:109",
+        "kind": "ref",
+        "target": "@vcmh7o2v0ms3pqmkt7lrhrb176"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:110": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:110",
+        "kind": "ref",
+        "target": "@f6ohevji4f8quo0263ujl6r5no:2"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:111": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:111",
+        "kind": "ref",
+        "target": "@f6ohevji4f8quo0263ujl6r5no:2"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:108": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:108",
+        "kind": "call",
+        "fn": "@f6ohevji4f8quo0263ujl6r5no:109",
+        "args": [
+          "@f6ohevji4f8quo0263ujl6r5no:110",
+          "@f6ohevji4f8quo0263ujl6r5no:111"
+        ]
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:103": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:103",
+        "kind": "ref",
+        "target": "@5qcutt1hdu2hjlgvrja609ighr"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:102": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:102",
+        "kind": "call",
+        "fn": "@f6ohevji4f8quo0263ujl6r5no:103",
+        "args": [
+          "@f6ohevji4f8quo0263ujl6r5no:104",
+          "@f6ohevji4f8quo0263ujl6r5no:108"
+        ]
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:101": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:101",
+        "kind": "ref",
+        "target": "@oquhi80b8a59m25n42qkmt292d"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:100": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:100",
+        "kind": "call",
+        "fn": "@f6ohevji4f8quo0263ujl6r5no:101",
+        "args": [
+          "@f6ohevji4f8quo0263ujl6r5no:102"
+        ]
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:82": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:82",
+        "kind": "binder"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:89": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:89",
+        "kind": "lit",
+        "value": 0
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:87": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:87",
+        "kind": "ref",
+        "target": "builtin.equal"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:88": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:88",
+        "kind": "ref",
+        "target": "@f6ohevji4f8quo0263ujl6r5no:7"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:86": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:86",
+        "kind": "call",
+        "fn": "@f6ohevji4f8quo0263ujl6r5no:87",
+        "args": [
+          "@f6ohevji4f8quo0263ujl6r5no:88",
+          "@f6ohevji4f8quo0263ujl6r5no:89"
+        ]
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:92": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:92",
+        "kind": "lit",
+        "value": 0
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:91": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:91",
+        "kind": "ref",
+        "target": "builtin.less"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:93": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:93",
+        "kind": "ref",
+        "target": "@f6ohevji4f8quo0263ujl6r5no:6"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:90": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:90",
+        "kind": "call",
+        "fn": "@f6ohevji4f8quo0263ujl6r5no:91",
+        "args": [
+          "@f6ohevji4f8quo0263ujl6r5no:92",
+          "@f6ohevji4f8quo0263ujl6r5no:93"
+        ]
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:85": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:85",
+        "kind": "ref",
+        "target": "builtin.and"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:84": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:84",
+        "kind": "call",
+        "fn": "@f6ohevji4f8quo0263ujl6r5no:85",
+        "args": [
+          "@f6ohevji4f8quo0263ujl6r5no:86",
+          "@f6ohevji4f8quo0263ujl6r5no:90"
+        ]
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:96": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:96",
+        "kind": "ref",
+        "target": "@aclg13eff4ceaebcksq8gh376d"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:97": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:97",
+        "kind": "ref",
+        "target": "@f6ohevji4f8quo0263ujl6r5no:82"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:95": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:95",
+        "kind": "call",
+        "fn": "@f6ohevji4f8quo0263ujl6r5no:96",
+        "args": [
+          "@f6ohevji4f8quo0263ujl6r5no:97"
+        ]
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:94": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:94",
+        "kind": "arm",
+        "variant": "std.bool.true",
+        "binds": [],
+        "results": [],
+        "body": "@f6ohevji4f8quo0263ujl6r5no:95"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:99": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:99",
+        "kind": "ref",
+        "target": "@f6ohevji4f8quo0263ujl6r5no:82"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:98": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:98",
+        "kind": "arm",
+        "variant": "std.bool.false",
+        "binds": [],
+        "results": [],
+        "body": "@f6ohevji4f8quo0263ujl6r5no:99"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:83": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:83",
+        "kind": "match",
+        "scrutinee": "@f6ohevji4f8quo0263ujl6r5no:84",
+        "arms": [
+          "@f6ohevji4f8quo0263ujl6r5no:94",
+          "@f6ohevji4f8quo0263ujl6r5no:98"
+        ],
+        "otherwise": null
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:81": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:81",
+        "kind": "lambda",
+        "params": [
+          "@f6ohevji4f8quo0263ujl6r5no:82"
+        ],
+        "body": "@f6ohevji4f8quo0263ujl6r5no:83"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:80": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:80",
+        "kind": "call",
+        "fn": "@f6ohevji4f8quo0263ujl6r5no:81",
+        "args": [
+          "@f6ohevji4f8quo0263ujl6r5no:100"
+        ]
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:10": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:10",
+        "kind": "binder"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:70": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:70",
+        "kind": "ref",
+        "target": "@f6ohevji4f8quo0263ujl6r5no:10"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:72": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:72",
+        "kind": "binder"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:73": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:73",
+        "kind": "binder"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:77": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:77",
+        "kind": "ref",
+        "target": "builtin.neg"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:78": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:78",
+        "kind": "ref",
+        "target": "@f6ohevji4f8quo0263ujl6r5no:73"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:76": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:76",
+        "kind": "call",
+        "fn": "@f6ohevji4f8quo0263ujl6r5no:77",
+        "args": [
+          "@f6ohevji4f8quo0263ujl6r5no:78"
+        ]
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:75": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:75",
+        "kind": "ref",
+        "target": "std.complex.complex"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:79": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:79",
+        "kind": "ref",
+        "target": "@f6ohevji4f8quo0263ujl6r5no:72"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:74": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:74",
+        "kind": "call",
+        "fn": "@f6ohevji4f8quo0263ujl6r5no:75",
+        "args": [
+          "@f6ohevji4f8quo0263ujl6r5no:76",
+          "@f6ohevji4f8quo0263ujl6r5no:79"
+        ]
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:71": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:71",
+        "kind": "arm",
+        "variant": "std.complex.complex",
+        "binds": [
+          "@f6ohevji4f8quo0263ujl6r5no:72",
+          "@f6ohevji4f8quo0263ujl6r5no:73"
+        ],
+        "results": [
+          null,
+          null
+        ],
+        "body": "@f6ohevji4f8quo0263ujl6r5no:74"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:69": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:69",
+        "kind": "match",
+        "scrutinee": "@f6ohevji4f8quo0263ujl6r5no:70",
+        "arms": [
+          "@f6ohevji4f8quo0263ujl6r5no:71"
+        ],
+        "otherwise": null
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:13": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:13",
+        "kind": "binder"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:66": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:66",
+        "kind": "ref",
+        "target": "@erjqmni7ivj8ajc7tfnnhvlki8"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:67": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:67",
+        "kind": "ref",
+        "target": "@f6ohevji4f8quo0263ujl6r5no:2"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:68": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:68",
+        "kind": "ref",
+        "target": "@f6ohevji4f8quo0263ujl6r5no:13"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:65": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:65",
+        "kind": "call",
+        "fn": "@f6ohevji4f8quo0263ujl6r5no:66",
+        "args": [
+          "@f6ohevji4f8quo0263ujl6r5no:67",
+          "@f6ohevji4f8quo0263ujl6r5no:68"
+        ]
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:62": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:62",
+        "kind": "ref",
+        "target": "@5qcutt1hdu2hjlgvrja609ighr"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:63": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:63",
+        "kind": "ref",
+        "target": "@f6ohevji4f8quo0263ujl6r5no:2"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:64": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:64",
+        "kind": "ref",
+        "target": "@f6ohevji4f8quo0263ujl6r5no:13"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:61": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:61",
+        "kind": "call",
+        "fn": "@f6ohevji4f8quo0263ujl6r5no:62",
+        "args": [
+          "@f6ohevji4f8quo0263ujl6r5no:63",
+          "@f6ohevji4f8quo0263ujl6r5no:64"
+        ]
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:16": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:16",
+        "kind": "binder"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:19": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:19",
+        "kind": "binder"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:41": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:41",
+        "kind": "ref",
+        "target": "@poo2a71bl3s61p9glu6dh6brc8"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:42": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:42",
+        "kind": "ref",
+        "target": "@f6ohevji4f8quo0263ujl6r5no:16"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:40": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:40",
+        "kind": "call",
+        "fn": "@f6ohevji4f8quo0263ujl6r5no:41",
+        "args": [
+          "@f6ohevji4f8quo0263ujl6r5no:42"
+        ]
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:44": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:44",
+        "kind": "ref",
+        "target": "@poo2a71bl3s61p9glu6dh6brc8"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:45": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:45",
+        "kind": "ref",
+        "target": "@f6ohevji4f8quo0263ujl6r5no:19"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:43": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:43",
+        "kind": "call",
+        "fn": "@f6ohevji4f8quo0263ujl6r5no:44",
+        "args": [
+          "@f6ohevji4f8quo0263ujl6r5no:45"
+        ]
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:39": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:39",
+        "kind": "ref",
+        "target": "builtin.less"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:38": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:38",
+        "kind": "call",
+        "fn": "@f6ohevji4f8quo0263ujl6r5no:39",
+        "args": [
+          "@f6ohevji4f8quo0263ujl6r5no:40",
+          "@f6ohevji4f8quo0263ujl6r5no:43"
+        ]
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:50": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:50",
+        "kind": "ref",
+        "target": "@v1c4ldqko02vai8ard6i72ejuf"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:51": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:51",
+        "kind": "ref",
+        "target": "@f6ohevji4f8quo0263ujl6r5no:19"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:49": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:49",
+        "kind": "call",
+        "fn": "@f6ohevji4f8quo0263ujl6r5no:50",
+        "args": [
+          "@f6ohevji4f8quo0263ujl6r5no:51"
+        ]
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:48": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:48",
+        "kind": "ref",
+        "target": "@jb907f4tbjb70755s5eempgnb9"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:47": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:47",
+        "kind": "call",
+        "fn": "@f6ohevji4f8quo0263ujl6r5no:48",
+        "args": [
+          "@f6ohevji4f8quo0263ujl6r5no:49"
+        ]
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:54": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:54",
+        "kind": "ref",
+        "target": "@v1c4ldqko02vai8ard6i72ejuf"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:55": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:55",
+        "kind": "ref",
+        "target": "@f6ohevji4f8quo0263ujl6r5no:16"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:53": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:53",
+        "kind": "call",
+        "fn": "@f6ohevji4f8quo0263ujl6r5no:54",
+        "args": [
+          "@f6ohevji4f8quo0263ujl6r5no:55"
+        ]
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:46": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:46",
+        "kind": "arm",
+        "variant": "std.bool.true",
+        "binds": [],
+        "results": [],
+        "body": "@f6ohevji4f8quo0263ujl6r5no:47"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:52": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:52",
+        "kind": "arm",
+        "variant": "std.bool.false",
+        "binds": [],
+        "results": [],
+        "body": "@f6ohevji4f8quo0263ujl6r5no:53"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:37": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:37",
+        "kind": "match",
+        "scrutinee": "@f6ohevji4f8quo0263ujl6r5no:38",
+        "arms": [
+          "@f6ohevji4f8quo0263ujl6r5no:46",
+          "@f6ohevji4f8quo0263ujl6r5no:52"
+        ],
+        "otherwise": null
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:36": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:36",
+        "kind": "lambda",
+        "params": [],
+        "body": "@f6ohevji4f8quo0263ujl6r5no:37"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:59": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:59",
+        "kind": "lit",
+        "value": 0
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:60": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:60",
+        "kind": "lit",
+        "value": 0
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:58": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:58",
+        "kind": "ref",
+        "target": "std.complex.complex"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:57": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:57",
+        "kind": "call",
+        "fn": "@f6ohevji4f8quo0263ujl6r5no:58",
+        "args": [
+          "@f6ohevji4f8quo0263ujl6r5no:59",
+          "@f6ohevji4f8quo0263ujl6r5no:60"
+        ]
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:56": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:56",
+        "kind": "lambda",
+        "params": [],
+        "body": "@f6ohevji4f8quo0263ujl6r5no:57"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:35": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:35",
+        "kind": "ref",
+        "target": "builtin.first"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:34": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:34",
+        "kind": "call",
+        "fn": "@f6ohevji4f8quo0263ujl6r5no:35",
+        "args": [
+          "@f6ohevji4f8quo0263ujl6r5no:36",
+          "@f6ohevji4f8quo0263ujl6r5no:56"
+        ]
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:22": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:22",
+        "kind": "binder"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:24": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:24",
+        "kind": "ref",
+        "target": "@f6ohevji4f8quo0263ujl6r5no:22"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:26": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:26",
+        "kind": "binder"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:27": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:27",
+        "kind": "binder"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:32": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:32",
+        "kind": "ref",
+        "target": "builtin.neg"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:33": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:33",
+        "kind": "ref",
+        "target": "@f6ohevji4f8quo0263ujl6r5no:26"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:31": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:31",
+        "kind": "call",
+        "fn": "@f6ohevji4f8quo0263ujl6r5no:32",
+        "args": [
+          "@f6ohevji4f8quo0263ujl6r5no:33"
+        ]
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:29": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:29",
+        "kind": "ref",
+        "target": "std.complex.complex"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:30": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:30",
+        "kind": "ref",
+        "target": "@f6ohevji4f8quo0263ujl6r5no:27"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:28": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:28",
+        "kind": "call",
+        "fn": "@f6ohevji4f8quo0263ujl6r5no:29",
+        "args": [
+          "@f6ohevji4f8quo0263ujl6r5no:30",
+          "@f6ohevji4f8quo0263ujl6r5no:31"
+        ]
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:25": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:25",
+        "kind": "arm",
+        "variant": "std.complex.complex",
+        "binds": [
+          "@f6ohevji4f8quo0263ujl6r5no:26",
+          "@f6ohevji4f8quo0263ujl6r5no:27"
+        ],
+        "results": [
+          null,
+          null
+        ],
+        "body": "@f6ohevji4f8quo0263ujl6r5no:28"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:23": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:23",
+        "kind": "match",
+        "scrutinee": "@f6ohevji4f8quo0263ujl6r5no:24",
+        "arms": [
+          "@f6ohevji4f8quo0263ujl6r5no:25"
+        ],
+        "otherwise": null
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:21": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:21",
+        "kind": "lambda",
+        "params": [
+          "@f6ohevji4f8quo0263ujl6r5no:22"
+        ],
+        "body": "@f6ohevji4f8quo0263ujl6r5no:23"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:20": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:20",
+        "kind": "call",
+        "fn": "@f6ohevji4f8quo0263ujl6r5no:21",
+        "args": [
+          "@f6ohevji4f8quo0263ujl6r5no:34"
+        ]
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:18": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:18",
+        "kind": "lambda",
+        "params": [
+          "@f6ohevji4f8quo0263ujl6r5no:19"
+        ],
+        "body": "@f6ohevji4f8quo0263ujl6r5no:20"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:17": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:17",
+        "kind": "call",
+        "fn": "@f6ohevji4f8quo0263ujl6r5no:18",
+        "args": [
+          "@f6ohevji4f8quo0263ujl6r5no:61"
+        ]
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:15": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:15",
+        "kind": "lambda",
+        "params": [
+          "@f6ohevji4f8quo0263ujl6r5no:16"
+        ],
+        "body": "@f6ohevji4f8quo0263ujl6r5no:17"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:14": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:14",
+        "kind": "call",
+        "fn": "@f6ohevji4f8quo0263ujl6r5no:15",
+        "args": [
+          "@f6ohevji4f8quo0263ujl6r5no:65"
+        ]
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:12": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:12",
+        "kind": "lambda",
+        "params": [
+          "@f6ohevji4f8quo0263ujl6r5no:13"
+        ],
+        "body": "@f6ohevji4f8quo0263ujl6r5no:14"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:11": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:11",
+        "kind": "call",
+        "fn": "@f6ohevji4f8quo0263ujl6r5no:12",
+        "args": [
+          "@f6ohevji4f8quo0263ujl6r5no:69"
+        ]
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:9": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:9",
+        "kind": "lambda",
+        "params": [
+          "@f6ohevji4f8quo0263ujl6r5no:10"
+        ],
+        "body": "@f6ohevji4f8quo0263ujl6r5no:11"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:8": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:8",
+        "kind": "call",
+        "fn": "@f6ohevji4f8quo0263ujl6r5no:9",
+        "args": [
+          "@f6ohevji4f8quo0263ujl6r5no:80"
+        ]
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:5": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:5",
+        "kind": "arm",
+        "variant": "std.complex.complex",
+        "binds": [
+          "@f6ohevji4f8quo0263ujl6r5no:6",
+          "@f6ohevji4f8quo0263ujl6r5no:7"
+        ],
+        "results": [
+          null,
+          null
+        ],
+        "body": "@f6ohevji4f8quo0263ujl6r5no:8"
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:3": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:3",
+        "kind": "match",
+        "scrutinee": "@f6ohevji4f8quo0263ujl6r5no:4",
+        "arms": [
+          "@f6ohevji4f8quo0263ujl6r5no:5"
+        ],
+        "otherwise": null
+      },
+      "@f6ohevji4f8quo0263ujl6r5no:1": {
+        "id": "@f6ohevji4f8quo0263ujl6r5no:1",
+        "kind": "lambda",
+        "params": [
+          "@f6ohevji4f8quo0263ujl6r5no:2"
+        ],
+        "body": "@f6ohevji4f8quo0263ujl6r5no:3"
+      },
       "@tu0hmqf815cglqlbjfk0np3l0f": {
         "id": "@tu0hmqf815cglqlbjfk0np3l0f",
         "kind": "def",
@@ -50892,6 +53044,15 @@
       "@pd38c7vaapt5d63e9l1q4a08s6",
       "@itrutcjuml4ip1t1nbb8dkfhrh",
       "@3sc5994e0iegdsc875vjlqvv5m",
+      "@oquhi80b8a59m25n42qkmt292d",
+      "@v1c4ldqko02vai8ard6i72ejuf",
+      "@vcmh7o2v0ms3pqmkt7lrhrb176",
+      "@qk3j9f89h64jva46f74gieccsi",
+      "@5qcutt1hdu2hjlgvrja609ighr",
+      "@erjqmni7ivj8ajc7tfnnhvlki8",
+      "@jb907f4tbjb70755s5eempgnb9",
+      "@qieak0btgq6c6tcotdksjr7t6f",
+      "@f6ohevji4f8quo0263ujl6r5no",
       "@tu0hmqf815cglqlbjfk0np3l0f",
       "@ilortmfvkbjt9bs8q02goksirf",
       "@lpgbkpl5cvmfold4ma5a9k9on4",
@@ -51003,10 +53164,6 @@
       "@qvk73gc0r0qv7a38j4oc5nrsjc",
       "@idiaof7f0r6jhar1phf6uup59c",
       "@becso7bpuoumte8afa0eurkp1r",
-      "@erjqmni7ivj8ajc7tfnnhvlki8",
-      "@5qcutt1hdu2hjlgvrja609ighr",
-      "@vcmh7o2v0ms3pqmkt7lrhrb176",
-      "@jb907f4tbjb70755s5eempgnb9",
       "@q8448b3cvu3u37nsqf5k6etio0",
       "@b98gg61sq5voof01qmqpqmdt7d",
       "@2dilt1b3f9hjpds2aonqamb6h8",
@@ -52870,6 +55027,264 @@
       "plain": []
     },
     "@3sc5994e0iegdsc875vjlqvv5m": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.complex",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.complex",
+          "args": []
+        },
+        "eff": {
+          "effs": [],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
+    "@oquhi80b8a59m25n42qkmt292d": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.complex",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.complex",
+          "args": []
+        },
+        "eff": {
+          "effs": [],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
+    "@v1c4ldqko02vai8ard6i72ejuf": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.complex",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.complex",
+          "args": []
+        },
+        "eff": {
+          "effs": [
+            "effect.choice"
+          ],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
+    "@vcmh7o2v0ms3pqmkt7lrhrb176": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.complex",
+            "args": []
+          },
+          {
+            "t": "con",
+            "id": "std.complex",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.complex",
+          "args": []
+        },
+        "eff": {
+          "effs": [],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
+    "@qk3j9f89h64jva46f74gieccsi": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.complex",
+            "args": []
+          },
+          {
+            "t": "con",
+            "id": "std.complex",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.complex",
+          "args": []
+        },
+        "eff": {
+          "effs": [
+            "effect.choice"
+          ],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
+    "@5qcutt1hdu2hjlgvrja609ighr": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.complex",
+            "args": []
+          },
+          {
+            "t": "con",
+            "id": "std.complex",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.complex",
+          "args": []
+        },
+        "eff": {
+          "effs": [],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
+    "@erjqmni7ivj8ajc7tfnnhvlki8": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.complex",
+            "args": []
+          },
+          {
+            "t": "con",
+            "id": "std.complex",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.complex",
+          "args": []
+        },
+        "eff": {
+          "effs": [],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
+    "@jb907f4tbjb70755s5eempgnb9": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.complex",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.complex",
+          "args": []
+        },
+        "eff": {
+          "effs": [],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
+    "@qieak0btgq6c6tcotdksjr7t6f": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.complex",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.complex",
+          "args": []
+        },
+        "eff": {
+          "effs": [],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
+    "@f6ohevji4f8quo0263ujl6r5no": {
       "vars": [],
       "rows": [
         0
@@ -57825,125 +60240,6 @@
       },
       "plain": []
     },
-    "@erjqmni7ivj8ajc7tfnnhvlki8": {
-      "vars": [],
-      "rows": [
-        0
-      ],
-      "type": {
-        "t": "fn",
-        "params": [
-          {
-            "t": "con",
-            "id": "std.complex",
-            "args": []
-          },
-          {
-            "t": "con",
-            "id": "std.complex",
-            "args": []
-          }
-        ],
-        "ret": {
-          "t": "con",
-          "id": "std.complex",
-          "args": []
-        },
-        "eff": {
-          "effs": [],
-          "tail": 0
-        }
-      },
-      "plain": []
-    },
-    "@5qcutt1hdu2hjlgvrja609ighr": {
-      "vars": [],
-      "rows": [
-        0
-      ],
-      "type": {
-        "t": "fn",
-        "params": [
-          {
-            "t": "con",
-            "id": "std.complex",
-            "args": []
-          },
-          {
-            "t": "con",
-            "id": "std.complex",
-            "args": []
-          }
-        ],
-        "ret": {
-          "t": "con",
-          "id": "std.complex",
-          "args": []
-        },
-        "eff": {
-          "effs": [],
-          "tail": 0
-        }
-      },
-      "plain": []
-    },
-    "@vcmh7o2v0ms3pqmkt7lrhrb176": {
-      "vars": [],
-      "rows": [
-        0
-      ],
-      "type": {
-        "t": "fn",
-        "params": [
-          {
-            "t": "con",
-            "id": "std.complex",
-            "args": []
-          },
-          {
-            "t": "con",
-            "id": "std.complex",
-            "args": []
-          }
-        ],
-        "ret": {
-          "t": "con",
-          "id": "std.complex",
-          "args": []
-        },
-        "eff": {
-          "effs": [],
-          "tail": 0
-        }
-      },
-      "plain": []
-    },
-    "@jb907f4tbjb70755s5eempgnb9": {
-      "vars": [],
-      "rows": [
-        0
-      ],
-      "type": {
-        "t": "fn",
-        "params": [
-          {
-            "t": "con",
-            "id": "std.complex",
-            "args": []
-          }
-        ],
-        "ret": {
-          "t": "con",
-          "id": "std.complex",
-          "args": []
-        },
-        "eff": {
-          "effs": [],
-          "tail": 0
-        }
-      },
-      "plain": []
-    },
     "@q8448b3cvu3u37nsqf5k6etio0": {
       "vars": [],
       "rows": [
@@ -60228,6 +62524,47 @@
     "@3sc5994e0iegdsc875vjlqvv5m:6": "re",
     "@3sc5994e0iegdsc875vjlqvv5m:7": "im",
     "@3sc5994e0iegdsc875vjlqvv5m:10": "eᵃ",
+    "@oquhi80b8a59m25n42qkmt292d": "complex sqrt",
+    "@oquhi80b8a59m25n42qkmt292d:2": "z",
+    "@oquhi80b8a59m25n42qkmt292d:6": "re",
+    "@oquhi80b8a59m25n42qkmt292d:7": "im",
+    "@oquhi80b8a59m25n42qkmt292d:10": "r",
+    "@oquhi80b8a59m25n42qkmt292d:13": "im",
+    "@v1c4ldqko02vai8ard6i72ejuf": "complex log",
+    "@v1c4ldqko02vai8ard6i72ejuf:2": "z",
+    "@v1c4ldqko02vai8ard6i72ejuf:6": "re",
+    "@v1c4ldqko02vai8ard6i72ejuf:7": "im",
+    "@qk3j9f89h64jva46f74gieccsi": "complex power",
+    "@qk3j9f89h64jva46f74gieccsi:2": "z",
+    "@qk3j9f89h64jva46f74gieccsi:3": "w",
+    "@qk3j9f89h64jva46f74gieccsi:16": "re₂",
+    "@qk3j9f89h64jva46f74gieccsi:17": "im₂",
+    "@qieak0btgq6c6tcotdksjr7t6f": "complex asin",
+    "@qieak0btgq6c6tcotdksjr7t6f:2": "z",
+    "@qieak0btgq6c6tcotdksjr7t6f:6": "re",
+    "@qieak0btgq6c6tcotdksjr7t6f:7": "im",
+    "@qieak0btgq6c6tcotdksjr7t6f:77": "s",
+    "@qieak0btgq6c6tcotdksjr7t6f:10": "s",
+    "@qieak0btgq6c6tcotdksjr7t6f:13": "iz",
+    "@qieak0btgq6c6tcotdksjr7t6f:16": "up",
+    "@qieak0btgq6c6tcotdksjr7t6f:19": "down",
+    "@qieak0btgq6c6tcotdksjr7t6f:22": "log",
+    "@qieak0btgq6c6tcotdksjr7t6f:26": "p",
+    "@qieak0btgq6c6tcotdksjr7t6f:27": "q",
+    "@f6ohevji4f8quo0263ujl6r5no": "complex acos",
+    "@f6ohevji4f8quo0263ujl6r5no:2": "z",
+    "@f6ohevji4f8quo0263ujl6r5no:6": "re",
+    "@f6ohevji4f8quo0263ujl6r5no:7": "im",
+    "@f6ohevji4f8quo0263ujl6r5no:82": "s",
+    "@f6ohevji4f8quo0263ujl6r5no:10": "s",
+    "@f6ohevji4f8quo0263ujl6r5no:72": "re₂",
+    "@f6ohevji4f8quo0263ujl6r5no:73": "im₂",
+    "@f6ohevji4f8quo0263ujl6r5no:13": "is",
+    "@f6ohevji4f8quo0263ujl6r5no:16": "up",
+    "@f6ohevji4f8quo0263ujl6r5no:19": "down",
+    "@f6ohevji4f8quo0263ujl6r5no:22": "log",
+    "@f6ohevji4f8quo0263ujl6r5no:26": "p",
+    "@f6ohevji4f8quo0263ujl6r5no:27": "q",
     "@tu0hmqf815cglqlbjfk0np3l0f": "show complex",
     "@tu0hmqf815cglqlbjfk0np3l0f:2": "z",
     "@tu0hmqf815cglqlbjfk0np3l0f:6": "re",
@@ -61440,6 +63777,11 @@
     "@pd38c7vaapt5d63e9l1q4a08s6": "The complex number size away from 0 at this angle: size·(cos angle + i sin angle).",
     "@itrutcjuml4ip1t1nbb8dkfhrh": "z ÷ w for complex numbers; no answer when w is 0.",
     "@3sc5994e0iegdsc875vjlqvv5m": "e to the z: eᵃ(cos b + i sin b) for a + bi, Euler's formula (textbook). complex exp(i · π) is −1.",
+    "@oquhi80b8a59m25n42qkmt292d": "√z for a complex number, the root with a real part of 0 or more: complex sqrt(−4) is 2i. Float64's sqrt has no answer below 0; this one always has.",
+    "@v1c4ldqko02vai8ard6i72ejuf": "log z for a complex number: log|z| + i·(its angle, between −π and π). complex log(−1) is iπ. No answer at 0.",
+    "@qk3j9f89h64jva46f74gieccsi": "z to the power w, e^(w · log z), the principal value: complex power(−8, 1/3) is 1 + 1.732i. 0 to a power with a real part above 0 is 0; to any other, no answer.",
+    "@qieak0btgq6c6tcotdksjr7t6f": "asin z for a complex number, the principal value: complex asin(2) is π/2 + 1.317i. Float64's asin has no answer outside −1 to 1; this one always has.",
+    "@f6ohevji4f8quo0263ujl6r5no": "acos z for a complex number, the principal value: complex acos(2) is −1.317i. Float64's acos has no answer outside −1 to 1; this one always has.",
     "@tu0hmqf815cglqlbjfk0np3l0f": "A complex number as 3 + 4i or 3 − 4i.",
     "@erjqmni7ivj8ajc7tfnnhvlki8": "What + is at Complex. Not offered on its own: + is.",
     "@5qcutt1hdu2hjlgvrja609ighr": "What − is at Complex. Not offered on its own: − is.",
@@ -61558,6 +63900,11 @@
     "@pd38c7vaapt5d63e9l1q4a08s6",
     "@itrutcjuml4ip1t1nbb8dkfhrh",
     "@3sc5994e0iegdsc875vjlqvv5m",
+    "@oquhi80b8a59m25n42qkmt292d",
+    "@v1c4ldqko02vai8ard6i72ejuf",
+    "@qk3j9f89h64jva46f74gieccsi",
+    "@qieak0btgq6c6tcotdksjr7t6f",
+    "@f6ohevji4f8quo0263ujl6r5no",
     "@tu0hmqf815cglqlbjfk0np3l0f",
     "@ilortmfvkbjt9bs8q02goksirf",
     "@lpgbkpl5cvmfold4ma5a9k9on4",
