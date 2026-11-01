@@ -210,6 +210,7 @@ Proposed in [STABLE-REFERENCES.md](../design/data/STABLE-REFERENCES.md) (BACKLOG
 | Two-way transformations, invertible printers and parsers | Influence | Lenses (Foster, Greenwald, Moore, Pierce, Schmitt, TOPLAS 2007), Boomerang (Bohannon et al., POPL 2008), "Invertible Syntax Descriptions" (Rendel and Ostermann, 2010). |
 | Relational arithmetic on binary numbers | Influence | Kiselyov, Byrd, Friedman and Shan, "Pure, declarative, and constructive arithmetic relations" (FLOPS 2008). NUMBERS.md. |
 | `hence` (a consequence that guides solving without being a constraint) | Our own | Not known to us elsewhere. |
+| A function's inputs are one tuple and its results another, so `f(x, y)` is `f(p)` and a relation is the same box with no favourite direction (design, PORTS-2026-11-01.md) | Ersagun's idea / Prior art | Ersagun asked for one view of inputs, results and relations (2026-11-01). Done before: Standard ML, where every function takes one argument, maybe a tuple (Milner, Tofte, Harper and MacQueen, *The Definition of Standard ML*); multiple values in Go, Lua and Common Lisp, and WebAssembly's multi-value. Considered: Swift's tuple splat, removed by SE-0029 and SE-0110 as ambiguous. Influence: the category of relations and its string diagrams. A list port drawn as growing sockets: prior art Blender's multi-input sockets. |
 
 ## Derivatives
 
