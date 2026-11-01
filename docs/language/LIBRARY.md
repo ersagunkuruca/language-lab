@@ -173,6 +173,8 @@ Text is a string of characters. Positions count from 0.
 - **not after** : `(Text, Text) -> Bool`. Text a ≤ b: a comes before b or is b.
 - **comes after** : `(Text, Text) -> Bool`. Text a > b: b comes before a.
 - **not before** : `(Text, Text) -> Bool`. Text a ≥ b: b comes before a or is a.
+- **starts with** : `(Text, Text) -> Bool`. Whether the text begins with this: starts with("# notes", "#") is true. Every text starts with "".
+- **ends with** : `(Text, Text) -> Bool`. Whether the text ends with this: ends with("page.md", ".md") is true. Every text ends with "".
 
 ## Lists and pairs
 
