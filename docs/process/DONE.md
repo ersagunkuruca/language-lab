@@ -26,7 +26,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| E165a | Make it a function (and Make it a definition) on nodes with two to eight values going out returns them as one tuple (L128a's `tuple`), each read where it was by its place (`r = first(results)`); no `Part results` type is made any more (still made past eight) | #PR |
+| E165a | Make it a function (and Make it a definition) on nodes with two to eight values going out returns them as one tuple (L128a's `tuple`), each read where it was by its place (`r = first(results)`); no `Part results` type is made any more (still made past eight) | #929 |
 | E168b (click) | A double-click on a definition call's filled input turns the call around at that input; a double-click on what a turned call gives turns it back. The menu items stay (E168) | #928 |
 | E168b (look) | A call of a definition with two or more inputs names its ports, as its solve and an implementation's node already did: `fall` shows distance, speed, gravity, time; `if` shows condition, then, else. So a call and the same box turned around (E168) read alike. Operators' glyphs, one-input calls and calls with a list on a port go without | #927 |
 | E167a | A multiple selection's frame (E171) shows ports: one on its left for each value wired in from outside, one on its right for each value wired out, which are the inputs and results Make it a function would give (PORTS-2026-11-01.md §5) | #924 |
