@@ -1,0 +1,5 @@
+# Program files merge id by id (SHARING.md §6, ters/src/merge-files.ts).
+# git uses its own line merge until a clone says what `ters` runs:
+#   git config merge.ters.driver "node ters/cli/lab.ts merge %O %A %B %P"
+ters/examples/**/*.json merge=ters
+ters/library/*.json merge=ters
