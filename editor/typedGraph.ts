@@ -255,7 +255,7 @@ export function typedGraph(code: Code, pres: Presentation, info: Info | null, de
         const it = scene.items.get(k);
         if (it && fresh.has(k) && Math.hypot(p.x - it.auto.x, p.y - it.auto.y) < 600) it.auto = p;
       }
-    if (fresh.size) clearFreshFrames(scene, shown, hooks.at, fresh);
+    if (fresh.size) clearFresh(scene, shown, hooks.at, fresh);
   }
   // A frame just unfolded opens where its box was, over whatever it now
   // covers: nothing else moves (Ersagun 2026-11-01, replacing I57's
@@ -1482,33 +1482,48 @@ function arrangeInside(scene: Scene, at: Record<Id, Pos>, folded: Set<Id> | unde
 
 // Tidy everything lays it all out afresh (arrange), the same every time;
 // tidying some only spaces those out from where they are.
-// A frame whose nodes are all new (a group just made a function) is spaced
-// out as one: tidy moves its nodes one at a time, each a short way, so the
-// frame drawn around them could still cover what stays. It moves down
-// past whatever it covers, nothing inside it moving apart (BACKLOG I126).
-function clearFreshFrames(scene: Scene, shown: (at: Record<Id, Pos>) => Scene, at: Record<Id, Pos>, fresh: Set<Id>) {
-  const GAP = 24;
-  for (let round = 0; round < 8; round++) {
-    const { nodes, frames } = asLayout(shown(at), at);
+// What's new after an edit gets a free place (BACKLOG I126): tidy moves
+// new nodes one at a time, each only a short way, so after Make it a
+// function the new call, its reads and the function's frame could sit on
+// what stays. Each new unit (a frame whose nodes are all new, as one
+// block, or a new node of its own) that still covers something is moved
+// up or down to the nearest place that covers nothing, or else below
+// everything. What stays doesn't move.
+function clearFresh(scene: Scene, shown: (at: Record<Id, Pos>) => Scene, at: Record<Id, Pos>, fresh: Set<Id>) {
+  const GAP = 14, STEP = 12;
+  const contents = (id: Id): Id[] => (scene.items.has(id) ? [id] : [...expand(scene, [id])]);
+  const isFresh = (id: Id) => { const ks = contents(id); return ks.length > 0 && ks.every((k) => fresh.has(k)); };
+  const move = (id: Id, dy: number) => { for (const k of contents(id)) { const it = scene.items.get(k)!; it.auto = { x: it.auto.x, y: it.auto.y + dy }; } };
+  const view = () => {
+    const v = shown(at), { nodes, frames } = asLayout(v, at);
     const parent = new Map(frames.map((f) => [f.id, f.parent]));
-    const ups = (id: Id | null | undefined) => { const out: Id[] = []; for (let p = id; p; p = parent.get(p) ?? null) out.push(p); return out; };
-    const boxes = frameBoxes(nodes, frames);
-    const inside = new Map(frames.map((f) => [f.id, nodes.filter((n) => ups(n.frame).includes(f.id))]));
-    const own = frames.filter((f) => { const ns = inside.get(f.id)!; return ns.length && ns.every((n) => fresh.has(n.id)) && !(f.parent && inside.get(f.parent)!.every((n) => fresh.has(n.id))); });
-    let moved = false;
-    for (const f of own) {
-      const b = boxes.get(f.id)!, mine = new Set(inside.get(f.id)!.map((n) => n.id)), around = ups(f.parent);
-      const hit = (o: Box) => o.x < b.x + b.w && b.x < o.x + o.w && o.y < b.y + b.h && b.y < o.y + o.h;
-      const others: Box[] = [
-        ...nodes.filter((n) => !mine.has(n.id)),
-        ...frames.filter((g) => g.id !== f.id && !around.includes(g.id) && !ups(g.parent).includes(f.id)).map((g) => boxes.get(g.id)!),
-      ].filter(hit);
-      if (!others.length) continue;
-      const dy = Math.max(...others.map((o) => o.y + o.h)) + GAP - b.y;
-      for (const id of mine) { const it = scene.items.get(id)!; it.auto = { x: it.auto.x, y: it.auto.y + dy }; }
-      moved = true;
-    }
-    if (!moved) return;
+    const ups = (f: Id | null | undefined) => { const out: Id[] = []; for (let p = f; p; p = parent.get(p) ?? null) out.push(p); return out; };
+    return { nodes, frames, ups, boxes: frameBoxes(nodes, frames) };
+  };
+  // The units, outermost first: a new frame inside a new frame goes with it.
+  const v0 = view();
+  const unitFrames = v0.frames.filter((f) => isFresh(f.id) && !(f.parent && isFresh(f.parent))).map((f) => f.id);
+  const inUnit = (n: TNode) => v0.ups(n.frame).some((f) => unitFrames.includes(f));
+  const units = [...unitFrames, ...v0.nodes.filter((n) => isFresh(n.id) && !inUnit(n)).sort((p, q) => p.y - q.y).map((n) => n.id)];
+  const pending = new Set(units);
+  for (const u of units) {
+    pending.delete(u);
+    const { nodes, frames, ups, boxes } = view();
+    const own = nodes.find((n) => n.id === u);
+    const b = own ? { x: own.x, y: own.y, w: own.w, h: own.h } : boxes.get(u);
+    if (!b) continue;
+    const around = ups(own ? own.frame : frames.find((f) => f.id === u)?.parent);
+    const within = (n: TNode) => !own && ups(n.frame).includes(u);
+    const skip = (id: Id, fr: Id | null | undefined) => pending.has(id) || ups(fr).some((f) => pending.has(f));
+    const others: Box[] = [
+      ...nodes.filter((n) => n.id !== u && !within(n) && !skip(n.id, n.frame)),
+      ...frames.filter((g) => g.id !== u && !around.includes(g.id) && !ups(g.parent).includes(u) && !skip(g.id, g.parent)).map((g) => boxes.get(g.id)!),
+    ];
+    const hits = (dy: number) => others.some((o) => o.x < b.x + b.w + GAP / 2 && b.x - GAP / 2 < o.x + o.w && o.y < b.y + dy + b.h + GAP / 2 && b.y + dy - GAP / 2 < o.y + o.h);
+    if (!hits(0)) continue;
+    let dy: number | null = null;
+    for (let i = 1; i <= 40 && dy === null; i++) for (const d of [i * STEP, -i * STEP]) if (dy === null && !hits(d)) dy = d;
+    move(u, dy ?? Math.max(...others.map((o) => o.y + o.h)) + GAP - b.y);
   }
 }
 
