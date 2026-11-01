@@ -218,6 +218,65 @@ patch theory, as in Darcs and Pijul, or a CRDT. That's what live
 collaboration in one program would need, and it can wait until we want
 that.
 
+## 7. "Same as the library's": showing a match, never merging (Ersagun, 2026-11-01)
+
+*"If I create the square magnitude function, and it turns out the prelude
+or the set of libraries I am using already have the same function with the
+same hash, what are we gonna do then, are we gonna show that to the user
+as well (just showing not merging or collapsing, because it might be that
+the user edits it to be a different thing in the end)?"*
+
+**What happens today.** Nothing the user sees. The editor already works
+out the open definition's hash (the "Meaning hash" in the Files panel,
+editor/main.ts `semanticHash`) but never looks it up in the library. The
+only place a match is acted on is `adopt` (ters/src/lang/modules.ts),
+which `ters/library/build.ts` runs over the shipped examples when the
+library is rebuilt: an example's own copy of, say, `map` is replaced by
+the prelude's, silently. That's a merge, and it only ever touches the
+shipped examples, never a program being edited.
+
+**The design.** Show, don't merge:
+
+- After each edit the editor hashes the user's drafts (memoized, so only
+  the changed definition and what calls it are rehashed) and looks each
+  hash up in an index of the library the program uses: the prelude, std
+  and every module it refers to.
+- On a match, the definition's header gets a quiet line: *"Same as
+  `magnitude` in vectors"*, with the name as a link that opens the
+  library's definition (read-only, as published nodes are). Names don't
+  enter the hash, so the user's `sqMag` matches the library's `normSq`;
+  the line shows both names.
+- Nothing else changes. The draft keeps its own id, name, comments and
+  layout, and every call keeps pointing at it. Edit it into something else
+  and its hash moves, so the line goes away on the same edit; edit it back
+  and the line comes back.
+- The line can offer one optional button, *"Use the library's"*, which
+  runs `adopt` for that one definition (its calls move to the library's,
+  the user's name stays as a local name, as §5 says). Only on a click;
+  undo brings the draft back.
+- The same index finds a match **inside the program**: two drafts with one
+  hash get *"Same as your `foo`"*, which is how a user notices they wrote
+  something twice.
+- With versions (§1), a match against an older kept version (§4b) says so:
+  *"Same as `parse` in json, version 2 (json is at version 4 now)"*.
+
+**What it won't catch.** A hash match means the same code up to names, not
+the same function. `x·x + y·y` and `y·y + x·x`, or a different order of
+arguments, are different hashes. So the line is rare and always right;
+finding "does the same thing, written differently" is a different and much
+harder question (laws, tests, T7), and is not this.
+
+For Ersagun's square magnitude in the Mandelbrot demo: the vectors module
+has `magnitude` (√(v · v)) but no squared one, and the prelude's `modulus`
+takes the root too, so today his new function would match nothing and no
+line would show.
+
+**Prior art.** Unison: adding a definition whose hash is already in the
+codebase reports it as another name for the existing one ("also named").
+Unison then has just one definition under two names; we deliberately keep
+the user's draft separate until they choose, because a draft is still
+being written and may stop matching.
+
 ## Steps (BACKLOG)
 
 | id | step | size |
@@ -229,6 +288,8 @@ that.
 | L113 | Structural diff and three-way merge driver for program files, by id, registered in `.gitattributes` | M |
 | L115 | A project store: every published node the project has used, kept by hash with the project; runs when a source is gone; downgrade moves a ref back to any kept version | M |
 | L114 | Lineage logs: signed, append-only, "current" and "broken" entries; fetching code by hash from any host; a browser over logs (was L68) | L |
+| L126 | `sameAs`: drafts' hashes looked up in the library and the program (§7) | S |
+| E161 | The editor's "Same as the library's" line, showing only (§7) | M |
 
 L17's data-type migrations stay as L17. L113 can go first: it needs
 nothing else and helps today.
@@ -245,4 +306,5 @@ nothing else and helps today.
 | Compatibility checked from types, not declared by version numbers | Influence | Elm's `elm diff` and enforced semantic versioning (Evan Czaplicki) |
 | History as commuting patches | Prior art | [Darcs](https://darcs.net) (David Roundy), [Pijul](https://pijul.org) (Pierre-Étienne Meunier, Florent Becker); CRDTs (Shapiro et al. 2011), [Automerge](https://automerge.org) (Martin Kleppmann) |
 | Diffs of trees instead of lines | Prior art | GumTree (Falleri et al., ASE 2014), [Difftastic](https://difftastic.wilfred.me.uk) (Wilfred Hughes) |
+| Reporting a new definition whose hash already exists as another name for it (we show it, but keep the draft separate) | Prior art | [Unison](https://www.unison-lang.org)'s codebase manager |
 | A stable lineage id with a version hash under it; names pinned per program and offered on upgrade | Ersagun's idea | The thread above, 2026-10-31 |

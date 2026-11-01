@@ -55,6 +55,7 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| E161 | **"Same as the library's" line** (SHARING.md §7): when a draft's hash equals a library definition's, or another draft's, its header shows a quiet "Same as `magnitude` in vectors" linking to it; never merges; goes away on the edit that stops the match. Optional "Use the library's" button runs `adopt` on that one definition, on click only. Credit Unison (prior art) where the line is explained | Ersagun 2026-11-01 | P2 | M | after L126 |
 | I29 | 66 of 154 definitions open with an empty Run. Pictures run at their pixel (#578); left: Mandelbrot's helpers (called through a fold), derivatives, page parts, newton. **Counted 2026-10-30 (editor lane):** 57 still empty in converter, dice, calculus, Mandelbrot and pedal. Two causes, neither a quick fix: (a) the first call's inputs are functions (`newton(f, f′, x)`, `field(…, view, …)`), **done in #703**: a port's box takes a definition's name as its function, so newton's helpers now open filled; (b) **views done in #761** (empty Runs in converter, dice, Tumble, Pig 47 → 28); **handlers done in #845**: each handler runs once in the dry run as if its event came (Tumble 24 → 17 empty, Pig 4 → 1); left: what runs only in a later state (a Tumble move in progress). Was: the call is inside a page part that runs later (`property("value", view(read(q)))`, a handler, an audio block), which main's trace never enters. Running main in a dry world (files kept in memory, no network) gets past converter's file read but fills none of these | QA-2026-10-28 L4 | P2 | M | step 1 done |
 
 ### Speed of editing
@@ -185,6 +186,7 @@ all of these.
 | L70 | Design note: grammars written once as printers and parsed by running them backwards; calc's parser first | LANGUAGE-NEEDS §8 | P3 | M | |
 | L72 | Grammars and their machines (Chomsky hierarchy) as ordinary data, parsing and printing one relation run both ways; extends L70 | Ersagun 2026-10-24 | P3 | L | low priority |
 | L17 | Data-type upgrades (migrations when constructors and fields move); path namespaces are a name layer (SHARING.md §5) | ROADMAP 5 | P3 | L | |
+| L126 | `sameAs(code, lib)` in ters (beside `adopt`, modules.ts): hash every draft (memoized) and look it up in a hash → definition index of the prelude, std and the modules the program uses, plus the program's other drafts; for E161, and for `lab check` and the MCP server to report the same (SHARING.md §7) | Ersagun 2026-11-01 | P2 | S | |
 | L113 | Structural diff and three-way merge driver for program files, by id, in `.gitattributes`; can go first | SHARING.md §6 | P3 | M | |
 | L109 | Hashes carry a recipe version; std published with lineages and versions, so a std change adds versions and keeps the old (no more #709-style republishing) | SHARING.md §3 | P3 | M | |
 | L110 | Publishing keeps the draft id as the lineage id; refs hold lineage and exact version; `replaces` derived from the lineage | SHARING.md §1, §2 | P3 | M | after L109 |
