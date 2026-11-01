@@ -5,7 +5,7 @@ import { root } from "../src/io.ts";
 import { subtree, type NodeOf } from "../src/model.ts";
 import { loadProgram } from "../src/lang/load.ts";
 import { renderLet } from "../src/render/letseq.ts";
-import { infer, makeFunction } from "../../editor/typed.ts";
+import { definitionFrom, infer, liftToDefinition, makeFunction } from "../../editor/typed.ts";
 
 // A group made into a function called where it was (BACKLOG E146): physics
 // fall's drop = 0.5 · gravity · time · time, its three · grouped, becomes
@@ -46,4 +46,47 @@ test("a group of several values out gives them back as a record", () => {
   assert.match(text, /part = \(saturation, hue\) => ‹part results›\(1 \+ 2 · saturation · cos\(6\.283185307179586 · \(hue − 0\)\), 1 \+ 2 · saturation · cos\(6\.283185307179586 · \(hue − 0\.3333333333333333\)\)\)/);
   assert.match(text, /results = part\(saturation, hue\)\n\s+r₁ = r₂\(results\)\n\s+g₁ = g₂\(results\)/);
   assert.deepEqual(infer(r.code, r.names).errors, []);
+});
+
+// Make it a definition (BACKLOG E164): physics fall's drop, made a
+// function, then that function lifted to a definition of its own in the
+// side menu. It uses nothing from around it, so where it was is its name.
+test("a group made a definition is in the side menu and called where it was", () => {
+  const p = loadProgram(join(root, "examples", "physics"));
+  const { code } = p, names = p.pres.names, fall = p.named("fall");
+  const info = infer(code, names);
+  const muls = subtree(code, fall).map((id) => code.nodes[id]).filter((n): n is NodeOf<"call"> => n.kind === "call" && names[(code.nodes[n.fn] as NodeOf<"ref">).target] === "multiply");
+  const drop = muls.filter((m) => m.args.some((a) => muls.some((x) => x.id === a)) || muls.some((x) => x.args.includes(m.id)));
+  const r = definitionFrom(code, names, info, fall, drop.map((m) => m.id));
+  assert.ok(r.ok, !r.ok ? r.reason : "");
+  if (!r.ok) return;
+  assert.equal(r.code.defs.length, code.defs.length + 1);
+  assert.equal(r.code.defs[r.code.defs.indexOf(fall) + 1], r.def);
+  assert.equal(r.names[r.def!], "part");
+  const text = renderLet(r.code, { ...p.pres, names: r.names }, fall);
+  assert.match(text, /drop = part\(gravity, time\)/);
+  assert.match(renderLet(r.code, { ...p.pres, names: r.names }, r.def!), /^part\(gravity, time\):/);
+  assert.deepEqual(infer(r.code, r.names).errors, []);
+});
+
+// A function that uses a value from around it takes it as its first input
+// (lambda lifting): a function inside a definition, (x) => x + k with k a
+// variable of the definition, becomes k_x = (k, x) => x + k, and where it
+// was, (x) => part(k, x).
+test("a function using what's around it takes that first when lifted", () => {
+  const p = loadProgram(join(root, "examples", "mandelbrot"));
+  const { code } = p, names = p.pres.names;
+  const info = infer(code, names);
+  // Every function inside a definition that isn't the definition itself.
+  let lifted = 0;
+  for (const d of code.defs.filter((x) => code.nodes[x]?.kind === "def")) {
+    const body = (code.nodes[d] as NodeOf<"def">).body;
+    for (const l of subtree(code, d).filter((x) => x !== body && code.nodes[x].kind === "lambda")) {
+      const r = liftToDefinition(code, names, info, d, l);
+      if (!r.ok) continue;
+      lifted++;
+      assert.deepEqual(infer(r.code, r.names).errors, [], `${names[d]}: ${r.note}`);
+    }
+  }
+  assert.ok(lifted > 0);
 });
