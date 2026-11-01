@@ -13,7 +13,7 @@ import { infer } from "../src/lang/infer.ts";
 import { base, baseNames, checkOptions, loadProgram } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { oneHolder } from "../src/lang/one-holder.ts";
-import { MAP, PAIR_V, S, SHOW_ANY } from "../src/lang/std.ts";
+import { MAP, PAIR_V, S, SET_TYPE, SHOW_ANY } from "../src/lang/std.ts";
 import type { Code, Id } from "../src/model.ts";
 import type { Info } from "../src/lang/infer.ts";
 
@@ -76,4 +76,17 @@ test("the examples that keep one version of each map pass: routes, ledger, chapt
     const r = check(p.code, info, p.named("main"), p.pres.names);
     assert.deepEqual(r.problems, [], name);
   }
+});
+
+// routes' sets too: its `near` walks the same fold twice (a match's
+// scrutinee, and its otherwise again), each walk a set of its own. The
+// names an arm binds are new each time it runs, so what the first walk
+// used up under them doesn't count against the second.
+test("routes' sets have one holder, a fold walked twice included", () => {
+  const p = loadProgram(join(import.meta.dirname, "../examples", "routes"));
+  const info = infer(p.code, p.pres.names, undefined, p.options);
+  const setRow = LIBRARY.reps.find((r) => r.name === "hash table" && r.of === SET_TYPE)!;
+  const setChanges = new Map([[L("add item"), 0], [L("remove item"), 0], [L("set union"), 0]]);
+  const r = oneHolder(p.code, info, p.named("main"), new Set([SET_TYPE]), new Set(Object.keys(setRow.impl)), setChanges, p.pres.names);
+  assert.deepEqual(r.problems, []);
 });
