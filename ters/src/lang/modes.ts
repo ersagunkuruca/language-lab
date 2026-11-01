@@ -32,7 +32,7 @@
 // Diverge only when it may not end, and an error when it's stuck.
 // test/modes.test.ts compares what it says with what relate.ts does.
 
-import type { Code, Id, NodeOf } from "../model.ts";
+import type { Code, Id, Node, NodeOf } from "../model.ts";
 import { children, ownerOfTypeParts, subtree } from "../model.ts";
 import { NUMERIC } from "./equations.ts";
 import { planSolve, type SolvePlan } from "./solve.ts";
@@ -160,6 +160,16 @@ interface St {
 const strict = (s: Size | undefined): Size => new Map([...(s ?? new Map()).keys()].map((p) => [p, true]));
 const same = (s: Size | undefined): Size => new Map(s ?? []);
 
+// A program made from another by changing a few nodes, and those nodes:
+// its analyzer starts from the other's slots (BACKLOG E133b).
+const derived = new WeakMap<Code, { base: Code; changed: Set<Id> }>();
+export function derivedFrom(code: Code, base: Code, changed: Iterable<Id>) { derived.set(code, { base, changed: new Set(changed) }); }
+const slotsOf = new WeakMap<Code, { parent: Map<Id, Id>; seen: Set<Id> }>();
+function baseSlots(code: Code) {
+  if (!slotsOf.has(code)) analyzer(code);
+  return slotsOf.get(code)!;
+}
+
 // plansOnly: for relate.ts, which needs the schedules and not whether
 // they end (the size-change check, run again for each mode planned while
 // the search runs, would be most of its time).
@@ -171,28 +181,42 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
   // Slots: refs to a binder are the binder, a let's parameter is its
   // argument, and a let is its body.
   const parent = new Map<Id, Id>();
-  const find = (id: Id): Id => { let r = id; while (parent.has(r)) r = parent.get(r)!; return r; };
+  // With path compression: a long chain of lets and refs is walked once.
+  const find = (id: Id): Id => {
+    let r = id;
+    while (parent.has(r)) r = parent.get(r)!;
+    for (let x = id; x !== r;) { const up = parent.get(x)!; parent.set(x, r); x = up; }
+    return r;
+  };
   const union = (a: Id, b: Id) => { const x = find(a), y = find(b); if (x !== y) parent.set(x, y); };
   const isLet = (n: NodeOf<"call">) => nodes[n.fn]?.kind === "lambda" && (nodes[n.fn] as NodeOf<"lambda">).params.length === n.args.length;
   // Nodes can be added while a program runs (a derivative is a new
   // lambda), so the slots are brought up to date when one is asked for.
   const seen = new Set<Id>();
-  const refresh = () => {
-    for (const n of Object.values(nodes)) {
-      if (seen.has(n.id)) continue;
-      seen.add(n.id);
-      if (n.kind === "ref" && nodes[n.target]?.kind === "binder") union(n.id, n.target);
-      if (n.kind === "call" && isLet(n)) {
-        const lam = nodes[n.fn] as NodeOf<"lambda">;
-        lam.params.forEach((p, i) => union(p, n.args[i]));
-        union(n.id, lam.body);
-      }
+  const scan = (n: Node) => {
+    seen.add(n.id);
+    if (n.kind === "ref" && nodes[n.target]?.kind === "binder") union(n.id, n.target);
+    if (n.kind === "call" && isLet(n)) {
+      const lam = nodes[n.fn] as NodeOf<"lambda">;
+      lam.params.forEach((p, i) => union(p, n.args[i]));
+      union(n.id, lam.body);
     }
   };
-  refresh();
+  // A program that is another with a few nodes changed (a palette's
+  // filling, BACKLOG E133b) starts from that one's slots and scans only
+  // what changed: the scan of every node was most of each offer's plan.
+  const from = derived.get(code), base = from && baseSlots(from.base);
+  const refresh = base
+    ? () => { for (const n of Object.values(nodes)) if (!seen.has(n.id) && (!base.seen.has(n.id) || from!.changed.has(n.id))) scan(n); }
+    : () => { for (const n of Object.values(nodes)) if (!seen.has(n.id)) scan(n); };
+  if (base) {
+    for (const [k, v] of base.parent) parent.set(k, v);
+    for (const id of from!.changed) if (nodes[id]) scan(nodes[id]);
+  } else refresh();
+  if (!from && !slotsOf.has(code)) slotsOf.set(code, { parent: new Map(parent), seen });
   const slot = find;
   // The plans of a lambda made after the analyzer was.
-  const fresh = (lam: Id) => { if (!seen.has(lam)) refresh(); };
+  const fresh = (lam: Id) => { if (!seen.has(lam) && (!base?.seen.has(lam) || from!.changed.has(lam))) refresh(); };
 
   // Binders a lambda uses from outside itself.
   const freeOf = new Map<Id, Id[]>();
