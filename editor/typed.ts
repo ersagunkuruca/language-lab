@@ -1275,12 +1275,17 @@ export function makeFunction(code: Code, names: Names, info: Info, defId: Id, me
   const rest = roots.includes(at) ? outs[roots.indexOf(at)] : at;
   if (one) next.nodes[lam] = { id: lam, kind: "lambda", params, body: roots[0] };
   else if (tuple) {
-    // The tuple: (drift, drop), each read where it was by its place.
+    // The tuple: (drift, drop), each read where it was by its place, and
+    // the function's result ports named for where each went (L128b), so
+    // its frame has an output each and a read shows as results.drift.
     const n = roots.length, nodes = next.nodes;
     const mk = freshId(), cref = freshId();
     nodes[cref] = { id: cref, kind: "ref", target: tupleVariant(n) };
     nodes[mk] = { id: mk, kind: "call", fn: cref, args: roots };
-    nodes[lam] = { id: lam, kind: "lambda", params, body: mk };
+    const outNames = roots.map((r, i) => { const at_ = parentOf(code, r); const l = at_ && code.nodes[at_.parent]; const f = l?.kind === "call" && code.nodes[l.fn]?.kind === "lambda" ? (code.nodes[l.fn] as NodeOf<"lambda">).params[at_!.index ?? 0] : undefined; return f && names[f] && names[f] !== "_" ? names[f] : `value ${i + 1}`; });
+    const results = roots.map(() => freshId());
+    results.forEach((b, i) => { nodes[b] = { id: b, kind: "binder" }; nn[b] = outNames[i]; });
+    nodes[lam] = { id: lam, kind: "lambda", params, body: mk, results };
     roots.forEach((_, i) => {
       const fr = freshId(), pr = freshId();
       nodes[fr] = { id: fr, kind: "ref", target: tuplePart(n, i) };

@@ -35,7 +35,7 @@
 import type { Code, Id, NodeOf } from "../ters/src/model.ts";
 import type { Presentation } from "../ters/src/presentation.ts";
 import type { Info } from "../ters/src/lang/infer.ts";
-import { ASSOCIATIVE, chainOperands, CONS, NIL, S, SIGS, TRUE, FALSE } from "../ters/src/lang/std.ts";
+import { ASSOCIATIVE, chainOperands, CONS, NIL, S, SIGS, TRUE, FALSE, TUPLE_MAX, tuplePart, tupleVariant } from "../ters/src/lang/std.ts";
 import { CHOICE, DIVERGE, showIn, showType, type Type } from "../ters/src/lang/types.ts";
 import { connectDrag, follow, infiniteCanvas, moveDrag, s, svgPoint, type Canvas, type Pos } from "./canvas.ts";
 import { litLabel, sigType } from "./typed.ts";
@@ -485,7 +485,10 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
         for (let b = node(body); b?.kind === "lambda"; b = node(body)) { params.push(...b.params); body = b.body; }
         // A function of nothing is an action, run when what it's given to
         // asks: first(queens(8), else nil) in the text.
-        return region(id, params.length ? paramsTitle(params.map(name)) : "action", params, body, "lam");
+        // A function that names its results (L128b) gives each part to
+        // its own port on the right edge, a tuple(…) of them not drawn.
+        const rs = n.results ?? [];
+        return region(id, params.length ? paramsTitle(params.map(name)) : "action", params, body, "lam", rs, tupleParts(body, rs.length));
       }
       case "match": case "fold": return cases(id, n);
       case "call": {
@@ -540,6 +543,36 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   };
 
   // A call: arguments stacked on the left, wired into the node's inputs.
+  // A part of a tuple read by position, named as the function that gave
+  // it named that result (L128b): first(r) reads .drift. What it's read
+  // from is followed through lets and definitions to that function.
+  let letValues: Map<Id, Id> | null = null;
+  const valueOf = (b: Id): Id | undefined => {
+    if (!letValues) {
+      letValues = new Map();
+      for (const c of Object.values(code.nodes)) if (c.kind === "call") { const l = code.nodes[c.fn]; if (l?.kind === "lambda") l.params.forEach((p, i) => c.args[i] && letValues!.set(p, c.args[i])); }
+    }
+    return letValues.get(b);
+  };
+  const follow_ = (e: Id | undefined): NodeOf<"lambda"> | NodeOf<"call"> | null => {
+    for (let hops = 0; e && hops < 8; hops++) {
+      const x = node(e);
+      if (x?.kind === "lambda" || x?.kind === "call") return x;
+      if (x?.kind !== "ref") return null;
+      const t = node(x.target);
+      e = t?.kind === "def" ? t.body ?? undefined : t?.kind === "binder" ? valueOf(x.target) : undefined;
+    }
+    return null;
+  };
+  const partName = (field: Id, from: Id): string | null => {
+    let k = -1, size = 0;
+    for (let m = 2; m <= TUPLE_MAX && k < 0; m++) for (let i = 0; i < m; i++) if (tuplePart(m, i) === field) { k = i; size = m; }
+    if (k < 0) return null;
+    const c = follow_(from);
+    const fn = c?.kind === "call" ? follow_(c.fn) : null;
+    const rs = fn?.kind === "lambda" ? fn.results : undefined;
+    return rs?.length === size && names[rs[k]] ? names[rs[k]] : null;
+  };
   const call = (id: Id, n: NodeOf<"call">): Sub => {
     const f = node(n.fn);
     const nota = f.kind === "ref" ? pres.style.notation[f.target] : undefined;
@@ -550,7 +583,8 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     // per operation, named (BACKLOG E152): not as a call of its record.
     const ops = implementationOps(code, n.fn);
     const at = ops ? /^(\S+) (.+)$/.exec(typeOf(id)) : null;
-    const label = list ? "list" : at ? `${at[1]} at ${at[2]}` : f.kind === "ref" ? (nota?.glyph?.trim() || `${field ? "." : ""}${name(f.target)}`) : "apply";
+    const port = field && n.args.length === 1 ? partName(f.target, n.args[0]) : null;
+    const label = list ? "list" : at ? `${at[1]} at ${at[2]}` : port ? `.${port}` : f.kind === "ref" ? (nota?.glyph?.trim() || `${field ? "." : ""}${name(f.target)}`) : "apply";
     // a ++ b ++ c is one ++ node with three inputs, as the text writes it;
     // an inner ++ with a dot on it stays its own node.
     const inputs = list ?? chainOperands(code, id, (a) => !!dotOf(a)) ?? (f.kind === "ref" ? n.args : [n.fn, ...n.args]);
@@ -624,13 +658,15 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   const portsW = (binders: Id[]) => Math.max(0, ...binders.map((b) => tw(name(b), 6.8) + 18));
   // A definition's results (RESULTS.md) are ports on its right edge, one
   // output each, as a network's outer ports were before #41.
-  const region = (id: Id, title: string, binders: Id[], body: Id, cls: string, results: Id[] = []): Sub => {
+  // parts: the body's tuple(…) arguments, one per result, each laid out
+  // and wired to its result port (a lambda's named results, L128b).
+  const region = (id: Id, title: string, binders: Id[], body: Id, cls: string, results: Id[] = [], parts: Id[] | null = null): Sub => {
     const outer = frame;
     frame = id;
-    const pw = portsW(binders), ph = Math.max(binders.length, results.length && results.length + 1) * 22;
+    const pw = portsW(binders), ph = Math.max(binders.length, results.length && results.length + (parts ? 0 : 1)) * 22;
     binders.forEach((b, i) => sources.set(b, { frame: id, port: i }));
     results.forEach((b, i) => sources.set(b, { frame: id, port: i, right: true }));
-    const b = lay(body);
+    const b = parts ? column(parts, (p, i) => wires.push({ from: p.out, to: { frame: id, port: i, right: true }, cls: "", edge: parts[i], flow: true })) : lay(body);
     frame = outer;
     const bx = Math.max(pw + 14, PAD), innerH = Math.max(ph + 8, b.h);
     const by = HEAD + (innerH - b.h) / 2;
@@ -638,8 +674,24 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     shift(at, b, bx, by);
     const rw = results.length ? portsW(results) + 14 : 22;
     const w = Math.max(bx + b.w + rw, tw(title, 6.6) + 20), h = HEAD + innerH + PAD;
-    frames.set(id, { id, parent: outer, title, cls, binders, labels: binders.map(name), ...(results.length ? { results, resultLabels: results.map(name) } : {}), out: b.out, pad: [bx, HEAD, rw, PAD], minH: HEAD + ph + 8 + PAD, minW: tw(title, 6.6) + 36 });
+    frames.set(id, { id, parent: outer, title, cls, binders, labels: binders.map(name), ...(results.length ? { results, resultLabels: results.map(name) } : {}), out: parts ? null : b.out, pad: [bx, HEAD, rw, PAD], minH: HEAD + ph + 8 + PAD, minW: tw(title, 6.6) + 36 });
     return { w, h, outX: w, outY: by + b.outY, out: { frameOut: id }, at };
+  };
+
+  // Pieces one under another, each told where it ended up.
+  const column = (ids: Id[], each: (p: Sub, i: number) => void): Sub => {
+    const at = new Map<Id, Pos>();
+    const subs = ids.map(lay);
+    let y = 0;
+    subs.forEach((p, i) => { shift(at, p, 0, y); each(p, i); y += p.h + 14; });
+    const h = Math.max(0, y - 14), w = Math.max(0, ...subs.map((p) => p.w));
+    return { w, h, outX: w, outY: h / 2, out: subs[0].out, at };
+  };
+  // The parts of a tuple(…) body, when it has as many as the results.
+  const tupleParts = (body: Id, n: number): Id[] | null => {
+    if (n < 2 || n > TUPLE_MAX) return null;
+    const b = node(body), f = b?.kind === "call" ? node(b.fn) : undefined;
+    return b?.kind === "call" && f?.kind === "ref" && f.target === tupleVariant(n) && b.args.length === n ? b.args : null;
   };
 
   // A relation used in one direction: the given ports are inputs on the
