@@ -13,14 +13,19 @@ import { TRUE } from "./std.ts";
 
 export interface Edit { code: Code; names: Names }
 
-function adder(code: Code) {
-  const nodes = { ...code.nodes };
+// `into`, given, is a copy of code's nodes to write in instead of making
+// one (a palette checking one offer after another: infer.ts fillings);
+// `made` lists what was added, so it can be taken out again.
+function adder(code: Code, into?: Record<Id, Node>) {
+  const nodes = into ?? { ...code.nodes };
+  const made: Id[] = [];
   const add = (n: NodeData): Id => {
     const id = freshId();
     nodes[id] = { id, ...n } as Node;
+    made.push(id);
     return id;
   };
-  return { nodes, add };
+  return { nodes, add, made };
 }
 
 const variantsOf = (code: Code, def: Id) => {
@@ -99,8 +104,10 @@ function namesInScope(code: Code, names: Names, hole: Id): Set<string> {
   return out;
 }
 
-export function fillHole(code: Code, names: Names, hole: Id, f: Filling, library: Names = {}): Edit {
-  const { nodes, add } = adder(code);
+// With `into` (a copy of code's nodes), the filling is written there, and
+// `undo` puts the copy back as it was (BACKLOG E133a).
+export function fillHole(code: Code, names: Names, hole: Id, f: Filling, library: Names = {}, into?: Record<Id, Node>): Edit & { undo: () => void } {
+  const { nodes, add, made } = adder(code, into);
   const nn: Names = { ...names };
   const holes = (k: number) => Array.from({ length: k }, () => add({ kind: "hole" }));
   let data: NodeData;
@@ -145,8 +152,9 @@ export function fillHole(code: Code, names: Names, hole: Id, f: Filling, library
       break;
     }
   }
+  const was = nodes[hole];
   nodes[hole] = { ...data, id: hole } as Node;
-  return { code: { nodes, defs: code.defs }, names: nn };
+  return { code: { nodes, defs: code.defs }, names: nn, undo: () => { for (const id of made) delete nodes[id]; nodes[hole] = was; } };
 }
 
 // Add a case to a data type. Every match and fold over that type that
