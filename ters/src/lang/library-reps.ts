@@ -302,7 +302,11 @@ function keyed(info: Info, defs: Id[], code: Code, of: Id): boolean {
 // with it is decided for every type, so the rewrite above can't find its
 // show by type, and it would see the tree's shape. Such a program keeps
 // the definition. The representation's own jobs are replaced, so they
-// don't count.
+// don't count. Only a variable the definition looks at counts (C70,
+// GAPS.md round 6 N1): one whose values reach show, equal or compare,
+// there or in a definition it hands them to (`looked`). `map`, `first`,
+// `keep` and `sort by` pass their items on unseen, so a map over pairs
+// that hold a map keeps the trees.
 function generic(info: Info, defs: Id[], code: Code, rep: Representation): boolean {
   // A list is in nearly every type's definition (a Set, a Map, a record
   // with a list field), so for List the types' definitions count too.
@@ -316,15 +320,84 @@ function generic(info: Info, defs: Id[], code: Code, rep: Representation): boole
     if (param.t === "fn" && arg.t === "fn") return param.params.some((p, i) => !!arg.params[i] && open(p, arg.params[i])) || open(param.ret, arg.ret);
     return false;
   };
+  const looks = looked(code, info);
+  // The callee's parameter type with only its looked-at variables left
+  // variables (the others can't see the value).
+  const seen = (t: Type, vs: Set<number>): Type => (t.t === "var" ? (vs.has(t.v) ? t : { t: "con", id: "", args: [] }) : t.t === "con" ? { ...t, args: t.args.map((x) => seen(x, vs)) } : t.t === "fn" ? { ...t, params: t.params.map((x) => seen(x, vs)), ret: seen(t.ret, vs) } : t);
   return defs.some((d) => subtree(code, d).some((id) => {
     const n = code.nodes[id];
     if (n.kind !== "call") return false;
     const f = code.nodes[n.fn];
     const scheme = f?.kind === "ref" && !(f.target in rep.impl) ? info.schemes.get(f.target) : undefined;
     if (scheme?.type.t !== "fn") return false;
+    // A builtin is looked at as before; a definition, by what it looks at.
+    const vs = code.nodes[(f as NodeOf<"ref">).target]?.kind === "def" ? looks((f as NodeOf<"ref">).target) : null;
     const params = scheme.type.params;
-    return n.args.some((a, i) => !!params[i] && !!info.typeOf.get(a) && open(params[i], info.typeOf.get(a)!));
+    return n.args.some((a, i) => !!params[i] && !!info.typeOf.get(a) && open(vs ? seen(params[i], vs) : params[i], info.typeOf.get(a)!));
   }));
+}
+
+// The variables of each definition's type (its scheme's) whose values it
+// shows, compares or checks for equality, itself or through a definition
+// or builtin it hands them to; for a builtin other than those three,
+// every variable it is given (it isn't read). A library definition's body
+// has variables of its own, read off its lambda paired with the scheme.
+// The same reading as the compiler's copies per compared type (GAPS.md
+// M4, compile.ts `compared`).
+function looked(code: Code, info: Info): (def: Id) => Set<number> {
+  const memo = new Map<Id, Set<number>>();
+  const zonk = (t: Type) => info.subst.zonk(t);
+  const varsOf = (t: Type, out: Set<number>): Set<number> => {
+    t = zonk(t);
+    if (t.t === "var") out.add(t.v);
+    else if (t.t === "con") t.args.forEach((x) => varsOf(x, out));
+    else if (t.t === "fn") { t.params.forEach((x) => varsOf(x, out)); varsOf(t.ret, out); }
+    return out;
+  };
+  const LOOKS = new Set<Id>(Object.keys(BY_VALUE));
+  const self = (def: Id): Set<number> => {
+    if (memo.has(def)) return memo.get(def)!;
+    const out = new Set<number>();
+    memo.set(def, out);
+    const sc = info.schemes.get(def), d = code.nodes[def];
+    if (!sc || !sc.vars.length || d?.kind !== "def" || !d.body) return out;
+    const toScheme = new Map<number, number>(sc.vars.map((v) => [v, v]));
+    const pair = (a: Type, b: Type) => {
+      b = zonk(b);
+      if (a.t === "var") { if (b.t === "var") toScheme.set(b.v, a.v); return; }
+      if (a.t === "con" && b.t === "con") a.args.forEach((x, i) => b.args[i] && pair(x, b.args[i]));
+      if (a.t === "fn" && b.t === "fn") { a.params.forEach((x, i) => b.params[i] && pair(x, b.params[i])); pair(a.ret, b.ret); }
+    };
+    const bt = info.typeOf.get(d.body);
+    if (bt) pair(sc.type, bt);
+    const add = (vs: Set<number>) => { for (const v of vs) { const w = toScheme.get(v); if (w !== undefined && sc.vars.includes(w)) out.add(w); } };
+    for (const x of subtree(code, def)) {
+      const n = code.nodes[x];
+      if (n.kind !== "ref" || n.target === def) continue;
+      const at = info.typeOf.get(x);
+      if (!at) continue;
+      const target = code.nodes[n.target];
+      // equal, show, compare, or a builtin we don't read: all it's given.
+      if (target?.kind !== "def") {
+        if (LOOKS.has(n.target) || (SIGS[n.target] && !PASSES_ON.has(n.target) && !STRUCTURAL.has(n.target))) { const t = zonk(at); if (t.t === "fn") t.params.forEach((p) => add(varsOf(p, new Set()))); }
+        continue;
+      }
+      const g = self(n.target);
+      if (!g.size) continue;
+      const gs = info.schemes.get(n.target);
+      if (!gs) continue;
+      // The types the callee's looked-at variables stand for here.
+      const bindVars = (a: Type, b: Type) => {
+        b = zonk(b);
+        if (a.t === "var") { if (g.has(a.v)) add(varsOf(b, new Set())); return; }
+        if (a.t === "con" && b.t === "con") a.args.forEach((y, i) => b.args[i] && bindVars(y, b.args[i]));
+        if (a.t === "fn" && b.t === "fn") { a.params.forEach((y, i) => b.params[i] && bindVars(y, b.params[i])); bindVars(a.ret, b.ret); }
+      };
+      bindVars(gs.type, at);
+    }
+    return out;
+  };
+  return self;
 }
 
 // Lists as arrays (C30d3b) or trees (C45): where the program's lists meet
@@ -340,6 +413,8 @@ function generic(info: Info, defs: Id[], code: Code, rep: Representation): boole
 // rewrite leaves as it is. Null when one is found; otherwise the nodes
 // that put the boundary in.
 const PASSES_ON = new Set<Id>([S.first, S.optional, S.all]);
+// Builtins that only move values of a variable type about (C70).
+const STRUCTURAL = new Set<Id>([S.oneOf, S.fail, ...Object.values(ARRAY_OPS)]);
 function listBoundary(code: Code, info: Info, defs: Id[], rep: Representation): { nodes: Record<Id, Node>; reached: Id[]; made: Id[] } | null {
   const program = new Set(defs), inside = holdsType(code, LIST);
   const hasList = (t: Type): boolean => { t = info.subst.zonk(t); return t.t === "con" ? t.id === LIST || inside(t.id) || t.args.some(hasList) : t.t === "fn" ? [...t.params, t.ret].some(hasList) : false; };
