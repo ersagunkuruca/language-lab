@@ -325,7 +325,9 @@ export interface SFunc { def: Id; name: string; params: LType[]; result: LType; 
 // a copy with its derivatives generated, where funcs[i].def lives.
 // rounded: definitions with a call worked out when compiled (stage.ts) that
 // computed a number Float32 can't hold, so a Float32 run differs from it.
-export interface Lowered { funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; arrays: AType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info; escapes: DType[]; rounded: Set<Id> }
+// `shader`: lowered with `shader` and not `data` (C66c): Int is int32, and
+// no answer is the flag, not a status (wasm.ts takes both).
+export interface Lowered { funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; arrays: AType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info; escapes: DType[]; rounded: Set<Id>; shader?: true }
 
 class Refused extends Error {}
 
@@ -1710,7 +1712,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   }
   for (const [r, why] of unstarted) if (!refused.has(r)) refused.set(r, why);
   // Refusals by definition; those of one specialization stay inside.
-  return { funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()], arrays: [...arrays.values()], fns: [...fns.values()], shapes, code, info, escapes: escapes.map((e) => stype({ t: "con", id: e, args: [] }) as DType), rounded };
+  return { funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()], arrays: [...arrays.values()], fns: [...fns.values()], shapes, code, info, escapes: escapes.map((e) => stype({ t: "con", id: e, args: [] }) as DType), rounded, ...(opts.shader && !opts.data ? { shader: true as const } : {}) };
 }
 
 // A Float64 is finite (L125c2, FLOAT-VALUES-2026-11-01.md §2), on

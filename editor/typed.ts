@@ -23,7 +23,7 @@ import type { Value } from "../ters/src/lang/run.ts";
 import { parseValue } from "../ters/src/lang/values.ts";
 import { choose, representationsIn } from "../ters/src/lang/represent.ts";
 import { blocksOf, blocksText, litLabel, type Blk, type Piece } from "../ters/src/lang/render.ts";
-import { shape } from "../ters/src/lang/patterns.ts";
+import { matchRows, patternText, shape, sharedOtherwise } from "../ters/src/lang/patterns.ts";
 
 type Kid = HTMLElement | string | null | undefined | false;
 function h(tag: string, attrs: Record<string, string | boolean | undefined> = {}, ...kids: Kid[]) {
@@ -219,7 +219,7 @@ export function fillValue(code: Code, names: Names, info: Info, hole: Id, text: 
   // where a Rational goes, a whole number or one over another is a
   // fraction: 1/2 is one half, not 0.5.
   const whole = (v: Value): boolean => typeof v === "number" ? Number.isInteger(v) : typeof v === "object" && v !== null && "tag" in v && v.fields.some(whole);
-  const wholes = (t: Typed): boolean => "value" in t ? whole(t.value) : "args" in t ? t.args.some(wholes) : "body" in t && wholes(t.body);
+  const wholes = (t: Typed): boolean => "value" in t ? whole(t.value) : "args" in t ? t.args.some(wholes) : "cond" in t ? [t.cond, t.then, t.else].some(wholes) : "body" in t && wholes(t.body);
   // A name several things share (show, length) is each of them in turn,
   // and the first that type-checks there is the one meant.
   let first: TEdit | undefined;
@@ -289,6 +289,11 @@ export function simplify(code: Code, names: Names, info: Info, id: Id): TEdit | 
 // Each way to read what's typed, one id per called name: at most 16.
 function readings(t: Typed): Typed[] {
   if ("params" in t) return readings(t.body).map((body) => ({ params: t.params, body }));
+  if ("cond" in t) {
+    let out: Typed[][] = [[]];
+    for (const a of [t.cond, t.then, t.else]) out = out.flatMap((done) => readings(a).map((x) => [...done, x])).slice(0, 16);
+    return out.map(([cond, then, els]) => ({ cond, then, else: els }));
+  }
   if (!("op" in t)) return [t];
   let out: Typed[][] = [[]];
   for (const a of t.args) out = out.flatMap((done) => readings(a).map((x) => [...done, x])).slice(0, 16);
@@ -303,7 +308,7 @@ function readings(t: Typed): Typed[] {
 // definition, a builtin or a constructor: `alts` when several share the name.
 // A function written out, (x, y) => x + y or () => 0, is its inputs (new
 // binders, in scope in its body) and its body.
-type Typed = { value: Value } | { ref: Id } | { op: Id; args: Typed[]; alts?: Id[] } | { params: { id: Id; name: string }[]; body: Typed };
+type Typed = { value: Value } | { ref: Id } | { op: Id; args: Typed[]; alts?: Id[] } | { params: { id: Id; name: string }[]; body: Typed } | { cond: Typed; then: Typed; else: Typed };
 // The operators are read from the notation itself (styles/blocks.json),
 // loosest first: each glyph is every function drawn with it, and the first
 // that type-checks is the one meant. The generic arithmetic comes first, so
@@ -314,7 +319,9 @@ const KEYS: Record<string, string> = { "-": "−", "*": "·", "×": "·", "÷": 
 const glyphs = (fixity: string) => {
   const by = new Map<string, { prec: number; ids: Id[] }>();
   for (const [id, n] of Object.entries(blocksStyle.notation) as [Id, Notation][]) {
-    if (n.fixity !== fixity || /^\p{L}/u.test(n.glyph) || n.glyph === "^") continue;
+    // A word (and, or) is read with spaces on both sides; a prefix word
+    // (not) isn't read yet.
+    if (n.fixity !== fixity || (fixity !== "infix" && /^\p{L}/u.test(n.glyph)) || n.glyph === "^") continue;
     const g = by.get(n.glyph) ?? { prec: n.prec ?? 5, ids: [] };
     g.ids.push(id);
     by.set(n.glyph, g);
@@ -348,6 +355,15 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
       return "error" in body ? body : { params, body };
     }
   }
+  // if c then a else b, as the blocks print a match on a Bool (BACKLOG
+  // I114): one fill, not a step and a split.
+  const branches = ifParts(t);
+  if (branches) {
+    const [c, a, b] = branches.map((x) => typedOut(x, code, names, scope));
+    for (const x of [c, a, b]) if ("error" in x) return x;
+    return { cond: c as Typed, then: a as Typed, else: b as Typed };
+  }
+  let inner: { error: string } | undefined;
   for (const level of OPS) {
     let depth = 0, quoted = false;
     for (let i = t.length - 1; i > 0; i--) {
@@ -356,13 +372,16 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
       if (quoted) continue;
       if (")]".includes(c)) depth++;
       else if ("([".includes(c)) depth--;
-      const op = depth === 0 ? level.find(([sym]) => t.slice(i - sym.length + 1, i + 1) === sym) : undefined;
+      const word = (sym: string) => !/^\p{L}/u.test(sym) || (/\s/.test(t[i - sym.length] ?? "") && /\s/.test(t[i + 1] ?? ""));
+      const op = depth === 0 ? level.find(([sym]) => t.slice(i - sym.length + 1, i + 1) === sym && word(sym)) : undefined;
       if (!op) continue;
       const left = t.slice(0, i - op[0].length + 1).trimEnd();
       if (!left || OPS.flat().some(([sym]) => left.endsWith(sym))) continue;
       const a = typedOut(left, code, names, scope), b = typedOut(t.slice(i + 1), code, names, scope);
       const alts = op[1].filter((id) => code.nodes[id]);
       if (!("error" in a) && !("error" in b) && alts.length) return { op: alts[0], args: [a, b], alts };
+      // What's wrong in an operand says more than a position in the whole.
+      inner ??= [a, b].find((x): x is { error: string } => "error" in x && !/ at \d+$/.test(x.error));
     }
   }
   const neg = /^[-−]\s*(.+)$/s.exec(t);
@@ -372,6 +391,16 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
     if (!("error" in a) && alts.length) return { op: alts[0], args: [a], alts };
   }
   if (t.startsWith("(") && t.endsWith(")")) { const inner = typedOut(t.slice(1, -1), code, names, scope); if (!("error" in inner)) return inner; }
+  // A field read as the blocks print it, board.columns: the field's
+  // projection called on what's before the dot (BACKLOG I113). The last dot
+  // outside brackets and text, so a.b.c is (a.b).c.
+  const dot = lastDot(t);
+  if (dot > 0) {
+    const field = t.slice(dot + 1).trim().replace(/^‹(.*)›$/, "$1");
+    const alts = Object.keys(names).filter((id) => names[id] === field && code.nodes[id]?.kind === "field");
+    const of = typedOut(t.slice(0, dot), code, names, scope);
+    if (alts.length && !("error" in of)) return { op: alts[0], args: [of], alts };
+  }
   // A name may be several words, as fraction(3), or quoted as the blocks
   // draw it, ‹show numbers›(x).
   const call = /^‹?([^()[\],"‹›]+?)›?\s*\((.*)\)$/s.exec(t);
@@ -387,8 +416,40 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
       .sort((x, y) => +isOperation(code, y) - +isOperation(code, x));
     const args = parts.map((a) => typedOut(a, code, names, scope));
     if (alts.length && args.every((a) => !("error" in a))) return { op: alts[0], args: args as Typed[], alts };
+    // What's wrong, not where (BACKLOG I115): the name, or what's wrong
+    // inside its inputs.
+    if (!alts.length) return { error: `there's no function named ${call[1]}${closest(call[1], [...scope.keys(), ...Object.values(names)], scope)}` };
+    return args.find((a) => "error" in a) as { error: string };
   }
-  return r;
+  if (dot > 0) {
+    const field = t.slice(dot + 1).trim();
+    if (!Object.keys(names).some((id) => names[id] === field && code.nodes[id]?.kind === "field")) return { error: `there's no field named ${field}${closest(field, Object.keys(names).filter((id) => code.nodes[id]?.kind === "field").map((id) => names[id]), scope)}` };
+    return typedOut(t.slice(0, dot), code, names, scope);
+  }
+  if (/^[\p{L}_][\p{L}\p{N}_' ]*$/u.test(t) && !/^(if|then|else)$/.test(t)) return { error: `nothing is named ${t} here${closest(t, scope.keys(), scope)}` };
+  return inner ?? r;
+}
+
+// The names closest to one that isn't there, to say "did you mean": in
+// scope first, then any definition or builtin, at most three, each at most
+// a third of the name's letters away (Levenshtein's distance, 1966, with
+// Damerau's swaps).
+function closest(word: string, among: Iterable<string>, scope: Map<string, Id>): string {
+  const far = Math.max(1, Math.floor(word.length / 3));
+  const pool = new Set(among);
+  const scored = [...pool].filter((n) => n && n !== word && Math.abs(n.length - word.length) <= far).map((n) => [n, distance(word, n)] as const).filter(([, d]) => d <= far);
+  scored.sort((a, b) => a[1] - b[1] || +scope.has(b[0]) - +scope.has(a[0]));
+  const near = scored.slice(0, 3).map(([n]) => n);
+  return near.length ? `; did you mean ${near.join(", ")}?` : "";
+}
+// Two letters swapped count as one edit (Damerau, 1964).
+function distance(a: string, b: string): number {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)));
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) {
+    d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+  }
+  return d[a.length][b.length];
 }
 
 // A field of an interface's record is one of its operations (INTERFACES.md).
@@ -396,6 +457,56 @@ function isOperation(code: Code, id: Id): boolean {
   if (code.nodes[id]?.kind !== "field") return false;
   const v = Object.values(code.nodes).find((n) => n.kind === "variant" && n.fields.includes(id));
   return !!v && Object.values(code.nodes).some((n) => n.kind === "typedef" && n.interface && n.variants.includes(v.id));
+}
+
+// The condition, the then and the else of `if c then a else b`, split at
+// its own then and else: an if inside either takes its own (an else goes
+// with the nearest if still open). Undefined when it isn't one.
+function ifParts(text: string): [string, string, string] | undefined {
+  if (!/^if\s/.test(text)) return undefined;
+  const words: { w: string; at: number }[] = [];
+  let depth = 0, quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '"' && text[i - 1] !== "\\") quoted = !quoted;
+    if (quoted) continue;
+    if ("([".includes(c)) depth++;
+    else if (")]".includes(c)) depth--;
+    else if (depth === 0 && (i === 0 || /\s/.test(text[i - 1]))) {
+      const m = /^(if|then|else)(?=\s)/.exec(text.slice(i));
+      if (m) words.push({ w: m[1], at: i });
+    }
+  }
+  let open = 0, then = -1, els = -1;
+  for (let k = 1; k < words.length; k++) {
+    const { w } = words[k];
+    if (then < 0) {
+      if (w === "if") open++;
+      else if (w === "else" && open > 0) open--;
+      else if (w === "then" && open === 0) { then = k; }
+    } else {
+      if (w === "if") open++;
+      else if (w === "else") { if (open === 0) { els = k; break; } open--; }
+    }
+  }
+  if (then < 0 || els < 0) return undefined;
+  const at = (k: number) => words[k].at;
+  return [text.slice(2, at(then)).trim(), text.slice(at(then) + 4, at(els)).trim(), text.slice(at(els) + 4).trim()];
+}
+
+// Where the last dot outside brackets and text is, before a name (not a
+// digit: 1.5 is a number): -1 when there's none.
+function lastDot(text: string): number {
+  let depth = 0, quoted = false, at = -1;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '"' && text[i - 1] !== "\\") quoted = !quoted;
+    if (quoted) continue;
+    if ("([".includes(c)) depth++;
+    else if (")]".includes(c)) depth--;
+    else if (c === "." && depth === 0 && /[^\s\d.]/u.test(text[i + 1] ?? "")) at = i;
+  }
+  return at;
 }
 
 // The arguments of a call, split at its own commas: none inside brackets
@@ -454,6 +565,12 @@ function written(code: Code, names: Names, info: Info, hole: Id, text: string, t
       return id;
     }
     if ("ref" in t) { const id = place ?? freshId(); nodes[id] = { id, kind: "ref", target: t.ref }; return id; }
+    if ("cond" in t) {
+      const id = place ?? freshId();
+      const arm = (variant: Id, body: Typed) => { const a = freshId(); nodes[a] = { id: a, kind: "arm", variant, binds: [], results: [], body: tree(body) }; return a; };
+      nodes[id] = { id, kind: "match", scrutinee: tree(t.cond), arms: [arm(TRUE, t.then), arm(FALSE, t.else)], otherwise: null };
+      return id;
+    }
     const [p, q] = t.args.map(isWhole);
     if (fit && t.op === B.div && t.args.length === 2 && p !== null && q !== null) {
       const id = place ?? freshId();
@@ -558,7 +675,35 @@ export function inputsOf(code: Code, id: Id): Id[] {
   }
 }
 
-export type LooseEdit = TEdit & { of?: Record<Id, Id>; home?: Record<Id, Id> };
+// `own`: made in this one place, not in every copy a shared row stands
+// for (I117).
+export type LooseEdit = TEdit & { of?: Record<Id, Id>; home?: Record<Id, Id>; own?: boolean };
+
+// Cases that read once as a match's otherwise, because they give the same
+// value, when `id` is that value: each can be given a body of its own
+// (BACKLOG I117). Their labels as the rows print them.
+export function sharedCases(code: Code, names: Names, info: Info | null, id: Id): { label: string; parent: Id; slot: "body" | "otherwise" }[] {
+  const up = new Map<Id, Id>();
+  for (const n of Object.values(code.nodes)) for (const c of children(n)) up.set(c, n.id);
+  for (let x = up.get(id); x; x = up.get(x)) {
+    const m = code.nodes[x];
+    if (m?.kind !== "match") continue;
+    const { folded, otherwise } = sharedOtherwise(code, matchRows(code, info, m), m.otherwise ?? undefined);
+    if (folded.length < 2 || (otherwise !== id && !folded.some((r) => r.body === id))) continue;
+    const nm = (x: Id) => names[x] ?? display[x] ?? "_";
+    return folded.map((r) => ({ label: patternText(r.pat, nm, nm), parent: r.at, slot: code.nodes[r.at].kind === "arm" ? "body" : "otherwise" }));
+  }
+  return [];
+}
+
+// One of those cases with a body of its own: a hole to fill there, the
+// others keeping the value they share.
+export function ownBody(code: Code, names: Names, info: Info, c: { label: string; parent: Id; slot: "body" | "otherwise" }): LooseEdit {
+  const hole = freshId();
+  const nodes = { ...code.nodes, [hole]: { id: hole, kind: "hole" } as Node, [c.parent]: { ...code.nodes[c.parent], [c.slot]: hole } as Node };
+  const r = guardTyped(info, collect({ nodes, defs: code.defs }), names, hole, `${c.label} has a body of its own now: fill the hole. The other cases keep the value they share; Undo puts it back.`);
+  return r.ok ? { ...r, own: true } : r;
+}
 
 // A loose part's new inputs are called what the variables they stand for are.
 const inputNames = (names: Names, was: Record<Id, Id>, now: Record<Id, Id>): Names =>

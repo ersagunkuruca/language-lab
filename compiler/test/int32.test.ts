@@ -13,7 +13,8 @@ import { INT_OPS } from "../../ters/src/lang/std.ts";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitWgsl } from "../src/wgsl.ts";
 import { loadJs } from "../src/js-scalar.ts";
-import { ints } from "../src/fixtures.ts";
+import { ints, shaderArrays } from "../src/fixtures.ts";
+import { emitWasm, instantiate } from "../src/wasm.ts";
 
 
 const first = <T>(xs: Iterable<T>) => { for (const x of xs) return x; };
@@ -88,4 +89,33 @@ test("first with a fallback and count in a shader: a flag, the evaluator's answe
     assert.equal(js.get(d)!(a, b), ev(d, a, b), `${p.names[d]} ${a} ${b}`);
   }
   for (const x of [2.5, -2.5, 0, -0.5, 1e6, NaN, Infinity, -Infinity]) assert.equal(js.get(p.whole)!(x), ev(p.whole, x), `whole ${x}`);
+});
+
+// C66e: the same lowering in WebAssembly, the faster way to draw a
+// shader's picture on the CPU (editor/picture.ts): Int as an i32, the
+// flag a global, so its answers are js-scalar.ts's and the evaluator's.
+test("Int in 32 bits and the flag in WebAssembly: js-scalar.ts's answers", async () => {
+  const p = ints();
+  const roots = [p.poly, p.smaller, p.same, p.sumTo, p.cube, p.lowest, p.quot, p.rem, p.pow, p.whole, p.counted, p.quarter];
+  const lowered = lowerScalar(p.code, p.info, p.names, roots, { records: true, shader: true });
+  const m = emitWasm(lowered);
+  assert.match(m.wat, /\(global \$none \(mut i32\)/);
+  assert.match(m.wat, /call \$int32\.imul/);
+  const w = await instantiate(m) as unknown as Record<string, (...xs: number[]) => number>;
+  const js = loadJs(lowered);
+  const at = (d: string) => w[p.names[d]];
+  const same = (d: string, ...xs: number[]) => assert.equal(at(d)(...xs), Number(js.get(d)!(...xs)), `${p.names[d]} ${xs.join(" ")}`);
+  for (const [a, b] of [[3, 4], [-7, 2], [0, -5], [46340, 46340], [-2147483647, 1]]) for (const d of [p.poly, p.smaller, p.same]) same(d, a, b);
+  for (const n of [0, 1, 10, 500, 5000]) same(p.sumTo, n);
+  for (const n of [1290, 1291, -1291]) same(p.cube, n);
+  same(p.lowest);
+  const pairs = [[7, 2], [-7, 2], [7, -2], [-7, -2], [6, 3], [5, 0], [0, 0], [-2147483648, 1], [-2147483648, -1], [2, 10], [3, -1], [-3, 3], [1, 31], [12, 4], [8, 5]];
+  for (const d of [p.quot, p.rem, p.pow, p.counted, p.quarter]) for (const [a, b] of pairs) same(d, a, b);
+  for (const x of [2.5, -2.5, 0, -0.5, 1e6, 3e9, NaN, Infinity, -Infinity]) same(p.whole, x);
+});
+
+test("a shader's arrays aren't in WebAssembly yet, with the reason (JavaScript draws them)", () => {
+  const p = shaderArrays();
+  const lowered = lowerScalar(p.code, p.info, p.names, [p.palette], { records: true, shader: true });
+  assert.throws(() => emitWasm(lowered), /arrays .* aren't in WebAssembly yet/);
 });

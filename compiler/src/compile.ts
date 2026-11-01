@@ -37,7 +37,7 @@ import { planSolve } from "../../ters/src/lang/solve.ts";
 import { oneAnswer as solvedOnce } from "../../ters/src/lang/modes.ts";
 import { compileSolve } from "./relation.ts";
 import { modeCompiler, type ModeEmit } from "./modes.ts";
-import { INLINE, jsKind } from "./builtins.ts";
+import { INLINE, jsKind, NO_ANSWER_JS } from "./builtins.ts";
 import { CORE, MODULES } from "../../ters/src/lang/library.ts";
 import { pointsAt } from "../../ters/src/lang/modules.ts";
 import { foldPlan } from "../../ters/src/lang/represent.ts";
@@ -1467,6 +1467,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         if (t.kind === "variant" || t.kind === "field") return false;
         if (t.kind === "builtin") {
           if (f.target === S.oneOf || f.target === S.fail || f.target === S.fuel || manyOf(f.target)) return true;
+          // x / 0 and the like give no answer, unless the checker found this
+          // call always answered (L125b, L125c3).
+          if (NO_ANSWER_JS[f.target] && !info.answered?.has(n.id)) return true;
           if (f.target === S.first) return streamsFn(ty(n.args[1]), rho);
           if (f.target === S.seeded) return streamsFn(ty(n.args[1]), rho);
           return false;
@@ -2779,6 +2782,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         else if (kind === "variant") c = effectOf(target!) ? perform(target!, args) : construct(target!, args);
         else if (kind === "field") c = field(args[0], target!);
         else if (target === COMPARE) c = `$ORDER[${orderJs(n.args[0], args)} + 1]`;
+        else if (kind === "builtin" && NO_ANSWER_JS[target!] && !info.answered?.has(n.id)) c = `${NO_ANSWER_JS[target!]}(${args.join(", ")})`;
         else if (kind === "builtin" && INLINE[target!]) {
           const js = INLINE[target!].js(INLINE[target!]?.boolArgs ? args.map((a) => `(${a}.tag === ${JSON.stringify(TRUE)})`) : args);
           c = INLINE[target!].bool ? `$bool(${js})` : js;
@@ -2797,7 +2801,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           if (callee && rec) {
             const viaF = spec(callee.def, callee.rho, callee.plain, false, callee.arr, callee.own, true, null, callee.lat, keyAt(callee));
             out = `if (${viaF.name}(${args.join(", ")})) {\n${fromGot(rec, r, k)}\n}`;
-          } else if (callee?.single || (kind === "builtin" && oneOf(target!))) out = `const ${r} = ${c};\nif (${r} !== $no) {\n${k(r)}\n}`;
+          } else if (callee?.single || (kind === "builtin" && (oneOf(target!) || NO_ANSWER_JS[target!]))) out = `const ${r} = ${c};\nif (${r} !== $no) {\n${k(r)}\n}`;
           else if (callee?.sus) {
             // A search that waits: its waits go on to whoever answers them,
             // and the answer comes back in.
@@ -2993,7 +2997,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // as it is.
   for (const [s, b] of made) if (keep.has(s.name)) out.push(heapCalled.has(s.name) && !heapCopies.has(s.name) ? `${b}\nfunction* ${s.name}$h(...a) {\nreturn ${s.name}(...a);\n}` : b);
 
-  const helpers = ["$isLater", "$no", "$answered", "$stream0", "$showAny", "$compare", "$int", "$text", "$impl", "$many", "$partial", "$setPath", "$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$snoc", "$fromBack", "$range", "$eq", "$show", "$mod", "$fin", "$div", "$sqrt", "$log", "$pow", "$mapParts", "$zipParts", "$total", "$first", "$firstS",
+  const helpers = ["$isLater", "$no", "$answered", "$stream0", "$showAny", "$compare", "$int", "$text", "$impl", "$many", "$partial", "$setPath", "$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$snoc", "$fromBack", "$range", "$eq", "$show", "$mod", "$fin", "$div", "$sqrt", "$log", "$pow", "$divN", "$sqrtN", "$logN", "$powN", "$modN", "$mapParts", "$zipParts", "$total", "$first", "$firstS",
     "$all", "$count", "$oneOf", "$fail", "$lift", "$one", "$hole", "$fuel", "$enter", "$caught", "$leave", "$spend", "$spendOrThrow", "$outOfFuel", "$ok", "$clean", "$key",
     "$close", "$near", "$sameNumber", "$planned", "$solveRuntime", "$print", "$FN", "$perform", "$handle", "$handleS", "$io", "$seeded", "$seededS", "$optional", "$cells", "$listArrays", "$path", "$spread", "$self", "$foldNested", "$drive", "$rec", "$pushList", "$withInto", "$intoArray", "$later", "$handleL", "$handleLG",
     "$ORDER", "$compareN", "$numberOrder", "$intOrder", "$textOrder",

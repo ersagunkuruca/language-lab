@@ -5,8 +5,7 @@
 // the argument; an overflow is checked late, where it would otherwise
 // vanish or decide something: a comparison, `show`, a divisor, `exp`.
 // Since L125b no answer is a Choice in the evaluator: WebAssembly's
-// partial functions give none too, and compiled JavaScript still stops
-// with the reason (L125c3).
+// partial functions give none too, and so does compiled JavaScript (L125c3).
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -79,26 +78,17 @@ test("compiled JavaScript stops where the evaluator does, with the same reason",
   const none = new Set<string>();
   for (const [name, d] of defs) for (const [a, b] of inputs) {
     const want = evaluated(d, a, b), got = said(() => { const v = js[name](a, b) as { next?: unknown } & Iterable<unknown>; return typeof v?.next === "function" ? [...v][0] : v; });
-    // No answer in the evaluator (L125b) is, for now, a stop with its reason here (L125c3).
-    if (want === "undefined" && /^stops: .* has no answer$/.test(got)) { none.add(got); continue; }
-    // caught handles the stop's Abort here; in the evaluator there is none to handle.
-    if (want === "undefined" && name === "caught" && / has no answer$/.test(got)) continue;
+    if (want === "undefined") none.add(name);
     if (name !== "less") assert.equal(got, want, `${name}(${a}, ${b})`);
     else assert.equal(got.startsWith("stops"), want.startsWith("stops"), `${name}(${a}, ${b}): ${got} vs ${want}`);
     if (want.startsWith("stops")) stops.add(want);
   }
-  // caught has a Choice now (its division isn't known to be answered), so its copy gives a stream.
-  assert.equal(said(() => { const v = js.caught(1, 0) as { next?: unknown } & Iterable<unknown>; return typeof v?.next === "function" ? [...v][0] : v; }), "x / 0 has no answer");
-  // The evaluator stops only on overflow now; every no answer came up.
+  // No answer (L125b) is no answer here too (L125c3): x / 0 in caught is a
+  // Choice, not an Abort its handler sees. Every partial operation had none.
+  assert.equal(said(() => [...(js.caught(1, 0) as Iterable<unknown>)][0]), "undefined");
+  // The evaluator stops only on overflow now.
   assert.deepEqual([...stops].sort(), ["stops: the answer is too big for a Float64 (overflow)"]);
-  assert.deepEqual([...none].sort(), [
-    "stops: 0 to a negative power has no answer",
-    "stops: a negative number to a fractional power has no answer",
-    "stops: the log of 0 or less has no answer",
-    "stops: the square root of a negative number has no answer",
-    "stops: x / 0 has no answer",
-    "stops: x mod 0 has no answer",
-  ]);
+  assert.deepEqual([...none].sort(), ["caught", "divide", "log", "mod", "over", "power", "root"]);
 });
 
 // WebAssembly (L125c2): the same checks, lowered (scalar.ts), and the
