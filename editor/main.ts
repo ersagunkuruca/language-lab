@@ -164,6 +164,9 @@ interface Layout {
   // Matches drawn as the nested tree they are, not as rows of patterns
   // (PATTERNS.md). A view.
   tree?: Id[];
+  // Nodes made bigger by hand, by `def/id` (BACKLOG I49). Never smaller
+  // than what they show. A view.
+  size?: Record<string, { w: number; h: number }>;
 }
 
 // The examples, and programs of your own: made new, or opened from a file.
@@ -2836,6 +2839,12 @@ function graphHooks(info: T.Info) {
       if (!n) { ui.note = note ?? "Nothing moved."; ui.touched = []; return render(); }
       commit({ layout: { ...doc.layout, at: { ...(doc.layout.at ?? {}), ...Object.fromEntries(Object.entries(to).map(([k, v]) => [lkey(k), v])) } } }, ["layout.json"],
         note ?? `Moved ${n === 1 ? "a node" : `${n} nodes`}. Where nodes sit lives in layout.json; the code is untouched.`);
+    },
+    sizes: Object.fromEntries(Object.entries(doc.layout.size ?? {}).filter(([k]) => k.startsWith(`${ui.def}/`)).map(([k, v]) => [k.slice(ui.def.length + 1), v])),
+    resized: (id: Id, to: { w: number; h: number } | null) => {
+      const { [lkey(id)]: _, ...rest } = doc.layout.size ?? {};
+      commit({ layout: { ...doc.layout, size: to ? { ...rest, [lkey(id)]: to } : rest } }, ["layout.json"],
+        to ? "Resized a node. Its size lives in layout.json; double-click the corner to give it its own size again." : "The node has its own size again.");
     },
     named: new Set(bindersOf(ui.def).filter(isNamed)),
     loose: looseOf(doc.code, doc.loose ?? {}, ui.def),

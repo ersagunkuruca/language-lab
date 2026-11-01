@@ -37,7 +37,7 @@ export interface ProgramFile {
   // Where nodes were put (world coordinates, by `def/id`), which bindings
   // are shown as let and get nodes, what you give each definition when you
   // run it backwards, and which calls are shown inline. All views.
-  layout: { at?: Record<string, { x: number; y: number }>; named?: Id[]; wired?: Id[]; known: Record<Id, Id[]>; inline?: Id[]; folded?: Id[]; groups?: Record<Id, Id[]>; tree?: Id[] };
+  layout: { at?: Record<string, { x: number; y: number }>; named?: Id[]; wired?: Id[]; known: Record<Id, Id[]>; inline?: Id[]; folded?: Id[]; groups?: Record<Id, Id[]>; tree?: Id[]; size?: Record<string, { w: number; h: number }> };
   // Inputs per definition, or inputs and accepted answers (tests.ts Saved).
   examples: Record<Id, string[] | Saved[]>;
   needs?: Record<Id, string>;
@@ -119,6 +119,7 @@ export function fromFile(text: string, baseFor: (typed: boolean) => Code): { fil
       ...(Array.isArray(l.inline) && l.inline.every((c) => typeof c === "string") ? { inline: l.inline as Id[] } : {}),
       ...(Array.isArray(l.folded) && l.folded.every((c) => typeof c === "string") ? { folded: l.folded as Id[] } : {}),
       ...(Array.isArray(l.tree) && l.tree.every((c) => typeof c === "string") ? { tree: l.tree as Id[] } : {}),
+      ...(isObj(l.size) && Object.values(l.size).every((z) => isObj(z) && typeof z.w === "number" && typeof z.h === "number") ? { size: l.size as Record<string, { w: number; h: number }> } : {}),
       ...(isObj(l.groups) && Object.values(l.groups).every((g) => Array.isArray(g) && g.every((c) => typeof c === "string")) ? { groups: l.groups as Record<Id, Id[]> } : {}),
     },
   };
