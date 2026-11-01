@@ -76,8 +76,9 @@ the host file's entry.
    the operation's result type before the program sees it (Elm's ports
    do this for what comes in from JavaScript). A wrong answer is
    performing `Abort` with the reason, never a value of the wrong type
-   inside the program. Inputs going out need no check: the checker
-   already typed them.
+   inside the program. A `Float64` must be finite: NaN or ±∞ from the
+   host is a wrong answer too (L125f). Inputs going out need no check:
+   the checker already typed them.
 3. **A missing side is a refusal, with the reason.** A program whose
    `Camera` has no `hosts/c.c` entry doesn't build for C, and says which
    operation and why, the way the scalar profile says a builtin isn't in
