@@ -1256,6 +1256,33 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
       g.append(s("rect", { x: x - 9, y: y - 9, width: 18, height: 18, class: "grip-hit" }), s("rect", { x: x - 4, y: y - 4, width: 8, height: 8, rx: 1.5, class: "spread-dot" }), s("title", {}, "Drag to spread the picked nodes apart or draw them together; hold Shift to resize them too"));
       spread.append(g);
     }
+    // The frame's ports (E167, PORTS-2026-11-01.md §5): each value wired
+    // in from outside on its left, each value wired out on its right,
+    // one port per value: the inputs and results Make it a function
+    // would give the picked nodes.
+    const items = new Set(units.flatMap((u) => u.keys));
+    const frames = new Set<Id>();
+    for (const f of scene.frames.values()) for (let p: Id | null = f.id; p; p = scene.frames.get(p)?.parent ?? null) if (picked.has(p)) { frames.add(f.id); break; }
+    const inside = (e: End) => ("item" in e ? items.has(e.item) : frames.has("frame" in e ? e.frame : e.frameOut));
+    const ins = new Map<string, number>(), outs = new Map<string, number>();
+    for (const w of scene.wires) {
+      const a = inside(w.from), z = inside(w.to);
+      if (!a && z && !ins.has(JSON.stringify(w.from))) ins.set(JSON.stringify(w.from), point(w.to).y);
+      if (a && !z && !outs.has(JSON.stringify(w.from))) outs.set(JSON.stringify(w.from), point(w.from).y);
+    }
+    const ports = (ys: number[], x: number, cls: string, title: string) => {
+      // Spread along the edge in the order the wires meet it, never closer than 14.
+      let last = -Infinity;
+      for (const y0 of ys.sort((p, q) => p - q)) {
+        const y = Math.min(b.y + b.h + m - 6, Math.max(y0, last + 14, b.y - m + 6));
+        last = y;
+        const c = s("circle", { cx: x, cy: y, r: 4, class: `spread-port ${cls}` });
+        c.append(s("title", {}, title));
+        spread.append(c);
+      }
+    };
+    ports([...ins.values()], b.x - m, "in", "A value wired in from outside: an input Make it a function would give");
+    ports([...outs.values()], b.x + b.w + m, "out", "A value wired out: a result Make it a function would give");
   }
   return [...[false, true].flatMap((up) => [frameL(up), wireL(up), portL(up), ...(up ? [] : [marks]), itemL(up), nameL(up)]), out, vals, spread];
 }
