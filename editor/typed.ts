@@ -288,7 +288,7 @@ export function simplify(code: Code, names: Names, info: Info, id: Id): TEdit | 
 
 // Each way to read what's typed, one id per called name: at most 16.
 function readings(t: Typed): Typed[] {
-  if ("params" in t) return readings(t.body).map((body) => ({ params: t.params, body }));
+  if ("params" in t) return readings(t.body).map((body) => ({ ...t, body }));
   if ("cond" in t) {
     let out: Typed[][] = [[]];
     for (const a of [t.cond, t.then, t.else]) out = out.flatMap((done) => readings(a).map((x) => [...done, x])).slice(0, 16);
@@ -308,7 +308,10 @@ function readings(t: Typed): Typed[] {
 // definition, a builtin or a constructor: `alts` when several share the name.
 // A function written out, (x, y) => x + y or () => 0, is its inputs (new
 // binders, in scope in its body) and its body.
-type Typed = { value: Value } | { ref: Id } | { op: Id; args: Typed[]; alts?: Id[] } | { params: { id: Id; name: string }[]; body: Typed } | { cond: Typed; then: Typed; else: Typed };
+// One that names its results, (speed, time) → drift, drop => speed · time,
+// time · time, gives that many (L128b, the text L128c prints): the parts
+// written out are its tuple.
+type Typed = { value: Value } | { ref: Id } | { op: Id; args: Typed[]; alts?: Id[] } | { params: { id: Id; name: string }[]; body: Typed; results?: { id: Id; name: string }[] } | { cond: Typed; then: Typed; else: Typed };
 // The operators are read from the notation itself (styles/blocks.json),
 // loosest first: each glyph is every function drawn with it, and the first
 // that type-checks is the one meant. The generic arithmetic comes first, so
@@ -344,15 +347,21 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
   const r = parseValue(text, code, names);
   if (!("error" in r)) return { value: r.value };
   // => binds loosest: (x) => x + 1 is a function of x, not (x) => x, plus 1.
-  const fn = /^\(([^()]*)\)\s*=>\s*(\S[\s\S]*)$/.exec(t);
+  const fn = /^\(([^()]*)\)\s*(?:(?:→|->)\s*([^()=]+?)\s*)?=>\s*(\S[\s\S]*)$/.exec(t);
   if (fn) {
-    const words = fn[1].trim() ? fn[1].split(",").map((w) => w.trim()) : [];
-    if (words.every((w) => /^[^\s()[\],"=<>]+( [^\s()[\],"=<>]+)*$/u.test(w)) && new Set(words).size === words.length) {
+    const list = (x: string) => (x.trim() ? x.split(",").map((w) => w.trim()) : []);
+    const words = list(fn[1]), outs = list(fn[2] ?? "");
+    const ok = (w: string) => /^[^\s()[\],"=<>]+( [^\s()[\],"=<>]+)*$/u.test(w);
+    if (words.every(ok) && outs.every(ok) && new Set(words).size === words.length && new Set(outs).size === outs.length && outs.length <= TUPLE_MAX) {
       const params = words.map((name) => ({ id: freshId(), name }));
       const inner = new Map(scope);
       for (const p of params) inner.set(p.name, p.id);
-      const body = typedOut(fn[2], code, names, inner);
-      return "error" in body ? body : { params, body };
+      // Its parts written out, e1, e2, are the tuple it gives.
+      const parts = outs.length > 1 ? topLevel(fn[3]) : undefined;
+      const each = parts?.length === outs.length ? parts.map((x) => typedOut(x, code, names, inner)) : null;
+      const body: Typed | { error: string } = each ? (each.find((x) => "error" in x) ?? { op: tupleVariant(outs.length), args: each as Typed[] }) : typedOut(fn[3], code, names, inner);
+      if ("error" in body) return body;
+      return outs.length ? { params, body, results: outs.map((name) => ({ id: freshId(), name })) } : { params, body };
     }
   }
   // if c then a else b, as the blocks print a match on a Bool (BACKLOG
@@ -560,8 +569,8 @@ function written(code: Code, names: Names, info: Info, hole: Id, text: string, t
     if ("value" in t) return build(t.value, place);
     if ("params" in t) {
       const id = place ?? freshId();
-      for (const p of t.params) { nodes[p.id] = { id: p.id, kind: "binder" }; nn[p.id] = p.name; }
-      nodes[id] = { id, kind: "lambda", params: t.params.map((p) => p.id), body: tree(t.body) };
+      for (const p of [...t.params, ...(t.results ?? [])]) { nodes[p.id] = { id: p.id, kind: "binder" }; nn[p.id] = p.name; }
+      nodes[id] = { id, kind: "lambda", params: t.params.map((p) => p.id), body: tree(t.body), ...(t.results ? { results: t.results.map((r) => r.id) } : {}) };
       return id;
     }
     if ("ref" in t) { const id = place ?? freshId(); nodes[id] = { id, kind: "ref", target: t.ref }; return id; }
