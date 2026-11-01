@@ -29,9 +29,10 @@ test("a group of one value out becomes a function called in its place", () => {
   assert.deepEqual(infer(r.code, r.names).errors, []);
 });
 
-// Several values out (BACKLOG E149): HSI colour's r and g, grouped, leave
-// part as a record, Part results, and each is read where it was.
-test("a group of several values out gives them back as a record", () => {
+// Several values out (BACKLOG E149, E165): HSI colour's r and g, grouped,
+// leave part as one tuple (L128a), and each is read where it was by its
+// place: no type of its own is made.
+test("a group of several values out gives them back as a tuple", () => {
   const p = loadProgram(join(root, "examples", "mandelbrot"));
   const { code } = p, names = p.pres.names, hsi = p.named("hsi colour");
   const info = infer(code, names);
@@ -43,8 +44,9 @@ test("a group of several values out gives them back as a record", () => {
   assert.ok(r.ok, !r.ok ? r.reason : "");
   if (!r.ok) return;
   const text = renderLet(r.code, { ...p.pres, names: r.names }, hsi);
-  assert.match(text, /part = \(saturation, hue\) => ‹part results›\(1 \+ 2 · saturation · cos\(6\.283185307179586 · \(hue − 0\)\), 1 \+ 2 · saturation · cos\(6\.283185307179586 · \(hue − 0\.3333333333333333\)\)\)/);
-  assert.match(text, /results = part\(saturation, hue\)\n\s+r₁ = r₂\(results\)\n\s+g₁ = g₂\(results\)/);
+  assert.match(text, /part = \(saturation, hue\) => tuple\(1 \+ 2 · saturation · cos\(6\.283185307179586 · \(hue − 0\)\), 1 \+ 2 · saturation · cos\(6\.283185307179586 · \(hue − 0\.3333333333333333\)\)\)/);
+  assert.match(text, /results = part\(saturation, hue\)\n\s+r = first\(results\)\n\s+g = second\(results\)/);
+  assert.equal(r.code.defs.length, code.defs.length);
   assert.deepEqual(infer(r.code, r.names).errors, []);
 });
 
