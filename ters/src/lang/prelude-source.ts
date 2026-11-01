@@ -97,6 +97,15 @@ export function buildPrelude(): Module {
   const notAfter = compare("not after", TEXT_OPS.less, (lt, a, b) => k.call(S.not, lt(b, a)));
   const after = compare("comes after", TEXT_OPS.less, (lt, a, b) => lt(b, a));
   const notBefore = compare("not before", TEXT_OPS.less, (lt, a, b) => k.call(S.not, lt(a, b)));
+  // A text's start and end (BACKLOG L134, GAPS round 6 NG2): notebook
+  // wrote ends with from length and slice, and routes its blank-line test.
+  const startsWith = k.def("starts with");
+  k.define(startsWith, k.fn(["text", "start"], (t, p) => k.let("n", k.call(TEXT_OPS.length, p), (m) =>
+    k.and(k.call(S.not, k.call(INT_OPS.less, k.call(TEXT_OPS.length, t), m)), k.equal(k.call(TEXT_OPS.slice, t, k.int(0), m), p)))));
+  const endsWith = k.def("ends with");
+  k.define(endsWith, k.fn(["text", "end"], (t, p) => k.let("length", k.call(TEXT_OPS.length, t), (l) =>
+    k.let("n", k.call(TEXT_OPS.length, p), (m) =>
+      k.and(k.call(S.not, k.call(INT_OPS.less, l, m)), k.equal(k.call(TEXT_OPS.slice, t, k.call(INT_OPS.sub, l, m), l), p))))));
 
   // Extended a (FLOAT-VALUES-2026-11-01.md §3, BACKLOG L125d): a number type
   // with −∞ and +∞ around it, for any ordered number type. The extended
@@ -1269,7 +1278,7 @@ export function buildPrelude(): Module {
     )))));
   const awaitHelpers = [startBranch, waiting, goOn, finished, settle, firstDone, raceSettle];
 
-  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, csqrt, clog, cpow, casin, cacos, showC, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, showDecimals, divD, slopeAt, dualTable, showD, asFixed, fixedF, showX, divX, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, ticketId, anyOf, together, race, within];
+  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, csqrt, clog, cpow, casin, cacos, showC, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, showDecimals, divD, slopeAt, dualTable, showD, asFixed, fixedF, showX, divX, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, ticketId, anyOf, together, race, within];
   const mapHelpers = [lastItem, putEntry, updateEntry, removeEntry, lookupEntry, hasEntry, pairsAsEntries, addItem_, removeItem_, hasItem_, unionItems, interItems, diffItems];
   const comments: Record<Id, string> = {
     [each]: "Runs the action on each item of the list in turn, for what it does (prints, writes a cell).",
@@ -1295,6 +1304,8 @@ export function buildPrelude(): Module {
     [notAfter]: "Text a ≤ b: a comes before b or is b.",
     [after]: "Text a > b: b comes before a.",
     [notBefore]: "Text a ≥ b: b comes before a or is a.",
+    [startsWith]: "Whether the text begins with this: starts with(\"# notes\", \"#\") is true. Every text starts with \"\".",
+    [endsWith]: "Whether the text ends with this: ends with(\"page.md\", \".md\") is true. Every text ends with \"\".",
     [extLess]: "a < b for Extended numbers: −∞ is below every number and +∞ above, so the order is total. compare and sort give the same order.",
     [extAdd]: "a + b with ±∞: ∞ + 1 is ∞ and −∞ + −∞ is −∞. ∞ + −∞ has no answer.",
     [extNeg]: "−a with ±∞: −(+∞) is −∞.",

@@ -40,3 +40,12 @@ test("L136: one sum for every number type, as + is", () => {
     k.call(L("sum"), k.list()),
   ]), ["6", "0.75", "0"]);
 });
+
+test("L134: starts with and ends with", () => {
+  const t = (k: Lang, f: string, a: string, b: string) => k.call(L(f), k.lit(a), k.lit(b));
+  assert.deepEqual(prints((k) => [
+    t(k, "starts with", "# notes", "#"), t(k, "starts with", "notes", "#"), t(k, "starts with", "#", "# notes"), t(k, "starts with", "", ""),
+    t(k, "ends with", "page.md", ".md"), t(k, "ends with", "page.txt", ".md"), t(k, "ends with", "md", "page.md"), t(k, "ends with", "x", ""),
+  ]), ["true", "false", "false", "true", "true", "false", "false", "true"]);
+  assert.equal(type("starts with"), "(Text, Text) -> Bool");
+});
