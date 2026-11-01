@@ -12,7 +12,7 @@ import { base, baseNames, loadProgram } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { makeRunner, type Value } from "../src/lang/run.ts";
 import { algebrasOf, bladeMask, describeMask, gradeMistakes } from "../src/lang/grades.ts";
-import { ARITH } from "../src/lang/std.ts";
+import { ARITH, CONS, LIST, NIL } from "../src/lang/std.ts";
 import { NUMBER } from "../src/lang/types.ts";
 import { SET } from "../src/lang/std.ts";
 import type { Id } from "../src/model.ts";
@@ -185,4 +185,33 @@ test("a field named Vector of T holds only vectors: each blade combination its o
   const r = bladeMask(p2.code, p2.info, where)!;
   assert.equal(describeMask(r.algebra, r.mask), "a vector");
   void turnF;
+});
+
+test("a field named List (Vector of T) holds only vectors, item by item (L43e3)", () => {
+  const a = algebra([1, 1, 1]);
+  const { k, M, def, at, call } = a;
+  const vec = (x: Id) => at({ 1: x, 2: x, 4: x });
+  const Trail = k.type("Trail", [], [["trail", [["points", () => k.tref(LIST, k.tref("type.vector of", k.tref(M.def)))]]]]);
+  const pointsF = Trail.f["trail.points"];
+  const part = (v: Id, ...b: number[]) => call("part", v, k.list(...b.map((x) => k.lit(x))));
+  let wrongItem = "", setItem = "";
+  const fns = {
+    right: def("a trail", () => k.fn(["x"], (x) => k.call(Trail.v.trail, k.list(vec(x), vec(x))))),
+    wrong: def("a rotor in it", () => k.fn(["x"], (x) => k.call(Trail.v.trail, k.list(vec(x), (wrongItem = call("exp", at({ 3: x }))))))),
+    added: def("added", () => k.fn(["t", "x"], (t, x) => k.call(SET, k.x(pointsF), t, k.call(CONS, (setItem = call("product", vec(x), vec(x))), k.call(pointsF, t))))),
+    // An item read from the field is a vector: its e₁₂ is always 0.
+    read: def("bivector of the first", () => k.fn(["t"], (t) => k.match(k.call(pointsF, t), [
+      { variant: NIL, names: [], body: () => k.lit(0) },
+      { variant: CONS, names: ["p", "rest"], body: ([p]) => part(p, 1, 2) },
+    ]))),
+  };
+  const { code, info } = a.done();
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const found = gradeMistakes(code, info, Object.values(fns));
+  assert.deepEqual(found.map((f) => [f.def, f.message]).sort(), [
+    [fns.added, "puts an item that is even (a rotor or motor) where a list of Vector of goes, a vector each"],
+    [fns.wrong, "puts an item that is 1, e₁₂ where a list of Vector of goes, a vector each"],
+    [fns.read, "reads the e₁₂ part of a value that is a vector, so it is always 0"],
+  ].sort());
+  assert.ok(wrongItem && setItem);
 });
