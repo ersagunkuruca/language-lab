@@ -14,11 +14,36 @@ README.
 
 ## Goals
 
-One goal runs through Ters: programs written in plain functional
-style (lists as `cons`/`nil`, numbers as `zero`/`succ`) that compile to fast
-code, because how data is stored is a separate, chosen representation.
-[docs/design/numbers/NUMBERS.md](docs/design/numbers/NUMBERS.md), "Where this stands",
-says what of that is built and what isn't.
+Each goal says whether it's built, partly built, or a rule we hold to.
+
+- **No text syntax.** A program is a tree, edited structurally in the
+  editor. There is no parser, on purpose, so there are no syntax errors and
+  no arguments about formatting. *Built.*
+- **Names and comments live apart from the program.** The code refers to
+  everything by an id. Names, comments and notation sit in side tables, so a
+  rename never breaks anything, and how code reads (operators, infix or
+  prefix, nesting) is a view you choose. *Built; more views to come.*
+- **Definitions run both ways.** The same definition computes forwards or
+  solves backwards for its inputs, as with a relation
+  ([BACKWARDS.md](docs/language/BACKWARDS.md)). *Built for arithmetic and
+  search.*
+- **Effects are in the types.** Randomness, input and output show in a
+  function's type and are answered by handlers. *Built.*
+- **Plain style, fast code.** Programs are written in plain functional style
+  (lists as `cons`/`nil`, numbers as `zero`/`succ`) and compile to fast code,
+  because how data is stored is a separate representation the compiler
+  picks. You never select it yourself.
+  [NUMBERS.md](docs/design/numbers/NUMBERS.md), "Where this stands", says
+  what is built. *Partly built: today on compiled JavaScript only.*
+- **One uniform system.** No special node kinds and no special cases: a
+  feature that needs one is rethought instead. *A rule we hold to.*
+- **Targets don't bend the language.** Ters runs in the evaluator and
+  compiles to JavaScript, WebAssembly, native code through C, GPU shaders,
+  web pages, phone apps and live audio. Each target's quirks stay in how it
+  is hosted and never change what the language means. *Targets built; the
+  rule holds.*
+- **Tests in the language.** A test is a definition that checks, run by
+  `lab test`. *Built.*
 
 ## Docs
 

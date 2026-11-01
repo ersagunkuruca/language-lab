@@ -1445,7 +1445,16 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   const units = new UnitsBefore(code);
   const recheck = (c: Code) => infer(c, {}, { from: info, only: affected, units }, info.options).errors;
   const baseline = () => (before ??= recheck(code));
-  const whole = (f: Filling) => recheck(filled(f)).length <= baseline().length;
+  // A filling passes when it brings no error the program didn't have: not
+  // only no more of them, since filling the hole can clear one (a
+  // definition's results found again) while it makes another (a pinned
+  // implementation's type broken).
+  const noNew = (errs: Problem[]) => {
+    const was = new Map<string, number>();
+    for (const e of baseline()) was.set(e.message, (was.get(e.message) ?? 0) + 1);
+    return errs.every((e) => { const n = was.get(e.message) ?? 0; was.set(e.message, n - 1); return n > 0; });
+  };
+  const whole = (f: Filling) => noNew(recheck(filled(f)));
   // A function that brings Choice where the world is (or the world under
   // a Choice) is checked against the whole program, and what that check
   // finds about the mix is the same for every function bringing the same
@@ -1457,7 +1466,7 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
     const k = `${mix}|${f.kind}`, known = mixing.get(k);
     if (known !== undefined) return known ? undefined : false;
     const errs = recheck(filled(f));
-    if (errs.length <= baseline().length) { mixing.set(k, true); return true; }
+    if (noNew(errs)) { mixing.set(k, true); return true; }
     const was = new Set(baseline().map((e) => e.message));
     if (errs.every((e) => was.has(e.message) || e.message.includes("while a Choice is open"))) mixing.set(k, false);
     return false;

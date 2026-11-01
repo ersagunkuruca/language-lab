@@ -67,6 +67,10 @@ export interface GraphHooks {
   share: (from: Id, slot: Id) => void;
   // Where nodes were put (world coordinates), and saving some.
   at: Record<Id, Pos>;
+  // Nodes made bigger by hand (I49), and resizing one: null gives it its
+  // own size again.
+  sizes?: Record<Id, { w: number; h: number }>;
+  resized?: (id: Id, to: { w: number; h: number } | null) => void;
   moved: (to: Record<Id, Pos>, note?: string) => void;
   // Bindings shown as a let node with get nodes instead of wires.
   named: Set<Id>;
@@ -131,7 +135,9 @@ let held = 0, menuAt = 0;
 // Where each graph's nodes were placed when last drawn, so an edit keeps
 // them there. Not saved: a reload lays the graph out afresh.
 const drawnAt = new Map<string, Map<Id, Pos & { frame: Id | null }>>();
-const foldedAt = new Map<string, Set<Id>>();
+// The last press on a node's resize corner, across redraws: two in a row
+// give it its own size again (I49).
+let lastGrip: { id: Id; at: number } | null = null;
 
 // The longest a title or a case's row reads before it is shortened.
 const APART = 24;
@@ -227,26 +233,9 @@ export function typedGraph(code: Code, pres: Presentation, info: Info | null, de
         if (it && fresh.has(k) && Math.hypot(p.x - it.auto.x, p.y - it.auto.y) < 600) it.auto = p;
       }
   }
-  // A frame just unfolded opens where its box was, so what it now covers
-  // is spaced out from it (I57); the frame and its contents stay put.
-  const wasFolded = foldedAt.get(key);
-  const opened = [...(wasFolded ?? [])].filter((f) => scene.frames.has(f) && !hooks.folded?.has(f));
-  if (last && opened.length) {
-    const view = shown(hooks.at), { pos, boxes } = placeAll(view, hooks.at);
-    const inside = (fr: Id | null | undefined, f: Id) => { for (let p = fr; p; p = scene.frames.get(p)?.parent ?? null) if (p === f) return true; return false; };
-    const covered = new Set<Id>();
-    for (const f of opened) {
-      const b = boxes.get(f);
-      if (!b) continue;
-      for (const [k, it] of view.items) {
-        const q = pos.get(k);
-        if (!q || hooks.at[k] || !scene.items.has(k) || inside(it.frame, f)) continue;
-        if (q.x < b.x + b.w && q.x + it.w > b.x && q.y < b.y + b.h && q.y + it.h > b.y) covered.add(k);
-      }
-    }
-    if (covered.size) for (const [k, p] of Object.entries(tidyScene(view, hooks.at, covered))) if (covered.has(k)) scene.items.get(k)!.auto = p;
-  }
-  foldedAt.set(key, new Set(hooks.folded ?? []));
+  // A frame just unfolded opens where its box was, over whatever it now
+  // covers: nothing else moves (Ersagun 2026-11-01, replacing I57's
+  // spacing out). Tidy puts things apart when wanted.
   drawnAt.set(key, new Map([...scene.items].map(([k, it]) => [k, { ...it.auto, frame: it.frame ?? null }])));
   const draw = (at: Record<Id, Pos>) => canvas.world.replaceChildren(...render(shown(at), hooks, at, picked));
   draw(hooks.at);
@@ -339,6 +328,18 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   const usesOf = new Map<Id, Id[]>();
   let frame: Id | null = null;   // the frame being laid out
 
+  // A node's size: what it shows, or bigger where it was made bigger by
+  // hand (I49).
+  const sized = (id: Id, w: number, h: number): [number, number] => {
+    const z = hooks.sizes?.[id];
+    return z ? [Math.max(w, z.w), Math.max(h, z.h)] : [w, h];
+  };
+  // The corner a selected node is resized by: drag it, or double-click it
+  // for the node's own size again.
+  const grip = (g: SVGGElement, id: Id, w: number, h: number) => {
+    if (!hooks.resized || hooks.selected !== id) return;
+    g.append(titled(s("path", { d: `M${w - 12} ${h - 2} L${w - 2} ${h - 12} M${w - 7} ${h - 2} L${w - 2} ${h - 7}`, class: "grip", "data-resize": id, "data-w": String(w), "data-h": String(h) }), "Drag to make this node bigger; double-click for its own size"));
+  };
   const item = (key: Id, w: number, h: number, draw: (g: SVGGElement) => void, extra: Partial<Item> = {}): Sub => {
     items.set(key, { key, frame, w, h, auto: { x: 0, y: 0 }, draw, solid: true, ...extra });
     return { w, h, outX: w, outY: h / 2, out: { item: key, dx: w, dy: h / 2 }, at: new Map([[key, { x: 0, y: 0 }]]) };
@@ -508,15 +509,16 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const eff = effectsOf(n);
     const badge = [...eff.does, ...(eff.handles ? [`handles ${eff.handles}`] : [])].join(" · ");
     const portNames = ops && ops.length === n.args.length ? ops.map(name) : null;
-    const bw = Math.max(44, tw(label, 8.2) + 24, badge ? tw(badge, 6.4) + 16 : 0, portNames ? Math.max(...portNames.map((l) => tw(l, 6.6))) + 30 : 0);
     // A list, or a chain of one operation, takes one more input at its +.
     const grows = !!hooks.addItem && (!!list || (f.kind === "ref" && ASSOCIATIVE.has(f.target) && n.args.length === 2));
     const plus = grows ? 16 : 0;
-    const bh = portNames ? 30 + inputs.length * 20 : Math.max(30, inputs.length * 18 + 12) + (badge ? 14 : 0) + plus;
+    const [bw, bh] = sized(id, Math.max(44, tw(label, 8.2) + 24, badge ? tw(badge, 6.4) + 16 : 0, portNames ? Math.max(...portNames.map((l) => tw(l, 6.6))) + 30 : 0),
+      portNames ? 30 + inputs.length * 20 : Math.max(30, inputs.length * 18 + 12) + (badge ? 14 : 0) + plus);
     const top = badge ? 14 : 0;
     const portY = (i: number) => (portNames ? 30 + i * 20 : top + ((bh - top - plus) / (inputs.length + 1)) * (i + 1));
     item(id, bw, bh, (g) => {
       g.append(titled(s("rect", { width: bw, height: bh, rx: 7, class: `cn${eff.does.length ? " eff" : ""}${eff.handles ? " handler" : ""}${sel(id)}${errs.has(id) ? " err" : ""}`, "data-id": id, "data-move": id }), typeOf(id)));
+      grip(g, id, bw, bh);
       if (badge) g.append(s("text", { x: bw / 2, y: 11, class: "badge", "text-anchor": "middle" }, badge));
       g.append(s("text", { x: bw / 2, y: portNames ? 19 : top + (bh - top) / 2 + 5, class: "cl", "text-anchor": "middle" }, label));
       portNames?.forEach((l, i) => g.append(s("text", { x: 9, y: portY(i) + 4, class: "portl" }, l)));
@@ -1292,6 +1294,7 @@ function interact(canvas: Canvas, scene: Scene, hooks: GraphHooks, picked: Set<I
       const keep = Object.fromEntries([...pos].filter(([k]) => !hooks.at[k]).map(([k, q]) => [k, { x: Math.round(q.x), y: Math.round(q.y) }]));
       return hooks.addDot(edge.getAttribute("data-edge")!, { dot: { x: Math.round(w.x - 6), y: Math.round(w.y - 6) }, keep });
     }
+    if ((e.target as Element).closest("[data-resize]")) return;
     const t = (e.target as Element).closest("[data-move], [data-id]");
     if (e.shiftKey) {
       const k = t?.getAttribute("data-move") ?? t?.getAttribute("data-id");
@@ -1351,6 +1354,28 @@ function interact(canvas: Canvas, scene: Scene, hooks: GraphHooks, picked: Set<I
   root.addEventListener("pointerdown", (ev) => {
     if (ev.button !== 0) return;
     const start = ev.target as Element;
+    // The corner of a selected node: drag to resize it (I49). The box
+    // follows the pointer; the node is laid out at its new size on release.
+    const grab = start.closest("[data-resize]");
+    if (grab && hooks.resized) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const id = grab.getAttribute("data-resize")!, w0 = +grab.getAttribute("data-w")!, h0 = +grab.getAttribute("data-h")!;
+      // A second press in a row (a pointerdown's detail is always 0): its
+      // own size again.
+      const again = lastGrip?.id === id && ev.timeStamp - lastGrip.at < 450;
+      lastGrip = { id, at: ev.timeStamp };
+      if (again) { lastGrip = null; hooks.resized(id, null); return; }
+      const box = grab.parentElement?.querySelector(":scope > rect") as SVGRectElement | null;
+      let size = { w: w0, h: h0 };
+      moveDrag(root, ev, (dx, dy) => {
+        size = { w: Math.round(Math.max(w0, w0 + dx)), h: Math.round(Math.max(h0, h0 + dy)) };
+        box?.setAttribute("width", String(size.w));
+        box?.setAttribute("height", String(size.h));
+        grab.setAttribute("transform", `translate(${size.w - w0} ${size.h - h0})`);
+      }, (moved) => { if (moved && (size.w !== w0 || size.h !== h0)) hooks.resized!(id, { w: Math.max(size.w, hooks.sizes?.[id]?.w ?? 0), h: Math.max(size.h, hooks.sizes?.[id]?.h ?? 0) }); }, canvas.zoom());
+      return;
+    }
     const add = start.closest("[data-add]")?.getAttribute("data-add");
     if (add && hooks.addItem) { ev.preventDefault(); hooks.addItem(add); return; }
     // A step done only for its effect has no value to wire: a drag moves it.
