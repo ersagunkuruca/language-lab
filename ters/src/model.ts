@@ -247,7 +247,8 @@ export function replace(code: Code, id: Id, build: (code: Code) => NodeData): Co
 }
 
 // Where `id` hangs in the tree: its parent and the slot it occupies.
-export function parentOf(code: Code, id: Id): { parent: Id; slot: string; index?: number } | null {
+// A solve's given value hangs under its port's name (`key`, slot "given").
+export function parentOf(code: Code, id: Id): { parent: Id; slot: string; index?: number; key?: string } | null {
   for (const n of Object.values(code.nodes)) {
     if (n.kind === "call") {
       if (n.fn === id) return { parent: n.id, slot: "fn" };
@@ -257,6 +258,7 @@ export function parentOf(code: Code, id: Id): { parent: Id; slot: string; index?
     else if ((n.kind === "match" || n.kind === "fold") && n.scrutinee === id) return { parent: n.id, slot: "scrutinee" };
     else if (n.kind === "match" && n.otherwise === id) return { parent: n.id, slot: "otherwise" };
     else if ((n.kind === "arm" || n.kind === "solve") && n.body === id) return { parent: n.id, slot: "body" };
+    else if (n.kind === "solve") { const key = Object.keys(n.given).find((k) => n.given[k] === id); if (key !== undefined) return { parent: n.id, slot: "given", key }; }
     else if (n.kind === "def" && n.body === id) return { parent: n.id, slot: "body" };
   }
   return null;
@@ -273,7 +275,8 @@ export function swapIn(code: Code, id: Id, replacement: Id): Code {
     const args = [...(p.args as Id[])];
     args[at.index!] = replacement;
     p.args = args;
-  } else p[at.slot] = replacement;
+  } else if (at.slot === "given") p.given = { ...(p.given as Record<string, Id>), [at.key!]: replacement };
+  else p[at.slot] = replacement;
   next.nodes[at.parent] = p as unknown as Node;
   return next;
 }

@@ -49,7 +49,12 @@ export function trace(code: Code, info: Info, def: Id, args: Value[], world?: Ru
       case "call": {
         const head = code.nodes[n.fn];
         const vals = n.args.map((a) => walk(a, env));
-        if (head.kind === "lambda") {
+        // A call the runner runs as something else (+ on records resolved to
+        // its parts, f(p) spread: arith.ts) is run as it runs; what went
+        // into it is shown as written (BACKLOG I122).
+        const ran = r.code.nodes[id];
+        if (ran !== n && !(ran?.kind === "call" && ran.fn === n.fn && ran.args.length === n.args.length && ran.args.every((a, i) => a === n.args[i]) && r.code.nodes[n.fn] === head)) v = first(r.ev(id, env), id);
+        else if (head.kind === "lambda") {
           // A let: its dots get the values, then its body runs.
           const inner = new Map(env);
           head.params.forEach((p, i) => { inner.set(p, vals[i]); values.set(p, vals[i]); });
