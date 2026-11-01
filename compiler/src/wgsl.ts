@@ -211,11 +211,20 @@ export function emitWgsl(lowered: Lowered): Shader {
 
   // Arrays (C66c): a shader's array has its size where it's made (written
   // out, empty, or pushed onto), and WGSL's array<T, N> says it. Each
-  // function's array locals and answer get theirs from the code; one that
-  // takes an array as an input, or whose size depends on the way it went,
-  // is refused with the reason.
-  const arrSizes = new Map<number, { locals: Map<number, number>; result?: number }>();
-  const sizing = new Set<number>();
+  // function's array locals and answer get theirs from the code. A function
+  // that takes an array as an input gets a copy per size it is called with
+  // (C66d), as C++ templates and Futhark's size-specialised functions do:
+  // its instance `i@3,2` is i with arrays of 3 and 2 items for its array
+  // inputs. One whose size depends on the way it went is refused with the
+  // reason.
+  type Inst = { fn: number; key: string; locals: Map<number, number>; result?: number };
+  const insts = new Map<string, Inst>();
+  const sizing = new Set<string>();
+  const arrayParams = (i: number) => funcs[i].params.some(isArray);
+  // The instance a call runs: its callee at the sizes of its array inputs.
+  const keyOf = (fn: number, sizes: number[]) => (sizes.length ? `${fn}@${sizes.join(",")}` : `${fn}`);
+  const callKey = (locals: Map<number, number>, e: Extract<SExpr, { k: "call" }>) =>
+    keyOf(e.fn, funcs[e.fn].params.flatMap((t, j) => (isArray(t) ? [szOf(locals, e.args[j])] : [])));
   // The size of e, an array, in a function whose array locals' sizes are known.
   const szOf = (locals: Map<number, number>, e: SExpr): number => {
     const sz = (x: SExpr) => szOf(locals, x);
@@ -227,7 +236,7 @@ export function emitWgsl(lowered: Lowered): Shader {
         if (a !== b) throw new Error(`gives an array of ${a} items one way and of ${b} another (a shader's array has one size)`);
         return a;
       }
-      case "call": { const r = sizesOf(e.fn).result; if (r === undefined) throw new Error(`uses ${funcs[e.fn].name}'s array`); return r; }
+      case "call": { const r = sizesOf(callKey(locals, e)).result; if (r === undefined) throw new Error(`uses ${funcs[e.fn].name}'s array`); return r; }
       case "rt": {
         const op = /^array\.(\w+)\./.exec(e.fn)?.[1];
         if (op === "of") return e.args.length;
@@ -238,13 +247,18 @@ export function emitWgsl(lowered: Lowered): Shader {
       default: throw new Error("uses an array where a shader can't tell its size");
     }
   };
-  const sizesOf = (i: number): { locals: Map<number, number>; result?: number } => {
-    if (arrSizes.has(i)) return arrSizes.get(i)!;
-    const f = funcs[i];
-    if (sizing.has(i)) throw new Error("makes an array whose size depends on how far it recurses");
-    if (f.params.some(isArray)) throw new Error("takes an array as an input (a shader's array has its size where it's made)");
-    sizing.add(i);
+  // A function given every way of calling it, at most this many sizes.
+  const COPIES = 16;
+  const sizesOf = (key: string): Inst => {
+    if (insts.has(key)) return insts.get(key)!;
+    const [fn, at] = key.split("@");
+    const i = Number(fn), f = funcs[i];
+    if (sizing.has(key)) throw new Error("makes an array whose size depends on how far it recurses");
+    if (at && [...insts.values()].filter((x) => x.fn === i).length >= COPIES) throw new Error(`is called with arrays of more than ${COPIES} sizes`);
+    sizing.add(key);
     const locals = new Map<number, number>();
+    const given = at ? at.split(",").map(Number) : [];
+    f.params.forEach((t, j) => { if (isArray(t)) locals.set(j, given.shift()!); });
     const walk = (e: SExpr) => {
       if (e.k === "let") { walk(e.value); if (isArray(f.locals[e.i])) locals.set(e.i, szOf(locals, e.value)); walk(e.body); return; }
       if (e.k === "attempt") { walk(e.body); if (isArray(f.locals[e.res])) locals.set(e.res, szOf(locals, e.body)); walk(e.ok); walk(e.otherwise); if (isArray(e.t)) szOf(locals, e); return; }
@@ -253,16 +267,30 @@ export function emitWgsl(lowered: Lowered): Shader {
       // Every array the printer will need the size of.
       if ((e.k === "if" || e.k === "budget") && isArray(e.t)) szOf(locals, e);
       if (e.k === "rt" && /^array\.(push|length|at)\./.test(e.fn)) szOf(locals, e.args[0]);
+      // Every instance a call runs. Calling itself as the last step is a
+      // loop, which reuses its inputs, so their sizes must stay the same.
+      if (e.k === "call") {
+        const k = callKey(locals, e);
+        if (e.fn === i && e.tail && k !== key) throw new Error("calls itself with arrays of other sizes (a loop's arrays keep their size)");
+        if (!sizing.has(k)) {
+          try { sizesOf(k); } catch (err) { if (!(err instanceof Error) || e.fn === i) throw err; throw new Error(`calls ${funcs[e.fn].name}, which ${err.message}`); }
+        }
+      }
     };
     walk(f.body);
-    const r = { locals, ...(isArray(f.result) ? { result: szOf(locals, f.body) } : {}) };
-    sizing.delete(i);
-    arrSizes.set(i, r);
+    const r: Inst = { fn: i, key, locals, ...(isArray(f.result) ? { result: szOf(locals, f.body) } : {}) };
+    sizing.delete(key);
+    insts.set(key, r);
     return r;
   };
+  // Each function that takes no array is sized on its own, and with it the
+  // copies it calls; one that takes an array, by what calls it.
   funcs.forEach((f, i) => {
-    if (bad.has(i) || (![...f.locals, f.result].some(isArray) && !hasRt(f.body))) return;
-    try { sizesOf(i); } catch (e) { if (!(e instanceof Error)) throw e; bad.set(i, e.message); }
+    if (bad.has(i) || arrayParams(i)) return;
+    try { sizesOf(`${i}`); } catch (e) { if (!(e instanceof Error)) throw e; bad.set(i, e.message); }
+  });
+  funcs.forEach((f, i) => {
+    if (!bad.has(i) && arrayParams(i) && ![...insts.values()].some((x) => x.fn === i)) bad.set(i, "takes an array as an input, and nothing here calls it (a shader's array has its size where it's made, so each call gets a copy for its size)");
   });
 
   // Recursion: edges of the call graph, leaving out calls to itself in tail
@@ -299,7 +327,12 @@ export function emitWgsl(lowered: Lowered): Shader {
     used.add(n);
     return n;
   };
-  const wname = new Map(kept.map((i) => [i, ident(funcs[i].name, `_${i}`)]));
+  // The copies to write: every instance of a kept function (a function with
+  // no array inputs is its own one copy).
+  const keptSet = new Set(kept);
+  const copies = [...insts.values()].filter((x) => keptSet.has(x.fn)).sort((a, b) => a.fn - b.fn || a.key.localeCompare(b.key));
+  for (const i of kept) if (!insts.has(`${i}`) && !arrayParams(i)) copies.push({ fn: i, key: `${i}`, locals: new Map() });
+  const wname = new Map(copies.map((x) => [x.key, ident(funcs[x.fn].name, `_${x.key.replace("@", "_n").replace(/,/g, "_")}`)]));
 
   // Structs for the records the kept functions use, each after the ones
   // its fields need.
@@ -505,7 +538,7 @@ export function emitWgsl(lowered: Lowered): Shader {
   const mixes = (a: { rows: Aff[] }) => a.rows.some((r) => [...r.c.values()].filter((x) => x !== 0).length >= 2);
 
   const matrices = new Set<number>();
-  const text = kept.map((i) => func(funcs[i], i));
+  const text = copies.map((x) => func(funcs[x.fn], x));
   const needsPow = kept.some((i) => usesOp(funcs[i].body, "pow"));
   const needsMod = kept.some((i) => usesOp(funcs[i].body, "mod"));
   // power multiplies with lab_imul.
@@ -527,16 +560,17 @@ export function emitWgsl(lowered: Lowered): Shader {
     wgsl,
     // Only what can be called from outside a budget is a place to start.
     // A search with no answer outside any `first` isn't one either.
-    funcs: kept.filter((i) => !funcs[i].budgeted && !funcs[i].partial && !isArray(funcs[i].result)).map((i) => ({ def: funcs[i].def, name: funcs[i].name, wgsl: wname.get(i)!, params: funcs[i].params as GType[], result: funcs[i].result as GType })),
+    funcs: kept.filter((i) => !funcs[i].budgeted && !funcs[i].partial && !isArray(funcs[i].result) && !arrayParams(i)).map((i) => ({ def: funcs[i].def, name: funcs[i].name, wgsl: wname.get(`${i}`)!, params: funcs[i].params as GType[], result: funcs[i].result as GType })),
     refused,
     structs,
     matrices,
   };
 
-  function func(f: SFunc, i: number): string {
+  function func(f: SFunc, inst: Inst): string {
+    const i = inst.fn;
     const loops = calls(f.body).some((c) => c.fn === i && c.tail);
     // Sizes of the array locals, and the type of e (an array: with its size).
-    const L = arrSizes.get(i)?.locals ?? new Map<number, number>();
+    const L = inst.locals;
     const ty = (t: LType, e: SExpr) => tname(t, isArray(t) ? szOf(L, e) : undefined);
     const local = (j: number) => (j < f.params.length ? `p${j}` : `l${j}`);
     let temps = 0;
@@ -620,7 +654,7 @@ export function emitWgsl(lowered: Lowered): Shader {
           // A linear function of a linear function (or of staged code): one matrix.
           const a = vectorWidth(funcs[e.fn].result) && e.args.some((x) => x.k === "call" || x.k === "let") ? affine(e, f) : null;
           if (a && !a.rows.every((r) => r.c.size === 0)) return matrix(a, pre, d);
-          return `${wname.get(e.fn)}(${e.args.map((a) => bare(ex(a, pre, d))).join(", ")})`;
+          return `${wname.get(callKey(L, e))}(${e.args.map((a) => bare(ex(a, pre, d))).join(", ")})`;
         }
         case "budget": {
           const s = temp(), t = temp();
@@ -713,9 +747,9 @@ export function emitWgsl(lowered: Lowered): Shader {
     }
 
     // One from the budget per call, and per round of the loop.
-    const rt = tname(f.result, arrSizes.get(i)?.result);
+    const rt = tname(f.result, inst.result);
     const spend = (d: string) => (f.spends ? [`${d}lab_fuel = lab_fuel - 1.0;`, `${d}if (lab_fuel < 0.0) { return ${rt}(); }`] : []);
-    const sig = `fn ${wname.get(i)}(${f.params.map((t, j) => `${loops ? "a" : "p"}${j}: ${tname(t)}`).join(", ")}) -> ${rt}`;
+    const sig = `fn ${wname.get(inst.key)}(${f.params.map((t, j) => `${loops ? "a" : "p"}${j}: ${tname(t, L.get(j))}`).join(", ")}) -> ${rt}`;
     const body = loops
       ? [...f.params.map((t, j) => `  var p${j} = a${j};`), "  loop {", ...spend("    "), ...block(f.body, "return", "    "), "  }"]
       : [...spend("  "), ...block(f.body, "return", "  ")];
