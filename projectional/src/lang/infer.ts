@@ -15,7 +15,7 @@ import { ownerOfTypeParts, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { unitProblems, UnitsBefore } from "../units.ts";
 import { fillHole } from "./refactor.ts";
-import { planSolve, solvesInWholeNumbers } from "./solve.ts";
+import { planSolve, runsBackwards, solvesInWholeNumbers } from "./solve.ts";
 import { computedForward, directionProblem, useDirections } from "./directions.ts";
 import { analyzer, determinism, oneAnswer, solveMode, type Fn } from "./modes.ts";
 import { smoothDerivative as hasSmoothDerivative, smoothGradient as hasSmoothGradient, recordVariant } from "./derive.ts";
@@ -118,6 +118,10 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   const show = (t: Type) => showT(s.zonk(t), names);
   // The modes of this program, made when a call first needs them.
   let modes: ReturnType<typeof analyzer> | undefined;
+  // Solves waiting on their givens' types (L38), and whether one turned out
+  // to be in whole numbers, so the program is checked again with it so.
+  const waiting: { solve: Id; givens: [Id, Type][] }[] = [];
+  let again = false;
   const effName = (e: EffectError) => e.effects.map(nm).join(", ");
   const worldMessage = (what: string, e: EffectError) => `${what} does ${effName(e)} while a Choice is open, so it would act on paths that are later abandoned: handle the Choice first (first, all, count or optional) and act on its result`;
   const worldOrEffect = (e: EffectError) => (e instanceof WorldError ? worldMessage("this", e) : `this performs ${effName(e)}, which nothing here handles`);
@@ -388,6 +392,11 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         try { if (t.t === "fn") s.unifyRow(t.eff, { effs: [DIVERGE], tail: s.next++ }); }
         catch (e) { if (e instanceof EffectError) err(d, `${nm(d)} might not finish, and it is used where only a function that surely finishes fits`); else throw e; }
       }
+    }
+    // Solves whose givens waited for the definition's types (L38).
+    for (const w of waiting.splice(0)) {
+      if (w.givens.some(([, t]) => { const r = s.resolve(t); return r.t === "con" && r.id === INT; })) { solvesInWholeNumbers(code, w.solve); again = true; }
+      else for (const [g, t] of w.givens) unifyAt(g, num, t, "a given port");
     }
     settle();
     const generalized = new Set<number>();
@@ -804,7 +813,12 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     }
     // A predicate's out = true is a Bool; every other port is a number.
     const outTrue = (k: string) => !!p?.predicate && k === "out";
-    for (const [k, g] of Object.entries(n.given)) unifyAt(g, outTrue(k) ? bool : num, givenTypes.get(k)!, "a given port");
+    // A given whose type isn't known yet may turn out an Int later in the
+    // definition (L38's open end): it waits until the definition is read,
+    // and an Int then makes this a whole-number solve, checked again.
+    const open = Object.entries(n.given).filter(([k]) => !outTrue(k) && s.resolve(givenTypes.get(k)!).t === "var");
+    if (open.length && runsBackwards(code, n.fn)) waiting.push({ solve: n.id, givens: open.map(([k, g]) => [g, givenTypes.get(k)!]) });
+    for (const [k, g] of Object.entries(n.given)) if (!open.some(([o]) => o === k) || !runsBackwards(code, n.fn)) unifyAt(g, outTrue(k) ? bool : num, givenTypes.get(k)!, "a given port");
     for (const b of Object.values(n.binds)) { inner.set(b, num); info.typeOf.set(b, num); }
     if (p) {
       const ports = p.rel!.ports;
@@ -1107,6 +1121,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       err(n.args[1], `this does ${show(of)}'s job at ${show(r)}, so its type is ${show(want)}, not ${show(by)}`);
     }
   }
+  if (again) return infer(code, names, reuse, opts);
   for (const [id, t] of info.typeOf) info.typeOf.set(id, s.zonk(t));
   for (const [id, t] of info.opAt!) info.opAt!.set(id, s.zonk(t));
   for (const h of info.holes.values()) {
