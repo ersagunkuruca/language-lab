@@ -11,9 +11,10 @@
 // outer and inner products, the regressive product, the dual, the reverse
 // and the involution are linear in each input, so their mask is the
 // union over the input blades of what each pair of basis elements gives;
-// that table of masks is worked out once per algebra by running the
-// operation on its basis elements (so in PGA a product landing on
-// e₀e₀ = 0 drops out). The sandwich, a reflection, an inverse and the
+// that table of masks is worked out from the blades and the squares as
+// the prelude defines each operation (so in PGA a product landing on
+// e₀e₀ = 0 drops out), or, for a basis that isn't one 1 per element, by
+// running the operation on the basis elements. The sandwich, a reflection, an inverse and the
 // exponential are built from those (the exponential as a closure under
 // the product). Anything the reading doesn't follow is every part, so a
 // mask is never too small.
@@ -51,9 +52,8 @@ export interface Algebra {
   blades: number[][];
   full: number;
   // pair(op, i, j): the mask of op(eᵢ, eⱼ); one(op, i): of op(eᵢ).
-  // Each is worked out by running the program's own operation the first
-  // time it is asked for: a 16-part algebra has 1024 products, and
-  // describing a value needs none of them.
+  // Each is worked out from the blades (or, for an unusual basis, by
+  // running the program's own operation the first time it is asked for).
   pair(op: Binary, i: number, j: number): number;
   one(op: Unary, i: number): number;
 }
@@ -112,19 +112,49 @@ export function algebrasOf(code: Code, info: Info): Map<Id, Algebra> {
       const at = Array.from({ length: parts }, (_, i) => pairs.findIndex(([, e]) => (e as { fields: number[] }).fields[i] !== 0));
       const blades = at.map((k) => listOf(pairs[k][0]).flatMap((b, j) => ((b as { tag: Id }).tag === TRUE ? [j + 1] : [])));
       const el = (i: number) => elements[at[i]];
+      const full = (1 << parts) - 1;
+      // With one 1 per element (the basis as clifford table wants it),
+      // each table is worked out from the blades and the squares, as the
+      // prelude's own definitions give it: eₐ eᵦ = ± e_{A Δ B}, 0 when a
+      // vector both have squares to 0; the outer product keeps the pairs
+      // that share no vector, the inner product (a left contraction) those
+      // where A is inside B; the reverse and the involution keep each
+      // blade; the dual and the undual take it to its complement; and the
+      // regressive product is undual(dual a ∧ dual b). Running the
+      // operations instead took 14 seconds on Spacetime's 16 parts
+      // (BACKLOG L43c); grades.test.ts checks the two agree.
+      const squares = listOf(al.fields[0]) as number[];
+      const unit = elements.every((e) => e.fields.filter((x) => x !== 0).length === 1);
+      const vecs = blades.map((b) => b.reduce((m, v) => m | (1 << (v - 1)), 0));
+      const partOf = new Map(vecs.map((v, i) => [v, i]));
+      const bit = (v: number) => { const i = partOf.get(v); return i === undefined ? 0 : 1 << i; };
+      const all = (1 << squares.length) - 1;
+      const dies = (common: number) => squares.some((s, i) => (common >> i) & 1 && s === 0);
+      const times = (A: number, B: number, keep: boolean) => (keep && !dies(A & B) ? bit(A ^ B) : 0);
+      const spread = (m: number, f: (v: number) => number) => bits(m).reduce((r, i) => r | f(vecs[i]), 0);
+      const table = {
+        product: (A: number, B: number) => times(A, B, true),
+        outer: (A: number, B: number) => times(A, B, (A & B) === 0),
+        inner: (A: number, B: number) => times(A, B, (A & ~B) === 0),
+        regressive: (A: number, B: number) => spread(bit(all & ~A), (a) => spread(bit(all & ~B), (b) => spread(times(a, b, (a & b) === 0), (c) => bit(all & ~c)))),
+        reverse: (A: number) => bit(A),
+        involute: (A: number) => bit(A),
+        dual: (A: number) => bit(all & ~A),
+        undual: (A: number) => bit(all & ~A),
+      };
       const maskOf = (v: Value) => { const f = (v as { fields: number[] }).fields; return f.reduce((m, x, i) => (x !== 0 ? m | (1 << i) : m), 0); };
       const run = (op: string, ...xs: Value[]) => maskOf(first(r.call(r.value(CL[op]!), al, ...xs) as Iterable<Value>)!);
       const memo = new Map<string, number>();
       // An operation that fails on a part could give any part.
       const once = (key: string, f: () => number) => {
         let m = memo.get(key);
-        if (m === undefined) { try { m = f(); } catch { m = (1 << parts) - 1; } memo.set(key, m); }
+        if (m === undefined) { try { m = f(); } catch { m = full; } memo.set(key, m); }
         return m;
       };
       const alg: Algebra = {
-        def: d, variant: elements[0].tag, parts, blades, full: (1 << parts) - 1,
-        pair: (op, i, j) => once(`${op} ${i} ${j}`, () => run(op, el(i), el(j))),
-        one: (op, i) => once(`${op} ${i}`, () => run(op, el(i))),
+        def: d, variant: elements[0].tag, parts, blades, full,
+        pair: (op, i, j) => (unit ? table[op](vecs[i], vecs[j]) : once(`${op} ${i} ${j}`, () => run(op, el(i), el(j)))),
+        one: (op, i) => (unit ? table[op](vecs[i]) : once(`${op} ${i}`, () => run(op, el(i)))),
       };
       found.set(d, alg);
     } catch { /* an algebra that doesn't run is not read */ }

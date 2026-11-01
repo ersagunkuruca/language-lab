@@ -53,6 +53,15 @@ Because the table is known, the product rule is exact, not an estimate
 from grades: in PGA a product that would land on e₀e₀ = 0 drops out by
 itself, which grade arithmetic alone can't see.
 
+Each operation's table of masks is worked out from the blades and the
+squares, as the prelude defines the operation: eₐ eᵦ lands on A Δ B and
+is 0 when a vector both share squares to 0; the outer product keeps the
+pairs with no vector in common, the inner product those with A inside B;
+the dual is the complement. Working them out by running each operation
+on the basis elements took 14 seconds on Spacetime's 16 parts; this
+takes 0.2 (L43c's first step), and grades.test.ts checks both give the
+same tables.
+
 In Bounce a position would come out as {e₁, e₂, e₃} and a rotor as {1,
 e₁₂, e₁₃, e₂₃}; a rotor times a position as {e₁, e₂, e₃, e₁₂₃}, and the
 whole sandwich R x R̃ back as {e₁, e₂, e₃} only if the rule knows R R̃ is
