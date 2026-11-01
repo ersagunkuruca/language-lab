@@ -37,7 +37,7 @@ import type { Presentation } from "../ters/src/presentation.ts";
 import type { Info } from "../ters/src/lang/infer.ts";
 import { ASSOCIATIVE, chainOperands, CONS, NIL, S, SIGS, TRUE, FALSE } from "../ters/src/lang/std.ts";
 import { CHOICE, DIVERGE, showIn, showType, type Type } from "../ters/src/lang/types.ts";
-import { connectDrag, infiniteCanvas, moveDrag, s, svgPoint, type Canvas, type Pos } from "./canvas.ts";
+import { connectDrag, follow, infiniteCanvas, moveDrag, s, svgPoint, type Canvas, type Pos } from "./canvas.ts";
 import { litLabel, sigType } from "./typed.ts";
 import { arrange, crossingsOf, curve, curvePoints, frameBoxes, hopPath, overlaps, placeLabels, route, tidy, tunnels, type Box, type TFrame, type TNode, type TWire } from "./graphLayout.ts";
 import { planSolve } from "../ters/src/lang/solve.ts";
@@ -82,6 +82,9 @@ export interface GraphHooks {
   // own size again.
   sizes?: Record<Id, { w: number; h: number }>;
   resized?: (id: Id, to: { w: number; h: number } | null) => void;
+  // A multiple selection's frame dragged by a corner (E171): where the
+  // picked nodes go, and with Shift their sizes too (null: their own).
+  spread?: (at: Record<Id, Pos>, sizes: Record<Id, { w: number; h: number } | null>) => void;
   moved: (to: Record<Id, Pos>, note?: string) => void;
   // Bindings shown as a let node with get nodes instead of wires.
   named: Set<Id>;
@@ -250,7 +253,23 @@ export function typedGraph(code: Code, pres: Presentation, info: Info | null, de
   drawnAt.set(key, new Map([...scene.items].map(([k, it]) => [k, { ...it.auto, frame: it.frame ?? null }])));
   const draw = (at: Record<Id, Pos>) => canvas.world.replaceChildren(...render(shown(at), hooks, at, picked));
   draw(hooks.at);
-  interact(canvas, scene, hooks, picked, draw);
+  // A node being resized, drawn at the size so far with its wires: the
+  // definition built again with that size, the node and its wires taken
+  // from it (Ersagun 2026-11-01: the wires only caught up on release).
+  // Several at once for a selection's frame dragged with Shift (E171).
+  const preview = (sizes: Record<Id, { w: number; h: number } | null>, at: Record<Id, Pos> = hooks.at): boolean => {
+    const given = { ...hooks.sizes };
+    for (const [id, z] of Object.entries(sizes)) { if (z) given[id] = z; else delete given[id]; }
+    const next = build(code, pres, info, defId, { ...hooks, sizes: given });
+    const ids = new Set(Object.keys(sizes).filter((id) => next.items.has(id) && scene.items.has(id)));
+    if (!ids.size) return false;
+    for (const id of ids) { const old = scene.items.get(id)!; scene.items.set(id, { ...next.items.get(id)!, auto: old.auto, frame: old.frame }); }
+    const touches = (w: Wire) => ("item" in w.from && ids.has(w.from.item)) || ("item" in w.to && ids.has(w.to.item));
+    scene.wires = [...scene.wires.filter((w) => !touches(w)), ...next.wires.filter(touches)];
+    draw(at);
+    return true;
+  };
+  interact(canvas, scene, hooks, picked, draw, preview);
   return {
     ...canvas,
     picked: () => [...picked],
@@ -291,6 +310,7 @@ interface Item {
   solid: boolean;       // wires running under it are drawn as tunnels
   label?: Box;          // words drawn outside it (a dot's name), relative to it
   name?: string;        // what it is called, for a folded box that holds it
+  own?: { w: number; h: number }; // its own size, when it can be resized
 }
 interface Frame { id: Id; parent: Id | null; title: string; cls: string; binders: Id[]; labels: string[]; results?: Id[]; resultLabels?: string[]; out: End | null; pad: [number, number, number, number]; minH: number; minW: number }
 interface Wire { from: End; to: End; cls: string; edge?: Id; use?: { dot: Id; ref: Id }; flow: boolean }
@@ -341,18 +361,30 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
 
   // A node's size: what it shows, or bigger where it was made bigger by
   // hand (I49).
+  // Each resizable node's own size, what it shows (its smallest).
+  const natural = new Map<Id, { w: number; h: number }>();
   const sized = (id: Id, w: number, h: number): [number, number] => {
+    natural.set(id, { w, h });
     const z = hooks.sizes?.[id];
     return z ? [Math.max(w, z.w), Math.max(h, z.h)] : [w, h];
   };
-  // The corner a selected node is resized by: drag it, or double-click it
-  // for the node's own size again.
+  // The corner a selected node is resized by: drag it either way, down to
+  // the node's own size, or double-click it for that size again. Drawn
+  // last, over the node's words and ports, with a square to grab rather
+  // than its two thin strokes (Ersagun 2026-11-01: "I have to wiggle my
+  // mouse pixel by pixel").
   const grip = (g: SVGGElement, id: Id, w: number, h: number) => {
-    if (!hooks.resized || hooks.selected !== id) return;
-    g.append(titled(s("path", { d: `M${w - 12} ${h - 2} L${w - 2} ${h - 12} M${w - 7} ${h - 2} L${w - 2} ${h - 7}`, class: "grip", "data-resize": id, "data-w": String(w), "data-h": String(h) }), "Drag to make this node bigger; double-click for its own size"));
+    const own = natural.get(id);
+    if (!hooks.resized || hooks.selected !== id || !own) return;
+    const at = { "data-resize": id, "data-w": String(w), "data-h": String(h), "data-min-w": String(own.w), "data-min-h": String(own.h) };
+    const handle = s("g", { class: "grip", ...at });
+    handle.append(s("rect", { x: w - 16, y: h - 16, width: 18, height: 18, class: "grip-hit" }), s("path", { d: `M${w - 12} ${h - 2} L${w - 2} ${h - 12} M${w - 7} ${h - 2} L${w - 2} ${h - 7}` }));
+    g.append(titled(handle, "Drag to resize this node; double-click for its own size"));
   };
   const item = (key: Id, w: number, h: number, draw: (g: SVGGElement) => void, extra: Partial<Item> = {}): Sub => {
-    items.set(key, { key, frame, w, h, auto: { x: 0, y: 0 }, draw, solid: true, ...extra });
+    const drawn = (g: SVGGElement) => { draw(g); grip(g, key, w, h); };
+    const own = natural.get(key);
+    items.set(key, { key, frame, w, h, auto: { x: 0, y: 0 }, draw: drawn, solid: true, ...(own && hooks.resized ? { own } : {}), ...extra });
     return { w, h, outX: w, outY: h / 2, out: { item: key, dx: w, dy: h / 2 }, at: new Map([[key, { x: 0, y: 0 }]]) };
   };
   // A use of a binding wired into (item, dx, dy): a wire from its source,
@@ -521,7 +553,21 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     // An input with nothing in it is drawn as an empty port, not a node
     // (NODE-EDITOR.md "Loose parts", rule 3): click it for the palette.
     const empty = (a: Id) => node(a)?.kind === "hole";
-    const kids = inputs.map((a) => (empty(a) ? null : arg(a)));
+    // A list written in place as an input, sum([1, 2, 3]), is drawn on the
+    // node itself: a socket per item, bracketed, and an empty one after
+    // them that adds an item, clicked or wired to (E166, PORTS-2026-11-01.md
+    // §4; prior art: Blender's multi-input sockets). The list node isn't
+    // drawn: it is the port. An empty list stays a value of its own.
+    const inPlace = (a: Id): Id[] | null => {
+      if (list || ops || f.kind !== "ref" || inputs !== n.args || empty(a) || dotOf(a)) return null;
+      const items = listItems(a);
+      return items?.length ? items : null;
+    };
+    const rows: { a: Id; list?: Id; add?: boolean }[] = inputs.flatMap((a) => {
+      const items = inPlace(a);
+      return items ? [...items.map((x) => ({ a: x, list: a })), { a, list: a, add: true }] : [{ a }];
+    });
+    const kids = rows.map((r) => (r.add || empty(r.a) ? null : arg(r.a)));
     const eff = effectsOf(n);
     const badge = [...eff.does, ...(eff.handles ? [`handles ${eff.handles}`] : [])].join(" · ");
     const portNames = ops && ops.length === n.args.length ? ops.map(name) : null;
@@ -529,16 +575,26 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const grows = !!hooks.addItem && (!!list || (f.kind === "ref" && ASSOCIATIVE.has(f.target) && n.args.length === 2));
     const plus = grows ? 16 : 0;
     const [bw, bh] = sized(id, Math.max(44, tw(label, 8.2) + 24, badge ? tw(badge, 6.4) + 16 : 0, portNames ? Math.max(...portNames.map((l) => tw(l, 6.6))) + 30 : 0),
-      portNames ? 30 + inputs.length * 20 : Math.max(30, inputs.length * 18 + 12) + (badge ? 14 : 0) + plus);
+      portNames ? 30 + rows.length * 20 : Math.max(30, rows.length * 18 + 12) + (badge ? 14 : 0) + plus);
     const top = badge ? 14 : 0;
-    const portY = (i: number) => (portNames ? 30 + i * 20 : top + ((bh - top - plus) / (inputs.length + 1)) * (i + 1));
+    const portY = (i: number) => (portNames ? 30 + i * 20 : top + ((bh - top - plus) / (rows.length + 1)) * (i + 1));
     item(id, bw, bh, (g) => {
       g.append(titled(s("rect", { width: bw, height: bh, rx: 7, class: `cn${eff.does.length ? " eff" : ""}${eff.handles ? " handler" : ""}${sel(id)}${errs.has(id) ? " err" : ""}`, "data-id": id, "data-move": id }), typeOf(id)));
-      grip(g, id, bw, bh);
       if (badge) g.append(titled(s("text", { x: bw / 2, y: 11, class: "badge", "text-anchor": "middle" }, badge), eff.why ? `Choice: it can give no answer, ${eff.why}` : badge));
       g.append(s("text", { x: bw / 2, y: portNames ? 19 : top + (bh - top) / 2 + 5, class: "cl", "text-anchor": "middle" }, label));
       portNames?.forEach((l, i) => g.append(s("text", { x: 9, y: portY(i) + 4, class: "portl" }, l)));
-      inputs.forEach((a, i) => g.append(empty(a)
+      // Each list's bracket, under its sockets.
+      for (const l of new Set(rows.flatMap((r) => (r.list ? [r.list] : [])))) {
+        const ys = rows.flatMap((r, i) => (r.list === l ? [portY(i)] : []));
+        g.append(titled(s("rect", { x: -8, y: ys[0] - 8, width: 16, height: ys[ys.length - 1] - ys[0] + 16, rx: 8, class: `list-port${sel(l)}${errs.has(l) ? " err" : ""}`, "data-id": l }), `${typeOf(l)}: a list written in place, a socket per item`));
+      }
+      rows.forEach((r, i) => {
+        if (!r.add) return;
+        const add = s("g", { class: "add-inp", ...(hooks.addItem ? { "data-add": r.list! } : {}) });
+        add.append(s("circle", { cx: 0, cy: portY(i), r: 5 }), s("text", { x: 0, y: portY(i) + 3.5, "text-anchor": "middle" }, "+"));
+        g.append(titled(add, "Add an item to this list: click, or drag a value here"));
+      });
+      rows.forEach(({ a, add }, i) => add || g.append(empty(a)
         ? titled(s("circle", { cx: 0, cy: portY(i), r: 5, class: `inp empty${sel(a)}${errs.has(a) ? " err" : ""}`, "data-slot": a, "data-id": a }), `${holeType(a) ? `${holeType(a)}: ` : ""}empty. Click it for the palette, or drag a value onto it`)
         : titled(s("circle", { cx: 0, cy: portY(i), r: 5, class: "inp", "data-slot": a }), typeOf(a))));
       if (grows) {
@@ -548,7 +604,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
       }
       g.append(titled(s("circle", { cx: bw, cy: bh / 2, r: 5, class: "outp", "data-out": id }), "Drag onto another input to share this value there"));
     }, { value: id, out: { x: bw, y: bh / 2 }, name: label === "list" || label === "apply" ? undefined : field ? label.slice(1) : label });
-    const { sub, bx, by } = withArgs(inputs, kids, bw, bh, id, portY);
+    const { sub, bx, by } = withArgs(rows.map((r) => r.a), kids, bw, bh, id, portY);
     return { ...sub, outX: bx + bw, outY: by + bh / 2, out: { item: id, dx: bw, dy: bh / 2 } };
   };
 
@@ -1188,7 +1244,20 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
     // A title can't hang off a circle that's a sibling: put it inside.
     for (const c of vals.querySelectorAll("circle.val-more")) { const t = c.nextElementSibling; if (t?.tagName === "title") c.append(t); }
   }
-  return [...[false, true].flatMap((up) => [frameL(up), wireL(up), portL(up), ...(up ? [] : [marks]), itemL(up), nameL(up)]), out, vals];
+  // A multiple selection's frame, with a corner to drag at each end (E171).
+  const spread = s("g", { class: "spread" });
+  const units = hooks.spread && picked.size > 1 ? spreadUnits(scene, at, picked) : [];
+  if (units.length > 1) {
+    const b = union(units.map((u) => u.box)), m = 12;
+    spread.append(s("rect", { x: b.x - m, y: b.y - m, width: b.w + 2 * m, height: b.h + 2 * m, rx: 10, class: "spread-box" }));
+    for (const c of ["nw", "ne", "sw", "se"]) {
+      const x = c.includes("w") ? b.x - m : b.x + b.w + m, y = c.includes("n") ? b.y - m : b.y + b.h + m;
+      const g = s("g", { class: `spread-grip ${c}`, "data-spread": c });
+      g.append(s("rect", { x: x - 9, y: y - 9, width: 18, height: 18, class: "grip-hit" }), s("rect", { x: x - 4, y: y - 4, width: 8, height: 8, rx: 1.5, class: "spread-dot" }), s("title", {}, "Drag to spread the picked nodes apart or draw them together; hold Shift to resize them too"));
+      spread.append(g);
+    }
+  }
+  return [...[false, true].flatMap((up) => [frameL(up), wireL(up), portL(up), ...(up ? [] : [marks]), itemL(up), nameL(up)]), out, vals, spread];
 }
 
 // ---------------------------------------------------------------- tidy
@@ -1203,6 +1272,24 @@ function expand(scene: Scene, ids: Id[]): Set<Id> {
   }
   return out;
 }
+
+// What a multiple selection's frame moves (E171): each picked node or
+// frame that isn't inside another picked frame, its box, and the nodes it
+// carries.
+function spreadUnits(scene: Scene, at: Record<Id, Pos>, picked: Set<Id>): { id: Id; box: Box; keys: Id[] }[] {
+  const { pos, boxes } = placeAll(scene, at);
+  const parent = (id: Id) => scene.items.get(id)?.frame ?? scene.frames.get(id)?.parent ?? null;
+  const under = (id: Id) => { for (let f = parent(id); f; f = scene.frames.get(f)?.parent ?? null) if (picked.has(f)) return true; return false; };
+  return [...picked].filter((id) => !under(id)).flatMap((id) => {
+    const it = scene.items.get(id), p = pos.get(id);
+    const box = it && p ? { x: p.x, y: p.y, w: it.w, h: it.h } : boxes.get(id);
+    return box ? [{ id, box, keys: [...expand(scene, [id])] }] : [];
+  });
+}
+const union = (bs: Box[]): Box => {
+  const x = Math.min(...bs.map((b) => b.x)), y = Math.min(...bs.map((b) => b.y));
+  return { x, y, w: Math.max(...bs.map((b) => b.x + b.w)) - x, h: Math.max(...bs.map((b) => b.y + b.h)) - y };
+};
 
 // The scene as tidy and arrange see it: boxes, frames and wires.
 function asLayout(scene: Scene, at: Record<Id, Pos>) {
@@ -1291,7 +1378,7 @@ function tidyScene(scene: Scene, at: Record<Id, Pos>, only: Set<Id> | null): Rec
 // shares its value with an input; an input dragged into space is cleared;
 // shift-drag on empty space picks what the box touches. Right-click asks
 // the editor for a menu.
-function interact(canvas: Canvas, scene: Scene, hooks: GraphHooks, picked: Set<Id>, draw: (at: Record<Id, Pos>) => void) {
+function interact(canvas: Canvas, scene: Scene, hooks: GraphHooks, picked: Set<Id>, draw: (at: Record<Id, Pos>) => void, preview?: (sizes: Record<Id, { w: number; h: number } | null>, at?: Record<Id, Pos>) => boolean) {
   const root = canvas.root;
   // A click on empty space deselects; a press that panned doesn't.
   let down = { x: 0, y: 0 };
@@ -1378,26 +1465,85 @@ function interact(canvas: Canvas, scene: Scene, hooks: GraphHooks, picked: Set<I
   root.addEventListener("pointerdown", (ev) => {
     if (ev.button !== 0) return;
     const start = ev.target as Element;
-    // The corner of a selected node: drag to resize it (I49). The box
-    // follows the pointer; the node is laid out at its new size on release.
+    // The corner of a selected node: drag to resize it (I49), bigger or
+    // back down to its own size. The node and its wires follow the
+    // pointer, a frame at a time; the graph is laid out at the new size on
+    // release.
+    // A corner of a multiple selection's frame (E171): drag it and the
+    // picked nodes spread apart or draw together, about the opposite
+    // corner, each keeping its size; with Shift held they are resized by
+    // as much too (Ersagun 2026-11-01).
+    const corner = start.closest("[data-spread]")?.getAttribute("data-spread");
+    if (corner && hooks.spread) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const units = spreadUnits(scene, hooks.at, picked);
+      const all = union(units.map((u) => u.box));
+      const west = corner.includes("w"), north = corner.includes("n");
+      const anchor = { x: west ? all.x + all.w : all.x, y: north ? all.y + all.h : all.y };
+      const from = { x: west ? all.x : all.x + all.w, y: north ? all.y : all.y + all.h };
+      const { pos } = placeAll(scene, hooks.at);
+      let now: Record<Id, Pos> = {}, sizes: Record<Id, { w: number; h: number } | null> = {}, frame = 0, shift = ev.shiftKey;
+      const keys = (e: KeyboardEvent | PointerEvent) => { shift = e.shiftKey; };
+      window.addEventListener("keydown", keys);
+      window.addEventListener("keyup", keys);
+      window.addEventListener("pointermove", keys);
+      let d = { x: 0, y: 0 };
+      const show = () => {
+        frame = 0;
+        const ratio = (to: number, a: number, f: number) => (Math.abs(f - a) < 1 ? 1 : Math.max(0.1, (to - a) / (f - a)));
+        const sx = ratio(from.x + d.x, anchor.x, from.x), sy = ratio(from.y + d.y, anchor.y, from.y);
+        now = {}; sizes = {};
+        for (const u of units) {
+          const it = scene.items.get(u.id);
+          const own = shift && it?.own ? it.own : null;
+          const w = own ? Math.max(own.w, Math.round(u.box.w * sx)) : u.box.w, h = own ? Math.max(own.h, Math.round(u.box.h * sy)) : u.box.h;
+          if (own) sizes[u.id] = w <= own.w && h <= own.h ? null : { w, h };
+          const cx = anchor.x + (u.box.x + u.box.w / 2 - anchor.x) * sx, cy = anchor.y + (u.box.y + u.box.h / 2 - anchor.y) * sy;
+          const dx = Math.round(cx - w / 2 - u.box.x), dy = Math.round(cy - h / 2 - u.box.y);
+          for (const k of u.keys) { const p = pos.get(k)!; now[k] = { x: p.x + dx, y: p.y + dy }; }
+        }
+        const at = { ...hooks.at, ...now };
+        if (!(Object.keys(sizes).length && preview?.(sizes, at))) draw(at);
+      };
+      moveDrag(root, ev, (dx, dy) => { d = { x: dx, y: dy }; frame ||= requestAnimationFrame(show); }, (moved) => {
+        if (frame) { cancelAnimationFrame(frame); show(); }
+        window.removeEventListener("keydown", keys);
+        window.removeEventListener("keyup", keys);
+        window.removeEventListener("pointermove", keys);
+        if (moved) hooks.spread!(now, sizes);
+      }, canvas.zoom());
+      return;
+    }
     const grab = start.closest("[data-resize]");
     if (grab && hooks.resized) {
       ev.preventDefault();
       ev.stopPropagation();
       const id = grab.getAttribute("data-resize")!, w0 = +grab.getAttribute("data-w")!, h0 = +grab.getAttribute("data-h")!;
+      const minW = +(grab.getAttribute("data-min-w") ?? w0), minH = +(grab.getAttribute("data-min-h") ?? h0);
       // A second press in a row (a pointerdown's detail is always 0): its
       // own size again.
       const again = lastGrip?.id === id && ev.timeStamp - lastGrip.at < 450;
       lastGrip = { id, at: ev.timeStamp };
       if (again) { lastGrip = null; hooks.resized(id, null); return; }
-      const box = grab.parentElement?.querySelector(":scope > rect") as SVGRectElement | null;
-      let size = { w: w0, h: h0 };
-      moveDrag(root, ev, (dx, dy) => {
-        size = { w: Math.round(Math.max(w0, w0 + dx)), h: Math.round(Math.max(h0, h0 + dy)) };
+      let size = { w: w0, h: h0 }, frame = 0;
+      const show = () => {
+        frame = 0;
+        if (preview?.({ [id]: size })) return;
+        // Without a preview, the box alone follows.
+        const g = canvas.world.querySelector(`[data-resize="${CSS.escape(id)}"]`)?.parentElement;
+        const box = g?.querySelector(":scope > rect");
         box?.setAttribute("width", String(size.w));
         box?.setAttribute("height", String(size.h));
-        grab.setAttribute("transform", `translate(${size.w - w0} ${size.h - h0})`);
-      }, (moved) => { if (moved && (size.w !== w0 || size.h !== h0)) hooks.resized!(id, { w: Math.max(size.w, hooks.sizes?.[id]?.w ?? 0), h: Math.max(size.h, hooks.sizes?.[id]?.h ?? 0) }); }, canvas.zoom());
+      };
+      moveDrag(root, ev, (dx, dy) => {
+        size = { w: Math.max(minW, Math.round(w0 + dx)), h: Math.max(minH, Math.round(h0 + dy)) };
+        frame ||= requestAnimationFrame(show);
+      }, (moved) => {
+        if (frame) cancelAnimationFrame(frame);
+        if (!moved || (size.w === w0 && size.h === h0)) return;
+        hooks.resized!(id, size.w <= minW && size.h <= minH ? null : size);
+      }, canvas.zoom());
       return;
     }
     const add = start.closest("[data-add]")?.getAttribute("data-add");
@@ -1445,17 +1591,14 @@ function interact(canvas: Canvas, scene: Scene, hooks: GraphHooks, picked: Set<I
         box.setAttribute("x", String(Math.min(a.x, b.x))); box.setAttribute("y", String(Math.min(a.y, b.y)));
         box.setAttribute("width", String(Math.abs(b.x - a.x))); box.setAttribute("height", String(Math.abs(b.y - a.y)));
       };
-      const up = (e: PointerEvent) => {
-        window.removeEventListener("pointermove", mv2);
-        window.removeEventListener("pointerup", up);
+      follow(ev, mv2, (e, cut) => {
+        if (cut) { box.remove(); return; }
         const b = world(canvas, e);
         const r = { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(b.x - a.x), h: Math.abs(b.y - a.y) };
         const { pos } = placeAll(scene, hooks.at);
         for (const it of scene.items.values()) { const p = pos.get(it.key)!; if (overlaps(r, { x: p.x, y: p.y, w: it.w, h: it.h })) picked.add(it.key); }
         draw(hooks.at);
-      };
-      window.addEventListener("pointermove", mv2);
-      window.addEventListener("pointerup", up);
+      });
     }
   });
 }

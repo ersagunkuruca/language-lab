@@ -234,6 +234,67 @@ export function adopt(code: Code, names: Names, lib: Library, comments: Comments
   return { code: next, names: own(names, lib.names), comments: own(comments, lib.comments), adopted };
 }
 
+// ------------------------------------------------------------------ sameAs
+
+// What each of a program's drafts is the same as (SHARING.md §7): the
+// library's definitions with its hash, and the program's other drafts with
+// it. Shown, never merged: the draft keeps its id, and an edit that moves
+// its hash ends the match. A hash is the code up to names, so a match is
+// rare and always right. Hidden definitions (a module's insides) aren't
+// offered. Prior art: Unison reports a definition whose hash it already
+// has as another name for it. Types aren't offered: two types of the same
+// shape are still two types (Spot isn't Complex), and the checker keeps
+// them apart.
+export interface Same { library: Id[]; drafts: Id[] }
+const libraryIndex = new WeakMap<Code, { index: Map<string, Id[]>; memo: Map<Id, string> }>();
+const valueDef = (code: Code, d: Id) => { const n = code.nodes[d]; return n?.kind === "def" && n.body !== null && code.nodes[n.body]?.kind !== "typedef"; };
+function indexOf(lib: Library) {
+  let found = libraryIndex.get(lib.code);
+  if (!found) {
+    const index = new Map<string, Id[]>(), memo = hashes(lib.code, lib.code.defs.filter((d) => lib.code.nodes[d]?.kind === "def"));
+    for (const d of lib.code.defs) if (valueDef(lib.code, d) && !lib.hidden.has(d)) { const k = memo.get(d)!; index.set(k, [...(index.get(k) ?? []), d]); }
+    libraryIndex.set(lib.code, (found = { index, memo }));
+  }
+  return found;
+}
+// The library's hashes under a program's own: a draft that calls the
+// library hashes only itself.
+class Over extends Map<Id, string> {
+  under: Map<Id, string>;
+  constructor(under: Map<Id, string>) { super(); this.under = under; }
+  override has(k: Id) { return super.has(k) || this.under.has(k); }
+  override get(k: Id) { return super.get(k) ?? this.under.get(k); }
+}
+// `memo` carries the drafts' hashes from one call to the next while their
+// code is the same (hash.ts `hashes`): the editor keeps it per version.
+export function sameAs(code: Code, lib: Library, memo?: Map<Id, string>): Map<Id, Same> {
+  const { index, memo: libMemo } = indexOf(lib);
+  memo ??= new Over(libMemo);
+  const drafts = code.defs.filter((d) => !isPublished(d) && !lib.code.nodes[d] && valueDef(code, d));
+  const h = hashes(code, drafts, memo);
+  const byHash = new Map<string, Id[]>();
+  for (const d of drafts) { const k = h.get(d)!; byHash.set(k, [...(byHash.get(k) ?? []), d]); }
+  const out = new Map<Id, Same>();
+  for (const d of drafts) {
+    const k = h.get(d)!;
+    const same = { library: index.get(k) ?? [], drafts: (byHash.get(k) ?? []).filter((x) => x !== d) };
+    if (same.library.length || same.drafts.length) out.set(d, same);
+  }
+  return out;
+}
+
+// sameAs said in words, one line per draft that has a match, for `lab
+// check` and the MCP server's check: "`sq` is the same as `square`
+// (yours)", "`transform` is the same as `map` in the library".
+export function sameLines(code: Code, names: Names, lib: Library): string[] {
+  const where = (d: Id) => lib.modules.find((m) => m.code.nodes[d])?.title;
+  const nm = (d: Id) => `\`${names[d] ?? lib.names[d] ?? d}\``;
+  return [...sameAs(code, lib)].map(([d, s]) => `${nm(d)} is the same as ${[
+    ...s.library.map((x) => { const m = where(x); return `${nm(x)} ${m ? `in ${m}` : "in the library"}`; }),
+    ...s.drafts.map((x) => `${nm(x)} (yours)`),
+  ].join(" and ")}`);
+}
+
 // ------------------------------------------------------------------ upgrade
 
 // Move a program from one published definition to another (a module's

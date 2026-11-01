@@ -42,25 +42,47 @@ export function svgPoint(root: SVGSVGElement, e: { clientX: number; clientY: num
 export function moveDrag(root: SVGSVGElement, ev: PointerEvent, move: (dx: number, dy: number) => void, done: (moved: boolean) => void, scale = moveScale(root)) {
   // Measured in screen pixels and divided by the zoom: world units.
   let moved = false;
-  const mv = (e: PointerEvent) => {
+  follow(ev, (e) => {
     const dx = (e.clientX - ev.clientX) / scale, dy = (e.clientY - ev.clientY) / scale;
     if (!moved && Math.abs(dx) + Math.abs(dy) <= 3) return;
     moved = true;
     move(dx, dy);
-  };
-  const up = () => {
-    window.removeEventListener("pointermove", mv);
-    window.removeEventListener("pointerup", up);
+  }, () => {
     if (moved) {
       // The click that follows a drag isn't a click.
       root.addEventListener("click", stop, { capture: true });
       setTimeout(() => root.removeEventListener("click", stop, { capture: true }), 0);
     }
     done(moved);
-  };
+  });
   const stop = (e: Event) => e.stopPropagation();
+}
+
+// One pointer followed from its press: `move` on its own moves only, `end`
+// when it lifts. Cut short (`cut`) when the browser takes it over
+// (pointercancel) or a second finger comes down: a pinch takes over from
+// there, and its moves are no longer this drag's, but the end still waits
+// for this finger to lift, so nothing is redrawn under the pinch. Without
+// the pointer's id, a second finger's moves were read as the first's and
+// the dragged thing jumped between them.
+export function follow(ev: PointerEvent, move: (e: PointerEvent) => void, end: (e: PointerEvent, cut: boolean) => void): void {
+  const id = ev.pointerId;
+  let cut = false;
+  const mv = (e: PointerEvent) => { if (e.pointerId === id && !cut) move(e); };
+  const finish = (e: PointerEvent) => {
+    window.removeEventListener("pointermove", mv);
+    window.removeEventListener("pointerup", up);
+    window.removeEventListener("pointercancel", cancel);
+    window.removeEventListener("pointerdown", other, true);
+    end(e, cut);
+  };
+  const up = (e: PointerEvent) => { if (e.pointerId === id) finish(e); };
+  const cancel = (e: PointerEvent) => { if (e.pointerId === id) { cut = true; finish(e); } };
+  const other = (e: PointerEvent) => { if (e.pointerId !== id && e.pointerType === "touch") cut = true; };
   window.addEventListener("pointermove", mv);
   window.addEventListener("pointerup", up);
+  window.addEventListener("pointercancel", cancel);
+  window.addEventListener("pointerdown", other, true);
 }
 
 // Drag to connect: a dashed line follows the pointer; every element matching
@@ -93,18 +115,16 @@ export function connectDrag(root: SVGSVGElement, ev: PointerEvent, targets: stri
     why.setAttribute("y", String(b.y - 8));
     line.classList.toggle("bad", !!reason);
   };
-  const up = (e: PointerEvent) => {
-    window.removeEventListener("pointermove", move);
-    window.removeEventListener("pointerup", up);
+  // A wire cut short (a second finger, the browser taking the touch)
+  // goes nowhere: it doesn't clear what it was dragged from.
+  follow(ev, move, (e, cut) => {
     line.remove();
     why.remove();
     root.classList.remove("dragging");
     for (const t of verdicts.keys()) t.classList.remove("can", "cannot");
-    if (!moved) return;
+    if (!moved || cut) return;
     drop(document.elementFromPoint(e.clientX, e.clientY)?.closest(targets) ?? null, e);
-  };
-  window.addEventListener("pointermove", move);
-  window.addEventListener("pointerup", up);
+  });
 }
 
 // ---------------------------------------------------------------- the world
@@ -207,10 +227,7 @@ export function infiniteCanvas(key: string, cls: string, start?: () => Element[]
     const v0 = view ?? { x: 0, y: 0, z: 1 }, began = pinches;
     root.classList.add("panning");
     // A second finger makes it a pinch, which takes over from here.
-    const mv = (e: PointerEvent) => { if (pinches === began && e.pointerId === ev.pointerId) set({ ...v0, x: v0.x + e.clientX - ev.clientX, y: v0.y + e.clientY - ev.clientY }); };
-    const up = () => { root.classList.remove("panning"); window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up); };
-    window.addEventListener("pointermove", mv);
-    window.addEventListener("pointerup", up);
+    follow(ev, (e) => { if (pinches === began) set({ ...v0, x: v0.x + e.clientX - ev.clientX, y: v0.y + e.clientY - ev.clientY }); }, () => root.classList.remove("panning"));
   });
   // Pinch: two fingers zoom about the point between them, and pan with it.
   const fingers = new Map<number, { clientX: number; clientY: number }>();
@@ -339,9 +356,7 @@ export function infiniteCanvas(key: string, cls: string, start?: () => Element[]
     e.preventDefault();
     e.stopPropagation();
     look(e);
-    const up = () => { window.removeEventListener("pointermove", look); window.removeEventListener("pointerup", up); };
-    window.addEventListener("pointermove", look);
-    window.addEventListener("pointerup", up);
+    follow(e, look, () => {});
   });
   map.setAttribute("display", "none");
   el.append(root, tools, map);

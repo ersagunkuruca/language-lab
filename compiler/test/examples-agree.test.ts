@@ -30,6 +30,7 @@ const dir = mkdtempSync(join(tmpdir(), "agree-"));
 const setup: Record<string, () => string[]> = {
   chapters: () => { writeFileSync(join(dir, "book.md"), chaptersBook(3, 5)); return ["book.md", "out"]; },
   ledger: () => { writeFileSync(join(dir, "book.csv"), ledgerBook(60, 6)); return ["book.csv"]; },
+  notebook: () => [join(examples, "notebook/notes.txt")],
   routes: () => [join(examples, "routes/roads.txt")],
   wc: () => { writeFileSync(join(dir, "a.txt"), "two words\nand three more\n"); return ["a.txt"]; },
 };

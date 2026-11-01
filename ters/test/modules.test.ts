@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { isPublished, merge, MergeClash, subtree, type Code, type Id } from "../src/model.ts";
+import { isPublished, merge, MergeClash, subtree, type Code, type Id, type Node, type NodeOf } from "../src/model.ts";
 import { B } from "../src/prelude.ts";
 import { hashDef } from "../src/hash.ts";
 import { hex, sha256 } from "../src/sha256.ts";
@@ -13,7 +13,7 @@ import { Lang } from "../src/lang/dsl.ts";
 import { fillings, infer } from "../src/lang/infer.ts";
 import { CORE, LIBRARY, PRELUDE } from "../src/lang/library.ts";
 import { base, baseNames, checkOptions, loadProgram } from "../src/lang/load.ts";
-import { adopt, publish, upgrade, verify, type Module } from "../src/lang/modules.ts";
+import { adopt, publish, sameAs, upgrade, verify, type Module } from "../src/lang/modules.ts";
 import { buildPrelude } from "../src/lang/prelude-source.ts";
 import { library as listHelpers } from "../src/lang/programs.ts";
 import { pinsOf, recheck } from "../src/lang/signatures.ts";
@@ -138,6 +138,31 @@ test("adopt: a copy of a library function becomes a reference to it, and its nam
   assert.equal(r.names[prelude("keep")], undefined);
   const info = infer(r.code, baseNames(r.names));
   assert.deepEqual(info.errors, []);
+});
+
+test("sameAs: a draft with a library definition's hash, or another draft's, is shown as the same, and stops on an edit (SHARING.md §7)", () => {
+  const k = new Lang();
+  const { map } = listHelpers(k);
+  const square = k.def("square"), sq = k.def("sq"), cube = k.def("cube");
+  k.define(square, k.fn(["n"], (n) => k.call(B.mul, n, n)));
+  k.define(sq, k.fn(["x"], (x) => k.call(B.mul, x, x)));
+  k.define(cube, k.fn(["x"], (x) => k.call(B.mul, x, k.call(B.mul, x, x))));
+  const code = merge(LIBRARY.code, k.code);
+  const same = sameAs(code, LIBRARY);
+  // Names don't enter the hash: the copy of map is the prelude's map.
+  assert.deepEqual(same.get(map)?.library, [prelude("map")]);
+  assert.deepEqual(same.get(square)?.drafts, [sq]);
+  assert.deepEqual(same.get(sq)?.drafts, [square]);
+  assert.equal(same.get(cube), undefined);
+  // Nothing is merged: the drafts are still there.
+  assert.ok(code.defs.includes(map) && code.defs.includes(sq));
+  // Edited into x + x, sq matches nothing, and square nothing either.
+  const lam = code.nodes[(code.nodes[sq] as NodeOf<"def">).body!] as NodeOf<"lambda">;
+  const op = (code.nodes[lam.body] as NodeOf<"call">).fn;
+  const edited = { ...code, nodes: { ...code.nodes, [op]: { ...code.nodes[op], target: B.add } as Node } };
+  const after = sameAs(edited, LIBRARY);
+  assert.equal(after.get(sq), undefined);
+  assert.equal(after.get(square), undefined);
 });
 
 test("a pin holds a definition's type: a change that breaks it is an error there, not at the callers", () => {
