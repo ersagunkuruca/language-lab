@@ -830,6 +830,10 @@ export class Table {
   had = false;
   old: unknown = undefined;
   readonly shared: boolean;
+  // Its entries (a set's items) in compare's order, once listed: a
+  // version's entries never change, so a map read many times (an index's
+  // postings) is sorted once (C72).
+  listed: unknown = undefined;
   constructor(m: Map<unknown, unknown>, shared = false) { this.cur = m; this.shared = shared; }
   get m(): Map<unknown, unknown> { reroot(this); return this.cur!; }
 }
@@ -874,7 +878,7 @@ export const TABLE_OPS = {
   at: tableAt,
   // The entries in compare's order: the Map it stands for.
   entries: builtin("table.entries", "table entries", ofEntry((k, v) => [[tableOf_(k, v)], list({ t: "con", id: PAIR, args: [k, v] })]),
-    (t: Table) => listOf([...t.m].sort(([a], [b]) => keyOrder(a, b)).map(([a, b]) => ({ tag: PAIR_V, fields: [a, b] })))),
+    (t: Table) => (t.listed ??= listOf([...t.m].sort(([a], [b]) => keyOrder(a, b)).map(([a, b]) => ({ tag: PAIR_V, fields: [a, b] }))))),
 };
 
 // Set as a hash table changed in place (C63d): the same Table, its keys
@@ -889,7 +893,7 @@ export const HASH_SET_OPS = {
   remove: builtin("hashset.remove", "hash set remove", ofSetItem((a) => [[setOf_(a), a], setOf_(a)]), (t: Table, x: unknown) => change(t, x, false)),
   has: builtin("hashset.has", "hash set has", ofSetItem((a) => [[setOf_(a), a], bool]), (t: Table, x: unknown) => ({ tag: t.m.has(x) ? TRUE : FALSE, fields: [] })),
   size: builtin("hashset.size", "hash set size", ofSetItem((a) => [[setOf_(a)], int]), (t: Table) => t.m.size),
-  items: builtin("hashset.items", "hash set items", ofSetItem((a) => [[setOf_(a)], list(a)]), (t: Table) => listOf([...t.m.keys()].sort(keyOrder))),
+  items: builtin("hashset.items", "hash set items", ofSetItem((a) => [[setOf_(a)], list(a)]), (t: Table) => (t.listed ??= listOf([...t.m.keys()].sort(keyOrder)))),
 };
 
 // Algebraic's operations (src/lang/algebraic.ts). The one + − · −x <
