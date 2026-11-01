@@ -17,6 +17,8 @@ import { pinsOf, type Pins } from "../ters/src/lang/signatures.ts";
 import { dropLoose, setLoose, wireIn } from "./drafts.ts";
 import { addVariant, fillHole } from "../ters/src/lang/refactor.ts";
 import { partNamed } from "../ters/src/lang/results.ts";
+import { planSolve } from "../ters/src/lang/solve.ts";
+import { solveMode } from "../ters/src/lang/modes.ts";
 import { ARITH, ASSOCIATIVE, CONS, FALSE, NIL, SIGS, TRUE, TUPLE_MAX, tuplePart, tupleVariant } from "../ters/src/lang/std.ts";
 import { INT, NUMBER, RATIONAL_TYPE, STRING, schemeArith, showIn, showType, type Type } from "../ters/src/lang/types.ts";
 import { ratioParts, read as readInt } from "../ters/src/lang/int.ts";
@@ -1072,11 +1074,27 @@ export function turnable(code: Code, call: Id): { def: NodeOf<"def">; params: Id
   return { def: d, params: lam.params };
 }
 
+// Whether input k can be worked out from the result at all, in plain
+// words (BACKLOG I129): the value given as the result must be of the
+// result's type, and what's worked out stands where the result was. The
+// menu leaves out the turns this rules out; it's cheap, from the types.
+export function turnMismatch(code: Code, names: Names, info: Info | null, call: Id, k: number): string | null {
+  const t = turnable(code, call), n = code.nodes[call];
+  if (!t || n?.kind !== "call") return null;
+  const res = typeOf(info, call, names), inp = typeOf(info, n.args[k], names);
+  if (!res || !inp || res === inp) return null;
+  const nm = (id: Id) => names[id] ?? display[id] ?? "it";
+  return `${nm(t.def.id)} gives ${an(res)}, and ${nm(t.params[k])} takes ${an(inp)}: the one can't stand for the other`;
+}
+const an = (t: string) => (/^[AEIOU]/.test(t) ? `an ${t}` : `a ${t}`);
+
 export function turnAround(code: Code, names: Names, info: Info, call: Id, k: number): TEdit {
   const t = turnable(code, call);
   if (!t) return { ok: false, reason: "only a call of a definition with one result can be turned around" };
   const n = code.nodes[call] as NodeOf<"call">;
   if (n.args.some((a) => code.nodes[a]?.kind === "hole")) return { ok: false, reason: "fill its inputs first: the one turned becomes the result given, the others stay given" };
+  const mismatch = turnMismatch(code, names, info, call, k);
+  if (mismatch) return { ok: false, reason: mismatch };
   const p = t.params[k], nm = (id: Id) => names[id] ?? display[id] ?? "it";
   const b = freshId(), use = freshId();
   const given: Record<string, Id> = { out: n.args[k] };
@@ -1084,6 +1102,17 @@ export function turnAround(code: Code, names: Names, info: Info, call: Id, k: nu
   const next = replace(code, call, () => ({ kind: "solve", fn: t.def.id, given, binds: { [p]: b }, body: use }));
   next.nodes[b] = { id: b, kind: "binder" };
   next.nodes[use] = { id: use, kind: "ref", target: b };
+  // A search that can't get from the result back to this input (split:
+  // nothing gives sum), said as what it means.
+  try {
+    const sv = next.nodes[call] as NodeOf<"solve">;
+    const v = planSolve(next, sv).mode === "relational" ? solveMode(next, sv, names) : null;
+    const stuck = v?.stuck.filter((x) => x !== "a hole") ?? [];
+    if (stuck.length) {
+      const none = stuck.find((x) => x.startsWith("nothing gives"));
+      return { ok: false, reason: none ? `${nm(t.def.id)} can't work out ${nm(p)} from its result: nothing in its body gives ${none.slice("nothing gives ".length)} back when the rest is given` : `${nm(t.def.id)} can't work out ${nm(p)} from its result: ${stuck[0]} never gets what it needs` };
+    }
+  } catch {}
   return guardTyped(info, next, { ...names, [b]: nm(p) }, call, `Turned ${nm(t.def.id)} around: what went into ${nm(p)} is now its result, given, and it works out ${nm(p)}. Double-click what it gives, or use its menu, to turn it back; Undo does too.`);
 }
 

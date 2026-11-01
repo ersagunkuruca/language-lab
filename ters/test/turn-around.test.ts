@@ -41,3 +41,31 @@ test("a call turned around works out its input from the result, and turns back",
   // A builtin's call has no body to turn.
   assert.equal(turnable(code, (code.nodes[(code.nodes[f] as NodeOf<"def">).body!] as NodeOf<"lambda">).body), null);
 });
+
+// QA-2026-11-01b F7 (BACKLOG I129): the turns that can't work say why in
+// plain words, and the menu leaves out the ones the types rule out.
+test("a turn that can't work says why", async () => {
+  const { join } = await import("node:path");
+  const { root } = await import("../src/io.ts");
+  const { loadProgram } = await import("../src/lang/load.ts");
+  const { subtree } = await import("../src/model.ts");
+  const { turnMismatch } = await import("../../editor/typed.ts");
+  const callOf = (dir: string, def: string, fn: string) => {
+    const p = loadProgram(join(root, "examples", dir));
+    const names = p.pres.names, d = p.named(def);
+    const c = subtree(p.code, d).map((x) => p.code.nodes[x]).find((n): n is NodeOf<"call"> => n.kind === "call" && names[(p.code.nodes[n.fn] as NodeOf<"ref">).target ?? ""] === fn)!;
+    assert.ok(c, `${def} calls ${fn}`);
+    return { code: p.code, names, info: infer(p.code, names), call: c.id };
+  };
+  // fall gives a Bool; distance is a Float64.
+  const f = callOf("physics", "main", "fall");
+  assert.match(turnMismatch(f.code, f.names, f.info, f.call, 0) ?? "", /^fall gives a Bool, and distance takes a Float64/);
+  // split gives a pair; neither input is one.
+  const s = callOf("relations", "main", "split");
+  for (let k = 0; k < 2; k++) assert.match(turnMismatch(s.code, s.names, s.info, s.call, k) ?? "", /^split gives a Pair Float64 Float64, and \S+ takes a Float64/);
+  // missing addend's body gives back neither input from its result.
+  const m = callOf("relations", "main", "missing addend");
+  const r = turnAround(m.code, m.names, m.info, m.call, 0);
+  assert.equal(turnMismatch(m.code, m.names, m.info, m.call, 0), null);
+  assert.match(r.ok ? "" : r.reason, /^missing addend can't work out known from its result: nothing in its body gives known back when the rest is given$/);
+});

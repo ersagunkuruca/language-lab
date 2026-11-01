@@ -2673,7 +2673,8 @@ function graphMenu(info: T.Info): HTMLElement | null {
     // Turn a call around (E168): an input swaps sides with the result.
     const turn = n?.kind === "call" ? T.turnable(doc.code, id) : null;
     const pName = (p: Id) => names[p] ?? "it";
-    if (turn) turn.params.forEach((p, k) => rows.push(item(`Work out ${pName(p)} from the result`, `turn-${k}`, `Turn it around: what goes into ${pName(p)} becomes the result given, and the node gives ${pName(p)} instead. Changes the code; Undo puts it back`, why(() => T.turnAround(doc.code, doc.names.short, info, id, k)))));
+    // Only the inputs that can stand for the result (I129).
+    if (turn) turn.params.forEach((p, k) => T.turnMismatch(doc.code, names, info, id, k) || rows.push(item(`Work out ${pName(p)} from the result`, `turn-${k}`, `Turn it around: what goes into ${pName(p)} becomes the result given, and the node gives ${pName(p)} instead. Changes the code; Undo puts it back`, why(() => T.turnAround(doc.code, doc.names.short, info, id, k)))));
     if (n?.kind === "solve") rows.push(item("Use it forwards", "turn-back", "The call again: the result given goes back into the input it works out", why(() => T.turnBack(doc.code, doc.names.short, info, id))));
     if (kind === "node") rows.push(...stepRows(id));
     // Cases that share this value, read once as the otherwise: each can
