@@ -23,7 +23,7 @@ Ersagun's "take 20 tasks" (2026-11-01): Editor 7, Compiler 7, Language 6.
 | lane | thread | next, in order |
 |---|---|---|
 | E Editor | "Editor lane" | T7d, L43d (Ersagun's 20, 2026-11-01) |
-| C Compiler and targets | "Compiler lane" | C40's next step, C64's next step, C63, L43c (store only the masked parts: L, since Bounce's vectors sit in `Body` fields carried across frames, so masks must flow through record fields program-wide), C66 on shaders. L41 is done (#724, #729) |
+| C Compiler and targets | "Compiler lane" | I106 (match-then-cons copies the array), I107 (0 · x folded), C63, L43c (store only the masked parts: L, since Bounce's vectors sit in `Body` fields carried across frames, so masks must flow through record fields program-wide), C66 on shaders. L41 is done (#724, #729) |
 | L Language and library | "Language lane" | Next up for all lanes (#809), L43e named masks on fields (#812), L38j a generic function solved at an Int given (#815), L108d representation laws (#816), L97d Fixed's polar by CORDIC (#820), L69a foreign definitions answered by hosts/js.js in the evaluator (#822), L71's typing written down (this PR); then L71a. Yesterday's run ended with I100 (#805) |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
@@ -33,7 +33,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I105 | **Bug, broken now.** `chapters` doesn't run or compile (`lab run`, `lab compile`, likely the editor's Run): since #769 the chooser picks `array of List` and the rewrite fails the check because `keep` is pinned to List. A rewrite that doesn't check must keep the definition, never refuse the program; `listBoundary` should treat a pinned List as a boundary | REVIEW-2026-11-01 §1 | 2026-11-01 |
 | I106 | **Bug.** `array of List` says cons is constant, but a cons onto a match's rest copies the array: match-then-cons is quadratic (16,000 steps 6 s, against <1 ms as a cons list), and the chooser picks the array by itself. A measured cost test per representation row (each job at n and 4n), then the chooser counting cons onto a rest as linear. Also: a rest keeps the whole buffer alive | REVIEW-2026-11-01 §2 | 2026-11-01 |
 | I107 | Staging folds `0 · x` to 0 and `x + 0` to x (stage.ts, "as fast-math"), so compiled answers differ from the evaluator's for ∞, NaN and −0, and the preview swaps between the two. Fold only when x is known finite; a test with ∞ and NaN inputs | REVIEW-2026-11-01 §3 | 2026-11-01 |
 | I108 | `clifford inverse` is ṽ/⟨vṽ⟩₀, right only for versors: it gives 1 + e₁ (which has no inverse) the value (1 + e₁)/2. Name it for what it is, or make it general, with an empty answer when there is none; it has no doc string | REVIEW-2026-11-01 §4 | 2026-11-01 |
@@ -72,7 +71,7 @@ New targets and speed rank below every language item (Ersagun,
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| C40 | Compiled JS for operations answered later (L54/L71): steps 1, 2a to 2d done (#571 to #573). Next: a search whose own definitions wait; then the world's `await(any of …)` as a promise, after L71 | LANGUAGE-NEEDS-2026-10-24 | P2 | M | step 2 done |
+| C40 | Compiled JS for operations answered later (L54/L71): steps 1, 2a to 2d done (#571 to #573), 2e a search whose own definitions wait (C40e). Next: the world's `await(any of …)` as a promise, after L71; a waiting search through its `$k` or record-field copies still says not yet | LANGUAGE-NEEDS-2026-10-24 | P2 | M | step 2 done |
 
 ### Speed of compiled code
 
@@ -191,6 +190,20 @@ all of these.
 | L112 | Names pinned per program; one question per upgrade for the author's renames; the program's own renames win | SHARING.md §5 | P3 | M | after L110 |
 | L115 | Project store: every published node the project used, kept by hash with it by default; runs when a source is gone; downgrade to any kept version (Ersagun 2026-10-31) | SHARING.md §4b | P3 | M | after L110 |
 | L114 | Lineage logs: signed, append-only, "current" and "broken" entries; code fetched by hash from any host; a browser over logs (was L68) | SHARING.md §4 | P3 | L | after L111 |
+
+### Physics and planning ([PHYSICS-AND-PLANNING.md](docs/design/physics/PHYSICS-AND-PLANNING.md), later goals)
+
+Ersagun 2026-11-01: fast bodies passing through each other, and A* for an
+agent with inertia. All later goals.
+
+| id | item | source | pri | size | status |
+|---|---|---|---|---|---|
+| L119 | **Later goal**: Bounce's continuous collisions: time of impact for ball and ball (a quadratic, S₁(t)·S₂(t) = −r₁r₂ for conformal spheres) and ball and wall (linear), once for 2D and 3D; step to the first impact with a sub-step cap; a "bullet through a thin wall" case beside the plain step | Ersagun 2026-11-01 | P3 | M | |
+| L120 | **Later goal**: time of impact for rotating shapes along a PGA motor (screw motion) by conservative advancement (Mirtich); the compiler choosing it or the closed form by cost (WAYS.md) | Ersagun 2026-11-01 | P3 | L | after L119, shapes other than balls |
+| L121 | **Later goal**: speculative contacts in Bounce, compared with L119 on the same scene (cost per frame, ghost bumps) | Ersagun 2026-11-01 | P3 | S | after L119 |
+| L122 | **Later goal**: an agent with inertia, decoupled: navigation-mesh A* (from routes' frontier), the funnel, corners as arcs, the time-optimal speed profile (forward and backward pass), a follower; one page, a hand-made mesh | Ersagun 2026-11-01 | P3 | L | |
+| L123 | **Later goal**: the coupled search: Hybrid A*-style over position and velocity, motion primitives exact under linear drag, L122's path length / top speed as the heuristic; compared with L122 on the same map | Ersagun 2026-11-01 | P3 | L | after L122 |
+| L124 | **Later goal**: a rapidity speed cap (velocity as a boost in Cl(2, 1)) beside linear drag on L122's page; optional | Ersagun 2026-11-01 | P3 | M | after L122 |
 
 ### Someday
 

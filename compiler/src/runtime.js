@@ -414,6 +414,9 @@ class Later {
   constructor(effect, op, args) { this.effect = effect; this.op = op; this.args = args; }
 }
 export const $later = (effect, op, args) => new Later(effect, op, args);
+// Is what a search's generator gave a wait rather than an answer? (C40: a
+// search that waits yields both, and whoever walks it passes waits on.)
+export const $isLater = (x) => x instanceof Later;
 // `done`: the case for the normal finish (L57), given the computation's
 // value however many rests ran before it, and not an escape's.
 export function $handleL(effect, later, ops, answers, escapes, body, done = null) {

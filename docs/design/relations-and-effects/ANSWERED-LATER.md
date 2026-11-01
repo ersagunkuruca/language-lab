@@ -2,7 +2,7 @@
 
 BACKLOG L54, written together with L71 as both rows ask. **Status
 (2026-10-30):** step 1 (L54a) is built: the evaluator and the checker run
-it (`test/later.test.ts`). Step 2 (C40) is mostly built, step 3 (L56,
+it (`test/later.test.ts`). Step 2 (C40) is mostly built (2026-11-01: a search defined on its own that waits compiles too), step 3 (L56,
 effects that take a type) is built, and steps 4 and 5 are open. The two documents behind it say why it
 matters: EFFECTS-REVIEW-2026-10-24 §1.5 finds the root of the page dents
 (a handler fetch runs twice, fetch-once, `Wait` apart from `Time`) in "an
