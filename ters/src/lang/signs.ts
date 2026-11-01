@@ -80,6 +80,21 @@ export function signAnalysis(code: Code) {
     return parents.get(id);
   };
   const target = (id: Id): Id | undefined => { const n = code.nodes[id]; return n?.kind === "ref" ? n.target : undefined; };
+  // Two expressions that are the same value: the same name, or the same
+  // field or arithmetic of the same values (rad(x) · rad(x) is a square).
+  // Only calls that always give the same answer for the same inputs count.
+  const alike = (x: Id, y: Id, depth = 0): boolean => {
+    if (x === y) return true;
+    const a = code.nodes[x], b = code.nodes[y];
+    if (!a || !b || depth > 4) return false;
+    if (a.kind === "ref" && b.kind === "ref") return a.target === b.target;
+    if (a.kind === "lit" && b.kind === "lit") return a.value === b.value;
+    if (a.kind !== "call" || b.kind !== "call" || a.args.length !== b.args.length) return false;
+    const f = target(a.fn);
+    if (!f || f !== target(b.fn)) return false;
+    const pure = code.nodes[f]?.kind === "field" || ADD.has(f) || SUB.has(f) || MUL.has(f) || NEGATE.has(f);
+    return pure && a.args.every((arg, i) => alike(arg, b.args[i], depth + 1));
+  };
   // A number known where it's written: a literal, a let or a definition
   // whose value is one, or an input given one.
   const numLit = (id: Id, env: Env = NONE, depth = 0): number | null => {
@@ -176,7 +191,7 @@ export function signAnalysis(code: Code) {
     const f = target(n.fn);
     if (!f) return ANY;
     const a = (i: number) => (n.args[i] ? of(n.args[i], env, depth + 1) : ANY);
-    const same = n.args.length === 2 && target(n.args[0]) !== undefined && target(n.args[0]) === target(n.args[1]);
+    const same = n.args.length === 2 && alike(n.args[0], n.args[1]);
     if (ADD.has(f) || f === INT_OPS.add) return plus(a(0), a(1));
     if (SUB.has(f) || f === INT_OPS.sub) return same ? ZERO : plus(a(0), flip(a(1)));
     if (NEGATE.has(f)) return flip(a(0));

@@ -1012,7 +1012,7 @@ builtin's type takes away exactly what its row says.
 |---|---|---|
 | a match on an effect's operations | any effect declared with operations (Abort, Log, Random, your own) | a case for each operation says what it does: the handler |
 | a page's event handler | Cells, Update, Console, Files, Abort, Diverge, Time, Network, Random, Log | the page runtime runs a handler when its event comes, under a step budget, and logs an Abort; a log line goes to the browser's console |
-| a page's text, part or attribute value | Cells, Diverge, Time, Network, Log | the page runtime runs a view in a watcher, under a step budget, after main has returned; a log line goes to the browser's console, once per run |
+| a page's text, part or attribute value | Cells, Diverge, Time, Network, Log, Choice | the page runtime runs a view in a watcher, under a step budget, after main has returned; a view with no answer shows nothing; a log line goes to the browser's console, once per run |
 | a program's main | Console, Files, Update, Cells, Diverge, Network, Log, Abort, Random, Time, Wait | the runtime handles them around main: the world, cells, the clock and the web; an Abort ends the program with its reason |
 | a shader | Diverge | only under a literal with fuel, which gives each pixel a step budget |
 | a sound's block function | Cells, Update, Random, Diverge | the audio runtime runs it on each block, under a step budget, with Random seeded; a block that doesn't finish plays silence |

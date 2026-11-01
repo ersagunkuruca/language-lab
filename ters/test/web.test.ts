@@ -16,6 +16,7 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { FakeEl, fakeDoc } from "./fakedom.ts";
 import { pageProgram } from "./page-program.ts";
 import { PAGE_HANDLER, PAGE_VIEW } from "../src/lang/std.ts";
+import { CHOICE } from "../src/lang/types.ts";
 import { RUNTIME_HANDLES } from "../src/lang/run.ts";
 
 const lab = join(import.meta.dirname, "../cli/lab.ts");
@@ -167,9 +168,12 @@ for (const way of ["lab build-web", "Save page"]) test(`the dice app (${way}): s
 });
 
 test("what a page's views and handlers may do is named once, and the runtime handles all of it", () => {
-  for (const e of [...PAGE_VIEW, ...PAGE_HANDLER]) assert.ok(RUNTIME_HANDLES.includes(e), `${e} is in a page's row but the runtime doesn't handle it`);
-  // A view only reads: everything it may do, a handler may do too.
-  for (const e of PAGE_VIEW) assert.ok(PAGE_HANDLER.includes(e), e);
+  // A view's Choice is the page's own: a view with no answer shows nothing
+  // there (html.ts NoAnswer, L125b). A handler handles its own Choice.
+  for (const e of [...PAGE_VIEW, ...PAGE_HANDLER]) assert.ok(e === CHOICE || RUNTIME_HANDLES.includes(e), `${e} is in a page's row but the runtime doesn't handle it`);
+  assert.ok(!PAGE_HANDLER.includes(CHOICE));
+  // A view only reads: everything else it may do, a handler may do too.
+  for (const e of PAGE_VIEW) assert.ok(e === CHOICE || PAGE_HANDLER.includes(e), e);
 });
 
 test("lab run on a page prints it once as static HTML: values drawn, no script", () => {

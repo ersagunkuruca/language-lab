@@ -201,17 +201,18 @@ test("infinities are equal only to themselves", () => {
   assert.deepEqual([[Infinity, Infinity], [-Infinity, -Infinity], [1e308, 1e308 * (1 + 1e-12)], [0.1 + 0.2, 0.3]].map(([a, b]) => close(a, b)), [true, true, true, true]);
 });
 
-// L125a (FLOAT-VALUES-2026-11-01.md): Float64 is the finite floats. An
-// answer outside them stops the program with the reason: no answer (x/0,
-// √ of a negative, log of 0, 0 to a negative power) or overflow.
-test("a Float64 is always finite: no answer and overflow stop the program with the reason", () => {
-  const cases: [(k: Lang) => Id, RegExp][] = [
-    [(k) => k.call(B.div, k.lit(1), k.lit(0)), /x \/ 0 has no answer/],
-    [(k) => k.call(B.div, k.lit(0), k.lit(0)), /x \/ 0 has no answer/],
-    [(k) => k.call(B.sqrt, k.lit(-4)), /square root of a negative number/],
-    [(k) => k.call(B.log, k.lit(0)), /log of 0 or less/],
-    [(k) => k.call(B.mul, k.lit(1e308), k.lit(10)), /too big for a Float64/],
+// L125a and L125b (FLOAT-VALUES-2026-11-01.md): Float64 is the finite
+// floats. An answer outside them is no answer (x/0, √ of a negative, log of
+// 0 or less: a Choice, which all and first see) or an overflow, which stops
+// the program with the reason.
+test("a Float64 is always finite: no answer is a Choice, and overflow stops the program with the reason", () => {
+  const none: ((k: Lang) => Id)[] = [
+    (k) => k.call(B.div, k.lit(1), k.lit(0)),
+    (k) => k.call(B.div, k.lit(0), k.lit(0)),
+    (k) => k.call(B.sqrt, k.lit(-4)),
+    (k) => k.call(B.log, k.lit(0)),
   ];
-  for (const [make, why] of cases) assert.throws(() => program((k) => lines(k, k.call(S.show, make(k)))).run(), why);
+  for (const make of none) assert.deepEqual(program((k) => lines(k, k.call(SHOW_ANY, k.call(S.all, k.thunk(() => make(k)))))).run(), ["[]"]);
+  assert.throws(() => program((k) => lines(k, k.call(S.show, k.call(B.mul, k.lit(1e308), k.lit(10))))).run(), /too big for a Float64/);
   assert.deepEqual(program((k) => lines(k, k.call(S.show, k.call(B.mul, k.lit(-0), k.lit(1))))).run(), ["0"]);
 });

@@ -220,13 +220,19 @@ test("R3 §1.2 a set of Float64s has the same size whatever order its items come
   assert.equal(new Set(out).size, 1, `sizes by order: ${out.join(", ")}`);
 });
 
-// L125a (FLOAT-VALUES-2026-11-01.md): NaN isn't a Float64 any more. 0/0 and
-// sqrt(−1) stop the program with the reason, so no NaN reaches compare or a set.
+// L125a and L125b (FLOAT-VALUES-2026-11-01.md): NaN isn't a Float64 any
+// more. 0/0 and sqrt(−1) have no answer (a Choice), so no NaN reaches
+// compare or a set: what's asked of them has no answer either.
 test("R3 §1.3 NaN, which 0/0 and sqrt(−1) made in typed code, can't reach compare or sets", () => {
-  for (const [make, why] of [[(k: Lang) => k.call(B.div, k.lit(0), k.lit(0)), /x \/ 0 has no answer/], [(k: Lang) => k.call(B.sqrt, k.lit(-1)), /square root of a negative number has no answer/]] as const) {
-    assert.throws(() => printed((k, L) => [k.call(L("has item"), k.call(L("as set"), k.list(make(k), k.lit(1))), make(k))]), why);
-    // Before L78 (#443) compare said ["after", "after"] both ways; before L125a it ran.
-    assert.throws(() => printed((k) => [k.call(COMPARE, make(k), k.lit(1))]), why);
+  for (const make of [(k: Lang) => k.call(B.div, k.lit(0), k.lit(0)), (k: Lang) => k.call(B.sqrt, k.lit(-1))]) {
+    const all = (k: Lang, x: Id) => k.call(S.all, k.thunk(() => x));
+    const { errors, out } = printed((k, L) => [
+      all(k, k.call(L("has item"), k.call(L("as set"), k.list(make(k), k.lit(1))), make(k))),
+      // Before L78 (#443) compare said ["after", "after"] both ways; before L125a it ran.
+      all(k, k.call(COMPARE, make(k), k.lit(1))),
+    ]);
+    assert.deepEqual(errors.map((e) => e.message), []);
+    assert.deepEqual(out, ["[]", "[]"]);
   }
 });
 

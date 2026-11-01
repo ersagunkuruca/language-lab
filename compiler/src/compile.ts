@@ -488,6 +488,26 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   }
 
   // ---- effects under a specialization
+  // A library definition is checked apart, so its body's types may name
+  // its rows with variables of their own: a row switched on for the copy
+  // (a Choice function given to map) is switched on under the body's name
+  // for it too, read off its lambda, as `lat` is in spec. Without this a
+  // body called its Choice parameter as if it had one answer.
+  const bodyRho = (def: Id, rho: Rho): Rho => {
+    const body = node<"def">(def).body;
+    if (!rho.size || !body || !isFnDef(def)) return rho;
+    const out = new Map(rho);
+    const pair = (a: Type, b: Type) => {
+      if (a.t === "con" && b.t === "con") a.args.forEach((x, i) => b.args[i] && pair(x, b.args[i]));
+      if (a.t !== "fn" || b.t !== "fn") return;
+      const x = sub.resolveRow(a.eff).tail, y = sub.resolveRow(b.eff).tail;
+      if (x !== null && y !== null && rho.has(x) && !out.has(y)) out.set(y, rho.get(x)!);
+      a.params.forEach((p, i) => b.params[i] && pair(p, b.params[i]));
+      pair(a.ret, b.ret);
+    };
+    pair(info.schemes.get(def)!.type, ty(body));
+    return out;
+  };
   const choice = (row: Row, rho: Rho) => {
     const r = sub.resolveRow(row);
     return r.effs.includes(CHOICE) || (r.tail !== null && rho.get(r.tail) === true);
@@ -1193,9 +1213,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     curAt = sp.at;
     // The copies this one's heap copy calls with a yield.
     const yields = new Set<string>();
-    const rho = sp.rho;
-    const memo = new Map<Id, boolean>();
     const d = node<"def">(sp.def);
+    const rho = bodyRho(sp.def, sp.rho);
+    const memo = new Map<Id, boolean>();
     // Lambdas here that are typed Choice but never choose, and are passed
     // where the callee's copy calls them plainly.
     const plainHere = new Set<Id>();
