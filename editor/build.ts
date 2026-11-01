@@ -82,10 +82,10 @@ ${body}
 `);
 };
 // Where to start (LEARN.md): picks a level and links on to the two below.
-docPage("LEARN.md", "learn.html", "Learn");
-docPage("TUTORIAL.md", "tutorial.html", "Language tutorial");
+docPage("LEARN.md", "learn.html", "Learn Ters");
+docPage("TUTORIAL.md", "tutorial.html", "Ters tutorial");
 // The hands-on start (GUIDE.md): the editor's Learn button opens it.
-docPage("GUIDE.md", "guide.html", "A hands-on guide to the editor and the language");
+docPage("GUIDE.md", "guide.html", "A hands-on guide to Ters and its editor");
 
 // The Cells page: reactive.html's text around editor/reactive.ts.
 const rout = await build({ entryPoints: [here + "reactive.ts"], bundle: true, format: "iife", target: "es2022", minify: true, write: false });
@@ -144,7 +144,7 @@ writeFileSync(site + "shaders.html", `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Shaders: the language on the GPU</title>
+<title>Shaders: Ters on the GPU</title>
 ${fonts}
 <style>
 ${tokens}

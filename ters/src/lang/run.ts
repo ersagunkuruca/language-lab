@@ -28,7 +28,7 @@ import { oneAnswer } from "./modes.ts";
 import { computedForward } from "./directions.ts";
 import { discharge } from "./ledger.ts";
 import * as Alg from "./algebraic.ts";
-import { WORLD_OPS, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, COMPLEX_V, FIXED_V, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP } from "./std.ts";
+import { WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, COMPLEX_V, FIXED_V, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP } from "./std.ts";
 import { intLit } from "./int.ts";
 import { JETS } from "./jets.ts";
 import { answerFromHost, effectOfOperation, hostedEffects, type Hosts } from "./hosts.ts";
@@ -1031,7 +1031,7 @@ export const DEF_VALUE = "@definition";
 const defOf = new WeakMap<object, Id>();
 export const definedAs = (v: Value): Id | undefined => (typeof v === "function" ? defOf.get(v) : undefined);
 
-// `asNumber` shows a Fixed as the number it stands for, where the text is
+// `asNumber` shows a Fixed or an Extended as the number it stands for, where the text is
 // only read (the Run panel, a wire's value), not typed back in.
 export function showValue(v: Value, code: Code, names: Names, asNumber = false): string {
   if (typeof v === "bigint") return String(v);
@@ -1045,6 +1045,9 @@ export function showValue(v: Value, code: Code, names: Names, asNumber = false):
   if (v.tag === ALGEBRAIC_V) return Alg.show(algebraicOf(v));
   if (v.tag === COMPLEX_V) { const [re, im] = v.fields as number[]; return `${showValue(re, code, names, asNumber)} ${im < 0 ? "−" : "+"} ${showValue(Math.abs(im), code, names, asNumber)}i`; }
   if (asNumber && v.tag === FIXED_V && (typeof v.fields[0] === "number" || typeof v.fields[0] === "bigint")) return showValue(Number(v.fields[0]) / 2 ** 32, code, names);
+  // An Extended number reads as the number, or −∞ and +∞ (L125d).
+  if (asNumber && v.tag === EXTENDED_V.finite) return showValue(v.fields[0], code, names, asNumber);
+  if (asNumber && (v.tag === EXTENDED_V.minus || v.tag === EXTENDED_V.plus)) return v.tag === EXTENDED_V.minus ? "−∞" : "+∞";
   const name = names[v.tag] ?? v.tag;
   return v.fields.length ? `${name}(${v.fields.map((x) => showValue(x, code, names, asNumber)).join(", ")})` : name;
 }
