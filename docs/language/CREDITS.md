@@ -84,6 +84,18 @@ Proposed in [SHARING.md](../design/sharing/SHARING.md) (BACKLOG L109-L115); its 
 | Compatibility checked from types | Influence | Elm's `elm diff` (Evan Czaplicki). |
 | Structural diff and merge; history as commuting patches | Prior art | GumTree (Falleri et al. 2014), Difftastic (Wilfred Hughes); Darcs (David Roundy), Pijul (Meunier, Becker), CRDTs (Shapiro et al. 2011), Automerge (Martin Kleppmann). |
 
+## Physics and planning (designed, not built)
+
+Proposed in [PHYSICS-AND-PLANNING.md](../design/physics/PHYSICS-AND-PLANNING.md) (BACKLOG L119-L124); its Credits table has the full list.
+
+| What | Label | Who and where |
+|---|---|---|
+| Time of impact instead of sampled steps; speculative contacts; conservative advancement; collisions as intersections in spacetime | Prior art | Erin Catto (Box2D, GDC 2013 "Continuous Collision"); Paul Firth (speculative contacts, 2011); Brian Mirtich (1996); Redon, Kheddar and Coquillart (2002); Von Herzen, Barr and Zatz (1990) |
+| Spheres as conformal vectors, motors as screw motions, dynamics in PGA | Prior art | Hestenes, Li and Rockwood (2001); Dorst, Fontijne and Mann (2007); Gunn and De Keninck (SIGGRAPH 2019; "May the Forque Be with You") |
+| Planning over position and velocity; Hybrid A*; state lattices; kinodynamic RRT* | Prior art | Donald, Xavier, Canny and Reif (1993); LaValle, *Planning Algorithms* (2006); Dolgov, Thrun, Montemerlo and Diebel (2010); Pivtoraiko, Knepper and Kelly (2009); Karaman and Frazzoli (2011); Webb and van den Berg (2013) |
+| Navigation-mesh A*, the funnel, time-optimal speed along a path | Prior art | Demyen and Buro (2006); Mikko Mononen (Recast and Detour); Bobrow, Dubowsky and Gibson (1985); Shin and McKay (1985) |
+| A top speed as a speed of light (rapidity) for a game agent | Ersagun's idea / Prior art | Ersagun, 2026-11-01; rapidity from Robb (1911), boosts as rotors from Hestenes (1966) |
+
 ## Types, totality, units
 
 | What | Label | Who and where |
