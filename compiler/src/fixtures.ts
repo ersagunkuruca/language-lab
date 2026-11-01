@@ -6,6 +6,8 @@ import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { B } from "../../ters/src/prelude.ts";
 import { ABORT_OP, ARITH, ARRAY_OPS, COMPARE, CONS, FALSE, INT_OPS, IO, NIL, NONE, PAIR_V, S, SECOND, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
+// S as the pga fixture names it is its Space type.
+const STD = S;
 import { INT, NUMBER, STRING } from "../../ters/src/lang/types.ts";
 import type { Id } from "../../ters/src/model.ts";
 import { LIBRARY, VECTORS } from "../../ters/src/lang/library.ts";
@@ -647,8 +649,15 @@ export function pga() {
     { variant: CONS, names: ["h", "t"], results: [null, "r"], body: ([h], [, r]) => k.call(B.add, k.call(coord("x"), k.call(moveIn, s, h)), r!) },
   ])));
   const totalGiven = def("total given", () => k.fn(["ps"], (ps) => k.call(totalIn, k.x(space), ps)));
+  // A multivector given to a definition only its own callers call (L43c):
+  // `moved n times` is only ever given a point, moved or not (its blade
+  // mask, 4 of the 16 parts), and staging can't work it out whole (n is
+  // known only when it runs), so its sandwich is staged reading those 4.
+  const movedN = k.def("moved n times");
+  k.define(movedN, k.fn(["q", "n"], (q, n) => k.if(k.call(STD.less, n, k.lit(1)), q, k.call(movedN, call("clifford sandwich", k.x(motor), q), k.call(B.sub, n, k.lit(1))))));
+  const moveN = def("move n times", () => k.fn(["p", "n"], (p, n) => k.call(fromPga, k.call(movedN, k.call(toPga, p), n))));
   const code = base(k.code), names = baseNames(k.names);
-  return { code, names, info: infer(code, names, undefined, checkOptions), pga: M.v.pga, point: P.v.point, defs: { product, moveBy, moveFixed, movePoint, moveGiven, totalGiven } };
+  return { code, names, info: infer(code, names, undefined, checkOptions), pga: M.v.pga, point: P.v.point, defs: { product, moveBy, moveFixed, movePoint, moveGiven, totalGiven }, times: { movedN, moveN } };
 }
 
 // Int held in 32 bits, for shaders (C66c): + − × negate abs, less, as

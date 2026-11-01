@@ -34,7 +34,7 @@
 // same, by the language's own abstract evaluation over a finite lattice
 // (Cousot and Cousot, POPL 1977). CREDITS.md.
 
-import type { Code, Id, Node, NodeOf } from "../model.ts";
+import { children as childIds, type Code, type Id, type Node, type NodeOf } from "../model.ts";
 import type { Info } from "./infer.ts";
 import { LIBRARY } from "./library.ts";
 import { makeRunner, type Value } from "./run.ts";
@@ -179,9 +179,14 @@ const versor = (alg: Algebra, r: number) => {
 // The mask of what `fn` (a definition or a lambda) gives, each input
 // given as a mask (or every part when left out); null when it isn't a
 // multivector of an algebra the program writes down.
-export function bladeMask(code: Code, info: Info, fn: Id, given: (number | null)[] = [], mistakes?: Map<Id, string>): { algebra: Algebra; mask: number } | null {
+// The reading itself, over one program: `ev` reads an expression in an
+// environment of what its variables are. `onCall` sees each call of one of
+// the program's own definitions, with what its inputs are there, and may
+// answer for it (a summary) instead of reading it through; `onValue` sees
+// each node read and what it was.
+interface Hooks { onCall?: (call: NodeOf<"call">, args: V[]) => V | undefined; onValue?: (id: Id, v: V) => void }
+function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: Hooks = {}) {
   const algebras = algebrasOf(code, info);
-  if (!algebras.size) return null;
   const byVariant = new Map([...algebras.values()].map((a) => [a.variant, a]));
   const nodes = code.nodes;
   const lam = (id: Id): NodeOf<"lambda"> | null => {
@@ -263,8 +268,10 @@ export function bladeMask(code: Code, info: Info, fn: Id, given: (number | null)
     }
   };
   const ev = (id: Id, env: Map<Id, V>, depth: number): V => {
-    const v = ev1(id, env, depth);
-    return v.k === "top" ? typed(id) : v;
+    const v0 = ev1(id, env, depth);
+    const v = v0.k === "top" ? typed(id) : v0;
+    hooks.onValue?.(id, v);
+    return v;
   };
   const ev1 = (id: Id, env: Map<Id, V>, depth: number): V => {
     if (depth > DEPTH) return TOP;
@@ -418,9 +425,13 @@ export function bladeMask(code: Code, info: Info, fn: Id, given: (number | null)
       }
     }
     // A let, a lambda applied, a definition of the program: read through.
+    if (target && hooks.onCall && nodes[target]?.kind === "def") {
+      const r = hooks.onCall(n, n.args.map((a) => ev(a, env, depth + 1)));
+      if (r) return r;
+    }
     const f = ev(n.fn, env, depth + 1);
-    if (f.k === "closure") return apply(f, n.args.map((a) => ev(a, env, depth + 1)), depth);
-    return TOP;
+    if (f.k !== "closure") return TOP;
+    return apply(f, n.args.map((a) => ev(a, env, depth + 1)), depth);
   };
 
   // The blade a list of literal vectors names: its index, -1 when it
@@ -447,6 +458,12 @@ export function bladeMask(code: Code, info: Info, fn: Id, given: (number | null)
     }
   };
 
+  return { algebras, ev, lam, byType };
+}
+
+export function bladeMask(code: Code, info: Info, fn: Id, given: (number | null)[] = [], mistakes?: Map<Id, string>): { algebra: Algebra; mask: number } | null {
+  if (!algebrasOf(code, info).size) return null;
+  const { algebras, ev, lam } = makeReader(code, info, mistakes);
   const l = lam(fn);
   const env = new Map<Id, V>();
   // An input given as a mask: of which algebra, if there's only one.
@@ -455,6 +472,119 @@ export function bladeMask(code: Code, info: Info, fn: Id, given: (number | null)
   const v = l ? ev(l.body, env, 0) : ev(fn, env, 0);
   return v.k === "mask" ? { algebra: v.alg, mask: v.m } : null;
 }
+
+// The masks a program's values have wherever they are made (L43c), for
+// the compiler: each definition's inputs are what its callers give it, the
+// union over every call, worked out to a fixed point (a definition that
+// calls itself gives its own inputs). A definition `open` names (called
+// from outside: main, an export), or used other than by being called, has
+// inputs of every part. Then each node a definition reads directly (not
+// inside a lambda it hands on) has the union of what it was each time.
+//
+// A call the reading didn't reach in its own definition (past the depth,
+// inside a fold's arms) or made from inside a lambda handed on (whose
+// callers aren't known) gives its callee every part, so a mask is never
+// too small. Off still means 0 in exact arithmetic, as above.
+export function valueMasks(code: Code, info: Info, open: Iterable<Id>): Map<Id, { algebra: Algebra; mask: number }> {
+  const out = new Map<Id, { algebra: Algebra; mask: number }>();
+  if (!algebrasOf(code, info).size) return out;
+  const nodes = code.nodes;
+  // The program's own definitions; the library's are read as before.
+  const fnDefs = code.defs.filter((d) => { const n = nodes[d] as NodeOf<"def">; return !LIBRARY.code.nodes[d] && n?.kind === "def" && !n.way && !!n.body && nodes[n.body]?.kind === "lambda"; });
+  const isFn = new Set(fnDefs);
+  // Each definition's own nodes: its body, through lets (a lambda called
+  // where it is) but not into a lambda handed on.
+  const own = new Map<Id, Set<Id>>(), ownerOf = new Map<Id, Id>();
+  for (const d of fnDefs) {
+    const set = new Set<Id>();
+    const walk = (id: Id) => {
+      const n = nodes[id];
+      if (!n || set.has(id)) return;
+      if (n.kind === "lambda" && id !== (nodes[d] as NodeOf<"def">).body) return;
+      set.add(id);
+      if (n.kind === "call" && nodes[n.fn]?.kind === "lambda") { set.add(n.fn); walk(node(n.fn).body); n.args.forEach(walk); return; }
+      for (const c of childIds(n)) walk(c);
+    };
+    const lam = nodes[(nodes[d] as NodeOf<"def">).body!] as NodeOf<"lambda">;
+    set.add(lam.id);
+    walk(lam.body);
+    own.set(d, set);
+    for (const id of set) ownerOf.set(id, d);
+  }
+  function node(id: Id) { return nodes[id] as NodeOf<"lambda">; }
+  // Every input of a definition called from somewhere unknown, or used as
+  // a value, is every part.
+  const wide = new Set<Id>([...open].filter((d) => isFn.has(d)));
+  const sites = new Map<Id, Id>(); // call → callee
+  for (const n of Object.values(nodes)) {
+    if (n.kind === "call") { const f = nodes[n.fn]; if (f?.kind === "ref" && isFn.has(f.target)) sites.set(n.id, f.target); }
+  }
+  const called = new Set([...sites.keys()].map((c) => (nodes[c] as NodeOf<"call">).fn));
+  for (const n of Object.values(nodes)) if (n.kind === "ref" && isFn.has(n.target) && !called.has(n.id)) wide.add(n.target);
+  // A call from no definition's own nodes (inside a lambda handed on, or
+  // outside every definition) widens its callee.
+  for (const [c, callee] of sites) if (!ownerOf.has(c)) wide.add(callee);
+  const reader0 = makeReader(code, info);
+  const algOf = (b: Id) => { const t0 = info.typeOf.get(b), t = t0 && info.subst.zonk(t0); return t?.t === "con" ? reader0.byType.get(t.id) : undefined; };
+  // What each input is so far: a mask (from 0, nothing seen) per input of
+  // a multivector type; others are read as the reading reads them.
+  const given = new Map<Id, number>();
+  for (const d of fnDefs) for (const p of node((nodes[d] as NodeOf<"def">).body!).params) { const a = algOf(p); if (a) given.set(p, wide.has(d) ? a.full : 0); }
+  const envFor = (d: Id) => {
+    const env = new Map<Id, V>();
+    for (const p of node((nodes[d] as NodeOf<"def">).body!).params) { const a = algOf(p); env.set(p, a ? { k: "mask", alg: a, m: given.get(p)! } : TOP); }
+    return env;
+  };
+  // What each definition gives so far: a mask (from 0) when it gives a
+  // multivector, read from its own body each round; otherwise unknown.
+  const gives = new Map<Id, V>();
+  for (const d of fnDefs) {
+    const t0 = info.typeOf.get(d), t = t0 && info.subst.zonk(t0);
+    const r = t?.t === "fn" ? info.subst.zonk(t.ret) : undefined;
+    const a = r?.t === "con" ? reader0.byType.get(r.id) : undefined;
+    gives.set(d, a ? { k: "mask", alg: a, m: 0 } : TOP);
+  }
+  let seen = new Map<Id, V>(), settled = false;
+  for (let round = 0; round < 64 && !settled; round++) {
+    let changed = false;
+    seen = new Map();
+    for (const d of fnDefs) {
+      const mine = own.get(d)!, reached = new Set<Id>();
+      const widen = (callee: Id, args: V[]) => {
+        node((nodes[callee] as NodeOf<"def">).body!).params.forEach((p, i) => {
+          if (!given.has(p)) return;
+          const a = algOf(p)!, v = args[i];
+          const m = v && v.k === "mask" && v.alg === a && !v.l ? v.m : a.full;
+          const now = given.get(p)! | m;
+          if (now !== given.get(p)) { given.set(p, now); changed = true; }
+        });
+      };
+      const r = makeReader(code, info, undefined, {
+        onCall: (c, args) => {
+          const callee = sites.get(c.id);
+          if (!callee) return undefined;
+          if (mine.has(c.id)) { reached.add(c.id); widen(callee, args); }
+          return gives.get(callee);
+        },
+        onValue: (id, v) => { if (!mine.has(id)) return; const was = seen.get(id); seen.set(id, was ? joinMasks(was, v) : v); },
+      });
+      const got = r.ev(node((nodes[d] as NodeOf<"def">).body!).body, envFor(d), 0);
+      const was = gives.get(d)!;
+      if (was.k === "mask") {
+        const m = got.k === "mask" && got.alg === was.alg && !got.l ? was.m | got.m : was.alg.full;
+        if (m !== was.m) { gives.set(d, { ...was, m }); changed = true; }
+      }
+      for (const c of mine) if (sites.has(c) && !reached.has(c)) widen(sites.get(c)!, []);
+    }
+    settled = !changed;
+  }
+  // Not settled is not known: nothing is said.
+  if (!settled) return out;
+  for (const [id, v] of seen) if (v.k === "mask" && !v.l) out.set(id, { algebra: v.alg, mask: v.m });
+  return out;
+}
+
+const joinMasks = (a: V, b: V): V => (a.k === "mask" && b.k === "mask" && a.alg === b.alg ? { k: "mask", alg: a.alg, m: a.m | b.m, l: a.l || b.l } : { k: "top" });
 
 // Wrong grades (L43e's first step): every place a definition reads a part
 // its value can't have, which is always 0. Each definition is read with

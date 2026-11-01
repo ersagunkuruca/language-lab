@@ -63,3 +63,28 @@ test("PGA products and motors: compiled with no lists, the evaluator's numbers, 
   assert.match(s.wgsl, /fn move_given_\d+\(p0: vec4f\) -> vec4f \{/);
   assert.match(s.wgsl, /fn move_point_\d+\(p0: vec4f\) -> vec4f \{\n {2}return mat4x4f\(.*, 5\.0, 0\.0, 0\.0, 1\.0\) \* p0;\n\}/);
 });
+
+test("a multivector only its callers give is staged with the parts its blade mask leaves out known zeros (L43c)", async () => {
+  const p = pga();
+  assert.deepEqual(p.info.errors, []);
+  const body = (source: string, n: string) => { const i = source.indexOf(`function ${n.replace(/ /g, "_")}(`); assert.ok(i >= 0, n); return source.slice(i, source.indexOf("\n}\n", i)); };
+  const products = (s: string) => (s.match(/ \* /g) ?? []).length;
+  // Called from outside too, `moved n times` could be given any
+  // multivector: all 16 parts are read.
+  const open = compile(p.code, p.info, p.names, { runtime, exports: ["move n times", "moved n times"] });
+  const closed = compile(p.code, p.info, p.names, { runtime, exports: ["move n times"] });
+  const wide = body(open, "moved n times"), narrow = body(closed, "moved n times");
+  assert.ok(products(narrow) > 0 && products(narrow) < products(wide) / 2, `${products(narrow)} products, ${products(wide)} when exported`);
+  // Each version, run, gives what the evaluator gives.
+  const r = makeRunner(p.code, p.info, { print: () => {} });
+  const dir = mkdtempSync(join(tmpdir(), "stage-"));
+  for (const [name, source] of [["open.js", open], ["closed.js", closed]]) {
+    writeFileSync(join(dir, name), source);
+    const defs = (await import(pathToFileURL(join(dir, name)).href)).defs as Record<string, (...a: unknown[]) => Value>;
+    for (const [fields, n] of [[[1, 2, 3, 1], 3], [[-0.5, 4, 0, 1], 2]] as const) {
+      const pt = { tag: p.point, fields: [...fields] } as Value;
+      const got = (defs["move n times"](pt, n) as { fields: number[] }).fields, want = (first(r.call(r.value(p.times.moveN), pt, n)) as { fields: number[] }).fields;
+      want.forEach((w, i) => assert.ok(Math.abs(got[i] - w) < 1e-9, `${name}: ${got} vs ${want}`));
+    }
+  }
+});
