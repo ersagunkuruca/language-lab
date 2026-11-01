@@ -553,7 +553,21 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     // An input with nothing in it is drawn as an empty port, not a node
     // (NODE-EDITOR.md "Loose parts", rule 3): click it for the palette.
     const empty = (a: Id) => node(a)?.kind === "hole";
-    const kids = inputs.map((a) => (empty(a) ? null : arg(a)));
+    // A list written in place as an input, sum([1, 2, 3]), is drawn on the
+    // node itself: a socket per item, bracketed, and an empty one after
+    // them that adds an item, clicked or wired to (E166, PORTS-2026-11-01.md
+    // §4; prior art: Blender's multi-input sockets). The list node isn't
+    // drawn: it is the port. An empty list stays a value of its own.
+    const inPlace = (a: Id): Id[] | null => {
+      if (list || ops || f.kind !== "ref" || inputs !== n.args || empty(a) || dotOf(a)) return null;
+      const items = listItems(a);
+      return items?.length ? items : null;
+    };
+    const rows: { a: Id; list?: Id; add?: boolean }[] = inputs.flatMap((a) => {
+      const items = inPlace(a);
+      return items ? [...items.map((x) => ({ a: x, list: a })), { a, list: a, add: true }] : [{ a }];
+    });
+    const kids = rows.map((r) => (r.add || empty(r.a) ? null : arg(r.a)));
     const eff = effectsOf(n);
     const badge = [...eff.does, ...(eff.handles ? [`handles ${eff.handles}`] : [])].join(" · ");
     const portNames = ops && ops.length === n.args.length ? ops.map(name) : null;
@@ -561,15 +575,26 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const grows = !!hooks.addItem && (!!list || (f.kind === "ref" && ASSOCIATIVE.has(f.target) && n.args.length === 2));
     const plus = grows ? 16 : 0;
     const [bw, bh] = sized(id, Math.max(44, tw(label, 8.2) + 24, badge ? tw(badge, 6.4) + 16 : 0, portNames ? Math.max(...portNames.map((l) => tw(l, 6.6))) + 30 : 0),
-      portNames ? 30 + inputs.length * 20 : Math.max(30, inputs.length * 18 + 12) + (badge ? 14 : 0) + plus);
+      portNames ? 30 + rows.length * 20 : Math.max(30, rows.length * 18 + 12) + (badge ? 14 : 0) + plus);
     const top = badge ? 14 : 0;
-    const portY = (i: number) => (portNames ? 30 + i * 20 : top + ((bh - top - plus) / (inputs.length + 1)) * (i + 1));
+    const portY = (i: number) => (portNames ? 30 + i * 20 : top + ((bh - top - plus) / (rows.length + 1)) * (i + 1));
     item(id, bw, bh, (g) => {
       g.append(titled(s("rect", { width: bw, height: bh, rx: 7, class: `cn${eff.does.length ? " eff" : ""}${eff.handles ? " handler" : ""}${sel(id)}${errs.has(id) ? " err" : ""}`, "data-id": id, "data-move": id }), typeOf(id)));
       if (badge) g.append(titled(s("text", { x: bw / 2, y: 11, class: "badge", "text-anchor": "middle" }, badge), eff.why ? `Choice: it can give no answer, ${eff.why}` : badge));
       g.append(s("text", { x: bw / 2, y: portNames ? 19 : top + (bh - top) / 2 + 5, class: "cl", "text-anchor": "middle" }, label));
       portNames?.forEach((l, i) => g.append(s("text", { x: 9, y: portY(i) + 4, class: "portl" }, l)));
-      inputs.forEach((a, i) => g.append(empty(a)
+      // Each list's bracket, under its sockets.
+      for (const l of new Set(rows.flatMap((r) => (r.list ? [r.list] : [])))) {
+        const ys = rows.flatMap((r, i) => (r.list === l ? [portY(i)] : []));
+        g.append(titled(s("rect", { x: -8, y: ys[0] - 8, width: 16, height: ys[ys.length - 1] - ys[0] + 16, rx: 8, class: `list-port${sel(l)}${errs.has(l) ? " err" : ""}`, "data-id": l }), `${typeOf(l)}: a list written in place, a socket per item`));
+      }
+      rows.forEach((r, i) => {
+        if (!r.add) return;
+        const add = s("g", { class: "add-inp", ...(hooks.addItem ? { "data-add": r.list! } : {}) });
+        add.append(s("circle", { cx: 0, cy: portY(i), r: 5 }), s("text", { x: 0, y: portY(i) + 3.5, "text-anchor": "middle" }, "+"));
+        g.append(titled(add, "Add an item to this list: click, or drag a value here"));
+      });
+      rows.forEach(({ a, add }, i) => add || g.append(empty(a)
         ? titled(s("circle", { cx: 0, cy: portY(i), r: 5, class: `inp empty${sel(a)}${errs.has(a) ? " err" : ""}`, "data-slot": a, "data-id": a }), `${holeType(a) ? `${holeType(a)}: ` : ""}empty. Click it for the palette, or drag a value onto it`)
         : titled(s("circle", { cx: 0, cy: portY(i), r: 5, class: "inp", "data-slot": a }), typeOf(a))));
       if (grows) {
@@ -579,7 +604,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
       }
       g.append(titled(s("circle", { cx: bw, cy: bh / 2, r: 5, class: "outp", "data-out": id }), "Drag onto another input to share this value there"));
     }, { value: id, out: { x: bw, y: bh / 2 }, name: label === "list" || label === "apply" ? undefined : field ? label.slice(1) : label });
-    const { sub, bx, by } = withArgs(inputs, kids, bw, bh, id, portY);
+    const { sub, bx, by } = withArgs(rows.map((r) => r.a), kids, bw, bh, id, portY);
     return { ...sub, outX: bx + bw, outY: by + bh / 2, out: { item: id, dx: bw, dy: bh / 2 } };
   };
 
