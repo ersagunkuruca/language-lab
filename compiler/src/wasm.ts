@@ -21,6 +21,10 @@
 // to the case first. Since such types may contain themselves, all the
 // structs are written as one recursion group.
 //
+// A shader's lowering (`lowered.shader`, C66c) runs here too, for the
+// editor's pictures on the CPU: Int is an i32, and no answer is a global
+// flag, $none, that `first` and `count` read, as WGSL keeps it.
+//
 // The console and files (lowered with `data`) are imports from "world",
 // which `instantiate` gives from the evaluator's own Runtime; `runMain`
 // runs a program's main as the evaluator's runProgram does.
@@ -55,7 +59,12 @@ const INSTR: Partial<Record<Op, [number | number[], string]>> = {
   neg: [0x9a, "f64.neg"], abs: [0x99, "f64.abs"], sqrt: [0x9f, "f64.sqrt"], floor: [0x9c, "f64.floor"],
   float32: [[0xb6, 0xbb], "f32.demote_f64 f64.promote_f32"],
   less: [0x63, "f64.lt"], equal: [0x61, "f64.eq"], beq: [0x46, "i32.eq"], and: [0x71, "i32.and"], or: [0x72, "i32.or"], not: [0x45, "i32.eqz"],
+  // Int in 32 bits (`shader`, C66c): the rest are wasm-rt.ts's int32.*.
+  iless: [0x48, "i32.lt_s"], ieq: [0x46, "i32.eq"], itof: [0xb7, "f64.convert_i32_s"],
 };
+const INT32_RT: Op[] = ["iadd", "isub", "imul", "ineg", "iabs", "iquot", "irem", "ipow", "iwhole"];
+// Where a shader's flag is set or read.
+const flagged = (e: SExpr): boolean => e.k === "attempt" || (e.k === "zero" && !!e.none) || (e.k === "op" && ["iquot", "irem", "ipow", "iwhole"].includes(e.op)) || kids(e).some(flagged);
 
 export interface Module { bytes: Uint8Array; wat: string; exports: string[] }
 
@@ -64,7 +73,12 @@ export interface Module { bytes: Uint8Array; wat: string; exports: string[] }
 // runMain does, for hosts with no JavaScript (wasmtime).
 export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Module {
   const wasi = !!opts.wasi;
-  const { funcs } = lowered;
+  // A shader's lowering (C66c, `lowered.shader`): Int in 32 bits, and no
+  // answer is the flag $none that `first` and `count` look at, as WGSL
+  // and js-scalar.ts keep it, not a status, so no function is partial.
+  const shader = !!lowered.shader;
+  const funcs = shader ? lowered.funcs.map((f) => ({ ...f, partial: undefined })) : lowered.funcs;
+  if (shader && lowered.arrays.length) throw new Error("a shader's arrays (array<T, N>, C66c3) aren't in WebAssembly yet: JavaScript draws them");
   // Host functions used, in a fixed order: they take the first indices.
   // A WASI host has no Math: there sin and the rest are V8's fdlibm,
   // compiled to WebAssembly (wasm-math.ts), with a memory of their own.
@@ -85,6 +99,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
   const rtCalls = (e: SExpr): void => {
     if (e.k === "rt") need(e.fn);
     if (e.k === "op" && e.op === "mod") need("number.mod");
+    if (e.k === "op" && INT32_RT.includes(e.op)) need(`int32.${e.op}`);
     kids(e).forEach(rtCalls);
   };
   funcs.forEach((f) => rtCalls(f.body));
@@ -105,7 +120,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
     need("wasi_proc_exit");
   }
   // Ints (W5): an i31, a $big or a $huge; the host makes and reads them with toInt and fromInt.
-  const ints = rtNames.some((n) => { const f = runtime(n); return [...f.params.map(([, t]) => t), f.result].includes("int"); })
+  const ints = !shader && rtNames.some((n) => { const f = runtime(n); return [...f.params.map(([, t]) => t), f.result].includes("int"); })
     || funcs.some((f) => [...f.params, ...f.locals, f.result].includes("int") || mentions(f.body, "int"))
     || lowered.records.some((x) => x.fields.some((y) => y.t === "int")) || lowered.data.some((d) => d.cases.some((c) => c.fields.some((y) => y.t === "int")));
   if (ints) ["int.of", "int.small", ...(wasi ? [] : ["int.limbs", "int.limb", "int.huge", "int.setLimb"])].forEach(need);
@@ -222,7 +237,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
       const h = helpers.findIndex((x) => x.name === n);
       return h >= 0 ? fnIndex(funcs.length + h) : rtIndex(n);
     },
-    global: (n: string) => (n === "reason" ? reasonG : n === "pow5" ? pow5G : n === "msp" ? mspG : 0),
+    global: (n: string) => (n === "reason" ? reasonG : n === "pow5" ? pow5G : n === "msp" ? mspG : n === "none" ? noneG : 0),
     memory: (n: string) => (n === "math" ? 1 : 0),
     valtype: (t: VT) => {
       if (t === "list") return { bytes: typeOf(listOf(f)), text: `(ref null $${structs[baseIndex.get(listOf(f).key)!].name})` };
@@ -293,12 +308,14 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
   // Global 0 the fuel left (when something spends), then the reason of
   // the last abort: the host reads it with Abort.reason when a function
   // gives status 2.
-  const fuel = funcs.some((f) => f.spends || budgets(f.body));
+  const fuel = funcs.some((f) => f.spends || budgets(f.body)) || (shader && rtNames.some((n) => /^int32\.i(add|sub|mul|neg|abs|pow|whole)$/.test(n)));
+  // $none, a shader's flag (after the others).
+  const flags = shader && funcs.some((f) => flagged(f.body));
   const aborts = funcs.some((f) => mentions(f.body, "abort")) || worldReason;
   const reasonG = fuel ? 1 : 0, pow5G = (fuel ? 1 : 0) + (aborts ? 1 : 0), mspG = pow5G + (ryu ? 1 : 0);
   // Another operation that never returns (C34) leaves the operation, a
   // value of its effect's type, in $escape on its way out, as an eqref.
-  const escapes = lowered.escapes.length > 0, escapeG = mspG + (math ? 1 : 0);
+  const escapes = lowered.escapes.length > 0, escapeG = mspG + (math ? 1 : 0), noneG = escapeG + (escapes ? 1 : 0);
   if (aborts) helpers.push({ name: "Abort.reason", key: "", params: [], result: "text", code: [0x23, ...u(reasonG)], wat: ["global.get $reason"] });
   // For the world's host: lists and optionals of texts, by fixed names
   // (TextList.cons, TextOption.some), whatever else the module has.
@@ -369,6 +386,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
     // The math functions' stack pointer, from the end of their page down.
     ...(math ? [[0x7f, 0x01, 0x41, ...s(65536), 0x0b]] : []),
     ...(escapes ? [[0x6d, 0x01, 0xd0, 0x6d, 0x0b]] : []),
+    ...(flags ? [[0x7f, 0x01, 0x41, 0x00, 0x0b]] : []),
   ]);
   const zero = (t: MType) => (t === "text" ? [0xd0, ...s(bytesIndex)] : isRec(t) ? [0xd0, ...s(refIndex(t))] : t === "f64" ? [0x44, ...f64(0)] : t === "int" ? [0xd0, 0x6d] : t === "mag" ? [0xd0, ...s(u32sIndex)] : t === "i64" ? [0x42, 0x00] : [0x41, 0x00]);
   // fuel = fuel - 1; if fuel < 0, return zero (a partial function: and
@@ -397,7 +415,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
     switch (e.k) {
       case "num": return [0x44, ...f64(e.v)];
       // An Int: an i31 while it fits, else a $big.
-      case "int": return small(e.v) ? [0x41, ...sBig(e.v), 0xfb, 0x1c] : [0x42, ...sBig(e.v), 0xfb, 0x00, ...u(bigIndex)];
+      case "int": return shader ? [0x41, ...sBig(e.v)] : small(e.v) ? [0x41, ...sBig(e.v), 0xfb, 0x1c] : [0x42, ...sBig(e.v), 0xfb, 0x00, ...u(bigIndex)];
       case "text": { const b = textBytes(e.v); return [...b.flatMap((x) => [0x41, ...s(x)]), 0xfb, 0x08, ...u(bytesIndex), ...u(b.length)]; }
       case "rt": return [...e.args.flatMap(code1), 0x10, ...u(resolve.func(e.fn)), ...(runtime(e.fn).partial ? check(d, fl) : [])];
       case "bool": return [0x41, ...s(e.v ? 1 : 0)];
@@ -452,6 +470,13 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
       }
       case "fail": return [0x41, 0x01, 0x0c, ...to(d, fl)];
       case "attempt": {
+        // A shader's: the flag saved and cleared, the search, the flag read
+        // into the status local and put back, then ok or otherwise by it.
+        if (shader) return [
+          0x23, ...u(noneG), 0x41, 0x00, 0x24, ...u(noneG), ...code1(e.body), 0x21, ...u(e.res),
+          0x23, ...u(noneG), 0x21, ...u(st), 0x24, ...u(noneG),
+          0x20, ...u(st), 0x04, ...typeOf(e.t), ...code(e.otherwise, d + 1, fl), 0x05, ...code(e.ok, d + 1, fl), 0x0b,
+        ];
         // block $done (block $none (result i32) body; res = it; ok; br $done) drop; otherwise
         return [0x02, ...typeOf(e.t), 0x02, 0x7f, ...code(e.body, d + 2, d + 1), 0x21, ...u(e.res), ...code(e.ok, d + 2, fl), 0x0c, 0x01, 0x0b, ...on(1, d + 1, fl), ...code(e.otherwise, d + 1, fl), 0x0b];
       }
@@ -475,10 +500,11 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
       }
       // A box's field set (W4d), then what comes after.
       case "set": return [...code1(e.rec), ...code1(e.value), 0xfb, 0x05, ...u(recIndex.get(e.t.key)!), ...u(e.i), ...code1(e.then)];
-      case "zero": return zero(e.t);
+      case "zero": return [...(shader && e.none ? [0x41, 0x01, 0x24, ...u(noneG)] : []), ...zero(e.t)];
       case "choose": case "search": throw new Error(`${f.name}: ${e.k} is lowered away before WebAssembly`);
       case "op": {
         const args = e.args.flatMap(code1);
+        if (INT32_RT.includes(e.op)) return [...args, 0x10, ...u(rtIndex(`int32.${e.op}`))];
         if (hostIndex.has(e.op)) return [...args, 0x10, ...u(hostIndex.get(e.op)!)];
         if (e.op === "stop") return [...args, 0x10, ...u(rtIndex("wasi.stop"))];
         if (math && HOST[e.op]) return [...args, 0x10, ...u(rtIndex(`math.${e.op}`))];
@@ -512,7 +538,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
     ...section(1, typeSec), ...(imports ? section(2, importSec) : []), ...section(3, funcSec),
     // WASI's memory, then the math functions' (wasm-math.ts).
     ...(wasi ? section(5, vec([[0x00, 0x01], ...(math ? [[0x00, 0x01]] : [])])) : []),
-    ...(fuel || aborts || ryu || math || escapes ? section(6, globalSec) : []), ...section(7, exportSec),
+    ...(fuel || aborts || ryu || math || escapes || flags ? section(6, globalSec) : []), ...section(7, exportSec),
     // ref.func needs the functions declared: one declarative segment.
     ...(codeOf.size ? section(9, vec([[0x03, 0x00, ...vec([...codeOf.keys()].map((i) => u(fnIndex(i))))]])) : []),
     ...section(10, codeSec),
@@ -525,8 +551,8 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
   const local = (f: SFunc, i: number) => `$${i < f.params.length ? "p" : "l"}${i}`;
   const sname = (i: number) => `$${structs[i].name}`;
   const recName = (r: RType | DType | FType | AType) => sname(refIndex(r));
-  const ty = (t: MType) => (t === "text" ? "(ref null $bytes)" : isRec(t) ? `(ref null ${recName(t)})` : t === "int" ? "eqref" : t === "mag" ? "(ref null $u32s)" : t);
-  const zeroText = (t: MType) => (t === "text" ? "ref.null $bytes" : isRec(t) ? `ref.null ${recName(t)}` : t === "int" ? "ref.null eq" : t === "mag" ? "ref.null $u32s" : `${t}.const 0`);
+  const ty = (t: MType) => (t === "text" ? "(ref null $bytes)" : isRec(t) ? `(ref null ${recName(t)})` : t === "int" ? "eqref" : t === "mag" ? "(ref null $u32s)" : t === "int32" ? "i32" : t);
+  const zeroText = (t: MType) => (t === "text" ? "ref.null $bytes" : isRec(t) ? `ref.null ${recName(t)}` : t === "int" ? "ref.null eq" : t === "mag" ? "ref.null $u32s" : `${t === "int32" ? "i32" : t}.const 0`);
   // As code(): `ld` blocks open around e, a status for none goes to fl.
   function wat(e: SExpr, f: SFunc, d: string, ld: number, fl: number): string {
     const w = (x: SExpr) => wat(x, f, d, ld, fl);
@@ -536,7 +562,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
     const on = (mine: number, dd: string, ld2: number) => (fl < 0 ? [`${dd}drop`] : [`${dd}local.set ${st}`, `${dd}local.get ${st}`, `${dd}local.get ${st}`, `${dd}i32.const ${mine}`, `${dd}i32.ne`, `${dd}br_if ${to(ld2)} ;; not mine: on out`, `${dd}drop`]);
     switch (e.k) {
       case "num": return `${d}f64.const ${e.v}`;
-      case "int": return small(e.v) ? `${d}i32.const ${e.v}\n${d}ref.i31` : `${d}i64.const ${e.v}\n${d}struct.new $big`;
+      case "int": return shader ? `${d}i32.const ${e.v}` : small(e.v) ? `${d}i32.const ${e.v}\n${d}ref.i31` : `${d}i64.const ${e.v}\n${d}struct.new $big`;
       case "text": { const b = textBytes(e.v); return `${d}(array.new_fixed $bytes ${b.length}${b.map((x) => ` (i32.const ${x})`).join("")}) ;; ${JSON.stringify(e.v)}`; }
       case "rt": return [...e.args.map(w), `${d}call $${e.fn}`, ...(runtime(e.fn).partial ? check(ld) : [])].join("\n");
       case "bool": return `${d}i32.const ${e.v ? 1 : 0}`;
@@ -585,7 +611,12 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
         ].join("\n");
       }
       case "fail": return `${d}i32.const 1\n${d}br ${to(ld)} ;; no answer`;
-      case "attempt": return [
+      case "attempt": if (shader) return [
+        `${d}global.get $none`, `${d}i32.const 0`, `${d}global.set $none`, w(e.body), `${d}local.set ${local(f, e.res)}`,
+        `${d}global.get $none`, `${d}local.set ${st}`, `${d}global.set $none`,
+        `${d}local.get ${st}`, `${d}(if (result ${ty(e.t)}) ;; no answer`, `${d}  (then`, wat(e.otherwise, f, d + "    ", ld + 1, fl) + ")", `${d}  (else`, wat(e.ok, f, d + "    ", ld + 1, fl) + "))",
+      ].join("\n");
+      return [
         `${d}(block (result ${ty(e.t)})`, `${d}  (block (result i32) ;; no answer`, wat(e.body, f, d + "    ", ld + 2, ld + 1), `${d}    local.set ${local(f, e.res)}`, wat(e.ok, f, d + "    ", ld + 2, fl), `${d}    br 1)`,
         ...on(1, d + "  ", ld + 1),
         wat(e.otherwise, f, d + "  ", ld + 1, fl) + ")",
@@ -605,9 +636,9 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
         ...(isUnit(e.t) ? [`${d}struct.new ${recName(e.t as RType)}`] : []),
       ].join("\n");
       case "set": return [w(e.rec), w(e.value), `${d}struct.set ${recName(e.t)} ${e.i}`, w(e.then)].join("\n");
-      case "zero": return `${d}${zeroText(e.t)}`;
+      case "zero": return `${shader && e.none ? `${d}i32.const 1\n${d}global.set $none\n` : ""}${d}${zeroText(e.t)}`;
       case "choose": case "search": throw new Error(`${f.name}: ${e.k} is lowered away before WebAssembly`);
-      case "op": return [...e.args.map(w), `${d}${hostIndex.has(e.op) ? `call $Math.${e.op}` : e.op === "stop" ? "call $wasi.stop" : math && HOST[e.op] ? `call $math.${e.op}` : e.op === "mod" ? "call $number.mod" : INSTR[e.op]![1]}`].join("\n");
+      case "op": return [...e.args.map(w), `${d}${INT32_RT.includes(e.op) ? `call $int32.${e.op}` : hostIndex.has(e.op) ? `call $Math.${e.op}` : e.op === "stop" ? "call $wasi.stop" : math && HOST[e.op] ? `call $math.${e.op}` : e.op === "mod" ? "call $number.mod" : INSTR[e.op]![1]}`].join("\n");
     }
   }
   const text = [
@@ -635,6 +666,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
     ...(ryu ? [`  (global $pow5 (ref $i64s) (array.new_fixed $i64s ${POW5.length}${POW5.map((v) => ` (i64.const ${v})`).join("")}))`] : []),
     ...(math ? ["  (global $msp (mut i32) (i32.const 65536))", `  (data (memory $math) (i32.const ${MATH_DATA_AT}) "${MATH_DATA.map((b) => `\\${b.toString(16).padStart(2, "0")}`).join("")}")`] : []),
     ...(escapes ? ["  (global $escape (mut eqref) (ref.null eq))"] : []),
+    ...(flags ? ["  (global $none (mut i32) (i32.const 0))"] : []),
     ...(codeOf.size ? [`  (elem declare func${[...codeOf.keys()].map((i) => ` ${id(funcs[i])}`).join("")})`] : []),
     ...funcs.map((f, i) => {
       const ps = f.params.map((t, i) => ` (param ${local(f, i)} ${ty(t)})`).join("");
