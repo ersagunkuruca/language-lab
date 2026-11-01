@@ -125,6 +125,25 @@ test("on(\"frame\") comes once each time the browser draws, while its element is
   } finally { g.requestAnimationFrame = saved; }
 });
 
+test("on(\"frame\") says how many seconds passed since the frame before", () => {
+  const frames: ((ms: number) => void)[] = [];
+  const g = globalThis as { requestAnimationFrame?: (f: (ms: number) => void) => number };
+  const saved = g.requestAnimationFrame;
+  g.requestAnimationFrame = (f) => frames.push(f);
+  try {
+    const got: number[] = [];
+    const then = (ev: Data) => { got.push(ev.fields[4] as number); return { tag: "std.unit.unit", fields: [] }; };
+    const page = { tag: HTML_V.element, fields: ["div", toList([{ tag: HTML_V.on, fields: ["frame", then as never] }]), toList([])] } as Data;
+    const e = mountHtml(page, { cells: new Cells(), doc: fakeDoc(), call: (f, ...a) => (f as (...a: Value[]) => Value)(...a) }) as FakeEl & { isConnected?: boolean };
+    e.isConnected = true;
+    const draw = (ms: number) => { const now = frames.splice(0); for (const f of now) f(ms); };
+    draw(1000); draw(1016); draw(1066);
+    assert.deepEqual(got.map((s) => Math.round(s * 1000)), [0, 16, 50], "0 the first time, then the time since the frame before");
+    e.isConnected = false;
+    draw(1100);
+  } finally { g.requestAnimationFrame = saved as never; }
+});
+
 test("an event says where the pointer is: from the element's top-left, or 0, 0 without a pointer", () => {
   let got: Data | null = null;
   const then = (ev: Data) => { got = ev; return { tag: "std.unit.unit", fields: [] }; };
@@ -132,9 +151,9 @@ test("an event says where the pointer is: from the element's top-left, or 0, 0 w
   const e = mountHtml(page, { cells: new Cells(), doc: fakeDoc(), call: (f, ...a) => (f as (...a: Value[]) => Value)(...a) }) as FakeEl & { getBoundingClientRect?: () => { left: number; top: number } };
   e.getBoundingClientRect = () => ({ left: 100, top: 40 });
   e.fire("pointerdown", { clientX: 130, clientY: 45 } as never);
-  assert.deepEqual(got!.fields.slice(2), [30, 5]);
+  assert.deepEqual(got!.fields.slice(2), [30, 5, 0]);
   e.fire("keydown", { key: "a" });
-  assert.deepEqual(got!.fields.slice(1), ["a", 0, 0]);
+  assert.deepEqual(got!.fields.slice(1), ["a", 0, 0, 0]);
 });
 
 test("a part inside a picture is an SVG group; elsewhere a lab-part", () => {
