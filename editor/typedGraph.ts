@@ -1330,10 +1330,21 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
   const spread = s("g", { class: "spread" });
   const units = hooks.spread && picked.size > 1 ? spreadUnits(scene, at, picked) : [];
   if (units.length > 1) {
-    const b = union(units.map((u) => u.box)), m = 12;
-    spread.append(s("rect", { x: b.x - m, y: b.y - m, width: b.w + 2 * m, height: b.h + 2 * m, rx: 10, class: "spread-box" }));
+    // Its sides stand off the nodes by more than their own ports' reach,
+    // so the frame's ports don't read as one row of rings with the nodes'
+    // inputs; its top stays under any title or signature line it would
+    // cover (QA-2026-11-01b F8, I130).
+    const b = union(units.map((u) => u.box)), m = 12, mx = 26;
+    let mt = m;
+    for (const f of scene.frames.values()) {
+      const fb = boxes.get(f.id);
+      if (!fb || picked.has(f.id)) continue;
+      const t = { x: fb.x + 6, y: fb.y + 2, w: tw(f.title, 6.2) + 8, h: 16 };
+      if (t.x < b.x + b.w + mx && b.x - mx < t.x + t.w && t.y < b.y && b.y - mt < t.y + t.h) mt = Math.max(4, b.y - (t.y + t.h) - 2);
+    }
+    spread.append(s("rect", { x: b.x - mx, y: b.y - mt, width: b.w + 2 * mx, height: b.h + mt + m, rx: 10, class: "spread-box" }));
     for (const c of ["nw", "ne", "sw", "se"]) {
-      const x = c.includes("w") ? b.x - m : b.x + b.w + m, y = c.includes("n") ? b.y - m : b.y + b.h + m;
+      const x = c.includes("w") ? b.x - mx : b.x + b.w + mx, y = c.includes("n") ? b.y - mt : b.y + b.h + m;
       const g = s("g", { class: `spread-grip ${c}`, "data-spread": c });
       g.append(s("rect", { x: x - 9, y: y - 9, width: 18, height: 18, class: "grip-hit" }), s("rect", { x: x - 4, y: y - 4, width: 8, height: 8, rx: 1.5, class: "spread-dot" }), s("title", {}, "Drag to spread the picked nodes apart or draw them together; hold Shift to resize them too"));
       spread.append(g);
@@ -1356,15 +1367,15 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
       // Spread along the edge in the order the wires meet it, never closer than 14.
       let last = -Infinity;
       for (const y0 of ys.sort((p, q) => p - q)) {
-        const y = Math.min(b.y + b.h + m - 6, Math.max(y0, last + 14, b.y - m + 6));
+        const y = Math.min(b.y + b.h + m - 6, Math.max(y0, last + 14, b.y - mt + 6));
         last = y;
         const c = s("circle", { cx: x, cy: y, r: 4, class: `spread-port ${cls}` });
         c.append(s("title", {}, title));
         spread.append(c);
       }
     };
-    ports([...ins.values()], b.x - m, "in", "A value wired in from outside: an input Make it a function would give");
-    ports([...outs.values()], b.x + b.w + m, "out", "A value wired out: a result Make it a function would give");
+    ports([...ins.values()], b.x - mx, "in", "A value wired in from outside: an input Make it a function would give");
+    ports([...outs.values()], b.x + b.w + mx, "out", "A value wired out: a result Make it a function would give");
   }
   return [...[false, true].flatMap((up) => [frameL(up), wireL(up), portL(up), ...(up ? [] : [marks]), itemL(up), nameL(up)]), out, vals, spread];
 }
