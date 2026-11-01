@@ -7,7 +7,7 @@ work lives in this folder, one subfolder per kind:
 |---|---|
 | [learn/](learn/) | Start here: the Learn page, the hands-on guide, the tutorial, how programs run; the guide's and tutorial's screenshots |
 | [language/](language/) | The reference: the language, the library, running backwards, credits |
-| [design/](design/) | Design notes, by area: [numbers/](design/numbers/), [data/](design/data/), [relations-and-effects/](design/relations-and-effects/), [targets/](design/targets/), [editor/](design/editor/), [physics/](design/physics/) |
+| [design/](design/) | Design notes, by area: [numbers/](design/numbers/), [data/](design/data/), [relations-and-effects/](design/relations-and-effects/), [targets/](design/targets/), [editor/](design/editor/), [physics/](design/physics/), [tools/](design/tools/) |
 | [process/](process/) | How we work: the workflow, finished backlog items, testing |
 | [reports/](reports/) | Dated reports, kept as written: [reviews/](reports/reviews/), [qa/](reports/qa/) (with their screenshots), and the bigger-program rounds ([GAPS.md](reports/GAPS.md)) |
 | [history/](history/) | Superseded plans and notes, kept as written |
@@ -54,6 +54,7 @@ Each note says why, then gives the plan as steps; each step is a backlog row.
 | doc | what it is | status |
 |---|---|---|
 | [CONFUSING.md](design/CONFUSING.md) | What's confusing in the language and the editor, and what could be simpler; moved out of the tutorial | current; open items are backlog rows |
+| [MCP.md](design/tools/MCP.md) | The Ters MCP server: an LLM views, edits, runs and tests programs by id (`lab mcp`) | read tools built; edits next |
 
 ### Numbers
 

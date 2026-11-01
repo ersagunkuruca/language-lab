@@ -13,5 +13,5 @@
     "types": ["node", "@webgpu/types"],
     "skipLibCheck": true
   },
-  "include": ["src", "test", "examples", "../editor/*.ts"]
+  "include": ["src", "test", "examples", "../editor/*.ts", "mcp"]
 }
