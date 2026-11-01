@@ -85,10 +85,15 @@ anything but an Int. One that nothing fixes is exact where it can be: `2 +
 by themselves: `as float64`, `whole part`, `as fraction` and `as complex`
 convert. (WHAT-NUMBER-MEANS.md.) A `Float64` is always finite, with one
 zero: NaN and ±∞ are not values. An answer outside the finite floats
-stops the program with the reason: no answer (`x / 0`, the square root of
-a negative, the log of 0 or less, 0 to a negative power) or overflow. Today
-both stop it; with L125b "no answer" becomes `Choice`, so a handler can
-catch it (FLOAT-VALUES-2026-11-01.md). Where ±∞ helps (a bound with no
+is either no answer or overflow. No answer (`x / 0`, `x mod 0`, the square
+root of a negative, the log of 0 or less, 0 to a negative power) is a
+`Choice`, like a lookup that finds nothing, so `first(() => 1 / x, () => 0)`
+says what to do instead. The checker drops that `Choice` where it can see
+the input is fine: dividing by a literal or a let that isn't 0, inside `x >
+0`'s true branch, the square root of `x · x`. A page's view (a part, a
+text, an attribute) with no answer shows nothing there; a handler such as
+a button's handles its own. Overflow stops the program with the reason
+(FLOAT-VALUES-2026-11-01.md). Where ±∞ helps (a bound with no
 end, the least of no numbers), it is ordinary data: `Extended a` is
 `minus infinity`, `finite(value)` or `plus infinity`, for any ordered
 number type, and `minimum` of no numbers is `plus infinity`.
