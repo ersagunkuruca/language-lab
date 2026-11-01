@@ -37,6 +37,19 @@ function h(tag: string, attrs: Record<string, string | boolean | undefined> = {}
   return el;
 }
 
+// A builtin's own type (std.ts SIGS), made once per check of the program:
+// its type variables come from one copy of the substitution, not a copy
+// per call, which on Spacetime cost half a second a graph (I101).
+const sigTypes = new WeakMap<Info, { s: Info["subst"]; types: Map<Id, Type> }>();
+export function sigType(info: Info, target: Id): Type | undefined {
+  const sig = SIGS[target];
+  if (!sig) return undefined;
+  let c = sigTypes.get(info);
+  if (!c) sigTypes.set(info, (c = { s: info.subst.clone(), types: new Map() }));
+  let t = c.types.get(target);
+  if (!t) c.types.set(target, (t = sig(c.s)));
+  return t;
+}
 export const typeOf = (info: Info | null, id: Id, names: Names): string | null => {
   const t = info?.typeOf.get(id);
   return t ? showIn(t, names, info!.subst) : null;
@@ -61,7 +74,7 @@ export function renderTyped(code: Code, pres: Presentation, info: Info | null, d
   const ownTypeOf = (id: Id) => {
     const n = code.nodes[id];
     if (n?.kind !== "ref" || !info) return typeOf(info, id, pres.names);
-    const own = info.schemes.get(n.target)?.type ?? SIGS[n.target]?.(info.subst.clone());
+    const own = info.schemes.get(n.target)?.type ?? sigType(info, n.target);
     const here = typeOf(info, id, pres.names);
     if (!own) return here;
     // A generic one (+ on Float64s) says what it is here too.

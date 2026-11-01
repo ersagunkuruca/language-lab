@@ -1196,13 +1196,23 @@ function backwardsPanel(namer: Namer, info: T.Info): HTMLElement {
   const plain = (p: Id) => pres().names[p] ?? namer.name(p);
   const portName = (p: Id) => ports.some((q) => q !== p && q !== "out" && plain(q) === plain(p)) ? namer.name(p) : plain(p);
   const missing = known.filter((k) => !portText(info, k).trim());
-  let r: Backwards = missing.length ? { answers: [], more: false } : runBackwards(info, known);
   // Every input given: a run forwards has the answer the search can miss
   // (relate's limits, I39), so a plain function shows its result (I75).
+  // One that can't choose has no other answer, so it isn't searched at
+  // all: the search's setup (types, modes) took half a second on the page
+  // for Spacetime's helpers (I101).
   const forwards = ports.every((p) => p === "out" || known.includes(p)) && !known.includes("out");
+  const forward = (): Backwards | null => {
+    const tr = forwards && !missing.length ? traced(info) : null;
+    return tr?.result !== undefined && !tr.error ? { answers: [{ values: { out: showValue(tr.result, doc.code, pres().names) }, free: [], residual: [] }], more: false } : null;
+  };
+  const dt = info.typeOf.get(ui.def), dz = dt ? info.subst.zonk(dt) : null;
+  // An open row chooses only through a function it's given.
+  const chooses = dz?.t !== "fn" || dz.eff.effs.includes(CHOICE) || (dz.eff.tail !== null && dz.params.some((p) => info.subst.zonk(p).t === "fn"));
+  let r: Backwards = (!chooses && forward()) || (missing.length ? { answers: [], more: false } : runBackwards(info, known));
   if (forwards && !missing.length && !r.answers.length && !r.error) {
-    const tr = traced(info);
-    if (tr?.result !== undefined && !tr.error) r = { ...r, answers: [{ values: { out: showValue(tr.result, doc.code, pres().names) }, free: [], residual: [] }] };
+    const f = forward();
+    if (f) r = { ...r, answers: f.answers };
   }
   const units = (() => { try { return unitInfer(doc.code, ui.def); } catch { return null; } })();
   const unitOf = (p: Id) => { const u = p === "out" ? null : units?.unit(p); return u && Object.keys(u).length ? ` ${formatUnit(u)}` : ""; };

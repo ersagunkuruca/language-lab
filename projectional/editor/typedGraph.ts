@@ -38,7 +38,7 @@ import type { Info } from "../src/lang/infer.ts";
 import { ASSOCIATIVE, chainOperands, CONS, NIL, S, SIGS, TRUE, FALSE } from "../src/lang/std.ts";
 import { CHOICE, DIVERGE, showIn, showType, type Type } from "../src/lang/types.ts";
 import { connectDrag, infiniteCanvas, moveDrag, s, svgPoint, type Canvas, type Pos } from "./canvas.ts";
-import { litLabel } from "./typed.ts";
+import { litLabel, sigType } from "./typed.ts";
 import { arrange, crossingsOf, curve, curvePoints, frameBoxes, hopPath, overlaps, placeLabels, route, tidy, tunnels, type Box, type TFrame, type TNode, type TWire } from "./graphLayout.ts";
 import { planSolve } from "../src/lang/solve.ts";
 import { solveMode } from "../src/lang/modes.ts";
@@ -349,7 +349,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const f = node(call.fn);
     if (f.kind !== "ref" || !info) return { does: [] };
     let t: Type | undefined;
-    if (SIGS[f.target]) t = SIGS[f.target](info.subst.clone());
+    if (SIGS[f.target]) t = sigType(info, f.target);
     else if (info.schemes.get(f.target)) t = info.schemes.get(f.target)!.type;
     const z = t ? info.subst.zonk(t) : null;
     const does = z?.t === "fn" ? z.eff.effs.map(name) : [];
