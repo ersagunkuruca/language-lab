@@ -9,7 +9,7 @@ import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { library } from "./programs.ts";
-import { ABORT_OP, ARITH, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, TICKET_V, AWAIT_OP, START_TIMER_OP, BRANCH_V, DUAL_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, EXTENDED_V, ALGEBRAIC_OPS, CHECK_OP, std } from "./std.ts";
+import { ABORT_OP, ARITH, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, TICKET_V, AWAIT_OP, START_TIMER_OP, BRANCH_V, DUAL_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, EXTENDED_V, ALGEBRAIC_OPS, CHECK_OP, RANDOM_OP, std } from "./std.ts";
 
 export function buildPrelude(): Module {
   const k = new Lang();
@@ -1248,6 +1248,7 @@ export function buildPrelude(): Module {
     { variant: TICKET_V.ticket, names: ["number"], body: ([n]) => k.call(TICKET_V.ticket, n) },
     { variant: TICKET_V.timer, names: ["milliseconds", "value"], body: ([ms]) => k.call(TICKET_V.timer, ms, k.unitValue) },
     { variant: TICKET_V.firstReady, names: ["tickets", "which"], body: ([ts]) => k.call(TICKET_V.firstReady, ts, k.fn(["i"], () => k.unitValue)) },
+    { variant: TICKET_V.at, names: ["time", "value"], body: ([at]) => k.call(TICKET_V.at, at, k.unitValue) },
   ])));
   const anyOf = k.def("any of");
   k.define(anyOf, k.fn(["tickets"], (ts) => k.call(TICKET_V.firstReady, ts, k.fn(["i"], (i) => i))));
@@ -1255,7 +1256,7 @@ export function buildPrelude(): Module {
   k.define(startBranch, k.fn(["action"], (a) => k.handle(k.call(a), [
     { variant: AWAIT_OP, names: ["ticket", "rest"], body: ([t, rest]) => k.call(BRANCH_V.parked, k.call(ticketId, t), k.thunk(() => k.call(rest, k.call(AWAIT_OP, t)))) },
     // Starting a timer is answered outward, and the branch goes on at once.
-    { variant: START_TIMER_OP, names: ["milliseconds"], body: ([ms]) => k.call(START_TIMER_OP, ms) },
+    { variant: START_TIMER_OP, names: ["milliseconds", "rest"], body: ([ms, rest]) => k.call(rest, k.call(START_TIMER_OP, ms)) },
   ], ["value", (v) => k.call(BRANCH_V.done, v)])));
   const waiting = k.def("waiting tickets");
   k.define(waiting, k.fn(["branches"], (bs) => k.fold(bs, [
@@ -1313,9 +1314,73 @@ export function buildPrelude(): Module {
       k.thunk(() => k.call(SOME, k.call(a))),
       k.thunk(() => k.seq(k.call(AWAIT_OP, t), k.x(NONE))),
     )))));
-  const awaitHelpers = [startBranch, waiting, goOn, finished, settle, firstDone, raceSettle];
+  // A simulated world for tests (L63, LANGUAGE-NEEDS Part 1 "Deterministic
+  // testing"): `simulated(seed, action)` answers Await from a virtual clock
+  // that starts at 0, so no pause is real, and when several tickets are
+  // ready at the same moment it picks one with Random, seeded by `seed`
+  // like the action's own random numbers. A schedule is then a seed: the
+  // same every run, and another seed tries another order. The clock is
+  // passed along as the rests resume (a handler's state, the
+  // parameter-passing handlers of Plotkin and Pretnar), and a timer it
+  // starts is a ticket `at` its deadline. Prior art: FoundationDB's
+  // deterministic simulation (Will Wilson, 2014), tokio's paused clock.
+  const readyAt = k.def("ready at");
+  const earliest = k.def("earliest");
+  k.define(earliest, k.fn(["times"], (ts) => k.match(ts, [
+    { variant: NIL, names: [], body: () => k.call(ABORT_OP, k.lit("any of no tickets is never ready")) },
+    { variant: CONS, names: ["time", "others"], body: ([t, others]) => k.match(others, [
+      { variant: NIL, names: [], body: () => t },
+      { variant: CONS, names: ["next", "rest"], body: () => k.let("soonest", k.call(earliest, others), (e) => k.if(k.call(S.less, e, t), e, t)) },
+    ]) },
+  ])));
+  const readyTimes = k.def("ready times");
+  k.define(readyTimes, k.fn(["tickets", "now"], (ts, now) => k.match(ts, [
+    { variant: NIL, names: [], body: () => NIL },
+    { variant: CONS, names: ["ticket", "others"], body: ([t, others]) => k.call(CONS, k.call(readyAt, t, now), k.call(readyTimes, others, now)) },
+  ])));
+  const foreign = () => k.call(ABORT_OP, k.lit("a ticket from another world, awaited in a simulated one"));
+  k.define(readyAt, k.fn(["ticket", "now"], (t, now) => k.match(t, [
+    { variant: TICKET_V.ticket, names: ["number"], body: foreign },
+    { variant: TICKET_V.timer, names: ["milliseconds", "value"], body: ([ms]) => k.call(B.add, now, ms) },
+    { variant: TICKET_V.firstReady, names: ["tickets", "which"], body: ([ts]) => k.call(earliest, k.call(readyTimes, ts, now)) },
+    { variant: TICKET_V.at, names: ["time", "value"], body: ([at]) => at },
+  ])));
+  // The positions whose time is `at`.
+  const tiedAt = k.def("tied at");
+  k.define(tiedAt, k.fn(["times", "at", "position"], (ts, at, i) => k.match(ts, [
+    { variant: NIL, names: [], body: () => NIL },
+    { variant: CONS, names: ["time", "others"], body: ([t, others]) => k.let("later ones", k.call(tiedAt, others, at, k.call(INT_OPS.add, i, k.int(1))), (r) => k.if(k.equal(t, at), k.call(CONS, i, r), r)) },
+  ])));
+  // The one at x · count, x in [0, 1): each as likely.
+  const pickAt = k.def("pick at");
+  k.define(pickAt, k.fn(["positions", "x"], (ps, x) => k.match(ps, [
+    { variant: NIL, names: [], body: () => k.call(ABORT_OP, k.lit("nothing to pick from")) },
+    { variant: CONS, names: ["position", "others"], body: ([p, others]) => k.match(others, [
+      { variant: NIL, names: [], body: () => p },
+      { variant: CONS, names: ["next", "rest"], body: () => k.if(k.call(S.less, x, k.lit(1)), p, k.call(pickAt, others, k.call(B.sub, x, k.lit(1)))) },
+    ]) },
+  ])));
+  const later = (now: Id, at: Id) => k.if(k.call(S.less, at, now), now, at);
+  const simulatedWorld = k.def("simulated world");
+  k.define(simulatedWorld, k.fn(["action"], (a) => k.handle(k.call(a), [
+    { variant: START_TIMER_OP, names: ["milliseconds", "rest"], body: ([ms, rest]) => k.fn(["now"], (now) =>
+      k.call(k.call(rest, k.call(TICKET_V.at, k.call(B.add, now, ms), k.unitValue)), now)) },
+    { variant: AWAIT_OP, names: ["ticket", "rest"], body: ([t, rest]) => k.fn(["now"], (now) => k.match(t, [
+      { variant: TICKET_V.timer, names: ["milliseconds", "value"], body: ([ms, v]) => k.call(k.call(rest, v), k.call(B.add, now, ms)) },
+      { variant: TICKET_V.at, names: ["time", "value"], body: ([at, v]) => k.call(k.call(rest, v), later(now, at)) },
+      { variant: TICKET_V.firstReady, names: ["tickets", "which"], body: ([ts, which]) => k.let("times", k.call(readyTimes, ts, now), (times) =>
+        k.let("soonest", k.call(earliest, times), (at) => k.let("tied", k.call(tiedAt, times, at, k.int(0)), (tied) =>
+          k.let("picked", k.call(pickAt, tied, k.call(B.mul, k.call(RANDOM_OP), k.call(INT_OPS.toNumber, k.call(length, tied)))), (i) =>
+            k.call(k.call(rest, k.call(which, i)), later(now, at)))))) },
+      { variant: TICKET_V.ticket, names: ["number"], body: foreign },
+    ])) },
+  ], ["value", (v) => k.fn(["now"], () => v)])));
+  const simulated = k.def("simulated");
+  k.define(simulated, k.fn(["seed", "action"], (seed, a) => k.call(S.seeded, seed, k.thunk(() => k.call(k.call(simulatedWorld, a), k.lit(0))))));
+  const simulatedHelpers = [readyAt, earliest, readyTimes, tiedAt, pickAt, simulatedWorld];
+  const awaitHelpers = [startBranch, waiting, goOn, finished, settle, firstDone, raceSettle, ...simulatedHelpers];
 
-  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, csqrt, clog, cpow, casin, cacos, showC, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, showDecimals, divD, slopeAt, dualTable, showD, asFixed, fixedF, showX, divX, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, ticketId, anyOf, together, race, within];
+  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, csqrt, clog, cpow, casin, cacos, showC, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, showDecimals, divD, slopeAt, dualTable, showD, asFixed, fixedF, showX, divX, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, ticketId, anyOf, together, race, within, simulated];
   const mapHelpers = [lastItem, putEntry, updateEntry, removeEntry, lookupEntry, hasEntry, pairsAsEntries, addItem_, removeItem_, hasItem_, unionItems, interItems, diffItems];
   const comments: Record<Id, string> = {
     [each]: "Runs the action on each item of the list in turn, for what it does (prints, writes a cell).",
@@ -1471,7 +1536,8 @@ export function buildPrelude(): Module {
     [together]: "Runs the actions side by side: each runs until it awaits a ticket, and whichever ticket is ready first goes on, until every action has its value. The values come back in the actions' order (as JavaScript's Promise.all).",
     [race]: "Runs the actions side by side, as together does, and gives the value of the first to finish; the others are dropped where they wait (as JavaScript's Promise.race).",
     [within]: "The action's value as some(value) if it finishes within this many milliseconds, or none if the timer is ready first; the action is then dropped where it waits.",
-    ...Object.fromEntries(awaitHelpers.map((d) => [d, "A helper of together and race. Not offered in the palette."])),
+    [simulated]: "Runs the action in a simulated world for tests: its timers on a clock that starts at 0 and never really waits, and when several tickets are ready at the same moment, which goes on is picked with Random seeded by seed, as the action's own random numbers are. The same seed gives the same schedule every run; another seed may give another, so an order that goes wrong is a seed to paste into a test (FoundationDB's deterministic simulation).",
+    ...Object.fromEntries(awaitHelpers.map((d) => [d, simulatedHelpers.includes(d) ? "A helper of simulated. Not offered in the palette." : "A helper of together and race. Not offered in the palette."])),
     [applied]: "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette.",
   };
   const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, ...awaitHelpers, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarD, unpolarX, vector, asinBy, acosBy, asinF, acosF, asinX, acosX, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...laws], merge(prelude, std));

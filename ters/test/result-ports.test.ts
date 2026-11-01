@@ -57,3 +57,17 @@ test("the text shows a function's named results after its inputs, = e1, e2 when 
   assert.match(renderBlocks(code, pres, info, part), /part\(speed, time\) → drift, drop = speed · time, time · time$/m);
   assert.match(renderBlocks(code, pres, info, half), /half\(x\) → halved = x · 0\.5$/m);
 });
+
+// An inline function reads the same, with `=>` (L128e): what the editor's
+// text reader takes back (editor/typed.ts).
+test("an inline function shows its named results after its inputs, => e1, e2 when its body is the tuple written out", () => {
+  const k = new Lang();
+  const use = k.def("use");
+  k.define(use, k.fn(["s"], (s) => k.let("f", k.gives(["a", "b"], ["sum", "product"], (a, b) => k.call(tupleVariant(2), k.call(ARITH.add, a, b), k.call(ARITH.mul, a, b))), (f) => k.call(f, s, s))));
+  const other = k.def("other");
+  k.define(other, k.fn(["s"], (s) => k.let("g", k.gives(["a"], ["twice"], (a) => k.call(ARITH.add, a, a)), (g) => k.call(g, s))));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names);
+  const pres: Presentation = { names, comments: {}, hints: {}, style: blocksStyle as unknown as Style };
+  assert.match(renderBlocks(code, pres, info, use), /\(a, b\) → sum, product => a \+ b, a · b/);
+  assert.match(renderBlocks(code, pres, info, other), /\(a\) → twice => a \+ a/);
+});

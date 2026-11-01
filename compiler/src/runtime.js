@@ -486,15 +486,20 @@ export const $isLater = (x) => x instanceof Later;
 export function $handleL(effect, later, ops, answers, escapes, body, done = null) {
   const h = { effect, answers }, it = body();
   const run = (send) => {
-    const at = handlers.length, d = $rec.d;
-    handlers.push(h);
     let r;
-    try { r = it.next(send); } catch (e) {
-      handlers.length = at;
-      if (!(e instanceof Escape) || e.handler !== h) throw e;
-      $rec.d = d;
-      return escapes[e.op](...e.args);
-    } finally { handlers.length = at; }
+    for (;;) {
+      const at = handlers.length, d = $rec.d;
+      handlers.push(h);
+      try { r = it.next(send); } catch (e) {
+        handlers.length = at;
+        if (!(e instanceof Escape) || e.handler !== h) throw e;
+        $rec.d = d;
+        return escapes[e.op](...e.args);
+      } finally { handlers.length = at; }
+      // A case that leaves the rest out answers at once (L63).
+      if (!r.done && r.value instanceof Later && r.value.effect === effect && !(r.value.op in later) && r.value.op in answers) { send = answers[r.value.op](...r.value.args); continue; }
+      break;
+    }
     if (r.done) return done ? done(r.value) : r.value;
     const m = r.value;
     if (!(m instanceof Later) || m.effect !== effect || !(m.op in later)) throw new Error(`nothing handles ${m.op ?? m}`);
@@ -538,6 +543,8 @@ export function* $handleLG(effect, later, ops, answers, escapes, body, done = nu
         };
         return yield* later[m.op](...m.args, rest);
       }
+      // A case that leaves the rest out answers at once (L63).
+      if (m instanceof Later && m.effect === effect && m.op in answers) { send = answers[m.op](...m.args); continue; }
       send = yield m;
     }
   }

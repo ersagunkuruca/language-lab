@@ -988,13 +988,19 @@ export const TICKET = typedef("std.ticket", "Ticket", ["a"], [
   ["ticket", [["number", () => tref(INT)]]],
   ["timer", [["milliseconds", () => tref(NUMBER)], ["value", ([a]) => tref(a)]]],
   ["first ready", [["tickets", (_, self) => tref(LIST, tref(self, tref(UNIT)))], ["which", ([a]) => tfun([tref(INT)], tref(a), [])]]],
+  // Ready at this moment on the clock of whoever answers it, with this
+  // value: what a handler that keeps its own clock (`simulated`, L63)
+  // gives for a timer it starts.
+  ["at", [["time", () => tref(NUMBER)], ["value", ([a]) => tref(a)]]],
 ]);
-export const TICKET_V = { ticket: "std.ticket.ticket", timer: "std.ticket.timer", firstReady: "std.ticket.first ready" } as const;
+export const TICKET_V = { ticket: "std.ticket.ticket", timer: "std.ticket.timer", firstReady: "std.ticket.first ready", at: "std.ticket.at" } as const;
 export const AWAIT = typedef("std.await", "Await", [], [
   ["await", [["ticket", ([a]) => tref(TICKET, tref(a))]], ([a]) => tref(a), { later: true, own: ["a"] }],
   // A timer the world keeps (L71c): ready this many milliseconds after it
-  // was started, whoever awaits it and however often.
-  ["start timer", [["milliseconds", () => tref(NUMBER)]], () => tref(TICKET, tref(UNIT))],
+  // was started, whoever awaits it and however often. Answered later, so a
+  // handler that keeps the clock (`simulated`, L63) can pass it along; the
+  // world, and most cases, answer at once.
+  ["start timer", [["milliseconds", () => tref(NUMBER)]], () => tref(TICKET, tref(UNIT)), { later: true }],
 ], true);
 export const AWAIT_OP = "std.await.await", START_TIMER_OP = "std.await.start timer";
 export const BRANCH = typedef("std.branch", "Branch", ["r"], [

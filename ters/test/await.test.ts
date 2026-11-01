@@ -31,6 +31,7 @@ function program(actions: (k: Lang) => Id[]) {
         { variant: TICKET_V.timer, names: ["milliseconds", "value"], body: ([ms]) => k.if(k.call(S.less, ms, bestT), next(at, ms), next(best, bestT)) },
         { variant: TICKET_V.ticket, names: ["number"], body: () => next(best, bestT) },
         { variant: TICKET_V.firstReady, names: ["tickets", "which"], body: () => next(best, bestT) },
+        { variant: TICKET_V.at, names: ["time", "value"], body: () => next(best, bestT) },
       ]);
     } },
   ])));
@@ -41,6 +42,7 @@ function program(actions: (k: Lang) => Id[]) {
       { variant: TICKET_V.firstReady, names: ["tickets", "which"], body: ([ts, which]) => k.call(rest, k.call(which, k.call(soonest, ts, k.int(0), k.int(0), k.lit(1e300)))) },
       // A world ticket: not this world's; nothing more runs.
       { variant: TICKET_V.ticket, names: ["number"], body: () => NIL },
+      { variant: TICKET_V.at, names: ["time", "value"], body: () => NIL },
     ]) },
     // This world starts no timers of its own.
     { variant: START_TIMER_OP, names: ["milliseconds"], body: () => k.call(TICKET_V.ticket, k.int(0)) },
