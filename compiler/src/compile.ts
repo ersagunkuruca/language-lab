@@ -150,7 +150,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // arithmetic, with no lists. Kept only if the program still checks.
   // Definitions given such data get a copy for it, whose calls are worked
   // out in turn (I86).
-  ({ code, names, info } = stageProgram(code, info, names));
+  // A multivector's parts its blade mask leaves out are known zeros there
+  // (grades.ts, L43c).
+  ({ code, names, info } = stageProgram(code, info, names, opts.exports.flatMap((x) => code.defs.findLast((d) => names[d] === x) ?? [])));
   // Handlers the compiler can see are put into the code they handle
   // (handlers.ts, C64b), a round at a time, each checked again; a round
   // that doesn't check is dropped.

@@ -90,9 +90,30 @@ rule falls back to the product rule.
 | step | what | lane | size |
 |---|---|---|---|
 | L43b | `src/lang/grades.ts`: blade masks over a program whose algebras are known before running, the table above; tested on Bounce, Constructions and Spacetime | L | M |
-| L43c | Compiled JS (then WGSL) stores and multiplies only the masked parts, with L41 | C | M |
+| L43c | Compiled JS (then WGSL) stores and multiplies only the masked parts, with L41 (built so far: the mask tables from the blades, #942; staging multiplies only the masked parts, see "In the compiler" below; next, storing only them) | C | M |
 | L43d | The editor shows a value's mask in words | E | S |
 | L43e | Masks are types (built: a part read outside a value's mask is refused by `lab check`; named masks `Scalar of`, `Vector of`, `Bivector of`, `Trivector of` and `Rotor of` on record fields, checked where a value is put in and known where it is read): named masks (`Vector of`, `Rotor of`, ...) in std, checked where a definition or a field names one, and a part read outside a value's mask refused (Ersagun's answer) | L | M |
+
+## In the compiler (L43c)
+
+`valueMasks` (grades.ts) works out each definition's input masks from all
+of its callers, to a fixed point, with one summary per definition: a
+definition called from outside (an export) or used as a value has inputs
+of every part, as does one called from inside a lambda handed on or from
+a place the reading didn't reach. Then each node a definition reads gets
+the union of what it was each time.
+
+The compiler passes the exports to `stageProgram`, and a multivector
+arriving later at a staged call (stage.ts `later`) has a known 0 in each
+part outside its mask, so the products drop those terms. The PGA fixture's
+`moved n times`, given only points, sandwiches with 32 products instead of
+96 (compiler/test/stage.test.ts); Spacetime's compiled program has 2656
+instead of 3168. The masks are those of the program as given; the copies
+staging makes for data known at a call (I86) don't have them yet, which
+is what Bounce needs.
+
+Still to do: storing only the masked parts (a record per mask), and the
+shader side.
 
 ## Ersagun's answer: each blade combination is its own type
 
