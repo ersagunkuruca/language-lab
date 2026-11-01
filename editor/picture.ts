@@ -74,6 +74,14 @@ async function gpu(): Promise<GPUDevice | string> {
   return d;
 }
 
+// A picture's definitions lowered as a shader has them (C66c): an Int is
+// an i32 and std's Array an array<T, N>, on the GPU and on the CPU alike
+// (WebAssembly takes the Ints, C66e; JavaScript draws a picture with
+// arrays when WebAssembly refuses them).
+export function lowerPicture(code: Code, info: Info, names: Names, entries: Record<string, Id>) {
+  return lowerScalar(code, info, names, Object.values(entries), { records: true, shader: true });
+}
+
 // Throws, with the compiler's reason, when the entries can't be drawn.
 export async function drawPicture(o: PictureOptions): Promise<Picture> {
   const { code, info, names, entries, canvas, status } = o;
@@ -83,7 +91,7 @@ export async function drawPicture(o: PictureOptions): Promise<Picture> {
   let stopped = false;
   const stop = () => { stopped = true; };
 
-  const shader = emitWgsl(lowerScalar(code, info, names, keys.map((k) => entries[k]), { records: true }));
+  const shader = emitWgsl(lowerPicture(code, info, names, entries));
   const fn = (name: string) => {
     const f = shader.funcs.find((f) => f.name === name);
     if (!f) throw new Error(`${name} can't run on the GPU: it ${shader.refused.get(entries[name]) ?? "isn't in the scalar profile"}`);
@@ -294,7 +302,7 @@ fn main(@builtin(global_invocation_id) g: vec3u) {
   }
 
   async function cpu(why: string) {
-    const lowered = lowerScalar(cpuSide.code, cpuSide.info, cpuSide.names, keys.map((k) => entries[k]), { records: true });
+    const lowered = lowerPicture(cpuSide.code, cpuSide.info, cpuSide.names, entries);
     const out = keys.find((k) => lowered.refused.has(entries[k]));
     if (out) { status.textContent = `No GPU here (${why}), and ${out} can't be drawn on the CPU either: it ${lowered.refused.get(entries[out])}.`; return; }
     const wasm = await inWasm(lowered).catch(() => null);
