@@ -572,7 +572,12 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     // which the nearest handler sees, as in the evaluator.
     const all = constant ? [] : info.subst.resolveRow(ft.eff).effs;
     const partial = (!!opts.data && (all.includes(CHOICE) || all.some(escaping) || (!constant && info.divergent.has(def)))) || (!!opts.shader && all.includes(CHOICE));
-    const effs = all.filter((e) => !BUDGETED.includes(e) && !(partial && partialEff(e)) && !(opts.data && (e === CONSOLE || e === FILES)));
+    // Without `data` or `shader`, a Choice is let through: one from a
+    // partial builtin (x / 0, the square root of a negative; L125b) is
+    // lowered as its arithmetic, so no answer isn't seen here yet (L125c2,
+    // L125c3); a Choice of the program's own (fail, one of) is refused
+    // where it's used.
+    const effs = all.filter((e) => !BUDGETED.includes(e) && !(partial && partialEff(e)) && !(opts.data && (e === CONSOLE || e === FILES)) && !(e === CHOICE && !opts.data && !opts.shader));
     if (effs.length) fail(`has effects (${effs.map(nm).join(", ")})`);
     const budgeted = !constant && !opts.data && diverges(ft);
 
