@@ -985,6 +985,10 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
 
   return {
     ev,
+    // The program as it runs: the generic arithmetic resolved, lets lifted,
+    // tuples spread (resolveArithmetic). A caller walking the program as
+    // written (trace.ts) asks it for a node it changed.
+    code,
     value: (def: Id) => refValue(def, null),
     // Call a function value and stream its results.
     call: (f: Value, ...args: Value[]) => (f as Fn)(...args),
