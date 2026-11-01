@@ -7,18 +7,22 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { closeSync, mkdtempSync, openSync, readFileSync, writeFileSync } from "node:fs";
+import { WASI } from "node:wasi";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { Lang } from "../../ters/src/lang/dsl.ts";
 import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
-import { Aborted, makeRunner } from "../../ters/src/lang/run.ts";
+import { Aborted, makeRunner, runProgram } from "../../ters/src/lang/run.ts";
+import { nodeWorld } from "../../ters/src/lang/world.ts";
 import { ABORT_OP, S } from "../../ters/src/lang/std.ts";
 import { B } from "../../ters/src/prelude.ts";
 import type { Id } from "../../ters/src/model.ts";
 import { compile } from "../src/compile.ts";
+import { lowerScalar } from "../src/scalar.ts";
+import { emitWasm, fromText, instantiate } from "../src/wasm.ts";
 
 // Each definition takes two Float64s and shows its answer.
 const CASES: [string, (k: Lang, a: Id, b: Id) => Id][] = [
@@ -37,7 +41,7 @@ const CASES: [string, (k: Lang, a: Id, b: Id) => Id][] = [
 // Overflow decides a comparison: the show is of a Bool, so only less sees it.
 const LESS = (k: Lang, a: Id, b: Id) => k.call(S.less, k.call(B.mul, a, b), k.lit(0));
 
-test("compiled JavaScript stops where the evaluator does, with the same reason", async () => {
+function program() {
   const k = new Lang();
   const defs = [...CASES.map(([name, f]): [string, Id] => {
     const d = k.def(name);
@@ -54,17 +58,23 @@ test("compiled JavaScript stops where the evaluator does, with the same reason",
   defs.push(["caught", caught]);
   const code = base(k.code), names = { ...baseNames(), ...k.names }, info = infer(code, names, undefined, checkOptions);
   assert.deepEqual(info.errors.map((e) => e.message), []);
+  return { code, names, info, defs };
+}
+// What a run says: its answer, or the reason it stopped.
+const said = (f: () => unknown) => { try { const v = f(); return typeof v === "object" ? JSON.stringify(v) : String(v); } catch (e) { if (e instanceof Aborted) return `stops: ${e.reason}`; throw e; } };
+const INPUTS = [[1, 0], [0, 0], [-4, 2], [0, -1], [-8, 0.5], [6, 4], [1e300, 1e300], [-1e300, 1e300], [2, 3], [-0, 1]];
+
+test("compiled JavaScript stops where the evaluator does, with the same reason", async () => {
+  const { code, names, info, defs } = program();
   const path = join(mkdtempSync(join(tmpdir(), "finite-")), "finite.js");
   writeFileSync(path, compile(code, info, names, { runtime: pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href, exports: defs.map(([n]) => n) }));
   const js = (await import(pathToFileURL(path).href)).defs as Record<string, (a: number, b: number) => unknown>;
   const r = makeRunner(code, info, { print: () => {}, names });
-  // What a run says: its answer, or the reason it stopped.
-  const said = (f: () => unknown) => { try { return String(f()); } catch (e) { if (e instanceof Aborted) return `stops: ${e.reason}`; throw e; } };
-  const evaluated = (d: Id, a: number, b: number) => said(() => { for (const v of r.call(r.value(d), a, b)) return typeof v === "object" ? JSON.stringify(v) : v; });
-  const inputs = [[1, 0], [0, 0], [-4, 2], [0, -1], [-8, 0.5], [6, 4], [1e300, 1e300], [-1e300, 1e300], [2, 3], [-0, 1]];
+  const evaluated = (d: Id, a: number, b: number) => said(() => { for (const v of r.call(r.value(d), a, b)) return v; });
+  const inputs = INPUTS;
   const stops = new Set<string>();
   for (const [name, d] of defs) for (const [a, b] of inputs) {
-    const want = evaluated(d, a, b), got = said(() => { const v = js[name](a, b); return typeof v === "object" ? JSON.stringify(v) : v; });
+    const want = evaluated(d, a, b), got = said(() => js[name](a, b));
     if (name !== "less") assert.equal(got, want, `${name}(${a}, ${b})`);
     else assert.equal(got.startsWith("stops"), want.startsWith("stops"), `${name}(${a}, ${b}): ${got} vs ${want}`);
     if (want.startsWith("stops")) stops.add(want);
@@ -80,4 +90,49 @@ test("compiled JavaScript stops where the evaluator does, with the same reason",
     "stops: x / 0 has no answer",
     "stops: x mod 0 has no answer",
   ]);
+});
+
+// WebAssembly (L125c2): the same checks, lowered (scalar.ts), and the
+// host's stop throws the Abort. Not a handler's to catch there: `caught`
+// stops too (FLOAT-VALUES-2026-11-01.md, L125c2).
+test("WebAssembly stops where the evaluator does, with the same reason", async () => {
+  const { code, names, info, defs } = program();
+  const lowered = lowerScalar(code, info, names, defs.filter(([n]) => n !== "caught").map(([, d]) => d), { data: true });
+  assert.deepEqual([...lowered.refused.values()], []);
+  const w = (await instantiate(emitWasm(lowered))) as unknown as Record<string, (a: number, b: number) => unknown>;
+  const r = makeRunner(code, info, { print: () => {} });
+  let stops = 0;
+  for (const [name, d] of defs) {
+    if (name === "caught") continue;
+    const f = lowered.funcs.find((g) => g.def === d)!;
+    for (const [a, b] of INPUTS) {
+      const want = said(() => { for (const v of r.call(r.value(d), a, b)) return v; });
+      const got = said(() => { const v = w[f.name](a, b); return f.result === "text" ? fromText(w as never, v) : f.result === "i32" ? (v ? "true" : "false") : v; });
+      if (name === "less") assert.equal(got.startsWith("stops"), want.startsWith("stops"), `${name}(${a}, ${b}): ${got} vs ${want}`);
+      else assert.equal(got, want, `${name}(${a}, ${b})`);
+      if (want.startsWith("stops")) stops++;
+    }
+  }
+  assert.ok(stops > 10);
+});
+
+// Under WASI the stop writes its reason to standard error and exits with 1,
+// after what the program printed: as `lab run` does.
+test("a WASI program stops with the evaluator's reason and exit code", async () => {
+  const k = new Lang();
+  const main = k.def("main");
+  const half = (x: number, y: number) => k.call(S.print, k.call(S.show, k.call(B.div, k.call(B.add, k.lit(x), k.lit(0)), k.call(B.add, k.lit(y), k.lit(0)))));
+  k.define(main, k.thunk(() => k.seq(half(1, 4), half(1, 0), half(1, 2))));
+  const code = base(k.code), names = { ...baseNames(), ...k.names }, info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const printed: string[] = [], errors: string[] = [];
+  const exit = runProgram(code, info, main, [], { print: (l) => printed.push(l), names, world: { ...nodeWorld(), error: (l) => errors.push(l) } });
+  assert.deepEqual([exit, printed, errors], [1, ["0.25"], ["x / 0 has no answer"]]);
+  const m = emitWasm(lowerScalar(code, info, names, [main], { data: true }), { wasi: true });
+  const io = mkdtempSync(join(tmpdir(), "finite-wasi-"));
+  const [stdout, stderr] = [openSync(join(io, "out"), "w"), openSync(join(io, "err"), "w")];
+  const wasi = new WASI({ version: "preview1", args: ["main"], stdout, stderr, returnOnExit: true });
+  const got = wasi.start(await WebAssembly.instantiate(await WebAssembly.compile(m.bytes), wasi.getImportObject() as WebAssembly.Imports));
+  [stdout, stderr].forEach((fd) => closeSync(fd));
+  assert.deepEqual([got, readFileSync(join(io, "out"), "utf8"), readFileSync(join(io, "err"), "utf8")], [1, "0.25\n", "x / 0 has no answer\n"]);
 });

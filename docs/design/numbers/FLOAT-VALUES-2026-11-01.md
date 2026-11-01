@@ -9,8 +9,12 @@ answer isn't finite, and `atan2` takes −0 as 0. Until L125b's nonzero fact,
 "no answer" stops the program too rather than being `Choice`, since a
 `Choice` on every `/` would make nearly every program a search. L125c1
 (compiled JavaScript, 2026-11-01): the same stops with the same reasons,
-no answer checked on the argument and overflow late (§2); WASM and C
-follow in L125c2. L125d is built: `Extended a` with
+no answer checked on the argument and overflow late (§2). L125c2
+(WebAssembly and C): the same checks in the lowering (scalar.ts), and the
+stop says the same reason and exits with 1; there it ends the program
+rather than being an Abort a handler in the program gets, and an answer
+given back to a host is checked only by C's test harness. Shaders keep
+no checks (§ targets). L125d is built: `Extended a` with
 `extended less/add/negate/subtract/multiply`, `minimum` and `maximum`. L125f is built: a host's NaN or ±∞ is refused at
 the border.
 

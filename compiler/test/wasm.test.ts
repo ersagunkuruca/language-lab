@@ -9,7 +9,7 @@ import { norm } from "../../ters/src/lang/int.ts";
 import { isData, isFn, isRecord, lowerScalar, type LType } from "../src/scalar.ts";
 import { emitWasm, fromInt, fromText, instantiate, runMain, toInt, toText } from "../src/wasm.ts";
 import { load } from "../src/program.ts";
-import { area, choices, recursiveLets, closures, escapes, fractionInputs, fractions, maths, ordered, orderedInputs, roses, sameLists, searches, several, texts, worldly } from "../src/fixtures.ts";
+import { area, choices, recursiveLets, closures, escapes, fractionInputs, fractions, maths, ordered, orderedInputs, roses, sameLists, searches, several, stopsWith, texts, worldly } from "../src/fixtures.ts";
 import { nodeWorld } from "../../ters/src/lang/world.ts";
 import { WASI } from "node:wasi";
 import { closeSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -18,6 +18,9 @@ import { dirname, join } from "node:path";
 import { book } from "../gaps/ledger.ts";
 
 const first = (xs: Iterable<Value>) => { for (const x of xs) return x; };
+// What a run says: its answer, or why it stopped (L125c: an Abort, from the
+// evaluator or from WebAssembly's host).
+const said = <T>(run: () => T): T | string => { try { return run(); } catch (e) { if (e instanceof Aborted) return `stops: ${e.reason}`; throw e; } };
 
 for (const [name, expected] of [
   ["calculus", ["cubic", "wave", "kink", "bump", "cubic′", "wave′", "kink′", "bump′"]],
@@ -35,9 +38,9 @@ for (const [name, expected] of [
     for (const f of lowered.funcs) {
       for (const x of [-2.5, -1, 0, 0.5, 2, 3.7, 1e6]) {
         const args = f.params.map((_, i) => x + i);
-        const want = first(r.call(r.value(f.def), ...args));
-        const got = w[f.name](...args);
-        if (f.result === "i32") assert.equal(got === 1, (want as { tag: string }).tag === "std.bool.true", `${f.name}(${args})`);
+        const want = said(() => first(r.call(r.value(f.def), ...args)));
+        const got = said(() => w[f.name](...args));
+        if (f.result === "i32" && typeof want !== "string") assert.equal(got === 1, (want as { tag: string }).tag === "std.bool.true", `${f.name}(${args})`);
         else assert.ok(Object.is(got, want), `${f.name}(${args}): ${got} ≠ ${want}`);
         compared++;
       }
@@ -159,7 +162,7 @@ test("equal on data in WebAssembly: the evaluator's rule on each number, two lon
   const w = await instantiate(m) as unknown as Exports;
   const r = makeRunner(p.code, p.info, { print: () => {} });
   const t = lowered.funcs.find((f) => f.name === "same")!.params[0];
-  for (const [xs, ys] of [[[1, 2, 3], [1, 2, 3]], [[1, 2, 3], [1, 2]], [[], []], [[0.1 + 0.2], [0.3]], [[1e12], [1e12 + 1]], [[2], [3]], [[Infinity], [-Infinity]], [[1e308], [Infinity]], [[Infinity], [Infinity]], [[1e308], [-1e308]]]) {
+  for (const [xs, ys] of [[[1, 2, 3], [1, 2, 3]], [[1, 2, 3], [1, 2]], [[], []], [[0.1 + 0.2], [0.3]], [[1e12], [1e12 + 1]], [[2], [3]], [[1e308], [-1e308]]]) {
     const want = first(r.call(r.value(p.same), toList(xs), toList(ys)));
     assert.deepStrictEqual(fromWasm(w, w.same(toWasm(w, toList(xs), t), toWasm(w, toList(ys), t)), "i32"), want, `${xs} = ${ys}`);
   }
@@ -191,8 +194,8 @@ test("folds over nested data in WebAssembly: a rose tree's List of children, a g
   for (const [name, inputs] of cases) {
     const def = p.defs[name], f = lowered.funcs.find((g) => g.def === def)!;
     for (const xs of inputs) {
-      const want = first(r.call(r.value(def), ...xs));
-      const got = fromWasm(w, (w[f.name] as (...a: unknown[]) => unknown)(...xs.map((x, i) => toWasm(w, x, f.params[i]))), f.result);
+      const want = said(() => first(r.call(r.value(def), ...xs)));
+      const got = said(() => fromWasm(w, (w[f.name] as (...a: unknown[]) => unknown)(...xs.map((x, i) => toWasm(w, x, f.params[i]))), f.result));
       assert.deepStrictEqual(got, want, name);
     }
   }
@@ -287,27 +290,29 @@ test("Int and Text in WebAssembly: the runtime gives the evaluator's answers, ch
     before: words.flatMap((a) => words.map((b) => [a, b])),
     same: words.flatMap((a) => words.map((b) => [a, b])),
     glued: [["", ""], ["héllo", "🎉"]],
-    shown: [0, -0, 1, -7, 0.5, 1 / 3, -2 / 3, 1e-6, 1.5e-7, 123456.789, 1e6 + 0.25, 2 ** 53, 1e20, 1e21, 1e300, 0.1 + 0.2, NaN, Infinity, -Infinity, 2.0000000001,
+    shown: [0, -0, 1, -7, 0.5, 1 / 3, -2 / 3, 1e-6, 1.5e-7, 123456.789, 1e6 + 0.25, 2 ** 53, 1e20, 1e21, 1e300, 0.1 + 0.2, 2.0000000001,
       // Written by the runtime: tiny ones as JavaScript does (1e-7 and below), wholes below 2⁵³; the rest by the host.
       1e-7, -1e-7, 1.5e-7, 5.5e-8, 1e-9, -9.99e-7, 1.23e-8, 9.99e-9, 1e-10, -1e-10, 4.9e-10, 5e-10, -5e-10, 3e-300, 5e-324, 1e-6 - 1e-22, 2 ** 53 - 1, 2 ** 53 + 2, -(2 ** 60), 9.3e18, 123456789012345, 1234567890123.5].map((x) => [x]),
     arith: [[0, 0], [6, 7], [-3, 5], [123456789, 1000], [2 ** 31, 2 ** 31], ...bigPairs],
     smaller: [[1, 2], [5, -5], [0, 0], ...bigPairs],
     sameInt: [[1, 1], [-1, 1], [0, 0], ...bigPairs, ...bigs.map((x) => [norm(x), norm(x < 0n ? -x : x)])],
-    // mod, from musl's fmod: exact, b's sign, NaN and the infinities as JavaScript's.
-    remainder: [7, -7, 0, -0, 0.5, 1e300, -1e-300, 5e-324, 2 ** 53 + 1, NaN, Infinity, -Infinity, 1e22, 0.1, 6.283185307179586].flatMap((a) =>
-      [3, -3, 0.1, 2.5, 1e-310, 5e-324, 1e300, 2 ** -1074 * 3, Infinity, -Infinity, NaN, 0, 1 / 3].map((b) => [a, b])),
+    // mod, from musl's fmod: exact, b's sign as JavaScript's; mod 0 stops (L125c).
+    remainder: [7, -7, 0, -0, 0.5, 1e300, -1e-300, 5e-324, 2 ** 53 + 1, 1e22, 0.1, 6.283185307179586].flatMap((a) =>
+      [3, -3, 0.1, 2.5, 1e-310, 5e-324, 1e300, 2 ** -1074 * 3, 0, 1 / 3].map((b) => [a, b])),
   };
   for (const [name, inputs] of Object.entries(cases)) {
     const def = p.defs[name as keyof typeof p.defs], f = lowered.funcs.find((g) => g.def === def)!;
     for (const xs of inputs) {
-      const want = first(r.call(r.value(def), ...xs));
-      const got = fromWasm(w, (w[f.name] as (...a: unknown[]) => unknown)(...xs.map((x, i) => toWasm(w, x, f.params[i]))), f.result);
+      const want = said(() => first(r.call(r.value(def), ...xs)));
+      const got = said(() => fromWasm(w, (w[f.name] as (...a: unknown[]) => unknown)(...xs.map((x, i) => toWasm(w, x, f.params[i]))), f.result));
       assert.deepStrictEqual(got, want, `${name}(${xs.map((x) => (typeof x === "bigint" ? `${x}n` : JSON.stringify(x))).join(", ")})`);
     }
   }
-  // mod is the module's own: alone it imports nothing, not even texts.
+  // mod is the module's own: alone it imports no texts, and from the host
+  // only the stop for x mod 0 (L125c2).
   const alone = emitWasm(lowerScalar(p.code, p.info, p.names, [p.defs.remainder], { data: true }));
-  assert.ok(!alone.wat.includes("(import") && !alone.wat.includes("$bytes"), "mod needs no host");
+  assert.deepEqual(WebAssembly.Module.imports(new WebAssembly.Module(alone.bytes)), [{ module: "Math", name: "stop", kind: "function" }], "mod needs no host but its stop");
+  assert.ok(!alone.wat.includes("$bytes"), "mod needs no texts");
   // Programs: wc's and chapters' text functions, the evaluator's answers.
   for (const [name, fn, inputs] of [
     ["wc", "blank", [[""], ["  "], ["a b"], ["\t x"]]],
@@ -336,7 +341,8 @@ test("Int and Text in WebAssembly: the runtime gives the evaluator's answers, ch
 test("a Float64's text in WebAssembly is JavaScript's String: the shortest digits that read back, with no host", async () => {
   const p = texts();
   const m = emitWasm(lowerScalar(p.code, p.info, p.names, [p.defs.shown], { data: true }));
-  assert.deepEqual(WebAssembly.Module.imports(new WebAssembly.Module(m.bytes)), []);
+  // Only the stop, for a show of an overflow (L125c2).
+  assert.deepEqual(WebAssembly.Module.imports(new WebAssembly.Module(m.bytes)), [{ module: "Math", name: "stop", kind: "function" }]);
   const w = await instantiate(m) as unknown as Exports;
   const text = (x: number) => fromText(w, (w["Number.text"] as (x: number) => unknown)(x));
   const bits = new Float64Array(1), word = new Uint32Array(bits.buffer);
@@ -369,7 +375,7 @@ test("one answer or none in WebAssembly: a status after the answer, handlers as 
     remainder: [...ints.flatMap((a) => ints.map((b) => [a, b])), ...divisions],
     power: [[2, 10], [-3, 3], [0, 0], [5, -1], [-1, 63], [1, 2 ** 40], [2, 62], [-2, 63], [10, 18], [2, 64], [-3, 200], [10n ** 20n, 7], [7, 1000],
       [0, 2n ** 70n], [1, 2n ** 70n], [-1, 2n ** 70n], [-1, 2n ** 70n + 1n], [5, -(2n ** 70n)]].map((xs) => xs.map((x) => norm(BigInt(x)))),
-    whole: [0, -0, 0.5, -0.5, 3.99, -3.01, 1e15 + 0.5, 2 ** 60, 2 ** 63, -(2 ** 63), 2 ** 64 + 4096, -1.5e19, 1e300, -Number.MAX_VALUE, NaN, Infinity, -Infinity].map((x) => [x]),
+    whole: [0, -0, 0.5, -0.5, 3.99, -3.01, 1e15 + 0.5, 2 ** 60, 2 ** 63, -(2 ** 63), 2 ** 64 + 4096, -1.5e19, 1e300, -Number.MAX_VALUE].map((x) => [x]),
     reread: [...texts, ...bigs.map(String), "9223372036854775808", "-9223372036854775809", "0123456789012345678901", "-", "12345678901234567890x"].map((t) => [t]),
     found: ["", "abc", "héllo wörld", "a🎉b🎉c", "aaa"].flatMap((t) => ["", "a", "b", "ö", "🎉", "c", "wörld", "aa", "zz"].map((q) => [t, q])),
     code: texts.map((t) => [t]),
@@ -557,16 +563,22 @@ test("Math with no JavaScript host: V8's fdlibm in WebAssembly, the same bits as
   const stub = new Proxy({}, { get: () => () => 0 });
   const { instance } = await WebAssembly.instantiate(m.bytes, { wasi_snapshot_preview1: stub }) as unknown as { instance: { exports: Exports } };
   const w = instance.exports;
-  const F = { sin: Math.sin, cos: Math.cos, tan: Math.tan, exp: Math.exp, log: Math.log, pow: Math.pow, atan2: Math.atan2 } as Record<string, (x: number, y: number) => number>;
+  const F = { sin: Math.sin, cos: Math.cos, tan: Math.tan, exp: Math.exp, log: Math.log, pow: Math.pow, atan2: (y: number, x: number) => Math.atan2(y + 0, x + 0) } as Record<string, (x: number, y: number) => number>; // −0 is 0 (L125a): atan2(−0, −1) is π
   let seed = 7n;
   const next = () => Number((seed = (seed * 6364136223846793005n + 1442695040888963407n) % 2n ** 64n) >> 11n) / 2 ** 53;
   const anyBits = () => new Float64Array(new BigUint64Array([BigInt(Math.floor(next() * 2 ** 32)) << 32n | BigInt(Math.floor(next() * 2 ** 32))]).buffer)[0];
   // Small, around a period, large (rem_pio2's long path past 2²⁰·π/2), tiny, the edges, and any bits at all.
-  const pick = () => { const k = next(); return k < 0.3 ? (next() - 0.5) * 20 : k < 0.5 ? (next() - 0.5) * 2e7 : k < 0.6 ? next() * 1e-5 : k < 0.65 ? [0, -0, NaN, Infinity, -Infinity, 1, -1, 0.5, 2, 1e22, 1e300, 5e-324][Math.floor(next() * 12)] : anyBits(); };
+  const pick = () => { const k = next(); return k < 0.3 ? (next() - 0.5) * 20 : k < 0.5 ? (next() - 0.5) * 2e7 : k < 0.6 ? next() * 1e-5 : k < 0.65 ? [0, -0, 1, -1, 0.5, 2, 1e22, 1e300, 5e-324][Math.floor(next() * 9)] : finiteBits(); };
+  // Every Float64 is finite (L125a): any bits but NaN's and the infinities'.
+  const finiteBits = (): number => { const x = anyBits(); return Number.isFinite(x) ? x : finiteBits(); };
   for (const [op, f] of Object.entries(F)) {
     const fn = lowered.funcs.find((g) => g.def === p.defs[op as keyof typeof p.defs])!.name;
     for (let i = 0; i < 20000; i++) {
       const x = pick(), y = op === "pow" && next() < 0.4 ? Math.round(pick() % 20) : pick();
+      // A stop (L125c2) writes its reason and exits, which the stub host
+      // here can't do (finite.test.ts runs one under WASI). exp's overflow
+      // is given back unchecked: the host's to check.
+      if (stopsWith(op, x, y) && op !== "exp") continue;
       assert.ok(Object.is(w[fn](x, y), f(x, y)), `${op}(${x}, ${y}): ${w[fn](x, y)}, not ${f(x, y)}`);
     }
   }
