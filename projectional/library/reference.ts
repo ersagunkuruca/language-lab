@@ -38,6 +38,7 @@ export const SECTIONS: Section[] = [
       ...t("complex"), ...prelude("as complex", "i", "complex conjugate", "modulus", "angle of", "from polar", "divide complex", "complex exp", "show complex", "table product", "complex table", "clifford table", "clifford algebra", "clifford product", "clifford reverse", "clifford versor inverse", "clifford sandwich", "clifford reflect", "clifford project", "clifford exp", "clifford outer", "clifford inner", "clifford grade", "clifford dual", "clifford undual", "clifford regressive", "clifford part", "clifford with part"), ...t("tableEntry"), ...t("algebra"),
       ...t("mat2", "mat3", "mat4"), ...prelude("matrix table"),
       ...t("fixed"), ...prelude("as fixed", "fixed as float64", "show fixed", "divide fixed", "square root fixed"),
+      ...t("extended"), ...prelude("extended less", "extended add", "extended negate", "extended subtract", "extended multiply", "minimum", "maximum"),
       ...t("dual"), ...prelude("slope by duals", "divide duals", "show dual", "dual table"),
       ...t("algebraic"), ...b("algebraic.sqrt", "algebraic.root", "algebraic.divide", "algebraic.ofRational", "algebraic.asFraction", "algebraic.digits", "algebraic.toNumber", "algebraic.show"),
       ...b("sin", "cos", "tan", "exp", "log"), ...b("add", "sub", "mul", "neg", "less", "int.add", "int.sub", "int.mul", "int.neg", "int.less", "algebraic.add", "algebraic.sub", "algebraic.mul", "algebraic.neg", "algebraic.less", "algebraic.fraction")] },
