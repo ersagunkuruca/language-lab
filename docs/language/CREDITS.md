@@ -323,6 +323,7 @@ Proposed in [STABLE-REFERENCES.md](../design/data/STABLE-REFERENCES.md) (BACKLOG
 | Audio as functions on blocks with state in cells, played in an AudioWorklet (design, AUDIO.md) | Prior art | Faust (Orlarey, Fober and Letz, Grame), SuperCollider (James McCartney; unit generators by block, server apart from the language), Elementary Audio (Nick Thompson), the W3C Web Audio API's AudioWorklet. No code taken. |
 | Mobile apps as a packaged web page (`lab build-app`, `ters/cli/app.ts`) | Prior art | PWAs: W3C's Web Application Manifest and Service Workers (the cache-first offline pattern); [Capacitor](https://capacitorjs.com) (Ionic), whose `capacitor.config.json` with `webDir` the folder follows. WEB.md. |
 | A page's event handler that stops at a fetch is taken back and run again (`Cells.attempt`, src/lang/cells.ts) | Prior art | Software transactional memory's `retry` (Harris, Marlow, Peyton Jones and Herlihy, *Composable Memory Transactions*, 2005), in one thread: writes undone, printing held until the run is kept. No code taken. |
+| A page's event handler that stops at a fetch goes on from there when the reply lands, its machine kept (L59, `Pending.resume`, src/lang/run.ts and html.ts) | Prior art | One-shot continuations resumed by an event loop: OCaml 5's effect handlers under Eio (Sivaramakrishnan et al., 2021), and JavaScript's `async`/`await`, here with no colouring of the handler's type. |
 
 ## Shaders
 
