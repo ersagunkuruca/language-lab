@@ -1501,7 +1501,7 @@ call. *Fix:* where the list is consumed once by a fold or a structural
 recursion, walk the tree in order instead (the representation's own fold,
 ROADMAP 5's folds as representations; M3's `heads` did this for the first
 item only). *Measured* from the profile: `tree onto` 6% at 3000 notes, and
-part of the GC. **Hash-table side done (C72, this PR):** once C71 made the
+part of the GC. **Hash-table side done (C72, #947):** once C71 made the
 maps hash tables, sorting them for `entries of` was 34% of the run; each
 version now keeps its sorted list the first time it is asked for (a
 version never changes), and notebook's table run at 3000 notes went from

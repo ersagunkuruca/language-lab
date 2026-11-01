@@ -39,6 +39,7 @@ import { ARITH, FALSE, S, STD_IMPL, TRUE } from "./std.ts";
 import { NUMBER, type Type } from "./types.ts";
 import { infer, type Info } from "./infer.ts";
 import { recordVariant } from "./derive.ts";
+import { valueMasks, type Algebra } from "./grades.ts";
 
 class Stop extends Error {}
 const stop = (): never => { throw new Stop(); };
@@ -63,7 +64,7 @@ const LIMIT = 400_000, NODES = 40_000, LETS = 800;
 // caller; staged is empty when nothing changed.
 // `rounded`: the staged calls that worked out a number Float32 can't hold,
 // so a Float32 run of the same program rounds it differently.
-export function stageCalls(code: Code, info: Info, names: Names, only?: Id[], copied: Set<Id> = new Set()): { code: Code; names: Names; staged: Id[]; rounded: Id[] } {
+export function stageCalls(code: Code, info: Info, names: Names, only?: Id[], copied: Set<Id> = new Set(), masks?: Map<Id, { algebra: Algebra; mask: number }>): { code: Code; names: Names; staged: Id[]; rounded: Id[] } {
   const nodes = code.nodes;
   const staged: Id[] = [], rounded: Id[] = [];
   const out: Code = { nodes: { ...nodes }, defs: [...code.defs] };
@@ -108,7 +109,7 @@ export function stageCalls(code: Code, info: Info, names: Names, only?: Id[], co
       // An argument given later is worked out too, its variables (Float64s
       // and records of them) read where they are, so `to pga(p)` is seen
       // to be mostly zeros; when it can't be, it is named once.
-      st.free = (ref, b) => { const sh = shape(ref); return sh ? st.later(b, sh) : stop(); };
+      st.free = (ref, b) => { const sh = shape(ref); return sh ? st.later(b, sh, masks?.get(ref)) : stop(); };
       const binders: (Id | null)[] = [];
       const args = n.args.map((a, i) => {
         if (known[i]) { binders.push(null); return known[i]!; }
@@ -116,7 +117,7 @@ export function stageCalls(code: Code, info: Info, names: Names, only?: Id[], co
         try { const v = st.ev(a, new Map()); binders.push(null); return v; } catch (e) { if (!stopped(e)) throw e; st.lets.length = mark; }
         const b = st.binder(`staged ${i}`);
         binders.push(b);
-        return st.later(b, shape(a)!);
+        return st.later(b, shape(a)!, masks?.get(a));
       });
       const result = st.apply(st.defValue(f.target), args);
       const body = st.wrap(st.residual(result));
@@ -141,7 +142,10 @@ export function stageCalls(code: Code, info: Info, names: Names, only?: Id[], co
 // still checks: calls given their data worked out (stageCalls), then
 // copies for data known at a call (specialiseCalls), and the calls inside
 // those copies worked out in turn. `rounded` as stageCalls's.
-export function stageProgram(code: Code, info: Info, names: Names): { code: Code; info: Info; names: Names; rounded: Id[] } {
+// `open`: the definitions called from outside (the exports). Given, the
+// program's blade masks are worked out first (grades.ts valueMasks, L43c)
+// and a multivector arriving later has known zeros outside its mask.
+export function stageProgram(code: Code, info: Info, names: Names, open?: Id[]): { code: Code; info: Info; names: Names; rounded: Id[] } {
   // A check again is a plain one (no pins), so it is measured against the
   // program as it came, checked the same way: a pinned generic definition
   // such as the prelude's `sum` can check worse plainly than it did under
@@ -152,6 +156,7 @@ export function stageProgram(code: Code, info: Info, names: Names): { code: Code
     if (base === null) { try { base = Math.max(initial, infer(asCame, names).errors.length); } catch { base = initial; } }
     return base;
   };
+  const masks = open ? valueMasks(code, info, open) : undefined;
   // The last state that checked, and what is pending on top of it.
   let good = { code, names, info, rounded: [] as Id[] };
   let pending: Id[] | null = null;
@@ -184,7 +189,8 @@ export function stageProgram(code: Code, info: Info, names: Names): { code: Code
   const copied = new Set<Id>();
   const staged = new Set<Id>();
   const stage = (only?: Id[]) => {
-    const st = stageCalls(code, info, names, only, copied);
+    // Masks are of the program as given; a copy's nodes have none.
+    const st = stageCalls(code, info, names, only, copied, masks);
     st.staged.forEach((id) => staged.add(id));
     if (!st.staged.length) return;
     ({ code, names } = st);
@@ -480,10 +486,14 @@ class Stager {
   ref(target: Id) { return this.add({ kind: "ref", target }); }
 
   // A value given later: a Float64, or a record of them read part by part.
-  later(b: Id, shape: Id | "number"): PV {
+  // A multivector whose blade mask is known (grades.ts valueMasks, L43c)
+  // has a known 0 in each part outside it, so the products on it drop
+  // those terms.
+  later(b: Id, shape: Id | "number", mask?: { algebra: Algebra; mask: number }): PV {
     if (shape === "number") return { k: "dyn", make: () => this.ref(b), cheap: true };
     const fields = (this.code.nodes[shape] as NodeOf<"variant">).fields;
-    return { k: "data", tag: shape, fields: fields.map((f) => ({ k: "dyn", make: () => this.add({ kind: "call", fn: this.ref(f), args: [this.ref(b)] }), cheap: true }) as Dyn) };
+    const off = (i: number) => !!mask && mask.algebra.variant === shape && !((mask.mask >> i) & 1);
+    return { k: "data", tag: shape, fields: fields.map((f, i) => (off(i) ? 0 : ({ k: "dyn", make: () => this.add({ kind: "call", fn: this.ref(f), args: [this.ref(b)] }), cheap: true }) as Dyn)) };
   }
 
   // An expression with no variables, known now; Stop otherwise.
