@@ -22,7 +22,7 @@ Ersagun's "take 40 more tasks" (2026-11-01 11:46): Editor 13, Compiler 13, Langu
 
 | lane | thread | next, in order |
 |---|---|---|
-| E Editor | "Editor lane" | Ersagun's "as many as you can" (until 2 Nov 17:00 UTC): C66's picture half (#892), E103c (#898), I29's later states (#900), E103d (#902); then QA13's findings (QA-2026-11-01b): I122 to I126 and I128 done, then I127 and I129 to I132 |
+| E Editor | "Editor lane" | Ersagun's "as many as you can" (until 2 Nov 17:00 UTC): C66's picture half (#892), E103c (#898), I29's later states (#900), E103d (#902); then QA13's findings (QA-2026-11-01b): I122 to I128 done, then I129 to I132 |
 | C Compiler and targets | "Compiler lane" | Bigger-program round 6 (2026-11-01): C72 (trees side); then C40's next step (a page's main that waits), L43c's next step (storing only the masked parts), then (Ersagun 16:05 "take 20 more") C30's next stage, C56, C58, C59 |
 | L Language and library | "Language lane" | Ersagun's 40 (2026-11-01): L125a step 1 done (#842); L125b done, L125d done (#847), L125f done (#848), L71a done (#849), L38's open end done (#851), L71b done (#887), I118 done (#890), L127 done (#891), L69a2 done (#894), L43e3 done (#895), L108d2 done (#896), L29 and I84 put back (too big for now, see their rows); Ersagun's 20 more (16:05): L71c done (#901), L59a done (#904), the calculus palette bug done (I120, #913), L128a done (#925), L128b done (#930), L136 done (#932), L134 done (#933), L135 done (#934), L133 done (#935), L128c's text done (#936; reading it back is the Editor lane's), I121 the site's build done (#946), L128e inline functions' result ports in the text done (#948), I122 the upgrade test done (#950), L63 done (this PR), L60 done (#937), L44's next step, L42's next step (a PGA motor), L130 after E168 (L126 `sameAs` done by the Editor lane, #920; L97d was already done). Earlier today: #809 to #823 |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
@@ -43,7 +43,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| I127 | **Bug.** Ctrl+Z right after adding a list item from its + socket goes to the new hole's palette search box and does nothing; the Undo button works | [QA-2026-11-01b](docs/reports/qa/QA-2026-11-01b.md) F10 | P3 | S | |
 
 ### Writing programs in the editor
 
