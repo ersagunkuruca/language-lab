@@ -127,6 +127,7 @@ Each note says why, then gives the plan as steps; each step is a backlog row.
 | doc | what it is | status |
 |---|---|---|
 | [NODE-EDITOR.md](design/editor/NODE-EDITOR.md) | The graph view: node editors' usual complaints and what we do about each | current |
+| [SHARED-NODES.md](design/editor/SHARED-NODES.md) | Offers in a palette written into one copy of the program instead of a copy each (E133) | step a built |
 
 ## How we work
 

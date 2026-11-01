@@ -26,6 +26,9 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
+| E164 | Make it a definition: any function inside a definition, a picked set or a group becomes a definition of its own in the side menu, called where it was; what it uses from around it becomes its first inputs (lambda lifting, Johnsson 1985) | #873 |
+| E163 | The context menu opens at once (~1 s → ~70 ms on Mandelbrot `escape`): the whole-program checks that grey out an item run after it shows | #872 |
+| E162 | Make it a function on picked nodes no longer depends on the order they were clicked: the node selected before the first shift-click is picked with them, and a menu opened beside the picked takes that node too | #871 |
 | I49 | A selected call node is resized by dragging its corner, never smaller than what it shows; two presses on the corner give it its own size again; kept in layout.json | #864 |
 | I112 | The editor and its pages are titled Ters (page title, the brand, Learn, tutorial, guide, shaders) | #863 |
 | L69c | A definition whose host is missing says it needs its host; the Program tab shows the host file lab hosts writes | #860 |

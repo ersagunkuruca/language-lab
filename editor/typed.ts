@@ -1494,3 +1494,91 @@ export function storedAs(code: Code, info: Info, names: Names, own: Id[], type: 
   const c = choose(code, main, reps);
   return { rep: c.rep.name, jobs: c.jobs };
 }
+
+// A function inside a definition made a definition of its own, in the
+// side menu with the rest (BACKLOG E164, Ersagun 2026-11-01: "we should
+// be able to somehow turn each lambda into a function"). What it uses from
+// around it (a variable of the definition, a value worked out before it)
+// becomes its first inputs, and where it was, a function gives them: this
+// is lambda lifting (Johnsson, "Lambda lifting: transforming programs to
+// recursive equations", 1985). One that uses nothing from around it is
+// replaced by its name.
+export function liftToDefinition(code: Code, names: Names, info: Info, defId: Id, lam: Id): TEdit & { def?: Id } {
+  const l = code.nodes[lam];
+  if (l?.kind !== "lambda") return { ok: false, reason: "only a function becomes a definition" };
+  const d = code.nodes[defId] as NodeOf<"def"> | undefined;
+  if (d?.body === lam) return { ok: false, reason: "it's a definition already" };
+  if (!subtree(code, defId).includes(lam)) return { ok: false, reason: "that isn't inside this definition" };
+  const inside = new Set(subtree(code, lam));
+  // What it uses from around it, in the order it's first used.
+  const used: Id[] = [];
+  for (const x of readingOrder(code, lam)) {
+    const n = code.nodes[x];
+    if (n?.kind === "ref" && code.nodes[n.target]?.kind === "binder" && !inside.has(n.target) && !used.includes(n.target)) used.push(n.target);
+  }
+  // Its name: what it's bound to (part = (z) => …), else the definition's.
+  const at = parentOf(code, lam), p = at && code.nodes[at.parent];
+  const boundTo = at?.slot === "args" && p?.kind === "call" && code.nodes[p.fn]?.kind === "lambda" ? (code.nodes[p.fn] as NodeOf<"lambda">).params[at.index!] : undefined;
+  const taken = new Set(code.defs.map((x) => names[x] ?? display[x]));
+  const base = (boundTo && names[boundTo] && names[boundTo] !== "_" ? names[boundTo] : `${names[defId] ?? "a"} part`);
+  let label = base;
+  for (let k = 2; taken.has(label); k++) label = `${base} ${k}`;
+  const nodes = { ...code.nodes };
+  const nn: Names = { ...names };
+  const def = freshId();
+  nn[def] = label;
+  let body: Id;
+  let site: Id;
+  if (!used.length) {
+    body = lam;
+    site = freshId();
+    nodes[site] = { id: site, kind: "ref", target: def };
+  } else {
+    // The definition: (what it uses…, its own inputs…) => its body, the
+    // uses of what came from around it now its inputs.
+    const ins = used.map(() => freshId());
+    used.forEach((u, i) => { nodes[ins[i]] = { id: ins[i], kind: "binder" }; if (names[u]) nn[ins[i]] = names[u]; });
+    for (const x of inside) {
+      const n = nodes[x];
+      if (n?.kind === "ref" && used.includes(n.target)) nodes[x] = { ...n, target: ins[used.indexOf(n.target)] };
+    }
+    body = freshId();
+    nodes[body] = { id: body, kind: "lambda", params: [...ins, ...l.params], body: l.body };
+    // Where it was: a function of its own inputs giving them on.
+    const own = l.params.map(() => freshId());
+    l.params.forEach((q, i) => { nodes[own[i]] = { id: own[i], kind: "binder" }; if (names[q]) nn[own[i]] = names[q]; });
+    const ref = (target: Id) => { const r = freshId(); nodes[r] = { id: r, kind: "ref", target }; return r; };
+    const call = freshId();
+    nodes[call] = { id: call, kind: "call", fn: ref(def), args: [...used.map(ref), ...own.map(ref)] };
+    site = freshId();
+    nodes[site] = { id: site, kind: "lambda", params: own, body: call };
+    delete nodes[lam];
+  }
+  // Swapped in before the definition is added, so the place found is
+  // where it was, not the new definition holding it.
+  const at_ = code.defs.indexOf(defId) + 1;
+  let next = swapIn({ nodes, defs: [...code.defs.slice(0, at_), def, ...code.defs.slice(at_)] }, lam, site);
+  next.nodes[def] = { id: def, kind: "def", body };
+  // part = (z) => … made a definition part leaves part = part behind:
+  // the value goes, and its uses read the definition.
+  if (!used.length && boundTo && p?.kind === "call") {
+    const let_ = next.nodes[p.id] as NodeOf<"call">, bl = next.nodes[let_.fn] as NodeOf<"lambda">, i = bl.params.indexOf(boundTo);
+    for (const u of usesOf(next, boundTo)) next.nodes[u] = { ...(next.nodes[u] as NodeOf<"ref">), target: def };
+    next.nodes[bl.id] = { ...bl, params: bl.params.filter((_, j) => j !== i) };
+    next.nodes[let_.id] = { ...let_, args: let_.args.filter((_, j) => j !== i) };
+    if (bl.params.length === 1) next = swapIn(next, let_.id, bl.body);
+    delete nn[boundTo];
+    next = collect(next);
+  }
+  const r = guardTyped(info, next, nn, def, `Made it a definition, ${label}${used.length ? `, taking ${used.map((u) => names[u] ?? "a value").join(", ")} first` : ""}: it's in the side menu, and ${names[defId] ?? "the definition"} calls it where it was.`);
+  return r.ok ? { ...r, def } : r;
+}
+
+// Picked nodes made a definition: Make it a function, then that function
+// made a definition (E164).
+export function definitionFrom(code: Code, names: Names, info: Info, defId: Id, members: Id[]): TEdit & { def?: Id } {
+  const r = makeFunction(code, names, info, defId, members);
+  if (!r.ok || !r.fn) return r.ok ? { ok: false, reason: "it didn't make a function" } : r;
+  // makeFunction's fn is the function it made.
+  return liftToDefinition(r.code, r.names, check(r.code, { ...display, ...r.names }), defId, r.fn);
+}
