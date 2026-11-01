@@ -9,7 +9,7 @@
 // just recurses. Lower with `{ records: true }` to have records. A budget
 // (with fuel) is one variable, `fuel`, spent as in WGSL and WebAssembly.
 
-import { noData, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc } from "./scalar.ts";
+import { noData, unchecked, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc } from "./scalar.ts";
 
 const INFIX: Partial<Record<Op, string>> = {
   add: "+", sub: "-", mul: "*", div: "/", less: "<", equal: "===", beq: "===", and: "&&", or: "||", iless: "<", ieq: "===",
@@ -35,7 +35,8 @@ const MATH: Partial<Record<Op, string>> = {
 // The source of a function returning every function of the profile, by
 // name, and the names.
 export function emitJs(lowered: Lowered): { js: string; names: Map<number, string> } {
-  const { funcs } = lowered;
+  // A picture's CPU fallback, as the GPU: no finiteness checks (L125c2).
+  const funcs = lowered.funcs.map((f) => ({ ...f, body: unchecked(f.body) }));
   const names = new Map(funcs.map((f, i) => [i, `f${i}`]));
   const text = funcs.map((f, i) => func(f, i));
   const js = `let fuel = 0, none = false;\n${INT}\n${text.join("\n\n")}\nreturn { ${funcs.map((_, i) => names.get(i)).join(", ")} };\n`;

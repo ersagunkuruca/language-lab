@@ -17,6 +17,7 @@
 // JavaScript's (non-overlapping, left to right), show is std.ts's show.
 
 import { MATH } from "./wasm-math.ts";
+import { STOPS } from "./stops.ts";
 
 // A value type, as the runtime functions name them: `text` is a
 // reference to the byte array, `list` to a List Text of the module.
@@ -5395,6 +5396,16 @@ const WASI: Record<string, Omit<RtFn, "name">> = {
       call $text.concat
       call $wasi.write
       drop`,
+  },
+  // The program stops with STOPS[i] (L125c2): its reason to standard
+  // error, then exit 1, as an Abort nothing handled does.
+  "wasi.stop": {
+    params: [["i", "f64"]], result: "f64", locals: [], uses: ["wasi.line", "wasi_proc_exit"],
+    body: `
+      ${STOPS.map((why, i) => `local.get $i\n      f64.const ${i}\n      f64.eq\n      if void\n        i32.const 2\n        ${lit(why)}\n        call $wasi.line\n      end`).join("\n      ")}
+      i32.const 1
+      call $wasi_proc_exit
+      unreachable`,
   },
   "wasi.print": { params: [["t", "text"]], result: "void", locals: [], uses: ["wasi.line"], body: "i32.const 1\nlocal.get $t\ncall $wasi.line" },
   "wasi.printError": { params: [["t", "text"]], result: "void", locals: [], uses: ["wasi.line"], body: "i32.const 2\nlocal.get $t\ncall $wasi.line" },

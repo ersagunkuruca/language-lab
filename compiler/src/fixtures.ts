@@ -1,5 +1,6 @@
 // Small programs written for the tests and the benchmark, in the DSL.
 
+import { STOPS } from "./stops.ts";
 import { Lang } from "../../ters/src/lang/dsl.ts";
 import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
@@ -519,7 +520,7 @@ export function orderedInputs(): Record<string, unknown[][]> {
   let seed = 9n;
   const next = () => Number((seed = (seed * 6364136223846793005n + 1442695040888963407n) % 2n ** 64n) >> 33n);
   const of = <T>(xs: T[]) => xs[next() % xs.length];
-  const nums = [0, -0, 1, -1, 0.5, 1 + 1e-12, 3, -2.5, 1e300, -Infinity, Infinity, NaN];
+  const nums = [0, -0, 1, -1, 0.5, 1 + 1e-12, 3, -2.5, 1e300, -1e300, 5e-324];
   const ints = [0n, 1n, -1n, 7n, -7n, 2n ** 31n, 2n ** 53n + 1n, 2n ** 62n, -(2n ** 63n), 2n ** 64n, -(10n ** 30n), 2n ** 100n];
   const texts = ["", "a", "ab", "b", "z", "é", "🎉", "aa", "A", "a b"];
   const list = (n: number) => Array.from({ length: n }, () => of(ints));
@@ -705,4 +706,15 @@ export function shaderArrays() {
   const code = base(k.code), names = { ...baseNames(k.names) }, info = infer(code, names, undefined, checkOptions);
   if (info.errors.length) throw new Error(info.errors.map((e) => e.message).join("; "));
   return { code, names, info, palette, grow, table, pick, nothing, uneven, listed, headSize, twoSizes, loose };
+}
+
+// Why `maths()`'s op stops on x and y, the program's answer where a Float64
+// has none (L125c2, stops.ts), or null: log of 0 or less, and a power
+// whose answer isn't finite; any other answer that isn't is an overflow,
+// found as it's given back to the host.
+export function stopsWith(op: string, x: number, y: number): string | null {
+  if (op === "log" && x <= 0) return STOPS[3];
+  const r = (Math as unknown as Record<string, (a: number, b: number) => number>)[op](x, y);
+  if (Number.isFinite(r)) return null;
+  return op === "pow" && x === 0 && y < 0 ? STOPS[4] : op === "pow" && x < 0 && !Number.isInteger(y) ? STOPS[5] : STOPS[6];
 }

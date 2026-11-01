@@ -53,6 +53,7 @@
 import { FDLIBM_C } from "./c-math.ts";
 import { BASE, cName, POSIX, RESERVED, RT_C, runtimeC, WORLD_H, type ListNames } from "./c-rt.ts";
 import { runtime } from "./wasm-rt.ts";
+import { STOPS } from "./stops.ts";
 import { fails, isArray, isData, isFn, isRecord, kids, mapKids, OPS, type AType, type DType, type FType, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc } from "./scalar.ts";
 
 // What a C compiler needs to keep the evaluator's numbers. -fwrapv: fdlibm
@@ -386,6 +387,12 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string
     ...(cells ? [`static void lab_fields(lab_cell *c) { switch (c->type) { ${fieldsOf.filter(Boolean).join(" ")} default: break; } }`] : []),
     ...(text.some((t) => t.includes("lab_fuel")) ? ["static double lab_fuel = INFINITY; // outside any budget, as much as it takes"] : []),
     ...(text.some((t) => t.includes("lab_mod(")) ? ["static double lab_mod(double a, double b) { return fmod(fmod(a, b) + b, b); }"] : []),
+    // A Float64 with no answer or too big (L125c2, stops.ts): the reason
+    // to standard error and exit 1, as an Abort nothing handled does.
+    ...(text.some((t) => t.includes("lab_stop(")) || opts.harness ? [`static const char *lab_stops[] = { ${STOPS.map((x) => JSON.stringify(x)).join(", ")} };`, "#include <setjmp.h>",
+      // The test harness goes on to its next call instead (lab_stop_at).
+      "static jmp_buf *lab_stop_at = 0; static int lab_stopped = 0;",
+      "static double lab_stop(double i) { if (lab_stop_at) { lab_stopped = (int)i; longjmp(*lab_stop_at, 1); } fflush(stdout); fprintf(stderr, \"%s\\n\", lab_stops[(int)i]); exit(1); }"] : []),
     ...[...statics.values()].map((x) => x.decl),
     ...(rts.size ? ["", runtimeC(rts, listNames)] : []),
     ...[...arrays.values()].flatMap((a) => arrayC(a)),
@@ -669,6 +676,7 @@ int main(int argc, char **argv) {
           if (e.op === "not") return `(!${xs[0]})`;
           if (e.op === "float32") return `((double)(float)${xs[0]})`;
           if (e.op === "mod") return `lab_mod(${xs.join(", ")})`;
+          if (e.op === "stop") return `lab_stop(${xs[0]})`;
           return `${LIBM[e.op] ?? FDLIBM[e.op]}(${xs.join(", ")})`;
         }
         default: throw new Error(`${e.k} in C comes with NATIVE.md's stage N4`);
@@ -1070,9 +1078,13 @@ static lab_cell *lab__copy_a${i}(${T} *xs, uint32_t n) {
       // Read in order: C doesn't say in which order a call's arguments run.
       const ins = f.params.map((t, j) => `${ty(t)} a${j} = ${rd(t)};`);
       const after = counted(f.result) ? drop(f.result, "r") : "";
+      // An answer given back to the host is a boundary: an overflow in it
+      // stops there (L125c2), before any of it is printed.
+      const res = f.result, overflowed = res === "f64" ? ["r"] : isRecord(res) ? res.fields.flatMap((x, j) => (x.t === "f64" ? [`r.f${j}`] : [])) : [];
+      const check = overflowed.length ? `if (${overflowed.map((v) => `${v} - ${v} != 0`).join(" || ")}) lab_stop(${STOPS.length - 1}); ` : "";
       const show = f.partial
-        ? `if (lab_st == 1) { printf(" ?"); lab_st = 0; } else if (lab_st) { printf(" !"); if (lab_st == 2) { ${pr("text", "lab_reason")} } lab_drop(lab_reason); lab_reason = 0; lab_st = 0; } else { ${pr(f.result, "r")} ${after} }`
-        : `${pr(f.result, "r")} ${after}`;
+        ? `if (lab_st == 1) { printf(" ?"); lab_st = 0; } else if (lab_st) { printf(" !"); if (lab_st == 2) { ${pr("text", "lab_reason")} } lab_drop(lab_reason); lab_reason = 0; lab_st = 0; } else { ${check}${pr(f.result, "r")} ${after} }`
+        : `${check}${pr(f.result, "r")} ${after}`;
       return `    case ${i}: { ${ins.join(" ")} ${ty(f.result)} r = ${names.get(i)}(${f.params.map((_, j) => `a${j}`).join(", ")}); ${show} break; }`;
     }).filter(Boolean);
     // Prototypes first: a reader may use one made after it.
@@ -1104,7 +1116,12 @@ static lab_cell *lab_hex(void) { return lab_token(1); }` : ""}
 ${[...protos, ...io].join("\n")}
 int main(void) {
   int i;
+  // A stop (L125c2) is that call's answer: "!" and its reason, as an
+  // abort's; the cells it held aren't counted.
+  jmp_buf at;
+  lab_stop_at = &at;
   while (scanf("%d", &i) == 1) {
+    if (setjmp(at)) { const char *w = lab_stops[lab_stopped]; printf(" ! x"); for (; *w; w++) printf("%02x", (unsigned char)*w); printf(" ;0\\n"); ${cells ? "lab_live = 0; " : ""}continue; }
     switch (i) {
 ${cases.join("\n")}
     }
