@@ -15,6 +15,7 @@ import { makeRunner, type Value } from "../../ters/src/lang/run.ts";
 import { compile } from "../src/compile.ts";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitWgsl } from "../src/wgsl.ts";
+import { loadJs } from "../src/js-scalar.ts";
 import { pga } from "../src/fixtures.ts";
 import { CONS, NIL } from "../../ters/src/lang/std.ts";
 import type { Id } from "../../ters/src/model.ts";
@@ -100,4 +101,20 @@ test("on the GPU too: a shader's own definitions multiply only the masked parts 
   // A point moved n times, against any multivector moved n times.
   const points = products([p.times.moveNBudget]), any = products([p.times.movedAnyBudget]);
   assert.ok(points > 0 && points < any / 2, `${points} products, ${any} for any multivector`);
+});
+
+test("a gradient through a PGA motor: staged first, then read, on the CPU and the GPU (C74)", () => {
+  const p = pga();
+  const lowered = lowerScalar(p.code, p.info, p.names, [p.ball.ball, p.ball.ballNormal], { records: true });
+  // Before, the gradient met the table's folds: "calls a computed function".
+  assert.deepEqual([...lowered.refused.values()], []);
+  const js = loadJs(lowered);
+  const f = js.get(p.ball.ball)!, g = js.get(p.ball.ballNormal)!;
+  // The slope the gradient gives is the field's, by central differences.
+  for (const pt of [[0.3, -1.2, 2, 1], [1.5, 0.5, -0.7, 1]]) {
+    const h = 1e-6;
+    const fd = pt.map((_, i) => { const a = [...pt], b = [...pt]; a[i] += h; b[i] -= h; return ((f(a) as number) - (f(b) as number)) / (2 * h); });
+    (g(pt) as number[]).forEach((x, i) => assert.ok(Math.abs(x - fd[i]) < 1e-6, `${g(pt)} vs ${fd}`));
+  }
+  assert.deepEqual([...emitWgsl(lowered).refused.values()], []);
 });

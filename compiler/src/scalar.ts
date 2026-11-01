@@ -376,6 +376,24 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   // L43c), so staging multiplies only their masked parts.
   const st = stageProgram(code, info, names, roots);
   ({ code, names, info } = st);
+  // A derivative of a function that calls the clifford functions with an
+  // algebra written down can be read only once those calls are arithmetic
+  // (C74: a ray marcher's scene moved by a PGA motor), so it is expanded
+  // again after staging, and what it made is staged in turn.
+  const later = expandDerivatives(code, names, (call) => {
+    const f = info.subst.zonk(info.typeOf.get((code.nodes[call] as NodeOf<"call">).args[0]) ?? { t: "var", v: -1 });
+    return f.t === "fn" && f.params[0]?.t === "con" ? recordVariant(code, f.params[0].id) : null;
+  });
+  if (later.expanded.length) {
+    const checked = infer(later.code, later.names);
+    if (checked.errors.length <= info.errors.length) {
+      ({ code, names } = later);
+      info = checked;
+      const again = stageProgram(code, info, names, roots);
+      ({ code, names, info } = again);
+      st.rounded.push(...again.rounded);
+    }
+  }
   const rounded = new Set<Id>();
   const calls = new Set(st.rounded);
   if (calls.size) for (const d of code.defs) if (subtree(code, d).some((id) => calls.has(id))) rounded.add(d);
