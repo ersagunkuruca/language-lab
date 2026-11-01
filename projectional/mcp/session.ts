@@ -13,6 +13,7 @@ import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import type { Code, Id, NodeOf } from "../src/model.ts";
 import { collect, subtree } from "../src/model.ts";
+import { sameEverywhere, sharedPlaces } from "../src/lang/patterns.ts";
 import type { Comments, Names, Presentation, Style } from "../src/presentation.ts";
 import { root } from "../src/io.ts";
 import { infer, type Info } from "../src/lang/infer.ts";
@@ -164,7 +165,14 @@ export class Session {
     for (let d = 12; depth === undefined && lines.length > LINES && d >= 2; d--) lines = this.lines(found ?? blocks, d);
     const errors = this.info.errors.filter((e) => subtree(this.code, found ? id : def).includes(e.id)).map((e) => `✗ #${this.id(e.id)} ${e.message}`);
     const head = id === def || !found ? [] : [`in ${this.name(def)}:`];
-    return [...head, ...lines, ...errors].join("\n");
+    // A match whose cases read the same shows them once, as otherwise.
+    const folded = subtree(this.code, found ? id : def).flatMap((x) => {
+      const m = this.code.nodes[x];
+      if (m?.kind !== "match") return [];
+      const ps = sharedPlaces(this.code, this.info, m).filter((p) => p.slot === "body");
+      return ps.length ? [`${this.id(x)} otherwise is: ${ps.map((p) => this.name((this.code.nodes[p.parent] as NodeOf<"arm">).variant)).join(", ")}`] : [];
+    });
+    return [...head, ...lines, ...folded, ...errors].join("\n");
   }
 
   // The gutter: the id of a block that starts on the line, else blank.
@@ -229,15 +237,19 @@ export class Session {
 
   private undos: { code: Code; names: Names; comments: Comments }[] = [];
 
-  private apply(def: Id | null, make: () => { ok: true; code: Code; names: Names } | { ok: false; reason: string }, after?: (code: Code) => Id | null): string {
+  private apply(def: Id | null, make: () => { ok: true; code: Code; names: Names } | { ok: false; reason: string }, after?: (code: Code) => Id | null, share = true): string {
     setDisplayNames(LIBRARY.names);
     const before = def ? this.viewLines(def) : [];
     const was = { code: this.code, names: this.names, comments: this.comments };
     const errs = this.info.errors.length;
     const r = make();
     if (!r.ok) throw new Error(r.reason);
-    this.code = collect(r.code);
-    this.names = r.names;
+    // A body drawn once as the otherwise is a copy in each case it stands for.
+    const same = share ? sameEverywhere(this.code, r.code, this.info) : { code: r.code, copied: [] as [Id, Id][] };
+    const names = { ...r.names };
+    for (const [x, y] of same.copied) if (names[x]) names[y] = names[x];
+    this.code = collect(same.code);
+    this.names = names;
     this.recheck();
     if (this.info.errors.length > errs) {
       const fresh = this.info.errors.filter((e) => !was.code.nodes[e.id] || !this.infoHad(was, e.id)).at(0) ?? this.info.errors.at(-1)!;
@@ -272,8 +284,18 @@ export class Session {
     return top[0];
   }
 
-  replace(at: string, text: string, find?: string): string {
-    const target = this.part(at, find);
+  // `kase`: in a match, the body of that one case, even where the view
+  // shows it folded into otherwise; else an edit to a folded otherwise is
+  // made in every case it stands for, as in the editor.
+  replace(at: string, text: string, find?: string, kase?: string): string {
+    let target = this.part(at, find);
+    if (kase) {
+      const m = this.code.nodes[target];
+      if (m?.kind !== "match") throw new Error(`#${this.id(target)} isn't a match`);
+      const arm = m.arms.map((a) => this.code.nodes[a] as NodeOf<"arm">).find((a) => this.name(a.variant) === kase.trim());
+      if (!arm) throw new Error(`no case ${kase}: ${m.arms.map((a) => this.name((this.code.nodes[a] as NodeOf<"arm">).variant)).join(", ")}`);
+      target = arm.body;
+    }
     const def = this.defOf(target);
     if (!def || target === def) throw new Error("replace a part of a definition, not the definition");
     const t = text.trim();
@@ -282,7 +304,21 @@ export class Session {
       const holed = T.toHole(this.code, this.names, info, target);
       if (!holed.ok || t === "□" || t === "?" || t === "") return holed;
       return T.fillValue(holed.code, holed.names, editorInfo(holed.code, holed.names), target, t, def);
-    });
+    }, undefined, !kase);
+  }
+
+  // The smallest parts of each definition whose text contains `text`,
+  // with their ids, to edit next.
+  search(text: string): string {
+    const want = norm(text);
+    const out: string[] = [];
+    for (const d of this.own) {
+      const hits = [...this.texts(d)].filter(([, t]) => norm(t).includes(want)).map(([x]) => x);
+      const small = hits.filter((x) => !hits.some((y) => y !== x && subtree(this.code, x).includes(y)));
+      const texts = this.texts(d);
+      for (const x of small) { const t = texts.get(x)!; out.push(`${this.id(x)}  ${this.name(d)}: ${t.length > 90 ? t.slice(0, 90) + "…" : t}`); }
+    }
+    return clip(out, 60).join("\n") || "(none)";
   }
 
   rename(at: string, name: string): string {

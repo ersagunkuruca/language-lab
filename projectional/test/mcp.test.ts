@@ -69,3 +69,21 @@ test("edits: each is type-checked, saved, and answered with the changed lines", 
   // A step: name = value, before a part.
   assert.match(text("step", { at: "fall", name: "n", value: "total(board)" }), /^\+ .*n#\w+ = total\(board\)$/m);
 });
+
+test("a split's cases show folded as otherwise; case= changes one, otherwise changes the rest", async () => {
+  const { cpSync, mkdtempSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = join(mkdtempSync(join(tmpdir(), "ters-mcp-")), "tumble");
+  cpSync("examples/tumble", dir, { recursive: true });
+  text("open", { path: dir });
+  const hole = /□#(\w+)/.exec(text("define", { name: "loud", kind: "function", params: ["m"] }))![1];
+  text("replace", { at: hole, text: "moment name(m)" });
+  const split = text("split", { at: "loud", find: "moment name(m)", on: "m" });
+  const m = /^\+ (\w+)\s+match m$/m.exec(split)![1];
+  assert.match(split, /otherwise is: swapped, swapped back, cleared, fell, filled/);
+  text("replace", { at: m, case: "swapped", text: '"swap!"' });
+  text("replace", { at: "loud", find: "moment name(m)", text: '"!"' });
+  assert.equal(text("eval", { text: "map([swapped, fell, filled], loud)" }), '= ["swap!", "!", "!"] : List Text');
+  assert.match(text("search", { text: "swap!" }), /^\w+ +loud: "swap!"$/m);
+});

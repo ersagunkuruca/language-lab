@@ -44,6 +44,12 @@ export const TOOLS: Tool[] = [
     call: (a) => program().view(String(a.at), typeof a.depth === "number" ? a.depth : undefined),
   },
   {
+    name: "search",
+    description: "Lines of the program's views containing the text (a name, a call).",
+    inputSchema: obj({ text: str("text") }, ["text"]),
+    call: (a) => program().search(String(a.text)),
+  },
+  {
     name: "check",
     description: "Type errors in the program, or ok.",
     inputSchema: obj({}),
@@ -64,8 +70,8 @@ export const TOOLS: Tool[] = [
   {
     name: "replace",
     description: "Replace a part with an expression written as view prints it (□ for a hole). Typechecked; saved; returns the diff.",
-    inputSchema: obj({ at: str("id"), text: str("e.g. fall(b) + 1, (x) => x * 2, [1, 2], □"), find: str("optional: the exact text of a part inside at") }, ["at", "text"]),
-    call: (a) => program().replace(String(a.at), String(a.text), a.find as string | undefined),
+    inputSchema: obj({ at: str("id"), text: str("e.g. fall(b) + 1, (x) => x * 2, [1, 2], □"), find: str("optional: the exact text of a part inside at"), case: str("optional: at is a match; replace this case's body only") }, ["at", "text"]),
+    call: (a) => program().replace(String(a.at), String(a.text), a.find as string | undefined, a.case as string | undefined),
   },
   {
     name: "step",
