@@ -474,7 +474,9 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // Does a body of type `sc` keep the pin `p`? Its type, instantiated,
   // must unify with the pin's type with the pin's variables held rigid.
   function fitsPin(sc: Scheme, p: Scheme): boolean {
-    const t = s.clone();
+    // A trial over s, thrown away after: a full copy for each pinned
+    // definition was most of a big program's check (C67f).
+    const t = s.trial();
     const plainArgs = t.plainArgs;
     t.plainArgs = (id, args) => (id.startsWith(`${RIGID}any.`) ? null : plainArgs(id, args));
     const before = t.wanted.length;
@@ -1429,6 +1431,9 @@ export function resultsDirection(code: Code, d: Id, names: Names = {}): { why: s
   const use = { id: `${d}:results`, kind: "solve", fn: d, given, binds, body: add({ id: `${d}:body`, kind: "hole" }) } as NodeOf<"solve">;
   add(use);
   const asked = { nodes, defs: code.defs };
+  // The program with this use added: the modes analysis starts from the
+  // program's own slots and scans only the new nodes.
+  derivedFrom(asked, code, [use.id, ...Object.values(given), ...Object.values(binds), use.body]);
   try {
     const p = planSolve(asked, use);
     let ends = true;
