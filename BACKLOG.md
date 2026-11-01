@@ -22,7 +22,7 @@ Ersagun's "take 40 more tasks" (2026-11-01 11:46): Editor 13, Compiler 13, Langu
 
 | lane | thread | next, in order |
 |---|---|---|
-| E Editor | "Editor lane" | Ersagun's 40 (2026-11-01): I109 done (#841), I29's handler step (#845); then E103 and I40 (slow palette on physics), E133 (fillings share nodes, design), L69c (a definition whose host is missing says so; the host file in the Program tab), E160 (the mode on a solve node), I49 (resize a node), and the editor half of L125 (a `Choice` from `/` shown where it comes from) and of L125d (`Extended` values shown as ±∞); then the next QA round's findings |
+| E Editor | "Editor lane" | Ersagun's 40 (2026-11-01): I109 (#841), I29's handler step (#845), I40 (#846) done; then L69c (a definition whose host is missing says so; the host file in the Program tab), E103 (a hole in physics fall, ~5 s now: plan checks and node copies, with E133), E133 (fillings share nodes, design), E160 (the mode on a solve node), I49 (resize a node), and the editor half of L125 (a `Choice` from `/` shown where it comes from) and of L125d (`Extended` values shown as ±∞); then the next QA round's findings |
 | C Compiler and targets | "Compiler lane" | L125c after L125a, L125e (niche representations), C63b (hash table), L43c, C66 on shaders, C55, C40 step 2e, C64's next step, C67's next step, C31 |
 | L Language and library | "Language lane" | Ersagun's 40 (2026-11-01): L125a step 1 done (#842); L125b (the inferred nonzero fact; asked Ersagun how a page shows no answer), L125d done, L125f (host floats checked on entry), L71a (an operation's own type variables), L71b (`Await` and `together`), L69a2 (hosts in the compiled JS), L43e3 (named masks on list items), L108d2 (laws of match and fold jobs), L38's open end, L29, I84. Earlier today: #809 to #823 |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
@@ -56,7 +56,6 @@ New items land here until the next triage gives them a lane and a priority.
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | E103 | **Bug.** Adding a value in a definition run backwards (physics `fall`) takes about 4 s; five stages (#478 to #504) took fall's holes from 48 s to 18.5 s in all. Stopped by the 10% rule; what's left is E133 | E100 | P3 | M | |
-| I40 | Add a step before this on physics `main` takes ~2 s: the palette checks each of ~590 candidates against the whole program (same cause as E103) | smoke fix, 2026-10-29 | P3 | M | |
 | E133 | **Design.** Fillings share the program's nodes instead of copying ~3000 each: a persistent node store under `Code` (HAMT or overlay map), about 20% off a palette. Design note before building | E103 | P3 | L | ⏸ held |
 
 ## C: Compiler and targets
