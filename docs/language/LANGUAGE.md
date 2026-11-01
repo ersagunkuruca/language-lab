@@ -227,6 +227,22 @@ The standard library (`src/lang/std.ts`) defines `Bool`, `Unit`, `List a`
 and `Pair a b` as ordinary typedef nodes with stable ids. Nothing about them
 is built into the language.
 
+**Tuples** (L128a, [PORTS-2026-11-01.md](../design/relations-and-effects/PORTS-2026-11-01.md)):
+a function's inputs together are one value, and so are its results. std
+has `Tuple2` to `Tuple8`, shown `(A, B)`: `tuple(x, y)` makes one and its
+parts are `first`, `second`, …. A tuple of one is its value and of none is
+`Unit`, so there is no tuple of one to confuse with its value (Swift's
+SE-0110 problem). A function of two inputs given one `(A, B)` takes it
+apart: `f(p)` is `f(x, y)` when `p` is `tuple(x, y)`, so a function's
+results, given as a tuple, go straight on to the next function's inputs
+(`times(sum and difference(5, 2))`). The checker does it by unifying the
+one value with the tuple of the inputs' types; `src/lang/spread.ts` takes
+the tuple apart before anything runs, so the evaluator and every compiler
+target see an ordinary call. Standard ML is the prior art (every function
+takes one value, which may be a tuple). Still to come (L128b): naming a
+function's result ports, so `r.length` reads a part by the name the
+function gave it.
+
 `Array a` is the one data type that is a builtin (L116): a list's items side
 by side, read by position in constant time (`item at(array, i)`, no answer
 outside it). `array of(list)` makes one, `items of array(a)` is the list it

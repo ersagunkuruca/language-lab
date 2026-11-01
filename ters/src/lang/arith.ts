@@ -34,6 +34,7 @@ import { PRELUDE } from "./library.ts";
 import { ratioParts } from "./int.ts";
 import { recordVariant } from "./derive.ts";
 import { hasRecursiveLet, liftLets } from "./lift-lets.ts";
+import { spreadTuples } from "./spread.ts";
 import { useDirections } from "./directions.ts";
 
 const num: Type = { t: "con", id: NUMBER, args: [] };
@@ -102,6 +103,7 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
   // the compiler run a solve the way the checker typed it.
   code = useDirections(code);
   ({ code, info, names } = liftLets(code, info, names));
+  ({ code, info, names } = spreadTuples(code, info, names));
   if (!usesGenericArithmetic(code) && !someLiteralNotFloat64(code, info)) return { code, info, names };
   const s = info.subst;
   const nodes: Record<Id, Node> = { ...code.nodes };
