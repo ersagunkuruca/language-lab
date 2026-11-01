@@ -72,15 +72,35 @@ const lengths = (p: Pos[]) => {
   return out;
 };
 
+// A polyline's box, kept per polyline (they don't change once made).
+const bounds = new WeakMap<Pos[], { x0: number; x1: number; y0: number; y1: number }>();
+function boundsOf(p: Pos[]) {
+  let b = bounds.get(p);
+  if (!b) {
+    b = { x0: Infinity, x1: -Infinity, y0: Infinity, y1: -Infinity };
+    for (const q of p) { if (q.x < b.x0) b.x0 = q.x; if (q.x > b.x1) b.x1 = q.x; if (q.y < b.y0) b.y0 = q.y; if (q.y > b.y1) b.y1 = q.y; }
+    bounds.set(p, b);
+  }
+  return b;
+}
+
 // Where wire `over` crosses each of `under`, as distances along `over`.
 // Crossings near either wire's ends don't count: wires leaving the same
 // output, or arriving at neighbouring inputs, touch there by design.
+// Wires whose boxes are apart are skipped, and so are the stretches of
+// one outside the other's box: a big graph has hundreds of wires, each
+// checked against every one drawn before it (I101).
 export function crossingsOf(over: Pos[], unders: Pos[][], end = 16): number[] {
   const L = lengths(over), total = L[L.length - 1];
   const out: number[] = [];
+  const ob = boundsOf(over);
   for (const under of unders) {
+    const ub = boundsOf(under);
+    if (ub.x0 > ob.x1 || ub.x1 < ob.x0 || ub.y0 > ob.y1 || ub.y1 < ob.y0) continue;
     const M = lengths(under), mt = M[M.length - 1];
     for (let i = 1; i < over.length; i++) {
+      const p = over[i - 1], q = over[i];
+      if (Math.max(p.x, q.x) < ub.x0 || Math.min(p.x, q.x) > ub.x1 || Math.max(p.y, q.y) < ub.y0 || Math.min(p.y, q.y) > ub.y1) continue;
       for (let j = 1; j < under.length; j++) {
         const h = segHit(over[i - 1], over[i], under[j - 1], under[j]);
         if (!h) continue;
@@ -136,7 +156,9 @@ export function hopPath(p: Pos[], at: number[], r = 5): string {
 export function route(a: Pos, b: Pos, boxes: Box[], drawn: Pos[][] = [], text: Box[] = [], n = 28, clear = 8, reach = 40): { pts: Pos[]; bent: boolean } {
   const inside = (q: Pos, box: Box) => q.x > box.x && q.x < box.x + box.w && q.y > box.y && q.y < box.y + box.h;
   const chain = (ps: Pos[]) => ps.slice(1).flatMap((q, i) => curvePoints(ps[i].x, ps[i].y, q.x, q.y, i === 0 ? n : Math.max(8, n >> 1)).slice(i === 0 ? 0 : 1));
-  const under = (pts: Pos[]) => boxes.filter((box) => pts.some((q) => inside(q, box)));
+  // A box apart from the wire's own box is skipped before its points are looked at.
+  const apart = (pb: ReturnType<typeof boundsOf>, box: Box) => box.x >= pb.x1 || box.x + box.w <= pb.x0 || box.y >= pb.y1 || box.y + box.h <= pb.y0;
+  const under = (pts: Pos[]) => { const pb = boundsOf(pts); return boxes.filter((box) => !apart(pb, box) && pts.some((q) => inside(q, box))); };
   const crossings = (pts: Pos[]) => crossingsOf(pts, drawn).length;
   const straight = curvePoints(a.x, a.y, b.x, b.y, n);
   let pts = straight, way: Pos[] = [];
@@ -161,7 +183,7 @@ export function route(a: Pos, b: Pos, boxes: Box[], drawn: Pos[][] = [], text: B
       const next = [...kept, ...corners].sort((p, q) => p.x - q.x);
       if (next.some((q, i) => i > 0 && q.x - next[i - 1].x < 0.5)) return [];
       const p = chain([a, ...next, b]);
-      const onText = text.filter((box) => p.some((q) => inside(q, box))).length;
+      const onText = text.filter((box) => !apart(boundsOf(p), box) && p.some((q) => inside(q, box))).length;
       return [{ next, p, score: (under(p).length + onText) * 1000 + crossings(p) * 20 + Math.abs(y - wy) }];
     }).sort((x, z) => x.score - z.score);
     if (!tries.length) break;
@@ -183,7 +205,9 @@ export function route(a: Pos, b: Pos, boxes: Box[], drawn: Pos[][] = [], text: B
 export function tunnels(p: Pos[], boxes: Box[]): [Pos, Pos][] {
   const out: [Pos, Pos][] = [];
   const inside = (q: Pos, b: Box) => q.x > b.x && q.x < b.x + b.w && q.y > b.y && q.y < b.y + b.h;
+  const pb = boundsOf(p);
   for (const b of boxes) {
+    if (b.x >= pb.x1 || b.x + b.w <= pb.x0 || b.y >= pb.y1 || b.y + b.h <= pb.y0) continue;
     if (inside(p[0], b) || inside(p[p.length - 1], b)) continue;
     let from: Pos | null = null;
     for (const q of p) {

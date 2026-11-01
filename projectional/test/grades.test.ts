@@ -14,6 +14,7 @@ import { makeRunner, type Value } from "../src/lang/run.ts";
 import { algebrasOf, bladeMask, describeMask, gradeMistakes } from "../src/lang/grades.ts";
 import { ARITH } from "../src/lang/std.ts";
 import { NUMBER } from "../src/lang/types.ts";
+import { SET } from "../src/lang/std.ts";
 import type { Id } from "../src/model.ts";
 
 const lib = (name: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === name)!;
@@ -29,7 +30,7 @@ function algebra(squares: number[]) {
   const basis = def("basis", () => k.list(...Array.from({ length: n }, (_, i) => at({ [i]: 1 }))));
   const al = def("algebra", () => k.call(lib("clifford algebra"), k.list(...squares.map((x) => k.lit(x))), k.x(basis)));
   const call = (f: string, ...xs: Id[]) => k.call(lib(`clifford ${f}`), k.x(al), ...xs);
-  return { k, def, at, call, done: () => { const code = base(k.code), names = { ...baseNames(), ...k.names }; return { code, names, info: infer(code, names) }; } };
+  return { k, M, def, at, call, done: () => { const code = base(k.code), names = { ...baseNames(), ...k.names }; return { code, names, info: infer(code, names) }; } };
 }
 
 test("blade masks in Cl(3, 0): vectors, products, rotors and the sandwich", () => {
@@ -141,4 +142,47 @@ test("a part read outside a value's mask is a wrong grade (L43e)", () => {
     [fns.wrong, "reads the e₁₂ part of a value that is a vector, so it is always 0"],
     [caller, "reads the e₃ part of a value that is a bivector, so it is always 0"],
   ]);
+});
+
+test("a field named Vector of T holds only vectors: each blade combination its own type (L43e)", () => {
+  const a = algebra([1, 1, 1]);
+  const { k, M, def, at, call } = a;
+  const vec = (x: Id) => at({ 1: x, 2: x, 4: x });
+  // A body: where it is, a vector, and how it is turned, a rotor.
+  const Body = k.type("Body", [], [["body", [
+    ["at", () => k.tref("type.vector of", k.tref(M.def))],
+    ["turn", () => k.tref("type.rotor of", k.tref(M.def))],
+  ]]]);
+  const atF = Body.f["body.at"], turnF = Body.f["body.turn"];
+  const part = (v: Id, ...b: number[]) => call("part", v, k.list(...b.map((x) => k.lit(x))));
+  const fns = {
+    right: def("a body", () => k.fn(["x"], (x) => k.call(Body.v.body, vec(x), call("exp", at({ 3: x }))))),
+    // A rotor where the vector goes, and a vector where the rotor goes.
+    swapped: def("swapped", () => k.fn(["x"], (x) => k.call(Body.v.body, call("exp", at({ 3: x })), vec(x)))),
+    // A product of two vectors put back with set: scalar and bivector.
+    set: def("set wrong", () => k.fn(["b"], (b) => k.call(SET, k.x(atF), b, call("product", k.call(atF, b), k.call(atF, b))))),
+    moved: def("moved", () => k.fn(["b", "x"], (b, x) => k.call(SET, k.x(atF), b, k.call(ARITH.add, k.call(atF, b), vec(x))))),
+    // Read from the field, it is a vector: its e₁₂ is always 0.
+    read: def("bivector of where", () => k.fn(["b"], (b) => part(k.call(atF, b), 1, 2))),
+    // Inputs aren't known, so they are checked where the call gives them.
+    make: def("make", () => k.fn(["p", "r"], (p, r) => k.call(Body.v.body, p, r))),
+  };
+  const caller = def("make wrong", () => k.fn(["x"], (x) => k.call(k.x(fns.make), call("outer", vec(x), vec(x)), call("exp", at({ 3: x })))));
+  const { code, info } = a.done();
+  // To the type checker a Vector of Multivector is a Multivector.
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const found = gradeMistakes(code, info, [...Object.values(fns), caller]);
+  assert.deepEqual(found.map((f) => [f.def, f.message]), [
+    [fns.swapped, "puts a value that is 1, e₁₂ where Vector of goes, a vector"],
+    [fns.swapped, "puts a value that is a vector where Rotor of goes, even (a rotor or motor)"],
+    [fns.set, "puts a value that is even (a rotor or motor) where Vector of goes, a vector"],
+    [fns.read, "reads the e₁₂ part of a value that is a vector, so it is always 0"],
+    [caller, "puts a value that is a bivector where Vector of goes, a vector"],
+  ]);
+  // What a definition gives from the field is a vector.
+  const where = def("where", () => k.fn(["b"], (b) => k.call(atF, b)));
+  const p2 = a.done();
+  const r = bladeMask(p2.code, p2.info, where)!;
+  assert.equal(describeMask(r.algebra, r.mask), "a vector");
+  void turnF;
 });
