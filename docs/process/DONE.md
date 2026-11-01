@@ -442,6 +442,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
+| I122 | test/modules.test.ts's upgrade test still expected a Float64 `sum`: its second `sum` is generic now, as the prelude's has been since L136 (#932), and the refused upgrade names the generic type. Found by `npm run affected` | this PR |
 | L128e | An inline function with named result ports reads as a definition's does, with `=>`: `(a, b) → sum, product => a + b, a · b` when its body is the tuple written out, `=> body` otherwise (render.ts), the form the editor's text reader takes back (E165c). Asked for by the Editor lane (test/result-ports.test.ts) | this PR |
 | I121 | The site's deploy broke after L136 (#932): constructions.html didn't compile ("mirror has Choice but is compiled as a plain expression"). Staging checks the program again without the prelude's pins, where the now generic `sum` checks as Ints, so every staging round counted as worse and was dropped, and a call staging used to work out reached the compiler with its Choice. stage.ts now measures a round against the program as it came, checked the same plain way. test/web.test.ts's every-app test caught it; it wasn't run before #932 merged | #946 |
 | L60 | A page with sound may read the clock and draw random numbers in main: the page's world keeps what it answered main (audio-page.ts recordingWorld), and the audio thread's run of main is answered the same, in order (audio-worklet.ts replaying), its first clock reading making the clock's cell as the page's did, so the cells still line up (test/audio.test.ts) | #937 |
