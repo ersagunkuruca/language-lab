@@ -22,9 +22,9 @@ Ersagun's "take 20 tasks" (2026-11-01): Editor 7, Compiler 7, Language 6.
 
 | lane | thread | next, in order |
 |---|---|---|
-| E Editor | "Editor lane" | I103, I104, I99, T7d, L43d (Ersagun's 20, 2026-11-01) |
-| C Compiler and targets | "Compiler lane" | C63, L43c (store only the masked parts: L, since Bounce's vectors sit in `Body` fields carried across frames, so masks must flow through record fields program-wide), C66 on shaders. L41 is done (#724, #729) |
-| L Language and library | "Language lane" | Next up for all lanes (#809), L43e named masks on fields (#812), L38j a generic function solved at an Int given (#815), L108d representation laws (this PR), L97d (Fixed's CORDIC polar), L69a (foreign definitions, JS host), L54b. Yesterday's run ended with I100 (#805) |
+| E Editor | "Editor lane" | I104, I99, T7d, L43d (Ersagun's 20, 2026-11-01) |
+| C Compiler and targets | "Compiler lane" | I105 (chapters broken), I106 (match-then-cons copies the array), I107 (0 · x folded), C63, L43c (store only the masked parts: L, since Bounce's vectors sit in `Body` fields carried across frames, so masks must flow through record fields program-wide), C66 on shaders. L41 is done (#724, #729) |
+| L Language and library | "Language lane" | Next up for all lanes (#809), L43e named masks on fields (#812), L38j a generic function solved at an Int given (#815), L108d representation laws (#816), L97d Fixed's polar by CORDIC (#820), L69a foreign definitions answered by hosts/js.js in the evaluator (#822), L71's typing written down (this PR); then L71a. Yesterday's run ended with I100 (#805) |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -33,8 +33,14 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I103 | Tumble `contains` opens on a red "No answer": `holds` is ticked true though main's first call (items = []) gave false | QA12 L1 | 2026-11-01 |
 | I104 | Tumble's main still opens with ~250 px empty canvas above its first row | QA12 L2 | 2026-11-01 |
+| I105 | **Bug, broken now.** `chapters` doesn't run or compile (`lab run`, `lab compile`, likely the editor's Run): since #769 the chooser picks `array of List` and the rewrite fails the check because `keep` is pinned to List. A rewrite that doesn't check must keep the definition, never refuse the program; `listBoundary` should treat a pinned List as a boundary | REVIEW-2026-11-01 §1 | 2026-11-01 |
+| I106 | **Bug.** `array of List` says cons is constant, but a cons onto a match's rest copies the array: match-then-cons is quadratic (16,000 steps 6 s, against <1 ms as a cons list), and the chooser picks the array by itself. A measured cost test per representation row (each job at n and 4n), then the chooser counting cons onto a rest as linear. Also: a rest keeps the whole buffer alive | REVIEW-2026-11-01 §2 | 2026-11-01 |
+| I107 | Staging folds `0 · x` to 0 and `x + 0` to x (stage.ts, "as fast-math"), so compiled answers differ from the evaluator's for ∞, NaN and −0, and the preview swaps between the two. Fold only when x is known finite; a test with ∞ and NaN inputs | REVIEW-2026-11-01 §3 | 2026-11-01 |
+| I108 | `clifford inverse` is ṽ/⟨vṽ⟩₀, right only for versors: it gives 1 + e₁ (which has no inverse) the value (1 + e₁)/2. Name it for what it is, or make it general, with an empty answer when there is none; it has no doc string | REVIEW-2026-11-01 §4 | 2026-11-01 |
+| I109 | The compiled preview (#789) starts the page afresh, losing what the user did in its first 2 to 7 s; hand the cells across, or hold input until the swap. Pages with sound stay interpreted with nothing saying why | REVIEW-2026-11-01 §5 | 2026-11-01 |
+| I110 | Check main: 49 of its last 60 runs cancelled while queued, a run takes ~19 of its 20 minutes, "affected" reaches 93 of 97 test files. Look at why std.ts and the prelude reach every test; lanes check the latest run when starting an item | REVIEW-2026-11-01 §6 | 2026-11-01 |
+| I111 | One agreement test over every example: `main` (or a page's first render) evaluated as defined, after the chooser, and compiled after the chooser and staging, compared. Would have caught I105 and I107. Before more representations or targets | REVIEW-2026-11-01 §7 | 2026-11-01 |
 | I99 | Drag a built point on Constructions and Compass (a crossing, a midpoint, an inverted point), not only free ones. Running the construction backwards has endless answers (either line could turn about either of its points), so it needs a rule to pick one: proposed "least movement", moving the free points it depends on as little as possible so the point lands under the pointer (a few Newton steps on the free points' coordinates); the simpler "carry the parents" slides every free point it depends on by the same amount. Ersagun was told least movement is the recommendation. | Ersagun 2026-10-31 21:08 | 2026-10-31 |
 
 ## E: Editor
@@ -136,7 +142,7 @@ all of these.
 | L118 | A faster evaluator ([EVALUATOR-SPEED-2026-10-31.md](docs/reports/EVALUATOR-SPEED-2026-10-31.md)): profile, one hotspot per PR, stop when the next buys <10%. L118a the table product as a jet done (Spacetime's charge path 8.3 s → 0.48 s, Bounce's step 14 → 3.7 ms). L118b, the machine's own hotspots, measured below the noise and stopped. Stopped here (Ersagun 2026-10-31 21:12); L118c is its own row below | Ersagun 2026-10-31 | P1 | M | done for now |
 | L118c | The evaluator compiles each definition to JavaScript closures once (closure compilation, Feeley and Lapalme 1987), keeping the heap continuation only where a search or a handler needs it; likely 3-10x on all interpreted code ([EVALUATOR-SPEED-2026-10-31.md](docs/reports/EVALUATOR-SPEED-2026-10-31.md) step 2). For later: Ersagun stopped L118 after step 2 | Ersagun 2026-10-31 | P3 | L | for later |
 | L51 | Tensors as the general algebra (NUMBERS.md stage 6) | NUMBERS.md stage 6 | P1 | L | after C30 |
-| L97 | `polar` as the relation behind Trig (POLAR.md): L97a to L97c4 done (Trig's polar, unpolar, asin, acos; polar given x, y answered by unpolar). L97e complex laws done (prelude tests). Next: L97d Fixed's CORDIC | Ersagun 2026-10-28 | P2 | M | 4 of 5 steps, L97d left |
+| L97 | `polar` as the relation behind Trig (POLAR.md): L97a to L97c4 done (Trig's polar, unpolar, asin, acos; polar given x, y answered by unpolar). L97e complex laws done (prelude tests). L97d done: Fixed's polar is CORDIC's rotation, its sin and cos come from it. Left: C55, so sin alone doesn't run the cos half | Ersagun 2026-10-28 | P2 | M | done, C55 left, L97d left |
 | L96 | Several ways to compute one operation, the compiler choosing by cost (WAYS.md): L96a to L96c done. Left: the steps after L97 | Ersagun 2026-10-28 | P2 | L | 3 of 5 steps |
 | L88 | Exact reals (EXACT-REALS.md): `Algebraic` done (L88a to L88d, √2·√2 is the Int 2). Next: step 4, `Real` as lazy intervals, when a program needs π exactly | Ersagun 2026-10-26 | P2 | L | 3 of 4 steps |
 | L89 | Fixed point for games (FIXED-POINT.md): `Fixed`, exact show, CORDIC trig and examples/lockstep done (L89a to L89d). Left: i64 on WASM and C (lane C) | Ersagun 2026-10-26 | P3 | M | 3 of 4 steps |
@@ -160,9 +166,9 @@ all of these.
 | L54 | Operations answered later, at most once (ANSWERED-LATER.md): step 1 done (L54a); compiled side is C40 | EFFECTS-REVIEW §1.5, §5 | P1 | L | step 1 done |
 | L59 | A page's fetch and wait resume instead of re-running the handler; `Wait` folds into `Time` | EFFECTS-REVIEW §1.1-1.3 | P1 | M | after L54 |
 | L60 | The audio worklet's run of `main` replays the page's random numbers and clock under a handler | EFFECTS-REVIEW §1.4 | P2 | M | after L54 |
-| L71 | `together`, `race`, `within(ms, a)` as prelude handlers over `await` | LANGUAGE-NEEDS Part 1 | P2 | L | after L54 |
+| L71 | `together`, `race`, `within(ms, a)` as prelude handlers over `await`. Typing written down (ANSWERED-LATER.md "Typing `await` and `together`"): L71a an operation's own type variables (fresh per call, rigid in its case); L71b std's `Await`, `Ticket a` and `together` in the prelude, parked branches kept as thunks; L71c the world answers `await(any of(…))`, then `race` and `within` | LANGUAGE-NEEDS Part 1 | P2 | L | typing designed |
 | L63 | Deterministic schedules: under `seeded` the scheduler's choices are seeded, so an interleaving bug is a seed in a test (FoundationDB) | LANGUAGE-NEEDS Part 1 | P2 | M | after L71, L55 |
-| L69 | Foreign definitions ([FOREIGN.md](docs/design/targets/FOREIGN.md)): a program's own effect answered by a host file per target. L69a `hosts/js.js` in the evaluator and compiled JS, results checked at the border, `lab hosts` skeleton (L, M); L69b C and WebAssembly (C, M); L69c the editor's "needs its host" (E, S); L69d optional, std's world operations as host files (L, M). Asks Ersagun: may a foreign operation be declared pure | LANGUAGE-NEEDS §5 | P2 | M | design done |
+| L69 | Foreign definitions ([FOREIGN.md](docs/design/targets/FOREIGN.md)): a program's own effect answered by a host file per target. L69a `hosts/js.js` in the evaluator and compiled JS, results checked at the border, `lab hosts` skeleton (L, M): the evaluator's half done, the compiled JS left; L69b C and WebAssembly (C, M); L69c the editor's "needs its host" (E, S); L69d optional, std's world operations as host files (L, M). Asks Ersagun: may a foreign operation be declared pure | LANGUAGE-NEEDS §5 | P2 | M | design done |
 | L62 | Branches with no world effects marked pure by a row constraint, so the runtime may run them on another core | LANGUAGE-NEEDS Part 1 | P3 | S | after L71 |
 | L64 | Scoped channels (`Channel a`, `send`, `receive`), when a program needs a pipeline | LANGUAGE-NEEDS Part 1 | P3 | M | |
 

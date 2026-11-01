@@ -107,7 +107,7 @@ test("polar is given by a definition with the same results", () => {
   assert.ok(info.errors.some((e) => e.message === "trig at angle gives polar as angle polar, which must name its results the way polar does: x, y from length, angle"), String(info.errors.map((e) => e.message)));
 });
 
-test("Dual and Fixed give sin and cos and get polar by them; Float64 gives all three", () => {
+test("Dual gives sin and cos and gets polar by them; Fixed and Float64 give polar", () => {
   const code = base(new Lang(LIBRARY.code).code), ways = waysIn(code);
   const pick = (impl: string) => {
     const d = code.defs.find((x) => LIBRARY.names[x] === impl)!;
@@ -117,7 +117,8 @@ test("Dual and Fixed give sin and cos and get polar by them; Float64 gives all t
     return w ? LIBRARY.names[w] : w;
   };
   assert.equal(pick("trig at dual"), "polar by sincos");
-  assert.equal(pick("trig at fixed"), "polar by sincos");
+  // Fixed gives polar by CORDIC's rotation (L97d), and its sin and cos come from it.
+  assert.equal(pick("trig at fixed"), null);
   assert.equal(pick("trig at float64"), null);
 });
 

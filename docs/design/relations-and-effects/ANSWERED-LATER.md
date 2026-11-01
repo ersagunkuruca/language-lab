@@ -196,6 +196,60 @@ In the order the BACKLOG wants them:
    `together`, `race` and `within`.
 5. **WebAssembly and C**, when a program there needs it.
 
+## Typing `await` and `together` (2026-11-01, L71's first step)
+
+Written before building L71, because the sketch above leaves two type
+questions open, and the obvious answers would dent the language.
+
+**1. `await` is one operation for every type.** `await(ticket: Ticket a)
+returns a, later` needs its `a` chosen at each call: a fetch's ticket
+gives a Text, a timer's a Unit, in the same `together`. Today an effect's
+type parameter (L56, `Yield a`) belongs to the effect, and a row unifies
+it across every use in its scope, so `Await a` would force one type per
+scope. That is the wrong shape, not a limit to live with.
+
+The answer is **an operation's own type variables**: a variable in an
+operation's fields that isn't one of its effect's parameters is the
+operation's, fresh at each call, and isn't in the row (the row says
+`Await`, with no argument). It is OCaml 5's choice (an effect is a GADT
+constructor, `Await : 'a ticket -> 'a Effect.t`) and Koka's polymorphic
+operations. A case handling it must work for every `a`: inside the arm,
+`a` is rigid (signatures.ts already makes rigid variables), so the case
+can pass the ticket on or keep the rest, and can't pretend the answer is
+a Text. No new node kind: an operation's fields simply name a binder the
+operation itself introduces (`params` on its variant, as a typedef has).
+
+**2. `together` parks rests of different types.** A parked branch is a
+ticket of some `a` and a rest taking an `a`. A list of them would need
+existential types. It doesn't: what `together` keeps for a branch is a
+thunk, `() → rest(await(ticket))`, made inside the arm where `a` is known,
+so every parked branch has the same type, `() -[Await]-> r`. Beside it,
+`together` keeps the ticket with its type forgotten (`ticket id(t) :
+Ticket Unit`, std), which is all `await(any of(ids))` needs to say which
+branch is ready. Resuming that branch is running its thunk: its `await`
+goes outward and is answered at once, its result already there.
+
+```
+together(actions) =
+  run each branch under
+  | await(ticket) with rest → park(ticket id(ticket), () → rest(await(ticket)))
+  when every branch is parked or done:
+    i = await(any of(parked ids))        -- outward: the world, or an outer together
+    run parked branch i's thunk, the rest as before
+```
+
+**The steps this gives** (BACKLOG):
+
+- **L71a**, an operation's own type variables, in the checker (fresh per
+  call, rigid in its case, absent from the row), the evaluator untouched
+  (it is untyped). Tested on a program's own `ask(question: Ticket a) → a`.
+- **L71b**, std's `Await` (`await`, later), `Ticket a`, `ticket id` and
+  `any of`, and `together` in the prelude as above, tested with a handler
+  that answers `await` from a list of ready tickets (a fake world, in the
+  language, L55's way).
+- **L71c**, the world answers `await(any of(…))`: the evaluator's and the
+  page's runtimes (with L59), then `race` and `within`.
+
 ## Prior art
 
 - Algebraic effect handlers: Plotkin and Pretnar (2009); Eff (Bauer and
@@ -211,3 +265,5 @@ In the order the BACKLOG wants them:
   scheme of Effekt's and Koka's JavaScript back-ends.
 - Structured concurrency for `together`: Trio's nurseries (Smith, 2018),
   as in LANGUAGE-NEEDS-2026-10-24.
+- An operation's own type variables: OCaml 5's effects as GADT
+  constructors, and Koka's polymorphic operations.
