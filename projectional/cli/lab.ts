@@ -51,6 +51,7 @@ import { soundOf } from "./sound.ts";
 import { readWav, writeWav } from "./wav.ts";
 import { audioProblem, BLOCK, playBlocks } from "../src/lang/audio.ts";
 import { runTests, savedFrom } from "../src/lang/tests.ts";
+import { representationLaws } from "../src/lang/rep-laws.ts";
 import { evaluatorHash, readKept, resultKeys, writeKept } from "./checks.ts";
 
 const USAGE = `usage:
@@ -58,7 +59,8 @@ const USAGE = `usage:
   lab compile <program> [-o out.mjs]    compile to a JavaScript module that runs main
   lab native <program> [-o out]         compile to a native program through C, with $CC (default cc)
   lab check <program>                   type-check, and list the definitions and their types
-  lab test <program> [--fresh]          run each definition that performs Check, and check each accepted answer in examples.json;
+  lab test <program> [--fresh]          run each definition that performs Check, check each accepted answer in examples.json
+                                        and each representation's jobs against its type's through meaning;
                                         an unchanged test's result is kept by hash (.lab/checks.json), --fresh runs it again
   lab build-web <program> [-o app.html] one HTML file running the page main returns
   lab build-app <program> [-o folder]   that page as an app for phones: a PWA in folder/www, and a Capacitor project
@@ -331,8 +333,15 @@ switch (command) {
       for (const f of r.failures.slice(0, 3)) console.log(`✗ ${r.name}(${f.inputs.join(", ")}): ${f.what.join("; ")}`);
       if (r.failures.length > 3) console.log(`  … and ${r.failures.length - 3} more`);
     }
-    if (!results.length && !p.info.errors.length) console.log("no tests: a test is a definition that performs Check (expect), or an accepted answer in examples.json");
-    process.exitCode = p.info.errors.length || results.some((r) => r.error || r.failures.length) ? 1 : 0;
+    // The program's own representations: each job agrees with its type's through meaning (L108d).
+    const laws = p.info.errors.length ? [] : representationLaws(p.code, p.info, p.names, p.reps);
+    for (const l of laws) {
+      if (!l.failures.length) console.log(`✓ ${l.rep}'s ${l.job} agrees through its meaning (${l.cases} case${l.cases === 1 ? "" : "s"})`);
+      for (const f of l.failures.slice(0, 3)) console.log(`✗ ${l.rep}'s ${l.job}(${f.inputs.join(", ")}): ${f.what}`);
+      if (l.failures.length > 3) console.log(`  … and ${l.failures.length - 3} more`);
+    }
+    if (!results.length && !laws.length && !p.info.errors.length) console.log("no tests: a test is a definition that performs Check (expect), or an accepted answer in examples.json");
+    process.exitCode = p.info.errors.length || results.some((r) => r.error || r.failures.length) || laws.some((l) => l.failures.length) ? 1 : 0;
     break;
   }
   default:
