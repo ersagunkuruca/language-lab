@@ -41,6 +41,17 @@ import { connectDrag, infiniteCanvas, moveDrag, s, svgPoint, type Canvas, type P
 import { litLabel, sigType } from "./typed.ts";
 import { arrange, crossingsOf, curve, curvePoints, frameBoxes, hopPath, overlaps, placeLabels, route, tidy, tunnels, type Box, type TFrame, type TNode, type TWire } from "./graphLayout.ts";
 import { planSolve } from "../ters/src/lang/solve.ts";
+import { B } from "../ters/src/prelude.ts";
+
+// Why a builtin's call can give no answer, when its inputs aren't known to
+// be fine (FLOAT-VALUES-2026-11-01.md, L125b).
+const NO_ANSWER: Record<Id, string> = {
+  [B.div]: "when what it divides by is 0, and that isn't ruled out here",
+  [S.mod]: "when what it divides by is 0, and that isn't ruled out here",
+  [B.sqrt]: "at a negative number, and that isn't ruled out here",
+  [B.log]: "at 0 or a negative number, and that isn't ruled out here",
+  [B.pow]: "for 0 to a negative power or a negative number to a fractional one, and that isn't ruled out here",
+};
 import { solveMode } from "../ters/src/lang/modes.ts";
 import { portLabel } from "../ters/src/lang/equations.ts";
 import { implementationOps, isOperation } from "../ters/src/lang/records.ts";
@@ -352,7 +363,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     usesOf.set(dot, [...(usesOf.get(dot) ?? []), ref]);
   };
 
-  const effectsOf = (call: NodeOf<"call">): { does: string[]; handles?: string } => {
+  const effectsOf = (call: NodeOf<"call">): { does: string[]; handles?: string; why?: string } => {
     // Effects this call itself brings in: from the callee's own signature,
     // not from the row it was unified with here.
     const f = node(call.fn);
@@ -361,9 +372,14 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     if (SIGS[f.target]) t = sigType(info, f.target);
     else if (info.schemes.get(f.target)) t = info.schemes.get(f.target)!.type;
     const z = t ? info.subst.zonk(t) : null;
-    const does = z?.t === "fn" ? z.eff.effs.map(name) : [];
+    // A `/` (or sqrt, log, ^, mod, or a definition with only such a
+    // Choice) whose inputs are known to be fine here has no Choice here
+    // (L125b): only the calls that can give no answer say so.
+    const answered = info.answered?.has(call.id);
+    const does = z?.t === "fn" ? z.eff.effs.filter((e) => !(answered && e === CHOICE)).map(name) : [];
     const handles = HANDLES[f.target] ? name(HANDLES[f.target]) : undefined;
-    return { does, handles };
+    const why = does.includes(name(CHOICE)) ? NO_ANSWER[f.target] : undefined;
+    return { does, handles, why };
   };
 
   const holeType = (id: Id) => { const hi = info?.holes.get(id); return hi ? showIn(hi.expected, names, info!.subst) : ""; };
@@ -519,7 +535,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     item(id, bw, bh, (g) => {
       g.append(titled(s("rect", { width: bw, height: bh, rx: 7, class: `cn${eff.does.length ? " eff" : ""}${eff.handles ? " handler" : ""}${sel(id)}${errs.has(id) ? " err" : ""}`, "data-id": id, "data-move": id }), typeOf(id)));
       grip(g, id, bw, bh);
-      if (badge) g.append(s("text", { x: bw / 2, y: 11, class: "badge", "text-anchor": "middle" }, badge));
+      if (badge) g.append(titled(s("text", { x: bw / 2, y: 11, class: "badge", "text-anchor": "middle" }, badge), eff.why ? `Choice: it can give no answer, ${eff.why}` : badge));
       g.append(s("text", { x: bw / 2, y: portNames ? 19 : top + (bh - top) / 2 + 5, class: "cl", "text-anchor": "middle" }, label));
       portNames?.forEach((l, i) => g.append(s("text", { x: 9, y: portY(i) + 4, class: "portl" }, l)));
       inputs.forEach((a, i) => g.append(empty(a)
