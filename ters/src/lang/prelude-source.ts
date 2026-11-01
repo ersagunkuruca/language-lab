@@ -988,6 +988,19 @@ export function buildPrelude(): Module {
     { variant: CONS, names: ["item", "rest"], body: ([x, rest]) => k.if(k.call(S.less, i, k.lit(-0.5)), xs,
       k.if(k.call(S.less, i, k.lit(0.5)), k.call(CONS, by, rest), k.call(CONS, x, k.call(replaceAt, rest, n.sub(i, k.lit(1)), by)))) },
   ])));
+  // The first n items, and the rest after them (BACKLOG L135, GAPS round 6
+  // NG3: notebook wrote take for its best five). Counted as item at's
+  // positions are; fewer than n items give them all (take) or none (drop).
+  const take = k.def("take");
+  k.define(take, k.fn(["list", "count"], (xs, c) => k.match(xs, [
+    { variant: NIL, names: [], body: () => NIL },
+    { variant: CONS, names: ["item", "rest"], body: ([x, rest]) => k.if(k.call(S.less, c, k.lit(0.5)), NIL, k.call(CONS, x, k.call(take, rest, n.sub(c, k.lit(1))))) },
+  ])));
+  const drop = k.def("drop");
+  k.define(drop, k.fn(["list", "count"], (xs, c) => k.match(xs, [
+    { variant: NIL, names: [], body: () => NIL },
+    { variant: CONS, names: ["item", "rest"], body: ([, rest]) => k.if(k.call(S.less, c, k.lit(0.5)), xs, k.call(drop, rest, n.sub(c, k.lit(1)))) },
+  ])));
   // A Float64 shown to a fixed number of decimals (BACKLOG I93): the
   // Spacetime demo wrote its own `rounded`. Rounds half away from 0 at
   // the last place and keeps trailing zeros, as JavaScript's toFixed and
@@ -1278,7 +1291,7 @@ export function buildPrelude(): Module {
     )))));
   const awaitHelpers = [startBranch, waiting, goOn, finished, settle, firstDone, raceSettle];
 
-  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, csqrt, clog, cpow, casin, cacos, showC, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, showDecimals, divD, slopeAt, dualTable, showD, asFixed, fixedF, showX, divX, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, ticketId, anyOf, together, race, within];
+  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, csqrt, clog, cpow, casin, cacos, showC, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, showDecimals, divD, slopeAt, dualTable, showD, asFixed, fixedF, showX, divX, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, ticketId, anyOf, together, race, within];
   const mapHelpers = [lastItem, putEntry, updateEntry, removeEntry, lookupEntry, hasEntry, pairsAsEntries, addItem_, removeItem_, hasItem_, unionItems, interItems, diffItems];
   const comments: Record<Id, string> = {
     [each]: "Runs the action on each item of the list in turn, for what it does (prints, writes a cell).",
@@ -1324,6 +1337,8 @@ export function buildPrelude(): Module {
     [negF]: "What −x is at Rational. Not offered on its own: − is.",
     [lessF]: "What < is at Rational. Not offered on its own: < is.",
     [sort]: "The list in order: numbers by value, text alphabetically (by code point), cases in the order their type lists them, then field by field (compare). A merge sort (von Neumann, 1945), bottom-up so it surely finishes: n log n steps.",
+    [take]: "The first count items: take([a, b, c], 2) is [a, b]; a list with fewer gives them all. count steps.",
+    [drop]: "The items after the first count: drop([a, b, c], 2) is [c]; a list with fewer gives []. count steps.",
     [itemAt]: "The item at a position, counting from 0, or `otherwise` when the list has none there: item at([a, b, c], 1, z) is b, item at([a], 5, z) is z. n steps.",
     [replaceAt]: "The list with the item at a position, counting from 0, replaced by `by`; the list as it was when it has no item there. n steps.",
     [showDecimals]: "x as text with `places` digits after the point, rounded half away from 0 and keeping trailing zeros: show decimals(2.5, 3) is \"2.500\", show decimals(-0.0004, 3) is \"0.000\". For when show's up to nine places would jump about.",

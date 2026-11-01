@@ -49,3 +49,13 @@ test("L134: starts with and ends with", () => {
   ]), ["true", "false", "false", "true", "true", "false", "false", "true"]);
   assert.equal(type("starts with"), "(Text, Text) -> Bool");
 });
+
+test("L135: take and drop, the first n items and the rest after them", () => {
+  const xs = (k: Lang) => k.list(k.lit("a"), k.lit("b"), k.lit("c"));
+  assert.deepEqual(prints((k) => [
+    k.call(L("take"), xs(k), k.lit(2)), k.call(L("drop"), xs(k), k.lit(2)),
+    k.call(L("take"), xs(k), k.lit(5)), k.call(L("drop"), xs(k), k.lit(5)),
+    k.call(L("take"), xs(k), k.lit(0)), k.call(L("drop"), xs(k), k.lit(0)),
+  ]), ['["a", "b"]', '["c"]', '["a", "b", "c"]', "[]", "[]", '["a", "b", "c"]']);
+  assert.equal(type("take"), "(List a, Float64) -> List a");
+});
