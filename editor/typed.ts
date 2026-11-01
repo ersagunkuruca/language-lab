@@ -16,7 +16,7 @@ import { B } from "../ters/src/prelude.ts";
 import { pinsOf, type Pins } from "../ters/src/lang/signatures.ts";
 import { dropLoose, setLoose, wireIn } from "./drafts.ts";
 import { addVariant, fillHole } from "../ters/src/lang/refactor.ts";
-import { ARITH, ASSOCIATIVE, CONS, FALSE, NIL, SIGS, TRUE } from "../ters/src/lang/std.ts";
+import { ARITH, ASSOCIATIVE, CONS, FALSE, NIL, SIGS, TRUE, TUPLE_MAX, tuplePart, tupleVariant } from "../ters/src/lang/std.ts";
 import { INT, NUMBER, RATIONAL_TYPE, STRING, schemeArith, showIn, showType, type Type } from "../ters/src/lang/types.ts";
 import { ratioParts, read as readInt } from "../ters/src/lang/int.ts";
 import type { Value } from "../ters/src/lang/run.ts";
@@ -1243,7 +1243,10 @@ export function makeFunction(code: Code, names: Names, info: Info, defId: Id, me
   if (late) return { ok: false, reason: `${names[(late as NodeOf<"ref">).target] ?? "a value"} comes in, but it's worked out after the first value going out: put it in the group, or group less` };
   // Each value out's type, for the record's fields.
   const spec = (t: Type): { target: Id; args: unknown[] } | null => { const r = info.subst.resolve(t); if (r.t !== "con") return null; const as = r.args.map(spec); return as.every(Boolean) ? { target: r.id, args: as } : null; };
-  const types = one ? [] : roots.map((r) => { const t = info.typeOf.get(r); return t ? spec(t) : null; });
+  // Up to eight values go out as a tuple (E165, L128a): no type of its
+  // own is made; more than eight still make a record type, Part results.
+  const tuple = !one && roots.length <= TUPLE_MAX;
+  const types = one || tuple ? [] : roots.map((r) => { const t = info.typeOf.get(r); return t ? spec(t) : null; });
   if (types.some((t) => !t)) return { ok: false, reason: "a value going out is a function, or of no one type yet: for now several values out each hold a plain type" };
   const fn = freshId(), lam = freshId(), call = freshId(), fref = freshId(), outer = freshId(), let_ = freshId();
   // The same variable wired in twice (time · time) is one input.
@@ -1271,7 +1274,24 @@ export function makeFunction(code: Code, names: Names, info: Info, defId: Id, me
   next.nodes[call] = { id: call, kind: "call", fn: fref, args: firsts };
   const rest = roots.includes(at) ? outs[roots.indexOf(at)] : at;
   if (one) next.nodes[lam] = { id: lam, kind: "lambda", params, body: roots[0] };
-  else {
+  else if (tuple) {
+    // The tuple: (drift, drop), each read where it was by its place.
+    const n = roots.length, nodes = next.nodes;
+    const mk = freshId(), cref = freshId();
+    nodes[cref] = { id: cref, kind: "ref", target: tupleVariant(n) };
+    nodes[mk] = { id: mk, kind: "call", fn: cref, args: roots };
+    nodes[lam] = { id: lam, kind: "lambda", params, body: mk };
+    roots.forEach((_, i) => {
+      const fr = freshId(), pr = freshId();
+      nodes[fr] = { id: fr, kind: "ref", target: tuplePart(n, i) };
+      nodes[pr] = { id: pr, kind: "ref", target: p };
+      nodes[outs[i]] = { id: outs[i], kind: "call", fn: fr, args: [pr] };
+    });
+    nodes[p] = { id: p, kind: "binder" };
+    nn[p] = "results";
+    nodes[pLam] = { id: pLam, kind: "lambda", params: [p], body: rest };
+    nodes[pLet] = { id: pLet, kind: "call", fn: pLam, args: [call] };
+  } else {
     // The record: Part results, one field per value out, named for where
     // it went (drift, drop) or by its place.
     const names_ = roots.map((r, i) => { const at_ = parentOf(code, r); const l = at_ && code.nodes[at_.parent]; const f = l?.kind === "call" && code.nodes[l.fn]?.kind === "lambda" ? (code.nodes[l.fn] as NodeOf<"lambda">).params[at_!.index ?? 0] : undefined; return f && names[f] && names[f] !== "_" ? names[f] : `value ${i + 1}`; });
@@ -1304,7 +1324,7 @@ export function makeFunction(code: Code, names: Names, info: Info, defId: Id, me
   next.nodes[outer] = { id: outer, kind: "lambda", params: [fn], body: one ? (at === roots[0] ? call : at) : pLet };
   next.nodes[let_] = { id: let_, kind: "call", fn: outer, args: [lam] };
   params.forEach((q, i) => { const x = code.nodes[firsts[i]]; nn[q] = x.kind === "ref" && names[x.target] ? names[x.target] : `in${params.length > 1 ? i + 1 : ""}`; });
-  const what = one ? "" : ` Its ${roots.length} values go out together as Part results, and each is read where it was.`;
+  const what = one ? "" : tuple ? ` Its ${roots.length} values go out together, as one tuple, and each is read where it was.` : ` Its ${roots.length} values go out together as Part results, and each is read where it was.`;
   const r = guardTyped(info, collect(next), nn, fn, `Made it a function, part, called where it was${firsts.length ? ` with what came in: ${firsts.length} input${firsts.length === 1 ? "" : "s"}` : ""}.${what} Name it, fold it, or Undo to put it back.`);
   return r.ok ? { ...r, fn: lam } : r;
 }
