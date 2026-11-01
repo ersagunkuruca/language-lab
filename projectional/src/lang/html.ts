@@ -151,7 +151,7 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
           });
         } else if (a.tag === HTML_V.on) {
           const then = a.fields[1];
-          const handle = (ev: { key?: string; target?: unknown; clientX?: number; clientY?: number }) => {
+          const handle = (ev: { key?: string; target?: unknown; clientX?: number; clientY?: number; seconds?: number }) => {
             const target = (ev.target ?? e) as El & { type?: string };
             const value = target.type === "checkbox" ? String(!!target.checked) : String(target.value ?? "");
             const [x, y] = pointer(e, ev);
@@ -162,7 +162,7 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
             // event, so what it did before the fetch happens once.
             const fire = () => {
               try {
-                cells.attempt(() => withSteps(steps, () => m.call(then, { tag: HTML_V.event, fields: [value, ev.key ?? "", x, y] })), (e) => e instanceof Pending);
+                cells.attempt(() => withSteps(steps, () => m.call(then, { tag: HTML_V.event, fields: [value, ev.key ?? "", x, y, ev.seconds ?? 0] })), (e) => e instanceof Pending);
               } catch (err) {
                 if (err instanceof Pending) err.ready.then(fire);
                 else if (err instanceof OutOfSteps) console.error(`${name} handler ${STUCK}`);
@@ -173,8 +173,10 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
           };
           // "frame": once each time the browser draws, while the element is
           // on the page, so a simulation steps without a hidden CSS
-          // animation to listen to (I80). Elsewhere it never comes.
-          if (name === "frame") everyFrame(e, () => handle({}));
+          // animation to listen to (I80). Elsewhere it never comes. It
+          // says how many seconds passed since the frame before, so a
+          // simulation can keep to real time whatever the frame rate.
+          if (name === "frame") everyFrame(e, (seconds) => handle({ seconds }));
           else e.addEventListener(name, handle);
         } else if (a.tag === HTML_V.listen) {
           if (m.listen) m.listen(e, a);
@@ -207,14 +209,23 @@ function pointer(e: El, ev: { clientX?: number; clientY?: number }): [number, nu
 }
 
 // Calls `tick` once a frame from when `e` is first on the page until it
-// leaves it (a redraw that drops it, the page closing).
-function everyFrame(e: El, tick: () => void) {
-  const raf = (globalThis as { requestAnimationFrame?: (f: () => void) => number }).requestAnimationFrame;
+// leaves it (a redraw that drops it, the page closing), with the seconds
+// since the frame before: 0 the first time, then the browser's frame time
+// (requestAnimationFrame's timestamp) less the last one.
+function everyFrame(e: El, tick: (seconds: number) => void) {
+  const raf = (globalThis as { requestAnimationFrame?: (f: (ms?: number) => void) => number }).requestAnimationFrame;
   if (!raf) return;
   let seen = false;
-  const step = () => {
+  let last: number | null = null;
+  const step = (ms?: number) => {
     const on = (e as El & { isConnected?: boolean }).isConnected;
-    if (on) { seen = true; tick(); } else if (seen) return;
+    const now = typeof ms === "number" ? ms : null;
+    if (on) {
+      seen = true;
+      const seconds = last === null || now === null ? 0 : Math.max(0, (now - last) / 1000);
+      last = now;
+      tick(seconds);
+    } else if (seen) return;
     raf(step);
   };
   raf(step);
