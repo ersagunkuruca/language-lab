@@ -379,6 +379,7 @@ export function $perform(effect, op, args) {
     const h = handlers[i];
     if (h.effect !== effect || h.hidden) continue;
     if (!(op in h.answers)) throw new Escape(h, op, args);
+    if (h.gens?.has(op)) throw new Error(`${op}'s case waits, and it was performed where code can't wait: compiled JavaScript doesn't run that yet (BACKLOG C40); the evaluator does`);
     // Cases that perform nothing (C64, compile.ts performsNothing): no
     // handler could be seen from them, so none is hidden.
     if (h.quiet) return h.answers[op](...args);
@@ -604,6 +605,43 @@ export function* $handleLG(effect, later, ops, answers, escapes, body, done = nu
     }
   }
   return yield* run(undefined);
+}
+
+// A match of operations answered at once around code that waits on another
+// handler's operation answered later (C78: `simulated`'s clock): a
+// generator that is on the stack while its computation runs, during each
+// step, and passes the waits outward and their answers back in. The cases
+// named in `gens` wait themselves: they are generators, run by $performG.
+export function* $handleG(effect, answers, gens, escapes, body) {
+  const h = { effect, answers, gens: new Set(gens) }, it = body();
+  let send;
+  for (;;) {
+    const at = handlers.length, d = $rec.d;
+    handlers.push(h);
+    let r;
+    try { r = it.next(send); } catch (e) {
+      handlers.length = at;
+      if (!(e instanceof Escape) || e.handler !== h) throw e;
+      $rec.d = d;
+      return yield* escapes[e.op](...e.args);
+    } finally { handlers.length = at; }
+    if (r.done) return r.value;
+    send = yield r.value;
+  }
+}
+// Performing, where the code may wait: as $perform, but a case that waits
+// runs as the generator it is, outside its own handler and the ones above it
+// (hidden while it runs, across its waits, as $perform hides them).
+export function* $performG(effect, op, args) {
+  for (let i = handlers.length - 1; i >= 0; i--) {
+    const h = handlers[i];
+    if (h.effect !== effect || h.hidden) continue;
+    if (!h.gens?.has(op)) return $perform(effect, op, args);
+    const hid = handlers.slice(i);
+    for (const x of hid) x.hidden = (x.hidden ?? 0) + 1;
+    try { return yield* h.answers[op](...args); } finally { for (const x of hid) x.hidden--; }
+  }
+  return $perform(effect, op, args);
 }
 
 // `seeded`: Random answered from a generator (ters/src/lang/random.ts,
