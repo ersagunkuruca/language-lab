@@ -79,7 +79,8 @@ type Outcome = "row" | "refused" | `runtime: ${string}`;
 const PAGE_BUDGET = "runtime: the page runs each update under a step budget (run.ts withSteps)";
 const PAGE_HANDLER = "runtime: the page runs handlers, whose row allows it (std.ts Attribute.on)";
 const plain: Record<Effect, Outcome> = { Console: "row", Choice: "row", Diverge: "row", Update: "row" };
-const pageView: Record<Effect, Outcome> = { Console: "refused", Choice: "refused", Diverge: PAGE_BUDGET, Update: "refused" };
+const PAGE_NOTHING = "runtime: a view with no answer shows nothing there (html.ts NoAnswer, L125b)";
+const pageView: Record<Effect, Outcome> = { Console: "refused", Choice: PAGE_NOTHING, Diverge: PAGE_BUDGET, Update: "refused" };
 
 // What each cell should be. "row": the effect is in main's type.
 const expected: Record<string, Record<Effect, Outcome>> = {

@@ -170,8 +170,9 @@ export function fractionsProgram() {
     k.let("m′", sub(mul(d, a), m), (m2) =>
     k.let("d′", k.call(div, sub(n, mul(m2, m2)), d), (d2) =>
       k.call(rootFrom, n, a0, m2, d2, k.call(div, add(a0, m2), d2))))))));
+  // Of a whole number at least 0: a negative one is read as 0.
   const root = k.def("square root");
-  k.define(root, k.fn(["n"], (n) => k.let("a0", k.call(whole, k.call(B.sqrt, k.call(I.toNumber, n))), (a0) =>
+  k.define(root, k.fn(["n"], (n) => k.let("a0", k.call(whole, k.call(S.first, k.thunk(() => k.call(B.sqrt, k.call(I.toNumber, n))), k.thunk(() => k.lit(0)))), (a0) =>
     k.if(k.equal(mul(a0, a0), n), k.call(term, a0, later(() => end)), k.call(rootFrom, n, a0, int(0), int(1), a0)))));
 
   // e = [2; 1, 2, 1, 1, 4, 1, 1, 6, …] (Euler).
@@ -197,13 +198,15 @@ export function fractionsProgram() {
     ], k.text(k.lit("; "), k.call(TEXT_OPS.joinAll, k.call(map, t, I.show), k.lit(", ")))), k.lit("]")) },
   ])));
 
-  // The value of the terms read so far (a convergent), as a Float64.
+  // The value of the terms read so far (a convergent), as a Float64. A
+  // rest worth 0 has no inverse (it can't be: every term after the first
+  // is at least 1), and then the whole part alone is the value.
   const value = k.def("value");
   k.define(value, k.fn(["terms"], (ts) => k.fold(ts, [
     { variant: NIL, names: [], body: () => k.lit(0) },
     { variant: CONS, names: ["whole", "rest"], results: [null, "value of rest"], body: ([w, rest], [, r]) =>
       k.match(rest, [{ variant: NIL, names: [], body: () => k.call(I.toNumber, w) }],
-        k.call(B.add, k.call(I.toNumber, w), k.call(B.div, k.lit(1), r!))) },
+        k.call(S.first, k.thunk(() => k.call(B.add, k.call(I.toNumber, w), k.call(B.div, k.lit(1), r!))), k.thunk(() => k.call(I.toNumber, w)))) },
   ])));
 
   // ---- Gosper's arithmetic. z = (axy + bx + cy + d) / (exy + fx + gy + h)

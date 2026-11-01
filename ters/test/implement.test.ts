@@ -36,7 +36,9 @@ test("implement for a type makes the record with a hole per operation, typed at 
   setProgramPins({});
   const body = r.code.nodes[(r.code.nodes[def] as NodeOf<"def">).body!] as NodeOf<"call">;
   assert.equal(body.args.length, 9);
-  for (const hole of [...body.args.slice(0, 5), ...body.args.slice(7)]) assert.equal(showIn(after.holes.get(hole)!.expected, names, after.subst), "(Wave) -> Wave");
+  // log, asin and acos have no answer outside their domain: Choice (L125b).
+  for (const hole of body.args.slice(0, 4)) assert.equal(showIn(after.holes.get(hole)!.expected, names, after.subst), "(Wave) -> Wave");
+  for (const hole of [body.args[4], ...body.args.slice(7)]) assert.equal(showIn(after.holes.get(hole)!.expected, names, after.subst), "(Wave) -[Choice]-> Wave");
   // polar and unpolar, predicates over their four ports (POLAR.md).
   for (const hole of body.args.slice(5, 7)) assert.equal(showIn(after.holes.get(hole)!.expected, names, after.subst), "(Wave, Wave, Wave, Wave) -> Bool");
   // Nothing is missing now, the holes are what's left, and a second one is

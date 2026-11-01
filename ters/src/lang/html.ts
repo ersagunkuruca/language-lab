@@ -23,6 +23,7 @@ export interface El extends Node_ {
   replaceChildren(...nodes: Node_[]): void;
   addEventListener(type: string, f: (e: { key?: string; target?: unknown }) => void): void;
   setAttribute(name: string, value: string): void;
+  removeAttribute?(name: string): void;
 }
 export interface Doc {
   createElement(tag: string): El;
@@ -47,12 +48,26 @@ export interface Mount {
 // formula that never ends is typed Diverge, and this is the page handling it.
 export const STUCK = "didn't finish";
 
+// A view with no answer (its Choice gave none: x / 0, say) shows nothing
+// there, as Ersagun decided for L125b: a view only reads, so nothing is
+// done on a path that is abandoned. A handler handles its own Choice.
+export class NoAnswer extends Error { constructor() { super("no value"); } }
 // The evaluator's way of calling: the first result of the stream.
 export const evaluatorCall = (f: Value, ...args: Value[]): Value => {
   for (const v of (f as (...a: Value[]) => Iterable<Value>)(...args)) return v;
-  throw new Error("no value");
+  throw new NoAnswer();
 };
-export const compiledCall = (f: Value, ...args: Value[]): Value => (f as (...a: Value[]) => Value)(...args);
+// Compiled code gives a value, or a stream of answers when it searches.
+export const compiledCall = (f: Value, ...args: Value[]): Value => {
+  const r = (f as (...a: Value[]) => Value)(...args) as unknown;
+  if (r && typeof r === "object" && typeof (r as Iterator<Value>).next === "function" && Symbol.iterator in (r as object)) {
+    for (const v of r as Iterable<Value>) return v;
+    throw new NoAnswer();
+  }
+  return r as Value;
+};
+// A view's value, or null when it has no answer.
+const viewOf = (call: Mount["call"], f: Value): Value | null => { try { return call(f); } catch (e) { if (e instanceof NoAnswer) return null; throw e; } };
 
 const SVG = "http://www.w3.org/2000/svg";
 
@@ -113,7 +128,7 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
       // moving an item runs the count again, and the count is the same.
       let changed = true;
       watch(t, "text", () => {
-        const now = String(m.call(d.fields[0]));
+        const v = viewOf(m.call, d.fields[0]), now = v === null ? "" : String(v);
         changed = now !== t.textContent;
         if (changed) t.textContent = now;
       }, () => { t.textContent = STUCK; }, () => (changed ? [t] : []));
@@ -128,7 +143,7 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
       const e = inSvg ? doc.createElementNS!(SVG, "g") : doc.createElement("lab-part");
       if (!inSvg) e.setAttribute("style", "display: contents");
       let now: Node_ | undefined;
-      watch(e, "part", () => { e.replaceChildren((now = mountHtml(m.call(d.fields[0]), m, svg))); }, () => { e.replaceChildren((now = doc.createTextNode(STUCK))); }, () => (now ? fresh(now) : []));
+      watch(e, "part", () => { const v = viewOf(m.call, d.fields[0]); if (v === null) { now = undefined; e.replaceChildren(); } else e.replaceChildren((now = mountHtml(v, m, svg))); }, () => { e.replaceChildren((now = doc.createTextNode(STUCK))); }, () => (now ? fresh(now) : []));
       return e;
     }
     case HTML_V.element: {
@@ -142,7 +157,9 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
           if (name === "autofocus") focus = true;
           // Out of steps, an attribute keeps its last value.
           watch(e, name, () => {
-            const value = String(m.call(a.fields[1]));
+            const v = viewOf(m.call, a.fields[1]);
+            if (v === null) { if (name !== "value" && name !== "checked") e.removeAttribute?.(name); return; }
+            const value = String(v);
             if (name === "checked") e.checked = value === "true";
             // Svelte's rule for bind:value (Rich Harris): leave the field
             // alone when it already shows this, so typing isn't disturbed.
@@ -245,11 +262,11 @@ export function htmlText(v: Value, call: Mount["call"], raw = false): string {
   switch (d.tag) {
     // Inside <style> and <script> text isn't read for entities: it goes in
     // as it is, with only a closing tag kept from ending it early.
-    case HTML_V.text: { const t = String(call(d.fields[0])); return raw ? t.replace(/<\//g, "<\\/") : esc(t); }
-    case HTML_V.part: return htmlText(call(d.fields[0]), call, raw);
+    case HTML_V.text: { const v = viewOf(call, d.fields[0]), t = v === null ? "" : String(v); return raw ? t.replace(/<\//g, "<\\/") : esc(t); }
+    case HTML_V.part: { const v = viewOf(call, d.fields[0]); return v === null ? "" : htmlText(v, call, raw); }
     case HTML_V.element: {
       const attrs = (fromList(d.fields[1]) as Data[]).filter((a) => a.tag === HTML_V.property)
-        .map((a) => ` ${a.fields[0]}="${esc(String(call(a.fields[1])))}"`).join("");
+        .flatMap((a) => { const v = viewOf(call, a.fields[1]); return v === null ? [] : [` ${a.fields[0]}="${esc(String(v))}"`]; }).join("");
       const rawText = d.fields[0] === "style" || d.fields[0] === "script";
       return `<${d.fields[0]}${attrs}>${fromList(d.fields[2]).map((c) => htmlText(c, call, rawText)).join("")}</${d.fields[0]}>`;
     }

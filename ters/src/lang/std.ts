@@ -109,8 +109,11 @@ const tfun = (params: Id[], result: Id, effects: Id[]) => node({ id: `std.t${tn+
 // Log is in both: a log line is for whoever debugs the page, not the page,
 // so a view may log (each time it runs, which is what debugging a view
 // wants to see), where it may not print.
-export const PAGE_VIEW: readonly Id[] = discharge("a page's text, part or attribute value", [CELLS, DIVERGE, TIME, NETWORK, LOG],
-  "the page runtime runs a view in a watcher, under a step budget, after main has returned; a log line goes to the browser's console, once per run");
+// Choice too (L125b, Ersagun 2026-11-01): a view with no answer, one that
+// divides by 0, shows nothing there; a view only reads, so nothing is done
+// on a path that is abandoned. A handler still handles its own Choice.
+export const PAGE_VIEW: readonly Id[] = discharge("a page's text, part or attribute value", [CELLS, DIVERGE, TIME, NETWORK, LOG, CHOICE],
+  "the page runtime runs a view in a watcher, under a step budget, after main has returned; a view with no answer shows nothing; a log line goes to the browser's console, once per run");
 export const PAGE_HANDLER: readonly Id[] = discharge("a page's event handler", [CELLS, UPDATE, CONSOLE, FILES, ABORT, DIVERGE, TIME, NETWORK, RANDOM, LOG],
   "the page runtime runs a handler when its event comes, under a step budget, and logs an Abort; a log line goes to the browser's console");
 // A sound (AUDIO.md): a function from a block of samples to the block to
@@ -226,7 +229,8 @@ export const ALGEBRAIC_V = "std.algebraic.algebraic";
 // is resolved to the type's own function before anything runs (arith.ts).
 const TRIG_NAMES = ["sin", "cos", "tan", "exp", "log"] as const;
 export const TRIG = typedef("std.trig", "Trig", ["a"], [
-  ["trig", TRIG_NAMES.map((op): [string, TypeOf] => [op, ([a]) => tfun([tref(a)], tref(a), [])])],
+  // log has no answer at 0 or below, so it may fail (L125b).
+  ["trig", TRIG_NAMES.map((op): [string, TypeOf] => [op, ([a]) => tfun([tref(a)], tref(a), op === "log" ? [CHOICE] : [])])],
 ], false, true);
 export const TRIG_V = "std.trig.trig";
 export const TRIG_OPS = Object.fromEntries(TRIG_NAMES.map((op) => [op, `${TRIG_V}.${op}`])) as Record<(typeof TRIG_NAMES)[number], Id>;
@@ -251,11 +255,11 @@ export const TRIG_UNPOLAR = `${TRIG_V}.unpolar`;
   named(node({ id: TRIG_UNPOLAR, kind: "field", type, results: [0, 1], ports: ["length", "angle", "x", "y"] }), "unpolar");
   (nodes.find((n) => n.id === TRIG_V) as NodeOf<"variant">).fields.push(TRIG_UNPOLAR);
 }
-// asin and acos (POLAR.md, L97c3): angles read off unpolar, (a) -> a like
-// sin and cos.
+// asin and acos (POLAR.md, L97c3): angles read off unpolar, (a) -[Choice]-> a:
+// no answer outside −1 to 1 (L125b).
 export const TRIG_ASIN = `${TRIG_V}.asin`, TRIG_ACOS = `${TRIG_V}.acos`;
 for (const [id, name] of [[TRIG_ASIN, "asin"], [TRIG_ACOS, "acos"]]) {
-  const type = node({ id: `${id}.type`, kind: "tfun", params: [node({ id: `${id}.t0`, kind: "tref", target: `${TRIG}.a`, args: [] })], result: node({ id: `${id}.t1`, kind: "tref", target: `${TRIG}.a`, args: [] }), effects: [] });
+  const type = node({ id: `${id}.type`, kind: "tfun", params: [node({ id: `${id}.t0`, kind: "tref", target: `${TRIG}.a`, args: [] })], result: node({ id: `${id}.t1`, kind: "tref", target: `${TRIG}.a`, args: [] }), effects: [CHOICE] });
   named(node({ id, kind: "field", type }), name);
   (nodes.find((n) => n.id === TRIG_V) as NodeOf<"variant">).fields.push(id);
 }
@@ -356,8 +360,11 @@ function itemsOf(l: { tag: Id; fields: unknown[] }): unknown[] {
 }
 
 // The numeric builtins from prelude.ts get types here; their code stays there.
+const PARTIAL_OPS = new Set(["div", "sqrt", "log", "pow"]);
 for (const op of Object.keys(impl) as (keyof typeof impl)[]) {
-  SIGS[B[op]] = (s) => fn(Array(impl[op].length).fill(num), num, s.freshRow());
+  // `/`, `sqrt`, `log` and `^` have no answer at some inputs (L125b): Choice,
+  // dropped where the checker knows the input is fine (signs.ts).
+  SIGS[B[op]] = (s) => fn(Array(impl[op].length).fill(num), num, s.freshRow(PARTIAL_OPS.has(op) ? [CHOICE] : []));
 }
 
 const pure = (params: Type[], ret: Type): Sig => (s) => fn(params, ret, s.freshRow());
@@ -382,7 +389,7 @@ export const S = {
   // The nearest binary32 value (ties to even): what a GPU holds. The job
   // of every Float64 operation in the Float32 representation (NUMBERS.md).
   float32: builtin("float32", "round to Float32", pure([num], num), Math.fround),
-  mod: builtin("mod", "mod", pure([num, num], num), (a: number, b: number) => ((a % b) + b) % b),
+  mod: builtin("mod", "mod", (s) => fn([num, num], num, s.freshRow([CHOICE])), (a: number, b: number) => ((a % b) + b) % b),
   concat: builtin("concat", "join text", pure([str, str], str), (a: string, b: string) => a + b),
   show: builtin("show", "show", pure([num], str), (x: number) => (Number.isInteger(x) ? String(x) : String(Math.round(x * 1e9) / 1e9))),
   range: builtin("range", "range", pure([num], list(num))),

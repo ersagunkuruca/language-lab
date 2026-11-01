@@ -28,7 +28,10 @@ test("vectors module: compiled JavaScript gives the evaluator's values", async (
   const run = (name: string, ...xs: Value[]) => { for (const v of r.call(r.value(p.defs[name as keyof typeof p.defs]), ...xs)) return v; return undefined; };
   const inputs: Record<string, number[]> = { along: [1, 2, 3, 2], facing: [0.3, 2, -1], far: [4, 6, 3], bounce: [1, -1, 0], fade: [0.2, 0.4, 0.6, 0.25], light: [0.5, 0.8, 1, 1.5], halfway: [4], size: [-3] };
   for (const name of names) {
-    const want = run(name, ...inputs[name]), got = compiled[name](...inputs[name]);
+    // facing and bounce go through unit, which has no answer for the zero
+    // vector (a Choice, L125b): their copies give their answers as a stream.
+    const out = compiled[name](...inputs[name]) as { next?: unknown } & Iterable<unknown>;
+    const want = run(name, ...inputs[name]), got = typeof out?.next === "function" ? [...out][0] : out;
     assert.deepEqual(JSON.parse(JSON.stringify(got)), JSON.parse(JSON.stringify(want)), name);
   }
   // A few by hand: (1,2,3) + 2·(0.3,−0.5,1); |(4,6,3) − (1,2,3)| = 5; light clamps.
@@ -54,7 +57,8 @@ test("vectors module: on a GPU, each definition is the vector operation it descr
   one("magnitude", "p0: vec3f", "return length(p0)");
   one("mix", "p0: vec3f, p1: vec3f, p2: f32", "return mix(p0, p1, p2)");
   one("clamp", "p0: vec3f, p1: f32, p2: f32", "return clamp(p0, vec3f(p1), vec3f(p2))");
-  assert.match(s.wgsl, /fn unit_\d+\(p0: vec3f\) -> vec3f \{\n {2}let l1 = magnitude_\d+\(p0\);\n {2}return p0 \/ l1;/);
+  // unit scales by 1 / length, which has no answer for the zero vector (L125b).
+  assert.match(s.wgsl, /fn unit_\d+\(p0: vec3f\) -> vec3f \{\n {2}let l\d+ = 1\.0 \/ magnitude_\d+\(p0\);\n {2}return p0 \* l\d+;/);
   // One copy per type it's used at: scale for Vec and for Colour (both
   // vec3f), mix for Colour and for Float64.
   assert.equal(s.funcs.filter((f) => f.name === "scale").length, 2);

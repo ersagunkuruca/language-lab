@@ -102,11 +102,12 @@ test("Fixed: CORDIC sin and cos, tan, exp, log and square root, evaluated and co
     ["cos", (a) => k.call(TRIG_OPS.cos, a), Math.cos, [0, 0.5, 2, 3.14159, -1, -2.5, 10, 1000.25]],
     ["tan", (a) => k.call(TRIG_OPS.tan, a), Math.tan, [0, 0.5, -1, 1.2, 4]],
     ["exp", (a) => k.call(TRIG_OPS.exp, a), Math.exp, [0, 1, -1, 0.5, 2.5, -7, 10]],
-    ["log", (a) => k.call(TRIG_OPS.log, a), Math.log, [1, 2, 0.5, 10, 1e-3, 12345.678, 1e9]],
+    // log has no answer at 0 or less (a Choice, L125b), as square root at a negative.
+    ["log", (a) => k.call(S.all, k.thunk(() => k.call(TRIG_OPS.log, a))), Math.log, [1, 2, 0.5, 10, 1e-3, 12345.678, 1e9]],
     ["sqrt", (a) => k.call(S.all, k.thunk(() => k.call(lib("square root fixed"), a))), Math.sqrt, [0, 1, 2, 0.25, 1e-6, 12345.678, 1e12]],
   ];
   const names: string[] = [];
-  for (const [op, f, , xs] of cases) xs.forEach((v, j) => { names.push(`${op} ${j}`); def(`${op} ${j}`, () => k.call(SHOW_ANY, op === "sqrt" ? k.call(lib("map"), f(x(v)), k.fn(["r"], (r) => stepsOf(r))) : stepsOf(f(x(v))))); });
+  for (const [op, f, , xs] of cases) xs.forEach((v, j) => { names.push(`${op} ${j}`); def(`${op} ${j}`, () => k.call(SHOW_ANY, op === "sqrt" || op === "log" ? k.call(lib("map"), f(x(v)), k.fn(["r"], (r) => stepsOf(r))) : stepsOf(f(x(v))))); });
   const code = base(k.code), info = infer(code, baseNames(k.names), undefined, checkOptions);
   const nm = baseNames(k.names);
   assert.deepEqual(info.errors.map((e) => e.message), []);
