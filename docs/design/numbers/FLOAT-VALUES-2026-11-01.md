@@ -1,9 +1,14 @@
 # Which IEEE float values the language keeps (design note, 2026-11-01)
 
-**Status (2026-11-01): decided, nothing built yet.** Ersagun chose both
+**Status (2026-11-01): decided, the evaluator's half of L125a built.** Ersagun chose both
 recommendations (10:28 and 10:29): `Float64` is the finite floats with one
 zero, ±∞ move to `Extended a`, and `x / 0` has no answer (`Choice`). Rows
-L125a to L125f in BACKLOG.md.
+L125a to L125f in BACKLOG.md. L125a step 1 (this PR's row in DONE.md): the
+evaluator stops the program with the reason whenever a float operation's
+answer isn't finite, and `atan2` takes −0 as 0. Until L125b's nonzero fact,
+"no answer" stops the program too rather than being `Choice`, since a
+`Choice` on every `/` would make nearly every program a search. The
+compiled targets follow in L125c.
 
 Ersagun, 2026-11-01: "Shall we put the problems with IEEE floats into a
 discussion. Maybe we should use a subset of them (probably excluding
