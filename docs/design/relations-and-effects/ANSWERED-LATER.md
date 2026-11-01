@@ -244,10 +244,16 @@ together(actions) =
   checker (fresh per call, rigid in its case, absent from the row), the
   evaluator untouched (it is untyped): a variant's `params`. Tested on a
   program's own `pick(first: a, others: List a) → a` (test/own-type-vars.test.ts).
-- **L71b**, std's `Await` (`await`, later), `Ticket a`, `ticket id` and
+- **L71b** (done, 2026-11-01), std's `Await` (`await`, later), `Ticket a`, `ticket id` and
   `any of`, and `together` in the prelude as above, tested with a handler
   that answers `await` from a list of ready tickets (a fake world, in the
-  language, L55's way).
+  language, L55's way). Built with `Ticket a = ticket(number) | timer(milliseconds,
+  value) | first ready(tickets, which)`: `which : (Int) → a` gives `any of`
+  its Ticket Int without a type that depends on the case, and lets a
+  world in the language answer `first ready` at all (a case can't make an
+  `a` from nothing). Its limit: `Branch`'s `resume` is a field, and a
+  field's function row is closed, so a branch may only `Await` for now
+  (test/await.test.ts).
 - **L71c**, the world answers `await(any of(…))`: the evaluator's and the
   page's runtimes (with L59), then `race` and `within`.
 

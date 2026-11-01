@@ -23,7 +23,7 @@ import type { Value } from "../ters/src/lang/run.ts";
 import { parseValue } from "../ters/src/lang/values.ts";
 import { choose, representationsIn } from "../ters/src/lang/represent.ts";
 import { blocksOf, blocksText, litLabel, type Blk, type Piece } from "../ters/src/lang/render.ts";
-import { shape } from "../ters/src/lang/patterns.ts";
+import { matchRows, patternText, shape, sharedOtherwise } from "../ters/src/lang/patterns.ts";
 
 type Kid = HTMLElement | string | null | undefined | false;
 function h(tag: string, attrs: Record<string, string | boolean | undefined> = {}, ...kids: Kid[]) {
@@ -363,6 +363,7 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
     for (const x of [c, a, b]) if ("error" in x) return x;
     return { cond: c as Typed, then: a as Typed, else: b as Typed };
   }
+  let inner: { error: string } | undefined;
   for (const level of OPS) {
     let depth = 0, quoted = false;
     for (let i = t.length - 1; i > 0; i--) {
@@ -379,6 +380,8 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
       const a = typedOut(left, code, names, scope), b = typedOut(t.slice(i + 1), code, names, scope);
       const alts = op[1].filter((id) => code.nodes[id]);
       if (!("error" in a) && !("error" in b) && alts.length) return { op: alts[0], args: [a, b], alts };
+      // What's wrong in an operand says more than a position in the whole.
+      inner ??= [a, b].find((x): x is { error: string } => "error" in x && !/ at \d+$/.test(x.error));
     }
   }
   const neg = /^[-−]\s*(.+)$/s.exec(t);
@@ -413,8 +416,40 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
       .sort((x, y) => +isOperation(code, y) - +isOperation(code, x));
     const args = parts.map((a) => typedOut(a, code, names, scope));
     if (alts.length && args.every((a) => !("error" in a))) return { op: alts[0], args: args as Typed[], alts };
+    // What's wrong, not where (BACKLOG I115): the name, or what's wrong
+    // inside its inputs.
+    if (!alts.length) return { error: `there's no function named ${call[1]}${closest(call[1], [...scope.keys(), ...Object.values(names)], scope)}` };
+    return args.find((a) => "error" in a) as { error: string };
   }
-  return r;
+  if (dot > 0) {
+    const field = t.slice(dot + 1).trim();
+    if (!Object.keys(names).some((id) => names[id] === field && code.nodes[id]?.kind === "field")) return { error: `there's no field named ${field}${closest(field, Object.keys(names).filter((id) => code.nodes[id]?.kind === "field").map((id) => names[id]), scope)}` };
+    return typedOut(t.slice(0, dot), code, names, scope);
+  }
+  if (/^[\p{L}_][\p{L}\p{N}_' ]*$/u.test(t) && !/^(if|then|else)$/.test(t)) return { error: `nothing is named ${t} here${closest(t, scope.keys(), scope)}` };
+  return inner ?? r;
+}
+
+// The names closest to one that isn't there, to say "did you mean": in
+// scope first, then any definition or builtin, at most three, each at most
+// a third of the name's letters away (Levenshtein's distance, 1966, with
+// Damerau's swaps).
+function closest(word: string, among: Iterable<string>, scope: Map<string, Id>): string {
+  const far = Math.max(1, Math.floor(word.length / 3));
+  const pool = new Set(among);
+  const scored = [...pool].filter((n) => n && n !== word && Math.abs(n.length - word.length) <= far).map((n) => [n, distance(word, n)] as const).filter(([, d]) => d <= far);
+  scored.sort((a, b) => a[1] - b[1] || +scope.has(b[0]) - +scope.has(a[0]));
+  const near = scored.slice(0, 3).map(([n]) => n);
+  return near.length ? `; did you mean ${near.join(", ")}?` : "";
+}
+// Two letters swapped count as one edit (Damerau, 1964).
+function distance(a: string, b: string): number {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)));
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) {
+    d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+  }
+  return d[a.length][b.length];
 }
 
 // A field of an interface's record is one of its operations (INTERFACES.md).
@@ -640,7 +675,35 @@ export function inputsOf(code: Code, id: Id): Id[] {
   }
 }
 
-export type LooseEdit = TEdit & { of?: Record<Id, Id>; home?: Record<Id, Id> };
+// `own`: made in this one place, not in every copy a shared row stands
+// for (I117).
+export type LooseEdit = TEdit & { of?: Record<Id, Id>; home?: Record<Id, Id>; own?: boolean };
+
+// Cases that read once as a match's otherwise, because they give the same
+// value, when `id` is that value: each can be given a body of its own
+// (BACKLOG I117). Their labels as the rows print them.
+export function sharedCases(code: Code, names: Names, info: Info | null, id: Id): { label: string; parent: Id; slot: "body" | "otherwise" }[] {
+  const up = new Map<Id, Id>();
+  for (const n of Object.values(code.nodes)) for (const c of children(n)) up.set(c, n.id);
+  for (let x = up.get(id); x; x = up.get(x)) {
+    const m = code.nodes[x];
+    if (m?.kind !== "match") continue;
+    const { folded, otherwise } = sharedOtherwise(code, matchRows(code, info, m), m.otherwise ?? undefined);
+    if (folded.length < 2 || (otherwise !== id && !folded.some((r) => r.body === id))) continue;
+    const nm = (x: Id) => names[x] ?? display[x] ?? "_";
+    return folded.map((r) => ({ label: patternText(r.pat, nm, nm), parent: r.at, slot: code.nodes[r.at].kind === "arm" ? "body" : "otherwise" }));
+  }
+  return [];
+}
+
+// One of those cases with a body of its own: a hole to fill there, the
+// others keeping the value they share.
+export function ownBody(code: Code, names: Names, info: Info, c: { label: string; parent: Id; slot: "body" | "otherwise" }): LooseEdit {
+  const hole = freshId();
+  const nodes = { ...code.nodes, [hole]: { id: hole, kind: "hole" } as Node, [c.parent]: { ...code.nodes[c.parent], [c.slot]: hole } as Node };
+  const r = guardTyped(info, collect({ nodes, defs: code.defs }), names, hole, `${c.label} has a body of its own now: fill the hole. The other cases keep the value they share; Undo puts it back.`);
+  return r.ok ? { ...r, own: true } : r;
+}
 
 // A loose part's new inputs are called what the variables they stand for are.
 const inputNames = (names: Names, was: Record<Id, Id>, now: Record<Id, Id>): Names =>
@@ -809,6 +872,12 @@ export function dataTypeOf(code: Code, info: Info, b: Id): Id | null {
   return r.t === "con" && [...info.owner.values()].includes(r.id) ? r.id : null;
 }
 
+// A variable whose type nothing has fixed yet: any type can go there.
+export function untyped(info: Info, b: Id): boolean {
+  const t = info.typeOf.get(b);
+  return !!t && info.subst.resolve(t).t === "var";
+}
+
 // Copy a subtree with fresh ids, binders included (refs to them follow).
 function copyTree(code: Code, nodes: Record<Id, Node>, names: Names, root: Id, map = new Map<Id, Id>()): Id {
   const go = (id: Id): Id => {
@@ -900,8 +969,10 @@ export function paste(code: Code, names: Names, info: Info, defId: Id, clip: Cli
 // per case of its type, each starting as a copy of the expression. The
 // arms come from the type, so no case is missing; each copy can then be
 // changed for its case.
-export function splitOn(code: Code, names: Names, info: Info, expr: Id, on: Id): TEdit {
-  const type = dataTypeOf(code, info, on);
+// `as`: the data type to split on, for a variable whose type nothing has
+// fixed yet (a new function's input): the split fixes it (BACKLOG I116).
+export function splitOn(code: Code, names: Names, info: Info, expr: Id, on: Id, as?: Id): TEdit {
+  const type = dataTypeOf(code, info, on) ?? (as && untyped(info, on) ? as : null);
   if (!type) return { ok: false, reason: "that variable's type has no cases" };
   const nodes = { ...code.nodes };
   const nn = { ...names };
