@@ -218,6 +218,32 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   };
   const perform = (op: Id, args: string[]) => (worldOnly(op) ? "$random()" : isLater(op) ? `(yield $later(${JSON.stringify(effectOf(op))}, ${tag(op)}, [${args.join(", ")}]))` : `$perform(${JSON.stringify(effectOf(op))}, ${tag(op)}, [${args.join(", ")}])`);
   const ty = (id: Id): Type => sub.zonk(info.typeOf.get(id) ?? { t: "var", v: -1 });
+  // Effects with a case answered at once that itself waits on an operation
+  // answered later (C78: `simulated`'s now and wait answered from its
+  // virtual clock by an await). Where code may wait, performing one of
+  // their operations is `yield* $performG`, which runs such a case as a
+  // generator; elsewhere it stays `$perform`.
+  let waitingCases: Set<string> | null = null;
+  const waitingEffect = (op: Id) => {
+    if (!waitingCases) {
+      waitingCases = new Set();
+      if (laterEffects.size) for (const n of Object.values(code.nodes)) {
+        if (n.kind !== "match") continue;
+        for (const a of n.arms) {
+          const arm = code.nodes[a] as NodeOf<"arm">, v = code.nodes[arm.variant] as NodeOf<"variant">;
+          if (v?.kind !== "variant" || !v.returns || v.later || !effectOf(arm.variant)) continue;
+          const waits = subtree(code, arm.body).some((id) => {
+            const c = code.nodes[id];
+            if (c.kind !== "call") return false;
+            const f = code.nodes[c.fn];
+            return (f?.kind === "ref" && code.nodes[f.target]?.kind === "variant" && isLater(f.target)) || laterFn(ty(c.fn));
+          });
+          if (waits) waitingCases.add(effectOf(arm.variant)!);
+        }
+      }
+    }
+    return !isLater(op) && !worldOnly(op) && waitingCases.has(effectOf(op)!);
+  };
   // Which possibly-divergent definitions spend a step per call (GAPS.md G1,
   // fuel). Only those that can run under a `with fuel`, or under a page's
   // step budget when the code may run in a page. Under fuel means: called,
@@ -1259,6 +1285,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     // may be performed (`isLater`): code made inside is a generator too.
     let gen = false;
     const inGen = <T>(on: boolean, f: () => T): T => { const was = gen; gen = on; try { return f(); } finally { gen = was; } };
+    const performHere = (op: Id, args: string[]) => (gen && waitingEffect(op) ? `(yield* $performG(${JSON.stringify(effectOf(op))}, ${tag(op)}, [${args.join(", ")}]))` : perform(op, args));
     const scoped = <T>(on: boolean, f: () => T): T => { const was = cps, wasHeap = heap, wasGen = gen; cps = on && !reflective; heap = false; gen = false; try { return f(); } finally { cps = was; heap = wasHeap; gen = wasGen; } };
     // A call of a copy: in the heap copy, one in this definition's cycle is
     // a yield the driver answers ($drive).
@@ -1767,7 +1794,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           if (implOf(f.target)) return `${implOf(f.target)}(${n.args.map(ex).join(", ")})`;
         }
         if (t.kind === "variant" && isConst(n.id)) return hoist(construct(f.target, n.args.map(ex)));
-        if (t.kind === "variant") return effectOf(f.target) ? perform(f.target, n.args.map(ex)) : construct(f.target, n.args.map(ex));
+        if (t.kind === "variant") return effectOf(f.target) ? performHere(f.target, n.args.map(ex)) : construct(f.target, n.args.map(ex));
         if (t.kind === "field") return field(ex(n.args[0]), f.target);
         if (t.kind === "def") {
           const s = defCall(n);
@@ -1957,6 +1984,10 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     }
     function handleEx(n: NodeOf<"match">, finish = (body: string) => body): string {
       const arms = n.arms.map((a) => node<"arm">(a));
+      if (gen && !arms.some((a) => isLater(a.variant))) {
+        const g = handleWaiting(n, arms, finish);
+        if (g) return g;
+      }
       if (n.otherwise) {
         // The normal finish (L57): the computation's value comes out marked,
         // so the case for it runs outside the handler and an escape's value
@@ -1978,6 +2009,28 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       // hidden: there is nothing in them that could see one.
       const quiet = arms.filter((a) => node<"variant">(a.variant).returns).every((a) => performsNothing(a.body));
       return `$handle(${JSON.stringify(handlerOf(n))}, ${answers}, ${escapes}, () => {\n${finish(ret(n.scrutinee))}\n}${quiet ? ", true" : ""})`;
+    }
+
+    // A handler of operations answered at once, inside code that may wait,
+    // where the handled code or a case waits on another handler's operation
+    // answered later (C78: `simulated`'s clock answers now and wait with an
+    // await). The match is a generator ($handleG) that keeps itself on the
+    // stack while its computation runs and passes the waits outward; a case
+    // that waits is a generator, run by $performG. Null when nothing in it
+    // waits: then it is written as any other.
+    function handleWaiting(n: NodeOf<"match">, arms: NodeOf<"arm">[], finish: (body: string) => string): string | null {
+      const parses = (js: string) => { try { new Function(`"use strict";\n${js}`); return true; } catch { return false; } };
+      const answering = arms.filter((a) => node<"variant">(a.variant).returns);
+      const plain = (a: NodeOf<"arm">) => `((${a.binds.map(local).join(", ")}) => {\n${scoped(false, () => ret(a.body))}\n})`;
+      const waitingArms = answering.filter((a) => !parses(`(${plain(a)})`));
+      const body = inGen(false, () => ret(n.scrutinee));
+      if (!waitingArms.length && parses(`(() => {\n${body}\n})`)) return null;
+      if (n.otherwise) throw notYet("a handler's case for the normal finish around code that waits");
+      const generator = (a: NodeOf<"arm">) => `(function* (${a.binds.map(local).join(", ")}) {\n${scoped(false, () => inGen(true, () => ret(a.body)))}\n})`;
+      const answers = `{ ${answering.map((a) => `${tag(a.variant)}: ${waitingArms.includes(a) ? generator(a) : plain(a)}`).join(", ")} }`;
+      const gens = `[${waitingArms.map((a) => tag(a.variant)).join(", ")}]`;
+      const escapes = `{ ${arms.filter((a) => !answering.includes(a)).map((a) => `${tag(a.variant)}: ${generator(a)}`).join(", ")} }`;
+      return `(yield* $handleG(${JSON.stringify(handlerOf(n))}, ${answers}, ${gens}, ${escapes}, function* () {\n${finish(inGen(true, () => ret(n.scrutinee)))}\n}))`;
     }
 
     // A handler with a case for an operation answered later: the handled
@@ -2805,7 +2858,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         const args = own.map((o, i) => o ?? (boolParams.has(params[i]) ? `(${rest[j++]}.tag === ${JSON.stringify(TRUE)})` : rest[j++]));
         let c: string;
         if (callee) c = callee.bool ? `$bool(${callee.name}(${args.join(", ")}))` : `${callee.name}(${args.join(", ")})`;
-        else if (kind === "variant") c = effectOf(target!) ? perform(target!, args) : construct(target!, args);
+        else if (kind === "variant") c = effectOf(target!) ? performHere(target!, args) : construct(target!, args);
         else if (kind === "field") c = field(args[0], target!);
         else if (target === COMPARE) c = `$ORDER[${orderJs(n.args[0], args)} + 1]`;
         else if (kind === "builtin" && NO_ANSWER_JS[target!] && !info.answered?.has(n.id)) c = `${NO_ANSWER_JS[target!]}(${args.join(", ")})`;
@@ -3034,7 +3087,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
 
   const helpers = ["$isLater", "$no", "$answered", "$stream0", "$showAny", "$compare", "$int", "$text", "$impl", "$many", "$partial", "$setPath", "$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$snoc", "$fromBack", "$range", "$eq", "$show", "$mod", "$fin", "$div", "$sqrt", "$log", "$pow", "$divN", "$sqrtN", "$logN", "$powN", "$modN", "$mapParts", "$zipParts", "$total", "$first", "$firstS",
     "$all", "$count", "$oneOf", "$fail", "$lift", "$one", "$hole", "$fuel", "$enter", "$caught", "$leave", "$spend", "$spendOrThrow", "$outOfFuel", "$ok", "$clean", "$key",
-    "$close", "$near", "$sameNumber", "$planned", "$solveRuntime", "$print", "$FN", "$perform", "$setHosts", "$random", "$handle", "$handleS", "$io", "$seeded", "$seededS", "$optional", "$cells", "$listArrays", "$path", "$spread", "$self", "$foldNested", "$drive", "$rec", "$pushList", "$withInto", "$intoArray", "$later", "$handleL", "$handleLG",
+    "$close", "$near", "$sameNumber", "$planned", "$solveRuntime", "$print", "$FN", "$perform", "$setHosts", "$random", "$handle", "$handleS", "$io", "$seeded", "$seededS", "$optional", "$cells", "$listArrays", "$path", "$spread", "$self", "$foldNested", "$drive", "$rec", "$pushList", "$withInto", "$intoArray", "$later", "$handleL", "$handleLG", "$handleG", "$performG",
     "$ORDER", "$compareN", "$numberOrder", "$intOrder", "$textOrder",
     ...(reflective ? ["$loadProgram", "$meta", "$prim", "$toEval", "$relate", "$derivative", "$exists"] : [])];
   const orders = [...orderFns.values()].flatMap((e) => (e.js && e.name ? [e.js] : []));

@@ -13,7 +13,7 @@ import { infer } from "../src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { runMain } from "../src/lang/run.ts";
-import { AWAIT_OP, START_TIMER_OP, CONS, INT_OPS, NIL, S, SHOW_ANY, TICKET_V } from "../src/lang/std.ts";
+import { AWAIT_OP, START_TIMER_OP, CONS, INT_OPS, NIL, NOW_OP, S, SHOW_ANY, TICKET_V, WAIT_OP } from "../src/lang/std.ts";
 import { showType } from "../src/lang/types.ts";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -159,4 +159,28 @@ test("compiled, main's waits are the world's: together, race and within as the e
   // A world that can't sleep (a page's): a promise, resumed by a timer.
   const late = await cases[1].compiled(false);
   assert.deepEqual(late.printed, ['"fast"']);
+});
+
+// A handler whose case answered at once waits itself (C78): Wait's `wait`
+// answered by an await of a timer, Time's `now` by one of 0, around an
+// action given as a function, as `simulated` will have them (L138).
+test("compiled, a case answered at once that awaits: wait and now answered by timers, as the evaluator gives them (C78)", async () => {
+  const p = worldProgram((k) => {
+    const clocked = k.def("clocked");
+    k.define(clocked, k.fn(["action"], (a) => k.handle(
+      k.handle(k.call(a), [
+        { variant: WAIT_OP, names: ["milliseconds"], body: ([ms]) => k.call(AWAIT_OP, k.call(TICKET_V.timer, ms, k.unitValue)) },
+      ]),
+      [{ variant: NOW_OP, names: [], body: () => k.call(AWAIT_OP, k.call(TICKET_V.timer, k.lit(0), k.lit(7))) }],
+    )));
+    return k.call(clocked, k.thunk(() => k.seq(
+      k.call(WAIT_OP, k.lit(20)),
+      k.call(AWAIT_OP, k.call(START_TIMER_OP, k.lit(5))),
+      k.call(WAIT_OP, k.lit(30)),
+      k.text(k.call(S.show, k.call(NOW_OP)), k.lit(" done")))));
+  });
+  assert.deepEqual(p.info.errors.map((e) => e.message), []);
+  const evaluated = p.run();
+  assert.deepEqual(evaluated, { printed: ['"7 done"'], waits: [20, 5, 30], clock: 1055 });
+  assert.deepEqual(await p.compiled(), evaluated);
 });

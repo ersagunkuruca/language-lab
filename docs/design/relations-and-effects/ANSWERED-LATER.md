@@ -194,7 +194,11 @@ In the order the BACKLOG wants them:
    that definition that waits too (step 2a). A handler around code that
    waits on another handler's operation passes it outward (step 2c). A
    search written in place may wait too (step 2b), and so may a waiting
-   handler with a case answered at once (step 2d). Not yet: a definition
+   handler with a case answered at once (step 2d). A handler of operations
+   answered at once whose case itself waits (C78: `simulated`'s clock
+   answers `wait` and `now` with an await) is a generator, `$handleG`, and
+   where code may wait such an operation is performed by `$performG`,
+   which runs the case as a generator. Not yet: a definition
    with both Choice and a waiting row, which says so when compiled.
 3. **L56**, effects that take a type, for `Ticket a`. **Built.**
 4. **L59** and **L60**, the page and audio runtimes as handlers. **L71**,
