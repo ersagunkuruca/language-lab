@@ -174,6 +174,26 @@ test("handlers the compiler can see are written into the code they handle (C64b)
   assert.match(r.js, /\$handle\(/);
 });
 
+// A case written in that names its inputs and decides with an if (Pig's
+// `hold at`, C64c) is a plain condition: no function made and called at
+// once for it, no Bool built.
+test("a case written in as a condition is a plain JS condition (C64c)", async () => {
+  const r = await both((k) => {
+    const ask = k.effect("Ask", [["go on", [["count", () => k.tref("type.number")]], () => k.tref("std.bool")]]);
+    const limit = k.def("limit"), count = k.def("count"), main = k.def("main");
+    k.define(limit, k.fn(["most", "game"], (most, g) => k.handle(k.call(g), [{ variant: ask.op["go on"], names: ["n"], body: ([n]) =>
+      k.if(k.call(S.less, n, k.lit(100)), k.call(S.less, n, most), k.false) }])));
+    k.define(count, k.fn(["n"], (n) => k.if(k.call(ask.op["go on"], n), k.call(count, k.call(B.add, n, k.lit(1))), n)));
+    k.define(main, k.thunk(() => k.seq(
+      k.call(S.print, show(k, k.call(limit, k.lit(5), k.thunk(() => k.call(count, k.lit(0)))))),
+      k.call(S.print, show(k, k.call(limit, k.lit(500), k.thunk(() => k.call(count, k.lit(0)))))))));
+    return main;
+  });
+  assert.deepEqual(r.lines, ["5", "100"]);
+  const copy = r.js.slice(r.js.indexOf("function count_handled(")).split("\n// ")[0];
+  assert.doesNotMatch(copy, /\(\(\) =>|\.tag === "std\.bool\.true"/);
+});
+
 test("an abort under Choice cuts the alternatives, compiled too", async () => {
   const r = await both((k) => {
     const main = k.def("main");

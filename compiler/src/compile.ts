@@ -1491,10 +1491,28 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           }
         }
       }
+      // A let that only names other locals (a handler's case written in,
+      // C64c): its names are the locals', and its body is the expression.
+      if (n.kind === "call" && code.nodes[n.fn].kind === "lambda" && !streamy(id) && aliases(n)) return exBool(node<"lambda">(n.fn).body);
+      // An if on a condition, as JS's ?: with no function made for it.
+      if (n.kind === "match" && !handlerOf(n) && !streamy(id) && isBoolMatch(n)) {
+        const [t, f] = boolArms(n);
+        return `(${exBool(n.scrutinee)} ? ${exBool(t)} : ${exBool(f)})`;
+      }
       if (n.kind === "match" && !handlerOf(n) && !streamy(id)) return `(() => {\n${ret(id, false, RETURN_BOOL)}\n})()`;
       return `(${ex(id)}.tag === ${JSON.stringify(TRUE)})`;
     }
-
+    // Can this let's inputs be the locals they're given? Each is a ref to a
+    // local binder written as its name, and the input has no name yet.
+    function aliases(n: NodeOf<"call">): boolean {
+      const f = node<"lambda">(n.fn);
+      const ok = f.params.every((p, i) => {
+        const a = code.nodes[n.args[i]];
+        return !idents.has(p) && !boolParams.has(p) && a?.kind === "ref" && code.nodes[a.target]?.kind === "binder" && refValue(a) === local(a.target);
+      });
+      if (ok) f.params.forEach((p, i) => idents.set(p, local((code.nodes[n.args[i]] as NodeOf<"ref">).target)));
+      return ok;
+    }
     function equality(n: NodeOf<"call">): string {
       // A name against a value built in place (`t = word("let")`): a tag
       // test and its fields, with nothing built (GAPS.md G2).
