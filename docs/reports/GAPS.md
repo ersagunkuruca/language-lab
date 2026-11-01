@@ -1483,7 +1483,14 @@ version of a table stays a value (std.ts `Table`, rerooted), so the table
 no longer needs one holder per map and is chosen for the whole type. 3000
 notes compiled: 8× to 6× the ideal (940 to 688 ms in one run).
 
-**N3. Data built once and then only read (perf, C59's case).** The index
+**N3. Data built once and then only read (perf, C59's case).** *Measured
+again after C71 and C72 (2026-11-01):* with the maps as hash tables
+notebook is 4.4× the ideal at 3000 notes (510 ms against 117), and no one
+place stands out: the garbage collector 14%, listing a table's entries
+the first time 5%, a put's write 4.5%, the sort's merges 3.6%. A frozen
+form (sorted arrays) would take the listing and some of the writes, about
+10%, so C59 stays P3.
+ The index
 is built in one pass (`index of`, one holder all the way) and then only
 read by 100 questions. Today each step of the build copies a path of the
 tree and rebalances (build 8.5× the ideal), and each read walks the tree
@@ -1511,7 +1518,14 @@ version never changes), and notebook's table run at 3000 notes went from
 of `ranked`, which sorts every hit. The ideal does the same, so it is not
 in the ratios, but a `take(sort by(xs, key), k)` is a selection: a heap
 of k, n log k. A law the compiler reads, as M3 did for the smallest item.
-Small here: the sort and its key closures are 5%.
+Small here: the sort and its key closures are 5%. **Checked, put back
+(C73, 2026-11-01):** a law for `take(sort by(xs, key), n)` was written and
+gave the sort's answers, ties included, but notebook never writes that
+shape where it counts: `hits text` takes 5 of a list `ranked` sorted in
+another definition, and notebook uses its own Int `take`, not the
+prelude's. Reading it there needs inlining across definitions first, for
+a few percent, so the law isn't kept; C73's row in DONE.md says how it
+went, for when a program writes the shape directly.
 
 **N6. The evaluator (not the compiler's).** 3.2 s for 100 notes as
 defined; the profile is the evaluator's own machine (`go`, `step`,
