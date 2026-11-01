@@ -22,7 +22,7 @@ Ersagun's "take 40 more tasks" (2026-11-01 11:46): Editor 13, Compiler 13, Langu
 
 | lane | thread | next, in order |
 |---|---|---|
-| E Editor | "Editor lane" | Ersagun's 40 (2026-11-01): I109 (#841), I29's handler step (#845), I40 (#846), unfolding overlaps (#859), L69c (#860), I112 (#863), I49 (#864), L125d's editor half (#865) done; then E133a (one copy of the nodes per palette), then E133b (plan checks per offer), and L125's editor half once `/` has Choice; then the next QA round's findings |
+| E Editor | "Editor lane" | Ersagun's 40 (2026-11-01): I109 (#841), I29's handler step (#845), I40 (#846), unfolding overlaps (#859), L69c (#860), I112 (#863), I49 (#864), L125d's editor half (#865), E133a (#866) done; then E133b (plan checks per offer), and L125's editor half once `/` has Choice; then the next QA round's findings |
 | C Compiler and targets | "Compiler lane" | L125c3 (compiled no answer as `Choice`, as the evaluator), L125e (niche representations), C63b (hash table), L43c, C66 on shaders, C55, C40 step 2e, C64's next step, C67's next step, C31 |
 | L Language and library | "Language lane" | Ersagun's 40 (2026-11-01): L125a step 1 done (#842); L125b done, L125d done (#847), L125f done (#848), L71a done (#849), L38's open end done (#851), L71b (`Await` and `together`), L69a2 (hosts in the compiled JS), L43e3 (named masks on list items), L108d2 (laws of match and fold jobs), L29, I84. Earlier today: #809 to #823 |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
@@ -55,14 +55,15 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| E161 | **"Same as the library's" line** (SHARING.md §7): when a draft's hash equals a library definition's, or another draft's, its header shows a quiet "Same as `magnitude` in vectors" linking to it; never merges; goes away on the edit that stops the match. Optional "Use the library's" button runs `adopt` on that one definition, on click only. Credit Unison (prior art) where the line is explained | Ersagun 2026-11-01 | P2 | M | after L126 |
 | I29 | 66 of 154 definitions open with an empty Run. Pictures run at their pixel (#578); left: Mandelbrot's helpers (called through a fold), derivatives, page parts, newton. **Counted 2026-10-30 (editor lane):** 57 still empty in converter, dice, calculus, Mandelbrot and pedal. Two causes, neither a quick fix: (a) the first call's inputs are functions (`newton(f, f′, x)`, `field(…, view, …)`), **done in #703**: a port's box takes a definition's name as its function, so newton's helpers now open filled; (b) **views done in #761** (empty Runs in converter, dice, Tumble, Pig 47 → 28); **handlers done in #845**: each handler runs once in the dry run as if its event came (Tumble 24 → 17 empty, Pig 4 → 1); left: what runs only in a later state (a Tumble move in progress). Was: the call is inside a page part that runs later (`property("value", view(read(q)))`, a handler, an audio block), which main's trace never enters. Running main in a dry world (files kept in memory, no network) gets past converter's file read but fills none of these | QA-2026-10-28 L4 | P2 | M | step 1 done |
 
 ### Speed of editing
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E103 | **Bug.** Adding a value in a definition run backwards (physics `fall`) takes about 4 s; five stages (#478 to #504) took fall's holes from 48 s to 18.5 s in all. Stopped by the 10% rule; what's left is E133 | E100 | P3 | M | |
-| E133 | **Design.** Fillings share the program's nodes instead of copying ~3000 each: a persistent node store under `Code` (HAMT or overlay map), about 20% off a palette. Design note before building | E103 | P3 | L | ⏸ held |
+| E103 | **Bug.** Adding a value in a definition run backwards (physics `fall`) takes about 4 s; five stages (#478 to #504) took fall's holes from 48 s to 18.5 s in all. Stopped by the 10% rule. **Measured again 2026-11-01:** 23 holes 121 s, the worst 22 s, of which the plan comparison per offer 5.7 s and whole checks for offers whose plan changed 10.4 s; E133a took the node copies off (→ 18 s); what's left is E133b | E100 | P3 | M | |
+| E133 | **Design** ([SHARED-NODES.md](docs/design/editor/SHARED-NODES.md)). Offers share the program's nodes instead of copying ~10,000 each. E133a, one scratch copy per palette, is done (#866; physics fall's worst hole 22 → 18 s). E133b: the plan comparison keyed by what a plan sees of the offer, measured first | E103 | P3 | M | step a done |
 
 ## C: Compiler and targets
 
@@ -185,6 +186,7 @@ all of these.
 | L70 | Design note: grammars written once as printers and parsed by running them backwards; calc's parser first | LANGUAGE-NEEDS §8 | P3 | M | |
 | L72 | Grammars and their machines (Chomsky hierarchy) as ordinary data, parsing and printing one relation run both ways; extends L70 | Ersagun 2026-10-24 | P3 | L | low priority |
 | L17 | Data-type upgrades (migrations when constructors and fields move); path namespaces are a name layer (SHARING.md §5) | ROADMAP 5 | P3 | L | |
+| L126 | `sameAs(code, lib)` in ters (beside `adopt`, modules.ts): hash every draft (memoized) and look it up in a hash → definition index of the prelude, std and the modules the program uses, plus the program's other drafts; for E161, and for `lab check` and the MCP server to report the same (SHARING.md §7) | Ersagun 2026-11-01 | P2 | S | |
 | L113 | Structural diff and three-way merge driver for program files, by id, in `.gitattributes`; can go first | SHARING.md §6 | P3 | M | |
 | L109 | Hashes carry a recipe version; std published with lineages and versions, so a std change adds versions and keeps the old (no more #709-style republishing) | SHARING.md §3 | P3 | M | |
 | L110 | Publishing keeps the draft id as the lineage id; refs hold lineage and exact version; `replaces` derived from the lineage | SHARING.md §1, §2 | P3 | M | after L109 |
