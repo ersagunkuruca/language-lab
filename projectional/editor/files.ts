@@ -20,6 +20,7 @@ import type { Comments, Names } from "../src/presentation.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { needs, pointsAt } from "../src/lang/modules.ts";
 import type { Pins } from "../src/lang/signatures.ts";
+import type { Saved } from "../src/lang/tests.ts";
 import type { Drafts } from "./drafts.ts";
 
 export const FORMAT = "projectional-program";
@@ -37,8 +38,8 @@ export interface ProgramFile {
   // are shown as let and get nodes, what you give each definition when you
   // run it backwards, and which calls are shown inline. All views.
   layout: { at?: Record<string, { x: number; y: number }>; named?: Id[]; wired?: Id[]; known: Record<Id, Id[]>; inline?: Id[]; folded?: Id[]; groups?: Record<Id, Id[]>; tree?: Id[] };
-  // Example inputs per definition, as text.
-  examples: Record<Id, string[]>;
+  // Inputs per definition, or inputs and accepted answers (tests.ts Saved).
+  examples: Record<Id, string[] | Saved[]>;
   needs?: Record<Id, string>;
   signatures?: Pins;
   drafts?: Drafts;
@@ -107,7 +108,7 @@ export function fromFile(text: string, baseFor: (typed: boolean) => Code): { fil
     names: x.names as Names,
     descriptive: (x.descriptive as Names) ?? {},
     comments: withCredits((x.comments as Comments) ?? {}, x.credits),
-    examples: isObj(x.examples) ? (Object.fromEntries(Object.entries(x.examples).filter(([, v]) => Array.isArray(v) && v.every((t) => typeof t === "string"))) as Record<Id, string[]>) : {},
+    examples: isObj(x.examples) ? (Object.fromEntries(Object.entries(x.examples).filter(([, v]) => Array.isArray(v) && (v.every((t) => typeof t === "string") || v.every((e) => isObj(e) && Array.isArray(e.inputs) && e.inputs.every((t: unknown) => typeof t === "string") && (e.answer === undefined || typeof e.answer === "string"))))) as Record<Id, string[] | Saved[]>) : {},
     layout: {
       // `positions` (offsets from the automatic layout, before free
       // placement) is dropped: those nodes go back to the automatic place.
