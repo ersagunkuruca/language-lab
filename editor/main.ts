@@ -1058,6 +1058,9 @@ const NO_EVENT: Data = { tag: HTML_V.event, fields: ["", "", 0, 0, 1 / 60] };
 // What each function was first called with when main last ran, as far as
 // it got in a few steps and MAIN_MS, in a world nothing goes out to.
 const mainRuns = new WeakMap<Code, Map<Id, Value[]>>();
+// The copy main's run entered for a lambda, when it was one at other
+// number types (arith.ts): its own values are that copy's (I125).
+const mainCopies = new WeakMap<Code, Map<Id, Id>>();
 // The world main runs in for that: nothing it does goes out. Printing is
 // swallowed, a file it writes is kept to itself and one it didn't isn't
 // there, the network answers nothing, so a program that saves or loads
@@ -1103,7 +1106,8 @@ function explore(page: Value, over: () => boolean, started: () => void) {
 function mainCalls(info: T.Info, main: Id): Map<Id, Value[]> {
   let calls = mainRuns.get(doc.code);
   if (!calls) {
-    const got = new Map<Id, Value[]>();
+    const got = new Map<Id, Value[]>(), copies = new Map<Id, Id>();
+    mainCopies.set(doc.code, copies);
     const body = defBody(main);
     // main takes nothing; a picture's function takes its pixel.
     const pixel = body?.kind === "lambda" && body.params.length ? pixelSeed(main) : [];
@@ -1115,9 +1119,9 @@ function mainCalls(info: T.Info, main: Id): Map<Id, Value[]> {
       let done = false;
       try {
         withSteps(MAIN_STEPS, () => {
-          const tr = trace(doc.code, info, main, args.map((a) => (a as { value: Value }).value), dryWorld(), (l, args) => {
+          const tr = trace(doc.code, info, main, args.map((a) => (a as { value: Value }).value), dryWorld(), (l, args, copy) => {
             if (done) return;
-            if (!got.has(l)) got.set(l, args);
+            if (!got.has(l)) { got.set(l, args); if (copy !== l) copies.set(l, copy); }
             if (performance.now() > end) throw new OutOfSteps();
           });
           // A page's views run later, as it's drawn: draw it once here, so
@@ -3418,10 +3422,11 @@ function traced(info: T.Info): Trace | null {
 // the whole search (BACKLOG I23). Values you gave run to the end.
 const TRACE_MS = 200;
 function boundedTrace(info: T.Info, args: Value[]): Trace {
-  if (doc.examples?.[ui.def] || !(defBody(ui.def) as NodeOf<"lambda">).params.length) return trace(doc.code, info, ui.def, args, quietWorld());
+  const body = defBody(ui.def), copy = body ? mainCopies.get(doc.code)?.get(body.id) : undefined;
+  if (doc.examples?.[ui.def] || !(body as NodeOf<"lambda">).params.length) return trace(doc.code, info, ui.def, args, quietWorld(), undefined, !!copy);
   const end = performance.now() + TRACE_MS;
   const slow = () => Object.assign(new OutOfSteps(), { message: `it runs longer than the ${TRACE_MS} ms the graph waits; Run main runs it in full` });
-  return trace(doc.code, info, ui.def, args, quietWorld(), () => { if (performance.now() > end) throw slow(); });
+  return trace(doc.code, info, ui.def, args, quietWorld(), () => { if (performance.now() > end) throw slow(); }, !!copy);
 }
 
 // Run main in a worker (editor/runWorker.ts): the page keeps drawing, the
