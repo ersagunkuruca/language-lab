@@ -1,0 +1,9 @@
+{
+  "name": "editor",
+  "private": true,
+  "type": "module",
+  "description": "The Ters editor. It has no dependencies of its own: it borrows esbuild and playwright-core from ters/ (npm ci there)",
+  "engines": {
+    "node": ">=22.18"
+  }
+}

@@ -5212,7 +5212,7 @@ export const RUNTIME = Object.keys(R);
 // operations written over wasi_snapshot_preview1, as wasm.ts's "world"
 // imports are over JavaScript. They give and fail the same way: an
 // operation that fails sets the module's `reason` global, worded as Node's
-// world (projectional/src/lang/world.ts) words it, and gives status 2.
+// world (ters/src/lang/world.ts) words it, and gives status 2.
 // WASI hands bytes over through linear memory: 0 to 127 is for its small
 // results, and 128 on the buffer, grown to fit. Paths are relative to the
 // first folder the host gives the program (fd 3), WASI's sandbox.

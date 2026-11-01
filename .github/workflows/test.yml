@@ -31,9 +31,9 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: projectional/package-lock.json
-      - name: projectional
-        working-directory: projectional
+          cache-dependency-path: ters/package-lock.json
+      - name: ters
+        working-directory: ters
         run: |
           npm ci
           npm run typecheck

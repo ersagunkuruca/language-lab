@@ -44,20 +44,20 @@
 // answer, fallback and all. n is a number written down, so the bound is
 // known when the shader is built.
 
-import { resolveArithmetic } from "../../projectional/src/lang/arith.ts";
-import type { Code, Id, NodeOf } from "../../projectional/src/model.ts";
-import { subtree } from "../../projectional/src/model.ts";
-import type { Names } from "../../projectional/src/presentation.ts";
-import type { Info } from "../../projectional/src/lang/infer.ts";
-import { ARRAY, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, STRING, type Row, type Type } from "../../projectional/src/lang/types.ts";
-import { ABORT, ABORT_OP, ARRAY_OPS, BOOL, COMPARE, CONS, FALSE, INT_OPS, IO, NIL, NONE, ORDER_V, PAIR_V, RATIO, S, SOME, TEXT_OPS, TRUE } from "../../projectional/src/lang/std.ts";
-import { liftLets } from "../../projectional/src/lang/lift-lets.ts";
+import { resolveArithmetic } from "../../ters/src/lang/arith.ts";
+import type { Code, Id, NodeOf } from "../../ters/src/model.ts";
+import { subtree } from "../../ters/src/model.ts";
+import type { Names } from "../../ters/src/presentation.ts";
+import type { Info } from "../../ters/src/lang/infer.ts";
+import { ARRAY, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, STRING, type Row, type Type } from "../../ters/src/lang/types.ts";
+import { ABORT, ABORT_OP, ARRAY_OPS, BOOL, COMPARE, CONS, FALSE, INT_OPS, IO, NIL, NONE, ORDER_V, PAIR_V, RATIO, S, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
+import { liftLets } from "../../ters/src/lang/lift-lets.ts";
 import { inlineLists } from "./inline-lets.ts";
-import { fieldIndex } from "../../projectional/src/lang/records.ts";
-import { expandDerivatives, recordVariant } from "../../projectional/src/lang/derive.ts";
-import { stageProgram } from "../../projectional/src/lang/stage.ts";
-import { infer } from "../../projectional/src/lang/infer.ts";
-import { discharge } from "../../projectional/src/lang/ledger.ts";
+import { fieldIndex } from "../../ters/src/lang/records.ts";
+import { expandDerivatives, recordVariant } from "../../ters/src/lang/derive.ts";
+import { stageProgram } from "../../ters/src/lang/stage.ts";
+import { infer } from "../../ters/src/lang/infer.ts";
+import { discharge } from "../../ters/src/lang/ledger.ts";
 import { scalarOp, TARGETS } from "./builtins.ts";
 import { runtime } from "./wasm-rt.ts";
 
@@ -335,7 +335,7 @@ const MAY_NOT_FINISH = `may not finish (its type has Diverge): on a GPU that han
 // on computes nothing anyone sees.
 export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean } = {}): Lowered {
   // The generic + resolved to each type's own operation first
-  // (projectional/src/lang/arith.ts): nothing here sees a generic one.
+  // (ters/src/lang/arith.ts): nothing here sees a generic one.
   ({ code, info, names } = resolveArithmetic(code, info, names));
   // A function named by a let (the editor's "Make it a function": `part =
   // (a, b) ↦ …; part(x, y)`) is a definition of its own, given what it

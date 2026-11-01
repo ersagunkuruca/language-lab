@@ -47,7 +47,7 @@ reported, and the editor shows that reason.
 
 ## From the command line
 
-In `projectional/`, with `node cli/lab.ts` (or `lab` if linked):
+In `ters/`, with `node cli/lab.ts` (or `lab` if linked):
 
 ```sh
 lab run examples/wc a.txt         # main with the evaluator, the real console and files

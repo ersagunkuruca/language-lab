@@ -29,7 +29,7 @@
 // (https://webassembly.github.io/spec/core/binary/), and a text version is
 // printed alongside it for reading.
 
-import type { Runtime, World } from "../../projectional/src/lang/run.ts";
+import type { Runtime, World } from "../../ters/src/lang/run.ts";
 import { MATH_DATA, MATH_DATA_AT } from "./wasm-math.ts";
 import { assemble, POW5, runtime, textBytes, WASI_IMPORTS, type RtFn, type VT } from "./wasm-rt.ts";
 import { fails, isArray, isData, isFn, kids, OPS, type AType, type DType, type FType, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc, type SType } from "./scalar.ts";

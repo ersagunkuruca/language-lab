@@ -9,29 +9,29 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CELL_OPS, S, SET, SIGS, STD_IMPL, STD_MANY, stdNames } from "../../projectional/src/lang/std.ts";
-import { base, baseNames } from "../../projectional/src/lang/load.ts";
-import { infer } from "../../projectional/src/lang/infer.ts";
-import { Lang } from "../../projectional/src/lang/dsl.ts";
-import { NotInvertible, relate } from "../../projectional/src/lang/relate.ts";
-import { makeRunner } from "../../projectional/src/lang/run.ts";
-import { NUMBER, Subst } from "../../projectional/src/lang/types.ts";
-import { differentiate, NotDifferentiable } from "../../projectional/src/lang/derive.ts";
-import { constraints } from "../../projectional/src/units.ts";
-import { B } from "../../projectional/src/prelude.ts";
+import { CELL_OPS, S, SET, SIGS, STD_IMPL, STD_MANY, stdNames } from "../../ters/src/lang/std.ts";
+import { base, baseNames } from "../../ters/src/lang/load.ts";
+import { infer } from "../../ters/src/lang/infer.ts";
+import { Lang } from "../../ters/src/lang/dsl.ts";
+import { NotInvertible, relate } from "../../ters/src/lang/relate.ts";
+import { makeRunner } from "../../ters/src/lang/run.ts";
+import { NUMBER, Subst } from "../../ters/src/lang/types.ts";
+import { differentiate, NotDifferentiable } from "../../ters/src/lang/derive.ts";
+import { constraints } from "../../ters/src/units.ts";
+import { B } from "../../ters/src/prelude.ts";
 import { lowerScalar, OPS as SCALAR_OPS } from "../src/scalar.ts";
 import { TARGETS } from "../src/builtins.ts";
 import { emitWasm, instantiate } from "../src/wasm.ts";
 import { emitWgsl } from "../src/wgsl.ts";
-import type { Id } from "../../projectional/src/model.ts";
+import type { Id } from "../../ters/src/model.ts";
 import { compile } from "../src/compile.ts";
 
 // Builtins whose first input must be written in place, so a plain
 // f(x, …) = builtin(x, …) can't use them; their own tests cover them.
 const IN_PLACE: Record<Id, string> = {
   [SET]: "set takes the field it sets written in place (test/records.test.ts)",
-  [CELL_OPS.path]: "path takes the field or path of fields it names written in place, as set does (projectional/test/cell-paths.test.ts)",
-  [S.byItsWays]: "by its ways only fills an implementation's field, and a way replaces it before anything runs (projectional/test/ways.test.ts)",
+  [CELL_OPS.path]: "path takes the field or path of fields it names written in place, as set does (ters/test/cell-paths.test.ts)",
+  [S.byItsWays]: "by its ways only fills an implementation's field, and a way replaces it before anything runs (ters/test/ways.test.ts)",
 };
 
 // f(x0, …) = builtin(x0, …), checked.

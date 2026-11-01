@@ -104,7 +104,7 @@ has no trig instruction, so there sin's only ways are the prelude's own
 (an fdlibm-style polynomial in the language) or an import from the host.
 
 Costs are on one scale with the representation chooser's (C30a,
-projectional/src/lang/cost.ts): a way's declared cost and a builtin's are
+ters/src/lang/cost.ts): a way's declared cost and a builtin's are
 constant steps, and a cost is compared from its highest order down.
 
 Declared costs are the start. NUMBERS.md "Costs and the chooser" already

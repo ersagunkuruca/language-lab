@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // routes, written by hand: the JavaScript the compiler should aim to
-// produce for projectional/examples/routes. Same program, same output, same
+// produce for ters/examples/routes. Same program, same output, same
 // exit codes, same algorithms: Dijkstra's shortest paths (1959) with the
 // frontier ordered by (distance, town), Kruskal's cheapest network (1956)
 // over a union-find forest joined by size (Galler and Fischer, 1964). What

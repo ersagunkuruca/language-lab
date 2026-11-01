@@ -1,13 +1,13 @@
 // Small programs written for the tests and the benchmark, in the DSL.
 
-import { Lang } from "../../projectional/src/lang/dsl.ts";
-import { base, baseNames, checkOptions } from "../../projectional/src/lang/load.ts";
-import { infer } from "../../projectional/src/lang/infer.ts";
-import { B } from "../../projectional/src/prelude.ts";
-import { ABORT_OP, ARITH, ARRAY_OPS, COMPARE, CONS, FALSE, INT_OPS, IO, NIL, NONE, PAIR_V, S, SECOND, SOME, TEXT_OPS, TRUE } from "../../projectional/src/lang/std.ts";
-import { INT, NUMBER, STRING } from "../../projectional/src/lang/types.ts";
-import type { Id } from "../../projectional/src/model.ts";
-import { LIBRARY, VECTORS } from "../../projectional/src/lang/library.ts";
+import { Lang } from "../../ters/src/lang/dsl.ts";
+import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
+import { infer } from "../../ters/src/lang/infer.ts";
+import { B } from "../../ters/src/prelude.ts";
+import { ABORT_OP, ARITH, ARRAY_OPS, COMPARE, CONS, FALSE, INT_OPS, IO, NIL, NONE, PAIR_V, S, SECOND, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
+import { INT, NUMBER, STRING } from "../../ters/src/lang/types.ts";
+import type { Id } from "../../ters/src/model.ts";
+import { LIBRARY, VECTORS } from "../../ters/src/lang/library.ts";
 
 // The area under x·x·x − x − 1 from `from`, in `steps` strips of width
 // `width`: a numeric loop written as tail recursion, the way the language
@@ -143,7 +143,7 @@ export function vectors() {
   return { code, names, info: infer(code, names), defs: { along, length, unit, diagonal, farther, walk, shoot, steps, sum, orZero, twice, numbers, vecs, shear, turn, sheared, lifted } };
 }
 
-// The vectors module (projectional/src/lang/vectors-source.ts) on a
+// The vectors module (ters/src/lang/vectors-source.ts) on a
 // program's own point and colour types, and on plain Float64s: each module
 // definition is written once, for every record of Float64s.
 export function parts() {

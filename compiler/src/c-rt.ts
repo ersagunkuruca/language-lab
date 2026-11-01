@@ -1,6 +1,6 @@
 // The runtime of native programs' Ints and Texts (docs/design/targets/NATIVE.md,
 // stage N4), in C: what wasm-rt.ts is to WebAssembly. The meaning is the
-// evaluator's (projectional/src/lang/int.ts and text.ts), case by case.
+// evaluator's (ters/src/lang/int.ts and text.ts), case by case.
 //
 // An Int is an int64_t: odd, the value itself shifted left one (while it
 // fits 62 bits), else even, a pointer to a counted cell of 32-bit limbs and
@@ -547,7 +547,7 @@ const FNS: Record<string, Fn> = {
 }` },
 
   // ---- The world (N4b): the console and files over the C library and
-  // POSIX, failing as Node's world (projectional/src/lang/world.ts) does:
+  // POSIX, failing as Node's world (ters/src/lang/world.ts) does:
   // with its words for a reason, and status 2.
   "world.fail": {
     uses: [],

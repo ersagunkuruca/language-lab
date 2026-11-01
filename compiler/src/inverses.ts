@@ -14,10 +14,10 @@
 // didn't. Specializing a function on a known function argument is old:
 // partial evaluation (Futamura, 1971; Jones, Gomard and Sestoft, 1993).
 
-import type { Code, Id, Node, NodeOf } from "../../projectional/src/model.ts";
-import { freshId } from "../../projectional/src/model.ts";
-import type { Names } from "../../projectional/src/presentation.ts";
-import { LIBRARY } from "../../projectional/src/lang/library.ts";
+import type { Code, Id, Node, NodeOf } from "../../ters/src/model.ts";
+import { freshId } from "../../ters/src/model.ts";
+import type { Names } from "../../ters/src/presentation.ts";
+import { LIBRARY } from "../../ters/src/lang/library.ts";
 
 const prelude = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name);
 const INVERSE = prelude("inverse"), CONJUGATE = prelude("conjugate");

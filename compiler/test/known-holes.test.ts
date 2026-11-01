@@ -4,12 +4,12 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Lang } from "../../projectional/src/lang/dsl.ts";
-import { base, baseNames } from "../../projectional/src/lang/load.ts";
-import { infer } from "../../projectional/src/lang/infer.ts";
-import { DIVERGE } from "../../projectional/src/lang/types.ts";
-import { B } from "../../projectional/src/prelude.ts";
-import { S } from "../../projectional/src/lang/std.ts";
+import { Lang } from "../../ters/src/lang/dsl.ts";
+import { base, baseNames } from "../../ters/src/lang/load.ts";
+import { infer } from "../../ters/src/lang/infer.ts";
+import { DIVERGE } from "../../ters/src/lang/types.ts";
+import { B } from "../../ters/src/prelude.ts";
+import { S } from "../../ters/src/lang/std.ts";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitWgsl } from "../src/wgsl.ts";
 

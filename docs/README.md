@@ -7,13 +7,13 @@ work lives in this folder, one subfolder per kind:
 |---|---|
 | [learn/](learn/) | Start here: the Learn page, the hands-on guide, the tutorial, how programs run; the guide's and tutorial's screenshots |
 | [language/](language/) | The reference: the language, the library, running backwards, credits |
-| [design/](design/) | Design notes, by area: [numbers/](design/numbers/), [data/](design/data/), [relations-and-effects/](design/relations-and-effects/), [targets/](design/targets/), [editor/](design/editor/), [physics/](design/physics/) |
+| [design/](design/) | Design notes, by area: [numbers/](design/numbers/), [data/](design/data/), [relations-and-effects/](design/relations-and-effects/), [targets/](design/targets/), [editor/](design/editor/), [physics/](design/physics/), [tools/](design/tools/) |
 | [process/](process/) | How we work: the workflow, finished backlog items, testing |
 | [reports/](reports/) | Dated reports, kept as written: [reviews/](reports/reviews/), [qa/](reports/qa/) (with their screenshots), and the bigger-program rounds ([GAPS.md](reports/GAPS.md)) |
 | [history/](history/) | Superseded plans and notes, kept as written |
 
 Open work is in [BACKLOG.md](../BACKLOG.md) at the root. Each package keeps
-its own README next to its code ([projectional](../projectional/README.md),
+its own README next to its code ([ters](../ters/README.md),
 [compiler](../compiler/README.md), [invertible](../invertible/README.md)).
 
 The tables below list every document with a status: **current**
@@ -33,7 +33,7 @@ updated; their findings are rows in the backlog.
 | [GUIDE.md](learn/GUIDE.md) | A hands-on tour of the editor, doing real edits on the dice program ([guide.html](https://ersagunkuruca.github.io/language-lab/guide.html)) | current |
 | [TUTORIAL.md](learn/TUTORIAL.md) | The whole language, from a five-year-old's view to effects ([tutorial.html](https://ersagunkuruca.github.io/language-lab/tutorial.html)) | current, except a few editor details (its opening note lists them) |
 | [RUNNING.md](learn/RUNNING.md) | What happens when you press Run, and every other way a program runs | current |
-| [projectional/README.md](../projectional/README.md) | The prototype: the program is the tree; layout of `projectional/`, commands | current |
+| [ters/README.md](../ters/README.md) | The prototype: the program is the tree; layout of `ters/`, commands | current |
 
 ## The language
 
@@ -54,6 +54,7 @@ Each note says why, then gives the plan as steps; each step is a backlog row.
 | doc | what it is | status |
 |---|---|---|
 | [CONFUSING.md](design/CONFUSING.md) | What's confusing in the language and the editor, and what could be simpler; moved out of the tutorial | current; open items are backlog rows |
+| [MCP.md](design/tools/MCP.md) | The Ters MCP server: an LLM views, edits, runs and tests programs by id (`lab mcp`) | built: read tools, edits, eval |
 
 ### Numbers
 
@@ -154,13 +155,14 @@ Kept as written; the newer document is named in each.
 | Language and effects reviews | [LANGUAGE-REVIEW-2026-10-24](reports/reviews/LANGUAGE-REVIEW-2026-10-24.md), [EFFECTS-REVIEW-2026-10-24](reports/reviews/EFFECTS-REVIEW-2026-10-24.md), [LANGUAGE-NEEDS-2026-10-24](reports/reviews/LANGUAGE-NEEDS-2026-10-24.md) |
 | Writing a program in the editor | [WRITING-2026-10-27](reports/reviews/WRITING-2026-10-27.md) |
 | Demos that look for gaps | [CLIFFORD-DEMOS-2026-10-31](reports/CLIFFORD-DEMOS-2026-10-31.md) |
+| Using Ters as an LLM, through its MCP server | [MCP-TRIAL-2026-11-01](reports/MCP-TRIAL-2026-11-01.md) |
 | Editor QA passes | [10-22](reports/qa/QA-2026-10-22.md), [10-23](reports/qa/QA-2026-10-23.md), [10-23b](reports/qa/QA-2026-10-23b.md), [10-24](reports/qa/QA-2026-10-24.md), [10-24b](reports/qa/QA-2026-10-24b.md), [10-26](reports/qa/QA-2026-10-26.md), [10-27](reports/qa/QA-2026-10-27.md), [10-28](reports/qa/QA-2026-10-28.md), [10-29](reports/qa/QA-2026-10-29.md), [10-29b](reports/qa/QA-2026-10-29b.md), [10-30](reports/qa/QA-2026-10-30.md) |
 
 A new dated report goes in its folder and in this table, in its own PR. A QA pass keeps its screenshots in `reports/qa/screenshots/<date>/`.
 
 ## Examples
 
-Each example is a folder under `projectional/examples/`. Two have a README:
-[routes](../projectional/examples/routes/README.md) (bigger-program round 5)
-and [archive](../projectional/examples/archive/README.md) (examples kept out
+Each example is a folder under `ters/examples/`. Two have a README:
+[routes](../ters/examples/routes/README.md) (bigger-program round 5)
+and [archive](../ters/examples/archive/README.md) (examples kept out
 of the editor's menu).

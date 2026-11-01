@@ -1,4 +1,4 @@
-// chapters (projectional/examples/chapters), the file-writing program of
+// chapters (ters/examples/chapters), the file-writing program of
 // GAPS.md round 2: the evaluator, the compiled code and the hand-written
 // ideal must print the same, leave the same files and exit the same way,
 // failures included.

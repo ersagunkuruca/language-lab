@@ -1,7 +1,7 @@
 // The scalar profile compiled to WGSL, run on a real GPU (WebGPU in
 // headless Chromium) and compared with the evaluator. Node has no WebGPU,
 // so this is a script rather than a unit test; CI runs it after the
-// projectional folder's `npm ci`, whose playwright-core it borrows (the
+// ters folder's `npm ci`, whose playwright-core it borrows (the
 // compiler has no dependencies of its own).
 //
 //   node gpu.ts   (or npm run gpu)
@@ -15,19 +15,19 @@
 // A function made only of + − × (and negate, abs, floor, comparisons,
 // choices, calls of such functions), which WGSL rounds correctly, is
 // checked exactly against the evaluator running the program in Float32
-// (projectional/src/lang/float32.ts): f32 in the program, not just on the
+// (ters/src/lang/float32.ts): f32 in the program, not just on the
 // GPU (NUMBERS.md).
 
-import { chromium } from "../projectional/node_modules/playwright-core/index.mjs";
-import { makeRunner, type Value } from "../projectional/src/lang/run.ts";
-import type { Code } from "../projectional/src/model.ts";
-import type { Info } from "../projectional/src/lang/infer.ts";
-import type { Names } from "../projectional/src/presentation.ts";
-import type { Id } from "../projectional/src/model.ts";
+import { chromium } from "../ters/node_modules/playwright-core/index.mjs";
+import { makeRunner, type Value } from "../ters/src/lang/run.ts";
+import type { Code } from "../ters/src/model.ts";
+import type { Info } from "../ters/src/lang/infer.ts";
+import type { Names } from "../ters/src/presentation.ts";
+import type { Id } from "../ters/src/model.ts";
 import { lowerScalar, type LType, type SExpr, type SFunc, type SType } from "./src/scalar.ts";
-import { withFloat32 } from "../projectional/src/lang/float32.ts";
-import { represent } from "../projectional/src/lang/represent.ts";
-import { infer } from "../projectional/src/lang/infer.ts";
+import { withFloat32 } from "../ters/src/lang/float32.ts";
+import { represent } from "../ters/src/lang/represent.ts";
+import { infer } from "../ters/src/lang/infer.ts";
 import { emitWgsl, type ShaderFunc } from "./src/wgsl.ts";
 import { load } from "./src/program.ts";
 import { area, corners, ints, parts, pga, shaderArrays, vectors } from "./src/fixtures.ts";

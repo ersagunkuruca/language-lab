@@ -8,7 +8,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
-import { runProgram, type World } from "../../projectional/src/lang/run.ts";
+import { runProgram, type World } from "../../ters/src/lang/run.ts";
 import { compile } from "../src/compile.ts";
 import { load } from "../src/program.ts";
 import { $setPrint, $setWorld, $Aborted, $toList } from "../src/runtime.js";

@@ -1,4 +1,4 @@
-// routes (projectional/examples/routes), GAPS.md round 5's program: the
+// routes (ters/examples/routes), GAPS.md round 5's program: the
 // evaluator and the compiled code, on maps and sets as defined and as
 // trees, and the hand-written ideal must print the same and exit the same
 // way, failures included.
@@ -8,8 +8,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { examples, load } from "../src/program.ts";
-import { infer } from "../../projectional/src/lang/infer.ts";
-import { withLibraryRepresentations } from "../../projectional/src/lang/library-reps.ts";
+import { infer } from "../../ters/src/lang/infer.ts";
+import { withLibraryRepresentations } from "../../ters/src/lang/library-reps.ts";
 import { country, ways, type Name } from "../gaps/routes.ts";
 
 const w = await ways();

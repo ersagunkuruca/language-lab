@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // calc, written by hand: the JavaScript the compiler should aim to produce
-// for projectional/examples/calc. Same program, same algorithm, same output
+// for ters/examples/calc. Same program, same algorithm, same output
 // and exit code, same Int representation (a number while it's a safe
-// integer, a BigInt beyond, as in projectional/src/lang/int.ts). What
+// integer, a BigInt beyond, as in ters/src/lang/int.ts). What
 // differs is only what a compiler could decide on its own; each difference
 // is marked with the gap it stands for in docs/reports/GAPS.md (G1, G2, …).
 //
@@ -10,7 +10,7 @@
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import * as I from "../../projectional/src/lang/int.ts";
+import * as I from "../../ters/src/lang/int.ts";
 
 // G3: variants as small numbers, not 26-character id strings, and Bool as
 // JS booleans. Data stays { tag, fields } so values can still cross into

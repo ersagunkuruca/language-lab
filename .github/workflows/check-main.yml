@@ -1,5 +1,5 @@
 # The tests a merge to main can reach, beside the deploy instead of before
-# it (docs/process/TESTING.md, T1 and T2): projectional/test/affected.ts
+# it (docs/process/TESTING.md, T1 and T2): ters/test/affected.ts
 # picks them from what changed since the last commit this workflow passed.
 # The browser tests (the editor, shaders, sound, WGSL on a GPU) took 8.5
 # of a run's 10 minutes, so they run in nightly.yml instead (T8). A red run
@@ -41,9 +41,9 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: projectional/package-lock.json
+          cache-dependency-path: ters/package-lock.json
       - run: npm ci
-        working-directory: projectional
+        working-directory: ters
       # Since the last green run; with none, everything.
       - name: What changed
         id: base
@@ -57,4 +57,4 @@ jobs:
       - name: The tests the change reaches
         env:
           SWEEP_AT: ${{ github.run_number }}
-        run: node projectional/test/affected.ts ${{ steps.base.outputs.base }} HEAD
+        run: node ters/test/affected.ts ${{ steps.base.outputs.base }} HEAD

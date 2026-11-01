@@ -1,6 +1,6 @@
 # The typed core: data, cases, loops, effects, and the errors you can't make
 
-This adds a language to the projectional prototype: data types, case
+This adds a language to the Ters prototype: data types, case
 analysis, folds, inferred types with effects, typed holes, and two programs
 that do real work. Everything is still nodes keyed by id, with names in side
 tables. Code is in `src/lang/`, the programs are `examples/queens` and
@@ -1515,7 +1515,7 @@ is the editor's next step.)
 
 ### Files and the compiler
 
-The program file (`editor/files.ts`) is version 2. It still holds only the
+The program file (`ters/src/files.ts`) is version 2. It still holds only the
 program's own nodes, plus two side tables: `needs`, the published
 definitions it uses and where they were found ("map from prelude"), and
 `signatures`, its own pins. `needs` is not an import list: the refs are
