@@ -1,6 +1,6 @@
 # Offers that don't copy the program (design note, 2026-11-01)
 
-**Status (2026-11-01).** BACKLOG E133, design only; nothing built. Asks
+**Status (2026-11-01).** BACKLOG E133. E133a (way 3 below) is built (#866); E133b is open. Asks
 nothing of Ersagun: the choice below is internal and changes no
 behaviour.
 
