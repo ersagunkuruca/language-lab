@@ -573,6 +573,8 @@ export function differentiate(code: Code, names: Names, def: Id, wrt = 0): { cod
 // lambda of the program, or a builtin (sqrt), read as x ↦ sqrt(x). Never
 // refuses: where a slope can't be read, the lambda fails.
 const cache = new WeakMap<object, Map<Id, Id>>();
+// For a copy of the nodes edited in place (infer.ts fillings).
+export const forgetDerived = (nodes: object) => void cache.delete(nodes);
 export function derivativeLambda(code: Code, fn: { lambda: Id } | { prim: Id }): Id {
   let c = cache.get(code.nodes);
   if (!c) cache.set(code.nodes, (c = new Map()));

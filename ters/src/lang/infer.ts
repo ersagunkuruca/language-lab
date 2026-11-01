@@ -18,7 +18,7 @@ import { fillHole } from "./refactor.ts";
 import { planSolve, runsBackwards, solvesInWholeNumbers } from "./solve.ts";
 import { computedForward, directionProblem, useDirections } from "./directions.ts";
 import { analyzer, determinism, oneAnswer, solveMode, type Fn } from "./modes.ts";
-import { smoothDerivative as hasSmoothDerivative, smoothGradient as hasSmoothGradient, recordVariant } from "./derive.ts";
+import { smoothDerivative as hasSmoothDerivative, smoothGradient as hasSmoothGradient, recordVariant, forgetDerived } from "./derive.ts";
 import { BOOL, CELL_OPS, JOBS, S, SET, SIGS, SMART, TRUE } from "./std.ts";
 import { countedCalls } from "./counting.ts";
 import { ratioParts } from "./int.ts";
@@ -1229,6 +1229,8 @@ function trefTargetsIn(code: Code, tid: Id, out = new Set<Id>()): Set<Id> {
 type Arc = [from: number, to: number, strict: boolean];
 // The definitions a representation row names as its match (`match by`).
 const matchers = new WeakMap<object, Set<Id>>();
+// What is kept by a nodes object, forgotten when it changes (fillings).
+function forgetNodes(nodes: object) { matchers.delete(nodes); forgetDerived(nodes); }
 function matchersOf(code: Code): Set<Id> {
   let m = matchers.get(code.nodes);
   if (!m) {
@@ -1439,8 +1441,20 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   const affected = dependents(code, h.group);
   // Each filling is made once for both checks below, which ask one after
   // the other.
-  let last: [Filling, Code] | undefined;
-  const filled = (f: Filling) => (last?.[0] === f ? last[1] : (last = [f, fillHole(code, {}, hole, f).code])[1]);
+  // All of them are written into one copy of the program's nodes, the
+  // last one taken out before the next goes in, instead of a copy of the
+  // ~10,000 nodes each (BACKLOG E133a, SHARED-NODES.md). Each gets a Code
+  // of its own, so what is kept by the Code is its own; what is kept by
+  // the nodes is forgotten at each change.
+  let last: [Filling, Code] | undefined, scratch: Record<Id, Node> | undefined, undo: (() => void) | undefined;
+  const filled = (f: Filling): Code => {
+    if (last?.[0] === f) return last[1];
+    undo?.();
+    forgetNodes(scratch ??= { ...code.nodes });
+    const r = fillHole(code, {}, hole, f, {}, scratch);
+    undo = r.undo;
+    return (last = [f, r.code])[1];
+  };
   let before: Problem[] | undefined;
   const units = new UnitsBefore(code);
   const recheck = (c: Code) => infer(c, {}, { from: info, only: affected, units }, info.options).errors;

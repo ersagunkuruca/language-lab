@@ -22,7 +22,7 @@ Ersagun's "take 40 more tasks" (2026-11-01 11:46): Editor 13, Compiler 13, Langu
 
 | lane | thread | next, in order |
 |---|---|---|
-| E Editor | "Editor lane" | Ersagun's 40 (2026-11-01): I109 (#841), I29's handler step (#845), I40 (#846), unfolding overlaps (#859), L69c (#860), I112 (#863), I49 (#864), L125d's editor half (#865) done; then E133a (one copy of the nodes per palette), then E133b (plan checks per offer), and L125's editor half once `/` has Choice; then the next QA round's findings |
+| E Editor | "Editor lane" | Ersagun's 40 (2026-11-01): I109 (#841), I29's handler step (#845), I40 (#846), unfolding overlaps (#859), L69c (#860), I112 (#863), I49 (#864), L125d's editor half (#865), E133a (#866) done; then E133b (plan checks per offer), and L125's editor half once `/` has Choice; then the next QA round's findings |
 | C Compiler and targets | "Compiler lane" | L125e (niche representations), C63b (hash table), L43c, C66 on shaders, C55, C40 step 2e, C64's next step, C67's next step, C31 |
 | L Language and library | "Language lane" | Ersagun's 40 (2026-11-01): L125a step 1 done (#842); L125b (the inferred nonzero fact; asked Ersagun how a page shows no answer), L125d done (#847), L125f done (#848), L71a done (#849), L38's open end done, L71b (`Await` and `together`), L69a2 (hosts in the compiled JS), L43e3 (named masks on list items), L108d2 (laws of match and fold jobs), L29, I84. Earlier today: #809 to #823 |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
@@ -62,8 +62,8 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E103 | **Bug.** Adding a value in a definition run backwards (physics `fall`) takes about 4 s; five stages (#478 to #504) took fall's holes from 48 s to 18.5 s in all. Stopped by the 10% rule; what's left is E133 | E100 | P3 | M | |
-| E133 | **Design.** Fillings share the program's nodes instead of copying ~3000 each: a persistent node store under `Code` (HAMT or overlay map), about 20% off a palette. Design note before building | E103 | P3 | L | ⏸ held |
+| E103 | **Bug.** Adding a value in a definition run backwards (physics `fall`) takes about 4 s; five stages (#478 to #504) took fall's holes from 48 s to 18.5 s in all. Stopped by the 10% rule. **Measured again 2026-11-01:** 23 holes 121 s, the worst 22 s, of which the plan comparison per offer 5.7 s and whole checks for offers whose plan changed 10.4 s; E133a took the node copies off (→ 18 s); what's left is E133b | E100 | P3 | M | |
+| E133 | **Design** ([SHARED-NODES.md](docs/design/editor/SHARED-NODES.md)). Offers share the program's nodes instead of copying ~10,000 each. E133a, one scratch copy per palette, is done (#866; physics fall's worst hole 22 → 18 s). E133b: the plan comparison keyed by what a plan sees of the offer, measured first | E103 | P3 | M | step a done |
 
 ## C: Compiler and targets
 
