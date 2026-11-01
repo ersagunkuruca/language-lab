@@ -9,7 +9,8 @@ answer isn't finite, and `atan2` takes −0 as 0. Until L125b's nonzero fact,
 "no answer" stops the program too rather than being `Choice`, since a
 `Choice` on every `/` would make nearly every program a search. The
 compiled targets follow in L125c. L125d is built: `Extended a` with
-`extended less/add/negate/subtract/multiply`, `minimum` and `maximum`.
+`extended less/add/negate/subtract/multiply`, `minimum` and `maximum`. L125f is built: a host's NaN or ±∞ is refused at
+the border.
 
 Ersagun, 2026-11-01: "Shall we put the problems with IEEE floats into a
 discussion. Maybe we should use a subset of them (probably excluding

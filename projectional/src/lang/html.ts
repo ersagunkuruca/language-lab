@@ -198,8 +198,14 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
 // Where the pointer is, in the element's own units (I87): inside a
 // picture, its SVG units, so a point lands where it's drawn; elsewhere,
 // CSS pixels from the element's top-left. 0, 0 when the event has no
-// pointer (a key, a frame).
+// pointer (a key, a frame), or when it has none that is finite (an element
+// scaled to nothing, whose transform has no inverse): a Float64 is finite
+// (L125f).
 function pointer(e: El, ev: { clientX?: number; clientY?: number }): [number, number] {
+  const [x, y] = pointerRaw(e, ev);
+  return Number.isFinite(x) && Number.isFinite(y) ? [x, y] : [0, 0];
+}
+function pointerRaw(e: El, ev: { clientX?: number; clientY?: number }): [number, number] {
   if (typeof ev.clientX !== "number" || typeof ev.clientY !== "number") return [0, 0];
   const g = e as El & { getScreenCTM?: () => DOMMatrix | null; getBoundingClientRect?: () => { left: number; top: number } };
   const m = g.getScreenCTM?.();
