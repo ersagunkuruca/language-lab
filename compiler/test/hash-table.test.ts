@@ -104,3 +104,43 @@ test("compiled JavaScript on the hash table prints what the evaluator prints", a
   defs.main();
   assert.deepEqual(got, lines);
 });
+
+// Set as a hash table (C63d): the same, for a set of Ints built by adding
+// in a fold, then asked about, listed and taken apart.
+function setProgram(n: number, opts: { old?: boolean } = {}) {
+  const k = new Lang(LIBRARY.code);
+  const seen = k.def("seen");
+  k.define(seen, k.fold(k.call(INT_OPS.range, k.int(n)), [
+    { variant: NIL, names: [], body: () => k.x(L("empty set")) },
+    { variant: CONS, names: ["i", "rest"], results: [null, "added"], body: ([i], [, s]) => k.call(L("add item"), s!, k.call(INT_OPS.shiftDown, i, k.int(2))) },
+  ]));
+  const show = (x: Id) => k.call(S.print, k.call(SHOW_ANY, x));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.let("s", k.x(seen), (s) => k.seq(
+    show(k.call(L("set size"), s)),
+    show(k.call(L("has item"), s, k.int(7))),
+    show(k.call(L("has item"), s, k.int(5000))),
+    ...(opts.old ? [k.let("more", k.call(L("add item"), s, k.int(5000)), (more) => k.seq(show(k.call(L("has item"), more, k.int(5000))), show(k.call(L("has item"), s, k.int(5000)))))] : []),
+    k.let("less", k.call(L("remove item"), s, k.int(7)), (less) => k.seq(show(k.call(L("set size"), less)), show(k.call(L("has item"), less, k.int(7))))),
+  ))));
+  return { code: base(k.code), names: baseNames(k.names), main, own: [seen, main] };
+}
+
+test("a set only built, asked and changed by its one holder is a hash table, compiled and evaluated the same; one whose old version is kept stays a tree", async () => {
+  const p = setProgram(400);
+  const c = chosen(p);
+  assert.deepEqual(c.chosen, ["Set as hash table"]);
+  const { lines, info } = printed(c.code, c.names, p.main, c.insiders);
+  assert.deepEqual(lines, printed(p.code, p.names, p.main).lines);
+  assert.deepEqual(lines, ["100", "true", "false", "99", "false"]);
+  const source = compile(c.code, info, c.names, { runtime: pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href, exports: ["main"] });
+  const file = join(mkdtempSync(join(tmpdir(), "hash-set-")), "seen.js");
+  writeFileSync(file, source);
+  const defs = (await import(pathToFileURL(file).href)).defs as Record<string, () => void>;
+  const got: string[] = [];
+  $setPrint((s: string) => got.push(s));
+  defs.main();
+  assert.deepEqual(got, lines);
+  assert.deepEqual(chosen(setProgram(400), false).chosen, ["Set as weight-balanced tree"]);
+  assert.deepEqual(chosen(setProgram(400, { old: true })).chosen, ["Set as weight-balanced tree"]);
+});

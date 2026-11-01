@@ -81,6 +81,8 @@ export const ARRAY = "type.array";
 // A hash table changed in place (C63b): Map's representation where every
 // map has one holder (one-holder.ts), never written by a program.
 export const TABLE = "type.table";
+// Set as a hash table (C63d): Table's keys alone.
+export const HASH_SET = "type.hashset";
 // Named blade masks (GRADES.md, BACKLOG L43e, Ersagun 2026-10-31: "each
 // blade combination a different type"): `Vector of T` is a T, a record type
 // of an algebra's multivectors, that can be nonzero only on T's vectors.
