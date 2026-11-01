@@ -13,7 +13,7 @@ import { Lang } from "../src/lang/dsl.ts";
 import { fillings, infer } from "../src/lang/infer.ts";
 import { CORE, LIBRARY, PRELUDE } from "../src/lang/library.ts";
 import { base, baseNames, checkOptions, loadProgram } from "../src/lang/load.ts";
-import { adopt, publish, sameAs, upgrade, verify, type Module } from "../src/lang/modules.ts";
+import { adopt, orderFreeHash, publish, sameAs, sameLines, sameUpToOrder, upgrade, verify, type Module } from "../src/lang/modules.ts";
 import { buildPrelude } from "../src/lang/prelude-source.ts";
 import { library as listHelpers } from "../src/lang/programs.ts";
 import { pinsOf, recheck } from "../src/lang/signatures.ts";
@@ -163,6 +163,31 @@ test("sameAs: a draft with a library definition's hash, or another draft's, is s
   const after = sameAs(edited, LIBRARY);
   assert.equal(after.get(sq), undefined);
   assert.equal(after.get(square), undefined);
+});
+
+// L131 (PORTS-2026-11-01.md §7): the same body with its inputs in another
+// order is found, beside the exact matches, and said so; the exact hash
+// still tells the two orders apart.
+test("sameUpToOrder: a draft that is another with its inputs swapped is found, and said so", () => {
+  const k = new Lang();
+  const over = k.def("over"), under = k.def("under"), again = k.def("over again"), self = k.def("countdown");
+  k.define(over, k.fn(["a", "b"], (a, b) => k.call(B.div, a, k.call(B.add, b, k.lit(1)))));
+  k.define(under, k.fn(["b", "a"], (b, a) => k.call(B.div, a, k.call(B.add, b, k.lit(1)))));
+  k.define(again, k.fn(["x", "y"], (x, y) => k.call(B.div, x, k.call(B.add, y, k.lit(1)))));
+  k.define(self, k.fn(["n", "m"], (n, m) => k.call(self, m, n)));
+  const code = merge(LIBRARY.code, k.code), names = { ...LIBRARY.names, ...k.names };
+  const exact = sameAs(code, LIBRARY), swapped = sameUpToOrder(code, LIBRARY);
+  assert.deepEqual(exact.get(over)?.drafts, [again]);
+  assert.deepEqual(swapped.get(over)?.drafts, [under]);
+  assert.deepEqual(swapped.get(under)?.drafts, [over, again]);
+  assert.equal(swapped.get(again)?.drafts.includes(over), false);
+  const memo = new Map<string, string>();
+  assert.equal(orderFreeHash(code, over, memo), orderFreeHash(code, under, memo));
+  // A recursive one would need its own calls reordered too: left out.
+  assert.equal(orderFreeHash(code, self, memo), null);
+  const lines = sameLines(code, names, LIBRARY);
+  assert.ok(lines.includes("`under` is the same as `over` (yours) and `over again` (yours) with its inputs in another order"), lines.join("\n"));
+  assert.ok(lines.includes("`over` is the same as `over again` (yours)"), lines.join("\n"));
 });
 
 test("a pin holds a definition's type: a change that breaks it is an error there, not at the callers", () => {
