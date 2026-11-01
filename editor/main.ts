@@ -2421,10 +2421,10 @@ function ungroup(g: Id) {
 // A group made a function called where it was (BACKLOG E146): the code
 // changes, and the group's frame gives way to the function's own, folded
 // if the group was.
-function groupToFunction(info: T.Info, g: Id) {
+function groupToFunction(info: T.Info, g: Id, definition = false) {
   const members = doc.layout.groups?.[g];
   if (!members) return;
-  const r = T.makeFunction(doc.code, doc.names.short, info, ui.def, members);
+  const r = (definition ? T.definitionFrom : T.makeFunction)(doc.code, doc.names.short, info, ui.def, members);
   const { [g]: _, ...groups } = doc.layout.groups ?? {};
   const was = doc.layout.folded ?? [];
   const folded = was.filter((x) => x !== g);
@@ -2604,9 +2604,14 @@ function graphMenu(info: T.Info): HTMLElement | null {
     if (kind === "frame") rows.push(item("Tidy what's inside", "tidy-frame", "Space out the nodes in this frame"));
     if (kind === "node" && n?.kind === "match" && (doc.layout.tree ?? []).includes(id)) rows.push(item("Draw as rows of patterns", "tree", "One row per case, however deep: [date, account, cents, memo], as the text reads it"));
     else if (kind === "node" && n?.kind === "match" && flattened(matchRows(doc.code, info, n))) rows.push(item("Draw as nested matches", "tree", "The decision tree as it is stored: one match per level, to see the order it decides in"));
+    // Any function inside a definition can become one in the side menu
+    // (E164, Ersagun 2026-11-01).
+    if (kind === "frame" && n?.kind === "lambda" && (doc.code.nodes[ui.def] as { body?: Id } | undefined)?.body !== id)
+      rows.push(item("Make it a definition", "lambda-def", "This function as a definition of its own, in the side menu: what it uses from around it becomes its first inputs. Changes the code; Undo puts it back", why(() => T.liftToDefinition(doc.code, doc.names.short, info, ui.def, id))));
     if (kind === "frame" && doc.layout.groups?.[id]) {
       const members = doc.layout.groups[id];
       rows.push(item("Make it a function", "group-fn", "A function, part, of what comes in, called right here: name it, fold it, reuse it. Changes the code; Undo puts it back", why(() => T.makeFunction(doc.code, doc.names.short, info, ui.def, members))));
+      rows.push(item("Make it a definition", "group-def", "The same function, as a definition of its own in the side menu, called right here. Changes the code; Undo puts it back", why(() => T.definitionFrom(doc.code, doc.names.short, info, ui.def, members))));
       rows.push(item("Ungroup", "ungroup", "Take the frame away: what it holds stays where it is"));
     }
     if (inGraph) rows.push(item("Back to the automatic place", "reset-one", picked.length > 1 ? "Forget where the picked nodes were dragged: back where Tidy everything puts them" : "Forget where it was dragged: back where Tidy everything puts it"));
@@ -2623,6 +2628,7 @@ function graphMenu(info: T.Info): HTMLElement | null {
     const set = id ? fnSet(id, picked) : null;
     if (set && kind !== "frame") {
       rows.push(item("Make it a function", "picked-fn", `${set.what} (shift-click to pick more): a function, part, of what comes in, called right here. Name it, fold it, reuse it. Changes the code; Undo puts it back`, why(() => T.makeFunction(doc.code, doc.names.short, info, ui.def, set.members))));
+      rows.push(item("Make it a definition", "picked-def", `${set.what}: a function as above, but a definition of its own in the side menu, called right here. Changes the code; Undo puts it back`, why(() => T.definitionFrom(doc.code, doc.names.short, info, ui.def, set.members))));
       if (!set.group) rows.push(item("Group into one box", "group-picked", `${set.what} (shift-click to pick more): a frame around them, folded, naming what it holds. A view only; unfold or ungroup it from its menu`, groupable(set.members)));
     }
     const bs = bindersOf(ui.def), allOn = bs.length > 0 && bs.every(isNamed);
@@ -2634,7 +2640,7 @@ function graphMenu(info: T.Info): HTMLElement | null {
   // Nodes picked: what's done with them comes first, not below the fold
   // of a menu that scrolls (Ersagun 2026-10-27: "No such options").
   if (picked.length) {
-    const first = rows.filter((r) => ["picked-fn", "group-picked"].includes(r?.dataset.menu ?? ""));
+    const first = rows.filter((r) => ["picked-fn", "picked-def", "group-picked"].includes(r?.dataset.menu ?? ""));
     rows.splice(0, rows.length, ...first, h("div", { class: "ctx-sep" }), ...rows.filter((r) => !first.includes(r)));
   }
   // Kept on the screen: at most as tall as its CSS lets it be (440px, then it scrolls).
@@ -2739,6 +2745,15 @@ function menuAction(act: string, target: Id | undefined) {
     case "group-picked": return groupPicked(fnSet(target!, graph?.picked() ?? [])?.members ?? []);
     case "ungroup": return ungroup(target!);
     case "group-fn": return groupToFunction(info, target!);
+    case "group-def": return groupToFunction(info, target!, true);
+    case "lambda-def": return applyT(T.liftToDefinition(doc.code, doc.names.short, info, ui.def, target!));
+    case "picked-def": {
+      const set = fnSet(target!, graph?.picked() ?? []);
+      if (!set) return;
+      if (set.group) return groupToFunction(info, set.group, true);
+      graph?.unpickAll();
+      return applyT(T.definitionFrom(doc.code, doc.names.short, info, ui.def, set.members));
+    }
     case "picked-fn": {
       const set = fnSet(target!, graph?.picked() ?? []);
       if (!set) return;
