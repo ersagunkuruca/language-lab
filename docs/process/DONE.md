@@ -479,7 +479,8 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| L143a | A tuple shows as its type does: `show(tuple(1, "a"))` is `(1, "a")`, evaluated and compiled (run.ts showValue, which runtime.js's $showAny uses; test/result-ports.test.ts). The text view's literal waits on the editor's reader | this PR |
+| L144 | `recheck` keeps what a run needs for the definitions it doesn't check again: `spread`, `reshape`, `answered`, `opAt` and `implementations` (signatures.ts `fill`; test/modules.test.ts) | this PR |
+| L143a | A tuple shows as its type does: `show(tuple(1, "a"))` is `(1, "a")`, evaluated and compiled (run.ts showValue, which runtime.js's $showAny uses; test/result-ports.test.ts). The text view's literal waits on the editor's reader | #1000 |
 | L142 | `simulated`'s schedule has a stream of its own (REVIEW-2026-11-01b §2): its tie-breaks come from Park and Miller's minimal standard generator, kept by the simulated world beside its clock and started from the seed, and the action's own random numbers still come from Random seeded by seed. An action that draws one more number keeps the schedule a seed names, evaluated and compiled | #993 |
 | L138 | **Bug.** `simulated(seed, action)` answers Time's `now` and Wait's `wait` from its own clock (REVIEW-2026-11-01b §2): a wait is an await of a timer and `now` the time of a timer of 0 started now (prelude-source.ts `simulated clock`), so `now` after a 5 s virtual timer and `wait(300)` is 5300 every run and nothing really sleeps. Evaluated and compiled (C78, #975, let compiled JS run a case that waits) | #989 |
 | L145 | **Bug.** Console's `print` performed by name (`effect.console.print`, offered in the palette beside builtin `print`) stopped with "nothing handles print". When nothing handles one of Console's, Files' or Network's operations, the world now answers it as it answers the builtin that performs it, in the evaluator (run.ts) and compiled JS (runtime.js); a match still handles it | #982 |

@@ -18,7 +18,7 @@ import { buildPrelude } from "../src/lang/prelude-source.ts";
 import { library as listHelpers } from "../src/lang/programs.ts";
 import { pinsOf, recheck } from "../src/lang/signatures.ts";
 import { runMain } from "../src/lang/run.ts";
-import { ARITH, CONS, INT_OPS, NIL, S, SHOW_ANY } from "../src/lang/std.ts";
+import { ARITH, CONS, INT_OPS, NIL, S, SHOW_ANY, tupleVariant } from "../src/lang/std.ts";
 import { root } from "../src/io.ts";
 
 const prelude = (name: string) => PRELUDE.exports.find((d) => PRELUDE.names[d] === name) ?? PRELUDE.code.defs.find((d) => PRELUDE.names[d] === name)!;
@@ -264,6 +264,22 @@ test("checking stops at pins: an edit inside a pinned definition rechecks only i
   const r = recheck(c1, k.names, i0, [f]);
   assert.ok(r.checked.has(g));
   assert.deepEqual(r.info.errors.map((e) => e.id).sort(), infer(c1, k.names).errors.map((e) => e.id).sort());
+});
+
+// L144: what a run needs from the check is kept for the definitions not
+// checked again: a call that takes a tuple apart stays marked.
+test("recheck keeps the definitions not checked again runnable: their spread calls", () => {
+  const k = new Lang();
+  const times = k.def("times"), use = k.def("use"), other = k.def("other");
+  k.define(times, k.fn(["a", "b"], (a, b) => k.call(B.mul, a, b)));
+  k.define(use, k.fn(["x"], (x) => k.call(times, k.call(tupleVariant(2), x, x))));
+  k.define(other, k.thunk(() => k.lit(1)));
+  const code = base(k.code), names = baseNames(k.names);
+  const full = infer(code, names, undefined, checkOptions);
+  assert.equal(full.spread!.size, 1);
+  const r = recheck(code, names, full, [other], checkOptions);
+  assert.ok(!r.checked.has(use));
+  assert.deepEqual([...r.info.spread!], [...full.spread!]);
 });
 
 test("a module's helpers are used where they are, and never offered in the palette", () => {
