@@ -1,6 +1,6 @@
 # The Ters MCP server
 
-*Status 2026-11-01: built: read tools (#853), edits and eval (this PR).*
+*Status 2026-11-01: built: read tools (#853), edits and eval (#855), search and folded cases (this PR).*
 
 An LLM reads, changes, runs and tests a Ters program through the
 [Model Context Protocol](https://modelcontextprotocol.io). It is also how we
@@ -35,6 +35,8 @@ For Claude Code: `claude mcp add ters -- node /path/to/ters/cli/lab.ts mcp`.
 - the gutter is the id of the block that starts on that line;
 - `name#id` is where a name is bound (definitions, inputs, lets, fields, cases);
 - `□#id` is a hole;
+- `ab12 otherwise is: fell, filled` under a match: cases that read the same
+  are shown once, as otherwise (as the editor does);
 - `…` is a block left out: with no `depth`, the view is as deep as fits 40
   lines; `view` the id to open it.
 
@@ -47,11 +49,12 @@ Uses of a name show the name alone: it is bound once, with its id, in sight.
 | `open(path)` | open a folder or saved file; lists its definitions |
 | `defs(filter?, library?)` | id, name, type of each definition; ✗ marks errors |
 | `view(at, depth?)` | a definition or one block of it |
+| `search(text)` | the smallest parts, in every definition, whose text contains it, with ids |
 | `check()` | type errors, or ok |
 | `run(entry?, args?, input?)` | run main (or an action, a value, a page); output and exit code |
 | `test()` | definitions that perform Check, and accepted answers |
 | `eval(text)` | the value of an expression, with its type |
-| `replace(at, text, find?)` | a part becomes an expression written as `view` prints it; `□` makes a hole |
+| `replace(at, text, find?, case?)` | a part becomes an expression written as `view` prints it; `□` makes a hole; `case` picks one case of a match |
 | `step(at, name, value)` | a step `name = value` before a part |
 | `split(at, on, find?)` | a part becomes a match on a variable, one case per variant |
 | `rename(at, name)`, `comment(at, text)` | side tables only; uses follow the id |
@@ -62,7 +65,9 @@ Uses of a name show the name alone: it is bound once, with its id, in sight.
 in it are ignored, `*` reads as `·`). Each edit is one of the editor's own
 gestures (`editor/typed.ts`, `ters/src/lang/toplevel.ts`); it is kept only if the
 program has no more type errors than before, then saved, and the answer is
-the changed lines of the definition or the reason it was refused.
+the changed lines of the definition or the reason it was refused. An edit to
+an otherwise that stands for several cases is made in each (the editor's
+`sameEverywhere`); `case` changes just one.
 
 Program output goes into the answer, never to the server's own stdout (the
 protocol). A run is stopped after 20 million steps.
