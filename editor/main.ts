@@ -129,6 +129,7 @@ import { browserWorld } from "../ters/src/lang/browser.ts";
 import type { Doc as PageDoc, Node_ } from "../ters/src/lang/html.ts";
 import { evaluatorCall } from "../ters/src/lang/html.ts";
 import { LIBRARY } from "../ters/src/lang/library.ts";
+import { sameAs, type Same } from "../ters/src/lang/modules.ts";
 import { join, looseOf, newLoose, split, type Drafts } from "./drafts.ts";
 // One window per graph: the program and the definition shown.
 const viewKey = () => `${doc.program}/${ui.def}`;
@@ -1478,6 +1479,25 @@ function unitSection(info: T.Info, id: Id): HTMLElement | null {
   }
   box.append(chips);
   return box;
+}
+
+// What the open definition is the same as, by hash (SHARING.md §7, E161):
+// a library definition, or another of the program's. Shown, never
+// merged: the draft stays as it is, and the edit that moves its hash ends
+// the line. Worked out once per version of the code. Prior art: Unison's
+// codebase manager, which reports it as another name (CREDITS.md).
+const sameMemo = new WeakMap<Code, Map<Id, Same>>();
+function sameLine(namer: Namer): HTMLElement | null {
+  let all = sameMemo.get(doc.code);
+  if (!all) { try { all = sameAs(doc.code, LIBRARY); } catch { all = new Map(); } sameMemo.set(doc.code, all); }
+  const same = all.get(ui.def);
+  if (!same) return null;
+  const link = (d: Id) => h("button", { type: "button", class: "link", "data-act": "goto", "data-target": d, title: "Open it" }, namer.name(d));
+  const where = (d: Id) => { const m = LIBRARY.modules.find((x) => x.code.nodes[d])?.title; return m ? ` in ${m}` : " in the library"; };
+  const parts: (HTMLElement | string)[] = [];
+  for (const d of same.library) parts.push(...(parts.length ? [", "] : []), link(d), where(d));
+  for (const d of same.drafts) parts.push(...(parts.length ? [", "] : []), link(d), " (yours)");
+  return h("p", { class: "hint same", title: "The same code as this one, names aside (its meaning hash). Nothing is merged: edit this one and the line goes when it stops matching. Prior art: Unison's codebase manager names such a definition as another name for the existing one." }, "Same as ", ...parts);
 }
 
 function filesPanel(): HTMLElement {
@@ -3778,6 +3798,7 @@ function draw() {
           h("div", { class: "text-head" }, h("h2", {}, "Text"),
             seg("text", ui.text, [["blocks", "Blocks"], ["let", "Steps"], ["nested", "Nested"], ["sexpr", "Lisp"]]),
             ui.text === "blocks" ? h("span", { class: "hint" }, TOUCH ? "tap a part for its type; tap a □ to fill it; double-tap a name to open it" : "hover for types; click a □ to fill it; double-click a name to open it") : null),
+          sameLine(namer),
           h("div", { class: "body" }, textView))),
       h("div", { class: "gutter", "data-gutter": onPage ? "page-w" : "side-w", style: "grid-area: g2", "aria-hidden": "true" }),
       h("aside", { class: "side" },

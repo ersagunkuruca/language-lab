@@ -69,7 +69,7 @@ not only code: an influence is credited even when nothing was copied.
 |---|---|---|
 | A definition is identified by a hash of its content; names are metadata; publishing by hash; no dependency conflicts | Influence | [Unison](https://www.unison-lang.org/docs/the-big-idea/) (Paul Chiusano, Rúnar Bjarnason, Arya Irani and the Unison team). Credited in `src/hash.ts`, `src/lang/modules.ts`, LANGUAGE.md. |
 | Hashing a mutually recursive group as a unit | Adapted | Unison's method for cycles, in `src/hash.ts`. |
-| Telling the user a new definition has the same hash as an existing one (we only show it, the draft stays separate until they choose) | Prior art | Unison's codebase manager reports such a definition as another name for the existing one. SHARING.md §7, BACKLOG E161 and L126. |
+| Telling the user a new definition has the same hash as an existing one (we only show it, the draft stays separate until they choose) | Prior art | Unison's codebase manager reports such a definition as another name for the existing one. SHARING.md §7; built in L126 (`sameAs`, src/lang/modules.ts; `lab check`'s `same` lines) and E161 (the editor's "Same as …" line under Text, whose tooltip names Unison). |
 | Strongly connected components for dependency order | Textbook | Tarjan's algorithm (R. E. Tarjan, SIAM J. Computing, 1972), `src/lang/infer.ts`, `src/hash.ts`. |
 | SHA-256 | Adapted | Written from the standard, FIPS 180-4, in `src/sha256.ts`. |
 
