@@ -153,7 +153,7 @@ Kept as written; the newer document is named in each.
 
 | kind | documents |
 |---|---|
-| Whole-project reviews | [REVIEW-2026-10-22b](reports/reviews/REVIEW-2026-10-22b.md), [REVIEW-2026-10-26](reports/reviews/REVIEW-2026-10-26.md), [REVIEW-2026-11-01](reports/reviews/REVIEW-2026-11-01.md) |
+| Whole-project reviews | [REVIEW-2026-10-22b](reports/reviews/REVIEW-2026-10-22b.md), [REVIEW-2026-10-26](reports/reviews/REVIEW-2026-10-26.md), [REVIEW-2026-11-01](reports/reviews/REVIEW-2026-11-01.md), [REVIEW-2026-11-01b](reports/reviews/REVIEW-2026-11-01b.md) |
 | Language and effects reviews | [LANGUAGE-REVIEW-2026-10-24](reports/reviews/LANGUAGE-REVIEW-2026-10-24.md), [EFFECTS-REVIEW-2026-10-24](reports/reviews/EFFECTS-REVIEW-2026-10-24.md), [LANGUAGE-NEEDS-2026-10-24](reports/reviews/LANGUAGE-NEEDS-2026-10-24.md) |
 | Writing a program in the editor | [WRITING-2026-10-27](reports/reviews/WRITING-2026-10-27.md) |
 | Demos that look for gaps | [CLIFFORD-DEMOS-2026-10-31](reports/CLIFFORD-DEMOS-2026-10-31.md) |
