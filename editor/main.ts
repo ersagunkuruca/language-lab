@@ -4022,10 +4022,11 @@ document.addEventListener("keydown", (e) => {
   const field = (e.target as HTMLElement).closest<HTMLInputElement | HTMLTextAreaElement>("input, textarea");
   const typing = !!field;
   if (e.key === "Escape" && !typing && ui.selected) return select(null);
-  // In a field that saves on Enter (data-commit) whose text is what was
-  // last saved (a rename just made, say), the browser has nothing of its own to undo, so the
-  // editor's Undo takes it: the rename itself is undone.
-  const committed = !!field && field.matches("[data-commit]") && field.value === field.defaultValue;
+  // In a field whose text is still what it was drawn with (a rename just
+  // saved, the palette's empty search box on a hole just added: I127), the
+  // browser has nothing of its own to undo, so the editor's Undo takes it:
+  // the rename, or the hole, is undone.
+  const committed = !!field && field.value === field.defaultValue;
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z" && (!typing || committed)) {
     e.preventDefault();
     return e.shiftKey ? travel(redo, undo, "Redid") : travel(undo, redo, "Undid");
