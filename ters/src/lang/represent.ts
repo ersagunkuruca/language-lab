@@ -347,7 +347,7 @@ export function represent(code: Code, entries: Id[], rep: Representation, keep: 
     switch (n.kind) {
       case "ref": c.target = renames.get(n.target) ?? n.target; break;
       case "call": c.fn = kid(n.fn); c.args = n.args.map(kid); break;
-      case "lambda": c.params = n.params.map(kid); c.body = kid(n.body); break;
+      case "lambda": c.params = n.params.map(kid); c.body = kid(n.body); if (n.results) c.results = n.results.map(kid); break;
       case "match": c.scrutinee = kid(n.scrutinee); c.arms = n.arms.map(kid); c.otherwise = n.otherwise && kid(n.otherwise); break;
       case "fold": c.scrutinee = kid(n.scrutinee); c.arms = n.arms.map(kid); break;
       case "arm": c.binds = n.binds.map(kid); c.results = n.results.map((r) => r && kid(r)); c.body = kid(n.body); break;
