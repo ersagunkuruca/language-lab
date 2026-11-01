@@ -15,7 +15,7 @@
 
 import { dependencies, freshId, mapIds, merge, subtree, type Code, type Id, type Node, type NodeOf } from "../model.ts";
 import type { Names } from "../presentation.ts";
-import type { Info } from "./infer.ts";
+import { infer, type Info } from "./infer.ts";
 import { Lang } from "./dsl.ts";
 import { LIBRARY, TREES } from "./library.ts";
 import { choose, represent, uses, type Representation } from "./represent.ts";
@@ -29,22 +29,38 @@ const BY_VALUE: Record<Id, "equal" | "show" | "compare"> = { [S.equal]: "equal",
 // `insiders`: the representations' definitions, which may call the
 // private constructors they represent (infer.ts Options). The library's
 // own are insiders already (load.ts checkOptions).
-export interface Chosen { code: Code; names: Names; chosen: string[]; insiders: Id[] }
+export interface Chosen { code: Code; names: Names; chosen: string[]; insiders: Id[]; info?: Info }
 
 // `defs`: the program's own definitions, which the rewrite changes;
 // `asked`: the program's own representations, whose types are left alone.
+// A choice that doesn't check is no choice (I105): the program checked as
+// written, so a rewrite that makes it fail (a signature it pins to List,
+// say) is dropped, the list row first, and the program runs as written.
+// The check made is handed back as `info`.
 export function withLibraryRepresentations(code: Code, info: Info, names: Names, main: Id, defs: Id[], asked: Representation[] = []): Chosen {
+  const skip = new Set<Id>();
+  for (;;) {
+    const r = choiceOf(code, info, names, main, defs, asked, skip);
+    if (!r.reps.length) return { code, names, chosen: [], insiders: [] };
+    const checked = infer(r.code, r.names, undefined, { ...info.options, insiders: [...(info.options?.insiders ?? []), ...r.insiders] });
+    if (checked.errors.length <= info.errors.length) return { code: r.code, names: r.names, chosen: r.chosen, insiders: r.insiders, info: checked };
+    const list = r.reps.find((x) => x.of === LIST);
+    for (const x of list ? [list] : r.reps) skip.add(x.of);
+  }
+}
+
+function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], asked: Representation[], skip: Set<Id>): Chosen & { reps: Representation[] } {
   const chosen: Representation[] = [];
   for (const tree of LIBRARY.reps.filter((r) => r.byType)) {
     const spec = LIBRARY.reps.find((r) => r.of === tree.of && r.canonical)!;
-    if (asked.some((r) => r.of === tree.of)) continue;
+    if (asked.some((r) => r.of === tree.of) || skip.has(tree.of)) continue;
     if (!uses(code, main, [spec, tree]).length || choose(code, main, [spec, tree]).rep !== tree || keyed(info, defs, code, tree.of) || generic(info, defs, code, tree)) continue;
     // Lists as arrays (C30d3b): alone, and only where every list the
     // program reaches can be one (listBoundary).
     if (tree.of === LIST && (chosen.length || !listBoundary(merge(treesFor(code, [tree]), code), info, defs, tree))) continue;
     chosen.push(tree);
   }
-  if (!chosen.length) return { code, names, chosen: [], insiders: [] };
+  if (!chosen.length) return { code, names, chosen: [], insiders: [], reps: [] };
   // The trees' module, which the library leaves out (library.ts): only
   // the definitions the chosen rows use, since the program is checked
   // again with them (the whole module is about 2,500 nodes).
@@ -122,7 +138,7 @@ export function withLibraryRepresentations(code: Code, info: Info, names: Names,
   const made = k.code.defs.filter((d) => !code.nodes[d]);
   const all = { nodes: { ...k.code.nodes, ...nodes }, defs: [...code.defs, ...made] };
   const out = chosen.reduce((c, rep) => represent(c, own, rep, made.filter((d) => !own.includes(d))), all);
-  return { code: out, names: { ...names, ...k.names }, chosen: chosen.map((r) => `${names[r.of] ?? LIBRARY.names[r.of]} as ${r.name}`), insiders: made };
+  return { code: out, names: { ...names, ...k.names }, chosen: chosen.map((r) => `${names[r.of] ?? LIBRARY.names[r.of]} as ${r.name}`), insiders: made, reps: chosen };
 }
 
 const prelude = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY.names[d] === name)!;

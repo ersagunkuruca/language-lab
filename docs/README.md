@@ -7,7 +7,7 @@ work lives in this folder, one subfolder per kind:
 |---|---|
 | [learn/](learn/) | Start here: the Learn page, the hands-on guide, the tutorial, how programs run; the guide's and tutorial's screenshots |
 | [language/](language/) | The reference: the language, the library, running backwards, credits |
-| [design/](design/) | Design notes, by area: [numbers/](design/numbers/), [data/](design/data/), [relations-and-effects/](design/relations-and-effects/), [targets/](design/targets/), [editor/](design/editor/) |
+| [design/](design/) | Design notes, by area: [numbers/](design/numbers/), [data/](design/data/), [relations-and-effects/](design/relations-and-effects/), [targets/](design/targets/), [editor/](design/editor/), [physics/](design/physics/) |
 | [process/](process/) | How we work: the workflow, finished backlog items, testing |
 | [reports/](reports/) | Dated reports, kept as written: [reviews/](reports/reviews/), [qa/](reports/qa/) (with their screenshots), and the bigger-program rounds ([GAPS.md](reports/GAPS.md)) |
 | [history/](history/) | Superseded plans and notes, kept as written |
@@ -89,6 +89,12 @@ Each note says why, then gives the plan as steps; each step is a backlog row.
 | [ANSWERED-LATER.md](design/relations-and-effects/ANSWERED-LATER.md) | Operations answered later, at most once; `together`, `race`, `within` | partly built (L54, L71, C40) |
 | [HOSTS.md](design/relations-and-effects/HOSTS.md) | Hosts as handlers: named rows (L58) and Console, Files, Network declared in std (L55) | built |
 
+### Physics and planning
+
+| doc | what it is | status |
+|---|---|---|
+| [PHYSICS-AND-PLANNING.md](design/physics/PHYSICS-AND-PLANNING.md) | Fast bodies passing through each other (time of impact in spacetime) and A* for an agent with inertia (search over position and velocity); costs and prior art | proposal (L119 to L124) |
+
 ### Sharing and versions
 
 | doc | what it is | status |
@@ -143,7 +149,7 @@ Kept as written; the newer document is named in each.
 
 | kind | documents |
 |---|---|
-| Whole-project reviews | [REVIEW-2026-10-22b](reports/reviews/REVIEW-2026-10-22b.md), [REVIEW-2026-10-26](reports/reviews/REVIEW-2026-10-26.md) |
+| Whole-project reviews | [REVIEW-2026-10-22b](reports/reviews/REVIEW-2026-10-22b.md), [REVIEW-2026-10-26](reports/reviews/REVIEW-2026-10-26.md), [REVIEW-2026-11-01](reports/reviews/REVIEW-2026-11-01.md) |
 | Language and effects reviews | [LANGUAGE-REVIEW-2026-10-24](reports/reviews/LANGUAGE-REVIEW-2026-10-24.md), [EFFECTS-REVIEW-2026-10-24](reports/reviews/EFFECTS-REVIEW-2026-10-24.md), [LANGUAGE-NEEDS-2026-10-24](reports/reviews/LANGUAGE-NEEDS-2026-10-24.md) |
 | Writing a program in the editor | [WRITING-2026-10-27](reports/reviews/WRITING-2026-10-27.md) |
 | Demos that look for gaps | [CLIFFORD-DEMOS-2026-10-31](reports/CLIFFORD-DEMOS-2026-10-31.md) |

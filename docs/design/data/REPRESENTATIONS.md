@@ -8,7 +8,7 @@ compiler?"
 #682): representations are definitions in the language, the library's Map
 and Set are written that way, and the compiler chooses and `lab check`
 says what it chose. A program never picks one. Open: showing the choice in
-the editor (E159), laws checked (L108d, after T7), and lists as arrays as
+the editor (E159), laws checked (L108d, built), and lists as arrays as
 one more representation (C30). The "Short answer" below was written
 before step 1.
 
@@ -128,8 +128,16 @@ never picks it by cost, and the shader target asks for it.
    as(binary)`, was built in #681 and taken out in the PR after it.
    Programs say which representations exist and what they cost, never
    which one a value gets.
-4. **L108d, after T7.** Each job's law through `meaning` is checked as a
-   law in the language.
+4. **L108d, built.** Each job's law through `meaning` is checked by `lab
+   test` (src/lang/rep-laws.ts): `meaning(f′(x′, …)) = f(meaning(x′), …)`
+   when the job gives a T, `f′(x′, …) = f(meaning(x′), …)` otherwise. The
+   inputs are small values (tests.ts), and each T input is built by T's
+   own jobs that give one (zero, succ; nil, cons; empty map, put), run at
+   T and at R side by side, so an R input is always one R's jobs make (an
+   Int standing for a Nat is never negative). A job taking a function
+   (match, fold, update at) isn't tried yet. Numbers' binary and int, the
+   trees and array of List all hold; a job swapped for another is caught
+   with its inputs ("at int gives …, Nat's own …").
 5. **With C30.** Lists as arrays becomes a row written this way (`array
    of List`), so every target can use it, not only compiled JS. **Built on
    the language side (L116, L117):** std's `Array a` (#723), and the trees

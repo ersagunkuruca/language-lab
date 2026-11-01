@@ -1,0 +1,68 @@
+// Foreign definitions (FOREIGN.md, BACKLOG L69a): a program's own effect,
+// left unhandled, is answered by its host, hosts/js.js's functions by
+// operation id. What comes back is checked at the border; a wrong or
+// missing answer is an Abort the program can catch. `lab hosts` writes the
+// skeleton.
+
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { Lang } from "../src/lang/dsl.ts";
+import { infer } from "../src/lang/infer.ts";
+import { base, baseNames } from "../src/lang/load.ts";
+import { runMain } from "../src/lang/run.ts";
+import { hostSkeleton } from "../src/lang/hosts.ts";
+import { ABORT_OP, S } from "../src/lang/std.ts";
+import { B } from "../src/prelude.ts";
+import type { Id } from "../src/model.ts";
+
+function program() {
+  const k = new Lang();
+  // effect Device = battery() → Float64 | name of(id: Int) → Text | ready() → Bool
+  const dev = k.effect("Device", [
+    ["battery", [], () => k.tref("type.number")],
+    ["name of", [["id", () => k.tref("type.int")]], () => k.tref("type.string")],
+    ["ready", [], () => k.tref("std.bool")],
+  ]);
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.seq(
+    k.call(S.print, k.call(S.concat, k.call(dev.op["name of"], k.int(7)), k.call(S.concat, k.lit(" at "), k.call(S.show, k.call(B.mul, k.call(dev.op.battery), k.lit(100)))))),
+    k.call(S.print, k.if(k.call(dev.op.ready), k.lit("ready"), k.lit("not ready"))),
+  )));
+  // The same, with an Abort caught around it.
+  const careful = k.def("careful");
+  k.define(careful, k.thunk(() => k.call(S.print, k.handle(k.call(dev.op["name of"], k.int(1)), [{ variant: ABORT_OP, names: ["why"], body: ([why]) => k.call(S.concat, k.lit("aborted: "), why) }]))));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names);
+  return { k, code, names, info, dev, main, careful };
+}
+
+test("an operation nothing handles is answered by the host, by its id", () => {
+  const p = program();
+  assert.deepEqual(p.info.errors.map((e) => e.message), []);
+  const out: string[] = [];
+  const hosts = {
+    [p.dev.op.battery]: () => 0.5,
+    [p.dev.op["name of"]]: (id: unknown) => `phone ${String(id)}`,
+    [p.dev.op.ready]: () => true,
+  };
+  runMain(p.code, p.info, p.main, { print: (s) => out.push(s), names: p.names, hosts });
+  assert.deepEqual(out, ["phone 7 at 50", "ready"]);
+});
+
+test("without a host the effect is still unhandled; a wrong answer is an Abort with the reason", () => {
+  const p = program();
+  assert.throws(() => runMain(p.code, p.info, p.main, { print: () => {}, names: p.names }), /unhandled effect: Device/);
+  const out: string[] = [];
+  // A number where Text goes.
+  runMain(p.code, p.info, p.careful, { print: (s) => out.push(s), names: p.names, hosts: { [p.dev.op["name of"]]: () => 42 } });
+  // No answer for the operation at all.
+  runMain(p.code, p.info, p.careful, { print: (s) => out.push(s), names: p.names, hosts: { [p.dev.op.battery]: () => 1 } });
+  assert.deepEqual(out, ["aborted: the host's name of gave 42, not a text", `aborted: hosts/js.js has no answer for name of (${p.dev.op["name of"]})`]);
+});
+
+test("lab hosts: a skeleton with each operation's id, name and types", () => {
+  const p = program();
+  const text = hostSkeleton(p.code, p.names, p.k.code.defs as Id[]);
+  assert.match(text, /^\/\/ Answers for this program's own effects/);
+  assert.ok(text.includes(`// name of, giving back string\n  ${JSON.stringify(p.dev.op["name of"])}: (id /* number | bigint */) => { throw new Error("not written yet"); },`), text);
+  assert.ok(text.includes(`// ready, giving back boolean`));
+});

@@ -6,6 +6,7 @@
 //   lab compile <program> [-o out.mjs]   compile to a JavaScript module that runs `main`
 //   lab native <program> [-o out]        compile to a native program through C (NATIVE.md)
 //   lab check <program>                  type-check, and list the definitions with their types
+//   lab hosts <program>                  print a hosts/js.js to start from: the program's own effects (FOREIGN.md)
 //   lab test <program> [--fresh]         run the tests: definitions whose row has Check (TESTS-IN-THE-LANGUAGE.md);
 //                                        results kept by hash in .lab/checks.json, --fresh ignores them
 //   lab build-web <program> [-o app.html] a page: one HTML file, opened anywhere (WEB.md)
@@ -51,6 +52,8 @@ import { soundOf } from "./sound.ts";
 import { readWav, writeWav } from "./wav.ts";
 import { audioProblem, BLOCK, playBlocks } from "../src/lang/audio.ts";
 import { runTests, savedFrom } from "../src/lang/tests.ts";
+import { representationLaws } from "../src/lang/rep-laws.ts";
+import { hostSkeleton, type Hosts } from "../src/lang/hosts.ts";
 import { evaluatorHash, readKept, resultKeys, writeKept } from "./checks.ts";
 
 const USAGE = `usage:
@@ -58,7 +61,9 @@ const USAGE = `usage:
   lab compile <program> [-o out.mjs]    compile to a JavaScript module that runs main
   lab native <program> [-o out]         compile to a native program through C, with $CC (default cc)
   lab check <program>                   type-check, and list the definitions and their types
-  lab test <program> [--fresh]          run each definition that performs Check, and check each accepted answer in examples.json;
+  lab hosts <program>                   print a hosts/js.js answering the program's own effects, to start from (FOREIGN.md)
+  lab test <program> [--fresh]          run each definition that performs Check, check each accepted answer in examples.json
+                                        and each representation's jobs against its type's through meaning;
                                         an unchanged test's result is kept by hash (.lab/checks.json), --fresh runs it again
   lab build-web <program> [-o app.html] one HTML file running the page main returns
   lab build-app <program> [-o folder]   that page as an app for phones: a PWA in folder/www, and a Capacitor project
@@ -204,17 +209,21 @@ if (!command || command === "help" || command === "--help" || !path) {
 const loaded = load(path);
 const main = command === "run" || command === "compile" || command === "native" || command === "build-web" || command === "build-app" ? entry(loaded, mainName, command.startsWith("build-")) : "";
 const p = main && defined < 0 ? represented(loaded, main) : loaded;
+// The host's answers to the program's own effects (FOREIGN.md, L69a):
+// hosts/js.js beside the program, if it has one.
+const hostFile = existsSync(path) && statSync(path).isDirectory() ? join(path, "hosts", "js.js") : "";
+const hosts: Hosts | undefined = hostFile && existsSync(hostFile) ? (await import(pathToFileURL(resolve(hostFile)).href)).default : undefined;
 switch (command) {
   case "run": {
     if (staticPage) {
       // Every text, part and attribute called once, and the handlers left
       // out: server-side rendering without a server.
       const cells = new Cells(equal);
-      const page = runMain(p.code, p.info, main, { print: (s) => console.error(s), names: p.names, cells, world: nodeWorld() });
+      const page = runMain(p.code, p.info, main, { print: (s) => console.error(s), names: p.names, cells, world: nodeWorld(), hosts });
       process.stdout.write(pageDocument(p.title, htmlText(page, evaluatorCall)));
       break;
     }
-    process.exitCode = runProgram(p.code, p.info, main, rest, { print: (s) => console.log(s), names: p.names, world: nodeWorld() });
+    process.exitCode = runProgram(p.code, p.info, main, rest, { print: (s) => console.log(s), names: p.names, world: nodeWorld(), hosts });
     break;
   }
   case "compile": {
@@ -309,6 +318,10 @@ switch (command) {
     process.exitCode = p.info.errors.length || wrongGrades.length ? 1 : 0;
     break;
   }
+  case "hosts": {
+    process.stdout.write(hostSkeleton(p.code, p.names, p.own));
+    break;
+  }
   case "test": {
     // Accepted answers first, then saved inputs (examples.json, the editor's Run), then small values.
     const file = join(path, "examples.json");
@@ -318,7 +331,7 @@ switch (command) {
     const keys = p.info.errors.length ? new Map<Id, string>() : resultKeys(p.code, p.info, p.own, saved, evaluatorHash());
     const kept = rest.includes("--fresh") ? {} : readKept();
     const old = new Map(p.own.filter((d) => kept[keys.get(d) ?? ""]).map((d) => [d, { def: d, ...kept[keys.get(d)!], kept: true }]));
-    const ran = p.info.errors.length ? [] : runTests(p.code, p.info, p.names, p.own.filter((d) => !old.has(d)), saved, { world: nodeWorld() });
+    const ran = p.info.errors.length ? [] : runTests(p.code, p.info, p.names, p.own.filter((d) => !old.has(d)), saved, { world: nodeWorld(), hosts });
     const results = [...ran, ...old.values()].sort((a, b) => p.own.indexOf(a.def) - p.own.indexOf(b.def));
     if (ran.some((r) => keys.has(r.def))) {
       const now = readKept();
@@ -331,8 +344,15 @@ switch (command) {
       for (const f of r.failures.slice(0, 3)) console.log(`✗ ${r.name}(${f.inputs.join(", ")}): ${f.what.join("; ")}`);
       if (r.failures.length > 3) console.log(`  … and ${r.failures.length - 3} more`);
     }
-    if (!results.length && !p.info.errors.length) console.log("no tests: a test is a definition that performs Check (expect), or an accepted answer in examples.json");
-    process.exitCode = p.info.errors.length || results.some((r) => r.error || r.failures.length) ? 1 : 0;
+    // The program's own representations: each job agrees with its type's through meaning (L108d).
+    const laws = p.info.errors.length ? [] : representationLaws(p.code, p.info, p.names, p.reps);
+    for (const l of laws) {
+      if (!l.failures.length) console.log(`✓ ${l.rep}'s ${l.job} agrees through its meaning (${l.cases} case${l.cases === 1 ? "" : "s"})`);
+      for (const f of l.failures.slice(0, 3)) console.log(`✗ ${l.rep}'s ${l.job}(${f.inputs.join(", ")}): ${f.what}`);
+      if (l.failures.length > 3) console.log(`  … and ${l.failures.length - 3} more`);
+    }
+    if (!results.length && !laws.length && !p.info.errors.length) console.log("no tests: a test is a definition that performs Check (expect), or an accepted answer in examples.json");
+    process.exitCode = p.info.errors.length || results.some((r) => r.error || r.failures.length) || laws.some((l) => l.failures.length) ? 1 : 0;
     break;
   }
   default:
