@@ -711,8 +711,11 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const choice = /Choice|needs|stuck|may not end/.test(badge);
     const title = `${declared ? "" : "solve "}${pres.style.notation[n.fn]?.glyph?.trim() || name(n.fn)}`;
     const rows = Math.max(givenKeys.length, boundKeys.length);
-    const lw = Math.max(0, ...givenKeys.map((k) => tw(label(k), 6.6))), rw = Math.max(0, ...boundKeys.map((k) => tw(label(k), 6.6)));
-    const bw = Math.max(70, tw(title, 8.2) + 24, tw(badge, 6.4) + 16, lw + rw + 36);
+    // A solved port reads "port → its name" when the two differ: sized as
+    // drawn, so a row's two labels don't run together (BACKLOG I132).
+    const outLabel = (k: string) => { const b = n.binds[k]; return name(b) === label(k) ? label(k) : `${label(k)} → ${name(b)}`; };
+    const lw = (i: number) => (givenKeys[i] ? tw(label(givenKeys[i]), 6.6) : 0), rw = (i: number) => (boundKeys[i] ? tw(outLabel(boundKeys[i]), 6.6) : 0);
+    const bw = Math.max(70, tw(title, 8.2) + 24, tw(badge, 6.4) + 16, ...Array.from({ length: Math.max(givenKeys.length, boundKeys.length) }, (_, i) => lw(i) + rw(i) + 36));
     const top = 34;
     const bh = top + rows * 20 + 6;
     const portY = (i: number) => top + i * 20 + 8;
@@ -727,7 +730,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
       });
       boundKeys.forEach((k, i) => {
         const b = n.binds[k];
-        g.append(s("text", { x: bw - 9, y: portY(i) + 4, class: "portl", "text-anchor": "end" }, name(b) === label(k) ? label(k) : `${label(k)} → ${name(b)}`));
+        g.append(s("text", { x: bw - 9, y: portY(i) + 4, class: "portl", "text-anchor": "end" }, outLabel(k)));
         g.append(titled(s("circle", { cx: bw, cy: portY(i), r: 6, class: `src${sel(b)}`, "data-src": b, "data-id": b }), `${name(b)}${typeOf(b) ? ` : ${typeOf(b)}` : ""}`));
       });
     }, { name: title });
