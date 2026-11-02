@@ -9,7 +9,7 @@ import { norm } from "../../ters/src/lang/int.ts";
 import { isData, isFn, isRecord, lowerScalar, type LType } from "../src/scalar.ts";
 import { emitWasm, fromInt, fromText, instantiate, runMain, toInt, toText } from "../src/wasm.ts";
 import { load } from "../src/program.ts";
-import { area, caseNameInputs, caseNames, changeInputs, changes, choices, recursiveLets, closures, escapes, fractionInputs, fractions, maths, ordered, orderedInputs, roses, sameLists, searches, several, showInputs, shows, stopsWith, texts, worldly } from "../src/fixtures.ts";
+import { area, caseNameInputs, caseNames, changeInputs, changes, choices, randomInputs, randoms, recursiveLets, closures, escapes, fractionInputs, fractions, maths, ordered, orderedInputs, roses, sameLists, searches, several, showInputs, shows, stopsWith, texts, worldly } from "../src/fixtures.ts";
 import { nodeWorld } from "../../ters/src/lang/world.ts";
 import { WASI } from "node:wasi";
 import { closeSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -852,4 +852,20 @@ test("case name in WebAssembly: the evaluator's names on every kind of value (C9
     }
   }
   assert.deepEqual([...seen].sort(), ["", "add", "cons", "false", "halt", "jump", "nil", "none", "some", "true", "tuple", "vec2"]);
+});
+
+test("Random under seeded in WebAssembly: the evaluator's numbers, a seeded inside another, a helper that draws (C106)", async () => {
+  const p = randoms();
+  assert.deepEqual(p.info.errors.map((e) => e.message), []);
+  const lowered = lowerScalar(p.code, p.info, p.names, [...Object.values(p.defs), p.roll], { data: true });
+  // A definition that draws with nobody seeding it is refused, by name.
+  assert.match(lowered.refused.get(p.roll) ?? "", /nobody seeds/);
+  for (const def of Object.values(p.defs)) assert.ok(!lowered.refused.has(def), lowered.refused.get(def));
+  const w = await instantiate(emitWasm(lowered)) as unknown as Exports;
+  const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });
+  const inputs = randomInputs();
+  for (const [name, def] of Object.entries(p.defs)) {
+    const f = lowered.funcs.find((g) => g.def === def)!;
+    for (const xs of inputs[name] as Value[][]) assert.equal(flat(answer(w, f, (w[f.name] as (...a: unknown[]) => unknown)(...xs))), flat(outcome(r, def, xs)), name);
+  }
 });

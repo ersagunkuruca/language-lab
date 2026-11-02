@@ -5,7 +5,7 @@ import { Lang } from "../../ters/src/lang/dsl.ts";
 import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { B } from "../../ters/src/prelude.ts";
-import { ABORT_OP, ARITH, ARRAY_OPS, CASE_NAME, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, INT_OPS, IO, LIST, NIL, NONE, PAIR_V, S, SECOND, SHOW_ANY, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
+import { ABORT_OP, ARITH, ARRAY_OPS, CASE_NAME, CELL_OPS, RANDOM_OP, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, INT_OPS, IO, LIST, NIL, NONE, PAIR_V, S, SECOND, SHOW_ANY, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
 // S as the pga fixture names it is its Space type.
 const STD = S;
 import { INT, NUMBER, STRING } from "../../ters/src/lang/types.ts";
@@ -637,6 +637,28 @@ export function caseNameInputs(): Record<string, unknown[][]> {
   const xs = [[-1], [0.5], [3]];
   return { instrs: xs, options: xs, lists: [[[]], [[1, 2]]], bools: xs, records: xs, pairs: xs, numbers: xs, texts: [[""], ["x"]] };
 }
+
+// Random under seeded (C106): the same numbers on every target, from
+// ters/src/lang/random.ts's generator: three draws, a seeded inside
+// another (the outer goes on where it was), and a helper that draws,
+// called from a map's function.
+export function randoms() {
+  const k = new Lang(LIBRARY.code);
+  const d = (name: string, params: string[], body: (...xs: Id[]) => Id) => { const x = k.def(name); k.define(x, k.fn(params, body)); return x; };
+  const lib = (name: string) => LIBRARY.code.defs.find((x) => LIBRARY.names[x] === name)!;
+  const draw = () => k.call(RANDOM_OP);
+  const seeded = (seed: Id, body: () => Id) => k.call(S.seeded, seed, k.thunk(body));
+  const roll = d("roll", [], () => k.call(B.add, k.call(S.floor, k.call(B.mul, draw(), k.lit(6))), k.lit(1)));
+  const defs = {
+    draws: d("draws", ["seed"], (s) => k.call(SHOW_ANY, seeded(s, () => k.list(draw(), draw(), draw())))),
+    nested: d("nested", ["seed"], (s) => k.call(SHOW_ANY, seeded(s, () => k.let("a", draw(), (a) => k.let("b", seeded(k.call(B.add, s, k.lit(1)), () => draw()), (b) => k.list(a, b, draw())))))),
+    dice: d("dice", ["seed"], (s) => k.call(SHOW_ANY, seeded(s, () => k.call(lib("map"), k.list(k.lit(1), k.lit(2), k.lit(3), k.lit(4)), k.fn(["i"], () => k.call(roll)))))),
+  };
+  const code = base(k.code);
+  const names = { ...baseNames(), ...k.names };
+  return { code, names, info: infer(code, names, undefined, checkOptions), defs, roll };
+}
+export const randomInputs = (): Record<string, unknown[][]> => ({ draws: [[0], [1], [42], [-7], [123456789.5], [4294967297]], nested: [[0], [9]], dice: [[3], [2026]] });
 
 // Inputs for ordered(), by function: near and equal Float64s, Ints past
 // 2⁶⁴, texts by code point (é after z, emoji after both), lists that share

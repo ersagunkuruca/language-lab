@@ -19,7 +19,7 @@ import { TRUE } from "../../ters/src/lang/std.ts";
 import { isRecord, lowerScalar, type DType, type LType, type Lowered, type RType } from "../src/scalar.ts";
 import { CFLAGS, emitC } from "../src/c.ts";
 import { load } from "../src/program.ts";
-import { area, caseNameInputs, caseNames, changeInputs, changes, escapes, fractionInputs, fractions, maths, ordered, orderedInputs, roses, sameLists, showInputs, shows, stopsWith, worldly } from "../src/fixtures.ts";
+import { area, caseNameInputs, caseNames, changeInputs, changes, escapes, randomInputs, randoms, fractionInputs, fractions, maths, ordered, orderedInputs, roses, sameLists, showInputs, shows, stopsWith, worldly } from "../src/fixtures.ts";
 
 import { build, compile, dir, hex, skip } from "./c-harness.ts";
 
@@ -453,6 +453,19 @@ test("case name in C: the evaluator's names on every kind of value, and every ce
     const i = lowered.funcs.findIndex((g) => g.def === def && !g.inner);
     assert.ok(i >= 0 && !emitC(lowered).refused.has(i), `${name} is in C`);
     for (const xs of inputs[name]) calls.push([i, xs.map(value)]);
+  }
+  sameAndFreed(build(lowered), calls, (i, xs) => first(r.call(r.value(lowered.funcs[i].def), ...xs))!, (i) => lowered.funcs[i].name);
+});
+
+test("Random under seeded in C: the evaluator's numbers, and every cell freed (C106)", { skip }, () => {
+  const p = randoms();
+  const lowered = lowerScalar(p.code, p.info, p.names, Object.values(p.defs), { data: true });
+  const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });
+  const inputs = randomInputs(), calls: [number, Value[]][] = [];
+  for (const [name, def] of Object.entries(p.defs)) {
+    const i = lowered.funcs.findIndex((g) => g.def === def && !g.inner);
+    assert.ok(i >= 0 && !emitC(lowered).refused.has(i), `${name} is in C`);
+    for (const xs of inputs[name]) calls.push([i, xs as Value[]]);
   }
   sameAndFreed(build(lowered), calls, (i, xs) => first(r.call(r.value(lowered.funcs[i].def), ...xs))!, (i) => lowered.funcs[i].name);
 });

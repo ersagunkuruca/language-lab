@@ -402,6 +402,35 @@ const FNS: Record<string, Fn> = {
   lab_drop(a); lab_drop(b);
   return t;
 }` },
+  // Random under \`seeded\` (C106): ters/src/lang/random.ts's generator,
+  // xoshiro128** (Blackman and Vigna, 2018, public domain) seeded by
+  // SplitMix32, so every target draws the same numbers.
+  "rand.seed": { uses: [], c: `static uint32_t lab__r[4];
+static uint32_t lab__rotl(uint32_t x, int k) { return (x << k) | (x >> (32 - k)); }
+static double lab_rand_seed(double seed) {
+  uint32_t z = (uint32_t)(int64_t)floor(seed);
+  for (int k = 0; k < 4; k++) {
+    z += 0x9e3779b9u;
+    uint32_t x = z;
+    x = (x ^ (x >> 16)) * 0x85ebca6bu;
+    x = (x ^ (x >> 13)) * 0xc2b2ae35u;
+    lab__r[k] = x ^ (x >> 16);
+  }
+  return 0;
+}
+static uint32_t lab__rand_word(void) {
+  uint32_t r = lab__rotl(lab__r[1] * 5, 7) * 9, t = lab__r[1] << 9;
+  lab__r[2] ^= lab__r[0]; lab__r[3] ^= lab__r[1]; lab__r[1] ^= lab__r[2]; lab__r[0] ^= lab__r[3];
+  lab__r[2] ^= t; lab__r[3] = lab__rotl(lab__r[3], 11);
+  return r;
+}
+static double lab_rand_next(void) { double hi = (double)(lab__rand_word() >> 5); return (hi * 67108864.0 + (double)(lab__rand_word() >> 6)) / 9007199254740992.0; }
+static double lab_rand_s0(void) { return lab__r[0]; }
+static double lab_rand_s1(void) { return lab__r[1]; }
+static double lab_rand_s2(void) { return lab__r[2]; }
+static double lab_rand_s3(void) { return lab__r[3]; }
+static double lab_rand_restore(double a, double b, double c, double d) { lab__r[0] = (uint32_t)a; lab__r[1] = (uint32_t)b; lab__r[2] = (uint32_t)c; lab__r[3] = (uint32_t)d; return 0; }` },
+  ...Object.fromEntries(["rand.next", "rand.s0", "rand.s1", "rand.s2", "rand.s3", "rand.restore"].map((n) => [n, { uses: ["rand.seed"], c: "" }])),
   // A Text shown, quoted as JSON.stringify quotes it (run.ts showValue, C102).
   "text.quoted": {
     uses: [],

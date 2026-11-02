@@ -73,7 +73,7 @@ const OPS: Record<string, [number[], Imm[]]> = {
   "i32.load": [[0x28, 0x02, 0x00], []], "i64.load": [[0x29, 0x03, 0x00], []], "i32.load8_u": [[0x2d, 0x00, 0x00], []],
   "i32.store": [[0x36, 0x02, 0x00], []], "i32.store8": [[0x3a, 0x00, 0x00], []], "memory.size": [[0x3f, 0x00], []], "memory.grow": [[0x40, 0x00], []],
   "f64.load": [[0x2b, 0x03, 0x00], []], "f64.store": [[0x39, 0x03, 0x00], []], "i64.store": [[0x37, 0x03, 0x00], []],
-  "i32.trunc_sat_f64_s": [[0xfc, 0x02], []], "global.get": [[0x23], ["global"]], "global.set": [[0x24], ["global"]],
+  "i32.trunc_sat_f64_s": [[0xfc, 0x02], []], "i32.trunc_sat_f64_u": [[0xfc, 0x03], []], "i64.trunc_sat_f64_s": [[0xfc, 0x06], []], "i32.rotl": [[0x77], []], "f64.convert_i32_u": [[0xb8], []], "global.get": [[0x23], ["global"]], "global.set": [[0x24], ["global"]],
   "ref.is_null": [[0xd1], []], "ref.null": [[0xd0], ["type"]],
   "ref.test": [[0xfb, 0x14], ["type"]], "ref.i31": [[0xfb, 0x1c], []], "i31.get_s": [[0xfb, 0x1d], []],
   "struct.new": [[0xfb, 0x00], ["type"]], "struct.get": [[0xfb, 0x02], ["type", "u"]], "struct.set": [[0xfb, 0x05], ["type", "u"]], "ref.cast": [[0xfb, 0x16], ["type"]],
@@ -210,6 +210,156 @@ const R: Record<string, Omit<RtFn, "name">> = {
       array.len
       array.copy $bytes $bytes
       local.get $r`,
+  },
+  // Random under `seeded` (C106): ters/src/lang/random.ts's generator,
+  // xoshiro128** (Blackman and Vigna, 2018, public domain) seeded by
+  // SplitMix32 (after Steele, Lea and Flood, OOPSLA 2014), its four words
+  // in the globals $r0 to $r3, so every target draws the same numbers. A
+  // seeded keeps the words it found (rand.s0 to rand.s3, as Float64s) and
+  // puts them back after (rand.restore).
+  "rand.mix": {
+    params: [["x", "i32"]], result: "i32", locals: [], uses: [],
+    body: `
+      local.get $x
+      local.get $x
+      i32.const 16
+      i32.shr_u
+      i32.xor
+      i32.const -2048144789
+      i32.mul
+      local.tee $x
+      local.get $x
+      i32.const 13
+      i32.shr_u
+      i32.xor
+      i32.const -1028477387
+      i32.mul
+      local.tee $x
+      local.get $x
+      i32.const 16
+      i32.shr_u
+      i32.xor`,
+  },
+  "rand.seed": {
+    params: [["seed", "f64"]], result: "f64", locals: [["z", "i32"]], uses: ["rand.mix"],
+    body: `
+      local.get $seed
+      f64.floor
+      i64.trunc_sat_f64_s
+      i32.wrap_i64
+      i32.const -1640531527
+      i32.add
+      local.tee $z
+      call $rand.mix
+      global.set $r0
+      local.get $z
+      i32.const -1640531527
+      i32.add
+      local.tee $z
+      call $rand.mix
+      global.set $r1
+      local.get $z
+      i32.const -1640531527
+      i32.add
+      local.tee $z
+      call $rand.mix
+      global.set $r2
+      local.get $z
+      i32.const -1640531527
+      i32.add
+      local.tee $z
+      call $rand.mix
+      global.set $r3
+      local.get $z
+      drop
+      f64.const 0`,
+  },
+  "rand.word": {
+    params: [], result: "i32", locals: [["r", "i32"], ["t", "i32"]], uses: [],
+    body: `
+      global.get $r1
+      i32.const 5
+      i32.mul
+      i32.const 7
+      i32.rotl
+      i32.const 9
+      i32.mul
+      local.set $r
+      global.get $r1
+      i32.const 9
+      i32.shl
+      local.set $t
+      global.get $r2
+      global.get $r0
+      i32.xor
+      global.set $r2
+      global.get $r3
+      global.get $r1
+      i32.xor
+      global.set $r3
+      global.get $r1
+      global.get $r2
+      i32.xor
+      global.set $r1
+      global.get $r0
+      global.get $r3
+      i32.xor
+      global.set $r0
+      global.get $r2
+      local.get $t
+      i32.xor
+      global.set $r2
+      global.get $r3
+      i32.const 11
+      i32.rotl
+      global.set $r3
+      local.get $r`,
+  },
+  "rand.next": {
+    params: [], result: "f64", locals: [], uses: ["rand.word"],
+    body: `
+      call $rand.word
+      i32.const 5
+      i32.shr_u
+      f64.convert_i32_u
+      f64.const 67108864
+      f64.mul
+      call $rand.word
+      i32.const 6
+      i32.shr_u
+      f64.convert_i32_u
+      f64.add
+      f64.const 9007199254740992
+      f64.div`,
+  },
+  "rand.s0": { params: [], result: "f64", locals: [], uses: [], body: `
+      global.get $r0
+      f64.convert_i32_u` },
+  "rand.s1": { params: [], result: "f64", locals: [], uses: [], body: `
+      global.get $r1
+      f64.convert_i32_u` },
+  "rand.s2": { params: [], result: "f64", locals: [], uses: [], body: `
+      global.get $r2
+      f64.convert_i32_u` },
+  "rand.s3": { params: [], result: "f64", locals: [], uses: [], body: `
+      global.get $r3
+      f64.convert_i32_u` },
+  "rand.restore": {
+    params: [["a", "f64"], ["b", "f64"], ["c", "f64"], ["d", "f64"]], result: "f64", locals: [], uses: [],
+    body: `
+      local.get $a
+      i32.trunc_sat_f64_u
+      global.set $r0
+      local.get $b
+      i32.trunc_sat_f64_u
+      global.set $r1
+      local.get $c
+      i32.trunc_sat_f64_u
+      global.set $r2
+      local.get $d
+      i32.trunc_sat_f64_u
+      global.set $r3
+      f64.const 0`,
   },
   // A Text shown, quoted as JSON.stringify quotes it (run.ts showValue,
   // C102): " and \\ and the controls with a letter (\\b \\f \\n \\r \\t)
