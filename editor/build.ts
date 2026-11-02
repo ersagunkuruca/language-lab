@@ -12,7 +12,8 @@
 //   reactive.html  the Cells programs running live (editor/reactive.ts)
 //   shaders.html   a program compiled to WGSL, drawn by WebGPU
 //                  (editor/shaders.ts)
-//   apps/*.html    web apps written in the language (examples/converter, examples/dice, examples/pig, examples/tumble, examples/pedal, examples/bounce, examples/constructions, examples/compass, examples/spacetime),
+//   apps/*.html    web apps written in the language (the programs
+//                  editor/examples.json marks page: converter, dice, …),
 //                  each one file built like `lab build-web` (WEB.md)
 
 import { build } from "../ters/node_modules/esbuild/lib/main.js";
@@ -22,13 +23,16 @@ import { mkdirSync } from "node:fs";
 import { pageRuntime, recordings, webPage, workletRuntime } from "../ters/cli/web.ts";
 import { infer } from "../ters/src/lang/infer.ts";
 import { loadProgram } from "../ters/src/lang/load.ts";
+import { examplesPlugin, type Manifest } from "./examplesPlugin.ts";
 
 const here = new URL(".", import.meta.url).pathname;
 const site = here + "../";
+// The example programs (BACKLOG E205): the editor's picker and the pages.
+const manifest = JSON.parse(readFileSync(here + "examples.json", "utf8")) as Manifest;
 // What the editor's "Save page" puts before a page's compiled program.
 // The worker Run uses (editor/runWorker.ts), as text the editor starts.
 const worker = await build({ entryPoints: [here + "runWorker.ts"], bundle: true, format: "iife", target: "es2022", minify: true, write: false });
-const out = await build({ entryPoints: [here + "main.ts"], bundle: true, format: "iife", target: "es2022", minify: true, write: false, define: { PAGE_RUNTIME: JSON.stringify(await pageRuntime()), RUN_WORKER: JSON.stringify(worker.outputFiles[0].text), WORKLET_RUNTIME: JSON.stringify(await workletRuntime()) } });
+const out = await build({ entryPoints: [here + "main.ts"], bundle: true, format: "iife", target: "es2022", minify: true, write: false, plugins: [examplesPlugin(manifest)], define: { PAGE_RUNTIME: JSON.stringify(await pageRuntime()), RUN_WORKER: JSON.stringify(worker.outputFiles[0].text), WORKLET_RUNTIME: JSON.stringify(await workletRuntime()) } });
 const js = out.outputFiles[0].text.replace(/<\/script/g, "<\\/script");
 const page = readFileSync(here + "page.html", "utf8").replace("<script>/*SCRIPT*/</script>", () => `<script>${js}</script>`);
 writeFileSync(site + "index.html", `<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n</head>\n<body>\n${page}</body>\n</html>\n`);
@@ -178,7 +182,7 @@ console.log("shaders.html");
 
 // The web apps: each example program whose main is a page, as one file.
 mkdirSync(site + "apps", { recursive: true });
-for (const name of ["converter", "dice", "pig", "tumble", "pedal", "bounce", "constructions", "compass", "spacetime"]) {
+for (const name of manifest.programs.flatMap((p) => (p.page ? p.folders ?? [] : []))) {
   const p = loadProgram(here + "../ters/examples/" + name);
   const info = infer(p.code, p.pres.names, undefined, p.options);
   writeFileSync(site + `apps/${name}.html`, await webPage(name[0].toUpperCase() + name.slice(1), p.code, info, p.pres.names, p.named("main")));

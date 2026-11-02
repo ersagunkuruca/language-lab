@@ -193,8 +193,9 @@ test("every example app the site builds compiles to a page", async () => {
   const { loadProgram } = await import("../src/lang/load.ts");
   const { infer } = await import("../src/lang/infer.ts");
   const { webPage } = await import("../cli/web.ts");
-  const build = readFileSync(join(import.meta.dirname, "../../editor/build.ts"), "utf8");
-  const apps = JSON.parse(/for \(const name of (\[[^\]]*\])\) \{\n  const p = loadProgram/.exec(build)![1].replace(/'/g, '"')) as string[];
+  // The pages editor/examples.json marks (E205), as build.ts reads it.
+  const manifest = JSON.parse(readFileSync(join(import.meta.dirname, "../../editor/examples.json"), "utf8")) as { programs: { page?: boolean; folders?: string[] }[] };
+  const apps = manifest.programs.flatMap((p) => (p.page ? p.folders ?? [] : []));
   assert.ok(apps.includes("bounce"), apps.join(" "));
   for (const name of apps) {
     const p = loadProgram(join(import.meta.dirname, "../examples", name));

@@ -8,83 +8,9 @@
 // network; its result is known to be true.
 
 import { handOver, type Cells } from "../ters/src/lang/cells.ts";
-import quadCode from "../ters/examples/quadratic/code.json" with { type: "json" };
-import quadShort from "../ters/examples/quadratic/names.short.json" with { type: "json" };
-import quadDescriptive from "../ters/examples/quadratic/names.descriptive.json" with { type: "json" };
-import quadComments from "../ters/examples/quadratic/comments.json" with { type: "json" };
-import quadHints from "../ters/examples/quadratic/hints.json" with { type: "json" };
-import phyCode from "../ters/examples/physics/code.json" with { type: "json" };
-import phyNames from "../ters/examples/physics/names.default.json" with { type: "json" };
-import phyComments from "../ters/examples/physics/comments.json" with { type: "json" };
-import phyLayout from "../ters/examples/physics/layout.json" with { type: "json" };
-import phyExamples from "../ters/examples/physics/examples.json" with { type: "json" };
-import quadExamples from "../ters/examples/quadratic/examples.json" with { type: "json" };
-import sortCode from "../ters/examples/sort/code.json" with { type: "json" };
-import sortNames from "../ters/examples/sort/names.default.json" with { type: "json" };
-import sortComments from "../ters/examples/sort/comments.json" with { type: "json" };
-import sortExamples from "../ters/examples/sort/examples.json" with { type: "json" };
-import queensCode from "../ters/examples/queens/code.json" with { type: "json" };
-import queensNames from "../ters/examples/queens/names.default.json" with { type: "json" };
-import queensComments from "../ters/examples/queens/comments.json" with { type: "json" };
-import calculusCode from "../ters/examples/calculus/code.json" with { type: "json" };
-import calculusNames from "../ters/examples/calculus/names.default.json" with { type: "json" };
-import calculusComments from "../ters/examples/calculus/comments.json" with { type: "json" };
-import backwardsCode from "../ters/examples/backwards/code.json" with { type: "json" };
-import backwardsNames from "../ters/examples/backwards/names.default.json" with { type: "json" };
-import backwardsComments from "../ters/examples/backwards/comments.json" with { type: "json" };
-import relationsCode from "../ters/examples/relations/code.json" with { type: "json" };
-import relationsNames from "../ters/examples/relations/names.default.json" with { type: "json" };
-import relationsComments from "../ters/examples/relations/comments.json" with { type: "json" };
-import effectsCode from "../ters/examples/effects/code.json" with { type: "json" };
-import effectsNames from "../ters/examples/effects/names.default.json" with { type: "json" };
-import effectsComments from "../ters/examples/effects/comments.json" with { type: "json" };
-import effectsExamples from "../ters/examples/effects/examples.json" with { type: "json" };
-import shadersCode from "../ters/examples/shaders/code.json" with { type: "json" };
-import shadersNames from "../ters/examples/shaders/names.default.json" with { type: "json" };
-import shadersComments from "../ters/examples/shaders/comments.json" with { type: "json" };
-import raymarchCode from "../ters/examples/raymarch/code.json" with { type: "json" };
-import raymarchNames from "../ters/examples/raymarch/names.default.json" with { type: "json" };
-import raymarchComments from "../ters/examples/raymarch/comments.json" with { type: "json" };
-import mandelbrotCode from "../ters/examples/mandelbrot/code.json" with { type: "json" };
-import mandelbrotNames from "../ters/examples/mandelbrot/names.default.json" with { type: "json" };
-import mandelbrotComments from "../ters/examples/mandelbrot/comments.json" with { type: "json" };
-import diceCode from "../ters/examples/dice/code.json" with { type: "json" };
-import diceNames from "../ters/examples/dice/names.default.json" with { type: "json" };
-import diceComments from "../ters/examples/dice/comments.json" with { type: "json" };
-import pigCode from "../ters/examples/pig/code.json" with { type: "json" };
-import pigNames from "../ters/examples/pig/names.default.json" with { type: "json" };
-import pigComments from "../ters/examples/pig/comments.json" with { type: "json" };
-import tumbleCode from "../ters/examples/tumble/code.json" with { type: "json" };
-import tumbleNames from "../ters/examples/tumble/names.default.json" with { type: "json" };
-import tumbleComments from "../ters/examples/tumble/comments.json" with { type: "json" };
-import constructionsCode from "../ters/examples/constructions/code.json" with { type: "json" };
-import constructionsNames from "../ters/examples/constructions/names.default.json" with { type: "json" };
-import constructionsComments from "../ters/examples/constructions/comments.json" with { type: "json" };
-import constructionsExamples from "../ters/examples/constructions/examples.json" with { type: "json" };
-import bounceCode from "../ters/examples/bounce/code.json" with { type: "json" };
-import bounceNames from "../ters/examples/bounce/names.default.json" with { type: "json" };
-import bounceComments from "../ters/examples/bounce/comments.json" with { type: "json" };
-import spacetimeCode from "../ters/examples/spacetime/code.json" with { type: "json" };
-import spacetimeNames from "../ters/examples/spacetime/names.default.json" with { type: "json" };
-import spacetimeComments from "../ters/examples/spacetime/comments.json" with { type: "json" };
-import pedalCode from "../ters/examples/pedal/code.json" with { type: "json" };
-import pedalNames from "../ters/examples/pedal/names.default.json" with { type: "json" };
-import pedalComments from "../ters/examples/pedal/comments.json" with { type: "json" };
-import converterCode from "../ters/examples/converter/code.json" with { type: "json" };
-import converterNames from "../ters/examples/converter/names.default.json" with { type: "json" };
-import converterComments from "../ters/examples/converter/comments.json" with { type: "json" };
-import conjugateCode from "../ters/examples/conjugate/code.json" with { type: "json" };
-import conjugateNames from "../ters/examples/conjugate/names.default.json" with { type: "json" };
-import conjugateComments from "../ters/examples/conjugate/comments.json" with { type: "json" };
 import { outlineProgram } from "../ters/src/lang/cells-programs.ts";
-import lockstepCode from "../ters/examples/lockstep/code.json" with { type: "json" };
-import lockstepNames from "../ters/examples/lockstep/names.default.json" with { type: "json" };
-import lockstepComments from "../ters/examples/lockstep/comments.json" with { type: "json" };
-import countdownCode from "../ters/examples/countdown/code.json" with { type: "json" };
-import countdownNames from "../ters/examples/countdown/names.default.json" with { type: "json" };
-import countdownDescriptive from "../ters/examples/countdown/names.descriptive.json" with { type: "json" };
-import countdownComments from "../ters/examples/countdown/comments.json" with { type: "json" };
-import countdownLayout from "../ters/examples/countdown/layout.json" with { type: "json" };
+import manifest from "./examples.json" with { type: "json" };
+import FILES from "examples:files";
 import blocksStyle from "../ters/styles/blocks.json" with { type: "json" };
 import mathStyle from "../ters/styles/math.json" with { type: "json" };
 import plainStyle from "../ters/styles/plain.json" with { type: "json" };
@@ -175,7 +101,8 @@ interface Layout {
 
 // The examples, and programs of your own: made new, or opened from a file.
 type Program = string;
-const EXAMPLES: [Program, string][] = [["numbers", "Numbers & physics"], ["sort", "Insertion sort"], ["queens", "Eight queens"], ["countdown", "Countdown numbers"], ["calculus", "Calculus"], ["backwards", "Run backwards"], ["conjugate", "Conjugation"], ["relations", "Relations in programs"], ["effects", "Effects"], ["lockstep", "Lockstep: a cart on a spring"], ["shaders", "Shader: ripples"], ["raymarch", "Shader: ray marching"], ["mandelbrot", "Shader: Mandelbrot set"], ["dice", "Page: two dice"], ["pig", "Page: Pig"], ["tumble", "Page: Tumble"], ["outline", "Page: nested to-do outline"], ["converter", "Page: unit converter"], ["pedal", "Page: guitar pedal"], ["constructions", "Page: constructions"], ["bounce", "Page: bounce"], ["spacetime", "Page: spacetime"]];
+// The example programs, in the picker's order (editor/examples.json, E205).
+const EXAMPLES: [Program, string][] = manifest.programs.filter((p) => p.editor !== false).map((p) => [p.program, p.label]);
 const isExample = (p: Program) => EXAMPLES.some(([k]) => k === p);
 const MINE = "mine.";
 // The program's own comment, in comments.json like any other: what it is,
@@ -259,29 +186,17 @@ const typedDoc = (program: Program, code: Code, names: Names, comments: Comments
   examples: more.examples,
 });
 
-const initialFor = (program: Program): Doc =>
-  program === "sort" ? typedDoc("sort", sortCode as Code, sortNames, sortComments, { examples: sortExamples })
-  : program === "queens" ? typedDoc("queens", queensCode as Code, queensNames, queensComments)
-  : program === "calculus" ? typedDoc("calculus", calculusCode as Code, calculusNames, calculusComments)
-  : program === "backwards" ? typedDoc("backwards", backwardsCode as Code, backwardsNames, backwardsComments)
-  : program === "relations" ? typedDoc("relations", relationsCode as Code, relationsNames, relationsComments)
-  : program === "effects" ? typedDoc("effects", effectsCode as Code, effectsNames, effectsComments, { examples: effectsExamples })
-  : program === "shaders" ? typedDoc("shaders", shadersCode as Code, shadersNames, shadersComments)
-  : program === "raymarch" ? typedDoc("raymarch", raymarchCode as Code, raymarchNames, raymarchComments)
-  : program === "mandelbrot" ? typedDoc("mandelbrot", mandelbrotCode as Code, mandelbrotNames, mandelbrotComments)
-  : program === "dice" ? typedDoc("dice", diceCode as Code, diceNames, diceComments)
-  : program === "pig" ? typedDoc("pig", pigCode as Code, pigNames, pigComments)
-  : program === "tumble" ? typedDoc("tumble", tumbleCode as Code, tumbleNames, tumbleComments)
-  : program === "outline" ? outlineDoc()
-  : program === "pedal" ? typedDoc("pedal", pedalCode as Code, pedalNames, pedalComments)
-  : program === "constructions" ? typedDoc("constructions", constructionsCode as Code, constructionsNames, constructionsComments, { examples: constructionsExamples })
-  : program === "bounce" ? typedDoc("bounce", bounceCode as Code, bounceNames, bounceComments)
-  : program === "spacetime" ? typedDoc("spacetime", spacetimeCode as Code, spacetimeNames, spacetimeComments)
-  : program === "countdown" ? { ...typedDoc("countdown", countdownCode as Code, countdownNames, countdownComments, { layout: countdownLayout }), names: { short: countdownNames, descriptive: countdownDescriptive } }
-  : program === "converter" ? typedDoc("converter", converterCode as Code, converterNames, converterComments)
-  : program === "lockstep" ? typedDoc("lockstep", lockstepCode as Code, lockstepNames, lockstepComments)
-  : program === "conjugate" ? typedDoc("conjugate", conjugateCode as Code, conjugateNames, conjugateComments)
-  : initial();
+// One from its folders (examples/unpack.ts writes one), merged in order,
+// or one built in code.
+const BUILT: Record<Program, () => Doc> = { outline: () => outlineDoc() };
+const initialFor = (program: Program): Doc => {
+  const m = manifest.programs.find((p) => p.program === program && p.editor !== false) ?? manifest.programs[0];
+  if (m.built) return BUILT[m.program]();
+  const fs = (m.folders ?? []).map((f) => FILES[f]);
+  const all = <K extends keyof (typeof fs)[number]>(k: K) => fs.some((f) => f[k]) ? Object.assign({}, ...fs.map((f) => f[k])) : undefined;
+  const d = typedDoc(m.program, fs.map((f) => f.code as Code).reduce((a, b) => merge(a, b)), all("names") ?? {}, all("comments") ?? {}, { layout: all("layout"), examples: all("examples") });
+  return { ...d, names: { short: d.names.short, descriptive: all("descriptive") ?? {} }, hints: all("hints") ?? {} };
+};
 
 // The nested to-do outline is built in src/lang/cells-programs.ts, where
 // reactive.html runs it too (BACKLOG L100, I35).
@@ -294,10 +209,7 @@ function outlineDoc(): Doc {
 // units that run in every direction.
 // Each starts out run the way you'd first ask (layout.json): how far it
 // falls, where the point lands.
-const initial = (): Doc => {
-  const d = typedDoc("numbers", merge(quadCode as Code, phyCode as Code), { ...quadShort, ...phyNames }, { ...quadComments, ...phyComments }, { layout: phyLayout, examples: { ...quadExamples, ...phyExamples } });
-  return { ...d, names: { short: d.names.short, descriptive: quadDescriptive }, hints: quadHints };
-};
+const initial = (): Doc => initialFor("numbers");
 
 // An embed (`?embed&program=sort&def=insert`): one definition's blocks
 // and Run, for a page that teaches with the editor in an iframe. It starts
@@ -364,7 +276,7 @@ function resolves(code: Code): boolean {
   return Object.values(code.nodes).every((n) => [...children(n), ...(n.kind === "ref" ? [n.target] : n.kind === "solve" ? [n.fn] : [])].every((c) => code.nodes[c]));
 }
 
-const START: Record<Program, string> = { numbers: "fall", sort: "sort", queens: "queens", calculus: "cubic", backwards: "who was greeted", relations: "to polar", effects: "main" };
+const START: Record<Program, string> = Object.fromEntries(manifest.programs.flatMap((p) => (p.start ? [[p.program, p.start]] : [])));
 // The program's own definitions, without the standard library's.
 const ownDefs = (d: Doc = doc) => d.code.defs.filter((x) => !BASE.nodes[x] && !d.loose?.[x]);
 // The program without its loose parts: what runs, compiles and is saved as

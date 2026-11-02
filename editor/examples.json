@@ -1,0 +1,28 @@
+{
+  "about": "The example programs (BACKLOG E205): the editor's picker in this order, each from its folders under ters/examples/ (merged in order) or built in code, with the definition it opens on (else main, else its picture). page: built as apps/<folder>.html too (editor/build.ts). editor false: a page only.",
+  "programs": [
+    { "program": "numbers", "label": "Numbers & physics", "folders": ["quadratic", "physics"], "start": "fall" },
+    { "program": "sort", "label": "Insertion sort", "folders": ["sort"], "start": "sort" },
+    { "program": "queens", "label": "Eight queens", "folders": ["queens"], "start": "queens" },
+    { "program": "countdown", "label": "Countdown numbers", "folders": ["countdown"] },
+    { "program": "calculus", "label": "Calculus", "folders": ["calculus"], "start": "cubic" },
+    { "program": "backwards", "label": "Run backwards", "folders": ["backwards"], "start": "who was greeted" },
+    { "program": "conjugate", "label": "Conjugation", "folders": ["conjugate"] },
+    { "program": "relations", "label": "Relations in programs", "folders": ["relations"], "start": "to polar" },
+    { "program": "effects", "label": "Effects", "folders": ["effects"], "start": "main" },
+    { "program": "lockstep", "label": "Lockstep: a cart on a spring", "folders": ["lockstep"] },
+    { "program": "shaders", "label": "Shader: ripples", "folders": ["shaders"] },
+    { "program": "raymarch", "label": "Shader: ray marching", "folders": ["raymarch"] },
+    { "program": "mandelbrot", "label": "Shader: Mandelbrot set", "folders": ["mandelbrot"] },
+    { "program": "dice", "label": "Page: two dice", "folders": ["dice"], "page": true },
+    { "program": "pig", "label": "Page: Pig", "folders": ["pig"], "page": true },
+    { "program": "tumble", "label": "Page: Tumble", "folders": ["tumble"], "page": true },
+    { "program": "outline", "label": "Page: nested to-do outline", "built": true },
+    { "program": "converter", "label": "Page: unit converter", "folders": ["converter"], "page": true },
+    { "program": "pedal", "label": "Page: guitar pedal", "folders": ["pedal"], "page": true },
+    { "program": "constructions", "label": "Page: constructions", "folders": ["constructions"], "page": true },
+    { "program": "bounce", "label": "Page: bounce", "folders": ["bounce"], "page": true },
+    { "program": "spacetime", "label": "Page: spacetime", "folders": ["spacetime"], "page": true },
+    { "program": "compass", "label": "Compass", "folders": ["compass"], "page": true, "editor": false }
+  ]
+}
