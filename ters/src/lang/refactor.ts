@@ -9,7 +9,7 @@ import { children, freshId, ownerOfTypeParts } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import type { Filling } from "./infer.ts";
 import { INT, NUMBER, STRING, type Type } from "./types.ts";
-import { TRUE } from "./std.ts";
+import { SET, TRUE } from "./std.ts";
 
 export interface Edit { code: Code; names: Names }
 
@@ -157,6 +157,15 @@ export function fillHole(code: Code, names: Names, hole: Id, f: Filling, library
       const value = add(f.type === STRING ? { kind: "lit", value: "" } : f.type === INT ? { kind: "lit", value: 0, of: INT } : { kind: "lit", value: 0 });
       const arm = add({ kind: "arm", variant: value, value, binds: [], results: [], body: add({ kind: "hole" }) });
       data = { kind: "match", scrutinee: add({ kind: "ref", target: f.on }), arms: [arm], otherwise: add({ kind: "hole" }) };
+      break;
+    }
+    // A record with one field changed (E214): set((m) ↦ m.field, on, □).
+    case "set": {
+      const m = add({ kind: "binder" });
+      const taken = namesInScope(code, names, hole);
+      nn[m] = unique(((library[f.type] ?? names[f.type] ?? "r").match(/\p{L}/u)?.[0] ?? "r").toLowerCase(), taken);
+      const read = add({ kind: "call", fn: add({ kind: "ref", target: f.field }), args: [add({ kind: "ref", target: m })] });
+      data = { kind: "call", fn: add({ kind: "ref", target: SET }), args: [add({ kind: "lambda", params: [m], body: read }), add({ kind: "ref", target: f.on }), add({ kind: "hole" })] };
       break;
     }
     case "match":

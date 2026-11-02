@@ -1721,7 +1721,10 @@ export type Filling =
   | { kind: "use"; target: Id }
   // A match on the values of an Int, Float64 or Text in scope (L164c,
   // E225): one value's arm and the otherwise, holes.
-  | { kind: "values"; on: Id; type: Id };
+  | { kind: "values"; on: Id; type: Id }
+  // A record in scope with one field changed (E214): `set((m) ↦ m.pc,
+  // machine, □)`, where the same type is wanted.
+  | { kind: "set"; on: Id; field: Id; type: Id };
 
 // Everything that can go in a hole without a type or effect error: variables
 // in scope, definitions, builtins and constructors (as values, or called with
@@ -2059,6 +2062,20 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
       const split = (f: Filling) => { if (!withResults || whole(f)) out.push(f); };
       split({ kind: "match", on: b.id, type: bt.id });
       if (recursiveType(code, bt.id)) split({ kind: "fold", on: b.id, type: bt.id });
+      // The same record with one field new, where a value of its type
+      // goes: rebuilding it from its own fields but one is what `set`
+      // says (E214; machine rebuilt its 8-field Machine 12 times).
+      const td = code.nodes[(code.nodes[bt.id] as NodeOf<"def">).body!] as NodeOf<"typedef">;
+      const only = td.variants.length === 1 && !td.interface ? code.nodes[td.variants[0]] as NodeOf<"variant"> : null;
+      // Where that type is the one wanted, or where anything goes and it is
+      // the definition's own input (a step from one state to the next):
+      // not every field of every record in scope wherever anything goes.
+      const input = h.group.some((d) => { const l = code.nodes[(code.nodes[d] as NodeOf<"def"> | undefined)?.body ?? ""]; return l?.kind === "lambda" && l.params.includes(b.id); });
+      const asIs = only && only.fields.length > 1 && (input || info.subst.resolve(h.expected).t === "con") ? fits(b.type, false) : null;
+      if (asIs) for (const field of only!.fields) {
+        const f: Filling = { kind: "set", on: b.id, field, type: bt.id };
+        if (safe(asIs, f, false)) out.push(f);
+      }
     } else if (bt.t === "con" && [INT, NUMBER, STRING].includes(bt.id)) {
       const f: Filling = { kind: "values", on: b.id, type: bt.id };
       if (!withResults || whole(f)) out.push(f);
