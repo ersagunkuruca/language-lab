@@ -1046,9 +1046,14 @@ export const AWAIT = typedef("std.await", "Await", [], [
   ["start timer", [["milliseconds", () => tref(NUMBER)]], () => tref(TICKET, tref(UNIT)), { later: true }],
 ], true);
 export const AWAIT_OP = "std.await.await", START_TIMER_OP = "std.await.start timer";
-export const BRANCH = typedef("std.branch", "Branch", ["r"], [
+// Its `e` is a row (L149): what the action does besides waiting, which
+// resuming it does too, so a branch may print, abort, fetch or draw.
+// The row's own tref has an id of its own, so the numbered ones after it
+// (the tuples') don't move: a saved program may hold std's type nodes.
+const BRANCH_ID = "std.branch";
+export const BRANCH = typedef(BRANCH_ID, "Branch", ["r", "e"], [
   ["done", [["value", ([r]) => tref(r)]]],
-  ["parked", [["ticket", () => tref(TICKET, tref(UNIT))], ["resume", ([r], self) => tfun([], tref(self, tref(r)), [AWAIT])]]],
+  ["parked", [["ticket", () => tref(TICKET, tref(UNIT))], ["resume", ([r, e], self) => tfun([], tref(self, tref(r), node({ id: `${BRANCH_ID}.e.arg`, kind: "tref", target: e, args: [] })), [AWAIT, e])]]],
 ]);
 export const BRANCH_V = { done: "std.branch.done", parked: "std.branch.parked" } as const;
 // Tuples (PORTS-2026-11-01.md §1, L128): the inputs of a function, or its

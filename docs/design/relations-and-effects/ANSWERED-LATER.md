@@ -260,9 +260,12 @@ together(actions) =
   value) | first ready(tickets, which)`: `which : (Int) → a` gives `any of`
   its Ticket Int without a type that depends on the case, and lets a
   world in the language answer `first ready` at all (a case can't make an
-  `a` from nothing). Its limit: `Branch`'s `resume` is a field, and a
-  field's function row is closed, so a branch may only `Await` for now
-  (test/await.test.ts).
+  `a` from nothing). Its first limit, a field's function row being
+  closed so a branch could only `Await`, is gone (L149): `Branch r e` has
+  a row parameter, `resume : () -[Await, e]-> Branch r e` (Koka's
+  effect-polymorphic data), so a branch may print, abort, fetch or draw,
+  and `together : (List (() -[Diverge, Await, e]-> a)) -[Diverge, Await,
+  e]-> List a` (test/branch-effects.test.ts).
 - **L71c** (done, 2026-11-01), the world answers `await`: `start timer(ms)`
   (an `Await` operation, answered by the world) gives a ticket ready ms after
   it was started; the evaluator's runtime waits on the world's clock for a

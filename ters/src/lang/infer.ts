@@ -27,7 +27,7 @@ import { fieldPath, placePath } from "./records.ts";
 import { leftToWays, pickWays, waysIn, type Ways } from "./ways.ts";
 import { fresh, rigid, RIGID, type Pins } from "./signatures.ts";
 import {
-  ALGEBRAIC_TYPE, ARRAY, MASK_TYPES, BUILTIN_EFFECTS, NAMED_ROWS, writtenRow, CELL, PATH, CHOICE, COMPLEX_TYPE, CONSOLE, DUAL_TYPE, FIXED_TYPE, DIVERGE, EffectError, ArithError, FractionError, WORLD, WorldError, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, RATIONAL_TYPE, schemeArith, schemeNeeds, showType as showT, STRING, Subst, TypeError,
+  ALGEBRAIC_TYPE, ARRAY, MASK_TYPES, isRowCarrier, rowCarrier, BUILTIN_EFFECTS, NAMED_ROWS, writtenRow, CELL, PATH, CHOICE, COMPLEX_TYPE, CONSOLE, DUAL_TYPE, FIXED_TYPE, DIVERGE, EffectError, ArithError, FractionError, WORLD, WorldError, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, RATIONAL_TYPE, schemeArith, schemeNeeds, showType as showT, STRING, Subst, TypeError,
   type Row, type Scheme, type Type,
 } from "./types.ts";
 import { DECLARED, discharge } from "./ledger.ts";
@@ -197,7 +197,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     // A function type in data lists its effects, a closed row: a function
     // put in a field can't hide what it does when it's taken out and called.
     if (n.kind === "tfun") {
-      return { t: "fn", params: n.params.map((p) => typeExpr(p, params)), ret: typeExpr(n.result, params), eff: writtenRow(n.effects) };
+      return { t: "fn", params: n.params.map((p) => typeExpr(p, params)), ret: typeExpr(n.result, params), eff: rowWithParams(s, n.effects, params) };
     }
     if (n.kind !== "tref") throw new Error(`${id} is not a type`);
     if (params.has(n.target)) return params.get(n.target)!;
@@ -337,7 +337,10 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       if (!positive(type, self, false)) err(field, `${nm(def)} can't take itself as an input in its own field ${nm(field)}: through it, a function could call itself without recursion and never end`);
       for (const t of subtree(code, type)) {
         const n = code.nodes[t];
-        if (n?.kind === "tfun") for (const e of n.effects ?? []) if (!isEffect(e) && !BUILTIN_EFFECTS.includes(e) && !NAMED_ROWS.has(e)) err(t, `${nm(e)} is not an effect`);
+        // One of the type's own parameters may stand for a row (L149).
+        const rowParams = (n?.kind === "tfun" ? n.effects ?? [] : []).filter((e) => typedefOf(def)!.params.includes(e));
+        if (rowParams.length > 1) err(t, `a function type in data can take one row parameter, not ${rowParams.map(nm).join(" and ")}`);
+        if (n?.kind === "tfun") for (const e of n.effects ?? []) if (!isEffect(e) && !BUILTIN_EFFECTS.includes(e) && !NAMED_ROWS.has(e) && !rowParams.includes(e)) err(t, `${nm(e)} is not an effect`);
       }
     }
   }
@@ -2043,12 +2046,27 @@ function fieldType(code: Code, s: Subst, def: Id, field: Id): Type | null {
   return { t: "fn", params: [made.ret], ret: made.params[i], eff: s.freshRow() };
 }
 
+// A function type's written effects, where one may be the data type's row
+// parameter (L149): the row is then open, its tail the parameter's, which
+// stands in the type's arguments as a carrier (types.ts ROW_CARRIER). A
+// parameter met here first, still a plain variable, becomes one.
+function rowWithParams(s: Subst, effects: readonly Id[] = [], params: ReadonlyMap<Id, Type>): Row {
+  const own = effects.find((e) => params.has(e));
+  if (own === undefined) return writtenRow(effects);
+  let c = s.resolve(params.get(own)!);
+  if (c.t === "var") { s.unify(c, rowCarrier(s.freshRow())); c = s.resolve(c); }
+  const written = writtenRow(effects.filter((e) => e !== own)).effs;
+  if (c.t !== "fn" || !isRowCarrier(c)) return { effs: written, tail: null };
+  const r = s.resolveRow(c.eff);
+  return { effs: [...new Set([...written, ...r.effs])], tail: r.tail, ...(r.args ? { args: r.args } : {}) };
+}
+
 function constructorType(code: Code, s: Subst, def: Id, variant: Id): Type {
   const td = code.nodes[(code.nodes[def] as NodeOf<"def">).body!] as NodeOf<"typedef">;
   const params = new Map(td.params.map((p) => [p, s.fresh()] as const));
   const te = (tid: Id): Type => {
     const t = code.nodes[tid];
-    if (t.kind === "tfun") return { t: "fn", params: t.params.map(te), ret: te(t.result), eff: writtenRow(t.effects) };
+    if (t.kind === "tfun") return { t: "fn", params: t.params.map(te), ret: te(t.result), eff: rowWithParams(s, t.effects, params) };
     const r = t as NodeOf<"tref">;
     if (MASK_TYPES[r.target] && r.args.length === 1) return te(r.args[0]);
     return params.get(r.target) ?? { t: "con", id: r.target, args: r.args.map(te) };
