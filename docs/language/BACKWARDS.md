@@ -258,6 +258,25 @@ written in place is offered by the palette only where a function is
 expected (an input of type `(a) -> b`), as "new function", and inside it the
 palette offers the let's name.
 
+## Tabling: a grammar read back (L70b)
+
+A printer run backwards cuts its text every way it could have been joined,
+and asks for the same piece again from each cut. calc's `expression text`
+(examples/calc, GRAMMARS-2026-11-02) read "1 + 2 * 3 - 4 / x ^ 2 + (y - 1) *
+-z" back in 20 seconds that way, and a longer line not at all. So relate.ts
+tables a recursive call whose result is a known text: the first time it is
+asked, it is searched on its own for all its answers, which are kept and
+handed to every later asking (0.5 seconds for that line). A call that reaches
+itself with the same text while it is being tabled gets the answers found so
+far, and the table is searched again until none is new, a least fixed point.
+Inside a tabled search, a recursive call with more than one input unknown
+waits until at most one is (the binding strength comes from the operator,
+which is read next to it). A table is kept only when its search ends within
+a step budget, without running out of fuel, and with every answer fully
+known. Otherwise the call is searched as before. Prior art: tabling in XSB
+Prolog (Tamaki and Sato's OLDT resolution, 1986; SLG resolution, Chen and
+Warren 1996) and packrat parsing's memo (Ford, 2002).
+
 ## Things it gets right that the old arithmetic-only relations couldn't
 
 - `show numbers` run backwards on `"10 20 30"` is `[10, 20, 30]`, and on

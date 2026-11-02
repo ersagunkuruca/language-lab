@@ -12,5 +12,8 @@
   "s8b7ckmq5q5o0lqvstvtb22kh5": "Parse an expression that must use every token.",
   "fbfndujth9rojtlbqgmkcu33bp": "One line: `let name = expression` defines a name, `? expression` shows how it parses, anything else is evaluated. Blank lines do nothing. Gives back the bindings for the next line.",
   "3v80md47mq7j81b65ilme5ekg9": "Each line in order, catching its Abort: the reason goes to standard error with the line number, and the session carries on. Plain recursion on the list, so the checker sees it ends.",
-  "0jvipanrt02fagv75k8g8v9pf5": "calc: a calculator for whole numbers of any size. Reads lines from standard input: expressions with + - * / % ^ and parentheses, `let name = expression`, and `? expression` to see how an expression was read. Exit code 1 if any line failed."
+  "0jvipanrt02fagv75k8g8v9pf5": "calc: a calculator for whole numbers of any size. Reads lines from standard input: expressions with + - * / % ^ and parentheses, `let name = expression`, and `? expression` to see how an expression was read. Exit code 1 if any line failed.",
+  "825v5va4ju2nfdt84939ivaaks": "How tightly an operator holds its two sides: * and / more than + and -, ^ most. A level's parentheses are needed only around a looser one.",
+  "7fdicqtobpd1cp57oegohg87ij": "The grammar, written once as a printer (GRAMMARS-2026-11-02): each part printed with parentheses only where its operator binds more loosely than the one around it, and spaces around operators. ^ leans right, the others left. Read backwards it is the parser: see read expression.",
+  "7vbp1b37dpejg1ckj33cau6quv": "A line read by running expression text backwards: the one expression that prints as it, with any spaces and any parentheses. The hand parser (whole expression) is still what run line uses, since compiled code can't run a printer backwards yet (C110)."
 }
