@@ -2077,7 +2077,16 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
   });
   const list = h("div", { class: "opts palette" });
   if (later) list.append(h("p", { class: "hint" }, "Finding what fits…"));
-  if (value) {
+  if (value?.choices) {
+    // A field several types have, on a value nothing has settled: which
+    // type's is meant is asked, not picked (E186).
+    list.append(h("div", { class: "pal-g" }, "the value typed, read as"), h("p", { class: "hint" }, "More than one type has these fields, and nothing here says which: pick one."));
+    for (const c of value.choices) {
+      const b = h("button", { class: "opt", type: "button" }, h("span", { class: "opt-l" }, ui.query.trim()), h("span", { class: "opt-d" }, c.label));
+      b.addEventListener("click", () => { ui.query = ""; applyT(c.edit); });
+      list.append(b);
+    }
+  } else if (value) {
     const b = h("button", { class: "opt", type: "button" }, h("span", { class: "opt-l" }, ui.query.trim()), h("span", { class: "opt-d" }, "this, written out"));
     b.addEventListener("click", runValue);
     list.append(h("div", { class: "pal-g" }, "the value typed"), b);
