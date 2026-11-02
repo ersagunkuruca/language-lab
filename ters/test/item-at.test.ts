@@ -25,17 +25,17 @@ test("item at and replace at: by position from 0, outside the list harmless", as
   const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
   const list = () => k.list(...["a", "b", "c"].map((x) => k.lit(x)));
   const cases: [string, () => Id, string][] = [
-    ["first", () => k.call(lib("item at"), list(), k.lit(0), k.lit("none")), '"a"'],
-    ["last", () => k.call(lib("item at"), list(), k.lit(2), k.lit("none")), '"c"'],
-    ["past the end", () => k.call(lib("item at"), list(), k.lit(3), k.lit("none")), '"none"'],
-    ["before the start", () => k.call(lib("item at"), list(), k.lit(-1), k.lit("none")), '"none"'],
-    ["replace the middle", () => k.call(lib("replace at"), list(), k.lit(1), k.lit("B")), '["a", "B", "c"]'],
-    ["replace past the end", () => k.call(lib("replace at"), list(), k.lit(7), k.lit("B")), '["a", "b", "c"]'],
+    ["first", () => k.call(lib("item at"), list(), k.int(0), k.lit("none")), '"a"'],
+    ["last", () => k.call(lib("item at"), list(), k.int(2), k.lit("none")), '"c"'],
+    ["past the end", () => k.call(lib("item at"), list(), k.int(3), k.lit("none")), '"none"'],
+    ["before the start", () => k.call(lib("item at"), list(), k.int(-1), k.lit("none")), '"none"'],
+    ["replace the middle", () => k.call(lib("replace at"), list(), k.int(1), k.lit("B")), '["a", "B", "c"]'],
+    ["replace past the end", () => k.call(lib("replace at"), list(), k.int(7), k.lit("B")), '["a", "b", "c"]'],
   ];
   const names = cases.map(([n, x]) => { def(`case ${n}`, () => k.call(SHOW_ANY, x())); return `case ${n}`; });
   const code = base(k.code), nm = baseNames(k.names), info = infer(code, nm, undefined, checkOptions);
   assert.deepEqual(info.errors.map((e) => e.message), []);
-  assert.equal(showType(info.subst.zonk(info.typeOf.get(lib("item at"))!), nm), "(List a, Float64, a) -> a");
+  assert.equal(showType(info.subst.zonk(info.typeOf.get(lib("item at"))!), nm), "(List a, Int, a) -> a");
   const r = makeRunner(code, info, { print: () => {}, names: nm });
   const got = names.map((n) => r.value(code.defs.find((d) => nm[d] === n)!));
   assert.deepEqual(got, cases.map(([, , want]) => want));

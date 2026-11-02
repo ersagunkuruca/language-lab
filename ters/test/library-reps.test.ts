@@ -13,7 +13,7 @@ import { makeRunner, runMain, showValue } from "../src/lang/run.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { withLibraryRepresentations } from "../src/lang/library-reps.ts";
-import { COMPARE, CONS, LIST, NIL, PAIR_V, S, SHOW_ANY } from "../src/lang/std.ts";
+import { COMPARE, CONS, INT_OPS, LIST, NIL, PAIR_V, S, SHOW_ANY } from "../src/lang/std.ts";
 import { NUMBER, STRING } from "../src/lang/types.ts";
 import { subtree, type Id } from "../src/model.ts";
 
@@ -323,7 +323,7 @@ test("a program that reads a list by position gets arrays, and prints what the d
   const xs = k.def("xs");
   k.define(xs, k.call(L("map"), k.call(S.range, k.lit(200)), k.fn(["i"], (i) => k.call(B.mul, i, i))));
   const total = k.def("total");
-  k.define(total, k.fold(k.call(S.range, k.lit(200)), [
+  k.define(total, k.fold(k.call(INT_OPS.range, k.int(200)), [
     { variant: NIL, names: [], body: () => k.lit(0) },
     { variant: CONS, names: ["i", "rest"], results: [null, "sum"], body: ([i], [, s]) => k.call(B.add, s!, k.call(L("item at"), k.x(xs), i, k.lit(-1))) },
   ]));
@@ -333,7 +333,7 @@ test("a program that reads a list by position gets arrays, and prints what the d
   k.define(main, k.thunk(() => k.seq(
     show(k.x(total)),
     show(k.call(L("length"), k.x(xs))),
-    show(k.call(L("item at"), k.x(xs), k.lit(7), k.lit(-1))),
+    show(k.call(L("item at"), k.x(xs), k.int(7), k.lit(-1))),
     show(nums(1, 2, 3)),
     show(k.call(S.equal, nums(1, 2), k.call(L("append"), nums(1), nums(2)))),
     show(k.call(COMPARE, nums(3), nums(1, 2))),
@@ -460,19 +460,19 @@ function byPosition(n: number) {
   k.define(xs, k.call(L("map"), k.call(S.range, k.lit(n)), k.fn(["i"], (i) => k.call(B.mul, i, k.lit(0)))));
   // Each i adds i to the item at 7i mod n.
   const counted = k.def("counted");
-  k.define(counted, k.fold(k.call(S.range, k.lit(3 * n)), [
+  k.define(counted, k.fold(k.call(INT_OPS.range, k.int(3 * n)), [
     { variant: NIL, names: [], body: () => k.x(xs) },
-    { variant: CONS, names: ["i", "rest"], results: [null, "so far"], body: ([i], [, l]) => k.let("at", k.call(S.mod, k.call(B.mul, i, k.lit(7)), k.lit(n)), (at) =>
-      k.call(L("replace at"), l!, at, k.call(B.add, k.call(L("item at"), l!, at, k.lit(0)), i))) },
+    { variant: CONS, names: ["i", "rest"], results: [null, "so far"], body: ([i], [, l]) => k.let("at", k.call(S.first, k.thunk(() => k.call(INT_OPS.remainder, k.call(INT_OPS.mul, i, k.int(7)), k.int(n))), k.thunk(() => k.int(0))), (at) =>
+      k.call(L("replace at"), l!, at, k.call(B.add, k.call(L("item at"), l!, at, k.lit(0)), k.call(INT_OPS.toNumber, i)))) },
   ]));
   const at = k.def("at");
   k.define(at, k.fn(["i"], (i) => k.call(L("item at"), k.x(counted), i, k.lit(-1))));
   const show = (x: Id) => k.call(S.print, k.call(SHOW_ANY, x));
   const main = k.def("main");
   k.define(main, k.thunk(() => k.seq(
-    show(k.call(at, k.lit(3))),
+    show(k.call(at, k.int(3))),
     show(k.call(L("length"), k.call(L("append"), k.x(counted), k.x(xs)))),
-    show(k.call(L("replace at"), k.list(k.lit(1), k.lit(2), k.lit(3)), k.lit(1.4), k.lit(9))),
+    show(k.call(L("replace at"), k.list(k.lit(1), k.lit(2), k.lit(3)), k.int(1), k.lit(9))),
     show(k.call(L("replace at"), k.list(k.lit(1), k.lit(2)), k.lit(5), k.lit(9))),
     show(k.call(S.equal, k.x(counted), k.call(L("reverse"), k.call(L("reverse"), k.x(counted))))),
     show(k.call(L("sum"), k.x(counted))),
