@@ -237,7 +237,7 @@ export const NOTES: Comments = {
   "builtin.io.fileExists": "Whether there's a file at this path.",
   "builtin.io.listFolder": "The names of the files in a folder.",
   "builtin.io.fetchText": "The text at a web address. Aborts if the request fails. The same as await(start fetch(url)).",
-  "builtin.io.startFetch": "Starts fetching the text at a web address and gives a ticket for it, so together and race can wait on it beside timers and other fetches: together([() => await(start fetch(a)), () => await(start fetch(b))]). Aborts where it is awaited if the request fails. Run from the command line, the fetch goes on in the background and the ticket is ready when the body has come, so fetches overlap; compiled and on a page it is fetched when it starts, and the ticket is ready at once.",
+  "builtin.io.startFetch": "Starts fetching the text at a web address and gives a ticket for it, so together and race can wait on it beside timers and other fetches: together([() => await(start fetch(a)), () => await(start fetch(b))]). Aborts where it is awaited if the request fails. Run from the command line, evaluated or compiled, the fetch goes on in the background and the ticket is ready when the body has come, so fetches overlap; on a page it is fetched when it starts, and the ticket is ready at once.",
 
   // --- cells: values that change, for pages
   "builtin.cells.cell": "A new cell holding a starting value: a value a page can change, and whose readers are redrawn when it does.",

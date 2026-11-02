@@ -499,8 +499,18 @@ export const $isLater = (x) => x instanceof Later;
 // page) gets a promise of main's value instead, resumed by setTimeout.
 const AWAIT_OP = "std.await.await", START_TIMER_OP = "std.await.start timer";
 const isGenerator = (x) => Object.prototype.toString.call(x) === "[object Generator]";
+// A fetch that failed, as main's driver answers its await: the await
+// performs the Abort itself, where the program's handlers see it (C111).
+class Failed { constructor(reason) { this.reason = reason; } }
+export const $awaited = (v) => (v instanceof Failed ? $perform(ABORT, ABORT_OP, [v.reason]) : v);
+// The timers of the main that is running: a fetch started in the
+// background (C111, as the evaluator's L150b) is a ticket of theirs.
+let running = null;
 export function $main(result) {
-  return isGenerator(result) ? goOn(result, undefined, worldTimers((m) => { throw new Aborted(m); })) : result;
+  if (!isGenerator(result)) return result;
+  const timers = worldTimers((m) => { throw new Aborted(m); }), was = running;
+  running = timers;
+  try { return goOn(result, undefined, timers); } finally { running = was; }
 }
 function goOn(it, send, timers) {
   for (;;) {
@@ -508,14 +518,26 @@ function goOn(it, send, timers) {
     if (r.done) return r.value;
     const l = r.value;
     if (!(l instanceof Later)) throw new Error("main gave a value before it finished");
-    const now = (world.now ?? Date.now)();
+    const clock = world.now ?? Date.now;
+    let now = clock();
     if (l.op === START_TIMER_OP) {
       send = timers.start(now, l.args[0]);
       continue;
     }
     if (l.op !== AWAIT_OP) throw new Error(`nothing handles ${l.op}`);
-    const t = l.args[0], w = timers.when(t, now);
-    const value = () => (w.first !== undefined ? t.fields[1](w.first) : t.tag === "std.ticket.timer" || t.tag === "std.ticket.at" ? t.fields[1] : $unit);
+    const t = l.args[0];
+    let w;
+    try {
+      w = timers.when(t, now);
+      // A fetch still on its way: look again every few milliseconds, or at
+      // a timer's deadline if that comes first (as run.ts does).
+      if (world.wait) while (w.at > now && timers.pending(t)) { world.wait(Math.min(5, w.at - now)); now = clock(); w = timers.when(t, now); }
+    } catch (e) {
+      if (!(e instanceof Aborted)) throw e;
+      send = new Failed(e.reason);
+      continue;
+    }
+    const value = () => (w.first !== undefined ? t.fields[1](w.first) : t.tag === "std.ticket.timer" || t.tag === "std.ticket.at" ? t.fields[1] : timers.value(t) ?? $unit);
     if (w.at > now) {
       if (!world.wait) return new Promise((resolve) => setTimeout(resolve, w.at - now)).then(() => goOn(it, value(), timers));
       world.wait(w.at - now);
@@ -676,7 +698,10 @@ export const $io = {
   listFolder: acting(IO.listFolder, (p) => $toList(fallible('listFolder')(p))),
   fetchText: acting(IO.fetchText, fallible('fetchText')),
   // Fetched now, so the ticket is ready at once on any clock (L150).
-  startFetch: acting(IO.startFetch, (u) => ({ tag: "std.ticket.timer", fields: [0, fallible('fetchText')(u)] })),
+  // In the background where the world can and can wait, under a running
+  // main (C111, as the evaluator's L150b): a ticket ready when the body has come.
+  // Otherwise fetched now, so the ticket is ready at once on any clock.
+  startFetch: acting(IO.startFetch, (u) => (world.startFetch && world.wait && running ? running.fetch(world.startFetch(u)) : { tag: "std.ticket.timer", fields: [0, fallible('fetchText')(u)] })),
 };
 // Each world operation by its builtin, for an operation performed by name
 // that nothing handles ($perform).
