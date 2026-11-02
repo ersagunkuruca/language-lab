@@ -9,7 +9,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CELL_OPS, S, SET, SIGS, STD_IMPL, STD_MANY, stdNames } from "../../ters/src/lang/std.ts";
+import { CELL_OPS, FIELDS, S, SET, SIGS, STD_IMPL, STD_MANY, stdNames } from "../../ters/src/lang/std.ts";
 import { base, baseNames } from "../../ters/src/lang/load.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { Lang } from "../../ters/src/lang/dsl.ts";
@@ -32,6 +32,10 @@ const IN_PLACE: Record<Id, string> = {
   [SET]: "set takes the field it sets written in place (test/records.test.ts)",
   [CELL_OPS.path]: "path takes the field or path of fields it names written in place, as set does (ters/test/cell-paths.test.ts)",
   [S.byItsWays]: "by its ways only fills an implementation's field, and a way replaces it before anything runs (ters/test/ways.test.ts)",
+  // Not written in place, but needing its types known where it is used,
+  // which a plain f(x, …) = builtin(x, …) leaves open.
+  [FIELDS.mapped]: "fields mapped is written out as a match for the types where it is used, before anything runs; f(x, g) leaves them open (ters/test/fields-by-type.test.ts)",
+  [FIELDS.listed]: "fields listed is written out as a match for the types where it is used, before anything runs; f(x) leaves them open (ters/test/fields-by-type.test.ts)",
 };
 
 // f(x0, …) = builtin(x0, …), checked.
