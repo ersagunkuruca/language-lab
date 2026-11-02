@@ -2306,7 +2306,11 @@ function interfacesOfType(info: T.Info, names: Names): HTMLElement {
   const out = h("div", {}, h("div", { class: "sub-head" }, `Interfaces ${dname} implements · code.json`));
   for (const iface of T.interfaces(doc.code)) {
     const d = info.implementations?.get(implementationKey(iface, type));
-    out.append(row(d ? pick(d, names[iface] ?? iface, `by ${names[d] ?? d}`) : h("span", {}, names[iface] ?? iface), d ? null : implementButton(info, iface, type, "Implement")));
+    // Worked out when clicked, not on every draw: one per interface cost a
+    // whole check each, 0.4 s a draw of a new type (E196).
+    const go = d ? null : h("button", { class: "btn", type: "button", title: "A definition of the interface's record at this type, a hole for each operation" }, "Implement");
+    go?.addEventListener("click", () => implementFor(T.implement(doc.code, doc.names.short, info, iface, type)));
+    out.append(row(d ? pick(d, names[iface] ?? iface, `by ${names[d] ?? d}`) : h("span", {}, names[iface] ?? iface), go));
   }
   out.append(h("p", { class: "hint" }, `An interface is a set of operations, like Trig's sin and cos. Implementing one for ${dname} is a definition of what each operation does at ${dname}; then the operation works on a ${dname} wherever it's used.`));
   return out;
@@ -2382,7 +2386,7 @@ function structurePanel(info: T.Info, names: Names): HTMLElement | null {
     for (const v of body.variants) {
       const fs = get(code, v, "variant").fields;
       out.append(row(pick(v, names[v] ?? w.case, fs.length ? `(${fs.map((f) => names[f] ?? w.field).join(", ")})` : ""),
-        edit("×", `Remove this ${w.case}`, Top.removeCase(code, sh, ui.def, v), () => runTop(info, Top.removeCase(code, sh, ui.def, v)), "btn mini")));
+        edit("×", `Remove this ${w.case}`, { ok: true }, () => runTop(info, Top.removeCase(code, sh, ui.def, v)), "btn mini")));
     }
     const c = textField("f-new-case", `New ${w.case}`, "its name");
     const add = h("button", { class: "btn", type: "button" }, `Add the ${w.case}`);
