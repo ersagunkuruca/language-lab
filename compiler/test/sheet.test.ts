@@ -1,0 +1,43 @@
+// sheet (compiler/gaps/sheet), GAPS.md round 7's program, written in the
+// editor: the evaluator and the compiled code, as defined and as the
+// chooser stores them, and the hand-written ideal must print the same,
+// write the same report and exit the same way, failures included.
+
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { sheetText, ways, type Name } from "../gaps/sheet.ts";
+
+const w = await ways();
+const all = (args: string[], files: Record<string, string>) => {
+  const want = w.ideal(args, files);
+  const others: Name[] = ["evaluator", "evaluator, chosen", "compiled", "compiled, chosen"];
+  for (const way of others) assert.deepEqual(w[way](args, files), want, way);
+  return want;
+};
+const budget = readFileSync(join(import.meta.dirname, "../gaps/sheet/budget.txt"), "utf8");
+
+test("sheet: the budget, with a cycle, a division by zero and a formula that can't be read", () => {
+  const r = all(["b.txt"], { "b.txt": budget });
+  assert.equal(r.code, 1);
+  assert.deepEqual(r.out, [
+    "           A       B       C       D",
+    "   1    1200   14400     750  #cycle",
+    "   2     450    5400     820  #cycle",
+    "   3     380    4560     676  #div/0",
+    "   4    2030   24360    -670  #parse",
+    "line 14: D1 is #cycle",
+    "line 15: D2 is #cycle",
+    "line 16: D3 is #div/0",
+    "line 17: D4 is #parse",
+  ]);
+  assert.equal(r.wrote["b.txt.out"].split("\n")[9], "C2 = (MAX(A1:A3) - MIN(A1:A3)) → 820");
+});
+
+test("sheet: a made-up sheet, no arguments, a missing file, a line without =", () => {
+  all(["s.txt"], { "s.txt": sheetText(20) });
+  assert.equal(all([], {}).code, 2);
+  assert.equal(all(["none.txt"], {}).code, 1);
+  assert.equal(all(["x.txt"], { "x.txt": "A1 = 1\nA2 2\n" }).code, 1);
+});

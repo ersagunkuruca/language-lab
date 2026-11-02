@@ -9,11 +9,12 @@ gap below gets its evidence, a fix and a rank.
 
 The programs are original, written for this purpose.
 
-**Rounds so far (2026-11-01):** 1 calc, 2 Countdown and chapters, 3
-ledger, 4 the guitar pedal, 5 routes, 6 notebook. Each round's gaps are
-below, as written then. The gaps still open are rows in BACKLOG.md, lane
-C (C30, C31, C59, C63, C64, C70 to C73), and the next round's program
-is chosen when the weekly round is due.
+**Rounds so far (2026-11-02):** 1 calc, 2 Countdown and chapters, 3
+ledger, 4 the guitar pedal, 5 routes, 6 notebook, 7 sheet (written in the
+editor). Each round's gaps are below, as written then. The gaps still open
+are rows in BACKLOG.md, lane C (C30, C31, C59, C63, C64, C70 to C73, C80
+to C82), and the next round's program is chosen when the weekly round is
+due.
 
 ## Round 1: calc (2026-10-22)
 
@@ -1570,3 +1571,276 @@ Where notebook defines a helper only because the language lacks something
 
 These are BACKLOG rows C70 (N1), C71 (N2), C72 (N4) and C73 (N5); N3 is
 added to C59. NG1 to NG4 are L133 to L136.
+
+## Round 7: sheet, written in the editor (2026-11-02)
+
+`compiler/gaps/sheet` is a small spreadsheet. It reads a file of cells,
+one per line (`B2 = A1 * 12 + max(A1:A3)`), parses each formula, works
+out every cell once, finds cycles, and prints the sheet as a grid and
+the cells that went wrong. It also writes a report beside the file, each
+formula as it was read with its value, so it is the first round to write
+a file.
+
+```
+$ node ters/cli/lab.ts run compiler/gaps/sheet compiler/gaps/sheet/budget.txt
+           A       B       C       D
+   1    1200   14400     750  #cycle
+   2     450    5400     820  #cycle
+   3     380    4560     676  #div/0
+   4    2030   24360    -670  #parse
+line 14: D1 is #cycle
+line 15: D2 is #cycle
+line 16: D3 is #div/0
+line 17: D4 is #parse
+$ cat compiler/gaps/sheet/budget.txt.out
+A1 = 1200 → 1200
+...
+C2 = (MAX(A1:A3) - MIN(A1:A3)) → 820
+D4 = ? → #parse
+```
+
+It has 90 definitions, against notebook's 51: 6 types (`Token`, `Expr`,
+`Parsed`, `Many`, `Value`, `Entry`) and 84 functions. A tokenizer over the
+characters, a recursive-descent parser of eleven mutually recursive
+definitions (sums, products, unary minus, brackets, cells, spans `A1:B3`
+and calls `SUM(…)`), cell names and spans, a depth-first evaluation that
+threads a `Map Text Value` of results and a `Set Text` of the cells on
+the way (a cell met again on the way is a cycle), errors as values
+(`ok(n)` or `error(reason)`) that pass through arithmetic, five functions
+over spans, and the grid, the problems and the report. `Choice` comes in
+through reading numbers, cell names and the parser, and is handled per
+formula (`first`); `Abort` only for a line with no `=`. The program is
+original; spreadsheet evaluation and recursive descent are common
+knowledge.
+
+**This round was written in the editor, not with the DSL.** Ersagun's
+ask for the round was that it mainly show what is hard or impossible to
+write in the editor. Every definition was made in the built editor
+(`npm run build-editor`, opened from disk in headless Chromium, the same
+page the site serves): *+ New definition* for functions, values and the
+six data types (cases and fields through the type's panel), the palette
+for every fill (typed expressions where the palette reads them, picks
+where it doesn't), `match x · T` from the palette, *Give … its own body*
+on a case, *Clear it*, *Let it loosen*, *Add a value before this…* and
+the dot's *Name* for `run`'s steps, *Add the input* for main's arguments,
+and *Save file*, then `examples/unpack.ts`. Nothing was edited by hand.
+It took about 160 fills, picks and menu gestures plus 96 cases given
+their own body. The driver script and the saved file are in the
+project's files (`gaps-round7/`). What the editor made hard is below the
+compiler's gaps.
+
+The program lives in `compiler/gaps/sheet`, not `ters/examples`, for now:
+with it among the examples, `ters/test/modes.test.ts` "forward, a
+definition ends exactly when the checker finds no Diverge of its own"
+fails, because the checker types `show formula` and `shown args` as
+Diverge where the modes see them end (SL1 below). It moves to the
+examples when that is fixed.
+
+Files:
+- `compiler/gaps/sheet.ideal.js`: the hand-written ideal, with the gaps
+  marked (S1 to S4 there are this round's S-numbers).
+- `compiler/gaps/sheet.ts`: five ways in one process (the evaluator and
+  the compiled code, as defined and as `lab run` stores it, and the
+  ideal) with files kept in memory, and a generator of sheets.
+- `compiler/test/sheet.test.ts`: all five agree on output, report and
+  exit code, failures included.
+- `compiler/gaps/bench-sheet.ts`: the table below.
+
+### Results
+
+```
+sheet               evaluator  evaluator,  compiled  compiled,   ideal  chosen/
+                               chosen                chosen              ideal
+50 rows, 300 cells    2822 ms    1485 ms     43 ms     26 ms    3.7 ms     7×
+200 rows, 1200 cells 33731 ms   14858 ms    453 ms    235 ms    8.0 ms    29×
+1000 rows, 6000 cells (skipped) (skipped)  stack overflow     41 ms
+3000 rows            (skipped) (skipped)  stack overflow    126 ms
+```
+
+"Chosen" is the program as `lab run` and `lab compile` store it: Map as
+the hash table, Set as the weight-balanced tree. Each generated row is six
+cells (an amount, a running total, sums, maxima and averages over a
+window of rows, a share that is sometimes divided by zero), one row in
+fifty has a cycle and one a formula that can't be read. All five ways
+agree wherever they run.
+
+From the command line (`lab compile`, then `node sheet.mjs file`, with
+`--stack-size=60000` so it gets past S1), best of three:
+
+```
+rows   compiled   by hand: S2 hoisted   ideal
+  50     218 ms        193 ms           45 ms
+ 200     461 ms        263 ms           57 ms
+ 500    1329 ms        386 ms           83 ms
+ 800    3663 ms        454 ms          106 ms
+```
+
+The compiled module is 3.4 MB (113,000 lines) for 90 definitions, and
+its start-up is most of the 50-row time. A profile of the compiled
+program at 300 rows (runtime only, 468 ms a run): `grid` 42% of it, of
+which `columns used` 28% and `width of` 13% (S2); `set tree of items`
+22% inside those two; `evaluate all` 13%; the garbage collector 10%.
+
+### The gaps, ranked
+
+**S1. A `map` that can't fail, inside a `first`, is compiled as a search
+(correctness: stack overflow from about 6,000 items).** `width of` is
+`2 + first(() => largest item(as set(map(values of(results), (v) =>
+length(show value(v))))), () => 0)`. The lambda performs nothing; only
+`largest item` has no answer for an empty set. The compiler puts the
+whole `map` in Choice's mode because it is inside `first`'s scope, and
+emits `map$choice$arr$k`: a generator and a continuation per item, and a
+JS frame per item. At 1000 rows (6000 results) it runs out of stack,
+in the harness and in `lab compile`'s output alike (G1's big stack didn't
+save it here). `cells between` has the same shape with a lambda that can
+fail (`row of`), where the search is right but still a frame per item.
+*Fix:* type-directed: a call whose function argument's row has no Choice
+is compiled in its plain mode whatever handler it sits under; and make
+`map$choice`'s one-answer case a loop. *Measured:* every run past 1000
+rows fails today.
+
+**S2. A pure call that doesn't depend on a lambda's input is worked out
+again on every call of the lambda (perf: the program quadratic).** `grid`
+is `cons(header(columns used(sheet), width of(results)), map(numbers
+from(1, last row(sheet)), (r) => grid row(r, columns used(sheet), width
+of(results), results)))`. `columns used` and `width of` walk every cell,
+and run once per row. The ideal works them out once. The program was
+written this way because typed text has no `let` (E178 below): naming the
+two needs *Add a value before this…* and the dot's panel, which is a lot
+to do for a reader who just wants the value twice. *Fix:* hoist a call
+with no effects whose inputs are all bound outside the lambda out of a
+lambda handed to `map`, `keep`, `for each` (loop-invariant code motion;
+in GHC it is the full-laziness transformation, prior art). *Measured* by
+hoisting the two calls by hand in the compiled module: 800 rows 3663 →
+454 ms, 500 rows 1329 → 386 ms; the ideal is 106 and 83 ms.
+
+**S3. What's left after S2: about 4×.** The results are a persistent
+hash table threaded through every cell (C71's rerooted versions), and the
+cells on the way a weight-balanced tree; `as set` then `items of` and
+`largest item` sort through a tree to drop duplicates; tokens are a list
+of one-character texts (the program reads `characters(text)`, the ideal
+walks the text once). None stands out alone; measure again after S1 and
+S2, with C59 and C62 in mind.
+
+**S4. Start-up.** 3.4 MB of JavaScript for a 90-definition program: the
+module carries the library it doesn't use, and at 50 rows start-up is
+most of the time (218 ms against 45 ms). Emit only what `main` reaches.
+
+**S5. The evaluator (not the compiler's).** 34 s for 200 rows as defined,
+15 s as chosen: the editor's Run of a definition over a sheet of a few
+hundred cells takes tens of seconds. L118c again.
+
+### What the editor made hard
+
+In the order they cost time. Each is a BACKLOG row (E173 to E184).
+
+1. **Typing in the palette freezes the editor (E173).** The palette reads
+   what's typed on every keystroke and on every redraw. Typing the 81
+   characters of `"line " ++ show(e.line) ++ ": " ++ e.name ++ " is " ++
+   cell text(results, e.name)` one key at a time took 114 s: the last 40
+   keys took 96 s, 2.4 s a key. With a refused expression left in the
+   search box, one click on another definition took 89 s to open it (the
+   next click: 0.1 s). Fills that are pasted whole take 0.5 to 1.5 s.
+2. **A refused expression never says why (E174).** Every refusal of
+   typed text reads "Nothing that fits matches. Values and arithmetic can
+   be typed too…", whatever the reason: a definition that doesn't exist
+   yet (`more terms`), a type that doesn't fit, a type held while the
+   definition has a hole, a name bound in only some cases. `fillValue`
+   has the reason (I115's "there's no function named …"); the palette
+   shows it only for a missing interface.
+3. **A name with several meanings is settled once, when typed, and then
+   blocks later edits (E175).** `show(n)` with nothing else about `n`
+   takes Float64's `show`, so `n` becomes Float64, and the later
+   `entry(…, n)` (an Int field) is refused. `show(n + 0)` is still
+   Float64's: the meanings are tried one by one, each with the literal
+   first as Int, then as any number, and Float64's comes first. Only a
+   palette pick of the Int row gets Int's `show`. `length(show value(v))`
+   typed while `show value` was a stub took the List's `length`, and
+   filling `show value` with text was then refused, silently, from
+   another definition. `range` is Float64-only (L147), which makes
+   `spaces` and `padded` Float64 too.
+4. **More than 16 readings and the right one is never tried (E176).**
+   `readings()` keeps the first 16 combinations. `.name` is a field of
+   three cases (Entry's, `cell`'s and `call`'s), `show` has three
+   meanings and `++` more than one, so the line in item 1 is refused
+   though each part is accepted alone. Written as two definitions
+   (`problem line`, `what is wrong`) it goes in.
+5. **A fresh match reads as one case (E177).** Picking `match chars ·
+   List` gives `match chars / otherwise → □` in the text: one hole that
+   stands for both cases, so the first fill is made in both ("Made in
+   all 2 places"), and `cons`'s binders (`head`, `tail`) don't show until
+   *Give cons(head, tail) its own body* on the right-click menu. The
+   graph draws the two holes apart, so the two views disagree about
+   what's there. The shared hole's scope is only what every case binds:
+   `text`, bound in `word` and `symbol` but not `number`, is refused
+   (silently, item 2). 96 of this program's cases were split this way.
+6. **Two `print`s, and one of them doesn't run (L145).** The palette
+   lists `print(□: Text) (Text) -[Console]-> Unit` twice, the same label
+   and type. Typed `print("usage: sheet <file>")` in an action took the
+   second, Console's operation, which type-checks with Console, but
+   `lab run`, the evaluator and the compiled code all stop with "nothing
+   handles print". Picking the first row from the palette fixed it.
+7. **Typed text can't write what the text prints (E178).** The Blocks
+   text prints `first(x, else y)`, `[name]` and steps; the palette reads
+   only `first(() => x, () => y)`, lists of literals (`[k]`, `[show(1)]`
+   are refused), no `let` (a value used twice needs *Add a value
+   before this…*, then naming the dot in its panel), no `□` to leave a
+   hole for later, no `match`. Building `abort("line " ++ show(n) ++
+   …)` with Int's `show` took seven palette steps.
+8. **Clearing to fix a mistake keeps the mistake (E179).** *Clear it*
+   holds the definition's type while it has a hole, so the corrected
+   body (`numbers from` held at Float64) is refused without a reason.
+   *Let it loosen* is on the hole's panel only; reloading the page drops
+   every hold without saying so.
+9. **Mutual recursion needs stubs made first (E180).** A typed call to a
+   definition that doesn't exist yet is refused (silently, item 2). The
+   parser's eleven definitions were made empty first and filled after.
+   No "make a definition named this" from the palette.
+10. **Smaller ones (E181 to E184).** A function made with no inputs is an
+   action `() -> Set Text`, not a value, and can't be turned into one
+   (`has item(symbols, c)` refused; `symbols()` needed). A definition of
+   one's own named like a library one (`values of`) silently wins in
+   typed text. Steps added as values read `‹•1› = for each(…)` in the
+   text, not as steps. Adding a case to a data type selects the new
+   case, so the next one needs the type selected again; a whole infix
+   body (`a + b`) is selected only by clicking its operator.
+
+### Language gaps
+
+Where sheet defines a helper only because the language or the editor
+lacks something (WORKFLOW.md, "Language gaps, every round"):
+
+- **SL1. Recursion through `map` over a case's list field is typed
+  Diverge.** `show formula(call(name, args))` calls `shown args(args)`,
+  which maps `show formula` over `args`: it ends (the modes say so), but
+  the checker types both, and `report line`, Diverge. This is what keeps
+  sheet out of `ters/examples` (above). L146.
+- **SL2. No Int `range`.** `range` is Float64, so `numbers from` and
+  `spaces` are written as recursions (and typed Diverge). With L140.
+  L147.
+- **SL3. No flatten (or flat map) for lists.** `flattened` (`joined` is
+  HTML's). L148.
+- **SL4. No padding or repeating a text.** `spaces` and `padded`. With
+  SL2 they'd be one line each. L148.
+- **SL5. Nested matches on the same type clash binder names.** `match
+  a / ok(number) → match b / ok(number) → …`: the inner `number` hides
+  the outer, so `arithmetic` calls a helper `with left` to keep the left
+  value. The binders can be renamed in the editor, one by one; no row,
+  but E177's split could name them apart.
+- **SL6. One definition per shared value.** `problem line`, `what is
+  wrong`, `with left`, `joined`, `negated`, `closed`, `called`,
+  `settled`, `with formula`: nine of the 84 functions exist to give a
+  value a name or to dodge E176, where a `let` typed in the palette would
+  do (E178).
+
+### Proposed order
+
+1. E173 and E174 first: the freeze and the missing reasons cost more
+   than everything else together, and every program written in the
+   editor meets them.
+2. L145: a program that type-checks and stops at run with "nothing
+   handles print" is a soundness bug.
+3. S1 (C80): every sheet past a thousand rows fails.
+4. E175, E177, E176, then the rest of the editor's.
+5. S2 (C81), then S4 (C82); S3 when S1 and S2 are in.
+6. SL1 (L146), so sheet can join the examples; SL2 to SL4 (L147, L148).
