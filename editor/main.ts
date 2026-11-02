@@ -2902,7 +2902,9 @@ function graphMenu(info: T.Info): HTMLElement | null {
     if (inlinable(code, id)) rows.push(item((doc.layout.inline ?? []).includes(id) ? "Collapse" : "Show inline", "inline", "Draw the call as the definition's body, in place. A view only."));
     if (kind === "node") rows.push(item("Put a dot on its wire", "dot", "Share this value: a dot you can wire to other inputs", why(() => T.addDot(doc.code, doc.names.short, info, ui.def, id))));
     // A step of an action gets a step before it, not a value (QA8 M1).
-    if (kind === "node" && stepRows(id).length) rows.push(item("Add a step before this…", "step-before", "A new step (a hole to fill) just before this one, done before it", why(() => T.addActionStep(doc.code, doc.names.short, info, stepAt(id)))));
+    // So does a function's whole body that is one action (E190).
+    const oneAction = kind === "node" && !stepRows(id).length && T.addActionStep(doc.code, doc.names.short, info, id).ok;
+    if (kind === "node" && (stepRows(id).length || oneAction)) rows.push(item("Add a step before this…", "step-before", "A new step (a hole to fill) just before this one, done before it", why(() => T.addActionStep(doc.code, doc.names.short, info, stepAt(id)))));
     else if (kind === "node") rows.push(item("Add a value before this…", "add-before", "A new named value (a hole to fill), first among the steps this is in, so this and all of them can use it. Inside a case of a match, first in that case", why(() => T.addStep(doc.code, doc.names.short, info, ui.def, id))));
     // Its place in a list, or among a + b + c's inputs.
     const inRow = T.rowOfItem(doc.code, id), own = T.rowAt(doc.code, id);

@@ -248,6 +248,30 @@ test("typed case names and effect operations read as meant", async () => {
   }
 });
 
+// Steps whose values nothing reads are typed as they print, a; b, and a
+// function whose whole body is one action takes a step before it (E190).
+test("typed steps and a step before a one-action body", async () => {
+  const { Lang } = await import("../src/lang/dsl.ts");
+  const { base, baseNames } = await import("../src/lang/load.ts");
+  const { addActionStep } = await import("../../editor/typed.ts");
+  const k = new Lang();
+  const f = k.def("f");
+  let hole = "";
+  k.define(f, k.fn(["a"], () => (hole = k.hole())));
+  const code = base(k.code), names = baseNames(k.names);
+  const r = fillValue(code, names, infer(code, names), hole, 'print("a"); print("b")', f);
+  assert.ok(r.ok, !r.ok ? r.reason : "");
+  if (!r.ok) return;
+  const call = r.code.nodes[hole] as NodeOf<"call">;
+  assert.equal(call.kind, "call");
+  const lam = r.code.nodes[call.fn] as NodeOf<"lambda">;
+  assert.equal(r.names[lam.params[0]], "_");
+  // (a) => print("b") alone: a step goes before it.
+  const one = { ...r.code, nodes: { ...r.code.nodes, [hole]: { ...r.code.nodes[lam.body], id: hole } } };
+  const s = addActionStep(one, r.names, infer(one, r.names), hole);
+  assert.ok(s.ok, !s.ok ? s.reason : "");
+});
+
 // A field two types share, read on an input nothing has settled, isn't
 // chosen silently (E186): both readings are offered.
 test("typed field shared by two types offers each type", async () => {
