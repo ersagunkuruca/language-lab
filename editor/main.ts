@@ -767,7 +767,7 @@ function typesOf(): T.Info | null {
   T.setProgramPins(pins);
   const hit = typedInfo.get(doc.code);
   if (hit?.pins === pins) return hit.info;
-  try { const info = T.infer(doc.code, pres().names); typedInfo.set(doc.code, { pins, info }); return info; } catch { return null; }
+  try { const info = T.guardedInfo(doc.code, pins) ?? T.infer(doc.code, pres().names); typedInfo.set(doc.code, { pins, info }); return info; } catch { return null; }
 }
 const defBody = (d: Id) => { const n = node(d); return n?.kind === "def" && n.body ? node(n.body) : null; };
 
@@ -1037,7 +1037,9 @@ function firstCall(info: T.Info, def: Id): Value[] | undefined {
   if (!entry || entry === def || body?.kind !== "lambda") return undefined;
   // Not reached in the short run: once per version of the code, a longer
   // one, which gets past a move (Tumble's fall, fill, cascade: I29f).
-  return mainCalls(info, entry).get(body.id) ?? mainCalls(info, entry, true).get(body.id);
+  // Only for a definition something calls: a new one isn't reached by any
+  // run (I136: the long run made + New definition a second slower).
+  return mainCalls(info, entry).get(body.id) ?? (calledDefs(doc.code).has(def) ? mainCalls(info, entry, true).get(body.id) : undefined);
 }
 const PASSED = "‹what main passes›";
 
@@ -1072,6 +1074,14 @@ const NO_EVENT: Data = { tag: HTML_V.event, fields: ["", "", 0, 0, 1 / 60] };
 // What each function was first called with when main last ran, as far as
 // it got in a few steps and MAIN_MS, in a world nothing goes out to.
 const mainRuns = new WeakMap<Code, Map<Id, Value[]>>(), longRuns = new WeakMap<Code, Map<Id, Value[]>>();
+// What some ref names, other than in its own definition's head: once per
+// version of the code.
+const calledSets = new WeakMap<Code, Set<Id>>();
+function calledDefs(code: Code): Set<Id> {
+  let r = calledSets.get(code);
+  if (!r) calledSets.set(code, (r = new Set(Object.values(code.nodes).flatMap((n) => (n.kind === "ref" ? [n.target] : [])))));
+  return r;
+}
 // The copy main's run entered for a lambda, when it was one at other
 // number types (arith.ts): its own values are that copy's (I125).
 const mainCopies = new WeakMap<Code, Map<Id, Id>>();
@@ -1917,6 +1927,7 @@ function enclosing(id: Id): Id | null {
 }
 
 const labels = new WeakMap<T.Filling, { key: Names; l: [string, string, string] }>();
+let findLater: Id | null = null;
 function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): HTMLElement {
   const q = ui.query.trim().toLowerCase();
   // Most often wanted first; a function passed along uncalled last, since
@@ -1938,7 +1949,13 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
   // new main, not for each because it's alphabetically early.
   const used = usesIn(doc.code);
   const often = (f: T.Filling) => (f.kind === "call" || f.kind === "ref" ? used.get(f.target) ?? 0 : 0);
-  const all = fillingsAt(info, hole).map((f) => ({ f, l: label(f) })).sort((a, b) => order.indexOf(a.l[2]) - order.indexOf(b.l[2]) || often(b.f) - often(a.f));
+  // A new definition's hole draws first and lists what fits a moment
+  // later: finding it (about 0.8 s in physics, every function tried as the
+  // definition's whole body) was in the same frame as the new definition
+  // (I136).
+  const later = findLater === hole && !fitting.get(info)?.has(hole);
+  if (later) setTimeout(() => { findLater = null; fillingsAt(info, hole); if (ui.selected === hole) render(); }, 0);
+  const all = (later ? [] : fillingsAt(info, hole)).map((f) => ({ f, l: label(f) })).sort((a, b) => order.indexOf(a.l[2]) - order.indexOf(b.l[2]) || often(b.f) - often(a.f));
   // Console's print performed by name reads, and does, what builtin print
   // does (L145): one row for both (E184).
   const plain = new Set(all.filter((x) => !((x.f.kind === "call" || x.f.kind === "ref") && x.f.target.startsWith("effect."))).map((x) => `${x.l[0]}\n${x.l[1]}`));
@@ -2021,6 +2038,7 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
     if (value) runValue(); else if (shown[0]) run(shown[0]);
   });
   const list = h("div", { class: "opts palette" });
+  if (later) list.append(h("p", { class: "hint" }, "Finding what fits…"));
   if (value) {
     const b = h("button", { class: "opt", type: "button" }, h("span", { class: "opt-l" }, ui.query.trim()), h("span", { class: "opt-d" }, "this, written out"));
     b.addEventListener("click", runValue);
@@ -2468,6 +2486,7 @@ function newDefinitionForm(info: T.Info): HTMLElement {
       ui.back = [ui.def];
       ui.def = r.code.defs.at(-1)!;
       ui.selected = kind === "type" || kind === "effect" || kind === "interface" ? null : r.select;
+      findLater = ui.selected;
       ui.mode = null;
     });
   });
