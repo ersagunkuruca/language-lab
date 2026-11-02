@@ -16,11 +16,11 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 - **Arithmetic** (type). An interface: the one + − · and −x, for any type that implements them. Float64, Int, Rational, Complex, Dual and Algebraic implement it in the prelude; a type of your own joins with a definition of type Arithmetic T, written arithmetic(its +, its −, its ·, its −x). A record of numbers without one gets them part by part. Resolved before the program runs, so it costs nothing (INTERFACES.md).
 - **Ordered** (type). An interface: the one <, for any type that implements it. The prelude's at most, smaller, sort and the rest then work on that type too. A type of your own joins with a definition of type Ordered T, written ordered(its <).
 - **by its ways** : `a`. In an implementation, a field left to the interface's ways: the compiler puts in the cheapest way that ends in a field the implementation gives. Trig at your type can give sin and leave cos by its ways, or the other way round (WAYS.md).
-- **at most** : `(a, a) -> Bool`. a ≤ b: not b < a.
-- **more than** : `(a, a) -> Bool`. a > b: b < a.
-- **at least** : `(a, a) -> Bool`. a ≥ b: not a < b.
-- **smaller** : `(a, a) -> a`. The smaller of two numbers (min); a shader's min.
-- **larger** : `(a, a) -> a`. The larger of two numbers (max); a shader's max.
+- **at most** : `(a, a) -> Bool where a is a Number with <`. a ≤ b: not b < a.
+- **more than** : `(a, a) -> Bool where a is a Number with <`. a > b: b < a.
+- **at least** : `(a, a) -> Bool where a is a Number with <`. a ≥ b: not a < b.
+- **smaller** : `(a, a) -> a where a is a Number with <`. The smaller of two numbers (min); a shader's min.
+- **larger** : `(a, a) -> a where a is a Number with <`. The larger of two numbers (max); a shader's max.
 - **Trig** (type). An interface: sin, cos, tan, exp and log, for any type that implements them. An implementation is a definition of type Trig T, written trig(its sin, its cos, …); Float64's is the builtins. A use is resolved to the type's own function before the program runs, so it costs nothing (INTERFACES.md).
 - **sin** : `(a) -> a where a has Trig`. Sine of an angle in radians, at any type with Trig (Float64 now; dual numbers next).
 - **cos** : `(a) -> a where a has Trig`. Cosine of an angle in radians, at any type with Trig.
@@ -103,13 +103,13 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 - **divide fixed** : `(Fixed, Fixed) -[Choice]-> Fixed`. a ÷ b for Fixed, rounded down to a step; no answer when b is 0.
 - **square root fixed** : `(Fixed) -[Choice]-> Fixed`. √x for Fixed, rounded down to a step, the same bits on every machine; no answer below 0.
 - **Extended** (type). A number of type a, or −∞ or +∞ around it: minus infinity, finite(value) or plus infinity. Float64 has no infinities of its own, so a bound with no end, the least of no numbers, or a distance not reached yet is an Extended. extended add, subtract and multiply follow the extended reals and have no answer for ∞ − ∞ and 0 · ∞; its order is total.
-- **extended less** : `(Extended a, Extended a) -> Bool`. a < b for Extended numbers: −∞ is below every number and +∞ above, so the order is total. compare and sort give the same order.
-- **extended add** : `(Extended a, Extended a) -[Choice]-> Extended a`. a + b with ±∞: ∞ + 1 is ∞ and −∞ + −∞ is −∞. ∞ + −∞ has no answer.
-- **extended negate** : `(Extended a) -> Extended a`. −a with ±∞: −(+∞) is −∞.
-- **extended subtract** : `(Extended a, Extended a) -[Choice]-> Extended a`. a − b with ±∞: ∞ − 1 is ∞. ∞ − ∞ has no answer.
-- **extended multiply** : `(Extended a, Extended a) -[Choice]-> Extended a`. a · b with ±∞: −2 · ∞ is −∞ and −∞ · −∞ is ∞. 0 · ∞ has no answer.
-- **minimum** : `(List a) -> Extended a`. The smallest of the numbers, as an Extended: +∞ when there are none, so it is minimum's identity and a fold over an empty list still has an answer.
-- **maximum** : `(List a) -> Extended a`. The largest of the numbers, as an Extended: −∞ when there are none.
+- **extended less** : `(Extended a, Extended a) -> Bool where a is a Number with <`. a < b for Extended numbers: −∞ is below every number and +∞ above, so the order is total. compare and sort give the same order.
+- **extended add** : `(Extended a, Extended a) -[Choice]-> Extended a where a is a Number`. a + b with ±∞: ∞ + 1 is ∞ and −∞ + −∞ is −∞. ∞ + −∞ has no answer.
+- **extended negate** : `(Extended a) -> Extended a where a is a Number`. −a with ±∞: −(+∞) is −∞.
+- **extended subtract** : `(Extended a, Extended a) -[Choice]-> Extended a where a is a Number`. a − b with ±∞: ∞ − 1 is ∞. ∞ − ∞ has no answer.
+- **extended multiply** : `(Extended a, Extended a) -[Choice]-> Extended a where a is a Number with <`. a · b with ±∞: −2 · ∞ is −∞ and −∞ · −∞ is ∞. 0 · ∞ has no answer.
+- **minimum** : `(List a) -> Extended a where a is a Number with <`. The smallest of the numbers, as an Extended: +∞ when there are none, so it is minimum's identity and a fold over an empty list still has an answer.
+- **maximum** : `(List a) -> Extended a where a is a Number with <`. The largest of the numbers, as an Extended: −∞ when there are none.
 - **Dual** (type). A dual number, value + slope·ε where ε · ε is 0: a record of two Float64s. The same + − · work on it, · by the product rule, and sin, cos, tan, exp and log by the chain rule, so a function given dual(x, 1) gives back its value and its slope at x. slope by duals does that for you (forward-mode automatic differentiation). No <.
 - **slope by duals** : `((Dual) -[e]-> Dual, Float64) -[e]-> Float64`. f′(x), worked out by giving f the dual number x + 1ε and reading the slope of what comes back (forward-mode automatic differentiation). f must work on duals: write it with the generic + − · and Trig. derivative(f) gives the same number by differentiating f's code.
 - **divide duals** : `(Dual, Dual) -[Choice]-> Dual`. x ÷ y for dual numbers, the quotient rule; no answer when y's value is 0.
@@ -199,9 +199,9 @@ A list is written [1, 2, 3]. There are no loops: map, keep and for each go throu
 - **Tuple8** (type). 8 values side by side, shown (A, B, C, D, E, F, G, H): the inputs or the results of a function as one value. A function of 8 inputs given one tuple takes it apart, so f(p) is f(x, y, z, u, v, w, s, t) when p is a tuple of them.
 - **map** : `(List a, (a) -[e]-> b) -[e]-> List b`. The list of f(item) for each item, in the same order.
 - **for each** : `(List a, (a) -[e]-> b) -[e]-> Unit`. Runs the action on each item of the list in turn, for what it does (prints, writes a cell).
-- **keep** : `(List a, (a) -[Choice]-> Bool) -> List a`. filter, written as a choice: pick any item, fail unless it passes, collect what's left with all.
+- **keep** : `(List a, (a) -[Choice, e]-> Bool) -[e]-> List a`. filter, written as a choice: pick any item, fail unless it passes, collect what's left with all.
 - **length** : `(List a) -> Int`. How many items the list has.
-- **sum** : `(List a) -> a`. The numbers of the list added up, for every number type as + is (Float64s, Ints, Rationals, …); 0 for an empty list.
+- **sum** : `(List a) -> a where a is a Number`. The numbers of the list added up, for every number type as + is (Float64s, Ints, Rationals, …); 0 for an empty list.
 - **append** : `(List a, List a) -> List a`. The items of the first list, then the items of the second.
 - **flatten** : `(List (List a)) -> List a`. The lists one after another, as one list: flatten([[1, 2], [], [3]]) is [1, 2, 3].
 - **flat map** : `(List a, (a) -[e]-> List b) -[e]-> List b`. The lists f gives for each item, one after another: flat map([1, 2], (x) => [x, x]) is [1, 1, 2, 2]. map, then flatten.
@@ -427,14 +427,14 @@ A record whose fields are all Float64s (a point, a direction, a colour) can be w
 - **set** : `((a) -> b, a, b) -> a`. The record with one field changed and the others kept: set((p) => p.x, point, 3). The field can be a path, like (p) => p.home.city.
 - **derivative** : `((Float64) -[e]-> Float64) -> (Float64) -[Choice, e]-> Float64`. The slope of a function of one Float64, as a function. Where a slope can't be read there's no answer (Choice).
 - **gradient** : `((a) -[e]-> Float64) -> (a) -[Choice, e]-> a`. For a function of a record of Float64s (a point, a colour), the record of its slopes along each part.
-- **plus** : `(a, a) -> a` (vectors module). a + b: the one + works part by part on points, directions, colours, or any record whose fields are all Float64s; plus is its old name, kept for a release. This module's operations and their names follow the built-in functions of GLSL and WGSL (influence), which a shader compiles them to.
-- **minus** : `(a, a) -> a` (vectors module). a − b: the old name of −, kept for a release. The direction from b to a.
-- **times** : `(a, a) -> a` (vectors module). a · b: the old name of ·, kept for a release. A colour tinted by another.
+- **plus** : `(a, a) -> a where a is a Number` (vectors module). a + b: the one + works part by part on points, directions, colours, or any record whose fields are all Float64s; plus is its old name, kept for a release. This module's operations and their names follow the built-in functions of GLSL and WGSL (influence), which a shader compiles them to.
+- **minus** : `(a, a) -> a where a is a Number` (vectors module). a − b: the old name of −, kept for a release. The direction from b to a.
+- **times** : `(a, a) -> a where a is a Number` (vectors module). a · b: the old name of ·, kept for a release. A colour tinted by another.
 - **scale** : `(Float64, a) -> a` (vectors module). Every part of v times by: a direction made longer, a colour made brighter.
 - **dot** : `(a, a) -> Float64` (vectors module). The parts' products added up: how much a and b point the same way.
 - **magnitude** : `(a) -> Float64` (vectors module). How long v is: √(v · v).
-- **distance** : `(a, a) -> Float64` (vectors module). How far a is from b.
+- **distance** : `(a, a) -> Float64 where a is a Number` (vectors module). How far a is from b.
 - **unit** : `(a) -[Choice]-> a` (vectors module). v scaled to length 1 (normalize on a GPU).
 - **mix** : `(a, a, Float64) -> a` (vectors module). a when amount is 0, b when it is 1, and in between, part by part.
 - **clamp** : `(a, Float64, Float64) -> a` (vectors module). Every part of v kept between low and high.
-- **reflect** : `(a, a) -> a` (vectors module). A ray going this direction, bounced off a surface facing normal (normal of length 1).
+- **reflect** : `(a, a) -> a where a is a Number` (vectors module). A ray going this direction, bounced off a surface facing normal (normal of length 1).

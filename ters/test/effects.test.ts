@@ -10,7 +10,7 @@ import { infer } from "../src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { Aborted, runMain, runProgram, type World } from "../src/lang/run.ts";
-import { ABORT_OP, INT_OPS, IO, LOG_OP, NONE, S, SHOW_ANY, SOME, TEXT_OPS, UNIT } from "../src/lang/std.ts";
+import { ABORT_OP, INT_OPS, IO, LOG_OP, NONE, RANDOM_OP, S, SHOW_ANY, SOME, TEXT_OPS, UNIT } from "../src/lang/std.ts";
 import { CONSOLE, showType, STRING } from "../src/lang/types.ts";
 import { B } from "../src/prelude.ts";
 
@@ -428,4 +428,24 @@ test("a pinned library function that searches keeps the rule and passes its func
   assert.match(at(loud).join("\n"), /while a Choice is open|is run under a Choice here/);
   assert.deepEqual(at(aborts), []);
   assert.match(showType(info.typeOf.get(aborts)!, names), /Abort/);
+});
+
+// keep's test runs under keep's own row (BACKLOG L158), as all's search
+// does: a test that draws a random number checks under seeded, and keep's
+// type says so, with the row it shares with its test.
+test("keep: its test may draw from seeded's Random, and keep's type shows the row they share", () => {
+  const lib = (n: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY.names[d] === n)!;
+  const k = new Lang(LIBRARY.code);
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.call(S.seeded, k.lit(3), k.thunk(() =>
+    k.call(lib("keep"), k.list(k.lit(1), k.lit(2), k.lit(3), k.lit(4)), k.fn(["x"], () => k.call(S.less, k.call(RANDOM_OP), k.lit(0.5))))))))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const out: string[] = [];
+  runMain(code, info, main, { print: (s) => out.push(s), names });
+  assert.equal(out.length, 1);
+  assert.match(out[0], /^\[[\d, ]*\]$/);
+  const sc = info.schemes.get(lib("keep"))!;
+  assert.equal(showType(sc.type, names, undefined, sc.subs ?? []), "(List a, (a) -[Choice, e]-> Bool) -[e]-> List a");
 });
