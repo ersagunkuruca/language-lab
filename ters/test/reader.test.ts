@@ -200,6 +200,21 @@ test("typed refusal of a shared name says where each meaning stops", async () =>
   assert.ok(!r.ok && /^nothing fits whichever length or add is meant: length needs List a or Text here, got Float64; or /.test(r.reason), r.ok ? "read" : r.reason);
 });
 
+// A tuple's fields read on an input of what's typed are the tuple's its
+// type says (E222): pr.first and pr.second over numbered(…) were each
+// Tuple2's to Tuple8's, past the readings tried.
+test("typed fields of a tuple input are read by the input's type", async () => {
+  const { Lang } = await import("../src/lang/dsl.ts");
+  const { base, baseNames } = await import("../src/lang/load.ts");
+  const k = new Lang();
+  const f = k.def("f");
+  let hole = "";
+  k.define(f, k.fn(["t"], () => (hole = k.hole())));
+  const code = base(k.code), names = baseNames(k.names);
+  const r = fillValue(code, names, infer(code, names), hole, "map(numbered(map(t, (x) => x + 1)), (pr) => show(pr.first) ++ show(pr.second))", f);
+  assert.ok(r.ok, !r.ok ? r.reason : "");
+});
+
 // Each name's meanings are narrowed by what's around them before they're
 // combined (E176): sheet's report line, with `line` a field of two types,
 // `name` of four and show of four meanings, has 128 readings, more than

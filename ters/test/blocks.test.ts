@@ -135,10 +135,10 @@ test("holes of a generic + show their type without the where clause", () => {
   assert.doesNotMatch(text, /□[^□]*where[^□]*□/s);
 });
 
-// A list written in place as a definition's one List input reads as its
-// inputs, sum(1, 2, 3), and reads back the same (E166b); a name with
-// another meaning keeps its brackets.
-test("a list in place reads as the call's inputs", async () => {
+// A list written in place as a call's one input keeps its brackets,
+// sum([1, 2, 3]) (E221, Ersagun's choice, undoing E166b's text side);
+// typing sum(1, 2, 3) still reads as the list.
+test("a list in place keeps its brackets, and sum(1, 2, 3) still reads", async () => {
   const { Lang } = await import("../src/lang/dsl.ts");
   const { LIBRARY } = await import("../src/lang/library.ts");
   const { base, baseNames, checkOptions } = await import("../src/lang/load.ts");
@@ -153,7 +153,7 @@ test("a list in place reads as the call's inputs", async () => {
   const info = infer(code, names, undefined, checkOptions);
   const pres = { names, comments: {}, hints: {}, style: JSON.parse(readFileSync(join(root, "styles", "blocks.json"), "utf8")) };
   const text = (d: string) => renderBlocks(code, pres, info, d).split("\n").slice(1).join(" ").trim();
-  assert.match(text(total), /sum\(1, 2, 3\)/);
+  assert.match(text(total), /sum\(\[1, 2, 3\]\)/);
   assert.match(text(len), /length\(\[1, 2\]\)/);
   const hole = k.def("again");
   let h = "";
