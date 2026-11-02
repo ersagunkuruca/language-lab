@@ -1714,7 +1714,8 @@ with no effects whose inputs are all bound outside the lambda out of a
 lambda handed to `map`, `keep`, `for each` (loop-invariant code motion;
 in GHC it is the full-laziness transformation, prior art). *Measured* by
 hoisting the two calls by hand in the compiled module: 800 rows 3663 →
-454 ms, 500 rows 1329 → 386 ms; the ideal is 106 and 83 ms.
+454 ms, 500 rows 1329 → 386 ms; the ideal is 106 and 83 ms. *Fixed (C81, compiler/src/hoist.ts):* as the
+chooser stores it, 800 rows 1622 → 142 ms on the same machine (ideal 31).
 
 **S3. What's left after S2: about 4×.** The results are a persistent
 hash table threaded through every cell (C71's rerooted versions), and the

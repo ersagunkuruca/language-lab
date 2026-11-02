@@ -47,6 +47,7 @@ import { add as addCost, less, steps as costSteps } from "../../ters/src/lang/co
 import { inlineLists } from "./inline-lets.ts";
 import { fuseHandlers } from "./handlers.ts";
 import { expandDerivatives, recordVariant } from "../../ters/src/lang/derive.ts";
+import { hoistInvariants } from "./hoist.ts";
 import { stageProgram } from "../../ters/src/lang/stage.ts";
 import { expandInverses } from "./inverses.ts";
 import { solvesAsCalls } from "./results.ts";
@@ -126,6 +127,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     names = x.names;
     info = infer(code, names);
   }
+  // Work a lambda redoes on every call though nothing in it changes, done
+  // once before (hoist.ts, C81).
+  ({ code, info, names } = hoistInvariants(code, info, names));
   // inverse(f, …) of a named f is a solve on f (inverses.ts).
   const inv = expandInverses(code, names);
   if (inv.expanded.length) {
