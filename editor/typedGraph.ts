@@ -32,7 +32,8 @@
 // where one runs under a node, the hidden stretch is drawn faintly over it
 // (a tunnel). NODE-EDITOR.md says why.
 
-import type { Code, Id, NodeOf } from "../ters/src/model.ts";
+import type { Code, Id, NodeOf, Use } from "../ters/src/model.ts";
+import { isUse, useTarget } from "../ters/src/model.ts";
 import type { Presentation } from "../ters/src/presentation.ts";
 import type { Info } from "../ters/src/lang/infer.ts";
 import { ASSOCIATIVE, chainOperands, CONS, NIL, S, SIGS, TRUE, FALSE, TUPLE_MAX, tupleVariant } from "../ters/src/lang/std.ts";
@@ -485,6 +486,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const n = node(id);
     const d = dotOf(id);
     if (d) return useNode(id, d);
+    if (isUse(n)) return solve(id, n);
     switch (n.kind) {
       // A text node is clipped shorter than in the blocks: a node is read
       // at a glance, and the whole text is on hover (Ersagun 2026-10-29).
@@ -516,7 +518,6 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
         const from = foldFrom(code, n, name);
         return from ? cases(id, from.fold, { args: n.args, lams: new Map(from.arms.map((x) => [x.arm.id, x.lam])) }) : call(id, n);
       }
-      case "solve": return solve(id, n);
       default: return pill(id, n.kind, "lit");
     }
   };
@@ -689,13 +690,14 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   // left, the solved ones are sources on the right (all from the same
   // solution), and what follows uses them. The badge says whether it's
   // pure: Choice when the solver can find several answers or none.
-  const solve = (id: Id, n: NodeOf<"solve">): Sub => {
-    const label = (k: string) => (k === "out" ? "result" : portLabel(code, names, n.fn, k));
+  const solve = (id: Id, n: Use): Sub => {
+    const of = useTarget(code.nodes, n);
+    const label = (k: string) => (k === "out" ? "result" : portLabel(code, names, of, k));
     const boundKeys = Object.keys(n.binds);
     // Used the way the definition declares (RESULTS.md), it reads as a
     // call with one output per result, and its relation holding (= true)
     // goes without saying; another direction says "solve".
-    const fd = code.nodes[n.fn]?.kind === "def" ? (code.nodes[n.fn] as NodeOf<"def">) : null;
+    const fd = code.nodes[of]?.kind === "def" ? (code.nodes[of] as NodeOf<"def">) : null;
     const declared = !!fd?.results?.length && fd.results.length === boundKeys.length && fd.results.every((r) => boundKeys.includes(r));
     const holds = (v: Id) => { const t = code.nodes[v]; return t?.kind === "ref" && t.target === "std.bool.true"; };
     const fl = fd?.body && code.nodes[fd.body]?.kind === "lambda" ? (code.nodes[fd.body] as NodeOf<"lambda">).params : [];
@@ -717,7 +719,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
       } else badge = plan.status === "underdetermined" ? `needs ${plan.needMore} more` : plan.unique ? "one answer" : `Choice${plan.many ? " · several answers" : ""}${plan.canFail ? " · may have none" : ""}`;
     } catch {}
     const choice = /Choice|needs|stuck|may not end/.test(badge);
-    const title = `${declared ? "" : "solve "}${pres.style.notation[n.fn]?.glyph?.trim() || name(n.fn)}`;
+    const title = `${declared ? "" : "solve "}${pres.style.notation[of]?.glyph?.trim() || name(of)}`;
     const rows = Math.max(givenKeys.length, boundKeys.length);
     // A solved port reads "port → its name" when the two differ: sized as
     // drawn, so a row's two labels don't run together (BACKLOG I132).

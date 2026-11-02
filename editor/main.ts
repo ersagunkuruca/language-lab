@@ -16,7 +16,7 @@ import mathStyle from "../ters/styles/math.json" with { type: "json" };
 import plainStyle from "../ters/styles/plain.json" with { type: "json" };
 import lispStyle from "../ters/styles/lisp.json" with { type: "json" };
 import { hashDef } from "../ters/src/hash.ts";
-import { children, freshId, get, ID_PATTERN, isPublished, merge, parentOf, resolveRefs, subtree, type Code, type Id, type Node, type NodeOf } from "../ters/src/model.ts";
+import { children, freshId, get, ID_PATTERN, isPublished, isUse, useTarget, merge, parentOf, resolveRefs, subtree, type Code, type Id, type Node, type NodeOf } from "../ters/src/model.ts";
 import { INT } from "../ters/src/lang/types.ts";
 import { formatUnit, infer as unitInfer, NAMED, type Unit } from "../ters/src/units.ts";
 import { layer, type Comments, type Hints, type Names, type Presentation, type Style } from "../ters/src/presentation.ts";
@@ -275,7 +275,7 @@ function onToday(d: Doc): Doc {
 // Every id a node names is there: its children, and what a ref or a solve
 // refers to.
 function resolves(code: Code): boolean {
-  return Object.values(code.nodes).every((n) => [...children(n), ...(n.kind === "ref" ? [n.target] : n.kind === "solve" ? [n.fn] : [])].every((c) => code.nodes[c]));
+  return Object.values(code.nodes).every((n) => [...children(n), ...(n.kind === "ref" ? [n.target] : isUse(n) ? [useTarget(code.nodes, n)] : [])].every((c) => code.nodes[c]));
 }
 
 const START: Record<Program, string> = Object.fromEntries(manifest.programs.flatMap((p) => (p.start ? [[p.program, p.start]] : [])));
@@ -568,7 +568,7 @@ let clip: T.Clip | null = (() => { try { return JSON.parse(localStorage.getItem(
 
 const copyable = (id: Id | null): id is Id => {
   const n = id ? node(id) : null;
-  return !!n && ["lit", "ref", "call", "lambda", "match", "fold", "solve"].includes(n.kind) && !doc.code.defs.includes(id!);
+  return !!n && (["lit", "ref", "call", "lambda", "match", "fold"].includes(n.kind) || isUse(n)) && !doc.code.defs.includes(id!);
 };
 
 function copySelected(cut = false) {
@@ -796,9 +796,9 @@ function calleeDef(id: Id): Id | null {
   const n = node(id);
   if (!n) return null;
   let t: Id | null = null;
-  if (n.kind === "call") { const fn = node(n.fn); t = fn?.kind === "ref" ? fn.target : null; }
+  if (isUse(n)) t = useTarget(doc.code.nodes, n);
+  else if (n.kind === "call") { const fn = node(n.fn); t = fn?.kind === "ref" ? fn.target : null; }
   else if (n.kind === "ref") t = n.target;
-  else if (n.kind === "solve") t = n.fn;
   return t && node(t)?.kind === "def" ? t : null;
 }
 
@@ -864,7 +864,7 @@ function removeSelected() {
   const id = ui.selected;
   if (!info || !id || !node(id) || (doc.code.defs.includes(id) && !doc.loose?.[id])) return;
   const n = node(id);
-  if (["lit", "ref", "call", "lambda", "match", "fold", "solve"].includes(n.kind) || doc.loose?.[id]) void applyT(T.deleteOne(doc.code, doc.names.short, info, ui.def, doc.loose ?? {}, doc.home ?? {}, id));
+  if (["lit", "ref", "call", "lambda", "match", "fold"].includes(n.kind) || isUse(n) || doc.loose?.[id]) void applyT(T.deleteOne(doc.code, doc.names.short, info, ui.def, doc.loose ?? {}, doc.home ?? {}, id));
 }
 
 // ---------------------------------------------------------------- run backwards
@@ -1957,10 +1957,10 @@ function parentsOf(code: Code) {
   m = new Map();
   const set = (c: Id | null | undefined, parent: Id, slot: string, index?: number) => { if (c && !m!.has(c)) m!.set(c, { parent, slot, ...(index !== undefined ? { index } : {}) }); };
   for (const n of Object.values(code.nodes)) {
-    if (n.kind === "call") { set(n.fn, n.id, "fn"); n.args.forEach((a, i) => set(a, n.id, "args", i)); }
+    if (isUse(n)) { set(n.body, n.id, "body"); Object.values(n.given).forEach((g) => set(g, n.id, "given")); }
+    else if (n.kind === "call") { set(n.fn, n.id, "fn"); n.args.forEach((a, i) => set(a, n.id, "args", i)); }
     else if (n.kind === "lambda" || n.kind === "arm" || n.kind === "def") set(n.body, n.id, "body");
     else if (n.kind === "match" || n.kind === "fold") { set(n.scrutinee, n.id, "scrutinee"); if (n.kind === "match") set(n.otherwise, n.id, "otherwise"); n.arms.forEach((a) => set(a, n.id, "arms")); }
-    else if (n.kind === "solve") { set(n.body, n.id, "body"); Object.values(n.given).forEach((g) => set(g, n.id, "given")); }
   }
   parents.set(code, m);
   return m;
@@ -1980,7 +1980,7 @@ function enclosing(id: Id): Id | null {
     const letCall = (c: Node | undefined) => c?.kind === "call" && node(c.fn)?.kind === "lambda";
     if (letCall(n)) continue;
     if (n.kind === "lambda") { const o = up(n.id); const on = o ? node(o.parent) : undefined; if (!o || on?.kind === "def" || (letCall(on) && o.slot === "fn")) continue; }
-    if (["call", "match", "fold", "lambda", "solve"].includes(n.kind) && drawn(n.id)) return n.id;
+    if ((["call", "match", "fold", "lambda"].includes(n.kind) || isUse(n)) && drawn(n.id)) return n.id;
   }
   return null;
 }
@@ -3092,7 +3092,7 @@ function graphMenu(info: T.Info): HTMLElement | null {
     const pName = (p: Id) => names[p] ?? "it";
     // Only the inputs that can stand for the result (I129).
     if (turn) turn.params.forEach((p, k) => T.turnMismatch(doc.code, names, info, id, k) || rows.push(item(`Work out ${pName(p)} from the result`, `turn-${k}`, `Turn it around: what goes into ${pName(p)} becomes the result given, and the node gives ${pName(p)} instead. Changes the code; Undo puts it back`, why(() => T.turnAround(doc.code, doc.names.short, info, id, k)))));
-    if (n?.kind === "solve") rows.push(item("Use it forwards", "turn-back", "The call again: the result given goes back into the input it works out", why(() => T.turnBack(doc.code, doc.names.short, info, id))));
+    if (isUse(n)) rows.push(item("Use it forwards", "turn-back", "The call again: the result given goes back into the input it works out", why(() => T.turnBack(doc.code, doc.names.short, info, id))));
     if (kind === "node") rows.push(...stepRows(id));
     // Cases that share this value, read once as the otherwise: each can
     // have its own (BACKLOG I117); an edit here is otherwise made in all.
@@ -3340,7 +3340,7 @@ function graphHooks(info: T.Info) {
     turn: (id: Id) => {
       const up = parentOf(doc.code, id);
       if (up?.slot === "args" && T.turnable(doc.code, up.parent)) return (applyT(T.turnAround(doc.code, doc.names.short, info, up.parent, up.index!)), true);
-      const s = Object.values(doc.code.nodes).find((n) => n.kind === "solve" && Object.values(n.binds).includes(id));
+      const s = Object.values(doc.code.nodes).find((n) => isUse(n) && Object.values(n.binds).includes(id));
       return s ? (applyT(T.turnBack(doc.code, doc.names.short, info, s.id)), true) : false;
     },
     canUse: (b: Id, slot: Id) => { const r = useOver(info, b, slot); return r.ok ? null : r.reason; },
