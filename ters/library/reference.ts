@@ -58,6 +58,8 @@ export const SECTIONS: Section[] = [
     ids: [...t("queue"), ...prelude("empty queue", "queue of", "queued", "front of", "dequeued", "queue size", "queue items"), ...t("priority queue"), ...prelude("empty priority queue", "priority queue of", "prioritized", "soonest", "without soonest", "priority queue size", "priority queue items")] },
   { title: "State", intro: "A value a computation reads and replaces as it goes, answered by a handler written in the language: with state gives the action's value and the last state.",
     ids: [...t("state"), ...prelude("with state", "change state")] },
+  { title: "Channels", intro: "A producer sends items and a consumer receives them; piped joins the two, and the producer runs only as far as the consumer asks.",
+    ids: [...t("send"), ...t("receive"), ...t("pipe"), ...prelude("piped")] },
   { title: "Matrices", intro: "A Matrix of any size holds its items row by row. Sums, products and a matrix times a vector work for every number type and stop with both sizes when they don't fit; solved finds x with m·x = b at Float64. Mat2 to Mat4 are the fixed-size ones geometry uses.",
     ids: [...t("matrix"), ...prelude("matrix of rows", "matrix rows", "row count", "column count", "matrix entry", "transposed", "identity matrix", "matrix scaled", "matrix sum", "matrix product", "matrix times vector", "solved", "determinant", "inverted", "least squares")] },
   { title: "Representations", intro: "A type can be stored as another type, written as one definition (REPRESENTATIONS.md): what a stored value means, which definitions do the type's jobs, and what each costs. The compiler picks the cheapest for the jobs a program uses; nothing changes where the values are used.",

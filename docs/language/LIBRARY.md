@@ -312,6 +312,15 @@ A value a computation reads and replaces as it goes, answered by a handler writt
 - **with state** : `(a, () -[State, e]-> b) -[e]-> (b, a)`. Runs the action with get state and put state answered, starting from initial, and gives (its value, the last state): with state(0, () ↦ put state(get state() + 1)) is ((), 1).
 - **change state** : `((a) -[State, e]-> a) -[State, e]-> Unit`. Puts f(the state) as the state: change state((n) ↦ n + 1).
 
+## Channels
+
+A producer sends items and a consumer receives them; piped joins the two, and the producer runs only as far as the consumer asks.
+
+- **Send** (type). Hands an item onward: piped(producer, consumer) answers it with the consumer's next receive.
+- **Receive** (type). Asks for the next item: piped answers it with some(item) from the producer's next send, or none once the producer has finished.
+- **Pipe** (type). A producer run to its next send: finished, or sent(item, more), where more runs it on to the send after.
+- **piped** : `(() -[Send, e]-> a, () -[Receive, e]-> b) -[e]-> b`. Runs the consumer with each receive() answered by the producer's next send(item): some(item), or none once the producer has finished. The producer runs only as far as the consumer asks.
+
 ## Matrices
 
 A Matrix of any size holds its items row by row. Sums, products and a matrix times a vector work for every number type and stop with both sizes when they don't fit; solved finds x with m·x = b at Float64. Mat2 to Mat4 are the fixed-size ones geometry uses.

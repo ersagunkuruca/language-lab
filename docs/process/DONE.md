@@ -616,7 +616,8 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| L16a | A std `State s` effect (get state, put state) and its handler written in the prelude, `with state(initial, action)` giving (value, last state), and `change state(f)`; the type checker's infinite-type check now looks inside an effect's own types, which calling `get state()`'s answer had made loop (test/state.test.ts, LANGUAGE.md "State") | this PR |
+| L64 | Channels as two std effects, `Send a` (send) and `Receive a` (receive, some(item) or none), joined by `piped(producer, consumer)` written in the prelude: the producer runs only as far as the consumer asks (test/state.test.ts, LANGUAGE.md "Send, Receive and piped") | this PR |
+| L16a | A std `State s` effect (get state, put state) and its handler written in the prelude, `with state(initial, action)` giving (value, last state), and `change state(f)`; the type checker's infinite-type check now looks inside an effect's own types, which calling `get state()`'s answer had made loop (test/state.test.ts, LANGUAGE.md "State") | #1212 |
 | L44f | `least squares(m, b)` for a Float64 Matrix with at least as many rows as columns, by the normal equations (test/matrix-any-size.test.ts, LANGUAGE.md "Matrices"); and `replace in array` got its note and its place in the library reference | #1208 |
 | L62 | Pure branches: a `together` whose actions are in-place functions with no effects but Abort and Diverge is known pure (src/lang/pure-branches.ts `pureTogethers`), so a target may run its branches in any order or at once (test/pure-branches.test.ts, ANSWERED-LATER.md "Pure branches") | #1202 |
 | L44e | `determinant` and `inverted` for a Matrix of any size: the determinant by elimination with a row swap per pivot, inverted by solving each column of the identity (test/matrix-any-size.test.ts, MATRICES.md step 3) | #1201 |

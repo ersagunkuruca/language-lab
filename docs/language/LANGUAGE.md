@@ -914,6 +914,22 @@ the next one, and the normal finish pairs the value with the state. It is
 not a Cell: nothing is woken, a put is only the next value
 (`test/state.test.ts`, BACKLOG L16).
 
+### Send, Receive and `piped`
+
+```
+effect Send a = send(item: a) returns Unit, later          -- std
+effect Receive a = receive() returns Optional a, later      -- std
+```
+
+`piped(producer, consumer)` runs the consumer and answers each `receive()`
+with the producer's next `send(item)`: `some(item)`, or `none` once the
+producer has finished. The producer runs only as far as the consumer asks,
+so their prints interleave (`test/state.test.ts`, BACKLOG L64). Both
+handlers are written in the prelude: `pipe of` runs the producer to its
+first send and keeps the rest as `sent(item, more)`, and `piped` hands that
+along as the state of the consumer's handler, as with State above. This is
+the pipes of Kammar, Lindley and Oury, "Handlers in action" (ICFP 2013).
+
 ### `Optional`: the data form of Choice
 
 `Choice` is how absence is *computed*; it can't be stored in a record or a
