@@ -235,6 +235,7 @@ A list is written [1, 2, 3]. There are no loops: map, keep and for each go throu
 - **rest of array** : `(Array a) -> Array a`. The array without its first item; an empty array stays empty. It shares the items rather than copying them.
 - **push front** : `(Array a, a) -> Array a`. The array with one more item at the front. Compiled JS writes into free room before the items when nothing else has taken it.
 - **first of array if any** : `(Array a) -> Optional a`. The array's first item as an Option: some(item), or none of an empty array. No Choice, so nothing searches around it.
+- **replace in array** : `(Array a, Int, a) -> Array a`. The array with the item at this position replaced. A copy: the compiler may write in place when nothing else holds the array.
 
 ## Maps and sets
 
@@ -322,6 +323,7 @@ A Matrix of any size holds its items row by row. Sums, products and a matrix tim
 - **solved** : `(Matrix Float64, List Float64) -[Choice, Abort]-> List Float64`. The list x with matrix times vector(m, x) = b, for a square Float64 matrix, by Gaussian elimination with partial pivoting. No answer when the matrix is singular (a pivot is 0).
 - **determinant** : `(Matrix Float64) -[Abort]-> Float64`. The determinant of a square Float64 matrix: 0 when it is singular. Other sizes stop the program.
 - **inverted** : `(Matrix Float64) -[Choice, Abort]-> Matrix Float64`. The inverse of a square Float64 matrix: matrix product(m, inverted(m)) is the identity. No answer when the matrix is singular.
+- **least squares** : `(Matrix Float64, List Float64) -[Choice, Abort]-> List Float64`. The x making matrix times vector(m, x) nearest the vector, by least squares, for a Float64 matrix with at least as many rows as columns: a line through points. No answer when the columns aren't independent.
 
 ## Representations
 

@@ -119,3 +119,20 @@ test("determinant and inverted (L44e): pivots multiplied with their sign; a sing
   assert.deepEqual(ran, want);
   assert.deepEqual(compiled, want);
 });
+
+test("least squares (L44f): a line through points that aren't on one", async () => {
+  const [ran, compiled] = await both((k) => [
+    // y = a + b·x through (0, 1), (1, 2), (2, 4): a = 5/6, b = 3/2
+    k.call(L("least squares"), rows(k, [1, 0], [1, 1], [1, 2]), vec(k, 1, 2, 4)),
+    // a square system is solved exactly
+    k.call(L("least squares"), rows(k, [2, 1], [1, 3]), vec(k, 5, 10)),
+    tried(k, k.call(L("least squares"), rows(k, [1, 0], [1, 1]), vec(k, 1, 2, 3))),
+  ]);
+  assert.equal(ran.length, 3);
+  const [a, b] = JSON.parse(ran[0]) as number[];
+  assert.ok(Math.abs(a - 5 / 6) < 1e-9 && Math.abs(b - 1.5) < 1e-9, ran[0]);
+  const [x, y] = JSON.parse(ran[1]) as number[];
+  assert.ok(Math.abs(x - 1) < 1e-9 && Math.abs(y - 3) < 1e-9, ran[1]);
+  assert.equal(ran[2], 'refused("least squares: a 2 × 2 matrix and a vector of 3; it needs one item per row")');
+  assert.deepEqual(compiled, ran);
+});
