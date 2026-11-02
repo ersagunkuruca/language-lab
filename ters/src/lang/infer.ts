@@ -23,7 +23,7 @@ import { smoothDerivative as hasSmoothDerivative, smoothGradient as hasSmoothGra
 import { BOOL, CELL_OPS, DIVISION, FIELDS, JOBS, S, SET, SIGS, SMART, TRUE, TUPLE_MAX, tupleType } from "./std.ts";
 import { countedCalls } from "./counting.ts";
 import { ratioParts } from "./int.ts";
-import { fieldPath, placePath } from "./records.ts";
+import { fieldPath, fieldPaths, placePath } from "./records.ts";
 import { leftToWays, pickWays, waysIn, type Ways } from "./ways.ts";
 import { fresh, rigid, RIGID, type Pins } from "./signatures.ts";
 import {
@@ -850,8 +850,8 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         // is a field or a path of them, written in place (or a hole, still
         // to be filled with one).
         if (code.nodes[n.fn]?.kind === "ref" && (code.nodes[n.fn] as NodeOf<"ref">).target === SET && n.args.length && !fieldPath(code, n.args[0], true)
-          && !info.errors.some((e) => e.id === n.args[0])) {
-          err(n.args[0], "set needs a field here, or a path of fields such as (p) ↦ p.address.city");
+          && !fieldPaths(code, n.args[0], true) && !info.errors.some((e) => e.id === n.args[0])) {
+          err(n.args[0], "set needs a field here, a path of fields such as (p) ↦ p.address.city, or several as a tuple, (m) ↦ (m.pc, m.steps), none twice or inside another");
         }
         if (code.nodes[n.fn]?.kind === "ref" && (code.nodes[n.fn] as NodeOf<"ref">).target === CELL_OPS.path && n.args.length && !placePath(code, n.args[0], true)
           && !info.errors.some((e) => e.id === n.args[0])) {

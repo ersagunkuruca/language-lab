@@ -889,7 +889,7 @@ test("$eq compares long lists without the JS stack", async () => {
 });
 
 test("Int, text and set compile to what the evaluator does", async () => {
-  const { INT_OPS: I, TEXT_OPS: T, SET } = await import("../../ters/src/lang/std.ts");
+  const { INT_OPS: I, TEXT_OPS: T, SET, tupleVariant } = await import("../../ters/src/lang/std.ts");
   const { INT, STRING } = await import("../../ters/src/lang/types.ts");
   const k = new Lang();
   const orNone = (body: () => string) => k.call(S.first, k.thunk(body), k.thunk(() => k.lit("none")));
@@ -912,12 +912,15 @@ test("Int, text and set compile to what the evaluator does", async () => {
     k.let("p", k.call(pt.v.point, k.int(1), k.lit("a")), (p) => k.call(pt.f["point.label"], k.call(SET, pt.f["point.label"], p, k.lit("b")))),
     k.let("p", k.call(pt.v.point, k.int(1), k.lit("a")), (p) => k.call(I.show, k.call(pt.f["point.x"], k.call(SET, k.fn(["q"], (q) => k.call(pt.f["point.x"], q)), p, k.int(5))))),
     k.call(SHOW_ANY, k.list(k.call(pt.v.point, k.int(1), k.lit("a")), k.call(pt.v.point, k.int("100000000000000000000"), k.lit("b")))),
+    // Several fields at once (L167): a tuple written in place, and one named.
+    k.call(SHOW_ANY, k.call(SET, k.fn(["q"], (q) => k.call(tupleVariant(2), k.call(pt.f["point.x"], q), k.call(pt.f["point.label"], q))), k.call(pt.v.point, k.int(1), k.lit("a")), k.call(tupleVariant(2), k.int(2), k.lit("c")))),
+    k.let("both", k.call(tupleVariant(2), k.lit("d"), k.int(3)), (both) => k.call(SHOW_ANY, k.call(SET, k.fn(["q"], (q) => k.call(tupleVariant(2), k.call(pt.f["point.label"], q), k.call(pt.f["point.x"], q))), k.call(pt.v.point, k.int(1), k.lit("a")), both))),
   ].map((t) => k.call(S.print, t)))));
   const { defs, code, info } = await compiledDefs(k, ["main"], "data.js");
   const want: string[] = [];
   runMain(code, info, main, { print: (s) => want.push(s), names: { ...baseNames(), ...k.names } });
   assert.deepEqual(printed(() => defs.main(), $setPrint), want);
-  assert.deepEqual(want, ["15511210043330985984000000", "9007199254740991", "-4", "none", "equal", "a+b+c", "2", "2", "b", "5", '[point(1, "a"), point(100000000000000000000, "b")]']);
+  assert.deepEqual(want, ["15511210043330985984000000", "9007199254740991", "-4", "none", "equal", "a+b+c", "2", "2", "b", "5", '[point(1, "a"), point(100000000000000000000, "b")]', 'point(2, "c")', 'point(3, "d")']);
 });
 
 test("comes before, against a constant below the surrogates, is JS's < and still orders by code point", async () => {

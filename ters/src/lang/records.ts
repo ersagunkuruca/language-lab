@@ -14,8 +14,14 @@ export function fieldPath(code: Code, id: Id, unfinished = false): Id[] | null {
   if (unfinished && n?.kind === "hole") return [];
   if (n?.kind === "ref" && code.nodes[n.target]?.kind === "field") return [n.target];
   if (n?.kind !== "lambda" || n.params.length !== 1) return null;
+  return pathFrom(code, n.body, n.params[0], unfinished);
+}
+
+// The fields `body` reads from `param`, outermost first: p.address.city is
+// [address, city]. Null unless it is only fields of the parameter.
+function pathFrom(code: Code, body: Id, param: Id, unfinished: boolean): Id[] | null {
   const path: Id[] = [];
-  let e = code.nodes[n.body];
+  let e = code.nodes[body];
   while (e?.kind === "call" && e.args.length === 1) {
     const head = code.nodes[e.fn];
     if (unfinished && head?.kind === "hole") { e = code.nodes[e.args[0]]; continue; }
@@ -24,7 +30,27 @@ export function fieldPath(code: Code, id: Id, unfinished = false): Id[] | null {
     e = code.nodes[e.args[0]];
   }
   if (unfinished && e?.kind === "hole") return path;
-  return path.length && e?.kind === "ref" && e.target === n.params[0] ? path : null;
+  return path.length && e?.kind === "ref" && e.target === param ? path : null;
+}
+
+// Several fields changed at once (BACKLOG L167): `set((m) ↦ (m.pc,
+// m.registers), machine, (pc, registers))`. The path is a tuple of paths
+// from the one parameter, and the value a tuple of as many. No field is
+// named twice and none is inside another (m.home and m.home.city), so the
+// update still has exactly one answer, whatever order the parts are put
+// in. Each path, outermost first; null when it isn't such a tuple.
+const TUPLE = /^std\.tuple[2-8]\.tuple$/;
+export function fieldPaths(code: Code, id: Id, unfinished = false): Id[][] | null {
+  const n = code.nodes[id];
+  if (n?.kind !== "lambda" || n.params.length !== 1) return null;
+  const body = code.nodes[n.body], head = body?.kind === "call" ? code.nodes[body.fn] : undefined;
+  if (body?.kind !== "call" || head?.kind !== "ref" || !TUPLE.test(head.target)) return null;
+  const paths = body.args.map((a) => pathFrom(code, a, n.params[0], unfinished));
+  if (paths.some((p) => !p)) return null;
+  const inside = (a: Id[], b: Id[]) => a.length > 0 && a.length <= b.length && a.every((f, i) => b[i] === f);
+  for (let i = 0; i < paths.length; i++) for (let j = 0; j < paths.length; j++)
+    if (i !== j && inside(paths[i]!, paths[j]!)) return null;
+  return paths as Id[][];
 }
 
 // A place for `path` (L98): a field or a path of fields as for `set`, or
