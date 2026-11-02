@@ -69,7 +69,7 @@ export class NotDifferentiable extends Error {}
 // a · (1/y) as a / y.
 // A record of Float64s has a derivative part by part: `rec` holds each
 // part's, and a `build` whose `variant` is set builds a whole record.
-type E = { k: "num"; v: number } | { k: "build"; build: () => Id; neg?: E; recip?: E; variant?: Id } | { k: "none" }
+type E = { k: "num"; v: number } | { k: "build"; build: () => Id; neg?: E; recip?: E; variant?: Id; record?: true } | { k: "none" }
   | { k: "rec"; variant: Id; parts: E[] };
 const numE = (v: number): E => ({ k: "num", v });
 const NONE: E = { k: "none" };
@@ -146,17 +146,31 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
   // right there, a binder known to hold one, or what a function returns.
   function shapeOf(id: Id, ctx: Ctx, seen = new Set<Id>()): Id | null {
     const n = nodes[id];
-    if (n.kind === "ref") return ctx.shape.get(n.target) ?? null;
-    if (n.kind === "match") {
+    if (n.kind === "ref") {
+      // A definition that is a record, not a function (a motor written
+      // down once): its body's.
+      const t = nodes[n.target];
+      if (t?.kind === "def" && t.body && nodes[t.body].kind !== "lambda" && !seen.has(n.target)) {
+        seen.add(n.target);
+        const v = shapeOf(t.body, ctx, seen);
+        seen.delete(n.target);
+        return v;
+      }
+      return ctx.shape.get(n.target) ?? null;
+    }
+    if (n.kind === "match" || n.kind === "fold") {
       for (const a of n.arms) { const v = shapeOf((nodes[a] as NodeOf<"arm">).body, ctx, seen); if (v) return v; }
       return null;
     }
     if (n.kind !== "call") return null;
     const head = nodes[n.fn];
-    const inner = (lam: NodeOf<"lambda">) => {
+    // The inputs' shapes are read before the body's definition is marked
+    // as seen: a product of a product is no recursion (I133).
+    const inner = (lam: NodeOf<"lambda">, def?: Id) => {
       const shape = new Map(ctx.shape);
       lam.params.forEach((p, i) => { const v = n.args[i] && shapeOf(n.args[i], ctx, seen); if (v) shape.set(p, v); });
-      return shapeOf(lam.body, { ...ctx, shape }, seen);
+      if (def) seen.add(def);
+      try { return shapeOf(lam.body, { ...ctx, shape }, seen); } finally { if (def) seen.delete(def); }
     };
     if (head.kind === "lambda") return inner(head);
     if (head.kind !== "ref") return null;
@@ -168,12 +182,7 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
       const td = tr?.kind === "tref" ? nodes[(nodes[tr.target] as NodeOf<"def"> | undefined)?.body ?? ""] : null;
       return td?.kind === "typedef" && td.variants.length === 1 && record(td.variants[0]) ? td.variants[0] : null;
     }
-    if (t?.kind === "def" && t.body && nodes[t.body].kind === "lambda" && !seen.has(head.target)) {
-      seen.add(head.target);
-      const v = inner(nodes[t.body] as NodeOf<"lambda">);
-      seen.delete(head.target);
-      return v;
-    }
+    if (t?.kind === "def" && t.body && nodes[t.body].kind === "lambda" && !seen.has(head.target)) return inner(nodes[t.body] as NodeOf<"lambda">, head.target);
     return null;
   }
   // map parts, zip parts and total, differentiated part by part: part j of
@@ -182,11 +191,8 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
     const records = which === S.total ? n.args : n.args.slice(1);
     const variant = shapeOf(records[0], ctx);
     if (!variant) {
-      // A Float64 is a record of one part, itself: map parts(f, x) is f(x).
-      // A Float64's slope is a Float64; a record's would be one.
       const ds = records.map((r) => D(r, ctx));
-      if (ds.every((d) => isNum(d, 0)) || ds.some(variantOf)) return cant("can't tell which record these parts are of");
-      return D(which === S.total ? records[0] : add({ kind: "call", fn: n.args[0], args: records }), ctx);
+      return partsAtRunTime(n, which, records, ds, ctx);
     }
     const parts = fieldsOf(variant).map((field) => {
       const at = records.map((r) => add({ kind: "call", fn: add({ kind: "ref", target: field }), args: [r] }));
@@ -194,6 +200,67 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
     });
     if (which !== S.total) return { k: "rec", variant, parts };
     return parts.reduce((a, b) => op("add", a, b), numE(0));
+  }
+
+  // map parts, zip parts and total of records whose kind the code doesn't
+  // say (I133: generic code such as `table product`, whose basis elements
+  // come out of a table made when it runs, so which record they are is
+  // known only then). The derivative is then written with map parts, zip
+  // parts and total too, which read the parts when it runs, whatever the
+  // record (a Float64 being a record of one part): part by part, f's slope
+  // with each part's own. A record whose derivative is 0 gives zeros of its
+  // shape, map parts((part) => 0, x).
+  function partsAtRunTime(n: NodeOf<"call">, which: Id, records: Id[], ds: E[], ctx: Ctx): E {
+    const zero = (d: E) => isNum(d, 0);
+    if (which === S.total) return zero(ds[0]) ? numE(0) : { k: "build", build: () => callN(ref(S.total), place(ds[0])) };
+    const late = (build: () => Id): E => ({ k: "build", build, record: true });
+    const f = n.args[0], head = nodes[f];
+    const asRecord = (d: E, like: Id) => (zero(d) ? callN(ref(S.mapParts), add({ kind: "lambda", params: [binder("part")], body: place(numE(0)) }), copy(like, ctx)) : place(d));
+    // f's slope at each part, the parts' own slopes given where they move.
+    // `seed`: f's slope along that input instead (its partial, part by part).
+    const pointwise = (moves: boolean[], seed?: number): E => {
+      let ps: Id[] = [], dps: Id[] = [];
+      const pbs = records.map(() => add({ kind: "binder" })), sub = new Map(ctx.sub), d = new Map(seed === undefined ? ctx.d : []);
+      pbs.forEach((pb, i) => {
+        sub.set(pb, () => ref(ps[i]));
+        if (moves[i]) d.set(pb, { k: "build", build: () => ref(dps[i]) });
+        if (seed === i) d.set(pb, numE(1));
+      });
+      const body = D(add({ kind: "call", fn: f, args: pbs.map(ref) }), { ...ctx, sub, d });
+      if (zero(body)) return numE(0);
+      return late(() => {
+        ps = records.map(() => binder("part"));
+        dps = records.map((_, i) => (moves[i] ? binder("part's slope") : ""));
+        const lam = add({ kind: "lambda", params: [...ps, ...dps.filter(Boolean)], body: place(body) });
+        return moves.some(Boolean)
+          ? callN(ref(S.zipParts), lam, copy(records[0], ctx), place(ds[0]))
+          : callN(ref(which), lam, ...records.map((r) => copy(r, ctx)));
+      });
+    };
+    if (which === S.mapParts) return pointwise([!zero(ds[0])]);
+    if (ds.every(zero)) return pointwise(records.map(() => false));
+    const fop = head.kind === "ref" ? OPS[(head as NodeOf<"ref">).target] : undefined;
+    const [x, y] = records, [dx, dy] = ds;
+    const zip = (g: Id, a: () => Id, b: () => Id) => callN(ref(S.zipParts), ref(g), a(), b());
+    if (fop === "add" || fop === "sub") return late(() => zip(BUILTIN[fop], () => asRecord(dx, x), () => asRecord(dy, y)));
+    if (fop === "mul") {
+      const terms: (() => Id)[] = [];
+      if (!zero(dx)) terms.push(() => zip(BUILTIN.mul, () => place(dx), () => copy(y, ctx)));
+      if (!zero(dy)) terms.push(() => zip(BUILTIN.mul, () => copy(x, ctx), () => place(dy)));
+      return late(() => (terms.length === 1 ? terms[0]() : zip(BUILTIN.add, terms[0], terms[1])));
+    }
+    // Any other f of two Float64s (Float32's `add in Float32`): its
+    // partials part by part, times each record's slope, summed,
+    const terms = ds.flatMap((di, i) => {
+      if (zero(di)) return [];
+      const partial = pointwise(records.map(() => false), i);
+      return zero(partial) ? [] : [() => zip(BUILTIN.mul, () => place(partial), () => place(di))];
+    });
+    // and f's own slope where it uses what moves from around it.
+    const own = pointwise(records.map(() => false));
+    if (!zero(own)) terms.push(() => place(own));
+    if (!terms.length) return numE(0);
+    return late(() => terms.slice(1).reduce((sum, t) => zip(BUILTIN.add, () => sum, t), terms[0]()));
   }
 
   // Arithmetic on derivatives, simplifying as it goes so the result reads
@@ -279,7 +346,7 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
   }
 
   // Does expression `id` depend on any binder in `dep`? Lets pass the
-  // dependence on to their binders; a fold's results are assumed to.
+  // dependence on to their binders; a fold's results do when a case does.
   function depends(id: Id, dep: Set<Id>): boolean {
     const n = nodes[id];
     if (n.kind === "ref") return dep.has(n.target);
@@ -290,11 +357,10 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
       return depends(lam.body, inner);
     }
     if (n.kind === "fold" && depends(n.scrutinee, dep)) return true;
-    if (n.kind === "fold") {
-      const inner = new Set(dep);
-      for (const a of n.arms) for (const r of (nodes[a] as NodeOf<"arm">).results) if (r) inner.add(r);
-      return n.arms.some((a) => depends((nodes[a] as NodeOf<"arm">).body, inner));
-    }
+    // A fold over data that doesn't depend on it, whose cases don't either
+    // but for the results of the rest, is a constant: each result is
+    // (I133: `clifford reverse`'s list of ones beside a multivector).
+    if (n.kind === "fold") return n.arms.some((a) => depends((nodes[a] as NodeOf<"arm">).body, dep));
     return children(n).some((c) => nodes[c].kind !== "binder" && depends(c, dep));
   }
 
@@ -372,10 +438,12 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
   // The body's derivative is worked out first (so it's known whether it
   // is a record's); the binders it refers to are made each time it's
   // placed.
-  function letD(n: NodeOf<"call">, lam: NodeOf<"lambda">, ctx: Ctx): E {
+  // `ds`: the inputs' derivatives when the caller has them (read outside
+  // the definition being inlined, so a product of a product is no recursion).
+  function letD(n: NodeOf<"call">, lam: NodeOf<"lambda">, ctx: Ctx, ds?: E[]): E {
     const sub = new Map(ctx.sub), d = new Map(ctx.d), shape = new Map(ctx.shape);
     const slots = lam.params.map((p, i) => {
-      const slot = { p, np: "", dp: "", dv: D(n.args[i], ctx), bound: false };
+      const slot = { p, np: "", dp: "", dv: ds?.[i] ?? D(n.args[i], ctx), bound: false };
       sub.set(p, () => ref(slot.np));
       const v = shapeOf(n.args[i], ctx) ?? variantOf(slot.dv);
       if (v) shape.set(p, v);
@@ -424,7 +492,7 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
     if (ds.some(variantOf) || shapeOf(n.id, ctx)) {
       if (inlining.has(def)) return cant(`${nm(def)} calls itself with a record, which isn't differentiated yet`);
       inlining.add(def);
-      try { return letD(n, nodes[(nodes[def] as NodeOf<"def">).body!] as NodeOf<"lambda">, ctx); } finally { inlining.delete(def); }
+      try { return letD(n, nodes[(nodes[def] as NodeOf<"def">).body!] as NodeOf<"lambda">, ctx, ds); } finally { inlining.delete(def); }
     }
     let sum: E = numE(0);
     args.forEach((a, i) => {
@@ -507,7 +575,7 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
     })) return cant("this fold goes through nested data (a container of the type), which isn't differentiated yet");
     return {
       k: "build", build: () => {
-        const arms = n.arms.map((a) => {
+        const made = n.arms.map((a) => {
           const arm = nodes[a] as NodeOf<"arm">;
           const sub = new Map(ctx.sub), d = new Map(ctx.d);
           const binds = arm.binds.map((b) => { const nb = binder(nm(b)); sub.set(b, () => ref(nb)); return nb; });
@@ -519,7 +587,19 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
             return nr;
           });
           const inner = { sub, d, shape: ctx.shape };
-          const body = callN(ref(PAIR_V), copy(arm.body, inner), place(D(arm.body, inner)));
+          return { arm, binds, results, inner, slope: D(arm.body, inner) };
+        });
+        // A record's slope is a record in every case: where a case's is 0
+        // and which record isn't known here (I133), it is zeros of the
+        // case's value's shape, read when it runs.
+        const records = made.some((m) => variantOf(m.slope) || (m.slope.k === "build" && m.slope.record));
+        const arms = made.map(({ arm, binds, results, inner, slope }) => {
+          const shape = shapeOf(arm.body, inner);
+          let body: Id;
+          if (records && !shape && isNum(slope, 0)) {
+            const v = binder("value");
+            body = callN(add({ kind: "lambda", params: [v], body: callN(ref(PAIR_V), ref(v), callN(ref(S.mapParts), add({ kind: "lambda", params: [binder("part")], body: place(numE(0)) }), ref(v))) }), copy(arm.body, inner));
+          } else body = callN(ref(PAIR_V), copy(arm.body, inner), placeAs(slope, shape));
           return add({ kind: "arm", variant: arm.variant, binds, results, body });
         });
         return callN(ref(SECOND), add({ kind: "fold", scrutinee: copy(n.scrutinee, ctx), arms }));
