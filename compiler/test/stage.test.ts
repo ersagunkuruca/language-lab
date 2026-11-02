@@ -20,6 +20,11 @@ import { pga } from "../src/fixtures.ts";
 import { CONS, NIL } from "../../ters/src/lang/std.ts";
 import { subtree, type Id } from "../../ters/src/model.ts";
 import { valueMasks } from "../../ters/src/lang/grades.ts";
+import { load } from "../src/program.ts";
+import { withFloat32 } from "../../ters/src/lang/float32.ts";
+import { represent } from "../../ters/src/lang/represent.ts";
+import { infer } from "../../ters/src/lang/infer.ts";
+import { S } from "../../ters/src/lang/std.ts";
 
 const runtime = pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href;
 const first = (xs: Iterable<Value>) => { for (const x of xs) return x; };
@@ -159,6 +164,30 @@ test("a gradient through a PGA motor: staged first, then read, on the CPU and th
     ev.fields.forEach((x, i) => assert.ok(Math.abs(x - fd[i]) < 1e-6, `evaluated ${ev.fields} vs ${fd}`));
   }
   assert.deepEqual([...emitWgsl(lowered).refused.values()], []);
+});
+
+// I146: in Float32 (the editor's CPU picture), the motor's sums of zeros
+// were each rounded again, 150 roundings deep, and the CPU frame cost 16×
+// the Float64 one. A value rounded already is not rounded again.
+test("staged in Float32, a rounded value isn't rounded again: the ray marcher's motor (I146)", () => {
+  const p = load("raymarch"), colour = p.named("colour");
+  const w = withFloat32(p.code, p.pres.names);
+  const code = represent(w.code, [colour], w.rep), info = infer(code, w.names);
+  const lowered = lowerScalar(code, info, w.names, [colour], { records: true, shader: true });
+  assert.ok(!lowered.refused.has(colour));
+  const twice = lowered.code.defs.flatMap((d) => subtree(lowered.code, d)).map((id) => lowered.code.nodes[id]).filter((n) => {
+    if (n.kind !== "call") return false;
+    const f = lowered.code.nodes[n.fn], a = lowered.code.nodes[n.args[0]];
+    const inner = a?.kind === "call" ? lowered.code.nodes[a.fn] : undefined;
+    return f?.kind === "ref" && f.target === S.float32 && inner?.kind === "ref" && inner.target === S.float32;
+  });
+  assert.equal(twice.length, 0);
+  // The same colours as the Float32 program evaluated.
+  const js = loadJs(lowered), r = makeRunner(code, info, { print: () => {} });
+  for (const [x, y, t] of [[0.1, 0.2, 1.3], [-0.5, -0.3, 0.4], [0.7, 0.05, 2]]) {
+    const [ev] = [...(r.call(r.value(colour), x, y, t) as Iterable<{ fields: number[] }>)];
+    assert.deepEqual(js.get(colour)!(x, y, t), ev.fields);
+  }
 });
 
 // C83: running backwards, a value defined once (the motor, a product of
