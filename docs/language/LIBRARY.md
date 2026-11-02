@@ -203,6 +203,11 @@ A list is written [1, 2, 3]. There are no loops: map, keep and for each go throu
 - **replace at** : `(List a, Int, a) -> List a`. The list with the item at a position, counting from 0, replaced by `by`; the list as it was when it has no item there. n steps.
 - **take** : `(List a, Int) -> List a`. The first count items: take([a, b, c], 2) is [a, b]; a list with fewer gives them all. count steps.
 - **drop** : `(List a, Int) -> List a`. The items after the first count: drop([a, b, c], 2) is [c]; a list with fewer gives []. count steps.
+- **zipped** : `(List a, List b) -> List (a, b)`. The two lists' items side by side, as tuples, as long as the shorter: zipped([1, 2, 3], ["a", "b"]) is [(1, "a"), (2, "b")].
+- **numbered** : `(List a) -> List (Int, a)`. Each item with its position, counting from 0: numbered(["a", "b"]) is [(0, "a"), (1, "b")].
+- **copies** : `(Int, a) -> List a`. A list of count copies of the item: copies(3, 0) is [0, 0, 0]. (repeated is Text's.)
+- **all pass** : `(List a, (a) -[e]-> Bool) -[e]-> Bool`. Whether every item passes the test; true for an empty list. Stops at the first that doesn't.
+- **any pass** : `(List a, (a) -[e]-> Bool) -[e]-> Bool`. Whether some item passes the test; false for an empty list. Stops at the first that does.
 - **position where** : `(List a, (a) -[e]-> Bool) -[e]-> Optional Int`. The position of the first item that passes the test, counting from 0, as some(position): position where([3, 8, 5], (x) ↦ 4 < x) is some(1); none when no item passes.
 - **show numbers** : `(List Float64) -> Text`. A fold that prints. Run backwards it unfolds, so it parses.
 - **empty array** : `() -> Array a`. An array with no items.
