@@ -1017,7 +1017,15 @@ function seedOf(info: T.Info, def: Id): string[] | null {
   // A definition passed in (newton's f) reads as its name (values.ts). A
   // function made on the way (newton's slope, derivative(f)) has no way
   // to be typed into a box: it shows as PASSED and runs as itself (I78).
-  const texts = got?.map((v) => { const d = definedAs(v); return d ? pres().names[d] ?? d : typeof v === "function" ? PASSED : showValue(v, doc.code, pres().names); });
+  // So does a value with no text that reads back as itself: a cell, a page
+  // (Tumble's make lane, scene drawn: I29).
+  const texts = got?.map((v, i) => {
+    const d = definedAs(v);
+    if (d) return pres().names[d] ?? d;
+    if (typeof v === "function") return PASSED;
+    const t = showValue(v, doc.code, pres().names);
+    return body?.kind === "lambda" && body.params[i] && "error" in readPort(info, body.params[i], t) ? PASSED : t;
+  });
   return texts?.length && body?.kind === "lambda" && texts.length === body.params.length && texts.every((t, i) => !("error" in readPort(info, body.params[i], t))) ? texts : null;
 }
 
