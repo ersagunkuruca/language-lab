@@ -55,7 +55,7 @@ for (const [name, expected] of [
 test("records are WasmGC structs: the ray marcher's colours in WebAssembly, exactly the evaluator's", async () => {
   const p = load("raymarch");
   const lowered = lowerScalar(p.code, p.info, p.pres.names, p.own.defs, { records: true });
-  assert.deepEqual(lowered.records.map((r) => r.name), ["Vec", "Colour"]);
+  assert.deepEqual(lowered.records.map((r) => r.name), ["Vec", "Pga", "Colour"]);
   const m = emitWasm(lowered);
   assert.ok(WebAssembly.validate(m.bytes));
   assert.match(m.wat, /\(type \$Colour\d+ \(struct \(field \$\w+ f64\)/);
@@ -63,7 +63,7 @@ test("records are WasmGC structs: the ray marcher's colours in WebAssembly, exac
   const w = await instantiate(m) as unknown as Record<string, (...xs: unknown[]) => unknown>;
   const r = makeRunner(p.code, p.info, { print: () => {} });
   const colour = lowered.funcs.find((f) => f.name === "colour" && f.params.every((t) => t === "f64"))!;
-  const fields = (lowered.records[1]).fields.map((x) => x.name);
+  const fields = lowered.records.find((r) => r.name === "Colour")!.fields.map((x) => x.name);
   for (const [x, y, t] of [[0, 0, 0], [0.3, -0.2, 1.5], [-0.9, 0.7, 4], [0.5, 0.5, 10]]) {
     const want = first(r.call(r.value(colour.def), x, y, t)) as { fields: number[] };
     const got = w.colour(x, y, t);

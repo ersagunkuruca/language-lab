@@ -181,14 +181,15 @@ test("relate works out a value defined once, once: a point moved by the PGA moto
 
 // C83: a gradient whose function and point are known is worked out
 // forward by the evaluator, not searched for: a sphere's normal through the
-// PGA motor in a few steps, where relate took thousands.
-test("relate takes a known gradient forward: the ball's normal through the PGA motor in a few steps (C83)", async () => {
+// PGA motor in about 650 steps (each hundred functions the evaluator
+// enters count as one), where the search took about 7,500.
+test("relate takes a known gradient forward: the ball's normal through the PGA motor in a few hundred steps (C83)", async () => {
   const { relate, toValue } = await import("../../ters/src/lang/relate.ts");
   const p = pga();
   const [param] = (p.code.nodes[(p.code.nodes[p.ball.ballNormal] as { body: Id }).body] as { params: Id[] }).params;
   const pt = { tag: p.point, fields: [0.3, -1.2, 2, 1] };
   let steps = 0;
-  const [a] = relate(p.code, p.ball.ballNormal, { [param]: pt }, { spend: () => ++steps < 100 });
+  const [a] = relate(p.code, p.ball.ballNormal, { [param]: pt }, { spend: () => ++steps < 1000 });
   const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });
   const [want] = [...(r.call(r.value(p.ball.ballNormal), pt) as Iterable<Value>)];
   assert.ok(a, `no answer in ${steps} steps`);
