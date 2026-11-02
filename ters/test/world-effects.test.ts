@@ -83,3 +83,29 @@ test("WebAssembly and C refuse a match on the world's effects, rather than skip 
   const lowered = lowerScalar(code, info, names, [quiet], { data: true });
   assert.ok(lowered.refused.has(quiet), "quiet is lowered");
 });
+
+// L145: Console's print performed by name, as the palette offers it beside
+// the builtin, is answered by the world as the builtin is, evaluated and
+// compiled; a match still handles it.
+test("Console's print performed by name goes to the world when nothing handles it", async () => {
+  const k = new Lang();
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.seq(
+    k.call(op(CONSOLE, "print"), k.lit("by name")),
+    k.handle(k.call(op(CONSOLE, "print"), k.lit("inside")),
+      [{ variant: op(CONSOLE, "print"), names: ["line"], body: ([line]) => k.call(S.print, k.text(k.lit("> "), line)) }, ...otherConsole(k)]),
+    k.call(S.print, k.lit("after")))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const want = ["by name", "> inside", "after"];
+  const out: string[] = [];
+  runMain(code, info, main, { print: (s) => out.push(s), names });
+  assert.deepEqual(out, want);
+  const path = join(mkdtempSync(join(tmpdir(), "world-")), "by-name.mjs");
+  writeFileSync(path, compile(code, info, names, { runtime, exports: ["main"] }));
+  const compiled: string[] = [];
+  $setPrint((s: string) => compiled.push(s));
+  try { (await import(pathToFileURL(path).href)).defs.main(); } finally { $setPrint((s: string) => console.log(s)); }
+  assert.deepEqual(compiled, want);
+});

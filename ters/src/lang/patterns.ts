@@ -72,6 +72,10 @@ export function shape(code: Code, root: Id): string {
 // no row left has a _ that would catch them first.
 export function sharedOtherwise(code: Code, all: Row[], otherwise?: Id): { rows: Row[]; otherwise?: Id; folded: Row[] } {
   const groups = new Map<string, Row[]>();
+  // A fresh match, every case still a hole, shares nothing: each case has
+  // its own row and its own hole to fill, as the graph draws it (E177).
+  // Holes left by clearing a shared value still read as one otherwise.
+  if (all.length && all.every((r) => code.nodes[r.body]?.kind === "hole")) return { rows: all, otherwise, folded: [] };
   for (const r of all) if (!reads(code, r.body, r.binds)) { const k = shape(code, r.body); groups.set(k, [...(groups.get(k) ?? []), r]); }
   const same = otherwise ? groups.get(shape(code, otherwise)) : [...groups.values()].filter((g) => g.length > 1).sort((a, b) => b.length - a.length)[0];
   const kept = same ? all.filter((r) => !same.includes(r)) : all;

@@ -456,6 +456,9 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   };
   const operations = new Map<Fn, Id>();
   const worldOps = new Map<Fn, Id>(Object.entries(WORLD_OPS).map(([b, op]) => [builtins[b], op]));
+  // ... and back: an operation performed by name that nothing handles is
+  // answered by the world as its builtin is (L145).
+  const worldBuiltins = new Map<Id, Fn>(Object.entries(WORLD_OPS).map(([b, op]) => [op, builtins[b]]));
   // The rests of computations whose operation is answered later
   // (ANSWERED-LATER.md): the frames from the perform up to its handler and
   // the choice points made since the handler began, kept as a function
@@ -631,6 +634,9 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       if (op === RANDOM_OP) return this.ret((rt.world?.random ?? worldRandom)());
       if (op === NOW_OP) return this.ret((rt.world?.now ?? Date.now)());
       if (op === WAIT_OP) return (world("wait")(args[0] as number), this.ret(unit));
+      // Console's, Files' and Network's operations (L145): as their builtins.
+      const builtin = worldBuiltins.get(op);
+      if (builtin) return this.apply(builtin, args);
       // Waiting (L71c): the world's timers, and which of several tickets is
       // ready first. A timer's ticket is ready at its deadline; `timer(ms,
       // value)` is ready ms from when it is awaited.

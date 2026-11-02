@@ -1901,28 +1901,45 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
   // Unsearched, the first 40 (the rest are a search away); searched, all.
   const cap = q ? shown.length : 40;
   const input = h("input", { id: field, type: "search", value: ui.query, autocomplete: "off", spellcheck: "false", placeholder: `${all.length} things fit here. Search…` }) as HTMLInputElement;
-  // Typing redraws once it pauses, not on every key: reading what's typed
-  // is a whole check per reading (E173: 81 keys took 114 s).
+  // Typing redraws the list on every key, but what's typed is read (a
+  // whole check per reading) only once typing pauses (E173: 81 keys took
+  // 114 s). Enter reads it at once.
+  const again = (read: boolean) => {
+    readingPaused = !read;
+    const cur = (document.getElementById(field) as HTMLInputElement | null) ?? input;
+    const at = cur.selectionStart, had = document.activeElement === cur;
+    render();
+    const next = document.getElementById(field) as HTMLInputElement | null;
+    if (had) next?.focus();
+    if (next && at !== null) next.setSelectionRange(at, at);
+  };
   input.addEventListener("input", () => {
     ui.query = input.value;
     clearTimeout(typingTimer);
-    typingTimer = setTimeout(() => {
-      if (ui.query !== input.value || !input.isConnected) return;
-      const at = input.selectionStart, had = document.activeElement === input;
-      render();
-      const again = document.getElementById(field) as HTMLInputElement | null;
-      if (had) again?.focus();
-      if (again && at !== null) again.setSelectionRange(at, at);
-    }, TYPING_PAUSE);
+    again(false);
+    // The field is drawn again on each key: the one on the page now.
+    typingTimer = setTimeout(() => { const cur = document.getElementById(field) as HTMLInputElement | null; if (cur && cur.value === ui.query) again(true); else readingPaused = false; }, TYPING_PAUSE);
   });
   // What's typed may itself be a value: 3, "hi", [3, 1, 2], circle(2).
   // Offered first, and only if it fits. A bare case name is already listed.
   // Read once per program, hole and text: a redraw reads it from the cache.
-  const typed = q && !all.some(({ l }) => l[0].toLowerCase() === q) ? readTyped(info, hole, ui.query) : null;
+  const pending = readingPaused;
+  const typed = q && !all.some(({ l }) => l[0].toLowerCase() === q) ? (pending ? peekTyped(info, hole, ui.query) : readTyped(info, hole, ui.query)) ?? null : null;
   const value = typed?.ok ? typed : null;
   const run = (x: (typeof all)[number]) => { ui.query = ""; applyT(T.fill(doc.code, doc.names.short, info, hole, x.f, x.l[0], ui.def)); };
   const runValue = () => { ui.query = ""; applyT(value!); };
-  input.addEventListener("keydown", (e) => { if (e.key === "Enter") { if (value) runValue(); else if (shown[0]) run(shown[0]); } });
+  input.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    if (pending || readingPaused) {
+      // Not read yet: read it now, then take the first row, as Enter does.
+      clearTimeout(typingTimer);
+      ui.query = input.value;
+      again(true);
+      document.getElementById(field)?.closest(".picker")?.querySelector<HTMLButtonElement>(".palette .opt")?.click();
+      return;
+    }
+    if (value) runValue(); else if (shown[0]) run(shown[0]);
+  });
   const list = h("div", { class: "opts palette" });
   if (value) {
     const b = h("button", { class: "opt", type: "button" }, h("span", { class: "opt-l" }, ui.query.trim()), h("span", { class: "opt-d" }, "this, written out"));
@@ -1937,7 +1954,8 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
     list.append(b);
   }
   if (shown.length > cap) list.append(h("p", { class: "hint" }, `${shown.length - cap} more: type to search them.`));
-  const why = !shown.length && !value && q ? cachedTyped(info, `why ${hole} ${ui.query}`, () => T.whyNotHere(doc.code, doc.names.short, info, hole, ui.query)) ?? pureHole(info, hole) : "";
+  const whyKey = `why ${hole} ${ui.query}`, whyRead = () => T.whyNotHere(doc.code, doc.names.short, info, hole, ui.query);
+  const why = !shown.length && !value && q ? (pending ? peekCached<string | null>(info, whyKey) : cachedTyped(info, whyKey, whyRead)) ?? pureHole(info, hole) : "";
   // What's typed is refused because its type has no implementation of an
   // interface it needs: say so, and offer to write one (BACKLOG E140).
   const lacks = typed && !typed.ok ? typed.missing : undefined;
@@ -1945,6 +1963,7 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
   // Refused, it says why (E174): the reading's own reason, when the text
   // is an expression or nothing listed matches it.
   else if (typed && !typed.ok && !value && !why && (!shown.length || /[^\p{L}\p{N}_' ]/u.test(q))) list.prepend(h("p", { class: "hint refused" }, `${ui.query.trim()} doesn't fit here: ${typed.reason.replace(/\.$/, "")}.`));
+  else if (!shown.length && !value && pending && q) list.append(h("p", { class: "hint" }, "Reading what's typed…"));
   else if (!shown.length && !value) list.append(h("p", { class: "hint" }, `Nothing that fits matches. ${why || "Values and arithmetic can be typed too: 3, \"text\", [1, 2], x * 2, (x) => x + 1."}`));
   return h("div", {}, h("div", { class: "sub-head" }, "Fill · only what type-checks here"), h("div", { class: "picker" }, input, list));
 }
@@ -1962,6 +1981,12 @@ function cachedTyped<R>(info: T.Info, key: string, read: () => R): R {
   if (!c.m.has(key)) c.m.set(key, read());
   return c.m.get(key) as R;
 }
+let readingPaused = false;
+function peekCached<R>(info: T.Info, key: string): R | undefined {
+  const c = typedReads.get(info);
+  return c && c.names === doc.names.short ? (c.m.get(key) as R | undefined) : undefined;
+}
+const peekTyped = (info: T.Info, hole: Id, text: string) => peekCached<T.TEdit>(info, `fill ${ui.def} ${hole} ${text}`);
 const readTyped = (info: T.Info, hole: Id, text: string) => cachedTyped(info, `fill ${ui.def} ${hole} ${text}`, () => T.fillValue(doc.code, doc.names.short, info, hole, text, ui.def));
 
 // What Wrap in… applies to: a value in an expression, not a definition's
