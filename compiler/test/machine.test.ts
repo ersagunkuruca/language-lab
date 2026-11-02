@@ -2,8 +2,8 @@
 // checker, optimizer, interpreter and profiler for a small register
 // machine. The evaluator, the compiled code (as `lab compile` stores it)
 // and the hand-written ideal must print the same and exit the same way,
-// failures included, and so must its WebAssembly (since C92); the C way
-// is in bench-machine.ts.
+// failures included, and so must its WebAssembly (since C92, with the
+// chooser's representations since C93); the C way is in bench-machine.ts.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -52,6 +52,15 @@ test("machine: the failures: bad lines, labels, registers, division by zero, the
 test("machine: as WebAssembly (WASI), the same (C92)", () => {
   assert.equal(w.wasmProblem, undefined);
   all(["--profile", "h.asm", "f.asm"], { "h.asm": source("hello"), "f.asm": sized("fib", 10) }, ["wasm"]);
+});
+
+// The WebAssembly takes the chooser's representations too, as `lab native`
+// does (no hash tables there): Map and Set as trees, lists as trees. primes
+// 5000 took 5.3 s with cons lists, about 60 ms as trees (C93).
+test("machine: its WebAssembly stores lists as trees, and agrees at a bigger size (C93)", () => {
+  const t = performance.now();
+  all(["p.asm"], { "p.asm": sized("primes", 5000) }, ["wasm"]);
+  assert.ok(performance.now() - t < 3000, "primes 5000 in WebAssembly in under 3 s");
 });
 
 // Its registers, memory and code are lists read and written by position:

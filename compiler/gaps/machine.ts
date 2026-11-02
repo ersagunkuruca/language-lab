@@ -50,22 +50,31 @@ const world = (files: Record<string, string>, err: string[]): World => ({
 });
 const lines = (printed: string[]) => printed.join("").split("\n").filter((l, i, all) => l !== "" || i < all.length - 1);
 
+// The program with the representations the chooser picks: `hostMaps` where
+// std's Table is (compiled JavaScript), not for WebAssembly and C, which
+// take what `lab native` takes (C93).
+function chosenFor(p: ReturnType<typeof load>, own: string[], main: string, hostMaps: boolean) {
+  const options = p.options as Parameters<typeof infer>[3];
+  const lib = withLibraryRepresentations(p.code, p.info, p.pres.names, main, own, [], { hostMaps });
+  const info = infer(lib.code, lib.names, undefined, { ...options, insiders: [...(options?.insiders ?? []), ...lib.insiders] });
+  if (info.errors.length) throw new Error(`machine on ${lib.chosen.join(", ")}: ${info.errors.map((e) => e.message).join("; ")}`);
+  return { code: lib.code, info, names: lib.names, chosen: lib.chosen };
+}
+
 export function programs() {
   const p = load(NAME);
   const own: string[] = JSON.parse(readFileSync(join(folder, "code.json"), "utf8")).defs;
   const main = own.find((d) => p.pres.names[d] === "main")!;
-  const options = p.options as Parameters<typeof infer>[3];
-  const lib = withLibraryRepresentations(p.code, p.info, p.pres.names, main, own, [], { hostMaps: true });
-  const info = infer(lib.code, lib.names, undefined, { ...options, insiders: [...(options?.insiders ?? []), ...lib.insiders] });
-  if (info.errors.length) throw new Error(`machine on ${lib.chosen.join(", ")}: ${info.errors.map((e) => e.message).join("; ")}`);
-  return { p, main, plain: { code: p.code, info: p.info, names: p.pres.names }, chosen: { code: lib.code, info, names: lib.names, chosen: lib.chosen } };
+  return { p, own, main, plain: { code: p.code, info: p.info, names: p.pres.names }, chosen: chosenFor(p, own, main, true) };
 }
 
-// The program as a WASI command (compiler/wasi.ts), or why it can't be one.
+// The program as a WASI command (compiler/wasi.ts), with the chooser's
+// representations, or why it can't be one.
 export async function wasmModule(): Promise<WebAssembly.Module | string> {
-  const p = load(NAME);
+  const { p, own, main } = programs();
   try {
-    const m = emitWasm(lowerScalar(p.code, p.info, p.pres.names, p.own.defs, { data: true }), { wasi: true });
+    const c = chosenFor(p, own, main, false);
+    const m = emitWasm(lowerScalar(c.code, c.info, c.names, own, { data: true }), { wasi: true });
     return await WebAssembly.compile(m.bytes);
   } catch (e) { return (e as Error).message; }
 }
