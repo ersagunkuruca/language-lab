@@ -44,7 +44,7 @@ test("the library's Map and Set trees, array of List and tree of List agree thro
   const laws = representationLaws(code, info, names, LIBRARY.reps);
   assert.deepEqual(laws.filter((l) => l.failures.length).map((l) => [l.rep, l.job, l.failures[0]]), []);
   const jobs = (rep: string) => laws.filter((l) => l.rep === rep && l.cases > 0).map((l) => l.job);
-  assert.deepEqual(jobs("array of List"), ["nil", "cons", "length", "append", "item at", "match", "fold"]);
+  assert.deepEqual(jobs("array of List"), ["nil", "cons", "length", "append", "item at", "replace at", "match", "fold"]);
   assert.deepEqual(jobs("tree of List"), ["nil", "cons", "length", "append", "item at", "replace at", "match", "fold"]);
   assert.ok(jobs("weight-balanced tree").includes("put") && jobs("weight-balanced tree").includes("set union"));
 });

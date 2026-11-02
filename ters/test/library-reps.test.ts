@@ -397,6 +397,45 @@ test("a program that reads a list by position and takes it apart gets arrays in 
   for (const n of [0, 4, 7]) assert.equal(one(fn(head)(n)), n);
 });
 
+// C93c: replace at on a list stored as an array is a job of its own,
+// written into the buffer; the list it was given still reads as it was,
+// in the evaluator and in WebAssembly and C (which copies unless it holds
+// the only view).
+test("a program that reads and replaces items by position gets arrays, and the list replaced still reads as it was, on every engine", async () => {
+  const { lowerScalar } = await import("../../compiler/src/scalar.ts");
+  const { emitC } = await import("../../compiler/src/c.ts");
+  const { emitWasm, instantiate } = await import("../../compiler/src/wasm.ts");
+  const k = new Lang(LIBRARY.code);
+  const xs = k.def("xs");
+  k.define(xs, k.call(L("map"), k.call(S.range, k.lit(50)), k.fn(["i"], (i) => k.call(B.mul, i, i))));
+  // The new item at i, plus the old one there, plus a neighbour of the new.
+  const swapped = k.def("swapped");
+  k.define(swapped, k.fn(["i"], (i) => k.let("ys", k.call(L("replace at"), k.x(xs), i, k.lit(1000)), (ys) =>
+    k.call(B.add, k.call(B.add, k.call(L("item at"), ys, i, k.lit(-1)), k.call(L("item at"), k.x(xs), i, k.lit(-1))), k.call(L("item at"), ys, k.int(2), k.lit(-1))))));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.list(...[0, 2, 49, 50].map((i) => k.call(swapped, k.int(i))))))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  const before = printed(code, names, main);
+  assert.deepEqual(before, ["[1004, 2004, 3405, 2]"]);
+  const c = withLibraryRepresentations(code, info, names, main, [xs, swapped, main]);
+  assert.deepEqual(c.chosen, ["List as array of List"]);
+  assert.deepEqual(printed(c.code, c.names, main, c.insiders), before);
+  const info2 = infer(c.code, c.names, undefined, { ...checkOptions, insiders: [...checkOptions.insiders!, ...c.insiders] });
+  const lowered = lowerScalar(c.code, info2, c.names, [swapped], { data: true });
+  assert.deepEqual([...lowered.refused.values()], []);
+  assert.deepEqual([...emitC(lowered).refused.values()], []);
+  const w = (await instantiate(emitWasm(lowered))) as unknown as Record<string, (x: unknown) => unknown>;
+  const f = lowered.funcs.find((g) => g.def === swapped && !g.inner)!;
+  const toInt = (await import("../../compiler/src/wasm.ts")).toInt;
+  assert.deepEqual([0n, 2n, 49n, 50n].map((i) => w[f.name](toInt(w as never, i))), [1004, 2004, 3405, 2]);
+  // C replaces in place only with one holder: xs is held, so it copies, and frees what it made.
+  const { build, skip } = await import("../../compiler/test/c-harness.ts");
+  if (skip) return;
+  const i = lowered.funcs.indexOf(f);
+  assert.deepEqual(build(lowered)([0n, 2n, 49n, 50n].map((x) => [i, [x]])), [1004, 2004, 3405, 2].map((value) => ({ value, live: 0 })));
+});
+
 // A Set holds a list as written (its constructor's field), so lists as
 // arrays wait until the Set is stored some other way: chosen first, as a
 // tree, then lists on what that made (C93). The answer is the same.
@@ -461,9 +500,21 @@ test("a program that conses onto a match's rest keeps List as written, and the c
   assert.ok(!withLibraryRepresentations(code, info, names, main, [xs, bump, main]).chosen.includes("List as array of List"));
 });
 
-// C45: a program that changes a list by position in a loop gets `tree of
-// List`, where each change is log n (the array copies, the cons cells
-// walk: n² both), and prints what the definition prints.
+// A list with xs appended `times` times, in a loop: on an array each append
+// copies (n), on a tree it's log n.
+function appendedInLoop(k: Lang, xs: Id, times = 4): Id {
+  const grown = k.def("grown");
+  k.define(grown, k.fold(k.call(INT_OPS.range, k.int(times)), [
+    { variant: NIL, names: [], body: () => k.x(xs) },
+    { variant: CONS, names: ["i", "rest"], results: [null, "so far"], body: (_, [, l]) => k.call(L("append"), l!, k.x(xs)) },
+  ]));
+  return grown;
+}
+
+// C45: a program that changes a list by position and appends in a loop gets
+// `tree of List`, where each change is log n (the cons cells walk, the
+// array copies on append: n² both), and prints what the definition prints.
+// Changing by position alone gets arrays (C93c).
 function byPosition(n: number) {
   const k = new Lang(LIBRARY.code);
   const xs = k.def("xs");
@@ -475,6 +526,8 @@ function byPosition(n: number) {
     { variant: CONS, names: ["i", "rest"], results: [null, "so far"], body: ([i], [, l]) => k.let("at", k.call(S.first, k.thunk(() => k.call(INT_OPS.remainder, k.call(INT_OPS.mul, i, k.int(7)), k.int(n))), k.thunk(() => k.int(0))), (at) =>
       k.call(L("replace at"), l!, at, k.call(B.add, k.call(L("item at"), l!, at, k.lit(0)), k.call(INT_OPS.toNumber, i)))) },
   ]));
+  // And appends in a loop, n each on an array (C93c made replacing 1 there).
+  const grown = appendedInLoop(k, xs);
   const at = k.def("at");
   k.define(at, k.fn(["i"], (i) => k.call(L("item at"), k.x(counted), i, k.lit(-1))));
   const show = (x: Id) => k.call(S.print, k.call(SHOW_ANY, x));
@@ -486,9 +539,10 @@ function byPosition(n: number) {
     show(k.call(L("replace at"), k.list(k.lit(1), k.lit(2)), k.lit(5), k.lit(9))),
     show(k.call(S.equal, k.x(counted), k.call(L("reverse"), k.call(L("reverse"), k.x(counted))))),
     show(k.call(L("sum"), k.x(counted))),
+    show(k.call(L("length"), k.x(grown))),
   )));
   const code = base(k.code), names = baseNames(k.names);
-  return { code, names, main, at, defs: [xs, counted, at, main], info: infer(code, names, undefined, checkOptions) };
+  return { code, names, main, at, defs: [xs, counted, grown, at, main], info: infer(code, names, undefined, checkOptions) };
 }
 
 test("a program that changes a list by position in a loop gets trees, and prints what the definition prints (C45)", () => {
@@ -589,23 +643,24 @@ test("a definition recurring through a stored list's match runs 50,000 deep comp
   const { pathToFileURL } = await import("node:url");
   const k = new Lang(LIBRARY.code);
   const xs = k.def("xs");
-  k.define(xs, k.call(S.range, k.lit(50000)));
+  k.define(xs, k.call(S.range, k.lit(25000)));
   const changed = k.def("changed");
   k.define(changed, k.fold(k.call(INT_OPS.range, k.int(100)), [
     { variant: NIL, names: [], body: () => k.x(xs) },
     { variant: CONS, names: ["i", "rest"], results: [null, "so far"], body: ([i], [, l]) => k.call(L("replace at"), l!, k.call(INT_OPS.mul, i, k.int(7)), k.lit(9)) },
   ]));
+  const grown = appendedInLoop(k, changed, 1);
   const count = k.def("count");
   k.define(count, k.fn(["l"], (l) => k.match(l, [
     { variant: NIL, names: [], body: () => k.int(0) },
     { variant: CONS, names: ["x", "r"], body: ([, r]) => k.call(INT_OPS.add, k.int(1), k.call(count, r)) },
   ])));
   const main = k.def("main");
-  k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.call(count, k.x(changed))))));
+  k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.call(count, k.x(grown))))));
   const code = base(k.code), names = baseNames(k.names);
   const info = infer(code, names, undefined, checkOptions);
   assert.deepEqual(info.errors.map((e) => e.message), []);
-  const c = withLibraryRepresentations(code, info, names, main, [xs, changed, count, main]);
+  const c = withLibraryRepresentations(code, info, names, main, [xs, changed, grown, count, main]);
   assert.deepEqual(c.chosen, ["List as tree of List"]);
   const info2 = infer(c.code, c.names, undefined, { ...checkOptions, insiders: [...checkOptions.insiders!, ...c.insiders] });
   assert.deepEqual(info2.errors.map((e) => e.message), []);

@@ -173,7 +173,7 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string
     return j >= 0 && strict.slice(0, j).every(pure) ? strict[j] : m;
   };
   const funcs = lowered.funcs.map((f) => ({ ...f, locals: [...f.locals], body: settle(f.body) }));
-  const used = new Set<string>(["new", "free", "unused", "block", "block_end", "dup", "dec", "drop", "fields", "oom", "live", "st", "reason", "fuel", "mod", "in", "out", "bits", "run", "code", "argc", "argv", "hex", "hexd", "word", "token", ...RESERVED, ...lowered.arrays.flatMap((_, i) => ["empty", "of", "items", "length", "at", "push", "first", "rest", "pushFront", "get"].map((op) => `array_${op}_a${i}`))]);
+  const used = new Set<string>(["new", "free", "unused", "block", "block_end", "dup", "dec", "drop", "fields", "oom", "live", "st", "reason", "fuel", "mod", "in", "out", "bits", "run", "code", "argc", "argv", "hex", "hexd", "word", "token", ...RESERVED, ...lowered.arrays.flatMap((_, i) => ["empty", "of", "items", "length", "at", "push", "first", "rest", "pushFront", "get", "replaceAt"].map((op) => `array_${op}_a${i}`))]);
   const ident = (hint: string) => {
     const base = hint.normalize("NFKD").replace(/[^A-Za-z0-9_]+/g, "_").replace(/^_+|_+$/g, "") || "f";
     let n = base;
@@ -1048,6 +1048,24 @@ static lab_cell *lab__copy_a${i}(${T} *xs, uint32_t n) {
   for (uint32_t k = v->n; k-- > 0;) { ${l!.cons} *c = lab_new(sizeof(${l!.cons}), ${l!.type}, ${l!.tag}); c->f${l!.head} = ${cp("it[k]")}; c->f${1 - l!.head} = acc; acc = (lab_cell *)c; }
   lab_drop(a);
   return acc;
+}`);
+    // The item at k replaced (C93c): in place when nobody else holds the
+    // view or its buffer (Perceus's reuse), else in a copy; the array as it
+    // is outside it.
+    const dropX = (x: string) => (counted(a.item) ? drop(a.item, x) : "");
+    if (has("replaceAt")) out.push(`static lab_cell *lab_array_replaceAt_a${i}(lab_cell *a, lab_int k, ${T} x) {
+  ${V} *v = (${V} *)a;
+  if (!LAB_IS_SMALL(k) || LAB_VAL(k) < 0 || LAB_VAL(k) >= (int64_t)v->n) { lab_int_drop(k); ${dropX("x")} return a; }
+  uint32_t at = (uint32_t)LAB_VAL(k);
+  if (a->rc == 1 && v->b->rc == 1) { ${B} *b = (${B} *)v->b; ${T} old = b->it[v->s + at]; b->it[v->s + at] = x; ${dropX("old")} (void)old; return a; }
+  lab_cell *r = lab__copy_a${i}(((${B} *)v->b)->it + v->s, v->n);
+  ${V} *w = (${V} *)r;
+  ${B} *c = (${B} *)w->b;
+  ${T} old = c->it[w->s + at];
+  c->it[w->s + at] = x;
+  ${dropX("old")} (void)old;
+  lab_drop(a);
+  return r;
 }`);
     if (has("length")) out.push(`static lab_int lab_array_length_a${i}(lab_cell *a) { lab_int n = LAB_SMALL(((${V} *)a)->n); lab_drop(a); return n; }`);
     // No answer past the end.

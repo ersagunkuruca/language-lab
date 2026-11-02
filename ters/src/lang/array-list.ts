@@ -66,6 +66,9 @@ export function buildArrayList(k: Lang, prelude: (name: string) => Id): ArrayLis
   const itemAt = def("array item at", ["array", "position", "otherwise"], (a, i, o) => k.call(S.first,
     k.thunk(() => k.call(ARRAY_OPS.at, a, i)),
     k.thunk(() => o)));
+  // An item replaced by its Int position (C93c), in the buffer, the array
+  // it was keeping the change back; the array as it is outside it.
+  const replaced = def("array replace at", ["array", "position", "by"], (a, i, x) => k.call(ARRAY_OPS.replaceAt, a, i, x));
   // Equal, show and compare see the list it stands for: an array's own
   // compare puts shorter arrays first, and show says "array".
   const equal = def("array equal", ["a", "b"], (a, b) => k.call(S.equal, items(a), items(b)));
@@ -82,6 +85,7 @@ export function buildArrayList(k: Lang, prelude: (name: string) => Id): ArrayLis
     k.call(JOBS.job, k.x(prelude("append")), k.x(append), cost(k, "linear")),
     k.call(JOBS.job, k.x(prelude("item at")), k.x(itemAt), cost(k, "constant")),
     k.call(JOBS.job, k.x(prelude("map")), k.x(mapped), cost(k, "linear")),
+    k.call(JOBS.job, k.x(prelude("replace at")), k.x(replaced), cost(k, "constant")),
     k.call(JOBS.hides, k.x(CONS), k.int(1)),
     // A whole list from outside: one array of it (C76).
     k.call(JOBS.storeBy, k.x(ARRAY_OPS.of)),

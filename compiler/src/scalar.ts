@@ -815,7 +815,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           const item = a.item;
           return { k: "search", kind: "optional", body: { k: "rt", fn: `array.first.a${a.index}`, args: args() }, res: f.locals.push(item) - 1, t, bt: item };
         }
-        if (opts.data && ARRAY_RT[target]) {
+        if (opts.data && (ARRAY_RT[target] || target === ARRAY_OPS.replaceAt)) {
           // The array's type, from the argument or the answer that is one;
           // List of its items too where the job takes or gives a list.
           const ts = [...n.args, id].map((a) => { const t = stype(zonk(a)); if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(a))}`); return t; });
@@ -823,7 +823,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           if (!a) throw new Refused(`uses ${nm(target)} on no array`);
           const l = ts.find(isData);
           if (l) a.list = l;
-          return { k: "rt", fn: `${ARRAY_RT[target]}.a${a.index}`, args: args() };
+          return { k: "rt", fn: `${ARRAY_RT[target] ?? "array.replaceAt"}.a${a.index}`, args: args() };
         }
         if (opts.data && RT[target]) {
           // What it takes and gives in, so List Text is one of the module's types.

@@ -188,6 +188,10 @@ export const TARGETS: Record<Id, Target> = {
   [ARRAY_OPS.rest]: { js: "impl", scalar: ARRAYS },
   [ARRAY_OPS.pushFront]: { js: "impl", scalar: ARRAYS },
   [ARRAY_OPS.firstIfAny]: { js: "impl", scalar: ARRAYS },
+  // Replacing an item (C93c): in JS a new version of the buffer (Baker's,
+  // std.ts); in C in place when the array has one holder, otherwise and in
+  // WebAssembly a copy. Not on shaders.
+  [ARRAY_OPS.replaceAt]: { js: "impl", scalar: written("scalar.ts: with `data`, array.replaceAt, one copy per item type (C93c); not on shaders") },
   // A hash table changed in place (C63b): std.ts's own, on a JS Map. Not on
   // WebAssembly or C: the chooser doesn't pick it for them.
   ...Object.fromEntries(Object.entries(TABLE_OPS).map(([k, id]): [Id, Target] => [id, { js: k === "at" ? "partial" : "impl", scalar: no("a hash table is JavaScript's Map: WebAssembly and C keep the tree (C63b)") }])),
