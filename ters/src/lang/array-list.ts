@@ -79,6 +79,8 @@ export function buildArrayList(k: Lang, prelude: (name: string) => Id): ArrayLis
     k.call(JOBS.job, k.x(prelude("append")), k.x(append), cost(k, "linear")),
     k.call(JOBS.job, k.x(prelude("item at")), k.x(itemAt), cost(k, "constant")),
     k.call(JOBS.hides, k.x(CONS), k.int(1)),
+    // A whole list from outside: one array of it (C76).
+    k.call(JOBS.storeBy, k.x(ARRAY_OPS.of)),
     k.call(JOBS.equalBy, k.x(equal)), k.call(JOBS.showBy, k.x(show)), k.call(JOBS.compareBy, k.x(compare)),
   )));
   defs.push(rep);
