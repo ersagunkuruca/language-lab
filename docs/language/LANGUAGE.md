@@ -88,7 +88,8 @@ zero: NaN and ±∞ are not values. An answer outside the finite floats
 is either no answer or overflow. No answer (`x / 0`, `x mod 0`, the square
 root of a negative, the log of 0 or less, 0 to a negative power) is a
 `Choice`, like a lookup that finds nothing, so `first(() => 1 / x, () => 0)`
-says what to do instead. The checker drops that `Choice` where it can see
+says what to do instead. Overflow (an answer too big to hold) stops the
+program, and no handler catches it, so every engine agrees (L166). The checker drops that `Choice` where it can see
 the input is fine: dividing by a literal or a let that isn't 0, inside `x >
 0`'s true branch, the square root of `x · x`. A page's view (a part, a
 text, an attribute) with no answer shows nothing there; a handler such as
@@ -1658,7 +1659,7 @@ a row's test is missing or the table here differs from the rows.
 | incomplete program | allowed | holes have types and the program runs until it reaches one | "a program with a hole runs until it reaches it" (`test/errors.test.ts`) |
 | integer overflow | impossible by construction | `Int` is unbounded: machine numbers with a BigInt fallback | "Int never overflows: 2^64 + 1, 30!, and the step from safe integers to BigInt" (`test/data.test.ts`) |
 | division by zero | runtime, but typed | `Int`'s `quotient` and `remainder` are `Choice` (no answer); `evaluate` fails instead of returning NaN; Float64's `/` by 0 is a `Choice` too (L125b): no answer, never a NaN or ∞ | "Int division rounds down; dividing by zero and a negative power have no answer" (`test/data.test.ts`) |
-| other domain errors (`sqrt` of a negative) | runtime | a Float64 is always finite (L125a): `sqrt` of a negative, `log` of 0 or less and 0 to a negative power have no answer (a `Choice`, L125b; dropped where the input is shown fine), and overflow stops the program with the reason, never a NaN or ∞ | "a Float64 is always finite: no answer is a Choice, and overflow stops the program with the reason" (`test/data.test.ts`) |
+| other domain errors (`sqrt` of a negative) | runtime | a Float64 is always finite (L125a): `sqrt` of a negative, `log` of 0 or less and 0 to a negative power have no answer (a `Choice`, L125b; dropped where the input is shown fine), and overflow stops the program with the reason, never a NaN or ∞. The stop is one no handler catches, on every engine (L166, R8 §1): compiled code finds an overflow late, so a handler of Abort seeing it would make the engines disagree. They agree up to an overflow nothing uses: that one may stop the evaluator and not compiled code (FLOAT-VALUES §2, “an overflow nobody uses may not be reported”) | "a Float64 is always finite: no answer is a Choice, and overflow stops the program with the reason" (`test/data.test.ts`) |
 | unit mismatches | checked | a unit is part of a number's type: dimension vectors (`src/units.ts`), reported by the type checker, so the editor refuses an edit that adds one | "units: declared on parameters and numbers, inferred through predicates and functions" (`test/oneworld.test.ts`) |
 | resource misuse (leaks, use after close) | not addressed | proposal: resources exist only inside their handler's scope, so they can't escape (effects again, not linear types) | no test: not addressed |
 

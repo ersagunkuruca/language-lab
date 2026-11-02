@@ -16,7 +16,7 @@ no answer checked on the argument and overflow late (§2). L125c2
 stop says the same reason and exits with 1; there it ends the program
 rather than being an Abort a handler in the program gets, and an answer
 given back to a host is checked only by C's test harness. Shaders keep
-no checks (§ targets). L125d is built: `Extended a` with
+no checks (§ targets). L166 (R8 §1, REVIEW-2026-11-02c): the evaluator and compiled JavaScript now agree with them: an overflow is a stop no handler catches anywhere, since a handler of Abort is pure code that would see the difference late checking makes. L125d is built: `Extended a` with
 `extended less/add/negate/subtract/multiply`, `minimum` and `maximum`. L125f is built: a host's NaN or ±∞ is refused at
 the border. L125e is built in WebAssembly and C: `Optional Float64`,
 `Extended Float64` and `Optional (Extended Float64)` are one f64 inside

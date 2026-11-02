@@ -306,7 +306,10 @@ export function noAnswer(op: string, args: number[]): string | null {
 export function finiteFloat(op: string, r: number, args: number[]): Iterable<number> {
   if (Number.isFinite(r)) return [r];
   if (noAnswer(op, args)) return [];
-  throw new Error(args.some((x) => !Number.isFinite(x)) ? "a Float64 that isn't finite reached arithmetic"
+  // A stop no handler catches (R8 §1, L166): compiled code finds an
+  // overflow late, after it may have left a handler, so a handler of Abort
+  // seeing it would make the engines disagree.
+  throw new Aborted(args.some((x) => !Number.isFinite(x)) ? "a Float64 that isn't finite reached arithmetic"
     : op === S.float32 ? "the number is too big for a Float32 (overflow)" : "the answer is too big for a Float64 (overflow)");
 }
 
@@ -565,7 +568,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
             else if (depth > 1) e.resume = null;
             throw e;
           }
-          if (e instanceof OutOfSteps) throw e;
+          if (e instanceof OutOfSteps || e instanceof Aborted) throw e;
           return this.perform(ABORT_OP, [(e as Error).message]);
         }
         return this.from(r, (x) => this.ret(x as Value));
