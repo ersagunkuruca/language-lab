@@ -106,7 +106,7 @@ import { BOOL, CHECK, CONS, FALSE, FIXED_V, HTML_V, MAP_V, NIL, onTodaysIds, SET
 import { CHOICE, DIVERGE, NUMBER, STRING, WORLD, showIn, type Type } from "../ters/src/lang/types.ts";
 import { implementationKey } from "../ters/src/lang/infer.ts";
 import { renderBlocks } from "../ters/src/lang/render.ts";
-import { definedAs, fromList, META, needsHandling, OutOfSteps, showValue, withSteps, type Data, type Value, type World } from "../ters/src/lang/run.ts";
+import { definedAs, fromList, META, needsHandling, OutOfSteps, showValue, toList, withSteps, type Data, type Value, type World } from "../ters/src/lang/run.ts";
 import type { CompileAsk, CompileSays, RunAsk, RunSays } from "./runWorker.ts";
 import { searchBackwards, type BackAsk, type Found } from "./backSearch.ts";
 import { hostSkeleton } from "../ters/src/lang/hosts.ts";
@@ -964,6 +964,7 @@ function portText(info: T.Info, p: Id): string {
 // the middle, one second in. The picture above is the same function at
 // every pixel, which is what its Run panel says.
 const PIXEL: Record<string, string> = { x: "0.5", y: "0.25", time: "1", t: "1" };
+const OTHER_PIXELS: [string, string][] = [["0.9", "0.9"], ["-0.9", "0.6"]];
 function pixelSeed(def: Id): string[] | null {
   if (!pictureEntries(ownDefs(), pres().names)) return null;
   const body = defBody(def);
@@ -1058,6 +1059,8 @@ function drawOnce(v: Value, over: () => boolean): Map<unknown, Value[]> {
     else if (d?.tag === HTML_V.element) {
       for (const a of fromList(d.fields[1]) as Data[]) {
         if (a.tag === HTML_V.property) tryCall(a.fields[1]);
+        // What plays a sound plays a block of one (the pedal's helpers: I29).
+        else if (a.tag === HTML_V.listen) tryCall(a.fields[1], BLOCK());
         else if (a.tag === HTML_V.on) {
           const f = a.fields[1], m = (f as unknown as Record<symbol, { lambda?: Id }>)[META], at = m?.lambda ?? f;
           const all = handlers.get(at);
@@ -1073,6 +1076,9 @@ const tryCall = (f: Value, ...args: Value[]): Value | undefined => { try { retur
 // What a handler is given when it's run as if its event came: a click at
 // 0, 0 with nothing typed, or a frame a sixtieth of a second on.
 const NO_EVENT: Data = { tag: HTML_V.event, fields: ["", "", 0, 0, 1 / 60] };
+// And what a sound's player is given: a block of 64 samples, a sine at
+// half of full scale, about a strum's loudness.
+const BLOCK = (): Data => toList(Array.from({ length: 64 }, (_, i) => 0.5 * Math.sin((2 * Math.PI * i) / 32)));
 
 // What each function was first called with when main last ran, as far as
 // it got in a few steps and MAIN_MS, in a world nothing goes out to.
@@ -1144,8 +1150,9 @@ function mainCalls(info: T.Info, main: Id, long = false): Map<Id, Value[]> {
     const body = defBody(main);
     // main takes nothing; a picture's function takes its pixel.
     const pixel = body?.kind === "lambda" && body.params.length ? pixelSeed(main) : [];
-    const args = pixel && body?.kind === "lambda" ? body.params.map((q, i) => readPort(info, q, pixel[i] ?? "")) : [];
-    if (pixel && args.every((a) => !("error" in a))) {
+    const runAt = (seed: string[]) => {
+      const args = body?.kind === "lambda" ? body.params.map((q, i) => readPort(info, q, seed[i] ?? "")) : [];
+      if (!args.every((a) => !("error" in a))) return;
       let end = performance.now() + mainMs;
       // A function main made (newton's slope) keeps this hook: called
       // later, from a helper's own Run, it is no longer main's run (I78).
@@ -1162,6 +1169,14 @@ function mainCalls(info: T.Info, main: Id, long = false): Map<Id, Value[]> {
           if (tr.result !== undefined) explore(tr.result, () => performance.now() > end, () => { end = performance.now() + handlersMs; });
         });
       } finally { done = true; }
+    };
+    if (pixel) {
+      runAt(pixel);
+      // A picture's pixel can miss what its helpers do: Mandelbrot's is in
+      // the set, so its palette never runs. A helper something calls that
+      // no pixel reached yet is looked for at two more (I29).
+      const missed = () => ownDefs().some((d) => d !== main && calledDefs(doc.code).has(d) && defBody(d)?.kind === "lambda" && !got.has(defBody(d)!.id));
+      if (pixel.length) for (const [x, y] of OTHER_PIXELS) if (missed()) runAt(pixel.map((v, i) => { const n = pres().names[(body as NodeOf<"lambda">).params[i]]; return n === "x" ? x : n === "y" ? y : v; }));
     }
     runs.set(doc.code, (calls = got));
   }
