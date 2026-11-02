@@ -20,6 +20,7 @@ import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { withLibraryRepresentations } from "../../ters/src/lang/library-reps.ts";
 import { CONS, INT_OPS, NIL, PAIR_V, S, SHOW_ANY } from "../../ters/src/lang/std.ts";
 import type { Id } from "../../ters/src/model.ts";
+import { INT, NUMBER, STRING } from "../../ters/src/lang/types.ts";
 import { compile } from "../src/compile.ts";
 import { $setPrint } from "../src/runtime.js";
 
@@ -28,11 +29,14 @@ const L = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY.names
 // Counts n keys (Ints, or Float64s with `floats`), then shows the count,
 // a few lookups and whether keys are there. With `old`, it also keeps the
 // map before one more put and shows both.
-function program(n: number, opts: { floats?: boolean; old?: boolean; remove?: boolean; list?: boolean; pairs?: boolean } = {}) {
+function program(n: number, opts: { floats?: boolean; old?: boolean; remove?: boolean; list?: boolean; pairs?: boolean; record?: "ints" | "floats" } = {}) {
   const k = new Lang(LIBRARY.code);
+  // With `record`, the same as a record of the program's own, spot(row, name)
+  // (C63g); with "floats", its row is a Float64.
+  const Spot = opts.record ? k.type("Spot", [], [["spot", [["row", () => k.tref(opts.record === "floats" ? NUMBER : INT)], ["name", () => k.tref(STRING)]]]]) : null;
   // With `pairs`, a key is (i ÷ 8, i ÷ 32 shown): a pair of an Int and a Text (C63f).
-  const pairKey = (i: Id) => k.call(PAIR_V, k.call(INT_OPS.shiftDown, i, k.int(3)), k.call(SHOW_ANY, k.call(INT_OPS.shiftDown, i, k.int(5))));
-  const key = (i: Id) => opts.pairs ? pairKey(i) : opts.floats ? k.call(B.mul, k.call(S.mod, i, k.lit(37)), k.lit(0.5)) : k.call(INT_OPS.shiftDown, i, k.int(1));
+  const pairKey = (i: Id) => k.call(Spot ? Spot.v.spot : PAIR_V, opts.record === "floats" ? k.call(INT_OPS.toNumber, k.call(INT_OPS.shiftDown, i, k.int(3))) : k.call(INT_OPS.shiftDown, i, k.int(3)), k.call(SHOW_ANY, k.call(INT_OPS.shiftDown, i, k.int(5))));
+  const key = (i: Id) => opts.pairs || opts.record ? pairKey(i) : opts.floats ? k.call(B.mul, k.call(S.mod, i, k.lit(37)), k.lit(0.5)) : k.call(INT_OPS.shiftDown, i, k.int(1));
   const counts = k.def("counts");
   k.define(counts, k.fold(opts.floats ? k.call(S.range, k.lit(n)) : k.call(INT_OPS.range, k.int(n)), [
     { variant: NIL, names: [], body: () => k.x(L("empty map")) },
@@ -41,7 +45,7 @@ function program(n: number, opts: { floats?: boolean; old?: boolean; remove?: bo
   ]));
   const show = (x: Id) => k.call(S.print, k.call(SHOW_ANY, x));
   const at = (m: Id, x: Id) => k.call(S.first, k.thunk(() => k.call(L("value at"), m, x)), k.thunk(() => k.int(-1)));
-  const probe = opts.pairs ? pairKey(k.int(7)) : opts.floats ? k.lit(2.5) : k.int(5);
+  const probe = opts.pairs || opts.record ? pairKey(k.int(7)) : opts.floats ? k.lit(2.5) : k.int(5);
   const main = k.def("main");
   k.define(main, k.thunk(() => k.let("m", k.x(counts), (m) => k.seq(
     show(k.call(L("map size"), m)),
@@ -110,6 +114,29 @@ test("a map keyed by pairs of an Int and a Text is a hash table too, evaluated a
   $setPrint((s: string) => got.push(s));
   defs.main();
   assert.deepEqual(got, lines);
+});
+
+// C63g: keys that are records of the program's own, whose fields are Ints
+// and Texts, are held by their spelling too; a record with a Float64 in it
+// keeps the tree (its equal is near).
+test("a map keyed by a record of Ints and Texts is a hash table, evaluated and compiled as the definition prints; with a Float64 in it, a tree (C63g)", async () => {
+  const p = program(300, { record: "ints", old: true, remove: true, list: true });
+  const c = chosen(p);
+  assert.deepEqual(c.chosen, ["Map as hash table"]);
+  const want = printed(p.code, p.names, p.main).lines;
+  const { lines, info } = printed(c.code, c.names, p.main, c.insiders);
+  assert.deepEqual(lines, want);
+  assert.equal(want[0], "38");
+  assert.match(want[want.length - 3], /^\[\(spot\(0, "0"\), 8\), /);
+  const source = compile(c.code, info, c.names, { runtime: pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href, exports: ["main"] });
+  const file = join(mkdtempSync(join(tmpdir(), "hash-records-")), "counts.js");
+  writeFileSync(file, source);
+  const defs = (await import(pathToFileURL(file).href)).defs as Record<string, () => void>;
+  const got: string[] = [];
+  $setPrint((s: string) => got.push(s));
+  defs.main();
+  assert.deepEqual(got, lines);
+  assert.deepEqual(chosen(program(300, { record: "floats" })).chosen, ["Map as weight-balanced tree"]);
 });
 
 // C71: the old version, read after a put and a remove on it, still says
