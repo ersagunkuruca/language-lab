@@ -102,7 +102,7 @@ import { renderLet } from "../ters/src/render/letseq.ts";
 import { renderNested } from "../ters/src/render/nested.ts";
 import { renderSexpr } from "../ters/src/render/sexpr.ts";
 import { Namer } from "../ters/src/render/namer.ts";
-import { BOOL, CHECK, CONS, FALSE, FIXED_V, HTML_V, MAP_V, NIL, SET_V, SOME, TRUE } from "../ters/src/lang/std.ts";
+import { BOOL, CHECK, CONS, FALSE, FIXED_V, HTML_V, MAP_V, NIL, onTodaysIds, SET_V, SOME, TRUE } from "../ters/src/lang/std.ts";
 import { CHOICE, DIVERGE, NUMBER, STRING, WORLD, showIn, type Type } from "../ters/src/lang/types.ts";
 import { implementationKey } from "../ters/src/lang/infer.ts";
 import { renderBlocks } from "../ters/src/lang/render.ts";
@@ -348,6 +348,9 @@ function onToday(d: Doc): Doc {
   // Credits kept apart, as the editor once did, are the program's comment now.
   const { credits, ...rest } = d as Doc & { credits?: string[] };
   if (credits?.length) d = { ...rest, comments: { ...d.comments, [PROGRAM]: [d.comments[PROGRAM], ...credits].filter(Boolean).join("\n") } };
+  // Renamed library ids (std's Pair is Tuple2, L139) read as today's, as
+  // load.ts and files.ts do; else its own nodes would name ids that are gone.
+  d = { ...d, code: onTodaysIds(d.code), names: onTodaysIds(d.names) };
   return { ...d, code: {
     nodes: { ...BASE.nodes, ...Object.fromEntries(Object.entries(d.code.nodes).filter(([id]) => own(id))) },
     defs: [...BASE.defs, ...d.code.defs.filter(own)],
