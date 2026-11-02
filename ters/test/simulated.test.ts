@@ -16,7 +16,7 @@ import { infer } from "../src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { runMain } from "../src/lang/run.ts";
-import { ARITH, AWAIT_OP, NOW_OP, START_TIMER_OP, S, SHOW_ANY, WAIT_OP } from "../src/lang/std.ts";
+import { ARITH, AWAIT_OP, NOW_OP, RANDOM_OP, START_TIMER_OP, S, SHOW_ANY, WAIT_OP } from "../src/lang/std.ts";
 import { showType } from "../src/lang/types.ts";
 import { compile } from "../../compiler/src/compile.ts";
 import { mkdtempSync, writeFileSync } from "node:fs";
@@ -103,4 +103,32 @@ test("simulated: now and wait read and move the virtual clock, evaluated and com
 test("the type of simulated: Await, Time and Wait are answered, Random seeded", () => {
   const code = base(LIBRARY.code), names = baseNames(LIBRARY.names), info = infer(code, names);
   assert.equal(showType(info.typeOf.get(lib("simulated"))!, names), "(Float64, () -[Abort, Await, Random, Time, Wait, e]-> a) -[Abort, e]-> a");
+});
+
+// L142 (REVIEW-2026-11-01b §2): the schedule draws from a stream of its
+// own, so an action that draws one more random number keeps the schedule
+// its seed names, evaluated and compiled.
+test("simulated: an extra random draw in the action doesn't change the schedule", async () => {
+  const k = new Lang(LIBRARY.code);
+  const step = (name: string) => k.thunk(() => k.let("t", k.call(START_TIMER_OP, k.lit(10)), (t) => k.seq(k.call(AWAIT_OP, t), k.lit(name))));
+  // race's actions only await, so the extra number is drawn before it.
+  const race = (draw: boolean) => {
+    const d = k.def(draw ? "drawing" : "plain");
+    k.define(d, k.fn(["seed"], (seed) => k.call(SHOW_ANY, k.call(lib("simulated"), seed, k.thunk(() =>
+      k.seq(...(draw ? [k.call(RANDOM_OP)] : []), k.call(lib("race"), k.list(step("a"), step("b"), step("c")))))))));
+    return d;
+  };
+  const plain = race(false), drawing = race(true);
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const r = makeRunner(code, info, { print: () => {}, names });
+  const run = (d: Id, seed: number) => [...(r.call(r.value(d), seed) as Iterable<unknown>)][0];
+  const seeds = [1, 2, 3, 4, 5, 6, 7, 8];
+  const winners = seeds.map((s) => run(plain, s));
+  assert.ok(new Set(winners).size > 1, `one winner for every seed: ${winners[0]}`);
+  assert.deepEqual(seeds.map((s) => run(drawing, s)), winners);
+  const path = join(mkdtempSync(join(tmpdir(), "simulated-")), "streams.js");
+  writeFileSync(path, compile(code, info, names, { runtime: pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href, exports: ["plain", "drawing"] }));
+  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, (seed: number) => string>;
+  assert.deepEqual(seeds.map((s) => defs.drawing(s)), winners);
 });
