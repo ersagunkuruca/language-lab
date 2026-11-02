@@ -495,6 +495,10 @@ int main(int argc, char **argv) {
     // and the owned temporaries an expression is holding while its other
     // parts run.
     const targets: Target[] = [];
+    // The labels some way out goes to: one nothing goes to isn't written
+    // (an unused label is a warning; C101).
+    const jumped = new Set<string>();
+    const at = (d: string, label: string) => (jumped.has(label) ? [`${d}${label}:`] : []);
     const pending: { t: LType; v: string }[] = [];
     // Cells taken apart (takeApart) that the next new cell of the same
     // fields can have, innermost last: v holds the cell, or 0 if it was
@@ -514,6 +518,7 @@ int main(int argc, char **argv) {
     // what the target won't use, then jump (or return a zero).
     const out = (d: string, after: Set<number>): string[] => {
       const t = targets.at(-1);
+      if (t) jumped.add(t.label);
       const gone = [...after].filter((j) => !t?.keep.has(j)).map((j) => `${d}${drop(f.locals[j], local(j))}`);
       const temps = pending.slice(t?.pending ?? 0).filter((x) => counted(x.t)).map((x) => `${d}${drop(x.t, x.v)}`);
       return [...gone, ...temps, ...letGo(tokens, d), t ? `${d}goto ${t.label};` : f.partial ? `${d}return ${zero(f.result)};` : `${d}abort(); // no answer, and nowhere to go`];
@@ -820,7 +825,7 @@ int main(int argc, char **argv) {
           lines.push(give(ex(e.body, lines, d, keep)));
         });
         if (to !== "return") lines.push(`${d}goto ${done};`);
-        lines.push(`${d}${label}:`, `${d}if (lab_st != ${2 + (e.esc ?? 0)}) {`, ...out(d + "  ", keep), `${d}}`, ...(fuel ? [`${d}lab_fuel = ${local(e.save)};`] : []));
+        lines.push(...at(d, label), `${d}if (lab_st != ${2 + (e.esc ?? 0)}) {`, ...out(d + "  ", keep), `${d}}`, ...(fuel ? [`${d}lab_fuel = ${local(e.save)};`] : []));
         lines.push(`${d}lab_st = 0;`, `${d}${local(e.reason)} = lab_reason;`, `${d}lab_reason = 0;`);
         lines.push(...drops(keep, free(e.arm), after, d), ...block(e.arm, to, d, after));
         if (to !== "return") lines.push(`${d}${done}:;`);
@@ -849,7 +854,7 @@ int main(int argc, char **argv) {
         const okLines = e.k === "attempt" ? block(e.ok, to, d, after) : [give(given)];
         lines.push(...okLines);
         if (to !== "return") lines.push(`${d}goto ${done};`);
-        lines.push(`${d}${label}:`, ...(budget ? [`${d}lab_fuel = ${budget.s};`] : []));
+        lines.push(...at(d, label), ...(budget ? [`${d}lab_fuel = ${budget.s};`] : []));
         lines.push(`${d}if (lab_st != 1) {`, ...out(d + "  ", keep), `${d}}`, `${d}lab_st = 0;`);
         lines.push(...drops(keep, free(e.otherwise), after, d), ...block(e.otherwise, to, d, after));
         if (to !== "return") lines.push(`${d}${done}:;`);

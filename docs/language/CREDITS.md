@@ -373,6 +373,7 @@ Proposed in [STABLE-REFERENCES.md](../design/data/STABLE-REFERENCES.md) (BACKLOG
 |---|---|---|
 | `npm run affected`: run the tests whose imports reach a change | Prior art | Google's TAP runs the test targets that depend on the changed files: A. Memon et al., "Taming Google-Scale Continuous Testing", ICSE-SEIP 2017. Regression test selection is an old field; see also Ekstazi (M. Gligoric et al., ISSTA 2015). Credited in `test/affected.ts`. |
 | A slice of each sweep per run, all of it at other times | Prior art | Close to Facebook's predictive test selection, which runs a learned subset of the affected tests per change (M. Machalica et al., ICSE-SEIP 2019); ours is a fixed rotating slice, with no learning. |
+| Generated programs on every engine, compared with the evaluator's answers (C101, compiler/test/fuzz.test.ts) | Prior art | Csmith's differential testing of one random program across C compilers (X. Yang, Y. Chen, E. Eide and J. Regehr, "Finding and understanding bugs in C compilers", PLDI 2011); QuickCheck's generators of typed values (K. Claessen and J. Hughes, ICFP 2000). Written fresh. |
 
 ## Example programs
 
