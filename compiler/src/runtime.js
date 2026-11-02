@@ -511,18 +511,24 @@ function goOn(it, send) {
       continue;
     }
     if (l.op !== AWAIT_OP) throw new Error(`nothing handles ${l.op}`);
+    // An any of is ready when the first of its tickets is, an any of
+    // inside one too (L141), as run.ts has it.
+    const items = (t) => {
+      const ts = [];
+      for (let c = t.fields[0]; c.tag === "std.list.cons"; c = c.fields[1]) ts.push(c.fields[0]);
+      if (!ts.length) throw new Aborted("any of no tickets is never ready");
+      return ts;
+    };
     const ready = (t) => {
       if (t.tag === "std.ticket.ticket") { const d = timers[Number(t.fields[0])]; if (d === undefined) throw new Aborted(`no ticket ${String(t.fields[0])} from this world`); return d; }
       if (t.tag === "std.ticket.timer") return now + t.fields[0];
       if (t.tag === "std.ticket.at") return t.fields[0];
-      throw new Aborted("any of a ticket that is itself an any of can't be awaited yet");
+      return Math.min(...items(t).map(ready));
     };
     const t = l.args[0];
     let at, value;
     if (t.tag === "std.ticket.first ready") {
-      const ts = [];
-      for (let c = t.fields[0]; c.tag === "std.list.cons"; c = c.fields[1]) ts.push(c.fields[0]);
-      if (!ts.length) throw new Aborted("any of no tickets is never ready");
+      const ts = items(t);
       const times = ts.map(ready), i = times.indexOf(Math.min(...times));
       at = times[i];
       value = () => t.fields[1](i);
