@@ -10,7 +10,7 @@ import { infer } from "../src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { Aborted, runMain } from "../src/lang/run.ts";
 import { nodeWorld } from "../src/lang/world.ts";
-import { ABORT_OP, HTML_V, IO, S } from "../src/lang/std.ts";
+import { ABORT_OP, HTML_V, IO, S, SHOW_ANY } from "../src/lang/std.ts";
 
 // A server in another process (fetching blocks this one): /hello answers,
 // anything else is a 404, and /hits says how many requests came.
@@ -38,7 +38,7 @@ test("fetch text on the command line: the body, a failure as an Abort, each addr
       k.call(S.print, fetch("/hello")),
       k.call(S.print, k.handle(fetch("/missing"), [{ variant: ABORT_OP, names: ["why"], body: ([why]) => why }])),
       // A search may fetch: the same address isn't asked again.
-      k.call(S.print, k.call(S.show, k.call(S.count, k.thunk(() => k.let("x", k.call(S.oneOf, k.list(k.lit(1), k.lit(2), k.lit(3))), () => fetch("/hello")))))),
+      k.call(S.print, k.call(SHOW_ANY, k.call(S.count, k.thunk(() => k.let("x", k.call(S.oneOf, k.list(k.lit(1), k.lit(2), k.lit(3))), () => fetch("/hello")))))),
       k.call(S.print, fetch("/hits")),
       fetch("/missing"))));
     const code = base(k.code), names = baseNames(k.names);

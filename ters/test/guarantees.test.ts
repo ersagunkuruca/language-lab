@@ -11,7 +11,7 @@ import { infer } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
 import { relate } from "../src/lang/relate.ts";
 import { makeRunner, runMain, toList, type Value } from "../src/lang/run.ts";
-import { CONS, INT_OPS as I, LIST, NIL, PAIR_V, S } from "../src/lang/std.ts";
+import { CONS, INT_OPS as I, LIST, NIL, PAIR_V, S, SHOW_ANY } from "../src/lang/std.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { CHOICE, CONSOLE, DIVERGE, showType } from "../src/lang/types.ts";
 import { B } from "../src/prelude.ts";
@@ -207,7 +207,7 @@ test("effects: a definition whose row is closed can be called where more happens
 test("equal works on plain data, and not on functions however they're wrapped", () => {
   const ok = program((k) => {
     const main = k.def("main");
-    k.define(main, k.thunk(() => k.call(S.print, k.call(S.show, k.call(S.count, k.thunk(() =>
+    k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.call(S.count, k.thunk(() =>
       k.if(k.call(S.equal, k.list(k.lit(1), k.lit(2)), k.list(k.lit(1), k.lit(2))), k.lit(1), k.call(S.fail))))))));
     return main;
   });

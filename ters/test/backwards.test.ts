@@ -542,7 +542,7 @@ test("Int run backwards through solve: x · 3 + 1 = 13 with Int's own ops or the
       let x = "";
       k.define(f, k.fn(["x"], (v) => ((x = v), k.call(add, k.call(mul, v, k.int(3)), k.int(1)))));
       const main = k.def("main");
-      k.define(main, k.thunk(() => k.call(S.print, k.call(S.show, k.call(S.count, k.fn([], () => k.solve(f, { out: k.int(13) }, { [x]: "x" }, ({ [x]: v }) => v)))))));
+      k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.call(S.count, k.fn([], () => k.solve(f, { out: k.int(13) }, { [x]: "x" }, ({ [x]: v }) => v)))))));
     });
     assert.deepEqual(p.info.errors.map((e) => e.message), [], `generic: ${generic}`);
     assert.equal(showType(p.info.typeOf.get(p.named("f"))!, p.names), "(Int) -> Int");
