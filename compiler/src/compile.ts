@@ -2332,6 +2332,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     }
     // A call of this very specialization of the definition.
     let jumps = false;
+    const singleTails = new Set<Id>();
     // Where the answer goes, when the definition fills holes (G22): the
     // last cell made and which of its fields is empty.
     let holes: { at: string; i: string } | null = null;
@@ -2987,6 +2988,15 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         if (callStreams(n)) {
           const r = temp("r");
           const rec = callee?.single ? unpackOf(callee) : null;
+          const viaSelf = callee && singleTails.has(n.id) && (callee.name === sp.name ||
+            (!!rec && spec(callee.def, callee.rho, callee.plain, false, callee.arr, callee.own, true, null, callee.lat, keyAt(callee), callee.semi).name === sp.name));
+          if (viaSelf) {
+            // A one-answer copy calling itself last: its answer is the
+            // call's, none included, so the call is a jump (C89).
+            jumps = true;
+            const spend = spends(sp.def) ? "$spendOrThrow();\n" : "";
+            return `${spend}${paramNames(sp).map((p, i) => `${p}$in = ${loopArgs(n, sp)[i]};`).join("\n")}\ncontinue;`;
+          }
           if (callee && rec) {
             const viaF = spec(callee.def, callee.rho, callee.plain, false, callee.arr, callee.own, true, null, callee.lat, keyAt(callee), callee.semi);
             out = `if (${viaF.name}(${args.join(", ")})) {\n${fromGot(rec, r, k)}\n}`;
@@ -3087,6 +3097,16 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const lam = node<"lambda">(b);
       const ps = paramNames(sp).join(", ");
       const meta = reflective ? `\n$meta(${sp.name}, ${JSON.stringify(b)});` : "";
+      // Calls of itself in tail position, in a copy with one answer or
+      // none: reached through lets and matches whose values make no
+      // choice, so no loop of the search's own is around them and failing
+      // there ends the copy too. Each is a jump (C89).
+      const tails = (id: Id) => {
+        const x = code.nodes[id];
+        if (x.kind === "call" && code.nodes[x.fn].kind === "lambda") { if (!x.args.some(streamy)) tails(node<"lambda">(x.fn).body); }
+        else if (x.kind === "match") { if (!handlerOf(x) && !streamy(x.scrutinee)) { x.arms.forEach((a) => tails(node<"arm">(a).body)); if (x.otherwise) tails(x.otherwise); } }
+        else if (x.kind === "call" && refTarget(x.fn) === sp.def && !x.args.some(streamy)) singleTails.add(id);
+      };
       if (sp.out) {
         const rec = unpackOf(sp)!;
         const leaf = (v: string) => {
@@ -3094,9 +3114,31 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           const gs = fields.map(() => temp("g"));
           return `${pre}const ${gs.map((g, i) => `${g} = ${fields[i]}`).join(", ")};\n${gs.map((g, i) => `$got[${i}] = ${g};`).join("\n")}\nreturn true;`;
         };
+        tails(lam.body);
+        if (singleTails.size) {
+          // The answer leaves the loop, so each branch's rest stays short
+          // (a local generator would take the jumps out of the loop).
+          jumps = false;
+          const a = temp("answer"), L = temp("search");
+          const stmts = st(lam.body, (v) => `${a} = ${v};\nbreak ${L};`);
+          if (jumps && !/function\*/.test(stmts)) {
+            const ins = paramNames(sp).map((p) => `${p}$in`).join(", ");
+            const fresh = lam.params.length ? `const ${paramNames(sp).map((p) => `${p} = ${p}$in`).join(", ")};\n` : "";
+            return `${header} (its ${names[rec] ?? "answer"}'s fields in \`$got\`)\nfunction ${sp.name}(${ins}) {\nlet ${a};\n${L}: for (;;) {\n${fresh}${stmts}\nreturn false;\n}\n${leaf(a)}\n}`;
+          }
+          singleTails.clear();
+        }
         return `${header} (its ${names[rec] ?? "answer"}'s fields in \`$got\`)\nfunction ${sp.name}(${ps}) {\n${st(lam.body, leaf)}\nreturn false;\n}`;
       }
-      if (sp.single) return `${header}\nfunction ${sp.name}(${ps}) {\n${st(lam.body, (v) => `return ${v};`)}\nreturn $no;\n}${meta}`;
+      if (sp.single) {
+        tails(lam.body);
+        jumps = false;
+        const stmts = `${st(lam.body, (v) => `return ${v};`)}\nreturn $no;`;
+        if (!jumps) return `${header}\nfunction ${sp.name}(${ps}) {\n${stmts}\n}${meta}`;
+        const ins = paramNames(sp).map((p) => `${p}$in`).join(", ");
+        const fresh = lam.params.length ? `const ${paramNames(sp).map((p) => `${p} = ${p}$in`).join(", ")};\n` : "";
+        return `${header}\nfunction ${sp.name}(${ins}) {\nfor (;;) {\n${fresh}${stmts}\n}\n}${meta}`;
+      }
       if (sp.cps) {
         const k = temp("k");
         const rec = unpackOf(sp);
