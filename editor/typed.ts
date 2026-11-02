@@ -235,7 +235,7 @@ export function fillValue(code: Code, names: Names, info: Info, hole: Id, text: 
   // where a Rational goes, a whole number or one over another is a
   // fraction: 1/2 is one half, not 0.5.
   const whole = (v: Value): boolean => typeof v === "number" ? Number.isInteger(v) : typeof v === "object" && v !== null && "tag" in v && v.fields.some(whole);
-  const wholes = (t: Typed): boolean => "value" in t ? whole(t.value) : "args" in t ? t.args.some(wholes) : "cond" in t ? [t.cond, t.then, t.else].some(wholes) : "let" in t ? wholes(t.be) || wholes(t.rest) : "body" in t && wholes(t.body);
+  const wholes = (t: Typed): boolean => "value" in t ? !t.float && whole(t.value) : "args" in t ? t.args.some(wholes) : "cond" in t ? [t.cond, t.then, t.else].some(wholes) : "let" in t ? wholes(t.be) || wholes(t.rest) : "body" in t && wholes(t.body);
   // A name several things share (show, length) is each of them in turn,
   // and the first that type-checks there is the one meant. A meaning that
   // would settle the type of a value nothing has settled yet comes after
@@ -473,7 +473,7 @@ function readings(t: Typed): Typed[] {
 // One that names its results, (speed, time) → drift, drop => speed · time,
 // time · time, gives that many (L128b, the text L128c prints): the parts
 // written out are its tuple.
-type Typed = { value: Value } | { ref: Id } | { hole: true } | { let: { id: Id; name: string }; be: Typed; rest: Typed } | { op: Id; args: Typed[]; alts?: Id[] } | { params: { id: Id; name: string }[]; body: Typed; results?: { id: Id; name: string }[] } | { cond: Typed; then: Typed; else: Typed };
+type Typed = { value: Value; float?: true } | { ref: Id } | { hole: true } | { let: { id: Id; name: string }; be: Typed; rest: Typed } | { op: Id; args: Typed[]; alts?: Id[] } | { params: { id: Id; name: string }[]; body: Typed; results?: { id: Id; name: string }[] } | { cond: Typed; then: Typed; else: Typed };
 // The operators are read from the notation itself (styles/blocks.json),
 // loosest first: each glyph is every function drawn with it, and the first
 // that type-checks is the one meant. The generic arithmetic comes first, so
@@ -517,6 +517,9 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
   // A value naming a definition (`[styles, …]`, `some(save name)`) is
   // read as the code it is, a reference: as a value it pointed at
   // nothing (E187).
+  // A whole number written with a point, 1500.0, is a Float64 (E192):
+  // the point is what says it isn't any number.
+  if (!("error" in r) && typeof r.value === "number" && Number.isInteger(r.value) && /^-?\d*\.\d*(e[+-]?\d+)?$|^-?\d+e[+-]?\d+$/i.test(t)) return { value: r.value, float: true };
   if (!("error" in r) && !namesDef(r.value)) return { value: r.value };
   // What the text prints, read back (E178): a □ left to fill later, a
   // step name = value; rest, and a list of anything.
@@ -798,6 +801,7 @@ function written(code: Code, names: Names, info: Info, hole: Id, text: string, t
   };
   const nn: Names = { ...names };
   const tree = (t: Typed, place?: Id): Id => {
+    if ("value" in t && t.float) { const id = place ?? freshId(); nodes[id] = { id, kind: "lit", value: t.value as number, of: NUMBER }; return id; }
     if ("value" in t) return build(t.value, place);
     if ("params" in t) {
       const id = place ?? freshId();
