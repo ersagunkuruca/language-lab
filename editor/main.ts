@@ -2025,7 +2025,10 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
   const inNote = (f: T.Filling) => { const n = note(f).toLowerCase(); return q.includes(" ") ? n.includes(q) : n.split(/[^\p{L}\p{N}]+/u).some((w) => w.startsWith(q)); };
   const rank = (x: (typeof all)[number]) => {
     const name = x.l[0].toLowerCase();
-    return name === q || name.startsWith(`${q}(`) || symbol(x.l) ? 0 : name.startsWith(q) ? 1 : name.split(/[^\p{L}\p{N}]+/u).some((w) => w.startsWith(q)) || also(x.l) ? 2 : name.includes(q) ? 3 : x.l.some((s) => s.toLowerCase().includes(q)) ? 4 : 5;
+    // A value of the name before a call of it: unit, the case, before
+    // unit(□), a function of the same name (E188). A function itself still
+    // comes after its call: random() before random.
+    return name === q && !/->/.test(x.l[1]) ? -1 : name.startsWith(`${q}(`) || symbol(x.l) ? 0 : name.startsWith(q) ? 1 : name.split(/[^\p{L}\p{N}]+/u).some((w) => w.startsWith(q)) || also(x.l) ? 2 : name.includes(q) ? 3 : x.l.some((s) => s.toLowerCase().includes(q)) ? 4 : 5;
   };
   // Found by another name or by its comment, the row says which.
   const found = (x: (typeof all)[number], r: number): [string, string, string] => {

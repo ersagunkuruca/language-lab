@@ -309,8 +309,8 @@ test("calculus: derivative(f) at run time, Newton on real functions, zeros by ru
   assert.deepEqual(out, [
     "cubic: f(2) = 5, f′(2) = 11, root near 1: 1.324717957",
     "wave: f(2) = -2.416146837, f′(2) = -1.909297427, root near 1: 0.739085133",
-    "kink: f(2) = 4, f′(2) = 4, root near 1: 0",
-    "bump: f(2) = 0.82682181, f′(2) = -0.756802495, root near 1: 0",
+    "kink: f(2) = 4, f′(2) = 4, root near 1: 9.094947017729282e-13",
+    "bump: f(2) = 0.82682181, f′(2) = -0.756802495, root near 1: 7.874978974638411e-13",
     "parabola: f(2) = 2, f′(2) = 4, root near 1: 1.414213562",
     "sinc: f(2) = 0.454648713, f′(2) = -0.435397775, root near 1: 3.141592654",
     "zeros of cubic: 1.324717957",

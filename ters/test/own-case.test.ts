@@ -59,3 +59,26 @@ test("an input with no type yet splits as a chosen data type", () => {
   // Each case has its own row and hole, not one otherwise for both (E177).
   assert.deepEqual(sharedOtherwise(r.code, matchRows(r.code, null, m), m.otherwise ?? undefined).folded, []);
 });
+
+// Filling one case leaves the others each with its own hole, not one
+// otherwise that binds what every case binds (E189).
+test("unfilled cases keep their own holes after the first is filled", () => {
+  const p = loadProgram(join(root, "examples", "tumble"));
+  const made = newDefinition(p.code, p.pres.names, "f", { kind: "function", params: ["x"] });
+  assert.ok(made.ok);
+  if (!made.ok) return;
+  const def = made.code.defs.find((d) => made.names[d] === "f")!;
+  const lam = made.code.nodes[(made.code.nodes[def] as NodeOf<"def">).body!] as NodeOf<"lambda">;
+  const info = infer(made.code, made.names);
+  const three = made.code.defs.find((d) => { const b = made.code.nodes[(made.code.nodes[d] as NodeOf<"def">).body ?? ""]; return b?.kind === "typedef" && b.variants.length >= 3; })!;
+  assert.ok(three, "a data type with three cases");
+  const r = splitOn(made.code, made.names, info, lam.body, lam.params[0], three);
+  assert.ok(r.ok, !r.ok ? r.reason : "");
+  if (!r.ok) return;
+  const m = r.code.nodes[lam.body] as NodeOf<"match">;
+  const first = m.arms.map((a) => r.code.nodes[a] as NodeOf<"arm">)[0];
+  const code = { ...r.code, nodes: { ...r.code.nodes, [first.body]: { id: first.body, kind: "lit" as const, value: 1 } } };
+  const shared = sharedOtherwise(code, matchRows(code, null, m), m.otherwise ?? undefined);
+  assert.deepEqual(shared.folded, []);
+  assert.equal(shared.rows.length, m.arms.length);
+});

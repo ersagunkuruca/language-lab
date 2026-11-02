@@ -302,7 +302,8 @@ async function sharedRow() {
   await p.locator(".p-text .body [data-id]", { hasText: /^nil$/ }).last().click();
   await p.keyboard.press("Delete");
   const after = await text();
-  if (!/otherwise → □/.test(after) || / nil/.test(after)) errors.push(`${where}: after clearing the otherwise, bands reads ${after}`);
+  // Cleared, each case has its own hole, as the graph draws them (E189).
+  if (/otherwise/.test(after) || /→ nil/.test(after) || (after.match(/□/g) ?? []).length !== 2) errors.push(`${where}: after clearing the otherwise, bands reads ${after}`);
   if (!/2 places/.test(await p.locator(".status").innerText())) errors.push(`${where}: the note doesn't say both places changed`);
   await p.locator('button[data-act="undo"]').first().click();
   if (!/otherwise → nil/.test(await text())) errors.push(`${where}: one Undo doesn't bring both back: ${await text()}`);
