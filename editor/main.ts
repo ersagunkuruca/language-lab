@@ -483,7 +483,7 @@ function commit(next: Partial<Doc>, touched: string[], note: string) {
 function save() {
   docs[doc.program] = doc;
   if (EMBED) return;
-  try { localStorage.setItem(STORE, JSON.stringify({ current: doc.program, docs })); } catch {}
+  try { localStorage.setItem(STORE, JSON.stringify({ current: doc.program, docs, held })); } catch {}
 }
 
 function switchProgram(p: Program) {
@@ -710,9 +710,10 @@ const node = (id: Id) => doc.code.nodes[id];
 // A definition's type doesn't loosen while a hole is open in it. Clearing
 // the √ in period would leave its inputs unused, so its type would become
 // (a, b) -> Float64. Until its holes are filled, the type it had stays, as a
-// pin the editor holds for the session (not signatures.json); "Let it
-// loosen" in its Type section drops it.
-let held: Pins = {};
+// pin the editor holds (not signatures.json), kept with the saved programs
+// so a reload doesn't drop it unsaid (E179); "Let it loosen" in its Type
+// section, or beside a fill it refuses, drops it.
+let held: Pins = (() => { if (EMBED) return {}; try { return JSON.parse(localStorage.getItem(STORE) ?? "null")?.held ?? {}; } catch { return {}; } })();
 const hasHole = (code: Code, d: Id) => !!code.nodes[d] && subtree(code, d).some((x) => code.nodes[x].kind === "hole");
 function holdType(next: Code): string {
   const d = ui.def, info = typesOf();
@@ -746,7 +747,7 @@ function heldReason(reason: string): string {
 
 function loosenButton(dname: string): HTMLElement {
   const b = h("button", { class: "btn", type: "button" }, "Let it loosen");
-  b.addEventListener("click", () => { const { [ui.def]: _, ...rest } = held; held = rest; ui.note = `${dname}'s type follows its body again.`; ui.refused = false; render(); });
+  b.addEventListener("click", () => { const { [ui.def]: _, ...rest } = held; held = rest; ui.note = `${dname}'s type follows its body again.`; ui.refused = false; save(); render(); });
   return b;
 }
 
@@ -1016,7 +1017,15 @@ function seedOf(info: T.Info, def: Id): string[] | null {
   // A definition passed in (newton's f) reads as its name (values.ts). A
   // function made on the way (newton's slope, derivative(f)) has no way
   // to be typed into a box: it shows as PASSED and runs as itself (I78).
-  const texts = got?.map((v) => { const d = definedAs(v); return d ? pres().names[d] ?? d : typeof v === "function" ? PASSED : showValue(v, doc.code, pres().names); });
+  // So does a value with no text that reads back as itself: a cell, a page
+  // (Tumble's make lane, scene drawn: I29).
+  const texts = got?.map((v, i) => {
+    const d = definedAs(v);
+    if (d) return pres().names[d] ?? d;
+    if (typeof v === "function") return PASSED;
+    const t = showValue(v, doc.code, pres().names);
+    return body?.kind === "lambda" && body.params[i] && "error" in readPort(info, body.params[i], t) ? PASSED : t;
+  });
   return texts?.length && body?.kind === "lambda" && texts.length === body.params.length && texts.every((t, i) => !("error" in readPort(info, body.params[i], t))) ? texts : null;
 }
 
@@ -1025,7 +1034,10 @@ function seedOf(info: T.Info, def: Id): string[] | null {
 function firstCall(info: T.Info, def: Id): Value[] | undefined {
   const entry = defNamed("main") ?? Object.values(pictureEntries(ownDefs(), pres().names) ?? {})[0];
   const body = defBody(def);
-  return entry && entry !== def && body?.kind === "lambda" ? mainCalls(info, entry).get(body.id) : undefined;
+  if (!entry || entry === def || body?.kind !== "lambda") return undefined;
+  // Not reached in the short run: once per version of the code, a longer
+  // one, which gets past a move (Tumble's fall, fill, cascade: I29f).
+  return mainCalls(info, entry).get(body.id) ?? mainCalls(info, entry, true).get(body.id);
 }
 const PASSED = "‹what main passes›";
 
@@ -1059,7 +1071,7 @@ const NO_EVENT: Data = { tag: HTML_V.event, fields: ["", "", 0, 0, 1 / 60] };
 
 // What each function was first called with when main last ran, as far as
 // it got in a few steps and MAIN_MS, in a world nothing goes out to.
-const mainRuns = new WeakMap<Code, Map<Id, Value[]>>();
+const mainRuns = new WeakMap<Code, Map<Id, Value[]>>(), longRuns = new WeakMap<Code, Map<Id, Value[]>>();
 // The copy main's run entered for a lambda, when it was one at other
 // number types (arith.ts): its own values are that copy's (I125).
 const mainCopies = new WeakMap<Code, Map<Id, Id>>();
@@ -1080,8 +1092,12 @@ function dryWorld(): World {
   };
 }
 // Once per version of the code. 50 ms often ended before main reached
-// calculus's newton on a cold page (I78).
+// calculus's newton on a cold page (I78). The long run is for a
+// definition the short one didn't reach, once per version too: Tumble's
+// main takes about 100 ms, each drawing of its page 70 to 90, and a move
+// comes after eight handlers (I29f).
 const MAIN_STEPS = 100_000, MAIN_MS = 120, HANDLERS_MS = 250;
+const LONG = { steps: 400_000, main: 400, handlers: 1200 };
 
 // The page drawn once, then its handlers run as if their events came (I29),
 // on the dry run's own cells, with time of their own (`started`): each
@@ -1105,22 +1121,24 @@ function explore(page: Value, over: () => boolean, started: () => void) {
   started();
   while (todo.length && !over()) { tryCall(todo.shift()!, NO_EVENT); draw(); }
 }
-function mainCalls(info: T.Info, main: Id): Map<Id, Value[]> {
-  let calls = mainRuns.get(doc.code);
+function mainCalls(info: T.Info, main: Id, long = false): Map<Id, Value[]> {
+  const runs = long ? longRuns : mainRuns;
+  const [steps, mainMs, handlersMs] = long ? [LONG.steps, LONG.main, LONG.handlers] : [MAIN_STEPS, MAIN_MS, HANDLERS_MS];
+  let calls = runs.get(doc.code);
   if (!calls) {
-    const got = new Map<Id, Value[]>(), copies = new Map<Id, Id>();
+    const got = new Map<Id, Value[]>(), copies = mainCopies.get(doc.code) ?? new Map<Id, Id>();
     mainCopies.set(doc.code, copies);
     const body = defBody(main);
     // main takes nothing; a picture's function takes its pixel.
     const pixel = body?.kind === "lambda" && body.params.length ? pixelSeed(main) : [];
     const args = pixel && body?.kind === "lambda" ? body.params.map((q, i) => readPort(info, q, pixel[i] ?? "")) : [];
     if (pixel && args.every((a) => !("error" in a))) {
-      let end = performance.now() + MAIN_MS;
+      let end = performance.now() + mainMs;
       // A function main made (newton's slope) keeps this hook: called
       // later, from a helper's own Run, it is no longer main's run (I78).
       let done = false;
       try {
-        withSteps(MAIN_STEPS, () => {
+        withSteps(steps, () => {
           const tr = trace(doc.code, info, main, args.map((a) => (a as { value: Value }).value), dryWorld(), (l, args, copy) => {
             if (done) return;
             if (!got.has(l)) { got.set(l, args); if (copy !== l) copies.set(l, copy); }
@@ -1128,11 +1146,11 @@ function mainCalls(info: T.Info, main: Id): Map<Id, Value[]> {
           });
           // A page's views run later, as it's drawn: draw it once here, so
           // what they call has values too (I29 b).
-          if (tr.result !== undefined) explore(tr.result, () => performance.now() > end, () => { end = performance.now() + HANDLERS_MS; });
+          if (tr.result !== undefined) explore(tr.result, () => performance.now() > end, () => { end = performance.now() + handlersMs; });
         });
       } finally { done = true; }
     }
-    mainRuns.set(doc.code, (calls = got));
+    runs.set(doc.code, (calls = got));
   }
   return calls;
 }
@@ -1576,7 +1594,11 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
   const out = h("div", { class: "insp" });
   // Its id is the program's, not the reader's: kept on hover for whoever
   // needs to find it in code.json.
-  out.append(h("div", { class: "insp-head" }, h("span", { class: "kind", title: `id ${id} in code.json` }, kindLabel(id))));
+  // What this part is in, a whole a + b around its b, one step out
+  // (E183b): Alt+↑ does the same.
+  const outer = enclosing(id);
+  const upBtn = outer ? h("button", { class: "btn mini", type: "button", title: "Select what this is in (Alt+↑)", "data-act": "goto-node", "data-target": outer }, "↑ what it's in") : null;
+  out.append(h("div", { class: "insp-head" }, h("span", { class: "kind", title: `id ${id} in code.json` }, kindLabel(id)), upBtn));
   const t = T.typeOf(info, id, names);
   const hole = info.holes.get(id);
   if (hole) out.append(h("div", { class: "typeline" }, h("span", {}, "needs"), h("code", {}, typeName(info, hole.expected, names))));
@@ -1854,6 +1876,34 @@ function usesIn(code: Code): Map<Id, number> {
   return m;
 }
 
+// The expression a part is in, one step out: past the arm or let that
+// only holds it, never the definition itself.
+function enclosing(id: Id): Id | null {
+  // parentOf knows an arm's body, not the match or fold holding the arm:
+  // that step is taken here (I134).
+  const up = (x: Id) => {
+    const n = node(x);
+    if (n?.kind !== "arm") return parentOf(doc.code, x);
+    const m = Object.values(doc.code.nodes).find((o) => (o.kind === "match" || o.kind === "fold") && o.arms.includes(x));
+    return m ? { parent: m.id, slot: "arms" } : null;
+  };
+  const marked = [...document.querySelectorAll<HTMLElement>(".blocks-wrap [data-id], .p-graph [data-id]")].map((el) => el.dataset.id!);
+  const drawn = marked.length ? new Set(marked) : null;
+  for (let at = up(id), hops = 0; at && hops < 16; at = up(at.parent), hops++) {
+    const n = node(at.parent);
+    if (!n || n.kind === "def" || at.parent === ui.def) return null;
+    // A let's call and its function only hold steps; a definition's own
+    // function is the definition.
+    const letCall = (c: Node | undefined) => c?.kind === "call" && node(c.fn)?.kind === "lambda";
+    if (letCall(n)) continue;
+    if (n.kind === "lambda") { const o = parentOf(doc.code, n.id); const on = o ? node(o.parent) : undefined; if (!o || on?.kind === "def" || (letCall(on) && o.slot === "fn")) continue; }
+    // Only what a view draws: a call merged into its chain (0.5 · g · t · t
+    // is one ·) or a match read as a longer pattern is passed over (I139).
+    if (["call", "match", "fold", "lambda", "solve"].includes(n.kind) && (!drawn || drawn.has(n.id))) return n.id;
+  }
+  return null;
+}
+
 function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): HTMLElement {
   const q = ui.query.trim().toLowerCase();
   // Most often wanted first; a function passed along uncalled last, since
@@ -1869,6 +1919,10 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
   const used = usesIn(doc.code);
   const often = (f: T.Filling) => (f.kind === "call" || f.kind === "ref" ? used.get(f.target) ?? 0 : 0);
   const all = fillingsAt(info, hole).map((f) => ({ f, l: label(f) })).sort((a, b) => order.indexOf(a.l[2]) - order.indexOf(b.l[2]) || often(b.f) - often(a.f));
+  // Console's print performed by name reads, and does, what builtin print
+  // does (L145): one row for both (E184).
+  const plain = new Set(all.filter((x) => !((x.f.kind === "call" || x.f.kind === "ref") && x.f.target.startsWith("effect."))).map((x) => `${x.l[0]}\n${x.l[1]}`));
+  for (let i = all.length - 1; i >= 0; i--) { const x = all[i]; if ((x.f.kind === "call" || x.f.kind === "ref") && x.f.target.startsWith("effect.") && plain.has(`${x.l[0]}\n${x.l[1]}`)) all.splice(i, 1); }
   // Rows that would read the same (show(□) for a Float64, an Int, anything)
   // say what each of their holes takes: show(□: Int).
   const seen = new Map<string, number>();
@@ -1878,6 +1932,12 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
     if (seen.get(x.l[0])! > 1 && x.f.kind === "call" && t?.t === "fn" && t.params.length)
       x.l = [`${names[x.f.target] ?? x.f.target}(${t.params.map((p) => `□: ${typeName(info, p, names)}`).join(", ")})`, x.l[1], x.l[2]];
   }
+  // A definition of the program's own named like the library's (values
+  // of) says it's its own, beside the library's (E182).
+  const alike = new Map<string, Set<Id>>();
+  const called = (x: (typeof all)[number]) => (x.f.kind === "call" || x.f.kind === "ref" ? names[x.f.target] : undefined);
+  for (const x of all) { const n = called(x); if (n && (x.f.kind === "call" || x.f.kind === "ref")) alike.set(n, (alike.get(n) ?? new Set()).add(x.f.target)); }
+  for (const x of all) { const n = called(x); if (n && (x.f.kind === "call" || x.f.kind === "ref") && alike.get(n)!.size > 1 && doc.code.defs.includes(x.f.target) && !BASE.nodes[x.f.target]) x.l = [x.l[0], `this program's own · ${x.l[1]}`, x.l[2]]; }
   // Searching: names that are the text, then start with it, then have a
   // word starting with it, then contain it, and only then entries whose
   // type or description mentions it. Within each, the usual order.
@@ -1962,7 +2022,14 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
   if (lacks) list.append(h("p", { class: "hint" }, `${ui.query.trim()} doesn't fit here: ${typed!.ok ? "" : typed!.reason}.`), h("div", { class: "acts" }, implementButton(info, lacks.iface, lacks.type, `Implement ${names[lacks.iface] ?? "it"} for ${showIn(lacks.type, names, info.subst)}`)));
   // Refused, it says why (E174): the reading's own reason, when the text
   // is an expression or nothing listed matches it.
-  else if (typed && !typed.ok && !value && !why && (!shown.length || /[^\p{L}\p{N}_' ]/u.test(q))) list.prepend(h("p", { class: "hint refused" }, `${ui.query.trim()} doesn't fit here: ${typed.reason.replace(/\.$/, "")}.`));
+  else if (typed && !typed.ok && !value && !why && (!shown.length || /[^\p{L}\p{N}_' ]/u.test(q))) {
+    // Refused because the definition's type is held while it has a hole:
+    // the way out is offered right there (E179).
+    const reason = heldReason(typed.reason.replace(/\.$/, ""));
+    const loosen = held[ui.def] && reason !== typed.reason.replace(/\.$/, "") ? h("div", { class: "acts" }, loosenButton(names[ui.def] ?? "It")) : null;
+    const missing = /^there's no function named (.+?)(?:;|$)/.exec(typed.reason)?.[1];
+    list.prepend(h("p", { class: "hint refused" }, `${ui.query.trim()} doesn't fit here: ${reason}.`), ...(loosen ? [loosen] : []), ...(missing ? [h("div", { class: "acts" }, makeNamed(info, missing))] : []));
+  }
   else if (!shown.length && !value && pending && q) list.append(h("p", { class: "hint" }, "Reading what's typed…"));
   else if (!shown.length && !value) list.append(h("p", { class: "hint" }, `Nothing that fits matches. ${why || "Values and arithmetic can be typed too: 3, \"text\", [1, 2], x * 2, (x) => x + 1."}`));
   return h("div", {}, h("div", { class: "sub-head" }, "Fill · only what type-checks here"), h("div", { class: "picker" }, input, list));
@@ -2086,6 +2153,29 @@ function typePicker(id: string, type: Id, names: Names, current: Id | null, chan
 }
 
 // Run a top-level edit; `then` adjusts what's shown once it's in.
+// A call typed of a name nothing has yet (E180): a definition of that
+// name, its inputs named after what the call gives it (a name typed there,
+// or input 1, 2…), its body a hole. The typed text stays, and reads now.
+function makeNamed(info: T.Info, name: string): HTMLElement {
+  const ins = T.callInputs(ui.query, name) ?? [];
+  const params = ins.map((x, i) => (/^[\p{L}_][\p{L}\p{N}_' ]*$/u.test(x) && !ins.slice(0, i).includes(x) ? x : `input ${i + 1}`));
+  const b = h("button", { class: "btn", type: "button" }, `Make a definition named ${name}`);
+  b.title = `${name}(${params.join(", ")}), its body a hole to fill later; what's typed here then reads`;
+  b.addEventListener("click", () => {
+    const keep = ui.query, at = ui.selected, was = doc;
+    runTop(info, Top.newDefinition(doc.code, doc.names.short, name, { kind: "function", params }));
+    if (doc === was) return;
+    // Back at the hole it was typed in, the typed text kept.
+    ui.selected = at;
+    ui.query = keep;
+    ui.note = `Made ${name}(${params.join(", ")}), its body a hole to fill later. Enter fills this one with what's typed.`;
+    render();
+    const f = document.getElementById("f-query") as HTMLInputElement | null;
+    f?.focus();
+  });
+  return b;
+}
+
 function runTop(info: T.Info, r: Top.Top, then?: (r: Extract<Top.Top, { ok: true }>) => void) {
   // Before drawing: drawn first, a deleted definition would still be the
   // open one, with its nodes gone.
@@ -2192,7 +2282,15 @@ function structurePanel(info: T.Info, names: Names): HTMLElement | null {
     }
     const c = textField("f-new-case", `New ${w.case}`, "its name");
     const add = h("button", { class: "btn", type: "button" }, `Add the ${w.case}`);
-    add.addEventListener("click", () => applyT(T.addCase(code, sh, info, ui.def, c.input.value, [])));
+    // The type stays selected, so the next case is typed straight after
+    // (E183); select a case to give it fields.
+    add.addEventListener("click", () => {
+      const at = ui.selected;
+      if (!applyT(T.addCase(code, sh, info, ui.def, c.input.value, []))) return;
+      ui.selected = at;
+      render();
+      (document.getElementById("f-new-case") as HTMLInputElement | null)?.focus();
+    });
     c.input.addEventListener("keydown", (e) => { if (e.key === "Enter") add.click(); });
     out.append(h("p", { class: "hint" }, body.effect
       ? "Calling an operation performs it; a match on the computation that performs it handles it, one case per operation, and every such match gets a case for a new one. Select an operation to give it inputs and say what it gives back."
@@ -2209,7 +2307,16 @@ function structurePanel(info: T.Info, names: Names): HTMLElement | null {
     out.append(pinRow(info, dname));
     const params = body?.kind === "lambda" ? body.params : [];
     out.append(h("div", { class: "sub-head" }, `Inputs of ${dname} · code.json`));
-    if (!params.length) out.append(h("p", { class: "hint" }, body?.kind === "lambda" ? "None: it's an action, run on its own." : "None: it's a value. Adding an input makes it a function."));
+    if (!params.length) {
+      out.append(h("p", { class: "hint" }, body?.kind === "lambda" ? "None: it's an action, run where it's called, each time." : "None: it's a value, computed once. Adding an input makes it a function."));
+      // One into the other (E181): symbols() everywhere becomes symbols.
+      if (body && body.kind !== "typedef" && !(body.kind === "lambda" && body.results?.length)) {
+        const turn = h("button", { class: "btn", type: "button" }, body.kind === "lambda" ? "Make it a value" : "Make it an action");
+        turn.title = body.kind === "lambda" ? `Computed once; its calls ${dname}() read ${dname}` : `Run where it's called; its reads call ${dname}()`;
+        turn.addEventListener("click", () => runTop(info, Top.toggleValue(code, sh, ui.def)));
+        out.append(h("div", { class: "acts" }, turn));
+      }
+    }
     params.forEach((p) => out.append(paramRow(info, names, p)));
     const c = textField("f-new-input", "New input", "its name");
     const add = h("button", { class: "btn", type: "button" }, "Add the input");
@@ -4107,6 +4214,11 @@ document.addEventListener("keydown", (e) => {
       document.querySelector<HTMLElement>(".blocks-wrap")?.focus({ preventScroll: true });
       document.querySelector(".blocks-wrap .sel")?.scrollIntoView({ block: "nearest" });
     }
+    return;
+  }
+  if (inProgram && ui.selected && e.altKey && e.key === "ArrowUp") {
+    const outer = enclosing(ui.selected);
+    if (outer) { e.preventDefault(); select(outer); }
     return;
   }
   if (inProgram && ui.selected && (e.key === "ContextMenu" || (e.key === "F10" && e.shiftKey))) {

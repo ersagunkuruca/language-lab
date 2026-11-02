@@ -169,3 +169,29 @@ test("typed line of fields and shows reads though its readings are many", async 
   const r = fillValue(code, names, info, hole, `"line " ++ show(e.line) ++ ": " ++ e.name ++ " is " ++ e.name ++ "."`, f);
   assert.ok(r.ok, !r.ok ? r.reason : "");
 });
+
+// Typed text reads what the text prints (E178): first(x, else y), lists of
+// anything, a step name = value; rest, and a □ left to fill later.
+test("typed text reads else, lists of expressions, steps and holes", async () => {
+  const { Lang } = await import("../src/lang/dsl.ts");
+  const { base, baseNames } = await import("../src/lang/load.ts");
+  const { CONS } = await import("../src/lang/std.ts");
+  const fill = (text: string) => {
+    const k = new Lang();
+    const f = k.def("f");
+    let hole = "";
+    k.define(f, k.fn(["a", "b"], () => (hole = k.hole())));
+    const code = base(k.code), names = baseNames(k.names);
+    const r = fillValue(code, names, infer(code, names), hole, text, f);
+    assert.ok(r.ok, `${text}: ${!r.ok ? r.reason : ""}`);
+    return r.ok ? { code: r.code, at: r.code.nodes[hole] } : null;
+  };
+  const first = fill("first(a, else b)")!;
+  assert.ok((first.at as NodeOf<"call">).args.every((x) => { const l = first.code.nodes[x] as NodeOf<"lambda">; return l.kind === "lambda" && l.params.length === 0; }));
+  const list = fill('[show(a + 1), "x"]')!;
+  assert.equal((list.code.nodes[(list.at as NodeOf<"call">).fn] as NodeOf<"ref">).target, CONS);
+  const step = fill("x = a + 1; x · x")!;
+  assert.equal(step.code.nodes[(step.at as NodeOf<"call">).fn].kind, "lambda");
+  const later = fill("a + □")!;
+  assert.ok((later.at as NodeOf<"call">).args.some((x) => later.code.nodes[x].kind === "hole"));
+});

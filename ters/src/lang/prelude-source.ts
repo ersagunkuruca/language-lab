@@ -1362,20 +1362,36 @@ export function buildPrelude(): Module {
     ]) },
   ])));
   const later = (now: Id, at: Id) => k.if(k.call(S.less, at, now), now, at);
+  // The schedule's own random numbers (L142), apart from the action's, so
+  // an action that draws one more number keeps the schedule its seed
+  // names: Park and Miller's minimal standard generator (CACM 1988), a
+  // state in 1 … 2³¹ − 2 multiplied by 16807 modulo 2³¹ − 1, exact in a
+  // Float64. Kept by the simulated world beside its clock.
+  const M31 = 2147483647;
+  const modM = (of: Id) => k.let("x", of, (x) => k.let("r", k.call(B.sub, x, k.call(B.mul, k.call(S.floor, k.call(B.mul, x, k.lit(1 / M31))), k.lit(M31))), (r) =>
+    k.if(k.call(S.less, r, k.lit(0)), k.call(B.add, r, k.lit(M31)), k.if(k.call(S.less, r, k.lit(M31)), r, k.call(B.sub, r, k.lit(M31))))));
+  const nextDraw = k.def("next schedule draw");
+  k.define(nextDraw, k.fn(["state"], (st) => modM(k.call(B.mul, st, k.lit(16807)))));
+  const firstDraw = k.def("first schedule draw");
+  // A state from the seed, three steps on, so small seeds don't start
+  // near 0.
+  const step = (x: Id) => k.call(nextDraw, x);
+  k.define(firstDraw, k.fn(["seed"], (seed) => step(step(step(k.call(B.add, k.lit(1), k.let("m", modM(k.call(S.abs, k.call(S.floor, seed))), (m) =>
+    k.if(k.call(S.less, m, k.lit(M31 - 1)), m, k.lit(0)))))))));
   const simulatedWorld = k.def("simulated world");
   k.define(simulatedWorld, k.fn(["action"], (a) => k.handle(k.call(a), [
-    { variant: START_TIMER_OP, names: ["milliseconds", "rest"], body: ([ms, rest]) => k.fn(["now"], (now) =>
-      k.call(k.call(rest, k.call(TICKET_V.at, k.call(B.add, now, ms), k.unitValue)), now)) },
-    { variant: AWAIT_OP, names: ["ticket", "rest"], body: ([t, rest]) => k.fn(["now"], (now) => k.match(t, [
-      { variant: TICKET_V.timer, names: ["milliseconds", "value"], body: ([ms, v]) => k.call(k.call(rest, v), k.call(B.add, now, ms)) },
-      { variant: TICKET_V.at, names: ["time", "value"], body: ([at, v]) => k.call(k.call(rest, v), later(now, at)) },
+    { variant: START_TIMER_OP, names: ["milliseconds", "rest"], body: ([ms, rest]) => k.fn(["now", "schedule"], (now, sch) =>
+      k.call(k.call(rest, k.call(TICKET_V.at, k.call(B.add, now, ms), k.unitValue)), now, sch)) },
+    { variant: AWAIT_OP, names: ["ticket", "rest"], body: ([t, rest]) => k.fn(["now", "schedule"], (now, sch) => k.match(t, [
+      { variant: TICKET_V.timer, names: ["milliseconds", "value"], body: ([ms, v]) => k.call(k.call(rest, v), k.call(B.add, now, ms), sch) },
+      { variant: TICKET_V.at, names: ["time", "value"], body: ([at, v]) => k.call(k.call(rest, v), later(now, at), sch) },
       { variant: TICKET_V.firstReady, names: ["tickets", "which"], body: ([ts, which]) => k.let("times", k.call(readyTimes, ts, now), (times) =>
         k.let("soonest", k.call(earliest, times), (at) => k.let("tied", k.call(tiedAt, times, at, k.int(0)), (tied) =>
-          k.let("picked", k.call(pickAt, tied, k.call(B.mul, k.call(RANDOM_OP), k.call(INT_OPS.toNumber, k.call(length, tied)))), (i) =>
-            k.call(k.call(rest, k.call(which, i)), later(now, at)))))) },
+          k.let("picked", k.call(pickAt, tied, k.call(B.mul, k.call(B.mul, sch, k.lit(1 / M31)), k.call(INT_OPS.toNumber, k.call(length, tied)))), (i) =>
+            k.call(k.call(rest, k.call(which, i)), later(now, at), k.call(nextDraw, sch)))))) },
       { variant: TICKET_V.ticket, names: ["number"], body: foreign },
     ])) },
-  ], ["value", (v) => k.fn(["now"], () => v)])));
+  ], ["value", (v) => k.fn(["now", "schedule"], () => v)])));
   // Time and Wait on the same clock (L138), so `now` after a 5 s timer is
   // 5000 every run and `wait` never really sleeps: a wait is an await of a
   // timer, and now is the time of a timer of 0 started now, which the
@@ -1390,8 +1406,8 @@ export function buildPrelude(): Module {
     ], k.call(ABORT_OP, k.lit("the simulated world's clock gave no time"))) }],
   )));
   const simulated = k.def("simulated");
-  k.define(simulated, k.fn(["seed", "action"], (seed, a) => k.call(S.seeded, seed, k.thunk(() => k.call(k.call(simulatedWorld, k.thunk(() => k.call(simulatedClock, a))), k.lit(0))))));
-  const simulatedHelpers = [readyAt, earliest, readyTimes, tiedAt, pickAt, simulatedWorld, simulatedClock];
+  k.define(simulated, k.fn(["seed", "action"], (seed, a) => k.call(S.seeded, seed, k.thunk(() => k.call(k.call(simulatedWorld, k.thunk(() => k.call(simulatedClock, a))), k.lit(0), k.call(firstDraw, seed))))));
+  const simulatedHelpers = [readyAt, earliest, readyTimes, tiedAt, pickAt, nextDraw, firstDraw, simulatedWorld, simulatedClock];
   const awaitHelpers = [startBranch, waiting, goOn, finished, settle, firstDone, raceSettle, ...simulatedHelpers];
 
   const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, csqrt, clog, cpow, casin, cacos, showC, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, showDecimals, divD, slopeAt, dualTable, showD, asFixed, fixedF, showX, divX, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, ticketId, anyOf, together, race, within, simulated];
@@ -1550,7 +1566,7 @@ export function buildPrelude(): Module {
     [together]: "Runs the actions side by side: each runs until it awaits a ticket, and whichever ticket is ready first goes on, until every action has its value. The values come back in the actions' order (as JavaScript's Promise.all).",
     [race]: "Runs the actions side by side, as together does, and gives the value of the first to finish; the others are dropped where they wait (as JavaScript's Promise.race).",
     [within]: "The action's value as some(value) if it finishes within this many milliseconds, or none if the timer is ready first; the action is then dropped where it waits.",
-    [simulated]: "Runs the action in a simulated world for tests: its timers, now and wait on a clock that starts at 0 and never really waits, and when several tickets are ready at the same moment, which goes on is picked with Random seeded by seed, as the action's own random numbers are. The same seed gives the same schedule every run; another seed may give another, so an order that goes wrong is a seed to paste into a test (FoundationDB's deterministic simulation).",
+    [simulated]: "Runs the action in a simulated world for tests: its timers, now and wait on a clock that starts at 0 and never really waits, and when several tickets are ready at the same moment, which goes on is picked with a second stream of numbers from the same seed, apart from the action's own Random (seeded by seed), so the same seed gives the same schedule every run, even after the action draws more or fewer numbers; another seed may give another, so an order that goes wrong is a seed to paste into a test (FoundationDB's deterministic simulation).",
     ...Object.fromEntries(awaitHelpers.map((d) => [d, simulatedHelpers.includes(d) ? "A helper of simulated. Not offered in the palette." : "A helper of together and race. Not offered in the palette."])),
     [applied]: "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette.",
   };
