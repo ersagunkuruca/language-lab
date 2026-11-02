@@ -111,13 +111,17 @@ Within a priority, in this order:
 
 What each lane takes next is the "Next up" table at the top of BACKLOG.md;
 the coordinator updates it at triage and when Ersagun changes direction.
+Each lane's cell names only the next few items, in order, in a line or two.
+A finished item is removed from it, never logged there: its record is its
+row in DONE.md (Ersagun 2026-11-02 asked why BACKLOG.md opened with walls
+of text; they were these cells logging every finished row).
 
 ## Doing an item
 
 - One item, one PR (one change per PR, never bundled). An L item may be
   split into several rows first.
 - The PR body says which item: `Backlog: E3`. The same PR moves the row to
-  its lane's table in [DONE.md](DONE.md) with its PR number, updates its
+  its lane's table in [DONE.md](DONE.md) with its PR number, takes it off its
   lane's line in "Next up" at the top of BACKLOG.md, and adds any follow-up rows it found. The
   number isn't known before the PR exists, so write "this PR" and fill it
   in with the lane's next PR: a push only for the number costs a CI run.
