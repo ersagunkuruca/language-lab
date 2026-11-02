@@ -20,8 +20,9 @@ export const baseNames = (...layers: Names[]): Names => layer<Names>(LIBRARY.nam
 // which of their definitions are helpers.
 // The prelude keeps the rules of the types whose constructors are private
 // (std.ts SMART), and the trees module stands in for Map and Set, so their
-// definitions are the insiders.
-export const checkOptions: Options = { pins: LIBRARY.pins, hidden: LIBRARY.hidden, insiders: [...PRELUDE.code.defs, ...TREES.code.defs] };
+// definitions are the insiders. A private case of a type the program
+// declares is the program's own to build (L165).
+export const checkOptions: Options = { pins: LIBRARY.pins, hidden: LIBRARY.hidden, insiders: [...PRELUDE.code.defs, ...TREES.code.defs], library: LIBRARY.code.defs };
 
 export function loadProgram(dir: string, style = "blocks") {
   const own = read<Code>(join(dir, "code.json"), { nodes: {}, defs: [] });

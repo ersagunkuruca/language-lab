@@ -192,7 +192,7 @@ const BUILT: Record<Program, () => Doc> = { outline: () => outlineDoc() };
 const initialFor = (program: Program): Doc => {
   const m = manifest.programs.find((p) => p.program === program && p.editor !== false) ?? manifest.programs[0];
   if (m.built) return BUILT[m.program]();
-  const fs = (m.folders ?? []).map((f) => FILES[f]);
+  const fs = (m.folders ?? []).map(FILES);
   const all = <K extends keyof (typeof fs)[number]>(k: K) => fs.some((f) => f[k]) ? Object.assign({}, ...fs.map((f) => f[k])) : undefined;
   const d = typedDoc(m.program, fs.map((f) => f.code as Code).reduce((a, b) => merge(a, b)), all("names") ?? {}, all("comments") ?? {}, { layout: all("layout"), examples: all("examples") });
   return { ...d, names: { short: d.names.short, descriptive: all("descriptive") ?? {} }, hints: all("hints") ?? {} };
@@ -1241,7 +1241,7 @@ let searching: Worker | null = null, searchingKey = "";
 function searchOn(key: string, values: Record<string, unknown>, plan: Backwards["plan"]) {
   searching?.terminate();
   searchingKey = key;
-  const w = (searching = new Worker(URL.createObjectURL(new Blob([RUN_WORKER], { type: "text/javascript" }))));
+  const w = (searching = newWorker());
   const done = (r: Found) => { w.terminate(); if (searching !== w) return; searching = null; searchingKey = ""; backwardsCache.set(key, { ...r, cut: false, stopped: r.cut, plan }); render(); };
   w.onmessage = (e: MessageEvent<Found>) => done(e.data);
   w.onerror = (e) => { e.preventDefault(); done({ answers: backwardsCache.get(key)?.answers ?? [], more: false, error: e.message || "the search failed" }); };
@@ -3575,7 +3575,7 @@ function startPage(info: T.Info, main: Id) {
   try {
     page.now = showPage({
       code: prog(), info, names: pres().names, main, program: titleOf(doc),
-      doc: page.maker as unknown as PageDoc, store: localStorage, worklet: WORKLET_RUNTIME, recordings: "apps/",
+      doc: page.maker as unknown as PageDoc, store: localStorage, worklet: workletRuntimeText(), recordings: "apps/",
       frame: (f) => requestAnimationFrame(f), ran: flashRan, keepCells: true,
     });
     page.root = page.now.root as unknown as globalThis.Node;
@@ -3617,7 +3617,7 @@ function compilePage(main: Id) {
   const made = compiledPages.get(code);
   if (made !== undefined) { if (made) swapCompiled(code, made, main); return; }
   page.status.textContent = "Interpreted while the page compiles; the compiled page takes over in a few seconds, keeping what you do on it.";
-  const w = (compiling = new Worker(URL.createObjectURL(new Blob([RUN_WORKER], { type: "text/javascript" }))));
+  const w = (compiling = newWorker());
   const done = (m: CompileSays) => {
     w.terminate();
     if (compiling !== w) return;
@@ -3639,7 +3639,7 @@ function swapCompiled(code: Code, program: string, main: Id) {
   type Lab = { mountPage(main: unknown, program: string, o: object): { root: Node_; cells: Pick<Cells, "write" | "batch">; kept: NonNullable<Cells["kept"]>; stop(): void } };
   let m;
   try {
-    const lab = new Function(`${PAGE_RUNTIME}\nreturn $lab;`)() as Lab;
+    const lab = new Function(`${pageRuntimeText()}\nreturn $lab;`)() as Lab;
     const defs = new Function("$lab", `${program}\nreturn defs;`)(lab) as Record<string, unknown>;
     m = lab.mountPage(defs[pres().names[main]], titleOf(doc), { doc: page.maker, store: localStorage, frame: (f: () => void) => requestAnimationFrame(f), ran: flashRan });
     if (page.now?.kept) handOver(page.now.kept, m.kept, m.cells);
@@ -3662,7 +3662,7 @@ function pageHtml(): { html: string; name: string } | null {
   const info = typesOf();
   const main = info && pageMain(ownDefs(), info, pres().names);
   if (!info || !main) return null;
-  return { html: pageFile(titleOf(doc), PAGE_RUNTIME, prog(), info, pres().names, main, WORKLET_RUNTIME), name: `${slug(titleOf(doc))}.html` };
+  return { html: pageFile(titleOf(doc), pageRuntimeText(), prog(), info, pres().names, main, workletRuntimeText()), name: `${slug(titleOf(doc))}.html` };
 }
 
 function savePage(open: boolean) {
@@ -3767,6 +3767,16 @@ function boundedTrace(info: T.Info, args: Value[]): Trace {
 // Run main in a worker (editor/runWorker.ts): the page keeps drawing, the
 // printing shows as it comes, and Stop ends it.
 declare const RUN_WORKER: string; // editor/runWorker.ts bundled, put in by editor/build.ts
+// esbuild's define writes the text at every use, so each runtime is used
+// once, here (E204): three uses of the worker carried its 3 MB three times.
+// (Its blob's address kept on the function, which is there before any
+// line of this file runs.)
+function newWorker(): Worker { const f = newWorker as { url?: string }; return new Worker(f.url ??= URL.createObjectURL(new Blob([runtimeText("lab-run-worker") || RUN_WORKER], { type: "text/javascript" }))); }
+// The site's page keeps them as text elements instead (build.ts, E204), so
+// the script it parses before the first drawing is 8 MB shorter.
+function runtimeText(id: string) { return document.getElementById(id)?.textContent || ""; }
+function pageRuntimeText() { return runtimeText("lab-page-runtime") || PAGE_RUNTIME; }
+function workletRuntimeText() { return runtimeText("lab-worklet-runtime") || WORKLET_RUNTIME; }
 let running: Worker | null = null;
 function stopRun(why?: string) {
   running?.terminate();
@@ -3778,7 +3788,7 @@ function runTyped() {
   const def = ui.def, title = titleOf(doc), prefix = `lab:${title}:`;
   const files: [string, string][] = [];
   try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k?.startsWith(prefix)) files.push([k, localStorage.getItem(k)!]); } } catch { /* no storage */ }
-  const w = (running = new Worker(URL.createObjectURL(new Blob([RUN_WORKER], { type: "text/javascript" }))));
+  const w = (running = newWorker());
   const ask: RunAsk = { code: prog(), names: pres().names, pins: heldPins?.all ?? doc.signatures ?? NO_PINS, def, title, files };
   ui.output = { def, lines: [], running: true };
   w.onmessage = (e: MessageEvent<RunSays>) => {
@@ -3983,13 +3993,14 @@ function navigator(p: Presentation) {
     h("button", { type: "button", class: `nav-row${on ? " on" : ""}`, "aria-current": on ? "true" : "false", ...attrs }, ...kids);
   const defs = ownDefs().filter((d) => defBody(d));
   const list = h("div", { class: "nav-list" });
+  const others: [Program, HTMLElement][] = [];
   for (const [k, label] of programList()) {
     list.append(row({ "data-set": "program", "data-value": k }, false, label));
-    // Shown only while a search matches them: another program's definitions.
+    // Shown only while a search matches them: another program's
+    // definitions, made at the first search (E204): an example not opened
+    // is read only then.
     if (k !== doc.program) {
-      const other = otherDoc(k);
-      if (other) list.append(h("div", { class: "nav-defs found", role: "group", "aria-label": `Definitions in ${label}` },
-        ...defNames(other).map(([d, name]) => row({ "data-goto": d, "data-program": k, hidden: "" }, false, name))));
+      others.push([k, list.appendChild(h("div", { class: "nav-defs found", role: "group", "aria-label": `Definitions in ${label}` }))]);
       continue;
     }
     list.lastElementChild!.classList.add("open");
@@ -4003,6 +4014,10 @@ function navigator(p: Presentation) {
   const filter = () => {
     const q = find.value.trim().toLowerCase();
     ui.find = find.value;
+    if (q) for (const [k, g] of others.splice(0)) {
+      const other = otherDoc(k);
+      if (other) g.append(...defNames(other).map(([d, name]) => row({ "data-goto": d, "data-program": k, hidden: "" }, false, name)));
+    }
     for (const r of list.querySelectorAll<HTMLElement>(".nav-row")) {
       const hit = r.textContent!.toLowerCase().includes(q);
       r.hidden = r.dataset.goto ? !q || !hit : !!q && !r.classList.contains("open") && !hit && !r.dataset.act;
