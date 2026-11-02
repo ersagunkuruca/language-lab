@@ -400,7 +400,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     [CELL_OPS.insertAt]: (c, p, i, v) => (cells.edit(c, stepsOf(p)!, (l) => toList(listEdits.insert(fromList(l), Number(i), v)), LISTS, { at: stepsOf(p)!, kind: "insert", i: Number(i) }), one(unit)),
     [CELL_OPS.removeAt]: (c, p, i) => (cells.edit(c, stepsOf(p)!, (l) => { const xs = listEdits.remove(fromList(l), Number(i)); return xs && toList(xs); }, LISTS, { at: stepsOf(p)!, kind: "remove", i: Number(i) }), one(unit)),
     [CELL_OPS.moveAt]: (c, p, a, b) => (cells.edit(c, stepsOf(p)!, (l) => { const xs = listEdits.move(fromList(l), Number(a), Number(b)); return xs && toList(xs); }, LISTS, { at: stepsOf(p)!, kind: "move", from: Number(a), to: Number(b) }), one(unit)),
-    [SHOW_ANY]: (v) => one(showValue(v, code, rt.names ?? stdNames)),
+    [SHOW_ANY]: (v) => one(showValue(v, code, rt.names ?? stdNames, true)),
     [SET]: (get, record, value) => {
       const m = (get as unknown as Record<symbol, { lambda?: Id; prim?: Id }>)[META];
       const path = m?.prim ? [m.prim] : m?.lambda ? fieldPath(code, m.lambda) : null;
@@ -1078,8 +1078,25 @@ export const DEF_VALUE = "@definition";
 const defOf = new WeakMap<object, Id>();
 export const definedAs = (v: Value): Id | undefined => (typeof v === "function" ? defOf.get(v) : undefined);
 
-// `asNumber` shows a Fixed or an Extended as the number it stands for, where the text is
-// only read (the Run panel, a wire's value), not typed back in.
+// A Fixed's steps of 2⁻³² as `show fixed` writes them: the shortest
+// decimal that reads back to the same steps (Steele and White's
+// free-format digits, 1990), the prelude's `fraction digits` in BigInts.
+function fixedText(steps: bigint): string {
+  const neg = steps < 0n, s = neg ? -steps : steps;
+  const whole = s >> 32n, fraction = s & 0xffffffffn, unit = 1n << 33n;
+  let text = "";
+  for (let r = 2n * fraction, m = 1n, i = 0; fraction && i < 10; i++) {
+    const r10 = r * 10n, m10 = m * 10n, d = r10 >> 33n, rest = r10 - (d << 33n);
+    const low = rest < m10, high = unit - m10 < rest;
+    if (low || high) { text += String(low && (!high || 2n * rest < unit) ? d : d + 1n); break; }
+    text += String(d); r = rest; m = m10;
+  }
+  return `${neg ? "-" : ""}${whole}${text ? `.${text}` : ""}`;
+}
+
+// `asNumber` shows a Fixed or an Extended as the number it stands for:
+// what `show` gives, the Run panel and a wire's value (L153). Without it a
+// value shows as the constructor it is built from.
 export function showValue(v: Value, code: Code, names: Names, asNumber = false): string {
   if (typeof v === "bigint") return String(v);
   if (typeof v === "number") return Number.isInteger(v) ? String(v) : v - v === 0 ? String(Math.round(v * 1e9) / 1e9) : overflowed();
@@ -1091,7 +1108,7 @@ export function showValue(v: Value, code: Code, names: Names, asNumber = false):
   if (v.tag === RATIO) { const [top, bottom] = v.fields.map((x) => showValue(x, code, names, asNumber)); return bottom === "1" ? top : `${top}/${bottom}`; }
   if (v.tag === ALGEBRAIC_V) return Alg.show(algebraicOf(v));
   if (v.tag === COMPLEX_V) { const [re, im] = v.fields as number[]; return `${showValue(re, code, names, asNumber)} ${im < 0 ? "−" : "+"} ${showValue(Math.abs(im), code, names, asNumber)}i`; }
-  if (asNumber && v.tag === FIXED_V && (typeof v.fields[0] === "number" || typeof v.fields[0] === "bigint")) return showValue(Number(v.fields[0]) / 2 ** 32, code, names);
+  if (asNumber && v.tag === FIXED_V && (typeof v.fields[0] === "number" || typeof v.fields[0] === "bigint")) return fixedText(BigInt(v.fields[0]));
   // An Extended number reads as the number, or −∞ and +∞ (L125d).
   if (asNumber && v.tag === EXTENDED_V.finite) return showValue(v.fields[0], code, names, asNumber);
   if (asNumber && (v.tag === EXTENDED_V.minus || v.tag === EXTENDED_V.plus)) return v.tag === EXTENDED_V.minus ? "−∞" : "+∞";
