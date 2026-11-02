@@ -29,6 +29,7 @@
 // compiles on the representation the chooser picks for each type `main` uses, e.g.
 // Peano Nat stored as an Int. `--as-defined` runs the definitions instead.
 
+import type { Plugin } from "esbuild";
 import { gradeMistakes } from "../src/lang/grades.ts";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
@@ -150,6 +151,25 @@ function entry(p: Program, name: string, web = false): Id {
   if (problem) fail(`${name} can't be ${web ? "a page" : "run from the command line"}: ${problem}`);
   return def;
 }
+
+// The bundle keeps a module only when something in it is used (C82). The
+// runtime imports run.ts for show and compare, run.ts imports arith.ts,
+// and arith.ts imports the library, whose module code reads every
+// published definition (prelude.json, trees.json: 3.4 MB of sheet's
+// bundle, most of its start-up). None of this checkout's modules is
+// imported for what it does on loading, so each is marked as having no
+// side effects there, and the bundler drops what the program never calls.
+const onlyWhatIsUsed: Plugin = {
+  name: "only what is used",
+  setup(build) {
+    const marked = Symbol("resolved");
+    build.onResolve({ filter: /^(\.\.?)?\// }, async (a) => {
+      if (a.pluginData === marked || a.kind === "entry-point") return undefined;
+      const r = await build.resolve(a.path, { importer: a.importer, resolveDir: a.resolveDir, kind: a.kind, pluginData: marked });
+      return r.errors.length || r.external ? undefined : { path: r.path, sideEffects: false };
+    });
+  },
+};
 
 // The compiled program, and a few lines that run it the way `lab run` does.
 // Recursion that isn't a tail call goes on the heap past 1,000 levels
@@ -277,6 +297,7 @@ switch (command) {
         stdin: { contents: compiled(p, main, false), resolveDir: import.meta.dirname, sourcefile: basename(out), loader: "js" },
         bundle: true, platform: "node", format: "esm", outfile: out, logLevel: "warning",
         banner: { js: `// ${p.title}, compiled by lab (ters/cli/lab.ts), with its runtime. Run: node <this file> [arguments…]` },
+        plugins: [onlyWhatIsUsed],
       });
     } else {
       writeFileSync(out, compiled(p, main, true));
