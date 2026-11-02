@@ -1043,6 +1043,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   function cases(n: NodeOf<"match"> | NodeOf<"fold">, env: Map<Id, Type>, row: Row): Type {
     const result = s.fresh();
     const arms = n.arms.map((a) => code.nodes[a] as NodeOf<"arm">);
+    if (arms.some((a) => a.value)) return byValue(n, arms, env, row, result);
     const def = arms.length ? owner.get(arms[0].variant) : undefined;
     if (def && isEffect(def)) return handle(n, def, arms, env, row, result);
     const scrut = expr(n.scrutinee, env, row);
@@ -1080,6 +1081,28 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       if (!missing.length && otherwise) err(otherwise, "every case is already handled, so this one can never run");
     }
     if (n.kind === "match" && n.otherwise) unifyAt(n.otherwise, result, expr(n.otherwise, env, row), "the other cases");
+    return result;
+  }
+
+  // A match on plain values (L164c, GAPS round 9 MG3): each arm is a
+  // literal of the scrutinee's type, `"add" → …`, and the rest arm is
+  // required, since no list of values is every value. literal-match.ts
+  // writes it as a chain of equal tests before anything runs.
+  function byValue(n: NodeOf<"match"> | NodeOf<"fold">, arms: NodeOf<"arm">[], env: Map<Id, Type>, row: Row, result: Type): Type {
+    const scrut = expr(n.scrutinee, env, row);
+    if (n.kind === "fold") err(n.id, "a fold walks a data type's cases; a choice by value is a match");
+    const seen = new Set<string>();
+    for (const arm of arms) {
+      const v = arm.value ? code.nodes[arm.value] : undefined;
+      if (v?.kind !== "lit") { err(arm.id, "this match chooses by value, so each case is a value: a number or a text"); continue; }
+      const key = JSON.stringify([v.of ?? null, v.value]);
+      if (seen.has(key)) err(arm.id, `${typeof v.value === "string" ? JSON.stringify(v.value) : v.value} is handled twice`);
+      seen.add(key);
+      unifyAt(arm.value!, scrut, expr(arm.value!, env, row), "the value examined");
+      unifyAt(arm.body, result, expr(arm.body, env, row), "this case");
+    }
+    if (n.kind === "match" && n.otherwise) unifyAt(n.otherwise, result, expr(n.otherwise, env, row), "the other cases");
+    else err(n.id, "a choice by value needs a case for every other value");
     return result;
   }
 
