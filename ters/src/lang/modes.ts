@@ -960,15 +960,17 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
 // asks it for each filling twice, for the plan and for the type check, and
 // each time it would build the analyzer over the whole program again.
 const NO_NAMES: Record<Id, string> = {};
-const verdicts = new WeakMap<Code, WeakMap<Record<Id, string>, Map<Id, Verdict | null>>>();
+// One analyzer serves every solve of the program (C67i): building one
+// scans every node, which for each solve was a sixth of compiling.
+const verdicts = new WeakMap<Code, WeakMap<Record<Id, string>, { an: ReturnType<typeof analyzer>; m: Map<Id, Verdict | null> }>>();
 export function solveMode(code: Code, n: NodeOf<"solve">, names: Record<Id, string> = NO_NAMES): Verdict | null {
   let byNames = verdicts.get(code);
   if (!byNames) verdicts.set(code, (byNames = new WeakMap()));
   const key = Object.keys(names).length ? names : NO_NAMES;
-  let m = byNames.get(key);
-  if (!m) byNames.set(key, (m = new Map()));
-  if (!m.has(n.id)) m.set(n.id, analyzer(code, names).ofSolve(n));
-  return m.get(n.id)!;
+  let c = byNames.get(key);
+  if (!c) byNames.set(key, (c = { an: analyzer(code, names), m: new Map() }));
+  if (!c.m.has(n.id)) c.m.set(n.id, c.an.ofSolve(n));
+  return c.m.get(n.id)!;
 }
 
 // Does this solve always give exactly one answer, so its type has no
