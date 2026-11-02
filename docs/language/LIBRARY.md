@@ -37,7 +37,7 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 - **round to Float32** : `(Float64) -> Float64`. The nearest Float64 a GPU can hold (32-bit floating point).
 - **show** : `(Float64) -> Text`. A Float64 as text: show(2.5) is "2.5".
 - **range** : `(Float64) -> List Float64`. The Float64s 0, 1, … up to n − 1, as a list.
-- **show decimals** : `(Float64, Float64) -> Text`. x as text with `places` digits after the point, rounded half away from 0 and keeping trailing zeros: show decimals(2.5, 3) is "2.500", show decimals(-0.0004, 3) is "0.000". For when show's up to nine places would jump about.
+- **show decimals** : `(Float64, Int) -> Text`. x as text with `places` digits after the point, rounded half away from 0 and keeping trailing zeros: show decimals(2.5, 3) is "2.500", show decimals(-0.0004, 3) is "0.000". For when show's up to nine places would jump about.
 - **quotient** : `(Int, Int) -[Choice]-> Int`. a ÷ b rounded down to a whole number. No answer (Choice) when b is 0.
 - **remainder** : `(Int, Int) -[Choice]-> Int`. What's left of a after quotient(a, b) times b; it has b's sign. No answer when b is 0.
 - **power** : `(Int, Int) -[Choice]-> Int`. a to the power b for Ints. No answer when b is negative.
@@ -84,12 +84,12 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 - **clifford exp** : `(Algebra a, a) -> a`. e^b for a bivector b whose square is a number: a rotor when b² < 0, 1 + b when b² = 0 (a translator in projective geometric algebra) and cosh/sinh when b² > 0. The rotor turning by θ in the plane B with B² = −1 is clifford exp(algebra, −θ/2 · B). When b² isn't a number (a field with E·B ≠ 0, a screw motion), it sums the series instead, by scaling and squaring.
 - **clifford outer** : `(Algebra a, a, a) -> a`. a ∧ b, the outer product in the algebra (clifford algebra makes one): e_A ∧ e_B is e_A e_B when the blades share no vector, else 0. Two vectors span a plane (e₁ ∧ e₂ = e₁₂), and a vector with itself gives 0.
 - **clifford inner** : `(Algebra a, a, a) -> a`. a ⌋ b, the left contraction: e_A ⌋ e_B is e_A e_B when every vector of A is in B, else 0. A vector contracted with a bivector gives the vector in that plane at right angles to it (e₁ ⌋ e₁₂ = e₂); a vector with a vector is their dot product.
-- **clifford grade** : `(Algebra a, Float64, a) -> a`. x's grade-k part: only its parts on blades of k vectors. Grade 0 is the scalar, 1 the vector, 2 the bivector.
+- **clifford grade** : `(Algebra a, Int, a) -> a`. x's grade-k part: only its parts on blades of k vectors. Grade 0 is the scalar, 1 the vector, 2 the bivector.
 - **clifford dual** : `(Algebra a, a) -> a`. x's dual by complement: e_A becomes ± e_Ā, the blade of the vectors A doesn't have, signed so that e_A ∧ dual(e_A) is the pseudoscalar. It works in projective geometric algebra, whose pseudoscalar squares to 0.
 - **clifford undual** : `(Algebra a, a) -> a`. Undoes clifford dual: clifford undual(algebra, clifford dual(algebra, x)) is x.
 - **clifford regressive** : `(Algebra a, a, a) -> a`. a ∨ b, the regressive product, undual(dual(a) ∧ dual(b)): in projective geometric algebra the line through two points, or the point where two lines meet in the plane.
-- **clifford part** : `(Algebra a, a, List Float64) -> Float64`. x's part on a blade named by its vectors, numbered from 1 in the order of the algebra's squares: clifford part(algebra, x, [1, 2]) reads e₁₂. In projective geometric algebra ([1, 1, 1, 0]) e₀ is vector 4. Another order flips the sign once per swap ([2, 1] reads −e₁₂), and a vector named twice reads 0.
-- **clifford with part** : `(Algebra a, a, List Float64, Float64) -> a`. x with its part on a blade, named by its vectors as clifford part names it, set to `value`, the other parts kept: clifford with part(algebra, zero, [1, 2], 2) is 2e₁₂. Several calls build a multivector by blade.
+- **clifford part** : `(Algebra a, a, List Int) -> Float64`. x's part on a blade named by its vectors, numbered from 1 in the order of the algebra's squares: clifford part(algebra, x, [1, 2]) reads e₁₂. In projective geometric algebra ([1, 1, 1, 0]) e₀ is vector 4. Another order flips the sign once per swap ([2, 1] reads −e₁₂), and a vector named twice reads 0.
+- **clifford with part** : `(Algebra a, a, List Int, Float64) -> a`. x with its part on a blade, named by its vectors as clifford part names it, set to `value`, the other parts kept: clifford with part(algebra, zero, [1, 2], 2) is 2e₁₂. Several calls build a multivector by blade.
 - **Table entry** (type). One line of an algebra's multiplication table: times(left, right, gives) says left · right is gives, for two basis elements. table product multiplies by a list of them.
 - **Algebra** (type). A Clifford algebra built once by clifford algebra(squares, basis): its signature, its basis, each blade beside its basis element, and its multiplication table. The clifford functions take one, so a product, sandwich, reflection or exp doesn't build a table on every call.
 - **Mat2** (type). A 2 × 2 matrix of Float64s, in rows: mat2(m11, m12, m21, m22). + and − go part by part, · is the matrix product, and a plain number is that many times the identity, so m + 1 adds 1 down the diagonal.
@@ -299,7 +299,7 @@ A computation with the Choice effect may have no answer, one, or several, like a
 - **fail** : `() -[Choice]-> a`. No answer. In a search it drops this path.
 - **all** : `(() -[Choice, e]-> a) -[e]-> List a`. Every answer a search gives, as a list. The search's Choice ends here.
 - **first** : `(() -[Choice]-> a, () -[e]-> a) -[e]-> a`. The first answer a search gives, or the default when it gives none.
-- **count** : `(() -[Choice, e]-> a) -[e]-> Float64`. How many answers a search gives.
+- **count** : `(() -[Choice, e]-> a) -[e]-> Int`. How many answers a search gives.
 - **optional** : `(() -[Choice, e]-> a) -[e]-> Optional a`. The first answer as some(answer), or none.
 - **value of** : `(Optional a) -[Choice]-> a`. The value in some(value); no answer for none. optional run backwards.
 - **Optional** (type). A value that may be missing: none, or some(value). The data form of Choice, for keeping an answer that may not be there.

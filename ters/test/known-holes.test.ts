@@ -107,7 +107,7 @@ test("§1.2 a well-typed backwards solve must not throw NotInvertible at run tim
     k.define(g, k.fn(["x"], (x) => k.call(S.first, k.thunk(() => k.call(B.mul, x, k.lit(2))), k.thunk(() => k.lit(0)))));
     const [x] = params(k.code, g);
     const main = k.def("main");
-    k.define(main, k.thunk(() => k.call(S.print, k.call(S.show, k.call(S.count, k.thunk(() =>
+    k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.call(S.count, k.thunk(() =>
       k.solve(g, { out: k.lit(6) }, { [x]: "x" }, (b) => b[x])))))));
     return main;
   });
@@ -122,7 +122,7 @@ test("§1.3 equal on functions should be refused, not compare by identity", () =
   const p = program((k) => {
     const main = k.def("main");
     const square = () => k.fn(["x"], (x) => k.call(B.mul, x, x));
-    k.define(main, k.thunk(() => k.call(S.print, k.call(S.show, k.call(S.count, k.thunk(() =>
+    k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.call(S.count, k.thunk(() =>
       k.if(k.call(S.equal, square(), square()), k.lit(1), k.call(S.fail))))))));
     return main;
   });

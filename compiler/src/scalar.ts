@@ -1353,8 +1353,13 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     const res = f.locals.push(bt) - 1, body = expr(search, env, f, false);
     return target === S.first
       ? { k: "attempt", body, res, ok: { k: "local", i: res }, otherwise: expr(dflt!, env, f, false), t }
-      : { k: "attempt", body, res, ok: { k: "num", v: 1 }, otherwise: { k: "num", v: 0 }, t };
+      : { k: "attempt", body, res, ok: countOf(t, 1), otherwise: countOf(t, 0), t };
   }
+  // A count, an Int since L151 (or a Float64 where a count was one):
+  // a whole number of the count's type.
+  const countOf = (t: LType, n: number): SExpr => (t === "int" || t === "int32" ? { k: "int", v: BigInt(n) } : { k: "num", v: n });
+  const countPlusOne = (t: LType, x: SExpr): SExpr => t === "int" ? { k: "rt", fn: "int.add", args: [x, countOf(t, 1)] }
+    : t === "int32" ? { k: "op", op: "iadd", args: [x, countOf(t, 1)] } : { k: "op", op: "add", args: [x, countOf(t, 1)] };
   // How many searches' bodies each function is lowering now.
   const searching = new Map<SFunc, number>();
   function attempt(n: NodeOf<"call">, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
@@ -1565,18 +1570,18 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     if (!several(e.body)) {
       // One answer or none.
       const answer = local(e.res);
-      const [ok, otherwise]: [SExpr, SExpr] = e.kind === "first" ? [answer, dflt()] : e.kind === "count" ? [{ k: "num", v: 1 }, { k: "num", v: 0 }]
+      const [ok, otherwise]: [SExpr, SExpr] = e.kind === "first" ? [answer, dflt()] : e.kind === "count" ? [countOf(e.t, 1), countOf(e.t, 0)]
         : e.kind === "optional" ? [made(SOME, [answer]), made(NONE, [])] : [made(CONS, [answer, made(NIL, [])]), made(NIL, [])];
       return { k: "attempt", body: e.body, res: e.res, ok, otherwise, t: e.t };
     }
-    const acc: LType = e.kind === "count" ? "f64" : e.kind === "all" ? e.t : e.bt, box = boxOf(acc);
+    const acc: LType = e.kind === "count" ? e.t : e.kind === "all" ? e.t : e.bt, box = boxOf(acc);
     const b = g.locals.push(box) - 1, got: SExpr = { k: "get", rec: local(b), t: box, i: 0 };
     const set = (value: SExpr, then: SExpr): SExpr => ({ k: "set", rec: local(b), t: box, i: 0, value, then });
     const keep: Cont["gen"] = e.kind === "first" || e.kind === "optional" ? (v) => set(v, { k: "bool", v: true })
       : e.kind === "all" ? (v) => set(made(CONS, [v, got]), { k: "fail" })
       // count: the answer is still computed, since it may turn out to be none.
-      : (v) => ({ k: "let", i: g.locals.push(e.bt) - 1, value: v, body: set({ k: "op", op: "add", args: [got, { k: "num", v: 1 }] }, { k: "fail" }) });
-    const start: SExpr = e.kind === "count" ? { k: "num", v: 0 } : e.kind === "all" ? made(NIL, []) : { k: "zero", t: acc };
+      : (v) => ({ k: "let", i: g.locals.push(e.bt) - 1, value: v, body: set(countPlusOne(acc, got), { k: "fail" }) });
+    const start: SExpr = e.kind === "count" ? countOf(acc, 0) : e.kind === "all" ? made(NIL, []) : { k: "zero", t: acc };
     const run = cps(e.body, { gen: keep }, false, g), r = g.locals.push("i32") - 1;
     const back: SExpr = { k: "call", fn: e.kind === "all" ? reverse(d) : -1, args: [got, made(NIL, [])], tail: false };
     const [ok, otherwise]: [SExpr, SExpr] = e.kind === "first" ? [got, dflt()] : e.kind === "optional" ? [made(SOME, [got]), made(NONE, [])] : e.kind === "all" ? [back, back] : [got, got];

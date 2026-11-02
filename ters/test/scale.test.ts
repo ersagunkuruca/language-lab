@@ -9,7 +9,7 @@ import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
 import { equal, runMain, toList } from "../src/lang/run.ts";
-import { CONS, NIL, S } from "../src/lang/std.ts";
+import { CONS, NIL, S, SHOW_ANY } from "../src/lang/std.ts";
 import { B } from "../src/prelude.ts";
 import { slice } from "../src/lang/text.ts";
 
@@ -77,8 +77,8 @@ test("Choice over a long list: count, all and first", () => {
     const evens = () => k.thunk(() => k.let("x", k.call(S.oneOf, k.call(S.range, k.lit(N))), (x) =>
       k.if(k.call(S.equal, k.call(S.mod, x, k.lit(2)), k.lit(0)), x, k.call(S.fail))));
     k.define(main, k.thunk(() => k.seq(
-      k.call(S.print, k.call(S.show, k.call(S.count, evens()))),
-      k.call(S.print, k.call(S.show, k.call(S.count, k.thunk(() => k.call(S.oneOf, k.call(S.all, pick())))))),
+      k.call(S.print, k.call(SHOW_ANY, k.call(S.count, evens()))),
+      k.call(S.print, k.call(SHOW_ANY, k.call(S.count, k.thunk(() => k.call(S.oneOf, k.call(S.all, pick())))))),
       // the last element, found by failing through all the others
       k.call(S.print, k.call(S.show, k.call(S.first, k.thunk(() => k.let("x", k.call(S.oneOf, k.call(S.range, k.lit(N))), (x) =>
         k.if(k.call(S.equal, x, k.lit(N - 1)), x, k.call(S.fail)))), k.thunk(() => k.lit(-1))))),
