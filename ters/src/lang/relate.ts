@@ -59,7 +59,7 @@ import { children, dependencies, ownerOfTypeParts, subtree } from "../model.ts";
 import { derivativeLambda, gradientLambda } from "./derive.ts";
 import { fieldShapes, look, type TypeEnv } from "./nested.ts";
 import { B, impl } from "../prelude.ts";
-import { close, DEF_VALUE, fromList, META, sameNumber, equal as valueEqual, showValue, compareValues, variantOrder, ORDER_VALUES, type Data, type Value } from "./run.ts";
+import { close, DEF_VALUE, fromList, makeRunner, META, sameNumber, equal as valueEqual, showValue, compareValues, variantOrder, ORDER_VALUES, type Data, type Value } from "./run.ts";
 import { NUMERIC, relationFor } from "./equations.ts";
 import { analyzer, type Choice, type Exec, type Fn, type Mode, type Plan } from "./modes.ts";
 import { seededGenerator } from "./random.ts";
@@ -757,7 +757,7 @@ function solveFraction(op: FractionOp, at: number, xs: (Q | undefined)[]): Q | n
 // that reads a slider with inverse(show, …) relates once per input, so a
 // program's are kept (as equations.ts keeps its relations). Spacetime's
 // sliders spent about 60 ms an input here.
-const prepared = new WeakMap<Code, { code: Code; owner: Map<Id, Id> }>();
+const prepared = new WeakMap<Code, { code: Code; owner: Map<Id, Id>; runner?: ReturnType<typeof makeRunner> | null }>();
 
 export function interpreter(given: Code, opts: Options = {}) {
   let ready = prepared.get(given);
@@ -1116,6 +1116,34 @@ export function interpreter(given: Code, opts: Options = {}) {
   }
 
   // mode: the mode the plan says the function runs in, when it says.
+  // A gradient whose function and point are both known is a value, worked
+  // out forward by the evaluator: the same derivative code (derive.ts), at
+  // its speed rather than a search's (C83: the ray marcher's normal through
+  // a PGA motor took relate about 7,500 steps and 9 s). Null when anything
+  // in it is still unknown, or the evaluator can't be had.
+  function gradientForward(g: Closure, p: Term, s: State): Value[] | null {
+    const point = toValue(deep(p, s));
+    if (point === undefined) return null;
+    const env = new Map<Id, Value>();
+    for (const [b, t] of g.env) {
+      let v: Value | undefined;
+      try { v = toValue(deep(t as Term, s)); } catch (e) { if (e instanceof NotInvertible) return null; throw e; }
+      if (v === undefined) return null;
+      env.set(b, v);
+    }
+    const prep = ready!;
+    if (prep.runner === undefined) {
+      try { prep.runner = makeRunner(code, infer(code), { print: () => {} }); } catch { prep.runner = null; }
+    }
+    const r = prep.runner;
+    if (!r) return null;
+    try {
+      const out: Value[] = [];
+      for (const fn of r.ev(g.lambda, env)) for (const d of r.call(r.value(S.gradient), fn)) for (const v of r.call(d, point)) out.push(v);
+      return out;
+    } catch { return null; }
+  }
+
   function apply(f: Term, args: Term[], out: Term, mode?: Mode): Goal {
     // Functions can't be guessed: wait until it's known which one this is.
     if (f instanceof LVar) return wait({ k: "later", ready: (s) => !(walk(f, s) instanceof LVar), then: (s) => apply(walk(f, s), args, out, mode)(s), text: "call", on: [f] });
@@ -1130,6 +1158,8 @@ export function interpreter(given: Code, opts: Options = {}) {
       return wait({
         k: "later", text: "gradient", on: [args[0]], ready: (s) => !(walk(args[0], s) instanceof LVar), then: (s) => {
           const p = walk(args[0], s);
+          const forward = gradientForward(g, p, s);
+          if (forward) return disj(...forward.map((v) => eq(out, fromValue(v))))(s);
           const lambda = typeof p === "number" ? derivativeLambda(code, { lambda: g.lambda }) : isData(p) ? gradientLambda(code, { lambda: g.lambda }, (p as DataT).tag) : null;
           if (!lambda) throw new NotInvertible("gradient is taken at a record of Float64s");
           return apply({ k: "closure", lambda, env: g.env }, args, out)(s);
