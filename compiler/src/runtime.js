@@ -409,6 +409,10 @@ export function $perform(effect, op, args) {
     try { v = answerByShapes(hostOps[op], hostAnswers, op, args); } catch (e) { return $perform(ABORT, ABORT_OP, [e.message]); }
     return v;
   }
+  // Console's, Files' and Network's operations performed by name (L145):
+  // the world answers them as it answers the builtins that perform them.
+  const builtin = worldBuiltin[op];
+  if (builtin) return builtin(...args);
   throw new Error(`nothing handles ${op}`);
 }
 // The host's answers (hosts/js.js) and what the border needs of each
@@ -695,6 +699,12 @@ export const $io = {
   fileExists: acting(IO.fileExists, (p) => $bool(!!world.fileExists?.(p))),
   listFolder: acting(IO.listFolder, (p) => $toList(fallible('listFolder')(p))),
   fetchText: acting(IO.fetchText, fallible('fetchText')),
+};
+// Each world operation by its builtin, for an operation performed by name
+// that nothing handles ($perform).
+const worldBuiltin = {
+  [WORLD_OPS[S.print]]: (t) => $print(t),
+  ...Object.fromEntries(Object.entries(IO).filter(([, b]) => WORLD_OPS[b]).map(([k, b]) => [WORLD_OPS[b], (...a) => $io[k](...a)])),
 };
 
 // Cells' handler: one per program, or the one the host gives (a page that
