@@ -3767,13 +3767,18 @@ function traced(info: T.Info): Trace | null {
 // Values on the wires come from a run on the page's own thread, so one
 // on values nobody gave (main's, say) stops after TRACE_MS: Countdown's
 // solutions, opened with main's numbers, would otherwise hold the page for
-// the whole search (BACKLOG I23). Values you gave run to the end.
-const TRACE_MS = 200;
+// the whole search (BACKLOG I23). Values you gave, and a definition with
+// no inputs, get longer, GIVEN_MS (E207): one that loops is already kept
+// from running here (the termination check says it might not finish, and
+// that stays so), but one that finishes after minutes held the page, on
+// every version of the code.
+const TRACE_MS = 200, GIVEN_MS = 3000;
 function boundedTrace(info: T.Info, args: Value[]): Trace {
   const body = defBody(ui.def), copy = body ? mainCopies.get(doc.code)?.get(body.id) : undefined;
-  if (doc.examples?.[ui.def] || !(body as NodeOf<"lambda">).params.length) return trace(doc.code, info, ui.def, args, quietWorld(), undefined, !!copy);
-  const end = performance.now() + TRACE_MS;
-  const slow = () => Object.assign(new OutOfSteps(), { message: `it runs longer than the ${TRACE_MS} ms the graph waits; Run main runs it in full` });
+  const given = !!doc.examples?.[ui.def] || !(body as NodeOf<"lambda">).params.length;
+  if (given && info.divergent.has(ui.def)) return trace(doc.code, info, ui.def, args, quietWorld(), undefined, !!copy);
+  const ms = given ? GIVEN_MS : TRACE_MS, end = performance.now() + ms;
+  const slow = () => Object.assign(new OutOfSteps(), { message: `it runs longer than the ${given ? `${ms / 1000} s` : `${ms} ms`} the graph waits; Run main runs it in full` });
   return trace(doc.code, info, ui.def, args, quietWorld(), () => { if (performance.now() > end) throw slow(); }, !!copy);
 }
 
