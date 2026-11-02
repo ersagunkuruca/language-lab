@@ -291,6 +291,22 @@ test("typed ≠ and != read as not equal", async () => {
   assert.ok(!left.ok && /after \.head/.test(left.reason), !left.ok ? left.reason : "");
 });
 
+// A whole number written with a point is a Float64, and prints with its
+// point so it reads back the same (E192).
+test("typed 1500.0 is a Float64", async () => {
+  const { Lang } = await import("../src/lang/dsl.ts");
+  const { base, baseNames } = await import("../src/lang/load.ts");
+  const { NUMBER } = await import("../src/lang/types.ts");
+  const k = new Lang();
+  const f = k.def("f");
+  let hole = "";
+  k.define(f, k.fn([], () => (hole = k.hole())));
+  const code = base(k.code), names = baseNames(k.names);
+  const r = fillValue(code, names, infer(code, names), hole, "1500.0", f);
+  assert.ok(r.ok, !r.ok ? r.reason : "");
+  if (r.ok) assert.deepEqual(r.code.nodes[hole], { id: hole, kind: "lit", value: 1500, of: NUMBER });
+});
+
 // A field two types share, read on an input nothing has settled, isn't
 // chosen silently (E186): both readings are offered.
 test("typed field shared by two types offers each type", async () => {

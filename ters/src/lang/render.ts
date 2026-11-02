@@ -24,7 +24,7 @@ import { paramName } from "./refactor.ts";
 import { implementationOps, isOperation } from "./records.ts";
 import { partPort } from "./results.ts";
 import { chainOperands, CONS, FALSE, MAP as MAP_TYPE, NIL, PAIR_V, S, SET_TYPE, TRUE, tupleVariant } from "./std.ts";
-import { showIn } from "./types.ts";
+import { NUMBER, showIn } from "./types.ts";
 
 const SUB = "₀₁₂₃₄₅₆₇₈₉";
 const plain = /^[\p{L}_][\p{L}\p{N}_'′]*$/u;
@@ -205,7 +205,8 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
     switch (n.kind) {
       case "lit": {
         // A number written as text (1/2 at Rational) is a number.
-        if (typeof n.value !== "string" || n.of !== undefined) return atom(part("lit", [String(n.value)], id));
+        // A whole Float64 keeps its point, 1500.0, so it reads back as one (E192).
+        if (typeof n.value !== "string" || n.of !== undefined) return atom(part("lit", [n.of === NUMBER && Number.isInteger(n.value) ? `${n.value}.0` : String(n.value)], id));
         if (pane) { const l = litLabel(n.value); return atom(part("lit", [l.short], id, l.full)); }
         return atom(part("lit", [JSON.stringify(n.value)], id));
       }
