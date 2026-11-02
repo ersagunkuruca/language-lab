@@ -2193,10 +2193,15 @@ function typePicker(id: string, type: Id, names: Names, current: Id | null, chan
 // Run a top-level edit; `then` adjusts what's shown once it's in.
 // A call typed of a name nothing has yet (E180): a definition of that
 // name, its inputs named after what the call gives it (a name typed there,
-// or input 1, 2…), its body a hole. The typed text stays, and reads now.
+// or in1, in2…), its body a hole. The typed text stays, and reads now.
 function makeNamed(info: T.Info, name: string): HTMLElement {
   const ins = T.callInputs(ui.query, name) ?? [];
-  const params = ins.map((x, i) => (/^[\p{L}_][\p{L}\p{N}_' ]*$/u.test(x) && !ins.slice(0, i).includes(x) ? x : `input ${i + 1}`));
+  // A name typed there, or in1, in2… as Make a function names them: one
+  // word, so it reads without ‹ › (I143).
+  const named = ins.map((x, i) => /^[\p{L}_][\p{L}\p{N}_' ]*$/u.test(x) && !ins.slice(0, i).includes(x));
+  const unnamed = named.filter((n) => !n).length;
+  let k = 0;
+  const params = ins.map((x, i) => (named[i] ? x : unnamed > 1 ? `in${++k}` : "in"));
   const b = h("button", { class: "btn", type: "button" }, `Make a definition named ${name}`);
   b.title = `${name}(${params.join(", ")}), its body a hole to fill later; what's typed here then reads`;
   b.addEventListener("click", () => {
