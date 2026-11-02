@@ -55,6 +55,7 @@ import { infer, type Info } from "../../ters/src/lang/infer.ts";
 
 type Rho = Map<number, boolean>;
 const NO_LAT: Set<number> = new Set();
+const NO_SEMI: Set<string> = new Set();
 const NO_AT: Map<number, Type> = new Map();
 type K = (value: string) => string;
 
@@ -600,7 +601,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // values of them (`compared`), so `compare` there is at those types
   // (GAPS.md M4): the tree jobs get a copy per key type. Specializing by
   // type as MLton does for every definition, here only where it compares.
-  interface Spec { lat: Set<number>; def: Id; rho: Rho; name: string; streams: boolean; plain: Set<Id>; bool: boolean; single: boolean; cps: boolean; arr: Map<Id, "front" | "back" | "view">; own: boolean; out: boolean; into: Into | null; sus: boolean; at: Map<number, Type> }
+  interface Spec { lat: Set<number>; def: Id; rho: Rho; name: string; streams: boolean; plain: Set<Id>; semi: Set<Id>; bool: boolean; single: boolean; cps: boolean; arr: Map<Id, "front" | "back" | "view">; own: boolean; out: boolean; into: Into | null; sus: boolean; at: Map<number, Type> }
   // A copy that writes its list into an array it is handed (`$into`): the
   // list itself, or the list field `k` of a record with two fields, when it
   // returns the other one (GAPS.md P4).
@@ -746,8 +747,11 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // Choice-typed parameters may give more. A definition that's still being
   // looked at (recursion) counts as one for itself, and as many for the
   // others in its cycle.
-  const singles = new Map<Id, boolean>();
-  const looking = new Set<Id>();
+  const singles = new Map<string, boolean>();
+  const looking = new Set<string>();
+  // Function parameters whose calls count as one answer, while a copy for
+  // them is looked at (`semi`, C84).
+  let trusted: Set<Id> = NO_SEMI;
   const STREAMING = new Set<Id>([S.oneOf, S.fuel, S.first, S.seeded]);
   // Does `id` give one answer or none? `def`: the definition being looked
   // at, whose calls of itself count as one.
@@ -765,13 +769,15 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           const f = code.nodes[n.fn];
           if (f.kind === "lambda") return one(f.body);
           if (f.kind !== "ref") return one(n.fn) && noChoice(ty(n.fn));
+          if (trusted.has(f.target)) return true;
           const t = code.nodes[f.target];
           if (t.kind === "variant" || t.kind === "field") return true;
           if (t.kind === "builtin") return !STREAMING.has(f.target);
           if (t.kind === "def") {
             if (f.target === def) return true;
             const scheme = info.schemes.get(f.target)!.type;
-            return noChoice(scheme) || ownsNoChoice(scheme) || (isFnDef(f.target) && singleDef(f.target));
+            const semi = semiArgs(n, def, trusted);
+            return noChoice(scheme) || ownsNoChoice(scheme) || (isFnDef(f.target) && (singleDef(f.target) || (!!semi && singleDef(f.target, semi))));
           }
           return noChoice(ty(n.fn));
         }
@@ -789,20 +795,44 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     const has = (x: Type): boolean => x.t === "fn" ? x.eff.tail === v || [...x.params, x.ret].some(has) : x.t === "con" && x.args.some(has);
     return ![...t.params, t.ret].some(has);
   }
-  function singleDef(def: Id): boolean {
-    if (singles.has(def)) return singles.get(def)!;
-    if (looking.has(def)) return false;
-    looking.add(def);
-    const r = isFnDef(def) && oneAnswer(node<"lambda">(node<"def">(def).body!).body, def);
-    looking.delete(def);
-    singles.set(def, r);
+  // `semi`: parameters given functions with at most one answer (C84), whose
+  // calls count as one.
+  function singleDef(def: Id, semi: Set<Id> = NO_SEMI): boolean {
+    const key = semi.size ? `${def}|${[...semi].sort().join(",")}` : def;
+    if (singles.has(key)) return singles.get(key)!;
+    if (looking.has(key)) return false;
+    looking.add(key);
+    const was = trusted;
+    trusted = semi;
+    let r: boolean;
+    try { r = isFnDef(def) && oneAnswer(node<"lambda">(node<"def">(def).body!).body, def); } finally { trusted = was; }
+    looking.delete(key);
+    singles.set(key, r);
     return r;
+  }
+  // A call's function parameters given functions with at most one answer:
+  // a lambda written in place whose body has one, or a parameter of the
+  // copy being written that is one of those itself.
+  function semiArgs(n: NodeOf<"call">, def: Id | null, given: Set<Id>): Set<Id> | null {
+    const f = code.nodes[n.fn];
+    if (reflective || f?.kind !== "ref" || !isFnDef(f.target)) return null;
+    const params = node<"lambda">(node<"def">(f.target).body!).params, called = semiParams(f.target);
+    const out = new Set<Id>();
+    n.args.forEach((a, i) => {
+      const arg = code.nodes[a], t = ty(a);
+      if (t.t !== "fn" || !called.has(params[i])) return;
+      if (arg.kind === "ref" && given.has(arg.target)) { out.add(params[i]); return; }
+      const effs = sub.resolveRow(t.eff).effs;
+      if (!effs.includes(CHOICE) || effs.some((e) => e !== CHOICE)) return;
+      if (arg.kind === "lambda" && oneAnswer(arg.body, def)) out.add(params[i]);
+    });
+    return out.size ? out : null;
   }
 
   // `out`: a single-answer copy whose answers are all one record, which
   // puts the record's fields in `$got` and returns whether it has one
   // (GAPS.md G13 again): its caller takes them apart straight away.
-  function spec(def: Id, rho: Rho, plain: Set<Id> = new Set(), cps = false, arr: Map<Id, "front" | "back" | "view"> = new Map(), own = false, out = false, into: Into | null = null, lat: Set<number> = NO_LAT, at: Map<number, Type> = NO_AT): Spec {
+  function spec(def: Id, rho: Rho, plain: Set<Id> = new Set(), cps = false, arr: Map<Id, "front" | "back" | "view"> = new Map(), own = false, out = false, into: Into | null = null, lat: Set<number> = NO_LAT, at: Map<number, Type> = NO_AT, semi: Set<Id> = NO_SEMI): Spec {
     const scheme = info.schemes.get(def)!;
     const on = scheme.rows.filter((r) => rho.get(r)).sort((a, b) => a - b);
     lat = new Set(scheme.rows.filter((r) => lat.has(r)));
@@ -819,7 +849,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       };
       pair(scheme.type, ty(node<"def">(def).body!));
     }
-    const key = `${def}|${on.join(",")}|${[...plain].sort().join(",")}${cps ? "|k" : ""}${arr.size ? `|a:${[...arr].map(([p, k]) => `${p}${k}`).sort().join(",")}` : ""}${own ? "|o" : ""}${out ? "|f" : ""}${into ? "|i" : ""}${lat.size ? `|l:${[...lat].sort((a, b) => a - b).join(",")}` : ""}${at.size ? `|t:${JSON.stringify(scheme.vars.filter((v) => at.has(v)).map((v) => at.get(v)))}` : ""}`;
+    const key = `${def}|${on.join(",")}|${[...plain].sort().join(",")}${cps ? "|k" : ""}${arr.size ? `|a:${[...arr].map(([p, k]) => `${p}${k}`).sort().join(",")}` : ""}${own ? "|o" : ""}${out ? "|f" : ""}${into ? "|i" : ""}${lat.size ? `|l:${[...lat].sort((a, b) => a - b).join(",")}` : ""}${at.size ? `|t:${JSON.stringify(scheme.vars.filter((v) => at.has(v)).map((v) => at.get(v)))}` : ""}${semi.size ? `|s:${[...semi].sort().join(",")}` : ""}`;
     if (!specs.has(key)) {
       const base = names[def] ?? def;
       const streams = streamsFn(scheme.type, rho), t = scheme.type;
@@ -828,8 +858,8 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       // waits, told apart by $isLater; whatever walks it passes the waits on.
       if (sus && streams && (cps || out || into || own || arr.size)) throw notYet(`${base} has Choice and performs an operation answered later`);
       const bool = !sus && !reflective && !streams && isFnDef(def) && t.t === "fn" && isBool(t.ret);
-      const single = !reflective && streams && !sus && isFnDef(def) && singleDef(def);
-      const s: Spec = { def, rho, plain, name: ident(key, `${base}${on.length ? "$choice" : ""}${plain.size ? "$plain" : ""}${arr.size ? "$arr" : ""}${own ? "$own" : ""}${cps ? "$k" : ""}${out ? "$fields" : ""}${into ? "$into" : ""}${at.size ? `$${scheme.vars.flatMap((v) => (at.has(v) ? [typeName(at.get(v)!)] : [])).join("_")}` : ""}`), streams, bool, single, cps, arr, own, out, into, sus, lat, at: typedAt(def, at) };
+      const single = !reflective && streams && !sus && isFnDef(def) && singleDef(def, semi);
+      const s: Spec = { def, rho, plain, semi, name: ident(key, `${base}${on.length ? "$choice" : ""}${plain.size ? "$plain" : ""}${semi.size ? "$one" : ""}${arr.size ? "$arr" : ""}${own ? "$own" : ""}${cps ? "$k" : ""}${out ? "$fields" : ""}${into ? "$into" : ""}${at.size ? `$${scheme.vars.flatMap((v) => (at.has(v) ? [typeName(at.get(v)!)] : [])).join("_")}` : ""}`), streams, bool, single, cps, arr, own, out, into, sus, lat, at: typedAt(def, at) };
       if (out && !constants.includes(GOT)) constants.push(GOT);
       specs.set(key, s);
       queue.push(s);
@@ -841,7 +871,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // as the definition's own effect (not inside a parameter) are pure: a
   // definition that doesn't do Choice itself can't start doing it because
   // a caller does. The others follow the argument passed for them.
-  function specAt(ref: Id, def: Id, rho: Rho, plain?: Set<Id>, arr?: Map<Id, "front" | "back" | "view">, own = false, lat: Set<number> = NO_LAT, callerAt: Map<number, Type> = NO_AT, quietParams?: Set<Id>): Spec {
+  function specAt(ref: Id, def: Id, rho: Rho, plain?: Set<Id>, arr?: Map<Id, "front" | "back" | "view">, own = false, lat: Set<number> = NO_LAT, callerAt: Map<number, Type> = NO_AT, quietParams?: Set<Id>, semi: Set<Id> = NO_SEMI): Spec {
     const scheme = info.schemes.get(def)!;
     const inner = new Set<number>();
     const collect = (t: Type, top: boolean) => {
@@ -902,12 +932,35 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       };
       bindVars(scheme.type, ty(ref));
     }
-    return spec(def, out, plain, false, arr, own, false, null, waits, at);
+    return spec(def, out, plain, false, arr, own, false, null, waits, at, semi);
   }
 
   // The parameters of a function definition that are only ever called,
   // never passed on or stored, so a copy may call them plainly.
   const onlyCalled = new Map<Id, Set<Id>>();
+  // The parameters of a function definition that are only called, or
+  // passed on to its own calls of itself in the same place: a copy may
+  // hand them a function that returns its answer or $no (C84, `map`'s).
+  const calledOrPassed = new Map<Id, Set<Id>>();
+  function semiParams(def: Id): Set<Id> {
+    if (!calledOrPassed.has(def)) {
+      const lam = node<"lambda">(node<"def">(def).body!);
+      const ok = new Set(lam.params), fine = new Set<Id>();
+      for (const id of subtree(code, lam.body)) {
+        const n = code.nodes[id];
+        if (n.kind !== "call") continue;
+        fine.add(n.fn);
+        const f = code.nodes[n.fn];
+        if (f?.kind === "ref" && f.target === def) n.args.forEach((a, i) => { const r = code.nodes[a]; if (r?.kind === "ref" && r.target === lam.params[i]) fine.add(a); });
+      }
+      for (const id of subtree(code, lam.body)) {
+        const n = code.nodes[id];
+        if (n.kind === "ref" && ok.has(n.target) && !fine.has(id)) ok.delete(n.target);
+      }
+      calledOrPassed.set(def, ok);
+    }
+    return calledOrPassed.get(def)!;
+  }
   function calledParams(def: Id): Set<Id> {
     if (!onlyCalled.has(def)) {
       const lam = node<"lambda">(node<"def">(def).body!);
@@ -1301,6 +1354,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     // Lambdas here that are typed Choice but never choose, and are passed
     // where the callee's copy calls them plainly.
     const plainHere = new Set<Id>();
+    // Lambdas here that choose but have at most one answer, passed where
+    // the callee's copy calls them as such (C84).
+    const semiHere = new Set<Id>();
     // Is the code being written now somewhere a closure can stand for the
     // rest of the search? Then direct calls of searches use their `$k` copy.
     // True in a `$k` body and in a handler written in place; false inside
@@ -1366,7 +1422,15 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           else if (viewable.has(params[i]) && viewArg(a)) arr.set(params[i], "view");
         });
       }
-      const s = specAt(f.id, f.target, rho, plain, arr, !sp.streams && ![...arr.values()].includes("view") && ownCall(n, sp.own), sp.lat, sp.at, new Set(quietArgs.keys()));
+      // Function parameters given lambdas that choose but have at most one
+      // answer, or this copy's own such parameters: the copy calls them as
+      // functions that return the answer or $no (C84).
+      const semi = new Set([...(semiArgs(n, sp.def, sp.semi) ?? [])].filter((p) => !plain.has(p) && !quietArgs.has(p)));
+      if (semi.size) {
+        const params = node<"lambda">(node<"def">(f.target).body!).params;
+        n.args.forEach((a, i) => { if (semi.has(params[i]) && code.nodes[a].kind === "lambda") semiHere.add(a); });
+      }
+      const s = specAt(f.id, f.target, rho, plain, arr, !sp.streams && ![...arr.values()].includes("view") && ownCall(n, sp.own), sp.lat, sp.at, new Set(quietArgs.keys()), semi);
       // A lambda that doesn't choose, given where the copy chose no Choice
       // after all (C80), is a plain function.
       if (quietArgs.size) {
@@ -1796,6 +1860,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     function plainLambda(n: NodeOf<"lambda">): string {
       const ps = n.params.map(local).join(", ");
       if (laterFn(ty(n.id), sp.lat)) return `(function* (${ps}) {\n${scoped(false, () => inGen(true, () => ret(n.body)))}\n})`;
+      if (semiHere.has(n.id)) return `((${ps}) => {\n${scoped(false, () => st(n.body, (v) => `return ${v};`))}\nreturn $no;\n})`;
       if (streamsFn(ty(n.id), rho) && !plainHere.has(n.id)) return `(function* (${ps}) {\n${scoped(false, () => st(n.body, (v) => `yield ${v};`))}\n})`;
       const b = code.nodes[n.body].kind;
       const plainJs = b === "match" || b === "fold" || (b === "call" && code.nodes[node<"call">(n.body).fn].kind === "lambda") ? `((${ps}) => {\n${ret(n.body)}\n})` : `((${ps}) => ${ex(n.body)})`;
@@ -2308,7 +2373,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       if (!g || code.nodes[g]?.kind !== "def" || !sameInto(intoShape(g), shape) || !intoGain(g) || callStreams(n)) return null;
       const c = defCall(n);
       if (c.streams || c.bool) return null;
-      return spec(c.def, c.rho, c.plain, false, c.arr, false, false, shape, c.lat, keyAt(c));
+      return spec(c.def, c.rho, c.plain, false, c.arr, false, false, shape, c.lat, keyAt(c), c.semi);
     }
     // A call that writes into the array `d`: a jump if it is this copy.
     function intoCallJs(n: NodeOf<"call">, t: Spec, tail: boolean, d: string, pre = ""): string {
@@ -2923,9 +2988,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           const r = temp("r");
           const rec = callee?.single ? unpackOf(callee) : null;
           if (callee && rec) {
-            const viaF = spec(callee.def, callee.rho, callee.plain, false, callee.arr, callee.own, true, null, callee.lat, keyAt(callee));
+            const viaF = spec(callee.def, callee.rho, callee.plain, false, callee.arr, callee.own, true, null, callee.lat, keyAt(callee), callee.semi);
             out = `if (${viaF.name}(${args.join(", ")})) {\n${fromGot(rec, r, k)}\n}`;
-          } else if (callee?.single || (kind === "builtin" && (oneOf(target!) || NO_ANSWER_JS[target!]))) out = `const ${r} = ${c};\nif (${r} !== $no) {\n${k(r)}\n}`;
+          } else if (callee?.single || (kind === "builtin" && (oneOf(target!) || NO_ANSWER_JS[target!])) || (!!target && sp.semi.has(target))) out = `const ${r} = ${c};\nif (${r} !== $no) {\n${k(r)}\n}`;
           else if (callee?.sus) {
             // A search that waits: its waits go on to whoever answers them,
             // and the answer comes back in.
@@ -2933,7 +2998,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
             const g = temp("g"), s = temp("s"), a = temp("a");
             out = `{\nconst ${g} = ${c};\nlet ${a};\nfor (let ${s} = ${g}.next(); !${s}.done; ${s} = ${g}.next(${a})) {\n${a} = undefined;\nif ($isLater(${s}.value)) {\n${a} = yield ${s}.value;\ncontinue;\n}\nconst ${r} = ${s}.value;\n${k(r)}\n}\n}`;
           } else if (callee && cps) {
-            const viaK = spec(callee.def, callee.rho, callee.plain, true, callee.arr, false, false, null, callee.lat, keyAt(callee)), rec = unpackOf(viaK);
+            const viaK = spec(callee.def, callee.rho, callee.plain, true, callee.arr, false, false, null, callee.lat, keyAt(callee), callee.semi), rec = unpackOf(viaK);
             out = `if (${viaK.name}(${[...args, rec ? unpacked(rec, r, k) : `(${r}) => {\n${k(r)}\n}`].join(", ")})) return true;`;
           } else out = `for (const ${r} of ${c}) {\n${k(r)}\n}`;
         } else out = guarded(n.id, c, k);
