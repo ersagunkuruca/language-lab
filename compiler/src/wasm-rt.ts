@@ -241,12 +241,21 @@ const R: Record<string, Omit<RtFn, "name">> = {
       i32.xor`,
   },
   "rand.seed": {
-    params: [["seed", "f64"]], result: "f64", locals: [["z", "i32"]], uses: ["rand.mix"],
+    params: [["seed", "f64"]], result: "f64", locals: [["z", "i32"], ["y", "f64"]], uses: ["rand.mix"],
     body: `
+      ;; JavaScript's ToUint32 of the floor: y − ⌊y / 2^32⌋·2^32, exact
+      ;; for every Float64 (C109).
       local.get $seed
       f64.floor
-      i64.trunc_sat_f64_s
-      i32.wrap_i64
+      local.tee $y
+      local.get $y
+      f64.const 4294967296
+      f64.div
+      f64.floor
+      f64.const 4294967296
+      f64.mul
+      f64.sub
+      i32.trunc_sat_f64_u
       i32.const -1640531527
       i32.add
       local.tee $z
