@@ -2332,6 +2332,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     }
     // A call of this very specialization of the definition.
     let jumps = false;
+    const singleTails = new Set<Id>();
     // Where the answer goes, when the definition fills holes (G22): the
     // last cell made and which of its fields is empty.
     let holes: { at: string; i: string } | null = null;
@@ -2987,6 +2988,13 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         if (callStreams(n)) {
           const r = temp("r");
           const rec = callee?.single ? unpackOf(callee) : null;
+          if (callee && callee.name === sp.name && singleTails.has(n.id)) {
+            // A one-answer copy calling itself last: its answer is the
+            // call's, none included, so the call is a jump (C85).
+            jumps = true;
+            const spend = spends(sp.def) ? "$spendOrThrow();\n" : "";
+            return `${spend}${paramNames(sp).map((p, i) => `${p}$in = ${loopArgs(n, sp)[i]};`).join("\n")}\ncontinue;`;
+          }
           if (callee && rec) {
             const viaF = spec(callee.def, callee.rho, callee.plain, false, callee.arr, callee.own, true, null, callee.lat, keyAt(callee), callee.semi);
             out = `if (${viaF.name}(${args.join(", ")})) {\n${fromGot(rec, r, k)}\n}`;
@@ -3096,7 +3104,24 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         };
         return `${header} (its ${names[rec] ?? "answer"}'s fields in \`$got\`)\nfunction ${sp.name}(${ps}) {\n${st(lam.body, leaf)}\nreturn false;\n}`;
       }
-      if (sp.single) return `${header}\nfunction ${sp.name}(${ps}) {\n${st(lam.body, (v) => `return ${v};`)}\nreturn $no;\n}${meta}`;
+      if (sp.single) {
+        // Calls of itself in tail position: reached through lets and
+        // matches whose values make no choice, so no loop of the search's
+        // own is around them and failing there ends the copy too (C85).
+        const tails = (id: Id) => {
+          const x = code.nodes[id];
+          if (x.kind === "call" && code.nodes[x.fn].kind === "lambda") { if (!x.args.some(streamy)) tails(node<"lambda">(x.fn).body); }
+          else if (x.kind === "match") { if (!handlerOf(x) && !streamy(x.scrutinee)) { x.arms.forEach((a) => tails(node<"arm">(a).body)); if (x.otherwise) tails(x.otherwise); } }
+          else if (x.kind === "call" && refTarget(x.fn) === sp.def && !x.args.some(streamy)) singleTails.add(id);
+        };
+        tails(lam.body);
+        jumps = false;
+        const stmts = `${st(lam.body, (v) => `return ${v};`)}\nreturn $no;`;
+        if (!jumps) return `${header}\nfunction ${sp.name}(${ps}) {\n${stmts}\n}${meta}`;
+        const ins = paramNames(sp).map((p) => `${p}$in`).join(", ");
+        const fresh = lam.params.length ? `const ${paramNames(sp).map((p) => `${p} = ${p}$in`).join(", ")};\n` : "";
+        return `${header}\nfunction ${sp.name}(${ins}) {\nfor (;;) {\n${fresh}${stmts}\n}\n}${meta}`;
+      }
       if (sp.cps) {
         const k = temp("k");
         const rec = unpackOf(sp);
