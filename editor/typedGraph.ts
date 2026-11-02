@@ -857,7 +857,10 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     // A case that only takes one of its fields apart further draws as one
     // row per inner case, the way the text reads it: one port and one frame
     // per row, its names all on that frame's left (PATTERNS.md).
-    const all = n.kind === "match" && !handles && !isIf && !apart && !hooks.tree?.has(id) ? matchRows(code, info, n) : null;
+    // A match on values (L164c): an input per value, labelled with it (E225).
+    const valueOf = (arm: NodeOf<"arm">) => { const v = arm.value ? node(arm.value) : null; return v?.kind === "lit" ? litLabel(v.value, 18).short : null; };
+    const byValue = armNodes.some((a) => a.value);
+    const all = n.kind === "match" && !handles && !isIf && !apart && !byValue && !hooks.tree?.has(id) ? matchRows(code, info, n) : null;
     const rows = all && flattened(all) ? all : null;
     for (const r of rows ?? []) {
       const pat = patternText(r.pat, name, name);
@@ -869,7 +872,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
       const results = arm.results.filter((r): r is Id => r !== null);
       const lam = from?.lams.get(arm.id);
       const params = [...arm.binds, ...results, ...(lam?.params ?? [])];
-      labels.push(isIf ? (arm.variant === TRUE ? "then" : "else") : apart ? "then" : name(arm.variant));
+      labels.push(isIf ? (arm.variant === TRUE ? "then" : "else") : apart ? "then" : valueOf(arm) ?? name(arm.variant));
       inputs.push(arm.id);
       // An operation answered later binds the rest after its inputs, read as
       // the text reads it: (item) with rest (ANSWERED-LATER.md).
