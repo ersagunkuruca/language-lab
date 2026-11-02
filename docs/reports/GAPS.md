@@ -1697,7 +1697,9 @@ fail (`row of`), where the search is right but still a frame per item.
 *Fix:* type-directed: a call whose function argument's row has no Choice
 is compiled in its plain mode whatever handler it sits under; and make
 `map$choice`'s one-answer case a loop. *Measured:* every run past 1000
-rows fails today.
+rows fails today. *Fixed (C80):* the copy is plain when
+the lambda makes no choice; 3,000 rows (18,000 cells) run. `map$choice`'s
+one-answer case is still a frame per item where the lambda can fail.
 
 **S2. A pure call that doesn't depend on a lambda's input is worked out
 again on every call of the lambda (perf: the program quadratic).** `grid`

@@ -41,3 +41,11 @@ test("sheet: a made-up sheet, no arguments, a missing file, a line without =", (
   assert.equal(all(["none.txt"], {}).code, 1);
   assert.equal(all(["x.txt"], { "x.txt": "A1 = 1\nA2 2\n" }).code, 1);
 });
+
+// C80: `width of`'s map (a lambda that makes no choice, inside `first`)
+// was compiled as a search, a JS frame per item, and ran out of stack from
+// about 6,000 cells. Its copy is plain now; 1,000 rows are 6,000 cells.
+test("sheet: compiled, 1,000 rows (6,000 cells) print what the ideal prints", () => {
+  const files = { "s.txt": sheetText(1000) };
+  assert.deepEqual(w["compiled, chosen"](["s.txt"], files), w.ideal(["s.txt"], files));
+});
