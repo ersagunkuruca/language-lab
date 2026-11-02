@@ -240,6 +240,8 @@ const styles: Record<StyleName, Style> = { math: mathStyle as unknown as Style, 
 // v5. Since free placement, layout.at holds positions; the offsets older
 // versions kept in layout.positions are ignored.
 const STORE = "projectional-editor-v5";
+// A program's own ids: the library's are dotted (`std.map`) or `@`-named.
+const own = (id: Id) => !id.includes(".") && !id.startsWith("@");
 
 // What every program is merged onto: the builtins, the standard library
 // and the modules (src/lang/library.ts). A file holds only what's on top.
@@ -344,7 +346,6 @@ if (!EMBED && isExample(ASKED.get("program") ?? "")) doc = docs[ASKED.get("progr
 // changed isn't kept at all, so it's always the one shipped; one you did
 // change is kept unless it uses something the library no longer has.
 function onToday(d: Doc): Doc {
-  const own = (id: Id) => !id.includes(".") && !id.startsWith("@");
   // Credits kept apart, as the editor once did, are the program's comment now.
   const { credits, ...rest } = d as Doc & { credits?: string[] };
   if (credits?.length) d = { ...rest, comments: { ...d.comments, [PROGRAM]: [d.comments[PROGRAM], ...credits].filter(Boolean).join("\n") } };
@@ -490,10 +491,23 @@ function commit(next: Partial<Doc>, touched: string[], note: string) {
   render();
 }
 
+// What a doc keeps in this browser: its own nodes only. The library under
+// them (1.4 M characters) is put back by onToday when it's read, so a copy
+// of it in every saved doc only filled the store (E197). One per version.
+const keptCode = new WeakMap<Code, Code>();
+const kept = (d: Doc): Doc => {
+  let code = keptCode.get(d.code);
+  if (!code) keptCode.set(d.code, (code = { nodes: Object.fromEntries(Object.entries(d.code.nodes).filter(([id]) => own(id))), defs: d.code.defs.filter(own) }));
+  return { ...d, code };
+};
+const UNSAVED = "Not kept in this browser: its storage is full. Save file keeps this program; deleting a program you no longer need makes room.";
+
 function save() {
   docs[doc.program] = doc;
   if (EMBED) return;
-  try { localStorage.setItem(STORE, JSON.stringify({ current: doc.program, docs, held })); } catch {}
+  const all = Object.fromEntries(Object.entries(docs).map(([k, d]) => [k, kept(d)]));
+  try { localStorage.setItem(STORE, JSON.stringify({ current: doc.program, docs: all, held })); }
+  catch { ui.note = ui.note ? `${ui.note} ${UNSAVED}` : UNSAVED; }
 }
 
 function switchProgram(p: Program) {
