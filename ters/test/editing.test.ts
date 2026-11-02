@@ -152,6 +152,11 @@ async function implementInterface() {
   await p.locator(".nav-row", { hasText: "+ New definition" }).click();
   await p.locator('[data-panel="node"]').click();
   await p.locator('[data-set="new-kind"][data-value="type"]').click();
+  // A type named like the library's is refused at the name (E217).
+  await p.locator("#f-def-name").fill("Event");
+  await p.locator("#f-def-case").fill("arrive");
+  await p.locator("button", { hasText: "Create" }).click();
+  if (!/Refused: the library has a type named Event/.test(await p.locator(".status").innerText())) errors.push(`${where}: a new type named Event isn't refused`);
   await p.locator("#f-def-name").fill("Wave");
   await p.locator("#f-def-case").fill("wave");
   await p.locator("button", { hasText: "Create" }).click();

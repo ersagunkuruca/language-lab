@@ -2219,7 +2219,14 @@ const typeText = (tid: Id, names: Names): string => {
 // adds a first choice of no type at all; a type the pickers can't show
 // (a function's) is kept until another is picked.
 function typePicker(id: string, type: Id, names: Names, current: Id | null, changed: () => void, none?: string, variant?: Id) {
-  const heads = Top.typeHeads(doc.code, type, variant);
+  // The program's own types before the library's, and a name both have
+  // marked on the library's (E217).
+  const all = Top.typeHeads(doc.code, type, variant), mine = (x: { target: Id }) => !LIBRARY.code.nodes[x.target];
+  const heads = [...all.filter(mine), ...all.filter((x) => !mine(x))];
+  const label = (x: { target: Id }) => {
+    const n = names[x.target] ?? x.target;
+    return !mine(x) && heads.some((y) => y !== x && (names[y.target] ?? y.target) === n) ? `${n} · library` : n;
+  };
   const specOf = (t: Id): Top.TypeSpec | null => {
     const n = node(t);
     if (n.kind !== "tref") return null;
@@ -2232,7 +2239,7 @@ function typePicker(id: string, type: Id, names: Names, current: Id | null, chan
     const select = h("select", sid ? { id: sid } : { "aria-label": "argument" },
       top && none ? h("option", { value: "none", selected: !current }, none) : null,
       odd ? h("option", { value: "kept", selected: true }, odd) : null,
-      ...heads.map((x, i) => h("option", { value: String(i), selected: !odd && at?.target === x.target }, names[x.target] ?? x.target))) as HTMLSelectElement;
+      ...heads.map((x, i) => h("option", { value: String(i), selected: !odd && at?.target === x.target }, label(x)))) as HTMLSelectElement;
     if (!at && !odd && !(top && none)) select.value = "0";
     const args = h("div", { class: "type-args" });
     let parts: { el: HTMLElement; spec: () => Top.TypeSpec | null }[] = [];
@@ -2604,6 +2611,11 @@ function innerLambda(id: Id | null): NodeOf<"lambda"> | null {
 }
 const inputOf = (binder: Id) => Object.values(doc.code.nodes).find((l) => l.kind === "lambda" && l.params.includes(binder))?.id ?? null;
 
+// The library's type (data, effect or interface) of that name, if any.
+function libraryTypeNamed(name: string): Id | undefined {
+  return LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name && (LIBRARY.code.nodes[d] as NodeOf<"def">).body !== undefined && LIBRARY.code.nodes[(LIBRARY.code.nodes[d] as NodeOf<"def">).body!]?.kind === "typedef");
+}
+
 // + New: a function (with its inputs), a value, or a data type.
 function newDefinitionForm(info: T.Info): HTMLElement {
   const name = textField("f-def-name", "Name", "what to call it");
@@ -2617,6 +2629,11 @@ function newDefinitionForm(info: T.Info): HTMLElement {
     const shape: Top.Shape = kind === "function" ? { kind, params: (extra!.input.value).split(",").map((x) => x.trim()).filter(Boolean) }
       : kind === "type" ? { kind, firstCase: extra!.input.value }
       : kind === "effect" || kind === "interface" ? { kind, firstOperation: extra!.input.value } : { kind: "value" };
+    // A type named like one of the library's would read as either, in the
+    // type pickers and in every message after (E217: clinic's own Event
+    // beside std's). Renaming refuses it the same way (Top.nameClash).
+    const lib = kind === "type" || kind === "effect" || kind === "interface" ? libraryTypeNamed(name.input.value.trim()) : null;
+    if (lib) { ui.note = `Refused: the library has a type named ${name.input.value.trim()}${LIBRARY.comments[lib] ? ` (${LIBRARY.comments[lib].split(/[.:]/)[0]})` : ""}; two would read the same. Nothing changed.`; ui.refused = true; ui.touched = []; return render(); }
     runTop(info, Top.newDefinition(doc.code, doc.names.short, name.input.value, shape), (r) => {
       ui.back = [ui.def];
       ui.def = r.code.defs.at(-1)!;
