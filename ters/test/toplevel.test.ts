@@ -4,7 +4,7 @@ import { isPublished, subtree, type Code, type Id, type Node, type NodeOf } from
 import { B } from "../src/prelude.ts";
 import type { Names } from "../src/presentation.ts";
 import { fillings, infer, type Filling } from "../src/lang/infer.ts";
-import { base, baseNames } from "../src/lang/load.ts";
+import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { addVariant, fillHole, paramName } from "../src/lang/refactor.ts";
 import { runMain, showValue } from "../src/lang/run.ts";
 import { Lang } from "../src/lang/dsl.ts";
@@ -959,4 +959,22 @@ test("a relation's other direction: the same ports, others given, a hole for how
   s.ok(Top.newDefinition(s.code, s.names, "plain", { kind: "function", params: ["a"] }));
   const plain = s.def("plain");
   assert.match(s.refused(Top.addDirection(s.code, s.names, plain, [0], "")), /only a definition with results/);
+});
+
+test("a private case: the program's own definitions still build it, an effect's operation can't be one (E209)", () => {
+  const s = new Session();
+  const t = s.ok(Top.newDefinition(s.code, s.names, "Light", { kind: "type", firstCase: "off" }));
+  const off = (s.code.nodes[(s.code.nodes[t] as NodeOf<"def">).body!] as NodeOf<"typedef">).variants[0];
+  s.ok(Top.newDefinition(s.code, s.names, "start", { kind: "value" }));
+  s.fill(s.def("start"), ref(off));
+  s.ok(Top.setPrivate(s.code, s.names, off, true));
+  assert.equal((s.code.nodes[off] as NodeOf<"variant">).private, true);
+  // Checked as the editor and lab check it, start may still build it (L165).
+  assert.deepEqual(infer(s.code, s.all(), undefined, checkOptions).errors.map((e) => e.message), []);
+  assert.match(s.refused(Top.setPrivate(s.code, s.names, off, true)), /private already/);
+  s.ok(Top.setPrivate(s.code, s.names, off, false));
+  assert.equal((s.code.nodes[off] as NodeOf<"variant">).private, undefined);
+  s.ok(Top.newDefinition(s.code, s.names, "Ask", { kind: "effect", firstOperation: "ask" }));
+  const ask = (s.code.nodes[(s.code.nodes[s.def("Ask")] as NodeOf<"def">).body!] as NodeOf<"typedef">).variants[0];
+  assert.match(s.refused(Top.setPrivate(s.code, s.names, ask, true)), /only a data type's cases/);
 });

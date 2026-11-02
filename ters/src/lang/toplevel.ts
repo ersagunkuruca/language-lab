@@ -437,6 +437,21 @@ export function setReturns(code: Code, names: Names, variant: Id, t: TypeSpec | 
 // operation's inputs, to resume once, now or later, or drop. Every case
 // that handles it gets a name for the rest, or loses it; one that uses its
 // rest keeps the operation later.
+// A case made private (L79, E209): only the program that declares the
+// type builds it (L165), and code that uses the type goes through its
+// functions. Data types only: an effect's operations and an interface's
+// are performed or implemented, not built.
+export function setPrivate(code: Code, names: Names, variant: Id, on: boolean): Top {
+  const v = code.nodes[variant];
+  if (v?.kind !== "variant") return { ok: false, reason: "that isn't a case of a type" };
+  const type = Object.values(code.nodes).find((t) => t.kind === "typedef" && t.variants.includes(variant)) as NodeOf<"typedef"> | undefined;
+  if (type?.effect || type?.interface) return { ok: false, reason: `${nameOf(names, variant)} is ${type.effect ? "an operation of an effect" : "an interface's"}: only a data type's cases are private` };
+  if (!!v.private === on) return { ok: false, reason: `${nameOf(names, variant)} is ${on ? "private" : "public"} already` };
+  const { private: _, ...open } = v;
+  return { ok: true, code: { nodes: { ...code.nodes, [variant]: on ? { ...v, private: true } : open }, defs: code.defs }, names, select: variant,
+    note: on ? `${nameOf(names, variant)} is private: this program builds it, and a program that uses the type builds one with this program's functions.` : `${nameOf(names, variant)} is public: anyone may build it.` };
+}
+
 export function setLater(code: Code, names: Names, variant: Id, on: boolean): Top {
   const v = code.nodes[variant];
   if (v?.kind !== "variant") return { ok: false, reason: "that isn't an operation" };
