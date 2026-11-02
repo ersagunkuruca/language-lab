@@ -277,9 +277,19 @@ is a tuple of them and the value a tuple of as many (L167):
 `{ r with … }` does. `src/lang/set-several.ts` writes it out as one `set`
 per field before anything runs. The checker accepts only a field, a path
 of fields, or a tuple of them with none twice and none inside another,
-written in place, so an update always has exactly one answer. A
-general function there (`(p) ↦ p.width · 2`) is the next step: it would
-run backwards through the relational interpreter, with `Choice`.
+written in place, so such an update always has exactly one answer.
+
+The path may also be a function that reads the record only through its
+fields (L20): `set((b) ↦ b.width · 2, box, 10)` is the box whose width,
+doubled, is 10, every other field kept, and `set((b) ↦ show(b.width) ++
+"x" ++ show(b.height), box, "4x5")` sets both. It is the function run
+backwards on the fields it reads, the rest of the record given, so it is a
+`Choice`: `set((b) ↦ show(b.width), box, "wide")` has no answer. A
+function that uses the record whole is refused, as is a tuple of paths
+with one twice. `src/lang/set-through.ts` writes it out as an `inverse`
+and a plain `set` before anything runs (`test/set-through.test.ts`).
+Prior art: lenses whose put is the get run backwards (Foster et al.,
+POPL 2005).
 
 **Records of Float64s, part by part.** A point, a direction or a colour is
 an ordinary one-case type whose fields are all Float64s (`vec(x, y, z)`,

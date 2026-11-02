@@ -126,13 +126,13 @@ test("set changes one field, or a field at the end of a path, and keeps the othe
   assert.deepEqual(p.run(), ["Ada, 36, London", "Ada, 37, London", "Ada, 36, Paris"]);
 });
 
-test("set refuses a function that isn't a path of fields, before anything runs", () => {
+test("set through a function that isn't a path of fields runs it backwards, a Choice (L20)", () => {
   const p = program((k) => {
     const { person, ada, describe } = people(k);
     return lines(k, k.let("p", ada(), (a) => describe(k.call(SET, k.fn(["q"], (q) => k.call(I.add, k.call(person.f["person.age"], q), k.int(1))), a, k.int(3)))));
   });
   assert.equal(p.info.errors.length, 1);
-  assert.match(p.info.errors[0].message, /path of fields/);
+  assert.match(p.info.errors[0].message, /Choice/);
 });
 
 test("set changes several fields at once: a tuple of paths and a tuple of values (L167)", () => {

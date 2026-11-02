@@ -4,7 +4,7 @@
 // the projections rather than written (REVIEW.md §5.3). The checker accepts
 // only a field or a path of fields, so every update has exactly one answer.
 
-import { ownerOfTypeParts, type Code, type Id, type NodeOf } from "../model.ts";
+import { children, ownerOfTypeParts, type Code, type Id, type NodeOf } from "../model.ts";
 
 // The fields `id` reads, outermost first, if it is a field or a lambda of
 // one parameter that only takes fields of it; otherwise null. With
@@ -112,4 +112,45 @@ export function setPath<D extends { tag: Id; fields: unknown[] }>(record: D, pat
   const fields = record.fields.slice();
   fields[path[0]] = setPath(fields[path[0]] as D, path.slice(1), value);
   return { ...record, fields };
+}
+
+// A general function for `set` (BACKLOG L20): a lambda of one parameter
+// that reads its parameter only through fields, p ↦ p.width · 2. The paths
+// it reads (none inside another: p.a and p.a.b read is p.a), and for each
+// use the node that stands for its path's part. Null when the parameter is
+// used whole, or not at all, or when the lambda is a path itself.
+export function readPaths(code: Code, id: Id): { paths: Id[][]; uses: { node: Id; path: number }[] } | null {
+  const n = code.nodes[id];
+  if (n?.kind !== "lambda" || n.params.length !== 1 || fieldPath(code, id) || fieldPaths(code, id)) return null;
+  const p = n.params[0];
+  // A tuple of paths with one twice or inside another is several fields
+  // set wrongly, not a function: refused as such.
+  const b = code.nodes[n.body], head = b?.kind === "call" ? code.nodes[b.fn] : undefined;
+  if (b?.kind === "call" && head?.kind === "ref" && TUPLE.test(head.target) && b.args.every((a) => pathFrom(code, a, p, false))) return null;
+  const found: { node: Id; path: Id[] }[] = [];
+  let whole = false;
+  const walk = (e: Id) => {
+    const path = pathFrom(code, e, p, false);
+    if (path) { found.push({ node: e, path }); return; }
+    const m = code.nodes[e];
+    if (!m) return;
+    if (m.kind === "ref" && m.target === p) { whole = true; return; }
+    for (const c of children(m)) walk(c);
+  };
+  walk(n.body);
+  if (whole || !found.length) return null;
+  const prefix = (a: Id[], b: Id[]) => a.length <= b.length && a.every((f, i) => b[i] === f);
+  const paths: Id[][] = [];
+  for (const { path } of [...found].sort((a, b) => a.path.length - b.path.length)) {
+    if (!paths.some((q) => prefix(q, path))) paths.push(path);
+  }
+  const uses = found.map(({ node, path }) => {
+    const i = paths.findIndex((q) => prefix(q, path));
+    // The node at the depth of its path's part: p.a.b read with p.a kept is
+    // p.a's node, one field call down.
+    let at = node;
+    for (let d = path.length - paths[i].length; d > 0; d--) at = (code.nodes[at] as NodeOf<"call">).args[0];
+    return { node: at, path: i };
+  });
+  return { paths, uses };
 }
