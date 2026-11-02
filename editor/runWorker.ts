@@ -16,6 +16,7 @@ import { LIBRARY } from "../ters/src/lang/library.ts";
 import { withLibraryRepresentations } from "../ters/src/lang/library-reps.ts";
 import { infer, setDisplayNames, setProgramPins } from "./typed.ts";
 import { searchBackwards, type BackAsk, type Found } from "./backSearch.ts";
+import { stuckReading, type Reading } from "../ters/src/lang/relate.ts";
 import { compile } from "../compiler/src/compile.ts";
 
 export type RunAsk = { code: Code; names: Names; pins: Pins; def: Id; title: string; files: [string, string][]; args?: string[] };
@@ -24,7 +25,11 @@ export type RunAsk = { code: Code; names: Names; pins: Pins; def: Id; title: str
 // page's thread: the preview swaps it in when it's ready (main.ts startPage).
 export type CompileAsk = { compilePage: true; code: Code; names: Names; pins: Pins; main: Id };
 export type CompileSays = { program: string } | { error: string };
-export type RunSays = { lines: string[] } | { done: true; shown: string; files: [string, string][] } | { error: string; files: [string, string][] };
+// Where the last read of a text run backwards stopped, when one found no
+// answer (L70c): the text, the place, what was looked for there, and how
+// many reads stopped.
+export type Stuck = { text: string; at: number; expected: string[]; said: string; times: number };
+export type RunSays = { lines: string[] } | { done: true; shown: string; files: [string, string][]; stuck?: Stuck } | { error: string; files: [string, string][]; stuck?: Stuck };
 
 const post = (m: RunSays | Found | CompileSays) => (self as unknown as Worker).postMessage(m);
 
@@ -54,7 +59,7 @@ self.onmessage = (e: MessageEvent<RunAsk | BackAsk | CompileAsk>) => {
     key: (i) => [...kept.keys()][i] ?? null,
   };
   // Printing goes out in batches, a few times a second.
-  let lines: string[] = [], sent = Date.now();
+  let lines: string[] = [], sent = Date.now(), stuck: Stuck | undefined;
   const flush = () => { if (lines.length) post({ lines }); lines = []; sent = Date.now(); };
   try {
     setDisplayNames(names);
@@ -67,13 +72,14 @@ self.onmessage = (e: MessageEvent<RunAsk | BackAsk | CompileAsk>) => {
     const rt = {
       print: (line: string) => { lines.push(line); if (Date.now() - sent > 100) flush(); },
       names: lib.names, world: browserWorld(store, title),
+      stuck: (r: Reading) => { stuck = { text: r.text, at: r.at, expected: [...r.expected], said: stuckReading(r), times: (stuck?.times ?? 0) + 1 }; },
     };
     // With its arguments main gives an exit code, which shows when it isn't 0.
     const shown = args ? ((c: number) => (c ? `exit ${c}` : "unit"))(runProgram(lib.code, info, def, args, rt)) : showValue(runMain(lib.code, info, def, rt), lib.code, lib.names);
     flush();
-    post({ done: true, shown, files: [...wrote] });
+    post({ done: true, shown, files: [...wrote], ...(stuck ? { stuck } : {}) });
   } catch (err) {
     flush();
-    post({ error: (err as Error).message, files: [...wrote] });
+    post({ error: (err as Error).message, files: [...wrote], ...(stuck ? { stuck } : {}) });
   }
 };

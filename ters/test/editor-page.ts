@@ -39,7 +39,9 @@ export function openEditor(saved?: string) {
   // What Node has and happy-dom doesn't pass on, a worker that never
   // answers, and no canvas to draw on (a shader's preview says so).
   w.structuredClone = structuredClone;
-  w.Worker = class { onmessage = null; onerror = null; postMessage() {} terminate() {} addEventListener() {} };
+  // Each one is kept, so a scenario can answer for it (workers, below).
+  const workers: { onmessage: ((e: { data: unknown }) => void) | null; asked: unknown[] }[] = [];
+  w.Worker = class { onmessage = null; onerror = null; asked: unknown[] = []; constructor() { workers.push(this as never); } postMessage(m: unknown) { this.asked.push(m); } terminate() {} addEventListener() {} };
   w.HTMLCanvasElement.prototype.getContext = () => null;
   // No layout: scrolling into view does nothing, and the graph's pan and
   // zoom is none (the pointer's place is its place in the graph).
@@ -218,7 +220,7 @@ export function openEditor(saved?: string) {
     },
   };
   return {
-    doc, errors, keyboard, mouse, window,
+    doc, errors, keyboard, mouse, window, workers,
     evaluate: <T,>(f: (arg?: never) => T, arg?: unknown) => inPage(f)(arg),
     locator: (selector: string, o: { hasText?: Text } = {}) => new Locator(selector, o.hasText),
     texts: (selector: string) => [...doc.querySelectorAll(selector)].map((e) => e.textContent ?? ""),
