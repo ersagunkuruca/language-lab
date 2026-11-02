@@ -913,3 +913,21 @@ export function stopsWith(op: string, x: number, y: number): string | null {
   if (Number.isFinite(r)) return null;
   return op === "pow" && x === 0 && y < 0 ? STOPS[4] : op === "pow" && x < 0 && !Number.isInteger(y) ? STOPS[5] : STOPS[6];
 }
+
+// What the generated programs (C101) found, as programs of their own:
+// a list of texts that only runtime functions make and take (split, then
+// join all, C110), and a sort of an empty list, whose item type nothing
+// fixes, inside the types of sort's helpers (C111).
+export function fuzzFinds() {
+  const k = new Lang(LIBRARY.code);
+  const lib = (name: string) => LIBRARY.code.defs.find((x) => LIBRARY.names[x] === name)!;
+  const d = (name: string, params: string[], body: (...xs: Id[]) => Id) => { const x = k.def(name); k.define(x, k.fn(params, body)); return x; };
+  const defs = {
+    joined: d("joined", ["t"], (t) => k.call(TEXT_OPS.joinAll, k.call(TEXT_OPS.split, t, k.lit(",")), k.lit("+"))),
+    sortedNothing: d("sorted nothing", ["n"], (n) => k.call(INT_OPS.add, n, k.call(lib("length"), k.call(lib("sort"), k.x(NIL))))),
+  };
+  const code = base(k.code);
+  const names = { ...baseNames(), ...k.names };
+  return { code, names, info: infer(code, names, undefined, checkOptions), defs };
+}
+export const fuzzFindInputs = (): Record<string, unknown[][]> => ({ joined: [[""], ["a"], ["a,b,,c"], [",é,🎉"]], sortedNothing: [[0n], [5n]] });

@@ -466,6 +466,8 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   // The type variables of the root being lowered, which its callers give.
   let rootVars = new Set<number>();
   const unconstrained = (x: Type) => x.t === "var" && !rootVars.has(x.v);
+  const freeInside = (x: Type): boolean => unconstrained(x) || (x.t === "con" && x.args.some(freeInside)) || (x.t === "fn" && (x.params.some(freeInside) || freeInside(x.ret)));
+  const freed = (x: Type): Type => (unconstrained(x) ? { t: "con", id: NUMBER, args: [] } : x.t === "con" && x.args.some(freeInside) ? { ...x, args: x.args.map(freed) } : x.t === "fn" && freeInside(x) ? { ...x, params: x.params.map(freed), ret: freed(x.ret) } : x);
   function stype(t: Type, inside: Id[] = []): LType | null {
     if (t.t === "fn" && opts.data) {
       // A function that may not finish, have no answer or abort is fine
@@ -487,7 +489,9 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     // made, so any type holds it; Float64's.
     // A root's own type variables stay what they are: its caller gives
     // values of them.
-    if (opts.data && t.args.some(unconstrained)) t = { ...t, args: t.args.map((a) => (unconstrained(a) ? { t: "con", id: NUMBER, args: [] } : a)) };
+    // At any depth (List (Optional (List a)), sort's runs of nothing): the
+    // type's key is made from its arguments as they are.
+    if (opts.data && t.args.some(freeInside)) t = { ...t, args: t.args.map(freed) };
     if (t.id === NUMBER) return "f64";
     if (t.id === BOOL) return "i32";
     if (opts.data && t.id === INT) return "int";
