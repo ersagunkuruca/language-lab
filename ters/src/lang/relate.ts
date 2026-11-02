@@ -132,7 +132,38 @@ type Wait =
 
 // `spend` is the search's step budget, carried in the state so the
 // equation solver, which runs outside the interpreter, spends from it too.
-interface State { sub: Sub; eqs: Eq[]; waits: Wait[]; next: number; spend?: () => boolean; asleep?: Asleep }
+interface State { sub: Sub; eqs: Eq[]; waits: Wait[]; next: number; spend?: () => boolean; asleep?: Asleep; read?: Reading }
+
+// How far a backward read of a text got (BACKLOG L70c, GRAMMARS-2026-11-02
+// step 3): running a function backwards from a known text, each piece the
+// search cuts the text into is placed at the character it starts at, and
+// the furthest character a piece was read to, or a literal was looked for
+// at, is kept with what was looked for there. When no reading is found,
+// that is where the text stopped making sense. This is a packrat or PEG
+// parser's furthest failure (Ford, "Packrat Parsing", 2002; the error
+// position of Parsec and of Menhir's error messages): the deepest point
+// any try reached, with the terminals expected there. One reading is
+// shared by every branch of the search (it is a fact about all of them),
+// so the State only carries a reference to it.
+export interface Reading { text: string; at: number; expected: Set<string>; found: Map<string, number> }
+const placeOf = (r: Reading, piece: string): number | undefined => (piece === r.text ? 0 : r.found.get(piece));
+// A piece is kept at the furthest place it was cut at (the empty piece
+// too, where a cut left nothing): a guess when one text is in two places,
+// biased to the furthest, as the furthest failure is what's wanted.
+const place = (r: Reading, piece: string, at: number) => { if (piece !== r.text && !((r.found.get(piece) ?? -1) >= at)) r.found.set(piece, at); };
+const reached = (r: Reading, at: number) => { if (at > r.at) { r.at = at; r.expected.clear(); } };
+const expect = (r: Reading, at: number, what: string) => {
+  if (at > r.at) { r.at = at; r.expected = new Set([what]); } else if (at === r.at) r.expected.add(what);
+};
+// The words for where a reading stopped: what was read, and what was
+// looked for next.
+export function stuckReading(r: Reading): string {
+  const before = r.text.slice(0, r.at), after = r.text.slice(r.at);
+  const where = r.at === 0 ? "at its start" : `after ${JSON.stringify(before)}`;
+  const next = after === "" ? " (the end)" : `, before ${JSON.stringify(after.length > 12 ? `${after.slice(0, 12)}…` : after)}`;
+  const wanted = r.expected.size ? `: expected ${[...r.expected].join(" or ")}` : "";
+  return `the text can't be read back: it stops ${where}${next}${wanted}`;
+}
 
 // Equations and waits that nothing new is known about sleep, each under
 // the unknowns it reads, and wake when one of them gets a value (in
@@ -627,8 +658,17 @@ function wake(w: Wait, s: State): Goal | null {
       const a = walk(w.a, s), b = walk(w.b, s), c = walk(w.c, s);
       if (typeof a === "string" && typeof b === "string") return eq(w.c, a + b);
       if (typeof c !== "string") return null;
-      if (typeof a === "string") return c.startsWith(a) ? eq(w.b, c.slice(a.length)) : failG;
-      if (typeof b === "string") return c.endsWith(b) ? eq(w.a, c.slice(0, c.length - b.length)) : failG;
+      const r = s.read, p = r && placeOf(r, c);
+      if (typeof a === "string") {
+        if (!c.startsWith(a)) { if (p !== undefined) expect(r!, p, JSON.stringify(a)); return failG; }
+        if (p !== undefined) { reached(r!, p + a.length); place(r!, c.slice(a.length), p + a.length); }
+        return eq(w.b, c.slice(a.length));
+      }
+      if (typeof b === "string") {
+        if (!c.endsWith(b)) { if (p !== undefined) expect(r!, p + c.length, JSON.stringify(b)); return failG; }
+        if (p !== undefined) place(r!, c.slice(0, c.length - b.length), p);
+        return eq(w.a, c.slice(0, c.length - b.length));
+      }
       // Every way to cut the text in two that the two sides could be: a
       // side that is itself a join with a known part, or a number shown,
       // rules most cuts out before any branch is made (in "1 22 333", the
@@ -639,7 +679,10 @@ function wake(w: Wait, s: State): Goal | null {
       const cuts: Goal[] = [];
       for (let i = 0; i <= c.length; i++) {
         const x = c.slice(0, i), y = c.slice(i);
-        if ((!front || front(x)) && (!back || back(y))) cuts.push(conj(eq(w.a, x), eq(w.b, y)));
+        if ((!front || front(x)) && (!back || back(y))) {
+          if (p !== undefined) { place(r!, x, p); place(r!, y, p + i); }
+          cuts.push(conj(eq(w.a, x), eq(w.b, y)));
+        }
       }
       return disj(...cuts);
     }
@@ -649,7 +692,10 @@ function wake(w: Wait, s: State): Goal | null {
       if (typeof t !== "string") return null;
       // Read it back, and accept only the spelling show would produce.
       const x = Number(t);
-      return t.trim() === t && t !== "" && Number.isFinite(x) && showNumber(x) === t ? eq(w.n, x) : failG;
+      const ok = t.trim() === t && t !== "" && Number.isFinite(x) && showNumber(x) === t;
+      const p = s.read && placeOf(s.read, t);
+      if (p !== undefined) { if (ok) reached(s.read!, p + t.length); else expect(s.read!, p, "a number"); }
+      return ok ? eq(w.n, x) : failG;
     }
     case "test": {
       const xs = w.args.map((a) => ground(a, s));
@@ -713,6 +759,9 @@ export interface Options {
   // The schedules, when an interpreter inside this one (seeded, with fuel)
   // runs the same code.
   plans?: ReturnType<typeof analyzer>;
+  // Told, when a function run backwards from a known text (its result)
+  // finds no answer, how far the reading got (L70c; stuckReading words it).
+  stuck?: (r: Reading) => void;
 }
 
 // One analyzer per program, brought up to date as nodes are added.
@@ -853,7 +902,7 @@ export function interpreter(given: Code, opts: Options = {}) {
       let whole = true;
       for (let pass = 0; whole; pass++) {
         table.hit = false;
-        const [vs, s0] = freshVars({ sub: new Sub(), eqs: [], waits: [], next: 0, spend: opts.spend }, open.length);
+        const [vs, s0] = freshVars({ sub: new Sub(), eqs: [], waits: [], next: 0, spend: opts.spend, read: s.read }, open.length);
         const inner = now.map((a, i) => (a instanceof LVar ? vs[open.indexOf(i)] : deep(a, s)));
         const found: Term[][] = [], seen = new Set<string>();
         // Its plan is made for what is known now, whatever the caller planned.
@@ -1295,6 +1344,13 @@ export function interpreter(given: Code, opts: Options = {}) {
       };
       return (s) => {
         const known = forward(c, args, s);
+        // A test run on a piece of the text that passes reads the piece
+        // (a name checked for letters).
+        const r = s.read;
+        if (known && r && known.some((v) => isData(v) && v.tag === TRUE) && known.some((v) => unify(out, fromValue(v), s))) for (const a of args) {
+          const t = walk(a, s), p = typeof t === "string" ? placeOf(r, t) : undefined;
+          if (p !== undefined) reached(r, p + (t as string).length);
+        }
         if (known) return disj(...known.map((v) => eq(out, fromValue(v))))(s);
         // Inside a tabled search, a recursive call on a known text with more
         // than one input not yet known waits until at most one is: its
@@ -1366,10 +1422,26 @@ export function interpreter(given: Code, opts: Options = {}) {
     return wait({
       k: "later", text: op, on: [...args, out], ready: (s) => known(out, s), then: (s) => {
         const text = walk(out, s) as string;
-        if (op === "spaced") return eq(args[0], text.replace(/^ +| +$/g, ""))(s);
+        const r = s.read, p = r && placeOf(r, text);
+        if (op === "spaced") {
+          const trimmed = text.replace(/^ +| +$/g, "");
+          if (p !== undefined) place(r!, trimmed, p + (text.length - text.trimStart().length));
+          return eq(args[0], trimmed)(s);
+        }
         const [needed, t] = args;
         const inside: string[] = [];
-        for (let x = text; wrapped(x); x = x.slice(1, -1)) inside.push(x.slice(1, -1));
+        let x = text;
+        for (; wrapped(x); x = x.slice(1, -1)) {
+          inside.push(x.slice(1, -1));
+          if (p !== undefined) { reached(r!, p + inside.length); place(r!, x.slice(1, -1), p + inside.length); }
+        }
+        // An open parenthesis that isn't closed: its close was looked for
+        // at the end.
+        // at the end, or where the reading inside it got to.
+        if (p !== undefined && x.startsWith("(") && !wrapped(x)) {
+          const start = p + inside.length, end = start + x.length;
+          expect(r!, r!.at > start && r!.at < end ? r!.at : end, '")"');
+        }
         return disj(conj(eq(needed, fromValue(bool(false))), eq(t, text)), ...inside.map((x) => eq(t, x)))(s);
       },
     });
@@ -1569,7 +1641,10 @@ export function interpreter(given: Code, opts: Options = {}) {
         k: "later", text: "show", on: [n, out], ready: (s) => known(n, s) || known(out, s), then: (s) => {
           if (known(n, s)) return eq(out, intShow(walk(n, s) as Int))(s);
           const t = walk(out, s) as string;
-          return /^-?(0|[1-9][0-9]*)$/.test(t) && t !== "-0" ? eq(n, intLit(t))(s) : null;
+          const ok = /^-?(0|[1-9][0-9]*)$/.test(t) && t !== "-0";
+          const p = s.read && placeOf(s.read, t);
+          if (p !== undefined) { if (ok) reached(s.read!, p + t.length); else expect(s.read!, p, "a whole number"); }
+          return ok ? eq(n, intLit(t))(s) : null;
         },
       });
     }
@@ -1827,8 +1902,10 @@ export function* relate(code: Code, fn: Id, known: Record<string, unknown>, opts
     return body?.kind === "lambda" ? { k: "closure", lambda: body.id, env: new Map() } : fromValue(v);
   };
   const at: Record<string, Term> = Object.fromEntries(Object.entries(known).map(([k, v]) => [k, given(v)]));
-  const start: State = { sub: new Sub(), eqs: [], waits: [], next: 0, spend: opts.spend };
+  const read: Reading | undefined = opts.stuck && typeof known.out === "string" ? { text: known.out, at: 0, expected: new Set(), found: new Map() } : undefined;
+  const start: State = { sub: new Sub(), eqs: [], waits: [], next: 0, spend: opts.spend, read };
   const ports = portsOf(code, fn, Object.keys(known));
+  let answers = 0;
   const [vs, s] = freshVars(start, ports.length);
   ports.forEach((p, i) => { if (!(p in at)) at[p] = vs[i]; });
   for (const st of pull(it.relationGoal(fn, at)(s))) {
@@ -1850,8 +1927,10 @@ export function* relate(code: Code, fn: Id, known: Record<string, unknown>, opts
       ...tidy(left, values).map((e) => `${shown(e.lhs)} = ${shown(e.rhs)}`),
       ...everyWait(st).map((w) => w.k === "test" || w.k === "compute" ? `${w.text}(${w.args.map((a) => showTerm(deep(a, st))).join(", ")})` : w.k === "later" ? w.text : w.k),
     ].map(named);
+    answers++;
     yield { values, free: ports.filter((p) => hasVars(values[p])), residual };
   }
+  if (read && !answers) opts.stuck!(read);
 }
 
 // Does some value make f true? This is `for some` run forward.

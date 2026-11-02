@@ -23,7 +23,7 @@ import { derivativeLambda, gradientLambda } from "./derive.ts";
 import { fieldShapes, shapeOf, spread, type Shape } from "./nested.ts";
 import { resolveArithmetic } from "./arith.ts";
 import { worldTimers } from "./timers.ts";
-import { relate, satisfiable, toValue } from "./relate.ts";
+import { relate, satisfiable, toValue, type Reading } from "./relate.ts";
 import { planSolve, solutions } from "./solve.ts";
 import { oneAnswer } from "./modes.ts";
 import { computedForward } from "./directions.ts";
@@ -251,6 +251,10 @@ export interface Runtime {
   // Check's handler when the program has none (`lab test`, tests.ts):
   // each expect, whether it held, and what it says.
   check?: (holds: boolean, what: string) => void;
+  // Told when a function run backwards from a known text finds no
+  // reading, how far it got (L70c, relate.ts Reading; stuckReading words
+  // it): the editor marks the place in the text.
+  stuck?: (r: Reading) => void;
   // The host's answers to the program's own effects (hosts.ts, FOREIGN.md):
   // hosts/js.js's default export, by operation id.
   hosts?: Hosts;
@@ -874,7 +878,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         if (p.mode === "relational") {
           // Each step that might unfold forever spends the innermost fuel.
           const spend = () => { const f = fuel(); return !(f && --f.left < 0); };
-          for (const sol of relate(code, n.fn, known, { spend, names: rt.names })) {
+          for (const sol of relate(code, n.fn, known, { spend, names: rt.names, stuck: rt.stuck })) {
             const bound = Object.keys(n.binds).map((k) => toValue(sol.values[k]));
             if (bound.some((v) => v === undefined)) continue; // not pinned down: not an answer
             yield bound as Value[];
