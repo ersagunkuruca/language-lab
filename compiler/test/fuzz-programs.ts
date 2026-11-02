@@ -17,9 +17,9 @@ function random(seed: number) {
   return { next, int: (n: number) => Math.floor(next() * n), pick: <T>(xs: T[]): T => xs[Math.floor(next() * xs.length)] };
 }
 
-// Float64, Int, Bool, List Int, Text, a data type of three cases (Shape)
-// and a record (Box).
-type Ty = "F" | "I" | "B" | "L" | "T" | "D" | "R";
+// Float64, Int, Bool, List Int, Text, a data type of three cases (Shape),
+// a record (Box), List Float64 and List Shape (C119).
+type Ty = "F" | "I" | "B" | "L" | "T" | "D" | "R" | "P" | "Q";
 type Scope = Record<Ty, Id[]>;
 
 export function program(seed: number, count: number) {
@@ -48,7 +48,7 @@ export function program(seed: number, count: number) {
       const shape = r.int(12);
       if (shape === 0) return k.if(sub("B"), sub(t), sub(t));
       if (shape === 1) {
-        const u = r.pick<Ty>(["F", "I", "L", "T", "D", "R"]);
+        const u = r.pick<Ty>(["F", "I", "L", "T", "D", "R", "P", "Q"]);
         return k.let(fresh(), sub(u), (v) => gen(t, { ...s, [u]: [...s[u], v] }, depth - 1));
       }
       if (shape === 3) return k.match(sub("D"), [
@@ -64,6 +64,14 @@ export function program(seed: number, count: number) {
         { variant: NIL, names: [], body: () => sub(t) },
         { variant: CONS, names: [fresh(), fresh()], body: ([h, rest]) => gen(t, { ...s, I: [...s.I, h], L: [...s.L, rest] }, depth - 1) },
       ]);
+      // A match on a list of Float64s or of shapes (C119).
+      if (shape === 5) {
+        const [lt, it] = r.next() < 0.5 ? ["P", "F"] as const : ["Q", "D"] as const;
+        return k.match(sub(lt), [
+          { variant: NIL, names: [], body: () => sub(t) },
+          { variant: CONS, names: [fresh(), fresh()], body: ([h, rest]) => gen(t, { ...s, [it]: [...s[it], h], [lt]: [...s[lt], rest] }, depth - 1) },
+        ]);
+      }
     }
     if ((leaf || r.next() < 0.15) && s[t].length && r.next() < 0.7) return k.x(r.pick(s[t]));
     switch (t) {
@@ -80,6 +88,7 @@ export function program(seed: number, count: number) {
           () => call(INT_OPS.toNumber, sub("I")),
           () => call(S.floor, sub("F")),
           () => call(lib("smaller"), sub("F"), sub("F")),
+          () => call(lib("item at"), sub("P"), sub("I"), sub("F")),
           () => call(Box.f["box.size"], sub("R")),
           () => orElse(call(B.div, sub("F"), sub("F"))),
           () => orElse(call(B.sqrt, sub("F"))),
@@ -103,6 +112,7 @@ export function program(seed: number, count: number) {
           () => call(INT_OPS.mul, sub("I"), sub("I")),
           () => call(INT_OPS.neg, sub("I")),
           () => call(lib("length"), sub("L")),
+          () => call(lib("length"), r.next() < 0.5 ? sub("P") : sub("Q")),
           () => call(lib("item at"), sub("L"), sub("I"), sub("I")),
           () => call(Box.f["box.count"], sub("R")),
           () => call(TEXT_OPS.length, sub("T")),
@@ -135,6 +145,9 @@ export function program(seed: number, count: number) {
           () => call(INT_OPS.less, sub("I"), sub("I")),
           () => k.equal(sub("I"), sub("I")),
           () => k.equal(sub("L"), sub("L")),
+          () => k.equal(sub("P"), sub("P")),
+          () => k.equal(sub("Q"), sub("Q")),
+          () => call(lib("contains"), sub("Q"), sub("D")),
           () => call(S.not, sub("B")),
           () => k.equal(sub("T"), sub("T")),
           () => call(TEXT_OPS.less, sub("T"), sub("T")),
@@ -175,6 +188,8 @@ export function program(seed: number, count: number) {
           () => call(SHOW_ANY, sub("I")),
           () => call(SHOW_ANY, sub("F")),
           () => call(SHOW_ANY, sub("D")),
+          () => call(SHOW_ANY, sub("P")),
+          () => call(SHOW_ANY, sub("Q")),
           () => call(TEXT_OPS.slice, sub("T"), sub("I"), sub("I")),
           () => call(S.show, sub("F")),
           () => call(INT_OPS.show, sub("I")),
@@ -196,6 +211,32 @@ export function program(seed: number, count: number) {
           () => call(shape_.rect, sub("I"), sub("F")),
         ])();
       }
+      case "P": {
+        if (leaf) return r.next() < 0.3 ? k.list() : k.list(...Array.from({ length: 1 + r.int(3) }, () => k.lit(r.pick([0, 1, -1, 0.5, 2.25, -3, 1e300]))));
+        return r.pick<() => Id>([
+          () => call(CONS, sub("F"), sub("P")),
+          () => call(lib("append"), sub("P"), sub("P")),
+          () => call(lib("reverse"), sub("P")),
+          () => call(lib("take"), sub("P"), sub("I")),
+          () => call(lib("drop"), sub("P"), sub("I")),
+          () => call(lib("sort"), sub("P")),
+          () => call(lib("replace at"), sub("P"), sub("I"), sub("F")),
+          () => call(lib("map"), sub("L"), k.fn([fresh()], (v) => gen("F", { ...s, I: [...s.I, v] }, depth - 1))),
+          () => call(lib("keep"), sub("P"), k.fn([fresh()], (v) => gen("B", { ...s, F: [...s.F, v] }, depth - 1))),
+        ])();
+      }
+      case "Q": {
+        if (leaf) return r.next() < 0.3 ? k.list() : k.list(...Array.from({ length: 1 + r.int(3) }, () => (r.next() < 0.3 ? k.x(shape_.dot) : call(shape_.circle, k.lit(r.pick([0, 1.5, -2]))))));
+        return r.pick<() => Id>([
+          () => call(CONS, sub("D"), sub("Q")),
+          () => call(lib("append"), sub("Q"), sub("Q")),
+          () => call(lib("reverse"), sub("Q")),
+          () => call(lib("sort"), sub("Q")),
+          () => call(lib("inserted at"), sub("Q"), sub("I"), sub("D")),
+          () => call(lib("map"), sub("P"), k.fn([fresh()], (v) => gen("D", { ...s, F: [...s.F, v] }, depth - 1))),
+          () => call(lib("keep"), sub("Q"), k.fn([fresh()], (v) => gen("B", { ...s, D: [...s.D, v] }, depth - 1))),
+        ])();
+      }
       case "R":
         // set (C106): a field of a box changed, the other kept.
         if (!leaf && r.next() < 0.3) return r.next() < 0.5 ? call(SET, k.x(Box.f["box.count"]), sub("R"), sub("I")) : call(SET, k.x(Box.f["box.size"]), sub("R"), sub("F"));
@@ -213,7 +254,7 @@ export function program(seed: number, count: number) {
     k.define(h, k.fn(["b", "s", "m"], (b, s0, m) =>
       k.let("c0", call(Box.f["box.count"], b), (c0) =>
         k.let("m0", call(INT_OPS.add, m, k.int(0)), (m0) => {
-          const sc = (more: Partial<Scope> = {}): Scope => ({ F: [...(more.F ?? [])], I: [c0, m0, ...(more.I ?? [])], L: [], B: [], T: [], D: [s0], R: [b] });
+          const sc = (more: Partial<Scope> = {}): Scope => ({ F: [...(more.F ?? [])], I: [c0, m0, ...(more.I ?? [])], L: [], B: [], T: [], D: [s0], R: [b], P: [], Q: [] });
           return k.match(s0, [
             { variant: shape_.dot, names: [], body: () => gen("I", sc(), 3) },
             { variant: shape_.circle, names: [fresh()], body: ([rad]) => gen("I", sc({ F: [rad] }), 3) },
@@ -225,14 +266,14 @@ export function program(seed: number, count: number) {
   const defs: { def: Id; result: Ty }[] = [];
   for (let i = 0; i < count; i++) {
     calls = false;
-    const result = r.pick<Ty>(["F", "I", "B", "L", "T", "D", "R"]), def = k.def(`g${i}`);
+    const result = r.pick<Ty>(["F", "I", "B", "L", "T", "D", "R", "P", "Q"]), def = k.def(`g${i}`);
     // Its inputs are a Float64, an Int and a List Int: each used once
     // first, so its type is that whatever the body does.
     k.define(def, k.fn(["x", "n", "xs"], (x, n, xs) =>
       k.let("x0", call(B.add, x, k.lit(0)), (x0) =>
         k.let("n0", call(INT_OPS.add, n, k.int(0)), (n0) =>
           k.let("xs0", call(lib("append"), xs, k.list(n0)), (xs0) =>
-            call(SHOW_ANY, gen(result, { F: [x0], I: [n0], L: [xs0], B: [], T: [], D: [], R: [] }, 4)))))));
+            call(SHOW_ANY, gen(result, { F: [x0], I: [n0], L: [xs0], B: [], T: [], D: [], R: [], P: [], Q: [] }, 4)))))));
     defs.push({ def, result });
     if (!calls) callable.push(def);
   }
