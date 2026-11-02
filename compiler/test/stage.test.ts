@@ -18,7 +18,8 @@ import { emitWgsl } from "../src/wgsl.ts";
 import { loadJs } from "../src/js-scalar.ts";
 import { pga } from "../src/fixtures.ts";
 import { CONS, NIL } from "../../ters/src/lang/std.ts";
-import type { Id } from "../../ters/src/model.ts";
+import { subtree, type Id } from "../../ters/src/model.ts";
+import { valueMasks } from "../../ters/src/lang/grades.ts";
 
 const runtime = pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href;
 const first = (xs: Iterable<Value>) => { for (const x of xs) return x; };
@@ -89,6 +90,41 @@ test("a multivector only its callers give is staged with the parts its blade mas
       want.forEach((w, i) => assert.ok(Math.abs(got[i] - w) < 1e-9, `${name}: ${got} vs ${want}`));
     }
   }
+});
+
+// C77: the point carried in a record beside the count. Before, a
+// record's fields lost their masks (every part); now `moved carried`
+// reads the point's 4 parts, as `moved n times` does.
+test("a multivector carried in a record keeps its blade mask through each step (C77)", async () => {
+  const p = pga();
+  assert.deepEqual(p.info.errors, []);
+  const body = (source: string, n: string) => { const i = source.indexOf(`function ${n.replace(/ /g, "_")}(`); assert.ok(i >= 0, n); return source.slice(i, source.indexOf("\n}\n", i)); };
+  const products = (s: string) => (s.match(/ \* /g) ?? []).length;
+  const open = compile(p.code, p.info, p.names, { runtime, exports: ["move carried", "moved carried"] });
+  const closed = compile(p.code, p.info, p.names, { runtime, exports: ["move carried"] });
+  const wide = body(open, "moved carried"), narrow = body(closed, "moved carried");
+  assert.ok(products(narrow) > 0 && products(narrow) < products(wide) / 2, `${products(narrow)} products, ${products(wide)} when exported`);
+  const r = makeRunner(p.code, p.info, { print: () => {} });
+  const dir = mkdtempSync(join(tmpdir(), "stage-"));
+  writeFileSync(join(dir, "closed.js"), closed);
+  const defs = (await import(pathToFileURL(join(dir, "closed.js")).href)).defs as Record<string, (...a: unknown[]) => Value>;
+  const pt = { tag: p.point, fields: [1, 2, 3, 1] } as Value;
+  const got = (defs["move carried"](pt, 3) as { fields: number[] }).fields, want = (first(r.call(r.value(p.times.moveCarried), pt, 3)) as { fields: number[] }).fields;
+  want.forEach((w, i) => assert.ok(Math.abs(got[i] - w) < 1e-9, `${got} vs ${want}`));
+});
+
+// The guard (C77, REVIEW-2026-11-01b §7): a definition nobody open
+// reaches, compiled anyway, reads every part rather than zeros.
+test("a definition the open ones don't reach gets every part, not zeros (C77)", () => {
+  const p = pga();
+  const inMoved = new Set(subtree(p.code, p.times.movedN));
+  const read = (open: Id[]) => [...valueMasks(p.code, p.info, open)].filter(([id]) => inMoved.has(id)).map(([, m]) => m);
+  // Reached: some of its values are narrower than every part.
+  assert.ok(read([p.times.moveN]).some((m) => m.mask !== m.algebra.full));
+  // Not reached: every value read is every part.
+  const unreached = read([p.defs.product]);
+  assert.ok(unreached.length > 0);
+  for (const m of unreached) assert.equal(m.mask, m.algebra.full, "moved n times, not reached, read as every part");
 });
 
 test("on the GPU too: a shader's own definitions multiply only the masked parts their callers give (L43c)", () => {

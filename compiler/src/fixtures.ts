@@ -660,6 +660,13 @@ export function pga() {
   const moveNBudget = def("move n times on the GPU", () => k.fn(["p", "n"], (p, n) => within(k, 64, () => k.call(moveN, p, n), () => p)));
   // Given any multivector from outside: every part.
   const movedAnyBudget = def("moved n times on the GPU", () => k.fn(["q", "n"], (q, n) => within(k, 64, () => k.call(movedN, q, n), () => q)));
+  // The same with the point carried in a record beside the count (C77): a
+  // state record keeps its multivector's mask through each step.
+  const C = k.type("Carried", [], [["carried", [["at", () => k.tref(M.def)], ["left", num]]]]);
+  const movedCarried = k.def("moved carried");
+  k.define(movedCarried, k.fn(["s"], (s) => k.if(k.call(STD.less, k.call(C.f["carried.left"], s), k.lit(1)), s,
+    k.call(movedCarried, k.call(C.v.carried, call("clifford sandwich", k.x(motor), k.call(C.f["carried.at"], s)), k.call(B.sub, k.call(C.f["carried.left"], s), k.lit(1)))))));
+  const moveCarried = def("move carried", () => k.fn(["p", "n"], (p, n) => k.call(fromPga, k.call(C.f["carried.at"], k.call(movedCarried, k.call(C.v.carried, k.call(toPga, p), n))))));
   // A distance field moved by the motor, and its gradient (C74): the
   // gradient can be read only once the sandwich is arithmetic.
   const sq = (x: Id) => k.call(B.mul, x, x);
@@ -667,7 +674,7 @@ export function pga() {
     k.call(B.sub, k.call(B.sqrt, k.call(B.add, sq(k.call(coord("x"), m)), k.call(B.add, sq(k.call(coord("y"), m)), sq(k.call(coord("z"), m))))), k.lit(1)))));
   const ballNormal = def("ball normal", () => k.fn(["p"], (p) => k.call(k.call(STD.gradient, k.fn(["q"], (q) => k.call(ball, q))), p)));
   const code = base(k.code), names = baseNames(k.names);
-  return { code, names, info: infer(code, names, undefined, checkOptions), pga: M.v.pga, point: P.v.point, defs: { product, moveBy, moveFixed, movePoint, moveGiven, totalGiven }, times: { movedN, moveN, moveNBudget, movedAnyBudget }, ball: { ball, ballNormal } };
+  return { code, names, info: infer(code, names, undefined, checkOptions), pga: M.v.pga, point: P.v.point, defs: { product, moveBy, moveFixed, movePoint, moveGiven, totalGiven }, times: { movedN, moveN, moveNBudget, movedAnyBudget, movedCarried, moveCarried }, ball: { ball, ballNormal } };
 }
 
 // Int held in 32 bits, for shaders (C66c): + − × negate abs, less, as
