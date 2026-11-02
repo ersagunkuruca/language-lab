@@ -999,6 +999,11 @@ export const ALGEBRAIC_OPS = {
 // presentation, so they're an input to the run, like the console). Float64's
 // own show stays: run backwards, it is what reads numbers.
 export const SHOW_ANY = builtin("showAny", "show", (s) => fn([s.fresh(true)], str, s.freshRow()));
+// The name of the case a plain value was made by, as text (L162, GAPS
+// round 9 MG1): case name(add(r1, r2, r3)) is "add", case name([]) is
+// "nil", and a number or a text, made by no case, gives "". The name is the
+// program's, like show's (run.ts caseName). Data.Data's showConstr.
+export const CASE_NAME = builtin("caseName", "case name", (s) => fn([s.fresh(true)], str, s.freshRow()));
 // The order on plain data (L66, run.ts compareValues): numbers by value,
 // text by code point, cases in the order their type declares them, then
 // fields left to right. Plain data only, like `equal`.

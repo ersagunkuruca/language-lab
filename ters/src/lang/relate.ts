@@ -59,7 +59,7 @@ import { children, dependencies, ownerOfTypeParts, subtree } from "../model.ts";
 import { derivativeLambda, gradientLambda } from "./derive.ts";
 import { fieldShapes, look, type TypeEnv } from "./nested.ts";
 import { B, impl } from "../prelude.ts";
-import { close, DEF_VALUE, fromList, makeRunner, META, sameNumber, equal as valueEqual, showValue, compareValues, variantOrder, ORDER_VALUES, type Data, type Value } from "./run.ts";
+import { close, DEF_VALUE, fromList, makeRunner, META, sameNumber, equal as valueEqual, showValue, caseName, compareValues, variantOrder, ORDER_VALUES, type Data, type Value } from "./run.ts";
 import { NUMERIC, relationFor } from "./equations.ts";
 import { analyzer, type Choice, type Exec, type Fn, type Mode, type Plan } from "./modes.ts";
 import { seededGenerator } from "./random.ts";
@@ -69,7 +69,7 @@ import { ALGEBRAIC_OPS, ALGEBRAIC_V, ofAlg, toAlg } from "./std.ts";
 import * as Alg from "./algebraic.ts";
 import { realRoots, type Algebraic } from "./algebraic.ts";
 import { lowest, type Q as Frac } from "./poly.ts";
-import { CELL_OPS, COMPARE, CONS, FALSE, INT_OPS, IO, NIL, NONE, RANDOM_OP, RATIO, S, SET, SHOW_ANY, SIGS, SOME, STD_IMPL, STD_MANY, stdNames, TEXT_OPS, TRUE } from "./std.ts";
+import { CELL_OPS, COMPARE, CONS, FALSE, INT_OPS, IO, NIL, NONE, RANDOM_OP, RATIO, S, SET, SHOW_ANY, CASE_NAME, SIGS, SOME, STD_IMPL, STD_MANY, stdNames, TEXT_OPS, TRUE } from "./std.ts";
 import { add as intAdd, divides, intLit, lowestTerms, mul as intMul, neg as intNeg, squareRoots, sub as intSub, type Int } from "./int.ts";
 import { fieldIndex, fieldPath, setPath } from "./records.ts";
 import { CHOICE, DIVERGE, INT, type Type } from "./types.ts";
@@ -1421,6 +1421,7 @@ export function interpreter(given: Code, opts: Options = {}) {
     // compare runs forwards once both are known: which pairs are in order
     // isn't a search worth making.
     const many = STD_MANY[id] ?? (STD_IMPL[id] ? (...xs: Value[]) => [STD_IMPL[id](...xs)] : id === SHOW_ANY ? (x: Value) => [showValue(x, code, opts.names ?? stdNames, true)]
+      : id === CASE_NAME ? (x: Value) => [caseName(x, opts.names ?? stdNames)]
       : id === COMPARE ? (a: Value, b: Value) => [ORDER_VALUES[compareValues(a, b, variantOrder(code)) + 1]] : null);
     const algOp = id === ALGEBRAIC_OPS.add ? "add" : id === ALGEBRAIC_OPS.sub ? "sub" : id === ALGEBRAIC_OPS.mul ? "mul" : id === ALGEBRAIC_OPS.neg ? "neg" : null;
     if (many && algOp) {
