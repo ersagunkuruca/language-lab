@@ -124,3 +124,21 @@ test("a gradient through a PGA motor: staged first, then read, on the CPU and th
   }
   assert.deepEqual([...emitWgsl(lowered).refused.values()], []);
 });
+
+// C83: running backwards, a value defined once (the motor, a product of
+// two exponentials in the algebra) is worked out once per search, not at
+// each use: moving a point runs forward through relate in about 4,200
+// steps, where it took about 16,700.
+test("relate works out a value defined once, once: a point moved by the PGA motor within 6,000 steps (C83)", async () => {
+  const { relate, toValue } = await import("../../ters/src/lang/relate.ts");
+  const p = pga();
+  const def = p.code.defs.find((d) => p.names[d] === "move point")!;
+  const [param] = (p.code.nodes[(p.code.nodes[def] as { body: Id }).body] as { params: Id[] }).params;
+  const pt = { tag: p.point, fields: [0.3, -1.2, 2, 1] };
+  let steps = 0;
+  const [a] = relate(p.code, def, { [param]: pt }, { spend: () => ++steps < 6000 });
+  const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });
+  const [want] = [...(r.call(r.value(def), pt) as Iterable<Value>)];
+  assert.ok(a, `no answer in ${steps} steps`);
+  assert.deepEqual(toValue(a.values.out), want);
+});
