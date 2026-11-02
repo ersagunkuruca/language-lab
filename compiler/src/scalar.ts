@@ -50,7 +50,7 @@ import { dependencies, subtree } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { ARRAY, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, STRING, type Row, type Type } from "../../ters/src/lang/types.ts";
-import { ABORT, ABORT_OP, ARRAY_OPS, BOOL, COMPARE, CONS, EXTENDED_V, FALSE, INT_OPS, IO, NIL, NONE, ORDER_V, PAIR_V, RATIO, S, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
+import { ABORT, ABORT_OP, ALGEBRAIC_V, ARRAY_OPS, BOOL, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, ORDER_V, PAIR_V, RATIO, S, SHOW_ANY, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
 import { liftLets } from "../../ters/src/lang/lift-lets.ts";
 import { inlineLists } from "./inline-lets.ts";
 import { STOPS } from "./stops.ts";
@@ -739,6 +739,14 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           const num = (v: number): SExpr => ({ k: "num", v });
           return { k: "let", i: lx, value: x, body: { k: "let", i: ly, value: y, body: { k: "let", i: c, value: compared({ k: "local", i: lx }, { k: "local", i: ly }, t, f, false), body: { k: "if", cond: { k: "op", op: "less", args: [at, num(0)] }, then: order(ORDER_V.before), else: { k: "if", cond: { k: "op", op: "equal", args: [at, num(0)] }, then: order(ORDER_V.same), else: order(ORDER_V.after), t: o }, t: o } } } };
         }
+        if (opts.data && target === SHOW_ANY) {
+          // show as the evaluator gives it (run.ts showValue, a number as
+          // the number it stands for), from a function of its own per type.
+          const t = stype(zonk(n.args[0]));
+          if (!t) throw new Refused(`shows ${whyNot(zonk(n.args[0]))}`);
+          const [x] = args();
+          return shown(t === "f64" ? fin(f, x) : x, t, f, tail);
+        }
         if (opts.data && target === INT_OPS.lowestTerms) {
           // int.ts's lowest terms from the runtime's gcd and exact division:
           // both over their gcd, both negated if the bottom is below 0.
@@ -1078,6 +1086,72 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     return index.get(key)!;
   }
 
+  // show's text (run.ts showValue with asNumber, which compiled JS's
+  // $showAny is) of a value of type t: numbers as show writes them, Bools
+  // and cases by their names, a list as [a, b], a tuple as (a, b), a
+  // fraction as 1/3, an Extended as its number or −∞ and +∞ (C97).
+  function shown(x: SExpr, t: LType, f: SFunc, tail: boolean): SExpr {
+    if (t === "f64") return { k: "rt", fn: "number.show", args: [x] };
+    if (t === "int") return { k: "rt", fn: "int.show", args: [x] };
+    if (t === "i32") return { k: "if", cond: x, then: { k: "text", v: nm(TRUE) }, else: { k: "text", v: nm(FALSE) }, t: "text" };
+    if (t === "text") throw new Refused("shows a Text, quoted (not in WebAssembly and C yet)");
+    if (t === "int32" || isFn(t) || isArray(t)) throw new Refused(`shows ${isFn(t) ? "a function" : isArray(t) ? "an array" : "an Int in 32 bits"} (not in WebAssembly and C yet)`);
+    return { k: "call", fn: showing(t), args: [x], tail };
+  }
+  // Text joined, left to right.
+  const joined = (...parts: SExpr[]): SExpr => parts.reduce((a, b) => ({ k: "rt", fn: "text.concat", args: [a, b] }));
+  // show on a record or data type, a function of its own (recursive for a
+  // type that contains itself). A list's items are joined by a loop of
+  // tail calls carrying the text so far, so a long list shows in constant
+  // stack.
+  function showing(t: RType | DType): number {
+    const key = `$${t.key}`;
+    if (index.has(key)) return index.get(key)!;
+    const variants = isRecord(t) ? [t.variant] : t.cases.map((c) => c.variant);
+    if (variants.includes(FIXED_V) || variants.includes(ALGEBRAIC_V)) throw new Refused(`shows ${t.name} (not in WebAssembly and C yet)`);
+    const g: SFunc = { def: t.def, name: `${t.name}.show`, params: [t], result: "text", locals: [t], body: { k: "text", v: "" }, spends: false, budgeted: false, inner: true };
+    index.set(key, funcs.push(g) - 1);
+    const a: SExpr = { k: "local", i: 0 }, text = (v: string): SExpr => ({ k: "text", v });
+    // Case c's text, from its fields (part j) and their types.
+    const one = (v: Id, fts: LType[], part: (j: number) => SExpr): SExpr => {
+      const fields = fts.map((ft, j) => shown(part(j), ft, g, false));
+      const list = (open: string, close: string) => joined(text(open), ...fields.flatMap((x, j) => (j ? [text(", "), x] : [x])), text(close));
+      if (v === RATIO) {
+        const bottom = g.locals.push("int") - 1;
+        return { k: "let", i: bottom, value: part(1), body: { k: "if", cond: { k: "rt", fn: "int.equal", args: [{ k: "local", i: bottom }, { k: "int", v: 1n }] }, then: fields[0], else: joined(fields[0], text("/"), shown({ k: "local", i: bottom }, "int", g, false)), t: "text" } };
+      }
+      if (v === COMPLEX_V) {
+        const im = g.locals.push("f64") - 1, at: SExpr = { k: "local", i: im };
+        return { k: "let", i: im, value: part(1), body: joined(fields[0], { k: "if", cond: { k: "op", op: "less", args: [at, { k: "num", v: 0 }] }, then: text(" − "), else: text(" + "), t: "text" }, shown({ k: "op", op: "abs", args: [at] }, "f64", g, false), text("i")) };
+      }
+      if (v === EXTENDED_V.minus) return text("−∞");
+      if (v === EXTENDED_V.plus) return text("+∞");
+      if (v === EXTENDED_V.finite) return fields[0];
+      if (/^std\.tuple[2-8]\.tuple$/.test(v)) return list("(", ")");
+      return fts.length ? list(`${nm(v)}(`, ")") : text(nm(v));
+    };
+    if (isRecord(t)) {
+      g.body = one(t.variant, t.fields.map((x) => x.t), (j) => ({ k: "get", rec: a, t, i: j }));
+      return index.get(key)!;
+    }
+    const nil = variants.indexOf(NIL), cons = variants.indexOf(CONS);
+    if (nil >= 0 && cons >= 0 && t.cases.length === 2) {
+      // [a, b, c]: the first item, then ", " and each of the rest.
+      const item = t.cases[cons].fields[0].t;
+      const r: SFunc = { def: t.def, name: `${t.name}.show.rest`, params: [t, "text"], result: "text", locals: [t, "text"], body: text(""), spends: false, budgeted: false, inner: true };
+      const ri = funcs.push(r) - 1;
+      const head = (fn: SFunc, s: number): SExpr => shown({ k: "field", rec: { k: "local", i: s }, t, c: cons, i: 0 }, item, fn, false);
+      const rest = (s: number): SExpr => ({ k: "field", rec: { k: "local", i: s }, t, c: cons, i: 1 });
+      const arms = (whenNil: SExpr, whenCons: SExpr): SExpr[] => variants.map((_, i) => (i === nil ? whenNil : whenCons));
+      const rs = r.locals.push(t) - 1, gs = g.locals.push(t) - 1;
+      r.body = { k: "case", scrut: { k: "local", i: 0 }, s: rs, t, result: "text", arms: arms(joined({ k: "local", i: 1 }, text("]")), { k: "call", fn: ri, args: [rest(rs), joined({ k: "local", i: 1 }, text(", "), head(r, rs))], tail: true }) };
+      g.body = { k: "case", scrut: a, s: gs, t, result: "text", arms: arms(text("[]"), { k: "call", fn: ri, args: [rest(gs), joined(text("["), head(g, gs))], tail: true }) };
+      return index.get(key)!;
+    }
+    const s = g.locals.push(t) - 1;
+    g.body = { k: "case", scrut: a, s, t, result: "text", arms: t.cases.map((c, ci) => one(c.variant, c.fields.map((x) => x.t), (j) => ({ k: "field", rec: { k: "local", i: s }, t, c: ci, i: j }))) };
+    return index.get(key)!;
+  }
   // A function written in place, as a closure: its code is a function of
   // its own taking the closure and then the inputs, which starts by
   // reading what it captured into locals.
