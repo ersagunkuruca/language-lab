@@ -27,7 +27,7 @@ test("array of List: its row, and its jobs agree with List's through items of ar
   assert.ok(rep.byType);
   assert.deepEqual(rep.hidden, { [CONS]: [1] });
   const lib = (n: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === n)!;
-  assert.deepEqual(rep.cost, { space: "n", [NIL]: "1", [CONS]: "1", match: "1", fold: "n", [lib("length")]: "1", [lib("append")]: "n", [lib("item at")]: "1", [lib("map")]: "n" });
+  assert.deepEqual(rep.cost, { space: "n", [NIL]: "1", [CONS]: "1", match: "1", fold: "n", [lib("length")]: "1", [lib("append")]: "n", [lib("item at")]: "1", [lib("map")]: "n", [lib("replace at")]: "1" });
   // List as written, which the chooser weighs it against (C30d3b).
   const spec = LIBRARY.reps.find((r) => r.of === LIST && r.canonical)!;
   assert.equal(spec.type, LIST);
@@ -52,6 +52,10 @@ test("array of List: its row, and its jobs agree with List's through items of ar
   show("append", () => items(k.call(tree("array append"), arr(1, 2), arr(3))));
   // item at by an Int position, and otherwise outside.
   show("item at", () => k.list(...[-1, 0, 1, 2, 3].map((i) => k.call(tree("array item at"), arr(10, 20, 30), k.int(i), k.lit(0)))));
+  // replace at (C93c): in the buffer, and the array it was given still
+  // reads as it was; the array as it is outside it.
+  show("replace at", () => k.let("a", arr(10, 20, 30), (a) => k.let("b", k.call(tree("array replace at"), a, k.int(1), k.lit(5)), (b) =>
+    k.list(items(b), items(a), items(k.call(tree("array replace at"), b, k.int(3), k.lit(9))), items(k.call(tree("array replace at"), a, k.int(0), k.lit(7))), items(b)))));
   show("show", () => k.call(tree("array show"), arr(1, 2)));
   show("compare", () => k.call(tree("array compare"), arr(3), arr(1, 2)));
   const code = merge(base(TREES.code), k.code), nm = { ...baseNames(k.names), ...TREES.names };
@@ -59,5 +63,5 @@ test("array of List: its row, and its jobs agree with List's through items of ar
   assert.deepEqual(info.errors.map((e) => e.message), []);
   const r = makeRunner(code, info, { print: () => {}, names: nm });
   const got = names.map((n) => r.value(code.defs.find((d) => nm[d] === n)!));
-  assert.deepEqual(got, ["[]", "[1, 2, 3]", "[1, 2, 3]", "[0]", "[2, 1, 1, 2, 0, 3]", "3", "[1, 2, 3]", "[0, 10, 20, 30, 0]", "\"[1, 2]\"", "after"]);
+  assert.deepEqual(got, ["[]", "[1, 2, 3]", "[1, 2, 3]", "[0]", "[2, 1, 1, 2, 0, 3]", "3", "[1, 2, 3]", "[0, 10, 20, 30, 0]", "[[10, 5, 30], [10, 20, 30], [10, 5, 30], [7, 20, 30], [10, 5, 30]]", "\"[1, 2]\"", "after"]);
 });

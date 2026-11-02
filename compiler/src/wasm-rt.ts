@@ -6096,6 +6096,67 @@ const ARRAYS: Record<string, Omit<RtFn, "name">> = {
       array.get $items
       i32.const 0`,
   },
+  // The item at k replaced (C93c), in a copy with room on both sides
+  // (WebAssembly has no counts to tell it's the one holder); the array
+  // as it is outside it.
+  "array.replaceAt": {
+    params: [["a", "array"], ["k", "int"], ["x", "item"]], result: "array", locals: [["n", "i32"], ["it", "items"], ["room", "i32"]], uses: [],
+    body: `
+      local.get $k
+      i64.const 0
+      i64.lt_s
+      local.get $k
+      local.get $a
+      struct.get $arr 2
+      i64.extend_i32_s
+      i64.ge_s
+      i32.or
+      if void
+        local.get $a
+        return
+      end
+      local.get $a
+      struct.get $arr 2
+      local.set $n
+      local.get $n
+      i32.const 4
+      local.get $n
+      i32.const 4
+      i32.gt_u
+      select
+      local.set $room
+      local.get $n
+      local.get $room
+      i32.const 1
+      i32.shl
+      i32.add
+      array.new_default $items
+      local.tee $it
+      local.get $room
+      local.get $a
+      struct.get $arr 0
+      struct.get $buf 0
+      local.get $a
+      struct.get $arr 1
+      local.get $n
+      array.copy $items $items
+      local.get $it
+      local.get $room
+      local.get $k
+      i32.wrap_i64
+      i32.add
+      local.get $x
+      array.set $items
+      local.get $it
+      local.get $room
+      local.get $room
+      local.get $n
+      i32.add
+      struct.new $buf
+      local.get $room
+      local.get $n
+      struct.new $arr`,
+  },
   // Item k where k is known to be in the array (equal and compare's loop).
   "array.get": {
     params: [["a", "array"], ["k", "int"]], result: "item", locals: [], uses: [],

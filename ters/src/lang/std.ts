@@ -778,15 +778,42 @@ export const TEXT_OPS = {
 // `fields` is the { tag, fields: [n, item₀, …] } value equal, compare and
 // show walk, the count first so they tell [1] from [1, 2] and order
 // shorter arrays first; it is made once, when first read.
+//
+// An item replaced (C93c) is written into the buffer too, so a replace is
+// constant: the views on the buffer as it was point at a version that
+// records the change instead, the slot and what it held, and reading one
+// of those first undoes the changes back to it, as a Map's hash table
+// does (Table below: Baker's shallow binding, "Shallow binding makes
+// functional arrays fast", 1991). A list kept by one holder only reads
+// its newest version, so each replace stays constant.
 export const ARRAY_TAG = "std.array";
 type Buffer = { items: unknown[]; lo: number; hi: number };
+// The newest version holds the buffer; an older one, the change from the
+// version after it: `slot` held `old`.
+type Version = { cur: Buffer | null; next: Version | null; slot: number; old: unknown };
+const versionOf = (b: Buffer): Version => ({ cur: b, next: null, slot: 0, old: undefined });
+function rerootArray(t: Version) {
+  if (t.cur) return;
+  const path: Version[] = [];
+  let x = t;
+  while (!x.cur) { path.push(x); x = x.next!; }
+  for (let i = path.length - 1; i >= 0; i--) {
+    const y = path[i], b = x.cur!, was = b.items[y.slot];
+    b.items[y.slot] = y.old;
+    y.cur = b; y.next = null;
+    x.cur = null; x.next = y; x.slot = y.slot; x.old = was;
+    x = y;
+  }
+}
 export class ArrayView {
   readonly tag = ARRAY_TAG;
-  readonly buf: Buffer;
+  readonly ver: Version;
   readonly start: number;
   readonly n: number;
   private f: unknown[] | null = null;
-  constructor(buf: Buffer, start: number, n: number) { this.buf = buf; this.start = start; this.n = n; }
+  constructor(ver: Version, start: number, n: number) { this.ver = ver; this.start = start; this.n = n; }
+  // The buffer as this view's version has it.
+  get buf(): Buffer { rerootArray(this.ver); return this.ver.cur!; }
   get fields(): unknown[] { return (this.f ??= [this.n, ...this.buf.items.slice(this.start, this.start + this.n)]); }
   toJSON() { return { tag: this.tag, fields: this.fields }; }
 }
@@ -796,26 +823,38 @@ type ArrayValue = ArrayView | { tag: Id; fields: unknown[] };
 export const arrayOf = (xs: unknown[], from = 0, to = xs.length): ArrayView => {
   const n = to - from, room = Math.max(4, n), items = new Array(n + 2 * room).fill(undefined);
   for (let i = 0; i < n; i++) items[room + i] = xs[from + i];
-  return new ArrayView({ items, lo: room, hi: room + n }, room, n);
+  return new ArrayView(versionOf({ items, lo: room, hi: room + n }), room, n);
 };
 // Either kind of array value: a view, or { tag, fields } made elsewhere
 // (a value read back from JSON).
 export const arrayView = (a: ArrayValue): ArrayView => (a instanceof ArrayView ? a : arrayOf(a.fields, 1));
 const pushBack = (a: ArrayValue, x: unknown): ArrayView => {
   const v = arrayView(a), b = v.buf, end = v.start + v.n;
-  if (end === b.hi && end < b.items.length) { b.items[end] = x; b.hi++; return new ArrayView(b, v.start, v.n + 1); }
+  if (end === b.hi && end < b.items.length) { b.items[end] = x; b.hi++; return new ArrayView(v.ver, v.start, v.n + 1); }
   const w = arrayOf(b.items, v.start, end);
   w.buf.items[w.start + w.n] = x; w.buf.hi++;
-  return new ArrayView(w.buf, w.start, w.n + 1);
+  return new ArrayView(w.ver, w.start, w.n + 1);
 };
 const pushFront = (a: ArrayValue, x: unknown): ArrayView => {
   const v = arrayView(a), b = v.buf;
-  if (v.start === b.lo && v.start > 0) { b.items[v.start - 1] = x; b.lo--; return new ArrayView(b, v.start - 1, v.n + 1); }
+  if (v.start === b.lo && v.start > 0) { b.items[v.start - 1] = x; b.lo--; return new ArrayView(v.ver, v.start - 1, v.n + 1); }
   const w = arrayOf(b.items, v.start, v.start + v.n);
   w.buf.items[w.start - 1] = x; w.buf.lo--;
-  return new ArrayView(w.buf, w.start - 1, w.n + 1);
+  return new ArrayView(w.ver, w.start - 1, w.n + 1);
 };
-const restOf = (a: ArrayValue): ArrayView => { const v = arrayView(a); return v.n === 0 ? v : new ArrayView(v.buf, v.start + 1, v.n - 1); };
+const restOf = (a: ArrayValue): ArrayView => { const v = arrayView(a); return v.n === 0 ? v : new ArrayView(v.ver, v.start + 1, v.n - 1); };
+// The item at position i replaced by x (C93c), or the array as it is
+// outside it, as `replace at` on a list: written into the buffer, and the
+// version given becomes the change back.
+const replaceIn = (a: ArrayValue, i: I.Int, x: unknown): ArrayView => {
+  const v = arrayView(a), k = Number(i);
+  if (!(Number.isInteger(k) && k >= 0 && k < v.n)) return v;
+  const b = v.buf, slot = v.start + k, t = v.ver;
+  const newest: Version = { cur: b, next: null, slot: 0, old: undefined };
+  t.cur = null; t.next = newest; t.slot = slot; t.old = b.items[slot];
+  b.items[slot] = x;
+  return new ArrayView(newest, v.start, v.n);
+};
 const itemsIn = (a: ArrayValue): unknown[] => { const v = arrayView(a); return v.buf.items.slice(v.start, v.start + v.n); };
 const arrayOf_ = (a: Type): Type => ({ t: "con", id: ARRAY, args: [a] });
 const ofItem = (make: (a: Type, s: Subst) => [Type[], Type], effects: Id[] = []): Sig => (s) => { const a = s.fresh(); const [ps, r] = make(a, s); return fn(ps, r, s.freshRow(effects)); };
@@ -835,6 +874,7 @@ export const ARRAY_OPS = {
   first: arrayFirst,
   rest: builtin("array.rest", "rest of array", ofItem((a) => [[arrayOf_(a)], arrayOf_(a)]), restOf),
   pushFront: builtin("array.pushFront", "push front", ofItem((a) => [[arrayOf_(a), a], arrayOf_(a)]), pushFront),
+  replaceAt: builtin("array.replaceAt", "replace in array", ofItem((a) => [[arrayOf_(a), int, a], arrayOf_(a)]), replaceIn),
   // The first item as an Option, without Choice: `array of List`'s match
   // (array-list.ts, C30d3b) reads it this way, so the evaluator runs a
   // match on an array without a search around it.
