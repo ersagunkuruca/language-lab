@@ -192,7 +192,9 @@ const BUILT: Record<Program, () => Doc> = { outline: () => outlineDoc() };
 const initialFor = (program: Program): Doc => {
   const m = manifest.programs.find((p) => p.program === program && p.editor !== false) ?? manifest.programs[0];
   if (m.built) return BUILT[m.program]();
-  const fs = (m.folders ?? []).map(FILES);
+  // With today's ids, as lab run reads a folder (load.ts): sheet still says
+  // std's Pair, which is Tuple2 now (L139), and pointed at nothing (E212).
+  const fs = (m.folders ?? []).map((f) => onTodaysIds(FILES(f)));
   const all = <K extends keyof (typeof fs)[number]>(k: K) => fs.some((f) => f[k]) ? Object.assign({}, ...fs.map((f) => f[k])) : undefined;
   const d = typedDoc(m.program, fs.map((f) => f.code as Code).reduce((a, b) => merge(a, b)), all("names") ?? {}, all("comments") ?? {}, { layout: all("layout"), examples: all("examples") });
   return { ...d, names: { short: d.names.short, descriptive: all("descriptive") ?? {} }, hints: all("hints") ?? {} };
@@ -3430,11 +3432,15 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
   } else if (choice) {
     box.append(h("p", { class: "hint" }, `${namer.name(ui.def)} may give no answer, or more than one (Choice), so it doesn't run as it is. To run it, say which you want: call it inside `,
       h("code", {}, "first(…, else …)"), ", ", h("code", {}, "all"), ", ", h("code", {}, "count"), " or ", h("code", {}, "optional"), "."));
-  } else if (action || value && ui.def === defNamed("main")) {
-    // main runs whatever it is: a value's Run gives the value.
+  } else if (action || value && ui.def === defNamed("main") || z?.t === "fn" && z.params.length === 1 && runGiven()) {
+    // main runs whatever it is: a value's Run gives the value. One that
+    // reads the command line runs on the example's own arguments (E212).
     const going = ui.output?.def === ui.def && ui.output.running;
+    const given = action || value ? null : runGiven();
+    const label = [namer.name(ui.def), ...given?.args ?? []].join(" ");
     box.append(going ? h("button", { class: "btn", type: "button", "data-act": "t-stop" }, `Stop ${namer.name(ui.def)}`)
-      : h("button", { class: "btn", type: "button", "data-act": "t-run" }, `Run ${namer.name(ui.def)}`));
+      : h("button", { class: "btn", type: "button", "data-act": "t-run" }, `Run ${label}`));
+    if (given) box.append(h("p", { class: "hint" }, `As lab run gives it: ${given.args.join(", ")}. ${Object.keys(given.files).join(", ")} ${Object.keys(given.files).length > 1 ? "come" : "comes"} with the example; what the run writes stays in this browser.`));
     if (ui.output?.def === ui.def) {
       box.append(h("pre", { class: "text out" }, ui.output.lines.join("\n") || (going ? "Running…" : "(no output)")));
       if (ui.output.error) box.append(h("p", { class: "status-line bad" }, ui.output.error));
@@ -3813,13 +3819,26 @@ function stopRun(why?: string) {
   running = null;
   if (ui.output?.running) { ui.output = { ...ui.output, running: false, error: why ?? ui.output.error }; render(); }
 }
+// What `lab run` would be given for an example whose main reads the
+// command line (examples.json "run", E212): its arguments, and its files,
+// shipped beside it. Only for main as the example has it: a program of
+// one's own, or main taking other inputs, gets none.
+function runGiven(): { args: string[]; files: Record<string, string> } | null {
+  const m = manifest.programs.find((p) => p.program === doc.program && p.editor !== false);
+  if (!m?.run || doc.title || ui.def !== defNamed("main")) return null;
+  return { args: m.run.args, files: m.folders?.[0] ? FILES(m.folders[0]).data ?? {} : {} };
+}
 function runTyped() {
   stopRun();
   const def = ui.def, title = titleOf(doc), prefix = `lab:${title}:`;
   const files: [string, string][] = [];
   try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k?.startsWith(prefix)) files.push([k, localStorage.getItem(k)!]); } } catch { /* no storage */ }
+  // An example's own files (budget.txt…) are there until a run writes one
+  // of the same name (E212).
+  const given = runGiven();
+  if (given) for (const [name, text] of Object.entries(given.files)) if (!files.some(([k]) => k === prefix + name)) files.push([prefix + name, text]);
   const w = (running = newWorker());
-  const ask: RunAsk = { code: prog(), names: pres().names, pins: heldPins?.all ?? doc.signatures ?? NO_PINS, def, title, files };
+  const ask: RunAsk = { code: prog(), names: pres().names, pins: heldPins?.all ?? doc.signatures ?? NO_PINS, def, title, files, args: given?.args };
   ui.output = { def, lines: [], running: true };
   w.onmessage = (e: MessageEvent<RunSays>) => {
     if (running !== w || !ui.output) return;
