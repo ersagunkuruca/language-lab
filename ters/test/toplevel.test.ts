@@ -838,3 +838,29 @@ test("a function input takes a definition's name: root near given cubic and 1", 
   const f = [...tr.values].find(([id]) => p.pres.names[id] === "f")?.[1];
   assert.equal(definedAs(f!), p.named("cubic"));
 });
+
+// A definition with no inputs turns from an action into a value and back
+// (E181): its calls read it, then call it again, and the program checks.
+test("an action with no inputs becomes a value, and back", async () => {
+  const { toggleValue } = await import("../src/lang/toplevel.ts");
+  const k = new Lang();
+  const symbols = k.def("symbols");
+  k.define(symbols, k.thunk(() => k.call(B.add, k.lit(1), k.lit(2))));
+  const g = k.def("g");
+  k.define(g, k.fn(["c"], () => k.call(B.add, k.call(symbols), k.call(symbols))));
+  const code = base(k.code), names = baseNames(k.names);
+  const v = toggleValue(code, names, symbols);
+  assert.ok(v.ok, !v.ok ? v.reason : "");
+  if (!v.ok) return;
+  assert.notEqual(v.code.nodes[(v.code.nodes[symbols] as NodeOf<"def">).body!].kind, "lambda");
+  assert.equal(subtree(v.code, g).filter((x) => (v.code.nodes[x] as NodeOf<"ref">).target === symbols).length, 2);
+  const zero = (c: Code) => subtree(c, g).filter((x) => c.nodes[x].kind === "call" && !(c.nodes[x] as NodeOf<"call">).args.length).length;
+  assert.equal(zero(v.code), 0);
+  assert.equal(infer(v.code).errors.length, infer(code).errors.length);
+  const back = toggleValue(v.code, v.names, symbols);
+  assert.ok(back.ok);
+  if (!back.ok) return;
+  assert.equal(back.code.nodes[(back.code.nodes[symbols] as NodeOf<"def">).body!].kind, "lambda");
+  assert.equal(zero(back.code), 2);
+  assert.equal(infer(back.code).errors.length, infer(code).errors.length);
+});

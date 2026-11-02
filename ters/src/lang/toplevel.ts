@@ -221,6 +221,35 @@ export function addParameter(code: Code, names: Names, def: Id, rawName: string)
     note: `Added the input ${name}.${places ? ` ${places} ${places === 1 ? "use" : "uses"} got a hole for it, so none is missing an argument.` : ""}` };
 }
 
+// A definition with no inputs is an action, () -> T, run where it's
+// called; one without a function is a value, computed once (E181). Each
+// turns into the other: an action's calls symbols() read symbols, and
+// where it was passed whole it's () => symbols; a value's reads become
+// calls. Whether the program still checks (an action that does Console
+// isn't a value) is the type check's to say.
+export function toggleValue(code: Code, names: Names, def: Id): Top {
+  const d = code.nodes[def];
+  if (d?.kind !== "def" || !d.body) return { ok: false, reason: "that isn't a definition with a body" };
+  const body = code.nodes[d.body];
+  if (body.kind === "typedef") return { ok: false, reason: "only a value or a function can change" };
+  if (body.kind === "lambda" && (body.params.length || body.results?.length)) return { ok: false, reason: `${nameOf(names, def)} has inputs; only one with none can be a value` };
+  const { nodes, add } = builder(code);
+  const own = new Set(subtree(code, def));
+  const calls = Object.values(code.nodes).filter((n): n is NodeOf<"call"> => n.kind === "call" && !n.args.length && code.nodes[n.fn]?.kind === "ref" && (code.nodes[n.fn] as NodeOf<"ref">).target === def);
+  const called = new Set(calls.map((c) => c.fn));
+  if (body.kind === "lambda") {
+    nodes[def] = { ...d, body: body.body };
+    for (const c of calls) nodes[c.id] = { id: c.id, kind: "ref", target: def };
+    for (const r of refsTo(code, def)) if (!called.has(r.id) && !own.has(r.id)) nodes[r.id] = { id: r.id, kind: "lambda", params: [], body: add({ kind: "ref", target: def }) };
+    const next = collect({ nodes, defs: code.defs });
+    return { ok: true, code: next, names, select: def, note: `${nameOf(names, def)} is a value now, computed once.${calls.length ? ` ${calls.length} call${calls.length === 1 ? " reads" : "s read"} it.` : ""}` };
+  }
+  nodes[def] = { ...d, body: add({ kind: "lambda", params: [], body: d.body }) };
+  const reads = refsTo(code, def).filter((r) => !own.has(r.id));
+  for (const r of reads) nodes[r.id] = { id: r.id, kind: "call", fn: add({ kind: "ref", target: def }), args: [] };
+  return { ok: true, code: { nodes, defs: code.defs }, names, select: def, note: `${nameOf(names, def)} is an action now, run where it's called.${reads.length ? ` ${reads.length} read${reads.length === 1 ? " calls" : "s call"} it.` : ""}` };
+}
+
 // With `leaveHoles`, a used input goes too: each use becomes a hole.
 export function removeParameter(code: Code, names: Names, def: Id, param: Id, leaveHoles = false): Top {
   const lam = lambdaOf(code, def);

@@ -2240,7 +2240,16 @@ function structurePanel(info: T.Info, names: Names): HTMLElement | null {
     out.append(pinRow(info, dname));
     const params = body?.kind === "lambda" ? body.params : [];
     out.append(h("div", { class: "sub-head" }, `Inputs of ${dname} · code.json`));
-    if (!params.length) out.append(h("p", { class: "hint" }, body?.kind === "lambda" ? "None: it's an action, run on its own." : "None: it's a value. Adding an input makes it a function."));
+    if (!params.length) {
+      out.append(h("p", { class: "hint" }, body?.kind === "lambda" ? "None: it's an action, run where it's called, each time." : "None: it's a value, computed once. Adding an input makes it a function."));
+      // One into the other (E181): symbols() everywhere becomes symbols.
+      if (body && body.kind !== "typedef" && !(body.kind === "lambda" && body.results?.length)) {
+        const turn = h("button", { class: "btn", type: "button" }, body.kind === "lambda" ? "Make it a value" : "Make it an action");
+        turn.title = body.kind === "lambda" ? `Computed once; its calls ${dname}() read ${dname}` : `Run where it's called; its reads call ${dname}()`;
+        turn.addEventListener("click", () => runTop(info, Top.toggleValue(code, sh, ui.def)));
+        out.append(h("div", { class: "acts" }, turn));
+      }
+    }
     params.forEach((p) => out.append(paramRow(info, names, p)));
     const c = textField("f-new-input", "New input", "its name");
     const add = h("button", { class: "btn", type: "button" }, "Add the input");
