@@ -230,6 +230,24 @@ test("typed lists and constructors take value definitions by name", async () => 
   }
 });
 
+// A program's own case shares its name with std's done(value), and an
+// effect's operation is called (E188): done, [todo, doing, done] and
+// random() * 3 are read.
+test("typed case names and effect operations read as meant", async () => {
+  const { Lang } = await import("../src/lang/dsl.ts");
+  const { base, baseNames } = await import("../src/lang/load.ts");
+  const k = new Lang();
+  k.type("Stage", [], [["todo", []], ["doing", []], ["done", []]]);
+  const f = k.def("f");
+  let hole = "";
+  k.define(f, k.fn(["a"], () => (hole = k.hole())));
+  const code = base(k.code), names = baseNames(k.names);
+  for (const text of ["done", "[todo, doing, done]", "random() * 3"]) {
+    const r = fillValue(code, names, infer(code, names), hole, text, f);
+    assert.ok(r.ok, `${text}: ${!r.ok ? r.reason : ""}`);
+  }
+});
+
 // A field two types share, read on an input nothing has settled, isn't
 // chosen silently (E186): both readings are offered.
 test("typed field shared by two types offers each type", async () => {
