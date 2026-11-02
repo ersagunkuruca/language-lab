@@ -222,7 +222,7 @@ export function fillValue(code: Code, names: Names, info: Info, hole: Id, text: 
   // where a Rational goes, a whole number or one over another is a
   // fraction: 1/2 is one half, not 0.5.
   const whole = (v: Value): boolean => typeof v === "number" ? Number.isInteger(v) : typeof v === "object" && v !== null && "tag" in v && v.fields.some(whole);
-  const wholes = (t: Typed): boolean => "value" in t ? whole(t.value) : "args" in t ? t.args.some(wholes) : "cond" in t ? [t.cond, t.then, t.else].some(wholes) : "body" in t && wholes(t.body);
+  const wholes = (t: Typed): boolean => "value" in t ? whole(t.value) : "args" in t ? t.args.some(wholes) : "cond" in t ? [t.cond, t.then, t.else].some(wholes) : "let" in t ? wholes(t.be) || wholes(t.rest) : "body" in t && wholes(t.body);
   // A name several things share (show, length) is each of them in turn,
   // and the first that type-checks there is the one meant. A meaning that
   // would settle the type of a value nothing has settled yet comes after
@@ -316,6 +316,7 @@ function narrow(code: Code, info: Info, top: Typed): Typed {
   const look = (t: Typed): void => {
     if ("params" in t) return look(t.body);
     if ("cond" in t) return [t.cond, t.then, t.else].forEach(look);
+    if ("let" in t) return [t.be, t.rest].forEach(look);
     if (!("op" in t)) return;
     const alts = t.alts ?? [t.op];
     t.args.forEach((a, i) => {
@@ -328,9 +329,12 @@ function narrow(code: Code, info: Info, top: Typed): Typed {
     });
   };
   look(top);
+  const bound = new Map<Id, Set<Id>>();
   const go = (t: Typed): { t: Typed; heads: Set<Id> | null } => {
     if ("value" in t) return { t, heads: typeof t.value === "string" ? new Set([STRING]) : null };
-    if ("ref" in t) { const h = head(info.typeOf.get(t.ref)); const g = given.get(t.ref); return { t, heads: h ? new Set([h]) : g?.size ? g : null }; }
+    if ("hole" in t) return { t, heads: null };
+    if ("ref" in t) { const h = head(info.typeOf.get(t.ref)); const g = bound.get(t.ref) ?? given.get(t.ref); return { t, heads: h ? new Set([h]) : g?.size ? g : null }; }
+    if ("let" in t) { const be = go(t.be); if (be.heads) bound.set(t.let.id, be.heads); const rest = go(t.rest); return { t: { ...t, be: be.t, rest: rest.t }, heads: rest.heads }; }
     if ("params" in t) return { t: { ...t, body: go(t.body).t }, heads: null };
     if ("cond" in t) {
       const [c, a, b] = [t.cond, t.then, t.else].map(go);
@@ -343,7 +347,12 @@ function narrow(code: Code, info: Info, top: Typed): Typed {
     const use = kept.length ? kept : alts;
     const outs = use.map(gives);
     const heads = outs.every((h) => h) ? new Set(outs as Id[]) : null;
-    return { t: { op: use[0], args: args.map((a) => a.t), ...(use.length > 1 ? { alts: use } : {}) }, heads };
+    // An action given by name, as the text prints it: first(x, else y) is
+    // first(() => x, () => y), where every meaning takes a function of
+    // nothing there (E178).
+    const byName = (i: number) => use.every((op) => { if (caseOf(op)) return false; const f = typeOfOp(op); const p = f && f.params.length === args.length ? info.subst.resolve(f.params[i]) : null; return p?.t === "fn" && p.params.length === 0; });
+    const passed = args.map((a, i): Typed => (!("params" in a.t) && byName(i) ? { params: [], body: a.t } : a.t));
+    return { t: { op: use[0], args: passed, ...(use.length > 1 ? { alts: use } : {}) }, heads };
   };
   return go(top).t;
 }
@@ -368,6 +377,7 @@ function leaveOpen(info: Info, t: Typed): Typed {
   };
   if ("params" in t) return { ...t, body: leaveOpen(info, t.body) };
   if ("cond" in t) return { cond: leaveOpen(info, t.cond), then: leaveOpen(info, t.then), else: leaveOpen(info, t.else) };
+  if ("let" in t) return { ...t, be: leaveOpen(info, t.be), rest: leaveOpen(info, t.rest) };
   if (!("op" in t)) return t;
   const args = t.args.map((a) => leaveOpen(info, a));
   if (!t.alts || t.alts.length < 2) return { ...t, args };
@@ -384,6 +394,7 @@ function readings(t: Typed): Typed[] {
     for (const a of [t.cond, t.then, t.else]) out = out.flatMap((done) => readings(a).map((x) => [...done, x])).slice(0, 16);
     return out.map(([cond, then, els]) => ({ cond, then, else: els }));
   }
+  if ("let" in t) return readings(t.be).flatMap((be) => readings(t.rest).map((rest) => ({ ...t, be, rest }))).slice(0, 16);
   if (!("op" in t)) return [t];
   let out: Typed[][] = [[]];
   for (const a of t.args) out = out.flatMap((done) => readings(a).map((x) => [...done, x])).slice(0, 16);
@@ -401,7 +412,7 @@ function readings(t: Typed): Typed[] {
 // One that names its results, (speed, time) → drift, drop => speed · time,
 // time · time, gives that many (L128b, the text L128c prints): the parts
 // written out are its tuple.
-type Typed = { value: Value } | { ref: Id } | { op: Id; args: Typed[]; alts?: Id[] } | { params: { id: Id; name: string }[]; body: Typed; results?: { id: Id; name: string }[] } | { cond: Typed; then: Typed; else: Typed };
+type Typed = { value: Value } | { ref: Id } | { hole: true } | { let: { id: Id; name: string }; be: Typed; rest: Typed } | { op: Id; args: Typed[]; alts?: Id[] } | { params: { id: Id; name: string }[]; body: Typed; results?: { id: Id; name: string }[] } | { cond: Typed; then: Typed; else: Typed };
 // The operators are read from the notation itself (styles/blocks.json),
 // loosest first: each glyph is every function drawn with it, and the first
 // that type-checks is the one meant. The generic arithmetic comes first, so
@@ -436,6 +447,29 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
   if (named) return { ref: named };
   const r = parseValue(text, code, names);
   if (!("error" in r)) return { value: r.value };
+  // What the text prints, read back (E178): a □ left to fill later, a
+  // step name = value; rest, and a list of anything.
+  if (t === "□") return { hole: true };
+  const steps = topLevel(t, ";");
+  const step = steps && steps.length > 1 ? /^([\p{L}_][\p{L}\p{N}_' ]*?)\s*=(?![=>])\s*(\S[\s\S]*)$/u.exec(steps[0].trim()) : null;
+  if (step && steps) {
+    const be = typedOut(step[2], code, names, scope);
+    if ("error" in be) return be;
+    const id = freshId(), inner = new Map(scope).set(step[1], id);
+    const rest = typedOut(steps.slice(1).join(";"), code, names, inner);
+    return "error" in rest ? rest : { let: { id, name: step[1] }, be, rest };
+  }
+  const items = /^\[[\s\S]*\]$/.test(t) ? topLevel(t.slice(1, -1)) : undefined;
+  if (items) {
+    const tail = items.length && /^\s*\.\./.test(items[items.length - 1]) ? items.pop()!.trim().slice(2) : undefined;
+    let list: Typed | { error: string } = tail !== undefined ? typedOut(tail, code, names, scope) : { value: { tag: NIL, fields: [] } as Value };
+    for (const x of items.reverse()) {
+      if ("error" in list) break;
+      const item = typedOut(x, code, names, scope);
+      list = "error" in item ? item : { op: CONS, args: [item, list] };
+    }
+    return list;
+  }
   // => binds loosest: (x) => x + 1 is a function of x, not (x) => x, plus 1.
   const fn = /^\(([^()]*)\)\s*(?:(?:→|->)\s*([^()=]+?)\s*)?=>\s*(\S[\s\S]*)$/.exec(t);
   if (fn) {
@@ -516,7 +550,10 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
     const callable = (id: Id) => !["binder", "field"].includes(code.nodes[id]?.kind) || isOperation(code, id);
     const alts = [...new Set([...(named ? [named] : []), ...Object.keys(names).filter((id) => names[id] === call[1] && callable(id))])]
       .sort((x, y) => +isOperation(code, y) - +isOperation(code, x));
-    const args = parts.map((a) => typedOut(a, code, names, scope));
+    // A word the notation prints before an input, first(x, else y), is
+    // read past (E178).
+    const words = alts.flatMap((id) => (blocksStyle.notation as Record<Id, Notation>)[id]?.words ?? []);
+    const args = parts.map((a, i) => { const w = words.length ? alts.map((id) => (blocksStyle.notation as Record<Id, Notation>)[id]?.words?.[i]).find((w) => w && new RegExp(`^\\s*${w}\\s`).test(a)) : undefined; return typedOut(w ? a.trim().slice(w.length) : a, code, names, scope); });
     if (alts.length && args.every((a) => !("error" in a))) return { op: alts[0], args: args as Typed[], alts };
     // What's wrong, not where (BACKLOG I115): the name, or what's wrong
     // inside its inputs.
@@ -616,7 +653,7 @@ function lastDot(text: string): number {
 
 // The arguments of a call, split at its own commas: none inside brackets
 // or text. Undefined when the brackets don't close where they should.
-function topLevel(text: string): string[] | undefined {
+function topLevel(text: string, by = ","): string[] | undefined {
   const out: string[] = [];
   let depth = 0, quoted = false, from = 0;
   for (let i = 0; i < text.length; i++) {
@@ -625,7 +662,7 @@ function topLevel(text: string): string[] | undefined {
     if (quoted) continue;
     if ("([".includes(c)) depth++;
     else if (")]".includes(c) && --depth < 0) return undefined;
-    else if (c === "," && depth === 0) { out.push(text.slice(from, i)); from = i + 1; }
+    else if (c === by && depth === 0) { out.push(text.slice(from, i)); from = i + 1; }
   }
   if (depth || quoted) return undefined;
   const last = text.slice(from);
@@ -670,6 +707,17 @@ function written(code: Code, names: Names, info: Info, hole: Id, text: string, t
       return id;
     }
     if ("ref" in t) { const id = place ?? freshId(); nodes[id] = { id, kind: "ref", target: t.ref }; return id; }
+    if ("hole" in t) { const id = place ?? freshId(); nodes[id] = { id, kind: "hole" }; return id; }
+    if ("let" in t) {
+      // name = value; rest: a step, as Add a value before this makes one.
+      const lam = freshId();
+      nodes[t.let.id] = { id: t.let.id, kind: "binder" };
+      nn[t.let.id] = t.let.name;
+      nodes[lam] = { id: lam, kind: "lambda", params: [t.let.id], body: tree(t.rest) };
+      const id = place ?? freshId();
+      nodes[id] = { id, kind: "call", fn: lam, args: [tree(t.be)] };
+      return id;
+    }
     if ("cond" in t) {
       const id = place ?? freshId();
       const arm = (variant: Id, body: Typed) => { const a = freshId(); nodes[a] = { id: a, kind: "arm", variant, binds: [], results: [], body: tree(body) }; return a; };
