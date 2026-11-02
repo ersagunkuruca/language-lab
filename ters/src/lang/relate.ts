@@ -787,6 +787,8 @@ export function interpreter(given: Code, opts: Options = {}) {
   // A point where the search may go on forever: suspend (for fairness) and
   // spend fuel.
   const step = (g: Goal): Goal => (s) => () => (spend() ? g(s) : null);
+  // Values defined once, worked out once (refGoal): null when they can't be.
+  const constants = new Map<Id, Term | null>();
 
   const variantsOf = (variant: Id): Id[] => {
     const def = owner.get(variant)!;
@@ -976,7 +978,26 @@ export function interpreter(given: Code, opts: Options = {}) {
         const body = nodes[t.body!];
         if (body.kind === "lambda") return eq(out, { k: "closure", lambda: body.id, env: new Map() });
         // A value defined once: its body, in a frame of its own.
-        return framed(body.id, [body.id], () => undefined, [[body.id, out]], (f) => (s) => runPlan(plans.planOfValue(target, known(out, s)), f)(s));
+        const value = (o: Term): Goal => framed(body.id, [body.id], () => undefined, [[body.id, o]], (f) => (s) => runPlan(plans.planOfValue(target, known(o, s)), f)(s));
+        // Worked out once per search when it has exactly one answer with
+        // nothing unknown in it (C83: an algebra's table, built from its
+        // signature, is otherwise built again at each use: the ray
+        // marcher's PGA motor ran out of steps).
+        if (!constants.has(target)) {
+          constants.set(target, null);
+          let found: Term | null = null, answers = 0;
+          try {
+            const [[x], s1] = freshVars({ sub: new Sub(), eqs: [], waits: [], next: 0, spend: opts.spend }, 1);
+            for (const st of pull(value(x)(s1))) {
+              const g = everyEq(st).length || everyWait(st).length ? undefined : ground(x, st);
+              if (!g || ++answers > 1) { found = null; break; }
+              found = g;
+            }
+          } catch (e) { if (!(e instanceof NotInvertible)) throw e; found = null; }
+          constants.set(target, found);
+        }
+        const c = constants.get(target);
+        return c ? eq(out, c) : value(out);
       }
       case "builtin": return eq(out, { k: "prim", id: target });
       case "variant": return eq(out, t.fields.length ? { k: "prim", id: target } : dataT(target));
