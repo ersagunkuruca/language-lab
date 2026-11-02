@@ -272,6 +272,25 @@ test("typed steps and a step before a one-action body", async () => {
   assert.ok(s.ok, !s.ok ? s.reason : "");
 });
 
+// ≠ and != are not(a = b), and what's left after a field read is named,
+// not taken for the field's name (E191).
+test("typed ≠ and != read as not equal", async () => {
+  const { Lang } = await import("../src/lang/dsl.ts");
+  const { base, baseNames } = await import("../src/lang/load.ts");
+  const k = new Lang();
+  const f = k.def("f");
+  let hole = "";
+  k.define(f, k.fn(["a", "b"], () => (hole = k.hole())));
+  const code = base(k.code), names = baseNames(k.names);
+  for (const text of ["a ≠ b", "a != b"]) {
+    const r = fillValue(code, names, infer(code, names), hole, text, f);
+    assert.ok(r.ok, `${text}: ${!r.ok ? r.reason : ""}`);
+    if (r.ok) assert.equal((r.code.nodes[(r.code.nodes[hole] as NodeOf<"call">).fn] as NodeOf<"ref">).target, "builtin.not", text);
+  }
+  const left = fillValue(code, names, infer(code, names), hole, "a.head <> b", f);
+  assert.ok(!left.ok && /after \.head/.test(left.reason), !left.ok ? left.reason : "");
+});
+
 // A field two types share, read on an input nothing has settled, isn't
 // chosen silently (E186): both readings are offered.
 test("typed field shared by two types offers each type", async () => {

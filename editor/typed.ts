@@ -19,7 +19,7 @@ import { addVariant, fillHole } from "../ters/src/lang/refactor.ts";
 import { partNamed } from "../ters/src/lang/results.ts";
 import { planSolve } from "../ters/src/lang/solve.ts";
 import { solveMode } from "../ters/src/lang/modes.ts";
-import { ARITH, ASSOCIATIVE, CONS, FALSE, NIL, SIGS, TRUE, TUPLE_MAX, tuplePart, tupleVariant } from "../ters/src/lang/std.ts";
+import { ARITH, ASSOCIATIVE, CONS, FALSE, NIL, S, SIGS, TRUE, TUPLE_MAX, tuplePart, tupleVariant } from "../ters/src/lang/std.ts";
 import { INT, NUMBER, RATIONAL_TYPE, STRING, schemeArith, showIn, showType, type Type } from "../ters/src/lang/types.ts";
 import { ratioParts, read as readInt } from "../ters/src/lang/int.ts";
 import { DEF_VALUE, type Value } from "../ters/src/lang/run.ts";
@@ -498,9 +498,12 @@ const glyphs = (fixity: string) => {
   return by;
 };
 const INFIX = glyphs("infix");
+const UNEQUAL = ["≠", "!="];
 const OPS: [string, Id[]][][] = [...new Set([...INFIX.values()].map((g) => g.prec))].sort((a, b) => a - b).map((prec) => {
   const level = [...INFIX].filter(([, g]) => g.prec === prec).map(([glyph, g]): [string, Id[]] => [glyph, g.ids]);
   const keyed = Object.entries(KEYS).flatMap(([key, glyph]): [string, Id[]][] => (INFIX.get(glyph)?.prec === prec ? [[key, INFIX.get(glyph)!.ids]] : []));
+  // ≠ and != are not(a = b): the language has no ≠ of its own (E191, L161).
+  if (INFIX.get("=")?.prec === prec) for (const sym of UNEQUAL) keyed.push([sym, INFIX.get("=")!.ids]);
   // Longest first: <= before <, ++ before +.
   return [...level, ...keyed].sort((a, b) => b[0].length - a[0].length);
 });
@@ -582,7 +585,7 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
       if (!left || OPS.flat().some(([sym]) => left.endsWith(sym))) continue;
       const a = typedOut(left, code, names, scope), b = typedOut(t.slice(i + 1), code, names, scope);
       const alts = op[1].filter((id) => code.nodes[id]);
-      if (!("error" in a) && !("error" in b) && alts.length) return { op: alts[0], args: [a, b], alts };
+      if (!("error" in a) && !("error" in b) && alts.length) return UNEQUAL.includes(op[0]) ? { op: S.not, args: [{ op: alts[0], args: [a, b], alts }] } : { op: alts[0], args: [a, b], alts };
       // What's wrong in an operand says more than a position in the whole.
       inner ??= [a, b].find((x): x is { error: string } => "error" in x && !/ at \d+$/.test(x.error));
     }
@@ -635,6 +638,11 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
   }
   if (dot > 0) {
     const field = t.slice(dot + 1).trim();
+    // A field read followed by what isn't read (a.id <> b): say what's
+    // left over, not that the whole rest is no field's name (E191).
+    const fields = new Set(Object.keys(names).filter((id) => code.nodes[id]?.kind === "field").map((id) => names[id]));
+    const known = [...fields].filter((f) => field.startsWith(f) && /^\s+\S/.test(field.slice(f.length))).sort((a, b) => b.length - a.length)[0];
+    if (!fields.has(field) && known) return { error: `after .${known}, “${field.slice(known.length).trim()}” isn't read: no operator starts it` };
     if (!Object.keys(names).some((id) => names[id] === field && code.nodes[id]?.kind === "field")) return { error: `there's no field named ${field}${closest(field, Object.keys(names).filter((id) => code.nodes[id]?.kind === "field").map((id) => names[id]), scope)}` };
     return typedOut(t.slice(0, dot), code, names, scope);
   }
