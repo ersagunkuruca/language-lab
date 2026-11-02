@@ -43,9 +43,9 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E212 | The text reader reads a case's name as a function value: `map(xs, out)` says "nothing is named out here", though the checker types a case as its constructor. machine has 17 `make …` wrappers only to pass a case | [REVIEW-2026-11-02d](docs/reports/reviews/REVIEW-2026-11-02d.md) §6 | P2 | S | |
-| E213 | The text reader resolves `x.field` by x's type: `jump(number(3)).to` in machine says "to belongs to one case of Attribute" (the html library's `to`, not `Instr`'s) | [REVIEW-2026-11-02d](docs/reports/reviews/REVIEW-2026-11-02d.md) §6 | P2 | S | |
-| E211 | The palette offers `set` where a record is being rebuilt from another's fields (machine rebuilds its 8-field Machine 12 times), and a case where a function value goes | [REVIEW-2026-11-02d](docs/reports/reviews/REVIEW-2026-11-02d.md) §1, §6 | P3 | S | |
+| E215 | The text reader reads a case's name as a function value: `map(xs, out)` says "nothing is named out here", though the checker types a case as its constructor. machine has 17 `make …` wrappers only to pass a case | [REVIEW-2026-11-02d](docs/reports/reviews/REVIEW-2026-11-02d.md) §6 | P2 | S | |
+| E216 | The text reader resolves `x.field` by x's type: `jump(number(3)).to` in machine says "to belongs to one case of Attribute" (the html library's `to`, not `Instr`'s) | [REVIEW-2026-11-02d](docs/reports/reviews/REVIEW-2026-11-02d.md) §6 | P2 | S | |
+| E214 | The palette offers `set` where a record is being rebuilt from another's fields (machine rebuilds its 8-field Machine 12 times), and a case where a function value goes | [REVIEW-2026-11-02d](docs/reports/reviews/REVIEW-2026-11-02d.md) §1, §6 | P3 | S | |
 
 ### Writing programs in the editor
 
