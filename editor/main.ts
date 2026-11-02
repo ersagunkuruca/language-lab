@@ -1556,8 +1556,26 @@ function textPanel(info: T.Info): string {
 
 const blocksPres = (): Presentation => ({ ...pres(), style: { ...(blocksStyle as unknown as Style) } });
 // Typed views: unnamed dots get a handle (•1, •2) for display only.
-const withHandles = (p: Presentation): Presentation => ({ ...p, names: { ...T.dotHandles(doc.code, ui.def, p.names), ...p.names } });
+// The same names object while the program, the definition and the names
+// are, so what is kept by the names (shown types, E200b) is kept.
+let handled: { from: unknown[]; names: Names } | null = null;
+const withHandles = (p: Presentation): Presentation => {
+  const from = [doc.code, ui.def, p.names];
+  if (!handled || from.some((x, i) => x !== handled!.from[i])) handled = { from, names: { ...T.dotHandles(doc.code, ui.def, p.names), ...p.names } };
+  return { ...p, names: handled.names };
+};
 const typedPres = (): Presentation => withHandles(blocksPres());
+// A definition's blocks, kept while only the selection changes (E200b):
+// the selection is a class, moved on the kept element.
+let blocksKept: { from: unknown[]; el: HTMLElement } | null = null;
+function blocksOf(info: T.Info): HTMLElement {
+  const p = typedPres();
+  const from = [doc.code, info, ui.def, p.names, p.comments, p.hints, doc.layout.groups, doc.layout.folded];
+  if (!blocksKept || from.some((x, i) => x !== blocksKept!.from[i])) return (blocksKept = { from, el: T.renderTyped(doc.code, p, info, ui.def, ui.selected, undefined, doc.layout.groups, doc.layout.folded) }).el;
+  for (const e of blocksKept.el.querySelectorAll(".sel")) e.classList.remove("sel");
+  if (ui.selected) for (const e of blocksKept.el.querySelectorAll(`[data-id="${CSS.escape(ui.selected)}"]`)) e.classList.add("sel");
+  return blocksKept.el;
+}
 const GRAPH_HINT = TOUCH
   ? "long-press for a menu; drag a node to move it; Pick (in the menu) several to move them together; pinch to zoom; tap a wire to put a dot on it; drag from a port, dot or output onto an input to use that value there"
   : "right-click for a menu; drag a node to move it (alt-drag for a dot), shift-click or shift-drag to pick several; click a wire to put a dot on it; drag from a port, dot or output onto an input to use that value there; drag an input's wire away to leave a hole";
@@ -4130,7 +4148,7 @@ function draw() {
     h("button", { type: "button", class: "t-open", "data-tab": d, title: namer.name(d), "aria-current": d === ui.def ? "true" : "false" }, namer.name(d)),
     ui.tabs.length > 1 ? h("button", { type: "button", class: "t-close", "data-close-tab": d, "aria-label": `Close ${namer.name(d)}` }, "×") : null);
   const textView = ui.text === "blocks"
-    ? h("div", { class: "blocks-wrap", tabindex: "0", "aria-label": "The program: Tab steps through its parts, Enter edits one, Shift+F10 or the Menu key opens its menu" }, T.renderTyped(doc.code, typedPres(), info, ui.def, ui.selected, undefined, doc.layout.groups, doc.layout.folded), ...looseBlocks(info))
+    ? h("div", { class: "blocks-wrap", tabindex: "0", "aria-label": "The program: Tab steps through its parts, Enter edits one, Shift+F10 or the Menu key opens its menu" }, blocksOf(info), ...looseBlocks(info))
     : h("pre", { class: "text" }, textPanel(info));
   const panels: [UI["panel"], string, () => Kid[]][] = [
     ["node", ui.mode === "new-def" ? "New" : ui.selected ? "Selected" : "Definition", () => [typedInspector(namer, typedPres(), info), definitionPanel(p)]],

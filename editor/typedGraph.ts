@@ -38,7 +38,7 @@ import type { Info } from "../ters/src/lang/infer.ts";
 import { ASSOCIATIVE, chainOperands, CONS, NIL, S, SIGS, TRUE, FALSE, TUPLE_MAX, tupleVariant } from "../ters/src/lang/std.ts";
 import { CHOICE, DIVERGE, showIn, showType, type Type } from "../ters/src/lang/types.ts";
 import { connectDrag, follow, infiniteCanvas, moveDrag, s, svgPoint, type Canvas, type Pos } from "./canvas.ts";
-import { litLabel, sigType } from "./typed.ts";
+import { litLabel, sigType, typeOf as shownType } from "./typed.ts";
 import { partPort, resultPorts } from "../ters/src/lang/results.ts";
 import { arrange, crossingsOf, curve, curvePoints, frameBoxes, hopPath, overlaps, placeLabels, route, tidy, tunnels, type Box, type TFrame, type TNode, type TWire } from "./graphLayout.ts";
 import { planSolve } from "../ters/src/lang/solve.ts";
@@ -358,7 +358,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   const names = pres.names;
   const node = (id: Id) => code.nodes[id];
   const name = (id: Id) => names[id] ?? (node(id)?.kind === "builtin" ? (node(id) as NodeOf<"builtin">).op : "?");
-  const typeOf = (id: Id) => { const t = info?.typeOf.get(id); return t ? showIn(t, names, info!.subst) : ""; };
+  const typeOf = (id: Id) => shownType(info, id, names) ?? "";
   const sel = (id: Id) => (hooks.selected === id ? " sel" : "");
   const errs = new Set((info?.errors ?? []).map((e) => e.id));
   const dotOf = (id: Id): Id | null => {
