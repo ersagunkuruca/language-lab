@@ -9,7 +9,7 @@ import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { library } from "./programs.ts";
-import { ABORT_OP, ARITH, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, TICKET_V, AWAIT_OP, START_TIMER_OP, NOW_OP, WAIT_OP, BRANCH_V, DUAL_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, DIVISION_V, EXTENDED_V, ALGEBRAIC_OPS, CHECK_OP, RANDOM_OP, std } from "./std.ts";
+import { ABORT_OP, ARITH, CELL_OPS, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, TICKET_V, AWAIT_OP, START_TIMER_OP, NOW_OP, WAIT_OP, BRANCH_V, DUAL_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, DIVISION_V, EXTENDED_V, ALGEBRAIC_OPS, CHECK_OP, RANDOM_OP, std } from "./std.ts";
 
 export function buildPrelude(): Module {
   const k = new Lang();
@@ -1044,6 +1044,13 @@ export function buildPrelude(): Module {
   // position, n steps.
   const lt = (a: Id, b: Id) => k.call(INT_OPS.less, a, b);
   const less1 = (i: Id) => k.call(INT_OPS.sub, i, k.int(1));
+  // The walk of position where: the position of the first item that
+  // passes, the list's first item being at `from`.
+  const positionFrom = k.def("position from");
+  k.define(positionFrom, k.fn(["list", "test", "from"], (xs, test, from) => k.match(xs, [
+    { variant: NIL, names: [], body: () => k.x(NONE) },
+    { variant: CONS, names: ["item", "rest"], body: ([x, rest]) => k.if(k.call(test, x), k.call(SOME, from), k.call(positionFrom, rest, test, k.call(INT_OPS.add, from, k.int(1)))) },
+  ])));
   const itemAt = k.def("item at");
   k.define(itemAt, k.fn(["list", "position", "otherwise"], (xs, i, o) => k.match(xs, [
     { variant: NIL, names: [], body: () => o },
@@ -1070,6 +1077,26 @@ export function buildPrelude(): Module {
     { variant: NIL, names: [], body: () => NIL },
     { variant: CONS, names: ["item", "rest"], body: ([, rest]) => k.if(lt(c, k.int(1)), xs, k.call(drop, rest, less1(c))) },
   ])));
+  // The position of the first item that passes a test, counting from 0, as
+  // some(position); none when no item does (L160). Not a Choice, so the
+  // test runs as the function it is.
+  const positionWhere = k.def("position where");
+  k.define(positionWhere, k.fn(["list", "test"], (xs, test) => k.call(positionFrom, xs, test, k.int(0))));
+  // A path to the list item that passes a test, so one item of a cell's
+  // list can be written by its key (BACKLOG L160, GAPS round 8 B2 and BL5:
+  // board rewrote its whole state to change one card's time). The list is
+  // read now and the item found by position: `write at(board, then
+  // path(item where(board, cards, (c) ↦ c.id = id), time), t)` wakes only
+  // that card's readers. Prior art: Solid stores' path filters
+  // (`setState("todos", t => t.id === id, "done", true)`). When no item
+  // passes, the path is to no item, as `item path` past the end is: read
+  // at has no answer there and an edit changes nothing.
+  const itemWhere = k.def("item where");
+  k.define(itemWhere, k.fn(["cell", "path", "test"], (c, p, test) =>
+    k.call(CELL_OPS.itemPath, p, k.match(k.call(positionWhere, k.call(S.first, k.thunk(() => k.call(CELL_OPS.readAt, c, p)), k.thunk(() => k.x(NIL))), test), [
+      { variant: SOME, names: ["position"], body: ([i]) => i },
+      { variant: NONE, names: [], body: () => k.int(-1) },
+    ]))));
   // A Float64 shown to a fixed number of decimals (BACKLOG I93): the
   // Spacetime demo wrote its own `rounded`. Rounds half away from 0 at
   // the last place and keeps trailing zeros, as JavaScript's toFixed and
@@ -1455,7 +1482,7 @@ export function buildPrelude(): Module {
   const simulatedHelpers = [readyAt, earliest, readyTimes, tiedAt, pickAt, nextDraw, firstDraw, simulatedWorld, simulatedClock];
   const awaitHelpers = [startBranch, waiting, goOn, finished, settle, firstDone, raceSettle, ...simulatedHelpers];
 
-  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, repeated, padStart, padEnd, flatten, flatMap, rangeFrom, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, ticketId, anyOf, together, race, within, simulated];
+  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, repeated, padStart, padEnd, flatten, flatMap, rangeFrom, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, positionWhere, itemWhere, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, ticketId, anyOf, together, race, within, simulated];
   // Each number's own show, from before the generic one showed every number
   // (L153, L156): kept so programs saved before still open, not offered.
   const perTypeShows = [showF, showC, showD, showX];
@@ -1507,6 +1534,9 @@ export function buildPrelude(): Module {
     [maximum]: "The largest of the numbers, as an Extended: −∞ when there are none.",
     [fraction]: "top/bottom, exactly, in lowest terms (Euclid's algorithm, textbook); no answer when bottom is 0.",
     [whole]: "The whole number n as a fraction, n/1.",
+    [positionWhere]: "The position of the first item that passes the test, counting from 0, as some(position): position where([3, 8, 5], (x) ↦ 4 < x) is some(1); none when no item passes.",
+    [itemWhere]: "A path to the first item of the list at a place in a cell that passes the test, so one item can be written by its key: write at(board, then path(item where(board, path((b) ↦ b.cards), (c) ↦ c.id = id), path((c) ↦ c.time)), t) changes one card and wakes only its readers. The list is read now. When no item passes, the path is to no item: read at has no answer there and a write changes nothing.",
+    [positionFrom]: "A helper of position where: the walk, counting from `from`. Not offered.",
     [divF]: "a ÷ b for fractions, exactly; no answer when b is 0. Not offered: the one divide works on every number but Int; kept so programs saved before still open.",
     [showF]: "A fraction as 3/4, or 3 when it is whole. Not offered: the one show shows every number; kept so programs saved before still open.",
     [toNum]: "The nearest Float64.",
@@ -1625,9 +1655,9 @@ export function buildPrelude(): Module {
     ...Object.fromEntries(awaitHelpers.map((d) => [d, simulatedHelpers.includes(d) ? "A helper of simulated. Not offered in the palette." : "A helper of together and race. Not offered in the palette."])),
     [applied]: "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette.",
   };
-  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, ...awaitHelpers, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarD, unpolarX, vector, asinBy, acosBy, asinF, acosF, asinX, acosX, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, ...perTypeShows, ...textOnly, ...divisions, divF, divC, divD, divX, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...laws], merge(prelude, std));
+  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, ...awaitHelpers, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarD, unpolarX, vector, asinBy, acosBy, asinF, acosF, asinX, acosX, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, ...perTypeShows, ...textOnly, positionFrom, ...divisions, divF, divC, divD, divX, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...laws], merge(prelude, std));
   if (!p.ok) throw new Error(`the prelude can't be published: ${p.reason}`);
   const at = (d: Id) => p.rename.get(d)!;
   const notes = Object.fromEntries(Object.entries(comments).map(([d, c]) => [at(d), c]));
-  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [...awaitHelpers, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, ...perTypeShows, ...textOnly, ...divisions, divF, divC, divD, divX, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarD, unpolarX, vector, asinBy, acosBy, asinF, acosF, asinX, acosX, ...laws].map(at));
+  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [...awaitHelpers, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, ...perTypeShows, ...textOnly, positionFrom, ...divisions, divF, divC, divD, divX, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarD, unpolarX, vector, asinBy, acosBy, asinF, acosF, asinX, acosX, ...laws].map(at));
 }
