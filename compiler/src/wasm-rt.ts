@@ -5350,6 +5350,463 @@ ${drop}
       i64.extend_i32_u
       i32.const 0`,
   },
+  // The Float64 a text spells (L176, C108), text.ts's readNumber: a
+  // sign, digits with perhaps a point, perhaps an exponent; no answer for
+  // anything else or past the largest Float64; -0 reads as 0. The digits
+  // are an exact magnitude d, the value d·10^e: for e ≥ 0, d·10^e is made
+  // and mag.toNumber rounds it once (ties to even); for e < 0, d·2^s over
+  // 10^-e with at least 65 bits and the remainder kept as a last bit, so
+  // that rounding is once too, then scaled by 2^-(s+1), exact unless the
+  // answer is below the smallest normal Float64. Prior art: Clinger, "How
+  // to read floating point numbers accurately" (PLDI 1990), the exact
+  // big-number reading.
+  "text.readNumber": {
+    params: [["t", "text"]], result: "f64", partial: true,
+    locals: [["n", "i32"], ["i", "i32"], ["c", "i32"], ["neg", "i32"], ["nd", "i32"], ["frac", "i32"], ["e", "i32"], ["eneg", "i32"], ["ed", "i32"], ["d", "mag"], ["p", "mag"], ["u", "mag"], ["q", "mag"], ["r", "mag"], ["s", "i32"], ["x", "f64"]],
+    uses: ["mag.muladd", "mag.of", "mag.shl", "mag.divrem", "mag.toNumber", "mag.cmp", "mag.at"],
+    body: `
+      local.get $t
+      array.len
+      local.set $n
+      i32.const 0
+      array.new_default $u32s
+      local.set $d
+      local.get $n
+      if void
+        local.get $t
+        i32.const 0
+        array.get_u $bytes
+        local.tee $c
+        i32.const 45
+        i32.eq
+        local.set $neg
+        local.get $c
+        i32.const 45
+        i32.eq
+        local.get $c
+        i32.const 43
+        i32.eq
+        i32.or
+        local.set $i
+      end
+      block void
+        loop void
+          local.get $i
+          local.get $n
+          i32.ge_u
+          br_if 1
+          local.get $t
+          local.get $i
+          array.get_u $bytes
+          i32.const 48
+          i32.sub
+          local.tee $c
+          i32.const 9
+          i32.gt_u
+          br_if 1
+          local.get $d
+          i32.const 10
+          local.get $c
+          call $mag.muladd
+          local.set $d
+          local.get $nd
+          i32.const 1
+          i32.add
+          local.set $nd
+          local.get $i
+          i32.const 1
+          i32.add
+          local.set $i
+          br 0
+        end
+      end
+      local.get $i
+      local.get $n
+      i32.lt_u
+      if void
+        local.get $t
+        local.get $i
+        array.get_u $bytes
+        i32.const 46
+        i32.eq
+        if void
+          local.get $i
+          i32.const 1
+          i32.add
+          local.set $i
+      block void
+        loop void
+          local.get $i
+          local.get $n
+          i32.ge_u
+          br_if 1
+          local.get $t
+          local.get $i
+          array.get_u $bytes
+          i32.const 48
+          i32.sub
+          local.tee $c
+          i32.const 9
+          i32.gt_u
+          br_if 1
+          local.get $d
+          i32.const 10
+          local.get $c
+          call $mag.muladd
+          local.set $d
+          local.get $nd
+          i32.const 1
+          i32.add
+          local.set $nd
+          local.get $frac
+          i32.const 1
+          i32.add
+          local.set $frac
+          local.get $i
+          i32.const 1
+          i32.add
+          local.set $i
+          br 0
+        end
+      end
+        end
+      end
+      local.get $nd
+      i32.eqz
+      if void
+        f64.const 0
+        i32.const 1
+        return
+      end
+      local.get $i
+      local.get $n
+      i32.lt_u
+      if void
+        local.get $t
+        local.get $i
+        array.get_u $bytes
+        i32.const 32
+        i32.or
+        i32.const 101
+        i32.ne
+        if void
+        f64.const 0
+        i32.const 1
+        return
+        end
+        local.get $i
+        i32.const 1
+        i32.add
+        local.set $i
+        local.get $i
+        local.get $n
+        i32.lt_u
+        if void
+          local.get $t
+          local.get $i
+          array.get_u $bytes
+          local.tee $c
+          i32.const 45
+          i32.eq
+          local.set $eneg
+          local.get $c
+          i32.const 45
+          i32.eq
+          local.get $c
+          i32.const 43
+          i32.eq
+          i32.or
+          local.get $i
+          i32.add
+          local.set $i
+        end
+      block void
+        loop void
+          local.get $i
+          local.get $n
+          i32.ge_u
+          br_if 1
+          local.get $t
+          local.get $i
+          array.get_u $bytes
+          i32.const 48
+          i32.sub
+          local.tee $c
+          i32.const 9
+          i32.gt_u
+          br_if 1
+          local.get $e
+          i32.const 10
+          i32.mul
+          local.get $c
+          i32.add
+          local.tee $e
+          i32.const 100000
+          i32.gt_s
+          if void
+            i32.const 100000
+            local.set $e
+          end
+          local.get $ed
+          i32.const 1
+          i32.add
+          local.set $ed
+          local.get $i
+          i32.const 1
+          i32.add
+          local.set $i
+          br 0
+        end
+      end
+        local.get $ed
+        i32.eqz
+        if void
+        f64.const 0
+        i32.const 1
+        return
+        end
+        local.get $eneg
+        if void
+          i32.const 0
+          local.get $e
+          i32.sub
+          local.set $e
+        end
+      end
+      local.get $i
+      local.get $n
+      i32.ne
+      if void
+        f64.const 0
+        i32.const 1
+        return
+      end
+      ;; zero, whatever its sign
+      local.get $d
+      array.len
+      i32.eqz
+      if void
+        f64.const 0
+        i32.const 0
+        return
+      end
+      local.get $e
+      local.get $frac
+      i32.sub
+      local.tee $e
+      i32.const 0
+      i32.ge_s
+      if void
+        local.get $e
+        i32.const 400
+        i32.gt_s
+        if void
+        f64.const 0
+        i32.const 1
+        return
+        end
+        block void
+          loop void
+            local.get $e
+            i32.eqz
+            br_if 1
+            local.get $d
+            i32.const 10
+            i32.const 0
+            call $mag.muladd
+            local.set $d
+            local.get $e
+            i32.const 1
+            i32.sub
+            local.set $e
+            br 0
+          end
+        end
+        local.get $d
+        call $mag.toNumber
+        local.tee $x
+        local.get $x
+        f64.sub
+        f64.const 0
+        f64.ne
+        if void
+        f64.const 0
+        i32.const 1
+        return
+        end
+      else
+        ;; below 10^-400: 0
+        i32.const 0
+        local.get $e
+        i32.sub
+        local.tee $e
+        local.get $nd
+        i32.sub
+        i32.const 400
+        i32.gt_s
+        if void
+          f64.const 0
+          i32.const 0
+          return
+        end
+        i64.const 1
+        call $mag.of
+        local.set $p
+        block void
+          loop void
+            local.get $e
+            i32.eqz
+            br_if 1
+            local.get $p
+            i32.const 10
+            i32.const 0
+            call $mag.muladd
+            local.set $p
+            local.get $e
+            i32.const 1
+            i32.sub
+            local.set $e
+            br 0
+          end
+        end
+        local.get $p
+        array.len
+        local.get $d
+        array.len
+        i32.sub
+        i32.const 32
+        i32.mul
+        i32.const 96
+        i32.add
+        local.tee $s
+        i32.const 0
+        i32.lt_s
+        if void
+          i32.const 0
+          local.set $s
+        end
+        local.get $d
+        local.get $s
+        call $mag.shl
+        local.tee $u
+        local.get $p
+        i32.const 0
+        call $mag.divrem
+        local.set $q
+        local.get $u
+        local.get $p
+        i32.const 1
+        call $mag.divrem
+        local.set $r
+        local.get $q
+        i32.const 2
+        local.get $r
+        array.len
+        i32.const 0
+        i32.ne
+        call $mag.muladd
+        call $mag.toNumber
+        local.set $x
+        local.get $s
+        i32.const 1
+        i32.add
+        local.set $s
+        block void
+          loop void
+            local.get $s
+            i32.const 1000
+            i32.le_s
+            br_if 1
+            local.get $x
+            i64.const 103582791429521408
+            f64.reinterpret_i64
+            f64.mul
+            local.set $x
+            local.get $s
+            i32.const 1000
+            i32.sub
+            local.set $s
+            br 0
+          end
+        end
+        local.get $x
+        i32.const 1023
+        local.get $s
+        i32.sub
+        i64.extend_i32_u
+        i64.const 52
+        i64.shl
+        f64.reinterpret_i64
+        f64.mul
+        local.tee $x
+        ;; At or below the smallest normal Float64, that was rounded
+        ;; twice: the multiple of 2^-1074 nearest d/10^k instead, rounded
+        ;; once (ties to even), which is exact as a Float64.
+        i64.const 4503599627370496
+        f64.reinterpret_i64
+        f64.le
+        if void
+          local.get $d
+          i32.const 1074
+          call $mag.shl
+          local.tee $u
+          local.get $p
+          i32.const 0
+          call $mag.divrem
+          local.set $q
+          local.get $u
+          local.get $p
+          i32.const 1
+          call $mag.divrem
+          i32.const 2
+          i32.const 0
+          call $mag.muladd
+          local.get $p
+          call $mag.cmp
+          local.tee $c
+          i32.const 0
+          i32.gt_s
+          local.get $c
+          i32.eqz
+          local.get $q
+          i32.const 0
+          call $mag.at
+          i64.const 1
+          i64.and
+          i32.wrap_i64
+          i32.and
+          i32.or
+          if void
+            local.get $q
+            i32.const 1
+            i32.const 1
+            call $mag.muladd
+            local.set $q
+          end
+          local.get $q
+          call $mag.toNumber
+          i64.const 103582791429521408
+          f64.reinterpret_i64
+          f64.mul
+          i64.const 4273916046374600704
+          f64.reinterpret_i64
+          f64.mul
+          local.set $x
+        end
+      end
+      local.get $neg
+      local.get $x
+      f64.const 0
+      f64.ne
+      i32.and
+      if void
+        local.get $x
+        f64.neg
+        local.set $x
+      end
+      local.get $x
+      i32.const 0`,
+  },
   // A code point's character in UTF-8; past U+10FFFF, below 0 and the
   // surrogates have none.
   "text.fromCode": {

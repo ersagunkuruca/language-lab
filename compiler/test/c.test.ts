@@ -19,7 +19,7 @@ import { TRUE } from "../../ters/src/lang/std.ts";
 import { isRecord, lowerScalar, type DType, type LType, type Lowered, type RType } from "../src/scalar.ts";
 import { CFLAGS, emitC } from "../src/c.ts";
 import { load } from "../src/program.ts";
-import { area, caseNameInputs, caseNames, changeInputs, changes, escapes, randomInputs, randoms, fractionInputs, fractions, maths, ordered, orderedInputs, roses, sameLists, showInputs, shows, stopsWith, worldly } from "../src/fixtures.ts";
+import { area, choices, numberTexts, caseNameInputs, caseNames, changeInputs, changes, escapes, randomInputs, randoms, fractionInputs, fractions, maths, ordered, orderedInputs, roses, sameLists, showInputs, shows, stopsWith, worldly } from "../src/fixtures.ts";
 
 import { build, compile, dir, hex, skip } from "./c-harness.ts";
 
@@ -468,4 +468,13 @@ test("Random under seeded in C: the evaluator's numbers, and every cell freed (C
     for (const xs of inputs[name]) calls.push([i, xs as Value[]]);
   }
   sameAndFreed(build(lowered), calls, (i, xs) => first(r.call(r.value(lowered.funcs[i].def), ...xs))!, (i) => lowered.funcs[i].name);
+});
+
+test("read number in C: the evaluator's Float64 or no answer for every text, and every cell freed (C108)", { skip }, () => {
+  const p = choices();
+  const lowered = lowerScalar(p.code, p.info, p.names, [p.defs.readNumber], { data: true });
+  const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });
+  const i = lowered.funcs.findIndex((g) => g.def === p.defs.readNumber && !g.inner);
+  assert.ok(i >= 0 && !emitC(lowered).refused.has(i));
+  sameAndFreed(build(lowered), numberTexts.map((t): [number, Value[]] => [i, [t]]), (j, xs) => first(r.call(r.value(lowered.funcs[j].def), ...xs))!, (j) => lowered.funcs[j].name);
 });

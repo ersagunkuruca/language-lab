@@ -499,6 +499,29 @@ already had, and it runs backwards like any `if`. C's `switch` and ML's
 and Haskell's literal patterns are the prior art. `case of` (L164b) says
 the same as a list of pairs, for keys that aren't literals.
 
+### A field several cases share
+
+When several cases have the same field, a match for it is one arm per
+case saying the same thing. machine's `Instr` has `to` in six of its 21
+cases. A case's field can say it is another case's field (`same`, by id,
+never by name), and then `i.to` reads it on any `Instr`:
+
+```
+targets(code) = flat map(code, (i) ↦ first([i.to], else nil))
+```
+
+On a case without the field there is no answer, so the read has `Choice`
+("Pattern matching by choice"); when every case has it, as `Timer`'s `id`
+in `running(id, left) | paused(id, left)`, it has none. The cases must
+give it one type. Before anything runs, the read becomes a generated match
+with one arm per case that has the field (`src/lang/shared-fields.ts`), so
+every target runs what it already runs. `set((i) ↦ i.to, instr, 9)` is
+the instruction with its `to` changed, and likewise has no answer on a
+case without it (the field alone for now, not a path through it).
+Haskell's record fields across constructors are the prior
+art, though they throw on a case without the field
+(SHARED-FIELDS-2026-11-02.md; `test/shared-fields.test.ts`).
+
 ## Loops: `fold`, and recursion the checker can see ends
 
 ```

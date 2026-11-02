@@ -234,6 +234,14 @@ export function texts() {
 // a definition that has Choice itself (plus one), and budgets around
 // searches, so WebAssembly's found-flag returns can be compared with the
 // evaluator on any input.
+// Texts read as Float64s (L176, C108): the grammar's edges, the nearest
+// Float64 where the decimal is between two, past the largest, below the
+// smallest, and subnormals.
+export const numberTexts = ["0", "-0", "+0.0", "1", "-2", "30.5", ".5", "5.", "+.5", "1e3", "1E-3", "-1.5e+2", "0.1", "0.3", "1e23", "9007199254740993", "9007199254740995",
+  "123456789012345678901234567890", "123456789012345678901234567890e-10", "0.000000000000000000000000000000000001234", "1.7976931348623157e308", "1.7976931348623158e308", "1.7976931348623159e308",
+  "1e308", "1e309", "1e400", "1e-300", "2.2250738585072014e-308", "2.2250738585072011e-308", "4.9e-324", "5e-324", "2.4703282292062328e-324", "2.4703282292062327e-324", "1e-400", "1e-100000", "1e100000",
+  "", ".", "e5", "1e", "1e+", "--1", "+-1", " 1", "1 ", "1_0", "0x10", "Infinity", "NaN", "1.2.3", "1e5.5", "١", "00012.50", "0.0000000000000000000000000000000000000000e10"];
+
 export function choices() {
   const k = new Lang();
   const d = (name: string, params: string[], body: (...xs: Id[]) => Id) => { const x = k.def(name); k.define(x, k.fn(params, body)); return x; };
@@ -259,6 +267,7 @@ export function choices() {
     found: d("found", ["t", "p"], (t, p) => opt(() => k.call(TEXT_OPS.find, t, p))),
     code: d("code of", ["t"], (t) => opt(() => k.call(TEXT_OPS.code, t))),
     character: d("character of", ["n"], (n) => k.call(S.first, k.thunk(() => k.call(TEXT_OPS.fromCode, n)), k.thunk(() => k.lit("?")))),
+    readNumber: d("read as number", ["t"], (t) => opt(() => k.call(TEXT_OPS.readNumber, t))),
     position: d("position", ["key", "xs"], (key, xs) => opt(() => k.call(index, key, xs, k.int(0)))),
     sums: d("sums", ["xs"], (xs) => k.call(S.all, k.thunk(() => k.call(sum, xs)))),
     readable: d("readable", ["t"], (t) => k.call(S.count, k.thunk(() => k.call(INT_OPS.read, t)))),
