@@ -1420,7 +1420,7 @@ export function interpreter(given: Code, opts: Options = {}) {
     }
     // compare runs forwards once both are known: which pairs are in order
     // isn't a search worth making.
-    const many = STD_MANY[id] ?? (STD_IMPL[id] ? (...xs: Value[]) => [STD_IMPL[id](...xs)] : id === SHOW_ANY ? (x: Value) => [showValue(x, code, opts.names ?? stdNames)]
+    const many = STD_MANY[id] ?? (STD_IMPL[id] ? (...xs: Value[]) => [STD_IMPL[id](...xs)] : id === SHOW_ANY ? (x: Value) => [showValue(x, code, opts.names ?? stdNames, true)]
       : id === COMPARE ? (a: Value, b: Value) => [ORDER_VALUES[compareValues(a, b, variantOrder(code)) + 1]] : null);
     const algOp = id === ALGEBRAIC_OPS.add ? "add" : id === ALGEBRAIC_OPS.sub ? "sub" : id === ALGEBRAIC_OPS.mul ? "mul" : id === ALGEBRAIC_OPS.neg ? "neg" : null;
     if (many && algOp) {

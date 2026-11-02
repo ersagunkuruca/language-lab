@@ -155,7 +155,7 @@ export const $partial = Object.fromEntries(Object.entries($many).map(([id, f]) =
 { const whole = $partial[INT_OPS.wholePart]; $partial[INT_OPS.wholePart] = (x) => whole($fin(x)); }
 export { setPath as $setPath } from '../../ters/src/lang/records.ts';
 import { showValue, compareValues, ORDER_VALUES } from '../../ters/src/lang/run.ts';
-export const $showAny = performed((v, names) => showValue(v, null, names));
+export const $showAny = performed((v, names) => showValue(v, null, names, true));
 // `compare` (L66): `order` is each case's place in its type (compile.ts
 // writes it as $order), so cases compare as in the evaluator.
 export const $compare = performed((a, b, order) => ORDER_VALUES[compareValues(a, b, order) + 1]);
