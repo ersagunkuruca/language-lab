@@ -1130,6 +1130,36 @@ export function buildPrelude(): Module {
     { variant: NIL, names: [], body: () => k.false },
     { variant: CONS, names: ["item", "rest"], body: ([x, rest]) => k.if(k.call(test, x), k.true, k.call(anyPass, rest, test)) },
   ])));
+  // Searching a list, its largest and smallest item, and an item put in
+  // at a position (L161, GAPS round 8 BL2 to BL4: board wrote card of,
+  // position of, tag in, largest id and inserted for itself). Its whole
+  // number from text and Float64 to Int were already std's `read whole
+  // number` and `whole part`.
+  const firstWhere = k.def("first where");
+  k.define(firstWhere, k.fn(["list", "test"], (xs, test) => k.match(xs, [
+    { variant: NIL, names: [], body: () => k.x(NONE) },
+    { variant: CONS, names: ["item", "rest"], body: ([x, rest]) => k.if(k.call(test, x), k.call(SOME, x), k.call(firstWhere, rest, test)) },
+  ])));
+  const positionOf = k.def("position of");
+  k.define(positionOf, k.fn(["list", "item"], (xs, y) => k.call(positionFrom, xs, k.fn(["x"], (x) => k.call(S.equal, x, y)), k.int(0))));
+  const contains = k.def("contains");
+  k.define(contains, k.fn(["list", "item"], (xs, y) => k.call(anyPass, xs, k.fn(["x"], (x) => k.call(S.equal, x, y)))));
+  // The largest and smallest by the one generic <, none for an empty list.
+  const extremeOf = (name: string, keep: (a: Id, b: Id) => Id) => {
+    const d = k.def(name);
+    k.define(d, k.fn(["list"], (xs) => k.match(xs, [
+      { variant: NIL, names: [], body: () => k.x(NONE) },
+      { variant: CONS, names: ["item", "rest"], body: ([x, rest]) => k.call(SOME, k.fold(rest, [
+        { variant: NIL, names: [], body: () => x },
+        { variant: CONS, names: ["next", "rest"], results: [null, "best of the rest"], body: ([y], [, r]) => keep(r!, y) },
+      ])) },
+    ])));
+    return d;
+  };
+  const largestOf = extremeOf("largest of", (a, b) => k.if(k.call(ARITH.less, a, b), b, a));
+  const smallestOf = extremeOf("smallest of", (a, b) => k.if(k.call(ARITH.less, b, a), b, a));
+  const insertedAt = k.def("inserted at");
+  k.define(insertedAt, k.fn(["list", "position", "item"], (xs, i, y) => k.call(append, k.call(take, xs, i), k.call(CONS, y, k.call(drop, xs, i)))));
   // A Float64 shown to a fixed number of decimals (BACKLOG I93): the
   // Spacetime demo wrote its own `rounded`. Rounds half away from 0 at
   // the last place and keeps trailing zeros, as JavaScript's toFixed and
@@ -1515,7 +1545,7 @@ export function buildPrelude(): Module {
   const simulatedHelpers = [readyAt, earliest, readyTimes, tiedAt, pickAt, nextDraw, firstDraw, simulatedWorld, simulatedClock];
   const awaitHelpers = [startBranch, waiting, goOn, finished, settle, firstDone, raceSettle, ...simulatedHelpers];
 
-  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, repeated, padStart, padEnd, flatten, flatMap, rangeFrom, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, positionWhere, itemWhere, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, ticketId, anyOf, together, race, within, simulated];
+  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, repeated, padStart, padEnd, flatten, flatMap, rangeFrom, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, positionWhere, itemWhere, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, ticketId, anyOf, together, race, within, simulated];
   // Each number's own show, from before the generic one showed every number
   // (L153, L156): kept so programs saved before still open, not offered.
   const perTypeShows = [showF, showC, showD, showX];
@@ -1572,6 +1602,12 @@ export function buildPrelude(): Module {
     [positionFrom]: "A helper of position where: the walk, counting from `from`. Not offered.",
     [zipped]: "The two lists' items side by side, as tuples, as long as the shorter: zipped([1, 2, 3], [\"a\", \"b\"]) is [(1, \"a\"), (2, \"b\")].",
     [numbered]: "Each item with its position, counting from 0: numbered([\"a\", \"b\"]) is [(0, \"a\"), (1, \"b\")].",
+    [firstWhere]: "The first item that passes the test, or none: first where([3, 8, 9], (x) ↦ x > 5) is some(8).",
+    [positionOf]: "Where the item first is in the list, from 0, or none: position of([\"a\", \"b\"], \"b\") is some(1).",
+    [contains]: "Whether the item is in the list: contains([1, 2], 2) is true. (has is a Set's.)",
+    [largestOf]: "The largest item by <, or none for an empty list: largest of([3, 9, 4]) is some(9).",
+    [smallestOf]: "The smallest item by <, or none for an empty list: smallest of([3, 9, 4]) is some(3).",
+    [insertedAt]: "The list with the item put in at the position, the items from there on moved one later: inserted at([1, 3], 1, 2) is [1, 2, 3].",
     [numberedFrom]: "A helper of numbered: the positions counted from `from`. Not offered.",
     [copies]: "A list of count copies of the item: copies(3, 0) is [0, 0, 0]. (repeated is Text's.)",
     [allPass]: "Whether every item passes the test; true for an empty list. Stops at the first that doesn't.",
