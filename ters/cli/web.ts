@@ -16,8 +16,10 @@ const esbuild = () => import("esbuild").catch(() => { throw new Error("a page ne
 // HTML file, keeping only what the program uses. editor/build.ts builds the
 // example apps with it too.
 const at = (path: string) => JSON.stringify(join(here, path));
-const compiled = (code: Code, info: Info, names: Names, main: Id) =>
-  compile(code, info, names, { runtime: JSON.parse(at("../../compiler/src/runtime.js")), exports: [names[main]] });
+// A program's hosts/js.js (FOREIGN.md, L69a3), when it has one, is imported
+// by the compiled program and bundled in with it.
+const compiled = (code: Code, info: Info, names: Names, main: Id, hosts?: string) =>
+  compile(code, info, names, { runtime: JSON.parse(at("../../compiler/src/runtime.js")), exports: [names[main]], ...(hosts ? { hosts } : {}) });
 
 // A page with sound (AUDIO.md, A2) also carries its program bundled for the
 // audio thread (src/lang/audio-worklet.ts), which runs main again there.
@@ -34,11 +36,11 @@ export function recordings(code: Code): string[] {
   return [...out];
 }
 
-export async function soundWorklet(code: Code, info: Info, names: Names, main: Id): Promise<string> {
+export async function soundWorklet(code: Code, info: Info, names: Names, main: Id, hosts?: string): Promise<string> {
   const { build } = await esbuild();
   const out = await build({
     stdin: {
-      contents: `${compiled(code, info, names, main)}
+      contents: `${compiled(code, info, names, main, hosts)}
 import { startSound as $$startSound } from ${at("../src/lang/audio-worklet.ts")};
 $$startSound(defs[${JSON.stringify(names[main])}]);
 `,
@@ -49,10 +51,10 @@ $$startSound(defs[${JSON.stringify(names[main])}]);
   return out.outputFiles[0].text;
 }
 
-export async function webPage(title: string, code: Code, info: Info, names: Names, main: Id): Promise<string> {
+export async function webPage(title: string, code: Code, info: Info, names: Names, main: Id, hosts?: string): Promise<string> {
   const name = names[main];
-  const program = compiled(code, info, names, main);
-  const worklet = hasSound(code) ? `, ${JSON.stringify(await soundWorklet(code, info, names, main))}` : "";
+  const program = compiled(code, info, names, main, hosts);
+  const worklet = hasSound(code) ? `, ${JSON.stringify(await soundWorklet(code, info, names, main, hosts))}` : "";
   const { build } = await esbuild();
   const out = await build({
     stdin: {

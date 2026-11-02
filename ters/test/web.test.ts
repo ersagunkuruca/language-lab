@@ -203,3 +203,27 @@ test("every example app the site builds compiles to a page", async () => {
     await assert.doesNotReject(webPage(name, p.code, info, p.pres.names, p.named("main")), name);
   }
 });
+
+// A page whose program declares its own effect bundles hosts/js.js into
+// its script (FOREIGN.md, L69a3), as `lab build` does for a program run
+// by node: the page asks the host and draws its answer.
+test("a page bundles its hosts/js.js and asks it", async () => {
+  const { Lang } = await import("../src/lang/dsl.ts");
+  const { base, baseNames } = await import("../src/lang/load.ts");
+  const { infer } = await import("../src/lang/infer.ts");
+  const { webPage } = await import("../cli/web.ts");
+  const { HTML_V } = await import("../src/lang/std.ts");
+  const k = new Lang(LIBRARY.code);
+  const dev = k.effect("Device", [["name of", [["id", () => k.tref("type.int")]], () => k.tref("type.string")]]);
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.let("name", k.call(dev.op["name of"], k.int(7)), (n) => k.call(HTML_V.element, k.lit("p"), k.list(), k.list(k.call(HTML_V.text, k.thunk(() => n)))))));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const host = join(dir, "device-host.js");
+  writeFileSync(host, `export default { ${JSON.stringify(dev.op["name of"])}: (id) => "phone " + id };\n`);
+  const html = await webPage("device", code, info, names, main, host);
+  const script = /<script>([\s\S]*)<\/script>/.exec(html)![1];
+  const body = new FakeEl("body");
+  runInNewContext(script, { document: { ...fakeDoc(), body }, localStorage: memoryStore(), console });
+  assert.match((body.kids[0] as FakeEl).html(), /<p>phone 7<\/p>/);
+});

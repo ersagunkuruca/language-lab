@@ -11,7 +11,11 @@ reason. `lab hosts` prints the skeleton. A host answers at once for now;
 one that answers later (a promise) waits for L59. Compiled JavaScript
 does the same (L69a2): the module imports `hosts/js.js` and the runtime's
 `$perform` answers from it with the same border checks, and `lab compile`
-bundles it in. Left: `lab build-web`'s page. One question for Ersagun at the end; nothing before L69a
+bundles it in. A page does too (L69a3): `lab build-web` and `lab build-app`
+bundle the program's `hosts/js.js` into the page's script. A page's main
+may ask the host while it builds the page; its views and handlers may
+perform only the page's own effects (Cells, Time, …), so asking a host
+from a view is refused until a row lets it. One question for Ersagun at the end; nothing before L69a
 waits on it.
 
 A website needs the browser's APIs, a phone app the device's (camera,
