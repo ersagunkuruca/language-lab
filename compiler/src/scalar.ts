@@ -50,7 +50,7 @@ import { dependencies, subtree } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { ARRAY, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, STRING, type Row, type Type } from "../../ters/src/lang/types.ts";
-import { ABORT, ABORT_OP, ALGEBRAIC_V, ARRAY_OPS, BOOL, CASE_NAME, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, ORDER_V, PAIR_V, RATIO, S, SHOW_ANY, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
+import { ABORT, ABORT_OP, ALGEBRAIC_V, ARRAY_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, ORDER_V, PAIR_V, RATIO, S, SHOW_ANY, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
 import { liftLets } from "../../ters/src/lang/lift-lets.ts";
 import { inlineLists } from "./inline-lets.ts";
 import { STOPS } from "./stops.ts";
@@ -456,7 +456,9 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   // What a partial function (`data`) may do besides answer: have no answer,
   // not finish (running out of a budget), or abort; and the world's effects.
   const partialEff = (e: Id) => e === CHOICE || e === DIVERGE || escaping(e);
-  const allowedEff = (e: Id) => partialEff(e) || e === CONSOLE || e === FILES;
+  // Random only under a `seeded` (C106): a root that draws one nobody
+  // seeds is refused below.
+  const allowedEff = (e: Id) => partialEff(e) || e === CONSOLE || e === FILES || (!!opts.data && e === RANDOM);
   const OTHER = opts.data ? "something other than Float64, Bool or data of them" : opts.records ? "something other than Float64, Bool or a record of them" : "something other than Float64 or Bool";
 
   // The profile's type for t, or null if t isn't in it.
@@ -629,7 +631,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     // lowered as its arithmetic, so no answer isn't seen here yet (L125c2,
     // L125c3); a Choice of the program's own (fail, one of) is refused
     // where it's used.
-    const effs = all.filter((e) => !BUDGETED.includes(e) && !(partial && partialEff(e)) && !(opts.data && (e === CONSOLE || e === FILES)) && !(e === CHOICE && !opts.data && !opts.shader));
+    const effs = all.filter((e) => !BUDGETED.includes(e) && !(partial && partialEff(e)) && !(opts.data && (e === CONSOLE || e === FILES || e === RANDOM)) && !(e === CHOICE && !opts.data && !opts.shader));
     if (effs.length) fail(`has effects (${effs.map(nm).join(", ")})`);
     const budgeted = !constant && !opts.data && diverges(ft);
 
@@ -848,6 +850,8 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           return { k: "world", ...WORLD_OPS[target], args: args(), t };
         }
         if (opts.data && target === CELL_OPS.changed) return changed(n, id, env, f);
+        if (opts.data && target === RANDOM_OP) return { k: "rt", fn: "rand.next", args: [] };
+        if (opts.data && target === S.seeded) return seeded(n, id, env, f);
         if (target === S.valueOf && opts.data) return valueOf(n, id, env, f);
         if (target === S.oneOf && opts.data && n.args.length === 1) {
           const lt = stype(zonk(n.args[0]));
@@ -1870,6 +1874,25 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     h.body = { k: "case", scrut: l, s: sl, t, result: t, arms: t.cases.map((_, k): SExpr => (k !== ci ? l : { k: "if", cond: less(0n), then: l, else: { k: "if", cond: less(1n), then: here, else: on, t }, t })) };
     return { k: "call", fn: hi, args: [v, at[0]!, ...later, x], tail: false };
   }
+  // seeded(seed, body) (C106): the generator's words as the body found
+  // them are kept, it's seeded, the body runs, and they're put back, so an
+  // outer seeded goes on where it was. random() is rand.next.
+  function seeded(n: NodeOf<"call">, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
+    const t = stype(zonk(id));
+    if (!t || n.args.length !== 2) throw new Refused(`seeds Random around ${whyNot(zonk(id))}`);
+    const lam = code.nodes[n.args[1]];
+    const body = lam?.kind === "lambda" && lam.params.length === 0 ? expr(lam.body, env, f, false)
+      : (() => { const ft = stype(zonk(n.args[1])); if (!ft || !isFn(ft)) throw new Refused("seeds Random around a function it can't call"); return { k: "apply", fn: expr(n.args[1], env, f, false), t: ft, args: [], tail: false, tmp: f.locals.push(ft) - 1 } as SExpr; })();
+    const keep = [0, 1, 2, 3].map(() => f.locals.push("f64") - 1), seedL = f.locals.push("f64") - 1, done = f.locals.push("f64") - 1, v = f.locals.push(t) - 1;
+    const rt = (fn: string, ...args: SExpr[]): SExpr => ({ k: "rt", fn, args });
+    const lets: [number, SExpr][] = [
+      ...keep.map((l, k): [number, SExpr] => [l, rt(`rand.s${k}`)]),
+      [seedL, rt("rand.seed", expr(n.args[0], env, f, false))],
+      [v, body],
+      [done, rt("rand.restore", ...keep.map((l): SExpr => ({ k: "local", i: l })))],
+    ];
+    return lets.reduceRight<SExpr>((e, [i, value]) => ({ k: "let", i, value, body: e }), { k: "local", i: v });
+  }
   // value of(o): o's value if it's some, no answer if it's none.
   function valueOf(n: NodeOf<"call">, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
     const d = stype(zonk(n.args[0])), t = stype(zonk(id));
@@ -1962,6 +1985,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   for (const r of roots) {
     const from = funcs.length, shaped = shapes.length;
     const raw = info.typeOf.get(r) && info.subst.zonk(info.typeOf.get(r)!), given = defaults(r);
+    if (opts.data && raw?.t === "fn" && info.subst.resolveRow(raw.eff).effs.includes(RANDOM)) { refused.set(r, "draws a random number nobody seeds (the world's Random isn't in WebAssembly and C yet): seed it with seeded"); continue; }
     rootVars = new Set(raw ? vars(raw).filter((v) => !given.has(v)) : []);
     try { func(r, given); several_(from); modCons(from); } catch (e) {
       if (!(e instanceof Refused)) throw e;

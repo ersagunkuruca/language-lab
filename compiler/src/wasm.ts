@@ -255,7 +255,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
       const h = helpers.findIndex((x) => x.name === n);
       return h >= 0 ? fnIndex(funcs.length + h) : rtIndex(n);
     },
-    global: (n: string) => (n === "reason" ? reasonG : n === "pow5" ? pow5G : n === "msp" ? mspG : n === "none" ? noneG : 0),
+    global: (n: string) => (n === "reason" ? reasonG : n === "pow5" ? pow5G : n === "msp" ? mspG : n === "none" ? noneG : /^r[0-3]$/.test(n) ? randG + Number(n[1]) : 0),
     memory: (n: string) => (n === "math" ? 1 : 0),
     valtype: (t: VT) => {
       if (t === "list") return { bytes: typeOf(listOf(f)), text: `(ref null $${structs[baseIndex.get(listOf(f).key)!].name})` };
@@ -334,6 +334,8 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
   // Another operation that never returns (C34) leaves the operation, a
   // value of its effect's type, in $escape on its way out, as an eqref.
   const escapes = lowered.escapes.length > 0, escapeG = mspG + (math ? 1 : 0), noneG = escapeG + (escapes ? 1 : 0);
+  // Random's generator under `seeded` (C106): four words, $r0 to $r3.
+  const rand = rtNames.some((n) => n.startsWith("rand.")), randG = noneG + (flags ? 1 : 0);
   if (aborts) helpers.push({ name: "Abort.reason", key: "", params: [], result: "text", code: [0x23, ...u(reasonG)], wat: ["global.get $reason"] });
   // For the world's host: lists and optionals of texts, by fixed names
   // (TextList.cons, TextOption.some), whatever else the module has.
@@ -405,6 +407,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
     ...(math ? [[0x7f, 0x01, 0x41, ...s(65536), 0x0b]] : []),
     ...(escapes ? [[0x6d, 0x01, 0xd0, 0x6d, 0x0b]] : []),
     ...(flags ? [[0x7f, 0x01, 0x41, 0x00, 0x0b]] : []),
+    ...(rand ? [0, 1, 2, 3].map(() => [0x7f, 0x01, 0x41, 0x00, 0x0b]) : []),
   ]);
   const zero = (t: MType) => (t === "text" ? [0xd0, ...s(bytesIndex)] : isRec(t) ? [0xd0, ...s(refIndex(t))] : t === "f64" ? [0x44, ...f64(0)] : t === "int" ? [0xd0, 0x6d] : t === "mag" ? [0xd0, ...s(u32sIndex)] : t === "i64" ? [0x42, 0x00] : [0x41, 0x00]);
   // fuel = fuel - 1; if fuel < 0, return zero (a partial function: and
@@ -567,7 +570,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
     ...section(1, typeSec), ...(imports ? section(2, importSec) : []), ...section(3, funcSec),
     // WASI's memory, then the math functions' (wasm-math.ts).
     ...(wasi ? section(5, vec([[0x00, 0x01], ...(math ? [[0x00, 0x01]] : [])])) : []),
-    ...(fuel || aborts || ryu || math || escapes || flags ? section(6, globalSec) : []), ...section(7, exportSec),
+    ...(fuel || aborts || ryu || math || escapes || flags || rand ? section(6, globalSec) : []), ...section(7, exportSec),
     // ref.func needs the functions declared: one declarative segment.
     ...(codeOf.size ? section(9, vec([[0x03, 0x00, ...vec([...codeOf.keys()].map((i) => u(fnIndex(i))))]])) : []),
     ...section(10, codeSec),
@@ -697,6 +700,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
     ...(math ? ["  (global $msp (mut i32) (i32.const 65536))", `  (data (memory $math) (i32.const ${MATH_DATA_AT}) "${MATH_DATA.map((b) => `\\${b.toString(16).padStart(2, "0")}`).join("")}")`] : []),
     ...(escapes ? ["  (global $escape (mut eqref) (ref.null eq))"] : []),
     ...(flags ? ["  (global $none (mut i32) (i32.const 0))"] : []),
+    ...(rand ? [0, 1, 2, 3].map((k) => `  (global $r${k} (mut i32) (i32.const 0))`) : []),
     ...(codeOf.size ? [`  (elem declare func${[...codeOf.keys()].map((i) => ` ${id(funcs[i])}`).join("")})`] : []),
     ...funcs.map((f, i) => {
       const ps = f.params.map((t, i) => ` (param ${local(f, i)} ${ty(t)})`).join("");
