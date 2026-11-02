@@ -1034,7 +1034,10 @@ function seedOf(info: T.Info, def: Id): string[] | null {
 function firstCall(info: T.Info, def: Id): Value[] | undefined {
   const entry = defNamed("main") ?? Object.values(pictureEntries(ownDefs(), pres().names) ?? {})[0];
   const body = defBody(def);
-  return entry && entry !== def && body?.kind === "lambda" ? mainCalls(info, entry).get(body.id) : undefined;
+  if (!entry || entry === def || body?.kind !== "lambda") return undefined;
+  // Not reached in the short run: once per version of the code, a longer
+  // one, which gets past a move (Tumble's fall, fill, cascade: I29f).
+  return mainCalls(info, entry).get(body.id) ?? mainCalls(info, entry, true).get(body.id);
 }
 const PASSED = "‹what main passes›";
 
@@ -1068,7 +1071,7 @@ const NO_EVENT: Data = { tag: HTML_V.event, fields: ["", "", 0, 0, 1 / 60] };
 
 // What each function was first called with when main last ran, as far as
 // it got in a few steps and MAIN_MS, in a world nothing goes out to.
-const mainRuns = new WeakMap<Code, Map<Id, Value[]>>();
+const mainRuns = new WeakMap<Code, Map<Id, Value[]>>(), longRuns = new WeakMap<Code, Map<Id, Value[]>>();
 // The copy main's run entered for a lambda, when it was one at other
 // number types (arith.ts): its own values are that copy's (I125).
 const mainCopies = new WeakMap<Code, Map<Id, Id>>();
@@ -1089,8 +1092,12 @@ function dryWorld(): World {
   };
 }
 // Once per version of the code. 50 ms often ended before main reached
-// calculus's newton on a cold page (I78).
+// calculus's newton on a cold page (I78). The long run is for a
+// definition the short one didn't reach, once per version too: Tumble's
+// main takes about 100 ms, each drawing of its page 70 to 90, and a move
+// comes after eight handlers (I29f).
 const MAIN_STEPS = 100_000, MAIN_MS = 120, HANDLERS_MS = 250;
+const LONG = { steps: 400_000, main: 400, handlers: 1200 };
 
 // The page drawn once, then its handlers run as if their events came (I29),
 // on the dry run's own cells, with time of their own (`started`): each
@@ -1114,22 +1121,24 @@ function explore(page: Value, over: () => boolean, started: () => void) {
   started();
   while (todo.length && !over()) { tryCall(todo.shift()!, NO_EVENT); draw(); }
 }
-function mainCalls(info: T.Info, main: Id): Map<Id, Value[]> {
-  let calls = mainRuns.get(doc.code);
+function mainCalls(info: T.Info, main: Id, long = false): Map<Id, Value[]> {
+  const runs = long ? longRuns : mainRuns;
+  const [steps, mainMs, handlersMs] = long ? [LONG.steps, LONG.main, LONG.handlers] : [MAIN_STEPS, MAIN_MS, HANDLERS_MS];
+  let calls = runs.get(doc.code);
   if (!calls) {
-    const got = new Map<Id, Value[]>(), copies = new Map<Id, Id>();
+    const got = new Map<Id, Value[]>(), copies = mainCopies.get(doc.code) ?? new Map<Id, Id>();
     mainCopies.set(doc.code, copies);
     const body = defBody(main);
     // main takes nothing; a picture's function takes its pixel.
     const pixel = body?.kind === "lambda" && body.params.length ? pixelSeed(main) : [];
     const args = pixel && body?.kind === "lambda" ? body.params.map((q, i) => readPort(info, q, pixel[i] ?? "")) : [];
     if (pixel && args.every((a) => !("error" in a))) {
-      let end = performance.now() + MAIN_MS;
+      let end = performance.now() + mainMs;
       // A function main made (newton's slope) keeps this hook: called
       // later, from a helper's own Run, it is no longer main's run (I78).
       let done = false;
       try {
-        withSteps(MAIN_STEPS, () => {
+        withSteps(steps, () => {
           const tr = trace(doc.code, info, main, args.map((a) => (a as { value: Value }).value), dryWorld(), (l, args, copy) => {
             if (done) return;
             if (!got.has(l)) { got.set(l, args); if (copy !== l) copies.set(l, copy); }
@@ -1137,11 +1146,11 @@ function mainCalls(info: T.Info, main: Id): Map<Id, Value[]> {
           });
           // A page's views run later, as it's drawn: draw it once here, so
           // what they call has values too (I29 b).
-          if (tr.result !== undefined) explore(tr.result, () => performance.now() > end, () => { end = performance.now() + HANDLERS_MS; });
+          if (tr.result !== undefined) explore(tr.result, () => performance.now() > end, () => { end = performance.now() + handlersMs; });
         });
       } finally { done = true; }
     }
-    mainRuns.set(doc.code, (calls = got));
+    runs.set(doc.code, (calls = got));
   }
   return calls;
 }
