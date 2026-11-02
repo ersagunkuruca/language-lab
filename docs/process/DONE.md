@@ -622,7 +622,8 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| L130a2 | A use's relation is read through `useTarget(nodes, u)` and a new use is built through `useNode(add, target, given, binds, body)` (model.ts), in ters/src and compiler/src, so the flip to one call kind changes only those two | this PR |
+| L98b | Keys: `key path(p, by, k)`, the item of the list at p whose part at `by` is k, found when the path is used, so one path keeps naming the same item through inserts and moves (cells.ts `resolved`, evaluator and compiled JS; test/key-paths.test.ts, STABLE-REFERENCES.md §1) | this PR |
+| L130a2 | A use's relation is read through `useTarget(nodes, u)` and a new use is built through `useNode(add, target, given, binds, body)` (model.ts), in ters/src and compiler/src, so the flip to one call kind changes only those two | #1219 |
 | L130b | The compiler (compiler/src) reads a use through `Use` and `isUse` too, the second step of one node kind for call and solve | #1216 |
 | L130a | Uses read through `Use`, `isUse` and `useOf` (model.ts) in every ters/src reader instead of the `solve` kind, the first step of one node kind for call and solve (PORTS-2026-11-01.md "The merge, step by step"); no change in the saved format | #1215 |
 | L64 | Channels as two std effects, `Send a` (send) and `Receive a` (receive, some(item) or none), joined by `piped(producer, consumer)` written in the prelude: the producer runs only as far as the consumer asks (test/state.test.ts, LANGUAGE.md "Send, Receive and piped") | #1213 |

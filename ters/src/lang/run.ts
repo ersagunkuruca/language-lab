@@ -411,6 +411,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     },
     [CELL_OPS.itemPath]: (p, i) => one(pathValue([...stepsOf(p)!, { item: Number(i) }])),
     [CELL_OPS.thenPath]: (p, q) => one(pathValue([...stepsOf(p)!, ...stepsOf(q)!])),
+    [CELL_OPS.keyPath]: (p, by, k) => one(pathValue([...stepsOf(p)!, { key: k, by: stepsOf(by)! }])),
     [CELL_OPS.readAt]: (c, p) => {
       try { const v = cells.readAt(c, stepsOf(p)!, LISTS); return v === undefined ? [] : one(v); } catch (e) { if (e instanceof NoValue) return []; throw e; }
     },

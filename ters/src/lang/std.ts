@@ -650,6 +650,11 @@ export const CELL_OPS = {
   path: builtin("cells.path", "path", (s) => { const r = s.fresh(), a = s.fresh(); return fn([fn([r], a, s.freshRow())], pathOf(r, a), s.freshRow()); }),
   itemPath: builtin("cells.itemPath", "item path", (s) => { const w = s.fresh(), a = s.fresh(); return fn([pathOf(w, list(a)), int], pathOf(w, a), s.freshRow()); }),
   thenPath: builtin("cells.thenPath", "then path", (s) => { const a = s.fresh(), b = s.fresh(), c = s.fresh(); return fn([pathOf(a, b), pathOf(b, c)], pathOf(a, c), s.freshRow()); }),
+  // The item of the list at p whose part at `by` is the key (L98 keys):
+  // found when the path is used, not when it is made, so it names the same
+  // item after others moved. No such item: read at has no answer there and
+  // an edit changes nothing, as past the end of a list.
+  keyPath: builtin("cells.keyPath", "key path", (s) => { const w = s.fresh(), a = s.fresh(), k = s.fresh(); return fn([pathOf(w, list(a)), pathOf(a, k), k], pathOf(w, a), s.freshRow()); }),
   readAt: builtin("cells.readAt", "read at", (s) => { const a = s.fresh(), b = s.fresh(); return fn([cellOf(a), pathOf(a, b)], b, s.freshRow([CELLS, DIVERGE, CHOICE])); }),
   writeAt: builtin("cells.writeAt", "write at", (s) => { const a = s.fresh(), b = s.fresh(); return fn([cellOf(a), pathOf(a, b), b], unit, s.freshRow([UPDATE])); }),
   insertAt: builtin("cells.insertAt", "insert at", (s) => { const a = s.fresh(), b = s.fresh(); return fn([cellOf(a), pathOf(a, list(b)), int, b], unit, s.freshRow([UPDATE])); }),

@@ -130,8 +130,18 @@ other items are the same values as before. It wakes a reader of the cell
 only if the reader read the whole cell, or read with `read at` a place that
 is this place, inside it, or around it. So writing item 1's title doesn't
 wake the reader of item 0's title, and an insert into a list wakes the
-readers of its items, whose positions it shifts. Keys are not built yet:
-positions shift, so a keyed reader (L99) is what keeps a row's reads put.
+readers of its items, whose positions it shifts.
+
+**Built (L98 keys).** `key path(p, by, k)` is the item of the list at p
+whose part at `by` (a path inside the item) is k. It is found when the
+path is used, not when it is made, so one path made once keeps naming the
+same item after others are put in, moved or taken out before it; when no
+item has the key, read at has no answer and an edit changes nothing. The
+handler finds the position and then works as for `item path`, so readers
+still record positions: a reader that should stay asleep while its item
+moves reads through a tracked view, as `each`'s rows do (L99)
+(test/key-paths.test.ts). Unlike the prelude's `item where`, which looks
+the item up once when it makes the path, a key path looks every time.
 The "in place" store is also not built yet: the value is copied along its
 path, and storing it in place is C56's representation
 (test/cell-paths.test.ts).
