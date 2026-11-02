@@ -2233,7 +2233,15 @@ function structurePanel(info: T.Info, names: Names): HTMLElement | null {
     }
     const c = textField("f-new-case", `New ${w.case}`, "its name");
     const add = h("button", { class: "btn", type: "button" }, `Add the ${w.case}`);
-    add.addEventListener("click", () => applyT(T.addCase(code, sh, info, ui.def, c.input.value, [])));
+    // The type stays selected, so the next case is typed straight after
+    // (E183); select a case to give it fields.
+    add.addEventListener("click", () => {
+      const at = ui.selected;
+      if (!applyT(T.addCase(code, sh, info, ui.def, c.input.value, []))) return;
+      ui.selected = at;
+      render();
+      (document.getElementById("f-new-case") as HTMLInputElement | null)?.focus();
+    });
     c.input.addEventListener("keydown", (e) => { if (e.key === "Enter") add.click(); });
     out.append(h("p", { class: "hint" }, body.effect
       ? "Calling an operation performs it; a match on the computation that performs it handles it, one case per operation, and every such match gets a case for a new one. Select an operation to give it inputs and say what it gives back."
