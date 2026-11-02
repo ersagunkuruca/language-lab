@@ -88,7 +88,7 @@ async function swapAndUndo() {
   // m/s by s, and subtract would take two of one unit (BACKLOG E126).
   await p.locator(".p-graph g:has(> text:text-is('·')) > rect.cn").first().click({ button: "right" });
   await p.locator('[data-menu="swap"]').click();
-  await p.locator("#m-query").fill("subtract");
+  await p.locator("#m-query").fill("subtract"); await p.waitForTimeout(400);
   const refusal = await p.locator(".ctx-menu .palette").innerText();
   if (!/subtract doesn't fit here: .*(m\/s|s\b)/s.test(refusal)) errors.push(`${where}: subtract over speed · time is refused with ${JSON.stringify(refusal)}`);
   // Escape before anything is picked puts the · back (QA8 M2).
@@ -97,7 +97,7 @@ async function swapAndUndo() {
   // Insert a node after it says so, not "Wrapped it" (I33).
   await p.locator(".p-graph g:has(> text:text-is('·')) > rect.cn").first().click({ button: "right" });
   await p.locator('[data-menu="wrap"]').click();
-  await p.locator("#m-query").fill("negate");
+  await p.locator("#m-query").fill("negate"); await p.waitForTimeout(400);
   await p.locator(".ctx-menu button", { hasText: /^negate/ }).first().click({ timeout: 2000 }).catch(() => errors.push(`${where}: no negate to insert after ·`));
   if (!/^Inserted the call after it/.test(await p.locator(".status").innerText())) errors.push(`${where}: inserting a node after · says ${await p.locator(".status").innerText()}`);
   await p.locator('button[data-act="undo"]').first().click();
@@ -203,7 +203,7 @@ async function choiceAction() {
   await p.locator("#f-def-name").fill("sum");
   await p.locator("button", { hasText: "Create" }).click();
   await p.locator(".hole").first().click();
-  await p.locator("#f-query").fill("fraction(1, 2) + fraction(1, 3)");
+  await p.locator("#f-query").fill("fraction(1, 2) + fraction(1, 3)"); await p.waitForTimeout(400);
   await p.keyboard.press("Enter");
   if (await p.locator('[data-act="t-run"]').count()) errors.push(`${where}: Run is offered, and can only fail`);
   if (!(await p.locator(".run", { hasText: "first(" }).count())) errors.push(`${where}: the panel doesn't say how to run it`);
@@ -229,13 +229,13 @@ async function heldSeed() {
   const head = (await p.locator(".insp-head").first().innerText()).trim();
   if (head !== "Hole") errors.push(`${where}: the Selected panel heads the hole ${JSON.stringify(head)}, not just Hole`);
   const die = p.locator(".palette .opt", { hasText: /^die\(\)/ });
-  await p.locator("#f-query").fill("die()");
+  await p.locator("#f-query").fill("die()"); await p.waitForTimeout(400);
   if (await die.count()) errors.push(`${where}: die() is offered while the type is held`);
   const loosen = p.locator(".held button", { hasText: "Let it loosen" });
   if (!(await loosen.count())) errors.push(`${where}: the hole's panel doesn't say the type is held, nor offer Let it loosen`);
   else {
     await loosen.click();
-    await p.locator("#f-query").fill("die()");
+    await p.locator("#f-query").fill("die()"); await p.waitForTimeout(400);
     await die.first().click({ timeout: 2000 }).catch(() => errors.push(`${where}: after Let it loosen die() isn't offered`));
     if (!(await p.locator(".p-text").innerText()).includes("Random")) errors.push(`${where}: filled with die(), its type doesn't say Random`);
   }
