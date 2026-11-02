@@ -593,7 +593,8 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| L168b | `set` along a path that passes shared fields at any step (`(g) ↦ g.to.line`, `(w) ↦ w.g.to.line`): each step a generated `with` match, no answer on a case without the field. A tuple of paths through one is still refused. Using it in machine and board is L168c | this PR |
+| L70a | Grammar pieces `spaced` and `optional parens` in the prelude: each prints one way and, run backwards, reads several (any spaces; parentheses wherever matched pairs wrap the text, absent only where not needed), relate.ts grammarGoal. They wait for the text, so a printer's own spaces don't pin the reading | this PR |
+| L168b | `set` along a path that passes shared fields at any step (`(g) ↦ g.to.line`, `(w) ↦ w.g.to.line`): each step a generated `with` match, no answer on a case without the field. A tuple of paths through one is still refused. Using it in machine and board is L168c | #1173 |
 | L150b | Fetches that overlap in the evaluator: a world may start a fetch in the background (World.startFetch; the CLI's spawns a child that writes the body to a temp folder), so `start fetch` returns at once and `await` polls until the body is in (three 400 ms fetches took 678 ms). A failed fetch aborts at the await. The compiled main and pages still fetch synchronously (C111); `start read file` is later | #1171 |
 | L172 | `join all` runs backwards as `split` (the one list of parts holding no separator), so the html library's `joined` and a printer that joins its fields read back with `inverse`; `inverse(card line, text)` still searches on board's `floor(c.spent)` and `c.id` (L173b) | #1170 |
 | L70 | Design note: grammars written once as printers and parsed by running them backwards ([GRAMMARS-2026-11-02](../design/relations-and-effects/GRAMMARS-2026-11-02.md)); steps L70a-c and C110 | #1169 |

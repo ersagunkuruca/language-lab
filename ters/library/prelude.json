@@ -4554,6 +4554,167 @@
         ],
         "body": "@adaj9q1ooe34kuk98lmdsju99l:5"
       },
+      "@73jvjh0jhh9419otae0ldk6jb1": {
+        "id": "@73jvjh0jhh9419otae0ldk6jb1",
+        "kind": "def",
+        "body": "@73jvjh0jhh9419otae0ldk6jb1:1"
+      },
+      "@73jvjh0jhh9419otae0ldk6jb1:2": {
+        "id": "@73jvjh0jhh9419otae0ldk6jb1:2",
+        "kind": "binder"
+      },
+      "@73jvjh0jhh9419otae0ldk6jb1:5": {
+        "id": "@73jvjh0jhh9419otae0ldk6jb1:5",
+        "kind": "lit",
+        "value": " "
+      },
+      "@73jvjh0jhh9419otae0ldk6jb1:9": {
+        "id": "@73jvjh0jhh9419otae0ldk6jb1:9",
+        "kind": "lit",
+        "value": " "
+      },
+      "@73jvjh0jhh9419otae0ldk6jb1:7": {
+        "id": "@73jvjh0jhh9419otae0ldk6jb1:7",
+        "kind": "ref",
+        "target": "builtin.concat"
+      },
+      "@73jvjh0jhh9419otae0ldk6jb1:8": {
+        "id": "@73jvjh0jhh9419otae0ldk6jb1:8",
+        "kind": "ref",
+        "target": "@73jvjh0jhh9419otae0ldk6jb1:2"
+      },
+      "@73jvjh0jhh9419otae0ldk6jb1:6": {
+        "id": "@73jvjh0jhh9419otae0ldk6jb1:6",
+        "kind": "call",
+        "fn": "@73jvjh0jhh9419otae0ldk6jb1:7",
+        "args": [
+          "@73jvjh0jhh9419otae0ldk6jb1:8",
+          "@73jvjh0jhh9419otae0ldk6jb1:9"
+        ]
+      },
+      "@73jvjh0jhh9419otae0ldk6jb1:4": {
+        "id": "@73jvjh0jhh9419otae0ldk6jb1:4",
+        "kind": "ref",
+        "target": "builtin.concat"
+      },
+      "@73jvjh0jhh9419otae0ldk6jb1:3": {
+        "id": "@73jvjh0jhh9419otae0ldk6jb1:3",
+        "kind": "call",
+        "fn": "@73jvjh0jhh9419otae0ldk6jb1:4",
+        "args": [
+          "@73jvjh0jhh9419otae0ldk6jb1:5",
+          "@73jvjh0jhh9419otae0ldk6jb1:6"
+        ]
+      },
+      "@73jvjh0jhh9419otae0ldk6jb1:1": {
+        "id": "@73jvjh0jhh9419otae0ldk6jb1:1",
+        "kind": "lambda",
+        "params": [
+          "@73jvjh0jhh9419otae0ldk6jb1:2"
+        ],
+        "body": "@73jvjh0jhh9419otae0ldk6jb1:3"
+      },
+      "@9hjf7ci8fb8h0lvmnpjq3go6a2": {
+        "id": "@9hjf7ci8fb8h0lvmnpjq3go6a2",
+        "kind": "def",
+        "body": "@9hjf7ci8fb8h0lvmnpjq3go6a2:1"
+      },
+      "@9hjf7ci8fb8h0lvmnpjq3go6a2:2": {
+        "id": "@9hjf7ci8fb8h0lvmnpjq3go6a2:2",
+        "kind": "binder"
+      },
+      "@9hjf7ci8fb8h0lvmnpjq3go6a2:3": {
+        "id": "@9hjf7ci8fb8h0lvmnpjq3go6a2:3",
+        "kind": "binder"
+      },
+      "@9hjf7ci8fb8h0lvmnpjq3go6a2:9": {
+        "id": "@9hjf7ci8fb8h0lvmnpjq3go6a2:9",
+        "kind": "lit",
+        "value": "("
+      },
+      "@9hjf7ci8fb8h0lvmnpjq3go6a2:13": {
+        "id": "@9hjf7ci8fb8h0lvmnpjq3go6a2:13",
+        "kind": "lit",
+        "value": ")"
+      },
+      "@9hjf7ci8fb8h0lvmnpjq3go6a2:11": {
+        "id": "@9hjf7ci8fb8h0lvmnpjq3go6a2:11",
+        "kind": "ref",
+        "target": "builtin.concat"
+      },
+      "@9hjf7ci8fb8h0lvmnpjq3go6a2:12": {
+        "id": "@9hjf7ci8fb8h0lvmnpjq3go6a2:12",
+        "kind": "ref",
+        "target": "@9hjf7ci8fb8h0lvmnpjq3go6a2:3"
+      },
+      "@9hjf7ci8fb8h0lvmnpjq3go6a2:10": {
+        "id": "@9hjf7ci8fb8h0lvmnpjq3go6a2:10",
+        "kind": "call",
+        "fn": "@9hjf7ci8fb8h0lvmnpjq3go6a2:11",
+        "args": [
+          "@9hjf7ci8fb8h0lvmnpjq3go6a2:12",
+          "@9hjf7ci8fb8h0lvmnpjq3go6a2:13"
+        ]
+      },
+      "@9hjf7ci8fb8h0lvmnpjq3go6a2:8": {
+        "id": "@9hjf7ci8fb8h0lvmnpjq3go6a2:8",
+        "kind": "ref",
+        "target": "builtin.concat"
+      },
+      "@9hjf7ci8fb8h0lvmnpjq3go6a2:7": {
+        "id": "@9hjf7ci8fb8h0lvmnpjq3go6a2:7",
+        "kind": "call",
+        "fn": "@9hjf7ci8fb8h0lvmnpjq3go6a2:8",
+        "args": [
+          "@9hjf7ci8fb8h0lvmnpjq3go6a2:9",
+          "@9hjf7ci8fb8h0lvmnpjq3go6a2:10"
+        ]
+      },
+      "@9hjf7ci8fb8h0lvmnpjq3go6a2:5": {
+        "id": "@9hjf7ci8fb8h0lvmnpjq3go6a2:5",
+        "kind": "ref",
+        "target": "@9hjf7ci8fb8h0lvmnpjq3go6a2:2"
+      },
+      "@9hjf7ci8fb8h0lvmnpjq3go6a2:6": {
+        "id": "@9hjf7ci8fb8h0lvmnpjq3go6a2:6",
+        "kind": "arm",
+        "variant": "std.bool.true",
+        "binds": [],
+        "results": [],
+        "body": "@9hjf7ci8fb8h0lvmnpjq3go6a2:7"
+      },
+      "@9hjf7ci8fb8h0lvmnpjq3go6a2:15": {
+        "id": "@9hjf7ci8fb8h0lvmnpjq3go6a2:15",
+        "kind": "ref",
+        "target": "@9hjf7ci8fb8h0lvmnpjq3go6a2:3"
+      },
+      "@9hjf7ci8fb8h0lvmnpjq3go6a2:14": {
+        "id": "@9hjf7ci8fb8h0lvmnpjq3go6a2:14",
+        "kind": "arm",
+        "variant": "std.bool.false",
+        "binds": [],
+        "results": [],
+        "body": "@9hjf7ci8fb8h0lvmnpjq3go6a2:15"
+      },
+      "@9hjf7ci8fb8h0lvmnpjq3go6a2:4": {
+        "id": "@9hjf7ci8fb8h0lvmnpjq3go6a2:4",
+        "kind": "match",
+        "scrutinee": "@9hjf7ci8fb8h0lvmnpjq3go6a2:5",
+        "arms": [
+          "@9hjf7ci8fb8h0lvmnpjq3go6a2:6",
+          "@9hjf7ci8fb8h0lvmnpjq3go6a2:14"
+        ],
+        "otherwise": null
+      },
+      "@9hjf7ci8fb8h0lvmnpjq3go6a2:1": {
+        "id": "@9hjf7ci8fb8h0lvmnpjq3go6a2:1",
+        "kind": "lambda",
+        "params": [
+          "@9hjf7ci8fb8h0lvmnpjq3go6a2:2",
+          "@9hjf7ci8fb8h0lvmnpjq3go6a2:3"
+        ],
+        "body": "@9hjf7ci8fb8h0lvmnpjq3go6a2:4"
+      },
       "@9jf2t6u7u41ic33e26eotbapan": {
         "id": "@9jf2t6u7u41ic33e26eotbapan",
         "kind": "def",
@@ -63904,6 +64065,8 @@
       "@irism94h4628kck5lvrg8jo5as",
       "@p9oec8ns0priahlo1970brkupl",
       "@adaj9q1ooe34kuk98lmdsju99l",
+      "@73jvjh0jhh9419otae0ldk6jb1",
+      "@9hjf7ci8fb8h0lvmnpjq3go6a2",
       "@c9sa21p6t34r9bf9cjcm8h2101",
       "@9jf2t6u7u41ic33e26eotbapan",
       "@h7nla8kekh6mepta8fskumeb6k",
@@ -64808,6 +64971,63 @@
           {
             "t": "con",
             "id": "type.int",
+            "args": []
+          },
+          {
+            "t": "con",
+            "id": "type.string",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "type.string",
+          "args": []
+        },
+        "eff": {
+          "effs": [],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
+    "@73jvjh0jhh9419otae0ldk6jb1": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "type.string",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "type.string",
+          "args": []
+        },
+        "eff": {
+          "effs": [],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
+    "@9hjf7ci8fb8h0lvmnpjq3go6a2": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.bool",
             "args": []
           },
           {
@@ -76396,6 +76616,11 @@
     "@adaj9q1ooe34kuk98lmdsju99l:3": "width",
     "@adaj9q1ooe34kuk98lmdsju99l:4": "fill",
     "@adaj9q1ooe34kuk98lmdsju99l:7": "short by",
+    "@73jvjh0jhh9419otae0ldk6jb1": "spaced",
+    "@73jvjh0jhh9419otae0ldk6jb1:2": "text",
+    "@9hjf7ci8fb8h0lvmnpjq3go6a2": "optional parens",
+    "@9hjf7ci8fb8h0lvmnpjq3go6a2:2": "needed",
+    "@9hjf7ci8fb8h0lvmnpjq3go6a2:3": "text",
     "@9jf2t6u7u41ic33e26eotbapan": "flatten",
     "@9jf2t6u7u41ic33e26eotbapan:2": "lists",
     "@9jf2t6u7u41ic33e26eotbapan:8": "list",
@@ -78028,6 +78253,8 @@
     "@5spbl9n0242le2go76pak262k3": "Whether the text ends with this: ends with(\"page.md\", \".md\") is true. Every text ends with \"\".",
     "@jlusj9pahb8jugi95l7c09o6tn": "Whether the part occurs somewhere in the text: contains text(\"to do list\", \"do\") is true. Every text contains \"\". (contains is a list's.)",
     "@resu20vgihfnqi04h0qu9cnp5v": "The text without the prefix it starts with: after prefix(\"r7\", \"r\") is \"7\". No answer when it doesn't start with it (Choice), so first(after prefix(w, \"#\"), else w) reads a tag or keeps the word.",
+    "@73jvjh0jhh9419otae0ldk6jb1": "The text with a space either side: spaced(\"+\") is \" + \". Run backwards (inverse) it reads the text with any spaces around it, or none.",
+    "@9hjf7ci8fb8h0lvmnpjq3go6a2": "The text in parentheses when needed, else as it is. Run backwards it reads the text bare (when not needed) or in parentheses, any number of matched pairs, so a printer that leaves out the ones it needn't print still reads them.",
     "@irism94h4628kck5lvrg8jo5as": "The text written this many times over: repeated(\"ab\", 3) is \"ababab\". 0 times, or fewer, is \"\".",
     "@p9oec8ns0priahlo1970brkupl": "The text with fill put in front until it is this wide: padded start(\"7\", 3, \"0\") is \"007\". A text already as wide is as it was; a fill of several characters is cut where the width ends.",
     "@adaj9q1ooe34kuk98lmdsju99l": "The text with fill put after it until it is this wide: padded end(\"ab\", 4, \".\") is \"ab..\". For columns of text.",
@@ -78261,6 +78488,8 @@
     "@irism94h4628kck5lvrg8jo5as",
     "@p9oec8ns0priahlo1970brkupl",
     "@adaj9q1ooe34kuk98lmdsju99l",
+    "@73jvjh0jhh9419otae0ldk6jb1",
+    "@9hjf7ci8fb8h0lvmnpjq3go6a2",
     "@9jf2t6u7u41ic33e26eotbapan",
     "@h7nla8kekh6mepta8fskumeb6k",
     "@b79rmbj8j5i50lftl5a2gocpm7",

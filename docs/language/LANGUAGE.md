@@ -1653,7 +1653,12 @@ f's space, the way back being f run backwards (`examples/conjugate`: an
 edit in linear light, a turn about a point, one band of a signal). The
 function it gives back is typed the same way from the f it is given:
 `conjugate(step, double)` with `step = (x) ↦ x + 1` is a plain function,
-`conjugate(double, step)` keeps Choice. It is written once with the DSL in
+`conjugate(double, step)` keeps Choice. Two text pieces are made for printers that `inverse`
+reads back (L70a, GRAMMARS-2026-11-02): `spaced(t)` prints t with a space
+either side and reads it with any spaces around, or none, and
+`optional parens(needed, t)` prints the parentheses only when needed and
+reads them whenever they're there (matched pairs, any number), and their absence
+only where they weren't needed. Each prints one way and reads several. It is written once with the DSL in
 `src/lang/prelude-source.ts` and
 published by `node library/build.ts`, which also moves the examples onto it.
 Every program is loaded with it (`src/lang/library.ts`): the editor, the
