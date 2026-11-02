@@ -823,7 +823,8 @@ export const ARRAY_OPS = {
 
 // A hash table changed in place (C63b, IN-PLACE.md step 2): Map's
 // representation, its keys Ints and Texts, the ones a JS Map holds by value
-// (an Int has one spelling, int.ts). Its entries are in compare's order, so
+// (an Int has one spelling, int.ts), and tuples of them, held by their
+// spelling (C63f). Its entries are in compare's order, so
 // its meaning is the Map it stands for.
 //
 // Every version stays a value (C71): a put writes into the one JS Map and
@@ -884,35 +885,58 @@ function change(t: Table, key: unknown, set: boolean, v?: unknown): Table {
 }
 const tableOf_ = (k: Type, v: Type): Type => ({ t: "con", id: TABLE, args: [k, v] });
 const ofEntry = (make: (k: Type, v: Type) => [Type[], Type], effects: Id[] = []): Sig => (s) => { const k = s.fresh(), v = s.fresh(); const [ps, r] = make(k, v); return fn(ps, r, s.freshRow(effects)); };
-// compare's order on Ints and Texts (run.ts compareValues).
-const keyOrder = (a: unknown, b: unknown): number => (typeof a === "string" ? (a === b ? 0 : T.less(a, b as string) ? -1 : 1) : (a as number) < (b as number) ? -1 : (a as number) > (b as number) ? 1 : 0);
+// compare's order on Ints, Texts and tuples of them (run.ts
+// compareValues): a tuple part by part.
+const keyOrder = (a: unknown, b: unknown): number => {
+  if (typeof a === "string") return a === b ? 0 : T.less(a, b as string) ? -1 : 1;
+  if (typeof a === "object" && a !== null) {
+    const x = (a as { fields: unknown[] }).fields, y = (b as { fields: unknown[] }).fields;
+    for (let i = 0; i < x.length; i++) { const c = keyOrder(x[i], y[i]); if (c) return c; }
+    return 0;
+  }
+  return (a as number) < (b as number) ? -1 : (a as number) > (b as number) ? 1 : 0;
+};
+// A tuple key (C63f) is held by its spelling, one per value: an Int's
+// digits (an Int has one spelling, int.ts), a Text quoted, a tuple's parts
+// in brackets. The table's keys are all of one type, so a spelling never
+// meets a Text it could be mistaken for. Such an entry keeps the key itself
+// beside its value (`Keyed`), for the entries; an Int or Text key is held
+// as it is.
+class Keyed { key: unknown; value: unknown; constructor(key: unknown, value: unknown) { this.key = key; this.value = value; } }
+const spelling = (x: unknown): string => (typeof x === "string" ? JSON.stringify(x) : typeof x === "object" && x !== null ? `(${(x as { fields: unknown[] }).fields.map(spelling).join(",")})` : String(x));
+const held = (key: unknown) => (typeof key === "object" && key !== null ? spelling(key) : key);
+const valueOf = (v: unknown) => (v instanceof Keyed ? v.value : v);
+const keyOf = (k: unknown, v: unknown) => (v instanceof Keyed ? v.key : k);
 const tableAt = builtin("table.at", "table value at", ofEntry((k, v) => [[tableOf_(k, v), k], v], [CHOICE]));
-STD_MANY[tableAt] = (t: Table, key: unknown) => (t.m.has(key) ? [t.m.get(key)] : []);
+STD_MANY[tableAt] = (t: Table, key: unknown) => { const h = held(key); return t.m.has(h) ? [valueOf(t.m.get(h))] : []; };
 export const TABLE_OPS = {
   empty: builtin("table.empty", "empty table", ofEntry((k, v) => [[], tableOf_(k, v)]), () => new Table(new Map(), true)),
-  put: builtin("table.put", "table put", ofEntry((k, v) => [[tableOf_(k, v), k, v], tableOf_(k, v)]), (t: Table, key: unknown, v: unknown) => change(t, key, true, v)),
-  remove: builtin("table.remove", "table remove", ofEntry((k, v) => [[tableOf_(k, v), k], tableOf_(k, v)]), (t: Table, key: unknown) => change(t, key, false)),
-  has: builtin("table.has", "table has", ofEntry((k, v) => [[tableOf_(k, v), k], bool]), (t: Table, key: unknown) => ({ tag: t.m.has(key) ? TRUE : FALSE, fields: [] })),
+  put: builtin("table.put", "table put", ofEntry((k, v) => [[tableOf_(k, v), k, v], tableOf_(k, v)]), (t: Table, key: unknown, v: unknown) => {
+    const h = held(key);
+    return change(t, h, true, h === key ? v : new Keyed(key, v));
+  }),
+  remove: builtin("table.remove", "table remove", ofEntry((k, v) => [[tableOf_(k, v), k], tableOf_(k, v)]), (t: Table, key: unknown) => change(t, held(key), false)),
+  has: builtin("table.has", "table has", ofEntry((k, v) => [[tableOf_(k, v), k], bool]), (t: Table, key: unknown) => ({ tag: t.m.has(held(key)) ? TRUE : FALSE, fields: [] })),
   size: builtin("table.size", "table size", ofEntry((k, v) => [[tableOf_(k, v)], int]), (t: Table) => t.m.size),
   at: tableAt,
   // The entries in compare's order: the Map it stands for.
   entries: builtin("table.entries", "table entries", ofEntry((k, v) => [[tableOf_(k, v)], list({ t: "con", id: PAIR, args: [k, v] })]),
-    (t: Table) => (t.listed ??= listOf([...t.m].sort(([a], [b]) => keyOrder(a, b)).map(([a, b]) => ({ tag: PAIR_V, fields: [a, b] }))))),
+    (t: Table) => (t.listed ??= listOf([...t.m].map(([k, v]) => [keyOf(k, v), valueOf(v)]).sort(([a], [b]) => keyOrder(a, b)).map(([a, b]) => ({ tag: PAIR_V, fields: [a, b] }))))),
 };
 
 // Set as a hash table changed in place (C63d): the same Table, its keys
 // the items, each holding `true`. As for Map's, only where every set has
-// one holder, items are Ints and Texts, and they come out in compare's
-// order.
+// one holder, items are Ints, Texts and tuples of them (C63f), and they
+// come out in compare's order.
 const setOf_ = (a: Type): Type => ({ t: "con", id: HASH_SET, args: [a] });
 const ofSetItem = (make: (a: Type) => [Type[], Type]): Sig => (s) => { const a = s.fresh(); const [ps, r] = make(a); return fn(ps, r, s.freshRow([])); };
 export const HASH_SET_OPS = {
   empty: builtin("hashset.empty", "empty hash set", ofSetItem((a) => [[], setOf_(a)]), () => new Table(new Map(), true)),
-  add: builtin("hashset.add", "hash set add", ofSetItem((a) => [[setOf_(a), a], setOf_(a)]), (t: Table, x: unknown) => change(t, x, true, true)),
-  remove: builtin("hashset.remove", "hash set remove", ofSetItem((a) => [[setOf_(a), a], setOf_(a)]), (t: Table, x: unknown) => change(t, x, false)),
-  has: builtin("hashset.has", "hash set has", ofSetItem((a) => [[setOf_(a), a], bool]), (t: Table, x: unknown) => ({ tag: t.m.has(x) ? TRUE : FALSE, fields: [] })),
+  add: builtin("hashset.add", "hash set add", ofSetItem((a) => [[setOf_(a), a], setOf_(a)]), (t: Table, x: unknown) => { const h = held(x); return change(t, h, true, h === x ? true : new Keyed(x, true)); }),
+  remove: builtin("hashset.remove", "hash set remove", ofSetItem((a) => [[setOf_(a), a], setOf_(a)]), (t: Table, x: unknown) => change(t, held(x), false)),
+  has: builtin("hashset.has", "hash set has", ofSetItem((a) => [[setOf_(a), a], bool]), (t: Table, x: unknown) => ({ tag: t.m.has(held(x)) ? TRUE : FALSE, fields: [] })),
   size: builtin("hashset.size", "hash set size", ofSetItem((a) => [[setOf_(a)], int]), (t: Table) => t.m.size),
-  items: builtin("hashset.items", "hash set items", ofSetItem((a) => [[setOf_(a)], list(a)]), (t: Table) => (t.listed ??= listOf([...t.m.keys()].sort(keyOrder)))),
+  items: builtin("hashset.items", "hash set items", ofSetItem((a) => [[setOf_(a)], list(a)]), (t: Table) => (t.listed ??= listOf([...t.m].map(([k, v]) => keyOf(k, v)).sort(keyOrder)))),
 };
 
 // Algebraic's operations (src/lang/algebraic.ts). The one + − · −x <
