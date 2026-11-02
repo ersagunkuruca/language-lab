@@ -9,7 +9,7 @@ import { norm } from "../../ters/src/lang/int.ts";
 import { isData, isFn, isRecord, lowerScalar, type LType } from "../src/scalar.ts";
 import { emitWasm, fromInt, fromText, instantiate, runMain, toInt, toText } from "../src/wasm.ts";
 import { load } from "../src/program.ts";
-import { area, choices, recursiveLets, closures, escapes, fractionInputs, fractions, maths, ordered, orderedInputs, roses, sameLists, searches, several, showInputs, shows, stopsWith, texts, worldly } from "../src/fixtures.ts";
+import { area, changeInputs, changes, choices, recursiveLets, closures, escapes, fractionInputs, fractions, maths, ordered, orderedInputs, roses, sameLists, searches, several, showInputs, shows, stopsWith, texts, worldly } from "../src/fixtures.ts";
 import { nodeWorld } from "../../ters/src/lang/world.ts";
 import { WASI } from "node:wasi";
 import { closeSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -812,5 +812,23 @@ test("a recursive let in WebAssembly: lifted to a definition, the evaluator's an
   const t = lowered.funcs.find((f) => f.name === "scaled sum")!.params[0];
   for (const [xs, c] of [[[1, 2, 3], 2], [[], 5], [[0.5, -1.5], -2]] as [number[], number][]) {
     assert.equal(w["scaled sum"](toWasm(w, toList(xs), t), c), first(r.call(r.value(p.scaledSum), toList(xs), c)), `${xs} · ${c}`);
+  }
+});
+
+test("changed in WebAssembly: one field, one item, one inside the other, a place that isn't there, an item of a long list (C100)", async () => {
+  const p = changes();
+  assert.deepEqual(p.info.errors.map((e) => e.message), []);
+  const lowered = lowerScalar(p.code, p.info, p.names, Object.values(p.defs), { data: true });
+  assert.deepEqual([...lowered.refused.entries()], []);
+  const w = await instantiate(emitWasm(lowered)) as unknown as Exports;
+  const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });
+  const inputs = changeInputs();
+  const value = (x: unknown): Value => (typeof x === "bigint" ? norm(x) : Array.isArray(x) ? toList(x.map(value)) : x as Value);
+  for (const [name, def] of Object.entries(p.defs)) {
+    const f = lowered.funcs.find((g) => g.def === def)!;
+    for (const xs of inputs[name].map((ys) => ys.map(value))) {
+      const got = answer(w, f, (w[f.name] as (...a: unknown[]) => unknown)(...xs.map((x, i) => toWasm(w, x, f.params[i]))));
+      assert.equal(flat(got), flat(outcome(r, def, xs)), name);
+    }
   }
 });

@@ -140,7 +140,9 @@ export const TARGETS: Record<Id, Target> = {
   [CELL_OPS.thenPath]: { js: op(([p, q]) => `$path.then(${p}, ${q})`), scalar: CELLS },
   [CELL_OPS.readAt]: { js: "partial", scalar: CELLS },
   [CELL_OPS.writeAt]: { js: op(([c, p, v]) => `$path.write(${c}, ${p}, ${v})`), scalar: CELLS },
-  [CELL_OPS.changed]: { js: op(([v, p, x]) => `$path.changed(${v}, ${p}, ${x})`), scalar: CELLS },
+  // changed is pure (L163): with `data`, the value rebuilt along a path
+  // written out where it's used (C100).
+  [CELL_OPS.changed]: { js: op(([v, p, x]) => `$path.changed(${v}, ${p}, ${x})`), scalar: written("changed(): the value rebuilt along the path, an item step a walk of its own") },
   [CELL_OPS.insertAt]: { js: op(([c, p, i, v]) => `$path.insert(${c}, ${p}, ${i}, ${v})`), scalar: CELLS },
   [CELL_OPS.removeAt]: { js: op(([c, p, i]) => `$path.remove(${c}, ${p}, ${i})`), scalar: CELLS },
   [CELL_OPS.moveAt]: { js: op(([c, p, a, b]) => `$path.move(${c}, ${p}, ${a}, ${b})`), scalar: CELLS },
