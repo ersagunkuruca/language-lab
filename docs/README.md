@@ -80,6 +80,7 @@ Each note says why, then gives the plan as steps; each step is a backlog row.
 | [REPRESENTATIONS.md](design/data/REPRESENTATIONS.md) | How a value is stored, written in the language; the compiler chooses, never the program | partly built (L108; laws after T7) |
 | [DATA-STRUCTURES.md](design/data/DATA-STRUCTURES.md) | Maps, sets and more as meanings with representations | partly built (Map and Set; L61) |
 | [STABLE-REFERENCES.md](design/data/STABLE-REFERENCES.md) | Cells that own their value, edits at a path, tracked reads, memory layout | partly built (L98, L99; C56 to C61) |
+| [SHARED-FIELDS-2026-11-02.md](design/data/SHARED-FIELDS-2026-11-02.md) | A field several cases of a type share: read as a Choice, set where present (L168) | design only |
 | [IN-PLACE.md](design/data/IN-PLACE.md) | Changing a value in place when it has one holder, invisibly | proposal (C62, C63) |
 
 ### Relations, patterns and effects
