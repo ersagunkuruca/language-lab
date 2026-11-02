@@ -5,7 +5,7 @@ import { Lang } from "../../ters/src/lang/dsl.ts";
 import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { B } from "../../ters/src/prelude.ts";
-import { ABORT_OP, ARITH, ARRAY_OPS, CASE_NAME, CELL_OPS, RANDOM_OP, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, INT_OPS, IO, LIST, NIL, NONE, PAIR_V, S, SECOND, SHOW_ANY, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
+import { ABORT_OP, ARITH, ARRAY_OPS, CASE_NAME, CELL_OPS, RANDOM_OP, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, INT_OPS, IO, LIST, NIL, NONE, PAIR_V, S, SECOND, SET, SHOW_ANY, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
 // S as the pga fixture names it is its Space type.
 const STD = S;
 import { INT, NUMBER, STRING } from "../../ters/src/lang/types.ts";
@@ -572,6 +572,7 @@ export function changes() {
   const lib = (name: string) => LIBRARY.code.defs.find((x) => LIBRARY.names[x] === name)!;
   const Machine = k.type("Machine", [], [["machine", [["pc", () => k.tref(INT)], ["registers", () => k.tref(LIST, k.tref(INT))]]]]);
   const pcOf = Machine.f["machine.pc"], regsOf = Machine.f["machine.registers"];
+  const Box = k.type("Box", [], [["box", [["label", () => k.tref(INT)], ["machine", () => k.tref(Machine.def)]]]]);
   const sh = (x: Id) => k.call(SHOW_ANY, x);
   const int = (x: Id) => k.call(INT_OPS.add, x, k.int(0));
   const field = (f: Id) => k.call(CELL_OPS.path, k.fn(["m"], (m) => k.call(f, m)));
@@ -587,6 +588,10 @@ export function changes() {
     machines: d("machines", ["i", "x"], (i, x) => sh(changed(k.list(m0(), m0()), k.call(CELL_OPS.thenPath, k.call(CELL_OPS.itemPath, whole(), int(i)), field(pcOf)), int(x)))),
     // A long list's item near its end: the walk to it in constant stack.
     far: d("far", ["xs", "i", "x"], (xs, i, x) => sh(k.call(lib("item at"), changed(xs, k.call(CELL_OPS.itemPath, whole(), int(i)), int(x)), int(i), k.int(-1)))),
+    // set (C106): a field, a path of fields, and two fields at once.
+    setPc: d("set pc", ["x"], (x) => sh(k.call(SET, k.x(pcOf), m0(), int(x)))),
+    setInside: d("set inside", ["x"], (x) => sh(k.call(SET, k.fn(["b"], (b) => k.call(pcOf, k.call(Box.f["box.machine"], b))), k.call(Box.v.box, k.int(4), m0()), int(x)))),
+    setBoth: d("set both", ["x"], (x) => sh(k.call(SET, k.fn(["m"], (m) => k.call(PAIR_V, k.call(pcOf, m), k.call(regsOf, m))), m0(), k.call(PAIR_V, int(x), k.list(int(x)))))),
     deep: d("deep", ["i", "j", "x"], (i, j, x) => sh(changed(k.list(m0(), m0()), k.call(CELL_OPS.itemPath, k.call(CELL_OPS.thenPath, k.call(CELL_OPS.itemPath, whole(), int(i)), field(regsOf)), int(j)), int(x)))),
   };
   const code = base(k.code);
@@ -601,6 +606,9 @@ export function changeInputs(): Record<string, unknown[][]> {
     both: is.map((i) => [i]),
     items: is.map((i) => [i, 9n]),
     machines: is.map((i) => [i, 5n]),
+    setPc: [[7n], [-(2n ** 70n)]],
+    setInside: [[7n], [2n ** 70n]],
+    setBoth: [[3n]],
     deep: is.flatMap((i) => [[i, 1n, 8n], [i, 5n, 8n]]),
     far: [[Array.from({ length: 200000 }, (_, i) => BigInt(i)), 199990n, 7n], [[], 0n, 7n]],
   };
