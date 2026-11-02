@@ -302,6 +302,7 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string
   };
   const fuel = kept.some((i) => funcs[i].spends || walk(funcs[i].body).some((e) => e.k === "budget"));
   const math = kept.some((i) => walk(funcs[i].body).some((e) => e.k === "op" && e.op in FDLIBM));
+  for (const i of kept) funcs[i].body = readFirst(funcs[i], funcs);
   const text = kept.map((i) => func(funcs[i], i));
   const ints = opts.main !== undefined || rts.size > 0 || arrayFns.size > 0 || statics.size > 0 || kept.some((i) => [...funcs[i].params, ...funcs[i].locals, funcs[i].result].some((t) => mentions(t)));
   const cells = ints || tnum.size > 0 || kept.some((i) => funcs[i].partial);
@@ -1168,3 +1169,98 @@ function walk(e: SExpr): SExpr[] {
 function calls(e: SExpr): Extract<SExpr, { k: "call" }>[] {
   return walk(e).filter((x): x is Extract<SExpr, { k: "call" }> => x.k === "call");
 }
+
+// A record given to a call and afterwards only read field by field has
+// those fields read before the call, so the call is given the record
+// itself and not a copy whose counts it shares (C94: machine's `stepped`
+// read `m.pc` after `executed(…, m)`, so every list in the machine had two
+// holders while an instruction ran, and none was ever changed in place).
+// Borrowing in Perceus (Reinking, Xie, de Moura and Leijen, PLDI 2021)
+// does this for a parameter; here it is the fields still needed that are
+// taken first.
+function readFirst(f: SFunc, funcs: SFunc[]): SExpr {
+  const occurs = (e: SExpr, x: number): number => (e.k === "local" && e.i === x ? 1 : 0) + kids(e).reduce((n, k) => n + occurs(k, x), 0);
+  const fieldReads = (e: SExpr, x: number): number => (e.k === "get" && e.rec.k === "local" && e.rec.i === x ? 1 : 0) + kids(e).reduce((n, k) => n + fieldReads(k, x), 0);
+  const given = (e: SExpr, out: Set<number>): Set<number> => {
+    if (e.k === "call" || e.k === "apply") for (const a of e.args) if (a.k === "local") out.add(a.i);
+    for (const k of kids(e)) given(k, out);
+    return out;
+  };
+  const go = (e: SExpr): SExpr => {
+    e = mapKids(e, go);
+    if (e.k !== "let") return e;
+    let body = e.body;
+    const lets: { i: number; value: SExpr }[] = [];
+    for (const x of given(e.value, new Set())) {
+      const t = f.locals[x];
+      if (x === e.i || !isRecord(t) || t.mutable) continue;
+      const n = occurs(body, x);
+      if (!n || fieldReads(body, x) !== n) continue;
+      const taken = new Map<number, number>();
+      const swap = (b: SExpr): SExpr => {
+        if (b.k === "get" && b.rec.k === "local" && b.rec.i === x) {
+          if (!taken.has(b.i)) { const l = f.locals.push(t.fields[b.i].t) - 1; taken.set(b.i, l); lets.push({ i: l, value: b }); }
+          return { k: "local", i: taken.get(b.i)! };
+        }
+        return mapKids(b, swap);
+      };
+      body = swap(body);
+    }
+    return lets.reduceRight<SExpr>((inner, l) => ({ k: "let", i: l.i, value: l.value, body: inner }), { ...e, body });
+  };
+  // At the end of the function, where nothing comes after: a record
+  // parameter read field by field while something there changes one of its
+  // fields (machine's `stored`: `replace at(m.memory, …)` among the others)
+  // has every field read first, so the record is gone and each field has
+  // one holder when it is changed. A call there given the whole record
+  // before anything else happens is made first.
+  const lets = (inner: SExpr, ls: { i: number; value: SExpr }[]) => ls.reduceRight<SExpr>((b, l) => ({ k: "let", i: l.i, value: l.value, body: b }), inner);
+  const tail = (e: SExpr): SExpr => {
+    switch (e.k) {
+      case "let": return { ...e, body: tail(e.body) };
+      case "if": return { ...e, then: tail(e.then), else: tail(e.else) };
+      case "case": return { ...e, arms: e.arms.map((a) => (a ? tail(a) : a)) };
+      case "make": case "call": case "new": case "rt": break;
+      default: return e;
+    }
+    let t: SExpr = e;
+    for (let x = 0; x < f.params.length; x++) {
+      const rt = f.locals[x];
+      if (!isRecord(rt) || rt.mutable || !occurs(t, x)) continue;
+      // Calls given x whole that come first, in the order things happen.
+      const first: SExpr[] = [];
+      let pure = true;
+      const order = (n: SExpr) => {
+        if (!pure) return;
+        // Only through plain expressions: a call inside a search, a budget
+        // or a handler stays where its failure is caught.
+        if (!["make", "call", "new", "rt", "op", "get", "local", "num", "int", "text", "bool"].includes(n.k)) { pure = false; return; }
+        if (n.k === "call" && n.args.some((a) => a.k === "local" && a.i === x) && n.args.every((a) => a.k === "local" || !kids(a).length)) { first.push(n); return; }
+        for (const k of kids(n)) order(k);
+        if (n.k === "call" || n.k === "apply" || n.k === "world" || n.k === "fail" || (n.k === "rt" && runtime(n.fn).partial)) pure = false;
+      };
+      order(t);
+      const ls: { i: number; value: SExpr }[] = [];
+      for (const c of first) {
+        const l = f.locals.push(funcs[(c as Extract<SExpr, { k: "call" }>).fn].result) - 1;
+        ls.push({ i: l, value: c });
+        const put = (n: SExpr): SExpr => (n === c ? { k: "local", i: l } : mapKids(n, put));
+        t = put(t);
+      }
+      const n = occurs(t, x);
+      if (!n || fieldReads(t, x) !== n || !walk(t).some((y) => y.k === "call" || y.k === "rt")) { t = lets(t, ls); continue; }
+      const taken = new Map<number, number>();
+      const swap = (b: SExpr): SExpr => {
+        if (b.k === "get" && b.rec.k === "local" && b.rec.i === x) {
+          if (!taken.has(b.i)) { const l = f.locals.push(rt.fields[b.i].t) - 1; taken.set(b.i, l); ls.push({ i: l, value: b }); }
+          return { k: "local", i: taken.get(b.i)! };
+        }
+        return mapKids(b, swap);
+      };
+      t = lets(swap(t), ls);
+    }
+    return t;
+  };
+  return tail(go(f.body));
+}
+
