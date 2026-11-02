@@ -50,11 +50,11 @@ import { dependencies, subtree } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { ARRAY, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, STRING, type Row, type Type } from "../../ters/src/lang/types.ts";
-import { ABORT, ABORT_OP, ALGEBRAIC_V, ARRAY_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, ORDER_V, PAIR_V, RATIO, S, SHOW_ANY, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
+import { ABORT, ABORT_OP, ALGEBRAIC_V, ARRAY_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, ORDER_V, PAIR_V, RATIO, S, SET, SHOW_ANY, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
 import { liftLets } from "../../ters/src/lang/lift-lets.ts";
 import { inlineLists } from "./inline-lets.ts";
 import { STOPS } from "./stops.ts";
-import { fieldIndex } from "../../ters/src/lang/records.ts";
+import { fieldIndex, fieldPath } from "../../ters/src/lang/records.ts";
 import { expandDerivatives, recordVariant } from "../../ters/src/lang/derive.ts";
 import { stageProgram } from "../../ters/src/lang/stage.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
@@ -850,6 +850,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           return { k: "world", ...WORLD_OPS[target], args: args(), t };
         }
         if (opts.data && target === CELL_OPS.changed) return changed(n, id, env, f);
+        if (target === SET && n.args.length === 3) return setField(n, id, env, f);
         if (opts.data && target === RANDOM_OP) return { k: "rt", fn: "rand.next", args: [] };
         if (opts.data && target === S.seeded) return seeded(n, id, env, f);
         if (target === S.valueOf && opts.data) return valueOf(n, id, env, f);
@@ -1833,6 +1834,18 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     const x = keep(expr(n.args[2], env, f, false), xt);
     const body = along(v, t, steps, at, x, xt, f);
     return lets.reduceRight<SExpr>((e, l) => ({ k: "let", i: l.i, value: l.value, body: e }), body);
+  }
+  // set(field, record, value) (C106): the path is fields written in place
+  // (the checker insists), so the record is made again along it with that
+  // field changed, the way changed does for a path of fields.
+  function setField(n: NodeOf<"call">, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
+    const t = stype(zonk(id)), xt = stype(zonk(n.args[2]));
+    if (!t || !xt) throw new Refused(`sets a field of ${whyNot(zonk(t ? n.args[2] : id))}`);
+    const path = fieldPath(code, n.args[0]);
+    if (!path) throw new Refused("sets a field that isn't written in place");
+    const vl = f.locals.push(t) - 1, xl = f.locals.push(xt) - 1;
+    const body = along({ k: "local", i: vl }, t, path.map((field) => ({ field })), path.map(() => null), { k: "local", i: xl }, xt, f);
+    return { k: "let", i: vl, value: expr(n.args[1], env, f, false), body: { k: "let", i: xl, value: expr(n.args[2], env, f, false), body } };
   }
   // v (a local) of type t with the place at steps changed to x. `at` holds
   // the item steps' positions, as expressions g can read.
