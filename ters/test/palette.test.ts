@@ -20,7 +20,9 @@ import { B } from "../src/prelude.ts";
 for (const name of ["calculus", "backwards", "queens"]) {
   test(`every filling the palette offers in ${name} type-checks`, () => {
     const p = loadProgram(join(import.meta.dirname, "../examples", name));
-    const calls = Object.values(p.code.nodes).filter((n): n is NodeOf<"call"> => n.kind === "call" && n.args.length > 0);
+    // The example's own calls: the library's (some ten thousand nodes now)
+    // made this a half-hour run, each filling a whole check.
+    const calls = Object.values(p.own.nodes).filter((n): n is NodeOf<"call"> => n.kind === "call" && n.args.length > 0);
     const bad: string[] = [];
     for (const c of sweep(calls.filter((_, i) => i % 9 === 0))) {
       const hole = c.args[0];
