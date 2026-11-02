@@ -211,6 +211,224 @@ const R: Record<string, Omit<RtFn, "name">> = {
       array.copy $bytes $bytes
       local.get $r`,
   },
+  // A Text shown, quoted as JSON.stringify quotes it (run.ts showValue,
+  // C102): " and \\ and the controls with a letter (\\b \\f \\n \\r \\t)
+  // after a backslash, the other controls as \\u00 and two lowercase hex
+  // digits, every other byte as it is. Two passes: the size, then the bytes.
+  "text.escape": {
+    params: [["c", "i32"]], result: "i32", locals: [], uses: [],
+    body: `
+      local.get $c
+      i32.const 34
+      i32.eq
+      local.get $c
+      i32.const 92
+      i32.eq
+      i32.or
+      if i32
+        local.get $c
+      else
+        local.get $c
+        i32.const 8
+        i32.eq
+        if i32
+          i32.const 98
+        else
+          local.get $c
+          i32.const 12
+          i32.eq
+          if i32
+            i32.const 102
+          else
+            local.get $c
+            i32.const 10
+            i32.eq
+            if i32
+              i32.const 110
+            else
+              local.get $c
+              i32.const 13
+              i32.eq
+              if i32
+                i32.const 114
+              else
+                local.get $c
+                i32.const 9
+                i32.eq
+                if i32
+                  i32.const 116
+                else
+                  i32.const 0
+                end
+              end
+            end
+          end
+        end
+      end`,
+  },
+  "text.hex": {
+    params: [["d", "i32"]], result: "i32", locals: [], uses: [],
+    body: `
+      local.get $d
+      i32.const 48
+      i32.add
+      local.get $d
+      i32.const 87
+      i32.add
+      local.get $d
+      i32.const 10
+      i32.lt_u
+      select`,
+  },
+  "text.quoted": {
+    params: [["t", "text"]], result: "text", locals: [["i", "i32"], ["n", "i32"], ["c", "i32"], ["e", "i32"], ["r", "text"], ["o", "i32"]], uses: ["text.escape", "text.hex"],
+    body: `
+      i32.const 2
+      local.set $n
+      block void
+      loop void
+        local.get $i
+        local.get $t
+        array.len
+        i32.ge_u
+        br_if 1
+        local.get $t
+        local.get $i
+        array.get_u $bytes
+        local.tee $c
+        call $text.escape
+        if i32
+          i32.const 2
+        else
+          i32.const 6
+          i32.const 1
+          local.get $c
+          i32.const 32
+          i32.lt_u
+          select
+        end
+        local.get $n
+        i32.add
+        local.set $n
+        local.get $i
+        i32.const 1
+        i32.add
+        local.set $i
+        br 0
+      end
+      end
+      local.get $n
+      array.new_default $bytes
+      local.set $r
+      local.get $r
+      i32.const 0
+      i32.const 34
+      array.set $bytes
+      i32.const 1
+      local.set $o
+      i32.const 0
+      local.set $i
+      block void
+      loop void
+        local.get $i
+        local.get $t
+        array.len
+        i32.ge_u
+        br_if 1
+        local.get $t
+        local.get $i
+        array.get_u $bytes
+        local.tee $c
+        call $text.escape
+        local.tee $e
+        if void
+      local.get $r
+      local.get $o
+            i32.const 92
+      array.set $bytes
+      local.get $r
+      local.get $o
+      i32.const 1
+      i32.add
+      local.get $e
+      array.set $bytes
+          local.get $o
+          i32.const 2
+          i32.add
+          local.set $o
+        else
+          local.get $c
+          i32.const 32
+          i32.lt_u
+          if void
+      local.get $r
+      local.get $o
+            i32.const 92
+      array.set $bytes
+      local.get $r
+      local.get $o
+      i32.const 1
+      i32.add
+      i32.const 117
+      array.set $bytes
+      local.get $r
+      local.get $o
+      i32.const 2
+      i32.add
+      i32.const 48
+      array.set $bytes
+      local.get $r
+      local.get $o
+      i32.const 3
+      i32.add
+      i32.const 48
+      array.set $bytes
+      local.get $r
+      local.get $o
+      i32.const 4
+      i32.add
+      local.get $c
+      i32.const 4
+      i32.shr_u
+      call $text.hex
+      array.set $bytes
+      local.get $r
+      local.get $o
+      i32.const 5
+      i32.add
+      local.get $c
+      i32.const 15
+      i32.and
+      call $text.hex
+      array.set $bytes
+            local.get $o
+            i32.const 6
+            i32.add
+            local.set $o
+          else
+      local.get $r
+      local.get $o
+            local.get $c
+      array.set $bytes
+            local.get $o
+            i32.const 1
+            i32.add
+            local.set $o
+          end
+        end
+        local.get $i
+        i32.const 1
+        i32.add
+        local.set $i
+        br 0
+      end
+      end
+      local.get $r
+      local.get $o
+      i32.const 34
+      array.set $bytes
+      local.get $r`,
+  },
   // The number of characters: the bytes that start one.
   "text.length": {
     params: [["t", "text"]], result: "int", locals: [["i", "i32"], ["n", "i32"]], uses: [],

@@ -125,7 +125,7 @@ export function program(seed: number, count: number) {
         ])();
       }
       case "T": {
-        if (leaf) return k.lit(r.pick(["", "a", "héllo", "🎉", "a b"]));
+        if (leaf) return k.lit(r.pick(["", "a", "héllo", "🎉", "a b", 'say "hi"\\', "tab\there\n", "\u0001\u001f\u007f"]));
         return r.pick<() => Id>([
           () => call(S.concat, sub("T"), sub("T")),
           () => call(SHOW_ANY, sub("I")),
@@ -154,7 +154,7 @@ export function program(seed: number, count: number) {
       k.let("x0", call(B.add, x, k.lit(0)), (x0) =>
         k.let("n0", call(INT_OPS.add, n, k.int(0)), (n0) =>
           k.let("xs0", call(lib("append"), xs, k.list(n0)), (xs0) =>
-            ((e: Id) => (result === "T" ? e : call(SHOW_ANY, e)))(gen(result, { F: [x0], I: [n0], L: [xs0], B: [], T: [], D: [], R: [] }, 4)))))));
+            call(SHOW_ANY, gen(result, { F: [x0], I: [n0], L: [xs0], B: [], T: [], D: [], R: [] }, 4)))))));
     defs.push({ def, result });
   }
   const code = base(k.code), names2 = baseNames(k.names);
