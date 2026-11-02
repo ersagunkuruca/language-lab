@@ -26,7 +26,8 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| E211 chapters | Round 2's chapters (a Markdown book split into a file per chapter, with contents.md) opens from the editor's picker as "Bigger program: chapters". Its main reads the book it's given, so Run waits on E212 | this PR |
+| E211 calc | Round 1's calc (a calculator for whole numbers of any size, reading standard input) opens from the editor's picker as "Bigger program: calc", the last of the eight. Its main reads standard input, which a page hasn't: the values panel now says so as a hint ("No values on the wires: a page has no standard input"), not as a failure in red, as the graph's own time limit is | this PR |
+| E211 chapters | Round 2's chapters (a Markdown book split into a file per chapter, with contents.md) opens from the editor's picker as "Bigger program: chapters". Its main reads the book it's given, so Run waits on E212 | #1130 |
 | E211 ledger | Round 3's ledger (money entries read from a file, totalled by account and month) opens from the editor's picker as "Bigger program: ledger". Its main reads the file it's given, so Run waits on E212 | #1129 |
 | E211 routes | Round 5's routes (roads between towns, read from a file) opens from the editor's picker as "Bigger program: routes". Its main reads roads.txt, so Run waits on E212 | #1128 |
 | E211 notebook | Round 6's notebook (notes read from a file, a word index and questions about them) opens from the editor's picker as "Bigger program: notebook". Its main reads notes.txt, so Run waits on E212 | #1127 |
