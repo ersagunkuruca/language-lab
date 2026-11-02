@@ -167,5 +167,14 @@ function fill(code: Code, info: Info, prev: Info, only: Set<Id>): Info {
     info.holes.set(id, { ...h, expected: z(h.expected), scope: h.scope.map((b) => ({ id: b.id, type: z(b.type) })), row: prev.subst.resolveRow(h.row) });
   }
   info.errors.push(...prev.errors.filter((e) => !inside.has(e.id) && code.nodes[e.id]));
+  // And what a run needs from the check (L144): which calls take a tuple
+  // apart (spread), which inputs get a wrapper (reshape), which divisions
+  // are answered, and which implementation each generic operation is.
+  const keep = (id: Id) => !inside.has(id) && !!code.nodes[id];
+  for (const id of prev.spread ?? []) if (keep(id)) info.spread?.add(id);
+  for (const id of prev.answered ?? []) if (keep(id)) info.answered?.add(id);
+  for (const [id, r] of prev.reshape ?? []) if (keep(id) && !info.reshape?.has(id)) info.reshape?.set(id, r);
+  for (const [id, t] of prev.opAt ?? []) if (keep(id) && !info.opAt?.has(id)) info.opAt?.set(id, z(t));
+  for (const [k, d] of prev.implementations ?? []) if (!info.implementations?.has(k)) info.implementations?.set(k, d);
   return info;
 }
