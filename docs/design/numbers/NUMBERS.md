@@ -749,8 +749,9 @@ operations that the editor filled in. Ersagun chose the replacement on
 Part 2, which gives the reasons. The vectors module had already gone this
 way, and Int and Float64 had shown what two `+`s look like in practice.*
 
-**What the programmer sees.** One `+`, `−`, `·`, `−x` and `<` (and later
-`÷`), offered wherever both sides have the same number type: Float64, Int,
+**What the programmer sees.** One `+`, `−`, `·`, `−x` and `<` (and
+`÷`, `divide`, since L155: an interface, Division, which every number type
+but Int implements), offered wherever both sides have the same number type: Float64, Int,
 a record whose fields are all one number type (a `Vec`, a `Colour`), and
 later Rational, Complex and the other algebras. A definition written with
 them and no literal, like `smaller(a, b) = if a < b then a else b`, works
