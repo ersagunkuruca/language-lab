@@ -2475,6 +2475,9 @@ the compiled time: an event copies the `Clinic` six to nine times
 `visited`). Every copy but the last is dead at once. K2's fusion takes
 some; reuse in place when the old record has no other holder (C62, C94's
 rc==1 reuse) the rest.
+Closed after measuring (C107): even every set of the ten-field record
+changed in place buys 0 to 7%; the rest of the collector's time is the
+heaps, lists and texts each event makes.
 
 **K4. No seeded Random in C or WebAssembly (target gap, C106).** Every
 simulation, game and test that wants the same numbers each run is
