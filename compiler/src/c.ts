@@ -302,13 +302,45 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string
     return isRecord(t) ? t.fields.some((x) => mentions(x.t, seen)) : isArray(t) ? mentions(t.item, seen) : isData(t) ? t.cases.some((c) => c.fields.some((x) => mentions(x.t, seen))) : [...(t as FType).params, (t as FType).result].some((x) => mentions(x, seen));
   };
 
-  const header = (i: number) => {
+  const header = (i: number, lending = false) => {
     const f = funcs[i];
-    return `${ty(f.result)} ${names.get(i)}(${f.params.map((t, j) => `${ty(t)} p${j}`).join(", ") || "void"})`;
+    return `${ty(f.result)} ${lending ? bnames.get(i) : names.get(i)}(${f.params.map((t, j) => `${ty(t)} p${j}`).join(", ") || "void"})`;
   };
   const fuel = kept.some((i) => funcs[i].spends || walk(funcs[i].body).some((e) => e.k === "budget"));
   const math = kept.some((i) => walk(funcs[i].body).some((e) => e.k === "op" && e.op in FDLIBM));
   for (const i of kept) funcs[i].body = readFirst(funcs[i], funcs);
+  // Inputs lent, not given (C94, Perceus's borrowed parameters): a record
+  // or cell input the body only reads fields of, or lends on in turn, is
+  // neither dup'd by the caller nor dropped by the callee. Such a function
+  // is written as name_b, which callers in the program call; `name`, the
+  // one the host and closures call, gives the inputs back to name_b and
+  // drops them after. A loop's inputs are set again each round, so a
+  // function that loops keeps its own.
+  const viaClosure = new Set(kept.flatMap((i) => walk(funcs[i].body).flatMap((e) => (e.k === "closure" ? [e.fn] : []))));
+  const lent = new Map<number, Set<number>>();
+  for (const i of kept) {
+    const f = funcs[i];
+    if (viaClosure.has(i) || calls(f.body).some((x) => x.fn === i && x.tail)) continue;
+    // One that makes a new value of the input's type is an update (machine's
+    // `stored`): it keeps the input, so the fields it moves on have one
+    // holder and are changed in place.
+    const made = new Set(walk(f.body).flatMap((e) => (e.k === "make" || e.k === "new" ? [e.t.key] : [])));
+    const c = new Set(f.params.flatMap((t, j) => (((isRecord(t) && !t.mutable && counted(t)) || isData(t)) && !made.has((t as RType).key) ? [j] : [])));
+    if (c.size) lent.set(i, c);
+  }
+  // Whether e uses local j other than as a field's record or a lent input.
+  const owns = (e: SExpr, j: number): boolean => {
+    if (e.k === "local") return e.i === j;
+    if ((e.k === "get" || e.k === "field" || e.k === "tag") && e.rec.k === "local" && e.rec.i === j) return false;
+    if (e.k === "call") return e.args.some((a, k) => (a.k === "local" && a.i === j ? !lent.get(e.fn)?.has(k) : owns(a, j)));
+    return kids(e).some((x) => owns(x, j));
+  };
+  for (let more = true; more;) {
+    more = false;
+    for (const [i, ps] of lent) for (const j of [...ps]) if (owns(funcs[i].body, j)) { ps.delete(j); more = true; }
+  }
+  for (const [i, ps] of [...lent]) if (!ps.size) lent.delete(i);
+  const bnames = new Map([...lent.keys()].map((i) => [i, ident(`${names.get(i)}_b`)]));
   const text = kept.map((i) => func(funcs[i], i));
   const ints = opts.main !== undefined || rts.size > 0 || arrayFns.size > 0 || statics.size > 0 || kept.some((i) => [...funcs[i].params, ...funcs[i].locals, funcs[i].result].some((t) => mentions(t)));
   const cells = ints || tnum.size > 0 || kept.some((i) => funcs[i].partial);
@@ -416,6 +448,7 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string
     ...[...arrays.values()].flatMap((a) => arrayC(a)),
     "",
     ...kept.map((i) => `${header(i)};`),
+    ...[...lent.keys()].map((i) => `${header(i, true)};`),
     "",
     text.join("\n\n"),
     ...(opts.harness ? ["", tests] : []),
@@ -473,7 +506,9 @@ int main(int argc, char **argv) {
     // Every local is declared once at the top: a let in one branch of an
     // if is still one variable.
     f.locals.forEach((t, j) => { if (j >= f.params.length) decls.push(`  ${ty(t)} ${local(j)};`); });
-    const isCounted = (j: number) => counted(f.locals[j]);
+    // A lent input isn't this function's to give on or drop.
+    const mine = lent.get(i);
+    const isCounted = (j: number) => counted(f.locals[j]) && !mine?.has(j);
     // The counted locals e reads before setting them. `cap` reads the
     // closure, input 0.
     const memo = new Map<SExpr, Set<number>>();
@@ -657,8 +692,31 @@ int main(int argc, char **argv) {
         case "field": return borrow(e.rec, e.t.cases[e.c].fields[e.i].t, (r) => `((${cname(e.t, e.c)} *)${r})->f${e.i}`, pre, d, after);
         case "tag": return borrow(e.rec, "i32", (r) => `(int32_t)${r}->tag`, pre, d, after);
         case "call": {
-          const c = `${names.get(e.fn)}(${args(e.args, pre, d, after).join(", ")})`;
-          return funcs[e.fn].partial ? checked(c, funcs[e.fn].result, pre, d, after) : stated(c, funcs[e.fn].result, pre, d);
+          const ps = lent.get(e.fn);
+          if (!ps) {
+            const c = `${names.get(e.fn)}(${args(e.args, pre, d, after).join(", ")})`;
+            return funcs[e.fn].partial ? checked(c, funcs[e.fn].result, pre, d, after) : stated(c, funcs[e.fn].result, pre, d);
+          }
+          // Lent inputs (C94): a local still used after the call, or one
+          // lent to this function, goes as it is; any other value is held
+          // through the call and dropped after it.
+          const as = (a: SExpr) => a.k === "local" && (!isCounted(a.i) || after.has(a.i));
+          const xs = args(e.args.map((a, k) => (ps.has(k) && as(a) ? { k: "num", v: 0 } as SExpr : a)), pre, d, after);
+          const held: { t: LType; v: string }[] = [];
+          e.args.forEach((a, k) => {
+            if (!ps.has(k)) return;
+            if (as(a)) { xs[k] = local((a as Extract<SExpr, { k: "local" }>).i); return; }
+            const v = temp(funcs[e.fn].params[k]);
+            pre.push(`${d}${v} = ${xs[k]};`);
+            xs[k] = v;
+            held.push({ t: funcs[e.fn].params[k], v });
+          });
+          pending.push(...held);
+          const c = `${bnames.get(e.fn)}(${xs.join(", ")})`;
+          const r = funcs[e.fn].partial ? checked(c, funcs[e.fn].result, pre, d, after) : stated(c, funcs[e.fn].result, pre, d);
+          pending.splice(pending.length - held.length);
+          for (const h of held) pre.push(`${d}${drop(h.t, h.v)}`);
+          return r;
         }
         case "closure": {
           const s = shapes[e.shape], n = shapeName.get(e.shape)!;
@@ -885,7 +943,7 @@ int main(int argc, char **argv) {
       }
       // A tail call of something with one answer or none, from one: its
       // status is this function's.
-      if (to === "return" && f.partial && targets.length === 0 && ((e.k === "call" && e.tail && funcs[e.fn].partial) || (e.k === "apply" && e.tail && e.t.partial))) {
+      if (to === "return" && f.partial && targets.length === 0 && ((e.k === "call" && e.tail && funcs[e.fn].partial && !lent.has(e.fn)) || (e.k === "apply" && e.tail && e.t.partial))) {
         const c = e.k === "call"
           ? `${names.get(e.fn)}(${args(e.args, pre, d, after).join(", ")})`
           : (() => { const [fn, ...xs] = args([e.fn, ...e.args], pre, d, after); const t = temp(e.t); pre.push(`${d}${t} = ${fn};`); return `((${fname.get(e.t.key)})((lab_closure *)${t})->code)(${[t, ...xs].join(", ")})`; })();
@@ -897,15 +955,19 @@ int main(int argc, char **argv) {
 
     // One from the budget per call, and per round of the loop: running out
     // is no answer, in a function that may have none.
-    const spend = (d: string) => (f.spends ? [`${d}lab_fuel -= 1;`, `${d}if (lab_fuel < 0) {`, ...(f.partial ? [...f.params.flatMap((t, j) => (counted(t) ? [`${d}  ${drop(t, `p${j}`)}`] : [])), `${d}  lab_st = 1;`] : []), `${d}  return ${zero(f.result)};`, `${d}}`] : []);
+    const spend = (d: string) => (f.spends ? [`${d}lab_fuel -= 1;`, `${d}if (lab_fuel < 0) {`, ...(f.partial ? [...f.params.flatMap((t, j) => (isCounted(j) ? [`${d}  ${drop(t, `p${j}`)}`] : [])), `${d}  lab_st = 1;`] : []), `${d}  return ${zero(f.result)};`, `${d}}`] : []);
     // Inputs the body never reads are dropped as it starts.
-    const unread = (d: string) => f.params.map((t, j) => (counted(t) && !free(f.body).has(j) ? `${d}${drop(t, `p${j}`)}` : "")).filter(Boolean);
+    const unread = (d: string) => f.params.map((t, j) => (isCounted(j) && !free(f.body).has(j) ? `${d}${drop(t, `p${j}`)}` : "")).filter(Boolean);
     const body = loops
       ? ["  for (;;) {", ...spend("    "), ...unread("    "), ...block(f.body, "return", "    ", new Set()), "  }"]
       : [...spend("  "), ...unread("  "), ...block(f.body, "return", "  ", new Set())];
     // Only the locals the body uses (the lowering's own for budgets aren't).
     const all = body.join("\n"), named = decls.filter((x) => new RegExp(`\\b${/(\w+);$/.exec(x)![1]}\\b`).test(all));
-    return [`// ${f.name.replace(/\n/g, " ")}`, `${header(i)} {`, ...named, ...body, "}"].join("\n");
+    const text = [`// ${f.name.replace(/\n/g, " ")}`, `${header(i, !!mine)} {`, ...named, ...body, "}"].join("\n");
+    if (!mine) return text;
+    // The one the host and closures call: it owns its inputs.
+    const ps = f.params.map((_, j) => `p${j}`);
+    return [text, `${header(i)} {`, `  ${ty(f.result)} r = ${bnames.get(i)}(${ps.join(", ")});`, ...[...mine].map((j) => `  ${drop(f.params[j], `p${j}`)}`), "  return r;", "}"].join("\n");
   }
 
   // The type of e's value.

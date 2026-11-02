@@ -363,7 +363,9 @@ test("a record's fields are read before it is given away, so a changed field has
   const body = (name: string) => { const at = c.indexOf(`\nMachine lab_${name}(`, c.indexOf(`// ${name}\n`)); return c.slice(at, c.indexOf("\n}\n", at)); };
   assert.doesNotMatch(body("stepped"), /Machine_dup\(p1\)/);
   const stored = body("stored");
-  assert.ok(stored.indexOf("Machine_drop(p0);\n", stored.indexOf("lab_value_of(Machine_dup(p0), p1)")) < stored.indexOf("lab_replace_at("), stored);
+  // `value of` only reads the machine: it is lent, not copied (C94's rest).
+  assert.doesNotMatch(stored, /Machine_dup\(p0\)/);
+  assert.ok(stored.indexOf("Machine_drop(p0);\n", stored.indexOf("lab_value_of_b(p0, p1)")) < stored.indexOf("lab_replace_at("), stored);
 });
 
 test("fractions in C: the evaluator's answers in lowest terms, past 2⁶⁴ too, none at a zero bottom, and every cell freed", { skip }, () => {
