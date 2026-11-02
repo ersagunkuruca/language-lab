@@ -483,7 +483,7 @@ function commit(next: Partial<Doc>, touched: string[], note: string) {
 function save() {
   docs[doc.program] = doc;
   if (EMBED) return;
-  try { localStorage.setItem(STORE, JSON.stringify({ current: doc.program, docs })); } catch {}
+  try { localStorage.setItem(STORE, JSON.stringify({ current: doc.program, docs, held })); } catch {}
 }
 
 function switchProgram(p: Program) {
@@ -710,9 +710,10 @@ const node = (id: Id) => doc.code.nodes[id];
 // A definition's type doesn't loosen while a hole is open in it. Clearing
 // the √ in period would leave its inputs unused, so its type would become
 // (a, b) -> Float64. Until its holes are filled, the type it had stays, as a
-// pin the editor holds for the session (not signatures.json); "Let it
-// loosen" in its Type section drops it.
-let held: Pins = {};
+// pin the editor holds (not signatures.json), kept with the saved programs
+// so a reload doesn't drop it unsaid (E179); "Let it loosen" in its Type
+// section, or beside a fill it refuses, drops it.
+let held: Pins = (() => { if (EMBED) return {}; try { return JSON.parse(localStorage.getItem(STORE) ?? "null")?.held ?? {}; } catch { return {}; } })();
 const hasHole = (code: Code, d: Id) => !!code.nodes[d] && subtree(code, d).some((x) => code.nodes[x].kind === "hole");
 function holdType(next: Code): string {
   const d = ui.def, info = typesOf();
@@ -746,7 +747,7 @@ function heldReason(reason: string): string {
 
 function loosenButton(dname: string): HTMLElement {
   const b = h("button", { class: "btn", type: "button" }, "Let it loosen");
-  b.addEventListener("click", () => { const { [ui.def]: _, ...rest } = held; held = rest; ui.note = `${dname}'s type follows its body again.`; ui.refused = false; render(); });
+  b.addEventListener("click", () => { const { [ui.def]: _, ...rest } = held; held = rest; ui.note = `${dname}'s type follows its body again.`; ui.refused = false; save(); render(); });
   return b;
 }
 
@@ -1962,7 +1963,13 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
   if (lacks) list.append(h("p", { class: "hint" }, `${ui.query.trim()} doesn't fit here: ${typed!.ok ? "" : typed!.reason}.`), h("div", { class: "acts" }, implementButton(info, lacks.iface, lacks.type, `Implement ${names[lacks.iface] ?? "it"} for ${showIn(lacks.type, names, info.subst)}`)));
   // Refused, it says why (E174): the reading's own reason, when the text
   // is an expression or nothing listed matches it.
-  else if (typed && !typed.ok && !value && !why && (!shown.length || /[^\p{L}\p{N}_' ]/u.test(q))) list.prepend(h("p", { class: "hint refused" }, `${ui.query.trim()} doesn't fit here: ${typed.reason.replace(/\.$/, "")}.`));
+  else if (typed && !typed.ok && !value && !why && (!shown.length || /[^\p{L}\p{N}_' ]/u.test(q))) {
+    // Refused because the definition's type is held while it has a hole:
+    // the way out is offered right there (E179).
+    const reason = heldReason(typed.reason.replace(/\.$/, ""));
+    const loosen = held[ui.def] && reason !== typed.reason.replace(/\.$/, "") ? h("div", { class: "acts" }, loosenButton(names[ui.def] ?? "It")) : null;
+    list.prepend(h("p", { class: "hint refused" }, `${ui.query.trim()} doesn't fit here: ${reason}.`), ...(loosen ? [loosen] : []));
+  }
   else if (!shown.length && !value && pending && q) list.append(h("p", { class: "hint" }, "Reading what's typed…"));
   else if (!shown.length && !value) list.append(h("p", { class: "hint" }, `Nothing that fits matches. ${why || "Values and arithmetic can be typed too: 3, \"text\", [1, 2], x * 2, (x) => x + 1."}`));
   return h("div", {}, h("div", { class: "sub-head" }, "Fill · only what type-checks here"), h("div", { class: "picker" }, input, list));
