@@ -370,7 +370,13 @@ Text has `length`, `slice`, `characters`, `split`, `join all`, `find`
 (`Choice`: the part may not be there), `comes before`, `character code`
 and `character` (`src/lang/text.ts`). Positions count characters, so an
 emoji is one. `join all` joins a list in one step, where a fold of `join
-text` would copy.
+text` would copy. `split` and `join all` (and html's `joined`, which is
+it) run backwards as each other: the parts of a joined text are the text
+split at the separator, the one list of parts that hold none of it, so a
+printer that joins its fields has its reader in `inverse` (L172):
+`inverse((r) ↦ joined([show(r.n), r.name], "|"), "12|Ada")` is
+`row(12, "Ada")`. A part that may hold the separator, or a `floor` on
+the way, has no single answer, and the checker says so.
 
 All of these run in the evaluator, the compiler (`$int`, `$impl`, `$many`
 in its runtime) and forward in the relational interpreter.

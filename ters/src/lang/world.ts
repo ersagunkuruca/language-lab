@@ -3,10 +3,13 @@
 // or compiled. Every operation is synchronous, like the rest of the
 // language; a failure throws with a message, which becomes the reason of
 // the program's Abort. `fetch text` is synchronous too: a child Node does
-// the fetch and the program waits for it.
+// the fetch and the program waits for it. `start fetch` (L150b) runs one
+// in the background and the program looks for its body when it awaits.
 
-import { execFileSync } from "node:child_process";
-import { appendFileSync, existsSync, readdirSync, readFileSync, readSync, writeFileSync } from "node:fs";
+import { execFileSync, spawn } from "node:child_process";
+import { appendFileSync, existsSync, mkdtempSync, readdirSync, readFileSync, readSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { worldRandom } from "./random.ts";
 import type { World } from "./run.ts";
 
@@ -78,6 +81,25 @@ export function nodeWorld(): World {
       if ("error" in r) throw new Error(r.error);
       return r.text;
     },
+    // In the background (L150b): a child Node fetches into a folder of its
+    // own and writes `done` last, so the program goes on and looks when it
+    // awaits. A body this run already has is answered at once.
+    startFetch: (url) => {
+      const had = fetched.get(url);
+      if (had) return () => had;
+      const dir = mkdtempSync(join(tmpdir(), "lab-fetch-"));
+      spawn(process.execPath, ["-e", FETCH_INTO, url, dir], { stdio: "ignore", detached: false }).unref();
+      return () => {
+        const known = fetched.get(url);
+        if (known) return known;
+        if (!existsSync(join(dir, "done"))) return null;
+        const failed = readFileSync(join(dir, "done"), "utf8");
+        const r = failed ? { error: `could not fetch ${url}: ${failed}` } : { text: readFileSync(join(dir, "body"), "utf8") };
+        rmSync(dir, { recursive: true, force: true });
+        fetched.set(url, r);
+        return r;
+      };
+    },
     random: worldRandom,
     now: Date.now,
     // Sleeping without spinning: wait on a word nobody will ever change.
@@ -92,4 +114,17 @@ fetch(process.argv[1]).then(async (r) => {
   if (!r.ok) { process.stderr.write(r.status + " " + r.statusText); process.exit(2); }
   process.stdout.write(await r.text());
 }, (e) => { process.stderr.write(String(e.cause?.message ?? e.message)); process.exit(2); });
+`;
+
+// The same in the background: the body into body, then done, empty, or
+// holding why not.
+const FETCH_INTO = `
+const { writeFileSync } = require("node:fs"), { join } = require("node:path");
+const [url, dir] = process.argv.slice(1);
+const done = (why) => writeFileSync(join(dir, "done"), why);
+fetch(url).then(async (r) => {
+  if (!r.ok) return done(r.status + " " + r.statusText);
+  writeFileSync(join(dir, "body"), await r.text());
+  done("");
+}, (e) => done(String(e.cause?.message ?? e.message)));
 `;

@@ -408,7 +408,9 @@ const FNS: Record<string, Fn> = {
   "rand.seed": { uses: [], c: `static uint32_t lab__r[4];
 static uint32_t lab__rotl(uint32_t x, int k) { return (x << k) | (x >> (32 - k)); }
 static double lab_rand_seed(double seed) {
-  uint32_t z = (uint32_t)(int64_t)floor(seed);
+  /* JavaScript's ToUint32 of the floor, exact for every double (C109). */
+  double y = floor(seed);
+  uint32_t z = (uint32_t)(y - floor(y / 4294967296.0) * 4294967296.0);
   for (int k = 0; k < 4; k++) {
     z += 0x9e3779b9u;
     uint32_t x = z;

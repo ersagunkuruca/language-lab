@@ -391,6 +391,22 @@ test("whole-number sums and split run backwards, so counting words backwards doe
   assert.deepEqual([...relate(p.code, pieces, { out: toList(["a b"]) })], []);
 });
 
+test("join all and the html library's joined run backwards as split, so a printer's reader is its inverse (L172)", () => {
+  const joined = LIBRARY.code.defs.find((d) => LIBRARY.names[d] === "joined" && LIBRARY.modules.some((m) => m.title === "html" && m.exports.includes(d)))!;
+  const p = program((k) => {
+    const Row = k.type("Row", [], [["row", [["n", () => k.tref("type.number")], ["name", () => k.tref("type.string")]]]]);
+    const line = k.def("line");
+    k.define(line, k.fn(["r"], (r) => k.call(joined, k.list(k.call(S.show, k.call(Row.f["row.n"], r)), k.call(Row.f["row.name"], r)), k.lit("|"))));
+    const parts = k.def("parts");
+    k.define(parts, k.fn(["xs"], (xs) => k.call(TEXT_OPS.joinAll, xs, k.lit(", "))));
+  }, LIBRARY.code);
+  const [r] = params(p.code, p.named("line"));
+  assert.deepEqual([...relate(p.code, p.named("line"), { out: "12|Ada" })].map((a) => shown(a, r).replace(/^\w+\(/, "row(")), ['row(12, "Ada")']);
+  const [xs] = params(p.code, p.named("parts"));
+  assert.deepEqual([...relate(p.code, p.named("parts"), { out: "a, b, c" })].map((a) => shown(a, xs)), ['["a", "b", "c"]']);
+  assert.deepEqual(p.info.errors.map((e) => e.message), []);
+});
+
 test("a search's step budget bounds the equation solver's work too", () => {
   // safe(column, placed) = true, backwards: every list of queens, with
   // equations growing per queen. The solver ran between the interpreter's

@@ -5,7 +5,7 @@ import { Lang } from "../../ters/src/lang/dsl.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
-import { CONS, FALSE, INT_OPS, NIL, S, SET, SHOW_ANY, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
+import { CONS, FALSE, INT_OPS, NIL, RANDOM_OP, S, SET, SHOW_ANY, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
 import { INT, NUMBER } from "../../ters/src/lang/types.ts";
 import { B } from "../../ters/src/prelude.ts";
 import type { Id } from "../../ters/src/model.ts";
@@ -79,6 +79,9 @@ export function program(seed: number, count: number) {
           () => orElse(call(B.sqrt, sub("F"))),
           () => orElse(call(B.log, sub("F"))),
           () => orElse(call(S.mod, sub("F"), sub("F"))),
+          // C108, C106: a text read as a number; a seeded draw.
+          () => orElse(call(TEXT_OPS.readNumber, sub("T"))),
+          () => call(S.seeded, sub("F"), k.thunk(() => call(B.add, call(RANDOM_OP), call(RANDOM_OP)))),
         ])();
       }
       case "I": {
@@ -95,6 +98,9 @@ export function program(seed: number, count: number) {
           () => call(TEXT_OPS.length, sub("T")),
           () => orElse(call(INT_OPS.quotient, sub("I"), sub("I"))),
           () => orElse(call(INT_OPS.remainder, sub("I"), sub("I"))),
+          () => orElse(call(INT_OPS.read, sub("T"))),
+          () => orElse(call(TEXT_OPS.code, sub("T"))),
+          () => orElse(call(TEXT_OPS.find, sub("T"), sub("T"))),
         ])();
       }
       case "B": {
@@ -122,16 +128,20 @@ export function program(seed: number, count: number) {
           () => call(lib("replace at"), sub("L"), sub("I"), sub("I")),
           // map with a closure: the item, and whatever is in scope.
           () => call(lib("map"), sub("L"), k.fn([fresh()], (v) => gen("I", { ...s, I: [...s.I, v] }, depth - 1))),
+          () => call(lib("keep"), sub("L"), k.fn([fresh()], (v) => gen("B", { ...s, I: [...s.I, v] }, depth - 1))),
         ])();
       }
       case "T": {
-        if (leaf) return k.lit(r.pick(["", "a", "héllo", "🎉", "a b", 'say "hi"\\', "tab\there\n", "\u0001\u001f\u007f"]));
+        if (leaf) return k.lit(r.pick(["", "a", "héllo", "🎉", "a b", 'say "hi"\\', "tab\there\n", "\u0001\u001f\u007f", "30.5", "-2", "1e3", "42", ".5", "007"]));
         return r.pick<() => Id>([
           () => call(S.concat, sub("T"), sub("T")),
           () => call(SHOW_ANY, sub("I")),
           () => call(SHOW_ANY, sub("F")),
           () => call(SHOW_ANY, sub("D")),
           () => call(TEXT_OPS.slice, sub("T"), sub("I"), sub("I")),
+          () => call(S.show, sub("F")),
+          () => call(INT_OPS.show, sub("I")),
+          () => k.call(S.first, k.thunk(() => call(TEXT_OPS.fromCode, sub("I"))), k.thunk(() => sub("T"))),
         ])();
       }
       case "D": {
