@@ -1880,7 +1880,10 @@ function usesIn(code: Code): Map<Id, number> {
   let m = uses.get(code);
   if (!m) {
     m = new Map();
-    for (const n of Object.values(code.nodes)) if (n.kind === "ref" && !isPublished(n.id)) m.set(n.target, (m.get(n.target) ?? 0) + 1);
+    // The program's own uses: the library's (std's representations call
+    // extended less, add, … hundreds of times) put those first in a new
+    // program's palette (I141).
+    for (const d of ownDefs()) for (const x of subtree(code, d)) { const n = code.nodes[x]; if (n?.kind === "ref") m.set(n.target, (m.get(n.target) ?? 0) + 1); }
     uses.set(code, m);
   }
   return m;
@@ -1936,12 +1939,15 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
   // what's wanted, and they will be called.
   const head = Object.values(doc.code.nodes).some((n) => n.kind === "call" && n.fn === hole);
   // Where a function goes, writing one here is often what's meant.
-  const order = [...(head ? ["functions"] : []), "in scope", "new function", "calls", "constructors", "definitions", "literals", "case analysis", "functions, not called"];
+  // What a representation is written with (match by, match as written)
+  // comes last: it's for writing one, not for a program's values (I141).
+  const order = [...(head ? ["functions"] : []), "in scope", "new function", "calls", "constructors", "definitions", "literals", "case analysis", "functions, not called", "for representations"];
   // A row's label, once per filling while the names stay (I135: every key
   // labelled every filling again, a type shown for each).
   const label = (f: T.Filling): [string, string, string] => {
     const was = labels.get(f), key = shownNames();
     const l = was?.key === key ? was.l : fillLabel(f, info, names);
+    if ((f.kind === "call" || f.kind === "ref") && f.target.startsWith("builtin.representation.")) l[2] = "for representations";
     if (was?.key !== key) labels.set(f, { key, l });
     return head && l[2] === "functions, not called" ? [l[0], l[1], "functions"] : l;
   };
