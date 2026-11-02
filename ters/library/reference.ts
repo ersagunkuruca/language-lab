@@ -45,7 +45,7 @@ export const SECTIONS: Section[] = [
       ...t("dual"), ...prelude("slope by duals", "dual table"),
       ...t("algebraic"), ...b("algebraic.sqrt", "algebraic.root", "algebraic.divide", "algebraic.ofRational", "algebraic.asFraction", "algebraic.digits", "algebraic.toNumber", "algebraic.show"),
       ...b("sin", "cos", "tan", "exp", "log"), ...b("add", "sub", "mul", "neg", "less", "int.add", "int.sub", "int.mul", "int.neg", "int.less", "algebraic.add", "algebraic.sub", "algebraic.mul", "algebraic.neg", "algebraic.less", "algebraic.fraction")] },
-  { title: "True and false, sameness and order", intro: "", ids: [...t("bool"), ...b("and", "or", "not", "equal", "compare"), ...t("order"), ...b("showAny")] },
+  { title: "True and false, sameness and order", intro: "", ids: [...t("bool"), ...b("and", "or", "not", "equal", "compare"), ...t("order"), ...b("showAny", "caseName")] },
   { title: "Text", intro: "Text is a string of characters. Positions count from 0. Text has the one <, alphabetical (comes before), so at most, smaller, larger and the rest take Text too; it has no + − ·.",
     ids: [...b("concat", "text.length", "text.slice", "text.characters", "text.split", "text.joinAll", "text.find", "text.less", "text.code", "text.fromCode"), ...prelude("starts with", "ends with", "is digit", "is letter", "lowercase", "uppercase", "repeated", "padded start", "padded end")] },
   { title: "Lists and pairs", intro: "A list is written [1, 2, 3]. There are no loops: map, keep and for each go through a list, and fold (a construct, not a function) walks any data.",

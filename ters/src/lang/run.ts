@@ -29,7 +29,7 @@ import { oneAnswer } from "./modes.ts";
 import { computedForward } from "./directions.ts";
 import { discharge } from "./ledger.ts";
 import * as Alg from "./algebraic.ts";
-import { floatText, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, COMPLEX_V, FIXED_V, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std.ts";
+import { floatText, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, COMPLEX_V, FIXED_V, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, CASE_NAME, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std.ts";
 import { intLit } from "./int.ts";
 import { JETS } from "./jets.ts";
 import { answerFromHost, effectOfOperation, hostedEffects, type Hosts } from "./hosts.ts";
@@ -407,6 +407,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     [CELL_OPS.removeAt]: (c, p, i) => (cells.edit(c, stepsOf(p)!, (l) => { const xs = listEdits.remove(fromList(l), Number(i)); return xs && toList(xs); }, LISTS, { at: stepsOf(p)!, kind: "remove", i: Number(i) }), one(unit)),
     [CELL_OPS.moveAt]: (c, p, a, b) => (cells.edit(c, stepsOf(p)!, (l) => { const xs = listEdits.move(fromList(l), Number(a), Number(b)); return xs && toList(xs); }, LISTS, { at: stepsOf(p)!, kind: "move", from: Number(a), to: Number(b) }), one(unit)),
     [SHOW_ANY]: (v) => one(showValue(v, code, rt.names ?? stdNames, true)),
+    [CASE_NAME]: (v) => one(caseName(v, rt.names ?? stdNames)),
     [SET]: (get, record, value) => {
       const m = (get as unknown as Record<symbol, { lambda?: Id; prim?: Id }>)[META];
       const path = m?.prim ? [m.prim] : m?.lambda ? fieldPath(code, m.lambda) : null;
@@ -1124,4 +1125,10 @@ export function showValue(v: Value, code: Code, names: Names, asNumber = false):
   return v.fields.length ? `${name}(${v.fields.map((x) => showValue(x, code, names, asNumber)).join(", ")})` : name;
 }
 const TUPLE_TAG = /^std\.tuple[2-8]\.tuple$/;
+// The name of the case a value was made by (std.ts CASE_NAME): "" for a
+// number, a text, an array (Array has no cases) or a cell.
+export function caseName(v: Value, names: Names): string {
+  if (typeof v !== "object" || v === null || v.tag === ARRAY_TAG) return "";
+  return names[v.tag] ?? v.tag;
+}
 
