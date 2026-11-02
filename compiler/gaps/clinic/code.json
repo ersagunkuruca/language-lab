@@ -6783,7 +6783,7 @@
     "24gj2t54o0s1pbjg09afqn22d4": {
       "id": "24gj2t54o0s1pbjg09afqn22d4",
       "kind": "ref",
-      "target": "@p1jv5i58ojignkr0rtg05tl5e3"
+      "target": "builtin.int.toNumber"
     },
     "pth5ii09cdk1gaqmg292qets72": {
       "id": "pth5ii09cdk1gaqmg292qets72",
@@ -8304,7 +8304,7 @@
     "jvhng5ima3cif8u8dr9bnv8h5p": {
       "id": "jvhng5ima3cif8u8dr9bnv8h5p",
       "kind": "ref",
-      "target": "@p1jv5i58ojignkr0rtg05tl5e3"
+      "target": "builtin.int.toNumber"
     },
     "923cnqmq19r2ahlc1nhhrs3gme": {
       "id": "923cnqmq19r2ahlc1nhhrs3gme",

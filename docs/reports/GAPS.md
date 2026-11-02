@@ -2478,6 +2478,8 @@ rc==1 reuse) the rest.
 simulation, game and test that wants the same numbers each run is
 JavaScript-only. The C and WebAssembly runtimes need `seeded` with the
 generator in `ters/src/lang/random.ts`, so all targets draw the same.
+Done (C106, #1143 and the `set` step after it): `lab native` builds
+clinic and gives `lab run`'s report and CSV byte for byte.
 
 **K5. The evaluator (not the compiler's).** 6.4 s for a day's report, 29 s
 for 40 hours: the Run panel's 5 s is the evaluator's. L118c again.

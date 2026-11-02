@@ -5,7 +5,7 @@ import { Lang } from "../../ters/src/lang/dsl.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
-import { CONS, FALSE, INT_OPS, NIL, S, SHOW_ANY, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
+import { CONS, FALSE, INT_OPS, NIL, S, SET, SHOW_ANY, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
 import { INT, NUMBER } from "../../ters/src/lang/types.ts";
 import { B } from "../../ters/src/prelude.ts";
 import type { Id } from "../../ters/src/model.ts";
@@ -141,7 +141,10 @@ export function program(seed: number, count: number) {
           () => call(shape_.rect, sub("I"), sub("F")),
         ])();
       }
-      case "R": return call(box.box, leaf ? k.int(r.int(5)) : sub("I"), leaf ? k.lit(0.5) : sub("F"));
+      case "R":
+        // set (C106): a field of a box changed, the other kept.
+        if (!leaf && r.next() < 0.3) return r.next() < 0.5 ? call(SET, k.x(Box.f["box.count"]), sub("R"), sub("I")) : call(SET, k.x(Box.f["box.size"]), sub("R"), sub("F"));
+        return call(box.box, leaf ? k.int(r.int(5)) : sub("I"), leaf ? k.lit(0.5) : sub("F"));
     }
   }
 
