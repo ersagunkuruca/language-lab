@@ -128,6 +128,11 @@ export class Lang extends Builder {
     return this.add({ kind: "match", scrutinee: this.x(scrutinee), arms: cases.map((c) => this.arm(c, false)), otherwise: otherwise === undefined ? null : this.x(otherwise) });
   }
 
+  // A match on plain values (L164c): each case a literal and what it gives.
+  byValue(scrutinee: Id, cases: [Id, Id][], otherwise?: Id): Id {
+    return this.add({ kind: "match", scrutinee: this.x(scrutinee), arms: cases.map(([v, body]) => this.add({ kind: "arm", variant: v, value: v, binds: [], results: [], body: this.x(body) })), otherwise: otherwise === undefined ? null : this.x(otherwise) });
+  }
+
   fold(scrutinee: Id, cases: Case[]): Id {
     return this.add({ kind: "fold", scrutinee: this.x(scrutinee), arms: cases.map((c) => this.arm(c, true)) });
   }

@@ -458,6 +458,25 @@ which are fine, and no missing cases, which would be errors. Adding
 `tangent` to `expression` produces exactly four holes, one each in evaluate,
 derivative, simplify and display, and each hole already knows its type.
 
+A match can also choose by **value** (L164c): each arm is a literal of
+the examined value's type, and the rest arm is required, since no list of
+values is every value.
+
+```
+‹instruction of›(op, words, line) =
+  match op
+    "set" → read d a(make set, op, words, line)
+    "add" → read d a a(make add, op, words, line)
+    …
+    otherwise → bad(line, "no instruction named " ++ op)
+```
+
+A value comes once. `src/lang/literal-match.ts` writes it out as a chain
+of `equal` tests before anything runs, so every engine runs the `if` it
+already had, and it runs backwards like any `if`. C's `switch` and ML's
+and Haskell's literal patterns are the prior art. `case of` (L164b) says
+the same as a list of pairs, for keys that aren't literals.
+
 ## Loops: `fold`, and recursion the checker can see ends
 
 ```
