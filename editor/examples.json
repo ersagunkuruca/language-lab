@@ -30,6 +30,7 @@
     { "program": "routes", "label": "Bigger program: routes, roads between towns", "folders": ["routes"] },
     { "program": "ledger", "label": "Bigger program: ledger, money entries totalled", "folders": ["ledger"] },
     { "program": "chapters", "label": "Bigger program: chapters, a book split into chapters", "folders": ["chapters"] },
+    { "program": "calc", "label": "Bigger program: calc, a calculator for big numbers", "folders": ["calc"] },
     { "program": "compass", "label": "Compass", "folders": ["compass"], "page": true, "editor": false }
   ]
 }
