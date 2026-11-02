@@ -35,7 +35,8 @@ const runtime = pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).hr
 const SEED = Number(process.env.SEED ?? 1), COUNT = Number(process.env.FUZZ ?? 40);
 
 // The inputs every definition is called with.
-const INPUTS: [number, bigint, bigint[]][] = [[0, 0n, []], [2.5, 3n, [1n, 2n, 3n]], [-1, -2n, [5n, -4n]]];
+// The last: Ints past 64 bits and a Float64 near the top (C115).
+const INPUTS: [number, bigint, bigint[]][] = [[0, 0n, []], [2.5, 3n, [1n, 2n, 3n]], [-1, -2n, [5n, -4n]], [1e300, 2n ** 64n + 1n, [2n ** 62n, -(2n ** 63n), 7n]]];
 
 test(`generated programs: the evaluator, compiled JavaScript, WebAssembly and C give the same text (C101, seed ${SEED})`, async () => {
   const p = program(SEED, COUNT);

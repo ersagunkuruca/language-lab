@@ -38,6 +38,10 @@ export function program(seed: number, count: number) {
     const leaf = depth <= 0 || r.next() < 0.2;
     const sub = (u: Ty, sc: Scope = s) => gen(u, sc, depth - 1);
     // An Int from −m to m: a remainder by m, which has an answer.
+    // A Map Int Int from two lists, and a Set Int (trees or hash tables,
+    // as each engine chooses).
+    const mapOf = () => call(lib("as map"), call(lib("zipped"), sub("L"), sub("L")));
+    const setOf = () => call(lib("as set"), sub("L"));
     const small = (m: number) => k.call(S.first, k.thunk(() => call(INT_OPS.remainder, sub("I"), k.int(m))), k.thunk(() => k.int(0)));
     // Shared by every type: a variable, an if, a let, a match on a list.
     if (!leaf) {
@@ -113,6 +117,11 @@ export function program(seed: number, count: number) {
           () => orElse(call(INT_OPS.wholePart, sub("F"))),
           () => call(lib("set size"), call(lib("as set"), sub("L"))),
           () => orElse(call(lib("last of items"), sub("L"))),
+          () => call(lib("map size"), call(lib("put"), mapOf(), sub("I"), sub("I"))),
+          () => orElse(call(lib("value at"), mapOf(), sub("I"))),
+          () => orElse(call(lib("smallest item"), setOf())),
+          () => orElse(call(lib("largest key"), mapOf())),
+          () => call(lib("queue size"), call(lib("queued"), call(lib("queue of"), sub("L")), sub("I"))),
         ])();
       }
       case "B": {
@@ -127,6 +136,8 @@ export function program(seed: number, count: number) {
           () => call(TEXT_OPS.less, sub("T"), sub("T")),
           () => call(lib("starts with"), sub("T"), sub("T")),
           () => call(lib("contains"), sub("L"), sub("I")),
+          () => call(lib("has key"), call(lib("remove key"), mapOf(), sub("I")), sub("I")),
+          () => call(lib("has item"), call(lib("set union"), setOf(), setOf()), sub("I")),
           () => k.equal(sub("D"), sub("D")),
           () => k.equal(sub("R"), sub("R")),
         ])();
@@ -144,6 +155,10 @@ export function program(seed: number, count: number) {
           () => call(lib("map"), sub("L"), k.fn([fresh()], (v) => gen("I", { ...s, I: [...s.I, v] }, depth - 1))),
           () => call(lib("sort"), sub("L")),
           () => call(lib("inserted at"), sub("L"), sub("I"), sub("I")),
+          () => call(lib("keys of"), mapOf()),
+          () => call(lib("values of"), call(lib("merge maps"), mapOf(), mapOf())),
+          () => call(lib("items of"), call(lib("set difference"), setOf(), setOf())),
+          () => k.call(S.first, k.thunk(() => call(lib("queue items"), call(lib("dequeued"), call(lib("queue of"), sub("L"))))), k.thunk(() => sub("L"))),
           () => call(lib("range from"), small(20), small(20)),
           () => call(lib("flat map"), sub("L"), k.fn([fresh()], (v) => k.list(v, gen("I", { ...s, I: [...s.I, v] }, depth - 1)))),
           () => call(lib("keep"), sub("L"), k.fn([fresh()], (v) => gen("B", { ...s, I: [...s.I, v] }, depth - 1))),
