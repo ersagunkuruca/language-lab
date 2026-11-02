@@ -10,6 +10,7 @@
 // effect: totality is inferred, not promised. Data types must be strictly
 // positive, so data can't be used to recurse without recursion.
 
+import { sharing } from "./shared-fields.ts";
 import { PARTIAL, signAnalysis } from "./signs.ts";
 import type { Code, Id, Node, NodeOf } from "../model.ts";
 import { nodesWhere, ownerOfTypeParts, subtree } from "../model.ts";
@@ -601,7 +602,19 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       case "field": {
         const def = owner.get(target)!;
         const { td, self, fields } = dataType(def);
-        if (td.variants.length !== 1) { err(id, `${nm(target)} belongs to one case of ${nm(def)}; use a match to reach it`); return s.fresh(); }
+        // A field several cases share (L168, shared-fields.ts): its type on
+        // each case that has it, and no answer (Choice) on one without it.
+        if (td.variants.length !== 1) {
+          const sh = sharing(code, td, target);
+          if (sh?.problem) { err(id, `${nm(target)} ${sh.problem}`); return s.fresh(); }
+          if (!sh) { err(id, `${nm(target)} belongs to one case of ${nm(def)}; use a match to reach it, or say in the other cases that their field is the same one`); return s.fresh(); }
+          const at = ([v, f]: [Id, Id]) => fields(v)[(code.nodes[v] as NodeOf<"variant">).fields.indexOf(f)];
+          const ft = at(sh.members[0]);
+          for (const m of sh.members.slice(1)) {
+            try { s.unify(ft, at(m)); } catch { err(id, `${nm(target)} is shared by cases where it has different types (${nm(m[0])}'s is ${show(at(m))}, not ${show(ft)})`); return s.fresh(); }
+          }
+          return { t: "fn", params: [self], ret: ft, eff: s.freshRow(sh.total ? [] : [CHOICE]) };
+        }
         const i = (code.nodes[td.variants[0]] as NodeOf<"variant">).fields.indexOf(target);
         // An interface's field is its operation, at the type this use
         // needs, which must have an implementation (INTERFACES.md).
@@ -852,6 +865,19 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         if (code.nodes[n.fn]?.kind === "ref" && (code.nodes[n.fn] as NodeOf<"ref">).target === SET && n.args.length && !fieldPath(code, n.args[0], true)
           && !fieldPaths(code, n.args[0], true) && !info.errors.some((e) => e.id === n.args[0])) {
           err(n.args[0], "set needs a field here, a path of fields such as (p) ↦ p.address.city, or several as a tuple, (m) ↦ (m.pc, m.steps), none twice or inside another");
+        }
+        // Set through a field several cases share (L168b): the value with
+        // it changed on a case that has it, no answer on one without. Only
+        // the field itself for now, not a path through it or a tuple.
+        if (code.nodes[n.fn]?.kind === "ref" && (code.nodes[n.fn] as NodeOf<"ref">).target === SET && n.args.length) {
+          const one = fieldPath(code, n.args[0]);
+          const shared = (f: Id) => { const d = owner.get(f), td = d ? code.nodes[(code.nodes[d] as NodeOf<"def">).body!] : undefined; return td?.kind === "typedef" && td.variants.length > 1 ? td : null; };
+          if (one?.length === 1 && shared(one[0])) {
+            const sh = sharing(code, shared(one[0])!, one[0]);
+            if (sh && !sh.problem && !sh.total) choice(id, row, [CHOICE], `setting ${nm(one[0])} has no answer on a case without it (Choice), which nothing here handles`);
+          } else if ((one ?? fieldPaths(code, n.args[0])?.flat() ?? []).some(shared)) {
+            err(n.args[0], "set through a field several cases share takes that field alone, not a path through it or a tuple: use a match");
+          }
         }
         if (code.nodes[n.fn]?.kind === "ref" && (code.nodes[n.fn] as NodeOf<"ref">).target === CELL_OPS.path && n.args.length && !placePath(code, n.args[0], true)
           && !info.errors.some((e) => e.id === n.args[0])) {

@@ -76,7 +76,10 @@ export type Node =
   // `results` (an interface's field, POLAR.md): the positions of the
   // ports it gives, when its type is a predicate over its ports read as a
   // function with several results; `ports` names them for the text.
-  | { id: Id; kind: "field"; type: Id; results?: number[]; ports?: string[] }
+  // `same`: another case's field of the same type that this one is (L168,
+  // SHARED-FIELDS-2026-11-02.md), so `x.to` reads it on every case that
+  // has it. It names the first case's field, which names none.
+  | { id: Id; kind: "field"; type: Id; results?: number[]; ports?: string[]; same?: Id }
   // Type expressions, used for fields. target is a typedef's def, a builtin
   // type (type.number, type.string) or one of the typedef's param binders.
   | { id: Id; kind: "tref"; target: Id; args: Id[] }
@@ -154,7 +157,7 @@ export function mapIds(n: Node, f: (id: Id) => Id): Node {
     case "def": return { ...n, id: f(n.id), body: n.body === null ? null : f(n.body), ...(n.results ? { results: n.results.map(f) } : {}), ...(n.direction ? { direction: f(n.direction) } : {}) };
     case "typedef": return { ...n, id: f(n.id), params: n.params.map(f), variants: n.variants.map(f), ...(n.row ? { row: n.row.map(f) } : {}) };
     case "variant": return { ...n, id: f(n.id), fields: n.fields.map(f), ...(n.params ? { params: n.params.map(f) } : {}) };
-    case "field": return { ...n, id: f(n.id), type: f(n.type) };
+    case "field": return { ...n, id: f(n.id), type: f(n.type), ...(n.same ? { same: f(n.same) } : {}) };
     case "tref": return { ...n, id: f(n.id), target: f(n.target), args: n.args.map(f) };
     case "tfun": return { ...n, id: f(n.id), params: n.params.map(f), result: f(n.result), ...(n.effects ? { effects: n.effects.map(f) } : {}) };
     case "match": return { ...n, id: f(n.id), scrutinee: f(n.scrutinee), arms: n.arms.map(f), otherwise: n.otherwise === null ? null : f(n.otherwise) };

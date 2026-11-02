@@ -2,7 +2,9 @@
 
 Design note for BACKLOG L168, from
 [REVIEW-2026-11-02d](../../reports/reviews/REVIEW-2026-11-02d.md) §2.
-Written 2026-11-02 by the Language lane. Nothing here is built yet.
+Written 2026-11-02 by the Language lane. Steps 1 and 2 are built (L168;
+set takes the shared field alone, not a path through it yet); the
+editor's half is next.
 
 ## The problem
 
