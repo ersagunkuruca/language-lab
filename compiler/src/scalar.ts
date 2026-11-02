@@ -88,6 +88,7 @@ const RT: Record<Id, string> = {
   [INT_OPS.quotient]: "int.quotient", [INT_OPS.remainder]: "int.remainder", [INT_OPS.power]: "int.power",
   [INT_OPS.read]: "int.read", [INT_OPS.wholePart]: "int.wholePart",
   [TEXT_OPS.find]: "text.find", [TEXT_OPS.code]: "text.code", [TEXT_OPS.fromCode]: "text.fromCode",
+  [TEXT_OPS.readNumber]: "text.readNumber",
 };
 
 // The world (`data`): the console and files, through the host's World
