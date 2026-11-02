@@ -12,15 +12,15 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 - **subtract** : `(a, a) -> a`. a − b, at any Number.
 - **multiply** : `(a, a) -> a`. a · b, at any Number. At Complex it's the complex product.
 - **negate** : `(a) -> a`. −a, at any Number.
-- **less than** : `(a, a) -> Bool`. a < b, at any Number with < (not Complex).
+- **less than** : `(a, a) -> Bool`. a < b, at any type with <: every Number but Complex, Text (alphabetical, as comes before), and a type with an Ordered of its own. at most, more than, at least, smaller and larger are written with it, so they take the same types.
 - **Arithmetic** (type). An interface: the one + − · and −x, for any type that implements them. Float64, Int, Rational, Complex, Dual and Algebraic implement it in the prelude; a type of your own joins with a definition of type Arithmetic T, written arithmetic(its +, its −, its ·, its −x). A record of numbers without one gets them part by part. Resolved before the program runs, so it costs nothing (INTERFACES.md).
 - **Ordered** (type). An interface: the one <, for any type that implements it. The prelude's at most, smaller, sort and the rest then work on that type too. A type of your own joins with a definition of type Ordered T, written ordered(its <).
 - **by its ways** : `a`. In an implementation, a field left to the interface's ways: the compiler puts in the cheapest way that ends in a field the implementation gives. Trig at your type can give sin and leave cos by its ways, or the other way round (WAYS.md).
-- **at most** : `(a, a) -> Bool where a is a Number with <`. a ≤ b: not b < a.
-- **more than** : `(a, a) -> Bool where a is a Number with <`. a > b: b < a.
-- **at least** : `(a, a) -> Bool where a is a Number with <`. a ≥ b: not a < b.
-- **smaller** : `(a, a) -> a where a is a Number with <`. The smaller of two numbers (min); a shader's min.
-- **larger** : `(a, a) -> a where a is a Number with <`. The larger of two numbers (max); a shader's max.
+- **at most** : `(a, a) -> Bool where a has <`. a ≤ b: not b < a.
+- **more than** : `(a, a) -> Bool where a has <`. a > b: b < a.
+- **at least** : `(a, a) -> Bool where a has <`. a ≥ b: not a < b.
+- **smaller** : `(a, a) -> a where a has <`. The smaller of two numbers (min); a shader's min.
+- **larger** : `(a, a) -> a where a has <`. The larger of two numbers (max); a shader's max.
 - **Trig** (type). An interface: sin, cos, tan, exp and log, for any type that implements them. An implementation is a definition of type Trig T, written trig(its sin, its cos, …); Float64's is the builtins. A use is resolved to the type's own function before the program runs, so it costs nothing (INTERFACES.md).
 - **sin** : `(a) -> a where a has Trig`. Sine of an angle in radians, at any type with Trig (Float64 now; dual numbers next).
 - **cos** : `(a) -> a where a has Trig`. Cosine of an angle in radians, at any type with Trig.
@@ -100,13 +100,13 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 - **divide fixed** : `(Fixed, Fixed) -[Choice]-> Fixed`. a ÷ b for Fixed, rounded down to a step; no answer when b is 0.
 - **square root fixed** : `(Fixed) -[Choice]-> Fixed`. √x for Fixed, rounded down to a step, the same bits on every machine; no answer below 0.
 - **Extended** (type). A number of type a, or −∞ or +∞ around it: minus infinity, finite(value) or plus infinity. Float64 has no infinities of its own, so a bound with no end, the least of no numbers, or a distance not reached yet is an Extended. extended add, subtract and multiply follow the extended reals and have no answer for ∞ − ∞ and 0 · ∞; its order is total.
-- **extended less** : `(Extended a, Extended a) -> Bool where a is a Number with <`. a < b for Extended numbers: −∞ is below every number and +∞ above, so the order is total. compare and sort give the same order.
+- **extended less** : `(Extended a, Extended a) -> Bool where a has <`. a < b for Extended numbers: −∞ is below every number and +∞ above, so the order is total. compare and sort give the same order.
 - **extended add** : `(Extended a, Extended a) -[Choice]-> Extended a where a is a Number`. a + b with ±∞: ∞ + 1 is ∞ and −∞ + −∞ is −∞. ∞ + −∞ has no answer.
 - **extended negate** : `(Extended a) -> Extended a where a is a Number`. −a with ±∞: −(+∞) is −∞.
 - **extended subtract** : `(Extended a, Extended a) -[Choice]-> Extended a where a is a Number`. a − b with ±∞: ∞ − 1 is ∞. ∞ − ∞ has no answer.
 - **extended multiply** : `(Extended a, Extended a) -[Choice]-> Extended a where a is a Number with <`. a · b with ±∞: −2 · ∞ is −∞ and −∞ · −∞ is ∞. 0 · ∞ has no answer.
-- **minimum** : `(List a) -> Extended a where a is a Number with <`. The smallest of the numbers, as an Extended: +∞ when there are none, so it is minimum's identity and a fold over an empty list still has an answer.
-- **maximum** : `(List a) -> Extended a where a is a Number with <`. The largest of the numbers, as an Extended: −∞ when there are none.
+- **minimum** : `(List a) -> Extended a where a has <`. The smallest of the numbers, as an Extended: +∞ when there are none, so it is minimum's identity and a fold over an empty list still has an answer.
+- **maximum** : `(List a) -> Extended a where a has <`. The largest of the numbers, as an Extended: −∞ when there are none.
 - **Dual** (type). A dual number, value + slope·ε where ε · ε is 0: a record of two Float64s. The same + − · work on it, · by the product rule, and sin, cos, tan, exp and log by the chain rule, so a function given dual(x, 1) gives back its value and its slope at x. slope by duals does that for you (forward-mode automatic differentiation). No <.
 - **slope by duals** : `((Dual) -[e]-> Dual, Float64) -[e]-> Float64`. f′(x), worked out by giving f the dual number x + 1ε and reading the slope of what comes back (forward-mode automatic differentiation). f must work on duals: write it with the generic + − · and Trig. derivative(f) gives the same number by differentiating f's code.
 - **divide duals** : `(Dual, Dual) -[Choice]-> Dual`. x ÷ y for dual numbers, the quotient rule; no answer when y's value is 0.
@@ -155,7 +155,7 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 
 ## Text
 
-Text is a string of characters. Positions count from 0.
+Text is a string of characters. Positions count from 0. Text has the one <, alphabetical (comes before), so at most, smaller, larger and the rest take Text too; it has no + − ·.
 
 - **join text** : `(Text, Text) -> Text`. Two texts one after the other.
 - **length** : `(Text) -> Int`. How many characters a text has.
@@ -167,9 +167,6 @@ Text is a string of characters. Positions count from 0.
 - **comes before** : `(Text, Text) -> Bool`. Whether one text comes before another alphabetically (by character code).
 - **character code** : `(Text) -[Choice]-> Int`. The character's number (its Unicode code point). No answer unless the text is one character.
 - **character** : `(Int) -[Choice]-> Text`. The character with this number. No answer when there's none.
-- **not after** : `(Text, Text) -> Bool`. Text a ≤ b: a comes before b or is b.
-- **comes after** : `(Text, Text) -> Bool`. Text a > b: b comes before a.
-- **not before** : `(Text, Text) -> Bool`. Text a ≥ b: b comes before a or is a.
 - **starts with** : `(Text, Text) -> Bool`. Whether the text begins with this: starts with("# notes", "#") is true. Every text starts with "".
 - **ends with** : `(Text, Text) -> Bool`. Whether the text ends with this: ends with("page.md", ".md") is true. Every text ends with "".
 - **is digit** : `(Text) -> Bool`. Whether this is one of the characters 0 to 9.

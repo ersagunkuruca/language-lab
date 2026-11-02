@@ -120,13 +120,18 @@ export class NumbersError extends TypeError {}
 
 // A number type, for the generic arithmetic (NUMBERS.md, "One `+` for every
 // number system"): `arith` is a type that has + − · and −x (Float64, Int, or
-// a record of Float64s), `ordered` one that also has < (Float64 or Int). A
-// type variable can carry either, like `numbers` above, and the program is
-// resolved to each type's own operations before it runs (arith.ts).
-export type Arith = "arith" | "ordered";
+// a record of Float64s), `less` one that has < (a Number but Complex,
+// Text, or a type with an Ordered of its own: BACKLOG L152), and `ordered`
+// one that has both (Float64, Int, Rational, Algebraic, Fixed). A type
+// variable can carry one, like `numbers` above, and the program is resolved
+// to each type's own operations before it runs (arith.ts).
+export type Arith = "arith" | "less" | "ordered";
+// What a variable needs when two uses each need something: + and < is a
+// Number with <.
+export const bothKinds = (a: Arith | undefined, b: Arith): Arith => (!a || a === b ? b : "ordered");
 export class ArithError extends TypeError {
   kind: Arith;
-  constructor(kind: Arith) { super(kind === "ordered" ? "not a Number with <" : "not a Number"); this.kind = kind; }
+  constructor(kind: Arith) { super(kind === "ordered" ? "not a Number with <" : kind === "less" ? "not a type with <" : "not a Number"); this.kind = kind; }
 }
 
 // A literal with a fraction part (0.5) is some Number too, but not an Int
@@ -262,13 +267,16 @@ export class Subst {
   requireArith(t: Type, kind: Arith): void {
     t = this.resolve(t);
     if (t.t === "var") {
-      if (this.arith.get(t.v) !== "ordered") this.arith.set(t.v, kind);
+      this.arith.set(t.v, bothKinds(this.arith.get(t.v), kind));
       this.plain.add(t.v);
       return;
     }
     if (t.t === "con" && (t.id === NUMBER || t.id === INT || t.id === RATIONAL_TYPE || t.id === ALGEBRAIC_TYPE || t.id === FIXED_TYPE)) return;
-    if (t.t === "con" && t.id === COMPLEX_TYPE) { if (kind === "ordered") throw new ArithError(kind); return; }
+    if (t.t === "con" && t.id === COMPLEX_TYPE) { if (kind !== "arith") throw new ArithError(kind); return; }
+    // Text has < (alphabetical, the prelude's `ordered at text`) and no + − ·.
+    if (t.t === "con" && t.id === STRING) { if (kind !== "less") throw new ArithError(kind); return; }
     if (t.t === "con" && t.id.startsWith("pin.ordered.")) return;
+    if (kind === "less" && t.t === "con" && t.id.startsWith("pin.less.")) return;
     if (kind === "arith" && t.t === "con" && (t.id.startsWith("pin.arith.") || t.id.startsWith("pin.numbers."))) return;
     // A type of the program's own may have its own + − · or <: whether it
     // does is known once every implementation is (infer). A record whose
@@ -277,7 +285,7 @@ export class Subst {
     if (t.t === "con" && !t.id.startsWith("std.") && !t.id.startsWith("type.")) {
       const fields = this.recordFields(t.id, t.args);
       const numeric = kind === "arith" && !!fields?.length && fields.every((f) => { const r = this.resolve(f); return r.t === "var" || (r.t === "con" && r.id === NUMBER); });
-      if (!numeric) { this.wanted.push({ t, iface: kind === "ordered" ? "std.ordered" : "std.arithmetic", at: this.site }); return; }
+      if (!numeric) { this.wanted.push({ t, iface: kind === "arith" ? "std.arithmetic" : "std.ordered", at: this.site }); return; }
     }
     if (kind === "arith" && t.t === "con" && this.recordFields(t.id, t.args)?.length) {
       try { this.requireNumbers(t); } catch (e) { if (e instanceof NumbersError) throw new ArithError(kind); throw e; }
@@ -496,11 +504,12 @@ export class WorldError extends EffectError {
 // A type scheme: a type with its own variables, copied fresh at each use.
 // `plain` lists the variables that may only stand for plain data.
 // `numbers` lists those that may only stand for a record of Float64s;
-// `arith` and `ordered` those that may only stand for a number type.
+// `arith`, `less` and `ordered` those that may only stand for a type with
+// + − ·, with <, or with both (Arith above).
 // `noWorld` lists the row variables that may not take a world effect, and
 // `subs` pairs of row variables, the first contained in the second.
 // `fractional` those that may not be Int (a literal's with a fraction part).
-export interface Scheme { vars: number[]; rows: number[]; type: Type; plain?: number[]; numbers?: number[]; arith?: number[]; ordered?: number[]; fractional?: number[]; whole?: number[]; noWorld?: number[]; subs?: [number, number][]; needs?: [number, Id][] }
+export interface Scheme { vars: number[]; rows: number[]; type: Type; plain?: number[]; numbers?: number[]; arith?: number[]; less?: number[]; ordered?: number[]; fractional?: number[]; whole?: number[]; noWorld?: number[]; subs?: [number, number][]; needs?: [number, Id][] }
 
 export function freeVars(t: Type, s: Subst, vars = new Set<number>(), rows = new Set<number>()) {
   t = s.resolve(t);
@@ -519,8 +528,8 @@ export function freeVars(t: Type, s: Subst, vars = new Set<number>(), rows = new
 // `at`: the use, for an interface its type needs and doesn't have.
 export function instantiate(sc: Scheme, s: Subst, at = ""): Type {
   const plain = new Set(sc.plain ?? []), numbers = new Set(sc.numbers ?? []);
-  const arith = new Set(sc.arith ?? []), ordered = new Set(sc.ordered ?? []);
-  const vm = new Map(sc.vars.map((v) => [v, s.fresh(plain.has(v), numbers.has(v), ordered.has(v) ? "ordered" : arith.has(v) ? "arith" : undefined)]));
+  const kinds = schemeArith(sc);
+  const vm = new Map(sc.vars.map((v) => [v, s.fresh(plain.has(v), numbers.has(v), kinds.get(v))]));
   for (const v of sc.fractional ?? []) { const t = vm.get(v); if (t?.t === "var") s.fractional.add(t.v); }
   for (const v of sc.whole ?? []) { const t = vm.get(v); if (t?.t === "var") s.whole.add(t.v); }
   for (const [v, iface] of sc.needs ?? []) { const t = vm.get(v); if (t) s.requireInterface(t, iface, at); }
@@ -597,7 +606,7 @@ export function showType(t: Type, names: Names, arith?: ReadonlyMap<number, Arit
   };
   const shown = go(t, false);
   if (!arith?.size && !needs?.size) return shown;
-  const kinds: Record<Arith, string[]> = { arith: [], ordered: [] };
+  const kinds: Record<Arith, string[]> = { arith: [], less: [], ordered: [] };
   const has: string[] = [];
   for (const [v, letter] of varNames) {
     const k = arith?.get(v);
@@ -606,7 +615,7 @@ export function showType(t: Type, names: Names, arith?: ReadonlyMap<number, Arit
     if (is.length) has.push(`${letter} has ${is.join(" and ")}`);
   }
   const say = (vs: string[], what: string) => (vs.length === 1 ? `${vs[0]} is a ${what}` : `${vs.join(", ")} are ${what.replace("Number", "Numbers")}`);
-  const clauses = [kinds.arith.length && say(kinds.arith, "Number"), kinds.ordered.length && say(kinds.ordered, "Number with <"), ...has].filter(Boolean);
+  const clauses = [kinds.arith.length && say(kinds.arith, "Number"), kinds.less.length && `${kinds.less.join(", ")} ${kinds.less.length === 1 ? "has" : "have"} <`, kinds.ordered.length && say(kinds.ordered, "Number with <"), ...has].filter(Boolean);
   return clauses.length ? `${shown} where ${clauses.join(", and ")}` : shown;
 }
 
@@ -626,5 +635,5 @@ export const schemeNeeds = (sc: Pick<Scheme, "needs">): Map<number, Id[]> => {
 };
 
 // A scheme's number-type variables, for showType.
-export const schemeArith = (sc: Pick<Scheme, "arith" | "ordered">): Map<number, Arith> =>
-  new Map<number, Arith>([...(sc.arith ?? []).map((v) => [v, "arith"] as const), ...(sc.ordered ?? []).map((v) => [v, "ordered"] as const)]);
+export const schemeArith = (sc: Pick<Scheme, "arith" | "less" | "ordered">): Map<number, Arith> =>
+  new Map<number, Arith>([...(sc.arith ?? []).map((v) => [v, "arith"] as const), ...(sc.less ?? []).map((v) => [v, "less"] as const), ...(sc.ordered ?? []).map((v) => [v, "ordered"] as const)]);

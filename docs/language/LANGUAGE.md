@@ -1522,19 +1522,20 @@ proposed in [SHARING.md](../design/sharing/SHARING.md).
 **The prelude**, the first module, is `for each`, `map`, `keep`, `show
 numbers`, `length`, `sum`, `append`, `reverse`, `inverse`, `conjugate`, the
 comparisons `at most`, `more than`, `at least` (drawn `≤ > ≥`, over the one
-generic `<`, so they work on every ordered number type, run backwards and
-differentiate with no rules of their own) and Text's `not after`, `comes
-after`, `not before` (over `comes before`), `smaller` and `larger` (min and
-max, on every ordered number type too, which a shader compiles to `min` and
-`max`; the Float64-only versions published before stay in the prelude,
-hidden, so a program saved with them still opens), the
-fractions `fraction`, `as fraction`, `divide fractions`, `show fraction` and
-`fraction as float64` (a Rational is exact and in lowest terms, and the one
+generic `<`, so they work on every type with `<`: every number type but
+Complex, Text (alphabetical, as `comes before`), and a type with an Ordered
+of its own; they run backwards and differentiate with no rules of their
+own), `smaller` and `larger` (min and max, on the same types, which a
+shader compiles to `min` and `max`; the Float64-only versions published
+before, and Text's own `not after`, `comes after` and `not before`, stay in
+the prelude, hidden, so a program saved with them still opens), the
+fractions `fraction`, `as fraction`, `divide fractions` and `as float64`
+(a Rational is exact and in lowest terms, and the one
 `+ − · <` works on it through the published, unoffered `add fractions`,
 `subtract fractions`, `multiply fractions`, `negate fraction` and `fraction
 less than`), the complex numbers `as complex`, `i`, `complex conjugate`,
-`modulus`, `angle of`, `polar`, `divide complex`, `complex exp` and `show
-complex` (a Complex is `complex(re, im)`, a record of two Float64s, so the
+`modulus`, `angle of`, `polar`, `divide complex` and `complex exp` (the one
+`show` shows a fraction and a Complex; a Complex is `complex(re, im)`, a record of two Float64s, so the
 parts builtins and the vectors module work on it and a shader holds it as a
 `vec2f`; the one `+ − · −x` works on it through the unoffered `add
 complex`, `subtract complex`, `multiply complex` and `negate complex`, ·
