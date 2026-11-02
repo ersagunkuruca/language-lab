@@ -433,6 +433,9 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
     if (alts.length && args.every((a) => !("error" in a))) return { op: alts[0], args: args as Typed[], alts };
     // What's wrong, not where (BACKLOG I115): the name, or what's wrong
     // inside its inputs.
+    // An operator expression whose last operand is a call reaches here
+    // whole (a + nosuch(b)): the operand's own error says more (E174).
+    if (!alts.length && inner) return inner;
     if (!alts.length) return { error: `there's no function named ${call[1]}${closest(call[1], [...scope.keys(), ...Object.values(names)], scope)}` };
     return args.find((a) => "error" in a) as { error: string };
   }

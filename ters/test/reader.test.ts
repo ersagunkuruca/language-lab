@@ -25,6 +25,10 @@ test("typed text reads a field as the blocks print it", () => {
   // A field of something else in the sum, and one that isn't there.
   assert.ok(fillValue(open, names, info, re.id, "c.re + z.im", escape).ok);
   assert.equal(fillValue(open, names, info, re.id, "z.nope", escape).ok, false);
+  // A sum whose last part calls a name that isn't there names that one,
+  // not the whole text (E174).
+  const nosuch = fillValue(open, names, info, re.id, "c.re + nosuch(z.im)", escape);
+  assert.match(nosuch.ok ? "" : nosuch.reason, /^there's no function named nosuch\b/);
   // A number with a point is still a number.
   assert.ok(fillValue(open, names, info, re.id, "1.5", escape).ok);
 });
