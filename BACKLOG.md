@@ -22,7 +22,7 @@ language, then more targets or speed (WORKFLOW.md "Priority").
 |---|---|---|
 | E Editor | "Editor lane" | E211 the bigger programs as editor examples (one a PR), L70c's editor half (mark where a failed read stopped), L147b; then E200b, E103 |
 | C Compiler and targets | "Compiler lane" | C93's rest, C86, C40's rest; then C30, C63, C67 |
-| L Language and library | "Language lane" | L70c; then L130 (with the Editor lane: one node kind for call and solve), L128d, L98 keys, L99 a plain State handler, L61 |
+| L Language and library | "Language lane" | L130 (with the Editor lane: one node kind for call and solve), L128d, L98 keys, L99 a plain State handler, L61 |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -170,7 +170,6 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L70c | A failed backward parse says the furthest position it reached (GRAMMARS-2026-11-02 step 3) | L70 | P3 | S | after L70b |
 | C110 | A grammar's backward mode compiled to recursive descent when it is LL(1), from COMPILER.md's planned mode analysis (GRAMMARS-2026-11-02 step 4) | L70 | P3 | L | after L70b |
 | L72 | Grammars and their machines (Chomsky hierarchy) as ordinary data, parsing and printing one relation run both ways; extends L70 | Ersagun 2026-10-24 | P3 | L | low priority |
 | L17 | Data-type upgrades (migrations when constructors and fields move); path namespaces are a name layer (SHARING.md §5) | ROADMAP 5 | P3 | L | |

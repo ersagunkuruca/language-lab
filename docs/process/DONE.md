@@ -606,7 +606,8 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| L69a3 | Foreign definitions in a page: `lab build-web` and `lab build-app` bundle the program's hosts/js.js into the page's script (cli/web.ts); a page's main may ask the host while it builds the page (test/web.test.ts) | this PR |
+| L70c | A backward read with no answer says where it stopped: run with a `stuck` hook (run.ts Runtime, relate.ts Options), it reports a Reading, the furthest character any try reached and what was expected there, as a packrat parser's furthest failure; `stuckReading` words it (test/calc-grammar.test.ts, BACKWARDS.md "Where a reading stopped"). The editor's marking is its half | this PR |
+| L69a3 | Foreign definitions in a page: `lab build-web` and `lab build-app` bundle the program's hosts/js.js into the page's script (cli/web.ts); a page's main may ask the host while it builds the page (test/web.test.ts) | #1194 |
 | L42 | `Cl(p, q, r)`: `clifford table` (L42a), then a PGA motor in the ray marcher, landed with C83 (#1037): ters/examples/raymarch turns and moves its scene with a motor and every target agrees with the evaluator. Closed 2026-11-02, nothing left in the row | #1184 |
 | L44d | A `Matrix a` of any size (MATRICES.md step 3): std type, `matrix of rows`, `matrix entry`, `transposed`, `identity matrix`, `matrix scaled`, `matrix sum`, `matrix product`, `matrix times vector` and `solved` (Gaussian elimination with partial pivoting), all in the language; size mismatches stop with both sizes (test/matrix-any-size.test.ts) | this PR |
 | L168c | machine's `to` is one field shared by jump, jz, jnz, jlt, jeq and call, so `targets`, `threaded` and `moved` are one line each (`first([target of(i.to)], else nil)`, `first(set((x) ↦ x.to, i, …), else i)`) and `next places` keeps three arms of nine; board's Timer shares `id` and `left`, so `timer id` is `tm.id`. The proof REVIEW-2026-11-02d §2 asked for | #1183 |

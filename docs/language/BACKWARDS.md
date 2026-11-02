@@ -277,6 +277,28 @@ known. Otherwise the call is searched as before. Prior art: tabling in XSB
 Prolog (Tamaki and Sato's OLDT resolution, 1986; SLG resolution, Chen and
 Warren 1996) and packrat parsing's memo (Ford, 2002).
 
+## Where a reading stopped (L70c)
+
+A text that has no reading is no answer, as any `Choice` is, and a
+`Choice` carries no reason. So the reason goes beside it: run with a
+`stuck` hook (run.ts's Runtime, relate.ts's Options), a function run
+backwards from a known text that finds no answer reports how far it got,
+a `Reading` with `at` (the character, counting from 0 in JavaScript's
+string units) and `expected` (what was looked for there). `stuckReading`
+words it: for calc, "1 + x)" gives `the text can't be read back: it stops
+after "1 + x", before ")"`, and "(1 + 2" gives `… it stops after "(1 + 2"
+(the end): expected ")"`. The editor marks the place (its half of L70c).
+
+It is the furthest failure of a packrat or PEG parser (Ford, 2002), as
+Parsec reports it: each piece the search cuts the text into is placed at
+the character it starts at, and the furthest a piece was read to (a
+literal matched, a number read back, a test passed on it) or a literal was
+looked for at is kept. A text that appears in two places is placed at the
+furthest, a guess that leans the way furthest failure does, and an open
+parenthesis whose close never comes may be reported at the end of its
+piece rather than where the inside stopped. It costs nothing without the
+hook.
+
 ## Things it gets right that the old arithmetic-only relations couldn't
 
 - `show numbers` run backwards on `"10 20 30"` is `[10, 20, 30]`, and on
