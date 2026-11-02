@@ -382,7 +382,7 @@ Each of these puts its effect in the type of every function that uses it, so `di
 - **file exists** : `(Text) -[Files]-> Bool`. Whether there's a file at this path.
 - **list folder** : `(Text) -[Files, Abort]-> List Text`. The names of the files in a folder.
 - **fetch text** : `(Text) -[Network, Abort]-> Text`. The text at a web address. Aborts if the request fails. The same as await(start fetch(url)).
-- **start fetch** : `(Text) -[Network, Abort]-> Ticket Text`. Starts fetching the text at a web address and gives a ticket for it, so together and race can wait on it beside timers and other fetches: together([() => await(start fetch(a)), () => await(start fetch(b))]). Aborts if the request fails. The world here fetches when it starts, so the ticket is ready at once.
+- **start fetch** : `(Text) -[Network, Abort]-> Ticket Text`. Starts fetching the text at a web address and gives a ticket for it, so together and race can wait on it beside timers and other fetches: together([() => await(start fetch(a)), () => await(start fetch(b))]). Aborts where it is awaited if the request fails. Run from the command line, the fetch goes on in the background and the ticket is ready when the body has come, so fetches overlap; compiled and on a page it is fetched when it starts, and the ticket is ready at once.
 
 ## Waiting for several things: Await
 
