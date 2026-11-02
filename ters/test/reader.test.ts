@@ -195,3 +195,18 @@ test("typed text reads else, lists of expressions, steps and holes", async () =>
   const later = fill("a + □")!;
   assert.ok((later.at as NodeOf<"call">).args.some((x) => later.code.nodes[x].kind === "hole"));
 });
+
+// A number given where an action giving something else goes says so, at
+// the number (I140): first([1], else 2) needs a List there.
+test("typed first with a number for a list's default says the number is wrong", async () => {
+  const { Lang } = await import("../src/lang/dsl.ts");
+  const { base, baseNames } = await import("../src/lang/load.ts");
+  const k = new Lang();
+  const f = k.def("f");
+  let hole = "";
+  k.define(f, k.fn(["a"], () => (hole = k.hole())));
+  const code = base(k.code), names = baseNames(k.names);
+  const r = fillValue(code, names, infer(code, names), hole, "first([1], else 2)", f);
+  assert.ok(!r.ok);
+  if (!r.ok) assert.match(r.reason, /needs List .* here, and a number isn't one/);
+});
