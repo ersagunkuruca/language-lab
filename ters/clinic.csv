@@ -1,0 +1,138 @@
+id,urgency,arrived,waited,outcome
+1,routine,0.9,0.0,seen
+2,routine,7.1,0.0,seen
+3,soon,10.3,0.0,seen
+4,routine,11.2,0.0,seen
+5,routine,12.7,0.0,seen
+6,urgent,15.7,0.0,seen
+7,urgent,18.8,0.0,seen
+8,soon,20.2,0.0,seen
+9,soon,20.7,3.2,seen
+11,urgent,29.1,1.4,seen
+10,routine,28.7,2.9,seen
+12,routine,29.9,3.3,seen
+13,routine,31.4,7.8,seen
+14,routine,34.1,7.7,seen
+15,soon,45.1,0.0,seen
+16,routine,65.3,0.0,seen
+17,routine,66.0,0.0,seen
+18,routine,72.7,0.0,seen
+19,routine,73.9,0.0,seen
+20,routine,80.1,0.0,seen
+21,routine,82.0,0.0,seen
+22,routine,85.4,0.0,seen
+23,routine,87.3,0.0,seen
+24,routine,89.0,0.0,seen
+25,routine,89.5,0.0,seen
+26,soon,92.6,0.0,seen
+27,urgent,96.8,0.0,seen
+28,routine,97.6,0.1,seen
+29,soon,102.3,0.0,seen
+30,routine,109.8,0.0,seen
+31,routine,110.0,0.0,seen
+32,soon,113.7,0.0,seen
+33,routine,114.0,0.2,seen
+34,routine,114.2,0.9,seen
+35,routine,119.8,0.0,seen
+36,soon,120.0,0.6,seen
+37,soon,129.3,0.1,walked out
+38,urgent,133.3,3.3,seen
+39,soon,140.6,0.0,seen
+40,soon,149.7,0.0,seen
+41,routine,153.3,0.0,seen
+42,routine,155.4,0.0,seen
+43,soon,160.0,0.0,seen
+44,routine,166.5,0.0,seen
+45,routine,169.0,0.0,seen
+46,soon,171.8,2.3,walked out
+47,soon,186.7,0.0,seen
+48,routine,190.8,0.0,seen
+49,routine,197.3,0.0,seen
+50,routine,203.2,0.0,seen
+51,routine,206.8,0.0,seen
+52,routine,210.1,0.0,seen
+53,routine,212.2,0.0,seen
+54,routine,213.4,0.9,seen
+55,routine,226.4,0.0,seen
+56,routine,231.7,0.0,seen
+57,soon,231.7,0.0,seen
+58,soon,233.5,0.0,seen
+59,routine,234.0,1.3,seen
+60,soon,235.5,1.3,seen
+61,routine,237.5,0.0,seen
+62,soon,242.2,0.0,seen
+63,soon,249.6,0.0,seen
+64,routine,253.3,0.0,seen
+65,routine,254.0,0.0,seen
+66,routine,262.8,0.0,seen
+67,routine,265.4,0.0,seen
+68,routine,267.0,0.0,seen
+69,soon,271.4,0.0,seen
+70,routine,276.6,0.0,seen
+71,soon,277.0,4.6,seen
+72,routine,284.3,1.8,seen
+73,routine,285.8,2.1,seen
+74,urgent,288.4,4.6,seen
+76,urgent,293.0,2.5,seen
+75,soon,292.0,6.2,seen
+86,routine,310.7,1.8,walked out
+77,routine,297.0,15.8,walked out
+79,soon,298.3,19.9,seen
+80,soon,300.1,18.4,seen
+85,routine,310.6,9.1,walked out
+82,soon,301.3,19.2,seen
+78,routine,297.0,23.6,walked out
+84,soon,308.7,14.3,seen
+81,routine,300.7,24.8,seen
+90,urgent,330.0,1.7,seen
+83,routine,301.8,35.9,walked out
+91,routine,331.6,8.6,walked out
+89,routine,323.8,16.6,walked out
+93,soon,339.3,1.6,seen
+87,routine,315.4,26.9,walked out
+88,routine,322.9,23.0,seen
+92,routine,339.0,12.1,walked out
+94,routine,339.6,12.1,seen
+97,routine,354.0,1.7,walked out
+95,routine,346.9,9.0,seen
+98,routine,355.8,4.2,walked out
+96,routine,349.1,13.8,seen
+99,routine,355.9,7.4,walked out
+100,routine,359.3,7.2,seen
+101,routine,364.8,2.1,seen
+102,routine,365.6,6.0,seen
+103,routine,372.6,1.0,seen
+105,soon,374.1,0.4,seen
+104,routine,373.0,1.9,walked out
+106,routine,374.2,1.0,seen
+107,soon,377.3,0.0,seen
+108,routine,382.2,0.0,seen
+109,soon,382.3,0.0,seen
+110,soon,386.2,0.0,seen
+111,routine,387.4,0.0,seen
+112,soon,405.5,0.0,seen
+113,routine,407.8,0.0,seen
+114,routine,411.3,0.6,seen
+115,soon,417.1,0.0,seen
+116,routine,418.2,0.0,seen
+117,routine,425.8,0.0,seen
+118,soon,426.5,0.0,seen
+119,routine,427.5,8.4,walked out
+120,soon,431.0,7.0,seen
+126,soon,444.1,0.3,seen
+123,routine,437.5,7.8,walked out
+121,routine,437.1,9.5,walked out
+122,routine,437.3,12.1,seen
+124,routine,440.7,11.9,seen
+127,soon,452.7,0.8,seen
+125,routine,442.0,11.6,seen
+128,routine,455.5,0.0,seen
+129,routine,455.9,1.9,seen
+130,urgent,458.5,0.8,walked out
+131,routine,459.9,1.1,seen
+132,urgent,462.5,2.9,seen
+133,routine,463.9,5.4,seen
+134,routine,464.9,6.3,seen
+135,soon,472.9,0.0,seen
+136,soon,474.0,0.0,seen
+137,routine,479.3,0.0,seen
