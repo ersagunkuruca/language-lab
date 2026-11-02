@@ -1985,7 +1985,7 @@ function enclosing(id: Id): Id | null {
 }
 
 const labels = new WeakMap<T.Filling, { key: Names; l: [string, string, string] }>();
-let findLater: Id | null = null;
+let finding: { info: T.Info; hole: Id } | null = null;
 function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): HTMLElement {
   const q = ui.query.trim().toLowerCase();
   // Most often wanted first; a function passed along uncalled last, since
@@ -2010,12 +2010,19 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
   // new main, not for each because it's alphabetically early.
   const used = usesIn(doc.code);
   const often = (f: T.Filling) => (f.kind === "call" || f.kind === "ref" ? used.get(f.target) ?? 0 : 0);
-  // A new definition's hole draws first and lists what fits a moment
-  // later: finding it (about 0.8 s in physics, every function tried as the
-  // definition's whole body) was in the same frame as the new definition
-  // (I136).
-  const later = findLater === hole && !fitting.get(info)?.has(hole);
-  if (later) setTimeout(() => { findLater = null; fillingsAt(info, hole); if (ui.selected === hole) render(); }, 0);
+  // A hole draws first and lists what fits a moment later, once the frame
+  // that shows it is painted: finding it tries every candidate there (a
+  // new definition's in physics about 0.8 s, I136; the hole a Delete
+  // leaves in Bounce 0.83 s, E201), and it was in the same frame as the
+  // edit. Known already (the same version of the code), it's listed at
+  // once, and so it is in a menu opened to change something, which is
+  // there to show the list.
+  const later = field === "f-query" && !fitting.get(info)?.has(hole);
+  if (later && (finding?.info !== info || finding.hole !== hole)) {
+    const at = (finding = { info, hole }), was = doc;
+    const go = () => { if (finding !== at) return; finding = null; if (doc !== was || (ui.selected !== hole && !document.getElementById(field))) return; fillingsAt(info, hole); render(); };
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => setTimeout(go, 0)); else setTimeout(go, 0);
+  }
   const all = (later ? [] : fillingsAt(info, hole)).map((f) => ({ f, l: label(f) })).sort((a, b) => order.indexOf(a.l[2]) - order.indexOf(b.l[2]) || often(b.f) - often(a.f));
   // Of two meanings of one name in a group, the Int one first: positions
   // and counts are Ints, so `range` for a list's indices is range at Int.
@@ -2072,7 +2079,7 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
   const shown = !q ? all : all.filter((x) => symbol(x.l) || also(x.l) || x.l.some((s) => s.toLowerCase().includes(q)) || inNote(x.f)).map((x) => { const r = rank(x); return { ...x, l: found(x, r), r }; }).sort((a, b) => a.r - b.r);
   // Unsearched, the first 40 (the rest are a search away); searched, all.
   const cap = q ? shown.length : 40;
-  const input = h("input", { id: field, type: "search", value: ui.query, autocomplete: "off", spellcheck: "false", placeholder: `${all.length} things fit here. Search…` }) as HTMLInputElement;
+  const input = h("input", { id: field, type: "search", value: ui.query, autocomplete: "off", spellcheck: "false", placeholder: later ? "Working out what fits here…" : `${all.length} things fit here. Search…` }) as HTMLInputElement;
   // Typing redraws the list on every key, but what's typed is read (a
   // whole check per reading) only once typing pauses (E173: 81 keys took
   // 114 s). Enter reads it at once.
@@ -2137,7 +2144,7 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
   }
   if (shown.length > cap) list.append(h("p", { class: "hint" }, `${shown.length - cap} more: type to search them.`));
   const whyKey = `why ${hole} ${ui.query}`, whyRead = () => T.whyNotHere(doc.code, doc.names.short, info, hole, ui.query);
-  const why = !shown.length && !value && q ? (pending ? peekCached<string | null>(info, whyKey) : cachedTyped(info, whyKey, whyRead)) ?? pureHole(info, hole) : "";
+  const why = !later && !shown.length && !value && q ? (pending ? peekCached<string | null>(info, whyKey) : cachedTyped(info, whyKey, whyRead)) ?? pureHole(info, hole) : "";
   // What's typed is refused because its type has no implementation of an
   // interface it needs: say so, and offer to write one (BACKLOG E140).
   const lacks = typed && !typed.ok ? typed.missing : undefined;
@@ -2152,6 +2159,7 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
     const missing = /^there's no function named (.+?)(?:;|$)/.exec(typed.reason)?.[1];
     list.prepend(h("p", { class: "hint refused" }, `${ui.query.trim()} doesn't fit here: ${reason}.`), ...(loosen ? [loosen] : []), ...(missing ? [h("div", { class: "acts" }, makeNamed(info, missing))] : []));
   }
+  else if (!shown.length && !value && later) list.append(h("p", { class: "hint" }, "Working out what fits here…"));
   else if (!shown.length && !value && pending && q) list.append(h("p", { class: "hint" }, "Reading what's typed…"));
   else if (!shown.length && !value) list.append(h("p", { class: "hint" }, `Nothing that fits matches. ${why || "Values and arithmetic can be typed too: 3, \"text\", [1, 2], x * 2, (x) => x + 1."}`));
   return h("div", {}, h("div", { class: "sub-head" }, "Fill · only what type-checks here"), h("div", { class: "picker" }, input, list));
@@ -2603,7 +2611,6 @@ function newDefinitionForm(info: T.Info): HTMLElement {
       ui.back = [ui.def];
       ui.def = r.code.defs.at(-1)!;
       ui.selected = kind === "type" || kind === "effect" || kind === "interface" ? null : r.select;
-      findLater = ui.selected;
       ui.mode = null;
     });
   });
