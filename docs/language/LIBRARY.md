@@ -168,6 +168,8 @@ Text is a string of characters. Positions count from 0. Text has the one <, alph
 - **character** : `(Int) -[Choice]-> Text`. The character with this number. No answer when there's none.
 - **starts with** : `(Text, Text) -> Bool`. Whether the text begins with this: starts with("# notes", "#") is true. Every text starts with "".
 - **ends with** : `(Text, Text) -> Bool`. Whether the text ends with this: ends with("page.md", ".md") is true. Every text ends with "".
+- **contains text** : `(Text, Text) -> Bool`. Whether the part occurs somewhere in the text: contains text("to do list", "do") is true. Every text contains "". (contains is a list's.)
+- **after prefix** : `(Text, Text) -[Choice]-> Text`. The text without the prefix it starts with: after prefix("r7", "r") is "7". No answer when it doesn't start with it (Choice), so first(after prefix(w, "#"), else w) reads a tag or keeps the word.
 - **is digit** : `(Text) -> Bool`. Whether this is one of the characters 0 to 9.
 - **is letter** : `(Text) -> Bool`. Whether this is one of the English letters a to z or A to Z (other alphabets' letters aren't, yet).
 - **lowercase** : `(Text) -> Text`. The text with A to Z made a to z, everything else as it was: lowercase("Hello, World") is "hello, world".
@@ -338,6 +340,7 @@ Each of these puts its effect in the type of every function that uses it, so `di
 
 - **Random** (type). An effect: random() is a Float64 from 0 up to (not including) 1. seeded(seed, action) answers it with the same numbers every time; with nothing around it, the world's randomness answers.
 - **seeded** : `(Float64, () -[Random, e]-> a) -[e]-> a`. Runs the action with its random() calls answered by a generator started from the seed: the same numbers every time for the same seed. The action's Random ends here.
+- **random item** : `(List a) -[Choice, Random]-> a`. An item of the list drawn at random, each as likely: random item(["a", "b", "c"]). No answer for an empty list (Choice). seeded gives the same draws every time.
 - **Time** (type). An effect: now() is the time in milliseconds since 1970. In a page, a part that reads it is drawn again every frame.
 - **Wait** (type). An effect: wait(milliseconds) pauses the program. On the command line only: a page can't wait.
 - **Log** (type). An effect: log(line) is debugging output. It can run anywhere, even inside a search; when nothing handles it the line goes to standard error (in a page, the browser's console).
@@ -391,6 +394,7 @@ A page is a value of type Html that main returns. Cells hold what changes; a par
 - **move at** : `(Cell a, Path a (List b), Int, Int) -[Update]-> Unit`. Moves item `from` of the list at a place to position `to`; nothing when either isn't there.
 - **changed** : `(a, Path a b, b) -> a`. The value with the part at a place changed, the rest shared: changed(m, path((m) ↦ m.pc), 7) is m with its pc 7, and changed(xs, item path(path((l) ↦ l), 2), 0) is xs with its third item 0. A place that isn't there gives the value as it was. For a cell, write at does this and wakes the place's readers.
 - **item where** : `(Cell a, Path a (List b), (b) -[Cells, Diverge, e]-> Bool) -[Cells, Diverge, e]-> Path a b`. A path to the first item of the list at a place in a cell that passes the test, so one item can be written by its key: write at(board, then path(item where(board, path((b) ↦ b.cards), (c) ↦ c.id = id), path((c) ↦ c.time)), t) changes one card and wakes only its readers. The list is read now. When no item passes, the path is to no item: read at has no answer there and a write changes nothing.
+- **change** : `(Cell a, (a) -[Cells, Diverge, Update, e]-> a) -[Cells, Diverge, Update, e]-> Unit`. The cell given f of what it holds: change(count, (n) ↦ n + 1) is write(count, read(count) + 1). Only event handlers can write.
 - **Html** (type). A page: elements with attributes and children, text, and parts that are drawn again when what they read changes.
 - **Attribute** (type). Something attached to a page element: a property (name and value), an on(event, then) handler, or a sound to play when it's clicked.
 - **Event** (type). What a page's handler is given when its event comes: the field's value, the key pressed, where the pointer is (x, y: in a picture's own units inside an SVG, else pixels from the element's top-left; 0, 0 without a pointer). on("frame", …) comes once each time the browser draws, while its element is on the page, and its seconds are the time since the frame before (0 the first time and for other events): a simulation steps there, as far as that time needs.

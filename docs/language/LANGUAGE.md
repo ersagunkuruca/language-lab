@@ -271,8 +271,13 @@ field changed and every other field kept. The field can also be a path,
 `set((p) ↦ p.home.city, ada, "Paris")`, which copies only the records on the
 path. That is the projection run backwards with the rest of the record
 given, so records get updates, and nested data gets lenses, without a new
-construct (REVIEW.md §5.3). The checker accepts only a field or a path of
-fields written in place, so an update always has exactly one answer. A
+construct (REVIEW.md §5.3). Several fields change at once when the path
+is a tuple of them and the value a tuple of as many (L167):
+`set((m) ↦ (m.pc, m.registers), machine, (pc, registers))`, as OCaml's
+`{ r with … }` does. `src/lang/set-several.ts` writes it out as one `set`
+per field before anything runs. The checker accepts only a field, a path
+of fields, or a tuple of them with none twice and none inside another,
+written in place, so an update always has exactly one answer. A
 general function there (`(p) ↦ p.width · 2`) is the next step: it would
 run backwards through the relational interpreter, with `Choice`.
 

@@ -425,7 +425,9 @@ function leaveOpen(info: Info, t: Typed): Typed {
     const s = sig ? sigSubst(info) : info.subst;
     const ty = sig ?? info.typeOf.get(op);
     const r = ty && s.resolve(ty);
-    const p = r?.t === "fn" ? s.resolve(r.params[i]) : undefined;
+    // An input past its last (html's one-input div read for a program's
+    // two-input div) fixes nothing (E218).
+    const p = r?.t === "fn" && i < r.params.length ? s.resolve(r.params[i]) : undefined;
     return !!p && (p.t === "con" || (p.t === "var" && (s.numbers.has(p.v) || s.arith.has(p.v))));
   };
   if ("params" in t) return { ...t, body: leaveOpen(info, t.body) };

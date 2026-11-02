@@ -3,7 +3,8 @@
 // list at `path` that passes `test`, so a handler writes one item's field
 // by its key instead of rewriting the whole value; with no such item, the
 // path is to no item and a write changes nothing. `position where` is its
-// walk. Evaluated and compiled the same.
+// walk. `change(cell, f)` (L170) writes f of what a cell holds. Evaluated
+// and compiled the same.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -41,6 +42,8 @@ function program() {
       // No card 4: the write changes nothing, and reading there has no answer.
       k.seq(k.call(CELL_OPS.writeAt, board, titleOfId(board, 4), k.lit("lost")), show()),
       k.call(SHOW_ANY, k.call(S.count, k.thunk(() => k.call(CELL_OPS.readAt, board, titleOfId(board, 4))))),
+      // change (L170): the cell given f of what it holds.
+      k.seq(k.call(lib("change"), board, k.fn(["cards"], (cs) => k.call(lib("reverse"), cs))), show()),
     );
   })));
   const code = base(k.code), names = baseNames(k.names);
@@ -48,7 +51,7 @@ function program() {
 }
 
 const BOARD = '[card(7, "plan"), card(3, "built"), card(9, "ship")]';
-const EXPECTED = ["some(1)", "none", BOARD, BOARD, "0"];
+const EXPECTED = ["some(1)", "none", BOARD, BOARD, "0", '[card(9, "ship"), card(3, "built"), card(7, "plan")]'];
 const listOf = (v: Value): Value[] => { const out: Value[] = []; let l = v as unknown as { fields: Value[] }; while (l.fields.length) { out.push(l.fields[0]); l = l.fields[1] as unknown as { fields: Value[] }; } return out; };
 
 test("item where finds the card by its id and write at changes only its title; no card, no answer", async () => {
@@ -67,5 +70,6 @@ test("their types", () => {
   const code = base(LIBRARY.code), names = baseNames(LIBRARY.names), info = infer(code, names);
   const type = (n: string) => { const sc = info.schemes.get(lib(n))!; return showType(sc.type, names, schemeArith(sc), sc.subs ?? [], schemeNeeds(sc)); };
   assert.equal(type("position where"), "(List a, (a) -[e]-> Bool) -[e]-> Optional Int");
+  assert.equal(type("change"), "(Cell a, (a) -[Cells, Diverge, Update, e]-> a) -[Cells, Diverge, Update, e]-> Unit");
   assert.equal(type("item where"), "(Cell a, Path a (List b), (b) -[Cells, Diverge, e]-> Bool) -[Cells, Diverge, e]-> Path a b");
 });

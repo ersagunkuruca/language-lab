@@ -150,6 +150,22 @@ test("typed show of a value not known yet leaves its type open", async () => {
   assert.equal((r.code.nodes[call.fn] as NodeOf<"ref">).target, SHOW_ANY);
 });
 
+// A meaning with fewer inputs than are typed doesn't throw while the
+// meanings are ordered (E218): clinic's own div(a, b) beside html's
+// one-input div, typed with an input whose type is still open.
+test("typed call of a name whose other meaning has fewer inputs reads", async () => {
+  const { Lang } = await import("../src/lang/dsl.ts");
+  const { base, baseNames } = await import("../src/lang/load.ts");
+  const k = new Lang();
+  const div = k.def("div"), f = k.def("f");
+  k.define(div, k.fn(["a", "b"], (a) => a));
+  let hole = "";
+  k.define(f, k.fn(["n", "top"], () => (hole = k.hole())));
+  const code = base(k.code), names = baseNames(k.names);
+  const r = fillValue(code, names, infer(code, names), hole, "div(n, top)", f);
+  assert.ok(r.ok, !r.ok ? r.reason : "");
+});
+
 // Each name's meanings are narrowed by what's around them before they're
 // combined (E176): sheet's report line, with `line` a field of two types,
 // `name` of four and show of four meanings, has 128 readings, more than
