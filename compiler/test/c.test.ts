@@ -19,7 +19,7 @@ import { TRUE } from "../../ters/src/lang/std.ts";
 import { isRecord, lowerScalar, type DType, type LType, type Lowered, type RType } from "../src/scalar.ts";
 import { CFLAGS, emitC } from "../src/c.ts";
 import { load } from "../src/program.ts";
-import { area, escapes, fractionInputs, fractions, maths, ordered, orderedInputs, roses, sameLists, showInputs, shows, stopsWith, worldly } from "../src/fixtures.ts";
+import { area, changeInputs, changes, escapes, fractionInputs, fractions, maths, ordered, orderedInputs, roses, sameLists, showInputs, shows, stopsWith, worldly } from "../src/fixtures.ts";
 
 const cc = process.env.CC ?? "cc";
 let have = true;
@@ -494,4 +494,18 @@ test("a recursive let in C: lifted to a definition, the evaluator's answers, eve
   const i = lowered.funcs.findIndex((f) => f.name === "scaled sum" && !f.inner);
   const r = makeRunner(p.code, p.info, { print: () => {} });
   sameAndFreed(build(lowered), [[[1, 2, 3], 2], [[], 5], [[0.5, -1.5], -2]].map(([xs, c]): [number, Value[]] => [i, [toList(xs as number[]), c as number]]), (_, xs) => first(r.call(r.value(p.scaledSum), ...xs))!, () => "scaled sum");
+});
+
+test("changed in C: the evaluator's values, an item of a long list, and every cell freed (C100)", { skip }, () => {
+  const p = changes();
+  const lowered = lowerScalar(p.code, p.info, p.names, Object.values(p.defs), { data: true });
+  const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });
+  const inputs = changeInputs(), calls: [number, Value[]][] = [];
+  const value = (x: unknown): Value => (typeof x === "bigint" ? norm(x) : Array.isArray(x) ? toList(x.map(value)) : x as Value);
+  for (const [name, def] of Object.entries(p.defs)) {
+    const i = lowered.funcs.findIndex((g) => g.def === def && !g.inner);
+    assert.ok(i >= 0 && !emitC(lowered).refused.has(i), `${name} is in C`);
+    for (const xs of inputs[name]) calls.push([i, xs.map(value)]);
+  }
+  sameAndFreed(build(lowered), calls, (i, xs) => first(r.call(r.value(lowered.funcs[i].def), ...xs))!, (i) => lowered.funcs[i].name);
 });
