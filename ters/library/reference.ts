@@ -15,7 +15,7 @@ import { HTML_MODULE, LIBRARY, PRELUDE, VECTORS } from "../src/lang/library.ts";
 import { checkOptions } from "../src/lang/load.ts";
 import type { Module } from "../src/lang/modules.ts";
 import { SIGS, std } from "../src/lang/std.ts";
-import { showType, Subst, type Type } from "../src/lang/types.ts";
+import { schemeArith, schemeNeeds, showType, Subst, type Type } from "../src/lang/types.ts";
 
 // A module's definition by its name, so the sections below can list them.
 const of = (m: Module) => (...names: string[]): Id[] => names.map((name) => {
@@ -88,6 +88,11 @@ export function reference(): string {
       const te = (id: Id): Type => { const n = LIBRARY.code.nodes[id]; return n.kind === "tfun" ? { t: "fn", params: n.params.map(te), ret: te(n.result), eff: { effs: n.effects ?? [], tail: null } } : n.kind === "tref" && LIBRARY.code.nodes[n.target]?.kind === "binder" ? a : { t: "con", id: (n as { target: Id }).target, args: [] }; };
       return showType(te((field as { type: Id }).type), LIBRARY.names, undefined, [], new Map([[(a as { v: number }).v, [iface]]]));
     }
+    // A definition's scheme, with its rows one inside the other (subs)
+    // printed as one, as the editor shows it: keep's test runs under
+    // keep's own row (L158).
+    const sc = info.schemes.get(d);
+    if (sc) return showType(sc.type, LIBRARY.names, schemeArith(sc), sc.subs ?? [], schemeNeeds(sc));
     const ty = info.typeOf.get(d);
     return ty ? showType(ty, LIBRARY.names) : "";
   };
