@@ -215,6 +215,25 @@ test("typed fields of a tuple input are read by the input's type", async () => {
   assert.ok(r.ok, !r.ok ? r.reason : "");
 });
 
+// as float64 of a number nothing has settled is Int's, not Fixed's,
+// Rational's or Algebraic's (E226: clinic's counts compiled as Fixed).
+test("typed as float64 of an open number takes no number type no one asked for", async () => {
+  const { Lang } = await import("../src/lang/dsl.ts");
+  const { base, baseNames } = await import("../src/lang/load.ts");
+  const k = new Lang();
+  const f = k.def("f");
+  let hole = "";
+  k.define(f, k.fn(["n"], () => (hole = k.hole())));
+  const code = base(k.code), names = baseNames(k.names);
+  for (const text of ["as float64(n)", "as float64(n + 1)"]) {
+    const r = fillValue(code, names, infer(code, names), hole, text, f);
+    assert.ok(r.ok, !r.ok ? r.reason : "");
+    if (!r.ok) continue;
+    const used = Object.values(r.code.nodes).flatMap((x) => (x.kind === "ref" && !code.nodes[x.id] ? [x.target] : []));
+    assert.ok(used.includes("builtin.int.toNumber"), `${text}: ${used.join(" ")}`);
+  }
+});
+
 // Each name's meanings are narrowed by what's around them before they're
 // combined (E176): sheet's report line, with `line` a field of two types,
 // `name` of four and show of four meanings, has 128 readings, more than
