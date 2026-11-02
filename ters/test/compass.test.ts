@@ -75,3 +75,20 @@ test("the perpendicular tool: through a point at right angles to a line, or thro
   const again = build(step("free", 1, 2), step("free", 3, 2), step("free", -2, -1), step("circle", 0, 1), step("perpendicular", 2, 3), step("free", 1, -4), step("through", 0, 5), step("cut", 4, 6, 1));
   near(at(again[7]), [1, 2], "through the centre");
 });
+
+test("the angle bisector tool: the line halving the angle at the corner", () => {
+  const { step, build, at } = compass();
+  // Corner V, a point on each side; the bisector crosses the line x = vx + 1 where the angle says.
+  for (const [vx, vy, ax, ay, bx, by] of [[0, 0, 1, 0, 0, 1], [0, 0, 3, 0, 0, 0.5], [1, -1, 4, -1, 1, 3]]) {
+    const shapes = build(step("free", ax, ay), step("free", vx, vy), step("free", bx, by), step("angle bisector", 0, 1, 2),
+      step("free", vx + 1, vy), step("free", vx + 1, vy + 7), step("through", 4, 5), step("cut", 3, 6, 1));
+    near(at(shapes[7]), [vx + 1, vy + 1], "on the bisector");
+  }
+  // The incircle: two bisectors of a triangle cross at a point as far from each side.
+  const t = build(step("free", -2, -1.5), step("free", 2, -1.5), step("free", 0.7, 2.4),
+    step("angle bisector", 1, 0, 2), step("angle bisector", 0, 1, 2), step("cut", 3, 4, 1));
+  const [ix, iy] = at(t[5]);
+  const side = (px: number, py: number, qx: number, qy: number) => Math.abs((qx - px) * (iy - py) - (qy - py) * (ix - px)) / Math.hypot(qx - px, qy - py);
+  const r = side(-2, -1.5, 2, -1.5);
+  assert.ok(Math.abs(side(2, -1.5, 0.7, 2.4) - r) < 1e-9 && Math.abs(side(0.7, 2.4, -2, -1.5) - r) < 1e-9, `incentre (${ix}, ${iy})`);
+});
