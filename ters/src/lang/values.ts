@@ -9,8 +9,12 @@ import { DEF_VALUE, toList, type Value } from "./run.ts";
 import { EXTENDED_V } from "./std.ts";
 
 export function parseValue(text: string, code: Code, names: Names): { value: Value } | { error: string } {
-  const variants = new Map<string, Id>();
-  for (const n of Object.values(code.nodes)) if (n.kind === "variant" && names[n.id] !== undefined && !variants.has(names[n.id])) variants.set(names[n.id], n.id);
+  // Cases of one name in several types (a program's own done, std's
+  // done(value)) are told apart by how many values they take (E188).
+  // An effect's operation (random) is a call, not a value (E188).
+  const ops = new Set(Object.values(code.nodes).flatMap((n) => n.kind === "typedef" && n.effect ? n.variants : []));
+  const variants = new Map<string, Id[]>();
+  for (const n of Object.values(code.nodes)) if (n.kind === "variant" && names[n.id] !== undefined && !ops.has(n.id)) variants.set(names[n.id], [...(variants.get(names[n.id]) ?? []), n.id]);
   // A definition by its name is that function (newton's f: cubic). It
   // stands for the definition until a run looks it up (trace.ts).
   const defs = new Map<string, Id>();
@@ -57,13 +61,14 @@ export function parseValue(text: string, code: Code, names: Names): { value: Val
     if (!m) return fail("expected a value");
     const name = m[0].trim();
     i += m[0].trimEnd().length;
-    const tag = variants.get(name);
-    if (!tag && defs.has(name)) return { tag: DEF_VALUE, fields: [defs.get(name)!] };
-    if (!tag) return fail(`no case named ${name}`);
-    const arity = (code.nodes[tag] as { fields: Id[] }).fields.length;
+    const tags = variants.get(name);
+    if (!tags && defs.has(name)) return { tag: DEF_VALUE, fields: [defs.get(name)!] };
+    if (!tags) return fail(`no case named ${name}`);
+    const arity = (tag: Id) => (code.nodes[tag] as { fields: Id[] }).fields.length;
     ws();
     const fields = text[i] === "(" ? (i++, list(")")) : [];
-    if (fields.length !== arity) return fail(`${name} takes ${arity} value${arity === 1 ? "" : "s"}, not ${fields.length}`);
+    const tag = tags.find((t) => arity(t) === fields.length);
+    if (!tag) return fail(`${name} takes ${arity(tags[0])} value${arity(tags[0]) === 1 ? "" : "s"}, not ${fields.length}`);
     return { tag, fields };
   };
   try {
