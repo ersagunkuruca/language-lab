@@ -143,6 +143,10 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
           // A helper given a box and a shape (C116): C lends what it only reads.
           () => (helpers.length ? call(r.pick(helpers), sub("R"), sub("D"), sub("I")) : sub("I")),
           () => call(lib("queue size"), call(lib("queued"), call(lib("queue of"), sub("L")), sub("I"))),
+          // A recursive helper of the program's own, and a function
+          // given to one with what's in scope closed over (C121).
+          () => (recursive.length ? call(r.pick(recursive), sub("L"), sub("I")) : sub("I")),
+          () => (higher.length ? call(r.pick(higher), k.fn([fresh()], (v) => gen("I", { ...s, I: [...s.I, v] }, depth - 1)), sub("I")) : sub("I")),
         ])();
       }
       case "B": {
@@ -265,7 +269,7 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
 
   // Helpers from a box, a shape and an Int to an Int, which the
   // definitions call: some only read the box's fields, some make boxes.
-  const helpers: Id[] = [];
+  const helpers: Id[] = [], recursive: Id[] = [], higher: Id[] = [];
   const callable: Id[] = [];
   let calls = false;
   for (let i = 0; i < 6; i++) {
@@ -281,6 +285,25 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
           ]);
         }))));
     helpers.push(h);
+  }
+  // Recursive helpers over a list and an Int, each recurring on the
+  // rest, the result used after the call (no tail call); and helpers
+  // given a function, calling it twice or folding a list with it (C121).
+  for (let i = 0; i < 4; i++) {
+    const h = k.def(`rec${i}`);
+    k.define(h, k.fn(["xs", "a"], (xs, a) => k.match(xs, [
+      { variant: NIL, names: [], body: () => gen("I", { F: [], I: [a], L: [], B: [], T: [], D: [], R: [], P: [], Q: [], U: [] }, 2) },
+      { variant: CONS, names: [fresh(), fresh()], body: ([hd, tl]) => k.let(fresh(), call(h, tl, gen("I", { F: [], I: [a, hd], L: [tl], B: [], T: [], D: [], R: [], P: [], Q: [], U: [] }, 2)), (got) =>
+        gen("I", { F: [], I: [got, hd, a], L: [tl], B: [], T: [], D: [], R: [], P: [], Q: [], U: [] }, 2)) },
+    ])));
+    recursive.push(h);
+  }
+  {
+    const twice = k.def("twice");
+    k.define(twice, k.fn(["f", "x"], (f, x) => k.call(f, k.call(f, x))));
+    const along = k.def("along");
+    k.define(along, k.fn(["f", "x"], (f, x) => call(lib("sum"), call(lib("map"), call(lib("range from"), k.int(0), k.call(S.first, k.thunk(() => call(INT_OPS.remainder, x, k.int(5))), k.thunk(() => k.int(0)))), f))));
+    higher.push(twice, along);
   }
   const defs: { def: Id; result: Ty }[] = [];
   for (let i = 0; i < count; i++) {
@@ -312,5 +335,5 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
   const main = k.def("main");
   k.define(main, k.thunk(() => k.list(...entries.map((e) => call(e, k.lit(2.5), k.int(3), k.int(1))))));
   const code = base(k.code), names2 = baseNames(k.names);
-  return { code, names: names2, info: infer(code, names2, undefined, checkOptions), defs, entries, main, own: [...helpers, ...defs.map((d) => d.def), lists, ...entries, main] };
+  return { code, names: names2, info: infer(code, names2, undefined, checkOptions), defs, entries, main, own: [...helpers, ...recursive, ...higher, ...defs.map((d) => d.def), lists, ...entries, main] };
 }
