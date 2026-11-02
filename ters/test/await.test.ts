@@ -186,6 +186,31 @@ test("compiled, a case answered at once that awaits: wait and now answered by ti
   assert.deepEqual(await p.compiled(), evaluated);
 });
 
+// C40: the same, each handler with a case for the normal finish (L57),
+// which runs on the action's value once it has finished waiting, outside
+// its handler: the inner one's own wait is the world's, after the two its
+// handler awaited.
+test("compiled, a handler that waits with a case for the normal finish, as the evaluator gives it (C40)", async () => {
+  const p = worldProgram((k) => {
+    const clocked = k.def("clocked");
+    k.define(clocked, k.fn(["action"], (a) => k.handle(
+      k.handle(k.call(a), [
+        { variant: WAIT_OP, names: ["milliseconds"], body: ([ms]) => k.call(AWAIT_OP, k.call(TICKET_V.timer, ms, k.unitValue)) },
+      ], ["v", (v) => k.seq(k.call(WAIT_OP, k.lit(5)), k.text(v, k.lit(", waited")))]),
+      [{ variant: NOW_OP, names: [], body: () => k.call(AWAIT_OP, k.call(TICKET_V.timer, k.lit(0), k.lit(7))) }],
+      ["v", (v) => k.text(v, k.lit(", clocked"))],
+    )));
+    return k.call(clocked, k.thunk(() => k.seq(
+      k.call(WAIT_OP, k.lit(20)),
+      k.call(WAIT_OP, k.lit(30)),
+      k.text(k.call(S.show, k.call(NOW_OP)), k.lit(" done")))));
+  });
+  assert.deepEqual(p.info.errors.map((e) => e.message), []);
+  const evaluated = p.run();
+  assert.deepEqual(evaluated, { printed: ['"7 done, waited, clocked"'], waits: [20, 30, 5], clock: 1055 });
+  assert.deepEqual(await p.compiled(), evaluated);
+});
+
 // L141 (REVIEW-2026-11-01b §6): an any of inside an any of is ready when
 // its own first ticket is, in the world (evaluated and compiled) as under
 // simulated. The outer which is given the outer position.

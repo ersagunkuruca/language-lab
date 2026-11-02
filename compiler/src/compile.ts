@@ -2130,7 +2130,14 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const waitingArms = answering.filter((a) => !parses(`(${plain(a)})`));
       const body = inGen(false, () => ret(n.scrutinee));
       if (!waitingArms.length && parses(`(() => {\n${body}\n})`)) return null;
-      if (n.otherwise) throw notYet("a handler's case for the normal finish around code that waits");
+      if (n.otherwise) {
+        // The normal finish (L57) as handleEx has it: the computation's
+        // value comes out marked, and the case runs on it outside the
+        // handler, in the generator, so it may wait too (C40).
+        const mark = temp("finished"), r = temp("r");
+        const handled = handleWaiting({ ...n, otherwise: null }, arms, (b) => `return [${mark}, yield* (function* () {\n${b}\n})()];`)!;
+        return `(yield* (function* () {\nconst ${mark} = {};\nconst ${r} = ${handled};\nreturn Array.isArray(${r}) && ${r}[0] === ${mark} ? ${laterFn(ty(n.otherwise), sp.lat) ? "yield* " : ""}(${ex(n.otherwise)})(${r}[1]) : ${r};\n})())`;
+      }
       const generator = (a: NodeOf<"arm">) => `(function* (${a.binds.map(local).join(", ")}) {\n${scoped(false, () => inGen(true, () => ret(a.body)))}\n})`;
       const answers = `{ ${answering.map((a) => `${tag(a.variant)}: ${waitingArms.includes(a) ? generator(a) : plain(a)}`).join(", ")} }`;
       const gens = `[${waitingArms.map((a) => tag(a.variant)).join(", ")}]`;
