@@ -208,6 +208,12 @@ A list is written [1, 2, 3]. There are no loops: map, keep and for each go throu
 - **copies** : `(Int, a) -> List a`. A list of count copies of the item: copies(3, 0) is [0, 0, 0]. (repeated is Text's.)
 - **all pass** : `(List a, (a) -[e]-> Bool) -[e]-> Bool`. Whether every item passes the test; true for an empty list. Stops at the first that doesn't.
 - **any pass** : `(List a, (a) -[e]-> Bool) -[e]-> Bool`. Whether some item passes the test; false for an empty list. Stops at the first that does.
+- **first where** : `(List a, (a) -[e]-> Bool) -[e]-> Optional a`. The first item that passes the test, or none: first where([3, 8, 9], (x) ↦ x > 5) is some(8).
+- **position of** : `(List a, a) -> Optional Int`. Where the item first is in the list, from 0, or none: position of(["a", "b"], "b") is some(1).
+- **contains** : `(List a, a) -> Bool`. Whether the item is in the list: contains([1, 2], 2) is true. (has is a Set's.)
+- **largest of** : `(List a) -> Optional a where a has <`. The largest item by <, or none for an empty list: largest of([3, 9, 4]) is some(9).
+- **smallest of** : `(List a) -> Optional a where a has <`. The smallest item by <, or none for an empty list: smallest of([3, 9, 4]) is some(3).
+- **inserted at** : `(List a, Int, a) -> List a`. The list with the item put in at the position, the items from there on moved one later: inserted at([1, 3], 1, 2) is [1, 2, 3].
 - **position where** : `(List a, (a) -[e]-> Bool) -[e]-> Optional Int`. The position of the first item that passes the test, counting from 0, as some(position): position where([3, 8, 5], (x) ↦ 4 < x) is some(1); none when no item passes.
 - **show numbers** : `(List Float64) -> Text`. A fold that prints. Run backwards it unfolds, so it parses.
 - **empty array** : `() -> Array a`. An array with no items.
