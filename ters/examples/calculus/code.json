@@ -1202,7 +1202,7 @@
     "04eb2965": {
       "id": "04eb2965",
       "kind": "ref",
-      "target": "std.pair.pair"
+      "target": "std.tuple2.tuple"
     },
     "dd14b6f5": {
       "id": "dd14b6f5",
@@ -1226,7 +1226,7 @@
     "6e6b0471": {
       "id": "6e6b0471",
       "kind": "ref",
-      "target": "std.pair.pair"
+      "target": "std.tuple2.tuple"
     },
     "1a3c2d8d": {
       "id": "1a3c2d8d",
@@ -1250,7 +1250,7 @@
     "a404fa93": {
       "id": "a404fa93",
       "kind": "ref",
-      "target": "std.pair.pair"
+      "target": "std.tuple2.tuple"
     },
     "bc93ae00": {
       "id": "bc93ae00",
@@ -1274,7 +1274,7 @@
     "df716596": {
       "id": "df716596",
       "kind": "ref",
-      "target": "std.pair.pair"
+      "target": "std.tuple2.tuple"
     },
     "21ab8384": {
       "id": "21ab8384",
@@ -1298,7 +1298,7 @@
     "30c2d669": {
       "id": "30c2d669",
       "kind": "ref",
-      "target": "std.pair.pair"
+      "target": "std.tuple2.tuple"
     },
     "333795a7": {
       "id": "333795a7",
@@ -1322,7 +1322,7 @@
     "9942a2ee": {
       "id": "9942a2ee",
       "kind": "ref",
-      "target": "std.pair.pair"
+      "target": "std.tuple2.tuple"
     },
     "6678a5e1": {
       "id": "6678a5e1",
@@ -1439,7 +1439,7 @@
     "01fb4155": {
       "id": "01fb4155",
       "kind": "ref",
-      "target": "std.pair.pair.snd"
+      "target": "std.tuple2.tuple.second"
     },
     "160182ac": {
       "id": "160182ac",
@@ -1461,7 +1461,7 @@
     "d92c691a": {
       "id": "d92c691a",
       "kind": "ref",
-      "target": "std.pair.pair.fst"
+      "target": "std.tuple2.tuple.first"
     },
     "c794d249": {
       "id": "c794d249",
@@ -2415,7 +2415,7 @@
     "0f0409c6": {
       "id": "0f0409c6",
       "kind": "ref",
-      "target": "std.pair.pair"
+      "target": "std.tuple2.tuple"
     },
     "8f9d6fe9": {
       "id": "8f9d6fe9",
@@ -2450,7 +2450,7 @@
     "09afdbd5": {
       "id": "09afdbd5",
       "kind": "ref",
-      "target": "std.pair.pair"
+      "target": "std.tuple2.tuple"
     },
     "35d1fd1f": {
       "id": "35d1fd1f",
@@ -2475,7 +2475,7 @@
     "3d38cdf0": {
       "id": "3d38cdf0",
       "kind": "ref",
-      "target": "std.pair.pair.fst"
+      "target": "std.tuple2.tuple.first"
     },
     "d56cf380": {
       "id": "d56cf380",
@@ -2516,7 +2516,7 @@
     "9818f09d": {
       "id": "9818f09d",
       "kind": "ref",
-      "target": "std.pair.pair.fst"
+      "target": "std.tuple2.tuple.first"
     },
     "bafcb1ed": {
       "id": "bafcb1ed",
@@ -2536,7 +2536,7 @@
     "7ac71f89": {
       "id": "7ac71f89",
       "kind": "ref",
-      "target": "std.pair.pair.snd"
+      "target": "std.tuple2.tuple.second"
     },
     "c3054fb6": {
       "id": "c3054fb6",
@@ -2595,7 +2595,7 @@
     "911311b6": {
       "id": "911311b6",
       "kind": "ref",
-      "target": "std.pair.pair.snd"
+      "target": "std.tuple2.tuple.second"
     },
     "18a7c4ef": {
       "id": "18a7c4ef",

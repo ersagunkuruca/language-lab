@@ -9,8 +9,10 @@ import { layer, type Names, type Presentation, type Style } from "../presentatio
 import { root } from "../io.ts";
 import type { Options } from "./infer.ts";
 import { LIBRARY, PRELUDE, TREES } from "./library.ts";
+import { onTodaysIds } from "./std.ts";
 
-const read = <T>(path: string, fallback: T): T => (existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : fallback);
+// A saved file, with ids since renamed read as today's (std.ts RENAMED_IDS).
+const read = <T>(path: string, fallback: T): T => (existsSync(path) ? onTodaysIds(JSON.parse(readFileSync(path, "utf8"))) : fallback);
 
 export const base = (code: Code): Code => merge(LIBRARY.code, code);
 export const baseNames = (...layers: Names[]): Names => layer<Names>(LIBRARY.names, ...layers);

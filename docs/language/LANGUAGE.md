@@ -218,14 +218,16 @@ A `typedef` is a def's body: a list of `variant`s, each a list of `field`s.
 Variants and fields are nodes, so **the id is the tag and the id is the
 label**. A reference to a variant is its constructor, called like any
 function (`sum(a, b)`). A reference to a field of a one-variant type is its
-projection (`fst(p)`). Two libraries can both add a field called `name` to
+projection (`pages(c)`). Two libraries can both add a field called `name` to
 things and never collide, because the field is an id and "name" is just its
 display name. That covers the `Symbol` and `WeakMap` workarounds from the
 original pitch.
 
 The standard library (`src/lang/std.ts`) defines `Bool`, `Unit`, `List a`
-and `Pair a b` as ordinary typedef nodes with stable ids. Nothing about them
-is built into the language.
+and the tuples as ordinary typedef nodes with stable ids. Nothing about them
+is built into the language. Two values together are a `Tuple2`, `(a, b)`:
+std once had its own `Pair` beside it, and a saved program's `Pair` reads
+as `Tuple2` (L139).
 
 **Tuples** (L128a, [PORTS-2026-11-01.md](../design/relations-and-effects/PORTS-2026-11-01.md)):
 a function's inputs together are one value, and so are its results. std
@@ -387,7 +389,7 @@ maps compares their entries with its own nearness.
 A map and a set are ordinary data with one spelling (DATA-STRUCTURES.md):
 
 ```
-Map k v = map of(entries: List (Pair k v))   -- sorted by key, no key twice
+Map k v = map of(entries: List (k, v))       -- sorted by key, no key twice
 Set k   = set of(items: List k)              -- sorted, no item twice
 ```
 
@@ -1226,7 +1228,7 @@ outputs stay consistent with each other (`src/lang/solve.ts`,
 `examples/relations`):
 
 ```
-‹to polar› : (Float64, Float64) -[Choice]-> Pair Float64 Float64
+‹to polar› : (Float64, Float64) -[Choice]-> (Float64, Float64)
 ‹to polar›(x, y) =
   solve polar(x = x, y = y) for length, angle
     pair(length, angle)
@@ -1685,7 +1687,7 @@ is changed in the editor, and nothing regenerates it.
 
 ```
 src/lang/types.ts     types, effect rows, unification, display
-src/lang/std.ts       Bool, Unit, List, Pair as typedef nodes; builtins with signatures
+src/lang/std.ts       Bool, Unit, List, tuples as typedef nodes; builtins with signatures
 src/lang/infer.ts     inference, exhaustiveness, totality, typed holes, fillings()
 src/lang/run.ts       evaluator: results as lazy streams; handlers; runMain
 src/lang/cells.ts     the Cells handler: cells, lazy formulas, watchers

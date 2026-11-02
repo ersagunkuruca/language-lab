@@ -51,9 +51,12 @@ export const LIST = typedef("std.list", "List", ["a"], [
   ["nil", []],
   ["cons", [["head", ([a]) => tref(a)], ["tail", ([a], self) => tref(self, tref(a))]]],
 ]);
-export const PAIR = typedef("std.pair", "Pair", ["a", "b"], [
-  ["pair", [["fst", ([a]) => tref(a)], ["snd", ([, b]) => tref(b)]]],
-]);
+// Two values together is a Tuple2 (below; BACKLOG L139): std once had its
+// own Pair beside it, and a saved program's ids for it read as Tuple2's
+// (RENAMED_IDS). Its two trefs' numbers are kept, so the ones after them
+// don't move.
+export const PAIR = "std.tuple2";
+tn += 2;
 
 // The data form of Choice: a value that may be missing, for storing what
 // a Choice computes (LANGUAGE.md, "Optional"). `optional` turns a Choice
@@ -320,7 +323,7 @@ export const HTML_V = { element: "std.html.element", text: "std.html.text", part
 
 export const TRUE = "std.bool.true", FALSE = "std.bool.false", UNIT_V = "std.unit.unit";
 export const NIL = "std.list.nil", CONS = "std.list.cons";
-export const PAIR_V = "std.pair.pair", FIRST = "std.pair.pair.fst", SECOND = "std.pair.pair.snd";
+export const PAIR_V = "std.tuple2.tuple", FIRST = "std.tuple2.tuple.first", SECOND = "std.tuple2.tuple.second";
 
 // --- builtins. A signature builds a fresh type each time it's used, so the
 // variables in it are automatically generalized.
@@ -664,7 +667,7 @@ export const INT_OPS = {
   // a fraction's one spelling. Total: (n, 0) gives (±1, 0) and (0, 0) stays.
   lowestTerms: builtin("int.lowestTerms", "lowest terms", pure([int, int], { t: "con", id: PAIR, args: [int, int] }), (a: I.Int, b: I.Int) => {
     const [t, u] = I.lowestTerms(a, b);
-    return { tag: "std.pair.pair", fields: [t, u] };
+    return { tag: PAIR_V, fields: [t, u] };
   }),
   show: builtin("int.show", "show", pure([int], str), I.show),
   read: choice("int.read", "read whole number", [str], int, I.read),
@@ -1030,9 +1033,23 @@ for (let n = 2; n <= TUPLE_MAX; n++) {
 export const tupleType = (n: number): Id => `std.tuple${n}`;
 export const tupleVariant = (n: number): Id => `std.tuple${n}.tuple`;
 export const tuplePart = (n: number, i: number): Id => `std.tuple${n}.tuple.${PART_NAMES[i]}`;
+// Ids that were renamed, as a saved program may still use them: std's Pair
+// is Tuple2 (L139).
+export const RENAMED_IDS: Record<Id, Id> = {
+  "std.pair": "std.tuple2", "std.pair.type": "std.tuple2.type", "std.pair.a": "std.tuple2.a", "std.pair.b": "std.tuple2.b",
+  "std.pair.pair": "std.tuple2.tuple", "std.pair.pair.fst": "std.tuple2.tuple.first", "std.pair.pair.snd": "std.tuple2.tuple.second",
+};
+// A saved value (a program's code, names, comments) with each renamed id
+// in it, as a key or a string, read as today's.
+export function onTodaysIds<T>(x: T): T {
+  if (typeof x === "string") return (RENAMED_IDS[x] ?? x) as T;
+  if (Array.isArray(x)) return x.map(onTodaysIds) as T;
+  if (x && typeof x === "object") return Object.fromEntries(Object.entries(x).map(([k, v]) => [RENAMED_IDS[k] ?? k, onTodaysIds(v)])) as T;
+  return x;
+}
 export const tupleSize = (id: Id): number | null => { const m = /^std\.tuple(\d)$/.exec(id); return m ? Number(m[1]) : null; };
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, PAIR, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ...TUPLES] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ...TUPLES] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one

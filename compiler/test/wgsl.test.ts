@@ -187,8 +187,8 @@ test("records are structs (or vectors): built by their case, read by fields or a
   // Two to four Float64s are a vector; anything else is a struct.
   assert.match(s.wgsl, /\/\/ Vec is a vec3f: x is \.x, y is \.y, z is \.z\./);
   assert.match(s.wgsl, /struct Ray_1 \{\n {2}origin: vec3f,\n {2}direction: vec3f,\n\}/);
-  // The standard library's Pair, at Float64 and Float64.
-  assert.match(s.wgsl, /\/\/ Pair is a vec2f: fst is \.x, snd is \.y\./);
+  // A Tuple2, at Float64 and Float64.
+  assert.match(s.wgsl, /\/\/ Tuple2 is a vec2f: first is \.x, second is \.y\./);
   // origin + t · direction, written field by field, is one vector expression.
   assert.match(s.wgsl, /let l3 = l2\.origin;\n {2}let l4 = l2\.direction;\n {2}return l3 \+ \(p1 \* l4\);/);
   assert.match(s.wgsl, /fn length_\d+\(p0: vec3f\) -> f32 \{\n {2}return length\(p0\);/);

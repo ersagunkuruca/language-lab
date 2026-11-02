@@ -3304,7 +3304,7 @@
       "@9rdisbitjg5966uq7jjoivne4g:9": {
         "id": "@9rdisbitjg5966uq7jjoivne4g:9",
         "kind": "ref",
-        "target": "std.pair.pair"
+        "target": "std.tuple2.tuple"
       },
       "@9rdisbitjg5966uq7jjoivne4g:10": {
         "id": "@9rdisbitjg5966uq7jjoivne4g:10",
@@ -3766,7 +3766,7 @@
       "@2494lbdj8iiddfgbod9f68o25j:20": {
         "id": "@2494lbdj8iiddfgbod9f68o25j:20",
         "kind": "arm",
-        "variant": "std.pair.pair",
+        "variant": "std.tuple2.tuple",
         "binds": [
           "@2494lbdj8iiddfgbod9f68o25j:21",
           "@2494lbdj8iiddfgbod9f68o25j:22"
@@ -4162,7 +4162,7 @@
       "@rik768vn446pjh427g4dda8h3n:20": {
         "id": "@rik768vn446pjh427g4dda8h3n:20",
         "kind": "ref",
-        "target": "std.pair.pair"
+        "target": "std.tuple2.tuple"
       },
       "@rik768vn446pjh427g4dda8h3n:21": {
         "id": "@rik768vn446pjh427g4dda8h3n:21",
@@ -5078,7 +5078,7 @@
       "@9p14mg18qaokj7fi0lfcb2otbd:13": {
         "id": "@9p14mg18qaokj7fi0lfcb2otbd:13",
         "kind": "arm",
-        "variant": "std.pair.pair",
+        "variant": "std.tuple2.tuple",
         "binds": [
           "@9p14mg18qaokj7fi0lfcb2otbd:14",
           "@9p14mg18qaokj7fi0lfcb2otbd:15"
@@ -5227,7 +5227,7 @@
       "@j4k96kgceteqjksaq1tr1l83up:15": {
         "id": "@j4k96kgceteqjksaq1tr1l83up:15",
         "kind": "arm",
-        "variant": "std.pair.pair",
+        "variant": "std.tuple2.tuple",
         "binds": [
           "@j4k96kgceteqjksaq1tr1l83up:16",
           "@j4k96kgceteqjksaq1tr1l83up:17"
@@ -5393,7 +5393,7 @@
       "@nsvghsfd9temhof35gh6lo4i3m:18": {
         "id": "@nsvghsfd9temhof35gh6lo4i3m:18",
         "kind": "arm",
-        "variant": "std.pair.pair",
+        "variant": "std.tuple2.tuple",
         "binds": [
           "@nsvghsfd9temhof35gh6lo4i3m:19",
           "@nsvghsfd9temhof35gh6lo4i3m:20"
@@ -5497,7 +5497,7 @@
       "@5cgnetlnf10h47hp3lp63fo859:12": {
         "id": "@5cgnetlnf10h47hp3lp63fo859:12",
         "kind": "arm",
-        "variant": "std.pair.pair",
+        "variant": "std.tuple2.tuple",
         "binds": [
           "@5cgnetlnf10h47hp3lp63fo859:13",
           "@5cgnetlnf10h47hp3lp63fo859:14"
@@ -5599,7 +5599,7 @@
       "@atalred0tcmnnlkqdo9mlj2omb:12": {
         "id": "@atalred0tcmnnlkqdo9mlj2omb:12",
         "kind": "arm",
-        "variant": "std.pair.pair",
+        "variant": "std.tuple2.tuple",
         "binds": [
           "@atalred0tcmnnlkqdo9mlj2omb:13",
           "@atalred0tcmnnlkqdo9mlj2omb:14"
@@ -5876,7 +5876,7 @@
       "@60ibdf8ro0h3g5jggdof00tcb1:21": {
         "id": "@60ibdf8ro0h3g5jggdof00tcb1:21",
         "kind": "arm",
-        "variant": "std.pair.pair",
+        "variant": "std.tuple2.tuple",
         "binds": [
           "@60ibdf8ro0h3g5jggdof00tcb1:22",
           "@60ibdf8ro0h3g5jggdof00tcb1:23"
@@ -6388,7 +6388,7 @@
       "@n7ec045rb9krqkba8k3rnn8kj3:14": {
         "id": "@n7ec045rb9krqkba8k3rnn8kj3:14",
         "kind": "arm",
-        "variant": "std.pair.pair",
+        "variant": "std.tuple2.tuple",
         "binds": [
           "@n7ec045rb9krqkba8k3rnn8kj3:15",
           "@n7ec045rb9krqkba8k3rnn8kj3:16"
@@ -6543,7 +6543,7 @@
       "@dvpin5fe0ricu8aaqjgjkvcsg0:16": {
         "id": "@dvpin5fe0ricu8aaqjgjkvcsg0:16",
         "kind": "arm",
-        "variant": "std.pair.pair",
+        "variant": "std.tuple2.tuple",
         "binds": [
           "@dvpin5fe0ricu8aaqjgjkvcsg0:17",
           "@dvpin5fe0ricu8aaqjgjkvcsg0:18"
@@ -7054,7 +7054,7 @@
       "@2toskr9jl4sg58jd74kmj3atng:18": {
         "id": "@2toskr9jl4sg58jd74kmj3atng:18",
         "kind": "arm",
-        "variant": "std.pair.pair",
+        "variant": "std.tuple2.tuple",
         "binds": [
           "@2toskr9jl4sg58jd74kmj3atng:19",
           "@2toskr9jl4sg58jd74kmj3atng:20"
@@ -7158,7 +7158,7 @@
       "@hecotodeqq8i6qqori79lq7dai:12": {
         "id": "@hecotodeqq8i6qqori79lq7dai:12",
         "kind": "arm",
-        "variant": "std.pair.pair",
+        "variant": "std.tuple2.tuple",
         "binds": [
           "@hecotodeqq8i6qqori79lq7dai:13",
           "@hecotodeqq8i6qqori79lq7dai:14"
@@ -7260,7 +7260,7 @@
       "@kdp3ocr2euosj1rhuabj2pseg5:12": {
         "id": "@kdp3ocr2euosj1rhuabj2pseg5:12",
         "kind": "arm",
-        "variant": "std.pair.pair",
+        "variant": "std.tuple2.tuple",
         "binds": [
           "@kdp3ocr2euosj1rhuabj2pseg5:13",
           "@kdp3ocr2euosj1rhuabj2pseg5:14"
@@ -7420,7 +7420,7 @@
       "@0e0p2rmv96ovg3nsj4e1ac5m7h:15": {
         "id": "@0e0p2rmv96ovg3nsj4e1ac5m7h:15",
         "kind": "arm",
-        "variant": "std.pair.pair",
+        "variant": "std.tuple2.tuple",
         "binds": [
           "@0e0p2rmv96ovg3nsj4e1ac5m7h:16",
           "@0e0p2rmv96ovg3nsj4e1ac5m7h:17"
@@ -7560,7 +7560,7 @@
       "@io2h4sd0l9csvtfreqo1l7beub:17": {
         "id": "@io2h4sd0l9csvtfreqo1l7beub:17",
         "kind": "arm",
-        "variant": "std.pair.pair",
+        "variant": "std.tuple2.tuple",
         "binds": [
           "@io2h4sd0l9csvtfreqo1l7beub:18",
           "@io2h4sd0l9csvtfreqo1l7beub:19"
@@ -18815,7 +18815,7 @@
       "@jv53lpdt1kvdcq9bvlb1g145r9:12": {
         "id": "@jv53lpdt1kvdcq9bvlb1g145r9:12",
         "kind": "ref",
-        "target": "std.pair.pair"
+        "target": "std.tuple2.tuple"
       },
       "@jv53lpdt1kvdcq9bvlb1g145r9:11": {
         "id": "@jv53lpdt1kvdcq9bvlb1g145r9:11",
@@ -18916,7 +18916,7 @@
       "@jv53lpdt1kvdcq9bvlb1g145r9:27": {
         "id": "@jv53lpdt1kvdcq9bvlb1g145r9:27",
         "kind": "ref",
-        "target": "std.pair.pair"
+        "target": "std.tuple2.tuple"
       },
       "@jv53lpdt1kvdcq9bvlb1g145r9:26": {
         "id": "@jv53lpdt1kvdcq9bvlb1g145r9:26",
@@ -18930,7 +18930,7 @@
       "@jv53lpdt1kvdcq9bvlb1g145r9:23": {
         "id": "@jv53lpdt1kvdcq9bvlb1g145r9:23",
         "kind": "arm",
-        "variant": "std.pair.pair",
+        "variant": "std.tuple2.tuple",
         "binds": [
           "@jv53lpdt1kvdcq9bvlb1g145r9:24",
           "@jv53lpdt1kvdcq9bvlb1g145r9:25"
@@ -18989,7 +18989,7 @@
       "@jv53lpdt1kvdcq9bvlb1g145r9:37": {
         "id": "@jv53lpdt1kvdcq9bvlb1g145r9:37",
         "kind": "arm",
-        "variant": "std.pair.pair",
+        "variant": "std.tuple2.tuple",
         "binds": [
           "@jv53lpdt1kvdcq9bvlb1g145r9:38",
           "@jv53lpdt1kvdcq9bvlb1g145r9:39"
@@ -23340,7 +23340,7 @@
       "@v9971nppsbdjfm9sgm3es6p0fb:12": {
         "id": "@v9971nppsbdjfm9sgm3es6p0fb:12",
         "kind": "ref",
-        "target": "std.pair.pair"
+        "target": "std.tuple2.tuple"
       },
       "@v9971nppsbdjfm9sgm3es6p0fb:11": {
         "id": "@v9971nppsbdjfm9sgm3es6p0fb:11",
@@ -23441,7 +23441,7 @@
       "@v9971nppsbdjfm9sgm3es6p0fb:26": {
         "id": "@v9971nppsbdjfm9sgm3es6p0fb:26",
         "kind": "ref",
-        "target": "std.pair.pair"
+        "target": "std.tuple2.tuple"
       },
       "@v9971nppsbdjfm9sgm3es6p0fb:25": {
         "id": "@v9971nppsbdjfm9sgm3es6p0fb:25",
@@ -23455,7 +23455,7 @@
       "@v9971nppsbdjfm9sgm3es6p0fb:22": {
         "id": "@v9971nppsbdjfm9sgm3es6p0fb:22",
         "kind": "arm",
-        "variant": "std.pair.pair",
+        "variant": "std.tuple2.tuple",
         "binds": [
           "@v9971nppsbdjfm9sgm3es6p0fb:23",
           "@v9971nppsbdjfm9sgm3es6p0fb:24"
@@ -23514,7 +23514,7 @@
       "@v9971nppsbdjfm9sgm3es6p0fb:36": {
         "id": "@v9971nppsbdjfm9sgm3es6p0fb:36",
         "kind": "arm",
-        "variant": "std.pair.pair",
+        "variant": "std.tuple2.tuple",
         "binds": [
           "@v9971nppsbdjfm9sgm3es6p0fb:37",
           "@v9971nppsbdjfm9sgm3es6p0fb:38"
@@ -26687,7 +26687,7 @@
         ],
         "ret": {
           "t": "con",
-          "id": "std.pair",
+          "id": "std.tuple2",
           "args": [
             {
               "t": "var",
@@ -26898,7 +26898,7 @@
             "args": [
               {
                 "t": "con",
-                "id": "std.pair",
+                "id": "std.tuple2",
                 "args": [
                   {
                     "t": "var",
@@ -26919,7 +26919,7 @@
           "args": [
             {
               "t": "con",
-              "id": "std.pair",
+              "id": "std.tuple2",
               "args": [
                 {
                   "t": "var",
@@ -26972,7 +26972,7 @@
           "args": [
             {
               "t": "con",
-              "id": "std.pair",
+              "id": "std.tuple2",
               "args": [
                 {
                   "t": "var",
@@ -27220,7 +27220,7 @@
                 "args": [
                   {
                     "t": "con",
-                    "id": "std.pair",
+                    "id": "std.tuple2",
                     "args": [
                       {
                         "t": "var",
@@ -27273,7 +27273,7 @@
             "args": [
               {
                 "t": "con",
-                "id": "std.pair",
+                "id": "std.tuple2",
                 "args": [
                   {
                     "t": "var",
@@ -27328,7 +27328,7 @@
             "args": [
               {
                 "t": "con",
-                "id": "std.pair",
+                "id": "std.tuple2",
                 "args": [
                   {
                     "t": "var",
@@ -27547,7 +27547,7 @@
           "args": [
             {
               "t": "con",
-              "id": "std.pair",
+              "id": "std.tuple2",
               "args": [
                 {
                   "t": "var",
@@ -27794,7 +27794,7 @@
           "args": [
             {
               "t": "con",
-              "id": "std.pair",
+              "id": "std.tuple2",
               "args": [
                 {
                   "t": "var",
@@ -27897,7 +27897,7 @@
                 "args": [
                   {
                     "t": "con",
-                    "id": "std.pair",
+                    "id": "std.tuple2",
                     "args": [
                       {
                         "t": "var",
@@ -27972,7 +27972,7 @@
             "args": [
               {
                 "t": "con",
-                "id": "std.pair",
+                "id": "std.tuple2",
                 "args": [
                   {
                     "t": "var",
@@ -28025,7 +28025,7 @@
             "args": [
               {
                 "t": "con",
-                "id": "std.pair",
+                "id": "std.tuple2",
                 "args": [
                   {
                     "t": "var",

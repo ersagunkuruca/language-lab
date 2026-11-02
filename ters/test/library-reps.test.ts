@@ -162,7 +162,7 @@ test("a list of maps, a map of maps and main's answer get the tree, and print wh
   assert.deepEqual(c.chosen, ["Map as weight-balanced tree"]);
   const plain = printed(p.code, p.names, p.main);
   assert.deepEqual(printed(c.code, c.names, p.main, c.insiders), plain);
-  assert.match(plain.at(-1)!, /^\[map of\(\[pair\("a", 1\)/);
+  assert.match(plain.at(-1)!, /^\[map of\(\[\("a", 1\)/);
 
   const k = new Lang(LIBRARY.code);
   const put = (m: Id, key: string, v: Id) => k.call(L("put"), m, k.lit(key), v);

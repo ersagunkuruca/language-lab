@@ -481,7 +481,7 @@ test("two things in scope together can't share a name; cases each have their own
   for (const b of subtree(a.code, ev)) if (a.code.nodes[b]?.kind === "binder" && a.pres.names[b]) assert.equal(Top.nameClash(a.code, a.pres.names, b, a.pres.names[b]), null);
 });
 
-test("a field can hold Int, Pair, Optional, List of anything, or the type itself through them", () => {
+test("a field can hold Int, a tuple, Optional, List of anything, or the type itself through them", () => {
   const s = new Session();
   const Chapter = s.ok(Top.newDefinition(s.code, s.names, "Chapter", { kind: "type", firstCase: "chapter" }));
   const td = () => s.code.nodes[(s.code.nodes[Chapter] as NodeOf<"def">).body!] as NodeOf<"typedef">;
@@ -489,17 +489,17 @@ test("a field can hold Int, Pair, Optional, List of anything, or the type itself
   const heads = Top.typeHeads(s.code, Chapter);
   const arity = (t: Id) => heads.find((h) => h.target === t)?.arity;
   assert.equal(arity("type.int"), 0);
-  assert.equal(arity("std.pair"), 2);
+  assert.equal(arity("std.tuple2"), 2);
   assert.equal(arity("std.optional"), 1);
   assert.equal(arity(Chapter), 0);
   const T = (target: Id, ...args: Top.TypeSpec[]): Top.TypeSpec => ({ target, args });
   s.ok(Top.addField(s.code, s.names, Chapter, chapter, "pages", T("type.int")));
-  s.ok(Top.addField(s.code, s.names, Chapter, chapter, "span", T("std.pair", T("type.int"), T("type.string"))));
+  s.ok(Top.addField(s.code, s.names, Chapter, chapter, "span", T("std.tuple2", T("type.int"), T("type.string"))));
   s.ok(Top.addField(s.code, s.names, Chapter, chapter, "next", T("std.optional", T(Chapter))));
-  s.ok(Top.addField(s.code, s.names, Chapter, chapter, "sections", T("std.list", T("std.pair", T("type.string"), T("type.int")))));
+  s.ok(Top.addField(s.code, s.names, Chapter, chapter, "sections", T("std.list", T("std.tuple2", T("type.string"), T("type.int")))));
   const fields = (s.code.nodes[chapter] as NodeOf<"variant">).fields;
   const spec = (t: Id): Top.TypeSpec => { const n = s.code.nodes[t] as NodeOf<"tref">; return { target: n.target, args: n.args.map(spec) }; };
-  assert.deepEqual(spec((s.code.nodes[fields[1]] as NodeOf<"field">).type), T("std.pair", T("type.int"), T("type.string")));
+  assert.deepEqual(spec((s.code.nodes[fields[1]] as NodeOf<"field">).type), T("std.tuple2", T("type.int"), T("type.string")));
   s.ok(Top.setFieldType(s.code, s.names, fields[0], T("std.optional", T("type.int"))));
   assert.equal(s.info().errors.length, 0);
 });
@@ -518,19 +518,19 @@ test("a field of a one-case type is in the palette as the function that reads it
   s.code = { ...s.code, nodes: { ...s.code.nodes, [lit.id]: { id: lit.id, kind: "lit", value: 12, of: "type.int" } } };
   assert.equal(s.info().errors.length, 0);
   assert.equal(showValue(runMain(s.code, s.info(), n), s.code, s.all()), "12");
-  // The standard library's Pair reads the same way.
+  // A tuple reads the same way.
   s.ok(Top.newDefinition(s.code, s.names, "m", { kind: "value" }));
   const m = s.def("m");
   const offered = fillings(s.code, s.info(), s.holes(m)[0]).flatMap((f) => (f.kind === "call" ? [f.target] : []));
-  assert.ok(offered.includes("std.pair.pair.fst") && offered.includes(pages));
+  assert.ok(offered.includes("std.tuple2.tuple.first") && offered.includes(pages));
 });
 
-test("match on a Pair or an Optional of the standard library is in the palette", () => {
+test("match on a tuple or an Optional of the standard library is in the palette", () => {
   const s = new Session();
   s.ok(Top.newDefinition(s.code, s.names, "n", { kind: "function", params: [] }));
   const n = s.def("n");
   const offered = fillings(s.code, s.info(), s.holes(n)[0]).flatMap((f) => (f.kind === "match" && f.on === null ? [f.type] : []));
-  assert.ok(offered.includes("std.pair") && offered.includes("std.optional"), offered.join(", "));
+  assert.ok(offered.includes("std.tuple2") && offered.includes("std.optional"), offered.join(", "));
   // n = match some(5) { none → 0; some(v) → v }, by palette picks.
   s.fill(n, (f) => f.kind === "match" && f.on === null && f.type === "std.optional");
   s.fill(n, call("std.optional.some"));

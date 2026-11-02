@@ -4033,7 +4033,7 @@
     "r4ek9sq6nua4dj76h43ac8m283": {
       "id": "r4ek9sq6nua4dj76h43ac8m283",
       "kind": "lit",
-      "value": 1e-09
+      "value": 1e-9
     },
     "f4i9cm4o617hcsmo9bn0qor7t6": {
       "id": "f4i9cm4o617hcsmo9bn0qor7t6",
@@ -4797,7 +4797,7 @@
     "qi50pdqsujajg5p2ja4c6q5mb7": {
       "id": "qi50pdqsujajg5p2ja4c6q5mb7",
       "kind": "lit",
-      "value": -1e-09
+      "value": -1e-9
     },
     "2s9t3csb41h2u72isvdos601d0": {
       "id": "2s9t3csb41h2u72isvdos601d0",
@@ -9504,7 +9504,7 @@
     "mt25qudnn8vqqkgijnghpf3f0d": {
       "id": "mt25qudnn8vqqkgijnghpf3f0d",
       "kind": "ref",
-      "target": "std.pair.pair"
+      "target": "std.tuple2.tuple"
     },
     "cadkkp0f4nas03u4h79hk0hsrd": {
       "id": "cadkkp0f4nas03u4h79hk0hsrd",
@@ -10827,7 +10827,7 @@
     "d0unv33j8preigpc3m37hscqnk": {
       "id": "d0unv33j8preigpc3m37hscqnk",
       "kind": "arm",
-      "variant": "std.pair.pair",
+      "variant": "std.tuple2.tuple",
       "binds": [
         "0kr4o9elq24goo8s3nkk4pmc4k",
         "q6bphtv56khkqmlpbifgtsc9o9"
@@ -11780,7 +11780,7 @@
     "8am001icqd4ijng54vejj7r1e5": {
       "id": "8am001icqd4ijng54vejj7r1e5",
       "kind": "arm",
-      "variant": "std.pair.pair",
+      "variant": "std.tuple2.tuple",
       "binds": [
         "2tmk616duambllk9i7vgipfuid",
         "pukcn5hin4siqhpn2ul9p3qo66"
@@ -16652,7 +16652,7 @@
     "1iu80mj26kha0h9l48bd3i7ja8": {
       "id": "1iu80mj26kha0h9l48bd3i7ja8",
       "kind": "arm",
-      "variant": "std.pair.pair",
+      "variant": "std.tuple2.tuple",
       "binds": [
         "r1vot93oe0f5t79qhf5425043m",
         "71imtjnif3phsfgcij5n10r4id"
@@ -17757,7 +17757,7 @@
     "g4a5eqtq09pcm8vikm59g9erag": {
       "id": "g4a5eqtq09pcm8vikm59g9erag",
       "kind": "arm",
-      "variant": "std.pair.pair",
+      "variant": "std.tuple2.tuple",
       "binds": [
         "tijel9kdsh0qb58nq87ci16k2g",
         "bmmob3c2ji3o1d1udlo0s4rqco"
@@ -17859,7 +17859,7 @@
     "hm4ibsaabi2rlbnp10mbqg694c": {
       "id": "hm4ibsaabi2rlbnp10mbqg694c",
       "kind": "arm",
-      "variant": "std.pair.pair",
+      "variant": "std.tuple2.tuple",
       "binds": [
         "d9trs2d7hv5llmuuic5lc99j9f",
         "b867rq38l5rf1m12ffguc4porf"
@@ -18570,7 +18570,7 @@
     "mgum2fllejti8hb1hq2ud3hrrd": {
       "id": "mgum2fllejti8hb1hq2ud3hrrd",
       "kind": "arm",
-      "variant": "std.pair.pair",
+      "variant": "std.tuple2.tuple",
       "binds": [
         "dfd8vb7k12a05osq83huk056m0",
         "0h0s9i2h70ta0cd00ntgnkptr2"
