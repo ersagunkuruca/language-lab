@@ -584,7 +584,8 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| L173 | machine's `op name` is `case name`, board's `tag in` is `contains` and `stage from key` is `inverse(stage key, k)`, edited through `lab mcp`. The rest is L173b | this PR |
+| L164c | A match on values: each arm a literal of the examined value's type, none twice, the rest arm required; written out as a chain of `equal` tests before anything runs (src/lang/literal-match.ts). The editor's half is E225 | this PR |
+| L173 | machine's `op name` is `case name`, board's `tag in` is `contains` and `stage from key` is `inverse(stage key, k)`, edited through `lab mcp`. The rest is L173b | #1151 |
 | L175 | clinic's counts are no longer done in Fixed: its two `as float64` reads were the text reader's pick of Fixed's of four (they're Int's now, and the compiled module has no `_at_Fixed`). Defaulting a whole-literal result to Int at the definition was tried and dropped: 14 tests broke where callers use that result as a Float64, and a whole literal being any Number is the rule (WHAT-NUMBER-MEANS.md). The pick is the Editor lane's E226 | #1149 |
 | L171 | `random item(list)`: an item drawn at random, each as likely, no answer for an empty list, prelude (REVIEW-2026-11-02d §4: board picked with a Float64 position). Test: random-item.test.ts, seeded, evaluated and compiled the same | #1146 |
 | L170 | `change(cell, f)`: write(cell, f(read(cell))) as one call, prelude (REVIEW-2026-11-02d §4: board wrote it six times). Test: item-where.test.ts, evaluated and compiled | #1144 |

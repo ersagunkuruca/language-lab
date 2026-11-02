@@ -92,7 +92,10 @@ export type Node =
   | { id: Id; kind: "fold"; scrutinee: Id; arms: Id[] }
   // binds: one binder per field. results (fold only): a binder for each
   // recursive field's folded value, null for the others.
-  | { id: Id; kind: "arm"; variant: Id; binds: Id[]; results: (Id | null)[]; body: Id }
+  // An arm names the case it handles (`variant`), or, in a match on plain
+  // values (L164c), the value: `value` is its own literal child, and
+  // `variant` is the same id, with nothing bound.
+  | { id: Id; kind: "arm"; variant: Id; value?: Id; binds: Id[]; results: (Id | null)[]; body: Id }
   // A relation used in one direction inside an expression (src/lang/solve.ts):
   // `given` ports get their values from expressions, `binds` ports are solved
   // for and bound to binders in scope in `body`. Choice when not unique.
@@ -156,7 +159,7 @@ export function mapIds(n: Node, f: (id: Id) => Id): Node {
     case "tfun": return { ...n, id: f(n.id), params: n.params.map(f), result: f(n.result), ...(n.effects ? { effects: n.effects.map(f) } : {}) };
     case "match": return { ...n, id: f(n.id), scrutinee: f(n.scrutinee), arms: n.arms.map(f), otherwise: n.otherwise === null ? null : f(n.otherwise) };
     case "fold": return { ...n, id: f(n.id), scrutinee: f(n.scrutinee), arms: n.arms.map(f) };
-    case "arm": return { ...n, id: f(n.id), variant: f(n.variant), binds: n.binds.map(f), results: n.results.map((r) => (r === null ? null : f(r))), body: f(n.body) };
+    case "arm": return { ...n, id: f(n.id), variant: f(n.variant), ...(n.value ? { value: f(n.value) } : {}), binds: n.binds.map(f), results: n.results.map((r) => (r === null ? null : f(r))), body: f(n.body) };
     case "solve": return { ...n, id: f(n.id), fn: f(n.fn), given: rec(n.given), binds: rec(n.binds), body: f(n.body) };
   }
 }
@@ -180,7 +183,7 @@ export function children(n: Node): Id[] {
     case "tfun": return [...n.params, n.result];
     case "match": return [n.scrutinee, ...n.arms, ...(n.otherwise ? [n.otherwise] : [])];
     case "fold": return [n.scrutinee, ...n.arms];
-    case "arm": return [...n.binds, ...n.results.filter((r): r is Id => r !== null), n.body];
+    case "arm": return [...(n.value ? [n.value] : []), ...n.binds, ...n.results.filter((r): r is Id => r !== null), n.body];
     case "solve": return [...Object.values(n.given), ...Object.values(n.binds), n.body];
     default: return [];
   }
