@@ -1365,6 +1365,91 @@ export function recursiveLet(code: Code, call: NodeOf<"call">, i: number): Id | 
   return subtree(code, a.id).some((x) => { const n = code.nodes[x]; return n?.kind === "ref" && n.target === p; }) ? p : null;
 }
 
+// What a definition does with a function it is given (BACKLOG L146): for
+// its k-th input, when that is a function it only calls (or passes on,
+// unchanged, to itself), the inputs it gives that function, each with the
+// inputs of its own it is always a piece of. `map(xs, f)` calls f on an
+// item of xs, so f's input is a piece of map's first: a definition that
+// recurs through map on a field of what it took apart still shrinks.
+// Size-change for higher-order programs, as Sereni and Jones (APLAS
+// 2005) do it by a call graph through the functions passed around.
+// Keyed by the function's input k, then f's input j, then the definition's
+// input i: strict when always a proper piece.
+type Applies = Map<number, Map<number, Map<number, boolean>>>;
+const appliesMemo = new WeakMap<object, Map<Id, Applies>>();
+function appliesTo(code: Code, c: Id): Applies {
+  let memo = appliesMemo.get(code.nodes);
+  if (!memo) appliesMemo.set(code.nodes, (memo = new Map()));
+  const known = memo.get(c);
+  if (known) return known;
+  const out: Applies = new Map();
+  memo.set(c, out);
+  const def = code.nodes[c], lam = def?.kind === "def" && def.body ? code.nodes[def.body] : null;
+  if (lam?.kind !== "lambda") return out;
+  const fnParam = new Map(lam.params.map((p, k) => [p, k]));
+  const size = new Map<Id, Map<number, boolean>>(lam.params.map((p, i) => [p, new Map([[i, false]])]));
+  const sizeOf = (id: Id | undefined): Map<number, boolean> | undefined => {
+    const n = id === undefined ? null : code.nodes[id];
+    if (n?.kind === "ref") return size.get(n.target);
+    // An item of a list is a piece of it (keep's one of).
+    if (n?.kind === "call" && code.nodes[n.fn]?.kind === "ref" && (code.nodes[n.fn] as NodeOf<"ref">).target === S.oneOf) {
+      const of = sizeOf(n.args[0]);
+      return of && new Map([...of.keys()].map((i) => [i, true]));
+    }
+    return undefined;
+  };
+  const calls = new Map<number, Map<number, boolean>[][]>();
+  const escapes = new Set<number>();
+  const walk = (id: Id, at?: { call: NodeOf<"call">; pos: number }) => {
+    const n = code.nodes[id];
+    if (!n) return;
+    if (n.kind === "ref" && fnParam.has(n.target)) {
+      const k = fnParam.get(n.target)!;
+      // Called, or passed on in its own place to this definition again,
+      // each of whose inputs is no bigger than this one's.
+      if (at?.pos === -1) return;
+      const self = at && code.nodes[at.call.fn]?.kind === "ref" && (code.nodes[at.call.fn] as NodeOf<"ref">).target === c && at.pos === k;
+      if (self && at!.call.args.every((a, i) => a === id || i === k || !!sizeOf(a)?.has(i))) return;
+      escapes.add(k);
+      return;
+    }
+    if (n.kind === "call") {
+      const f = code.nodes[n.fn];
+      if (f?.kind === "ref" && fnParam.has(f.target)) {
+        const k = fnParam.get(f.target)!;
+        if (!calls.has(k)) calls.set(k, []);
+        calls.get(k)!.push(n.args.map((a) => sizeOf(a) ?? new Map()));
+      }
+      if (f?.kind === "lambda") f.params.forEach((p, i) => { const sz = sizeOf(n.args[i]); if (sz) size.set(p, new Map(sz)); });
+      walk(n.fn, { call: n, pos: -1 });
+      n.args.forEach((a, pos) => walk(a, { call: n, pos }));
+      return;
+    }
+    if (n.kind === "match" || n.kind === "fold") {
+      const from = sizeOf(n.scrutinee);
+      if (from) for (const a of n.arms) for (const b of (code.nodes[a] as NodeOf<"arm">).binds) size.set(b, new Map([...from.keys()].map((i) => [i, true])));
+    }
+    kids(n).forEach((x) => walk(x));
+  };
+  walk(lam.body);
+  for (const [k, cs] of calls) {
+    if (escapes.has(k)) continue;
+    const byInput = new Map<number, Map<number, boolean>>();
+    const arity = Math.max(...cs.map((a) => a.length));
+    for (let j = 0; j < arity; j++) {
+      // What every call's j-th input is always a piece of.
+      let common = new Map<number, boolean>(cs[0][j] ?? []);
+      for (const a of cs.slice(1)) {
+        const here = a[j] ?? new Map<number, boolean>();
+        common = new Map([...common].filter(([i]) => here.has(i)).map(([i, st]): [number, boolean] => [i, st && here.get(i)!]));
+      }
+      if (common.size) byInput.set(j, common);
+    }
+    if (byInput.size) out.set(k, byInput);
+  }
+  return out;
+}
+
 // `lambdaOf`: the function each member is, a definition's body by default
 // (a recursive let's binder names its lambda).
 function terminates(code: Code, group: Id[], lambdaOf = (d: Id) => { const body = (code.nodes[d] as NodeOf<"def">).body; return body ? code.nodes[body] : null; }): boolean {
@@ -1387,6 +1472,32 @@ function terminates(code: Code, group: Id[], lambdaOf = (d: Id) => { const body 
       if (n.kind === "ref" && inGroup.has(n.target)) ok = false;
       if (n.kind === "call") {
         const f = code.nodes[n.fn];
+        // A function of the group given to one that only calls it on
+        // pieces of its other inputs (L146: `map(args, show formula)`).
+        const applies = f.kind === "ref" && !inGroup.has(f.target) && code.nodes[f.target]?.kind === "def" ? appliesTo(code, f.target) : null;
+        if (applies?.size) {
+          const given = (j: Map<number, Map<number, boolean>>) => {
+            const at = new Map<number, Map<number, boolean>>();
+            for (const [jj, from] of j) for (const [ic, st] of from) sizeOf(n.args[ic])?.forEach((s2, i) => {
+              const m = at.get(jj) ?? new Map<number, boolean>();
+              m.set(i, (m.get(i) ?? false) || st || s2);
+              at.set(jj, m);
+            });
+            return at;
+          };
+          const skip = new Set<number>();
+          n.args.forEach((a, k) => {
+            const uses = applies.get(k), x = code.nodes[a];
+            if (!uses) return;
+            if (x?.kind === "ref" && inGroup.has(x.target)) {
+              const arcs: Arc[] = [];
+              given(uses).forEach((m, j) => m.forEach((st, i) => arcs.push([i, j, st])));
+              graphs.push({ from: d, to: x.target, arcs });
+              skip.add(k);
+            } else if (x?.kind === "lambda") given(uses).forEach((m, j) => { if (x.params[j]) size.set(x.params[j], m); });
+          });
+          if (skip.size) { n.args.forEach((a, k) => { if (!skip.has(k)) walk(a); }); return; }
+        }
         if (f.kind === "ref" && inGroup.has(f.target)) {
           const arcs: Arc[] = [];
           n.args.forEach((a, j) => sizeOf(a)?.forEach((strict, i) => arcs.push([i, j, strict])));
