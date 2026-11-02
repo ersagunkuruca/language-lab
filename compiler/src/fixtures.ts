@@ -5,7 +5,7 @@ import { Lang } from "../../ters/src/lang/dsl.ts";
 import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { B } from "../../ters/src/prelude.ts";
-import { ABORT_OP, ARITH, ARRAY_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, INT_OPS, IO, NIL, NONE, PAIR_V, S, SECOND, SHOW_ANY, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
+import { ABORT_OP, ARITH, ARRAY_OPS, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, INT_OPS, IO, LIST, NIL, NONE, PAIR_V, S, SECOND, SHOW_ANY, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
 // S as the pga fixture names it is its Space type.
 const STD = S;
 import { INT, NUMBER, STRING } from "../../ters/src/lang/types.ts";
@@ -557,6 +557,49 @@ export function showInputs(): Record<string, unknown[][]> {
     fractions: [[1n, 3n], [6n, -4n], [4n, 2n], [0n, 5n], [1n, 0n], [2n ** 64n, 3n]],
     complexes: [[1, 2], [0.5, -1.5], [-0, -0], [0, 1e21]],
     extendeds: [[-3], [-0.25], [0], [0.5], [7]],
+  };
+}
+
+// A value with one place changed (L163, C100), shown: a field, an item,
+// one inside the other, an item past the end, a field of an item and an
+// item of an item's field.
+export function changes() {
+  const k = new Lang(LIBRARY.code);
+  const d = (name: string, params: string[], body: (...xs: Id[]) => Id) => { const x = k.def(name); k.define(x, k.fn(params, body)); return x; };
+  const lib = (name: string) => LIBRARY.code.defs.find((x) => LIBRARY.names[x] === name)!;
+  const Machine = k.type("Machine", [], [["machine", [["pc", () => k.tref(INT)], ["registers", () => k.tref(LIST, k.tref(INT))]]]]);
+  const pcOf = Machine.f["machine.pc"], regsOf = Machine.f["machine.registers"];
+  const sh = (x: Id) => k.call(SHOW_ANY, x);
+  const int = (x: Id) => k.call(INT_OPS.add, x, k.int(0));
+  const field = (f: Id) => k.call(CELL_OPS.path, k.fn(["m"], (m) => k.call(f, m)));
+  const whole = () => k.call(CELL_OPS.path, k.fn(["l"], (l) => l));
+  const m0 = () => k.call(Machine.v.machine, k.int(0), k.list(k.int(1), k.int(2), k.int(3)));
+  const register = (i: Id) => k.call(CELL_OPS.itemPath, field(regsOf), int(i));
+  const changed = (v: Id, p: Id, x: Id) => k.call(CELL_OPS.changed, v, p, x);
+  const defs = {
+    pc: d("pc", ["x"], (x) => sh(changed(m0(), field(pcOf), int(x)))),
+    register: d("register", ["i", "x"], (i, x) => sh(changed(m0(), register(i), int(x)))),
+    both: d("both", ["i"], (i) => sh(changed(changed(m0(), field(pcOf), k.int(1)), register(i), k.int(0)))),
+    items: d("items", ["i", "x"], (i, x) => sh(changed(k.list(k.int(1), k.int(2)), k.call(CELL_OPS.itemPath, whole(), int(i)), int(x)))),
+    machines: d("machines", ["i", "x"], (i, x) => sh(changed(k.list(m0(), m0()), k.call(CELL_OPS.thenPath, k.call(CELL_OPS.itemPath, whole(), int(i)), field(pcOf)), int(x)))),
+    // A long list's item near its end: the walk to it in constant stack.
+    far: d("far", ["xs", "i", "x"], (xs, i, x) => sh(k.call(lib("item at"), changed(xs, k.call(CELL_OPS.itemPath, whole(), int(i)), int(x)), int(i), k.int(-1)))),
+    deep: d("deep", ["i", "j", "x"], (i, j, x) => sh(changed(k.list(m0(), m0()), k.call(CELL_OPS.itemPath, k.call(CELL_OPS.thenPath, k.call(CELL_OPS.itemPath, whole(), int(i)), field(regsOf)), int(j)), int(x)))),
+  };
+  const code = base(k.code);
+  const names = { ...baseNames(), ...k.names };
+  return { code, names, info: infer(code, names, undefined, checkOptions), defs };
+}
+export function changeInputs(): Record<string, unknown[][]> {
+  const is = [-1n, 0n, 1n, 2n, 3n, 9n];
+  return {
+    pc: [[7n], [-(2n ** 70n)]],
+    register: is.map((i) => [i, 20n]),
+    both: is.map((i) => [i]),
+    items: is.map((i) => [i, 9n]),
+    machines: is.map((i) => [i, 5n]),
+    deep: is.flatMap((i) => [[i, 1n, 8n], [i, 5n, 8n]]),
+    far: [[Array.from({ length: 200000 }, (_, i) => BigInt(i)), 199990n, 7n], [[], 0n, 7n]],
   };
 }
 

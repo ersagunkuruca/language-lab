@@ -50,7 +50,7 @@ import { dependencies, subtree } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { ARRAY, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, STRING, type Row, type Type } from "../../ters/src/lang/types.ts";
-import { ABORT, ABORT_OP, ALGEBRAIC_V, ARRAY_OPS, BOOL, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, ORDER_V, PAIR_V, RATIO, S, SHOW_ANY, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
+import { ABORT, ABORT_OP, ALGEBRAIC_V, ARRAY_OPS, BOOL, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, ORDER_V, PAIR_V, RATIO, S, SHOW_ANY, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
 import { liftLets } from "../../ters/src/lang/lift-lets.ts";
 import { inlineLists } from "./inline-lets.ts";
 import { STOPS } from "./stops.ts";
@@ -825,6 +825,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(id))}`);
           return { k: "world", ...WORLD_OPS[target], args: args(), t };
         }
+        if (opts.data && target === CELL_OPS.changed) return changed(n, id, env, f);
         if (target === S.valueOf && opts.data) return valueOf(n, id, env, f);
         if (target === S.oneOf && opts.data && n.args.length === 1) {
           const lt = stype(zonk(n.args[0]));
@@ -1764,6 +1765,87 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       k: "call", fn: gi, tail: true, args: [{ k: "field", rec: l, t: d, c: k, i: 1 }, { k: "new", t: d, c: k, args: [{ k: "field", rec: l, t: d, c: k, i: 0 }, { k: "local", i: 1 }] }],
     })) };
     return gi;
+  }
+  // changed(value, path, part) (L163, C100): the path is written out where
+  // it is used (path of a chain of fields, item path, then path), so the
+  // value is rebuilt along it: a field step makes the record again with
+  // that field changed, an item step a function of its own that walks the
+  // list to the item. A place that isn't there (an item past the end, a
+  // field of another case) leaves the value as it was, as cells.ts
+  // changeAt does.
+  type PathStep = { field: Id } | { item: Id };
+  function stepsOfPath(id: Id): PathStep[] {
+    const n = code.nodes[id], head = n?.kind === "call" ? code.nodes[n.fn] : undefined;
+    const op = head?.kind === "ref" ? head.target : undefined;
+    if (n?.kind === "call" && op === CELL_OPS.path && n.args.length === 1) {
+      const l = code.nodes[n.args[0]];
+      if (l?.kind === "lambda" && l.params.length === 1) {
+        const fields: PathStep[] = [];
+        let b = code.nodes[l.body];
+        for (; b?.kind === "call" && b.args.length === 1; b = code.nodes[b.args[0]]) {
+          const h = code.nodes[b.fn];
+          if (h?.kind !== "ref" || code.nodes[h.target]?.kind !== "field") break;
+          fields.unshift({ field: h.target });
+        }
+        if (b?.kind === "ref" && b.target === l.params[0]) return fields;
+      }
+    }
+    if (n?.kind === "call" && op === CELL_OPS.itemPath && n.args.length === 2) return [...stepsOfPath(n.args[0]), { item: n.args[1] }];
+    if (n?.kind === "call" && op === CELL_OPS.thenPath && n.args.length === 2) return [...stepsOfPath(n.args[0]), ...stepsOfPath(n.args[1])];
+    throw new Refused("changes a value at a path that isn't written out where it's used (a chain of fields and items)");
+  }
+  function changed(n: NodeOf<"call">, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
+    const t = stype(zonk(id)), xt = stype(zonk(n.args[2]));
+    if (!t || !xt) throw new Refused(`changes ${whyNot(zonk(t ? n.args[2] : id))}`);
+    const steps = stepsOfPath(n.args[1]);
+    // Each item's position is worked out once, before the value is rebuilt.
+    const lets: { i: number; value: SExpr }[] = [];
+    const keep = (e: SExpr, lt: LType): SExpr => { const i = f.locals.push(lt) - 1; lets.push({ i, value: e }); return { k: "local", i }; };
+    const v = keep(expr(n.args[0], env, f, false), t);
+    const at = steps.map((s) => ("item" in s ? keep(expr(s.item, env, f, false), "int") : null));
+    const x = keep(expr(n.args[2], env, f, false), xt);
+    const body = along(v, t, steps, at, x, xt, f);
+    return lets.reduceRight<SExpr>((e, l) => ({ k: "let", i: l.i, value: l.value, body: e }), body);
+  }
+  // v (a local) of type t with the place at steps changed to x. `at` holds
+  // the item steps' positions, as expressions g can read.
+  function along(v: SExpr, t: LType, steps: PathStep[], at: (SExpr | null)[], x: SExpr, xt: LType, g: SFunc): SExpr {
+    if (!steps.length) return x;
+    const [s, ...rest] = steps, inner = (part: SExpr, pt: LType): SExpr => {
+      const i = g.locals.push(pt) - 1;
+      return { k: "let", i, value: part, body: along({ k: "local", i }, pt, rest, at.slice(1), x, xt, g) };
+    };
+    if ("field" in s) {
+      const fi = fieldIndex(code, s.field);
+      if (isRecord(t)) return { k: "make", t, args: t.fields.map((fl, j) => (j === fi ? inner({ k: "get", rec: v, t, i: j }, fl.t) : { k: "get", rec: v, t, i: j })) };
+      if (isData(t)) {
+        const c = t.cases.findIndex((cs) => (code.nodes[cs.variant] as NodeOf<"variant">).fields.includes(s.field));
+        if (c < 0) throw new Refused(`changes ${nm(s.field)} of a value without it`);
+        const sl = g.locals.push(t) - 1, sv: SExpr = { k: "local", i: sl };
+        const arms = t.cases.map((cs, k): SExpr => (k !== c ? sv : { k: "new", t, c, args: cs.fields.map((fl, j) => (j === fi ? inner({ k: "field", rec: sv, t, c, i: j }, fl.t) : { k: "field", rec: sv, t, c, i: j })) }));
+        return { k: "case", scrut: v, s: sl, t, arms, result: t };
+      }
+      throw new Refused(`changes ${nm(s.field)} of something that isn't a record`);
+    }
+    const ci = isData(t) ? t.cases.findIndex((c) => c.variant === CONS) : -1;
+    if (!isData(t) || ci < 0) throw new Refused("changes an item of something that isn't a List");
+    // A function of its own: the list, the position, the later positions
+    // and the part; it walks to the item and makes the list again up to it.
+    const later = at.slice(1).filter((a): a is SExpr => !!a);
+    const params: LType[] = [t, "int", ...later.map(() => "int" as LType), xt];
+    const h: SFunc = { def: t.def, name: `${t.name}.changed`, params, result: t, locals: [...params], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
+    const hi = funcs.push(h) - 1;
+    const loc = (i: number): SExpr => ({ k: "local", i }), l = loc(0), pos = loc(1);
+    let p = 2;
+    const at2 = at.slice(1).map((a) => (a ? loc(p++) : null)), x2 = loc(p);
+    const item = t.cases[ci].fields[0].t, sl = h.locals.push(t) - 1, cell: SExpr = loc(sl);
+    const head: SExpr = { k: "field", rec: cell, t, c: ci, i: 0 }, tl: SExpr = { k: "field", rec: cell, t, c: ci, i: 1 };
+    const hl = h.locals.push(item) - 1;
+    const here: SExpr = { k: "let", i: hl, value: head, body: { k: "new", t, c: ci, args: [(() => { const r = along(loc(hl), item, rest, at2, x2, xt, h); return r; })(), tl] } };
+    const on: SExpr = { k: "new", t, c: ci, args: [head, { k: "call", fn: hi, args: [tl, { k: "rt", fn: "int.sub", args: [pos, { k: "int", v: 1n }] }, ...at2.filter((a): a is SExpr => !!a), x2], tail: false }] };
+    const less = (y: bigint): SExpr => ({ k: "rt", fn: "int.less", args: [pos, { k: "int", v: y }] });
+    h.body = { k: "case", scrut: l, s: sl, t, result: t, arms: t.cases.map((_, k): SExpr => (k !== ci ? l : { k: "if", cond: less(0n), then: l, else: { k: "if", cond: less(1n), then: here, else: on, t }, t })) };
+    return { k: "call", fn: hi, args: [v, at[0]!, ...later, x], tail: false };
   }
   // value of(o): o's value if it's some, no answer if it's none.
   function valueOf(n: NodeOf<"call">, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
