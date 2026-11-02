@@ -523,7 +523,8 @@ give it one type. Before anything runs, the read becomes a generated match
 with one arm per case that has the field (`src/lang/shared-fields.ts`), so
 every target runs what it already runs. `set((i) ↦ i.to, instr, 9)` is
 the instruction with its `to` changed, and likewise has no answer on a
-case without it (the field alone for now, not a path through it).
+case without it. A path through it works too: `set((g) ↦ g.to.line, g,
+9)` changes the line of the spot on the case that has a `to` (L168b).
 Haskell's record fields across constructors are the prior
 art, though they throw on a case without the field
 (SHARED-FIELDS-2026-11-02.md; `test/shared-fields.test.ts`).
