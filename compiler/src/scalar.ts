@@ -1089,7 +1089,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   // show's text (run.ts showValue with asNumber, which compiled JS's
   // $showAny is) of a value of type t: numbers as show writes them, Bools
   // and cases by their names, a list as [a, b], a tuple as (a, b), a
-  // fraction as 1/3, an Extended as its number or −∞ and +∞ (C91).
+  // fraction as 1/3, an Extended as its number or −∞ and +∞ (C97).
   function shown(x: SExpr, t: LType, f: SFunc, tail: boolean): SExpr {
     if (t === "f64") return { k: "rt", fn: "number.show", args: [x] };
     if (t === "int") return { k: "rt", fn: "int.show", args: [x] };

@@ -134,3 +134,31 @@ test("holes of a generic + show their type without the where clause", () => {
   assert.ok(text.includes("□"), text);
   assert.doesNotMatch(text, /□[^□]*where[^□]*□/s);
 });
+
+// A list written in place as a definition's one List input reads as its
+// inputs, sum(1, 2, 3), and reads back the same (E166b); a name with
+// another meaning keeps its brackets.
+test("a list in place reads as the call's inputs", async () => {
+  const { Lang } = await import("../src/lang/dsl.ts");
+  const { LIBRARY } = await import("../src/lang/library.ts");
+  const { base, baseNames, checkOptions } = await import("../src/lang/load.ts");
+  const { readFileSync } = await import("node:fs");
+  const { fillValue } = await import("../../editor/typed.ts");
+  const lib = (name: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === name)!;
+  const k = new Lang(LIBRARY.code);
+  const total = k.def("total"), len = k.def("len");
+  k.define(total, k.call(lib("sum"), k.list(k.lit(1), k.lit(2), k.lit(3))));
+  k.define(len, k.call(lib("length"), k.list(k.lit(1), k.lit(2))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  const pres = { names, comments: {}, hints: {}, style: JSON.parse(readFileSync(join(root, "styles", "blocks.json"), "utf8")) };
+  const text = (d: string) => renderBlocks(code, pres, info, d).split("\n").slice(1).join(" ").trim();
+  assert.match(text(total), /sum\(1, 2, 3\)/);
+  assert.match(text(len), /length\(\[1, 2\]\)/);
+  const hole = k.def("again");
+  let h = "";
+  k.define(hole, k.fn([], () => (h = k.hole())));
+  const c2 = base(k.code), n2 = baseNames(k.names);
+  const r = fillValue(c2, n2, infer(c2, n2), h, "sum(1, 2, 3)", hole);
+  assert.ok(r.ok, !r.ok ? r.reason : "");
+});

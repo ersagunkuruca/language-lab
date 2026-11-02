@@ -434,7 +434,7 @@ test("compare and sort in C: the evaluator's order on every plain type, and ever
   sameAndFreed(build(lowered), calls, (i, xs) => first(r.call(r.value(lowered.funcs[i].def), ...xs))!, (i) => lowered.funcs[i].name);
 });
 
-test("show in C: the evaluator's text on every plain type, and every cell freed (C91)", { skip }, () => {
+test("show in C: the evaluator's text on every plain type, and every cell freed (C97)", { skip }, () => {
   const p = shows();
   const lowered = lowerScalar(p.code, p.info, p.names, Object.values(p.defs), { data: true });
   const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });

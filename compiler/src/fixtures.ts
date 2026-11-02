@@ -515,7 +515,7 @@ export function ordered() {
   return { code, names, info: infer(code, names, undefined, checkOptions), defs };
 }
 
-// show on every plain type WebAssembly and C take (C91): what the
+// show on every plain type WebAssembly and C take (C97): what the
 // evaluator writes, numbers as numbers, cases by their names.
 export function shows() {
   const k = new Lang(LIBRARY.code);

@@ -784,7 +784,7 @@ test("compare and sort in WebAssembly: the evaluator's order on every plain type
   }
 });
 
-test("show in WebAssembly: the evaluator's text on every plain type, a long list in constant stack (C91)", async () => {
+test("show in WebAssembly: the evaluator's text on every plain type, a long list in constant stack (C97)", async () => {
   const p = shows();
   assert.deepEqual(p.info.errors, []);
   const lowered = lowerScalar(p.code, p.info, p.names, Object.values(p.defs), { data: true });
