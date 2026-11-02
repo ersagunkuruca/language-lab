@@ -15,7 +15,7 @@ import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { makeRunner } from "../../ters/src/lang/run.ts";
-import { DUAL_V, FIXED_V, SHOW_ANY, TRIG_UNPOLAR } from "../../ters/src/lang/std.ts";
+import { DUAL_V, FIXED_V, INT_OPS, SHOW_ANY, TRIG_UNPOLAR } from "../../ters/src/lang/std.ts";
 import { compile } from "../src/compile.ts";
 
 const runtime = pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href;
@@ -85,5 +85,36 @@ test("results bound together share their work, and give what the evaluator gives
     const ev = r.call(r.value(at(n)), (n === "fixed both" ? Math.round(a * 2 ** 32) : a) as never, (n === "fixed both" ? Math.round(b * 2 ** 32) : b) as never);
     const want = [...(ev as Iterable<unknown>)][0] ?? ev;
     assert.deepEqual(out[n](n === "fixed both" ? Math.round(a * 2 ** 32) : a, n === "fixed both" ? Math.round(b * 2 ** 32) : b), want, `${n}(${a}, ${b})`);
+  }
+});
+
+// C69: below where the results part, a value written with the operands of
+// a commutative operation in the other order (`a·a + b·b` and `b·b + a·a`)
+// is the same value, worked out once (results.ts `same`, L132's COMMUTES).
+test("a shared value is found with its operands in either order (C69)", async () => {
+  const k = new Lang(LIBRARY.code);
+  const I = INT_OPS, sq = (a: Id) => k.call(I.mul, a, a);
+  const parts = k.def("parts");
+  let p: Id[] = [];
+  k.define(parts, k.fn(["a", "b", "s", "t"], (a, b, s, t) => (p = [a, b, s, t], k.and(
+    k.equal(s, k.call(I.add, sq(a), sq(b))),
+    k.equal(t, k.call(I.add, k.call(I.add, sq(b), sq(a)), k.int(1)))))));
+  k.results(parts, "s", "t");
+  const both = k.def("both");
+  k.define(both, k.fn(["a", "b"], (a, b) => k.solve(parts, { [p[0]]: a, [p[1]]: b, out: k.true }, { [p[2]]: "s", [p[3]]: "t" }, ({ [p[2]]: s, [p[3]]: t }) =>
+    k.text(k.call(SHOW_ANY, s), k.lit(" "), k.call(SHOW_ANY, t)))));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const js = compile(code, info, names, { runtime, exports: ["both"] });
+  const fused = /function parts_s_s_and_t\([^)]*\) \{[\s\S]*?\n\}/.exec(js)![0];
+  assert.equal(fused.match(/\$int\.add\(/g)?.length, 2, fused);
+  const path = join(mkdtempSync(join(tmpdir(), "results-")), "commutes.js");
+  writeFileSync(path, js);
+  const out = (await import(pathToFileURL(path).href)).defs as Record<string, (a: number, b: number) => unknown>;
+  const r = makeRunner(code, info, { print: () => {}, names });
+  const at = code.defs.find((d) => names[d] === "both")!;
+  for (const [a, b] of [[3, 4], [-2, 7], [0, 0]]) {
+    const ev = r.call(r.value(at), BigInt(a) as never, BigInt(b) as never);
+    assert.deepEqual(out.both(a, b), [...(ev as Iterable<unknown>)][0] ?? ev, `both(${a}, ${b})`);
   }
 });

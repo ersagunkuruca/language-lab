@@ -29,6 +29,7 @@ import type { Names } from "../../ters/src/presentation.ts";
 import { PAIR_V, TRUE } from "../../ters/src/lang/std.ts";
 import { computedForward, givenBy } from "../../ters/src/lang/directions.ts";
 import { planSolve } from "../../ters/src/lang/solve.ts";
+import { COMMUTES } from "../../ters/src/lang/modules.ts";
 
 export function solvesAsCalls(code: Code, names: Names): { code: Code; names: Names; expanded: Id[] } {
   const out: Code = { nodes: { ...code.nodes }, defs: [...code.defs] };
@@ -95,6 +96,7 @@ export function solvesAsCalls(code: Code, names: Names): { code: Code; names: Na
   };
   // a and b do the same, b's binders standing for a's (m, then the
   // context's subA and subB).
+  const commutes = (f: Id) => { const r = code.nodes[f], t = r?.kind === "ref" ? code.nodes[r.target] : undefined; return t?.kind === "builtin" && COMMUTES.has(t.op); };
   const same = (a: Id, b: Id, subA: Map<Id, Id>, subB: Map<Id, Id>, m = new Map<Id, Id>()): boolean => {
     const x = code.nodes[a], y = code.nodes[b];
     if (!x || !y || x.kind !== y.kind) return a === b;
@@ -103,7 +105,18 @@ export function solvesAsCalls(code: Code, names: Names): { code: Code; names: Na
     switch (x.kind) {
       case "lit": { const z = y as typeof x; return x.value === z.value && JSON.stringify(x.unit) === JSON.stringify(z.unit) && x.of === z.of; }
       case "ref": { const t = (y as typeof x).target; return (subA.get(x.target) ?? x.target) === (m.get(t) ?? subB.get(t) ?? t); }
-      case "call": { const z = y as typeof x; return same(x.fn, z.fn, subA, subB, m) && all(x.args, z.args); }
+      case "call": {
+        const z = y as typeof x;
+        if (!same(x.fn, z.fn, subA, subB, m)) return false;
+        if (x.args.length !== 2 || !commutes(x.fn)) return all(x.args, z.args);
+        // Operands of an operation that commutes, in either order (C69):
+        // `a·a + b·b` and `b·b + a·a` are one value.
+        const tried = new Map(m);
+        if (all(x.args, z.args)) return true;
+        m.clear();
+        tried.forEach((v, k) => m.set(k, v));
+        return all(x.args, [z.args[1], z.args[0]]);
+      }
       case "lambda": { const z = y as typeof x; return binds(x.params, z.params) && same(x.body, z.body, subA, subB, m); }
       case "match": { const z = y as typeof x; return same(x.scrutinee, z.scrutinee, subA, subB, m) && all(x.arms, z.arms) && (x.otherwise === null ? z.otherwise === null : z.otherwise !== null && same(x.otherwise, z.otherwise, subA, subB, m)); }
       case "fold": { const z = y as typeof x; return same(x.scrutinee, z.scrutinee, subA, subB, m) && all(x.arms, z.arms); }
