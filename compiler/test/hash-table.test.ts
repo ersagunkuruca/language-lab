@@ -18,7 +18,7 @@ import { runMain } from "../../ters/src/lang/run.ts";
 import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { withLibraryRepresentations } from "../../ters/src/lang/library-reps.ts";
-import { CONS, INT_OPS, NIL, S, SHOW_ANY } from "../../ters/src/lang/std.ts";
+import { CONS, INT_OPS, NIL, PAIR_V, S, SHOW_ANY } from "../../ters/src/lang/std.ts";
 import type { Id } from "../../ters/src/model.ts";
 import { compile } from "../src/compile.ts";
 import { $setPrint } from "../src/runtime.js";
@@ -28,9 +28,11 @@ const L = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY.names
 // Counts n keys (Ints, or Float64s with `floats`), then shows the count,
 // a few lookups and whether keys are there. With `old`, it also keeps the
 // map before one more put and shows both.
-function program(n: number, opts: { floats?: boolean; old?: boolean; remove?: boolean; list?: boolean } = {}) {
+function program(n: number, opts: { floats?: boolean; old?: boolean; remove?: boolean; list?: boolean; pairs?: boolean } = {}) {
   const k = new Lang(LIBRARY.code);
-  const key = (i: Id) => opts.floats ? k.call(B.mul, k.call(S.mod, i, k.lit(37)), k.lit(0.5)) : k.call(INT_OPS.shiftDown, i, k.int(1));
+  // With `pairs`, a key is (i ÷ 8, i ÷ 32 shown): a pair of an Int and a Text (C63f).
+  const pairKey = (i: Id) => k.call(PAIR_V, k.call(INT_OPS.shiftDown, i, k.int(3)), k.call(SHOW_ANY, k.call(INT_OPS.shiftDown, i, k.int(5))));
+  const key = (i: Id) => opts.pairs ? pairKey(i) : opts.floats ? k.call(B.mul, k.call(S.mod, i, k.lit(37)), k.lit(0.5)) : k.call(INT_OPS.shiftDown, i, k.int(1));
   const counts = k.def("counts");
   k.define(counts, k.fold(opts.floats ? k.call(S.range, k.lit(n)) : k.call(INT_OPS.range, k.int(n)), [
     { variant: NIL, names: [], body: () => k.x(L("empty map")) },
@@ -39,7 +41,7 @@ function program(n: number, opts: { floats?: boolean; old?: boolean; remove?: bo
   ]));
   const show = (x: Id) => k.call(S.print, k.call(SHOW_ANY, x));
   const at = (m: Id, x: Id) => k.call(S.first, k.thunk(() => k.call(L("value at"), m, x)), k.thunk(() => k.int(-1)));
-  const probe = opts.floats ? k.lit(2.5) : k.int(5);
+  const probe = opts.pairs ? pairKey(k.int(7)) : opts.floats ? k.lit(2.5) : k.int(5);
   const main = k.def("main");
   k.define(main, k.thunk(() => k.let("m", k.x(counts), (m) => k.seq(
     show(k.call(L("map size"), m)),
@@ -88,6 +90,26 @@ test("a map listed once after its puts and lookups in a loop is a hash table too
 test("where there is no host Map (WebAssembly, C), or its keys are Float64s, it keeps the tree", () => {
   assert.deepEqual(chosen(program(300), false).chosen, ["Map as weight-balanced tree"]);
   assert.deepEqual(chosen(program(300, { floats: true })).chosen, ["Map as weight-balanced tree"]);
+});
+
+// C63f: keys that are tuples of Ints and Texts are held by their
+// spelling, and come out in compare's order.
+test("a map keyed by pairs of an Int and a Text is a hash table too, evaluated and compiled as the definition prints (C63f)", async () => {
+  const p = program(300, { pairs: true, old: true, remove: true, list: true });
+  const c = chosen(p);
+  assert.deepEqual(c.chosen, ["Map as hash table"]);
+  const want = printed(p.code, p.names, p.main).lines;
+  const { lines, info } = printed(c.code, c.names, p.main, c.insiders);
+  assert.deepEqual(lines, want);
+  assert.equal(want[0], "38");
+  const source = compile(c.code, info, c.names, { runtime: pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href, exports: ["main"] });
+  const file = join(mkdtempSync(join(tmpdir(), "hash-pairs-")), "counts.js");
+  writeFileSync(file, source);
+  const defs = (await import(pathToFileURL(file).href)).defs as Record<string, () => void>;
+  const got: string[] = [];
+  $setPrint((s: string) => got.push(s));
+  defs.main();
+  assert.deepEqual(got, lines);
 });
 
 // C71: the old version, read after a put and a remove on it, still says
