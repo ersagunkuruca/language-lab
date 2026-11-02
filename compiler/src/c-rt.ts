@@ -402,6 +402,26 @@ const FNS: Record<string, Fn> = {
   lab_drop(a); lab_drop(b);
   return t;
 }` },
+  // A Text shown, quoted as JSON.stringify quotes it (run.ts showValue, C102).
+  "text.quoted": {
+    uses: [],
+    c: `static lab_cell *lab_text_quoted(lab_cell *t) {
+  static const char hex[] = "0123456789abcdef";
+  const uint8_t *b = LAB_TB(t); uint32_t n = LAB_TN(t); size_t m = 2;
+  for (uint32_t i = 0; i < n; i++) { uint8_t c = b[i]; m += c == '"' || c == '\\\\' || c == '\\b' || c == '\\f' || c == '\\n' || c == '\\r' || c == '\\t' ? 2 : c < 32 ? 6 : 1; }
+  lab_cell *r = lab__text(m);
+  uint8_t *o = (uint8_t *)LAB_TB(r);
+  *o++ = '"';
+  for (uint32_t i = 0; i < n; i++) {
+    uint8_t c = b[i], e = c == '"' ? '"' : c == '\\\\' ? '\\\\' : c == '\\b' ? 'b' : c == '\\f' ? 'f' : c == '\\n' ? 'n' : c == '\\r' ? 'r' : c == '\\t' ? 't' : 0;
+    if (e) { *o++ = '\\\\'; *o++ = e; }
+    else if (c < 32) { *o++ = '\\\\'; *o++ = 'u'; *o++ = '0'; *o++ = '0'; *o++ = hex[c >> 4]; *o++ = hex[c & 15]; }
+    else *o++ = c;
+  }
+  *o = '"';
+  lab_drop(t);
+  return r;
+}` },
   "text.length": { uses: [], c: `static lab_int lab_text_length(lab_cell *t) { int64_t k = 0; for (uint32_t i = 0; i < LAB_TN(t); i++) k += (LAB_TB(t)[i] & 0xC0) != 0x80; lab_drop(t); return LAB_SMALL(k); }` },
   "text.size": { uses: [], c: `static int32_t lab_text_size(lab_cell *t) { int32_t n = (int32_t)LAB_TN(t); lab_drop(t); return n; }` },
   "text.before": { uses: [], c: `static int32_t lab_text_before(lab_cell *t, int32_t i) { int32_t r = (int32_t)lab__back(LAB_TB(t), (uint32_t)i); lab_drop(t); return r; }` },

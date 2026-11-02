@@ -536,6 +536,8 @@ export function shows() {
     fractions: d("fractions", ["a", "b"], (a, b) => sh(k.call(lib("fraction"), a, b))),
     complexes: d("complexes", ["x", "y"], (x, y) => sh(k.call(COMPLEX_V, x, y))),
     extendeds: d("extendeds", ["x"], (x) => sh(k.if(below(x, -1), k.x(EXTENDED_V.minus), k.if(below(x, 1), k.call(EXTENDED_V.finite, x), k.x(EXTENDED_V.plus))))),
+    // A Text quoted as JSON.stringify quotes it (C102), alone and in a list.
+    texts: d("texts", ["t"], (t) => sh(k.list(k.call(S.concat, t, k.lit("")), k.lit("x")))),
   };
   const code = base(k.code);
   const names = { ...baseNames(), ...k.names };
@@ -557,6 +559,7 @@ export function showInputs(): Record<string, unknown[][]> {
     fractions: [[1n, 3n], [6n, -4n], [4n, 2n], [0n, 5n], [1n, 0n], [2n ** 64n, 3n]],
     complexes: [[1, 2], [0.5, -1.5], [-0, -0], [0, 1e21]],
     extendeds: [[-3], [-0.25], [0], [0.5], [7]],
+    texts: [[""], ['say "hi" \\ bye'], ["\b\f\n\r\t"], ["\u0000\u0001\u001f\u007f"], ["héllo 🎉"]],
   };
 }
 

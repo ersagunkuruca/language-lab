@@ -1117,7 +1117,8 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     if (t === "f64") return { k: "rt", fn: "number.show", args: [x] };
     if (t === "int") return { k: "rt", fn: "int.show", args: [x] };
     if (t === "i32") return { k: "if", cond: x, then: { k: "text", v: nm(TRUE) }, else: { k: "text", v: nm(FALSE) }, t: "text" };
-    if (t === "text") throw new Refused("shows a Text, quoted (not in WebAssembly and C yet)");
+    // Quoted as JSON.stringify quotes it (run.ts showValue, C102).
+    if (t === "text") return { k: "rt", fn: "text.quoted", args: [x] };
     if (t === "int32" || isFn(t) || isArray(t)) throw new Refused(`shows ${isFn(t) ? "a function" : isArray(t) ? "an array" : "an Int in 32 bits"} (not in WebAssembly and C yet)`);
     return { k: "call", fn: showing(t), args: [x], tail };
   }
