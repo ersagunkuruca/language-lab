@@ -175,10 +175,17 @@ export function changesPublished(code: Code): Id | null {
   return n ? n.id.split(":")[0] : null;
 }
 
+// The check an edit was guarded with, for the editor to draw the edited
+// program from instead of checking it again (I136): the same code under
+// the same pins.
+let lastGuard: { code: Code; pins: Pins; info: Info } | null = null;
+export const guardedInfo = (code: Code, pins: Pins): Info | null => (lastGuard?.code === code && lastGuard.pins === pins ? lastGuard.info : null);
+
 export function guardTyped(before: Info, code: Code, names: Names, select: Id | undefined, note: string): TEdit {
   const lib = changesPublished(code);
   if (lib) return { ok: false, reason: `${names[lib] ?? display[lib] ?? "that"} is published in a module: it is named by what it says, so it can't change` };
   const after = infer(code, { ...display, ...names });
+  lastGuard = { code, pins: programPins, info: after };
   if (after.errors.length > before.errors.length) { const e = nearest(code, after.errors, select); return { ok: false, reason: e.message, ...(e.missing ? { missing: e.missing } : {}) }; }
   return { ok: true, code, names, select, note };
 }
