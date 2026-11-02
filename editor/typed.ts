@@ -20,7 +20,7 @@ import { partNamed } from "../ters/src/lang/results.ts";
 import { planSolve } from "../ters/src/lang/solve.ts";
 import { solveMode } from "../ters/src/lang/modes.ts";
 import { ARITH, ASSOCIATIVE, CONS, FALSE, NIL, S, SIGS, TRUE, TUPLE_MAX, tuplePart, tupleVariant } from "../ters/src/lang/std.ts";
-import { INT, NUMBER, RATIONAL_TYPE, STRING, schemeArith, showIn, showType, type Type } from "../ters/src/lang/types.ts";
+import { ALGEBRAIC_TYPE, FIXED_TYPE, INT, NUMBER, RATIONAL_TYPE, STRING, schemeArith, showIn, showType, type Type } from "../ters/src/lang/types.ts";
 import { ratioParts, read as readInt } from "../ters/src/lang/int.ts";
 import { DEF_VALUE, type Value } from "../ters/src/lang/run.ts";
 import { parseValue } from "../ters/src/lang/values.ts";
@@ -486,28 +486,38 @@ function narrow(code: Code, info: Info, top: Typed): Typed {
 // type come last (E175): an input whose value's type is still a variable
 // (a parameter nothing uses yet, a definition still a stub), at a meaning
 // whose own input there is a fixed type.
+const EXOTIC: Id[] = [FIXED_TYPE, RATIONAL_TYPE, ALGEBRAIC_TYPE];
 const fromLibrary = (id: Id) => !!LIBRARY.code.nodes[id] || !!SIGS[id];
 function leaveOpen(info: Info, t: Typed): Typed {
   const open = (x: Typed): boolean => {
-    const ty = "ref" in x ? info.typeOf.get(x.ref) : "op" in x && !SIGS[x.op] ? info.typeOf.get(x.op) : undefined;
+    // A builtin's own type: n + 1 is as open as n's (E226).
+    const sig = "op" in x && SIGS[x.op] ? sigType(info, x.op) : undefined, s = sig ? sigSubst(info) : info.subst;
+    const ty = "ref" in x ? info.typeOf.get(x.ref) : "op" in x ? sig ?? info.typeOf.get(x.op) : undefined;
     if (!ty) return false;
-    const r = info.subst.resolve(ty);
-    const out = "op" in x ? (r.t === "fn" ? info.subst.resolve(r.ret) : null) : r;
+    const r = s.resolve(ty);
+    const out = "op" in x ? (r.t === "fn" ? s.resolve(r.ret) : null) : r;
     return out?.t === "var";
   };
   // Fixed: a type, or a variable held to numbers or a record of them
   // (builtin total), which tumble's own total(board) shouldn't give way
   // to. Plain data alone (show for any value) leaves it open.
-  const fixedAt = (op: Id, i: number): boolean => {
+  const paramAt = (op: Id, i: number) => {
     const sig = SIGS[op] ? sigType(info, op) : undefined;
     const s = sig ? sigSubst(info) : info.subst;
     const ty = sig ?? info.typeOf.get(op);
     const r = ty && s.resolve(ty);
     // An input past its last (html's one-input div read for a program's
     // two-input div) fixes nothing (E218).
-    const p = r?.t === "fn" && i < r.params.length ? s.resolve(r.params[i]) : undefined;
+    return { s, p: r?.t === "fn" && i < r.params.length ? s.resolve(r.params[i]) : undefined };
+  };
+  const fixedAt = (op: Id, i: number): boolean => {
+    const { s, p } = paramAt(op, i);
     return !!p && (p.t === "con" || (p.t === "var" && (s.numbers.has(p.v) || s.arith.has(p.v))));
   };
+  // A number type no one asked for (E226): as float64 of a count nothing
+  // has settled is Int's or Float64's, not Fixed's, Rational's or
+  // Algebraic's, which would make the program count in those.
+  const exoticAt = (op: Id, i: number): boolean => { const { p } = paramAt(op, i); return p?.t === "con" && EXOTIC.includes(p.id); };
   if ("params" in t) return { ...t, body: leaveOpen(info, t.body) };
   if ("cond" in t) return { cond: leaveOpen(info, t.cond), then: leaveOpen(info, t.then), else: leaveOpen(info, t.else) };
   if ("let" in t) return { ...t, be: leaveOpen(info, t.be), rest: leaveOpen(info, t.rest) };
@@ -517,7 +527,8 @@ function leaveOpen(info: Info, t: Typed): Typed {
   const settles = (op: Id) => args.filter((a, i) => open(a) && fixedAt(op, i)).length;
   // The program's own meaning before the library's whatever it settles
   // (E220: clinic's div(n, top), not html's div).
-  const alts = t.alts.map((op, k) => ({ op, k, n: settles(op), lib: +fromLibrary(op) })).sort((a, b) => a.lib - b.lib || a.n - b.n || a.k - b.k).map((x) => x.op);
+  const exotic = (op: Id) => args.filter((a, i) => open(a) && exoticAt(op, i)).length;
+  const alts = t.alts.map((op, k) => ({ op, k, n: settles(op), x: exotic(op), lib: +fromLibrary(op) })).sort((a, b) => a.lib - b.lib || a.x - b.x || a.n - b.n || a.k - b.k).map((x) => x.op);
   return { op: alts[0], args, alts };
 }
 
