@@ -80,6 +80,7 @@ Each note says why, then gives the plan as steps; each step is a backlog row.
 | [REPRESENTATIONS.md](design/data/REPRESENTATIONS.md) | How a value is stored, written in the language; the compiler chooses, never the program | partly built (L108; laws after T7) |
 | [DATA-STRUCTURES.md](design/data/DATA-STRUCTURES.md) | Maps, sets and more as meanings with representations | partly built (Map and Set; L61) |
 | [STABLE-REFERENCES.md](design/data/STABLE-REFERENCES.md) | Cells that own their value, edits at a path, tracked reads, memory layout | partly built (L98, L99; C56 to C61) |
+| [SHARED-FIELDS-2026-11-02.md](design/data/SHARED-FIELDS-2026-11-02.md) | A field several cases of a type share: read as a Choice, set where present (L168) | design only |
 | [IN-PLACE.md](design/data/IN-PLACE.md) | Changing a value in place when it has one holder, invisibly | proposal (C62, C63) |
 
 ### Relations, patterns and effects
@@ -154,7 +155,7 @@ Kept as written; the newer document is named in each.
 
 | kind | documents |
 |---|---|
-| Whole-project reviews | [REVIEW-2026-10-22b](reports/reviews/REVIEW-2026-10-22b.md), [REVIEW-2026-10-26](reports/reviews/REVIEW-2026-10-26.md), [REVIEW-2026-11-01](reports/reviews/REVIEW-2026-11-01.md), [REVIEW-2026-11-01b](reports/reviews/REVIEW-2026-11-01b.md), [REVIEW-2026-11-02](reports/reviews/REVIEW-2026-11-02.md), [REVIEW-2026-11-02b](reports/reviews/REVIEW-2026-11-02b.md) (the editor), [REVIEW-2026-11-02c](reports/reviews/REVIEW-2026-11-02c.md) |
+| Whole-project reviews | [REVIEW-2026-10-22b](reports/reviews/REVIEW-2026-10-22b.md), [REVIEW-2026-10-26](reports/reviews/REVIEW-2026-10-26.md), [REVIEW-2026-11-01](reports/reviews/REVIEW-2026-11-01.md), [REVIEW-2026-11-01b](reports/reviews/REVIEW-2026-11-01b.md), [REVIEW-2026-11-02](reports/reviews/REVIEW-2026-11-02.md), [REVIEW-2026-11-02b](reports/reviews/REVIEW-2026-11-02b.md) (the editor), [REVIEW-2026-11-02c](reports/reviews/REVIEW-2026-11-02c.md), [REVIEW-2026-11-02d](reports/reviews/REVIEW-2026-11-02d.md) (the language as machine and board use it) |
 | Language and effects reviews | [LANGUAGE-REVIEW-2026-10-24](reports/reviews/LANGUAGE-REVIEW-2026-10-24.md), [EFFECTS-REVIEW-2026-10-24](reports/reviews/EFFECTS-REVIEW-2026-10-24.md), [LANGUAGE-NEEDS-2026-10-24](reports/reviews/LANGUAGE-NEEDS-2026-10-24.md) |
 | Writing a program in the editor | [WRITING-2026-10-27](reports/reviews/WRITING-2026-10-27.md) |
 | Demos that look for gaps | [CLIFFORD-DEMOS-2026-10-31](reports/CLIFFORD-DEMOS-2026-10-31.md) |
