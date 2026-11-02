@@ -29,6 +29,15 @@ export function writtenRow(effects: readonly Id[] = []): Row {
   return effects.length === 1 && NAMED_ROWS.has(effects[0]) ? { effs, tail: null, name: effects[0] } : { effs, tail: null };
 }
 
+// A data type's row parameter (BACKLOG L149, Koka's effect-polymorphic
+// data): `Branch r e`, whose `resume : () -[Await, e]-> Branch r e`. A type
+// argument is a type, so the row stands in one as a function type that only
+// carries it, `() -[e]-> ·`: two Branches unify their carriers, so their
+// rows. Shown as the row alone, `[Console, e]`.
+export const ROW_CARRIER = "std.row";
+export const rowCarrier = (eff: Row): Type => ({ t: "fn", params: [], ret: { t: "con", id: ROW_CARRIER, args: [] }, eff });
+export const isRowCarrier = (t: Type): boolean => t.t === "fn" && !t.params.length && t.ret.t === "con" && t.ret.id === ROW_CARRIER;
+
 // The effects. Ids, like everything else; names are presentation.
 export const CHOICE = "effect.choice";
 export const CONSOLE = "effect.console";
@@ -579,6 +588,15 @@ export function showType(t: Type, names: Names, arith?: ReadonlyMap<number, Arit
   count(t);
   const tailNames = new Map<number, string>();
   const name = (id: Id) => names[id] ?? id;
+  const rowText = (eff: Row): string[] => {
+    const effs = eff.effs.map((e) => { const xs = eff.args?.[e]; return xs?.length ? `${name(e)} ${xs.map((a) => (a.t === "con" && a.args.length) || a.t === "fn" ? `(${go(a, true)})` : go(a, true)).join(" ")}` : name(e); });
+    const tail = eff.tail === null ? null : tailOf(eff.tail);
+    if (tail !== null && (tailCount.get(tail) ?? 0) > 1) {
+      if (!tailNames.has(tail)) tailNames.set(tail, `e${tailNames.size ? tailNames.size + 1 : ""}`);
+      effs.push(tailNames.get(tail)!);
+    }
+    return effs;
+  };
   const go = (t: Type, nested: boolean): string => {
     if (t.t === "var") {
       if (!varNames.has(t.v)) varNames.set(t.v, LETTERS[varNames.size % 26]);
@@ -589,17 +607,12 @@ export function showType(t: Type, names: Names, arith?: ReadonlyMap<number, Arit
       // A tuple (L128): its parts side by side.
       if (/^std\.tuple\d$/.test(t.id)) return `(${t.args.map((a) => go(a, false)).join(", ")})`;
       // A tuple argument has its own parentheses: List (a, b).
-      return `${name(t.id)} ${t.args.map((a) => (a.t === "con" && a.args.length && !/^std\.tuple\d$/.test(a.id)) || a.t === "fn" ? `(${go(a, true)})` : go(a, true)).join(" ")}`;
+      return `${name(t.id)} ${t.args.map((a) => a.t === "fn" && isRowCarrier(a) ? `[${rowText(a.eff).join(", ")}]` : (a.t === "con" && a.args.length && !/^std\.tuple\d$/.test(a.id)) || a.t === "fn" ? `(${go(a, true)})` : go(a, true)).join(" ")}`;
     }
     const named = t.eff.name !== undefined && t.eff.tail === null && NAMED_ROWS.get(t.eff.name);
     if (named && named.length === t.eff.effs.length && named.every((e) => t.eff.effs.includes(e)) && !Object.keys(t.eff.args ?? {}).length)
       return `(${t.params.map((p) => go(p, false)).join(", ")}) -[${name(t.eff.name!)}]-> ${go(t.ret, false)}`;
-    const effs = t.eff.effs.map((e) => { const xs = t.eff.args?.[e]; return xs?.length ? `${name(e)} ${xs.map((a) => (a.t === "con" && a.args.length) || a.t === "fn" ? `(${go(a, true)})` : go(a, true)).join(" ")}` : name(e); });
-    const tail = t.eff.tail === null ? null : tailOf(t.eff.tail);
-    if (tail !== null && (tailCount.get(tail) ?? 0) > 1) {
-      if (!tailNames.has(tail)) tailNames.set(tail, `e${tailNames.size ? tailNames.size + 1 : ""}`);
-      effs.push(tailNames.get(tail)!);
-    }
+    const effs = rowText(t.eff);
     const arrow = effs.length ? ` -[${effs.join(", ")}]-> ` : " -> ";
     const s = `(${t.params.map((p) => go(p, false)).join(", ")})${arrow}${go(t.ret, false)}`;
     return nested ? s : s;

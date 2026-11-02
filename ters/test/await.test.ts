@@ -87,12 +87,12 @@ test("an action that never awaits is done at once, and together of none is []", 
   assert.deepEqual(none.run(), ["[]"]);
 });
 
-test("the types: one await for every ticket type, any of a Ticket Int, together's actions wait and nothing else", () => {
+test("the types: one await for every ticket type, any of a Ticket Int, together's actions may do more than wait (L149)", () => {
   const code = base(LIBRARY.code), names = baseNames(LIBRARY.names), info = infer(code, names);
   const type = (n: string) => showType(info.typeOf.get(lib(n))!, names);
   assert.equal(type("ticket id"), "(Ticket a) -> Ticket Unit");
   assert.equal(type("any of"), "(List (Ticket Unit)) -> Ticket Int");
-  assert.equal(type("together"), "(List (() -[Await]-> a)) -[Diverge, Await]-> List a");
+  assert.equal(type("together"), "(List (() -[Diverge, Await, e]-> a)) -[Diverge, Await, e]-> List a");
 });
 
 // The world answers await (L71c): a fake clock that only moves when waited on.
@@ -145,8 +145,8 @@ test("the world: race gives the first to finish, and within gives none when its 
 test("the types of race and within", () => {
   const code = base(LIBRARY.code), names = baseNames(LIBRARY.names), info = infer(code, names);
   const type = (n: string) => showType(info.typeOf.get(lib(n))!, names);
-  assert.equal(type("race"), "(List (() -[Await]-> a)) -[Diverge, Await]-> a");
-  assert.equal(type("within"), "(Float64, () -[Await]-> a) -[Diverge, Await]-> Optional a");
+  assert.equal(type("race"), "(List (() -[Diverge, Await, e]-> a)) -[Diverge, Await, e]-> a");
+  assert.equal(type("within"), "(Float64, () -[Diverge, Await, e]-> a) -[Diverge, Await, e]-> Optional a");
 });
 
 test("compiled, main's waits are the world's: together, race and within as the evaluator gives them (C40)", async () => {
