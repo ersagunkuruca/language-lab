@@ -114,6 +114,38 @@ export function buildListTree(k: Lang, prelude: (name: string) => Id): ListTree 
     k.if(i.less(i.mul(k.int(DELTA), sl), sr), B(rx, k.call(link, l, x, rl), rr),
       k.if(i.less(i.mul(k.int(DELTA), sr), sl), B(lx, ll, k.call(link, lr, x, r)), N(x, l, r))),
   () => k.call(snoc, l, x), "r "), () => k.call(cons, x, r), "l ")));
+  // A whole list stored at once (C76), in n steps, where one cons at a
+  // time costs a rebalance each (n log n). The list's fold gives its items
+  // from the last; each waits on a stack beside the complete tree after
+  // it, and an item whose tree is as big as the one just finished joins
+  // them: node(item, finished, its tree), as a binary counter carries.
+  // What is left on the stack is linked at the end, log n links. Prior
+  // art: Haskell containers' fromDistinctAscList.
+  const sizeOf = (t: Id) => k.call(size, t);
+  const carried = rec("list tree carried");
+  k.define(carried, k.fn(["tree", "waiting"], (t, w) => k.match(w, [
+    { variant: NIL, names: [], body: () => k.call(PAIR_V, t, w) },
+    { variant: CONS, names: ["top", "below"], body: ([top, below]) => k.match(top, [
+      { variant: PAIR_V, names: ["item", "after"], body: ([x, r]) => k.if(k.call(S.equal, sizeOf(r), sizeOf(t)),
+        k.call(carried, k.call(node, x, i.add(i.add(sizeOf(t), sizeOf(r)), k.int(1)), t, r), below),
+        k.call(PAIR_V, t, w)) },
+    ]) },
+  ])));
+  const linked = rec("list tree linked");
+  k.define(linked, k.fn(["tree", "waiting"], (t, w) => k.match(w, [
+    { variant: NIL, names: [], body: () => t },
+    { variant: CONS, names: ["top", "below"], body: ([top, below]) => k.match(top, [
+      { variant: PAIR_V, names: ["item", "after"], body: ([x, r]) => k.call(linked, k.call(link, t, x, r), below) },
+    ]) },
+  ])));
+  const store = def("list tree of list", ["list"], (l) => k.match(k.fold(l, [
+    { variant: NIL, names: [], body: () => k.call(PAIR_V, k.x(tip), k.x(NIL)) },
+    { variant: CONS, names: ["item", "rest"], results: [null, "after"], body: ([x], [, after]) => k.match(after!, [
+      { variant: PAIR_V, names: ["finished", "waiting"], body: ([t, w]) => k.match(k.call(carried, t, w), [
+        { variant: PAIR_V, names: ["joined", "still waiting"], body: ([j, sw]) => k.call(PAIR_V, k.x(tip), k.call(CONS, k.call(PAIR_V, x, j), sw)) },
+      ]) },
+    ]) },
+  ]), [{ variant: PAIR_V, names: ["first tree", "waiting"], body: ([t, w]) => k.call(linked, t, w) }]));
   const append = def("list tree append", ["front", "back"], (a, b) => parts(b, (_, y, l) => k.call(link, a, k.call(first, l, y), k.call(dropFirst, b)), () => a));
   // A position is an Int, as item at's is (L140); `at` goes down by the
   // sizes, and outside the tree gives `otherwise`.
@@ -146,6 +178,7 @@ export function buildListTree(k: Lang, prelude: (name: string) => Id): ListTree 
     k.call(JOBS.job, k.x(prelude("item at")), k.x(itemAt), cost(k, "logarithmic")),
     k.call(JOBS.job, k.x(prelude("replace at")), k.x(replaceAt), cost(k, "logarithmic")),
     k.call(JOBS.equalBy, k.x(equal)), k.call(JOBS.showBy, k.x(show)), k.call(JOBS.compareBy, k.x(compare)),
+    k.call(JOBS.storeBy, k.x(store)),
   )));
   defs.push(rep);
   return { representation: rep, defs };

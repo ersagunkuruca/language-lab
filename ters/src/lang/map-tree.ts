@@ -362,6 +362,7 @@ export function buildTrees(k: Lang, prelude: (name: string) => Id): Trees {
     if (rep.byType) jobs.push(k.call(JOBS.equalBy, k.x(rep.byType.equal)), k.call(JOBS.showBy, k.x(rep.byType.show)), k.call(JOBS.compareBy, k.x(rep.byType.compare)));
     for (const [j, d] of Object.entries(rep.heads ?? {})) jobs.push(k.call(JOBS.headBy, k.x(j), k.x(d)));
     if (rep.oneHolder) jobs.push(k.call(JOBS.inPlace));
+    if (rep.store) jobs.push(k.call(JOBS.storeBy, k.x(rep.store)));
     const d = k.def(rep.name);
     k.define(d, k.call(REPRESENTATION_V, rep.meaning ? k.x(rep.meaning) : k.fn(["value"], (v) => v), cost(rep.cost.space), k.list(...jobs)));
     defs.push(d);
