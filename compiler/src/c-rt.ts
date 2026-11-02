@@ -508,6 +508,34 @@ static double lab_rand_restore(double a, double b, double c, double d) { lab__r[
   lab_drop(t);
   return LAB_SMALL(c);
 }` },
+  // The Float64 a text spells (L176, C108): text.ts's grammar checked
+  // here, then strtod, which rounds the decimal once to the nearest.
+  "text.readNumber": {
+    uses: [],
+    c: `static double lab_text_readNumber(lab_cell *t) {
+  const uint8_t *b = LAB_TB(t);
+  uint32_t n = LAB_TN(t), i = 0, digits = 0;
+  if (i < n && (b[i] == '+' || b[i] == '-')) i++;
+  while (i < n && b[i] >= '0' && b[i] <= '9') { i++; digits++; }
+  if (i < n && b[i] == '.') { i++; while (i < n && b[i] >= '0' && b[i] <= '9') { i++; digits++; } }
+  int ok = digits > 0;
+  if (ok && i < n && (b[i] == 'e' || b[i] == 'E')) {
+    uint32_t ed = 0;
+    i++;
+    if (i < n && (b[i] == '+' || b[i] == '-')) i++;
+    while (i < n && b[i] >= '0' && b[i] <= '9') { i++; ed++; }
+    ok = ed > 0;
+  }
+  if (!ok || i != n) { lab_drop(t); lab_st = 1; return 0; }
+  char *s = malloc(n + 1);
+  memcpy(s, b, n);
+  s[n] = 0;
+  double x = strtod(s, 0);
+  free(s);
+  lab_drop(t);
+  if (!isfinite(x)) { lab_st = 1; return 0; }
+  return x == 0 ? 0 : x;
+}` },
   // A character's text; not a character's number (a surrogate, beyond
   // U+10FFFF, below 0): no answer.
   "text.fromCode": {

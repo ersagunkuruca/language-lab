@@ -9,7 +9,7 @@ import { norm } from "../../ters/src/lang/int.ts";
 import { isData, isFn, isRecord, lowerScalar, type LType } from "../src/scalar.ts";
 import { emitWasm, fromInt, fromText, instantiate, runMain, toInt, toText } from "../src/wasm.ts";
 import { load } from "../src/program.ts";
-import { area, caseNameInputs, caseNames, changeInputs, changes, choices, randomInputs, randoms, recursiveLets, closures, escapes, fractionInputs, fractions, maths, ordered, orderedInputs, roses, sameLists, searches, several, showInputs, shows, stopsWith, texts, worldly } from "../src/fixtures.ts";
+import { area, caseNameInputs, caseNames, changeInputs, changes, choices, numberTexts, randomInputs, randoms, recursiveLets, closures, escapes, fractionInputs, fractions, maths, ordered, orderedInputs, roses, sameLists, searches, several, showInputs, shows, stopsWith, texts, worldly } from "../src/fixtures.ts";
 import { nodeWorld } from "../../ters/src/lang/world.ts";
 import { WASI } from "node:wasi";
 import { closeSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -383,6 +383,7 @@ test("one answer or none in WebAssembly: a status after the answer, handlers as 
     found: ["", "abc", "héllo wörld", "a🎉b🎉c", "aaa"].flatMap((t) => ["", "a", "b", "ö", "🎉", "c", "wörld", "aa", "zz"].map((q) => [t, q])),
     code: texts.map((t) => [t]),
     character: codes.map((n) => [n]),
+    readNumber: numberTexts.map((t) => [t]),
     position: ["1", "3", "x", "9999", "nope"].flatMap((key) => lists.map((xs) => [key, xs])),
     sums: lists.map((xs) => [xs]),
     readable: texts.map((t) => [t]),
@@ -393,7 +394,7 @@ test("one answer or none in WebAssembly: a status after the answer, handlers as 
   };
   let compared = 0;
   for (const [name, inputs] of Object.entries(cases)) {
-    const def = p.defs[name as keyof typeof p.defs], f = lowered.funcs.find((g) => g.def === def)!;
+    const def = p.defs[name as keyof typeof p.defs], f = lowered.funcs.find((g) => g.def === def && !g.inner)!;
     for (const xs of inputs) {
       const want = first(r.call(r.value(def), ...xs));
       let got: unknown = (w[f.name] as (...a: unknown[]) => unknown)(...xs.map((x, i) => toWasm(w, x, f.params[i])));

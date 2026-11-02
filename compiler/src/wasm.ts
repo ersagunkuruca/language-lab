@@ -130,7 +130,9 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
     need("wasi_proc_exit");
   }
   // Ints (W5): an i31, a $big or a $huge; the host makes and reads them with toInt and fromInt.
-  const ints = !shader && rtNames.some((n) => { const f = runtime(n); return [...f.params.map(([, t]) => t), f.result].includes("int"); })
+  // A runtime function on magnitudes alone (text.readNumber) needs their
+  // array type too.
+  const ints = !shader && rtNames.some((n) => { const f = runtime(n); const ts = [...f.params.map(([, t]) => t), f.result, ...(f.locals ?? []).map(([, t]) => t)]; return ts.includes("int") || ts.includes("mag"); })
     || funcs.some((f) => [...f.params, ...f.locals, f.result].includes("int") || mentions(f.body, "int"))
     || lowered.records.some((x) => x.fields.some((y) => y.t === "int")) || lowered.data.some((d) => d.cases.some((c) => c.fields.some((y) => y.t === "int")));
   if (ints) ["int.of", "int.small", ...(wasi ? [] : ["int.limbs", "int.limb", "int.huge", "int.setLimb"])].forEach(need);
