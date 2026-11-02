@@ -274,6 +274,12 @@ together(actions) =
   dropped where they wait: a parked branch is a value, so cancelling it is
   forgetting it. `within(ms, action)` races the action against a timer.
   The page's runtime is L59; compiled JS is C40.
+- **L150** (done, 2026-11-02), `start fetch(url) : Ticket Text` (Network),
+  so `together` and `race` wait on fetches beside timers; `fetch text` is
+  `await(start fetch(url))`. The world here fetches when it starts and the
+  ticket is ready at once (a timer of 0 ms with the text, so simulated's
+  clock reads it the same); fetches that overlap need a world that fetches
+  in the background, L150b (test/start-fetch.test.ts).
 
 ## Prior art
 

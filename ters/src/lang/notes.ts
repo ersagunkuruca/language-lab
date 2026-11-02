@@ -230,7 +230,8 @@ export const NOTES: Comments = {
   "builtin.io.appendFile": "Adds text to the end of a file.",
   "builtin.io.fileExists": "Whether there's a file at this path.",
   "builtin.io.listFolder": "The names of the files in a folder.",
-  "builtin.io.fetchText": "The text at a web address. Aborts if the request fails.",
+  "builtin.io.fetchText": "The text at a web address. Aborts if the request fails. The same as await(start fetch(url)).",
+  "builtin.io.startFetch": "Starts fetching the text at a web address and gives a ticket for it, so together and race can wait on it beside timers and other fetches: together([() => await(start fetch(a)), () => await(start fetch(b))]). Aborts if the request fails. The world here fetches when it starts, so the ticket is ready at once.",
 
   // --- cells: values that change, for pages
   "builtin.cells.cell": "A new cell holding a starting value: a value a page can change, and whose readers are redrawn when it does.",
