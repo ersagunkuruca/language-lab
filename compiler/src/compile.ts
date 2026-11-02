@@ -828,7 +828,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // as the definition's own effect (not inside a parameter) are pure: a
   // definition that doesn't do Choice itself can't start doing it because
   // a caller does. The others follow the argument passed for them.
-  function specAt(ref: Id, def: Id, rho: Rho, plain?: Set<Id>, arr?: Map<Id, "front" | "back" | "view">, own = false, lat: Set<number> = NO_LAT, callerAt: Map<number, Type> = NO_AT): Spec {
+  function specAt(ref: Id, def: Id, rho: Rho, plain?: Set<Id>, arr?: Map<Id, "front" | "back" | "view">, own = false, lat: Set<number> = NO_LAT, callerAt: Map<number, Type> = NO_AT, quietParams?: Set<Id>): Spec {
     const scheme = info.schemes.get(def)!;
     const inner = new Set<number>();
     const collect = (t: Type, top: boolean) => {
@@ -840,12 +840,32 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     };
     collect(scheme.type, true);
     const out: Rho = new Map(), waits = new Set<number>();
-    const walk = (s: Type, t: Type) => {
-      if (s.t === "con" && t.t === "con") s.args.forEach((a, i) => walk(a, t.args[i]));
+    // A parameter given a lambda that doesn't choose (`plain`, defCall)
+    // says nothing about Choice: its row may have been joined with a
+    // search's around it (inside `first`), but the lambda makes no
+    // choice, so the copy can be plain for it (C80: `map` inside `first`
+    // compiled as a search, a frame per item).
+    const quiet = new Set<Type>();
+    const ps = (plain?.size || quietParams?.size) && isFnDef(def) ? node<"lambda">(node<"def">(def).body!).params : [];
+    if (scheme.type.t === "fn") scheme.type.params.forEach((p, i) => { if (plain?.has(ps[i]) || quietParams?.has(ps[i])) quiet.add(p); });
+    // The copy's own effect says the same as its parameters' (`map`'s e is
+    // f's): where a quiet parameter carries it, it isn't read off the call.
+    const quietRows = new Set<number>();
+    const rows = (t: Type) => {
+      if (t.t === "con") t.args.forEach(rows);
+      if (t.t !== "fn") return;
+      if (t.eff.tail !== null) quietRows.add(t.eff.tail);
+      t.params.forEach(rows);
+      rows(t.ret);
+    };
+    quiet.forEach(rows);
+    const walk = (s: Type, t: Type, hushed = false) => {
+      hushed ||= quiet.has(s) || (s === scheme.type && s.t === "fn" && s.eff.tail !== null && quietRows.has(s.eff.tail));
+      if (s.t === "con" && t.t === "con") s.args.forEach((a, i) => walk(a, t.args[i], hushed));
       if (s.t !== "fn" || t.t !== "fn") return;
       // Where the position already says Choice, the variable adds nothing,
       // so only positions without it tell us what the variable stands for.
-      if (s.eff.tail !== null && inner.has(s.eff.tail) && !s.eff.effs.includes(CHOICE) && !out.get(s.eff.tail)) out.set(s.eff.tail, choice(t.eff, rho));
+      if (!hushed && s.eff.tail !== null && inner.has(s.eff.tail) && !s.eff.effs.includes(CHOICE) && !out.get(s.eff.tail)) out.set(s.eff.tail, choice(t.eff, rho));
       // The same for an operation answered later: a copy that waits (C40).
       // Only what the variable stands for counts: the operations the
       // position names itself (`() ->{Animate | e}`, a handler's
@@ -854,8 +874,8 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         const named = new Set(sub.resolveRow(s.eff).effs), r = sub.resolveRow(t.eff);
         if (laterRow({ ...r, effs: r.effs.filter((e) => !named.has(e)) }, lat)) waits.add(s.eff.tail);
       }
-      s.params.forEach((p, i) => walk(p, t.params[i]));
-      walk(s.ret, t.ret);
+      s.params.forEach((p, i) => walk(p, t.params[i], hushed));
+      walk(s.ret, t.ret, hushed);
     };
     walk(scheme.type, ty(ref));
     // The types its variables stand for here, where the copy compares them.
@@ -1316,22 +1336,34 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     // get a lambda written in place that doesn't choose.
     function defCall(n: NodeOf<"call">): Spec {
       const f = node<"ref">(n.fn);
-      const plain = new Set<Id>(), arr = new Map<Id, Kind | "view">();
+      const plain = new Set<Id>(), arr = new Map<Id, Kind | "view">(), quietArgs = new Map<Id, Id>();
       if (!reflective && isFnDef(f.target)) {
         const params = node<"lambda">(node<"def">(f.target).body!).params;
         const called = calledParams(f.target);
         n.args.forEach((a, i) => {
           const arg = code.nodes[a];
-          if (arg.kind === "lambda" && called.has(params[i]) && streamsFn(ty(a), rho) && !streamy(arg.body)) {
-            plain.add(params[i]);
-            plainHere.add(a);
+          if (arg.kind === "lambda" && streamsFn(ty(a), rho) && !streamy(arg.body)) {
+            if (called.has(params[i])) {
+              plain.add(params[i]);
+              plainHere.add(a);
+            } else quietArgs.set(params[i], a);
           }
           const kind = arrayKind(a, true);
           if (kind && fits(params[i], kind)) arr.set(params[i], kind);
           else if (viewable.has(params[i]) && viewArg(a)) arr.set(params[i], "view");
         });
       }
-      return specAt(f.id, f.target, rho, plain, arr, !sp.streams && ![...arr.values()].includes("view") && ownCall(n, sp.own), sp.lat, sp.at);
+      const s = specAt(f.id, f.target, rho, plain, arr, !sp.streams && ![...arr.values()].includes("view") && ownCall(n, sp.own), sp.lat, sp.at, new Set(quietArgs.keys()));
+      // A lambda that doesn't choose, given where the copy chose no Choice
+      // after all (C80), is a plain function.
+      if (quietArgs.size) {
+        const ps = node<"lambda">(node<"def">(f.target).body!).params, t = info.schemes.get(f.target)!.type;
+        if (t.t === "fn") ps.forEach((p, i) => {
+          const pt = t.params[i];
+          if (quietArgs.has(p) && pt?.t === "fn" && pt.eff.tail !== null && !s.rho.get(pt.eff.tail)) plainHere.add(quietArgs.get(p)!);
+        });
+      }
+      return s;
     }
     // A call's arguments, each an array where the copy takes one.
     function argsOf(n: NodeOf<"call">, s: Spec): string[] {
