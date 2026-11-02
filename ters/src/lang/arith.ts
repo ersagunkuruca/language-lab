@@ -154,6 +154,20 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
     return id;
   };
 
+  // The variables of def's body's own type that its scheme's stand for.
+  const ownVars = (def: Id, sc: Scheme): Map<number, number> => {
+    const out = new Map<number, number>();
+    const d = code.nodes[def] as NodeOf<"def"> | undefined;
+    const own = d?.body ? info.typeOf.get(d.body) : undefined;
+    const pair = (b: Type, p: Type) => {
+      b = s.resolve(b); p = s.resolve(p);
+      if (b.t === "var") { if (p.t === "var" && !out.has(p.v)) out.set(p.v, b.v); return; }
+      if (b.t === "con" && p.t === "con") b.args.forEach((a, i) => p.args[i] && pair(a, p.args[i]));
+      if (b.t === "fn" && p.t === "fn") { b.params.forEach((x, i) => p.params[i] && pair(x, p.params[i])); pair(b.ret, p.ret); }
+    };
+    if (own) pair(own, sc.type);
+    return out;
+  };
   // The copy of `def` for these types of its number-type variables.
   const copies = new Map<string, Id>();
   const todo: { root: Id; env: Env }[] = [];
@@ -161,8 +175,13 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
     const vars = constrained(sc);
     // The definition itself is at its own defaults (Int for a whole
     // literal nothing fixes, else Float64): a use at those needs no copy.
-    const at = (v: number): Type => env.get(v) ?? otherwise(v);
-    if (vars.every((v) => JSON.stringify(at(v)) === JSON.stringify(otherwise(v)))) return def;
+    // Its body may be typed with variables of its own (a module's
+    // definition), and a whole literal marks those: `sum`'s 0 makes its
+    // body's item Int though its scheme's variable is unmarked (C114).
+    const ownOf = ownVars(def, sc);
+    const mine = (v: number): Type => otherwise(ownOf.get(v) ?? v);
+    const at = (v: number): Type => env.get(v) ?? mine(v);
+    if (vars.every((v) => JSON.stringify(at(v)) === JSON.stringify(mine(v)))) return def;
     const key = `${def}|${vars.map((v) => JSON.stringify(at(v))).join(",")}`;
     const done = copies.get(key);
     if (done) return done;

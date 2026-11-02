@@ -479,7 +479,7 @@ test("read number in C: the evaluator's Float64 or no answer for every text, and
   sameAndFreed(build(lowered), numberTexts.map((t): [number, Value[]] => [i, [t]]), (j, xs) => first(r.call(r.value(lowered.funcs[j].def), ...xs))!, (j) => lowered.funcs[j].name);
 });
 
-test("what the generated programs found, in C: split then join all, and a sort of nothing, with every cell freed (C110, C111)", { skip }, () => {
+test("what the generated programs found, in C: split then join all, a sort of nothing and a sum of nothing, with every cell freed (C112, C113, C114)", { skip }, () => {
   const p = fuzzFinds();
   const lowered = lowerScalar(p.code, p.info, p.names, Object.values(p.defs), { data: true });
   assert.deepEqual([...lowered.refused.entries()].map(([d, why]) => `${p.names[d]}: ${why}`), []);
