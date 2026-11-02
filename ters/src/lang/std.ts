@@ -1218,6 +1218,26 @@ export const STATE = typedef("std.state", "State", ["s"], [
   ["put state", [["value", ([s]) => tref(s)]], () => tref(UNIT), { later: true }],
 ], true);
 export const STATE_OPS = { get: "std.state.get state", put: "std.state.put state" } as const;
+// A pipeline (BACKLOG L64): a producer that sends items and a consumer
+// that receives them, run side by side by the prelude's `piped`, the
+// producer going on only when the consumer asks (a pipe handler, as in
+// Kammar, Lindley and Oury, "Handlers in action", 2013, and Unix pipes
+// before it). The channel is scoped to the one `piped` call: nothing else
+// can send on it or receive from it. A Pipe is the producer stopped at an
+// item, with how to go on (its own effects in `e`, as a Branch's), or
+// finished. After the state, so ids above don't move.
+export const SEND = typedef("std.send", "Send", ["a"], [
+  ["send", [["item", ([a]) => tref(a)]], () => tref(UNIT), { later: true }],
+], true);
+export const RECEIVE = typedef("std.receive", "Receive", ["a"], [
+  ["receive", [], ([a]) => tref(OPTIONAL, tref(a)), { later: true }],
+], true);
+const PIPE_ID = "std.pipe";
+export const PIPE = typedef(PIPE_ID, "Pipe", ["a", "e"], [
+  ["finished", []],
+  ["sent", [["item", ([a]) => tref(a)], ["more", ([a, e], self) => tfun([], tref(self, tref(a), node({ id: `${PIPE_ID}.e.arg`, kind: "tref", target: e, args: [] })), [e])]]],
+]);
+export const PIPE_OPS = { send: "std.send.send", receive: "std.receive.receive", finished: "std.pipe.finished", sent: "std.pipe.sent" } as const;
 export const tupleType = (n: number): Id => `std.tuple${n}`;
 export const tupleVariant = (n: number): Id => `std.tuple${n}.tuple`;
 export const tuplePart = (n: number, i: number): Id => `std.tuple${n}.tuple.${PART_NAMES[i]}`;
@@ -1237,7 +1257,7 @@ export function onTodaysIds<T>(x: T): T {
 }
 export const tupleSize = (id: Id): number | null => { const m = /^std\.tuple(\d)$/.exec(id); return m ? Number(m[1]) : null; };
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, MATRIX, STATE] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, MATRIX, STATE, SEND, RECEIVE, PIPE] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one

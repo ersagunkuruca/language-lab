@@ -16,17 +16,17 @@ import { infer } from "../src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { runMain } from "../src/lang/run.ts";
-import { S, SHOW_ANY, STATE_OPS } from "../src/lang/std.ts";
+import { PIPE_OPS, S, SHOW_ANY, STATE_OPS } from "../src/lang/std.ts";
 import { showType } from "../src/lang/types.ts";
 import { B } from "../src/prelude.ts";
 const L = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY.names[d] === name)!;
 
 const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 
-async function both(lines: (k: Lang) => Id[]): Promise<[string[], string[]]> {
+async function both(lines: (k: Lang) => Id[], plain = false): Promise<[string[], string[]]> {
   const k = new Lang(LIBRARY.code);
   const main = k.def("main");
-  k.define(main, k.thunk(() => k.seq(...lines(k).map((v) => k.call(S.print, k.call(S.first, k.thunk(() => k.call(SHOW_ANY, v)), k.thunk(() => k.lit("none"))))))));
+  k.define(main, k.thunk(() => k.seq(...lines(k).map((v) => k.call(S.print, plain ? k.call(SHOW_ANY, v) : k.call(S.first, k.thunk(() => k.call(SHOW_ANY, v)), k.thunk(() => k.lit("none"))))))));
   const code = base(k.code), names = baseNames(k.names);
   const info = infer(code, names, undefined, checkOptions);
   assert.deepEqual(info.errors.map((e) => e.message), []);
@@ -57,6 +57,25 @@ test("with state passes the state from each operation to the rest", async () => 
     ];
   });
   const want = ["(15, 10)", '("summed", 6)', '(7, "unused")'];
+  assert.deepEqual(ran, want);
+  assert.deepEqual(compiled, want);
+});
+
+// Send, Receive and piped (L64): the producer goes on only when the
+// consumer asks, so their prints interleave.
+test("piped: each receive takes the producer's next item, none once it has finished", async () => {
+  const [ran, compiled] = await both((k) => {
+    const send = (x: number) => k.seq(k.call(S.print, k.lit(`sends ${x}`)), k.call(PIPE_OPS.send, k.lit(x)));
+    const producer = k.thunk(() => k.seq(send(1), send(2), k.call(S.print, k.lit("producer done"))));
+    // total(acc) = match receive() | some(x) → total(acc + x) | none → acc
+    const total = k.def("total");
+    k.define(total, k.fn(["acc"], (acc) => k.match(k.call(PIPE_OPS.receive), [
+      { variant: "std.optional.some", names: ["x"], body: ([x]) => k.seq(k.call(S.print, k.call(S.concat, k.lit("got "), k.call(S.show, x))), k.call(total, k.call(B.add, acc, x))) },
+      { variant: "std.optional.none", names: [], body: () => acc },
+    ])));
+    return [k.call(L("piped"), producer, k.thunk(() => k.call(total, k.lit(0))))];
+  }, true);
+  const want = ["sends 1", "got 1", "sends 2", "got 2", "producer done", "3"];
   assert.deepEqual(ran, want);
   assert.deepEqual(compiled, want);
 });
