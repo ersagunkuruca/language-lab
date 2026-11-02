@@ -71,3 +71,16 @@ test("an inline function shows its named results after its inputs, => e1, e2 whe
   assert.match(renderBlocks(code, pres, info, use), /\(a, b\) → sum, product => a \+ b, a · b/);
   assert.match(renderBlocks(code, pres, info, other), /\(a\) → twice => a \+ a/);
 });
+
+// L143 (REVIEW-2026-11-01b §8): a tuple shows as its type does.
+test("a tuple shows as (1, \"a\"), as its type (Int, Text) does", () => {
+  const k = new Lang();
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.call(tupleVariant(2), k.int(1), k.call(tupleVariant(3), k.lit("a"), k.lit(2.5), k.int(3)))))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const printed: string[] = [];
+  runMain(code, info, main, { print: (s) => printed.push(s), names } as Parameters<typeof runMain>[3]);
+  assert.deepEqual(printed, ['(1, ("a", 2.5, 3))']);
+});
