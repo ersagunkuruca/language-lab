@@ -295,6 +295,9 @@ export class Cells {
     const n = nodeOf(c);
     if (!n) throw new Error("write needs a cell");
     if (n.compute) throw new Error("a formula can't be written: write the cells it reads");
+    // The value it holds, written back: nothing to copy or compare (a
+    // cell never holds a view, C85).
+    if (at === undefined && v === n.value) return;
     // An edit (at given) copied its new part out of views already.
     if (at === undefined) v = this.plainOf(v);
     if (this.same(n.value as Value, v)) return;
