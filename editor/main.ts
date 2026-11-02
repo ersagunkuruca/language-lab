@@ -1870,6 +1870,10 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
   const used = usesIn(doc.code);
   const often = (f: T.Filling) => (f.kind === "call" || f.kind === "ref" ? used.get(f.target) ?? 0 : 0);
   const all = fillingsAt(info, hole).map((f) => ({ f, l: label(f) })).sort((a, b) => order.indexOf(a.l[2]) - order.indexOf(b.l[2]) || often(b.f) - often(a.f));
+  // Console's print performed by name reads, and does, what builtin print
+  // does (L145): one row for both (E184).
+  const plain = new Set(all.filter((x) => !((x.f.kind === "call" || x.f.kind === "ref") && x.f.target.startsWith("effect."))).map((x) => `${x.l[0]}\n${x.l[1]}`));
+  for (let i = all.length - 1; i >= 0; i--) { const x = all[i]; if ((x.f.kind === "call" || x.f.kind === "ref") && x.f.target.startsWith("effect.") && plain.has(`${x.l[0]}\n${x.l[1]}`)) all.splice(i, 1); }
   // Rows that would read the same (show(□) for a Float64, an Int, anything)
   // say what each of their holes takes: show(□: Int).
   const seen = new Map<string, number>();
