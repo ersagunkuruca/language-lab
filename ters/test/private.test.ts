@@ -14,6 +14,7 @@ import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { makeRunner } from "../src/lang/run.ts";
 import { MAP_V, PAIR_V, RATIO, SET_V, SHOW_ANY } from "../src/lang/std.ts";
+import { INT } from "../src/lang/types.ts";
 
 const lib = (name: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === name)!;
 
@@ -63,4 +64,29 @@ test("the palette doesn't offer a private constructor to a program", () => {
   assert.ok(!offered.includes(SET_V), "set of isn't");
   // Without the library's options nothing is private, as with no pins.
   assert.ok(fillings(code, infer(code, names), hole).some((f) => "target" in f && f.target === SET_V));
+});
+
+// L165: private means private to the program that declares the type. A
+// program's own private case is built by any of its definitions (its own
+// smart constructor, say), and its palette offers it; the library's stay
+// the library's.
+test("a program's own private case is the program's to build", () => {
+  const k = new Lang(LIBRARY.code);
+  const Even = k.type("Even", [], [["even", [["half", () => k.tref(INT)]]]]);
+  const node = k.code.nodes[Even.v.even] as { private?: true };
+  node.private = true;
+  const doubled = k.def("doubled");
+  k.define(doubled, k.fn(["n"], (n) => k.call(Even.v.even, n)));
+  const d = k.def("a set");
+  const hole = k.hole();
+  k.define(d, k.call(doubled, hole));
+  const other = k.def("other");
+  const hole2 = k.hole();
+  k.define(other, k.call(SHOW_ANY, hole2));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.filter((e) => !/hole|empty|□|missing/i.test(e.message)).map((e) => e.message), []);
+  const offered = fillings(code, info, hole2).flatMap((f) => ("target" in f ? [f.target] : []));
+  assert.ok(offered.includes(Even.v.even), "the program's private case is offered to the program");
+  assert.ok(!offered.includes(SET_V), "the library's isn't");
 });
