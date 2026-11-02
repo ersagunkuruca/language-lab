@@ -78,9 +78,27 @@ async function gpu(): Promise<GPUDevice | string> {
 // an i32 and std's Array an array<T, N>, on the GPU and on the CPU alike
 // (WebAssembly takes the Ints, C66e; JavaScript draws a picture with
 // arrays when WebAssembly refuses them).
-export function lowerPicture(code: Code, info: Info, names: Names, entries: Record<string, Id>) {
-  return lowerScalar(code, info, names, Object.values(entries), { records: true, shader: true });
+// Once per version of the code (C90): the GPU try and the CPU side lower
+// the same picture, and so does opening the program again.
+// The names are compared by what they say: opening the program again
+// builds the same names anew.
+const lowered = new WeakMap<Code, Map<string, { info: Info; names: string; out: ReturnType<typeof lowerScalar> }>>();
+const said = new WeakMap<Names, string>();
+const saidOf = (names: Names) => { let s = said.get(names); if (s === undefined) said.set(names, (s = JSON.stringify(names))); return s; };
+function once<T>(cache: WeakMap<Code, Map<string, { info: Info; names: string; out: T }>>, code: Code, info: Info, names: Names, entries: Record<string, Id>, make: () => T): T {
+  const m = cache.get(code) ?? new Map();
+  cache.set(code, m);
+  const key = JSON.stringify(entries), hit = m.get(key), sig = saidOf(names);
+  if (hit && hit.info === info && hit.names === sig) return hit.out;
+  const out = make();
+  m.set(key, { info, names: sig, out });
+  return out;
 }
+export function lowerPicture(code: Code, info: Info, names: Names, entries: Record<string, Id>) {
+  return once(lowered, code, info, names, entries, () => lowerScalar(code, info, names, Object.values(entries), { records: true, shader: true }));
+}
+type Side = { code: Code; info: Info; names: Names } | null;
+const float32 = new WeakMap<Code, Map<string, { info: Info; names: string; out: Side }>>();
 
 // Throws, with the compiler's reason, when the entries can't be drawn.
 export async function drawPicture(o: PictureOptions): Promise<Picture> {
@@ -143,13 +161,13 @@ fn fragment(@builtin(position) at: vec4f) -> @location(0) vec4f {
   // The same program in Float32 (src/lang/float32.ts), as compiler/gpu.ts
   // checks it: the evaluator's check and the CPU's picture round as the GPU
   // does. The program as it is when that can't be made.
-  const in32 = (() => {
+  const in32 = once(float32, code, info, names, entries, (): Side => {
     try {
       const w = withFloat32(code, names);
       const c = represent(w.code, keys.map((k) => entries[k]), w.rep), i = infer(c, w.names);
       return i.errors.length ? null : { code: c, info: i, names: w.names };
     } catch { return null; }
-  })();
+  });
   const cpuSide = in32 ?? { code, info, names };
   const floats = in32 ? "in 32-bit floats, as the GPU" : "in 64-bit floats";
   const r = makeRunner(cpuSide.code, cpuSide.info, { print: () => {} });
