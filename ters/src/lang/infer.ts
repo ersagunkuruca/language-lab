@@ -20,7 +20,7 @@ import { planSolve, runsBackwards, solvesInWholeNumbers } from "./solve.ts";
 import { computedForward, directionProblem, useDirections } from "./directions.ts";
 import { analyzer, derivedFrom, determinism, oneAnswer, solveMode, type Fn } from "./modes.ts";
 import { smoothDerivative as hasSmoothDerivative, smoothGradient as hasSmoothGradient, recordVariant, forgetDerived } from "./derive.ts";
-import { BOOL, CELL_OPS, DIVISION, JOBS, S, SET, SIGS, SMART, TRUE, TUPLE_MAX, tupleType } from "./std.ts";
+import { BOOL, CELL_OPS, DIVISION, FIELDS, JOBS, S, SET, SIGS, SMART, TRUE, TUPLE_MAX, tupleType } from "./std.ts";
 import { countedCalls } from "./counting.ts";
 import { ratioParts } from "./int.ts";
 import { fieldPath, placePath } from "./records.ts";
@@ -1237,6 +1237,22 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   settle();
   implementations();
   results();
+  // fields mapped and fields listed are written out per type where they are
+  // used (fields-by-type.ts, L162b), so both types must be known there.
+  for (const n of Object.values(code.nodes)) {
+    if (n.kind !== "call") continue;
+    const f = code.nodes[n.fn];
+    if (f?.kind !== "ref" || (f.target !== FIELDS.mapped && f.target !== FIELDS.listed)) continue;
+    // Its inputs not written yet: the holes say so (the palette offers it
+    // with holes, and filling them may still give the types).
+    if (n.args.some((a) => code.nodes[a]?.kind === "hole")) continue;
+    const at = (id: Id | undefined) => { const t = id && info.typeOf.get(id); return t ? s.zonk(t) : undefined; };
+    const whole = at(n.args[0]), g = f.target === FIELDS.mapped ? at(n.args[1]) : undefined, out = f.target === FIELDS.listed ? at(n.id) : undefined;
+    const part = g?.t === "fn" ? g.params[0] : out?.t === "con" ? out.args[0] : undefined;
+    const body = whole?.t === "con" ? code.nodes[whole.id] : undefined, td = body?.kind === "def" && body.body ? code.nodes[body.body] : undefined;
+    if (!whole || whole.t !== "con" || td?.kind !== "typedef") err(n.id, `${nm(f.target)} needs the value's data type known here, and it is ${whole ? show(whole) : "open"}: use it where the value's type is known (a definition that takes any value can't say which of its fields to pick)`);
+    else if (!part || part.t !== "con") err(n.id, `${nm(f.target)} needs the fields' type known here, and it is ${part ? show(part) : "open"}: ${f.target === FIELDS.mapped ? "give it a function whose input type is known" : "use the list where its items' type is known"}`);
+  }
   // Each field with results given by a definition with the same results,
   // in that direction with one answer (POLAR.md, L97c).
   for (const { impl, field, by } of resultsGiven) {

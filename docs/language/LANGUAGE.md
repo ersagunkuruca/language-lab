@@ -295,6 +295,22 @@ that reason. Run backwards, each part is one call that runs backwards on its
 own: the point that `plus(p, vec(1, 1, 1))` takes to `vec(5, 0, 2)` is
 `vec(4, -1, 1)`.
 
+**A type's fields by their type.** An instruction type with twenty cases,
+most of them holding `Arg`s, needs one walk over its `Arg`s, not twenty arms
+each time. Two builtins give it (L162b):
+
+- `fields mapped(value, f)`: value with each field of its case whose type is
+  `f`'s input given to `f`, the other fields kept;
+- `fields listed(value)`: those fields, in order, as a list.
+
+The fields picked are the ones declared with that type, one level deep (a
+`List Arg` field is kept as it is). Nothing looks at types while the program
+runs: where each is used, both types are known, and the call becomes a
+generated definition with one arm per case (`src/lang/fields-by-type.ts`),
+the way GHC writes out `deriving Functor`. So the checker asks for both
+types where it is used, and a definition that takes any value can't use
+them. A case's name as text is `case name(value)` (L162).
+
 The **vectors module** (`library/vectors.json`, built from
 `src/lang/vectors-source.ts`) is written on them: `plus`, `minus`,
 `times`, `scale`, `dot`, `magnitude`, `distance`, `unit`, `mix`, `clamp`

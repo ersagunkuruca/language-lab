@@ -70,7 +70,7 @@ export const SECTIONS: Section[] = [
     ids: [...b("cells.cell", "cells.read", "cells.write", "cells.formula", "cells.each", "cells.eachOf", "cells.path", "cells.itemPath", "cells.thenPath", "cells.readAt", "cells.writeAt", "cells.insertAt", "cells.removeAt", "cells.moveAt", "cells.changed"), ...prelude("item where"), ...t("html", "attribute", "event", "input"), "std.row.view", "std.row.handler", "std.row.sound",
       ...html("div", "span", "p", "h1", "h2", "section", "footer", "label", "ul", "li", "strong", "tag", "words", "button", "input", "attribute", "with", "styled", "named", "classed", "for each", "rule", "media", "style sheet", "px", "joined")] },
   { title: "Points, colours and slopes", intro: "A record whose fields are all Float64s (a point, a direction, a colour) can be worked on part by part, and the vectors module is written that way.",
-    ids: [...b("mapParts", "zipParts", "total", "set", "derivative", "gradient"), ...vectors("plus", "minus", "times", "scale", "dot", "magnitude", "distance", "unit", "mix", "clamp", "reflect")] },
+    ids: [...b("mapParts", "zipParts", "total", "set", "fields.mapped", "fields.listed", "derivative", "gradient"), ...vectors("plus", "minus", "times", "scale", "dot", "magnitude", "distance", "unit", "mix", "clamp", "reflect")] },
 ];
 
 // Everything a program is offered: the builtins, std's types, and what

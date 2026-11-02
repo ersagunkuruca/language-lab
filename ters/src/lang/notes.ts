@@ -219,6 +219,8 @@ export const NOTES: Comments = {
   "builtin.mapParts": "A function applied to each part of a record of Float64s: map parts(f, vec(x, y)) is vec(f(x), f(y)).",
   "builtin.zipParts": "A function applied to each pair of parts of two records of the same type.",
   "builtin.total": "The parts of a record of Float64s added up.",
+  "builtin.fields.mapped": "The value with each field of its case whose type is f's input given to f, the rest kept: with f : (Arg) -> Arg, fields mapped(add(r1, r2, \"x\"), f) is add(f(r1), f(r2), \"x\"). Picks the fields declared with that type, one level deep; the value's type and f's input must be known where it is used.",
+  "builtin.fields.listed": "The fields of the value's case of one type, in order, as a list: fields listed(add(r1, r2, \"x\")) is [r1, r2] where the list is used as a List Arg. Picks the fields declared with that type, one level deep; both types must be known where it is used.",
   "builtin.set": "The record with one field changed and the others kept: set((p) => p.x, point, 3). The field can be a path, like (p) => p.home.city.",
 
   // --- the world
