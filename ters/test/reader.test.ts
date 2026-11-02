@@ -229,3 +229,20 @@ test("typed lists and constructors take value definitions by name", async () => 
     if (r.ok) assert.ok(Object.values(r.code.nodes).some((n) => n.kind === "ref" && n.target === name), text);
   }
 });
+
+// A field two types share, read on an input nothing has settled, isn't
+// chosen silently (E186): both readings are offered.
+test("typed field shared by two types offers each type", async () => {
+  const { Lang } = await import("../src/lang/dsl.ts");
+  const { base, baseNames } = await import("../src/lang/load.ts");
+  const { INT, STRING } = await import("../src/lang/types.ts");
+  const k = new Lang();
+  for (const t of ["Card", "Quick"]) k.type(t, [], [[t.toLowerCase(), [["title", () => k.tref(STRING)], ["points", () => k.tref(INT)]]]]);
+  const f = k.def("with title");
+  let hole = "";
+  k.define(f, k.fn(["q", "word"], () => (hole = k.hole())));
+  const code = base(k.code), names = baseNames(k.names);
+  const r = fillValue(code, names, infer(code, names), hole, "quick(q.title ++ word, q.points)", f);
+  assert.ok(r.ok, !r.ok ? r.reason : "");
+  if (r.ok) assert.deepEqual(r.choices?.map((c) => c.label), ["as a Card", "as a Quick"]);
+});
