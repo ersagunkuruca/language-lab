@@ -1376,6 +1376,8 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     // Writing a generator's statements, where an operation answered later
     // may be performed (`isLater`): code made inside is a generator too.
     let gen = false;
+    // Whether JS parses as written: a body with `yield` doesn't outside a generator.
+    const parses = (js: string) => { try { new Function(`"use strict";\n${js}`); return true; } catch { return false; } };
     const inGen = <T>(on: boolean, f: () => T): T => { const was = gen; gen = on; try { return f(); } finally { gen = was; } };
     const performHere = (op: Id, args: string[]) => (gen && waitingEffect(op) ? `(yield* $performG(${JSON.stringify(effectOf(op))}, ${tag(op)}, [${args.join(", ")}]))` : perform(op, args));
     const scoped = <T>(on: boolean, f: () => T): T => { const was = cps, wasHeap = heap, wasGen = gen; cps = on && !reflective; heap = false; gen = false; try { return f(); } finally { cps = was; heap = wasHeap; gen = wasGen; } };
@@ -2725,7 +2727,12 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         return `case ${tag(a.variant)}: {${binds(a, s)}${rec}\n${ret(a.body)}\n}`;
       });
       const recursive = arms.filter((a) => recOf(a).length);
-      const fn = `const ${step} = (${s}, ${rs}) => {\nswitch (${s}.tag) {\n${cases.join("\n")}\n}\n};\n`;
+      const sw = `{\nswitch (${s}.tag) {\n${cases.join("\n")}\n}\n}`;
+      // A case that waits (C40), in a generator: the step is one too, each
+      // call's waits passed on.
+      const waits = gen && !parses(`((${s}, ${rs}) => ${sw})`);
+      const fn = waits ? `const ${step} = function* (${s}, ${rs}) ${sw};\n` : `const ${step} = (${s}, ${rs}) => ${sw};\n`;
+      const call = (...xs: string[]) => (waits ? `(yield* ${step}(${xs.join(", ")}))` : `${step}(${xs.join(", ")})`);
       const v = temp("v"), r = temp("r");
       const fwd = chain ? forward(arms, recOf) : null;
       if (fwd) {
@@ -2741,14 +2748,14 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         const k = temp("k");
         return `${fn}const ${spine} = [];\nlet ${v} = ${input};\n` +
           `for (let ${k} = ${next}; ${k} >= 0; ${k} = ${next}) {\n${spine}.push(${v});\n${v} = ${v}.fields[${k}];\n}\n` +
-          `let ${r} = ${step}(${v});\nfor (let ${i} = ${spine}.length - 1; ${i} >= 0; ${i}--) ${r} = ${step}(${spine}[${i}], ${r});\nreturn ${r};`;
+          `let ${r} = ${call(v)};\nfor (let ${i} = ${spine}.length - 1; ${i} >= 0; ${i}--) ${r} = ${call(`${spine}[${i}]`, r)};\nreturn ${r};`;
       }
       const todo = temp("todo"), top = temp("top"), ix = temp("ix");
       const fields = `{ ${recursive.map((a) => `${tag(a.variant).split(" ")[0]}: [${recOf(a).join(", ")}]`).join(", ")} }`;
       return `${fn}const ${ix} = ${fields};\nconst ${todo} = [{ v: ${input}, i: 0, rs: [] }];\n` +
         `for (;;) {\nconst ${top} = ${todo}[${todo}.length - 1];\nconst ${v} = ${ix}[${top}.v.tag];\n` +
         `if (${v} && ${top}.i < ${v}.length) {\n${todo}.push({ v: ${top}.v.fields[${v}[${top}.i++]], i: 0, rs: [] });\ncontinue;\n}\n` +
-        `const ${r} = ${step}(${top}.v, ${top}.rs);\n${todo}.pop();\nif (!${todo}.length) return ${r};\n${todo}[${todo}.length - 1].rs.push(${r});\n}`;
+        `const ${r} = ${call(`${top}.v`, `${top}.rs`)};\n${todo}.pop();\nif (!${todo}.length) return ${r};\n${todo}[${todo}.length - 1].rs.push(${r});\n}`;
     }
 
     // A fold over a list held as a JS array (GAPS.md G21): an index loop
@@ -2814,16 +2821,28 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         };
         const out: Out = { bool: false, leaf };
         splitAt.set(rest, { variant, fields: afters });
-        const consFn = `const ${ifCons} = (${[c, ...afters].join(", ")}) => {\n${ret(cons.body, false, out)}\n};\n`;
+        const nilBody = `{\n${ret(nil.body, false, out)}\n}`, consBody = `{\n${ret(cons.body, false, out)}\n}`;
+        const w = arms(`() => ${nilBody}`, `(${[c, ...afters].join(", ")}) => ${consBody}`);
         return {
-          pre: `let ${rs.join(", ")};\nconst ${ifNil} = () => {\n${ret(nil.body, false, out)}\n};\n${consFn}`,
-          start: `${ifNil}();`, step: (x) => `${ifCons}(${[x, ...rs].join(", ")});`, end: construct(variant, rs),
+          pre: `let ${rs.join(", ")};\nconst ${ifNil} = ${w.fn("", nilBody)};\nconst ${ifCons} = ${w.fn([c, ...afters].join(", "), consBody)};\n`,
+          start: `${w.call(ifNil, "")};`, step: (x) => `${w.call(ifCons, [x, ...rs].join(", "))};`, end: construct(variant, rs),
         };
       }
       const r = temp("r"), after = rest ? local(rest) : temp("after");
+      const nilBody = `{\n${ret(nil.body)}\n}`, consBody = `{\n${ret(cons.body)}\n}`;
+      const w = arms(`() => ${nilBody}`, `(${c}, ${after}) => ${consBody}`);
       return {
-        pre: `const ${ifNil} = () => {\n${ret(nil.body)}\n};\nconst ${ifCons} = (${c}, ${after}) => {\n${ret(cons.body)}\n};\n`,
-        start: `let ${r} = ${ifNil}();`, step: (x) => `${r} = ${ifCons}(${x}, ${r});`, end: r,
+        pre: `const ${ifNil} = ${w.fn("", nilBody)};\nconst ${ifCons} = ${w.fn(`${c}, ${after}`, consBody)};\n`,
+        start: `let ${r} = ${w.call(ifNil, "")};`, step: (x) => `${r} = ${w.call(ifCons, `${x}, ${r}`)};`, end: r,
+      };
+    }
+    // A fold's arms as local functions: generators where one waits (C40),
+    // in a generator, so each call's waits are passed on.
+    function arms(...fns: string[]) {
+      const waits = gen && fns.some((f) => !parses(`(${f})`));
+      return {
+        fn: (params: string, body: string) => (waits ? `function* (${params}) ${body}` : `(${params}) => ${body}`),
+        call: (f: string, args: string) => (waits ? `(yield* ${f}(${args}))` : `${f}(${args})`),
       };
     }
     // The case of a type with one case and some fields, not a list.

@@ -16,7 +16,7 @@ import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { runMain } from "../src/lang/run.ts";
 import { renderBlocks } from "../src/lang/render.ts";
-import { CONS, NIL, S, SHOW_ANY, UNIT, UNIT_V } from "../src/lang/std.ts";
+import { CONS, INT_OPS, NIL, S, SHOW_ANY, TEXT_OPS, UNIT, UNIT_V } from "../src/lang/std.ts";
 import { CONSOLE, DIVERGE, NUMBER, STRING, showType } from "../src/lang/types.ts";
 import { compile } from "../../compiler/src/compile.ts";
 import { $setPrint } from "../../compiler/src/runtime.js";
@@ -348,6 +348,36 @@ test("a search that waits in a fold over its list: compiled, each wait reaches t
   const want = ["saw 3", "saw 2", "saw 1", "saw 1", "saw 2", "saw 1", "saw 1", "[6, 5, 4, 3, 3, 2, 1, 0]"];
   assert.deepEqual(p.run(), want);
   assert.deepEqual(await p.compiled(), want);
+});
+
+// A fold whose step waits (C40), in place: over a list, over `range(n)`
+// and over `characters(t)` (run on n and t, no list), and one inside
+// another. Its steps are generators, each wait passed on to the handler,
+// which answers twice the item.
+test("a fold whose step waits: compiled, over a list, a range and a text's characters (C40)", async () => {
+  const sum = (k: Lang, on: Id, item: (k: Lang, x: Id) => Id) => k.fold(on, [
+    { variant: NIL, names: [], body: () => k.lit(0) },
+    { variant: CONS, names: ["x", "more"], results: [null, "others"], body: ([x], [, o]) => k.call(B.add, item(k, x), o!) },
+  ]);
+  const cases: [(k: Lang, Y: { op: Record<string, Id> }) => Id, string[]][] = [
+    [(k, Y) => sum(k, k.list(k.lit(1), k.lit(2)), (k, x) => k.call(Y.op.yield, x)), ["saw 2", "saw 1", "6"]],
+    [(k, Y) => sum(k, k.call(INT_OPS.range, k.int(3)), (k, i) => k.call(Y.op.yield, k.call(INT_OPS.toNumber, i))), ["saw 2", "saw 1", "saw 0", "6"]],
+    [(k, Y) => sum(k, k.call(TEXT_OPS.characters, k.lit("ab")), (k, c) => k.call(Y.op.yield, k.call(INT_OPS.toNumber, k.call(TEXT_OPS.length, c)))), ["saw 1", "saw 1", "4"]],
+    [(k, Y) => sum(k, k.list(k.list(k.lit(1)), k.list(k.lit(2), k.lit(3))), (k, xs) => sum(k, xs, (k, x) => k.call(Y.op.yield, x))), ["saw 3", "saw 2", "saw 1", "12"]],
+  ];
+  for (const [body, want] of cases) {
+    const p = program((k) => {
+      const Y = k.effect("Yield", [["yield", [["item", () => k.tref(NUMBER)]], () => k.tref(NUMBER), "later"]]);
+      const main = k.def("main");
+      k.define(main, k.thunk(() => say(k, k.call(SHOW_ANY, k.handle(body(k, Y), [
+        { variant: Y.op.yield, names: ["item", "rest"], body: ([item, rest]) => k.seq(say(k, k.lit("saw "), k.call(S.show, item)), k.call(rest, k.call(B.mul, item, k.lit(2)))) },
+      ])))));
+      return main;
+    });
+    assert.deepEqual(p.errors, []);
+    assert.deepEqual(p.run(), want);
+    assert.deepEqual(await p.compiled(), want);
+  }
 });
 
 // A function that waits and chooses, given to the library (C40): map
