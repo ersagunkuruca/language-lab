@@ -26,6 +26,7 @@
     { "program": "sheet", "label": "Bigger program: sheet, a spreadsheet", "folders": ["sheet"] },
     { "program": "board", "label": "Bigger program: board, a task board page", "folders": ["compiler/gaps/board"] },
     { "program": "machine", "label": "Bigger program: machine, an assembler and interpreter", "folders": ["compiler/gaps/machine"] },
+    { "program": "notebook", "label": "Bigger program: notebook, notes and a word index", "folders": ["notebook"] },
     { "program": "compass", "label": "Compass", "folders": ["compass"], "page": true, "editor": false }
   ]
 }
