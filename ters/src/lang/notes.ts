@@ -241,6 +241,7 @@ export const NOTES: Comments = {
   "builtin.cells.read": "What a cell holds now. A page part that reads it is redrawn when it changes.",
   "builtin.cells.write": "Puts a new value in a cell. Only event handlers can write.",
   "builtin.cells.path": "A place inside a cell's value, from a field or a path of fields: path((t) ↦ t.title), or path((t) ↦ t) for the whole value. Edits and read at use it.",
+  "builtin.cells.changed": "The value with the part at a place changed, the rest shared: changed(m, path((m) ↦ m.pc), 7) is m with its pc 7, and changed(xs, item path(path((l) ↦ l), 2), 0) is xs with its third item 0. A place that isn't there gives the value as it was. For a cell, write at does this and wakes the place's readers.",
   "builtin.cells.itemPath": "Item i of the list at a place, counting from 0: item path(path((t) ↦ t), 3) is the fourth item of a cell's list.",
   "builtin.cells.thenPath": "The second place inside the first: then path(item path(all, 3), path((i) ↦ i.title)) is the fourth item's title.",
   "builtin.cells.readAt": "What is at a place in a cell's value. A page part that reads it is redrawn only when that place changes, not when another item does. No answer when the place isn't there (an item past the end).",

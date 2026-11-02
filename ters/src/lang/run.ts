@@ -35,7 +35,7 @@ import { JETS } from "./jets.ts";
 import { answerFromHost, effectOfOperation, hostedEffects, type Hosts } from "./hosts.ts";
 import * as I from "./int.ts";
 import * as T from "./text.ts";
-import { Cells, NoValue, Pending, listEdits, nodeOf, pathValue, stepsOf } from "./cells.ts";
+import { Cells, NoValue, Pending, changeAt, listEdits, nodeOf, pathValue, stepsOf } from "./cells.ts";
 import { seededGenerator, worldRandom, type Generator as RandomGenerator } from "./random.ts";
 import { fieldIndex, fieldPath, placePath, setPath } from "./records.ts";
 import { CELLS, CHOICE, DIVERGE, INT, NETWORK, WORLD, type Type } from "./types.ts";
@@ -402,6 +402,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       try { const v = cells.readAt(c, stepsOf(p)!, LISTS); return v === undefined ? [] : one(v); } catch (e) { if (e instanceof NoValue) return []; throw e; }
     },
     [CELL_OPS.writeAt]: (c, p, v) => (cells.edit(c, stepsOf(p)!, () => v, LISTS), one(unit)),
+    [CELL_OPS.changed]: (v, p, x) => one(changeAt(v, stepsOf(p)!, () => x, LISTS)),
     [CELL_OPS.insertAt]: (c, p, i, v) => (cells.edit(c, stepsOf(p)!, (l) => toList(listEdits.insert(fromList(l), Number(i), v)), LISTS, { at: stepsOf(p)!, kind: "insert", i: Number(i) }), one(unit)),
     [CELL_OPS.removeAt]: (c, p, i) => (cells.edit(c, stepsOf(p)!, (l) => { const xs = listEdits.remove(fromList(l), Number(i)); return xs && toList(xs); }, LISTS, { at: stepsOf(p)!, kind: "remove", i: Number(i) }), one(unit)),
     [CELL_OPS.moveAt]: (c, p, a, b) => (cells.edit(c, stepsOf(p)!, (l) => { const xs = listEdits.move(fromList(l), Number(a), Number(b)); return xs && toList(xs); }, LISTS, { at: stepsOf(p)!, kind: "move", from: Number(a), to: Number(b) }), one(unit)),
