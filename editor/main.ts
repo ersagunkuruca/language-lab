@@ -1942,6 +1942,9 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
   // interface it needs: say so, and offer to write one (BACKLOG E140).
   const lacks = typed && !typed.ok ? typed.missing : undefined;
   if (lacks) list.append(h("p", { class: "hint" }, `${ui.query.trim()} doesn't fit here: ${typed!.ok ? "" : typed!.reason}.`), h("div", { class: "acts" }, implementButton(info, lacks.iface, lacks.type, `Implement ${names[lacks.iface] ?? "it"} for ${showIn(lacks.type, names, info.subst)}`)));
+  // Refused, it says why (E174): the reading's own reason, when the text
+  // is an expression or nothing listed matches it.
+  else if (typed && !typed.ok && !value && !why && (!shown.length || /[^\p{L}\p{N}_' ]/u.test(q))) list.prepend(h("p", { class: "hint refused" }, `${ui.query.trim()} doesn't fit here: ${typed.reason.replace(/\.$/, "")}.`));
   else if (!shown.length && !value) list.append(h("p", { class: "hint" }, `Nothing that fits matches. ${why || "Values and arithmetic can be typed too: 3, \"text\", [1, 2], x * 2, (x) => x + 1."}`));
   return h("div", {}, h("div", { class: "sub-head" }, "Fill · only what type-checks here"), h("div", { class: "picker" }, input, list));
 }
