@@ -811,6 +811,8 @@ export class ArrayView {
   readonly start: number;
   readonly n: number;
   private f: unknown[] | null = null;
+  // Its rest, when that was copied out of a much bigger buffer (I106c).
+  rest: ArrayView | null = null;
   constructor(ver: Version, start: number, n: number) { this.ver = ver; this.start = start; this.n = n; }
   // The buffer as this view's version has it.
   get buf(): Buffer { rerootArray(this.ver); return this.ver.cur!; }
@@ -842,7 +844,20 @@ const pushFront = (a: ArrayValue, x: unknown): ArrayView => {
   w.buf.items[w.start - 1] = x; w.buf.lo--;
   return new ArrayView(w.ver, w.start - 1, w.n + 1);
 };
-const restOf = (a: ArrayValue): ArrayView => { const v = arrayView(a); return v.n === 0 ? v : new ArrayView(v.ver, v.start + 1, v.n - 1); };
+// A rest is a view on the same buffer, so a list taken apart item by item
+// would keep its whole first buffer however little is left (Go's slices
+// leak so, I106c). Where what's left is under a quarter of a big buffer,
+// the rest is copied into one of its own instead: n items copied once
+// after at least 3n rests, so still constant per rest, and kept on the
+// view, so matching the same view again copies nothing.
+const restOf = (a: ArrayValue): ArrayView => {
+  const v = arrayView(a);
+  if (v.n === 0) return v;
+  if (v.rest) return v.rest;
+  const size = v.ver.cur ? v.ver.cur.items.length : v.buf.items.length;
+  if (size > 256 && (v.n - 1) * 4 < size) return (v.rest = arrayOf(v.buf.items, v.start + 1, v.start + v.n));
+  return new ArrayView(v.ver, v.start + 1, v.n - 1);
+};
 // The item at position i replaced by x (C93c), or the array as it is
 // outside it, as `replace at` on a list: written into the buffer, and the
 // version given becomes the change back.

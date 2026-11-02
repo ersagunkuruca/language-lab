@@ -65,3 +65,31 @@ test("array of List: its row, and its jobs agree with List's through items of ar
   const got = names.map((n) => r.value(code.defs.find((d) => nm[d] === n)!));
   assert.deepEqual(got, ["[]", "[1, 2, 3]", "[1, 2, 3]", "[0]", "[2, 1, 1, 2, 0, 3]", "3", "[1, 2, 3]", "[0, 10, 20, 30, 0]", "[[10, 5, 30], [10, 20, 30], [10, 5, 30], [7, 20, 30], [10, 5, 30]]", "\"[1, 2]\"", "after"]);
 });
+
+// I106c: a list taken apart item by item doesn't keep its first buffer.
+// Where what's left is under a quarter of a big buffer, the rest is copied
+// into one of its own, once: matching the same view again gives the same
+// rest, and the items are the same all the way down.
+test("rests of a big array let its buffer go once little is left, and a view's rest is made once", async () => {
+  const { STD_IMPL, arrayOf, ArrayView } = await import("../src/lang/std.ts");
+  const rest = STD_IMPL[ARRAY_OPS.rest] as (a: unknown) => InstanceType<typeof ArrayView>;
+  const n = 100_000;
+  let v = arrayOf(Array.from({ length: n }, (_, i) => i));
+  const first = v.buf;
+  let copied = 0, seen = v.buf;
+  for (let i = 0; i < n - 1; i++) { v = rest(v); if (v.buf !== seen) { copied += v.n; seen = v.buf; } }
+  assert.equal(v.n, 1);
+  assert.deepEqual(v.fields, [1, n - 1]);
+  assert.notEqual(v.buf, first);
+  assert.ok(v.buf.items.length <= 256 * 3, `one item holds ${v.buf.items.length} slots`);
+  // Constant per rest: each copy holds three quarters of the one before,
+  // so the copies add up to under three times the list.
+  assert.ok(copied < 3 * n, `${copied} items copied`);
+  // A view of 100 items on a buffer of 6000: its rest is a copy, once.
+  const w = arrayOf(Array.from({ length: 2000 }, (_, i) => i));
+  const x = new ArrayView(w.ver, w.start + 900, 100);
+  assert.equal(rest(x), rest(x));
+  assert.ok(rest(x).buf.items.length < 400);
+  assert.deepEqual(rest(x).fields.slice(0, 3), [99, 901, 902]);
+  assert.deepEqual(w.fields.slice(0, 3), [2000, 0, 1]);
+});
