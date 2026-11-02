@@ -138,6 +138,7 @@ export const TARGETS: Record<Id, Target> = {
   [CELL_OPS.path]: { js: written("pathCall(): `$path.of` with the field positions written in place"), scalar: CELLS },
   [CELL_OPS.itemPath]: { js: op(([p, i]) => `$path.item(${p}, ${i})`), scalar: CELLS },
   [CELL_OPS.thenPath]: { js: op(([p, q]) => `$path.then(${p}, ${q})`), scalar: CELLS },
+  [CELL_OPS.keyPath]: { js: op(([p, by, k]) => `$path.key(${p}, ${by}, ${k})`), scalar: CELLS },
   [CELL_OPS.readAt]: { js: "partial", scalar: CELLS },
   [CELL_OPS.writeAt]: { js: op(([c, p, v]) => `$path.write(${c}, ${p}, ${v})`), scalar: CELLS },
   // changed is pure (L163): with `data`, the value rebuilt along a path

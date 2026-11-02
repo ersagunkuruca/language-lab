@@ -721,6 +721,7 @@ export function $setCells(c) { cells = c; }
 export const $path = {
   item: (p, i) => pathValue([...stepsOf(p), { item: Number(i) }]),
   then: (p, q) => pathValue([...stepsOf(p), ...stepsOf(q)]),
+  key: (p, by, k) => pathValue([...stepsOf(p), { key: k, by: stepsOf(by) }]),
   of: (steps) => pathValue(steps),
   write: (c, p, v) => ($cells().edit(c, stepsOf(p), () => v, $listArrays), $unit),
   // A value with one place changed (L163): no cell, nothing woken.

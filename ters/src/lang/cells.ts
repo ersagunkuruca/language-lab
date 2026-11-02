@@ -100,7 +100,10 @@ export const nodeOf = (v: Value): CellNode | null => (typeof v === "function" ? 
 // language, made by `path`, `item path` and `then path` (std.ts), and
 // compared by identity like a cell; the cell's handler applies an edit at
 // one and wakes only the readers whose path meets it.
-export type Step = { item: number } | { field: number };
+// A keyed step (L98 keys) names the item of a list whose part at `by` is
+// `key`. It is found when the path is used, so an edit by key reaches the
+// same item after others were put in, taken out or moved before it.
+export type Step = { item: number } | { field: number } | { key: Value; by: Step[] };
 export const PATH = Symbol("path");
 export const stepsOf = (v: Value): Step[] | null => (typeof v === "function" ? ((v as unknown as Record<symbol, Step[]>)[PATH] ?? null) : null);
 export const pathValue = (steps: Step[]): Value => Object.assign(() => { throw new Error("a path is used by read at and the edits, not called"); }, { [PATH]: steps }) as unknown as Value;
@@ -114,12 +117,36 @@ export interface Lists {
   views?: { cons: string; nil: string; isList: (v: Value) => boolean };
 }
 type Data = { tag: string; fields: Value[] };
-const keyOf = (steps: Step[]) => steps.map((s) => ("item" in s ? `i${s.item}/` : `f${s.field}/`)).join("");
+const keyOf = (steps: Step[]) => steps.map((s) => ("item" in s ? `i${s.item}/` : "field" in s ? `f${s.field}/` : "k/")).join("");
+// Plain data equal: what a key is compared by.
+const sameData = (a: Value, b: Value): boolean => {
+  if (a === b) return true;
+  if (typeof a === "bigint" || typeof b === "bigint") return (typeof a === "bigint" || typeof a === "number") && (typeof b === "bigint" || typeof b === "number") && BigInt(a as never) === BigInt(b as never);
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
+  const d = a as unknown as Data, e = b as unknown as Data;
+  return d.tag === e.tag && Array.isArray(d.fields) && Array.isArray(e.fields) && d.fields.length === e.fields.length && d.fields.every((x, i) => sameData(x, e.fields[i]));
+};
+// Where the item with the key is in xs, or -1.
+const keyed = (xs: Value[], s: { key: Value; by: Step[] }, lists: Lists) => xs.findIndex((x) => { const k = partAt(x, s.by, lists); return k !== undefined && sameData(k, s.key); });
+// The steps with each keyed one replaced by the item it finds in v now (-1,
+// no item, when none has the key): the handler and its readers work with
+// positions.
+export function resolved(v: Value, steps: Step[], lists: Lists): Step[] {
+  if (!steps.some((s) => "key" in s)) return steps;
+  const out: Step[] = [];
+  let here: Value | undefined = v;
+  for (const s of steps) {
+    const step: Step = "key" in s ? { item: here === undefined ? -1 : keyed(lists.from(here), s, lists) } : s;
+    out.push(step);
+    here = here === undefined ? undefined : partAt(here, [step], lists);
+  }
+  return out;
+}
 // The part of v at steps, or undefined when there is no such item.
 export function partAt(v: Value, steps: Step[], lists: Lists): Value | undefined {
   for (const s of steps) {
     if ("field" in s) v = (v as unknown as Data).fields[s.field];
-    else { const xs = lists.from(v); if (!(s.item >= 0 && s.item < xs.length)) return undefined; v = xs[s.item]; }
+    else { const xs = lists.from(v), i = "key" in s ? keyed(xs, s, lists) : s.item; if (!(i >= 0 && i < xs.length)) return undefined; v = xs[i]; }
   }
   return v;
 }
@@ -127,7 +154,8 @@ export function partAt(v: Value, steps: Step[], lists: Lists): Value | undefined
 // when there is no such item or change gives undefined.
 export function changeAt(v: Value, steps: Step[], change: (part: Value) => Value | undefined, lists: Lists): Value {
   if (!steps.length) return change(v) ?? v;
-  const [s, ...rest] = steps;
+  const [first, ...rest] = steps;
+  const s = "key" in first ? { item: keyed(lists.from(v), first, lists) } : first;
   if ("field" in s) {
     const d = v as unknown as Data, inner = changeAt(d.fields[s.field], rest, change, lists);
     if (inner === d.fields[s.field]) return v;
@@ -190,7 +218,7 @@ export const listEdits = {
 // the reactive part: whatever is written or made a formula's value is
 // copied out of them first (plainOf), so a cell never holds another's view.
 const VIEWS = new WeakMap<object, () => Value>();
-const keyIs = (a: Step[], b: Step[]) => a.length <= b.length && a.every((s, i) => ("item" in s ? "item" in b[i] && b[i].item === (s as { item: number }).item : "field" in b[i] && (b[i] as { field: number }).field === s.field));
+const keyIs = (a: Step[], b: Step[]) => a.length <= b.length && a.every((s, i) => ("item" in s ? "item" in b[i] && b[i].item === (s as { item: number }).item : "field" in s && "field" in b[i] && (b[i] as { field: number }).field === s.field));
 // Where a row is after an edit of the list its each maps; -1 once removed.
 function shifted(i: number, e: Edit): number {
   if (i < 0) return i;
@@ -369,13 +397,16 @@ export class Cells {
     const n = nodeOf(c);
     if (!n) throw new Error("an edit needs a cell");
     if (n.compute) throw new Error("a formula can't be written: write the cells it reads");
-    const old = n.value as Value, next = changeAt(old, at, (part) => { const v = change(part); return v === undefined ? v : this.plainOf(v); }, lists);
+    const old = n.value as Value;
+    if (at.some((s) => "key" in s)) { at = resolved(old, at, lists); what = { ...what, at }; }
+    const next = changeAt(old, at, (part) => { const v = change(part); return v === undefined ? v : this.plainOf(v); }, lists);
     if (next !== old) this.write(c, next, at, what);
   }
 
   // What's at a place in a cell's value, read as a reader of that place
   // only; undefined when there's no such item.
   readAt(c: Value, at: Step[], lists: Lists): Value | undefined {
+    if (at.some((s) => "key" in s)) at = resolved(this.peek(c), at, lists);
     return partAt(this.read(c, at), at, lists);
   }
 
