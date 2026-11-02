@@ -59,9 +59,20 @@ export function sigType(info: Info, target: Id): Type | undefined {
   if (!t) c.types.set(target, (t = sig(c.s)));
   return t;
 }
+// Shown once per version of the program and of the names (E200b): every
+// redraw put every node's type in its hover title again, a fifth of a
+// click's time in Constructions.
+const shownTypes = new WeakMap<Info, WeakMap<Names, Map<Id, string | null>>>();
 export const typeOf = (info: Info | null, id: Id, names: Names): string | null => {
-  const t = info?.typeOf.get(id);
-  return t ? showIn(t, names, info!.subst) : null;
+  if (!info) return null;
+  let byNames = shownTypes.get(info);
+  if (!byNames) shownTypes.set(info, (byNames = new WeakMap()));
+  let m = byNames.get(names);
+  if (!m) byNames.set(names, (m = new Map()));
+  if (m.has(id)) return m.get(id)!;
+  const t = info.typeOf.get(id), shown = t ? showIn(t, names, info.subst) : null;
+  m.set(id, shown);
+  return shown;
 };
 
 // ---------------------------------------------------------------- view
