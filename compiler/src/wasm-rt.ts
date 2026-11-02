@@ -3013,7 +3013,8 @@ ${drop}
       local.get $v
       array.set $u32s`,
   },
-  // std.ts's show of a Float64: a whole number as its digits, any other
+  // std.ts's show of a Float64 (floatText): a whole number as its digits,
+  // a nonzero one below 1e-6 in size by its shortest digits, any other
   // rounded to 9 places, written as JavaScript writes it: plain decimals
   // of at most 15 digits directly (which is then exactly what JavaScript
   // writes), otherwise by number.js.
@@ -3021,6 +3022,21 @@ ${drop}
     params: [["x", "f64"]], result: "text", locals: [["y", "f64"], ["r", "f64"], ["n", "i64"], ["m", "i64"], ["f", "i64"], ["buf", "text"], ["i", "i32"], ["out", "text"], ["y_text", "text"]],
     uses: ["int64.show", "text.concat", "number.js", "number.tiny"],
     body: `
+      ;; A nonzero number smaller than 1e-6 in size: its shortest digits,
+      ;; never 0 (L154).
+      local.get $x
+      f64.const 0
+      f64.ne
+      local.get $x
+      f64.abs
+      f64.const 1e-6
+      f64.lt
+      i32.and
+      if void
+        local.get $x
+        call $number.js
+        return
+      end
       local.get $x
       f64.floor
       local.get $x

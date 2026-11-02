@@ -380,9 +380,11 @@ const FNS: Record<string, Fn> = {
 }` },
   "number.show": {
     uses: [],
-    // A whole Float64 as it is, any other rounded to 9 places
+    // A whole Float64 as it is, a nonzero one below 1e-6 in size by its
+    // shortest digits (L154), any other rounded to 9 places
     // (Math.round(x · 1e9) / 1e9: the nearest whole number, halves up).
     c: `static lab_cell *lab_number_show(double x) {
+  if (x != 0 && fabs(x) < 1e-6) return lab__js_string(x);
   if (!(isfinite(x) && floor(x) == x)) {
     double y = x * 1e9, f = floor(y);
     if (isfinite(y) && floor(y) != y) { double r = y - f >= 0.5 ? f + 1 : f; if (r == 0 && y < 0) r = -0.0; y = r; }

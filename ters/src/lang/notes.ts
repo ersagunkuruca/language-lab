@@ -117,7 +117,7 @@ export const NOTES: Comments = {
   "builtin.floor": "The Float64 rounded down to a whole one, still a Float64. whole part gives an Int.",
   "builtin.float32": "The nearest Float64 a GPU can hold (32-bit floating point).",
   "builtin.mod": "The remainder of a ÷ b, never negative when b is positive: mod(−1, 3) is 2.",
-  "builtin.show": "A Float64 as text: show(2.5) is \"2.5\".",
+  "builtin.show": "A Float64 as text: show(2.5) is \"2.5\". Up to nine decimals, so 0.1 + 0.2 shows 0.3; a nonzero number smaller than 0.000001 shows exactly, as 1e-12, never as 0.",
   "builtin.range": "The Float64s 0, 1, … up to n − 1, as a list.",
   "builtin.int.add": "a + b for Ints: what the generic + is at Int. Ints never overflow.",
   "builtin.int.sub": "a − b for Ints: what the generic − is at Int.",

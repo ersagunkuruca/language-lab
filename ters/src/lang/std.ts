@@ -398,7 +398,7 @@ export const S = {
   float32: builtin("float32", "round to Float32", pure([num], num), Math.fround),
   mod: builtin("mod", "mod", (s) => fn([num, num], num, s.freshRow([CHOICE])), (a: number, b: number) => ((a % b) + b) % b),
   concat: builtin("concat", "join text", pure([str, str], str), (a: string, b: string) => a + b),
-  show: builtin("show", "show", pure([num], str), (x: number) => (Number.isInteger(x) ? String(x) : String(Math.round(x * 1e9) / 1e9))),
+  show: builtin("show", "show", pure([num], str), (x: number) => floatText(x)),
   range: builtin("range", "range", pure([num], list(num))),
   // Choice: a computation that may have no answer, one, or many (Verse-ish).
   oneOf: builtin("oneOf", "one of", (s) => { const a = s.fresh(); return fn([list(a)], a, s.freshRow([CHOICE])); }),
@@ -713,6 +713,15 @@ export const ARITH_FIELD: Record<Id, { iface: Id; field: Id }> = {
   [ARITH.neg]: { iface: ARITHMETIC, field: `${ARITHMETIC_V}.negate` },
   [ARITH.less]: { iface: ORDERED, field: `${ORDERED_V}.less` },
 };
+
+// A Float64 as show writes it (BACKLOG L154, Ersagun 2026-11-02): to 9
+// decimals, so a sum's last-bit noise doesn't show (0.1 + 0.2 is 0.3);
+// but a nonzero number smaller than 10⁻⁶ in size, which 9 decimals would
+// turn into 0 or one digit, gets the shortest text that reads back to it
+// exactly (JavaScript's own, 1e-12), as Steele and White's and Ryū's
+// shortest round trip.
+export const floatText = (x: number): string =>
+  Number.isInteger(x) ? String(x) : x !== 0 && Math.abs(x) < 1e-6 ? String(x) : String(Math.round(x * 1e9) / 1e9);
 
 // Text at real sizes (src/lang/text.ts). Positions count characters.
 export const TEXT_OPS = {

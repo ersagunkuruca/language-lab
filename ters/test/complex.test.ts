@@ -93,7 +93,9 @@ test("the answers: the complex product, i · i = −1, e^(iπ) = −1, no answer
   assert.equal(e.negated, "-1 + 2i");
   assert.deepEqual(e.quotient, ["1 + 2i"]);
   assert.deepEqual(e["by zero"], []);
-  assert.equal(e.euler, "-1 + 0i");
+  // e^(iπ)'s imaginary part is sin(π) in Float64, 1.2e-16 and not 0, and
+  // show writes a nonzero number below 1e-6 exactly (L154).
+  assert.equal(e.euler, "-1 + 1.2246467991473532e-16i");
   assert.equal(e.conjugated, "25 + 0i");
   assert.equal(e.size, 5);
   assert.equal(e["size as vector"], 5);
