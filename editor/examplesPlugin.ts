@@ -17,6 +17,11 @@ import type { Plugin } from "../ters/node_modules/esbuild/lib/main.js";
 
 const editor = new URL(".", import.meta.url).pathname;
 const examples = editor + "../ters/examples/";
+// A folder is under ters/examples/, or, with a slash, from the repository's
+// root (compiler/gaps/board: the bigger programs kept with the compiler).
+const dirOf = (f: string) => (f.includes("/") ? `${editor}../${f}/` : `${examples}${f}/`);
+// Its page element's id has no slash.
+const idOf = (f: string) => f.replace(/\//g, "-");
 
 export type Manifest = { programs: { program: string; label: string; folders?: string[]; start?: string; page?: boolean; built?: boolean; editor?: boolean }[] };
 
@@ -31,12 +36,12 @@ export const examplesPlugin = (manifest: Manifest, mode: "inline" | "page" = "in
   setup(b) {
     b.onResolve({ filter: /^examples:files$/ }, (a) => ({ path: a.path, namespace: "examples" }));
     b.onLoad({ filter: /.*/, namespace: "examples" }, () => {
-      if (mode === "page") return { contents: `const read = {};\nexport default (f) => read[f] ??= JSON.parse(document.getElementById("lab-example-" + f).textContent);\n`, loader: "js" };
+      if (mode === "page") return { contents: `const read = {};\nexport default (f) => read[f] ??= JSON.parse(document.getElementById("lab-example-" + f.replace(/\\//g, "-")).textContent);\n`, loader: "js" };
       const imports: string[] = [], entries: string[] = [];
       for (const f of foldersOf(manifest)) {
         const own: string[] = [];
         for (const [table, file] of TABLES) {
-          const path = `${examples}${f}/${file}.json`;
+          const path = `${dirOf(f)}${file}.json`;
           if (!existsSync(path)) continue;
           const v = `f${imports.length}`;
           imports.push(`import ${v} from ${JSON.stringify(path)} with { type: "json" };`);
@@ -56,9 +61,9 @@ export function exampleTags(manifest: Manifest): string {
   return foldersOf(manifest).map((f) => {
     const tables: Record<string, unknown> = {};
     for (const [table, file] of TABLES) {
-      const path = `${examples}${f}/${file}.json`;
+      const path = `${dirOf(f)}${file}.json`;
       if (existsSync(path)) tables[table] = JSON.parse(readFileSync(path, "utf8"));
     }
-    return `<script type="application/json" id="lab-example-${f}">${JSON.stringify(tables).replace(/</g, "\\u003c")}</script>\n`;
+    return `<script type="application/json" id="lab-example-${idOf(f)}">${JSON.stringify(tables).replace(/</g, "\\u003c")}</script>\n`;
   }).join("");
 }

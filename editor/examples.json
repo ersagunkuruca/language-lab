@@ -1,5 +1,5 @@
 {
-  "about": "The example programs (BACKLOG E205): the editor's picker in this order, each from its folders under ters/examples/ (merged in order) or built in code, with the definition it opens on (else main, else its picture). page: built as apps/<folder>.html too (editor/build.ts). editor false: a page only.",
+  "about": "The example programs (BACKLOG E205), with every bigger-program round's program (GAPS.md): the editor's picker in this order, each from its folders under ters/examples/, or from the repository root when the name has a slash (merged in order) or built in code, with the definition it opens on (else main, else its picture). page: built as apps/<folder>.html too (editor/build.ts). editor false: a page only.",
   "programs": [
     { "program": "numbers", "label": "Numbers & physics", "folders": ["quadratic", "physics"], "start": "fall" },
     { "program": "sort", "label": "Insertion sort", "folders": ["sort"], "start": "sort" },
@@ -23,6 +23,7 @@
     { "program": "constructions", "label": "Page: constructions", "folders": ["constructions"], "page": true },
     { "program": "bounce", "label": "Page: bounce", "folders": ["bounce"], "page": true },
     { "program": "spacetime", "label": "Page: spacetime", "folders": ["spacetime"], "page": true },
+    { "program": "sheet", "label": "Bigger program: sheet, a spreadsheet", "folders": ["sheet"] },
     { "program": "compass", "label": "Compass", "folders": ["compass"], "page": true, "editor": false }
   ]
 }
