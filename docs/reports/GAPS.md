@@ -1574,7 +1574,7 @@ added to C59. NG1 to NG4 are L133 to L136.
 
 ## Round 7: sheet, written in the editor (2026-11-02)
 
-`compiler/gaps/sheet` is a small spreadsheet. It reads a file of cells,
+`ters/examples/sheet` is a small spreadsheet. It reads a file of cells,
 one per line (`B2 = A1 * 12 + max(A1:A3)`), parses each formula, works
 out every cell once, finds cycles, and prints the sheet as a grid and
 the cells that went wrong. It also writes a report beside the file, each
@@ -1582,7 +1582,7 @@ formula as it was read with its value, so it is the first round to write
 a file.
 
 ```
-$ node ters/cli/lab.ts run compiler/gaps/sheet compiler/gaps/sheet/budget.txt
+$ node ters/cli/lab.ts run ters/examples/sheet ters/examples/sheet/budget.txt
            A       B       C       D
    1    1200   14400     750  #cycle
    2     450    5400     820  #cycle
@@ -1592,7 +1592,7 @@ line 14: D1 is #cycle
 line 15: D2 is #cycle
 line 16: D3 is #div/0
 line 17: D4 is #parse
-$ cat compiler/gaps/sheet/budget.txt.out
+$ cat ters/examples/sheet/budget.txt.out
 A1 = 1200 → 1200
 ...
 C2 = (MAX(A1:A3) - MIN(A1:A3)) → 820
@@ -1629,12 +1629,11 @@ their own body. The driver script and the saved file are in the
 project's files (`gaps-round7/`). What the editor made hard is below the
 compiler's gaps.
 
-The program lives in `compiler/gaps/sheet`, not `ters/examples`, for now:
-with it among the examples, `ters/test/modes.test.ts` "forward, a
-definition ends exactly when the checker finds no Diverge of its own"
-fails, because the checker types `show formula` and `shown args` as
-Diverge where the modes see them end (SL1 below). It moves to the
-examples when that is fixed.
+The program lived in `compiler/gaps/sheet` at first: among the examples,
+`ters/test/modes.test.ts` "forward, a definition ends exactly when the
+checker finds no Diverge of its own" failed, because the checker typed
+`show formula` and `shown args` as Diverge where the modes see them end
+(SL1 below). With that fixed (L146), it is in `ters/examples/sheet`.
 
 Files:
 - `compiler/gaps/sheet.ideal.js`: the hand-written ideal, with the gaps
