@@ -96,7 +96,8 @@ test("the weight-balanced trees: lookups and changes grow as a logarithm, walks 
 });
 
 // C45: lists as trees by position. Every job on one end or one position
-// grows as a logarithm, the fold (each arm's rest a tree again) as n log n.
+// grows as a logarithm, the fold (each arm's rest a tree again) as n log n,
+// and a fold that doesn't read the rest as n.
 test("tree of List: changes by position grow as a logarithm, the fold as n log n", () => {
   const row = rep("tree of List"), cons = def("list tree cons");
   const tree = (n: number) => { let t = def("list tree nil"); for (let i = 0; i < n; i++) t = call(cons, i, t); return t; };
@@ -108,6 +109,8 @@ test("tree of List: changes by position grow as a logarithm, the fold as n log n
     "replace at": [(t, i) => call(def("list tree replace at"), t, (i * 7919) % 1000, -1), 2000],
     append: [(t) => call(def("list tree append"), t, t), 2000],
     fold: [(t) => call(def("list tree fold"), t, () => [0], (_x: Value, _r: Value, s: Value) => [s]), 3],
+    // A fold whose cases don't read the rest: the items, walked (C75).
+    "fold of items": [(t) => call(def("items of list tree"), t), 3],
   };
   for (const [job, [run, m]] of Object.entries(jobs)) check("tree of List", job, costOf(row, job), growth(tree, run, 1000, m));
 });
