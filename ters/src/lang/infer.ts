@@ -101,6 +101,7 @@ export interface Options { pins?: Pins; hidden?: Iterable<Id>; insiders?: Iterab
 const num: Type = { t: "con", id: NUMBER, args: [] };
 const ARITH_WHAT = {
   arith: "a Number (Int, Rational, Float64, Fixed, Complex, or one case whose fields are all Float64s)",
+  less: "a type with < (a Number but Complex, Text, or a type with an Ordered of its own)",
   ordered: "a Number with < (Int, Rational, Fixed or Float64)",
 };
 const str: Type = { t: "con", id: STRING, args: [] };
@@ -474,7 +475,8 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       const t = s.zonk(mono.get(d)!);
       const fv = freeVars(t, s);
       let sc: Scheme = { vars: [...fv.vars], rows: [...fv.rows], type: t, plain: [...fv.vars].filter((v) => s.plain.has(v)), numbers: [...fv.vars].filter((v) => s.numbers.has(v)) };
-      const arith = [...fv.vars].filter((v) => s.arith.get(v) === "arith"), ordered = [...fv.vars].filter((v) => s.arith.get(v) === "ordered");
+      const arith = [...fv.vars].filter((v) => s.arith.get(v) === "arith"), ordered = [...fv.vars].filter((v) => s.arith.get(v) === "ordered"), less = [...fv.vars].filter((v) => s.arith.get(v) === "less");
+      if (less.length) sc.less = less;
       if (arith.length) sc.arith = arith;
       if (ordered.length) sc.ordered = ordered;
       const fractional = [...fv.vars].filter((v) => s.fractional.has(v));
@@ -1184,7 +1186,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       // + − · and < say what a Number is first, as they always have.
       if (w.iface === "std.arithmetic" || w.iface === "std.ordered") {
         const ordered = w.iface === "std.ordered";
-        err(w.at || current[0], `${show(t)} isn't ${ARITH_WHAT[ordered ? "ordered" : "arith"]}, and has no ${ordered ? "<" : "+ − ·"} of its own: give it one, a definition of type ${of}`, { iface: w.iface, type: t });
+        err(w.at || current[0], `${show(t)} isn't ${ARITH_WHAT[ordered ? "less" : "arith"]}, and has no ${ordered ? "<" : "+ − ·"} of its own: give it one, a definition of type ${of}`, { iface: w.iface, type: t });
       } else err(w.at || current[0], `${show(t)} has no ${nm(w.iface)}: give it one, a definition of type ${of}`, { iface: w.iface, type: t });
     }
   }

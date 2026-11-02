@@ -97,6 +97,9 @@ export function buildPrelude(): Module {
   const notAfter = compare("not after", TEXT_OPS.less, (lt, a, b) => k.call(S.not, lt(b, a)));
   const after = compare("comes after", TEXT_OPS.less, (lt, a, b) => lt(b, a));
   const notBefore = compare("not before", TEXT_OPS.less, (lt, a, b) => k.call(S.not, lt(a, b)));
+  // Text's copies of ≤ > ≥, from before Text had the one < (L152): kept so
+  // programs saved before still open, not offered.
+  const textOnly = [notAfter, after, notBefore];
   // Letters and digits, and a text's case (BACKLOG L133, GAPS round 6
   // NG1: notebook wrote lower, wordy and between with character codes, calc
   // its own digit and letter). The English letters A to Z and the digits 0
@@ -958,6 +961,9 @@ export function buildPrelude(): Module {
     impl("arithmetic at fixed", ARITHMETIC_V, [addX, subX, mulX, negX]),
     ...matProducts.map((m, i) => impl(`arithmetic at mat${i + 2}`, ARITHMETIC_V, [addParts, subParts, m, negParts])),
     impl("ordered at fixed", ORDERED_V, [lessX]),
+    // Text's < is `comes before`, alphabetical (L152): at most, smaller,
+    // larger and the rest take Text, and no + − · does.
+    impl("ordered at text", ORDERED_V, [TEXT_OPS.less]),
   ];
 
   // Sorting by the order on plain data (`compare`, L66): a merge sort
@@ -1439,7 +1445,7 @@ export function buildPrelude(): Module {
   const simulatedHelpers = [readyAt, earliest, readyTimes, tiedAt, pickAt, nextDraw, firstDraw, simulatedWorld, simulatedClock];
   const awaitHelpers = [startBranch, waiting, goOn, finished, settle, firstDone, raceSettle, ...simulatedHelpers];
 
-  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, repeated, padStart, padEnd, flatten, flatMap, rangeFrom, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, showDecimals, divD, slopeAt, dualTable, asFixed, fixedF, divX, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, ticketId, anyOf, together, race, within, simulated];
+  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, repeated, padStart, padEnd, flatten, flatMap, rangeFrom, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, divF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, showDecimals, divD, slopeAt, dualTable, asFixed, fixedF, divX, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, ticketId, anyOf, together, race, within, simulated];
   // Each number's own show, from before the generic one showed every number
   // (L153, L156): kept so programs saved before still open, not offered.
   const perTypeShows = [showF, showC, showD, showX];
@@ -1465,9 +1471,9 @@ export function buildPrelude(): Module {
     [atLeast]: "a ≥ b: not a < b.",
     [smaller]: "The smaller of two numbers (min); a shader's min.",
     [larger]: "The larger of two numbers (max); a shader's max.",
-    [notAfter]: "Text a ≤ b: a comes before b or is b.",
-    [after]: "Text a > b: b comes before a.",
-    [notBefore]: "Text a ≥ b: b comes before a or is a.",
+    [notAfter]: "Text a ≤ b: a comes before b or is b. Not offered: at most, more than and at least take Text; kept so programs saved before still open.",
+    [after]: "Text a > b: b comes before a. Not offered: at most, more than and at least take Text; kept so programs saved before still open.",
+    [notBefore]: "Text a ≥ b: b comes before a or is a. Not offered: at most, more than and at least take Text; kept so programs saved before still open.",
     [isDigit]: "Whether this is one of the characters 0 to 9.",
     [isLetter]: "Whether this is one of the English letters a to z or A to Z (other alphabets' letters aren't, yet).",
     [lowercase]: "The text with A to Z made a to z, everything else as it was: lowercase(\"Hello, World\") is \"hello, world\".",
@@ -1608,9 +1614,9 @@ export function buildPrelude(): Module {
     ...Object.fromEntries(awaitHelpers.map((d) => [d, simulatedHelpers.includes(d) ? "A helper of simulated. Not offered in the palette." : "A helper of together and race. Not offered in the palette."])),
     [applied]: "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette.",
   };
-  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, ...awaitHelpers, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarD, unpolarX, vector, asinBy, acosBy, asinF, acosF, asinX, acosX, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, ...perTypeShows, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...laws], merge(prelude, std));
+  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, ...awaitHelpers, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarD, unpolarX, vector, asinBy, acosBy, asinF, acosF, asinX, acosX, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, ...perTypeShows, ...textOnly, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...laws], merge(prelude, std));
   if (!p.ok) throw new Error(`the prelude can't be published: ${p.reason}`);
   const at = (d: Id) => p.rename.get(d)!;
   const notes = Object.fromEntries(Object.entries(comments).map(([d, c]) => [at(d), c]));
-  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [...awaitHelpers, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, ...perTypeShows, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarD, unpolarX, vector, asinBy, acosBy, asinF, acosF, asinX, acosX, ...laws].map(at));
+  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [...awaitHelpers, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, ...perTypeShows, ...textOnly, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarD, unpolarX, vector, asinBy, acosBy, asinF, acosF, asinX, acosX, ...laws].map(at));
 }

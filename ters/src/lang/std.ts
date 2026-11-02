@@ -693,17 +693,17 @@ export const INT_OPS = {
 // (src/lang/arith.ts), so they have no implementation of their own: the
 // one here says so if a caller forgot to resolve.
 const unresolved = (name: string) => () => { throw new Error(`the generic ${name} must be resolved to its type's own operation first (arith.ts)`); };
-const generic = (op: string, name: string, arity: 1 | 2, kind: "arith" | "ordered" = "arith") =>
+const generic = (op: string, name: string, arity: 1 | 2, kind: "arith" | "less" = "arith") =>
   builtin(`arith.${op}`, name, (s) => {
     const a = s.fresh(false, false, kind);
-    return fn(arity === 1 ? [a] : [a, a], kind === "ordered" ? bool : a, s.freshRow());
+    return fn(arity === 1 ? [a] : [a, a], kind === "less" ? bool : a, s.freshRow());
   }, unresolved(name));
 export const ARITH = {
   add: generic("add", "add", 2),
   sub: generic("sub", "subtract", 2),
   mul: generic("mul", "multiply", 2),
   neg: generic("neg", "negate", 1),
-  less: generic("less", "less than", 2, "ordered"),
+  less: generic("less", "less than", 2, "less"),
 };
 // Which interface's field each generic operation is (INTERFACES.md step 4).
 export const ARITH_FIELD: Record<Id, { iface: Id; field: Id }> = {

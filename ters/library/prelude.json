@@ -45521,6 +45521,29 @@
           "@indf96h7ipud48mac85l9s0o6g:3"
         ]
       },
+      "@q561k053eq9hj02i9dgpi90gah": {
+        "id": "@q561k053eq9hj02i9dgpi90gah",
+        "kind": "def",
+        "body": "@q561k053eq9hj02i9dgpi90gah:1"
+      },
+      "@q561k053eq9hj02i9dgpi90gah:3": {
+        "id": "@q561k053eq9hj02i9dgpi90gah:3",
+        "kind": "ref",
+        "target": "builtin.text.less"
+      },
+      "@q561k053eq9hj02i9dgpi90gah:2": {
+        "id": "@q561k053eq9hj02i9dgpi90gah:2",
+        "kind": "ref",
+        "target": "std.ordered.ordered"
+      },
+      "@q561k053eq9hj02i9dgpi90gah:1": {
+        "id": "@q561k053eq9hj02i9dgpi90gah:1",
+        "kind": "call",
+        "fn": "@q561k053eq9hj02i9dgpi90gah:2",
+        "args": [
+          "@q561k053eq9hj02i9dgpi90gah:3"
+        ]
+      },
       "@v53dcuo5olrbvtgve59t594n5r": {
         "id": "@v53dcuo5olrbvtgve59t594n5r",
         "kind": "def",
@@ -59382,9 +59405,6 @@
       "@i6fegek8k300348mgag5spc82m",
       "@2cffeb22vf6lq91e33uel1np1h",
       "@7oqrouv1btl6kt56s12kr7t7k0",
-      "@oibbb5951dfie4ggdg41hmht58",
-      "@asph5j4jqbhglhup8u6ff8eluk",
-      "@5bnaqbbd4u4mtb07mi3pvic9fa",
       "@im5r2c6h3m1dh2jrleu0jjd3ao",
       "@umq0g46cm32hve92nci4ufttq9",
       "@p7l8meq803g3bcfkgkm9c189m9",
@@ -59539,6 +59559,9 @@
       "@c80rodj4euanl6hcacl8e1eio9",
       "@13vf6q6v7l5qubj1a6cntaece9",
       "@p03lgr8efclhoeg5i1prm7h7ai",
+      "@oibbb5951dfie4ggdg41hmht58",
+      "@asph5j4jqbhglhup8u6ff8eluk",
+      "@5bnaqbbd4u4mtb07mi3pvic9fa",
       "@gqaqevodbqvkve52jflltfe15j",
       "@brbvg0sr9iq5iaavff80b7jag4",
       "@jdr0cbak0dr75q00ui5q25nhmg",
@@ -59572,6 +59595,7 @@
       "@uj4nsc01rkbjmakemjmlaclrpv",
       "@86p35ajg9ehfnssldf7ldc2r6u",
       "@indf96h7ipud48mac85l9s0o6g",
+      "@q561k053eq9hj02i9dgpi90gah",
       "@0q3qq6ao580d6ie7maa7ranf6k",
       "@dcipv71aesdeh9ea1l3jeaan2b",
       "@0rkl8ik3br3h3u76afs5aaq43j",
@@ -59653,7 +59677,7 @@
       "plain": [
         0
       ],
-      "ordered": [
+      "less": [
         0
       ]
     },
@@ -59904,7 +59928,7 @@
       "plain": [
         0
       ],
-      "ordered": [
+      "less": [
         0
       ]
     },
@@ -59947,7 +59971,7 @@
       "plain": [
         0
       ],
-      "ordered": [
+      "less": [
         0
       ]
     },
@@ -61304,7 +61328,7 @@
       "plain": [
         0
       ],
-      "ordered": [
+      "less": [
         0
       ]
     },
@@ -61340,7 +61364,7 @@
       "plain": [
         0
       ],
-      "ordered": [
+      "less": [
         0
       ]
     },
@@ -61376,7 +61400,7 @@
       "plain": [
         0
       ],
-      "ordered": [
+      "less": [
         0
       ]
     },
@@ -61411,7 +61435,7 @@
       "plain": [
         0
       ],
-      "ordered": [
+      "less": [
         0
       ]
     },
@@ -61446,102 +61470,9 @@
       "plain": [
         0
       ],
-      "ordered": [
+      "less": [
         0
       ]
-    },
-    "@oibbb5951dfie4ggdg41hmht58": {
-      "vars": [],
-      "rows": [
-        0
-      ],
-      "type": {
-        "t": "fn",
-        "params": [
-          {
-            "t": "con",
-            "id": "type.string",
-            "args": []
-          },
-          {
-            "t": "con",
-            "id": "type.string",
-            "args": []
-          }
-        ],
-        "ret": {
-          "t": "con",
-          "id": "std.bool",
-          "args": []
-        },
-        "eff": {
-          "effs": [],
-          "tail": 0
-        }
-      },
-      "plain": []
-    },
-    "@asph5j4jqbhglhup8u6ff8eluk": {
-      "vars": [],
-      "rows": [
-        0
-      ],
-      "type": {
-        "t": "fn",
-        "params": [
-          {
-            "t": "con",
-            "id": "type.string",
-            "args": []
-          },
-          {
-            "t": "con",
-            "id": "type.string",
-            "args": []
-          }
-        ],
-        "ret": {
-          "t": "con",
-          "id": "std.bool",
-          "args": []
-        },
-        "eff": {
-          "effs": [],
-          "tail": 0
-        }
-      },
-      "plain": []
-    },
-    "@5bnaqbbd4u4mtb07mi3pvic9fa": {
-      "vars": [],
-      "rows": [
-        0
-      ],
-      "type": {
-        "t": "fn",
-        "params": [
-          {
-            "t": "con",
-            "id": "type.string",
-            "args": []
-          },
-          {
-            "t": "con",
-            "id": "type.string",
-            "args": []
-          }
-        ],
-        "ret": {
-          "t": "con",
-          "id": "std.bool",
-          "args": []
-        },
-        "eff": {
-          "effs": [],
-          "tail": 0
-        }
-      },
-      "plain": []
     },
     "@im5r2c6h3m1dh2jrleu0jjd3ao": {
       "vars": [],
@@ -67914,6 +67845,99 @@
       },
       "plain": []
     },
+    "@oibbb5951dfie4ggdg41hmht58": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "type.string",
+            "args": []
+          },
+          {
+            "t": "con",
+            "id": "type.string",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.bool",
+          "args": []
+        },
+        "eff": {
+          "effs": [],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
+    "@asph5j4jqbhglhup8u6ff8eluk": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "type.string",
+            "args": []
+          },
+          {
+            "t": "con",
+            "id": "type.string",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.bool",
+          "args": []
+        },
+        "eff": {
+          "effs": [],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
+    "@5bnaqbbd4u4mtb07mi3pvic9fa": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "type.string",
+            "args": []
+          },
+          {
+            "t": "con",
+            "id": "type.string",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.bool",
+          "args": []
+        },
+        "eff": {
+          "effs": [],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
     "@gqaqevodbqvkve52jflltfe15j": {
       "vars": [],
       "rows": [],
@@ -68677,6 +68701,22 @@
           {
             "t": "con",
             "id": "std.fixed",
+            "args": []
+          }
+        ]
+      },
+      "plain": []
+    },
+    "@q561k053eq9hj02i9dgpi90gah": {
+      "vars": [],
+      "rows": [],
+      "type": {
+        "t": "con",
+        "id": "std.ordered",
+        "args": [
+          {
+            "t": "con",
+            "id": "type.string",
             "args": []
           }
         ]
@@ -70914,6 +70954,7 @@
     "@4eli2i9q86k8f6m5g5mofsqckd": "arithmetic at mat3",
     "@uj4nsc01rkbjmakemjmlaclrpv": "arithmetic at mat4",
     "@indf96h7ipud48mac85l9s0o6g": "ordered at fixed",
+    "@q561k053eq9hj02i9dgpi90gah": "ordered at text",
     "@v53dcuo5olrbvtgve59t594n5r": "merge sorted",
     "@v53dcuo5olrbvtgve59t594n5r:2": "xs",
     "@v53dcuo5olrbvtgve59t594n5r:3": "ys",
@@ -71374,9 +71415,9 @@
     "@i6fegek8k300348mgag5spc82m": "a ≥ b: not a < b.",
     "@2cffeb22vf6lq91e33uel1np1h": "The smaller of two numbers (min); a shader's min.",
     "@7oqrouv1btl6kt56s12kr7t7k0": "The larger of two numbers (max); a shader's max.",
-    "@oibbb5951dfie4ggdg41hmht58": "Text a ≤ b: a comes before b or is b.",
-    "@asph5j4jqbhglhup8u6ff8eluk": "Text a > b: b comes before a.",
-    "@5bnaqbbd4u4mtb07mi3pvic9fa": "Text a ≥ b: b comes before a or is a.",
+    "@oibbb5951dfie4ggdg41hmht58": "Text a ≤ b: a comes before b or is b. Not offered: at most, more than and at least take Text; kept so programs saved before still open.",
+    "@asph5j4jqbhglhup8u6ff8eluk": "Text a > b: b comes before a. Not offered: at most, more than and at least take Text; kept so programs saved before still open.",
+    "@5bnaqbbd4u4mtb07mi3pvic9fa": "Text a ≥ b: b comes before a or is a. Not offered: at most, more than and at least take Text; kept so programs saved before still open.",
     "@kns2kgot84jr2lfre0vbl00j9q": "Whether this is one of the characters 0 to 9.",
     "@3ghl6cjivv5vaeuti6ht2gip8a": "Whether this is one of the English letters a to z or A to Z (other alphabets' letters aren't, yet).",
     "@n58n0psu4gm2r12rl3bh6qp2t1": "The text with A to Z made a to z, everything else as it was: lowercase(\"Hello, World\") is \"hello, world\".",
@@ -71538,6 +71579,7 @@
     "@4eli2i9q86k8f6m5g5mofsqckd": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
     "@uj4nsc01rkbjmakemjmlaclrpv": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
     "@indf96h7ipud48mac85l9s0o6g": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
+    "@q561k053eq9hj02i9dgpi90gah": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
     "@e9fsfaqqmkbqi45m9thp36ep42": "The same ticket with what it gives forgotten (a Ticket Unit), so tickets of different types can go in one list for any of.",
     "@s80979s95urnfent649ge9ikvu": "A ticket for whichever of these tickets is ready first: await(any of(tickets)) gives its position, from 0.",
     "@l0dk7i94iks6hair9rmo4bl610": "Runs the actions side by side: each runs until it awaits a ticket, and whichever ticket is ready first goes on, until every action has its value. The values come back in the actions' order (as JavaScript's Promise.all).",
@@ -71601,9 +71643,6 @@
     "@i6fegek8k300348mgag5spc82m",
     "@2cffeb22vf6lq91e33uel1np1h",
     "@7oqrouv1btl6kt56s12kr7t7k0",
-    "@oibbb5951dfie4ggdg41hmht58",
-    "@asph5j4jqbhglhup8u6ff8eluk",
-    "@5bnaqbbd4u4mtb07mi3pvic9fa",
     "@im5r2c6h3m1dh2jrleu0jjd3ao",
     "@umq0g46cm32hve92nci4ufttq9",
     "@p7l8meq803g3bcfkgkm9c189m9",
