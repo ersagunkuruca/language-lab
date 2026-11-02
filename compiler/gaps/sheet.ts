@@ -36,8 +36,8 @@ const world = (files: Record<string, string>, err: string[], wrote: Record<strin
 });
 
 export function programs() {
-  const p = load("../../compiler/gaps/sheet");
-  const own: string[] = JSON.parse(readFileSync(join(examples, "../../compiler/gaps/sheet/code.json"), "utf8")).defs;
+  const p = load("sheet");
+  const own: string[] = JSON.parse(readFileSync(join(examples, "sheet/code.json"), "utf8")).defs;
   const main = own.find((d) => p.pres.names[d] === "main")!;
   const options = p.options as Parameters<typeof infer>[3];
   const lib = withLibraryRepresentations(p.code, p.info, p.pres.names, main, own, [], { hostMaps: true });
