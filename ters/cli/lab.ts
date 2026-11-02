@@ -272,6 +272,8 @@ const p = main && defined < 0 ? represented(loaded, main, command !== "native") 
 // hosts/js.js beside the program, if it has one.
 const hostFile = existsSync(path) && statSync(path).isDirectory() ? join(path, "hosts", "js.js") : "";
 const hosts: Hosts | undefined = hostFile && existsSync(hostFile) ? (await import(pathToFileURL(resolve(hostFile)).href)).default : undefined;
+// A page or app bundles the same file into its script (L69a3).
+const pageHost = hostFile && existsSync(hostFile) ? resolve(hostFile) : undefined;
 switch (command) {
   case "run": {
     if (staticPage) {
@@ -325,7 +327,7 @@ switch (command) {
   case "build-web": {
     const o = rest.indexOf("-o");
     const out = o >= 0 ? rest[o + 1] ?? fail("-o needs a file") : `${basename(resolve(path)).replace(/\.json$/, "")}.html`;
-    writeFileSync(out, await webPage(p.title, p.code, p.info, p.names, main));
+    writeFileSync(out, await webPage(p.title, p.code, p.info, p.names, main, pageHost));
     // A recording the page plays, from the program's folder (AUDIO.md).
     const copied = recordings(p.code).filter((f) => existsSync(join(path, f)) && statSync(path).isDirectory());
     for (const f of copied) copyFileSync(join(path, f), join(dirname(out), f));
@@ -335,7 +337,7 @@ switch (command) {
   case "build-app": {
     const o = rest.indexOf("-o");
     const out = o >= 0 ? rest[o + 1] ?? fail("-o needs a folder") : basename(resolve(path)).replace(/\.json$/, "");
-    for (const [file, x] of Object.entries(appFolder(p.title, await webPage(p.title, p.code, p.info, p.names, main)))) {
+    for (const [file, x] of Object.entries(appFolder(p.title, await webPage(p.title, p.code, p.info, p.names, main, pageHost)))) {
       mkdirSync(dirname(join(out, file)), { recursive: true });
       writeFileSync(join(out, file), x);
     }
