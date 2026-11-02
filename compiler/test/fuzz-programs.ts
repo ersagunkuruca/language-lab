@@ -5,7 +5,7 @@ import { Lang } from "../../ters/src/lang/dsl.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
-import { CONS, FALSE, INT_OPS, NIL, RANDOM_OP, S, SET, SHOW_ANY, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
+import { ABORT_OP, CONS, FALSE, INT_OPS, NIL, RANDOM_OP, S, SET, SHOW_ANY, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
 import { INT, NUMBER } from "../../ters/src/lang/types.ts";
 import { B } from "../../ters/src/prelude.ts";
 import type { Id } from "../../ters/src/model.ts";
@@ -116,6 +116,8 @@ export function program(seed: number, count: number) {
           () => call(lib("sum"), sub("L")),
           () => orElse(call(INT_OPS.wholePart, sub("F"))),
           () => call(lib("set size"), call(lib("as set"), sub("L"))),
+          // A handler of Abort written in place: the reason's length.
+          () => k.handle(k.if(sub("B"), call(ABORT_OP, sub("T")), sub("I")), [{ variant: ABORT_OP, names: [fresh()], body: ([why]) => call(TEXT_OPS.length, why) }]),
           () => orElse(call(lib("last of items"), sub("L"))),
           () => call(lib("map size"), call(lib("put"), mapOf(), sub("I"), sub("I"))),
           () => orElse(call(lib("value at"), mapOf(), sub("I"))),
@@ -178,6 +180,9 @@ export function program(seed: number, count: number) {
           () => call(INT_OPS.show, sub("I")),
           () => call(lib("uppercase"), sub("T")),
           () => call(lib("repeated"), sub("T"), small(4)),
+          // Abort under attempt, and an outcome taken apart again (C117).
+          () => call(SHOW_ANY, call(lib("attempt"), k.thunk(() => k.if(sub("B"), call(ABORT_OP, sub("T")), sub("I"))))),
+          () => call(SHOW_ANY, call(lib("attempt"), k.thunk(() => call(lib("value or abort"), call(lib("attempt"), k.thunk(() => k.if(sub("B"), call(ABORT_OP, sub("T")), sub("L")))))))),
           // A call of an earlier definition, one that calls none itself.
           () => { const d = callable.length ? r.pick(callable) : null; if (!d) return sub("T"); calls = true; return call(d, sub("F"), sub("I"), sub("L")); },
           () => call(TEXT_OPS.joinAll, call(TEXT_OPS.split, sub("T"), sub("T")), sub("T")),
