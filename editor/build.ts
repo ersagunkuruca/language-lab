@@ -23,7 +23,7 @@ import { mkdirSync } from "node:fs";
 import { pageRuntime, recordings, webPage, workletRuntime } from "../ters/cli/web.ts";
 import { infer } from "../ters/src/lang/infer.ts";
 import { loadProgram } from "../ters/src/lang/load.ts";
-import { examplesPlugin, type Manifest } from "./examplesPlugin.ts";
+import { examplesPlugin, exampleTags, type Manifest } from "./examplesPlugin.ts";
 
 const here = new URL(".", import.meta.url).pathname;
 const site = here + "../";
@@ -32,9 +32,14 @@ const manifest = JSON.parse(readFileSync(here + "examples.json", "utf8")) as Man
 // What the editor's "Save page" puts before a page's compiled program.
 // The worker Run uses (editor/runWorker.ts), as text the editor starts.
 const worker = await build({ entryPoints: [here + "runWorker.ts"], bundle: true, format: "iife", target: "es2022", minify: true, write: false });
-const out = await build({ entryPoints: [here + "main.ts"], bundle: true, format: "iife", target: "es2022", minify: true, write: false, plugins: [examplesPlugin(manifest)], define: { PAGE_RUNTIME: JSON.stringify(await pageRuntime()), RUN_WORKER: JSON.stringify(worker.outputFiles[0].text), WORKLET_RUNTIME: JSON.stringify(await workletRuntime()) } });
+// The runtimes and the examples are text elements of the page, read when
+// they're needed, not parts of the script parsed before the first drawing
+// (BACKLOG E204): main.ts reads them by id.
+const out = await build({ entryPoints: [here + "main.ts"], bundle: true, format: "iife", target: "es2022", minify: true, write: false, plugins: [examplesPlugin(manifest, "page")], define: { PAGE_RUNTIME: '""', RUN_WORKER: '""', WORKLET_RUNTIME: '""' } });
 const js = out.outputFiles[0].text.replace(/<\/script/g, "<\\/script");
-const page = readFileSync(here + "page.html", "utf8").replace("<script>/*SCRIPT*/</script>", () => `<script>${js}</script>`);
+const text = (id: string, t: string) => `<script type="text/plain" id="${id}">${t.replace(/<\/script/gi, "<\\/script")}</script>\n`;
+const data = text("lab-page-runtime", await pageRuntime()) + text("lab-worklet-runtime", await workletRuntime()) + text("lab-run-worker", worker.outputFiles[0].text) + exampleTags(manifest);
+const page = readFileSync(here + "page.html", "utf8").replace("<script>/*SCRIPT*/</script>", () => `${data}<script>${js}</script>`);
 writeFileSync(site + "index.html", `<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n</head>\n<body>\n${page}</body>\n</html>\n`);
 console.log(`index.html: ${(page.length / 1024).toFixed(0)} KB`);
 
