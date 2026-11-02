@@ -749,7 +749,10 @@ int main(int argc, char **argv) {
       tokens.pop();
       if (r.alive) {
         tokens.forEach((x, k) => ([x.alive, x.used] = was[k]));
+        // Not given this time: what the first try did with it is undone
+        // (a way out had freed it, so the cell was kept and leaked; C101).
         r.alive = false;
+        r.used = false;
         lines = rest(body);
       }
       const give = !r.alive && r.used;
