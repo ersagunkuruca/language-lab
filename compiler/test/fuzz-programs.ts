@@ -121,6 +121,8 @@ export function program(seed: number, count: number) {
           () => orElse(call(lib("value at"), mapOf(), sub("I"))),
           () => orElse(call(lib("smallest item"), setOf())),
           () => orElse(call(lib("largest key"), mapOf())),
+          // A helper given a box and a shape (C116): C lends what it only reads.
+          () => (helpers.length ? call(r.pick(helpers), sub("R"), sub("D"), sub("I")) : sub("I")),
           () => call(lib("queue size"), call(lib("queued"), call(lib("queue of"), sub("L")), sub("I"))),
         ])();
       }
@@ -196,9 +198,26 @@ export function program(seed: number, count: number) {
     }
   }
 
-  const defs: { def: Id; result: Ty }[] = [];
+  // Helpers from a box, a shape and an Int to an Int, which the
+  // definitions call: some only read the box's fields, some make boxes.
+  const helpers: Id[] = [];
   const callable: Id[] = [];
   let calls = false;
+  for (let i = 0; i < 6; i++) {
+    const h = k.def(`h${i}`);
+    k.define(h, k.fn(["b", "s", "m"], (b, s0, m) =>
+      k.let("c0", call(Box.f["box.count"], b), (c0) =>
+        k.let("m0", call(INT_OPS.add, m, k.int(0)), (m0) => {
+          const sc = (more: Partial<Scope> = {}): Scope => ({ F: [...(more.F ?? [])], I: [c0, m0, ...(more.I ?? [])], L: [], B: [], T: [], D: [s0], R: [b] });
+          return k.match(s0, [
+            { variant: shape_.dot, names: [], body: () => gen("I", sc(), 3) },
+            { variant: shape_.circle, names: [fresh()], body: ([rad]) => gen("I", sc({ F: [rad] }), 3) },
+            { variant: shape_.rect, names: [fresh(), fresh()], body: ([w, h2]) => gen("I", sc({ I: [w], F: [h2] }), 3) },
+          ]);
+        }))));
+    helpers.push(h);
+  }
+  const defs: { def: Id; result: Ty }[] = [];
   for (let i = 0; i < count; i++) {
     calls = false;
     const result = r.pick<Ty>(["F", "I", "B", "L", "T", "D", "R"]), def = k.def(`g${i}`);
