@@ -277,6 +277,7 @@ A type can be stored as another type, written as one definition (REPRESENTATIONS
 - **fold by** : `(a, Cost) -> Job b c`. A representation's fold: by(value, one function per case of t, given the folded rest), at this cost.
 - **match as written** : `(Cost) -> Job a b`. A representation's match, done as t's own, at this cost.
 - **fold as written** : `(Cost) -> Job a b`. A representation's fold, done as t's own, at this cost.
+- **fold of items** : `(Cost) -> Job a b`. A representation's fold whose cases don't read the rest (a sum, a count): done as t's own fold of what the value means, at this cost. A tree that lists its items in n folds that way instead of rebuilding each rest.
 - **equal by** : `((a, a) -> Bool) -> Job b a`. For a representation that isn't one spelling per value (a tree, whose shape depends on the order things went in): how equal sees two of its values, through their meaning.
 - **show by** : `((a) -> Text) -> Job b a`. For a representation that isn't one spelling per value: how show prints one of its values, through its meaning.
 - **compare by** : `((a, a) -> Order) -> Job b a`. For a representation that isn't one spelling per value: how compare orders two of its values, through their meaning.

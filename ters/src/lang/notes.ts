@@ -73,6 +73,7 @@ export const NOTES: Comments = {
   "builtin.representation.foldBy": "A representation's fold: by(value, one function per case of t, given the folded rest), at this cost.",
   "builtin.representation.matchAsWritten": "A representation's match, done as t's own, at this cost.",
   "builtin.representation.foldAsWritten": "A representation's fold, done as t's own, at this cost.",
+  "builtin.representation.foldOfItems": "A representation's fold whose cases don't read the rest (a sum, a count): done as t's own fold of what the value means, at this cost. A tree that lists its items in n folds that way instead of rebuilding each rest.",
   "builtin.representation.equalBy": "For a representation that isn't one spelling per value (a tree, whose shape depends on the order things went in): how equal sees two of its values, through their meaning.",
   "builtin.representation.showBy": "For a representation that isn't one spelling per value: how show prints one of its values, through its meaning.",
   "builtin.representation.compareBy": "For a representation that isn't one spelling per value: how compare orders two of its values, through their meaning.",

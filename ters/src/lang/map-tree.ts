@@ -23,7 +23,7 @@
 import { merge, type Code, type Id } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { Lang } from "./dsl.ts";
-import { LADDER, representationsIn, type Representation } from "./represent.ts";
+import { FOLD_OF_ITEMS, LADDER, representationsIn, type Representation } from "./represent.ts";
 import { infer } from "./infer.ts";
 import { COMPARE, CONS, COST, JOBS, HASH_SET_OPS, TABLE_OPS, REPRESENTATION_V, FALSE, INT_OPS, MAP, MAP_V, NIL, ORDER_V, PAIR_V, S, SET_TYPE, SET_V, SHOW_ANY, TRUE } from "./std.ts";
 import { HASH_SET, INT, TABLE } from "./types.ts";
@@ -355,7 +355,8 @@ export function buildTrees(k: Lang, prelude: (name: string) => Id): Trees {
     for (const j of keys) {
       const by = rep.impl[j], c = rep.cost[j];
       if (!c) throw new Error(`${rep.name}: ${j} has no cost`);
-      if (j === "match" || j === "fold") jobs.push(by ? k.call(j === "match" ? JOBS.matchBy : JOBS.foldBy, k.x(by), cost(c)) : k.call(j === "match" ? JOBS.matchAsWritten : JOBS.foldAsWritten, cost(c)));
+      if (j === FOLD_OF_ITEMS) jobs.push(k.call(JOBS.foldOfItems, cost(c)));
+      else if (j === "match" || j === "fold") jobs.push(by ? k.call(j === "match" ? JOBS.matchBy : JOBS.foldBy, k.x(by), cost(c)) : k.call(j === "match" ? JOBS.matchAsWritten : JOBS.foldAsWritten, cost(c)));
       else jobs.push(by ? k.call(JOBS.job, k.x(j), k.x(by), cost(c)) : k.call(JOBS.asWritten, k.x(j), cost(c)));
     }
     if (rep.byType) jobs.push(k.call(JOBS.equalBy, k.x(rep.byType.equal)), k.call(JOBS.showBy, k.x(rep.byType.show)), k.call(JOBS.compareBy, k.x(rep.byType.compare)));

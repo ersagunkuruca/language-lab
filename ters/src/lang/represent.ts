@@ -107,7 +107,7 @@ export function representationsIn(code: Code, info: Info, names: Record<Id, stri
         if (Number.isInteger(at) && at >= 0 && at < ((code.nodes[a[0]] as NodeOf<"variant"> | undefined)?.fields.length ?? 0)) (rep.hidden ??= {})[a[0]] = [...(rep.hidden?.[a[0]] ?? []), at];
         continue;
       }
-      const key = kind === JOBS.job || kind === JOBS.asWritten ? a[0] : kind === JOBS.matchBy || kind === JOBS.matchAsWritten ? "match" : kind === JOBS.foldBy || kind === JOBS.foldAsWritten ? "fold" : null;
+      const key = kind === JOBS.job || kind === JOBS.asWritten ? a[0] : kind === JOBS.matchBy || kind === JOBS.matchAsWritten ? "match" : kind === JOBS.foldBy || kind === JOBS.foldAsWritten ? "fold" : kind === JOBS.foldOfItems ? FOLD_OF_ITEMS : null;
       if (!key) continue;
       const by = kind === JOBS.job ? a[1] : kind === JOBS.matchBy || kind === JOBS.foldBy ? a[0] : null;
       if (by) rep.impl[key] = by;
@@ -131,6 +131,19 @@ const literalOf = (n: Node, t: Id) => n.kind === "lit" && (n.of ? n.of === t : t
 // The job of building a v whose field i is that field taken out of another
 // v by a match (`x :: rest` in a cons arm).
 export const ontoField = (v: Id, i: number) => `${v} onto its field ${i}`;
+// A fold whose cases read no rest (a sum, a count) is fold(meaning(x)), by
+// the law fold′(x) = fold(meaning(x)): a representation that lists its
+// items in n (a tree) does it that way where its own fold rebuilds each
+// arm's rest (C75). Its own job, at the cost the representation gives it,
+// else its fold's.
+export const FOLD_OF_ITEMS = "fold of items";
+const readsNoRest = (code: Code, n: NodeOf<"fold">, t: Id) => n.arms.every((a) => {
+  const arm = code.nodes[a] as NodeOf<"arm">;
+  const fields = (code.nodes[arm.variant] as NodeOf<"variant"> | undefined)?.fields ?? [];
+  const rests = new Set(arm.binds.filter((_, i) => { const ty = code.nodes[(code.nodes[fields[i]] as NodeOf<"field"> | undefined)?.type ?? ""]; return ty?.kind === "tref" && ty.target === t; }));
+  return !rests.size || !subtree(code, arm.body).some((x) => { const r = code.nodes[x]; return r?.kind === "ref" && rests.has(r.target); });
+});
+const foldJob = (code: Code, n: NodeOf<"match"> | NodeOf<"fold">, t: Id) => (n.kind === "fold" && readsNoRest(code, n, t) ? FOLD_OF_ITEMS : n.kind);
 
 export function uses(code: Code, entry: Id, reps: Representation[]): string[] {
   const t = reps[0].of;
@@ -142,7 +155,7 @@ export function uses(code: Code, entry: Id, reps: Representation[]): string[] {
     for (const id of subtree(code, def)) {
       const n = code.nodes[id];
       if (n.kind === "ref" && (variants.has(n.target) || costed.has(n.target))) out.add(n.target);
-      if ((n.kind === "match" || n.kind === "fold") && armsOver(code, n, variants)) out.add(n.kind);
+      if ((n.kind === "match" || n.kind === "fold") && armsOver(code, n, variants)) out.add(foldJob(code, n, t));
       // A constructor given a field a match took out of another value
       // (`x :: rest` in a cons arm): its own job, since a representation
       // that hides that field shares it with the value it came from.
@@ -212,7 +225,7 @@ export function looped(code: Code, entry: Id, reps: Representation[]): Set<strin
     if (!n) return;
     if (loop) {
       if (n.kind === "ref" && (variants.has(n.target) || costed.has(n.target))) out.add(n.target);
-      if ((n.kind === "match" || n.kind === "fold") && armsOver(code, n, variants)) out.add(n.kind);
+      if ((n.kind === "match" || n.kind === "fold") && armsOver(code, n, variants)) out.add(foldJob(code, n, t));
     }
     if (n.kind === "ref" && graph.has(n.target)) visit(n.target, loop);
     if (n.kind === "fold") { walk(n.scrutinee, loop); for (const a of n.arms) walk(a, true); return; }
@@ -269,7 +282,8 @@ export function choose(code: Code, entry: Id, reps: Representation[]): Choice {
     const [v, i] = at;
     return r.hidden?.[v]?.includes(i) ? (r.cost.space ?? "n") : (r.cost[v] ?? spec.cost[v]);
   };
-  const costs = (r: Representation) => Object.fromEntries([...jobs, "space"].map((j) => [j, r.cost[j] ?? onto(r, j) ?? spec.cost[j] ?? "?"]));
+  const own = (r: Representation, j: string) => r.cost[j] ?? (j === FOLD_OF_ITEMS ? r.cost.fold : undefined);
+  const costs = (r: Representation) => Object.fromEntries([...jobs, "space"].map((j) => [j, own(r, j) ?? onto(r, j) ?? own(spec, j) ?? "?"]));
   const step = (c: string): Cost => (LADDER.includes(c) ? steps(1, c) : NEVER);
   // A job in a loop runs about n times (C63c): one order up, n² at most.
   const inLoop = looped(code, entry, reps);
@@ -375,6 +389,9 @@ export function represent(code: Code, entries: Id[], rep: Representation, keep: 
       nodes[id] = { id, kind: "call", fn: ref(rep.literal), args: [add(lit)] };
     }
     else if (n.kind === "tref" && n.target === t) nodes[id] = { ...n, target: rep.type };
+    else if (n.kind === "fold" && rep.meaning && rep.cost[FOLD_OF_ITEMS] && armsOver(code, n, variants) && readsNoRest(code, n, t)) {
+      nodes[id] = { ...n, scrutinee: add({ kind: "call", fn: ref(rep.meaning), args: [n.scrutinee] }) };
+    }
     else if ((n.kind === "match" || n.kind === "fold") && armsOver(code, n, variants)) {
       const arms = new Map(n.arms.map((a) => { const arm = nodes[a] as NodeOf<"arm">; return [arm.variant, arm]; }));
       // One function per case, in the type's order: its fields, then (fold)

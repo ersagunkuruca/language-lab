@@ -575,6 +575,9 @@ export const JOBS = {
   // A match or a fold on t done as t does it, at this cost.
   matchAsWritten: jobOf("representation.matchAsWritten", "match as written", () => []),
   foldAsWritten: jobOf("representation.foldAsWritten", "fold as written", () => []),
+  // A fold whose cases read no rest (a sum, a count), done as t's own fold
+  // of the meaning, at this cost (C75).
+  foldOfItems: jobOf("representation.foldOfItems", "fold of items", () => []),
   // A representation that isn't one spelling per value (a tree, whose shape
   // depends on the order things went in) says how equal, show and compare
   // see a value of r: through its meaning.

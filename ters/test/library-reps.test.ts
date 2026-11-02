@@ -511,3 +511,31 @@ test("lists as trees lower to WebAssembly and C too, with the evaluator's answer
   const one = (v: unknown) => (Array.isArray(v) ? v[0] : v);
   for (const i of [0, 3, 39, 40]) assert.equal(one(fn(i)), want(i));
 });
+
+// C75: a fold whose cases don't read the rest (sum's) walks the tree's
+// items, fold(meaning(x)), where the tree's own fold rebuilds each arm's
+// rest as a tree (n log n, and slow: 1,770 ms for 8,000 items against the
+// walk's 17.5 ms in REVIEW-2026-11-01b §4).
+test("a fold over a list stored as a tree that doesn't read the rest walks its items (C75)", () => {
+  const { code, names, main, defs, info } = byPosition(40);
+  const c = withLibraryRepresentations(code, info, names, main, defs);
+  assert.deepEqual(c.chosen, ["List as tree of List"]);
+  const named = (n: string) => Object.keys(c.names).find((d) => c.names[d] === n && c.code.nodes[d]?.kind === "def")!;
+  const items = named("items of list tree");
+  // The program's own copy of sum, which the rewrite changes.
+  const sum = c.code.defs.find((d) => c.names[d] === "sum" && d !== L("sum"))!;
+  const fold = subtree(c.code, sum).map((x) => c.code.nodes[x]).find((n) => n.kind === "fold")!;
+  const by = c.code.nodes[(fold as { scrutinee: Id }).scrutinee];
+  assert.ok(by.kind === "call" && (c.code.nodes[by.fn] as { target?: Id }).target === items, "sum's fold is over the tree's items");
+  const info2 = infer(c.code, c.names, undefined, { ...checkOptions, insiders: [...checkOptions.insiders!, ...c.insiders] });
+  const r = makeRunner(c.code, info2, { print: () => {}, names: c.names });
+  const one = (x: unknown) => { for (const v of x as Iterable<unknown>) return v; };
+  let t = r.value(named("list tree nil"));
+  for (let i = 0; i < 8000; i++) t = one(r.call(r.value(named("list tree cons")), i, t)) as typeof t;
+  const time = (f: () => unknown) => { let best = Infinity; for (let b = 0; b < 3; b++) { const s = performance.now(); f(); best = Math.min(best, performance.now() - s); } return best; };
+  let total: unknown;
+  const summed = time(() => (total = one(r.call(r.value(sum), t))));
+  const walked = time(() => one(r.call(r.value(items), t)));
+  assert.equal(total, (8000 * 7999) / 2);
+  assert.ok(summed < 10 * walked + 20, `summing 8,000 items took ${summed.toFixed(1)} ms, walking them ${walked.toFixed(1)} ms`);
+});

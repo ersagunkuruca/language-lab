@@ -143,6 +143,8 @@ export function buildListTree(k: Lang, prelude: (name: string) => Id): ListTree 
     k.call(JOBS.job, k.x(CONS), k.x(cons), cost(k, "logarithmic")),
     k.call(JOBS.matchBy, k.x(match), cost(k, "logarithmic")),
     k.call(JOBS.foldBy, k.x(fold), cost(k, "linearithmic")),
+    // A fold whose cases don't read the rest walks the items (C75).
+    k.call(JOBS.foldOfItems, cost(k, "linear")),
     k.call(JOBS.job, k.x(prelude("length")), k.x(size), cost(k, "constant")),
     k.call(JOBS.job, k.x(prelude("append")), k.x(append), cost(k, "logarithmic")),
     k.call(JOBS.job, k.x(prelude("item at")), k.x(itemAt), cost(k, "logarithmic")),
