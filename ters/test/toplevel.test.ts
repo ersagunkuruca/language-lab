@@ -864,3 +864,52 @@ test("an action with no inputs becomes a value, and back", async () => {
   assert.equal(zero(back.code), 2);
   assert.equal(infer(back.code).errors.length, infer(code).errors.length);
 });
+
+test("type parameters: a generic data type, an effect's, and an operation's own, added and removed (E198)", () => {
+  const s = new Session();
+  const T = (target: Id, ...args: Top.TypeSpec[]): Top.TypeSpec => ({ target, args });
+  const Stack = s.ok(Top.newDefinition(s.code, s.names, "Stack", { kind: "type", firstCase: "empty" }));
+  const td = (t: Id) => s.code.nodes[(s.code.nodes[t] as NodeOf<"def">).body!] as NodeOf<"typedef">;
+  // One case holding the type itself: adding a turns that use into Stack a.
+  const empty = td(Stack).variants[0];
+  s.ok(Top.addField(s.code, s.names, Stack, empty, "rest", T("type.int")));
+  const rest = (s.code.nodes[empty] as NodeOf<"variant">).fields[0];
+  s.ok(Top.setFieldType(s.code, s.names, rest, T(Stack)));
+  s.ok(Top.addTypeParameter(s.code, s.names, Stack, ""));
+  const a = td(Stack).params[0];
+  assert.equal(s.names[a], "a");
+  const restType = s.code.nodes[(s.code.nodes[rest] as NodeOf<"field">).type] as NodeOf<"tref">;
+  assert.deepEqual(restType.args.map((x) => (s.code.nodes[x] as NodeOf<"tref">).target), [a]);
+  assert.equal(Top.typeHeads(s.code, Stack).find((h) => h.target === Stack)?.arity, 1);
+  assert.match(s.refused(Top.addTypeParameter(s.code, s.names, Stack, "a")), /already has a type parameter named a/);
+  assert.match(s.refused(Top.addTypeParameter(s.code, s.names, Stack, "Item")), /lower case/);
+  const top = s.ok(Top.addField(s.code, s.names, Stack, empty, "top", T(a)));
+  assert.equal(s.info().errors.length, 0);
+  // A use in another type's field would need an argument: refused, saying where.
+  const Board = s.ok(Top.newDefinition(s.code, s.names, "Board", { kind: "type", firstCase: "board" }));
+  s.ok(Top.addField(s.code, s.names, Board, td(Board).variants[0], "pile", T(Stack, T("type.int"))));
+  assert.match(s.refused(Top.addTypeParameter(s.code, s.names, Stack, "b")), /named in the types of Board/);
+  // a can't go while top holds one; with top gone it can, and Stack a is Stack again.
+  assert.match(s.refused(Top.removeTypeParameter(s.code, s.names, Stack, a)), /still names a/);
+  s.ok(Top.removeField(s.code, s.names, empty, top));
+  s.ok(Top.removeTypeParameter(s.code, s.names, Stack, a));
+  assert.equal(td(Stack).params.length, 0);
+  for (const id of [rest]) assert.equal((s.code.nodes[(s.code.nodes[id] as NodeOf<"field">).type] as NodeOf<"tref">).args.length, 0);
+  assert.equal(s.info().errors.length, 0);
+
+  // An effect's own type, State s, and an operation's own, await : Ticket a → a.
+  const State = s.ok(Top.newDefinition(s.code, s.names, "State", { kind: "effect", firstOperation: "get" }));
+  s.ok(Top.addTypeParameter(s.code, s.names, State, "s"));
+  const st = td(State).params[0];
+  s.ok(Top.setReturns(s.code, s.names, td(State).variants[0], T(st)));
+  const Wait = s.ok(Top.newDefinition(s.code, s.names, "Wait", { kind: "effect", firstOperation: "await" }));
+  const wait = td(Wait).variants[0];
+  s.ok(Top.addTypeParameter(s.code, s.names, Wait, "", wait));
+  const own = (s.code.nodes[wait] as NodeOf<"variant">).params![0];
+  assert.ok(Top.typeHeads(s.code, Wait, wait).some((h) => h.target === own));
+  assert.ok(!Top.typeHeads(s.code, Wait).some((h) => h.target === own));
+  s.ok(Top.addField(s.code, s.names, Wait, wait, "ticket", T("std.list", T(own))));
+  s.ok(Top.setReturns(s.code, s.names, wait, T(own)));
+  assert.equal(s.info().errors.length, 0);
+  assert.match(s.refused(Top.removeTypeParameter(s.code, s.names, Wait, own)), /still names a/);
+});

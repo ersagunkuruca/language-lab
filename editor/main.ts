@@ -1493,8 +1493,12 @@ function programText(namer: Namer, _p: Presentation, steps: Step[]): string {
 
 // ---------------------------------------------------------------- side panels
 
+// A data type's, an effect's or an operation's type parameter (E198): a
+// binder, but of a type, so nothing about values (units, wires) applies.
+const isTypeParam = (id: Id) => Object.values(doc.code.nodes).some((n) => (n.kind === "typedef" || n.kind === "variant") && n.params?.includes(id));
 function kindLabel(id: Id): string {
   const n = node(id);
+  if (n.kind === "binder" && isTypeParam(id)) return "Type parameter";
   if (n.kind === "binder") return T.isDot(doc.code, ui.def, id) ? "Dot" : "Variable";
   if (n.kind === "def") return "Definition";
   if (n.kind === "call") return node(n.fn)?.kind === "lambda" ? "Let" : implementationOps(doc.code, n.fn) ? "Implementation" : "Step (call)";
@@ -1540,7 +1544,7 @@ function unitSection(info: T.Info, id: Id): HTMLElement | null {
   // An input takes a unit when it is a number or nothing says what it is
   // yet; one holding a function or a list doesn't (I138).
   const ty = info.typeOf.get(id), shape = ty && info.subst.resolve(ty);
-  const declarable = (n.kind === "binder" && (!shape || shape.t === "var" || numeric)) || (n.kind === "lit" && typeof n.value === "number");
+  const declarable = (n.kind === "binder" && !isTypeParam(id) && (!shape || shape.t === "var" || numeric)) || (n.kind === "lit" && typeof n.value === "number");
   if (!declarable && !numeric) return null;
   const u = (() => { try { return unitInfer(doc.code, ui.def).unit(id); } catch { return undefined; } })();
   const declared = (n as { unit?: Unit }).unit;
@@ -1713,7 +1717,7 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
       h("p", { class: "hint" }, `${k === 0 ? "Nothing reads it: it is a step done for its effect." : `Feeds ${k} input${k === 1 ? "" : "s"}.`} Drag from the dot in the graph to any input it can reach to share it there. A name is optional${doc.names.short[id] === undefined ? `; without one it shows as ${names[id]}` : ""}.`),
       h("div", { class: "acts" }, h("button", { class: "btn", type: "button", "data-act": "t-undot", disabled: !r.ok, title: r.ok ? "Put the value back on its one wire" : `Can't: ${r.reason}` }, "Remove the dot")));
   }
-  if (n.kind === "binder" && names[id] !== "_") {
+  if (n.kind === "binder" && names[id] !== "_" && !isTypeParam(id)) {
     const on = isNamed(id);
     out.append(h("div", { class: "sub-head" }, "Shown as · layout.json"),
       h("p", { class: "hint" }, on ? "A let node, and a get node next to every use: no long wires." : "Wires from where it's bound to every use."),
@@ -2227,8 +2231,8 @@ const typeText = (tid: Id, names: Names): string => {
 // arguments, a picker for each, nested: Pair, then Int and Text. `none`
 // adds a first choice of no type at all; a type the pickers can't show
 // (a function's) is kept until another is picked.
-function typePicker(id: string, type: Id, names: Names, current: Id | null, changed: () => void, none?: string) {
-  const heads = Top.typeHeads(doc.code, type);
+function typePicker(id: string, type: Id, names: Names, current: Id | null, changed: () => void, none?: string, variant?: Id) {
+  const heads = Top.typeHeads(doc.code, type, variant);
   const specOf = (t: Id): Top.TypeSpec | null => {
     const n = node(t);
     if (n.kind !== "tref") return null;
@@ -2396,6 +2400,7 @@ function structurePanel(info: T.Info, names: Names): HTMLElement | null {
     // An effect is a data type whose cases are operations: the same panel,
     // in its words.
     const w = words(ui.def);
+    if (!body.row) out.append(typeParams(info, names, ui.def, body.params, w.effect ? "effect" : "type"));
     out.append(h("div", { class: "sub-head" }, `${cap(w.cases)} of ${dname} · code.json`));
     for (const v of body.variants) {
       const fs = get(code, v, "variant").fields;
@@ -2473,7 +2478,7 @@ function structurePanel(info: T.Info, names: Names): HTMLElement | null {
         edit("×", `Remove this ${w.field}`, Top.removeField(code, sh, sel, f), () => runTop(info, Top.removeField(code, sh, sel, f)), "btn mini")));
     }
     const c = textField("f-new-field", `New ${w.field}`, "its name");
-    const t = typePicker("f-new-field-type", type, names, null, () => {});
+    const t = typePicker("f-new-field-type", type, names, null, () => {}, undefined, w.effect ? sel : undefined);
     const add = h("button", { class: "btn", type: "button" }, `Add the ${w.field}`);
     add.addEventListener("click", () => { const sp = t.spec(); if (sp) runTop(info, Top.addField(code, sh, type, sel, c.input.value, sp)); });
     out.append(c.el, h("label", { class: "field", for: "f-new-field-type" }, h("span", {}, "Holding"), t.el), h("div", { class: "acts" }, add),
@@ -2484,7 +2489,7 @@ function structurePanel(info: T.Info, names: Names): HTMLElement | null {
       const r = typePicker("f-returns", type, names, n.returns ?? null, () => {
         const sp = r.spec();
         if (sp || (r.el.querySelector("select") as HTMLSelectElement).value === "none") runTop(info, Top.setReturns(code, sh, sel, sp));
-      }, "nothing: it never returns");
+      }, "nothing: it never returns", sel);
       out.append(h("label", { class: "field", for: "f-returns" }, h("span", {}, "Gives back"), r.el),
         h("p", { class: "hint" }, now ? `A call of ${names[sel] ?? "it"} is worth the ${now} its handler answers with.` : `Like abort: performing ${names[sel] ?? "it"} ends what performs it, and the handler's case gives the result instead.`));
       // Answered later (ANSWERED-LATER.md): the case gets the rest too.
@@ -2495,6 +2500,8 @@ function structurePanel(info: T.Info, names: Names): HTMLElement | null {
           h("p", { class: "hint" }, n.later ? `Its handler's case also gets the rest of the computation, written ${names[sel] ?? "it"}(…) with rest: it may resume it once, now or later, or drop it. A generator's yield, a page's fetch.` : "Tick it to let the handler answer later: its case also gets the rest of the computation, to resume once, now or later, or drop."));
       }
     }
+    // An operation's own type, fresh at each call (`await : Ticket a → a`).
+    if (w.effect) out.append(typeParams(info, names, type, n.params ?? [], "operation", sel));
     out.append(h("div", { class: "acts" }, edit(`Remove this ${w.case}`, `Remove this ${w.case} from the ${w.effect ? "effect" : "type"}`, Top.removeCase(code, sh, type, sel), () => runTop(info, Top.removeCase(code, sh, type, sel), () => { ui.selected = null; }), "btn danger")));
     return out;
   } else if (n?.kind === "field" && (defBody(info.owner.get(sel) ?? "") as { interface?: true } | null)?.interface) {
@@ -2529,6 +2536,27 @@ function structurePanel(info: T.Info, names: Names): HTMLElement | null {
   out.append(h("div", { class: "acts" },
     edit(`Duplicate ${dname}`, "A copy to change, next to it; the original stays as it is", typeDef ? { ok: false, reason: "the copy's cases would share the original's names: make a new type with + New definition" } : { ok: true }, dup),
     edit(`Delete ${dname}`, "Delete this definition", del, () => runTop(info, del, (r) => { ui.def = r.select; ui.selected = null; ui.back = []; }), "btn danger")));
+  return out;
+}
+
+// A data type's, an effect's or an operation's type parameters (E198):
+// each removable while no type names it, and a new one added by name (a,
+// then b, … when none is given). Selecting one renames it.
+function typeParams(info: T.Info, names: Names, type: Id, params: Id[], what: "type" | "effect" | "operation", variant?: Id): HTMLElement {
+  const code = doc.code, sh = doc.names.short;
+  const whose = names[variant ?? type] ?? `this ${what}`;
+  const out = h("div", {}, h("div", { class: "sub-head" }, `Type parameters of ${whose} · code.json`));
+  if (!params.length) out.append(h("p", { class: "hint" }, what === "operation" ? "None: its inputs and what it gives back use the effect's types." : `None: ${whose} holds the same types wherever it's used. A type parameter makes it generic, like List a.`));
+  for (const p of params) {
+    const r = Top.removeTypeParameter(code, sh, type, p);
+    out.append(row(pick(p, names[p] ?? "a"), edit("×", "Remove this type parameter", r, () => runTop(info, r), "btn mini")));
+  }
+  const id = variant ? "f-new-op-param" : "f-new-type-param";
+  const c = textField(id, "New type parameter", "a lower-case name, or a, b, … if empty");
+  const add = h("button", { class: "btn", type: "button" }, "Add the type parameter");
+  add.addEventListener("click", () => runTop(info, Top.addTypeParameter(code, sh, type, c.input.value, variant)));
+  c.input.addEventListener("keydown", (e) => { if (e.key === "Enter") add.click(); });
+  out.append(c.el, h("div", { class: "acts" }, add));
   return out;
 }
 
