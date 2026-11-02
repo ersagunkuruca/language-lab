@@ -87,13 +87,11 @@ test("a field every case shares is read without a Choice", async () => {
   assert.deepEqual(compiled, ran);
 });
 
-test("refused: a field no other case shares, two types, and a path through a shared one", () => {
+test("refused: a field no other case shares, and two types", () => {
   const own = check((k, { I }) => [k.call(S.first, k.thunk(() => k.call(I.f["jump.to"], k.x(I.v.halt))), k.thunk(() => k.int(0)))], { jzTo: "own" });
   assert.match(own.info.errors.map((e) => e.message).join("\n"), /to belongs to one case of Instr; use a match to reach it, or say in the other cases that their field is the same one/);
   const text = check((k, { I }) => [k.call(S.first, k.thunk(() => k.call(I.f["jump.to"], k.x(I.v.halt))), k.thunk(() => k.int(0)))], { jzTo: "text" });
   assert.match(text.info.errors.map((e) => e.message).join("\n"), /to is shared by cases where it has different types/);
-  const path = check((k, { T }) => [k.call(SET, k.fn(["t"], (t) => k.call(T.f["running.left"], k.call(T.f["running.left"], t))), k.call(T.v.paused, k.lit("tea"), k.lit(30)), k.lit(5))]);
-  assert.match(path.info.errors.map((e) => e.message).join("\n"), /set through a field several cases share takes that field alone/);
 });
 
 test("a shared field keeps its hash apart from an unshared one", () => {
@@ -112,4 +110,34 @@ test("set through a shared field changes it on the case that has it, and has no 
   assert.deepEqual(compiled, ran);
   const open = check((k, { I }) => [k.call(SET, k.fn(["i"], (i) => k.call(I.f["jz.to"], i)), k.x(I.v.halt), k.int(9))]);
   assert.match(open.info.errors.map((e) => e.message).join("\n"), /Choice/);
+});
+
+// Go = go(to: Spot) | stop(to: Spot, why: Text) | idle, with stop's `to`
+// go's; Spot = spot(line: Int, name: Text); Wrap = wrap(g: Go).
+function paths(k: Lang) {
+  const Spot = k.type("Spot", [], [["spot", [["line", () => k.tref(INT)], ["name", () => k.tref(STRING)]]]]);
+  const Go = k.type("Go", [], [
+    ["go", [["to", () => k.tref(Spot.def)]]],
+    ["stop", [["to", () => k.tref(Spot.def)], ["why", () => k.tref(STRING)]]],
+    ["idle", []],
+  ]);
+  k.code.nodes[Go.f["stop.to"]] = { ...(k.code.nodes[Go.f["stop.to"]] as NodeOf<"field">), same: Go.f["go.to"] };
+  const Wrap = k.type("Wrap", [], [["wrap", [["g", () => k.tref(Go.def)]]]]);
+  return { Spot, Go, Wrap };
+}
+
+test("set along a path through a shared field, at any step (L168b)", async () => {
+  const [ran, compiled] = await both((k) => {
+    const { Spot, Go, Wrap } = paths(k);
+    const line = (g: Id) => k.call(Spot.f["spot.line"], k.call(Go.f["go.to"], g));
+    const or = (x: Id, d: Id) => k.call(S.first, k.thunk(() => x), k.thunk(() => d));
+    const stop = k.call(Go.v.stop, k.call(Spot.v.spot, k.int(1), k.lit("a")), k.lit("x"));
+    return [
+      or(k.call(SET, k.fn(["g"], line), stop, k.int(9)), k.x(Go.v.idle)),
+      or(k.call(SET, k.fn(["g"], line), k.x(Go.v.idle), k.int(9)), k.x(Go.v.idle)),
+      or(k.call(SET, k.fn(["w"], (w) => line(k.call(Wrap.f["wrap.g"], w))), k.call(Wrap.v.wrap, k.call(Go.v.go, k.call(Spot.v.spot, k.int(1), k.lit("b")))), k.int(5)), k.call(Wrap.v.wrap, k.x(Go.v.idle))),
+    ];
+  });
+  assert.deepEqual(ran, ['stop(spot(9, "a"), "x")', "idle", 'wrap(go(spot(5, "b")))']);
+  assert.deepEqual(compiled, ran);
 });

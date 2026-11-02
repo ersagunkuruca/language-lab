@@ -866,17 +866,17 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
           && !fieldPaths(code, n.args[0], true) && !info.errors.some((e) => e.id === n.args[0])) {
           err(n.args[0], "set needs a field here, a path of fields such as (p) ↦ p.address.city, or several as a tuple, (m) ↦ (m.pc, m.steps), none twice or inside another");
         }
-        // Set through a field several cases share (L168b): the value with
-        // it changed on a case that has it, no answer on one without. Only
-        // the field itself for now, not a path through it or a tuple.
+        // Set through fields several cases share (L168, L168b): the value
+        // with the field changed on a case that has it, no answer on one
+        // without, at any step of a path. Not in a tuple of paths yet.
         if (code.nodes[n.fn]?.kind === "ref" && (code.nodes[n.fn] as NodeOf<"ref">).target === SET && n.args.length) {
           const one = fieldPath(code, n.args[0]);
           const shared = (f: Id) => { const d = owner.get(f), td = d ? code.nodes[(code.nodes[d] as NodeOf<"def">).body!] : undefined; return td?.kind === "typedef" && td.variants.length > 1 ? td : null; };
-          if (one?.length === 1 && shared(one[0])) {
-            const sh = sharing(code, shared(one[0])!, one[0]);
-            if (sh && !sh.problem && !sh.total) choice(id, row, [CHOICE], `setting ${nm(one[0])} has no answer on a case without it (Choice), which nothing here handles`);
-          } else if ((one ?? fieldPaths(code, n.args[0])?.flat() ?? []).some(shared)) {
-            err(n.args[0], "set through a field several cases share takes that field alone, not a path through it or a tuple: use a match");
+          if (one) {
+            const partial = one.find((f) => { const td = shared(f), sh = td && sharing(code, td, f); return sh && !sh.problem && !sh.total; });
+            if (partial) choice(id, row, [CHOICE], `setting ${nm(partial)} has no answer on a case without it (Choice), which nothing here handles`);
+          } else if ((fieldPaths(code, n.args[0])?.flat() ?? []).some(shared)) {
+            err(n.args[0], "set through a field several cases share takes one path, not a tuple of them: set each in turn");
           }
         }
         if (code.nodes[n.fn]?.kind === "ref" && (code.nodes[n.fn] as NodeOf<"ref">).target === CELL_OPS.path && n.args.length && !placePath(code, n.args[0], true)
