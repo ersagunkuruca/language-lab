@@ -24,7 +24,7 @@ import { smoothDerivative as hasSmoothDerivative, smoothGradient as hasSmoothGra
 import { BOOL, CELL_OPS, DIVISION, FIELDS, JOBS, S, SET, SIGS, SMART, TRUE, TUPLE_MAX, tupleType } from "./std.ts";
 import { countedCalls } from "./counting.ts";
 import { ratioParts } from "./int.ts";
-import { fieldPath, fieldPaths, placePath } from "./records.ts";
+import { fieldPath, fieldPaths, placePath, readPaths } from "./records.ts";
 import { leftToWays, pickWays, waysIn, type Ways } from "./ways.ts";
 import { fresh, rigid, RIGID, type Pins } from "./signatures.ts";
 import {
@@ -864,7 +864,11 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         // to be filled with one).
         if (code.nodes[n.fn]?.kind === "ref" && (code.nodes[n.fn] as NodeOf<"ref">).target === SET && n.args.length && !fieldPath(code, n.args[0], true)
           && !fieldPaths(code, n.args[0], true) && !info.errors.some((e) => e.id === n.args[0])) {
-          err(n.args[0], "set needs a field here, a path of fields such as (p) ↦ p.address.city, or several as a tuple, (m) ↦ (m.pc, m.steps), none twice or inside another");
+          // A general function reading its record through fields (L20) is
+          // run backwards with the rest of the record kept: it may have no
+          // answer, or several (set-through.ts).
+          if (readPaths(code, n.args[0])) choice(id, row, [CHOICE], "setting through a function runs it backwards, which may give several answers or none (Choice), which nothing here handles");
+          else err(n.args[0], "set needs a field here, a path of fields such as (p) ↦ p.address.city, several as a tuple, (m) ↦ (m.pc, m.steps), none twice or inside another, or a function that reads the record only through its fields, (b) ↦ b.width · 2");
         }
         // Set through fields several cases share (L168, L168b): the value
         // with the field changed on a case that has it, no answer on one
