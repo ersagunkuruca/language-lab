@@ -304,6 +304,14 @@ A Queue gives its items back first in, first out; a Priority queue gives back th
 - **priority queue size** : `(Priority queue a b) -> Int`. How many items the priority queue holds.
 - **priority queue items** : `(Priority queue a b) -> List (a, b)`. The queue's (priority, item) pairs, soonest first.
 
+## State
+
+A value a computation reads and replaces as it goes, answered by a handler written in the language: with state gives the action's value and the last state.
+
+- **State** (type). A value a computation reads with get state and replaces with put state as it goes; with state(initial, action) answers both and gives the action's value and the last state.
+- **with state** : `(a, () -[State, e]-> b) -[e]-> (b, a)`. Runs the action with get state and put state answered, starting from initial, and gives (its value, the last state): with state(0, () ↦ put state(get state() + 1)) is ((), 1).
+- **change state** : `((a) -[State, e]-> a) -[State, e]-> Unit`. Puts f(the state) as the state: change state((n) ↦ n + 1).
+
 ## Matrices
 
 A Matrix of any size holds its items row by row. Sums, products and a matrix times a vector work for every number type and stop with both sizes when they don't fit; solved finds x with m·x = b at Float64. Mat2 to Mat4 are the fixed-size ones geometry uses.

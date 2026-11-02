@@ -9,7 +9,7 @@ import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { library } from "./programs.ts";
-import { ABORT_OP, ARITH, CELL_OPS, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, TICKET_V, AWAIT_OP, START_TIMER_OP, NOW_OP, WAIT_OP, BRANCH_V, DUAL_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, DIVISION_V, EXTENDED_V, ALGEBRAIC_OPS, CHECK_OP, RANDOM_OP, QUEUE_V, PRIORITY_QUEUE_V, MATRIX_V, std } from "./std.ts";
+import { ABORT_OP, ARITH, CELL_OPS, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, TICKET_V, AWAIT_OP, START_TIMER_OP, NOW_OP, WAIT_OP, BRANCH_V, DUAL_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, DIVISION_V, EXTENDED_V, ALGEBRAIC_OPS, CHECK_OP, RANDOM_OP, QUEUE_V, PRIORITY_QUEUE_V, MATRIX_V, STATE_OPS, std } from "./std.ts";
 
 export function buildPrelude(): Module {
   const k = new Lang();
@@ -1546,6 +1546,15 @@ export function buildPrelude(): Module {
     k.if(iSame(r, k.call(length, v)),
       k.let("flipped", k.call(transposed, m), (t) => k.call(solved, k.call(matrixProduct, t, m), k.call(matrixTimesVector, t, v))),
       k.call(ABORT_OP, texts(k.lit("least squares: a "), sizeText(r, c), k.lit(" matrix and a vector of "), k.call(INT_OPS.show, k.call(length, v)), k.lit("; it needs one item per row"))))));
+  // State (L16, std.ts's State): with state(initial, action) runs the
+  // action with get state and put state answered, and gives its value and
+  // the last state. Each case answers with a function of the state so far
+  // and hands the rest the next one.
+  const withState = def("with state", ["initial", "action"], (init, a) => k.call(k.handle(k.call(a), [
+    { variant: STATE_OPS.get, names: ["rest"], body: ([rest]) => k.fn(["state"], (st) => k.call(k.call(rest, st), st)) },
+    { variant: STATE_OPS.put, names: ["value", "rest"], body: ([v, rest]) => k.fn(["state"], () => k.call(k.call(rest, k.unitValue), v)) },
+  ], ["value", (v) => k.fn(["state"], (st) => P(v, st))]), init));
+  const changeState = def("change state", ["f"], (f) => k.call(STATE_OPS.put, k.call(f, k.call(STATE_OPS.get))));
   const matrixHelpers = [listDot, eliminated, backSubstituted, determinantOf];
   // The three set operations: one walk down both sorted lists at once,
   // keeping what each wants from the smaller head, the shape of merge
@@ -1761,7 +1770,7 @@ export function buildPrelude(): Module {
   const simulatedHelpers = [readyAt, earliest, readyTimes, tiedAt, pickAt, nextDraw, firstDraw, simulatedWorld, simulatedClock];
   const awaitHelpers = [startBranch, waiting, goOn, finished, settle, firstDone, raceSettle, ...simulatedHelpers];
 
-  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, spaced, optionalParens, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, determinant, inverted, leastSquares, ticketId, anyOf, together, race, within, simulated];
+  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, spaced, optionalParens, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, determinant, inverted, leastSquares, withState, changeState, ticketId, anyOf, together, race, within, simulated];
   // Each number's own show, from before the generic one showed every number
   // (L153, L156): kept so programs saved before still open, not offered.
   const perTypeShows = [showF, showC, showD, showX];
@@ -1907,6 +1916,8 @@ export function buildPrelude(): Module {
     [solved]: "The list x with matrix times vector(m, x) = b, for a square Float64 matrix, by Gaussian elimination with partial pivoting. No answer when the matrix is singular (a pivot is 0).",
     [determinant]: "The determinant of a square Float64 matrix: 0 when it is singular. Other sizes stop the program.",
     [leastSquares]: "The x making matrix times vector(m, x) nearest the vector, by least squares, for a Float64 matrix with at least as many rows as columns: a line through points. No answer when the columns aren't independent.",
+    [withState]: "Runs the action with get state and put state answered, starting from initial, and gives (its value, the last state): with state(0, () ↦ put state(get state() + 1)) is ((), 1).",
+    [changeState]: "Puts f(the state) as the state: change state((n) ↦ n + 1).",
     [inverted]: "The inverse of a square Float64 matrix: matrix product(m, inverted(m)) is the identity. No answer when the matrix is singular.",
     ...Object.fromEntries(matrixHelpers.map((d) => [d, "A helper of the matrix operations. Not offered."])),
     [priorityQueueItems]: "The queue's (priority, item) pairs, soonest first.",

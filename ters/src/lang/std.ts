@@ -1205,6 +1205,19 @@ export const MATRIX = typedef("std.matrix", "Matrix", ["a"], [
   ["matrix", [["rows", () => tref(INT)], ["columns", () => tref(INT)], ["items", ([a]) => tref(LIST, tref(a))]]],
 ]);
 export const MATRIX_V = "std.matrix.matrix";
+// State (BACKLOG L16's first half): a value a computation reads and
+// replaces as it goes, `get state()` and `put state(value)`, answered by a
+// handler written in the language (the prelude's `with state`), which
+// passes the value along from each operation to the rest: the classic
+// state handler of effect handlers (Plotkin and Pretnar, "Handlers of
+// algebraic effects", 2009; Koka's and Eff's examples). Not Cells: no
+// reader is woken, a write is only the next value. After the matrix, so
+// ids above don't move.
+export const STATE = typedef("std.state", "State", ["s"], [
+  ["get state", [], ([s]) => tref(s), { later: true }],
+  ["put state", [["value", ([s]) => tref(s)]], () => tref(UNIT), { later: true }],
+], true);
+export const STATE_OPS = { get: "std.state.get state", put: "std.state.put state" } as const;
 export const tupleType = (n: number): Id => `std.tuple${n}`;
 export const tupleVariant = (n: number): Id => `std.tuple${n}.tuple`;
 export const tuplePart = (n: number, i: number): Id => `std.tuple${n}.tuple.${PART_NAMES[i]}`;
@@ -1224,7 +1237,7 @@ export function onTodaysIds<T>(x: T): T {
 }
 export const tupleSize = (id: Id): number | null => { const m = /^std\.tuple(\d)$/.exec(id); return m ? Number(m[1]) : null; };
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, MATRIX] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, MATRIX, STATE] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one

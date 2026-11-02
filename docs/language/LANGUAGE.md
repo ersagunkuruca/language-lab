@@ -899,6 +899,21 @@ the same.
 Errors with reasons are now `Abort` (REVIEW.md §4.3): `read file` aborts
 with "no such file: notes.txt", and `Choice` stays reason-free, for search.
 
+### State, a handler written in the language
+
+```
+effect State s = get state() returns s, later | put state(value: s) returns Unit, later   -- std
+```
+
+`with state(initial, action)` runs the action with both answered and gives
+its value and the last state: `with state(0, () ↦ put state(get state() +
+1))` is `((), 1)`, and `change state(f)` puts `f` of the state. It is the
+classic state handler (Plotkin and Pretnar, 2009), written in the prelude:
+each case answers with a function of the state so far and hands the rest
+the next one, and the normal finish pairs the value with the state. It is
+not a Cell: nothing is woken, a put is only the next value
+(`test/state.test.ts`, BACKLOG L16).
+
 ### `Optional`: the data form of Choice
 
 `Choice` is how absence is *computed*; it can't be stored in a record or a
