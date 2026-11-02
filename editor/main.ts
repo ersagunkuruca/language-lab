@@ -2382,6 +2382,9 @@ function structurePanel(info: T.Info, names: Names): HTMLElement | null {
     // (REPRESENTATIONS.md; Ersagun 2026-10-30: "I want the compiler to choose").
     const st = T.storedAs(code, info, names, ownDefs(), ui.def, defNamed("main") ?? null);
     if (st) out.append(h("p", { class: "hint stored" }, `Stored as ${st.rep} when main runs: the compiler's choice, the cheapest for the jobs main uses (${st.jobs.map((j) => names[j] ?? j).join(", ")}).`));
+    // `unique` (model.ts): kept apart from a type of the same shape when
+    // hashed. Shown, not set here: it is written in text (E209).
+    if (body.unique) out.append(h("p", { class: "hint" }, `Unique as “${body.unique}”: kept apart from any other type of the same shape when the program is hashed, as Unison's unique type is.`));
     // An effect is a data type whose cases are operations: the same panel,
     // in its words.
     const w = words(ui.def);
@@ -2497,6 +2500,14 @@ function structurePanel(info: T.Info, names: Names): HTMLElement | null {
         out.append(h("label", { class: "field check", for: "f-later" }, cb, h("span", {}, "Answered later")),
           h("p", { class: "hint" }, n.later ? `Its handler's case also gets the rest of the computation, written ${names[sel] ?? "it"}(…) with rest: it may resume it once, now or later, or drop it. A generator's yield, a page's fetch.` : "Tick it to let the handler answer later: its case also gets the rest of the computation, to resume once, now or later, or drop."));
       }
+    }
+    // Private (L79, E209): the program that declares the type builds it;
+    // a program using the type builds one with its functions.
+    if (!w.effect && !(defBody(type) as NodeOf<"typedef"> | null)?.interface) {
+      const cb = h("input", { id: "f-private", type: "checkbox", checked: !!n.private }) as HTMLInputElement;
+      cb.addEventListener("change", () => runTop(info, Top.setPrivate(code, sh, sel, cb.checked)));
+      out.append(h("label", { class: "field check", for: "f-private" }, cb, h("span", {}, "Private")),
+        h("p", { class: "hint" }, n.private ? `Only this program builds a ${names[sel] ?? "case"}: a program that uses ${names[type] ?? "the type"} builds one with this program's functions, so they can keep a rule (a sorted list, a checked range).` : `Tick it to let only this program build a ${names[sel] ?? "case"}, so its functions can keep a rule; others still read and match it.`));
     }
     // An operation's own type, fresh at each call (`await : Ticket a → a`).
     if (w.effect) out.append(typeParams(info, names, type, n.params ?? [], "operation", sel));

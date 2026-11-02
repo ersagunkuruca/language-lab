@@ -11,7 +11,7 @@ import type { Names, Notation, Presentation } from "../ters/src/presentation.ts"
 import blocksStyle from "../ters/styles/blocks.json" with { type: "json" };
 import { fillings, implementationKey, infer as check, type Filling, type Info } from "../ters/src/lang/infer.ts";
 import { isPublished } from "../ters/src/model.ts";
-import { LIBRARY } from "../ters/src/lang/library.ts";
+import { LIBRARY, PRELUDE, TREES } from "../ters/src/lang/library.ts";
 import { B } from "../ters/src/prelude.ts";
 import { pinsOf, type Pins } from "../ters/src/lang/signatures.ts";
 import { dropLoose, setLoose, wireIn } from "./drafts.ts";
@@ -173,9 +173,12 @@ export const setDisplayNames = (n: Names) => { display = n; };
 // definition that's gone is dropped.
 let programPins: Pins = {};
 export const setProgramPins = (p: Pins) => { programPins = p; };
+const INSIDERS = [...PRELUDE.code.defs, ...TREES.code.defs];
 export const infer = (code: Code, names: Names = {}): Info => {
   const own = Object.fromEntries(Object.entries(programPins).filter(([d]) => code.nodes[d]?.kind === "def"));
-  return check(code, names, undefined, { pins: { ...LIBRARY.pins, ...own }, hidden: LIBRARY.hidden });
+  // As load.ts checkOptions: the modules' private cases are theirs to
+  // build, a program's own are the program's (L165, E209).
+  return check(code, names, undefined, { pins: { ...LIBRARY.pins, ...own }, hidden: LIBRARY.hidden, insiders: INSIDERS, library: LIBRARY.code.defs });
 };
 
 // A published definition is named by its content, so it can't change: an
