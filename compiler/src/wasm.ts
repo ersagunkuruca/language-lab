@@ -53,6 +53,9 @@ const HOST: Partial<Record<Op, { name: string; params: number }>> = {
 // Float64 arithmetic the runtime writes itself (mod, from musl's fmod): it
 // alone doesn't make a module need texts.
 const small = (v: bigint) => v >= -(2n ** 30n) && v < 2n ** 30n;
+const inI64 = (v: bigint) => v >= -(2n ** 63n) && v < 2n ** 63n;
+// A magnitude's 32-bit limbs, the lowest first, each as an i32's bits.
+const limbs = (v: bigint): number[] => { const out: number[] = []; for (let m = v < 0n ? -v : v; m; m >>= 32n) out.push(Number(m & 0xffffffffn) | 0); return out; };
 // float32: to f32 and back, which rounds to the nearest binary32 value.
 const INSTR: Partial<Record<Op, [number | number[], string]>> = {
   add: [0xa0, "f64.add"], sub: [0xa1, "f64.sub"], mul: [0xa2, "f64.mul"], div: [0xa3, "f64.div"],
@@ -438,7 +441,10 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
     switch (e.k) {
       case "num": return [0x44, ...f64(e.v)];
       // An Int: an i31 while it fits, else a $big.
-      case "int": return shader ? [0x41, ...sBig(e.v)] : small(e.v) ? [0x41, ...sBig(e.v), 0xfb, 0x1c] : [0x42, ...sBig(e.v), 0xfb, 0x00, ...u(bigIndex)];
+      // Past an i64 (a literal Int as big as 1e300, C101): a $huge of its
+      // sign and its magnitude's 32-bit limbs, the lowest first.
+      case "int": return shader ? [0x41, ...sBig(e.v)] : small(e.v) ? [0x41, ...sBig(e.v), 0xfb, 0x1c] : inI64(e.v) ? [0x42, ...sBig(e.v), 0xfb, 0x00, ...u(bigIndex)]
+        : [0x41, e.v < 0n ? 1 : 0, ...limbs(e.v).flatMap((l) => [0x41, ...sBig(BigInt(l))]), 0xfb, 0x08, ...u(u32sIndex), ...u(limbs(e.v).length), 0xfb, 0x00, ...u(hugeIndex)];
       case "text": { const b = textBytes(e.v); return [...b.flatMap((x) => [0x41, ...s(x)]), 0xfb, 0x08, ...u(bytesIndex), ...u(b.length)]; }
       case "rt": return [...e.args.flatMap(code1), 0x10, ...u(resolve.func(e.fn)), ...(runtime(e.fn).partial ? check(d, fl) : [])];
       case "bool": return [0x41, ...s(e.v ? 1 : 0)];
@@ -585,7 +591,8 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
     const on = (mine: number, dd: string, ld2: number) => (fl < 0 ? [`${dd}drop`] : [`${dd}local.set ${st}`, `${dd}local.get ${st}`, `${dd}local.get ${st}`, `${dd}i32.const ${mine}`, `${dd}i32.ne`, `${dd}br_if ${to(ld2)} ;; not mine: on out`, `${dd}drop`]);
     switch (e.k) {
       case "num": return `${d}f64.const ${e.v}`;
-      case "int": return shader ? `${d}i32.const ${e.v}` : small(e.v) ? `${d}i32.const ${e.v}\n${d}ref.i31` : `${d}i64.const ${e.v}\n${d}struct.new $big`;
+      case "int": return shader ? `${d}i32.const ${e.v}` : small(e.v) ? `${d}i32.const ${e.v}\n${d}ref.i31` : inI64(e.v) ? `${d}i64.const ${e.v}\n${d}struct.new $big`
+        : [`${d}i32.const ${e.v < 0n ? 1 : 0}`, ...limbs(e.v).map((l) => `${d}i32.const ${l}`), `${d}array.new_fixed $u32s ${limbs(e.v).length}`, `${d}struct.new $huge`].join("\n");
       case "text": { const b = textBytes(e.v); return `${d}(array.new_fixed $bytes ${b.length}${b.map((x) => ` (i32.const ${x})`).join("")}) ;; ${JSON.stringify(e.v)}`; }
       case "rt": return [...e.args.map(w), `${d}call $${e.fn}`, ...(runtime(e.fn).partial ? check(ld) : [])].join("\n");
       case "bool": return `${d}i32.const ${e.v ? 1 : 0}`;

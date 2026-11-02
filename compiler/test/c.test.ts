@@ -21,75 +21,8 @@ import { CFLAGS, emitC } from "../src/c.ts";
 import { load } from "../src/program.ts";
 import { area, caseNameInputs, caseNames, changeInputs, changes, escapes, fractionInputs, fractions, maths, ordered, orderedInputs, roses, sameLists, showInputs, shows, stopsWith, worldly } from "../src/fixtures.ts";
 
-const cc = process.env.CC ?? "cc";
-let have = true;
-try { execFileSync(cc, ["--version"], { stdio: "ignore" }); } catch { have = false; }
-const skip = have ? false : `no C compiler (${cc})`;
-const dir = mkdtempSync(join(tmpdir(), "native-"));
-let builds = 0;
+import { build, compile, dir, hex, skip } from "./c-harness.ts";
 
-type Data = { tag: string; fields: Value[] };
-const hex = (x: number) => new BigUint64Array(new Float64Array([x]).buffer)[0].toString(16);
-const unhex = (w: string) => new Float64Array(new BigUint64Array([BigInt(`0x${w}`)]).buffer)[0];
-// A value as the harness reads it; data along its last field with a loop.
-function encode(v: Value, t: LType, out: string[]): void {
-  if (t === "f64") { out.push(hex(v as number)); return; }
-  if (t === "i32") { out.push((v as Data).tag === TRUE ? "1" : "0"); return; }
-  if (t === "int") { out.push(String(v)); return; }
-  if (t === "text") { out.push(`x${Buffer.from(v as string).toString("hex")}`); return; }
-  if (isRecord(t)) { t.fields.forEach((f, j) => encode((v as Data).fields[j], f.t, out)); return; }
-  const d = t as DType;
-  for (let x = v as Data; ;) {
-    const j = d.cases.findIndex((c) => c.variant === x.tag), c = d.cases[j];
-    out.push(String(j));
-    const self = c.fields.length > 0 && c.fields.at(-1)!.t === d;
-    c.fields.forEach((f, k) => { if (!(self && k === c.fields.length - 1)) encode(x.fields[k], f.t, out); });
-    if (!self) return;
-    x = x.fields.at(-1) as Data;
-  }
-}
-function decode(ws: string[], t: LType): Value {
-  if (t === "f64") return unhex(ws.shift()!);
-  if (t === "i32") return bool(ws.shift() === "1");
-  if (t === "int") return norm(BigInt(ws.shift()!));
-  if (t === "text") return Buffer.from(ws.shift()!.slice(1), "hex").toString();
-  if (isRecord(t)) return { tag: (t as RType).variant, fields: t.fields.map((f) => decode(ws, f.t)) };
-  const d = t as DType, top: Data = { tag: "", fields: [] };
-  for (let into = top; ;) {
-    const c = d.cases[Number(ws.shift())];
-    const self = c.fields.length > 0 && c.fields.at(-1)!.t === d;
-    const x: Data = { tag: c.variant, fields: c.fields.map((f, k) => (self && k === c.fields.length - 1 ? null : decode(ws, f.t))) as Value[] };
-    into.fields.push(x);
-    if (!self) return top.fields[0];
-    x.fields.pop();
-    into = x;
-  }
-}
-
-// The program built, and a function that makes the calls and gives back
-// each answer, with the cells still live after it.
-const compile = (c: string) => {
-  const src = join(dir, `p${builds}.c`), exe = join(dir, `p${builds++}`);
-  writeFileSync(src, c);
-  // GCC can't see that a cell freed at count 1 is never a static one (whose count is 0): -Wno-free-nonheap-object.
-  execFileSync(cc, [...CFLAGS, "-pthread", "-Wall", "-Werror", "-Wno-unknown-warning-option", "-Wno-unused-function", "-Wno-maybe-uninitialized", "-Wno-free-nonheap-object", "-Wno-unused-but-set-variable", "-Wno-unused-variable", "-Wno-unknown-pragmas", ...(process.env.NATIVE_CFLAGS ?? "").split(" ").filter(Boolean), "-o", exe, src, "-lm"]);
-  return exe;
-};
-function build(lowered: Lowered) {
-  const exe = compile(emitC(lowered, { harness: true }).c);
-  return (calls: [number, Value[]][]) => {
-    const input = calls.map(([i, xs]) => { const out = [String(i)]; xs.forEach((x, j) => encode(x, lowered.funcs[i].params[j], out)); return out.join(" "); }).join("\n") + "\n";
-    const lines = execFileSync(exe, { input, maxBuffer: 1 << 28 }).toString().trim().split("\n");
-    return lines.map((l, k) => {
-      const ws = l.trim().split(/\s+/);
-      const live = Number(ws.pop()!.slice(1));
-      // "?": no answer (a function with one answer or none).
-      // "!": aborted, with the reason.
-      const value = ws[0] === "?" ? undefined : ws[0] === "!" ? { aborted: decode(ws.slice(1), "text") } : decode(ws, lowered.funcs[calls[k][0]].result);
-      return { value: value as Value, live };
-    });
-  };
-}
 const first = (xs: Iterable<Value>) => { for (const x of xs) return x; };
 
 for (const name of ["calculus", "physics"]) {

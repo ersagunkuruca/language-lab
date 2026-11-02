@@ -2825,7 +2825,10 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     // `let x = v`, or just `v;` for the `_` of a sequence.
     function bindLet(p: Id, v: string): string {
       if (referenced.has(p)) return `const ${local(p)} = ${v};\n`;
-      return /^[\p{L}\p{N}_$]+$/u.test(v) ? "" : `${v};\n`;
+      if (/^[\p{L}\p{N}_$]+$/u.test(v)) return "";
+      // An object written out would read as a block, a function as a
+      // declaration (C101, found by fuzz.test.ts): in parentheses.
+      return /^(\{|function\b|class\b|async\b|let\s*\[)/.test(v) ? `(${v});\n` : `${v};\n`;
     }
 
     // ---- expressions with Choice: statements that run `k` once per result

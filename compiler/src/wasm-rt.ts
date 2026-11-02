@@ -4338,6 +4338,16 @@ ${drop}
           return
         end
       end
+      ;; b is 0 with a past an i64 (C101): no answer, as the i64 way says.
+      local.get $b
+      call $int.mag
+      array.len
+      i32.eqz
+      if void
+        ref.null eq
+        i32.const 1
+        return
+      end
       local.get $a
       call $int.negative
       local.set $na
@@ -4528,6 +4538,16 @@ ${drop}
         local.set $st
         call $int.of
         local.get $st
+        return
+      end
+      ;; b is 0 with a past an i64 (C101): no answer, as the i64 way says.
+      local.get $b
+      call $int.mag
+      array.len
+      i32.eqz
+      if void
+        ref.null eq
+        i32.const 1
         return
       end
       local.get $a
