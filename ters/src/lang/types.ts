@@ -411,7 +411,10 @@ export class Subst {
     t = this.resolve(t);
     if (t.t === "var") return t.v === v;
     if (t.t === "con") return t.args.some((a) => this.occurs(v, a));
-    return t.params.some((p) => this.occurs(v, p)) || this.occurs(v, t.ret);
+    // An effect's own arguments count too (State s): calling get state()'s
+    // answer would otherwise make s a function whose effects hold s.
+    const args = this.resolveRow(t.eff).args;
+    return t.params.some((p) => this.occurs(v, p)) || this.occurs(v, t.ret) || (!!args && Object.values(args).some((xs) => xs.some((x) => this.occurs(v, x))));
   }
 
   unify(a: Type, b: Type): void {
