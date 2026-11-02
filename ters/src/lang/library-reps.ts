@@ -316,10 +316,29 @@ function inPlace(code: Code, info: Info, main: Id, defs: Id[], row: Representati
     if (t.t === "con" && t.id === row.of && !hashable(info.subst.zonk(t.args[0]))) return false;
   }
   return true;
-  // Int, Text, or a tuple of them (C63f, std.ts `spelling`).
-  function hashable(k: Type): boolean {
+  // Int, Text, or a tuple of them (C63f, std.ts `spelling`), or a record
+  // of the program's own (a type with one case) whose fields are (C63g):
+  // with one case its spelling needs no tag. Not a type inside itself.
+  function hashable(k: Type, within: ReadonlySet<Id> = new Set()): boolean {
     if (k.t === "var") return true;
-    return k.t === "con" && (k.id === INT || k.id === STRING || (/^std\.tuple\d+$/.test(k.id) && k.args.every((a) => { const z = info.subst.zonk(a); return z.t !== "var" && hashable(z); })));
+    if (k.t !== "con") return false;
+    const inner = (a: Type) => { const z = info.subst.zonk(a); return z.t !== "var" && hashable(z, within); };
+    if (k.id === INT || k.id === STRING) return true;
+    if (/^std\.tuple\d+$/.test(k.id)) return k.args.every(inner);
+    const d = code.nodes[k.id], td = d?.kind === "def" && d.body ? code.nodes[d.body] : null;
+    if (td?.kind !== "typedef" || td.effect || td.interface || td.variants.length !== 1 || within.has(k.id)) return false;
+    const params = new Map(td.params.map((p, i) => [p, k.args[i]] as const));
+    const typeOf = (tid: Id): Type | null => {
+      const t = code.nodes[tid];
+      if (t?.kind !== "tref") return null;
+      const own = params.get(t.target);
+      if (own) return own;
+      const args = t.args.map(typeOf);
+      return args.every((a) => a) ? { t: "con", id: t.target, args: args as Type[] } : null;
+    };
+    const fields = (code.nodes[td.variants[0]] as NodeOf<"variant">).fields.map((f) => typeOf((code.nodes[f] as NodeOf<"field">).type));
+    const deeper = new Set([...within, k.id]);
+    return fields.length > 0 && fields.every((f) => { if (!f) return false; const z = info.subst.zonk(f); return z.t !== "var" && hashable(z, deeper); });
   }
 }
 
