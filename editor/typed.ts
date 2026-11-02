@@ -148,7 +148,7 @@ export function groupBlocks(bs: Blk[], groups: Groups, mark: WeakMap<Blk, Id>): 
 
 // missing: refused because a type has no implementation of an interface
 // the edit needs, so the editor can offer to write one (BACKLOG E140).
-export type TEdit = { ok: true; code: Code; names: Names; select?: Id; note: string } | { ok: false; reason: string; missing?: Info["errors"][number]["missing"] };
+export type TEdit = { ok: true; code: Code; names: Names; select?: Id; note: string; choices?: { label: string; edit: TEdit }[] } | { ok: false; reason: string; missing?: Info["errors"][number]["missing"] };
 
 // Names for messages: the library's and the presentation's, under the
 // program's own (which are what edits change and store).
@@ -242,7 +242,28 @@ export function fillValue(code: Code, names: Names, info: Info, hole: Id, text: 
   // those that leave it open (E175): show(n) of an n not known yet is show
   // for any value, not Float64's, so n can still be an Int later.
   let first: TEdit | undefined;
-  for (const t of readings(leaveOpen(info, narrow(code, info, r)))) {
+  const all_ = readings(leaveOpen(info, narrow(code, info, r)));
+  // A field several types have (title on a Card and on a Quick), read on a
+  // value nothing has settled, is each type's in turn: when more than one
+  // fits, each is offered, and nothing is chosen silently (E186).
+  const owners = fieldOwners(code, info, all);
+  const asked = all_.length > 1 && all_.some((t) => owners(t).length) ? all_ : null;
+  if (asked) {
+    const ok = new Map<string, TEdit>();
+    for (const t of asked) {
+      const key = owners(t).join(", ");
+      if (!key || ok.has(key)) continue;
+      const e = written(code, names, info, hole, text, t, wholes(t), defId);
+      const fit = e.ok ? e : wholes(t) ? written(code, names, info, hole, text, t, false, defId) : e;
+      if (fit.ok) ok.set(key, fit);
+    }
+    if (ok.size > 1) {
+      const choices = [...ok].map(([key, edit]) => ({ label: `as ${key}`, edit }));
+      const one = choices[0].edit as TEdit & { ok: true };
+      return { ...one, choices };
+    }
+  }
+  for (const t of all_) {
     // Whole numbers first at what their places take: a plain literal would
     // fit an Int's place too (it's some Number), but read as a Float64 it
     // couldn't hold 12345678901234567890 exactly.
@@ -405,6 +426,28 @@ function leaveOpen(info: Info, t: Typed): Typed {
 }
 
 // Each way to read what's typed, one id per called name: at most 16.
+// The types whose fields a reading reads, where the field's name is
+// shared by several types (E186): "a Card", "a Quick".
+function fieldOwners(code: Code, info: Info, names: Names) {
+  const ownerOf = new Map<Id, Id>();
+  for (const v of Object.values(code.nodes)) if (v.kind === "variant") for (const f of v.fields) ownerOf.set(f, v.id);
+  const shared = (op: Id) => { const n = names[op]; return n !== undefined && Object.keys(names).filter((id) => names[id] === n && code.nodes[id]?.kind === "field").length > 1; };
+  return (t: Typed): string[] => {
+    const out = new Set<string>();
+    const go = (x: Typed): void => {
+      if ("params" in x) return go(x.body);
+      if ("cond" in x) return [x.cond, x.then, x.else].forEach(go);
+      if ("let" in x) return [x.be, x.rest].forEach(go);
+      if (!("op" in x)) return;
+      x.args.forEach(go);
+      const v = ownerOf.get(x.op);
+      if (v && shared(x.op)) { const ty = info.owner.get(v), n = names[ty ?? v] ?? ty ?? v; out.add(`${/^[AEIOU]/.test(n) ? "an" : "a"} ${n}`); }
+    };
+    go(t);
+    return [...out].sort();
+  };
+}
+
 function readings(t: Typed): Typed[] {
   if ("params" in t) return readings(t.body).map((body) => ({ ...t, body }));
   if ("cond" in t) {
