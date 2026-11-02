@@ -154,6 +154,36 @@ test("tracked views: a row's watchers read places of its item, kept by the row t
   assert.equal((c.peek(kept) as unknown as { fields: Value[] }).fields[0], "a");
 });
 
+// C86: a whole new value written over the old wakes only the readers of
+// the places where they differ, as an edit there would (Solid's
+// `reconcile`): one item's field changed in a fresh list wakes that item's
+// row only; a list grown wakes them all.
+test("a whole new value wakes only the readers of the places that differ from the old (C86)", () => {
+  const cons: Lists = {
+    from: (v) => { const xs: Value[] = []; for (let d = v as unknown as { tag: string; fields: Value[] }; d.tag === "cons"; d = d.fields[1] as never) xs.push(d.fields[0]); return xs; },
+    to: (xs) => xs.reduceRight<Value>((tail, x) => ({ tag: "cons", fields: [x, tail] }) as unknown as Value, { tag: "nil", fields: [] } as unknown as Value),
+    views: { cons: "cons", nil: "nil", isList: (v) => typeof v === "object" && ["cons", "nil"].includes((v as unknown as { tag: string }).tag) },
+  };
+  const c = new Cells(same);
+  const items = ["a", "b", "c"].map((t) => item(t));
+  const todos = c.cell(cons.to(items));
+  const ran: string[] = [];
+  const rows = c.each(todos, (x) => {
+    const d = x as unknown as { fields: Value[] };
+    c.watch(() => { ran.push(`${d.fields[0]} ${d.fields[1]}`); });
+    return x;
+  }, cons);
+  c.watch(() => { c.read(rows); });
+  ran.length = 0;
+  // A new list, sharing a and c, with b done: only b's watcher.
+  c.write(todos, cons.to([items[0], item("b", true), items[2]]));
+  assert.deepEqual(ran, ["b true"]);
+  ran.length = 0;
+  // A new list one longer: every row may have moved, so all wake.
+  c.write(todos, cons.to([item("z"), items[0], item("b", true), items[2]]));
+  assert.ok(ran.length >= 3, ran.join("; "));
+});
+
 // ---------------------------------------------------------------- in the language
 
 // A cell of to-dos, edited at paths, each step's whole list and one place

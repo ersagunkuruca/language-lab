@@ -143,6 +143,31 @@ export function changeAt(v: Value, steps: Step[], change: (part: Value) => Value
   ys[s.item] = inner;
   return lists.to(ys);
 }
+// The places where b differs from a, outermost first, or null when there
+// are more than a few (then every reader wakes). Parts that are the same
+// object are the same; a list whose length changed differs as a whole.
+const MAX_DIFFERENCES = 16;
+function differences(a: Value, b: Value, lists: Lists): Step[][] | null {
+  const out: Step[][] = [];
+  const views = lists.views;
+  const go = (x: Value, y: Value, at: Step[]): boolean => {
+    if (x === y) return true;
+    if (views && views.isList(x) && views.isList(y)) {
+      const xs = lists.from(x), ys = lists.from(y);
+      if (xs.length === ys.length) { for (let i = 0; i < xs.length; i++) if (!go(xs[i], ys[i], [...at, { item: i }])) return false; return true; }
+    } else if (typeof x === "object" && typeof y === "object" && x !== null && y !== null && "fields" in x && "fields" in y) {
+      const d = x as unknown as Data, e = y as unknown as Data;
+      if (d.tag === e.tag && d.fields.length === e.fields.length && !(views && (views.isList(x) || views.isList(y)))) {
+        for (let i = 0; i < d.fields.length; i++) if (!go(d.fields[i], e.fields[i], [...at, { field: i }])) return false;
+        return true;
+      }
+    }
+    out.push(at);
+    return out.length <= MAX_DIFFERENCES;
+  };
+  return go(a, b, []) ? out : null;
+}
+
 // The three edits of a list: an item put in at i (at the end when i is past
 // it), the item at i taken out, the item at `from` moved to `to`. A place
 // that isn't there changes nothing.
@@ -301,27 +326,32 @@ export class Cells {
     // An edit (at given) copied its new part out of views already.
     if (at === undefined) v = this.plainOf(v);
     if (this.same(n.value as Value, v)) return;
-    if (this.journal) { const was = n.value as Value; this.journal.undo.push(() => this.write(c, was)); }
+    const was = at === undefined ? n.value as Value : undefined;
+    if (this.journal) { const old = n.value as Value; this.journal.undo.push(() => this.write(c, old)); }
     n.value = v;
     if (this.onWrite) this.onWrite(this.order.get(n)!, v);
     // A change at a place wakes the readers of that place, of a place
     // inside it and of one around it; the rest read elsewhere (L98).
     // A place read through a view wakes only for an edit there or around
     // it; and a row's places don't wake when its list only moved it.
-    const key = at && keyOf(at);
+    // A whole new value: the places where it differs from the old one,
+    // what they share skipped, so only their readers wake (C86, as Solid's
+    // `reconcile` diffs an immutable value into a store).
+    const ats = at ? [at] : was !== undefined && this.shape ? differences(was, v, this.shape) : null;
+    const keys = ats?.map(keyOf);
     if (what && at && what.kind !== "write") for (const o of n.observers) o.shift?.(what, at);
-    const hits = (seen: Seen) => {
-      if (!seen.row) return keyIs(at!, seen.rel);
+    const hits = (at: Step[]) => (seen: Seen) => {
+      if (!seen.row) return keyIs(at, seen.rel);
       const place = placeOf(seen.row);
       // An insert, remove or move in a list around the row's item only
       // moves it (or drops it, which its each does).
-      if (!place || (what && what.kind !== "write" && at!.length < place.length)) return false;
-      return keyIs(at!, [...place, ...seen.rel]);
+      if (!place || (what && what.kind !== "write" && at.length < place.length)) return false;
+      return keyIs(at, [...place, ...seen.rel]);
     };
     for (const o of n.observers) {
       if (o.edits !== undefined) o.edits = what && o.edits ? [...o.edits, what] : null;
-      const ps = key === undefined ? undefined : o.paths?.get(n);
-      if (!ps || ps.some((p) => p.startsWith(key!) || key!.startsWith(p)) || o.views?.get(n)?.some(hits)) {
+      const ps = keys === undefined ? undefined : o.paths?.get(n);
+      if (!ps || keys!.some((key) => ps.some((p) => p.startsWith(key) || key.startsWith(p))) || ats!.some((at) => o.views?.get(n)?.some(hits(at)))) {
         this.mark(o, DIRTY);
         if (o.rowOf && !o.rowOf.disposed) this.mark(o.rowOf, DIRTY);
       }
