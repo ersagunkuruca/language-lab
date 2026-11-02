@@ -222,7 +222,9 @@ function asMeanings(k: Lang, code: Code, info: Info, names: Names, chosen: Repre
           { variant: NIL, names: [], body: () => k.x(NIL) },
           { variant: CONS, names: ["item", "rest"], results: [null, "the rest's meanings"], body: ([x], [, r]) => k.call(CONS, k.call(inner, x), r!) },
         ]))
-        : k.x(row.meaning!));
+        // A function written out, not the meaning's name: WebAssembly and C
+        // compile only functions written in the program (I150).
+        : k.fn(["array"], (a) => k.call(row.meaning!, a)));
       return d;
     }
     if (row) {
@@ -231,7 +233,7 @@ function asMeanings(k: Lang, code: Code, info: Info, names: Names, chosen: Repre
       k.define(d, inner
         ? k.fn(["tree"], (tr) => k.call(MAP_V, k.call(prelude("map"), k.call(row.impl[prelude("entries of")], tr), k.fn(["entry"], (e) =>
           k.match(e, [{ variant: PAIR_V, names: ["key", "value"], body: ([kk, v]) => k.call(PAIR_V, kk, k.call(inner, v)) }])))))
-        : k.x(row.meaning!));
+        : k.fn(["stored"], (v) => k.call(row.meaning!, v)));
       return d;
     }
     if (t.id === LIST) {

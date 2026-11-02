@@ -95,3 +95,26 @@ test("a definition handing on keep of numbered compiles, and answers as evaluate
   assert.equal(want, 1 + 4 + 8 + 32);
   assert.equal(compiled, want);
 });
+
+// I150: a definition that is another's name (`twice = double`), called with
+// arguments, crashed compiled JavaScript while it looked up the parameters
+// it takes as arrays ("Cannot read properties of undefined"). The fuzz test
+// found it in the chooser's `as meanings` of a list stored as a tree.
+test("a definition that names another, called, compiles (I150)", async () => {
+  const { LIBRARY } = await import("../../ters/src/lang/library.ts");
+  const { checkOptions } = await import("../../ters/src/lang/load.ts");
+  const L = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
+  const k = new Lang(LIBRARY.code);
+  const double = k.def("double");
+  k.define(double, k.fn(["xs"], (xs) => k.call(L("append"), xs, xs)));
+  const twice = k.def("twice");
+  k.define(twice, k.x(double));
+  const answer = k.def("answer");
+  k.define(answer, k.thunk(() => k.call(L("length"), k.call(twice, k.list(k.lit(1), k.lit(2), k.lit(3))))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const file = join(dir, "i150.mjs");
+  writeFileSync(file, compile(code, info, names, { runtime, exports: ["answer"] }));
+  assert.equal(Number(((await import(pathToFileURL(file).href)).defs.answer as () => unknown)()), 6);
+});
