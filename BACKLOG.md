@@ -180,7 +180,7 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L70b | calc's `expression text` as one printer fold with binding strengths, read back by running it backwards; calc's hand parser goes (GRAMMARS-2026-11-02 step 2) | L70 | P3 | M | after L70a |
+| L70b | calc's `expression text` as one printer fold with binding strengths, read back by running it backwards; calc's hand parser goes (GRAMMARS-2026-11-02 step 2) | L70 | P3 | M | after L70a, which is done (#1174). Work in progress, kept outside the repo as project file language-lane/L70b-wip.patch: calc's `expression text` with tabling in relate.ts reads lines like "1 + 2 * 3 - 4 / x ^ 2 + (y - 1) * -z" correctly in about 0.5 s when run backwards directly, but `inverse` from a program still hangs (a left-recursive call on an empty piece). Also fixes modes.ts for a match on values, and adds Int show backwards |
 | L70c | A failed backward parse says the furthest position it reached (GRAMMARS-2026-11-02 step 3) | L70 | P3 | S | after L70b |
 | C111 | Fetches that overlap in compiled code: the compiled main and pages start a fetch in the background and `await` waits for its body, as the evaluator does since L150b | L150b | P3 | M | |
 | C110 | A grammar's backward mode compiled to recursive descent when it is LL(1), from COMPILER.md's planned mode analysis (GRAMMARS-2026-11-02 step 4) | L70 | P3 | L | after L70b |
