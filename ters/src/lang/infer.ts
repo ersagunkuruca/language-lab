@@ -96,7 +96,10 @@ export const implementationKey = (iface: Id, t: Type) => `${iface}|${JSON.string
 // insiders: the definitions that may call a private constructor (the
 // library that keeps its type's rule). Given, every other definition may
 // not; not given, nothing is checked, as with no pins.
-export interface Options { pins?: Pins; hidden?: Iterable<Id>; insiders?: Iterable<Id> }
+// library: the library's definitions. A private case of a type the program
+// declares itself is private to that program (L165): any of its
+// definitions may build it, as a module's own may build its type's.
+export interface Options { pins?: Pins; hidden?: Iterable<Id>; insiders?: Iterable<Id>; library?: Iterable<Id> }
 
 const num: Type = { t: "con", id: NUMBER, args: [] };
 const ARITH_WHAT = {
@@ -127,6 +130,9 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // are the earlier check's.
   const owner = reuse ? reuse.from.owner : ownerOfTypeParts(code);
   const insiders = opts.insiders ? new Set(opts.insiders) : null;
+  const library = opts.library ? new Set(opts.library) : null;
+  // Whether a type's private cases are the library's to build.
+  const libraryType = (def: Id) => !library || library.has(def);
   const info: Info = { typeOf: new Map(), schemes: new Map(), errors: [], holes: new Map(), divergent: new Set(), subst: s, owner, hidden: new Set(opts.hidden ?? []), options: opts, implementations: new Map(), opAt: new Map(), answered: new Set(), spread: new Set(), reshape: new Map() };
   const err = (id: Id, message: string, missing?: Problem["missing"]) => info.errors.push(missing ? { id, message, missing } : { id, message });
   const nm = (id: Id) => names[id] ?? id;
@@ -586,7 +592,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
           if (params.size) eff.args = { [def]: (self as { args: Type[] }).args };
           return { t: "fn", params: op.fields.map((f) => typeExpr((code.nodes[f] as NodeOf<"field">).type, own)), ret: op.returns ? typeExpr(op.returns, own) : s.fresh(), eff };
         }
-        if ((t as NodeOf<"variant">).private && insiders && !current.every((d) => insiders.has(d)))
+        if ((t as NodeOf<"variant">).private && insiders && libraryType(def) && !current.every((d) => insiders.has(d)))
           err(id, `${nm(target)} is private to the library, which keeps ${nm(def)}'s rule: build a ${nm(def)} with the library's functions (${SMART[target] ?? "see LIBRARY.md"})`);
         const { self, fields } = dataType(def);
         const fs = fields(target);
@@ -1949,13 +1955,14 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   // A private constructor only where the checker would take it.
   const insiders = info.options?.insiders ? new Set(info.options.insiders) : null;
   const outside = !!insiders && !h.group.every((d) => insiders.has(d));
+  const library = info.options?.library ? new Set(info.options.library) : null;
   const atTop = Object.values(code.nodes).some((d) => d.kind === "def" && d.body === hole);
   for (const [part, def] of info.owner) {
     const n = code.nodes[part];
     // An interface's constructor makes an implementation, so it's offered
     // only as a definition's whole body: elsewhere an operation of the same
     // name (Twice's twice) is what's meant (BACKLOG E141).
-    if (n.kind === "variant") { if (!(n.private && outside) && (atTop || !isInterface(code, def))) consider(part, constructorType(code, info.subst, def, part)); }
+    if (n.kind === "variant") { if (!(n.private && outside && (!library || library.has(def))) && (atTop || !isInterface(code, def))) consider(part, constructorType(code, info.subst, def, part)); }
     // A field of a one-case type reads it from a value: fst(p), pages(c).
     // An interface's operation is checked whole: what its type ends up
     // as decides whether there is an implementation.

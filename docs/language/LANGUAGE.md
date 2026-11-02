@@ -1509,6 +1509,13 @@ when it opens. Taking a value apart is open to everyone: a `match` on
 are the library's is the checker's `insiders` option (`checkOptions`
 gives the prelude's), like its `pins` and `hidden`.
 
+Private means private to whoever declares the type (L165). A program that
+declares its own type with a private case, to keep a rule of its own,
+builds it in any of its own definitions (its smart constructor) and gets
+it offered in its own palette; only the library's types are the library's
+alone. The checker tells the two apart by its `library` option, the
+library's definitions.
+
 This is the smallest form of an abstract type: the constructor is hidden,
 the type and its pattern are not. OCaml's private types (`type t = private
 …`) are the same idea, and Haskell's smart constructors with an
