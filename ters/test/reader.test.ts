@@ -234,6 +234,23 @@ test("typed as float64 of an open number takes no number type no one asked for",
   }
 });
 
+// A case named alone is its constructor, passed as a function (E215):
+// map(t, some), where it said "nothing is named some here".
+test("typed case name alone is its constructor as a function", async () => {
+  const { Lang } = await import("../src/lang/dsl.ts");
+  const { base, baseNames } = await import("../src/lang/load.ts");
+  const { SOME } = await import("../src/lang/std.ts");
+  const k = new Lang();
+  const f = k.def("f");
+  let hole = "";
+  k.define(f, k.fn(["t"], () => (hole = k.hole())));
+  const code = base(k.code), names = baseNames(k.names);
+  const r = fillValue(code, names, infer(code, names), hole, "map([1, 2], some)", f);
+  assert.ok(r.ok, !r.ok ? r.reason : "");
+  if (!r.ok) return;
+  assert.ok(Object.values(r.code.nodes).some((x) => x.kind === "ref" && x.target === SOME && !code.nodes[x.id]));
+});
+
 // Each name's meanings are narrowed by what's around them before they're
 // combined (E176): sheet's report line, with `line` a field of two types,
 // `name` of four and show of four meanings, has 128 readings, more than
