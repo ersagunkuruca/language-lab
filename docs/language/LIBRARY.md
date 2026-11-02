@@ -203,6 +203,11 @@ A list is written [1, 2, 3]. There are no loops: map, keep and for each go throu
 - **replace at** : `(List a, Int, a) -> List a`. The list with the item at a position, counting from 0, replaced by `by`; the list as it was when it has no item there. n steps.
 - **take** : `(List a, Int) -> List a`. The first count items: take([a, b, c], 2) is [a, b]; a list with fewer gives them all. count steps.
 - **drop** : `(List a, Int) -> List a`. The items after the first count: drop([a, b, c], 2) is [c]; a list with fewer gives []. count steps.
+- **zipped** : `(List a, List b) -> List (a, b)`. The two lists' items side by side, as tuples, as long as the shorter: zipped([1, 2, 3], ["a", "b"]) is [(1, "a"), (2, "b")].
+- **numbered** : `(List a) -> List (Int, a)`. Each item with its position, counting from 0: numbered(["a", "b"]) is [(0, "a"), (1, "b")].
+- **copies** : `(Int, a) -> List a`. A list of count copies of the item: copies(3, 0) is [0, 0, 0]. (repeated is Text's.)
+- **all pass** : `(List a, (a) -[e]-> Bool) -[e]-> Bool`. Whether every item passes the test; true for an empty list. Stops at the first that doesn't.
+- **any pass** : `(List a, (a) -[e]-> Bool) -[e]-> Bool`. Whether some item passes the test; false for an empty list. Stops at the first that does.
 - **position where** : `(List a, (a) -[e]-> Bool) -[e]-> Optional Int`. The position of the first item that passes the test, counting from 0, as some(position): position where([3, 8, 5], (x) ↦ 4 < x) is some(1); none when no item passes.
 - **show numbers** : `(List Float64) -> Text`. A fold that prints. Run backwards it unfolds, so it parses.
 - **empty array** : `() -> Array a`. An array with no items.
@@ -376,6 +381,7 @@ A page is a value of type Html that main returns. Cells hold what changes; a par
 - **insert at** : `(Cell a, Path a (List b), Int, b) -[Update]-> Unit`. Puts an item into the list at a place, before item i (at the end when i is past it).
 - **remove at** : `(Cell a, Path a (List b), Int) -[Update]-> Unit`. Takes item i out of the list at a place; nothing when there's no item i.
 - **move at** : `(Cell a, Path a (List b), Int, Int) -[Update]-> Unit`. Moves item `from` of the list at a place to position `to`; nothing when either isn't there.
+- **changed** : `(a, Path a b, b) -> a`. The value with the part at a place changed, the rest shared: changed(m, path((m) ↦ m.pc), 7) is m with its pc 7, and changed(xs, item path(path((l) ↦ l), 2), 0) is xs with its third item 0. A place that isn't there gives the value as it was. For a cell, write at does this and wakes the place's readers.
 - **item where** : `(Cell a, Path a (List b), (b) -[Cells, Diverge, e]-> Bool) -[Cells, Diverge, e]-> Path a b`. A path to the first item of the list at a place in a cell that passes the test, so one item can be written by its key: write at(board, then path(item where(board, path((b) ↦ b.cards), (c) ↦ c.id = id), path((c) ↦ c.time)), t) changes one card and wakes only its readers. The list is read now. When no item passes, the path is to no item: read at has no answer there and a write changes nothing.
 - **Html** (type). A page: elements with attributes and children, text, and parts that are drawn again when what they read changes.
 - **Attribute** (type). Something attached to a page element: a property (name and value), an on(event, then) handler, or a sound to play when it's clicked.
