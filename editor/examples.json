@@ -24,6 +24,7 @@
     { "program": "bounce", "label": "Page: bounce", "folders": ["bounce"], "page": true },
     { "program": "spacetime", "label": "Page: spacetime", "folders": ["spacetime"], "page": true },
     { "program": "sheet", "label": "Bigger program: sheet, a spreadsheet", "folders": ["sheet"] },
+    { "program": "board", "label": "Bigger program: board, a task board page", "folders": ["compiler/gaps/board"] },
     { "program": "compass", "label": "Compass", "folders": ["compass"], "page": true, "editor": false }
   ]
 }
