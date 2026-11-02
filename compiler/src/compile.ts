@@ -771,7 +771,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           if (t.kind === "def") {
             if (f.target === def) return true;
             const scheme = info.schemes.get(f.target)!.type;
-            return noChoice(scheme) || (isFnDef(f.target) && singleDef(f.target));
+            return noChoice(scheme) || ownsNoChoice(scheme) || (isFnDef(f.target) && singleDef(f.target));
           }
           return noChoice(ty(n.fn));
         }
@@ -779,6 +779,15 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       }
     };
     return one(id);
+  }
+  // A function performing nothing of its own whose row is open only so its
+  // caller's row can stand there (`uppercase`, Text to Text): no parameter
+  // carries that row, so it can't choose, wherever it's called (C82b).
+  function ownsNoChoice(t: Type): boolean {
+    if (t.t !== "fn" || t.eff.effs.includes(CHOICE) || t.eff.tail === null) return false;
+    const v = t.eff.tail;
+    const has = (x: Type): boolean => x.t === "fn" ? x.eff.tail === v || [...x.params, x.ret].some(has) : x.t === "con" && x.args.some(has);
+    return ![...t.params, t.ret].some(has);
   }
   function singleDef(def: Id): boolean {
     if (singles.has(def)) return singles.get(def)!;
