@@ -1718,7 +1718,10 @@ export type Filling =
   | { kind: "match" | "fold"; on: Id | null; type: Id }
   | { kind: "lambda"; arity: number; params?: Type[] }
   // A definition with results used the way it declares: `x, y = polar(□, □)`.
-  | { kind: "use"; target: Id };
+  | { kind: "use"; target: Id }
+  // A match on the values of an Int, Float64 or Text in scope (L164c,
+  // E225): one value's arm and the otherwise, holes.
+  | { kind: "values"; on: Id; type: Id };
 
 // Everything that can go in a hole without a type or effect error: variables
 // in scope, definitions, builtins and constructors (as values, or called with
@@ -2056,6 +2059,9 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
       const split = (f: Filling) => { if (!withResults || whole(f)) out.push(f); };
       split({ kind: "match", on: b.id, type: bt.id });
       if (recursiveType(code, bt.id)) split({ kind: "fold", on: b.id, type: bt.id });
+    } else if (bt.t === "con" && [INT, NUMBER, STRING].includes(bt.id)) {
+      const f: Filling = { kind: "values", on: b.id, type: bt.id };
+      if (!withResults || whole(f)) out.push(f);
     } else if (bt.t === "var") {
       // Nothing says what it is yet (a new input, say): splitting it by the
       // cases of a type is what says so. Checked like any filling that pins
@@ -2068,6 +2074,13 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
           const f: Filling = { kind, on: b.id, type };
           if (safe(s, f, false)) out.push(f);
         }
+      }
+      // Or by its values, as a Text or an Int (E225).
+      for (const type of [STRING, INT]) {
+        const s = info.subst.clone();
+        try { s.unify(bt, { t: "con", id: type, args: [] }); } catch (e) { if (e instanceof TypeError) continue; throw e; }
+        const f: Filling = { kind: "values", on: b.id, type };
+        if (safe(s, f, false)) out.push(f);
       }
     }
   }
