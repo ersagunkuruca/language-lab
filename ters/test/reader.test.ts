@@ -305,6 +305,10 @@ test("typed 1500.0 is a Float64", async () => {
   const r = fillValue(code, names, infer(code, names), hole, "1500.0", f);
   assert.ok(r.ok, !r.ok ? r.reason : "");
   if (r.ok) assert.deepEqual(r.code.nodes[hole], { id: hole, kind: "lit", value: 1500, of: NUMBER });
+  // In a list too, each keeps its point (E195).
+  const l = fillValue(code, names, infer(code, names), hole, "[1.0, 2.0]", f);
+  assert.ok(l.ok, !l.ok ? l.reason : "");
+  if (l.ok) assert.equal(Object.values(l.code.nodes).filter((n) => n.kind === "lit" && n.of === NUMBER).length, 2);
 });
 
 // A name several types share, in a stub its one caller passes a Text:
