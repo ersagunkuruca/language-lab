@@ -346,18 +346,31 @@ fn main(@builtin(global_invocation_id) g: vec3u) {
       img.data[at + 3] = 255;
     };
     const say = (what: string) => { status.textContent = `Drawn as ${how} on the CPU (no GPU here), ${what}`; };
+    // A frame is drawn a few rows at a time, at most ~10 ms at once, and a
+    // slow one leaves the page as much time again before the next, so a
+    // picture that costs 150 ms a frame doesn't hold the page (E194).
+    let frame = 0;
     const draw = () => {
       if (stopped || paused !== null) return;
-      const t = now(), t0 = performance.now();
-      if (canvas.width !== size) canvas.width = canvas.height = size;
-      const img = ctx.createImageData(size, size);
-      for (let py = 0; py < size; py++) for (let px = 0; px < size; px++) pixel(img, size, px, py, t);
-      ctx.putImageData(img, 0, 0);
-      const ms = performance.now() - t0;
-      if (ms > 40) size = Math.max(32, Math.round(size * 0.8));
-      else if (ms < 15) size = Math.min(256, Math.round(size * 1.15));
-      if (moving) { say(`${canvas.width}×${canvas.width}, ${Math.round(ms)} ms a frame. Click it to pause and sharpen.`); requestAnimationFrame(draw); }
-      else refine(t);
+      const t = now(), n = size, mine = ++frame;
+      const img = ctx.createImageData(n, n);
+      let row = 0, busy = 0;
+      const rows = () => {
+        if (stopped || paused !== null || mine !== frame) return;
+        const t0 = performance.now();
+        while (row < n && performance.now() - t0 < 10) { for (let px = 0; px < n; px++) pixel(img, n, px, row, t); row++; }
+        busy += performance.now() - t0;
+        if (row < n) { setTimeout(rows, 0); return; }
+        if (canvas.width !== n) canvas.width = canvas.height = n;
+        ctx.putImageData(img, 0, 0);
+        if (busy > 40) size = Math.max(32, Math.round(size * 0.8));
+        else if (busy < 15) size = Math.min(256, Math.round(size * 1.15));
+        if (!moving) return refine(t);
+        say(`${n}×${n}, ${Math.round(busy)} ms a frame. Click it to pause and sharpen.`);
+        if (busy > 40) setTimeout(() => requestAnimationFrame(draw), busy);
+        else requestAnimationFrame(draw);
+      };
+      rows();
     };
     // Sharper, without blanking: the small picture scaled up first.
     const refine = (t: number) => {
