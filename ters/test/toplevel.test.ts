@@ -8,7 +8,7 @@ import { base, baseNames } from "../src/lang/load.ts";
 import { addVariant, fillHole, paramName } from "../src/lang/refactor.ts";
 import { runMain, showValue } from "../src/lang/run.ts";
 import { Lang } from "../src/lang/dsl.ts";
-import { ARITH, S } from "../src/lang/std.ts";
+import { ARITH, BOOL, S } from "../src/lang/std.ts";
 import { INT, NUMBER, RATIONAL_TYPE, STRING, showType } from "../src/lang/types.ts";
 import * as Top from "../src/lang/toplevel.ts";
 
@@ -912,4 +912,29 @@ test("type parameters: a generic data type, an effect's, and an operation's own,
   s.ok(Top.setReturns(s.code, s.names, wait, T(own)));
   assert.equal(s.info().errors.length, 0);
   assert.match(s.refused(Top.removeTypeParameter(s.code, s.names, Wait, own)), /still names a/);
+});
+
+test("a way of an interface's operation: added with a hole, its cost set, made ordinary again (E210)", () => {
+  const s = new Session();
+  const Eq = s.ok(Top.newDefinition(s.code, s.names, "Eq", { kind: "interface", firstOperation: "same" }));
+  const td = () => s.code.nodes[(s.code.nodes[Eq] as NodeOf<"def">).body!] as NodeOf<"typedef">;
+  const ops = () => (s.code.nodes[td().variants[0]] as NodeOf<"variant">).fields;
+  s.ok(Top.setOperation(s.code, s.names, Eq, ops()[0], 2, BOOL));
+  s.ok(Top.addOperation(s.code, s.names, Eq, "differ", 2, BOOL));
+  const differ = ops()[1];
+  const way = s.ok(Top.addWay(s.code, s.names, Eq, differ, ""));
+  const d = s.code.nodes[way] as NodeOf<"def">;
+  assert.equal(d.way, differ);
+  assert.equal(s.names[way], "differ by its way");
+  assert.equal((s.code.nodes[d.body!] as NodeOf<"lambda">).params.length, 2);
+  const second = s.ok(Top.addWay(s.code, s.names, Eq, differ, ""));
+  assert.equal(s.names[second], "differ by its way 2");
+  s.ok(Top.setWay(s.code, s.names, way, { cost: 2 }));
+  assert.equal((s.code.nodes[way] as NodeOf<"def">).cost, 2);
+  assert.match(s.refused(Top.setWay(s.code, s.names, way, { cost: -1 })), /0 or more/);
+  s.ok(Top.setWay(s.code, s.names, way, null));
+  assert.equal((s.code.nodes[way] as NodeOf<"def">).way, undefined);
+  assert.equal((s.code.nodes[way] as NodeOf<"def">).cost, undefined);
+  const Shape = s.ok(Top.newDefinition(s.code, s.names, "Shape", { kind: "type", firstCase: "dot" }));
+  assert.match(s.refused(Top.addWay(s.code, s.names, Shape, differ, "")), /only an interface/);
 });

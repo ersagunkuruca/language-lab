@@ -2464,6 +2464,19 @@ function structurePanel(info: T.Info, names: Names): HTMLElement | null {
     return out;
   } else if (sel === ui.def) {
     out.append(pinRow(info, dname));
+    // A way of an interface's operation (E210): which, what it costs, and
+    // back to an ordinary definition.
+    const way = (node(ui.def) as NodeOf<"def">).way;
+    if (way) {
+      const cost = (node(ui.def) as NodeOf<"def">).cost;
+      const iface = info.owner.get(way);
+      const ci = h("input", { id: "f-way-cost", type: "number", min: "0", step: "1", value: cost == null ? "" : String(cost), placeholder: "1", autocomplete: "off" }) as HTMLInputElement;
+      ci.addEventListener("change", () => runTop(info, Top.setWay(code, sh, ui.def, { cost: ci.value.trim() === "" ? null : Number(ci.value) })));
+      out.append(h("div", { class: "sub-head" }, "A way of ", pick(way, names[way] ?? "an operation"), iface ? " in " : "", iface ? pick(iface, names[iface] ?? "its interface") : "", " · code.json"),
+        h("label", { class: "field", for: "f-way-cost" }, h("span", {}, "Cost"), ci),
+        h("p", { class: "hint" }, `What it costs besides what it uses (the usual is 1): the compiler takes the cheapest way that ends in what an implementation gives.`),
+        h("div", { class: "acts" }, edit("Make it ordinary", `No longer a way of ${names[way] ?? "the operation"}: a definition like any other`, { ok: true }, () => runTop(info, Top.setWay(code, sh, ui.def, null)))));
+    }
     const params = body?.kind === "lambda" ? body.params : [];
     out.append(h("div", { class: "sub-head" }, `Inputs of ${dname} · code.json`));
     if (!params.length) {
@@ -2549,6 +2562,18 @@ function structurePanel(info: T.Info, names: Names): HTMLElement | null {
       h("label", { class: "field", for: "f-op-takes" }, h("span", {}, "Takes"), takes), h("label", { class: "field", for: "f-op-gives" }, h("span", {}, "Gives"), gives),
       h("div", { class: "acts" }, change, edit("Remove this operation", `Remove it from ${names[iface] ?? "the interface"}`, Top.removeField(code, sh, variant, sel), () => runTop(info, Top.removeField(code, sh, variant, sel), () => { ui.selected = iface; }), "btn danger")),
       h("p", { class: "hint" }, "An implementation's part for it becomes a hole when what it takes or gives changes."));
+    // Its ways (WAYS.md, E210): definitions that compute it from the
+    // interface's other operations, so an implementation can leave it to
+    // them; the compiler picks the cheapest that ends in what's given.
+    const op = names[sel] ?? "it", ways = code.defs.filter((d) => (code.nodes[d] as NodeOf<"def">).way === sel);
+    out.append(h("div", { class: "sub-head" }, `Ways of ${op} · code.json`));
+    if (!ways.length) out.append(h("p", { class: "hint" }, `None: each implementation gives ${op}. A way computes it from ${names[iface] ?? "the interface"}'s other operations, so an implementation can leave it to its ways.`));
+    for (const d of ways) { const cost = (code.nodes[d] as NodeOf<"def">).cost; out.append(row(pick(d, names[d] ?? "a way", cost != null ? `cost ${cost}` : ""))); }
+    const wc = textField("f-new-way", "New way", "its name, or one is made");
+    const addWay = h("button", { class: "btn", type: "button" }, "Add a way");
+    addWay.addEventListener("click", () => runTop(info, Top.addWay(code, sh, iface, sel, wc.input.value), (r) => { ui.back = [ui.def]; ui.def = r.select; ui.selected = null; }));
+    wc.input.addEventListener("keydown", (e) => { if (e.key === "Enter") addWay.click(); });
+    out.append(wc.el, h("div", { class: "acts" }, addWay));
     return out;
   } else if (n?.kind === "field") {
     const variant = Object.values(code.nodes).find((v) => v.kind === "variant" && v.fields.includes(sel)) as NodeOf<"variant">;
