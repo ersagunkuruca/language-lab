@@ -752,7 +752,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| D9 | Compass: a perpendicular from a circle's own centre, or an angle bisector with a side point on the corner, drew a line pointing wherever rounding said, swinging as points moved (Ersagun 2026-11-02). Its vector is 0; such a line is now nothing, and the help says so | #PR |
+| D9 | Compass: a perpendicular from a circle's own centre, or an angle bisector with a side point on the corner, drew a line pointing wherever rounding said, swinging as points moved (Ersagun 2026-11-02). Its vector is 0; such a line is now nothing, and the help says so | #1098 |
 | D8 | Compass: an Angle bisector tool, three clicks (a point on one side, the corner, a point on the other). Each side as a line of size 1 running from the corner, l / √(l · l); their sum halves the angle. Test: two bisectors of a triangle cross at a point equally far from all three sides | #1092 |
 | D7 | Compass: a Perpendicular tool. Click a point, then a line: (p ∧ s ∧ ∞)*, the line through p meeting s at right angles (dot 0 with p, s and ∞); with a circle it is the line through the point and the centre | #1090 |
 | D6 | Compass: a Midpoint tool (Ersagun 2026-11-02, after building an incircle by hand). Two points p and q of weight 1: p − q is their perpendicular bisector (x · p = x · q), and the midpoint is where it crosses the line through them. Perpendicular and angle bisector follow as D7, D8 | #1088 |
