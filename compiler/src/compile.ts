@@ -95,6 +95,29 @@ const HANDLERS = new Set([S.first, S.all, S.count, S.optional, S.fuel]);
 // a BigInt beyond.
 const intJs = (v: number | string): string => { const x = intLit(v); return typeof x === "bigint" ? `${x}n` : x < 0 ? `(${x})` : String(x); };
 
+// A call of a definition that is another's name (`twice = double`, the
+// chooser's `as meanings` of a list) calls that one (I150): copies and
+// arguments are worked out from a definition's own parameters, and the
+// name has none, so its call gave the function itself, unapplied.
+function throughNames(code: Code): Code {
+  const named = (d: Id): Id | null => {
+    const body = (code.nodes[d] as NodeOf<"def">).body, b = body ? code.nodes[body] : null;
+    return b?.kind === "ref" && code.nodes[b.target]?.kind === "def" ? b.target : null;
+  };
+  let nodes: Code["nodes"] | null = null;
+  for (const n of Object.values(code.nodes)) {
+    if (n.kind !== "call") continue;
+    const f = code.nodes[n.fn];
+    if (f?.kind !== "ref" || code.nodes[f.target]?.kind !== "def") continue;
+    let to = f.target;
+    for (let seen = 0, next; (next = named(to)) && seen < 64; seen++) to = next;
+    if (to === f.target) continue;
+    nodes ??= { ...code.nodes };
+    nodes[f.id] = { ...f, target: to };
+  }
+  return nodes ? { ...code, nodes } : code;
+}
+
 // The definitions the exports reach, every type, and the builtins (all of
 // them when an export isn't found).
 function reachedFromExports(code: Code, names: Names, exports: string[]): Code {
@@ -153,6 +176,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // A multivector's parts its blade mask leaves out are known zeros there
   // (grades.ts, L43c).
   ({ code, names, info } = stageProgram(code, info, names, opts.exports.flatMap((x) => code.defs.findLast((d) => names[d] === x) ?? [])));
+  code = throughNames(code);
   // Handlers the compiler can see are put into the code they handle
   // (handlers.ts, C64b), a round at a time, each checked again; a round
   // that doesn't check is dropped.
