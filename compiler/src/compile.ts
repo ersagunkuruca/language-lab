@@ -121,6 +121,13 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     names = x.names;
     info = infer(code, names);
   }
+  // Only what the exports reach is compiled, so it is all the passes below
+  // look at and check again (C67): the library's other definitions were
+  // over half of each check. Types stay, and the builtins. The checked
+  // types still hold for what's left, so this needs no check of its own.
+  // Before hoisting, whose check again was over the whole library too
+  // (sheet: 1.6 s of its 2.4 s compile).
+  code = reachedFromExports(code, names, opts.exports);
   // Work a lambda redoes on every call though nothing in it changes, done
   // once before (hoist.ts, C81).
   ({ code, info, names } = hoistInvariants(code, info, names));
@@ -138,11 +145,6 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     const checked = infer(sol.code, sol.names);
     if (checked.errors.length <= info.errors.length) ({ code, names, info } = { ...sol, info: checked });
   }
-  // Only what the exports reach is compiled, so it is all the passes below
-  // look at and check again (C67): the library's other definitions were
-  // over half of each check. Types stay, and the builtins. The checked
-  // types still hold for what's left, so this needs no check of its own.
-  code = reachedFromExports(code, names, opts.exports);
   // Calls given data written down (an algebra's signature and basis) are
   // worked out as far as that data goes (stage.ts, C65): what's left is
   // arithmetic, with no lists. Kept only if the program still checks.
