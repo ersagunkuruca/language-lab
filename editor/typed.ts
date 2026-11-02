@@ -1327,13 +1327,21 @@ const lets = (code: Code, defId: Id): NodeOf<"call">[] => {
 export const isDot = (code: Code, defId: Id, b: Id) => lets(code, defId).some((l) => (code.nodes[l.fn] as NodeOf<"lambda">).params.includes(b));
 
 // Display handles for dots without a name, in reading order.
+// What some ref reads, once per version of the code (I135: every redraw
+// walked all the nodes for it).
+const readSets = new WeakMap<Code["nodes"], Set<Id>>();
+function readTargets(code: Code): Set<Id> {
+  let r = readSets.get(code.nodes);
+  if (!r) readSets.set(code.nodes, (r = new Set(Object.values(code.nodes).flatMap((n) => (n.kind === "ref" ? [n.target] : [])))));
+  return r;
+}
 export function dotHandles(code: Code, defId: Id, names: Names): Names {
   const out: Names = {};
   let k = 0;
   // A step done for what it does, filled and read by nothing, reads as the
   // step itself, for each(…), not ‹•1› = for each(…) (E183); while its
   // value is a hole, the handle is how to reach it.
-  const read = new Set(Object.values(code.nodes).flatMap((n) => (n.kind === "ref" ? [n.target] : [])));
+  const read = readTargets(code);
   for (const l of lets(code, defId)) (code.nodes[l.fn] as NodeOf<"lambda">).params.forEach((p, i) => {
     if (names[p] !== undefined || (!read.has(p) && code.nodes[l.args[i]]?.kind !== "hole")) return;
     out[p] = `•${++k}`;
