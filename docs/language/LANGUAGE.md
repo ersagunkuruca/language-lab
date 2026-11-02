@@ -370,7 +370,13 @@ Text has `length`, `slice`, `characters`, `split`, `join all`, `find`
 (`Choice`: the part may not be there), `comes before`, `character code`
 and `character` (`src/lang/text.ts`). Positions count characters, so an
 emoji is one. `join all` joins a list in one step, where a fold of `join
-text` would copy.
+text` would copy. `split` and `join all` (and html's `joined`, which is
+it) run backwards as each other: the parts of a joined text are the text
+split at the separator, the one list of parts that hold none of it, so a
+printer that joins its fields has its reader in `inverse` (L172):
+`inverse((r) ↦ joined([show(r.n), r.name], "|"), "12|Ada")` is
+`row(12, "Ada")`. A part that may hold the separator, or a `floor` on
+the way, has no single answer, and the checker says so.
 
 All of these run in the evaluator, the compiler (`$int`, `$impl`, `$many`
 in its runtime) and forward in the relational interpreter.
@@ -517,7 +523,8 @@ give it one type. Before anything runs, the read becomes a generated match
 with one arm per case that has the field (`src/lang/shared-fields.ts`), so
 every target runs what it already runs. `set((i) ↦ i.to, instr, 9)` is
 the instruction with its `to` changed, and likewise has no answer on a
-case without it (the field alone for now, not a path through it).
+case without it. A path through it works too: `set((g) ↦ g.to.line, g,
+9)` changes the line of the spot on the case that has a `to` (L168b).
 Haskell's record fields across constructors are the prior
 art, though they throw on a case without the field
 (SHARED-FIELDS-2026-11-02.md; `test/shared-fields.test.ts`).
@@ -1646,7 +1653,12 @@ f's space, the way back being f run backwards (`examples/conjugate`: an
 edit in linear light, a turn about a point, one band of a signal). The
 function it gives back is typed the same way from the f it is given:
 `conjugate(step, double)` with `step = (x) ↦ x + 1` is a plain function,
-`conjugate(double, step)` keeps Choice. It is written once with the DSL in
+`conjugate(double, step)` keeps Choice. Two text pieces are made for printers that `inverse`
+reads back (L70a, GRAMMARS-2026-11-02): `spaced(t)` prints t with a space
+either side and reads it with any spaces around, or none, and
+`optional parens(needed, t)` prints the parentheses only when needed and
+reads them whenever they're there (matched pairs, any number), and their absence
+only where they weren't needed. Each prints one way and reads several. It is written once with the DSL in
 `src/lang/prelude-source.ts` and
 published by `node library/build.ts`, which also moves the examples onto it.
 Every program is loaded with it (`src/lang/library.ts`): the editor, the

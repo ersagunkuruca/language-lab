@@ -276,6 +276,10 @@ export interface World {
   wait(ms: number): void;
   // Network's: the body of a GET, once per address (the world remembers).
   fetchText(url: string): string;
+  // A GET started in the background (L150b): what to ask, later, for its
+  // body, its failure, or null while it is on its way. A world without it
+  // fetches when the fetch starts.
+  startFetch?(url: string): () => { text: string } | { error: string } | null;
 }
 
 // An Abort that nothing in the program handled.
@@ -371,8 +375,10 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     [IO.fileExists]: (p) => one(bool(world("fileExists")(p as string))),
     [IO.listFolder]: (p) => one(toList(world("listFolder")(p as string))),
     [IO.fetchText]: (u) => one(world("fetchText")(u as string)),
-    // Fetched now, so the ticket is ready at once on any clock (L150).
-    [IO.startFetch]: (u) => one({ tag: TICKET_V.timer, fields: [0, world("fetchText")(u as string)] }),
+    // In the background where the world can (L150b): a ticket ready when
+    // the body has come. Otherwise fetched now, so the ticket is ready at
+    // once on any clock (L150).
+    [IO.startFetch]: (u) => one(rt.world?.startFetch ? timers.fetch(rt.world.startFetch(u as string)) : { tag: TICKET_V.timer, fields: [0, world("fetchText")(u as string)] }),
     [CELL_OPS.cell]: (v) => one(cells.cell(v)),
     [CELL_OPS.formula]: (f) => one(cells.formula(() => {
       for (const v of (f as Fn)()) return v;
@@ -652,10 +658,18 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       // program's main uses too).
       if (op === START_TIMER_OP) return this.ret(timers.start((rt.world?.now ?? Date.now)(), args[0] as number));
       if (op === AWAIT_OP) {
-        const now = (rt.world?.now ?? Date.now)(), t = args[0] as Data, w = timers.when(t, now);
+        const clock = rt.world?.now ?? Date.now, t = args[0] as Data;
+        let now = clock(), w: { at: number; first?: number };
+        // A fetch that failed is an Abort where it is awaited.
+        try { w = timers.when(t, now); } catch (e) { if (e instanceof Aborted) return this.perform(ABORT_OP, [e.reason]); throw e; }
+        // A fetch still on its way: look again every few milliseconds, or
+        // at a timer's deadline if that comes first (L150b).
+        try {
+          while (w.at > now && timers.pending(t)) { world("wait")(Math.min(5, w.at - now)); now = clock(); w = timers.when(t, now); }
+        } catch (e) { if (e instanceof Aborted) return this.perform(ABORT_OP, [e.reason]); throw e; }
         if (w.at > now) world("wait")(w.at - now);
         if (w.first !== undefined) return this.apply(t.fields[1], [w.first]);
-        return this.ret(t.tag === TICKET_V.timer || t.tag === TICKET_V.at ? t.fields[1] : unit);
+        return this.ret(t.tag === TICKET_V.timer || t.tag === TICKET_V.at ? t.fields[1] : timers.value(t) ?? unit);
       }
       if (op === CHECK_OP && rt.check) return (rt.check((args[0] as Data).tag === TRUE, args[1] as string), this.ret(unit));
       // A program's own effect, answered by its host (L69a); a missing or

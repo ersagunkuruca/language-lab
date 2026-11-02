@@ -59,7 +59,7 @@ import { children, dependencies, ownerOfTypeParts, subtree } from "../model.ts";
 import { derivativeLambda, gradientLambda } from "./derive.ts";
 import { fieldShapes, look, type TypeEnv } from "./nested.ts";
 import { B, impl } from "../prelude.ts";
-import { close, DEF_VALUE, fromList, makeRunner, META, sameNumber, equal as valueEqual, showValue, caseName, compareValues, variantOrder, ORDER_VALUES, type Data, type Value } from "./run.ts";
+import { bool, close, DEF_VALUE, fromList, makeRunner, META, sameNumber, equal as valueEqual, showValue, caseName, compareValues, variantOrder, ORDER_VALUES, type Data, type Value } from "./run.ts";
 import { NUMERIC, relationFor } from "./equations.ts";
 import { analyzer, type Choice, type Exec, type Fn, type Mode, type Plan } from "./modes.ts";
 import { seededGenerator } from "./random.ts";
@@ -727,6 +727,18 @@ function plansFor(code: Code, names?: Names): ReturnType<typeof analyzer> {
 type Q = [Int, Int];
 const FRACTION_OPS = ["add fractions", "subtract fractions", "multiply fractions", "divide fractions", "negate fraction"] as const;
 type FractionOp = (typeof FRACTION_OPS)[number];
+const GRAMMAR_OPS = ["spaced", "optional parens"] as const;
+type GrammarOp = (typeof GRAMMAR_OPS)[number];
+// "(…)" whose first parenthesis closes at its last character.
+const wrapped = (t: string): boolean => {
+  if (t[0] !== "(" || t[t.length - 1] !== ")") return false;
+  let depth = 0;
+  for (let i = 0; i < t.length; i++) {
+    depth += t[i] === "(" ? 1 : t[i] === ")" ? -1 : 0;
+    if (depth === 0 && i < t.length - 1) return false;
+  }
+  return depth === 0;
+};
 const isZero = (a: Q) => a[0] === 0;
 const qAdd = ([p, q]: Q, [r, t]: Q): Q => lowestTerms(intAdd(intMul(p, t), intMul(r, q)), intMul(q, t));
 const qNeg = ([p, q]: Q): Q => [intNeg(p), q];
@@ -778,6 +790,12 @@ export function interpreter(given: Code, opts: Options = {}) {
   for (const name of FRACTION_OPS) {
     const d = preludeDef(name), n = d ? nodes[d] : undefined;
     if (n?.kind === "def" && n.body) fractionOps.set(n.body, name);
+  }
+  // The grammar pieces (L70a), by their definitions' bodies.
+  const grammarOps = new Map<Id, GrammarOp>();
+  for (const name of GRAMMAR_OPS) {
+    const d = preludeDef(name), n = d ? nodes[d] : undefined;
+    if (n?.kind === "def" && n.body) grammarOps.set(n.body, name);
   }
   const isRecursive = (lambda: Id) => {
     if (!recursive.has(lambda)) {
@@ -1195,6 +1213,7 @@ export function interpreter(given: Code, opts: Options = {}) {
       });
     }
     if (f.k === "closure" && fractionOps.has(f.lambda)) return fractionGoal(fractionOps.get(f.lambda)!, args, out);
+    if (f.k === "closure" && grammarOps.has(f.lambda)) return grammarGoal(grammarOps.get(f.lambda)!, args, out);
     if (f.k === "closure") {
       const c = f;
       const searched = (): Goal => {
@@ -1242,6 +1261,29 @@ export function interpreter(given: Code, opts: Options = {}) {
         const r = solveFraction(op, at, xs);
         // Free: every value fits (0 · x = 0), so the side stays unknown.
         return r === "free" ? succeed(s) : r ? eq(sides[at], dataT(RATIO, r))(s) : null;
+      },
+    });
+  }
+
+  // The grammar pieces run backwards (L70a, GRAMMARS-2026-11-02): each
+  // prints one way and reads several, as Boomerang's lenses choose one
+  // canonical text. `spaced(t)` reads t with any spaces around it, none
+  // too. `optional parens(needed, t)` reads t, unless needed, or t in
+  // parentheses (matched to each other, any number of pairs), whatever
+  // was needed.
+  // They wait for the text even when their inputs are known: in
+  // `l ++ spaced(op) ++ r` read backwards, printing " + " first would pin
+  // the spaces down. A printer called with all its inputs known runs
+  // forwards before it gets here (apply's `forward`).
+  function grammarGoal(op: GrammarOp, args: Term[], out: Term): Goal {
+    return wait({
+      k: "later", text: op, on: [...args, out], ready: (s) => known(out, s), then: (s) => {
+        const text = walk(out, s) as string;
+        if (op === "spaced") return eq(args[0], text.replace(/^ +| +$/g, ""))(s);
+        const [needed, t] = args;
+        const inside: string[] = [];
+        for (let x = text; wrapped(x); x = x.slice(1, -1)) inside.push(x.slice(1, -1));
+        return disj(conj(eq(needed, fromValue(bool(false))), eq(t, text)), ...inside.map((x) => eq(t, x)))(s);
       },
     });
   }
@@ -1415,6 +1457,19 @@ export function interpreter(given: Code, opts: Options = {}) {
           const pieces = fromList(toValue(deep(out, s))!) as string[];
           const text = pieces.join(sep);
           return sep !== "" && valueEqual(split(text, sep), toValue(deep(out, s))!) ? eq(t, text)(s) : null;
+        },
+      });
+    }
+    // join all, backwards (L172): the text split at the separator, the one
+    // list of parts that hold none of it (modes.ts). So a printer that
+    // joins its fields runs backwards as their reader.
+    if (id === TEXT_OPS.joinAll) {
+      const [parts, by] = args;
+      return wait({
+        k: "later", text: "join all", on: [parts, by, out], ready: (s) => known(by, s) && (known(parts, s) || known(out, s)), then: (s) => {
+          const sep = walk(by, s) as string;
+          if (known(parts, s)) return eq(out, fromValue(STD_IMPL[id](toValue(deep(parts, s))!, sep)))(s);
+          return eq(parts, fromValue((STD_IMPL[TEXT_OPS.split] as (t: string, by: string) => Value)(walk(out, s) as string, sep)))(s);
         },
       });
     }

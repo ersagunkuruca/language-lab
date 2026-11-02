@@ -80,3 +80,44 @@ test("a failed fetch aborts, which attempt catches; start fetch's type", async (
   const c2 = base(k.code), n2 = baseNames(k.names), i2 = infer(c2, n2);
   assert.equal(showType(i2.schemes.get(d)!.type, n2), "(Text) -[Network, Abort]-> Ticket Text");
 });
+
+// In the background (L150b): a world with startFetch gives a ticket ready
+// when the body comes, so two fetches overlap and a timer can beat one.
+// The evaluator's; compiled main still fetches when it starts (C109).
+function background(body: (k: Lang) => Id, delays: Record<string, number>) {
+  const k = new Lang(LIBRARY.code);
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, body(k)))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  let clock = 1000;
+  const world = {
+    now: () => clock, wait: (ms: number) => { clock += ms; },
+    fetchText: () => { throw new Error("fetched in the foreground"); },
+    startFetch: (u: string) => {
+      const ready = clock + (delays[u] ?? 0);
+      return () => (clock < ready ? null : u.includes("missing") ? { error: "404 Not Found" } : { text: `<${u}>` });
+    },
+  };
+  const ran: string[] = [];
+  runMain(code, info, main, { print: (s) => ran.push(s), names, world } as Parameters<typeof runMain>[3]);
+  return { ran, took: clock - 1000 };
+}
+
+test("background fetches overlap: together of two waits for the slower, not for both in turn", () => {
+  const r = background((k) => k.call(lib("together"), k.list(fetchAwait(k, "a"), fetchAwait(k, "b"))), { a: 300, b: 200 });
+  assert.deepEqual(r.ran, ['["<a>", "<b>"]']);
+  assert.ok(r.took >= 300 && r.took < 320, `took ${r.took} ms`);
+});
+
+test("background fetches: a timer beats a slow fetch in a race, and a failure is an Abort where it's awaited", () => {
+  const r = background((k) => k.call(lib("race"), k.list(
+    fetchAwait(k, "slow"),
+    k.thunk(() => k.let("t", k.call(START_TIMER_OP, k.lit(100)), (t) => k.seq(k.call(AWAIT_OP, t), k.lit("timer")))),
+  )), { slow: 5000 });
+  assert.deepEqual(r.ran, ['"timer"']);
+  assert.ok(r.took >= 100 && r.took < 120, `took ${r.took} ms`);
+  const f = background((k) => k.call(lib("attempt"), k.thunk(() => k.call(AWAIT_OP, k.call(IO.startFetch, k.lit("missing"))))), { missing: 50 });
+  assert.deepEqual(f.ran, ['refused("404 Not Found")']);
+});

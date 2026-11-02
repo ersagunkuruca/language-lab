@@ -26,7 +26,7 @@ import { prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { PRELUDE } from "./library.ts";
-import { CELL_OPS, CONS, HTML_V, NIL, SHOW_ANY, std } from "./std.ts";
+import { CELL_OPS, CONS, HTML_V, NIL, SHOW_ANY, TEXT_OPS, std } from "./std.ts";
 
 // The tags with a function of their own after div, and what each is for.
 const TAG_NOTES = [
@@ -44,15 +44,11 @@ export function buildHtml(): Module {
   const el = (tag: Id, attributes: Id, children: Id) => k.call(HTML_V.element, tag, attributes, children);
   const join = (...parts: Id[]) => k.text(...parts);
 
-  // Lists of text joined with a separator between them.
+  // Lists of text joined with a separator between them: the builtin join
+  // all, so it runs backwards as split (L172) and every target joins
+  // natively.
   const joined = k.def("joined");
-  k.define(joined, k.fn(["texts", "between"], (xs, between) => k.fold(xs, [
-    { variant: NIL, names: [], body: () => k.lit("") },
-    {
-      variant: CONS, names: ["first", "rest"], results: [null, "rest joined"],
-      body: ([first, rest], [, r]) => k.match(rest, [{ variant: NIL, names: [], body: () => first }], join(first, between, r!)),
-    },
-  ])));
+  k.define(joined, k.fn(["texts", "between"], (xs, between) => k.call(TEXT_OPS.joinAll, xs, between)));
 
   // An element with these children, by its tag's name.
   const tag = k.def("tag");
