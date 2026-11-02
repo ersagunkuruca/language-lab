@@ -21,7 +21,7 @@
 // Unison's (https://www.unison-lang.org/docs/the-big-idea/); visibility and
 // pins are what REVIEW.md §4.5 and §4.6 add.
 
-import { children, collect, isPublished, mapIds, merge, subtree, type Code, type Id, type Node } from "../model.ts";
+import { children, collect, isPublished, mapIds, merge, subtree, type Code, type Id, type Node, isUse } from "../model.ts";
 import { defGroups, hashes } from "../hash.ts";
 import { layer, type Comments, type Names } from "../presentation.ts";
 import { infer } from "./infer.ts";
@@ -161,7 +161,7 @@ export function pointsAt(n: Node): Id[] {
   // A solve's ports are the function's parameters, and "out", its result.
   // A builtin and an interface's field have no parameter nodes: their ports
   // are positions, 0, 1, ….
-  if (n.kind === "solve") out.push(n.fn, ...(n.fn.startsWith("builtin.") ? [] : [...Object.keys(n.given), ...Object.keys(n.binds)].filter((k) => k !== "out" && !/^\d{1,2}$/.test(k))));
+  if (isUse(n)) out.push(n.fn, ...(n.fn.startsWith("builtin.") ? [] : [...Object.keys(n.given), ...Object.keys(n.binds)].filter((k) => k !== "out" && !/^\d{1,2}$/.test(k))));
   if (n.kind === "tfun") out.push(...(n.effects ?? []));
   if (n.kind === "typedef") out.push(...(n.row ?? []));
   if (n.kind === "lit" && n.of) out.push(n.of);

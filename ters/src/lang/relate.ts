@@ -53,7 +53,7 @@
 
 import { plan, relation, stream } from "../../../invertible/src/relation.js";
 import { call as ecall, evaluate as evaluateSolverExpr, num as enum_, show as eshow, simplify, v as evar } from "../../../invertible/src/expr.js";
-import type { Code, Id, NodeOf } from "../model.ts";
+import type { Code, Id, NodeOf, Use } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { children, dependencies, ownerOfTypeParts, subtree } from "../model.ts";
 import { derivativeLambda, gradientLambda } from "./derive.ts";
@@ -1079,7 +1079,7 @@ export function interpreter(given: Code, opts: Options = {}) {
       case "same": return e.a === e.b ? succeed : eq(sl(f, e.a), sl(f, e.b));
       case "case": return eq(sl(f, e.value), dataT(e.variant, e.binds.map((b) => sl(f, b))));
       case "unfold": return unfoldGoal(e, f);
-      case "solve": return solveGoal(nodes[e.node] as NodeOf<"solve">, f, e.callee);
+      case "solve": return solveGoal(nodes[e.node] as Use, f, e.callee);
       case "hole": return () => { throw new NotInvertible("the program has a hole here"); };
     }
   }
@@ -1095,7 +1095,7 @@ export function interpreter(given: Code, opts: Options = {}) {
       return (s) => ins.every((t) => known(t, s)) || known(out, s);
     }
     if (e.k === "solve") {
-      const ins = Object.values((nodes[e.node] as NodeOf<"solve">).given).map((x) => sl(f, x));
+      const ins = Object.values((nodes[e.node] as Use).given).map((x) => sl(f, x));
       return (s) => ins.every((t) => known(t, s));
     }
     if (e.k === "unfold") { const p = sl(f, e.part), r = sl(f, e.result); return (s) => known(p, s) || known(r, s); }
@@ -1104,7 +1104,7 @@ export function interpreter(given: Code, opts: Options = {}) {
   // What needs reads.
   function reads(e: Exec, f: Frame): Term[] | undefined {
     if (e.k === "call") { const n = nodes[e.node] as NodeOf<"call">; return [...n.args.map((a) => sl(f, a)), sl(f, n.id)]; }
-    if (e.k === "solve") return Object.values((nodes[e.node] as NodeOf<"solve">).given).map((x) => sl(f, x));
+    if (e.k === "solve") return Object.values((nodes[e.node] as Use).given).map((x) => sl(f, x));
     if (e.k === "unfold") return [sl(f, e.part), sl(f, e.result)];
     return undefined;
   }
@@ -1232,7 +1232,7 @@ export function interpreter(given: Code, opts: Options = {}) {
 
   // A solve node is a call with some ports connected to expressions and the
   // others to binders: the same thing as any other call, read sideways.
-  function solveGoal(n: NodeOf<"solve">, f: Frame, callee?: Mode): Goal {
+  function solveGoal(n: Use, f: Frame, callee?: Mode): Goal {
     const at: Record<string, Term> = {};
     for (const [p, e] of Object.entries(n.given)) at[p] = sl(f, e);
     for (const [p, b] of Object.entries(n.binds)) at[p] = sl(f, b);

@@ -12,7 +12,8 @@
 // re-infers the program and refuses anything that adds a type error, like
 // any other edit.
 
-import type { Code, Id, Node, NodeData, NodeOf } from "../model.ts";
+import type { Code, Id, Node, NodeData, NodeOf, Use } from "../model.ts";
+import { isUse } from "../model.ts";
 import { children, collect, freshId, ownerOfTypeParts, parentAt, parentOf, replace, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 
@@ -66,7 +67,7 @@ function scopesWith(code: Code, def: Id, binder: Id): Id[] {
     if (!x) return;
     const fresh = x.kind === "lambda" ? x.params
       : x.kind === "arm" ? [...x.binds, ...x.results.filter((r): r is Id => r !== null)]
-      : x.kind === "solve" ? Object.values(x.binds)
+      : isUse(x) ? Object.values(x.binds)
       : x.kind === "typedef" ? x.params : [];
     const inner = fresh.length ? [...scope, ...fresh] : scope;
     if (inner.includes(binder)) inner.forEach((b) => out.add(b));
@@ -189,7 +190,7 @@ const lambdaOf = (code: Code, def: Id): NodeOf<"lambda"> | null => {
 };
 
 // The solves that run `def` backwards.
-const solvesOf = (code: Code, def: Id) => Object.values(code.nodes).filter((n): n is NodeOf<"solve"> => n.kind === "solve" && n.fn === def);
+const solvesOf = (code: Code, def: Id) => Object.values(code.nodes).filter((n): n is Use => isUse(n) && n.fn === def);
 
 export function addParameter(code: Code, names: Names, def: Id, rawName: string): Top {
   const d = code.nodes[def] as NodeOf<"def">;

@@ -13,7 +13,7 @@
 // type (C52). A map's keys or a set's items that hold one would be ordered
 // by the tree's shape, so such a program keeps the definition.
 
-import { dependencies, freshId, mapIds, merge, subtree, type Code, type Id, type Node, type NodeOf } from "../model.ts";
+import { dependencies, freshId, mapIds, merge, subtree, type Code, type Id, type Node, type NodeOf, isUse } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { infer, type Info } from "./infer.ts";
 import { Lang } from "./dsl.ts";
@@ -519,7 +519,7 @@ function listBoundary(code: Code, info: Info, defs: Id[], rep: Representation, a
   for (const d of reached) for (const id of subtree(code, d)) { const n = code.nodes[id]; if (n.kind === "call") calledBy.set(n.fn, n); }
   for (const d of reached) for (const id of subtree(code, d)) {
     const n = code.nodes[id];
-    if (n.kind === "solve") return null;
+    if (isUse(n)) return null;
     const ty = info.typeOf.get(id);
     if (ty && libraryHolder(ty)) return null;
     const target = n.kind === "ref" ? n.target : null;

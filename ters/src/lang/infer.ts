@@ -12,7 +12,8 @@
 
 import { sharing } from "./shared-fields.ts";
 import { PARTIAL, signAnalysis } from "./signs.ts";
-import type { Code, Id, Node, NodeOf } from "../model.ts";
+import type { Code, Id, Node, NodeOf, Use } from "../model.ts";
+import { isUse } from "../model.ts";
 import { nodesWhere, ownerOfTypeParts, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { unitProblems, UnitsBefore } from "../units.ts";
@@ -371,7 +372,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       if (!n) return;
       if (n.kind === "ref" && code.nodes[n.target]?.kind === "def" && !isTypeDef(n.target)) out.add(n.target);
       // a function run backwards is used too: its type gives the ports' types
-      if (n.kind === "solve" && code.nodes[n.fn]?.kind === "def") out.add(n.fn);
+      if (isUse(n) && code.nodes[n.fn]?.kind === "def") out.add(n.fn);
       for (const c of kids(n)) walk(c);
     };
     const body = (code.nodes[d] as NodeOf<"def">).body;
@@ -959,7 +960,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     if (found < count) err(n.args.length ? n.args[0] : n.id, `${callee(n)} is given a function of several inputs where a function of one tuple goes (or the other way round) inside other data, which can't be wrapped here`);
   }
 
-  function solveType(n: NodeOf<"solve">, env: Map<Id, Type>, row: Row): Type {
+  function solveType(n: Use, env: Map<Id, Type>, row: Row): Type {
     const inner = new Map(env);
     // An interface's field with results (POLAR.md, L97c): the type's own
     // definition answers it, in the direction the field declares, with one
@@ -1020,7 +1021,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // adds Choice (any number of answers) unless its mode always gives
   // exactly one, Diverge when it may unfold forever, and whatever the
   // function itself does, except printing, which can't be undone.
-  function relationalSolve(n: NodeOf<"solve">, env: Map<Id, Type>, row: Row, inner: Map<Id, Type>, loops: boolean, why?: string, one = false, givenTypes?: Map<string, Type>) {
+  function relationalSolve(n: Use, env: Map<Id, Type>, row: Row, inner: Map<Id, Type>, loops: boolean, why?: string, one = false, givenTypes?: Map<string, Type>) {
     const ft = s.resolve(refType(n.id, n.fn, env));
     if (ft.t !== "fn") { err(n.id, `${nm(n.fn)} is not a function`); return; }
     (info.solveAt ??= new Map()).set(n.id, ft);
@@ -1753,7 +1754,7 @@ export function resultsDirection(code: Code, d: Id, names: Names = {}): { why: s
   const given = Object.fromEntries(ins.map((p) => [p, add({ id: `${d}:given:${p}`, kind: "hole" })]));
   given.out = add({ id: `${d}:true`, kind: "ref", target: TRUE });
   const binds = Object.fromEntries(def.results!.map((r) => [r, add({ id: `${d}:as:${r}`, kind: "binder" })]));
-  const use = { id: `${d}:results`, kind: "solve", fn: d, given, binds, body: add({ id: `${d}:body`, kind: "hole" }) } as NodeOf<"solve">;
+  const use = { id: `${d}:results`, kind: "solve", fn: d, given, binds, body: add({ id: `${d}:body`, kind: "hole" }) } as Use;
   add(use);
   const asked = { nodes, defs: code.defs };
   // The program with this use added: the modes analysis starts from the
@@ -1872,7 +1873,7 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   // makes the answer two). What the check makes of the body is its plan,
   // so a filling that leaves every plan of the group's solves as it was
   // is checked like any other; one that changes a plan, on its own.
-  const solves = Object.values(code.nodes).filter((n): n is NodeOf<"solve"> => n.kind === "solve" && h.group.includes(n.fn));
+  const solves = Object.values(code.nodes).filter((n): n is Use => isUse(n) && h.group.includes(n.fn));
   const plans = (c: Code) => solves.map((n) => {
     try {
       const p = planSolve(c, n);
@@ -2140,7 +2141,7 @@ function dependents(code: Code, group: Id[]): Set<Id> {
   for (const d of code.defs) {
     for (const id of subtree(code, d)) {
       const n = code.nodes[id];
-      let t = n.kind === "ref" ? n.target : n.kind === "solve" ? n.fn : null;
+      let t = n.kind === "ref" ? n.target : isUse(n) ? n.fn : null;
       if (t && owner.has(t)) t = owner.get(t)!;
       if (t && t !== d) usedBy.set(t, [...(usedBy.get(t) ?? []), d]);
     }

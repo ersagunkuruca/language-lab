@@ -12,7 +12,8 @@
 // Prior art: Mercury's mode-specific clauses and promise_equivalent_clauses,
 // one predicate with a definition per mode, promised to agree.
 
-import type { Code, Id, Node, NodeOf } from "../model.ts";
+import type { Code, Id, Node, NodeOf, Use } from "../model.ts";
+import { isUse } from "../model.ts";
 import { derivedFrom, nodesWhere, subtree } from "../model.ts";
 import { S } from "./std.ts";
 
@@ -47,7 +48,7 @@ export function directionProblem(code: Code, d: Id, nm: (id: Id) => string): str
 // of the same interface over the same ports, reading them the other way, is
 // its other direction (Trig's polar and unpolar, POLAR.md step 3). Ports
 // are positions there, so only the function changes.
-function fieldDirection(code: Code, n: NodeOf<"solve">, f: NodeOf<"field">): NodeOf<"solve"> | null {
+function fieldDirection(code: Code, n: Use, f: NodeOf<"field">): Use | null {
   const given = Object.keys(n.given).filter((k) => k !== "out").map(Number);
   const reads = (g: NodeOf<"field">) => {
     const ty = code.nodes[g.type];
@@ -66,7 +67,7 @@ function fieldDirection(code: Code, n: NodeOf<"solve">, f: NodeOf<"field">): Nod
 
 // The solve rewritten onto the direction that its given ports ask for, or
 // null when none does (the relation is then solved as it always was).
-export function directionFor(code: Code, n: NodeOf<"solve">, ways = directionsIn(code)): NodeOf<"solve"> | null {
+export function directionFor(code: Code, n: Use, ways = directionsIn(code)): Use | null {
   const f = code.nodes[n.fn];
   if (f?.kind === "field" && f.results) return fieldDirection(code, n, f);
   const ds = ways.get(n.fn);
@@ -89,11 +90,11 @@ export function directionFor(code: Code, n: NodeOf<"solve">, ways = directionsIn
 // Every such solve rewritten; the same code back when there are none.
 export function useDirections(code: Code): Code {
   const ways = directionsIn(code);
-  const asked = (n: NodeOf<"solve">) => { const f = code.nodes[n.fn]; return ways.has(n.fn) || (f?.kind === "field" && !!f.results); };
+  const asked = (n: Use) => { const f = code.nodes[n.fn]; return ways.has(n.fn) || (f?.kind === "field" && !!f.results); };
   let nodes: Code["nodes"] | null = null;
   const rewritten: Id[] = [];
-  for (const id of nodesWhere(code, "solve", (n) => n.kind === "solve")) {
-    const n = code.nodes[id] as NodeOf<"solve">;
+  for (const id of nodesWhere(code, "solve", (n) => isUse(n))) {
+    const n = code.nodes[id] as Use;
     if (!asked(n)) continue;
     const r = directionFor(code, n, ways);
     if (r) { (nodes ??= { ...code.nodes })[n.id] = r; rewritten.push(n.id); }
@@ -131,7 +132,7 @@ export function givenBy(code: Code, b: Id, results: Id[]): Id[] | null {
 // A solve in the direction its definition declares, whose results are each
 // given by an expression of the inputs: computed forward, one answer, the
 // way a function is (sqrt(x² + y²) is no search for a length).
-export function computedForward(code: Code, n: NodeOf<"solve">): boolean {
+export function computedForward(code: Code, n: Use): boolean {
   const def = code.nodes[n.fn];
   if (def?.kind !== "def" || !def.results || !def.body) return false;
   const lam = code.nodes[def.body];
