@@ -490,6 +490,13 @@ export const IO = {
   // The body of a GET, as text. Aborts when it can't be had (no network,
   // a status that isn't 2xx). Fetched once per address per run.
   fetchText: world("io.fetchText", "fetch text", [str], str, [NETWORK, ABORT]),
+  // A GET started, as a ticket for its body (L150), so `together` and
+  // `race` can wait on fetches beside timers and each other: fetch text is
+  // await(start fetch(url)). The world here fetches when it starts and the
+  // ticket is ready at once, a timer of 0 ms with the text, on any clock
+  // (simulated's too); fetches that overlap need a world that fetches in
+  // the background (L150b).
+  startFetch: world("io.startFetch", "start fetch", [str], { t: "con", id: "std.ticket", args: [str] }, [NETWORK, ABORT]),
 };
 
 // Cells (src/lang/cells.ts, LANGUAGE.md "Cells"): Solid.js's signals and
@@ -546,12 +553,20 @@ export const FILES_TYPE = typedef(FILES, "Files", [], [
   ["file exists", [["path", text]], () => tref(BOOL)],
   ["list folder", [["path", text]], () => tref(LIST, tref(STRING))],
 ], true);
-export const NETWORK_TYPE = typedef(NETWORK, "Network", [], [["fetch text", [["url", text]], text]], true);
+// start fetch's types are nodes with ids of their own, so the numbered
+// ones after them (the tuples') don't move: a saved program may hold
+// std's type nodes.
+const fixedTref = (id: Id, target: Id, ...args: Id[]) => node({ id, kind: "tref", target, args });
+export const NETWORK_TYPE = typedef(NETWORK, "Network", [], [
+  ["fetch text", [["url", text]], text],
+  ["start fetch", [["url", () => fixedTref(`${NETWORK}.start fetch.url.type`, STRING)]],
+    () => fixedTref(`${NETWORK}.start fetch.returns`, "std.ticket", fixedTref(`${NETWORK}.start fetch.returns.a`, STRING))],
+], true);
 // Each builtin that acts on the world, by the operation it performs.
 export const WORLD_OPS: Record<Id, Id> = {
   [S.print]: `${CONSOLE}.print`, [IO.printError]: `${CONSOLE}.print error`, [IO.readInput]: `${CONSOLE}.read input`, [IO.readLine]: `${CONSOLE}.read line`,
   [IO.readFile]: `${FILES}.read file`, [IO.writeFile]: `${FILES}.write file`, [IO.appendFile]: `${FILES}.add to file`, [IO.fileExists]: `${FILES}.file exists`, [IO.listFolder]: `${FILES}.list folder`,
-  [IO.fetchText]: `${NETWORK}.fetch text`,
+  [IO.fetchText]: `${NETWORK}.fetch text`, [IO.startFetch]: `${NETWORK}.start fetch`,
 };
 for (const v of Object.values(WORLD_OPS)) (nodes.find((n) => n.id === v) as NodeOf<"variant">).private = true;
 // A job's two definitions have the same type but for t, which is r in the

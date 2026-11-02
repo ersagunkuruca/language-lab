@@ -368,6 +368,8 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     [IO.fileExists]: (p) => one(bool(world("fileExists")(p as string))),
     [IO.listFolder]: (p) => one(toList(world("listFolder")(p as string))),
     [IO.fetchText]: (u) => one(world("fetchText")(u as string)),
+    // Fetched now, so the ticket is ready at once on any clock (L150).
+    [IO.startFetch]: (u) => one({ tag: TICKET_V.timer, fields: [0, world("fetchText")(u as string)] }),
     [CELL_OPS.cell]: (v) => one(cells.cell(v)),
     [CELL_OPS.formula]: (f) => one(cells.formula(() => {
       for (const v of (f as Fn)()) return v;
@@ -446,7 +448,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   // performed where they were called.
   const hosted = hostedEffects(code, rt.hosts);
   const timers = worldTimers((m) => { throw new Aborted(m); });
-  const FALLIBLE = new Set<Fn>([...Object.keys(impl).map((op) => `builtin.${op}`), S.mod, S.float32, IO.readFile, IO.writeFile, IO.appendFile, IO.listFolder, IO.readInput, IO.readLine, IO.fetchText].map((id) => builtins[id]));
+  const FALLIBLE = new Set<Fn>([...Object.keys(impl).map((op) => `builtin.${op}`), S.mod, S.float32, IO.readFile, IO.writeFile, IO.appendFile, IO.listFolder, IO.readInput, IO.readLine, IO.fetchText, IO.startFetch].map((id) => builtins[id]));
   function world<K extends keyof World>(k: K): World[K] {
     const f = rt.world?.[k];
     if (!f) return (() => { throw new Error(`this runtime can't ${k === "error" || k === "log" ? "write to standard error" : k}`); }) as unknown as World[K];
