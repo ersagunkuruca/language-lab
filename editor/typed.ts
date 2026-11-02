@@ -586,6 +586,9 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
     if (!Object.keys(names).some((id) => names[id] === field && code.nodes[id]?.kind === "field")) return { error: `there's no field named ${field}${closest(field, Object.keys(names).filter((id) => code.nodes[id]?.kind === "field").map((id) => names[id]), scope)}` };
     return typedOut(t.slice(0, dot), code, names, scope);
   }
+  // A match isn't read from text yet (E178): say where one is (I142).
+  const kw = /^(match|fold)\s+(\S.*)$/.exec(t);
+  if (kw) return { error: `a ${kw[1]} isn't read from text yet: the case analysis rows (${kw[1]} ${kw[2]} · a type) write one` };
   if (/^[\p{L}_][\p{L}\p{N}_' ]*$/u.test(t) && !/^(if|then|else)$/.test(t)) return { error: `nothing is named ${t} here${closest(t, scope.keys(), scope)}` };
   return inner ?? r;
 }
