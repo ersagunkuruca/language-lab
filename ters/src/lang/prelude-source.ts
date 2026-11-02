@@ -134,6 +134,18 @@ export function buildPrelude(): Module {
     k.let("n", k.call(TEXT_OPS.length, p), (m) =>
       k.and(k.call(S.not, k.call(INT_OPS.less, l, m)), k.equal(k.call(TEXT_OPS.slice, t, k.call(INT_OPS.sub, l, m), l), p))))));
 
+  // A text's inside (L169, REVIEW-2026-11-02d §4): board spelled "the
+  // title has these words" as not (find(…) < 0) under a first, and machine
+  // sliced after starts with five times. contains text is find's Choice
+  // asked only whether there is a position (Python's `in`, JavaScript's
+  // includes); after prefix is starts with and the slice as one Choice,
+  // "if it starts so, the rest" (Python 3.9's removeprefix, which gives
+  // the text unchanged instead of no answer).
+  const containsText = k.def("contains text");
+  k.define(containsText, k.fn(["text", "part"], (t, p) => k.call(S.first, k.thunk(() => k.seq(k.call(TEXT_OPS.find, t, p), k.true)), k.thunk(() => k.false))));
+  const afterPrefix = k.def("after prefix");
+  k.define(afterPrefix, k.fn(["text", "prefix"], (t, p) => k.if(k.call(startsWith, t, p), k.call(TEXT_OPS.slice, t, k.call(TEXT_OPS.length, p), k.call(TEXT_OPS.length, t)), k.call(S.fail))));
+
   // A text repeated and padded, a list of lists flattened (BACKLOG L148,
   // GAPS round 7 SL3 and SL4: sheet wrote spaces, padded and flattened
   // itself). JavaScript's repeat, padStart and padEnd, and flat and
@@ -1557,7 +1569,7 @@ export function buildPrelude(): Module {
   const simulatedHelpers = [readyAt, earliest, readyTimes, tiedAt, pickAt, nextDraw, firstDraw, simulatedWorld, simulatedClock];
   const awaitHelpers = [startBranch, waiting, goOn, finished, settle, firstDone, raceSettle, ...simulatedHelpers];
 
-  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, repeated, padStart, padEnd, flatten, flatMap, rangeFrom, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, ticketId, anyOf, together, race, within, simulated];
+  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, flatten, flatMap, rangeFrom, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, ticketId, anyOf, together, race, within, simulated];
   // Each number's own show, from before the generic one showed every number
   // (L153, L156): kept so programs saved before still open, not offered.
   const perTypeShows = [showF, showC, showD, showX];
@@ -1594,6 +1606,8 @@ export function buildPrelude(): Module {
     [upperOne]: "A helper of uppercase. Not offered in the palette.",
     [startsWith]: "Whether the text begins with this: starts with(\"# notes\", \"#\") is true. Every text starts with \"\".",
     [endsWith]: "Whether the text ends with this: ends with(\"page.md\", \".md\") is true. Every text ends with \"\".",
+    [containsText]: "Whether the part occurs somewhere in the text: contains text(\"to do list\", \"do\") is true. Every text contains \"\". (contains is a list's.)",
+    [afterPrefix]: "The text without the prefix it starts with: after prefix(\"r7\", \"r\") is \"7\". No answer when it doesn't start with it (Choice), so first(after prefix(w, \"#\"), else w) reads a tag or keeps the word.",
     [repeated]: "The text written this many times over: repeated(\"ab\", 3) is \"ababab\". 0 times, or fewer, is \"\".",
     [padStart]: "The text with fill put in front until it is this wide: padded start(\"7\", 3, \"0\") is \"007\". A text already as wide is as it was; a fill of several characters is cut where the width ends.",
     [padEnd]: "The text with fill put after it until it is this wide: padded end(\"ab\", 4, \".\") is \"ab..\". For columns of text.",

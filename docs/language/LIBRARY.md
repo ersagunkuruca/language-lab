@@ -168,6 +168,8 @@ Text is a string of characters. Positions count from 0. Text has the one <, alph
 - **character** : `(Int) -[Choice]-> Text`. The character with this number. No answer when there's none.
 - **starts with** : `(Text, Text) -> Bool`. Whether the text begins with this: starts with("# notes", "#") is true. Every text starts with "".
 - **ends with** : `(Text, Text) -> Bool`. Whether the text ends with this: ends with("page.md", ".md") is true. Every text ends with "".
+- **contains text** : `(Text, Text) -> Bool`. Whether the part occurs somewhere in the text: contains text("to do list", "do") is true. Every text contains "". (contains is a list's.)
+- **after prefix** : `(Text, Text) -[Choice]-> Text`. The text without the prefix it starts with: after prefix("r7", "r") is "7". No answer when it doesn't start with it (Choice), so first(after prefix(w, "#"), else w) reads a tag or keeps the word.
 - **is digit** : `(Text) -> Bool`. Whether this is one of the characters 0 to 9.
 - **is letter** : `(Text) -> Bool`. Whether this is one of the English letters a to z or A to Z (other alphabets' letters aren't, yet).
 - **lowercase** : `(Text) -> Text`. The text with A to Z made a to z, everything else as it was: lowercase("Hello, World") is "hello, world".
