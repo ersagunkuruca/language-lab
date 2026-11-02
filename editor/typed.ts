@@ -256,7 +256,7 @@ export function fillValue(code: Code, names: Names, info: Info, hole: Id, text: 
   // those that leave it open (E175): show(n) of an n not known yet is show
   // for any value, not Float64's, so n can still be an Int later.
   let first: TEdit | undefined;
-  const all_ = readings(leaveOpen(info, narrow(code, info, r)));
+  const all_ = readings(leaveOpen(info, narrow(code, info, fieldsByProbe(code, names, info, hole, r, defId))));
   // A field several types have (title on a Card and on a Quick), read on a
   // value nothing has settled, is each type's in turn: when more than one
   // fits, each is offered, and nothing is chosen silently (E186).
@@ -294,6 +294,43 @@ export function fillValue(code: Code, names: Names, info: Info, hole: Id, text: 
     why.push(plain.reason);
   }
   return refusal(first! as TEdit & { ok: false }, why, overloaded(r, all));
+}
+
+// A field several types have, read on an input or a step of what's
+// typed: whose it is comes from that input's type, found by checking the
+// text once with those reads left as holes (E222: clinic's map over
+// numbered(counts) reading pr.first and pr.second, Tuple2's to Tuple8's
+// each, ran past the 16 readings tried and picked a wrong one).
+function fieldsByProbe(code: Code, names: Names, info: Info, hole: Id, t: Typed, defId?: Id): Typed {
+  const shared = (x: Typed): x is { op: Id; args: Typed[]; alts: Id[] } =>
+    "op" in x && !!x.alts && x.alts.length > 1 && x.args.length === 1 && "ref" in x.args[0] && x.alts.every((a) => code.nodes[a]?.kind === "field");
+  const map = (x: Typed, f: (x: Typed) => Typed | null): Typed => {
+    const y = f(x);
+    if (y) return y;
+    if ("op" in x) return { ...x, args: x.args.map((a) => map(a, f)) };
+    if ("params" in x) return { ...x, body: map(x.body, f) };
+    if ("cond" in x) return { cond: map(x.cond, f), then: map(x.then, f), else: map(x.else, f) };
+    if ("let" in x) return { ...x, be: map(x.be, f), rest: map(x.rest, f) };
+    return x;
+  };
+  let any = false;
+  const probe = map(t, (x) => (shared(x) ? ((any = true), { hole: true }) : null));
+  if (!any) return t;
+  const variantOf = new Map<Id, Id>();
+  for (const v of Object.values(code.nodes)) if (v.kind === "variant") for (const f of v.fields) variantOf.set(f, v.id);
+  for (const p of readings(leaveOpen(info, narrow(code, info, probe))).slice(0, 8)) {
+    const e = written(code, names, info, hole, "", p, false, defId);
+    if (!e.ok) continue;
+    const seen = infer(e.code, e.names);
+    return map(t, (x) => {
+      if (!shared(x)) return null;
+      const of = seen.typeOf.get((x.args[0] as { ref: Id }).ref) ?? info.typeOf.get((x.args[0] as { ref: Id }).ref);
+      const r = of && seen.subst.resolve(of);
+      const alts = r?.t === "con" ? x.alts.filter((a) => seen.owner.get(variantOf.get(a)!) === r.id) : [];
+      return alts.length ? { op: alts[0], args: x.args, ...(alts.length > 1 ? { alts } : {}) } : null;
+    });
+  }
+  return t;
 }
 
 // What's refused when no reading fits (E219). One reason every reading
