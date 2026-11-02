@@ -3336,7 +3336,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
 
   const helpers = ["$isLater", "$no", "$answered", "$stream0", "$showAny", "$caseName", "$compare", "$int", "$text", "$impl", "$many", "$partial", "$setPath", "$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$snoc", "$fromBack", "$range", "$eq", "$show", "$mod", "$fin", "$div", "$sqrt", "$log", "$pow", "$divN", "$sqrtN", "$logN", "$powN", "$modN", "$mapParts", "$zipParts", "$total", "$first", "$firstS",
     "$all", "$count", "$oneOf", "$fail", "$lift", "$one", "$hole", "$fuel", "$enter", "$caught", "$leave", "$spend", "$spendOrThrow", "$outOfFuel", "$ok", "$clean", "$key",
-    "$close", "$near", "$sameNumber", "$planned", "$solveRuntime", "$print", "$FN", "$perform", "$setHosts", "$random", "$handle", "$handleS", "$io", "$seeded", "$seededS", "$optional", "$cells", "$listArrays", "$path", "$spread", "$self", "$foldNested", "$drive", "$rec", "$pushList", "$withInto", "$intoArray", "$later", "$awaited", "$handleL", "$handleLG", "$handleG", "$performG",
+    "$close", "$near", "$sameNumber", "$planned", "$solveRuntime", "$print", "$FN", "$perform", "$setHosts", "$random", "$handle", "$handleS", "$io", "$seeded", "$seededS", "$optional", "$cells", "$listArrays", "$listViews", "$path", "$spread", "$self", "$foldNested", "$drive", "$rec", "$pushList", "$withInto", "$intoArray", "$later", "$awaited", "$handleL", "$handleLG", "$handleG", "$performG",
     "$ORDER", "$compareN", "$numberOrder", "$intOrder", "$textOrder",
     ...(reflective ? ["$loadProgram", "$meta", "$prim", "$toEval", "$relate", "$derivative", "$exists"] : [])];
   const orders = [...orderFns.values()].flatMap((e) => (e.js && e.name ? [e.js] : []));

@@ -48,6 +48,10 @@ export function $arrayOf(f, ...args) {
 }
 // How cells.ts each turns lists into arrays and back.
 export const $listArrays = { from: $fromList, to: $toList };
+// The same, for each over a cell (L99): it hands its rows tracked views, so
+// a row's watchers wake only for edits at the places they read, as in the
+// evaluator (cells.ts `view`).
+export const $listViews = { ...$listArrays, views: { cons: CONS, nil: NIL, isList: (v) => typeof v === 'object' && v !== null && (v.tag === CONS || v.tag === NIL) } };
 
 // A list kept from the other end, { a, n }: the list a[n − 1], …, a[0]
 // (compile.ts, `growable`; GAPS.md G21). Consing onto it pushes when nothing

@@ -184,9 +184,11 @@ edit anywhere else in the item doesn't. A row's places are kept by the row,
 so when the list only moves it, nothing in it wakes. Views stay inside the
 reactive part: whatever is written to a cell or becomes a formula's value
 is copied out of them first, so a cell never holds a window on another.
-Compiled JS keeps L99a's behaviour (the row is made again) until the
-compiler picks views where a watcher reads (test/cell-paths.test.ts,
-test/outline.test.ts).
+Compiled JS hands its rows the same views since L99d: its lists inside a
+cell are the same cons records, so `each` and `each of` there take the
+evaluator's shape (runtime.js `$listViews`), and a tick three deep on the
+compiled outline makes no row (test/cell-paths.test.ts,
+test/outline.test.ts, compiler/test/outline-views.test.ts).
 
 **Built (L99c): `each of`**, for a list inside a row's item, the outline's
 steps say. Mapping that list while the row is made would read its cases as
@@ -196,8 +198,8 @@ that place: it reads only the list's cases, follows the edits made there
 (an insert makes one row, a move none), and wakes for an edit inside a step
 only through the step's row. Its rows' places are the list's place in the
 cell plus their position, both kept up to date, so a step's row reads its
-own step after its item moves. Over a plain list (compiled JS, for now), it
-maps the list once. The outline draws each item's steps with it, so adding a
+own step after its item moves, in the evaluator and compiled JS. Over a
+plain list it maps the list once. The outline draws each item's steps with it, so adding a
 step three deep makes the step's row and draws nothing above it.
 
 ### 3. Owned values updated in place (C56)
