@@ -675,7 +675,7 @@ export function randoms() {
   const names = { ...baseNames(), ...k.names };
   return { code, names, info: infer(code, names, undefined, checkOptions), defs, roll };
 }
-export const randomInputs = (): Record<string, unknown[][]> => ({ draws: [[0], [1], [42], [-7], [123456789.5], [4294967297]], nested: [[0], [9]], dice: [[3], [2026]] });
+export const randomInputs = (): Record<string, unknown[][]> => ({ draws: [[0], [1], [42], [-7], [123456789.5], [4294967297], [1e300], [-1e300], [2 ** 63], [-(2 ** 33) + 5], [2 ** 70 + 2 ** 40]], nested: [[0], [9]], dice: [[3], [2026]] });
 
 // Inputs for ordered(), by function: near and equal Float64s, Ints past
 // 2⁶⁴, texts by code point (é after z, emoji after both), lists that share
