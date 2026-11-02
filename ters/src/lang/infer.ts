@@ -749,7 +749,10 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         }
         // Which inputs are some Number not yet known, for the message if
         // one is given where something else goes.
-        const someNumber = args.map((a) => { const r = s.resolve(a); return r.t === "var" && s.arith.has(r.v); });
+        // A number, or an action giving one: first(x, else 2) gives first
+        // () => 2 (I140).
+        const given0 = (t: Type): Type => { const r = s.resolve(t); return r.t === "fn" && !r.params.length ? given0(r.ret) : r; };
+        const someNumber = args.map((a) => { const r = given0(a); return r.t === "var" && s.arith.has(r.v); });
         // A call back into the group being checked (a recursive call) has
         // its inputs checked after the group's bodies (BACKLOG I118): the
         // body's own uses fix the types first, so a wrong recursive call is
@@ -778,10 +781,10 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
             // numbers given something else.
             const ft = s.resolve(f);
             const given = ft.t === "fn" ? ft.params.findIndex((p, i) => {
-              const want = s.resolve(p);
+              const want = given0(p);
               return someNumber[i] && want.t === "con" && !isNumberType(want);
             }) : -1;
-            if (given >= 0 && ft.t === "fn") err(n.args[given], `${callee(n)} needs ${show(ft.params[given])} here, and a number isn't one`);
+            if (given >= 0 && ft.t === "fn") err(n.args[given], `${callee(n)} needs ${show(given0(ft.params[given]))} here, and a number isn't one`);
             else err(id, `${callee(n)} works only on ${ARITH_WHAT[e.kind]}`);
           }
           else if (e instanceof FractionError) err(id, `${callee(n)} needs an Int here, and a number with a fraction part can't be one`);
