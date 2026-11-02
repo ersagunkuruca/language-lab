@@ -461,6 +461,12 @@ let swapped: { hole: Id; at: number } | null = null;
 // takes it back as one of its inputs (typed.ts wrapInto).
 let wrapping: { hole: Id; kept: Code; info: T.Info; graph: boolean } | null = null;
 
+// The definition open at each version, so Undo and Redo go back to it
+// (E193): Undo of + New definition to the one open before, Redo to the
+// new one.
+const openWith = new WeakMap<Doc, Id>();
+// The one open before an edit's own step changed it (applyT's `then`).
+let openBefore: Id | null = null;
 function commit(next: Partial<Doc>, touched: string[], note: string) {
   ui.menu = null;
   if (READONLY && (next.code || next.names)) {
@@ -471,7 +477,8 @@ function commit(next: Partial<Doc>, touched: string[], note: string) {
   deleted = null;
   const filled = swapped && undo.length === swapped.at && next.code && next.code.nodes[swapped.hole] && next.code.nodes[swapped.hole].kind !== "hole";
   swapped = null;
-  if (!filled) undo.push(doc);
+  if (!filled) { openWith.set(doc, openBefore ?? ui.def); undo.push(doc); }
+  openBefore = null;
   redo.length = 0;
   doc = { ...doc, ...next, edited: true };
   ui.touched = touched;
@@ -664,6 +671,7 @@ function applyT(e: T.LooseEdit, then?: () => void, place?: Record<Id, Pos>, pins
     e = { ...e, code: same.code, names, note: `${e.note} Made in all ${same.places} places it stands for.` };
   }
   const note = holdType(e.code);
+  openBefore = ui.def;
   then?.();
   // A node an edit removed takes its names with it, in every layer.
   const kept = (ns: Names) => Object.fromEntries(Object.entries(ns).filter(([id]) => e.code.nodes[id]));
@@ -694,11 +702,14 @@ function travel(from: Doc[], to: Doc[], label: string) {
   if (from === undo && !from.length && deleted) return undeleteProgram();
   const d = from.pop();
   if (!d) return;
+  openWith.set(doc, ui.def);
   to.push(doc);
   const changed = files().filter((f) => f.get(d) !== f.get(doc)).map((f) => f.name);
   doc = d;
   if (ui.selected && !doc.code.nodes[ui.selected]) ui.selected = null;
-  if (!doc.code.nodes[ui.def] || doc.loose?.[ui.def]) ui.def = doc.loose?.[ui.def] ?? doc.code.defs[0];
+  const was = openWith.get(d);
+  if (was && doc.code.nodes[was] && was !== ui.def) { ui.def = was; ui.selected = null; }
+  if (!doc.code.nodes[ui.def] || doc.loose?.[ui.def]) ui.def = doc.loose?.[ui.def] ?? startDef();
   ui.touched = changed;
   ui.note = `${label}: ${changed.join(", ") || "nothing"} changed back.`;
   ui.mode = null;

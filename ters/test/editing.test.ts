@@ -433,6 +433,29 @@ async function newAndDeleteDefinition() {
   await p.close();
 }
 
+// Undo of + New definition goes back to the definition open before, and
+// Redo to the new one (E193): not to the library's first type.
+async function undoNewDefinition() {
+  where = "undo a new definition";
+  const p = await browser.newPage();
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  await p.goto(page);
+  await p.locator('[data-set="program"]', { hasText: "Insertion sort" }).first().click();
+  await p.locator("[data-def]", { hasText: /^insert$/ }).first().click();
+  await p.locator(".nav-row", { hasText: "+ New definition" }).click();
+  await p.locator('[data-panel="node"]').click();
+  await p.locator("#f-def-name").fill("k");
+  await p.locator("#f-def-inputs").fill("x");
+  await p.locator("button", { hasText: "Create" }).click();
+  const open = async () => (await p.locator(".p-text .body").innerText()).replace(/\s+/g, " ");
+  if (!/\bk\(x\) =/.test(await open())) errors.push(`${where}: k isn't open after Create: ${(await open()).slice(0, 80)}`);
+  await p.locator('button[data-act="undo"]').first().click();
+  if (!/\binsert\(/.test(await open())) errors.push(`${where}: Undo opened ${(await open()).slice(0, 80)}`);
+  await p.locator('button[data-act="redo"]').first().click();
+  if (!/\bk\(x\) =/.test(await open())) errors.push(`${where}: Redo opened ${(await open()).slice(0, 80)}`);
+  await p.close();
+}
+
 // In the graph, an input dropped on another input of the same + moves
 // there (BACKLOG E101); one Undo puts it back.
 async function reorderInputs() {
@@ -596,7 +619,7 @@ async function simplifyAppend() {
   await p.close();
 }
 
-const scenarios = { deleteAndUndo, swapAndUndo, implementInterface, choiceAction, heldSeed, listItems, sharedRow, matchDeeper, foldFrom, answeredLater, helperAtValue, textPort, newAndDeleteDefinition, reorderInputs, looseParts, seededRun, shaderOpens, letNodes, simplifyAppend };
+const scenarios = { deleteAndUndo, swapAndUndo, implementInterface, choiceAction, heldSeed, listItems, sharedRow, matchDeeper, foldFrom, answeredLater, helperAtValue, textPort, newAndDeleteDefinition, undoNewDefinition, reorderInputs, looseParts, seededRun, shaderOpens, letNodes, simplifyAppend };
 for (const [name, run] of Object.entries(scenarios)) {
   test(name, async () => {
     errors.length = 0;
