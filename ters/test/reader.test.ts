@@ -307,6 +307,22 @@ test("typed 1500.0 is a Float64", async () => {
   if (r.ok) assert.deepEqual(r.code.nodes[hole], { id: hole, kind: "lit", value: 1500, of: NUMBER });
 });
 
+// A name several types share, in a stub its one caller passes a Text:
+// the caller chooses, Text's length, not List's (E186b).
+test("a stub's callers choose a shared name's meaning", async () => {
+  const { Lang } = await import("../src/lang/dsl.ts");
+  const { base, baseNames } = await import("../src/lang/load.ts");
+  const k = new Lang();
+  const g = k.def("g");
+  let hole = "";
+  k.define(g, k.fn(["w"], () => (hole = k.hole())));
+  k.define(k.def("main"), k.call(g, k.lit("hello")));
+  const code = base(k.code), names = baseNames(k.names);
+  const r = fillValue(code, names, infer(code, names), hole, "length(w)", g);
+  assert.ok(r.ok, !r.ok ? r.reason : "");
+  if (r.ok) assert.equal((r.code.nodes[(r.code.nodes[hole] as NodeOf<"call">).fn] as NodeOf<"ref">).target, "builtin.text.length");
+});
+
 // A field two types share, read on an input nothing has settled, isn't
 // chosen silently (E186): both readings are offered.
 test("typed field shared by two types offers each type", async () => {
