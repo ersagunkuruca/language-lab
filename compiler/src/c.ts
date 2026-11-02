@@ -225,6 +225,12 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string
       if (e.k === "closure" || e.k === "cap") shaped.add(e.shape);
       const a = e.k === "rt" ? ARRAY_FN.exec(e.fn) : null;
       if (a) collect(lowered.arrays[Number(a[2])]);
+      // A runtime function that makes or takes a list of texts (split,
+      // join all): its list type, though no function here names it.
+      if (e.k === "rt" && !a) {
+        const r = runtime(e.fn);
+        if (r.result === "list" || r.params.some(([, t]) => t === "list")) { const d = lowered.data.find((x) => x.key === (r.list ?? LIST_TEXT)); if (d) collect(d); }
+      }
     });
   }
   shaped.forEach((s) => { collect(shapes[s].t); shapes[s].caps.forEach(collect); });
