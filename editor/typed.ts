@@ -229,7 +229,7 @@ export function fillValue(code: Code, names: Names, info: Info, hole: Id, text: 
   // those that leave it open (E175): show(n) of an n not known yet is show
   // for any value, not Float64's, so n can still be an Int later.
   let first: TEdit | undefined;
-  for (const t of readings(leaveOpen(info, r))) {
+  for (const t of readings(leaveOpen(info, narrow(code, info, r)))) {
     // Whole numbers first at what their places take: a plain literal would
     // fit an Int's place too (it's some Number), but read as a Float64 it
     // couldn't hold 12345678901234567890 exactly.
@@ -292,7 +292,62 @@ export function simplify(code: Code, names: Names, info: Info, id: Id): TEdit | 
   return guardTyped(info, next, names, root, a && b && a.cells.length && b.cells.length ? "Simplified: one list, written out." : "Simplified: appending an empty list changes nothing.");
 }
 
-// Each way to read what's typed, one id per called name: at most 16.
+// Each name's meanings narrowed by the types around it before they're
+// combined (E176): only 16 combinations are tried, and a line of five ++,
+// shows of four meanings and fields of four is more. Bottom up, what
+// each part can be (the heads of its possible types, or null when it
+// could be anything); a meaning whose input there wants a type the part
+// can't be is dropped, unless that drops them all (the check then says
+// what's wrong). A value whose type nothing fixes yet (`e` in
+// `e.line … e.name`) can be only what every place it's given to takes.
+function narrow(code: Code, info: Info, top: Typed): Typed {
+  const head = (ty: Type | undefined): Id | null => { if (!ty) return null; const r = info.subst.resolve(ty); return r.t === "con" ? r.id : null; };
+  const typeOfOp = (op: Id) => { const ty = sigType(info, op) ?? info.typeOf.get(op); const r = ty && info.subst.resolve(ty); return r?.t === "fn" ? r : null; };
+  // A field takes a value of the type its case is of, and gives its own.
+  let cases: Map<Id, Id> | undefined;
+  const caseOf = (op: Id) => {
+    if (code.nodes[op]?.kind !== "field") return undefined;
+    cases ??= new Map(Object.values(code.nodes).flatMap((v) => v.kind === "variant" ? v.fields.map((f) => [f, v.id] as [Id, Id]) : []));
+    return cases.get(op);
+  };
+  const takes = (op: Id, i: number, n: number) => { const v = caseOf(op); if (v) return n === 1 ? info.owner.get(v) ?? null : null; const f = typeOfOp(op); return f && f.params.length === n ? head(f.params[i]) : null; };
+  const gives = (op: Id) => caseOf(op) ? head(info.typeOf.get(op)) : head(typeOfOp(op)?.ret);
+  const given = new Map<Id, Set<Id>>();
+  const look = (t: Typed): void => {
+    if ("params" in t) return look(t.body);
+    if ("cond" in t) return [t.cond, t.then, t.else].forEach(look);
+    if (!("op" in t)) return;
+    const alts = t.alts ?? [t.op];
+    t.args.forEach((a, i) => {
+      look(a);
+      if (!("ref" in a) || head(info.typeOf.get(a.ref))) return;
+      const hs = alts.map((op) => takes(op, i, t.args.length));
+      if (hs.some((h) => !h)) return;
+      const was = given.get(a.ref);
+      given.set(a.ref, new Set((hs as Id[]).filter((h) => !was || was.has(h))));
+    });
+  };
+  look(top);
+  const go = (t: Typed): { t: Typed; heads: Set<Id> | null } => {
+    if ("value" in t) return { t, heads: typeof t.value === "string" ? new Set([STRING]) : null };
+    if ("ref" in t) { const h = head(info.typeOf.get(t.ref)); const g = given.get(t.ref); return { t, heads: h ? new Set([h]) : g?.size ? g : null }; }
+    if ("params" in t) return { t: { ...t, body: go(t.body).t }, heads: null };
+    if ("cond" in t) {
+      const [c, a, b] = [t.cond, t.then, t.else].map(go);
+      return { t: { cond: c.t, then: a.t, else: b.t }, heads: a.heads && b.heads ? new Set([...a.heads, ...b.heads]) : null };
+    }
+    const args = t.args.map(go);
+    const alts = t.alts ?? [t.op];
+    const fits = (op: Id) => args.every((a, i) => { const p = takes(op, i, args.length); return !p || !a.heads || a.heads.has(p); });
+    const kept = alts.length > 1 ? alts.filter(fits) : alts;
+    const use = kept.length ? kept : alts;
+    const outs = use.map(gives);
+    const heads = outs.every((h) => h) ? new Set(outs as Id[]) : null;
+    return { t: { op: use[0], args: args.map((a) => a.t), ...(use.length > 1 ? { alts: use } : {}) }, heads };
+  };
+  return go(top).t;
+}
+
 // The meanings of each name ordered so those that would settle an open
 // type come last (E175): an input whose value's type is still a variable
 // (a parameter nothing uses yet, a definition still a stub), at a meaning
@@ -321,6 +376,7 @@ function leaveOpen(info: Info, t: Typed): Typed {
   return { op: alts[0], args, alts };
 }
 
+// Each way to read what's typed, one id per called name: at most 16.
 function readings(t: Typed): Typed[] {
   if ("params" in t) return readings(t.body).map((body) => ({ ...t, body }));
   if ("cond" in t) {
