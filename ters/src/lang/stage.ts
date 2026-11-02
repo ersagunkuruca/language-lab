@@ -54,7 +54,7 @@ type PV =
   | { k: "data"; tag: Id; fields: PV[] }
   | { k: "lit"; node: NodeOf<"lit"> }
   | Dyn
-  | { k: "clo"; lambda: NodeOf<"lambda">; env: Map<Id, PV> }
+  | { k: "clo"; lambda: NodeOf<"lambda">; env: Scope }
   | { k: "ref"; target: Id };
 
 const ARITH_B: Record<Id, Op> = { [ARITH.add]: "add", [ARITH.sub]: "sub", [ARITH.mul]: "mul", [ARITH.neg]: "neg" };
@@ -116,7 +116,7 @@ export function stageCalls(code: Code, info: Info, names: Names, only?: Id[], co
       const args = n.args.map((a, i) => {
         if (known[i]) { binders.push(null); return known[i]!; }
         const mark = st.lets.length;
-        try { const v = st.ev(a, new Map()); binders.push(null); return v; } catch (e) { if (!stopped(e)) throw e; st.lets.length = mark; }
+        try { const v = st.ev(a, Scope.empty); binders.push(null); return v; } catch (e) { if (!stopped(e)) throw e; st.lets.length = mark; }
         const b = st.binder(`staged ${i}`);
         binders.push(b);
         return st.later(b, shape(a)!, masks?.get(a));
@@ -334,9 +334,32 @@ export function specialiseCalls(code: Code, info: Info, names: Names, calls: Id[
   return made.length ? { code: out, names: outNames, copies: made, inner, sites, holders: holdersOf } : { code, names, copies: [], inner: [], sites: [], holders: holdersOf };
 }
 
-// The only case of a record type.
+// What names stand for while staging evaluates: a function's or a case's
+// own names over the scope it was made in, looked up through the chain
+// rather than copied at each call (C67h).
+class Scope {
+  static readonly empty = new Scope(null);
+  private readonly own = new Map<Id, PV>();
+  private readonly up: Scope | null;
+  constructor(up: Scope | null) { this.up = up; }
+  set(id: Id, v: PV) { this.own.set(id, v); }
+  get(id: Id): PV | undefined {
+    for (let s: Scope | null = this; s; s = s.up) { const v = s.own.get(id); if (v !== undefined) return v; }
+    return undefined;
+  }
+}
+
+// The only case of a record type. The record types are found once per
+// nodes table (C67h): staging asks for each call it copies.
+const recordCases = new WeakMap<object, Set<Id>>();
 function oneCase(code: Code, variant: Id): boolean {
-  return Object.values(code.nodes).some((n) => n.kind === "typedef" && !n.effect && n.variants.length === 1 && n.variants[0] === variant);
+  let cases = recordCases.get(code.nodes);
+  if (!cases) {
+    cases = new Set();
+    for (const n of Object.values(code.nodes)) if (n.kind === "typedef" && !n.effect && n.variants.length === 1) cases.add(n.variants[0]);
+    recordCases.set(code.nodes, cases);
+  }
+  return cases.has(variant);
 }
 // No variable from outside the tree at root.
 function closedTree(code: Code, root: Id, fixed: Map<Id, Id> = new Map()): boolean {
@@ -500,7 +523,7 @@ class Stager {
 
   // An expression with no variables, known now; Stop otherwise.
   closed(id: Id): PV {
-    const v = this.ev(id, new Map());
+    const v = this.ev(id, Scope.empty);
     if (later(v)) stop();
     return v;
   }
@@ -564,7 +587,7 @@ class Stager {
 
   tick() { if (++this.steps > this.limit) stop(); }
 
-  ev(id: Id, env: Map<Id, PV>): PV {
+  ev(id: Id, env: Scope): PV {
     this.tick();
     const n = this.code.nodes[id];
     if (!n) return stop();
@@ -575,7 +598,8 @@ class Stager {
         return { k: "lit", node: n };
       case "lambda": return { k: "clo", lambda: n, env };
       case "ref": {
-        if (env.has(n.target)) return env.get(n.target)!;
+        const known = env.get(n.target);
+        if (known !== undefined) return known;
         const t = this.code.nodes[n.target];
         if (!t) return stop();
         if (t.kind === "variant" && !t.fields.length) return { k: "data", tag: n.target, fields: [] };
@@ -589,7 +613,7 @@ class Stager {
         if (typeof s !== "object" || s.k !== "data") return stop();
         const arm = n.arms.map((a) => this.code.nodes[a] as NodeOf<"arm">).find((a) => a.variant === s.tag);
         if (!arm) return n.otherwise ? this.ev(n.otherwise, env) : stop();
-        const inner = new Map(env);
+        const inner = new Scope(env);
         arm.binds.forEach((b, i) => inner.set(b, this.bind(s.fields[i])));
         return this.ev(arm.body, inner);
       }
@@ -598,12 +622,12 @@ class Stager {
     }
   }
 
-  fold(n: NodeOf<"fold">, s: PV, env: Map<Id, PV>): PV {
+  fold(n: NodeOf<"fold">, s: PV, env: Scope): PV {
     if (typeof s !== "object" || s.k !== "data") return stop();
     if (++this.depth > 600) stop();
     const arm = n.arms.map((a) => this.code.nodes[a] as NodeOf<"arm">).find((a) => a.variant === s.tag);
     if (!arm) return stop();
-    const inner = new Map(env);
+    const inner = new Scope(env);
     arm.binds.forEach((b, i) => inner.set(b, this.bind(s.fields[i])));
     arm.results.forEach((r, i) => { if (r) inner.set(r, this.bind(this.fold(n, s.fields[i], env))); });
     const out = this.ev(arm.body, inner);
@@ -618,9 +642,9 @@ class Stager {
     const body = this.code.nodes[d.body];
     if (body.kind === "typedef") return stop();
     // A function is a closure; a constant is worked out once, if it can be.
-    if (body.kind === "lambda") { const v: PV = { k: "clo", lambda: body, env: new Map() }; this.defValues.set(def, v); return v; }
+    if (body.kind === "lambda") { const v: PV = { k: "clo", lambda: body, env: Scope.empty }; this.defValues.set(def, v); return v; }
     this.defValues.set(def, null);
-    const v = this.ev(d.body, new Map());
+    const v = this.ev(d.body, Scope.empty);
     if (later(v)) return stop();
     this.defValues.set(def, v);
     return v;
@@ -632,7 +656,7 @@ class Stager {
     if (f.k === "clo") {
       if (f.lambda.params.length !== args.length) return stop();
       if (++this.depth > 600) stop();
-      const env = new Map(f.env);
+      const env = new Scope(f.env);
       f.lambda.params.forEach((p, i) => env.set(p, this.bind(args[i])));
       const out = this.ev(f.lambda.body, env);
       this.depth--;
