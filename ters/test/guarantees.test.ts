@@ -384,3 +384,15 @@ test("nested data: a container defined together with the type is refused, not lo
   });
   assert.ok(p.errors.some((m) => /can't be folded/.test(m)), p.errors.join("\n"));
 });
+
+test("a lazy stream maker: the message names the function in the field, and Diverge on the field takes it (L159)", () => {
+  const build = (diverge: boolean) => (k: Lang) => {
+    const Stream = k.type("Stream", [], [["node", [["next", (self) => k.tfun([], k.tref(self), diverge ? [DIVERGE] : [])]]]]);
+    const make = k.def("make");
+    k.define(make, k.fn(["u"], (u) => k.call(Stream.v.node, k.thunk(() => k.call(make, u)))));
+  };
+  const closed = program(build(false));
+  assert.deepEqual(closed.errors, ["the function in node's next calls make, which might not finish, but next's type, () -> Stream, wants one that surely finishes: add Diverge to it, () -[Diverge]-> Stream"]);
+  const open = program(build(true));
+  assert.deepEqual(open.errors, []);
+});
