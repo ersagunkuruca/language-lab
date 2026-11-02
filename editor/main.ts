@@ -2818,6 +2818,13 @@ function fnSet(id: Id, picked: Id[]): { members: Id[]; what: string; group?: Id 
   return doc.code.nodes[id] ? { members: [id], what: "This node" } : null;
 }
 
+// A part of the Blocks pane as the nodes a function is made of: the calls
+// written inside it, itself first (E208). A name or a number alone is
+// none: there's nothing to make a function of.
+function partCalls(id: Id): Id[] {
+  return subtree(doc.code, id).filter((x) => doc.code.nodes[x]?.kind === "call");
+}
+
 function ungroup(g: Id) {
   const { [g]: _, ...groups } = doc.layout.groups ?? {};
   commit({ layout: { ...doc.layout, groups, folded: (doc.layout.folded ?? []).filter((x) => x !== g) } }, ["layout.json"], "Ungrouped: what it held stays where it was. Only layout.json changed.");
@@ -3041,6 +3048,18 @@ function graphMenu(info: T.Info): HTMLElement | null {
     if (inGraph) rows.push(item("Back to the automatic place", "reset-one", picked.length > 1 ? "Forget where the picked nodes were dragged: back where Tidy everything puts them" : "Forget where it was dragged: back where Tidy everything puts it"));
     if (inGraph) rows.push(item(picked.includes(id) ? "Unpick" : "Pick", "pick", "Mark it, to move and tidy it together with other marked nodes (shift-click does the same)"));
   }
+  // The Blocks pane has no picking: a part made a function or a
+  // definition takes it with everything written inside it, and a function
+  // written in place can be made a definition, as from its frame in the
+  // graph (E208).
+  if (kind === "node" && !inGraph && id) {
+    const members = partCalls(id);
+    if (members.length) rows.push(h("div", { class: "ctx-sep" }),
+      item("Make it a function", "part-fn", "This part, with all it holds: a function, part, of what comes in, called right here. Changes the code; Undo puts it back", why(() => T.makeFunction(doc.code, doc.names.short, info, ui.def, members))),
+      item("Make it a definition", "part-def", "The same function, as a definition of its own in the side menu, called right here. Changes the code; Undo puts it back", why(() => T.definitionFrom(doc.code, doc.names.short, info, ui.def, members))));
+    if (doc.code.nodes[id]?.kind === "lambda" && (doc.code.nodes[ui.def] as { body?: Id } | undefined)?.body !== id)
+      rows.push(item("Make it a definition", "lambda-def", "This function as a definition of its own, in the side menu: what it uses from around it becomes its first inputs. Changes the code; Undo puts it back", why(() => T.liftToDefinition(doc.code, doc.names.short, info, ui.def, id))));
+  }
   if (kind !== "hole" && inGraph) {
     rows.push(h("div", { class: "ctx-sep" }));
     if (picked.length > 1) rows.push(item(`Tidy the ${picked.length} picked`, "tidy-picked", "Space out only the picked nodes: no overlaps, off the wires"));
@@ -3183,6 +3202,8 @@ function menuAction(act: string, target: Id | undefined) {
       graph?.unpickAll();
       return applyT(T.definitionFrom(doc.code, doc.names.short, info, ui.def, set.members));
     }
+    case "part-fn": return applyT(T.makeFunction(doc.code, doc.names.short, info, ui.def, partCalls(target!)));
+    case "part-def": return applyT(T.definitionFrom(doc.code, doc.names.short, info, ui.def, partCalls(target!)));
     case "picked-fn": {
       const set = fnSet(target!, graph?.picked() ?? []);
       if (!set) return;
