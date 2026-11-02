@@ -51,6 +51,8 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 - **shifted down** : `(Int, Int) -> Int`. floor(a / 2ⁿ): a shifted down n places, rounded towards −∞, so shifted down(−1, 1) is −1. A negative n shifts up. Fixed's · uses it.
 - **show** : `(Int) -> Text`. An Int as text.
 - **range** : `(Int) -> List Int`. The Ints 0, 1, … up to n − 1, as a list.
+- **whole of** : `(Float64) -> Int`. The whole number at or below x, as an Int: whole of(2.7) is 2, whole of(-0.5) is -1. Always an answer, since a Float64 is finite (whole part is the same as a Choice).
+- **divided or** : `(Float64, Float64, Float64) -> Float64`. a / b, or otherwise when b is 0: divided or(waited, patients, 0) is the mean, or 0 with no patients.
 - **range from** : `(Int, Int) -> List Int`. The Ints from start up to end, end left out: range from(2, 5) is [2, 3, 4]. Empty when end is not after start.
 - **Rational** (type). An exact fraction, top/bottom, always in lowest terms. The same + − · < work on it. Make one with fraction(1, 3) or as fraction(n); its constructor ratio is private to the library, which keeps the rule.
 - **fraction** : `(Int, Int) -[Choice]-> Rational`. top/bottom, exactly, in lowest terms (Euclid's algorithm, textbook); no answer when bottom is 0.
@@ -166,6 +168,7 @@ Text is a string of characters. Positions count from 0. Text has the one <, alph
 - **comes before** : `(Text, Text) -> Bool`. Whether one text comes before another alphabetically (by character code).
 - **character code** : `(Text) -[Choice]-> Int`. The character's number (its Unicode code point). No answer unless the text is one character.
 - **character** : `(Int) -[Choice]-> Text`. The character with this number. No answer when there's none.
+- **read number** : `(Text) -[Choice]-> Float64`. The Float64 a text spells: read number("30.5") is 30.5, and "-2", ".5" and "1e-3" read too. No answer for anything else, or for a number too big for a Float64. (read whole number reads an Int.)
 - **starts with** : `(Text, Text) -> Bool`. Whether the text begins with this: starts with("# notes", "#") is true. Every text starts with "".
 - **ends with** : `(Text, Text) -> Bool`. Whether the text ends with this: ends with("page.md", ".md") is true. Every text ends with "".
 - **contains text** : `(Text, Text) -> Bool`. Whether the part occurs somewhere in the text: contains text("to do list", "do") is true. Every text contains "". (contains is a list's.)
@@ -276,6 +279,27 @@ A map is kept sorted by key in compare's order, so two maps with the same entrie
 - **set size** : `(Set a) -> Int`. How many items the set has.
 - **smallest item** : `(Set a) -[Choice]-> a`. The set's smallest item, in compare's order; no answer when the set is empty, so first(smallest item(s), else d) gives a default. Nearest first in a set of pair(distance, place).
 - **largest item** : `(Set a) -[Choice]-> a`. The set's largest item, in compare's order; no answer when the set is empty.
+
+## Queues
+
+A Queue gives its items back first in, first out; a Priority queue gives back the item with the lowest priority, and of two with one priority the one added first. Both keep their size, and neither walks itself to add or take.
+
+- **Queue** (type). Items in the order they came: queued adds at the back, front of and dequeued take from the front. Its size is kept, so counting doesn't walk it.
+- **empty queue** : `Queue a`. A queue with nothing in it. queued adds at the back, front of and dequeued take from the front: first in, first out.
+- **queue of** : `(List a) -> Queue a`. A queue of the items, the first item at the front.
+- **queued** : `(Queue a, a) -> Queue a`. The queue with the item added at the back. Doesn't walk the queue.
+- **front of** : `(Queue a) -[Choice]-> a`. The item at the front of the queue, the one queued longest ago; no answer when it's empty.
+- **dequeued** : `(Queue a) -[Choice]-> Queue a`. The queue without its front item; no answer when it's empty. Taking every item in turn walks each once.
+- **queue size** : `(Queue a) -> Int`. How many items the queue holds. Kept, not counted.
+- **queue items** : `(Queue a) -> List a`. The queue's items, front first.
+- **Priority queue** (type). Items by priority, lowest first: prioritized adds one, soonest and without soonest take it. Two with one priority leave in the order they were added. A simulation's event list.
+- **empty priority queue** : `Priority queue a b`. A priority queue with nothing in it: prioritized adds an item with a priority, and soonest is the one with the lowest priority (in compare's order), of those the one added first.
+- **priority queue of** : `(List (a, b)) -> Priority queue a b`. A priority queue of (priority, item) pairs, added in the list's order: priority queue of([(2.5, "b"), (1.0, "a")]).
+- **prioritized** : `(Priority queue a b, a, b) -> Priority queue a b`. The queue with the item added at that priority. Two items may share a priority; they leave in the order they were added. A simulation's events: prioritized(events, now + delay, arrival(p)).
+- **soonest** : `(Priority queue a b) -[Choice]-> (a, b)`. The (priority, item) with the lowest priority, the earliest added of those; no answer when the queue is empty.
+- **without soonest** : `(Priority queue a b) -[Choice]-> Priority queue a b`. The queue without its soonest item; no answer when it's empty. first(soonest(q), else …) and without soonest(q) are one simulation step.
+- **priority queue size** : `(Priority queue a b) -> Int`. How many items the priority queue holds.
+- **priority queue items** : `(Priority queue a b) -> List (a, b)`. The queue's (priority, item) pairs, soonest first.
 
 ## Representations
 

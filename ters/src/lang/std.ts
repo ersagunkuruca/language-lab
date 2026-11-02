@@ -756,6 +756,7 @@ export const TEXT_OPS = {
   less: builtin("text.less", "comes before", pure([str, str], bool), (a: string, b: string) => truth(T.less(a, b))),
   code: choice("text.code", "character code", [str], int, T.code),
   fromCode: choice("text.fromCode", "character", [int], str, T.fromCode),
+  readNumber: choice("text.readNumber", "read number", [str], num, T.readNumber),
 };
 
 // Arrays (BACKLOG C30d, REPRESENTATIONS.md step 5): a list's items side by
@@ -1121,6 +1122,23 @@ export const DIVISION = typedef("std.division", "Division", ["a"], [
 ], false, true);
 export const DIVISION_V = "std.division.division";
 export const DIVIDE = `${DIVISION_V}.divide`;
+// A queue and a priority queue (BACKLOG L177, GAPS round 10 KL4: clinic
+// wrote a leftist heap and a two-list queue). A Queue is two lists, the
+// front in order and the back reversed, with its size kept, so adding,
+// taking and counting don't walk it (Okasaki, "Purely Functional Data
+// Structures", 1998, §5.2): the front is empty only when the queue is. A
+// Priority queue is a Map from (priority, the order it came in) to the
+// item, so two items may have one priority and leave in the order they
+// came, and whatever stores a Map stores it (trees, DATA-STRUCTURES.md).
+// After the division, so ids above don't move.
+export const QUEUE = typedef("std.queue", "Queue", ["a"], [
+  ["queue", [["front", ([a]) => tref(LIST, tref(a))], ["back", ([a]) => tref(LIST, tref(a))], ["size", () => tref(INT)]]],
+]);
+export const QUEUE_V = "std.queue.queue";
+export const PRIORITY_QUEUE = typedef("std.priority queue", "Priority queue", ["p", "a"], [
+  ["priority queue", [["entries", ([p, a]) => tref(MAP, tref("std.tuple2", tref(p), tref(INT)), tref(a))], ["next", () => tref(INT)]]],
+]);
+export const PRIORITY_QUEUE_V = "std.priority queue.priority queue";
 export const tupleType = (n: number): Id => `std.tuple${n}`;
 export const tupleVariant = (n: number): Id => `std.tuple${n}.tuple`;
 export const tuplePart = (n: number, i: number): Id => `std.tuple${n}.tuple.${PART_NAMES[i]}`;
@@ -1140,7 +1158,7 @@ export function onTodaysIds<T>(x: T): T {
 }
 export const tupleSize = (id: Id): number | null => { const m = /^std\.tuple(\d)$/.exec(id); return m ? Number(m[1]) : null; };
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ...TUPLES, DIVISION] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one

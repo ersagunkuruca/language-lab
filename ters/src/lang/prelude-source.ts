@@ -9,7 +9,7 @@ import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { library } from "./programs.ts";
-import { ABORT_OP, ARITH, CELL_OPS, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, TICKET_V, AWAIT_OP, START_TIMER_OP, NOW_OP, WAIT_OP, BRANCH_V, DUAL_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, DIVISION_V, EXTENDED_V, ALGEBRAIC_OPS, CHECK_OP, RANDOM_OP, std } from "./std.ts";
+import { ABORT_OP, ARITH, CELL_OPS, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, TICKET_V, AWAIT_OP, START_TIMER_OP, NOW_OP, WAIT_OP, BRANCH_V, DUAL_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, DIVISION_V, EXTENDED_V, ALGEBRAIC_OPS, CHECK_OP, RANDOM_OP, QUEUE_V, PRIORITY_QUEUE_V, std } from "./std.ts";
 
 export function buildPrelude(): Module {
   const k = new Lang();
@@ -165,6 +165,16 @@ export function buildPrelude(): Module {
   ])));
   const flatMap = k.def("flat map");
   k.define(flatMap, k.fn(["list", "f"], (xs, f) => k.call(flatten, k.call(map, xs, f))));
+
+  // Ends of a Choice that can't happen, or has a plain default (L174, GAPS
+  // round 10 KL1): clinic wrote `int of`, `share` and three more to end
+  // one. A Float64 is finite (L125), so the whole number at or below one
+  // always exists; `whole part` stays a Choice for the programs that
+  // handle it. `divided or` is a / b, or the default when b is 0.
+  const wholeOf = k.def("whole of");
+  k.define(wholeOf, k.fn(["x"], (x) => k.call(S.first, k.thunk(() => k.call(INT_OPS.wholePart, x)), k.thunk(() => k.int(0)))));
+  const dividedOr = k.def("divided or");
+  k.define(dividedOr, k.fn(["a", "b", "otherwise"], (a, b, o) => k.call(S.first, k.thunk(() => k.call(B.div, a, b)), k.thunk(() => o))));
 
   // The Ints from start up to end, end left out (BACKLOG L147, GAPS round
   // 7 SL2: sheet counted `numbers from` itself), as Python's range(a, b).
@@ -1371,6 +1381,46 @@ export function buildPrelude(): Module {
   const largestItem = def("largest item", ["set"], (st) => itemsOf(st, (xs) => k.call(lastItem, xs)));
   const smallestKey = def("smallest key", ["map"], (m) => entriesOf(m, (es) => keyOfEntry(firstOf(es))));
   const largestKey = def("largest key", ["map"], (m) => entriesOf(m, (es) => keyOfEntry(k.call(lastItem, es))));
+  // A queue and a priority queue (L177, std.ts's Queue and Priority
+  // queue). A queue's front is empty only when the queue is, so its first
+  // item is the front's; taking it, the back turns round when the front
+  // runs out. A priority queue's soonest is its Map's smallest key: the
+  // lowest priority, and of those the one put in first.
+  const Q = (front: Id, back: Id, size: Id) => k.call(QUEUE_V, front, back, size);
+  const queueOf_ = (q: Id, f: (front: Id, back: Id, size: Id) => Id) => k.match(q, [{ variant: QUEUE_V, names: ["front", "back", "size"], body: ([a, b, n]) => f(a, b, n) }]);
+  const plus1 = (n: Id) => k.call(INT_OPS.add, n, k.int(1));
+  const emptyQueue = k.def("empty queue");
+  k.define(emptyQueue, Q(k.x(NIL), k.x(NIL), k.int(0)));
+  const queueOf = def("queue of", ["items"], (xs) => Q(xs, k.x(NIL), k.call(length, xs)));
+  const queued = def("queued", ["queue", "item"], (q, x) => queueOf_(q, (front, back, n) => k.match(front, [
+    { variant: NIL, names: [], body: () => Q(k.call(CONS, x, k.x(NIL)), back, plus1(n)) },
+  ], Q(front, k.call(CONS, x, back), plus1(n)))));
+  const frontOf = def("front of", ["queue"], (q) => queueOf_(q, (front) => firstOf(front)));
+  const dequeued = def("dequeued", ["queue"], (q) => queueOf_(q, (front, back, n) => k.match(front, [
+    { variant: NIL, names: [], body: () => k.call(S.fail) },
+    { variant: CONS, names: ["item", "rest"], body: ([, rest]) => k.match(rest, [
+      { variant: NIL, names: [], body: () => Q(k.call(reverse, back), k.x(NIL), k.call(INT_OPS.sub, n, k.int(1))) },
+    ], Q(rest, back, k.call(INT_OPS.sub, n, k.int(1)))) },
+  ])));
+  const queueSize = def("queue size", ["queue"], (q) => queueOf_(q, (_f, _b, n) => n));
+  const queueItems = def("queue items", ["queue"], (q) => queueOf_(q, (front, back) => k.call(append, front, k.call(reverse, back))));
+  const PQ = (es: Id, next: Id) => k.call(PRIORITY_QUEUE_V, es, next);
+  const pqOf = (q: Id, f: (es: Id, next: Id) => Id) => k.match(q, [{ variant: PRIORITY_QUEUE_V, names: ["entries", "next"], body: ([es, n]) => f(es, n) }]);
+  const emptyPriorityQueue = k.def("empty priority queue");
+  k.define(emptyPriorityQueue, PQ(k.x(emptyMap), k.int(0)));
+  const prioritized = def("prioritized", ["queue", "priority", "item"], (q, pr, x) => pqOf(q, (es, n) => PQ(k.call(put, es, P(pr, n), x), plus1(n))));
+  const prioritizedAll = k.def("prioritized all");
+  k.define(prioritizedAll, k.fn(["queue", "pairs"], (q, ps) => k.match(ps, [
+    { variant: NIL, names: [], body: () => q },
+    { variant: CONS, names: ["pair", "rest"], body: ([pr, rest]) => entry(pr, (p, x) => k.call(prioritizedAll, k.call(prioritized, q, p, x), rest), ["priority", "item"]) },
+  ])));
+  const priorityQueueOf = def("priority queue of", ["pairs"], (ps) => k.call(prioritizedAll, k.x(emptyPriorityQueue), ps));
+  const soonest = def("soonest", ["queue"], (q) => pqOf(q, (es) => k.let("key", k.call(smallestKey, es), (key) =>
+    entry(key, (p) => P(p, k.call(lookup, es, key)), ["priority", "order"]))));
+  const withoutSoonest = def("without soonest", ["queue"], (q) => pqOf(q, (es, n) => PQ(k.call(remove, es, k.call(smallestKey, es)), n)));
+  const priorityQueueSize = def("priority queue size", ["queue"], (q) => pqOf(q, (es) => k.call(mapSize, es)));
+  const priorityQueueItems = def("priority queue items", ["queue"], (q) => pqOf(q, (es) => k.call(map, k.call(entries, es),
+    k.fn(["entry"], (e) => entry(e, (key, x) => entry(key, (p) => P(p, x), ["priority", "order"]))))));
   // The three set operations: one walk down both sorted lists at once,
   // keeping what each wants from the smaller head, the shape of merge
   // sorted.
@@ -1585,7 +1635,7 @@ export function buildPrelude(): Module {
   const simulatedHelpers = [readyAt, earliest, readyTimes, tiedAt, pickAt, nextDraw, firstDraw, simulatedWorld, simulatedClock];
   const awaitHelpers = [startBranch, waiting, goOn, finished, settle, firstDone, raceSettle, ...simulatedHelpers];
 
-  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, flatten, flatMap, rangeFrom, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, ticketId, anyOf, together, race, within, simulated];
+  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, ticketId, anyOf, together, race, within, simulated];
   // Each number's own show, from before the generic one showed every number
   // (L153, L156): kept so programs saved before still open, not offered.
   const perTypeShows = [showF, showC, showD, showX];
@@ -1648,6 +1698,8 @@ export function buildPrelude(): Module {
     [numbered]: "Each item with its position, counting from 0: numbered([\"a\", \"b\"]) is [(0, \"a\"), (1, \"b\")].",
     [firstWhere]: "The first item that passes the test, or none: first where([3, 8, 9], (x) ↦ x > 5) is some(8).",
     [positionOf]: "Where the item first is in the list, from 0, or none: position of([\"a\", \"b\"], \"b\") is some(1).",
+    [wholeOf]: "The whole number at or below x, as an Int: whole of(2.7) is 2, whole of(-0.5) is -1. Always an answer, since a Float64 is finite (whole part is the same as a Choice).",
+    [dividedOr]: "a / b, or otherwise when b is 0: divided or(waited, patients, 0) is the mean, or 0 with no patients.",
     [contains]: "Whether the item is in the list: contains([1, 2], 2) is true. (has is a Set's.)",
     [largestOf]: "The largest item by <, or none for an empty list: largest of([3, 9, 4]) is some(9).",
     [smallestOf]: "The smallest item by <, or none for an empty list: smallest of([3, 9, 4]) is some(3).",
@@ -1700,6 +1752,20 @@ export function buildPrelude(): Module {
     [setSize]: "How many items the set has.",
     [smallestItem]: "The set's smallest item, in compare's order; no answer when the set is empty, so first(smallest item(s), else d) gives a default. Nearest first in a set of pair(distance, place).",
     [largestItem]: "The set's largest item, in compare's order; no answer when the set is empty.",
+    [emptyQueue]: "A queue with nothing in it. queued adds at the back, front of and dequeued take from the front: first in, first out.",
+    [queueOf]: "A queue of the items, the first item at the front.",
+    [queued]: "The queue with the item added at the back. Doesn't walk the queue.",
+    [frontOf]: "The item at the front of the queue, the one queued longest ago; no answer when it's empty.",
+    [dequeued]: "The queue without its front item; no answer when it's empty. Taking every item in turn walks each once.",
+    [queueSize]: "How many items the queue holds. Kept, not counted.",
+    [queueItems]: "The queue's items, front first.",
+    [emptyPriorityQueue]: "A priority queue with nothing in it: prioritized adds an item with a priority, and soonest is the one with the lowest priority (in compare's order), of those the one added first.",
+    [priorityQueueOf]: "A priority queue of (priority, item) pairs, added in the list's order: priority queue of([(2.5, \"b\"), (1.0, \"a\")]).",
+    [prioritized]: "The queue with the item added at that priority. Two items may share a priority; they leave in the order they were added. A simulation's events: prioritized(events, now + delay, arrival(p)).",
+    [soonest]: "The (priority, item) with the lowest priority, the earliest added of those; no answer when the queue is empty.",
+    [withoutSoonest]: "The queue without its soonest item; no answer when it's empty. first(soonest(q), else …) and without soonest(q) are one simulation step.",
+    [priorityQueueSize]: "How many items the priority queue holds.",
+    [priorityQueueItems]: "The queue's (priority, item) pairs, soonest first.",
     [smallestKey]: "The map's smallest key, in compare's order; no answer when the map is empty. value at(m, smallest key(m)) is what it holds.",
     [largestKey]: "The map's largest key, in compare's order; no answer when the map is empty.",
     ...Object.fromEntries(mapHelpers.map((d) => [d, "A helper of the map and set operations: a walk down the sorted list. Not offered."])),

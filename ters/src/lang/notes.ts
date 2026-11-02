@@ -41,6 +41,8 @@ export const NOTES: Comments = {
   "std.rational": "An exact fraction, top/bottom, always in lowest terms. The same + − · < work on it. Make one with fraction(1, 3) or as fraction(n); its constructor ratio is private to the library, which keeps the rule.",
   "std.arithmetic": "An interface: the one + − · and −x, for any type that implements them. Float64, Int, Rational, Complex, Dual and Algebraic implement it in the prelude; a type of your own joins with a definition of type Arithmetic T, written arithmetic(its +, its −, its ·, its −x). A record of numbers without one gets them part by part. Resolved before the program runs, so it costs nothing (INTERFACES.md).",
   "std.division": "An interface: the one ÷, divide, for any type that implements it. Float64, Rational, Complex, Dual, Fixed and Algebraic do (the prelude's), and a type of your own joins with a definition of type Division T. Int doesn't: its quotient and remainder are another operation. Dividing by 0 has no answer, so divide has Choice.",
+  "std.queue": "Items in the order they came: queued adds at the back, front of and dequeued take from the front. Its size is kept, so counting doesn't walk it.",
+  "std.priority queue": "Items by priority, lowest first: prioritized adds one, soonest and without soonest take it. Two with one priority leave in the order they were added. A simulation's event list.",
   "std.division.division.divide": "a ÷ b, at any number but Int: exact at Rational, Fixed and Algebraic, floating point at Float64, the complex quotient at Complex. Dividing by 0 has no answer, so it has Choice.",
   "std.ordered": "An interface: the one <, for any type that implements it. The prelude's at most, smaller, sort and the rest then work on that type too. A type of your own joins with a definition of type Ordered T, written ordered(its <).",
   "std.trig": "An interface: sin, cos, tan, exp and log, for any type that implements them. An implementation is a definition of type Trig T, written trig(its sin, its cos, …); Float64's is the builtins. A use is resolved to the type's own function before the program runs, so it costs nothing (INTERFACES.md).",
@@ -196,6 +198,7 @@ export const NOTES: Comments = {
   "builtin.text.less": "Whether one text comes before another alphabetically (by character code).",
   "builtin.text.code": "The character's number (its Unicode code point). No answer unless the text is one character.",
   "builtin.text.fromCode": "The character with this number. No answer when there's none.",
+  "builtin.text.readNumber": "The Float64 a text spells: read number(\"30.5\") is 30.5, and \"-2\", \".5\" and \"1e-3\" read too. No answer for anything else, or for a number too big for a Float64. (read whole number reads an Int.)",
 
   // --- searching: Choice
   "builtin.oneOf": "Any item of the list: a Choice with one answer per item. all, first or count decide what to do with them.",

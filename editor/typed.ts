@@ -774,6 +774,12 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
   // A match isn't read from text yet (E178): say where one is (I142).
   const kw = /^(match|fold)\s+(\S.*)$/.exec(t);
   if (kw) return { error: `a ${kw[1]} isn't read from text yet: the case analysis rows (${kw[1]} ${kw[2]} · a type) write one` };
+  // A case named alone is its constructor, a function: map(xs, out)
+  // (E215; machine wrapped 17 cases in make … only to pass one). The
+  // program's own first; a case the library keeps private is none.
+  const cases = Object.keys(names).filter((id) => names[id] === t && code.nodes[id]?.kind === "variant" && (code.nodes[id] as NodeOf<"variant">).fields.length > 0 && !(fromLibrary(id) && (code.nodes[id] as NodeOf<"variant">).private))
+    .sort((x, y) => +fromLibrary(x) - +fromLibrary(y));
+  if (cases.length) return { ref: cases[0] };
   if (/^[\p{L}_][\p{L}\p{N}_' ]*$/u.test(t) && !/^(if|then|else)$/.test(t)) return { error: `nothing is named ${t} here${closest(t, scope.keys(), scope)}` };
   return inner ?? r;
 }

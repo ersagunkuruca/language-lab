@@ -1958,6 +1958,8 @@ function enclosing(id: Id): Id | null {
   return null;
 }
 
+const STARTERS = ["print", "show", "map", "keep", "fold", "for each", "length", "range", "join", "sum", "read file", "write file", "read line", "first", "item at", "sort", "count"];
+const starter = (name: string) => { const i = STARTERS.indexOf(name); return i < 0 ? STARTERS.length : i; };
 const labels = new WeakMap<T.Filling, { key: Names; l: [string, string, string] }>();
 let finding: { info: T.Info; hole: Id } | null = null;
 function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): HTMLElement {
@@ -1984,6 +1986,11 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
   // new main, not for each because it's alphabetically early.
   const used = usesIn(doc.code);
   const often = (f: T.Filling) => (f.kind === "call" || f.kind === "ref" ? used.get(f.target) ?? 0 : 0);
+  // Then, as in a new program where nothing is called yet, the program's
+  // own definitions, then what a program first reaches for, then the rest
+  // (E224: a new main listed extended less, extended add and extended
+  // negate first of 935 calls).
+  const reach = (f: T.Filling) => (f.kind !== "call" && f.kind !== "ref" ? STARTERS.length : !LIBRARY.code.nodes[f.target] && !f.target.startsWith("builtin.") ? -1 : starter(names[f.target] ?? LIBRARY.names[f.target] ?? ""));
   // A hole draws first and lists what fits a moment later, once the frame
   // that shows it is painted: finding it tries every candidate there (a
   // new definition's in physics about 0.8 s, I136; the hole a Delete
@@ -1997,7 +2004,7 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
     const go = () => { if (finding !== at) return; finding = null; if (doc !== was || (ui.selected !== hole && !document.getElementById(field))) return; fillingsAt(info, hole); render(); };
     if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => setTimeout(go, 0)); else setTimeout(go, 0);
   }
-  const all = (later ? [] : fillingsAt(info, hole)).map((f) => ({ f, l: label(f) })).sort((a, b) => order.indexOf(a.l[2]) - order.indexOf(b.l[2]) || often(b.f) - often(a.f));
+  const all = (later ? [] : fillingsAt(info, hole)).map((f) => ({ f, l: label(f) })).sort((a, b) => order.indexOf(a.l[2]) - order.indexOf(b.l[2]) || often(b.f) - often(a.f) || reach(a.f) - reach(b.f));
   // Of two meanings of one name in a group, the Int one first: positions
   // and counts are Ints, so `range` for a list's indices is range at Int.
   const base = (x: (typeof all)[number]) => (x.f.kind === "call" || x.f.kind === "ref" ? `${x.l[2]}\n${x.l[0].split("(")[0]}` : null);

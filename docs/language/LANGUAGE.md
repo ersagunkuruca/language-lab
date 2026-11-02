@@ -440,6 +440,28 @@ a lot (choosing it without the program asking is C47). Haskell's
 `Data.Map`, OCaml's `Map` and Rust's `BTreeMap` are the prior art.
 (`test/maps.test.ts`.)
 
+### Queues
+
+```
+Queue a = queue(front: List a, back: List a, size: Int)
+Priority queue p a = priority queue(entries: Map (p, Int) a, next: Int)
+```
+
+A `Queue` gives its items back first in, first out: `queued(q, x)` adds
+at the back, `front of(q)` and `dequeued(q)` take from the front (both a
+`Choice`: no answer when it's empty), and `queue size` is kept, not
+counted. The front is empty only when the queue is, and the back is
+reversed onto it when the front runs out, so taking every item walks each
+once (Okasaki's batched queue, "Purely Functional Data Structures" §5.2).
+
+A `Priority queue` is what a simulation keeps its events in:
+`prioritized(events, now + delay, arrival(p))` adds one, `soonest(q)` is
+the `(priority, item)` with the lowest priority, and `without soonest(q)`
+is the rest. Two items may share a priority, and they leave in the order
+they were added: the Map's key is the priority and a count of what came
+before, so it is a `Map` and is stored as one (the trees above), with no
+heap of its own to check. (`test/queues.test.ts`, BACKLOG L177.)
+
 ## Case analysis: `match`
 
 ```
