@@ -44,11 +44,17 @@ function h(tag: string, attrs: Record<string, string | boolean | undefined> = {}
 // its type variables come from one copy of the substitution, not a copy
 // per call, which on Spacetime cost half a second a graph (I101).
 const sigTypes = new WeakMap<Info, { s: Info["subst"]; types: Map<Id, Type> }>();
+// The substitution sigType's types were made in, with what each variable
+// is held to.
+function sigSubst(info: Info) {
+  let c = sigTypes.get(info);
+  if (!c) sigTypes.set(info, (c = { s: info.subst.clone(), types: new Map() }));
+  return c.s;
+}
 export function sigType(info: Info, target: Id): Type | undefined {
   const sig = SIGS[target];
   if (!sig) return undefined;
-  let c = sigTypes.get(info);
-  if (!c) sigTypes.set(info, (c = { s: info.subst.clone(), types: new Map() }));
+  const c = { s: sigSubst(info), types: sigTypes.get(info)!.types };
   let t = c.types.get(target);
   if (!t) c.types.set(target, (t = sig(c.s)));
   return t;
@@ -369,11 +375,16 @@ function leaveOpen(info: Info, t: Typed): Typed {
     const out = "op" in x ? (r.t === "fn" ? info.subst.resolve(r.ret) : null) : r;
     return out?.t === "var";
   };
+  // Fixed: a type, or a variable held to numbers or a record of them
+  // (builtin total), which tumble's own total(board) shouldn't give way
+  // to. Plain data alone (show for any value) leaves it open.
   const fixedAt = (op: Id, i: number): boolean => {
-    const ty = sigType(info, op) ?? info.typeOf.get(op);
-    const r = ty && info.subst.resolve(ty);
-    const p = r?.t === "fn" ? r.params[i] : undefined;
-    return !!p && info.subst.resolve(p).t === "con";
+    const sig = SIGS[op] ? sigType(info, op) : undefined;
+    const s = sig ? sigSubst(info) : info.subst;
+    const ty = sig ?? info.typeOf.get(op);
+    const r = ty && s.resolve(ty);
+    const p = r?.t === "fn" ? s.resolve(r.params[i]) : undefined;
+    return !!p && (p.t === "con" || (p.t === "var" && (s.numbers.has(p.v) || s.arith.has(p.v))));
   };
   if ("params" in t) return { ...t, body: leaveOpen(info, t.body) };
   if ("cond" in t) return { cond: leaveOpen(info, t.cond), then: leaveOpen(info, t.then), else: leaveOpen(info, t.else) };
