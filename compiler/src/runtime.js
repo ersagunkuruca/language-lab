@@ -367,6 +367,7 @@ import { ABORT, ABORT_OP, IO, LOG_OP, NONE, NOW_OP, RANDOM, RANDOM_OP, S, SOME, 
 import { CONSOLE, FILES, NETWORK } from '../../ters/src/lang/types.ts';
 import { seededGenerator, worldRandom } from '../../ters/src/lang/random.ts';
 import { answerByShapes } from '../../ters/src/lang/hosts.ts';
+import { worldTimers } from '../../ters/src/lang/timers.ts';
 export { Aborted as $Aborted };
 
 const handlers = [];
@@ -489,20 +490,15 @@ export const $isLater = (x) => x instanceof Later;
 
 // main's own waits (C40, L71c): what the program leaves unhandled of Await
 // reaches main's generator, and the world answers it as the evaluator's
-// runtime does (run.ts `unhandled`). `start timer(ms)` is a ticket ready
-// at the world's clock plus ms; awaiting a ticket, a timer or the first
-// ready of `any of(…)` waits until the least ready time and goes on with
-// its value (the index of the first ready, for any of). The world's `wait`
-// sleeps; a world with none (a page) gets a promise of main's value
-// instead, resumed by setTimeout. Prior art: an event loop's timers
-// (libuv, the browser's), and Promise.race.
-const timers = [];
+// runtime does, with the same timers (ters/src/lang/timers.ts, C79), new
+// for each run of main. The world's `wait` sleeps; a world with none (a
+// page) gets a promise of main's value instead, resumed by setTimeout.
 const AWAIT_OP = "std.await.await", START_TIMER_OP = "std.await.start timer";
 const isGenerator = (x) => Object.prototype.toString.call(x) === "[object Generator]";
 export function $main(result) {
-  return isGenerator(result) ? goOn(result, undefined) : result;
+  return isGenerator(result) ? goOn(result, undefined, worldTimers((m) => { throw new Aborted(m); })) : result;
 }
-function goOn(it, send) {
+function goOn(it, send, timers) {
   for (;;) {
     const r = it.next(send);
     if (r.done) return r.value;
@@ -510,39 +506,15 @@ function goOn(it, send) {
     if (!(l instanceof Later)) throw new Error("main gave a value before it finished");
     const now = (world.now ?? Date.now)();
     if (l.op === START_TIMER_OP) {
-      timers.push(now + l.args[0]);
-      send = { tag: "std.ticket.ticket", fields: [timers.length - 1] };
+      send = timers.start(now, l.args[0]);
       continue;
     }
     if (l.op !== AWAIT_OP) throw new Error(`nothing handles ${l.op}`);
-    // An any of is ready when the first of its tickets is, an any of
-    // inside one too (L141), as run.ts has it.
-    const items = (t) => {
-      const ts = [];
-      for (let c = t.fields[0]; c.tag === "std.list.cons"; c = c.fields[1]) ts.push(c.fields[0]);
-      if (!ts.length) throw new Aborted("any of no tickets is never ready");
-      return ts;
-    };
-    const ready = (t) => {
-      if (t.tag === "std.ticket.ticket") { const d = timers[Number(t.fields[0])]; if (d === undefined) throw new Aborted(`no ticket ${String(t.fields[0])} from this world`); return d; }
-      if (t.tag === "std.ticket.timer") return now + t.fields[0];
-      if (t.tag === "std.ticket.at") return t.fields[0];
-      return Math.min(...items(t).map(ready));
-    };
-    const t = l.args[0];
-    let at, value;
-    if (t.tag === "std.ticket.first ready") {
-      const ts = items(t);
-      const times = ts.map(ready), i = times.indexOf(Math.min(...times));
-      at = times[i];
-      value = () => t.fields[1](i);
-    } else {
-      at = ready(t);
-      value = () => (t.tag === "std.ticket.timer" || t.tag === "std.ticket.at" ? t.fields[1] : $unit);
-    }
-    if (at > now) {
-      if (!world.wait) return new Promise((resolve) => setTimeout(resolve, at - now)).then(() => goOn(it, value()));
-      world.wait(at - now);
+    const t = l.args[0], w = timers.when(t, now);
+    const value = () => (w.first !== undefined ? t.fields[1](w.first) : t.tag === "std.ticket.timer" || t.tag === "std.ticket.at" ? t.fields[1] : $unit);
+    if (w.at > now) {
+      if (!world.wait) return new Promise((resolve) => setTimeout(resolve, w.at - now)).then(() => goOn(it, value(), timers));
+      world.wait(w.at - now);
     }
     send = value();
   }
