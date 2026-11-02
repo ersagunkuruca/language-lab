@@ -58,6 +58,9 @@ export function buildArrayList(k: Lang, prelude: (name: string) => Id): ArrayLis
   ]), [{ variant: PAIR_V, names: ["answer", "array"], body: ([answer]) => answer }]));
   const length = def("array length of", ["array"], (a) => k.call(ARRAY_OPS.length, a));
   const append = def("array append", ["front", "back"], (a, b) => array(k.call(prelude("append"), items(a), items(b))));
+  // A map: the items mapped as a list, stored again (C93), linear as the
+  // tree's map is.
+  const mapped = def("array map", ["array", "by"], (a, f) => array(k.call(prelude("map"), items(a), f)));
   // An item by its Int position, read in place, and `otherwise` outside
   // the array.
   const itemAt = def("array item at", ["array", "position", "otherwise"], (a, i, o) => k.call(S.first,
@@ -78,6 +81,7 @@ export function buildArrayList(k: Lang, prelude: (name: string) => Id): ArrayLis
     k.call(JOBS.job, k.x(prelude("length")), k.x(length), cost(k, "constant")),
     k.call(JOBS.job, k.x(prelude("append")), k.x(append), cost(k, "linear")),
     k.call(JOBS.job, k.x(prelude("item at")), k.x(itemAt), cost(k, "constant")),
+    k.call(JOBS.job, k.x(prelude("map")), k.x(mapped), cost(k, "linear")),
     k.call(JOBS.hides, k.x(CONS), k.int(1)),
     // A whole list from outside: one array of it (C76).
     k.call(JOBS.storeBy, k.x(ARRAY_OPS.of)),
@@ -94,6 +98,7 @@ export function buildArrayList(k: Lang, prelude: (name: string) => Id): ArrayLis
     k.call(JOBS.asWritten, k.x(prelude("length")), cost(k, "linear")),
     k.call(JOBS.asWritten, k.x(prelude("append")), cost(k, "linear")),
     k.call(JOBS.asWritten, k.x(prelude("item at")), cost(k, "linear")),
+    k.call(JOBS.asWritten, k.x(prelude("map")), cost(k, "linear")),
     k.call(JOBS.asWritten, k.x(prelude("replace at")), cost(k, "linear")),
   )));
   defs.push(spec);

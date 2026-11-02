@@ -53,3 +53,14 @@ test("machine: as WebAssembly (WASI), the same (C92)", () => {
   assert.equal(w.wasmProblem, undefined);
   all(["--profile", "h.asm", "f.asm"], { "h.asm": source("hello"), "f.asm": sized("fib", 10) }, ["wasm"]);
 });
+
+// Its registers, memory and code are lists read and written by position:
+// the compiled program stores them as trees, beside its maps and sets as
+// hash tables, where it walked cons lists at every step (C93). Bigger
+// than the rest, so walking a list each step would show.
+test("machine: lists as trees beside the hash tables, and the same at a bigger size (C93)", () => {
+  assert.deepEqual(w.chosen, ["Map as hash table", "Set as hash table", "List as tree of List"]);
+  const t = performance.now();
+  all(["p.asm"], { "p.asm": sized("primes", 20000) }, ["compiled"]);
+  assert.ok(performance.now() - t < 10000, "primes 20000 compiled in under 10 s (47.9 s as cons lists, under 1 s as trees)");
+});
