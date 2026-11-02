@@ -26,8 +26,8 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 - **cos** : `(a) -> a where a has Trig`. Cosine of an angle in radians, at any type with Trig.
 - **tan** : `(a) -> a where a has Trig`. Tangent of an angle in radians, at any type with Trig.
 - **exp** : `(a) -> a where a has Trig`. e to the power x, at any type with Trig.
-- **log** : `(a) -> a where a has Trig`. The natural logarithm, at any type with Trig (the debugging effect is Log, a different thing).
-- **divide** : `(Float64, Float64) -[Choice]-> Float64`. a ÷ b for Float64s (floating point, so 1 ÷ 3 is 0.333…; dividing by 0 gives infinity). For exact division use fractions.
+- **log** : `(a) -[Choice]-> a where a has Trig`. The natural logarithm, at any type with Trig (the debugging effect is Log, a different thing).
+- **divide** : `(Float64, Float64) -[Choice]-> Float64`. a ÷ b for Float64s (floating point, so 1 ÷ 3 is 0.333…; dividing by 0 has no answer, so it has Choice). For exact division use fractions.
 - **sqrt** : `(Float64) -[Choice]-> Float64`. The square root.
 - **power** : `(Float64, Float64) -[Choice]-> Float64`. a to the power b.
 - **atan2** : `(Float64, Float64) -> Float64`. The angle of the point (x, y) from the x axis, in radians: atan2(y, x).
