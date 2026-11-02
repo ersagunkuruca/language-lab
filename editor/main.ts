@@ -1626,6 +1626,9 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
   const at = ops ? /^(\S+) (.+)$/.exec(T.typeOf(info, up!.parent, names) ?? "") : null;
   if (ops && at && up?.index !== undefined) out.append(h("p", { class: "hint" }, `This is ${names[ops[up.index]] ?? "an operation"} at ${at[2]}: what ${at[1]}'s ${names[ops[up.index]] ?? "operation"} does for a ${at[2]}. Write it as a function, or pick one that fits.`));
   else if (t) out.append(h("div", { class: "typeline" }, h("span", {}, "type"), h("code", {}, t)));
+  // Which of a shared name's meanings a call took (E223).
+  const took = T.tookType(doc.code, info, names, id);
+  if (took) out.append(h("div", { class: "typeline", title: "Several things have this name: this is the one the types picked" }, h("span", {}, "calls"), h("code", {}, took)));
   const err = info.errors.find((e) => e.id === id);
   if (err) out.append(h("p", { class: "status-line bad" }, err.message));
   // A type with no implementation of an interface a use needs: write one.
