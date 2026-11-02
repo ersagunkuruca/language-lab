@@ -899,6 +899,10 @@ test("Int, text and set compile to what the evaluator does", async () => {
     { variant: CONS, names: ["i", "rest"], results: [null, "r"], body: ([i], [, r]) => k.call(I.mul, k.call(I.add, i, k.int(1)), r!) },
   ])));
   const pt = k.type("point", [], [["point", [["x", () => k.tref(INT)], ["label", () => k.tref(STRING)]]]]);
+  const bx = k.type("box", [], [["box", [["at", () => k.tref(pt.def)], ["n", () => k.tref(INT)]]]]);
+  const set = (path: Id, r: Id, v: Id) => k.call(SET, path, r, v);
+  const x = () => k.fn(["q"], (q) => k.call(pt.f["point.x"], q)), at = () => k.fn(["b"], (b) => k.call(bx.f["box.at"], b));
+  const atX = () => k.fn(["b"], (b) => k.call(pt.f["point.x"], k.call(bx.f["box.at"], b)));
   const main = k.def("main");
   k.define(main, k.thunk(() => k.seq(...[
     k.call(I.show, k.call(fact, k.int(25))),
@@ -915,12 +919,18 @@ test("Int, text and set compile to what the evaluator does", async () => {
     // Several fields at once (L167): a tuple written in place, and one named.
     k.call(SHOW_ANY, k.call(SET, k.fn(["q"], (q) => k.call(tupleVariant(2), k.call(pt.f["point.x"], q), k.call(pt.f["point.label"], q))), k.call(pt.v.point, k.int(1), k.lit("a")), k.call(tupleVariant(2), k.int(2), k.lit("c")))),
     k.let("both", k.call(tupleVariant(2), k.lit("d"), k.int(3)), (both) => k.call(SHOW_ANY, k.call(SET, k.fn(["q"], (q) => k.call(tupleVariant(2), k.call(pt.f["point.label"], q), k.call(pt.f["point.x"], q))), k.call(pt.v.point, k.int(1), k.lit("a")), both))),
+    // A chain of sets on one record is one copy (C105): two fields, one
+    // field twice, and a whole field then a field inside it.
+    k.call(SHOW_ANY, set(x(), set(pt.f["point.label"], k.call(pt.v.point, k.int(1), k.lit("a")), k.lit("b")), k.int(7))),
+    k.call(SHOW_ANY, set(x(), set(x(), k.call(pt.v.point, k.int(1), k.lit("a")), k.int(2)), k.int(3))),
+    k.call(SHOW_ANY, set(atX(), set(at(), k.call(bx.v.box, k.call(pt.v.point, k.int(1), k.lit("a")), k.int(2)), k.call(pt.v.point, k.int(9), k.lit("z"))), k.int(4))),
   ].map((t) => k.call(S.print, t)))));
-  const { defs, code, info } = await compiledDefs(k, ["main"], "data.js");
+  const { defs, code, info, source } = await compiledDefs(k, ["main"], "data.js");
+  assert.doesNotMatch(source, /\$setPath\(/);
   const want: string[] = [];
   runMain(code, info, main, { print: (s) => want.push(s), names: { ...baseNames(), ...k.names } });
   assert.deepEqual(printed(() => defs.main(), $setPrint), want);
-  assert.deepEqual(want, ["15511210043330985984000000", "9007199254740991", "-4", "none", "equal", "a+b+c", "2", "2", "b", "5", '[point(1, "a"), point(100000000000000000000, "b")]', 'point(2, "c")', 'point(3, "d")']);
+  assert.deepEqual(want, ["15511210043330985984000000", "9007199254740991", "-4", "none", "equal", "a+b+c", "2", "2", "b", "5", '[point(1, "a"), point(100000000000000000000, "b")]', 'point(2, "c")', 'point(3, "d")', 'point(7, "b")', 'point(3, "a")', 'box(point(4, "z"), 2)']);
 });
 
 test("comes before, against a constant below the surrogates, is JS's < and still orders by code point", async () => {

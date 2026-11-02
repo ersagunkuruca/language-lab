@@ -1780,10 +1780,42 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     const arity = (id: Id) => { const t = ty(id); return t.t === "fn" ? t.params.length : 0; };
 
     // set: the checker made sure the path is fields written in place, so
-    // the positions are known now.
+    // the positions and the records' sizes are known now (C105). A set is
+    // a function of the program's own that makes the record again with
+    // that field changed, `(r, v) => ({ tag: r.tag, fields: [r.fields[0],
+    // v, …] })`, one per path and record type; a chain of sets on one
+    // record, set(a, set(b, r, x), y), is one such function, so the record
+    // is copied once. The values are still worked out in the order written.
     function setCall(get: Id, record: string, value: string): string {
-      const path = fieldPath(code, get)!.map(fieldIndex);
-      return `$setPath(${record}, ${JSON.stringify(path)}, ${value})`;
+      return setChain(record, [{ path: fieldPath(code, get)!, value }]);
+    }
+    // set(…) at n with any sets of the same record inside it, innermost
+    // first.
+    function setNested(n: NodeOf<"call">): string {
+      const links: NodeOf<"call">[] = [];
+      for (let c: Node | undefined = n; c?.kind === "call" && c.args.length === 3 && code.nodes[c.fn]?.kind === "ref" && (code.nodes[c.fn] as NodeOf<"ref">).target === SET && fieldPath(code, c.args[0]); c = code.nodes[c.args[1]]) links.unshift(c);
+      const record = ex(links[0].args[1]);
+      return setChain(record, links.map((l) => ({ path: fieldPath(code, l.args[0])!, value: ex(l.args[2]) })));
+    }
+    function setChain(record: string, sets: { path: Id[]; value: string }[]): string {
+      const decls: string[] = [];
+      let k = 0;
+      const make = (src: string, at: { path: Id[]; arg: string }[]): string => {
+        const whole = at.findLastIndex((e) => !e.path.length);
+        if (whole >= 0) { src = at[whole].arg; at = at.slice(whole + 1); }
+        if (!at.length) return src;
+        const s = `r${k++}`;
+        decls.push(`const ${s} = ${src};`);
+        const variant = node<"typedef">(node<"def">(info.owner.get(at[0].path[0])!).body!).variants[0];
+        const fields = node<"variant">(variant).fields.map((_, i) => {
+          const inner = at.filter((e) => fieldIndex(e.path[0]) === i).map((e) => ({ path: e.path.slice(1), arg: e.arg }));
+          return inner.length ? make(`${s}.fields[${i}]`, inner) : `${s}.fields[${i}]`;
+        });
+        return `{ tag: ${s}.tag, fields: [${fields.join(", ")}] }`;
+      };
+      const body = make("r", sets.map((e, i) => ({ path: e.path, arg: `v${i}` })));
+      const helper = hoist(`(r, ${sets.map((_, i) => `v${i}`).join(", ")}) => {\n${decls.join("\n")}\nreturn ${body};\n}`);
+      return `${helper}(${record}, ${sets.map((e) => e.value).join(", ")})`;
     }
 
     // path (L98): a field path, or (t) ↦ t for the whole, known now too.
@@ -1897,7 +1929,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           if (f.target === S.derivative) return `$derivative($program, ${ex(n.args[0])}, ${streamsFn(ty(n.id), rho)})`;
           if (f.target === S.gradient) return `$derivative($program, ${ex(n.args[0])}, ${streamsFn(ty(n.id), rho)}, ${JSON.stringify(S.gradient)})`;
           if (f.target === S.exists) return `$exists($program, ${ex(n.args[0])})`;
-          if (f.target === SET) return setCall(n.args[0], ex(n.args[1]), ex(n.args[2]));
+          if (f.target === SET) return setNested(n);
           if (f.target === CELL_OPS.path) return pathCall(n.args[0]);
           if (implOf(f.target)) return `${implOf(f.target)}(${n.args.map(ex).join(", ")})`;
         }
