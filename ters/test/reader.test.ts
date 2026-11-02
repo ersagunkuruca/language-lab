@@ -25,6 +25,10 @@ test("typed text reads a field as the blocks print it", () => {
   // A field of something else in the sum, and one that isn't there.
   assert.ok(fillValue(open, names, info, re.id, "c.re + z.im", escape).ok);
   assert.equal(fillValue(open, names, info, re.id, "z.nope", escape).ok, false);
+  // A sum whose last part calls a name that isn't there names that one,
+  // not the whole text (E174).
+  const nosuch = fillValue(open, names, info, re.id, "c.re + nosuch(z.im)", escape);
+  assert.match(nosuch.ok ? "" : nosuch.reason, /^there's no function named nosuch\b/);
   // A number with a point is still a number.
   assert.ok(fillValue(open, names, info, re.id, "1.5", escape).ok);
 });
@@ -124,4 +128,24 @@ test("the blocks read a tuple's parts by their result ports' names", async () =>
   if (!r.ok) return;
   assert.equal(renderBlocks(r.code, { ...p.pres, names: r.names }, infer(r.code, r.names), hsi), text);
   assert.equal(fillValue(open, made.names, infer(open, made.names), g.id, "results.nope", hsi).ok, false);
+});
+
+// A name with several meanings doesn't settle an open type (E175):
+// show(n) where nothing says what n is yet is show for any value, so n
+// can be an Int later.
+test("typed show of a value not known yet leaves its type open", async () => {
+  const { Lang } = await import("../src/lang/dsl.ts");
+  const { base, baseNames } = await import("../src/lang/load.ts");
+  const { SHOW_ANY } = await import("../src/lang/std.ts");
+  const k = new Lang();
+  const f = k.def("f");
+  let hole = "";
+  k.define(f, k.fn(["n"], () => (hole = k.hole())));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names);
+  const r = fillValue(code, names, info, hole, "show(n)", f);
+  assert.ok(r.ok, !r.ok ? r.reason : "");
+  if (!r.ok) return;
+  const call = r.code.nodes[hole] as NodeOf<"call">;
+  assert.equal((r.code.nodes[call.fn] as NodeOf<"ref">).target, SHOW_ANY);
 });

@@ -184,3 +184,21 @@ test("compiled, a case answered at once that awaits: wait and now answered by ti
   assert.deepEqual(evaluated, { printed: ['"7 done"'], waits: [20, 5, 30], clock: 1055 });
   assert.deepEqual(await p.compiled(), evaluated);
 });
+
+// L141 (REVIEW-2026-11-01b §6): an any of inside an any of is ready when
+// its own first ticket is, in the world (evaluated and compiled) as under
+// simulated. The outer which is given the outer position.
+test("an any of inside an any of: the world and simulated agree", async () => {
+  const nested = (k: Lang) => {
+    const t = (ms: number) => k.call(TICKET_V.timer, k.lit(ms), k.unitValue);
+    const inner = k.call(TICKET_V.firstReady, k.list(t(30), t(40)), k.fn(["i"], () => k.unitValue));
+    return k.call(AWAIT_OP, k.call(TICKET_V.firstReady, k.list(t(50), inner), k.fn(["i"], (i) => i)));
+  };
+  const world = worldProgram(nested);
+  assert.deepEqual(world.info.errors.map((e) => e.message), []);
+  const want = { printed: ["1"], waits: [30], clock: 1030 };
+  assert.deepEqual(world.run(), want);
+  assert.deepEqual(await world.compiled(), want);
+  const simulated = worldProgram((k) => k.call(lib("simulated"), k.lit(1), k.thunk(() => nested(k))));
+  assert.deepEqual(simulated.run(), { printed: ["1"], waits: [], clock: 1000 });
+});

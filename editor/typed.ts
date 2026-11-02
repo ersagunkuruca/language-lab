@@ -224,9 +224,12 @@ export function fillValue(code: Code, names: Names, info: Info, hole: Id, text: 
   const whole = (v: Value): boolean => typeof v === "number" ? Number.isInteger(v) : typeof v === "object" && v !== null && "tag" in v && v.fields.some(whole);
   const wholes = (t: Typed): boolean => "value" in t ? whole(t.value) : "args" in t ? t.args.some(wholes) : "cond" in t ? [t.cond, t.then, t.else].some(wholes) : "body" in t && wholes(t.body);
   // A name several things share (show, length) is each of them in turn,
-  // and the first that type-checks there is the one meant.
+  // and the first that type-checks there is the one meant. A meaning that
+  // would settle the type of a value nothing has settled yet comes after
+  // those that leave it open (E175): show(n) of an n not known yet is show
+  // for any value, not Float64's, so n can still be an Int later.
   let first: TEdit | undefined;
-  for (const t of readings(r)) {
+  for (const t of readings(leaveOpen(info, r))) {
     // Whole numbers first at what their places take: a plain literal would
     // fit an Int's place too (it's some Number), but read as a Float64 it
     // couldn't hold 12345678901234567890 exactly.
@@ -290,6 +293,34 @@ export function simplify(code: Code, names: Names, info: Info, id: Id): TEdit | 
 }
 
 // Each way to read what's typed, one id per called name: at most 16.
+// The meanings of each name ordered so those that would settle an open
+// type come last (E175): an input whose value's type is still a variable
+// (a parameter nothing uses yet, a definition still a stub), at a meaning
+// whose own input there is a fixed type.
+function leaveOpen(info: Info, t: Typed): Typed {
+  const open = (x: Typed): boolean => {
+    const ty = "ref" in x ? info.typeOf.get(x.ref) : "op" in x && !SIGS[x.op] ? info.typeOf.get(x.op) : undefined;
+    if (!ty) return false;
+    const r = info.subst.resolve(ty);
+    const out = "op" in x ? (r.t === "fn" ? info.subst.resolve(r.ret) : null) : r;
+    return out?.t === "var";
+  };
+  const fixedAt = (op: Id, i: number): boolean => {
+    const ty = sigType(info, op) ?? info.typeOf.get(op);
+    const r = ty && info.subst.resolve(ty);
+    const p = r?.t === "fn" ? r.params[i] : undefined;
+    return !!p && info.subst.resolve(p).t === "con";
+  };
+  if ("params" in t) return { ...t, body: leaveOpen(info, t.body) };
+  if ("cond" in t) return { cond: leaveOpen(info, t.cond), then: leaveOpen(info, t.then), else: leaveOpen(info, t.else) };
+  if (!("op" in t)) return t;
+  const args = t.args.map((a) => leaveOpen(info, a));
+  if (!t.alts || t.alts.length < 2) return { ...t, args };
+  const settles = (op: Id) => args.filter((a, i) => open(a) && fixedAt(op, i)).length;
+  const alts = t.alts.map((op, k) => ({ op, k, n: settles(op) })).sort((a, b) => a.n - b.n || a.k - b.k).map((x) => x.op);
+  return { op: alts[0], args, alts };
+}
+
 function readings(t: Typed): Typed[] {
   if ("params" in t) return readings(t.body).map((body) => ({ ...t, body }));
   if ("cond" in t) {
@@ -433,6 +464,9 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
     if (alts.length && args.every((a) => !("error" in a))) return { op: alts[0], args: args as Typed[], alts };
     // What's wrong, not where (BACKLOG I115): the name, or what's wrong
     // inside its inputs.
+    // An operator expression whose last operand is a call reaches here
+    // whole (a + nosuch(b)): the operand's own error says more (E174).
+    if (!alts.length && inner) return inner;
     if (!alts.length) return { error: `there's no function named ${call[1]}${closest(call[1], [...scope.keys(), ...Object.values(names)], scope)}` };
     return args.find((a) => "error" in a) as { error: string };
   }

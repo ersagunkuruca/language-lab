@@ -848,6 +848,8 @@ function openDef(d: Id) {
   ui.def = d;
   ui.selected = firstHole();
   ui.mode = null;
+  // What was typed was for the hole left behind (E173).
+  ui.query = "";
   ui.touched = [];
   ui.note = `Opened ${new Namer(doc.code, pres(), d).name(d)}. Back returns to where you were.`;
   render();
@@ -1899,17 +1901,24 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
   // Unsearched, the first 40 (the rest are a search away); searched, all.
   const cap = q ? shown.length : 40;
   const input = h("input", { id: field, type: "search", value: ui.query, autocomplete: "off", spellcheck: "false", placeholder: `${all.length} things fit here. Search…` }) as HTMLInputElement;
+  // Typing redraws once it pauses, not on every key: reading what's typed
+  // is a whole check per reading (E173: 81 keys took 114 s).
   input.addEventListener("input", () => {
     ui.query = input.value;
-    const at = input.selectionStart;
-    render();
-    const again = document.getElementById(field) as HTMLInputElement | null;
-    again?.focus();
-    if (again && at !== null) again.setSelectionRange(at, at);
+    clearTimeout(typingTimer);
+    typingTimer = setTimeout(() => {
+      if (ui.query !== input.value || !input.isConnected) return;
+      const at = input.selectionStart, had = document.activeElement === input;
+      render();
+      const again = document.getElementById(field) as HTMLInputElement | null;
+      if (had) again?.focus();
+      if (again && at !== null) again.setSelectionRange(at, at);
+    }, TYPING_PAUSE);
   });
   // What's typed may itself be a value: 3, "hi", [3, 1, 2], circle(2).
   // Offered first, and only if it fits. A bare case name is already listed.
-  const typed = q && !all.some(({ l }) => l[0].toLowerCase() === q) ? T.fillValue(doc.code, doc.names.short, info, hole, ui.query, ui.def) : null;
+  // Read once per program, hole and text: a redraw reads it from the cache.
+  const typed = q && !all.some(({ l }) => l[0].toLowerCase() === q) ? readTyped(info, hole, ui.query) : null;
   const value = typed?.ok ? typed : null;
   const run = (x: (typeof all)[number]) => { ui.query = ""; applyT(T.fill(doc.code, doc.names.short, info, hole, x.f, x.l[0], ui.def)); };
   const runValue = () => { ui.query = ""; applyT(value!); };
@@ -1928,14 +1937,32 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
     list.append(b);
   }
   if (shown.length > cap) list.append(h("p", { class: "hint" }, `${shown.length - cap} more: type to search them.`));
-  const why = !shown.length && !value && q ? T.whyNotHere(doc.code, doc.names.short, info, hole, ui.query) ?? pureHole(info, hole) : "";
+  const why = !shown.length && !value && q ? cachedTyped(info, `why ${hole} ${ui.query}`, () => T.whyNotHere(doc.code, doc.names.short, info, hole, ui.query)) ?? pureHole(info, hole) : "";
   // What's typed is refused because its type has no implementation of an
   // interface it needs: say so, and offer to write one (BACKLOG E140).
   const lacks = typed && !typed.ok ? typed.missing : undefined;
   if (lacks) list.append(h("p", { class: "hint" }, `${ui.query.trim()} doesn't fit here: ${typed!.ok ? "" : typed!.reason}.`), h("div", { class: "acts" }, implementButton(info, lacks.iface, lacks.type, `Implement ${names[lacks.iface] ?? "it"} for ${showIn(lacks.type, names, info.subst)}`)));
+  // Refused, it says why (E174): the reading's own reason, when the text
+  // is an expression or nothing listed matches it.
+  else if (typed && !typed.ok && !value && !why && (!shown.length || /[^\p{L}\p{N}_' ]/u.test(q))) list.prepend(h("p", { class: "hint refused" }, `${ui.query.trim()} doesn't fit here: ${typed.reason.replace(/\.$/, "")}.`));
   else if (!shown.length && !value) list.append(h("p", { class: "hint" }, `Nothing that fits matches. ${why || "Values and arithmetic can be typed too: 3, \"text\", [1, 2], x * 2, (x) => x + 1."}`));
   return h("div", {}, h("div", { class: "sub-head" }, "Fill · only what type-checks here"), h("div", { class: "picker" }, input, list));
 }
+
+// Typed text in the palette, read once (E173): per program, hole, text
+// and definition, so a redraw, a blur or a click elsewhere doesn't read it
+// again. Its checked program (any edit, a type held or let go) or its
+// names changing start a new cache.
+const TYPING_PAUSE = 250;
+let typingTimer: ReturnType<typeof setTimeout> | undefined;
+const typedReads = new WeakMap<object, { names: Names; m: Map<string, unknown> }>();
+function cachedTyped<R>(info: T.Info, key: string, read: () => R): R {
+  let c = typedReads.get(info);
+  if (!c || c.names !== doc.names.short) typedReads.set(info, (c = { names: doc.names.short, m: new Map() }));
+  if (!c.m.has(key)) c.m.set(key, read());
+  return c.m.get(key) as R;
+}
+const readTyped = (info: T.Info, hole: Id, text: string) => cachedTyped(info, `fill ${ui.def} ${hole} ${text}`, () => T.fillValue(doc.code, doc.names.short, info, hole, text, ui.def));
 
 // What Wrap in… applies to: a value in an expression, not a definition's
 // whole body's lambda or a step's own let.
