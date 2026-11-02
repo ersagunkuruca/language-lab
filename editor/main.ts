@@ -102,7 +102,7 @@ import { renderLet } from "../ters/src/render/letseq.ts";
 import { renderNested } from "../ters/src/render/nested.ts";
 import { renderSexpr } from "../ters/src/render/sexpr.ts";
 import { Namer } from "../ters/src/render/namer.ts";
-import { BOOL, CHECK, CONS, FALSE, FIXED_V, HTML_V, MAP_V, NIL, SET_V, SOME, TRUE } from "../ters/src/lang/std.ts";
+import { BOOL, CHECK, CONS, FALSE, FIXED_V, HTML_V, MAP_V, NIL, onTodaysIds, SET_V, SOME, TRUE } from "../ters/src/lang/std.ts";
 import { CHOICE, DIVERGE, NUMBER, STRING, WORLD, showIn, type Type } from "../ters/src/lang/types.ts";
 import { implementationKey } from "../ters/src/lang/infer.ts";
 import { renderBlocks } from "../ters/src/lang/render.ts";
@@ -348,6 +348,9 @@ function onToday(d: Doc): Doc {
   // Credits kept apart, as the editor once did, are the program's comment now.
   const { credits, ...rest } = d as Doc & { credits?: string[] };
   if (credits?.length) d = { ...rest, comments: { ...d.comments, [PROGRAM]: [d.comments[PROGRAM], ...credits].filter(Boolean).join("\n") } };
+  // Renamed library ids (std's Pair is Tuple2, L139) read as today's, as
+  // load.ts and files.ts do; else its own nodes would name ids that are gone.
+  d = { ...d, code: onTodaysIds(d.code), names: onTodaysIds(d.names) };
   return { ...d, code: {
     nodes: { ...BASE.nodes, ...Object.fromEntries(Object.entries(d.code.nodes).filter(([id]) => own(id))) },
     defs: [...BASE.defs, ...d.code.defs.filter(own)],
@@ -767,7 +770,7 @@ function typesOf(): T.Info | null {
   T.setProgramPins(pins);
   const hit = typedInfo.get(doc.code);
   if (hit?.pins === pins) return hit.info;
-  try { const info = T.infer(doc.code, pres().names); typedInfo.set(doc.code, { pins, info }); return info; } catch { return null; }
+  try { const info = T.guardedInfo(doc.code, pins) ?? T.infer(doc.code, pres().names); typedInfo.set(doc.code, { pins, info }); return info; } catch { return null; }
 }
 const defBody = (d: Id) => { const n = node(d); return n?.kind === "def" && n.body ? node(n.body) : null; };
 
@@ -1037,7 +1040,9 @@ function firstCall(info: T.Info, def: Id): Value[] | undefined {
   if (!entry || entry === def || body?.kind !== "lambda") return undefined;
   // Not reached in the short run: once per version of the code, a longer
   // one, which gets past a move (Tumble's fall, fill, cascade: I29f).
-  return mainCalls(info, entry).get(body.id) ?? mainCalls(info, entry, true).get(body.id);
+  // Only for a definition something calls: a new one isn't reached by any
+  // run (I136: the long run made + New definition a second slower).
+  return mainCalls(info, entry).get(body.id) ?? (calledDefs(doc.code).has(def) ? mainCalls(info, entry, true).get(body.id) : undefined);
 }
 const PASSED = "‹what main passes›";
 
@@ -1072,6 +1077,14 @@ const NO_EVENT: Data = { tag: HTML_V.event, fields: ["", "", 0, 0, 1 / 60] };
 // What each function was first called with when main last ran, as far as
 // it got in a few steps and MAIN_MS, in a world nothing goes out to.
 const mainRuns = new WeakMap<Code, Map<Id, Value[]>>(), longRuns = new WeakMap<Code, Map<Id, Value[]>>();
+// What some ref names, other than in its own definition's head: once per
+// version of the code.
+const calledSets = new WeakMap<Code, Set<Id>>();
+function calledDefs(code: Code): Set<Id> {
+  let r = calledSets.get(code);
+  if (!r) calledSets.set(code, (r = new Set(Object.values(code.nodes).flatMap((n) => (n.kind === "ref" ? [n.target] : [])))));
+  return r;
+}
 // The copy main's run entered for a lambda, when it was one at other
 // number types (arith.ts): its own values are that copy's (I125).
 const mainCopies = new WeakMap<Code, Map<Id, Id>>();
@@ -1483,8 +1496,11 @@ const UNIT_CHIPS: [string, Unit | null][] = [["free", null], ["1", {}], ["m", { 
 
 function unitSection(info: T.Info, id: Id): HTMLElement | null {
   const n = node(id);
-  const declarable = n.kind === "binder" || (n.kind === "lit" && typeof n.value === "number");
   const numeric = T.typeOf(info, id, {}) === "Float64";
+  // An input takes a unit when it is a number or nothing says what it is
+  // yet; one holding a function or a list doesn't (I138).
+  const ty = info.typeOf.get(id), shape = ty && info.subst.resolve(ty);
+  const declarable = (n.kind === "binder" && (!shape || shape.t === "var" || numeric)) || (n.kind === "lit" && typeof n.value === "number");
   if (!declarable && !numeric) return null;
   const u = (() => { try { return unitInfer(doc.code, ui.def).unit(id); } catch { return undefined; } })();
   const declared = (n as { unit?: Unit }).unit;
@@ -1598,13 +1614,13 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
   // (E183b): Alt+↑ does the same.
   const outer = enclosing(id);
   const upBtn = outer ? h("button", { class: "btn mini", type: "button", title: "Select what this is in (Alt+↑)", "data-act": "goto-node", "data-target": outer }, "↑ what it's in") : null;
-  out.append(h("div", { class: "insp-head" }, h("span", { class: "kind", title: `id ${id} in code.json` }, kindLabel(id)), upBtn));
+  out.append(h("div", { class: "insp-head" }, h("span", { class: "kind", title: `id ${id} in code.json` }, kindLabel(id))), ...(upBtn ? [h("div", { class: "acts up" }, upBtn)] : []));
   const t = T.typeOf(info, id, names);
   const hole = info.holes.get(id);
   if (hole) out.append(h("div", { class: "typeline" }, h("span", {}, "needs"), h("code", {}, typeName(info, hole.expected, names))));
   // A hole in an implementation is one operation at its type: say which,
   // since the hole's type alone doesn't (BACKLOG E153).
-  const up = hole ? parentOf(doc.code, id) : null;
+  const up = hole ? parentsOf(doc.code).get(id) ?? null : null;
   const upn = up?.slot === "args" ? node(up.parent) : null;
   const ops = upn?.kind === "call" ? implementationOps(doc.code, upn.fn) : null;
   const at = ops ? /^(\S+) (.+)$/.exec(T.typeOf(info, up!.parent, names) ?? "") : null;
@@ -1870,7 +1886,10 @@ function usesIn(code: Code): Map<Id, number> {
   let m = uses.get(code);
   if (!m) {
     m = new Map();
-    for (const n of Object.values(code.nodes)) if (n.kind === "ref" && !isPublished(n.id)) m.set(n.target, (m.get(n.target) ?? 0) + 1);
+    // The program's own uses: the library's (std's representations call
+    // extended less, add, … hundreds of times) put those first in a new
+    // program's palette (I141).
+    for (const d of ownDefs()) for (const x of subtree(code, d)) { const n = code.nodes[x]; if (n?.kind === "ref") m.set(n.target, (m.get(n.target) ?? 0) + 1); }
     uses.set(code, m);
   }
   return m;
@@ -1878,17 +1897,31 @@ function usesIn(code: Code): Map<Id, number> {
 
 // The expression a part is in, one step out: past the arm or let that
 // only holds it, never the definition itself.
+// Each node's parent, once per version of the code: an arm's is the
+// match or fold holding it, which parentOf doesn't know (I134); one walk
+// of the nodes, not one per step (I135).
+const parents = new WeakMap<Code, Map<Id, { parent: Id; slot: string; index?: number }>>();
+function parentsOf(code: Code) {
+  let m = parents.get(code);
+  if (m) return m;
+  m = new Map();
+  const set = (c: Id | null | undefined, parent: Id, slot: string, index?: number) => { if (c && !m!.has(c)) m!.set(c, { parent, slot, ...(index !== undefined ? { index } : {}) }); };
+  for (const n of Object.values(code.nodes)) {
+    if (n.kind === "call") { set(n.fn, n.id, "fn"); n.args.forEach((a, i) => set(a, n.id, "args", i)); }
+    else if (n.kind === "lambda" || n.kind === "arm" || n.kind === "def") set(n.body, n.id, "body");
+    else if (n.kind === "match" || n.kind === "fold") { set(n.scrutinee, n.id, "scrutinee"); if (n.kind === "match") set(n.otherwise, n.id, "otherwise"); n.arms.forEach((a) => set(a, n.id, "arms")); }
+    else if (n.kind === "solve") { set(n.body, n.id, "body"); Object.values(n.given).forEach((g) => set(g, n.id, "given")); }
+  }
+  parents.set(code, m);
+  return m;
+}
+
 function enclosing(id: Id): Id | null {
-  // parentOf knows an arm's body, not the match or fold holding the arm:
-  // that step is taken here (I134).
-  const up = (x: Id) => {
-    const n = node(x);
-    if (n?.kind !== "arm") return parentOf(doc.code, x);
-    const m = Object.values(doc.code.nodes).find((o) => (o.kind === "match" || o.kind === "fold") && o.arms.includes(x));
-    return m ? { parent: m.id, slot: "arms" } : null;
-  };
-  const marked = [...document.querySelectorAll<HTMLElement>(".blocks-wrap [data-id], .p-graph [data-id]")].map((el) => el.dataset.id!);
-  const drawn = marked.length ? new Set(marked) : null;
+  const ps = parentsOf(doc.code), up = (x: Id) => ps.get(x) ?? null;
+  // Only what a view draws: a call merged into its chain (0.5 · g · t · t
+  // is one ·) or a match read as a longer pattern is passed over (I139).
+  const views = document.querySelector(".blocks-wrap [data-id], .p-graph [data-id]");
+  const drawn = (x: Id) => !views || !!document.querySelector(`.blocks-wrap [data-id="${CSS.escape(x)}"], .p-graph [data-id="${CSS.escape(x)}"]`);
   for (let at = up(id), hops = 0; at && hops < 16; at = up(at.parent), hops++) {
     const n = node(at.parent);
     if (!n || n.kind === "def" || at.parent === ui.def) return null;
@@ -1896,14 +1929,14 @@ function enclosing(id: Id): Id | null {
     // function is the definition.
     const letCall = (c: Node | undefined) => c?.kind === "call" && node(c.fn)?.kind === "lambda";
     if (letCall(n)) continue;
-    if (n.kind === "lambda") { const o = parentOf(doc.code, n.id); const on = o ? node(o.parent) : undefined; if (!o || on?.kind === "def" || (letCall(on) && o.slot === "fn")) continue; }
-    // Only what a view draws: a call merged into its chain (0.5 · g · t · t
-    // is one ·) or a match read as a longer pattern is passed over (I139).
-    if (["call", "match", "fold", "lambda", "solve"].includes(n.kind) && (!drawn || drawn.has(n.id))) return n.id;
+    if (n.kind === "lambda") { const o = up(n.id); const on = o ? node(o.parent) : undefined; if (!o || on?.kind === "def" || (letCall(on) && o.slot === "fn")) continue; }
+    if (["call", "match", "fold", "lambda", "solve"].includes(n.kind) && drawn(n.id)) return n.id;
   }
   return null;
 }
 
+const labels = new WeakMap<T.Filling, { key: Names; l: [string, string, string] }>();
+let findLater: Id | null = null;
 function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): HTMLElement {
   const q = ui.query.trim().toLowerCase();
   // Most often wanted first; a function passed along uncalled last, since
@@ -1912,13 +1945,29 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
   // what's wanted, and they will be called.
   const head = Object.values(doc.code.nodes).some((n) => n.kind === "call" && n.fn === hole);
   // Where a function goes, writing one here is often what's meant.
-  const order = [...(head ? ["functions"] : []), "in scope", "new function", "calls", "constructors", "definitions", "literals", "case analysis", "functions, not called"];
-  const label = (f: T.Filling): [string, string, string] => { const l = fillLabel(f, info, names); return head && l[2] === "functions, not called" ? [l[0], l[1], "functions"] : l; };
+  // What a representation is written with (match by, match as written)
+  // comes last: it's for writing one, not for a program's values (I141).
+  const order = [...(head ? ["functions"] : []), "in scope", "new function", "calls", "constructors", "definitions", "literals", "case analysis", "functions, not called", "for representations"];
+  // A row's label, once per filling while the names stay (I135: every key
+  // labelled every filling again, a type shown for each).
+  const label = (f: T.Filling): [string, string, string] => {
+    const was = labels.get(f), key = shownNames();
+    const l = was?.key === key ? was.l : fillLabel(f, info, names);
+    if ((f.kind === "call" || f.kind === "ref") && f.target.startsWith("builtin.representation.")) l[2] = "for representations";
+    if (was?.key !== key) labels.set(f, { key, l });
+    return head && l[2] === "functions, not called" ? [l[0], l[1], "functions"] : l;
+  };
   // Within a group, what the program calls most comes first: print in a
   // new main, not for each because it's alphabetically early.
   const used = usesIn(doc.code);
   const often = (f: T.Filling) => (f.kind === "call" || f.kind === "ref" ? used.get(f.target) ?? 0 : 0);
-  const all = fillingsAt(info, hole).map((f) => ({ f, l: label(f) })).sort((a, b) => order.indexOf(a.l[2]) - order.indexOf(b.l[2]) || often(b.f) - often(a.f));
+  // A new definition's hole draws first and lists what fits a moment
+  // later: finding it (about 0.8 s in physics, every function tried as the
+  // definition's whole body) was in the same frame as the new definition
+  // (I136).
+  const later = findLater === hole && !fitting.get(info)?.has(hole);
+  if (later) setTimeout(() => { findLater = null; fillingsAt(info, hole); if (ui.selected === hole) render(); }, 0);
+  const all = (later ? [] : fillingsAt(info, hole)).map((f) => ({ f, l: label(f) })).sort((a, b) => order.indexOf(a.l[2]) - order.indexOf(b.l[2]) || often(b.f) - often(a.f));
   // Console's print performed by name reads, and does, what builtin print
   // does (L145): one row for both (E184).
   const plain = new Set(all.filter((x) => !((x.f.kind === "call" || x.f.kind === "ref") && x.f.target.startsWith("effect."))).map((x) => `${x.l[0]}\n${x.l[1]}`));
@@ -2001,6 +2050,7 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
     if (value) runValue(); else if (shown[0]) run(shown[0]);
   });
   const list = h("div", { class: "opts palette" });
+  if (later) list.append(h("p", { class: "hint" }, "Finding what fits…"));
   if (value) {
     const b = h("button", { class: "opt", type: "button" }, h("span", { class: "opt-l" }, ui.query.trim()), h("span", { class: "opt-d" }, "this, written out"));
     b.addEventListener("click", runValue);
@@ -2155,10 +2205,15 @@ function typePicker(id: string, type: Id, names: Names, current: Id | null, chan
 // Run a top-level edit; `then` adjusts what's shown once it's in.
 // A call typed of a name nothing has yet (E180): a definition of that
 // name, its inputs named after what the call gives it (a name typed there,
-// or input 1, 2…), its body a hole. The typed text stays, and reads now.
+// or in1, in2…), its body a hole. The typed text stays, and reads now.
 function makeNamed(info: T.Info, name: string): HTMLElement {
   const ins = T.callInputs(ui.query, name) ?? [];
-  const params = ins.map((x, i) => (/^[\p{L}_][\p{L}\p{N}_' ]*$/u.test(x) && !ins.slice(0, i).includes(x) ? x : `input ${i + 1}`));
+  // A name typed there, or in1, in2… as Make a function names them: one
+  // word, so it reads without ‹ › (I143).
+  const named = ins.map((x, i) => /^[\p{L}_][\p{L}\p{N}_' ]*$/u.test(x) && !ins.slice(0, i).includes(x));
+  const unnamed = named.filter((n) => !n).length;
+  let k = 0;
+  const params = ins.map((x, i) => (named[i] ? x : unnamed > 1 ? `in${++k}` : "in"));
   const b = h("button", { class: "btn", type: "button" }, `Make a definition named ${name}`);
   b.title = `${name}(${params.join(", ")}), its body a hole to fill later; what's typed here then reads`;
   b.addEventListener("click", () => {
@@ -2448,6 +2503,7 @@ function newDefinitionForm(info: T.Info): HTMLElement {
       ui.back = [ui.def];
       ui.def = r.code.defs.at(-1)!;
       ui.selected = kind === "type" || kind === "effect" || kind === "interface" ? null : r.select;
+      findLater = ui.selected;
       ui.mode = null;
     });
   });

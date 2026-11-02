@@ -41,7 +41,7 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 - **quotient** : `(Int, Int) -[Choice]-> Int`. a ÷ b rounded down to a whole number. No answer (Choice) when b is 0.
 - **remainder** : `(Int, Int) -[Choice]-> Int`. What's left of a after quotient(a, b) times b; it has b's sign. No answer when b is 0.
 - **power** : `(Int, Int) -[Choice]-> Int`. a to the power b for Ints. No answer when b is negative.
-- **lowest terms** : `(Int, Int) -> Pair Int Int`. Both divided by their greatest common divisor, the second made positive: how a fraction is kept.
+- **lowest terms** : `(Int, Int) -> (Int, Int)`. Both divided by their greatest common divisor, the second made positive: how a fraction is kept.
 - **read whole number** : `(Text) -[Choice]-> Int`. The Int a text spells, like "42". No answer when it isn't one.
 - **as float64** : `(Int) -> Float64`. The Int as a Float64.
 - **whole part** : `(Float64) -[Choice]-> Int`. The Float64 rounded down, as an Int: whole part(2.7) is 2. No answer for infinity or not-a-number.
@@ -185,7 +185,6 @@ Text is a string of characters. Positions count from 0.
 A list is written [1, 2, 3]. There are no loops: map, keep and for each go through a list, and fold (a construct, not a function) walks any data.
 
 - **List** (type). A list: nil (empty), or cons(head, tail), an item in front of a list. [1, 2, 3] is how one is written.
-- **Pair** (type). Two values together: pair(fst, snd).
 - **Unit** (type). The type with one value, unit: what an action that only does something gives back.
 - **Tuple2** (type). 2 values side by side, shown (A, B): the inputs or the results of a function as one value. A function of 2 inputs given one tuple takes it apart, so f(p) is f(x, y) when p is a tuple of them.
 - **Tuple3** (type). 3 values side by side, shown (A, B, C): the inputs or the results of a function as one value. A function of 3 inputs given one tuple takes it apart, so f(p) is f(x, y, z) when p is a tuple of them.
@@ -203,10 +202,10 @@ A list is written [1, 2, 3]. There are no loops: map, keep and for each go throu
 - **reverse** : `(List a) -> List a`. The list back to front.
 - **sort** : `(List a) -> List a`. The list in order: numbers by value, text alphabetically (by code point), cases in the order their type lists them, then field by field (compare). A merge sort (von Neumann, 1945), bottom-up so it surely finishes: n log n steps.
 - **sort by** : `(List a, (a) -[e]-> b) -[e]-> List a`. The list in the order of key(item), by compare: sort by(roads, length of) puts the shortest first, sort by(rows, (r) → −amount of(r)) the largest. Items with the same key keep their order (a stable sort; Python's key=, Haskell's sortOn). n log n steps, each calling key.
-- **item at** : `(List a, Float64, a) -> a`. The item at a position, counting from 0, or `otherwise` when the list has none there: item at([a, b, c], 1, z) is b, item at([a], 5, z) is z. n steps.
-- **replace at** : `(List a, Float64, a) -> List a`. The list with the item at a position, counting from 0, replaced by `by`; the list as it was when it has no item there. n steps.
-- **take** : `(List a, Float64) -> List a`. The first count items: take([a, b, c], 2) is [a, b]; a list with fewer gives them all. count steps.
-- **drop** : `(List a, Float64) -> List a`. The items after the first count: drop([a, b, c], 2) is [c]; a list with fewer gives []. count steps.
+- **item at** : `(List a, Int, a) -> a`. The item at a position, counting from 0, or `otherwise` when the list has none there: item at([a, b, c], 1, z) is b, item at([a], 5, z) is z. n steps.
+- **replace at** : `(List a, Int, a) -> List a`. The list with the item at a position, counting from 0, replaced by `by`; the list as it was when it has no item there. n steps.
+- **take** : `(List a, Int) -> List a`. The first count items: take([a, b, c], 2) is [a, b]; a list with fewer gives them all. count steps.
+- **drop** : `(List a, Int) -> List a`. The items after the first count: drop([a, b, c], 2) is [c]; a list with fewer gives []. count steps.
 - **show numbers** : `(List Float64) -> Text`. A fold that prints. Run backwards it unfolds, so it parses.
 - **empty array** : `() -> Array a`. An array with no items.
 - **array of** : `(List a) -> Array a`. The array of a list's items, in order.
@@ -225,7 +224,7 @@ A map is kept sorted by key in compare's order, so two maps with the same entrie
 
 - **Map** (type). A map from keys to values, kept sorted by key with no key twice. Build one with empty map, as map or put (its constructor map of is private to the library, which keeps the rule); read it with value at.
 - **empty map** : `Map a b`. The map with no entries.
-- **as map** : `(List (Pair a b)) -> Map a b`. The map of a list of pair(key, value); when a key comes twice, the later pair wins. Keys are kept in compare's order, so a map has one spelling and folds go in key order (Haskell's Data.Map, Rust's BTreeMap).
+- **as map** : `(List (a, b)) -> Map a b`. The map of a list of (key, value) tuples; when a key comes twice, the later one wins. Keys are kept in compare's order, so a map has one spelling and folds go in key order (Haskell's Data.Map, Rust's BTreeMap).
 - **put** : `(Map a b, a, b) -> Map a b`. The map with key holding value, in place of what it held.
 - **update at** : `(Map a b, a, b, (b) -[e]-> b) -[e]-> Map a b`. The map with key holding change(what it held), or change(default) when it held nothing: one walk, where put(m, k, change(first(value at(m, k), default))) looks the key up twice. Counting is update at(counts, word, 0, partially(add, 1)). Haskell's Data.Map alter and Rust's entry API are the same job.
 - **value at** : `(Map a b, a) -[Choice]-> b`. What key holds; no answer when the map hasn't got it, so first(value at(m, k), else d) gives a default.
@@ -234,7 +233,7 @@ A map is kept sorted by key in compare's order, so two maps with the same entrie
 - **merge maps** : `(Map a b, Map a b) -> Map a b`. The entries of both maps; where both hold a key, the second's value wins.
 - **keys of** : `(Map a b) -> List a`. The keys, in order.
 - **values of** : `(Map a b) -> List b`. The values, in the order of their keys.
-- **entries of** : `(Map a b) -> List (Pair a b)`. The entries as pair(key, value), in key order.
+- **entries of** : `(Map a b) -> List (a, b)`. The entries as (key, value) tuples, in key order.
 - **map size** : `(Map a b) -> Int`. How many keys the map holds.
 - **smallest key** : `(Map a b) -[Choice]-> a`. The map's smallest key, in compare's order; no answer when the map is empty. value at(m, smallest key(m)) is what it holds.
 - **largest key** : `(Map a b) -[Choice]-> a`. The map's largest key, in compare's order; no answer when the map is empty.
@@ -244,7 +243,7 @@ A map is kept sorted by key in compare's order, so two maps with the same entrie
 - **table has** : `(Table a b, a) -> Bool`. Whether the table has the key.
 - **table size** : `(Table a b) -> Int`. How many keys the table has.
 - **table value at** : `(Table a b, a) -[Choice]-> b`. The key's value, or no answer when the table doesn't have the key.
-- **table entries** : `(Table a b) -> List (Pair a b)`. The table's entries as pairs, in compare's order of their keys: the map it stands for.
+- **table entries** : `(Table a b) -> List (a, b)`. The table's entries as (key, value) tuples, in compare's order of their keys: the map it stands for.
 - **empty hash set** : `() -> Hash set a`. A hash set with no items: how a set is stored when the compiler sees that every set has one holder (C63d). Programs say Set; the compiler picks this.
 - **hash set add** : `(Hash set a, a) -> Hash set a`. The set with the item in it. It changes the set itself, so the compiler uses it only where nobody can see the set before the change.
 - **hash set remove** : `(Hash set a, a) -> Hash set a`. The set without the item, changed in place like add.

@@ -211,9 +211,9 @@ test("relations: a direction is chosen at the use site, and its effect is inferr
   const p = load("relations");
   const info = infer(p.code, p.pres.names);
   assert.deepEqual(info.errors, []);
-  assert.equal(typeOf(p, info, "split"), "(Float64, Float64) -> Pair Float64 Float64");
+  assert.equal(typeOf(p, info, "split"), "(Float64, Float64) -> (Float64, Float64)");
   assert.equal(typeOf(p, info, "missing addend"), "(Float64, Float64) -> Float64");
-  assert.equal(typeOf(p, info, "to polar"), "(Float64, Float64) -[Choice]-> Pair Float64 Float64");
+  assert.equal(typeOf(p, info, "to polar"), "(Float64, Float64) -[Choice]-> (Float64, Float64)");
   assert.equal(typeOf(p, info, "square roots"), "(Float64) -> List Float64");
   assert.deepEqual(run(p.code, info, p.named("main")), [
     "split(10, 4) = 7, 3",

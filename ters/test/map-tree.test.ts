@@ -168,7 +168,7 @@ test("byType: equal, show and compare on trees go through the meaning", () => {
   assert.notDeepEqual(x, y);
   assert.equal((call(mapTree.byType!.equal, x, y) as Data).tag, "std.bool.true");
   assert.equal((call(mapTree.byType!.compare, x, y) as Data).tag, "std.order.same");
-  assert.equal(call(mapTree.byType!.show, x), "map of([pair(1, 10), pair(2, 20)])");
+  assert.equal(call(mapTree.byType!.show, x), "map of([(1, 10), (2, 20)])");
   const setTree = LIBRARY.reps.find((rep) => rep.of === SET_TYPE && rep.byType)!;
   const add = setTree.impl[lib("add item")];
   let a = r.value(setTree.impl[lib("empty set")]), b = a;
@@ -199,7 +199,7 @@ test("a set's smallest and largest item, and a map's smallest and largest key (L
   )));
   const code = base(k.code), names = baseNames(k.names);
   const plain = printed(code, names, main);
-  assert.deepEqual(plain, ["[[1, 5]]", "[]", 'pair(10, "a")', '[["apple", "pear"]]', "[]"]);
+  assert.deepEqual(plain, ["[[1, 5]]", "[]", '(10, "a")', '[["apple", "pear"]]', "[]"]);
   const stored = represent(represent(merge(code, TREES.code), [main], mapTree), [main], setTree);
   assert.deepEqual(printed(stored, names, main), plain);
   // On the tree, each is log n: a walk down one side, not the items listed.
@@ -224,7 +224,7 @@ test("update at changes the value at a key in one walk, or puts change(default) 
   )));
   const code = base(k.code), names = baseNames(k.names);
   const plain = printed(code, names, main);
-  assert.deepEqual(plain, ['[pair("a", 3), pair("b", 2), pair("c", 1)]', '[pair("a", ["c", "b"]), pair("b", ["c"])]']);
+  assert.deepEqual(plain, ['[("a", 3), ("b", 2), ("c", 1)]', '[("a", ["c", "b"]), ("b", ["c"])]']);
   assert.deepEqual(printed(represent(merge(code, TREES.code), [main], mapTree), names, main), plain);
   assert.equal(mapTree.cost[lib("update at")], "log n");
 });

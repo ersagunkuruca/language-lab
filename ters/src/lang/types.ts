@@ -579,7 +579,8 @@ export function showType(t: Type, names: Names, arith?: ReadonlyMap<number, Arit
       if (!t.args.length) return name(t.id);
       // A tuple (L128): its parts side by side.
       if (/^std\.tuple\d$/.test(t.id)) return `(${t.args.map((a) => go(a, false)).join(", ")})`;
-      return `${name(t.id)} ${t.args.map((a) => (a.t === "con" && a.args.length) || a.t === "fn" ? `(${go(a, true)})` : go(a, true)).join(" ")}`;
+      // A tuple argument has its own parentheses: List (a, b).
+      return `${name(t.id)} ${t.args.map((a) => (a.t === "con" && a.args.length && !/^std\.tuple\d$/.test(a.id)) || a.t === "fn" ? `(${go(a, true)})` : go(a, true)).join(" ")}`;
     }
     const named = t.eff.name !== undefined && t.eff.tail === null && NAMED_ROWS.get(t.eff.name);
     if (named && named.length === t.eff.effs.length && named.every((e) => t.eff.effs.includes(e)) && !Object.keys(t.eff.args ?? {}).length)

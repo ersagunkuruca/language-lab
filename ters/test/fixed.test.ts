@@ -70,7 +70,7 @@ test("Fixed: exact literals, a physics loop and a big world, evaluated and compi
   for (let i = 0; i < 1000; i++) { v += times(g, dt); h += times(v, dt); }
   assert.deepEqual(got.slice(0, 8), [
     String(3n * ONE / 2n), String(steps(1n, 10n)), String(steps(-1n, 10n)), String(times(steps(1n, 10n), steps(-37n, 10n))), "true",
-    `"pair(${h}, ${v})"`, "1", "\"-2.75\"",
+    `"(${h}, ${v})"`, "1", "\"-2.75\"",
   ]);
   // Each shown decimal reads back to its steps, and one digit fewer doesn't.
   SHOWN.forEach((st, j) => {

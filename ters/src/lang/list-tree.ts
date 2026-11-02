@@ -23,7 +23,6 @@
 
 import type { Id } from "../model.ts";
 import type { Lang } from "./dsl.ts";
-import { B as BUILTIN } from "../prelude.ts";
 import { COMPARE, CONS, COST, INT_OPS, JOBS, NIL, PAIR_V, REPRESENTATION_V, S, SHOW_ANY } from "./std.ts";
 import { INT } from "./types.ts";
 
@@ -116,22 +115,19 @@ export function buildListTree(k: Lang, prelude: (name: string) => Id): ListTree 
       k.if(i.less(i.mul(k.int(DELTA), sr), sl), B(lx, ll, k.call(link, lr, x, r)), N(x, l, r))),
   () => k.call(snoc, l, x), "r "), () => k.call(cons, x, r), "l ")));
   const append = def("list tree append", ["front", "back"], (a, b) => parts(b, (_, y, l) => k.call(link, a, k.call(first, l, y), k.call(dropFirst, b)), () => a));
-  // A position as item at rounds it (within a half of n is n), or none
-  // for one that isn't a number; `at` then goes down by the sizes.
-  const position = (p: Id) => k.call(INT_OPS.wholePart, k.call(S.floor, k.call(BUILTIN.add, p, k.lit(0.5))));
+  // A position is an Int, as item at's is (L140); `at` goes down by the
+  // sizes, and outside the tree gives `otherwise`.
   const find = rec("list tree at");
   k.define(find, k.fn(["tree", "position", "otherwise"], (t, p, o) => parts(t, (_, y, l, r) => k.let("before", k.call(size, l), (before) =>
     k.if(i.less(p, before), k.call(find, l, p, o),
       k.if(i.less(before, p), k.call(find, r, i.sub(p, i.add(before, k.int(1))), o), y))), () => o)));
-  const itemAt = def("list tree item at", ["tree", "position", "otherwise"], (t, p, o) => k.call(S.first,
-    k.thunk(() => k.call(find, t, position(p), o)), k.thunk(() => o)));
+  const itemAt = def("list tree item at", ["tree", "position", "otherwise"], (t, p, o) => k.call(find, t, p, o));
   // A replace keeps every size, so the tree keeps its shape.
   const put = rec("list tree replace");
   k.define(put, k.fn(["tree", "position", "by"], (t, p, by) => parts(t, (s, y, l, r) => k.let("before", k.call(size, l), (before) =>
     k.if(i.less(p, before), k.call(node, y, s, k.call(put, l, p, by), r),
       k.if(i.less(before, p), k.call(node, y, s, l, k.call(put, r, i.sub(p, i.add(before, k.int(1))), by)), k.call(node, by, s, l, r)))), () => t)));
-  const replaceAt = def("list tree replace at", ["tree", "position", "by"], (t, p, by) => k.call(S.first,
-    k.thunk(() => k.call(put, t, position(p), by)), k.thunk(() => t)));
+  const replaceAt = def("list tree replace at", ["tree", "position", "by"], (t, p, by) => k.call(put, t, p, by));
   // Equal, show and compare see the list it stands for.
   const equal = def("list tree equal", ["a", "b"], (a, b) => k.call(S.equal, k.call(items, a), k.call(items, b)));
   const show = def("list tree show", ["tree"], (t) => k.call(SHOW_ANY, k.call(items, t)));

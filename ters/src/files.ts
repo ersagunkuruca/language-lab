@@ -19,6 +19,7 @@ import { isPublished, type Code, type Id, type Node } from "./model.ts";
 import type { Comments, Names } from "./presentation.ts";
 import { LIBRARY } from "./lang/library.ts";
 import { needs, pointsAt } from "./lang/modules.ts";
+import { onTodaysIds } from "./lang/std.ts";
 import type { Pins } from "./lang/signatures.ts";
 import type { Saved } from "./lang/tests.ts";
 import type { Drafts } from "../../editor/drafts.ts";
@@ -66,7 +67,8 @@ const strings = (x: unknown): x is Record<string, string> => isObj(x) && Object.
 // the reason it can't be opened instead of throwing.
 export function fromFile(text: string, baseFor: (typed: boolean) => Code): { file: ProgramFile; code: Code } | { error: string } {
   let x: unknown;
-  try { x = JSON.parse(text); } catch { return { error: "it isn't JSON" }; }
+  // Ids since renamed read as today's (std.ts RENAMED_IDS).
+  try { x = onTodaysIds(JSON.parse(text)); } catch { return { error: "it isn't JSON" }; }
   if (!isObj(x) || x.format !== FORMAT) return { error: "it isn't a program saved by this editor" };
   if (x.version !== 1 && x.version !== 2) return { error: `it was saved by a newer version (${String(x.version)})` };
   const c = x.code;

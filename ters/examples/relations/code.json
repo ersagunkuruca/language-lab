@@ -175,7 +175,7 @@
     "09af47d3vdtk2ahprsg57325vs": {
       "id": "09af47d3vdtk2ahprsg57325vs",
       "kind": "ref",
-      "target": "std.pair.pair"
+      "target": "std.tuple2.tuple"
     },
     "2lvhoikrf82i7tid2vgam4ddu1": {
       "id": "2lvhoikrf82i7tid2vgam4ddu1",
@@ -589,7 +589,7 @@
     "2igrqhs6spqbcuhv3stdmhrg6j": {
       "id": "2igrqhs6spqbcuhv3stdmhrg6j",
       "kind": "ref",
-      "target": "std.pair.pair"
+      "target": "std.tuple2.tuple"
     },
     "gdga7sovmevnofct18b1846m94": {
       "id": "gdga7sovmevnofct18b1846m94",
@@ -774,7 +774,7 @@
     "ri4tr7mtj0r67eimm1vk4udpbb": {
       "id": "ri4tr7mtj0r67eimm1vk4udpbb",
       "kind": "ref",
-      "target": "std.pair.pair.fst"
+      "target": "std.tuple2.tuple.first"
     },
     "gaouj92ipiclbhtp8qluq4cb83": {
       "id": "gaouj92ipiclbhtp8qluq4cb83",
@@ -805,7 +805,7 @@
     "oh4vr4hl97vqcom06v32fg6n69": {
       "id": "oh4vr4hl97vqcom06v32fg6n69",
       "kind": "ref",
-      "target": "std.pair.pair.snd"
+      "target": "std.tuple2.tuple.second"
     },
     "7kg7kia58g5g9t65ae1l3435f8": {
       "id": "7kg7kia58g5g9t65ae1l3435f8",
@@ -1000,7 +1000,7 @@
     "6i2qqsf2vl50d2jhni687lev1v": {
       "id": "6i2qqsf2vl50d2jhni687lev1v",
       "kind": "ref",
-      "target": "std.pair.pair"
+      "target": "std.tuple2.tuple"
     },
     "n48c9nad538ogfgv1qg54jnenp": {
       "id": "n48c9nad538ogfgv1qg54jnenp",
@@ -1034,7 +1034,7 @@
     "u319eq5dmbv26ek475j1qp0isf": {
       "id": "u319eq5dmbv26ek475j1qp0isf",
       "kind": "ref",
-      "target": "std.pair.pair.fst"
+      "target": "std.tuple2.tuple.first"
     },
     "71q32stcsuv1r00ofa18190ej8": {
       "id": "71q32stcsuv1r00ofa18190ej8",
@@ -1065,7 +1065,7 @@
     "hosj5n3kr6difl56le4kcbmdke": {
       "id": "hosj5n3kr6difl56le4kcbmdke",
       "kind": "ref",
-      "target": "std.pair.pair.snd"
+      "target": "std.tuple2.tuple.second"
     },
     "tvsvbhs2qhp4imtv0qc8smqpda": {
       "id": "tvsvbhs2qhp4imtv0qc8smqpda",
@@ -1209,7 +1209,7 @@
     "9gaev54lqaieb2c71qb9jh0pm2": {
       "id": "9gaev54lqaieb2c71qb9jh0pm2",
       "kind": "lit",
-      "value": "square roots(\u22121) = ["
+      "value": "square roots(−1) = ["
     },
     "j3koqtp5pdcpcvpip2v0gib6b8": {
       "id": "j3koqtp5pdcpcvpip2v0gib6b8",

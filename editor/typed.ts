@@ -175,10 +175,17 @@ export function changesPublished(code: Code): Id | null {
   return n ? n.id.split(":")[0] : null;
 }
 
+// The check an edit was guarded with, for the editor to draw the edited
+// program from instead of checking it again (I136): the same code under
+// the same pins.
+let lastGuard: { code: Code; pins: Pins; info: Info } | null = null;
+export const guardedInfo = (code: Code, pins: Pins): Info | null => (lastGuard?.code === code && lastGuard.pins === pins ? lastGuard.info : null);
+
 export function guardTyped(before: Info, code: Code, names: Names, select: Id | undefined, note: string): TEdit {
   const lib = changesPublished(code);
   if (lib) return { ok: false, reason: `${names[lib] ?? display[lib] ?? "that"} is published in a module: it is named by what it says, so it can't change` };
   const after = infer(code, { ...display, ...names });
+  lastGuard = { code, pins: programPins, info: after };
   if (after.errors.length > before.errors.length) { const e = nearest(code, after.errors, select); return { ok: false, reason: e.message, ...(e.missing ? { missing: e.missing } : {}) }; }
   return { ok: true, code, names, select, note };
 }
@@ -579,6 +586,9 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
     if (!Object.keys(names).some((id) => names[id] === field && code.nodes[id]?.kind === "field")) return { error: `there's no field named ${field}${closest(field, Object.keys(names).filter((id) => code.nodes[id]?.kind === "field").map((id) => names[id]), scope)}` };
     return typedOut(t.slice(0, dot), code, names, scope);
   }
+  // A match isn't read from text yet (E178): say where one is (I142).
+  const kw = /^(match|fold)\s+(\S.*)$/.exec(t);
+  if (kw) return { error: `a ${kw[1]} isn't read from text yet: the case analysis rows (${kw[1]} ${kw[2]} · a type) write one` };
   if (/^[\p{L}_][\p{L}\p{N}_' ]*$/u.test(t) && !/^(if|then|else)$/.test(t)) return { error: `nothing is named ${t} here${closest(t, scope.keys(), scope)}` };
   return inner ?? r;
 }
@@ -1327,13 +1337,21 @@ const lets = (code: Code, defId: Id): NodeOf<"call">[] => {
 export const isDot = (code: Code, defId: Id, b: Id) => lets(code, defId).some((l) => (code.nodes[l.fn] as NodeOf<"lambda">).params.includes(b));
 
 // Display handles for dots without a name, in reading order.
+// What some ref reads, once per version of the code (I135: every redraw
+// walked all the nodes for it).
+const readSets = new WeakMap<Code["nodes"], Set<Id>>();
+function readTargets(code: Code): Set<Id> {
+  let r = readSets.get(code.nodes);
+  if (!r) readSets.set(code.nodes, (r = new Set(Object.values(code.nodes).flatMap((n) => (n.kind === "ref" ? [n.target] : [])))));
+  return r;
+}
 export function dotHandles(code: Code, defId: Id, names: Names): Names {
   const out: Names = {};
   let k = 0;
   // A step done for what it does, filled and read by nothing, reads as the
   // step itself, for each(…), not ‹•1› = for each(…) (E183); while its
   // value is a hole, the handle is how to reach it.
-  const read = new Set(Object.values(code.nodes).flatMap((n) => (n.kind === "ref" ? [n.target] : [])));
+  const read = readTargets(code);
   for (const l of lets(code, defId)) (code.nodes[l.fn] as NodeOf<"lambda">).params.forEach((p, i) => {
     if (names[p] !== undefined || (!read.has(p) && code.nodes[l.args[i]]?.kind !== "hole")) return;
     out[p] = `•${++k}`;

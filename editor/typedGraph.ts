@@ -242,6 +242,14 @@ export function typedGraph(code: Code, pres: Presentation, info: Info | null, de
         ring = ring.flatMap((x) => next.get(x) ?? []).filter((x) => !seen.has(x) && (seen.add(x), true));
         near = ring.find((x) => last.has(x) && !fresh.has(x));
       }
+      // A let's dot is wired only to a frame's result and to its uses (I137:
+      // Make it a function's `part` landed where the fresh layout had it,
+      // past everything): it goes with what stays nearest it there.
+      if (!near) {
+        const a = arranged.get(k)!;
+        let best = Infinity;
+        for (const [x, p] of arranged) if (last.has(x) && !fresh.has(x)) { const d = Math.hypot(p.x - a.x, p.y - a.y); if (d < best) { best = d; near = x; } }
+      }
       if (!near) continue;
       const a = arranged.get(k)!, was = hooks.at[near] ?? last.get(near)!, now = arranged.get(near)!;
       scene.items.get(k)!.auto = { x: a.x + was.x - now.x, y: a.y + was.y - now.y };

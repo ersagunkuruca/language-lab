@@ -997,33 +997,37 @@ export function buildPrelude(): Module {
     ]) },
   ])));
   // A list's items by position (BACKLOG I83): three examples each wrote
-  // their own. Positions count from 0; a position outside the list gives
-  // `otherwise` (item at) or the list as it was (replace at), so neither
-  // has Choice. Each walks to the position, n steps.
+  // their own. Positions count from 0 and are Ints, as `length` is (L140);
+  // a position outside the list gives `otherwise` (item at) or the list as
+  // it was (replace at), so neither has Choice. Each walks to the
+  // position, n steps.
+  const lt = (a: Id, b: Id) => k.call(INT_OPS.less, a, b);
+  const less1 = (i: Id) => k.call(INT_OPS.sub, i, k.int(1));
   const itemAt = k.def("item at");
   k.define(itemAt, k.fn(["list", "position", "otherwise"], (xs, i, o) => k.match(xs, [
     { variant: NIL, names: [], body: () => o },
-    { variant: CONS, names: ["item", "rest"], body: ([x, rest]) => k.if(k.call(S.less, i, k.lit(-0.5)), o,
-      k.if(k.call(S.less, i, k.lit(0.5)), x, k.call(itemAt, rest, n.sub(i, k.lit(1)), o))) },
+    { variant: CONS, names: ["item", "rest"], body: ([x, rest]) => k.if(lt(i, k.int(0)), o,
+      k.if(lt(i, k.int(1)), x, k.call(itemAt, rest, less1(i), o))) },
   ])));
   const replaceAt = k.def("replace at");
   k.define(replaceAt, k.fn(["list", "position", "by"], (xs, i, by) => k.match(xs, [
     { variant: NIL, names: [], body: () => NIL },
-    { variant: CONS, names: ["item", "rest"], body: ([x, rest]) => k.if(k.call(S.less, i, k.lit(-0.5)), xs,
-      k.if(k.call(S.less, i, k.lit(0.5)), k.call(CONS, by, rest), k.call(CONS, x, k.call(replaceAt, rest, n.sub(i, k.lit(1)), by)))) },
+    { variant: CONS, names: ["item", "rest"], body: ([x, rest]) => k.if(lt(i, k.int(0)), xs,
+      k.if(lt(i, k.int(1)), k.call(CONS, by, rest), k.call(CONS, x, k.call(replaceAt, rest, less1(i), by)))) },
   ])));
   // The first n items, and the rest after them (BACKLOG L135, GAPS round 6
-  // NG3: notebook wrote take for its best five). Counted as item at's
-  // positions are; fewer than n items give them all (take) or none (drop).
+  // NG3: notebook wrote take for its best five). Counted in Ints, as
+  // `length` is (L140); fewer than n items give them all (take) or none
+  // (drop).
   const take = k.def("take");
   k.define(take, k.fn(["list", "count"], (xs, c) => k.match(xs, [
     { variant: NIL, names: [], body: () => NIL },
-    { variant: CONS, names: ["item", "rest"], body: ([x, rest]) => k.if(k.call(S.less, c, k.lit(0.5)), NIL, k.call(CONS, x, k.call(take, rest, n.sub(c, k.lit(1))))) },
+    { variant: CONS, names: ["item", "rest"], body: ([x, rest]) => k.if(lt(c, k.int(1)), NIL, k.call(CONS, x, k.call(take, rest, less1(c)))) },
   ])));
   const drop = k.def("drop");
   k.define(drop, k.fn(["list", "count"], (xs, c) => k.match(xs, [
     { variant: NIL, names: [], body: () => NIL },
-    { variant: CONS, names: ["item", "rest"], body: ([, rest]) => k.if(k.call(S.less, c, k.lit(0.5)), xs, k.call(drop, rest, n.sub(c, k.lit(1)))) },
+    { variant: CONS, names: ["item", "rest"], body: ([, rest]) => k.if(lt(c, k.int(1)), xs, k.call(drop, rest, less1(c))) },
   ])));
   // A Float64 shown to a fixed number of decimals (BACKLOG I93): the
   // Spacetime demo wrote its own `rounded`. Rounds half away from 0 at
@@ -1473,7 +1477,7 @@ export function buildPrelude(): Module {
     [attempt]: "The action's answer as done(answer), or refused(reason) when it aborts: an Abort kept as data, so it can go in a list (Rust's Result is the influence).",
     [valueOrAbort]: "The value in done(value); refused(reason) aborts with the reason again. attempt run backwards.",
     [emptyMap]: "The map with no entries.",
-    [asMap]: "The map of a list of pair(key, value); when a key comes twice, the later pair wins. Keys are kept in compare's order, so a map has one spelling and folds go in key order (Haskell's Data.Map, Rust's BTreeMap).",
+    [asMap]: "The map of a list of (key, value) tuples; when a key comes twice, the later one wins. Keys are kept in compare's order, so a map has one spelling and folds go in key order (Haskell's Data.Map, Rust's BTreeMap).",
     [put]: "The map with key holding value, in place of what it held.",
     [updateAt]: "The map with key holding change(what it held), or change(default) when it held nothing: one walk, where put(m, k, change(first(value at(m, k), default))) looks the key up twice. Counting is update at(counts, word, 0, partially(add, 1)). Haskell's Data.Map alter and Rust's entry API are the same job.",
     [lookup]: "What key holds; no answer when the map hasn't got it, so first(value at(m, k), else d) gives a default.",
@@ -1482,7 +1486,7 @@ export function buildPrelude(): Module {
     [mergeMaps]: "The entries of both maps; where both hold a key, the second's value wins.",
     [keys]: "The keys, in order.",
     [values]: "The values, in the order of their keys.",
-    [entries]: "The entries as pair(key, value), in key order.",
+    [entries]: "The entries as (key, value) tuples, in key order.",
     [mapSize]: "How many keys the map holds.",
     [emptySet]: "The set with no items.",
     [asSet]: "The set of a list's items: in compare's order, each once.",

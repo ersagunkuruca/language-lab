@@ -363,7 +363,7 @@ test("fetch text: the world's body, a failure as an Abort, compiled the same", a
 });
 
 test("a solve with exactly one answer is a plain call: no Choice, no generator", async () => {
-  // A Pair taken apart has exactly one answer (MODES.md, L11d), so the
+  // A tuple taken apart has exactly one answer (MODES.md, L11d), so the
   // function around it is an ordinary function, which takes its answer.
   const r = await both((k) => {
     const make = k.def("make");

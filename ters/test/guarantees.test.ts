@@ -11,12 +11,13 @@ import { infer } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
 import { relate } from "../src/lang/relate.ts";
 import { makeRunner, runMain, toList, type Value } from "../src/lang/run.ts";
-import { CONS, INT_OPS as I, NIL, PAIR_V, S } from "../src/lang/std.ts";
+import { CONS, INT_OPS as I, LIST, NIL, PAIR_V, S } from "../src/lang/std.ts";
+import { LIBRARY } from "../src/lang/library.ts";
 import { CHOICE, CONSOLE, DIVERGE, showType } from "../src/lang/types.ts";
 import { B } from "../src/prelude.ts";
 
-function program(build: (k: Lang) => Id | void) {
-  const k = new Lang();
+function program(build: (k: Lang) => Id | void, known?: Code) {
+  const k = new Lang(known);
   const main = build(k) ?? null;
   const code = base(k.code), names = baseNames(k.names);
   const info = infer(code, names);
@@ -83,6 +84,36 @@ test("size-change: a call that keeps every argument the same size is Diverge", (
     ])));
   });
   assert.ok(p.effects(spin).includes(DIVERGE));
+});
+
+// Recursion through a function that calls what it is given on pieces of
+// its other inputs (BACKLOG L146): `map(args, copy)` over a case's list
+// field shrinks, as sheet's `show formula` does; map over a list holding
+// the input itself, or a function applied to the input whole, doesn't.
+test("size-change: recursion through map over a field's list is total", () => {
+  const lib = (n: string) => Object.keys(LIBRARY.names).find((x) => LIBRARY.names[x] === n && LIBRARY.code.nodes[x]?.kind === "def")!;
+  const map = lib("map");
+  const defs: Record<string, Id> = {};
+  const p = program((k) => {
+    const expr = k.type("expr", [], [["num", [["x", () => k.tref(NUM)]]], ["node", [["args", (self) => k.tref(LIST, k.tref(self))]]]]);
+    const def = (name: string, body: (self: Id, e: Id) => Id) => { const d = k.def(name); defs[name] = d; k.define(d, k.fn(["e"], (e) => k.match(e, [
+      { variant: expr.v.num, names: ["x"], body: ([x]) => k.call(expr.v.num, x) },
+      { variant: expr.v.node, names: ["args"], body: ([args]) => k.call(expr.v.node, body(d, args)) },
+    ]))); };
+    def("copy", (self, args) => k.call(map, args, self));
+    def("copy each", (self, args) => k.call(map, args, k.fn(["a"], (a) => k.call(self, a))));
+    const applyTo = k.def("apply to");
+    k.define(applyTo, k.fn(["x", "f"], (x, f) => k.call(f, x)));
+    // map over a list that holds the whole input, not a piece of it
+    const d1 = k.def("again"); defs.again = d1;
+    k.define(d1, k.fn(["e"], (e) => k.call(expr.v.node, k.call(map, k.list(e), d1))));
+    // a function that is given the input whole
+    const d2 = k.def("whole"); defs.whole = d2;
+    k.define(d2, k.fn(["e"], (e) => k.call(applyTo, e, d2)));
+  }, LIBRARY.code);
+  assert.deepEqual(p.errors, []);
+  for (const d of ["copy", "copy each"]) assert.ok(!p.effects(defs[d]).includes(DIVERGE), `${d}: ${p.type(defs[d])}`);
+  for (const d of ["again", "whole"]) assert.ok(p.effects(defs[d]).includes(DIVERGE), `${d}: ${p.type(defs[d])}`);
 });
 
 // Bounded counting (BACKLOG L46): an Int moving towards a bound its guard
