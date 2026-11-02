@@ -50,7 +50,7 @@ import { dependencies, subtree } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { ARRAY, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, STRING, type Row, type Type } from "../../ters/src/lang/types.ts";
-import { ABORT, ABORT_OP, ALGEBRAIC_V, ARRAY_OPS, BOOL, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, ORDER_V, PAIR_V, RATIO, S, SHOW_ANY, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
+import { ABORT, ABORT_OP, ALGEBRAIC_V, ARRAY_OPS, BOOL, CASE_NAME, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, ORDER_V, PAIR_V, RATIO, S, SHOW_ANY, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
 import { liftLets } from "../../ters/src/lang/lift-lets.ts";
 import { inlineLists } from "./inline-lets.ts";
 import { STOPS } from "./stops.ts";
@@ -746,6 +746,17 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           if (!t) throw new Refused(`shows ${whyNot(zonk(n.args[0]))}`);
           const [x] = args();
           return shown(t === "f64" ? fin(f, x) : x, t, f, tail);
+        }
+        if (opts.data && target === CASE_NAME) {
+          // case name (L162, C99): show's walk stopped at the tag, the
+          // case's name as a text constant (run.ts caseName); a value made
+          // by no case (a number, a text, an array, a function) gives "".
+          const t = stype(zonk(n.args[0]));
+          if (!t) throw new Refused(`names the case of ${whyNot(zonk(n.args[0]))}`);
+          const [x] = args(), text = (v: string): SExpr => ({ k: "text", v }), s = f.locals.push(t) - 1;
+          if (t === "i32") return { k: "if", cond: x, then: text(nm(TRUE)), else: text(nm(FALSE)), t: "text" };
+          if (isData(t)) return { k: "case", scrut: x, s, t, result: "text", arms: t.cases.map((c) => text(nm(c.variant))) };
+          return { k: "let", i: s, value: x, body: text(isRecord(t) ? nm(t.variant) : "") };
         }
         if (opts.data && target === INT_OPS.lowestTerms) {
           // int.ts's lowest terms from the runtime's gcd and exact division:

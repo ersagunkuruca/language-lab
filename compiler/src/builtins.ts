@@ -110,7 +110,7 @@ export const TARGETS: Record<Id, Target> = {
   [SET]: { js: written("setCall(): `$setPath` along the field written in place"), scalar: no("set takes the field it sets written in place; records in the scalar profile are built whole") },
   // Cases print with the names the program was compiled with ($names).
   [SHOW_ANY]: { js: op(([a]) => `$showAny(${a}, $names)`), scalar: DATA },
-  [CASE_NAME]: { js: op(([a]) => `$caseName(${a}, $names)`), scalar: DATA },
+  [CASE_NAME]: { js: op(([a]) => `$caseName(${a}, $names)`), scalar: written("the case's name as a text constant, a case on the tag (C99)") },
   // Cases compare in the order their types declare them ($order).
   [COMPARE]: { js: op(([a, b]) => `$compare(${a}, ${b}, $order)`), scalar: DATA },
   // The world: the runtime's World, set by whoever runs the program.

@@ -9,7 +9,7 @@ import { norm } from "../../ters/src/lang/int.ts";
 import { isData, isFn, isRecord, lowerScalar, type LType } from "../src/scalar.ts";
 import { emitWasm, fromInt, fromText, instantiate, runMain, toInt, toText } from "../src/wasm.ts";
 import { load } from "../src/program.ts";
-import { area, changeInputs, changes, choices, recursiveLets, closures, escapes, fractionInputs, fractions, maths, ordered, orderedInputs, roses, sameLists, searches, several, showInputs, shows, stopsWith, texts, worldly } from "../src/fixtures.ts";
+import { area, caseNameInputs, caseNames, changeInputs, changes, choices, recursiveLets, closures, escapes, fractionInputs, fractions, maths, ordered, orderedInputs, roses, sameLists, searches, several, showInputs, shows, stopsWith, texts, worldly } from "../src/fixtures.ts";
 import { nodeWorld } from "../../ters/src/lang/world.ts";
 import { WASI } from "node:wasi";
 import { closeSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -831,4 +831,25 @@ test("changed in WebAssembly: one field, one item, one inside the other, a place
       assert.equal(flat(got), flat(outcome(r, def, xs)), name);
     }
   }
+});
+
+test("case name in WebAssembly: the evaluator's names on every kind of value (C99)", async () => {
+  const p = caseNames();
+  assert.deepEqual(p.info.errors.map((e) => e.message), []);
+  const lowered = lowerScalar(p.code, p.info, p.names, Object.values(p.defs), { data: true });
+  assert.deepEqual([...lowered.refused.entries()], []);
+  const w = await instantiate(emitWasm(lowered)) as unknown as Exports;
+  const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });
+  const inputs = caseNameInputs();
+  const value = (x: unknown): Value => (Array.isArray(x) ? toList(x.map(value)) : x as Value);
+  const seen = new Set<string>();
+  for (const [name, def] of Object.entries(p.defs)) {
+    const f = lowered.funcs.find((g) => g.def === def)!;
+    for (const xs of inputs[name].map((ys) => ys.map(value))) {
+      const got = answer(w, f, (w[f.name] as (...a: unknown[]) => unknown)(...xs.map((x, i) => toWasm(w, x, f.params[i]))));
+      assert.equal(flat(got), flat(outcome(r, def, xs)), name);
+      seen.add(got as string);
+    }
+  }
+  assert.deepEqual([...seen].sort(), ["", "add", "cons", "false", "halt", "jump", "nil", "none", "some", "true", "tuple", "vec2"]);
 });

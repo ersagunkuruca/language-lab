@@ -5,7 +5,7 @@ import { Lang } from "../../ters/src/lang/dsl.ts";
 import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { B } from "../../ters/src/prelude.ts";
-import { ABORT_OP, ARITH, ARRAY_OPS, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, INT_OPS, IO, LIST, NIL, NONE, PAIR_V, S, SECOND, SHOW_ANY, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
+import { ABORT_OP, ARITH, ARRAY_OPS, CASE_NAME, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, INT_OPS, IO, LIST, NIL, NONE, PAIR_V, S, SECOND, SHOW_ANY, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
 // S as the pga fixture names it is its Space type.
 const STD = S;
 import { INT, NUMBER, STRING } from "../../ters/src/lang/types.ts";
@@ -601,6 +601,38 @@ export function changeInputs(): Record<string, unknown[][]> {
     deep: is.flatMap((i) => [[i, 1n, 8n], [i, 5n, 8n]]),
     far: [[Array.from({ length: 200000 }, (_, i) => BigInt(i)), 199990n, 7n], [[], 0n, 7n]],
   };
+}
+
+// case name (L162, C99) on every kind of value: a case of the program's
+// own type, Optional's, a list's, a Bool's, a record's, and "" for a
+// number and a text.
+export function caseNames() {
+  const k = new Lang(LIBRARY.code);
+  const d = (name: string, params: string[], body: (...xs: Id[]) => Id) => { const x = k.def(name); k.define(x, k.fn(params, body)); return x; };
+  const num = () => k.tref(NUMBER);
+  const Instr = k.type("Instr", [], [["halt", []], ["add", [["to", num], ["from", num]]], ["jump", [["at", num]]]]);
+  const Vec = k.type("Vec2", [], [["vec2", [["x", num], ["y", num]]]]);
+  const named = (x: Id) => k.call(CASE_NAME, x);
+  const below = (x: Id, v: number) => k.call(S.less, x, k.lit(v));
+  const n = (x: Id) => k.call(B.add, x, k.lit(0));
+  const defs = {
+    instrs: d("instrs", ["x"], (x) => named(k.if(below(x, 0), k.x(Instr.v.halt), k.if(below(x, 1), k.call(Instr.v.add, x, x), k.call(Instr.v.jump, x))))),
+    options: d("options", ["x"], (x) => named(k.if(below(x, 0), k.x(NONE), k.call(SOME, x)))),
+    lists: d("lists", ["xs"], (xs) => named(k.call(lib0("map"), xs, k.fn(["v"], (v) => n(v))))),
+    bools: d("bools", ["x"], (x) => named(below(x, 0))),
+    records: d("records", ["x"], (x) => named(k.call(Vec.v.vec2, x, x))),
+    pairs: d("pairs", ["x"], (x) => named(k.call(PAIR_V, n(x), k.lit("a")))),
+    numbers: d("numbers", ["x"], (x) => named(n(x))),
+    texts: d("texts", ["t"], (t) => named(k.call(S.concat, t, k.lit("")))),
+  };
+  const code = base(k.code);
+  const names = { ...baseNames(), ...k.names };
+  return { code, names, info: infer(code, names, undefined, checkOptions), defs };
+}
+const lib0 = (name: string) => LIBRARY.code.defs.find((x) => LIBRARY.names[x] === name)!;
+export function caseNameInputs(): Record<string, unknown[][]> {
+  const xs = [[-1], [0.5], [3]];
+  return { instrs: xs, options: xs, lists: [[[]], [[1, 2]]], bools: xs, records: xs, pairs: xs, numbers: xs, texts: [[""], ["x"]] };
 }
 
 // Inputs for ordered(), by function: near and equal Float64s, Ints past
