@@ -49,6 +49,7 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 - **shifted down** : `(Int, Int) -> Int`. floor(a / 2ⁿ): a shifted down n places, rounded towards −∞, so shifted down(−1, 1) is −1. A negative n shifts up. Fixed's · uses it.
 - **show** : `(Int) -> Text`. An Int as text.
 - **range** : `(Int) -> List Int`. The Ints 0, 1, … up to n − 1, as a list.
+- **range from** : `(Int, Int) -> List Int`. The Ints from start up to end, end left out: range from(2, 5) is [2, 3, 4]. Empty when end is not after start.
 - **Rational** (type). An exact fraction, top/bottom, always in lowest terms. The same + − · < work on it. Make one with fraction(1, 3) or as fraction(n); its constructor ratio is private to the library, which keeps the rule.
 - **fraction** : `(Int, Int) -[Choice]-> Rational`. top/bottom, exactly, in lowest terms (Euclid's algorithm, textbook); no answer when bottom is 0.
 - **as fraction** : `(Int) -> Rational`. The whole number n as a fraction, n/1.

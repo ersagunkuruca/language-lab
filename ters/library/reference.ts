@@ -33,7 +33,7 @@ export const SECTIONS: Section[] = [
     ids: [...b("arith.add", "arith.sub", "arith.mul", "arith.neg", "arith.less"), ...t("arithmetic", "ordered"), ...b("byItsWays"), ...prelude("at most", "more than", "at least", "smaller", "larger"),
       ...t("trig"), ...["sin", "cos", "tan", "exp", "log"].map((op) => `std.trig.trig.${op}`),
       ...b("div", "sqrt", "pow", "atan2", "abs", "floor", "mod", "float32", "show", "range"), ...prelude("show decimals"),
-      ...b("int.quotient", "int.remainder", "int.power", "int.lowestTerms", "int.read", "int.toNumber", "int.wholePart", "int.abs", "int.shiftDown", "int.show", "int.range"),
+      ...b("int.quotient", "int.remainder", "int.power", "int.lowestTerms", "int.read", "int.toNumber", "int.wholePart", "int.abs", "int.shiftDown", "int.show", "int.range"), ...prelude("range from"),
       ...t("rational"), ...prelude("fraction", "as fraction", "divide fractions", "show fraction", "fraction as float64"),
       ...t("complex"), ...prelude("as complex", "i", "complex conjugate", "modulus", "angle of", "from polar", "divide complex", "complex exp", "complex sqrt", "complex log", "complex power", "complex asin", "complex acos", "show complex", "table product", "complex table", "clifford table", "clifford algebra", "clifford product", "clifford reverse", "clifford versor inverse", "clifford sandwich", "clifford reflect", "clifford project", "clifford exp", "clifford outer", "clifford inner", "clifford grade", "clifford dual", "clifford undual", "clifford regressive", "clifford part", "clifford with part"), ...t("tableEntry"), ...t("algebra"),
       ...t("mat2", "mat3", "mat4"), ...prelude("matrix table"),
