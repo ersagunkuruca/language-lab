@@ -585,7 +585,8 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| L176 | `read number : (Text) -[Choice]-> Float64` reads a decimal with a sign and an exponent ("-30.5", "1e3"), no answer for anything else or a value too large; evaluator and compiled JS. C and WASM are C108 | this PR |
+| L174 | `whole of(x) -> Int` (the whole number at or below x, total since a Float64 is finite) and `divided or(a, b, otherwise)`, so clinic's `int of` and `share` are library calls. Int quotient and remainder by a literal stay Choice: a nonzero divisor isn't known to the checker yet (L125b's fact) | this PR |
+| L176 | `read number : (Text) -[Choice]-> Float64` reads a decimal with a sign and an exponent ("-30.5", "1e3"), no answer for anything else or a value too large; evaluator and compiled JS. C and WASM are C108 | #1158 |
 | L164c | A match on values: each arm a literal of the examined value's type, none twice, the rest arm required; written out as a chain of `equal` tests before anything runs (src/lang/literal-match.ts). The editor's half is E225 | #1156 |
 | L173 | machine's `op name` is `case name`, board's `tag in` is `contains` and `stage from key` is `inverse(stage key, k)`, edited through `lab mcp`. The rest is L173b | #1151 |
 | L175 | clinic's counts are no longer done in Fixed: its two `as float64` reads were the text reader's pick of Fixed's of four (they're Int's now, and the compiled module has no `_at_Fixed`). Defaulting a whole-literal result to Int at the definition was tried and dropped: 14 tests broke where callers use that result as a Float64, and a whole literal being any Number is the rule (WHAT-NUMBER-MEANS.md). The pick is the Editor lane's E226 | #1149 |

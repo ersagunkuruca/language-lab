@@ -4707,6 +4707,155 @@
         ],
         "body": "@h7nla8kekh6mepta8fskumeb6k:4"
       },
+      "@ksd4egbi7rrhfg8dnilgrcmp2e": {
+        "id": "@ksd4egbi7rrhfg8dnilgrcmp2e",
+        "kind": "def",
+        "body": "@ksd4egbi7rrhfg8dnilgrcmp2e:1"
+      },
+      "@ksd4egbi7rrhfg8dnilgrcmp2e:2": {
+        "id": "@ksd4egbi7rrhfg8dnilgrcmp2e:2",
+        "kind": "binder"
+      },
+      "@ksd4egbi7rrhfg8dnilgrcmp2e:7": {
+        "id": "@ksd4egbi7rrhfg8dnilgrcmp2e:7",
+        "kind": "ref",
+        "target": "builtin.int.wholePart"
+      },
+      "@ksd4egbi7rrhfg8dnilgrcmp2e:8": {
+        "id": "@ksd4egbi7rrhfg8dnilgrcmp2e:8",
+        "kind": "ref",
+        "target": "@ksd4egbi7rrhfg8dnilgrcmp2e:2"
+      },
+      "@ksd4egbi7rrhfg8dnilgrcmp2e:6": {
+        "id": "@ksd4egbi7rrhfg8dnilgrcmp2e:6",
+        "kind": "call",
+        "fn": "@ksd4egbi7rrhfg8dnilgrcmp2e:7",
+        "args": [
+          "@ksd4egbi7rrhfg8dnilgrcmp2e:8"
+        ]
+      },
+      "@ksd4egbi7rrhfg8dnilgrcmp2e:5": {
+        "id": "@ksd4egbi7rrhfg8dnilgrcmp2e:5",
+        "kind": "lambda",
+        "params": [],
+        "body": "@ksd4egbi7rrhfg8dnilgrcmp2e:6"
+      },
+      "@ksd4egbi7rrhfg8dnilgrcmp2e:10": {
+        "id": "@ksd4egbi7rrhfg8dnilgrcmp2e:10",
+        "kind": "lit",
+        "value": 0,
+        "of": "type.int"
+      },
+      "@ksd4egbi7rrhfg8dnilgrcmp2e:9": {
+        "id": "@ksd4egbi7rrhfg8dnilgrcmp2e:9",
+        "kind": "lambda",
+        "params": [],
+        "body": "@ksd4egbi7rrhfg8dnilgrcmp2e:10"
+      },
+      "@ksd4egbi7rrhfg8dnilgrcmp2e:4": {
+        "id": "@ksd4egbi7rrhfg8dnilgrcmp2e:4",
+        "kind": "ref",
+        "target": "builtin.first"
+      },
+      "@ksd4egbi7rrhfg8dnilgrcmp2e:3": {
+        "id": "@ksd4egbi7rrhfg8dnilgrcmp2e:3",
+        "kind": "call",
+        "fn": "@ksd4egbi7rrhfg8dnilgrcmp2e:4",
+        "args": [
+          "@ksd4egbi7rrhfg8dnilgrcmp2e:5",
+          "@ksd4egbi7rrhfg8dnilgrcmp2e:9"
+        ]
+      },
+      "@ksd4egbi7rrhfg8dnilgrcmp2e:1": {
+        "id": "@ksd4egbi7rrhfg8dnilgrcmp2e:1",
+        "kind": "lambda",
+        "params": [
+          "@ksd4egbi7rrhfg8dnilgrcmp2e:2"
+        ],
+        "body": "@ksd4egbi7rrhfg8dnilgrcmp2e:3"
+      },
+      "@no6atci7fqgfpmm1c8bj00gvg3": {
+        "id": "@no6atci7fqgfpmm1c8bj00gvg3",
+        "kind": "def",
+        "body": "@no6atci7fqgfpmm1c8bj00gvg3:1"
+      },
+      "@no6atci7fqgfpmm1c8bj00gvg3:2": {
+        "id": "@no6atci7fqgfpmm1c8bj00gvg3:2",
+        "kind": "binder"
+      },
+      "@no6atci7fqgfpmm1c8bj00gvg3:3": {
+        "id": "@no6atci7fqgfpmm1c8bj00gvg3:3",
+        "kind": "binder"
+      },
+      "@no6atci7fqgfpmm1c8bj00gvg3:4": {
+        "id": "@no6atci7fqgfpmm1c8bj00gvg3:4",
+        "kind": "binder"
+      },
+      "@no6atci7fqgfpmm1c8bj00gvg3:9": {
+        "id": "@no6atci7fqgfpmm1c8bj00gvg3:9",
+        "kind": "ref",
+        "target": "builtin.div"
+      },
+      "@no6atci7fqgfpmm1c8bj00gvg3:10": {
+        "id": "@no6atci7fqgfpmm1c8bj00gvg3:10",
+        "kind": "ref",
+        "target": "@no6atci7fqgfpmm1c8bj00gvg3:2"
+      },
+      "@no6atci7fqgfpmm1c8bj00gvg3:11": {
+        "id": "@no6atci7fqgfpmm1c8bj00gvg3:11",
+        "kind": "ref",
+        "target": "@no6atci7fqgfpmm1c8bj00gvg3:3"
+      },
+      "@no6atci7fqgfpmm1c8bj00gvg3:8": {
+        "id": "@no6atci7fqgfpmm1c8bj00gvg3:8",
+        "kind": "call",
+        "fn": "@no6atci7fqgfpmm1c8bj00gvg3:9",
+        "args": [
+          "@no6atci7fqgfpmm1c8bj00gvg3:10",
+          "@no6atci7fqgfpmm1c8bj00gvg3:11"
+        ]
+      },
+      "@no6atci7fqgfpmm1c8bj00gvg3:7": {
+        "id": "@no6atci7fqgfpmm1c8bj00gvg3:7",
+        "kind": "lambda",
+        "params": [],
+        "body": "@no6atci7fqgfpmm1c8bj00gvg3:8"
+      },
+      "@no6atci7fqgfpmm1c8bj00gvg3:13": {
+        "id": "@no6atci7fqgfpmm1c8bj00gvg3:13",
+        "kind": "ref",
+        "target": "@no6atci7fqgfpmm1c8bj00gvg3:4"
+      },
+      "@no6atci7fqgfpmm1c8bj00gvg3:12": {
+        "id": "@no6atci7fqgfpmm1c8bj00gvg3:12",
+        "kind": "lambda",
+        "params": [],
+        "body": "@no6atci7fqgfpmm1c8bj00gvg3:13"
+      },
+      "@no6atci7fqgfpmm1c8bj00gvg3:6": {
+        "id": "@no6atci7fqgfpmm1c8bj00gvg3:6",
+        "kind": "ref",
+        "target": "builtin.first"
+      },
+      "@no6atci7fqgfpmm1c8bj00gvg3:5": {
+        "id": "@no6atci7fqgfpmm1c8bj00gvg3:5",
+        "kind": "call",
+        "fn": "@no6atci7fqgfpmm1c8bj00gvg3:6",
+        "args": [
+          "@no6atci7fqgfpmm1c8bj00gvg3:7",
+          "@no6atci7fqgfpmm1c8bj00gvg3:12"
+        ]
+      },
+      "@no6atci7fqgfpmm1c8bj00gvg3:1": {
+        "id": "@no6atci7fqgfpmm1c8bj00gvg3:1",
+        "kind": "lambda",
+        "params": [
+          "@no6atci7fqgfpmm1c8bj00gvg3:2",
+          "@no6atci7fqgfpmm1c8bj00gvg3:3",
+          "@no6atci7fqgfpmm1c8bj00gvg3:4"
+        ],
+        "body": "@no6atci7fqgfpmm1c8bj00gvg3:5"
+      },
       "@b79rmbj8j5i50lftl5a2gocpm7": {
         "id": "@b79rmbj8j5i50lftl5a2gocpm7",
         "kind": "def",
@@ -61987,6 +62136,8 @@
       "@9jf2t6u7u41ic33e26eotbapan",
       "@h7nla8kekh6mepta8fskumeb6k",
       "@b79rmbj8j5i50lftl5a2gocpm7",
+      "@ksd4egbi7rrhfg8dnilgrcmp2e",
+      "@no6atci7fqgfpmm1c8bj00gvg3",
       "@kns2kgot84jr2lfre0vbl00j9q",
       "@3ghl6cjivv5vaeuti6ht2gip8a",
       "@gtmcml6c0jng71egbc2grgied0",
@@ -63073,6 +63224,68 @@
               "args": []
             }
           ]
+        },
+        "eff": {
+          "effs": [],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
+    "@ksd4egbi7rrhfg8dnilgrcmp2e": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "type.number",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "type.int",
+          "args": []
+        },
+        "eff": {
+          "effs": [],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
+    "@no6atci7fqgfpmm1c8bj00gvg3": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "type.number",
+            "args": []
+          },
+          {
+            "t": "con",
+            "id": "type.number",
+            "args": []
+          },
+          {
+            "t": "con",
+            "id": "type.number",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "type.number",
+          "args": []
         },
         "eff": {
           "effs": [],
@@ -73766,6 +73979,12 @@
     "@h7nla8kekh6mepta8fskumeb6k": "flat map",
     "@h7nla8kekh6mepta8fskumeb6k:2": "list",
     "@h7nla8kekh6mepta8fskumeb6k:3": "f",
+    "@ksd4egbi7rrhfg8dnilgrcmp2e": "whole of",
+    "@ksd4egbi7rrhfg8dnilgrcmp2e:2": "x",
+    "@no6atci7fqgfpmm1c8bj00gvg3": "divided or",
+    "@no6atci7fqgfpmm1c8bj00gvg3:2": "a",
+    "@no6atci7fqgfpmm1c8bj00gvg3:3": "b",
+    "@no6atci7fqgfpmm1c8bj00gvg3:4": "otherwise",
     "@b79rmbj8j5i50lftl5a2gocpm7": "range from",
     "@b79rmbj8j5i50lftl5a2gocpm7:2": "start",
     "@b79rmbj8j5i50lftl5a2gocpm7:3": "end",
@@ -75335,6 +75554,8 @@
     "@ssemhlqkj8mqo139vtu32vk2ji": "Each item with its position, counting from 0: numbered([\"a\", \"b\"]) is [(0, \"a\"), (1, \"b\")].",
     "@v6mnt13ndlbrsgos2r5ntqt875": "The first item that passes the test, or none: first where([3, 8, 9], (x) ↦ x > 5) is some(8).",
     "@m034i4qkfti1rvbsi8jsr0sf4d": "Where the item first is in the list, from 0, or none: position of([\"a\", \"b\"], \"b\") is some(1).",
+    "@ksd4egbi7rrhfg8dnilgrcmp2e": "The whole number at or below x, as an Int: whole of(2.7) is 2, whole of(-0.5) is -1. Always an answer, since a Float64 is finite (whole part is the same as a Choice).",
+    "@no6atci7fqgfpmm1c8bj00gvg3": "a / b, or otherwise when b is 0: divided or(waited, patients, 0) is the mean, or 0 with no patients.",
     "@cjrjs4jets8sk57qb33a3abuji": "Whether the item is in the list: contains([1, 2], 2) is true. (has is a Set's.)",
     "@jl9isr4knkin0hfcfl9sp63798": "The largest item by <, or none for an empty list: largest of([3, 9, 4]) is some(9).",
     "@dikfj810b1uob7ovc5f0940o4b": "The smallest item by <, or none for an empty list: smallest of([3, 9, 4]) is some(3).",
@@ -75531,6 +75752,8 @@
     "@9jf2t6u7u41ic33e26eotbapan",
     "@h7nla8kekh6mepta8fskumeb6k",
     "@b79rmbj8j5i50lftl5a2gocpm7",
+    "@ksd4egbi7rrhfg8dnilgrcmp2e",
+    "@no6atci7fqgfpmm1c8bj00gvg3",
     "@kns2kgot84jr2lfre0vbl00j9q",
     "@3ghl6cjivv5vaeuti6ht2gip8a",
     "@n58n0psu4gm2r12rl3bh6qp2t1",
