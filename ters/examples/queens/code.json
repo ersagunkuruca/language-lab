@@ -646,7 +646,7 @@
     "cb670b42": {
       "id": "cb670b42",
       "kind": "ref",
-      "target": "builtin.show"
+      "target": "builtin.int.show"
     },
     "5527fcd0": {
       "id": "5527fcd0",

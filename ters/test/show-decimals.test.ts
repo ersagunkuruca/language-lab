@@ -29,7 +29,7 @@ test("show decimals: fixed places, trailing zeros kept, no -0", async () => {
   const names = cases.map(([x, p], i) => { const d = k.def(`case ${i}`); k.define(d, k.call(lib("show decimals"), k.lit(x), k.lit(p))); return `case ${i}`; });
   const code = base(k.code), nm = baseNames(k.names), info = infer(code, nm, undefined, checkOptions);
   assert.deepEqual(info.errors.map((e) => e.message), []);
-  assert.equal(showType(info.subst.zonk(info.typeOf.get(lib("show decimals"))!), nm), "(Float64, Float64) -> Text");
+  assert.equal(showType(info.subst.zonk(info.typeOf.get(lib("show decimals"))!), nm), "(Float64, Int) -> Text");
   const r = makeRunner(code, info, { print: () => {}, names: nm });
   const defOf = (n: string) => code.defs.find((d) => nm[d] === n)! as Id;
   assert.deepEqual(names.map((n) => r.value(defOf(n)) as Value), cases.map(([, , want]) => want));

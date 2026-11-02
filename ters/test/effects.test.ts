@@ -136,7 +136,7 @@ test("a case runs outside its handler: logging from a Log case goes to the next 
 test("Log may run under Choice: it isn't the world", () => {
   const p = program((k) => {
     const main = k.def("main");
-    k.define(main, k.thunk(() => k.call(S.print, show(k, k.call(S.count, k.thunk(() =>
+    k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.call(S.count, k.thunk(() =>
       k.let("x", k.call(S.oneOf, k.list(k.lit(1), k.lit(2))), (x) => k.seq(k.call(LOG_OP, show(k, x)), x))))))));
     return main;
   });
@@ -374,7 +374,7 @@ test("a printer passed as a parameter isn't run under a Choice either", () => {
 test("a printer taken out of a list and called under a search is refused", () => {
   const p = program((k) => {
     const main = k.def("main");
-    k.define(main, k.thunk(() => k.call(S.print, show(k, k.call(S.count, k.thunk(() => k.let("x", k.call(S.oneOf, k.list(k.lit(1), k.lit(2), k.lit(3))), () =>
+    k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.call(S.count, k.thunk(() => k.let("x", k.call(S.oneOf, k.list(k.lit(1), k.lit(2), k.lit(3))), () =>
       k.match(k.list(k.fn(["s"], (s) => k.call(S.print, s))), [
         { variant: "std.list.cons", names: ["f", "rest"], body: ([f]) => k.seq(k.call(f, k.lit("trying")), k.call(S.fail)) },
         { variant: "std.list.nil", names: [], body: () => k.call(S.fail) },
@@ -389,10 +389,10 @@ test("code beside a search may act, a function that runs one may too, and it say
     // prints, and runs a pure search: fine
     const main = k.def("main");
     k.define(main, k.thunk(() => k.seq(k.call(S.print, k.lit("searching")), k.call(IO.writeFile, k.lit("log"), k.lit("x")),
-      k.call(S.print, show(k, k.call(S.count, k.thunk(() => k.call(S.oneOf, k.list(k.lit(1), k.lit(2))))))))));
+      k.call(S.print, k.call(SHOW_ANY, k.call(S.count, k.thunk(() => k.call(S.oneOf, k.list(k.lit(1), k.lit(2))))))))));
     // a function that prints and runs a search on what it is given
     const report = k.def("report");
-    k.define(report, k.fn(["g"], (g) => k.call(S.print, show(k, k.call(S.count, g)))));
+    k.define(report, k.fn(["g"], (g) => k.call(S.print, k.call(SHOW_ANY, k.call(S.count, g)))));
     const pure = k.def("pure use");
     k.define(pure, k.thunk(() => k.call(report, k.thunk(() => k.call(S.oneOf, k.list(k.lit(1)))))));
     const loud = k.def("loud use");

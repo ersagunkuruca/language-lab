@@ -857,7 +857,7 @@ export function buildPrelude(): Module {
   ]);
   const cliffordGrade = k.def("clifford grade");
   k.define(cliffordGrade, k.fn(["algebra", "grade", "x"], (al, g, x) => parts(al, ({ blades }) => reweigh(blades, x, (b, e) =>
-    k.if(k.call(S.equal, k.call(gradeOf, b), g), scaledBy(along(x, e), e), k.call(S.mapParts, k.fn(["part"], () => k.lit(0)), x))))));
+    k.if(k.call(S.equal, k.call(gradeOf, b), k.call(INT_OPS.toNumber, g)), scaledBy(along(x, e), e), k.call(S.mapParts, k.fn(["part"], () => k.lit(0)), x))))));
   // The dual by complement, which works in degenerate algebras too
   // (projective geometric algebra, where the pseudoscalar squares to 0):
   // e_A goes to ± e_Ā, Ā the vectors A doesn't have, signed so that
@@ -889,7 +889,7 @@ export function buildPrelude(): Module {
     { variant: NIL, names: [], body: () => k.lit(1) },
     { variant: CONS, names: ["v", "later"], results: [null, "the later ones' sign"], body: ([v, later], [, r]) => k.fold(later, [
       { variant: NIL, names: [], body: () => r! },
-      { variant: CONS, names: ["w", "more"], results: [null, "with more"], body: ([w], [, m]) => k.if(k.call(S.less, w, v), k.call(B.neg, m!), m!) },
+      { variant: CONS, names: ["w", "more"], results: [null, "with more"], body: ([w], [, m]) => k.if(k.call(INT_OPS.less, w, v), k.call(B.neg, m!), m!) },
     ]) },
   ])));
   // The blade with those vectors, as clifford algebra lists them: for each
@@ -897,7 +897,7 @@ export function buildPrelude(): Module {
   const namedBlade = (sq: Id, vs: Id) => k.call(map, k.call(S.range, k.call(INT_OPS.toNumber, k.call(length, sq))), k.fn(["position"], (i) =>
     k.fold(vs, [
       { variant: NIL, names: [], body: () => FALSE },
-      { variant: CONS, names: ["v", "others"], results: [null, "among the others"], body: ([v], [, r]) => k.call(S.or, k.call(S.equal, v, n.add(i, k.lit(1))), r!) },
+      { variant: CONS, names: ["v", "others"], results: [null, "among the others"], body: ([v], [, r]) => k.call(S.or, k.call(S.equal, k.call(INT_OPS.toNumber, v), n.add(i, k.lit(1))), r!) },
     ])));
   // The sign is 0 for no blade: a blade with fewer vectors than were named.
   const byBlade = (al: Id, x: Id, vs: Id, body: (sign: Id, element: Id) => Id) => parts(al, ({ squares: sq, blades }) =>
@@ -1067,12 +1067,12 @@ export function buildPrelude(): Module {
       k.call(S.show, k.call(S.mod, k.call(S.floor, n.div(m, k.call(B.pow, k.lit(10), n.sub(n.sub(c, k.lit(1)), i)))), k.lit(10))), after!) },
   ])));
   const showDecimals = k.def("show decimals");
-  k.define(showDecimals, k.fn(["x", "places"], (x, places) => k.let("scale", k.call(B.pow, k.lit(10), places), (scale) =>
+  k.define(showDecimals, k.fn(["x", "places"], (x, wholePlaces) => k.let("places as float64", k.call(INT_OPS.toNumber, wholePlaces), (places) => k.let("scale", k.call(B.pow, k.lit(10), places), (scale) =>
     k.let("steps", k.call(S.floor, n.add(n.mul(k.call(S.abs, x), scale), k.lit(0.5))), (m) =>
       k.let("whole", k.call(S.floor, n.div(m, scale)), (w) =>
         k.let("text", k.if(k.call(S.less, places, k.lit(0.5)), k.call(S.show, w),
           k.call(S.concat, k.call(S.show, w), k.call(S.concat, k.lit("."), k.call(paddedDigits, n.sub(m, n.mul(w, scale)), places)))), (text) =>
-          k.if(k.call(S.and, k.call(S.less, x, k.lit(0)), k.call(S.less, k.lit(0), m)), k.call(S.concat, k.lit("-"), text), text)))))));
+          k.if(k.call(S.and, k.call(S.less, x, k.lit(0)), k.call(S.less, k.lit(0), m)), k.call(S.concat, k.lit("-"), text), text))))))));
   const sortBy = k.def("sort by");
   k.define(sortBy, k.fn(["list", "key"], (xs, key) => k.fold(
     k.fold(xs, [
