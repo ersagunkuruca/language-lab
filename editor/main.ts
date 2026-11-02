@@ -2247,10 +2247,18 @@ const typeText = (tid: Id, names: Names): string => {
 // arguments, a picker for each, nested: Pair, then Int and Text. `none`
 // adds a first choice of no type at all; a type the pickers can't show
 // (a function's) is kept until another is picked.
+// A field's type as the pickers write one: a tref of trefs, or null.
+function typeSpecOf(t: Id): Top.TypeSpec | null {
+  const n = node(t);
+  if (n?.kind !== "tref") return null;
+  const args = n.args.map(typeSpecOf);
+  return args.every(Boolean) ? { target: n.target, args: args as Top.TypeSpec[] } : null;
+}
+
 function typePicker(id: string, type: Id, names: Names, current: Id | null, changed: () => void, none?: string, variant?: Id) {
   // The program's own types before the library's, and a name both have
   // marked on the library's (E217).
-  const all = Top.typeHeads(doc.code, type, variant), mine = (x: { target: Id }) => !LIBRARY.code.nodes[x.target];
+  const all = Top.typeHeads(doc.code, type, variant), mine = (x: { target: Id }) => LIBRARY.code.nodes[x.target]?.kind !== "def";
   const heads = [...all.filter(mine), ...all.filter((x) => !mine(x))];
   const label = (x: { target: Id }) => {
     const n = names[x.target] ?? x.target;
@@ -2512,15 +2520,32 @@ function structurePanel(info: T.Info, names: Names): HTMLElement | null {
     out.append(h("div", { class: "sub-head" }, `${cap(w.fields)} of ${names[sel] ?? `this ${w.case}`} · code.json`));
     const fs = n.fields;
     if (!fs.length) out.append(h("p", { class: "hint" }, w.effect ? "None: performing it takes nothing." : "None: it's a constant."));
+    // A field several cases share (L168): which others have it (E227).
+    const td = node((node(type) as NodeOf<"def">).body!) as NodeOf<"typedef">;
+    const rootOf = (f: Id) => (node(f) as NodeOf<"field">).same ?? f;
+    const sharers = (f: Id) => td.variants.filter((v) => v !== sel && (node(v) as NodeOf<"variant">).fields.some((x) => rootOf(x) === rootOf(f)));
     for (const f of fs) {
+      const others = w.effect ? [] : sharers(f);
       out.append(row(pick(f, names[f] ?? w.field, typeText(get(code, f, "field").type, names)),
+        others.length ? h("span", { class: "chip", title: `The same field: .${names[f] ?? w.field} reads and sets it on any of these cases` }, `also in ${others.map((v) => names[v] ?? v).join(", ")}`) : null,
         edit("×", `Remove this ${w.field}`, Top.removeField(code, sh, sel, f), () => runTop(info, Top.removeField(code, sh, sel, f)), "btn mini")));
     }
     const c = textField("f-new-field", `New ${w.field}`, "its name");
     const t = typePicker("f-new-field-type", type, names, null, () => {}, undefined, w.effect ? sel : undefined);
     const add = h("button", { class: "btn", type: "button" }, `Add the ${w.field}`);
     add.addEventListener("click", () => { const sp = t.spec(); if (sp) runTop(info, Top.addField(code, sh, type, sel, c.input.value, sp)); });
+    // Or another case's field, the same one (L168, E227): one not here yet,
+    // that isn't itself another's.
+    const mine = new Set(fs.map(rootOf));
+    const theirs = w.effect ? [] : td.variants.filter((v) => v !== sel).flatMap((v) => (node(v) as NodeOf<"variant">).fields.filter((f) => !(node(f) as NodeOf<"field">).same && !mine.has(f)).map((f) => [v, f] as const));
+    const same = theirs.map(([v, f]) => {
+      const spec = typeSpecOf(get(code, f, "field").type);
+      const r = spec ? Top.addField(code, sh, type, sel, names[f] ?? "field", spec) : { ok: false as const, reason: "its type can't be written here" };
+      const shared: Top.Top = r.ok ? (() => { const made = (r.code.nodes[sel] as NodeOf<"variant">).fields.at(-1)!; return { ...r, code: { ...r.code, nodes: { ...r.code.nodes, [made]: { ...(r.code.nodes[made] as NodeOf<"field">), same: f } } }, note: `${r.note} It is ${names[v] ?? v}'s ${names[f] ?? "field"}, the same one: .${names[f] ?? "field"} reads it on either case.` }; })() : r;
+      return edit(`${names[f] ?? "field"}, as ${names[v] ?? v}'s`, `The same field as ${names[v] ?? v}'s ${names[f] ?? "field"} (${typeText(get(code, f, "field").type, names)})`, shared, () => runTop(info, shared));
+    });
     out.append(c.el, h("label", { class: "field", for: "f-new-field-type" }, h("span", {}, "Holding"), t.el), h("div", { class: "acts" }, add),
+      same.length ? h("div", { class: "acts" }, h("span", { class: "hint" }, "Or another case's, the same field:"), ...same) : "",
       h("p", { class: "hint" }, w.effect ? "Every call of it gets a hole for a new input, and every case that handles it a name." : "Every place that makes this case gets a hole for a new field, and every arm for it a name."));
     if (w.effect) {
       // What the handler answers it with: the value the call gives back.
