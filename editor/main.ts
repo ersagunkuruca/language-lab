@@ -1598,13 +1598,13 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
   // (E183b): Alt+↑ does the same.
   const outer = enclosing(id);
   const upBtn = outer ? h("button", { class: "btn mini", type: "button", title: "Select what this is in (Alt+↑)", "data-act": "goto-node", "data-target": outer }, "↑ what it's in") : null;
-  out.append(h("div", { class: "insp-head" }, h("span", { class: "kind", title: `id ${id} in code.json` }, kindLabel(id)), upBtn));
+  out.append(h("div", { class: "insp-head" }, h("span", { class: "kind", title: `id ${id} in code.json` }, kindLabel(id))), ...(upBtn ? [h("div", { class: "acts up" }, upBtn)] : []));
   const t = T.typeOf(info, id, names);
   const hole = info.holes.get(id);
   if (hole) out.append(h("div", { class: "typeline" }, h("span", {}, "needs"), h("code", {}, typeName(info, hole.expected, names))));
   // A hole in an implementation is one operation at its type: say which,
   // since the hole's type alone doesn't (BACKLOG E153).
-  const up = hole ? parentOf(doc.code, id) : null;
+  const up = hole ? parentsOf(doc.code).get(id) ?? null : null;
   const upn = up?.slot === "args" ? node(up.parent) : null;
   const ops = upn?.kind === "call" ? implementationOps(doc.code, upn.fn) : null;
   const at = ops ? /^(\S+) (.+)$/.exec(T.typeOf(info, up!.parent, names) ?? "") : null;
@@ -1878,17 +1878,31 @@ function usesIn(code: Code): Map<Id, number> {
 
 // The expression a part is in, one step out: past the arm or let that
 // only holds it, never the definition itself.
+// Each node's parent, once per version of the code: an arm's is the
+// match or fold holding it, which parentOf doesn't know (I134); one walk
+// of the nodes, not one per step (I135).
+const parents = new WeakMap<Code, Map<Id, { parent: Id; slot: string; index?: number }>>();
+function parentsOf(code: Code) {
+  let m = parents.get(code);
+  if (m) return m;
+  m = new Map();
+  const set = (c: Id | null | undefined, parent: Id, slot: string, index?: number) => { if (c && !m!.has(c)) m!.set(c, { parent, slot, ...(index !== undefined ? { index } : {}) }); };
+  for (const n of Object.values(code.nodes)) {
+    if (n.kind === "call") { set(n.fn, n.id, "fn"); n.args.forEach((a, i) => set(a, n.id, "args", i)); }
+    else if (n.kind === "lambda" || n.kind === "arm" || n.kind === "def") set(n.body, n.id, "body");
+    else if (n.kind === "match" || n.kind === "fold") { set(n.scrutinee, n.id, "scrutinee"); if (n.kind === "match") set(n.otherwise, n.id, "otherwise"); n.arms.forEach((a) => set(a, n.id, "arms")); }
+    else if (n.kind === "solve") { set(n.body, n.id, "body"); Object.values(n.given).forEach((g) => set(g, n.id, "given")); }
+  }
+  parents.set(code, m);
+  return m;
+}
+
 function enclosing(id: Id): Id | null {
-  // parentOf knows an arm's body, not the match or fold holding the arm:
-  // that step is taken here (I134).
-  const up = (x: Id) => {
-    const n = node(x);
-    if (n?.kind !== "arm") return parentOf(doc.code, x);
-    const m = Object.values(doc.code.nodes).find((o) => (o.kind === "match" || o.kind === "fold") && o.arms.includes(x));
-    return m ? { parent: m.id, slot: "arms" } : null;
-  };
-  const marked = [...document.querySelectorAll<HTMLElement>(".blocks-wrap [data-id], .p-graph [data-id]")].map((el) => el.dataset.id!);
-  const drawn = marked.length ? new Set(marked) : null;
+  const ps = parentsOf(doc.code), up = (x: Id) => ps.get(x) ?? null;
+  // Only what a view draws: a call merged into its chain (0.5 · g · t · t
+  // is one ·) or a match read as a longer pattern is passed over (I139).
+  const views = document.querySelector(".blocks-wrap [data-id], .p-graph [data-id]");
+  const drawn = (x: Id) => !views || !!document.querySelector(`.blocks-wrap [data-id="${CSS.escape(x)}"], .p-graph [data-id="${CSS.escape(x)}"]`);
   for (let at = up(id), hops = 0; at && hops < 16; at = up(at.parent), hops++) {
     const n = node(at.parent);
     if (!n || n.kind === "def" || at.parent === ui.def) return null;
@@ -1896,14 +1910,13 @@ function enclosing(id: Id): Id | null {
     // function is the definition.
     const letCall = (c: Node | undefined) => c?.kind === "call" && node(c.fn)?.kind === "lambda";
     if (letCall(n)) continue;
-    if (n.kind === "lambda") { const o = parentOf(doc.code, n.id); const on = o ? node(o.parent) : undefined; if (!o || on?.kind === "def" || (letCall(on) && o.slot === "fn")) continue; }
-    // Only what a view draws: a call merged into its chain (0.5 · g · t · t
-    // is one ·) or a match read as a longer pattern is passed over (I139).
-    if (["call", "match", "fold", "lambda", "solve"].includes(n.kind) && (!drawn || drawn.has(n.id))) return n.id;
+    if (n.kind === "lambda") { const o = up(n.id); const on = o ? node(o.parent) : undefined; if (!o || on?.kind === "def" || (letCall(on) && o.slot === "fn")) continue; }
+    if (["call", "match", "fold", "lambda", "solve"].includes(n.kind) && drawn(n.id)) return n.id;
   }
   return null;
 }
 
+const labels = new WeakMap<T.Filling, { key: Names; l: [string, string, string] }>();
 function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): HTMLElement {
   const q = ui.query.trim().toLowerCase();
   // Most often wanted first; a function passed along uncalled last, since
@@ -1913,7 +1926,14 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
   const head = Object.values(doc.code.nodes).some((n) => n.kind === "call" && n.fn === hole);
   // Where a function goes, writing one here is often what's meant.
   const order = [...(head ? ["functions"] : []), "in scope", "new function", "calls", "constructors", "definitions", "literals", "case analysis", "functions, not called"];
-  const label = (f: T.Filling): [string, string, string] => { const l = fillLabel(f, info, names); return head && l[2] === "functions, not called" ? [l[0], l[1], "functions"] : l; };
+  // A row's label, once per filling while the names stay (I135: every key
+  // labelled every filling again, a type shown for each).
+  const label = (f: T.Filling): [string, string, string] => {
+    const was = labels.get(f), key = shownNames();
+    const l = was?.key === key ? was.l : fillLabel(f, info, names);
+    if (was?.key !== key) labels.set(f, { key, l });
+    return head && l[2] === "functions, not called" ? [l[0], l[1], "functions"] : l;
+  };
   // Within a group, what the program calls most comes first: print in a
   // new main, not for each because it's alphabetically early.
   const used = usesIn(doc.code);
