@@ -160,6 +160,12 @@ export function buildListTree(k: Lang, prelude: (name: string) => Id): ListTree 
     k.if(i.less(p, before), k.call(node, y, s, k.call(put, l, p, by), r),
       k.if(i.less(before, p), k.call(node, y, s, l, k.call(put, r, i.sub(p, i.add(before, k.int(1))), by)), k.call(node, by, s, l, r)))), () => t)));
   const replaceAt = def("list tree replace at", ["tree", "position", "by"], (t, p, by) => k.call(put, t, p, by));
+  // A map keeps the shape: each item's answer where the item was, the
+  // items done in order, left side, item, right side (C93). Linear, and
+  // only log n deep where a map by match calls itself once an item.
+  const mapped = rec("list tree map");
+  k.define(mapped, k.fn(["tree", "by"], (t, f) => parts(t, (s, y, l, r) => k.let("left done", k.call(mapped, l, f), (ld) =>
+    k.let("item done", k.call(f, y), (yd) => k.let("right done", k.call(mapped, r, f), (rd) => k.call(node, yd, s, ld, rd)))), () => k.x(tip))));
   // Equal, show and compare see the list it stands for.
   const equal = def("list tree equal", ["a", "b"], (a, b) => k.call(S.equal, k.call(items, a), k.call(items, b)));
   const show = def("list tree show", ["tree"], (t) => k.call(SHOW_ANY, k.call(items, t)));
@@ -177,6 +183,7 @@ export function buildListTree(k: Lang, prelude: (name: string) => Id): ListTree 
     k.call(JOBS.job, k.x(prelude("append")), k.x(append), cost(k, "logarithmic")),
     k.call(JOBS.job, k.x(prelude("item at")), k.x(itemAt), cost(k, "logarithmic")),
     k.call(JOBS.job, k.x(prelude("replace at")), k.x(replaceAt), cost(k, "logarithmic")),
+    k.call(JOBS.job, k.x(prelude("map")), k.x(mapped), cost(k, "linear")),
     k.call(JOBS.equalBy, k.x(equal)), k.call(JOBS.showBy, k.x(show)), k.call(JOBS.compareBy, k.x(compare)),
     k.call(JOBS.storeBy, k.x(store)),
   )));

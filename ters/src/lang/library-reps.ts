@@ -19,7 +19,7 @@ import { infer, type Info } from "./infer.ts";
 import { Lang } from "./dsl.ts";
 import { LIBRARY, TREES } from "./library.ts";
 import { choose, represent, uses, type Representation } from "./represent.ts";
-import { ARRAY_OPS, COMPARE, CONS, LIST, MAP, MAP_V, NIL, PAIR_V, S, SHOW_ANY, SIGS } from "./std.ts";
+import { ARRAY_OPS, COMPARE, CONS, LIST, MAP, MAP_V, NIL, PAIR_V, S, SET_TYPE, SHOW_ANY, SIGS } from "./std.ts";
 import { INT, STRING, Subst, type Type } from "./types.ts";
 
 // What equal, show and compare see of a value: these, given a stored one,
@@ -48,7 +48,17 @@ export function withLibraryRepresentations(code: Code, info: Info, names: Names,
     const r = choiceOf(code, info, names, main, defs, asked, skip, options);
     if (!r.reps.length) return { code, names, chosen: [], insiders: [] };
     const checked = infer(r.code, r.names, undefined, { ...info.options, insiders: [...(info.options?.insiders ?? []), ...r.insiders] });
-    if (checked.errors.length <= info.errors.length) return { code: r.code, names: r.names, chosen: r.chosen, insiders: r.insiders, info: checked };
+    if (checked.errors.length <= info.errors.length) {
+      // Lists go alone (choiceOf); with Map or Set chosen first, they're
+      // chosen again on what that made, the Map and Set rows asked for as
+      // the program's own (C93).
+      if (r.reps.some((x) => x.of === LIST) || asked.some((x) => x.of === LIST)) return { code: r.code, names: r.names, chosen: r.chosen, insiders: r.insiders, info: checked };
+      const insiders = [...(info.options?.insiders ?? []), ...r.insiders];
+      const lists = withLibraryRepresentations(r.code, { ...checked, options: { ...checked.options, insiders } }, r.names, main, defs, [...asked, ...r.reps], options);
+      return lists.chosen.length
+        ? { ...lists, chosen: [...r.chosen, ...lists.chosen], insiders: [...r.insiders, ...lists.insiders] }
+        : { code: r.code, names: r.names, chosen: r.chosen, insiders: r.insiders, info: checked };
+    }
     const list = r.reps.find((x) => x.of === LIST);
     // A hash table that doesn't check gives way to the tree, not to the
     // definition.
@@ -71,7 +81,7 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
     if (tree === spec || keyed(info, defs, code, ty) || generic(info, defs, code, tree)) continue;
     // Lists as arrays (C30d3b): alone, and only where every list the
     // program reaches can be one (listBoundary).
-    if (tree.of === LIST && (chosen.length || !listBoundary(merge(treesFor(code, [tree]), code), info, defs, tree))) continue;
+    if (tree.of === LIST && (chosen.length || !listBoundary(merge(treesFor(code, [tree]), code), info, defs, tree, asked))) continue;
     chosen.push(tree);
   }
   if (!chosen.length) return { code, names, chosen: [], insiders: [], reps: [] };
@@ -83,7 +93,7 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
   // Lists as arrays reach the library's own definitions on lists (map,
   // sum, …): the program gets its own copies of them, which the rewrite
   // changes, and the library's stay as they are for everything else.
-  const lists = chosen.find((r) => r.of === LIST), boundary = lists && listBoundary(code, info, defs, lists)!;
+  const lists = chosen.find((r) => r.of === LIST), boundary = lists && listBoundary(code, info, defs, lists, asked)!;
   let copies: Id[] = [];
   if (boundary) {
     const withBoundary: Code = { nodes: { ...code.nodes, ...boundary.nodes }, defs: [...code.defs, ...boundary.made] };
@@ -94,6 +104,9 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
     const nodes = { ...withBoundary.nodes };
     for (const d of library) for (const id of subtree(withBoundary, d)) { const n = mapIds(withBoundary.nodes[id], f); nodes[n.id] = n; }
     for (const d of defs) for (const id of subtree(withBoundary, d)) nodes[id] = mapIds(withBoundary.nodes[id], f);
+    // The boundary's changes are the copies'; the library's own stay as
+    // written, for whatever else calls them (a Map row's meaning, C93).
+    for (const d of library) for (const id of subtree(code, d)) nodes[id] = code.nodes[id];
     code = { nodes, defs: [...code.defs, ...boundary.made, ...library.map(f)] };
     names = { ...names, ...Object.fromEntries(library.map((d) => [f(d), names[d] ?? LIBRARY.names[d] ?? d])), ...Object.fromEntries(boundary.made.map((d) => [d, "stored list"])) };
     copies = library.map(f);
@@ -140,13 +153,20 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
   // main's answer, for whoever shows it: main gives what it gave, as meanings.
   const answer = (() => { const t = typeOf(main); return t?.t === "fn" ? meanings(info.subst.zonk(t.ret)) : t ? meanings(t) : null; })();
   let own = [...defs, ...copies];
-  if (answer) {
+  // main's inputs, from whoever runs it (the command line's arguments): a
+  // plain list comes as written and is stored on the way in (C93).
+  const mainType = typeOf(main), mainBody = code.nodes[(nodes[main] as NodeOf<"def">).body!];
+  const stores = lists && mainType?.t === "fn" && mainBody?.kind === "lambda"
+    ? mainType.params.map((p) => { const t = info.subst.zonk(p); return t.t === "con" && t.id === LIST && !t.args.some(withList) ? storeOf(k, lists) : null; })
+    : [];
+  if (answer || stores.some((x) => x)) {
     const def = nodes[main] as NodeOf<"def">, inner = k.def(`${names[main] ?? "main"} as stored`);
     const body = code.nodes[def.body!];
     k.code.nodes[inner] = { ...(k.code.nodes[inner] as NodeOf<"def">), body: def.body };
+    const result = (r: Id) => (answer ? k.call(answer, r) : r);
     nodes[main] = { ...def, body: body?.kind === "lambda"
-      ? k.fn(body.params.map((p) => names[p] ?? "x"), (...xs) => k.call(answer, k.call(inner, ...xs)))
-      : k.call(answer, k.x(inner)) };
+      ? k.fn(body.params.map((p) => names[p] ?? "x"), (...xs) => result(k.call(inner, ...xs.map((x, i) => (stores[i] ? k.call(stores[i]!, x) : x)))))
+      : result(k.x(inner)) };
     own = [...own, inner];
   }
   const made = k.code.defs.filter((d) => !code.nodes[d]);
@@ -157,6 +177,19 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
   const out = chosen.reduce((c, rep) => represent(c, own, rep, kept), all);
   return { code: out, names: { ...names, ...k.names }, chosen: chosen.map((r) => `${names[r.of] ?? LIBRARY.names[r.of]} as ${r.name}`), insiders: made, reps: chosen };
 }
+
+// A list as written, stored: the row's own way (`store by`), else one
+// constructor a time.
+function storeOf(k: Lang, rep: Representation): Id {
+  if (rep.store) return rep.store;
+  const d = k.def("stored list");
+  k.define(d, k.fn(["list"], (l) => k.fold(l, [
+    { variant: NIL, names: [], body: () => k.x(rep.impl[NIL]) },
+    { variant: CONS, names: ["item", "rest"], results: [null, "the rest stored"], body: ([x], [, r]) => k.call(rep.impl[CONS], x, r!) },
+  ])));
+  return d;
+}
+const withList = (t: Type): boolean => t.t === "con" && (t.id === LIST || t.args.some(withList));
 
 const prelude = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY.names[d] === name)!;
 
@@ -290,11 +323,15 @@ function inPlace(code: Code, info: Info, main: Id, defs: Id[], row: Representati
   }
 }
 
+// A list's rows never look at its items, so a list of lists is no reason;
+// a list in a map's keys or a set's items is, where those rows compare
+// them (C93).
 function keyed(info: Info, defs: Id[], code: Code, of: Id): boolean {
   const has = (t: Type): boolean => t.t === "con" && (t.id === of || t.args.some((a) => has(info.subst.zonk(a))));
+  const holders = of === LIST ? new Set<Id>([MAP, SET_TYPE]) : new Set<Id>([of]);
   const deep = (t: Type): boolean => {
     t = info.subst.zonk(t);
-    if (t.t === "con") return (t.id === of && !!t.args[0] && has(info.subst.zonk(t.args[0]))) || t.args.some(deep);
+    if (t.t === "con") return (holders.has(t.id) && !!t.args[0] && has(info.subst.zonk(t.args[0]))) || t.args.some(deep);
     if (t.t === "fn") return [...t.params, t.ret].some(deep);
     return false;
   };
@@ -419,20 +456,22 @@ function looked(code: Code, info: Info): (def: Id) => Set<number> {
 const PASSES_ON = new Set<Id>([S.first, S.optional, S.all]);
 // Builtins that only move values of a variable type about (C70).
 const STRUCTURAL = new Set<Id>([S.oneOf, S.fail, ...Object.values(ARRAY_OPS)]);
-function listBoundary(code: Code, info: Info, defs: Id[], rep: Representation): { nodes: Record<Id, Node>; reached: Id[]; made: Id[] } | null {
-  const program = new Set(defs), inside = holdsType(code, LIST);
+function listBoundary(code: Code, info: Info, defs: Id[], rep: Representation, asked: Representation[] = []): { nodes: Record<Id, Node>; reached: Id[]; made: Id[] } | null {
+  const program = new Set(defs), inside = holdsType(code, LIST), stored = new Set(asked.map((r) => r.of));
   const hasList = (t: Type): boolean => { t = info.subst.zonk(t); return t.t === "con" ? t.id === LIST || inside(t.id) || t.args.some(hasList) : t.t === "fn" ? [...t.params, t.ret].some(hasList) : false; };
   // A type the library defines with a list in it (Set and Map as written,
   // Algebra): its definition isn't the program's, so the rewrite leaves
-  // its fields List while the values in them would be arrays.
-  const libraryHolder = (t: Type): boolean => { t = info.subst.zonk(t); return t.t === "con" ? (t.id !== LIST && !program.has(t.id) && inside(t.id)) || t.args.some(libraryHolder) : t.t === "fn" ? [...t.params, t.ret].some(libraryHolder) : false; };
+  // its fields List while the values in them would be arrays. A type
+  // already stored by an asked row (Map as a hash table) holds no list.
+  const libraryHolder = (t: Type): boolean => { t = info.subst.zonk(t); return t.t === "con" ? (t.id !== LIST && !program.has(t.id) && !stored.has(t.id) && inside(t.id)) || t.args.some(libraryHolder) : t.t === "fn" ? [...t.params, t.ret].some(libraryHolder) : false; };
   // What the rewrite reaches (represent.ts), and what it keeps as it is.
   const own = new Set<Id>();
   for (const d of [...Object.values(rep.impl), rep.meaning!, ...(rep.store ? [rep.store] : [])]) for (const x of [d, ...dependencies(code, d)]) own.add(x);
   const reached = new Set<Id>(), todo = [...defs];
   while (todo.length) {
     const d = todo.pop()!;
-    if (reached.has(d) || rep.impl[d]) continue;
+    // An asked row's meaning is written on its type as written, and stays.
+    if (reached.has(d) || rep.impl[d] || asked.some((r) => r.meaning === d)) continue;
     const def = code.nodes[d];
     if (def?.kind !== "def" || (def.body && code.nodes[def.body]?.kind === "typedef")) continue;
     if (own.has(d)) return null;
