@@ -215,6 +215,7 @@ A list is written [1, 2, 3]. There are no loops: map, keep and for each go throu
 - **largest of** : `(List a) -> Optional a where a has <`. The largest item by <, or none for an empty list: largest of([3, 9, 4]) is some(9).
 - **smallest of** : `(List a) -> Optional a where a has <`. The smallest item by <, or none for an empty list: smallest of([3, 9, 4]) is some(3).
 - **inserted at** : `(List a, Int, a) -> List a`. The list with the item put in at the position, the items from there on moved one later: inserted at([1, 3], 1, 2) is [1, 2, 3].
+- **case of** : `(a, List (a, () -[e]-> b), () -[e]-> b) -[e]-> b`. The first case whose key equals key, run, or otherwise when none does: case of(name, [("add", () ↦ 1), ("jump", () ↦ 2)], () ↦ 0). Any plain data is a key.
 - **position where** : `(List a, (a) -[e]-> Bool) -[e]-> Optional Int`. The position of the first item that passes the test, counting from 0, as some(position): position where([3, 8, 5], (x) ↦ 4 < x) is some(1); none when no item passes.
 - **show numbers** : `(List Float64) -> Text`. A fold that prints. Run backwards it unfolds, so it parses.
 - **empty array** : `() -> Array a`. An array with no items.
