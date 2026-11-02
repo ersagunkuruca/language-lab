@@ -1879,7 +1879,17 @@ function usesIn(code: Code): Map<Id, number> {
 // The expression a part is in, one step out: past the arm or let that
 // only holds it, never the definition itself.
 function enclosing(id: Id): Id | null {
-  for (let at = parentOf(doc.code, id), hops = 0; at && hops < 8; at = parentOf(doc.code, at.parent), hops++) {
+  // parentOf knows an arm's body, not the match or fold holding the arm:
+  // that step is taken here (I134).
+  const up = (x: Id) => {
+    const n = node(x);
+    if (n?.kind !== "arm") return parentOf(doc.code, x);
+    const m = Object.values(doc.code.nodes).find((o) => (o.kind === "match" || o.kind === "fold") && o.arms.includes(x));
+    return m ? { parent: m.id, slot: "arms" } : null;
+  };
+  const marked = [...document.querySelectorAll<HTMLElement>(".blocks-wrap [data-id], .p-graph [data-id]")].map((el) => el.dataset.id!);
+  const drawn = marked.length ? new Set(marked) : null;
+  for (let at = up(id), hops = 0; at && hops < 16; at = up(at.parent), hops++) {
     const n = node(at.parent);
     if (!n || n.kind === "def" || at.parent === ui.def) return null;
     // A let's call and its function only hold steps; a definition's own
@@ -1887,7 +1897,9 @@ function enclosing(id: Id): Id | null {
     const letCall = (c: Node | undefined) => c?.kind === "call" && node(c.fn)?.kind === "lambda";
     if (letCall(n)) continue;
     if (n.kind === "lambda") { const o = parentOf(doc.code, n.id); const on = o ? node(o.parent) : undefined; if (!o || on?.kind === "def" || (letCall(on) && o.slot === "fn")) continue; }
-    if (["call", "match", "fold", "lambda", "solve"].includes(n.kind)) return n.id;
+    // Only what a view draws: a call merged into its chain (0.5 · g · t · t
+    // is one ·) or a match read as a longer pattern is passed over (I139).
+    if (["call", "match", "fold", "lambda", "solve"].includes(n.kind) && (!drawn || drawn.has(n.id))) return n.id;
   }
   return null;
 }
