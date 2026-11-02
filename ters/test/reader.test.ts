@@ -251,6 +251,26 @@ test("typed case name alone is its constructor as a function", async () => {
   assert.ok(Object.values(r.code.nodes).some((x) => x.kind === "ref" && x.target === SOME && !code.nodes[x.id]));
 });
 
+// A field read on a call's result is the result type's (E216): machine's
+// jump(…).to was said to be html's Attribute's too.
+test("typed field of a call's result is read by the result's type", async () => {
+  const { Lang } = await import("../src/lang/dsl.ts");
+  const { base, baseNames } = await import("../src/lang/load.ts");
+  const { LIBRARY } = await import("../src/lang/library.ts");
+  const k = new Lang(LIBRARY.code);
+  k.type("Instr", [], [["jump", [["to", () => k.tref("type.int")]]], ["halt", []]]);
+  k.type("Edge", [], [["edge", [["to", () => k.tref("type.int")]]]]);
+  const f = k.def("f");
+  let hole = "";
+  k.define(f, k.fn(["n"], () => (hole = k.hole())));
+  const code = base(k.code), names = { ...LIBRARY.names, ...baseNames(k.names) };
+  const info = infer(code, names);
+  const r = fillValue(code, names, info, hole, "jump(n).to", f);
+  assert.ok(!r.ok && !/Attribute/.test(r.reason) && /Instr/.test(r.reason), r.ok ? "read" : r.reason);
+  const e = fillValue(code, names, info, hole, "edge(n).to + 1", f);
+  assert.ok(e.ok, !e.ok ? e.reason : "");
+});
+
 // Each name's meanings are narrowed by what's around them before they're
 // combined (E176): sheet's report line, with `line` a field of two types,
 // `name` of four and show of four meanings, has 128 readings, more than

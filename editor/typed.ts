@@ -296,14 +296,16 @@ export function fillValue(code: Code, names: Names, info: Info, hole: Id, text: 
   return refusal(first! as TEdit & { ok: false }, why, overloaded(r, all));
 }
 
-// A field several types have, read on an input or a step of what's
-// typed: whose it is comes from that input's type, found by checking the
-// text once with those reads left as holes (E222: clinic's map over
-// numbered(counts) reading pr.first and pr.second, Tuple2's to Tuple8's
-// each, ran past the 16 readings tried and picked a wrong one).
+// A field several types have, read on any value of what's typed (an
+// input, a step, a call's result): whose it is comes from that value's
+// type, found by checking the text once with those reads left as holes
+// (E222: clinic's map over numbered(counts) reading pr.first and
+// pr.second, Tuple2's to Tuple8's each, ran past the 16 readings tried
+// and picked a wrong one; E216: machine's jump(number(3)).to was said to
+// be html's Attribute's too).
 function fieldsByProbe(code: Code, names: Names, info: Info, hole: Id, t: Typed, defId?: Id): Typed {
   const shared = (x: Typed): x is { op: Id; args: Typed[]; alts: Id[] } =>
-    "op" in x && !!x.alts && x.alts.length > 1 && x.args.length === 1 && "ref" in x.args[0] && x.alts.every((a) => code.nodes[a]?.kind === "field");
+    "op" in x && !!x.alts && x.alts.length > 1 && x.args.length === 1 && x.alts.every((a) => code.nodes[a]?.kind === "field");
   const map = (x: Typed, f: (x: Typed) => Typed | null): Typed => {
     const y = f(x);
     if (y) return y;
@@ -313,22 +315,31 @@ function fieldsByProbe(code: Code, names: Names, info: Info, hole: Id, t: Typed,
     if ("let" in x) return { ...x, be: map(x.be, f), rest: map(x.rest, f) };
     return x;
   };
-  let any = false;
-  const probe = map(t, (x) => (shared(x) ? ((any = true), { hole: true }) : null));
-  if (!any) return t;
+  // Each such read's value, named by a step of its own in the probe, so
+  // its type can be looked up: jump(number(3)).to's is an Instr (E216).
+  const at = new Map<Typed, Id>();
+  const probe = map(t, (x) => {
+    if (!shared(x)) return null;
+    const id = freshId();
+    at.set(x, id);
+    return { let: { id, name: "_" }, be: map(x.args[0], () => null), rest: { hole: true } };
+  });
+  if (!at.size) return t;
   const variantOf = new Map<Id, Id>();
   for (const v of Object.values(code.nodes)) if (v.kind === "variant") for (const f of v.fields) variantOf.set(f, v.id);
   for (const p of readings(leaveOpen(info, narrow(code, info, probe))).slice(0, 8)) {
     const e = written(code, names, info, hole, "", p, false, defId);
     if (!e.ok) continue;
     const seen = infer(e.code, e.names);
-    return map(t, (x) => {
+    const narrowed = (x: Typed): Typed | null => {
       if (!shared(x)) return null;
-      const of = seen.typeOf.get((x.args[0] as { ref: Id }).ref) ?? info.typeOf.get((x.args[0] as { ref: Id }).ref);
+      const of = seen.typeOf.get(at.get(x)!);
       const r = of && seen.subst.resolve(of);
       const alts = r?.t === "con" ? x.alts.filter((a) => seen.owner.get(variantOf.get(a)!) === r.id) : [];
-      return alts.length ? { op: alts[0], args: x.args, ...(alts.length > 1 ? { alts } : {}) } : null;
-    });
+      const args = x.args.map((a) => map(a, narrowed));
+      return alts.length ? { op: alts[0], args, ...(alts.length > 1 ? { alts } : {}) } : { ...x, args };
+    };
+    return map(t, narrowed);
   }
   return t;
 }
