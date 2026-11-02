@@ -277,6 +277,8 @@ export function fillValue(code: Code, names: Names, info: Info, hole: Id, text: 
       return { ...one, choices };
     }
   }
+  // Why each reading didn't fit, in the order tried.
+  const why: string[] = [];
   for (const t of all_) {
     // Whole numbers first at what their places take: a plain literal would
     // fit an Int's place too (it's some Number), but read as a Float64 it
@@ -289,8 +291,46 @@ export function fillValue(code: Code, names: Names, info: Info, hole: Id, text: 
     const plain = written(code, names, info, hole, text, t, false, defId);
     if (plain.ok) return plain;
     first ??= plain;
+    why.push(plain.reason);
   }
-  return first!;
+  return refusal(first! as TEdit & { ok: false }, why, overloaded(r, all));
+}
+
+// What's refused when no reading fits (E219). One reason every reading
+// gives is the cause, whichever meaning of a shared name is taken; else
+// each different one, so the cause isn't hidden behind the meaning tried
+// first ("as float64 needs Fixed here, got Int" where the program's own
+// ratio was what failed).
+function refusal(first: TEdit & { ok: false }, why: string[], shared: string[]): TEdit {
+  if (new Set(why).size < 2) return first;
+  // "length needs List a here, got Float64" and "length needs Text here,
+  // got Float64" are one place: "length needs List a or Text here, got
+  // Float64". The place most readings stop at first.
+  const places = new Map<string, { n: number; wants: string[]; got: string; other?: string }>();
+  for (const w of why) {
+    const m = /^(.+?) needs (.+?) here, got (.+)$/.exec(w);
+    const key = m ? `${m[1]}\u0000${m[3]}` : w;
+    const at = places.get(key) ?? places.set(key, { n: 0, wants: [], got: m?.[3] ?? "", other: m ? undefined : w }).get(key)!;
+    at.n++;
+    if (m && !at.wants.includes(m[2])) at.wants.push(m[2]);
+  }
+  const kinds = [...places].sort((a, b) => b[1].n - a[1].n).map(([key, p]) => p.other ?? `${key.split("\u0000")[0]} needs ${p.wants.join(" or ")} here, got ${p.got}`);
+  if (kinds.length < 2) return { ...first, reason: kinds[0] };
+  const which = shared.length ? `whichever ${shared.length > 1 ? `${shared.slice(0, -1).join(", ")} or ${shared.at(-1)}` : shared[0]} is meant` : "however it's read";
+  return { ...first, reason: `nothing fits ${which}: ${kinds.slice(0, 2).join("; or ")}${kinds.length > 2 ? `; or ${kinds.length - 2} more` : ""}` };
+}
+
+// The names in what's typed that have several meanings, as typed.
+function overloaded(t: Typed, names: Names): string[] {
+  const out = new Set<string>();
+  const go = (x: Typed): void => {
+    if ("op" in x) { if (x.alts && x.alts.length > 1) out.add(names[x.op] ?? x.op); x.args.forEach(go); }
+    else if ("params" in x) go(x.body);
+    else if ("cond" in x) [x.cond, x.then, x.else].forEach(go);
+    else if ("let" in x) { go(x.be); go(x.rest); }
+  };
+  go(t);
+  return [...out];
 }
 
 // Why a function named in full doesn't go where a call's function goes

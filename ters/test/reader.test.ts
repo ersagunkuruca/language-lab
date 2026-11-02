@@ -186,6 +186,20 @@ test("typed call never reads a case the library keeps private", async () => {
   assert.ok(!r.ok && !/private/.test(r.reason), r.ok ? "read" : r.reason);
 });
 
+// A refusal names where every reading stops, not the meaning tried first
+// (E219): length(n + 1.5) is refused at length, whichever add.
+test("typed refusal of a shared name says where each meaning stops", async () => {
+  const { Lang } = await import("../src/lang/dsl.ts");
+  const { base, baseNames } = await import("../src/lang/load.ts");
+  const k = new Lang();
+  const f = k.def("f");
+  let hole = "";
+  k.define(f, k.fn(["n"], () => (hole = k.hole())));
+  const code = base(k.code), names = baseNames(k.names);
+  const r = fillValue(code, names, infer(code, names), hole, "length(n + 1.5)", f);
+  assert.ok(!r.ok && /^nothing fits whichever length or add is meant: length needs List a or Text here, got Float64; or /.test(r.reason), r.ok ? "read" : r.reason);
+});
+
 // Each name's meanings are narrowed by what's around them before they're
 // combined (E176): sheet's report line, with `line` a field of two types,
 // `name` of four and show of four meanings, has 128 readings, more than
