@@ -9,7 +9,9 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
-import { sameNumber } from "../../ters/src/lang/run.ts";
+import { equal, sameNumber } from "../../ters/src/lang/run.ts";
+import { $eq } from "../src/runtime.js";
+import { Cells } from "../../ters/src/lang/cells.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { Lang } from "../../ters/src/lang/dsl.ts";
 import { base, baseNames } from "../../ters/src/lang/load.ts";
@@ -41,4 +43,20 @@ test("compiled equal gives the evaluator's answer on every boundary pair, at eve
     for (const f of ["numbers", "generic", "lists"]) assert.equal(yes(defs[f](a, b)), want, `${f}(${a}, ${b}) compiled`);
     assert.equal(wasm.numbers(a, b) === 1, want, `numbers(${a}, ${b}) in WebAssembly`);
   }
+});
+
+// C85: a value is equal to itself without looking inside, so a cell
+// written back with what it holds (board's idle frame) costs nothing at
+// any size. Its fields here throw when read.
+test("a value is equal to itself without being walked, and a cell written back with what it holds doesn't look (C85)", () => {
+  const sealed = { tag: "t", fields: new Proxy([], { get: () => { throw new Error("walked"); } }) };
+  const x = { tag: "pair", fields: [1, sealed] };
+  assert.equal($eq(x, x), true);
+  assert.equal(equal(x as never, x as never), true);
+  assert.equal($eq({ tag: "pair", fields: [1, sealed] }, { tag: "pair", fields: [2, sealed] }), false);
+  const cells = new Cells(equal), c = cells.cell(x as never);
+  let woke = 0;
+  cells.watch(() => { cells.read(c); woke++; });
+  cells.write(c, cells.read(c));
+  assert.equal(woke, 1);
 });

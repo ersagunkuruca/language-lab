@@ -130,6 +130,9 @@ export function $eq(a, b) {
     const y = todo.pop(), x = todo.pop();
     if (typeof x === 'number' && typeof y === 'number') { if (!same(x, y)) return false; continue; }
     if (typeof x !== 'object' || typeof y !== 'object') { if (x !== y) return false; continue; }
+    // The same value on both sides is equal to itself, whatever is inside
+    // (a cell written back with what it holds, C85).
+    if (x === y) continue;
     if (x.tag !== y.tag) return false;
     for (let i = x.fields.length - 1; i >= 0; i--) todo.push(x.fields[i], y.fields[i]);
   }
