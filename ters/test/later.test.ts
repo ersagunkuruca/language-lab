@@ -350,6 +350,30 @@ test("a search that waits in a fold over its list: compiled, each wait reaches t
   assert.deepEqual(await p.compiled(), want);
 });
 
+// A function that waits and chooses, given to the library (C40): map
+// calls it as a search that waits, its waits passed on; keep calls its
+// test inside an `all` of its own, so keep's copy waits too, though its
+// row is another variable than the test's.
+test("a function that waits and chooses, given to map and to keep: compiled, each wait reaches the handler (C40)", async () => {
+  const p = program((k) => {
+    const Y = k.effect("Yield", [["yield", [["item", () => k.tref(NUMBER)]], () => k.tref(UNIT), "later"]]);
+    const lib0 = (name: string) => LIBRARY.code.defs.find((x) => LIBRARY.names[x] === name)!;
+    const mapped = k.def("mapped"), kept = k.def("kept"), main = k.def("main");
+    k.define(mapped, k.thunk(() => k.call(lib0("map"), k.list(k.lit(1), k.lit(2)), k.fn(["x"], (x) => k.seq(k.call(Y.op.yield, x), k.call(S.oneOf, k.list(x, k.lit(0))))))));
+    k.define(kept, k.thunk(() => k.call(lib0("keep"), k.list(k.lit(1), k.lit(2), k.lit(3)), k.fn(["x"], (x) => k.seq(k.call(Y.op.yield, k.call(B.mul, x, k.lit(10))), k.call(S.less, x, k.lit(3)))))));
+    const seen = (body: Id) => k.handle(body, [{ variant: Y.op.yield, names: ["item", "rest"], body: ([item, rest]) => k.seq(say(k, k.lit("saw "), k.call(S.show, item)), k.call(rest, k.x(UNIT_V))) }]);
+    k.define(main, k.thunk(() => k.seq(
+      say(k, k.call(SHOW_ANY, seen(k.call(S.all, k.thunk(() => k.call(mapped)))))),
+      say(k, k.call(SHOW_ANY, seen(k.call(kept)))),
+    )));
+    return main;
+  });
+  assert.deepEqual(p.errors, []);
+  const want = ["saw 1", "saw 2", "saw 2", "[[1, 2], [1, 0], [0, 2], [0, 0]]", "saw 10", "saw 20", "saw 30", "[1, 2]"];
+  assert.deepEqual(p.run(), want);
+  assert.deepEqual(await p.compiled(), want);
+});
+
 // Declared in the editor (BACKLOG E80): Answered later beside Gives back.
 // Every case handling the operation gets a name for the rest, kept after
 // its inputs; answered at once again, it loses it, unless a case uses it.

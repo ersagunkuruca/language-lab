@@ -831,6 +831,11 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     const scheme = info.schemes.get(def)!;
     const on = scheme.rows.filter((r) => rho.get(r)).sort((a, b) => a - b);
     lat = new Set(scheme.rows.filter((r) => lat.has(r)));
+    // A function given that waits, called under a search the copy
+    // handles (`keep`'s test, inside its `all`): the copy's own row is
+    // another variable, the test's without Choice, but it waits too (C40).
+    const own0 = scheme.type.t === "fn" ? scheme.type.eff.tail : null;
+    if (own0 !== null && !lat.has(own0) && scheme.type.t === "fn" && scheme.type.params.some((p) => p.t === "fn" && p.eff.tail !== null && lat.has(p.eff.tail))) lat.add(own0);
     // The body's types may name the same rows with variables of their own
     // (a library definition, checked apart): read them off its lambda.
     if (lat.size && isFnDef(def)) {
@@ -1889,6 +1894,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     }
     function plainLambda(n: NodeOf<"lambda">): string {
       const ps = n.params.map(local).join(", ");
+      // A function that waits and chooses (C40): its generator gives its
+      // answers and its waits, told apart by $isLater, as a search's does.
+      if (laterFn(ty(n.id), sp.lat) && streamsFn(ty(n.id), rho) && !plainHere.has(n.id)) return `(function* (${ps}) {\n${scoped(false, () => inGen(true, () => st(n.body, (v) => `yield ${v};`)))}\n})`;
       if (laterFn(ty(n.id), sp.lat)) return `(function* (${ps}) {\n${scoped(false, () => inGen(true, () => ret(n.body)))}\n})`;
       if (semiHere.has(n.id)) return `((${ps}) => {\n${scoped(false, () => st(n.body, (v) => `return ${v};`))}\nreturn $no;\n})`;
       if (streamsFn(ty(n.id), rho) && !plainHere.has(n.id)) return `(function* (${ps}) {\n${scoped(false, () => st(n.body, (v) => `yield ${v};`))}\n})`;
@@ -3041,10 +3049,11 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
             const viaF = spec(callee.def, callee.rho, callee.plain, false, callee.arr, callee.own, true, null, callee.lat, keyAt(callee), callee.semi);
             out = `if (${viaF.name}(${args.join(", ")})) {\n${fromGot(rec, r, k)}\n}`;
           } else if (callee?.single || (kind === "builtin" && (oneOf(target!) || NO_ANSWER_JS[target!])) || (!!target && sp.semi.has(target))) out = `const ${r} = ${c};\nif (${r} !== $no) {\n${k(r)}\n}`;
-          else if (callee?.sus) {
-            // A search that waits: its waits go on to whoever answers them,
-            // and the answer comes back in.
-            if (!gen) throw notYet(`${names[callee.def] ?? callee.def} has Choice and waits, called where nothing can wait`);
+          else if (callee?.sus || (!callee && kind !== "builtin" && gen && laterFn(ty(n.fn), sp.lat))) {
+            // A search that waits, or a function given that waits and
+            // chooses: its waits go on to whoever answers them, and the
+            // answer comes back in.
+            if (!gen) throw notYet(`${callee ? names[callee.def] ?? callee.def : "a function"} has Choice and waits, called where nothing can wait`);
             const g = temp("g"), s = temp("s"), a = temp("a");
             out = `{\nconst ${g} = ${c};\nlet ${a};\nfor (let ${s} = ${g}.next(); !${s}.done; ${s} = ${g}.next(${a})) {\n${a} = undefined;\nif ($isLater(${s}.value)) {\n${a} = yield ${s}.value;\ncontinue;\n}\nconst ${r} = ${s}.value;\n${k(r)}\n}\n}`;
           } else if (callee && cps) {
