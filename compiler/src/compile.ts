@@ -25,6 +25,7 @@
 // emitted as straight-line code (src/relation.ts). Plans that need numeric
 // search fall back to the solver at run time, with the plan made once.
 
+import { reachedFrom } from "./scalar.ts";
 import { resolveArithmetic } from "../../ters/src/lang/arith.ts";
 import { intLit } from "../../ters/src/lang/int.ts";
 import { hostOp, ownOperations } from "../../ters/src/lang/hosts.ts";
@@ -99,15 +100,7 @@ const intJs = (v: number | string): string => { const x = intLit(v); return type
 function reachedFromExports(code: Code, names: Names, exports: string[]): Code {
   const roots = exports.map((x) => code.defs.findLast((d) => names[d] === x));
   if (roots.some((r) => !r)) return code;
-  const reach = new Set<Id>();
-  for (const r of roots as Id[]) { reach.add(r); for (const d of dependencies(code, r)) reach.add(d); }
-  const isType = (d: Id) => { const n = code.nodes[d]; return n?.kind === "def" && !!n.body && code.nodes[n.body]?.kind === "typedef"; };
-  const defs = code.defs.filter((d) => reach.has(d) || isType(d));
-  if (defs.length === code.defs.length) return code;
-  const nodes: Code["nodes"] = {};
-  for (const [id, n] of Object.entries(code.nodes)) if (n.kind === "builtin") nodes[id] = n;
-  for (const d of defs) for (const id of subtree(code, d)) nodes[id] = code.nodes[id];
-  return { nodes, defs };
+  return reachedFrom(code, roots as Id[]);
 }
 
 export function compile(code: Code, info: Info, names: Names, opts: Options): string {

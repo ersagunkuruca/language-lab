@@ -46,7 +46,7 @@
 
 import { resolveArithmetic } from "../../ters/src/lang/arith.ts";
 import type { Code, Id, NodeOf } from "../../ters/src/model.ts";
-import { subtree } from "../../ters/src/model.ts";
+import { dependencies, subtree } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { ARRAY, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, STRING, type Row, type Type } from "../../ters/src/lang/types.ts";
@@ -336,6 +336,21 @@ export const MAX_FUEL = 2 ** 24;
 const BUDGET = "first(() => with fuel(n, () => …), () => …)";
 const MAY_NOT_FINISH = `may not finish (its type has Diverge): on a GPU that hangs the page, so run it under a budget, ${BUDGET}`;
 
+// The definitions the roots reach, every type, and the builtins: what
+// the scalar profile and compile (C67) stage and check again (C90).
+export function reachedFrom(code: Code, roots: Id[]): Code {
+  const reach = new Set<Id>();
+  for (const r of roots) { reach.add(r); for (const d of dependencies(code, r)) reach.add(d); }
+  const isType = (d: Id) => { const n = code.nodes[d]; return n?.kind === "def" && !!n.body && code.nodes[n.body]?.kind === "typedef"; };
+  const defs = code.defs.filter((d) => reach.has(d) || isType(d));
+  if (defs.length === code.defs.length) return code;
+  const nodes: Code["nodes"] = {};
+  for (const [id, n] of Object.entries(code.nodes)) if (n.kind === "builtin") nodes[id] = n;
+  for (const d of defs) for (const id of subtree(code, d)) nodes[id] = code.nodes[id];
+  return { nodes, defs };
+}
+
+
 // `shader`: what a shader has without a heap (C66c). An Int is held in 32
 // bits, and a result past them gives up as a budget running out does. A
 // search with one answer or none, under `first` with a fallback or
@@ -352,6 +367,10 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   // uses from around it, since there are no closures here (lift-lets.ts,
   // C54).
   ({ code, info, names } = liftLets(code, info, names, true));
+  // Only what the roots reach is staged and checked again, as compile
+  // does (C67): the editor's picture of the ray marcher, with its PGA
+  // motor, was checked over the whole library each time (C90).
+  code = reachedFrom(code, roots);
   if (opts.data) opts = { ...opts, records: true };
   // Calls given data written down (an algebra's signature and basis) are
   // worked out as far as that data goes (stage.ts, C65): what's left is
