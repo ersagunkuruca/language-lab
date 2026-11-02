@@ -43,6 +43,11 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
     // as each engine chooses).
     const mapOf = () => call(lib("as map"), call(lib("zipped"), sub("L"), sub("L")));
     const setOf = () => call(lib("as set"), sub("L"));
+    // Text keys and items (C122): a Map Text Int and a Set Text, from a
+    // text split at spaces and commas.
+    const words = () => call(TEXT_OPS.split, call(S.concat, sub("T"), k.lit(r.pick([" a b", ",x,y", "", " é 🎉"]))), k.lit(r.pick([" ", ","])));
+    const textMap = () => call(lib("as map"), call(lib("zipped"), words(), sub("L")));
+    const textSet = () => call(lib("as set"), words());
     const small = (m: number) => k.call(S.first, k.thunk(() => call(INT_OPS.remainder, sub("I"), k.int(m))), k.thunk(() => k.int(0)));
     // Shared by every type: a variable, an if, a let, a match on a list.
     if (!leaf) {
@@ -143,6 +148,9 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
           // A helper given a box and a shape (C116): C lends what it only reads.
           () => (helpers.length ? call(r.pick(helpers), sub("R"), sub("D"), sub("I")) : sub("I")),
           () => call(lib("queue size"), call(lib("queued"), call(lib("queue of"), sub("L")), sub("I"))),
+          () => call(lib("map size"), call(lib("put"), textMap(), sub("T"), sub("I"))),
+          () => orElse(call(lib("value at"), textMap(), sub("T"))),
+          () => call(lib("set size"), call(lib("set union"), textSet(), textSet())),
           // A recursive helper of the program's own, and a function
           // given to one with what's in scope closed over (C121).
           () => (recursive.length ? call(r.pick(recursive), sub("L"), sub("I")) : sub("I")),
@@ -167,6 +175,8 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
           () => call(lib("contains"), sub("L"), sub("I")),
           () => call(lib("has key"), call(lib("remove key"), mapOf(), sub("I")), sub("I")),
           () => call(lib("has item"), call(lib("set union"), setOf(), setOf()), sub("I")),
+          () => call(lib("has key"), call(lib("remove key"), textMap(), sub("T")), sub("T")),
+          () => call(lib("has item"), call(lib("set difference"), textSet(), textSet()), sub("T")),
           () => k.equal(sub("D"), sub("D")),
           () => k.equal(sub("R"), sub("R")),
         ])();
@@ -203,6 +213,10 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
           () => call(SHOW_ANY, sub("P")),
           () => call(SHOW_ANY, sub("Q")),
           () => call(SHOW_ANY, sub("U")),
+          () => call(SHOW_ANY, call(lib("merge maps"), textMap(), textMap())),
+          () => call(SHOW_ANY, textSet()),
+          () => call(TEXT_OPS.joinAll, call(lib("keys of"), textMap()), sub("T")),
+          () => k.call(S.first, k.thunk(() => call(lib("smallest item"), textSet())), k.thunk(() => sub("T"))),
           // Lists of tuples: zipped, sorted (by the Int, then the Float64).
           () => call(SHOW_ANY, call(lib("sort"), call(lib("zipped"), sub("L"), sub("P")))),
           () => call(TEXT_OPS.slice, sub("T"), sub("I"), sub("I")),
