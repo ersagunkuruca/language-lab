@@ -476,6 +476,33 @@ async function matchByValue() {
   await p.close();
 }
 
+// A field another case has, added as the same one (L168, E227): the
+// second case's panel offers it, and both cases' panels then say so.
+async function sharedField() {
+  where = "a shared field";
+  const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  await p.goto(page);
+  await p.locator(".nav-row", { hasText: "+ New program" }).click();
+  await p.locator(".nav-row", { hasText: "+ New definition" }).click();
+  await p.locator('[data-panel="node"]').click();
+  await p.locator('[data-set="new-kind"][data-value="type"]').click();
+  await p.locator("#f-def-name").fill("Instr");
+  await p.locator("#f-def-case").fill("jump");
+  await p.locator("button", { hasText: "Create" }).click();
+  await p.locator("#f-new-case").fill("call");
+  await p.locator("button", { hasText: "Add the case" }).click();
+  await p.locator(".slink", { hasText: /^jump/ }).first().click();
+  await p.locator("#f-new-field").fill("to");
+  await p.locator("button", { hasText: "Add the field" }).click();
+  await p.locator(".p-text .body *", { hasText: /^call$/ }).last().click({ timeout: 2000 }).catch(() => errors.push(`${where}: no way back to the case call`));
+  await p.locator("button", { hasText: "to, as jump's" }).click({ timeout: 3000 }).catch(() => errors.push(`${where}: call's panel doesn't offer jump's to`));
+  if (!/the same one/.test(await p.locator(".status").innerText())) errors.push(`${where}: adding it said ${await p.locator(".status").innerText()}`);
+  await p.locator(".p-text .body *", { hasText: /^call$/ }).last().click({ timeout: 2000 }).catch(() => {});
+  if (!(await p.locator(".chip", { hasText: "also in jump" }).count())) errors.push(`${where}: call's to doesn't say it is jump's too`);
+  await p.close();
+}
+
 // Undo of + New definition goes back to the definition open before, and
 // Redo to the new one (E193): not to the library's first type.
 async function undoNewDefinition() {
@@ -684,7 +711,7 @@ async function simplifyAppend() {
   await p.close();
 }
 
-const scenarios = { matchByValue, deleteAndUndo, swapAndUndo, implementInterface, choiceAction, heldSeed, listItems, sharedRow, matchDeeper, foldFrom, answeredLater, helperAtValue, partToFunction, textPort, newAndDeleteDefinition, undoNewDefinition, keptOnReload, reorderInputs, looseParts, seededRun, shaderOpens, letNodes, simplifyAppend };
+const scenarios = { sharedField, matchByValue, deleteAndUndo, swapAndUndo, implementInterface, choiceAction, heldSeed, listItems, sharedRow, matchDeeper, foldFrom, answeredLater, helperAtValue, partToFunction, textPort, newAndDeleteDefinition, undoNewDefinition, keptOnReload, reorderInputs, looseParts, seededRun, shaderOpens, letNodes, simplifyAppend };
 for (const [name, run] of Object.entries(scenarios)) {
   test(name, async () => {
     errors.length = 0;
