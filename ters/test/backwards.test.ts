@@ -189,7 +189,7 @@ test("backwards: types say Choice, Diverge when the search may not end, and prin
 });
 
 test("a direction with exactly one answer has no Choice, and gives its answer", () => {
-  // A Pair taken apart: a Pair is always a Pair, so each value given has
+  // A tuple taken apart: a tuple is always a tuple, so each value given has
   // exactly one pair of fields (modes.ts: det, and it ends).
   const c = program((k) => {
     const make = k.def("make");
@@ -205,7 +205,7 @@ test("a direction with exactly one answer has no Choice, and gives its answer", 
     k.define(name, k.fn(["t"], (t) => k.call(S.first, k.thunk(() => k.solve(greet, { out: t }, { [who]: "who" }, ({ [who]: w }) => w)), k.thunk(() => k.lit("nobody")))));
   });
   assert.deepEqual(c.info.errors, []);
-  assert.equal(showType(c.info.typeOf.get(c.named("sum of"))!, c.names), "(Pair Int Int) -> Int");
+  assert.equal(showType(c.info.typeOf.get(c.named("sum of"))!, c.names), "((Int, Int)) -> Int");
   const r = makeRunner(c.code, c.info, { print: () => {} });
   assert.deepEqual([...r.call(r.value(c.named("sum of")), [...r.call(r.value(PAIR_V), 1, 2)][0])], [3]);
   assert.equal(showType(c.info.typeOf.get(c.named("name in"))!, c.names), "(Text) -> Text");

@@ -62,7 +62,7 @@ test("a turn that can't work says why", async () => {
   assert.match(turnMismatch(f.code, f.names, f.info, f.call, 0) ?? "", /^fall gives a Bool, and distance takes a Float64/);
   // split gives a pair; neither input is one.
   const s = callOf("relations", "main", "split");
-  for (let k = 0; k < 2; k++) assert.match(turnMismatch(s.code, s.names, s.info, s.call, k) ?? "", /^split gives a Pair Float64 Float64, and \S+ takes a Float64/);
+  for (let k = 0; k < 2; k++) assert.match(turnMismatch(s.code, s.names, s.info, s.call, k) ?? "", /^split gives a \(Float64, Float64\), and \S+ takes a Float64/);
   // missing addend's body gives back neither input from its result.
   const m = callOf("relations", "main", "missing addend");
   const r = turnAround(m.code, m.names, m.info, m.call, 0);

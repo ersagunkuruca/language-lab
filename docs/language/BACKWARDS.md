@@ -47,7 +47,7 @@ node --test test/backwards.test.ts
 | number, text | the literal | check it's equal |
 | variable | look it up | unify it with the value |
 | constructor `cons(h, t)` | build | **take apart**: `cons(h, t) = [1, 2]` binds `h = 1`, `t = [2]` |
-| projection `fst(p)` | read the field | build a pair whose `fst` is the value, `snd` unknown |
+| projection `first(p)` | read the field | build a tuple whose `first` is the value, `second` unknown |
 | `+ − × ÷`, `sqrt`, `pow`, `exp`, `log`, `sin`, `cos`, `tan`, `atan2`, `abs` | evaluate | an equation for the solver. One unknown: undone primitive by primitive, with every branch (`±sqrt`, `asin + 2πk`). Several unknowns: kept until enough is known, or eliminated together when they form a square linear block (`a + b = 10, a − b = 4`). Nonlinear with one unknown (`x³ − x − 1 = 0`): scanned for every root |
 | `if` / `match` | pick the arm | **a choice over the arms**: run the arm backwards, then rebuild the value examined from the arm's case, and check it. `if x < 0 then −x else x` backwards from 5 gives −5 and 5 |
 | `fold` | fold bottom-up | **unfold**: pick a case, run its body backwards to find the parts and the folded values of the recursive parts, unfold those in turn. The printer `show numbers` becomes a parser |

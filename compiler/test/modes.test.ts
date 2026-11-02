@@ -25,7 +25,7 @@ const paramsOf = (k: Lang, def: Id) => (k.code.nodes[(k.code.nodes[def] as NodeO
 
 test("det and semidet solves are plain functions, with the evaluator's answers", async () => {
   const k = new Lang();
-  // A Pair taken apart: det, a variant's fields.
+  // A tuple taken apart: det, a variant's fields.
   const make = k.def("make");
   k.define(make, k.fn(["a", "b"], (a, b) => k.call(PAIR_V, a, b)));
   const [a, b] = paramsOf(k, make);

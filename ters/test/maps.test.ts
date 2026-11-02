@@ -81,9 +81,9 @@ test("a map has one spelling, counts words in key order, and reads out in order"
   const p = program();
   assert.deepEqual(p.info.errors.map((e) => e.message), []);
   const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });
-  assert.equal(r.value(p.defs.counts), 'map of([pair("and", 1), pair("cat", 2), pair("dog", 1), pair("saw", 1), pair("the", 3)])');
+  assert.equal(r.value(p.defs.counts), 'map of([("and", 1), ("cat", 2), ("dog", 1), ("saw", 1), ("the", 3)])');
   assert.ok(bool(r.value(p.defs.sameSpelling)));
-  assert.deepEqual(items(r.value(p.defs.reads)), ["[1, 2, 3]", '["a", "c"]', "1", "false", "[]", 'map of([pair(1, "a"), pair(2, "B"), pair(3, "C")])']);
+  assert.deepEqual(items(r.value(p.defs.reads)), ["[1, 2, 3]", '["a", "c"]', "1", "false", "[]", 'map of([(1, "a"), (2, "B"), (3, "C")])']);
 });
 
 test("set union, intersection and difference agree with a plain model on every small set", () => {
@@ -108,7 +108,7 @@ test("the operations surely finish: no Diverge in their types; value at is a Cho
   const t = (name: string) => showType(p.info.schemes.get(lib(name))!.type, p.names);
   assert.equal(t("put"), "(Map a b, a, b) -> Map a b");
   assert.equal(t("value at"), "(Map a b, a) -[Choice]-> b");
-  assert.equal(t("as map"), "(List (Pair a b)) -> Map a b");
+  assert.equal(t("as map"), "(List (a, b)) -> Map a b");
   assert.equal(t("set union"), "(Set a, Set a) -> Set a");
   for (const name of ["remove key", "has key", "merge maps", "keys of", "values of", "as set", "add item", "remove item", "has item", "set intersection", "set difference"]) assert.doesNotMatch(t(name), /Diverge/, name);
 });
