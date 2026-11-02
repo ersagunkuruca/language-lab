@@ -451,6 +451,25 @@ if (!ASKED.has("code")) missingAsked();
 
 const undo: Doc[] = [];
 const redo: Doc[] = [];
+// Undo keeps the last UNDO_MAX versions (E202: every one, with its
+// caches, was ~5 MB an edit in Constructions, a gigabyte in an hour). The
+// caches (inference, traces, runs, layouts) are WeakMaps keyed by a
+// version's Code, so a version further back than WARM gets a Code of its
+// own, the same nodes under a new key: its caches go, and an Undo that far
+// back works them out again. The last few steps stay as quick as ever.
+const UNDO_MAX = 200, WARM = 4;
+function keepUndo() {
+  if (undo.length > UNDO_MAX) undo.splice(0, undo.length - UNDO_MAX);
+  const i = undo.length - 1 - WARM;
+  const d = i >= 0 ? undo[i] : null;
+  if (!d || cold.has(d)) return;
+  const c: Doc = { ...d, code: { nodes: d.code.nodes, defs: d.code.defs } };
+  const at = openWith.get(d);
+  if (at) openWith.set(c, at);
+  cold.add(c);
+  undo[i] = c;
+}
+const cold = new WeakSet<Doc>();
 // The program just deleted, until the next edit or switch: Undo brings it
 // back, so a delete needs no "are you sure".
 let deleted: Doc | null = null;
@@ -478,7 +497,7 @@ function commit(next: Partial<Doc>, touched: string[], note: string) {
   deleted = null;
   const filled = swapped && undo.length === swapped.at && next.code && next.code.nodes[swapped.hole] && next.code.nodes[swapped.hole].kind !== "hole";
   swapped = null;
-  if (!filled) { openWith.set(doc, openBefore ?? ui.def); undo.push(doc); }
+  if (!filled) { openWith.set(doc, openBefore ?? ui.def); undo.push(doc); keepUndo(); }
   openBefore = null;
   redo.length = 0;
   doc = { ...doc, ...next, edited: true };
