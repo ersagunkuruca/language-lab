@@ -131,6 +131,26 @@ export function buildPrelude(): Module {
     k.let("n", k.call(TEXT_OPS.length, p), (m) =>
       k.and(k.call(S.not, k.call(INT_OPS.less, l, m)), k.equal(k.call(TEXT_OPS.slice, t, k.call(INT_OPS.sub, l, m), l), p))))));
 
+  // A text repeated and padded, a list of lists flattened (BACKLOG L148,
+  // GAPS round 7 SL3 and SL4: sheet wrote spaces, padded and flattened
+  // itself). JavaScript's repeat, padStart and padEnd, and flat and
+  // flatMap (Haskell's concat and concatMap).
+  const repeated = k.def("repeated");
+  k.define(repeated, k.fn(["text", "times"], (t, n) => k.call(TEXT_OPS.joinAll, k.call(map, k.call(INT_OPS.range, n), k.fn(["i"], () => t)), k.lit(""))));
+  const padding = (t: Id, w: Id, fill: Id, put: (pad: Id) => Id) => k.let("short by", k.call(INT_OPS.sub, w, k.call(TEXT_OPS.length, t)), (by) =>
+    k.if(k.call(INT_OPS.less, k.int(0), by), put(k.call(TEXT_OPS.slice, k.call(repeated, fill, by), k.int(0), by)), t));
+  const padStart = k.def("padded start");
+  k.define(padStart, k.fn(["text", "width", "fill"], (t, w, fill) => padding(t, w, fill, (pad) => k.call(S.concat, pad, t))));
+  const padEnd = k.def("padded end");
+  k.define(padEnd, k.fn(["text", "width", "fill"], (t, w, fill) => padding(t, w, fill, (pad) => k.call(S.concat, t, pad))));
+  const flatten = k.def("flatten");
+  k.define(flatten, k.fn(["lists"], (ls) => k.fold(ls, [
+    { variant: NIL, names: [], body: () => NIL },
+    { variant: CONS, names: ["list", "rest"], results: [null, "rest flattened"], body: ([l], [, r]) => k.call(append, l, r!) },
+  ])));
+  const flatMap = k.def("flat map");
+  k.define(flatMap, k.fn(["list", "f"], (xs, f) => k.call(flatten, k.call(map, xs, f))));
+
   // Extended a (FLOAT-VALUES-2026-11-01.md §3, BACKLOG L125d): a number type
   // with −∞ and +∞ around it, for any ordered number type. The extended
   // reals' rules (∞ + 1 = ∞, −2 · ∞ = −∞), and no answer where they have
@@ -1414,7 +1434,7 @@ export function buildPrelude(): Module {
   const simulatedHelpers = [readyAt, earliest, readyTimes, tiedAt, pickAt, nextDraw, firstDraw, simulatedWorld, simulatedClock];
   const awaitHelpers = [startBranch, waiting, goOn, finished, settle, firstDone, raceSettle, ...simulatedHelpers];
 
-  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, csqrt, clog, cpow, casin, cacos, showC, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, showDecimals, divD, slopeAt, dualTable, showD, asFixed, fixedF, showX, divX, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, ticketId, anyOf, together, race, within, simulated];
+  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, repeated, padStart, padEnd, flatten, flatMap, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, csqrt, clog, cpow, casin, cacos, showC, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, showDecimals, divD, slopeAt, dualTable, showD, asFixed, fixedF, showX, divX, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, ticketId, anyOf, together, race, within, simulated];
   const mapHelpers = [lastItem, putEntry, updateEntry, removeEntry, lookupEntry, hasEntry, pairsAsEntries, addItem_, removeItem_, hasItem_, unionItems, interItems, diffItems];
   const comments: Record<Id, string> = {
     [each]: "Runs the action on each item of the list in turn, for what it does (prints, writes a cell).",
@@ -1448,6 +1468,11 @@ export function buildPrelude(): Module {
     [upperOne]: "A helper of uppercase. Not offered in the palette.",
     [startsWith]: "Whether the text begins with this: starts with(\"# notes\", \"#\") is true. Every text starts with \"\".",
     [endsWith]: "Whether the text ends with this: ends with(\"page.md\", \".md\") is true. Every text ends with \"\".",
+    [repeated]: "The text written this many times over: repeated(\"ab\", 3) is \"ababab\". 0 times, or fewer, is \"\".",
+    [padStart]: "The text with fill put in front until it is this wide: padded start(\"7\", 3, \"0\") is \"007\". A text already as wide is as it was; a fill of several characters is cut where the width ends.",
+    [padEnd]: "The text with fill put after it until it is this wide: padded end(\"ab\", 4, \".\") is \"ab..\". For columns of text.",
+    [flatten]: "The lists one after another, as one list: flatten([[1, 2], [], [3]]) is [1, 2, 3].",
+    [flatMap]: "The lists f gives for each item, one after another: flat map([1, 2], (x) => [x, x]) is [1, 1, 2, 2]. map, then flatten.",
     [extLess]: "a < b for Extended numbers: −∞ is below every number and +∞ above, so the order is total. compare and sort give the same order.",
     [extAdd]: "a + b with ±∞: ∞ + 1 is ∞ and −∞ + −∞ is −∞. ∞ + −∞ has no answer.",
     [extNeg]: "−a with ±∞: −(+∞) is −∞.",
