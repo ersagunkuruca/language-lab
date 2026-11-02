@@ -24,7 +24,7 @@
 // Conway, 1996); dead-result elimination is the same idea in any optimiser.
 
 import type { Code, Id, Node, NodeOf } from "../../ters/src/model.ts";
-import { isUse } from "../../ters/src/model.ts";
+import { isUse, useTarget } from "../../ters/src/model.ts";
 import { freshId, mapIds, subtree } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { PAIR_V, TRUE } from "../../ters/src/lang/std.ts";
@@ -247,8 +247,8 @@ export function solvesAsCalls(code: Code, names: Names): { code: Code; names: Na
     // Only what the relational interpreter would run: a direction the
     // numeric solver plans is compiled from its plan already, rounded as the
     // evaluator's solver rounds it.
-    if (!isUse(n) || !computedForward(code, n) || planSolve(code, n).mode !== "relational" || !shapeOf(n.fn)) continue;
-    const def = code.nodes[n.fn] as NodeOf<"def">, lam = code.nodes[def.body!] as NodeOf<"lambda">;
+    if (!isUse(n) || !computedForward(code, n) || planSolve(code, n).mode !== "relational" || !shapeOf(useTarget(code.nodes, n))) continue;
+    const def = code.nodes[useTarget(code.nodes, n)] as NodeOf<"def">, lam = code.nodes[def.body!] as NodeOf<"lambda">;
     const inputs = lam.params.filter((p) => !def.results!.includes(p));
     const given = Object.keys(n.given).filter((k) => k !== "out");
     const bound = Object.keys(n.binds);
@@ -256,10 +256,10 @@ export function solvesAsCalls(code: Code, names: Names): { code: Code; names: Na
     // let g… = given in let b… = (r's function)(g…) in body, so each given
     // is worked out once however many results are bound.
     const gs = inputs.map((p) => { const b = add({ kind: "binder" } as Omit<Node, "id">); more[b] = names[p] ?? "given"; return b; });
-    const callR = (r: Id) => add({ kind: "call", fn: add({ kind: "ref", target: resultFn(n.fn, r) } as Omit<Node, "id">), args: gs.map((g) => add({ kind: "ref", target: g } as Omit<Node, "id">)) } as Omit<Node, "id">);
+    const callR = (r: Id) => add({ kind: "call", fn: add({ kind: "ref", target: resultFn(useTarget(code.nodes, n), r) } as Omit<Node, "id">), args: gs.map((g) => add({ kind: "ref", target: g } as Omit<Node, "id">)) } as Omit<Node, "id">);
     // Two or more results that share work come from one function, as pairs
     // taken apart again (C55b).
-    const both = bound.length > 1 ? togetherFn(n.fn, def.results!.filter((r) => bound.includes(r))) : null;
+    const both = bound.length > 1 ? togetherFn(useTarget(code.nodes, n), def.results!.filter((r) => bound.includes(r))) : null;
     let lets: Id;
     if (both) {
       const rs = def.results!.filter((r) => bound.includes(r));

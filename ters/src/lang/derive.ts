@@ -54,7 +54,7 @@
 
 import { FN } from "../../../invertible/src/expr.js";
 import type { Code, Id, Node, NodeData, NodeOf } from "../model.ts";
-import { children, freshId, ownerOfTypeParts } from "../model.ts";
+import { children, freshId, ownerOfTypeParts, useTarget, useNode } from "../model.ts";
 import { fieldShapes } from "./nested.ts";
 import type { Names } from "../presentation.ts";
 import { impl } from "../prelude.ts";
@@ -339,7 +339,7 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
         const sub = new Map(ctx.sub);
         const given = Object.fromEntries(Object.entries(n.given).map(([k, e]) => [k, copy(e, ctx)]));
         const binds = Object.fromEntries(Object.entries(n.binds).map(([k, b]) => [k, fresh([b], sub)[0]]));
-        return add({ kind: "solve", fn: n.fn, given, binds, body: copy(n.body, { ...ctx, sub }) });
+        return add(useNode(add, useTarget(nodes, n), given, binds, copy(n.body, { ...ctx, sub })));
       }
       default: throw new NotDifferentiable(`can't copy a ${n.kind}`);
     }

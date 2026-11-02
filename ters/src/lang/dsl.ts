@@ -2,7 +2,7 @@
 // makes nodes with fresh ids and records names in a side table.
 
 import { Builder } from "../builder.ts";
-import { merge, type Code, type Id, type NodeOf } from "../model.ts";
+import { merge, useNode, type Code, type Id, type NodeOf } from "../model.ts";
 import { prelude } from "../prelude.ts";
 import { BOOL, CONS, FALSE, NIL, S, std, TRUE, UNIT_V } from "./std.ts";
 import { INT } from "./types.ts";
@@ -171,7 +171,7 @@ export class Lang extends Builder {
     const given: Record<string, Id> = Object.fromEntries(ins.map((p, i) => [p, this.x(args[i])]));
     given.out = this.true;
     const binds = Object.fromEntries(results.map((r, i) => [r, this.binder(names[i])]));
-    return this.add({ kind: "solve", fn, given, binds, body: this.x(body(...results.map((r) => binds[r]))) });
+    return this.add(useNode((n) => this.add(n), fn, given, binds, this.x(body(...results.map((r) => binds[r])))));
   }
 
   // Use relation `fn` in one direction: `given` ports from expressions, the
@@ -179,7 +179,7 @@ export class Lang extends Builder {
   solve(fn: Id, given: Record<string, Id>, want: Record<string, string>, body: (b: Record<string, Id>) => Id): Id {
     const binds = Object.fromEntries(Object.entries(want).map(([k, name]) => [k, this.binder(name)]));
     const g = Object.fromEntries(Object.entries(given).map(([k, e]) => [k, this.x(e)]));
-    return this.add({ kind: "solve", fn, given: g, binds, body: this.x(body(binds)) });
+    return this.add(useNode((n) => this.add(n), fn, g, binds, this.x(body(binds))));
   }
 
   // An Int literal: exact at any size.
