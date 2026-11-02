@@ -340,6 +340,7 @@ Each of these puts its effect in the type of every function that uses it, so `di
 
 - **Random** (type). An effect: random() is a Float64 from 0 up to (not including) 1. seeded(seed, action) answers it with the same numbers every time; with nothing around it, the world's randomness answers.
 - **seeded** : `(Float64, () -[Random, e]-> a) -[e]-> a`. Runs the action with its random() calls answered by a generator started from the seed: the same numbers every time for the same seed. The action's Random ends here.
+- **random item** : `(List a) -[Choice, Random]-> a`. An item of the list drawn at random, each as likely: random item(["a", "b", "c"]). No answer for an empty list (Choice). seeded gives the same draws every time.
 - **Time** (type). An effect: now() is the time in milliseconds since 1970. In a page, a part that reads it is drawn again every frame.
 - **Wait** (type). An effect: wait(milliseconds) pauses the program. On the command line only: a page can't wait.
 - **Log** (type). An effect: log(line) is debugging output. It can run anywhere, even inside a search; when nothing handles it the line goes to standard error (in a page, the browser's console).
