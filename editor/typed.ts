@@ -664,6 +664,24 @@ function lastDot(text: string): number {
 
 // The arguments of a call, split at its own commas: none inside brackets
 // or text. Undefined when the brackets don't close where they should.
+// The inputs a call of `name` in typed text is given, as typed: a name
+// typed that nothing has yet becomes a definition with inputs named after
+// what it's given (E180), more terms(tokens, rest) -> tokens, rest.
+export function callInputs(text: string, name: string): string[] | null {
+  const at = text.search(new RegExp(`(^|[^\\p{L}\\p{N}_'])${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\(`, "u"));
+  if (at < 0) return null;
+  const open = text.indexOf("(", at + (text.slice(at).startsWith(name) ? 0 : 1) + name.length);
+  let depth = 0, quoted = false;
+  for (let i = open; i < text.length; i++) {
+    const c = text[i];
+    if (c === '"' && text[i - 1] !== "\\") quoted = !quoted;
+    if (quoted) continue;
+    if ("([".includes(c)) depth++;
+    else if (")]".includes(c) && --depth === 0) return topLevel(text.slice(open + 1, i))?.map((x) => x.trim()) ?? null;
+  }
+  return null;
+}
+
 function topLevel(text: string, by = ","): string[] | undefined {
   const out: string[] = [];
   let depth = 0, quoted = false, from = 0;

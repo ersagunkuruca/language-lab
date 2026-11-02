@@ -1968,7 +1968,8 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
     // the way out is offered right there (E179).
     const reason = heldReason(typed.reason.replace(/\.$/, ""));
     const loosen = held[ui.def] && reason !== typed.reason.replace(/\.$/, "") ? h("div", { class: "acts" }, loosenButton(names[ui.def] ?? "It")) : null;
-    list.prepend(h("p", { class: "hint refused" }, `${ui.query.trim()} doesn't fit here: ${reason}.`), ...(loosen ? [loosen] : []));
+    const missing = /^there's no function named (.+?)(?:;|$)/.exec(typed.reason)?.[1];
+    list.prepend(h("p", { class: "hint refused" }, `${ui.query.trim()} doesn't fit here: ${reason}.`), ...(loosen ? [loosen] : []), ...(missing ? [h("div", { class: "acts" }, makeNamed(info, missing))] : []));
   }
   else if (!shown.length && !value && pending && q) list.append(h("p", { class: "hint" }, "Reading what's typed…"));
   else if (!shown.length && !value) list.append(h("p", { class: "hint" }, `Nothing that fits matches. ${why || "Values and arithmetic can be typed too: 3, \"text\", [1, 2], x * 2, (x) => x + 1."}`));
@@ -2093,6 +2094,29 @@ function typePicker(id: string, type: Id, names: Names, current: Id | null, chan
 }
 
 // Run a top-level edit; `then` adjusts what's shown once it's in.
+// A call typed of a name nothing has yet (E180): a definition of that
+// name, its inputs named after what the call gives it (a name typed there,
+// or input 1, 2…), its body a hole. The typed text stays, and reads now.
+function makeNamed(info: T.Info, name: string): HTMLElement {
+  const ins = T.callInputs(ui.query, name) ?? [];
+  const params = ins.map((x, i) => (/^[\p{L}_][\p{L}\p{N}_' ]*$/u.test(x) && !ins.slice(0, i).includes(x) ? x : `input ${i + 1}`));
+  const b = h("button", { class: "btn", type: "button" }, `Make a definition named ${name}`);
+  b.title = `${name}(${params.join(", ")}), its body a hole to fill later; what's typed here then reads`;
+  b.addEventListener("click", () => {
+    const keep = ui.query, at = ui.selected, was = doc;
+    runTop(info, Top.newDefinition(doc.code, doc.names.short, name, { kind: "function", params }));
+    if (doc === was) return;
+    // Back at the hole it was typed in, the typed text kept.
+    ui.selected = at;
+    ui.query = keep;
+    ui.note = `Made ${name}(${params.join(", ")}), its body a hole to fill later. Enter fills this one with what's typed.`;
+    render();
+    const f = document.getElementById("f-query") as HTMLInputElement | null;
+    f?.focus();
+  });
+  return b;
+}
+
 function runTop(info: T.Info, r: Top.Top, then?: (r: Extract<Top.Top, { ok: true }>) => void) {
   // Before drawing: drawn first, a deleted definition would still be the
   // open one, with its nodes gone.
