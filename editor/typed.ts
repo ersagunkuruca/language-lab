@@ -1330,7 +1330,14 @@ export const isDot = (code: Code, defId: Id, b: Id) => lets(code, defId).some((l
 export function dotHandles(code: Code, defId: Id, names: Names): Names {
   const out: Names = {};
   let k = 0;
-  for (const l of lets(code, defId)) for (const p of (code.nodes[l.fn] as NodeOf<"lambda">).params) if (names[p] === undefined) out[p] = `•${++k}`;
+  // A step done for what it does, filled and read by nothing, reads as the
+  // step itself, for each(…), not ‹•1› = for each(…) (E183); while its
+  // value is a hole, the handle is how to reach it.
+  const read = new Set(Object.values(code.nodes).flatMap((n) => (n.kind === "ref" ? [n.target] : [])));
+  for (const l of lets(code, defId)) (code.nodes[l.fn] as NodeOf<"lambda">).params.forEach((p, i) => {
+    if (names[p] !== undefined || (!read.has(p) && code.nodes[l.args[i]]?.kind !== "hole")) return;
+    out[p] = `•${++k}`;
+  });
   return out;
 }
 
