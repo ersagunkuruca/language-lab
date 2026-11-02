@@ -56,4 +56,6 @@ test("an input with no type yet splits as a chosen data type", () => {
   const m = r.code.nodes[lam.body] as NodeOf<"match">;
   assert.equal(m.kind, "match");
   assert.equal(m.arms.length, 2);
+  // Each case has its own row and hole, not one otherwise for both (E177).
+  assert.deepEqual(sharedOtherwise(r.code, matchRows(r.code, null, m), m.otherwise ?? undefined).folded, []);
 });
