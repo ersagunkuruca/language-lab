@@ -166,6 +166,7 @@ Text is a string of characters. Positions count from 0. Text has the one <, alph
 - **comes before** : `(Text, Text) -> Bool`. Whether one text comes before another alphabetically (by character code).
 - **character code** : `(Text) -[Choice]-> Int`. The character's number (its Unicode code point). No answer unless the text is one character.
 - **character** : `(Int) -[Choice]-> Text`. The character with this number. No answer when there's none.
+- **read number** : `(Text) -[Choice]-> Float64`. The Float64 a text spells: read number("30.5") is 30.5, and "-2", ".5" and "1e-3" read too. No answer for anything else, or for a number too big for a Float64. (read whole number reads an Int.)
 - **starts with** : `(Text, Text) -> Bool`. Whether the text begins with this: starts with("# notes", "#") is true. Every text starts with "".
 - **ends with** : `(Text, Text) -> Bool`. Whether the text ends with this: ends with("page.md", ".md") is true. Every text ends with "".
 - **contains text** : `(Text, Text) -> Bool`. Whether the part occurs somewhere in the text: contains text("to do list", "do") is true. Every text contains "". (contains is a list's.)

@@ -196,6 +196,7 @@ export const NOTES: Comments = {
   "builtin.text.less": "Whether one text comes before another alphabetically (by character code).",
   "builtin.text.code": "The character's number (its Unicode code point). No answer unless the text is one character.",
   "builtin.text.fromCode": "The character with this number. No answer when there's none.",
+  "builtin.text.readNumber": "The Float64 a text spells: read number(\"30.5\") is 30.5, and \"-2\", \".5\" and \"1e-3\" read too. No answer for anything else, or for a number too big for a Float64. (read whole number reads an Int.)",
 
   // --- searching: Choice
   "builtin.oneOf": "Any item of the list: a Choice with one answer per item. all, first or count decide what to do with them.",
