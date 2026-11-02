@@ -612,7 +612,8 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| L62 | Pure branches: a `together` whose actions are in-place functions with no effects but Abort and Diverge is known pure (src/lang/pure-branches.ts `pureTogethers`), so a target may run its branches in any order or at once (test/pure-branches.test.ts, ANSWERED-LATER.md "Pure branches") | this PR |
+| L44f | `least squares(m, b)` for a Float64 Matrix with at least as many rows as columns, by the normal equations (test/matrix-any-size.test.ts, LANGUAGE.md "Matrices"); and `replace in array` got its note and its place in the library reference | this PR |
+| L62 | Pure branches: a `together` whose actions are in-place functions with no effects but Abort and Diverge is known pure (src/lang/pure-branches.ts `pureTogethers`), so a target may run its branches in any order or at once (test/pure-branches.test.ts, ANSWERED-LATER.md "Pure branches") | #1202 |
 | L44e | `determinant` and `inverted` for a Matrix of any size: the determinant by elimination with a row swap per pivot, inverted by solving each column of the identity (test/matrix-any-size.test.ts, MATRICES.md step 3) | #1201 |
 | L20 | `set` through a general function: when the function reads the record only through its fields, (b) ↦ b.width · 2, set runs it backwards to new field values and sets those paths, as a lens; otherwise the message says which functions work (src/lang/set-through.ts, test/set-through.test.ts, LANGUAGE.md) | #1200 |
 | L70c | A backward read with no answer says where it stopped: run with a `stuck` hook (run.ts Runtime, relate.ts Options), it reports a Reading, the furthest character any try reached and what was expected there, as a packrat parser's furthest failure; `stuckReading` words it (test/calc-grammar.test.ts, BACKWARDS.md "Where a reading stopped"). The editor's marking is its half | #1196 |

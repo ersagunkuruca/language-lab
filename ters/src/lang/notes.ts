@@ -176,6 +176,7 @@ export const NOTES: Comments = {
   "builtin.array.push": "The array with one more item at the end. A copy: the compiler may add in place when nothing else holds the array.",
   "builtin.array.first": "The array's first item; none of an empty array.",
   "builtin.array.firstIfAny": "The array's first item as an Option: some(item), or none of an empty array. No Choice, so nothing searches around it.",
+  "builtin.array.replaceAt": "The array with the item at this position replaced. A copy: the compiler may write in place when nothing else holds the array.",
   "builtin.table.empty": "A hash table with no entries: how a map is stored when the compiler sees that every map has one holder (C63b). Programs say Map; the compiler picks this.",
   "builtin.table.put": "The table with the key's value set. It changes the table itself, so the compiler uses it only where nobody can see the table before the change.",
   "builtin.table.remove": "The table without the key, changed in place like put.",
