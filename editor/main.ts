@@ -1626,6 +1626,9 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
   const at = ops ? /^(\S+) (.+)$/.exec(T.typeOf(info, up!.parent, names) ?? "") : null;
   if (ops && at && up?.index !== undefined) out.append(h("p", { class: "hint" }, `This is ${names[ops[up.index]] ?? "an operation"} at ${at[2]}: what ${at[1]}'s ${names[ops[up.index]] ?? "operation"} does for a ${at[2]}. Write it as a function, or pick one that fits.`));
   else if (t) out.append(h("div", { class: "typeline" }, h("span", {}, "type"), h("code", {}, t)));
+  // Which of a shared name's meanings a call took (E223).
+  const took = T.tookType(doc.code, info, names, id);
+  if (took) out.append(h("div", { class: "typeline", title: "Several things have this name: this is the one the types picked" }, h("span", {}, "calls"), h("code", {}, took)));
   const err = info.errors.find((e) => e.id === id);
   if (err) out.append(h("p", { class: "status-line bad" }, err.message));
   // A type with no implementation of an interface a use needs: write one.
@@ -1836,6 +1839,8 @@ function fillLabel(f: T.Filling, info: T.Info, names: Names): [string, string, s
       const d = node(f.target) as NodeOf<"def">, ps = (node(d.body!) as NodeOf<"lambda">).params;
       return [`${d.results!.map(nm).join(", ")} = ${nm(f.target)}(${ps.filter((q) => !d.results!.includes(q)).map(() => "□").join(", ")})`, `its results, named, in what you write next`, "results"];
     }
+    // A record with one field new (E214): machine with pc changed.
+    case "set": return [`${nm(f.on)} with ${nm(f.field)} changed`, `set((…) ↦ ….${nm(f.field)}, ${nm(f.on)}, □): the same ${nm(f.type)}, only its ${nm(f.field)} new`, "one field changed"];
     // A match on values (E225): match op · by value.
     case "values": return [`match ${nm(f.on)} · by value`, `a case per ${f.type === "type.string" ? "Text" : nm(f.type)} value you write, then otherwise`, "case analysis"];
     default: return words(f.type).effect
@@ -1994,7 +1999,7 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
   // Where a function goes, writing one here is often what's meant.
   // What a representation is written with (match by, match as written)
   // comes last: it's for writing one, not for a program's values (I141).
-  const order = [...(head ? ["functions"] : []), "in scope", "new function", "calls", "constructors", "definitions", "literals", "case analysis", "functions, not called", "for representations"];
+  const order = [...(head ? ["functions"] : []), "in scope", "one field changed", "new function", "calls", "constructors", "definitions", "literals", "case analysis", "functions, not called", "for representations"];
   // A row's label, once per filling while the names stay (I135: every key
   // labelled every filling again, a type shown for each).
   const label = (f: T.Filling): [string, string, string] => {

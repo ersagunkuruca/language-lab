@@ -70,7 +70,7 @@ import * as Alg from "./algebraic.ts";
 import { realRoots, type Algebraic } from "./algebraic.ts";
 import { lowest, type Q as Frac } from "./poly.ts";
 import { CELL_OPS, COMPARE, CONS, FALSE, INT_OPS, IO, NIL, NONE, RANDOM_OP, RATIO, S, SET, SHOW_ANY, CASE_NAME, SIGS, SOME, STD_IMPL, STD_MANY, stdNames, TEXT_OPS, TRUE } from "./std.ts";
-import { add as intAdd, divides, intLit, lowestTerms, mul as intMul, neg as intNeg, squareRoots, sub as intSub, type Int } from "./int.ts";
+import { add as intAdd, divides, intLit, show as intShow, lowestTerms, mul as intMul, neg as intNeg, squareRoots, sub as intSub, type Int } from "./int.ts";
 import { fieldIndex, fieldPath, setPath } from "./records.ts";
 import { CHOICE, DIVERGE, INT, type Type } from "./types.ts";
 import { around, resultBounds, within, type Iv } from "./bounds.ts";
@@ -806,7 +806,80 @@ export function interpreter(given: Code, opts: Options = {}) {
   };
   // A point where the search may go on forever: suspend (for fairness) and
   // spend fuel.
-  const step = (g: Goal): Goal => (s) => () => (spend() ? g(s) : null);
+  // While a call is tabled (below), every step also spends from its budget.
+  // A search cut short by fuel while tabling isn't kept either (starved).
+  let budget: number | null = null, starved = false;
+  const spent = () => (budget === null || --budget >= 0) && (spend() || ((starved = budget !== null), false));
+  const step = (g: Goal): Goal => (s) => () => (spent() ? g(s) : null);
+  // Tabling (L70b): a recursive call whose result is a known text and
+  // whose inputs are each known or not yet anything is searched once, on
+  // its own, for all its answers, and kept: a grammar printer read
+  // backwards asks for the same piece of text again from every way of
+  // cutting the text around it, and without this that is exponential.
+  // Kept only when the search ends within its budget with every answer
+  // known; otherwise the call is searched as usual. Prior art: tabling in
+  // XSB Prolog (Tamaki and Sato's OLDT resolution, 1986) and packrat
+  // parsing's memo (Ford, 2002).
+  // A call reached again with the same text and inputs while it is being
+  // tabled (left recursion through an empty piece) gets the answers found
+  // so far, and the table is searched again until no new answer comes
+  // (a least fixed point, as SLG resolution computes). A table that used
+  // another's answers so far isn't kept, since they may grow.
+  type Table = { answers: Term[][] | null; running: boolean; hit: boolean; leaned: boolean };
+  const tables = new Map<string, Table>();
+  const running: Table[] = [];
+  const TABLE_BUDGET = 200_000, PASSES = 5;
+  function tabled(c: Closure, args: Term[], out: Term, s: State): Stream | undefined {
+    const text = walk(out, s);
+    if (typeof text !== "string" || !isRecursive(c.lambda) || !known(c, s)) return undefined;
+    const now = args.map((a) => walk(a, s));
+    const open = now.map((a, i) => (a instanceof LVar ? i : -1)).filter((i) => i >= 0);
+    if (!open.length || new Set(now.filter((a) => a instanceof LVar)).size !== open.length) return undefined;
+    if (now.some((a) => !(a instanceof LVar) && !known(a, s))) return undefined;
+    const key = `${c.lambda}\u0000${text}\u0000${now.map((a) => (a instanceof LVar ? "?" : showTerm(deep(a, s)))).join("\u0000")}`;
+    const answer = (found: Term[][]) => disj(...found.map((vals) => conj(...open.map((i, j) => eq(args[i], vals[j])))))(s);
+    let table = tables.get(key);
+    if (table?.running) {
+      table.hit = true;
+      for (const t of running.slice(running.indexOf(table) + 1)) t.leaned = true;
+      return answer(table.answers ?? []);
+    }
+    if (!table) {
+      table = { answers: [], running: true, hit: false, leaned: false };
+      tables.set(key, table);
+      running.push(table);
+      const outer = budget;
+      if (budget === null) { budget = TABLE_BUDGET; starved = false; }
+      let whole = true;
+      for (let pass = 0; whole; pass++) {
+        table.hit = false;
+        const [vs, s0] = freshVars({ sub: new Sub(), eqs: [], waits: [], next: 0, spend: opts.spend }, open.length);
+        const inner = now.map((a, i) => (a instanceof LVar ? vs[open.indexOf(i)] : deep(a, s)));
+        const found: Term[][] = [], seen = new Set<string>();
+        // Its plan is made for what is known now, whatever the caller planned.
+        for (const t of pull(invoke(c, inner, text)(s0))) {
+          const got = vs.map((v) => ground(v, t));
+          if (t.waits.length || t.asleep?.waits || got.some((g) => g === undefined)) { whole = false; break; }
+          const shown = got.map((g) => showTerm(g!)).join("\u0000");
+          if (!seen.has(shown)) { seen.add(shown); found.push(got as Term[]); }
+        }
+        const grew = found.length > table.answers!.length;
+        table.answers = found;
+        if (!table.hit || !grew) break;
+        if (pass === PASSES - 1) whole = false;
+      }
+      if ((budget !== null && budget < 0) || starved) whole = false;
+      budget = outer === null ? null : budget;
+      running.pop();
+      table.running = false;
+      if (!whole) table.answers = null;
+      const kept = table.answers;
+      if (table.leaned) tables.delete(key);
+      if (!kept) return undefined;
+      return answer(kept);
+    }
+    return table.answers ? answer(table.answers) : undefined;
+  }
   // Values defined once, worked out once (refGoal): null when they can't be.
   const constants = new Map<Id, Term | null>();
 
@@ -1222,7 +1295,21 @@ export function interpreter(given: Code, opts: Options = {}) {
       };
       return (s) => {
         const known = forward(c, args, s);
-        return known ? disj(...known.map((v) => eq(out, fromValue(v))))(s) : searched()(s);
+        if (known) return disj(...known.map((v) => eq(out, fromValue(v))))(s);
+        // Inside a tabled search, a recursive call on a known text with more
+        // than one input not yet known waits until at most one is: its
+        // table would otherwise hold answers that leave them open (a
+        // grammar's binding strength, worked out from the operator read
+        // next to it).
+        const opens = (st: State) => args.filter((a) => walk(a, st) instanceof LVar).length;
+        if (budget !== null && typeof walk(out, s) === "string" && opens(s) > 1 && isRecursive(c.lambda)) {
+          return wait({ k: "later", text: "a call waiting for its inputs", on: args, ready: (st) => opens(st) <= 1, then: (st) => {
+            const kept = tabled(c, args, out, st);
+            return kept !== undefined ? kept : searched()(st);
+          } })(s);
+        }
+        const kept = tabled(c, args, out, s);
+        return kept !== undefined ? kept : searched()(s);
       };
     }
     const t = nodes[f.id];
@@ -1470,6 +1557,19 @@ export function interpreter(given: Code, opts: Options = {}) {
           const sep = walk(by, s) as string;
           if (known(parts, s)) return eq(out, fromValue(STD_IMPL[id](toValue(deep(parts, s))!, sep)))(s);
           return eq(parts, fromValue((STD_IMPL[TEXT_OPS.split] as (t: string, by: string) => Value)(walk(out, s) as string, sep)))(s);
+        },
+      });
+    }
+    // An Int's show, backwards: the digits read back, only in the one
+    // spelling show writes (no leading zeros or plus sign, no "-0"), as
+    // Float64's show is (L70b: a printer's numbers read back).
+    if (id === INT_OPS.show) {
+      const [n] = args;
+      return wait({
+        k: "later", text: "show", on: [n, out], ready: (s) => known(n, s) || known(out, s), then: (s) => {
+          if (known(n, s)) return eq(out, intShow(walk(n, s) as Int))(s);
+          const t = walk(out, s) as string;
+          return /^-?(0|[1-9][0-9]*)$/.test(t) && t !== "-0" ? eq(n, intLit(t))(s) : null;
         },
       });
     }

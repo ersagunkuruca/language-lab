@@ -719,7 +719,10 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
   // determinism analysis does the same for a switch on an output.
   function matchGoal(n: NodeOf<"match">, ctx: Ctx): Goal {
     const arms = n.arms.map((a) => nodes[a] as NodeOf<"arm">);
-    const others = arms.length && n.otherwise ? variantsOf(arms[0].variant).filter((v) => !arms.some((a) => a.variant === v)) : [];
+    // A match on values (L164c): an arm chosen gives the value examined,
+    // its literal; there are no fields and no other cases to list.
+    const byValue = arms.some((a) => a.value);
+    const others = arms.length && n.otherwise && !byValue ? variantsOf(arms[0].variant).filter((v) => !arms.some((a) => a.variant === v)) : [];
     const v = slot(n.scrutinee), out = slot(n.id);
     return {
       text: "match", slots: [v, out], exec: { k: "same", a: n.id, b: n.id },
@@ -729,7 +732,11 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
         // each case anyway, so this is the last thing to do.
         const guess = !exclusive && !st.known.has(out);
         const branches: Branch[] = [
-          ...arms.map((arm) => ({
+          ...arms.map((arm) => byValue ? {
+            text: "arm by value", variant: null, binds: [],
+            goals: [...goalsOf(arm.body, ctx), sameValue(arm.body, n.id)],
+            gives: exclusive ? [] : [v], sizes: [],
+          } : ({
             text: `arm ${nm(arm.variant)}`, variant: arm.variant, binds: arm.binds,
             goals: [...(exclusive ? [] : [caseGoal(n.scrutinee, arm.variant, arm.binds, `case ${nm(arm.variant)}`)]), ...goalsOf(arm.body, ctx), sameValue(arm.body, n.id)],
             ...taken(exclusive, v, arm.binds, st),

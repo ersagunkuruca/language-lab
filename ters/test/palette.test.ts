@@ -133,3 +133,32 @@ test("in a definition with results, only fillings that keep its direction are of
   const bad = offered.filter((f) => infer(fillHole(code, {}, hole, f).code).errors.length > info.errors.length);
   assert.deepEqual(bad.map((f) => JSON.stringify(f).slice(0, 80)), []);
 });
+
+// Where a record's type is wanted and one of its type is in scope, the
+// palette offers it with one field changed, set((m) ↦ m.pc, machine, □)
+// (E214: machine rebuilt its 8-field Machine from its own fields 12
+// times), and the filled program type-checks and runs.
+test("a record in scope with one field changed is offered where its type goes", async () => {
+  const { STRING } = await import("../src/lang/types.ts");
+  const k = new Lang();
+  const M = k.type("Machine", [], [["machine", [["pc", () => k.tref("type.number")], ["name", () => k.tref(STRING)]]]]);
+  const step = k.def("step");
+  let hole = "";
+  // m.pc says m is a Machine; what step gives is still open.
+  k.define(step, k.fn(["m"], (m) => k.let("at", k.call(M.f["machine.pc"], m), () => (hole = k.hole()))));
+  const code = base(k.code);
+  const info = infer(code);
+  const offers = fillings(code, info, hole).filter((f) => f.kind === "set");
+  assert.deepEqual(offers.map((f) => (f.kind === "set" ? f.field : "")), [M.f["machine.pc"], M.f["machine.name"]]);
+  const filled = fillHole(code, {}, hole, offers[0]).code;
+  assert.equal(infer(filled).errors.length, info.errors.length);
+  // Not where any type goes: a new value's hole doesn't list every field
+  // of every record in scope.
+  const k2 = new Lang();
+  const g = k2.def("g");
+  let h2 = "";
+  const M2 = k2.type("Machine", [], [["machine", [["pc", () => k2.tref("type.number")], ["name", () => k2.tref(STRING)]]]]);
+  k2.define(g, k2.fn(["n"], (n) => k2.let("m", k2.call(M2.v.machine, n, k2.lit("")), (m) => k2.let("v", (h2 = k2.hole()), () => m))));
+  const c2 = base(k2.code);
+  assert.equal(fillings(c2, infer(c2), h2).filter((f) => f.kind === "set").length, 0);
+});
