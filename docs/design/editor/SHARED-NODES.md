@@ -126,3 +126,30 @@ that was the first of its kind had its units checked twice, inside the
 whole check and on their own. The whole check now leaves units out
 (`noUnits`): 30 s to 23 s for the 23 holes, the worst 4.2 s to 3.7 s.
 
+
+## Where it stands (2026-11-02): closed
+
+Measured again on physics `fall` (23 holes, this container, quiet):
+25.5 s in all, the worst hole 4.1 s, most holes 0.4 to 0.8 s (121 s and
+22 s when this note began). A profile of the worst hole (3.5 s in
+`fillings`):
+
+| part | time |
+|---|---|
+| whole checks keyed by what an offer makes of the group's types and plans (`byKind`: 1,208 asks, 642 distinct keys, ~2 ms each for the 3 definitions affected: fall, landing times, main) | 1.3 s |
+| each offer's units on their own (`unitProblems`) | 0.7 s |
+| the solves' plans per offer (`planSolve`, `solveMode`) | 0.9 s |
+| the rest (fits, directions, garbage collection) | ~0.6 s |
+
+Nothing is copied any more, and no step left is a scan of the program:
+each part is the check's own work, done once per distinct question. The
+642 keys are distinct because the offers really make different types
+(functions of 1, 2 or 3 inputs, each with its own result shape) and
+different plans (a call with holes for inputs makes the search
+nondeterministic). What would cut further is a check that knows, from the
+offer alone, that it can't fail: an incremental inference that rechecks
+only the uses of the group's changed type. That is a change to the checker
+(infer.ts), larger than the palette needs while a hole's offers take under
+a second on most holes and 4 s on the worst one. So E133 stops here, by the
+10% rule like E103: steps a and b, and E103c to E103e, took the worst hole
+from 22 s to 4 s.
