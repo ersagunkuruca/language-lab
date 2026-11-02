@@ -145,10 +145,18 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
   const fnIndex = (i: number) => imports + i;
   // A generic definition lowered at several types (plus on Vec and on
   // Colour) is exported under its name once, then with the types it's at.
-  const exportName = (f: SFunc) => {
-    const i = funcs.indexOf(f);
-    if (funcs.findIndex((g) => g.name === f.name) === i) return f.name;
-    return `${f.name}(${f.params.map((t) => (t === "f64" ? "Float64" : t === "i32" ? "Bool" : t === "int" || t === "int32" ? "Int" : t === "text" ? "Text" : isFn(t) ? "Function" : t.name)).join(", ")})`;
+  // A generic definition's later copies are named by their inputs' types;
+  // where those read the same (`length` at List Instr and at List Int both
+  // read List), by a count too, since export names must differ (C92).
+  const exportNames = new Map<SFunc, string>(), taken = new Set<string>();
+  const exportName = (f: SFunc): string => {
+    if (exportNames.size === 0) for (const g of funcs) {
+      let n = taken.has(g.name) ? `${g.name}(${g.params.map((t) => (t === "f64" ? "Float64" : t === "i32" ? "Bool" : t === "int" || t === "int32" ? "Int" : t === "text" ? "Text" : isFn(t) ? "Function" : t.name)).join(", ")})` : g.name;
+      for (let k = 2, base = n; taken.has(n); k++) n = `${base} ${k}`;
+      taken.add(n);
+      exportNames.set(g, n);
+    }
+    return exportNames.get(f)!;
   };
 
   // ---- binary
