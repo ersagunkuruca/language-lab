@@ -460,13 +460,16 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   const OTHER = opts.data ? "something other than Float64, Bool or data of them" : opts.records ? "something other than Float64, Bool or a record of them" : "something other than Float64 or Bool";
 
   // The profile's type for t, or null if t isn't in it.
+  // The type variables of the root being lowered, which its callers give.
+  let rootVars = new Set<number>();
+  const unconstrained = (x: Type) => x.t === "var" && !rootVars.has(x.v);
   function stype(t: Type, inside: Id[] = []): LType | null {
     if (t.t === "fn" && opts.data) {
       // A function that may not finish, have no answer or abort is fine
       // here (a partial one, giving a status); one with other effects isn't yet.
       const effs = info.subst.resolveRow(t.eff).effs;
       if (effs.some((e) => !allowedEff(e))) return null;
-      const free = (x: Type): Type => (x.t === "var" ? { t: "con", id: NUMBER, args: [] } : x);
+      const free = (x: Type): Type => (unconstrained(x) ? { t: "con", id: NUMBER, args: [] } : x);
       const params = t.params.map((p) => stype(free(p), inside)), result = stype(free(t.ret), inside);
       if (params.some((p) => !p) || !result) return null;
       const partial = effs.some(partialEff);
@@ -478,7 +481,9 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     // A part nothing constrains (the items of `[]` nobody adds to, what a
     // function given to map over it takes, C101): no value of it is ever
     // made, so any type holds it; Float64's.
-    if (opts.data && t.args.some((a) => a.t === "var")) t = { ...t, args: t.args.map((a) => (a.t === "var" ? { t: "con", id: NUMBER, args: [] } : a)) };
+    // A root's own type variables stay what they are: its caller gives
+    // values of them.
+    if (opts.data && t.args.some(unconstrained)) t = { ...t, args: t.args.map((a) => (unconstrained(a) ? { t: "con", id: NUMBER, args: [] } : a)) };
     if (t.id === NUMBER) return "f64";
     if (t.id === BOOL) return "i32";
     if (opts.data && t.id === INT) return "int";
@@ -1954,7 +1959,9 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   };
   for (const r of roots) {
     const from = funcs.length, shaped = shapes.length;
-    try { func(r, defaults(r)); several_(from); modCons(from); } catch (e) {
+    const raw = info.typeOf.get(r) && info.subst.zonk(info.typeOf.get(r)!), given = defaults(r);
+    rootVars = new Set(raw ? vars(raw).filter((v) => !given.has(v)) : []);
+    try { func(r, given); several_(from); modCons(from); } catch (e) {
       if (!(e instanceof Refused)) throw e;
       if (funcs.length > from && index.get(r) !== undefined && index.get(r)! >= from) {
         // Refused making its searches: undo it, and what was lowered with it.
