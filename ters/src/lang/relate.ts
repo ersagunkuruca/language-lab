@@ -1418,6 +1418,19 @@ export function interpreter(given: Code, opts: Options = {}) {
         },
       });
     }
+    // join all, backwards (L172): the text split at the separator, the one
+    // list of parts that hold none of it (modes.ts). So a printer that
+    // joins its fields runs backwards as their reader.
+    if (id === TEXT_OPS.joinAll) {
+      const [parts, by] = args;
+      return wait({
+        k: "later", text: "join all", on: [parts, by, out], ready: (s) => known(by, s) && (known(parts, s) || known(out, s)), then: (s) => {
+          const sep = walk(by, s) as string;
+          if (known(parts, s)) return eq(out, fromValue(STD_IMPL[id](toValue(deep(parts, s))!, sep)))(s);
+          return eq(parts, fromValue((STD_IMPL[TEXT_OPS.split] as (t: string, by: string) => Value)(walk(out, s) as string, sep)))(s);
+        },
+      });
+    }
     // compare runs forwards once both are known: which pairs are in order
     // isn't a search worth making.
     const many = STD_MANY[id] ?? (STD_IMPL[id] ? (...xs: Value[]) => [STD_IMPL[id](...xs)] : id === SHOW_ANY ? (x: Value) => [showValue(x, code, opts.names ?? stdNames, true)]

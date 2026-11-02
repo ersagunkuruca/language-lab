@@ -103,150 +103,51 @@
         ],
         "body": "@c9sa21p6t34r9bf9cjcm8h2101:4"
       },
-      "@htgmkjadvd8b5m17uvfn9s7hc0": {
-        "id": "@htgmkjadvd8b5m17uvfn9s7hc0",
+      "@rrc61bud51hgr319omhcik166b": {
+        "id": "@rrc61bud51hgr319omhcik166b",
         "kind": "def",
-        "body": "@htgmkjadvd8b5m17uvfn9s7hc0:1"
+        "body": "@rrc61bud51hgr319omhcik166b:1"
       },
-      "@htgmkjadvd8b5m17uvfn9s7hc0:2": {
-        "id": "@htgmkjadvd8b5m17uvfn9s7hc0:2",
+      "@rrc61bud51hgr319omhcik166b:2": {
+        "id": "@rrc61bud51hgr319omhcik166b:2",
         "kind": "binder"
       },
-      "@htgmkjadvd8b5m17uvfn9s7hc0:3": {
-        "id": "@htgmkjadvd8b5m17uvfn9s7hc0:3",
+      "@rrc61bud51hgr319omhcik166b:3": {
+        "id": "@rrc61bud51hgr319omhcik166b:3",
         "kind": "binder"
       },
-      "@htgmkjadvd8b5m17uvfn9s7hc0:5": {
-        "id": "@htgmkjadvd8b5m17uvfn9s7hc0:5",
+      "@rrc61bud51hgr319omhcik166b:5": {
+        "id": "@rrc61bud51hgr319omhcik166b:5",
         "kind": "ref",
-        "target": "@htgmkjadvd8b5m17uvfn9s7hc0:2"
+        "target": "builtin.text.joinAll"
       },
-      "@htgmkjadvd8b5m17uvfn9s7hc0:7": {
-        "id": "@htgmkjadvd8b5m17uvfn9s7hc0:7",
-        "kind": "lit",
-        "value": ""
-      },
-      "@htgmkjadvd8b5m17uvfn9s7hc0:6": {
-        "id": "@htgmkjadvd8b5m17uvfn9s7hc0:6",
-        "kind": "arm",
-        "variant": "std.list.nil",
-        "binds": [],
-        "results": [],
-        "body": "@htgmkjadvd8b5m17uvfn9s7hc0:7"
-      },
-      "@htgmkjadvd8b5m17uvfn9s7hc0:9": {
-        "id": "@htgmkjadvd8b5m17uvfn9s7hc0:9",
-        "kind": "binder"
-      },
-      "@htgmkjadvd8b5m17uvfn9s7hc0:10": {
-        "id": "@htgmkjadvd8b5m17uvfn9s7hc0:10",
-        "kind": "binder"
-      },
-      "@htgmkjadvd8b5m17uvfn9s7hc0:11": {
-        "id": "@htgmkjadvd8b5m17uvfn9s7hc0:11",
-        "kind": "binder"
-      },
-      "@htgmkjadvd8b5m17uvfn9s7hc0:19": {
-        "id": "@htgmkjadvd8b5m17uvfn9s7hc0:19",
+      "@rrc61bud51hgr319omhcik166b:6": {
+        "id": "@rrc61bud51hgr319omhcik166b:6",
         "kind": "ref",
-        "target": "builtin.concat"
+        "target": "@rrc61bud51hgr319omhcik166b:2"
       },
-      "@htgmkjadvd8b5m17uvfn9s7hc0:20": {
-        "id": "@htgmkjadvd8b5m17uvfn9s7hc0:20",
+      "@rrc61bud51hgr319omhcik166b:7": {
+        "id": "@rrc61bud51hgr319omhcik166b:7",
         "kind": "ref",
-        "target": "@htgmkjadvd8b5m17uvfn9s7hc0:9"
+        "target": "@rrc61bud51hgr319omhcik166b:3"
       },
-      "@htgmkjadvd8b5m17uvfn9s7hc0:21": {
-        "id": "@htgmkjadvd8b5m17uvfn9s7hc0:21",
-        "kind": "ref",
-        "target": "@htgmkjadvd8b5m17uvfn9s7hc0:3"
-      },
-      "@htgmkjadvd8b5m17uvfn9s7hc0:18": {
-        "id": "@htgmkjadvd8b5m17uvfn9s7hc0:18",
+      "@rrc61bud51hgr319omhcik166b:4": {
+        "id": "@rrc61bud51hgr319omhcik166b:4",
         "kind": "call",
-        "fn": "@htgmkjadvd8b5m17uvfn9s7hc0:19",
+        "fn": "@rrc61bud51hgr319omhcik166b:5",
         "args": [
-          "@htgmkjadvd8b5m17uvfn9s7hc0:20",
-          "@htgmkjadvd8b5m17uvfn9s7hc0:21"
+          "@rrc61bud51hgr319omhcik166b:6",
+          "@rrc61bud51hgr319omhcik166b:7"
         ]
       },
-      "@htgmkjadvd8b5m17uvfn9s7hc0:17": {
-        "id": "@htgmkjadvd8b5m17uvfn9s7hc0:17",
-        "kind": "ref",
-        "target": "builtin.concat"
-      },
-      "@htgmkjadvd8b5m17uvfn9s7hc0:22": {
-        "id": "@htgmkjadvd8b5m17uvfn9s7hc0:22",
-        "kind": "ref",
-        "target": "@htgmkjadvd8b5m17uvfn9s7hc0:11"
-      },
-      "@htgmkjadvd8b5m17uvfn9s7hc0:16": {
-        "id": "@htgmkjadvd8b5m17uvfn9s7hc0:16",
-        "kind": "call",
-        "fn": "@htgmkjadvd8b5m17uvfn9s7hc0:17",
-        "args": [
-          "@htgmkjadvd8b5m17uvfn9s7hc0:18",
-          "@htgmkjadvd8b5m17uvfn9s7hc0:22"
-        ]
-      },
-      "@htgmkjadvd8b5m17uvfn9s7hc0:13": {
-        "id": "@htgmkjadvd8b5m17uvfn9s7hc0:13",
-        "kind": "ref",
-        "target": "@htgmkjadvd8b5m17uvfn9s7hc0:10"
-      },
-      "@htgmkjadvd8b5m17uvfn9s7hc0:15": {
-        "id": "@htgmkjadvd8b5m17uvfn9s7hc0:15",
-        "kind": "ref",
-        "target": "@htgmkjadvd8b5m17uvfn9s7hc0:9"
-      },
-      "@htgmkjadvd8b5m17uvfn9s7hc0:14": {
-        "id": "@htgmkjadvd8b5m17uvfn9s7hc0:14",
-        "kind": "arm",
-        "variant": "std.list.nil",
-        "binds": [],
-        "results": [],
-        "body": "@htgmkjadvd8b5m17uvfn9s7hc0:15"
-      },
-      "@htgmkjadvd8b5m17uvfn9s7hc0:12": {
-        "id": "@htgmkjadvd8b5m17uvfn9s7hc0:12",
-        "kind": "match",
-        "scrutinee": "@htgmkjadvd8b5m17uvfn9s7hc0:13",
-        "arms": [
-          "@htgmkjadvd8b5m17uvfn9s7hc0:14"
-        ],
-        "otherwise": "@htgmkjadvd8b5m17uvfn9s7hc0:16"
-      },
-      "@htgmkjadvd8b5m17uvfn9s7hc0:8": {
-        "id": "@htgmkjadvd8b5m17uvfn9s7hc0:8",
-        "kind": "arm",
-        "variant": "std.list.cons",
-        "binds": [
-          "@htgmkjadvd8b5m17uvfn9s7hc0:9",
-          "@htgmkjadvd8b5m17uvfn9s7hc0:10"
-        ],
-        "results": [
-          null,
-          "@htgmkjadvd8b5m17uvfn9s7hc0:11"
-        ],
-        "body": "@htgmkjadvd8b5m17uvfn9s7hc0:12"
-      },
-      "@htgmkjadvd8b5m17uvfn9s7hc0:4": {
-        "id": "@htgmkjadvd8b5m17uvfn9s7hc0:4",
-        "kind": "fold",
-        "scrutinee": "@htgmkjadvd8b5m17uvfn9s7hc0:5",
-        "arms": [
-          "@htgmkjadvd8b5m17uvfn9s7hc0:6",
-          "@htgmkjadvd8b5m17uvfn9s7hc0:8"
-        ]
-      },
-      "@htgmkjadvd8b5m17uvfn9s7hc0:1": {
-        "id": "@htgmkjadvd8b5m17uvfn9s7hc0:1",
+      "@rrc61bud51hgr319omhcik166b:1": {
+        "id": "@rrc61bud51hgr319omhcik166b:1",
         "kind": "lambda",
         "params": [
-          "@htgmkjadvd8b5m17uvfn9s7hc0:2",
-          "@htgmkjadvd8b5m17uvfn9s7hc0:3"
+          "@rrc61bud51hgr319omhcik166b:2",
+          "@rrc61bud51hgr319omhcik166b:3"
         ],
-        "body": "@htgmkjadvd8b5m17uvfn9s7hc0:4"
+        "body": "@rrc61bud51hgr319omhcik166b:4"
       },
       "@fok6jrbedlfa86etqm74a421mq": {
         "id": "@fok6jrbedlfa86etqm74a421mq",
@@ -1533,225 +1434,225 @@
         ],
         "body": "@l1ibnd69fhv5j8j3reredg1ar1:4"
       },
-      "@sv3q3ae9pssb720vsoff6784sc": {
-        "id": "@sv3q3ae9pssb720vsoff6784sc",
+      "@urmvgd3e2dcctt7q85g15nql15": {
+        "id": "@urmvgd3e2dcctt7q85g15nql15",
         "kind": "def",
-        "body": "@sv3q3ae9pssb720vsoff6784sc:1"
+        "body": "@urmvgd3e2dcctt7q85g15nql15:1"
       },
-      "@sv3q3ae9pssb720vsoff6784sc:2": {
-        "id": "@sv3q3ae9pssb720vsoff6784sc:2",
+      "@urmvgd3e2dcctt7q85g15nql15:2": {
+        "id": "@urmvgd3e2dcctt7q85g15nql15:2",
         "kind": "binder"
       },
-      "@sv3q3ae9pssb720vsoff6784sc:3": {
-        "id": "@sv3q3ae9pssb720vsoff6784sc:3",
+      "@urmvgd3e2dcctt7q85g15nql15:3": {
+        "id": "@urmvgd3e2dcctt7q85g15nql15:3",
         "kind": "binder"
       },
-      "@sv3q3ae9pssb720vsoff6784sc:12": {
-        "id": "@sv3q3ae9pssb720vsoff6784sc:12",
+      "@urmvgd3e2dcctt7q85g15nql15:12": {
+        "id": "@urmvgd3e2dcctt7q85g15nql15:12",
         "kind": "lit",
         "value": "@media "
       },
-      "@sv3q3ae9pssb720vsoff6784sc:14": {
-        "id": "@sv3q3ae9pssb720vsoff6784sc:14",
+      "@urmvgd3e2dcctt7q85g15nql15:14": {
+        "id": "@urmvgd3e2dcctt7q85g15nql15:14",
         "kind": "lit",
         "value": " { "
       },
-      "@sv3q3ae9pssb720vsoff6784sc:18": {
-        "id": "@sv3q3ae9pssb720vsoff6784sc:18",
+      "@urmvgd3e2dcctt7q85g15nql15:18": {
+        "id": "@urmvgd3e2dcctt7q85g15nql15:18",
         "kind": "lit",
         "value": " "
       },
-      "@sv3q3ae9pssb720vsoff6784sc:16": {
-        "id": "@sv3q3ae9pssb720vsoff6784sc:16",
+      "@urmvgd3e2dcctt7q85g15nql15:16": {
+        "id": "@urmvgd3e2dcctt7q85g15nql15:16",
         "kind": "ref",
-        "target": "@htgmkjadvd8b5m17uvfn9s7hc0"
+        "target": "@rrc61bud51hgr319omhcik166b"
       },
-      "@sv3q3ae9pssb720vsoff6784sc:17": {
-        "id": "@sv3q3ae9pssb720vsoff6784sc:17",
+      "@urmvgd3e2dcctt7q85g15nql15:17": {
+        "id": "@urmvgd3e2dcctt7q85g15nql15:17",
         "kind": "ref",
-        "target": "@sv3q3ae9pssb720vsoff6784sc:3"
+        "target": "@urmvgd3e2dcctt7q85g15nql15:3"
       },
-      "@sv3q3ae9pssb720vsoff6784sc:15": {
-        "id": "@sv3q3ae9pssb720vsoff6784sc:15",
+      "@urmvgd3e2dcctt7q85g15nql15:15": {
+        "id": "@urmvgd3e2dcctt7q85g15nql15:15",
         "kind": "call",
-        "fn": "@sv3q3ae9pssb720vsoff6784sc:16",
+        "fn": "@urmvgd3e2dcctt7q85g15nql15:16",
         "args": [
-          "@sv3q3ae9pssb720vsoff6784sc:17",
-          "@sv3q3ae9pssb720vsoff6784sc:18"
+          "@urmvgd3e2dcctt7q85g15nql15:17",
+          "@urmvgd3e2dcctt7q85g15nql15:18"
         ]
       },
-      "@sv3q3ae9pssb720vsoff6784sc:19": {
-        "id": "@sv3q3ae9pssb720vsoff6784sc:19",
+      "@urmvgd3e2dcctt7q85g15nql15:19": {
+        "id": "@urmvgd3e2dcctt7q85g15nql15:19",
         "kind": "lit",
         "value": " }"
       },
-      "@sv3q3ae9pssb720vsoff6784sc:11": {
-        "id": "@sv3q3ae9pssb720vsoff6784sc:11",
+      "@urmvgd3e2dcctt7q85g15nql15:11": {
+        "id": "@urmvgd3e2dcctt7q85g15nql15:11",
         "kind": "ref",
         "target": "builtin.concat"
       },
-      "@sv3q3ae9pssb720vsoff6784sc:13": {
-        "id": "@sv3q3ae9pssb720vsoff6784sc:13",
+      "@urmvgd3e2dcctt7q85g15nql15:13": {
+        "id": "@urmvgd3e2dcctt7q85g15nql15:13",
         "kind": "ref",
-        "target": "@sv3q3ae9pssb720vsoff6784sc:2"
+        "target": "@urmvgd3e2dcctt7q85g15nql15:2"
       },
-      "@sv3q3ae9pssb720vsoff6784sc:10": {
-        "id": "@sv3q3ae9pssb720vsoff6784sc:10",
+      "@urmvgd3e2dcctt7q85g15nql15:10": {
+        "id": "@urmvgd3e2dcctt7q85g15nql15:10",
         "kind": "call",
-        "fn": "@sv3q3ae9pssb720vsoff6784sc:11",
+        "fn": "@urmvgd3e2dcctt7q85g15nql15:11",
         "args": [
-          "@sv3q3ae9pssb720vsoff6784sc:12",
-          "@sv3q3ae9pssb720vsoff6784sc:13"
+          "@urmvgd3e2dcctt7q85g15nql15:12",
+          "@urmvgd3e2dcctt7q85g15nql15:13"
         ]
       },
-      "@sv3q3ae9pssb720vsoff6784sc:9": {
-        "id": "@sv3q3ae9pssb720vsoff6784sc:9",
-        "kind": "ref",
-        "target": "builtin.concat"
-      },
-      "@sv3q3ae9pssb720vsoff6784sc:8": {
-        "id": "@sv3q3ae9pssb720vsoff6784sc:8",
-        "kind": "call",
-        "fn": "@sv3q3ae9pssb720vsoff6784sc:9",
-        "args": [
-          "@sv3q3ae9pssb720vsoff6784sc:10",
-          "@sv3q3ae9pssb720vsoff6784sc:14"
-        ]
-      },
-      "@sv3q3ae9pssb720vsoff6784sc:7": {
-        "id": "@sv3q3ae9pssb720vsoff6784sc:7",
+      "@urmvgd3e2dcctt7q85g15nql15:9": {
+        "id": "@urmvgd3e2dcctt7q85g15nql15:9",
         "kind": "ref",
         "target": "builtin.concat"
       },
-      "@sv3q3ae9pssb720vsoff6784sc:6": {
-        "id": "@sv3q3ae9pssb720vsoff6784sc:6",
+      "@urmvgd3e2dcctt7q85g15nql15:8": {
+        "id": "@urmvgd3e2dcctt7q85g15nql15:8",
         "kind": "call",
-        "fn": "@sv3q3ae9pssb720vsoff6784sc:7",
+        "fn": "@urmvgd3e2dcctt7q85g15nql15:9",
         "args": [
-          "@sv3q3ae9pssb720vsoff6784sc:8",
-          "@sv3q3ae9pssb720vsoff6784sc:15"
+          "@urmvgd3e2dcctt7q85g15nql15:10",
+          "@urmvgd3e2dcctt7q85g15nql15:14"
         ]
       },
-      "@sv3q3ae9pssb720vsoff6784sc:5": {
-        "id": "@sv3q3ae9pssb720vsoff6784sc:5",
+      "@urmvgd3e2dcctt7q85g15nql15:7": {
+        "id": "@urmvgd3e2dcctt7q85g15nql15:7",
         "kind": "ref",
         "target": "builtin.concat"
       },
-      "@sv3q3ae9pssb720vsoff6784sc:4": {
-        "id": "@sv3q3ae9pssb720vsoff6784sc:4",
+      "@urmvgd3e2dcctt7q85g15nql15:6": {
+        "id": "@urmvgd3e2dcctt7q85g15nql15:6",
         "kind": "call",
-        "fn": "@sv3q3ae9pssb720vsoff6784sc:5",
+        "fn": "@urmvgd3e2dcctt7q85g15nql15:7",
         "args": [
-          "@sv3q3ae9pssb720vsoff6784sc:6",
-          "@sv3q3ae9pssb720vsoff6784sc:19"
+          "@urmvgd3e2dcctt7q85g15nql15:8",
+          "@urmvgd3e2dcctt7q85g15nql15:15"
         ]
       },
-      "@sv3q3ae9pssb720vsoff6784sc:1": {
-        "id": "@sv3q3ae9pssb720vsoff6784sc:1",
+      "@urmvgd3e2dcctt7q85g15nql15:5": {
+        "id": "@urmvgd3e2dcctt7q85g15nql15:5",
+        "kind": "ref",
+        "target": "builtin.concat"
+      },
+      "@urmvgd3e2dcctt7q85g15nql15:4": {
+        "id": "@urmvgd3e2dcctt7q85g15nql15:4",
+        "kind": "call",
+        "fn": "@urmvgd3e2dcctt7q85g15nql15:5",
+        "args": [
+          "@urmvgd3e2dcctt7q85g15nql15:6",
+          "@urmvgd3e2dcctt7q85g15nql15:19"
+        ]
+      },
+      "@urmvgd3e2dcctt7q85g15nql15:1": {
+        "id": "@urmvgd3e2dcctt7q85g15nql15:1",
         "kind": "lambda",
         "params": [
-          "@sv3q3ae9pssb720vsoff6784sc:2",
-          "@sv3q3ae9pssb720vsoff6784sc:3"
+          "@urmvgd3e2dcctt7q85g15nql15:2",
+          "@urmvgd3e2dcctt7q85g15nql15:3"
         ],
-        "body": "@sv3q3ae9pssb720vsoff6784sc:4"
+        "body": "@urmvgd3e2dcctt7q85g15nql15:4"
       },
-      "@bhjac77spcp227o4pbmb1nc1n6": {
-        "id": "@bhjac77spcp227o4pbmb1nc1n6",
+      "@qhe6eubvt6sgc2314q6lkv31rs": {
+        "id": "@qhe6eubvt6sgc2314q6lkv31rs",
         "kind": "def",
-        "body": "@bhjac77spcp227o4pbmb1nc1n6:1"
+        "body": "@qhe6eubvt6sgc2314q6lkv31rs:1"
       },
-      "@bhjac77spcp227o4pbmb1nc1n6:2": {
-        "id": "@bhjac77spcp227o4pbmb1nc1n6:2",
+      "@qhe6eubvt6sgc2314q6lkv31rs:2": {
+        "id": "@qhe6eubvt6sgc2314q6lkv31rs:2",
         "kind": "binder"
       },
-      "@bhjac77spcp227o4pbmb1nc1n6:5": {
-        "id": "@bhjac77spcp227o4pbmb1nc1n6:5",
+      "@qhe6eubvt6sgc2314q6lkv31rs:5": {
+        "id": "@qhe6eubvt6sgc2314q6lkv31rs:5",
         "kind": "lit",
         "value": "style"
       },
-      "@bhjac77spcp227o4pbmb1nc1n6:14": {
-        "id": "@bhjac77spcp227o4pbmb1nc1n6:14",
+      "@qhe6eubvt6sgc2314q6lkv31rs:14": {
+        "id": "@qhe6eubvt6sgc2314q6lkv31rs:14",
         "kind": "lit",
         "value": "\n"
       },
-      "@bhjac77spcp227o4pbmb1nc1n6:12": {
-        "id": "@bhjac77spcp227o4pbmb1nc1n6:12",
+      "@qhe6eubvt6sgc2314q6lkv31rs:12": {
+        "id": "@qhe6eubvt6sgc2314q6lkv31rs:12",
         "kind": "ref",
-        "target": "@htgmkjadvd8b5m17uvfn9s7hc0"
+        "target": "@rrc61bud51hgr319omhcik166b"
       },
-      "@bhjac77spcp227o4pbmb1nc1n6:13": {
-        "id": "@bhjac77spcp227o4pbmb1nc1n6:13",
+      "@qhe6eubvt6sgc2314q6lkv31rs:13": {
+        "id": "@qhe6eubvt6sgc2314q6lkv31rs:13",
         "kind": "ref",
-        "target": "@bhjac77spcp227o4pbmb1nc1n6:2"
+        "target": "@qhe6eubvt6sgc2314q6lkv31rs:2"
       },
-      "@bhjac77spcp227o4pbmb1nc1n6:11": {
-        "id": "@bhjac77spcp227o4pbmb1nc1n6:11",
+      "@qhe6eubvt6sgc2314q6lkv31rs:11": {
+        "id": "@qhe6eubvt6sgc2314q6lkv31rs:11",
         "kind": "call",
-        "fn": "@bhjac77spcp227o4pbmb1nc1n6:12",
+        "fn": "@qhe6eubvt6sgc2314q6lkv31rs:12",
         "args": [
-          "@bhjac77spcp227o4pbmb1nc1n6:13",
-          "@bhjac77spcp227o4pbmb1nc1n6:14"
+          "@qhe6eubvt6sgc2314q6lkv31rs:13",
+          "@qhe6eubvt6sgc2314q6lkv31rs:14"
         ]
       },
-      "@bhjac77spcp227o4pbmb1nc1n6:10": {
-        "id": "@bhjac77spcp227o4pbmb1nc1n6:10",
+      "@qhe6eubvt6sgc2314q6lkv31rs:10": {
+        "id": "@qhe6eubvt6sgc2314q6lkv31rs:10",
         "kind": "ref",
         "target": "@b7n8pptvpqc60oiragc5ult5p7"
       },
-      "@bhjac77spcp227o4pbmb1nc1n6:9": {
-        "id": "@bhjac77spcp227o4pbmb1nc1n6:9",
+      "@qhe6eubvt6sgc2314q6lkv31rs:9": {
+        "id": "@qhe6eubvt6sgc2314q6lkv31rs:9",
         "kind": "call",
-        "fn": "@bhjac77spcp227o4pbmb1nc1n6:10",
+        "fn": "@qhe6eubvt6sgc2314q6lkv31rs:10",
         "args": [
-          "@bhjac77spcp227o4pbmb1nc1n6:11"
+          "@qhe6eubvt6sgc2314q6lkv31rs:11"
         ]
       },
-      "@bhjac77spcp227o4pbmb1nc1n6:15": {
-        "id": "@bhjac77spcp227o4pbmb1nc1n6:15",
+      "@qhe6eubvt6sgc2314q6lkv31rs:15": {
+        "id": "@qhe6eubvt6sgc2314q6lkv31rs:15",
         "kind": "ref",
         "target": "std.list.nil"
       },
-      "@bhjac77spcp227o4pbmb1nc1n6:8": {
-        "id": "@bhjac77spcp227o4pbmb1nc1n6:8",
+      "@qhe6eubvt6sgc2314q6lkv31rs:8": {
+        "id": "@qhe6eubvt6sgc2314q6lkv31rs:8",
         "kind": "ref",
         "target": "std.list.cons"
       },
-      "@bhjac77spcp227o4pbmb1nc1n6:7": {
-        "id": "@bhjac77spcp227o4pbmb1nc1n6:7",
+      "@qhe6eubvt6sgc2314q6lkv31rs:7": {
+        "id": "@qhe6eubvt6sgc2314q6lkv31rs:7",
         "kind": "call",
-        "fn": "@bhjac77spcp227o4pbmb1nc1n6:8",
+        "fn": "@qhe6eubvt6sgc2314q6lkv31rs:8",
         "args": [
-          "@bhjac77spcp227o4pbmb1nc1n6:9",
-          "@bhjac77spcp227o4pbmb1nc1n6:15"
+          "@qhe6eubvt6sgc2314q6lkv31rs:9",
+          "@qhe6eubvt6sgc2314q6lkv31rs:15"
         ]
       },
-      "@bhjac77spcp227o4pbmb1nc1n6:4": {
-        "id": "@bhjac77spcp227o4pbmb1nc1n6:4",
+      "@qhe6eubvt6sgc2314q6lkv31rs:4": {
+        "id": "@qhe6eubvt6sgc2314q6lkv31rs:4",
         "kind": "ref",
         "target": "std.html.element"
       },
-      "@bhjac77spcp227o4pbmb1nc1n6:6": {
-        "id": "@bhjac77spcp227o4pbmb1nc1n6:6",
+      "@qhe6eubvt6sgc2314q6lkv31rs:6": {
+        "id": "@qhe6eubvt6sgc2314q6lkv31rs:6",
         "kind": "ref",
         "target": "std.list.nil"
       },
-      "@bhjac77spcp227o4pbmb1nc1n6:3": {
-        "id": "@bhjac77spcp227o4pbmb1nc1n6:3",
+      "@qhe6eubvt6sgc2314q6lkv31rs:3": {
+        "id": "@qhe6eubvt6sgc2314q6lkv31rs:3",
         "kind": "call",
-        "fn": "@bhjac77spcp227o4pbmb1nc1n6:4",
+        "fn": "@qhe6eubvt6sgc2314q6lkv31rs:4",
         "args": [
-          "@bhjac77spcp227o4pbmb1nc1n6:5",
-          "@bhjac77spcp227o4pbmb1nc1n6:6",
-          "@bhjac77spcp227o4pbmb1nc1n6:7"
+          "@qhe6eubvt6sgc2314q6lkv31rs:5",
+          "@qhe6eubvt6sgc2314q6lkv31rs:6",
+          "@qhe6eubvt6sgc2314q6lkv31rs:7"
         ]
       },
-      "@bhjac77spcp227o4pbmb1nc1n6:1": {
-        "id": "@bhjac77spcp227o4pbmb1nc1n6:1",
+      "@qhe6eubvt6sgc2314q6lkv31rs:1": {
+        "id": "@qhe6eubvt6sgc2314q6lkv31rs:1",
         "kind": "lambda",
         "params": [
-          "@bhjac77spcp227o4pbmb1nc1n6:2"
+          "@qhe6eubvt6sgc2314q6lkv31rs:2"
         ],
-        "body": "@bhjac77spcp227o4pbmb1nc1n6:3"
+        "body": "@qhe6eubvt6sgc2314q6lkv31rs:3"
       },
       "@usqihniri7nekl35ndc3tmbehb": {
         "id": "@usqihniri7nekl35ndc3tmbehb",
@@ -1953,9 +1854,9 @@
       "@59g9lcuclfeshkgnpl8ka163d1",
       "@usqihniri7nekl35ndc3tmbehb",
       "@l1ibnd69fhv5j8j3reredg1ar1",
-      "@htgmkjadvd8b5m17uvfn9s7hc0",
-      "@sv3q3ae9pssb720vsoff6784sc",
-      "@bhjac77spcp227o4pbmb1nc1n6",
+      "@rrc61bud51hgr319omhcik166b",
+      "@urmvgd3e2dcctt7q85g15nql15",
+      "@qhe6eubvt6sgc2314q6lkv31rs",
       "@v4m3u10hkehjb5097mejohqi5p"
     ]
   },
@@ -2798,7 +2699,7 @@
       },
       "plain": []
     },
-    "@htgmkjadvd8b5m17uvfn9s7hc0": {
+    "@rrc61bud51hgr319omhcik166b": {
       "vars": [],
       "rows": [
         0
@@ -2835,7 +2736,7 @@
       },
       "plain": []
     },
-    "@sv3q3ae9pssb720vsoff6784sc": {
+    "@urmvgd3e2dcctt7q85g15nql15": {
       "vars": [],
       "rows": [
         0
@@ -2872,7 +2773,7 @@
       },
       "plain": []
     },
-    "@bhjac77spcp227o4pbmb1nc1n6": {
+    "@qhe6eubvt6sgc2314q6lkv31rs": {
       "vars": [],
       "rows": [
         0
@@ -2935,12 +2836,9 @@
     }
   },
   "names": {
-    "@htgmkjadvd8b5m17uvfn9s7hc0": "joined",
-    "@htgmkjadvd8b5m17uvfn9s7hc0:2": "texts",
-    "@htgmkjadvd8b5m17uvfn9s7hc0:3": "between",
-    "@htgmkjadvd8b5m17uvfn9s7hc0:9": "first",
-    "@htgmkjadvd8b5m17uvfn9s7hc0:10": "rest",
-    "@htgmkjadvd8b5m17uvfn9s7hc0:11": "rest joined",
+    "@rrc61bud51hgr319omhcik166b": "joined",
+    "@rrc61bud51hgr319omhcik166b:2": "texts",
+    "@rrc61bud51hgr319omhcik166b:3": "between",
     "@fok6jrbedlfa86etqm74a421mq": "tag",
     "@fok6jrbedlfa86etqm74a421mq:2": "name",
     "@fok6jrbedlfa86etqm74a421mq:3": "children",
@@ -2994,11 +2892,11 @@
     "@l1ibnd69fhv5j8j3reredg1ar1": "rule",
     "@l1ibnd69fhv5j8j3reredg1ar1:2": "selector",
     "@l1ibnd69fhv5j8j3reredg1ar1:3": "declarations",
-    "@sv3q3ae9pssb720vsoff6784sc": "media",
-    "@sv3q3ae9pssb720vsoff6784sc:2": "query",
-    "@sv3q3ae9pssb720vsoff6784sc:3": "rules",
-    "@bhjac77spcp227o4pbmb1nc1n6": "style sheet",
-    "@bhjac77spcp227o4pbmb1nc1n6:2": "rules",
+    "@urmvgd3e2dcctt7q85g15nql15": "media",
+    "@urmvgd3e2dcctt7q85g15nql15:2": "query",
+    "@urmvgd3e2dcctt7q85g15nql15:3": "rules",
+    "@qhe6eubvt6sgc2314q6lkv31rs": "style sheet",
+    "@qhe6eubvt6sgc2314q6lkv31rs:2": "rules",
     "@usqihniri7nekl35ndc3tmbehb": "for each",
     "@usqihniri7nekl35ndc3tmbehb:2": "items",
     "@usqihniri7nekl35ndc3tmbehb:3": "row",
@@ -3030,10 +2928,10 @@
     "@59g9lcuclfeshkgnpl8ka163d1": "The same element in this class, for a style sheet's rules to select.",
     "@usqihniri7nekl35ndc3tmbehb": "The items of a cell's list, each drawn by row and all put inside (ul, div, …). An item still there when the list changes keeps its row as it was; only new items get one. Solid's <For> (prior art).",
     "@l1ibnd69fhv5j8j3reredg1ar1": "A style sheet rule: a selector and its declarations. A style sheet is a list of these, so it shows rule by rule instead of as one long text.",
-    "@sv3q3ae9pssb720vsoff6784sc": "Rules that apply only when the query holds, such as (prefers-color-scheme: dark).",
-    "@bhjac77spcp227o4pbmb1nc1n6": "A style element holding these rules.",
+    "@urmvgd3e2dcctt7q85g15nql15": "Rules that apply only when the query holds, such as (prefers-color-scheme: dark).",
+    "@qhe6eubvt6sgc2314q6lkv31rs": "A style element holding these rules.",
     "@v4m3u10hkehjb5097mejohqi5p": "A length in pixels, from a Float64 or an Int.",
-    "@htgmkjadvd8b5m17uvfn9s7hc0": "The texts with between between each two of them."
+    "@rrc61bud51hgr319omhcik166b": "The texts with between between each two of them."
   },
   "exports": [
     "@fok6jrbedlfa86etqm74a421mq",
@@ -3058,9 +2956,9 @@
     "@59g9lcuclfeshkgnpl8ka163d1",
     "@usqihniri7nekl35ndc3tmbehb",
     "@l1ibnd69fhv5j8j3reredg1ar1",
-    "@sv3q3ae9pssb720vsoff6784sc",
-    "@bhjac77spcp227o4pbmb1nc1n6",
+    "@urmvgd3e2dcctt7q85g15nql15",
+    "@qhe6eubvt6sgc2314q6lkv31rs",
     "@v4m3u10hkehjb5097mejohqi5p",
-    "@htgmkjadvd8b5m17uvfn9s7hc0"
+    "@rrc61bud51hgr319omhcik166b"
   ]
 }
