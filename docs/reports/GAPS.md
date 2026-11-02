@@ -11,10 +11,10 @@ The programs are original, written for this purpose.
 
 **Rounds so far (2026-11-02):** 1 calc, 2 Countdown and chapters, 3
 ledger, 4 the guitar pedal, 5 routes, 6 notebook, 7 sheet (written in the
-editor). Each round's gaps are below, as written then. The gaps still open
-are rows in BACKLOG.md, lane C (C30, C31, C59, C63, C64, C70 to C73, C80
-to C82), and the next round's program is chosen when the weekly round is
-due.
+editor), 8 board (a page, written in the editor). Each round's gaps are
+below, as written then. The gaps still open are rows in BACKLOG.md, lane
+C (C30, C31, C59, C63, C64, C70 to C73, C85 to C88), and the next round's
+program is chosen when the weekly round is due.
 
 ## Round 1: calc (2026-10-22)
 
@@ -1861,3 +1861,269 @@ lacks something (WORKFLOW.md, "Language gaps, every round"):
 4. E175, E177, E176, then the rest of the editor's.
 5. S2 (C81), then S4 (C82); S3 when S1 and S2 are in.
 6. SL1 (L146), so sheet can join the examples; SL2 to SL4 (L147, L148).
+
+## Round 8: board, a page written in the editor (2026-11-02)
+
+`compiler/gaps/board` is a task board: a page with three columns (To do,
+Doing, Done) of cards. A card has a title, points, tags and the time spent
+on it. Cards are added through one field (`Fix the timer #code #ui +3`
+reads as a title, two tags and three points), moved left and right,
+renamed in place, given more or fewer points and deleted. Every edit is
+kept in a history and can be undone and redone (buttons, or the keys z and
+y). A tag's chip filters the board, a search field filters by title, and
+the counts and points of each column and a progress bar follow the
+filter. A focus timer counts down 25 minutes on one card, a frame at a
+time, and adds the time to the card. The board is saved to a file and
+loaded back, and a button picks a random card to do next.
+
+It is the first round that is an interactive app: cells, formulas,
+`for each` rows, event handlers (click, input, change, keydown), frames
+(state over time), files and Random. It has 112 definitions, against
+sheet's 90: 9 types (`Stage`, `Card`, `Board`, `Edit`, `History`,
+`State`, `Filter`, `Timer`, `Quick`) and 103 functions and values. The
+state is one cell holding a `State` (the board and the history); each edit
+is an `Edit` value (`added`, `removed`, `moved`, `renamed`, `pointed`)
+that `applied` and `unapplied` run forwards and back. The filter, the
+timer, the quick-add field and the note under the buttons are cells of
+their own. The program is original; a task board with columns, undo
+through a list of edits and a countdown are common knowledge.
+
+**It was written in the editor**, as round 7 was: the built editor
+(`npm run build-editor`) opened from disk in headless Chromium, every
+definition made with *+ New definition* and the palette (typed text where
+the palette reads it, picks where it doesn't), `match x · T` from the
+palette with *Give … its own body* and *Replace with…* for the cases,
+*Clear it* and *Let it loosen* to fix a wrong type, *Add a value before
+this…* for a handler's first step, the case panel's *Name* to rename a
+case, and the program's *Title*. Nothing was edited by hand. About 120
+typed fills, 25 matches (68 cases), 4 steps added and 7 bodies cleared and
+written again. The page ran in the editor's Run panel throughout, and was
+clicked through there (add, move, filter, undo, focus, save, pick, rename;
+screenshot and driver scripts in the project's files, `gaps-round8/`).
+*Make it a function* was tried on two picked calls (`percent done` and
+`points at` in `progress text`): it made a part with two results read as
+`results.‹value 1›` and `results.‹value 2›`, and was undone.
+
+Files:
+- `compiler/gaps/board/`: the program as the editor saved it
+  (`examples/unpack.ts`).
+- `compiler/gaps/board.ideal.js`: the hand-written ideal, the same page by
+  hand over the same document interface (B1 and B2 marked there).
+- `compiler/gaps/board.ts`: three ways in one process (the evaluator and
+  the compiled page drawn into the fake document of `test/fakedom.ts`,
+  and the ideal), a scripted session of fifteen phases, files in memory
+  and Random from a fixed sequence, frames at 60 a second.
+- `compiler/test/board.test.ts`: the three draw the same page at the start
+  and after every phase.
+- `compiler/gaps/bench-board.ts`: the table below.
+
+### Results
+
+The session: `n` cards added through the field; ten moved to Doing; one
+given three more points; one renamed; the board filtered by a tag and
+back; searched and cleared; five undos and two redos; the focus timer on
+a card for 120 frames, paused for 10 and stopped; 120 frames with no
+timer; saved and loaded; a random pick; five cards deleted. All three
+ways draw the same page after every phase.
+
+```
+cards  way        whole session  add, per card  frame   idle frame
+   50  evaluator        851 ms       3.30 ms   3.92 ms   0.03 ms
+   50  compiled          88 ms       0.34 ms   0.43 ms   0.01 ms
+   50  ideal           4.71 ms       0.01 ms   0.00 ms   0.00 ms
+  200  evaluator       3377 ms       6.75 ms     13 ms   0.09 ms
+  200  compiled         337 ms       0.94 ms   0.63 ms   0.06 ms
+  200  ideal             19 ms       0.02 ms   0.00 ms   0.00 ms
+ 1000  compiled        4241 ms       3.63 ms   1.81 ms   0.43 ms
+ 1000  ideal             96 ms       0.01 ms   0.01 ms   0.00 ms
+ 2000  compiled       15707 ms       7.11 ms   4.09 ms   1.40 ms
+ 2000  ideal            194 ms       0.01 ms   0.02 ms   0.00 ms
+```
+
+Best of three, one process (`node compiler/gaps/bench-board.ts 50 200
+1000 2000`); the evaluator is skipped past 200 cards.
+
+"Add" is one card through the field, Enter included; "frame" is one frame
+with the timer running (the card's time and the timer's line change);
+"idle frame" one with no timer. The compiled module is 58 KB (C82 keeps
+only what main reaches).
+
+Loading a saved board of `n` cards and running the timer on its last card
+for 60 frames (compiled, once each, the ideal in brackets):
+
+```
+cards   load              60 frames, timer running
+ 1000    150 ms (15)       275 ms (5)
+ 2000    270 ms (25)       436 ms (11); the timer's line stays "No focus timer running" (B3)
+10000   1037 ms (133)     1225 ms (54), and a RangeError in the console each frame
+30000   5153 ms (406)     6251 ms (100)
+```
+
+A profile of the compiled page at 1,000 cards: in 300 adds, the cells'
+`recompute` 46% of the time by itself (formulas run again and their old
+and new values compared), the three columns' `shown cards` and the rows'
+matching most of the rest; in 600 running frames, `recompute` 33% and the
+garbage collector 9%; in 2,000 idle frames, `recompute` 35% and `write`
+13%, comparing a state with itself.
+
+### The gaps, ranked
+
+**B1. An unchanged write compares the whole value with itself (perf,
+every page).** Each frame, the timer's handler writes the state:
+`write(stc, spent for(read(stc), read(timer), dt))`. With no timer
+running, `spent for` gives back the very state it read, and the write
+walks it twice to find it equal (`plainOf`, then `$eq`), because `$eq`
+compares a pair of objects field by field even when they are the same
+object. 0.43 ms an idle frame at 1,000 cards, 1.4 ms at 2,000, against 0.
+*Fix:* `$eq` (and the evaluator's `equal`) skip a pair that is the same
+object, and a write of the value the cell already holds returns at once.
+*Measured* by adding `if (x === y) continue;` to `$eq` by hand: 2,000 idle
+frames at 1,000 cards 564 → 4 ms, 600 running frames 985 → 738 ms (the
+history and the parts of the board a frame doesn't change are shared). C85.
+
+**B2. A write of a whole new value wakes every reader of the cell (perf:
+state over time).** A running frame changes one card's time, but the
+state is one value: the three columns' `shown cards` formulas run again
+and their lists of cards are compared, `for each` matches every row, and
+the headings, the progress, the tags and the history run again. 1.8 ms a
+frame at 1,000 cards, 4.1 ms at 2,000, about 20 ms at 10,000 (more than a
+frame's 16.7 ms) and 100 ms at 30,000, against the ideal's 0.01 to 1.7,
+which changes two texts. Adding a card is the same shape: 3.6 ms at 1,000
+cards and 7.1 ms at 2,000 against the ideal's 0.01, which appends one row
+and counts on (`append` copies the list; every column's cards, every tag
+and the progress are worked out again). The language has the other way already, `write at` a path (L98), but
+a path to a list item is by its position, and the program's edits are
+whole values (`applied(board, edit)`), as undo wants them. *Fix,* two
+halves: the runtime compares the old and the new value once, skipping
+what they share, and wakes only the readers of the places that differ
+(Solid's `reconcile`, which diffs a new immutable value into a store and
+notifies only the changed paths, is prior art), C86; and a path to the
+list item with a given key, so a handler can write one card's field (Solid
+stores' path filters, `setState("todos", t => t.id === id, "done", true)`,
+prior art), L160.
+
+**B3. A one-answer search down a list whose result is taken apart is a
+generator per item (correctness: stack overflow from about 2,000
+items).** `card of(cards, id)` is a recursion: `nil → fail()`, `cons →
+if head.id = id then head else card of(tail, id)`. Where `card name`
+reads `card of(b.cards, id).title`, the compiler makes `card_of$fields`
+(the result's fields handed back in `$got`): each level is a `function*`
+whose body calls the next level, rebuilds the card from `$got` and yields
+it. Two JS frames and a card a level. From about 2,000 cards, a card near
+the end overflows the stack: clicking Focus on it writes the timer, but
+the timer's line throws a RangeError (logged to the console, every frame)
+and keeps saying "No focus timer running". The ideal is a loop. *Fix:* a
+one-answer recursion whose recursive call is the case's answer is a loop,
+as `read words` already is (the `for (;;)` with its inputs rebound), with
+`$fields` or without. C87.
+
+**B4. A `first`'s fallback is worked out before it's needed (perf,
+small).** `take word(q, w) = first(with tag(q, tag word(w)), else
+first(with points(q, points word(w)), else with word(q, w)))` compiles to
+`const with_word_once = with_word(q4, w3)` before `points_word` is tried:
+`with word` builds a new `Quick` for every word, the ones that are points
+included. Pure and total here, so only waste, but the fallback is a
+lambda that runs only when the search has no answer; it shouldn't be
+moved out of it. C88.
+
+**B5. The evaluator (not the compiler's).** 3.3 ms a card added at 50
+cards and 6.8 ms at 200, 13 ms a frame at 200 cards: the editor's Run panel
+draws the page with the evaluator for the first few seconds (I109's
+hand-over), and at a few hundred cards a frame there takes most of the
+frame's time. L118c again.
+
+### What the editor made hard
+
+In the order they cost time. Each is a BACKLOG row (E185 to E192).
+
+1. **A field read on an input nothing has settled takes the first type
+   with that field, silently (E186).** `Quick` and `Card` both have
+   `title`, `tags` and `points`. `with tag(q, word) = quick(q.title,
+   append(q.tags, [word]), q.points)` went in as `(Card, Text) -> Quick`;
+   nothing said so, and the refusal came two definitions later, in `read
+   words` ("read words needs Card here, got Quick"). `new card(b, q)` the
+   same. Fixed by clearing the body, *Let it loosen*, and `match q · Quick`
+   to name the type. (`length(w)` in a stub likewise took List's length
+   though its one caller passes a Text.)
+2. **A value definition named inside a call is refused with "points at
+   nothing" (E187).** `cell(state(starting board, history(nil, nil)))`,
+   `tag("main", [styles, …])` and `file exists(save name)` were refused
+   with infer's "points at nothing", a reference to a node that isn't in
+   the code; `cell(starting board)` and `write file(save name, …)` went
+   in. main was written with two `□`s and the names filled in alone; the
+   file's name is written out twice instead of using `save name`.
+3. **The comparisons read as the hidden Float64-only ones (E185).**
+   `length(w) > 1` is refused: "more than needs Float64 here, got Int".
+   `>`, `≥` and `≤` (and `>=`, `<=`) read as the prelude's old Float64-only
+   `more than`, `at least`, `at most`, kept hidden so old files open. Written
+   as `not(w = "#")`.
+4. **A match's cases after the first are one hole that can't be split
+   (E189).** After the first case is filled the rest read as one
+   `otherwise → □`, and a hole has no *Give … its own body*; its scope is
+   what every case binds, so a body using a case's own fields is refused
+   ("nothing is named id here"). Each match of cases with different
+   fields took a placeholder in the otherwise (`b`, `""`, `true`), then
+   *Give … its own body* and a fill per case, then *Replace with…* on the
+   last case, which is no longer under the otherwise. A case given its own
+   hole goes back under `otherwise` in the text if the next one is split
+   before it's filled.
+5. **Names that read as something else (E188).** The case `done` of
+   `Stage` can't be typed (std's `Outcome` has `done(value)`): "nothing
+   is named done here", and `[todo, doing, done]` is refused with the
+   generic message; it was renamed `finished`. Bare `unit` is the vectors
+   module's `unit` (normalize): "this case: expected (a) -[Choice]-> a,
+   got Unit"; `unit()` works. `random()` reads as the function `() -[Random]->
+   Float64`, so `random() · n` is refused ("multiply needs Float64 here, got
+   () -[Random]-> Float64"); `□ · n` was typed and `random()` picked from
+   the palette into the hole.
+6. **No sequence of actions in typed text (E190).** `write(a, x); write(b,
+   y)` is refused ("no case named write at 6"). Four handlers do two
+   things; each was written as its last action, then *Add a value before
+   this…* for the first (*Add a step before this…* isn't offered on a
+   one-call body).
+7. **Smaller (E191, E192).** `≠` and `!=` aren't read: "there's no field
+   named id ≠ id" (the field read takes the rest of the line as the
+   field's name); `not(a = b)` instead, and the language has no ≠. After
+   *Clear it* and *Let it loosen*, the palette's case analysis still offers
+   only the old type (`match q · Card`) until the callers change. `1500.0`
+   typed is any number, not a Float64.
+
+What went well, for the record: every view and handler (lambdas, `on`,
+`property`, `text`, `part`, `for each`, `formula`) went in typed whole,
+first time, once the names above were avoided; the page drew in the Run
+panel at once and stayed live while editing; `first(…, else …)`, lists of
+expressions, `□` and `name = value; rest` (E178) carried most of the
+program.
+
+### Language gaps
+
+Where board defines a helper only because the language or the library
+lacks something (WORKFLOW.md, "Language gaps, every round"):
+
+- **BL1. No whole number from text.** `digit of`, `digits value` and
+  `whole number` (three definitions) read `+3` and the saved file's
+  numbers. L161.
+- **BL2. No search in a list.** `card of`, `position of`, `tag in` and
+  `largest id` are recursions: `has item` and `find` are Set's and Text's,
+  and there's no largest of a list. L161.
+- **BL3. No Float64 to Int.** `floor` gives a Float64, so picking a random
+  card is `nth card`, a recursion on a Float64 index, and `random below`
+  exists to get `random()` in at all (E188). L161.
+- **BL4. No `++` on lists, no `≠`.** `inserted` is two appends; `not(a =
+  b)` everywhere. L161, E191.
+- **BL5. No path to a list item by key.** One card's time is written by
+  rewriting the whole state each frame (B2). L160.
+- **BL6. Undo written twice.** `applied` and `unapplied` are ten cases,
+  each the other's inverse by hand. The language runs functions backwards,
+  but `removed`'s position and `moved`'s stage are what the edit records,
+  so `unapplied` isn't `applied` solved for the board; no row.
+
+### Proposed order
+
+1. C85 first: a one-line change that takes idle frames to nothing and a
+   quarter off running frames on every page.
+2. C87: a board of 2,000 cards fails silently today.
+3. E186, E187 and E185: each cost a definition written again and a
+   refusal that didn't say why; then E189 (25 matches) and E188, E190.
+4. C86 with L160: frames and adds that grow with the board.
+5. C88, L161, E191, E192.
