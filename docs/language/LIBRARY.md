@@ -180,6 +180,8 @@ Text is a string of characters. Positions count from 0. Text has the one <, alph
 - **repeated** : `(Text, Int) -> Text`. The text written this many times over: repeated("ab", 3) is "ababab". 0 times, or fewer, is "".
 - **padded start** : `(Text, Int, Text) -> Text`. The text with fill put in front until it is this wide: padded start("7", 3, "0") is "007". A text already as wide is as it was; a fill of several characters is cut where the width ends.
 - **padded end** : `(Text, Int, Text) -> Text`. The text with fill put after it until it is this wide: padded end("ab", 4, ".") is "ab..". For columns of text.
+- **spaced** : `(Text) -> Text`. The text with a space either side: spaced("+") is " + ". Run backwards (inverse) it reads the text with any spaces around it, or none.
+- **optional parens** : `(Bool, Text) -> Text`. The text in parentheses when needed, else as it is. Run backwards it reads the text bare (when not needed) or in parentheses, any number of matched pairs, so a printer that leaves out the ones it needn't print still reads them.
 
 ## Lists and pairs
 
