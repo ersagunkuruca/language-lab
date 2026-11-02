@@ -435,8 +435,36 @@ export function represent(code: Code, entries: Id[], rep: Representation, keep: 
         return add({ kind: "lambda", params: [...arm.binds, ...results], body: arm.body });
       });
       nodes[id] = { id, kind: "call", fn: ref(rep.impl[n.kind]), args: [n.scrutinee, ...cases] };
+      if (n.kind === "match") inline(id);
     }
   };
+  // A match job that isn't recursive and calls each case at most once is
+  // put in place, its cases where it calls them: a definition that
+  // matches and calls itself in a case (a map over the list) then calls
+  // itself, not through a function it hands on, so the compilers see the
+  // recursion (a loop, or the heap past 1000 calls deep). The input is
+  // bound once, by a let; a case called is its function applied there,
+  // which is a let too. GHC inlines the same way, a function used once at
+  // its call (Peyton Jones and Marlow, "Secrets of the Glasgow Haskell
+  // Compiler inliner", JFP 2002).
+  const inline = (id: Id) => {
+    const c = nodes[id] as NodeOf<"call">, job = (nodes[c.fn] as NodeOf<"ref">).target;
+    const def = code.nodes[job];
+    const fn = def?.kind === "def" && def.body ? code.nodes[def.body] : undefined;
+    if (fn?.kind !== "lambda" || fn.params.length !== c.args.length || directRefs(code, job).includes(job)) return;
+    const uses = (p: Id) => subtree(code, fn.body).filter((x) => { const r = code.nodes[x]; return r.kind === "ref" && r.target === p; });
+    if (fn.params.slice(1).some((p) => uses(p).length > 1)) return;
+    const renames = new Map<Id, Id>();
+    const params = fn.params.map((p) => copy(p, renames));
+    const body = copy(fn.body, renames);
+    // Each case where the job calls it; the input, once, by a let.
+    for (let i = 1; i < fn.params.length; i++) {
+      const at = subtree({ ...code, nodes }, body).find((x) => { const r = nodes[x]; return r.kind === "ref" && r.target === params[i]; });
+      if (at) nodes[at] = { ...nodes[c.args[i]], id: at } as Node;
+    }
+    nodes[id] = { id, kind: "call", fn: add({ kind: "lambda", params: [params[0]], body }), args: [c.args[0]] };
+  };
+
   for (const d of todo) rewrite(d);
   return { nodes, defs: code.defs };
 }
