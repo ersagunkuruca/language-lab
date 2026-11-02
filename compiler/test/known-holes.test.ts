@@ -43,7 +43,9 @@ test("R2 §1.1 the shader profile refuses a loop it can't see end", () => {
 // the evaluator stops at the multiply, inside the handler, which answers 0;
 // compiled JavaScript lets the ∞ out of the handler and stops at the show
 // outside it, where nothing handles it.
-test("R8 §1 an overflow inside a handler of Abort is handled there, compiled as evaluated", { todo: "compiled code checks an overflow late, after it has left the handler" }, async () => {
+// Fixed by L166: an overflow is a stop no handler catches, on every engine
+// (compiled code checks it late, after it may have left the handler).
+test("R8 §1 an overflow inside a handler of Abort stops, compiled as evaluated", async () => {
   const k = new Lang();
   const caught = k.def("caught");
   // caught(a, b) = show(match a · b { abort(why) → 0 })
@@ -53,10 +55,9 @@ test("R8 §1 an overflow inside a handler of Abort is handled there, compiled as
   const said = (f: () => unknown) => { try { return String(f()); } catch (e) { if (e instanceof Aborted) return `stops: ${e.reason}`; throw e; } };
   const r = makeRunner(code, info, { print: () => {}, names });
   const evaluated = said(() => { for (const v of r.call(r.value(caught), 1e300, 1e300)) return v; });
-  assert.equal(evaluated, "0");
+  assert.equal(evaluated, "stops: the answer is too big for a Float64 (overflow)");
   const path = join(mkdtempSync(join(tmpdir(), "holes-")), "holes.js");
   writeFileSync(path, compile(code, info, names, { runtime: pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href, exports: ["caught"] }));
   const js = (await import(pathToFileURL(path).href)).defs as Record<string, (a: number, b: number) => unknown>;
-  // Today: "stops: the answer is too big for a Float64 (overflow)".
   assert.equal(said(() => js.caught(1e300, 1e300)), evaluated);
 });
