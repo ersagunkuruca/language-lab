@@ -1,0 +1,121 @@
+// Small random typed definitions for fuzz.test.ts (C101): over Float64,
+// Int, Bool and List Int, from the palette's own parts, each shown as text.
+
+import { Lang } from "../../ters/src/lang/dsl.ts";
+import { infer } from "../../ters/src/lang/infer.ts";
+import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
+import { LIBRARY } from "../../ters/src/lang/library.ts";
+import { CONS, FALSE, INT_OPS, NIL, S, SHOW_ANY, TRUE } from "../../ters/src/lang/std.ts";
+import { B } from "../../ters/src/prelude.ts";
+import type { Id } from "../../ters/src/model.ts";
+
+// mulberry32: a small seeded generator, the same numbers on every machine.
+function random(seed: number) {
+  let a = seed >>> 0;
+  const next = () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  return { next, int: (n: number) => Math.floor(next() * n), pick: <T>(xs: T[]): T => xs[Math.floor(next() * xs.length)] };
+}
+
+type Ty = "F" | "I" | "B" | "L";
+type Scope = Record<Ty, Id[]>;
+
+export function program(seed: number, count: number) {
+  const k = new Lang(LIBRARY.code), r = random(seed);
+  const lib = (name: string) => LIBRARY.code.defs.find((x) => LIBRARY.names[x] === name)!;
+  const call = (f: Id, ...xs: Id[]) => k.call(f, ...xs);
+  let names = 0;
+  const fresh = () => `v${names++}`;
+
+  // An expression of type t, at most `depth` deep, over what's in scope.
+  function gen(t: Ty, s: Scope, depth: number): Id {
+    const leaf = depth <= 0 || r.next() < 0.2;
+    const sub = (u: Ty, sc: Scope = s) => gen(u, sc, depth - 1);
+    // Shared by every type: a variable, an if, a let, a match on a list.
+    if (!leaf) {
+      const shape = r.int(10);
+      if (shape === 0) return k.if(sub("B"), sub(t), sub(t));
+      if (shape === 1) {
+        const u = r.pick<Ty>(["F", "I", "L"]);
+        return k.let(fresh(), sub(u), (v) => gen(t, { ...s, [u]: [...s[u], v] }, depth - 1));
+      }
+      if (shape === 2) return k.match(sub("L"), [
+        { variant: NIL, names: [], body: () => sub(t) },
+        { variant: CONS, names: [fresh(), fresh()], body: ([h, rest]) => gen(t, { ...s, I: [...s.I, h], L: [...s.L, rest] }, depth - 1) },
+      ]);
+    }
+    if ((leaf || r.next() < 0.15) && s[t].length && r.next() < 0.7) return k.x(r.pick(s[t]));
+    switch (t) {
+      case "F": {
+        // 1e300 now and then, so a product can overflow (a stop).
+        if (leaf) return k.lit(r.pick([0, 1, -1, 0.5, 2.25, -3, 10, 0.1, 1e-3, 1e15, 1e300]));
+        // An operation with no answer at some inputs, and a fallback.
+        const orElse = (e: Id) => k.call(S.first, k.thunk(() => e), k.thunk(() => sub("F")));
+        return r.pick<() => Id>([
+          () => call(B.add, sub("F"), sub("F")),
+          () => call(B.sub, sub("F"), sub("F")),
+          () => call(B.mul, sub("F"), sub("F")),
+          () => call(B.neg, sub("F")),
+          () => call(INT_OPS.toNumber, sub("I")),
+          () => call(S.floor, sub("F")),
+          () => call(lib("smaller"), sub("F"), sub("F")),
+          () => orElse(call(B.div, sub("F"), sub("F"))),
+          () => orElse(call(B.sqrt, sub("F"))),
+          () => orElse(call(B.log, sub("F"))),
+          () => orElse(call(S.mod, sub("F"), sub("F"))),
+        ])();
+      }
+      case "I": {
+        if (leaf) return k.int(r.pick([0, 1, -1, 2, 3, 7, -10, 1000, 2n ** 62n]));
+        const orElse = (e: Id) => k.call(S.first, k.thunk(() => e), k.thunk(() => sub("I")));
+        return r.pick<() => Id>([
+          () => call(INT_OPS.add, sub("I"), sub("I")),
+          () => call(INT_OPS.sub, sub("I"), sub("I")),
+          () => call(INT_OPS.mul, sub("I"), sub("I")),
+          () => call(INT_OPS.neg, sub("I")),
+          () => call(lib("length"), sub("L")),
+          () => call(lib("item at"), sub("L"), sub("I"), sub("I")),
+          () => orElse(call(INT_OPS.quotient, sub("I"), sub("I"))),
+          () => orElse(call(INT_OPS.remainder, sub("I"), sub("I"))),
+        ])();
+      }
+      case "B": {
+        if (leaf) return k.x(r.next() < 0.5 ? TRUE : FALSE);
+        return r.pick<() => Id>([
+          () => call(S.less, sub("F"), sub("F")),
+          () => call(INT_OPS.less, sub("I"), sub("I")),
+          () => k.equal(sub("I"), sub("I")),
+          () => k.equal(sub("L"), sub("L")),
+          () => call(S.not, sub("B")),
+        ])();
+      }
+      case "L": {
+        if (leaf) return r.next() < 0.3 ? k.list() : k.list(...Array.from({ length: 1 + r.int(3) }, () => k.int(r.int(9) - 4)));
+        return r.pick<() => Id>([
+          () => call(CONS, sub("I"), sub("L")),
+          () => call(lib("append"), sub("L"), sub("L")),
+          () => call(lib("reverse"), sub("L")),
+          () => call(lib("take"), sub("L"), sub("I")),
+          () => call(lib("drop"), sub("L"), sub("I")),
+          () => call(lib("replace at"), sub("L"), sub("I"), sub("I")),
+          // map with a closure: the item, and whatever is in scope.
+          () => call(lib("map"), sub("L"), k.fn([fresh()], (v) => gen("I", { ...s, I: [...s.I, v] }, depth - 1))),
+        ])();
+      }
+    }
+  }
+
+  const defs: { def: Id; result: Ty }[] = [];
+  for (let i = 0; i < count; i++) {
+    const result = r.pick<Ty>(["F", "I", "B", "L"]), def = k.def(`g${i}`);
+    // Its inputs are a Float64, an Int and a List Int: each used once
+    // first, so its type is that whatever the body does.
+    k.define(def, k.fn(["x", "n", "xs"], (x, n, xs) =>
+      k.let("x0", call(B.add, x, k.lit(0)), (x0) =>
+        k.let("n0", call(INT_OPS.add, n, k.int(0)), (n0) =>
+          k.let("xs0", call(lib("append"), xs, k.list(n0)), (xs0) =>
+            call(SHOW_ANY, gen(result, { F: [x0], I: [n0], L: [xs0], B: [] }, 4)))))));
+    defs.push({ def, result });
+  }
+  const code = base(k.code), names2 = baseNames(k.names);
+  return { code, names: names2, info: infer(code, names2, undefined, checkOptions), defs };
+}

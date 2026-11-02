@@ -466,7 +466,8 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       // here (a partial one, giving a status); one with other effects isn't yet.
       const effs = info.subst.resolveRow(t.eff).effs;
       if (effs.some((e) => !allowedEff(e))) return null;
-      const params = t.params.map((p) => stype(p, inside)), result = stype(t.ret, inside);
+      const free = (x: Type): Type => (x.t === "var" ? { t: "con", id: NUMBER, args: [] } : x);
+      const params = t.params.map((p) => stype(free(p), inside)), result = stype(free(t.ret), inside);
       if (params.some((p) => !p) || !result) return null;
       const partial = effs.some(partialEff);
       const key = `fn(${(params as LType[]).map(keyOf).join(",")})>${keyOf(result)}${partial ? "!" : ""}`;
@@ -474,6 +475,10 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       return fns.get(key)!;
     }
     if (t.t !== "con") return null;
+    // A part nothing constrains (the items of `[]` nobody adds to, what a
+    // function given to map over it takes, C101): no value of it is ever
+    // made, so any type holds it; Float64's.
+    if (opts.data && t.args.some((a) => a.t === "var")) t = { ...t, args: t.args.map((a) => (a.t === "var" ? { t: "con", id: NUMBER, args: [] } : a)) };
     if (t.id === NUMBER) return "f64";
     if (t.id === BOOL) return "i32";
     if (opts.data && t.id === INT) return "int";
