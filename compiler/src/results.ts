@@ -82,12 +82,14 @@ export function solvesAsCalls(code: Code, names: Names): { code: Code; names: Na
   const pair = (xs: Id[]): Id => xs.length === 1 ? xs[0] : add({ kind: "call", fn: add({ kind: "ref", target: PAIR_V } as Omit<Node, "id">), args: [xs[0], pair(xs.slice(1))] } as Omit<Node, "id">);
   // A copy of e with its own binders fresh and the context's binders read
   // through sub.
-  const copy = (e: Id, sub: Map<Id, Id>): Id => {
+  // `shared`: parts read from a value worked out before, by its binder.
+  const copy = (e: Id, sub: Map<Id, Id>, shared?: Map<Id, Id>): Id => {
     const inside = new Set(subtree(code, e)), fresh = new Map<Id, Id>();
     const f = (id: Id) => (inside.has(id) ? (fresh.get(id) ?? (fresh.set(id, freshId()), fresh.get(id)!)) : (sub.get(id) ?? id));
     for (const id of inside) {
-      out.nodes[f(id)] = mapIds(code.nodes[id], f);
-      if (names[id] !== undefined) more[f(id)] = names[id];
+      const b = shared?.get(id);
+      out.nodes[f(id)] = b ? { id: f(id), kind: "ref", target: b } as Node : mapIds(code.nodes[id], f);
+      if (names[id] !== undefined && !b) more[f(id)] = names[id];
     }
     return f(e);
   };
@@ -146,7 +148,66 @@ export function solvesAsCalls(code: Code, names: Names): { code: Code; names: Na
       const body = together(lets.map((l) => (l as typeof l0).body), subs, shared);
       return add({ kind: "call", fn: add({ kind: "lambda", params, body } as Omit<Node, "id">), args } as Omit<Node, "id">);
     }
-    return pair(es.map((e, k) => copy(e, subs[k])));
+    return sharedBelow(es, subs, shared);
+  };
+  // Where the results part, a value more than one of them works out the
+  // same way (a Dual's x² + y², under the length's square root and as the
+  // angle's slope's divisor) is worked out once, before the pair, and each
+  // reads it (C55c): common subexpressions, as any optimiser shares them
+  // (Cocke, 1970). Only values each result surely works out (an argument
+  // of a call, a let's value or body, a match's scrutinee: not inside a
+  // case or a function), reading nothing bound inside the result.
+  const sharedBelow = (es: Id[], subs: Map<Id, Id>[], shared: { n: number }): Id => {
+    const sure = (e: Id): Id[] => {
+      const out: Id[] = [];
+      const walk = (id: Id) => {
+        const n = code.nodes[id];
+        if (n?.kind === "call") {
+          out.push(id);
+          n.args.forEach(walk);
+          const f = code.nodes[n.fn];
+          if (f?.kind === "lambda") walk(f.body);
+        } else if (n?.kind === "match") walk(n.scrutinee);
+      };
+      walk(e);
+      return out;
+    };
+    const local = es.map((e) => {
+      const bound = new Set<Id>();
+      for (const id of subtree(code, e)) {
+        const n = code.nodes[id];
+        if (n?.kind === "lambda") n.params.forEach((p) => bound.add(p));
+        if (n?.kind === "arm") n.binds.forEach((b) => b !== null && bound.add(b));
+      }
+      return bound;
+    });
+    // Candidates, the largest first, with the result each is in.
+    const cands = es.flatMap((e, k) => sure(e).filter((id) => {
+      const n = code.nodes[id] as NodeOf<"call">;
+      if (code.nodes[n.fn]?.kind !== "ref" || !n.args.length) return false;
+      return subtree(code, id).every((x) => { const r = code.nodes[x]; return r?.kind !== "ref" || !local[k].has(r.target); });
+    }).map((id) => ({ id, k, size: subtree(code, id).length })));
+    cands.sort((a, b) => b.size - a.size);
+    const repl = es.map(() => new Map<Id, Id>()), within = es.map(() => new Set<Id>());
+    const values: Id[] = [], binders: Id[] = [];
+    for (let i = 0; i < cands.length; i++) {
+      const a = cands[i];
+      if (within[a.k].has(a.id)) continue;
+      const alike = cands.filter((b, j) => j > i && !within[b.k].has(b.id) && b.size === a.size && same(a.id, b.id, subs[a.k], subs[b.k]));
+      if (!alike.length) continue;
+      const b = add({ kind: "binder" } as Omit<Node, "id">);
+      more[b] = "shared";
+      values.push(copy(a.id, subs[a.k]));
+      binders.push(b);
+      for (const c of [a, ...alike]) {
+        repl[c.k].set(c.id, b);
+        for (const x of subtree(code, c.id)) within[c.k].add(x);
+      }
+    }
+    const parts = es.map((e, k) => copy(e, subs[k], repl[k]));
+    if (!values.length) return pair(parts);
+    shared.n++;
+    return add({ kind: "call", fn: add({ kind: "lambda", params: binders, body: pair(parts) } as Omit<Node, "id">), args: values } as Omit<Node, "id">);
   };
   // The definition giving results rs of d together, or null when they
   // share nothing.
