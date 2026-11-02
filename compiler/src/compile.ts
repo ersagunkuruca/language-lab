@@ -1424,7 +1424,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           }
           const kind = arrayKind(a, true);
           if (kind && fits(params[i], kind)) arr.set(params[i], kind);
-          else if (viewable.has(params[i]) && viewArg(a)) arr.set(params[i], "view");
+          else if (viewable.has(params[i]) && viewArg(a, true)) arr.set(params[i], "view");
         });
       }
       // Function parameters given lambdas that choose but have at most one
@@ -1466,7 +1466,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     // `characters`, whose arrays are made here, or a call of a definition
     // with an `$into` copy, which writes its list into a new one (P4: the
     // compressor's samples, walked by the loudness match).
-    function viewArg(id: Id): { a: string; i: string } | null {
+    // `probe`: only whether it is one, writing no code (I149: writing the
+    // callee's arguments here ran before the writer was set up).
+    function viewArg(id: Id, probe = false): { a: string; i: string } | null {
       const n = code.nodes[id];
       if (n.kind === "ref") return views.get(n.target) ?? null;
       if (n.kind !== "call" || code.nodes[n.fn].kind !== "ref" || streamy(id)) return null;
@@ -1474,7 +1476,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       if (f === TEXT_OPS.split || f === TEXT_OPS.characters) return { a: arraySource(id)!.js, i: "0" };
       if (f === S.first) { const a = firstArray(n); return a ? { a, i: "0" } : null; }
       const t = code.nodes[f]?.kind === "def" ? intoCallee(n, { rec: null, k: 0 }) : null;
-      return t ? { a: `$intoArray(${[t.name, ...argsOf(n, t)].join(", ")})`, i: "0" } : null;
+      return t ? { a: probe ? "" : `$intoArray(${[t.name, ...argsOf(n, t)].join(", ")})`, i: "0" } : null;
     }
     // `first` whose answer is a solve's one bind, a list its mode can push
     // onto an array (the pedal's join run backwards, in `conjugate`): the

@@ -58,3 +58,40 @@ test("a block function's list as an array: the same items as its cells, and no s
     assert.deepEqual($arrayOf(f, $toList(long)), $fromList(f($toList(long))), name);
   }
 });
+
+// I149: a recursive definition handing on `map(keep(numbered(rest), …), …)`
+// asked, while working out its copy, whether that argument could be a view
+// on an array, and wrote the callee's code to find out, before the writer
+// was set up ("Cannot access 'boolFns' before initialization"). Asking now
+// writes nothing.
+test("a definition handing on keep of numbered compiles, and answers as evaluated (I149)", async () => {
+  const { LIBRARY } = await import("../../ters/src/lang/library.ts");
+  const { checkOptions } = await import("../../ters/src/lang/load.ts");
+  const { INT_OPS, S } = await import("../../ters/src/lang/std.ts");
+  const { makeRunner } = await import("../../ters/src/lang/run.ts");
+  const L = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
+  const k = new Lang(LIBRARY.code);
+  // The first item, plus f of the rest without its i-th item, at i + 1.
+  const f = k.def("f");
+  const second = (pair: string, pick: 0 | 1) => k.match(pair, [{ variant: PAIR_V, names: ["j", "row"], body: (parts) => parts[pick] }]);
+  k.define(f, k.fn(["rows", "i"], (rows, i) => k.match(rows, [
+    { variant: NIL, names: [], body: () => k.lit(0) },
+    { variant: CONS, names: ["x", "rest"], body: ([x, rest]) => k.call(B.add, x, k.call(f,
+      k.call(L("map"), k.call(L("keep"), k.call(L("numbered"), rest), k.fn(["pair"], (p) => k.call(S.not, k.call(S.equal, second(p, 0), i)))), k.fn(["q"], (q) => second(q, 1))),
+      k.call(INT_OPS.add, i, k.int(1)))) },
+  ])));
+  const answer = k.def("answer");
+  k.define(answer, k.thunk(() => k.call(f, k.list(...[1, 2, 4, 8, 16, 32].map((x) => k.lit(x))), k.int(0))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const file = join(dir, "i149.mjs");
+  writeFileSync(file, compile(code, info, names, { runtime, exports: ["answer"] }));
+  const compiled = ((await import(pathToFileURL(file).href)).defs.answer as () => unknown)();
+  const r = makeRunner(code, info, { print: () => {} });
+  const [want] = r.call(r.value(answer)) as Iterable<unknown>;
+  // 1, then [2, 4, 8, 16, 32]'s rest without its item 0, [4, 8, 16, 32];
+  // 4, then [8, 16, 32] without item 1, [8, 32]; 8, then [32]; 32.
+  assert.equal(want, 1 + 4 + 8 + 32);
+  assert.equal(compiled, want);
+});
