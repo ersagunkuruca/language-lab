@@ -28,6 +28,7 @@
     { "program": "machine", "label": "Bigger program: machine, an assembler and interpreter", "folders": ["compiler/gaps/machine"] },
     { "program": "notebook", "label": "Bigger program: notebook, notes and a word index", "folders": ["notebook"] },
     { "program": "routes", "label": "Bigger program: routes, roads between towns", "folders": ["routes"] },
+    { "program": "ledger", "label": "Bigger program: ledger, money entries totalled", "folders": ["ledger"] },
     { "program": "compass", "label": "Compass", "folders": ["compass"], "page": true, "editor": false }
   ]
 }
