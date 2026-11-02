@@ -63,3 +63,12 @@ test("L153: show agrees with show fixed on every step it tries", async () => {
   const [own] = await both((k) => xs(k).map((x) => k.call(L("show fixed"), x)));
   assert.deepEqual(shown, own.map((t) => JSON.parse(t)));
 });
+
+test("L154: a Float64 shows to 9 decimals, and one below 10⁻⁶ in size by the shortest text that reads back to it", async () => {
+  const want = ["0.3", "0.333333333", "1e-12", "-5e-7", "0.000001", "0", "2.5"];
+  const [ran, compiled] = await both((k) => [
+    k.lit(0.1 + 0.2), k.lit(1 / 3), k.lit(1e-12), k.lit(-5e-7), k.lit(1e-6), k.lit(0), k.lit(2.5),
+  ].map((x) => k.call(S.show, x)));
+  assert.deepEqual(ran.map((t) => JSON.parse(t)), want);
+  assert.deepEqual(compiled.map((t) => JSON.parse(t)), want);
+});

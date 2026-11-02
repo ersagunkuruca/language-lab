@@ -143,7 +143,7 @@ export function $eq(a, b) {
 // builtins compiled code calls by id.
 export * as $int from '../../ters/src/lang/int.ts';
 export * as $text from '../../ters/src/lang/text.ts';
-import { CELL_OPS, INT_OPS, STD_IMPL, STD_MANY } from '../../ters/src/lang/std.ts';
+import { CELL_OPS, INT_OPS, STD_IMPL, STD_MANY, floatText } from '../../ters/src/lang/std.ts';
 
 // Arrays (std.ts ARRAY_OPS, C30d): views on a buffer with free room at
 // both ends, the same as the evaluator's (std.ts ArrayView).
@@ -181,7 +181,7 @@ export const $textOrder = (a, b) => {
   return a.length < b.length ? -1 : 1;
 };
 
-export const $show = (x) => (Number.isInteger(x) ? String(x) : String(Math.round($fin(x) * 1e9) / 1e9));
+export const $show = (x) => floatText($fin(x));
 export const $mod = (a, b) => (b === 0 ? $stop('x mod 0 has no answer') : ((a % $fin(b)) + b) % b);
 export const $modN = (a, b) => (b === 0 ? $no : ((a % $fin(b)) + b) % b);
 // A record of Float64s part by part (std.ts); a Float64 is one part.
