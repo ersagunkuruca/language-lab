@@ -62,3 +62,15 @@ export function fromCode(n: Int): string[] {
   if (typeof n !== "number" || n < 0 || n > 0x10ffff || (n >= 0xd800 && n <= 0xdfff)) return [];
   return [String.fromCodePoint(n)];
 }
+
+// The Float64 a text spells (L176, GAPS round 10 KL3: clinic read "30.5"
+// with a parser of its own): digits with perhaps a point, a sign and an
+// exponent, "30.5", "-2", ".5", "1e-3". No answer for anything else, nor
+// for a number too big to be a Float64 (a Float64 is finite, L125). The
+// nearest Float64 to the decimal, as JavaScript's Number and C's strtod
+// round it. -0 reads as 0, as show never shows it.
+export function readNumber(t: string): number[] {
+  if (!/^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$/.test(t)) return [];
+  const x = Number(t);
+  return Number.isFinite(x) ? [x === 0 ? 0 : x] : [];
+}

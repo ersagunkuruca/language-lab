@@ -51,6 +51,8 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 - **shifted down** : `(Int, Int) -> Int`. floor(a / 2ⁿ): a shifted down n places, rounded towards −∞, so shifted down(−1, 1) is −1. A negative n shifts up. Fixed's · uses it.
 - **show** : `(Int) -> Text`. An Int as text.
 - **range** : `(Int) -> List Int`. The Ints 0, 1, … up to n − 1, as a list.
+- **whole of** : `(Float64) -> Int`. The whole number at or below x, as an Int: whole of(2.7) is 2, whole of(-0.5) is -1. Always an answer, since a Float64 is finite (whole part is the same as a Choice).
+- **divided or** : `(Float64, Float64, Float64) -> Float64`. a / b, or otherwise when b is 0: divided or(waited, patients, 0) is the mean, or 0 with no patients.
 - **range from** : `(Int, Int) -> List Int`. The Ints from start up to end, end left out: range from(2, 5) is [2, 3, 4]. Empty when end is not after start.
 - **Rational** (type). An exact fraction, top/bottom, always in lowest terms. The same + − · < work on it. Make one with fraction(1, 3) or as fraction(n); its constructor ratio is private to the library, which keeps the rule.
 - **fraction** : `(Int, Int) -[Choice]-> Rational`. top/bottom, exactly, in lowest terms (Euclid's algorithm, textbook); no answer when bottom is 0.
@@ -166,6 +168,7 @@ Text is a string of characters. Positions count from 0. Text has the one <, alph
 - **comes before** : `(Text, Text) -> Bool`. Whether one text comes before another alphabetically (by character code).
 - **character code** : `(Text) -[Choice]-> Int`. The character's number (its Unicode code point). No answer unless the text is one character.
 - **character** : `(Int) -[Choice]-> Text`. The character with this number. No answer when there's none.
+- **read number** : `(Text) -[Choice]-> Float64`. The Float64 a text spells: read number("30.5") is 30.5, and "-2", ".5" and "1e-3" read too. No answer for anything else, or for a number too big for a Float64. (read whole number reads an Int.)
 - **starts with** : `(Text, Text) -> Bool`. Whether the text begins with this: starts with("# notes", "#") is true. Every text starts with "".
 - **ends with** : `(Text, Text) -> Bool`. Whether the text ends with this: ends with("page.md", ".md") is true. Every text ends with "".
 - **contains text** : `(Text, Text) -> Bool`. Whether the part occurs somewhere in the text: contains text("to do list", "do") is true. Every text contains "". (contains is a list's.)

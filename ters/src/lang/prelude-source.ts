@@ -166,6 +166,16 @@ export function buildPrelude(): Module {
   const flatMap = k.def("flat map");
   k.define(flatMap, k.fn(["list", "f"], (xs, f) => k.call(flatten, k.call(map, xs, f))));
 
+  // Ends of a Choice that can't happen, or has a plain default (L174, GAPS
+  // round 10 KL1): clinic wrote `int of`, `share` and three more to end
+  // one. A Float64 is finite (L125), so the whole number at or below one
+  // always exists; `whole part` stays a Choice for the programs that
+  // handle it. `divided or` is a / b, or the default when b is 0.
+  const wholeOf = k.def("whole of");
+  k.define(wholeOf, k.fn(["x"], (x) => k.call(S.first, k.thunk(() => k.call(INT_OPS.wholePart, x)), k.thunk(() => k.int(0)))));
+  const dividedOr = k.def("divided or");
+  k.define(dividedOr, k.fn(["a", "b", "otherwise"], (a, b, o) => k.call(S.first, k.thunk(() => k.call(B.div, a, b)), k.thunk(() => o))));
+
   // The Ints from start up to end, end left out (BACKLOG L147, GAPS round
   // 7 SL2: sheet counted `numbers from` itself), as Python's range(a, b).
   const rangeFrom = k.def("range from");
@@ -1585,7 +1595,7 @@ export function buildPrelude(): Module {
   const simulatedHelpers = [readyAt, earliest, readyTimes, tiedAt, pickAt, nextDraw, firstDraw, simulatedWorld, simulatedClock];
   const awaitHelpers = [startBranch, waiting, goOn, finished, settle, firstDone, raceSettle, ...simulatedHelpers];
 
-  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, flatten, flatMap, rangeFrom, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, ticketId, anyOf, together, race, within, simulated];
+  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, ticketId, anyOf, together, race, within, simulated];
   // Each number's own show, from before the generic one showed every number
   // (L153, L156): kept so programs saved before still open, not offered.
   const perTypeShows = [showF, showC, showD, showX];
@@ -1648,6 +1658,8 @@ export function buildPrelude(): Module {
     [numbered]: "Each item with its position, counting from 0: numbered([\"a\", \"b\"]) is [(0, \"a\"), (1, \"b\")].",
     [firstWhere]: "The first item that passes the test, or none: first where([3, 8, 9], (x) ↦ x > 5) is some(8).",
     [positionOf]: "Where the item first is in the list, from 0, or none: position of([\"a\", \"b\"], \"b\") is some(1).",
+    [wholeOf]: "The whole number at or below x, as an Int: whole of(2.7) is 2, whole of(-0.5) is -1. Always an answer, since a Float64 is finite (whole part is the same as a Choice).",
+    [dividedOr]: "a / b, or otherwise when b is 0: divided or(waited, patients, 0) is the mean, or 0 with no patients.",
     [contains]: "Whether the item is in the list: contains([1, 2], 2) is true. (has is a Set's.)",
     [largestOf]: "The largest item by <, or none for an empty list: largest of([3, 9, 4]) is some(9).",
     [smallestOf]: "The smallest item by <, or none for an empty list: smallest of([3, 9, 4]) is some(3).",

@@ -202,6 +202,7 @@ export const TARGETS: Record<Id, Target> = {
   // before the surrogates, JS's UTF-16 order gives the same answer.
   [TEXT_OPS.less]: { js: test(([a, b], narrow) => (narrow?.some(Boolean) ? `(${a} < ${b})` : `$text.less(${a}, ${b})`)), scalar: DATA },
   [TEXT_OPS.code]: { js: "partial", scalar: DATA },
+  [TEXT_OPS.readNumber]: { js: "partial", scalar: DATA },
   [TEXT_OPS.fromCode]: { js: "partial", scalar: DATA },
   // The generic + − · −x <: resolved to each type's own operation (the
   // records above) before the compiler sees the program, by compile() and
