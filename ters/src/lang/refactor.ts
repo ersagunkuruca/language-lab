@@ -151,6 +151,14 @@ export function fillHole(code: Code, names: Names, hole: Id, f: Filling, library
       data = { kind: "solve", fn: f.target, given, binds, body: add({ kind: "hole" }) };
       break;
     }
+    // A match on values (L164c): one arm, its value a literal of the
+    // examined type to change, and the otherwise (E225).
+    case "values": {
+      const value = add(f.type === STRING ? { kind: "lit", value: "" } : f.type === INT ? { kind: "lit", value: 0, of: INT } : { kind: "lit", value: 0 });
+      const arm = add({ kind: "arm", variant: value, value, binds: [], results: [], body: add({ kind: "hole" }) });
+      data = { kind: "match", scrutinee: add({ kind: "ref", target: f.on }), arms: [arm], otherwise: add({ kind: "hole" }) };
+      break;
+    }
     case "match":
     case "fold": {
       const scrutinee = add(f.on ? { kind: "ref", target: f.on } : { kind: "hole" });

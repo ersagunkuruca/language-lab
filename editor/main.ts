@@ -1714,6 +1714,11 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
       deeper ? edit("Match deeper", `Open ${names[id] ?? "it"} into its cases, each row a copy of this one`, deeper, () => applyT(deeper)) : null,
       join?.ok ? edit("Join cases", "Its cases all give the same value: put that value back in their place", join, () => applyT(join)) : null));
   }
+  // A match on values (L164c) takes another value's arm, before the
+  // otherwise: its value a literal of the examined type to change (E225).
+  const byValue = joinable ? valueArmAdded(joinable) : null;
+  if (byValue) out.append(h("div", { class: "sub-head" }, "Values · code.json"), h("div", { class: "acts" },
+    edit("Add a value", "Another value's case, before the otherwise: its value and its body to fill", byValue, () => applyT(byValue))));
   if (hole && clip) out.append(h("div", { class: "acts" }, h("button", { class: "btn", type: "button", "data-act": "paste", title: "Ctrl+V" }, "Paste the copy here")));
   if (hole && held[ui.def] && !doc.signatures?.[ui.def]) {
     const dname = pres().names[ui.def] ?? "This definition";
@@ -1831,10 +1836,27 @@ function fillLabel(f: T.Filling, info: T.Info, names: Names): [string, string, s
       const d = node(f.target) as NodeOf<"def">, ps = (node(d.body!) as NodeOf<"lambda">).params;
       return [`${d.results!.map(nm).join(", ")} = ${nm(f.target)}(${ps.filter((q) => !d.results!.includes(q)).map(() => "□").join(", ")})`, `its results, named, in what you write next`, "results"];
     }
+    // A match on values (E225): match op · by value.
+    case "values": return [`match ${nm(f.on)} · by value`, `a case per ${f.type === "type.string" ? "Text" : nm(f.type)} value you write, then otherwise`, "case analysis"];
     default: return words(f.type).effect
       ? [`handle ${nm(f.type)} in □`, `one case per operation of ${nm(f.type)}, on the computation you give next`, "case analysis"]
       : [`${f.kind} ${f.on ? nm(f.on) : "□"} · ${nm(f.type)}`, `one case per ${nm(f.type)}${f.kind === "fold" ? ", with each part already folded" : ""}${f.on ? "" : ", on a value you give next"}`, "case analysis"];
   }
+}
+
+// A match on values with one more arm: a literal like its first arm's,
+// its body a hole. Null for a match on cases.
+function valueArmAdded(match: Id): (T.TEdit & { ok: true }) | null {
+  const m = node(match);
+  const first = m?.kind === "match" ? (node(m.arms[0]) as NodeOf<"arm"> | undefined) : undefined;
+  const v = first?.value ? node(first.value) : null;
+  if (m?.kind !== "match" || v?.kind !== "lit") return null;
+  const nodes = { ...doc.code.nodes }, value = freshId(), arm = freshId(), body = freshId();
+  nodes[value] = typeof v.value === "string" && v.of !== INT ? { id: value, kind: "lit", value: "" } : { id: value, kind: "lit", value: 0, ...(v.of ? { of: v.of } : {}) };
+  nodes[body] = { id: body, kind: "hole" };
+  nodes[arm] = { id: arm, kind: "arm", variant: value, value, binds: [], results: [], body };
+  nodes[match] = { ...m, arms: [...m.arms, arm] };
+  return { ok: true, code: { nodes, defs: doc.code.defs }, names: doc.names.short, select: value, note: "Added a value's case: give its value, then fill its body." };
 }
 
 // The symbols people type for the builtins with word names.

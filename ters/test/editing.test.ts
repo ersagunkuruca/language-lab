@@ -453,6 +453,29 @@ async function newAndDeleteDefinition() {
   await p.close();
 }
 
+// A match on values (L164c) from the palette, and another value's case
+// added from its panel (E225).
+async function matchByValue() {
+  where = "a match on values";
+  const p = await browser.newPage();
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  await p.goto(page);
+  await p.locator(".nav-row", { hasText: "+ New program" }).click();
+  await p.locator(".nav-row", { hasText: "+ New definition" }).click();
+  await p.locator('[data-panel="node"]').click();
+  await p.locator("#f-def-name").fill("op");
+  await p.locator("#f-def-inputs").fill("name");
+  await p.locator("button", { hasText: "Create" }).click();
+  await p.locator(".hole").first().click();
+  await p.locator("#f-query").fill("by value"); await p.waitForTimeout(400);
+  await p.locator(".opt", { hasText: "a case per Text value" }).click({ timeout: 5000 }).catch(() => errors.push(`${where}: no match name · by value for a Text`));
+  await p.locator(".p-text .kw", { hasText: "match" }).first().click({ timeout: 2000 }).catch(() => {});
+  await p.locator("button", { hasText: "Add a value" }).click({ timeout: 3000 }).catch(() => errors.push(`${where}: no Add a value on the match`));
+  const text = (await p.locator(".p-text .body").innerText()).replace(/\s+/g, " ");
+  if (!/match name "" → □\S* "" → □\S* otherwise → □/.test(text)) errors.push(`${where}: the text reads ${text.slice(0, 160)}`);
+  await p.close();
+}
+
 // Undo of + New definition goes back to the definition open before, and
 // Redo to the new one (E193): not to the library's first type.
 async function undoNewDefinition() {
@@ -661,7 +684,7 @@ async function simplifyAppend() {
   await p.close();
 }
 
-const scenarios = { deleteAndUndo, swapAndUndo, implementInterface, choiceAction, heldSeed, listItems, sharedRow, matchDeeper, foldFrom, answeredLater, helperAtValue, partToFunction, textPort, newAndDeleteDefinition, undoNewDefinition, keptOnReload, reorderInputs, looseParts, seededRun, shaderOpens, letNodes, simplifyAppend };
+const scenarios = { matchByValue, deleteAndUndo, swapAndUndo, implementInterface, choiceAction, heldSeed, listItems, sharedRow, matchDeeper, foldFrom, answeredLater, helperAtValue, partToFunction, textPort, newAndDeleteDefinition, undoNewDefinition, keptOnReload, reorderInputs, looseParts, seededRun, shaderOpens, letNodes, simplifyAppend };
 for (const [name, run] of Object.entries(scenarios)) {
   test(name, async () => {
     errors.length = 0;
