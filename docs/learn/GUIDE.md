@@ -369,7 +369,8 @@ new type. Undo twice to get back.
 ## 10. Saving, and getting back
 
 - **Every edit is kept in this browser** as you make it. Close the tab,
-  come back, and your changes are still there.
+  come back, and your changes are still there. If the browser's storage
+  is ever full, the status line says so: **Save file** still keeps it.
 - **Undo** and **Redo** step through your edits.
 - **Reset** puts an example back the way it shipped. You can undo that
   too.

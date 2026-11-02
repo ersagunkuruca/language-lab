@@ -456,6 +456,28 @@ async function undoNewDefinition() {
   await p.close();
 }
 
+// What's kept in the browser is a program's own nodes, not the library
+// under them (BACKLOG E197): three programs of your own fit, and a new
+// definition is there when the page is opened again.
+async function keptOnReload() {
+  where = "kept on reload";
+  const p = await browser.newPage();
+  for (const _ of [1, 2, 3]) await p.locator(".nav-row", { hasText: "+ New program" }).click();
+  await p.locator(".nav-row", { hasText: "+ New definition" }).click();
+  await p.locator('[data-panel="node"]').click();
+  await p.locator("#f-def-name").fill("kept");
+  await p.locator("#f-def-inputs").fill("x");
+  await p.locator("button", { hasText: "Create" }).click();
+  const saved = open.at(-1)!.window.localStorage.getItem("projectional-editor-v5") ?? "";
+  const mine = Object.keys(JSON.parse(saved || "{}").docs ?? {}).filter((k) => k.startsWith("mine")).length;
+  if (mine !== 3) errors.push(`${where}: ${mine} programs of your own saved, not 3`);
+  if (saved.length > 300_000) errors.push(`${where}: the store holds ${saved.length} characters`);
+  const again = openEditor(saved);
+  open.push(again);
+  await new Promise((r) => setTimeout(r, 50));
+  if (!again.texts("[data-def]").some((t) => t.trim() === "kept")) errors.push(`${where}: kept isn't there when the page is opened again`);
+}
+
 // In the graph, an input dropped on another input of the same + moves
 // there (BACKLOG E101); one Undo puts it back.
 async function reorderInputs() {
@@ -619,7 +641,7 @@ async function simplifyAppend() {
   await p.close();
 }
 
-const scenarios = { deleteAndUndo, swapAndUndo, implementInterface, choiceAction, heldSeed, listItems, sharedRow, matchDeeper, foldFrom, answeredLater, helperAtValue, textPort, newAndDeleteDefinition, undoNewDefinition, reorderInputs, looseParts, seededRun, shaderOpens, letNodes, simplifyAppend };
+const scenarios = { deleteAndUndo, swapAndUndo, implementInterface, choiceAction, heldSeed, listItems, sharedRow, matchDeeper, foldFrom, answeredLater, helperAtValue, textPort, newAndDeleteDefinition, undoNewDefinition, keptOnReload, reorderInputs, looseParts, seededRun, shaderOpens, letNodes, simplifyAppend };
 for (const [name, run] of Object.entries(scenarios)) {
   test(name, async () => {
     errors.length = 0;
