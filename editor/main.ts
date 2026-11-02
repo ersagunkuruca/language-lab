@@ -1577,7 +1577,11 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
   const out = h("div", { class: "insp" });
   // Its id is the program's, not the reader's: kept on hover for whoever
   // needs to find it in code.json.
-  out.append(h("div", { class: "insp-head" }, h("span", { class: "kind", title: `id ${id} in code.json` }, kindLabel(id))));
+  // What this part is in, a whole a + b around its b, one step out
+  // (E183b): Alt+↑ does the same.
+  const outer = enclosing(id);
+  const upBtn = outer ? h("button", { class: "btn mini", type: "button", title: "Select what this is in (Alt+↑)", "data-act": "goto-node", "data-target": outer }, "↑ what it's in") : null;
+  out.append(h("div", { class: "insp-head" }, h("span", { class: "kind", title: `id ${id} in code.json` }, kindLabel(id)), upBtn));
   const t = T.typeOf(info, id, names);
   const hole = info.holes.get(id);
   if (hole) out.append(h("div", { class: "typeline" }, h("span", {}, "needs"), h("code", {}, typeName(info, hole.expected, names))));
@@ -1853,6 +1857,22 @@ function usesIn(code: Code): Map<Id, number> {
     uses.set(code, m);
   }
   return m;
+}
+
+// The expression a part is in, one step out: past the arm or let that
+// only holds it, never the definition itself.
+function enclosing(id: Id): Id | null {
+  for (let at = parentOf(doc.code, id), hops = 0; at && hops < 8; at = parentOf(doc.code, at.parent), hops++) {
+    const n = node(at.parent);
+    if (!n || n.kind === "def" || at.parent === ui.def) return null;
+    // A let's call and its function only hold steps; a definition's own
+    // function is the definition.
+    const letCall = (c: Node | undefined) => c?.kind === "call" && node(c.fn)?.kind === "lambda";
+    if (letCall(n)) continue;
+    if (n.kind === "lambda") { const o = parentOf(doc.code, n.id); const on = o ? node(o.parent) : undefined; if (!o || on?.kind === "def" || (letCall(on) && o.slot === "fn")) continue; }
+    if (["call", "match", "fold", "lambda", "solve"].includes(n.kind)) return n.id;
+  }
+  return null;
 }
 
 function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): HTMLElement {
@@ -4165,6 +4185,11 @@ document.addEventListener("keydown", (e) => {
       document.querySelector<HTMLElement>(".blocks-wrap")?.focus({ preventScroll: true });
       document.querySelector(".blocks-wrap .sel")?.scrollIntoView({ block: "nearest" });
     }
+    return;
+  }
+  if (inProgram && ui.selected && e.altKey && e.key === "ArrowUp") {
+    const outer = enclosing(ui.selected);
+    if (outer) { e.preventDefault(); select(outer); }
     return;
   }
   if (inProgram && ui.selected && (e.key === "ContextMenu" || (e.key === "F10" && e.shiftKey))) {
