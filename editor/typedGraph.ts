@@ -1441,11 +1441,29 @@ function asLayout(scene: Scene, at: Record<Id, Pos>) {
 // A graph nobody has moved is drawn as Tidy everything draws it, so the
 // two are one layout: folded frames are laid out as the boxes they are
 // drawn as, after their contents are laid out inside them.
+//
+// One layout per shape of graph (BACKLOG E200): a click that only changes
+// the selection builds the same scene again, so it gets the layout it got
+// before instead of a new one (half of a click in Constructions). The key
+// is everything the layout reads: the nodes with their sizes and places,
+// the frames, the wires, the steps and which frames are folded.
+const arranged = new Map<string, Record<Id, Pos>>();
 function autoArrange(scene: Scene, folded?: Set<Id>) {
+  // A folded frame is laid out as its box, whose width is its title's and
+  // the names of the calls inside it: those are read too.
+  const { nodes, frames, wires } = asLayout(scene, {});
+  const shut = [...folded ?? []].sort();
+  const boxes = shut.length ? [[...scene.frames.values()].map((f) => [f.title, f.minW]), [...scene.items.values()].map((it) => it.name ?? null)] : null;
+  const key = JSON.stringify([nodes, frames, wires, scene.chains ?? null, shut, boxes]);
+  const kept = arranged.get(key);
+  if (kept) { for (const [k, p] of Object.entries(kept)) scene.items.get(k)!.auto = { ...p }; return; }
   // Twice: arrange breaks ties by where things already are, and Tidy
   // everything starts from this layout, not from the one the graph was
   // built with, so one pass left it moving a pixel here and there (I56).
-  for (let i = 0; i < 2; i++) for (const [k, p] of Object.entries(arrangeAll(scene, folded))) scene.items.get(k)!.auto = p;
+  let last: Record<Id, Pos> = {};
+  for (let i = 0; i < 2; i++) for (const [k, p] of Object.entries((last = arrangeAll(scene, folded)))) scene.items.get(k)!.auto = p;
+  arranged.set(key, Object.fromEntries(Object.entries(last).map(([k, p]) => [k, { ...p }])));
+  if (arranged.size > 24) arranged.delete(arranged.keys().next().value!);
 }
 
 // Where everything goes, laid out afresh: each folded frame's contents as
