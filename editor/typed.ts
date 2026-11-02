@@ -75,6 +75,24 @@ export const typeOf = (info: Info | null, id: Id, names: Names): string | null =
   return shown;
 };
 
+// A name several things share (`as float64` is Int's, Rational's, Fixed's
+// and Algebraic's): a call of one says which it took, by its own type,
+// "as float64 : (Fixed) -> Float64" (E223). Null for a name only one has.
+const sharedNames = new WeakMap<Names, Map<string, number>>();
+export function tookType(code: Code, info: Info | null, names: Names, id: Id): string | null {
+  const n = code.nodes[id], f = n?.kind === "call" ? code.nodes[n.fn] : n;
+  const name = f?.kind === "ref" ? names[f.target] : undefined;
+  if (!info || f?.kind !== "ref" || !name) return null;
+  let m = sharedNames.get(names);
+  if (!m) {
+    sharedNames.set(names, (m = new Map()));
+    for (const [k, v] of Object.entries(names)) if (["builtin", "def", "variant", "field"].includes(code.nodes[k]?.kind ?? "")) m.set(v, (m.get(v) ?? 0) + 1);
+  }
+  if ((m.get(name) ?? 0) < 2) return null;
+  const own = info.schemes.get(f.target)?.type ?? sigType(info, f.target);
+  return own ? `${name} : ${showType(own, names).replace(/ -\[[^\]]*\]->/g, " ->")}` : null;
+}
+
 // ---------------------------------------------------------------- view
 
 // The pane draws what the blocks text prints (render.ts blocksOf), so the
@@ -84,7 +102,8 @@ export function renderTyped(code: Code, pres: Presentation, info: Info | null, d
   const errorAt = new Map((info?.errors ?? []).map((e) => [e.id, e.message]));
   const cls = (id: Id | undefined, c: string | undefined) => (id ? `x ${c ?? ""}${selected === id ? " sel" : ""}${errorAt.has(id) ? " err" : ""}` : c);
   const title = (id: Id | undefined, more?: string) => {
-    const said = id ? errorAt.get(id) ?? ownTypeOf(id) ?? undefined : undefined;
+    const took = id && code.nodes[id]?.kind === "call" ? tookType(code, info, pres.names, id) : null;
+    const said = id ? errorAt.get(id) ?? ([ownTypeOf(id), took].filter(Boolean).join("\n") || undefined) : undefined;
     return said && more ? `${said}\n\n${more}` : said ?? more;
   };
   // A name of a definition hovers as the definition's own type. Its type

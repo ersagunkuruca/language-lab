@@ -464,3 +464,15 @@ test("typed field shared by two types offers each type", async () => {
   assert.ok(r.ok, !r.ok ? r.reason : "");
   if (r.ok) assert.deepEqual(r.choices?.map((c) => c.label), ["as a Card", "as a Quick"]);
 });
+
+// A call of a name several things share says which it took (E223):
+// clinic's `as float64(heap size(…))` is Int's, by its own type.
+test("a call of a shared name says which meaning it took", async () => {
+  const { tookType } = await import("../../editor/typed.ts");
+  const p = loadProgram(join(root, "..", "compiler/gaps/clinic"));
+  const info = infer(p.code, p.pres.names);
+  const calls = Object.values(p.own.nodes).filter((n): n is NodeOf<"call"> => n.kind === "call" && p.code.nodes[n.fn]?.kind === "ref");
+  const named = (name: string) => calls.find((c) => p.pres.names[(p.code.nodes[c.fn] as NodeOf<"ref">).target] === name)!;
+  assert.equal(tookType(p.code, info, p.pres.names, named("as float64").id), "as float64 : (Int) -> Float64");
+  assert.equal(tookType(p.code, info, p.pres.names, named("heap size").id), null);
+});
