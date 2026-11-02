@@ -516,6 +516,44 @@ export function setWay(code: Code, names: Names, def: Id, way: { cost: number | 
     note: way ? `${nameOf(names, def)} costs ${way.cost ?? "the usual"}${way.cost != null ? " plus what it uses" : ""}.` : `${nameOf(names, def)} is an ordinary definition now, no longer a way of ${nameOf(names, field)}.` };
 }
 
+// A relation's other direction (POLAR.md, BACKLOG E210b): a definition of
+// the same ports in the same order, these `results` given from the rest,
+// marked `direction` of the relation, with a hole for the predicate. A
+// solve of the relation given its inputs then calls it instead of a
+// search. `results` are positions among the relation's ports.
+export function addDirection(code: Code, names: Names, rel: Id, results: number[], rawName: string): Top {
+  const r = code.nodes[rel];
+  const lam = r?.kind === "def" && r.body ? code.nodes[r.body] : null;
+  if (r?.kind !== "def" || !r.results?.length || lam?.kind !== "lambda") return { ok: false, reason: "only a definition with results has other directions" };
+  const rs = [...new Set(results)].filter((i) => i >= 0 && i < lam.params.length).sort((a, b) => a - b);
+  if (!rs.length || rs.length === lam.params.length) return { ok: false, reason: "a direction gives some of the ports from the others: pick at least one result and leave one input" };
+  if (rs.length === r.results.length && rs.every((i) => r.results!.includes(lam.params[i]))) return { ok: false, reason: `that is ${nameOf(names, rel)}'s own direction` };
+  const port = (i: number) => nameOf(names, lam.params[i]);
+  let name = trim(rawName);
+  if (!name) for (let i = 1; !name || nameTaken(code, names, name); i++) name = `${nameOf(names, rel)} for ${rs.map(port).join(", ")}${i > 1 ? ` ${i}` : ""}`;
+  if (nameTaken(code, names, name)) return { ok: false, reason: `there is already a definition named ${name}` };
+  const { nodes, add } = builder(code);
+  const nn: Names = { ...names };
+  const params = lam.params.map((p) => { const b = add({ kind: "binder" }); nn[b] = names[p] ?? "port"; return b; });
+  // Its body starts as one equation per result: `length = □ and angle = □`,
+  // the hole for how each is worked out from the given ports.
+  const eq = (i: number) => add({ kind: "call", fn: add({ kind: "ref", target: "builtin.equal" }), args: [add({ kind: "ref", target: params[i] }), add({ kind: "hole" })] });
+  const body = rs.slice(1).reduce((acc, i) => add({ kind: "call", fn: add({ kind: "ref", target: "builtin.and" }), args: [acc, eq(i)] }), eq(rs[0]));
+  const def = add({ kind: "def", body: add({ kind: "lambda", params, body }), results: rs.map((i) => params[i]), direction: rel });
+  nn[def] = name;
+  return { ok: true, code: { nodes, defs: [...code.defs, def] }, names: nn, select: def,
+    note: `New direction of ${nameOf(names, rel)}, ${name}: ${rs.map(port).join(", ")} from ${lam.params.map((_, i) => i).filter((i) => !rs.includes(i)).map(port).join(", ")}. Fill each result's hole with how it is worked out; a solve of ${nameOf(names, rel)} given those then uses it instead of searching.` };
+}
+
+// A direction made an ordinary definition again (it keeps its results).
+export function dropDirection(code: Code, names: Names, def: Id): Top {
+  const d = code.nodes[def];
+  if (d?.kind !== "def" || !d.direction) return { ok: false, reason: "that isn't a direction of a relation" };
+  const { direction, ...plain } = d;
+  return { ok: true, code: { nodes: { ...code.nodes, [def]: plain }, defs: code.defs }, names, select: def,
+    note: `${nameOf(names, def)} is an ordinary definition now, no longer a direction of ${nameOf(names, direction)}.` };
+}
+
 // ------------------------------------------------------- type parameters
 
 // A data type's or an effect's type parameters (`Stack a`, `State s`), or

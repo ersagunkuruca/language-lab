@@ -1683,7 +1683,9 @@ export function resultsDirection(code: Code, d: Id, names: Names = {}): { why: s
     let ends = true;
     if (p.mode === "relational") {
       const v = solveMode(asked, use, names);
-      const stuck = v?.stuck.filter((x) => x !== "a hole") ?? [];
+      // Unfinished (a hole still in it): judged when it is filled, as a
+      // use of it is (above).
+      const stuck = v?.stuck.includes("a hole") ? [] : v?.stuck ?? [];
       if (stuck.length) return { why: stuck.find((x) => x.startsWith("nothing gives")) ?? `${stuck[0]} never gets what it needs` };
       ends = !!v?.ends;
     } else if (p.status !== "solved") return { why: `it needs ${p.needMore} more known port${p.needMore === 1 ? "" : "s"}` };

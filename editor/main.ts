@@ -1731,6 +1731,29 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
         b.addEventListener("click", () => applyT(T.setResults(doc.code, doc.names.short, info, id, on ? rs.filter((r) => r !== q) : [...rs, q])));
         return b;
       })));
+    // Its other directions (POLAR.md, E210b): definitions over the same
+    // ports that give others of them, used by a solve given those.
+    if (rs.length) {
+      const dirs = doc.code.defs.filter((d) => (node(d) as NodeOf<"def">).direction === id);
+      const want = new Set(fnBody.params.map((q, i) => (rs.includes(q) ? -1 : i)).filter((i) => i >= 0));
+      const ticks = fnBody.params.map((q, i) => {
+        const cb = h("input", { type: "checkbox", id: `f-dir-${i}`, checked: want.has(i) }) as HTMLInputElement;
+        return { cb, el: h("label", { class: "field check", for: `f-dir-${i}` }, cb, h("span", {}, names[q] ?? `port ${i + 1}`)) };
+      });
+      const go = h("button", { class: "btn", type: "button" }, "Add a direction");
+      go.addEventListener("click", () => runTop(info, Top.addDirection(doc.code, doc.names.short, id, ticks.flatMap((t, i) => (t.cb.checked ? [i] : [])), ""), (r) => { ui.back = [ui.def]; ui.def = r.select; ui.selected = null; }));
+      out.append(h("div", { class: "sub-head" }, "Other directions · code.json"),
+        h("p", { class: "hint" }, dirs.length ? "Each gives other ports from the rest; a solve given those uses it instead of searching." : `None: a solve of ${names[id] ?? "it"} given its results searches. A direction says how to work out other ports from the rest, as unpolar does for polar.`),
+        ...dirs.map((d) => row(pick(d, names[d] ?? "a direction", `gives ${((node(d) as NodeOf<"def">).results ?? []).map((r) => names[r] ?? "?").join(", ")}`))),
+        h("p", { class: "hint" }, "The ports a new direction gives:"), ...ticks.map((t) => t.el), h("div", { class: "acts" }, go));
+    }
+  }
+  // A direction of a relation (E210b): which, and back to ordinary.
+  if (n.kind === "def" && n.direction) {
+    const r = Top.dropDirection(doc.code, doc.names.short, id);
+    out.append(h("div", { class: "sub-head" }, "A direction of ", pick(n.direction, names[n.direction] ?? "a relation"), " · code.json"),
+      h("p", { class: "hint" }, `The same ports as ${names[n.direction] ?? "it"}, in the same order: a solve of it given this one's inputs calls this instead of searching. They must agree; the law tests check it.`),
+      h("div", { class: "acts" }, edit("Make it ordinary", "No longer a direction: a definition like any other, with its results", r, () => runTop(info, r))));
   }
 
   // A dot: a let's binder, the shared output of its value.

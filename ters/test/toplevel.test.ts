@@ -938,3 +938,25 @@ test("a way of an interface's operation: added with a hole, its cost set, made o
   const Shape = s.ok(Top.newDefinition(s.code, s.names, "Shape", { kind: "type", firstCase: "dot" }));
   assert.match(s.refused(Top.addWay(s.code, s.names, Shape, differ, "")), /only an interface/);
 });
+
+test("a relation's other direction: the same ports, others given, a hole for how (E210b)", () => {
+  const s = new Session();
+  s.ok(Top.newDefinition(s.code, s.names, "polar", { kind: "function", params: ["length", "angle", "x", "y"] }));
+  const polar = s.def("polar");
+  const lam = s.code.nodes[(s.code.nodes[polar] as NodeOf<"def">).body!] as NodeOf<"lambda">;
+  s.code = { ...s.code, nodes: { ...s.code.nodes, [polar]: { ...(s.code.nodes[polar] as NodeOf<"def">), results: lam.params.slice(2) } } };
+  assert.match(s.refused(Top.addDirection(s.code, s.names, polar, [2, 3], "")), /own direction/);
+  assert.match(s.refused(Top.addDirection(s.code, s.names, polar, [], "")), /at least one result/);
+  const back = s.ok(Top.addDirection(s.code, s.names, polar, [0, 1], ""));
+  const d = s.code.nodes[back] as NodeOf<"def">;
+  assert.equal(s.names[back], "polar for length, angle");
+  assert.equal(d.direction, polar);
+  const ps = (s.code.nodes[d.body!] as NodeOf<"lambda">).params;
+  assert.deepEqual(ps.map((p) => s.names[p]), ["length", "angle", "x", "y"]);
+  assert.deepEqual(d.results, ps.slice(0, 2));
+  s.ok(Top.dropDirection(s.code, s.names, back));
+  assert.equal((s.code.nodes[back] as NodeOf<"def">).direction, undefined);
+  s.ok(Top.newDefinition(s.code, s.names, "plain", { kind: "function", params: ["a"] }));
+  const plain = s.def("plain");
+  assert.match(s.refused(Top.addDirection(s.code, s.names, plain, [0], "")), /only a definition with results/);
+});
