@@ -157,8 +157,9 @@ export const $partial = Object.fromEntries(Object.entries($many).map(([id, f]) =
 // A Float64 made a whole number is a conversion: it must be finite (L125c).
 { const whole = $partial[INT_OPS.wholePart]; $partial[INT_OPS.wholePart] = (x) => whole($fin(x)); }
 export { setPath as $setPath } from '../../ters/src/lang/records.ts';
-import { showValue, compareValues, ORDER_VALUES } from '../../ters/src/lang/run.ts';
+import { showValue, caseName, compareValues, ORDER_VALUES } from '../../ters/src/lang/run.ts';
 export const $showAny = performed((v, names) => showValue(v, null, names, true));
+export const $caseName = performed((v, names) => caseName(v, names));
 // `compare` (L66): `order` is each case's place in its type (compile.ts
 // writes it as $order), so cases compare as in the evaluator.
 export const $compare = performed((a, b, order) => ORDER_VALUES[compareValues(a, b, order) + 1]);
@@ -686,7 +687,7 @@ const worldBuiltin = {
 
 // Cells' handler: one per program, or the one the host gives (a page that
 // watches cells shares its own).
-import { Cells, Pending, listEdits, pathValue, stepsOf } from '../../ters/src/lang/cells.ts';
+import { Cells, Pending, changeAt, listEdits, pathValue, stepsOf } from '../../ters/src/lang/cells.ts';
 let cells = null;
 export const $cells = () => (cells ??= new Cells($eq));
 export function $setCells(c) { cells = c; }
@@ -697,6 +698,8 @@ export const $path = {
   then: (p, q) => pathValue([...stepsOf(p), ...stepsOf(q)]),
   of: (steps) => pathValue(steps),
   write: (c, p, v) => ($cells().edit(c, stepsOf(p), () => v, $listArrays), $unit),
+  // A value with one place changed (L163): no cell, nothing woken.
+  changed: (v, p, x) => changeAt(v, stepsOf(p), () => x, $listArrays),
   insert: (c, p, i, v) => ($cells().edit(c, stepsOf(p), (l) => $toList(listEdits.insert($fromList(l), Number(i), v)), $listArrays, { at: stepsOf(p), kind: 'insert', i: Number(i) }), $unit),
   remove: (c, p, i) => ($cells().edit(c, stepsOf(p), (l) => { const xs = listEdits.remove($fromList(l), Number(i)); return xs && $toList(xs); }, $listArrays, { at: stepsOf(p), kind: 'remove', i: Number(i) }), $unit),
   move: (c, p, a, b) => ($cells().edit(c, stepsOf(p), (l) => { const xs = listEdits.move($fromList(l), Number(a), Number(b)); return xs && $toList(xs); }, $listArrays, { at: stepsOf(p), kind: 'move', from: Number(a), to: Number(b) }), $unit),

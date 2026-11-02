@@ -2464,6 +2464,19 @@ function structurePanel(info: T.Info, names: Names): HTMLElement | null {
     return out;
   } else if (sel === ui.def) {
     out.append(pinRow(info, dname));
+    // A way of an interface's operation (E210): which, what it costs, and
+    // back to an ordinary definition.
+    const way = (node(ui.def) as NodeOf<"def">).way;
+    if (way) {
+      const cost = (node(ui.def) as NodeOf<"def">).cost;
+      const iface = info.owner.get(way);
+      const ci = h("input", { id: "f-way-cost", type: "number", min: "0", step: "1", value: cost == null ? "" : String(cost), placeholder: "1", autocomplete: "off" }) as HTMLInputElement;
+      ci.addEventListener("change", () => runTop(info, Top.setWay(code, sh, ui.def, { cost: ci.value.trim() === "" ? null : Number(ci.value) })));
+      out.append(h("div", { class: "sub-head" }, "A way of ", pick(way, names[way] ?? "an operation"), iface ? " in " : "", iface ? pick(iface, names[iface] ?? "its interface") : "", " · code.json"),
+        h("label", { class: "field", for: "f-way-cost" }, h("span", {}, "Cost"), ci),
+        h("p", { class: "hint" }, `What it costs besides what it uses (the usual is 1): the compiler takes the cheapest way that ends in what an implementation gives.`),
+        h("div", { class: "acts" }, edit("Make it ordinary", `No longer a way of ${names[way] ?? "the operation"}: a definition like any other`, { ok: true }, () => runTop(info, Top.setWay(code, sh, ui.def, null)))));
+    }
     const params = body?.kind === "lambda" ? body.params : [];
     out.append(h("div", { class: "sub-head" }, `Inputs of ${dname} · code.json`));
     if (!params.length) {
@@ -2549,6 +2562,18 @@ function structurePanel(info: T.Info, names: Names): HTMLElement | null {
       h("label", { class: "field", for: "f-op-takes" }, h("span", {}, "Takes"), takes), h("label", { class: "field", for: "f-op-gives" }, h("span", {}, "Gives"), gives),
       h("div", { class: "acts" }, change, edit("Remove this operation", `Remove it from ${names[iface] ?? "the interface"}`, Top.removeField(code, sh, variant, sel), () => runTop(info, Top.removeField(code, sh, variant, sel), () => { ui.selected = iface; }), "btn danger")),
       h("p", { class: "hint" }, "An implementation's part for it becomes a hole when what it takes or gives changes."));
+    // Its ways (WAYS.md, E210): definitions that compute it from the
+    // interface's other operations, so an implementation can leave it to
+    // them; the compiler picks the cheapest that ends in what's given.
+    const op = names[sel] ?? "it", ways = code.defs.filter((d) => (code.nodes[d] as NodeOf<"def">).way === sel);
+    out.append(h("div", { class: "sub-head" }, `Ways of ${op} · code.json`));
+    if (!ways.length) out.append(h("p", { class: "hint" }, `None: each implementation gives ${op}. A way computes it from ${names[iface] ?? "the interface"}'s other operations, so an implementation can leave it to its ways.`));
+    for (const d of ways) { const cost = (code.nodes[d] as NodeOf<"def">).cost; out.append(row(pick(d, names[d] ?? "a way", cost != null ? `cost ${cost}` : ""))); }
+    const wc = textField("f-new-way", "New way", "its name, or one is made");
+    const addWay = h("button", { class: "btn", type: "button" }, "Add a way");
+    addWay.addEventListener("click", () => runTop(info, Top.addWay(code, sh, iface, sel, wc.input.value), (r) => { ui.back = [ui.def]; ui.def = r.select; ui.selected = null; }));
+    wc.input.addEventListener("keydown", (e) => { if (e.key === "Enter") addWay.click(); });
+    out.append(wc.el, h("div", { class: "acts" }, addWay));
     return out;
   } else if (n?.kind === "field") {
     const variant = Object.values(code.nodes).find((v) => v.kind === "variant" && v.fields.includes(sel)) as NodeOf<"variant">;
@@ -2818,6 +2843,13 @@ function fnSet(id: Id, picked: Id[]): { members: Id[]; what: string; group?: Id 
   return doc.code.nodes[id] ? { members: [id], what: "This node" } : null;
 }
 
+// A part of the Blocks pane as the nodes a function is made of: the calls
+// written inside it, itself first (E208). A name or a number alone is
+// none: there's nothing to make a function of.
+function partCalls(id: Id): Id[] {
+  return subtree(doc.code, id).filter((x) => doc.code.nodes[x]?.kind === "call");
+}
+
 function ungroup(g: Id) {
   const { [g]: _, ...groups } = doc.layout.groups ?? {};
   commit({ layout: { ...doc.layout, groups, folded: (doc.layout.folded ?? []).filter((x) => x !== g) } }, ["layout.json"], "Ungrouped: what it held stays where it was. Only layout.json changed.");
@@ -3041,6 +3073,18 @@ function graphMenu(info: T.Info): HTMLElement | null {
     if (inGraph) rows.push(item("Back to the automatic place", "reset-one", picked.length > 1 ? "Forget where the picked nodes were dragged: back where Tidy everything puts them" : "Forget where it was dragged: back where Tidy everything puts it"));
     if (inGraph) rows.push(item(picked.includes(id) ? "Unpick" : "Pick", "pick", "Mark it, to move and tidy it together with other marked nodes (shift-click does the same)"));
   }
+  // The Blocks pane has no picking: a part made a function or a
+  // definition takes it with everything written inside it, and a function
+  // written in place can be made a definition, as from its frame in the
+  // graph (E208).
+  if (kind === "node" && !inGraph && id) {
+    const members = partCalls(id);
+    if (members.length) rows.push(h("div", { class: "ctx-sep" }),
+      item("Make it a function", "part-fn", "This part, with all it holds: a function, part, of what comes in, called right here. Changes the code; Undo puts it back", why(() => T.makeFunction(doc.code, doc.names.short, info, ui.def, members))),
+      item("Make it a definition", "part-def", "The same function, as a definition of its own in the side menu, called right here. Changes the code; Undo puts it back", why(() => T.definitionFrom(doc.code, doc.names.short, info, ui.def, members))));
+    if (doc.code.nodes[id]?.kind === "lambda" && (doc.code.nodes[ui.def] as { body?: Id } | undefined)?.body !== id)
+      rows.push(item("Make it a definition", "lambda-def", "This function as a definition of its own, in the side menu: what it uses from around it becomes its first inputs. Changes the code; Undo puts it back", why(() => T.liftToDefinition(doc.code, doc.names.short, info, ui.def, id))));
+  }
   if (kind !== "hole" && inGraph) {
     rows.push(h("div", { class: "ctx-sep" }));
     if (picked.length > 1) rows.push(item(`Tidy the ${picked.length} picked`, "tidy-picked", "Space out only the picked nodes: no overlaps, off the wires"));
@@ -3183,6 +3227,8 @@ function menuAction(act: string, target: Id | undefined) {
       graph?.unpickAll();
       return applyT(T.definitionFrom(doc.code, doc.names.short, info, ui.def, set.members));
     }
+    case "part-fn": return applyT(T.makeFunction(doc.code, doc.names.short, info, ui.def, partCalls(target!)));
+    case "part-def": return applyT(T.definitionFrom(doc.code, doc.names.short, info, ui.def, partCalls(target!)));
     case "picked-fn": {
       const set = fnSet(target!, graph?.picked() ?? []);
       if (!set) return;

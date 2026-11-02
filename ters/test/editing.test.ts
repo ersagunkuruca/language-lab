@@ -386,6 +386,21 @@ async function helperAtValue() {
   await p.close();
 }
 
+// Make it a function from the Blocks pane (BACKLOG E208): fall's drift,
+// v·t, made a function from its menu, called where it was.
+async function partToFunction() {
+  where = "make it a function from the blocks";
+  const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  await p.goto(page);
+  await p.locator("[data-def]", { hasText: /^fall$/ }).click();
+  await p.locator(".blocks-wrap .op", { hasText: "·" }).first().click({ button: "right" });
+  await p.locator('.ctx-menu [data-menu="part-fn"]').click({ timeout: 15000 });
+  const text = (await p.locator(".p-text .body").innerText()).replace(/\s+/g, " ");
+  if (!/= \(speed, time\) => speed · time/.test(text) || !/drift = part\(speed, time\)/.test(text)) errors.push(`${where}: no function part made and called: ${text.slice(200, 600)}`);
+  await p.close();
+}
+
 // A Text port reads what's typed as text, quotes or not (BACKLOG E93):
 // greet run forwards from a name.
 async function textPort() {
@@ -641,7 +656,7 @@ async function simplifyAppend() {
   await p.close();
 }
 
-const scenarios = { deleteAndUndo, swapAndUndo, implementInterface, choiceAction, heldSeed, listItems, sharedRow, matchDeeper, foldFrom, answeredLater, helperAtValue, textPort, newAndDeleteDefinition, undoNewDefinition, keptOnReload, reorderInputs, looseParts, seededRun, shaderOpens, letNodes, simplifyAppend };
+const scenarios = { deleteAndUndo, swapAndUndo, implementInterface, choiceAction, heldSeed, listItems, sharedRow, matchDeeper, foldFrom, answeredLater, helperAtValue, partToFunction, textPort, newAndDeleteDefinition, undoNewDefinition, keptOnReload, reorderInputs, looseParts, seededRun, shaderOpens, letNodes, simplifyAppend };
 for (const [name, run] of Object.entries(scenarios)) {
   test(name, async () => {
     errors.length = 0;

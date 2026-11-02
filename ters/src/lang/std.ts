@@ -654,6 +654,13 @@ export const CELL_OPS = {
   writeAt: builtin("cells.writeAt", "write at", (s) => { const a = s.fresh(), b = s.fresh(); return fn([cellOf(a), pathOf(a, b), b], unit, s.freshRow([UPDATE])); }),
   insertAt: builtin("cells.insertAt", "insert at", (s) => { const a = s.fresh(), b = s.fresh(); return fn([cellOf(a), pathOf(a, list(b)), int, b], unit, s.freshRow([UPDATE])); }),
   removeAt: builtin("cells.removeAt", "remove at", (s) => { const a = s.fresh(), b = s.fresh(); return fn([cellOf(a), pathOf(a, list(b)), int], unit, s.freshRow([UPDATE])); }),
+  // A value with the part at a place changed (L163, GAPS round 9 MG2): the
+  // paths above, on any value rather than a cell's, so a record's one
+  // field or a list's one item changes without writing the rest out. A
+  // place that isn't there gives the value as it was. Pure. Prior art:
+  // lenses' `set` (van Laarhoven; Kmett's lens), OCaml's and Elm's
+  // `{ r with f = v }`.
+  changed: builtin("cells.changed", "changed", (s) => { const a = s.fresh(), b = s.fresh(); return fn([a, pathOf(a, b), b], a, s.freshRow()); }),
   moveAt: builtin("cells.moveAt", "move at", (s) => { const a = s.fresh(), b = s.fresh(); return fn([cellOf(a), pathOf(a, list(b)), int, int], unit, s.freshRow([UPDATE])); }),
 };
 
@@ -992,6 +999,11 @@ export const ALGEBRAIC_OPS = {
 // presentation, so they're an input to the run, like the console). Float64's
 // own show stays: run backwards, it is what reads numbers.
 export const SHOW_ANY = builtin("showAny", "show", (s) => fn([s.fresh(true)], str, s.freshRow()));
+// The name of the case a plain value was made by, as text (L162, GAPS
+// round 9 MG1): case name(add(r1, r2, r3)) is "add", case name([]) is
+// "nil", and a number or a text, made by no case, gives "". The name is the
+// program's, like show's (run.ts caseName). Data.Data's showConstr.
+export const CASE_NAME = builtin("caseName", "case name", (s) => fn([s.fresh(true)], str, s.freshRow()));
 // The order on plain data (L66, run.ts compareValues): numbers by value,
 // text by code point, cases in the order their type declares them, then
 // fields left to right. Plain data only, like `equal`.

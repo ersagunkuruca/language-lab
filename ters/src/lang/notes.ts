@@ -159,6 +159,7 @@ export const NOTES: Comments = {
   "builtin.not": "true becomes false and false true.",
   "builtin.compare": "How two values are ordered: before, same or after. Float64s by value, exactly (unlike equal, which lets two Float64s within about 1e-9 be equal), with NaN after every other Float64; text alphabetically; cases in the order their type lists them; then field by field. sort, maps and sets use it.",
   "builtin.showAny": "Any plain value as text, the way it would be written: show([1, 2]) is \"[1, 2]\". Every number type shows as its number: a fraction 1/3, a Fixed by show fixed's digits, an Extended as its number or +∞ and −∞.",
+  "builtin.caseName": "The name of the case the value was made by, as text: case name(some(3)) is \"some\", case name([]) is \"nil\". A number or a text was made by no case and gives \"\".",
 
   // --- text
   "builtin.concat": "Two texts one after the other.",
@@ -241,6 +242,7 @@ export const NOTES: Comments = {
   "builtin.cells.read": "What a cell holds now. A page part that reads it is redrawn when it changes.",
   "builtin.cells.write": "Puts a new value in a cell. Only event handlers can write.",
   "builtin.cells.path": "A place inside a cell's value, from a field or a path of fields: path((t) ↦ t.title), or path((t) ↦ t) for the whole value. Edits and read at use it.",
+  "builtin.cells.changed": "The value with the part at a place changed, the rest shared: changed(m, path((m) ↦ m.pc), 7) is m with its pc 7, and changed(xs, item path(path((l) ↦ l), 2), 0) is xs with its third item 0. A place that isn't there gives the value as it was. For a cell, write at does this and wakes the place's readers.",
   "builtin.cells.itemPath": "Item i of the list at a place, counting from 0: item path(path((t) ↦ t), 3) is the fourth item of a cell's list.",
   "builtin.cells.thenPath": "The second place inside the first: then path(item path(all, 3), path((i) ↦ i.title)) is the fourth item's title.",
   "builtin.cells.readAt": "What is at a place in a cell's value. A page part that reads it is redrawn only when that place changes, not when another item does. No answer when the place isn't there (an item past the end).",
