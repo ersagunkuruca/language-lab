@@ -281,6 +281,21 @@ together(actions) =
   clock reads it the same); fetches that overlap need a world that fetches
   in the background, L150b (test/start-fetch.test.ts).
 
+## Pure branches (L62)
+
+A `together` whose actions only compute (or abort, or run long) may run
+them on other cores, and the answer is the same: `pure-branches.ts`
+`pureTogethers` marks those calls. What an action does can't be read from
+its type there, since the actions are one list and share one row, which
+together's own type fills with Await. So each action, written in place as a
+lambda of nothing, is read for what it calls: a builtin's signature, a
+definition's generalized type, an operation's effect. One that prints,
+waits, writes a cell, draws from the random stream, does one of the
+program's own effects, or calls a function it was handed (only its caller
+knows what that does) isn't marked. The runtime decides by cost whether to
+use it (C41); the editor may show it. Haskell's `par` without the
+annotation (Marlow et al., "Seq no more", 2010).
+
 ## Prior art
 
 - Algebraic effect handlers: Plotkin and Pretnar (2009); Eff (Bauer and
