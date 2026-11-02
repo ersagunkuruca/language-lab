@@ -22,7 +22,7 @@
 // an answer. The cells that would hold them are left out, and a call of a
 // mode for the rest hands the array on.
 
-import type { Code, Id, NodeOf } from "../../ters/src/model.ts";
+import type { Code, Id, NodeOf, Use } from "../../ters/src/model.ts";
 import { analyzer, determinism, type Exec, type Plan } from "../../ters/src/lang/modes.ts";
 import { CONS, INT_OPS, NIL, S } from "../../ters/src/lang/std.ts";
 import { B } from "../../ters/src/prelude.ts";
@@ -321,7 +321,7 @@ export function modeCompiler(code: Code, names: Record<Id, string>) {
   // which pushes the one bind, a list, onto `d$` (`intoSolvers`), when the
   // mode can write it.
   const intoSolvers = new Set<string>();
-  function solver(n: NodeOf<"solve">, name: string, emit: ModeEmit, into = false): string | null {
+  function solver(n: Use, name: string, emit: ModeEmit, into = false): string | null {
     const v = an.ofSolve(n);
     if (!v || !v.ends || v.stuck.length || v.dynamic.length) return null;
     const d = determinism(v.answers);
@@ -366,7 +366,7 @@ export function modeCompiler(code: Code, names: Record<Id, string>) {
 
   // Can this solve be written out? The same walk with an emit that writes
   // nothing, keeping nothing.
-  function compilable(n: NodeOf<"solve">, dry: ModeEmit): boolean {
+  function compilable(n: Use, dry: ModeEmit): boolean {
     const mark = out.length, size = made.size, t = temps;
     const ok = solver(n, "dry", dry) !== null;
     out.length = mark;
