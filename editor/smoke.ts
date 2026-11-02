@@ -155,7 +155,7 @@ async function editKeepsPlaces() {
   await p.locator("#f-def-inputs").fill("x");
   await p.locator("button", { hasText: "Create" }).click();
   await p.locator(".hole").first().click();
-  await p.locator("#f-query").fill("x · x + 1");
+  await p.locator("#f-query").fill("x · x + 1"); await p.waitForTimeout(400);
   await p.keyboard.press("Enter");
   // Each node's place in the world, apart from the canvas's pan and zoom.
   const places = () => p.locator(".p-graph svg.canvas > g.world .items [data-id]:not(.rg):not(.src):not(.use-hit)").evaluateAll((es) => Object.fromEntries(es.map((e) => {
@@ -166,7 +166,7 @@ async function editKeepsPlaces() {
   const before = await places();
   await p.locator(".p-text .x", { hasText: /^1$/ }).last().click({ button: "right" });
   await p.locator(".ctx-menu button, .menu button", { hasText: "Replace with" }).first().click();
-  await p.locator("#f-query").fill("2 · 3 · 4 · 5");
+  await p.locator("#f-query").fill("2 · 3 · 4 · 5"); await p.waitForTimeout(400);
   await p.keyboard.press("Enter");
   const after = await places();
   const moved = Object.keys(before).filter((k) => k in after && before[k] !== after[k]);
@@ -245,16 +245,16 @@ async function looseValue() {
   const titles = await p.locator(".p-graph text.rt").evaluateAll((es) => es.map((e) => e.textContent ?? ""));
   if (/_1/.test(text) || !titles.some((t) => /^loose : /.test(t))) errors.push(`${where}: the loose part reads as _1: ${JSON.stringify(titles)}`);
   // Its hole takes no effects, and a search for one says why (BACKLOG E123).
-  await p.locator("#f-query").fill('print("hi")');
+  await p.locator("#f-query").fill('print("hi")'); await p.waitForTimeout(400);
   if (!/loose part .* can't have effects/.test(await p.locator(".side .palette").innerText())) errors.push(`${where}: a search for print in a loose hole doesn't say why nothing fits`);
   // A function is found by what other languages call it, and by its
   // comment (BACKLOG E136).
-  await p.locator("#f-query").fill("insert");
+  await p.locator("#f-query").fill("insert"); await p.waitForTimeout(400);
   if (!/put\(□, □, □\)\s*elsewhere called insert/.test(await p.locator(".side .palette").innerText())) errors.push(`${where}: insert doesn't find put`);
-  await p.locator("#f-query").fill("holds");
+  await p.locator("#f-query").fill("holds"); await p.waitForTimeout(400);
   if (!/has key\(□, □\)\s*Whether the map holds key/.test(await p.locator(".side .palette").innerText())) errors.push(`${where}: a word of has key's comment doesn't find it`);
   // Filled with a literal, it still has an output to wire it in by (BACKLOG E122).
-  await p.locator("#f-query").fill("7");
+  await p.locator("#f-query").fill("7"); await p.waitForTimeout(400);
   await p.locator("#f-query").press("Enter");
   if (!(await p.locator(".p-graph .items > g.faded circle.outp[data-out]").count())) errors.push(`${where}: the loose 7 has no output to wire it in by`);
   await p.keyboard.press("Escape");
