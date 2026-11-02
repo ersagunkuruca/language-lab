@@ -162,3 +162,19 @@ test("a list in place keeps its brackets, and sum(1, 2, 3) still reads", async (
   const r = fillValue(c2, n2, infer(c2, n2), h, "sum(1, 2, 3)", hole);
   assert.ok(r.ok, !r.ok ? r.reason : "");
 });
+
+// A match on values (L164c) reads each arm as its value (E225).
+test("a match on values shows each arm as its value", async () => {
+  const { Lang } = await import("../src/lang/dsl.ts");
+  const { LIBRARY } = await import("../src/lang/library.ts");
+  const { base, baseNames, checkOptions } = await import("../src/lang/load.ts");
+  const { readFileSync } = await import("node:fs");
+  const k = new Lang(LIBRARY.code);
+  const op = k.def("op");
+  k.define(op, k.fn(["name"], (name) => k.byValue(name, [[k.lit("add"), k.int(1)], [k.lit("jump"), k.int(2)]], k.int(0))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  const pres = { names, comments: {}, hints: {}, style: JSON.parse(readFileSync(join(root, "styles", "blocks.json"), "utf8")) };
+  const text = renderBlocks(code, pres, info, op);
+  assert.match(text, /match name\s+"add" → 1\s+"jump" → 2\s+otherwise → 0/);
+});
