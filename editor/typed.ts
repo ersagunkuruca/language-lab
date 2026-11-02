@@ -444,6 +444,9 @@ const glyphs = (fixity: string) => {
     // A word (and, or) is read with spaces on both sides; a prefix word
     // (not) isn't read yet.
     if (n.fixity !== fixity || (fixity !== "infix" && /^\p{L}/u.test(n.glyph)) || n.glyph === "^") continue;
+    // A hidden copy (the Float64-only > kept so old files open) is never
+    // what's typed: the generic one is (E185).
+    if (LIBRARY.hidden.has(id)) continue;
     const g = by.get(n.glyph) ?? { prec: n.prec ?? 5, ids: [] };
     g.ids.push(id);
     by.set(n.glyph, g);
