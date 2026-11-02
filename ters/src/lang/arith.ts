@@ -129,7 +129,7 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
     if (t.t === "con") return { t: "con", id: t.id, args: t.args.map((a) => close(a, env)) };
     return { t: "fn", params: t.params.map((p) => close(p, env)), ret: close(t.ret, env), eff: s.resolveRow(t.eff) };
   };
-  const constrained = (sc: Scheme) => [...new Set([...(sc.arith ?? []), ...(sc.ordered ?? []), ...(sc.needs ?? []).map(([v]) => v)])];
+  const constrained = (sc: Scheme) => [...new Set([...(sc.arith ?? []), ...(sc.less ?? []), ...(sc.ordered ?? []), ...(sc.needs ?? []).map(([v]) => v)])];
   // What a scheme's variables stand for at one use: walk its type beside
   // the use's.
   const bind = (pat: Type, t: Type, vars: Set<number>, out: Env) => {
@@ -182,7 +182,7 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
     const type = close(sc.type, env);
     const left = (xs?: number[]) => (xs ?? []).filter((v) => !env.has(v));
     const needs = (sc.needs ?? []).filter(([v]) => !env.has(v));
-    schemes.set(id, { ...sc, vars: sc.vars.filter((v) => !env.has(v)), type, ...(sc.arith ? { arith: left(sc.arith) } : {}), ...(sc.ordered ? { ordered: left(sc.ordered) } : {}), needs });
+    schemes.set(id, { ...sc, vars: sc.vars.filter((v) => !env.has(v)), type, ...(sc.arith ? { arith: left(sc.arith) } : {}), ...(sc.less ? { less: left(sc.less) } : {}), ...(sc.ordered ? { ordered: left(sc.ordered) } : {}), needs });
     typeOf.set(id, type);
     if (info.divergent.has(def)) divergent.add(id);
     if (body !== null) todo.push({ root: body, env });
@@ -452,10 +452,10 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
   for (const [d, sc] of schemes) {
     const vars = constrained(sc).filter((v) => !(sc.numbers ?? []).includes(v));
     if (!vars.length) continue;
-    const { arith: _a, ordered: _o, fractional: _f, whole: _w, needs: _n, ...rest } = sc;
+    const { arith: _a, less: _l, ordered: _o, fractional: _f, whole: _w, needs: _n, ...rest } = sc;
     const left = (xs?: number[]) => (xs ?? []).filter((v) => !vars.includes(v));
     schemes.set(d, { ...rest, vars: left(sc.vars), type: close(sc.type, new Map(vars.map((v) => [v, otherwise(v)]))),
-      ...(left(sc.arith).length ? { arith: left(sc.arith) } : {}), ...(left(sc.ordered).length ? { ordered: left(sc.ordered) } : {}), ...(left(sc.fractional).length ? { fractional: left(sc.fractional) } : {}) });
+      ...(left(sc.arith).length ? { arith: left(sc.arith) } : {}), ...(left(sc.less).length ? { less: left(sc.less) } : {}), ...(left(sc.ordered).length ? { ordered: left(sc.ordered) } : {}), ...(left(sc.fractional).length ? { fractional: left(sc.fractional) } : {}) });
   }
 
   return { code: { nodes, defs }, info: { ...info, typeOf, schemes, divergent, copyOf }, names: outNames };

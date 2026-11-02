@@ -520,7 +520,10 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
   // A whole number written with a point, 1500.0, is a Float64 (E192):
   // the point is what says it isn't any number.
   if (!("error" in r) && typeof r.value === "number" && Number.isInteger(r.value) && /^-?\d*\.\d*(e[+-]?\d+)?$|^-?\d+e[+-]?\d+$/i.test(t)) return { value: r.value, float: true };
-  if (!("error" in r) && !namesDef(r.value)) return { value: r.value };
+  // A value with such a number inside, [1.0, 2.0], is read part by part,
+  // so each keeps its point (E195).
+  const pointed = !("error" in r) && typeof r.value !== "number" && /(^|[^\w.])-?\d+\.0*(?![\d.])|(^|[^\w.])-?\d+e[+-]?\d+/i.test(t.replace(/"(?:[^"\\]|\\.)*"/g, '""'));
+  if (!("error" in r) && !namesDef(r.value) && !pointed) return { value: r.value };
   // What the text prints, read back (E178): a □ left to fill later, a
   // step name = value; rest, and a list of anything.
   if (t === "□") return { hole: true };

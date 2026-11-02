@@ -48,7 +48,7 @@ export function canonical(sc: Scheme): Pin {
   // Only when there are any, so every signature written before keeps its hash.
   const nums = [...vars].filter(([v]) => numbers.has(v)).map(([, i]) => i);
   if (nums.length) out.numbers = nums;
-  for (const k of ["arith", "ordered"] as const) {
+  for (const k of ["arith", "less", "ordered"] as const) {
     const these = new Set(sc[k] ?? []);
     const at = [...vars].filter(([v]) => these.has(v)).map(([, i]) => i);
     if (at.length) out[k] = at;
@@ -88,7 +88,7 @@ export function fresh(p: Pin, s: Subst): Scheme {
     return { t: "fn", params: t.params.map(go), ret: go(t.ret), eff: { effs: t.eff.effs, tail: t.eff.tail === null ? null : m.get(t.eff.tail) ?? t.eff.tail, ...(t.eff.name !== undefined ? { name: t.eff.name } : {}) } };
   };
   return { vars: p.vars.map((v) => m.get(v)!), rows: p.rows.map((r) => m.get(r)!), type: go(p.type), plain: (p.plain ?? []).map((v) => m.get(v)!), numbers: (p.numbers ?? []).map((v) => m.get(v)!),
-    ...(p.arith ? { arith: p.arith.map((v) => m.get(v)!) } : {}), ...(p.ordered ? { ordered: p.ordered.map((v) => m.get(v)!) } : {}),
+    ...(p.arith ? { arith: p.arith.map((v) => m.get(v)!) } : {}), ...(p.less ? { less: p.less.map((v) => m.get(v)!) } : {}), ...(p.ordered ? { ordered: p.ordered.map((v) => m.get(v)!) } : {}),
     ...(p.noWorld ? { noWorld: p.noWorld.map((r) => m.get(r)!) } : {}), ...(p.subs ? { subs: p.subs.map(([f, t]): [number, number] => [m.get(f)!, m.get(t)!]) } : {}),
     ...(p.needs ? { needs: p.needs.map(([v, i]): [number, Id] => [m.get(v)!, i]) } : {}) };
 }
@@ -104,8 +104,8 @@ export function rigid(sc: Scheme): Type {
   const noWorld = new Set(sc.noWorld ?? []);
   const inside = (r: number): string[] => [`${RIGID}row.${r}`, ...(sc.subs ?? []).filter(([, t]) => t === r).flatMap(([f]) => inside(f))];
   const plain = new Set(sc.plain ?? []), numbers = new Set(sc.numbers ?? []);
-  const arith = new Set(sc.arith ?? []), ordered = new Set(sc.ordered ?? []);
-  const kind = (v: number) => (numbers.has(v) ? "numbers" : ordered.has(v) ? "ordered" : arith.has(v) ? "arith" : plain.has(v) ? "plain" : "any");
+  const arith = new Set(sc.arith ?? []), less = new Set(sc.less ?? []), ordered = new Set(sc.ordered ?? []);
+  const kind = (v: number) => (numbers.has(v) ? "numbers" : ordered.has(v) ? "ordered" : arith.has(v) ? "arith" : less.has(v) ? "less" : plain.has(v) ? "plain" : "any");
   const go = (t: Type): Type => {
     if (t.t === "var") return sc.vars.includes(t.v) ? { t: "con", id: `${RIGID}${kind(t.v)}.${t.v}`, args: [] } : t;
     if (t.t === "con") return { t: "con", id: t.id, args: t.args.map(go) };

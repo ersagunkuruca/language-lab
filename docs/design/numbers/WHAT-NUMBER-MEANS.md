@@ -85,8 +85,9 @@ Credit: Haskell's numeric literals and defaulting (Haskell 2010 report
 
 ## What's built (L86, 2026-10-26)
 
-- Types, errors and the palette say "a is a Number", and "a Number with <"
-  where `<` is used (Int, Rational or Float64).
+- Types, errors and the palette say "a is a Number", and "a has <" where
+  only `<` is used (any Number but Complex, Text, or a type with an Ordered
+  of its own; L152), "a Number with <" where both are.
 - A plain literal gets a fresh variable with the `arith` constraint, and a
   literal with a fraction part also the `fractional` one (types.ts), so
   `0.5` at an Int is the error "a number with a fraction part can't be an
