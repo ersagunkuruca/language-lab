@@ -1097,6 +1097,39 @@ export function buildPrelude(): Module {
       { variant: SOME, names: ["position"], body: ([i]) => i },
       { variant: NONE, names: [], body: () => k.int(-1) },
     ]))));
+  // Lists side by side, numbered, made of copies, and tested whole (L164,
+  // GAPS round 9 MG3: machine wrote zipped, numbered, zeros and all
+  // digits). zipped stops at the shorter list, as Haskell's zip and
+  // Python's zip do; numbered counts from 0, as positions do (L140); all
+  // pass and any pass stop at the first item that decides (Haskell's all
+  // and any; `all` and `any of` were taken).
+  const zipped = k.def("zipped");
+  k.define(zipped, k.fn(["first", "second"], (xs, ys) => k.match(xs, [
+    { variant: NIL, names: [], body: () => NIL },
+    { variant: CONS, names: ["x", "xs rest"], body: ([x, xr]) => k.match(ys, [
+      { variant: NIL, names: [], body: () => NIL },
+      { variant: CONS, names: ["y", "ys rest"], body: ([y, yr]) => k.call(CONS, k.call(PAIR_V, x, y), k.call(zipped, xr, yr)) },
+    ]) },
+  ])));
+  const numberedFrom = k.def("numbered from");
+  k.define(numberedFrom, k.fn(["list", "from"], (xs, from) => k.match(xs, [
+    { variant: NIL, names: [], body: () => NIL },
+    { variant: CONS, names: ["item", "rest"], body: ([x, rest]) => k.call(CONS, k.call(PAIR_V, from, x), k.call(numberedFrom, rest, k.call(INT_OPS.add, from, k.int(1)))) },
+  ])));
+  const numbered = k.def("numbered");
+  k.define(numbered, k.fn(["list"], (xs) => k.call(numberedFrom, xs, k.int(0))));
+  const copies = k.def("copies");
+  k.define(copies, k.fn(["count", "item"], (c, x) => k.call(map, k.call(INT_OPS.range, c), k.fn(["i"], () => x))));
+  const allPass = k.def("all pass");
+  k.define(allPass, k.fn(["list", "test"], (xs, test) => k.match(xs, [
+    { variant: NIL, names: [], body: () => k.true },
+    { variant: CONS, names: ["item", "rest"], body: ([x, rest]) => k.if(k.call(test, x), k.call(allPass, rest, test), k.false) },
+  ])));
+  const anyPass = k.def("any pass");
+  k.define(anyPass, k.fn(["list", "test"], (xs, test) => k.match(xs, [
+    { variant: NIL, names: [], body: () => k.false },
+    { variant: CONS, names: ["item", "rest"], body: ([x, rest]) => k.if(k.call(test, x), k.true, k.call(anyPass, rest, test)) },
+  ])));
   // A Float64 shown to a fixed number of decimals (BACKLOG I93): the
   // Spacetime demo wrote its own `rounded`. Rounds half away from 0 at
   // the last place and keeps trailing zeros, as JavaScript's toFixed and
@@ -1482,7 +1515,7 @@ export function buildPrelude(): Module {
   const simulatedHelpers = [readyAt, earliest, readyTimes, tiedAt, pickAt, nextDraw, firstDraw, simulatedWorld, simulatedClock];
   const awaitHelpers = [startBranch, waiting, goOn, finished, settle, firstDone, raceSettle, ...simulatedHelpers];
 
-  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, repeated, padStart, padEnd, flatten, flatMap, rangeFrom, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, positionWhere, itemWhere, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, ticketId, anyOf, together, race, within, simulated];
+  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, repeated, padStart, padEnd, flatten, flatMap, rangeFrom, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, positionWhere, itemWhere, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, ticketId, anyOf, together, race, within, simulated];
   // Each number's own show, from before the generic one showed every number
   // (L153, L156): kept so programs saved before still open, not offered.
   const perTypeShows = [showF, showC, showD, showX];
@@ -1537,6 +1570,12 @@ export function buildPrelude(): Module {
     [positionWhere]: "The position of the first item that passes the test, counting from 0, as some(position): position where([3, 8, 5], (x) ↦ 4 < x) is some(1); none when no item passes.",
     [itemWhere]: "A path to the first item of the list at a place in a cell that passes the test, so one item can be written by its key: write at(board, then path(item where(board, path((b) ↦ b.cards), (c) ↦ c.id = id), path((c) ↦ c.time)), t) changes one card and wakes only its readers. The list is read now. When no item passes, the path is to no item: read at has no answer there and a write changes nothing.",
     [positionFrom]: "A helper of position where: the walk, counting from `from`. Not offered.",
+    [zipped]: "The two lists' items side by side, as tuples, as long as the shorter: zipped([1, 2, 3], [\"a\", \"b\"]) is [(1, \"a\"), (2, \"b\")].",
+    [numbered]: "Each item with its position, counting from 0: numbered([\"a\", \"b\"]) is [(0, \"a\"), (1, \"b\")].",
+    [numberedFrom]: "A helper of numbered: the positions counted from `from`. Not offered.",
+    [copies]: "A list of count copies of the item: copies(3, 0) is [0, 0, 0]. (repeated is Text's.)",
+    [allPass]: "Whether every item passes the test; true for an empty list. Stops at the first that doesn't.",
+    [anyPass]: "Whether some item passes the test; false for an empty list. Stops at the first that does.",
     [divF]: "a ÷ b for fractions, exactly; no answer when b is 0. Not offered: the one divide works on every number but Int; kept so programs saved before still open.",
     [showF]: "A fraction as 3/4, or 3 when it is whole. Not offered: the one show shows every number; kept so programs saved before still open.",
     [toNum]: "The nearest Float64.",
@@ -1655,9 +1694,9 @@ export function buildPrelude(): Module {
     ...Object.fromEntries(awaitHelpers.map((d) => [d, simulatedHelpers.includes(d) ? "A helper of simulated. Not offered in the palette." : "A helper of together and race. Not offered in the palette."])),
     [applied]: "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette.",
   };
-  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, ...awaitHelpers, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarD, unpolarX, vector, asinBy, acosBy, asinF, acosF, asinX, acosX, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, ...perTypeShows, ...textOnly, positionFrom, ...divisions, divF, divC, divD, divX, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...laws], merge(prelude, std));
+  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, ...awaitHelpers, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarD, unpolarX, vector, asinBy, acosBy, asinF, acosF, asinX, acosX, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, divF, divC, divD, divX, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...laws], merge(prelude, std));
   if (!p.ok) throw new Error(`the prelude can't be published: ${p.reason}`);
   const at = (d: Id) => p.rename.get(d)!;
   const notes = Object.fromEntries(Object.entries(comments).map(([d, c]) => [at(d), c]));
-  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [...awaitHelpers, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, ...perTypeShows, ...textOnly, positionFrom, ...divisions, divF, divC, divD, divX, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarD, unpolarX, vector, asinBy, acosBy, asinF, acosF, asinX, acosX, ...laws].map(at));
+  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [...awaitHelpers, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, divF, divC, divD, divX, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarD, unpolarX, vector, asinBy, acosBy, asinF, acosF, asinX, acosX, ...laws].map(at));
 }
