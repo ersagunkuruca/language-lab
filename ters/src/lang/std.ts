@@ -584,6 +584,10 @@ export const JOBS = {
   // A representation that isn't one spelling per value (a tree, whose shape
   // depends on the order things went in) says how equal, show and compare
   // see a value of r: through its meaning.
+  // How a value of t is stored as r at once, in one go rather than by
+  // its constructors one at a time (C76): a list's items as a balanced
+  // tree, or an array.
+  storeBy: builtin("representation.storeBy", "store by", (s) => { const t = s.fresh(), r = s.fresh(); return fn([fn([t], r, s.freshRow())], jobType(t, r), s.freshRow()); }, (...xs: unknown[]) => ({ tag: "builtin.representation.storeBy", fields: xs })),
   equalBy: sameJob("representation.equalBy", "equal by", (r) => [fn([r, r], bool, { effs: [], tail: null })]),
   showBy: sameJob("representation.showBy", "show by", (r) => [fn([r], str, { effs: [], tail: null })]),
   compareBy: sameJob("representation.compareBy", "compare by", (r) => [fn([r, r], { t: "con", id: ORDER, args: [] }, { effs: [], tail: null })]),

@@ -22,8 +22,7 @@
 
 import type { Id } from "../model.ts";
 import type { Lang } from "./dsl.ts";
-import { B } from "../prelude.ts";
-import { ARRAY_OPS, COMPARE, CONS, COST, INT_OPS, JOBS, NIL, NONE, PAIR_V, REPRESENTATION_V, S, SHOW_ANY, SOME } from "./std.ts";
+import { ARRAY_OPS, COMPARE, CONS, COST, JOBS, NIL, NONE, PAIR_V, REPRESENTATION_V, S, SHOW_ANY, SOME } from "./std.ts";
 
 // `representations`: the array's row, then List's own (the definition as
 // written, with its costs), which the chooser weighs it against.
@@ -59,11 +58,10 @@ export function buildArrayList(k: Lang, prelude: (name: string) => Id): ArrayLis
   ]), [{ variant: PAIR_V, names: ["answer", "array"], body: ([answer]) => answer }]));
   const length = def("array length of", ["array"], (a) => k.call(ARRAY_OPS.length, a));
   const append = def("array append", ["front", "back"], (a, b) => array(k.call(prelude("append"), items(a), items(b))));
-  // An item by its position, read in place: item at's rounding (a
-  // position within a half of n is n), and `otherwise` outside the array
-  // or for a position that isn't a number.
+  // An item by its Int position, read in place, and `otherwise` outside
+  // the array.
   const itemAt = def("array item at", ["array", "position", "otherwise"], (a, i, o) => k.call(S.first,
-    k.thunk(() => k.call(ARRAY_OPS.at, a, k.call(INT_OPS.wholePart, k.call(S.floor, k.call(B.add, i, k.lit(0.5)))))),
+    k.thunk(() => k.call(ARRAY_OPS.at, a, i)),
     k.thunk(() => o)));
   // Equal, show and compare see the list it stands for: an array's own
   // compare puts shorter arrays first, and show says "array".
@@ -81,6 +79,8 @@ export function buildArrayList(k: Lang, prelude: (name: string) => Id): ArrayLis
     k.call(JOBS.job, k.x(prelude("append")), k.x(append), cost(k, "linear")),
     k.call(JOBS.job, k.x(prelude("item at")), k.x(itemAt), cost(k, "constant")),
     k.call(JOBS.hides, k.x(CONS), k.int(1)),
+    // A whole list from outside: one array of it (C76).
+    k.call(JOBS.storeBy, k.x(ARRAY_OPS.of)),
     k.call(JOBS.equalBy, k.x(equal)), k.call(JOBS.showBy, k.x(show)), k.call(JOBS.compareBy, k.x(compare)),
   )));
   defs.push(rep);

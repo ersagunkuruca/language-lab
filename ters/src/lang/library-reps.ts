@@ -422,7 +422,7 @@ function listBoundary(code: Code, info: Info, defs: Id[], rep: Representation): 
   const libraryHolder = (t: Type): boolean => { t = info.subst.zonk(t); return t.t === "con" ? (t.id !== LIST && !program.has(t.id) && inside(t.id)) || t.args.some(libraryHolder) : t.t === "fn" ? [...t.params, t.ret].some(libraryHolder) : false; };
   // What the rewrite reaches (represent.ts), and what it keeps as it is.
   const own = new Set<Id>();
-  for (const d of [...Object.values(rep.impl), rep.meaning!]) for (const x of [d, ...dependencies(code, d)]) own.add(x);
+  for (const d of [...Object.values(rep.impl), rep.meaning!, ...(rep.store ? [rep.store] : [])]) for (const x of [d, ...dependencies(code, d)]) own.add(x);
   const reached = new Set<Id>(), todo = [...defs];
   while (todo.length) {
     const d = todo.pop()!;
@@ -435,7 +435,9 @@ function listBoundary(code: Code, info: Info, defs: Id[], rep: Representation): 
   }
   const nodes: Record<Id, Node> = {}, made: Id[] = [];
   const call = (fn: Id, arg: Id): Id => { const r = freshId(), c = freshId(); nodes[r] = { id: r, kind: "ref", target: fn }; nodes[c] = { id: c, kind: "call", fn: r, args: [arg] }; return c; };
-  let back: Id | undefined = rep.meaning === ARRAY_OPS.items ? ARRAY_OPS.of : undefined;
+  // The row's own way to store a whole list (`store by`: the array's
+  // builtin, the tree's balanced build, C76), else one constructor a time.
+  let back: Id | undefined = rep.store;
   const wayBack = (): Id => {
     if (back) return back;
     const k = new Lang(code), d = k.def("stored list");

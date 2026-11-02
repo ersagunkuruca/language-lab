@@ -179,6 +179,9 @@ Text is a string of characters. Positions count from 0.
 - **is letter** : `(Text) -> Bool`. Whether this is one of the English letters a to z or A to Z (other alphabets' letters aren't, yet).
 - **lowercase** : `(Text) -> Text`. The text with A to Z made a to z, everything else as it was: lowercase("Hello, World") is "hello, world".
 - **uppercase** : `(Text) -> Text`. The text with a to z made A to Z, everything else as it was: uppercase("Hello") is "HELLO".
+- **repeated** : `(Text, Int) -> Text`. The text written this many times over: repeated("ab", 3) is "ababab". 0 times, or fewer, is "".
+- **padded start** : `(Text, Int, Text) -> Text`. The text with fill put in front until it is this wide: padded start("7", 3, "0") is "007". A text already as wide is as it was; a fill of several characters is cut where the width ends.
+- **padded end** : `(Text, Int, Text) -> Text`. The text with fill put after it until it is this wide: padded end("ab", 4, ".") is "ab..". For columns of text.
 
 ## Lists and pairs
 
@@ -199,13 +202,15 @@ A list is written [1, 2, 3]. There are no loops: map, keep and for each go throu
 - **length** : `(List a) -> Int`. How many items the list has.
 - **sum** : `(List a) -> a`. The numbers of the list added up, for every number type as + is (Float64s, Ints, Rationals, …); 0 for an empty list.
 - **append** : `(List a, List a) -> List a`. The items of the first list, then the items of the second.
+- **flatten** : `(List (List a)) -> List a`. The lists one after another, as one list: flatten([[1, 2], [], [3]]) is [1, 2, 3].
+- **flat map** : `(List a, (a) -[e]-> List b) -[e]-> List b`. The lists f gives for each item, one after another: flat map([1, 2], (x) => [x, x]) is [1, 1, 2, 2]. map, then flatten.
 - **reverse** : `(List a) -> List a`. The list back to front.
 - **sort** : `(List a) -> List a`. The list in order: numbers by value, text alphabetically (by code point), cases in the order their type lists them, then field by field (compare). A merge sort (von Neumann, 1945), bottom-up so it surely finishes: n log n steps.
 - **sort by** : `(List a, (a) -[e]-> b) -[e]-> List a`. The list in the order of key(item), by compare: sort by(roads, length of) puts the shortest first, sort by(rows, (r) → −amount of(r)) the largest. Items with the same key keep their order (a stable sort; Python's key=, Haskell's sortOn). n log n steps, each calling key.
-- **item at** : `(List a, Float64, a) -> a`. The item at a position, counting from 0, or `otherwise` when the list has none there: item at([a, b, c], 1, z) is b, item at([a], 5, z) is z. n steps.
-- **replace at** : `(List a, Float64, a) -> List a`. The list with the item at a position, counting from 0, replaced by `by`; the list as it was when it has no item there. n steps.
-- **take** : `(List a, Float64) -> List a`. The first count items: take([a, b, c], 2) is [a, b]; a list with fewer gives them all. count steps.
-- **drop** : `(List a, Float64) -> List a`. The items after the first count: drop([a, b, c], 2) is [c]; a list with fewer gives []. count steps.
+- **item at** : `(List a, Int, a) -> a`. The item at a position, counting from 0, or `otherwise` when the list has none there: item at([a, b, c], 1, z) is b, item at([a], 5, z) is z. n steps.
+- **replace at** : `(List a, Int, a) -> List a`. The list with the item at a position, counting from 0, replaced by `by`; the list as it was when it has no item there. n steps.
+- **take** : `(List a, Int) -> List a`. The first count items: take([a, b, c], 2) is [a, b]; a list with fewer gives them all. count steps.
+- **drop** : `(List a, Int) -> List a`. The items after the first count: drop([a, b, c], 2) is [c]; a list with fewer gives []. count steps.
 - **show numbers** : `(List Float64) -> Text`. A fold that prints. Run backwards it unfolds, so it parses.
 - **empty array** : `() -> Array a`. An array with no items.
 - **array of** : `(List a) -> Array a`. The array of a list's items, in order.
@@ -277,6 +282,7 @@ A type can be stored as another type, written as one definition (REPRESENTATIONS
 - **match as written** : `(Cost) -> Job a b`. A representation's match, done as t's own, at this cost.
 - **fold as written** : `(Cost) -> Job a b`. A representation's fold, done as t's own, at this cost.
 - **fold of items** : `(Cost) -> Job a b`. A representation's fold whose cases don't read the rest (a sum, a count): done as t's own fold of what the value means, at this cost. A tree that lists its items in n folds that way instead of rebuilding each rest.
+- **store by** : `((a) -> b) -> Job a b`. store by(f): f stores a value of t as r in one go, where building it with r's constructors one at a time would cost more: a list's items as a balanced tree in n steps, or as an array.
 - **equal by** : `((a, a) -> Bool) -> Job b a`. For a representation that isn't one spelling per value (a tree, whose shape depends on the order things went in): how equal sees two of its values, through their meaning.
 - **show by** : `((a) -> Text) -> Job b a`. For a representation that isn't one spelling per value: how show prints one of its values, through its meaning.
 - **compare by** : `((a, a) -> Order) -> Job b a`. For a representation that isn't one spelling per value: how compare orders two of its values, through their meaning.

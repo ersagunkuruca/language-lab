@@ -49,7 +49,7 @@ test("a direction the relational interpreter ran is a call per bound result, eva
 });
 
 // C55b: both results bound are given by one function that does their
-// shared work once. A Fixed's unpolar runs CORDIC's vectoring once, not
+// shared work once, down to a value both work out the same way (C55c). A Fixed's unpolar runs CORDIC's vectoring once, not
 // once for the length and again for the angle; a Dual's takes its inputs
 // apart once.
 test("results bound together share their work, and give what the evaluator gives", async () => {
@@ -72,6 +72,10 @@ test("results bound together share their work, and give what the evaluator gives
   // CORDIC's vectoring is called from one place per half-plane case only.
   const fused = new RegExp(`function fixed_unpolar_s_length_and_angle\\([^)]*\\) \\{[\\s\\S]*?\\n\\}`).exec(js)![0];
   assert.equal(fused.match(/cordic_vector\(/g)?.length, 3);
+  // C55c: below where the length and the angle part, a Dual's x² + y² (the
+  // length's square root, the angle's slope's divisor) is worked out once.
+  const dual = /function dual_unpolar_s_length_and_angle\([^)]*\) \{[\s\S]*?\n\}/.exec(js)![0];
+  assert.equal(dual.match(/x_value \* x_value/g)?.length, 1, dual);
   const path = join(mkdtempSync(join(tmpdir(), "results-")), "both.js");
   writeFileSync(path, js);
   const out = (await import(pathToFileURL(path).href)).defs as Record<string, (x: number, y: number) => unknown>;

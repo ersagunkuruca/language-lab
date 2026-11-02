@@ -9,11 +9,11 @@ import assert from "node:assert/strict";
 import { B } from "../src/prelude.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
-import { makeRunner, runMain, showValue } from "../src/lang/run.ts";
+import { makeRunner, runMain, showValue, type Value } from "../src/lang/run.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { withLibraryRepresentations } from "../src/lang/library-reps.ts";
-import { COMPARE, CONS, LIST, NIL, PAIR_V, S, SHOW_ANY } from "../src/lang/std.ts";
+import { COMPARE, CONS, INT_OPS, LIST, NIL, PAIR_V, S, SHOW_ANY } from "../src/lang/std.ts";
 import { NUMBER, STRING } from "../src/lang/types.ts";
 import { subtree, type Id } from "../src/model.ts";
 
@@ -323,7 +323,7 @@ test("a program that reads a list by position gets arrays, and prints what the d
   const xs = k.def("xs");
   k.define(xs, k.call(L("map"), k.call(S.range, k.lit(200)), k.fn(["i"], (i) => k.call(B.mul, i, i))));
   const total = k.def("total");
-  k.define(total, k.fold(k.call(S.range, k.lit(200)), [
+  k.define(total, k.fold(k.call(INT_OPS.range, k.int(200)), [
     { variant: NIL, names: [], body: () => k.lit(0) },
     { variant: CONS, names: ["i", "rest"], results: [null, "sum"], body: ([i], [, s]) => k.call(B.add, s!, k.call(L("item at"), k.x(xs), i, k.lit(-1))) },
   ]));
@@ -333,7 +333,7 @@ test("a program that reads a list by position gets arrays, and prints what the d
   k.define(main, k.thunk(() => k.seq(
     show(k.x(total)),
     show(k.call(L("length"), k.x(xs))),
-    show(k.call(L("item at"), k.x(xs), k.lit(7), k.lit(-1))),
+    show(k.call(L("item at"), k.x(xs), k.int(7), k.lit(-1))),
     show(nums(1, 2, 3)),
     show(k.call(S.equal, nums(1, 2), k.call(L("append"), nums(1), nums(2)))),
     show(k.call(COMPARE, nums(3), nums(1, 2))),
@@ -460,19 +460,19 @@ function byPosition(n: number) {
   k.define(xs, k.call(L("map"), k.call(S.range, k.lit(n)), k.fn(["i"], (i) => k.call(B.mul, i, k.lit(0)))));
   // Each i adds i to the item at 7i mod n.
   const counted = k.def("counted");
-  k.define(counted, k.fold(k.call(S.range, k.lit(3 * n)), [
+  k.define(counted, k.fold(k.call(INT_OPS.range, k.int(3 * n)), [
     { variant: NIL, names: [], body: () => k.x(xs) },
-    { variant: CONS, names: ["i", "rest"], results: [null, "so far"], body: ([i], [, l]) => k.let("at", k.call(S.mod, k.call(B.mul, i, k.lit(7)), k.lit(n)), (at) =>
-      k.call(L("replace at"), l!, at, k.call(B.add, k.call(L("item at"), l!, at, k.lit(0)), i))) },
+    { variant: CONS, names: ["i", "rest"], results: [null, "so far"], body: ([i], [, l]) => k.let("at", k.call(S.first, k.thunk(() => k.call(INT_OPS.remainder, k.call(INT_OPS.mul, i, k.int(7)), k.int(n))), k.thunk(() => k.int(0))), (at) =>
+      k.call(L("replace at"), l!, at, k.call(B.add, k.call(L("item at"), l!, at, k.lit(0)), k.call(INT_OPS.toNumber, i)))) },
   ]));
   const at = k.def("at");
   k.define(at, k.fn(["i"], (i) => k.call(L("item at"), k.x(counted), i, k.lit(-1))));
   const show = (x: Id) => k.call(S.print, k.call(SHOW_ANY, x));
   const main = k.def("main");
   k.define(main, k.thunk(() => k.seq(
-    show(k.call(at, k.lit(3))),
+    show(k.call(at, k.int(3))),
     show(k.call(L("length"), k.call(L("append"), k.x(counted), k.x(xs)))),
-    show(k.call(L("replace at"), k.list(k.lit(1), k.lit(2), k.lit(3)), k.lit(1.4), k.lit(9))),
+    show(k.call(L("replace at"), k.list(k.lit(1), k.lit(2), k.lit(3)), k.int(1), k.lit(9))),
     show(k.call(L("replace at"), k.list(k.lit(1), k.lit(2)), k.lit(5), k.lit(9))),
     show(k.call(S.equal, k.x(counted), k.call(L("reverse"), k.call(L("reverse"), k.x(counted))))),
     show(k.call(L("sum"), k.x(counted))),
@@ -538,4 +538,28 @@ test("a fold over a list stored as a tree that doesn't read the rest walks its i
   const walked = time(() => one(r.call(r.value(items), t)));
   assert.equal(total, (8000 * 7999) / 2);
   assert.ok(summed < 10 * walked + 20, `summing 8,000 items took ${summed.toFixed(1)} ms, walking them ${walked.toFixed(1)} ms`);
+});
+
+// C76: a whole list handed to a row that stores lists as trees is stored by
+// the row's own `store by`, a balanced build in n steps (a binary counter
+// of finished trees, as Haskell's containers builds from a sorted list),
+// where it was one cons a time, each relinking the tree (n log n).
+test("a list stored as a tree is built by the row's own store, balanced, in n steps (C76)", () => {
+  const { code, names, main, defs, info } = byPosition(40);
+  const c = withLibraryRepresentations(code, info, names, main, defs);
+  assert.deepEqual(c.chosen, ["List as tree of List"]);
+  const named = (n: string) => Object.keys(c.names).find((d) => c.names[d] === n && c.code.nodes[d]?.kind === "def")!;
+  assert.equal(named("stored list"), undefined, "no cons-a-time rebuild is written");
+  const info2 = infer(c.code, c.names, undefined, { ...checkOptions, insiders: [...checkOptions.insiders!, ...c.insiders] });
+  const r = makeRunner(c.code, info2, { print: () => {}, names: c.names });
+  const one = (x: unknown) => { for (const v of x as Iterable<Value>) return v as Value; return undefined as unknown as Value; };
+  const list = (n: number): Value => { let l: Value = { tag: NIL, fields: [] }; for (let i = n - 1; i >= 0; i--) l = { tag: CONS, fields: [i, l] }; return l; };
+  const back = (l: unknown) => { const xs: unknown[] = []; for (let c = l as { tag: Id; fields: unknown[] }; c.tag === CONS; c = c.fields[1] as typeof c) xs.push(c.fields[0]); return xs; };
+  const store = r.value(named("list tree of list")), items = r.value(named("items of list tree"));
+  for (const n of [0, 1, 2, 3, 7, 8, 9, 100]) assert.deepEqual(back(one(r.call(items, one(r.call(store, list(n)))))), Array.from({ length: n }, (_, i) => i), `${n} items`);
+  const time = (f: () => unknown) => { let best = Infinity; for (let b = 0; b < 3; b++) { const s = performance.now(); f(); best = Math.min(best, performance.now() - s); } return best; };
+  const big = list(8000);
+  const stored = time(() => one(r.call(store, big)));
+  const consed = time(() => { let t = r.value(named("list tree nil")); for (let i = 7999; i >= 0; i--) t = one(r.call(r.value(named("list tree cons")), i, t)) as typeof t; });
+  assert.ok(stored < consed, `storing 8,000 items took ${stored.toFixed(1)} ms, consing them ${consed.toFixed(1)} ms`);
 });

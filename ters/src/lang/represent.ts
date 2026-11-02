@@ -55,6 +55,10 @@ export interface Representation {
   // Fields, by variant, that R doesn't keep as values of T (`hides`, L117):
   // made only when an arm reads them, as Storage's `hidden` below.
   hidden?: Record<Id, number[]>;
+  // A definition storing a value of T as R in one go (`store by`, C76):
+  // where a value comes from outside (a builtin's list), it is stored so
+  // rather than by R's constructors one at a time.
+  store?: Id;
   // The definition that writes it, for one a program writes (L108).
   def?: Id;
 }
@@ -102,6 +106,7 @@ export function representationsIn(code: Code, info: Info, names: Record<Id, stri
       if (seen && a[0]) { rep.canonical = false; (rep.byType ??= { equal: "", show: "", compare: "" })[seen] = a[0]; continue; }
       if (kind === JOBS.headBy && a[0] && a[1]) { (rep.heads ??= {})[a[0]] = a[1]; continue; }
       if (kind === JOBS.inPlace) { rep.oneHolder = true; continue; }
+      if (kind === JOBS.storeBy && a[0]) { rep.store = a[0]; continue; }
       if (kind === JOBS.hides && a[0]) {
         const lit = code.nodes[j.args[1]], at = lit?.kind === "lit" ? Number(lit.value) : -1;
         if (Number.isInteger(at) && at >= 0 && at < ((code.nodes[a[0]] as NodeOf<"variant"> | undefined)?.fields.length ?? 0)) (rep.hidden ??= {})[a[0]] = [...(rep.hidden?.[a[0]] ?? []), at];
@@ -336,7 +341,7 @@ export function represent(code: Code, entries: Id[], rep: Representation, keep: 
   // The representation's own code stays as it is: it's written on R, and
   // `meaning` is written on T.
   const own = new Set<Id>(keep);
-  for (const d of [...Object.values(rep.impl), ...(rep.meaning ? [rep.meaning] : []), ...(rep.literal ? [rep.literal] : [])]) {
+  for (const d of [...Object.values(rep.impl), ...(rep.meaning ? [rep.meaning] : []), ...(rep.literal ? [rep.literal] : []), ...(rep.store ? [rep.store] : [])]) {
     own.add(d);
     for (const x of dependencies(code, d)) own.add(x);
   }

@@ -50,8 +50,8 @@ test("array of List: its row, and its jobs agree with List's through items of ar
   show("fold", () => k.call(tree("array fold"), arr(1, 2, 3), k.thunk(() => k.x(NIL)), k.fn(["x", "rest", "r"], (x, rest, r) => k.call(CONS, k.call(lib("length"), items(rest)), k.call(CONS, x, r)))));
   show("length", () => k.call(tree("array length of"), arr(4, 5, 6)));
   show("append", () => items(k.call(tree("array append"), arr(1, 2), arr(3))));
-  // item at's rounding, and otherwise outside.
-  show("item at", () => k.list(...[-0.6, -0.5, 0.4, 0.5, 2.49, 2.5].map((i) => k.call(tree("array item at"), arr(10, 20, 30), k.lit(i), k.lit(0)))));
+  // item at by an Int position, and otherwise outside.
+  show("item at", () => k.list(...[-1, 0, 1, 2, 3].map((i) => k.call(tree("array item at"), arr(10, 20, 30), k.int(i), k.lit(0)))));
   show("show", () => k.call(tree("array show"), arr(1, 2)));
   show("compare", () => k.call(tree("array compare"), arr(3), arr(1, 2)));
   const code = merge(base(TREES.code), k.code), nm = { ...baseNames(k.names), ...TREES.names };
@@ -59,5 +59,5 @@ test("array of List: its row, and its jobs agree with List's through items of ar
   assert.deepEqual(info.errors.map((e) => e.message), []);
   const r = makeRunner(code, info, { print: () => {}, names: nm });
   const got = names.map((n) => r.value(code.defs.find((d) => nm[d] === n)!));
-  assert.deepEqual(got, ["[]", "[1, 2, 3]", "[1, 2, 3]", "[0]", "[2, 1, 1, 2, 0, 3]", "3", "[1, 2, 3]", "[0, 10, 10, 20, 30, 0]", "\"[1, 2]\"", "after"]);
+  assert.deepEqual(got, ["[]", "[1, 2, 3]", "[1, 2, 3]", "[0]", "[2, 1, 1, 2, 0, 3]", "3", "[1, 2, 3]", "[0, 10, 20, 30, 0]", "\"[1, 2]\"", "after"]);
 });

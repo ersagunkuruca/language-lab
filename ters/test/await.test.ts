@@ -15,6 +15,7 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { runMain } from "../src/lang/run.ts";
 import { AWAIT_OP, START_TIMER_OP, CONS, INT_OPS, NIL, NOW_OP, S, SHOW_ANY, TICKET_V, WAIT_OP } from "../src/lang/std.ts";
 import { showType } from "../src/lang/types.ts";
+import { worldTimers } from "../src/lang/timers.ts";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -201,4 +202,21 @@ test("an any of inside an any of: the world and simulated agree", async () => {
   assert.deepEqual(await world.compiled(), want);
   const simulated = worldProgram((k) => k.call(lib("simulated"), k.lit(1), k.thunk(() => nested(k))));
   assert.deepEqual(simulated.run(), { printed: ["1"], waits: [], clock: 1000 });
+});
+
+// C79: the evaluator and main compiled answer Await with the same timers
+// (timers.ts), each run its own, so a ticket kept from an earlier run (the
+// editor's worker runs many in one realm) isn't from this world.
+test("each run has its own timers, and compiled runs one after another agree with the evaluator (C79)", async () => {
+  const abort = (m: string): never => { throw new Error(m); };
+  const one = worldTimers(abort), two = worldTimers(abort);
+  const ticket = one.start(1000, 5);
+  assert.deepEqual(one.when(ticket, 1000), { at: 1005 });
+  assert.deepEqual(two.start(1000, 7), ticket, "numbered from 0 in each run");
+  assert.deepEqual(two.when(ticket, 1000), { at: 1007 });
+  assert.throws(() => worldTimers(abort).when(ticket, 1000), /no ticket 0 from this world/);
+  const p = worldProgram((k) => k.call(lib("race"), k.list(slow(k, 50, "slow"), slow(k, 20, "fast"))));
+  const first = await p.compiled(), second = await p.compiled();
+  assert.deepEqual(second, first);
+  assert.deepEqual(first, p.run());
 });
