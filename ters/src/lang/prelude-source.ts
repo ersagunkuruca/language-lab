@@ -1160,6 +1160,18 @@ export function buildPrelude(): Module {
   const smallestOf = extremeOf("smallest of", (a, b) => k.if(k.call(ARITH.less, b, a), b, a));
   const insertedAt = k.def("inserted at");
   k.define(insertedAt, k.fn(["list", "position", "item"], (xs, i, y) => k.call(append, k.call(take, xs, i), k.call(CONS, y, k.call(drop, xs, i)))));
+  // A choice by value (L164b, GAPS round 9 MG3): machine's `instruction
+  // of` was a 21-way if chain over the instruction's name. case of(key,
+  // cases, otherwise) runs the first case whose key equals key, or
+  // otherwise when none does: Lisp's `case` and C's `switch`, written as a
+  // list of (key, what to do) pairs, so any plain data is a key.
+  const caseOf = k.def("case of");
+  k.define(caseOf, k.fn(["key", "cases", "otherwise"], (key, cs, o) => k.match(cs, [
+    { variant: NIL, names: [], body: () => k.call(o) },
+    { variant: CONS, names: ["case", "rest"], body: ([c, rest]) => k.match(c, [
+      { variant: PAIR_V, names: ["when", "then"], body: ([w, then]) => k.if(k.call(S.equal, w, key), k.call(then), k.call(caseOf, key, rest, o)) },
+    ]) },
+  ])));
   // A Float64 shown to a fixed number of decimals (BACKLOG I93): the
   // Spacetime demo wrote its own `rounded`. Rounds half away from 0 at
   // the last place and keeps trailing zeros, as JavaScript's toFixed and
@@ -1545,7 +1557,7 @@ export function buildPrelude(): Module {
   const simulatedHelpers = [readyAt, earliest, readyTimes, tiedAt, pickAt, nextDraw, firstDraw, simulatedWorld, simulatedClock];
   const awaitHelpers = [startBranch, waiting, goOn, finished, settle, firstDone, raceSettle, ...simulatedHelpers];
 
-  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, repeated, padStart, padEnd, flatten, flatMap, rangeFrom, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, positionWhere, itemWhere, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, ticketId, anyOf, together, race, within, simulated];
+  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, repeated, padStart, padEnd, flatten, flatMap, rangeFrom, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, ticketId, anyOf, together, race, within, simulated];
   // Each number's own show, from before the generic one showed every number
   // (L153, L156): kept so programs saved before still open, not offered.
   const perTypeShows = [showF, showC, showD, showX];
@@ -1607,6 +1619,7 @@ export function buildPrelude(): Module {
     [contains]: "Whether the item is in the list: contains([1, 2], 2) is true. (has is a Set's.)",
     [largestOf]: "The largest item by <, or none for an empty list: largest of([3, 9, 4]) is some(9).",
     [smallestOf]: "The smallest item by <, or none for an empty list: smallest of([3, 9, 4]) is some(3).",
+    [caseOf]: "The first case whose key equals key, run, or otherwise when none does: case of(name, [(\"add\", () ↦ 1), (\"jump\", () ↦ 2)], () ↦ 0). Any plain data is a key.",
     [insertedAt]: "The list with the item put in at the position, the items from there on moved one later: inserted at([1, 3], 1, 2) is [1, 2, 3].",
     [numberedFrom]: "A helper of numbered: the positions counted from `from`. Not offered.",
     [copies]: "A list of count copies of the item: copies(3, 0) is [0, 0, 0]. (repeated is Text's.)",
