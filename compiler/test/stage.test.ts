@@ -103,7 +103,7 @@ test("on the GPU too: a shader's own definitions multiply only the masked parts 
   assert.ok(points > 0 && points < any / 2, `${points} products, ${any} for any multivector`);
 });
 
-test("a gradient through a PGA motor: staged first, then read, on the CPU and the GPU (C74)", () => {
+test("a gradient through a PGA motor: staged first, then read, on the CPU and the GPU (C74), and evaluated (I133)", () => {
   const p = pga();
   const lowered = lowerScalar(p.code, p.info, p.names, [p.ball.ball, p.ball.ballNormal], { records: true });
   // Before, the gradient met the table's folds: "calls a computed function".
@@ -115,6 +115,12 @@ test("a gradient through a PGA motor: staged first, then read, on the CPU and th
     const h = 1e-6;
     const fd = pt.map((_, i) => { const a = [...pt], b = [...pt]; a[i] += h; b[i] -= h; return ((f(a) as number) - (f(b) as number)) / (2 * h); });
     (g(pt) as number[]).forEach((x, i) => assert.ok(Math.abs(x - fd[i]) < 1e-6, `${g(pt)} vs ${fd}`));
+    // The evaluator reads the same slope through the generic clifford
+    // functions themselves, records of a shape known only when it runs
+    // (I133).
+    const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });
+    const [ev] = [...(r.call(r.value(p.ball.ballNormal), { tag: p.point, fields: pt }) as Iterable<{ fields: number[] }>)];
+    ev.fields.forEach((x, i) => assert.ok(Math.abs(x - fd[i]) < 1e-6, `evaluated ${ev.fields} vs ${fd}`));
   }
   assert.deepEqual([...emitWgsl(lowered).refused.values()], []);
 });
