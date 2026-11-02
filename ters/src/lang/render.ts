@@ -398,7 +398,13 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
       const handles = n.kind === "match" && isHandler(n);
       const arms: Blk[] = [];
       const row = (body: Id, head: Piece[], at?: Id) => arms.push(grp(hang(body, [...head, pn(" → ")]), 0, at, "arm"));
-      if (n.kind === "match" && !handles) {
+      // A match on values (L164c): each arm is its value, "add" → …, then
+      // otherwise (E225).
+      const byValue = n.kind === "match" && n.arms.some((a) => (node(a) as NodeOf<"arm">).value);
+      if (byValue) {
+        for (const a of n.arms) { const arm = node(a) as NodeOf<"arm">; row(arm.body, arm.value ? inline(arm.value).p : pattern({ con: arm.variant, args: [] }), a); }
+        if (n.otherwise) row(n.otherwise, [kw("otherwise")]);
+      } else if (n.kind === "match" && !handles) {
         // A case whose body only takes one of its fields apart further reads
         // as one row per inner case: nested patterns (patterns.ts). Cases
         // that say the same thing read once, as the otherwise; in the pane,
