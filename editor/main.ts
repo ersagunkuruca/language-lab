@@ -3903,6 +3903,16 @@ function select(id: Id | null) {
   ui.mode = null; ui.query = "";
   ui.selected = id;
   if (toPalette) ui.pane = "side";
+  // One pane at a time on a touch screen: the Selected panel is in the
+  // other pane and there's no hover, so what was tapped and its type go on
+  // the status line, where the tap is (E203).
+  else if (id && TOUCH && onePane()) {
+    const info = typesOf(), names = typedPres().names, n = doc.code.nodes[id];
+    const t = info ? T.typeOf(info, id, names) : null;
+    const head = n?.kind === "call" ? doc.code.nodes[n.fn] : n;
+    const name = head?.kind === "ref" ? names[head.target] : names[id];
+    if (n) { ui.note = `${kindLabel(id)}${name ? ` ${name}` : ""}${t ? ` : ${t}` : ""}. Its panel is in Run & more.`; ui.refused = false; }
+  }
   render();
 }
 
@@ -4204,7 +4214,7 @@ function draw() {
           ...shown[2]()))),
     status,
     // At phone width one pane at a time, picked here (page.html).
-    h("nav", { class: "panes", "aria-label": "Panes" }, ...([["nav", "Programs"], ["graph", "Graph"], ["text", "Text"], ["side", "Run"]] as const).map(([k, label]) =>
+    h("nav", { class: "panes", "aria-label": "Panes" }, ...([["nav", "Programs"], ["graph", "Graph"], ["text", "Text"], ["side", "Run & more"]] as const).map(([k, label]) =>
       h("button", { type: "button", class: k === ui.pane ? "on" : "", "aria-pressed": String(k === ui.pane), "data-pane": k }, label))),
   );
   restore();
