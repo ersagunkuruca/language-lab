@@ -597,6 +597,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
+| I148 | Bug, main broken: the mode analysis crashed on a match on values (L164c), reading its literal arms as cases of a type (modes.ts matchGoal), which broke palette.test.ts's one + − · test. An arm chosen now gives the value examined, its literal | this PR |
 | L70a | Grammar pieces `spaced` and `optional parens` in the prelude: each prints one way and, run backwards, reads several (any spaces; parentheses wherever matched pairs wrap the text, absent only where not needed), relate.ts grammarGoal. They wait for the text, so a printer's own spaces don't pin the reading | this PR |
 | L168b | `set` along a path that passes shared fields at any step (`(g) ↦ g.to.line`, `(w) ↦ w.g.to.line`): each step a generated `with` match, no answer on a case without the field. A tuple of paths through one is still refused. Using it in machine and board is L168c | #1173 |
 | L150b | Fetches that overlap in the evaluator: a world may start a fetch in the background (World.startFetch; the CLI's spawns a child that writes the body to a temp folder), so `start fetch` returns at once and `await` polls until the body is in (three 400 ms fetches took 678 ms). A failed fetch aborts at the await. The compiled main and pages still fetch synchronously (C111); `start read file` is later | #1171 |
