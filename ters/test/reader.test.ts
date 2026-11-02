@@ -210,3 +210,22 @@ test("typed first with a number for a list's default says the number is wrong", 
   assert.ok(!r.ok);
   if (!r.ok) assert.match(r.reason, /needs List .* here, and a number isn't one/);
 });
+
+// A value definition named inside a list or a constructor is a reference
+// to it, as it is alone (E187: "points at nothing").
+test("typed lists and constructors take value definitions by name", async () => {
+  const { Lang } = await import("../src/lang/dsl.ts");
+  const { base, baseNames } = await import("../src/lang/load.ts");
+  const k = new Lang();
+  const name = k.def("save name");
+  k.define(name, k.lit("board.json"));
+  const f = k.def("f");
+  let hole = "";
+  k.define(f, k.fn(["a"], () => (hole = k.hole())));
+  const code = base(k.code), names = baseNames(k.names);
+  for (const text of ['[save name, "x"]', "some(save name)"]) {
+    const r = fillValue(code, names, infer(code, names), hole, text, f);
+    assert.ok(r.ok, `${text}: ${!r.ok ? r.reason : ""}`);
+    if (r.ok) assert.ok(Object.values(r.code.nodes).some((n) => n.kind === "ref" && n.target === name), text);
+  }
+});

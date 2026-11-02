@@ -22,7 +22,7 @@ import { solveMode } from "../ters/src/lang/modes.ts";
 import { ARITH, ASSOCIATIVE, CONS, FALSE, NIL, SIGS, TRUE, TUPLE_MAX, tuplePart, tupleVariant } from "../ters/src/lang/std.ts";
 import { INT, NUMBER, RATIONAL_TYPE, STRING, schemeArith, showIn, showType, type Type } from "../ters/src/lang/types.ts";
 import { ratioParts, read as readInt } from "../ters/src/lang/int.ts";
-import type { Value } from "../ters/src/lang/run.ts";
+import { DEF_VALUE, type Value } from "../ters/src/lang/run.ts";
 import { parseValue } from "../ters/src/lang/values.ts";
 import { choose, representationsIn } from "../ters/src/lang/represent.ts";
 import { blocksOf, blocksText, litLabel, type Blk, type Piece } from "../ters/src/lang/render.ts";
@@ -462,12 +462,16 @@ const OPS: [string, Id[]][][] = [...new Set([...INFIX.values()].map((g) => g.pre
   return [...level, ...keyed].sort((a, b) => b[0].length - a[0].length);
 });
 const NEGATE = glyphs("prefix").get("−")?.ids ?? [ARITH.neg];
+const namesDef = (v: unknown): boolean => !!v && typeof v === "object" && ((v as { tag?: unknown }).tag === DEF_VALUE || ((v as { fields?: unknown[] }).fields ?? []).some(namesDef));
 function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>): Typed | { error: string } {
   const t = text.trim();
   const named = scope.get(t);
   if (named) return { ref: named };
   const r = parseValue(text, code, names);
-  if (!("error" in r)) return { value: r.value };
+  // A value naming a definition (`[styles, …]`, `some(save name)`) is
+  // read as the code it is, a reference: as a value it pointed at
+  // nothing (E187).
+  if (!("error" in r) && !namesDef(r.value)) return { value: r.value };
   // What the text prints, read back (E178): a □ left to fill later, a
   // step name = value; rest, and a list of anything.
   if (t === "□") return { hole: true };
