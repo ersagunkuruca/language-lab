@@ -5,7 +5,7 @@ import { Lang } from "../../ters/src/lang/dsl.ts";
 import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { B } from "../../ters/src/prelude.ts";
-import { ABORT_OP, ARITH, ARRAY_OPS, COMPARE, CONS, FALSE, INT_OPS, IO, NIL, NONE, PAIR_V, S, SECOND, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
+import { ABORT_OP, ARITH, ARRAY_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, INT_OPS, IO, NIL, NONE, PAIR_V, S, SECOND, SHOW_ANY, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
 // S as the pga fixture names it is its Space type.
 const STD = S;
 import { INT, NUMBER, STRING } from "../../ters/src/lang/types.ts";
@@ -513,6 +513,51 @@ export function ordered() {
   const code = base(k.code);
   const names = { ...baseNames(), ...k.names };
   return { code, names, info: infer(code, names, undefined, checkOptions), defs };
+}
+
+// show on every plain type WebAssembly and C take (C97): what the
+// evaluator writes, numbers as numbers, cases by their names.
+export function shows() {
+  const k = new Lang(LIBRARY.code);
+  const lib = (name: string) => LIBRARY.code.defs.find((x) => LIBRARY.names[x] === name)!;
+  const d = (name: string, params: string[], body: (...xs: Id[]) => Id) => { const x = k.def(name); k.define(x, k.fn(params, body)); return x; };
+  const sh = (x: Id) => k.call(SHOW_ANY, x);
+  const int = (x: Id) => k.call(INT_OPS.add, x, k.int(0));
+  const ints = (xs: Id) => k.call(lib("map"), xs, k.fn(["n"], (n) => int(n)));
+  const below = (x: Id, v: number) => k.call(S.less, x, k.lit(v));
+  const defs = {
+    numbers: d("numbers", ["x"], (x) => sh(k.call(B.add, x, k.lit(0)))),
+    ints: d("ints", ["a"], (a) => sh(int(a))),
+    bools: d("bools", ["x"], (x) => sh(below(x, 0))),
+    lists: d("lists", ["xs"], (xs) => sh(ints(xs))),
+    nested: d("nested", ["xs", "ys"], (xs, ys) => sh(k.list(ints(xs), ys, k.x(NIL)))),
+    pairs: d("pairs", ["a", "xs"], (a, xs) => sh(k.call(PAIR_V, int(a), ints(xs)))),
+    options: d("options", ["x"], (x) => sh(k.if(below(x, 0), k.x(NONE), k.call(SOME, x)))),
+    fractions: d("fractions", ["a", "b"], (a, b) => sh(k.call(lib("fraction"), a, b))),
+    complexes: d("complexes", ["x", "y"], (x, y) => sh(k.call(COMPLEX_V, x, y))),
+    extendeds: d("extendeds", ["x"], (x) => sh(k.if(below(x, -1), k.x(EXTENDED_V.minus), k.if(below(x, 1), k.call(EXTENDED_V.finite, x), k.x(EXTENDED_V.plus))))),
+  };
+  const code = base(k.code);
+  const names = { ...baseNames(), ...k.names };
+  return { code, names, info: infer(code, names, undefined, checkOptions), defs };
+}
+
+// Inputs for shows(), by function.
+export function showInputs(): Record<string, unknown[][]> {
+  const nums = [0, -0, 1, -1, 0.5, 0.1, 1 + 1e-12, -2.5, 1e21, 1e300, -1e-7, 5e-324, 123456.789];
+  const ints = [0n, 1n, -1n, 7n, 2n ** 31n, 2n ** 64n, -(10n ** 30n)];
+  return {
+    numbers: nums.map((x) => [x]),
+    ints: ints.map((x) => [x]),
+    bools: [[-1], [1]],
+    lists: [[[]], [[1n]], [ints], [Array.from({ length: 2000 }, (_, i) => BigInt(i))]],
+    nested: [[[], []], [[1n, 2n], [3n]], [ints, []]],
+    pairs: [[0n, []], [-7n, ints]],
+    options: [[-1], [2.5], [0]],
+    fractions: [[1n, 3n], [6n, -4n], [4n, 2n], [0n, 5n], [1n, 0n], [2n ** 64n, 3n]],
+    complexes: [[1, 2], [0.5, -1.5], [-0, -0], [0, 1e21]],
+    extendeds: [[-3], [-0.25], [0], [0.5], [7]],
+  };
 }
 
 // Inputs for ordered(), by function: near and equal Float64s, Ints past
