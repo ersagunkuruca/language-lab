@@ -46,7 +46,9 @@ const stop = (): never => { throw new Stop(); };
 // Running out of stack is running out of patience too.
 const stopped = (e: unknown) => e instanceof Stop || e instanceof RangeError;
 
-type Dyn = { k: "dyn"; make: () => Id; cheap: boolean; op?: Op; args?: PV[] };
+// `f32`: already rounded to Float32, so rounding it again changes nothing
+// (I146).
+type Dyn = { k: "dyn"; make: () => Id; cheap: boolean; op?: Op; args?: PV[]; f32?: true };
 type PV =
   | number
   | { k: "data"; tag: Id; fields: PV[] }
@@ -557,7 +559,7 @@ class Stager {
     if (v.k !== "dyn" || v.cheap) return v;
     const b = this.binder("part");
     this.lets.push({ b, value: v.make() });
-    return { k: "dyn", make: () => this.ref(b), cheap: true };
+    return { k: "dyn", make: () => this.ref(b), cheap: true, ...(v.f32 ? { f32: true as const } : {}) };
   }
 
   tick() { if (++this.steps > this.limit) stop(); }
@@ -682,7 +684,10 @@ class Stager {
       const x = args[0];
       if (typeof x === "number") return Math.fround(x);
       if (typeof x === "object" && x.k === "lit" && typeof x.node.value === "number" && !x.node.unit) return Math.fround(x.node.value);
-      if (typeof x === "object" && x.k === "dyn") return { k: "dyn", cheap: false, make: () => this.add({ kind: "call", fn: this.ref(S.float32), args: [this.residual(x)] }) };
+      // Rounded once: x + 0 and 1 · x are x, and rounding what is
+      // rounded already is a no-op (I146: the motor's sums of zeros were
+      // rounded again at every step, 150 roundings deep).
+      if (typeof x === "object" && x.k === "dyn") return x.f32 ? x : { k: "dyn", cheap: false, f32: true, make: () => this.add({ kind: "call", fn: this.ref(S.float32), args: [this.residual(x)] }) };
       return stop();
     }
     if (args.some(later)) return stop();
