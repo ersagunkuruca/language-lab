@@ -15,7 +15,8 @@ import { infer } from "../../ters/src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { makeRunner } from "../../ters/src/lang/run.ts";
-import { S, SHOW_ANY } from "../../ters/src/lang/std.ts";
+import { CONS, NIL, PAIR_V, S, SHOW_ANY } from "../../ters/src/lang/std.ts";
+import { B } from "../../ters/src/prelude.ts";
 import { compile } from "../src/compile.ts";
 
 const runtime = pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href;
@@ -41,4 +42,58 @@ test("map given a lambda that may fail runs single-style, compiled as evaluated 
   assert.deepEqual(got("all kept"), run.value(all));
   assert.deepEqual(got("none kept"), run.value(none));
   assert.equal(got("none kept"), "[]");
+});
+
+// C89: a one-answer copy that calls itself last jumps instead, so a search
+// down a long list for one key (sheet's `lookup entry`, uncompiled maps)
+// takes no stack.
+test("a one-answer search that calls itself last is a loop (C89)", async () => {
+  const k = new Lang(LIBRARY.code);
+  const find = k.def("find");
+  k.define(find, k.fn(["list", "key"], (xs, key) => k.match(xs, [
+    { variant: NIL, names: [], body: () => k.call(S.fail) },
+    { variant: CONS, names: ["item", "rest"], body: ([x, rest]) => k.if(k.call(S.equal, x, key), x, k.call(find, rest, key)) },
+  ])));
+  const found = k.def("found"), missing = k.def("missing");
+  k.define(found, k.call(SHOW_ANY, k.call(S.all, k.thunk(() => k.call(find, k.call(S.range, k.lit(100000)), k.lit(99999))))));
+  k.define(missing, k.call(SHOW_ANY, k.call(S.all, k.thunk(() => k.call(find, k.call(S.range, k.lit(100000)), k.lit(-1))))));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const source = compile(code, info, names, { runtime, exports: ["found", "missing"] });
+  assert.match(/function find\$?\w*\([^)]*\) \{\n[^\n]*for \(;;\)/.exec(source)?.[0] ?? "", /for \(;;\)/, "find is a loop");
+  const path = join(mkdtempSync(join(tmpdir(), "semi-")), "find.js");
+  writeFileSync(path, source);
+  const out = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
+  const got = (name: string) => typeof out[name] === "function" ? (out[name] as () => unknown)() : out[name];
+  assert.equal(got("found"), "[99999]");
+  assert.equal(got("missing"), "[]");
+});
+
+// C87: the same when the answer is a record its caller takes apart (its
+// `$fields` copy, G13): board's `card of(cards, id).title` ran out of stack
+// from about 2,000 cards.
+test("a one-answer search for a record, taken apart by its caller, is a loop (C87)", async () => {
+  const k = new Lang(LIBRARY.code);
+  const find = k.def("find pair");
+  k.define(find, k.fn(["list", "key"], (xs, key) => k.match(xs, [
+    { variant: NIL, names: [], body: () => k.call(S.fail) },
+    { variant: CONS, names: ["item", "rest"], body: ([x, rest]) => k.match(x, [{ variant: PAIR_V, names: ["a", "b"], body: ([a]) =>
+      k.if(k.call(S.equal, a, key), x, k.call(find, rest, key)) }]) },
+  ])));
+  const pairs = k.def("pairs");
+  k.define(pairs, k.fn(["n"], (n) => k.call(lib("map"), k.call(S.range, n), k.fn(["i"], (i) => k.call(PAIR_V, i, k.call(B.mul, i, k.lit(2)))))));
+  const found = k.def("found"), missing = k.def("missing");
+  const second = (key: number) => k.call(SHOW_ANY, k.call(S.all, k.thunk(() => k.match(k.call(find, k.call(pairs, k.lit(100000)), k.lit(key)), [{ variant: PAIR_V, names: ["a", "b"], body: ([, b]) => b }]))));
+  k.define(found, second(99999));
+  k.define(missing, second(-1));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const source = compile(code, info, names, { runtime, exports: ["found", "missing"] });
+  assert.match(source, /function find_pair\$fields\([^)]*\) \{\n[^\n]*\n[^\n]*: for \(;;\)/, "find pair's $fields copy is a loop");
+  const path = join(mkdtempSync(join(tmpdir(), "semi-")), "pair.js");
+  writeFileSync(path, source);
+  const out = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
+  const got = (name: string) => typeof out[name] === "function" ? (out[name] as () => unknown)() : out[name];
+  assert.equal(got("found"), "[199998]");
+  assert.equal(got("missing"), "[]");
 });
