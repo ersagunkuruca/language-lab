@@ -11,9 +11,10 @@ The programs are original, written for this purpose.
 
 **Rounds so far (2026-11-02):** 1 calc, 2 Countdown and chapters, 3
 ledger, 4 the guitar pedal, 5 routes, 6 notebook, 7 sheet (written in the
-editor), 8 board (a page, written in the editor). Each round's gaps are
+editor), 8 board (a page, written in the editor), 9 machine (an assembler
+and interpreter, on every target). Each round's gaps are
 below, as written then. The gaps still open are rows in BACKLOG.md, lane
-C (C30, C31, C59, C63, C64, C70 to C73, C85 to C88), and the next round's
+C (C30, C31, C59, C63, C64, C70 to C73, C85 to C88, C91 to C96), and the next round's
 program is chosen when the weekly round is due.
 
 ## Round 1: calc (2026-10-22)
@@ -2127,3 +2128,224 @@ lacks something (WORKFLOW.md, "Language gaps, every round"):
    refusal that didn't say why; then E189 (25 matches) and E188, E190.
 4. C86 with L160: frames and adds that grow with the board.
 5. C88, L161, E191, E192.
+
+## Round 9: machine, an assembler and interpreter on every target (2026-11-02)
+
+`compiler/gaps/machine` is a small register machine and its tools. It
+reads assembly (labels, `.data` and `.zero` for named memory, twenty-one
+instructions over eight registers `r0` to `r7`: `set add sub mul div mod
+load store jump jz jnz jlt jeq call ret push pop out outc halt nop`),
+assembles it in two passes (labels, then the code with the labels
+resolved), checks it (registers, jump targets, labels; and the lines
+nothing reaches, found with a worklist over a `Set Int`), optimizes it
+(constant folding, `x + 0` and `x × 1`, tests of numbers decided, jumps to
+jumps threaded, a jump to the next instruction dropped, `push a; pop d`
+and `store a b; load d b` paired, what never runs dropped, the nops taken
+out and every jump renumbered, repeated until a round takes nothing out),
+and runs the program as written and as optimized, step by step, to check
+they print the same. It can print the listing, a trace and a profile (the
+hot instructions and the mix of instruction names, from a count per
+instruction kept as the machine runs).
+
+```
+$ node ters/cli/lab.ts run compiler/gaps/machine --profile compiler/gaps/machine/hello.asm
+== compiler/gaps/machine/hello.asm
+never runs: line 8
+  Hello, machine!
+12 instructions, 9 after optimizing (3 taken out)
+steps: 132 as written, 100 optimized (24.2% fewer)
+hot spots:
+  17.0%  line 6    jlt r1 r2 4
+  ...
+mix: jlt 17.0%, load 17.0%, set 17.0%, add 16.0%, jump 16.0%, outc 16.0%
+```
+
+It has 141 definitions, against board's 112: 8 types (`Arg`, `Instr`,
+`Item`, `Program`, `Machine`, `Options`, `Hot`, `Run`) and 133 functions
+and values. Five programs for it come in the folder: `primes.asm` (the
+sieve of Eratosthenes below 5000, in memory), `sort.asm` (400 numbers from
+a linear congruential generator, insertion sorted, and a checksum),
+`fib.asm` (the 20th Fibonacci number by the slow recursion: calls, returns
+and the stack), `collatz.asm` (the longest Collatz chain from below 3000:
+registers only) and `hello.asm`. The machine, its assembly and the five
+programs are original; two-pass assembly, peephole optimization and jump
+threading are common knowledge.
+
+It was chosen to be what the compiler's representation stages (C30) are
+for: the machine's registers, memory, code and profile counts are lists
+read with `item at` and changed with `replace at` at every step, the way a
+program written without arrays in mind would hold them. It was written
+with the DSL, as round 6 was, since this round aims at the compiler and
+its targets (the build script is in the project's files,
+`gaps-round9/build.ts`); it checked on its first try.
+
+Files:
+- `compiler/gaps/machine/`: the program and the five `.asm` programs.
+- `compiler/gaps/machine.ideal.js`: the hand-written ideal: the same
+  program with arrays changed in place (M1 marked there).
+- `compiler/gaps/machine.ts`: four ways in one process (the evaluator,
+  the compiled code as `lab compile` stores it, the WebAssembly as a WASI
+  command, and the ideal), and the programs at other sizes.
+- `compiler/test/machine.test.ts`: the evaluator, the compiled code and
+  the ideal print and exit the same, on the five programs, a listing, a
+  trace, a profile and fifteen failures; the WebAssembly is a todo until
+  M3.
+- `compiler/gaps/bench-machine.ts`: the table below (C from `lab native`,
+  or a binary given in `MACHINE_NATIVE` while M2 is open).
+
+### Results
+
+Every way prints the same and exits the same on every program and every
+failure tried, once M2 and M3 are worked around by hand (one line each,
+below).
+
+```
+program       steps   evaluator  compiled   wasm    native  ideal   compiled/ideal
+fib 15        13811     2513 ms     10 ms    14 ms   17 ms   5.6 ms     2×
+fib 24      1050343   (skipped)    501 ms   601 ms  582 ms   130 ms     4×
+collatz 3000 1382338  (skipped)    747 ms   933 ms  827 ms   101 ms     7×
+primes 500     7619     7384 ms     48 ms    99 ms   66 ms   0.7 ms    70×
+primes 5000   82280   (skipped)   2197 ms  4605 ms 3892 ms   5.5 ms   400×
+primes 20000 342983   (skipped)  47933 ms 63825 ms 62875 ms   43 ms  1119×
+sort 400     357792   (skipped)   2356 ms  4016 ms 3013 ms    25 ms    94×
+sort 1000   2231180   (skipped)  23199 ms 36686 ms 28160 ms  126 ms   183×
+hello           132      195 ms    0.7 ms   4.2 ms  7.4 ms   0.3 ms     2×
+```
+
+Median of three in one process (`node compiler/gaps/bench-machine.ts`),
+each run being the whole command: assemble, check, optimize, run both
+programs. "Steps" is the program as written; the optimized run is about
+10% fewer. `lab compile` chose the hash table for Map and Set and nothing
+for List. The evaluator takes about 90 µs a step (L118c again).
+
+Where the compiled code's time goes, by the profile: in `primes 5000`,
+`stored` (a `replace at` on memory, inlined) 39%, `loaded` (an `item at`)
+15%, the garbage collector 14%, `length` 8% (the memory's length, walked
+again at every load and store to check the address); in `collatz 3000`,
+which touches only registers, the step loop itself 23%, `set register`
+8% and the collector 7%.
+
+### The gaps, ranked
+
+**M1. Lists read and written by position stay lists (perf: 400× to
+1100× on memory, 7× on registers).** Every load walks the memory list to
+the address, every store copies it up to there, and every step walks the
+code to the program counter and the registers to the one it reads. The
+chooser has `array of List` and `tree of List`, and picks the tree for
+this program's lists, but it gives List up program-wide for each of three
+reasons, all of which machine has (library-reps.ts `choiceOf`):
+(a) a list of lists anywhere (`keyed`): `data values` flattens a `List
+(List Int)` and `problems of` another; (b) another library type was
+chosen first: lists become arrays only when nothing else does, and Map
+and Set are hash tables here; (c) a value of a library type that holds a
+list (`listBoundary`'s `libraryHolder`): the labels, a `Map Text Int`,
+which as written is a list of entries, in `assembled`. And `array of
+List` has no `replace at` job, so a write would still go through the list.
+*Measured* by editing the compiled output by hand so that the machine's
+registers, memory, code and counts are arrays (made when the machine
+starts; `item at`, `replace at` and `length` on an array read it, copy it
+with one item changed, or read its length):
+
+```
+                     as compiled   arrays, copied   arrays, in place   ideal
+primes 5000            1740 ms         95 ms             90 ms         5.5 ms
+primes 20000          47.6 s          7.2 s             0.11 s         43 ms
+sort 400               2310 ms        130 ms            105 ms          25 ms
+sort 1000             23.2 s          0.63 s            0.26 s         126 ms
+collatz 3000            640 ms        315 ms            295 ms         101 ms
+```
+
+(whole command, less the 290 ms that `hello` takes: starting node and
+assembling). "In place" changes the array a write is given: each run's
+machine is the only holder of its memory, so no one can see it change.
+*Fix:* choose a representation per value, or at least stop one list of
+lists, one Map or one other choice from deciding for every list (the same
+shape as C70 and C71 for maps); give `array of List` a `replace at` job
+(one copy); then in place where a value has one holder (C56). C93, part
+of C30.
+
+**M2. The C output doesn't build (correctness: `lab native` fails).**
+`listing` numbers the pairs of instructions and lines, so `numbered` is
+lowered at `(Int, (Instr, Int))`, an unboxed pair holding an unboxed
+pair. The C declares `Tuple2_3 { lab_int f0; Tuple2_4 f1; }` before
+`Tuple2_4`, and `Tuple2_3_dup` before `Tuple2_4_dup`: six errors, the
+first "unknown type name 'Tuple2_4'". Moving the inner pair's typedef and
+its dup, drop and dec above the outer's by hand, it builds and agrees with
+the ideal everywhere. *Fix:* emit tuple typedefs and their helpers in the
+order they hold each other. C91.
+
+**M3. The WebAssembly doesn't load (correctness).** `WebAssembly.compile`
+refuses the module: "Duplicate export name 'length(List)'". A generic
+definition lowered at several types is exported under its name once, then
+under its name with its parameters' type names (wasm.ts `exportName`),
+and `length` at `List Instr` and at `List Int` both read `length(List)`.
+Adding the function's index to the second name, it loads and agrees
+everywhere. *Fix:* names that tell the types' arguments apart, or a
+counter when two collide. C92.
+
+**M4. In C, a record read after a call is shared during it (perf,
+native).** `stepped(code, m)` is `executed(item at(code, m.pc), m)` and
+then reads `m.pc` again to count the step; the C passes
+`Machine_dup(p1)` to `lab_executed`, so the registers, memory and stack
+lists have two holders while the instruction runs, and the reuse of a
+cell with one holder (`rc == 1`) can't happen in `replace at`. Native is
+slower than the compiled JS on every program here (fib 24: 582 against
+501 ms). *Fix:* read the fields a function still needs (an Int here)
+before handing the record on, so the call gets the only reference
+(Perceus's borrowing and drop specialisation, Reinking, Xie, de Moura and
+Leijen 2021, prior art, already credited for C56). Not measured. C94.
+
+**M5. Two records a step (perf, small).** `executed` builds a new
+`Machine` for each instruction, and `stepped` at once copies it with the
+step counted (and the profile count changed). The first has one holder
+and is never seen again: it could be changed in place. *Measured* on top
+of the arrays in place, by setting the two fields on `executed`'s record:
+collatz 3000 295 → 210 ms, primes 5000 90 → 50 ms. C95.
+
+**M6. `lab check` hashes every input order (tools).** `lab check
+compiler/gaps/machine` takes 10.9 s (sheet 4.5 s), against 2.9 s for `lab
+compile`: 77% of it is `orderFreeHash` (modules.ts), which for "same as
+another definition up to the order of its inputs" hashes every
+permutation of every definition's inputs, up to five (120 orders), each
+time copying the program's whole node table. machine has many
+definitions of four and five inputs. *Fix:* one hash with the inputs as
+a multiset where the body allows it, or hash each order without copying
+the table. C96.
+
+### Language gaps
+
+Where machine defines something only because the language or the library
+lacks it (WORKFLOW.md, "Language gaps, every round"):
+
+- **MG1. A type's fields by their type.** `Instr` has 21 cases. Seven
+  definitions match all 21 only to reach the `Arg`s in them or the
+  case's name: `args mapped` (an instruction with a function applied to
+  every `Arg`), `problems of`, `threaded`, `moved`, `targets`,
+  `disassembled`, `op name`. The DSL wrote them with a loop; in the
+  editor they are 147 cases. A map and a fold over every field of a given
+  type, in any case, and a case's name as text, would make each one line.
+  Prior art: Haskell's `deriving Functor`, GHC Generics and "Scrap your
+  boilerplate" (Lämmel and Peyton Jones, 2003) for the first, `showConstr`
+  in Haskell's Data.Data for the second. L162.
+- **MG2. A value with one place changed.** A step changes one or two of
+  `Machine`'s eight fields, and every change writes all eight out
+  (`mwith` in the build script, twelve places), and a register write is
+  `replace at` on a field of it. Paths exist (`path`, `item path`, `then
+  path`), but only `write at` on a cell uses them. A `changed(value, path,
+  part)` for any value would be one call, and would tell the compiler
+  which field changes. Prior art: lenses (van Laarhoven; Kmett's `lens`),
+  and OCaml's and Elm's `{ r with f = v }`. L163.
+- **MG3. Library.** `zipped` (no zip), `numbered` (no list of positions
+  and items), `zeros` (no list of n copies: `repeated` is Text's), `all
+  digits` (no "all" or "any" over a list); and `instruction of` is a
+  21-way `if op = "set" … else if …`: no match on Text values. L164.
+
+### Proposed order
+
+1. C91 and C92: the C and WebAssembly ways fail to build or load; each is
+   small.
+2. C93: lists as arrays (and the tree) for a program like this one; the
+   chooser's three refusals first, then `replace at` on arrays. It is the
+   largest gap any round has measured.
+3. C94 and C95, then C96.
+4. L162, L163 and L164 for the language lane.
