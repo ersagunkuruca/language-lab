@@ -353,20 +353,6 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   // C54).
   ({ code, info, names } = liftLets(code, info, names, true));
   if (opts.data) opts = { ...opts, records: true };
-  // derivative(f) of a function written right there becomes the code of
-  // its derivative (derive.ts), checked again, so the GPU gets exact
-  // slopes as plain arithmetic. The partials it calls (∂scene/∂x …) are
-  // definitions like any other.
-  // gradient(f) too, over the record f's type says it takes.
-  const x = expandDerivatives(code, names, (call) => {
-    const f = info.subst.zonk(info.typeOf.get((code.nodes[call] as NodeOf<"call">).args[0]) ?? { t: "var", v: -1 });
-    return f.t === "fn" && f.params[0]?.t === "con" ? recordVariant(code, f.params[0].id) : null;
-  });
-  if (x.expanded.length) {
-    code = x.code;
-    names = x.names;
-    info = infer(code, names);
-  }
   // Calls given data written down (an algebra's signature and basis) are
   // worked out as far as that data goes (stage.ts, C65): what's left is
   // arithmetic, with no lists. Kept only if the program still checks.
@@ -376,10 +362,15 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   // L43c), so staging multiplies only their masked parts.
   const st = stageProgram(code, info, names, roots);
   ({ code, names, info } = st);
-  // A derivative of a function that calls the clifford functions with an
-  // algebra written down can be read only once those calls are arithmetic
-  // (C74: a ray marcher's scene moved by a PGA motor), so it is expanded
-  // again after staging, and what it made is staged in turn.
+  // Then derivative(f) of a function written right there becomes the code
+  // of its derivative (derive.ts), checked again, so the GPU gets exact
+  // slopes as plain arithmetic. The partials it calls (∂scene/∂x …) are
+  // definitions like any other. gradient(f) too, over the record f's type
+  // says it takes. After staging, so a function that calls the clifford
+  // functions with an algebra written down is arithmetic by then (C74: a
+  // ray marcher's scene moved by a PGA motor; read before, its derivative
+  // would be the clifford functions' generic folds again), and what the
+  // derivatives made is staged in turn.
   const later = expandDerivatives(code, names, (call) => {
     const f = info.subst.zonk(info.typeOf.get((code.nodes[call] as NodeOf<"call">).args[0]) ?? { t: "var", v: -1 });
     return f.t === "fn" && f.params[0]?.t === "con" ? recordVariant(code, f.params[0].id) : null;
