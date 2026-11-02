@@ -401,7 +401,15 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
   const spend = (f: SFunc) => (f.spends ? [0x23, 0x00, 0x44, ...f64(1), 0xa1, 0x24, 0x00, 0x23, 0x00, 0x44, ...f64(0), 0x63, 0x04, 0x40, ...zero(f.result), ...(f.partial ? [0x41, 0x01] : []), 0x0f, 0x0b] : []);
   // Whether f needs a local for a status: it's partial, or has no answer
   // somewhere, or tries something that may have none.
-  const failing = (e: SExpr): boolean => e.k === "fail" || (e.k === "world" && e.aborts) || e.k === "attempt" || e.k === "abort" || e.k === "handle" || (e.k === "call" && !!funcs[e.fn].partial) || (e.k === "apply" && !!e.t.partial) || (e.k === "rt" && !!runtime(e.fn).partial) || kids(e).some(failing);
+  // Remembered per node: a body's nodes can be shared (a value used in two
+  // places is one node), so walking it as a tree went over the ray
+  // marcher's motor exponentially often, minutes in the editor.
+  const fails = new WeakMap<SExpr, boolean>();
+  const failing = (e: SExpr): boolean => {
+    let r = fails.get(e);
+    if (r === undefined) fails.set(e, r = e.k === "fail" || (e.k === "world" && e.aborts) || e.k === "attempt" || e.k === "abort" || e.k === "handle" || (e.k === "call" && !!funcs[e.fn].partial) || (e.k === "apply" && !!e.t.partial) || (e.k === "rt" && !!runtime(e.fn).partial) || kids(e).some(failing));
+    return r;
+  };
   const statusOf = (f: SFunc) => (f.partial || failing(f.body) ? f.locals.length : -1);
 
   // f's code. `d` is how many blocks are open around e, and `fl` the
