@@ -735,7 +735,7 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
     const args = parts.map((a, i) => { const w = words.length ? alts.map((id) => (blocksStyle.notation as Record<Id, Notation>)[id]?.words?.[i]).find((w) => w && new RegExp(`^\\s*${w}\\s`).test(a)) : undefined; return typedOut(w ? a.trim().slice(w.length) : a, code, names, scope); });
     // sum(1, 2, 3) is sum([1, 2, 3]) when sum is a definition of one
     // input and nothing of that name takes as many as are written (E166b):
-    // the text the list in place prints as.
+    // a shorthand to type; the text prints it with its brackets (E221).
     const one = (id: Id) => { const d = code.nodes[id]; const b = d?.kind === "def" && d.body ? code.nodes[d.body] : null; return b?.kind === "lambda" ? b.params.length : -1; };
     if (alts.length && args.length > 1 && args.every((a) => !("error" in a)) && alts.every((id) => one(id) === 1)) {
       const list = (args as Typed[]).reduceRight<Typed>((rest, item) => ({ op: CONS, args: [item, rest] }), { value: { tag: NIL, fields: [] } as Value });

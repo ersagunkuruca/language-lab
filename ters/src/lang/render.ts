@@ -199,25 +199,10 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
     }
   };
 
-  // A list written in place as a definition's one input, when that input
-  // is a List: sum(1, 2, 3) for sum([1, 2, 3]), as the graph draws it on
-  // the port (E166b, PORTS-2026-11-01.md §4). Only where the name has no
-  // other meaning, so the text reads back as the same call.
-  let meanings: Map<string, number> | undefined;
-  const spread = (fn: Id, arg: Id): Id[] | null => {
-    const f = node(fn);
-    if (f.kind !== "ref" || code.nodes[f.target]?.kind !== "def" || !info) return null;
-    const items = listItems(arg);
-    if (!items || items.length < 2) return null;
-    const t = info.typeOf.get(f.target), r = t && info.subst.resolve(t);
-    const p = r?.t === "fn" && r.params.length === 1 ? info.subst.resolve(r.params[0]) : null;
-    if (p?.t !== "con" || p.id !== info.owner.get(CONS)) return null;
-    if (!meanings) {
-      meanings = new Map();
-      for (const id of Object.keys(names)) if (["def", "builtin", "variant", "field"].includes(code.nodes[id]?.kind)) meanings.set(names[id], (meanings.get(names[id]) ?? 0) + 1);
-    }
-    return (meanings.get(names[f.target]) ?? 0) === 1 ? items : null;
-  };
+  // A list written in place as a call's one input keeps its brackets,
+  // sum([1, 2, 3]): written sum(1, 2, 3) it would read as a call of three
+  // inputs, or of a tuple (Ersagun 2026-11-02, E221, undoing E166b's
+  // text side; the graph still draws a socket per item, E166).
 
   // One line.
   const inline = (id: Id): I => {
@@ -294,8 +279,6 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
         // Change the function is how the name itself is replaced).
         const named = inline(n.fn);
         const head = f.kind === "ref" ? { ...named, p: named.p.map((x) => (typeof x === "string" ? x : { ...x, cls: `${x.cls} head` })) } : named;
-        const spreadOut = n.args.length === 1 && !ops ? spread(n.fn, n.args[0]) : null;
-        if (spreadOut) return atom(part("call", [...paren(head, head.prec >= ATOM), pn("("), ...commas(spreadOut.map((x) => inline(x).p)), pn(")")], id));
         const shownArgs = ops ? args.map((a) => a.p) : n.args.map((a, i) => {
           const b = byName(a), kids = [...word(nota, i), ...inline(b).p];
           return b === a ? kids : [part("lam byname", kids, a)];
@@ -540,9 +523,6 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
         return hold([ln(...lead, kw("fold "), ...inline(f.kind === "fold" ? f.scrutinee : n.fn).p, kw(" from "), ...many), grp(arms)]);
       }
       if (n.args.every((a) => !tall(a)) && tall(n.fn)) return hold([...block(n.fn, [...lead, kw("apply ")]), grp([ln(kw("to "), pn("("), ...commas(n.args.map((a) => inline(a).p)), pn(")"))])]);
-      // p(named(…), words(" ")) for p([…]): the items are its inputs (E166b).
-      const spreadOut = n.args.length === 1 && ops === n.args ? spread(n.fn, n.args[0]) : null;
-      if (spreadOut) return hold([ln(...lead, ...head, pn("(")), grp(spreadOut.flatMap((x, i) => (i < spreadOut.length - 1 ? appendLast(block(x, []), pn(",")) : block(x, [])))), ln(pn(")"))]);
       const args = ops.map((a, i) => {
         const b = ops === n.args ? byName(a) : a;
         const lines = b === a ? block(a, ops === n.args ? word(nota, i) : []) : [grp(block(b, word(nota, i)), 0, a, "lam byname")];
