@@ -82,6 +82,10 @@ export function program(seed: number, count: number) {
           // C108, C106: a text read as a number; a seeded draw.
           () => orElse(call(TEXT_OPS.readNumber, sub("T"))),
           () => call(S.seeded, sub("F"), k.thunk(() => call(B.add, call(RANDOM_OP), call(RANDOM_OP)))),
+          () => call(B.sin, sub("F")),
+          () => call(B.exp, sub("F")),
+          () => call(B.atan2, sub("F"), sub("F")),
+          () => orElse(call(B.pow, sub("F"), sub("F"))),
         ])();
       }
       case "I": {
@@ -101,6 +105,10 @@ export function program(seed: number, count: number) {
           () => orElse(call(INT_OPS.read, sub("T"))),
           () => orElse(call(TEXT_OPS.code, sub("T"))),
           () => orElse(call(TEXT_OPS.find, sub("T"), sub("T"))),
+          // Small powers only: a power of a power would be millions of digits.
+          () => orElse(call(INT_OPS.power, call(INT_OPS.remainder, sub("I"), k.int(10)), call(INT_OPS.remainder, sub("I"), k.int(20)))),
+          () => call(lib("sum"), sub("L")),
+          () => orElse(call(INT_OPS.wholePart, sub("F"))),
         ])();
       }
       case "B": {
@@ -113,6 +121,8 @@ export function program(seed: number, count: number) {
           () => call(S.not, sub("B")),
           () => k.equal(sub("T"), sub("T")),
           () => call(TEXT_OPS.less, sub("T"), sub("T")),
+          () => call(lib("starts with"), sub("T"), sub("T")),
+          () => call(lib("contains"), sub("L"), sub("I")),
           () => k.equal(sub("D"), sub("D")),
           () => k.equal(sub("R"), sub("R")),
         ])();
@@ -128,6 +138,7 @@ export function program(seed: number, count: number) {
           () => call(lib("replace at"), sub("L"), sub("I"), sub("I")),
           // map with a closure: the item, and whatever is in scope.
           () => call(lib("map"), sub("L"), k.fn([fresh()], (v) => gen("I", { ...s, I: [...s.I, v] }, depth - 1))),
+          () => call(lib("sort"), sub("L")),
           () => call(lib("keep"), sub("L"), k.fn([fresh()], (v) => gen("B", { ...s, I: [...s.I, v] }, depth - 1))),
         ])();
       }
@@ -141,6 +152,8 @@ export function program(seed: number, count: number) {
           () => call(TEXT_OPS.slice, sub("T"), sub("I"), sub("I")),
           () => call(S.show, sub("F")),
           () => call(INT_OPS.show, sub("I")),
+          () => call(lib("uppercase"), sub("T")),
+          () => call(TEXT_OPS.joinAll, call(TEXT_OPS.split, sub("T"), sub("T")), sub("T")),
           () => k.call(S.first, k.thunk(() => call(TEXT_OPS.fromCode, sub("I"))), k.thunk(() => sub("T"))),
         ])();
       }
