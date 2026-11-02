@@ -116,6 +116,14 @@ export type NodeOf<K extends Kind> = Extract<Node, { kind: K }>;
 export type Use = NodeOf<"solve">;
 export const isUse = (n: Node | undefined | null): n is Use => n?.kind === "solve";
 export const useOf = (n: Node | undefined | null): Use | null => (isUse(n) ? n : null);
+// The relation a use runs: a definition, a field or a builtin. Ask this,
+// not the use's `fn`, which becomes an expression when call and solve are
+// one kind (L130d).
+export const useTarget = (_nodes: Record<Id, Node>, u: Use): Id => u.fn;
+// A new use of `target`: build it with this, which adds any node the use
+// needs besides itself through `add` (after L130d, the ref to `target`).
+export const useNode = (_add: (n: NodeData) => Id, target: Id, given: Record<string, Id>, binds: Record<string, Id>, body: Id): Omit<Use, "id"> =>
+  ({ kind: "solve", fn: target, given, binds, body });
 
 // What gets stored on disk as code.json. `defs` is the list of top-level
 // definitions; there are no modules, imports or files, just reachable defs.

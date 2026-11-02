@@ -15,7 +15,7 @@
 // (Console, Files) have one handler, the runtime's `World`; Log, Abort,
 // Random, Time and Wait, when nothing in the program handles them, go to it too.
 
-import { dependencies, subtree, type Code, type Id, type NodeOf, type Use } from "../model.ts";
+import { dependencies, subtree, type Code, type Id, type NodeOf, type Use, useTarget } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { impl } from "../prelude.ts";
 import type { Info } from "./infer.ts";
@@ -878,7 +878,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         if (p.mode === "relational") {
           // Each step that might unfold forever spends the innermost fuel.
           const spend = () => { const f = fuel(); return !(f && --f.left < 0); };
-          for (const sol of relate(code, n.fn, known, { spend, names: rt.names, stuck: rt.stuck })) {
+          for (const sol of relate(code, useTarget(code.nodes, n), known, { spend, names: rt.names, stuck: rt.stuck })) {
             const bound = Object.keys(n.binds).map((k) => toValue(sol.values[k]));
             if (bound.some((v) => v === undefined)) continue; // not pinned down: not an answer
             yield bound as Value[];
@@ -899,7 +899,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       let answers: Iterable<Value[]> = bodies();
       if (p.mode === "relational" ? oneAnswer(code, n) : computedForward(code, n)) {
         const r = (answers as Generator<Value[]>).next();
-        if (r.done) throw new Error(`solving ${rt.names?.[n.fn] ?? n.fn} this way gives exactly one answer, and it gave none`);
+        if (r.done) throw new Error(`solving ${rt.names?.[useTarget(code.nodes, n)] ?? useTarget(code.nodes, n)} this way gives exactly one answer, and it gave none`);
         answers = [r.value];
       }
       this.from(answers, (bound) => this.eval(n.body, bind(env, Object.values(n.binds), bound as Value[])));

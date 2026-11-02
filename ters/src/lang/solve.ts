@@ -22,6 +22,7 @@
 
 import { direction, results } from "../../../invertible/src/index.js";
 import type { Code, Id, NodeOf, Use } from "../model.ts";
+import { useTarget } from "../model.ts";
 import { relationFor, type Relation } from "./equations.ts";
 import { SIGS, TRUE } from "./std.ts";
 
@@ -62,12 +63,12 @@ export function solvesInWholeNumbers(code: Code, solve: Id): void {
 
 export function planSolve(code: Code, n: Use): SolvePlan {
   const relational = (): SolvePlan => {
-    if (!runsBackwards(code, n.fn)) throw new Error(`${n.fn} can't be run backwards`);
+    if (!runsBackwards(code, useTarget(code.nodes, n))) throw new Error(`${useTarget(code.nodes, n)} can't be run backwards`);
     return { mode: "relational", rel: null, known: Object.keys(n.given), predicate: false, status: "solved", needMore: 0, many: true, canFail: true, unique: false };
   };
-  if (whole.get(code)?.has(n.id) && runsBackwards(code, n.fn)) return relational();
+  if (whole.get(code)?.has(n.id) && runsBackwards(code, useTarget(code.nodes, n))) return relational();
   let r: ReturnType<typeof relationFor>;
-  try { r = relationFor(code, n.fn); } catch { return relational(); }
+  try { r = relationFor(code, useTarget(code.nodes, n)); } catch { return relational(); }
   // A predicate reads as equations only when it is asked to be true.
   const outTrue = isTrue(code, n.given.out);
   if (r.predicate && (!outTrue || "out" in n.binds)) return relational();

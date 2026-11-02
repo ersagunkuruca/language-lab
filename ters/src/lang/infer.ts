@@ -13,7 +13,7 @@
 import { sharing } from "./shared-fields.ts";
 import { PARTIAL, signAnalysis } from "./signs.ts";
 import type { Code, Id, Node, NodeOf, Use } from "../model.ts";
-import { isUse } from "../model.ts";
+import { isUse, useTarget } from "../model.ts";
 import { nodesWhere, ownerOfTypeParts, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { unitProblems, UnitsBefore } from "../units.ts";
@@ -372,7 +372,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       if (!n) return;
       if (n.kind === "ref" && code.nodes[n.target]?.kind === "def" && !isTypeDef(n.target)) out.add(n.target);
       // a function run backwards is used too: its type gives the ports' types
-      if (isUse(n) && code.nodes[n.fn]?.kind === "def") out.add(n.fn);
+      if (isUse(n) && code.nodes[useTarget(code.nodes, n)]?.kind === "def") out.add(useTarget(code.nodes, n));
       for (const c of kids(n)) walk(c);
     };
     const body = (code.nodes[d] as NodeOf<"def">).body;
@@ -965,14 +965,14 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     // An interface's field with results (POLAR.md, L97c): the type's own
     // definition answers it, in the direction the field declares, with one
     // answer. Ports are positions.
-    const field = code.nodes[n.fn];
+    const field = code.nodes[useTarget(code.nodes, n)];
     if (field?.kind === "field" && field.results) {
       const ty = code.nodes[field.type];
       const ins = ty?.kind === "tfun" ? ty.params.map((_, i) => i).filter((i) => !field.results!.includes(i)) : [];
       const given = Object.keys(n.given).filter((k) => k !== "out").map(Number);
       const port = (i: number) => field.ports?.[i] ?? String(i);
       if (given.length !== ins.length || !ins.every((i) => given.includes(i)) || !Object.keys(n.binds).every((k) => field.results!.includes(Number(k))))
-        err(n.id, `${nm(n.fn)} gives ${field.results.map(port).join(", ")} from ${ins.map(port).join(", ")}`);
+        err(n.id, `${nm(useTarget(code.nodes, n))} gives ${field.results.map(port).join(", ")} from ${ins.map(port).join(", ")}`);
       relationalSolve(n, env, row, inner, false, undefined, true);
       return expr(n.body, inner, row);
     }
@@ -989,7 +989,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       // gives an answer.
       const v = solveMode(code, n, names);
       // (A hole is a gap the editor already shows; the search runs up to it.)
-      if (v?.stuck.length && !v.stuck.includes("a hole")) err(n.id, `${nm(n.fn)} can't be run this way: ${v.stuck.find((x) => x.startsWith("nothing gives")) ?? `${v.stuck[0]} never gets what it needs`}`);
+      if (v?.stuck.length && !v.stuck.includes("a hole")) err(n.id, `${nm(useTarget(code.nodes, n))} can't be run this way: ${v.stuck.find((x) => x.startsWith("nothing gives")) ?? `${v.stuck[0]} never gets what it needs`}`);
       relationalSolve(n, env, row, inner, v ? !v.ends : true, v?.loops[0], oneAnswer(code, n), givenTypes);
       return expr(n.body, inner, row);
     }
@@ -999,14 +999,14 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     // definition (L38's open end): it waits until the definition is read,
     // and an Int then makes this a whole-number solve, checked again.
     const open = Object.entries(n.given).filter(([k]) => !outTrue(k) && s.resolve(givenTypes.get(k)!).t === "var");
-    if (open.length && runsBackwards(code, n.fn)) waiting.push({ solve: n.id, givens: open.map(([k, g]) => [g, givenTypes.get(k)!]) });
-    for (const [k, g] of Object.entries(n.given)) if (!open.some(([o]) => o === k) || !runsBackwards(code, n.fn)) unifyAt(g, outTrue(k) ? bool : num, givenTypes.get(k)!, "a given port");
+    if (open.length && runsBackwards(code, useTarget(code.nodes, n))) waiting.push({ solve: n.id, givens: open.map(([k, g]) => [g, givenTypes.get(k)!]) });
+    for (const [k, g] of Object.entries(n.given)) if (!open.some(([o]) => o === k) || !runsBackwards(code, useTarget(code.nodes, n))) unifyAt(g, outTrue(k) ? bool : num, givenTypes.get(k)!, "a given port");
     for (const b of Object.values(n.binds)) { inner.set(b, num); info.typeOf.set(b, num); }
     if (p) {
       const ports = p.rel!.ports;
-      for (const k of [...Object.keys(n.given), ...Object.keys(n.binds)]) if (!ports.includes(k) && !outTrue(k)) err(n.id, `${nm(n.fn)} has no port ${k}`);
-      if (p.status !== "solved") err(n.id, `${nm(n.fn)} needs ${p.needMore} more known port${p.needMore === 1 ? "" : "s"} to be solved this way`);
-      else if (!p.unique && !computedForward(code, n)) choice(n.id, row, [CHOICE], `solving ${nm(n.fn)} this way may give several answers or none (Choice), which nothing here handles`);
+      for (const k of [...Object.keys(n.given), ...Object.keys(n.binds)]) if (!ports.includes(k) && !outTrue(k)) err(n.id, `${nm(useTarget(code.nodes, n))} has no port ${k}`);
+      if (p.status !== "solved") err(n.id, `${nm(useTarget(code.nodes, n))} needs ${p.needMore} more known port${p.needMore === 1 ? "" : "s"} to be solved this way`);
+      else if (!p.unique && !computedForward(code, n)) choice(n.id, row, [CHOICE], `solving ${nm(useTarget(code.nodes, n))} this way may give several answers or none (Choice), which nothing here handles`);
     }
     return expr(n.body, inner, row);
   }
@@ -1022,20 +1022,20 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // exactly one, Diverge when it may unfold forever, and whatever the
   // function itself does, except printing, which can't be undone.
   function relationalSolve(n: Use, env: Map<Id, Type>, row: Row, inner: Map<Id, Type>, loops: boolean, why?: string, one = false, givenTypes?: Map<string, Type>) {
-    const ft = s.resolve(refType(n.id, n.fn, env));
-    if (ft.t !== "fn") { err(n.id, `${nm(n.fn)} is not a function`); return; }
+    const ft = s.resolve(refType(n.id, useTarget(code.nodes, n), env));
+    if (ft.t !== "fn") { err(n.id, `${nm(useTarget(code.nodes, n))} is not a function`); return; }
     (info.solveAt ??= new Map()).set(n.id, ft);
-    const t = code.nodes[n.fn];
+    const t = code.nodes[useTarget(code.nodes, n)];
     const keys = t.kind === "def" ? (code.nodes[t.body!] as NodeOf<"lambda">).params : ft.params.map((_, i) => String(i));
     const portType = (k: string) => (k === "out" ? ft.ret : keys.includes(k) ? ft.params[keys.indexOf(k)] : null);
     for (const [k, g] of Object.entries(n.given)) {
       const pt = portType(k);
       const gt = givenTypes?.get(k) ?? expr(g, env, row);
-      if (pt) unifyAt(g, pt, gt, "a given port"); else err(n.id, `${nm(n.fn)} has no port ${k}`);
+      if (pt) unifyAt(g, pt, gt, "a given port"); else err(n.id, `${nm(useTarget(code.nodes, n))} has no port ${k}`);
     }
     for (const [k, b] of Object.entries(n.binds)) {
       const pt = portType(k) ?? s.fresh();
-      if (!portType(k)) err(n.id, `${nm(n.fn)} has no port ${k}`);
+      if (!portType(k)) err(n.id, `${nm(useTarget(code.nodes, n))} has no port ${k}`);
       // An answer is a value found by search; a function can't be guessed.
       try { s.requirePlain(pt); } catch (e) {
         if (e instanceof PlainError) err(n.id, `${nm(b)} can't be solved for: it has functions in it, and functions can't be guessed`); else throw e;
@@ -1048,7 +1048,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     // so nothing it does may be seen from outside: no world effects, and no
     // effects of our own either, whose handlers could be anything.
     const acts = own.filter((e) => e !== CHOICE && e !== DIVERGE);
-    if (acts.length) err(n.id, `${nm(n.fn)} performs ${acts.map(nm).join(", ")}, and a function that acts can't be run backwards`);
+    if (acts.length) err(n.id, `${nm(useTarget(code.nodes, n))} performs ${acts.map(nm).join(", ")}, and a function that acts can't be run backwards`);
     // What the function's row doesn't name yet (a function given as a
     // port, as in inverse) is whatever that function turns out to do: it
     // goes into the row around, as a call's would, rather than nowhere.
@@ -1057,13 +1057,13 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     // acts is refused when it's run backwards (relate.ts), not here.
     if (!one) {
       const effs = [...new Set([CHOICE, ...(loops ? [DIVERGE] : [])])];
-      choice(n.id, row, effs, `running ${nm(n.fn)} backwards may give several answers or none (Choice)${loops ? ` and may search forever (Diverge${why ? `: ${why}` : ""})` : ""}, which nothing here handles`);
+      choice(n.id, row, effs, `running ${nm(useTarget(code.nodes, n))} backwards may give several answers or none (Choice)${loops ? ` and may search forever (Diverge${why ? `: ${why}` : ""})` : ""}, which nothing here handles`);
     }
     const tail = s.resolveRow(ft.eff).tail;
     if (acts.length || tail === null) return;
     const around = s.resolveRow(row);
     try { s.unifyRow(around, { effs: around.effs, tail }); }
-    catch (e) { if (e instanceof EffectError) err(n.id, `running ${nm(n.fn)} backwards performs ${effName(e)}, which nothing here handles`); else throw e; }
+    catch (e) { if (e instanceof EffectError) err(n.id, `running ${nm(useTarget(code.nodes, n))} backwards performs ${effName(e)}, which nothing here handles`); else throw e; }
   }
 
   function callee(n: NodeOf<"call">): string {
@@ -1873,7 +1873,7 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   // makes the answer two). What the check makes of the body is its plan,
   // so a filling that leaves every plan of the group's solves as it was
   // is checked like any other; one that changes a plan, on its own.
-  const solves = Object.values(code.nodes).filter((n): n is Use => isUse(n) && h.group.includes(n.fn));
+  const solves = Object.values(code.nodes).filter((n): n is Use => isUse(n) && h.group.includes(useTarget(code.nodes, n)));
   const plans = (c: Code) => solves.map((n) => {
     try {
       const p = planSolve(c, n);
@@ -2141,7 +2141,7 @@ function dependents(code: Code, group: Id[]): Set<Id> {
   for (const d of code.defs) {
     for (const id of subtree(code, d)) {
       const n = code.nodes[id];
-      let t = n.kind === "ref" ? n.target : isUse(n) ? n.fn : null;
+      let t = n.kind === "ref" ? n.target : isUse(n) ? useTarget(code.nodes, n) : null;
       if (t && owner.has(t)) t = owner.get(t)!;
       if (t && t !== d) usedBy.set(t, [...(usedBy.get(t) ?? []), d]);
     }

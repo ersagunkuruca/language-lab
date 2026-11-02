@@ -29,7 +29,7 @@ import { reachedFrom } from "./scalar.ts";
 import { resolveArithmetic } from "../../ters/src/lang/arith.ts";
 import { intLit } from "../../ters/src/lang/int.ts";
 import { hostOp, ownOperations } from "../../ters/src/lang/hosts.ts";
-import { children, dependencies, subtree, type Code, type Id, type Node, type NodeOf, type Use, isUse } from "../../ters/src/model.ts";
+import { children, dependencies, subtree, type Code, type Id, type Node, type NodeOf, type Use, isUse, useTarget } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { CHOICE, DIVERGE, INT, NUMBER, STRING, Subst, type Row, type Type } from "../../ters/src/lang/types.ts";
 import { fieldShapes, shapeOf, type Shape } from "../../ters/src/lang/nested.ts";
@@ -1319,7 +1319,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     if (!solvers.has(n.id)) {
       const name = `solve$${solvers.size}`;
       solvers.set(n.id, name);
-      const label = (port: string) => names[`${n.fn}#${port}`] ?? names[port] ?? port;
+      const label = (port: string) => names[`${useTarget(code.nodes, n)}#${port}`] ?? names[port] ?? port;
       const bound = Object.values(n.binds);
       if (relational(n) && modes.solver(n, name, modeEmit(true), bound.length === 1 && isList(ty(bound[0])))) {
         solverCode.push(...modes.code.splice(0));
@@ -1331,12 +1331,12 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         // A mode with several answers, or a goal that waits: the relational
         // interpreter runs it.
         const given = Object.keys(n.given), ps = given.map((_, i) => `g${i}`);
-        solverCode.push(`// ${names[n.fn] ?? n.fn}, run backwards by the relational interpreter: given ${given.map(label).join(", ")}, ` +
+        solverCode.push(`// ${names[useTarget(code.nodes, n)] ?? useTarget(code.nodes, n)}, run backwards by the relational interpreter: given ${given.map(label).join(", ")}, ` +
           `solve for ${Object.keys(n.binds).map(label).join(", ")}\nfunction ${name}(${ps.join(", ")}) {\n` +
-          `return $relate($program, ${JSON.stringify(n.fn)}, { ${given.map((g, i) => `${JSON.stringify(g)}: ${ps[i]}`).join(", ")} }, ${JSON.stringify(Object.keys(n.binds))});\n}`);
+          `return $relate($program, ${JSON.stringify(useTarget(code.nodes, n))}, { ${given.map((g, i) => `${JSON.stringify(g)}: ${ps[i]}`).join(", ")} }, ${JSON.stringify(Object.keys(n.binds))});\n}`);
         return name;
       }
-      const c = compileSolve(name, planSolve(code, n).rel!, planSolve(code, n).known, Object.keys(n.binds), names[n.fn] ?? n.fn, label);
+      const c = compileSolve(name, planSolve(code, n).rel!, planSolve(code, n).known, Object.keys(n.binds), names[useTarget(code.nodes, n)] ?? useTarget(code.nodes, n), label);
       solverCode.push(c.code);
       if (c.once) onceSolvers.add(n.id);
     }

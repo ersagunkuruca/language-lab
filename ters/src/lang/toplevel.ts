@@ -13,7 +13,7 @@
 // any other edit.
 
 import type { Code, Id, Node, NodeData, NodeOf, Use } from "../model.ts";
-import { isUse } from "../model.ts";
+import { isUse, useTarget } from "../model.ts";
 import { children, collect, freshId, ownerOfTypeParts, parentAt, parentOf, replace, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 
@@ -157,7 +157,7 @@ export function usesOfDefinition(code: Code, def: Id): Id[] {
     switch (n.kind) {
       case "ref": case "tref": return into(n.target);
       case "arm": return into(n.variant);
-      case "solve": return into(n.fn);
+      case "solve": return into(useTarget(code.nodes, n));
       default: return false;
     }
   }).map((n) => n.id);
@@ -190,7 +190,7 @@ const lambdaOf = (code: Code, def: Id): NodeOf<"lambda"> | null => {
 };
 
 // The solves that run `def` backwards.
-const solvesOf = (code: Code, def: Id) => Object.values(code.nodes).filter((n): n is Use => isUse(n) && n.fn === def);
+const solvesOf = (code: Code, def: Id) => Object.values(code.nodes).filter((n): n is Use => isUse(n) && useTarget(code.nodes, n) === def);
 
 export function addParameter(code: Code, names: Names, def: Id, rawName: string): Top {
   const d = code.nodes[def] as NodeOf<"def">;

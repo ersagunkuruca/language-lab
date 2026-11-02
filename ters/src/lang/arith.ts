@@ -23,7 +23,7 @@
 // keep working, and the meaning hash is of the program as written.
 
 import type { Code, Id, Node, NodeData, NodeOf, Use } from "../model.ts";
-import { isUse } from "../model.ts";
+import { isUse, useTarget } from "../model.ts";
 import { freshId } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { B } from "../prelude.ts";
@@ -67,7 +67,7 @@ export const preludeDef = (name: string): Id | undefined =>
 
 export const usesGenericArithmetic = (code: Code) => {
   const ops = interfaceOps(code);
-  return Object.values(code.nodes).some((n) => (n.kind === "ref" && (n.target in AT || ops.has(n.target))) || (isUse(n) && ops.has(n.fn)) || (n.kind === "lit" && n.of !== undefined && DATA_NUMBERS.has(n.of)));
+  return Object.values(code.nodes).some((n) => (n.kind === "ref" && (n.target in AT || ops.has(n.target))) || (isUse(n) && ops.has(useTarget(code.nodes, n))) || (n.kind === "lit" && n.of !== undefined && DATA_NUMBERS.has(n.of)));
 };
 
 // Whether resolveArithmetic changes anything: it also lifts recursive lets
@@ -304,7 +304,7 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
   // from positions to that definition's parameters.
   const implementSolve = (id: Id, env: Env) => {
     const n = nodes[id] as Use;
-    const ref: NodeOf<"ref"> = { id, kind: "ref", target: n.fn };
+    const ref: NodeOf<"ref"> = { id, kind: "ref", target: useTarget(nodes, n) };
     const before = nodes[id];
     nodes[id] = ref;
     implement(id, env);
@@ -320,7 +320,7 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
     }
     const d = nodes[target];
     const lam = d?.kind === "def" && d.body ? nodes[d.body] : null;
-    if (lam?.kind !== "lambda") throw new Error(`${names[n.fn] ?? n.fn} is given by ${names[target] ?? target}, which isn't a definition of its ports`);
+    if (lam?.kind !== "lambda") throw new Error(`${names[useTarget(nodes, n)] ?? useTarget(nodes, n)} is given by ${names[target] ?? target}, which isn't a definition of its ports`);
     const key = (k: string) => (k === "out" ? k : lam.params[Number(k)]);
     const re = (r: Record<string, Id>) => Object.fromEntries(Object.entries(r).map(([k, v]) => [key(k), v]));
     nodes[id] = { ...n, fn: target, given: re(n.given), binds: re(n.binds) };
@@ -331,13 +331,13 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
   // solved in whole numbers), its ports moved to the copy's parameters.
   const instanceSolve = (id: Id, env: Env) => {
     const n = nodes[id] as Use;
-    const sc = schemes.get(n.fn), t = info.solveAt?.get(id);
-    if (!sc || !t || !constrained(sc).length || nodes[n.fn]?.kind !== "def") return;
+    const sc = schemes.get(useTarget(nodes, n)), t = info.solveAt?.get(id);
+    if (!sc || !t || !constrained(sc).length || nodes[useTarget(nodes, n)]?.kind !== "def") return;
     const at: Env = new Map();
     bind(sc.type, close(t, env), new Set(constrained(sc)), at);
-    const target = instance(n.fn, at, sc);
-    if (target === n.fn) return;
-    const from = nodes[(nodes[n.fn] as NodeOf<"def">).body!], to = nodes[(nodes[target] as NodeOf<"def">).body!];
+    const target = instance(useTarget(nodes, n), at, sc);
+    if (target === useTarget(nodes, n)) return;
+    const from = nodes[(nodes[useTarget(nodes, n)] as NodeOf<"def">).body!], to = nodes[(nodes[target] as NodeOf<"def">).body!];
     if (from?.kind !== "lambda" || to?.kind !== "lambda") return;
     const key = (k: string) => (k === "out" ? k : to.params[from.params.indexOf(k)] ?? k);
     const re = (r: Record<string, Id>) => Object.fromEntries(Object.entries(r).map(([k, v]) => [key(k), v]));
@@ -355,7 +355,7 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
         if (x?.t === "con" && info.implementations?.has(implementationKey(f.iface, x))) { nodes[id] = { id, kind: "ref", target: f.field }; opAt.set(id, x); }
       }
       if (nodes[id].kind === "ref" && ops.has((nodes[id] as NodeOf<"ref">).target)) implement(id, env);
-      if (isUse(nodes[id]) && ops.has((nodes[id] as Use).fn)) implementSolve(id, env);
+      if (isUse(nodes[id]) && ops.has(useTarget(nodes, (nodes[id] as Use)))) implementSolve(id, env);
       else if (isUse(nodes[id])) instanceSolve(id, env);
       const n = nodes[id];
       if (n.kind === "ref") {

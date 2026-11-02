@@ -13,7 +13,7 @@
 // one predicate with a definition per mode, promised to agree.
 
 import type { Code, Id, Node, NodeOf, Use } from "../model.ts";
-import { isUse } from "../model.ts";
+import { isUse, useTarget } from "../model.ts";
 import { derivedFrom, nodesWhere, subtree } from "../model.ts";
 import { S } from "./std.ts";
 
@@ -68,10 +68,10 @@ function fieldDirection(code: Code, n: Use, f: NodeOf<"field">): Use | null {
 // The solve rewritten onto the direction that its given ports ask for, or
 // null when none does (the relation is then solved as it always was).
 export function directionFor(code: Code, n: Use, ways = directionsIn(code)): Use | null {
-  const f = code.nodes[n.fn];
+  const f = code.nodes[useTarget(code.nodes, n)];
   if (f?.kind === "field" && f.results) return fieldDirection(code, n, f);
-  const ds = ways.get(n.fn);
-  const theirs = ds && paramsOf(code, n.fn);
+  const ds = ways.get(useTarget(code.nodes, n));
+  const theirs = ds && paramsOf(code, useTarget(code.nodes, n));
   if (!theirs) return null;
   const given = new Set(Object.keys(n.given).filter((k) => k !== "out").map((k) => theirs.indexOf(k)));
   if (given.has(-1)) return null;
@@ -90,7 +90,7 @@ export function directionFor(code: Code, n: Use, ways = directionsIn(code)): Use
 // Every such solve rewritten; the same code back when there are none.
 export function useDirections(code: Code): Code {
   const ways = directionsIn(code);
-  const asked = (n: Use) => { const f = code.nodes[n.fn]; return ways.has(n.fn) || (f?.kind === "field" && !!f.results); };
+  const asked = (n: Use) => { const f = code.nodes[useTarget(code.nodes, n)]; return ways.has(useTarget(code.nodes, n)) || (f?.kind === "field" && !!f.results); };
   let nodes: Code["nodes"] | null = null;
   const rewritten: Id[] = [];
   for (const id of nodesWhere(code, "solve", (n) => isUse(n))) {
@@ -133,7 +133,7 @@ export function givenBy(code: Code, b: Id, results: Id[]): Id[] | null {
 // given by an expression of the inputs: computed forward, one answer, the
 // way a function is (sqrt(x² + y²) is no search for a length).
 export function computedForward(code: Code, n: Use): boolean {
-  const def = code.nodes[n.fn];
+  const def = code.nodes[useTarget(code.nodes, n)];
   if (def?.kind !== "def" || !def.results || !def.body) return false;
   const lam = code.nodes[def.body];
   if (lam?.kind !== "lambda") return false;

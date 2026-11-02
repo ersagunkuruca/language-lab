@@ -33,7 +33,7 @@
 // test/modes.test.ts compares what it says with what relate.ts does.
 
 import type { Code, Id, Node, NodeOf, Use } from "../model.ts";
-import { children, derived, derivedFrom, ownerOfTypeParts, subtree } from "../model.ts";
+import { children, derived, derivedFrom, ownerOfTypeParts, subtree, useTarget } from "../model.ts";
 import { NUMERIC } from "./equations.ts";
 import { planSolve, type SolvePlan } from "./solve.ts";
 import { computedForward } from "./directions.ts";
@@ -838,7 +838,7 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
     const givenSlots = Object.values(n.given).map(slot);
     const bound = Object.values(n.binds).map(slot);
     return {
-      text: `solve ${nm(n.fn)}`, slots: [...givenSlots, ...bound], exec: { k: "solve", node: n.id },
+      text: `solve ${nm(useTarget(nodes, n))}`, slots: [...givenSlots, ...bound], exec: { k: "solve", node: n.id },
       ready: (st) => {
         if (!givenSlots.every((s) => st.known.has(s)) || bound.every((s) => st.known.has(s))) return null;
         const v = solveVerdict(n, ctx);
@@ -856,14 +856,14 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
     let plan: SolvePlan | null = null;
     try { plan = planSolve(code, n); } catch { return null; }
     if (plan.mode === "solver") return { answers: { fail: plan.canFail, many: plan.many }, ends: true, loops: [], stuck: [], dynamic: [], order: [], plan: NO_PLAN };
-    if (nodes[n.fn].kind !== "def") return { answers: MANY, ends: true, loops: [], stuck: [], dynamic: [], order: [], plan: NO_PLAN };
+    if (nodes[useTarget(nodes, n)].kind !== "def") return { answers: MANY, ends: true, loops: [], stuck: [], dynamic: [], order: [], plan: NO_PLAN };
     const k = solveKey(n, ctx);
-    return k && mode({ k: "def", id: n.fn }, k.known, k.spec);
+    return k && mode({ k: "def", id: useTarget(nodes, n) }, k.known, k.spec);
   }
 
   // The mode a solve node names: its given ports, and the functions given.
   function solveKey(n: Use, ctx?: Ctx): { known: Set<string>; spec: Map<number, Fn> } | null {
-    const f = nodes[n.fn];
+    const f = nodes[useTarget(nodes, n)];
     const lam = f.kind === "def" ? nodes[f.body!] : null;
     if (lam?.kind !== "lambda") return null;
     const known = new Set<string>(Object.keys(n.given).map((p) => (p === "out" ? "out" : String(lam.params.indexOf(p)))));
@@ -927,7 +927,7 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
   const ofSolve = (n: Use) => checked(() => {
     const v = solveVerdict(n);
     const s = solveKey(n);
-    return { v, key: s && keyOf({ k: "def", id: n.fn }, s.known, s.spec) };
+    return { v, key: s && keyOf({ k: "def", id: useTarget(nodes, n) }, s.known, s.spec) };
   });
   // known: parameter positions as "0", "1", …, and "out".
   const ofMode = (def: Id, known: string[], spec: Map<number, Fn> = new Map()) =>

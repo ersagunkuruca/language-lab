@@ -20,7 +20,7 @@
 //     fresh id, and far past where two different definitions could share one.
 
 import type { Code, Id, Node } from "./model.ts";
-import { isUse } from "./model.ts";
+import { isUse, useTarget } from "./model.ts";
 import { ownerOfTypeParts } from "./model.ts";
 import { base32, sha256 } from "./sha256.ts";
 
@@ -206,7 +206,7 @@ function canon(code: Code, defId: Id, group: Map<Id, number | null>, memo: Map<I
       case "tfun": return n.effects?.length ? ["tfun", n.params.map(go), go(n.result), n.effects.map(defRef)] : ["tfun", n.params.map(go), go(n.result)];
       case "match": return ["match", go(n.scrutinee), n.arms.map(go), n.otherwise ? go(n.otherwise) : null];
       case "solve": {
-        const t = code.nodes[n.fn];
+        const t = code.nodes[useTarget(code.nodes, n)];
         const body = t?.kind === "def" && t.body ? code.nodes[t.body] : null;
         const params = body && body.kind === "lambda" ? body.params : [];
         const key = (k: string) => (params.includes(k) ? `p${params.indexOf(k)}` : k);
@@ -215,7 +215,7 @@ function canon(code: Code, defId: Id, group: Map<Id, number | null>, memo: Map<I
         // whatever order the record's keys were written in.
         const given = sorted(n.given).map(([k, e]) => [k, go(e)]);
         const binds = sorted(n.binds).map(([k, e]) => [k, go(e)]);
-        return ["solve", defRef(n.fn), given, binds, go(n.body)];
+        return ["solve", defRef(useTarget(code.nodes, n)), given, binds, go(n.body)];
       }
       case "fold": return ["fold", go(n.scrutinee), n.arms.map(go)];
       case "arm": return ["arm", part(n.variant), n.binds.map(go), n.results.map((r) => (r ? go(r) : null)), go(n.body)];

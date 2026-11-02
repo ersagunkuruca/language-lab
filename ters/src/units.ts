@@ -11,7 +11,7 @@
 // isn't in scope.
 
 import type { Code, Id, Node } from "./model.ts";
-import { get } from "./model.ts";
+import { get, useTarget } from "./model.ts";
 
 // Angles are plain numbers, as in SI: a radian is a length over a length.
 export const BASE = ["m", "s", "kg", "A"] as const;
@@ -154,8 +154,8 @@ export function constraints(code: Code, defId: Id, prefix = "", bindings: Map<Id
         // A call read sideways: each port is a given expression or a binder.
         Object.values(n.given).forEach(visit);
         const term = (k: string) => (n.given[k] ? t(n.given[k]) : n.binds[k] ? t(n.binds[k]) : `${prefix}${id}:${k}`);
-        if (code.nodes[n.fn]?.kind === "def") out.push(...calleeConstraints(code, n.fn, term, `${prefix}${id}/`, [...path, defId]));
-        else if (code.nodes[n.fn]?.kind === "builtin") out.push(...rules((code.nodes[n.fn] as { op: string }).op, term, id, id));
+        if (code.nodes[useTarget(code.nodes, n)]?.kind === "def") out.push(...calleeConstraints(code, useTarget(code.nodes, n), term, `${prefix}${id}/`, [...path, defId]));
+        else if (code.nodes[useTarget(code.nodes, n)]?.kind === "builtin") out.push(...rules((code.nodes[useTarget(code.nodes, n)] as { op: string }).op, term, id, id));
         visit(n.body);
         same(id, n.body, "solve", id);
         return;

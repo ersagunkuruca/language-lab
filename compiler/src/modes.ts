@@ -23,6 +23,7 @@
 // mode for the rest hands the array on.
 
 import type { Code, Id, NodeOf, Use } from "../../ters/src/model.ts";
+import { useTarget } from "../../ters/src/model.ts";
 import { analyzer, determinism, type Exec, type Plan } from "../../ters/src/lang/modes.ts";
 import { CONS, INT_OPS, NIL, S } from "../../ters/src/lang/std.ts";
 import { B } from "../../ters/src/prelude.ts";
@@ -326,7 +327,7 @@ export function modeCompiler(code: Code, names: Record<Id, string>) {
     if (!v || !v.ends || v.stuck.length || v.dynamic.length) return null;
     const d = determinism(v.answers);
     if (d !== "det" && d !== "semidet") return null;
-    const def = nodes[n.fn];
+    const def = nodes[useTarget(nodes, n)];
     if (def.kind !== "def") return null;
     const lam = nodes[def.body!] as NodeOf<"lambda">;
     const portOf = (k: string) => (k === "out" ? "out" : String(lam.params.indexOf(k)));
@@ -334,19 +335,19 @@ export function modeCompiler(code: Code, names: Record<Id, string>) {
     if (given.includes("-1")) return null;
     const mark = out.length, size = made.size;
     try {
-      const f = modeFn(n.fn, given, emit);
+      const f = modeFn(useTarget(nodes, n), given, emit);
       const ins = order(given), outs = portsOf(lam).filter((p) => !ins.includes(p));
       const gs = Object.keys(n.given).map((_, i) => `g${i}`);
       const at = (p: string) => gs[given.indexOf(p)];
       const pick = Object.keys(n.binds).map((k) => (outs.length === 1 ? "r" : `r[${outs.indexOf(portOf(k))}]`));
-      out.push(`// ${names[n.fn] ?? n.fn}, run backwards (${d}): its plan written out\nfunction ${name}(${gs.join(", ")}) {\nconst r = ${f}(${ins.map(at).join(", ")});\nreturn r === $no ? [] : [[${pick.join(", ")}]];\n}\n` +
+      out.push(`// ${names[useTarget(nodes, n)] ?? useTarget(nodes, n)}, run backwards (${d}): its plan written out\nfunction ${name}(${gs.join(", ")}) {\nconst r = ${f}(${ins.map(at).join(", ")});\nreturn r === $no ? [] : [[${pick.join(", ")}]];\n}\n` +
         // At most one answer: its binds (one bind as itself), or $no
         // (GAPS.md P2).
         `function ${name}$one(${gs.join(", ")}) {\n${(pick.length === 1 && pick[0] === "r") || (outs.length > 1 && pick.length === outs.length && pick.every((p, i) => p === `r[${i}]`)) ? `return ${f}(${ins.map(at).join(", ")});` : `const r = ${f}(${ins.map(at).join(", ")});\nreturn r === $no ? $no : ${pick.length === 1 ? pick[0] : `[${pick.join(", ")}]`};`}\n}`);
       if (into && pick.length === 1 && pick[0] === "r") {
         const mark = out.length, size = made.size;
         try {
-          const g = modeFn(n.fn, given, emit, true);
+          const g = modeFn(useTarget(nodes, n), given, emit, true);
           out.push(`function ${name}$into(${["d$", ...gs].join(", ")}) {\nreturn ${g}(${["d$", ...ins.map(at)].join(", ")});\n}`);
           intoSolvers.add(name);
         } catch (e) {

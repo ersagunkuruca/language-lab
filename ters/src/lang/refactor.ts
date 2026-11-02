@@ -5,7 +5,7 @@
 // adds a hole arm to every case analysis that needs one.
 
 import type { Code, Id, Node, NodeData, NodeOf } from "../model.ts";
-import { children, freshId, ownerOfTypeParts } from "../model.ts";
+import { children, freshId, ownerOfTypeParts, useNode } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import type { Filling } from "./infer.ts";
 import { INT, NUMBER, STRING, type Type } from "./types.ts";
@@ -148,7 +148,7 @@ export function fillHole(code: Code, names: Names, hole: Id, f: Filling, library
         taken.add(nn[b]);
         return [r, b];
       }));
-      data = { kind: "solve", fn: f.target, given, binds, body: add({ kind: "hole" }) };
+      data = useNode(add, f.target, given, binds, add({ kind: "hole" }));
       break;
     }
     // A match on values (L164c): one arm, its value a literal of the
