@@ -475,12 +475,83 @@ export function setFieldType(code: Code, names: Names, field: Id, t: TypeSpec): 
   return { ok: true, code: collect({ nodes, defs: code.defs }), names, select: field, note: `Changed the type of ${nameOf(names, field)}.` };
 }
 
+// ------------------------------------------------------- type parameters
+
+// A data type's or an effect's type parameters (`Stack a`, `State s`), or
+// an operation's own (`await : Ticket a → a`, model.ts), added and removed
+// the way a function's inputs are (BACKLOG E198). The type's own uses of
+// itself, in its fields, get the new parameter as their argument, so
+// `Tree` holding a `Tree` becomes `Tree a` holding a `Tree a`. A use in
+// another type's field would need an argument nobody chose, so that is
+// refused with where; values of the type need nothing, their types are
+// inferred.
+const LETTERS = "abcdefghijklmnopqrstuvwxyz";
+export function addTypeParameter(code: Code, names: Names, type: Id, rawName: string, variant?: Id): Top {
+  const td = typedefOf(code, type);
+  if (td.interface) return { ok: false, reason: "an interface takes one type, its a" };
+  if (td.row) return { ok: false, reason: "a row of effects has no parameters" };
+  const v = variant ? code.nodes[variant] : null;
+  if (variant && (v?.kind !== "variant" || !td.variants.includes(variant))) return { ok: false, reason: "that isn't one of its operations" };
+  const taken = [...td.params, ...((v as NodeOf<"variant"> | null)?.params ?? [])].map((p) => names[p]);
+  const name = trim(rawName) || [...LETTERS].find((x) => !taken.includes(x)) || "t";
+  if (!/^[a-z][A-Za-z0-9_']*$/.test(name)) return { ok: false, reason: `a type parameter is written in lower case, like a or item (not ${name})` };
+  if (taken.includes(name)) return { ok: false, reason: `${nameOf(names, variant ?? type)} already has a type parameter named ${name}` };
+  const { nodes, add } = builder(code);
+  const nn: Names = { ...names };
+  const b = add({ kind: "binder" });
+  nn[b] = name;
+  if (variant) {
+    const op = v as NodeOf<"variant">;
+    nodes[variant] = { ...op, params: [...(op.params ?? []), b] };
+    return { ok: true, code: { nodes, defs: code.defs }, names: nn, select: variant,
+      note: `${nameOf(names, variant)} has its own type ${name} now, fresh at each call: give an input or what it gives back the type ${name}.` };
+  }
+  const own = new Set(subtree(code, type));
+  const uses = Object.values(code.nodes).filter((n): n is NodeOf<"tref"> => n.kind === "tref" && n.target === type);
+  const outside = uses.filter((u) => !own.has(u.id));
+  if (outside.length) {
+    const owners = defOwners(code);
+    const where = [...new Set(outside.map((u) => owners.get(u.id)).filter((d): d is Id => !!d))].map((d) => nameOf(names, d));
+    return { ok: false, reason: `${nameOf(names, type)} is named in the types of ${list(where) || "other code"}, which would need an argument for ${name}; change those first` };
+  }
+  nodes[td.id] = { ...td, params: [...td.params, b] };
+  for (const u of uses) nodes[u.id] = { ...u, args: [...u.args, add({ kind: "tref", target: b, args: [] })] };
+  return { ok: true, code: { nodes, defs: code.defs }, names: nn, select: type,
+    note: `${nameOf(names, type)} takes a type ${name} now: a field can hold an ${name}.${uses.length ? ` Its ${uses.length === 1 ? "use" : `${uses.length} uses`} of itself became ${nameOf(names, type)} ${[...td.params, b].map((p) => nn[p] ?? "?").join(" ")}.` : ""}` };
+}
+
+export function removeTypeParameter(code: Code, names: Names, type: Id, param: Id): Top {
+  const td = typedefOf(code, type);
+  const op = td.variants.map((v) => code.nodes[v] as NodeOf<"variant">).find((v) => v.params?.includes(param));
+  const at = td.params.indexOf(param);
+  if (at < 0 && !op) return { ok: false, reason: "that isn't one of its type parameters" };
+  if (td.interface) return { ok: false, reason: "an interface takes one type, its a" };
+  // The type's own uses of itself pass it on (`Tree a` in Tree a): those go with it.
+  const passed = new Set(at < 0 ? [] : Object.values(code.nodes).flatMap((n) => n.kind === "tref" && n.target === type && n.args[at] ? [n.args[at]] : []));
+  const used = Object.values(code.nodes).some((n) => n.kind === "tref" && n.target === param && !passed.has(n.id));
+  if (used) return { ok: false, reason: `a type in ${nameOf(names, type)} still names ${nameOf(names, param)}; change it first` };
+  const nodes = { ...code.nodes };
+  if (op) {
+    const rest = op.params!.filter((p) => p !== param);
+    const { params: _, ...bare } = op;
+    nodes[op.id] = rest.length ? { ...op, params: rest } : bare;
+  } else {
+    nodes[td.id] = { ...td, params: td.params.filter((p) => p !== param) };
+    for (const n of Object.values(code.nodes)) if (n.kind === "tref" && n.target === type && n.args.length > at) nodes[n.id] = { ...n, args: n.args.filter((_, i) => i !== at) };
+  }
+  const next = collect({ nodes, defs: code.defs });
+  const nn = Object.fromEntries(Object.entries(names).filter(([id]) => next.nodes[id]));
+  return { ok: true, code: next, names: nn, select: op?.id ?? type, note: `Removed the type parameter ${nameOf(names, param)}.` };
+}
+
 // What a field's type can start with, for a picker that then asks for
 // each argument the same way: the builtin types, the type's own parameters,
 // and every data type with how many arguments it takes (Bool, List, Pair,
 // Optional, the program's own, and the type being edited, for recursion).
-export function typeHeads(code: Code, type: Id): { target: Id; arity: number }[] {
-  const out = ["type.number", "type.int", "type.string", ...typedefOf(code, type).params].map((target) => ({ target, arity: 0 }));
+// An operation (`variant`) adds its own type parameters.
+export function typeHeads(code: Code, type: Id, variant?: Id): { target: Id; arity: number }[] {
+  const own = variant ? (code.nodes[variant] as NodeOf<"variant"> | undefined)?.params ?? [] : [];
+  const out = ["type.number", "type.int", "type.string", ...typedefOf(code, type).params, ...own].map((target) => ({ target, arity: 0 }));
   for (const d of code.defs) {
     const n = code.nodes[d];
     const b = n?.kind === "def" && n.body ? code.nodes[n.body] : null;

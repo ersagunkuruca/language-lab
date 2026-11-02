@@ -343,6 +343,13 @@ palette picks only.
   a data type, or the type itself). If that type takes arguments, you
   pick each one the same way. So for a pair of a whole number and text,
   pick *Tuple2*, then *Int*, then *Text*: `(Int, Text)`.
+- A data type or an effect can take **type parameters**, as `List a` and
+  `State s` do: *Add the type parameter* on the type gives it an `a`
+  (then `b`, …, or the name you type), and a field can then hold an `a`.
+  A field holding the type itself becomes `Stack a` with it. An
+  operation of an effect can have its own, fresh at each call, like
+  `await : Ticket a → a`. Select one to rename it; × removes one no field
+  uses.
 - In a type with only one case, a field is also the function that reads
   it. The palette offers `pages(□)` for a chapter's page count, and
   `first(□)` and `second(□)` for a tuple `(a, b)`. A type with several cases is taken
