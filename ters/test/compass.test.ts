@@ -92,3 +92,13 @@ test("the angle bisector tool: the line halving the angle at the corner", () => 
   const r = side(-2, -1.5, 2, -1.5);
   assert.ok(Math.abs(side(2, -1.5, 0.7, 2.4) - r) < 1e-9 && Math.abs(side(0.7, 2.4, -2, -1.5) - r) < 1e-9, `incentre (${ix}, ${iy})`);
 });
+
+test("a line from points that coincide is nothing, not a line pointing wherever rounding says", () => {
+  const { step, build } = compass();
+  for (const [cx, cy] of [[1, 2], [0.3, -1.7], [2.5, 0.4]]) {
+    // 2 a circle round 0 through 1; the perpendicular from its own centre; an angle with a side point on its corner.
+    const shapes = build(step("free", cx, cy), step("free", cx + 1.3, cy + 0.2), step("circle", 0, 1), step("perpendicular", 0, 2), step("angle bisector", 1, 0, 0), step("perpendicular", 1, 2));
+    assert.deepEqual([3, 4].map((i) => shapes[i].fields.length), [0, 0]);
+    assert.equal(shapes[5].fields.length, 1);
+  }
+});
