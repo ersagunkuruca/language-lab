@@ -475,6 +475,47 @@ export function setFieldType(code: Code, names: Names, field: Id, t: TypeSpec): 
   return { ok: true, code: collect({ nodes, defs: code.defs }), names, select: field, note: `Changed the type of ${nameOf(names, field)}.` };
 }
 
+// ------------------------------------------------------------------ ways
+
+// A way of an interface's operation (WAYS.md, BACKLOG E210): an ordinary
+// definition marked as one way of computing that operation from the
+// others, `differ by equal = (a, b) => not(equal(a, b))`. Added with a
+// hole for its body and an input for each of the operation's; the checker
+// says what is wrong with one (nothing grounds, the wrong type), so no
+// check here. Its cost is the compiler's to weigh against the others.
+export function addWay(code: Code, names: Names, iface: Id, field: Id, rawName: string): Top {
+  const td = typedefOf(code, iface);
+  if (!td.interface) return { ok: false, reason: "only an interface's operations have ways" };
+  if (!td.variants.some((v) => (code.nodes[v] as NodeOf<"variant">).fields.includes(field))) return { ok: false, reason: "that isn't one of its operations" };
+  const op = nameOf(names, field);
+  let name = trim(rawName);
+  if (!name) for (let i = 1; !name || nameTaken(code, names, name); i++) name = `${op} by its way${i > 1 ? ` ${i}` : ""}`;
+  if (nameTaken(code, names, name)) return { ok: false, reason: `there is already a definition named ${name}` };
+  const t = code.nodes[(code.nodes[field] as NodeOf<"field">).type];
+  const f = code.nodes[field] as NodeOf<"field">;
+  const n = t?.kind === "tfun" ? t.params.length : 0;
+  const { nodes, add } = builder(code);
+  const nn: Names = { ...names };
+  const params = Array.from({ length: n }, (_, i) => { const b = add({ kind: "binder" }); nn[b] = f.ports?.[i] ?? LETTERS[23 + i] ?? `input ${i + 1}`; return b; });
+  const hole = add({ kind: "hole" });
+  const def = add({ kind: "def", body: add({ kind: "lambda", params, body: hole }), way: field });
+  nn[def] = name;
+  return { ok: true, code: { nodes, defs: [...code.defs, def] }, names: nn, select: def,
+    note: `New way of ${op}, ${name}: write ${op} from ${nameOf(names, iface)}'s other operations in its hole. An implementation can then leave ${op} to its ways.` };
+}
+
+// A way's cost (null: the usual, 1 plus what it uses), or a way made an
+// ordinary definition again (way: null).
+export function setWay(code: Code, names: Names, def: Id, way: { cost: number | null } | null): Top {
+  const d = code.nodes[def];
+  if (d?.kind !== "def" || !d.way) return { ok: false, reason: "that isn't a way of an operation" };
+  if (way?.cost != null && !(Number.isFinite(way.cost) && way.cost >= 0)) return { ok: false, reason: "a cost is a number, 0 or more" };
+  const { way: field, cost: _, ...plain } = d;
+  const nodes = { ...code.nodes, [def]: way ? { ...plain, way: field, ...(way.cost != null ? { cost: way.cost } : {}) } : plain };
+  return { ok: true, code: { nodes, defs: code.defs }, names, select: def,
+    note: way ? `${nameOf(names, def)} costs ${way.cost ?? "the usual"}${way.cost != null ? " plus what it uses" : ""}.` : `${nameOf(names, def)} is an ordinary definition now, no longer a way of ${nameOf(names, field)}.` };
+}
+
 // ------------------------------------------------------- type parameters
 
 // A data type's or an effect's type parameters (`Stack a`, `State s`), or
