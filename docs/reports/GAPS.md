@@ -2466,6 +2466,8 @@ to 1560 ms (noisy, 2 to 12%). The fix is a set on a known record type
 compiled as the constructor with one field changed, and a chain of sets on
 one record as one copy; L167 (several fields at once) is the language
 half.
+Done (C105): each set is the record made again by a function of the
+program's own, and a chain of them one copy; clinic about 10% faster.
 
 **K3. Copies per event (perf, C107).** The garbage collector is 23% of
 the compiled time: an event copies the `Clinic` six to nine times
