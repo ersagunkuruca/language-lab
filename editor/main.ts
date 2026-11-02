@@ -3493,9 +3493,10 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
   if (tr?.result !== undefined && (action || value)) box.append(h("div", { class: "hint" }, choice ? "Its first answer: " : "Gives ", valueView(tr.result)));
   // A hole isn't a failure: it is where the program isn't written yet.
   // Nor is a run on values you didn't give: they're only a starting point.
+  // Nor the graph's own time limit (E207): Run main runs it in full.
   if (tr?.error) box.append(tr.error.message === "reached a hole"
     ? h("p", { class: "hint" }, "Values show once the holes on their way are filled.")
-    : !doc.examples?.[ui.def] || LIMIT.test(tr.error.message) ? h("p", { class: "hint" }, `No values on the wires: ${tr.error.message}.`)
+    : !doc.examples?.[ui.def] || LIMIT.test(tr.error.message) || /the graph waits/.test(tr.error.message) ? h("p", { class: "hint" }, `No values on the wires: ${tr.error.message}.`)
     : h("p", { class: "status-line bad" }, `Values stopped: ${tr.error.message}.`));
   return box;
 }
