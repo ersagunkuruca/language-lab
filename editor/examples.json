@@ -31,6 +31,7 @@
     { "program": "ledger", "label": "Bigger program: ledger, money entries totalled", "folders": ["ledger"], "run": { "args": ["book.csv"], "files": ["book.csv"] } },
     { "program": "chapters", "label": "Bigger program: chapters, a book split into chapters", "folders": ["chapters"], "run": { "args": ["book.md", "out"], "files": ["book.md"] } },
     { "program": "calc", "label": "Bigger program: calc, a calculator for big numbers", "folders": ["calc"] },
+    { "program": "clinic", "label": "Bigger program: clinic, a waiting-room simulation", "folders": ["compiler/gaps/clinic"] },
     { "program": "compass", "label": "Compass", "folders": ["compass"], "page": true, "editor": false }
   ]
 }
