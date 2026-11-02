@@ -149,6 +149,28 @@ const readsNoRest = (code: Code, n: NodeOf<"fold">, t: Id) => n.arms.every((a) =
   return !rests.size || !subtree(code, arm.body).some((x) => { const r = code.nodes[x]; return r?.kind === "ref" && rests.has(r.target); });
 });
 const foldJob = (code: Code, n: NodeOf<"match"> | NodeOf<"fold">, t: Id) => (n.kind === "fold" && readsNoRest(code, n, t) ? FOLD_OF_ITEMS : n.kind);
+// A match on `items of(s)` (or keys, entries) whose cons case doesn't use
+// the rest reads only the first: a job of its own, `HEAD` and the job's
+// id, which a row with a head for it does down the left of a tree (log n,
+// GAPS.md M3) and any other row as its whole listing. Dijkstra's frontier
+// (routes' `settle`) takes the smallest so, once per town: on a hash set
+// it was a sort per town (C63f). The refs read so, by node id.
+export const HEAD = "head of ";
+const headsRead = new WeakMap<Code, Set<Id>>();
+function headRefs(code: Code): Set<Id> {
+  let r = headsRead.get(code);
+  if (r) return r;
+  headsRead.set(code, (r = new Set()));
+  for (const n of Object.values(code.nodes)) {
+    if (n.kind !== "match") continue;
+    const s = code.nodes[n.scrutinee];
+    if (s?.kind !== "call" || code.nodes[s.fn]?.kind !== "ref") continue;
+    const cons = n.arms.map((a) => code.nodes[a] as NodeOf<"arm">).find((a) => a?.variant === CONS), rest = cons?.binds[1];
+    if (rest && !subtree(code, cons.body).some((x) => { const y = code.nodes[x]; return y.kind === "ref" && y.target === rest; })) r.add(s.fn);
+  }
+  return r;
+}
+const jobOf = (code: Code, n: NodeOf<"ref">) => (headRefs(code).has(n.id) ? HEAD + n.target : n.target);
 
 export function uses(code: Code, entry: Id, reps: Representation[]): string[] {
   const t = reps[0].of;
@@ -159,7 +181,7 @@ export function uses(code: Code, entry: Id, reps: Representation[]): string[] {
   const walk = (def: Id) => {
     for (const id of subtree(code, def)) {
       const n = code.nodes[id];
-      if (n.kind === "ref" && (variants.has(n.target) || costed.has(n.target))) out.add(n.target);
+      if (n.kind === "ref" && (variants.has(n.target) || costed.has(n.target))) out.add(jobOf(code, n));
       if ((n.kind === "match" || n.kind === "fold") && armsOver(code, n, variants)) out.add(foldJob(code, n, t));
       // A constructor given a field a match took out of another value
       // (`x :: rest` in a cons arm): its own job, since a representation
@@ -229,7 +251,7 @@ export function looped(code: Code, entry: Id, reps: Representation[]): Set<strin
     const n = code.nodes[id];
     if (!n) return;
     if (loop) {
-      if (n.kind === "ref" && (variants.has(n.target) || costed.has(n.target))) out.add(n.target);
+      if (n.kind === "ref" && (variants.has(n.target) || costed.has(n.target))) out.add(jobOf(code, n));
       if ((n.kind === "match" || n.kind === "fold") && armsOver(code, n, variants)) out.add(foldJob(code, n, t));
     }
     if (n.kind === "ref" && graph.has(n.target)) visit(n.target, loop);
@@ -287,7 +309,7 @@ export function choose(code: Code, entry: Id, reps: Representation[]): Choice {
     const [v, i] = at;
     return r.hidden?.[v]?.includes(i) ? (r.cost.space ?? "n") : (r.cost[v] ?? spec.cost[v]);
   };
-  const own = (r: Representation, j: string) => r.cost[j] ?? (j === FOLD_OF_ITEMS ? r.cost.fold : undefined);
+  const own = (r: Representation, j: string): string | undefined => j.startsWith(HEAD) ? (r.heads?.[j.slice(HEAD.length)] ? "log n" : own(r, j.slice(HEAD.length))) : r.cost[j] ?? (j === FOLD_OF_ITEMS ? r.cost.fold : undefined);
   const costs = (r: Representation) => Object.fromEntries([...jobs, "space"].map((j) => [j, own(r, j) ?? onto(r, j) ?? own(spec, j) ?? "?"]));
   const step = (c: string): Cost => (LADDER.includes(c) ? steps(1, c) : NEVER);
   // A job in a loop runs about n times (C63c): one order up, n² at most.

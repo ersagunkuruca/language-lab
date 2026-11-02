@@ -269,7 +269,8 @@ function asMeanings(k: Lang, code: Code, info: Info, names: Names, chosen: Repre
 // tree orders them by compare, which would see their shapes.
 // The table's keys, wherever the program's own definitions name one, are
 // Int or Text, which the table keeps as they are (a Float64's equal is
-// near). A helper generic in the key is given maps made elsewhere, where
+// near), or tuples of them, kept by their spelling (C63f). A helper
+// generic in the key is given maps made elsewhere, where
 // their keys are named. Whether each map has one holder no longer decides
 // it (C71): every version of a table stays a value (std.ts Table), so a
 // map read again after a change is still right; one holder is what makes
@@ -279,9 +280,14 @@ function inPlace(code: Code, info: Info, main: Id, defs: Id[], row: Representati
     const t0 = info.typeOf.get(id);
     if (!t0) continue;
     const t = info.subst.zonk(t0);
-    if (t.t === "con" && t.id === row.of) { const k = info.subst.zonk(t.args[0]); if (k.t !== "var" && (k.t !== "con" || (k.id !== INT && k.id !== STRING))) return false; }
+    if (t.t === "con" && t.id === row.of && !hashable(info.subst.zonk(t.args[0]))) return false;
   }
   return true;
+  // Int, Text, or a tuple of them (C63f, std.ts `spelling`).
+  function hashable(k: Type): boolean {
+    if (k.t === "var") return true;
+    return k.t === "con" && (k.id === INT || k.id === STRING || (/^std\.tuple\d+$/.test(k.id) && k.args.every((a) => { const z = info.subst.zonk(a); return z.t !== "var" && hashable(z); })));
+  }
 }
 
 function keyed(info: Info, defs: Id[], code: Code, of: Id): boolean {
