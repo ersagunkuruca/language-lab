@@ -15,6 +15,7 @@ export function parseValue(text: string, code: Code, names: Names): { value: Val
   // stands for the definition until a run looks it up (trace.ts).
   const defs = new Map<string, Id>();
   for (const d of code.defs) if (code.nodes[d]?.kind === "def" && names[d] !== undefined && !defs.has(names[d])) defs.set(names[d], d);
+  const byLength = [...defs.keys()].filter((n) => !/^[\p{L}_][\p{L}\p{N}_′' ]*$/u.test(n)).sort((a, b) => b.length - a.length);
   let i = 0;
   const ws = () => { while (/\s/.test(text[i] ?? "")) i++; };
   const fail = (what: string): never => { throw new Error(`${what} at ${i + 1}`); };
@@ -47,6 +48,10 @@ export function parseValue(text: string, code: Code, names: Names): { value: Val
     if (inf) { i += inf[0].length; return { tag: /^[-−]/.test(inf[0]) ? EXTENDED_V.minus : EXTENDED_V.plus, fields: [] }; }
     const num = /^-?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?/i.exec(text.slice(i));
     if (num) { i += num[0].length; return Number(num[0]); }
+    // A definition named with other marks (as °C, as km/h, x² − 2): the
+    // longest such name the text goes on with (I29).
+    const named = byLength.find((d) => text.startsWith(d, i) && /^\s*(?:$|[,\])])/.test(text.slice(i + d.length)));
+    if (named) { i += named.length; return { tag: DEF_VALUE, fields: [defs.get(named)!] }; }
     // A case name: letters, digits, spaces between words, primes.
     const m = /^[\p{L}_][\p{L}\p{N}_′' ]*/u.exec(text.slice(i));
     if (!m) return fail("expected a value");
