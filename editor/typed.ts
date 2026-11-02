@@ -409,6 +409,7 @@ function narrow(code: Code, info: Info, top: Typed): Typed {
 // type come last (E175): an input whose value's type is still a variable
 // (a parameter nothing uses yet, a definition still a stub), at a meaning
 // whose own input there is a fixed type.
+const fromLibrary = (id: Id) => !!LIBRARY.code.nodes[id] || !!SIGS[id];
 function leaveOpen(info: Info, t: Typed): Typed {
   const open = (x: Typed): boolean => {
     const ty = "ref" in x ? info.typeOf.get(x.ref) : "op" in x && !SIGS[x.op] ? info.typeOf.get(x.op) : undefined;
@@ -437,7 +438,9 @@ function leaveOpen(info: Info, t: Typed): Typed {
   const args = t.args.map((a) => leaveOpen(info, a));
   if (!t.alts || t.alts.length < 2) return { ...t, args };
   const settles = (op: Id) => args.filter((a, i) => open(a) && fixedAt(op, i)).length;
-  const alts = t.alts.map((op, k) => ({ op, k, n: settles(op) })).sort((a, b) => a.n - b.n || a.k - b.k).map((x) => x.op);
+  // The program's own meaning before the library's whatever it settles
+  // (E220: clinic's div(n, top), not html's div).
+  const alts = t.alts.map((op, k) => ({ op, k, n: settles(op), lib: +fromLibrary(op) })).sort((a, b) => a.lib - b.lib || a.n - b.n || a.k - b.k).map((x) => x.op);
   return { op: alts[0], args, alts };
 }
 
@@ -643,8 +646,12 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
     // interface's operation: double(x) (BACKLOG E139). An operation comes
     // before a constructor of the same name, as the palette offers it.
     const callable = (id: Id) => !["binder", "field"].includes(code.nodes[id]?.kind) || isOperation(code, id);
+    // A case the library keeps private is never one of a program's
+    // meanings (E220: clinic's ratio(a, b) was read as Rational's ratio);
+    // the program's own come first (fromLibrary, leaveOpen).
     const alts = [...new Set([...(named ? [named] : []), ...Object.keys(names).filter((id) => names[id] === call[1] && callable(id))])]
-      .sort((x, y) => +isOperation(code, y) - +isOperation(code, x));
+      .filter((id) => !(fromLibrary(id) && (code.nodes[id] as NodeOf<"variant"> | undefined)?.private))
+      .sort((x, y) => +fromLibrary(x) - +fromLibrary(y) || +isOperation(code, y) - +isOperation(code, x));
     // A word the notation prints before an input, first(x, else y), is
     // read past (E178).
     const words = alts.flatMap((id) => (blocksStyle.notation as Record<Id, Notation>)[id]?.words ?? []);

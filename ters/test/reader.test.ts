@@ -164,6 +164,26 @@ test("typed call of a name whose other meaning has fewer inputs reads", async ()
   const code = base(k.code), names = baseNames(k.names);
   const r = fillValue(code, names, infer(code, names), hole, "div(n, top)", f);
   assert.ok(r.ok, !r.ok ? r.reason : "");
+  if (!r.ok) return;
+  // The program's own div is the one read (E220).
+  const call = r.code.nodes[hole] as NodeOf<"call">;
+  assert.equal((r.code.nodes[call.fn] as NodeOf<"ref">).target, div);
+});
+
+// A case the library keeps private is never one of a program's meanings
+// (E220): clinic's ratio, typed where its own didn't fit, was refused as
+// "ratio is private to the library", Rational's case.
+test("typed call never reads a case the library keeps private", async () => {
+  const { Lang } = await import("../src/lang/dsl.ts");
+  const { base, baseNames } = await import("../src/lang/load.ts");
+  const k = new Lang();
+  const ratio = k.def("ratio"), f = k.def("f");
+  k.define(ratio, k.fn(["a", "b", "c"], (a) => a));
+  let hole = "";
+  k.define(f, k.fn(["x", "y"], () => (hole = k.hole())));
+  const code = base(k.code), names = baseNames(k.names);
+  const r = fillValue(code, names, infer(code, names), hole, "ratio(x, y)", f);
+  assert.ok(!r.ok && !/private/.test(r.reason), r.ok ? "read" : r.reason);
 });
 
 // Each name's meanings are narrowed by what's around them before they're
