@@ -303,6 +303,24 @@ A Queue gives its items back first in, first out; a Priority queue gives back th
 - **priority queue size** : `(Priority queue a b) -> Int`. How many items the priority queue holds.
 - **priority queue items** : `(Priority queue a b) -> List (a, b)`. The queue's (priority, item) pairs, soonest first.
 
+## Matrices
+
+A Matrix of any size holds its items row by row. Sums, products and a matrix times a vector work for every number type and stop with both sizes when they don't fit; solved finds x with m·x = b at Float64. Mat2 to Mat4 are the fixed-size ones geometry uses.
+
+- **Matrix** (type). A matrix of any size: its row and column counts and its items row by row. Built with matrix of rows; a size mismatch stops the program and names both sizes, as the size isn't in the type.
+- **matrix of rows** : `(List (List a)) -[Abort]-> Matrix a`. The matrix with these rows: matrix of rows([[1, 2, 3], [4, 5, 6]]) is 2 × 3. Rows of different lengths stop the program.
+- **matrix rows** : `(Matrix a) -> List (List a)`. The matrix's rows, each a list, top to bottom.
+- **row count** : `(Matrix a) -> Int`. How many rows the matrix has.
+- **column count** : `(Matrix a) -> Int`. How many columns the matrix has.
+- **matrix entry** : `(Matrix a, Int, Int) -[Choice]-> a`. The item at a row and a column, counting from 0; no answer outside the matrix.
+- **transposed** : `(Matrix a) -> Matrix a`. The matrix flipped across its diagonal: row i is column i.
+- **identity matrix** : `(Int) -> Matrix a where a is a Number`. The size × size matrix with 1 on its diagonal and 0 elsewhere, for any number type.
+- **matrix scaled** : `(Matrix a, a) -> Matrix a where a is a Number`. Every item times the number.
+- **matrix sum** : `(Matrix a, Matrix a) -[Abort]-> Matrix a where a is a Number`. The two matrices added item by item. Different sizes stop the program, with both sizes.
+- **matrix product** : `(Matrix a, Matrix a) -[Abort]-> Matrix a where a is a Number`. The first matrix times the second: row by column, for any number type. The first's columns must be the second's rows, or the program stops with both sizes.
+- **matrix times vector** : `(Matrix a, List a) -[Abort]-> List a where a is a Number`. The matrix times the list as a column: one item per row. The list must have one item per column, or the program stops with both sizes.
+- **solved** : `(Matrix Float64, List Float64) -[Choice, Abort]-> List Float64`. The list x with matrix times vector(m, x) = b, for a square Float64 matrix, by Gaussian elimination with partial pivoting. No answer when the matrix is singular (a pivot is 0).
+
 ## Representations
 
 A type can be stored as another type, written as one definition (REPRESENTATIONS.md): what a stored value means, which definitions do the type's jobs, and what each costs. The compiler picks the cheapest for the jobs a program uses; nothing changes where the values are used.

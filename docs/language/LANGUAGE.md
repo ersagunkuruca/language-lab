@@ -468,6 +468,31 @@ they were added: the Map's key is the priority and a count of what came
 before, so it is a `Map` and is stored as one (the trees above), with no
 heap of its own to check. (`test/queues.test.ts`, BACKLOG L177.)
 
+### Matrices
+
+```
+Matrix a = matrix(rows: Int, columns: Int, items: List a)
+```
+
+A `Matrix` of any size holds its items row by row in one list, as BLAS,
+LAPACK and NumPy store a dense matrix. `matrix of rows([[1, 2, 3], [4, 5,
+6]])` builds a 2 × 3 one, and `matrix rows`, `row count`, `column count`
+and `matrix entry(m, i, j)` (a `Choice`, counting from 0) read it back.
+`transposed`, `identity matrix(n)`, `matrix scaled`, `matrix sum`,
+`matrix product` and `matrix times vector(m, v)` work for every number
+type, as `+` and `×` do. The size isn't in the type yet (that needs
+numbers in types), so sizes that don't fit stop the program, and the
+message names both: `matrix product: a 2 × 3 matrix and a 2 × 2 one`, as
+NumPy's "shapes not aligned" does.
+
+`solved(m, b)` is the `x` with `matrix times vector(m, x) = b`, for a
+square `Float64` matrix: Gaussian elimination, taking the row with the
+largest first item as each pivot (partial pivoting, as LAPACK's `gesv`
+does), then back substitution. A singular matrix has no answer, as
+dividing by 0 has none. `Mat2` to `Mat4` stay the fixed-size matrices
+that geometry and shaders use (MATRICES.md); how a `Matrix`'s items are
+stored is the compiler's choice. (`test/matrix-any-size.test.ts`, BACKLOG L44.)
+
 ## Case analysis: `match`
 
 ```
