@@ -26,7 +26,8 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| E211 ledger | Round 3's ledger (money entries read from a file, totalled by account and month) opens from the editor's picker as "Bigger program: ledger". Its main reads the file it's given, so Run waits on E212 | this PR |
+| E211 chapters | Round 2's chapters (a Markdown book split into a file per chapter, with contents.md) opens from the editor's picker as "Bigger program: chapters". Its main reads the book it's given, so Run waits on E212 | this PR |
+| E211 ledger | Round 3's ledger (money entries read from a file, totalled by account and month) opens from the editor's picker as "Bigger program: ledger". Its main reads the file it's given, so Run waits on E212 | #1129 |
 | E211 routes | Round 5's routes (roads between towns, read from a file) opens from the editor's picker as "Bigger program: routes". Its main reads roads.txt, so Run waits on E212 | #1128 |
 | E211 notebook | Round 6's notebook (notes read from a file, a word index and questions about them) opens from the editor's picker as "Bigger program: notebook". Its main reads notes.txt, so Run waits on E212 | #1127 |
 | E211 machine | Round 9's machine (compiler/gaps/machine), the register machine with its assembler and interpreter, opens from the editor's picker as "Bigger program: machine". Its main reads the .asm file it's given, so it shows and edits but doesn't Run yet (E212) | #1126 |
