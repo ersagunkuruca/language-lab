@@ -1983,6 +1983,17 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
   const later = findLater === hole && !fitting.get(info)?.has(hole);
   if (later) setTimeout(() => { findLater = null; fillingsAt(info, hole); if (ui.selected === hole) render(); }, 0);
   const all = (later ? [] : fillingsAt(info, hole)).map((f) => ({ f, l: label(f) })).sort((a, b) => order.indexOf(a.l[2]) - order.indexOf(b.l[2]) || often(b.f) - often(a.f));
+  // Of two meanings of one name in a group, the Int one first: positions
+  // and counts are Ints, so `range` for a list's indices is range at Int.
+  const base = (x: (typeof all)[number]) => (x.f.kind === "call" || x.f.kind === "ref" ? `${x.l[2]}\n${x.l[0].split("(")[0]}` : null);
+  const isInt = (x: (typeof all)[number]) => (x.f.kind === "call" || x.f.kind === "ref") && x.f.target.startsWith("builtin.int.");
+  const ints = new Set(all.filter(isInt).map(base));
+  for (let i = 0; i < all.length; i++) {
+    const k = base(all[i]);
+    if (!k || !ints.has(k) || isInt(all[i])) continue;
+    const j = all.findIndex((y, n) => n > i && isInt(y) && base(y) === k);
+    if (j > i) all.splice(i, 0, ...all.splice(j, 1));
+  }
   // Console's print performed by name reads, and does, what builtin print
   // does (L145): one row for both (E184).
   const plain = new Set(all.filter((x) => !((x.f.kind === "call" || x.f.kind === "ref") && x.f.target.startsWith("effect."))).map((x) => `${x.l[0]}\n${x.l[1]}`));
