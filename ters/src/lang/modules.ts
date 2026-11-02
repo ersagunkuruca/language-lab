@@ -314,7 +314,12 @@ export function orderFreeHash(code: Code, d: Id, memo: Map<Id, string>): string 
   if (!group || group.length > 1 || subtree(code, lam.body).some((id) => { const n = code.nodes[id]; return n?.kind === "ref" && n.target === d; })) return null;
   let least: string | null = null;
   for (const order of permutations(lam.params)) {
-    const swapped: Code = { ...code, nodes: { ...code.nodes, [lam.id]: { ...lam, params: order } } };
+    // The one node changed over the others, not a copy of the whole table
+    // per order (C96: machine's check spent 77% copying it). Hashing reads
+    // nodes only by id.
+    const nodes: Code["nodes"] = Object.create(code.nodes);
+    nodes[lam.id] = { ...lam, params: order };
+    const swapped: Code = { ...code, nodes };
     // d's own hash must be taken again: hidden from what memo holds.
     const fresh = new Over(memo);
     fresh.hidden = d;
