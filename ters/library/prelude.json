@@ -57358,83 +57358,281 @@
         ],
         "body": "@govjm1iql70igaup1d3j5c43ic:3"
       },
-      "@552s4vdpchuapmo3md2jmsbp9o": {
-        "id": "@552s4vdpchuapmo3md2jmsbp9o",
+      "@jn0agiffaojlp000s1ajt0jgs5": {
+        "id": "@jn0agiffaojlp000s1ajt0jgs5",
         "kind": "def",
-        "body": "@552s4vdpchuapmo3md2jmsbp9o:1"
+        "body": "@jn0agiffaojlp000s1ajt0jgs5:1"
       },
-      "@552s4vdpchuapmo3md2jmsbp9o:2": {
-        "id": "@552s4vdpchuapmo3md2jmsbp9o:2",
+      "@jn0agiffaojlp000s1ajt0jgs5:2": {
+        "id": "@jn0agiffaojlp000s1ajt0jgs5:2",
         "kind": "binder"
       },
-      "@552s4vdpchuapmo3md2jmsbp9o:3": {
-        "id": "@552s4vdpchuapmo3md2jmsbp9o:3",
-        "kind": "binder"
-      },
-      "@552s4vdpchuapmo3md2jmsbp9o:10": {
-        "id": "@552s4vdpchuapmo3md2jmsbp9o:10",
+      "@jn0agiffaojlp000s1ajt0jgs5:6": {
+        "id": "@jn0agiffaojlp000s1ajt0jgs5:6",
         "kind": "ref",
-        "target": "@govjm1iql70igaup1d3j5c43ic"
+        "target": "@jn0agiffaojlp000s1ajt0jgs5:2"
       },
-      "@552s4vdpchuapmo3md2jmsbp9o:11": {
-        "id": "@552s4vdpchuapmo3md2jmsbp9o:11",
-        "kind": "ref",
-        "target": "@552s4vdpchuapmo3md2jmsbp9o:3"
-      },
-      "@552s4vdpchuapmo3md2jmsbp9o:9": {
-        "id": "@552s4vdpchuapmo3md2jmsbp9o:9",
+      "@jn0agiffaojlp000s1ajt0jgs5:5": {
+        "id": "@jn0agiffaojlp000s1ajt0jgs5:5",
         "kind": "call",
-        "fn": "@552s4vdpchuapmo3md2jmsbp9o:10",
+        "fn": "@jn0agiffaojlp000s1ajt0jgs5:6",
+        "args": []
+      },
+      "@jn0agiffaojlp000s1ajt0jgs5:8": {
+        "id": "@jn0agiffaojlp000s1ajt0jgs5:8",
+        "kind": "binder"
+      },
+      "@jn0agiffaojlp000s1ajt0jgs5:14": {
+        "id": "@jn0agiffaojlp000s1ajt0jgs5:14",
+        "kind": "ref",
+        "target": "std.unit.unit"
+      },
+      "@jn0agiffaojlp000s1ajt0jgs5:12": {
+        "id": "@jn0agiffaojlp000s1ajt0jgs5:12",
+        "kind": "ref",
+        "target": "std.ticket.timer"
+      },
+      "@jn0agiffaojlp000s1ajt0jgs5:13": {
+        "id": "@jn0agiffaojlp000s1ajt0jgs5:13",
+        "kind": "ref",
+        "target": "@jn0agiffaojlp000s1ajt0jgs5:8"
+      },
+      "@jn0agiffaojlp000s1ajt0jgs5:11": {
+        "id": "@jn0agiffaojlp000s1ajt0jgs5:11",
+        "kind": "call",
+        "fn": "@jn0agiffaojlp000s1ajt0jgs5:12",
         "args": [
-          "@552s4vdpchuapmo3md2jmsbp9o:11"
+          "@jn0agiffaojlp000s1ajt0jgs5:13",
+          "@jn0agiffaojlp000s1ajt0jgs5:14"
         ]
       },
-      "@552s4vdpchuapmo3md2jmsbp9o:12": {
-        "id": "@552s4vdpchuapmo3md2jmsbp9o:12",
+      "@jn0agiffaojlp000s1ajt0jgs5:10": {
+        "id": "@jn0agiffaojlp000s1ajt0jgs5:10",
+        "kind": "ref",
+        "target": "std.await.await"
+      },
+      "@jn0agiffaojlp000s1ajt0jgs5:9": {
+        "id": "@jn0agiffaojlp000s1ajt0jgs5:9",
+        "kind": "call",
+        "fn": "@jn0agiffaojlp000s1ajt0jgs5:10",
+        "args": [
+          "@jn0agiffaojlp000s1ajt0jgs5:11"
+        ]
+      },
+      "@jn0agiffaojlp000s1ajt0jgs5:7": {
+        "id": "@jn0agiffaojlp000s1ajt0jgs5:7",
+        "kind": "arm",
+        "variant": "std.wait.wait",
+        "binds": [
+          "@jn0agiffaojlp000s1ajt0jgs5:8"
+        ],
+        "results": [
+          null
+        ],
+        "body": "@jn0agiffaojlp000s1ajt0jgs5:9"
+      },
+      "@jn0agiffaojlp000s1ajt0jgs5:4": {
+        "id": "@jn0agiffaojlp000s1ajt0jgs5:4",
+        "kind": "match",
+        "scrutinee": "@jn0agiffaojlp000s1ajt0jgs5:5",
+        "arms": [
+          "@jn0agiffaojlp000s1ajt0jgs5:7"
+        ],
+        "otherwise": null
+      },
+      "@jn0agiffaojlp000s1ajt0jgs5:19": {
+        "id": "@jn0agiffaojlp000s1ajt0jgs5:19",
         "kind": "lit",
         "value": 0
       },
-      "@552s4vdpchuapmo3md2jmsbp9o:8": {
-        "id": "@552s4vdpchuapmo3md2jmsbp9o:8",
+      "@jn0agiffaojlp000s1ajt0jgs5:18": {
+        "id": "@jn0agiffaojlp000s1ajt0jgs5:18",
+        "kind": "ref",
+        "target": "std.await.start timer"
+      },
+      "@jn0agiffaojlp000s1ajt0jgs5:17": {
+        "id": "@jn0agiffaojlp000s1ajt0jgs5:17",
         "kind": "call",
-        "fn": "@552s4vdpchuapmo3md2jmsbp9o:9",
+        "fn": "@jn0agiffaojlp000s1ajt0jgs5:18",
         "args": [
-          "@552s4vdpchuapmo3md2jmsbp9o:12"
+          "@jn0agiffaojlp000s1ajt0jgs5:19"
         ]
       },
-      "@552s4vdpchuapmo3md2jmsbp9o:7": {
-        "id": "@552s4vdpchuapmo3md2jmsbp9o:7",
+      "@jn0agiffaojlp000s1ajt0jgs5:26": {
+        "id": "@jn0agiffaojlp000s1ajt0jgs5:26",
+        "kind": "lit",
+        "value": "the simulated world's clock gave no time"
+      },
+      "@jn0agiffaojlp000s1ajt0jgs5:25": {
+        "id": "@jn0agiffaojlp000s1ajt0jgs5:25",
+        "kind": "ref",
+        "target": "std.abort.abort"
+      },
+      "@jn0agiffaojlp000s1ajt0jgs5:24": {
+        "id": "@jn0agiffaojlp000s1ajt0jgs5:24",
+        "kind": "call",
+        "fn": "@jn0agiffaojlp000s1ajt0jgs5:25",
+        "args": [
+          "@jn0agiffaojlp000s1ajt0jgs5:26"
+        ]
+      },
+      "@jn0agiffaojlp000s1ajt0jgs5:21": {
+        "id": "@jn0agiffaojlp000s1ajt0jgs5:21",
+        "kind": "binder"
+      },
+      "@jn0agiffaojlp000s1ajt0jgs5:22": {
+        "id": "@jn0agiffaojlp000s1ajt0jgs5:22",
+        "kind": "binder"
+      },
+      "@jn0agiffaojlp000s1ajt0jgs5:23": {
+        "id": "@jn0agiffaojlp000s1ajt0jgs5:23",
+        "kind": "ref",
+        "target": "@jn0agiffaojlp000s1ajt0jgs5:21"
+      },
+      "@jn0agiffaojlp000s1ajt0jgs5:20": {
+        "id": "@jn0agiffaojlp000s1ajt0jgs5:20",
+        "kind": "arm",
+        "variant": "std.ticket.at",
+        "binds": [
+          "@jn0agiffaojlp000s1ajt0jgs5:21",
+          "@jn0agiffaojlp000s1ajt0jgs5:22"
+        ],
+        "results": [
+          null,
+          null
+        ],
+        "body": "@jn0agiffaojlp000s1ajt0jgs5:23"
+      },
+      "@jn0agiffaojlp000s1ajt0jgs5:16": {
+        "id": "@jn0agiffaojlp000s1ajt0jgs5:16",
+        "kind": "match",
+        "scrutinee": "@jn0agiffaojlp000s1ajt0jgs5:17",
+        "arms": [
+          "@jn0agiffaojlp000s1ajt0jgs5:20"
+        ],
+        "otherwise": "@jn0agiffaojlp000s1ajt0jgs5:24"
+      },
+      "@jn0agiffaojlp000s1ajt0jgs5:15": {
+        "id": "@jn0agiffaojlp000s1ajt0jgs5:15",
+        "kind": "arm",
+        "variant": "std.time.now",
+        "binds": [],
+        "results": [],
+        "body": "@jn0agiffaojlp000s1ajt0jgs5:16"
+      },
+      "@jn0agiffaojlp000s1ajt0jgs5:3": {
+        "id": "@jn0agiffaojlp000s1ajt0jgs5:3",
+        "kind": "match",
+        "scrutinee": "@jn0agiffaojlp000s1ajt0jgs5:4",
+        "arms": [
+          "@jn0agiffaojlp000s1ajt0jgs5:15"
+        ],
+        "otherwise": null
+      },
+      "@jn0agiffaojlp000s1ajt0jgs5:1": {
+        "id": "@jn0agiffaojlp000s1ajt0jgs5:1",
+        "kind": "lambda",
+        "params": [
+          "@jn0agiffaojlp000s1ajt0jgs5:2"
+        ],
+        "body": "@jn0agiffaojlp000s1ajt0jgs5:3"
+      },
+      "@oh233ou23mvfdspdim5bogov44": {
+        "id": "@oh233ou23mvfdspdim5bogov44",
+        "kind": "def",
+        "body": "@oh233ou23mvfdspdim5bogov44:1"
+      },
+      "@oh233ou23mvfdspdim5bogov44:2": {
+        "id": "@oh233ou23mvfdspdim5bogov44:2",
+        "kind": "binder"
+      },
+      "@oh233ou23mvfdspdim5bogov44:3": {
+        "id": "@oh233ou23mvfdspdim5bogov44:3",
+        "kind": "binder"
+      },
+      "@oh233ou23mvfdspdim5bogov44:13": {
+        "id": "@oh233ou23mvfdspdim5bogov44:13",
+        "kind": "ref",
+        "target": "@jn0agiffaojlp000s1ajt0jgs5"
+      },
+      "@oh233ou23mvfdspdim5bogov44:14": {
+        "id": "@oh233ou23mvfdspdim5bogov44:14",
+        "kind": "ref",
+        "target": "@oh233ou23mvfdspdim5bogov44:3"
+      },
+      "@oh233ou23mvfdspdim5bogov44:12": {
+        "id": "@oh233ou23mvfdspdim5bogov44:12",
+        "kind": "call",
+        "fn": "@oh233ou23mvfdspdim5bogov44:13",
+        "args": [
+          "@oh233ou23mvfdspdim5bogov44:14"
+        ]
+      },
+      "@oh233ou23mvfdspdim5bogov44:11": {
+        "id": "@oh233ou23mvfdspdim5bogov44:11",
         "kind": "lambda",
         "params": [],
-        "body": "@552s4vdpchuapmo3md2jmsbp9o:8"
+        "body": "@oh233ou23mvfdspdim5bogov44:12"
       },
-      "@552s4vdpchuapmo3md2jmsbp9o:5": {
-        "id": "@552s4vdpchuapmo3md2jmsbp9o:5",
+      "@oh233ou23mvfdspdim5bogov44:10": {
+        "id": "@oh233ou23mvfdspdim5bogov44:10",
+        "kind": "ref",
+        "target": "@govjm1iql70igaup1d3j5c43ic"
+      },
+      "@oh233ou23mvfdspdim5bogov44:9": {
+        "id": "@oh233ou23mvfdspdim5bogov44:9",
+        "kind": "call",
+        "fn": "@oh233ou23mvfdspdim5bogov44:10",
+        "args": [
+          "@oh233ou23mvfdspdim5bogov44:11"
+        ]
+      },
+      "@oh233ou23mvfdspdim5bogov44:15": {
+        "id": "@oh233ou23mvfdspdim5bogov44:15",
+        "kind": "lit",
+        "value": 0
+      },
+      "@oh233ou23mvfdspdim5bogov44:8": {
+        "id": "@oh233ou23mvfdspdim5bogov44:8",
+        "kind": "call",
+        "fn": "@oh233ou23mvfdspdim5bogov44:9",
+        "args": [
+          "@oh233ou23mvfdspdim5bogov44:15"
+        ]
+      },
+      "@oh233ou23mvfdspdim5bogov44:7": {
+        "id": "@oh233ou23mvfdspdim5bogov44:7",
+        "kind": "lambda",
+        "params": [],
+        "body": "@oh233ou23mvfdspdim5bogov44:8"
+      },
+      "@oh233ou23mvfdspdim5bogov44:5": {
+        "id": "@oh233ou23mvfdspdim5bogov44:5",
         "kind": "ref",
         "target": "builtin.seeded"
       },
-      "@552s4vdpchuapmo3md2jmsbp9o:6": {
-        "id": "@552s4vdpchuapmo3md2jmsbp9o:6",
+      "@oh233ou23mvfdspdim5bogov44:6": {
+        "id": "@oh233ou23mvfdspdim5bogov44:6",
         "kind": "ref",
-        "target": "@552s4vdpchuapmo3md2jmsbp9o:2"
+        "target": "@oh233ou23mvfdspdim5bogov44:2"
       },
-      "@552s4vdpchuapmo3md2jmsbp9o:4": {
-        "id": "@552s4vdpchuapmo3md2jmsbp9o:4",
+      "@oh233ou23mvfdspdim5bogov44:4": {
+        "id": "@oh233ou23mvfdspdim5bogov44:4",
         "kind": "call",
-        "fn": "@552s4vdpchuapmo3md2jmsbp9o:5",
+        "fn": "@oh233ou23mvfdspdim5bogov44:5",
         "args": [
-          "@552s4vdpchuapmo3md2jmsbp9o:6",
-          "@552s4vdpchuapmo3md2jmsbp9o:7"
+          "@oh233ou23mvfdspdim5bogov44:6",
+          "@oh233ou23mvfdspdim5bogov44:7"
         ]
       },
-      "@552s4vdpchuapmo3md2jmsbp9o:1": {
-        "id": "@552s4vdpchuapmo3md2jmsbp9o:1",
+      "@oh233ou23mvfdspdim5bogov44:1": {
+        "id": "@oh233ou23mvfdspdim5bogov44:1",
         "kind": "lambda",
         "params": [
-          "@552s4vdpchuapmo3md2jmsbp9o:2",
-          "@552s4vdpchuapmo3md2jmsbp9o:3"
+          "@oh233ou23mvfdspdim5bogov44:2",
+          "@oh233ou23mvfdspdim5bogov44:3"
         ],
-        "body": "@552s4vdpchuapmo3md2jmsbp9o:4"
+        "body": "@oh233ou23mvfdspdim5bogov44:4"
       }
     },
     "defs": [
@@ -57611,13 +57809,14 @@
       "@7bvp7h0mp8gpg4dldb17lbkf6e",
       "@6otedvi467md5ao603vj9alsi6",
       "@ig7ae66a5cnmvi1qqnc17v0393",
+      "@jn0agiffaojlp000s1ajt0jgs5",
       "@annsfbbsepik8b1irr6akcfdk0",
       "@14v267m93eavm5fhg86mv2p32f",
       "@9ugo1409bua35vbcctnev6eiha",
       "@puaisgk8h78po2lhe65u3rd4fh",
       "@cjjj5tmuaf74du10v8oqf3jme0",
       "@govjm1iql70igaup1d3j5c43ic",
-      "@552s4vdpchuapmo3md2jmsbp9o",
+      "@oh233ou23mvfdspdim5bogov44",
       "@fbbi4qvo7d58s98tv0etifnllv",
       "@g68h67scr0eirikv8og762j6u3",
       "@qvk73gc0r0qv7a38j4oc5nrsjc",
@@ -65038,6 +65237,48 @@
       },
       "plain": []
     },
+    "@jn0agiffaojlp000s1ajt0jgs5": {
+      "vars": [
+        0
+      ],
+      "rows": [
+        1
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "fn",
+            "params": [],
+            "ret": {
+              "t": "var",
+              "v": 0
+            },
+            "eff": {
+              "effs": [
+                "std.abort",
+                "std.await",
+                "std.time",
+                "std.wait"
+              ],
+              "tail": 1
+            }
+          }
+        ],
+        "ret": {
+          "t": "var",
+          "v": 0
+        },
+        "eff": {
+          "effs": [
+            "std.abort",
+            "std.await"
+          ],
+          "tail": 1
+        }
+      },
+      "plain": []
+    },
     "@annsfbbsepik8b1irr6akcfdk0": {
       "vars": [],
       "rows": [
@@ -65309,7 +65550,7 @@
       },
       "plain": []
     },
-    "@552s4vdpchuapmo3md2jmsbp9o": {
+    "@oh233ou23mvfdspdim5bogov44": {
       "vars": [
         0
       ],
@@ -65335,7 +65576,9 @@
               "effs": [
                 "std.abort",
                 "std.await",
-                "std.random"
+                "std.random",
+                "std.time",
+                "std.wait"
               ],
               "tail": 1
             }
@@ -69050,9 +69293,14 @@
     "@govjm1iql70igaup1d3j5c43ic:67": "tied",
     "@govjm1iql70igaup1d3j5c43ic:70": "picked",
     "@govjm1iql70igaup1d3j5c43ic:111": "number",
-    "@552s4vdpchuapmo3md2jmsbp9o": "simulated",
-    "@552s4vdpchuapmo3md2jmsbp9o:2": "seed",
-    "@552s4vdpchuapmo3md2jmsbp9o:3": "action"
+    "@jn0agiffaojlp000s1ajt0jgs5": "simulated clock",
+    "@jn0agiffaojlp000s1ajt0jgs5:2": "action",
+    "@jn0agiffaojlp000s1ajt0jgs5:8": "milliseconds",
+    "@jn0agiffaojlp000s1ajt0jgs5:21": "time",
+    "@jn0agiffaojlp000s1ajt0jgs5:22": "value",
+    "@oh233ou23mvfdspdim5bogov44": "simulated",
+    "@oh233ou23mvfdspdim5bogov44:2": "seed",
+    "@oh233ou23mvfdspdim5bogov44:3": "action"
   },
   "comments": {
     "@7uq2j0i4v8m02boa1jovfc68tl": "Runs the action on each item of the list in turn, for what it does (prints, writes a cell).",
@@ -69238,7 +69486,7 @@
     "@l0dk7i94iks6hair9rmo4bl610": "Runs the actions side by side: each runs until it awaits a ticket, and whichever ticket is ready first goes on, until every action has its value. The values come back in the actions' order (as JavaScript's Promise.all).",
     "@6otedvi467md5ao603vj9alsi6": "Runs the actions side by side, as together does, and gives the value of the first to finish; the others are dropped where they wait (as JavaScript's Promise.race).",
     "@ig7ae66a5cnmvi1qqnc17v0393": "The action's value as some(value) if it finishes within this many milliseconds, or none if the timer is ready first; the action is then dropped where it waits.",
-    "@552s4vdpchuapmo3md2jmsbp9o": "Runs the action in a simulated world for tests: its timers on a clock that starts at 0 and never really waits, and when several tickets are ready at the same moment, which goes on is picked with Random seeded by seed, as the action's own random numbers are. The same seed gives the same schedule every run; another seed may give another, so an order that goes wrong is a seed to paste into a test (FoundationDB's deterministic simulation).",
+    "@oh233ou23mvfdspdim5bogov44": "Runs the action in a simulated world for tests: its timers, now and wait on a clock that starts at 0 and never really waits, and when several tickets are ready at the same moment, which goes on is picked with Random seeded by seed, as the action's own random numbers are. The same seed gives the same schedule every run; another seed may give another, so an order that goes wrong is a seed to paste into a test (FoundationDB's deterministic simulation).",
     "@i0i9trh6nmo5lq8gqi0mqo49dd": "A helper of together and race. Not offered in the palette.",
     "@t79tneehi5ioefs5k7omsocj1q": "A helper of together and race. Not offered in the palette.",
     "@uko2gost7s5c6n7p379vaef9jh": "A helper of together and race. Not offered in the palette.",
@@ -69252,6 +69500,7 @@
     "@puaisgk8h78po2lhe65u3rd4fh": "A helper of simulated. Not offered in the palette.",
     "@cjjj5tmuaf74du10v8oqf3jme0": "A helper of simulated. Not offered in the palette.",
     "@govjm1iql70igaup1d3j5c43ic": "A helper of simulated. Not offered in the palette.",
+    "@jn0agiffaojlp000s1ajt0jgs5": "A helper of simulated. Not offered in the palette.",
     "@evvkvacd5ecmvnt8jl3v6s9n64": "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette."
   },
   "exports": [
@@ -69378,6 +69627,6 @@
     "@l0dk7i94iks6hair9rmo4bl610",
     "@6otedvi467md5ao603vj9alsi6",
     "@ig7ae66a5cnmvi1qqnc17v0393",
-    "@552s4vdpchuapmo3md2jmsbp9o"
+    "@oh233ou23mvfdspdim5bogov44"
   ]
 }

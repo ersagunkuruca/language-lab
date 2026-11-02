@@ -16,7 +16,7 @@ import { infer } from "../src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { runMain } from "../src/lang/run.ts";
-import { AWAIT_OP, START_TIMER_OP, S, SHOW_ANY } from "../src/lang/std.ts";
+import { ARITH, AWAIT_OP, NOW_OP, START_TIMER_OP, S, SHOW_ANY, WAIT_OP } from "../src/lang/std.ts";
 import { showType } from "../src/lang/types.ts";
 import { compile } from "../../compiler/src/compile.ts";
 import { mkdtempSync, writeFileSync } from "node:fs";
@@ -76,9 +76,31 @@ test("simulated compiled to JavaScript picks what the evaluator picks, seed by s
   for (let seed = 1; seed <= 8; seed++) assert.equal(compiled(seed), [...(r.call(r.value(winner), seed) as Iterable<unknown>)][0], `seed ${seed}`);
 });
 
-// Await and Random are answered; an Abort (a ticket from another world)
-// passes out.
-test("the type of simulated: Await is answered, Random seeded", () => {
+// Time and Wait on the virtual clock too (L138, REVIEW-2026-11-01b §2):
+// after a 5 s timer and wait(300), now has moved 5300, every run, with no
+// real sleep, evaluated and compiled.
+test("simulated: now and wait read and move the virtual clock, evaluated and compiled", async () => {
+  const k = new Lang(LIBRARY.code);
+  const elapsed = k.def("elapsed");
+  k.define(elapsed, k.fn(["seed"], (seed) => k.call(lib("simulated"), seed, k.thunk(() =>
+    k.let("before", k.call(NOW_OP), (before) => k.seq(
+      k.call(AWAIT_OP, k.call(START_TIMER_OP, k.lit(5000))),
+      k.call(WAIT_OP, k.lit(300)),
+      k.call(ARITH.sub, k.call(NOW_OP), before)))))));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const real = { now: () => assert.fail("a simulated run read the real clock"), wait: () => assert.fail("a simulated run waited for real") };
+  const r = makeRunner(code, info, { print: () => {}, names, world: real } as Parameters<typeof makeRunner>[2]);
+  for (const seed of [1, 2]) assert.equal([...(r.call(r.value(elapsed), seed) as Iterable<unknown>)][0], 5300);
+  const path = join(mkdtempSync(join(tmpdir(), "simulated-clock-")), "clock.js");
+  writeFileSync(path, compile(code, info, names, { runtime: pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href, exports: ["elapsed"] }));
+  const compiled = (await import(pathToFileURL(path).href)).defs.elapsed as (seed: number) => number;
+  assert.equal(compiled(1), 5300);
+});
+
+// Await, Time, Wait and Random are answered; an Abort (a ticket from
+// another world) passes out.
+test("the type of simulated: Await, Time and Wait are answered, Random seeded", () => {
   const code = base(LIBRARY.code), names = baseNames(LIBRARY.names), info = infer(code, names);
-  assert.equal(showType(info.typeOf.get(lib("simulated"))!, names), "(Float64, () -[Abort, Await, Random, e]-> a) -[Abort, e]-> a");
+  assert.equal(showType(info.typeOf.get(lib("simulated"))!, names), "(Float64, () -[Abort, Await, Random, Time, Wait, e]-> a) -[Abort, e]-> a");
 });
