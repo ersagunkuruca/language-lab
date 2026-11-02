@@ -1529,13 +1529,15 @@ own), `smaller` and `larger` (min and max, on the same types, which a
 shader compiles to `min` and `max`; the Float64-only versions published
 before, and Text's own `not after`, `comes after` and `not before`, stay in
 the prelude, hidden, so a program saved with them still opens), the
-fractions `fraction`, `as fraction`, `divide fractions` and `as float64`
+fractions `fraction`, `as fraction` and `as float64`
 (a Rational is exact and in lowest terms, and the one
 `+ − · <` works on it through the published, unoffered `add fractions`,
 `subtract fractions`, `multiply fractions`, `negate fraction` and `fraction
 less than`), the complex numbers `as complex`, `i`, `complex conjugate`,
-`modulus`, `angle of`, `polar`, `divide complex` and `complex exp` (the one
-`show` shows a fraction and a Complex; a Complex is `complex(re, im)`, a record of two Float64s, so the
+`modulus`, `angle of`, `polar` and `complex exp` (the one
+`show` shows a fraction and a Complex, and the one `divide` (Division,
+L155) divides both, and Float64s, Duals, Fixeds and Algebraics, but not
+Ints; a Complex is `complex(re, im)`, a record of two Float64s, so the
 parts builtins and the vectors module work on it and a shader holds it as a
 `vec2f`; the one `+ − · −x` works on it through the unoffered `add
 complex`, `subtract complex`, `multiply complex` and `negate complex`, ·

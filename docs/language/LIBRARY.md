@@ -6,7 +6,7 @@ How to read a type: `(Float64, Float64) -> Float64` takes two Float64s and gives
 
 ## Numbers
 
-There are six kinds of number. Int is a whole number of any size. Float64 is a floating-point number, like most languages' (0.1 + 0.2 isn't exactly 0.3). Rational is an exact fraction. Algebraic is an exact root of a polynomial, like √2, so √2 · √2 is exactly 2. Complex is re + im·i. Fixed counts steps of 2⁻³², the same bits on every machine. Mat2, Mat3 and Mat4 are small matrices, with · the matrix product. One + − · < works on all of them, and the checker works out which kind you mean. Together they are the Numbers, and a type says "where a is a Number" when any of them will do. A plain literal is some Number too: 3 is an Int where an Int is needed and a Float64 where a Float64 is, 0.5 can be anything but an Int. One that nothing fixes is an Int when it is whole and a Float64 when it isn't, so 2 + 3 alone is exact. Values never mix by themselves: as float64 turns an Int into a Float64, whole part goes back, and as fraction and as complex turn into the others. The versions "at Float64" and "at Int" are what the one + turns into once the kind is known, so the palette offers the one +. A type of your own joins the one + − · −x with a definition of type Arithmetic T, and the one < with one of type Ordered T.
+There are six kinds of number. Int is a whole number of any size. Float64 is a floating-point number, like most languages' (0.1 + 0.2 isn't exactly 0.3). Rational is an exact fraction. Algebraic is an exact root of a polynomial, like √2, so √2 · √2 is exactly 2. Complex is re + im·i. Fixed counts steps of 2⁻³², the same bits on every machine. Mat2, Mat3 and Mat4 are small matrices, with · the matrix product. One + − · < works on all of them, and one divide on all but Int (whose quotient and remainder are another operation), and the checker works out which kind you mean. Together they are the Numbers, and a type says "where a is a Number" when any of them will do. A plain literal is some Number too: 3 is an Int where an Int is needed and a Float64 where a Float64 is, 0.5 can be anything but an Int. One that nothing fixes is an Int when it is whole and a Float64 when it isn't, so 2 + 3 alone is exact. Values never mix by themselves: as float64 turns an Int into a Float64, whole part goes back, and as fraction and as complex turn into the others. The versions "at Float64" and "at Int" are what the one + turns into once the kind is known, so the palette offers the one +. A type of your own joins the one + − · −x with a definition of type Arithmetic T, and the one < with one of type Ordered T.
 
 - **add** : `(a, a) -> a`. a + b, at any Number: Int, Float64, Rational, Algebraic, Complex (and records of Float64s through the vectors module).
 - **subtract** : `(a, a) -> a`. a − b, at any Number.
@@ -27,7 +27,9 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 - **tan** : `(a) -> a where a has Trig`. Tangent of an angle in radians, at any type with Trig.
 - **exp** : `(a) -> a where a has Trig`. e to the power x, at any type with Trig.
 - **log** : `(a) -[Choice]-> a where a has Trig`. The natural logarithm, at any type with Trig (the debugging effect is Log, a different thing).
-- **divide** : `(Float64, Float64) -[Choice]-> Float64`. a ÷ b for Float64s (floating point, so 1 ÷ 3 is 0.333…; dividing by 0 has no answer, so it has Choice). For exact division use fractions.
+- **Division** (type). An interface: the one ÷, divide, for any type that implements it. Float64, Rational, Complex, Dual, Fixed and Algebraic do (the prelude's), and a type of your own joins with a definition of type Division T. Int doesn't: its quotient and remainder are another operation. Dividing by 0 has no answer, so divide has Choice.
+- **divide** : `(a, a) -[Choice]-> a where a has Division`. a ÷ b, at any number but Int: exact at Rational, Fixed and Algebraic, floating point at Float64, the complex quotient at Complex. Dividing by 0 has no answer, so it has Choice.
+- **divide** : `(Float64, Float64) -[Choice]-> Float64`. a ÷ b for Float64s (floating point, so 1 ÷ 3 is 0.333…; dividing by 0 has no answer, so it has Choice). For exact division use fractions. The one divide (Division) is this at Float64.
 - **sqrt** : `(Float64) -[Choice]-> Float64`. The square root.
 - **power** : `(Float64, Float64) -[Choice]-> Float64`. a to the power b.
 - **atan2** : `(Float64, Float64) -> Float64`. The angle of the point (x, y) from the x axis, in radians: atan2(y, x).
@@ -53,7 +55,6 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 - **Rational** (type). An exact fraction, top/bottom, always in lowest terms. The same + − · < work on it. Make one with fraction(1, 3) or as fraction(n); its constructor ratio is private to the library, which keeps the rule.
 - **fraction** : `(Int, Int) -[Choice]-> Rational`. top/bottom, exactly, in lowest terms (Euclid's algorithm, textbook); no answer when bottom is 0.
 - **as fraction** : `(Int) -> Rational`. The whole number n as a fraction, n/1.
-- **divide fractions** : `(Rational, Rational) -[Choice]-> Rational`. a ÷ b for fractions, exactly; no answer when b is 0.
 - **as float64** : `(Rational) -> Float64`. The nearest Float64.
 - **Complex** (type). A complex number re + im·i, a record of two Float64s. The same + − · work on it (· is the complex product); it has no <.
 - **as complex** : `(Float64) -> Complex`. The Float64 x as a complex number, x + 0i.
@@ -62,7 +63,6 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 - **modulus** : `(Complex) -> Float64`. |z|, how far z is from 0 (the vectors module's magnitude says the same).
 - **angle of** : `(Complex) -> Float64`. The angle from the positive real line to z, in radians, between −π and π (atan2).
 - **from polar** : `(Float64, Float64) -> Complex`. The complex number size away from 0 at this angle: size·(cos angle + i sin angle).
-- **divide complex** : `(Complex, Complex) -[Choice]-> Complex`. z ÷ w for complex numbers; no answer when w is 0.
 - **complex exp** : `(Complex) -> Complex`. e to the z: eᵃ(cos b + i sin b) for a + bi, Euler's formula (textbook). complex exp(i · π) is −1.
 - **complex sqrt** : `(Complex) -> Complex`. √z for a complex number, the root with a real part of 0 or more: complex sqrt(−4) is 2i. Float64's sqrt has no answer below 0; this one always has.
 - **complex log** : `(Complex) -[Choice]-> Complex`. log z for a complex number: log|z| + i·(its angle, between −π and π). complex log(−1) is iπ. No answer at 0.
@@ -97,7 +97,6 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 - **Fixed** (type). A fixed-point number: an Int counting steps of 2⁻³², so 1.5 is fixed(6442450944). The same + − · < work on it, with · rounded down to a step, and the answer has the same bits on every machine. A step is 2⁻³² anywhere, so a position far from the origin keeps its precision (FIXED-POINT.md).
 - **as fixed** : `(Int) -> Fixed`. A whole number as a Fixed, exactly.
 - **as float64** : `(Fixed) -> Float64`. A Fixed as the nearest Float64, for drawing or printing. Past 2⁵³ steps (about 2 million) it drops the last bits; the Fixed keeps them.
-- **divide fixed** : `(Fixed, Fixed) -[Choice]-> Fixed`. a ÷ b for Fixed, rounded down to a step; no answer when b is 0.
 - **square root fixed** : `(Fixed) -[Choice]-> Fixed`. √x for Fixed, rounded down to a step, the same bits on every machine; no answer below 0.
 - **Extended** (type). A number of type a, or −∞ or +∞ around it: minus infinity, finite(value) or plus infinity. Float64 has no infinities of its own, so a bound with no end, the least of no numbers, or a distance not reached yet is an Extended. extended add, subtract and multiply follow the extended reals and have no answer for ∞ − ∞ and 0 · ∞; its order is total.
 - **extended less** : `(Extended a, Extended a) -> Bool where a has <`. a < b for Extended numbers: −∞ is below every number and +∞ above, so the order is total. compare and sort give the same order.
@@ -109,7 +108,6 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 - **maximum** : `(List a) -> Extended a where a has <`. The largest of the numbers, as an Extended: −∞ when there are none.
 - **Dual** (type). A dual number, value + slope·ε where ε · ε is 0: a record of two Float64s. The same + − · work on it, · by the product rule, and sin, cos, tan, exp and log by the chain rule, so a function given dual(x, 1) gives back its value and its slope at x. slope by duals does that for you (forward-mode automatic differentiation). No <.
 - **slope by duals** : `((Dual) -[e]-> Dual, Float64) -[e]-> Float64`. f′(x), worked out by giving f the dual number x + 1ε and reading the slope of what comes back (forward-mode automatic differentiation). f must work on duals: write it with the generic + − · and Trig. derivative(f) gives the same number by differentiating f's code.
-- **divide duals** : `(Dual, Dual) -[Choice]-> Dual`. x ÷ y for dual numbers, the quotient rule; no answer when y's value is 0.
 - **dual table** : `List (Table entry Dual)`. Dual numbers' multiplication table: 1 · 1 = 1, 1 · ε = ε, ε · 1 = ε, and ε · ε = 0, which needs no line. table product(dual table, x, y) is x · y.
 - **Algebraic** (type). An exact real number that solves a polynomial equation with whole-number coefficients, like √2 (x² = 2) or the golden ratio (x² = x + 1). Held by that equation and which of its roots it is, so √2 · √2 is exactly 2 and < always answers. The same + − · < work on it. Make one with square root, root, or as algebraic; digits shows as many digits as you ask for (EXACT-REALS.md).
 - **square root** : `(Algebraic) -[Choice]-> Algebraic`. The positive square root, exactly: square root(2) is √2, the root of x² − 2 between 1 and 2. No answer (Choice) for a negative number.
@@ -286,7 +284,7 @@ A type can be stored as another type, written as one definition (REPRESENTATIONS
 
 ## Searching: Choice
 
-A computation with the Choice effect may have no answer, one, or several, like a search. one of picks any item, fail drops a path, and all, first, count and optional decide what to do with the answers, which ends the Choice. A function that may have no answer (value at, find, divide fractions) has Choice too, so first(() => value at(m, k), () => 0) gives a default.
+A computation with the Choice effect may have no answer, one, or several, like a search. one of picks any item, fail drops a path, and all, first, count and optional decide what to do with the answers, which ends the Choice. A function that may have no answer (value at, find, divide) has Choice too, so first(() => value at(m, k), () => 0) gives a default.
 
 - **one of** : `(List a) -[Choice]-> a`. Any item of the list: a Choice with one answer per item. all, first or count decide what to do with them.
 - **fail** : `() -[Choice]-> a`. No answer. In a search it drops this path.

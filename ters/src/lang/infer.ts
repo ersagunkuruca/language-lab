@@ -20,7 +20,7 @@ import { planSolve, runsBackwards, solvesInWholeNumbers } from "./solve.ts";
 import { computedForward, directionProblem, useDirections } from "./directions.ts";
 import { analyzer, derivedFrom, determinism, oneAnswer, solveMode, type Fn } from "./modes.ts";
 import { smoothDerivative as hasSmoothDerivative, smoothGradient as hasSmoothGradient, recordVariant, forgetDerived } from "./derive.ts";
-import { BOOL, CELL_OPS, JOBS, S, SET, SIGS, SMART, TRUE, TUPLE_MAX, tupleType } from "./std.ts";
+import { BOOL, CELL_OPS, DIVISION, JOBS, S, SET, SIGS, SMART, TRUE, TUPLE_MAX, tupleType } from "./std.ts";
 import { countedCalls } from "./counting.ts";
 import { ratioParts } from "./int.ts";
 import { fieldPath, placePath } from "./records.ts";
@@ -1190,6 +1190,9 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       if (w.iface === "std.arithmetic" || w.iface === "std.ordered") {
         const ordered = w.iface === "std.ordered";
         err(w.at || current[0], `${show(t)} isn't ${ARITH_WHAT[ordered ? "less" : "arith"]}, and has no ${ordered ? "<" : "+ − ·"} of its own: give it one, a definition of type ${of}`, { iface: w.iface, type: t });
+      } else if (w.iface === DIVISION && t.t === "con" && t.id === INT) {
+        // Int has no ÷ (L155): a whole number divided isn't one.
+        err(w.at || current[0], "Int has no divide: use quotient and remainder, or turn it into a Float64 (as float64) or a fraction (as fraction) first", { iface: w.iface, type: t });
       } else err(w.at || current[0], `${show(t)} has no ${nm(w.iface)}: give it one, a definition of type ${of}`, { iface: w.iface, type: t });
     }
   }

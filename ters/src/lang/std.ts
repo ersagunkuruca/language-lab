@@ -1072,6 +1072,17 @@ for (let n = 2; n <= TUPLE_MAX; n++) {
     ["tuple", PART_NAMES.slice(0, n).map((f, i) => [f, (ps: Id[]) => tref(ps[i])] as [string, TypeOf])],
   ]));
 }
+// The one ÷ (BACKLOG L155, NUMBERS.md "and later ÷"): an interface, as
+// Trig is, whose `divide` is resolved to the type's own before anything
+// runs (arith.ts). Every number type but Int implements it in the prelude;
+// dividing by zero has no answer, so it has Choice. Int has no ÷: its
+// quotient and remainder are another operation. After the tuples, so ids
+// above don't move.
+export const DIVISION = typedef("std.division", "Division", ["a"], [
+  ["division", [["divide", ([a]) => tfun([tref(a), tref(a)], tref(a), [CHOICE])]]],
+], false, true);
+export const DIVISION_V = "std.division.division";
+export const DIVIDE = `${DIVISION_V}.divide`;
 export const tupleType = (n: number): Id => `std.tuple${n}`;
 export const tupleVariant = (n: number): Id => `std.tuple${n}.tuple`;
 export const tuplePart = (n: number, i: number): Id => `std.tuple${n}.tuple.${PART_NAMES[i]}`;
@@ -1091,7 +1102,7 @@ export function onTodaysIds<T>(x: T): T {
 }
 export const tupleSize = (id: Id): number | null => { const m = /^std\.tuple(\d)$/.exec(id); return m ? Number(m[1]) : null; };
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ...TUPLES] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ...TUPLES, DIVISION] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one
