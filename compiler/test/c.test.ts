@@ -407,6 +407,20 @@ test("whole programs in C: files, console, arguments and exit codes as the evalu
   assert.equal(deep.stdout.toString(), "1\n", deep.stderr.toString());
 });
 
+// GAPS round 9's machine: an unboxed pair holding another,
+// `(Int, (Instr, Int))`, declared before the pair it holds didn't build
+// (C91).
+test("records holding records by value in C: machine builds, and hello says what the evaluator says (C91)", { skip }, () => {
+  const p = load("../../compiler/gaps/machine"), main = p.named("main");
+  const exe = compile(emitC(lowerScalar(p.code, p.info, p.pres.names, [main], { data: true }), { main }).c);
+  const src = join(dir, "hello.asm");
+  writeFileSync(src, readFileSync(join(import.meta.dirname, "../gaps/machine/hello.asm"), "utf8"));
+  const got = spawnSync(exe, [src], { encoding: "utf8" });
+  const printed: string[] = [];
+  const exit = runProgram(p.code, p.info, main, [src], { print: (l: string) => printed.push(l), names: p.pres.names, world: nodeWorld() });
+  assert.deepEqual([got.stdout, got.status], [printed.map((l) => `${l}\n`).join(""), exit], got.stderr);
+});
+
 test("fractions in C: the evaluator's answers in lowest terms, past 2⁶⁴ too, none at a zero bottom, and every cell freed", { skip }, () => {
   const p = fractions();
   const lowered = lowerScalar(p.code, p.info, p.names, Object.values(p.defs), { data: true });

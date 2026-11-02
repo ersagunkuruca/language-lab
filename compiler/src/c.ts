@@ -307,8 +307,19 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string
   const cells = ints || tnum.size > 0 || kept.some((i) => funcs[i].partial);
   const tests = opts.harness ? harness() : "";
 
+  // Records in the order they hold each other: a record's struct holds
+  // another (not a box, which is a cell) by value, so the inner one is
+  // declared first, and its dup, drop and dec too (C91: machine's
+  // `(Int, (Instr, Int))`).
+  const inOrder: RType[] = [];
+  const place = (r: RType) => {
+    if (inOrder.includes(r)) return;
+    for (const x of r.fields) if (isRecord(x.t) && !x.t.mutable) { const inner = records.get(x.t.key); if (inner && inner !== r) place(inner); }
+    inOrder.push(r);
+  };
+  for (const r of records.values()) place(r);
   const types: string[] = [];
-  for (const r of records.values()) {
+  for (const r of inOrder) {
     const n = sname.get(r.key)!;
     types.push(r.mutable
       ? `typedef struct { lab_cell h; ${r.fields.map((x, j) => `${ty(x.t)} f${j};`).join(" ")} } ${n}; // a box`
@@ -334,7 +345,7 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string
   // Dup and drop for records that hold counts, and each cell type's
   // fields given up when its cell goes.
   const counts: string[] = [];
-  for (const r of records.values()) {
+  for (const r of inOrder) {
     if (!counted(r) || r.mutable) continue;
     const n = sname.get(r.key)!;
     const parts = r.fields.map((x, j) => ({ t: x.t, at: `r.f${j}` })).filter((x) => counted(x.t));
