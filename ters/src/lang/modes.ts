@@ -32,7 +32,7 @@
 // Diverge only when it may not end, and an error when it's stuck.
 // test/modes.test.ts compares what it says with what relate.ts does.
 
-import type { Code, Id, Node, NodeOf } from "../model.ts";
+import type { Code, Id, Node, NodeOf, Use } from "../model.ts";
 import { children, derived, derivedFrom, ownerOfTypeParts, subtree } from "../model.ts";
 import { NUMERIC } from "./equations.ts";
 import { planSolve, type SolvePlan } from "./solve.ts";
@@ -834,7 +834,7 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
   }
 
   // A solve inside: the function in the mode it names.
-  function solveGoal(n: NodeOf<"solve">, ctx: Ctx): Goal {
+  function solveGoal(n: Use, ctx: Ctx): Goal {
     const givenSlots = Object.values(n.given).map(slot);
     const bound = Object.values(n.binds).map(slot);
     return {
@@ -850,7 +850,7 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
     };
   }
 
-  function solveVerdict(n: NodeOf<"solve">, ctx?: Ctx): Verdict | null {
+  function solveVerdict(n: Use, ctx?: Ctx): Verdict | null {
     // Equations the solver plans before running: its plan says how many
     // answers, and its search ends (solve.ts).
     let plan: SolvePlan | null = null;
@@ -862,7 +862,7 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
   }
 
   // The mode a solve node names: its given ports, and the functions given.
-  function solveKey(n: NodeOf<"solve">, ctx?: Ctx): { known: Set<string>; spec: Map<number, Fn> } | null {
+  function solveKey(n: Use, ctx?: Ctx): { known: Set<string>; spec: Map<number, Fn> } | null {
     const f = nodes[n.fn];
     const lam = f.kind === "def" ? nodes[f.body!] : null;
     if (lam?.kind !== "lambda") return null;
@@ -924,7 +924,7 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
     const name = (k: string) => { const lam = k.split("|")[0]; const d = code.defs.find((d) => (nodes[d] as NodeOf<"def">).body === lam); return d ? nm(d) : "a function"; };
     return { ...v, ends: false, loops: [...v.loops, ...t.at.map((k) => `${name(k)} calls itself on something that isn't smaller`)] };
   }
-  const ofSolve = (n: NodeOf<"solve">) => checked(() => {
+  const ofSolve = (n: Use) => checked(() => {
     const v = solveVerdict(n);
     const s = solveKey(n);
     return { v, key: s && keyOf({ k: "def", id: n.fn }, s.known, s.spec) };
@@ -963,7 +963,7 @@ const NO_NAMES: Record<Id, string> = {};
 // One analyzer serves every solve of the program (C67i): building one
 // scans every node, which for each solve was a sixth of compiling.
 const verdicts = new WeakMap<Code, WeakMap<Record<Id, string>, { an: ReturnType<typeof analyzer>; m: Map<Id, Verdict | null> }>>();
-export function solveMode(code: Code, n: NodeOf<"solve">, names: Record<Id, string> = NO_NAMES): Verdict | null {
+export function solveMode(code: Code, n: Use, names: Record<Id, string> = NO_NAMES): Verdict | null {
   let byNames = verdicts.get(code);
   if (!byNames) verdicts.set(code, (byNames = new WeakMap()));
   const key = Object.keys(names).length ? names : NO_NAMES;
@@ -977,7 +977,7 @@ export function solveMode(code: Code, n: NodeOf<"solve">, names: Record<Id, stri
 // Choice (MODES.md, L11d)? The equation solver's unique directions, and a
 // relational mode that's det and ends: one answer, found in finite time.
 const single = new WeakMap<Code, Map<Id, boolean>>();
-export function oneAnswer(code: Code, n: NodeOf<"solve">): boolean {
+export function oneAnswer(code: Code, n: Use): boolean {
   let m = single.get(code);
   if (!m) single.set(code, (m = new Map()));
   if (!m.has(n.id)) {

@@ -109,6 +109,14 @@ type DistOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never
 export type NodeData = DistOmit<Node, "id">;
 export type NodeOf<K extends Kind> = Extract<Node, { kind: K }>;
 
+// A use of a relation in one direction (L130a): some ports given by name,
+// the rest bound for its body. Read it through these, not through the
+// `solve` kind, so call and solve can become one kind (PORTS-2026-11-01.md
+// "The merge, step by step") without touching each reader again.
+export type Use = NodeOf<"solve">;
+export const isUse = (n: Node | undefined | null): n is Use => n?.kind === "solve";
+export const useOf = (n: Node | undefined | null): Use | null => (isUse(n) ? n : null);
+
 // What gets stored on disk as code.json. `defs` is the list of top-level
 // definitions; there are no modules, imports or files, just reachable defs.
 export interface Code {
@@ -211,7 +219,7 @@ export function dependencies(code: Code, root: Id): Id[] {
   const visit = (id: Id) => {
     for (const n of subtree(code, id)) {
       const node = code.nodes[n];
-      const target = node.kind === "ref" ? node.target : node.kind === "solve" ? node.fn : node.kind === "tref" ? node.target : node.kind === "arm" ? node.variant : null;
+      const target = node.kind === "ref" ? node.target : isUse(node) ? node.fn : node.kind === "tref" ? node.target : node.kind === "arm" ? node.variant : null;
       for (let t of [target, ...(node.kind === "tfun" ? node.effects ?? [] : []), ...(node.kind === "typedef" ? node.row ?? [] : [])]) {
         if (t && owner.has(t)) t = owner.get(t)!;
         if (!t || seen.has(t)) continue;
@@ -263,8 +271,8 @@ export function parentOf(code: Code, id: Id): { parent: Id; slot: string; index?
     } else if (n.kind === "lambda" && n.body === id) return { parent: n.id, slot: "body" };
     else if ((n.kind === "match" || n.kind === "fold") && n.scrutinee === id) return { parent: n.id, slot: "scrutinee" };
     else if (n.kind === "match" && n.otherwise === id) return { parent: n.id, slot: "otherwise" };
-    else if ((n.kind === "arm" || n.kind === "solve") && n.body === id) return { parent: n.id, slot: "body" };
-    else if (n.kind === "solve") { const key = Object.keys(n.given).find((k) => n.given[k] === id); if (key !== undefined) return { parent: n.id, slot: "given", key }; }
+    else if ((n.kind === "arm" || isUse(n)) && n.body === id) return { parent: n.id, slot: "body" };
+    else if (isUse(n)) { const key = Object.keys(n.given).find((k) => n.given[k] === id); if (key !== undefined) return { parent: n.id, slot: "given", key }; }
     else if (n.kind === "def" && n.body === id) return { parent: n.id, slot: "body" };
   }
   return null;
@@ -285,7 +293,7 @@ export function parentAt(code: Code, id: Id): Parent | null {
       if (n.kind === "call") { put(n.fn, { parent: n.id, slot: "fn" }); n.args.forEach((a, i) => put(a, { parent: n.id, slot: "args", index: i })); }
       else if (n.kind === "lambda" || n.kind === "arm" || n.kind === "def") put(n.body, { parent: n.id, slot: "body" });
       else if (n.kind === "match" || n.kind === "fold") { put(n.scrutinee, { parent: n.id, slot: "scrutinee" }); if (n.kind === "match") put(n.otherwise, { parent: n.id, slot: "otherwise" }); }
-      else if (n.kind === "solve") { put(n.body, { parent: n.id, slot: "body" }); for (const key of Object.keys(n.given)) put(n.given[key], { parent: n.id, slot: "given", key }); }
+      else if (isUse(n)) { put(n.body, { parent: n.id, slot: "body" }); for (const key of Object.keys(n.given)) put(n.given[key], { parent: n.id, slot: "given", key }); }
     }
     parentIndex.set(code, (m = at));
   }

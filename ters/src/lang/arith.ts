@@ -22,7 +22,8 @@
 // definition's own id stays its Float64 version, so entry points and names
 // keep working, and the meaning hash is of the program as written.
 
-import type { Code, Id, Node, NodeData, NodeOf } from "../model.ts";
+import type { Code, Id, Node, NodeData, NodeOf, Use } from "../model.ts";
+import { isUse } from "../model.ts";
 import { freshId } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { B } from "../prelude.ts";
@@ -66,7 +67,7 @@ export const preludeDef = (name: string): Id | undefined =>
 
 export const usesGenericArithmetic = (code: Code) => {
   const ops = interfaceOps(code);
-  return Object.values(code.nodes).some((n) => (n.kind === "ref" && (n.target in AT || ops.has(n.target))) || (n.kind === "solve" && ops.has(n.fn)) || (n.kind === "lit" && n.of !== undefined && DATA_NUMBERS.has(n.of)));
+  return Object.values(code.nodes).some((n) => (n.kind === "ref" && (n.target in AT || ops.has(n.target))) || (isUse(n) && ops.has(n.fn)) || (n.kind === "lit" && n.of !== undefined && DATA_NUMBERS.has(n.of)));
 };
 
 // Whether resolveArithmetic changes anything: it also lifts recursive lets
@@ -302,7 +303,7 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
   // of what the type gives for it, or of the way picked, its ports moved
   // from positions to that definition's parameters.
   const implementSolve = (id: Id, env: Env) => {
-    const n = nodes[id] as NodeOf<"solve">;
+    const n = nodes[id] as Use;
     const ref: NodeOf<"ref"> = { id, kind: "ref", target: n.fn };
     const before = nodes[id];
     nodes[id] = ref;
@@ -329,7 +330,7 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
   // solve gives it, as a call would (L38: x · n + 1 = 13 with n an Int is
   // solved in whole numbers), its ports moved to the copy's parameters.
   const instanceSolve = (id: Id, env: Env) => {
-    const n = nodes[id] as NodeOf<"solve">;
+    const n = nodes[id] as Use;
     const sc = schemes.get(n.fn), t = info.solveAt?.get(id);
     if (!sc || !t || !constrained(sc).length || nodes[n.fn]?.kind !== "def") return;
     const at: Env = new Map();
@@ -354,8 +355,8 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
         if (x?.t === "con" && info.implementations?.has(implementationKey(f.iface, x))) { nodes[id] = { id, kind: "ref", target: f.field }; opAt.set(id, x); }
       }
       if (nodes[id].kind === "ref" && ops.has((nodes[id] as NodeOf<"ref">).target)) implement(id, env);
-      if (nodes[id].kind === "solve" && ops.has((nodes[id] as NodeOf<"solve">).fn)) implementSolve(id, env);
-      else if (nodes[id].kind === "solve") instanceSolve(id, env);
+      if (isUse(nodes[id]) && ops.has((nodes[id] as Use).fn)) implementSolve(id, env);
+      else if (isUse(nodes[id])) instanceSolve(id, env);
       const n = nodes[id];
       if (n.kind === "ref") {
         const t = typeOf.get(id);

@@ -20,6 +20,7 @@
 //     fresh id, and far past where two different definitions could share one.
 
 import type { Code, Id, Node } from "./model.ts";
+import { isUse } from "./model.ts";
 import { ownerOfTypeParts } from "./model.ts";
 import { base32, sha256 } from "./sha256.ts";
 
@@ -48,7 +49,7 @@ export function defDeps(code: Code, def: Id, owner = ownerOfTypeParts(code)): Id
 }
 
 const target = (n: Node): Id | null =>
-  n.kind === "ref" || n.kind === "tref" ? n.target : n.kind === "solve" ? n.fn : n.kind === "arm" ? n.variant : null;
+  n.kind === "ref" || n.kind === "tref" ? n.target : isUse(n) ? n.fn : n.kind === "arm" ? n.variant : null;
 
 function kids(n: Node): Id[] {
   switch (n.kind) {

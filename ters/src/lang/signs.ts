@@ -22,7 +22,7 @@
 // Haskell's path-sensitive refinements, which a divisor `{v /= 0}` asks
 // for by annotation; here it's inferred. CREDITS.md.
 
-import { children, type Code, type Id, type NodeOf } from "../model.ts";
+import { children, type Code, type Id, type NodeOf, isUse } from "../model.ts";
 import { B } from "../prelude.ts";
 import { ARITH, FALSE, INT_OPS, RATIO, S, TRUE } from "./std.ts";
 
@@ -239,7 +239,7 @@ export function signAnalysis(code: Code) {
     return within(d, () => {
       for (const id of subtreeOf(body.body)) {
         const n = code.nodes[id];
-        if (n?.kind === "solve") return false;
+        if (isUse(n)) return false;
         if (n?.kind !== "call") continue;
         const fn = code.nodes[n.fn];
         if (fn?.kind === "lambda") continue;

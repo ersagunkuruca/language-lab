@@ -32,6 +32,7 @@
 // do.
 
 import type { Code, Id, Node, NodeData, NodeOf } from "../model.ts";
+import { isUse } from "../model.ts";
 import { children, freshId, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { impl, type Op } from "../prelude.ts";
@@ -369,7 +370,7 @@ function closedTree(code: Code, root: Id, fixed: Map<Id, Id> = new Map()): boole
     const n = code.nodes[id];
     if (n.kind === "lambda") n.params.forEach((p) => bound.add(p));
     if (n.kind === "arm") [...n.binds, ...n.results].forEach((p) => p && bound.add(p));
-    if (n.kind === "solve") Object.values(n.binds).forEach((p) => bound.add(p));
+    if (isUse(n)) Object.values(n.binds).forEach((p) => bound.add(p));
   }
   return ids.every((id) => { const n = code.nodes[id]; return n.kind !== "ref" || code.nodes[n.target]?.kind !== "binder" || bound.has(n.target) || fixed.has(n.target); });
 }
@@ -391,7 +392,7 @@ function copyTree(code: Code, names: Names, root: Id, map: Map<Id, Id>, fixed = 
   // Binders are reached through their binding nodes' fields, not children.
   for (const id of ids) {
     const n = code.nodes[id];
-    const bound = n.kind === "lambda" ? n.params : n.kind === "arm" ? [...n.binds, ...n.results.filter((r): r is Id => !!r)] : n.kind === "solve" ? Object.values(n.binds) : [];
+    const bound = n.kind === "lambda" ? n.params : n.kind === "arm" ? [...n.binds, ...n.results.filter((r): r is Id => !!r)] : isUse(n) ? Object.values(n.binds) : [];
     for (const b of bound) if (!map.has(b)) map.set(b, freshId());
   }
   const re = (x: Id) => map.get(x) ?? x;

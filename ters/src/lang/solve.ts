@@ -21,7 +21,7 @@
 // may not end (modes.ts; the checker asks it).
 
 import { direction, results } from "../../../invertible/src/index.js";
-import type { Code, Id, NodeOf } from "../model.ts";
+import type { Code, Id, NodeOf, Use } from "../model.ts";
 import { relationFor, type Relation } from "./equations.ts";
 import { SIGS, TRUE } from "./std.ts";
 
@@ -60,7 +60,7 @@ export function solvesInWholeNumbers(code: Code, solve: Id): void {
   s.add(solve);
 }
 
-export function planSolve(code: Code, n: NodeOf<"solve">): SolvePlan {
+export function planSolve(code: Code, n: Use): SolvePlan {
   const relational = (): SolvePlan => {
     if (!runsBackwards(code, n.fn)) throw new Error(`${n.fn} can't be run backwards`);
     return { mode: "relational", rel: null, known: Object.keys(n.given), predicate: false, status: "solved", needMore: 0, many: true, canFail: true, unique: false };

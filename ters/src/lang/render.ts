@@ -14,6 +14,7 @@
 // the same: one printer. A piece with an id stands for that node.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
+import { isUse } from "../model.ts";
 import { children, resolveRefs, subtree } from "../model.ts";
 import { givenBy } from "./directions.ts";
 import type { Notation, Presentation } from "../presentation.ts";
@@ -178,7 +179,7 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
   // Does this expression need lines of its own?
   const tall = (id: Id): boolean => {
     const n = node(id);
-    if (n.kind === "match" || n.kind === "fold" || n.kind === "solve" || isLet(n)) return true;
+    if (n.kind === "match" || n.kind === "fold" || isUse(n) || isLet(n)) return true;
     if (n.kind === "call") return [n.fn, ...n.args].some(tall);
     if (n.kind === "lambda") return tall(n.body);
     return false;
@@ -434,7 +435,7 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
       }
       return hold([ln(...lead, kw(`${handles ? "handle" : n.kind} `), ...inline(n.scrutinee).p), grp(arms)]);
     }
-    if (n.kind === "solve") {
+    if (isUse(n)) {
       // A use of a definition with results, in the direction it declares
       // (RESULTS.md): length, angle = polar(x, y), the results side by side.
       const f = node(n.fn);
