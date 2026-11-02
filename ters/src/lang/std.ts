@@ -756,6 +756,7 @@ export const TEXT_OPS = {
   less: builtin("text.less", "comes before", pure([str, str], bool), (a: string, b: string) => truth(T.less(a, b))),
   code: choice("text.code", "character code", [str], int, T.code),
   fromCode: choice("text.fromCode", "character", [int], str, T.fromCode),
+  readNumber: choice("text.readNumber", "read number", [str], num, T.readNumber),
 };
 
 // Arrays (BACKLOG C30d, REPRESENTATIONS.md step 5): a list's items side by
