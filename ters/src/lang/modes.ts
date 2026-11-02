@@ -663,6 +663,10 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
     // (relate.ts; any when both are 0, which is rare enough to call Choice).
     if (id === INT_OPS.mul) return sided(text, sides, call, [forward, { needs: [1, o], gives: [0], answers: CHECK }, { needs: [0, o], gives: [1], answers: CHECK }]);
     if (id === TEXT_OPS.split) return sided(text, sides, call, [forward, { needs: [1, 2], gives: [0], answers: CHECK }]);
+    // join all backwards (L172): the parts are the text split at the
+    // separator, the one list of parts that hold none of it, as show run
+    // backwards reads the one way a number is written.
+    if (id === TEXT_OPS.joinAll) return sided(text, sides, call, [forward, { needs: [1, 2], gives: [0], answers: ONE }]);
     if (id === SET || STD_IMPL[id] || STD_MANY[id]) return sided(text, sides, call, [forward]);
     return sided(text, sides, call, [forward]);
   }
