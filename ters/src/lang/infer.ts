@@ -72,6 +72,10 @@ export interface Info {
   answered?: Set<Id>;
   // Calls given one tuple for several inputs, f(p) for f(x, y) (L128).
   spread?: Set<Id>;
+  // Each input that is a function of n inputs given for a function of one
+  // n-tuple (tupled: it takes the parts, and is given the tuple), or the
+  // other way round (L137). spread.ts wraps it.
+  reshape?: Map<Id, { size: number; tupled: boolean }>;
   // Each definition with results (RESULTS.md): the effects of the direction
   // it declares, Choice when it may give several answers or none, Diverge
   // when its search may not end.
@@ -122,7 +126,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // are the earlier check's.
   const owner = reuse ? reuse.from.owner : ownerOfTypeParts(code);
   const insiders = opts.insiders ? new Set(opts.insiders) : null;
-  const info: Info = { typeOf: new Map(), schemes: new Map(), errors: [], holes: new Map(), divergent: new Set(), subst: s, owner, hidden: new Set(opts.hidden ?? []), options: opts, implementations: new Map(), opAt: new Map(), answered: new Set(), spread: new Set() };
+  const info: Info = { typeOf: new Map(), schemes: new Map(), errors: [], holes: new Map(), divergent: new Set(), subst: s, owner, hidden: new Set(opts.hidden ?? []), options: opts, implementations: new Map(), opAt: new Map(), answered: new Set(), spread: new Set(), reshape: new Map() };
   const err = (id: Id, message: string, missing?: Problem["missing"]) => info.errors.push(missing ? { id, message, missing } : { id, message });
   const nm = (id: Id) => names[id] ?? id;
   const show = (t: Type) => showT(s.zonk(t), names);
@@ -753,8 +757,11 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         const back = given?.kind === "ref" && current.includes(given.target) && fr.t === "var";
         const params = back ? args.map(() => s.fresh()) : args;
         if (back) recursiveCalls.push({ call: n, params, args });
+        const reshapedBefore = s.reshaped;
         try {
-          s.unify(fr, { t: "fn", params, ret, eff: callRow });
+          s.tupleOf = tupleType;
+          try { s.unify(fr, { t: "fn", params, ret, eff: callRow }); } finally { s.tupleOf = null; }
+          if (s.reshaped > reshapedBefore) reshape(n, f, args, s.reshaped - reshapedBefore);
         } catch (e) {
           if (e instanceof WorldError) {
             // The callee acting itself, or a function it's given that it
@@ -856,6 +863,26 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // are numbers bound in the body, and Choice unless the answer is unique.
   // A function run backwards by the relational interpreter instead takes
   // its port types from the function's own type.
+  // A function of n ≥ 2 inputs given where a function of one n-tuple goes,
+  // or the other way round (L137): unification let the two shapes meet, so
+  // the input is marked for a wrapper (spread.ts), (p ↦ f(p.first,
+  // p.second)) or ((x, y) ↦ f(tuple(x, y))). Only an input given right
+  // here can be wrapped: a meeting deeper inside (a list of functions) is
+  // refused, as before.
+  function reshape(n: NodeOf<"call">, f: Type, args: Type[], count: number) {
+    const ft = s.resolve(f);
+    const params = ft.t === "fn" ? ft.params : [];
+    let found = 0;
+    n.args.forEach((a, i) => {
+      const given = s.resolve(args[i] ?? { t: "var", v: -1 }), want = params[i] ? s.resolve(params[i]) : null;
+      if (given.t !== "fn" || want?.t !== "fn" || given.params.length === want.params.length) return;
+      const size = Math.max(given.params.length, want.params.length);
+      info.reshape!.set(a, { size, tupled: given.params.length > 1 });
+      found++;
+    });
+    if (found < count) err(n.args.length ? n.args[0] : n.id, `${callee(n)} is given a function of several inputs where a function of one tuple goes (or the other way round) inside other data, which can't be wrapped here`);
+  }
+
   function solveType(n: NodeOf<"solve">, env: Map<Id, Type>, row: Row): Type {
     const inner = new Map(env);
     // An interface's field with results (POLAR.md, L97c): the type's own

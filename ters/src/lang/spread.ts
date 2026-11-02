@@ -14,16 +14,34 @@ import type { Code, Id, Node, NodeOf } from "../model.ts";
 import { freshId } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { infer, type Info } from "./infer.ts";
-import { tuplePart } from "./std.ts";
+import { tuplePart, tupleVariant } from "./std.ts";
 
 // A node without its id, kind by kind.
 type Bare = Node extends infer N ? (N extends Node ? Omit<N, "id"> : never) : never;
 
 export function spreadTuples(code: Code, info: Info, names: Names): { code: Code; info: Info; names: Names } {
   const calls = [...(info.spread ?? [])].filter((id) => code.nodes[id]?.kind === "call");
-  if (!calls.length) return { code, info, names };
+  const reshaped = [...(info.reshape ?? [])].filter(([id]) => code.nodes[id]);
+  if (!calls.length && !reshaped.length) return { code, info, names };
   const nodes: Record<Id, Node> = { ...code.nodes };
   const add = (n: Bare): Id => { const id = freshId(); nodes[id] = { ...n, id } as Node; return id; };
+  // A function given at the other shape (L137) gets a wrapper where it is
+  // given: the input keeps its id, as the wrapper, and what was there moves
+  // inside. Given the parts where a tuple comes: p ↦ f(p.first, p.second).
+  // Given a tuple where the parts come: (x, y) ↦ f(tuple(x, y)).
+  for (const [id, { size, tupled }] of reshaped) {
+    const inner = add({ ...(nodes[id] as Bare) });
+    const ref = (target: Id) => add({ kind: "ref", target });
+    if (tupled) {
+      const p = add({ kind: "binder" });
+      const parts = Array.from({ length: size }, (_, i) => add({ kind: "call", fn: ref(tuplePart(size, i)), args: [ref(p)] }));
+      nodes[id] = { id, kind: "lambda", params: [p], body: add({ kind: "call", fn: inner, args: parts }) } as Node;
+    } else {
+      const xs = Array.from({ length: size }, () => add({ kind: "binder" }));
+      const whole = add({ kind: "call", fn: ref(tupleVariant(size)), args: xs.map(ref) });
+      nodes[id] = { id, kind: "lambda", params: xs, body: add({ kind: "call", fn: inner, args: [whole] }) } as Node;
+    }
+  }
   for (const id of calls) {
     const n = nodes[id] as NodeOf<"call">;
     const t = info.typeOf.get(n.args[0]), r = t && info.subst.resolve(t);
