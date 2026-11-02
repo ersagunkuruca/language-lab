@@ -446,7 +446,7 @@ export const S = {
   print: builtin("print", "print", (s) => fn([str], unit, s.freshRow([CONSOLE]))),
   // Handlers. Each takes thunks and removes an effect from them.
   all: builtin("all", "all", (s) => { const a = s.fresh(), e = searchRow(s); return fn([fn([], a, { effs: [CHOICE], tail: e.tail })], list(a), e); }),
-  count: builtin("count", "count", (s) => { const a = s.fresh(), e = searchRow(s); return fn([fn([], a, { effs: [CHOICE], tail: e.tail })], num, e); }),
+  count: builtin("count", "count", (s) => { const a = s.fresh(), e = searchRow(s); return fn([fn([], a, { effs: [CHOICE], tail: e.tail })], int, e); }),
   // The default runs after the search, not under it: it may act, and the
   // call does what either does.
   first: builtin("first", "first", (s) => {
