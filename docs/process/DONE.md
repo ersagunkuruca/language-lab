@@ -746,7 +746,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| D7 | Compass: a Perpendicular tool. Click a point, then a line: (p ∧ s ∧ ∞)*, the line through p meeting s at right angles (dot 0 with p, s and ∞); with a circle it is the line through the point and the centre | #PR |
+| D7 | Compass: a Perpendicular tool. Click a point, then a line: (p ∧ s ∧ ∞)*, the line through p meeting s at right angles (dot 0 with p, s and ∞); with a circle it is the line through the point and the centre | #1090 |
 | D6 | Compass: a Midpoint tool (Ersagun 2026-11-02, after building an incircle by hand). Two points p and q of weight 1: p − q is their perpendicular bisector (x · p = x · q), and the midpoint is where it crosses the line through them. Perpendicular and angle bisector follow as D7, D8 | #1088 |
 | I147 | Compass: a circle round a point through a point where two lines cross missed that point, and shrank as the crossing moved away from the origin (Ersagun 2026-11-02, building an incircle). Two lines' crossing was read off the flat point as o ⌋ T = x − ½\|x\|² ∞, which has the point's x and y but isn't a point (it doesn't square to 0), so c · p was off by ½\|x\|². The crossing is made again from its x and y; test/compass.test.ts | #1079 |
 | D5 | The guitar pedal restyled as a stompbox (Ersagun 2026-10-30): the converter's colours with a dark version; the two sources light up while they play (the page's `data-playing`); the controls are the pedal's dark top, its switch lit orange while driven (a class worked out from `driven`), the drive in a monospace readout; the waveform a scope screen with a grid. A `styles` definition of rules and every element named by its class | this PR |
