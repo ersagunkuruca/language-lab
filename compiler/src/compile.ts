@@ -121,6 +121,13 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     names = x.names;
     info = infer(code, names);
   }
+  // Only what the exports reach is compiled, so it is all the passes below
+  // look at and check again (C67): the library's other definitions were
+  // over half of each check. Types stay, and the builtins. The checked
+  // types still hold for what's left, so this needs no check of its own.
+  // Before hoisting, whose check again was over the whole library too
+  // (sheet: 1.6 s of its 2.4 s compile).
+  code = reachedFromExports(code, names, opts.exports);
   // Work a lambda redoes on every call though nothing in it changes, done
   // once before (hoist.ts, C81).
   ({ code, info, names } = hoistInvariants(code, info, names));
@@ -138,11 +145,6 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     const checked = infer(sol.code, sol.names);
     if (checked.errors.length <= info.errors.length) ({ code, names, info } = { ...sol, info: checked });
   }
-  // Only what the exports reach is compiled, so it is all the passes below
-  // look at and check again (C67): the library's other definitions were
-  // over half of each check. Types stay, and the builtins. The checked
-  // types still hold for what's left, so this needs no check of its own.
-  code = reachedFromExports(code, names, opts.exports);
   // Calls given data written down (an algebra's signature and basis) are
   // worked out as far as that data goes (stage.ts, C65): what's left is
   // arithmetic, with no lists. Kept only if the program still checks.
@@ -2128,7 +2130,14 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const waitingArms = answering.filter((a) => !parses(`(${plain(a)})`));
       const body = inGen(false, () => ret(n.scrutinee));
       if (!waitingArms.length && parses(`(() => {\n${body}\n})`)) return null;
-      if (n.otherwise) throw notYet("a handler's case for the normal finish around code that waits");
+      if (n.otherwise) {
+        // The normal finish (L57) as handleEx has it: the computation's
+        // value comes out marked, and the case runs on it outside the
+        // handler, in the generator, so it may wait too (C40).
+        const mark = temp("finished"), r = temp("r");
+        const handled = handleWaiting({ ...n, otherwise: null }, arms, (b) => `return [${mark}, yield* (function* () {\n${b}\n})()];`)!;
+        return `(yield* (function* () {\nconst ${mark} = {};\nconst ${r} = ${handled};\nreturn Array.isArray(${r}) && ${r}[0] === ${mark} ? ${laterFn(ty(n.otherwise), sp.lat) ? "yield* " : ""}(${ex(n.otherwise)})(${r}[1]) : ${r};\n})())`;
+      }
       const generator = (a: NodeOf<"arm">) => `(function* (${a.binds.map(local).join(", ")}) {\n${scoped(false, () => inGen(true, () => ret(a.body)))}\n})`;
       const answers = `{ ${answering.map((a) => `${tag(a.variant)}: ${waitingArms.includes(a) ? generator(a) : plain(a)}`).join(", ")} }`;
       const gens = `[${waitingArms.map((a) => tag(a.variant)).join(", ")}]`;

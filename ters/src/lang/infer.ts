@@ -401,6 +401,34 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         else unifyAt(call.args[i], p, args[i]);
       }
     });
+    // L159: why a group that might not finish can't take Diverge, when it
+    // is a function stored in a constructor's field whose type has none
+    // (a lazy stream's `next : () -> Stream`) that calls back into the
+    // group. The group itself is fine; the field is what wants a function
+    // that surely finishes, so the message names the field and its fix.
+    // Guarded corecursion, which would take it as it is, is NUMBERS.md
+    // stage 5.
+    const lazyField = (d: Id, group: Id[]): { at: Id; message: string } | null => {
+      const members = new Set(group);
+      for (const id of subtree(code, d)) {
+        const n = code.nodes[id];
+        if (n?.kind !== "call") continue;
+        const f = code.nodes[n.fn], v = f?.kind === "ref" ? code.nodes[f.target] : undefined;
+        if (v?.kind !== "variant") continue;
+        for (const [i, a] of n.args.entries()) {
+          const callee = subtree(code, a).map((x) => code.nodes[x]).find((r): r is NodeOf<"ref"> => r?.kind === "ref" && members.has(r.target));
+          const t = info.typeOf.get(a), field = v.fields[i];
+          if (code.nodes[a]?.kind !== "lambda" || callee?.kind !== "ref" || !t || !field) continue;
+          const r = s.resolve(t);
+          if (r.t !== "fn") continue;
+          const row = s.resolveRow(r.eff);
+          if (row.tail !== null || row.effs.includes(DIVERGE)) continue;
+          const fieldName = nm(field), wanted = show(r), open = show({ ...r, eff: { effs: [...row.effs, DIVERGE], tail: null } });
+          return { at: a, message: `the function in ${nm((f as NodeOf<"ref">).target)}'s ${fieldName} calls ${nm(callee.target)}, which might not finish, but ${fieldName}'s type, ${wanted}, wants one that surely finishes: add Diverge to it, ${open}` };
+        }
+      }
+      return null;
+    };
     const recursive = group.length > 1 || deps(group[0]).includes(group[0]);
     // Only functions can be recursive: a value defined in terms of itself
     // (ones = cons(1, ones)) has no first step to take.
@@ -415,7 +443,11 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         // Its type may already be closed without Diverge: it was passed
         // where only a pure function fits (map parts' function, say).
         try { if (t.t === "fn") s.unifyRow(t.eff, { effs: [DIVERGE], tail: s.next++ }); }
-        catch (e) { if (e instanceof EffectError) err(d, `${nm(d)} might not finish, and it is used where only a function that surely finishes fits`); else throw e; }
+        catch (e) {
+          if (!(e instanceof EffectError)) throw e;
+          const lazy = lazyField(d, group);
+          if (lazy) err(lazy.at, lazy.message); else err(d, `${nm(d)} might not finish, and it is used where only a function that surely finishes fits`);
+        }
       }
     }
     // Solves whose givens waited for the definition's types (L38).

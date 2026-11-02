@@ -21,7 +21,7 @@ import type { Id } from "../src/model.ts";
 import { compile } from "../../compiler/src/compile.ts";
 
 const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
-const lib = (name: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === name)!;
+const lib = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
 const POINTS = [-1.5, 0, 0.3, 2];
 
 function program() {

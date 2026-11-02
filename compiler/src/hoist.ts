@@ -110,7 +110,8 @@ export function hoistInvariants(code: Code, info: Info, names: Names): { code: C
   const checked = infer(out, names, undefined, info.options);
   // Checked again the same way as the program as it came is, since a check
   // again can find what the first (with its pins) didn't (stage.ts, I121).
-  const before = Math.max(info.errors.length, infer(code, names, undefined, info.options).errors.length);
-  if (checked.errors.length > before) return { code, info, names, hoisted: 0 };
+  // Only asked when the new check has more errors than the first: it is
+  // a whole check of its own (C67).
+  if (checked.errors.length > info.errors.length && checked.errors.length > infer(code, names, undefined, info.options).errors.length) return { code, info, names, hoisted: 0 };
   return { code: out, info: checked, names, hoisted };
 }
