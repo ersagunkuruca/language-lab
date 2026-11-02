@@ -1,5 +1,6 @@
 // Holes in the compiler found by the reviews (docs/reports/reviews/
-// REVIEW-2026-10-22b.md, then REVIEW-2026-11-02b.md, "R7"), as todo tests: they run, fail today, and don't fail the suite. When a fix lands,
+// REVIEW-2026-10-22b.md, then REVIEW-2026-11-02c.md, "R8"), as todo tests:
+// they run, fail today, and don't fail the suite. When a fix lands,
 // drop the todo and the test guards it.
 
 import { test } from "node:test";
@@ -42,7 +43,7 @@ test("R2 §1.1 the shader profile refuses a loop it can't see end", () => {
 // the evaluator stops at the multiply, inside the handler, which answers 0;
 // compiled JavaScript lets the ∞ out of the handler and stops at the show
 // outside it, where nothing handles it.
-test("R7 §1 an overflow inside a handler of Abort is handled there, compiled as evaluated", { todo: "compiled code checks an overflow late, after it has left the handler" }, async () => {
+test("R8 §1 an overflow inside a handler of Abort is handled there, compiled as evaluated", { todo: "compiled code checks an overflow late, after it has left the handler" }, async () => {
   const k = new Lang();
   const caught = k.def("caught");
   // caught(a, b) = show(match a · b { abort(why) → 0 })
