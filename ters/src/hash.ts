@@ -152,6 +152,15 @@ function canon(code: Code, defId: Id, group: Map<Id, number | null>, memo: Map<I
     }
     return ["extern", id];
   };
+  // A field's place in its type, case then field: what `same` points at.
+  const samePlace = (id: Id): unknown[] => {
+    const d = owner.get(id), td = d ? code.nodes[(code.nodes[d] as { body: Id }).body] : undefined;
+    if (td?.kind === "typedef") for (const [vi, v] of td.variants.entries()) {
+      const fi = (code.nodes[v] as { fields: Id[] }).fields.indexOf(id);
+      if (fi >= 0) return [vi, fi];
+    }
+    return [["extern", id]];
+  };
   const go = (id: Id): Canon => {
     const n = code.nodes[id];
     switch (n.kind) {
@@ -186,7 +195,9 @@ function canon(code: Code, defId: Id, group: Map<Id, number | null>, memo: Map<I
       // An operation's own type variables, only when it has some, so every
       // hash from before stays.
       case "variant": return n.params?.length ? ["variant", ["own", n.params.map(go)], n.fields.map(go)] : ["variant", n.fields.map(go)];
-      case "field": return ["field", go(n.type)];
+      // A shared field (L168) says which case's field it is, by position;
+      // only when present, so every hash from before stays.
+      case "field": return n.same ? ["field", go(n.type), ["same", ...samePlace(n.same)]] : ["field", go(n.type)];
       case "tref": {
         const head = binders.has(n.target) ? ["var", binders.get(n.target)] : defRef(n.target);
         return ["tref", head, ...n.args.map(go)];
