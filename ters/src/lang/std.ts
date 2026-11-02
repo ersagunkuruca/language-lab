@@ -1009,6 +1009,17 @@ export const CASE_NAME = builtin("caseName", "case name", (s) => fn([s.fresh(tru
 // fields left to right. Plain data only, like `equal`.
 export const COMPARE = builtin("compare", "compare", (s) => { const a = s.fresh(true); return fn([a, a], { t: "con", id: "std.order", args: [] }, s.freshRow()); });
 
+// A data type's fields picked by their type (L162b, fields-by-type.ts):
+// fields mapped(value, f) gives every field of value's case declared with
+// f's input type to f; fields listed(value) is those fields as a list. Both
+// are written out per type as a match before anything runs, so they have no
+// implementation of their own (run.ts says so if one is reached).
+const open = (name: string) => () => { throw new Error(`${name} needs the value's data type and the fields' type known where it is used: give the definition that calls it those types`); };
+export const FIELDS = {
+  mapped: builtin("fields.mapped", "fields mapped", (s) => { const a = s.fresh(true), b = s.fresh(), e = s.freshRow(); return fn([a, fn([b], b, e)], a, e); }, open("fields mapped")),
+  listed: builtin("fields.listed", "fields listed", (s) => { const a = s.fresh(true), b = s.fresh(); return fn([a], list(b), s.freshRow()); }, open("fields listed")),
+};
+
 // Records: set(field, record, value) is the record with that field changed.
 // `field` is a field, or a path of fields (p ↦ p.address.city), which the
 // checker insists on; the update is that path run backwards, with every
