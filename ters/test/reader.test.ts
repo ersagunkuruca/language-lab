@@ -149,3 +149,23 @@ test("typed show of a value not known yet leaves its type open", async () => {
   const call = r.code.nodes[hole] as NodeOf<"call">;
   assert.equal((r.code.nodes[call.fn] as NodeOf<"ref">).target, SHOW_ANY);
 });
+
+// Each name's meanings are narrowed by what's around them before they're
+// combined (E176): sheet's report line, with `line` a field of two types,
+// `name` of four and show of four meanings, has 128 readings, more than
+// the 16 tried; e is what every field read of it takes.
+test("typed line of fields and shows reads though its readings are many", async () => {
+  const { Lang } = await import("../src/lang/dsl.ts");
+  const { base, baseNames } = await import("../src/lang/load.ts");
+  const { INT, STRING } = await import("../src/lang/types.ts");
+  const k = new Lang();
+  for (const [t, line] of [["Entry", true], ["Cell", true], ["Sum", false], ["Note", false]] as const)
+    k.type(t, [], [[t.toLowerCase(), [["name", () => k.tref(STRING)], ...(line ? [["line", () => k.tref(INT)] as [string, () => string]] : [])]]]);
+  const f = k.def("report line");
+  let hole = "";
+  k.define(f, k.fn(["e"], () => (hole = k.hole())));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names);
+  const r = fillValue(code, names, info, hole, `"line " ++ show(e.line) ++ ": " ++ e.name ++ " is " ++ e.name ++ "."`, f);
+  assert.ok(r.ok, !r.ok ? r.reason : "");
+});
