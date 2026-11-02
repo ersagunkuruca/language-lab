@@ -10,7 +10,7 @@ import { children, collect, freshId, parentAt, parentOf, replace, subtree, swapI
 import type { Names, Notation, Presentation } from "../ters/src/presentation.ts";
 import blocksStyle from "../ters/styles/blocks.json" with { type: "json" };
 import { fillings, implementationKey, infer as check, type Filling, type Info } from "../ters/src/lang/infer.ts";
-import { isPublished } from "../ters/src/model.ts";
+import { isPublished, isUse, useNode, useTarget, type Use } from "../ters/src/model.ts";
 import { LIBRARY, PRELUDE, TREES } from "../ters/src/lang/library.ts";
 import { B } from "../ters/src/prelude.ts";
 import { pinsOf, type Pins } from "../ters/src/lang/signatures.ts";
@@ -1084,12 +1084,12 @@ export function wrapInto(code: Code, names: Names, before: Info, at: Id, kept: C
 // case looks at and what each case gives, a relation's givens and body.
 export function inputsOf(code: Code, id: Id): Id[] {
   const n = code.nodes[id];
+  if (isUse(n)) return [...Object.values(n.given), n.body];
   switch (n?.kind) {
     case "call": { const f = code.nodes[n.fn]; return [...n.args, ...(f?.kind === "lambda" ? [f.body] : [])]; }
     case "lambda": return [n.body];
     case "match": return [n.scrutinee, ...n.arms.map((a) => (code.nodes[a] as NodeOf<"arm">).body), ...(n.otherwise ? [n.otherwise] : [])];
     case "fold": return [n.scrutinee, ...n.arms.map((a) => (code.nodes[a] as NodeOf<"arm">).body)];
-    case "solve": return [...Object.values(n.given), n.body];
     default: return [];
   }
 }
@@ -1254,6 +1254,11 @@ export function scopeAt(code: Code, defId: Id, id: Id): Id[] {
     if (found) return;
     if (n === id) { found = scope; return; }
     const x = code.nodes[n];
+    if (isUse(x)) {
+      Object.values(x.given).forEach((g) => walk(g, scope));
+      walk(x.body, [...scope, ...Object.values(x.binds)]);
+      return;
+    }
     switch (x.kind) {
       case "lambda": walk(x.body, [...scope, ...x.params]); return;
       case "call":
@@ -1272,10 +1277,6 @@ export function scopeAt(code: Code, defId: Id, id: Id): Id[] {
           walk(arm.body, [...scope, ...arm.binds, ...arm.results.filter((r): r is Id => r !== null)]);
         }
         if (x.kind === "match" && x.otherwise) walk(x.otherwise, scope);
-        return;
-      case "solve":
-        Object.values(x.given).forEach((g) => walk(g, scope));
-        walk(x.body, [...scope, ...Object.values(x.binds)]);
         return;
     }
   };
@@ -1303,17 +1304,18 @@ function copyTree(code: Code, nodes: Record<Id, Node>, names: Names, root: Id, m
     const n = code.nodes[id];
     if (n.kind === "ref") return mk({ kind: "ref", target: map.get(n.target) ?? n.target });
     if (n.kind === "binder") { const nid = mk({ kind: "binder" }); map.set(id, nid); if (names[id] !== undefined) names[nid] = names[id]; return nid; }
+    if (isUse(n)) {
+      const given = Object.fromEntries(Object.entries(n.given).map(([k, v]) => [k, go(v)]));
+      const binds = Object.fromEntries(Object.entries(n.binds).map(([k, v]) => [k, go(v)]));
+      const target = useTarget(code.nodes, n);
+      return mk(useNode(mk, map.get(target) ?? target, given, binds, go(n.body)));
+    }
     switch (n.kind) {
       case "call": { const fn = go(n.fn); return mk({ kind: "call", fn, args: n.args.map(go) }); }
       case "lambda": { const params = n.params.map(go); return mk({ kind: "lambda", params, body: go(n.body) }); }
       case "match": { const s = go(n.scrutinee); const arms = n.arms.map(go); return mk({ kind: "match", scrutinee: s, arms, otherwise: n.otherwise ? go(n.otherwise) : null }); }
       case "fold": { const s = go(n.scrutinee); return mk({ kind: "fold", scrutinee: s, arms: n.arms.map(go) }); }
       case "arm": { const binds = n.binds.map(go); const results = n.results.map((r) => (r ? go(r) : null)); return mk({ kind: "arm", variant: n.variant, binds, results, body: go(n.body) }); }
-      case "solve": {
-        const given = Object.fromEntries(Object.entries(n.given).map(([k, v]) => [k, go(v)]));
-        const binds = Object.fromEntries(Object.entries(n.binds).map(([k, v]) => [k, go(v)]));
-        return mk({ kind: "solve", fn: map.get(n.fn) ?? n.fn, given, binds, body: go(n.body) });
-      }
       default: return mk({ ...n, id: undefined } as unknown as NodeData);
     }
   };
@@ -1348,6 +1350,13 @@ export function paste(code: Code, names: Names, info: Info, defId: Id, clip: Cli
   const bind = (b: Id): Id => { const nb = mk({ kind: "binder" }); map.set(b, nb); if (clip.names[b] !== undefined) nn[nb] = clip.names[b]; return nb; };
   const go = (id: Id, at = freshId()): Id => {
     const n = clip.nodes[id];
+    if (isUse(n)) {
+      const target = useTarget(clip.nodes, n);
+      if (!code.nodes[target]) { lost++; return mk({ kind: "hole" }, at); }
+      const given = Object.fromEntries(Object.entries(n.given).map(([k, g]) => [k, go(g)]));
+      const binds = Object.fromEntries(Object.entries(n.binds).map(([k, b]) => [k, bind(b)]));
+      return mk(useNode((d) => mk(d), target, given, binds, go(n.body)), at);
+    }
     switch (n.kind) {
       case "ref": {
         if (map.has(n.target)) return mk({ kind: "ref", target: map.get(n.target)! }, at);
@@ -1367,12 +1376,6 @@ export function paste(code: Code, names: Names, info: Info, defId: Id, clip: Cli
           return mk({ kind: "arm", variant: arm.variant, binds, results, body: go(arm.body) });
         });
         return n.kind === "match" ? mk({ kind: "match", scrutinee, arms, otherwise: n.otherwise ? go(n.otherwise) : null }, at) : mk({ kind: "fold", scrutinee, arms }, at);
-      }
-      case "solve": {
-        if (!code.nodes[n.fn]) { lost++; return mk({ kind: "hole" }, at); }
-        const given = Object.fromEntries(Object.entries(n.given).map(([k, g]) => [k, go(g)]));
-        const binds = Object.fromEntries(Object.entries(n.binds).map(([k, b]) => [k, bind(b)]));
-        return mk({ kind: "solve", fn: n.fn, given, binds, body: go(n.body) }, at);
       }
       case "lit": return mk({ kind: "lit", value: n.value }, at);
       default: return mk({ kind: "hole" }, at);
@@ -1503,13 +1506,15 @@ export function turnAround(code: Code, names: Names, info: Info, call: Id, k: nu
   const b = freshId(), use = freshId();
   const given: Record<string, Id> = { out: n.args[k] };
   t.params.forEach((q, i) => { if (i !== k) given[q] = n.args[i]; });
-  const next = replace(code, call, () => ({ kind: "solve", fn: t.def.id, given, binds: { [p]: b }, body: use }));
+  const extra: Node[] = [];
+  const next = replace(code, call, () => useNode((d) => { const id = freshId(); extra.push({ id, ...d } as Node); return id; }, t.def.id, given, { [p]: b }, use));
+  for (const x of extra) next.nodes[x.id] = x;
   next.nodes[b] = { id: b, kind: "binder" };
   next.nodes[use] = { id: use, kind: "ref", target: b };
   // A search that can't get from the result back to this input (split:
   // nothing gives sum), said as what it means.
   try {
-    const sv = next.nodes[call] as NodeOf<"solve">;
+    const sv = next.nodes[call] as Use;
     const v = planSolve(next, sv).mode === "relational" ? solveMode(next, sv, names) : null;
     const stuck = v?.stuck.filter((x) => x !== "a hole") ?? [];
     if (stuck.length) {
@@ -1524,8 +1529,8 @@ export function turnAround(code: Code, names: Names, info: Info, call: Id, k: nu
 // its result and the rest, and gives just that, is the call again.
 export function turnBack(code: Code, names: Names, info: Info, solve: Id): TEdit {
   const n = code.nodes[solve];
-  if (n?.kind !== "solve") return { ok: false, reason: "it isn't turned around" };
-  const d = code.nodes[n.fn], lam = d?.kind === "def" && d.body ? code.nodes[d.body] : null;
+  if (!isUse(n)) return { ok: false, reason: "it isn't turned around" };
+  const d = code.nodes[useTarget(code.nodes, n)], lam = d?.kind === "def" && d.body ? code.nodes[d.body] : null;
   const bound = Object.keys(n.binds), body = code.nodes[n.body];
   if (lam?.kind !== "lambda" || bound.length !== 1 || bound[0] === "out" || !("out" in n.given)) return { ok: false, reason: "it works out more than one input, or the result" };
   if (body?.kind !== "ref" || body.target !== n.binds[bound[0]]) return { ok: false, reason: "it does more with what it works out than give it" };
@@ -1551,12 +1556,12 @@ const lets = (code: Code, defId: Id): NodeOf<"call">[] => {
   while (stack.length) {
     const n = code.nodes[stack.pop()!];
     if (!n) continue;
+    if (isUse(n)) { stack.push(n.body, ...Object.values(n.given).reverse()); continue; }
     if (n.kind === "call" && code.nodes[n.fn]?.kind === "lambda") out.push(n);
     if (n.kind === "call") stack.push(...[...n.args, n.fn].reverse());
     else if (n.kind === "lambda") stack.push(n.body);
     else if (n.kind === "match" || n.kind === "fold") stack.push(...(n.kind === "match" && n.otherwise ? [n.otherwise] : []), ...[...n.arms].reverse(), n.scrutinee);
     else if (n.kind === "arm") stack.push(n.body);
-    else if (n.kind === "solve") stack.push(n.body, ...Object.values(n.given).reverse());
   }
   return out;
 };
@@ -1599,6 +1604,7 @@ function bodiesAround(code: Code, defId: Id, slot: Id): Id[] | null {
   const walk = (n: Id, r: Id[]): Id[] | null => {
     if (n === slot) return r;
     const x = code.nodes[n];
+    if (isUse(x)) { for (const g of Object.values(x.given)) { const f = walk(g, r); if (f) return f; } return walk(x.body, [...r, x.body]); }
     switch (x?.kind) {
       case "lambda": return walk(x.body, [...r, x.body]);
       case "call": for (const c of [x.fn, ...x.args]) { const f = walk(c, r); if (f) return f; } return null;
@@ -1608,7 +1614,6 @@ function bodiesAround(code: Code, defId: Id, slot: Id): Id[] | null {
         for (const a of x.arms) { const ab = (code.nodes[a] as NodeOf<"arm">).body; const g = walk(ab, [...r, ab]); if (g) return g; }
         return x.kind === "match" && x.otherwise ? walk(x.otherwise, [...r, x.otherwise]) : null;
       }
-      case "solve": for (const g of Object.values(x.given)) { const f = walk(g, r); if (f) return f; } return walk(x.body, [...r, x.body]);
       default: return null;
     }
   };
@@ -1626,6 +1631,7 @@ function stepAround(code: Code, defId: Id, slot: Id): Id | null {
   const walk = (n: Id, at: Id): Id | null => {
     if (n === slot) return at;
     const x = code.nodes[n];
+    if (isUse(x)) { for (const g of Object.values(x.given)) { const f = walk(g, at); if (f) return f; } return walk(x.body, x.body); }
     switch (x?.kind) {
       // A function passed as a value: its body is no step of this one.
       case "lambda": return walk(x.body, at);
@@ -1643,7 +1649,6 @@ function stepAround(code: Code, defId: Id, slot: Id): Id | null {
         for (const a of x.arms) { const ab = (code.nodes[a] as NodeOf<"arm">).body; const g = walk(ab, ab); if (g) return g; }
         return x.kind === "match" && x.otherwise ? walk(x.otherwise, x.otherwise) : null;
       }
-      case "solve": for (const g of Object.values(x.given)) { const f = walk(g, at); if (f) return f; } return walk(x.body, x.body);
       default: return null;
     }
   };

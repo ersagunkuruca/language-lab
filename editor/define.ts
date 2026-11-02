@@ -6,6 +6,7 @@
 import { analyze, defineRelation, directions, showEq } from "../invertible/src/index.js";
 import { call, v } from "../invertible/src/expr.js";
 import type { Code, Id } from "../ters/src/model.ts";
+import { isUse, useTarget } from "../ters/src/model.ts";
 import type { Names } from "../ters/src/presentation.ts";
 import { impl } from "../ters/src/prelude.ts";
 
@@ -20,8 +21,8 @@ export interface Definition {
 export function builtinOf(code: Code, id: Id | null): Id | null {
   const n = id ? code.nodes[id] : null;
   if (!n) return null;
-  const t = n.kind === "builtin" ? n.id : n.kind === "call" ? (code.nodes[n.fn]?.kind === "ref" ? (code.nodes[n.fn] as { target: Id }).target : null)
-    : n.kind === "ref" ? n.target : n.kind === "solve" ? n.fn : null;
+  const t = n.kind === "builtin" ? n.id : isUse(n) ? useTarget(code.nodes, n) : n.kind === "call" ? (code.nodes[n.fn]?.kind === "ref" ? (code.nodes[n.fn] as { target: Id }).target : null)
+    : n.kind === "ref" ? n.target : null;
   return t && code.nodes[t]?.kind === "builtin" ? t : null;
 }
 
