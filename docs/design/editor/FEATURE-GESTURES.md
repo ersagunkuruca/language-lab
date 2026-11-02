@@ -1,6 +1,6 @@
 # Language features the editor can't make yet (design note, 2026-11-02, E199)
 
-**Status (2026-11-02).** Ways built (E210). Directions are E210b. Private cases (E209) wait on the checker: today only the library's definitions may make a private case, so a program's own would refuse its own constructors.
+**Status (2026-11-02).** Ways built (E210), directions built (E210b). Private cases (E209) wait on the checker: today only the library's definitions may make a private case, so a program's own would refuse its own constructors.
 
 REVIEW-2026-11-02b §3 found four things in the model that the editor
 draws but no gesture makes: text (the DSL, `lab`) is the only way to write
