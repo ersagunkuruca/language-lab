@@ -617,7 +617,8 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| L130a | Uses read through `Use`, `isUse` and `useOf` (model.ts) in every ters/src reader instead of the `solve` kind, the first step of one node kind for call and solve (PORTS-2026-11-01.md "The merge, step by step"); no change in the saved format | this PR |
+| L130b | The compiler (compiler/src) reads a use through `Use` and `isUse` too, the second step of one node kind for call and solve | this PR |
+| L130a | Uses read through `Use`, `isUse` and `useOf` (model.ts) in every ters/src reader instead of the `solve` kind, the first step of one node kind for call and solve (PORTS-2026-11-01.md "The merge, step by step"); no change in the saved format | #1215 |
 | L64 | Channels as two std effects, `Send a` (send) and `Receive a` (receive, some(item) or none), joined by `piped(producer, consumer)` written in the prelude: the producer runs only as far as the consumer asks (test/state.test.ts, LANGUAGE.md "Send, Receive and piped") | #1213 |
 | L16a | A std `State s` effect (get state, put state) and its handler written in the prelude, `with state(initial, action)` giving (value, last state), and `change state(f)`; the type checker's infinite-type check now looks inside an effect's own types, which calling `get state()`'s answer had made loop (test/state.test.ts, LANGUAGE.md "State") | #1212 |
 | L44f | `least squares(m, b)` for a Float64 Matrix with at least as many rows as columns, by the normal equations (test/matrix-any-size.test.ts, LANGUAGE.md "Matrices"); and `replace in array` got its note and its place in the library reference | #1208 |

@@ -20,6 +20,7 @@
 // doesn't keep it in.
 
 import type { Code, Id, NodeOf } from "../../ters/src/model.ts";
+import { isUse } from "../../ters/src/model.ts";
 import { freshId, subtree } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { infer, type Info } from "../../ters/src/lang/infer.ts";
@@ -53,7 +54,7 @@ export function hoistInvariants(code: Code, info: Info, names: Names): { code: C
   // Nothing inside it may do anything either, nor make a function.
   const quiet = (id: Id): boolean => subtree({ nodes, defs: [] }, id).every((x) => {
     const n = nodes[x];
-    if (n.kind === "lambda" || n.kind === "solve" || n.kind === "hole") return false;
+    if (n.kind === "lambda" || isUse(n) || n.kind === "hole") return false;
     return n.kind !== "call" || plainCall(n, false);
   });
   let hoisted = 0;

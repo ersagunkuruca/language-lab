@@ -29,7 +29,7 @@ import { reachedFrom } from "./scalar.ts";
 import { resolveArithmetic } from "../../ters/src/lang/arith.ts";
 import { intLit } from "../../ters/src/lang/int.ts";
 import { hostOp, ownOperations } from "../../ters/src/lang/hosts.ts";
-import { children, dependencies, subtree, type Code, type Id, type Node, type NodeOf } from "../../ters/src/model.ts";
+import { children, dependencies, subtree, type Code, type Id, type Node, type NodeOf, type Use, isUse } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { CHOICE, DIVERGE, INT, NUMBER, STRING, Subst, type Row, type Type } from "../../ters/src/lang/types.ts";
 import { fieldShapes, shapeOf, type Shape } from "../../ters/src/lang/nested.ts";
@@ -471,7 +471,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // functions remember the node they came from and the values they closed
   // over, the same as the evaluator's (META), and the module carries its
   // own node table for the interpreter to read.
-  const relational = (n: NodeOf<"solve">) => planSolve(code, n).mode === "relational";
+  const relational = (n: Use) => planSolve(code, n).mode === "relational";
   // A relational solve whose mode has one answer or none is its plan
   // written out as a function (modes.ts here, MODES.md step 5): a call it
   // runs forward is a call of a compiled function or a builtin, and the
@@ -522,11 +522,11 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     for (const id of subtree(code, d)) { const n = code.nodes[id]; if (n.kind === "ref" && code.nodes[n.target]?.kind === "def") reachFrom(n.target); }
   };
   for (const x of opts.exports) reachFrom(code.defs.findLast((d) => names[d] === x));
-  const reflective = code.defs.filter((d) => exportsReach.has(d)).flatMap((d) => subtree(code, d)).map((id) => code.nodes[id]).some((n) => (n.kind === "solve" && relational(n) && !modes.compilable(n, dryEmit)) || (n.kind === "ref" && (n.target === S.derivative || n.target === S.gradient || n.target === S.exists)));
+  const reflective = code.defs.filter((d) => exportsReach.has(d)).flatMap((d) => subtree(code, d)).map((id) => code.nodes[id]).some((n) => (isUse(n) && relational(n) && !modes.compilable(n, dryEmit)) || (n.kind === "ref" && (n.target === S.derivative || n.target === S.gradient || n.target === S.exists)));
   // The expressions a solve node hands over: all of its given ports for the
   // interpreter, only the solver's known ones (not a predicate's out = true)
   // for a planned direction.
-  const givenOf = (n: NodeOf<"solve">) => (relational(n) ? Object.values(n.given) : planSolve(code, n).known.map((k) => n.given[k]));
+  const givenOf = (n: Use) => (relational(n) ? Object.values(n.given) : planSolve(code, n).known.map((k) => n.given[k]));
   // The binders a lambda closes over: used inside it, bound outside it.
   function captured(lambda: Id): Id[] {
     const inside = subtree(code, lambda);
@@ -1291,7 +1291,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // onto an array: `name$into(d, given…)` (modes.ts).
   const intoSolvers = new Set<Id>();
   const solverCode: string[] = [];
-  function solver(n: NodeOf<"solve">): string {
+  function solver(n: Use): string {
     if (!solvers.has(n.id)) {
       const name = `solve$${solvers.size}`;
       solvers.set(n.id, name);
@@ -1487,7 +1487,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const body = thunk(n.args[0]), g = thunk(n.args[1]);
       if (reflective || !body || !g) return null;
       const tails = tailsOf(body.body), sv = code.nodes[tails[0]];
-      if (tails.length !== 1 || sv.kind !== "solve") return null;
+      if (tails.length !== 1 || !isUse(sv)) return null;
       const bound = Object.values(sv.binds);
       if (bound.length !== 1 || refTarget(sv.body) !== bound[0] || !relational(sv) || (solver(sv), !intoSolvers.has(sv.id))) return null;
       const d = temp("a"), got = temp("got"), was = arrayAt;
@@ -2518,7 +2518,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     function pure(id: Id): boolean {
       return subtree(code, id).every((x) => {
         const c = code.nodes[x];
-        if (c.kind === "solve") return false;
+        if (isUse(c)) return false;
         if (c.kind !== "call") return true;
         const t = ty(c.fn), f = code.nodes[c.fn];
         if (f.kind === "ref" && info.divergent.has(f.target)) return false;
@@ -2579,7 +2579,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     // No effects other than Choice: an item may be dropped, nothing else.
     const onlyChoice = (id: Id) => subtree(code, id).every((x) => {
       const c = code.nodes[x];
-      if (c.kind === "solve") return false;
+      if (isUse(c)) return false;
       if (c.kind !== "call") return true;
       const t = ty(c.fn), f = code.nodes[c.fn];
       if (f.kind === "ref" && info.divergent.has(f.target)) return false;

@@ -24,6 +24,7 @@
 // Conway, 1996); dead-result elimination is the same idea in any optimiser.
 
 import type { Code, Id, Node, NodeOf } from "../../ters/src/model.ts";
+import { isUse } from "../../ters/src/model.ts";
 import { freshId, mapIds, subtree } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { PAIR_V, TRUE } from "../../ters/src/lang/std.ts";
@@ -246,7 +247,7 @@ export function solvesAsCalls(code: Code, names: Names): { code: Code; names: Na
     // Only what the relational interpreter would run: a direction the
     // numeric solver plans is compiled from its plan already, rounded as the
     // evaluator's solver rounds it.
-    if (n.kind !== "solve" || !computedForward(code, n) || planSolve(code, n).mode !== "relational" || !shapeOf(n.fn)) continue;
+    if (!isUse(n) || !computedForward(code, n) || planSolve(code, n).mode !== "relational" || !shapeOf(n.fn)) continue;
     const def = code.nodes[n.fn] as NodeOf<"def">, lam = code.nodes[def.body!] as NodeOf<"lambda">;
     const inputs = lam.params.filter((p) => !def.results!.includes(p));
     const given = Object.keys(n.given).filter((k) => k !== "out");
