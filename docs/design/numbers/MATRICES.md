@@ -89,6 +89,15 @@ products, solving (LU, least squares) and decompositions.
   semantics, and Julia's structured matrix types (dispatch on Diagonal,
   Symmetric, Sparse).
 
+Where this stands (L44d, 2026-11-02): `Matrix a` of any size is a std
+type (rows, columns, items row by row), with `matrix of rows`, `matrix
+entry`, `transposed`, `identity matrix`, `matrix scaled`, `matrix sum`,
+`matrix product`, `matrix times vector` and `solved` (Gaussian
+elimination with partial pivoting, at Float64), all written in the
+language (LANGUAGE.md "Matrices"). Size mismatches stop with both sizes.
+Still to come: LU kept for many right-hand sides, least squares,
+determinants, decompositions, sparse storage chosen by the compiler.
+
 ## Order
 
 1. Layer 2 first: rotors and reflections written with the existing

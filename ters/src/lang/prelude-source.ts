@@ -9,7 +9,7 @@ import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { library } from "./programs.ts";
-import { ABORT_OP, ARITH, CELL_OPS, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, TICKET_V, AWAIT_OP, START_TIMER_OP, NOW_OP, WAIT_OP, BRANCH_V, DUAL_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, DIVISION_V, EXTENDED_V, ALGEBRAIC_OPS, CHECK_OP, RANDOM_OP, QUEUE_V, PRIORITY_QUEUE_V, std } from "./std.ts";
+import { ABORT_OP, ARITH, CELL_OPS, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, TICKET_V, AWAIT_OP, START_TIMER_OP, NOW_OP, WAIT_OP, BRANCH_V, DUAL_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, DIVISION_V, EXTENDED_V, ALGEBRAIC_OPS, CHECK_OP, RANDOM_OP, QUEUE_V, PRIORITY_QUEUE_V, MATRIX_V, std } from "./std.ts";
 
 export function buildPrelude(): Module {
   const k = new Lang();
@@ -1432,6 +1432,91 @@ export function buildPrelude(): Module {
   const priorityQueueSize = def("priority queue size", ["queue"], (q) => pqOf(q, (es) => k.call(mapSize, es)));
   const priorityQueueItems = def("priority queue items", ["queue"], (q) => pqOf(q, (es) => k.call(map, k.call(entries, es),
     k.fn(["entry"], (e) => entry(e, (key, x) => entry(key, (p) => P(p, x), ["priority", "order"]))))));
+  // Matrices of any size (L44, MATRICES.md step 3, std.ts's Matrix): the
+  // items row by row in one list. Products, sums and a matrix times a
+  // vector are for every number type, as + and × are; a size mismatch
+  // stops with both sizes, as NumPy's "shapes (2,3) and (2,2) not
+  // aligned" does. solved(m, b) is the x with m·x = b, by Gaussian
+  // elimination with partial pivoting (the largest pivot first, as
+  // LAPACK's gesv does), at Float64; a singular matrix has no answer.
+  const M = (r: Id, c: Id, xs: Id) => k.call(MATRIX_V, r, c, xs);
+  const matOf = (m: Id, f: (r: Id, c: Id, xs: Id) => Id) => k.match(m, [{ variant: MATRIX_V, names: ["rows", "columns", "items"], body: ([r, c, xs]) => f(r, c, xs) }]);
+  const iLess = (a: Id, b: Id) => k.call(INT_OPS.less, a, b);
+  const iSame = (a: Id, b: Id) => k.equal(a, b);
+  const iMul = (a: Id, b: Id) => k.call(INT_OPS.mul, a, b);
+  const iAdd = (a: Id, b: Id) => k.call(INT_OPS.add, a, b);
+  const texts = (...parts: Id[]) => parts.reduceRight((acc, t) => k.call(S.concat, t, acc));
+  const sizeText = (r: Id, c: Id) => texts(k.call(INT_OPS.show, r), k.lit(" × "), k.call(INT_OPS.show, c));
+  // Two lists' items multiplied pairwise and added, its own walk.
+  const listDot = k.def("matrix dot");
+  k.define(listDot, k.fn(["first", "second"], (xs, ys) => k.match(xs, [
+    { variant: NIL, names: [], body: () => k.lit(0) },
+    { variant: CONS, names: ["x", "xs rest"], body: ([x, xr]) => k.match(ys, [
+      { variant: NIL, names: [], body: () => k.lit(0) },
+      { variant: CONS, names: ["y", "ys rest"], body: ([y, yr]) => k.call(ARITH.add, k.call(ARITH.mul, x, y), k.call(listDot, xr, yr)) },
+    ]) },
+  ])));
+  const rowsOf = def("matrix rows", ["matrix"], (m) => matOf(m, (r, c, xs) => k.call(map, k.call(INT_OPS.range, r), k.fn(["i"], (i) => k.call(take, k.call(drop, xs, iMul(i, c)), c)))));
+  const matrixOfRows = def("matrix of rows", ["rows"], (rs) => k.match(rs, [
+    { variant: NIL, names: [], body: () => M(k.int(0), k.int(0), k.x(NIL)) },
+    { variant: CONS, names: ["first", "rest"], body: ([first]) => k.let("columns", k.call(length, first), (c) =>
+      k.if(k.call(allPass, rs, k.fn(["row"], (row) => iSame(k.call(length, row), c))),
+        M(k.call(length, rs), c, k.call(flatten, rs)),
+        k.call(ABORT_OP, texts(k.lit("matrix of rows: the rows aren't all "), k.call(INT_OPS.show, c), k.lit(" long"))))) },
+  ]));
+  const rowCount = def("row count", ["matrix"], (m) => matOf(m, (r) => r));
+  const columnCount = def("column count", ["matrix"], (m) => matOf(m, (_r, c) => c));
+  const matrixEntry = def("matrix entry", ["matrix", "row", "column"], (m, i, j) => matOf(m, (r, c, xs) =>
+    k.if(k.call(S.or, k.call(S.or, iLess(i, k.int(0)), k.call(S.not, iLess(i, r))), k.call(S.or, iLess(j, k.int(0)), k.call(S.not, iLess(j, c)))), k.call(S.fail),
+      k.match(k.call(drop, xs, iAdd(iMul(i, c), j)), [
+        { variant: CONS, names: ["item", "rest"], body: ([x]) => x },
+      ], k.call(S.fail)))));
+  const transposed = def("transposed", ["matrix"], (m) => matOf(m, (r, c, xs) => M(c, r,
+    k.call(flatMap, k.call(INT_OPS.range, c), k.fn(["j"], (j) => k.call(flatMap, k.call(INT_OPS.range, r), k.fn(["i"], (i) => k.call(take, k.call(drop, xs, iAdd(iMul(i, c), j)), k.int(1)))))))));
+  const identityMatrix = def("identity matrix", ["size"], (n) => M(n, n,
+    k.call(flatMap, k.call(INT_OPS.range, n), k.fn(["i"], (i) => k.call(map, k.call(INT_OPS.range, n), k.fn(["j"], (j) => k.if(iSame(i, j), k.lit(1), k.lit(0))))))));
+  const matrixScaled = def("matrix scaled", ["matrix", "by"], (m, s) => matOf(m, (r, c, xs) => M(r, c, k.call(map, xs, k.fn(["x"], (x) => k.call(ARITH.mul, s, x))))));
+  const mismatch = (what: string, r1: Id, c1: Id, r2: Id, c2: Id) => k.call(ABORT_OP, texts(k.lit(`${what}: a `), sizeText(r1, c1), k.lit(" matrix and a "), sizeText(r2, c2), k.lit(" one")));
+  const matrixSum = def("matrix sum", ["first", "second"], (a, b) => matOf(a, (r1, c1, xs) => matOf(b, (r2, c2, ys) =>
+    k.if(k.call(S.and, iSame(r1, r2), iSame(c1, c2)),
+      M(r1, c1, k.call(map, k.call(zipped, xs, ys), k.fn(["pair"], (p) => entry(p, (x, y) => k.call(ARITH.add, x, y), ["x", "y"])))),
+      mismatch("matrix sum", r1, c1, r2, c2)))));
+  const matrixProduct = def("matrix product", ["first", "second"], (a, b) => matOf(a, (r1, c1, _xs) => matOf(b, (r2, c2, _ys) =>
+    k.if(iSame(c1, r2),
+      k.let("columns", k.call(rowsOf, k.call(transposed, b)), (cols) =>
+        M(r1, c2, k.call(flatMap, k.call(rowsOf, a), k.fn(["row"], (row) => k.call(map, cols, k.fn(["column"], (col) => k.call(listDot, row, col))))))),
+      mismatch("matrix product", r1, c1, r2, c2)))));
+  const matrixTimesVector = def("matrix times vector", ["matrix", "vector"], (m, v) => matOf(m, (r, c) =>
+    k.if(iSame(c, k.call(length, v)),
+      k.call(map, k.call(rowsOf, m), k.fn(["row"], (row) => k.call(listDot, row, v))),
+      k.call(ABORT_OP, texts(k.lit("matrix times vector: a "), sizeText(r, c), k.lit(" matrix and a vector of "), k.call(INT_OPS.show, k.call(length, v)))))));
+  // Elimination: the row with the largest first item is the pivot; the
+  // others lose their first column, less a multiple of the pivot's. It
+  // counts down the rows, so it ends; a pivot of 0 has no answer (divide
+  // has none). Back substitution then reads the triangle from the bottom.
+  const headOr0 = (row: Id) => k.match(row, [{ variant: CONS, names: ["first", "rest"], body: ([x]) => x }], k.lit(0));
+  const tailOf = (row: Id) => k.match(row, [{ variant: CONS, names: ["first", "rest"], body: ([, rest]) => rest }], k.x(NIL));
+  const eliminated = k.def("eliminated");
+  k.define(eliminated, k.fn(["rows", "count"], (rs, n) => k.if(iLess(n, k.int(1)), k.x(NIL),
+    k.match(k.call(sortBy, rs, k.fn(["row"], (row) => k.call(B.sub, k.lit(0), k.call(S.abs, headOr0(row))))), [
+      { variant: NIL, names: [], body: () => k.x(NIL) },
+      { variant: CONS, names: ["pivot", "others"], body: ([p, others]) => k.let("pivot first", headOr0(p), (a) =>
+        k.call(CONS, p, k.call(eliminated, k.call(map, others, k.fn(["row"], (row) => k.let("factor", k.call(B.div, headOr0(row), a), (f) =>
+          k.call(map, k.call(zipped, tailOf(row), tailOf(p)), k.fn(["pair"], (pr) => entry(pr, (x, y) => k.call(B.sub, x, k.call(B.mul, f, y)), ["x", "y"])))))),
+          k.call(INT_OPS.sub, n, k.int(1))))) },
+    ]))));
+  const backSubstituted = k.def("back substituted");
+  k.define(backSubstituted, k.fn(["triangle"], (t) => k.match(t, [
+    { variant: NIL, names: [], body: () => k.x(NIL) },
+    { variant: CONS, names: ["row", "below"], body: ([row, below]) => k.let("found", k.call(backSubstituted, below), (xs) =>
+      k.let("coefficients", tailOf(row), (cs) => k.let("known", k.call(length, xs), (n) =>
+        k.call(CONS, k.call(B.div, k.call(B.sub, k.call(itemAt, k.call(drop, cs, n), k.int(0), k.lit(0)), k.call(listDot, k.call(take, cs, n), xs)), headOr0(row)), xs)))) },
+  ])));
+  const solved = def("solved", ["matrix", "vector"], (m, v) => matOf(m, (r, c) =>
+    k.if(k.call(S.and, iSame(r, c), iSame(r, k.call(length, v))),
+      k.call(backSubstituted, k.call(eliminated, k.call(map, k.call(zipped, k.call(rowsOf, m), v), k.fn(["pair"], (p) => entry(p, (row, b) => k.call(append, row, k.call(CONS, b, k.x(NIL))), ["row", "b"]))), r)),
+      k.call(ABORT_OP, texts(k.lit("solved: a "), sizeText(r, c), k.lit(" matrix and a vector of "), k.call(INT_OPS.show, k.call(length, v)), k.lit("; it needs a square matrix and one item per row"))))));
+  const matrixHelpers = [listDot, eliminated, backSubstituted];
   // The three set operations: one walk down both sorted lists at once,
   // keeping what each wants from the smaller head, the shape of merge
   // sorted.
@@ -1646,7 +1731,7 @@ export function buildPrelude(): Module {
   const simulatedHelpers = [readyAt, earliest, readyTimes, tiedAt, pickAt, nextDraw, firstDraw, simulatedWorld, simulatedClock];
   const awaitHelpers = [startBranch, waiting, goOn, finished, settle, firstDone, raceSettle, ...simulatedHelpers];
 
-  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, spaced, optionalParens, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, ticketId, anyOf, together, race, within, simulated];
+  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, spaced, optionalParens, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, ticketId, anyOf, together, race, within, simulated];
   // Each number's own show, from before the generic one showed every number
   // (L153, L156): kept so programs saved before still open, not offered.
   const perTypeShows = [showF, showC, showD, showX];
@@ -1778,6 +1863,19 @@ export function buildPrelude(): Module {
     [soonest]: "The (priority, item) with the lowest priority, the earliest added of those; no answer when the queue is empty.",
     [withoutSoonest]: "The queue without its soonest item; no answer when it's empty. first(soonest(q), else …) and without soonest(q) are one simulation step.",
     [priorityQueueSize]: "How many items the priority queue holds.",
+    [matrixOfRows]: "The matrix with these rows: matrix of rows([[1, 2, 3], [4, 5, 6]]) is 2 × 3. Rows of different lengths stop the program.",
+    [rowsOf]: "The matrix's rows, each a list, top to bottom.",
+    [rowCount]: "How many rows the matrix has.",
+    [columnCount]: "How many columns the matrix has.",
+    [matrixEntry]: "The item at a row and a column, counting from 0; no answer outside the matrix.",
+    [transposed]: "The matrix flipped across its diagonal: row i is column i.",
+    [identityMatrix]: "The size × size matrix with 1 on its diagonal and 0 elsewhere, for any number type.",
+    [matrixScaled]: "Every item times the number.",
+    [matrixSum]: "The two matrices added item by item. Different sizes stop the program, with both sizes.",
+    [matrixProduct]: "The first matrix times the second: row by column, for any number type. The first's columns must be the second's rows, or the program stops with both sizes.",
+    [matrixTimesVector]: "The matrix times the list as a column: one item per row. The list must have one item per column, or the program stops with both sizes.",
+    [solved]: "The list x with matrix times vector(m, x) = b, for a square Float64 matrix, by Gaussian elimination with partial pivoting. No answer when the matrix is singular (a pivot is 0).",
+    ...Object.fromEntries(matrixHelpers.map((d) => [d, "A helper of the matrix operations. Not offered."])),
     [priorityQueueItems]: "The queue's (priority, item) pairs, soonest first.",
     [smallestKey]: "The map's smallest key, in compare's order; no answer when the map is empty. value at(m, smallest key(m)) is what it holds.",
     [largestKey]: "The map's largest key, in compare's order; no answer when the map is empty.",
@@ -1854,9 +1952,9 @@ export function buildPrelude(): Module {
     ...Object.fromEntries(awaitHelpers.map((d) => [d, simulatedHelpers.includes(d) ? "A helper of simulated. Not offered in the palette." : "A helper of together and race. Not offered in the palette."])),
     [applied]: "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette.",
   };
-  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, ...awaitHelpers, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarD, unpolarX, vector, asinBy, acosBy, asinF, acosF, asinX, acosX, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, divF, divC, divD, divX, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...laws], merge(prelude, std));
+  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, ...awaitHelpers, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarD, unpolarX, vector, asinBy, acosBy, asinF, acosF, asinX, acosX, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, divF, divC, divD, divX, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...matrixHelpers, ...laws], merge(prelude, std));
   if (!p.ok) throw new Error(`the prelude can't be published: ${p.reason}`);
   const at = (d: Id) => p.rename.get(d)!;
   const notes = Object.fromEntries(Object.entries(comments).map(([d, c]) => [at(d), c]));
-  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [...awaitHelpers, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, divF, divC, divD, divX, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarD, unpolarX, vector, asinBy, acosBy, asinF, acosF, asinX, acosX, ...laws].map(at));
+  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [...awaitHelpers, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, divF, divC, divD, divX, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...matrixHelpers, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarD, unpolarX, vector, asinBy, acosBy, asinF, acosF, asinX, acosX, ...laws].map(at));
 }
