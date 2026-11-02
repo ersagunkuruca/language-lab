@@ -1432,7 +1432,10 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         const ps = node<"lambda">(node<"def">(f.target).body!).params, t = info.schemes.get(f.target)!.type;
         if (t.t === "fn") ps.forEach((p, i) => {
           const pt = t.params[i];
-          if (quietArgs.has(p) && pt?.t === "fn" && pt.eff.tail !== null && !s.rho.get(pt.eff.tail)) plainHere.add(quietArgs.get(p)!);
+          // A row that names Choice itself (`(a) -[Choice, e]-> Bool`,
+          // sharing a search's row) is called as a stream whatever e is
+          // (C98).
+          if (quietArgs.has(p) && pt?.t === "fn" && pt.eff.tail !== null && !pt.eff.effs.includes(CHOICE) && !s.rho.get(pt.eff.tail)) plainHere.add(quietArgs.get(p)!);
         });
       }
       return s;
