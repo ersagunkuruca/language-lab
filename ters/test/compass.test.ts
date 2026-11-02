@@ -8,6 +8,21 @@ import { fromList, makeRunner, toList, type Data, type Value } from "../src/lang
 
 const first = (xs: Iterable<Value>) => { for (const x of xs) return x; };
 
+function compass() {
+  const p = loadProgram("examples/compass");
+  const info = infer(p.code, p.pres.names);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const r = makeRunner(p.code, info, { print: () => {}, names: p.pres.names });
+  const fn = (name: string) => (...xs: Value[]) => first(r.call(r.value(p.named(name)), ...xs) as Iterable<Value>)!;
+  const td = p.code.nodes[(p.code.nodes[p.named("Step")] as { body: string }).body] as { variants: string[] };
+  const tag = (name: string) => td.variants.find((v) => p.pres.names[v] === name)!;
+  const step = (name: string, ...xs: number[]): Data => ({ tag: tag(name), fields: xs });
+  const build = (...steps: Data[]) => fromList(fn("build")(toList(steps), toList([]))) as Data[];
+  const at = (s: Data) => { const v = s.fields[0]; return [fn("x of")(v), fn("y of")(v)] as number[]; };
+  return { fn, step, build, at };
+}
+const near = (a: number[], b: number[], what: string) => assert.ok(a.every((x, i) => Math.abs(x - b[i]) < 1e-9), `${what}: ${a} is not ${b}`);
+
 test("a circle through a point where two lines cross goes through it", () => {
   const p = loadProgram("examples/compass");
   const info = infer(p.code, p.pres.names);
@@ -37,5 +52,13 @@ test("a circle through a point where two lines cross goes through it", () => {
     // The crossing is a point: it squares to 0, like A.
     assert.ok(Math.abs(fn("dot")(x, x) as number) < 1e-9, `X·X = ${fn("dot")(x, x)}`);
     assert.equal(fn("dot")(a, a), 0);
+  }
+});
+
+test("the midpoint tool: halfway between two points, wherever they are", () => {
+  const { step, build, at } = compass();
+  for (const [ax, ay, bx, by] of [[-2, -1.5, 2, -1.5], [1, 3, 4, -2], [-3, 0.5, -3, 2.5]]) {
+    const shapes = build(step("free", ax, ay), step("free", bx, by), step("midpoint", 0, 1));
+    near(at(shapes[2]), [(ax + bx) / 2, (ay + by) / 2], "midpoint");
   }
 });
