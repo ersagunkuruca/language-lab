@@ -9,7 +9,7 @@ import { norm } from "../../ters/src/lang/int.ts";
 import { isData, isFn, isRecord, lowerScalar, type LType } from "../src/scalar.ts";
 import { emitWasm, fromInt, fromText, instantiate, runMain, toInt, toText } from "../src/wasm.ts";
 import { load } from "../src/program.ts";
-import { area, caseNameInputs, caseNames, changeInputs, changes, choices, numberTexts, randomInputs, randoms, recursiveLets, closures, escapes, fractionInputs, fractions, maths, ordered, orderedInputs, roses, sameLists, searches, several, showInputs, shows, stopsWith, texts, worldly } from "../src/fixtures.ts";
+import { area, caseNameInputs, caseNames, changeInputs, changes, choices, numberTexts, fuzzFinds, randomInputs, randoms, recursiveLets, closures, escapes, fractionInputs, fractions, maths, ordered, orderedInputs, roses, sameLists, searches, several, showInputs, shows, stopsWith, texts, worldly } from "../src/fixtures.ts";
 import { nodeWorld } from "../../ters/src/lang/world.ts";
 import { WASI } from "node:wasi";
 import { closeSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -869,4 +869,14 @@ test("Random under seeded in WebAssembly: the evaluator's numbers, a seeded insi
     const f = lowered.funcs.find((g) => g.def === def)!;
     for (const xs of inputs[name] as Value[][]) assert.equal(flat(answer(w, f, (w[f.name] as (...a: unknown[]) => unknown)(...xs))), flat(outcome(r, def, xs)), name);
   }
+});
+
+test("what the generated programs found, in WebAssembly: a sum of an empty list at Float64 (C114)", async () => {
+  const p = fuzzFinds();
+  const lowered = lowerScalar(p.code, p.info, p.names, [p.defs.summedNothing], { data: true });
+  assert.deepEqual([...lowered.refused.entries()].map(([d, why]) => `${p.names[d]}: ${why}`), []);
+  // sum's own body is at Int, its 0 a whole literal: this copy is at Float64.
+  const w = await instantiate(emitWasm(lowered));
+  const f = lowered.funcs.find((g) => g.def === p.defs.summedNothing && !g.inner)!;
+  for (const n of [0n, 3n]) assert.equal(w[f.name](toInt(w, n) as never), 0);
 });

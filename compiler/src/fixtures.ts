@@ -916,8 +916,9 @@ export function stopsWith(op: string, x: number, y: number): string | null {
 
 // What the generated programs (C101) found, as programs of their own:
 // a list of texts that only runtime functions make and take (split, then
-// join all, C110), and a sort of an empty list, whose item type nothing
-// fixes, inside the types of sort's helpers (C111).
+// join all, C112), and a sort of an empty list, whose item type nothing
+// fixes, inside the types of sort's helpers (C113); and a sum of an empty
+// list at Float64, which reached sum's own body, typed at Int (C114).
 export function fuzzFinds() {
   const k = new Lang(LIBRARY.code);
   const lib = (name: string) => LIBRARY.code.defs.find((x) => LIBRARY.names[x] === name)!;
@@ -925,9 +926,10 @@ export function fuzzFinds() {
   const defs = {
     joined: d("joined", ["t"], (t) => k.call(TEXT_OPS.joinAll, k.call(TEXT_OPS.split, t, k.lit(",")), k.lit("+"))),
     sortedNothing: d("sorted nothing", ["n"], (n) => k.call(INT_OPS.add, n, k.call(lib("length"), k.call(lib("sort"), k.x(NIL))))),
+    summedNothing: d("summed nothing", ["n"], (n) => k.call(lib("sum"), k.call(lib("take"), k.x(NIL), k.call(INT_OPS.add, n, k.int(0))))),
   };
   const code = base(k.code);
   const names = { ...baseNames(), ...k.names };
   return { code, names, info: infer(code, names, undefined, checkOptions), defs };
 }
-export const fuzzFindInputs = (): Record<string, unknown[][]> => ({ joined: [[""], ["a"], ["a,b,,c"], [",é,🎉"]], sortedNothing: [[0n], [5n]] });
+export const fuzzFindInputs = (): Record<string, unknown[][]> => ({ joined: [[""], ["a"], ["a,b,,c"], [",é,🎉"]], sortedNothing: [[0n], [5n]], summedNothing: [[0n], [3n]] });

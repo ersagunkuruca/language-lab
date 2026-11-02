@@ -37,6 +37,8 @@ export function program(seed: number, count: number) {
   function gen(t: Ty, s: Scope, depth: number): Id {
     const leaf = depth <= 0 || r.next() < 0.2;
     const sub = (u: Ty, sc: Scope = s) => gen(u, sc, depth - 1);
+    // An Int from −m to m: a remainder by m, which has an answer.
+    const small = (m: number) => k.call(S.first, k.thunk(() => call(INT_OPS.remainder, sub("I"), k.int(m))), k.thunk(() => k.int(0)));
     // Shared by every type: a variable, an if, a let, a match on a list.
     if (!leaf) {
       const shape = r.int(12);
@@ -109,6 +111,8 @@ export function program(seed: number, count: number) {
           () => orElse(call(INT_OPS.power, call(INT_OPS.remainder, sub("I"), k.int(10)), call(INT_OPS.remainder, sub("I"), k.int(20)))),
           () => call(lib("sum"), sub("L")),
           () => orElse(call(INT_OPS.wholePart, sub("F"))),
+          () => call(lib("set size"), call(lib("as set"), sub("L"))),
+          () => orElse(call(lib("last of items"), sub("L"))),
         ])();
       }
       case "B": {
@@ -139,6 +143,9 @@ export function program(seed: number, count: number) {
           // map with a closure: the item, and whatever is in scope.
           () => call(lib("map"), sub("L"), k.fn([fresh()], (v) => gen("I", { ...s, I: [...s.I, v] }, depth - 1))),
           () => call(lib("sort"), sub("L")),
+          () => call(lib("inserted at"), sub("L"), sub("I"), sub("I")),
+          () => call(lib("range from"), small(20), small(20)),
+          () => call(lib("flat map"), sub("L"), k.fn([fresh()], (v) => k.list(v, gen("I", { ...s, I: [...s.I, v] }, depth - 1)))),
           () => call(lib("keep"), sub("L"), k.fn([fresh()], (v) => gen("B", { ...s, I: [...s.I, v] }, depth - 1))),
         ])();
       }
@@ -153,6 +160,9 @@ export function program(seed: number, count: number) {
           () => call(S.show, sub("F")),
           () => call(INT_OPS.show, sub("I")),
           () => call(lib("uppercase"), sub("T")),
+          () => call(lib("repeated"), sub("T"), small(4)),
+          // A call of an earlier definition, one that calls none itself.
+          () => { const d = callable.length ? r.pick(callable) : null; if (!d) return sub("T"); calls = true; return call(d, sub("F"), sub("I"), sub("L")); },
           () => call(TEXT_OPS.joinAll, call(TEXT_OPS.split, sub("T"), sub("T")), sub("T")),
           () => k.call(S.first, k.thunk(() => call(TEXT_OPS.fromCode, sub("I"))), k.thunk(() => sub("T"))),
         ])();
@@ -172,7 +182,10 @@ export function program(seed: number, count: number) {
   }
 
   const defs: { def: Id; result: Ty }[] = [];
+  const callable: Id[] = [];
+  let calls = false;
   for (let i = 0; i < count; i++) {
+    calls = false;
     const result = r.pick<Ty>(["F", "I", "B", "L", "T", "D", "R"]), def = k.def(`g${i}`);
     // Its inputs are a Float64, an Int and a List Int: each used once
     // first, so its type is that whatever the body does.
@@ -182,6 +195,7 @@ export function program(seed: number, count: number) {
           k.let("xs0", call(lib("append"), xs, k.list(n0)), (xs0) =>
             call(SHOW_ANY, gen(result, { F: [x0], I: [n0], L: [xs0], B: [], T: [], D: [], R: [] }, 4)))))));
     defs.push({ def, result });
+    if (!calls) callable.push(def);
   }
   const code = base(k.code), names2 = baseNames(k.names);
   return { code, names: names2, info: infer(code, names2, undefined, checkOptions), defs };
