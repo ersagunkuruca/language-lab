@@ -40,10 +40,10 @@ test("Extended: the extended reals' + − ·, no answer for ∞ − ∞ and 0 ·
     ["sorted", k.call(lib("sort"), k.list(plus(k), fin(k, 2), minus(k), fin(k, -7)))],
   ]);
   assert.deepEqual(got, {
-    "∞ + 1": ["plus infinity"], "−∞ + −∞": ["minus infinity"], "∞ + −∞": [], "∞ − ∞": [],
-    "2 − 5": ["finite(-3)"], "−2 · ∞": ["minus infinity"], "−∞ · −∞": ["plus infinity"], "0 · ∞": [],
-    "−(+∞)": ["minus infinity"], "−∞ < 3": ["true"], "3 < ∞": ["true"], "∞ < ∞": ["false"],
-    sorted: ["[minus infinity, finite(-7), finite(2), plus infinity]"],
+    "∞ + 1": ["+∞"], "−∞ + −∞": ["−∞"], "∞ + −∞": [], "∞ − ∞": [],
+    "2 − 5": ["-3"], "−2 · ∞": ["−∞"], "−∞ · −∞": ["+∞"], "0 · ∞": [],
+    "−(+∞)": ["−∞"], "−∞ < 3": ["true"], "3 < ∞": ["true"], "∞ < ∞": ["false"],
+    sorted: ["[−∞, -7, 2, +∞]"],
   });
 });
 
@@ -56,7 +56,7 @@ test("minimum and maximum: +∞ and −∞ for no numbers, at any ordered number
     ["smaller than any", k.call(lib("extended less"), k.call(lib("minimum"), k.list(k.at(NUMBER, 1e300))), k.call(lib("minimum"), k.list()))],
   ]);
   assert.deepEqual(got, {
-    least: ["finite(-1.5)"], "least of none": ["plus infinity"], "most of ints": ["finite(9)"], "most of none": ["minus infinity"],
+    least: ["-1.5"], "least of none": ["+∞"], "most of ints": ["9"], "most of none": ["−∞"],
     "smaller than any": ["true"],
   });
 });
