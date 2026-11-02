@@ -1493,8 +1493,11 @@ const UNIT_CHIPS: [string, Unit | null][] = [["free", null], ["1", {}], ["m", { 
 
 function unitSection(info: T.Info, id: Id): HTMLElement | null {
   const n = node(id);
-  const declarable = n.kind === "binder" || (n.kind === "lit" && typeof n.value === "number");
   const numeric = T.typeOf(info, id, {}) === "Float64";
+  // An input takes a unit when it is a number or nothing says what it is
+  // yet; one holding a function or a list doesn't (I138).
+  const ty = info.typeOf.get(id), shape = ty && info.subst.resolve(ty);
+  const declarable = (n.kind === "binder" && (!shape || shape.t === "var" || numeric)) || (n.kind === "lit" && typeof n.value === "number");
   if (!declarable && !numeric) return null;
   const u = (() => { try { return unitInfer(doc.code, ui.def).unit(id); } catch { return undefined; } })();
   const declared = (n as { unit?: Unit }).unit;
