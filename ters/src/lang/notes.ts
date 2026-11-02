@@ -98,7 +98,7 @@ export const NOTES: Comments = {
   "builtin.mul": `a · b for ${n}s: what the generic · is at ${n}.`,
   "builtin.neg": `−a for a ${n}: what the generic − is at ${n}.`,
   "builtin.less": `a < b for ${n}s: what the generic < is at ${n}.`,
-  "builtin.div": "a ÷ b for Float64s (floating point, so 1 ÷ 3 is 0.333…; dividing by 0 gives infinity). For exact division use fractions.",
+  "builtin.div": "a ÷ b for Float64s (floating point, so 1 ÷ 3 is 0.333…; dividing by 0 has no answer, so it has Choice). For exact division use fractions.",
   "builtin.sqrt": "The square root.",
   "builtin.pow": "a to the power b.",
   "builtin.sin": "Sine of a Float64 angle in radians: what Trig's sin is at Float64. Not offered on its own: sin is.",

@@ -342,10 +342,10 @@ palette picks only.
   type the way it's written: first what it is (Float64, Int, Text, Bool,
   a data type, or the type itself). If that type takes arguments, you
   pick each one the same way. So for a pair of a whole number and text,
-  pick *Pair*, then *Int*, then *Text*.
+  pick *Tuple2*, then *Int*, then *Text*: `(Int, Text)`.
 - In a type with only one case, a field is also the function that reads
   it. The palette offers `pages(□)` for a chapter's page count, and
-  `fst(□)` and `snd(□)` for a Pair. A type with several cases is taken
+  `first(□)` and `second(□)` for a tuple `(a, b)`. A type with several cases is taken
   apart with a match instead, since the field may not be there.
 - The *Definition* tab renames a definition, adds, reorders and removes
   inputs, and deletes it. A new input gives every call a hole for it, so
@@ -373,7 +373,7 @@ type Shape
 
 A case used as a function builds a value: `circle(2)`.
 
-The standard types `Bool`, `Unit`, `List a`, `Pair a b` and `Optional a`
+The standard types `Bool`, `Unit`, `List a`, the tuples `(a, b)` to `(a, …, h)` and `Optional a`
 are ordinary data types. They aren't built in.
 
 Fields are ids, not names. So two libraries can both have a field called
@@ -399,7 +399,7 @@ Two gestures make sure a match never misses a case:
 So a missing case can't be written.
 
 **Records.** A type with one case is a record. A field used as a function
-reads it: `fst(p)`.
+reads it: `first(p)`.
 
 `set(field, record, value)` gives the record with one field changed. The
 field can be a path: `set((p) ↦ p.home.city, ada, "Paris")`.

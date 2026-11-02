@@ -85,7 +85,7 @@ export function reference(): string {
     const iface = field?.kind === "field" ? info.owner.get(d) : undefined;
     if (iface) {
       const s = new Subst(), a = s.fresh();
-      const te = (id: Id): Type => { const n = LIBRARY.code.nodes[id]; return n.kind === "tfun" ? { t: "fn", params: n.params.map(te), ret: te(n.result), eff: { effs: [], tail: null } } : n.kind === "tref" && LIBRARY.code.nodes[n.target]?.kind === "binder" ? a : { t: "con", id: (n as { target: Id }).target, args: [] }; };
+      const te = (id: Id): Type => { const n = LIBRARY.code.nodes[id]; return n.kind === "tfun" ? { t: "fn", params: n.params.map(te), ret: te(n.result), eff: { effs: n.effects ?? [], tail: null } } : n.kind === "tref" && LIBRARY.code.nodes[n.target]?.kind === "binder" ? a : { t: "con", id: (n as { target: Id }).target, args: [] }; };
       return showType(te((field as { type: Id }).type), LIBRARY.names, undefined, [], new Map([[(a as { v: number }).v, [iface]]]));
     }
     const ty = info.typeOf.get(d);
