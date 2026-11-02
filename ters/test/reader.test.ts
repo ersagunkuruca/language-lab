@@ -476,3 +476,20 @@ test("a call of a shared name says which meaning it took", async () => {
   assert.equal(tookType(p.code, info, p.pres.names, named("as float64").id), "as float64 : (Int) -> Float64");
   assert.equal(tookType(p.code, info, p.pres.names, named("heap size").id), null);
 });
+
+// A typed range(n) of an open n is Int's range, not Float64's that std
+// declares first (L147b): a count or a position is an Int. The generic +
+// stays the generic one.
+test("typed range(n) of an open n is Int's", async () => {
+  const { Lang } = await import("../src/lang/dsl.ts");
+  const { base, baseNames } = await import("../src/lang/load.ts");
+  const k = new Lang();
+  const f = k.def("f");
+  let hole = "";
+  k.define(f, k.fn(["n"], () => (hole = k.hole())));
+  const code = base(k.code), names = baseNames(k.names);
+  const used = (text: string) => { const r = fillValue(code, names, infer(code, names), hole, text, f); assert.ok(r.ok, text); return r.ok ? Object.values(r.code.nodes).flatMap((x) => (x.kind === "ref" && !code.nodes[x.id] ? [x.target] : [])) : []; };
+  assert.ok(used("range(n)").includes("builtin.int.range"));
+  assert.ok(used("range(2.5)").includes("builtin.range"));
+  assert.ok(used("n + 1").includes("builtin.arith.add"));
+});

@@ -558,7 +558,12 @@ function leaveOpen(info: Info, t: Typed): Typed {
   // The program's own meaning before the library's whatever it settles
   // (E220: clinic's div(n, top), not html's div).
   const exotic = (op: Id) => args.filter((a, i) => open(a) && exoticAt(op, i)).length;
-  const alts = t.alts.map((op, k) => ({ op, k, n: settles(op), x: exotic(op), lib: +fromLibrary(op) })).sort((a, b) => a.lib - b.lib || a.x - b.x || a.n - b.n || a.k - b.k).map((x) => x.op);
+  // Of the rest, Int's before Float64's own twin of it: a count or a
+  // position is an Int, so range(n) of an open n is Int's range (L147b),
+  // not the one std happens to declare first. Where a generic one is
+  // among them (+ for every number type), the order is left as it was.
+  const generic = t.alts.some((op) => op.startsWith("builtin.arith."));
+  const alts = t.alts.map((op, k) => ({ op, k, n: settles(op), x: exotic(op), lib: +fromLibrary(op), f: +(!generic && /^builtin\.(?!int\.)/.test(op) && t.alts!.includes(op.replace(/^builtin\./, "builtin.int."))) })).sort((a, b) => a.lib - b.lib || a.x - b.x || a.n - b.n || a.f - b.f || a.k - b.k).map((x) => x.op);
   return { op: alts[0], args, alts };
 }
 
