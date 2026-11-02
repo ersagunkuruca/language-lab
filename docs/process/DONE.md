@@ -591,7 +591,8 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| L168 | A field several cases share: a case's field says, with `same` (by id), that it is another case's, and then `i.to` reads it on any case (Choice where a case lacks it, none when all have it) and `set((i) ↦ i.to, i, x)` changes it; a code → code pass writes both as generated matches (src/lang/shared-fields.ts). A path through a shared field and the editor's half are L168b and E227 | this PR |
+| L70 | Design note: grammars written once as printers and parsed by running them backwards ([GRAMMARS-2026-11-02](../design/relations-and-effects/GRAMMARS-2026-11-02.md)); steps L70a-c and C109 | this PR |
+| L168 | A field several cases share: a case's field says, with `same` (by id), that it is another case's, and then `i.to` reads it on any case (Choice where a case lacks it, none when all have it) and `set((i) ↦ i.to, i, x)` changes it; a code → code pass writes both as generated matches (src/lang/shared-fields.ts). A path through a shared field and the editor's half are L168b and E227 | #1166 |
 | L177 | `Queue a` (Okasaki's two lists, size kept: `queued`, `front of`, `dequeued`, `queue size`, `queue items`) and `Priority queue p a` (a Map keyed by (priority, arrival), so ties leave first in, first out, stored however a Map is: `prioritized`, `soonest`, `without soonest`, `priority queue size`, `priority queue items`), std types with prelude operations | #1160 |
 | L174 | `whole of(x) -> Int` (the whole number at or below x, total since a Float64 is finite) and `divided or(a, b, otherwise)`, so clinic's `int of` and `share` are library calls. Int quotient and remainder by a literal stay Choice: a nonzero divisor isn't known to the checker yet (L125b's fact) | #1159 |
 | L176 | `read number : (Text) -[Choice]-> Float64` reads a decimal with a sign and an exponent ("-30.5", "1e3"), no answer for anything else or a value too large; evaluator and compiled JS. C and WASM are C108 | #1158 |

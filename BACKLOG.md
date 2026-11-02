@@ -184,7 +184,10 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L70 | Design note: grammars written once as printers and parsed by running them backwards; calc's parser first | LANGUAGE-NEEDS §8 | P3 | M | |
+| L70a | Printer pieces `spaced` and `optional parens` in the text library, each running backwards (GRAMMARS-2026-11-02 step 1) | L70 | P3 | S | |
+| L70b | calc's `expression text` as one printer fold with binding strengths, read back by running it backwards; calc's hand parser goes (GRAMMARS-2026-11-02 step 2) | L70 | P3 | M | after L70a |
+| L70c | A failed backward parse says the furthest position it reached (GRAMMARS-2026-11-02 step 3) | L70 | P3 | S | after L70b |
+| C109 | A grammar's backward mode compiled to recursive descent when it is LL(1), from COMPILER.md's planned mode analysis (GRAMMARS-2026-11-02 step 4) | L70 | P3 | L | after L70b |
 | L72 | Grammars and their machines (Chomsky hierarchy) as ordinary data, parsing and printing one relation run both ways; extends L70 | Ersagun 2026-10-24 | P3 | L | low priority |
 | L17 | Data-type upgrades (migrations when constructors and fields move); path namespaces are a name layer (SHARING.md §5) | ROADMAP 5 | P3 | L | |
 | L109 | Hashes carry a recipe version; std published with lineages and versions, so a std change adds versions and keeps the old (no more #709-style republishing) | SHARING.md §3 | P3 | M | |
