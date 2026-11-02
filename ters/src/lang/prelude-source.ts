@@ -9,7 +9,7 @@ import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { library } from "./programs.ts";
-import { ABORT_OP, ARITH, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, TICKET_V, AWAIT_OP, START_TIMER_OP, BRANCH_V, DUAL_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, EXTENDED_V, ALGEBRAIC_OPS, CHECK_OP, RANDOM_OP, std } from "./std.ts";
+import { ABORT_OP, ARITH, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, TICKET_V, AWAIT_OP, START_TIMER_OP, NOW_OP, WAIT_OP, BRANCH_V, DUAL_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, EXTENDED_V, ALGEBRAIC_OPS, CHECK_OP, RANDOM_OP, std } from "./std.ts";
 
 export function buildPrelude(): Module {
   const k = new Lang();
@@ -1318,7 +1318,8 @@ export function buildPrelude(): Module {
   // testing"): `simulated(seed, action)` answers Await from a virtual clock
   // that starts at 0, so no pause is real, and when several tickets are
   // ready at the same moment it picks one with Random, seeded by `seed`
-  // like the action's own random numbers. A schedule is then a seed: the
+  // like the action's own random numbers. Time's `now` reads the same
+  // clock and Wait's `wait` moves it (L138). A schedule is then a seed: the
   // same every run, and another seed tries another order. The clock is
   // passed along as the rests resume (a handler's state, the
   // parameter-passing handlers of Plotkin and Pretnar), and a timer it
@@ -1375,9 +1376,22 @@ export function buildPrelude(): Module {
       { variant: TICKET_V.ticket, names: ["number"], body: foreign },
     ])) },
   ], ["value", (v) => k.fn(["now"], () => v)])));
+  // Time and Wait on the same clock (L138), so `now` after a 5 s timer is
+  // 5000 every run and `wait` never really sleeps: a wait is an await of a
+  // timer, and now is the time of a timer of 0 started now, which the
+  // simulated world gives as a ticket `at` its clock.
+  const simulatedClock = k.def("simulated clock");
+  k.define(simulatedClock, k.fn(["action"], (a) => k.handle(
+    k.handle(k.call(a), [
+      { variant: WAIT_OP, names: ["milliseconds"], body: ([ms]) => k.call(AWAIT_OP, k.call(TICKET_V.timer, ms, k.unitValue)) },
+    ]),
+    [{ variant: NOW_OP, names: [], body: () => k.match(k.call(START_TIMER_OP, k.lit(0)), [
+      { variant: TICKET_V.at, names: ["time", "value"], body: ([t]) => t },
+    ], k.call(ABORT_OP, k.lit("the simulated world's clock gave no time"))) }],
+  )));
   const simulated = k.def("simulated");
-  k.define(simulated, k.fn(["seed", "action"], (seed, a) => k.call(S.seeded, seed, k.thunk(() => k.call(k.call(simulatedWorld, a), k.lit(0))))));
-  const simulatedHelpers = [readyAt, earliest, readyTimes, tiedAt, pickAt, simulatedWorld];
+  k.define(simulated, k.fn(["seed", "action"], (seed, a) => k.call(S.seeded, seed, k.thunk(() => k.call(k.call(simulatedWorld, k.thunk(() => k.call(simulatedClock, a))), k.lit(0))))));
+  const simulatedHelpers = [readyAt, earliest, readyTimes, tiedAt, pickAt, simulatedWorld, simulatedClock];
   const awaitHelpers = [startBranch, waiting, goOn, finished, settle, firstDone, raceSettle, ...simulatedHelpers];
 
   const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, notAfter, after, notBefore, fraction, whole, divF, showF, toNum, asC, unitI, conjC, modulus, angle, polar, divC, expC, csqrt, clog, cpow, casin, cacos, showC, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, showDecimals, divD, slopeAt, dualTable, showD, asFixed, fixedF, showX, divX, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, ticketId, anyOf, together, race, within, simulated];
@@ -1536,7 +1550,7 @@ export function buildPrelude(): Module {
     [together]: "Runs the actions side by side: each runs until it awaits a ticket, and whichever ticket is ready first goes on, until every action has its value. The values come back in the actions' order (as JavaScript's Promise.all).",
     [race]: "Runs the actions side by side, as together does, and gives the value of the first to finish; the others are dropped where they wait (as JavaScript's Promise.race).",
     [within]: "The action's value as some(value) if it finishes within this many milliseconds, or none if the timer is ready first; the action is then dropped where it waits.",
-    [simulated]: "Runs the action in a simulated world for tests: its timers on a clock that starts at 0 and never really waits, and when several tickets are ready at the same moment, which goes on is picked with Random seeded by seed, as the action's own random numbers are. The same seed gives the same schedule every run; another seed may give another, so an order that goes wrong is a seed to paste into a test (FoundationDB's deterministic simulation).",
+    [simulated]: "Runs the action in a simulated world for tests: its timers, now and wait on a clock that starts at 0 and never really waits, and when several tickets are ready at the same moment, which goes on is picked with Random seeded by seed, as the action's own random numbers are. The same seed gives the same schedule every run; another seed may give another, so an order that goes wrong is a seed to paste into a test (FoundationDB's deterministic simulation).",
     ...Object.fromEntries(awaitHelpers.map((d) => [d, simulatedHelpers.includes(d) ? "A helper of simulated. Not offered in the palette." : "A helper of together and race. Not offered in the palette."])),
     [applied]: "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette.",
   };
