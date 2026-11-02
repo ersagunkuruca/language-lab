@@ -1879,6 +1879,12 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
     if (seen.get(x.l[0])! > 1 && x.f.kind === "call" && t?.t === "fn" && t.params.length)
       x.l = [`${names[x.f.target] ?? x.f.target}(${t.params.map((p) => `□: ${typeName(info, p, names)}`).join(", ")})`, x.l[1], x.l[2]];
   }
+  // A definition of the program's own named like the library's (values
+  // of) says it's its own, beside the library's (E182).
+  const alike = new Map<string, Set<Id>>();
+  const called = (x: (typeof all)[number]) => (x.f.kind === "call" || x.f.kind === "ref" ? names[x.f.target] : undefined);
+  for (const x of all) { const n = called(x); if (n && (x.f.kind === "call" || x.f.kind === "ref")) alike.set(n, (alike.get(n) ?? new Set()).add(x.f.target)); }
+  for (const x of all) { const n = called(x); if (n && (x.f.kind === "call" || x.f.kind === "ref") && alike.get(n)!.size > 1 && doc.code.defs.includes(x.f.target) && !BASE.nodes[x.f.target]) x.l = [x.l[0], `this program's own · ${x.l[1]}`, x.l[2]]; }
   // Searching: names that are the text, then start with it, then have a
   // word starting with it, then contain it, and only then entries whose
   // type or description mentions it. Within each, the usual order.
