@@ -7,7 +7,7 @@ sheet as a grid and the cells that went wrong, and writes a report beside
 the file.
 
 ```
-$ node ters/cli/lab.ts run compiler/gaps/sheet compiler/gaps/sheet/budget.txt
+$ node ters/cli/lab.ts run ters/examples/sheet ters/examples/sheet/budget.txt
            A       B       C       D
    1    1200   14400     750  #cycle
    2     450    5400     820  #cycle

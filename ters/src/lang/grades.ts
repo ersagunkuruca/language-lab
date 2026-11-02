@@ -40,7 +40,7 @@ import { LIBRARY } from "./library.ts";
 import { makeRunner, type Value } from "./run.ts";
 import { ALGEBRA_V, ARITH, CONS, LIST, NIL, S, SET as S_SET, TRUE } from "./std.ts";
 import { B } from "../prelude.ts";
-import { MASK_TYPES, NUMBER } from "./types.ts";
+import { MASK_TYPES, NUMBER, type Type } from "./types.ts";
 
 export interface Algebra {
   // The definition whose value it is, and the record variant of its
@@ -69,6 +69,9 @@ type V =
   | { k: "closure"; lambda: NodeOf<"lambda">; env: Map<Id, V> }
   // A list, and what its items are (null: it has none, as nil).
   | { k: "list"; item: V | null }
+  // A value of a case with fields (a record, a tuple) and what each field
+  // is (C77): a state record's multivectors keep their masks through it.
+  | { k: "rec"; variant: Id; fields: V[] }
   | { k: "top" };
 
 const TOP: V = { k: "top" };
@@ -199,6 +202,7 @@ function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: H
     if (a.k === "mask" && b.k === "mask" && a.alg === b.alg) return { k: "mask", alg: a.alg, m: a.m | b.m, l: a.l || b.l };
     if (a.k === "num" && b.k === "num") return { k: "num", zero: a.zero && b.zero };
     if (a.k === "list" && b.k === "list") return { k: "list", item: a.item && b.item ? join(a.item, b.item) : a.item ?? b.item };
+    if (a.k === "rec" && b.k === "rec" && a.variant === b.variant) return { k: "rec", variant: a.variant, fields: a.fields.map((f, i) => join(f, b.fields[i] ?? TOP)) };
     return TOP;
   };
 
@@ -239,6 +243,13 @@ function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: H
     }
   }
   const fieldsOf = (variant: Id) => (nodes[variant] as NodeOf<"variant">).fields;
+  // A case of a data type with fields, not an effect's operation.
+  const isData = (variant: Id) => {
+    const v = nodes[variant];
+    if (v?.kind !== "variant" || !v.fields.length || v.returns || v.later) return false;
+    const owner = info.owner.get(variant), body = owner ? (nodes[owner] as NodeOf<"def"> | undefined)?.body : undefined, td = body ? nodes[body] : undefined;
+    return td?.kind === "typedef" && !td.effect;
+  };
   const declares = (variant: Id) => nodes[variant]?.kind === "variant" && fieldsOf(variant).some((f) => declared.has(f) || declaredItems.has(f));
   // A value going where a named mask is: refused when its mask is known
   // and has a part the name doesn't allow.
@@ -302,6 +313,13 @@ function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: H
           arms[0].binds.forEach((b, i) => inner.set(b, { k: "num", zero: !((s.m >> i) & 1) }));
           return ev(arms[0].body, inner, depth + 1);
         }
+        // A case value whose case is known: only its arm runs, given what
+        // each field is (C77).
+        if (s.k === "rec") {
+          const arm = arms.find((a) => a.variant === s.variant);
+          if (arm) return ev(arm.body, new Map([...env, ...arm.binds.map((b, i) => [b, s.fields[i] ?? TOP] as const)]), depth + 1);
+          if (n.otherwise) return ev(n.otherwise, env, depth + 1);
+        }
         // Otherwise every arm may run: the union of what they give. A
         // field with a named mask binds that mask; a list's head binds
         // what its items are, and its tail the list.
@@ -334,7 +352,19 @@ function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: H
     }
     if (target && declares(target)) {
       fieldsOf(target).forEach((f, i) => { if (declared.has(f) && n.args[i]) put(n.args[i], f, arg(i)); if (declaredItems.has(f) && n.args[i]) putItems(n.args[i], f, env, depth); });
-      return TOP;
+    }
+    // A case with fields built: what each field is (C77). A list's cons is
+    // read as a list, below.
+    if (target && target !== CONS && isData(target) && n.args.length === fieldsOf(target).length)
+      return { k: "rec", variant: target, fields: n.args.map((_, i) => arg(i)) };
+    // A field read from a case value whose fields are known; a named mask
+    // where it says more.
+    if (target && nodes[target]?.kind === "field" && n.args.length === 1) {
+      const x = arg(0), i = x.k === "rec" ? fieldsOf(x.variant).indexOf(target) : -1;
+      const v = x.k === "rec" && i >= 0 ? x.fields[i] : TOP;
+      if (declared.has(target) && !(v.k === "mask" && !v.l)) return held(target);
+      if (declaredItems.has(target) && v.k !== "list") return heldItems(target);
+      if (v.k !== "top") return v;
     }
     if (target && declared.has(target)) return held(target);
     if (target && declaredItems.has(target)) return heldItems(target);
@@ -344,8 +374,12 @@ function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: H
     }
     if (target === S_SET) {
       const fr = nodes[n.args[0]];
-      if (fr?.kind === "ref" && declared.has(fr.target)) { put(n.args[2], fr.target, arg(2)); return TOP; }
-      if (fr?.kind === "ref" && declaredItems.has(fr.target)) { putItems(n.args[2], fr.target, env, depth); return TOP; }
+      if (fr?.kind === "ref" && declared.has(fr.target)) put(n.args[2], fr.target, arg(2));
+      if (fr?.kind === "ref" && declaredItems.has(fr.target)) putItems(n.args[2], fr.target, env, depth);
+      // A record with one field changed: the others as they were (C77).
+      const r = arg(1), i = fr?.kind === "ref" && r.k === "rec" ? fieldsOf(r.variant).indexOf(fr.target) : -1;
+      if (r.k === "rec" && i >= 0) return { ...r, fields: r.fields.map((f, j) => (j === i ? arg(2) : f)) };
+      return TOP;
     }
     if (target && (ADD.has(target) || SUB.has(target))) {
       const [a, b] = [arg(0), arg(1)];
@@ -517,10 +551,15 @@ export function valueMasks(code: Code, info: Info, open: Iterable<Id>): Map<Id, 
   const wide = new Set<Id>([...open].filter((d) => isFn.has(d)));
   // Only what the open definitions reach calls anything: a definition no
   // one runs (a shader's other entry points, say) widens nothing.
-  const reached: Node[] = [];
-  for (const d of new Set([...open].flatMap((r) => (nodes[r] ? [r, ...dependencies(code, r)] : [])))) {
+  const reached: Node[] = [], reachedDefs = new Set([...open].flatMap((r) => (nodes[r] ? [r, ...dependencies(code, r)] : [])));
+  for (const d of reachedDefs) {
     if (nodes[d]?.kind === "def") for (const id of subtree(code, d)) reached.push(nodes[id]);
   }
+  // A definition the open ones don't reach has callers nobody knows: if
+  // something compiles it anyway (a caller that forgot to name it open),
+  // its inputs are every part, never staged as zeros (C77,
+  // REVIEW-2026-11-01b §7).
+  for (const d of fnDefs) if (!reachedDefs.has(d)) wide.add(d);
   const sites = new Map<Id, Id>(); // call → callee
   for (const n of reached) {
     if (n.kind === "call") { const f = nodes[n.fn]; if (f?.kind === "ref" && isFn.has(f.target)) sites.set(n.id, f.target); }
@@ -531,24 +570,60 @@ export function valueMasks(code: Code, info: Info, open: Iterable<Id>): Map<Id, 
   // outside every definition) widens its callee.
   for (const [c, callee] of sites) if (!ownerOf.has(c)) wide.add(callee);
   const reader0 = makeReader(code, info);
-  const algOf = (b: Id) => { const t0 = info.typeOf.get(b), t = t0 && info.subst.zonk(t0); return t?.t === "con" ? reader0.byType.get(t.id) : undefined; };
-  // What each input is so far: a mask (from 0, nothing seen) per input of
-  // a multivector type; others are read as the reading reads them.
-  const given = new Map<Id, number>();
-  for (const d of fnDefs) for (const p of node((nodes[d] as NodeOf<"def">).body!).params) { const a = algOf(p); if (a) given.set(p, wide.has(d) ? a.full : 0); }
+  // A value of type t, nothing seen yet: a mask of 0 for a multivector, and
+  // for a record (one case) or tuple with one inside (C77) that case with
+  // each field so; null for a type with no multivector in it.
+  const shapeOf = (t0: Type, depth = 0): V | null => {
+    const t = info.subst.zonk(t0);
+    if (t.t !== "con" || depth > 8) return null;
+    const a = reader0.byType.get(t.id);
+    if (a) return { k: "mask", alg: a, m: 0 };
+    const b = (nodes[t.id] as NodeOf<"def"> | undefined)?.body, td = b ? nodes[b] : undefined;
+    if (td?.kind !== "typedef" || td.effect || td.variants.length !== 1) return null;
+    const v = nodes[td.variants[0]] as NodeOf<"variant">;
+    if (!v.fields.length || v.returns || v.later) return null;
+    const args = new Map(td.params.map((p, i) => [p, t.args[i]] as const));
+    const asType = (id: Id): Type | null => {
+      const n = nodes[id];
+      if (n?.kind !== "tref") return null;
+      if (args.has(n.target)) return args.get(n.target) ?? null;
+      const xs = n.args.map(asType);
+      return xs.every(Boolean) ? { t: "con", id: n.target, args: xs as Type[] } : null;
+    };
+    const fields = v.fields.map((f) => { const ft = asType((nodes[f] as NodeOf<"field">).type); return (ft && shapeOf(ft, depth + 1)) ?? TOP; });
+    return fields.some((f) => f.k !== "top") ? { k: "rec", variant: v.id, fields } : null;
+  };
+  // The same with every part: what anything of that type may be.
+  const fullOf = (v: V): V => (v.k === "mask" ? { ...v, m: v.alg.full } : v.k === "rec" ? { ...v, fields: v.fields.map(fullOf) } : v);
+  // What was so far, and v besides: a mask's parts added; one that isn't
+  // a known mask of the same algebra (lost, loose) is every part.
+  const grow = (was: V, v: V | undefined): V => {
+    if (was.k === "mask") return { ...was, m: was.m | (v && v.k === "mask" && v.alg === was.alg && !v.l ? v.m : was.alg.full) };
+    if (was.k === "rec") return { ...was, fields: was.fields.map((f, i) => grow(f, v?.k === "rec" && v.variant === was.variant ? v.fields[i] : undefined)) };
+    return was;
+  };
+  const same = (a: V, b: V): boolean => (a.k === "mask" && b.k === "mask" ? a.m === b.m : a.k === "rec" && b.k === "rec" ? a.fields.every((f, i) => same(f, b.fields[i])) : a.k === b.k);
+  const typeOf = (id: Id) => info.typeOf.get(id);
+  // What each input is so far (a mask from 0, nothing seen, per input
+  // with a multivector in its type); others are read as the reading reads
+  // them.
+  const given = new Map<Id, V>();
+  for (const d of fnDefs) for (const p of node((nodes[d] as NodeOf<"def">).body!).params) {
+    const t = typeOf(p), shape = t && shapeOf(t);
+    if (shape) given.set(p, wide.has(d) ? fullOf(shape) : shape);
+  }
   const envFor = (d: Id) => {
     const env = new Map<Id, V>();
-    for (const p of node((nodes[d] as NodeOf<"def">).body!).params) { const a = algOf(p); env.set(p, a ? { k: "mask", alg: a, m: given.get(p)! } : TOP); }
+    for (const p of node((nodes[d] as NodeOf<"def">).body!).params) env.set(p, given.get(p) ?? TOP);
     return env;
   };
-  // What each definition gives so far: a mask (from 0) when it gives a
-  // multivector, read from its own body each round; otherwise unknown.
+  // What each definition gives so far, read from its own body each round:
+  // from nothing seen when it gives a multivector or a record of them;
+  // otherwise unknown.
   const gives = new Map<Id, V>();
   for (const d of fnDefs) {
-    const t0 = info.typeOf.get(d), t = t0 && info.subst.zonk(t0);
-    const r = t?.t === "fn" ? info.subst.zonk(t.ret) : undefined;
-    const a = r?.t === "con" ? reader0.byType.get(r.id) : undefined;
-    gives.set(d, a ? { k: "mask", alg: a, m: 0 } : TOP);
+    const t0 = typeOf(d), t = t0 && info.subst.zonk(t0);
+    gives.set(d, (t?.t === "fn" && shapeOf(t.ret)) || TOP);
   }
   let seen = new Map<Id, V>(), settled = false;
   for (let round = 0; round < 64 && !settled; round++) {
@@ -558,11 +633,10 @@ export function valueMasks(code: Code, info: Info, open: Iterable<Id>): Map<Id, 
       const mine = own.get(d)!, reached = new Set<Id>();
       const widen = (callee: Id, args: V[]) => {
         node((nodes[callee] as NodeOf<"def">).body!).params.forEach((p, i) => {
-          if (!given.has(p)) return;
-          const a = algOf(p)!, v = args[i];
-          const m = v && v.k === "mask" && v.alg === a && !v.l ? v.m : a.full;
-          const now = given.get(p)! | m;
-          if (now !== given.get(p)) { given.set(p, now); changed = true; }
+          const was = given.get(p);
+          if (!was) return;
+          const now = grow(was, args[i]);
+          if (!same(now, was)) { given.set(p, now); changed = true; }
         });
       };
       const r = makeReader(code, info, undefined, {
@@ -575,11 +649,8 @@ export function valueMasks(code: Code, info: Info, open: Iterable<Id>): Map<Id, 
         onValue: (id, v) => { if (!mine.has(id)) return; const was = seen.get(id); seen.set(id, was ? joinMasks(was, v) : v); },
       });
       const got = r.ev(node((nodes[d] as NodeOf<"def">).body!).body, envFor(d), 0);
-      const was = gives.get(d)!;
-      if (was.k === "mask") {
-        const m = got.k === "mask" && got.alg === was.alg && !got.l ? was.m | got.m : was.alg.full;
-        if (m !== was.m) { gives.set(d, { ...was, m }); changed = true; }
-      }
+      const was = gives.get(d)!, now = grow(was, got);
+      if (!same(now, was)) { gives.set(d, now); changed = true; }
       for (const c of mine) if (sites.has(c) && !reached.has(c)) widen(sites.get(c)!, []);
     }
     settled = !changed;
