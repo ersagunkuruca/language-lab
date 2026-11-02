@@ -72,7 +72,7 @@ import { lowest, type Q as Frac } from "./poly.ts";
 import { CELL_OPS, COMPARE, CONS, FALSE, INT_OPS, IO, NIL, NONE, RANDOM_OP, RATIO, S, SET, SHOW_ANY, SIGS, SOME, STD_IMPL, STD_MANY, stdNames, TEXT_OPS, TRUE } from "./std.ts";
 import { add as intAdd, divides, intLit, lowestTerms, mul as intMul, neg as intNeg, squareRoots, sub as intSub, type Int } from "./int.ts";
 import { fieldIndex, fieldPath, setPath } from "./records.ts";
-import { INT } from "./types.ts";
+import { CHOICE, DIVERGE, INT, type Type } from "./types.ts";
 import { around, resultBounds, within, type Iv } from "./bounds.ts";
 import { Subst } from "./types.ts";
 
@@ -757,7 +757,9 @@ function solveFraction(op: FractionOp, at: number, xs: (Q | undefined)[]): Q | n
 // that reads a slider with inverse(show, …) relates once per input, so a
 // program's are kept (as equations.ts keeps its relations). Spacetime's
 // sliders spent about 60 ms an input here.
-const prepared = new WeakMap<Code, { code: Code; owner: Map<Id, Id>; runner?: ReturnType<typeof makeRunner> | null }>();
+// The search's budget ran out inside a call worked out forward.
+class OutOfSteps extends Error {}
+const prepared = new WeakMap<Code, { code: Code; owner: Map<Id, Id>; runner?: ReturnType<typeof makeRunner> | null; info?: ReturnType<typeof infer>; spend?: () => boolean }>();
 
 export function interpreter(given: Code, opts: Options = {}) {
   let ready = prepared.get(given);
@@ -1116,32 +1118,58 @@ export function interpreter(given: Code, opts: Options = {}) {
   }
 
   // mode: the mode the plan says the function runs in, when it says.
-  // A gradient whose function and point are both known is a value, worked
-  // out forward by the evaluator: the same derivative code (derive.ts), at
-  // its speed rather than a search's (C83: the ray marcher's normal through
-  // a PGA motor took relate about 7,500 steps and 9 s). Null when anything
-  // in it is still unknown, or the evaluator can't be had.
-  function gradientForward(g: Closure, p: Term, s: State): Value[] | null {
-    const point = toValue(deep(p, s));
-    if (point === undefined) return null;
-    const env = new Map<Id, Value>();
-    for (const [b, t] of g.env) {
-      let v: Value | undefined;
-      try { v = toValue(deep(t as Term, s)); } catch (e) { if (e instanceof NotInvertible) return null; throw e; }
-      if (v === undefined) return null;
-      env.set(b, v);
-    }
+  // A call whose function and inputs are all known is a value, worked out
+  // forward by the evaluator, at its speed rather than a search's (C83).
+  // So is a gradient whose function and point are known: the same
+  // derivative code (derive.ts). The ray marcher's normal through a PGA
+  // motor took relate about 7,500 steps and 9 s, and its march through the
+  // scene about 11,000 steps and 15 s. As Mercury runs a goal whose inputs
+  // are all bound in its det mode, a plain function call. Only a function
+  // that performs nothing but Choice (the evaluator gives every answer) and
+  // Diverge (the budget stops it), and null when anything in it is still unknown or the evaluator can't
+  // be had.
+  // A value with no function in it (a generic input may be given one).
+  const plain = (v: Value): boolean => typeof v !== "object" || ("tag" in v && Array.isArray((v as Data).fields) && (v as Data).fields.every((f) => plain(f as Value)));
+  function forward(c: Closure, args: Term[], s: State, gradient = false): Value[] | null {
     const prep = ready!;
     if (prep.runner === undefined) {
-      try { prep.runner = makeRunner(code, infer(code), { print: () => {} }); } catch { prep.runner = null; }
+      // Every hundred functions the evaluator enters cost a step of the
+      // search's budget (a step of the search does about as much work: the
+      // ray marcher's trace enters 94,000 in half a second), so a call that
+      // runs long (a march that never hits) stops where the search would.
+      let entries = 0;
+      try { prep.info = infer(code); prep.runner = makeRunner(code, prep.info, { print: () => {}, entered: () => { if (++entries % 100 === 0 && !prep.spend!()) throw new OutOfSteps(); } }); } catch { prep.runner = null; }
     }
     const r = prep.runner;
-    if (!r) return null;
+    if (!r || (!gradient && !performsOnlyChoice(c.lambda))) return null;
+    const known = (t: Term): Value | undefined => { try { return toValue(deep(t, s)); } catch (e) { if (e instanceof NotInvertible) return undefined; throw e; } };
+    const ins: Value[] = [];
+    for (const a of args) { const v = known(a); if (v === undefined || !plain(v)) return null; ins.push(v); }
+    const env = new Map<Id, Value>();
+    for (const [b, t] of c.env) { const v = known(t as Term); if (v === undefined) return null; env.set(b, v); }
+    prep.spend = spend;
     try {
       const out: Value[] = [];
-      for (const fn of r.ev(g.lambda, env)) for (const d of r.call(r.value(S.gradient), fn)) for (const v of r.call(d, point)) out.push(v);
+      for (const fn of r.ev(c.lambda, env)) {
+        const f = gradient ? [...r.call(r.value(S.gradient), fn)] : [fn];
+        // Each answer costs a step too: a search can have no end of them.
+        for (const d of f) for (const v of r.call(d, ...ins)) { if (!spend()) return null; out.push(v); }
+      }
       return out;
     } catch { return null; }
+  }
+  // Whether a lambda performs nothing but Choice and Diverge, by its type:
+  // no other effect, and no input a function, whose effects it would perform (its
+  // row may be open, so a caller's row can stand there).
+  const pure = new Map<Id, boolean>();
+  function performsOnlyChoice(lambda: Id): boolean {
+    if (pure.has(lambda)) return pure.get(lambda)!;
+    const info = ready!.info!;
+    const t = info.subst.zonk(info.typeOf.get(lambda) ?? { t: "var", v: -1 });
+    const hasFn = (x: Type): boolean => x.t === "fn" || (x.t === "con" && x.args.some(hasFn));
+    const ok = t.t === "fn" && t.eff.effs.every((e) => e === CHOICE || e === DIVERGE) && !t.params.some(hasFn);
+    pure.set(lambda, ok);
+    return ok;
   }
 
   function apply(f: Term, args: Term[], out: Term, mode?: Mode): Goal {
@@ -1158,8 +1186,8 @@ export function interpreter(given: Code, opts: Options = {}) {
       return wait({
         k: "later", text: "gradient", on: [args[0]], ready: (s) => !(walk(args[0], s) instanceof LVar), then: (s) => {
           const p = walk(args[0], s);
-          const forward = gradientForward(g, p, s);
-          if (forward) return disj(...forward.map((v) => eq(out, fromValue(v))))(s);
+          const known = forward(g, [p], s, true);
+          if (known) return disj(...known.map((v) => eq(out, fromValue(v))))(s);
           const lambda = typeof p === "number" ? derivativeLambda(code, { lambda: g.lambda }) : isData(p) ? gradientLambda(code, { lambda: g.lambda }, (p as DataT).tag) : null;
           if (!lambda) throw new NotInvertible("gradient is taken at a record of Float64s");
           return apply({ k: "closure", lambda, env: g.env }, args, out)(s);
@@ -1168,10 +1196,15 @@ export function interpreter(given: Code, opts: Options = {}) {
     }
     if (f.k === "closure" && fractionOps.has(f.lambda)) return fractionGoal(fractionOps.get(f.lambda)!, args, out);
     if (f.k === "closure") {
-      const g = invoke(f, args, out, mode);
-      if (!isRecursive(f.lambda)) return g;
       const c = f;
-      return step((s) => (outOfReach(c, args, out, s) ? null : g(s)));
+      const searched = (): Goal => {
+        const g = invoke(c, args, out, mode);
+        return isRecursive(c.lambda) ? step((s) => (outOfReach(c, args, out, s) ? null : g(s))) : g;
+      };
+      return (s) => {
+        const known = forward(c, args, s);
+        return known ? disj(...known.map((v) => eq(out, fromValue(v))))(s) : searched()(s);
+      };
     }
     const t = nodes[f.id];
     if (t.kind === "variant") return eq(out, dataT(f.id, args));

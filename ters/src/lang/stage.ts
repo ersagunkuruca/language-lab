@@ -673,6 +673,18 @@ class Stager {
         return r.fields.reduce((x, y) => this.arith("add", [x, y]));
       }
     }
+    // Rounding to Float32 (a program in the Float32 representation: each
+    // job is its Float64 one rounded): a number known now is rounded now,
+    // as the evaluator rounds it; a later one is rounded where it is
+    // computed. 0 · x and x + 0 stay exact under it (I133: the ray
+    // marcher's motor in Float32).
+    if (id === S.float32) {
+      const x = args[0];
+      if (typeof x === "number") return Math.fround(x);
+      if (typeof x === "object" && x.k === "lit" && typeof x.node.value === "number" && !x.node.unit) return Math.fround(x.node.value);
+      if (typeof x === "object" && x.k === "dyn") return { k: "dyn", cheap: false, make: () => this.add({ kind: "call", fn: this.ref(S.float32), args: [this.residual(x)] }) };
+      return stop();
+    }
     if (args.some(later)) return stop();
     switch (id) {
       case S.equal: return bool(equal(value(args[0]), value(args[1])));

@@ -117,7 +117,7 @@ for (const name of ["calculus", "physics"]) {
 test("records are structs: the ray marcher's colours in C, exactly the evaluator's", { skip }, () => {
   const p = load("raymarch");
   const lowered = lowerScalar(p.code, p.info, p.pres.names, p.own.defs, { records: true });
-  assert.deepEqual(lowered.records.map((r) => r.name), ["Vec", "Colour"]);
+  assert.deepEqual(lowered.records.map((r) => r.name), ["Vec", "Pga", "Colour"]);
   assert.match(emitC(lowered).c, /typedef struct \{ double f0; double f1; double f2; \} Vec;/);
   const run = build(lowered);
   const r = makeRunner(p.code, p.info, { print: () => {} });
