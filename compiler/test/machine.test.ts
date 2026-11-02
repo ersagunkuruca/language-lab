@@ -2,8 +2,8 @@
 // checker, optimizer, interpreter and profiler for a small register
 // machine. The evaluator, the compiled code (as `lab compile` stores it)
 // and the hand-written ideal must print the same and exit the same way,
-// failures included. The WebAssembly way is a todo until GAPS round
-// 9's M3 is fixed (C92); the C way is in bench-machine.ts.
+// failures included, and so must its WebAssembly (since C92); the C way
+// is in bench-machine.ts.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -49,6 +49,7 @@ test("machine: the failures: bad lines, labels, registers, division by zero, the
   assert.deepEqual(all(["--bogus"], {}).err, ["machine: no option --bogus"]);
 });
 
-test("machine: as WebAssembly (WASI), the same", { todo: w.wasmProblem ? `GAPS round 9 M3, C92: ${w.wasmProblem}` : false }, () => {
+test("machine: as WebAssembly (WASI), the same (C92)", () => {
+  assert.equal(w.wasmProblem, undefined);
   all(["--profile", "h.asm", "f.asm"], { "h.asm": source("hello"), "f.asm": sized("fib", 10) }, ["wasm"]);
 });
