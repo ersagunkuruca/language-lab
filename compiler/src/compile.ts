@@ -2990,7 +2990,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           const rec = callee?.single ? unpackOf(callee) : null;
           if (callee && callee.name === sp.name && singleTails.has(n.id)) {
             // A one-answer copy calling itself last: its answer is the
-            // call's, none included, so the call is a jump (C85).
+            // call's, none included, so the call is a jump (C89).
             jumps = true;
             const spend = spends(sp.def) ? "$spendOrThrow();\n" : "";
             return `${spend}${paramNames(sp).map((p, i) => `${p}$in = ${loopArgs(n, sp)[i]};`).join("\n")}\ncontinue;`;
@@ -3107,7 +3107,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       if (sp.single) {
         // Calls of itself in tail position: reached through lets and
         // matches whose values make no choice, so no loop of the search's
-        // own is around them and failing there ends the copy too (C85).
+        // own is around them and failing there ends the copy too (C89).
         const tails = (id: Id) => {
           const x = code.nodes[id];
           if (x.kind === "call" && code.nodes[x.fn].kind === "lambda") { if (!x.args.some(streamy)) tails(node<"lambda">(x.fn).body); }

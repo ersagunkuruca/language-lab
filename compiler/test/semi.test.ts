@@ -43,10 +43,10 @@ test("map given a lambda that may fail runs single-style, compiled as evaluated 
   assert.equal(got("none kept"), "[]");
 });
 
-// C85: a one-answer copy that calls itself last jumps instead, so a search
+// C89: a one-answer copy that calls itself last jumps instead, so a search
 // down a long list for one key (sheet's `lookup entry`, uncompiled maps)
 // takes no stack.
-test("a one-answer search that calls itself last is a loop (C85)", async () => {
+test("a one-answer search that calls itself last is a loop (C89)", async () => {
   const k = new Lang(LIBRARY.code);
   const find = k.def("find");
   k.define(find, k.fn(["list", "key"], (xs, key) => k.match(xs, [
