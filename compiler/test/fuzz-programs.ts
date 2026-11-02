@@ -5,7 +5,7 @@ import { Lang } from "../../ters/src/lang/dsl.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
-import { ABORT_OP, CONS, FALSE, INT_OPS, NIL, RANDOM_OP, S, SET, SHOW_ANY, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
+import { ABORT_OP, CONS, FALSE, FIRST, INT_OPS, NIL, PAIR_V, RANDOM_OP, S, SECOND, SET, SHOW_ANY, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
 import { INT, NUMBER } from "../../ters/src/lang/types.ts";
 import { B } from "../../ters/src/prelude.ts";
 import type { Id } from "../../ters/src/model.ts";
@@ -18,11 +18,12 @@ function random(seed: number) {
 }
 
 // Float64, Int, Bool, List Int, Text, a data type of three cases (Shape),
-// a record (Box), List Float64 and List Shape (C119).
-type Ty = "F" | "I" | "B" | "L" | "T" | "D" | "R" | "P" | "Q";
+// a record (Box), List Float64 and List Shape (C119), and a tuple
+// (Int, Float64) (C120).
+type Ty = "F" | "I" | "B" | "L" | "T" | "D" | "R" | "P" | "Q" | "U";
 type Scope = Record<Ty, Id[]>;
 
-export function program(seed: number, count: number) {
+export function program(seed: number, count: number, inputs: bigint[][] = []) {
   const k = new Lang(LIBRARY.code), r = random(seed);
   const lib = (name: string) => LIBRARY.code.defs.find((x) => LIBRARY.names[x] === name)!;
   const call = (f: Id, ...xs: Id[]) => k.call(f, ...xs);
@@ -48,7 +49,7 @@ export function program(seed: number, count: number) {
       const shape = r.int(12);
       if (shape === 0) return k.if(sub("B"), sub(t), sub(t));
       if (shape === 1) {
-        const u = r.pick<Ty>(["F", "I", "L", "T", "D", "R", "P", "Q"]);
+        const u = r.pick<Ty>(["F", "I", "L", "T", "D", "R", "P", "Q", "U"]);
         return k.let(fresh(), sub(u), (v) => gen(t, { ...s, [u]: [...s[u], v] }, depth - 1));
       }
       if (shape === 3) return k.match(sub("D"), [
@@ -63,6 +64,10 @@ export function program(seed: number, count: number) {
       if (shape === 2) return k.match(sub("L"), [
         { variant: NIL, names: [], body: () => sub(t) },
         { variant: CONS, names: [fresh(), fresh()], body: ([h, rest]) => gen(t, { ...s, I: [...s.I, h], L: [...s.L, rest] }, depth - 1) },
+      ]);
+      // A tuple taken apart (C120).
+      if (shape === 6) return k.match(sub("U"), [
+        { variant: PAIR_V, names: [fresh(), fresh()], body: ([a, b]) => gen(t, { ...s, I: [...s.I, a], F: [...s.F, b] }, depth - 1) },
       ]);
       // A match on a list of Float64s or of shapes (C119).
       if (shape === 5) {
@@ -89,6 +94,7 @@ export function program(seed: number, count: number) {
           () => call(S.floor, sub("F")),
           () => call(lib("smaller"), sub("F"), sub("F")),
           () => call(lib("item at"), sub("P"), sub("I"), sub("F")),
+          () => call(SECOND, sub("U")),
           () => call(Box.f["box.size"], sub("R")),
           () => orElse(call(B.div, sub("F"), sub("F"))),
           () => orElse(call(B.sqrt, sub("F"))),
@@ -113,6 +119,7 @@ export function program(seed: number, count: number) {
           () => call(INT_OPS.neg, sub("I")),
           () => call(lib("length"), sub("L")),
           () => call(lib("length"), r.next() < 0.5 ? sub("P") : sub("Q")),
+          () => call(FIRST, sub("U")),
           () => call(lib("item at"), sub("L"), sub("I"), sub("I")),
           () => call(Box.f["box.count"], sub("R")),
           () => call(TEXT_OPS.length, sub("T")),
@@ -147,6 +154,7 @@ export function program(seed: number, count: number) {
           () => k.equal(sub("L"), sub("L")),
           () => k.equal(sub("P"), sub("P")),
           () => k.equal(sub("Q"), sub("Q")),
+          () => k.equal(sub("U"), sub("U")),
           () => call(lib("contains"), sub("Q"), sub("D")),
           () => call(S.not, sub("B")),
           () => k.equal(sub("T"), sub("T")),
@@ -190,6 +198,9 @@ export function program(seed: number, count: number) {
           () => call(SHOW_ANY, sub("D")),
           () => call(SHOW_ANY, sub("P")),
           () => call(SHOW_ANY, sub("Q")),
+          () => call(SHOW_ANY, sub("U")),
+          // Lists of tuples: zipped, sorted (by the Int, then the Float64).
+          () => call(SHOW_ANY, call(lib("sort"), call(lib("zipped"), sub("L"), sub("P")))),
           () => call(TEXT_OPS.slice, sub("T"), sub("I"), sub("I")),
           () => call(S.show, sub("F")),
           () => call(INT_OPS.show, sub("I")),
@@ -237,6 +248,14 @@ export function program(seed: number, count: number) {
           () => call(lib("keep"), sub("Q"), k.fn([fresh()], (v) => gen("B", { ...s, D: [...s.D, v] }, depth - 1))),
         ])();
       }
+      case "U": {
+        if (leaf) return call(PAIR_V, k.int(r.int(5) - 2), k.lit(r.pick([0, 0.5, -3])));
+        return r.pick<() => Id>([
+          () => call(PAIR_V, sub("I"), sub("F")),
+          () => call(PAIR_V, call(FIRST, sub("U")), call(B.add, call(SECOND, sub("U")), sub("F"))),
+          () => call(lib("item at"), call(lib("zipped"), sub("L"), sub("P")), sub("I"), sub("U")),
+        ])();
+      }
       case "R":
         // set (C106): a field of a box changed, the other kept.
         if (!leaf && r.next() < 0.3) return r.next() < 0.5 ? call(SET, k.x(Box.f["box.count"]), sub("R"), sub("I")) : call(SET, k.x(Box.f["box.size"]), sub("R"), sub("F"));
@@ -254,7 +273,7 @@ export function program(seed: number, count: number) {
     k.define(h, k.fn(["b", "s", "m"], (b, s0, m) =>
       k.let("c0", call(Box.f["box.count"], b), (c0) =>
         k.let("m0", call(INT_OPS.add, m, k.int(0)), (m0) => {
-          const sc = (more: Partial<Scope> = {}): Scope => ({ F: [...(more.F ?? [])], I: [c0, m0, ...(more.I ?? [])], L: [], B: [], T: [], D: [s0], R: [b], P: [], Q: [] });
+          const sc = (more: Partial<Scope> = {}): Scope => ({ F: [...(more.F ?? [])], I: [c0, m0, ...(more.I ?? [])], L: [], B: [], T: [], D: [s0], R: [b], P: [], Q: [], U: [] });
           return k.match(s0, [
             { variant: shape_.dot, names: [], body: () => gen("I", sc(), 3) },
             { variant: shape_.circle, names: [fresh()], body: ([rad]) => gen("I", sc({ F: [rad] }), 3) },
@@ -266,21 +285,32 @@ export function program(seed: number, count: number) {
   const defs: { def: Id; result: Ty }[] = [];
   for (let i = 0; i < count; i++) {
     calls = false;
-    const result = r.pick<Ty>(["F", "I", "B", "L", "T", "D", "R", "P", "Q"]), def = k.def(`g${i}`);
+    const result = r.pick<Ty>(["F", "I", "B", "L", "T", "D", "R", "P", "Q", "U"]), def = k.def(`g${i}`);
     // Its inputs are a Float64, an Int and a List Int: each used once
     // first, so its type is that whatever the body does.
     k.define(def, k.fn(["x", "n", "xs"], (x, n, xs) =>
       k.let("x0", call(B.add, x, k.lit(0)), (x0) =>
         k.let("n0", call(INT_OPS.add, n, k.int(0)), (n0) =>
           k.let("xs0", call(lib("append"), xs, k.list(n0)), (xs0) =>
-            call(SHOW_ANY, gen(result, { F: [x0], I: [n0], L: [xs0], B: [], T: [], D: [], R: [], P: [], Q: [] }, 4)))))));
+            call(SHOW_ANY, gen(result, { F: [x0], I: [n0], L: [xs0], B: [], T: [], D: [], R: [], P: [], Q: [], U: [] }, 4)))))));
     defs.push({ def, result });
     if (!calls) callable.push(def);
   }
+  // Each definition again behind an entry e(x, n, j) whose list is the
+  // j-th of the inputs, written in the program: when the chooser stores
+  // lists another way, only what the program builds is stored so, and
+  // Ints come in from outside (C120).
+  const lists = k.def("inputs");
+  k.define(lists, k.list(...inputs.map((xs) => k.list(...xs.map((x) => k.int(x))))));
+  const entries = defs.map(({ def }, i) => {
+    const e = k.def(`e${i}`);
+    k.define(e, k.fn(["x", "n", "j"], (x, n, j) => call(def, x, n, call(lib("item at"), k.x(lists), j, k.list()))));
+    return e;
+  });
   // A main calling each once, for the representation chooser, which
   // weighs what main reaches (C118).
   const main = k.def("main");
-  k.define(main, k.thunk(() => k.list(...defs.map(({ def }) => call(def, k.lit(2.5), k.int(3), k.list(k.int(1), k.int(2)))))));
+  k.define(main, k.thunk(() => k.list(...entries.map((e) => call(e, k.lit(2.5), k.int(3), k.int(1))))));
   const code = base(k.code), names2 = baseNames(k.names);
-  return { code, names: names2, info: infer(code, names2, undefined, checkOptions), defs, main };
+  return { code, names: names2, info: infer(code, names2, undefined, checkOptions), defs, entries, main, own: [...helpers, ...defs.map((d) => d.def), lists, ...entries, main] };
 }

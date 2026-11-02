@@ -42,7 +42,7 @@ const SEED = Number(process.env.SEED ?? 1), COUNT = Number(process.env.FUZZ ?? 4
 const INPUTS: [number, bigint, bigint[]][] = [[0, 0n, []], [2.5, 3n, [1n, 2n, 3n]], [-1, -2n, [5n, -4n]], [1e300, 2n ** 64n + 1n, [2n ** 62n, -(2n ** 63n), 7n]]];
 
 test(`generated programs: the evaluator, compiled JavaScript, WebAssembly and C give the same text (C101, seed ${SEED})`, async () => {
-  const p = program(SEED, COUNT);
+  const p = program(SEED, COUNT, INPUTS.map(([, , xs]) => xs));
   assert.deepEqual(p.info.errors.map((e) => e.message), [], `seed ${SEED}`);
   const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });
   const args = (x: number, n: bigint, xs: bigint[]): Value[] => [x, norm(n), toList(xs.map(norm))];
@@ -63,17 +63,20 @@ test(`generated programs: the evaluator, compiled JavaScript, WebAssembly and C 
 
   // Each engine on a program: the one generated, or the one with the
   // representations the chooser picks (C118).
+  // `entry`: call e(x, n, j), whose list the program holds (C120), so a
+  // list stored another way never comes in from outside.
   type Built = { code: typeof p.code; info: typeof p.info; names: typeof p.names };
-  const engines = async (q: Built, tag: string, js = true, native = true) => {
+  const engines = async (q: Built, tag: string, js = true, native = true, entry = false) => {
+    const roots = entry ? p.entries : p.defs.map((d) => d.def), name = (i: number) => `${entry ? "e" : "g"}${i}`;
     if (js) {
     const path = join(mkdtempSync(join(tmpdir(), "fuzz-")), "out.mjs");
-    writeFileSync(path, compile(q.code, q.info, q.names, { runtime, exports: p.defs.map((_, i) => `g${i}`) }));
+    writeFileSync(path, compile(q.code, q.info, q.names, { runtime, exports: p.defs.map((_, i) => name(i)) }));
     const js = (await import(pathToFileURL(path).href)).defs as Record<string, (...a: Value[]) => string>;
-    p.defs.forEach((_, i) => INPUTS.forEach(([x, n, xs], j) => check(stopped(() => js[`g${i}`](...args(x, n, xs))), i, j, `JavaScript${tag}`)));
+    p.defs.forEach((_, i) => INPUTS.forEach(([x, n, xs], j) => check(stopped(() => js[name(i)](...(entry ? [x, norm(n), norm(BigInt(j))] : args(x, n, xs)))), i, j, `JavaScript${tag}`)));
     }
     if (!native) return;
 
-    const lowered = lowerScalar(q.code, q.info, q.names, p.defs.map((d) => d.def), { data: true });
+    const lowered = lowerScalar(q.code, q.info, q.names, roots, { data: true });
     assert.deepEqual([...lowered.refused.entries()].map(([d, why]) => `${q.names[d]}: ${why}`), [], `seed ${SEED}${tag}`);
     const w = await instantiate(emitWasm(lowered)) as unknown as Record<string, (...a: unknown[]) => unknown>;
     // A List Int made by the module's own makers, from the end.
@@ -82,16 +85,16 @@ test(`generated programs: the evaluator, compiled JavaScript, WebAssembly and C 
       const maker = (v: Id) => { const c = t.cases.find((x) => x.variant === v)!; return (w[`${t.name}.${c.name}(${t.key})`] ?? w[`${t.name}.${c.name}`]) as (...a: unknown[]) => unknown; };
       return xs.reduceRight<unknown>((l, x) => maker(CONS)(toInt(w, x), l), maker(NIL)());
     };
-    const fns = p.defs.map(({ def }) => lowered.funcs.findIndex((g) => g.def === def && !g.inner));
+    const fns = roots.map((def) => lowered.funcs.findIndex((g) => g.def === def && !g.inner));
     fns.forEach((fi, i) => {
       const f = lowered.funcs[fi];
       INPUTS.forEach(([x, n, xs], j) => {
-        check(stopped(() => fromText(w, w[f.name](x, toInt(w, n), list(xs, f.params[2])) as never)), i, j, `WebAssembly${tag}`);
+        check(stopped(() => fromText(w, w[f.name](x, toInt(w, n), entry ? toInt(w, BigInt(j)) : list(xs, f.params[2])) as never)), i, j, `WebAssembly${tag}`);
       });
     });
 
     if (!skip) {
-    const calls = fns.flatMap((fi) => INPUTS.map(([x, n, xs]): [number, Value[]] => [fi, args(x, n, xs)]));
+    const calls = fns.flatMap((fi) => INPUTS.map(([x, n, xs], j): [number, Value[]] => [fi, entry ? [x, norm(n), norm(BigInt(j))] : args(x, n, xs)]));
     const got = build(lowered)(calls);
     calls.forEach(([fi], c) => {
       const [i, j] = [Math.floor(c / INPUTS.length), c % INPUTS.length];
@@ -106,16 +109,16 @@ test(`generated programs: the evaluator, compiled JavaScript, WebAssembly and C 
   // tables where the host has a Map (the evaluator and compiled
   // JavaScript); WebAssembly and C take what they would.
   for (const hostMaps of [true, false]) {
-    const c = withLibraryRepresentations(p.code, p.info, p.names, p.main, [...p.defs.map((d) => d.def), p.main], [], { hostMaps });
+    const c = withLibraryRepresentations(p.code, p.info, p.names, p.main, p.own, [], { hostMaps });
     if (!c.chosen.length) continue;
     const info = infer(c.code, c.names, undefined, { ...checkOptions, insiders: [...checkOptions.insiders!, ...c.insiders] });
     assert.deepEqual(info.errors.map((e) => e.message), [], `seed ${SEED}, ${c.chosen.join(", ")}`);
     const tag = ` (${c.chosen.join(", ")})`;
     if (hostMaps) {
       const rc = makeRunner(c.code, info, { print: () => {}, names: c.names });
-      p.defs.forEach(({ def }, i) => INPUTS.forEach(([x, n, xs], j) => check(stopped(() => { for (const v of rc.call(rc.value(def), ...args(x, n, xs))) return v as unknown as string; return "no answer"; }), i, j, `the evaluator${tag}`)));
+      p.entries.forEach((e, i) => INPUTS.forEach(([x, n], j) => check(stopped(() => { for (const v of rc.call(rc.value(e), x, norm(n), norm(BigInt(j)))) return v as unknown as string; return "no answer"; }), i, j, `the evaluator${tag}`)));
     }
-    await engines({ code: c.code, info, names: c.names }, tag, hostMaps, !hostMaps);
+    await engines({ code: c.code, info, names: c.names }, tag, hostMaps, !hostMaps, true);
   }
   assert.deepEqual(differ, []);
 });
