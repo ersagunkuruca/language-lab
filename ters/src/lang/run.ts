@@ -22,6 +22,7 @@ import type { Info } from "./infer.ts";
 import { derivativeLambda, gradientLambda } from "./derive.ts";
 import { fieldShapes, shapeOf, spread, type Shape } from "./nested.ts";
 import { resolveArithmetic } from "./arith.ts";
+import { worldTimers } from "./timers.ts";
 import { relate, satisfiable, toValue } from "./relate.ts";
 import { planSolve, solutions } from "./solve.ts";
 import { oneAnswer } from "./modes.ts";
@@ -441,7 +442,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   // Builtins that touch the world and can fail: a failure is an Abort,
   // performed where they were called.
   const hosted = hostedEffects(code, rt.hosts);
-  const timers: number[] = [];
+  const timers = worldTimers((m) => { throw new Aborted(m); });
   const FALLIBLE = new Set<Fn>([...Object.keys(impl).map((op) => `builtin.${op}`), S.mod, S.float32, IO.readFile, IO.writeFile, IO.appendFile, IO.listFolder, IO.readInput, IO.readLine, IO.fetchText].map((id) => builtins[id]));
   function world<K extends keyof World>(k: K): World[K] {
     const f = rt.world?.[k];
@@ -637,39 +638,13 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       // Console's, Files' and Network's operations (L145): as their builtins.
       const builtin = worldBuiltins.get(op);
       if (builtin) return this.apply(builtin, args);
-      // Waiting (L71c): the world's timers, and which of several tickets is
-      // ready first. A timer's ticket is ready at its deadline; `timer(ms,
-      // value)` is ready ms from when it is awaited.
-      if (op === START_TIMER_OP) {
-        const n = timers.length;
-        timers.push((rt.world?.now ?? Date.now)() + (args[0] as number));
-        return this.ret({ tag: TICKET_V.ticket, fields: [n] });
-      }
+      // Waiting (L71c): the world's timers (timers.ts, which the compiled
+      // program's main uses too).
+      if (op === START_TIMER_OP) return this.ret(timers.start((rt.world?.now ?? Date.now)(), args[0] as number));
       if (op === AWAIT_OP) {
-        const now = (rt.world?.now ?? Date.now)();
-        // An any of is ready when the first of its tickets is, an any of
-        // inside one too (L141), as simulated's `ready at` has it.
-        const items = (t: Data): Data[] => {
-          const ts: Data[] = [];
-          for (let c = t.fields[0] as Data; c.tag === CONS; c = c.fields[1] as Data) ts.push(c.fields[0] as Data);
-          if (!ts.length) throw new Aborted("any of no tickets is never ready");
-          return ts;
-        };
-        const ready = (t: Data): number => {
-          if (t.tag === TICKET_V.ticket) { const d = timers[Number(t.fields[0])]; if (d === undefined) throw new Aborted(`no ticket ${String(t.fields[0])} from this world`); return d; }
-          if (t.tag === TICKET_V.timer) return now + (t.fields[0] as number);
-          if (t.tag === TICKET_V.at) return t.fields[0] as number;
-          return Math.min(...items(t).map(ready));
-        };
-        const t = args[0] as Data;
-        const waitUntil = (at: number) => { if (at > now) world("wait")(at - now); };
-        if (t.tag === TICKET_V.firstReady) {
-          const ts = items(t);
-          const at = ts.map(ready), i = at.indexOf(Math.min(...at));
-          waitUntil(at[i]);
-          return this.apply(t.fields[1], [i]);
-        }
-        waitUntil(ready(t));
+        const now = (rt.world?.now ?? Date.now)(), t = args[0] as Data, w = timers.when(t, now);
+        if (w.at > now) world("wait")(w.at - now);
+        if (w.first !== undefined) return this.apply(t.fields[1], [w.first]);
         return this.ret(t.tag === TICKET_V.timer || t.tag === TICKET_V.at ? t.fields[1] : unit);
       }
       if (op === CHECK_OP && rt.check) return (rt.check((args[0] as Data).tag === TRUE, args[1] as string), this.ret(unit));
