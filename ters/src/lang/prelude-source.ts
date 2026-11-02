@@ -1516,7 +1516,29 @@ export function buildPrelude(): Module {
     k.if(k.call(S.and, iSame(r, c), iSame(r, k.call(length, v))),
       k.call(backSubstituted, k.call(eliminated, k.call(map, k.call(zipped, k.call(rowsOf, m), v), k.fn(["pair"], (p) => entry(p, (row, b) => k.call(append, row, k.call(CONS, b, k.x(NIL))), ["row", "b"]))), r)),
       k.call(ABORT_OP, texts(k.lit("solved: a "), sizeText(r, c), k.lit(" matrix and a vector of "), k.call(INT_OPS.show, k.call(length, v)), k.lit("; it needs a square matrix and one item per row"))))));
-  const matrixHelpers = [listDot, eliminated, backSubstituted];
+  // The determinant and the inverse (L44e), at Float64. The determinant is
+  // the elimination's pivots multiplied, the sign turned for each row a
+  // pivot was moved past (partial pivoting, as LAPACK's getrf); a 0 pivot
+  // is a singular matrix, so 0. The inverse is solved once per column of
+  // the identity, so a singular matrix has no answer.
+  const determinantOf = k.def("determinant of rows");
+  const reducedBy = (p: Id, a: Id) => k.fn(["row"], (row) => k.let("factor", k.call(dividedOr, headOr0(row), a, k.lit(0)), (f) =>
+    k.call(map, k.call(zipped, tailOf(row), tailOf(p)), k.fn(["pair"], (pr) => entry(pr, (x, y) => k.call(B.sub, x, k.call(B.mul, f, y)), ["x", "y"])))));
+  const odd = (i: Id) => k.let("place", k.call(INT_OPS.toNumber, i), (x) => k.call(S.not, k.call(S.equal, k.call(B.mul, k.call(S.floor, k.call(B.mul, x, k.lit(0.5))), k.lit(2)), x)));
+  const pivotStep = (rs: Id, n: Id, i: Id, p: Id) => k.let("pivot first", headOr0(p), (a) => k.if(k.call(S.equal, a, k.lit(0)), k.lit(0),
+    k.let("rest", k.call(determinantOf, k.call(map, k.call(append, k.call(take, rs, i), k.call(drop, rs, k.call(INT_OPS.add, i, k.int(1)))), reducedBy(p, a)), k.call(INT_OPS.sub, n, k.int(1))), (d) =>
+      k.if(odd(i), k.call(B.sub, k.lit(0), k.call(B.mul, a, d)), k.call(B.mul, a, d)))));
+  k.define(determinantOf, k.fn(["rows", "count"], (rs, n) => k.if(iLess(n, k.int(1)), k.lit(1),
+    k.match(k.call(sortBy, k.call(numbered, rs), k.fn(["pair"], (pr) => entry(pr, (_i, row) => k.call(B.sub, k.lit(0), k.call(S.abs, headOr0(row))), ["position", "row"]))), [
+      { variant: NIL, names: [], body: () => k.lit(1) },
+      { variant: CONS, names: ["pivot", "others"], body: ([pp]) => entry(pp, (i, p) => pivotStep(rs, n, i, p), ["position", "row"]) },
+    ]))));
+  const determinant = def("determinant", ["matrix"], (m) => matOf(m, (r, c) => k.if(iSame(r, c), k.call(determinantOf, k.call(rowsOf, m), r),
+    k.call(ABORT_OP, texts(k.lit("determinant: a "), sizeText(r, c), k.lit(" matrix; it needs a square one"))))));
+  const inverted = def("inverted", ["matrix"], (m) => matOf(m, (r, c) => k.if(iSame(r, c),
+    k.call(transposed, k.call(matrixOfRows, k.call(map, k.call(rowsOf, k.call(identityMatrix, r)), k.fn(["column"], (e) => k.call(solved, m, e))))),
+    k.call(ABORT_OP, texts(k.lit("inverted: a "), sizeText(r, c), k.lit(" matrix; it needs a square one"))))));
+  const matrixHelpers = [listDot, eliminated, backSubstituted, determinantOf];
   // The three set operations: one walk down both sorted lists at once,
   // keeping what each wants from the smaller head, the shape of merge
   // sorted.
@@ -1731,7 +1753,7 @@ export function buildPrelude(): Module {
   const simulatedHelpers = [readyAt, earliest, readyTimes, tiedAt, pickAt, nextDraw, firstDraw, simulatedWorld, simulatedClock];
   const awaitHelpers = [startBranch, waiting, goOn, finished, settle, firstDone, raceSettle, ...simulatedHelpers];
 
-  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, spaced, optionalParens, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, ticketId, anyOf, together, race, within, simulated];
+  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, spaced, optionalParens, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, determinant, inverted, ticketId, anyOf, together, race, within, simulated];
   // Each number's own show, from before the generic one showed every number
   // (L153, L156): kept so programs saved before still open, not offered.
   const perTypeShows = [showF, showC, showD, showX];
@@ -1875,6 +1897,8 @@ export function buildPrelude(): Module {
     [matrixProduct]: "The first matrix times the second: row by column, for any number type. The first's columns must be the second's rows, or the program stops with both sizes.",
     [matrixTimesVector]: "The matrix times the list as a column: one item per row. The list must have one item per column, or the program stops with both sizes.",
     [solved]: "The list x with matrix times vector(m, x) = b, for a square Float64 matrix, by Gaussian elimination with partial pivoting. No answer when the matrix is singular (a pivot is 0).",
+    [determinant]: "The determinant of a square Float64 matrix: 0 when it is singular. Other sizes stop the program.",
+    [inverted]: "The inverse of a square Float64 matrix: matrix product(m, inverted(m)) is the identity. No answer when the matrix is singular.",
     ...Object.fromEntries(matrixHelpers.map((d) => [d, "A helper of the matrix operations. Not offered."])),
     [priorityQueueItems]: "The queue's (priority, item) pairs, soonest first.",
     [smallestKey]: "The map's smallest key, in compare's order; no answer when the map is empty. value at(m, smallest key(m)) is what it holds.",

@@ -103,3 +103,19 @@ test("solved finds x with m·x = b, pivoting on the largest; a singular matrix h
   assert.deepEqual(ran, want);
   assert.deepEqual(compiled, want);
 });
+
+test("determinant and inverted (L44e): pivots multiplied with their sign; a singular matrix", async () => {
+  const [ran, compiled] = await both((k) => [
+    k.call(L("determinant"), rows(k, [2, 1], [1, 3])),
+    // a zero first pivot: rows swap, the sign turns
+    k.call(L("determinant"), rows(k, [0, 1, 0], [1, 0, 0], [0, 0, 2])),
+    k.call(L("determinant"), rows(k, [1, 2], [2, 4])),
+    k.call(L("matrix rows"), k.call(L("inverted"), rows(k, [4, 7], [2, 6]))),
+    k.call(L("matrix rows"), k.call(L("matrix product"), rows(k, [2, 0], [0, 4]), k.call(L("inverted"), rows(k, [2, 0], [0, 4])))),
+    k.call(L("inverted"), rows(k, [1, 2], [2, 4])),
+    tried(k, k.call(L("determinant"), rows(k, [1, 2, 3]))),
+  ]);
+  const want = ["5", "-2", "0", "[[0.6, -0.7], [-0.2, 0.4]]", "[[1, 0], [0, 1]]", "none", 'refused("determinant: a 1 × 3 matrix; it needs a square one")'];
+  assert.deepEqual(ran, want);
+  assert.deepEqual(compiled, want);
+});

@@ -320,6 +320,8 @@ A Matrix of any size holds its items row by row. Sums, products and a matrix tim
 - **matrix product** : `(Matrix a, Matrix a) -[Abort]-> Matrix a where a is a Number`. The first matrix times the second: row by column, for any number type. The first's columns must be the second's rows, or the program stops with both sizes.
 - **matrix times vector** : `(Matrix a, List a) -[Abort]-> List a where a is a Number`. The matrix times the list as a column: one item per row. The list must have one item per column, or the program stops with both sizes.
 - **solved** : `(Matrix Float64, List Float64) -[Choice, Abort]-> List Float64`. The list x with matrix times vector(m, x) = b, for a square Float64 matrix, by Gaussian elimination with partial pivoting. No answer when the matrix is singular (a pivot is 0).
+- **determinant** : `(Matrix Float64) -[Abort]-> Float64`. The determinant of a square Float64 matrix: 0 when it is singular. Other sizes stop the program.
+- **inverted** : `(Matrix Float64) -[Choice, Abort]-> Matrix Float64`. The inverse of a square Float64 matrix: matrix product(m, inverted(m)) is the identity. No answer when the matrix is singular.
 
 ## Representations
 
@@ -402,7 +404,7 @@ Each of these puts its effect in the type of every function that uses it, so `di
 - **file exists** : `(Text) -[Files]-> Bool`. Whether there's a file at this path.
 - **list folder** : `(Text) -[Files, Abort]-> List Text`. The names of the files in a folder.
 - **fetch text** : `(Text) -[Network, Abort]-> Text`. The text at a web address. Aborts if the request fails. The same as await(start fetch(url)).
-- **start fetch** : `(Text) -[Network, Abort]-> Ticket Text`. Starts fetching the text at a web address and gives a ticket for it, so together and race can wait on it beside timers and other fetches: together([() => await(start fetch(a)), () => await(start fetch(b))]). Aborts where it is awaited if the request fails. Run from the command line, the fetch goes on in the background and the ticket is ready when the body has come, so fetches overlap; compiled and on a page it is fetched when it starts, and the ticket is ready at once.
+- **start fetch** : `(Text) -[Network, Abort]-> Ticket Text`. Starts fetching the text at a web address and gives a ticket for it, so together and race can wait on it beside timers and other fetches: together([() => await(start fetch(a)), () => await(start fetch(b))]). Aborts where it is awaited if the request fails. Run from the command line, evaluated or compiled, the fetch goes on in the background and the ticket is ready when the body has come, so fetches overlap; on a page it is fetched when it starts, and the ticket is ready at once.
 
 ## Waiting for several things: Await
 

@@ -95,8 +95,9 @@ entry`, `transposed`, `identity matrix`, `matrix scaled`, `matrix sum`,
 `matrix product`, `matrix times vector` and `solved` (Gaussian
 elimination with partial pivoting, at Float64), all written in the
 language (LANGUAGE.md "Matrices"). Size mismatches stop with both sizes.
-Still to come: LU kept for many right-hand sides, least squares,
-determinants, decompositions, sparse storage chosen by the compiler.
+`determinant` and `inverted` followed (L44e). Still to come: LU kept for
+many right-hand sides, least squares, decompositions, sparse storage
+chosen by the compiler.
 
 ## Order
 

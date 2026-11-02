@@ -499,7 +499,10 @@ NumPy's "shapes not aligned" does.
 square `Float64` matrix: Gaussian elimination, taking the row with the
 largest first item as each pivot (partial pivoting, as LAPACK's `gesv`
 does), then back substitution. A singular matrix has no answer, as
-dividing by 0 has none. `Mat2` to `Mat4` stay the fixed-size matrices
+dividing by 0 has none. `determinant(m)` multiplies the same
+elimination's pivots, turning the sign for each row a pivot moved past (0
+for a singular matrix), and `inverted(m)` solves once per column of the
+identity (no answer for a singular one). `Mat2` to `Mat4` stay the fixed-size matrices
 that geometry and shaders use (MATRICES.md); how a `Matrix`'s items are
 stored is the compiler's choice. (`test/matrix-any-size.test.ts`, BACKLOG L44.)
 
