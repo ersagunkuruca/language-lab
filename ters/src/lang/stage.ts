@@ -20,8 +20,9 @@
 // staging, and the call stays as it was. Effects, Choice and ways stop it
 // too. Arithmetic with 0 and 1 known now is simplified (0 · x is 0, x + 0
 // is x), so a sum over a table's lines keeps only the lines that matter.
-// For a later x that is ∞ or NaN, 0 · x is NaN, not 0; staging assumes
-// finite numbers, as compilers' fast-math does.
+// A Float64 is finite (L125), so 0 · x is 0 and x + 0 is x: the type's
+// laws, not fast-math. The sign of a zero they drop isn't seen: −0 is a
+// second spelling of 0, which show and atan2 read as 0 (I107).
 //
 // Prior art: partial evaluation (Futamura 1971; Jones, Gomard and Sestoft,
 // "Partial Evaluation and Automatic Program Generation", 1993), here
