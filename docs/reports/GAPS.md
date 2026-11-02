@@ -1725,6 +1725,21 @@ of one-character texts (the program reads `characters(text)`, the ideal
 walks the text once). None stands out alone; measure again after S1 and
 S2, with C59 and C62 in mind.
 
+*Measured again after S1, S2 and S4 (C82b, 2026-11-02):* 2,000 rows
+(12,000 cells) in about 340 ms against the ideal's 60 to 85 (a busy
+machine), about 5×. A profile of the run: `evaluate all` 33%, of which
+reading each formula (`formula of`, tokenizing and parsing) 21%; `cells
+between` 16%; the garbage collector 20%. The tokenizer was a search: `classify` (a number or a word, or
+no answer) calls `uppercase`, whose row is open only so its caller's row
+can stand there, and the compiler counted that as a call that may
+choose, so `classify`, `flush` and `tokens` each took the rest of the
+search as a continuation, a closure per character. *Fixed (C82b,
+compile.ts `ownsNoChoice`):* they are one-answer functions now, and
+`tokens` went from 21% of the run to 9%. Left: `cells between`'s `map`
+over a lambda that can fail (`row of`) is still a search with a JS frame
+per item (S1's rest), though a map whose lambda has at most one answer
+has at most one answer itself (C84).
+
 **S4. Start-up.** 3.4 MB of JavaScript for a 90-definition program: the
 module carries the library it doesn't use, and at 50 rows start-up is
 most of the time (218 ms against 45 ms). Emit only what `main` reaches.
