@@ -21,7 +21,7 @@ import type { Id } from "../src/model.ts";
 import { compile } from "../../compiler/src/compile.ts";
 
 const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
-const lib = (name: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === name)!;
+const lib = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
 const ONE = 2n ** 32n;
 // The nearest step, halves up, and the product rounded down: by hand.
 const steps = (top: bigint, bottom: bigint) => { const t = 2n * top * ONE + bottom, d = 2n * bottom; return t >= 0n ? t / d : -((-t + d - 1n) / d); };
@@ -54,7 +54,7 @@ test("Fixed: exact literals, a physics loop and a big world, evaluated and compi
   ]), [{ variant: PAIR_V, names: ["h", "v"], body: ([h, v]) => k.call(SHOW_ANY, k.call(PAIR_V, stepsOf(h), stepsOf(v))) }]));
   // A step past 10¹², and back: Fixed keeps it.
   show("far away", () => stepsOf(k.call(ARITH.sub, k.call(ARITH.add, k.call(lib("as fixed"), k.int(10 ** 12)), k.call(FIXED_V, k.int(1))), x(1e12))));
-  show("as float64", () => k.call(lib("show fixed"), x(-2.75)));
+  show("minus two and three quarters", () => k.call(lib("show fixed"), x(-2.75)));
   // Shown as the shortest decimal that reads back to the same steps.
   SHOWN.forEach((st, j) => show(`shown ${j}`, () => k.call(lib("show fixed"), k.call(FIXED_V, k.int(st)))));
   show("a third", () => k.call(S.all, k.thunk(() => stepsOf(k.call(lib("divide fixed"), x(1), x(3))))));

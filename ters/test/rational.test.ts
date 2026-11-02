@@ -26,7 +26,7 @@ function program() {
   const k = new Lang(LIBRARY.code);
   const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
   const fn = (name: string, params: string[], body: (...xs: Id[]) => Id) => { const d = k.def(name); k.define(d, k.fn(params, body)); return d; };
-  const [fraction, divide, show, asNumber, whole] = ["fraction", "divide fractions", "show fraction", "fraction as float64", "as fraction"].map(lib);
+  const [fraction, divide, show, asNumber, whole] = ["fraction", "divide fractions", "show fraction", "as float64", "as fraction"].map(lib);
   // Every answer, as a list: [] when there is none.
   const all = (body: () => Id) => k.call(S.all, k.thunk(body));
   const f = (a: number, b: number) => k.call(fraction, k.int(a), k.int(b));
@@ -104,7 +104,7 @@ test("compiled JavaScript gives the evaluator's answers", async () => {
 // stay published (hidden) so programs saved before still open.
 test("smaller, larger and at most work on Int and fractions too; the old Float64-only ones are kept", () => {
   const k = new Lang(LIBRARY.code);
-  const [smaller, larger, atMost, fraction, show] = ["smaller", "larger", "at most", "fraction", "show fraction"].map((n) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === n)!);
+  const [smaller, larger, atMost, fraction, show] = ["smaller", "larger", "at most", "fraction", "show fraction"].map((n) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === n)!);
   const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
   const f = (a: number, b: number) => k.call(fraction, k.int(a), k.int(b));
   const ints = def("ints", () => k.call(larger, k.int(3), k.int(7)));
