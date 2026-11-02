@@ -62,3 +62,16 @@ test("the midpoint tool: halfway between two points, wherever they are", () => {
     near(at(shapes[2]), [(ax + bx) / 2, (ay + by) / 2], "midpoint");
   }
 });
+
+test("the perpendicular tool: through a point at right angles to a line, or through a circle's centre", () => {
+  const { step, build, at } = compass();
+  for (const [ax, ay, bx, by, px, py, fx, fy] of [[-2, -1.5, 2, -1.5, 3, 2, 3, -1.5], [0, 0, 1, 1, 2, 0, 1, 1], [-1, 3, -1, -2, 4, 0.5, -1, 0.5]]) {
+    // 3 the line AB, 4 the perpendicular through P, 5 its foot on AB.
+    const shapes = build(step("free", ax, ay), step("free", bx, by), step("free", px, py), step("through", 0, 1), step("perpendicular", 2, 3), step("cut", 3, 4, 1));
+    near(at(shapes[5]), [fx, fy], "foot");
+  }
+  // A circle round A through B: the perpendicular through P goes through A.
+  // 5 a free point below A, 6 the line through A and it, 7 where it crosses the perpendicular.
+  const again = build(step("free", 1, 2), step("free", 3, 2), step("free", -2, -1), step("circle", 0, 1), step("perpendicular", 2, 3), step("free", 1, -4), step("through", 0, 5), step("cut", 4, 6, 1));
+  near(at(again[7]), [1, 2], "through the centre");
+});
