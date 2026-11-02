@@ -13,7 +13,7 @@ import { infer } from "../../ters/src/lang/infer.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { makeRunner } from "../../ters/src/lang/run.ts";
 import { B } from "../../ters/src/prelude.ts";
-import { CONS, NIL } from "../../ters/src/lang/std.ts";
+import { CONS, NIL, S } from "../../ters/src/lang/std.ts";
 import type { Id } from "../../ters/src/model.ts";
 import { compile } from "../src/compile.ts";
 import { hoistInvariants } from "../src/hoist.ts";
@@ -60,4 +60,21 @@ test("a call inside a lambda given to map, using nothing of the lambda's, is wor
   }
   // In the JavaScript, shares' total is outside the function map is given.
   assert.match(js.shares.toString(), /total_of\([^)]*\)[^]*=>/);
+});
+
+// C88: a thunk runs once or not at all, so its work stays in it: `first`'s
+// fallback, worked out before the search was tried, ran even when the
+// search had an answer (board's `take word`, GAPS round 8 B4).
+test("a first's fallback keeps its work: nothing is moved out of a lambda of no inputs (C88)", () => {
+  const k = new Lang(LIBRARY.code);
+  const total = k.def("total of");
+  k.define(total, k.fn(["xs"], (xs) => k.fold(xs, [
+    { variant: NIL, names: [], body: () => k.lit(0) },
+    { variant: CONS, names: ["h", "t"], results: [null, "r"], body: ([h], [, r]) => k.call(B.add, h, r!) },
+  ])));
+  const pick = k.def("pick");
+  k.define(pick, k.fn(["xs"], (xs) => k.call(S.first, k.thunk(() => k.call(S.oneOf, xs)), k.thunk(() => k.call(total, xs)))));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  assert.equal(hoistInvariants(code, info, names).hoisted, 0);
 });

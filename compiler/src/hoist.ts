@@ -63,8 +63,11 @@ export function hoistInvariants(code: Code, info: Info, names: Names): { code: C
     const call = nodes[id];
     if (call?.kind !== "call" || nodes[call.fn]?.kind === "lambda") continue;
     for (const a of call.args) {
+      // A lambda of no inputs is a thunk: run once or not at all (first's
+      // body and fallback), so moving its work out saves nothing and runs
+      // what a fallback may never need (C88).
       const lam = nodes[a];
-      if (lam?.kind !== "lambda") continue;
+      if (lam?.kind !== "lambda" || !lam.params.length) continue;
       const inside = new Set(subtree({ nodes, defs: [] }, a).filter((x) => nodes[x]?.kind === "binder"));
       lam.params.forEach((p) => inside.add(p));
       const found: Id[] = [];
