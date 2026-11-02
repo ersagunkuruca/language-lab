@@ -26,8 +26,8 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 - **cos** : `(a) -> a where a has Trig`. Cosine of an angle in radians, at any type with Trig.
 - **tan** : `(a) -> a where a has Trig`. Tangent of an angle in radians, at any type with Trig.
 - **exp** : `(a) -> a where a has Trig`. e to the power x, at any type with Trig.
-- **log** : `(a) -> a where a has Trig`. The natural logarithm, at any type with Trig (the debugging effect is Log, a different thing).
-- **divide** : `(Float64, Float64) -[Choice]-> Float64`. a ÷ b for Float64s (floating point, so 1 ÷ 3 is 0.333…; dividing by 0 gives infinity). For exact division use fractions.
+- **log** : `(a) -[Choice]-> a where a has Trig`. The natural logarithm, at any type with Trig (the debugging effect is Log, a different thing).
+- **divide** : `(Float64, Float64) -[Choice]-> Float64`. a ÷ b for Float64s (floating point, so 1 ÷ 3 is 0.333…; dividing by 0 has no answer, so it has Choice). For exact division use fractions.
 - **sqrt** : `(Float64) -[Choice]-> Float64`. The square root.
 - **power** : `(Float64, Float64) -[Choice]-> Float64`. a to the power b.
 - **atan2** : `(Float64, Float64) -> Float64`. The angle of the point (x, y) from the x axis, in radians: atan2(y, x).
@@ -49,6 +49,7 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 - **shifted down** : `(Int, Int) -> Int`. floor(a / 2ⁿ): a shifted down n places, rounded towards −∞, so shifted down(−1, 1) is −1. A negative n shifts up. Fixed's · uses it.
 - **show** : `(Int) -> Text`. An Int as text.
 - **range** : `(Int) -> List Int`. The Ints 0, 1, … up to n − 1, as a list.
+- **range from** : `(Int, Int) -> List Int`. The Ints from start up to end, end left out: range from(2, 5) is [2, 3, 4]. Empty when end is not after start.
 - **Rational** (type). An exact fraction, top/bottom, always in lowest terms. The same + − · < work on it. Make one with fraction(1, 3) or as fraction(n); its constructor ratio is private to the library, which keeps the rule.
 - **fraction** : `(Int, Int) -[Choice]-> Rational`. top/bottom, exactly, in lowest terms (Euclid's algorithm, textbook); no answer when bottom is 0.
 - **as fraction** : `(Int) -> Rational`. The whole number n as a fraction, n/1.

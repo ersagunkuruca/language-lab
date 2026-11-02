@@ -4466,6 +4466,115 @@
         ],
         "body": "@h7nla8kekh6mepta8fskumeb6k:4"
       },
+      "@b79rmbj8j5i50lftl5a2gocpm7": {
+        "id": "@b79rmbj8j5i50lftl5a2gocpm7",
+        "kind": "def",
+        "body": "@b79rmbj8j5i50lftl5a2gocpm7:1"
+      },
+      "@b79rmbj8j5i50lftl5a2gocpm7:2": {
+        "id": "@b79rmbj8j5i50lftl5a2gocpm7:2",
+        "kind": "binder"
+      },
+      "@b79rmbj8j5i50lftl5a2gocpm7:3": {
+        "id": "@b79rmbj8j5i50lftl5a2gocpm7:3",
+        "kind": "binder"
+      },
+      "@b79rmbj8j5i50lftl5a2gocpm7:9": {
+        "id": "@b79rmbj8j5i50lftl5a2gocpm7:9",
+        "kind": "ref",
+        "target": "builtin.int.sub"
+      },
+      "@b79rmbj8j5i50lftl5a2gocpm7:10": {
+        "id": "@b79rmbj8j5i50lftl5a2gocpm7:10",
+        "kind": "ref",
+        "target": "@b79rmbj8j5i50lftl5a2gocpm7:3"
+      },
+      "@b79rmbj8j5i50lftl5a2gocpm7:11": {
+        "id": "@b79rmbj8j5i50lftl5a2gocpm7:11",
+        "kind": "ref",
+        "target": "@b79rmbj8j5i50lftl5a2gocpm7:2"
+      },
+      "@b79rmbj8j5i50lftl5a2gocpm7:8": {
+        "id": "@b79rmbj8j5i50lftl5a2gocpm7:8",
+        "kind": "call",
+        "fn": "@b79rmbj8j5i50lftl5a2gocpm7:9",
+        "args": [
+          "@b79rmbj8j5i50lftl5a2gocpm7:10",
+          "@b79rmbj8j5i50lftl5a2gocpm7:11"
+        ]
+      },
+      "@b79rmbj8j5i50lftl5a2gocpm7:7": {
+        "id": "@b79rmbj8j5i50lftl5a2gocpm7:7",
+        "kind": "ref",
+        "target": "builtin.int.range"
+      },
+      "@b79rmbj8j5i50lftl5a2gocpm7:6": {
+        "id": "@b79rmbj8j5i50lftl5a2gocpm7:6",
+        "kind": "call",
+        "fn": "@b79rmbj8j5i50lftl5a2gocpm7:7",
+        "args": [
+          "@b79rmbj8j5i50lftl5a2gocpm7:8"
+        ]
+      },
+      "@b79rmbj8j5i50lftl5a2gocpm7:13": {
+        "id": "@b79rmbj8j5i50lftl5a2gocpm7:13",
+        "kind": "binder"
+      },
+      "@b79rmbj8j5i50lftl5a2gocpm7:15": {
+        "id": "@b79rmbj8j5i50lftl5a2gocpm7:15",
+        "kind": "ref",
+        "target": "builtin.int.add"
+      },
+      "@b79rmbj8j5i50lftl5a2gocpm7:16": {
+        "id": "@b79rmbj8j5i50lftl5a2gocpm7:16",
+        "kind": "ref",
+        "target": "@b79rmbj8j5i50lftl5a2gocpm7:2"
+      },
+      "@b79rmbj8j5i50lftl5a2gocpm7:17": {
+        "id": "@b79rmbj8j5i50lftl5a2gocpm7:17",
+        "kind": "ref",
+        "target": "@b79rmbj8j5i50lftl5a2gocpm7:13"
+      },
+      "@b79rmbj8j5i50lftl5a2gocpm7:14": {
+        "id": "@b79rmbj8j5i50lftl5a2gocpm7:14",
+        "kind": "call",
+        "fn": "@b79rmbj8j5i50lftl5a2gocpm7:15",
+        "args": [
+          "@b79rmbj8j5i50lftl5a2gocpm7:16",
+          "@b79rmbj8j5i50lftl5a2gocpm7:17"
+        ]
+      },
+      "@b79rmbj8j5i50lftl5a2gocpm7:12": {
+        "id": "@b79rmbj8j5i50lftl5a2gocpm7:12",
+        "kind": "lambda",
+        "params": [
+          "@b79rmbj8j5i50lftl5a2gocpm7:13"
+        ],
+        "body": "@b79rmbj8j5i50lftl5a2gocpm7:14"
+      },
+      "@b79rmbj8j5i50lftl5a2gocpm7:5": {
+        "id": "@b79rmbj8j5i50lftl5a2gocpm7:5",
+        "kind": "ref",
+        "target": "@9902gjnadddgv3jrh6ir29nf4q"
+      },
+      "@b79rmbj8j5i50lftl5a2gocpm7:4": {
+        "id": "@b79rmbj8j5i50lftl5a2gocpm7:4",
+        "kind": "call",
+        "fn": "@b79rmbj8j5i50lftl5a2gocpm7:5",
+        "args": [
+          "@b79rmbj8j5i50lftl5a2gocpm7:6",
+          "@b79rmbj8j5i50lftl5a2gocpm7:12"
+        ]
+      },
+      "@b79rmbj8j5i50lftl5a2gocpm7:1": {
+        "id": "@b79rmbj8j5i50lftl5a2gocpm7:1",
+        "kind": "lambda",
+        "params": [
+          "@b79rmbj8j5i50lftl5a2gocpm7:2",
+          "@b79rmbj8j5i50lftl5a2gocpm7:3"
+        ],
+        "body": "@b79rmbj8j5i50lftl5a2gocpm7:4"
+      },
       "@9og9ebkquo0l2vo799c7i27067": {
         "id": "@9og9ebkquo0l2vo799c7i27067",
         "kind": "def",
@@ -59170,6 +59279,7 @@
       "@c9sa21p6t34r9bf9cjcm8h2101",
       "@9jf2t6u7u41ic33e26eotbapan",
       "@h7nla8kekh6mepta8fskumeb6k",
+      "@b79rmbj8j5i50lftl5a2gocpm7",
       "@kns2kgot84jr2lfre0vbl00j9q",
       "@3ghl6cjivv5vaeuti6ht2gip8a",
       "@gtmcml6c0jng71egbc2grgied0",
@@ -60135,6 +60245,43 @@
         "eff": {
           "effs": [],
           "tail": 2
+        }
+      },
+      "plain": []
+    },
+    "@b79rmbj8j5i50lftl5a2gocpm7": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "type.int",
+            "args": []
+          },
+          {
+            "t": "con",
+            "id": "type.int",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.list",
+          "args": [
+            {
+              "t": "con",
+              "id": "type.int",
+              "args": []
+            }
+          ]
+        },
+        "eff": {
+          "effs": [],
+          "tail": 0
         }
       },
       "plain": []
@@ -69706,6 +69853,10 @@
     "@h7nla8kekh6mepta8fskumeb6k": "flat map",
     "@h7nla8kekh6mepta8fskumeb6k:2": "list",
     "@h7nla8kekh6mepta8fskumeb6k:3": "f",
+    "@b79rmbj8j5i50lftl5a2gocpm7": "range from",
+    "@b79rmbj8j5i50lftl5a2gocpm7:2": "start",
+    "@b79rmbj8j5i50lftl5a2gocpm7:3": "end",
+    "@b79rmbj8j5i50lftl5a2gocpm7:13": "i",
     "@9og9ebkquo0l2vo799c7i27067": "extended less",
     "@9og9ebkquo0l2vo799c7i27067:2": "a",
     "@9og9ebkquo0l2vo799c7i27067:3": "b",
@@ -71161,6 +71312,7 @@
     "@adaj9q1ooe34kuk98lmdsju99l": "The text with fill put after it until it is this wide: padded end(\"ab\", 4, \".\") is \"ab..\". For columns of text.",
     "@9jf2t6u7u41ic33e26eotbapan": "The lists one after another, as one list: flatten([[1, 2], [], [3]]) is [1, 2, 3].",
     "@h7nla8kekh6mepta8fskumeb6k": "The lists f gives for each item, one after another: flat map([1, 2], (x) => [x, x]) is [1, 1, 2, 2]. map, then flatten.",
+    "@b79rmbj8j5i50lftl5a2gocpm7": "The Ints from start up to end, end left out: range from(2, 5) is [2, 3, 4]. Empty when end is not after start.",
     "@9og9ebkquo0l2vo799c7i27067": "a < b for Extended numbers: −∞ is below every number and +∞ above, so the order is total. compare and sort give the same order.",
     "@jhtpq3g298okp8rpfbapiu6h8b": "a + b with ±∞: ∞ + 1 is ∞ and −∞ + −∞ is −∞. ∞ + −∞ has no answer.",
     "@tf4scqabknudnlqu92aii2g2oc": "−a with ±∞: −(+∞) is −∞.",
@@ -71347,6 +71499,7 @@
     "@adaj9q1ooe34kuk98lmdsju99l",
     "@9jf2t6u7u41ic33e26eotbapan",
     "@h7nla8kekh6mepta8fskumeb6k",
+    "@b79rmbj8j5i50lftl5a2gocpm7",
     "@kns2kgot84jr2lfre0vbl00j9q",
     "@3ghl6cjivv5vaeuti6ht2gip8a",
     "@n58n0psu4gm2r12rl3bh6qp2t1",

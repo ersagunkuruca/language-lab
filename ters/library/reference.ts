@@ -33,7 +33,7 @@ export const SECTIONS: Section[] = [
     ids: [...b("arith.add", "arith.sub", "arith.mul", "arith.neg", "arith.less"), ...t("arithmetic", "ordered"), ...b("byItsWays"), ...prelude("at most", "more than", "at least", "smaller", "larger"),
       ...t("trig"), ...["sin", "cos", "tan", "exp", "log"].map((op) => `std.trig.trig.${op}`),
       ...b("div", "sqrt", "pow", "atan2", "abs", "floor", "mod", "float32", "show", "range"), ...prelude("show decimals"),
-      ...b("int.quotient", "int.remainder", "int.power", "int.lowestTerms", "int.read", "int.toNumber", "int.wholePart", "int.abs", "int.shiftDown", "int.show", "int.range"),
+      ...b("int.quotient", "int.remainder", "int.power", "int.lowestTerms", "int.read", "int.toNumber", "int.wholePart", "int.abs", "int.shiftDown", "int.show", "int.range"), ...prelude("range from"),
       ...t("rational"), ...prelude("fraction", "as fraction", "divide fractions", "show fraction", "fraction as float64"),
       ...t("complex"), ...prelude("as complex", "i", "complex conjugate", "modulus", "angle of", "from polar", "divide complex", "complex exp", "complex sqrt", "complex log", "complex power", "complex asin", "complex acos", "show complex", "table product", "complex table", "clifford table", "clifford algebra", "clifford product", "clifford reverse", "clifford versor inverse", "clifford sandwich", "clifford reflect", "clifford project", "clifford exp", "clifford outer", "clifford inner", "clifford grade", "clifford dual", "clifford undual", "clifford regressive", "clifford part", "clifford with part"), ...t("tableEntry"), ...t("algebra"),
       ...t("mat2", "mat3", "mat4"), ...prelude("matrix table"),
@@ -85,7 +85,7 @@ export function reference(): string {
     const iface = field?.kind === "field" ? info.owner.get(d) : undefined;
     if (iface) {
       const s = new Subst(), a = s.fresh();
-      const te = (id: Id): Type => { const n = LIBRARY.code.nodes[id]; return n.kind === "tfun" ? { t: "fn", params: n.params.map(te), ret: te(n.result), eff: { effs: [], tail: null } } : n.kind === "tref" && LIBRARY.code.nodes[n.target]?.kind === "binder" ? a : { t: "con", id: (n as { target: Id }).target, args: [] }; };
+      const te = (id: Id): Type => { const n = LIBRARY.code.nodes[id]; return n.kind === "tfun" ? { t: "fn", params: n.params.map(te), ret: te(n.result), eff: { effs: n.effects ?? [], tail: null } } : n.kind === "tref" && LIBRARY.code.nodes[n.target]?.kind === "binder" ? a : { t: "con", id: (n as { target: Id }).target, args: [] }; };
       return showType(te((field as { type: Id }).type), LIBRARY.names, undefined, [], new Map([[(a as { v: number }).v, [iface]]]));
     }
     const ty = info.typeOf.get(d);

@@ -72,3 +72,15 @@ test("L148: flatten and flat map", async () => {
   assert.equal(type("flatten"), "(List (List a)) -> List a");
   for (const n of ["flatten", "flat map"]) assert.ok(ends(n), n);
 });
+
+test("L147: range from, the Ints from start up to end", async () => {
+  const want = ["[2, 3, 4]", "[]", "[]", "[-2, -1, 0]"];
+  const [ran, compiled] = await both((k) => [
+    k.call(L("range from"), k.int(2), k.int(5)), k.call(L("range from"), k.int(5), k.int(5)), k.call(L("range from"), k.int(5), k.int(2)),
+    k.call(L("range from"), k.int(-2), k.int(1)),
+  ]);
+  assert.deepEqual(ran, want);
+  assert.deepEqual(compiled, want);
+  assert.equal(type("range from"), "(Int, Int) -> List Int");
+  assert.ok(ends("range from"));
+});

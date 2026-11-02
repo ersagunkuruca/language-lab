@@ -1,5 +1,5 @@
 // The standard library of the typed core: builtin types, a few data types
-// written as ordinary typedef nodes (Bool, List, Pair, Unit), and builtins
+// written as ordinary typedef nodes (Bool, List, Unit, the tuples), and builtins
 // with their type signatures. Everything has a stable id so programs can
 // refer to it, exactly like prelude.ts.
 
