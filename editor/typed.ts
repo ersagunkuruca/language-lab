@@ -519,11 +519,13 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
   // step name = value; rest, and a list of anything.
   if (t === "□") return { hole: true };
   const steps = topLevel(t, ";");
-  const step = steps && steps.length > 1 ? /^([\p{L}_][\p{L}\p{N}_' ]*?)\s*=(?![=>])\s*(\S[\s\S]*)$/u.exec(steps[0].trim()) : null;
+  // A step with no name, write(a, x); write(b, y), is done for what it
+  // does: its value is named _, read by nothing (E190), as E183 prints it.
+  const step = steps && steps.length > 1 ? /^([\p{L}_][\p{L}\p{N}_' ]*?)\s*=(?![=>])\s*(\S[\s\S]*)$/u.exec(steps[0].trim()) ?? [steps[0], "_", steps[0]] : null;
   if (step && steps) {
     const be = typedOut(step[2], code, names, scope);
     if ("error" in be) return be;
-    const id = freshId(), inner = new Map(scope).set(step[1], id);
+    const id = freshId(), inner = step[1] === "_" ? scope : new Map(scope).set(step[1], id);
     const rest = typedOut(steps.slice(1).join(";"), code, names, inner);
     return "error" in rest ? rest : { let: { id, name: step[1] }, be, rest };
   }
@@ -1684,11 +1686,20 @@ export function addStep(code: Code, names: Names, info: Info, defId: Id, before?
 // An action's steps are a chain of lets (toplevel.ts, step order): a new
 // step just before `step` is one more let, of a hole whose value nobody
 // names, around the let `step` is the value of, or around the last step.
+// Does this function do something, an effect in its type?
+export function performs(info: Info, lam: Id): boolean {
+  const t = info.typeOf.get(lam), r = t && info.subst.resolve(t);
+  return r?.t === "fn" && info.subst.zonkRow(r.eff).effs.length > 0;
+}
+
 export function addActionStep(code: Code, names: Names, info: Info, step: Id): TEdit {
   const one = (id: Id | undefined) => { const n = id ? code.nodes[id] : undefined; return n?.kind === "lambda" && n.params.length === 1; };
   const at = parentOf(code, step), p = at ? code.nodes[at.parent] : undefined;
   const x = at?.slot === "args" && p?.kind === "call" && p.args.length === 1 && one(p.fn) ? p.id
     : at?.slot === "body" && one(at.parent) && Object.values(code.nodes).some((c) => c.kind === "call" && c.fn === at.parent && c.args.length === 1) ? step
+    // A function whose whole body is one action, (e) => write(a, x): its
+    // first step (E190).
+    : at?.slot === "body" && p?.kind === "lambda" && code.nodes[step]?.kind === "call" && performs(info, p.id) ? step
     : null;
   if (!x) return { ok: false, reason: "it isn't a step of an action" };
   const b = freshId(), hole = freshId(), lam = freshId(), let_ = freshId();
