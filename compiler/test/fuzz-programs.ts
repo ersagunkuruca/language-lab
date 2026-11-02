@@ -236,6 +236,10 @@ export function program(seed: number, count: number) {
     defs.push({ def, result });
     if (!calls) callable.push(def);
   }
+  // A main calling each once, for the representation chooser, which
+  // weighs what main reaches (C118).
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.list(...defs.map(({ def }) => call(def, k.lit(2.5), k.int(3), k.list(k.int(1), k.int(2)))))));
   const code = base(k.code), names2 = baseNames(k.names);
-  return { code, names: names2, info: infer(code, names2, undefined, checkOptions), defs };
+  return { code, names: names2, info: infer(code, names2, undefined, checkOptions), defs, main };
 }

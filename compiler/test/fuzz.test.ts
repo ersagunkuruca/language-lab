@@ -30,6 +30,9 @@ import { isData, lowerScalar, type LType } from "../src/scalar.ts";
 import { emitWasm, fromText, instantiate, toInt } from "../src/wasm.ts";
 import { build, skip } from "./c-harness.ts";
 import { program } from "./fuzz-programs.ts";
+import { withLibraryRepresentations } from "../../ters/src/lang/library-reps.ts";
+import { infer } from "../../ters/src/lang/infer.ts";
+import { checkOptions } from "../../ters/src/lang/load.ts";
 
 const runtime = pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href;
 const SEED = Number(process.env.SEED ?? 1), COUNT = Number(process.env.FUZZ ?? 40);
@@ -58,37 +61,61 @@ test(`generated programs: the evaluator, compiled JavaScript, WebAssembly and C 
   // may give an answer. The other way round is a difference.
   const check = (got: unknown, i: number, j: number, engine: string) => { if (got !== want[i][j] && want[i][j] !== "stop") differ.push(`${said(i, INPUTS[j])} in ${engine}: ${String(got)}, the evaluator ${String(want[i][j])}`); };
 
-  const path = join(mkdtempSync(join(tmpdir(), "fuzz-")), "out.mjs");
-  writeFileSync(path, compile(p.code, p.info, p.names, { runtime, exports: p.defs.map((_, i) => `g${i}`) }));
-  const js = (await import(pathToFileURL(path).href)).defs as Record<string, (...a: Value[]) => string>;
-  p.defs.forEach((_, i) => INPUTS.forEach(([x, n, xs], j) => check(stopped(() => js[`g${i}`](...args(x, n, xs))), i, j, "JavaScript")));
+  // Each engine on a program: the one generated, or the one with the
+  // representations the chooser picks (C118).
+  type Built = { code: typeof p.code; info: typeof p.info; names: typeof p.names };
+  const engines = async (q: Built, tag: string, js = true, native = true) => {
+    if (js) {
+    const path = join(mkdtempSync(join(tmpdir(), "fuzz-")), "out.mjs");
+    writeFileSync(path, compile(q.code, q.info, q.names, { runtime, exports: p.defs.map((_, i) => `g${i}`) }));
+    const js = (await import(pathToFileURL(path).href)).defs as Record<string, (...a: Value[]) => string>;
+    p.defs.forEach((_, i) => INPUTS.forEach(([x, n, xs], j) => check(stopped(() => js[`g${i}`](...args(x, n, xs))), i, j, `JavaScript${tag}`)));
+    }
+    if (!native) return;
 
-  const lowered = lowerScalar(p.code, p.info, p.names, p.defs.map((d) => d.def), { data: true });
-  assert.deepEqual([...lowered.refused.entries()].map(([d, why]) => `${p.names[d]}: ${why}`), [], `seed ${SEED}`);
-  const w = await instantiate(emitWasm(lowered)) as unknown as Record<string, (...a: unknown[]) => unknown>;
-  // A List Int made by the module's own makers, from the end.
-  const list = (xs: bigint[], t: LType): unknown => {
-    if (!isData(t)) throw new Error("not a list");
-    const maker = (v: Id) => { const c = t.cases.find((x) => x.variant === v)!; return (w[`${t.name}.${c.name}(${t.key})`] ?? w[`${t.name}.${c.name}`]) as (...a: unknown[]) => unknown; };
-    return xs.reduceRight<unknown>((l, x) => maker(CONS)(toInt(w, x), l), maker(NIL)());
-  };
-  const fns = p.defs.map(({ def }) => lowered.funcs.findIndex((g) => g.def === def && !g.inner));
-  fns.forEach((fi, i) => {
-    const f = lowered.funcs[fi];
-    INPUTS.forEach(([x, n, xs], j) => {
-      check(stopped(() => fromText(w, w[f.name](x, toInt(w, n), list(xs, f.params[2])) as never)), i, j, "WebAssembly");
+    const lowered = lowerScalar(q.code, q.info, q.names, p.defs.map((d) => d.def), { data: true });
+    assert.deepEqual([...lowered.refused.entries()].map(([d, why]) => `${q.names[d]}: ${why}`), [], `seed ${SEED}${tag}`);
+    const w = await instantiate(emitWasm(lowered)) as unknown as Record<string, (...a: unknown[]) => unknown>;
+    // A List Int made by the module's own makers, from the end.
+    const list = (xs: bigint[], t: LType): unknown => {
+      if (!isData(t)) throw new Error("not a list");
+      const maker = (v: Id) => { const c = t.cases.find((x) => x.variant === v)!; return (w[`${t.name}.${c.name}(${t.key})`] ?? w[`${t.name}.${c.name}`]) as (...a: unknown[]) => unknown; };
+      return xs.reduceRight<unknown>((l, x) => maker(CONS)(toInt(w, x), l), maker(NIL)());
+    };
+    const fns = p.defs.map(({ def }) => lowered.funcs.findIndex((g) => g.def === def && !g.inner));
+    fns.forEach((fi, i) => {
+      const f = lowered.funcs[fi];
+      INPUTS.forEach(([x, n, xs], j) => {
+        check(stopped(() => fromText(w, w[f.name](x, toInt(w, n), list(xs, f.params[2])) as never)), i, j, `WebAssembly${tag}`);
+      });
     });
-  });
 
-  if (!skip) {
-  const calls = fns.flatMap((fi) => INPUTS.map(([x, n, xs]): [number, Value[]] => [fi, args(x, n, xs)]));
-  const got = build(lowered)(calls);
-  calls.forEach(([fi], c) => {
-    const [i, j] = [Math.floor(c / INPUTS.length), c % INPUTS.length];
-    const v = got[c].value as unknown;
-    check(v && typeof v === "object" && "aborted" in v ? "stop" : v, i, j, "C");
-    if (got[c].live !== 0) differ.push(`${said(i, INPUTS[j])} in C: ${got[c].live} cells left (${lowered.funcs[fi].name})`);
-  });
+    if (!skip) {
+    const calls = fns.flatMap((fi) => INPUTS.map(([x, n, xs]): [number, Value[]] => [fi, args(x, n, xs)]));
+    const got = build(lowered)(calls);
+    calls.forEach(([fi], c) => {
+      const [i, j] = [Math.floor(c / INPUTS.length), c % INPUTS.length];
+      const v = got[c].value as unknown;
+      check(v && typeof v === "object" && "aborted" in v ? "stop" : v, i, j, `C${tag}`);
+      if (got[c].live !== 0) differ.push(`${said(i, INPUTS[j])} in C${tag}: ${got[c].live} cells left (${lowered.funcs[fi].name})`);
+    });
+    }
+  };
+  await engines(p, "");
+  // Through the chooser (C118): Map and Set as trees everywhere, as hash
+  // tables where the host has a Map (the evaluator and compiled
+  // JavaScript); WebAssembly and C take what they would.
+  for (const hostMaps of [true, false]) {
+    const c = withLibraryRepresentations(p.code, p.info, p.names, p.main, [...p.defs.map((d) => d.def), p.main], [], { hostMaps });
+    if (!c.chosen.length) continue;
+    const info = infer(c.code, c.names, undefined, { ...checkOptions, insiders: [...checkOptions.insiders!, ...c.insiders] });
+    assert.deepEqual(info.errors.map((e) => e.message), [], `seed ${SEED}, ${c.chosen.join(", ")}`);
+    const tag = ` (${c.chosen.join(", ")})`;
+    if (hostMaps) {
+      const rc = makeRunner(c.code, info, { print: () => {}, names: c.names });
+      p.defs.forEach(({ def }, i) => INPUTS.forEach(([x, n, xs], j) => check(stopped(() => { for (const v of rc.call(rc.value(def), ...args(x, n, xs))) return v as unknown as string; return "no answer"; }), i, j, `the evaluator${tag}`)));
+    }
+    await engines({ code: c.code, info, names: c.names }, tag, hostMaps, !hostMaps);
   }
   assert.deepEqual(differ, []);
 });
