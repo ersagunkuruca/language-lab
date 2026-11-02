@@ -2963,6 +2963,27 @@ ${drop}
   // The host's way to a $huge, which doesn't fit Int.get's i64: its limb
   // count, negative when it's negative (0 when it isn't a $huge), and its
   // limbs; and to make one, limb by limb, least significant first.
+  // An Int as an i64, one past an i64 as the nearest end (C101): the
+  // Ints a function on i64s takes are positions and codes, where one that
+  // big is past every end (slice clamps it, an item there is none).
+  "int.clamped": {
+    params: [["x", "int"]], result: "i64", locals: [], uses: ["int.small", "int.negative"], native: true,
+    body: `
+      local.get $x
+      ref.test $huge
+      if i64
+        local.get $x
+        call $int.negative
+        if i64
+          i64.const -9223372036854775808
+        else
+          i64.const 9223372036854775807
+        end
+      else
+        local.get $x
+        call $int.small
+      end`,
+  },
   "int.limbs": {
     params: [["x", "int"]], result: "i32", locals: [["n", "i32"]], uses: [], native: true,
     body: `
@@ -5542,9 +5563,9 @@ export const runtime = (name: string): RtFn => {
       return { ...f, name, params: f.params.map(([n, t]) => [n, i64(t)]), result: i64(f.result) };
     }
     return {
-      name, params: f.params, result: f.result, locals: f.partial ? [["st", "i32"]] : [], uses: [`${name}.i64`, "int.small", "int.of"], array: f.array, partial: f.partial,
+      name, params: f.params, result: f.result, locals: f.partial ? [["st", "i32"]] : [], uses: [`${name}.i64`, "int.clamped", "int.of"], array: f.array, partial: f.partial,
       body: [
-        ...f.params.flatMap(([n, t]) => [`local.get $${n}`, ...(t === "int" ? ["call $int.small"] : [])]),
+        ...f.params.flatMap(([n, t]) => [`local.get $${n}`, ...(t === "int" ? ["call $int.clamped"] : [])]),
         `call $${name}.i64`,
         ...(f.partial ? ["local.set $st"] : []),
         ...(f.result === "int" ? ["call $int.of"] : []),
@@ -5562,9 +5583,9 @@ export const runtime = (name: string): RtFn => {
   }
   if (!hasInt(f)) return { ...f, name, body, uses };
   return {
-    name, params: f.params, result: f.result, locals: f.partial ? [["st", "i32"]] : [], uses: [`${name}.i64`, "int.small", "int.of"], list: f.list, partial: f.partial,
+    name, params: f.params, result: f.result, locals: f.partial ? [["st", "i32"]] : [], uses: [`${name}.i64`, "int.clamped", "int.of"], list: f.list, partial: f.partial,
     body: [
-      ...f.params.flatMap(([n, t]) => [`local.get $${n}`, ...(t === "int" ? ["call $int.small"] : [])]),
+      ...f.params.flatMap(([n, t]) => [`local.get $${n}`, ...(t === "int" ? ["call $int.clamped"] : [])]),
       `call $${name}.i64`,
       ...(f.partial ? ["local.set $st"] : []),
       ...(f.result === "int" ? ["call $int.of"] : []),

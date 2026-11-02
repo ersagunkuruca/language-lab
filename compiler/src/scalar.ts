@@ -477,6 +477,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       if (!fns.has(key)) fns.set(key, { key, params: params as LType[], result, ...(partial ? { partial } : {}) });
       return fns.get(key)!;
     }
+    if (opts.data && unconstrained(t)) return "f64";
     if (t.t !== "con") return null;
     // A part nothing constrains (the items of `[]` nobody adds to, what a
     // function given to map over it takes, C101): no value of it is ever
