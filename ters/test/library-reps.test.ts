@@ -14,7 +14,7 @@ import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { withLibraryRepresentations } from "../src/lang/library-reps.ts";
 import { COMPARE, CONS, INT_OPS, LIST, NIL, PAIR_V, S, SHOW_ANY } from "../src/lang/std.ts";
-import { NUMBER, STRING } from "../src/lang/types.ts";
+import { DIVERGE, NUMBER, STRING } from "../src/lang/types.ts";
 import { subtree, type Id } from "../src/model.ts";
 
 const L = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY.names[d] === name)!;
@@ -379,7 +379,8 @@ test("a program that reads a list by position and takes it apart gets arrays in 
   const lowered = lowerScalar(c.code, info2, c.names, [at, head], { data: true });
   assert.deepEqual([...lowered.refused.values()], []);
   assert.deepEqual([...emitC(lowered).refused.values()], []);
-  // The match is the array's first, as an Optional.
+  // The match is the array's first, as an Optional, put in place in head
+  // plus (C93: a match job that isn't recursive is inlined).
   const seen = new Set<unknown>();
   const finds = (e: unknown): boolean => {
     if (!e || typeof e !== "object" || seen.has(e)) return false;
@@ -388,7 +389,7 @@ test("a program that reads a list by position and takes it apart gets arrays in 
     if (x.k === "attempt" && x.body?.k === "rt" && typeof x.body.fn === "string" && x.body.fn.startsWith("array.first")) return true;
     return Object.entries(e).some(([key, v]) => key !== "t" && key !== "bt" && finds(v));
   };
-  assert.ok(lowered.funcs.some((g) => g.name === "array match" && finds(g.body)));
+  assert.ok(lowered.funcs.some((g) => g.def === head && finds(g.body)));
   const w = (await instantiate(emitWasm(lowered))) as unknown as Record<string, (x: number) => unknown>;
   const fn = (d: Id) => w[lowered.funcs.find((g) => g.def === d)!.name];
   const one = (v: unknown) => (Array.isArray(v) ? v[0] : v);
@@ -571,4 +572,50 @@ test("a list stored as a tree is built by the row's own store, balanced, in n st
   const stored = time(() => one(r.call(store, big)));
   const consed = time(() => { let t = r.value(named("list tree nil")); for (let i = 7999; i >= 0; i--) t = one(r.call(r.value(named("list tree cons")), i, t)) as typeof t; });
   assert.ok(stored < consed, `storing 8,000 items took ${stored.toFixed(1)} ms, consing them ${consed.toFixed(1)} ms`);
+});
+
+// C93 step 2: a definition that recurs through a stored list's match, not
+// in a tail call (`count(l) = match l | cons(x, r) → 1 + count(r)`), calls
+// itself through the case's function when the match is the row's own
+// definition, which compiled JS can't move to the heap: 50,000 items ran
+// out of stack. The match is put in place, so the recursion is plain, and
+// its rest still shrinks for the termination check (no Diverge).
+test("a definition recurring through a stored list's match runs 50,000 deep compiled, and still surely finishes (C93)", async () => {
+  const { compile } = await import("../../compiler/src/compile.ts");
+  const { $setPrint } = await import("../../compiler/src/runtime.js");
+  const { mkdtempSync, writeFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const { pathToFileURL } = await import("node:url");
+  const k = new Lang(LIBRARY.code);
+  const xs = k.def("xs");
+  k.define(xs, k.call(S.range, k.lit(50000)));
+  const changed = k.def("changed");
+  k.define(changed, k.fold(k.call(INT_OPS.range, k.int(100)), [
+    { variant: NIL, names: [], body: () => k.x(xs) },
+    { variant: CONS, names: ["i", "rest"], results: [null, "so far"], body: ([i], [, l]) => k.call(L("replace at"), l!, k.call(INT_OPS.mul, i, k.int(7)), k.lit(9)) },
+  ]));
+  const count = k.def("count");
+  k.define(count, k.fn(["l"], (l) => k.match(l, [
+    { variant: NIL, names: [], body: () => k.int(0) },
+    { variant: CONS, names: ["x", "r"], body: ([, r]) => k.call(INT_OPS.add, k.int(1), k.call(count, r)) },
+  ])));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.call(count, k.x(changed))))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const c = withLibraryRepresentations(code, info, names, main, [xs, changed, count, main]);
+  assert.deepEqual(c.chosen, ["List as tree of List"]);
+  const info2 = infer(c.code, c.names, undefined, { ...checkOptions, insiders: [...checkOptions.insiders!, ...c.insiders] });
+  assert.deepEqual(info2.errors.map((e) => e.message), []);
+  const t = info2.subst.zonk(info2.typeOf.get(count)!);
+  assert.ok(t.t === "fn" && !info2.subst.resolveRow(t.eff).effs.includes(DIVERGE), "count surely finishes");
+  const path = join(mkdtempSync(join(tmpdir(), "deep-")), "m.js");
+  writeFileSync(path, compile(c.code, info2, c.names, { runtime: pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href, exports: ["main"] }));
+  const out: string[] = [];
+  $setPrint((s: string) => out.push(s));
+  const m = (await import(pathToFileURL(path).href)).defs.main;
+  if (typeof m === "function") m();
+  assert.deepEqual(out.join("").trim(), "50000");
 });

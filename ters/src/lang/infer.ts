@@ -1382,7 +1382,7 @@ type Arc = [from: number, to: number, strict: boolean];
 // The definitions a representation row names as its match (`match by`).
 const matchers = new WeakMap<object, Set<Id>>();
 // What is kept by a nodes object, forgotten when it changes (fillings).
-function forgetNodes(nodes: object) { matchers.delete(nodes); forgetDerived(nodes); }
+function forgetNodes(nodes: object) { matchers.delete(nodes); pieceMakers.delete(nodes); forgetDerived(nodes); }
 function matchersOf(code: Code): Set<Id> {
   let m = matchers.get(code.nodes);
   if (!m) {
@@ -1397,6 +1397,32 @@ function matchersOf(code: Code): Set<Id> {
   return m;
 }
 interface CallGraph { from: Id; to: Id; arcs: Arc[] }
+// What a representation's match gives its cases as the rest, made from its
+// input by one function (`list tree without first(tree)`, `rest of
+// array(a)`): a piece of that input. Where the match is put in place
+// (represent.ts, C93), the rest is that call, and it still shrinks.
+const pieceMakers = new WeakMap<object, Set<Id>>();
+function piecesOf(code: Code): Set<Id> {
+  let m = pieceMakers.get(code.nodes);
+  if (!m) {
+    m = new Set();
+    for (const d of matchersOf(code)) {
+      const def = code.nodes[d], lam = def?.kind === "def" && def.body ? code.nodes[def.body] : null;
+      if (lam?.kind !== "lambda" || !lam.params.length) continue;
+      const cases = new Set(lam.params.slice(1)), input = lam.params[0];
+      for (const id of subtree(code, lam.body)) {
+        const n = code.nodes[id], f = n.kind === "call" ? code.nodes[n.fn] : null;
+        if (n.kind !== "call" || f?.kind !== "ref" || !cases.has(f.target)) continue;
+        for (const a of n.args) {
+          const c = code.nodes[a], g = c?.kind === "call" ? code.nodes[c.fn] : null, x = c?.kind === "call" ? code.nodes[c.args[0]] : null;
+          if (c?.kind === "call" && c.args.length === 1 && g?.kind === "ref" && x?.kind === "ref" && x.target === input) m.add(g.target);
+        }
+      }
+    }
+    pieceMakers.set(code.nodes, m);
+  }
+  return m;
+}
 
 // A let's function that calls itself by its name (BACKLOG L84): the let's
 // binder, when the call's function is a lambda and its i-th input is a
@@ -1505,9 +1531,15 @@ function terminates(code: Code, group: Id[], lambdaOf = (d: Id) => { const body 
     const counted = group.length === 1 ? countedCalls(code, d, lam) : new Set<string>();
     // size.get(b): for each input i that b is (false) or is a piece of (true)
     const size = new Map<Id, Map<number, boolean>>(lam.params.map((p, i) => [p, new Map([[i, false]])]));
-    const sizeOf = (id: Id | undefined) => {
+    const sizeOf = (id: Id | undefined): Map<number, boolean> | undefined => {
       const n = id === undefined ? null : code.nodes[id];
-      return n?.kind === "ref" ? size.get(n.target) : undefined;
+      if (n?.kind === "ref") return size.get(n.target);
+      const g = n?.kind === "call" && n.args.length === 1 ? code.nodes[n.fn] : null;
+      if (n?.kind === "call" && g?.kind === "ref" && piecesOf(code).has(g.target)) {
+        const of = sizeOf(n.args[0]);
+        return of && new Map([...of.keys()].map((i) => [i, true]));
+      }
+      return undefined;
     };
     let ok = true;
     const walk = (id: Id) => {
