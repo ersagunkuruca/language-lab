@@ -319,7 +319,7 @@ switch (command) {
     try { execFileSync(cc, flags, { stdio: "inherit" }); } catch {
       fail(`wrote ${out}.c, but ${cc} didn't build it; build it with: cc ${flags.join(" ")}`);
     }
-    process.stderr.write(`lab: wrote ${out} (and ${out}.c); run it with: ./${out} [arguments…]\n`);
+    process.stderr.write(`lab: wrote ${out} (and ${out}.c); run it with: ${out.includes("/") ? out : `./${out}`} [arguments…]\n`);
     break;
   }
   case "build-web": {

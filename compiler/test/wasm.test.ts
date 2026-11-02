@@ -9,7 +9,7 @@ import { norm } from "../../ters/src/lang/int.ts";
 import { isData, isFn, isRecord, lowerScalar, type LType } from "../src/scalar.ts";
 import { emitWasm, fromInt, fromText, instantiate, runMain, toInt, toText } from "../src/wasm.ts";
 import { load } from "../src/program.ts";
-import { area, choices, recursiveLets, closures, escapes, fractionInputs, fractions, maths, ordered, orderedInputs, roses, sameLists, searches, several, stopsWith, texts, worldly } from "../src/fixtures.ts";
+import { area, choices, recursiveLets, closures, escapes, fractionInputs, fractions, maths, ordered, orderedInputs, roses, sameLists, searches, several, showInputs, shows, stopsWith, texts, worldly } from "../src/fixtures.ts";
 import { nodeWorld } from "../../ters/src/lang/world.ts";
 import { WASI } from "node:wasi";
 import { closeSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -774,6 +774,24 @@ test("compare and sort in WebAssembly: the evaluator's order on every plain type
   const w = await instantiate(emitWasm(lowered)) as unknown as Exports;
   const r = makeRunner(p.code, p.info, { print: () => {} });
   const inputs = orderedInputs();
+  const value = (x: unknown): Value => (typeof x === "bigint" ? norm(x) : Array.isArray(x) ? toList(x.map(value)) : x as Value);
+  for (const [name, def] of Object.entries(p.defs)) {
+    const f = lowered.funcs.find((g) => g.def === def)!;
+    for (const xs of inputs[name].map((ys) => ys.map(value))) {
+      const got = answer(w, f, (w[f.name] as (...a: unknown[]) => unknown)(...xs.map((x, i) => toWasm(w, x, f.params[i]))));
+      assert.equal(flat(got), flat(outcome(r, def, xs)), name);
+    }
+  }
+});
+
+test("show in WebAssembly: the evaluator's text on every plain type, a long list in constant stack (C91)", async () => {
+  const p = shows();
+  assert.deepEqual(p.info.errors, []);
+  const lowered = lowerScalar(p.code, p.info, p.names, Object.values(p.defs), { data: true });
+  for (const def of Object.values(p.defs)) assert.ok(!lowered.refused.has(def), lowered.refused.get(def));
+  const w = await instantiate(emitWasm(lowered)) as unknown as Exports;
+  const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });
+  const inputs = showInputs();
   const value = (x: unknown): Value => (typeof x === "bigint" ? norm(x) : Array.isArray(x) ? toList(x.map(value)) : x as Value);
   for (const [name, def] of Object.entries(p.defs)) {
     const f = lowered.funcs.find((g) => g.def === def)!;
