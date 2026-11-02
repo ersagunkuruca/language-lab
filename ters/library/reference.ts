@@ -24,6 +24,8 @@ const of = (m: Module) => (...names: string[]): Id[] => names.map((name) => {
   return d;
 });
 const prelude = of(PRELUDE), vectors = of(VECTORS), html = of(HTML_MODULE);
+// Rational's and Fixed's `as float64`, the one name (L156), in that order.
+const [ratioAsFloat, fixedAsFloat] = PRELUDE.exports.filter((e) => LIBRARY.names[e] === "as float64");
 const b = (...ops: string[]) => ops.map((op) => `builtin.${op}`);
 const t = (...names: string[]) => names.map((name) => `std.${name}`);
 
@@ -34,12 +36,12 @@ export const SECTIONS: Section[] = [
       ...t("trig"), ...["sin", "cos", "tan", "exp", "log"].map((op) => `std.trig.trig.${op}`),
       ...b("div", "sqrt", "pow", "atan2", "abs", "floor", "mod", "float32", "show", "range"), ...prelude("show decimals"),
       ...b("int.quotient", "int.remainder", "int.power", "int.lowestTerms", "int.read", "int.toNumber", "int.wholePart", "int.abs", "int.shiftDown", "int.show", "int.range"), ...prelude("range from"),
-      ...t("rational"), ...prelude("fraction", "as fraction", "divide fractions", "show fraction", "fraction as float64"),
-      ...t("complex"), ...prelude("as complex", "i", "complex conjugate", "modulus", "angle of", "from polar", "divide complex", "complex exp", "complex sqrt", "complex log", "complex power", "complex asin", "complex acos", "show complex", "table product", "complex table", "clifford table", "clifford algebra", "clifford product", "clifford reverse", "clifford versor inverse", "clifford sandwich", "clifford reflect", "clifford project", "clifford exp", "clifford outer", "clifford inner", "clifford grade", "clifford dual", "clifford undual", "clifford regressive", "clifford part", "clifford with part"), ...t("tableEntry"), ...t("algebra"),
+      ...t("rational"), ...prelude("fraction", "as fraction", "divide fractions"), ratioAsFloat,
+      ...t("complex"), ...prelude("as complex", "i", "complex conjugate", "modulus", "angle of", "from polar", "divide complex", "complex exp", "complex sqrt", "complex log", "complex power", "complex asin", "complex acos", "table product", "complex table", "clifford table", "clifford algebra", "clifford product", "clifford reverse", "clifford versor inverse", "clifford sandwich", "clifford reflect", "clifford project", "clifford exp", "clifford outer", "clifford inner", "clifford grade", "clifford dual", "clifford undual", "clifford regressive", "clifford part", "clifford with part"), ...t("tableEntry"), ...t("algebra"),
       ...t("mat2", "mat3", "mat4"), ...prelude("matrix table"),
-      ...t("fixed"), ...prelude("as fixed", "fixed as float64", "show fixed", "divide fixed", "square root fixed"),
+      ...t("fixed"), ...prelude("as fixed"), fixedAsFloat, ...prelude("divide fixed", "square root fixed"),
       ...t("extended"), ...prelude("extended less", "extended add", "extended negate", "extended subtract", "extended multiply", "minimum", "maximum"),
-      ...t("dual"), ...prelude("slope by duals", "divide duals", "show dual", "dual table"),
+      ...t("dual"), ...prelude("slope by duals", "divide duals", "dual table"),
       ...t("algebraic"), ...b("algebraic.sqrt", "algebraic.root", "algebraic.divide", "algebraic.ofRational", "algebraic.asFraction", "algebraic.digits", "algebraic.toNumber", "algebraic.show"),
       ...b("sin", "cos", "tan", "exp", "log"), ...b("add", "sub", "mul", "neg", "less", "int.add", "int.sub", "int.mul", "int.neg", "int.less", "algebraic.add", "algebraic.sub", "algebraic.mul", "algebraic.neg", "algebraic.less", "algebraic.fraction")] },
   { title: "True and false, sameness and order", intro: "", ids: [...t("bool"), ...b("and", "or", "not", "equal", "compare"), ...t("order"), ...b("showAny")] },

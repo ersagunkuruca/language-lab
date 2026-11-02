@@ -59388,7 +59388,6 @@
       "@im5r2c6h3m1dh2jrleu0jjd3ao",
       "@umq0g46cm32hve92nci4ufttq9",
       "@p7l8meq803g3bcfkgkm9c189m9",
-      "@j4c9qopsj5jhldoklctl3aubkn",
       "@tntkenjt8lmvpbb93drgn84qbd",
       "@8o6ptf0efocthvugd6capvcf2l",
       "@7lrku7dm0b5g72i0lrmd8acccv",
@@ -59407,7 +59406,6 @@
       "@jb907f4tbjb70755s5eempgnb9",
       "@qieak0btgq6c6tcotdksjr7t6f",
       "@f6ohevji4f8quo0263ujl6r5no",
-      "@tu0hmqf815cglqlbjfk0np3l0f",
       "@ilortmfvkbjt9bs8q02goksirf",
       "@lpgbkpl5cvmfold4ma5a9k9on4",
       "@rmuljvpp60kuj8khour9n699te",
@@ -59451,12 +59449,8 @@
       "@ld6jeo16ubg7r39233bit24m9r",
       "@l5hrsq9348beg0fck4pcmk92uh",
       "@5p7andlhmptbt2ovbrcsfl8e0s",
-      "@0qulvgbca1hm6dngmbf0eqldf8",
       "@s87tpqudidinh13f0blnceilg4",
       "@p1jv5i58ojignkr0rtg05tl5e3",
-      "@c80rodj4euanl6hcacl8e1eio9",
-      "@13vf6q6v7l5qubj1a6cntaece9",
-      "@p03lgr8efclhoeg5i1prm7h7ai",
       "@5jvkmi56jd9tst41r4feh0f86j",
       "@6ndb3l7i18ldc0gadvhtb21d9v",
       "@814l9844a7229lm9tptarpfb1i",
@@ -59539,6 +59533,12 @@
       "@2dilt1b3f9hjpds2aonqamb6h8",
       "@jicapf5pqmv60o38snigitpipg",
       "@2bsqu5k0de084n0uo4u01gsahq",
+      "@j4c9qopsj5jhldoklctl3aubkn",
+      "@tu0hmqf815cglqlbjfk0np3l0f",
+      "@0qulvgbca1hm6dngmbf0eqldf8",
+      "@c80rodj4euanl6hcacl8e1eio9",
+      "@13vf6q6v7l5qubj1a6cntaece9",
+      "@p03lgr8efclhoeg5i1prm7h7ai",
       "@gqaqevodbqvkve52jflltfe15j",
       "@brbvg0sr9iq5iaavff80b7jag4",
       "@jdr0cbak0dr75q00ui5q25nhmg",
@@ -61635,32 +61635,6 @@
       },
       "plain": []
     },
-    "@j4c9qopsj5jhldoklctl3aubkn": {
-      "vars": [],
-      "rows": [
-        0
-      ],
-      "type": {
-        "t": "fn",
-        "params": [
-          {
-            "t": "con",
-            "id": "std.rational",
-            "args": []
-          }
-        ],
-        "ret": {
-          "t": "con",
-          "id": "type.string",
-          "args": []
-        },
-        "eff": {
-          "effs": [],
-          "tail": 0
-        }
-      },
-      "plain": []
-    },
     "@tntkenjt8lmvpbb93drgn84qbd": {
       "vars": [],
       "rows": [
@@ -62140,32 +62114,6 @@
         "ret": {
           "t": "con",
           "id": "std.complex",
-          "args": []
-        },
-        "eff": {
-          "effs": [],
-          "tail": 0
-        }
-      },
-      "plain": []
-    },
-    "@tu0hmqf815cglqlbjfk0np3l0f": {
-      "vars": [],
-      "rows": [
-        0
-      ],
-      "type": {
-        "t": "fn",
-        "params": [
-          {
-            "t": "con",
-            "id": "std.complex",
-            "args": []
-          }
-        ],
-        "ret": {
-          "t": "con",
-          "id": "type.string",
           "args": []
         },
         "eff": {
@@ -64105,32 +64053,6 @@
       },
       "plain": []
     },
-    "@0qulvgbca1hm6dngmbf0eqldf8": {
-      "vars": [],
-      "rows": [
-        0
-      ],
-      "type": {
-        "t": "fn",
-        "params": [
-          {
-            "t": "con",
-            "id": "std.dual",
-            "args": []
-          }
-        ],
-        "ret": {
-          "t": "con",
-          "id": "type.string",
-          "args": []
-        },
-        "eff": {
-          "effs": [],
-          "tail": 0
-        }
-      },
-      "plain": []
-    },
     "@s87tpqudidinh13f0blnceilg4": {
       "vars": [],
       "rows": [
@@ -64174,84 +64096,6 @@
         "ret": {
           "t": "con",
           "id": "type.number",
-          "args": []
-        },
-        "eff": {
-          "effs": [],
-          "tail": 0
-        }
-      },
-      "plain": []
-    },
-    "@c80rodj4euanl6hcacl8e1eio9": {
-      "vars": [],
-      "rows": [
-        0
-      ],
-      "type": {
-        "t": "fn",
-        "params": [
-          {
-            "t": "con",
-            "id": "type.int",
-            "args": []
-          }
-        ],
-        "ret": {
-          "t": "con",
-          "id": "type.string",
-          "args": []
-        },
-        "eff": {
-          "effs": [],
-          "tail": 0
-        }
-      },
-      "plain": []
-    },
-    "@13vf6q6v7l5qubj1a6cntaece9": {
-      "vars": [],
-      "rows": [
-        0
-      ],
-      "type": {
-        "t": "fn",
-        "params": [
-          {
-            "t": "con",
-            "id": "type.int",
-            "args": []
-          }
-        ],
-        "ret": {
-          "t": "con",
-          "id": "type.string",
-          "args": []
-        },
-        "eff": {
-          "effs": [],
-          "tail": 0
-        }
-      },
-      "plain": []
-    },
-    "@p03lgr8efclhoeg5i1prm7h7ai": {
-      "vars": [],
-      "rows": [
-        0
-      ],
-      "type": {
-        "t": "fn",
-        "params": [
-          {
-            "t": "con",
-            "id": "std.fixed",
-            "args": []
-          }
-        ],
-        "ret": {
-          "t": "con",
-          "id": "type.string",
           "args": []
         },
         "eff": {
@@ -67914,6 +67758,162 @@
       },
       "plain": []
     },
+    "@j4c9qopsj5jhldoklctl3aubkn": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.rational",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "type.string",
+          "args": []
+        },
+        "eff": {
+          "effs": [],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
+    "@tu0hmqf815cglqlbjfk0np3l0f": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.complex",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "type.string",
+          "args": []
+        },
+        "eff": {
+          "effs": [],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
+    "@0qulvgbca1hm6dngmbf0eqldf8": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.dual",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "type.string",
+          "args": []
+        },
+        "eff": {
+          "effs": [],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
+    "@c80rodj4euanl6hcacl8e1eio9": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "type.int",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "type.string",
+          "args": []
+        },
+        "eff": {
+          "effs": [],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
+    "@13vf6q6v7l5qubj1a6cntaece9": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "type.int",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "type.string",
+          "args": []
+        },
+        "eff": {
+          "effs": [],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
+    "@p03lgr8efclhoeg5i1prm7h7ai": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.fixed",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "type.string",
+          "args": []
+        },
+        "eff": {
+          "effs": [],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
     "@gqaqevodbqvkve52jflltfe15j": {
       "vars": [],
       "rows": [],
@@ -70030,7 +70030,7 @@
     "@j4c9qopsj5jhldoklctl3aubkn:2": "a",
     "@j4c9qopsj5jhldoklctl3aubkn:6": "top",
     "@j4c9qopsj5jhldoklctl3aubkn:7": "bottom",
-    "@tntkenjt8lmvpbb93drgn84qbd": "fraction as float64",
+    "@tntkenjt8lmvpbb93drgn84qbd": "as float64",
     "@tntkenjt8lmvpbb93drgn84qbd:2": "a",
     "@tntkenjt8lmvpbb93drgn84qbd:6": "top",
     "@tntkenjt8lmvpbb93drgn84qbd:7": "bottom",
@@ -70302,7 +70302,7 @@
     "@mdec51phm3f02kectug8vjim24:6": "steps",
     "@s87tpqudidinh13f0blnceilg4": "as fixed",
     "@s87tpqudidinh13f0blnceilg4:2": "whole",
-    "@p1jv5i58ojignkr0rtg05tl5e3": "fixed as float64",
+    "@p1jv5i58ojignkr0rtg05tl5e3": "as float64",
     "@p1jv5i58ojignkr0rtg05tl5e3:2": "x",
     "@p1jv5i58ojignkr0rtg05tl5e3:6": "steps",
     "@5jvkmi56jd9tst41r4feh0f86j": "divide fixed",
@@ -71401,7 +71401,7 @@
     "@im5r2c6h3m1dh2jrleu0jjd3ao": "top/bottom, exactly, in lowest terms (Euclid's algorithm, textbook); no answer when bottom is 0.",
     "@umq0g46cm32hve92nci4ufttq9": "The whole number n as a fraction, n/1.",
     "@p7l8meq803g3bcfkgkm9c189m9": "a ÷ b for fractions, exactly; no answer when b is 0.",
-    "@j4c9qopsj5jhldoklctl3aubkn": "A fraction as 3/4, or 3 when it is whole.",
+    "@j4c9qopsj5jhldoklctl3aubkn": "A fraction as 3/4, or 3 when it is whole. Not offered: the one show shows every number; kept so programs saved before still open.",
     "@tntkenjt8lmvpbb93drgn84qbd": "The nearest Float64.",
     "@fbbi4qvo7d58s98tv0etifnllv": "What + is at Rational. Not offered on its own: + is.",
     "@g68h67scr0eirikv8og762j6u3": "What − is at Rational. Not offered on its own: − is.",
@@ -71473,7 +71473,7 @@
     "@qk3j9f89h64jva46f74gieccsi": "z to the power w, e^(w · log z), the principal value: complex power(−8, 1/3) is 1 + 1.732i. 0 to a power with a real part above 0 is 0; to any other, no answer.",
     "@qieak0btgq6c6tcotdksjr7t6f": "asin z for a complex number, the principal value: complex asin(2) is π/2 + 1.317i. Float64's asin has no answer outside −1 to 1; this one always has.",
     "@f6ohevji4f8quo0263ujl6r5no": "acos z for a complex number, the principal value: complex acos(2) is −1.317i. Float64's acos has no answer outside −1 to 1; this one always has.",
-    "@tu0hmqf815cglqlbjfk0np3l0f": "A complex number as 3 + 4i or 3 − 4i.",
+    "@tu0hmqf815cglqlbjfk0np3l0f": "A complex number as 3 + 4i or 3 − 4i. Not offered: the one show shows every number; kept so programs saved before still open.",
     "@erjqmni7ivj8ajc7tfnnhvlki8": "What + is at Complex. Not offered on its own: + is.",
     "@5qcutt1hdu2hjlgvrja609ighr": "What − is at Complex. Not offered on its own: − is.",
     "@ilortmfvkbjt9bs8q02goksirf": "a · b in an algebra given by its multiplication table: each line says what two basis elements multiply to, as times(i, i, −1). Complex numbers, dual numbers and quaternions are each one table (ALGEBRA-TABLES.md).",
@@ -71517,10 +71517,10 @@
     "@ipkn8klqc90r20d7177pmgioke": "A Clifford algebra, built once: its basis vectors square to `squares` (1, −1 or 0 each) and `basis` is your record type's basis elements, in clifford table's order. It holds the multiplication table, so clifford sandwich, reflect, exp and the others take it and don't build a table on every call. Make it once, as a definition: pga = clifford algebra([1, 1, 1, 0], basis).",
     "@nqvtom4jb3r3c8hh82i9671fma": "The multiplication table of a Clifford algebra, for table product: its basis vectors square to `squares` (1, −1 or 0 each; Cl(p, q, r) is p ones, q minus ones, r zeros), and `basis` is your record type's basis elements in the order 1, e₁, e₂, e₁e₂, e₃, e₁e₃, e₂e₃, e₁e₂e₃, … . clifford table([−1], …) is the complex numbers, [0] the dual numbers, [1] the split-complex ones, [−1, −1] the quaternions (i = e₁, j = e₂, k = e₁e₂), [1, 1, 1] Cl(3, 0) and [1, 1, 1, 0] projective geometric algebra (ALGEBRA-TABLES.md).",
     "@5p7andlhmptbt2ovbrcsfl8e0s": "Dual numbers' multiplication table: 1 · 1 = 1, 1 · ε = ε, ε · 1 = ε, and ε · ε = 0, which needs no line. table product(dual table, x, y) is x · y.",
-    "@0qulvgbca1hm6dngmbf0eqldf8": "A dual number as 3 + 2ε.",
+    "@0qulvgbca1hm6dngmbf0eqldf8": "A dual number as 3 + 2ε. Not offered: the one show shows every number; kept so programs saved before still open.",
     "@s87tpqudidinh13f0blnceilg4": "A whole number as a Fixed, exactly.",
     "@p1jv5i58ojignkr0rtg05tl5e3": "A Fixed as the nearest Float64, for drawing or printing. Past 2⁵³ steps (about 2 million) it drops the last bits; the Fixed keeps them.",
-    "@p03lgr8efclhoeg5i1prm7h7ai": "A Fixed as text: the shortest decimal that reads back to the same steps, so 0.1 shows as 0.1 and every step shows differently.",
+    "@p03lgr8efclhoeg5i1prm7h7ai": "A Fixed as text: the shortest decimal that reads back to the same steps, so 0.1 shows as 0.1 and every step shows differently. Not offered: the one show shows every number; kept so programs saved before still open.",
     "@5jvkmi56jd9tst41r4feh0f86j": "a ÷ b for Fixed, rounded down to a step; no answer when b is 0.",
     "@814l9844a7229lm9tptarpfb1i": "√x for Fixed, rounded down to a step, the same bits on every machine; no answer below 0.",
     "@gqaqevodbqvkve52jflltfe15j": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
@@ -71607,7 +71607,6 @@
     "@im5r2c6h3m1dh2jrleu0jjd3ao",
     "@umq0g46cm32hve92nci4ufttq9",
     "@p7l8meq803g3bcfkgkm9c189m9",
-    "@j4c9qopsj5jhldoklctl3aubkn",
     "@tntkenjt8lmvpbb93drgn84qbd",
     "@8o6ptf0efocthvugd6capvcf2l",
     "@7lrku7dm0b5g72i0lrmd8acccv",
@@ -71622,7 +71621,6 @@
     "@qk3j9f89h64jva46f74gieccsi",
     "@qieak0btgq6c6tcotdksjr7t6f",
     "@f6ohevji4f8quo0263ujl6r5no",
-    "@tu0hmqf815cglqlbjfk0np3l0f",
     "@ilortmfvkbjt9bs8q02goksirf",
     "@lpgbkpl5cvmfold4ma5a9k9on4",
     "@nqvtom4jb3r3c8hh82i9671fma",
@@ -71651,10 +71649,8 @@
     "@ld6jeo16ubg7r39233bit24m9r",
     "@l5hrsq9348beg0fck4pcmk92uh",
     "@5p7andlhmptbt2ovbrcsfl8e0s",
-    "@0qulvgbca1hm6dngmbf0eqldf8",
     "@s87tpqudidinh13f0blnceilg4",
     "@p1jv5i58ojignkr0rtg05tl5e3",
-    "@p03lgr8efclhoeg5i1prm7h7ai",
     "@5jvkmi56jd9tst41r4feh0f86j",
     "@814l9844a7229lm9tptarpfb1i",
     "@ffvjl4eq3ftk38cuspridvto96",
