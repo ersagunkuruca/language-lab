@@ -59,12 +59,15 @@ Sources this draws on, credited per the project's attribution rule:
 - Comment boxes. Comments live in comments.json and show in the inspector;
   drawing them on the canvas is a small step once someone wants it.
 
-## Same edits in both views (audit, 2026-10-24, BACKLOG E97)
+## Same edits in both views (audit, 2026-10-24, BACKLOG E97; extended 2026-11-02, E206)
 
 Every edit should be reachable from the graph and from the Blocks pane. Both
 views select into the one Selected panel, so anything the panel does works
-from both. The table lists every gesture and where it works. Each mark was
-checked on the built page (fall, two dice), not just read from the code.
+from both. The table lists every gesture and where it works. The rows down
+to Layout were checked on the built page (fall, two dice) in 2026-10; the
+rows after it, added since, were checked by reading the menu and panel code
+(`menuFor` in editor/main.ts: an item not behind `inGraph` is on both
+menus).
 
 | Gesture | Blocks | Graph | How |
 |---|---|---|---|
@@ -87,6 +90,17 @@ checked on the built page (fall, two dice), not just read from the code.
 | Menu from the keyboard | ✓ Shift+F10 | ✓ Shift+F10 | |
 | Long press for the menu (touch) | ✓ | ✓ | |
 | Layout: move, pick, tidy, fold, inline, let/get nodes | n/a | ✓ | how the graph is drawn, not the program |
+| Wrap in… / Insert a node after it… | ✓ menu Wrap in… | ✓ menu Insert a node after it… | the same edit: the part goes into a call from the palette |
+| Add a step before this | ✓ menu | ✓ menu | an action's step (E190) |
+| Turn around (work out an input from the result), use it forwards | ✓ menu | ✓ menu, or drag the result onto an input | E168 |
+| A list's sockets: add an item, drop onto one | ✓ panel, menu (list items above) | ✓ a socket per item and an empty one after | E166: the sockets are the graph's way of the same edits |
+| A function's result ports (L128) | ✓ panel | ✓ panel | the panel's input/result buttons |
+| Make it a function / a definition, from parts | ✗ | ✓ menu on a node, picked nodes or a group | Blocks has none yet: E208 |
+| Make an inner function a definition | ✗ | ✓ menu on its frame | E208 |
+| Simplify | ✓ menu | ✓ menu | |
+| Implement an interface | ✓ panel | ✓ panel | a data type's panel, or a missing implementation's error |
+| Answered later (an operation) | ✓ panel | ✓ panel | the operation's panel |
+| Type parameters (E198) | ✓ panel | ✓ panel | the type's or the operation's panel |
 
 ## Loose parts: editing without keeping the tree whole (agreed, 2026-10-24)
 
