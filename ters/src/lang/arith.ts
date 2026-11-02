@@ -36,6 +36,7 @@ import { recordVariant } from "./derive.ts";
 import { hasRecursiveLet, liftLets } from "./lift-lets.ts";
 import { spreadTuples } from "./spread.ts";
 import { fieldsByType, usesFieldsByType } from "./fields-by-type.ts";
+import { setSeveral, usesSetSeveral } from "./set-several.ts";
 import { useDirections } from "./directions.ts";
 
 const num: Type = { t: "con", id: NUMBER, args: [] };
@@ -71,7 +72,7 @@ export const usesGenericArithmetic = (code: Code) => {
 // A plain number literal is some Number (infer.ts), so a program with one
 // may need resolving too; with the types at hand, only when one isn't
 // already a Float64.
-export const needsResolving = (code: Code) => usesGenericArithmetic(code) || usesFieldsByType(code) || hasRecursiveLet(code) || Object.values(code.nodes).some(plainNumber);
+export const needsResolving = (code: Code) => usesGenericArithmetic(code) || usesFieldsByType(code) || usesSetSeveral(code) || hasRecursiveLet(code) || Object.values(code.nodes).some(plainNumber);
 const plainNumber = (n: Node) => n.kind === "lit" && n.of === undefined && typeof n.value === "number";
 const someLiteralNotFloat64 = (code: Code, info: Info) => Object.values(code.nodes).some((n) => {
   if (!plainNumber(n)) return false;
@@ -106,6 +107,7 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
   ({ code, info, names } = liftLets(code, info, names));
   ({ code, info, names } = spreadTuples(code, info, names));
   ({ code, info, names } = fieldsByType(code, info, names));
+  ({ code, info, names } = setSeveral(code, info, names));
   if (!usesGenericArithmetic(code) && !someLiteralNotFloat64(code, info)) return { code, info, names };
   const s = info.subst;
   const nodes: Record<Id, Node> = { ...code.nodes };

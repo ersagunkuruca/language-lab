@@ -10,7 +10,7 @@ import { infer } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
 import { close, runMain } from "../src/lang/run.ts";
 import { relate, toValue } from "../src/lang/relate.ts";
-import { CONS, INT_OPS as I, NIL, S, SET, SHOW_ANY, TEXT_OPS as T } from "../src/lang/std.ts";
+import { CONS, INT_OPS as I, NIL, S, SET, SHOW_ANY, TEXT_OPS as T, tupleVariant } from "../src/lang/std.ts";
 import * as Int from "../src/lang/int.ts";
 import { INT, NUMBER, STRING } from "../src/lang/types.ts";
 import { B } from "../src/prelude.ts";
@@ -135,11 +135,42 @@ test("set refuses a function that isn't a path of fields, before anything runs",
   assert.match(p.info.errors[0].message, /path of fields/);
 });
 
+test("set changes several fields at once: a tuple of paths and a tuple of values (L167)", () => {
+  const p = program((k) => {
+    const { person, address, ada, describe } = people(k);
+    const both = (q: Id) => k.call(tupleVariant(2), k.call(person.f["person.age"], q), k.call(address.f["address.city"], k.call(person.f["person.home"], q)));
+    return lines(k,
+      k.let("p", ada(), (a) => describe(k.call(SET, k.fn(["q"], both), a, k.call(tupleVariant(2), k.int(37), k.lit("Paris"))))),
+      k.let("parts", k.call(tupleVariant(2), k.int(38), k.lit("Rome")), (t) => k.let("p", ada(), (a) => describe(k.call(SET, k.fn(["q"], both), a, t)))),
+      k.let("p", ada(), (a) => describe(k.call(SET, k.fn(["q"], (q) => k.call(tupleVariant(3), k.call(person.f["person.name"], q), k.call(person.f["person.age"], q), k.call(person.f["person.home"], q))), a,
+        k.call(tupleVariant(3), k.lit("Grace"), k.int(85), k.call(address.v.address, k.lit("Arlington"), k.lit("Virginia")))))),
+    );
+  });
+  assert.deepEqual(p.info.errors, []);
+  assert.deepEqual(p.run(), ["Ada, 37, Paris", "Ada, 38, Rome", "Grace, 85, Virginia"]);
+});
+
+test("set refuses a field named twice, or one inside another, so the answer is one", () => {
+  for (const shape of ["twice", "inside"]) {
+    const p = program((k) => {
+      const { person, ada, city, describe } = people(k);
+      const age = (q: Id) => k.call(person.f["person.age"], q), home = (q: Id) => k.call(person.f["person.home"], q);
+      const bad = k.fn(["q"], (q) => (shape === "twice" ? k.call(tupleVariant(2), age(q), age(q)) : k.call(tupleVariant(2), home(q), city(q))));
+      return lines(k, k.let("p", ada(), (a) => describe(k.call(SET, bad, a, shape === "twice" ? k.call(tupleVariant(2), k.int(1), k.int(2)) : k.call(tupleVariant(2), home(a), k.lit("Paris"))))));
+    });
+    assert.equal(p.info.errors.length, 1, shape);
+    assert.match(p.info.errors[0].message, /none twice or inside another/, shape);
+  }
+});
+
 test("the relational interpreter runs Int, text and set forward", () => {
   const k = new Lang();
   const { person, ada, city } = people(k);
   const moved = k.def("moved");
   k.define(moved, k.fn(["to"], (to) => k.let("p", ada(), (a) => city(k.call(SET, k.fn(["q"], (q) => city(q)), a, to)))));
+  // Several fields at once (L167), forward too.
+  const both = k.def("both");
+  k.define(both, k.fn(["to"], (to) => k.let("p", ada(), (a) => city(k.call(SET, k.fn(["q"], (q) => k.call(tupleVariant(2), k.call(person.f["person.age"], q), city(q))), a, k.call(tupleVariant(2), k.int(1), to))))));
   const big = k.def("big");
   k.define(big, k.fn(["n"], (n) => k.call(I.show, k.call(I.mul, n, k.int("1000000000000000000000")))));
   const code = base(k.code);
@@ -147,6 +178,7 @@ test("the relational interpreter runs Int, text and set forward", () => {
   const param = (fn: Id) => (code.nodes[(code.nodes[fn] as { body: Id }).body] as { params: Id[] }).params[0];
   assert.equal(one(moved, { [param(moved)]: "Paris" }), "Paris");
   assert.equal(one(big, { [param(big)]: 7 }), "7000000000000000000000");
+  assert.equal(one(both, { [param(both)]: "Oslo" }), "Oslo");
   void person;
 });
 
