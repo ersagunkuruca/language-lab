@@ -2349,3 +2349,234 @@ lacks it (WORKFLOW.md, "Language gaps, every round"):
    largest gap any round has measured.
 3. C94 and C95, then C96.
 4. L162, L163 and L164 for the language lane.
+
+## Round 10: clinic, a simulation written in the editor (2026-11-02)
+
+`compiler/gaps/clinic` simulates a day at a walk-in clinic, one event at
+a time. Patients arrive at random (exponential gaps), each routine, soon
+or urgent, with a patience and a time they need. They wait in a waiting
+room ordered by arrival or by urgency, and a desk takes the next one when
+it is free: the first free desk, the least busy one, or one at random.
+Desks take a 30-minute break each; a patient whose patience runs out
+before a desk takes them walks out. The program reads a `clinic.txt` of
+settings (`desks 6`, `rate 30.5`, `order arrival`, `pick random`), prints a
+report (waits with their mean, spread, median and 90th percentile, a
+histogram, a table per urgency and per desk, the waiting room's average
+size, the last eight events, an hour-by-hour table), then runs the same
+day every other way, with 2 to 7 desks and over ten seeds, finds how many
+desks keep the 90th percentile under 15 minutes with nobody walking out,
+and writes every visit to `clinic.csv`.
+
+It is a new kind of program for the rounds: a discrete-event simulation,
+with its own generic data structures. It has **146 definitions**, against
+machine's 141: 13 types and 133 functions, ten of them tests (`expect`).
+It is the first round with **type parameters on the program's own types**
+(E198): `Heap a`, a leftist heap of 13 functions used at two types (`Heap
+Happening` for the events, `Heap Patient` for the waiting room), and
+`Queue a`, a two-list queue of the last events; and the first with
+**private cases** (E209) on both. The program is original; a
+discrete-event loop, an exponential arrival process and a histogram are
+common knowledge. The leftist heap and the two-list queue follow Okasaki's
+*Purely Functional Data Structures* (1998; the leftist heap is Crane's,
+1972), and the running mean and spread are Welford's method (1962): both
+adaptations, credited in the program's comment (the editor's Program
+panel) and in CREDITS.md.
+
+**It was written in the editor**, as rounds 7 and 8 were: the built editor
+in headless Chromium, every definition made with *+ New definition*, the
+types with the type panel (its new *Add the type parameter* and *Private*),
+bodies typed into the palette, matches from `match x · T`. Nothing was
+edited by hand. About 180 typed fills, 30 matches (75 cases), about 20
+refusals, three names and one field's type changed through
+the panels. Type parameters and private cases went in first time, and a
+fresh match now keeps one hole per case (E189), so each case was simply
+filled in turn. The finished program ran in the editor's Run panel (5 s
+for the report) and printed what `lab run` prints. Driver and scripts are
+in the project's files, `gaps-round10/`.
+
+Files:
+- `compiler/gaps/clinic/`: the program as the editor saved it.
+- `compiler/gaps/clinic.ideal.js`: the same report by hand, with binary
+  heaps in arrays, desks changed in place and the language's own seeded
+  generator (`ters/src/lang/random.ts`), so it draws the same numbers.
+- `compiler/gaps/clinic.ts`: the three ways (`lab run`, `lab compile`'s
+  module, the ideal) in a folder whose `clinic.txt` sets the hours.
+- `compiler/test/clinic.test.ts`: the three print the same report at 8
+  hours, and the compiled one and the ideal at 40.
+- `compiler/gaps/bench-clinic.ts`: the table below.
+
+### Results
+
+```
+hours  way        whole report   against the ideal
+    8  evaluator       6406 ms       189x
+    8  compiled         246 ms         7.3x
+    8  ideal             34 ms
+   40  evaluator      29451 ms       235x
+   40  compiled         424 ms         3.4x
+   40  ideal            125 ms
+  200  compiled        1458 ms         6.4x
+  200  ideal            227 ms
+ 1000  compiled        8272 ms         5.8x
+ 1000  ideal           1414 ms
+```
+
+`node compiler/gaps/bench-clinic.ts 8 40 200 1000`, once each; the
+evaluator and compiled times include starting node (about 40 ms) and
+`lab run` reading the program. A day of 8 hours is about 140 patients and
+1,000 events; the whole report runs 30 days (the six ways, six desk
+counts, ten seeds, the search for enough desks). All three print the same
+report up to 200 hours. At 1,000 hours the two "random free" lines differ
+by a few patients: a patient needs at least 2.0 minutes, so two desks can
+finish at the same moment, and the leftist heap and the ideal's binary
+heap take equal keys in a different order, which changes who gets which
+random draw. Neither is wrong.
+
+**C and WebAssembly don't run it** (C106): `lab native` says "main isn't
+in C: calls day, which uses seeded, which isn't in the scalar profile".
+
+A profile of the compiled module at 200 hours: the garbage collector 23%
+by itself; `run` 74% inclusive, of which `arrived` 29%, `assigned` 20%,
+`finished with` 15%, `noted` 12% (the clock text of every event's line,
+as the ideal does too); the runtime's `setPath` 3 to 6% by itself.
+
+### The gaps, ranked
+
+**K1. A generic number result is counted in `Fixed` (perf and a wrong
+type, L175).** `heap size` is `1 + heap size(left) + heap size(right)`;
+nothing pins the literals, so its type is `(Heap a) -> b where b is a
+Number`, and `advanced` reads `as float64(heap size(c.waiting))`. Of
+`as float64`'s four types (Int, Rational, Fixed, Algebraic) the checker
+took `Fixed`'s, and the compiled module counts the waiting room in
+fixed-point records of BigInt steps (`heap_size_at_Fixed`, `add_fixed`).
+The answer is the same; nothing in the editor says which `as float64` it
+is (E223). *Measured* by replacing it with a count in numbers by hand:
+1661 → 1527 ms at 200 hours (8 to 12%). The same defaulting made
+`urgency rank`, `largest count` and `power of ten` generic, and a
+`let` of `largest count(...)` was taken as a Float64 (below).
+
+**K2. `set` is a generic path walk (perf, every program that updates a
+record, C105).** Each `set((x) ↦ x.events, c, …)` compiles to the
+runtime's `setPath(c, [1], …)`: an array for the path, `fields.slice()`,
+and `{ ...record, fields }`. clinic has 30 of them, and a chain on one
+record (`advanced` sets `queue area` then `now`; `arrived` four in a row)
+copies the ten-field `Clinic` once per link. *Measured:* only a one-field
+fast path in `setPath` (no recursion, `{ tag, fields }`) took 1527 → 1335
+to 1560 ms (noisy, 2 to 12%). The fix is a set on a known record type
+compiled as the constructor with one field changed, and a chain of sets on
+one record as one copy; L167 (several fields at once) is the language
+half.
+
+**K3. Copies per event (perf, C107).** The garbage collector is 23% of
+the compiled time: an event copies the `Clinic` six to nine times
+(`advanced` 2, the events taken off, `scheduled`, `noted`, `with desk`,
+`visited`). Every copy but the last is dead at once. K2's fusion takes
+some; reuse in place when the old record has no other holder (C62, C94's
+rc==1 reuse) the rest.
+
+**K4. No seeded Random in C or WebAssembly (target gap, C106).** Every
+simulation, game and test that wants the same numbers each run is
+JavaScript-only. The C and WebAssembly runtimes need `seeded` with the
+generator in `ters/src/lang/random.ts`, so all targets draw the same.
+
+**K5. The evaluator (not the compiler's).** 6.4 s for a day's report, 29 s
+for 40 hours: the Run panel's 5 s is the evaluator's. L118c again.
+
+### What the editor made hard
+
+In the order they cost time. Each is a BACKLOG row.
+
+1. **A program type named like a library type is taken silently, and then
+   every message says "needs Event here, got Event" (E217).** `Event` is
+   std's (a page's event). The program's own `Event` was accepted; the
+   field type picker lists both as "Event" and took std's for `Clinic`'s
+   `events: Heap Event`. From then on `started`, `arrived`, `break
+   started`, `opened` and `run` were refused with "scheduled needs Event
+   here, got Event", "handled needs Event here, got Event", or messages
+   about `show` and `as float64` (item 3). Found by renaming the type
+   `Happening` and seeing the field still read `Heap Event`; fixed by
+   picking the field's type again in its panel.
+2. **The palette crashes on a name the program shares with a module
+   (E218).** The program's `div(a, b)` (a total quotient) shares its name
+   with the html module's `div(children)`. Typing `div(n, top)` where n
+   and top weren't settled throws in typed.ts (`leaveOpen`'s `fixedAt`
+   reads `r.params[i]` past html `div`'s one input: "Cannot read
+   properties of undefined (reading 't')"), and the picker never opens on
+   that hole. `div` was renamed `quotient of`. In `clock text`, where the
+   inputs were settled, `div(t, 60)` had gone in.
+3. **Refusals name an overload that has nothing to do with the cause
+   (E219).** About half of the refusals named the last of an overloaded
+   function's types: "as float64 needs Fixed here, got Int" (the cause:
+   the program's `ratio` read as the library's private `ratio` case, item
+   4), "show needs Float64 here, got Int" (the cause: item 1), "scaled
+   needs Int here, got Float64" (a let of a generic number, L175), "item
+   at needs Int here, got Fixed". Each took a bisection by probing
+   smaller texts to find.
+4. **The library's names win over the program's (E220).** With the
+   inputs not yet settled, the program's `ratio(a, b)` was read as the
+   library's `ratio`, Rational's private case ("ratio is private to the
+   library, which keeps Rational's rule"); renamed `share`. With item 2,
+   two of the program's names had to change for the library's sake. A
+   program's own definition should shadow a library name, and another
+   program's private case shouldn't be read at all.
+5. **One long typed body fails where small definitions pass (E222).**
+   `with sample` (Welford's update) as one text with three lets was
+   refused; the same as four small definitions (`new mean`, `new m2`, `new
+   low`, `new high`) went in. `histogram lines` as one map over
+   `numbered(counts)` was refused three ways (tuple fields `first` and
+   `second` "More than one type has these fields", a let of a generic
+   number, `as float64` of a range's item); it went in as `count at`,
+   `histogram line` and a map over `range from(0, 12)`. Six definitions
+   exist only to settle types one at a time.
+6. **A list literal as a call's only input loses its brackets (E221).**
+   `flatten([a, b, c])` is shown `flatten(a, b, c)`, `histogram([0.0,
+   4.9])` as `histogram(0.0, 4.9)` and `heap of([tuple(…), …])` as
+   `heap of(tuple(…), …)`: read as calls of several inputs, which since
+   L128a's tuples could mean something else.
+7. **Smaller (E223, E224).** A call never says which of a function's
+   types it took (`as float64` at Fixed, K1). A new program's palette
+   lists `extended less`, `extended add`, `extended negate` first under
+   "calls" for main's hole.
+
+What went well, for the record: type parameters (*Add the type
+parameter*, then fields of type `a`, `List a`, `Heap a`) and private cases
+(a tick) went in first time; matches keep one hole per case now; `set`,
+`case name`, `first where`, `any pass`, `sort by`, `range from`, `padded
+start`, `repeated`, `seeded` and the ten tests (`lab test` passes them)
+carried the program; the report ran in the Run panel once the program was
+whole, the same as `lab run`.
+
+Named result ports weren't used: typed text has no `a, b = f(x)` yet
+(L128c's reading it back).
+
+### Language gaps
+
+Where clinic defines a helper only because the language or the library
+lacks something:
+
+- **KL1. Division, log and whole part are Choice where they can't fail
+  here.** `share(a, b) = first(a / b, else 0.0)`, `safe log`, `int of =
+  first(whole part(floor(x)), else 0)`, `quotient of` and `mod int`: five
+  definitions to end a Choice with a default. Since L125 a Float64 is
+  finite, so `floor` to an Int always has an answer. L174.
+- **KL2. Number literals make generic results.** `heap size`, `urgency
+  rank`, `largest count`, `power of ten` and `count at` came out `where a
+  is a Number`; one was then counted in Fixed (K1), one taken as a Float64
+  by a let. L175.
+- **KL3. No Float64 from text.** `read decimal`, `power of ten` and `read
+  int` read "30.5"; no sign, no exponent. L176.
+- **KL4. No priority queue or queue in the library.** Heap (13
+  definitions) and Queue (6) are written by hand, as most simulations,
+  schedulers and searches would need. L177.
+- **KL5. A record's eleven settings by key.** `with setting` is an eleven-way
+  `if` on the key, one `set` each; L167 (several fields) and L168 don't
+  cover it, and a field named by text would be reflection. No row.
+
+### Proposed order
+
+1. E217, E218 and E220: a crash and two silent wrong readings, each
+   costing a definition renamed.
+2. E219, then E222: the messages that sent each refusal into a bisection.
+3. L175 (and K1's Fixed), C106 (seeded on C and WebAssembly).
+4. C105 with L167, then C107.
+5. E221, E223, E224, L174, L176, L177.

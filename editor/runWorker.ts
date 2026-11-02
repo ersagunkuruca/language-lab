@@ -11,14 +11,15 @@ import type { Code, Id } from "../ters/src/model.ts";
 import type { Names } from "../ters/src/presentation.ts";
 import type { Pins } from "../ters/src/lang/signatures.ts";
 import { browserWorld, type Store } from "../ters/src/lang/browser.ts";
-import { runMain, showValue } from "../ters/src/lang/run.ts";
+import { runMain, runProgram, showValue } from "../ters/src/lang/run.ts";
 import { LIBRARY } from "../ters/src/lang/library.ts";
 import { withLibraryRepresentations } from "../ters/src/lang/library-reps.ts";
 import { infer, setDisplayNames, setProgramPins } from "./typed.ts";
 import { searchBackwards, type BackAsk, type Found } from "./backSearch.ts";
 import { compile } from "../compiler/src/compile.ts";
 
-export type RunAsk = { code: Code; names: Names; pins: Pins; def: Id; title: string; files: [string, string][] };
+export type RunAsk = { code: Code; names: Names; pins: Pins; def: Id; title: string; files: [string, string][]; args?: string[] };
+// args: main takes the command line's words, as `lab run` gives them (E212).
 // A page compiled the way "Open in a tab" does (page.ts pageFile), off the
 // page's thread: the preview swaps it in when it's ready (main.ts startPage).
 export type CompileAsk = { compilePage: true; code: Code; names: Names; pins: Pins; main: Id };
@@ -44,7 +45,7 @@ self.onmessage = (e: MessageEvent<RunAsk | BackAsk | CompileAsk>) => {
     const { code, def, values, names } = e.data, until = Date.now() + 60000;
     return post(searchBackwards(code, def, values, names, () => Date.now() > until));
   }
-  const { code, names, pins, def, title, files } = e.data;
+  const { code, names, pins, def, title, files, args } = e.data;
   const kept = new Map(files), wrote = new Map<string, string>();
   const store: Store = {
     getItem: (k) => kept.get(k) ?? null,
@@ -62,12 +63,15 @@ self.onmessage = (e: MessageEvent<RunAsk | BackAsk | CompileAsk>) => {
     // in the program's own types' fields too (GAPS.md M2): the types go in.
     const own = code.defs.filter((d) => !LIBRARY.code.nodes[d]);
     const first = infer(code, names), lib = withLibraryRepresentations(code, first, names, def, own);
-    const v = runMain(lib.code, lib.chosen.length ? infer(lib.code, lib.names) : first, def, {
-      print: (line) => { lines.push(line); if (Date.now() - sent > 100) flush(); },
+    const info = lib.chosen.length ? infer(lib.code, lib.names) : first;
+    const rt = {
+      print: (line: string) => { lines.push(line); if (Date.now() - sent > 100) flush(); },
       names: lib.names, world: browserWorld(store, title),
-    });
+    };
+    // With its arguments main gives an exit code, which shows when it isn't 0.
+    const shown = args ? ((c: number) => (c ? `exit ${c}` : "unit"))(runProgram(lib.code, info, def, args, rt)) : showValue(runMain(lib.code, info, def, rt), lib.code, lib.names);
     flush();
-    post({ done: true, shown: showValue(v, lib.code, lib.names), files: [...wrote] });
+    post({ done: true, shown, files: [...wrote] });
   } catch (err) {
     flush();
     post({ error: (err as Error).message, files: [...wrote] });
