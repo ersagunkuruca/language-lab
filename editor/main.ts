@@ -1495,7 +1495,12 @@ function programText(namer: Namer, _p: Presentation, steps: Step[]): string {
 
 // A data type's, an effect's or an operation's type parameter (E198): a
 // binder, but of a type, so nothing about values (units, wires) applies.
-const isTypeParam = (id: Id) => Object.values(doc.code.nodes).some((n) => (n.kind === "typedef" || n.kind === "variant") && n.params?.includes(id));
+const typeParams_ = new WeakMap<Code, Set<Id>>();
+const isTypeParam = (id: Id) => {
+  let ps = typeParams_.get(doc.code);
+  if (!ps) typeParams_.set(doc.code, (ps = new Set(Object.values(doc.code.nodes).flatMap((n) => (n.kind === "typedef" || n.kind === "variant") ? n.params ?? [] : []))));
+  return ps.has(id);
+};
 function kindLabel(id: Id): string {
   const n = node(id);
   if (n.kind === "binder" && isTypeParam(id)) return "Type parameter";
