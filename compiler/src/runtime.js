@@ -674,6 +674,8 @@ export const $io = {
   fileExists: acting(IO.fileExists, (p) => $bool(!!world.fileExists?.(p))),
   listFolder: acting(IO.listFolder, (p) => $toList(fallible('listFolder')(p))),
   fetchText: acting(IO.fetchText, fallible('fetchText')),
+  // Fetched now, so the ticket is ready at once on any clock (L150).
+  startFetch: acting(IO.startFetch, (u) => ({ tag: "std.ticket.timer", fields: [0, fallible('fetchText')(u)] })),
 };
 // Each world operation by its builtin, for an operation performed by name
 // that nothing handles ($perform).

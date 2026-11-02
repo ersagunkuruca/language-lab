@@ -264,6 +264,28 @@ export function parentOf(code: Code, id: Id): { parent: Id; slot: string; index?
   return null;
 }
 
+// parentOf for a version of the code nothing changes any more (the
+// editor's: each edit makes a new Code): one scan indexes every node's
+// parent, then each look-up is constant (BACKLOG E200). parentOf itself
+// scans every time, since an edit in progress changes its nodes in place.
+type Parent = NonNullable<ReturnType<typeof parentOf>>;
+const parentIndex = new WeakMap<Code, Map<Id, Parent>>();
+export function parentAt(code: Code, id: Id): Parent | null {
+  let m = parentIndex.get(code);
+  if (!m) {
+    const at = new Map<Id, Parent>();
+    const put = (child: Id | null | undefined, p: Parent) => { if (child != null && !at.has(child)) at.set(child, p); };
+    for (const n of Object.values(code.nodes)) {
+      if (n.kind === "call") { put(n.fn, { parent: n.id, slot: "fn" }); n.args.forEach((a, i) => put(a, { parent: n.id, slot: "args", index: i })); }
+      else if (n.kind === "lambda" || n.kind === "arm" || n.kind === "def") put(n.body, { parent: n.id, slot: "body" });
+      else if (n.kind === "match" || n.kind === "fold") { put(n.scrutinee, { parent: n.id, slot: "scrutinee" }); if (n.kind === "match") put(n.otherwise, { parent: n.id, slot: "otherwise" }); }
+      else if (n.kind === "solve") { put(n.body, { parent: n.id, slot: "body" }); for (const key of Object.keys(n.given)) put(n.given[key], { parent: n.id, slot: "given", key }); }
+    }
+    parentIndex.set(code, (m = at));
+  }
+  return m.get(id) ?? null;
+}
+
 // Semantic edit: put a different node in the slot `id` occupies. The old
 // subtree keeps its ids (so it can be moved elsewhere, e.g. into a wrapper).
 export function swapIn(code: Code, id: Id, replacement: Id): Code {

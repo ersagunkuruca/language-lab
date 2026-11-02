@@ -6,7 +6,7 @@
 // checked by re-inferring the whole program and refused if it adds an error.
 
 import type { Code, Id, Node, NodeData, NodeOf } from "../ters/src/model.ts";
-import { children, collect, freshId, parentOf, replace, subtree, swapIn } from "../ters/src/model.ts";
+import { children, collect, freshId, parentAt, parentOf, replace, subtree, swapIn } from "../ters/src/model.ts";
 import type { Names, Notation, Presentation } from "../ters/src/presentation.ts";
 import blocksStyle from "../ters/styles/blocks.json" with { type: "json" };
 import { fillings, implementationKey, infer as check, type Filling, type Info } from "../ters/src/lang/infer.ts";
@@ -1917,16 +1917,17 @@ export function rowAt(code: Code, root: Id): Row | null {
 }
 
 // The row `id` is an item of, and where.
+// Read from a version of the code, so its parent index serves (E200).
 export function rowOfItem(code: Code, id: Id): { row: Row; at: number } | null {
-  const up = parentOf(code, id);
+  const up = parentAt(code, id);
   if (!up || up.slot !== "args") return null;
   let root = up.parent;
   if (consOf(code, root) && up.index === 0) {
-    for (let p = parentOf(code, root); p && p.slot === "args" && p.index === 1 && consOf(code, p.parent); p = parentOf(code, root)) root = p.parent;
+    for (let p = parentAt(code, root); p && p.slot === "args" && p.index === 1 && consOf(code, p.parent); p = parentAt(code, root)) root = p.parent;
   } else {
     const op = opOf(code, root);
     if (!op) return null;
-    for (let p = parentOf(code, root); p && p.slot === "args" && opOf(code, p.parent) === op; p = parentOf(code, root)) root = p.parent;
+    for (let p = parentAt(code, root); p && p.slot === "args" && opOf(code, p.parent) === op; p = parentAt(code, root)) root = p.parent;
   }
   const row = rowAt(code, root);
   const at = row ? row.items.indexOf(id) : -1;

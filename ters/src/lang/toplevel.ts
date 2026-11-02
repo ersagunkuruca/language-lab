@@ -13,7 +13,7 @@
 // any other edit.
 
 import type { Code, Id, Node, NodeData, NodeOf } from "../model.ts";
-import { children, collect, freshId, ownerOfTypeParts, parentOf, replace, subtree } from "../model.ts";
+import { children, collect, freshId, ownerOfTypeParts, parentAt, parentOf, replace, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 
 export type Top = { ok: true; code: Code; names: Names; select: Id; note: string } | { ok: false; reason: string };
@@ -565,8 +565,9 @@ export function typeHeads(code: Code, type: Id, variant?: Id): { target: Id; ari
 // An action's steps are a chain of lets: do v1, then (b1 bound to its value)
 // do v2, …, then the last step, whose value is the action's. The let of a
 // value: the call that applies a one-input function to it, if it is one.
+// Both read `code` only, so its parent index serves (model.ts parentAt).
 function letOf(code: Code, value: Id): { call: NodeOf<"call">; lam: NodeOf<"lambda"> } | null {
-  const at = parentOf(code, value);
+  const at = parentAt(code, value);
   const call = at?.slot === "args" ? code.nodes[at.parent] : null;
   if (call?.kind !== "call" || call.args.length !== 1) return null;
   const lam = code.nodes[call.fn];
@@ -574,11 +575,12 @@ function letOf(code: Code, value: Id): { call: NodeOf<"call">; lam: NodeOf<"lamb
 }
 // The let whose function's body is `id`: the step before it.
 function letAround(code: Code, id: Id): { call: NodeOf<"call">; lam: NodeOf<"lambda"> } | null {
-  const at = parentOf(code, id);
+  const at = parentAt(code, id);
   const lam = at?.slot === "body" ? code.nodes[at.parent] : null;
   if (lam?.kind !== "lambda" || lam.params.length !== 1) return null;
-  const call = Object.values(code.nodes).find((c): c is NodeOf<"call"> => c.kind === "call" && c.fn === lam.id && c.args.length === 1);
-  return call ? { call, lam } : null;
+  const by = parentAt(code, lam.id);
+  const call = by?.slot === "fn" ? code.nodes[by.parent] : null;
+  return call?.kind === "call" && call.args.length === 1 ? { call, lam } : null;
 }
 const mentions = (code: Code, root: Id, b: Id) => subtree(code, root).some((id) => { const n = code.nodes[id]; return n.kind === "ref" && n.target === b; });
 

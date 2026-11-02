@@ -58,9 +58,11 @@ const moved = Object.entries(oldIds).flatMap(([name, old]) => (newIds[name] && n
 
 // Examples, with the library just written.
 const { adoptLibrary } = await import("../src/lang/library.ts");
-const examples = join(here, "../examples");
-for (const dir of readdirSync(examples)) {
-  const d = join(examples, dir);
+// The examples, and the bigger programs the compiler's gaps rounds wrote
+// (compiler/gaps/board, machine), which are saved programs too.
+const examples = join(here, "../examples"), gaps = join(here, "../../compiler/gaps");
+const programs = [examples, gaps].flatMap((root) => (existsSync(root) ? readdirSync(root).map((dir) => [dir, join(root, dir)] as const) : []));
+for (const [dir, d] of programs) {
   if (!existsSync(join(d, "code.json")) || !existsSync(join(d, "names.default.json"))) continue;
   // Refer to the library's current definitions.
   for (const f of ["code.json", "names.default.json", "comments.json"]) {
