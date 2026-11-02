@@ -95,8 +95,8 @@ menus).
 | Turn around (work out an input from the result), use it forwards | ✓ menu | ✓ menu, or drag the result onto an input | E168 |
 | A list's sockets: add an item, drop onto one | ✓ panel, menu (list items above) | ✓ a socket per item and an empty one after | E166: the sockets are the graph's way of the same edits |
 | A function's result ports (L128) | ✓ panel | ✓ panel | the panel's input/result buttons |
-| Make it a function / a definition, from parts | ✗ | ✓ menu on a node, picked nodes or a group | Blocks has none yet: E208 |
-| Make an inner function a definition | ✗ | ✓ menu on its frame | E208 |
+| Make it a function / a definition, from parts | ✓ menu on a part: it with all it holds | ✓ menu on a node, picked nodes or a group | E208 |
+| Make an inner function a definition | ✓ menu on it | ✓ menu on its frame | E208 |
 | Simplify | ✓ menu | ✓ menu | |
 | Implement an interface | ✓ panel | ✓ panel | a data type's panel, or a missing implementation's error |
 | Answered later (an operation) | ✓ panel | ✓ panel | the operation's panel |
