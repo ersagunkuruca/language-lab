@@ -280,6 +280,27 @@ A map is kept sorted by key in compare's order, so two maps with the same entrie
 - **smallest item** : `(Set a) -[Choice]-> a`. The set's smallest item, in compare's order; no answer when the set is empty, so first(smallest item(s), else d) gives a default. Nearest first in a set of pair(distance, place).
 - **largest item** : `(Set a) -[Choice]-> a`. The set's largest item, in compare's order; no answer when the set is empty.
 
+## Queues
+
+A Queue gives its items back first in, first out; a Priority queue gives back the item with the lowest priority, and of two with one priority the one added first. Both keep their size, and neither walks itself to add or take.
+
+- **Queue** (type). Items in the order they came: queued adds at the back, front of and dequeued take from the front. Its size is kept, so counting doesn't walk it.
+- **empty queue** : `Queue a`. A queue with nothing in it. queued adds at the back, front of and dequeued take from the front: first in, first out.
+- **queue of** : `(List a) -> Queue a`. A queue of the items, the first item at the front.
+- **queued** : `(Queue a, a) -> Queue a`. The queue with the item added at the back. Doesn't walk the queue.
+- **front of** : `(Queue a) -[Choice]-> a`. The item at the front of the queue, the one queued longest ago; no answer when it's empty.
+- **dequeued** : `(Queue a) -[Choice]-> Queue a`. The queue without its front item; no answer when it's empty. Taking every item in turn walks each once.
+- **queue size** : `(Queue a) -> Int`. How many items the queue holds. Kept, not counted.
+- **queue items** : `(Queue a) -> List a`. The queue's items, front first.
+- **Priority queue** (type). Items by priority, lowest first: prioritized adds one, soonest and without soonest take it. Two with one priority leave in the order they were added. A simulation's event list.
+- **empty priority queue** : `Priority queue a b`. A priority queue with nothing in it: prioritized adds an item with a priority, and soonest is the one with the lowest priority (in compare's order), of those the one added first.
+- **priority queue of** : `(List (a, b)) -> Priority queue a b`. A priority queue of (priority, item) pairs, added in the list's order: priority queue of([(2.5, "b"), (1.0, "a")]).
+- **prioritized** : `(Priority queue a b, a, b) -> Priority queue a b`. The queue with the item added at that priority. Two items may share a priority; they leave in the order they were added. A simulation's events: prioritized(events, now + delay, arrival(p)).
+- **soonest** : `(Priority queue a b) -[Choice]-> (a, b)`. The (priority, item) with the lowest priority, the earliest added of those; no answer when the queue is empty.
+- **without soonest** : `(Priority queue a b) -[Choice]-> Priority queue a b`. The queue without its soonest item; no answer when it's empty. first(soonest(q), else …) and without soonest(q) are one simulation step.
+- **priority queue size** : `(Priority queue a b) -> Int`. How many items the priority queue holds.
+- **priority queue items** : `(Priority queue a b) -> List (a, b)`. The queue's (priority, item) pairs, soonest first.
+
 ## Representations
 
 A type can be stored as another type, written as one definition (REPRESENTATIONS.md): what a stored value means, which definitions do the type's jobs, and what each costs. The compiler picks the cheapest for the jobs a program uses; nothing changes where the values are used.

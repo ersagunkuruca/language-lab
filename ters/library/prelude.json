@@ -55927,6 +55927,1778 @@
         ],
         "body": "@h72b2fqdo5ra5oeno1pcuul66t:3"
       },
+      "@ki5k65oi80m0lh9j0d10b2uk9d": {
+        "id": "@ki5k65oi80m0lh9j0d10b2uk9d",
+        "kind": "def",
+        "body": "@ki5k65oi80m0lh9j0d10b2uk9d:1"
+      },
+      "@ki5k65oi80m0lh9j0d10b2uk9d:3": {
+        "id": "@ki5k65oi80m0lh9j0d10b2uk9d:3",
+        "kind": "ref",
+        "target": "std.list.nil"
+      },
+      "@ki5k65oi80m0lh9j0d10b2uk9d:4": {
+        "id": "@ki5k65oi80m0lh9j0d10b2uk9d:4",
+        "kind": "ref",
+        "target": "std.list.nil"
+      },
+      "@ki5k65oi80m0lh9j0d10b2uk9d:5": {
+        "id": "@ki5k65oi80m0lh9j0d10b2uk9d:5",
+        "kind": "lit",
+        "value": 0,
+        "of": "type.int"
+      },
+      "@ki5k65oi80m0lh9j0d10b2uk9d:2": {
+        "id": "@ki5k65oi80m0lh9j0d10b2uk9d:2",
+        "kind": "ref",
+        "target": "std.queue.queue"
+      },
+      "@ki5k65oi80m0lh9j0d10b2uk9d:1": {
+        "id": "@ki5k65oi80m0lh9j0d10b2uk9d:1",
+        "kind": "call",
+        "fn": "@ki5k65oi80m0lh9j0d10b2uk9d:2",
+        "args": [
+          "@ki5k65oi80m0lh9j0d10b2uk9d:3",
+          "@ki5k65oi80m0lh9j0d10b2uk9d:4",
+          "@ki5k65oi80m0lh9j0d10b2uk9d:5"
+        ]
+      },
+      "@ccu259dis3cvq2uonvdnoob93p": {
+        "id": "@ccu259dis3cvq2uonvdnoob93p",
+        "kind": "def",
+        "body": "@ccu259dis3cvq2uonvdnoob93p:1"
+      },
+      "@ccu259dis3cvq2uonvdnoob93p:2": {
+        "id": "@ccu259dis3cvq2uonvdnoob93p:2",
+        "kind": "binder"
+      },
+      "@ccu259dis3cvq2uonvdnoob93p:6": {
+        "id": "@ccu259dis3cvq2uonvdnoob93p:6",
+        "kind": "ref",
+        "target": "std.list.nil"
+      },
+      "@ccu259dis3cvq2uonvdnoob93p:8": {
+        "id": "@ccu259dis3cvq2uonvdnoob93p:8",
+        "kind": "ref",
+        "target": "@ms3a2v8ka09mr0hqvm9t2d4mq4"
+      },
+      "@ccu259dis3cvq2uonvdnoob93p:9": {
+        "id": "@ccu259dis3cvq2uonvdnoob93p:9",
+        "kind": "ref",
+        "target": "@ccu259dis3cvq2uonvdnoob93p:2"
+      },
+      "@ccu259dis3cvq2uonvdnoob93p:7": {
+        "id": "@ccu259dis3cvq2uonvdnoob93p:7",
+        "kind": "call",
+        "fn": "@ccu259dis3cvq2uonvdnoob93p:8",
+        "args": [
+          "@ccu259dis3cvq2uonvdnoob93p:9"
+        ]
+      },
+      "@ccu259dis3cvq2uonvdnoob93p:4": {
+        "id": "@ccu259dis3cvq2uonvdnoob93p:4",
+        "kind": "ref",
+        "target": "std.queue.queue"
+      },
+      "@ccu259dis3cvq2uonvdnoob93p:5": {
+        "id": "@ccu259dis3cvq2uonvdnoob93p:5",
+        "kind": "ref",
+        "target": "@ccu259dis3cvq2uonvdnoob93p:2"
+      },
+      "@ccu259dis3cvq2uonvdnoob93p:3": {
+        "id": "@ccu259dis3cvq2uonvdnoob93p:3",
+        "kind": "call",
+        "fn": "@ccu259dis3cvq2uonvdnoob93p:4",
+        "args": [
+          "@ccu259dis3cvq2uonvdnoob93p:5",
+          "@ccu259dis3cvq2uonvdnoob93p:6",
+          "@ccu259dis3cvq2uonvdnoob93p:7"
+        ]
+      },
+      "@ccu259dis3cvq2uonvdnoob93p:1": {
+        "id": "@ccu259dis3cvq2uonvdnoob93p:1",
+        "kind": "lambda",
+        "params": [
+          "@ccu259dis3cvq2uonvdnoob93p:2"
+        ],
+        "body": "@ccu259dis3cvq2uonvdnoob93p:3"
+      },
+      "@7nl35l5329m8gqls66tqm8qut1": {
+        "id": "@7nl35l5329m8gqls66tqm8qut1",
+        "kind": "def",
+        "body": "@7nl35l5329m8gqls66tqm8qut1:1"
+      },
+      "@7nl35l5329m8gqls66tqm8qut1:2": {
+        "id": "@7nl35l5329m8gqls66tqm8qut1:2",
+        "kind": "binder"
+      },
+      "@7nl35l5329m8gqls66tqm8qut1:3": {
+        "id": "@7nl35l5329m8gqls66tqm8qut1:3",
+        "kind": "binder"
+      },
+      "@7nl35l5329m8gqls66tqm8qut1:5": {
+        "id": "@7nl35l5329m8gqls66tqm8qut1:5",
+        "kind": "ref",
+        "target": "@7nl35l5329m8gqls66tqm8qut1:2"
+      },
+      "@7nl35l5329m8gqls66tqm8qut1:7": {
+        "id": "@7nl35l5329m8gqls66tqm8qut1:7",
+        "kind": "binder"
+      },
+      "@7nl35l5329m8gqls66tqm8qut1:8": {
+        "id": "@7nl35l5329m8gqls66tqm8qut1:8",
+        "kind": "binder"
+      },
+      "@7nl35l5329m8gqls66tqm8qut1:9": {
+        "id": "@7nl35l5329m8gqls66tqm8qut1:9",
+        "kind": "binder"
+      },
+      "@7nl35l5329m8gqls66tqm8qut1:28": {
+        "id": "@7nl35l5329m8gqls66tqm8qut1:28",
+        "kind": "ref",
+        "target": "std.list.cons"
+      },
+      "@7nl35l5329m8gqls66tqm8qut1:29": {
+        "id": "@7nl35l5329m8gqls66tqm8qut1:29",
+        "kind": "ref",
+        "target": "@7nl35l5329m8gqls66tqm8qut1:3"
+      },
+      "@7nl35l5329m8gqls66tqm8qut1:30": {
+        "id": "@7nl35l5329m8gqls66tqm8qut1:30",
+        "kind": "ref",
+        "target": "@7nl35l5329m8gqls66tqm8qut1:8"
+      },
+      "@7nl35l5329m8gqls66tqm8qut1:27": {
+        "id": "@7nl35l5329m8gqls66tqm8qut1:27",
+        "kind": "call",
+        "fn": "@7nl35l5329m8gqls66tqm8qut1:28",
+        "args": [
+          "@7nl35l5329m8gqls66tqm8qut1:29",
+          "@7nl35l5329m8gqls66tqm8qut1:30"
+        ]
+      },
+      "@7nl35l5329m8gqls66tqm8qut1:34": {
+        "id": "@7nl35l5329m8gqls66tqm8qut1:34",
+        "kind": "lit",
+        "value": 1,
+        "of": "type.int"
+      },
+      "@7nl35l5329m8gqls66tqm8qut1:32": {
+        "id": "@7nl35l5329m8gqls66tqm8qut1:32",
+        "kind": "ref",
+        "target": "builtin.int.add"
+      },
+      "@7nl35l5329m8gqls66tqm8qut1:33": {
+        "id": "@7nl35l5329m8gqls66tqm8qut1:33",
+        "kind": "ref",
+        "target": "@7nl35l5329m8gqls66tqm8qut1:9"
+      },
+      "@7nl35l5329m8gqls66tqm8qut1:31": {
+        "id": "@7nl35l5329m8gqls66tqm8qut1:31",
+        "kind": "call",
+        "fn": "@7nl35l5329m8gqls66tqm8qut1:32",
+        "args": [
+          "@7nl35l5329m8gqls66tqm8qut1:33",
+          "@7nl35l5329m8gqls66tqm8qut1:34"
+        ]
+      },
+      "@7nl35l5329m8gqls66tqm8qut1:25": {
+        "id": "@7nl35l5329m8gqls66tqm8qut1:25",
+        "kind": "ref",
+        "target": "std.queue.queue"
+      },
+      "@7nl35l5329m8gqls66tqm8qut1:26": {
+        "id": "@7nl35l5329m8gqls66tqm8qut1:26",
+        "kind": "ref",
+        "target": "@7nl35l5329m8gqls66tqm8qut1:7"
+      },
+      "@7nl35l5329m8gqls66tqm8qut1:24": {
+        "id": "@7nl35l5329m8gqls66tqm8qut1:24",
+        "kind": "call",
+        "fn": "@7nl35l5329m8gqls66tqm8qut1:25",
+        "args": [
+          "@7nl35l5329m8gqls66tqm8qut1:26",
+          "@7nl35l5329m8gqls66tqm8qut1:27",
+          "@7nl35l5329m8gqls66tqm8qut1:31"
+        ]
+      },
+      "@7nl35l5329m8gqls66tqm8qut1:11": {
+        "id": "@7nl35l5329m8gqls66tqm8qut1:11",
+        "kind": "ref",
+        "target": "@7nl35l5329m8gqls66tqm8qut1:7"
+      },
+      "@7nl35l5329m8gqls66tqm8qut1:18": {
+        "id": "@7nl35l5329m8gqls66tqm8qut1:18",
+        "kind": "ref",
+        "target": "std.list.nil"
+      },
+      "@7nl35l5329m8gqls66tqm8qut1:16": {
+        "id": "@7nl35l5329m8gqls66tqm8qut1:16",
+        "kind": "ref",
+        "target": "std.list.cons"
+      },
+      "@7nl35l5329m8gqls66tqm8qut1:17": {
+        "id": "@7nl35l5329m8gqls66tqm8qut1:17",
+        "kind": "ref",
+        "target": "@7nl35l5329m8gqls66tqm8qut1:3"
+      },
+      "@7nl35l5329m8gqls66tqm8qut1:15": {
+        "id": "@7nl35l5329m8gqls66tqm8qut1:15",
+        "kind": "call",
+        "fn": "@7nl35l5329m8gqls66tqm8qut1:16",
+        "args": [
+          "@7nl35l5329m8gqls66tqm8qut1:17",
+          "@7nl35l5329m8gqls66tqm8qut1:18"
+        ]
+      },
+      "@7nl35l5329m8gqls66tqm8qut1:23": {
+        "id": "@7nl35l5329m8gqls66tqm8qut1:23",
+        "kind": "lit",
+        "value": 1,
+        "of": "type.int"
+      },
+      "@7nl35l5329m8gqls66tqm8qut1:21": {
+        "id": "@7nl35l5329m8gqls66tqm8qut1:21",
+        "kind": "ref",
+        "target": "builtin.int.add"
+      },
+      "@7nl35l5329m8gqls66tqm8qut1:22": {
+        "id": "@7nl35l5329m8gqls66tqm8qut1:22",
+        "kind": "ref",
+        "target": "@7nl35l5329m8gqls66tqm8qut1:9"
+      },
+      "@7nl35l5329m8gqls66tqm8qut1:20": {
+        "id": "@7nl35l5329m8gqls66tqm8qut1:20",
+        "kind": "call",
+        "fn": "@7nl35l5329m8gqls66tqm8qut1:21",
+        "args": [
+          "@7nl35l5329m8gqls66tqm8qut1:22",
+          "@7nl35l5329m8gqls66tqm8qut1:23"
+        ]
+      },
+      "@7nl35l5329m8gqls66tqm8qut1:14": {
+        "id": "@7nl35l5329m8gqls66tqm8qut1:14",
+        "kind": "ref",
+        "target": "std.queue.queue"
+      },
+      "@7nl35l5329m8gqls66tqm8qut1:19": {
+        "id": "@7nl35l5329m8gqls66tqm8qut1:19",
+        "kind": "ref",
+        "target": "@7nl35l5329m8gqls66tqm8qut1:8"
+      },
+      "@7nl35l5329m8gqls66tqm8qut1:13": {
+        "id": "@7nl35l5329m8gqls66tqm8qut1:13",
+        "kind": "call",
+        "fn": "@7nl35l5329m8gqls66tqm8qut1:14",
+        "args": [
+          "@7nl35l5329m8gqls66tqm8qut1:15",
+          "@7nl35l5329m8gqls66tqm8qut1:19",
+          "@7nl35l5329m8gqls66tqm8qut1:20"
+        ]
+      },
+      "@7nl35l5329m8gqls66tqm8qut1:12": {
+        "id": "@7nl35l5329m8gqls66tqm8qut1:12",
+        "kind": "arm",
+        "variant": "std.list.nil",
+        "binds": [],
+        "results": [],
+        "body": "@7nl35l5329m8gqls66tqm8qut1:13"
+      },
+      "@7nl35l5329m8gqls66tqm8qut1:10": {
+        "id": "@7nl35l5329m8gqls66tqm8qut1:10",
+        "kind": "match",
+        "scrutinee": "@7nl35l5329m8gqls66tqm8qut1:11",
+        "arms": [
+          "@7nl35l5329m8gqls66tqm8qut1:12"
+        ],
+        "otherwise": "@7nl35l5329m8gqls66tqm8qut1:24"
+      },
+      "@7nl35l5329m8gqls66tqm8qut1:6": {
+        "id": "@7nl35l5329m8gqls66tqm8qut1:6",
+        "kind": "arm",
+        "variant": "std.queue.queue",
+        "binds": [
+          "@7nl35l5329m8gqls66tqm8qut1:7",
+          "@7nl35l5329m8gqls66tqm8qut1:8",
+          "@7nl35l5329m8gqls66tqm8qut1:9"
+        ],
+        "results": [
+          null,
+          null,
+          null
+        ],
+        "body": "@7nl35l5329m8gqls66tqm8qut1:10"
+      },
+      "@7nl35l5329m8gqls66tqm8qut1:4": {
+        "id": "@7nl35l5329m8gqls66tqm8qut1:4",
+        "kind": "match",
+        "scrutinee": "@7nl35l5329m8gqls66tqm8qut1:5",
+        "arms": [
+          "@7nl35l5329m8gqls66tqm8qut1:6"
+        ],
+        "otherwise": null
+      },
+      "@7nl35l5329m8gqls66tqm8qut1:1": {
+        "id": "@7nl35l5329m8gqls66tqm8qut1:1",
+        "kind": "lambda",
+        "params": [
+          "@7nl35l5329m8gqls66tqm8qut1:2",
+          "@7nl35l5329m8gqls66tqm8qut1:3"
+        ],
+        "body": "@7nl35l5329m8gqls66tqm8qut1:4"
+      },
+      "@8lpgr92pv0n9i3ik4hrjfq64sr": {
+        "id": "@8lpgr92pv0n9i3ik4hrjfq64sr",
+        "kind": "def",
+        "body": "@8lpgr92pv0n9i3ik4hrjfq64sr:1"
+      },
+      "@8lpgr92pv0n9i3ik4hrjfq64sr:2": {
+        "id": "@8lpgr92pv0n9i3ik4hrjfq64sr:2",
+        "kind": "binder"
+      },
+      "@8lpgr92pv0n9i3ik4hrjfq64sr:4": {
+        "id": "@8lpgr92pv0n9i3ik4hrjfq64sr:4",
+        "kind": "ref",
+        "target": "@8lpgr92pv0n9i3ik4hrjfq64sr:2"
+      },
+      "@8lpgr92pv0n9i3ik4hrjfq64sr:6": {
+        "id": "@8lpgr92pv0n9i3ik4hrjfq64sr:6",
+        "kind": "binder"
+      },
+      "@8lpgr92pv0n9i3ik4hrjfq64sr:7": {
+        "id": "@8lpgr92pv0n9i3ik4hrjfq64sr:7",
+        "kind": "binder"
+      },
+      "@8lpgr92pv0n9i3ik4hrjfq64sr:8": {
+        "id": "@8lpgr92pv0n9i3ik4hrjfq64sr:8",
+        "kind": "binder"
+      },
+      "@8lpgr92pv0n9i3ik4hrjfq64sr:10": {
+        "id": "@8lpgr92pv0n9i3ik4hrjfq64sr:10",
+        "kind": "ref",
+        "target": "@8lpgr92pv0n9i3ik4hrjfq64sr:6"
+      },
+      "@8lpgr92pv0n9i3ik4hrjfq64sr:13": {
+        "id": "@8lpgr92pv0n9i3ik4hrjfq64sr:13",
+        "kind": "ref",
+        "target": "builtin.fail"
+      },
+      "@8lpgr92pv0n9i3ik4hrjfq64sr:12": {
+        "id": "@8lpgr92pv0n9i3ik4hrjfq64sr:12",
+        "kind": "call",
+        "fn": "@8lpgr92pv0n9i3ik4hrjfq64sr:13",
+        "args": []
+      },
+      "@8lpgr92pv0n9i3ik4hrjfq64sr:11": {
+        "id": "@8lpgr92pv0n9i3ik4hrjfq64sr:11",
+        "kind": "arm",
+        "variant": "std.list.nil",
+        "binds": [],
+        "results": [],
+        "body": "@8lpgr92pv0n9i3ik4hrjfq64sr:12"
+      },
+      "@8lpgr92pv0n9i3ik4hrjfq64sr:15": {
+        "id": "@8lpgr92pv0n9i3ik4hrjfq64sr:15",
+        "kind": "binder"
+      },
+      "@8lpgr92pv0n9i3ik4hrjfq64sr:16": {
+        "id": "@8lpgr92pv0n9i3ik4hrjfq64sr:16",
+        "kind": "binder"
+      },
+      "@8lpgr92pv0n9i3ik4hrjfq64sr:17": {
+        "id": "@8lpgr92pv0n9i3ik4hrjfq64sr:17",
+        "kind": "ref",
+        "target": "@8lpgr92pv0n9i3ik4hrjfq64sr:15"
+      },
+      "@8lpgr92pv0n9i3ik4hrjfq64sr:14": {
+        "id": "@8lpgr92pv0n9i3ik4hrjfq64sr:14",
+        "kind": "arm",
+        "variant": "std.list.cons",
+        "binds": [
+          "@8lpgr92pv0n9i3ik4hrjfq64sr:15",
+          "@8lpgr92pv0n9i3ik4hrjfq64sr:16"
+        ],
+        "results": [
+          null,
+          null
+        ],
+        "body": "@8lpgr92pv0n9i3ik4hrjfq64sr:17"
+      },
+      "@8lpgr92pv0n9i3ik4hrjfq64sr:9": {
+        "id": "@8lpgr92pv0n9i3ik4hrjfq64sr:9",
+        "kind": "match",
+        "scrutinee": "@8lpgr92pv0n9i3ik4hrjfq64sr:10",
+        "arms": [
+          "@8lpgr92pv0n9i3ik4hrjfq64sr:11",
+          "@8lpgr92pv0n9i3ik4hrjfq64sr:14"
+        ],
+        "otherwise": null
+      },
+      "@8lpgr92pv0n9i3ik4hrjfq64sr:5": {
+        "id": "@8lpgr92pv0n9i3ik4hrjfq64sr:5",
+        "kind": "arm",
+        "variant": "std.queue.queue",
+        "binds": [
+          "@8lpgr92pv0n9i3ik4hrjfq64sr:6",
+          "@8lpgr92pv0n9i3ik4hrjfq64sr:7",
+          "@8lpgr92pv0n9i3ik4hrjfq64sr:8"
+        ],
+        "results": [
+          null,
+          null,
+          null
+        ],
+        "body": "@8lpgr92pv0n9i3ik4hrjfq64sr:9"
+      },
+      "@8lpgr92pv0n9i3ik4hrjfq64sr:3": {
+        "id": "@8lpgr92pv0n9i3ik4hrjfq64sr:3",
+        "kind": "match",
+        "scrutinee": "@8lpgr92pv0n9i3ik4hrjfq64sr:4",
+        "arms": [
+          "@8lpgr92pv0n9i3ik4hrjfq64sr:5"
+        ],
+        "otherwise": null
+      },
+      "@8lpgr92pv0n9i3ik4hrjfq64sr:1": {
+        "id": "@8lpgr92pv0n9i3ik4hrjfq64sr:1",
+        "kind": "lambda",
+        "params": [
+          "@8lpgr92pv0n9i3ik4hrjfq64sr:2"
+        ],
+        "body": "@8lpgr92pv0n9i3ik4hrjfq64sr:3"
+      },
+      "@n0uditb2rl2ce9s4g913ulsmra": {
+        "id": "@n0uditb2rl2ce9s4g913ulsmra",
+        "kind": "def",
+        "body": "@n0uditb2rl2ce9s4g913ulsmra:1"
+      },
+      "@n0uditb2rl2ce9s4g913ulsmra:2": {
+        "id": "@n0uditb2rl2ce9s4g913ulsmra:2",
+        "kind": "binder"
+      },
+      "@n0uditb2rl2ce9s4g913ulsmra:4": {
+        "id": "@n0uditb2rl2ce9s4g913ulsmra:4",
+        "kind": "ref",
+        "target": "@n0uditb2rl2ce9s4g913ulsmra:2"
+      },
+      "@n0uditb2rl2ce9s4g913ulsmra:6": {
+        "id": "@n0uditb2rl2ce9s4g913ulsmra:6",
+        "kind": "binder"
+      },
+      "@n0uditb2rl2ce9s4g913ulsmra:7": {
+        "id": "@n0uditb2rl2ce9s4g913ulsmra:7",
+        "kind": "binder"
+      },
+      "@n0uditb2rl2ce9s4g913ulsmra:8": {
+        "id": "@n0uditb2rl2ce9s4g913ulsmra:8",
+        "kind": "binder"
+      },
+      "@n0uditb2rl2ce9s4g913ulsmra:10": {
+        "id": "@n0uditb2rl2ce9s4g913ulsmra:10",
+        "kind": "ref",
+        "target": "@n0uditb2rl2ce9s4g913ulsmra:6"
+      },
+      "@n0uditb2rl2ce9s4g913ulsmra:13": {
+        "id": "@n0uditb2rl2ce9s4g913ulsmra:13",
+        "kind": "ref",
+        "target": "builtin.fail"
+      },
+      "@n0uditb2rl2ce9s4g913ulsmra:12": {
+        "id": "@n0uditb2rl2ce9s4g913ulsmra:12",
+        "kind": "call",
+        "fn": "@n0uditb2rl2ce9s4g913ulsmra:13",
+        "args": []
+      },
+      "@n0uditb2rl2ce9s4g913ulsmra:11": {
+        "id": "@n0uditb2rl2ce9s4g913ulsmra:11",
+        "kind": "arm",
+        "variant": "std.list.nil",
+        "binds": [],
+        "results": [],
+        "body": "@n0uditb2rl2ce9s4g913ulsmra:12"
+      },
+      "@n0uditb2rl2ce9s4g913ulsmra:15": {
+        "id": "@n0uditb2rl2ce9s4g913ulsmra:15",
+        "kind": "binder"
+      },
+      "@n0uditb2rl2ce9s4g913ulsmra:16": {
+        "id": "@n0uditb2rl2ce9s4g913ulsmra:16",
+        "kind": "binder"
+      },
+      "@n0uditb2rl2ce9s4g913ulsmra:37": {
+        "id": "@n0uditb2rl2ce9s4g913ulsmra:37",
+        "kind": "lit",
+        "value": 1,
+        "of": "type.int"
+      },
+      "@n0uditb2rl2ce9s4g913ulsmra:35": {
+        "id": "@n0uditb2rl2ce9s4g913ulsmra:35",
+        "kind": "ref",
+        "target": "builtin.int.sub"
+      },
+      "@n0uditb2rl2ce9s4g913ulsmra:36": {
+        "id": "@n0uditb2rl2ce9s4g913ulsmra:36",
+        "kind": "ref",
+        "target": "@n0uditb2rl2ce9s4g913ulsmra:8"
+      },
+      "@n0uditb2rl2ce9s4g913ulsmra:34": {
+        "id": "@n0uditb2rl2ce9s4g913ulsmra:34",
+        "kind": "call",
+        "fn": "@n0uditb2rl2ce9s4g913ulsmra:35",
+        "args": [
+          "@n0uditb2rl2ce9s4g913ulsmra:36",
+          "@n0uditb2rl2ce9s4g913ulsmra:37"
+        ]
+      },
+      "@n0uditb2rl2ce9s4g913ulsmra:31": {
+        "id": "@n0uditb2rl2ce9s4g913ulsmra:31",
+        "kind": "ref",
+        "target": "std.queue.queue"
+      },
+      "@n0uditb2rl2ce9s4g913ulsmra:32": {
+        "id": "@n0uditb2rl2ce9s4g913ulsmra:32",
+        "kind": "ref",
+        "target": "@n0uditb2rl2ce9s4g913ulsmra:16"
+      },
+      "@n0uditb2rl2ce9s4g913ulsmra:33": {
+        "id": "@n0uditb2rl2ce9s4g913ulsmra:33",
+        "kind": "ref",
+        "target": "@n0uditb2rl2ce9s4g913ulsmra:7"
+      },
+      "@n0uditb2rl2ce9s4g913ulsmra:30": {
+        "id": "@n0uditb2rl2ce9s4g913ulsmra:30",
+        "kind": "call",
+        "fn": "@n0uditb2rl2ce9s4g913ulsmra:31",
+        "args": [
+          "@n0uditb2rl2ce9s4g913ulsmra:32",
+          "@n0uditb2rl2ce9s4g913ulsmra:33",
+          "@n0uditb2rl2ce9s4g913ulsmra:34"
+        ]
+      },
+      "@n0uditb2rl2ce9s4g913ulsmra:18": {
+        "id": "@n0uditb2rl2ce9s4g913ulsmra:18",
+        "kind": "ref",
+        "target": "@n0uditb2rl2ce9s4g913ulsmra:16"
+      },
+      "@n0uditb2rl2ce9s4g913ulsmra:23": {
+        "id": "@n0uditb2rl2ce9s4g913ulsmra:23",
+        "kind": "ref",
+        "target": "@egedg16di7hp3kq2u7ghqi8dbd"
+      },
+      "@n0uditb2rl2ce9s4g913ulsmra:24": {
+        "id": "@n0uditb2rl2ce9s4g913ulsmra:24",
+        "kind": "ref",
+        "target": "@n0uditb2rl2ce9s4g913ulsmra:7"
+      },
+      "@n0uditb2rl2ce9s4g913ulsmra:22": {
+        "id": "@n0uditb2rl2ce9s4g913ulsmra:22",
+        "kind": "call",
+        "fn": "@n0uditb2rl2ce9s4g913ulsmra:23",
+        "args": [
+          "@n0uditb2rl2ce9s4g913ulsmra:24"
+        ]
+      },
+      "@n0uditb2rl2ce9s4g913ulsmra:25": {
+        "id": "@n0uditb2rl2ce9s4g913ulsmra:25",
+        "kind": "ref",
+        "target": "std.list.nil"
+      },
+      "@n0uditb2rl2ce9s4g913ulsmra:29": {
+        "id": "@n0uditb2rl2ce9s4g913ulsmra:29",
+        "kind": "lit",
+        "value": 1,
+        "of": "type.int"
+      },
+      "@n0uditb2rl2ce9s4g913ulsmra:27": {
+        "id": "@n0uditb2rl2ce9s4g913ulsmra:27",
+        "kind": "ref",
+        "target": "builtin.int.sub"
+      },
+      "@n0uditb2rl2ce9s4g913ulsmra:28": {
+        "id": "@n0uditb2rl2ce9s4g913ulsmra:28",
+        "kind": "ref",
+        "target": "@n0uditb2rl2ce9s4g913ulsmra:8"
+      },
+      "@n0uditb2rl2ce9s4g913ulsmra:26": {
+        "id": "@n0uditb2rl2ce9s4g913ulsmra:26",
+        "kind": "call",
+        "fn": "@n0uditb2rl2ce9s4g913ulsmra:27",
+        "args": [
+          "@n0uditb2rl2ce9s4g913ulsmra:28",
+          "@n0uditb2rl2ce9s4g913ulsmra:29"
+        ]
+      },
+      "@n0uditb2rl2ce9s4g913ulsmra:21": {
+        "id": "@n0uditb2rl2ce9s4g913ulsmra:21",
+        "kind": "ref",
+        "target": "std.queue.queue"
+      },
+      "@n0uditb2rl2ce9s4g913ulsmra:20": {
+        "id": "@n0uditb2rl2ce9s4g913ulsmra:20",
+        "kind": "call",
+        "fn": "@n0uditb2rl2ce9s4g913ulsmra:21",
+        "args": [
+          "@n0uditb2rl2ce9s4g913ulsmra:22",
+          "@n0uditb2rl2ce9s4g913ulsmra:25",
+          "@n0uditb2rl2ce9s4g913ulsmra:26"
+        ]
+      },
+      "@n0uditb2rl2ce9s4g913ulsmra:19": {
+        "id": "@n0uditb2rl2ce9s4g913ulsmra:19",
+        "kind": "arm",
+        "variant": "std.list.nil",
+        "binds": [],
+        "results": [],
+        "body": "@n0uditb2rl2ce9s4g913ulsmra:20"
+      },
+      "@n0uditb2rl2ce9s4g913ulsmra:17": {
+        "id": "@n0uditb2rl2ce9s4g913ulsmra:17",
+        "kind": "match",
+        "scrutinee": "@n0uditb2rl2ce9s4g913ulsmra:18",
+        "arms": [
+          "@n0uditb2rl2ce9s4g913ulsmra:19"
+        ],
+        "otherwise": "@n0uditb2rl2ce9s4g913ulsmra:30"
+      },
+      "@n0uditb2rl2ce9s4g913ulsmra:14": {
+        "id": "@n0uditb2rl2ce9s4g913ulsmra:14",
+        "kind": "arm",
+        "variant": "std.list.cons",
+        "binds": [
+          "@n0uditb2rl2ce9s4g913ulsmra:15",
+          "@n0uditb2rl2ce9s4g913ulsmra:16"
+        ],
+        "results": [
+          null,
+          null
+        ],
+        "body": "@n0uditb2rl2ce9s4g913ulsmra:17"
+      },
+      "@n0uditb2rl2ce9s4g913ulsmra:9": {
+        "id": "@n0uditb2rl2ce9s4g913ulsmra:9",
+        "kind": "match",
+        "scrutinee": "@n0uditb2rl2ce9s4g913ulsmra:10",
+        "arms": [
+          "@n0uditb2rl2ce9s4g913ulsmra:11",
+          "@n0uditb2rl2ce9s4g913ulsmra:14"
+        ],
+        "otherwise": null
+      },
+      "@n0uditb2rl2ce9s4g913ulsmra:5": {
+        "id": "@n0uditb2rl2ce9s4g913ulsmra:5",
+        "kind": "arm",
+        "variant": "std.queue.queue",
+        "binds": [
+          "@n0uditb2rl2ce9s4g913ulsmra:6",
+          "@n0uditb2rl2ce9s4g913ulsmra:7",
+          "@n0uditb2rl2ce9s4g913ulsmra:8"
+        ],
+        "results": [
+          null,
+          null,
+          null
+        ],
+        "body": "@n0uditb2rl2ce9s4g913ulsmra:9"
+      },
+      "@n0uditb2rl2ce9s4g913ulsmra:3": {
+        "id": "@n0uditb2rl2ce9s4g913ulsmra:3",
+        "kind": "match",
+        "scrutinee": "@n0uditb2rl2ce9s4g913ulsmra:4",
+        "arms": [
+          "@n0uditb2rl2ce9s4g913ulsmra:5"
+        ],
+        "otherwise": null
+      },
+      "@n0uditb2rl2ce9s4g913ulsmra:1": {
+        "id": "@n0uditb2rl2ce9s4g913ulsmra:1",
+        "kind": "lambda",
+        "params": [
+          "@n0uditb2rl2ce9s4g913ulsmra:2"
+        ],
+        "body": "@n0uditb2rl2ce9s4g913ulsmra:3"
+      },
+      "@hagd0tqqrriqvfstn38oc8dodb": {
+        "id": "@hagd0tqqrriqvfstn38oc8dodb",
+        "kind": "def",
+        "body": "@hagd0tqqrriqvfstn38oc8dodb:1"
+      },
+      "@hagd0tqqrriqvfstn38oc8dodb:2": {
+        "id": "@hagd0tqqrriqvfstn38oc8dodb:2",
+        "kind": "binder"
+      },
+      "@hagd0tqqrriqvfstn38oc8dodb:4": {
+        "id": "@hagd0tqqrriqvfstn38oc8dodb:4",
+        "kind": "ref",
+        "target": "@hagd0tqqrriqvfstn38oc8dodb:2"
+      },
+      "@hagd0tqqrriqvfstn38oc8dodb:6": {
+        "id": "@hagd0tqqrriqvfstn38oc8dodb:6",
+        "kind": "binder"
+      },
+      "@hagd0tqqrriqvfstn38oc8dodb:7": {
+        "id": "@hagd0tqqrriqvfstn38oc8dodb:7",
+        "kind": "binder"
+      },
+      "@hagd0tqqrriqvfstn38oc8dodb:8": {
+        "id": "@hagd0tqqrriqvfstn38oc8dodb:8",
+        "kind": "binder"
+      },
+      "@hagd0tqqrriqvfstn38oc8dodb:9": {
+        "id": "@hagd0tqqrriqvfstn38oc8dodb:9",
+        "kind": "ref",
+        "target": "@hagd0tqqrriqvfstn38oc8dodb:8"
+      },
+      "@hagd0tqqrriqvfstn38oc8dodb:5": {
+        "id": "@hagd0tqqrriqvfstn38oc8dodb:5",
+        "kind": "arm",
+        "variant": "std.queue.queue",
+        "binds": [
+          "@hagd0tqqrriqvfstn38oc8dodb:6",
+          "@hagd0tqqrriqvfstn38oc8dodb:7",
+          "@hagd0tqqrriqvfstn38oc8dodb:8"
+        ],
+        "results": [
+          null,
+          null,
+          null
+        ],
+        "body": "@hagd0tqqrriqvfstn38oc8dodb:9"
+      },
+      "@hagd0tqqrriqvfstn38oc8dodb:3": {
+        "id": "@hagd0tqqrriqvfstn38oc8dodb:3",
+        "kind": "match",
+        "scrutinee": "@hagd0tqqrriqvfstn38oc8dodb:4",
+        "arms": [
+          "@hagd0tqqrriqvfstn38oc8dodb:5"
+        ],
+        "otherwise": null
+      },
+      "@hagd0tqqrriqvfstn38oc8dodb:1": {
+        "id": "@hagd0tqqrriqvfstn38oc8dodb:1",
+        "kind": "lambda",
+        "params": [
+          "@hagd0tqqrriqvfstn38oc8dodb:2"
+        ],
+        "body": "@hagd0tqqrriqvfstn38oc8dodb:3"
+      },
+      "@vb6bhftebhjc2hnr81rookqric": {
+        "id": "@vb6bhftebhjc2hnr81rookqric",
+        "kind": "def",
+        "body": "@vb6bhftebhjc2hnr81rookqric:1"
+      },
+      "@vb6bhftebhjc2hnr81rookqric:2": {
+        "id": "@vb6bhftebhjc2hnr81rookqric:2",
+        "kind": "binder"
+      },
+      "@vb6bhftebhjc2hnr81rookqric:4": {
+        "id": "@vb6bhftebhjc2hnr81rookqric:4",
+        "kind": "ref",
+        "target": "@vb6bhftebhjc2hnr81rookqric:2"
+      },
+      "@vb6bhftebhjc2hnr81rookqric:6": {
+        "id": "@vb6bhftebhjc2hnr81rookqric:6",
+        "kind": "binder"
+      },
+      "@vb6bhftebhjc2hnr81rookqric:7": {
+        "id": "@vb6bhftebhjc2hnr81rookqric:7",
+        "kind": "binder"
+      },
+      "@vb6bhftebhjc2hnr81rookqric:8": {
+        "id": "@vb6bhftebhjc2hnr81rookqric:8",
+        "kind": "binder"
+      },
+      "@vb6bhftebhjc2hnr81rookqric:13": {
+        "id": "@vb6bhftebhjc2hnr81rookqric:13",
+        "kind": "ref",
+        "target": "@egedg16di7hp3kq2u7ghqi8dbd"
+      },
+      "@vb6bhftebhjc2hnr81rookqric:14": {
+        "id": "@vb6bhftebhjc2hnr81rookqric:14",
+        "kind": "ref",
+        "target": "@vb6bhftebhjc2hnr81rookqric:7"
+      },
+      "@vb6bhftebhjc2hnr81rookqric:12": {
+        "id": "@vb6bhftebhjc2hnr81rookqric:12",
+        "kind": "call",
+        "fn": "@vb6bhftebhjc2hnr81rookqric:13",
+        "args": [
+          "@vb6bhftebhjc2hnr81rookqric:14"
+        ]
+      },
+      "@vb6bhftebhjc2hnr81rookqric:10": {
+        "id": "@vb6bhftebhjc2hnr81rookqric:10",
+        "kind": "ref",
+        "target": "@c9sa21p6t34r9bf9cjcm8h2101"
+      },
+      "@vb6bhftebhjc2hnr81rookqric:11": {
+        "id": "@vb6bhftebhjc2hnr81rookqric:11",
+        "kind": "ref",
+        "target": "@vb6bhftebhjc2hnr81rookqric:6"
+      },
+      "@vb6bhftebhjc2hnr81rookqric:9": {
+        "id": "@vb6bhftebhjc2hnr81rookqric:9",
+        "kind": "call",
+        "fn": "@vb6bhftebhjc2hnr81rookqric:10",
+        "args": [
+          "@vb6bhftebhjc2hnr81rookqric:11",
+          "@vb6bhftebhjc2hnr81rookqric:12"
+        ]
+      },
+      "@vb6bhftebhjc2hnr81rookqric:5": {
+        "id": "@vb6bhftebhjc2hnr81rookqric:5",
+        "kind": "arm",
+        "variant": "std.queue.queue",
+        "binds": [
+          "@vb6bhftebhjc2hnr81rookqric:6",
+          "@vb6bhftebhjc2hnr81rookqric:7",
+          "@vb6bhftebhjc2hnr81rookqric:8"
+        ],
+        "results": [
+          null,
+          null,
+          null
+        ],
+        "body": "@vb6bhftebhjc2hnr81rookqric:9"
+      },
+      "@vb6bhftebhjc2hnr81rookqric:3": {
+        "id": "@vb6bhftebhjc2hnr81rookqric:3",
+        "kind": "match",
+        "scrutinee": "@vb6bhftebhjc2hnr81rookqric:4",
+        "arms": [
+          "@vb6bhftebhjc2hnr81rookqric:5"
+        ],
+        "otherwise": null
+      },
+      "@vb6bhftebhjc2hnr81rookqric:1": {
+        "id": "@vb6bhftebhjc2hnr81rookqric:1",
+        "kind": "lambda",
+        "params": [
+          "@vb6bhftebhjc2hnr81rookqric:2"
+        ],
+        "body": "@vb6bhftebhjc2hnr81rookqric:3"
+      },
+      "@4eqli2dghdh31njbspln09cq5i": {
+        "id": "@4eqli2dghdh31njbspln09cq5i",
+        "kind": "def",
+        "body": "@4eqli2dghdh31njbspln09cq5i:1"
+      },
+      "@4eqli2dghdh31njbspln09cq5i:3": {
+        "id": "@4eqli2dghdh31njbspln09cq5i:3",
+        "kind": "ref",
+        "target": "@jut822gbd6adhel7t395btc7gg"
+      },
+      "@4eqli2dghdh31njbspln09cq5i:4": {
+        "id": "@4eqli2dghdh31njbspln09cq5i:4",
+        "kind": "lit",
+        "value": 0,
+        "of": "type.int"
+      },
+      "@4eqli2dghdh31njbspln09cq5i:2": {
+        "id": "@4eqli2dghdh31njbspln09cq5i:2",
+        "kind": "ref",
+        "target": "std.priority queue.priority queue"
+      },
+      "@4eqli2dghdh31njbspln09cq5i:1": {
+        "id": "@4eqli2dghdh31njbspln09cq5i:1",
+        "kind": "call",
+        "fn": "@4eqli2dghdh31njbspln09cq5i:2",
+        "args": [
+          "@4eqli2dghdh31njbspln09cq5i:3",
+          "@4eqli2dghdh31njbspln09cq5i:4"
+        ]
+      },
+      "@o4m270qrjm8j54f1dt76k5qds4": {
+        "id": "@o4m270qrjm8j54f1dt76k5qds4",
+        "kind": "def",
+        "body": "@o4m270qrjm8j54f1dt76k5qds4:1"
+      },
+      "@o4m270qrjm8j54f1dt76k5qds4:2": {
+        "id": "@o4m270qrjm8j54f1dt76k5qds4:2",
+        "kind": "binder"
+      },
+      "@o4m270qrjm8j54f1dt76k5qds4:3": {
+        "id": "@o4m270qrjm8j54f1dt76k5qds4:3",
+        "kind": "binder"
+      },
+      "@o4m270qrjm8j54f1dt76k5qds4:4": {
+        "id": "@o4m270qrjm8j54f1dt76k5qds4:4",
+        "kind": "binder"
+      },
+      "@o4m270qrjm8j54f1dt76k5qds4:6": {
+        "id": "@o4m270qrjm8j54f1dt76k5qds4:6",
+        "kind": "ref",
+        "target": "@o4m270qrjm8j54f1dt76k5qds4:2"
+      },
+      "@o4m270qrjm8j54f1dt76k5qds4:8": {
+        "id": "@o4m270qrjm8j54f1dt76k5qds4:8",
+        "kind": "binder"
+      },
+      "@o4m270qrjm8j54f1dt76k5qds4:9": {
+        "id": "@o4m270qrjm8j54f1dt76k5qds4:9",
+        "kind": "binder"
+      },
+      "@o4m270qrjm8j54f1dt76k5qds4:16": {
+        "id": "@o4m270qrjm8j54f1dt76k5qds4:16",
+        "kind": "ref",
+        "target": "std.tuple2.tuple"
+      },
+      "@o4m270qrjm8j54f1dt76k5qds4:17": {
+        "id": "@o4m270qrjm8j54f1dt76k5qds4:17",
+        "kind": "ref",
+        "target": "@o4m270qrjm8j54f1dt76k5qds4:3"
+      },
+      "@o4m270qrjm8j54f1dt76k5qds4:18": {
+        "id": "@o4m270qrjm8j54f1dt76k5qds4:18",
+        "kind": "ref",
+        "target": "@o4m270qrjm8j54f1dt76k5qds4:9"
+      },
+      "@o4m270qrjm8j54f1dt76k5qds4:15": {
+        "id": "@o4m270qrjm8j54f1dt76k5qds4:15",
+        "kind": "call",
+        "fn": "@o4m270qrjm8j54f1dt76k5qds4:16",
+        "args": [
+          "@o4m270qrjm8j54f1dt76k5qds4:17",
+          "@o4m270qrjm8j54f1dt76k5qds4:18"
+        ]
+      },
+      "@o4m270qrjm8j54f1dt76k5qds4:13": {
+        "id": "@o4m270qrjm8j54f1dt76k5qds4:13",
+        "kind": "ref",
+        "target": "@782qjjjo7tbtj3e02a50v5n2q6"
+      },
+      "@o4m270qrjm8j54f1dt76k5qds4:14": {
+        "id": "@o4m270qrjm8j54f1dt76k5qds4:14",
+        "kind": "ref",
+        "target": "@o4m270qrjm8j54f1dt76k5qds4:8"
+      },
+      "@o4m270qrjm8j54f1dt76k5qds4:19": {
+        "id": "@o4m270qrjm8j54f1dt76k5qds4:19",
+        "kind": "ref",
+        "target": "@o4m270qrjm8j54f1dt76k5qds4:4"
+      },
+      "@o4m270qrjm8j54f1dt76k5qds4:12": {
+        "id": "@o4m270qrjm8j54f1dt76k5qds4:12",
+        "kind": "call",
+        "fn": "@o4m270qrjm8j54f1dt76k5qds4:13",
+        "args": [
+          "@o4m270qrjm8j54f1dt76k5qds4:14",
+          "@o4m270qrjm8j54f1dt76k5qds4:15",
+          "@o4m270qrjm8j54f1dt76k5qds4:19"
+        ]
+      },
+      "@o4m270qrjm8j54f1dt76k5qds4:23": {
+        "id": "@o4m270qrjm8j54f1dt76k5qds4:23",
+        "kind": "lit",
+        "value": 1,
+        "of": "type.int"
+      },
+      "@o4m270qrjm8j54f1dt76k5qds4:21": {
+        "id": "@o4m270qrjm8j54f1dt76k5qds4:21",
+        "kind": "ref",
+        "target": "builtin.int.add"
+      },
+      "@o4m270qrjm8j54f1dt76k5qds4:22": {
+        "id": "@o4m270qrjm8j54f1dt76k5qds4:22",
+        "kind": "ref",
+        "target": "@o4m270qrjm8j54f1dt76k5qds4:9"
+      },
+      "@o4m270qrjm8j54f1dt76k5qds4:20": {
+        "id": "@o4m270qrjm8j54f1dt76k5qds4:20",
+        "kind": "call",
+        "fn": "@o4m270qrjm8j54f1dt76k5qds4:21",
+        "args": [
+          "@o4m270qrjm8j54f1dt76k5qds4:22",
+          "@o4m270qrjm8j54f1dt76k5qds4:23"
+        ]
+      },
+      "@o4m270qrjm8j54f1dt76k5qds4:11": {
+        "id": "@o4m270qrjm8j54f1dt76k5qds4:11",
+        "kind": "ref",
+        "target": "std.priority queue.priority queue"
+      },
+      "@o4m270qrjm8j54f1dt76k5qds4:10": {
+        "id": "@o4m270qrjm8j54f1dt76k5qds4:10",
+        "kind": "call",
+        "fn": "@o4m270qrjm8j54f1dt76k5qds4:11",
+        "args": [
+          "@o4m270qrjm8j54f1dt76k5qds4:12",
+          "@o4m270qrjm8j54f1dt76k5qds4:20"
+        ]
+      },
+      "@o4m270qrjm8j54f1dt76k5qds4:7": {
+        "id": "@o4m270qrjm8j54f1dt76k5qds4:7",
+        "kind": "arm",
+        "variant": "std.priority queue.priority queue",
+        "binds": [
+          "@o4m270qrjm8j54f1dt76k5qds4:8",
+          "@o4m270qrjm8j54f1dt76k5qds4:9"
+        ],
+        "results": [
+          null,
+          null
+        ],
+        "body": "@o4m270qrjm8j54f1dt76k5qds4:10"
+      },
+      "@o4m270qrjm8j54f1dt76k5qds4:5": {
+        "id": "@o4m270qrjm8j54f1dt76k5qds4:5",
+        "kind": "match",
+        "scrutinee": "@o4m270qrjm8j54f1dt76k5qds4:6",
+        "arms": [
+          "@o4m270qrjm8j54f1dt76k5qds4:7"
+        ],
+        "otherwise": null
+      },
+      "@o4m270qrjm8j54f1dt76k5qds4:1": {
+        "id": "@o4m270qrjm8j54f1dt76k5qds4:1",
+        "kind": "lambda",
+        "params": [
+          "@o4m270qrjm8j54f1dt76k5qds4:2",
+          "@o4m270qrjm8j54f1dt76k5qds4:3",
+          "@o4m270qrjm8j54f1dt76k5qds4:4"
+        ],
+        "body": "@o4m270qrjm8j54f1dt76k5qds4:5"
+      },
+      "@rf4q2u86td7mgudnsplgk3gk63": {
+        "id": "@rf4q2u86td7mgudnsplgk3gk63",
+        "kind": "def",
+        "body": "@rf4q2u86td7mgudnsplgk3gk63:1"
+      },
+      "@rf4q2u86td7mgudnsplgk3gk63:2": {
+        "id": "@rf4q2u86td7mgudnsplgk3gk63:2",
+        "kind": "binder"
+      },
+      "@rf4q2u86td7mgudnsplgk3gk63:3": {
+        "id": "@rf4q2u86td7mgudnsplgk3gk63:3",
+        "kind": "binder"
+      },
+      "@rf4q2u86td7mgudnsplgk3gk63:5": {
+        "id": "@rf4q2u86td7mgudnsplgk3gk63:5",
+        "kind": "ref",
+        "target": "@rf4q2u86td7mgudnsplgk3gk63:3"
+      },
+      "@rf4q2u86td7mgudnsplgk3gk63:7": {
+        "id": "@rf4q2u86td7mgudnsplgk3gk63:7",
+        "kind": "ref",
+        "target": "@rf4q2u86td7mgudnsplgk3gk63:2"
+      },
+      "@rf4q2u86td7mgudnsplgk3gk63:6": {
+        "id": "@rf4q2u86td7mgudnsplgk3gk63:6",
+        "kind": "arm",
+        "variant": "std.list.nil",
+        "binds": [],
+        "results": [],
+        "body": "@rf4q2u86td7mgudnsplgk3gk63:7"
+      },
+      "@rf4q2u86td7mgudnsplgk3gk63:9": {
+        "id": "@rf4q2u86td7mgudnsplgk3gk63:9",
+        "kind": "binder"
+      },
+      "@rf4q2u86td7mgudnsplgk3gk63:10": {
+        "id": "@rf4q2u86td7mgudnsplgk3gk63:10",
+        "kind": "binder"
+      },
+      "@rf4q2u86td7mgudnsplgk3gk63:12": {
+        "id": "@rf4q2u86td7mgudnsplgk3gk63:12",
+        "kind": "ref",
+        "target": "@rf4q2u86td7mgudnsplgk3gk63:9"
+      },
+      "@rf4q2u86td7mgudnsplgk3gk63:14": {
+        "id": "@rf4q2u86td7mgudnsplgk3gk63:14",
+        "kind": "binder"
+      },
+      "@rf4q2u86td7mgudnsplgk3gk63:15": {
+        "id": "@rf4q2u86td7mgudnsplgk3gk63:15",
+        "kind": "binder"
+      },
+      "@rf4q2u86td7mgudnsplgk3gk63:19": {
+        "id": "@rf4q2u86td7mgudnsplgk3gk63:19",
+        "kind": "ref",
+        "target": "@o4m270qrjm8j54f1dt76k5qds4"
+      },
+      "@rf4q2u86td7mgudnsplgk3gk63:20": {
+        "id": "@rf4q2u86td7mgudnsplgk3gk63:20",
+        "kind": "ref",
+        "target": "@rf4q2u86td7mgudnsplgk3gk63:2"
+      },
+      "@rf4q2u86td7mgudnsplgk3gk63:21": {
+        "id": "@rf4q2u86td7mgudnsplgk3gk63:21",
+        "kind": "ref",
+        "target": "@rf4q2u86td7mgudnsplgk3gk63:14"
+      },
+      "@rf4q2u86td7mgudnsplgk3gk63:22": {
+        "id": "@rf4q2u86td7mgudnsplgk3gk63:22",
+        "kind": "ref",
+        "target": "@rf4q2u86td7mgudnsplgk3gk63:15"
+      },
+      "@rf4q2u86td7mgudnsplgk3gk63:18": {
+        "id": "@rf4q2u86td7mgudnsplgk3gk63:18",
+        "kind": "call",
+        "fn": "@rf4q2u86td7mgudnsplgk3gk63:19",
+        "args": [
+          "@rf4q2u86td7mgudnsplgk3gk63:20",
+          "@rf4q2u86td7mgudnsplgk3gk63:21",
+          "@rf4q2u86td7mgudnsplgk3gk63:22"
+        ]
+      },
+      "@rf4q2u86td7mgudnsplgk3gk63:17": {
+        "id": "@rf4q2u86td7mgudnsplgk3gk63:17",
+        "kind": "ref",
+        "target": "@rf4q2u86td7mgudnsplgk3gk63"
+      },
+      "@rf4q2u86td7mgudnsplgk3gk63:23": {
+        "id": "@rf4q2u86td7mgudnsplgk3gk63:23",
+        "kind": "ref",
+        "target": "@rf4q2u86td7mgudnsplgk3gk63:10"
+      },
+      "@rf4q2u86td7mgudnsplgk3gk63:16": {
+        "id": "@rf4q2u86td7mgudnsplgk3gk63:16",
+        "kind": "call",
+        "fn": "@rf4q2u86td7mgudnsplgk3gk63:17",
+        "args": [
+          "@rf4q2u86td7mgudnsplgk3gk63:18",
+          "@rf4q2u86td7mgudnsplgk3gk63:23"
+        ]
+      },
+      "@rf4q2u86td7mgudnsplgk3gk63:13": {
+        "id": "@rf4q2u86td7mgudnsplgk3gk63:13",
+        "kind": "arm",
+        "variant": "std.tuple2.tuple",
+        "binds": [
+          "@rf4q2u86td7mgudnsplgk3gk63:14",
+          "@rf4q2u86td7mgudnsplgk3gk63:15"
+        ],
+        "results": [
+          null,
+          null
+        ],
+        "body": "@rf4q2u86td7mgudnsplgk3gk63:16"
+      },
+      "@rf4q2u86td7mgudnsplgk3gk63:11": {
+        "id": "@rf4q2u86td7mgudnsplgk3gk63:11",
+        "kind": "match",
+        "scrutinee": "@rf4q2u86td7mgudnsplgk3gk63:12",
+        "arms": [
+          "@rf4q2u86td7mgudnsplgk3gk63:13"
+        ],
+        "otherwise": null
+      },
+      "@rf4q2u86td7mgudnsplgk3gk63:8": {
+        "id": "@rf4q2u86td7mgudnsplgk3gk63:8",
+        "kind": "arm",
+        "variant": "std.list.cons",
+        "binds": [
+          "@rf4q2u86td7mgudnsplgk3gk63:9",
+          "@rf4q2u86td7mgudnsplgk3gk63:10"
+        ],
+        "results": [
+          null,
+          null
+        ],
+        "body": "@rf4q2u86td7mgudnsplgk3gk63:11"
+      },
+      "@rf4q2u86td7mgudnsplgk3gk63:4": {
+        "id": "@rf4q2u86td7mgudnsplgk3gk63:4",
+        "kind": "match",
+        "scrutinee": "@rf4q2u86td7mgudnsplgk3gk63:5",
+        "arms": [
+          "@rf4q2u86td7mgudnsplgk3gk63:6",
+          "@rf4q2u86td7mgudnsplgk3gk63:8"
+        ],
+        "otherwise": null
+      },
+      "@rf4q2u86td7mgudnsplgk3gk63:1": {
+        "id": "@rf4q2u86td7mgudnsplgk3gk63:1",
+        "kind": "lambda",
+        "params": [
+          "@rf4q2u86td7mgudnsplgk3gk63:2",
+          "@rf4q2u86td7mgudnsplgk3gk63:3"
+        ],
+        "body": "@rf4q2u86td7mgudnsplgk3gk63:4"
+      },
+      "@p59pktk4jrderhvbsj78mert0c": {
+        "id": "@p59pktk4jrderhvbsj78mert0c",
+        "kind": "def",
+        "body": "@p59pktk4jrderhvbsj78mert0c:1"
+      },
+      "@p59pktk4jrderhvbsj78mert0c:2": {
+        "id": "@p59pktk4jrderhvbsj78mert0c:2",
+        "kind": "binder"
+      },
+      "@p59pktk4jrderhvbsj78mert0c:5": {
+        "id": "@p59pktk4jrderhvbsj78mert0c:5",
+        "kind": "ref",
+        "target": "@4eqli2dghdh31njbspln09cq5i"
+      },
+      "@p59pktk4jrderhvbsj78mert0c:4": {
+        "id": "@p59pktk4jrderhvbsj78mert0c:4",
+        "kind": "ref",
+        "target": "@rf4q2u86td7mgudnsplgk3gk63"
+      },
+      "@p59pktk4jrderhvbsj78mert0c:6": {
+        "id": "@p59pktk4jrderhvbsj78mert0c:6",
+        "kind": "ref",
+        "target": "@p59pktk4jrderhvbsj78mert0c:2"
+      },
+      "@p59pktk4jrderhvbsj78mert0c:3": {
+        "id": "@p59pktk4jrderhvbsj78mert0c:3",
+        "kind": "call",
+        "fn": "@p59pktk4jrderhvbsj78mert0c:4",
+        "args": [
+          "@p59pktk4jrderhvbsj78mert0c:5",
+          "@p59pktk4jrderhvbsj78mert0c:6"
+        ]
+      },
+      "@p59pktk4jrderhvbsj78mert0c:1": {
+        "id": "@p59pktk4jrderhvbsj78mert0c:1",
+        "kind": "lambda",
+        "params": [
+          "@p59pktk4jrderhvbsj78mert0c:2"
+        ],
+        "body": "@p59pktk4jrderhvbsj78mert0c:3"
+      },
+      "@lf19g9be97ag7644sft9dn40f2": {
+        "id": "@lf19g9be97ag7644sft9dn40f2",
+        "kind": "def",
+        "body": "@lf19g9be97ag7644sft9dn40f2:1"
+      },
+      "@lf19g9be97ag7644sft9dn40f2:2": {
+        "id": "@lf19g9be97ag7644sft9dn40f2:2",
+        "kind": "binder"
+      },
+      "@lf19g9be97ag7644sft9dn40f2:4": {
+        "id": "@lf19g9be97ag7644sft9dn40f2:4",
+        "kind": "ref",
+        "target": "@lf19g9be97ag7644sft9dn40f2:2"
+      },
+      "@lf19g9be97ag7644sft9dn40f2:6": {
+        "id": "@lf19g9be97ag7644sft9dn40f2:6",
+        "kind": "binder"
+      },
+      "@lf19g9be97ag7644sft9dn40f2:7": {
+        "id": "@lf19g9be97ag7644sft9dn40f2:7",
+        "kind": "binder"
+      },
+      "@lf19g9be97ag7644sft9dn40f2:24": {
+        "id": "@lf19g9be97ag7644sft9dn40f2:24",
+        "kind": "ref",
+        "target": "@blu7s19d4n29qbrf30t93p36pq"
+      },
+      "@lf19g9be97ag7644sft9dn40f2:25": {
+        "id": "@lf19g9be97ag7644sft9dn40f2:25",
+        "kind": "ref",
+        "target": "@lf19g9be97ag7644sft9dn40f2:6"
+      },
+      "@lf19g9be97ag7644sft9dn40f2:23": {
+        "id": "@lf19g9be97ag7644sft9dn40f2:23",
+        "kind": "call",
+        "fn": "@lf19g9be97ag7644sft9dn40f2:24",
+        "args": [
+          "@lf19g9be97ag7644sft9dn40f2:25"
+        ]
+      },
+      "@lf19g9be97ag7644sft9dn40f2:10": {
+        "id": "@lf19g9be97ag7644sft9dn40f2:10",
+        "kind": "binder"
+      },
+      "@lf19g9be97ag7644sft9dn40f2:12": {
+        "id": "@lf19g9be97ag7644sft9dn40f2:12",
+        "kind": "ref",
+        "target": "@lf19g9be97ag7644sft9dn40f2:10"
+      },
+      "@lf19g9be97ag7644sft9dn40f2:14": {
+        "id": "@lf19g9be97ag7644sft9dn40f2:14",
+        "kind": "binder"
+      },
+      "@lf19g9be97ag7644sft9dn40f2:15": {
+        "id": "@lf19g9be97ag7644sft9dn40f2:15",
+        "kind": "binder"
+      },
+      "@lf19g9be97ag7644sft9dn40f2:20": {
+        "id": "@lf19g9be97ag7644sft9dn40f2:20",
+        "kind": "ref",
+        "target": "@a0gevcc4n8bqkvq8t5767log3p"
+      },
+      "@lf19g9be97ag7644sft9dn40f2:21": {
+        "id": "@lf19g9be97ag7644sft9dn40f2:21",
+        "kind": "ref",
+        "target": "@lf19g9be97ag7644sft9dn40f2:6"
+      },
+      "@lf19g9be97ag7644sft9dn40f2:22": {
+        "id": "@lf19g9be97ag7644sft9dn40f2:22",
+        "kind": "ref",
+        "target": "@lf19g9be97ag7644sft9dn40f2:10"
+      },
+      "@lf19g9be97ag7644sft9dn40f2:19": {
+        "id": "@lf19g9be97ag7644sft9dn40f2:19",
+        "kind": "call",
+        "fn": "@lf19g9be97ag7644sft9dn40f2:20",
+        "args": [
+          "@lf19g9be97ag7644sft9dn40f2:21",
+          "@lf19g9be97ag7644sft9dn40f2:22"
+        ]
+      },
+      "@lf19g9be97ag7644sft9dn40f2:17": {
+        "id": "@lf19g9be97ag7644sft9dn40f2:17",
+        "kind": "ref",
+        "target": "std.tuple2.tuple"
+      },
+      "@lf19g9be97ag7644sft9dn40f2:18": {
+        "id": "@lf19g9be97ag7644sft9dn40f2:18",
+        "kind": "ref",
+        "target": "@lf19g9be97ag7644sft9dn40f2:14"
+      },
+      "@lf19g9be97ag7644sft9dn40f2:16": {
+        "id": "@lf19g9be97ag7644sft9dn40f2:16",
+        "kind": "call",
+        "fn": "@lf19g9be97ag7644sft9dn40f2:17",
+        "args": [
+          "@lf19g9be97ag7644sft9dn40f2:18",
+          "@lf19g9be97ag7644sft9dn40f2:19"
+        ]
+      },
+      "@lf19g9be97ag7644sft9dn40f2:13": {
+        "id": "@lf19g9be97ag7644sft9dn40f2:13",
+        "kind": "arm",
+        "variant": "std.tuple2.tuple",
+        "binds": [
+          "@lf19g9be97ag7644sft9dn40f2:14",
+          "@lf19g9be97ag7644sft9dn40f2:15"
+        ],
+        "results": [
+          null,
+          null
+        ],
+        "body": "@lf19g9be97ag7644sft9dn40f2:16"
+      },
+      "@lf19g9be97ag7644sft9dn40f2:11": {
+        "id": "@lf19g9be97ag7644sft9dn40f2:11",
+        "kind": "match",
+        "scrutinee": "@lf19g9be97ag7644sft9dn40f2:12",
+        "arms": [
+          "@lf19g9be97ag7644sft9dn40f2:13"
+        ],
+        "otherwise": null
+      },
+      "@lf19g9be97ag7644sft9dn40f2:9": {
+        "id": "@lf19g9be97ag7644sft9dn40f2:9",
+        "kind": "lambda",
+        "params": [
+          "@lf19g9be97ag7644sft9dn40f2:10"
+        ],
+        "body": "@lf19g9be97ag7644sft9dn40f2:11"
+      },
+      "@lf19g9be97ag7644sft9dn40f2:8": {
+        "id": "@lf19g9be97ag7644sft9dn40f2:8",
+        "kind": "call",
+        "fn": "@lf19g9be97ag7644sft9dn40f2:9",
+        "args": [
+          "@lf19g9be97ag7644sft9dn40f2:23"
+        ]
+      },
+      "@lf19g9be97ag7644sft9dn40f2:5": {
+        "id": "@lf19g9be97ag7644sft9dn40f2:5",
+        "kind": "arm",
+        "variant": "std.priority queue.priority queue",
+        "binds": [
+          "@lf19g9be97ag7644sft9dn40f2:6",
+          "@lf19g9be97ag7644sft9dn40f2:7"
+        ],
+        "results": [
+          null,
+          null
+        ],
+        "body": "@lf19g9be97ag7644sft9dn40f2:8"
+      },
+      "@lf19g9be97ag7644sft9dn40f2:3": {
+        "id": "@lf19g9be97ag7644sft9dn40f2:3",
+        "kind": "match",
+        "scrutinee": "@lf19g9be97ag7644sft9dn40f2:4",
+        "arms": [
+          "@lf19g9be97ag7644sft9dn40f2:5"
+        ],
+        "otherwise": null
+      },
+      "@lf19g9be97ag7644sft9dn40f2:1": {
+        "id": "@lf19g9be97ag7644sft9dn40f2:1",
+        "kind": "lambda",
+        "params": [
+          "@lf19g9be97ag7644sft9dn40f2:2"
+        ],
+        "body": "@lf19g9be97ag7644sft9dn40f2:3"
+      },
+      "@dm07k87nkcvu5r0dkfhd1qaa9l": {
+        "id": "@dm07k87nkcvu5r0dkfhd1qaa9l",
+        "kind": "def",
+        "body": "@dm07k87nkcvu5r0dkfhd1qaa9l:1"
+      },
+      "@dm07k87nkcvu5r0dkfhd1qaa9l:2": {
+        "id": "@dm07k87nkcvu5r0dkfhd1qaa9l:2",
+        "kind": "binder"
+      },
+      "@dm07k87nkcvu5r0dkfhd1qaa9l:4": {
+        "id": "@dm07k87nkcvu5r0dkfhd1qaa9l:4",
+        "kind": "ref",
+        "target": "@dm07k87nkcvu5r0dkfhd1qaa9l:2"
+      },
+      "@dm07k87nkcvu5r0dkfhd1qaa9l:6": {
+        "id": "@dm07k87nkcvu5r0dkfhd1qaa9l:6",
+        "kind": "binder"
+      },
+      "@dm07k87nkcvu5r0dkfhd1qaa9l:7": {
+        "id": "@dm07k87nkcvu5r0dkfhd1qaa9l:7",
+        "kind": "binder"
+      },
+      "@dm07k87nkcvu5r0dkfhd1qaa9l:14": {
+        "id": "@dm07k87nkcvu5r0dkfhd1qaa9l:14",
+        "kind": "ref",
+        "target": "@blu7s19d4n29qbrf30t93p36pq"
+      },
+      "@dm07k87nkcvu5r0dkfhd1qaa9l:15": {
+        "id": "@dm07k87nkcvu5r0dkfhd1qaa9l:15",
+        "kind": "ref",
+        "target": "@dm07k87nkcvu5r0dkfhd1qaa9l:6"
+      },
+      "@dm07k87nkcvu5r0dkfhd1qaa9l:13": {
+        "id": "@dm07k87nkcvu5r0dkfhd1qaa9l:13",
+        "kind": "call",
+        "fn": "@dm07k87nkcvu5r0dkfhd1qaa9l:14",
+        "args": [
+          "@dm07k87nkcvu5r0dkfhd1qaa9l:15"
+        ]
+      },
+      "@dm07k87nkcvu5r0dkfhd1qaa9l:11": {
+        "id": "@dm07k87nkcvu5r0dkfhd1qaa9l:11",
+        "kind": "ref",
+        "target": "@ofe8ngkvi9arnvbgco66vk4oog"
+      },
+      "@dm07k87nkcvu5r0dkfhd1qaa9l:12": {
+        "id": "@dm07k87nkcvu5r0dkfhd1qaa9l:12",
+        "kind": "ref",
+        "target": "@dm07k87nkcvu5r0dkfhd1qaa9l:6"
+      },
+      "@dm07k87nkcvu5r0dkfhd1qaa9l:10": {
+        "id": "@dm07k87nkcvu5r0dkfhd1qaa9l:10",
+        "kind": "call",
+        "fn": "@dm07k87nkcvu5r0dkfhd1qaa9l:11",
+        "args": [
+          "@dm07k87nkcvu5r0dkfhd1qaa9l:12",
+          "@dm07k87nkcvu5r0dkfhd1qaa9l:13"
+        ]
+      },
+      "@dm07k87nkcvu5r0dkfhd1qaa9l:9": {
+        "id": "@dm07k87nkcvu5r0dkfhd1qaa9l:9",
+        "kind": "ref",
+        "target": "std.priority queue.priority queue"
+      },
+      "@dm07k87nkcvu5r0dkfhd1qaa9l:16": {
+        "id": "@dm07k87nkcvu5r0dkfhd1qaa9l:16",
+        "kind": "ref",
+        "target": "@dm07k87nkcvu5r0dkfhd1qaa9l:7"
+      },
+      "@dm07k87nkcvu5r0dkfhd1qaa9l:8": {
+        "id": "@dm07k87nkcvu5r0dkfhd1qaa9l:8",
+        "kind": "call",
+        "fn": "@dm07k87nkcvu5r0dkfhd1qaa9l:9",
+        "args": [
+          "@dm07k87nkcvu5r0dkfhd1qaa9l:10",
+          "@dm07k87nkcvu5r0dkfhd1qaa9l:16"
+        ]
+      },
+      "@dm07k87nkcvu5r0dkfhd1qaa9l:5": {
+        "id": "@dm07k87nkcvu5r0dkfhd1qaa9l:5",
+        "kind": "arm",
+        "variant": "std.priority queue.priority queue",
+        "binds": [
+          "@dm07k87nkcvu5r0dkfhd1qaa9l:6",
+          "@dm07k87nkcvu5r0dkfhd1qaa9l:7"
+        ],
+        "results": [
+          null,
+          null
+        ],
+        "body": "@dm07k87nkcvu5r0dkfhd1qaa9l:8"
+      },
+      "@dm07k87nkcvu5r0dkfhd1qaa9l:3": {
+        "id": "@dm07k87nkcvu5r0dkfhd1qaa9l:3",
+        "kind": "match",
+        "scrutinee": "@dm07k87nkcvu5r0dkfhd1qaa9l:4",
+        "arms": [
+          "@dm07k87nkcvu5r0dkfhd1qaa9l:5"
+        ],
+        "otherwise": null
+      },
+      "@dm07k87nkcvu5r0dkfhd1qaa9l:1": {
+        "id": "@dm07k87nkcvu5r0dkfhd1qaa9l:1",
+        "kind": "lambda",
+        "params": [
+          "@dm07k87nkcvu5r0dkfhd1qaa9l:2"
+        ],
+        "body": "@dm07k87nkcvu5r0dkfhd1qaa9l:3"
+      },
+      "@p2d73hf4na3q5tbvm5v109qs4p": {
+        "id": "@p2d73hf4na3q5tbvm5v109qs4p",
+        "kind": "def",
+        "body": "@p2d73hf4na3q5tbvm5v109qs4p:1"
+      },
+      "@p2d73hf4na3q5tbvm5v109qs4p:2": {
+        "id": "@p2d73hf4na3q5tbvm5v109qs4p:2",
+        "kind": "binder"
+      },
+      "@p2d73hf4na3q5tbvm5v109qs4p:4": {
+        "id": "@p2d73hf4na3q5tbvm5v109qs4p:4",
+        "kind": "ref",
+        "target": "@p2d73hf4na3q5tbvm5v109qs4p:2"
+      },
+      "@p2d73hf4na3q5tbvm5v109qs4p:6": {
+        "id": "@p2d73hf4na3q5tbvm5v109qs4p:6",
+        "kind": "binder"
+      },
+      "@p2d73hf4na3q5tbvm5v109qs4p:7": {
+        "id": "@p2d73hf4na3q5tbvm5v109qs4p:7",
+        "kind": "binder"
+      },
+      "@p2d73hf4na3q5tbvm5v109qs4p:9": {
+        "id": "@p2d73hf4na3q5tbvm5v109qs4p:9",
+        "kind": "ref",
+        "target": "@c7vuikmdnpq9f9ev8cc2bm1g0n"
+      },
+      "@p2d73hf4na3q5tbvm5v109qs4p:10": {
+        "id": "@p2d73hf4na3q5tbvm5v109qs4p:10",
+        "kind": "ref",
+        "target": "@p2d73hf4na3q5tbvm5v109qs4p:6"
+      },
+      "@p2d73hf4na3q5tbvm5v109qs4p:8": {
+        "id": "@p2d73hf4na3q5tbvm5v109qs4p:8",
+        "kind": "call",
+        "fn": "@p2d73hf4na3q5tbvm5v109qs4p:9",
+        "args": [
+          "@p2d73hf4na3q5tbvm5v109qs4p:10"
+        ]
+      },
+      "@p2d73hf4na3q5tbvm5v109qs4p:5": {
+        "id": "@p2d73hf4na3q5tbvm5v109qs4p:5",
+        "kind": "arm",
+        "variant": "std.priority queue.priority queue",
+        "binds": [
+          "@p2d73hf4na3q5tbvm5v109qs4p:6",
+          "@p2d73hf4na3q5tbvm5v109qs4p:7"
+        ],
+        "results": [
+          null,
+          null
+        ],
+        "body": "@p2d73hf4na3q5tbvm5v109qs4p:8"
+      },
+      "@p2d73hf4na3q5tbvm5v109qs4p:3": {
+        "id": "@p2d73hf4na3q5tbvm5v109qs4p:3",
+        "kind": "match",
+        "scrutinee": "@p2d73hf4na3q5tbvm5v109qs4p:4",
+        "arms": [
+          "@p2d73hf4na3q5tbvm5v109qs4p:5"
+        ],
+        "otherwise": null
+      },
+      "@p2d73hf4na3q5tbvm5v109qs4p:1": {
+        "id": "@p2d73hf4na3q5tbvm5v109qs4p:1",
+        "kind": "lambda",
+        "params": [
+          "@p2d73hf4na3q5tbvm5v109qs4p:2"
+        ],
+        "body": "@p2d73hf4na3q5tbvm5v109qs4p:3"
+      },
+      "@uavcrcplkjjbscae5bbggb18sg": {
+        "id": "@uavcrcplkjjbscae5bbggb18sg",
+        "kind": "def",
+        "body": "@uavcrcplkjjbscae5bbggb18sg:1"
+      },
+      "@uavcrcplkjjbscae5bbggb18sg:2": {
+        "id": "@uavcrcplkjjbscae5bbggb18sg:2",
+        "kind": "binder"
+      },
+      "@uavcrcplkjjbscae5bbggb18sg:4": {
+        "id": "@uavcrcplkjjbscae5bbggb18sg:4",
+        "kind": "ref",
+        "target": "@uavcrcplkjjbscae5bbggb18sg:2"
+      },
+      "@uavcrcplkjjbscae5bbggb18sg:6": {
+        "id": "@uavcrcplkjjbscae5bbggb18sg:6",
+        "kind": "binder"
+      },
+      "@uavcrcplkjjbscae5bbggb18sg:7": {
+        "id": "@uavcrcplkjjbscae5bbggb18sg:7",
+        "kind": "binder"
+      },
+      "@uavcrcplkjjbscae5bbggb18sg:11": {
+        "id": "@uavcrcplkjjbscae5bbggb18sg:11",
+        "kind": "ref",
+        "target": "@2gej55a0rngq0j1a7823pgfkrl"
+      },
+      "@uavcrcplkjjbscae5bbggb18sg:12": {
+        "id": "@uavcrcplkjjbscae5bbggb18sg:12",
+        "kind": "ref",
+        "target": "@uavcrcplkjjbscae5bbggb18sg:6"
+      },
+      "@uavcrcplkjjbscae5bbggb18sg:10": {
+        "id": "@uavcrcplkjjbscae5bbggb18sg:10",
+        "kind": "call",
+        "fn": "@uavcrcplkjjbscae5bbggb18sg:11",
+        "args": [
+          "@uavcrcplkjjbscae5bbggb18sg:12"
+        ]
+      },
+      "@uavcrcplkjjbscae5bbggb18sg:14": {
+        "id": "@uavcrcplkjjbscae5bbggb18sg:14",
+        "kind": "binder"
+      },
+      "@uavcrcplkjjbscae5bbggb18sg:16": {
+        "id": "@uavcrcplkjjbscae5bbggb18sg:16",
+        "kind": "ref",
+        "target": "@uavcrcplkjjbscae5bbggb18sg:14"
+      },
+      "@uavcrcplkjjbscae5bbggb18sg:18": {
+        "id": "@uavcrcplkjjbscae5bbggb18sg:18",
+        "kind": "binder"
+      },
+      "@uavcrcplkjjbscae5bbggb18sg:19": {
+        "id": "@uavcrcplkjjbscae5bbggb18sg:19",
+        "kind": "binder"
+      },
+      "@uavcrcplkjjbscae5bbggb18sg:21": {
+        "id": "@uavcrcplkjjbscae5bbggb18sg:21",
+        "kind": "ref",
+        "target": "@uavcrcplkjjbscae5bbggb18sg:18"
+      },
+      "@uavcrcplkjjbscae5bbggb18sg:23": {
+        "id": "@uavcrcplkjjbscae5bbggb18sg:23",
+        "kind": "binder"
+      },
+      "@uavcrcplkjjbscae5bbggb18sg:24": {
+        "id": "@uavcrcplkjjbscae5bbggb18sg:24",
+        "kind": "binder"
+      },
+      "@uavcrcplkjjbscae5bbggb18sg:26": {
+        "id": "@uavcrcplkjjbscae5bbggb18sg:26",
+        "kind": "ref",
+        "target": "std.tuple2.tuple"
+      },
+      "@uavcrcplkjjbscae5bbggb18sg:27": {
+        "id": "@uavcrcplkjjbscae5bbggb18sg:27",
+        "kind": "ref",
+        "target": "@uavcrcplkjjbscae5bbggb18sg:23"
+      },
+      "@uavcrcplkjjbscae5bbggb18sg:28": {
+        "id": "@uavcrcplkjjbscae5bbggb18sg:28",
+        "kind": "ref",
+        "target": "@uavcrcplkjjbscae5bbggb18sg:19"
+      },
+      "@uavcrcplkjjbscae5bbggb18sg:25": {
+        "id": "@uavcrcplkjjbscae5bbggb18sg:25",
+        "kind": "call",
+        "fn": "@uavcrcplkjjbscae5bbggb18sg:26",
+        "args": [
+          "@uavcrcplkjjbscae5bbggb18sg:27",
+          "@uavcrcplkjjbscae5bbggb18sg:28"
+        ]
+      },
+      "@uavcrcplkjjbscae5bbggb18sg:22": {
+        "id": "@uavcrcplkjjbscae5bbggb18sg:22",
+        "kind": "arm",
+        "variant": "std.tuple2.tuple",
+        "binds": [
+          "@uavcrcplkjjbscae5bbggb18sg:23",
+          "@uavcrcplkjjbscae5bbggb18sg:24"
+        ],
+        "results": [
+          null,
+          null
+        ],
+        "body": "@uavcrcplkjjbscae5bbggb18sg:25"
+      },
+      "@uavcrcplkjjbscae5bbggb18sg:20": {
+        "id": "@uavcrcplkjjbscae5bbggb18sg:20",
+        "kind": "match",
+        "scrutinee": "@uavcrcplkjjbscae5bbggb18sg:21",
+        "arms": [
+          "@uavcrcplkjjbscae5bbggb18sg:22"
+        ],
+        "otherwise": null
+      },
+      "@uavcrcplkjjbscae5bbggb18sg:17": {
+        "id": "@uavcrcplkjjbscae5bbggb18sg:17",
+        "kind": "arm",
+        "variant": "std.tuple2.tuple",
+        "binds": [
+          "@uavcrcplkjjbscae5bbggb18sg:18",
+          "@uavcrcplkjjbscae5bbggb18sg:19"
+        ],
+        "results": [
+          null,
+          null
+        ],
+        "body": "@uavcrcplkjjbscae5bbggb18sg:20"
+      },
+      "@uavcrcplkjjbscae5bbggb18sg:15": {
+        "id": "@uavcrcplkjjbscae5bbggb18sg:15",
+        "kind": "match",
+        "scrutinee": "@uavcrcplkjjbscae5bbggb18sg:16",
+        "arms": [
+          "@uavcrcplkjjbscae5bbggb18sg:17"
+        ],
+        "otherwise": null
+      },
+      "@uavcrcplkjjbscae5bbggb18sg:13": {
+        "id": "@uavcrcplkjjbscae5bbggb18sg:13",
+        "kind": "lambda",
+        "params": [
+          "@uavcrcplkjjbscae5bbggb18sg:14"
+        ],
+        "body": "@uavcrcplkjjbscae5bbggb18sg:15"
+      },
+      "@uavcrcplkjjbscae5bbggb18sg:9": {
+        "id": "@uavcrcplkjjbscae5bbggb18sg:9",
+        "kind": "ref",
+        "target": "@9902gjnadddgv3jrh6ir29nf4q"
+      },
+      "@uavcrcplkjjbscae5bbggb18sg:8": {
+        "id": "@uavcrcplkjjbscae5bbggb18sg:8",
+        "kind": "call",
+        "fn": "@uavcrcplkjjbscae5bbggb18sg:9",
+        "args": [
+          "@uavcrcplkjjbscae5bbggb18sg:10",
+          "@uavcrcplkjjbscae5bbggb18sg:13"
+        ]
+      },
+      "@uavcrcplkjjbscae5bbggb18sg:5": {
+        "id": "@uavcrcplkjjbscae5bbggb18sg:5",
+        "kind": "arm",
+        "variant": "std.priority queue.priority queue",
+        "binds": [
+          "@uavcrcplkjjbscae5bbggb18sg:6",
+          "@uavcrcplkjjbscae5bbggb18sg:7"
+        ],
+        "results": [
+          null,
+          null
+        ],
+        "body": "@uavcrcplkjjbscae5bbggb18sg:8"
+      },
+      "@uavcrcplkjjbscae5bbggb18sg:3": {
+        "id": "@uavcrcplkjjbscae5bbggb18sg:3",
+        "kind": "match",
+        "scrutinee": "@uavcrcplkjjbscae5bbggb18sg:4",
+        "arms": [
+          "@uavcrcplkjjbscae5bbggb18sg:5"
+        ],
+        "otherwise": null
+      },
+      "@uavcrcplkjjbscae5bbggb18sg:1": {
+        "id": "@uavcrcplkjjbscae5bbggb18sg:1",
+        "kind": "lambda",
+        "params": [
+          "@uavcrcplkjjbscae5bbggb18sg:2"
+        ],
+        "body": "@uavcrcplkjjbscae5bbggb18sg:3"
+      },
       "@6p2p3lfunroptv3so771rjvmon": {
         "id": "@6p2p3lfunroptv3so771rjvmon",
         "kind": "def",
@@ -62292,6 +64064,21 @@
       "@qcude3v43rqkt6hs2q11f610gl",
       "@blu7s19d4n29qbrf30t93p36pq",
       "@h72b2fqdo5ra5oeno1pcuul66t",
+      "@ki5k65oi80m0lh9j0d10b2uk9d",
+      "@ccu259dis3cvq2uonvdnoob93p",
+      "@7nl35l5329m8gqls66tqm8qut1",
+      "@8lpgr92pv0n9i3ik4hrjfq64sr",
+      "@n0uditb2rl2ce9s4g913ulsmra",
+      "@hagd0tqqrriqvfstn38oc8dodb",
+      "@vb6bhftebhjc2hnr81rookqric",
+      "@4eqli2dghdh31njbspln09cq5i",
+      "@o4m270qrjm8j54f1dt76k5qds4",
+      "@rf4q2u86td7mgudnsplgk3gk63",
+      "@p59pktk4jrderhvbsj78mert0c",
+      "@lf19g9be97ag7644sft9dn40f2",
+      "@dm07k87nkcvu5r0dkfhd1qaa9l",
+      "@p2d73hf4na3q5tbvm5v109qs4p",
+      "@uavcrcplkjjbscae5bbggb18sg",
       "@e9fsfaqqmkbqi45m9thp36ep42",
       "@s80979s95urnfent649ge9ikvu",
       "@i2hnhkh6ss9q6nvaa6g5t54i09",
@@ -70073,6 +71860,644 @@
       },
       "plain": []
     },
+    "@ki5k65oi80m0lh9j0d10b2uk9d": {
+      "vars": [
+        0
+      ],
+      "rows": [],
+      "type": {
+        "t": "con",
+        "id": "std.queue",
+        "args": [
+          {
+            "t": "var",
+            "v": 0
+          }
+        ]
+      },
+      "plain": []
+    },
+    "@ccu259dis3cvq2uonvdnoob93p": {
+      "vars": [
+        0
+      ],
+      "rows": [
+        1
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.list",
+            "args": [
+              {
+                "t": "var",
+                "v": 0
+              }
+            ]
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.queue",
+          "args": [
+            {
+              "t": "var",
+              "v": 0
+            }
+          ]
+        },
+        "eff": {
+          "effs": [],
+          "tail": 1
+        }
+      },
+      "plain": []
+    },
+    "@7nl35l5329m8gqls66tqm8qut1": {
+      "vars": [
+        0
+      ],
+      "rows": [
+        1
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.queue",
+            "args": [
+              {
+                "t": "var",
+                "v": 0
+              }
+            ]
+          },
+          {
+            "t": "var",
+            "v": 0
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.queue",
+          "args": [
+            {
+              "t": "var",
+              "v": 0
+            }
+          ]
+        },
+        "eff": {
+          "effs": [],
+          "tail": 1
+        }
+      },
+      "plain": []
+    },
+    "@8lpgr92pv0n9i3ik4hrjfq64sr": {
+      "vars": [
+        0
+      ],
+      "rows": [
+        1
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.queue",
+            "args": [
+              {
+                "t": "var",
+                "v": 0
+              }
+            ]
+          }
+        ],
+        "ret": {
+          "t": "var",
+          "v": 0
+        },
+        "eff": {
+          "effs": [
+            "effect.choice"
+          ],
+          "tail": 1
+        }
+      },
+      "plain": []
+    },
+    "@n0uditb2rl2ce9s4g913ulsmra": {
+      "vars": [
+        0
+      ],
+      "rows": [
+        1
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.queue",
+            "args": [
+              {
+                "t": "var",
+                "v": 0
+              }
+            ]
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.queue",
+          "args": [
+            {
+              "t": "var",
+              "v": 0
+            }
+          ]
+        },
+        "eff": {
+          "effs": [
+            "effect.choice"
+          ],
+          "tail": 1
+        }
+      },
+      "plain": []
+    },
+    "@hagd0tqqrriqvfstn38oc8dodb": {
+      "vars": [
+        0
+      ],
+      "rows": [
+        1
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.queue",
+            "args": [
+              {
+                "t": "var",
+                "v": 0
+              }
+            ]
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "type.int",
+          "args": []
+        },
+        "eff": {
+          "effs": [],
+          "tail": 1
+        }
+      },
+      "plain": []
+    },
+    "@vb6bhftebhjc2hnr81rookqric": {
+      "vars": [
+        0
+      ],
+      "rows": [
+        1
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.queue",
+            "args": [
+              {
+                "t": "var",
+                "v": 0
+              }
+            ]
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.list",
+          "args": [
+            {
+              "t": "var",
+              "v": 0
+            }
+          ]
+        },
+        "eff": {
+          "effs": [],
+          "tail": 1
+        }
+      },
+      "plain": []
+    },
+    "@4eqli2dghdh31njbspln09cq5i": {
+      "vars": [
+        0,
+        1
+      ],
+      "rows": [],
+      "type": {
+        "t": "con",
+        "id": "std.priority queue",
+        "args": [
+          {
+            "t": "var",
+            "v": 0
+          },
+          {
+            "t": "var",
+            "v": 1
+          }
+        ]
+      },
+      "plain": []
+    },
+    "@o4m270qrjm8j54f1dt76k5qds4": {
+      "vars": [
+        0,
+        1
+      ],
+      "rows": [
+        2
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.priority queue",
+            "args": [
+              {
+                "t": "var",
+                "v": 0
+              },
+              {
+                "t": "var",
+                "v": 1
+              }
+            ]
+          },
+          {
+            "t": "var",
+            "v": 0
+          },
+          {
+            "t": "var",
+            "v": 1
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.priority queue",
+          "args": [
+            {
+              "t": "var",
+              "v": 0
+            },
+            {
+              "t": "var",
+              "v": 1
+            }
+          ]
+        },
+        "eff": {
+          "effs": [],
+          "tail": 2
+        }
+      },
+      "plain": [
+        0
+      ]
+    },
+    "@rf4q2u86td7mgudnsplgk3gk63": {
+      "vars": [
+        0,
+        1
+      ],
+      "rows": [
+        2
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.priority queue",
+            "args": [
+              {
+                "t": "var",
+                "v": 0
+              },
+              {
+                "t": "var",
+                "v": 1
+              }
+            ]
+          },
+          {
+            "t": "con",
+            "id": "std.list",
+            "args": [
+              {
+                "t": "con",
+                "id": "std.tuple2",
+                "args": [
+                  {
+                    "t": "var",
+                    "v": 0
+                  },
+                  {
+                    "t": "var",
+                    "v": 1
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.priority queue",
+          "args": [
+            {
+              "t": "var",
+              "v": 0
+            },
+            {
+              "t": "var",
+              "v": 1
+            }
+          ]
+        },
+        "eff": {
+          "effs": [],
+          "tail": 2
+        }
+      },
+      "plain": [
+        0
+      ]
+    },
+    "@p59pktk4jrderhvbsj78mert0c": {
+      "vars": [
+        0,
+        1
+      ],
+      "rows": [
+        2
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.list",
+            "args": [
+              {
+                "t": "con",
+                "id": "std.tuple2",
+                "args": [
+                  {
+                    "t": "var",
+                    "v": 0
+                  },
+                  {
+                    "t": "var",
+                    "v": 1
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.priority queue",
+          "args": [
+            {
+              "t": "var",
+              "v": 0
+            },
+            {
+              "t": "var",
+              "v": 1
+            }
+          ]
+        },
+        "eff": {
+          "effs": [],
+          "tail": 2
+        }
+      },
+      "plain": [
+        0
+      ]
+    },
+    "@lf19g9be97ag7644sft9dn40f2": {
+      "vars": [
+        0,
+        1
+      ],
+      "rows": [
+        2
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.priority queue",
+            "args": [
+              {
+                "t": "var",
+                "v": 0
+              },
+              {
+                "t": "var",
+                "v": 1
+              }
+            ]
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.tuple2",
+          "args": [
+            {
+              "t": "var",
+              "v": 0
+            },
+            {
+              "t": "var",
+              "v": 1
+            }
+          ]
+        },
+        "eff": {
+          "effs": [
+            "effect.choice"
+          ],
+          "tail": 2
+        }
+      },
+      "plain": [
+        0
+      ]
+    },
+    "@dm07k87nkcvu5r0dkfhd1qaa9l": {
+      "vars": [
+        0,
+        1
+      ],
+      "rows": [
+        2
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.priority queue",
+            "args": [
+              {
+                "t": "var",
+                "v": 0
+              },
+              {
+                "t": "var",
+                "v": 1
+              }
+            ]
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.priority queue",
+          "args": [
+            {
+              "t": "var",
+              "v": 0
+            },
+            {
+              "t": "var",
+              "v": 1
+            }
+          ]
+        },
+        "eff": {
+          "effs": [
+            "effect.choice"
+          ],
+          "tail": 2
+        }
+      },
+      "plain": [
+        0
+      ]
+    },
+    "@p2d73hf4na3q5tbvm5v109qs4p": {
+      "vars": [
+        0,
+        1
+      ],
+      "rows": [
+        2
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.priority queue",
+            "args": [
+              {
+                "t": "var",
+                "v": 0
+              },
+              {
+                "t": "var",
+                "v": 1
+              }
+            ]
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "type.int",
+          "args": []
+        },
+        "eff": {
+          "effs": [],
+          "tail": 2
+        }
+      },
+      "plain": []
+    },
+    "@uavcrcplkjjbscae5bbggb18sg": {
+      "vars": [
+        0,
+        1
+      ],
+      "rows": [
+        2
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.priority queue",
+            "args": [
+              {
+                "t": "var",
+                "v": 0
+              },
+              {
+                "t": "var",
+                "v": 1
+              }
+            ]
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.list",
+          "args": [
+            {
+              "t": "con",
+              "id": "std.tuple2",
+              "args": [
+                {
+                  "t": "var",
+                  "v": 0
+                },
+                {
+                  "t": "var",
+                  "v": 1
+                }
+              ]
+            }
+          ]
+        },
+        "eff": {
+          "effs": [],
+          "tail": 2
+        }
+      },
+      "plain": []
+    },
     "@e9fsfaqqmkbqi45m9thp36ep42": {
       "vars": [
         0
@@ -75308,6 +77733,79 @@
     "@h72b2fqdo5ra5oeno1pcuul66t:6": "entries",
     "@h72b2fqdo5ra5oeno1pcuul66t:12": "key",
     "@h72b2fqdo5ra5oeno1pcuul66t:13": "value",
+    "@ki5k65oi80m0lh9j0d10b2uk9d": "empty queue",
+    "@ccu259dis3cvq2uonvdnoob93p": "queue of",
+    "@ccu259dis3cvq2uonvdnoob93p:2": "items",
+    "@7nl35l5329m8gqls66tqm8qut1": "queued",
+    "@7nl35l5329m8gqls66tqm8qut1:2": "queue",
+    "@7nl35l5329m8gqls66tqm8qut1:3": "item",
+    "@7nl35l5329m8gqls66tqm8qut1:7": "front",
+    "@7nl35l5329m8gqls66tqm8qut1:8": "back",
+    "@7nl35l5329m8gqls66tqm8qut1:9": "size",
+    "@8lpgr92pv0n9i3ik4hrjfq64sr": "front of",
+    "@8lpgr92pv0n9i3ik4hrjfq64sr:2": "queue",
+    "@8lpgr92pv0n9i3ik4hrjfq64sr:6": "front",
+    "@8lpgr92pv0n9i3ik4hrjfq64sr:7": "back",
+    "@8lpgr92pv0n9i3ik4hrjfq64sr:8": "size",
+    "@8lpgr92pv0n9i3ik4hrjfq64sr:15": "item",
+    "@8lpgr92pv0n9i3ik4hrjfq64sr:16": "rest",
+    "@n0uditb2rl2ce9s4g913ulsmra": "dequeued",
+    "@n0uditb2rl2ce9s4g913ulsmra:2": "queue",
+    "@n0uditb2rl2ce9s4g913ulsmra:6": "front",
+    "@n0uditb2rl2ce9s4g913ulsmra:7": "back",
+    "@n0uditb2rl2ce9s4g913ulsmra:8": "size",
+    "@n0uditb2rl2ce9s4g913ulsmra:15": "item",
+    "@n0uditb2rl2ce9s4g913ulsmra:16": "rest",
+    "@hagd0tqqrriqvfstn38oc8dodb": "queue size",
+    "@hagd0tqqrriqvfstn38oc8dodb:2": "queue",
+    "@hagd0tqqrriqvfstn38oc8dodb:6": "front",
+    "@hagd0tqqrriqvfstn38oc8dodb:7": "back",
+    "@hagd0tqqrriqvfstn38oc8dodb:8": "size",
+    "@vb6bhftebhjc2hnr81rookqric": "queue items",
+    "@vb6bhftebhjc2hnr81rookqric:2": "queue",
+    "@vb6bhftebhjc2hnr81rookqric:6": "front",
+    "@vb6bhftebhjc2hnr81rookqric:7": "back",
+    "@vb6bhftebhjc2hnr81rookqric:8": "size",
+    "@4eqli2dghdh31njbspln09cq5i": "empty priority queue",
+    "@o4m270qrjm8j54f1dt76k5qds4": "prioritized",
+    "@o4m270qrjm8j54f1dt76k5qds4:2": "queue",
+    "@o4m270qrjm8j54f1dt76k5qds4:3": "priority",
+    "@o4m270qrjm8j54f1dt76k5qds4:4": "item",
+    "@o4m270qrjm8j54f1dt76k5qds4:8": "entries",
+    "@o4m270qrjm8j54f1dt76k5qds4:9": "next",
+    "@rf4q2u86td7mgudnsplgk3gk63": "prioritized all",
+    "@rf4q2u86td7mgudnsplgk3gk63:2": "queue",
+    "@rf4q2u86td7mgudnsplgk3gk63:3": "pairs",
+    "@rf4q2u86td7mgudnsplgk3gk63:9": "pair",
+    "@rf4q2u86td7mgudnsplgk3gk63:10": "rest",
+    "@rf4q2u86td7mgudnsplgk3gk63:14": "priority",
+    "@rf4q2u86td7mgudnsplgk3gk63:15": "item",
+    "@p59pktk4jrderhvbsj78mert0c": "priority queue of",
+    "@p59pktk4jrderhvbsj78mert0c:2": "pairs",
+    "@lf19g9be97ag7644sft9dn40f2": "soonest",
+    "@lf19g9be97ag7644sft9dn40f2:2": "queue",
+    "@lf19g9be97ag7644sft9dn40f2:6": "entries",
+    "@lf19g9be97ag7644sft9dn40f2:7": "next",
+    "@lf19g9be97ag7644sft9dn40f2:10": "key",
+    "@lf19g9be97ag7644sft9dn40f2:14": "priority",
+    "@lf19g9be97ag7644sft9dn40f2:15": "order",
+    "@dm07k87nkcvu5r0dkfhd1qaa9l": "without soonest",
+    "@dm07k87nkcvu5r0dkfhd1qaa9l:2": "queue",
+    "@dm07k87nkcvu5r0dkfhd1qaa9l:6": "entries",
+    "@dm07k87nkcvu5r0dkfhd1qaa9l:7": "next",
+    "@p2d73hf4na3q5tbvm5v109qs4p": "priority queue size",
+    "@p2d73hf4na3q5tbvm5v109qs4p:2": "queue",
+    "@p2d73hf4na3q5tbvm5v109qs4p:6": "entries",
+    "@p2d73hf4na3q5tbvm5v109qs4p:7": "next",
+    "@uavcrcplkjjbscae5bbggb18sg": "priority queue items",
+    "@uavcrcplkjjbscae5bbggb18sg:2": "queue",
+    "@uavcrcplkjjbscae5bbggb18sg:6": "entries",
+    "@uavcrcplkjjbscae5bbggb18sg:7": "next",
+    "@uavcrcplkjjbscae5bbggb18sg:14": "entry",
+    "@uavcrcplkjjbscae5bbggb18sg:18": "key",
+    "@uavcrcplkjjbscae5bbggb18sg:19": "value",
+    "@uavcrcplkjjbscae5bbggb18sg:23": "priority",
+    "@uavcrcplkjjbscae5bbggb18sg:24": "order",
     "@6p2p3lfunroptv3so771rjvmon": "union of items",
     "@6p2p3lfunroptv3so771rjvmon:2": "xs",
     "@6p2p3lfunroptv3so771rjvmon:3": "ys",
@@ -75608,6 +78106,20 @@
     "@qn392anmssve8vtqpin5h9hk3a": "How many items the set has.",
     "@i1ol3pfphdms76qrqffmp9ivaq": "The set's smallest item, in compare's order; no answer when the set is empty, so first(smallest item(s), else d) gives a default. Nearest first in a set of pair(distance, place).",
     "@qcude3v43rqkt6hs2q11f610gl": "The set's largest item, in compare's order; no answer when the set is empty.",
+    "@ki5k65oi80m0lh9j0d10b2uk9d": "A queue with nothing in it. queued adds at the back, front of and dequeued take from the front: first in, first out.",
+    "@ccu259dis3cvq2uonvdnoob93p": "A queue of the items, the first item at the front.",
+    "@7nl35l5329m8gqls66tqm8qut1": "The queue with the item added at the back. Doesn't walk the queue.",
+    "@8lpgr92pv0n9i3ik4hrjfq64sr": "The item at the front of the queue, the one queued longest ago; no answer when it's empty.",
+    "@n0uditb2rl2ce9s4g913ulsmra": "The queue without its front item; no answer when it's empty. Taking every item in turn walks each once.",
+    "@hagd0tqqrriqvfstn38oc8dodb": "How many items the queue holds. Kept, not counted.",
+    "@vb6bhftebhjc2hnr81rookqric": "The queue's items, front first.",
+    "@4eqli2dghdh31njbspln09cq5i": "A priority queue with nothing in it: prioritized adds an item with a priority, and soonest is the one with the lowest priority (in compare's order), of those the one added first.",
+    "@p59pktk4jrderhvbsj78mert0c": "A priority queue of (priority, item) pairs, added in the list's order: priority queue of([(2.5, \"b\"), (1.0, \"a\")]).",
+    "@o4m270qrjm8j54f1dt76k5qds4": "The queue with the item added at that priority. Two items may share a priority; they leave in the order they were added. A simulation's events: prioritized(events, now + delay, arrival(p)).",
+    "@lf19g9be97ag7644sft9dn40f2": "The (priority, item) with the lowest priority, the earliest added of those; no answer when the queue is empty.",
+    "@dm07k87nkcvu5r0dkfhd1qaa9l": "The queue without its soonest item; no answer when it's empty. first(soonest(q), else …) and without soonest(q) are one simulation step.",
+    "@p2d73hf4na3q5tbvm5v109qs4p": "How many items the priority queue holds.",
+    "@uavcrcplkjjbscae5bbggb18sg": "The queue's (priority, item) pairs, soonest first.",
     "@blu7s19d4n29qbrf30t93p36pq": "The map's smallest key, in compare's order; no answer when the map is empty. value at(m, smallest key(m)) is what it holds.",
     "@h72b2fqdo5ra5oeno1pcuul66t": "The map's largest key, in compare's order; no answer when the map is empty.",
     "@rmu342hf4dl487otto63tqbs73": "A helper of the map and set operations: a walk down the sorted list. Not offered.",
@@ -75868,6 +78380,20 @@
     "@qcude3v43rqkt6hs2q11f610gl",
     "@blu7s19d4n29qbrf30t93p36pq",
     "@h72b2fqdo5ra5oeno1pcuul66t",
+    "@ki5k65oi80m0lh9j0d10b2uk9d",
+    "@ccu259dis3cvq2uonvdnoob93p",
+    "@7nl35l5329m8gqls66tqm8qut1",
+    "@8lpgr92pv0n9i3ik4hrjfq64sr",
+    "@n0uditb2rl2ce9s4g913ulsmra",
+    "@hagd0tqqrriqvfstn38oc8dodb",
+    "@vb6bhftebhjc2hnr81rookqric",
+    "@4eqli2dghdh31njbspln09cq5i",
+    "@p59pktk4jrderhvbsj78mert0c",
+    "@o4m270qrjm8j54f1dt76k5qds4",
+    "@lf19g9be97ag7644sft9dn40f2",
+    "@dm07k87nkcvu5r0dkfhd1qaa9l",
+    "@p2d73hf4na3q5tbvm5v109qs4p",
+    "@uavcrcplkjjbscae5bbggb18sg",
     "@e9fsfaqqmkbqi45m9thp36ep42",
     "@s80979s95urnfent649ge9ikvu",
     "@3p8spfvu5d7cnl1pfuenm267t7",
