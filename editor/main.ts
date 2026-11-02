@@ -33,7 +33,7 @@ import { CHOICE, DIVERGE, NUMBER, STRING, WORLD, showIn, type Type } from "../te
 import { implementationKey } from "../ters/src/lang/infer.ts";
 import { renderBlocks } from "../ters/src/lang/render.ts";
 import { definedAs, fromList, META, needsHandling, OutOfSteps, showValue, toList, withSteps, type Data, type Value, type World } from "../ters/src/lang/run.ts";
-import type { CompileAsk, CompileSays, RunAsk, RunSays } from "./runWorker.ts";
+import type { CompileAsk, CompileSays, RunAsk, RunSays, Stuck } from "./runWorker.ts";
 import { searchBackwards, type BackAsk, type Found } from "./backSearch.ts";
 import { hostSkeleton } from "../ters/src/lang/hosts.ts";
 import { trace, type Trace } from "../ters/src/lang/trace.ts";
@@ -153,7 +153,7 @@ interface UI {
   newKind: "function" | "value" | "type" | "effect" | "interface";
   query: string;
   refused: boolean;
-  output: { def: Id; lines: string[]; error?: string; running?: boolean } | null;
+  output: { def: Id; lines: string[]; error?: string; running?: boolean; stuck?: Stuck } | null;
   // The graph's right-click menu: what it was for, where (screen, world).
   // `blocks`: opened from the Blocks pane, so the graph's layout items
   // (tidy, pick, fit) aren't offered.
@@ -3520,6 +3520,7 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
     if (ui.output?.def === ui.def) {
       box.append(h("pre", { class: "text out" }, ui.output.lines.join("\n") || (going ? "Running…" : "(no output)")));
       if (ui.output.error) box.append(h("p", { class: "status-line bad" }, ui.output.error));
+      if (ui.output.stuck) box.append(stuckView(ui.output.stuck));
     }
   } else if (z?.t === "fn" && z.eff.effs.some((e) => WORLD.includes(e))) {
     // Run backwards is a search, and a search would touch the world once
@@ -3904,6 +3905,19 @@ function runGiven(): { args: string[]; files: Record<string, string> } | null {
   if (!m?.run || doc.title || ui.def !== defNamed("main")) return null;
   return { args: m.run.args, files: m.folders?.[0] ? FILES(m.folders[0]).data ?? {} : {} };
 }
+// Where a read of a text run backwards stopped (L70c): its line, marked
+// at the place, and what was looked for there.
+function stuckView(st: Stuck): HTMLElement {
+  const start = st.text.lastIndexOf("\n", st.at - 1) + 1, end0 = st.text.indexOf("\n", st.at);
+  const end = end0 < 0 ? st.text.length : end0;
+  const from = Math.max(start, st.at - 40), to = Math.min(end, st.at + 40);
+  const before = st.text.slice(from, st.at), here = st.text.slice(st.at, st.at + 1), after = st.text.slice(st.at + 1, to);
+  const many = st.times > 1 ? ` ${st.times} texts couldn't be read back; this is the last.` : "";
+  return h("div", { class: "stuck" },
+    h("p", { class: "hint" }, `Reading the text back found nothing.${many} It stops at the mark${st.expected.length ? `, where it looked for ${st.expected.join(" or ")}` : ""}.`),
+    h("pre", { class: "text out stuck-at", title: st.said }, from > start ? "…" : "", before,
+      h("mark", { class: "stuck-mark", title: "Where the reading stopped" }, here && here !== "\n" ? here : "⏎"), after, to < end ? "…" : ""));
+}
 function runTyped() {
   stopRun();
   const def = ui.def, title = titleOf(doc), prefix = `lab:${title}:`;
@@ -3922,7 +3936,7 @@ function runTyped() {
     if ("lines" in m) { ui.output = { ...ui.output, lines: [...ui.output.lines, ...m.lines] }; render(); return; }
     try { for (const [k, v] of m.files) localStorage.setItem(k, v); } catch { /* no storage */ }
     const lines = "done" in m && m.shown !== "unit" ? [...ui.output.lines, `→ ${m.shown}`] : ui.output.lines;
-    ui.output = { def, lines, error: "error" in m ? m.error : undefined, running: false };
+    ui.output = { def, lines, error: "error" in m ? m.error : undefined, running: false, ...(m.stuck ? { stuck: m.stuck } : {}) };
     running = null;
     w.terminate();
     render();

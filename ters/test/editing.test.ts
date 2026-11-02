@@ -35,6 +35,7 @@ const browser = {
       async waitForTimeout(ms: number) { await new Promise((r) => setTimeout(r, ms)); },
       async waitForEvent(): Promise<never> { throw new Error("needs a browser"); },
       evaluate: e.evaluate,
+      workers: e.workers,
       async close() { take(); await e.close(); },
       take,
     };
@@ -503,6 +504,45 @@ async function sharedField() {
   await p.close();
 }
 
+// The run worker's code (editor/runWorker.ts) answering one ask, with
+// what it posts collected.
+async function inWorker(ask: unknown): Promise<unknown[]> {
+  const said: unknown[] = [];
+  const self = globalThis as unknown as { self?: unknown; onmessage?: (e: { data: unknown }) => void; postMessage?: (m: unknown) => void };
+  self.self ??= globalThis;
+  self.postMessage = (m) => said.push(m);
+  await import("../../editor/runWorker.ts");
+  self.onmessage!({ data: ask });
+  return said;
+}
+
+// A text run backwards that has no reading (calc's read expression of
+// "1 + x)") shows, under Run's output, where the reading stopped (L70c).
+async function stuckRead() {
+  where = "where a read stopped";
+  const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  await p.goto(page);
+  await p.locator('[data-set="program"]', { hasText: "calc, a calculator" }).first().click();
+  await p.locator(".nav-row", { hasText: "+ New definition" }).click();
+  await p.locator('[data-panel="node"]').click();
+  await p.locator("#f-def-name").fill("try");
+  await p.locator("button", { hasText: "Create" }).click();
+  await p.locator(".hole").first().click();
+  await p.locator("#f-query").fill('optional(read expression("1 + x)"))'); await p.waitForTimeout(400);
+  await p.keyboard.press("Enter");
+  await p.locator(".status", { hasText: "Filled with" }).waitFor({ timeout: 10000 }).catch(() => errors.push(`${where}: the typed text didn't fill the hole`));
+  await p.locator('[data-act="t-run"]').first().click({ timeout: 5000 }).catch(() => errors.push(`${where}: no Run`));
+  // The page's worker answered by the worker's own code, here in Node.
+  const w = p.workers.at(-1)!;
+  for (const m of await inWorker(w.asked[0])) w.onmessage?.({ data: m });
+  await p.waitForTimeout(100);
+  const mark = p.locator(".stuck .stuck-mark");
+  if (!(await mark.waitFor({ timeout: 60000 }).then(() => true, () => false))) errors.push(`${where}: Run's output marks no place: ${(await p.locator(".run").first().innerText().catch(() => "-")).replace(/\s+/g, " ").slice(0, 300)}`);
+  if (await mark.count() && (await mark.innerText()) !== ")") errors.push(`${where}: the mark is at ${JSON.stringify(await mark.innerText())}, not the )`);
+  await p.close();
+}
+
 // Undo of + New definition goes back to the definition open before, and
 // Redo to the new one (E193): not to the library's first type.
 async function undoNewDefinition() {
@@ -711,7 +751,7 @@ async function simplifyAppend() {
   await p.close();
 }
 
-const scenarios = { sharedField, matchByValue, deleteAndUndo, swapAndUndo, implementInterface, choiceAction, heldSeed, listItems, sharedRow, matchDeeper, foldFrom, answeredLater, helperAtValue, partToFunction, textPort, newAndDeleteDefinition, undoNewDefinition, keptOnReload, reorderInputs, looseParts, seededRun, shaderOpens, letNodes, simplifyAppend };
+const scenarios = { stuckRead, sharedField, matchByValue, deleteAndUndo, swapAndUndo, implementInterface, choiceAction, heldSeed, listItems, sharedRow, matchDeeper, foldFrom, answeredLater, helperAtValue, partToFunction, textPort, newAndDeleteDefinition, undoNewDefinition, keptOnReload, reorderInputs, looseParts, seededRun, shaderOpens, letNodes, simplifyAppend };
 for (const [name, run] of Object.entries(scenarios)) {
   test(name, async () => {
     errors.length = 0;
