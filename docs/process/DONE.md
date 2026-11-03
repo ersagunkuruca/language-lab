@@ -731,7 +731,8 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| L208a | Design note for embeddings, generalization as a feature (docs/design/numbers/EMBEDDINGS.md): one canonical `Embedding a b` per pair, inserted only where both types are known, the diamond rule, and steps b to f | this PR |
+| L51d | Tensors (L51) done: a bigger program, a two-layer network's forward pass (8 × 6 and 3 × 8 weights, ReLU between) as two contractions plus biases, evaluated and compiled to the hand-worked answer (ters/test/tensor-network.test.ts); the other engines are C160 | this PR |
+| L208a | Design note for embeddings, generalization as a feature (docs/design/numbers/EMBEDDINGS.md): one canonical `Embedding a b` per pair, inserted only where both types are known, the diamond rule, and steps b to f | #1401 |
 | L204a | A library type's + − · and < are looked up from the library's own implementations (the layer under a program) instead of a hand list of names; one without is still told so where it is used | #1400 |
 | L211b | A use's `binds` and `body` are optional in the model (model.ts), read through `bindsOf`/`bodyOf` everywhere in ters/src (the checker, the evaluator, relate, modes, arith, render, hash, units and the rest); a bodyless use hashes with no body. Nothing changes what runs: `fillUses` still fills a bodyless use at load. The compiler (C158, #1375) and the editor (E240) were ready | #1399 |
 | T12 | Each sweep checks a fixed number of things per change (test/helpers.ts `capped`, spread over the slice and rotating with SWEEP_AT; SWEEP=all checks everything): lang.test's palette sweep 10 targets with 8 fillings each, palette.test 8 calls with 10 fillings, dots.test 40 wires, a dot put only on those. lang.test 148 s to 33 s, palette.test 117 s to 83 s, dots.test 226 s to 95 s | #1397 |
