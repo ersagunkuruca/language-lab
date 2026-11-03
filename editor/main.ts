@@ -3678,10 +3678,29 @@ const pageBox = h("div", { class: "page-box" }, page.frame, page.status,
     h("label", { class: "hint", title: "Outline each text, attribute or part of the page when it runs again, so you can see that only what read a changed cell does" }, page.flashBox, " Outline updates"),
     h("button", { class: "btn", type: "button", "data-act": "page-tab", title: "The page compiled to JavaScript, in a tab of its own" }, "Open in a tab"),
     h("button", { class: "btn", type: "button", "data-act": "page-save", title: "The page compiled to JavaScript as one HTML file that runs anywhere, like lab build-web" }, "Save page")));
+// The program version a page will run for once the edit has drawn.
+let pageSoon: Code | null = null;
 function pageSection(info: T.Info | null): HTMLElement | null {
   const main = info && !errorsIn(info) && !holesIn(info) ? pageMain(ownDefs(), info, pres().names) : null;
   if (!main || !info) { leavePage(); return null; }
-  if (page.for !== prog()) {
+  if (page.for !== prog() && page.program === doc.program && !keptPages.has(doc.program)) {
+    // An edit to the page's program: the edit draws first and the page runs
+    // again just after, so the page's run (2 s in Spacetime) doesn't hold
+    // the edit back. Till then the page as it was stays.
+    const want = prog();
+    if (pageSoon !== want) {
+      pageSoon = want;
+      const go = () => {
+        if (pageSoon !== want) return;
+        pageSoon = null;
+        if (prog() !== want || page.for === want) return;
+        leavePage();
+        startPage(info, main);
+        render();
+      };
+      if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => setTimeout(go, 0)); else setTimeout(go, 0);
+    }
+  } else if (page.for !== prog()) {
     leavePage();
     const kept = keptPages.get(doc.program);
     keptPages.delete(doc.program);
