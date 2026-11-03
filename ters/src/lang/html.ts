@@ -10,6 +10,7 @@
 // stream of results, compiled ones their one result). The page is anything
 // shaped like the few DOM calls used here, so tests draw into a fake one.
 
+import { nfc } from "./border.ts";
 import { KEPT, Pending, type Cells, type CellNode } from "./cells.ts";
 import type { Data, Value } from "./run.ts";
 import { fromList, OutOfSteps, PAGE_STEPS, withSteps } from "./run.ts";
@@ -198,7 +199,8 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
           const then = a.fields[1];
           const handle = (ev: { key?: string; target?: unknown; clientX?: number; clientY?: number; seconds?: number }) => {
             const target = (ev.target ?? e) as El & { type?: string };
-            const value = target.type === "checkbox" ? String(!!target.checked) : String(target.value ?? "");
+            // What was typed enters in NFC (L214a, border.ts).
+            const value = target.type === "checkbox" ? String(!!target.checked) : nfc(String(target.value ?? ""));
             const [x, y] = pointer(e, ev);
             // One batch per event: the page updates once, after every write.
             // A handler that fetched what hasn't come stops there, what it

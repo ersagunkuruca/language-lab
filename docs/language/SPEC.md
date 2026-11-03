@@ -94,7 +94,7 @@ Normalization Form C, so equality is code points and still what people
 expect; text a program builds itself is not normalised again. Case
 mapping takes a locale as an argument, grapheme clusters are a separate
 operation, and an order for people is a separate collation, never
-`compare` (decided, S7, TEXT-2026-11-03.md; built in steps, L214).
+`compare` (decided, S7, TEXT-2026-11-03.md). NFC at the border is built (L214a); the rest is built in steps (L214).
 
 2.6. **Functions** are values. A function remembers the code it was made
 from (so it can be run backwards, §7), but a program can't look inside

@@ -669,6 +669,11 @@ export const $seededS = (seed, body) => $handleS(RANDOM, draws(seed), {}, body);
 
 let world = {};
 export function $setWorld(w) { world = w ?? {}; $random = world.random ?? worldRandom; }
+// Text from the world enters in Normalization Form C (TEXT-2026-11-03.md,
+// L214a), as ters/src/lang/border.ts does for the evaluator.
+const ENTERING = new Set(["input", "readLine", "readFile", "listFolder", "fetchText"]);
+const nfc = (v) => (typeof v === "string" ? v.normalize("NFC") : Array.isArray(v) ? v.map(nfc) : v);
+const fetched = (poll) => () => { const r = poll(); return r && "text" in r ? { text: nfc(r.text) } : r; };
 const fallible = (k) => (...args) => {
   const f = world[k];
   let v;
@@ -680,7 +685,7 @@ const fallible = (k) => (...args) => {
     if (e instanceof Pending || e instanceof OutOfSteps) throw e;
     return $perform(ABORT, ABORT_OP, [e.message]);
   }
-  return v;
+  return ENTERING.has(k) ? nfc(v) : v;
 };
 const some = (v) => (v === null ? { tag: NONE, fields: [] } : { tag: SOME, fields: [v] });
 // A builtin that acts on the world performs its effect's operation when a
@@ -704,7 +709,7 @@ export const $io = {
   // In the background where the world can and can wait, under a running
   // main (C111, as the evaluator's L150b): a ticket ready when the body has come.
   // Otherwise fetched now, so the ticket is ready at once on any clock.
-  startFetch: acting(IO.startFetch, (u) => (world.startFetch && world.wait && running ? running.fetch(world.startFetch(u)) : { tag: "std.ticket.timer", fields: [0, fallible('fetchText')(u)] })),
+  startFetch: acting(IO.startFetch, (u) => (world.startFetch && world.wait && running ? running.fetch(fetched(world.startFetch(u))) : { tag: "std.ticket.timer", fields: [0, fallible('fetchText')(u)] })),
 };
 // Each world operation by its builtin, for an operation performed by name
 // that nothing handles ($perform).

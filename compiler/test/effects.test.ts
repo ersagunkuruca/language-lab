@@ -13,7 +13,7 @@ import { infer } from "../../ters/src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
 import { Aborted, makeRunner, runMain, type Value, type World } from "../../ters/src/lang/run.ts";
 import { fractionsProgram } from "../../ters/src/lang/cells-programs.ts";
-import { ABORT_OP, CELL_OPS, INT_OPS, IO, LOG_OP, NOW_OP, PAIR_V, RANDOM_OP, S, SHOW_ANY, WAIT_OP } from "../../ters/src/lang/std.ts";
+import { ABORT_OP, CELL_OPS, INT_OPS, IO, LOG_OP, NOW_OP, PAIR_V, RANDOM_OP, S, SHOW_ANY, TEXT_OPS, WAIT_OP } from "../../ters/src/lang/std.ts";
 import { B } from "../../ters/src/prelude.ts";
 import { compile } from "../src/compile.ts";
 import { $setPrint, $setWorld } from "../src/runtime.js";
@@ -377,4 +377,26 @@ test("a solve with exactly one answer is a plain call: no Choice, no generator",
   });
   assert.deepEqual(r.lines, ["3"]);
   assert.match(r.js, /function sum_of\(p\) \{\n  return .*\$one\(solve\$0\(p\)\)/);
+});
+
+// Text from the world enters in Normalization Form C (TEXT-2026-11-03.md,
+// L214a): a file and a line holding "e" with a combining accent are "é",
+// one character, evaluated and compiled; text a program builds isn't
+// normalised again until it asks.
+test("text from the world is NFC: a decomposed é read from a file and a line equals the literal é", async () => {
+  const decomposed = "é";
+  const r = await both((k) => {
+    const main = k.def("main");
+    const is = (x: Id) => k.call(S.print, k.call(SHOW_ANY, k.call(S.equal, x, k.lit("é"))));
+    k.define(main, k.thunk(() => k.seq(
+      is(k.call(IO.readFile, k.lit("name.txt"))),
+      k.call(S.print, k.call(SHOW_ANY, k.call(TEXT_OPS.length, k.call(IO.readFile, k.lit("name.txt"))))),
+      k.match(k.call(IO.readLine), [{ variant: "std.optional.some", names: ["l"], body: ([l]) => is(l) }, { variant: "std.optional.none", names: [], body: () => k.call(S.print, k.lit("none")) }]),
+      k.call(S.print, k.call(SHOW_ANY, k.call(IO.listFolder, k.lit(".")))),
+      is(k.call(S.concat, k.lit("e"), k.lit("́"))),
+      is(k.call(TEXT_OPS.normalized, k.call(S.concat, k.lit("e"), k.lit("́")))),
+    )));
+    return main;
+  }, { [`caf${decomposed}.txt`]: "x", "name.txt": decomposed }, decomposed);
+  assert.deepEqual(r.lines, ["true", "1", "true", `["café.txt", "name.txt"]`, "false", "true"]);
 });

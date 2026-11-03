@@ -15,6 +15,7 @@
 // (Console, Files) have one handler, the runtime's `World`; Log, Abort,
 // Random, Time and Wait, when nothing in the program handles them, go to it too.
 
+import { bordered } from "./border.ts";
 import { givenInOrder } from "./ports.ts";
 import { dependencies, subtree, type Code, type Id, type NodeOf, type Use, useTarget, isCall, type Call, isUse } from "../model.ts";
 import type { Names } from "../presentation.ts";
@@ -461,7 +462,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     // In the background where the world can (L150b): a ticket ready when
     // the body has come. Otherwise fetched now, so the ticket is ready at
     // once on any clock (L150).
-    [IO.startFetch]: (u) => one(rt.world?.startFetch ? timers.fetch(rt.world.startFetch(u as string)) : { tag: TICKET_V.timer, fields: [0, world("fetchText")(u as string)] }),
+    [IO.startFetch]: (u) => one(rt.world?.startFetch ? timers.fetch(world("startFetch")!(u as string)) : { tag: TICKET_V.timer, fields: [0, world("fetchText")(u as string)] }),
     // Cells' operations (cellOps, below), the evaluator's way: a stream.
     ...Object.fromEntries(Object.entries(cellOps(cells, (f, ...xs) => { for (const v of (f as Fn)(...xs)) return v; throw new NoValue("gave no value"); })).map(([id, f]) => [id, (...xs: Value[]) => { const v = f(...xs); return v === undefined ? [] : one(v); }])),
     // Places and edits at them (L98, cells.ts).
@@ -519,7 +520,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   function world<K extends keyof World>(k: K): World[K] {
     const f = rt.world?.[k];
     if (!f) return (() => { throw new Error(`this runtime can't ${k === "error" || k === "log" ? "write to standard error" : k}`); }) as unknown as World[K];
-    return f.bind(rt.world) as World[K];
+    return bordered(rt.world!, k, f);
   }
   // Operations of effects, as function values.
   const effectOf = (variant: Id): Id | null => {
