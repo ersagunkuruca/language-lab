@@ -19,6 +19,7 @@
 // Every function owns its inputs, as the program's own do, and drops them.
 // One with no answer (Choice) sets lab_st to 1 and gives a stand-in.
 
+import { nfcC } from "./c-nfc.ts";
 export interface ListNames { cons: string; nil: string; type: number; tag: number; head: number }
 // A runtime function: its C, given the names of the list type it makes or
 // reads, and what it calls.
@@ -708,10 +709,12 @@ static double lab_world_randomSeed(void) {
   return t;
 }`,
   },
-  "world.readInput": { uses: ["world.readAll"], c: `static lab_cell *lab_world_readInput(void) { return lab__read_all(stdin); }` },
+  // Text from the world comes in in NFC (C151, c-nfc.ts), as the evaluator's (ters/src/lang/border.ts).
+  "world.nfc": { uses: [], get c() { return nfcC(); } },
+  "world.readInput": { uses: ["world.readAll", "world.nfc"], c: `static lab_cell *lab_world_readInput(void) { return lab__nfc(lab__read_all(stdin)); }` },
   // A line without its end (\n, or \r\n); none at the end of the input.
   "world.readLine": {
-    uses: [],
+    uses: ["world.nfc"],
     c: (o) => `static lab_cell *lab_world_readLine(void) {
   int c = getchar();
   if (c == EOF) return &${o.nil};
@@ -721,19 +724,19 @@ static double lab_world_randomSeed(void) {
   for (; c != EOF && c != '\\n'; c = getchar()) { if (n == cap) { s = realloc(s, cap *= 2); if (!s) lab_oom(); } s[n++] = (char)c; }
   if (n && s[n - 1] == '\\r') n--;
   ${o.cons} *r = lab_new(sizeof(${o.cons}), ${o.type}, ${o.tag});
-  r->f${o.head} = lab__text_of(s, n);
+  r->f${o.head} = lab__nfc(lab__text_of(s, n));
   free(s);
   return (lab_cell *)r;
 }`,
   },
   "world.readFile": {
-    uses: ["world.fail", "world.readAll"],
+    uses: ["world.fail", "world.readAll", "world.nfc"],
     c: `static lab_cell *lab_world_readFile(lab_cell *path) {
   char *p = lab__cstr(path);
   FILE *f = lab__kind(p) == 2 ? (errno = EISDIR, (FILE *)0) : fopen(p, "rb");
   free(p);
   if (!f) { lab__fail(errno, path); return 0; }
-  lab_cell *t = lab__read_all(f);
+  lab_cell *t = lab__nfc(lab__read_all(f));
   fclose(f);
   lab_drop(path);
   return t;
@@ -757,7 +760,7 @@ static double lab_world_randomSeed(void) {
   // A folder's names, sorted as JavaScript sorts texts: by UTF-16 units,
   // so a character past U+FFFF comes before U+E000 to U+FFFF.
   "world.listFolder": {
-    uses: ["world.fail"],
+    uses: ["world.fail", "world.nfc"],
     c: (l) => `static uint32_t lab__u16(const uint8_t *b, uint32_t n, uint32_t *i, uint32_t *low) {
   if (*low) { uint32_t u = *low; *low = 0; return u; }
   uint32_t c = b[(*i)++], w = c < 0x80 ? 0 : c < 0xE0 ? 1 : c < 0xF0 ? 2 : 3;
@@ -794,7 +797,7 @@ static lab_cell *lab_world_listFolder(lab_cell *path) {
   closedir(dir);
   qsort(xs, n, sizeof *xs, lab__js_order);
   lab_cell *acc = &${l.nil};
-  for (size_t k = n; k-- > 0;) { ${l.cons} *c = lab_new(sizeof(${l.cons}), ${l.type}, ${l.tag}); c->f${l.head} = xs[k]; c->f${1 - l.head} = acc; acc = (lab_cell *)c; }
+  for (size_t k = n; k-- > 0;) { ${l.cons} *c = lab_new(sizeof(${l.cons}), ${l.type}, ${l.tag}); c->f${l.head} = lab__nfc(xs[k]); c->f${1 - l.head} = acc; acc = (lab_cell *)c; }
   free(xs);
   lab_drop(path);
   return acc;
