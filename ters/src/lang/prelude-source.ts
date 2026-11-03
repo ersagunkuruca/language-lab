@@ -1986,6 +1986,7 @@ export function buildPrelude(): Module {
     [unitI]: "i, the square root of −1: i · i is −1.",
     [conjC]: "a − bi for a + bi: the same point mirrored across the real line. z · conjugate(z) is |z|².",
     [modulus]: "|z|, how far z is from 0 (the vectors module's magnitude says the same).",
+    [near]: "Whether two Float64s agree to the precision floats carry: within 1e-9 of each other, relative to their size. equal is exact, so √2 · √2 isn't equal to 2, but it is near it.",
     [angle]: "The angle from the positive real line to z, in radians, between −π and π (atan2).",
     [polar]: "The complex number size away from 0 at this angle: size·(cos angle + i sin angle).",
     [divC]: "z ÷ w for complex numbers; no answer when w is 0. Not offered: the one divide works on every number but Int; kept so programs saved before still open.",

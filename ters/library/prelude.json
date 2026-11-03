@@ -89485,6 +89485,7 @@
     "@7lrku7dm0b5g72i0lrmd8acccv": "i, the square root of −1: i · i is −1.",
     "@aclg13eff4ceaebcksq8gh376d": "a − bi for a + bi: the same point mirrored across the real line. z · conjugate(z) is |z|².",
     "@poo2a71bl3s61p9glu6dh6brc8": "|z|, how far z is from 0 (the vectors module's magnitude says the same).",
+    "@dnrgd5dukth30ul9bgkss9nohh": "Whether two Float64s agree to the precision floats carry: within 1e-9 of each other, relative to their size. equal is exact, so √2 · √2 isn't equal to 2, but it is near it.",
     "@pfojf3l6ilfal3049qk32pc8op": "The angle from the positive real line to z, in radians, between −π and π (atan2).",
     "@pd38c7vaapt5d63e9l1q4a08s6": "The complex number size away from 0 at this angle: size·(cos angle + i sin angle).",
     "@itrutcjuml4ip1t1nbb8dkfhrh": "z ÷ w for complex numbers; no answer when w is 0. Not offered: the one divide works on every number but Int; kept so programs saved before still open.",
