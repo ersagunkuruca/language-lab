@@ -31,6 +31,7 @@ import { fresh, rigid, RIGID, type Pins } from "./signatures.ts";
 import {
   ALGEBRAIC_TYPE, ARRAY, MASK_TYPES, isRowCarrier, rowCarrier, BUILTIN_EFFECTS, NAMED_ROWS, writtenRow, CELL, PATH, CHOICE, COMPLEX_TYPE, CONSOLE, DUAL_TYPE, FIXED_TYPE, DIVERGE, EffectError, ArithError, FractionError, WORLD, WorldError, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, RATIONAL_TYPE, schemeArith, schemeNeeds, showType as showT, STRING, Subst, TypeError,
   type Row, type Scheme, type Type,
+  OverMap, OverSet,
 } from "./types.ts";
 import { DECLARED, discharge } from "./ledger.ts";
 
@@ -126,22 +127,66 @@ const bool: Type = { t: "con", id: BOOL, args: [] };
 // `reuse` rechecks only the definitions in `only` and takes the others'
 // types from an earlier check of the same program (the palette uses this to
 // try a filling against just the definitions it can affect).
-export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only: Set<Id>; units?: UnitsBefore; noUnits?: boolean }, opts: Options = {}): Info {
+// The library under every program (L216): checked once per options and
+// kept, so a program's check reads through to it and checks only its own
+// definitions. It counts only while every one of its nodes is the library's
+// own, unchanged; a program that edits one is checked whole.
+let underAll: { code: Code; names: Names } | null = null;
+const underChecks: { opts: Options; info: Info }[] = [];
+export function checkOnce(code: Code | null, names: Names = {}) { underAll = code && { code, names }; underChecks.length = 0; }
+let checkingUnder = false;
+function under(code: Code, opts: Options): { info: Info; only: Set<Id> } | null {
+  if (!underAll || checkingUnder) return null;
+  const lib = underAll.code;
+  for (const id in lib.nodes) if (code.nodes[id] !== lib.nodes[id]) return null;
+  const libDefs = new Set(lib.defs);
+  const only = new Set(code.defs.filter((d) => !libDefs.has(d)));
+  if (!only.size || code.defs.length !== libDefs.size + only.size) return null;
+  const same = (a: Options) => a.pins === opts.pins && a.hidden === opts.hidden && a.insiders === opts.insiders && a.library === opts.library;
+  let kept = underChecks.find((c) => same(c.opts));
+  if (!kept) {
+    checkingUnder = true;
+    try { kept = { opts, info: infer(lib, underAll.names, undefined, opts) }; } finally { checkingUnder = false; }
+    // A few kept, the latest first: a caller that makes its options anew
+    // each time would otherwise keep a library check for each.
+    underChecks.unshift(kept);
+    if (underChecks.length > 4) underChecks.pop();
+  }
+  return kept.info.errors.length ? null : { info: kept.info, only };
+}
+
+// `layer`: from is a check of other definitions under this program (the
+// library's, L216), which this check reads through to rather than copies:
+// its substitution, and each node's type.
+export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only: Set<Id>; units?: UnitsBefore; noUnits?: boolean; layer?: boolean }, opts: Options = {}): Info {
+  if (!reuse) { const u = under(code, opts); if (u) return infer(code, names, { from: u.info, only: u.only, layer: true }, opts); }
   // A solve that one of its relation's directions answers is checked as a
   // solve of that direction (directions.ts, POLAR.md).
   code = useDirections(code);
   // gradient(f)(p): p's type, for gradient(f) (smoothGradient, below).
   const at = new Map<Id, Type>();
-  const s = new Subst();
-  if (reuse) s.next = reuse.from.subst.next;
+  const layer = reuse?.layer ? reuse.from : null;
+  const s = layer ? layer.subst.trial() : new Subst();
+  // What the layer under asked is answered already. (Its row containments
+  // stay: showing its types reads them.)
+  if (layer) s.wanted = [];
+  else if (reuse) s.next = reuse.from.subst.next;
   // A filling tried by the palette adds no types, so their parts' owners
   // are the earlier check's.
-  const owner = reuse ? reuse.from.owner : ownerOfTypeParts(code);
+  const owner = reuse && ![...reuse.only].some((d) => (code.nodes[(code.nodes[d] as NodeOf<"def">)?.body ?? ""] as Node | undefined)?.kind === "typedef") ? reuse.from.owner : ownerOfTypeParts(code);
   const insiders = opts.insiders ? new Set(opts.insiders) : null;
   const library = opts.library ? new Set(opts.library) : null;
   // Whether a type's private cases are the library's to build.
   const libraryType = (def: Id) => !library || library.has(def);
   const info: Info = { typeOf: new Map(), schemes: new Map(), errors: [], holes: new Map(), divergent: new Set(), subst: s, owner, hidden: new Set(opts.hidden ?? []), options: opts, implementations: new Map(), opAt: new Map(), answered: new Set(), spread: new Set(), reshape: new Map() };
+  if (layer) {
+    info.typeOf = new OverMap(layer.typeOf);
+    info.opAt = new OverMap(layer.opAt ?? new Map());
+    info.answered = new OverSet(layer.answered ?? new Set());
+    info.spread = new OverSet(layer.spread ?? new Set());
+    info.reshape = new OverMap(layer.reshape ?? new Map());
+    if (layer.solveAt) info.solveAt = new OverMap(layer.solveAt);
+  }
   const err = (id: Id, message: string, missing?: Problem["missing"]) => info.errors.push(missing ? { id, message, missing } : { id, message });
   const nm = (id: Id) => names[id] ?? id;
   const show = (t: Type) => showT(s.zonk(t), names);
@@ -1447,8 +1492,10 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     }
   }
   if (again) return infer(code, names, reuse, opts);
-  for (const [id, t] of info.typeOf) info.typeOf.set(id, s.zonk(t));
-  for (const [id, t] of info.opAt!) info.opAt!.set(id, s.zonk(t));
+  // Under a layer only this check's own are zonked: the layer's are already.
+  const own = <V>(m: Map<Id, V>) => [...(m instanceof OverMap ? m.own() : m.entries())];
+  for (const [id, t] of own(info.typeOf)) info.typeOf.set(id, s.zonk(t));
+  for (const [id, t] of own(info.opAt!)) info.opAt!.set(id, s.zonk(t));
   for (const h of info.holes.values()) {
     h.expected = s.zonk(h.expected);
     h.scope = h.scope.map((b) => ({ id: b.id, type: s.zonk(b.type) }));

@@ -9,6 +9,7 @@ import { merge, type Code, type Id } from "../model.ts";
 import { layer, type Comments, type Names } from "../presentation.ts";
 import { prelude, preludeNames } from "../prelude.ts";
 import { adopt, library, type Module } from "./modules.ts";
+import { checkOnce } from "./infer.ts";
 import { std, stdNames } from "./std.ts";
 import { NOTES } from "./notes.ts";
 
@@ -28,6 +29,8 @@ export const CORE: Code = merge(prelude, std);
 const lib = library(CORE, layer<Names>(preludeNames, stdNames), MODULES.filter((m) => m !== TREES));
 // The builtins' and std's plain notes (notes.ts) beside the modules' own.
 export const LIBRARY = { ...lib, comments: { ...NOTES, ...lib.comments }, reps: TREES.representations ?? [] };
+// Checked once, under every program that leaves it as it is (L216).
+checkOnce(LIBRARY.code, LIBRARY.names);
 
 // A program's own part: what isn't in the library.
 export const ownPart = (code: Code): Code => ({
