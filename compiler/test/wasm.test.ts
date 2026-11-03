@@ -859,8 +859,9 @@ test("Random under seeded in WebAssembly: the evaluator's numbers, a seeded insi
   const p = randoms();
   assert.deepEqual(p.info.errors.map((e) => e.message), []);
   const lowered = lowerScalar(p.code, p.info, p.names, [...Object.values(p.defs), p.roll], { data: true });
-  // A definition that draws with nobody seeding it is refused, by name.
-  assert.match(lowered.refused.get(p.roll) ?? "", /nobody seeds/);
+  // A definition that draws with nobody seeding it was refused; the world
+  // seeds it now (C136, random-world.test.ts).
+  assert.ok(!lowered.refused.has(p.roll), lowered.refused.get(p.roll));
   for (const def of Object.values(p.defs)) assert.ok(!lowered.refused.has(def), lowered.refused.get(def));
   const w = await instantiate(emitWasm(lowered)) as unknown as Exports;
   const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });

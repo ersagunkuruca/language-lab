@@ -457,9 +457,14 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   // What a partial function (`data`) may do besides answer: have no answer,
   // not finish (running out of a budget), or abort; and the world's effects.
   const partialEff = (e: Id) => e === CHOICE || e === DIVERGE || escaping(e);
-  // Random only under a `seeded` (C106): a root that draws one nobody
-  // seeds is refused below.
+  // Random under a `seeded` (C106), or drawn from the world (C136).
   const allowedEff = (e: Id) => partialEff(e) || e === CONSOLE || e === FILES || (!!opts.data && e === RANDOM);
+  // Some root draws a number nobody seeds (C136): the world seeds
+  // Random's generator then, at the first draw.
+  const worldRandom = !!opts.data && roots.some((r) => {
+    const raw = info.typeOf.get(r) && info.subst.zonk(info.typeOf.get(r)!);
+    return raw?.t === "fn" && info.subst.resolveRow(raw.eff).effs.includes(RANDOM);
+  });
   const OTHER = opts.data ? "something other than Float64, Bool or data of them" : opts.records ? "something other than Float64, Bool or a record of them" : "something other than Float64 or Bool";
 
   // The profile's type for t, or null if t isn't in it.
@@ -864,7 +869,15 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
         }
         if (opts.data && target === CELL_OPS.changed) return changed(n, id, env, f);
         if (target === SET && n.args.length === 3) return setField(n, id, env, f);
-        if (opts.data && target === RANDOM_OP) return { k: "rt", fn: "rand.next", args: [] };
+        if (opts.data && target === RANDOM_OP) {
+          const next: SExpr = { k: "rt", fn: "rand.next", args: [] };
+          if (!worldRandom) return next;
+          // Nobody may have seeded it (C136): the world seeds the
+          // generator at its first draw, so draws under a seeded still
+          // give the seeded numbers and an outer one goes on after.
+          const tmp = f.locals.push("f64") - 1;
+          return { k: "if", cond: { k: "rt", fn: "rand.unset", args: [] }, then: { k: "let", i: tmp, value: { k: "rt", fn: "rand.seed", args: [{ k: "world", op: "randomSeed", aborts: false, args: [], t: "f64" }] }, body: next }, else: next, t: "f64" };
+        }
         if (opts.data && target === S.seeded) return seeded(n, id, env, f);
         if (target === S.valueOf && opts.data) return valueOf(n, id, env, f);
         if (target === S.oneOf && opts.data && n.args.length === 1) {
@@ -2033,7 +2046,6 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   for (const r of roots) {
     const from = funcs.length, shaped = shapes.length;
     const raw = info.typeOf.get(r) && info.subst.zonk(info.typeOf.get(r)!), given = defaults(r);
-    if (opts.data && raw?.t === "fn" && info.subst.resolveRow(raw.eff).effs.includes(RANDOM)) { refused.set(r, "draws a random number nobody seeds (the world's Random isn't in WebAssembly and C yet): seed it with seeded"); continue; }
     rootVars = new Set(raw ? vars(raw).filter((v) => !given.has(v)) : []);
     try { func(r, given); several_(from); modCons(from); } catch (e) {
       if (!(e instanceof Refused)) throw e;
