@@ -108,11 +108,11 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 - **as word32** : `(Int) -> Word32`. The 32-bit word of an Int: its low 32 bits, so as word8(300) is 44 and as word8(−1) is 255. + − · wrap around, < is unsigned, and bits and, or, xor and shifts work on it. Its bits are the Int in its field bits.
 - **as word64** : `(Int) -> Word64`. The 64-bit word of an Int: its low 64 bits, so as word8(300) is 44 and as word8(−1) is 255. + − · wrap around, < is unsigned, and bits and, or, xor and shifts work on it. Its bits are the Int in its field bits.
 - **Bits** (type). An interface: and, or, xor and shifts on a type's bits. Int and the words implement it, so a hash written with bits xor works at Word32 and Word64 alike.
-- **bits and** : `(a, a) -> a where a has Bits`.
-- **bits or** : `(a, a) -> a where a has Bits`.
-- **bits xor** : `(a, a) -> a where a has Bits`.
-- **shifted up** : `(a, Int) -> a where a has Bits`.
-- **shifted down** : `(a, Int) -> a where a has Bits`.
+- **bits and** : `(a, a) -> a where a has Bits`. The bits both a and b have: at a word, its n bits; at Int, two's complement (a negative has ones going on forever).
+- **bits or** : `(a, a) -> a where a has Bits`. The bits either a or b has, at a word or an Int.
+- **bits xor** : `(a, a) -> a where a has Bits`. The bits exactly one of a and b has, at a word or an Int: a hash's step (FNV-1a) and a generator's (xorshift).
+- **shifted up** : `(a, Int) -> a where a has Bits`. x moved up n places, x · 2ⁿ: at a word the bits that pass the top are dropped, so shifted up(as word8(129), 1) is 2.
+- **shifted down** : `(a, Int) -> a where a has Bits`. x moved down n places, rounded towards −∞ (at a word, the low bits are dropped).
 - **int bits and** : `(Int, Int) -> Int`. The bits both a and b have, in two's complement (a negative has ones going on forever): Int's bits and in Bits.
 - **int bits or** : `(Int, Int) -> Int`. The bits either a or b has, in two's complement: Int's bits or in Bits.
 - **int bits xor** : `(Int, Int) -> Int`. The bits exactly one of a and b has, in two's complement: Int's bits xor in Bits.
