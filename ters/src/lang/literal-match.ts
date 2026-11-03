@@ -8,7 +8,7 @@
 //
 //   match op
 //     "set" → read d a(make set, …)
-//     "add" → read d a a(make add, …)
+//     "add" → read a register and two values(make add, …)
 //     otherwise → bad(line, "no instruction named " ++ op)
 //
 // The checker types each value as the scrutinee (infer.ts `byValue`) and
