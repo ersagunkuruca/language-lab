@@ -57,7 +57,7 @@ test("a written list reads as [a, b, c], as the nested conses do (L181c)", () =>
   const k = new Lang(LIBRARY.code);
   const flat = k.def("flat"), nested = k.def("nested");
   k.define(flat, k.listOf(k.lit(1), k.lit(2), k.lit(3)));
-  k.define(nested, k.list(k.lit(1), k.lit(2), k.lit(3)));
+  k.define(nested, k.consList(k.lit(1), k.lit(2), k.lit(3)));
   const code = base(k.code), names = baseNames(k.names);
   const info = infer(code, names);
   const pres = { names, comments: {}, hints: {}, style: JSON.parse(readFileSync(join(root, "styles", "blocks.json"), "utf8")) };

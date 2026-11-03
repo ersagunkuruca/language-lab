@@ -14,7 +14,7 @@
 import { subtree, type Code, type Id, type NodeOf, isCall } from "../model.ts";
 import { preludeDef } from "./arith.ts";
 import type { Info } from "./infer.ts";
-import { ABORT, CONS, NIL, SIGS } from "./std.ts";
+import { ABORT, SIGS, writtenItems } from "./std.ts";
 import { DIVERGE, Subst, type Type } from "./types.ts";
 
 // What a branch may do and still run elsewhere: stop (Abort), or run long
@@ -71,13 +71,7 @@ export function pureTogethers(code: Code, info: Info): Set<Id> {
     const f = code.nodes[n.fn];
     if (f?.kind !== "ref" || (f as NodeOf<"ref">).target !== together) continue;
     // The actions written in place, each a lambda of nothing.
-    const list: Id[] = [];
-    for (let e = code.nodes[n.args[0]]; ; ) {
-      if (e?.kind === "ref" && e.target === NIL) break;
-      if (!isCall(e) || code.nodes[e.fn]?.kind !== "ref" || (code.nodes[e.fn] as NodeOf<"ref">).target !== CONS) { list.length = 0; list.push(""); break; }
-      list.push(e.args[0]);
-      e = code.nodes[e.args[1]];
-    }
+    const list: Id[] = writtenItems(code.nodes, n.args[0]) ?? [""];
     const alone = list.length > 0 && list.every((a) => {
       const l = code.nodes[a];
       const own = l?.kind === "lambda" && !l.params.length ? ownEffects(code, info, l.body) : null;

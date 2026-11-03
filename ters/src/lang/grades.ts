@@ -38,7 +38,7 @@ import { children as childIds, dependencies, subtree, type Code, type Id, type N
 import type { Info } from "./infer.ts";
 import { LIBRARY } from "./library.ts";
 import { makeRunner, type Value } from "./run.ts";
-import { ALGEBRA_V, ARITH, CONS, LIST, NIL, S, SET as S_SET, TRUE } from "./std.ts";
+import { ALGEBRA_V, ARITH, CONS, LIST, NIL, S, SET as S_SET, TRUE, writtenItems } from "./std.ts";
 import { B } from "../prelude.ts";
 import { hashes } from "../hash.ts";
 import { MASK_TYPES, NUMBER, type Type } from "./types.ts";
@@ -393,6 +393,11 @@ function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: H
       const [h, t] = [arg(0), arg(1)];
       return { k: "list", item: t.k === "list" ? (t.item ? join(h, t.item) : h) : TOP };
     }
+    // A written list (L181d): its items joined, as the conses would give.
+    if (target === S.listOf) {
+      const items = n.args.map((_, i) => arg(i));
+      return { k: "list", item: items.reduce((a, b) => join(a, b)) };
+    }
     if (target === S_SET) {
       const fr = nodes[n.args[0]];
       if (fr?.kind === "ref" && declared.has(fr.target)) put(n.args[2], fr.target, arg(2));
@@ -498,19 +503,11 @@ function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: H
 
   // A list written out of Int or Float64 literals.
   const listLits = (id: Id): number[] | null => {
+    const items = writtenItems(nodes, id);
+    if (!items) return null;
     const out: number[] = [];
-    let c = nodes[id];
-    for (;;) {
-      if (c?.kind === "ref" && c.target === NIL) return out;
-      if (!isCall(c)) return null;
-      const f = nodes[c.fn];
-      if (f?.kind === "ref" && f.target === NIL) return out;
-      if (f?.kind !== "ref" || f.target !== CONS) return null;
-      const h = nodes[c.args[0]];
-      if (h?.kind !== "lit") return null;
-      out.push(Number(h.value));
-      c = nodes[c.args[1]];
-    }
+    for (const x of items) { const h = nodes[x]; if (h?.kind !== "lit") return null; out.push(Number(h.value)); }
+    return out;
   };
 
   return { algebras, ev, lam, byType };

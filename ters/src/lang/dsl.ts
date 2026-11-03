@@ -224,13 +224,17 @@ export class Lang extends Builder {
     return this.add({ kind: "hole" });
   }
 
+  // A written list is one call with an input per item (L181d), not nested
+  // conses; an empty one is nil.
   list(...items: Id[]): Id {
-    return items.reduceRight((tail, x) => this.call(CONS, x, tail), this.x(NIL));
+    return items.length ? this.call(S.listOf, ...items) : this.x(NIL);
   }
-
-  // A written list as one call with an input per item (L181).
   listOf(...items: Id[]): Id {
-    return this.call(S.listOf, ...items);
+    return this.list(...items);
+  }
+  // Nested conses, for a test of that form.
+  consList(...items: Id[]): Id {
+    return items.reduceRight((tail, x) => this.call(CONS, x, tail), this.x(NIL));
   }
 
   text(...parts: Id[]): Id {
