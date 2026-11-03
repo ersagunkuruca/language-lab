@@ -44,6 +44,12 @@ New items land here until the next triage gives them a lane and a priority.
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 
+### Foundations ([FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md))
+
+| id | item | source | pri | size | status |
+|---|---|---|---|---|---|
+| E228 | editor/main.ts (4,589 lines, 254 kind tests) split by job (selection, palette, run, files); the palette and inspector read L178's schema instead of switching on kinds | [FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md) §11 | P3 | L | |
+
 ### Writing programs in the editor
 
 | id | item | source | pri | size | status |
@@ -60,6 +66,14 @@ New items land here until the next triage gives them a lane and a priority.
 
 New targets and speed rank below every language item (Ersagun,
 2026-10-24 07:01). Measurements and rounds: docs/reports/GAPS.md.
+
+### Foundations ([FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md), in fix order)
+
+| id | item | source | pri | size | status |
+|---|---|---|---|---|---|
+| C137 | The compiled targets on one lowering. compile.ts (3,435 lines) lowers JS straight from the model while WebAssembly, C, WGSL and js-scalar share scalar.ts's `Lowered`, so each feature is built twice in the compiler. (a) From now on nothing goes into compile.ts alone: a model-to-model pass or the shared lowering; (b) `Lowered` named and documented as the core IR; (c) a JavaScript printer from it, grown until it runs compile.ts's examples, checked by I111 and the differential test; (d) compile.ts retired piece by piece | [FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md) §2 | P2 | L | |
+| C138 | C30's aim first: an `array` representation of List written in the language and chosen by the representation layer, on the core IR, replacing compile.ts's 50 CONS/NIL tests and the per-target copies (C30d2, C30d3) | [FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md) §3 | P2 | L | |
+| C139 | Library types out of the core passes: id tests on library constructors and functions (compile.ts 188, scalar.ts 152, run.ts 82) become representations or builtin records, retired with C137's printer | [FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md) §7 | P3 | M | |
 
 ### Bugs and gaps found by programs
 
@@ -106,6 +120,17 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 Numbers first (Ersagun, 2026-10-24 07:01), then the rest of
 LANGUAGE-REVIEW-2026-10-24. Anything that only adds a target ranks below
 all of these.
+
+### Foundations ([FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md), in fix order)
+
+| id | item | source | pri | size | status |
+|---|---|---|---|---|---|
+| L179 | Before L130d lands: decide whether a use in another direction gives its produced ports as a tuple, like any function with several results (L128), with no `binds`/`body` scope (adjacency, not nesting), or keeps the body; write the reason in PORTS-2026-11-01.md §3. Fixed in the saved format and hash the day the flip lands | [FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md) §4 | P1 | S | |
+| L178 | **Bug.** The hash misses meaning: an effect, an interface and a data type of one shape hash the same; so do a def with `results` and without; an operation's `returns`/`later`/`private` and a def's `direction`/`way` aren't hashed; a literal match arm is hashed by its node id, so editing its value keeps the hash and `lab test` keeps the old result. Root cause: the node's shape is listed by hand in `children`, three `kids`, `canon` and the copiers. Fix: one schema table in model.ts (child slots, meaning and presentation attributes) that they all read, a test that every attribute in `Node` is classified, then the hash covers the above; saved programs moved by `onTodaysIds`. After L130d | [FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md) §1 | P1 | M | |
+| L180 | Split std.ts into builtin ids and signatures (what the checker, compilers and editor import) and implementations (what the engines import). Today a one-line edit of text.ts or cells.ts runs 135 to 145 of 150 ters test files and 44 of 44 compiler ones. Measure with `affected --list` before and after; takes most of I110 | [FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md) §5 | P1 | M | |
+| L181 | A written list is one call to the list maker with n inputs (PORTS §4), not n nested `cons` calls, so a 1,000-item list is depth 1 in every pass (I154: the checker overflows its stack today) | [FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md) §6 | P2 | M | |
+| L182 | Flags as hidden kinds: every new node attribute goes through L178's schema; as L128d and L130 land, `def.results`, `def.direction` and `field.results/ports` become ports on the definition's type | [FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md) §8 | P3 | M | |
+| L183 | Design note: check per definition group, cached by its hash and its dependencies' types, so an edit rechecks only what it changed (I157, I158, E103 keep coming back). After L178 | [FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md) §9 | P3 | L | |
 
 ### Bugs and gaps found by programs
 
@@ -221,3 +246,4 @@ Not lane work; the coordinator does these or asks Ersagun.
 | P2 | Batch deploys if Actions cost needs it | Ersagun 2026-10-23 | P3 | asked, not requested |
 | P3 | A per-repo Actions budget, or a public repo for free Actions | thread "GitHub Actions cost" | P3 | Ersagun's call |
 | P4 | Lanes' squash merges carry every commit message of their long-lived branch (#952's lists C52, C30, C40 2a to 2d, C65, C66a to C66c3, I79 … before its own): squash with the PR's own title and summary only | [REVIEW-2026-11-01b](docs/reports/reviews/REVIEW-2026-11-01b.md) §8 | P3 | |
+| P7 | A foundation row every fourth item in each lane; the weekly review tracks kind tests across the code (2,805), tests reached by a one-line text.ts edit (145/150 + 44/44) and readers of a kind's fields | [FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md) §10 | P2 | |
