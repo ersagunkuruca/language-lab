@@ -6,7 +6,7 @@ import { infer } from "../../ters/src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { ABORT_OP, CONS, FALSE, FIRST, INT_OPS, NIL, PAIR_V, RANDOM_OP, S, SECOND, SET, SHOW_ANY, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
-import { INT, NUMBER } from "../../ters/src/lang/types.ts";
+import { INT, NUMBER, STRING } from "../../ters/src/lang/types.ts";
 import { B } from "../../ters/src/prelude.ts";
 import type { Id } from "../../ters/src/model.ts";
 
@@ -33,6 +33,10 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
   const Shape = k.type("Shape", [], [["dot", []], ["circle", [["radius", float]]], ["rect", [["width", integer], ["height", float]]]]);
   const Box = k.type("Box", [], [["box", [["count", integer], ["size", float]]]]);
   const shape_ = Shape.v, box = Box.v;
+  // An effect of the program's own whose operations never return (C123):
+  // performed inside a handler of it, through lets, matches and closures.
+  const Escape = k.effect("Escape", [["bail", [["code", () => integer()]], null], ["quit", [["why", () => k.tref(STRING)], ["by", float]], null]]);
+  let handling = 0;
 
   // An expression of type t, at most `depth` deep, over what's in scope.
   function gen(t: Ty, s: Scope, depth: number): Id {
@@ -148,6 +152,16 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
           // A helper given a box and a shape (C116): C lends what it only reads.
           () => (helpers.length ? call(r.pick(helpers), sub("R"), sub("D"), sub("I")) : sub("I")),
           () => call(lib("queue size"), call(lib("queued"), call(lib("queue of"), sub("L")), sub("I"))),
+          () => {
+            handling++;
+            const body = sub("I");
+            handling--;
+            return k.handle(body, [
+              { variant: Escape.op.bail, names: [fresh()], body: ([c]) => gen("I", { ...s, I: [...s.I, c] }, depth - 1) },
+              { variant: Escape.op.quit, names: [fresh(), fresh()], body: ([w, b]) => gen("I", { ...s, T: [...s.T, w], F: [...s.F, b] }, depth - 1) },
+            ]);
+          },
+          () => (handling ? k.if(sub("B"), r.next() < 0.5 ? call(Escape.op.bail, sub("I")) : call(Escape.op.quit, sub("T"), sub("F")), sub("I")) : sub("I")),
           () => call(lib("map size"), call(lib("put"), textMap(), sub("T"), sub("I"))),
           () => orElse(call(lib("value at"), textMap(), sub("T"))),
           () => call(lib("set size"), call(lib("set union"), textSet(), textSet())),
