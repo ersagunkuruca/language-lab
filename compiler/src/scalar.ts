@@ -971,6 +971,16 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           return { k: "zero", t, none: true };
         }
         if (opts.shader && (target === S.first || target === S.count) && !isBudget(n)) return flagged(n, id, env, f);
+        // A stop with a reason (L51c, SPEC §8.4) ends the program, as an
+        // overflow does: no handler gets it. The world says why; what it
+        // gives is never used, so the call's value is a zero of its type.
+        if (target === S.stop && opts.data && n.args.length === 1) {
+          const t = stype(zonk(id));
+          if (!t) throw new Refused(`stops as ${whyNot(zonk(id))}`);
+          const i = f.locals.push("f64") - 1;
+          return { k: "let", i, value: { k: "world", op: "stopWith", aborts: false, args: [expr(n.args[0], env, f, false)], t: "f64" }, body: { k: "zero", t } };
+        }
+        if (target === S.stop) throw new Refused("stops with a reason, which needs the heap's text (a shader can't stop)");
         if (target === ABORT_OP && opts.data && n.args.length === 1) return { k: "abort", reason: expr(n.args[0], env, f, false) };
         if (opts.data && opOf.has(target)) {
           const e = opOf.get(target)!;

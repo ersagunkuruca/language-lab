@@ -195,6 +195,8 @@ function worldFn(op: string, rt: Runtime): (...xs: unknown[]) => unknown {
   const tried = <T>(f: () => T): T => { try { return f(); } catch (e) { if (e instanceof Aborted) throw e; throw new Aborted((e as Error).message, 0); } };
   switch (op) {
     case "randomSeed": return () => Math.floor(Math.random() * 4294967296);
+    // A stop with a reason (L51c): the program ends, as an overflow's stop.
+    case "stopWith": return (why) => { throw new Stopped(why as string); };
     case "now": return () => (rt.world?.now ?? Date.now)();
     case "random": return () => (rt.world?.random ?? worldRandom)();
     case "print": return (s) => { rt.print(s as string); return []; };

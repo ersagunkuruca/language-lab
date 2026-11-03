@@ -7036,6 +7036,17 @@ const WASI: Record<string, Omit<RtFn, "name">> = {
       call $wasi_proc_exit
       unreachable`,
   },
+  // A stop with a reason (L51c), as wasi.stop with the program's words.
+  "wasi.stopWith": {
+    params: [["t", "text"]], result: "f64", locals: [], uses: ["wasi.line", "wasi_proc_exit"],
+    body: `
+      i32.const 2
+      local.get $t
+      call $wasi.line
+      i32.const 1
+      call $wasi_proc_exit
+      unreachable`,
+  },
   // A seed for Random's generator from the world (C136): four bytes
   // from random_get at address 0.
   "wasi.randomSeed": { params: [], result: "f64", locals: [], uses: ["wasi_random_get"], body: `

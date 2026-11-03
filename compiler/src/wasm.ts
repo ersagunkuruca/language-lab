@@ -804,6 +804,8 @@ function worldOf(rt: Runtime, exports: () => Record<string, (...xs: unknown[]) =
   return {
     // A seed for Random's generator, 32 bits (C136).
     randomSeed: () => Math.floor(Math.random() * 4294967296),
+    // A stop with a reason (L51c): the program ends, as an overflow's stop.
+    stopWith: (t: unknown) => { throw new Aborted(text(t)); },
     print: (t: unknown) => rt.print(text(t)),
     printError: (t: unknown) => w("error")(text(t)),
     readInput: () => tried(() => make(w("input")())),

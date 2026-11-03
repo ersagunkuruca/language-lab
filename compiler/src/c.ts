@@ -468,10 +468,12 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     ...(text.some((t) => t.includes("lab_mod(")) ? ["static double lab_mod(double a, double b) { return fmod(fmod(a, b) + b, b); }"] : []),
     // A Float64 with no answer or too big (L125c2, stops.ts): the reason
     // to standard error and exit 1, as an Abort nothing handled does.
-    ...(text.some((t) => t.includes("lab_stop(")) || opts.harness ? [`static const char *lab_stops[] = { ${STOPS.map((x) => JSON.stringify(x)).join(", ")} };`, "#include <setjmp.h>",
+    // A stop with a reason (L51c) is number -1, its words in lab_stop_why.
+    ...(text.some((t) => t.includes("lab_stop(")) || rts.has("world.stopWith") || opts.harness ? [`static const char *lab_stops[] = { ${STOPS.map((x) => JSON.stringify(x)).join(", ")} };`, "#include <setjmp.h>",
       // The test harness goes on to its next call instead (lab_stop_at).
       "static jmp_buf *lab_stop_at = 0; static int lab_stopped = 0;",
-      "static double lab_stop(double i) { if (lab_stop_at) { lab_stopped = (int)i; longjmp(*lab_stop_at, 1); } fflush(stdout); fprintf(stderr, \"%s\\n\", lab_stops[(int)i]); exit(1); }"] : []),
+      "static const char *lab_stop_why = 0; static size_t lab_stop_n = 0;",
+      "static double lab_stop(double i) { if (lab_stop_at) { lab_stopped = (int)i; longjmp(*lab_stop_at, 1); } fflush(stdout); if (i < 0) fprintf(stderr, \"%.*s\\n\", (int)lab_stop_n, lab_stop_why); else fprintf(stderr, \"%s\\n\", lab_stops[(int)i]); exit(1); }"] : []),
     ...[...statics.values()].map((x) => x.decl),
     ...(rts.size ? ["", runtimeC(rts, listNames)] : []),
     ...[...arrays.values()].flatMap((a) => arrayC(a)),
@@ -1507,7 +1509,7 @@ int main(void) {
   jmp_buf at;
   lab_stop_at = &at;
   while (scanf("%d", &i) == 1) {
-    if (setjmp(at)) { const char *w = lab_stops[lab_stopped]; printf(" ! x"); for (; *w; w++) printf("%02x", (unsigned char)*w); printf(" ;0\\n"); ${cells ? "lab_live = 0; " : ""}continue; }
+    if (setjmp(at)) { const char *w = lab_stopped < 0 ? lab_stop_why : lab_stops[lab_stopped]; printf(" ! x"); for (size_t j = 0; lab_stopped < 0 ? j < lab_stop_n : w[j] != 0; j++) printf("%02x", (unsigned char)w[j]); printf(" ;0\\n"); ${cells ? "lab_live = 0; " : ""}continue; }
     switch (i) {
 ${cases.join("\n")}
     }
