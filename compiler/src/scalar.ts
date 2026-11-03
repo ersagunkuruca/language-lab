@@ -2018,23 +2018,27 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   }
 
   // first(() => with fuel(n, () => body), () => otherwise), and nothing
-  // else made of those two.
+  // else made of those two. With `data`, with fuel(n, () => body) alone
+  // too: running out is no answer, as in the evaluator, for the nearest
+  // first (or the caller) to see.
   function budget(n: Call, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
     const thunk = (x: Id | undefined) => { const l = x && code.nodes[x]; return l && l.kind === "lambda" && !l.params.length ? l.body : null; };
-    const action = thunk(n.args[0]), otherwise = thunk(n.args[1]);
-    const inner = action ? code.nodes[action] : null;
+    const alone = !!opts.data && (code.nodes[n.fn] as NodeOf<"ref">).target === S.fuel;
+    const action = alone ? null : thunk(n.args[0]), otherwise = alone ? null : thunk(n.args[1]);
+    const inner = alone ? n : action ? code.nodes[action] : null;
     const head = isCall(inner) ? code.nodes[inner.fn] : null;
-    const shape = `only as a budget, ${BUDGET}`;
-    if ((code.nodes[n.fn] as NodeOf<"ref">).target !== S.first || !action || !otherwise || !isCall(inner) || head?.kind !== "ref" || head.target !== S.fuel || inner.args.length !== 2)
-      throw new Refused(`uses first or with fuel, which a shader takes ${shape}`);
+    const who = opts.data ? "this profile" : "a shader";
+    const shape = `only as a budget, ${opts.data ? `with fuel(n, () => …) or ${BUDGET}` : BUDGET}`;
+    if ((!alone && ((code.nodes[n.fn] as NodeOf<"ref">).target !== S.first || !action || !otherwise)) || !isCall(inner) || head?.kind !== "ref" || head.target !== S.fuel || inner.args.length !== 2)
+      throw new Refused(`uses first or with fuel, which ${who} takes ${shape}`);
     // A number written down, rounded to Float32 maybe (NUMBERS.md).
     const rounded = code.nodes[inner.args[0]];
     const under = isCall(rounded) && code.nodes[rounded.fn]?.kind === "ref" && (code.nodes[rounded.fn] as NodeOf<"ref">).target === S.float32 && rounded.args.length === 1;
     const amount = under ? code.nodes[(rounded as Call).args[0]] : rounded, body = thunk(inner.args[1]);
-    if (!body) throw new Refused(`uses with fuel, which a shader takes ${shape}`);
-    if (amount?.kind !== "lit" || typeof amount.value !== "number") throw new Refused("has a budget that isn't a number written down (a shader's bound is fixed when it's built)");
+    if (!body) throw new Refused(`uses with fuel, which ${who} takes ${shape}`);
+    if (amount?.kind !== "lit" || typeof amount.value !== "number") throw new Refused(`has a budget that isn't a number written down (${opts.data ? "this profile's" : "a shader's"} bound is fixed when it's built)`);
     const v = under ? Math.fround(amount.value) : amount.value;
-    if (!(v >= 0 && v <= MAX_FUEL && Math.fround(v) === v)) throw new Refused(`has a budget of ${v} (a shader's is a number from 0 to ${MAX_FUEL})`);
+    if (!(v >= 0 && v <= MAX_FUEL && Math.fround(v) === v)) throw new Refused(`has a budget of ${v} (${opts.data ? "this profile's" : "a shader's"} is a number from 0 to ${MAX_FUEL})`);
     const t = stype(zonk(id));
     if (!t) throw new Refused(`has a budget whose value is ${OTHER}`);
     const save = f.locals.push("f64") - 1, res = f.locals.push(t) - 1;
@@ -2042,7 +2046,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     underBudget = true;
     let inside: SExpr;
     try { inside = expr(body, env, f, false); } finally { underBudget = outer; }
-    return { k: "budget", n: v, body: inside, otherwise: expr(otherwise, env, f, false), t, save, res };
+    return { k: "budget", n: v, body: inside, otherwise: alone ? { k: "fail" } : expr(otherwise!, env, f, false), t, save, res };
   }
 
   // A root that may not finish is refused as a place to start, even when

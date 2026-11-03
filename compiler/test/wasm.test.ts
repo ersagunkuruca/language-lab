@@ -663,6 +663,20 @@ test("whole programs in WebAssembly and in JavaScript from the core IR: wc, ledg
   }
 });
 
+// with fuel(n, () => …) alone, not inside a first (algebra's root near):
+// with `data`, running out is no answer, which the caller's first sees.
+// Before, it was refused with a shader's reason.
+test("a with fuel no first is around: algebra's main in WebAssembly and JavaScript from the core IR prints what the evaluator prints", async () => {
+  const p = load("algebra");
+  const l = lowerScalar(p.code, p.info, p.pres.names, p.own.defs, { data: true });
+  assert.equal(l.refused.get(p.named("main")), undefined);
+  const want: string[] = [], wasm: string[] = [], js: string[] = [];
+  const exit = runProgram(p.code, p.info, p.named("main"), [], { print: (s) => want.push(s), names: p.pres.names });
+  assert.ok(want.some((s) => s.startsWith("root near")), want.join("\n"));
+  assert.deepEqual([await runMain(l, emitWasm(l), "main", [], { print: (s) => wasm.push(s) }), wasm], [exit, want]);
+  assert.deepEqual([runCoreMain(l, "main", [], { print: (s) => js.push(s) }), js], [exit, want]);
+});
+
 // The same programs as WASI commands (wasm-rt.ts's world over
 // wasi_snapshot_preview1), under node:wasi in a folder of their own,
 // against the evaluator with Node's world in another folder with the same files.
