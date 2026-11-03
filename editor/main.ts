@@ -735,9 +735,13 @@ function holdType(next: Code): string {
   if (inputs(doc.code) !== inputs(next)) return "";
   const p = T.pin(doc.code, info, {}, d, "");
   if (!p.ok || !p.pins[d]) return "";
-  T.setProgramPins(doc.signatures ?? NO_PINS);
+  const sigs = doc.signatures ?? NO_PINS;
+  T.setProgramPins(sigs);
   let loose: string | null = null;
-  try { loose = T.typeOf(T.infer(next, pres().names), d, pres().names); } catch { return ""; }
+  // The edit's own check, when it was made with these same pins (nothing
+  // else held), is the check without the hold: a second whole check of a
+  // big program was a second of Clear (I162).
+  try { loose = T.typeOf(T.guardedInfo(next, sigs) ?? T.infer(next, pres().names), d, pres().names); } catch { return ""; }
   const was = T.typeOf(info, d, pres().names);
   if (loose === was) return "";
   held = { ...held, [d]: p.pins[d] };
