@@ -379,7 +379,7 @@ export function buildPrelude(): Module {
   // of (√(1 − s²), s), acos c of (c, √(1 − c²)). A type with a square root
   // of its own gives them with it; the ways take √x as e^(½ log x), from
   // Trig's own exp and log, for any type that has them.
-  const onUnpolar = (x: Id, y: Id) => k.solve(TRIG_UNPOLAR, { 2: x, 3: y, out: k.true }, { 1: "angle" }, ({ 1: t }) => t);
+  const onUnpolar = (x: Id, y: Id) => k.solve(TRIG_UNPOLAR, { 0: x, 1: y, out: k.true }, { 3: "angle" }, ({ 3: t }) => t);
   const rest = (v: Id) => k.call(ARITH.sub, k.lit(1), k.call(ARITH.mul, v, v));
   const root = (v: Id) => k.call(TRIG_OPS.exp, k.call(ARITH.mul, k.lit(0.5), k.call(TRIG_OPS.log, v)));
   const asinBy = way("asin by unpolar", TRIG_ASIN, () => k.fn(["s"], (sv) => onUnpolar(root(rest(sv)), sv)));
@@ -411,7 +411,7 @@ export function buildPrelude(): Module {
   k.define(lawFromPolar, k.fn(["z"], (z) => expect(nearC(k.call(polar, k.call(modulus, z), k.call(angle, z)), z), "from polar(modulus z, angle of z) is near z")));
   const lawPolar = k.def("polar undoes unpolar");
   k.define(lawPolar, k.fn(["z"], (z) => cx(z, (a, b) =>
-    k.solve(TRIG_UNPOLAR, { 2: a, 3: b, out: k.true }, { 0: "length", 1: "angle" }, ({ 0: r, 1: t }) =>
+    k.solve(TRIG_UNPOLAR, { 0: a, 1: b, out: k.true }, { 2: "length", 3: "angle" }, ({ 2: r, 3: t }) =>
       k.solve(TRIG_POLAR, { 0: r, 1: t, out: k.true }, { 2: "x", 3: "y" }, ({ 2: x, 3: y }) =>
         expect(nearC(C(x, y), z), "polar(unpolar(x, y)) is near (x, y)"))))));
   // Ways agree (WAYS.md step 4, BACKLOG L96d): each way of a Trig field

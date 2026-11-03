@@ -365,6 +365,23 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
 
   // --- definitions, in dependency order
   const valueDefs = code.defs.filter((d) => !isTypeDef(d) && code.nodes[d]?.kind === "def");
+  // The bodies of definitions with results, and the type each has as a
+  // condition on all its ports (L128d2).
+  const resultsOf = new Map<Id, Id[]>();
+  for (const d of valueDefs) { const n = code.nodes[d] as NodeOf<"def">; if (n.results && n.body && code.nodes[n.body]?.kind === "lambda") resultsOf.set(n.body, n.results); }
+  const predicates = new Map<Id, Type>();
+  // A definition with results' type, the function of its direction, read
+  // back as the condition on all its ports, in order: what a use of it in
+  // any direction, or another direction of it, is typed against.
+  const asPredicate = (t: Type, d: Id): Type => {
+    const def = code.nodes[d] as NodeOf<"def">, lam = code.nodes[def.body!] as NodeOf<"lambda">, rs = def.results!;
+    const f = s.resolve(t);
+    if (f.t !== "fn") return t;
+    const ret = s.resolve(f.ret);
+    const outs = rs.length === 1 ? [f.ret] : ret.t === "con" && ret.id === tupleType(rs.length) ? ret.args : rs.map(() => s.fresh());
+    const ins = lam.params.filter((p) => !rs.includes(p));
+    return { t: "fn", params: lam.params.map((p) => (rs.includes(p) ? outs[rs.indexOf(p)] : f.params[ins.indexOf(p)])), ret: bool, eff: f.eff };
+  };
   const deps = (d: Id): Id[] => {
     const out = new Set<Id>();
     const walk = (id: Id) => {
@@ -682,6 +699,17 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
           else unifyAt(n.body, want, ret, `this function gives ${parts.length} results`);
         }
         t = { t: "fn", params, ret, eff: bodyRow };
+        // A definition with results (L128d2, PORTS §3): its body is a
+        // condition on all its ports, and the definition is the function
+        // of its declared direction, its inputs to its results.
+        const rs = resultsOf.get(id);
+        if (rs) {
+          predicates.set(id, t);
+          const part = (p: Id) => params[n.params.indexOf(p)] ?? s.fresh();
+          const outs = rs.map(part);
+          if (outs.length > TUPLE_MAX) err(id, `a function gives at most ${TUPLE_MAX} results`);
+          t = { t: "fn", params: n.params.filter((p) => !rs.includes(p)).map(part), ret: outs.length === 1 ? outs[0] : outs.length <= TUPLE_MAX ? { t: "con", id: tupleType(outs.length), args: outs } : s.fresh(), eff: bodyRow };
+        }
         break;
       }
       case "call": {
@@ -1028,10 +1056,19 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // exactly one, Diverge when it may unfold forever, and whatever the
   // function itself does, except printing, which can't be undone.
   function relationalSolve(n: Use, env: Map<Id, Type>, row: Row, inner: Map<Id, Type>, loops: boolean, why?: string, one = false, givenTypes?: Map<string, Type>) {
-    const ft = s.resolve(refType(n.id, useTarget(code.nodes, n), env));
-    if (ft.t !== "fn") { err(n.id, `${nm(useTarget(code.nodes, n))} is not a function`); return; }
-    (info.solveAt ??= new Map()).set(n.id, ft);
+    const fnT = s.resolve(refType(n.id, useTarget(code.nodes, n), env));
+    if (fnT.t !== "fn") { err(n.id, `${nm(useTarget(code.nodes, n))} is not a function`); return; }
+    (info.solveAt ??= new Map()).set(n.id, fnT);
     const t = code.nodes[useTarget(code.nodes, n)];
+    // A definition with results is solved as the condition on its ports.
+    // A field with results too (L128d3): its ports by position, inputs
+    // then results.
+    const fp = t.kind === "field" ? fieldPorts(code.nodes, t) : null;
+    const tupled = (ret: Type, k: number): Type[] => { const r = s.resolve(ret); return k === 1 ? [ret] : r.t === "con" && r.id === tupleType(k) ? r.args : Array.from({ length: k }, () => s.fresh()); };
+    const viewed = t.kind === "def" && t.results && code.nodes[t.body!]?.kind === "lambda" ? s.resolve(asPredicate(fnT, t.id))
+      : fp ? { t: "fn" as const, params: [...fnT.params, ...tupled(fnT.ret, fp.outs.length)], ret: bool, eff: fnT.eff } : fnT;
+    if (viewed.t !== "fn") return;
+    const ft = viewed;
     const keys = t.kind === "def" ? (code.nodes[t.body!] as NodeOf<"lambda">).params : ft.params.map((_, i) => String(i));
     const portType = (k: string) => (k === "out" ? ft.ret : keys.includes(k) ? ft.params[keys.indexOf(k)] : null);
     for (const [k, g] of Object.entries(n.given)) {
@@ -1282,7 +1319,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       if (lam?.kind !== "lambda") { err(d, `${nm(d)} has results, so it is a function of its ports`); continue; }
       const odd = def.results.filter((r, i) => !lam.params.includes(r) || def.results!.indexOf(r) !== i);
       if (odd.length) { err(d, `${nm(d)}'s results are some of its own ports, each once: ${odd.map(nm).join(", ")} isn't`); continue; }
-      const sc = info.schemes.get(d), t = sc && s.zonk(sc.type);
+      const sc = info.schemes.get(d), pr = predicates.get(lam.id), t = pr && s.zonk(pr);
       if (t?.t === "fn" && !(t.ret.t === "con" && t.ret.id === BOOL)) { err(d, `${nm(d)} has results, so it is a predicate over its ports (it gives true or false), not ${show(t.ret)}`); continue; }
       const ins = lam.params.filter((p) => !def.results!.includes(p));
       const from = ins.length ? ins.map(nm).join(", ") : "nothing";
@@ -1296,7 +1333,9 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       const wrong = directionProblem(code, d, nm);
       if (wrong) { err(d, wrong); continue; }
       const theirs = info.schemes.get(def.direction);
-      if (sc && theirs) { try { const c = s.clone(); c.unify(instantiate(sc, c), instantiate(theirs, c)); } catch { err(d, `${nm(d)} is a direction of ${nm(def.direction)}, so its ports have ${nm(def.direction)}'s types: ${show(sc.type)} isn't ${show(theirs.type)}`); } }
+      // Compared as conditions on their ports, in order (L128d2): each is
+      // the function of its own direction.
+      if (sc && theirs) { try { const c = s.clone(); c.unify(asPredicate(instantiate(sc, c), d), asPredicate(instantiate(theirs, c), def.direction)); } catch { err(d, `${nm(d)} is a direction of ${nm(def.direction)}, so its ports have ${nm(def.direction)}'s types: ${show(asPredicate(sc.type, d))} isn't ${show(asPredicate(theirs.type, def.direction))}`); } }
     }
   }
 

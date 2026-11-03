@@ -61,7 +61,7 @@ function fieldDirection(code: Code, n: Use, f: NodeOf<"field">): Retargeted | nu
   const ports = (g: NodeOf<"field">) => [...(g.ports ?? [])].sort().join();
   for (const id of v?.fields ?? []) {
     const g = code.nodes[id];
-    if (g?.kind !== "field" || !g.results || id === f.id || !g.ports || ports(g) !== ports(f) || !reads(g)) continue;
+    if (g?.kind !== "field" || !fieldPorts(code.nodes, g) || id === f.id || !g.ports || ports(g) !== ports(f) || !reads(g)) continue;
     // The same ports, perhaps in another order: each moved to g's position.
     const key = (k: string) => (k === "out" ? k : String(g.ports!.indexOf(name(f, k))));
     const re = (r: Record<string, Id>) => Object.fromEntries(Object.entries(r).map(([k, x]) => [key(k), x]));
