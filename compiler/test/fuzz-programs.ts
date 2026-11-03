@@ -60,6 +60,10 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
     const words = () => call(TEXT_OPS.split, call(S.concat, sub("T"), k.lit(r.pick([" a b", ",x,y", "", " é 🎉"]))), k.lit(r.pick([" ", ","])));
     const textMap = () => call(lib("as map"), call(lib("zipped"), words(), sub("L")));
     const textSet = () => call(lib("as set"), words());
+    // A search with several answers (C134): an item of a list, kept where
+    // a condition on it holds, then worked on.
+    const search = () => k.thunk(() => k.let(fresh(), call(S.oneOf, sub("L")), (v) =>
+      k.if(gen("B", { ...s, I: [...s.I, v] }, depth - 1), gen("I", { ...s, I: [...s.I, v] }, depth - 1), call(S.fail))));
     const small = (m: number) => k.call(S.first, k.thunk(() => call(INT_OPS.remainder, sub("I"), k.int(m))), k.thunk(() => k.int(0)));
     // Shared by every type: a variable, an if, a let, a match on a list.
     if (!leaf) {
@@ -133,6 +137,7 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
           () => orElse(call(TEXT_OPS.readNumber, sub("T"))),
           () => call(S.seeded, sub("F"), k.thunk(() => call(B.add, call(RANDOM_OP), call(RANDOM_OP)))),
           () => call(B.sin, sub("F")),
+          () => call(S.abs, sub("F")),
           () => call(B.exp, sub("F")),
           () => call(B.atan2, sub("F"), sub("F")),
           () => orElse(call(B.pow, sub("F"), sub("F"))),
@@ -164,6 +169,9 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
           // Small powers only: a power of a power would be millions of digits.
           () => orElse(call(INT_OPS.power, call(INT_OPS.remainder, sub("I"), k.int(10)), call(INT_OPS.remainder, sub("I"), k.int(20)))),
           () => call(lib("sum"), sub("L")),
+          () => call(S.count, search()),
+          () => k.call(S.first, search(), k.thunk(() => sub("I"))),
+          () => call(INT_OPS.abs, sub("I")),
           () => orElse(call(INT_OPS.wholePart, sub("F"))),
           () => call(lib("set size"), call(lib("as set"), sub("L"))),
           // A handler of Abort written in place: the reason's length.
@@ -230,6 +238,7 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
           () => call(lib("fraction less than"), sub("X"), sub("X")),
           () => call(lib("contains"), sub("Q"), sub("D")),
           () => call(S.not, sub("B")),
+          () => call(r.next() < 0.5 ? S.and : S.or, sub("B"), sub("B")),
           () => k.equal(sub("T"), sub("T")),
           () => call(TEXT_OPS.less, sub("T"), sub("T")),
           () => call(lib("starts with"), sub("T"), sub("T")),
@@ -261,6 +270,7 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
           () => k.call(S.first, k.thunk(() => call(lib("queue items"), call(lib("dequeued"), call(lib("queue of"), sub("L"))))), k.thunk(() => sub("L"))),
           () => call(lib("range from"), small(20), small(20)),
           () => call(ARRAY_OPS.items, sub("A")),
+          () => call(S.all, search()),
           () => call(lib("flat map"), sub("L"), k.fn([fresh()], (v) => k.list(v, gen("I", { ...s, I: [...s.I, v] }, depth - 1)))),
           () => call(lib("keep"), sub("L"), k.fn([fresh()], (v) => gen("B", { ...s, I: [...s.I, v] }, depth - 1))),
         ])();

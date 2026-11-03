@@ -402,7 +402,8 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| C133 | The fuzz test holds a Set Int as a value too, made by `empty set`, `as set`, `add item`, `remove item`, union, intersection and difference, and shown. Seeds 1 to 40 agree on every engine. Test: compiler/test/fuzz.test.ts | this PR |
+| C134 | The fuzz test runs searches with several answers: `one of` a list, kept where a condition on the item holds, under `all`, `count` and `first`; and `and`, `or` and `abs` (Float64 and Int). Seeds 1 to 40 agree on every engine. Test: compiler/test/fuzz.test.ts | this PR |
+| C133 | The fuzz test holds a Set Int as a value too, made by `empty set`, `as set`, `add item`, `remove item`, union, intersection and difference, and shown. Seeds 1 to 40 agree on every engine. Test: compiler/test/fuzz.test.ts | #1241 |
 | C132 | The fuzz test holds a Map Int Int as a value like any other: let, matched on, folded, returned and shown, made by `empty map`, `as map`, `put`, `remove key` and `merge maps`. Before, every map was built where it was read. So each engine's chosen representation (tree or hash table) now flows through the program. Seeds 1 to 40 agree on every engine. Test: compiler/test/fuzz.test.ts | #1240 |
 | C131 | The fuzz test makes complex numbers: from two Float64s, `as complex`, `i`, add, subtract, multiply, negate, conjugate, `from polar`, `complex exp`, and under `first` divide, sqrt, log, power, asin and acos (L127). It reads them back by their parts, `modulus`, `angle of`, `=`, `show` and `show complex`. Seeds 1 to 40 agree on every engine. Test: compiler/test/fuzz.test.ts | #1239 |
 | C130 | The fuzz test makes fractions: `fraction` (a 0 bottom has no answer), `as fraction`, add, subtract, multiply, negate and divide, and reads them back by their top and bottom, `=`, `fraction less than`, `show` and `show fraction`. Seeds 1 to 40 agree on every engine. Test: compiler/test/fuzz.test.ts | #1238 |
