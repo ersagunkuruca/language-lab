@@ -1,10 +1,17 @@
 // What the editor runs in and shows about a run of main, split out of
-// main.ts (E228b): the runtimes the build puts in the page (the worker that
-// runs main, the page and sound runtimes) and the views of how a run ended.
+// main.ts (E228b, E228g): the runtimes the build puts in the page (the
+// worker that runs main, the page and sound runtimes), the views of how a
+// run ended, a value as Run shows it, and a test's results.
 import type { Code, Id } from "../ters/src/model.ts";
 import type { Namer } from "../ters/src/render/namer.ts";
 import type { Profile, Stuck } from "./runWorker.ts";
 import { h } from "./dom.ts";
+import type { Names } from "../ters/src/presentation.ts";
+import { fromList, showValue, type Value, type World } from "../ters/src/lang/run.ts";
+import { MAP_V, SET_V } from "../ters/src/lang/std.ts";
+import { runTests, savedFrom, type TestResult } from "../ters/src/lang/tests.ts";
+import type * as T from "./typed.ts";
+import type { Doc } from "./main.ts";
 
 declare const PAGE_RUNTIME: string; // cli/web.ts pageRuntime, put in by editor/build.ts
 declare const WORKLET_RUNTIME: string; // cli/web.ts workletRuntime: a page with sound plays (AUDIO.md)
@@ -45,4 +52,40 @@ export function profileView(namer: Namer, profile: Profile, code: Code, pick: (i
     h("table", { class: "profile-t" },
       h("tr", {}, h("th", {}, "definition"), h("th", {}, "calls"), h("th", { title: "About how much of the run's time was spent in it, itself (not in what it calls), sampled" }, "time")),
       ...rows.map((p) => h("tr", {}, h("td", {}, pick(p.def, namer.name(p.def))), h("td", {}, p.calls.toLocaleString("en")), h("td", {}, total ? `${share(p.ms)} · ${p.ms} ms` : "")))));
+}
+
+// A value as the Run panel shows it. A map or a set is a table, a row per
+// entry in key order, as the blocks draw one written out
+// (DATA-STRUCTURES.md); anything else is its text.
+export function valueView(v: Value, code: Code, names: Names): HTMLElement {
+  const text = (x: Value) => h("code", {}, showValue(x, code, names, true));
+  const tag = typeof v === "object" && v !== null && "tag" in v ? v.tag : null;
+  if ((tag === MAP_V || tag === SET_V) && fromList((v as { fields: Value[] }).fields[0]).length) {
+    const rows = fromList((v as { fields: Value[] }).fields[0]).map((e) => (tag === MAP_V ? (e as { fields: Value[] }).fields : [e]));
+    return h("table", { class: "vtable" }, ...rows.map((cells) => h("tr", {}, ...cells.map((c) => h("td", {}, text(c))))));
+  }
+  return text(v);
+}
+
+// A test's results, once per version of the code and its saved values.
+const lawRuns = new WeakMap<Code, Map<string, TestResult>>();
+export function lawPanel(info: T.Info, box: HTMLElement, at: { code: Code; names: Names; def: Id; examples: NonNullable<Doc["examples"]>; world: World }): HTMLElement {
+  let m = lawRuns.get(at.code);
+  if (!m) lawRuns.set(at.code, (m = new Map()));
+  const key = `${at.def}\u0000${JSON.stringify(at.examples[at.def] ?? null)}`;
+  let r = m.get(key);
+  if (!r) {
+    try { r = runTests(at.code, info, at.names, [at.def], savedFrom(at.examples), { world: at.world })[0]; }
+    catch (e) { r = { def: at.def, name: "", cases: 0, failures: [], error: (e as Error).message }; }
+    m.set(key, r);
+  }
+  const cases = `${r.cases} case${r.cases === 1 ? "" : "s"}`;
+  box.append(h("p", { class: "hint" }, "A test: it performs Check. It runs on its saved inputs, then on small values of each input's type, smallest first, as lab test runs it."));
+  if (r.error) box.append(h("p", { class: "status-line bad" }, `The test stopped: ${r.error}.`));
+  else if (!r.failures.length) box.append(h("p", { class: "status-line accepted" }, `✓ Every expect held, in ${cases}.`));
+  else {
+    box.append(h("p", { class: "status-line bad" }, `${r.failures.length} of ${cases} failed. The first is the smallest.`));
+    box.append(h("ul", { class: "law-failures" }, ...r.failures.slice(0, 5).map((f) => h("li", {}, `${f.inputs.join(", ") || "no inputs"}: ${f.what.join("; ")}`))));
+  }
+  return box;
 }
