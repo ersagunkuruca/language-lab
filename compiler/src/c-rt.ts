@@ -433,6 +433,9 @@ static double lab_rand_s2(void) { return lab__r[2]; }
 static double lab_rand_s3(void) { return lab__r[3]; }
 static double lab_rand_restore(double a, double b, double c, double d) { lab__r[0] = (uint32_t)a; lab__r[1] = (uint32_t)b; lab__r[2] = (uint32_t)c; lab__r[3] = (uint32_t)d; return 0; }` },
   ...Object.fromEntries(["rand.next", "rand.s0", "rand.s1", "rand.s2", "rand.s3", "rand.restore"].map((n) => [n, { uses: ["rand.seed"], c: "" }])),
+  // Nobody has seeded the generator (C136): its words are all 0, which
+  // seeding never gives.
+  "rand.unset": { uses: ["rand.seed"], c: `static int32_t lab_rand_unset(void) { return (lab__r[0] | lab__r[1] | lab__r[2] | lab__r[3]) == 0; }` },
   // A Text shown, quoted as JSON.stringify quotes it (run.ts showValue, C102).
   "text.quoted": {
     uses: [],
@@ -654,6 +657,16 @@ static char *lab__cstr(lab_cell *t) { char *s = malloc((size_t)LAB_TN(t) + 1); i
 static int lab__kind(const char *p) { struct stat st; return stat(p, &st) ? 0 : S_ISDIR(st.st_mode) ? 2 : 1; }`,
   },
   "world.print": { uses: [], c: `static void lab_world_print(lab_cell *t) { fwrite(LAB_TB(t), 1, LAB_TN(t), stdout); putchar('\\n'); lab_drop(t); }` },
+  // A seed from the world for Random's generator (C136): four bytes of
+  // /dev/urandom, or the time and an address where there is none.
+  "world.randomSeed": { uses: [], c: `#include <time.h>
+static double lab_world_randomSeed(void) {
+  uint32_t s = 0;
+  FILE *f = fopen("/dev/urandom", "rb");
+  if (f) { if (fread(&s, sizeof s, 1, f) != 1) s = 0; fclose(f); }
+  if (!s) s = (uint32_t)time(NULL) ^ (uint32_t)clock() ^ (uint32_t)(uintptr_t)&s;
+  return (double)s;
+}` },
   "world.printError": { uses: [], c: `static void lab_world_printError(lab_cell *t) { fflush(stdout); fwrite(LAB_TB(t), 1, LAB_TN(t), stderr); fputc('\\n', stderr); lab_drop(t); }` },
   // All of a stream that's left.
   "world.readAll": {

@@ -353,6 +353,17 @@ const R: Record<string, Omit<RtFn, "name">> = {
   "rand.s3": { params: [], result: "f64", locals: [], uses: [], body: `
       global.get $r3
       f64.convert_i32_u` },
+  // Nobody has seeded the generator (C136): its words are all 0, which
+  // seeding never gives.
+  "rand.unset": { params: [], result: "i32", locals: [], uses: [], body: `
+      global.get $r0
+      global.get $r1
+      i32.or
+      global.get $r2
+      i32.or
+      global.get $r3
+      i32.or
+      i32.eqz` },
   "rand.restore": {
     params: [["a", "f64"], ["b", "f64"], ["c", "f64"], ["d", "f64"]], result: "f64", locals: [], uses: [],
     body: `
@@ -6512,6 +6523,7 @@ export const WASI_IMPORTS: Record<string, { params: ("i32" | "i64")[]; result: "
   args_sizes_get: { params: ["i32", "i32"], result: "i32" },
   args_get: { params: ["i32", "i32"], result: "i32" },
   proc_exit: { params: ["i32"], result: null },
+  random_get: { params: ["i32", "i32"], result: "i32" },
 };
 // WASI's errors (wasi_snapshot_preview1 errno) and rights.
 const E = { ACCES: 2, ISDIR: 31, NOENT: 44, NOTDIR: 54, PERM: 63, NOTCAPABLE: 76 };
@@ -6690,6 +6702,16 @@ const WASI: Record<string, Omit<RtFn, "name">> = {
       call $wasi_proc_exit
       unreachable`,
   },
+  // A seed for Random's generator from the world (C136): four bytes
+  // from random_get at address 0.
+  "wasi.randomSeed": { params: [], result: "f64", locals: [], uses: ["wasi_random_get"], body: `
+      i32.const 0
+      i32.const 4
+      call $wasi_random_get
+      drop
+      i32.const 0
+      i32.load
+      f64.convert_i32_u` },
   "wasi.print": { params: [["t", "text"]], result: "void", locals: [], uses: ["wasi.line"], body: "i32.const 1\nlocal.get $t\ncall $wasi.line" },
   "wasi.printError": { params: [["t", "text"]], result: "void", locals: [], uses: ["wasi.line"], body: "i32.const 2\nlocal.get $t\ncall $wasi.line" },
   // Error e on path: its reason, as Node's world gives it, and status 2.

@@ -752,6 +752,8 @@ function worldOf(rt: Runtime, exports: () => Record<string, (...xs: unknown[]) =
   const tried = <T>(f: () => T): [T | null, number] => { try { return [f(), 0]; } catch (e) { reason = (e as Error).message; return [null, 2]; } };
   const unit = (f: () => void) => tried(f)[1];
   return {
+    // A seed for Random's generator, 32 bits (C136).
+    randomSeed: () => Math.floor(Math.random() * 4294967296),
     print: (t: unknown) => rt.print(text(t)),
     printError: (t: unknown) => w("error")(text(t)),
     readInput: () => tried(() => make(w("input")())),
