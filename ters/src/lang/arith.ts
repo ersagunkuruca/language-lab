@@ -23,7 +23,7 @@
 // keep working, and the meaning hash is of the program as written.
 
 import type { Code, Id, Node, NodeData, NodeOf, Use } from "../model.ts";
-import { isUse, useTarget, isCall, type Call } from "../model.ts";
+import { isUse, useTarget, isCall, fieldPorts, type Call } from "../model.ts";
 import { freshId } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { B } from "../prelude.ts";
@@ -324,7 +324,15 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
     const d = nodes[target];
     const lam = d?.kind === "def" && d.body ? nodes[d.body] : null;
     if (lam?.kind !== "lambda") throw new Error(`${names[useTarget(nodes, n)] ?? useTarget(nodes, n)} is given by ${names[target] ?? target}, which isn't a definition of its ports`);
-    const key = (k: string) => (k === "out" ? k : lam.params[Number(k)]);
+    // The field's inputs are the definition's, in order, and its results
+    // the definition's results (L128d): the field read as a function.
+    const field = nodes[useTarget(nodes, n)], fp = field?.kind === "field" ? fieldPorts(nodes, field) : null;
+    const res = d?.kind === "def" ? d.results ?? [] : [], ins = lam.params.filter((p) => !res.includes(p)), outs = res;
+    const key = (k: string) => {
+      if (k === "out") return k;
+      const i = fp?.ins.indexOf(Number(k)) ?? -1, o = fp?.outs.indexOf(Number(k)) ?? -1;
+      return i >= 0 && ins[i] ? ins[i] : o >= 0 && outs[o] ? outs[o] : lam.params[Number(k)];
+    };
     const re = (r: Record<string, Id>) => Object.fromEntries(Object.entries(r).map(([k, v]) => [key(k), v]));
     nodes[id] = { ...n, given: re(n.given), binds: re(n.binds) };
     nodes[n.fn] = { id: n.fn, kind: "ref", target };
