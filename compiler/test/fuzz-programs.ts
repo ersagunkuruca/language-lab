@@ -87,6 +87,15 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
         ]);
       }
     }
+    // The generic helpers, at this type (C124).
+    if (!leaf && generic.length && r.next() < 0.06) {
+      const lt = listOf[t], [choose, around, countWhere, lastOr] = genericDefs;
+      const pick = r.int(lt ? 4 : 1);
+      if (pick === 0) return call(choose, sub("B"), sub(t), sub(t));
+      if (pick === 1) return call(lastOr, sub(lt!), sub(t));
+      if (pick === 2) return call(lastOr, call(around, sub(t), sub(lt!)), sub(t));
+      return call(choose, k.equal(call(countWhere, sub(lt!), k.fn([fresh()], (v) => gen("B", { ...s, [t]: [...s[t], v] }, depth - 1))), sub("I")), sub(t), sub(t));
+    }
     if ((leaf || r.next() < 0.15) && s[t].length && r.next() < 0.7) return k.x(r.pick(s[t]));
     switch (t) {
       case "F": {
@@ -297,7 +306,9 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
 
   // Helpers from a box, a shape and an Int to an Int, which the
   // definitions call: some only read the box's fields, some make boxes.
-  const helpers: Id[] = [], recursive: Id[] = [], higher: Id[] = [];
+  const helpers: Id[] = [], recursive: Id[] = [], higher: Id[] = [], generic: Id[] = [], genericDefs: Id[] = [];
+  // The list type of each item type, where there is one.
+  const listOf: Partial<Record<Ty, Ty>> = { I: "L", F: "P", D: "Q" };
   const callable: Id[] = [];
   let calls = false;
   for (let i = 0; i < 6; i++) {
@@ -333,6 +344,18 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
     k.define(along, k.fn(["f", "x"], (f, x) => call(lib("sum"), call(lib("map"), call(lib("range from"), k.int(0), k.call(S.first, k.thunk(() => call(INT_OPS.remainder, x, k.int(5))), k.thunk(() => k.int(0)))), f))));
     higher.push(twice, along);
   }
+  // Generic helpers of the program's own, called at many types (C124):
+  // each engine makes a copy per type, or one for all.
+  const choose = k.def("choose"), around = k.def("around"), countWhere = k.def("count where"), lastOr = k.def("last or");
+  k.define(choose, k.fn(["b", "x", "y"], (b, x, y) => k.if(b, x, y)));
+  k.define(around, k.fn(["x", "xs"], (x, xs) => call(CONS, x, call(lib("append"), xs, k.list(x)))));
+  k.define(countWhere, k.fn(["xs", "p"], (xs, p) => call(lib("length"), call(lib("keep"), xs, p))));
+  k.define(lastOr, k.fn(["xs", "d"], (xs, d) => k.fold(xs, [
+    { variant: NIL, names: [], body: () => d },
+    { variant: CONS, names: ["x", "rest"], results: [null, "last"], body: ([x, rest], [, last]) => k.match(rest, [{ variant: NIL, names: [], body: () => x }, { variant: CONS, names: ["y", "more"], body: () => last! }]) },
+  ])));
+  generic.push(choose);
+  genericDefs.push(choose, around, countWhere, lastOr);
   const defs: { def: Id; result: Ty }[] = [];
   for (let i = 0; i < count; i++) {
     calls = false;
@@ -363,5 +386,5 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
   const main = k.def("main");
   k.define(main, k.thunk(() => k.list(...entries.map((e) => call(e, k.lit(2.5), k.int(3), k.int(1))))));
   const code = base(k.code), names2 = baseNames(k.names);
-  return { code, names: names2, info: infer(code, names2, undefined, checkOptions), defs, entries, main, own: [...helpers, ...recursive, ...higher, ...defs.map((d) => d.def), lists, ...entries, main] };
+  return { code, names: names2, info: infer(code, names2, undefined, checkOptions), defs, entries, main, own: [...helpers, ...recursive, ...higher, ...genericDefs, ...defs.map((d) => d.def), lists, ...entries, main] };
 }
