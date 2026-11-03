@@ -54,7 +54,7 @@ import { FDLIBM_C } from "./c-math.ts";
 import { BASE, cName, POSIX, RESERVED, RT_C, runtimeC, WORLD_H, type ListNames } from "./c-rt.ts";
 import { runtime } from "./wasm-rt.ts";
 import { STOPS } from "./stops.ts";
-import { fails, isArray, isData, isFn, isRecord, kids, mapKids, OPS, type AType, type DType, type FType, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc } from "./scalar.ts";
+import { fails, isArray, isTable, isData, isFn, isRecord, kids, mapKids, OPS, type AType, type TType, type DType, type FType, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc } from "./scalar.ts";
 
 // What a C compiler needs to keep the evaluator's numbers. -fwrapv: fdlibm
 // shifts signed ints past their top bit (pow's test for an odd exponent).
@@ -75,6 +75,8 @@ const PRINTED = new Set<SExpr["k"]>([
 ]);
 // std's Array's runtime functions, one copy per item type (scalar.ts).
 const ARRAY_FN = /^array\.(\w+)\.a(\d+)$/;
+// std's Table's runtime functions, one copy per table type (C63h).
+const TABLE_FN = /^table\.(\w+)\.t(\d+)(?:\.e(\d+))?$/;
 const LIST_TEXT = "std.list<type.string<>>", OPTION_TEXT = "std.optional<type.string<>>";
 
 // The runtime of counted cells. A null cell (a box's value before the
@@ -173,7 +175,7 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string
     return j >= 0 && strict.slice(0, j).every(pure) ? strict[j] : m;
   };
   const funcs = lowered.funcs.map((f) => ({ ...f, locals: [...f.locals], body: settle(f.body) }));
-  const used = new Set<string>(["new", "free", "unused", "block", "block_end", "dup", "dec", "drop", "fields", "oom", "live", "st", "reason", "fuel", "mod", "in", "out", "bits", "run", "code", "argc", "argv", "hex", "hexd", "word", "token", ...RESERVED, ...lowered.arrays.flatMap((_, i) => ["empty", "of", "items", "length", "at", "push", "first", "rest", "pushFront", "get", "replaceAt"].map((op) => `array_${op}_a${i}`))]);
+  const used = new Set<string>(["new", "free", "unused", "block", "block_end", "dup", "dec", "drop", "fields", "oom", "live", "st", "reason", "fuel", "mod", "in", "out", "bits", "run", "code", "argc", "argv", "hex", "hexd", "word", "token", ...RESERVED, ...lowered.arrays.flatMap((_, i) => ["empty", "of", "items", "length", "at", "push", "first", "rest", "pushFront", "get", "replaceAt"].map((op) => `array_${op}_a${i}`)), ...lowered.tables.flatMap((t, i) => [...["empty", "put", "remove", "has", "size", "at"].map((op) => `table_${op}_t${i}`), ...t.entries.map((_, j) => `table_entries_t${i}_e${j}`), `Table_t${i}`, `Store_t${i}`, ...["find", "change", "grow", "hash", "eq", "cmp", "sort", "made", "store", "reroot"].map((h) => `_${h}_t${i}`)])]);
   const ident = (hint: string) => {
     const base = hint.normalize("NFKD").replace(/[^A-Za-z0-9_]+/g, "_").replace(/^_+|_+$/g, "") || "f";
     let n = base;
@@ -190,11 +192,12 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string
     : isRecord(t) ? t.fields.map((x) => why(x.t)).find(Boolean) ?? null
     : isData(t) ? null
     : isArray(t) ? why(t.item)
+    : isTable(t) ? why(t.value)
     : [...(t as FType).params, (t as FType).result].map(why).find(Boolean) ?? null;
   funcs.forEach((f, i) => {
     const t = [...f.locals, f.result].map(why).find(Boolean);
     if (t) return refused.set(i, t);
-    const k = walk(f.body).find((e) => !PRINTED.has(e.k) || (e.k === "rt" && !RT_C.has(e.fn) && !ARRAY_FN.test(e.fn)) || (e.k === "world" && !RT_C.has(`world.${e.op}`)));
+    const k = walk(f.body).find((e) => !PRINTED.has(e.k) || (e.k === "rt" && !RT_C.has(e.fn) && !ARRAY_FN.test(e.fn) && !TABLE_FN.test(e.fn)) || (e.k === "world" && !RT_C.has(`world.${e.op}`)));
     if (k) refused.set(i, k.k === "rt" ? `${k.fn} isn't in C's runtime` : k.k === "world" ? `the world's ${k.op} isn't in C's runtime` : `${k.k} isn't printed as C`);
   });
   const callees = (e: SExpr) => walk(e).flatMap((x) => (x.k === "call" || x.k === "closure" ? [x.fn] : []));
@@ -210,8 +213,9 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string
 
   // Types: every record, data type and function type the kept functions
   // mention, and the shapes of their closures.
-  const records = new Map<string, RType>(), data = new Map<string, DType>(), fns = new Map<string, FType>(), arrays = new Map<string, AType>();
+  const records = new Map<string, RType>(), data = new Map<string, DType>(), fns = new Map<string, FType>(), arrays = new Map<string, AType>(), tables = new Map<string, TType>();
   const collect = (t: LType) => {
+    if (isTable(t) && !tables.has(t.key)) { tables.set(t.key, t); collect(t.keyT); collect(t.value); t.entries.forEach(collect); }
     if (isArray(t) && !arrays.has(t.key)) { arrays.set(t.key, t); collect(t.item); if (t.list) collect(t.list); }
     if (isRecord(t) && !records.has(t.key)) { records.set(t.key, t); t.fields.forEach((x) => collect(x.t)); }
     if (isData(t) && !data.has(t.key)) { data.set(t.key, t); t.cases.forEach((c) => c.fields.forEach((x) => collect(x.t))); }
@@ -225,9 +229,11 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string
       if (e.k === "closure" || e.k === "cap") shaped.add(e.shape);
       const a = e.k === "rt" ? ARRAY_FN.exec(e.fn) : null;
       if (a) collect(lowered.arrays[Number(a[2])]);
+      const tb = e.k === "rt" ? TABLE_FN.exec(e.fn) : null;
+      if (tb) collect(lowered.tables[Number(tb[2])]);
       // A runtime function that makes or takes a list of texts (split,
       // join all): its list type, though no function here names it.
-      if (e.k === "rt" && !a) {
+      if (e.k === "rt" && !a && !tb) {
         const r = runtime(e.fn);
         if (r.result === "list" || r.params.some(([, t]) => t === "list")) { const d = lowered.data.find((x) => x.key === (r.list ?? LIST_TEXT)); if (d) collect(d); }
       }
@@ -241,7 +247,7 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string
   const shapeName = new Map([...shaped].map((s) => [s, ident(`Closure`)]));
   // Cell types, numbered: data types, boxes, closures' shapes.
   const tnum = new Map<string, number>();
-  [...data.keys(), ...boxes.map((b) => b.key), ...[...shaped].map((s) => `shape ${s}`), ...[...arrays.keys()].flatMap((k) => [`array ${k}`, `buf ${k}`])].forEach((k, j) => tnum.set(k, j));
+  [...data.keys(), ...boxes.map((b) => b.key), ...[...shaped].map((s) => `shape ${s}`), ...[...arrays.keys()].flatMap((k) => [`array ${k}`, `buf ${k}`]), ...[...tables.keys()].map((k) => `table ${k}`)].forEach((k, j) => tnum.set(k, j));
   const aname = new Map([...arrays.keys()].map((k) => [k, { view: ident("Array"), buf: ident("Buffer") }]));
   const cname = (t: DType, c: number) => `${dname.get(t.key)}_${t.cases[c].name.replace(/[^A-Za-z0-9_]/g, "_")}`;
   const names = new Map(kept.map((i) => [i, `lab_${ident(funcs[i].name)}`]));
@@ -250,14 +256,18 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string
   const layout = (fs: { t: LType }[]) => fs.map((x) => ty(x.t)).join(", ");
   const ty = (t: LType): string => (t === "f64" ? "double" : t === "i32" ? "int32_t" : t === "int" ? "lab_int" : isRecord(t) && !t.mutable ? sname.get(t.key)! : "lab_cell *");
   // Whether a value of t is a cell, or holds counts (an Int may be a cell).
-  const cell = (t: LType) => t === "text" || isData(t) || isFn(t) || isArray(t) || (isRecord(t) && !!t.mutable);
+  const cell = (t: LType) => t === "text" || isData(t) || isFn(t) || isArray(t) || isTable(t) || (isRecord(t) && !!t.mutable);
   const counted = (t: LType): boolean => cell(t) || t === "int" || (isRecord(t) && t.fields.some((x) => counted(x.t)));
   const dup = (t: LType, x: string) => (cell(t) ? `lab_dup(${x})` : t === "int" ? `lab_int_dup(${x})` : isRecord(t) && counted(t) ? `${sname.get(t.key)}_dup(${x})` : x);
   const drop = (t: LType, x: string) => (cell(t) ? `lab_drop(${x});` : t === "int" ? `lab_int_drop(${x});` : `${sname.get((t as RType).key)}_drop(${x});`);
   const dec = (t: LType, x: string) => (cell(t) ? `lab_dec(${x});` : t === "int" ? `lab_int_dec(${x});` : `${sname.get((t as RType).key)}_dec(${x});`);
   // The type of a runtime function's answer.
   const rtType = (fn: string): LType => {
-    const r = runtime(fn), a = ARRAY_FN.exec(fn);
+    const r = runtime(fn), a = ARRAY_FN.exec(fn), tb = TABLE_FN.exec(fn);
+    if (tb) {
+      const t = lowered.tables[Number(tb[2])];
+      return r.result === "table" ? t : r.result === "value" ? t.value : r.result === "list" ? t.entries[Number(tb[3])] : r.result as LType;
+    }
     if (a) {
       const t = lowered.arrays[Number(a[2])];
       return r.result === "array" ? t : r.result === "item" ? t.item : r.result === "list" ? t.list! : r.result as LType;
@@ -379,6 +389,11 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string
     types.push(`typedef struct { lab_cell h; uint32_t lo, hi, cap; ${ty(a.item)} it[]; } ${n.buf}; // an array's buffer: items lo..hi used`,
       `typedef struct { lab_cell h; lab_cell *b; uint32_t s, n; } ${n.view}; // an array: n items from s`);
   }
+  for (const t of tables.values()) {
+    const K = t.keyT === "int" ? "lab_int" : "lab_cell *";
+    types.push(`typedef struct { uint32_t n, used, cap; uint8_t *st; ${K} *ks; ${ty(t.value)} *vs; } lab_Store_t${t.index}; // a table's slots: cap, n full, used full or removed`,
+      `typedef struct { lab_cell h; lab_Store_t${t.index} *cur; lab_cell *next; ${K} key; ${ty(t.value)} old; uint8_t had; } lab_Table_t${t.index}; // a version: the newest holds the slots (cur), an older one the change from the next (key had old or was absent)`);
+  }
   for (const [k, t] of fns) types.push(`typedef ${ty(t.result)} (*${fname.get(k)})(${["lab_cell *", ...t.params.map(ty)].join(", ")});`);
   for (const s of shaped) types.push(`typedef struct { lab_cell h; void (*code)(void); ${shapes[s].caps.map((x, j) => `${ty(x)} c${j};`).join(" ")} } ${shapeName.get(s)};`);
   // Dup and drop for records that hold counts, and each cell type's
@@ -407,6 +422,11 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string
     const n = aname.get(a.key)!;
     fieldsOf.push(`case ${tnum.get(`array ${a.key}`)}: lab_dec(((${n.view} *)c)->b); break;`);
     if (counted(a.item)) fieldsOf.push(`case ${tnum.get(`buf ${a.key}`)}: { ${n.buf} *b = (${n.buf} *)c; for (uint32_t k = b->lo; k < b->hi; k++) ${dec(a.item, "b->it[k]")} } break;`);
+  }
+  for (const t of tables.values()) {
+    const T = `lab_Table_t${t.index}`, k = t.keyT === "int" ? "lab_int_dec(b->ks[j]);" : "lab_dec(b->ks[j]);";
+    const v = (x: string) => (counted(t.value) ? dec(t.value, x) : "");
+    fieldsOf.push(`case ${tnum.get(`table ${t.key}`)}: { ${T} *v = (${T} *)c; lab_Store_t${t.index} *b = v->cur; if (b) { for (uint32_t j = 0; j < b->cap; j++) if (b->st[j] == 1) { ${k} ${v("b->vs[j]")} } free(b->st); free(b->ks); free(b->vs); free(b); } else { ${k.replace("b->ks[j]", "v->key")} if (v->had) { ${v("v->old")} } lab_dec(v->next); } } break;`);
   }
   for (const s of shaped) {
     const ks = shapes[s].caps.map((x, j) => (counted(x) ? dec(x, `((${shapeName.get(s)} *)c)->c${j}`) : "")).filter(Boolean);
@@ -446,6 +466,7 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string
     ...[...statics.values()].map((x) => x.decl),
     ...(rts.size ? ["", runtimeC(rts, listNames)] : []),
     ...[...arrays.values()].flatMap((a) => arrayC(a)),
+    ...[...tables.values()].flatMap((t) => tableC(t)),
     "",
     ...kept.map((i) => `${header(i)};`),
     ...[...lent.keys()].map((i) => `${header(i, true)};`),
@@ -636,7 +657,7 @@ int main(int argc, char **argv) {
         case "int": return intLit(e.v);
         case "text": return textLit(e.v);
         case "rt": {
-          (ARRAY_FN.test(e.fn) ? arrayFns : rts).add(e.fn);
+          (ARRAY_FN.test(e.fn) || TABLE_FN.test(e.fn) ? arrayFns : rts).add(e.fn);
           const c = `${cName(e.fn)}(${args(e.args, pre, d, after).join(", ")})`;
           return runtime(e.fn).partial ? checked(c, rtType(e.fn), pre, d, after) : stated(c, rtType(e.fn), pre, d);
         }
@@ -1016,8 +1037,195 @@ int main(int argc, char **argv) {
   // longer one. Ersagun's two-ended array list; prior art: deques as ring
   // buffers, gap buffers, Go's slices, and Perceus's reuse of a cell whose
   // count is 1 (Reinking, Xie, de Moura and Leijen, PLDI 2021).
+  // std's Table (C63h, docs/design/data/IN-PLACE.md "Step 2 on WebAssembly
+  // and C"): Map as a hash table, open addressing with linear probing, its
+  // slots malloc'd beside the counted cells of its versions. A put or
+  // remove changes it in place when nobody else holds it (Perceus's reuse,
+  // as `array.replaceAt`); otherwise the version it was given becomes the
+  // change back from the new one, as std.ts's Table in JavaScript (C71), so
+  // every version stays a value and a map read again after a change pays
+  // only for the changes it walks back over, not a copy. Keys are Ints (hashed by value, or by limbs when big) or Texts
+  // (FNV-1a over their bytes); entries come out sorted by compare's order,
+  // so its meaning is the sorted Map. Prior art: Knuth's linear probing
+  // (TAOCP vol. 3, 6.4); Fowler, Noll and Vo's FNV hash; Reinking, Xie,
+  // de Moura and Leijen, Perceus (PLDI 2021); Baker's shallow binding
+  // ("Shallow binding makes functional arrays fast", 1991), as Conchon and
+  // Filliâtre's persistent arrays (2007).
+  function tableC(t: TType): string[] {
+    const fns = [...arrayFns].filter((f) => TABLE_FN.exec(f) && Number(TABLE_FN.exec(f)![2]) === t.index);
+    if (!fns.length) return [];
+    const i = t.index, T = `lab_Table_t${i}`, S = `lab_Store_t${i}`, tn = tnum.get(`table ${t.key}`)!, V = ty(t.value);
+    const int = t.keyT === "int", K = int ? "lab_int" : "lab_cell *";
+    const dupK = (x: string) => (int ? `lab_int_dup(${x})` : `lab_dup(${x})`), dropK = (x: string) => (int ? `lab_int_drop(${x});` : `lab_drop(${x});`);
+    const dupV = (x: string) => (counted(t.value) ? dup(t.value, x) : x), dropV = (x: string) => (counted(t.value) ? drop(t.value, x) : "");
+    const has = (op: string) => arrayFns.has(`table.${op}.t${i}`);
+    const out = [`// Table ${i}: ${int ? "Int" : "Text"} keys, ${V} values.
+static inline uint64_t lab__hash_t${i}(${K} k) {
+${int ? `  uint64_t h;
+  if (LAB_IS_SMALL(k)) h = (uint64_t)LAB_VAL(k);
+  else { lab_big *b = LAB_BIG(k); h = b->neg ? 0x9e3779b97f4a7c15u : 0; for (uint32_t j = 0; j < b->n; j++) h = (h ^ b->d[j]) * 0x100000001b3u; }
+  h ^= h >> 30; h *= 0xbf58476d1ce4e5b9u; h ^= h >> 27; h *= 0x94d049bb133111ebu; h ^= h >> 31;
+  return h;` : `  uint64_t h = 0xcbf29ce484222325u;
+  for (uint32_t j = 0; j < LAB_TN(k); j++) h = (h ^ LAB_TB(k)[j]) * 0x100000001b3u;
+  return h ^ (h >> 32);`}
+}
+static inline int lab__eq_t${i}(${K} a, ${K} b) {
+${int ? `  if (LAB_IS_SMALL(a) || LAB_IS_SMALL(b)) return a == b;
+  return LAB_BIG(a)->neg == LAB_BIG(b)->neg && lab__cmp(LAB_BIG(a)->d, LAB_BIG(a)->n, LAB_BIG(b)->d, LAB_BIG(b)->n) == 0;` : `  return LAB_TN(a) == LAB_TN(b) && memcmp(LAB_TB(a), LAB_TB(b), LAB_TN(a)) == 0;`}
+}
+// The slot holding k, or the free one where it would go (a removed one
+// first), with *found saying which.
+static inline uint32_t lab__find_t${i}(${S} *t, ${K} k, int *found) {
+  uint32_t m = t->cap - 1, j = (uint32_t)lab__hash_t${i}(k) & m, free_at = UINT32_MAX;
+  for (;; j = (j + 1) & m) {
+    if (t->st[j] == 0) { *found = 0; return free_at != UINT32_MAX ? free_at : j; }
+    if (t->st[j] == 2) { if (free_at == UINT32_MAX) free_at = j; continue; }
+    if (lab__eq_t${i}(t->ks[j], k)) { *found = 1; return j; }
+  }
+}
+static inline ${S} *lab__store_t${i}(uint32_t cap) {
+  ${S} *t = malloc(sizeof(${S}));
+  if (!t) lab_oom();
+  t->n = 0; t->used = 0; t->cap = cap;
+  t->st = calloc(cap, 1); t->ks = malloc(cap * sizeof(${K})); t->vs = malloc(cap * sizeof(${V}));
+  if (!t->st || !t->ks || !t->vs) lab_oom();
+  return t;
+}
+static inline ${T} *lab__made_t${i}(${S} *s) {
+  ${T} *t = lab_new(sizeof(${T}), ${tn}, 0);
+  t->cur = s; t->next = 0; t->had = 0;
+  return t;
+}
+// Room for one more, at most 3/4 used: the full slots moved into twice
+// the room (or the same, when removed ones took it).
+static inline void lab__grow_t${i}(${S} *t) {
+  if ((uint64_t)(t->used + 1) * 4 <= (uint64_t)t->cap * 3) return;
+  uint32_t cap = (uint64_t)(t->n + 1) * 2 > t->cap ? t->cap * 2 : t->cap;
+  if (cap < t->cap) lab_oom();
+  uint8_t *st = t->st; ${K} *ks = t->ks; ${V} *vs = t->vs; uint32_t old = t->cap;
+  t->st = calloc(cap, 1); t->ks = malloc(cap * sizeof(${K})); t->vs = malloc(cap * sizeof(${V}));
+  if (!t->st || !t->ks || !t->vs) lab_oom();
+  t->cap = cap; t->used = t->n;
+  for (uint32_t j = 0; j < old; j++) if (st[j] == 1) { int f; uint32_t at = lab__find_t${i}(t, ks[j], &f); t->st[at] = 1; t->ks[at] = ks[j]; t->vs[at] = vs[j]; }
+  free(st); free(ks); free(vs);
+}
+// Make t the newest version (std.ts reroot): undo, from the newest back,
+// each change between it and t, each undone one becoming the change that
+// redoes it. The newer of two holds no count on the older.
+static void lab__reroot_t${i}(${T} *t) {
+  if (t->cur) return;
+  uint32_t n = 0, room = 16;
+  ${T} **path = malloc(room * sizeof *path), *x = t;
+  if (!path) lab_oom();
+  while (!x->cur) {
+    if (n == room) { room *= 2; path = realloc(path, room * sizeof *path); if (!path) lab_oom(); }
+    path[n++] = x; x = (${T} *)x->next;
+  }
+  while (n-- > 0) {
+    ${T} *y = path[n];
+    ${S} *m = x->cur;
+    lab__grow_t${i}(m);
+    int f; uint32_t j = lab__find_t${i}(m, y->key, &f);
+    ${V} old = f ? m->vs[j] : ${zero(t.value)};
+    if (y->had && f) m->vs[j] = y->old;
+    else if (y->had) { if (m->st[j] == 0) m->used++; m->st[j] = 1; m->ks[j] = ${dupK("y->key")}; m->vs[j] = y->old; m->n++; }
+    else if (f) { ${dropK("m->ks[j]")} m->st[j] = 2; m->n--; }
+    x->cur = 0; x->key = y->key; x->had = f; x->old = old;
+    x->next = lab_dup((lab_cell *)y);
+    y->cur = m; y->next = 0;
+    lab_drop((lab_cell *)x);
+    x = y;
+  }
+  free(path);
+}
+// A put (set) or remove: changed in place when nobody else holds t, else
+// a new newest version, t becoming the change back to it (std.ts change).
+static lab_cell *lab__change_t${i}(lab_cell *c, ${K} k, int set, ${V} v) {
+  ${T} *t = (${T} *)c;
+  lab__reroot_t${i}(t);
+  ${S} *m = t->cur;
+  if (set) lab__grow_t${i}(m);
+  int f; uint32_t j = lab__find_t${i}(m, k, &f);
+  if (!set && !f) { ${dropK("k")} return c; }
+  if (t->h.rc == 1) {
+    if (set && f) { ${V} old = m->vs[j]; m->vs[j] = v; ${dropV("old")} (void)old; ${dropK("k")} }
+    else if (set) { if (m->st[j] == 0) m->used++; m->st[j] = 1; m->ks[j] = k; m->vs[j] = v; m->n++; }
+    else { ${dropK("m->ks[j]")} ${dropV("m->vs[j]")} m->st[j] = 2; m->n--; ${dropK("k")} }
+    return c;
+  }
+  ${T} *nv = lab__made_t${i}(m);
+  t->cur = 0; t->had = f; t->old = f ? m->vs[j] : ${zero(t.value)}; t->key = k;
+  if (set && f) m->vs[j] = v;
+  else if (set) { if (m->st[j] == 0) m->used++; m->st[j] = 1; m->ks[j] = ${dupK("k")}; m->vs[j] = v; m->n++; }
+  else { ${dropK("m->ks[j]")} m->st[j] = 2; m->n--; }
+  t->next = (lab_cell *)nv;
+  lab_dup((lab_cell *)nv);
+  lab_drop(c);
+  return (lab_cell *)nv;
+}`];
+    if (has("empty")) out.push(`static lab_cell *lab_table_empty_t${i}(void) { return (lab_cell *)lab__made_t${i}(lab__store_t${i}(8)); }`);
+    if (has("put")) out.push(`static lab_cell *lab_table_put_t${i}(lab_cell *c, ${K} k, ${V} v) { return lab__change_t${i}(c, k, 1, v); }`);
+    if (has("remove")) out.push(`static lab_cell *lab_table_remove_t${i}(lab_cell *c, ${K} k) { return lab__change_t${i}(c, k, 0, ${zero(t.value)}); }`);
+    if (has("has")) out.push(`static int32_t lab_table_has_t${i}(lab_cell *c, ${K} k) {
+  lab__reroot_t${i}((${T} *)c);
+  int f; lab__find_t${i}(((${T} *)c)->cur, k, &f);
+  ${dropK("k")} lab_drop(c);
+  return f;
+}`);
+    if (has("size")) out.push(`static lab_int lab_table_size_t${i}(lab_cell *c) { lab__reroot_t${i}((${T} *)c); lab_int n = LAB_SMALL(((${T} *)c)->cur->n); lab_drop(c); return n; }`);
+    // No answer for a key it doesn't have.
+    if (has("at")) out.push(`static ${V} lab_table_at_t${i}(lab_cell *c, ${K} k) {
+  lab__reroot_t${i}((${T} *)c);
+  ${S} *m = ((${T} *)c)->cur;
+  int f; uint32_t j = lab__find_t${i}(m, k, &f);
+  ${dropK("k")}
+  if (!f) { lab_drop(c); lab_st = 1; return ${zero(t.value)}; }
+  ${V} x = ${dupV("m->vs[j]")};
+  lab_drop(c);
+  return x;
+}`);
+    const lists = t.entries.map((d, j) => ({ d, j })).filter(({ j }) => arrayFns.has(`table.entries.t${i}.e${j}`));
+    if (lists.length) out.push(`static ${S} *lab__sort_t${i};
+static int lab__cmp_t${i}(const void *x, const void *y) {
+  ${K} a = lab__sort_t${i}->ks[*(const uint32_t *)x];
+  ${K} b = lab__sort_t${i}->ks[*(const uint32_t *)y];
+${int ? `  if (LAB_IS_SMALL(a) && LAB_IS_SMALL(b)) return LAB_VAL(a) < LAB_VAL(b) ? -1 : LAB_VAL(a) > LAB_VAL(b);
+  lab__mag p, q;
+  lab__mag_of(a, &p); lab__mag_of(b, &q);
+  if (p.neg != q.neg) return p.neg ? -1 : 1;
+  return p.neg ? lab__cmp(q.d, q.n, p.d, p.n) : lab__cmp(p.d, p.n, q.d, q.n);` : `  uint32_t n = LAB_TN(a) < LAB_TN(b) ? LAB_TN(a) : LAB_TN(b);
+  int r = memcmp(LAB_TB(a), LAB_TB(b), n);
+  return r ? (r < 0 ? -1 : 1) : LAB_TN(a) < LAB_TN(b) ? -1 : LAB_TN(a) > LAB_TN(b);`}
+}`);
+    for (const { d, j } of lists) {
+      const tag = d.cases.findIndex((c) => c.fields.length > 0), head = d.cases[tag].fields.findIndex((x) => x.t !== d);
+      const cons = cname(d, tag), nil = cname(d, 1 - tag), pair = d.cases[tag].fields[head].t as RType, P = ty(pair);
+      // A key nothing ever fixed (an empty map nothing is put in) is held
+      // as an Int, its entries' as another type: none are ever made.
+      out.push(`// The entries as a list of pairs, in compare's order of their keys.
+static lab_cell *lab_table_entries_t${i}_e${j}(lab_cell *c) {
+  lab__reroot_t${i}((${T} *)c);
+  ${S} *t = ((${T} *)c)->cur;
+  uint32_t *ix = malloc((t->n ? t->n : 1) * sizeof(uint32_t)), n = 0;
+  if (!ix) lab_oom();
+  for (uint32_t j = 0; j < t->cap; j++) if (t->st[j] == 1) ix[n++] = j;
+  lab__sort_t${i} = t;
+  qsort(ix, n, sizeof(uint32_t), lab__cmp_t${i});
+  lab_cell *acc = &${nil};
+  for (uint32_t j = n; j-- > 0;) {
+    ${cons} *e = lab_new(sizeof(${cons}), ${tnum.get(d.key)}, ${tag});
+    e->f${head} = (${P}){ ${pair.fields[0].t === t.keyT ? dupK("t->ks[ix[j]]") : zero(pair.fields[0].t)}, ${dupV("t->vs[ix[j]]")} };
+    e->f${1 - head} = acc; acc = (lab_cell *)e;
+  }
+  free(ix);
+  lab_drop(c);
+  return acc;
+}`);
+    }
+    return out;
+  }
   function arrayC(a: AType): string[] {
-    const fns = [...arrayFns].filter((f) => Number(ARRAY_FN.exec(f)![2]) === a.index);
+    const fns = [...arrayFns].filter((f) => ARRAY_FN.test(f) && Number(ARRAY_FN.exec(f)![2]) === a.index);
     if (!fns.length) return [];
     const { view: V, buf: B } = aname.get(a.key)!, T = ty(a.item), i = a.index;
     const tv = tnum.get(`array ${a.key}`), tb = tnum.get(`buf ${a.key}`);

@@ -23,20 +23,26 @@ import type { Id } from "../../ters/src/model.ts";
 import { INT, NUMBER, STRING } from "../../ters/src/lang/types.ts";
 import { compile } from "../src/compile.ts";
 import { $setPrint } from "../src/runtime.js";
+import { execFileSync } from "node:child_process";
+import { lowerScalar } from "../src/scalar.ts";
+import { emitC } from "../src/c.ts";
+import { compile as cc, skip } from "./c-harness.ts";
 
 const L = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY.names[d] === name)!;
 
 // Counts n keys (Ints, or Float64s with `floats`), then shows the count,
 // a few lookups and whether keys are there. With `old`, it also keeps the
 // map before one more put and shows both.
-function program(n: number, opts: { floats?: boolean; old?: boolean; remove?: boolean; list?: boolean; pairs?: boolean; record?: "ints" | "floats" } = {}) {
+function program(n: number, opts: { floats?: boolean; old?: boolean; remove?: boolean; list?: boolean; pairs?: boolean; record?: "ints" | "floats"; remainders?: boolean } = {}) {
   const k = new Lang(LIBRARY.code);
   // With `record`, the same as a record of the program's own, spot(row, name)
   // (C63g); with "floats", its row is a Float64.
   const Spot = opts.record ? k.type("Spot", [], [["spot", [["row", () => k.tref(opts.record === "floats" ? NUMBER : INT)], ["name", () => k.tref(STRING)]]]]) : null;
+  // With `remainders`, a key is i's remainder by 151 (C has no shifted
+  // down yet).
   // With `pairs`, a key is (i ÷ 8, i ÷ 32 shown): a pair of an Int and a Text (C63f).
   const pairKey = (i: Id) => k.call(Spot ? Spot.v.spot : PAIR_V, opts.record === "floats" ? k.call(INT_OPS.toNumber, k.call(INT_OPS.shiftDown, i, k.int(3))) : k.call(INT_OPS.shiftDown, i, k.int(3)), k.call(SHOW_ANY, k.call(INT_OPS.shiftDown, i, k.int(5))));
-  const key = (i: Id) => opts.pairs || opts.record ? pairKey(i) : opts.floats ? k.call(B.mul, k.call(S.mod, i, k.lit(37)), k.lit(0.5)) : k.call(INT_OPS.shiftDown, i, k.int(1));
+  const key = (i: Id) => opts.pairs || opts.record ? pairKey(i) : opts.floats ? k.call(B.mul, k.call(S.mod, i, k.lit(37)), k.lit(0.5)) : opts.remainders ? k.call(S.first, k.thunk(() => k.call(INT_OPS.remainder, i, k.int(151))), k.thunk(() => k.int(0))) : k.call(INT_OPS.shiftDown, i, k.int(1));
   const counts = k.def("counts");
   k.define(counts, k.fold(opts.floats ? k.call(S.range, k.lit(n)) : k.call(INT_OPS.range, k.int(n)), [
     { variant: NIL, names: [], body: () => k.x(L("empty map")) },
@@ -58,10 +64,10 @@ function program(n: number, opts: { floats?: boolean; old?: boolean; remove?: bo
   return { code: base(k.code), names: baseNames(k.names), main, own: [counts, main] };
 }
 
-function chosen(p: ReturnType<typeof program>, hostMaps = true) {
+function chosen(p: ReturnType<typeof program>, hostMaps = true, cTables = false) {
   const info = infer(p.code, p.names, undefined, checkOptions);
   assert.deepEqual(info.errors.map((e) => e.message), []);
-  return withLibraryRepresentations(p.code, info, p.names, p.main, p.own, [], { hostMaps });
+  return withLibraryRepresentations(p.code, info, p.names, p.main, p.own, [], { hostMaps, cTables });
 }
 
 const printed = (code: ReturnType<typeof program>["code"], names: Record<Id, string>, main: Id, insiders: Id[] = []) => {
@@ -205,4 +211,20 @@ test("a set only built, asked and changed by its one holder is a hash table, com
   const old = setProgram(400, { old: true }), o = chosen(old);
   assert.deepEqual(o.chosen, ["Set as hash table"]);
   assert.deepEqual(printed(o.code, o.names, old.main, o.insiders).lines, printed(old.code, old.names, old.main).lines);
+});
+
+// C63h: C's own table (c.ts tableC), for Int keys. Its versions are
+// values as JavaScript's are: the old map, read after a put on it, says
+// what it said, and the newer one too, with no copy between.
+test("in C, a map of Int keys is C's hash table, and prints what the definition prints, its old version too (C63h)", { skip }, () => {
+  const p = program(300, { old: true, remove: true, list: true, remainders: true });
+  const c = chosen(p, false, true);
+  assert.deepEqual(c.chosen, ["Map as hash table"]);
+  const { lines, info } = printed(c.code, c.names, p.main, c.insiders);
+  assert.deepEqual(lines, printed(p.code, p.names, p.main).lines);
+  const lowered = lowerScalar(c.code, info, c.names, [p.main], { data: true });
+  assert.deepEqual([...lowered.refused.values()], []);
+  assert.equal(lowered.tables.length, 1);
+  const out = execFileSync(cc(emitC(lowered, { main: p.main }).c), { encoding: "utf8" });
+  assert.deepEqual(out.split("\n").slice(0, -1), lines);
 });

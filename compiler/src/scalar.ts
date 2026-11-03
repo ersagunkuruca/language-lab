@@ -49,8 +49,8 @@ import type { Code, Id, NodeOf } from "../../ters/src/model.ts";
 import { dependencies, subtree } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
-import { ARRAY, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, STRING, type Row, type Type } from "../../ters/src/lang/types.ts";
-import { ABORT, ABORT_OP, ALGEBRAIC_V, ARRAY_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, ORDER_V, PAIR_V, RATIO, S, SET, SHOW_ANY, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
+import { ARRAY, TABLE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, STRING, type Row, type Type } from "../../ters/src/lang/types.ts";
+import { ABORT, ABORT_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, ORDER_V, PAIR_V, RATIO, S, SET, SHOW_ANY, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
 import { liftLets } from "../../ters/src/lang/lift-lets.ts";
 import { inlineLists } from "./inline-lets.ts";
 import { STOPS } from "./stops.ts";
@@ -65,6 +65,11 @@ import { runtime } from "./wasm-rt.ts";
 // A shader (or a ray marcher's loop) may call what might not finish only
 // under a literal with fuel; the rest of its type must be empty.
 // std's Array's builtins: runtime functions, one copy per item type.
+// std's Table's jobs (C63h), by their runtime functions' names.
+const TABLE_RT: Record<Id, string> = {
+  [TABLE_OPS.empty]: "empty", [TABLE_OPS.put]: "put", [TABLE_OPS.remove]: "remove", [TABLE_OPS.has]: "has",
+  [TABLE_OPS.size]: "size", [TABLE_OPS.at]: "at", [TABLE_OPS.entries]: "entries",
+};
 const ARRAY_RT: Record<Id, string> = {
   [ARRAY_OPS.empty]: "array.empty", [ARRAY_OPS.of]: "array.of", [ARRAY_OPS.items]: "array.items",
   [ARRAY_OPS.length]: "array.length", [ARRAY_OPS.at]: "array.at", [ARRAY_OPS.push]: "array.push",
@@ -126,8 +131,15 @@ export type WType = "int" | "text";
 // functions are named by (`array.push.a0`); `list`: List of its items,
 // when a job takes or gives one.
 export interface AType { key: string; name: string; item: LType; index: number; list: DType | null }
-export type LType = SType | WType | RType | DType | FType | AType;
+// std's Table (C63h): Map as a hash table, in C only, for Int and Text
+// keys (c.ts `tableC`). `index`: its place in Lowered.tables, which its
+// runtime functions are named by (`table.put.t0`); `entries`: each List
+// of (key, value) pairs `table entries` gives (`table.entries.t0.e1`): a
+// key nothing fixes is held as an Int, its pairs' may be another type.
+export interface TType { key: string; name: string; keyT: "int" | "text"; value: LType; index: number; entries: DType[] }
+export type LType = SType | WType | RType | DType | FType | AType | TType;
 export const isArray = (t: LType): t is AType => typeof t === "object" && "item" in t;
+export const isTable = (t: LType): t is TType => typeof t === "object" && "keyT" in t;
 export const isData = (t: LType): t is DType => typeof t === "object" && "cases" in t;
 export const isRecord = (t: LType): t is RType => typeof t === "object" && "variant" in t;
 export const isFn = (t: LType): t is FType => typeof t === "object" && "result" in t;
@@ -328,7 +340,7 @@ export interface SFunc { def: Id; name: string; params: LType[]; result: LType; 
 // computed a number Float32 can't hold, so a Float32 run differs from it.
 // `shader`: lowered with `shader` and not `data` (C66c): Int is int32, and
 // no answer is the flag, not a status (wasm.ts takes both).
-export interface Lowered { funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; arrays: AType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info; escapes: DType[]; rounded: Set<Id>; shader?: true }
+export interface Lowered { funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; arrays: AType[]; tables: TType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info; escapes: DType[]; rounded: Set<Id>; shader?: true }
 
 class Refused extends Error {}
 
@@ -434,6 +446,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   const datas = new Map<string, DType>();
   const fns = new Map<string, FType>();
   const arrays = new Map<string, AType>();
+  const tables = new Map<string, TType>();
   const shapes: Shape[] = [];
   // Effects whose operations all never return (Abort's shape, LANGUAGE.md
   // "Effects you define"), by their operations: each compiles as Abort does
@@ -496,6 +509,16 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     // values of them.
     // At any depth (List (Optional (List a)), sort's runs of nothing): the
     // type's key is made from its arguments as they are.
+    if (opts.data && t.t === "con" && t.id === TABLE) {
+      // A key no put ever fixes (an empty map nothing is put in) is an Int.
+      const k = !t.args[0] || unconstrained(t.args[0]) ? "int" : stype(t.args[0], inside), value = t.args[1] && stype(freed(t.args[1]), inside);
+      if ((k !== "int" && k !== "text") || !value) return null;
+      const key = `${t.id}<${k},${show(freed(t.args[1]))}>`;
+      if (tables.has(key)) return tables.get(key)!;
+      const h: TType = { key, name: "Table", keyT: k, value, index: tables.size, entries: [] };
+      tables.set(key, h);
+      return h;
+    }
     if (opts.data && t.args.some(freeInside)) t = { ...t, args: t.args.map(freed) };
     if (t.id === NUMBER) return "f64";
     if (t.id === BOOL) return "i32";
@@ -838,6 +861,16 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           if (l) a.list = l;
           return { k: "rt", fn: `${ARRAY_RT[target] ?? "array.replaceAt"}.a${a.index}`, args: args() };
         }
+        if (opts.data && TABLE_RT[target]) {
+          // The table's type, from the argument or the answer that is one;
+          // the list of its entries where the job gives one.
+          const ts = [...n.args, id].map((a) => { const t = stype(zonk(a)); if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(a))}`); return t; });
+          const h = ts.find(isTable);
+          if (!h) throw new Refused(`uses ${nm(target)} on no table`);
+          const l = target === TABLE_OPS.entries ? ts.find(isData) : undefined;
+          if (l && !h.entries.includes(l)) h.entries.push(l);
+          return { k: "rt", fn: `table.${TABLE_RT[target]}.t${h.index}${l ? `.e${h.entries.indexOf(l)}` : ""}`, args: args() };
+        }
         if (opts.data && RT[target]) {
           // What it takes and gives in, so List Text is one of the module's types.
           for (const a of [...n.args, id]) if (!stype(zonk(a))) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(a))}`);
@@ -1014,6 +1047,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     if (isArray(t)) return { k: "call", fn: arrayLoop(t, "="), args: [x, y], tail };
     if (t === "int") return { k: "rt", fn: "int.equal", args: [x, y] };
     if (t === "text") return { k: "rt", fn: "text.equal", args: [x, y] };
+    if (isTable(t)) throw new Refused("compares tables (their meaning does, in the library)");
     if (t !== "f64") return { k: "call", fn: equality(t), args: [x, y], tail };
     // Two Float64s within 1e-9 relative to their size (run.ts sameNumber).
     // Each side once: a local if it isn't one already.
@@ -1051,6 +1085,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     if (t === "int32") return pick({ k: "op", op: "ieq", args: [x, y] }, { k: "op", op: "iless", args: [x, y] });
     if (t === "text") return pick({ k: "rt", fn: "text.equal", args: [x, y] }, { k: "rt", fn: "text.less", args: [x, y] });
     if (isArray(t)) return { k: "call", fn: arrayLoop(t, "<"), args: [x, y], tail };
+    if (isTable(t)) throw new Refused("compares tables (their meaning does, in the library)");
     return { k: "call", fn: ordering(t), args: [x, y], tail };
   }
   // equal ("=") or compare ("<") on two arrays, as the evaluator has them
@@ -1152,6 +1187,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     if (t === "text") return { k: "rt", fn: "text.quoted", args: [x] };
     if (t === "int32" || isFn(t)) throw new Refused(`shows ${isFn(t) ? "a function" : "an Int in 32 bits"} (not in WebAssembly and C yet)`);
     if (isArray(t)) return { k: "call", fn: showingArray(t), args: [x], tail };
+    if (isTable(t)) throw new Refused("shows a table (its meaning does, in the library)");
     return { k: "call", fn: showing(t), args: [x], tail };
   }
   // show on an array, "array [a, b]" as run.ts writes it (I156): the
@@ -1610,6 +1646,10 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
         const r = runtime(e.fn).result;
         if (r === "int" && !opts.data) return "int32";
         if (r === "i32" || r === "int" || r === "f64" || r === "text") return r;
+        const tm = /^table\.\w+\.t(\d+)(?:\.e(\d+))?$/.exec(e.fn), h = tm && [...tables.values()][Number(tm[1])];
+        if (h && r === "table") return h;
+        if (h && r === "value") return h.value;
+        if (h && r === "list" && tm![2]) return h.entries[Number(tm![2])];
         const a = /\.a(\d+)$/.exec(e.fn) && [...arrays.values()][Number(/\.a(\d+)$/.exec(e.fn)![1])];
         if (a && r === "array") return a;
         if (a && r === "item") return a.item;
@@ -2061,8 +2101,8 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   }
   for (const [r, why] of unstarted) if (!refused.has(r)) refused.set(r, why);
   // Refusals by definition; those of one specialization stay inside.
-  const niche = opts.data ? niches(funcs, [...records.values()], [...datas.values()], [...arrays.values()], [...fns.values()], shapes) : new Set<string>();
-  return { funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()].filter((d) => !niche.has(d.key)), arrays: [...arrays.values()], fns: [...fns.values()], shapes, code, info, escapes: escapes.map((e) => stype({ t: "con", id: e, args: [] }) as DType), rounded, ...(opts.shader && !opts.data ? { shader: true as const } : {}) };
+  const niche = opts.data ? niches(funcs, [...records.values()], [...datas.values()], [...arrays.values()], [...fns.values()], shapes, [...tables.values()]) : new Set<string>();
+  return { funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()].filter((d) => !niche.has(d.key)), arrays: [...arrays.values()], tables: [...tables.values()], fns: [...fns.values()], shapes, code, info, escapes: escapes.map((e) => stype({ t: "con", id: e, args: [] }) as DType), rounded, ...(opts.shader && !opts.data ? { shader: true as const } : {}) };
 }
 
 // A Float64 is finite (L125c2, FLOAT-VALUES-2026-11-01.md §2), on
@@ -2099,7 +2139,7 @@ const guard = (bad: SExpr, why: SExpr, ok: SExpr): SExpr => ({ k: "if", cond: ba
 // match tests which f64 it is, and every type that held one holds an f64
 // instead. Gives the keys of the data types no longer used.
 type Niche = { values: number[]; test: (c: number, x: SExpr) => SExpr };
-function niches(funcs: SFunc[], records: RType[], datas: DType[], arrays: AType[], fns: FType[], shapes: Shape[]): Set<string> {
+function niches(funcs: SFunc[], records: RType[], datas: DType[], arrays: AType[], fns: FType[], shapes: Shape[], tables: TType[] = []): Set<string> {
   const plain = (t: LType) => t === "f64";
   const op = (o: Op, ...args: SExpr[]): SExpr => ({ k: "op", op: o, args });
   const is = (x: SExpr, v: number): SExpr => op("equal", x, { k: "num", v });
@@ -2134,6 +2174,7 @@ function niches(funcs: SFunc[], records: RType[], datas: DType[], arrays: AType[
   for (const r of records) r.fields.forEach((x) => { x.t = ty(x.t); });
   for (const d of datas) d.cases.forEach((c) => c.fields.forEach((x) => { x.t = ty(x.t); }));
   for (const a of arrays) a.item = ty(a.item);
+  for (const h of tables) h.value = ty(h.value);
   for (const t of [...fns, ...shapes.map((sh) => sh.t)]) { t.params = t.params.map(ty); t.result = ty(t.result); }
   for (const sh of shapes) sh.caps = sh.caps.map(ty);
   for (const f of funcs) {

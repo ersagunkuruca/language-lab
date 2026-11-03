@@ -40,7 +40,9 @@ export interface Chosen { code: Code; names: Names; chosen: string[]; insiders: 
 // `hostMaps`: the program runs where std's Table is (the evaluator and
 // compiled JavaScript), so a Map may be a hash table changed in place
 // (C63b); WebAssembly, C and shaders have none.
-export interface LibraryOptions { hostMaps?: boolean }
+// `cTables`: the program is compiled to C, whose runtime has a Map table
+// for Int and Text keys (C63h, compiler/src/c.ts `tableC`).
+export interface LibraryOptions { hostMaps?: boolean; cTables?: boolean }
 
 export function withLibraryRepresentations(code: Code, info: Info, names: Names, main: Id, defs: Id[], asked: Representation[] = [], options: LibraryOptions = {}): Chosen {
   const skip = new Set<Id>();
@@ -75,7 +77,8 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
     // A hash table only where it is (hostMaps), and only where every map
     // has one holder, so a put changing it in place can't be seen.
     const rows = LIBRARY.reps.filter((r) => r.of === ty && r.byType && !skip.has(r.name + " " + ty)
-      && (!r.oneHolder || (options.hostMaps && inPlace(code, info, main, defs, r))));
+      && (!r.oneHolder || (options.hostMaps && inPlace(code, info, main, defs, r))
+        || (options.cTables && ty === MAP && inPlace(code, info, main, defs, r, true))));
     if (!rows.length || !uses(code, main, [spec, ...rows]).length) continue;
     const tree = choose(code, main, [spec, ...rows]).rep;
     if (tree === spec || keyed(info, defs, code, ty) || generic(info, defs, code, tree)) continue;
@@ -310,7 +313,8 @@ function asMeanings(k: Lang, code: Code, info: Info, names: Names, chosen: Repre
 // it (C71): every version of a table stays a value (std.ts Table), so a
 // map read again after a change is still right; one holder is what makes
 // each change constant.
-function inPlace(code: Code, info: Info, main: Id, defs: Id[], row: Representation): boolean {
+// `simple`: Int and Text keys only (C's table, C63h).
+function inPlace(code: Code, info: Info, main: Id, defs: Id[], row: Representation, simple = false): boolean {
   for (const id of defs.flatMap((d) => subtree(code, d))) {
     const t0 = info.typeOf.get(id);
     if (!t0) continue;
@@ -326,6 +330,7 @@ function inPlace(code: Code, info: Info, main: Id, defs: Id[], row: Representati
     if (k.t !== "con") return false;
     const inner = (a: Type) => { const z = info.subst.zonk(a); return z.t !== "var" && hashable(z, within); };
     if (k.id === INT || k.id === STRING) return true;
+    if (simple) return false;
     if (/^std\.tuple\d+$/.test(k.id)) return k.args.every(inner);
     const d = code.nodes[k.id], td = d?.kind === "def" && d.body ? code.nodes[d.body] : null;
     if (td?.kind !== "typedef" || td.effect || td.interface || td.variants.length !== 1 || within.has(k.id)) return false;
