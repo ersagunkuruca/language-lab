@@ -24,6 +24,7 @@ import { TARGETS } from "../src/builtins.ts";
 import { emitWasm, instantiate } from "../src/wasm.ts";
 import { emitWgsl } from "../src/wgsl.ts";
 import type { Id } from "../../ters/src/model.ts";
+import { isCall } from "../../ters/src/model.ts";
 import { compile } from "../src/compile.ts";
 
 // Builtins whose first input must be written in place, so a plain

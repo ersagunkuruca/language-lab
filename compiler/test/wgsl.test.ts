@@ -18,7 +18,7 @@ import { infer } from "../../ters/src/lang/infer.ts";
 import { B } from "../../ters/src/prelude.ts";
 import { S } from "../../ters/src/lang/std.ts";
 import { expandDerivatives, recordVariant } from "../../ters/src/lang/derive.ts";
-import { merge, type Id, type NodeOf } from "../../ters/src/model.ts";
+import { merge, type Id, type NodeOf, type Call } from "../../ters/src/model.ts";
 
 test("calculus: the same definitions the WASM printer takes, as f32 functions", () => {
   const p = load("calculus");

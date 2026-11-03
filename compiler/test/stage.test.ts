@@ -18,7 +18,7 @@ import { emitWgsl } from "../src/wgsl.ts";
 import { loadJs } from "../src/js-scalar.ts";
 import { pga } from "../src/fixtures.ts";
 import { CONS, NIL } from "../../ters/src/lang/std.ts";
-import { subtree, type Id } from "../../ters/src/model.ts";
+import { subtree, isCall, type Id } from "../../ters/src/model.ts";
 import { valueMasks } from "../../ters/src/lang/grades.ts";
 import { load } from "../src/program.ts";
 import { withFloat32 } from "../../ters/src/lang/float32.ts";
