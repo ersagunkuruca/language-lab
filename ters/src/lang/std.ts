@@ -385,6 +385,11 @@ const pure = (params: Type[], ret: Type): Sig => (s) => fn(params, ret, s.freshR
 const searchRow = (s: Subst): Row => { const e = s.freshRow(); s.noWorld.add(e.tail!); return e; };
 
 export const S = {
+  // A list written out (L181, PORTS §4): one call with an input per item,
+  // so a thousand items are one node's inputs, not a thousand nested
+  // `cons` calls. Its type is written for one item; the checker gives a
+  // call with n inputs n of them (infer.ts).
+  listOf: builtin("list.of", "list of", (s) => { const a = s.fresh(); return fn([a], list(a), s.freshRow()); }, (...xs: unknown[]) => listOf(xs)),
   less: builtin("less", "less than", pure([num, num], bool)),
   // Only plain data can be compared: two functions that do the same thing
   // can't be told equal, and comparing them by where they live isn't

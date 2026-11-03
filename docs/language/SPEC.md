@@ -79,7 +79,10 @@ typed fields. A case may be **private**: only the library that keeps
 the type's rule may build it, but anyone may take it apart.
 
 2.3. **Lists.** A list means `cons(head, rest)` or `nil`, and nothing
-else. A written list `[1, 2, 3]` is that chain. However an engine stores
+else. A written list `[1, 2, 3]` is that chain. It may be kept as one call,
+`list of(1, 2, 3)`, with an input per item and all of one type, which
+means the same chain (L181); a thousand items are then one node, not a
+thousand nested ones. However an engine stores
 a list (as an array, a tree, two-ended, fused away) is not observable
 (§9).
 
