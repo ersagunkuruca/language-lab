@@ -55,7 +55,7 @@ export function navigatorPanel(host: NavHost) {
     const list = h("div", { class: "nav-list" });
     const others: [Program, HTMLElement][] = [];
     for (const [k, label] of programList()) {
-      list.append(row({ "data-set": "program", "data-value": k }, false, label));
+      list.append(row({ "data-set": "program", "data-value": k, "aria-expanded": k === doc().program ? "true" : "false" }, false, label));
       // Shown only while a search matches them: another program's
       // definitions, made at the first search (E204): an example not opened
       // is read only then.
@@ -94,6 +94,24 @@ export function navigatorPanel(host: NavHost) {
       // A program found is opened with all its definitions showing.
       if (r && !r.dataset.def) ui.find = "";
       r?.click();
+    });
+    // The keyboard moves through the rows shown (E231b): Up and Down, Home
+    // and End, and Down from the search goes to the first row; Up from the
+    // first row goes back to the search. Tab still leaves the list.
+    const shown = () => [...list.querySelectorAll<HTMLElement>(".nav-row")].filter((r) => !r.hidden && r.offsetParent !== null);
+    list.addEventListener("keydown", (e) => {
+      if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) return;
+      const rows = shown(), at = rows.indexOf(document.activeElement as HTMLElement);
+      if (at < 0) return;
+      e.preventDefault();
+      const to = e.key === "Home" ? 0 : e.key === "End" ? rows.length - 1 : at + (e.key === "ArrowDown" ? 1 : -1);
+      if (to < 0) find.focus();
+      else rows[Math.min(to, rows.length - 1)]?.focus();
+    });
+    find.addEventListener("keydown", (e) => {
+      if (e.key !== "ArrowDown") return;
+      e.preventDefault();
+      shown()[0]?.focus();
     });
     filter();
     return h("nav", { class: "panel p-nav", "aria-label": "Programs and definitions" }, h("h2", {}, "Programs"), find, list);
