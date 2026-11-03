@@ -24,7 +24,7 @@ import { TARGETS } from "../src/builtins.ts";
 import { emitWasm, instantiate } from "../src/wasm.ts";
 import { emitWgsl } from "../src/wgsl.ts";
 import type { Id } from "../../ters/src/model.ts";
-import { isCall } from "../../ters/src/model.ts";
+import { isCall, subtree } from "../../ters/src/model.ts";
 import { compile } from "../src/compile.ts";
 
 // Builtins whose first input must be written in place, so a plain
@@ -39,18 +39,28 @@ const IN_PLACE: Record<Id, string> = {
   [FIELDS.listed]: "fields listed is written out as a match for the types where it is used, before anything runs; f(x) leaves them open (ters/test/fields-by-type.test.ts)",
 };
 
-// f(x0, …) = builtin(x0, …), checked.
-function calling(id: Id) {
-  const t = SIGS[id](new Subst());
-  const n = t.t === "fn" ? t.params.length : 0;
-  const k = new Lang();
-  const f = k.def("f");
-  k.define(f, n ? k.fn(Array.from({ length: n }, (_, i) => `x${i}`), (...xs) => k.call(id, ...xs)) : k.thunk(() => k.call(id)));
-  const code = base(k.code), names = { ...baseNames(), ...k.names };
-  return { code, names, info: infer(code, names), f };
-}
-
 const builtins = Object.keys(SIGS).filter((id) => !IN_PLACE[id]);
+// f(x0, …) = builtin(x0, …) for each builtin, all in one program checked
+// once: a check of the library per builtin and per test was about four
+// minutes of this file's run (C152).
+const all = (() => {
+  const k = new Lang();
+  const fs = new Map<Id, Id>();
+  for (const id of builtins) {
+    const t = SIGS[id](new Subst());
+    const n = t.t === "fn" ? t.params.length : 0;
+    const f = k.def(`f ${id}`);
+    k.define(f, n ? k.fn(Array.from({ length: n }, (_, i) => `x${i}`), (...xs) => k.call(id, ...xs)) : k.thunk(() => k.call(id)));
+    fs.set(id, f);
+  }
+  const code = base(k.code), names = { ...baseNames(), ...k.names };
+  return { code, names, info: infer(code, names), fs };
+})();
+function calling(id: Id) {
+  return { code: all.code, names: all.names, info: all.info, f: all.fs.get(id)! };
+}
+const runner = makeRunner(all.code, all.info, { print: () => {} });
+
 const name = (id: Id) => `${stdNames[id] ?? id} (${id})`;
 
 test("std.ts declares the builtins this test goes through", () => {
@@ -61,11 +71,12 @@ test("std.ts declares the builtins this test goes through", () => {
 test("every builtin type-checks when called, and the evaluator runs it", () => {
   for (const id of builtins) {
     const { code, info, f } = calling(id);
-    assert.deepEqual(info.errors.map((e) => e.message), [], name(id));
-    const r = makeRunner(code, info, { print: () => {} });
-    assert.equal(typeof r.value(id), "function", `${name(id)} has no implementation in run.ts`);
-    assert.ok(r.value(f) !== undefined);
+    const inside = new Set(subtree(code, f));
+    assert.deepEqual(info.errors.filter((e) => inside.has(e.id)).map((e) => e.message), [], name(id));
+    assert.equal(typeof runner.value(id), "function", `${name(id)} has no implementation in run.ts`);
+    assert.ok(runner.value(f) !== undefined);
   }
+  assert.deepEqual(all.info.errors.map((e) => e.message), []);
 });
 
 test("every builtin has one record for the compiler's targets (builtins.ts), agreeing with std.ts", () => {
@@ -84,9 +95,10 @@ test("every builtin has one record for the compiler's targets (builtins.ts), agr
 });
 
 test("every builtin compiles to JavaScript", () => {
-  for (const id of builtins) {
-    const { code, info, names } = calling(id);
-    assert.doesNotThrow(() => compile(code, info, names, { runtime: "./runtime.js", exports: ["f"] }), name(id));
+  // All at once, and one at a time only to name the one that doesn't.
+  const exports = builtins.map((id) => all.names[all.fs.get(id)!]);
+  try { compile(all.code, all.info, all.names, { runtime: "./runtime.js", exports }); } catch {
+    for (const [i, id] of builtins.entries()) assert.doesNotThrow(() => compile(all.code, all.info, all.names, { runtime: "./runtime.js", exports: [exports[i]] }), name(id));
   }
 });
 
@@ -164,12 +176,12 @@ test("every number builtin lowers to the scalar profile (WASM, WGSL), or says wh
     assert.doesNotThrow(() => emitWgsl(lowered), name(id));
     // WASM gives the evaluator's numbers exactly.
     const w = await instantiate(emitWasm(lowered));
-    const r = makeRunner(code, info, { print: () => {} });
+    const r = runner;
     for (const x of [-2.5, -1, 0.5, 3.7]) {
       const xs = SAMPLE.slice(0, arity(id)).map((v, i) => (i === 0 ? x : v));
       // A stop (L125c) is an Abort with its reason, on both.
       const said = (run: () => unknown) => { try { return run(); } catch (e) { if (e instanceof Aborted) return `stops: ${e.reason}`; throw e; } };
-      const want = said(() => r.call(r.value(f), ...xs).next().value), got = said(() => w.f(...xs));
+      const want = said(() => r.call(r.value(f), ...xs).next().value), got = said(() => (w as Record<string, (...a: number[]) => unknown>)[names[f]](...xs));
       // A plain scalar function (no `data`) has no way to give no answer
       // (a Choice, L125b): it stops with the reason instead (L125c3).
       if (want === undefined && typeof got === "string" && /^stops: .* has no answer$/.test(got)) continue;
