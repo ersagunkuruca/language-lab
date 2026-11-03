@@ -39,7 +39,13 @@ const SEED = Number(process.env.SEED ?? 1), COUNT = Number(process.env.FUZZ ?? 4
 
 // The inputs every definition is called with.
 // The last: Ints past 64 bits and a Float64 near the top (C115).
-const INPUTS: [number, bigint, bigint[]][] = [[0, 0n, []], [2.5, 3n, [1n, 2n, 3n]], [-1, -2n, [5n, -4n]], [1e300, 2n ** 64n + 1n, [2n ** 62n, -(2n ** 63n), 7n]]];
+// FUZZ_LONG=n adds a list of n items (C128): recursion that isn't a tail
+// call, maps, folds and sorts over it, where an engine's stack shows. Off by
+// default: at a thousand items, seeds 2 and 9 ran out of memory and a sweep
+// of 40 seeds took over half an hour (a generated program may grow a list
+// at each step of a recursion, as append(xs, xs) does).
+const LONG = Number(process.env.FUZZ_LONG ?? 0);
+const INPUTS: [number, bigint, bigint[]][] = [[0, 0n, []], [2.5, 3n, [1n, 2n, 3n]], [-1, -2n, [5n, -4n]], [1e300, 2n ** 64n + 1n, [2n ** 62n, -(2n ** 63n), 7n]], ...(LONG ? [[0.5, 1n, Array.from({ length: LONG }, (_, i) => BigInt((i * 7919) % 201 - 100))] as [number, bigint, bigint[]]] : [])];
 
 test(`generated programs: the evaluator, compiled JavaScript, WebAssembly and C give the same text (C101, seed ${SEED})`, async () => {
   const p = program(SEED, COUNT, INPUTS.map(([, , xs]) => xs));

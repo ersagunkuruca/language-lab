@@ -399,7 +399,12 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
   // lists another way, only what the program builds is stored so, and
   // Ints come in from outside (C120).
   const lists = k.def("inputs");
-  k.define(lists, k.list(...inputs.map((xs) => k.list(...xs.map((x) => k.int(x))))));
+  // A long one is built by the program from its length (C128): a literal of
+  // a thousand items overflows the checker's stack (BACKLOG I154).
+  const LONG = 100;
+  const inputList = (xs: bigint[]) => (xs.length <= LONG ? k.list(...xs.map((x) => k.int(x)))
+    : call(lib("map"), call(lib("range from"), k.int(0), k.int(xs.length)), k.fn(["i"], (i) => call(INT_OPS.sub, k.call(S.first, k.thunk(() => call(INT_OPS.remainder, call(INT_OPS.mul, i, k.int(7919)), k.int(201))), k.thunk(() => k.int(0))), k.int(100)))));
+  k.define(lists, k.list(...inputs.map(inputList)));
   const entries = defs.map(({ def }, i) => {
     const e = k.def(`e${i}`);
     k.define(e, k.fn(["x", "n", "j"], (x, n, j) => call(def, x, n, call(lib("item at"), k.x(lists), j, k.list()))));
