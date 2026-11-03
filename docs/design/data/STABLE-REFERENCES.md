@@ -167,8 +167,10 @@ main reaches has no `formula`, `each` or `each of` (and the run isn't a
 page's, which brings its own handler), run.ts gives it `new Cells(equal,
 true)`: a read is a load and a write a store. Nothing is compared, copied
 out of views or diffed, so writing a list of n items costs 1 instead of n.
-A choice undone still undoes the write. Compiled JS still keeps its cells
-tracked; picking the plain handler there is the next step.
+A choice undone still undoes the write. Compiled JS does the same (L99f):
+compile.ts emits `$useCells(true)` when what the exports reach makes cells
+but has no formula, each, each of or Html, and runtime.js keeps cells
+tracked once any program loaded in the process needs them.
 
 **Built (L99a): `each` driven by the edits**, in the evaluator and compiled
 JS. Every edit tells the handler what it was (an insert at i, a remove at
