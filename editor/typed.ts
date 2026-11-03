@@ -30,6 +30,14 @@ import { blocksOf, blocksText, litLabel, type Blk, type Piece } from "../ters/sr
 import { matchRows, patternText, shape, sharedOtherwise } from "../ters/src/lang/patterns.ts";
 import { h, type Kid } from "./dom.ts";
 
+// A copy of use `n` of `target` with its given ports `given`: its bound
+// ports through `bind` and its body through `go`, when it has them. A use
+// that gives its ports as a tuple (L211) has neither.
+function useCopy(add: (n: NodeData) => Id, target: Id, given: Record<string, Id>, n: Use, go: (id: Id) => Id, bind: (id: Id) => Id = go): Omit<Use, "id"> {
+  if (!n.binds || n.body === undefined) return { kind: "call", fn: add({ kind: "ref", target }), given } as Omit<Use, "id">;
+  return useNode(add, target, given, Object.fromEntries(Object.entries(n.binds).map(([k, b]) => [k, bind(b)])), go(n.body));
+}
+
 // A builtin's own type (std.ts SIGS), made once per check of the program:
 // its type variables come from one copy of the substitution, not a copy
 // per call, which on Spacetime cost half a second a graph (I101).
@@ -1074,7 +1082,7 @@ export function wrapInto(code: Code, names: Names, before: Info, at: Id, kept: C
 // case looks at and what each case gives, a relation's givens and body.
 export function inputsOf(code: Code, id: Id): Id[] {
   const n = code.nodes[id];
-  if (isUse(n)) return [...Object.values(n.given), n.body];
+  if (isUse(n)) return [...Object.values(n.given), ...(n.body ? [n.body] : [])];
   switch (n?.kind) {
     case "call": { const f = code.nodes[n.fn]; return [...n.args, ...(f?.kind === "lambda" ? [f.body] : [])]; }
     case "lambda": return [n.body];
@@ -1246,7 +1254,7 @@ export function scopeAt(code: Code, defId: Id, id: Id): Id[] {
     const x = code.nodes[n];
     if (isUse(x)) {
       Object.values(x.given).forEach((g) => walk(g, scope));
-      walk(x.body, [...scope, ...Object.values(x.binds)]);
+      if (x.body) walk(x.body, [...scope, ...Object.values(x.binds ?? {})]);
       return;
     }
     switch (x.kind) {
@@ -1296,9 +1304,8 @@ function copyTree(code: Code, nodes: Record<Id, Node>, names: Names, root: Id, m
     if (n.kind === "binder") { const nid = mk({ kind: "binder" }); map.set(id, nid); if (names[id] !== undefined) names[nid] = names[id]; return nid; }
     if (isUse(n)) {
       const given = Object.fromEntries(Object.entries(n.given).map(([k, v]) => [k, go(v)]));
-      const binds = Object.fromEntries(Object.entries(n.binds).map(([k, v]) => [k, go(v)]));
       const target = useTarget(code.nodes, n);
-      return mk(useNode(mk, map.get(target) ?? target, given, binds, go(n.body)));
+      return mk(useCopy(mk, map.get(target) ?? target, given, n, go));
     }
     switch (n.kind) {
       case "call": { const fn = go(n.fn); return mk({ kind: "call", fn, args: n.args.map(go) }); }
@@ -1344,8 +1351,7 @@ export function paste(code: Code, names: Names, info: Info, defId: Id, clip: Cli
       const target = useTarget(clip.nodes, n);
       if (!code.nodes[target]) { lost++; return mk({ kind: "hole" }, at); }
       const given = Object.fromEntries(Object.entries(n.given).map(([k, g]) => [k, go(g)]));
-      const binds = Object.fromEntries(Object.entries(n.binds).map(([k, b]) => [k, bind(b)]));
-      return mk(useNode((d) => mk(d), target, given, binds, go(n.body)), at);
+      return mk(useCopy((d) => mk(d), target, given, n, go, bind), at);
     }
     switch (n.kind) {
       case "ref": {
@@ -1521,6 +1527,8 @@ export function turnBack(code: Code, names: Names, info: Info, solve: Id): TEdit
   const n = code.nodes[solve];
   if (!isUse(n)) return { ok: false, reason: "it isn't turned around" };
   const d = code.nodes[useTarget(code.nodes, n)], lam = d?.kind === "def" && d.body ? code.nodes[d.body] : null;
+  // A use that gives what it works out as a tuple (L211) has nothing to turn back.
+  if (!n.binds || n.body === undefined) return { ok: false, reason: "it gives what it works out as one value" };
   const bound = Object.keys(n.binds), body = code.nodes[n.body];
   if (lam?.kind !== "lambda" || bound.length !== 1 || bound[0] === "out" || !("out" in n.given)) return { ok: false, reason: "it works out more than one input, or the result" };
   if (body?.kind !== "ref" || body.target !== n.binds[bound[0]]) return { ok: false, reason: "it does more with what it works out than give it" };
@@ -1546,7 +1554,7 @@ const lets = (code: Code, defId: Id): Call[] => {
   while (stack.length) {
     const n = code.nodes[stack.pop()!];
     if (!n) continue;
-    if (isUse(n)) { stack.push(n.body, ...Object.values(n.given).reverse()); continue; }
+    if (isUse(n)) { stack.push(...(n.body ? [n.body] : []), ...Object.values(n.given).reverse()); continue; }
     if (isCall(n) && code.nodes[n.fn]?.kind === "lambda") out.push(n);
     if (isCall(n)) stack.push(...[...n.args, n.fn].reverse());
     else if (n.kind === "lambda") stack.push(n.body);
@@ -1594,7 +1602,7 @@ function bodiesAround(code: Code, defId: Id, slot: Id): Id[] | null {
   const walk = (n: Id, r: Id[]): Id[] | null => {
     if (n === slot) return r;
     const x = code.nodes[n];
-    if (isUse(x)) { for (const g of Object.values(x.given)) { const f = walk(g, r); if (f) return f; } return walk(x.body, [...r, x.body]); }
+    if (isUse(x)) { for (const g of Object.values(x.given)) { const f = walk(g, r); if (f) return f; } return x.body ? walk(x.body, [...r, x.body]) : null; }
     switch (x?.kind) {
       case "lambda": return walk(x.body, [...r, x.body]);
       case "call": for (const c of [x.fn, ...x.args]) { const f = walk(c, r); if (f) return f; } return null;
@@ -1621,7 +1629,7 @@ function stepAround(code: Code, defId: Id, slot: Id): Id | null {
   const walk = (n: Id, at: Id): Id | null => {
     if (n === slot) return at;
     const x = code.nodes[n];
-    if (isUse(x)) { for (const g of Object.values(x.given)) { const f = walk(g, at); if (f) return f; } return walk(x.body, x.body); }
+    if (isUse(x)) { for (const g of Object.values(x.given)) { const f = walk(g, at); if (f) return f; } return x.body ? walk(x.body, x.body) : null; }
     switch (x?.kind) {
       // A function passed as a value: its body is no step of this one.
       case "lambda": return walk(x.body, at);
