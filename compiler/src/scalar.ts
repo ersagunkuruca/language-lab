@@ -54,6 +54,7 @@ import { givenInOrder } from "../../ters/src/lang/ports.ts";
 import { resolveArithmetic } from "../../ters/src/lang/arith.ts";
 import type { Code, Id, NodeOf } from "../../ters/src/model.ts";
 import { dependencies, subtree, isCall, type Call, isUse, useTarget, type Use } from "../../ters/src/model.ts";
+import { bindsOf, bodyOf } from "./uses.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { ARRAY, TABLE, HASH_SET, CELL, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, PATH as PATH_T, STRING, Subst, type Row, type Type } from "../../ters/src/lang/types.ts";
@@ -1167,13 +1168,13 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     const once = solvesOnce(code, n) || (!f.partial && !searching.get(f));
     // In port order (C147), as the evaluator computes them and core-js.ts's
     // solve reads them.
-    const given = givenInOrder(code, n).map((k) => n.given[k]), binds = Object.values(n.binds);
+    const given = givenInOrder(code, n).map((k) => n.given[k]), binds = Object.values(bindsOf(n));
     for (const g of given) { const t = stype(zonk(g)); if (!t) throw new Refused(`solves ${name} given ${whyNot(zonk(g))}`); if (typeof t === "object" && boolInside(t)) throw new Refused(`solves ${name} given data holding a Bool, which isn't lowered yet`); }
     const ts = binds.map((b) => { const t = stype(zonk(b)); if (!t) throw new Refused(`solves ${name} for ${whyNot(zonk(b))}`); if (typeof t === "object" && boolInside(t)) throw new Refused(`solves ${name} for data holding a Bool, which isn't lowered yet`); return t; });
     const all = f.locals.push("host") - 1;
     let inner = new Map(env);
     const lets = binds.map((b, j) => { const i = f.locals.push(ts[j]) - 1; inner = new Map(inner).set(b, i); return { i, value: { k: "rt", fn: `pick:${j}${ts[j] === "i32" ? ":bool" : ""}`, args: [{ k: "local", i: all }], host: { t: ts[j], partial: false } } as SExpr }; });
-    const body = lets.reduceRight<SExpr>((e, l) => ({ k: "let", i: l.i, value: l.value, body: e }), expr(n.body, inner, f, tail));
+    const body = lets.reduceRight<SExpr>((e, l) => ({ k: "let", i: l.i, value: l.value, body: e }), expr(bodyOf(n), inner, f, tail));
     const solved: SExpr = once
       ? { k: "rt", fn: `solve:${n.id}`, args: given.map((g) => expr(g, env, f, false)), host: { t: "host", partial: false } }
       : { k: "choose", list: { k: "rt", fn: `solveAll:${n.id}`, args: given.map((g) => expr(g, env, f, false)), host: { t: ANSWERS, partial: false } }, t: ANSWERS };
@@ -1687,7 +1688,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     const n = code.nodes[id], all = (ids: Id[]) => ids.flatMap((x) => refsIn(x, folds));
     switch (n?.kind) {
       case "ref": return [n.target];
-      case "call": return isUse(n) ? all([...Object.values(n.given), n.body]) : all([n.fn, ...n.args]);
+      case "call": return isUse(n) ? all([...Object.values(n.given), bodyOf(n)]) : all([n.fn, ...n.args]);
       case "lambda": case "arm": return all([n.body]);
       case "match": return all([n.scrutinee, ...n.arms, ...(n.otherwise ? [n.otherwise] : [])]);
       case "fold": return all(folds ? [n.scrutinee, ...n.arms] : [n.scrutinee]);

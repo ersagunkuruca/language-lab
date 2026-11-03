@@ -26,6 +26,7 @@
 import type { Code, Id, Node, NodeOf } from "../../ters/src/model.ts";
 import { isUse, useTarget, isCall, type Call } from "../../ters/src/model.ts";
 import { freshId, mapIds, subtree } from "../../ters/src/model.ts";
+import { bindsOf, bodyOf } from "./uses.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { PAIR_V, TRUE } from "../../ters/src/lang/std.ts";
 import { computedForward, givenBy } from "../../ters/src/lang/directions.ts";
@@ -252,7 +253,7 @@ export function solvesAsCalls(code: Code, names: Names): { code: Code; names: Na
     const def = code.nodes[useTarget(code.nodes, n)] as NodeOf<"def">, lam = code.nodes[def.body!] as NodeOf<"lambda">;
     const inputs = lam.params.filter((p) => !def.results!.includes(p));
     const given = Object.keys(n.given).filter((k) => k !== "out");
-    const bound = Object.keys(n.binds);
+    const bound = Object.keys(bindsOf(n));
     if (!isTrue(n.given.out) || given.length !== inputs.length || !inputs.every((p) => n.given[p] !== undefined) || !bound.length || !bound.every((p) => def.results!.includes(p))) continue;
     // let g… = given in let b… = (r's function)(g…) in body, so each given
     // is worked out once however many results are bound.
@@ -265,15 +266,15 @@ export function solvesAsCalls(code: Code, names: Names): { code: Code; names: Na
     if (both) {
       const rs = def.results!.filter((r) => bound.includes(r));
       const apart = (v: Id, i: number): Id => {
-        if (i === rs.length - 1) return add({ kind: "call", fn: add({ kind: "lambda", params: [n.binds[rs[i]]], body: n.body } as Omit<Node, "id">), args: [v] } as Omit<Node, "id">);
+        if (i === rs.length - 1) return add({ kind: "call", fn: add({ kind: "lambda", params: [bindsOf(n)[rs[i]]], body: bodyOf(n) } as Omit<Node, "id">), args: [v] } as Omit<Node, "id">);
         const rest = add({ kind: "binder" } as Omit<Node, "id">);
         more[rest] = "the others";
-        const arm = add({ kind: "arm", variant: PAIR_V, binds: [n.binds[rs[i]], rest], results: [null, null], body: apart(add({ kind: "ref", target: rest } as Omit<Node, "id">), i + 1) } as Omit<Node, "id">);
+        const arm = add({ kind: "arm", variant: PAIR_V, binds: [bindsOf(n)[rs[i]], rest], results: [null, null], body: apart(add({ kind: "ref", target: rest } as Omit<Node, "id">), i + 1) } as Omit<Node, "id">);
         return add({ kind: "match", scrutinee: v, arms: [arm], otherwise: null } as Omit<Node, "id">);
       };
       lets = apart(add({ kind: "call", fn: add({ kind: "ref", target: both } as Omit<Node, "id">), args: gs.map((g) => add({ kind: "ref", target: g } as Omit<Node, "id">)) } as Omit<Node, "id">), 0);
     } else {
-      const inner = add({ kind: "lambda", params: bound.map((p) => n.binds[p]), body: n.body } as Omit<Node, "id">);
+      const inner = add({ kind: "lambda", params: bound.map((p) => bindsOf(n)[p]), body: bodyOf(n) } as Omit<Node, "id">);
       lets = add({ kind: "call", fn: inner, args: bound.map(callR) } as Omit<Node, "id">);
     }
     const outer = add({ kind: "lambda", params: gs, body: lets } as Omit<Node, "id">);

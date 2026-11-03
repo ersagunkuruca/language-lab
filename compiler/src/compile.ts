@@ -37,6 +37,7 @@ import { resolveArithmetic } from "../../ters/src/lang/arith.ts";
 import { intLit } from "../../ters/src/lang/int.ts";
 import { hostOp, ownOperations } from "../../ters/src/lang/hosts.ts";
 import { children, dependencies, subtree, type Code, type Id, type Node, type NodeOf, type Use, isUse, useTarget, isCall, type Call } from "../../ters/src/model.ts";
+import { bindsOf, bodyOf as useBody } from "./uses.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { CHOICE, DIVERGE, INT, NUMBER, STRING, Subst, type Row, type Type } from "../../ters/src/lang/types.ts";
 import { fieldShapes, shapeOf, type Shape } from "../../ters/src/lang/nested.ts";
@@ -795,7 +796,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         case "match": return !handlerOf(n) && one(n.scrutinee) && n.arms.every((a) => one(node<"arm">(a).body)) && (!n.otherwise || one(n.otherwise));
         case "fold": return one(n.scrutinee) && n.arms.every((a) => one(node<"arm">(a).body));
         case "call": {
-          if (isUse(n)) return givenOf(n).every(one) && (solver(n), onceSolvers.has(n.id)) && one(n.body);
+          if (isUse(n)) return givenOf(n).every(one) && (solver(n), onceSolvers.has(n.id)) && one(useBody(n));
           if (!n.args.every(one)) return false;
           const f = code.nodes[n.fn];
           if (f.kind === "lambda") return one(f.body);
@@ -1329,7 +1330,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const name = `solve$${solvers.size}`;
       solvers.set(n.id, name);
       const label = (port: string) => names[`${useTarget(code.nodes, n)}#${port}`] ?? names[port] ?? port;
-      const bound = Object.values(n.binds);
+      const bound = Object.values(bindsOf(n));
       if (relational(n) && modes.solver(n, name, modeEmit(true), bound.length === 1 && isList(ty(bound[0])))) {
         solverCode.push(...modes.code.splice(0));
         onceSolvers.add(n.id);
@@ -1341,11 +1342,11 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         // interpreter runs it.
         const given = givenInOrder(code, n), ps = given.map((_, i) => `g${i}`);
         solverCode.push(`// ${names[useTarget(code.nodes, n)] ?? useTarget(code.nodes, n)}, run backwards by the relational interpreter: given ${given.map(label).join(", ")}, ` +
-          `solve for ${Object.keys(n.binds).map(label).join(", ")}\nfunction ${name}(${ps.join(", ")}) {\n` +
-          `return $relate($program, ${JSON.stringify(useTarget(code.nodes, n))}, { ${given.map((g, i) => `${JSON.stringify(g)}: ${ps[i]}`).join(", ")} }, ${JSON.stringify(Object.keys(n.binds))});\n}`);
+          `solve for ${Object.keys(bindsOf(n)).map(label).join(", ")}\nfunction ${name}(${ps.join(", ")}) {\n` +
+          `return $relate($program, ${JSON.stringify(useTarget(code.nodes, n))}, { ${given.map((g, i) => `${JSON.stringify(g)}: ${ps[i]}`).join(", ")} }, ${JSON.stringify(Object.keys(bindsOf(n)))});\n}`);
         return name;
       }
-      const c = compileSolve(name, planSolve(code, n).rel!, knownInOrder(n), Object.keys(n.binds), names[useTarget(code.nodes, n)] ?? useTarget(code.nodes, n), label);
+      const c = compileSolve(name, planSolve(code, n).rel!, knownInOrder(n), Object.keys(bindsOf(n)), names[useTarget(code.nodes, n)] ?? useTarget(code.nodes, n), label);
       solverCode.push(c.code);
       if (c.once) onceSolvers.add(n.id);
     }
@@ -1523,8 +1524,8 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       if (reflective || !body || !g) return null;
       const tails = tailsOf(body.body), sv = code.nodes[tails[0]];
       if (tails.length !== 1 || !isUse(sv)) return null;
-      const bound = Object.values(sv.binds);
-      if (bound.length !== 1 || refTarget(sv.body) !== bound[0] || !relational(sv) || (solver(sv), !intoSolvers.has(sv.id))) return null;
+      const bound = Object.values(bindsOf(sv));
+      if (bound.length !== 1 || refTarget(useBody(sv)) !== bound[0] || !relational(sv) || (solver(sv), !intoSolvers.has(sv.id))) return null;
       const d = temp("a"), got = temp("got"), was = arrayAt;
       arrayAt = { solve: sv.id, d };
       const search = scoped(true, () => st(body.body, (v) => `${got} = ${v};\nreturn true;`));
@@ -1646,7 +1647,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       let r = false;
       switch (n.kind) {
         case "call": {
-          if (isUse(n)) { r = !solvedOnce(code, n) || Object.values(n.given).some(streamy) || streamy(n.body); break; }
+          if (isUse(n)) { r = !solvedOnce(code, n) || Object.values(n.given).some(streamy) || streamy(useBody(n)); break; }
           const f = code.nodes[n.fn];
           if (f.kind === "lambda") r = n.args.some(streamy) || streamy(f.body);
           else r = streamy(n.fn) || n.args.some(streamy) || callStreams(n);
@@ -1695,8 +1696,8 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         case "lambda": return lambda(n);
         case "call":
           if (isUse(n)) {
-            const binds = Object.values(n.binds).map(local);
-            return `((${binds.join(", ")}) => ${ex(n.body)})(...$one(${solver(n)}(${givenOf(n).map(ex).join(", ")})))`;
+            const binds = Object.values(bindsOf(n)).map(local);
+            return `((${binds.join(", ")}) => ${ex(useBody(n))})(...$one(${solver(n)}(${givenOf(n).map(ex).join(", ")})))`;
 
           }
           return call(n);
@@ -2956,13 +2957,13 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           if (isUse(n)) {
             return parts(givenOf(n), (vals) => {
               const sol = temp("sol");
-              const bs = Object.values(n.binds).map((b, i) => `const ${local(b)} = ${sol}[${i}];`).join(" ");
+              const bs = Object.values(bindsOf(n)).map((b, i) => `const ${local(b)} = ${sol}[${i}];`).join(" ");
               const f = solver(n);
-              const bound = Object.values(n.binds);
-              if (arrayAt?.solve === n.id) { const { d } = arrayAt; return `${d}.length = 0;\nif (${f}$into(${[d, ...vals].join(", ")})) {\nconst ${local(bound[0])} = ${d};\n${st(n.body, k)}\n}`; }
-              if (onceSolvers.has(n.id) && bound.length === 1) return `const ${local(bound[0])} = ${f}$one(${vals.join(", ")});\nif (${local(bound[0])} !== $no) {\n${st(n.body, k)}\n}`;
-              if (onceSolvers.has(n.id)) return `const ${sol} = ${f}$one(${vals.join(", ")});\nif (${sol} !== $no) {\n${bs}\n${st(n.body, k)}\n}`;
-              return `for (const ${sol} of ${f}(${vals.join(", ")})) {\n${bs}\n${st(n.body, k)}\n}`;
+              const bound = Object.values(bindsOf(n));
+              if (arrayAt?.solve === n.id) { const { d } = arrayAt; return `${d}.length = 0;\nif (${f}$into(${[d, ...vals].join(", ")})) {\nconst ${local(bound[0])} = ${d};\n${st(useBody(n), k)}\n}`; }
+              if (onceSolvers.has(n.id) && bound.length === 1) return `const ${local(bound[0])} = ${f}$one(${vals.join(", ")});\nif (${local(bound[0])} !== $no) {\n${st(useBody(n), k)}\n}`;
+              if (onceSolvers.has(n.id)) return `const ${sol} = ${f}$one(${vals.join(", ")});\nif (${sol} !== $no) {\n${bs}\n${st(useBody(n), k)}\n}`;
+              return `for (const ${sol} of ${f}(${vals.join(", ")})) {\n${bs}\n${st(useBody(n), k)}\n}`;
             });
 
           }
