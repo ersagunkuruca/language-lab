@@ -1269,6 +1269,21 @@ export const PIPE_OPS = { send: "std.send.send", receive: "std.receive.receive",
 export const SHOWN = typedef("std.shown", "Shown", ["a"], [
   ["shown", [["as shown", ([a]) => tfun([tref(a)], tref(STRING), [])]]],
 ], false, true);
+// A list written in the program, as one `list of` call (L181) or nested
+// conses ending in nil: its items, or null when it is anything else.
+export function writtenItems(nodes: Code["nodes"], id: Id): Id[] | null {
+  const ref = (x: Id) => { const n = nodes[x]; return n?.kind === "ref" ? n.target : null; };
+  const top = nodes[id];
+  if (isCall(top) && ref(top.fn) === S.listOf) return [...top.args];
+  const out: Id[] = [];
+  for (let at = id; ; ) {
+    if (ref(at) === NIL) return out;
+    const n = nodes[at];
+    if (!isCall(n) || ref(n.fn) !== CONS || n.args.length !== 2) return null;
+    out.push(n.args[0]);
+    at = n.args[1];
+  }
+}
 export const SHOWN_V = "std.shown.shown";
 // Each type with a Shown implementation, and the definition implementing
 // it: what `show any` shows a value of that type through, in the

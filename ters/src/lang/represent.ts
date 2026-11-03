@@ -16,7 +16,7 @@
 
 import { children, dependencies, freshId, subtree, type Code, type Id, type Node, type NodeData, type NodeOf, isCall, type Call, isUse } from "../model.ts";
 import type { Info } from "./infer.ts";
-import { CONS, COST, INT_OPS, JOBS, LIST, REPRESENTATION_V, S, TEXT_OPS } from "./std.ts";
+import { CONS, COST, INT_OPS, JOBS, LIST, REPRESENTATION_V, S, TEXT_OPS, writtenItems } from "./std.ts";
 import { NUMBER } from "./types.ts";
 import { add, compare, LADDER, NEVER, steps, type Cost } from "./cost.ts";
 
@@ -87,8 +87,7 @@ export function representationsIn(code: Code, info: Info, names: Record<Id, stri
     const same = lam?.kind === "lambda" && lam.params.length === 1 && refOf(lam.body) === lam.params[0];
     // t is what the meaning gives; for `(x) => x`, the type whose
     // constructors the jobs name.
-    const listed: Id[] = [];
-    for (let l = code.nodes[jobs]; isCall(l) && refOf(l.fn) === CONS; l = code.nodes[l.args[1]]) listed.push(l.args[0]);
+    const listed: Id[] = writtenItems(code.nodes, jobs) ?? [];
     const named = listed.map((j) => { const n = code.nodes[j], kind = isCall(n) ? refOf(n.fn) : null; return isCall(n) && (kind === JOBS.job || kind === JOBS.asWritten) ? refOf(n.args[0]) : null; });
     const [ty0, as] = t.args.map((a) => info.subst.zonk(a));
     const of = ty0.t === "con" ? ty0.id : named.map((v) => v && info.owner.get(v)).find(Boolean);

@@ -1489,6 +1489,8 @@ export function interpreter(given: Code, opts: Options = {}) {
     const [a, b] = args;
     const both = <T>(f: (x: T, y: T) => boolean) => (x: Value, y: Value) => f(x as T, y as T);
     switch (id) {
+      // A written list (L181d) is its conses: either way round.
+      case S.listOf: return eq(out, list(args));
       case S.concat: return wait({ k: "concat", a, b, c: out });
       case S.show: return wait({ k: "show", n: a, s: out });
       case S.floor: case S.mod: case S.float32:
