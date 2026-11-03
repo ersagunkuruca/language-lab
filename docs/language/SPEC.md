@@ -143,7 +143,8 @@ whose functions are written in Ters, which only that program carries.
 - **Overflow.** An answer too big to hold (past about 1.8e308) is a
   **stop** (§8.3) when its value is **used**, and not before: shown,
   compared, branched on, divided by, shown as text, handed out of the
-  program (an answer given to the host), or given to an operation that
+  program as an answer (a Float64 given to the host; inside a list or a
+  record it isn't looked at yet, C156), or given to an operation that
   would turn it back into a finite number (`1 / x`, `exp`, `atan2`,
   `x ^ 0`). Its whole part has none (`Choice`), as for any number with no
   whole part. + − · and the other operations that
