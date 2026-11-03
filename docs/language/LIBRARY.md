@@ -154,6 +154,7 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 - **Order** (type). What compare answers: before, same or after.
 - **show** : `(a) -> Text`. Any plain value as text, the way it would be written: show([1, 2]) is "[1, 2]". Every number type shows as its number: a fraction 1/3, a Fixed by show fixed's digits, an Extended as its number or +∞ and −∞.
 - **case name** : `(a) -> Text`. The name of the case the value was made by, as text: case name(some(3)) is "some", case name([]) is "nil". A number or a text was made by no case and gives "".
+- **Shown** (type). An interface: how a type's values show as text. show any shows a value of a type that implements it through its as shown, so a type of your own shows its own way with a definition of type Shown T. Rational, Complex and Fixed do (the prelude's).
 
 ## Text
 

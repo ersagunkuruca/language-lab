@@ -48072,6 +48072,75 @@
           "@qnk9v8aglbvsfje1g0c84k0h1n:3"
         ]
       },
+      "@jpp65o57bd94ur97km769hre8f": {
+        "id": "@jpp65o57bd94ur97km769hre8f",
+        "kind": "def",
+        "body": "@jpp65o57bd94ur97km769hre8f:1"
+      },
+      "@jpp65o57bd94ur97km769hre8f:3": {
+        "id": "@jpp65o57bd94ur97km769hre8f:3",
+        "kind": "ref",
+        "target": "@rgiao27q6ao5m6fv1bic6gdsoh"
+      },
+      "@jpp65o57bd94ur97km769hre8f:2": {
+        "id": "@jpp65o57bd94ur97km769hre8f:2",
+        "kind": "ref",
+        "target": "std.shown.shown"
+      },
+      "@jpp65o57bd94ur97km769hre8f:1": {
+        "id": "@jpp65o57bd94ur97km769hre8f:1",
+        "kind": "call",
+        "fn": "@jpp65o57bd94ur97km769hre8f:2",
+        "args": [
+          "@jpp65o57bd94ur97km769hre8f:3"
+        ]
+      },
+      "@1h5mmnpa0r0gjl97t0fphk3tqr": {
+        "id": "@1h5mmnpa0r0gjl97t0fphk3tqr",
+        "kind": "def",
+        "body": "@1h5mmnpa0r0gjl97t0fphk3tqr:1"
+      },
+      "@1h5mmnpa0r0gjl97t0fphk3tqr:3": {
+        "id": "@1h5mmnpa0r0gjl97t0fphk3tqr:3",
+        "kind": "ref",
+        "target": "@tu0hmqf815cglqlbjfk0np3l0f"
+      },
+      "@1h5mmnpa0r0gjl97t0fphk3tqr:2": {
+        "id": "@1h5mmnpa0r0gjl97t0fphk3tqr:2",
+        "kind": "ref",
+        "target": "std.shown.shown"
+      },
+      "@1h5mmnpa0r0gjl97t0fphk3tqr:1": {
+        "id": "@1h5mmnpa0r0gjl97t0fphk3tqr:1",
+        "kind": "call",
+        "fn": "@1h5mmnpa0r0gjl97t0fphk3tqr:2",
+        "args": [
+          "@1h5mmnpa0r0gjl97t0fphk3tqr:3"
+        ]
+      },
+      "@sfp5irbkrb6nep6ojrrrd3eui0": {
+        "id": "@sfp5irbkrb6nep6ojrrrd3eui0",
+        "kind": "def",
+        "body": "@sfp5irbkrb6nep6ojrrrd3eui0:1"
+      },
+      "@sfp5irbkrb6nep6ojrrrd3eui0:3": {
+        "id": "@sfp5irbkrb6nep6ojrrrd3eui0:3",
+        "kind": "ref",
+        "target": "@p03lgr8efclhoeg5i1prm7h7ai"
+      },
+      "@sfp5irbkrb6nep6ojrrrd3eui0:2": {
+        "id": "@sfp5irbkrb6nep6ojrrrd3eui0:2",
+        "kind": "ref",
+        "target": "std.shown.shown"
+      },
+      "@sfp5irbkrb6nep6ojrrrd3eui0:1": {
+        "id": "@sfp5irbkrb6nep6ojrrrd3eui0:1",
+        "kind": "call",
+        "fn": "@sfp5irbkrb6nep6ojrrrd3eui0:2",
+        "args": [
+          "@sfp5irbkrb6nep6ojrrrd3eui0:3"
+        ]
+      },
       "@v53dcuo5olrbvtgve59t594n5r": {
         "id": "@v53dcuo5olrbvtgve59t594n5r",
         "kind": "def",
@@ -73809,6 +73878,9 @@
       "@5jvkmi56jd9tst41r4feh0f86j",
       "@hf2e9f0sak3ja92aq2tbb61akj",
       "@qnk9v8aglbvsfje1g0c84k0h1n",
+      "@jpp65o57bd94ur97km769hre8f",
+      "@1h5mmnpa0r0gjl97t0fphk3tqr",
+      "@sfp5irbkrb6nep6ojrrrd3eui0",
       "@mjepml6vqs6t0ll1qgvecjb5re",
       "@978o1pot245hpvgj5oa13l1rtb",
       "@or93p8njnmkvu1492d2hlq7u2p",
@@ -85201,6 +85273,54 @@
       },
       "plain": []
     },
+    "@jpp65o57bd94ur97km769hre8f": {
+      "vars": [],
+      "rows": [],
+      "type": {
+        "t": "con",
+        "id": "std.shown",
+        "args": [
+          {
+            "t": "con",
+            "id": "std.rational",
+            "args": []
+          }
+        ]
+      },
+      "plain": []
+    },
+    "@1h5mmnpa0r0gjl97t0fphk3tqr": {
+      "vars": [],
+      "rows": [],
+      "type": {
+        "t": "con",
+        "id": "std.shown",
+        "args": [
+          {
+            "t": "con",
+            "id": "std.complex",
+            "args": []
+          }
+        ]
+      },
+      "plain": []
+    },
+    "@sfp5irbkrb6nep6ojrrrd3eui0": {
+      "vars": [],
+      "rows": [],
+      "type": {
+        "t": "con",
+        "id": "std.shown",
+        "args": [
+          {
+            "t": "con",
+            "id": "std.fixed",
+            "args": []
+          }
+        ]
+      },
+      "plain": []
+    },
     "@mjepml6vqs6t0ll1qgvecjb5re": {
       "vars": [],
       "rows": [],
@@ -88525,6 +88645,9 @@
     "@j85a5c8t6p7d9j7mck4j1bulll": "division at dual",
     "@hf2e9f0sak3ja92aq2tbb61akj": "division at fixed",
     "@qnk9v8aglbvsfje1g0c84k0h1n": "division at algebraic",
+    "@jpp65o57bd94ur97km769hre8f": "shown at rational",
+    "@1h5mmnpa0r0gjl97t0fphk3tqr": "shown at complex",
+    "@sfp5irbkrb6nep6ojrrrd3eui0": "shown at fixed",
     "@v53dcuo5olrbvtgve59t594n5r": "merge sorted",
     "@v53dcuo5olrbvtgve59t594n5r:2": "xs",
     "@v53dcuo5olrbvtgve59t594n5r:3": "ys",
@@ -89557,6 +89680,9 @@
     "@j85a5c8t6p7d9j7mck4j1bulll": "How this number type divides (Division): its own divide. Found by its type, so not offered: divide is.",
     "@hf2e9f0sak3ja92aq2tbb61akj": "How this number type divides (Division): its own divide. Found by its type, so not offered: divide is.",
     "@qnk9v8aglbvsfje1g0c84k0h1n": "How this number type divides (Division): its own divide. Found by its type, so not offered: divide is.",
+    "@jpp65o57bd94ur97km769hre8f": "How this number type shows (Shown): `show any` uses it. Found by its type, so not offered.",
+    "@1h5mmnpa0r0gjl97t0fphk3tqr": "How this number type shows (Shown): `show any` uses it. Found by its type, so not offered.",
+    "@sfp5irbkrb6nep6ojrrrd3eui0": "How this number type shows (Shown): `show any` uses it. Found by its type, so not offered.",
     "@mjepml6vqs6t0ll1qgvecjb5re": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
     "@978o1pot245hpvgj5oa13l1rtb": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
     "@or93p8njnmkvu1492d2hlq7u2p": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
