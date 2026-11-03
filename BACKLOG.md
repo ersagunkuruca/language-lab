@@ -22,7 +22,7 @@ language, then more targets or speed (WORKFLOW.md "Priority").
 |---|---|---|
 | E Editor | "Editor lane" | E211 the bigger programs as editor examples (one a PR), L70c's editor half (mark where a failed read stopped), L147b; then E200b, E103 |
 | C Compiler and targets | "Compiler lane" | C93's rest, C86, C40's rest; then C30, C67 |
-| L Language and library | "Language lane" | L61 |
+| L Language and library | "Language lane" | (queue empty; next by priority from the table below) |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -209,7 +209,7 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L61 | Better data structures as representations: a meaning (List, Map, Set) plus representations (array, HAMT, balanced tree, RRB vector) chosen per value, no new node kinds. `Map` and `Set` done (L65); written in the language since L108b | Ersagun 2026-10-24 | P1 | L | Map and Set done |
+| L210 | A hash array mapped trie for Map and Set, and RRB vectors (32-wide) for `tree of List`, as further representations ([DATA-STRUCTURES.md](docs/design/data/DATA-STRUCTURES.md) "Later representations"): only when a program measures the need, as C63's hash tables did. Credit Bagwell (HAMT, 2001) and Bagwell and Rompf (RRB, 2012), prior art | L61's rest | P3 | M | |
 | L98 | A cell owns its value and a write is an edit at a path (STABLE-REFERENCES.md §1): positions done (L98a), keys done (L98b, `key path`). Next: the in-place store is C56's representation | Ersagun 2026-10-29 | P2 | L | steps 1, 2 done |
 | L101 | **Later goal**: multithreading where uniqueness allows it (rayon), effect rows deciding what runs side by side (§5) | Ersagun 2026-10-29 | P3 | L | |
 | L21 | Folds: a `build` row for user producers, folds with `Choice` asking the table | ROADMAP 5 | P3 | L | |
