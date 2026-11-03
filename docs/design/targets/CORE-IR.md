@@ -39,7 +39,12 @@ model, so each feature has been written twice in the compiler
   lowering is for this printer (`lowerScalar`'s `host` option, which
   WebAssembly, C and WGSL never set): one without effects past Choice and
   Diverge, not taking or giving a Bool inside data. lockstep's Fixed runs
-  so (13 examples).
+  so (13 examples). Step c8: cells and pages. Cells' operations are the
+  evaluator's (run.ts `cellOps`, which the evaluator's runner uses too),
+  a cell or a place in one is an opaque value (`host`), and a function's
+  type may name a page's effects (View, Handler, Sound). bounce, compass
+  and constructions show the same HTML as in the evaluator, before and
+  after their handlers run (core-js.test.ts).
 - (d) compile.ts retired piece by piece.
 
 ## What it holds

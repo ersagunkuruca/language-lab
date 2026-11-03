@@ -55,7 +55,7 @@ import type { Code, Id, NodeOf } from "../../ters/src/model.ts";
 import { dependencies, subtree, isCall, type Call, isUse } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
-import { ARRAY, TABLE, HASH_SET, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, STRING, Subst, type Row, type Type } from "../../ters/src/lang/types.ts";
+import { ARRAY, TABLE, HASH_SET, CELL, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, PATH as PATH_T, STRING, Subst, type Row, type Type } from "../../ters/src/lang/types.ts";
 import { ABORT, ABORT_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, HASH_SET_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, ORDER_V, PAIR_V, RATIO, S, SET, SHOW_ANY, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
 import { liftLets } from "../../ters/src/lang/lift-lets.ts";
 import { inlineLists } from "./inline-lets.ts";
@@ -66,7 +66,15 @@ import { stageProgram } from "../../ters/src/lang/stage.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { discharge } from "../../ters/src/lang/ledger.ts";
 import { scalarOp, TARGETS } from "./builtins.ts";
-import { SIGS, STD_IMPL, STD_MANY } from "../../ters/src/lang/std.ts";
+import { AUDIO_BLOCK, HANDLER_ROW, PAGE_HANDLER, PAGE_VIEW, SIGS, SOUND_ROW, VIEW_ROW, STD_IMPL, STD_MANY } from "../../ters/src/lang/std.ts";
+// Cells' operations JavaScript from the core IR takes from the evaluator
+// (run.ts cellOps), `path` aside: it looks inside its function.
+// The effects a page's views and handlers may have (std.ts PAGE_VIEW,
+// PAGE_HANDLER, AUDIO_BLOCK, and the rows naming them), which a function's type may name for JavaScript from the
+// core IR (C137c8); an operation of one that isn't lowered is refused
+// where it is called.
+const PAGE_EFFECTS = new Set<Id>([...PAGE_VIEW, ...PAGE_HANDLER, ...AUDIO_BLOCK, VIEW_ROW, HANDLER_ROW, SOUND_ROW]);
+const HOST_CELLS = new Set(Object.values(CELL_OPS).filter((id) => id !== CELL_OPS.path));
 import { runtime } from "./wasm-rt.ts";
 
 // A shader (or a ray marcher's loop) may call what might not finish only
@@ -134,7 +142,7 @@ export interface FType { key: string; params: LType[]; result: LType; partial?: 
 type At = Map<number, Type | Row>;
 // Int and Text (`data`): an i31 or a $big (W5), and UTF-8 bytes
 // (wasm-rt.ts).
-export type WType = "int" | "text";
+export type WType = "int" | "text" | "host";
 // std's Array (`data`, C66): a view, a start and a length, on a buffer
 // with free room at both ends, as compiled JS keeps it (runtime.js, C30d1).
 // `index`: its place in CoreIR.arrays, which the runtime's array
@@ -483,7 +491,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   // not finish (running out of a budget), or abort; and the world's effects.
   const partialEff = (e: Id) => e === CHOICE || e === DIVERGE || escaping(e);
   // Random under a `seeded` (C106), or drawn from the world (C136).
-  const allowedEff = (e: Id) => partialEff(e) || e === CONSOLE || e === FILES || (!!opts.data && e === RANDOM);
+  const allowedEff = (e: Id) => partialEff(e) || e === CONSOLE || e === FILES || (!!opts.data && e === RANDOM) || (!!opts.host && PAGE_EFFECTS.has(e));
   // Some root draws a number nobody seeds (C136): the world seeds
   // Random's generator then, at the first draw.
   const worldRandom = !!opts.data && roots.some((r) => {
@@ -541,6 +549,8 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     if (opts.data && t.id === INT) return "int";
     if (opts.shader && !opts.data && t.id === INT) return "int32";
     if (opts.data && t.id === STRING) return "text";
+    // A cell or a place in one (C137c8): the evaluator's value, opaque here.
+    if (opts.host && (t.id === CELL || t.id === PATH_T)) return "host";
     if ((opts.data || opts.shader) && t.id === ARRAY) {
       const key = `${t.id}<${t.args.map(show).join(",")}>`;
       if (arrays.has(key)) return arrays.get(key)!;
@@ -688,7 +698,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     // lowered as its arithmetic, so no answer isn't seen here yet (L125c2,
     // L125c3); a Choice of the program's own (fail, one of) is refused
     // where it's used.
-    const effs = all.filter((e) => !BUDGETED.includes(e) && !(partial && partialEff(e)) && !(opts.data && (e === CONSOLE || e === FILES || e === RANDOM)) && !(e === CHOICE && !opts.data && !opts.shader));
+    const effs = all.filter((e) => !BUDGETED.includes(e) && !(partial && partialEff(e)) && !(opts.data && (e === CONSOLE || e === FILES || e === RANDOM)) && !(opts.host && PAGE_EFFECTS.has(e)) && !(e === CHOICE && !opts.data && !opts.shader));
     if (effs.length) fail(`has effects (${effs.map(nm).join(", ")})`);
     const budgeted = !constant && !opts.data && diverges(ft);
 
@@ -959,7 +969,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           if (!r || !isRecord(r)) throw new Refused(`takes ${nm(target)} of something that isn't a record of Float64s and Bools`);
           return { k: "get", rec: expr(n.args[0], env, f, false), t: r, i: fieldIndex(code, target) };
         }
-        if (opts.host && (STD_IMPL[target] || STD_MANY[target])) return host(n, target, id, env, f);
+        if (opts.host && (STD_IMPL[target] || STD_MANY[target] || (HOST_CELLS.has(target)))) return host(n, target, id, env, f);
         const why = TARGETS[target]?.scalar;
         throw new Refused(`uses ${nm(target)}, which isn't in the scalar profile${why && typeof why === "object" && "no" in why ? `: it ${why.no}` : ""}`);
       }
@@ -1064,13 +1074,13 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   function host(n: Call, target: Id, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
     const sig = SIGS[target]?.(new Subst());
     const effs = sig?.t === "fn" ? info.subst.resolveRow(sig.eff).effs : [];
-    const bad = effs.find((e) => e !== CHOICE && e !== DIVERGE);
+    const bad = effs.find((e) => e !== CHOICE && e !== DIVERGE && !(HOST_CELLS.has(target) && (e === CELLS || e === UPDATE)));
     if (bad) throw new Refused(`uses ${nm(target)}, which has ${nm(bad)} and isn't lowered yet`);
     const ts = [...n.args, id].map((a) => stype(zonk(a)));
     ts.forEach((t, i) => { if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk([...n.args, id][i]))}`); });
     if (ts.some((t) => typeof t === "object" && boolInside(t!))) throw new Refused(`uses ${nm(target)} on data holding a Bool, which isn't lowered yet`);
     const t = ts[ts.length - 1]!;
-    return { k: "rt", fn: `host:${target}${t === "i32" ? ":bool" : ""}`, args: n.args.map((a) => expr(a, env, f, false)), host: { t, partial: effs.includes(CHOICE) || !!STD_MANY[target] } };
+    return { k: "rt", fn: `host:${target}${t === "i32" ? ":bool" : ""}`, args: n.args.map((a) => expr(a, env, f, false)), host: { t, partial: effs.includes(CHOICE) || !!STD_MANY[target] || target === CELL_OPS.read || target === CELL_OPS.readAt } };
   }
   function boolInside(t: LType, seen = new Set<LType>()): boolean {
     if (t === "i32") return true;
@@ -1090,6 +1100,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     if (t === "int") return { k: "rt", fn: "int.equal", args: [x, y] };
     if (t === "text") return { k: "rt", fn: "text.equal", args: [x, y] };
     if (isTable(t)) throw new Refused("compares tables (their meaning does, in the library)");
+    if (t === "host") throw new Refused("compares a cell, which isn't lowered");
     if (t !== "f64") return { k: "call", fn: equality(t), args: [x, y], tail };
     // Two Float64s exactly (run.ts sameNumber, L197).
     return { k: "op", op: "equal", args: [x, y] };
@@ -1113,6 +1124,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     if (t === "text") return pick({ k: "rt", fn: "text.equal", args: [x, y] }, { k: "rt", fn: "text.less", args: [x, y] });
     if (isArray(t)) return { k: "call", fn: arrayLoop(t, "<"), args: [x, y], tail };
     if (isTable(t)) throw new Refused("compares tables (their meaning does, in the library)");
+    if (t === "host") throw new Refused("orders a cell, which isn't lowered");
     return { k: "call", fn: ordering(t), args: [x, y], tail };
   }
   // equal ("=") or compare ("<") on two arrays, as the evaluator has them
@@ -1215,6 +1227,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     if (t === "int32" || isFn(t)) throw new Refused(`shows ${isFn(t) ? "a function" : "an Int in 32 bits"} (not in WebAssembly and C yet)`);
     if (isArray(t)) return { k: "call", fn: showingArray(t), args: [x], tail };
     if (isTable(t)) throw new Refused("shows a table (its meaning does, in the library)");
+    if (t === "host") throw new Refused("shows a cell, which isn't lowered");
     return { k: "call", fn: showing(t), args: [x], tail };
   }
   // show on an array, "array [a, b]" as run.ts writes it (I156): the
