@@ -7,7 +7,6 @@
 // A function returning Bool built from equal and and is what used to be a
 // network; its result is known to be true.
 
-import { handOver, type Cells } from "../ters/src/lang/cells.ts";
 import { outlineProgram } from "../ters/src/lang/cells-programs.ts";
 import manifest from "./examples.json" with { type: "json" };
 import FILES from "examples:files";
@@ -18,7 +17,7 @@ import lispStyle from "../ters/styles/lisp.json" with { type: "json" };
 import { hashDef } from "../ters/src/hash.ts";
 import { children, freshId, get, ID_PATTERN, isCall, isPublished, isUse, useTarget, type Call, merge, parentOf, resolveRefs, subtree, type Code, type Id, type Node, type NodeOf } from "../ters/src/model.ts";
 import { INT } from "../ters/src/lang/types.ts";
-import { formatUnit, infer as unitInfer, NAMED, type Unit } from "../ters/src/units.ts";
+import { formatUnit, infer as unitInfer } from "../ters/src/units.ts";
 import { layer, type Comments, type Hints, type Names, type Presentation, type Style } from "../ters/src/presentation.ts";
 import { relationFor } from "../ters/src/lang/equations.ts";
 import { implementationOps, isOperation } from "../ters/src/lang/records.ts";
@@ -27,12 +26,12 @@ import { renderLet } from "../ters/src/render/letseq.ts";
 import { renderNested } from "../ters/src/render/nested.ts";
 import { renderSexpr } from "../ters/src/render/sexpr.ts";
 import { Namer } from "../ters/src/render/namer.ts";
-import { BOOL, CHECK, CONS, FALSE, FIXED_V, HTML_V, MAP_V, NIL, onTodaysIds, SET_V, SOME, TRUE } from "../ters/src/lang/std.ts";
+import { BOOL, CHECK, CONS, FALSE, FIXED_V, HTML_V, NIL, onTodaysIds, SOME, TRUE } from "../ters/src/lang/std.ts";
 import { CHOICE, DIVERGE, FILES as FILES_EFFECT, NETWORK, NUMBER, STRING, WORLD, showIn, type Type } from "../ters/src/lang/types.ts";
 import { implementationKey } from "../ters/src/lang/infer.ts";
 import { renderBlocks } from "../ters/src/lang/render.ts";
 import { definedAs, fromList, META, needsHandling, OutOfSteps, showValue, toList, withSteps, type Data, type Value, type World } from "../ters/src/lang/run.ts";
-import type { CompileAsk, CompileSays, Compiled, RunAsk, Profile, RunSays, Stuck } from "./runWorker.ts";
+import type { Compiled, RunAsk, Profile, RunSays, Stuck } from "./runWorker.ts";
 import { searchBackwards, type BackAsk, type Found } from "./backSearch.ts";
 import { hostSkeleton } from "../ters/src/lang/hosts.ts";
 import { trace, type Trace } from "../ters/src/lang/trace.ts";
@@ -41,24 +40,24 @@ import * as T from "./typed.ts";
 import { typedGraph, type GraphView, type MenuTarget } from "./typedGraph.ts";
 import { builtinName, builtinOf, definitionOf } from "./define.ts";
 import { follow, type Pos } from "./canvas.ts";
-import { h, type Kid } from "./dom.ts";
+import { edit, h, type Kid } from "./dom.ts";
 import { guide } from "./guide.ts";
+import { selectedParts } from "./selectedParts.ts";
+import { pagePanels } from "./pagePanel.ts";
 import { programText, type Step } from "./solverText.ts";
-import { newWorker, pageRuntimeText, profileView, stuckView, workletRuntimeText } from "./runViews.ts";
+import { lawPanel, newWorker, profileView, stuckView, valueView } from "./runViews.ts";
 import { fromFile, toFile } from "../ters/src/files.ts";
 import { flattened, matchRows, sameEverywhere } from "../ters/src/lang/patterns.ts";
 import { showPin, type Pins } from "../ters/src/lang/signatures.ts";
 import { inlinable, inlineView, type InlineView } from "./inline.ts";
 import * as Top from "../ters/src/lang/toplevel.ts";
-import { drawPicture, pictureEntries, type Picture } from "./picture.ts";
-import { runTests, savedFrom, type Saved, type TestResult } from "../ters/src/lang/tests.ts";
+import { pictureEntries } from "./picture.ts";
+import type { Saved } from "../ters/src/lang/tests.ts";
 import { algebrasOf, describeMask, maskOfValue, type Algebra } from "../ters/src/lang/grades.ts";
-import { PAGE_BASE, hasSound, pageFile, pageMain, showPage, type Preview } from "../ters/src/lang/page.ts";
+import { pageMain } from "../ters/src/lang/page.ts";
 import { browserWorld } from "../ters/src/lang/browser.ts";
-import type { Doc as PageDoc, Node_ } from "../ters/src/lang/html.ts";
 import { evaluatorCall } from "../ters/src/lang/html.ts";
 import { LIBRARY } from "../ters/src/lang/library.ts";
-import { sameAs, type Same } from "../ters/src/lang/modules.ts";
 import { join, looseOf, newLoose, split, type Drafts } from "./drafts.ts";
 // One window per graph: the program and the definition shown.
 const viewKey = () => `${doc.program}/${ui.def}`;
@@ -103,7 +102,7 @@ interface Layout {
 }
 
 // The examples, and programs of your own: made new, or opened from a file.
-type Program = string;
+export type Program = string;
 // The example programs, in the picker's order (editor/examples.json, E205).
 const EXAMPLES: [Program, string][] = manifest.programs.filter((p) => p.editor !== false).map((p) => [p.program, p.label]);
 const isExample = (p: Program) => EXAMPLES.some(([k]) => k === p);
@@ -112,7 +111,7 @@ const MINE = "mine.";
 // and whose code or ideas it uses (CREDITS.md has every one).
 const PROGRAM = "program";
 
-interface Doc {
+export interface Doc {
   program: Program;
   // Programs of your own have a title; the examples use their label.
   title?: string;
@@ -144,7 +143,7 @@ interface Doc {
   denied?: Id[];
 }
 
-interface UI {
+export interface UI {
   def: Id;
   // The definition whose Run is asking what a program from a file may do (E229).
   allowing?: Id | null;
@@ -888,15 +887,6 @@ function setComment(id: Id, value: string) {
 // A unit is part of a number's type, so declaring one goes through the
 // same check as any other edit: one that would make units disagree is
 // refused.
-function unitEdit(info: T.Info, id: Id, unit: Unit | null): T.TEdit {
-  const n = node(id) as Node & { unit?: Unit };
-  const { unit: _, ...rest } = n;
-  const next: Node = unit ? { ...rest, unit } as Node : rest as Node;
-  const code: Code = { nodes: { ...doc.code.nodes, [id]: next }, defs: doc.code.defs };
-  return T.guardTyped(info, code, doc.names.short, id, unit
-    ? `Declared ${formatUnit(unit)}. Units are part of the type, so everything connected to it now has to agree.`
-    : "Cleared the declared unit; it's inferred from what it's connected to again.");
-}
 
 function removeSelected() {
   const info = typesOf();
@@ -1439,88 +1429,7 @@ function kindLabel(id: Id): string {
   return ({ lit: "Literal", ref: "Reference", lambda: "Function", hole: "Hole", builtin: "Builtin", match: "Match", fold: "Fold", arm: "Arm", variant: "Case", field: "Field", solve: "Solve" } as Record<string, string>)[n.kind] ?? n.kind;
 }
 
-// A list's items and the operands of a + b + c are a row (typed.ts): the
-// part you selected says where it is in it, and moves, grows or leaves it.
-// Each edit is checked when clicked.
-function rowSection(info: T.Info, id: Id): HTMLElement | null {
-  const inRow = T.rowOfItem(doc.code, id), own = T.rowAt(doc.code, id);
-  if (!inRow && !own) return null;
-  const box = h("div", {});
-  const word = (r: T.Row) => (r.kind === "list" ? "item" : "input");
-  const of = (r: T.Row) => (r.kind === "list" ? "the list" : typedPres().names[r.op!] ?? "the call");
-  const go = (r: T.TEdit, add = false) => { if (applyT(r) && add) document.getElementById("f-query")?.focus(); };
-  if (inRow) {
-    const { row, at } = inRow, n = row.items.length;
-    const cant = (why: string) => ({ ok: false as const, reason: why });
-    box.append(h("div", { class: "sub-head" }, `${cap(word(row))} ${at + 1} of ${n} in ${of(row)} · code.json`), h("div", { class: "acts" },
-      edit("Add one before", `A new ${word(row)} just before this`, { ok: true }, () => go(T.addItem(doc.code, doc.names.short, info, row, at), true)),
-      edit("Add one after", `A new ${word(row)} just after this`, { ok: true }, () => go(T.addItem(doc.code, doc.names.short, info, row, at + 1), true)),
-      edit("Earlier", "Swap it with the one before", at > 0 ? { ok: true } : cant("it's first already"), () => go(T.moveItem(doc.code, doc.names.short, info, row, at, -1))),
-      edit("Later", "Swap it with the one after", at < n - 1 ? { ok: true } : cant("it's last already"), () => go(T.moveItem(doc.code, doc.names.short, info, row, at, 1))),
-      edit("Take it out", `Remove this ${word(row)}; the rest close up`, { ok: true }, () => go(T.removeItem(doc.code, doc.names.short, info, row, at)), "btn danger")));
-  }
-  if (own) {
-    if (!inRow) box.append(h("div", { class: "sub-head" }, `${own.kind === "list" ? `A list of ${own.items.length}` : `${own.items.length} inputs of ${of(own)}`} · code.json`));
-    box.append(h("div", { class: "acts" }, edit(`Add ${own.kind === "list" ? "an item" : "an input"} at the end`, "A new hole at the end, to fill", { ok: true }, () => go(T.addItem(doc.code, doc.names.short, info, own, own.items.length), true))));
-  }
-  return box;
-}
-
-// Units: what inference says, and chips to declare one. A chip that would
-// make units disagree is disabled and says why, before you click it.
-const UNIT_CHIPS: [string, Unit | null][] = [["free", null], ["1", {}], ["m", { m: 1 }], ["s", { s: 1 }], ["kg", { kg: 1 }], ["A", { A: 1 }],
-  ["m/s", { m: 1, s: -1 }], ["m/s²", { m: 1, s: -2 }], ...NAMED.map(([name, u]): [string, Unit] => [name, u])];
-
-function unitSection(info: T.Info, id: Id): HTMLElement | null {
-  const n = node(id);
-  const numeric = T.typeOf(info, id, {}) === "Float64";
-  // An input takes a unit when it is a number or nothing says what it is
-  // yet; one holding a function or a list doesn't (I138).
-  const ty = info.typeOf.get(id), shape = ty && info.subst.resolve(ty);
-  const declarable = (n.kind === "binder" && !isTypeParam(id) && (!shape || shape.t === "var" || numeric)) || (n.kind === "lit" && typeof n.value === "number");
-  if (!declarable && !numeric) return null;
-  const u = (() => { try { return unitInfer(doc.code, ui.def).unit(id); } catch { return undefined; } })();
-  const declared = (n as { unit?: Unit }).unit;
-  // A program that declares no units (two dice, say) keeps the chooser
-  // folded away: a number there is just a number.
-  const usesUnits = !!declared || Object.values(doc.code.nodes).some((x) => (x as { unit?: Unit }).unit);
-  if (!usesUnits && !declarable) return null;
-  const box = h(usesUnits ? "div" : "details", usesUnits ? {} : { class: "alts units" }, usesUnits ? h("div", { class: "sub-head" }, "Unit · part of its type") : h("summary", {}, "Give it a unit (m, s, kg…)"),
-    h("p", { class: "hint" }, declared ? `Declared ${formatUnit(declared)}.` : u ? `Inferred ${formatUnit(u)} from what it's connected to.` : n.kind === "lit" ? "A plain number." : "Free: nothing pins it down yet, so it fits anywhere."));
-  if (!declarable) return box;
-  const chips = h("div", { class: "chips" });
-  for (const [label, unit] of UNIT_CHIPS) {
-    const on = unit === null ? !declared : !!declared && formatUnit(declared) === formatUnit(unit);
-    // Checked when clicked, not when drawn: each check infers the whole
-    // program again, and a chip row in a big program took seconds to show
-    // every time a number was selected. A unit that doesn't fit is refused
-    // with the reason, like any edit.
-    const b = h("button", { class: `chip-btn${on ? " on" : ""}`, type: "button", title: `Declare ${label}` }, label);
-    if (!on) b.addEventListener("click", () => applyT(unitEdit(info, id, unit)));
-    chips.append(b);
-  }
-  box.append(chips);
-  return box;
-}
-
-// What the open definition is the same as, by hash (SHARING.md §7, E161):
-// a library definition, or another of the program's. Shown, never
-// merged: the draft stays as it is, and the edit that moves its hash ends
-// the line. Worked out once per version of the code. Prior art: Unison's
-// codebase manager, which reports it as another name (CREDITS.md).
-const sameMemo = new WeakMap<Code, Map<Id, Same>>();
-function sameLine(namer: Namer): HTMLElement | null {
-  let all = sameMemo.get(doc.code);
-  if (!all) { try { all = sameAs(doc.code, LIBRARY); } catch { all = new Map(); } sameMemo.set(doc.code, all); }
-  const same = all.get(ui.def);
-  if (!same) return null;
-  const link = (d: Id) => h("button", { type: "button", class: "link", "data-act": "goto", "data-target": d, title: "Open it" }, namer.name(d));
-  const where = (d: Id) => { const m = LIBRARY.modules.find((x) => x.code.nodes[d])?.title; return m ? ` in ${m}` : " in the library"; };
-  const parts: (HTMLElement | string)[] = [];
-  for (const d of same.library) parts.push(...(parts.length ? [", "] : []), link(d), where(d));
-  for (const d of same.drafts) parts.push(...(parts.length ? [", "] : []), link(d), " (yours)");
-  return h("p", { class: "hint same", title: "The same code as this one, names aside (its meaning hash). Nothing is merged: edit this one and the line goes when it stops matching. Prior art: Unison's codebase manager names such a definition as another name for the existing one." }, "Same as ", ...parts);
-}
+const { rowSection, unitSection, sameLine } = selectedParts({ doc: () => doc, ui, applyT, typedPres: () => typedPres(), isTypeParam: (id) => isTypeParam(id) });
 
 function filesPanel(): HTMLElement {
   const box = h("div", { class: "files" });
@@ -2224,11 +2133,6 @@ function pinRow(info: T.Info, dname: string) {
     h("div", { class: "acts" }, edit(pinned ? "Unpin" : "Pin this type", pinned ? "Let the type follow the body again" : "Freeze the type it has now", r, run)));
 }
 
-function edit(label: string, title: string, r: { ok: true } | { ok: false; reason: string }, run: () => void, cls = "btn") {
-  const b = h("button", { class: cls, type: "button", disabled: !r.ok, title: r.ok ? title : `Can't: ${r.reason}` }, label);
-  b.addEventListener("click", run);
-  return b;
-}
 
 function textField(id: string, label: string, placeholder: string, value = "") {
   const input = h("input", { id, type: "text", value, placeholder, autocomplete: "off", spellcheck: "false" }) as HTMLInputElement;
@@ -3437,41 +3341,6 @@ function graphHooks(info: T.Info) {
   };
 }
 
-// A value as the Run panel shows it. A map or a set is a table, a row per
-// entry in key order, as the blocks draw one written out
-// (DATA-STRUCTURES.md); anything else is its text.
-function valueView(v: Value): HTMLElement {
-  const text = (x: Value) => h("code", {}, showValue(x, doc.code, pres().names, true));
-  const tag = typeof v === "object" && v !== null && "tag" in v ? v.tag : null;
-  if ((tag === MAP_V || tag === SET_V) && fromList((v as { fields: Value[] }).fields[0]).length) {
-    const rows = fromList((v as { fields: Value[] }).fields[0]).map((e) => (tag === MAP_V ? (e as { fields: Value[] }).fields : [e]));
-    return h("table", { class: "vtable" }, ...rows.map((cells) => h("tr", {}, ...cells.map((c) => h("td", {}, text(c))))));
-  }
-  return text(v);
-}
-
-// A test's results, once per version of the code and its saved values.
-const lawRuns = new WeakMap<Code, Map<string, TestResult>>();
-function lawPanel(info: T.Info, box: HTMLElement): HTMLElement {
-  let m = lawRuns.get(prog());
-  if (!m) lawRuns.set(prog(), (m = new Map()));
-  const key = `${ui.def}\u0000${JSON.stringify(doc.examples?.[ui.def] ?? null)}`;
-  let r = m.get(key);
-  if (!r) {
-    try { r = runTests(prog(), info, pres().names, [ui.def], savedFrom(doc.examples ?? {}), { world: quietWorld() })[0]; }
-    catch (e) { r = { def: ui.def, name: "", cases: 0, failures: [], error: (e as Error).message }; }
-    m.set(key, r);
-  }
-  const cases = `${r.cases} case${r.cases === 1 ? "" : "s"}`;
-  box.append(h("p", { class: "hint" }, "A test: it performs Check. It runs on its saved inputs, then on small values of each input's type, smallest first, as lab test runs it."));
-  if (r.error) box.append(h("p", { class: "status-line bad" }, `The test stopped: ${r.error}.`));
-  else if (!r.failures.length) box.append(h("p", { class: "status-line accepted" }, `✓ Every expect held, in ${cases}.`));
-  else {
-    box.append(h("p", { class: "status-line bad" }, `${r.failures.length} of ${cases} failed. The first is the smallest.`));
-    box.append(h("ul", { class: "law-failures" }, ...r.failures.slice(0, 5).map((f) => h("li", {}, `${f.inputs.join(", ") || "no inputs"}: ${f.what.join("; ")}`))));
-  }
-  return box;
-}
 
 function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
   const box = h("div", { class: "run" });
@@ -3486,7 +3355,7 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
   // A test (its row has Check) runs as lab test runs it: on its saved
   // inputs, then on small values, and a failing expect shows here with the
   // inputs it failed on (T7d).
-  if (z?.t === "fn" && z.eff.effs.includes(CHECK) && !errorsIn(info) && !holesIn(info)) return lawPanel(info, box);
+  if (z?.t === "fn" && z.eff.effs.includes(CHECK) && !errorsIn(info) && !holesIn(info)) return lawPanel(info, box, { code: prog(), names: pres().names, def: ui.def, examples: doc.examples ?? {}, world: quietWorld() });
   // An action that performs an effect nothing answers yet runs only inside
   // a handler: say where, instead of a Run that can only fail.
   const needs = action ? needsHandling(z).filter((e) => e !== CHOICE) : [];
@@ -3539,7 +3408,7 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
     ex ? h("button", { class: "btn", type: "button", "data-act": "t-novalues" }, "Hide values") : null));
   else if (z?.t === "fn" && !EMBED) box.append(h("p", { class: "hint" }, ex ? "The graph shows what every node makes of these values. They're saved in examples.json, not in the code."
     : "The graph shows what every node makes of these values. Change one to keep values of your own, in examples.json, not in the code."));
-  if (tr?.result !== undefined && (action || value)) box.append(h("div", { class: "hint" }, choice ? "Its first answer: " : "Gives ", valueView(tr.result)));
+  if (tr?.result !== undefined && (action || value)) box.append(h("div", { class: "hint" }, choice ? "Its first answer: " : "Gives ", valueView(tr.result, doc.code, pres().names)));
   // A hole isn't a failure: it is where the program isn't written yet.
   // Nor is a run on values you didn't give: they're only a starting point.
   // Nor the graph's own time limit (E207): Run main runs it in full. Nor
@@ -3551,268 +3420,10 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
   return box;
 }
 
-// A program with a colour, or a red, green and blue, of (x, y, time) is a
-// picture (editor/picture.ts): drawn live on the GPU above Run, and drawn
-// again after every edit. When the compiler can't take it to the GPU, its
-// reason shows instead. The canvas outlives renders, so the drawing goes on.
-const pic = { canvas: h("canvas", { class: "picture" }) as HTMLCanvasElement, status: h("p", { class: "hint pic-status" }), for: null as Code | null, now: null as Picture | null };
-const picNote = h("div", {});
-const picBox = h("div", { class: "picture-box" }, picNote, pic.canvas, pic.status);
-function pictureSection(info: T.Info | null): HTMLElement | null {
-  const entries = pictureEntries(ownDefs(), pres().names);
-  if (!entries || !info) { pic.now?.stop(); pic.now = null; pic.for = null; return null; }
-  picNote.replaceChildren(noteView(noteOf(doc)) ?? "");
-  if (pic.for !== prog()) {
-    const code = pic.for = prog();
-    pic.now?.stop();
-    pic.now = null;
-    pic.canvas.hidden = false;
-    pic.status.textContent = "Drawing…";
-    const shown = (e: unknown) => { pic.canvas.hidden = true; pic.status.textContent = `Can't draw the picture: ${e instanceof Error ? e.message : String(e)}.`; };
-    if (errorsIn(info)) shown(new Error("the program has errors; fix them first"));
-    else drawPicture({ code, info, names: pres().names, entries, canvas: pic.canvas, status: pic.status })
-      .then((p) => { if (pic.for === code) pic.now = p; else p.stop(); },
-        (e) => { if (pic.for === code) shown(holesIn(info) ? new Error("the program has holes; fill them first") : e); });
-  }
-  return picBox;
-}
-
-// A program whose main takes nothing and returns an Html is a page
-// (WEB.md): shown live above Run, run by the evaluator, and run again from
-// the start after every edit. Its own <style> and its body rules need a
-// document of their own, so it's drawn in a frame. The editor redraws
-// everything on each change, which empties a frame put back in the page, so
-// the page's elements are made in a document that outlives renders and are
-// put back into the frame each time; their listeners and watchers go with
-// them, and what you typed into the page stays.
-const page = {
-  frame: h("iframe", { class: "page", title: "The page main returns, running" }) as HTMLIFrameElement,
-  status: h("p", { class: "hint" }),
-  // Where the page's elements are made (adopted into the frame's document).
-  maker: document.implementation.createHTMLDocument("page"),
-  for: null as Code | null, root: null as globalThis.Node | null, now: null as Preview | null, program: null as Program | null,
-  flashBox: h("input", { type: "checkbox" }) as HTMLInputElement,
-  // A page with sound: stop everything it plays, whatever its own buttons say.
-  hushBtn: h("button", { class: "btn", type: "button", "data-act": "page-hush", title: "Stop every sound this page is playing" }, "Stop sound") as HTMLButtonElement,
-};
-const sized = new WeakSet<Document>();
-const pageBox = h("div", { class: "page-box" }, page.frame, page.status,
-  h("div", { class: "acts" },
-    page.hushBtn,
-    h("button", { class: "btn", type: "button", "data-act": "page-restart", title: "Run main again from the start: every cell back to its first value" }, "Restart"),
-    h("label", { class: "hint", title: "Outline each text, attribute or part of the page when it runs again, so you can see that only what read a changed cell does" }, page.flashBox, " Outline updates"),
-    h("button", { class: "btn", type: "button", "data-act": "page-tab", title: "The page compiled to JavaScript, in a tab of its own" }, "Open in a tab"),
-    h("button", { class: "btn", type: "button", "data-act": "page-save", title: "The page compiled to JavaScript as one HTML file that runs anywhere, like lab build-web" }, "Save page")));
-// The program version a page will run for once the edit has drawn.
-let pageSoon: Code | null = null;
-function pageSection(info: T.Info | null): HTMLElement | null {
-  const main = info && !errorsIn(info) && !holesIn(info) ? pageMain(ownDefs(), info, pres().names) : null;
-  if (!main || !info) { leavePage(); return null; }
-  if (page.for !== prog() && page.program === doc.program && !keptPages.has(doc.program)) {
-    // An edit to the page's program: the edit draws first and the page runs
-    // again just after, so the page's run (2 s in Spacetime) doesn't hold
-    // the edit back. Till then the page as it was stays.
-    const want = prog();
-    if (pageSoon !== want) {
-      pageSoon = want;
-      const go = () => {
-        if (pageSoon !== want) return;
-        pageSoon = null;
-        if (prog() !== want || page.for === want) return;
-        leavePage();
-        startPage(info, main);
-        render();
-      };
-      if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => setTimeout(go, 0)); else setTimeout(go, 0);
-    }
-  } else if (page.for !== prog()) {
-    leavePage();
-    const kept = keptPages.get(doc.program);
-    keptPages.delete(doc.program);
-    if (kept?.for === prog()) Object.assign(page, kept, { program: doc.program });
-    else { kept?.now?.stop(); startPage(info, main); }
-  }
-  // Chrome drops every event listener in a frame's document when the frame
-  // leaves the page, and this redraw takes the frame out and puts it back.
-  // So the page goes back to the document that outlives renders first: its
-  // buttons keep their handlers.
-  if (page.root && page.root.ownerDocument !== page.maker) page.maker.body.append(page.maker.adoptNode(page.root));
-  page.hushBtn.hidden = !page.now?.hush;
-  // Put back in the frame once the frame is in the page again.
-  queueMicrotask(() => {
-    const d = page.frame.contentDocument;
-    if (!d || !page.root || d.body.contains(page.root)) return;
-    // The look a saved page has (page.ts PAGE_BASE), and a frame as tall
-    // as the page, up to most of the window; past that it scrolls.
-    if (!d.getElementById("lab-base")) d.head.append(Object.assign(d.createElement("style"), { id: "lab-base", textContent: PAGE_BASE }));
-    d.body.replaceChildren(page.root);
-    if (!sized.has(d)) {
-      sized.add(d);
-      // What's done on the page is said in the status bar too, as an edit
-      // is. Only the bar's text changes: the page is left as it is.
-      const say = (note: string) => {
-        ui.note = note;
-        ui.touched = [];
-        ui.refused = false;
-        const bar = document.querySelector<HTMLElement>(".status[role=status]");
-        if (bar) { bar.textContent = ui.note; bar.className = "status"; }
-      };
-      d.addEventListener("click", (e) => {
-        const b = (e.target as Element).closest?.("button, a, input[type=checkbox]");
-        const label = b?.textContent?.trim() || b?.getAttribute("aria-label");
-        if (!label) return;
-        say(`Clicked “${label}” on the page.`);
-      });
-      // And what's typed or set in a field, once it's in (Enter, leaving
-      // the field, letting go of a slider).
-      d.addEventListener("change", (e) => {
-        const f = e.target as HTMLInputElement;
-        if (!f.matches?.("input:not([type=checkbox]):not([type=button]), textarea, select")) return;
-        const name = f.labels?.[0]?.textContent?.trim() || f.getAttribute("aria-label") || f.placeholder || f.name;
-        const what = f.value === "" ? "Emptied" : f.type === "range" || f.tagName === "SELECT" ? `Set ${f.value} in` : `Typed ${f.value} in`;
-        say(`${what} ${name ? `“${name}”` : "a field"} on the page.`);
-      });
-      new ResizeObserver(() => { page.frame.style.height = `${Math.min(Math.max(Math.ceil(d.body.getBoundingClientRect().bottom) + 2, 120), Math.round(innerHeight * 0.7))}px`; }).observe(d.body);
-    }
-  });
-  return pageBox;
-}
-
-// A page goes on while another program is shown, so coming back finds it
-// as it was: its cells, what was typed. An edit to its program starts it
-// again, as before.
-const keptPages = new Map<Program, { for: Code; root: globalThis.Node | null; now: Preview | null }>();
-function leavePage() {
-  if (page.for && page.program && page.program !== doc.program) {
-    // A page left for another program goes on, but silent: nothing plays
-    // from a page that isn't shown.
-    page.now?.hush?.();
-    // Out of the frame before the frame goes, so its buttons keep their handlers.
-    if (page.root && page.root.ownerDocument !== page.maker) page.maker.body.append(page.maker.adoptNode(page.root));
-    keptPages.get(page.program)?.now?.stop();
-    keptPages.set(page.program, { for: page.for, root: page.root, now: page.now });
-  } else page.now?.stop();
-  page.now = null;
-  page.root = null;
-  page.for = null;
-}
-
-function startPage(info: T.Info, main: Id) {
-  page.now?.stop();
-  page.now = null;
-  page.root = null;
-  page.for = prog();
-  page.program = doc.program;
-  page.status.textContent = "";
-  try {
-    page.now = showPage({
-      code: prog(), info, names: pres().names, main, program: titleOf(doc),
-      doc: page.maker as unknown as PageDoc, store: localStorage, worklet: workletRuntimeText(), recordings: "apps/",
-      frame: (f) => requestAnimationFrame(f), ran: flashRan, keepCells: true,
-    });
-    page.root = page.now.root as unknown as globalThis.Node;
-  } catch (e) {
-    page.status.textContent = `The page stopped: ${e instanceof Error ? e.message : String(e)}.`;
-    return;
-  }
-  compilePage(main);
-}
-// Each time a part of the page runs again, outlined when "Outline updates" is on.
-function flashRan(n: Node_) {
-  if (!page.flashBox.checked) return;
-  const e = (n as unknown as globalThis.Node).nodeType === Node.ELEMENT_NODE ? n as unknown as HTMLElement : (n as unknown as globalThis.Node).parentElement;
-  // A part's own element takes no space (display: contents): its children flash.
-  for (const x of e?.tagName === "LAB-PART" ? [...e.children] as HTMLElement[] : e ? [e] : []) {
-    x.style.outline = "2px solid #e8a33d";
-    setTimeout(() => { x.style.outline = ""; }, 400);
-  }
-}
-
-// The preview runs compiled, as "Open in a tab" does (I97). The evaluator
-// walks the program's tree on every step, which an animation feels: Bounce
-// drew 8 frames a second here and 60 in a tab. So the page shows at once,
-// interpreted, while the same program is compiled off the editor's thread
-// (runWorker.ts, a few seconds for a big one), and the compiled page takes
-// its place when it's ready. What was done on the page meanwhile goes
-// with it: the cells that changed are handed across (cells.ts handOver,
-// I109). Once per version of the program: Restart swaps it in at once. A
-// page with sound stays interpreted, since here its sound plays from the
-// evaluator's page (audio-page.ts), and the status line says so. Runs and inspection don't use the page, so they don't change.
-const compiledPages = new WeakMap<Code, string | null>(); // null: it didn't compile
-let compiling: Worker | null = null;
-function compilePage(main: Id) {
-  compiling?.terminate();
-  compiling = null;
-  const code = prog();
-  if (!page.now) return;
-  if (page.now.hush || hasSound(code)) { page.status.textContent = "Interpreted: a page with sound plays from the interpreter in the editor, so it can be slower here. Open in a tab runs it compiled."; return; }
-  const made = compiledPages.get(code);
-  if (made !== undefined) { if (made) swapCompiled(code, made, main); return; }
-  page.status.textContent = "Interpreted while the page compiles; the compiled page takes over in a few seconds, keeping what you do on it.";
-  const w = (compiling = newWorker());
-  const done = (m: CompileSays) => {
-    w.terminate();
-    if (compiling !== w) return;
-    compiling = null;
-    compiledPages.set(code, "program" in m ? m.program : null);
-    if (page.for !== code) return;
-    if ("program" in m) swapCompiled(code, m.program, main);
-    else page.status.textContent = `Interpreted: the page couldn't be compiled (${m.error}).`;
-  };
-  w.onmessage = (e: MessageEvent<CompileSays>) => done(e.data);
-  w.onerror = (e) => { e.preventDefault(); done({ error: e.message || "the compiler failed" }); };
-  const ask: CompileAsk = { compilePage: true, code, names: pres().names, pins: heldPins?.all ?? doc.signatures ?? NO_PINS, main };
-  w.postMessage(ask);
-}
-// The compiled program and a fresh copy of the page runtime (cli/web.ts
-// pageRuntime) evaluated here, so the page's elements are made in the
-// same document as the interpreted page's and go into the frame the same way.
-function swapCompiled(code: Code, program: string, main: Id) {
-  type Lab = { mountPage(main: unknown, program: string, o: object): { root: Node_; cells: Pick<Cells, "write" | "batch">; kept: NonNullable<Cells["kept"]>; stop(): void } };
-  let m;
-  try {
-    const lab = new Function(`${pageRuntimeText()}\nreturn $lab;`)() as Lab;
-    const defs = new Function("$lab", `${program}\nreturn defs;`)(lab) as Record<string, unknown>;
-    m = lab.mountPage(defs[pres().names[main]], titleOf(doc), { doc: page.maker, store: localStorage, frame: (f: () => void) => requestAnimationFrame(f), ran: flashRan });
-    if (page.now?.kept) handOver(page.now.kept, m.kept, m.cells);
-  } catch (e) {
-    m?.stop();
-    compiledPages.set(code, null);
-    page.status.textContent = `Interpreted: the compiled page stopped (${e instanceof Error ? e.message : String(e)}).`;
-    return;
-  }
-  const old = page.root;
-  page.now?.stop();
-  page.now = { root: m.root, cells: null as never, stop: m.stop };
-  page.root = m.root as unknown as globalThis.Node;
-  if (old?.parentNode) (old as ChildNode).replaceWith(page.root);
-  page.status.textContent = "";
-}
-
-// The page compiled (page.ts pageFile): saved, or opened in a tab.
-function pageHtml(): { html: string; name: string } | null {
-  const info = typesOf();
-  const main = info && pageMain(ownDefs(), info, pres().names);
-  if (!info || !main) return null;
-  return { html: pageFile(titleOf(doc), pageRuntimeText(), prog(), info, pres().names, main, workletRuntimeText()), name: `${slug(titleOf(doc))}.html` };
-}
-
-function savePage(open: boolean) {
-  let made;
-  try { made = pageHtml(); } catch (e) { ui.note = `The page couldn't be compiled: ${(e as Error).message}.`; ui.refused = true; render(); return; }
-  if (!made) return;
-  const url = URL.createObjectURL(new Blob([made.html], { type: "text/html" }));
-  if (open) window.open(url, "_blank");
-  else {
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = made.name;
-    a.click();
-    ui.note = `Saved the page as ${made.name}: one HTML file with the program compiled to JavaScript. Open it in any browser, or put it on any web host.`;
-    render();
-  }
-  setTimeout(() => URL.revokeObjectURL(url), 60_000);
-}
+const { page, pageSection, pictureSection, savePage } = pagePanels({
+  doc: () => doc, prog: () => prog(), pres: () => pres(), ownDefs: () => ownDefs(), typesOf, render, ui,
+  errorsIn, holesIn, noteOf, noteView, titleOf, slug, pins: () => heldPins?.all ?? doc.signatures ?? NO_PINS,
+});
 
 // An action's values come from running it, so they're asked for.
 function showValues() {
