@@ -493,3 +493,18 @@ test("typed range(n) of an open n is Int's", async () => {
   assert.ok(used("range(2.5)").includes("builtin.range"));
   assert.ok(used("n + 1").includes("builtin.arith.add"));
 });
+
+// Text typed in is stored in NFC (E239, L214a): "é" typed as "e" and a
+// combining accent is the one character, the same literal either way.
+test("typed text is stored in NFC", () => {
+  const p = loadProgram(join(root, "examples", "queens"));
+  const { code } = p, names = p.pres.names, main = p.named("main");
+  const lit = subtree(code, main).map((x) => code.nodes[x]).find((n): n is NodeOf<"lit"> => n?.kind === "lit" && typeof n.value === "string")!;
+  assert.ok(lit);
+  const open = replace(code, lit.id, () => ({ kind: "hole" }));
+  const r = fillValue(open, names, infer(open, names), lit.id, '"café"', main);
+  assert.ok(r.ok, !r.ok ? r.reason : "");
+  if (!r.ok) return;
+  const filled = Object.values(r.code.nodes).find((n) => n.kind === "lit" && typeof n.value === "string" && n.value.startsWith("caf"));
+  assert.equal((filled as NodeOf<"lit">).value, "café");
+});

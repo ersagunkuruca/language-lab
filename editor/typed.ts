@@ -29,6 +29,7 @@ import { leftToWays, pickWays, waysIn } from "../ters/src/lang/ways.ts";
 import { blocksOf, blocksText, litLabel, type Blk, type Piece } from "../ters/src/lang/render.ts";
 import { matchRows, patternText, shape, sharedOtherwise } from "../ters/src/lang/patterns.ts";
 import { h, type Kid } from "./dom.ts";
+import { nfc } from "../ters/src/lang/border.ts";
 
 // A copy of use `n` of `target` with its given ports `given`: its bound
 // ports through `bind` and its body through `go`, when it has them. A use
@@ -946,7 +947,7 @@ function written(code: Code, names: Names, info: Info, hole: Id, text: string, t
   const build = (v: Value, place?: Id): Id => {
     const id = place ?? freshId();
     if (fit && typeof v === "number" && Number.isInteger(v)) { open.set(id, { n: v }); nodes[id] = { id, kind: "hole" }; }
-    else if (typeof v === "number" || typeof v === "string") nodes[id] = { id, kind: "lit", value: v };
+    else if (typeof v === "number" || typeof v === "string") nodes[id] = { id, kind: "lit", value: nfc(v) };
     else if (typeof v === "object" && "tag" in v) {
       const fn = v.fields.length ? freshId() : id;
       nodes[fn] = { id: fn, kind: "ref", target: v.tag };
@@ -1239,7 +1240,9 @@ export function setLit(code: Code, names: Names, info: Info, id: Id, raw: string
     const [p, q] = parts;
     return guardTyped(info, replace(code, id, () => ({ kind: "lit", value: q === 1n && Number.isSafeInteger(Number(p)) ? Number(p) : `${p}/${q}`, of: RATIONAL_TYPE })), names, id, "Changed a literal.");
   }
-  const v = typeof old.value === "number" ? Number(raw) : raw;
+  // Text is stored in NFC (L214a, E239): "é" typed as one character or as
+  // "e" and an accent is the same literal, and the same key as text from the world.
+  const v = typeof old.value === "number" ? Number(raw) : nfc(raw);
   if (typeof v === "number" && !Number.isFinite(v)) return { ok: false, reason: "this is a number; that isn't one" };
   return guardTyped(info, replace(code, id, () => ({ ...old, kind: "lit", value: v })), names, id, "Changed a literal.");
 }

@@ -51,7 +51,6 @@ New items land here until the next triage gives them a lane and a priority.
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | E237 | The editor's literals and display for library number types through L204's and L205's interfaces, not editor/typed.ts's own list (`EXOTIC`, the Rational literal paths) | [MATHEMATICS-AS-LIBRARIES](docs/design/numbers/MATHEMATICS-AS-LIBRARIES-2026-11-03.md) | P3 | M | after L204, L205 |
-| E239 | A text literal typed in the editor or read by the text view is stored in NFC (L214a, TEXT-2026-11-03.md §1), so `"é"` typed either way is the same literal and the same key as text from the world | L214a | P3 | S | |
 
 ### Speed of editing
 
