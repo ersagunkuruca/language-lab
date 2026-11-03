@@ -52,7 +52,7 @@ import { foldPlan } from "../../ters/src/lang/represent.ts";
 import { composeLinear, linearMap, type LinearMap } from "../../ters/src/lang/linear.ts";
 import { add as addCost, less, steps as costSteps } from "../../ters/src/lang/cost.ts";
 import { inlineLists } from "./inline-lets.ts";
-import { fuseHandlers } from "./handlers.ts";
+import { fusedProgram } from "./handlers.ts";
 import { expandDerivatives, recordVariant } from "../../ters/src/lang/derive.ts";
 import { hoistInvariants } from "./hoist.ts";
 import { stageProgram } from "../../ters/src/lang/stage.ts";
@@ -191,14 +191,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // Handlers the compiler can see are put into the code they handle
   // (handlers.ts, C64b), a round at a time, each checked again; a round
   // that doesn't check is dropped.
-  for (let round = 0; round < 8; round++) {
-    const f = fuseHandlers(code, info, names);
-    if (!f) break;
-    const checked = infer(f.code, f.names);
-    if (checked.errors.length) break;
-    ({ code, names } = f);
-    info = checked;
-  }
+  ({ code, names, info } = fusedProgram(code, info, names));
   // A list named first and then walked is put where it's walked, so the
   // fold or fusion sees what made it (inline-lets.ts, C49).
   const lets = inlineLists(code, info);
