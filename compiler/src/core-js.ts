@@ -24,7 +24,7 @@ import { fusedProgram } from "./handlers.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import type { Code, Id } from "../../ters/src/model.ts";
 import * as I from "../../ters/src/lang/int.ts";
-import { ARRAY_RT, RT, isData, isRecord, lowerScalar, type CoreIR, type LType, type Op, type SExpr, type SFunc, type TType } from "./scalar.ts";
+import { ARRAY_RT, listSteps, RT, isData, isRecord, lowerScalar, type CoreIR, type LType, type Op, type SExpr, type SFunc, type TType } from "./scalar.ts";
 import { runtime } from "./wasm-rt.ts";
 import { STOPS } from "./stops.ts";
 import { Aborted, FAIL, OUT, RUNTIME, Stopped, Unsupported, coreRuntime, runCoreFn, type BuiltinOf, type MainSpec, type TableSpec } from "./core-rt.ts";
@@ -154,6 +154,12 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
         case "make": { const v = `{ tag: ${JSON.stringify(e.t.variant)}, fields: [${e.args.map((a) => ex(a, pre, d)).join(", ")}] }`; return constant(e) ? constName(v) : v; }
         case "get": return `${ex(e.rec, pre, d)}.fields[${e.i}]`;
         case "new": { const v = `{ tag: ${JSON.stringify(e.t.cases[e.c].variant)}, fields: [${e.args.map((a) => ex(a, pre, d)).join(", ")}] }`; return constant(e) ? constName(v) : v; }
+        // A written list (L181b): its items in order, made into conses from the last.
+        case "list": {
+          const [nil, cons] = listSteps(e), xs = e.items.map((a) => ex(a, pre, d));
+          const fields = (cons as Extract<SExpr, { k: "new" }>).args.map((a) => ((a as { i: number }).i === e.acc ? "t" : "x")).join(", ");
+          return `[${xs.join(", ")}].reduceRight((t, x) => ({ tag: ${JSON.stringify(e.t.cases[e.c].variant)}, fields: [${fields}] }), ${ex(nil, pre, d)})`;
+        }
         case "field": return `${ex(e.rec, pre, d)}.fields[${e.i}]`;
         case "tag": return `R.caseOf(${ex(e.rec, pre, d)}, ${JSON.stringify(e.t.cases.map((c) => c.variant))})`;
         case "closure": return `R.closure(${names[e.fn]}, [${e.caps.map((a) => ex(a, pre, d)).join(", ")}]${e.src ? `, ${JSON.stringify(e.src)}` : ""})`;
@@ -217,7 +223,9 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
         out.push(`${d}${local(e.tmp)} = ${c};`);
         return give(`R.ap(${[local(e.tmp), ...xs].join(", ")})`);
       }
-      if (failable && e.k === "case") {
+      // A match hands `to` to its arms, so a self call in one is the
+      // loop's next round, not a call as deep as the data (L181b).
+      if (e.k === "case") {
         out.push(`${d}${local(e.s)} = ${slot(e.scrut, out, d)};`, `${d}switch (${local(e.s)}.tag) {`);
         e.arms.forEach((a, c) => { if (a) out.push(`${d}  case ${JSON.stringify(e.t.cases[c].variant)}: {`, ...block(a, to, d + "    "), ...(to === "return" ? [] : [`${d}    break;`]), `${d}  }`); });
         out.push(`${d}}`);
@@ -273,6 +281,7 @@ function zero(t: LType): string {
 function kidsOf(e: SExpr): SExpr[] {
   switch (e.k) {
     case "op": case "call": case "make": case "new": case "rt": case "world": return e.args;
+    case "list": return e.items;
     case "if": return [e.cond, e.then, e.else];
     case "let": return [e.value, e.body];
     case "get": case "field": case "tag": return [e.rec];
