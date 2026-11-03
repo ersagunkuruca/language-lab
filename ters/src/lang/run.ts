@@ -31,7 +31,7 @@ import { oneAnswer } from "./modes.ts";
 import { computedForward } from "./directions.ts";
 import { discharge } from "./ledger.ts";
 import * as Alg from "./algebraic.ts";
-import { floatText, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, COMPLEX_V, FIXED_V, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, shownImplementations, CASE_NAME, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std.ts";
+import { floatText, INT_OPS, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, COMPLEX_V, FIXED_V, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, shownImplementations, CASE_NAME, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std.ts";
 import { intLit } from "./int.ts";
 import { JETS } from "./jets.ts";
 import { answerFromHost, effectOfOperation, hostedEffects, type Hosts } from "./hosts.ts";
@@ -135,7 +135,8 @@ export const close = (a: number, b: number) => {
 // wasn't an equivalence on Float64s and disagreed with `compare`. The
 // tolerance stays where the solver checks an answer it found (relate.ts
 // unify). NOTES.md "Equality".
-export const sameNumber = (a: number, b: number) => a === b;
+// An overflow reaching it stops (SPEC §3.3, L216): comparing is a use.
+export const sameNumber = (a: number, b: number) => (a - a !== 0 || b - b !== 0 ? overflowed() : a === b);
 
 // With its own stack, so two long lists can be compared.
 export function equal(a: Value, b: Value): boolean {
@@ -358,16 +359,21 @@ export function noAnswer(op: string, args: number[]): string | null {
     : null;
 }
 // The answers of a Float64 operation: none where it has none (`/`, `sqrt`,
-// `log`, `^` and `mod` carry Choice for it, L125b), and an overflow, or a
-// value that isn't finite, stops the program with the reason.
+// `log`, `^` and `mod` carry Choice for it, L125b). An overflow stops the
+// program only when its value is used (SPEC §3.3, Ersagun 2026-11-03,
+// L216): until then it is carried as IEEE's ∞ or NaN, which + − · keep,
+// so an overflow nothing uses never stops, on any engine. An operation
+// that would turn one back into a finite number (1 / ∞, exp(−∞), 0 · ∞'s
+// neighbours, ∞ mod x) uses it, and so do comparing, showing and
+// converting (sameNumber, numberOrder, showValue). The stop is one no
+// handler catches (R8 §1, L166).
 export function finiteFloat(op: string, r: number, args: number[]): Iterable<number> {
-  if (Number.isFinite(r)) return [r];
-  if (noAnswer(op, args)) return [];
-  // A stop no handler catches (R8 §1, L166): compiled code finds an
-  // overflow late, after it may have left a handler, so a handler of Abort
-  // seeing it would make the engines disagree.
-  throw new Aborted(args.some((x) => !Number.isFinite(x)) ? "a Float64 that isn't finite reached arithmetic"
-    : op === S.float32 ? "the number is too big for a Float32 (overflow)" : "the answer is too big for a Float64 (overflow)");
+  // Only numbers are carried: anything else here (a fraction where the
+  // definition, as written, adds Float64s) is a wrong input, a stop.
+  if (!args.every((x) => typeof x === "number")) throw new Aborted("a Float64 operation was given something that isn't a Float64");
+  if (Number.isFinite(r)) return args.every((x) => x - x === 0) ? [r] : overflowed();
+  if (args.every((x) => x - x === 0) && noAnswer(op, args)) return [];
+  return [r];
 }
 
 // resolveArithmetic's answer for a version of the code and its check: the
@@ -423,14 +429,18 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   // L125a, L125b): an operation with no answer at its inputs fails (its
   // Choice), and an overflow is an Abort, performed where it was.
   for (const [op, f] of Object.entries(impl)) builtins[`builtin.${op}`] = op === "atan2"
-    ? (y, x) => one(f((y as number) + 0, (x as number) + 0)) // −0 is 0: atan2(−0, −1) is π
+    ? (y, x) => finiteFloat(op, f((y as number) + 0, (x as number) + 0), [y as number, x as number]) // −0 is 0: atan2(−0, −1) is π
     : (...a) => finiteFloat(op, f(...(a as number[])), a as number[]);
   for (const [id, f] of Object.entries(STD_IMPL)) builtins[id] = id === S.mod || id === S.abs || id === S.floor || id === S.float32
     ? (...a) => finiteFloat(id === S.mod ? "mod" : id, f(...a) as number, a as number[])
     : (...a) => one(f(...a));
   for (const [id, f] of Object.entries(STD_MANY)) builtins[id] = (...a) => f(...a);
   Object.assign(builtins, {
-    [S.less]: (a, b) => one(bool((a as number) < (b as number))),
+    [S.less]: (a, b) => one(bool(numberOrder(a as number, b as number) < 0)),
+    // Showing an overflow uses it (L216).
+    [S.show]: (x) => ((x as number) - (x as number) === 0 ? one(floatText(x as number)) : overflowed()),
+    // Turning an overflow into a whole number uses it (L216).
+    [INT_OPS.wholePart]: (x) => ((x as number) - (x as number) === 0 ? I.wholePart(x as number) : overflowed()),
     [S.equal]: (a, b) => one(bool(equal(a, b))),
     [COMPARE]: (a, b) => one(ORDER_VALUES[compareValues(a, b, (cmpOrder ??= variantOrder(code))) + 1]),
     [S.and]: (a, b) => one(bool((a as Data).tag === TRUE && (b as Data).tag === TRUE)),

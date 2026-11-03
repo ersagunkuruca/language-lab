@@ -66,8 +66,9 @@ test("without a host the effect is still unhandled; a wrong answer is an Abort w
 });
 
 // L125f: a Float64 is finite, so NaN or ±∞ from the host is refused at
-// the border, like any wrong answer; float32's overflow stops the program.
-test("a host's NaN or ∞ is refused at the border; float32 overflow stops the program", () => {
+// the border, like any wrong answer; float32's overflow stops the program
+// where it is used, here shown (S2, L216).
+test("a host's NaN or ∞ is refused at the border; float32 overflow stops the program where it is shown", () => {
   const p = program();
   for (const bad of [Infinity, -Infinity, NaN]) {
     assert.throws(() => runMain(p.code, p.info, p.main, { print: () => {}, names: p.names, hosts: {
@@ -78,7 +79,7 @@ test("a host's NaN or ∞ is refused at the border; float32 overflow stops the p
   const main = k.def("main");
   k.define(main, k.thunk(() => k.call(S.print, k.call(S.show, k.call(S.float32, k.lit(1e39))))));
   const code = base(k.code), names = baseNames(k.names), info = infer(code, names);
-  assert.throws(() => runMain(code, info, main, { print: () => {}, names }), /too big for a Float32/);
+  assert.throws(() => runMain(code, info, main, { print: () => {}, names }), /too big for a Float64 \(overflow\)/);
 });
 
 test("lab hosts: a skeleton with each operation's id, name and types", () => {

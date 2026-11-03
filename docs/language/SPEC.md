@@ -141,10 +141,13 @@ whose functions are written in Ters, which only that program carries.
   leave `Choice` out of a type where it can see the input is fine; that
   changes the type, never the answer.
 - **Overflow.** An answer too big to hold (past about 1.8e308) is a
-  **stop** (§8.3). No handler in the program catches it. An overflow
-  whose value nothing uses later *may* not be reported: one engine may
-  stop and another finish, but no engine may finish with a different
-  answer than another engine's finished answer.
+  **stop** (§8.3) when its value is **used**, and not before: shown,
+  compared, branched on, divided by, converted (to an Int, to text), or
+  given to an operation that would turn it back into a finite number
+  (`1 / x`, `exp`, `atan2`, `x ^ 0`). + − · and the other operations that
+  keep it too big carry it to its use. An overflow nothing uses never
+  stops, on any engine: `let big = x · 1e300 in 5` is 5 (decided
+  2026-11-03, S2, L216). No handler in the program catches the stop.
 
 3.4. **Rational** is an exact fraction, always in lowest terms. **Complex**
 is re + im·i, with Float64 parts. The library adds **Algebraic** (exact roots of
@@ -411,8 +414,8 @@ definition. These are its laws (L108d checks them).
 10.1. An engine **conforms** if, for every definition it accepts, it
 gives the evaluator's answers (the same stream, in the same order, for
 everything a program can observe), performs the same effects in the
-same order, and stops where the evaluator stops, with §3.3's freedom for
-an overflow nothing uses.
+same order, and stops where the evaluator stops (an overflow where its value is used,
+§3.3).
 
 10.2. An engine may **refuse** a definition it can't run, with a
 reason, before running anything. A refusal is not a wrong answer. Today
@@ -454,7 +457,7 @@ hasn't been chosen. None is answered here. Rows are in BACKLOG.md.
 | # | question | today | row |
 |---|---|---|---|
 | S1 | **Float64 `equal` within 1e-9.** Decided 2026-11-03 (Ersagun): `equal` becomes exact, and the tolerance stays only inside the solver (§2.7). | done: exact on every engine, the tolerance only in the solver | L197 |
-| S2 | **An overflow nothing uses.** §3.3 lets engines differ on whether it stops. Is that freedom the meaning, or should every engine stop like the evaluator? Today the agreement tests only compare programs that don't overflow, which this page now says. | decided by FLOAT-VALUES; written here | none |
+| S2 | **An overflow nothing uses.** Decided 2026-11-03 (Ersagun): it never stops; an overflow stops where its value is used, on every engine (§3.3). | done: the evaluator carries it to its use as compiled code did; finite.test.ts checks the evaluator, JS and WebAssembly agree | L216 |
 | S3 | **The order of a use's answers after the first.** Decided (L198, 2026-11-03): the evaluator's search order, on every engine (§7.4). | written; every engine runs the same solver | L198 |
 | S4 | **Fuel counts depend on the checker.** Decided (L199, 2026-11-03): kept, and written down: what counts is the checker's, and a checker change that stops counting a definition is a change of meaning (§5.6). | written; evaluator and the core IR count the same way | L199 |
 | S5 | **When a stopped search had effects.** Decided (L198): an engine runs the paths in the evaluator's order, so handled effects on a search's paths happen as the evaluator's do (§7.4). | written; the fuzz test checks it | L198 |
