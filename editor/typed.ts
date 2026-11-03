@@ -28,18 +28,7 @@ import { choose, representationsIn } from "../ters/src/lang/represent.ts";
 import { leftToWays, pickWays, waysIn } from "../ters/src/lang/ways.ts";
 import { blocksOf, blocksText, litLabel, type Blk, type Piece } from "../ters/src/lang/render.ts";
 import { matchRows, patternText, shape, sharedOtherwise } from "../ters/src/lang/patterns.ts";
-
-type Kid = HTMLElement | string | null | undefined | false;
-function h(tag: string, attrs: Record<string, string | boolean | undefined> = {}, ...kids: Kid[]) {
-  const el = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) {
-    if (v === undefined || v === false) continue;
-    if (v === true) el.setAttribute(k, "");
-    else el.setAttribute(k, v);
-  }
-  for (const k of kids) if (k !== null && k !== undefined && k !== false) el.append(k);
-  return el;
-}
+import { h, type Kid } from "./dom.ts";
 
 // A builtin's own type (std.ts SIGS), made once per check of the program:
 // its type variables come from one copy of the substitution, not a copy

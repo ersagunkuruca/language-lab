@@ -41,7 +41,8 @@ import { parseValue } from "../ters/src/lang/values.ts";
 import * as T from "./typed.ts";
 import { typedGraph, type GraphView, type MenuTarget } from "./typedGraph.ts";
 import { builtinName, builtinOf, definitionOf } from "./define.ts";
-import { follow, type Pos } from "./canvas.ts";
+import { follow, s as svg, type Pos } from "./canvas.ts";
+import { h, type Kid } from "./dom.ts";
 import { fromFile, toFile } from "../ters/src/files.ts";
 import { flattened, matchRows, sameEverywhere } from "../ters/src/lang/patterns.ts";
 import { showPin, type Pins } from "../ters/src/lang/signatures.ts";
@@ -822,25 +823,7 @@ function fnv(s: string) {
   return x.toString(16).padStart(8, "0");
 }
 
-type Kid = HTMLElement | SVGElement | string | null | undefined | false;
-function h(tag: string, attrs: Record<string, string | boolean | undefined> = {}, ...kids: Kid[]) {
-  const el = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) {
-    if (v === undefined || v === false) continue;
-    el.setAttribute(k, v === true ? "" : v);
-  }
-  for (const k of kids) if (k !== null && k !== undefined && k !== false) el.append(k);
-  return el;
-}
-
-function svg(tag: string, attrs: Record<string, string | number> = {}) {
-  const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
-  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, String(v));
-  return el;
-}
-
-const text = (x: number, y: number, s: string, cls: string, anchor = "middle") =>
-  Object.assign(svg("text", { x, y, class: cls, "text-anchor": anchor }), { textContent: s });
+const text = (x: number, y: number, t: string, cls: string, anchor = "middle") => svg("text", { x, y, class: cls, "text-anchor": anchor }, t);
 
 function semanticHash(code = doc.code): string {
   try { return hashDef(code, ui.def); } catch { return "—"; }
