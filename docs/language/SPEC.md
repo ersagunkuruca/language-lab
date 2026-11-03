@@ -337,9 +337,16 @@ its inputs are known and then runs forward (`floor`, `mod`, comparisons,
 BACKWARDS.md "What can't run backwards" is the list.
 
 7.6. A direction answered by a definition marked as computing it (POLAR
-§`direction`) must give the same answers as the search would, in the
-same canonical order. That is a law the definition's author promises;
-checking it is *open* (S14).
+§`direction`) must give only answers of the relation: each one, put back
+into the relation, holds (within the solver's tolerance, §7.4). It need
+not give every answer the search would, nor the search's first: it
+**chooses**, and its first answer is the canonical one in that direction.
+`unpolar` gives one answer, a length ≥ 0 and the principal angle, where
+the search gives every angle 2π apart and negative lengths too, and at
+(x, y) = (−2, 0.5) the search's first has the negative length. It may
+also answer where the search finds nothing (x = 0). That is a law the
+definition's author promises; directions.test.ts checks it on unpolar,
+and a direction that breaks it is caught there (S14, L201).
 
 ## 8. Errors and stops
 
@@ -447,7 +454,7 @@ hasn't been chosen. None is answered here. Rows are in BACKLOG.md.
 | S11 | **`compare` on Float64** was documented in LIBRARY.md as putting NaN after every other Float64, but NaN isn't a value (§3.2). Fixed at its source, the note in ters/src/lang/notes.ts (L200). | fixed | L200 |
 | S12 | **Library functions' bits.** Decided 2026-11-03 (Ersagun): the platform's own, within a few ulp (§3.2); exact agreement across machines comes from a type that asks for it | C calls libm (C144); WASI carries fdlibm, having no maths of its own; the agreement tests build C with fdlibm to compare to the bit, and c.test.ts checks libm within 4 ulp | C144 |
 | S13 | **The hash misses meaning** (L178): an effect and a data type of one shape, a literal arm's value. §1.3 is the rule L178 implements. | bug | L178 |
-| S14 | **A direction's law** (§7.6): nothing checks that a definition marked as another's direction gives the same answers. | promised by the author | L201 |
+| S14 | **A direction's law** (§7.6). Decided (L201, 2026-11-03): a direction gives only answers of the relation and chooses among them; its first is the canonical one in its direction, not the search's first, which differs for unpolar at (−2, 0.5). | written; checked on unpolar by directions.test.ts | L201 |
 
 ## How this page is kept
 
