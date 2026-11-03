@@ -63,7 +63,7 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E231 | Keyboard-only and screen-reader use of the editor, done part by part with E228's split; the daily QA format gains both checks | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §10 | P3 | L | |
+| E231 | Keyboard-only and screen-reader use of the editor, done part by part with E228's split (a: refused edits reachable and saying why, the unit chips, the picture, live status lines; the QA format has both checks, WORKFLOW.md) | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §10 | P3 | L | |
 
 ### What a good language needs ([ASPECTS-2026-11-03](docs/reports/reviews/ASPECTS-2026-11-03.md))
 
