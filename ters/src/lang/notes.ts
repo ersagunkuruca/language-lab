@@ -249,6 +249,7 @@ export const NOTES: Comments = {
   "builtin.print": "Writes a line of text to the console.",
   "builtin.io.printError": "Writes a line to standard error.",
   "builtin.io.readInput": "The rest of what was typed into the program (standard input), as one text.",
+  "builtin.text.normalized": "The text in Unicode Normalization Form C: \"e\" with a combining accent becomes the one character \"é\". Text from the world (a file, a fetch, a line typed in, a page's field) already is; text built from pieces may not be, so normalize before comparing it.",
   "builtin.io.readLine": "The next line typed in, or none at the end.",
   "builtin.io.readFile": "The text in a file. Aborts if it can't be read.",
   "builtin.io.writeFile": "Writes text to a file, replacing what was there.",

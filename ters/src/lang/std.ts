@@ -767,6 +767,9 @@ export const TEXT_OPS = {
   code: choice("text.code", "character code", [str], int, T.code),
   fromCode: choice("text.fromCode", "character", [int], str, T.fromCode),
   readNumber: choice("text.readNumber", "read number", [str], num, T.readNumber),
+  // NFC (L214a): text from the world already is; text built from pieces
+  // may not be ("e" ++ "\u0301").
+  normalized: builtin("text.normalized", "normalized", pure([str], str), (t: string) => t.normalize("NFC")),
 };
 
 // Arrays (BACKLOG C30d, REPRESENTATIONS.md step 5): a list's items side by

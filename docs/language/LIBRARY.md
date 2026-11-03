@@ -173,7 +173,7 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 
 ## Text
 
-Text is a string of characters. Positions count from 0. Text has the one <, alphabetical (comes before), so at most, smaller, larger and the rest take Text too; it has no + − ·.
+Text is a string of characters (Unicode code points). Positions count from 0. Text from the world comes in Normalization Form C, so "é" is one character however it was typed; normalized does the same for text you build. Text has the one <, alphabetical (comes before), so at most, smaller, larger and the rest take Text too; it has no + − ·.
 
 - **join text** : `(Text, Text) -> Text`. Two texts one after the other.
 - **length** : `(Text) -> Int`. How many characters a text has.
@@ -186,6 +186,7 @@ Text is a string of characters. Positions count from 0. Text has the one <, alph
 - **character code** : `(Text) -[Choice]-> Int`. The character's number (its Unicode code point). No answer unless the text is one character.
 - **character** : `(Int) -[Choice]-> Text`. The character with this number. No answer when there's none.
 - **read number** : `(Text) -[Choice]-> Float64`. The Float64 a text spells: read number("30.5") is 30.5, and "-2", ".5" and "1e-3" read too. No answer for anything else, or for a number too big for a Float64. (read whole number reads an Int.)
+- **normalized** : `(Text) -> Text`. The text in Unicode Normalization Form C: "e" with a combining accent becomes the one character "é". Text from the world (a file, a fetch, a line typed in, a page's field) already is; text built from pieces may not be, so normalize before comparing it.
 - **starts with** : `(Text, Text) -> Bool`. Whether the text begins with this: starts with("# notes", "#") is true. Every text starts with "".
 - **ends with** : `(Text, Text) -> Bool`. Whether the text ends with this: ends with("page.md", ".md") is true. Every text ends with "".
 - **contains text** : `(Text, Text) -> Bool`. Whether the part occurs somewhere in the text: contains text("to do list", "do") is true. Every text contains "". (contains is a list's.)

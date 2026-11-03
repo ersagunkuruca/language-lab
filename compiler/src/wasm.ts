@@ -33,6 +33,7 @@
 // (https://webassembly.github.io/spec/core/binary/), and a text version is
 // printed alongside it for reading.
 
+import { bordered } from "../../ters/src/lang/border.ts";
 import { Aborted, type Runtime, type World } from "../../ters/src/lang/run.ts";
 import { MATH_DATA, MATH_DATA_AT } from "./wasm-math.ts";
 import { assemble, POW5, runtime, textBytes, WASI_IMPORTS, type RtFn, type VT } from "./wasm-rt.ts";
@@ -771,7 +772,7 @@ function worldOf(rt: Runtime, exports: () => Record<string, (...xs: unknown[]) =
   const w = <K extends keyof World>(k: K): World[K] => {
     const f = rt.world?.[k];
     if (!f) return (() => { throw new Error(`this runtime can't ${k === "error" ? "write to standard error" : k}`); }) as unknown as World[K];
-    return f.bind(rt.world) as World[K];
+    return bordered(rt.world!, k, f);
   };
   const text = (t: unknown) => fromText(exports(), t), make = (v: string) => toText(exports(), v);
   const tried = <T>(f: () => T): [T | null, number] => { try { return [f(), 0]; } catch (e) { reason = (e as Error).message; return [null, 2]; } };
