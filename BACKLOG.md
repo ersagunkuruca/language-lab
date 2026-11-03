@@ -33,6 +33,7 @@ New items land here until the next triage gives them a lane and a priority.
 |---|---|---|---|
 | I160 | Check: opening every example one after another showed "Not kept in this browser: its storage is full" on notebook. Browsing shouldn't fill storage; if it does, opening must not save, or old copies must be dropped | [OUTSIDER-READ-2026-11-03](docs/reports/reviews/OUTSIDER-READ-2026-11-03.md) (screen text, notebook) | 2026-11-03 |
 | I159 | Bigger program machine's Run main takes 15 s for five small assembler programs (in the worker, page stays live). Not the editor: `lab run compiler/gaps/machine primes.asm` takes the same 15 s, about 4 s checking and choosing representations and 8 s in the evaluator's loop (run.ts go, step, apply, refValue; no single hot spot) for 82,280 machine steps; compiled JS runs it in 0.2 s. Evaluator speed, for the Compiler lane | QA 11-03 L1 | 2026-11-03 |
+| E238 | Run main runs the compiled JavaScript in the worker when main compiles, the way the page preview does, and the evaluator otherwise; the printed output must match the evaluator's (I159: machine's Run main 15 s, about 1 s compiled) | I159, Compiler lane | P2 | M | |
 | I110 | Check main: 49 of its last 60 runs cancelled while queued, a run takes ~19 of its 20 minutes, "affected" reaches 93 of 97 test files. Look at why std.ts and the prelude reach every test; lanes check the latest run when starting an item | REVIEW-2026-11-01 §6 | 2026-11-01 |
 | I154 | A list written out with a thousand items (a table of data pasted in) stops the checker: "Maximum call stack size exceeded" in infer.ts, which walks the list as a thousand nested calls of the list maker, one stack frame each (500 items check). The evaluator, staging and the compilers walk it the same way. Either walk a chain of the list maker in a loop in each pass, or keep a written list as one node of n items | C128 (fuzz test, 2026-11-03) | 2026-11-03 |
 
@@ -75,7 +76,6 @@ New items land here until the next triage gives them a lane and a priority.
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | E232 | Pause and step a run in the editor: stop at a node, step, see each effect answered so far, step back (on L186's log). Today "Show values" shows one finished run | [ASPECTS-2026-11-03](docs/reports/reviews/ASPECTS-2026-11-03.md) 204, 205 | P3 | L | after L186 |
-| E233 | A profile on the graph: time, calls and allocations per definition from a run, beside cost.ts's order (E230 says when the order changes; this says where a run spends its time) | [ASPECTS-2026-11-03](docs/reports/reviews/ASPECTS-2026-11-03.md) 125, 206 | P3 | M | |
 
 ### Plain words for newcomers ([OUTSIDER-READ-2026-11-03](docs/reports/reviews/OUTSIDER-READ-2026-11-03.md))
 

@@ -8,6 +8,7 @@
 // and what the run wrote goes back to the page with the result.
 
 import type { Code, Id } from "../ters/src/model.ts";
+import { subtree } from "../ters/src/model.ts";
 import type { Names } from "../ters/src/presentation.ts";
 import type { Pins } from "../ters/src/lang/signatures.ts";
 import { browserWorld, type Store } from "../ters/src/lang/browser.ts";
@@ -29,7 +30,10 @@ export type CompileSays = { program: string } | { error: string };
 // answer (L70c): the text, the place, what was looked for there, and how
 // many reads stopped.
 export type Stuck = { text: string; at: number; expected: string[]; said: string; times: number };
-export type RunSays = { lines: string[] } | { done: true; shown: string; files: [string, string][]; stuck?: Stuck } | { error: string; files: [string, string][]; stuck?: Stuck };
+// Where a run went (E233): each of the program's own definitions entered,
+// how many times, and about how long the run spent in it.
+export type Profile = { def: Id; calls: number; ms: number }[];
+export type RunSays = { lines: string[] } | { done: true; shown: string; files: [string, string][]; stuck?: Stuck; profile?: Profile } | { error: string; files: [string, string][]; stuck?: Stuck; profile?: Profile };
 
 const post = (m: RunSays | Found | CompileSays) => (self as unknown as Worker).postMessage(m);
 
@@ -69,7 +73,22 @@ self.onmessage = (e: MessageEvent<RunAsk | BackAsk | CompileAsk>) => {
     const own = code.defs.filter((d) => !LIBRARY.code.nodes[d]);
     const first = infer(code, names), lib = withLibraryRepresentations(code, first, names, def, own);
     const info = lib.chosen.length ? infer(lib.code, lib.names) : first;
+    // Each lambda of the program's own definitions, by the definition it's in.
+    const ownerOf = new Map<Id, Id>();
+    for (const d of own) { const n = lib.code.nodes[d]; if (n?.kind === "def" && n.body) for (const x of subtree(lib.code, n.body)) if (lib.code.nodes[x]?.kind === "lambda") ownerOf.set(x, d); }
+    // Calls are counted exactly. Time is sampled: every 256 entries the
+    // time since the last sample goes to the definition just entered, so a
+    // definition's share is about the share of the run spent in it.
+    const calls = new Map<Id, number>(), ms = new Map<Id, number>();
+    let entries = 0, last = performance.now();
+    const profile = (): Profile => [...calls].map(([d, c]) => ({ def: d, calls: c, ms: Math.round(ms.get(d) ?? 0) })).sort((a, b) => b.ms - a.ms || b.calls - a.calls);
     const rt = {
+      entered: (lambda: Id) => {
+        const d = ownerOf.get(lambda);
+        if (d === undefined) return;
+        calls.set(d, (calls.get(d) ?? 0) + 1);
+        if ((++entries & 255) === 0) { const now = performance.now(); ms.set(d, (ms.get(d) ?? 0) + now - last); last = now; }
+      },
       print: (line: string) => { lines.push(line); if (Date.now() - sent > 100) flush(); },
       names: lib.names, world: browserWorld(store, title),
       stuck: (r: Reading) => { stuck = { text: r.text, at: r.at, expected: [...r.expected], said: stuckReading(r), times: (stuck?.times ?? 0) + 1 }; },
@@ -77,7 +96,7 @@ self.onmessage = (e: MessageEvent<RunAsk | BackAsk | CompileAsk>) => {
     // With its arguments main gives an exit code, which shows when it isn't 0.
     const shown = args ? ((c: number) => (c ? `exit ${c}` : "unit"))(runProgram(lib.code, info, def, args, rt)) : showValue(runMain(lib.code, info, def, rt), lib.code, lib.names);
     flush();
-    post({ done: true, shown, files: [...wrote], ...(stuck ? { stuck } : {}) });
+    post({ done: true, shown, files: [...wrote], ...(stuck ? { stuck } : {}), profile: profile() });
   } catch (err) {
     flush();
     post({ error: (err as Error).message, files: [...wrote], ...(stuck ? { stuck } : {}) });
