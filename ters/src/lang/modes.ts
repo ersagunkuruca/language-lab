@@ -39,6 +39,7 @@ import { planSolve, type SolvePlan } from "./solve.ts";
 import { computedForward } from "./directions.ts";
 import { countedCalls } from "./counting.ts";
 import { INT_OPS, S, SET, STD_IMPL, STD_MANY, TEXT_OPS } from "./std.ts";
+import { filled } from "./ports.ts";
 
 // How many answers: whether there can be none, and whether there can be
 // more than one. det = neither, semidet = may fail, multi = may give
@@ -172,7 +173,9 @@ function baseSlots(code: Code) {
 // plansOnly: for relate.ts, which needs the schedules and not whether
 // they end (the size-change check, run again for each mode planned while
 // the search runs, would be most of its time).
-export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly = false } = {}) {
+export function analyzer(program: Code, names: Record<Id, string> = {}, { plansOnly = false } = {}) {
+  // A use with no body is read with its ports bound (L211e).
+  const code = filled(program);
   const nodes = code.nodes;
   const owner = ownerOfTypeParts(code);
   const nm = (id: Id) => names[id] ?? id;

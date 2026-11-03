@@ -88,3 +88,20 @@ export function fillUses(code: Code, own: Iterable<Id> = Object.keys(code.nodes)
     code.nodes[id] = { ...n, binds, body } as Node;
   }
 }
+
+// The program with each use that has no body read as fillUses reads one
+// (L211e): for the passes that work on slots, the modes analysis and the
+// relational interpreter, whose slots are binders. Its meaning is the same
+// (L211a); the copy is made once per program, and only when one is there.
+const filledOnce = new WeakMap<Code, Code>();
+export function filled(code: Code): Code {
+  let out = filledOnce.get(code);
+  if (!out) {
+    const bare = Object.keys(code.nodes).filter((id) => { const n = code.nodes[id]; return n?.kind === "call" && !!(n as Use).given && (n as Use).body === undefined; });
+    if (bare.length) { out = { ...code, nodes: { ...code.nodes } }; fillUses(out, bare); }
+    else out = code;
+    filledOnce.set(code, out);
+  }
+  return out;
+}
+
