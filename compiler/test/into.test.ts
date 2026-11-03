@@ -42,18 +42,29 @@ test("a block function's list as an array: the same items as its cells, and no s
     { variant: NIL, names: [], body: () => k.list() },
     { variant: CONS, names: ["x", "rest"], body: ([x, rest]) => k.call(CONS, x, k.call(CONS, k.call(B.neg, x), k.call(twice, rest))) },
   ])));
+  // Ends with a list written as one `list of` (L181, C157): its $into copy
+  // (twice reads it as an array) pushes the items one by one.
+  const padded = k.def("padded");
+  k.define(padded, k.fn(["xs"], (xs) => k.match(xs, [
+    { variant: NIL, names: [], body: () => k.listOf(k.lit(9), k.lit(8)) },
+    { variant: CONS, names: ["x", "rest"], body: ([x, rest]) => k.call(CONS, x, k.call(padded, rest)) },
+  ])));
   k.define(k.def("summing"), k.thunk(() => k.fn(["block"], (block) => k.call(sums, block))));
   k.define(k.def("doubling"), k.thunk(() => k.fn(["block"], (block) => k.call(twice, block))));
+  k.define(k.def("padding"), k.thunk(() => k.fn(["block"], (block) => k.call(twice, k.call(padded, block)))));
   const code = base(k.code), names = { ...baseNames(), ...k.names };
   const info = infer(code, names);
   assert.deepEqual(info.errors, []);
-  writeFileSync(join(dir, "into.js"), compile(code, info, names, { runtime, exports: ["summing", "doubling"] }));
+  const source = compile(code, info, names, { runtime, exports: ["summing", "doubling", "padding"] });
+  writeFileSync(join(dir, "into.js"), source);
   const defs = (await import(pathToFileURL(join(dir, "into.js")).href)).defs as Record<string, () => (l: unknown) => unknown>;
   const xs = [1, 2, 3, 0.5];
   assert.deepEqual($arrayOf(defs.summing(), $toList(xs)), [1, 6, 18, 3.25]);
   assert.deepEqual($arrayOf(defs.doubling(), $toList(xs)), [1, -1, 2, -2, 3, -3, 0.5, -0.5]);
+  assert.deepEqual($arrayOf(defs.padding(), $toList(xs)), [1, -1, 2, -2, 3, -3, 0.5, -0.5, 9, -9, 8, -8]);
+  assert.match(source, /\.push\(9\);\n.*\.push\(8\);/);
   const long = Array.from({ length: 200_000 }, (_, i) => i % 7);
-  for (const name of ["summing", "doubling"]) {
+  for (const name of ["summing", "doubling", "padding"]) {
     const f = defs[name]();
     assert.deepEqual($arrayOf(f, $toList(long)), $fromList(f($toList(long))), name);
   }

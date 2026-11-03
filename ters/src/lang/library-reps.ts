@@ -543,7 +543,8 @@ function listBoundary(code: Code, info: Info, defs: Id[], rep: Representation, a
     const args = c.args.map((a, i) => {
       const t = info.typeOf.get(a);
       if (!t || !hasList(t)) return a;
-      return plainList(sig.params[i], t) ? call(rep.meaning!, a) : passes ? a : null;
+      // `list of` takes any number of inputs, each of its one parameter's type (L181).
+      return plainList(sig.params[i] ?? sig.params[sig.params.length - 1], t) ? call(rep.meaning!, a) : passes ? a : null;
     });
     if (args.includes(null)) return null;
     const ret = info.typeOf.get(c.id);
