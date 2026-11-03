@@ -52,7 +52,7 @@
 
 import { resolveArithmetic } from "../../ters/src/lang/arith.ts";
 import type { Code, Id, NodeOf } from "../../ters/src/model.ts";
-import { dependencies, subtree, isCall, type Call } from "../../ters/src/model.ts";
+import { dependencies, subtree, isCall, type Call, isUse } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { ARRAY, TABLE, HASH_SET, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, STRING, type Row, type Type } from "../../ters/src/lang/types.ts";
@@ -765,6 +765,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
         throw new Refused(`uses ${nm(n.target)} as a value (functions and data need a heap)`);
       }
       case "call": {
+        if (isUse(n)) throw new Refused("solves a relation (not in this profile yet)");
         const head = code.nodes[n.fn];
         if (head.kind === "lambda") {
           // A let: each argument goes into a new local.
@@ -1042,7 +1043,6 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
         if (!opts.data) throw new Refused("folds over data (needs a heap)");
         return fold(n, id, env, f, tail);
       }
-      case "solve": throw new Refused("solves a relation (not in this profile yet)");
       case "lambda": {
         if (!opts.data) throw new Refused("makes a function (that needs closures)");
         const t = stype(zonk(id));
@@ -1532,11 +1532,10 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     const n = code.nodes[id], all = (ids: Id[]) => ids.flatMap((x) => refsIn(x, folds));
     switch (n?.kind) {
       case "ref": return [n.target];
-      case "call": return all([n.fn, ...n.args]);
+      case "call": return isUse(n) ? all([...Object.values(n.given), n.body]) : all([n.fn, ...n.args]);
       case "lambda": case "arm": return all([n.body]);
       case "match": return all([n.scrutinee, ...n.arms, ...(n.otherwise ? [n.otherwise] : [])]);
       case "fold": return all(folds ? [n.scrutinee, ...n.arms] : [n.scrutinee]);
-      case "solve": return all([...Object.values(n.given), n.body]);
       default: return [];
     }
   }

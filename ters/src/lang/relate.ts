@@ -55,7 +55,7 @@ import { plan, relation, stream } from "../../../invertible/src/relation.js";
 import { call as ecall, evaluate as evaluateSolverExpr, num as enum_, show as eshow, simplify, v as evar } from "../../../invertible/src/expr.js";
 import type { Code, Id, NodeOf, Use } from "../model.ts";
 import type { Names } from "../presentation.ts";
-import { children, dependencies, ownerOfTypeParts, subtree, useTarget, type Call } from "../model.ts";
+import { children, dependencies, ownerOfTypeParts, subtree, useTarget, type Call, isCall } from "../model.ts";
 import { derivativeLambda, gradientLambda } from "./derive.ts";
 import { fieldShapes, look, type TypeEnv } from "./nested.ts";
 import { B, impl } from "../prelude.ts";
@@ -987,7 +987,7 @@ export function interpreter(given: Code, opts: Options = {}) {
         case "ref": if (nodes[n.target]?.kind === "binder") used.add(n.target); return;
         case "lambda": for (const b of freeBinders(id)) used.add(b); return;
         case "call":
-          if (plans.isLet(n)) {
+          if (isCall(n) && plans.isLet(n)) {
             const lam = nodes[n.fn] as NodeOf<"lambda">;
             n.args.forEach(visit);
             lam.params.forEach(visit);

@@ -5,7 +5,7 @@
 
 import { discharge } from "./ledger.ts";
 import type { Code, Id, Node, NodeOf } from "../model.ts";
-import { isCall } from "../model.ts";
+import { isCall, upgradeUses } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { B, impl } from "../prelude.ts";
 import { MASK_TYPES, NAMED_ROWS, ARRAY, TABLE, HASH_SET, CELL, PATH, JOB, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NETWORK, NUMBER, STRING, type Row, type Subst, type Type } from "./types.ts";
@@ -1258,7 +1258,12 @@ export const RENAMED_IDS: Record<Id, Id> = {
 export function onTodaysIds<T>(x: T): T {
   if (typeof x === "string") return (RENAMED_IDS[x] ?? x) as T;
   if (Array.isArray(x)) return x.map(onTodaysIds) as T;
-  if (x && typeof x === "object") return Object.fromEntries(Object.entries(x).map(([k, v]) => [RENAMED_IDS[k] ?? k, onTodaysIds(v)])) as T;
+  if (x && typeof x === "object") {
+    const o = Object.fromEntries(Object.entries(x).map(([k, v]) => [RENAMED_IDS[k] ?? k, onTodaysIds(v)]));
+    // A saved use (kind `solve`) is a call today (L130d).
+    if (o.nodes && typeof o.nodes === "object" && !Array.isArray(o.nodes)) upgradeUses(o.nodes as Record<Id, unknown>);
+    return o as T;
+  }
   return x;
 }
 export const tupleSize = (id: Id): number | null => { const m = /^std\.tuple(\d)$/.exec(id); return m ? Number(m[1]) : null; };

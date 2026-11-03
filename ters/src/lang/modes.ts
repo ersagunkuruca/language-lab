@@ -33,7 +33,7 @@
 // test/modes.test.ts compares what it says with what relate.ts does.
 
 import type { Code, Id, Node, NodeOf, Use } from "../model.ts";
-import { children, derived, derivedFrom, ownerOfTypeParts, subtree, useTarget, isCall, type Call } from "../model.ts";
+import { children, derived, derivedFrom, ownerOfTypeParts, subtree, useTarget, isCall, type Call, isUse } from "../model.ts";
 import { NUMERIC } from "./equations.ts";
 import { planSolve, type SolvePlan } from "./solve.ts";
 import { computedForward } from "./directions.ts";
@@ -454,6 +454,12 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
         case "lambda": out.push(closure(id)); return;
         case "hole": out.push({ text: "a hole", slots: [slot(id)], exec: { k: "hole", node: id }, ready: () => null }); return;
         case "call":
+          if (isUse(n)) {
+            Object.values(n.given).forEach(walk);
+            out.push(solveGoal(n, ctx), sameValue(n.body, n.id));
+            walk(n.body);
+            return;
+          }
           if (isLet(n)) { n.args.forEach(walk); walk((nodes[n.fn] as NodeOf<"lambda">).body); return; }
           if (nodes[n.fn].kind !== "ref" && nodes[n.fn].kind !== "lambda") walk(n.fn);
           else if (nodes[n.fn].kind === "lambda") walk(n.fn);
@@ -462,12 +468,6 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
           return;
         case "match": walk(n.scrutinee); out.push(matchGoal(n, ctx)); return;
         case "fold": walk(n.scrutinee); out.push(foldGoal(n, ctx)); return;
-        case "solve": {
-          Object.values(n.given).forEach(walk);
-          out.push(solveGoal(n, ctx), sameValue(n.body, n.id));
-          walk(n.body);
-          return;
-        }
         default: for (const c of children(n)) walk(c);
       }
     };

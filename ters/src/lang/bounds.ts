@@ -27,6 +27,7 @@
 // static analysis of programs", POPL 1977).
 
 import type { Code, Id, NodeOf } from "../model.ts";
+import { isUse } from "../model.ts";
 import { B } from "../prelude.ts";
 import { FALSE, INT_OPS, S, TRUE } from "./std.ts";
 import { INT } from "./types.ts";
@@ -144,6 +145,7 @@ export function resultBounds(code: Code, lambda: Id, args: (Iv | null)[], outsid
           return null;
         }
         case "call": {
+          if (isUse(n)) return null;
           const f = nodes[n.fn];
           if (f?.kind === "lambda" && f.params.length === n.args.length) {
             f.params.forEach((p, i) => env.set(p, ev(n.args[i])));

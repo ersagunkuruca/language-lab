@@ -49,11 +49,13 @@ export function defDeps(code: Code, def: Id, owner = ownerOfTypeParts(code)): Id
 }
 
 const target = (n: Node): Id | null =>
-  n.kind === "ref" || n.kind === "tref" ? n.target : isUse(n) ? n.fn : n.kind === "arm" ? n.variant : null;
+  n.kind === "ref" || n.kind === "tref" ? n.target : n.kind === "arm" ? n.variant : null;
 
 function kids(n: Node): Id[] {
   switch (n.kind) {
-    case "call": return [n.fn, ...n.args];
+    case "call":
+      if (isUse(n)) return [n.fn, ...Object.values(n.given), ...Object.values(n.binds), n.body];
+      return [n.fn, ...n.args];
     case "lambda": return [...n.params, n.body];
     case "typedef": return [...n.params, ...n.variants];
     case "variant": return [...(n.params ?? []), ...n.fields];
@@ -63,7 +65,6 @@ function kids(n: Node): Id[] {
     case "match": return [n.scrutinee, ...n.arms, ...(n.otherwise ? [n.otherwise] : [])];
     case "fold": return [n.scrutinee, ...n.arms];
     case "arm": return [...n.binds, ...n.results.filter((r): r is Id => r !== null), n.body];
-    case "solve": return [...Object.values(n.given), ...Object.values(n.binds), n.body];
     default: return [];
   }
 }
@@ -178,6 +179,19 @@ function canon(code: Code, defId: Id, group: Map<Id, number | null>, memo: Map<I
         return defRef(n.target);
       }
       case "call": {
+        if (isUse(n)) {
+          const t = code.nodes[useTarget(code.nodes, n)];
+          const body = t?.kind === "def" && t.body ? code.nodes[t.body] : null;
+          const params = body && body.kind === "lambda" ? body.params : [];
+          const key = (k: string) => (params.includes(k) ? `p${params.indexOf(k)}` : k);
+          const sorted = (r: Record<string, Id>) => Object.entries(r).map(([k, e]) => [key(k), e] as const).sort(([a], [b]) => (a < b ? -1 : 1));
+          // Evaluated in canonical order, so binders are numbered the same
+          // whatever order the record's keys were written in.
+          const given = sorted(n.given).map(([k, e]) => [k, go(e)]);
+          const binds = sorted(n.binds).map(([k, e]) => [k, go(e)]);
+          // The same form as when a use was its own kind, so no hash changed.
+          return ["solve", defRef(useTarget(code.nodes, n)), given, binds, go(n.body)];
+        }
         const f = go(n.fn), args = n.args.map(go);
         // Operands of a commutative op sorted by their own form (PORTS
         // §7 part 2): `x·x + y·y` and `y·y + x·x` come out the same.
@@ -205,18 +219,6 @@ function canon(code: Code, defId: Id, group: Map<Id, number | null>, memo: Map<I
       }
       case "tfun": return n.effects?.length ? ["tfun", n.params.map(go), go(n.result), n.effects.map(defRef)] : ["tfun", n.params.map(go), go(n.result)];
       case "match": return ["match", go(n.scrutinee), n.arms.map(go), n.otherwise ? go(n.otherwise) : null];
-      case "solve": {
-        const t = code.nodes[useTarget(code.nodes, n)];
-        const body = t?.kind === "def" && t.body ? code.nodes[t.body] : null;
-        const params = body && body.kind === "lambda" ? body.params : [];
-        const key = (k: string) => (params.includes(k) ? `p${params.indexOf(k)}` : k);
-        const sorted = (r: Record<string, Id>) => Object.entries(r).map(([k, e]) => [key(k), e] as const).sort(([a], [b]) => (a < b ? -1 : 1));
-        // Evaluated in canonical order, so binders are numbered the same
-        // whatever order the record's keys were written in.
-        const given = sorted(n.given).map(([k, e]) => [k, go(e)]);
-        const binds = sorted(n.binds).map(([k, e]) => [k, go(e)]);
-        return ["solve", defRef(useTarget(code.nodes, n)), given, binds, go(n.body)];
-      }
       case "fold": return ["fold", go(n.scrutinee), n.arms.map(go)];
       case "arm": return ["arm", part(n.variant), n.binds.map(go), n.results.map((r) => (r ? go(r) : null)), go(n.body)];
       default: throw new Error(`unexpected ${n.kind}`);

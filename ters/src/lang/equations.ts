@@ -25,7 +25,7 @@
 import { defineRelation } from "../../../invertible/src/index.js";
 import { call, num, v } from "../../../invertible/src/expr.js";
 import type { Code, Id, NodeOf, Call } from "../model.ts";
-import { isCall } from "../model.ts";
+import { isCall, isUse } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { impl } from "../prelude.ts";
 import { ARITH, S, TRUE } from "./std.ts";
@@ -128,6 +128,7 @@ export function numeric(code: Code, id: Id, env: Env = new Map(), ctx: Ctx = fre
       throw new NotEquations("a function isn't a number");
     }
     case "call": {
+      if (isUse(n)) throw new NotEquations("a relation used backwards isn't arithmetic");
       const op = NUMERIC[targetOf(code, n.fn, env) ?? ""];
       if (op) return call(op, ...n.args.map((a) => numeric(code, a, env, ctx)));
       let out: Expr | null = null;

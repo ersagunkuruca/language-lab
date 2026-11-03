@@ -160,8 +160,8 @@ export function pointsAt(n: Node): Id[] {
   if (n.kind === "arm") out.push(n.variant);
   // A solve's ports are the function's parameters, and "out", its result.
   // A builtin and an interface's field have no parameter nodes: their ports
-  // are positions, 0, 1, ….
-  if (isUse(n)) out.push(n.fn, ...(n.fn.startsWith("builtin.") ? [] : [...Object.keys(n.given), ...Object.keys(n.binds)].filter((k) => k !== "out" && !/^\d{1,2}$/.test(k))));
+  // are positions, 0, 1, …. The relation itself is its `fn`, a child.
+  if (isUse(n)) out.push(...[...Object.keys(n.given), ...Object.keys(n.binds)].filter((k) => k !== "out" && !/^\d{1,2}$/.test(k)));
   if (n.kind === "tfun") out.push(...(n.effects ?? []));
   if (n.kind === "typedef") out.push(...(n.row ?? []));
   if (n.kind === "lit" && n.of) out.push(n.of);

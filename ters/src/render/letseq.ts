@@ -6,7 +6,7 @@
 // naming a step is a presentation edit, the same as a comment.
 
 import type { Code, Id } from "../model.ts";
-import { get } from "../model.ts";
+import { get, isUse } from "../model.ts";
 import type { Presentation } from "../presentation.ts";
 import { nestedExpr } from "./nested.ts";
 import { Namer } from "./namer.ts";
@@ -38,7 +38,6 @@ export function renderLet(code: Code, pres: Presentation, defId: Id): string {
         return operand(id);
       case "match":
       case "fold":
-      case "solve":
         // Arms have their own scopes; shown nested rather than flattened.
         return inline(id);
       case "lambda":
@@ -46,6 +45,8 @@ export function renderLet(code: Code, pres: Presentation, defId: Id): string {
         // enclosing sequence, so show it inline in nested form.
         return lambdaText(code, namer, n.params, inline(n.body));
       case "call": {
+        // A use's body has its own scope too.
+        if (isUse(n)) return inline(id);
         const fn = code.nodes[n.fn];
         if (fn.kind === "lambda") {
           n.args.forEach((arg, i) => emit(unread(code, fn.params[i], fn.body) ? null : namer.name(fn.params[i]), step(arg), arg));

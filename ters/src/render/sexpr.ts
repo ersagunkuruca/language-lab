@@ -2,7 +2,7 @@
 // chosen glyph if there is one, but ignores fixity.
 
 import type { Code, Id } from "../model.ts";
-import { get, useTarget } from "../model.ts";
+import { get, useTarget, isUse } from "../model.ts";
 import type { Presentation } from "../presentation.ts";
 import { Namer } from "./namer.ts";
 
@@ -16,7 +16,9 @@ export function renderSexpr(code: Code, pres: Presentation, defId: Id): string {
       case "lit": return typeof n.value === "string" ? JSON.stringify(n.value) : String(n.value);
       case "ref": return pres.style.notation[n.target]?.glyph ?? namer.name(n.target);
       case "lambda": return `(λ (${n.params.map((p) => namer.name(p)).join(" ")}) ${expr(n.body)})`;
-      case "call": return `(${[n.fn, ...n.args].map(expr).join(" ")})`;
+      case "call":
+        if (isUse(n)) return `(solve ${namer.name(useTarget(code.nodes, n))} (${Object.entries(n.given).map(([k, e]) => `(${k === "out" ? "out" : namer.name(k)} ${expr(e)})`).join(" ")}) (${Object.entries(n.binds).map(([k, b]) => `(${k === "out" ? "out" : namer.name(k)} ${namer.name(b)})`).join(" ")}) ${expr(n.body)})`;
+        return `(${[n.fn, ...n.args].map(expr).join(" ")})`;
       case "match":
       case "fold": {
         const arms = n.arms.map((a) => {
@@ -27,8 +29,6 @@ export function renderSexpr(code: Code, pres: Presentation, defId: Id): string {
         if (n.kind === "match" && n.otherwise) arms.push(`(else ${expr(n.otherwise)})`);
         return `(${n.kind} ${expr(n.scrutinee)} ${arms.join(" ")})`;
       }
-      case "solve":
-        return `(solve ${namer.name(useTarget(code.nodes, n))} (${Object.entries(n.given).map(([k, e]) => `(${k === "out" ? "out" : namer.name(k)} ${expr(e)})`).join(" ")}) (${Object.entries(n.binds).map(([k, b]) => `(${k === "out" ? "out" : namer.name(k)} ${namer.name(b)})`).join(" ")}) ${expr(n.body)})`;
       default: throw new Error(`unexpected ${n.kind} in expression`);
     }
   };

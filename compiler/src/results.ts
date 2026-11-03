@@ -107,8 +107,9 @@ export function solvesAsCalls(code: Code, names: Names): { code: Code; names: Na
       case "lit": { const z = y as typeof x; return x.value === z.value && JSON.stringify(x.unit) === JSON.stringify(z.unit) && x.of === z.of; }
       case "ref": { const t = (y as typeof x).target; return (subA.get(x.target) ?? x.target) === (m.get(t) ?? subB.get(t) ?? t); }
       case "call": {
+        if (!isCall(x)) return a === b;
         const z = y as typeof x;
-        if (!same(x.fn, z.fn, subA, subB, m)) return false;
+        if (!isCall(z) || !same(x.fn, z.fn, subA, subB, m)) return false;
         if (x.args.length !== 2 || !commutes(x.fn)) return all(x.args, z.args);
         // Operands of an operation that commutes, in either order (C69):
         // `a·a + b·b` and `b·b + a·a` are one value.
