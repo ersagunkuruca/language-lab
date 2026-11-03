@@ -283,7 +283,7 @@ So the recommendation becomes: **the small core is the machine numbers,
 interfaces, staging, representations, and embeddings as representations
 that keep the operations. Everything else, including Complex and
 Clifford, is library constructions with their embeddings.** Rows L208 and
-L209 below.
+L209 below. How embeddings go into Ters, in steps: EMBEDDINGS.md (L208a).
 
 ## Should Clifford stay in the standard library?
 
