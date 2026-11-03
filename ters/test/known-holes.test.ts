@@ -204,11 +204,13 @@ function printed(steps: (k: Lang, L: typeof lib) => Id[]) {
 }
 const nums = (k: Lang, xs: number[]) => k.list(...xs.map((x) => k.lit(x)));
 
-test("R3 §1.1 √x · √x equals x for a big x, as it does for 2", () => {
+test("R3 §1.1 √x · √x is the same for a big x as for 2: not equal, since equal is exact", () => {
   const sq = (k: Lang, x: number) => k.equal(k.call(B.mul, k.call(B.sqrt, k.lit(x)), k.call(B.sqrt, k.lit(x))), k.lit(x));
   // Before L80: ["true", "false"]. sqrt(1e17)² is 1.0000000000000002e17, a whole
   // float, so it's compared exactly; sqrt(2)² isn't whole, so it's near.
-  assert.deepEqual(printed((k) => [sq(k, 2), sq(k, 1e17)]).out, ["true", "true"]);
+  // Then ["true", "true"], both near; since L197 `equal` is exact, so both
+  // are false, and `near` says what was meant.
+  assert.deepEqual(printed((k) => [sq(k, 2), sq(k, 1e17)]).out, ["false", "false"]);
 });
 
 test("R3 §1.2 a set of Float64s has the same size whatever order its items come in", () => {

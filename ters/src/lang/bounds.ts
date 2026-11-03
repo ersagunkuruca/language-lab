@@ -194,8 +194,8 @@ export function resultBounds(code: Code, lambda: Id, args: (Iv | null)[], outsid
   return null;
 }
 
-// Can a value the function returns be `x`, to the language's tolerance for
-// Float64 equality (run.ts sameNumber: about 1e-9 relative)?
+// Can a value the function returns be `x`, to the solver's tolerance for
+// an answer it found (run.ts close: about 1e-9 relative)?
 export const within = (x: number, b: Iv): boolean => {
   const slack = 2e-9 * (1 + Math.abs(x));
   return x >= b.lo - slack && x <= b.hi + slack;

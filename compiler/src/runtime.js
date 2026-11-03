@@ -74,17 +74,16 @@ export function $range(n) {
   return l;
 }
 
-// Float64s are equal to the precision floats carry, as in the evaluator.
-// Only a finite gap is near (run.ts close): ∞ isn't −∞.
+// Near, as the solver checks an answer it found (run.ts close); `equal`
+// is exact. Only a finite gap is near: ∞ isn't −∞.
 export const $near = (a, b) => {
   const gap = Math.abs(a - b);
   return a === b || (gap < Infinity && gap <= 1e-9 * (1 + Math.abs(a) + Math.abs(b)));
 };
 
 // `equal` on two numbers, one rule on every type, as in the evaluator
-// (run.ts `sameNumber`): whole numbers exactly, others near.
-// run.ts sameNumber: near on every JS number; an Int past 2^28 is a BigInt.
-export const $sameNumber = (a, b) => $near($fin(a), $fin(b));
+// (run.ts `sameNumber`): exactly (L197). An Int past 2^28 is a BigInt.
+export const $sameNumber = (a, b) => $fin(a) === $fin(b);
 
 // A Float64 is finite (L125c, FLOAT-VALUES-2026-11-01.md §2), as in the
 // evaluator (run.ts finiteFloat), with its reasons. No answer is checked on

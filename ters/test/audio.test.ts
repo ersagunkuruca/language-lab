@@ -20,7 +20,7 @@ import { runInNewContext } from "node:vm";
 import { runMain } from "../src/lang/run.ts";
 import { soundWorklet, workletRuntime, pageRuntime } from "../cli/web.ts";
 import { pageFile, workletFile } from "../src/lang/page.ts";
-import { sameNumber } from "../src/lang/run.ts";
+import { close } from "../src/lang/run.ts";
 import { CELL_OPS, NOW_OP, RANDOM_OP, S } from "../src/lang/std.ts";
 import { recordingWorld } from "../src/lang/audio-page.ts";
 import { replaying } from "../src/lang/audio-worklet.ts";
@@ -47,12 +47,12 @@ test("the pedal: the evaluator and the compiled program play the same samples, a
   const input = sine(512, 0.3);
   const ways = await Promise.all((["evaluator", "compiled"] as const).flatMap((way) => [128, 256].map(async (size) => playBlocks(await soundOf(p, main, way), input, size))));
   for (const w of ways) assert.deepEqual(w.silent, []);
-  // Each way the same bits at either block size; the two ways the same
-  // numbers as the language compares them (the interpreter runs atanh
+  // Each way the same bits at either block size; the two ways near each
+  // other (run.ts close, `near` in the language: the interpreter runs atanh
   // backwards with fractions, the compiled plan with floats).
   assert.deepEqual(ways[1].out, ways[0].out);
   assert.deepEqual(ways[3].out, ways[2].out);
-  ways[0].out.forEach((x, i) => assert.ok(sameNumber(x, ways[2].out[i]), `sample ${i}: ${x} against ${ways[2].out[i]}`));
+  ways[0].out.forEach((x, i) => assert.ok(close(x, ways[2].out[i]), `sample ${i}: ${x} against ${ways[2].out[i]}`));
   // It drives, compresses and comes back as loud as it went in: once the
   // loudnesses have followed it in (a few hundredths of a second), a sine
   // comes out as loud, its peaks squashed towards it; silence stays silent.

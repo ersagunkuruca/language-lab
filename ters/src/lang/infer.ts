@@ -1922,6 +1922,7 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   // The plans a filling makes, or null when they are the program's.
   const newPlans = (f: Filling): string | null => { const now = plans(filled(f)); return now === (planned ??= plans(code)) ? null : now; };
   const pinnedGroup = h.group.some((d) => info.options?.pins?.[d]);
+  const callers = [...affected].some((d) => !h.group.includes(d));
   const around: Type[] = [h.expected, { t: "fn", params: h.scope.map((b) => b.type), ret: h.expected, eff: h.row }];
   let aroundBefore: string | undefined;
   // A definition with results is checked by its direction's verdict too
@@ -1970,6 +1971,12 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
     // keep the pin; the others are checked against it.
     const held = pinnedGroup && groupKey(s, around) !== (aroundBefore ??= groupKey(info.subst, around));
     if (!touches && !held) return true;
+    // What a filling pins of the group's own types is seen only by its
+    // callers: with none (a new definition, main), there is no one it can
+    // break, and the hole's fit above already holds the group's own
+    // constraints (I157: a new definition's 1,068 offers asked ~500
+    // checks of it, 3.7 s). Its units are still its own.
+    if (!callers && !held) return noNewUnits(unitsOf(filled(f)));
     return byKind(groupKey(s, [...groupTypes, ...(pinnedGroup ? around : [])]), f);
   };
   // A filling that brings Choice or the world where the other is may break

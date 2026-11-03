@@ -1064,23 +1064,8 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     if (t === "text") return { k: "rt", fn: "text.equal", args: [x, y] };
     if (isTable(t)) throw new Refused("compares tables (their meaning does, in the library)");
     if (t !== "f64") return { k: "call", fn: equality(t), args: [x, y], tail };
-    // Two Float64s within 1e-9 relative to their size (run.ts sameNumber).
-    // Each side once: a local if it isn't one already.
-    const lets: { i: number; value: SExpr }[] = [];
-    const [a, b] = [x, y].map((value): SExpr => {
-      if (value.k === "local" || value.k === "num") return value;
-      const i = f.locals.push("f64") - 1;
-      lets.push({ i, value });
-      return { k: "local", i };
-    });
-    const op = (o: Op, ...xs: SExpr[]): SExpr => ({ k: "op", op: o, args: xs });
-    const num = (v: number): SExpr => ({ k: "num", v });
-    // Near on every Float64, whole or not: an Int is its own type here.
-    const diff = op("abs", op("sub", a, b)), tol = op("mul", num(1e-9), op("add", op("add", num(1), op("abs", a)), op("abs", b)));
-    // Only a finite gap is near (run.ts close): diff − diff is NaN for ∞.
-    const finite = op("equal", op("sub", diff, diff), num(0));
-    const near = op("or", op("equal", a, b), op("and", finite, op("or", op("less", diff, tol), op("equal", diff, tol))));
-    return lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), near);
+    // Two Float64s exactly (run.ts sameNumber, L197).
+    return { k: "op", op: "equal", args: [x, y] };
   }
   // compare's order (run.ts compareValues) as −1, 0 or 1: numbers by
   // value (exactly), Bools and cases in the order their type declares them, text by

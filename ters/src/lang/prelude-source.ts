@@ -397,17 +397,27 @@ export function buildPrelude(): Module {
   // modulus and angle of; the second is Trig's polar and unpolar fields,
   // one direction undoing the other.
   const expect = (holds: Id, what: string) => k.call(CHECK_OP, holds, k.lit(what));
+  // Two Float64s that agree to the precision floats carry: within 1e-9 of
+  // each other, relative to their size. `equal` is exact (L197, Ersagun's
+  // choice 2026-11-03); near is how a program says "the same up to
+  // rounding", as a law over floats does: √2 · √2 is near 2, not equal to
+  // it. The solver checks an answer it found the same way (run.ts close).
+  const near = k.def("near");
+  k.define(near, k.fn(["a", "b"], (a, b) => k.let("gap", k.call(S.abs, n.sub(a, b)), (gap) =>
+    k.call(S.not, k.call(S.less, n.mul(k.lit(1e-9), n.add(n.add(k.lit(1), k.call(S.abs, a)), k.call(S.abs, b))), gap)))));
+  // Two complex numbers near part by part: what the laws below check.
+  const nearC = (w: Id, z: Id) => cx(w, (a, b) => cx(z, (c, d) => k.and(k.call(near, a, c), k.call(near, b, d)), ["re2", "im2"]));
   const lawFromPolar = k.def("from polar undoes modulus and angle");
-  k.define(lawFromPolar, k.fn(["z"], (z) => expect(k.equal(k.call(polar, k.call(modulus, z), k.call(angle, z)), z), "from polar(modulus z, angle of z) = z")));
+  k.define(lawFromPolar, k.fn(["z"], (z) => expect(nearC(k.call(polar, k.call(modulus, z), k.call(angle, z)), z), "from polar(modulus z, angle of z) is near z")));
   const lawPolar = k.def("polar undoes unpolar");
   k.define(lawPolar, k.fn(["z"], (z) => cx(z, (a, b) =>
     k.solve(TRIG_UNPOLAR, { 2: a, 3: b, out: k.true }, { 0: "length", 1: "angle" }, ({ 0: r, 1: t }) =>
       k.solve(TRIG_POLAR, { 0: r, 1: t, out: k.true }, { 2: "x", 3: "y" }, ({ 2: x, 3: y }) =>
-        expect(k.equal(C(x, y), z), "polar(unpolar(x, y)) = (x, y)"))))));
+        expect(nearC(C(x, y), z), "polar(unpolar(x, y)) is near (x, y)"))))));
   // Ways agree (WAYS.md step 4, BACKLOG L96d): each way of a Trig field
   // against Float64's own field on small values, as T7 laws, so `lab test`
-  // and test/prelude-laws.test.ts run them. Float64's = has its tolerance:
-  // the ways are other roundings of one real function. asin and acos are
+  // and test/prelude-laws.test.ts run them, with `near`: the ways are other
+  // roundings of one real function. asin and acos are
   // given a sine and a cosine, which are in their domain.
   const agrees = (way: Id, own: (x: Id) => Id, what: string, input = (x: Id) => x) => {
     const d = k.def(`${what} agrees at Float64`);
@@ -415,14 +425,17 @@ export function buildPrelude(): Module {
     // and kept within [−3, 3]: far out, x + π/2 rounds away more than the
     // tolerance (1e9 + π/2 is off by 6e-8), a disagreement of floats, not
     // of the ways.
-    k.define(d, k.fn(["x", "y"], (x, y) => k.let("given", input(k.call(B.mul, k.lit(3), k.call(B.sin, k.call(B.add, x, k.call(B.mul, y, k.lit(0.37)))))), (v) => expect(k.equal(k.call(way, v), own(v)), `${what}(x) = its field at Float64`))));
+    k.define(d, k.fn(["x", "y"], (x, y) => k.let("given", input(k.call(B.mul, k.lit(3), k.call(B.sin, k.call(B.add, x, k.call(B.mul, y, k.lit(0.37)))))), (v) => expect(k.call(near, k.call(way, v), own(v)), `${what}(x) is near its field at Float64`))));
     return d;
   };
-  // polar by sincos is a relation: it holds of Float64's own polar's answer.
+  // polar by sincos gives x and y from a length and an angle: near what
+  // Float64's own polar gives.
   const polarAgrees = k.def("polar by sincos agrees at Float64");
+  const [byLength, byAngle, byX, byY] = (k.code.nodes[(k.code.nodes[polarBy] as NodeOf<"def">).body!] as NodeOf<"lambda">).params;
   k.define(polarAgrees, k.fn(["length", "angle"], (r, t) => k.let("r", k.call(B.add, r, k.lit(0)), (rr) =>
     k.solve(TRIG_POLAR, { 0: rr, 1: t, out: k.true }, { 2: "x", 3: "y" }, ({ 2: x, 3: y }) =>
-      expect(k.call(polarBy, rr, t, x, y), "polar by sincos holds of Float64's polar")))));
+      k.solve(polarBy, { [byLength]: rr, [byAngle]: t, out: k.true }, { [byX]: "x2", [byY]: "y2" }, ({ [byX]: x2, [byY]: y2 }) =>
+        expect(k.and(k.call(near, x, x2), k.call(near, y, y2)), "polar by sincos is near Float64's polar"))))));
   const wayLaws = [
     agrees(cosBySin, (v) => k.call(B.cos, v), "cos by sin"),
     agrees(sinByCos, (v) => k.call(B.sin, v), "sin by cos"),
@@ -1811,7 +1824,7 @@ export function buildPrelude(): Module {
   const simulatedHelpers = [readyAt, earliest, readyTimes, tiedAt, pickAt, nextDraw, firstDraw, simulatedWorld, simulatedClock];
   const awaitHelpers = [startBranch, waiting, goOn, finished, settle, firstDone, raceSettle, ...simulatedHelpers];
 
-  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, spaced, optionalParens, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, determinant, inverted, leastSquares, withState, changeState, piped, ticketId, anyOf, together, race, within, simulated];
+  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, spaced, optionalParens, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, determinant, inverted, leastSquares, withState, changeState, piped, ticketId, anyOf, together, race, within, simulated, near];
   // Each number's own show, from before the generic one showed every number
   // (L153, L156): kept so programs saved before still open, not offered.
   const perTypeShows = [showF, showC, showD, showX];
@@ -1973,6 +1986,7 @@ export function buildPrelude(): Module {
     [unitI]: "i, the square root of −1: i · i is −1.",
     [conjC]: "a − bi for a + bi: the same point mirrored across the real line. z · conjugate(z) is |z|².",
     [modulus]: "|z|, how far z is from 0 (the vectors module's magnitude says the same).",
+    [near]: "Whether two Float64s agree to the precision floats carry: within 1e-9 of each other, relative to their size. equal is exact, so √2 · √2 isn't equal to 2, but it is near it.",
     [angle]: "The angle from the positive real line to z, in radians, between −π and π (atan2).",
     [polar]: "The complex number size away from 0 at this angle: size·(cos angle + i sin angle).",
     [divC]: "z ÷ w for complex numbers; no answer when w is 0. Not offered: the one divide works on every number but Int; kept so programs saved before still open.",
