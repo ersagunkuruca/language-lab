@@ -1186,7 +1186,7 @@ function acceptAnswer(inputs: string[], answer: string) {
   const same = (e: Saved) => e.inputs.length === inputs.length && e.inputs.every((x, i) => x === inputs[i]);
   const others = (savedOf(ui.def) ?? []).filter((e) => !same(e));
   commit({ examples: { ...(doc.examples ?? {}), [ui.def]: [{ inputs, answer }, ...others] } }, ["examples.json"],
-    `Accepted ${answer} for these inputs. lab test checks it from now on; it's kept in examples.json.`);
+    `Accepted ${answer} for these inputs. The program's tests check it from now on (lab test, on the command line).`);
 }
 
 function setKnown(info: T.Info, port: Id, on: boolean) {
@@ -1194,7 +1194,7 @@ function setKnown(info: T.Info, port: Id, on: boolean) {
   const next = on ? [...cur, port] : cur.filter((p) => p !== port);
   const name = port === "out" ? "the result" : new Namer(doc.code, pres(), ui.def).name(port);
   commit({ layout: { ...doc.layout, known: { ...doc.layout.known, [ui.def]: next } } }, ["layout.json"],
-    `${on ? "Gave" : "Asked for"} ${name}. Only layout.json changed: same code, same hash, another direction.`);
+    `${on ? "Gave" : "Asked for"} ${name}. Only the layout changed: same code, same hash, another direction.`);
 }
 
 interface Backwards extends Found { stopped?: boolean; plan?: { status: string; needMore: number; steps: Step[] } }
@@ -1365,7 +1365,7 @@ function backwardsPanel(namer: Namer, info: T.Info): HTMLElement {
     const inputs = ports.filter((p) => p !== "out").map((p) => portText(info, p));
     const acc = (savedOf(ui.def) ?? []).find((e) => e.answer !== undefined && e.inputs.length === inputs.length && e.inputs.every((x, i) => x === inputs[i]));
     const accept = (label: string) => {
-      const b = h("button", { class: "btn", type: "button", title: "Keep this answer for these inputs in examples.json: lab test checks it from now on" }, label);
+      const b = h("button", { class: "btn", type: "button", title: "Keep this answer for these inputs: the program's tests check it from now on (lab test, on the command line)" }, label);
       b.addEventListener("click", () => acceptAnswer(inputs, got));
       return b;
     };
@@ -2856,8 +2856,8 @@ const asNamed = (bs: Set<Id>, on: boolean): Partial<Layout> => {
 function toggleNamed(b: Id) {
   const on = isNamed(b);
   commit({ layout: { ...doc.layout, ...asNamed(new Set([b]), !on) } }, ["layout.json"],
-    on ? "Back to wires: one wire from where it's bound to every use. Only layout.json changed."
-      : "Shown as a let node, with a get node next to every use instead of long wires. Same binding, another look: only layout.json changed.");
+    on ? "Back to wires: one wire from where it's bound to every use. Only the layout changed."
+      : "Shown as a let node, with a get node next to every use instead of long wires. Same binding, another look: only the layout changed.");
 }
 
 // Every value of the definition (its inputs and its steps' dots) as let and
@@ -2865,8 +2865,8 @@ function toggleNamed(b: Id) {
 const bindersOf = (d: Id) => subtree(doc.code, d).filter((b) => node(b)?.kind === "binder" && pres().names[b] !== "_");
 function allNamed(on: boolean) {
   commit({ layout: { ...doc.layout, ...asNamed(new Set(bindersOf(ui.def)), on) } }, ["layout.json"],
-    on ? "Every value is a let node, with a get node at each use. Same program, another look: only layout.json changed."
-      : "Every value is wires again, from where it's bound to every use. Only layout.json changed.");
+    on ? "Every value is a let node, with a get node at each use. Same program, another look: only the layout changed."
+      : "Every value is wires again, from where it's bound to every use. Only the layout changed.");
 }
 
 // Picked nodes grouped into a frame of their own, folded into one box, or
@@ -2883,7 +2883,7 @@ function groupPicked(picked: Id[]) {
   const g = `group-${freshId()}`;
   graph?.unpickAll();
   commit({ layout: { ...doc.layout, groups: { ...(doc.layout.groups ?? {}), [g]: picked }, folded: [...(doc.layout.folded ?? []), g] } }, ["layout.json"],
-    `Grouped ${picked.length} into one box, which names what it holds; wires in end on its left, values out leave on its right. Unfold it (▸) to see them in their frame, or Ungroup from its menu. Only layout.json changed.`);
+    `Grouped ${picked.length} into one box, which names what it holds; wires in end on its left, values out leave on its right. Unfold it (▸) to see them in their frame, or Ungroup from its menu. Only the layout changed.`);
 }
 
 // The nodes Make it a function takes from a right-click on `id`: the
@@ -2907,7 +2907,7 @@ function partCalls(id: Id): Id[] {
 
 function ungroup(g: Id) {
   const { [g]: _, ...groups } = doc.layout.groups ?? {};
-  commit({ layout: { ...doc.layout, groups, folded: (doc.layout.folded ?? []).filter((x) => x !== g) } }, ["layout.json"], "Ungrouped: what it held stays where it was. Only layout.json changed.");
+  commit({ layout: { ...doc.layout, groups, folded: (doc.layout.folded ?? []).filter((x) => x !== g) } }, ["layout.json"], "Ungrouped: what it held stays where it was. Only the layout changed.");
 }
 
 // A group made a function called where it was (BACKLOG E146): the code
@@ -2993,8 +2993,8 @@ function toggleFolded(f: Id) {
   // Opened, it's selected, so it's drawn over its neighbours.
   if (on && doc.code.nodes[f]) ui.selected = f;
   commit({ layout: { ...doc.layout, folded: on ? now.filter((x) => x !== f) : deep ? now : [...now, f], ...(unfolded.length || doc.layout.unfolded ? { unfolded } : {}) } }, ["layout.json"],
-    on ? "Unfolded where the box was, drawn over its neighbours while it's selected. Only layout.json changed."
-      : "Folded into one box: wires in end on its left, values out leave on its right. Click ▸ to unfold. Only layout.json changed.");
+    on ? "Unfolded where the box was, drawn over its neighbours while it's selected. Only the layout changed."
+      : "Folded into one box: wires in end on its left, values out leave on its right. Click ▸ to unfold. Only the layout changed.");
 }
 
 // ---------------------------------------------------------------- the graph's menu
@@ -3082,7 +3082,7 @@ function graphMenu(info: T.Info): HTMLElement | null {
     // So does a function's whole body that is one action (E190).
     const oneAction = kind === "node" && !stepRows(id).length && T.addActionStep(doc.code, doc.names.short, info, id).ok;
     if (kind === "node" && (stepRows(id).length || oneAction)) rows.push(item("Add a step before this…", "step-before", "A new step (a hole to fill) just before this one, done before it", why(() => T.addActionStep(doc.code, doc.names.short, info, stepAt(id)))));
-    else if (kind === "node") rows.push(item("Add a value before this…", "add-before", "A new named value (a hole to fill), first among the steps this is in, so this and all of them can use it. Inside a case of a match, first in that case", why(() => T.addStep(doc.code, doc.names.short, info, ui.def, id))));
+    else if (kind === "node") rows.push(item("Add a value before this…", "add-before", "A new named value (a hole to fill), put before this so that this, and everything after it here, can use it. Inside a case of a match, it goes at the start of that case", why(() => T.addStep(doc.code, doc.names.short, info, ui.def, id))));
     // Its place in a list, or among a + b + c's inputs.
     const inRow = T.rowOfItem(doc.code, id), own = T.rowAt(doc.code, id);
     if (inRow) {
@@ -3096,7 +3096,7 @@ function graphMenu(info: T.Info): HTMLElement | null {
     if (doc.code.nodes[id] && doc.code.nodes[id].kind !== "hole" && !doc.code.defs.includes(id)) rows.push(item("Replace with…", "replace", "Pick what goes here instead, from the palette"));
     // In the graph a wrap is a node put on the wire out of this one; in the
     // text it reads as wrapping (Ersagun 2026-10-28).
-    if (wrappable(id)) rows.push(inGraph ? item("Insert a node after it…", "wrap", "A call from the palette goes on the wire out of this node: this feeds one of its inputs, and it gives on what this gave")
+    if (wrappable(id)) rows.push(inGraph ? item("Insert a node after it…", "wrap", "Pick a call from the palette: this node's value goes into one of its inputs, and its result goes on to wherever this node's value went")
       : item("Wrap in…", "wrap", "Put it inside a call or a function from the palette: it becomes one of its inputs"));
     if (doc.code.nodes[id] && doc.code.nodes[id].kind !== "hole") rows.push(item("Clear it (leave a hole)", "clear", "A hole of the same type stays in its place"));
     if (doc.code.nodes[id] && doc.code.nodes[id].kind !== "hole") rows.push(item("Delete it", "delete", "Only this node: a hole stays in its place, and what's wired into it is kept, loose"));
@@ -3128,7 +3128,7 @@ function graphMenu(info: T.Info): HTMLElement | null {
       rows.push(item("Ungroup", "ungroup", "Take the frame away: what it holds stays where it is"));
     }
     if (inGraph) rows.push(item("Back to the automatic place", "reset-one", picked.length > 1 ? "Forget where the picked nodes were dragged: back where Tidy everything puts them" : "Forget where it was dragged: back where Tidy everything puts it"));
-    if (inGraph) rows.push(item(picked.includes(id) ? "Unpick" : "Pick", "pick", "Mark it, to move and tidy it together with other marked nodes (shift-click does the same)"));
+    if (inGraph) rows.push(item(picked.includes(id) ? "Unpick" : "Pick", "pick", "Add it to the picked nodes (shift-click does the same): picked nodes move, tidy and become a function together. A plain click only selects it, to show it in the side panel"));
   }
   // The Blocks pane has no picking: a part made a function or a
   // definition takes it with everything written inside it, and a function
@@ -3137,7 +3137,7 @@ function graphMenu(info: T.Info): HTMLElement | null {
   if (kind === "node" && !inGraph && id) {
     const members = partCalls(id);
     if (members.length) rows.push(h("div", { class: "ctx-sep" }),
-      item("Make it a function", "part-fn", "This part, with all it holds: a function, part, of what comes in, called right here. Changes the code; Undo puts it back", why(() => T.makeFunction(doc.code, doc.names.short, info, ui.def, members))),
+      item("Make it a function", "part-fn", "This part and everything in it become a function of the values it takes in, called right here. Changes the code; Undo puts it back", why(() => T.makeFunction(doc.code, doc.names.short, info, ui.def, members))),
       item("Make it a definition", "part-def", "The same function, as a definition of its own in the side menu, called right here. Changes the code; Undo puts it back", why(() => T.definitionFrom(doc.code, doc.names.short, info, ui.def, members))));
     if (doc.code.nodes[id]?.kind === "lambda" && (doc.code.nodes[ui.def] as { body?: Id } | undefined)?.body !== id)
       rows.push(item("Make it a definition", "lambda-def", "This function as a definition of its own, in the side menu: what it uses from around it becomes its first inputs. Changes the code; Undo puts it back", why(() => T.liftToDefinition(doc.code, doc.names.short, info, ui.def, id))));
@@ -3152,14 +3152,14 @@ function graphMenu(info: T.Info): HTMLElement | null {
     // picked nodes, the group, or just this node (Ersagun 2026-10-27).
     const set = id ? fnSet(id, picked) : null;
     if (set && kind !== "frame") {
-      rows.push(item("Make it a function", "picked-fn", `${set.what} (shift-click to pick more): a function, part, of what comes in, called right here. Name it, fold it, reuse it. Changes the code; Undo puts it back`, why(() => T.makeFunction(doc.code, doc.names.short, info, ui.def, set.members))));
+      rows.push(item("Make it a function", "picked-fn", `${set.what} (shift-click to pick more) become a function of the values they take in, called right here; then you can name it and use it elsewhere. Changes the code; Undo puts it back`, why(() => T.makeFunction(doc.code, doc.names.short, info, ui.def, set.members))));
       rows.push(item("Make it a definition", "picked-def", `${set.what}: a function as above, but a definition of its own in the side menu, called right here. Changes the code; Undo puts it back`, why(() => T.definitionFrom(doc.code, doc.names.short, info, ui.def, set.members))));
-      if (!set.group) rows.push(item("Group into one box", "group-picked", `${set.what} (shift-click to pick more): a frame around them, folded, naming what it holds. A view only; unfold or ungroup it from its menu`, groupable(set.members)));
+      if (!set.group) rows.push(item("Group into one box", "group-picked", `${set.what} (shift-click to pick more): drawn as one closed box that lists what it holds. Only the drawing changes; open or ungroup it from its menu`, groupable(set.members)));
     }
     const bs = bindersOf(ui.def), allOn = bs.length > 0 && bs.every(isNamed);
     rows.push(allOn ? item("Show every value as wires", "named-none", "Wires from each let to every use, instead of let and get nodes")
       : item("Show every value as let and get nodes", "named-all", "A let node where each value is bound and a small get node at each use: no long wires", bs.length ? undefined : "it has no values to show"));
-    rows.push(item("Tidy everything", "tidy-all", "Lay it all out afresh, the same every time: columns from the inputs to the result, each call's inputs in the order of its ports and the call centred on them (Reingold–Tilford tidy trees), folded frames as one box"));
+    rows.push(item("Tidy everything", "tidy-all", "Lay it all out afresh, the same every time: columns from the inputs to the result, each call's inputs in the order of its ports and the call centred on them (the layout's sources are in Credits), folded frames as one box"));
     rows.push(item("Fit", "fit", "Zoom so the whole definition shows"));
   }
   // Nodes picked: what's done with them comes first, not below the fold
@@ -3182,7 +3182,7 @@ function menuAction(act: string, target: Id | undefined) {
   const forget = (keys: Id[]) => {
     const at = { ...(doc.layout.at ?? {}) };
     for (const k of keys) delete at[lkey(k)];
-    commit({ layout: { ...doc.layout, at } }, ["layout.json"], "Back to the automatic place. Only layout.json changed.");
+    commit({ layout: { ...doc.layout, at } }, ["layout.json"], "Back to the automatic place. Only the layout changed.");
   };
   const own = /^own-case-(\d+)$/.exec(act);
   if (own && target) { const c = T.sharedCases(doc.code, doc.names.short, info, target)[+own[1]]; if (c) applyT(T.ownBody(doc.code, doc.names.short, info, c)); return; }
@@ -3197,7 +3197,7 @@ function menuAction(act: string, target: Id | undefined) {
         ui.selected = x.hole;
         revealNext = (id) => id === x.hole || id === x.def;
         commit({ code: x.code, loose: x.of, home: doc.home ?? {}, layout: { ...doc.layout, at: { ...(doc.layout.at ?? {}), [lkey(x.def)]: { x: Math.round(m.world.x), y: Math.round(m.world.y) } } } },
-          ["drafts.json", "layout.json"], "Added a loose value: fill its hole, then drag its output onto an input. Until then it's kept apart, in drafts.json.");
+          ["drafts.json", "layout.json"], "Added a loose value: fill its hole, then drag its output onto an input. Until then it's kept apart, as a draft.");
         return paletteFor(x.hole, m);
       }
       const r = T.addStep(doc.code, doc.names.short, info, ui.def, act === "add-before" ? target : undefined);
@@ -3209,7 +3209,7 @@ function menuAction(act: string, target: Id | undefined) {
       // the blocks it has no place to keep, so the layout places it.
       const placed = m.blocks ? doc.layout : { ...doc.layout, at: { ...(doc.layout.at ?? {}), [lkey(hole)]: { x: Math.round(w.x), y: Math.round(w.y) }, [lkey(r.dot!)]: { x: Math.round(w.x) + 110, y: Math.round(w.y) + 6 } } };
       commit({ code: r.code, names: { ...doc.names, short: r.names }, layout: placed },
-        ["code.json", "names.short.json", ...(placed === doc.layout ? [] : ["layout.json"])], m.blocks ? `Added a value ${act === "add" ? "as the first step" : "first among the steps this is in, so all of them can use it"}: fill its hole, then use it by name.` : r.note);
+        ["code.json", "names.short.json", ...(placed === doc.layout ? [] : ["layout.json"])], m.blocks ? `Added a value ${act === "add" ? "as the first step" : "before this, so this and what comes after it can use it"}: fill its hole, then use it by name.` : r.note);
       return paletteFor(hole, m);
     }
     case "named": return toggleNamed(target!);
@@ -3296,7 +3296,7 @@ function menuAction(act: string, target: Id | undefined) {
     case "tree": {
       const now = doc.layout.tree ?? [], on = now.includes(target!);
       return commit({ layout: { ...doc.layout, tree: on ? now.filter((x) => x !== target) : [...now, target!] } }, ["layout.json"],
-        on ? "Drawn as rows of patterns, as the text reads it. Only layout.json changed." : "Drawn as the nested matches it is stored as. Only layout.json changed.");
+        on ? "Drawn as rows of patterns, as the text reads it. Only the layout changed." : "Drawn as the nested matches it is stored as. Only the layout changed.");
     }
     case "tidy-frame": return graph?.tidy([target!]);
     case "reset-one": { const p = graph?.picked() ?? []; return forget(p.length > 1 ? graph!.expand(p) : graph?.expand([target!]) ?? [target!]); }
@@ -3314,7 +3314,7 @@ function toggleInline(call: Id) {
   // The whole graph, which grows (or shrinks) by the callee's body.
   revealNext = WHOLE;
   commit({ layout: { ...doc.layout, inline } }, ["layout.json"],
-    on ? "Collapsed the call. Only layout.json changed." : "Showing the definition inline: the call is drawn as its body, with the arguments flowing into its inputs. It's a view: layout.json changed, code.json didn't.");
+    on ? "Collapsed the call. Only the layout changed." : "Showing the definition inline: the call is drawn as its body, with the arguments flowing into its inputs. It's a view: the layout changed, the code didn't.");
 }
 
 // The loose part `id` stands for: the part itself, or the node that is its
@@ -3414,20 +3414,20 @@ function graphHooks(info: T.Info) {
       const n = Object.keys(to).length;
       if (!n) { ui.note = note ?? "Nothing moved."; ui.touched = []; return render(); }
       commit({ layout: { ...doc.layout, at: { ...(doc.layout.at ?? {}), ...Object.fromEntries(Object.entries(to).map(([k, v]) => [lkey(k), v])) } } }, ["layout.json"],
-        note ?? `Moved ${n === 1 ? "a node" : `${n} nodes`}. Where nodes sit lives in layout.json; the code is untouched.`);
+        note ?? `Moved ${n === 1 ? "a node" : `${n} nodes`}. Where nodes sit is layout; the code is untouched.`);
     },
     sizes: Object.fromEntries(Object.entries(doc.layout.size ?? {}).filter(([k]) => k.startsWith(`${ui.def}/`)).map(([k, v]) => [k.slice(ui.def.length + 1), v])),
     resized: (id: Id, to: { w: number; h: number } | null) => {
       const { [lkey(id)]: _, ...rest } = doc.layout.size ?? {};
       commit({ layout: { ...doc.layout, size: to ? { ...rest, [lkey(id)]: to } : rest } }, ["layout.json"],
-        to ? "Resized a node. Its size lives in layout.json; double-click the corner to give it its own size again." : "The node has its own size again.");
+        to ? "Resized a node. Its size is layout, not code; double-click the corner to give it its own size again." : "The node has its own size again.");
     },
     spread: (to: Record<Id, Pos>, sizes: Record<Id, { w: number; h: number } | null>) => {
       const size = { ...(doc.layout.size ?? {}) };
       for (const [id, z] of Object.entries(sizes)) { if (z) size[lkey(id)] = z; else delete size[lkey(id)]; }
       const n = Object.keys(to).length, r = Object.values(sizes).filter(Boolean).length;
       commit({ layout: { ...doc.layout, at: { ...(doc.layout.at ?? {}), ...Object.fromEntries(Object.entries(to).map(([k, v]) => [lkey(k), v])) }, size } }, ["layout.json"],
-        `Spread the picked: ${n === 1 ? "a node" : `${n} nodes`} moved${r ? `, ${r} resized` : ""}. Only layout.json changed; hold Shift while dragging a corner to resize them too.`);
+        `Spread the picked: ${n === 1 ? "a node" : `${n} nodes`} moved${r ? `, ${r} resized` : ""}. Only the layout changed; hold Shift while dragging a corner to resize them too.`);
     },
     named: new Set(bindersOf(ui.def).filter(isNamed)),
     loose: looseOf(doc.code, doc.loose ?? {}, ui.def),
@@ -3440,7 +3440,7 @@ function graphHooks(info: T.Info) {
     fan: (v: Id) => {
       const now = doc.layout.fanned ?? [], on = now.includes(v);
       commit({ layout: { ...doc.layout, fanned: on ? now.filter((x) => x !== v) : [...now, v] } }, ["layout.json"],
-        on ? "Bundled into one wire. Only layout.json changed." : "Fanned out, a wire per part. Only layout.json changed.");
+        on ? "Bundled into one wire. Only the layout changed." : "Fanned out, a wire per part. Only the layout changed.");
     },
     menu: (target: MenuTarget, at: Pos, world: Pos) => { ui.menu = { target, x: at.x, y: at.y, world }; ui.query = ""; render(); document.getElementById("m-query")?.focus(); },
     reorder: (item: Id, onto: Id) => {
@@ -3999,8 +3999,14 @@ function typedChecks(namer: Namer, info: T.Info): HTMLElement {
 // On a narrow screen a cycling group shows only its choice, and tapping it
 // goes to the next (the top bar then fits without scrolling).
 const cycling = (el: HTMLElement) => (el.classList.add("cycle"), el);
+// What each switch is for, said where it's hovered (E234: "layer" and
+// "style" said nothing).
+const SEG_TITLES: Record<string, string> = {
+  layer: "Which names to show: short ones, or longer descriptive ones. Same code either way",
+  style: "How the text writes operators: a · b, a * b, or (* a b). Same code either way",
+};
 function seg(name: string, value: string, options: [string, string][]) {
-  return h("div", { class: "seg", role: "group", "aria-label": name },
+  return h("div", { class: "seg", role: "group", "aria-label": SEG_TITLES[name] ?? name, ...(SEG_TITLES[name] ? { title: SEG_TITLES[name] } : {}) },
     ...options.map(([v, label]) => h("button", { type: "button", class: v === value ? "on" : "", "data-set": name, "data-value": v, "aria-pressed": String(v === value) }, label)));
 }
 
@@ -4079,7 +4085,7 @@ const GUIDE_SEEN = "projectional-guide-seen";
 if (!EMBED) try { if (!localStorage.getItem(GUIDE_SEEN)) { ui.panel = "guide"; localStorage.setItem(GUIDE_SEEN, "1"); } } catch { ui.panel = "guide"; }
 
 function guide(): HTMLElement {
-  const pic = (w: number, ...els: SVGElement[]) => { const r = svg("svg", { viewBox: `0 0 ${w} 40`, width: w, height: 40, class: "tgraph" }); r.append(...els); return r; };
+  const pic = (w: number, ...els: SVGElement[]) => { const r = svg("svg", { viewBox: `0 0 ${w} 40`, width: w, height: 40, class: "tgraph", "aria-hidden": "true" }); r.append(...els); return r; };
   const box = (x: number, label: string, cls = "cn") => [svg("rect", { x, y: 6, width: 56, height: 28, rx: 7, class: cls }), text(x + 28, 25, label, "cl")];
   const wire = (x1: number, x2: number, y = 20, cls = "tw") => svg("path", { d: `M${x1},${y} C${(x1 + x2) / 2},${y} ${(x1 + x2) / 2},${y} ${x2},${y}`, class: cls });
   const items: [string, SVGElement, string][] = [
@@ -4096,15 +4102,15 @@ function guide(): HTMLElement {
     ["Badge", pic(80, svg("rect", { x: 12, y: 2, width: 56, height: 36, rx: 7, class: "cn eff" }), text(40, 13, "Choice", "badge"), text(40, 31, "fail", "cl")),
       "The effects a node has; a definition's type lists them too, between the arrows: (Float64) -[Random]-> Float64. Choice: several answers, or none. Random: draws numbers (die). Time: reads the clock. Abort: stops with a reason. Log: debugging output. Console: reads and prints. Files: reads and writes files. Network: reads from the web. Cells and Update: a page's state. Diverge: might not finish. And effects you declare (+ New definition, Effect). “handles …” marks a node that takes care of one, so it stops there: first or all for Choice, seeded for Random, a handle match for Abort, Log and yours."],
     ["Solve", pic(80, ...box(12, "polar", "cn rel"), svg("circle", { cx: 12, cy: 20, r: 5, class: "inp" }), svg("circle", { cx: 68, cy: 20, r: 6, class: "reroute" })),
-      "Any function run backwards: you give it some of its ports (inputs, left) and it works out the rest (dots, right). A function that says true or false, built from equal and and, is a set of equations, so it runs in every direction. Run does the same for the definition you're looking at."],
+      "Any function run backwards: you give it some of its ports (inputs, left) and it works out the rest, which leave as dots on its right. A function that says true or false, built from equal and and, is a set of equations, so it runs in every direction. Run does the same for the definition you're looking at."],
   ];
   return h("section", { class: "guide", "aria-label": "Guide" },
     h("p", { class: "hint" }, "One program, two views: the graph above and the text below (Blocks, or Steps, Nested and Lisp to read it other ways). Click anything in either to select it: Selected, in this panel, shows its type and what you can do with it. Delete or Clear to a hole leaves a hole (□); a hole's panel lists only what fits there, and you can type a value or arithmetic too: 3, \"hi\", [1, 2], x * 2, (x) => x + 1. Replace with… does both in one step. Copy, Cut and Paste (Ctrl+C, X, V) move whole parts between holes. An item of a list, or one input of a + b + c, can be added beside, moved earlier or later, or taken out from its panel; in the graph, the + under a node's inputs adds one at the end. An action's steps (print this, then that) run top to bottom: in the graph they're numbered in one column with a dashed line from each to the next, and Do it earlier or later, on a step's menu or in its panel, moves one. In the blocks, Tab steps through the parts, Enter edits one, Shift+F10 opens its menu; double-click a name to open its definition."),
     h("p", { class: "hint" }, "While a definition has a hole, its type is kept as it was, so a fill that would change it (one that does Random where it didn't, say) isn't offered. The hole's panel says so; Let it loosen there lets the type follow the body again."),
-    h("p", { class: "hint" }, "Run, above, runs main, or the definition you're looking at backwards: tick the ports you know and it works out the rest. Show values writes what each part computes into the graph."),
+    h("p", { class: "hint" }, "Run, above, runs main. On any other definition it runs that definition backwards: tick the ports you know and it works out the rest. Show values writes what each part computes into the graph."),
     h("div", { class: "guide-items" }, ...items.map(([t, p, d]) => h("div", { class: "guide-item" }, p, h("div", {}, h("strong", {}, t), h("p", {}, d))))),
-    h("p", { class: "hint" }, "Right-click in the graph for a menu: fill a hole, add a value, tidy, show a binding as let and get nodes. Long wires? Right-click the empty canvas and pick “Show every value as let and get nodes”: each value gets a let node where it's bound and a small get node at each use. Drag a node to move it (that only changes layout.json); shift-click or shift-drag to pick several. Where wires cross, one hops over the other; where one passes under a node, it shows faintly over it. Double-click a node to open the function it calls. Every change goes through the same checks, so if something would break the program, it's refused and the status line says why."),
-    h("p", { class: "hint" }, "Delete takes out one node: its place becomes a hole, and whatever was wired into it is kept, loose, in a dashed frame beside the graph and at the end of the text as _1, _2, …. Loose parts are type-checked but never run, and are saved in drafts.json, not code.json. Drag a loose part's output onto an empty input to wire it back in; dragging a wire off an input leaves its value loose too; Delete on a loose part throws it away."),
+    h("p", { class: "hint" }, "Right-click in the graph for a menu: fill a hole, add a value, tidy, show a binding as let and get nodes. Long wires? Right-click the empty canvas and pick “Show every value as let and get nodes”: each value gets a let node where it's bound and a small get node at each use. Drag a node to move it (that only changes the layout, not the code); shift-click or shift-drag to pick several. Where wires cross, one hops over the other; where one passes under a node, it shows faintly over it. Double-click a node to open the function it calls. Every change goes through the same checks, so if something would break the program, it's refused and the status line says why."),
+    h("p", { class: "hint" }, "Delete takes out one node: its place becomes a hole, and whatever was wired into it is kept, loose, in a dashed frame beside the graph and at the end of the text as _1, _2, …. Loose parts are type-checked but never run, and are saved as drafts, apart from the program. Drag a loose part's output onto an empty input to wire it back in; dragging a wire off an input leaves its value loose too; Delete on a loose part throws it away."),
     h("p", { class: "hint" }, "Where a program adapts someone's code or follows someone's idea, its comments say so: a definition's, or the program's own (in the Program tab, and above a picture). Credits, in the menu, lists every influence and source of the language itself."));
 }
 
