@@ -699,6 +699,8 @@ static char *lab__cstr(lab_cell *t) { char *s = malloc((size_t)LAB_TN(t) + 1); i
 // 0 nothing there, 1 a file (or anything but a folder), 2 a folder.
 static int lab__kind(const char *p) { struct stat st; return stat(p, &st) ? 0 : S_ISDIR(st.st_mode) ? 2 : 1; }`,
   },
+  // A stop with a reason (L51c): its words, then as lab_stop (c.ts).
+  "world.stopWith": { uses: [], c: `static double lab_world_stopWith(lab_cell *t) { lab_stop_why = (const char *)LAB_TB(t); lab_stop_n = LAB_TN(t); return lab_stop(-1); }` },
   "world.print": { uses: [], c: `static void lab_world_print(lab_cell *t) { fwrite(LAB_TB(t), 1, LAB_TN(t), stdout); putchar('\\n'); lab_drop(t); }` },
   // A seed from the world for Random's generator (C136): four bytes of
   // /dev/urandom, or the time and an address where there is none.
