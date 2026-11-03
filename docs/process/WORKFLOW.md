@@ -43,6 +43,13 @@ see the project instructions) don't take a lane: QA and review write reports
 only, and their findings come in as backlog items. The bigger-program round
 is lane C's item when it's due.
 
+**Keyboard and screen reader, every QA pass** (E231, BLIND-SPOTS-2026-11-03
+§10). Besides the mouse, each QA pass does one task with the keyboard only
+(Tab, Enter, Esc, Shift+F10 for a menu) and reads one panel as a screen
+reader gets it (Playwright's `page.accessibility.snapshot()`, or the
+accessibility tree in devtools): every control reachable, named, and a
+refused edit saying why. What fails becomes E231 rows, one part at a time.
+
 **Language gaps, every round.** Each bigger-program round records
 *language gaps* next to compiler gaps: every place the program declares a
 type, defines a helper or wraps a call only because the language lacks

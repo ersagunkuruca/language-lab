@@ -39,7 +39,7 @@ export function pagePanels(host: PageHost) {
   // picture (editor/picture.ts): drawn live on the GPU above Run, and drawn
   // again after every edit. When the compiler can't take it to the GPU, its
   // reason shows instead. The canvas outlives renders, so the drawing goes on.
-  const pic = { canvas: h("canvas", { class: "picture" }) as HTMLCanvasElement, status: h("p", { class: "hint pic-status" }), for: null as Code | null, now: null as Picture | null };
+  const pic = { canvas: h("canvas", { class: "picture", role: "img", "aria-label": "The program's picture, drawn live" }) as HTMLCanvasElement, status: h("p", { class: "hint pic-status", role: "status" }), for: null as Code | null, now: null as Picture | null };
   const picNote = h("div", {});
   const picBox = h("div", { class: "picture-box" }, picNote, pic.canvas, pic.status);
   function pictureSection(info: T.Info | null): HTMLElement | null {
@@ -71,7 +71,7 @@ export function pagePanels(host: PageHost) {
   // them, and what you typed into the page stays.
   const page = {
     frame: h("iframe", { class: "page", title: "The page main returns, running" }) as HTMLIFrameElement,
-    status: h("p", { class: "hint" }),
+    status: h("p", { class: "hint", role: "status" }),
     // Where the page's elements are made (adopted into the frame's document).
     maker: document.implementation.createHTMLDocument("page"),
     for: null as Code | null, root: null as globalThis.Node | null, now: null as Preview | null, program: null as Program | null,

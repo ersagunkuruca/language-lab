@@ -50,7 +50,7 @@ export function profileView(namer: Namer, profile: Profile, code: Code, pick: (i
   return h("details", { class: "profile" },
     h("summary", {}, `Where the run went: ${rows.length} of ${profile.length} definition${profile.length === 1 ? "" : "s"}`),
     h("table", { class: "profile-t" },
-      h("tr", {}, h("th", {}, "definition"), h("th", {}, "calls"), h("th", { title: "About how much of the run's time was spent in it, itself (not in what it calls), sampled" }, "time")),
+      h("tr", {}, h("th", { scope: "col" }, "definition"), h("th", { scope: "col" }, "calls"), h("th", { scope: "col", title: "About how much of the run's time was spent in it, itself (not in what it calls), sampled" }, "time")),
       ...rows.map((p) => h("tr", {}, h("td", {}, pick(p.def, namer.name(p.def))), h("td", {}, p.calls.toLocaleString("en")), h("td", {}, total ? `${share(p.ms)} · ${p.ms} ms` : "")))));
 }
 

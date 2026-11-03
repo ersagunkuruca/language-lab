@@ -58,7 +58,7 @@ import { bindsOf, bodyOf } from "./uses.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { ARRAY, TABLE, HASH_SET, CELL, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, PATH as PATH_T, STRING, Subst, type Row, type Type } from "../../ters/src/lang/types.ts";
-import { ABORT, ABORT_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, HASH_SET_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, NOW_OP, OPTIONAL, ORDER_V, PAIR_V, RATIO, S, SET, SHOW_ANY, shownImplementations, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
+import { tupleType, ABORT, ABORT_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, HASH_SET_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, NOW_OP, OPTIONAL, ORDER_V, PAIR_V, RATIO, S, SET, SHOW_ANY, shownImplementations, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
 import { liftLets } from "../../ters/src/lang/lift-lets.ts";
 import { solvesOnce } from "../../ters/src/lang/run.ts";
 import { inlineLists } from "./inline-lets.ts";
@@ -328,7 +328,9 @@ export type SExpr =
   // first, optional, all and count over a search with one answer or none:
   // body's answer goes into local res and ok is the value; if it has
   // none, otherwise is.
-  | { k: "attempt"; body: SExpr; res: number; ok: SExpr; otherwise: SExpr; t: LType }
+  // `spent`: running out of fuel inside is no answer here too, where a
+  // printer tells the two apart (core-js.ts; C137c21's rest of a search).
+  | { k: "attempt"; body: SExpr; res: number; ok: SExpr; otherwise: SExpr; t: LType; spent?: true }
   // abort(reason) (`data`): the computation ends, out to the nearest
   // handler of Abort, which gets the reason in local `reason` and gives
   // arm's value instead (a match on Abort). With `esc`, another operation
@@ -701,10 +703,26 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   let underBudget = false;
   const diverges = (t: Type | undefined) => !!t && t.t === "fn" && info.subst.resolveRow(t.eff).effs.includes(DIVERGE);
 
+  // A definition's type as its lambda is written. A definition with results
+  // (L128) has the type of its forward reading (polar from x and y to its
+  // length and angle), while its lambda takes every port and gives the
+  // condition on them, which is what a call given all its ports runs
+  // (L128d2, infer.ts asPredicate): that is the function lowered here;
+  // a use read another way goes through results.ts.
+  function defType(def: Id): Type | undefined {
+    const t = info.typeOf.get(def) && info.subst.zonk(info.typeOf.get(def)!);
+    const d = code.nodes[def], lam = d?.kind === "def" && d.body ? code.nodes[d.body] : undefined;
+    if (t?.t !== "fn" || d?.kind !== "def" || !d.results?.length || lam?.kind !== "lambda" || lam.params.length === t.params.length) return t;
+    const rs = d.results, ins = lam.params.filter((p) => !rs.includes(p));
+    const outs = rs.length === 1 ? [t.ret] : t.ret.t === "con" && t.ret.id === tupleType(rs.length) ? t.ret.args : null;
+    if (!outs || ins.length !== t.params.length) return t;
+    return { t: "fn", params: lam.params.map((p) => (rs.includes(p) ? outs[rs.indexOf(p)] : t.params[ins.indexOf(p)])), ret: { t: "con", id: BOOL, args: [] }, eff: t.eff };
+  }
+
   // The function index for `def` at these types, lowering it (and what it
   // calls) first.
   function func(def: Id, types: At = new Map()): number {
-    const raw = info.typeOf.get(def) && info.subst.zonk(info.typeOf.get(def)!);
+    const raw = defType(def);
     const t = raw && put(raw, types);
     if (!opts.data && !underBudget && diverges(t)) throw new Refused(`calls ${nm(def)}, which ${MAY_NOT_FINISH}`);
     const used = raw ? [...new Set(vars(raw))].filter((v) => types.has(v)).sort((a, b) => a - b) : [];
@@ -1021,7 +1039,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
         if (t?.kind === "def") {
           // What the callee's type variables and rows are here.
           const types: At = new Map();
-          const ct = info.typeOf.get(target) && info.subst.zonk(info.typeOf.get(target)!);
+          const ct = defType(target);
           if (ct?.t === "fn") { ct.params.forEach((p, j) => n.args[j] && bindVars(p, zonk(n.args[j]), types)); bindVars(ct.ret, zonk(id), types); }
           const fn = func(target, types);
           n.args.forEach((a, j) => {
@@ -1052,6 +1070,15 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
         // evaluator's relational interpreter (relate.ts satisfiable) on the
         // closure, which carries its lambda (closure.src).
         if (opts.host && target === S.exists && n.args.length === 1) return { k: "rt", fn: "exists", args: [expr(n.args[0], env, f, false)], host: { t: "i32", partial: false } };
+        // derivative(f) and gradient(f) of a function value, for JavaScript
+        // from the core IR (C137c20): the evaluator's, which looks inside
+        // the closure (it carries its lambda, closure.src); what it gives
+        // is the evaluator's function, called for its one answer.
+        if (opts.host && (target === S.derivative || target === S.gradient) && n.args.length === 1) {
+          const t = stype(zonk(id));
+          if (!t || !isFn(t)) throw new Refused(`takes ${nm(target)} giving ${whyNot(zonk(id))}`);
+          return { k: "rt", fn: `derive:${target}`, args: [expr(n.args[0], env, f, false)], host: { t, partial: false } };
+        }
         const why = TARGETS[target]?.scalar;
         throw new Refused(`uses ${nm(target)}, which isn't in the scalar profile${why && typeof why === "object" && "no" in why ? `: it ${why.no}` : ""}`);
       }
@@ -1798,7 +1825,6 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     if (e.k === "choose") return true;
     if (e.k === "call" && !e.cps && funcs[e.fn].multi) return true;
     if (e.k === "search") return !!e.dflt && several(e.dflt);
-    if (e.k === "budget" && several(e.body)) throw new Refused("chooses among several answers under a budget (not in WebAssembly yet)");
     if (e.k === "handle" && several(e.body)) throw new Refused("handles Abort around a search with several answers (not in WebAssembly yet)");
     return kids(e).some(several);
   }
@@ -1941,6 +1967,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
         const j = join(k, e.result, g, arms(e.arms));
         return { ...e, arms: e.arms.map((a) => a && cps(a, j, tail, g)), result: "i32" };
       }
+      case "budget": if (!several(e.otherwise)) return outside(e, k, g); break;
       case "attempt": {
         if (several(e.body)) break;
         const j = join(k, e.t, g, arms([e.ok, e.otherwise]));
@@ -1951,6 +1978,33 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       return inOrder(kids(e), (vs, tl) => { let j = 0; return k.gen(untail(mapKids(e, () => vs[j++])), tl); }, tail, g);
     }
     throw new Refused("chooses among several answers where WebAssembly can't yet");
+  }
+  // `with fuel` around several answers (C137c21): each answer goes on to
+  // the rest of the search, which runs on the fuel of the budget outside,
+  // so the fuel is swapped around it. The outside's fuel is kept in a box
+  // (the rest may be moved into a join or a closure), put back after the
+  // budget whichever way it ends. As in the evaluator, running out ends
+  // that budget's search: the inside's has no more answers; once the
+  // outside's ran out, the rest isn't run again and nothing after answers.
+  function outside(e: Extract<SExpr, { k: "budget" }>, k: Cont, g: SFunc): SExpr {
+    const box = boxOf("f64"), b = g.locals.push(box) - 1;
+    const got: SExpr = { k: "get", rec: local(b), t: box, i: 0 };
+    const swap = (x: SExpr): SExpr => ({ k: "rt", fn: "fuel.swap", args: [x] });
+    const fail: SExpr = { k: "fail" };
+    const ranOut: SExpr = { k: "op", op: "less", args: [got, { k: "num", v: 0 }] };
+    const rest: Cont = {
+      // The answer is worked out inside, on the inside's fuel; then the rest.
+      gen: (v) => {
+        const answer = g.locals.push(e.t) - 1, inner = g.locals.push("f64") - 1, r = g.locals.push("i32") - 1;
+        const back = (then: SExpr): SExpr => ({ k: "set", rec: local(b), t: box, i: 0, value: swap(local(inner)), then });
+        const run: SExpr = { k: "attempt", body: k.gen(local(answer), false), res: r, ok: back(local(r)), otherwise: back(fail), t: "i32", spent: true };
+        return { k: "let", i: answer, value: v, body: { k: "if", cond: ranOut, then: fail, else: { k: "let", i: inner, value: swap(got), body: run }, t: "i32" } };
+      },
+    };
+    const inside: SExpr = { ...e, body: cps(e.body, rest, false, g), otherwise: fail, t: "i32", res: g.locals.push("i32") - 1 };
+    const r = g.locals.push("i32") - 1, put = (then: SExpr): SExpr => ({ k: "let", i: g.locals.push("f64") - 1, value: swap(got), body: then });
+    const wrapped: SExpr = { k: "attempt", body: inside, res: r, ok: put({ k: "if", cond: ranOut, then: fail, else: local(r), t: "i32" }), otherwise: put(fail), t: "i32" };
+    return { k: "let", i: b, value: { k: "make", t: box, args: [{ k: "rt", fn: "fuel.get", args: [] }] }, body: wrapped };
   }
   // A handler's search, now that it's known whether it has several answers.
   function handled(e: Extract<SExpr, { k: "search" }>, g: SFunc): SExpr {

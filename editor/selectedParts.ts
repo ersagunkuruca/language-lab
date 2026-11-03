@@ -84,14 +84,14 @@ export function selectedParts(host: SelectedHost) {
     const box = h(usesUnits ? "div" : "details", usesUnits ? {} : { class: "alts units" }, usesUnits ? h("div", { class: "sub-head" }, "Unit · part of its type") : h("summary", {}, "Give it a unit (m, s, kg…)"),
       h("p", { class: "hint" }, declared ? `Declared ${formatUnit(declared)}.` : u ? `Inferred ${formatUnit(u)} from what it's connected to.` : n.kind === "lit" ? "A plain number." : "Free: nothing pins it down yet, so it fits anywhere."));
     if (!declarable) return box;
-    const chips = h("div", { class: "chips" });
+    const chips = h("div", { class: "chips", role: "group", "aria-label": "Unit" });
     for (const [label, unit] of UNIT_CHIPS) {
       const on = unit === null ? !declared : !!declared && formatUnit(declared) === formatUnit(unit);
       // Checked when clicked, not when drawn: each check infers the whole
       // program again, and a chip row in a big program took seconds to show
       // every time a number was selected. A unit that doesn't fit is refused
       // with the reason, like any edit.
-      const b = h("button", { class: `chip-btn${on ? " on" : ""}`, type: "button", title: `Declare ${label}` }, label);
+      const b = h("button", { class: `chip-btn${on ? " on" : ""}`, type: "button", title: `Declare ${label}`, "aria-pressed": on ? "true" : "false" }, label);
       if (!on) b.addEventListener("click", () => applyT(unitEdit(info, id, unit)));
       chips.append(b);
     }
