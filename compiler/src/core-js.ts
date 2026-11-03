@@ -19,7 +19,8 @@
 // the world is the evaluator's Runtime (C137c3, runCoreMain).
 
 import { ARRAY_OPS, FALSE, HASH_SET_OPS, NONE, S, SOME, STD_IMPL, STD_MANY, TABLE_OPS, TRUE } from "../../ters/src/lang/std.ts";
-import { toList, type Runtime, type World } from "../../ters/src/lang/run.ts";
+import { cellOps, equal, toList, type Runtime, type Value, type World } from "../../ters/src/lang/run.ts";
+import { Cells, NoValue } from "../../ters/src/lang/cells.ts";
 import * as I from "../../ters/src/lang/int.ts";
 import * as T from "../../ters/src/lang/text.ts";
 import type { Id } from "../../ters/src/model.ts";
@@ -95,8 +96,8 @@ function randFns(r: Uint32Array): Record<string, (...xs: never[]) => unknown> {
     "rand.restore": (a: number, b: number, c: number, d: number) => { r.set([a, b, c, d]); return 0; },
   };
 }
-function rtFn(name: string, tables?: TableSpec[], rand?: Record<string, (...xs: never[]) => unknown>): (...xs: unknown[]) => unknown {
-  if (name.startsWith("host:")) return hostFn(name);
+function rtFn(name: string, tables?: TableSpec[], rand?: Record<string, (...xs: never[]) => unknown>, cells?: Record<Id, (...xs: Value[]) => Value | undefined>): (...xs: unknown[]) => unknown {
+  if (name.startsWith("host:")) return hostFn(name, cells);
   const tm = TABLE.exec(name);
   if (tm && tables) return tableFn(tm[1], tables[Number(tm[2])]);
   if (rand?.[name]) return rand[name] as (...xs: unknown[]) => unknown;
@@ -116,14 +117,23 @@ function rtFn(name: string, tables?: TableSpec[], rand?: Record<string, (...xs: 
 // A builtin the core IR has no lowering for (C137c7, scalar.ts host):
 // the evaluator's own, by its id, a Bool given turned to the evaluator's
 // and one given back (`:bool`) turned back; no answer is FAIL.
-function hostFn(name: string): (...xs: unknown[]) => unknown {
+function hostFn(name: string, cells?: Record<Id, (...xs: Value[]) => Value | undefined>): (...xs: unknown[]) => unknown {
   const [, id, bool] = name.split(":");
+  const out = bool ? (v: unknown) => v === true || (v as { tag?: Id }).tag === TRUE : (v: unknown) => v;
+  const cell = cells?.[id];
+  if (cell) return (...xs) => { const v = cell(...(xs.map(inn) as Value[])); if (v === undefined) throw FAIL; return out(v); };
   const one = STD_IMPL[id], many = STD_MANY[id];
-  const inn = (x: unknown) => (typeof x === "boolean" ? { tag: x ? TRUE : FALSE, fields: [] } : x);
-  const out = bool ? (v: unknown) => (v as { tag: Id }).tag === TRUE : (v: unknown) => v;
   if (one) return (...xs) => out(one(...xs.map(inn)));
   if (many) return (...xs) => { const r = many(...xs.map(inn)); if (!r.length) throw FAIL; return out(r[0]); };
   return () => { throw new Unsupported(name); };
+}
+const inn = (x: unknown) => (typeof x === "boolean" ? { tag: x ? TRUE : FALSE, fields: [] } : x);
+// Cells' operations (run.ts cellOps) on the runtime's handler, calling the
+// program's closures: no answer is a formula with no value.
+function cellFns(cells: Cells) {
+  return cellOps(cells, (f, ...xs) => {
+    try { return inn((f as unknown as (...a: unknown[]) => unknown)(...xs)) as Value; } catch (e) { if (e === FAIL) throw new NoValue("gave no value"); throw e; }
+  });
 }
 
 export const RUNTIME = {
@@ -334,8 +344,8 @@ function worldFn(op: string, rt: Runtime): (...xs: unknown[]) => unknown {
 // What the printed functions are given as R: the runtime, the tables'
 // and the world's operations, a fresh generator.
 export function coreRuntime(tables: TableSpec[], worlds: string[], rt: Runtime) {
-  const rand = randFns(new Uint32Array(4));
-  return { ...RUNTIME, rt: (n: string) => rtFn(n, tables, rand), worlds: worlds.map((op) => worldFn(op, rt)), abort: (reason: unknown, esc: number): never => { throw new Aborted(reason, esc); } };
+  const rand = randFns(new Uint32Array(4)), cells = cellFns(rt.cells ?? new Cells(equal));
+  return { ...RUNTIME, rt: (n: string) => rtFn(n, tables, rand, cells), worlds: worlds.map((op) => worldFn(op, rt)), abort: (reason: unknown, esc: number): never => { throw new Aborted(reason, esc); } };
 }
 
 // The functions, by their place in ir.funcs. `rt`: the console and files.

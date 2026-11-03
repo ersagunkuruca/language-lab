@@ -12,9 +12,12 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import type { Runtime, World } from "../../ters/src/lang/run.ts";
-import { makeRunner, runProgram } from "../../ters/src/lang/run.ts";
+import { equal, fromList, makeRunner, runProgram, type Data, type Value } from "../../ters/src/lang/run.ts";
+import { Cells } from "../../ters/src/lang/cells.ts";
+import { evaluatorCall, htmlText, NoAnswer } from "../../ters/src/lang/html.ts";
+import { HTML_V } from "../../ters/src/lang/std.ts";
 import { lowerScalar } from "../src/scalar.ts";
-import { loadCoreJs, runCoreMain } from "../src/core-js.ts";
+import { FAIL, loadCoreJs, runCoreMain } from "../src/core-js.ts";
 import { examples, load } from "../src/program.ts";
 import { book as chaptersBook } from "../gaps/chapters.ts";
 import { book as ledgerBook } from "../gaps/ledger.ts";
@@ -86,5 +89,50 @@ test("lab compile --core writes a module that runs main as lab run does", () => 
   // One that doesn't lower says why, and writes nothing.
   const page = run([lab, "compile", join(examples, "dice"), "--core", "-o", "dice.mjs"]);
   assert.notEqual(page[2], 0);
-  assert.match(String(page[1]), /isn't compiled through the core IR: it takes or gives Html/);
+  assert.match(String(page[1]), /isn't compiled through the core IR: it builds now/);
 });
+
+// Pages through the core IR (C137c8): the cells are the evaluator's
+// (run.ts cellOps), and a page's views and handlers may have the page's
+// effects. Every page whose main lowers shows the same HTML in both, and
+// again after each of its first handlers runs (in the order the page
+// lists them): each run in its own cells.
+test("the pages whose main lowers show the same HTML, before and after their handlers run, as in the evaluator (C137c8)", () => {
+  const ran: string[] = [];
+  for (const name of ["bounce", "compass", "constructions", "dice", "pig", "tumble"]) {
+    const p = load(name);
+    const main = p.code.defs.find((d) => p.pres.names[d] === "main" && p.own.defs.includes(d))!;
+    const l = lowerScalar(p.code, p.info, p.pres.names, p.own.defs, { data: true, host: true });
+    if (l.refused.has(main)) continue;
+    const fi = l.funcs.findIndex((g) => g.name === "main" && !g.inner && !g.budgeted);
+    const coreCall = (f: Value, ...xs: Value[]): Value => { try { return (f as unknown as (...a: Value[]) => Value)(...xs); } catch (e) { if (e === FAIL) throw new NoAnswer(); throw e; } };
+    const views = (handlers: number) => {
+      const ev = new Cells(equal), co = new Cells(equal);
+      const a = evaluatorCall(makeRunner(p.code, p.info, { print: () => {}, names: p.pres.names, cells: ev }).value(main));
+      const b = loadCoreJs(l, { print: () => {}, cells: co })[fi]() as Value;
+      const shown = [[htmlText(a, evaluatorCall), htmlText(b, coreCall)]];
+      const ha = handlersOf(a, evaluatorCall), hb = handlersOf(b, coreCall);
+      assert.equal(ha.length, hb.length, name);
+      const event: Value = { tag: HTML_V.event, fields: ["1", "", 0, 0, 0] };
+      for (let i = 0; i < Math.min(handlers, ha.length); i++) {
+        evaluatorCall(ha[i], event); coreCall(hb[i], event);
+        shown.push([htmlText(a, evaluatorCall), htmlText(b, coreCall)]);
+      }
+      return shown;
+    };
+    const shown = views(6);
+    for (const [i, [want, got]] of shown.entries()) assert.equal(got, want, `${name}, after ${i} handlers`);
+    ran.push(name);
+  }
+  console.log(`pages ${ran.join(", ")}`);
+  assert.ok(ran.length >= 3, `pages ${ran.join(", ")}`);
+});
+
+// A page's handlers, in the order it lists them, each part's view called once.
+function handlersOf(v: Value, call: (f: Value, ...xs: Value[]) => Value): Value[] {
+  const d = v as Data;
+  if (d.tag === HTML_V.part) { let w: Value; try { w = call(d.fields[0]); } catch (e) { if (e instanceof NoAnswer) return []; throw e; } return handlersOf(w, call); }
+  if (d.tag !== HTML_V.element) return [];
+  const own = (fromList(d.fields[1]) as Data[]).filter((a) => a.tag === HTML_V.on).map((a) => a.fields[1]);
+  return [...own, ...fromList(d.fields[2]).flatMap((c) => handlersOf(c, call))];
+}
