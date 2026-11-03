@@ -15,7 +15,7 @@
 // (Console, Files) have one handler, the runtime's `World`; Log, Abort,
 // Random, Time and Wait, when nothing in the program handles them, go to it too.
 
-import { dependencies, subtree, type Code, type Id, type NodeOf, type Use, useTarget, isCall, type Call } from "../model.ts";
+import { dependencies, subtree, type Code, type Id, type NodeOf, type Use, useTarget, isCall, type Call, isUse } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { impl } from "../prelude.ts";
 import type { Info } from "./infer.ts";
@@ -763,6 +763,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       switch (n.kind) {
         case "lit": case "ref": case "lambda": return this.ret(this.atom(id, env)!);
         case "call": {
+          if (isUse(n)) return this.parts(Object.values(n.given), 0, [], env, n);
           const head = code.nodes[n.fn];
           const target = head.kind === "ref" ? head.target : null;
           // Each call into a possibly-divergent definition spends fuel, if a
@@ -781,8 +782,6 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
           else this.push({ t: n.kind, n, env, next: null } as Frame);
           return this.eval(n.scrutinee, env);
         }
-        case "solve":
-          return this.parts(Object.values(n.given), 0, [], env, n);
         case "hole": throw new Error("the program reached a hole");
         default: throw new Error(`can't evaluate a ${n.kind}`);
       }

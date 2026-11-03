@@ -1056,8 +1056,8 @@
     },
     "3b4b8243": {
       "id": "3b4b8243",
-      "kind": "solve",
-      "fn": "312088c5",
+      "kind": "call",
+      "fn": "3b4b8243.fn",
       "given": {
         "out": "f54c5e57"
       },
@@ -1160,8 +1160,8 @@
     },
     "f3e55cbc": {
       "id": "f3e55cbc",
-      "kind": "solve",
-      "fn": "897d2a81",
+      "kind": "call",
+      "fn": "f3e55cbc.fn",
       "given": {
         "out": "8dafe309"
       },
@@ -2896,6 +2896,16 @@
         "e14d37f1"
       ],
       "body": "a9536f88"
+    },
+    "3b4b8243.fn": {
+      "id": "3b4b8243.fn",
+      "kind": "ref",
+      "target": "312088c5"
+    },
+    "f3e55cbc.fn": {
+      "id": "f3e55cbc.fn",
+      "kind": "ref",
+      "target": "897d2a81"
     }
   },
   "defs": [

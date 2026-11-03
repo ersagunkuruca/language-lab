@@ -221,6 +221,26 @@ C63h, done: `lab native` gives a Map with Int or Text keys C's table
 (library-reps.ts `cTables`). On routes with 20,000 towns and 60,000 roads
 the program takes 0.37 s, against 0.99 s with the trees, the same output.
 
+C63i, done: a Set of Ints or Texts is C's table too, its items the keys,
+each holding true. Routes' sets keep their trees (the frontier reads its
+smallest), so routes is unchanged; the fuzz test runs C's sets on 13 of
+seeds 1 to 40.
+
+C63k, done (before C63j, being smaller): keys and items in C may be
+tuples and records of Ints and Texts too, as on JavaScript, hashed,
+compared and ordered part by part (c.ts `tableC` `leaves`). Routes'
+frontier still keeps its tree, so routes is unchanged.
+
+C63j, done: WebAssembly has the tables too (compiler/src/wasm-table.ts),
+Map and Set, every key C has, written for each table's types as C's are.
+With no counts to tell a table has one holder, every change makes a new
+newest version and the old one becomes the change back (Baker's
+rerooting, as JavaScript's). 200,000 puts and lookups over 50,000 Int
+keys: 400 ms on trees, 87 ms on the table. Machine's WebAssembly takes
+them (its time is in its lists, so about the same). A key nothing fixes
+(an empty map nothing is put in) is held as a Float64 on both, as its
+entries' keys are.
+
 ## M5, measured again
 
 GAPS.md M5 (leaving the depth count out of the tree jobs) was measured

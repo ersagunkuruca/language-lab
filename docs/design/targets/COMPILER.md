@@ -792,11 +792,14 @@ have.
 ## Files
 
 ```
-compiler/src/compile.ts    the code generator: conventions, specialization, loops for Choice
+compiler/src/compile.ts    the code generator: conventions, specialization, loops for Choice (to be retired for a printer of the core IR, C137)
 compiler/src/relation.ts   a solve plan, written out as code
 compiler/src/runtime.js    what generated code links against (handlers, fuel, solver and relate.ts fallbacks, derivative)
-compiler/src/scalar.ts     the scalar profile: check it, refuse with a reason, lower to a small tree
-compiler/src/wasm.ts       that tree as a WebAssembly module (binary and text), tail calls as return_call
+compiler/src/scalar.ts     the core IR (CORE-IR.md): check, refuse with a reason, lower to it
+compiler/src/wasm.ts       the core IR as a WebAssembly module (binary and text), tail calls as return_call
+compiler/src/c.ts          the core IR as C (NATIVE.md)
+compiler/src/wgsl.ts       the core IR's scalar profile as a WGSL shader
+compiler/src/core-js.ts    the core IR as JavaScript (C137c), to replace compile.ts; run by the fuzz test
 compiler/src/fixtures.ts   small programs for the tests and the benchmark
 compiler/src/program.ts    load, check and compile an example
 compiler/build.ts          writes compiler/out/*.js

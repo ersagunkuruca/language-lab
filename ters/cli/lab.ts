@@ -110,7 +110,7 @@ function load(path: string): Program {
 // the choices). Library types (std's Map) are chosen for too, unless the
 // table has a row for them (library-reps.ts, C47). The rewrite is checked
 // again, like any program.
-function represented(p: Program, main: Id, hostMaps: boolean, cTables = false): Program {
+function represented(p: Program, main: Id, hostMaps: boolean, tables = false): Program {
   // Every definition the program has, so the ones main shares with others
   // change together; types stay as they are for its own representations.
   // The library's are chosen over the types too, so a field typed Map
@@ -119,7 +119,7 @@ function represented(p: Program, main: Id, hostMaps: boolean, cTables = false): 
   // it is read, not rewritten or run, so the represented program leaves it out.
   const reps = new Set(p.reps.map((r) => r.def));
   const defs = p.own.filter((d) => { const b = (p.code.nodes[d] as { body?: Id | null }).body; return (!b || p.code.nodes[b]?.kind !== "typedef") && !reps.has(d); });
-  const lib = withLibraryRepresentations(p.code, p.info, p.names, main, p.own, p.reps, { hostMaps, cTables });
+  const lib = withLibraryRepresentations(p.code, p.info, p.names, main, p.own, p.reps, { hostMaps, tables });
   let code = lib.code;
   const names = lib.names, chosen = [...lib.chosen];
   for (const of of new Set(p.reps.map((r) => r.of))) {

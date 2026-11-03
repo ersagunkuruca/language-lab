@@ -16,7 +16,14 @@ export type Node =
   | { id: Id; kind: "binder"; unit?: Unit }
   // A reference points at a binder, a def or a builtin by id. Never by name.
   | { id: Id; kind: "ref"; target: Id }
-  | { id: Id; kind: "call"; fn: Id; args: Id[] }
+  // A call (L130d): `fn` is any expression, a def or field by a ref to it.
+  // With `args` it gives every input by position. With `given` it is a use
+  // of a relation in one direction (src/lang/solve.ts): `given` ports get
+  // their values from expressions, `binds` ports are solved for and bound
+  // to binders in scope in `body`, Choice when not unique. Read the two
+  // through isCall/Call and isUse/Use.
+  | { id: Id; kind: "call"; fn: Id; args: Id[]; given?: undefined; binds?: undefined; body?: undefined }
+  | { id: Id; kind: "call"; fn: Id; args?: undefined; given: Record<string, Id>; binds: Record<string, Id>; body: Id }
   // `results`: binders naming the function's result ports, when it gives
   // several (PORTS-2026-11-01.md, L128b): its body gives a tuple of that
   // many, and each binder names one part. Names only: nothing refers to
@@ -98,37 +105,44 @@ export type Node =
   // An arm names the case it handles (`variant`), or, in a match on plain
   // values (L164c), the value: `value` is its own literal child, and
   // `variant` is the same id, with nothing bound.
-  | { id: Id; kind: "arm"; variant: Id; value?: Id; binds: Id[]; results: (Id | null)[]; body: Id }
-  // A relation used in one direction inside an expression (src/lang/solve.ts):
-  // `given` ports get their values from expressions, `binds` ports are solved
-  // for and bound to binders in scope in `body`. Choice when not unique.
-  | { id: Id; kind: "solve"; fn: Id; given: Record<string, Id>; binds: Record<string, Id>; body: Id };
+  | { id: Id; kind: "arm"; variant: Id; value?: Id; binds: Id[]; results: (Id | null)[]; body: Id };
 
 export type Kind = Node["kind"];
 type DistOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 export type NodeData = DistOmit<Node, "id">;
 export type NodeOf<K extends Kind> = Extract<Node, { kind: K }>;
 
-// A use of a relation in one direction (L130a): some ports given by name,
-// the rest bound for its body. Read it through these, not through the
-// `solve` kind, so call and solve can become one kind (PORTS-2026-11-01.md
-// "The merge, step by step") without touching each reader again.
-export type Use = NodeOf<"solve">;
-export const isUse = (n: Node | undefined | null): n is Use => n?.kind === "solve";
+// A use of a relation in one direction: a call with some ports given by
+// name, the rest bound for its body (PORTS-2026-11-01.md "The merge, step
+// by step", L130).
+export type Use = Extract<NodeOf<"call">, { given: Record<string, Id> }>;
+export const isUse = (n: Node | undefined | null): n is Use => n?.kind === "call" && n.given !== undefined;
 export const useOf = (n: Node | undefined | null): Use | null => (isUse(n) ? n : null);
-// A call that gives every input by position: read it through these, not
-// through the `call` kind, which a use joins when call and solve become
-// one kind (L130d).
-export type Call = NodeOf<"call">;
-export const isCall = (n: Node | undefined | null): n is Call => n?.kind === "call";
-// The relation a use runs: a definition, a field or a builtin. Ask this,
-// not the use's `fn`, which becomes an expression when call and solve are
-// one kind (L130d).
-export const useTarget = (_nodes: Record<Id, Node>, u: Use): Id => u.fn;
-// A new use of `target`: build it with this, which adds any node the use
-// needs besides itself through `add` (after L130d, the ref to `target`).
-export const useNode = (_add: (n: NodeData) => Id, target: Id, given: Record<string, Id>, binds: Record<string, Id>, body: Id): Omit<Use, "id"> =>
-  ({ kind: "solve", fn: target, given, binds, body });
+// A call that gives every input by position.
+export type Call = Extract<NodeOf<"call">, { args: Id[] }>;
+export const isCall = (n: Node | undefined | null): n is Call => n?.kind === "call" && n.given === undefined;
+// The relation a use runs: a definition, a field or a builtin, which its
+// `fn` refers to.
+export const useTarget = (nodes: Record<Id, Node>, u: Use): Id => {
+  const f = nodes[u.fn];
+  return f?.kind === "ref" ? f.target : u.fn;
+};
+// A new use of `target`: adds the ref to it through `add`.
+export const useNode = (add: (n: NodeData) => Id, target: Id, given: Record<string, Id>, binds: Record<string, Id>, body: Id): Omit<Use, "id"> =>
+  ({ kind: "call", fn: add({ kind: "ref", target }), given, binds, body });
+// A saved program's nodes as today's (L130d): a use was its own kind,
+// `solve`, naming its relation directly; it is a call whose `fn` is a ref.
+// The ref's id comes from the use's, so loading the same file twice gives
+// the same nodes.
+export function upgradeUses(nodes: Record<Id, unknown>): void {
+  for (const [id, n] of Object.entries(nodes)) {
+    const o = n as { kind?: string; fn?: Id };
+    if (o?.kind !== "solve" || typeof o.fn !== "string") continue;
+    const ref = `${id}.fn`;
+    nodes[ref] = { id: ref, kind: "ref", target: o.fn };
+    nodes[id] = { ...o, kind: "call", fn: ref };
+  }
+}
 
 // What gets stored on disk as code.json. `defs` is the list of top-level
 // definitions; there are no modules, imports or files, just reachable defs.
@@ -173,7 +187,7 @@ export function mapIds(n: Node, f: (id: Id) => Id): Node {
     case "lit": return n.of ? { ...n, id: f(n.id), of: f(n.of) } : { ...n, id: f(n.id) };
     case "binder": case "builtin": case "hole": return { ...n, id: f(n.id) };
     case "ref": return { ...n, id: f(n.id), target: f(n.target) };
-    case "call": return { ...n, id: f(n.id), fn: f(n.fn), args: n.args.map(f) };
+    case "call": return n.given ? { ...n, id: f(n.id), fn: f(n.fn), given: rec(n.given), binds: rec(n.binds), body: f(n.body) } : { ...n, id: f(n.id), fn: f(n.fn), args: n.args.map(f) };
     case "lambda": return { ...n, id: f(n.id), params: n.params.map(f), body: f(n.body), ...(n.results ? { results: n.results.map(f) } : {}) };
     case "def": return { ...n, id: f(n.id), body: n.body === null ? null : f(n.body), ...(n.results ? { results: n.results.map(f) } : {}), ...(n.direction ? { direction: f(n.direction) } : {}) };
     case "typedef": return { ...n, id: f(n.id), params: n.params.map(f), variants: n.variants.map(f), ...(n.row ? { row: n.row.map(f) } : {}) };
@@ -184,7 +198,6 @@ export function mapIds(n: Node, f: (id: Id) => Id): Node {
     case "match": return { ...n, id: f(n.id), scrutinee: f(n.scrutinee), arms: n.arms.map(f), otherwise: n.otherwise === null ? null : f(n.otherwise) };
     case "fold": return { ...n, id: f(n.id), scrutinee: f(n.scrutinee), arms: n.arms.map(f) };
     case "arm": return { ...n, id: f(n.id), variant: f(n.variant), ...(n.value ? { value: f(n.value) } : {}), binds: n.binds.map(f), results: n.results.map((r) => (r === null ? null : f(r))), body: f(n.body) };
-    case "solve": return { ...n, id: f(n.id), fn: f(n.fn), given: rec(n.given), binds: rec(n.binds), body: f(n.body) };
   }
 }
 
@@ -197,7 +210,7 @@ export function get<K extends Kind>(code: Code, id: Id, kind?: K): NodeOf<K> {
 
 export function children(n: Node): Id[] {
   switch (n.kind) {
-    case "call": return [n.fn, ...n.args];
+    case "call": return n.given ? [n.fn, ...Object.values(n.given), ...Object.values(n.binds), n.body] : [n.fn, ...n.args];
     case "lambda": return [...n.params, n.body, ...(n.results ?? [])];
     case "def": return n.body ? [n.body] : [];
     case "typedef": return [...n.params, ...n.variants];
@@ -208,7 +221,6 @@ export function children(n: Node): Id[] {
     case "match": return [n.scrutinee, ...n.arms, ...(n.otherwise ? [n.otherwise] : [])];
     case "fold": return [n.scrutinee, ...n.arms];
     case "arm": return [...(n.value ? [n.value] : []), ...n.binds, ...n.results.filter((r): r is Id => r !== null), n.body];
-    case "solve": return [...Object.values(n.given), ...Object.values(n.binds), n.body];
     default: return [];
   }
 }
@@ -232,7 +244,7 @@ export function dependencies(code: Code, root: Id): Id[] {
   const visit = (id: Id) => {
     for (const n of subtree(code, id)) {
       const node = code.nodes[n];
-      const target = node.kind === "ref" ? node.target : isUse(node) ? node.fn : node.kind === "tref" ? node.target : node.kind === "arm" ? node.variant : null;
+      const target = node.kind === "ref" ? node.target : node.kind === "tref" ? node.target : node.kind === "arm" ? node.variant : null;
       for (let t of [target, ...(node.kind === "tfun" ? node.effects ?? [] : []), ...(node.kind === "typedef" ? node.row ?? [] : [])]) {
         if (t && owner.has(t)) t = owner.get(t)!;
         if (!t || seen.has(t)) continue;
@@ -285,7 +297,10 @@ export function parentOf(code: Code, id: Id): { parent: Id; slot: string; index?
     else if ((n.kind === "match" || n.kind === "fold") && n.scrutinee === id) return { parent: n.id, slot: "scrutinee" };
     else if (n.kind === "match" && n.otherwise === id) return { parent: n.id, slot: "otherwise" };
     else if ((n.kind === "arm" || isUse(n)) && n.body === id) return { parent: n.id, slot: "body" };
-    else if (isUse(n)) { const key = Object.keys(n.given).find((k) => n.given[k] === id); if (key !== undefined) return { parent: n.id, slot: "given", key }; }
+    else if (isUse(n)) {
+      if (n.fn === id) return { parent: n.id, slot: "fn" };
+      const key = Object.keys(n.given).find((k) => n.given[k] === id); if (key !== undefined) return { parent: n.id, slot: "given", key };
+    }
     else if (n.kind === "def" && n.body === id) return { parent: n.id, slot: "body" };
   }
   return null;
@@ -306,7 +321,7 @@ export function parentAt(code: Code, id: Id): Parent | null {
       if (isCall(n)) { put(n.fn, { parent: n.id, slot: "fn" }); n.args.forEach((a, i) => put(a, { parent: n.id, slot: "args", index: i })); }
       else if (n.kind === "lambda" || n.kind === "arm" || n.kind === "def") put(n.body, { parent: n.id, slot: "body" });
       else if (n.kind === "match" || n.kind === "fold") { put(n.scrutinee, { parent: n.id, slot: "scrutinee" }); if (n.kind === "match") put(n.otherwise, { parent: n.id, slot: "otherwise" }); }
-      else if (isUse(n)) { put(n.body, { parent: n.id, slot: "body" }); for (const key of Object.keys(n.given)) put(n.given[key], { parent: n.id, slot: "given", key }); }
+      else if (isUse(n)) { put(n.fn, { parent: n.id, slot: "fn" }); put(n.body, { parent: n.id, slot: "body" }); for (const key of Object.keys(n.given)) put(n.given[key], { parent: n.id, slot: "given", key }); }
     }
     parentIndex.set(code, (m = at));
   }

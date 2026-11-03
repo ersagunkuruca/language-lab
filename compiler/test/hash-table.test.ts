@@ -26,6 +26,7 @@ import { $setPrint } from "../src/runtime.js";
 import { execFileSync } from "node:child_process";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitC } from "../src/c.ts";
+import { emitWasm, runMain as runWasm } from "../src/wasm.ts";
 import { compile as cc, skip } from "./c-harness.ts";
 
 const L = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY.names[d] === name)!;
@@ -41,7 +42,10 @@ function program(n: number, opts: { floats?: boolean; old?: boolean; remove?: bo
   // With `remainders`, a key is i's remainder by 151 (C has no shifted
   // down yet).
   // With `pairs`, a key is (i ÷ 8, i ÷ 32 shown): a pair of an Int and a Text (C63f).
-  const pairKey = (i: Id) => k.call(Spot ? Spot.v.spot : PAIR_V, opts.record === "floats" ? k.call(INT_OPS.toNumber, k.call(INT_OPS.shiftDown, i, k.int(3))) : k.call(INT_OPS.shiftDown, i, k.int(3)), k.call(SHOW_ANY, k.call(INT_OPS.shiftDown, i, k.int(5))));
+  // With `remainders`, (i's remainder by 37, i's by 11 shown).
+  const rem = (i: Id, m: number) => k.call(S.first, k.thunk(() => k.call(INT_OPS.remainder, i, k.int(m))), k.thunk(() => k.int(0)));
+  const third = (i: Id) => (opts.remainders ? rem(i, 37) : k.call(INT_OPS.shiftDown, i, k.int(3)));
+  const pairKey = (i: Id) => k.call(Spot ? Spot.v.spot : PAIR_V, opts.record === "floats" ? k.call(INT_OPS.toNumber, third(i)) : third(i), k.call(SHOW_ANY, opts.remainders ? rem(i, 11) : k.call(INT_OPS.shiftDown, i, k.int(5))));
   const key = (i: Id) => opts.pairs || opts.record ? pairKey(i) : opts.floats ? k.call(B.mul, k.call(S.mod, i, k.lit(37)), k.lit(0.5)) : opts.remainders ? k.call(S.first, k.thunk(() => k.call(INT_OPS.remainder, i, k.int(151))), k.thunk(() => k.int(0))) : k.call(INT_OPS.shiftDown, i, k.int(1));
   const counts = k.def("counts");
   k.define(counts, k.fold(opts.floats ? k.call(S.range, k.lit(n)) : k.call(INT_OPS.range, k.int(n)), [
@@ -64,10 +68,10 @@ function program(n: number, opts: { floats?: boolean; old?: boolean; remove?: bo
   return { code: base(k.code), names: baseNames(k.names), main, own: [counts, main] };
 }
 
-function chosen(p: ReturnType<typeof program>, hostMaps = true, cTables = false) {
+function chosen(p: ReturnType<typeof program>, hostMaps = true, tables = false) {
   const info = infer(p.code, p.names, undefined, checkOptions);
   assert.deepEqual(info.errors.map((e) => e.message), []);
-  return withLibraryRepresentations(p.code, info, p.names, p.main, p.own, [], { hostMaps, cTables });
+  return withLibraryRepresentations(p.code, info, p.names, p.main, p.own, [], { hostMaps, tables });
 }
 
 const printed = (code: ReturnType<typeof program>["code"], names: Record<Id, string>, main: Id, insiders: Id[] = []) => {
@@ -172,12 +176,12 @@ test("compiled JavaScript on the hash table prints what the evaluator prints", a
 
 // Set as a hash table (C63d): the same, for a set of Ints built by adding
 // in a fold, then asked about, listed and taken apart.
-function setProgram(n: number, opts: { old?: boolean } = {}) {
+function setProgram(n: number, opts: { old?: boolean; remainders?: boolean } = {}) {
   const k = new Lang(LIBRARY.code);
   const seen = k.def("seen");
   k.define(seen, k.fold(k.call(INT_OPS.range, k.int(n)), [
     { variant: NIL, names: [], body: () => k.x(L("empty set")) },
-    { variant: CONS, names: ["i", "rest"], results: [null, "added"], body: ([i], [, s]) => k.call(L("add item"), s!, k.call(INT_OPS.shiftDown, i, k.int(2))) },
+    { variant: CONS, names: ["i", "rest"], results: [null, "added"], body: ([i], [, s]) => k.call(L("add item"), s!, opts.remainders ? k.call(S.first, k.thunk(() => k.call(INT_OPS.remainder, i, k.int(101))), k.thunk(() => k.int(0))) : k.call(INT_OPS.shiftDown, i, k.int(2))) },
   ]));
   const show = (x: Id) => k.call(S.print, k.call(SHOW_ANY, x));
   const main = k.def("main");
@@ -187,6 +191,7 @@ function setProgram(n: number, opts: { old?: boolean } = {}) {
     show(k.call(L("has item"), s, k.int(5000))),
     ...(opts.old ? [k.let("more", k.call(L("add item"), s, k.int(5000)), (more) => k.seq(show(k.call(L("has item"), more, k.int(5000))), show(k.call(L("has item"), s, k.int(5000)))))] : []),
     k.let("less", k.call(L("remove item"), s, k.int(7)), (less) => k.seq(show(k.call(L("set size"), less)), show(k.call(L("has item"), less, k.int(7))))),
+    ...(opts.remainders ? [show(k.call(L("items of"), s))] : []),
   ))));
   return { code: base(k.code), names: baseNames(k.names), main, own: [seen, main] };
 }
@@ -227,4 +232,60 @@ test("in C, a map of Int keys is C's hash table, and prints what the definition 
   assert.equal(lowered.tables.length, 1);
   const out = execFileSync(cc(emitC(lowered, { main: p.main }).c), { encoding: "utf8" });
   assert.deepEqual(out.split("\n").slice(0, -1), lines);
+});
+
+// C63i: a set of Ints in C is C's table of its items too, its old
+// version read again after an add and a remove.
+test("in C, a set of Ints is C's hash set, and prints what the definition prints, its old version too (C63i)", { skip }, () => {
+  const p = setProgram(300, { old: true, remainders: true });
+  const c = chosen(p, false, true);
+  assert.deepEqual(c.chosen, ["Set as hash table"]);
+  const { lines, info } = printed(c.code, c.names, p.main, c.insiders);
+  assert.deepEqual(lines, printed(p.code, p.names, p.main).lines);
+  const lowered = lowerScalar(c.code, info, c.names, [p.main], { data: true });
+  assert.deepEqual([...lowered.refused.values()], []);
+  assert.equal(lowered.tables.length, 1);
+  const out = execFileSync(cc(emitC(lowered, { main: p.main }).c), { encoding: "utf8" });
+  assert.deepEqual(out.split("\n").slice(0, -1), lines);
+});
+
+// C63k: keys that are pairs of an Int and a Text, or a record of them, in
+// C too, listed in compare's order part by part.
+test("in C, a map keyed by pairs or records of Ints and Texts is C's hash table, and prints what the definition prints (C63k)", { skip }, () => {
+  for (const o of [{ pairs: true }, { record: "ints" as const }]) {
+    const p = program(300, { ...o, old: true, remove: true, list: true, remainders: true });
+    const c = chosen(p, false, true);
+    assert.deepEqual(c.chosen, ["Map as hash table"]);
+    const { lines, info } = printed(c.code, c.names, p.main, c.insiders);
+    assert.deepEqual(lines, printed(p.code, p.names, p.main).lines);
+    const lowered = lowerScalar(c.code, info, c.names, [p.main], { data: true });
+    assert.deepEqual([...lowered.refused.values()], []);
+    assert.equal(lowered.tables.length, 1);
+    const out = execFileSync(cc(emitC(lowered, { main: p.main }).c), { encoding: "utf8" });
+    assert.deepEqual(out.split("\n").slice(0, -1), lines);
+  }
+});
+
+// C63j: WebAssembly's own tables (wasm-table.ts), rerooted as
+// JavaScript's: the same programs print the same, old versions too.
+test("in WebAssembly, maps and sets of Ints, and maps keyed by pairs and records, are its hash tables, and print what the definition prints, old versions too (C63j)", async () => {
+  const programs = [
+    program(300, { old: true, remove: true, list: true, remainders: true }),
+    setProgram(300, { old: true, remainders: true }),
+    program(300, { pairs: true, old: true, remove: true, list: true, remainders: true }),
+    program(300, { record: "ints", old: true, remove: true, list: true, remainders: true }),
+  ];
+  for (const p of programs) {
+    const c = chosen(p, false, true);
+    assert.equal(c.chosen.length, 1);
+    assert.match(c.chosen[0], /hash table/);
+    const { lines, info } = printed(c.code, c.names, p.main, c.insiders);
+    assert.deepEqual(lines, printed(p.code, p.names, p.main).lines);
+    const lowered = lowerScalar(c.code, info, c.names, [p.main], { data: true });
+    assert.deepEqual([...lowered.refused.values()], []);
+    assert.equal(lowered.tables.length, 1);
+    const got: string[] = [];
+    await runWasm(lowered, emitWasm(lowered), lowered.funcs.find((g) => g.def === p.main && !g.inner)!.name, [], { print: (x) => got.push(x) });
+    assert.deepEqual(got, lines);
+  }
 });

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isPublished, subtree, type Code, type Id, type Node, type NodeOf, isCall, type Call } from "../src/model.ts";
+import { isPublished, subtree, type Code, type Id, type Node, type NodeOf, isCall, type Call, type Use, isUse, useTarget } from "../src/model.ts";
 import { B } from "../src/prelude.ts";
 import type { Names } from "../src/presentation.ts";
 import { fillings, infer, type Filling } from "../src/lang/infer.ts";
@@ -447,7 +447,7 @@ test("an input added to a function that is solved somewhere is given there as a 
   const { join } = await import("node:path");
   const p = loadProgram(join(import.meta.dirname, "../examples/physics"));
   const fall = p.named("fall");
-  const solves = (code: Code) => Object.values(code.nodes).filter((n): n is NodeOf<"solve"> => n.kind === "solve" && n.fn === fall);
+  const solves = (code: Code) => Object.values(code.nodes).filter((n): n is Use => isUse(n) && useTarget(code.nodes, n) === fall);
   assert.ok(solves(p.code).length, "landing times solves fall");
   const before = infer(p.code, p.pres.names).errors.length;
   const r = Top.addParameter(p.code, p.pres.names, fall, "mass");

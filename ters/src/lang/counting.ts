@@ -18,7 +18,7 @@
 // take a counted input as one that strictly shrinks at that call.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
-import { isCall } from "../model.ts";
+import { isCall, isUse } from "../model.ts";
 import { ARITH, FALSE, INT_OPS, S, TRUE } from "./std.ts";
 import { INT } from "./types.ts";
 
@@ -34,12 +34,13 @@ const isPositiveInt = (n: Node | undefined) => n?.kind === "lit" && n.of === INT
 // Expressions and binders under a node (types and variants left out).
 function kids(n: Node): Id[] {
   switch (n.kind) {
-    case "call": return [n.fn, ...n.args];
+    case "call":
+      if (isUse(n)) return [...Object.values(n.given), n.body];
+      return [n.fn, ...n.args];
     case "lambda": return [n.body];
     case "match": return [n.scrutinee, ...n.arms, ...(n.otherwise ? [n.otherwise] : [])];
     case "fold": return [n.scrutinee, ...n.arms];
     case "arm": return [n.body];
-    case "solve": return [...Object.values(n.given), n.body];
     default: return [];
   }
 }

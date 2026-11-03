@@ -198,8 +198,8 @@
     },
     "1rj2i61jduqgpiviai9ddgq3o2": {
       "id": "1rj2i61jduqgpiviai9ddgq3o2",
-      "kind": "solve",
-      "fn": "mgcebnp7roc7m4l0tscmiltsi1",
+      "kind": "call",
+      "fn": "1rj2i61jduqgpiviai9ddgq3o2.fn",
       "given": {
         "0rk5fs3t58pfj9mn3i8a31kjsd": "e60qq6nqk737g0hgamed31rmqd",
         "1dutrs6g5io90n9fc7od483ujp": "af4eal9djd4ln8kmph000ma7k0",
@@ -254,8 +254,8 @@
     },
     "m8pkj0i9kqe2rq7nthp42v78vm": {
       "id": "m8pkj0i9kqe2rq7nthp42v78vm",
-      "kind": "solve",
-      "fn": "builtin.add",
+      "kind": "call",
+      "fn": "m8pkj0i9kqe2rq7nthp42v78vm.fn",
       "given": {
         "0": "lbhvb0oa8c0t37dpfordcv6mr2",
         "out": "7q2fsil38ij3dg0s7gnrf9c7f4"
@@ -612,8 +612,8 @@
     },
     "j0bnvct6ehqtqpgrh8vce8fl2r": {
       "id": "j0bnvct6ehqtqpgrh8vce8fl2r",
-      "kind": "solve",
-      "fn": "c5p1l9o2i5uqv9fviacg7f3oi8",
+      "kind": "call",
+      "fn": "j0bnvct6ehqtqpgrh8vce8fl2r.fn",
       "given": {
         "hs6e667etss8e73h3d2ncp8d2u": "4i1rqu7psdlrca5npoream8bsa",
         "out": "vqpl7b6nc6ghk97p1m48prl37u",
@@ -700,8 +700,8 @@
     },
     "7akqsevuopkc45ri5tv4ir8v7i": {
       "id": "7akqsevuopkc45ri5tv4ir8v7i",
-      "kind": "solve",
-      "fn": "f6ppmvr0qioeqiacol3p8cg5oc",
+      "kind": "call",
+      "fn": "7akqsevuopkc45ri5tv4ir8v7i.fn",
       "given": {
         "out": "rba4kj6tiioku5i95n11qeo599"
       },
@@ -1373,6 +1373,26 @@
       "kind": "lambda",
       "params": [],
       "body": "eo9tj2c3ot8fe3oc3mvdtdb23k"
+    },
+    "1rj2i61jduqgpiviai9ddgq3o2.fn": {
+      "id": "1rj2i61jduqgpiviai9ddgq3o2.fn",
+      "kind": "ref",
+      "target": "mgcebnp7roc7m4l0tscmiltsi1"
+    },
+    "m8pkj0i9kqe2rq7nthp42v78vm.fn": {
+      "id": "m8pkj0i9kqe2rq7nthp42v78vm.fn",
+      "kind": "ref",
+      "target": "builtin.add"
+    },
+    "j0bnvct6ehqtqpgrh8vce8fl2r.fn": {
+      "id": "j0bnvct6ehqtqpgrh8vce8fl2r.fn",
+      "kind": "ref",
+      "target": "c5p1l9o2i5uqv9fviacg7f3oi8"
+    },
+    "7akqsevuopkc45ri5tv4ir8v7i.fn": {
+      "id": "7akqsevuopkc45ri5tv4ir8v7i.fn",
+      "kind": "ref",
+      "target": "f6ppmvr0qioeqiacol3p8cg5oc"
     }
   },
   "defs": [

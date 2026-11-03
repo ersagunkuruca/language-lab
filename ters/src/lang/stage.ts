@@ -609,7 +609,7 @@ class Stager {
         if (t.kind === "binder") return this.free ? this.free(id, n.target) : stop();
         return { k: "ref", target: n.target };
       }
-      case "call": return this.apply(this.ev(n.fn, env), n.args.map((a) => this.ev(a, env)));
+      case "call": return isUse(n) ? stop() : this.apply(this.ev(n.fn, env), n.args.map((a) => this.ev(a, env)));
       case "match": {
         const s = this.ev(n.scrutinee, env);
         if (typeof s !== "object" || s.k !== "data") return stop();

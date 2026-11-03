@@ -28,6 +28,7 @@ import type { Id } from "../../ters/src/model.ts";
 import { compile } from "../src/compile.ts";
 import { isData, lowerScalar, type LType } from "../src/scalar.ts";
 import { emitWasm, fromText, instantiate, toInt } from "../src/wasm.ts";
+import { FAIL, Unsupported, loadCoreJs } from "../src/core-js.ts";
 import { build, skip } from "./c-harness.ts";
 import { program } from "./fuzz-programs.ts";
 import { withLibraryRepresentations } from "../../ters/src/lang/library-reps.ts";
@@ -62,6 +63,8 @@ test(`generated programs: the evaluator, compiled JavaScript, WebAssembly and C 
 
   // Every difference, by engine, so one run shows them all.
   const differ: string[] = [];
+  // What JavaScript from the core IR doesn't run yet (C137c).
+  const unsupported = new Set<string>(); let compared = 0;
   // An overflow nobody uses may not be reported (FLOAT-VALUES-2026-11-01
   // §2): where the evaluator stops, a compiled engine that checked later
   // may give an answer. The other way round is a difference.
@@ -72,8 +75,7 @@ test(`generated programs: the evaluator, compiled JavaScript, WebAssembly and C 
   // `entry`: call e(x, n, j), whose list the program holds (C120), so a
   // list stored another way never comes in from outside.
   type Built = { code: typeof p.code; info: typeof p.info; names: typeof p.names };
-  // `wasm` false: C alone (its own tables, C63h).
-  const engines = async (q: Built, tag: string, js = true, native = true, entry = false, wasm = true) => {
+  const engines = async (q: Built, tag: string, js = true, native = true, entry = false) => {
     const roots = entry ? p.entries : p.defs.map((d) => d.def), name = (i: number) => `${entry ? "e" : "g"}${i}`;
     if (js) {
     const path = join(mkdtempSync(join(tmpdir(), "fuzz-")), "out.mjs");
@@ -86,7 +88,7 @@ test(`generated programs: the evaluator, compiled JavaScript, WebAssembly and C 
     const lowered = lowerScalar(q.code, q.info, q.names, roots, { data: true });
     assert.deepEqual([...lowered.refused.entries()].map(([d, why]) => `${q.names[d]}: ${why}`), [], `seed ${SEED}${tag}`);
     const fns = roots.map((def) => lowered.funcs.findIndex((g) => g.def === def && !g.inner));
-    if (wasm) {
+    {
     const w = await instantiate(emitWasm(lowered)) as unknown as Record<string, (...a: unknown[]) => unknown>;
     // A List Int made by the module's own makers, from the end.
     const list = (xs: bigint[], t: LType): unknown => {
@@ -100,6 +102,25 @@ test(`generated programs: the evaluator, compiled JavaScript, WebAssembly and C 
         check(stopped(() => fromText(w, w[f.name](x, toInt(w, n), entry ? toInt(w, BigInt(j)) : list(xs, f.params[2])) as never)), i, j, `WebAssembly${tag}`);
       });
     });
+    }
+
+    // JavaScript printed from the core IR (C137c). What it can't run yet
+    // throws Unsupported, and isn't compared.
+    {
+    const cj = loadCoreJs(lowered);
+    const list = (xs: bigint[], t: LType): unknown => {
+      if (!isData(t)) throw new Error("not a list");
+      const c = (v: Id) => t.cases.findIndex((x) => x.variant === v);
+      return xs.reduceRight<unknown>((l, x) => [c(CONS), norm(x), l], [c(NIL)]);
+    };
+    fns.forEach((fi, i) => INPUTS.forEach(([x, n, xs], j) => {
+      let got: unknown;
+      try { got = cj[fi](x, norm(n), entry ? norm(BigInt(j)) : list(xs, lowered.funcs[fi].params[2])); } catch (e) {
+        if (e instanceof Unsupported) { unsupported.add(e.message); return; }
+        got = e === FAIL ? "no answer" : "stop";
+      }
+      compared++; check(got, i, j, `JavaScript from the core IR${tag}`);
+    }));
     }
 
     if (!skip) {
@@ -129,14 +150,15 @@ test(`generated programs: the evaluator, compiled JavaScript, WebAssembly and C 
     }
     await engines({ code: c.code, info, names: c.names }, tag, hostMaps, !hostMaps, true);
   }
-  // C's own Map table, for Int and Text keys (C63h).
-  if (!skip) {
-    const c = withLibraryRepresentations(p.code, p.info, p.names, p.main, p.own, [], { cTables: true });
+  // C's and WebAssembly's own Map and Set tables (C63h to C63k).
+  {
+    const c = withLibraryRepresentations(p.code, p.info, p.names, p.main, p.own, [], { tables: true });
     if (c.chosen.some((x) => x.includes("hash table"))) {
       const info = infer(c.code, c.names, undefined, { ...checkOptions, insiders: [...checkOptions.insiders!, ...c.insiders] });
       assert.deepEqual(info.errors.map((e) => e.message), [], `seed ${SEED}, ${c.chosen.join(", ")}`);
-      await engines({ code: c.code, info, names: c.names }, ` (${c.chosen.join(", ")})`, false, true, true, false);
+      await engines({ code: c.code, info, names: c.names }, ` (${c.chosen.join(", ")})`, false, true, true);
     }
   }
+  console.log(`seed ${SEED}: JavaScript from the core IR compared ${compared}${unsupported.size ? `, skipped ${[...unsupported].join(", ")}` : ""}`);
   assert.deepEqual(differ, []);
 });

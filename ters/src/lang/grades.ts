@@ -34,7 +34,7 @@
 // same, by the language's own abstract evaluation over a finite lattice
 // (Cousot and Cousot, POPL 1977). CREDITS.md.
 
-import { children as childIds, dependencies, subtree, type Code, type Id, type Node, type NodeOf, isCall, type Call } from "../model.ts";
+import { children as childIds, dependencies, subtree, type Code, type Id, type Node, type NodeOf, isCall, type Call, isUse } from "../model.ts";
 import type { Info } from "./infer.ts";
 import { LIBRARY } from "./library.ts";
 import { makeRunner, type Value } from "./run.ts";
@@ -303,7 +303,7 @@ function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: H
         }
         return TOP;
       }
-      case "call": return call(n, env, depth);
+      case "call": return isUse(n) ? TOP : call(n, env, depth);
       case "match": {
         // A record taken apart: its parts are numbers, zero where masked off.
         const s = ev(n.scrutinee, env, depth + 1);

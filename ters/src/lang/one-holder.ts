@@ -34,7 +34,7 @@
 // Moura, 2019) decide ownership from the program.
 
 import type { Code, Id, NodeOf } from "../model.ts";
-import { subtree, isCall, type Call } from "../model.ts";
+import { subtree, isCall, type Call, isUse } from "../model.ts";
 import type { Info } from "./infer.ts";
 import { COMPARE, S, SHOW_ANY } from "./std.ts";
 import { CHOICE, type Type } from "./types.ts";
@@ -161,7 +161,14 @@ export function oneHolder(code: Code, info: Info, entry: Id, types: Set<Id>, job
           if (nodes[n.target]?.kind === "def" && (modes.get(n.target) ?? []).some((m) => m.share) && counts(id)) report(`${nm(n.target)} shares a parameter and is passed as a value`, "");
           return;
         case "lambda": closure(n, consume, st); return;
-        case "call": return call(n, consume, st);
+        case "call":
+          if (isUse(n)) {
+            for (const g of Object.values(n.given)) ev(g, true, st);
+            for (const b of Object.values(n.binds)) if (tracked(b)) paths.set(b, b);
+            ev(n.body, consume, st);
+            return;
+          }
+          return call(n, consume, st);
         case "match": case "fold": {
           const base = place(n.scrutinee);
           if (base !== null) use(st, base, false, n.scrutinee); else ev(n.scrutinee, true, st);
@@ -180,11 +187,6 @@ export function oneHolder(code: Code, info: Info, entry: Id, types: Set<Id>, job
           }
           return;
         }
-        case "solve":
-          for (const g of Object.values(n.given)) ev(g, true, st);
-          for (const b of Object.values(n.binds)) if (tracked(b)) paths.set(b, b);
-          ev(n.body, consume, st);
-          return;
         default:
           return;
       }

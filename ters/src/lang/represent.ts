@@ -14,7 +14,7 @@
 // meaning: tests check every implementation against the definition it
 // replaces, through `meaning`.
 
-import { children, dependencies, freshId, subtree, type Code, type Id, type Node, type NodeData, type NodeOf, isCall, type Call } from "../model.ts";
+import { children, dependencies, freshId, subtree, type Code, type Id, type Node, type NodeData, type NodeOf, isCall, type Call, isUse } from "../model.ts";
 import type { Info } from "./infer.ts";
 import { CONS, COST, INT_OPS, JOBS, LIST, REPRESENTATION_V, S, TEXT_OPS } from "./std.ts";
 import { NUMBER } from "./types.ts";
@@ -387,16 +387,19 @@ export function represent(code: Code, entries: Id[], rep: Representation, keep: 
     const kid = (x: Id) => copy(x, renames);
     switch (n.kind) {
       case "ref": c.target = renames.get(n.target) ?? n.target; break;
-      case "call": c.fn = kid(n.fn); c.args = n.args.map(kid); break;
+      case "call":
+        if (isUse(n)) {
+          c.fn = kid(n.fn);
+          c.given = Object.fromEntries(Object.entries(n.given).map(([k, v]) => [k, kid(v)]));
+          c.binds = Object.fromEntries(Object.entries(n.binds).map(([k, v]) => [k, kid(v)]));
+          c.body = kid(n.body);
+          break;
+        }
+        c.fn = kid(n.fn); c.args = n.args.map(kid); break;
       case "lambda": c.params = n.params.map(kid); c.body = kid(n.body); if (n.results) c.results = n.results.map(kid); break;
       case "match": c.scrutinee = kid(n.scrutinee); c.arms = n.arms.map(kid); c.otherwise = n.otherwise && kid(n.otherwise); break;
       case "fold": c.scrutinee = kid(n.scrutinee); c.arms = n.arms.map(kid); break;
       case "arm": c.binds = n.binds.map(kid); c.results = n.results.map((r) => r && kid(r)); c.body = kid(n.body); break;
-      case "solve":
-        c.given = Object.fromEntries(Object.entries(n.given).map(([k, v]) => [k, kid(v)]));
-        c.binds = Object.fromEntries(Object.entries(n.binds).map(([k, v]) => [k, kid(v)]));
-        c.body = kid(n.body);
-        break;
     }
     nodes[fresh] = c as unknown as Node;
     return fresh;
@@ -472,7 +475,9 @@ export function represent(code: Code, entries: Id[], rep: Representation, keep: 
 
 function childrenOf(n: Node): Id[] {
   switch (n.kind) {
-    case "call": return [n.fn, ...n.args];
+    case "call":
+      if (isUse(n)) return [...Object.values(n.given), n.body];
+      return [n.fn, ...n.args];
     case "lambda": return [n.body];
     case "def": return n.body ? [n.body] : [];
     case "typedef": return n.variants;
@@ -482,7 +487,6 @@ function childrenOf(n: Node): Id[] {
     case "match": return [n.scrutinee, ...n.arms, ...(n.otherwise ? [n.otherwise] : [])];
     case "fold": return [n.scrutinee, ...n.arms];
     case "arm": return [n.body];
-    case "solve": return [...Object.values(n.given), n.body];
     default: return [];
   }
 }

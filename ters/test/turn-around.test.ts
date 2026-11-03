@@ -8,7 +8,7 @@ import { makeRunner } from "../src/lang/run.ts";
 import { ARITH } from "../src/lang/std.ts";
 import { NUMBER } from "../src/lang/types.ts";
 import type { NodeOf, Call } from "../src/model.ts";
-import { isCall } from "../src/model.ts";
+import { isCall, useOf } from "../src/model.ts";
 import { infer, turnAround, turnBack, turnable } from "../../editor/typed.ts";
 
 const first = (v: unknown) => { if (v && typeof v === "object" && Symbol.iterator in v) for (const x of v as Iterable<unknown>) return x; return v; };
@@ -28,8 +28,8 @@ test("a call turned around works out its input from the result, and turns back",
   const r = turnAround(code, names, info, call, 0);
   assert.ok(r.ok, !r.ok ? r.reason : "");
   if (!r.ok) return;
-  const s = r.code.nodes[call] as NodeOf<"solve">;
-  assert.equal(s.kind, "solve");
+  const s = useOf(r.code.nodes[call])!;
+  assert.ok(s, "a use");
   assert.deepEqual(Object.keys(s.binds), [(code.nodes[(code.nodes[f] as NodeOf<"def">).body!] as NodeOf<"lambda">).params[0]]);
   const after = infer(r.code, r.names);
   assert.equal(first(makeRunner(r.code, after, { print: () => {} }).value(main)), 1.5);

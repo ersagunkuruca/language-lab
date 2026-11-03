@@ -13,7 +13,7 @@
 // neither is anything that calls one.
 
 import type { Code, Id, NodeOf } from "../model.ts";
-import { isCall } from "../model.ts";
+import { isCall, isUse } from "../model.ts";
 import type { Info } from "./infer.ts";
 import { DEF_VALUE, makeRunner, type Data, type Runtime, type Value } from "./run.ts";
 
@@ -68,6 +68,7 @@ function traceOn(written: Code, info: Info, def: Id, args: Value[], entered: Run
     switch (n.kind) {
       case "hole": throw Object.assign(new Error("reached a hole"), { id });
       case "call": {
+        if (isUse(n)) { v = first(r.ev(id, env), id); break; }
         const head = code.nodes[n.fn];
         const vals = n.args.map((a) => walk(a, env));
         // A call the runner runs as something else (+ on records resolved to

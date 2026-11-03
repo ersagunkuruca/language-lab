@@ -33,7 +33,7 @@
 // (a tunnel). NODE-EDITOR.md says why.
 
 import type { Code, Id, NodeOf, Use } from "../ters/src/model.ts";
-import { isUse, useTarget } from "../ters/src/model.ts";
+import { isCall, isUse, useTarget, type Call } from "../ters/src/model.ts";
 import type { Presentation } from "../ters/src/presentation.ts";
 import type { Info } from "../ters/src/lang/infer.ts";
 import { ASSOCIATIVE, chainOperands, CONS, NIL, S, SIGS, TRUE, FALSE, TUPLE_MAX, tupleVariant } from "../ters/src/lang/std.ts";
@@ -417,7 +417,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     usesOf.set(dot, [...(usesOf.get(dot) ?? []), ref]);
   };
 
-  const effectsOf = (call: NodeOf<"call">): { does: string[]; handles?: string; why?: string } => {
+  const effectsOf = (call: Call): { does: string[]; handles?: string; why?: string } => {
     // Effects this call itself brings in: from the callee's own signature,
     // not from the row it was unified with here.
     const f = node(call.fn);
@@ -526,10 +526,10 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   // is, an input per item, as the text shows it.
   const listItems = (id: Id): Id[] | null => {
     const out: Id[] = [];
-    for (let n = node(id); ; n = node((n as NodeOf<"call">).args[1])) {
+    for (let n = node(id); ; n = node((n as Call).args[1])) {
       if (n.kind === "ref" && n.target === NIL) return out;
-      const f = n.kind === "call" ? node(n.fn) : null;
-      if (f?.kind !== "ref" || f.target !== CONS || n.kind !== "call" || dotOf(n.args[1])) return null;
+      const f = isCall(n) ? node(n.fn) : null;
+      if (f?.kind !== "ref" || f.target !== CONS || !isCall(n) || dotOf(n.args[1])) return null;
       out.push(n.args[0]);
     }
   };
@@ -565,7 +565,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   // it named that result (L128b): first(r) reads .drift. What it's read
   // from is followed through lets and definitions to that function.
   const partName = (field: Id, from: Id): string | null => { const port = partPort(code, field, from); return port && names[port] ? names[port] : null; };
-  const call = (id: Id, n: NodeOf<"call">): Sub => {
+  const call = (id: Id, n: Call): Sub => {
     const f = node(n.fn);
     const nota = f.kind === "ref" ? pres.style.notation[f.target] : undefined;
     const list = listItems(id);
@@ -682,8 +682,8 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   // The parts of a tuple(…) body, when it has as many as the results.
   const tupleParts = (body: Id, n: number): Id[] | null => {
     if (n < 2 || n > TUPLE_MAX) return null;
-    const b = node(body), f = b?.kind === "call" ? node(b.fn) : undefined;
-    return b?.kind === "call" && f?.kind === "ref" && f.target === tupleVariant(n) && b.args.length === n ? b.args : null;
+    const b = node(body), f = isCall(b) ? node(b.fn) : undefined;
+    return isCall(b) && f?.kind === "ref" && f.target === tupleVariant(n) && b.args.length === n ? b.args : null;
   };
 
   // A relation used in one direction: the given ports are inputs on the
@@ -754,13 +754,13 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   // A let: each value flows into its dot; wires from the dot run to the
   // uses. A dot nothing reads (`_ = print(…)`) is a step done for its
   // effect, before what follows. Shown named, the dot is a let node.
-  const letRegion = (n: NodeOf<"call">): Sub => {
+  const letRegion = (n: Call): Sub => {
     // A run of lets is one column of steps, then what they lead to.
     const steps: [Id, Id][] = [];
     let rest: Id = n.id;
-    for (let c = node(rest); c.kind === "call" && node(c.fn).kind === "lambda"; c = node(rest)) {
+    for (let c = node(rest); isCall(c) && node(c.fn).kind === "lambda"; c = node(rest)) {
       const lam = node(c.fn) as NodeOf<"lambda">;
-      lam.params.forEach((p, i) => steps.push([p, (c as NodeOf<"call">).args[i]]));
+      lam.params.forEach((p, i) => steps.push([p, (c as Call).args[i]]));
       rest = lam.body;
     }
     const at = new Map<Id, Pos>();

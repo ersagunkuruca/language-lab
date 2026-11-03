@@ -36,7 +36,8 @@
 import { Aborted, type Runtime, type World } from "../../ters/src/lang/run.ts";
 import { MATH_DATA, MATH_DATA_AT } from "./wasm-math.ts";
 import { assemble, POW5, runtime, textBytes, WASI_IMPORTS, type RtFn, type VT } from "./wasm-rt.ts";
-import { fails, isArray, isTable, isData, isFn, kids, mapKids, OPS, STOPS, type AType, type DType, type FType, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc, type SType, type TType } from "./scalar.ts";
+import { TABLE_RT, tableRt } from "./wasm-table.ts";
+import { fails, isArray, isTable, isData, isFn, kids, mapKids, OPS, STOPS, type AType, type DType, type FType, type LType, type CoreIR, type Op, type RType, type SExpr, type SFunc, type SType, type TType } from "./scalar.ts";
 
 // int32 (an Int in 32 bits) is the shaders' only (C66c); WebAssembly has Int.
 const VAL: Record<SType | "i64", number> = { f64: 0x7c, i32: 0x7f, int32: 0x7f, i64: 0x7e };
@@ -74,7 +75,7 @@ export interface Module { bytes: Uint8Array; wat: string; exports: string[] }
 // `wasi`: a WASI command instead, its world written over
 // wasi_snapshot_preview1 (wasm-rt.ts) and `_start` running main as
 // runMain does, for hosts with no JavaScript (wasmtime).
-export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Module {
+export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean } = {}): Module {
   const wasi = !!opts.wasi;
   // A shader's lowering (C66c, `lowered.shader`): Int in 32 bits, and no
   // answer is the flag $none that `first` and `count` look at, as WGSL
@@ -99,12 +100,14 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
   // WASI's functions it uses (wasi_fd_write …) are imports, and the
   // TextList and TextOption makers the module's own helpers.
   const rtNames: string[] = [], wasiImports: string[] = [];
+  // A table's functions are written for its types (wasm-table.ts, C63j).
+  const rt = (name: string): RtFn => (TABLE_RT.test(name) ? tableRt(name, lowered.tables) : runtime(name));
   const need = (name: string) => {
     if (rtNames.includes(name)) return;
     if (name.startsWith("wasi_")) { if (!wasiImports.includes(name)) wasiImports.push(name); return; }
     if (/^Text(List|Option)\./.test(name)) return;
     rtNames.push(name);
-    runtime(name).uses.forEach(need);
+    rt(name).uses.forEach(need);
   };
   const rtCalls = (e: SExpr): void => {
     if (e.k === "rt") need(e.fn);
@@ -132,14 +135,14 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
   // Ints (W5): an i31, a $big or a $huge; the host makes and reads them with toInt and fromInt.
   // A runtime function on magnitudes alone (text.readNumber) needs their
   // array type too.
-  const ints = !shader && rtNames.some((n) => { const f = runtime(n); const ts = [...f.params.map(([, t]) => t), f.result, ...(f.locals ?? []).map(([, t]) => t)]; return ts.includes("int") || ts.includes("mag"); })
+  const ints = !shader && rtNames.some((n) => { const f = rt(n); const ts = [...f.params.map(([, t]) => t), f.result, ...(f.locals ?? []).map(([, t]) => t)]; return ts.includes("int") || ts.includes("mag"); })
     || funcs.some((f) => [...f.params, ...f.locals, f.result].includes("int") || mentions(f.body, "int"))
     || lowered.records.some((x) => x.fields.some((y) => y.t === "int")) || lowered.data.some((d) => d.cases.some((c) => c.fields.some((y) => y.t === "int")));
   if (ints) ["int.of", "int.small", ...(wasi ? [] : ["int.limbs", "int.limb", "int.huge", "int.setLimb"])].forEach(need);
-  const texty = rtNames.some((n) => { const f = runtime(n); return [...f.params, ...f.locals, ["", f.result] as const].some(([, t]) => t === "text" || t === "list" || t === "option") || /\$bytes|\$text\./.test(f.body); }) || worldOps.length > 0 || funcs.some((f) => [...f.locals, f.result].includes("text") || mentionsText(f.body));
+  const texty = rtNames.some((n) => { const f = rt(n); return [...f.params, ...f.locals, ["", f.result] as const].some(([, t]) => t === "text" || t === "list" || t === "option") || /\$bytes|\$text\./.test(f.body); }) || worldOps.length > 0 || funcs.some((f) => [...f.locals, f.result].includes("text") || mentionsText(f.body));
   // The host makes and reads texts through these.
   if (texty) ["text.new", "text.put", "text.put4", "text.size", "text.byte"].forEach(need);
-  const rts: RtFn[] = rtNames.map(runtime);
+  const rts: RtFn[] = rtNames.map(rt);
   // Ryū's tables, for number.js: an i64 array type and a global holding them.
   const ryu = rtNames.includes("number.mulshift");
   const worldReason = worldOps.some((x) => x.aborts);
@@ -234,9 +237,26 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
     structs.push({ name: `array${a.index}`, fields: [{ name: "buf", t: "i32", ref: k + 1 }, { name: "start", t: "i32" }, { name: "n", t: "i32" }], final: true });
     arrIndex.set(a.key, k + 2);
   }
+  // A table (C63j, wasm-table.ts): each slot's state, its keys and its
+  // values, the store holding them, a version (the newest holds the store,
+  // an older one the change from the next) and the versions a reroot walks.
+  const tblIndex = new Map<number, number>();
+  const TBL: Record<string, number> = { tst: -4, tkeys: -3, tvals: -2, tstore: -1, tbl: 0, table: 0, tpath: 1 };
+  for (const t of lowered.tables) {
+    const k = structs.length, n = `table.${t.index}`;
+    structs.push({ name: `${n}.st`, fields: [], final: true, items: "i32" });
+    structs.push({ name: `${n}.keys`, fields: [], final: true, items: t.keyT });
+    structs.push({ name: `${n}.vals`, fields: [], final: true, items: t.value });
+    structs.push({ name: `${n}.store`, fields: [{ name: "st", t: "i32", ref: k }, { name: "ks", t: "i32", ref: k + 1 }, { name: "vs", t: "i32", ref: k + 2 }, { name: "n", t: "i32" }, { name: "used", t: "i32" }], final: true, mutable: true });
+    structs.push({ name: n, fields: [{ name: "cur", t: "i32", ref: k + 3 }, { name: "next", t: "i32", ref: k + 4 }, { name: "key", t: t.keyT }, { name: "had", t: "i32" }, { name: "old", t: t.value }], final: true, mutable: true });
+    structs.push({ name: `${n}.path`, fields: [], final: true, items: t });
+    tblIndex.set(t.index, k + 4);
+    // Its parts as types a runtime function's signature can name.
+    for (const [part, off] of Object.entries(TBL)) if (part !== "tbl" && part !== "table") recIndex.set(`${n}.${part}`, k + 4 + off);
+  }
   const arrayOf = (f?: RtFn): AType => { const a = f?.array !== undefined ? lowered.arrays[f.array] : undefined; if (!a) throw new Error(`${f?.name}: no array type`); return a; };
   const caseIndex = (d: DType, c: number) => baseIndex.get(d.key)! + 1 + c;
-  const isRec = (t: MType): t is RType | DType | FType | AType => { if (typeof t === "object" && isTable(t)) throw new Error("std's Table isn't in WebAssembly yet (C63j)"); return typeof t !== "string"; };
+  const isRec = (t: MType): t is RType | DType | FType | AType | TType => typeof t !== "string";
   // The runtime's names for types and functions.
   // `list` in a runtime function is the list type it names (List Text if none).
   const listOf = (f?: RtFn) => {
@@ -250,7 +270,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
     return d;
   };
   const resolver = (f?: RtFn) => ({
-    type: (n: string) => (n === "arr" ? arrIndex.get(arrayOf(f).key)! : n === "buf" ? arrIndex.get(arrayOf(f).key)! - 1 : n === "items" ? arrIndex.get(arrayOf(f).key)! - 2 : n === "bytes" ? bytesIndex : n === "i64s" ? i64sIndex : n === "big" ? bigIndex : n === "u32s" ? u32sIndex : n === "huge" ? hugeIndex : n === "option" ? baseIndex.get(OPTION_TEXT)! : n === "list" ? baseIndex.get(listOf(f).key)! : caseIndex(listOf(f), n === "list.nil" ? 0 : 1)),
+    type: (n: string) => (f?.table !== undefined && TBL[n] !== undefined ? tblIndex.get(f.table)! + TBL[n] : f?.types?.[n] ? refIndex(f.types[n] as RType) : n === "arr" ? arrIndex.get(arrayOf(f).key)! : n === "buf" ? arrIndex.get(arrayOf(f).key)! - 1 : n === "items" ? arrIndex.get(arrayOf(f).key)! - 2 : n === "bytes" ? bytesIndex : n === "i64s" ? i64sIndex : n === "big" ? bigIndex : n === "u32s" ? u32sIndex : n === "huge" ? hugeIndex : n === "option" ? baseIndex.get(OPTION_TEXT)! : n === "list" ? baseIndex.get(listOf(f).key)! : caseIndex(listOf(f), n === "list.nil" ? 0 : 1)),
     func: (n: string) => {
       if (n.startsWith("wasi_")) return worldBase + wasiImports.indexOf(n);
       if (n === "main") return fnIndex(funcs.indexOf(main!));
@@ -263,18 +283,22 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
       if (t === "list") return { bytes: typeOf(listOf(f)), text: `(ref null $${structs[baseIndex.get(listOf(f).key)!].name})` };
       if (t === "option") return { bytes: typeOf(optionOf()), text: `(ref null $${structs[baseIndex.get(OPTION_TEXT)!].name})` };
       if (t === "void") throw new Error("nothing isn't a value type");
-      if (t === "table" || t === "key" || t === "value") throw new Error("std's Table isn't in WebAssembly yet (C63j)");
+      if (f?.table !== undefined && TBL[t] !== undefined) { const k = tblIndex.get(f.table)! + TBL[t]; return { bytes: [0x63, ...s(k)], text: `(ref null $${structs[k].name})` }; }
+      if (t === "key" || t === "value") {
+        const m = t === "key" ? lowered.tables[f!.table!].keyT : lowered.tables[f!.table!].value;
+        return { bytes: typeOf(m), text: m === "text" ? "(ref null $bytes)" : isRec(m) ? `(ref null $${structs[refIndex(m)].name})` : m === "int" ? "eqref" : m as string };
+      }
       if (t === "array" || t === "item") {
         const m = t === "array" ? arrayOf(f) : arrayOf(f).item;
         return { bytes: typeOf(m), text: m === "text" ? "(ref null $bytes)" : isRec(m) ? `(ref null $${structs[refIndex(m)].name})` : m === "int" ? "eqref" : m as string };
       }
       if (t === "buf" || t === "items") { const k = arrIndex.get(arrayOf(f).key)! - (t === "buf" ? 1 : 2); return { bytes: [0x63, ...s(k)], text: `(ref null $${structs[k].name})` }; }
-      return { bytes: typeOf(t), text: t === "text" ? "(ref null $bytes)" : t === "int" ? "eqref" : t === "mag" ? "(ref null $u32s)" : t as string };
+      return { bytes: typeOf(t as MType), text: t === "text" ? "(ref null $bytes)" : t === "int" ? "eqref" : t === "mag" ? "(ref null $u32s)" : t as string };
     },
   });
   const resolve = resolver();
   const rtIndex = (n: string) => fnIndex(funcs.length + helpers.length + rts.findIndex((f) => f.name === n));
-  const refIndex = (t: RType | DType | FType | AType) => (isArray(t) ? arrIndex.get(t.key)! : isData(t) ? baseIndex.get(t.key)! : isFn(t) ? cloIndex.get(t.key)! : recIndex.get(t.key)!);
+  const refIndex = (t: RType | DType | FType | AType | TType) => (isTable(t) ? tblIndex.get(t.index)! : isArray(t) ? arrIndex.get(t.key)! : isData(t) ? baseIndex.get(t.key)! : isFn(t) ? cloIndex.get(t.key)! : recIndex.get(t.key)!);
   const typeOf = (t: MType): number[] => (t === "text" ? [0x63, ...s(bytesIndex)] : isRec(t) ? [0x63, ...s(refIndex(t))] : t === "int" ? [0x63, 0x6d] : t === "mag" ? [0x63, ...s(u32sIndex)] : [VAL[t as keyof typeof VAL]]);
   const keyOf = (t: MType) => (isRec(t) ? t.key : t);
   // A partial function (one answer or none) gives a status after its
@@ -289,7 +313,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
   const hostSig = hosts.map((op) => sig(Array(HOST[op]!.params).fill("f64"), "f64"));
   // A world operation giving the unit gives nothing (the module makes it);
   // one that can fail gives a status after.
-  const isUnit = (t: LType) => isRec(t) && !isData(t) && !isFn(t) && !isArray(t) && t.fields.length === 0;
+  const isUnit = (t: LType) => isRec(t) && !isData(t) && !isFn(t) && !isArray(t) && !isTable(t) && t.fields.length === 0;
   const worldSig = wasi ? [] : worldOps.map((x) => sig(x.args.map(() => "text" as LType), isUnit(x.t) ? null : x.t, x.aborts));
   const reasonSig = worldReason && !wasi ? sig([], "text") : 0;
   const wasiSig = wasiImports.map((n) => sig(WASI_IMPORTS[n.slice(5)].params, WASI_IMPORTS[n.slice(5)].result));
@@ -366,7 +390,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
       ].join("\n"),
     });
   }
-  const rtType = (f: RtFn, t: VT): MType | null => (t === "table" || t === "key" || t === "value" ? null : t === "list" ? listOf(f) : t === "option" ? optionOf() : t === "void" ? null : t === "array" ? arrayOf(f) : t === "item" ? arrayOf(f).item : t === "buf" || t === "items" ? null : t);
+  const rtType = (f: RtFn, t: VT): MType | null => (t === "table" ? lowered.tables[f.table!] : t === "key" ? lowered.tables[f.table!].keyT : t === "value" ? lowered.tables[f.table!].value : t === "list" ? listOf(f) : t === "option" ? optionOf() : t === "void" ? null : t === "array" ? arrayOf(f) : t === "item" ? arrayOf(f).item : t === "buf" || t === "items" ? null : t === "tstore" || t === "tkeys" || t === "tvals" || t === "tst" || t === "tpath" ? { key: `table.${f.table}.${t}`, name: t, fields: [] } as unknown as RType : t as MType);
   const rtSig = rts.map((f) => sig(f.params.map(([, t]) => rtType(f, t)!), rtType(f, f.result), f.partial));
   const rtCode = rts.map((f) => assemble(f, resolver(f)));
   const struct = (x: (typeof structs)[number]) => {
@@ -585,7 +609,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
   const id = (f: SFunc) => `$${f.name.replace(/[^\w]+/g, "_")}${funcs.indexOf(f)}`;
   const local = (f: SFunc, i: number) => `$${i < f.params.length ? "p" : "l"}${i}`;
   const sname = (i: number) => `$${structs[i].name}`;
-  const recName = (r: RType | DType | FType | AType) => sname(refIndex(r));
+  const recName = (r: RType | DType | FType | AType | TType) => sname(refIndex(r));
   const ty = (t: MType) => (t === "text" ? "(ref null $bytes)" : isRec(t) ? `(ref null ${recName(t)})` : t === "int" ? "eqref" : t === "mag" ? "(ref null $u32s)" : t === "int32" ? "i32" : t);
   const zeroText = (t: MType) => (t === "text" ? "ref.null $bytes" : isRec(t) ? `ref.null ${recName(t)}` : t === "int" ? "ref.null eq" : t === "mag" ? "ref.null $u32s" : `${t === "int32" ? "i32" : t}.const 0`);
   // As code(): `ld` blocks open around e, a status for none goes to fl.
@@ -779,7 +803,7 @@ export function textList(ex: Record<string, (...xs: never[]) => unknown>, xs: st
 // the arguments (a list of texts) or nothing, it gives the exit code (an
 // Int or a Float64), or anything else for 0; an Abort nothing handled
 // writes its reason to standard error and exits with 1.
-export async function runMain(lowered: Lowered, m: Module, name: string, args: string[], rt: Runtime): Promise<number> {
+export async function runMain(lowered: CoreIR, m: Module, name: string, args: string[], rt: Runtime): Promise<number> {
   const f = lowered.funcs.find((g) => g.name === name && !g.inner && !g.budgeted);
   if (!f || f.params.length > 1) throw new Error(`${name}: not compiled, or not a main`);
   const ex = (await instantiate(m, rt)) as unknown as Record<string, (...xs: unknown[]) => unknown>;

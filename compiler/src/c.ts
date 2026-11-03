@@ -54,7 +54,7 @@ import { FDLIBM_C } from "./c-math.ts";
 import { BASE, cName, POSIX, RESERVED, RT_C, runtimeC, WORLD_H, type ListNames } from "./c-rt.ts";
 import { runtime } from "./wasm-rt.ts";
 import { STOPS } from "./stops.ts";
-import { fails, isArray, isTable, isData, isFn, isRecord, kids, mapKids, OPS, type AType, type TType, type DType, type FType, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc } from "./scalar.ts";
+import { fails, isArray, isTable, isData, isFn, isRecord, kids, mapKids, OPS, type AType, type TType, type DType, type FType, type LType, type CoreIR, type Op, type RType, type SExpr, type SFunc } from "./scalar.ts";
 
 // What a C compiler needs to keep the evaluator's numbers. -fwrapv: fdlibm
 // shifts signed ints past their top bit (pow's test for an odd exponent).
@@ -161,7 +161,7 @@ interface Target { label: string; keep: Set<number>; pending: number }
 // List Text) if it takes them, on a thread with a big stack (1 GiB of
 // address space, used only as deep as the program goes); its Int or Float64
 // is the exit code, and an Abort's reason goes to standard error, with 1.
-export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string } = {}): CProgram {
+export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string } = {}): CProgram {
   const { shapes } = lowered;
   // A value that can't be had (a search's k given no answer) is the
   // expression it's in failing, when nothing before it in that
@@ -390,7 +390,7 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string
       `typedef struct { lab_cell h; lab_cell *b; uint32_t s, n; } ${n.view}; // an array: n items from s`);
   }
   for (const t of tables.values()) {
-    const K = t.keyT === "int" ? "lab_int" : "lab_cell *";
+    const K = ty(t.keyT);
     types.push(`typedef struct { uint32_t n, used, cap; uint8_t *st; ${K} *ks; ${ty(t.value)} *vs; } lab_Store_t${t.index}; // a table's slots: cap, n full, used full or removed`,
       `typedef struct { lab_cell h; lab_Store_t${t.index} *cur; lab_cell *next; ${K} key; ${ty(t.value)} old; uint8_t had; } lab_Table_t${t.index}; // a version: the newest holds the slots (cur), an older one the change from the next (key had old or was absent)`);
   }
@@ -424,7 +424,7 @@ export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string
     if (counted(a.item)) fieldsOf.push(`case ${tnum.get(`buf ${a.key}`)}: { ${n.buf} *b = (${n.buf} *)c; for (uint32_t k = b->lo; k < b->hi; k++) ${dec(a.item, "b->it[k]")} } break;`);
   }
   for (const t of tables.values()) {
-    const T = `lab_Table_t${t.index}`, k = t.keyT === "int" ? "lab_int_dec(b->ks[j]);" : "lab_dec(b->ks[j]);";
+    const T = `lab_Table_t${t.index}`, k = counted(t.keyT) ? dec(t.keyT, "b->ks[j]") : "";
     const v = (x: string) => (counted(t.value) ? dec(t.value, x) : "");
     fieldsOf.push(`case ${tnum.get(`table ${t.key}`)}: { ${T} *v = (${T} *)c; lab_Store_t${t.index} *b = v->cur; if (b) { for (uint32_t j = 0; j < b->cap; j++) if (b->st[j] == 1) { ${k} ${v("b->vs[j]")} } free(b->st); free(b->ks); free(b->vs); free(b); } else { ${k.replace("b->ks[j]", "v->key")} if (v->had) { ${v("v->old")} } lab_dec(v->next); } } break;`);
   }
@@ -1055,23 +1055,42 @@ int main(int argc, char **argv) {
     const fns = [...arrayFns].filter((f) => TABLE_FN.exec(f) && Number(TABLE_FN.exec(f)![2]) === t.index);
     if (!fns.length) return [];
     const i = t.index, T = `lab_Table_t${i}`, S = `lab_Store_t${i}`, tn = tnum.get(`table ${t.key}`)!, V = ty(t.value);
-    const int = t.keyT === "int", K = int ? "lab_int" : "lab_cell *";
-    const dupK = (x: string) => (int ? `lab_int_dup(${x})` : `lab_dup(${x})`), dropK = (x: string) => (int ? `lab_int_drop(${x});` : `lab_drop(${x});`);
+    // A key is an Int, a Text, or a record (a tuple) of them (C63k): its
+    // parts in order, `leaves`, hashed, compared and ordered one by one.
+    const kt = t.keyT, int = kt === "int", K = ty(kt);
+    // A Float64 key is one nothing fixes: none is ever made.
+    const leaves = (x: LType, at: string): ["int" | "text" | "f64", string][] => (x === "int" || x === "text" || x === "f64" ? [[x, at]] : (x as RType).fields.flatMap((f, j) => leaves(f.t, `${at}.f${j}`)));
+    const parts = (at: string) => leaves(kt, at);
+    const kinds = new Set(parts("").map(([x]) => x));
+    const dupK = (x: string) => (counted(kt) ? dup(kt, x) : x), dropK = (x: string) => (counted(kt) ? drop(kt, x) : "");
     const dupV = (x: string) => (counted(t.value) ? dup(t.value, x) : x), dropV = (x: string) => (counted(t.value) ? drop(t.value, x) : "");
     const has = (op: string) => arrayFns.has(`table.${op}.t${i}`);
-    const out = [`// Table ${i}: ${int ? "Int" : "Text"} keys, ${V} values.
-static inline uint64_t lab__hash_t${i}(${K} k) {
-${int ? `  uint64_t h;
+    const leafHelpers = [...(kinds.has("int") ? [`static inline uint64_t lab__hi_t${i}(lab_int k) {
+  uint64_t h;
   if (LAB_IS_SMALL(k)) h = (uint64_t)LAB_VAL(k);
   else { lab_big *b = LAB_BIG(k); h = b->neg ? 0x9e3779b97f4a7c15u : 0; for (uint32_t j = 0; j < b->n; j++) h = (h ^ b->d[j]) * 0x100000001b3u; }
   h ^= h >> 30; h *= 0xbf58476d1ce4e5b9u; h ^= h >> 27; h *= 0x94d049bb133111ebu; h ^= h >> 31;
-  return h;` : `  uint64_t h = 0xcbf29ce484222325u;
+  return h;
+}
+static inline int lab__ei_t${i}(lab_int a, lab_int b) {
+  if (LAB_IS_SMALL(a) || LAB_IS_SMALL(b)) return a == b;
+  return LAB_BIG(a)->neg == LAB_BIG(b)->neg && lab__cmp(LAB_BIG(a)->d, LAB_BIG(a)->n, LAB_BIG(b)->d, LAB_BIG(b)->n) == 0;
+}`] : []), ...(kinds.has("text") ? [`static inline uint64_t lab__ht_t${i}(lab_cell *k) {
+  uint64_t h = 0xcbf29ce484222325u;
   for (uint32_t j = 0; j < LAB_TN(k); j++) h = (h ^ LAB_TB(k)[j]) * 0x100000001b3u;
-  return h ^ (h >> 32);`}
+  return h ^ (h >> 32);
+}
+static inline int lab__et_t${i}(lab_cell *a, lab_cell *b) { return LAB_TN(a) == LAB_TN(b) && memcmp(LAB_TB(a), LAB_TB(b), LAB_TN(a)) == 0; }`] : []), ...(kinds.has("f64") ? [`static inline uint64_t lab__hf_t${i}(double k) { uint64_t h; memcpy(&h, &k, 8); return h * 0x9e3779b97f4a7c15u; }
+static inline int lab__ef_t${i}(double a, double b) { return a == b; }`] : [])];
+    const out = [`// ${t.set ? `Hash set ${i}: ${int ? "Int" : typeof kt === "string" ? kt : "tuple"} items` : `Table ${i}: ${int ? "Int" : typeof kt === "string" ? kt : "tuple"} keys, ${V} values`}.
+${leafHelpers.join("\n")}
+static inline uint64_t lab__hash_t${i}(${K} k) {
+  uint64_t h = 0;
+${parts("k").map(([x, at]) => `  h = (h ^ lab__h${x[0]}_t${i}(${at})) * 0x100000001b3u;`).join("\n")}
+  return h ^ (h >> 29);
 }
 static inline int lab__eq_t${i}(${K} a, ${K} b) {
-${int ? `  if (LAB_IS_SMALL(a) || LAB_IS_SMALL(b)) return a == b;
-  return LAB_BIG(a)->neg == LAB_BIG(b)->neg && lab__cmp(LAB_BIG(a)->d, LAB_BIG(a)->n, LAB_BIG(b)->d, LAB_BIG(b)->n) == 0;` : `  return LAB_TN(a) == LAB_TN(b) && memcmp(LAB_TB(a), LAB_TB(b), LAB_TN(a)) == 0;`}
+  return ${parts("").map(([x, at]) => `lab__e${x[0]}_t${i}(a${at}, b${at})`).join(" && ")};
 }
 // The slot holding k, or the free one where it would go (a removed one
 // first), with *found saying which.
@@ -1185,24 +1204,38 @@ static lab_cell *lab__change_t${i}(lab_cell *c, ${K} k, int set, ${V} v) {
   return x;
 }`);
     const lists = t.entries.map((d, j) => ({ d, j })).filter(({ j }) => arrayFns.has(`table.entries.t${i}.e${j}`));
+    // compare's order: a tuple part by part.
     if (lists.length) out.push(`static ${S} *lab__sort_t${i};
-static int lab__cmp_t${i}(const void *x, const void *y) {
-  ${K} a = lab__sort_t${i}->ks[*(const uint32_t *)x];
-  ${K} b = lab__sort_t${i}->ks[*(const uint32_t *)y];
-${int ? `  if (LAB_IS_SMALL(a) && LAB_IS_SMALL(b)) return LAB_VAL(a) < LAB_VAL(b) ? -1 : LAB_VAL(a) > LAB_VAL(b);
+${kinds.has("int") ? `static inline int lab__ci_t${i}(lab_int a, lab_int b) {
+  if (LAB_IS_SMALL(a) && LAB_IS_SMALL(b)) return LAB_VAL(a) < LAB_VAL(b) ? -1 : LAB_VAL(a) > LAB_VAL(b);
   lab__mag p, q;
   lab__mag_of(a, &p); lab__mag_of(b, &q);
   if (p.neg != q.neg) return p.neg ? -1 : 1;
-  return p.neg ? lab__cmp(q.d, q.n, p.d, p.n) : lab__cmp(p.d, p.n, q.d, q.n);` : `  uint32_t n = LAB_TN(a) < LAB_TN(b) ? LAB_TN(a) : LAB_TN(b);
+  return p.neg ? lab__cmp(q.d, q.n, p.d, p.n) : lab__cmp(p.d, p.n, q.d, q.n);
+}` : ""}
+${kinds.has("f64") ? `static inline int lab__cf_t${i}(double a, double b) { return a < b ? -1 : a > b; }` : ""}
+${kinds.has("text") ? `static inline int lab__ct_t${i}(lab_cell *a, lab_cell *b) {
+  uint32_t n = LAB_TN(a) < LAB_TN(b) ? LAB_TN(a) : LAB_TN(b);
   int r = memcmp(LAB_TB(a), LAB_TB(b), n);
-  return r ? (r < 0 ? -1 : 1) : LAB_TN(a) < LAB_TN(b) ? -1 : LAB_TN(a) > LAB_TN(b);`}
+  return r ? (r < 0 ? -1 : 1) : LAB_TN(a) < LAB_TN(b) ? -1 : LAB_TN(a) > LAB_TN(b);
+}` : ""}
+static int lab__cmp_t${i}(const void *x, const void *y) {
+  ${K} a = lab__sort_t${i}->ks[*(const uint32_t *)x];
+  ${K} b = lab__sort_t${i}->ks[*(const uint32_t *)y];
+  int r = 0;
+${parts("").map(([x, at]) => `  if ((r = lab__c${x[0]}_t${i}(a${at}, b${at}))) return r;`).join("\n")}
+  return r;
 }`);
     for (const { d, j } of lists) {
       const tag = d.cases.findIndex((c) => c.fields.length > 0), head = d.cases[tag].fields.findIndex((x) => x.t !== d);
-      const cons = cname(d, tag), nil = cname(d, 1 - tag), pair = d.cases[tag].fields[head].t as RType, P = ty(pair);
+      const cons = cname(d, tag), nil = cname(d, 1 - tag), item = d.cases[tag].fields[head].t;
+      // A set's items are its keys; a map's entries, pairs.
+      const same = (x: LType) => x === kt || (isRecord(x) && isRecord(kt) && x.key === kt.key);
+      const made = t.set ? (same(item) ? dupK("t->ks[ix[j]]") : zero(item))
+        : `(${ty(item)}){ ${same((item as RType).fields[0].t) ? dupK("t->ks[ix[j]]") : zero((item as RType).fields[0].t)}, ${dupV("t->vs[ix[j]]")} }`;
       // A key nothing ever fixed (an empty map nothing is put in) is held
       // as an Int, its entries' as another type: none are ever made.
-      out.push(`// The entries as a list of pairs, in compare's order of their keys.
+      out.push(`// The entries as a list of ${t.set ? "items" : "pairs"}, in compare's order of their keys.
 static lab_cell *lab_table_entries_t${i}_e${j}(lab_cell *c) {
   lab__reroot_t${i}((${T} *)c);
   ${S} *t = ((${T} *)c)->cur;
@@ -1214,7 +1247,7 @@ static lab_cell *lab_table_entries_t${i}_e${j}(lab_cell *c) {
   lab_cell *acc = &${nil};
   for (uint32_t j = n; j-- > 0;) {
     ${cons} *e = lab_new(sizeof(${cons}), ${tnum.get(d.key)}, ${tag});
-    e->f${head} = (${P}){ ${pair.fields[0].t === t.keyT ? dupK("t->ks[ix[j]]") : zero(pair.fields[0].t)}, ${dupV("t->vs[ix[j]]")} };
+    e->f${head} = ${made};
     e->f${1 - head} = acc; acc = (lab_cell *)e;
   }
   free(ix);

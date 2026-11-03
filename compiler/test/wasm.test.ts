@@ -8,6 +8,7 @@ import { TRUE } from "../../ters/src/lang/std.ts";
 import { norm } from "../../ters/src/lang/int.ts";
 import { isData, isFn, isRecord, lowerScalar, type LType } from "../src/scalar.ts";
 import { emitWasm, fromInt, fromText, instantiate, runMain, toInt, toText } from "../src/wasm.ts";
+import { runCoreMain } from "../src/core-js.ts";
 import { load } from "../src/program.ts";
 import { area, caseNameInputs, caseNames, changeInputs, changes, choices, numberTexts, fuzzFinds, randomInputs, randoms, recursiveLets, closures, escapes, fractionInputs, fractions, maths, ordered, orderedInputs, roses, sameLists, searches, several, showInputs, shows, stopsWith, texts, worldly } from "../src/fixtures.ts";
 import { nodeWorld } from "../../ters/src/lang/world.ts";
@@ -637,7 +638,7 @@ function fakeWorld(files: Record<string, string>, input: string) {
   return { rt: { print: (s: string) => out.printed.push(s), world }, out };
 }
 
-test("whole programs in WebAssembly: wc, ledger, chapters and calc's mains print, write files and exit as the evaluator's do", async () => {
+test("whole programs in WebAssembly and in JavaScript from the core IR: wc, ledger, chapters and calc's mains print, write files and exit as the evaluator's do", async () => {
   const files = {
     "a.txt": "one two\nthree\n", "book.md": "# One\nhello world\n# Two\nmore words here\n",
     "sums.txt": "1+2\nlet x = 3\nx*x\n1 +\n", "ledger.csv": "2026-09-01,salary,350000,pay\n2026-09-02,rent,-120000,flat\n", "big.csv": book(500),
@@ -655,8 +656,25 @@ test("whole programs in WebAssembly: wc, ledger, chapters and calc's mains print
       const want = fakeWorld(files, input), got = fakeWorld(files, input);
       const exit = runProgram(p.code, p.info, p.named("main"), args, { ...want.rt, names: p.pres.names });
       assert.deepEqual([await runMain(l, m, "main", args, got.rt), got.out], [exit, want.out], `${name} ${args.join(" ")}`);
+      // And JavaScript printed from the same core IR (C137c3).
+      const cj = fakeWorld(files, input);
+      assert.deepEqual([runCoreMain(l, "main", args, cj.rt), cj.out], [exit, want.out], `${name} ${args.join(" ")} in JavaScript from the core IR`);
     }
   }
+});
+
+// with fuel(n, () => …) alone, not inside a first (algebra's root near):
+// with `data`, running out is no answer, which the caller's first sees.
+// Before, it was refused with a shader's reason.
+test("a with fuel no first is around: algebra's main in WebAssembly and JavaScript from the core IR prints what the evaluator prints", async () => {
+  const p = load("algebra");
+  const l = lowerScalar(p.code, p.info, p.pres.names, p.own.defs, { data: true });
+  assert.equal(l.refused.get(p.named("main")), undefined);
+  const want: string[] = [], wasm: string[] = [], js: string[] = [];
+  const exit = runProgram(p.code, p.info, p.named("main"), [], { print: (s) => want.push(s), names: p.pres.names });
+  assert.ok(want.some((s) => s.startsWith("root near")), want.join("\n"));
+  assert.deepEqual([await runMain(l, emitWasm(l), "main", [], { print: (s) => wasm.push(s) }), wasm], [exit, want]);
+  assert.deepEqual([runCoreMain(l, "main", [], { print: (s) => js.push(s) }), js], [exit, want]);
 });
 
 // The same programs as WASI commands (wasm-rt.ts's world over

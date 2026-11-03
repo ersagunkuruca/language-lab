@@ -685,6 +685,10 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         break;
       }
       case "call": {
+        if (isUse(n)) {
+          t = solveType(n, env, row);
+          break;
+        }
         // gradient(f) needs f's type first: which record it's over. In
         // gradient(f)(p), p's type says so too, when f is generic.
         const isGradient = (c: Node | undefined) => isCall(c) && c.args.length === 1 && code.nodes[c.fn]?.kind === "ref" && (code.nodes[c.fn] as NodeOf<"ref">).target === S.gradient;
@@ -899,9 +903,6 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       case "match":
       case "fold":
         t = cases(n, env, row);
-        break;
-      case "solve":
-        t = solveType(n, env, row);
         break;
       default:
         err(id, `a ${n?.kind ?? "missing node"} is not an expression`);
@@ -1376,7 +1377,9 @@ export function resumedTwice(code: Code, body: Id, rest: Id): Id | null {
     const n = code.nodes[id];
     switch (n.kind) {
       case "ref": return n.target === rest ? 1 : 0;
-      case "call": return sum([n.fn, ...n.args]);
+      case "call":
+        if (isUse(n)) return sum([...Object.values(n.given), n.body]);
+        return sum([n.fn, ...n.args]);
       case "lambda": return Math.min(uses(n.body), 1) + (uses(n.body) > 1 ? flag(n.body) : 0);
       case "match": {
         const first = uses(n.scrutinee), then = Math.max(0, ...n.arms.map((a) => uses((code.nodes[a] as NodeOf<"arm">).body)), n.otherwise ? uses(n.otherwise) : 0);
@@ -1388,7 +1391,6 @@ export function resumedTwice(code: Code, body: Id, rest: Id): Id | null {
         if (inArm) flag(id);
         return first + (inArm ? 1 : 0);
       }
-      case "solve": return sum([...Object.values(n.given), n.body]);
       default: return 0;
     }
   };
@@ -1401,12 +1403,13 @@ export function resumedTwice(code: Code, body: Id, rest: Id): Id | null {
 // Children that are expressions or binders (types and variants excluded).
 function kids(n: Node): Id[] {
   switch (n.kind) {
-    case "call": return [n.fn, ...n.args];
+    case "call":
+      if (isUse(n)) return [...Object.values(n.given), n.body];
+      return [n.fn, ...n.args];
     case "lambda": return [n.body];
     case "match": return [n.scrutinee, ...n.arms, ...(n.otherwise ? [n.otherwise] : [])];
     case "fold": return [n.scrutinee, ...n.arms];
     case "arm": return [n.body];
-    case "solve": return [...Object.values(n.given), n.body];
     default: return [];
   }
 }
@@ -1759,12 +1762,13 @@ export function resultsDirection(code: Code, d: Id, names: Names = {}): { why: s
   const given = Object.fromEntries(ins.map((p) => [p, add({ id: `${d}:given:${p}`, kind: "hole" })]));
   given.out = add({ id: `${d}:true`, kind: "ref", target: TRUE });
   const binds = Object.fromEntries(def.results!.map((r) => [r, add({ id: `${d}:as:${r}`, kind: "binder" })]));
-  const use = { id: `${d}:results`, kind: "solve", fn: d, given, binds, body: add({ id: `${d}:body`, kind: "hole" }) } as Use;
+  const fn = add({ id: `${d}:fn`, kind: "ref", target: d });
+  const use: Use = { id: `${d}:results`, kind: "call", fn, given, binds, body: add({ id: `${d}:body`, kind: "hole" }) };
   add(use);
   const asked = { nodes, defs: code.defs };
   // The program with this use added: the modes analysis starts from the
   // program's own slots and scans only the new nodes.
-  derivedFrom(asked, code, [use.id, ...Object.values(given), ...Object.values(binds), use.body]);
+  derivedFrom(asked, code, [use.id, fn, ...Object.values(given), ...Object.values(binds), use.body]);
   try {
     const p = planSolve(asked, use);
     let ends = true;

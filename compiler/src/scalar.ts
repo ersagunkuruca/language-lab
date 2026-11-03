@@ -1,3 +1,9 @@
+// The core IR (docs/design/targets/CORE-IR.md, C137b): what WebAssembly,
+// C, WGSL and js-scalar.ts print, and what compiled JavaScript is to be
+// printed from too. It began as the scalar profile, below, and has grown
+// data, closures, searches, handlers, the world, Int, Text, arrays and
+// tables; CORE-IR.md has its contract.
+//
 // The scalar profile: the part of the language that needs no heap.
 //
 // A definition is in it when its inputs and result are Float64 or Bool, and
@@ -46,11 +52,11 @@
 
 import { resolveArithmetic } from "../../ters/src/lang/arith.ts";
 import type { Code, Id, NodeOf } from "../../ters/src/model.ts";
-import { dependencies, subtree, isCall, type Call } from "../../ters/src/model.ts";
+import { dependencies, subtree, isCall, type Call, isUse } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
-import { ARRAY, TABLE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, STRING, type Row, type Type } from "../../ters/src/lang/types.ts";
-import { ABORT, ABORT_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, ORDER_V, PAIR_V, RATIO, S, SET, SHOW_ANY, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
+import { ARRAY, TABLE, HASH_SET, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, STRING, type Row, type Type } from "../../ters/src/lang/types.ts";
+import { ABORT, ABORT_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, HASH_SET_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, ORDER_V, PAIR_V, RATIO, S, SET, SHOW_ANY, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
 import { liftLets } from "../../ters/src/lang/lift-lets.ts";
 import { inlineLists } from "./inline-lets.ts";
 import { STOPS } from "./stops.ts";
@@ -69,8 +75,11 @@ import { runtime } from "./wasm-rt.ts";
 const TABLE_RT: Record<Id, string> = {
   [TABLE_OPS.empty]: "empty", [TABLE_OPS.put]: "put", [TABLE_OPS.remove]: "remove", [TABLE_OPS.has]: "has",
   [TABLE_OPS.size]: "size", [TABLE_OPS.at]: "at", [TABLE_OPS.entries]: "entries",
+  // A hash set (C63i) is the table of its items, each holding true.
+  [HASH_SET_OPS.empty]: "empty", [HASH_SET_OPS.add]: "put", [HASH_SET_OPS.remove]: "remove", [HASH_SET_OPS.has]: "has",
+  [HASH_SET_OPS.size]: "size", [HASH_SET_OPS.items]: "entries",
 };
-const ARRAY_RT: Record<Id, string> = {
+export const ARRAY_RT: Record<Id, string> = {
   [ARRAY_OPS.empty]: "array.empty", [ARRAY_OPS.of]: "array.of", [ARRAY_OPS.items]: "array.items",
   [ARRAY_OPS.length]: "array.length", [ARRAY_OPS.at]: "array.at", [ARRAY_OPS.push]: "array.push",
   [ARRAY_OPS.first]: "array.first", [ARRAY_OPS.rest]: "array.rest", [ARRAY_OPS.pushFront]: "array.pushFront",
@@ -83,7 +92,7 @@ const INT32: Record<Id, Op> = {
   [INT_OPS.quotient]: "iquot", [INT_OPS.remainder]: "irem", [INT_OPS.power]: "ipow", [INT_OPS.wholePart]: "iwhole",
 };
 // Builtins on Int and Text that are runtime functions (`data`).
-const RT: Record<Id, string> = {
+export const RT: Record<Id, string> = {
   [INT_OPS.add]: "int.add", [INT_OPS.sub]: "int.sub", [INT_OPS.mul]: "int.mul", [INT_OPS.neg]: "int.neg", [INT_OPS.abs]: "int.abs",
   [INT_OPS.less]: "int.less", [INT_OPS.show]: "int.show", [INT_OPS.toNumber]: "int.toNumber",
   [S.concat]: "text.concat", [S.show]: "number.show", [S.range]: "number.range", [INT_OPS.range]: "int.range",
@@ -127,16 +136,18 @@ type At = Map<number, Type | Row>;
 export type WType = "int" | "text";
 // std's Array (`data`, C66): a view, a start and a length, on a buffer
 // with free room at both ends, as compiled JS keeps it (runtime.js, C30d1).
-// `index`: its place in Lowered.arrays, which the runtime's array
+// `index`: its place in CoreIR.arrays, which the runtime's array
 // functions are named by (`array.push.a0`); `list`: List of its items,
 // when a job takes or gives one.
 export interface AType { key: string; name: string; item: LType; index: number; list: DType | null }
 // std's Table (C63h): Map as a hash table, in C only, for Int and Text
-// keys (c.ts `tableC`). `index`: its place in Lowered.tables, which its
+// keys (c.ts `tableC`). `index`: its place in CoreIR.tables, which its
 // runtime functions are named by (`table.put.t0`); `entries`: each List
 // of (key, value) pairs `table entries` gives (`table.entries.t0.e1`): a
 // key nothing fixes is held as an Int, its pairs' may be another type.
-export interface TType { key: string; name: string; keyT: "int" | "text"; value: LType; index: number; entries: DType[] }
+// `set`: std's Hash set (C63i), its items the keys, each holding true
+// (a Bool), its entries the List of its items.
+export interface TType { key: string; name: string; keyT: "int" | "text" | "f64" | RType; value: LType; index: number; entries: DType[]; set: boolean }
 export type LType = SType | WType | RType | DType | FType | AType | TType;
 export const isArray = (t: LType): t is AType => typeof t === "object" && "item" in t;
 export const isTable = (t: LType): t is TType => typeof t === "object" && "keyT" in t;
@@ -286,7 +297,7 @@ export type SExpr =
   // handler of Abort, which gets the reason in local `reason` and gives
   // arm's value instead (a match on Abort). With `esc`, another operation
   // that never returns (C34): status 2 + esc, `reason` the operation as a
-  // value of its effect's type (Lowered.escapes[esc - 1]), and the
+  // value of its effect's type (CoreIR.escapes[esc - 1]), and the
   // handler with that `esc` takes it.
   | { k: "abort"; reason: SExpr; esc?: number }
   // An operation on the world (WORLD_OPS), with its result's type.
@@ -340,7 +351,7 @@ export interface SFunc { def: Id; name: string; params: LType[]; result: LType; 
 // computed a number Float32 can't hold, so a Float32 run differs from it.
 // `shader`: lowered with `shader` and not `data` (C66c): Int is int32, and
 // no answer is the flag, not a status (wasm.ts takes both).
-export interface Lowered { funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; arrays: AType[]; tables: TType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info; escapes: DType[]; rounded: Set<Id>; shader?: true }
+export interface CoreIR { funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; arrays: AType[]; tables: TType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info; escapes: DType[]; rounded: Set<Id>; shader?: true }
 
 class Refused extends Error {}
 
@@ -371,7 +382,7 @@ export function reachedFrom(code: Code, roots: Id[]): Code {
 // 0 and the like set it, the code goes on with zeros, and the `first`
 // looks at it when its search ends. Shaders have no side effects, so going
 // on computes nothing anyone sees.
-export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean } = {}): Lowered {
+export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean } = {}): CoreIR {
   // The generic + resolved to each type's own operation first
   // (ters/src/lang/arith.ts): nothing here sees a generic one.
   ({ code, info, names } = resolveArithmetic(code, info, names));
@@ -509,13 +520,17 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     // values of them.
     // At any depth (List (Optional (List a)), sort's runs of nothing): the
     // type's key is made from its arguments as they are.
-    if (opts.data && t.t === "con" && t.id === TABLE) {
-      // A key no put ever fixes (an empty map nothing is put in) is an Int.
-      const k = !t.args[0] || unconstrained(t.args[0]) ? "int" : stype(t.args[0], inside), value = t.args[1] && stype(freed(t.args[1]), inside);
-      if ((k !== "int" && k !== "text") || !value) return null;
-      const key = `${t.id}<${k},${show(freed(t.args[1]))}>`;
+    if (opts.data && t.t === "con" && (t.id === TABLE || t.id === HASH_SET)) {
+      // A key no put ever fixes (an empty map nothing is put in) is what
+      // any type nothing makes is, a Float64, as its entries' keys are.
+      const set = t.id === HASH_SET, free = !t.args[0] || unconstrained(t.args[0]);
+      const k = free ? "f64" : stype(t.args[0], inside), value = set ? "i32" : t.args[1] && stype(freed(t.args[1]), inside);
+      // A tuple or record of Ints and Texts too (C63k), as JavaScript's.
+      const hashable = (x: LType | null): boolean => x === "int" || x === "text" || (!!x && isRecord(x) && !x.mutable && x.fields.length > 0 && x.fields.every((f) => hashable(f.t)));
+      if (!(free || hashable(k)) || !value) return null;
+      const key = `${t.id}<${typeof k === "string" ? k : (k as RType).key}${set ? "" : `,${show(freed(t.args[1]))}`}>`;
       if (tables.has(key)) return tables.get(key)!;
-      const h: TType = { key, name: "Table", keyT: k, value, index: tables.size, entries: [] };
+      const h: TType = { key, name: set ? "HashSet" : "Table", keyT: k as TType["keyT"], value, index: tables.size, entries: [], set };
       tables.set(key, h);
       return h;
     }
@@ -750,6 +765,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
         throw new Refused(`uses ${nm(n.target)} as a value (functions and data need a heap)`);
       }
       case "call": {
+        if (isUse(n)) throw new Refused("solves a relation (not in this profile yet)");
         const head = code.nodes[n.fn];
         if (head.kind === "lambda") {
           // A let: each argument goes into a new local.
@@ -867,9 +883,9 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           const ts = [...n.args, id].map((a) => { const t = stype(zonk(a)); if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(a))}`); return t; });
           const h = ts.find(isTable);
           if (!h) throw new Refused(`uses ${nm(target)} on no table`);
-          const l = target === TABLE_OPS.entries ? ts.find(isData) : undefined;
+          const l = target === TABLE_OPS.entries || target === HASH_SET_OPS.items ? ts.find(isData) : undefined;
           if (l && !h.entries.includes(l)) h.entries.push(l);
-          return { k: "rt", fn: `table.${TABLE_RT[target]}.t${h.index}${l ? `.e${h.entries.indexOf(l)}` : ""}`, args: args() };
+          return { k: "rt", fn: `table.${TABLE_RT[target]}.t${h.index}${l ? `.e${h.entries.indexOf(l)}` : ""}`, args: target === HASH_SET_OPS.add ? [...args(), { k: "bool", v: true }] : args() };
         }
         if (opts.data && RT[target]) {
           // What it takes and gives in, so List Text is one of the module's types.
@@ -1027,7 +1043,6 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
         if (!opts.data) throw new Refused("folds over data (needs a heap)");
         return fold(n, id, env, f, tail);
       }
-      case "solve": throw new Refused("solves a relation (not in this profile yet)");
       case "lambda": {
         if (!opts.data) throw new Refused("makes a function (that needs closures)");
         const t = stype(zonk(id));
@@ -1517,11 +1532,10 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     const n = code.nodes[id], all = (ids: Id[]) => ids.flatMap((x) => refsIn(x, folds));
     switch (n?.kind) {
       case "ref": return [n.target];
-      case "call": return all([n.fn, ...n.args]);
+      case "call": return isUse(n) ? all([...Object.values(n.given), n.body]) : all([n.fn, ...n.args]);
       case "lambda": case "arm": return all([n.body]);
       case "match": return all([n.scrutinee, ...n.arms, ...(n.otherwise ? [n.otherwise] : [])]);
       case "fold": return all(folds ? [n.scrutinee, ...n.arms] : [n.scrutinee]);
-      case "solve": return all([...Object.values(n.given), n.body]);
       default: return [];
     }
   }
@@ -2003,23 +2017,27 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   }
 
   // first(() => with fuel(n, () => body), () => otherwise), and nothing
-  // else made of those two.
+  // else made of those two. With `data`, with fuel(n, () => body) alone
+  // too: running out is no answer, as in the evaluator, for the nearest
+  // first (or the caller) to see.
   function budget(n: Call, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
     const thunk = (x: Id | undefined) => { const l = x && code.nodes[x]; return l && l.kind === "lambda" && !l.params.length ? l.body : null; };
-    const action = thunk(n.args[0]), otherwise = thunk(n.args[1]);
-    const inner = action ? code.nodes[action] : null;
+    const alone = !!opts.data && (code.nodes[n.fn] as NodeOf<"ref">).target === S.fuel;
+    const action = alone ? null : thunk(n.args[0]), otherwise = alone ? null : thunk(n.args[1]);
+    const inner = alone ? n : action ? code.nodes[action] : null;
     const head = isCall(inner) ? code.nodes[inner.fn] : null;
-    const shape = `only as a budget, ${BUDGET}`;
-    if ((code.nodes[n.fn] as NodeOf<"ref">).target !== S.first || !action || !otherwise || !isCall(inner) || head?.kind !== "ref" || head.target !== S.fuel || inner.args.length !== 2)
-      throw new Refused(`uses first or with fuel, which a shader takes ${shape}`);
+    const who = opts.data ? "this profile" : "a shader";
+    const shape = `only as a budget, ${opts.data ? `with fuel(n, () => …) or ${BUDGET}` : BUDGET}`;
+    if ((!alone && ((code.nodes[n.fn] as NodeOf<"ref">).target !== S.first || !action || !otherwise)) || !isCall(inner) || head?.kind !== "ref" || head.target !== S.fuel || inner.args.length !== 2)
+      throw new Refused(`uses first or with fuel, which ${who} takes ${shape}`);
     // A number written down, rounded to Float32 maybe (NUMBERS.md).
     const rounded = code.nodes[inner.args[0]];
     const under = isCall(rounded) && code.nodes[rounded.fn]?.kind === "ref" && (code.nodes[rounded.fn] as NodeOf<"ref">).target === S.float32 && rounded.args.length === 1;
     const amount = under ? code.nodes[(rounded as Call).args[0]] : rounded, body = thunk(inner.args[1]);
-    if (!body) throw new Refused(`uses with fuel, which a shader takes ${shape}`);
-    if (amount?.kind !== "lit" || typeof amount.value !== "number") throw new Refused("has a budget that isn't a number written down (a shader's bound is fixed when it's built)");
+    if (!body) throw new Refused(`uses with fuel, which ${who} takes ${shape}`);
+    if (amount?.kind !== "lit" || typeof amount.value !== "number") throw new Refused(`has a budget that isn't a number written down (${opts.data ? "this profile's" : "a shader's"} bound is fixed when it's built)`);
     const v = under ? Math.fround(amount.value) : amount.value;
-    if (!(v >= 0 && v <= MAX_FUEL && Math.fround(v) === v)) throw new Refused(`has a budget of ${v} (a shader's is a number from 0 to ${MAX_FUEL})`);
+    if (!(v >= 0 && v <= MAX_FUEL && Math.fround(v) === v)) throw new Refused(`has a budget of ${v} (${opts.data ? "this profile's" : "a shader's"} is a number from 0 to ${MAX_FUEL})`);
     const t = stype(zonk(id));
     if (!t) throw new Refused(`has a budget whose value is ${OTHER}`);
     const save = f.locals.push("f64") - 1, res = f.locals.push(t) - 1;
@@ -2027,7 +2045,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     underBudget = true;
     let inside: SExpr;
     try { inside = expr(body, env, f, false); } finally { underBudget = outer; }
-    return { k: "budget", n: v, body: inside, otherwise: expr(otherwise, env, f, false), t, save, res };
+    return { k: "budget", n: v, body: inside, otherwise: alone ? { k: "fail" } : expr(otherwise!, env, f, false), t, save, res };
   }
 
   // A root that may not finish is refused as a place to start, even when
