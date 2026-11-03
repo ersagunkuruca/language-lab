@@ -52,3 +52,22 @@ test("json printed writes null, Bools, numbers, quoted text, lists and objects, 
   assert.deepEqual(JSON.parse(printed), value);
   assert.equal(printed, JSON.stringify(value));
 });
+
+test("json read reads what JSON.stringify writes, and json printed gives it back", async () => {
+  const value = { name: "a \"b\"\\\n\u0001éé", n: -2.5, big: 1e21, small: 1e-7, ok: true, no: false, none: null, items: [1, [], {}, [2, { x: "y" }]] };
+  const spaced = JSON.stringify(value, null, 2).replace("é", "\\u00e9");
+  const shown = await both((k) => k.call(lib("json printed"), k.call(lib("json read"), k.lit(spaced))));
+  assert.equal(JSON.parse(shown as string), JSON.stringify(value));
+});
+
+test("json read stops on text that isn't JSON, saying where", () => {
+  const stops = (text: string, why: RegExp) => {
+    const p = program((k) => k.call(lib("json read"), k.lit(text)));
+    assert.throws(() => runMain(p.code, p.info, p.main, { print: () => {}, names: p.names }), (e: unknown) => why.test(String((e as Error).message ?? e)));
+  };
+  stops("[1, 2", /ends inside a list/);
+  stops("{\"a\" 1}", /expected : after a field's name/);
+  stops("nul", /expected null/);
+  stops("1 2", /text after the value/);
+  stops("\"open", /ends inside a string/);
+});
