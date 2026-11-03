@@ -50,6 +50,11 @@ export function mul(a: Int, b: Int): Int {
 // floor(a / 2^n), an arithmetic shift: Fixed's product (FIXED-POINT.md)
 // rounds this way on every target. A negative n shifts up.
 export const shiftDown = (a: Int, n: Int): Int => norm(big(a) >> big(n));
+// Bits of two's complement with ones going on forever for a negative
+// (BigInt's and, or, xor): Word8 to Word64 keep the low bits (L193).
+export const bitAnd = (a: Int, b: Int): Int => norm(big(a) & big(b));
+export const bitOr = (a: Int, b: Int): Int => norm(big(a) | big(b));
+export const bitXor = (a: Int, b: Int): Int => norm(big(a) ^ big(b));
 export const neg = (a: Int): Int => (typeof a === "number" ? (a === 0 ? 0 : -a) : norm(-a));
 export const abs = (a: Int): Int => (less(a, 0) ? neg(a) : a);
 export const less = (a: Int, b: Int): boolean => a < b;

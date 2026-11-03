@@ -132,8 +132,10 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
   const int: Type = { t: "con", id: INT, args: [] };
   // Int only if it has every interface the variable needs (Haskell's
   // defaulting tries each type in turn the same way).
-  const intFits = (v: number) => [...(s.needs.get(v)?.keys() ?? [])].every((i) => info.implementations?.has(implementationKey(i, int)));
-  const otherwise = (v: number): Type => (s.whole.has(v) && !s.fractional.has(v) && !s.numbers.has(v) && s.arith.has(v) && intFits(v) ? int : num);
+  const fitsAt = (v: number, t: Type) => [...(s.needs.get(v)?.keys() ?? [])].every((i) => info.implementations?.has(implementationKey(i, t)));
+  const intFits = (v: number) => fitsAt(v, int);
+  // A variable only Int can stand for (one needing Bits, L193) is Int.
+  const otherwise = (v: number): Type => ((s.whole.has(v) && !s.fractional.has(v) && !s.numbers.has(v) && s.arith.has(v)) || !fitsAt(v, num)) && intFits(v) ? int : num;
   // A type with the definition's variables replaced, and every number-type
   // variable left open made its default.
   const close = (t: Type, env: Env): Type => {
