@@ -2,7 +2,7 @@
 // tree is.
 
 import type { Code, Id } from "../model.ts";
-import { get, useTarget, isCall, isUse } from "../model.ts";
+import { get, useTarget, isCall, isUse, bindsOf, bodyOf } from "../model.ts";
 import type { Presentation } from "../presentation.ts";
 import { Namer } from "./namer.ts";
 import { atom, callText, comment, Footnotes, lambdaText, unread, type R } from "./expr.ts";
@@ -20,8 +20,8 @@ export function nestedExpr(code: Code, pres: Presentation, namer: Namer, notes: 
         if (isUse(n)) {
           // A port is the callee's parameter, named as it is, or its result.
           const given = Object.entries(n.given).map(([k, e]) => `${k === "out" ? "out" : namer.name(k)} = ${expr(e).text}`).join(", ");
-          const wanted = Object.values(n.binds).map((b) => namer.name(b)).join(", ");
-          r = atom(`solve ${namer.name(useTarget(code.nodes, n))}(${given}) for ${wanted} → ${expr(n.body).text}`);
+          const wanted = Object.values(bindsOf(n)).map((b) => namer.name(b)).join(", ");
+          r = atom(`solve ${namer.name(useTarget(code.nodes, n))}(${given}) for ${wanted} → ${expr(bodyOf(n)).text}`);
           break;
         }
         // Steps done one after another (print this, then that): a; b.

@@ -30,7 +30,7 @@ test("a call turned around works out its input from the result, and turns back",
   if (!r.ok) return;
   const s = useOf(r.code.nodes[call])!;
   assert.ok(s, "a use");
-  assert.deepEqual(Object.keys(s.binds), [(code.nodes[(code.nodes[f] as NodeOf<"def">).body!] as NodeOf<"lambda">).params[0]]);
+  assert.deepEqual(Object.keys(s.binds ?? {}), [(code.nodes[(code.nodes[f] as NodeOf<"def">).body!] as NodeOf<"lambda">).params[0]]);
   const after = infer(r.code, r.names);
   assert.equal(first(makeRunner(r.code, after, { print: () => {} }).value(main)), 1.5);
   // Back: the call again, giving f(4) = 9.

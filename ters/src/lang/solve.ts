@@ -22,7 +22,7 @@
 
 import { direction, results } from "../../../invertible/src/index.js";
 import type { Code, Id, NodeOf, Use } from "../model.ts";
-import { useTarget } from "../model.ts";
+import { useTarget, bindsOf } from "../model.ts";
 import { relationFor, type Relation } from "./equations.ts";
 import { SIGS, TRUE } from "./std.ts";
 
@@ -71,7 +71,7 @@ export function planSolve(code: Code, n: Use): SolvePlan {
   try { r = relationFor(code, useTarget(code.nodes, n)); } catch { return relational(); }
   // A predicate reads as equations only when it is asked to be true.
   const outTrue = isTrue(code, n.given.out);
-  if (r.predicate && (!outTrue || "out" in n.binds)) return relational();
+  if (r.predicate && (!outTrue || "out" in bindsOf(n))) return relational();
   const known = Object.keys(n.given).filter((k) => !(r.predicate && k === "out"));
   const base = { mode: "solver" as const, rel: r.rel, known, predicate: r.predicate };
   const d = direction(r.rel as never, known) as Direction;

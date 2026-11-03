@@ -55,7 +55,7 @@ import { plan, relation, stream } from "../../../invertible/src/relation.js";
 import { call as ecall, evaluate as evaluateSolverExpr, num as enum_, show as eshow, simplify, v as evar } from "../../../invertible/src/expr.js";
 import type { Code, Id, NodeOf, Use } from "../model.ts";
 import type { Names } from "../presentation.ts";
-import { children, dependencies, ownerOfTypeParts, subtree, useTarget, type Call, isCall } from "../model.ts";
+import { children, dependencies, ownerOfTypeParts, subtree, useTarget, type Call, isCall, bindsOf } from "../model.ts";
 import { derivativeLambda, gradientLambda } from "./derive.ts";
 import { fieldShapes, look, type TypeEnv } from "./nested.ts";
 import { B, impl } from "../prelude.ts";
@@ -1244,7 +1244,7 @@ export function interpreter(given: Code, opts: Options = {}) {
   function solveGoal(n: Use, f: Frame, callee?: Mode): Goal {
     const at: Record<string, Term> = {};
     for (const [p, e] of Object.entries(n.given)) at[p] = sl(f, e);
-    for (const [p, b] of Object.entries(n.binds)) at[p] = sl(f, b);
+    for (const [p, b] of Object.entries(bindsOf(n))) at[p] = sl(f, b);
     return relationGoal(useTarget(nodes, n), at, callee);
   }
 

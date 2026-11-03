@@ -13,7 +13,7 @@
 // one predicate with a definition per mode, promised to agree.
 
 import type { Code, Id, Node, NodeOf, Use } from "../model.ts";
-import { isUse, useTarget, isCall, fieldPorts, type Call } from "../model.ts";
+import { isUse, useTarget, isCall, fieldPorts, type Call, bindsOf } from "../model.ts";
 import { derivedFrom, nodesWhere, subtree } from "../model.ts";
 import { S } from "./std.ts";
 
@@ -65,7 +65,7 @@ function fieldDirection(code: Code, n: Use, f: NodeOf<"field">): Retargeted | nu
     // The same ports, perhaps in another order: each moved to g's position.
     const key = (k: string) => (k === "out" ? k : String(g.ports!.indexOf(name(f, k))));
     const re = (r: Record<string, Id>) => Object.fromEntries(Object.entries(r).map(([k, x]) => [key(k), x]));
-    return { use: { ...n, given: re(n.given), binds: re(n.binds) }, target: id };
+    return { use: { ...n, given: re(n.given), binds: re(bindsOf(n)) }, target: id };
   }
   return null;
 }
@@ -91,7 +91,7 @@ export function directionFor(code: Code, n: Use, ways = directionsIn(code)): Ret
     if (ins.length !== given.size || !ins.every((i) => given.has(i))) continue;
     const key = (k: string) => (k === "out" ? k : mine[theirs.indexOf(k)]);
     const re = (r: Record<string, Id>) => Object.fromEntries(Object.entries(r).map(([k, v]) => [key(k), v]));
-    return { use: { ...n, given: re(n.given), binds: re(n.binds) }, target: d };
+    return { use: { ...n, given: re(n.given), binds: re(bindsOf(n)) }, target: d };
   }
   return null;
 }
@@ -152,5 +152,5 @@ export function computedForward(code: Code, n: Use): boolean {
   if (lam?.kind !== "lambda") return false;
   const ins = lam.params.filter((p) => !def.results!.includes(p));
   const given = Object.keys(n.given).filter((k) => k !== "out");
-  return given.length === ins.length && ins.every((p) => given.includes(p)) && Object.keys(n.binds).every((k) => def.results!.includes(k)) && !!givenBy(code, lam.body, def.results);
+  return given.length === ins.length && ins.every((p) => given.includes(p)) && Object.keys(bindsOf(n)).every((k) => def.results!.includes(k)) && !!givenBy(code, lam.body, def.results);
 }

@@ -23,7 +23,7 @@ export type Node =
   // to binders in scope in `body`, Choice when not unique. Read the two
   // through isCall/Call and isUse/Use.
   | { id: Id; kind: "call"; fn: Id; args: Id[]; given?: undefined; binds?: undefined; body?: undefined }
-  | { id: Id; kind: "call"; fn: Id; args?: undefined; given: Record<string, Id>; binds: Record<string, Id>; body: Id }
+  | { id: Id; kind: "call"; fn: Id; args?: undefined; given: Record<string, Id>; binds?: Record<string, Id>; body?: Id }
   // `results`: binders naming the function's result ports, when it gives
   // several (PORTS-2026-11-01.md, L128b): its body gives a tuple of that
   // many, and each binder names one part. Names only: nothing refers to
@@ -115,6 +115,15 @@ export type NodeOf<K extends Kind> = Extract<Node, { kind: K }>;
 // name, the rest bound for its body (PORTS-2026-11-01.md "The merge, step
 // by step", L130).
 export type Use = Extract<NodeOf<"call">, { given: Record<string, Id> }>;
+// A use's binds and body (L211b): a use may come without them, giving its
+// produced ports as one value. ports.ts's fillUses reads one at load as the
+// use binding each port and giving them back, so after a load both are there
+// unless the ports aren't known (a hole, an unknown target).
+export const bindsOf = (n: Use): Record<string, Id> => n.binds ?? {};
+export function bodyOf(n: Use): Id {
+  if (n.body === undefined) throw new Error(`a use whose ports aren't known gives its ports as one value (${n.id})`);
+  return n.body;
+}
 export const isUse = (n: Node | undefined | null): n is Use => n?.kind === "call" && n.given !== undefined;
 export const useOf = (n: Node | undefined | null): Use | null => (isUse(n) ? n : null);
 // A call that gives every input by position.
@@ -219,7 +228,7 @@ export function mapIds(n: Node, f: (id: Id) => Id): Node {
     case "lit": return n.of ? { ...n, id: f(n.id), of: f(n.of) } : { ...n, id: f(n.id) };
     case "binder": case "builtin": case "hole": return { ...n, id: f(n.id) };
     case "ref": return { ...n, id: f(n.id), target: f(n.target) };
-    case "call": return n.given ? { ...n, id: f(n.id), fn: f(n.fn), given: rec(n.given), binds: rec(n.binds), body: f(n.body) } : { ...n, id: f(n.id), fn: f(n.fn), args: n.args.map(f) };
+    case "call": return n.given ? { ...n, id: f(n.id), fn: f(n.fn), given: rec(n.given), ...(n.binds && { binds: rec(n.binds) }), ...(n.body !== undefined && { body: f(n.body) }) } : { ...n, id: f(n.id), fn: f(n.fn), args: n.args.map(f) };
     case "lambda": return { ...n, id: f(n.id), params: n.params.map(f), body: f(n.body), ...(n.results ? { results: n.results.map(f) } : {}) };
     case "def": return { ...n, id: f(n.id), body: n.body === null ? null : f(n.body), ...(n.results ? { results: n.results.map(f) } : {}), ...(n.direction ? { direction: f(n.direction) } : {}) };
     case "typedef": return { ...n, id: f(n.id), params: n.params.map(f), variants: n.variants.map(f), ...(n.row ? { row: n.row.map(f) } : {}) };

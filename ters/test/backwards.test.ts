@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { FN } from "../../invertible/src/expr.js";
 import { root } from "../src/io.ts";
-import { get, replace, type Code, type Id, type NodeOf, type Call, type Use, isUse, useTarget } from "../src/model.ts";
+import { get, replace, type Code, type Id, type NodeOf, type Call, type Use, isUse, useTarget, bindsOf } from "../src/model.ts";
 import { impl } from "../src/prelude.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
@@ -355,11 +355,11 @@ test("a parameter whose id is all digits is labelled by its name", () => {
   const { code, pres: { names } } = load("backwards");
   for (const n of Object.values(code.nodes)) {
     if (!isUse(n)) continue;
-    for (const k of [...Object.keys(n.given), ...Object.keys(n.binds)]) {
+    for (const k of [...Object.keys(n.given), ...Object.keys(bindsOf(n))]) {
       assert.equal(typeof portLabel(code, names, useTarget(code.nodes, n), k), "string", `${n.id} ${k}`);
     }
   }
-  const greet = Object.values(code.nodes).find((n): n is Use => isUse(n) && "19718686" in n.binds)!;
+  const greet = Object.values(code.nodes).find((n): n is Use => isUse(n) && "19718686" in bindsOf(n))!;
   assert.equal(portLabel(code, names, useTarget(code.nodes, greet), "19718686"), names["19718686"]);
   assert.equal(portLabel(code, names, "builtin.concat", "1"), "b");
 });
