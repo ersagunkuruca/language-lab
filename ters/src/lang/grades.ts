@@ -40,6 +40,7 @@ import { LIBRARY } from "./library.ts";
 import { makeRunner, type Value } from "./run.ts";
 import { ALGEBRA_V, ARITH, CONS, LIST, NIL, S, SET as S_SET, TRUE } from "./std.ts";
 import { B } from "../prelude.ts";
+import { hashes } from "../hash.ts";
 import { MASK_TYPES, NUMBER, type Type } from "./types.ts";
 
 export interface Algebra {
@@ -84,6 +85,24 @@ const CL: Record<string, Id | undefined> = Object.fromEntries(
     .map((n) => [n, libId(`clifford ${n}`)]),
 );
 const byId = new Map(Object.entries(CL).flatMap(([n, id]) => (id ? [[id, n] as const] : [])));
+// The program's own definitions that are one of those by what they are,
+// not by name or id (L203a): a copy of the prelude's Clifford operations,
+// as a library of its own holds them, has the prelude's meaning hash
+// (hash.ts; a library id is `@` and its hash), so it reads the same way.
+const opsCache = new WeakMap<Code, Map<Id, string>>();
+function cliffordOps(code: Code): Map<Id, string> {
+  let ops = opsCache.get(code);
+  if (ops) return ops;
+  ops = new Map(byId);
+  const own = code.defs.filter((d) => !LIBRARY.code.nodes[d] && code.nodes[d]?.kind === "def");
+  if (own.length) {
+    try {
+      for (const [d, h] of hashes(code, own)) { const op = own.includes(d) ? byId.get(`@${h}`) : undefined; if (op) ops.set(d, op); }
+    } catch { /* a program that doesn't hash is read by the prelude's ids only */ }
+  }
+  opsCache.set(code, ops);
+  return ops;
+}
 
 const ADD = new Set<Id>([ARITH.add, B.add]), SUB = new Set<Id>([ARITH.sub, B.sub]);
 const MUL = new Set<Id>([ARITH.mul, B.mul]), DIV = new Set<Id>([B.div]), NEG = new Set<Id>([ARITH.neg, B.neg]);
@@ -104,7 +123,7 @@ export function algebrasOf(code: Code, info: Info): Map<Id, Algebra> {
   for (const d of code.defs) {
     const def = code.nodes[d] as NodeOf<"def">;
     const body = def?.kind === "def" && def.body ? code.nodes[def.body] : undefined;
-    if (!isCall(body) || (code.nodes[body.fn] as Node)?.kind !== "ref" || (code.nodes[body.fn] as NodeOf<"ref">).target !== CL.algebra) continue;
+    if (!isCall(body) || (code.nodes[body.fn] as Node)?.kind !== "ref" || cliffordOps(code).get((code.nodes[body.fn] as NodeOf<"ref">).target) !== "algebra") continue;
     try {
       const al = r.value(d) as { tag: Id; fields: Value[] };
       if (al?.tag !== ALGEBRA_V) continue;
@@ -190,6 +209,7 @@ const versor = (alg: Algebra, r: number) => {
 interface Hooks { onCall?: (call: Call, args: V[]) => V | undefined; onValue?: (id: Id, v: V) => void }
 function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: Hooks = {}) {
   const algebras = algebrasOf(code, info);
+  const ops = cliffordOps(code);
   const byVariant = new Map([...algebras.values()].map((a) => [a.variant, a]));
   const nodes = code.nodes;
   const lam = (id: Id): NodeOf<"lambda"> | null => {
@@ -409,7 +429,7 @@ function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: H
       const z = apply(f, [{ k: "num", zero: true }], depth);
       return z.k === "num" && z.zero ? x : { ...x, m: x.alg.full };
     }
-    const op = target ? byId.get(target) : undefined;
+    const op = target ? ops.get(target) : undefined;
     if (op && op !== "algebra") {
       const al = arg(0);
       if (al.k !== "alg") return TOP;
