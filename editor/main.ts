@@ -26,7 +26,7 @@ import { renderLet } from "../ters/src/render/letseq.ts";
 import { renderNested } from "../ters/src/render/nested.ts";
 import { renderSexpr } from "../ters/src/render/sexpr.ts";
 import { Namer } from "../ters/src/render/namer.ts";
-import { BOOL, CHECK, CONS, FALSE, FIXED_V, HTML_V, MAP_V, NIL, onTodaysIds, SET_V, SOME, TRUE } from "../ters/src/lang/std.ts";
+import { BOOL, CHECK, CONS, FALSE, FIXED_V, HTML_V, NIL, onTodaysIds, SOME, TRUE } from "../ters/src/lang/std.ts";
 import { CHOICE, DIVERGE, FILES as FILES_EFFECT, NETWORK, NUMBER, STRING, WORLD, showIn, type Type } from "../ters/src/lang/types.ts";
 import { implementationKey } from "../ters/src/lang/infer.ts";
 import { renderBlocks } from "../ters/src/lang/render.ts";
@@ -45,14 +45,14 @@ import { guide } from "./guide.ts";
 import { selectedParts } from "./selectedParts.ts";
 import { pagePanels } from "./pagePanel.ts";
 import { programText, type Step } from "./solverText.ts";
-import { newWorker, profileView, stuckView } from "./runViews.ts";
+import { lawPanel, newWorker, profileView, stuckView, valueView } from "./runViews.ts";
 import { fromFile, toFile } from "../ters/src/files.ts";
 import { flattened, matchRows, sameEverywhere } from "../ters/src/lang/patterns.ts";
 import { showPin, type Pins } from "../ters/src/lang/signatures.ts";
 import { inlinable, inlineView, type InlineView } from "./inline.ts";
 import * as Top from "../ters/src/lang/toplevel.ts";
 import { pictureEntries } from "./picture.ts";
-import { runTests, savedFrom, type Saved, type TestResult } from "../ters/src/lang/tests.ts";
+import type { Saved } from "../ters/src/lang/tests.ts";
 import { algebrasOf, describeMask, maskOfValue, type Algebra } from "../ters/src/lang/grades.ts";
 import { pageMain } from "../ters/src/lang/page.ts";
 import { browserWorld } from "../ters/src/lang/browser.ts";
@@ -3341,41 +3341,6 @@ function graphHooks(info: T.Info) {
   };
 }
 
-// A value as the Run panel shows it. A map or a set is a table, a row per
-// entry in key order, as the blocks draw one written out
-// (DATA-STRUCTURES.md); anything else is its text.
-function valueView(v: Value): HTMLElement {
-  const text = (x: Value) => h("code", {}, showValue(x, doc.code, pres().names, true));
-  const tag = typeof v === "object" && v !== null && "tag" in v ? v.tag : null;
-  if ((tag === MAP_V || tag === SET_V) && fromList((v as { fields: Value[] }).fields[0]).length) {
-    const rows = fromList((v as { fields: Value[] }).fields[0]).map((e) => (tag === MAP_V ? (e as { fields: Value[] }).fields : [e]));
-    return h("table", { class: "vtable" }, ...rows.map((cells) => h("tr", {}, ...cells.map((c) => h("td", {}, text(c))))));
-  }
-  return text(v);
-}
-
-// A test's results, once per version of the code and its saved values.
-const lawRuns = new WeakMap<Code, Map<string, TestResult>>();
-function lawPanel(info: T.Info, box: HTMLElement): HTMLElement {
-  let m = lawRuns.get(prog());
-  if (!m) lawRuns.set(prog(), (m = new Map()));
-  const key = `${ui.def}\u0000${JSON.stringify(doc.examples?.[ui.def] ?? null)}`;
-  let r = m.get(key);
-  if (!r) {
-    try { r = runTests(prog(), info, pres().names, [ui.def], savedFrom(doc.examples ?? {}), { world: quietWorld() })[0]; }
-    catch (e) { r = { def: ui.def, name: "", cases: 0, failures: [], error: (e as Error).message }; }
-    m.set(key, r);
-  }
-  const cases = `${r.cases} case${r.cases === 1 ? "" : "s"}`;
-  box.append(h("p", { class: "hint" }, "A test: it performs Check. It runs on its saved inputs, then on small values of each input's type, smallest first, as lab test runs it."));
-  if (r.error) box.append(h("p", { class: "status-line bad" }, `The test stopped: ${r.error}.`));
-  else if (!r.failures.length) box.append(h("p", { class: "status-line accepted" }, `✓ Every expect held, in ${cases}.`));
-  else {
-    box.append(h("p", { class: "status-line bad" }, `${r.failures.length} of ${cases} failed. The first is the smallest.`));
-    box.append(h("ul", { class: "law-failures" }, ...r.failures.slice(0, 5).map((f) => h("li", {}, `${f.inputs.join(", ") || "no inputs"}: ${f.what.join("; ")}`))));
-  }
-  return box;
-}
 
 function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
   const box = h("div", { class: "run" });
@@ -3390,7 +3355,7 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
   // A test (its row has Check) runs as lab test runs it: on its saved
   // inputs, then on small values, and a failing expect shows here with the
   // inputs it failed on (T7d).
-  if (z?.t === "fn" && z.eff.effs.includes(CHECK) && !errorsIn(info) && !holesIn(info)) return lawPanel(info, box);
+  if (z?.t === "fn" && z.eff.effs.includes(CHECK) && !errorsIn(info) && !holesIn(info)) return lawPanel(info, box, { code: prog(), names: pres().names, def: ui.def, examples: doc.examples ?? {}, world: quietWorld() });
   // An action that performs an effect nothing answers yet runs only inside
   // a handler: say where, instead of a Run that can only fail.
   const needs = action ? needsHandling(z).filter((e) => e !== CHOICE) : [];
@@ -3443,7 +3408,7 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
     ex ? h("button", { class: "btn", type: "button", "data-act": "t-novalues" }, "Hide values") : null));
   else if (z?.t === "fn" && !EMBED) box.append(h("p", { class: "hint" }, ex ? "The graph shows what every node makes of these values. They're saved in examples.json, not in the code."
     : "The graph shows what every node makes of these values. Change one to keep values of your own, in examples.json, not in the code."));
-  if (tr?.result !== undefined && (action || value)) box.append(h("div", { class: "hint" }, choice ? "Its first answer: " : "Gives ", valueView(tr.result)));
+  if (tr?.result !== undefined && (action || value)) box.append(h("div", { class: "hint" }, choice ? "Its first answer: " : "Gives ", valueView(tr.result, doc.code, pres().names)));
   // A hole isn't a failure: it is where the program isn't written yet.
   // Nor is a run on values you didn't give: they're only a starting point.
   // Nor the graph's own time limit (E207): Run main runs it in full. Nor
