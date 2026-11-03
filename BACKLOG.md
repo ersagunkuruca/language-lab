@@ -70,6 +70,13 @@ New items land here until the next triage gives them a lane and a priority.
 | E230 | When an edit changes a definition's cost order or a type's chosen representation, say so next to the edit and name the use that caused it (cost.ts, E159's panel) | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §7 | P3 | M | |
 | E231 | Keyboard-only and screen-reader use of the editor, done part by part with E228's split; the daily QA format gains both checks | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §10 | P3 | L | |
 
+### What a good language needs ([ASPECTS-2026-11-03](docs/reports/reviews/ASPECTS-2026-11-03.md))
+
+| id | item | source | pri | size | status |
+|---|---|---|---|---|---|
+| E232 | Pause and step a run in the editor: stop at a node, step, see each effect answered so far, step back (on L186's log). Today "Show values" shows one finished run | [ASPECTS-2026-11-03](docs/reports/reviews/ASPECTS-2026-11-03.md) 204, 205 | P3 | L | after L186 |
+| E233 | A profile on the graph: time, calls and allocations per definition from a run, beside cost.ts's order (E230 says when the order changes; this says where a run spends its time) | [ASPECTS-2026-11-03](docs/reports/reviews/ASPECTS-2026-11-03.md) 125, 206 | P3 | M | |
+
 ## C: Compiler and targets
 
 New targets and speed rank below every language item (Ersagun,
@@ -249,6 +256,16 @@ agent with inertia. All later goals.
 | L186 | Design note in HOSTS.md: every world answer goes through one log a host can keep, so any run can be replayed exactly, stepped back, or saved as a test's inputs (with the seeded scheduler once fibers land) | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §6 | P3 | S | |
 | L187 | Error messages as one table (id, message, usual fix, the gesture that fixes it) with a smallest program per problem as its test | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §8 | P3 | M | |
 | L188 | Dates and times: Instant, calendar Date, Duration (on units.ts), time zone; now and the local zone as world effects (java.time, Temporal, influence) | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §9 | P3 | M | |
+
+### What a good language needs ([ASPECTS-2026-11-03](docs/reports/reviews/ASPECTS-2026-11-03.md))
+
+| id | item | source | pri | size | status |
+|---|---|---|---|---|---|
+| L189 | `Bytes`: a byte sequence, meaning a list of Ints 0 to 255, stored as a buffer by the representation layer; Files and Network read and write it. Audio files, images, binary formats, hashes and WASM/C buffers need it; today there is only Text | [ASPECTS-2026-11-03](docs/reports/reviews/ASPECTS-2026-11-03.md) 153, 164, 290 | P2 | M | |
+| L190 | JSON (then CSV) as a grammar run both ways (L70): one definition parses and prints, typed to the program's own records; websites and apps talk JSON | [ASPECTS-2026-11-03](docs/reports/reviews/ASPECTS-2026-11-03.md) 63, 166 | P2 | M | |
+| L191 | Network beyond `fetch text`: a request with method, headers and body, a response with status, headers and body (Text or L189's Bytes), as Network operations answered by the world or a test's handler | [ASPECTS-2026-11-03](docs/reports/reviews/ASPECTS-2026-11-03.md) 162 | P2 | M | |
+| L192 | Resources live only inside their handler: a file, audio device or socket is released when its handler ends and can't escape it (effects, not linear types). Design note first; it closes LANGUAGE.md's "resource misuse: not addressed" row | [ASPECTS-2026-11-03](docs/reports/reviews/ASPECTS-2026-11-03.md) 97, 123 | P3 | M | |
+| L193 | Wrapping integers as a meaning: arithmetic mod 2^n (`Word8`, `Word32`, `Word64`) for hashes, PRNGs, binary formats and audio samples, which unbounded Int can't say; the representation picks the machine word | [ASPECTS-2026-11-03](docs/reports/reviews/ASPECTS-2026-11-03.md) 142, 143 | P3 | M | |
 
 ## T: Testing and fast feedback
 
