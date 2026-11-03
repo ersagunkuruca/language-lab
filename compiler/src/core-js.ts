@@ -22,6 +22,7 @@ import { ARRAY_OPS, CONS, FALSE, HASH_SET_OPS, NIL, NONE, S, SOME, STD_IMPL, STD
 import { META, cellOps, equal, solveAnswers, toList, type Runtime, type Value, type World } from "../../ters/src/lang/run.ts";
 import { Cells, NoValue } from "../../ters/src/lang/cells.ts";
 import { NoAnswer } from "../../ters/src/lang/html.ts";
+import { satisfiable } from "../../ters/src/lang/relate.ts";
 import { worldRandom } from "../../ters/src/lang/random.ts";
 import * as I from "../../ters/src/lang/int.ts";
 import * as T from "../../ters/src/lang/text.ts";
@@ -104,6 +105,7 @@ function rtFn(name: string, tables?: TableSpec[], rand?: Record<string, (...xs: 
   if (name.startsWith("host:")) return hostFn(name, cells);
   if (name.startsWith("solve:")) return solveFn(name.slice(6), code, false, spend);
   if (name.startsWith("solveAll:")) return solveFn(name.slice(9), code, true, spend);
+  if (name === "exists") return (f) => { if (!code) throw new Unsupported("for some without the program"); return satisfiable(code, f); };
   if (name.startsWith("pick:")) { const [, j, bool] = name.split(":"); return (xs) => { const v = (xs as Value[])[Number(j)]; return bool ? (v as unknown) === true || (v as { tag?: Id }).tag === TRUE : v; }; }
   const tm = TABLE.exec(name);
   if (tm && tables) return tableFn(tm[1], tables[Number(tm[2])]);
@@ -529,7 +531,7 @@ export function coreModule(ir: CoreIR, name: string, runtime: string, world: str
 
 // The program's nodes, for a module whose solves the evaluator's solver
 // runs (C137c11): only when it has one.
-const codeFor = (ir: CoreIR, js: string) => (/R\.rt\("solve/.test(js) ? JSON.stringify({ nodes: ir.code.nodes, defs: ir.code.defs }) : "undefined");
+const codeFor = (ir: CoreIR, js: string) => (/R\.rt\("(solve|exists")/.test(js) ? JSON.stringify({ nodes: ir.code.nodes, defs: ir.code.defs }) : "undefined");
 
 // A page's script (C137c9, `lab build-web --core`): the printed functions,
 // with core-page.ts (`page`, which a bundler takes in) drawing main.

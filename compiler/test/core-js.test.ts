@@ -17,7 +17,12 @@ import type { Runtime, World } from "../../ters/src/lang/run.ts";
 import { equal, fromList, makeRunner, runProgram, type Data, type Value } from "../../ters/src/lang/run.ts";
 import { Cells } from "../../ters/src/lang/cells.ts";
 import { evaluatorCall, htmlText, NoAnswer } from "../../ters/src/lang/html.ts";
-import { HTML_V } from "../../ters/src/lang/std.ts";
+import { HTML_V, S, TRUE } from "../../ters/src/lang/std.ts";
+import { Lang } from "../../ters/src/lang/dsl.ts";
+import { base, baseNames } from "../../ters/src/lang/load.ts";
+import { infer } from "../../ters/src/lang/infer.ts";
+import { B } from "../../ters/src/prelude.ts";
+import type { Id } from "../../ters/src/model.ts";
 import { lowerScalar } from "../src/scalar.ts";
 import { FAIL, loadCoreJs, runCoreMain } from "../src/core-js.ts";
 import { examples, load } from "../src/program.ts";
@@ -171,4 +176,25 @@ test("lab build-web --core writes a page that draws and reacts as lab build-web'
   const r = spawnSync(process.execPath, [lab, "build-web", join(examples, "pig"), "--core", "-o", join(dir, "pig.html")], { encoding: "utf8" });
   assert.equal(r.status, 2);
   assert.match(r.stderr, /isn't compiled through the core IR: it calls written into/);
+});
+
+// for some(x => …) (C137c16): the evaluator's relational interpreter on a
+// printed closure, which carries its lambda; the same answers as the
+// evaluator's, on equations it solves and on ones with no answer.
+test("for some in JavaScript from the core IR: the evaluator's relational interpreter on the printed closure", () => {
+  const k = new Lang();
+  const d = (name: string, params: string[], body: (...xs: Id[]) => Id) => { const x = k.def(name); k.define(x, k.fn(params, body)); return x; };
+  const root = d("has root", ["c"], (c) => k.call(S.exists, k.fn(["x"], (x) => k.equal(k.call(B.mul, x, x), c))));
+  const between = d("lands between", ["a", "b"], (a, b) => k.call(S.exists, k.fn(["t"], (t) => k.call(S.and, k.equal(k.call(B.add, k.call(B.mul, t, k.lit(2)), k.lit(1)), a), k.call(S.less, t, b)))));
+  const code = base(k.code), names = { ...baseNames(), ...k.names }, info = infer(code, names);
+  const l = lowerScalar(code, info, names, [root, between], { data: true, host: true });
+  assert.deepEqual([...l.refused.values()], []);
+  const r = makeRunner(code, info, { print: () => {}, names });
+  const fs = loadCoreJs(l);
+  const asked: [Id, number[]][] = [[root, [4]], [root, [2]], [root, [0]], [between, [5, 3]], [between, [5, 1]], [between, [-3, 0]]];
+  for (const [def, xs] of asked) {
+    const fi = l.funcs.findIndex((g) => g.def === def && !g.inner);
+    const want = [...(r.value(def) as (...a: number[]) => Iterable<Value>)(...xs)].map((v) => (v as Data).tag === TRUE);
+    assert.deepEqual([fs[fi](...xs)], want, `${names[def]}(${xs.join(", ")})`);
+  }
 });
