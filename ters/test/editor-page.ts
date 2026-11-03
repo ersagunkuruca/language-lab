@@ -177,7 +177,7 @@ export function openEditor(saved?: string) {
     async scrollIntoViewIfNeeded() { await this.one(); }
     async check(o: { timeout?: number } = {}) { const el = await this.one(o.timeout) as HTMLInputElement; if (!el.checked) await this.click(o); }
     async press(key: string, o: { timeout?: number } = {}) { (await this.one(o.timeout)).focus(); await keyboard.press(key); }
-    async isDisabled(o: { timeout?: number } = {}) { return (await this.one(o.timeout)).hasAttribute("disabled"); }
+    async isDisabled(o: { timeout?: number } = {}) { const e = await this.one(o.timeout); return e.hasAttribute("disabled") || e.getAttribute("aria-disabled") === "true"; }
     async isChecked(o: { timeout?: number } = {}) { return (await this.one(o.timeout) as HTMLInputElement).checked; }
     async inputValue(o: { timeout?: number } = {}) { return (await this.one(o.timeout) as HTMLInputElement).value; }
     async allTextContents() { return this.all().map((e) => e.textContent ?? ""); }
