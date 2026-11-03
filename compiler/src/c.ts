@@ -887,9 +887,15 @@ int main(int argc, char **argv) {
         const done = `L${labels++}`;
         const lines: string[] = fuel ? [`${d}${local(e.save)} = lab_fuel;`] : [];
         let label = "";
+        // On with an answer: what only the arm would use goes (I151; it
+        // was kept, a list the arm read never freed).
+        const armOnly = drops(keep, new Set(), after, d);
         within(keep, (l) => {
           label = l;
-          lines.push(give(ex(e.body, lines, d, keep)));
+          const v = ex(e.body, lines, d, keep);
+          if (!armOnly.length) { lines.push(give(v)); return; }
+          const given = temp(e.t);
+          lines.push(`${d}${given} = ${v};`, ...armOnly, give(given));
         });
         if (to !== "return") lines.push(`${d}goto ${done};`);
         lines.push(...at(d, label), `${d}if (lab_st != ${2 + (e.esc ?? 0)}) {`, ...out(d + "  ", keep), `${d}}`, ...(fuel ? [`${d}lab_fuel = ${local(e.save)};`] : []));

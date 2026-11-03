@@ -422,6 +422,35 @@ test("a program's own effects that never return, in C as Abort is, and every cel
   sameAndFreed(build(lowered), calls, (i, xs) => { try { return first(r.call(r.value(lowered.funcs[i].def), ...xs))!; } catch (e) { if (e instanceof Aborted) return { aborted: e.reason } as unknown as Value; throw e; } }, (i) => lowered.funcs[i].name);
 });
 
+// I151: a handler that finished without its effect performed kept what only
+// its case for the effect would use: the list read there was never freed.
+test("a handler finished without its effect frees what only its case used, in C (I151)", { skip }, async () => {
+  const { Lang } = await import("../../ters/src/lang/dsl.ts");
+  const { infer } = await import("../../ters/src/lang/infer.ts");
+  const { base, baseNames, checkOptions } = await import("../../ters/src/lang/load.ts");
+  const { LIBRARY } = await import("../../ters/src/lang/library.ts");
+  const { INT_OPS } = await import("../../ters/src/lang/std.ts");
+  const { INT, NUMBER, STRING } = await import("../../ters/src/lang/types.ts");
+  const k = new Lang(LIBRARY.code);
+  const L = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
+  const E = k.effect("Escape", [["bail", [["code", () => k.tref(INT)]], null], ["quit", [["why", () => k.tref(STRING)], ["by", () => k.tref(NUMBER)]], null]]);
+  // length(xs) + (handled: n + 1, or bail(n) past 2; the quit case reads xs).
+  const g = k.def("g");
+  k.define(g, k.fn(["n", "ys"], (n, ys) => k.let("xs", k.call(L("append"), ys, k.list(n)), (xs) => k.call(INT_OPS.add, k.call(L("length"), xs), k.handle(
+    k.if(k.call(INT_OPS.less, k.int(2), n), k.call(E.op.bail, n), k.call(INT_OPS.add, n, k.int(1))), [
+      { variant: E.op.bail, names: ["c"], body: ([c]) => c },
+      { variant: E.op.quit, names: ["w", "b"], body: () => k.call(L("length"), k.call(L("append"), xs, xs)) },
+    ])))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const lowered = lowerScalar(code, info, names, [g], { data: true });
+  const i = lowered.funcs.findIndex((f) => f.def === g && !f.inner);
+  const r = makeRunner(code, info, { print: () => {} });
+  const calls = [1n, 5n].map((n): [number, Value[]] => [i, [norm(n), toList([norm(1n), norm(2n)])]]);
+  sameAndFreed(build(lowered), calls, (_, xs) => first(r.call(r.value(g), ...xs))!, () => "g");
+});
+
 test("a recursive let in C: lifted to a definition, the evaluator's answers, every cell freed (BACKLOG L84)", { skip }, async () => {
   const { recursiveLets } = await import("../src/fixtures.ts");
   const p = recursiveLets();
