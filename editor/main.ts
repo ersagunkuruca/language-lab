@@ -478,7 +478,9 @@ const UNSAVED = "Not kept in this browser: its storage is full. Save file keeps 
 function save() {
   docs[doc.program] = doc;
   if (EMBED) return;
-  const all = Object.fromEntries(Object.entries(docs).map(([k, d]) => [k, kept(d)]));
+  // An example as shipped isn't kept: it opens from the page again (I160:
+  // opening every example one after another filled the store, 5 MB).
+  const all = Object.fromEntries(Object.entries(docs).filter(([k, d]) => k.startsWith(MINE) || d.edited).map(([k, d]) => [k, kept(d)]));
   try { localStorage.setItem(STORE, JSON.stringify({ current: doc.program, docs: all, held })); }
   catch { ui.note = ui.note ? `${ui.note} ${UNSAVED}` : UNSAVED; }
 }
