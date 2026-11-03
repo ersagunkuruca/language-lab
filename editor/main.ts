@@ -43,6 +43,7 @@ import { typedGraph, type GraphView, type MenuTarget } from "./typedGraph.ts";
 import { builtinName, builtinOf, definitionOf } from "./define.ts";
 import { follow, s as svg, type Pos } from "./canvas.ts";
 import { h, type Kid } from "./dom.ts";
+import { newWorker, pageRuntimeText, profileView, stuckView, workletRuntimeText } from "./runViews.ts";
 import { fromFile, toFile } from "../ters/src/files.ts";
 import { flattened, matchRows, sameEverywhere } from "../ters/src/lang/patterns.ts";
 import { showPin, type Pins } from "../ters/src/lang/signatures.ts";
@@ -3577,7 +3578,7 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
       box.append(h("pre", { class: "text out" }, ui.output.lines.join("\n") || (going ? "Running…" : "(no output)")));
       if (ui.output.error) box.append(h("p", { class: "status-line bad" }, ui.output.error));
       if (ui.output.stuck) box.append(stuckView(ui.output.stuck));
-      if (ui.output.profile) box.append(profileView(namer, ui.output.profile));
+      if (ui.output.profile) box.append(profileView(namer, ui.output.profile, doc.code, pick));
       if (ui.output.compiled) box.append(h("p", { class: "hint", title: "main compiled to JavaScript, as Open in a tab and lab compile do: the same output, much faster than the evaluator, but with no record of where the run went" }, "Ran compiled."));
     }
   } else if (z?.t === "fn" && z.eff.effs.some((e) => WORLD.includes(e))) {
@@ -3641,8 +3642,6 @@ function pictureSection(info: T.Info | null): HTMLElement | null {
 // the page's elements are made in a document that outlives renders and are
 // put back into the frame each time; their listeners and watchers go with
 // them, and what you typed into the page stays.
-declare const PAGE_RUNTIME: string; // cli/web.ts pageRuntime, put in by editor/build.ts
-declare const WORKLET_RUNTIME: string; // cli/web.ts workletRuntime: a page with sound plays (AUDIO.md)
 const page = {
   frame: h("iframe", { class: "page", title: "The page main returns, running" }) as HTMLIFrameElement,
   status: h("p", { class: "hint" }),
@@ -3956,17 +3955,6 @@ function boundedTrace(info: T.Info, args: Value[]): Trace {
 
 // Run main in a worker (editor/runWorker.ts): the page keeps drawing, the
 // printing shows as it comes, and Stop ends it.
-declare const RUN_WORKER: string; // editor/runWorker.ts bundled, put in by editor/build.ts
-// esbuild's define writes the text at every use, so each runtime is used
-// once, here (E204): three uses of the worker carried its 3 MB three times.
-// (Its blob's address kept on the function, which is there before any
-// line of this file runs.)
-function newWorker(): Worker { const f = newWorker as { url?: string }; return new Worker(f.url ??= URL.createObjectURL(new Blob([runtimeText("lab-run-worker") || RUN_WORKER], { type: "text/javascript" }))); }
-// The site's page keeps them as text elements instead (build.ts, E204), so
-// the script it parses before the first drawing is 8 MB shorter.
-function runtimeText(id: string) { return document.getElementById(id)?.textContent || ""; }
-function pageRuntimeText() { return runtimeText("lab-page-runtime") || PAGE_RUNTIME; }
-function workletRuntimeText() { return runtimeText("lab-worklet-runtime") || WORKLET_RUNTIME; }
 let running: Worker | null = null;
 function stopRun(why?: string) {
   running?.terminate();
@@ -3981,32 +3969,6 @@ function runGiven(): { args: string[]; files: Record<string, string> } | null {
   const m = manifest.programs.find((p) => p.program === doc.program && p.editor !== false);
   if (!m?.run || doc.title || ui.def !== defNamed("main")) return null;
   return { args: m.run.args, files: m.folders?.[0] ? FILES(m.folders[0]).data ?? {} : {} };
-}
-// Where a read of a text run backwards stopped (L70c): its line, marked
-// at the place, and what was looked for there.
-function stuckView(st: Stuck): HTMLElement {
-  const start = st.text.lastIndexOf("\n", st.at - 1) + 1, end0 = st.text.indexOf("\n", st.at);
-  const end = end0 < 0 ? st.text.length : end0;
-  const from = Math.max(start, st.at - 40), to = Math.min(end, st.at + 40);
-  const before = st.text.slice(from, st.at), here = st.text.slice(st.at, st.at + 1), after = st.text.slice(st.at + 1, to);
-  const many = st.times > 1 ? ` ${st.times} texts couldn't be read back; this is the last.` : "";
-  return h("div", { class: "stuck" },
-    h("p", { class: "hint" }, `Reading the text back found nothing.${many} It stops at the mark${st.expected.length ? `, where it looked for ${st.expected.join(" or ")}` : ""}.`),
-    h("pre", { class: "text out stuck-at", title: st.said }, from > start ? "…" : "", before,
-      h("mark", { class: "stuck-mark", title: "Where the reading stopped" }, here && here !== "\n" ? here : "⏎"), after, to < end ? "…" : ""));
-}
-// Where the finished run spent its time (E233): the program's own
-// definitions, most time first, each a link to open it. The time is
-// sampled (runWorker.ts), so small shares are rough; calls are exact.
-function profileView(namer: Namer, profile: Profile): HTMLElement {
-  const total = profile.reduce((t, p) => t + p.ms, 0);
-  const rows = profile.filter((p) => doc.code.nodes[p.def]).slice(0, 8);
-  const share = (ms: number) => (total ? `${Math.round((100 * ms) / total)}%` : "");
-  return h("details", { class: "profile" },
-    h("summary", {}, `Where the run went: ${rows.length} of ${profile.length} definition${profile.length === 1 ? "" : "s"}`),
-    h("table", { class: "profile-t" },
-      h("tr", {}, h("th", {}, "definition"), h("th", {}, "calls"), h("th", { title: "About how much of the run's time was spent in it, itself (not in what it calls), sampled" }, "time")),
-      ...rows.map((p) => h("tr", {}, h("td", {}, pick(p.def, namer.name(p.def))), h("td", {}, p.calls.toLocaleString("en")), h("td", {}, total ? `${share(p.ms)} · ${p.ms} ms` : "")))));
 }
 // main as compiled by its last run, and the code it was compiled from.
 let compiledFor: { code: Code; def: Id; args?: string[]; compiled: Compiled } | null = null;
