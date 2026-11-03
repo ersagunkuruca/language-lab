@@ -311,10 +311,27 @@ export function finiteFloat(op: string, r: number, args: number[]): Iterable<num
     : op === S.float32 ? "the number is too big for a Float32 (overflow)" : "the answer is too big for a Float64 (overflow)");
 }
 
+// resolveArithmetic's answer for a version of the code and its check: the
+// editor makes a runner for each of a definition's traces when it opens
+// (its values, main's run for its seed, a backward search), and resolving
+// calc took about a second each time (I158). What it gives isn't changed
+// after (makeRunner copies the nodes before writing).
+// Keyed by the program and its check only: the names change only the
+// wording of a refusal (thrown, so not kept) and the names it gives back,
+// which no caller here reads.
+const resolved = new WeakMap<Code, WeakMap<Info, { code: Code; info: Info }>>();
+export function resolvedFor(code: Code, info: Info, names: Names | undefined): { code: Code; info: Info } {
+  let byInfo = resolved.get(code);
+  if (!byInfo) resolved.set(code, (byInfo = new WeakMap()));
+  let r = byInfo.get(info);
+  if (!r) { const { code: c, info: i } = resolveArithmetic(code, info, names ?? {}); byInfo.set(info, (r = { code: c, info: i })); }
+  return r;
+}
+
 export function makeRunner(code: Code, info: Info, rt: Runtime) {
   // The generic + resolved to each type's own (arith.ts); a program
   // without one is unchanged.
-  ({ code, info } = resolveArithmetic(code, info, rt.names ?? {}));
+  ({ code, info } = resolvedFor(code, info, rt.names));
   // A copy at another number type is entered as the lambda it copies.
   const copyOf = info.copyOf;
   // Our own copy of the node table: `derivative` writes new code into it.
@@ -868,7 +885,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         if (p.mode === "relational") {
           // Each step that might unfold forever spends the innermost fuel.
           const spend = () => { const f = fuel(); return !(f && --f.left < 0); };
-          for (const sol of relate(code, useTarget(code.nodes, n), known, { spend, names: rt.names, stuck: rt.stuck })) {
+          for (const sol of relate(code, useTarget(code.nodes, n), known, { spend, names: rt.names, stuck: rt.stuck, info })) {
             const bound = Object.keys(n.binds).map((k) => toValue(sol.values[k]));
             if (bound.some((v) => v === undefined)) continue; // not pinned down: not an answer
             yield bound as Value[];
