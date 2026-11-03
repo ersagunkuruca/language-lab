@@ -3337,7 +3337,7 @@ function graphHooks(info: T.Info) {
     turn: (id: Id) => {
       const up = parentOf(doc.code, id);
       if (up?.slot === "args" && T.turnable(doc.code, up.parent)) return (applyT(T.turnAround(doc.code, doc.names.short, info, up.parent, up.index!)), true);
-      const s = Object.values(doc.code.nodes).find((n) => isUse(n) && Object.values(n.binds).includes(id));
+      const s = Object.values(doc.code.nodes).find((n) => isUse(n) && Object.values(n.binds ?? {}).includes(id));
       return s ? (applyT(T.turnBack(doc.code, doc.names.short, info, s.id)), true) : false;
     },
     // Whether a wire can go there, asked for each input a drag passes: the
