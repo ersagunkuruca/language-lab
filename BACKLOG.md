@@ -45,7 +45,7 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E228 | editor/main.ts (4,589 lines, 254 kind tests) split by job (a: one element maker, editor/dom.ts; b: run runtimes and views, editor/runViews.ts; c: the Guide, editor/guide.ts) (selection, palette, run, files); the palette and inspector read L178's schema instead of switching on kinds | [FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md) §11 | P3 | L | |
+| E228 | editor/main.ts (4,589 lines, 254 kind tests) split by job (a: one element maker, editor/dom.ts; b: run runtimes and views, editor/runViews.ts; c: the Guide, editor/guide.ts; d: the solver's derived program, editor/solverText.ts) (selection, palette, run, files); the palette and inspector read L178's schema instead of switching on kinds | [FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md) §11 | P3 | L | |
 
 ### Writing programs in the editor
 
