@@ -1690,6 +1690,7 @@ export function interpreter(given: Code, opts: Options = {}) {
     }
     // Each builtin either has a reading above or says here why it has none
     // (compiler/test/builtins.test.ts checks every one).
+    if (id === S.stop) throw new NotInvertible(`${stdNames[id] ?? id} stops the program: there is no answer to run backwards from`);
     if (WORLD_OPS.has(id)) throw new NotInvertible(`${stdNames[id] ?? id} touches the world (the console, files): that can't be undone, and a search would do it once per guess`);
     if (CELL_IDS.has(id)) throw new NotInvertible(`${stdNames[id] ?? id} works on cells, the runtime's state, which only runs forward`);
     throw new NotInvertible(`${id} has no backwards reading`);
