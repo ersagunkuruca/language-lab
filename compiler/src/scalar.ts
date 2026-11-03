@@ -522,6 +522,11 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     const args = new Map(td.params.map((p, i) => [p, t.args[i]] as const));
     const te = (tid: Id): Type | null => {
       const n = code.nodes[tid];
+      // A field holding a function (C126), with the effects it names.
+      if (n?.kind === "tfun") {
+        const ps = n.params.map(te), ret = te(n.result);
+        return ps.every((x) => x) && ret ? { t: "fn", params: ps as Type[], ret, eff: { effs: n.effects ?? [], tail: null } } : null;
+      }
       if (n?.kind !== "tref") return null;
       if (args.has(n.target)) return args.get(n.target)!;
       const xs = n.args.map(te);
