@@ -79,7 +79,7 @@ const TABLE_RT: Record<Id, string> = {
   [HASH_SET_OPS.empty]: "empty", [HASH_SET_OPS.add]: "put", [HASH_SET_OPS.remove]: "remove", [HASH_SET_OPS.has]: "has",
   [HASH_SET_OPS.size]: "size", [HASH_SET_OPS.items]: "entries",
 };
-const ARRAY_RT: Record<Id, string> = {
+export const ARRAY_RT: Record<Id, string> = {
   [ARRAY_OPS.empty]: "array.empty", [ARRAY_OPS.of]: "array.of", [ARRAY_OPS.items]: "array.items",
   [ARRAY_OPS.length]: "array.length", [ARRAY_OPS.at]: "array.at", [ARRAY_OPS.push]: "array.push",
   [ARRAY_OPS.first]: "array.first", [ARRAY_OPS.rest]: "array.rest", [ARRAY_OPS.pushFront]: "array.pushFront",
@@ -92,7 +92,7 @@ const INT32: Record<Id, Op> = {
   [INT_OPS.quotient]: "iquot", [INT_OPS.remainder]: "irem", [INT_OPS.power]: "ipow", [INT_OPS.wholePart]: "iwhole",
 };
 // Builtins on Int and Text that are runtime functions (`data`).
-const RT: Record<Id, string> = {
+export const RT: Record<Id, string> = {
   [INT_OPS.add]: "int.add", [INT_OPS.sub]: "int.sub", [INT_OPS.mul]: "int.mul", [INT_OPS.neg]: "int.neg", [INT_OPS.abs]: "int.abs",
   [INT_OPS.less]: "int.less", [INT_OPS.show]: "int.show", [INT_OPS.toNumber]: "int.toNumber",
   [S.concat]: "text.concat", [S.show]: "number.show", [S.range]: "number.range", [INT_OPS.range]: "int.range",

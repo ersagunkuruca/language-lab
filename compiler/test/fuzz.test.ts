@@ -28,6 +28,7 @@ import type { Id } from "../../ters/src/model.ts";
 import { compile } from "../src/compile.ts";
 import { isData, lowerScalar, type LType } from "../src/scalar.ts";
 import { emitWasm, fromText, instantiate, toInt } from "../src/wasm.ts";
+import { FAIL, Unsupported, loadCoreJs } from "../src/core-js.ts";
 import { build, skip } from "./c-harness.ts";
 import { program } from "./fuzz-programs.ts";
 import { withLibraryRepresentations } from "../../ters/src/lang/library-reps.ts";
@@ -62,6 +63,8 @@ test(`generated programs: the evaluator, compiled JavaScript, WebAssembly and C 
 
   // Every difference, by engine, so one run shows them all.
   const differ: string[] = [];
+  // What JavaScript from the core IR doesn't run yet (C137c).
+  const unsupported = new Set<string>(); let compared = 0;
   // An overflow nobody uses may not be reported (FLOAT-VALUES-2026-11-01
   // §2): where the evaluator stops, a compiled engine that checked later
   // may give an answer. The other way round is a difference.
@@ -101,6 +104,25 @@ test(`generated programs: the evaluator, compiled JavaScript, WebAssembly and C 
     });
     }
 
+    // JavaScript printed from the core IR (C137c). What it can't run yet
+    // throws Unsupported, and isn't compared.
+    {
+    const cj = loadCoreJs(lowered);
+    const list = (xs: bigint[], t: LType): unknown => {
+      if (!isData(t)) throw new Error("not a list");
+      const c = (v: Id) => t.cases.findIndex((x) => x.variant === v);
+      return xs.reduceRight<unknown>((l, x) => [c(CONS), norm(x), l], [c(NIL)]);
+    };
+    fns.forEach((fi, i) => INPUTS.forEach(([x, n, xs], j) => {
+      let got: unknown;
+      try { got = cj[fi](x, norm(n), entry ? norm(BigInt(j)) : list(xs, lowered.funcs[fi].params[2])); } catch (e) {
+        if (e instanceof Unsupported) { unsupported.add(e.message); return; }
+        got = e === FAIL ? "no answer" : "stop";
+      }
+      compared++; check(got, i, j, `JavaScript from the core IR${tag}`);
+    }));
+    }
+
     if (!skip) {
     const calls = fns.flatMap((fi) => INPUTS.map(([x, n, xs], j): [number, Value[]] => [fi, entry ? [x, norm(n), norm(BigInt(j))] : args(x, n, xs)]));
     const got = build(lowered)(calls);
@@ -137,5 +159,6 @@ test(`generated programs: the evaluator, compiled JavaScript, WebAssembly and C 
       await engines({ code: c.code, info, names: c.names }, ` (${c.chosen.join(", ")})`, false, true, true);
     }
   }
+  console.log(`seed ${SEED}: JavaScript from the core IR compared ${compared}${unsupported.size ? `, skipped ${[...unsupported].join(", ")}` : ""}`);
   assert.deepEqual(differ, []);
 });

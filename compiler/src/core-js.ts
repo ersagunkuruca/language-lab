@@ -1,0 +1,245 @@
+// JavaScript printed from the core IR (C137c, docs/design/targets/CORE-IR.md):
+// the printer that is to replace compile.ts, which lowers the model a
+// second way. Grown in steps, checked by the fuzz test (C101) against the
+// evaluator; this first step takes the `data` profile's values and
+// control, with Int, Text and Array through the evaluator's own builtins.
+//
+// Values: a Float64 is a number, a Bool a boolean, an Int the evaluator's
+// (a number while small, else a bigint: int.ts), a Text a string, a record
+// an array of its fields, a data type's value an array of its case's number
+// then its fields, a closure an array of its code then what it captured,
+// an Array the evaluator's. No answer (Choice) is the exception `FAIL`,
+// caught by the nearest attempt; an abort is an `Aborted`, caught by its
+// handler; a budget running out is `OUT`. A runtime function or world
+// operation this printer doesn't have yet throws `Unsupported` when it is
+// reached, so a program runs as far as it can.
+
+import { S, STD_IMPL, STD_MANY, TRUE } from "../../ters/src/lang/std.ts";
+import { fromList, toList, type Value } from "../../ters/src/lang/run.ts";
+import * as I from "../../ters/src/lang/int.ts";
+import * as T from "../../ters/src/lang/text.ts";
+import type { Id } from "../../ters/src/model.ts";
+import { ARRAY_RT, RT, isData, isRecord, type CoreIR, type LType, type Op, type SExpr, type SFunc } from "./scalar.ts";
+import { runtime } from "./wasm-rt.ts";
+import { STOPS } from "./stops.ts";
+
+export class Unsupported extends Error {}
+export class Stopped extends Error {}
+export class Aborted { reason: unknown; esc: number; constructor(reason: unknown, esc: number) { this.reason = reason; this.esc = esc; } }
+export const FAIL = { fail: true }, OUT = { out: true };
+
+const INFIX: Partial<Record<Op, string>> = { add: "+", sub: "-", mul: "*", div: "/", less: "<", equal: "===", beq: "===", and: "&&", or: "||" };
+const MATH: Partial<Record<Op, string>> = { sqrt: "sqrt", abs: "abs", floor: "floor", float32: "fround", sin: "sin", cos: "cos", tan: "tan", exp: "exp", log: "log", pow: "pow", atan2: "atan2" };
+
+// The runtime functions by name: the evaluator's builtin where there is
+// one (scalar.ts RT and ARRAY_RT, read backwards), with lists and Bools
+// turned between the two forms; the rest written here.
+const BUILTIN = new Map<string, Id>([...Object.entries(RT), ...Object.entries(ARRAY_RT)].map(([id, n]) => [n, id]));
+const big = (x: I.Int) => BigInt(x);
+const listIn = (l: unknown): Value => { const xs: unknown[] = []; let p = l as unknown[]; while (p[0] === 1) { xs.push(p[1]); p = p[2] as unknown[]; } return toList(xs as Value[]); };
+const listOut = (v: Value): unknown[] => fromList(v).reduceRight<unknown[]>((tail, x) => [1, x, tail], [0]);
+const OWN: Record<string, (...xs: never[]) => unknown> = {
+  "int.equal": (a: I.Int, b: I.Int) => a === b,
+  "int.less": (a: I.Int, b: I.Int) => a < b,
+  "text.equal": (a: string, b: string) => a === b,
+  "text.less": (a: string, b: string) => T.less(a, b),
+  "text.quoted": (t: string) => JSON.stringify(t),
+  "int.exact": (a: I.Int, b: I.Int) => I.norm(big(a) / big(b)),
+  "int.gcd": (a: I.Int, b: I.Int) => { let x = big(a) < 0n ? -big(a) : big(a), y = big(b) < 0n ? -big(b) : big(b); while (y) [x, y] = [y, x % y]; return I.norm(x); },
+  "text.size": (t: string) => Buffer.byteLength(t, "utf8"),
+  "text.bytes": (t: string, a: number, b: number) => Buffer.from(t, "utf8").subarray(a, b).toString("utf8"),
+  // Where the character that ends at byte i (> 0) starts.
+  "text.before": (t: string, i: number) => { const b = Buffer.from(t, "utf8"); do i--; while (i > 0 && (b[i] & 0xc0) === 0x80); return i; },
+};
+function rtFn(name: string): (...xs: unknown[]) => unknown {
+  const base = name.replace(/\.a\d+$/, "");
+  if (OWN[base]) return OWN[base] as (...xs: unknown[]) => unknown;
+  const id = BUILTIN.get(base === "array.get" ? "array.at" : base);
+  const one = id && STD_IMPL[id], many = id && STD_MANY[id];
+  if (!one && !many) return () => { throw new Unsupported(name); };
+  const meta = runtime(name);
+  const ins = meta.params.map(([, t]) => (t === "list" ? listIn : (x: unknown) => x));
+  const out = meta.result === "list" ? (v: unknown) => listOut(v as Value) : meta.result === "i32" ? (v: unknown) => (typeof v === "object" && v !== null && "tag" in v ? (v as { tag: Id }).tag === TRUE : v) : (v: unknown) => v;
+  // array.get's place is an i32; array.at's an Int.
+  const conv = base === "array.get" ? (xs: unknown[]) => [xs[0], I.norm(BigInt(xs[1] as number))] : (xs: unknown[]) => xs.map((x, j) => ins[j](x));
+  if (one) return (...xs) => out(one(...conv(xs)));
+  return (...xs) => { const r = many!(...conv(xs)); if (!r.length) throw FAIL; return out(r[0]); };
+}
+
+export const RUNTIME = {
+  FAIL, OUT, Aborted, Unsupported, rt: rtFn,
+  fail: (): never => { throw FAIL; },
+  stop: (i: number): never => { throw new Stopped(STOPS[i]); },
+  mod: (a: number, b: number) => ((a % b) + b) % b,
+  unsupported: (what: string): never => { throw new Unsupported(what); },
+  int: (s: string) => I.norm(BigInt(s)),
+  show: STD_IMPL[S.show],
+};
+
+// The source of a function of the runtime giving every function, by name.
+export function emitCoreJs(ir: CoreIR): { js: string; names: string[] } {
+  const names = ir.funcs.map((_, i) => `f${i}`);
+  const rts = new Map<string, string>();
+  const rtName = (n: string) => { if (!rts.has(n)) rts.set(n, `rt${rts.size}`); return rts.get(n)!; };
+  const text = ir.funcs.map((f, i) => func(f, i));
+  const js = [
+    "let fuel = Infinity;",
+    ...[...rts].map(([n, v]) => `const ${v} = R.rt(${JSON.stringify(n)});`),
+    ...text,
+    `return { ${names.join(", ")} };`,
+  ].join("\n");
+  return { js, names };
+
+  function func(f: SFunc, i: number): string {
+    let temps = 0;
+    const temp = () => `t${temps++}`;
+    const local = (j: number) => `l${j}`;
+    const self = (e: SExpr): boolean => (e.k === "call" && e.fn === i && e.tail) || kidsOf(e).some(self);
+    const loops = self(f.body);
+
+    // An expression, with the statements it needs first.
+    function ex(e: SExpr, pre: string[], d: string): string {
+      switch (e.k) {
+        case "num": return Object.is(e.v, -0) ? "(-0)" : e.v < 0 ? `(${e.v})` : Number.isFinite(e.v) ? String(e.v) : e.v > 0 ? "Infinity" : e.v < 0 ? "(-Infinity)" : "NaN";
+        case "int": { const v = I.norm(e.v); return typeof v === "bigint" ? `(${v}n)` : `(${v})`; }
+        case "text": return JSON.stringify(e.v);
+        case "bool": return String(e.v);
+        case "local": return local(e.i);
+        case "zero": if (e.none) return "R.fail()"; return zero(e.t);
+        case "op": {
+          const xs = e.args.map((a) => ex(a, pre, d));
+          if (INFIX[e.op]) return `(${xs[0]} ${INFIX[e.op]} ${xs[1]})`;
+          if (e.op === "neg") return `(-${xs[0]})`;
+          if (e.op === "not") return `(!${xs[0]})`;
+          if (e.op === "mod") return `R.mod(${xs.join(", ")})`;
+          if (e.op === "stop") return `R.stop(${xs[0]})`;
+          if (MATH[e.op]) return `Math.${MATH[e.op]}(${xs.join(", ")})`;
+          return `R.unsupported(${JSON.stringify(`op ${e.op}`)})`;
+        }
+        case "let": pre.push(`${d}${local(e.i)} = ${ex(e.value, pre, d)};`); return ex(e.body, pre, d);
+        case "if": {
+          const c = ex(e.cond, pre, d), t = temp();
+          pre.push(`${d}let ${t};`, `${d}if (${c}) {`, ...block(e.then, { set: t }, d + "  "), `${d}} else {`, ...block(e.else, { set: t }, d + "  "), `${d}}`);
+          return t;
+        }
+        case "call": {
+          // Its inputs computed first: a call's own statements must not
+          // come between them.
+          const xs = e.args.map((a) => ex(a, pre, d));
+          return `${names[e.fn]}(${xs.join(", ")})`;
+        }
+        case "make": return `[${e.args.map((a) => ex(a, pre, d)).join(", ")}]`;
+        case "get": return `${ex(e.rec, pre, d)}[${e.i}]`;
+        case "new": return `[${[String(e.c), ...e.args.map((a) => ex(a, pre, d))].join(", ")}]`;
+        case "field": return `${ex(e.rec, pre, d)}[${e.i + 1}]`;
+        case "tag": return `${ex(e.rec, pre, d)}[0]`;
+        case "closure": return `[${[names[e.fn], ...e.caps.map((a) => ex(a, pre, d))].join(", ")}]`;
+        case "cap": return `l0[${e.i + 1}]`;
+        case "apply": {
+          const c = ex(e.fn, pre, d), xs = e.args.map((a) => ex(a, pre, d));
+          pre.push(`${d}${local(e.tmp)} = ${c};`);
+          return `${local(e.tmp)}[0](${[local(e.tmp), ...xs].join(", ")})`;
+        }
+        case "case": {
+          pre.push(`${d}${local(e.s)} = ${ex(e.scrut, pre, d)};`);
+          const t = temp();
+          pre.push(`${d}let ${t};`, `${d}switch (${local(e.s)}[0]) {`);
+          e.arms.forEach((a, c) => { if (a) pre.push(`${d}  case ${c}: {`, ...block(a, { set: t }, d + "    "), `${d}    break;`, `${d}  }`); });
+          pre.push(`${d}}`);
+          return t;
+        }
+        case "rt": {
+          const xs = e.args.map((a) => ex(a, pre, d));
+          return `${rtName(e.fn)}(${xs.join(", ")})`;
+        }
+        case "world": return `R.unsupported(${JSON.stringify(`world ${e.op}`)})`;
+        case "fail": return "R.fail()";
+        case "attempt": {
+          const ok = temp(), t = temp();
+          pre.push(`${d}let ${ok} = true;`, `${d}try {`, ...block(e.body, { set: local(e.res) }, d + "  "), `${d}} catch (x) {`, `${d}  if (x !== R.FAIL) throw x;`, `${d}  ${ok} = false;`, `${d}}`);
+          pre.push(`${d}let ${t};`, `${d}if (${ok}) {`, ...block(e.ok, { set: t }, d + "  "), `${d}} else {`, ...block(e.otherwise, { set: t }, d + "  "), `${d}}`);
+          return t;
+        }
+        case "budget": {
+          const s = temp(), out = temp(), t = temp();
+          pre.push(`${d}const ${s} = fuel;`, `${d}fuel = ${e.n};`, `${d}let ${t}, ${out} = false;`, `${d}try {`, ...block(e.body, { set: t }, d + "  "), `${d}} catch (x) {`, `${d}  if (x !== R.OUT) { fuel = ${s}; throw x; }`, `${d}  ${out} = true;`, `${d}}`, `${d}fuel = ${s};`);
+          pre.push(`${d}if (${out}) {`, ...block(e.otherwise, { set: t }, d + "  "), `${d}}`);
+          return t;
+        }
+        case "abort": return `R.abort(${ex(e.reason, pre, d)}, ${e.esc ?? 0})`;
+        case "handle": {
+          const t = temp();
+          pre.push(`${d}let ${t};`, `${d}try {`, ...block(e.body, { set: t }, d + "  "), `${d}} catch (x) {`, `${d}  if (!(x instanceof R.Aborted) || x.esc !== ${e.esc ?? 0}) throw x;`, `${d}  ${local(e.reason)} = x.reason;`, ...block(e.arm, { set: t }, d + "  "), `${d}}`);
+          return t;
+        }
+        case "set": { const r = ex(e.rec, pre, d); pre.push(`${d}${r}[${e.i}] = ${ex(e.value, pre, d)};`); return ex(e.then, pre, d); }
+        case "choose": case "search": throw new Error(`${e.k} is gone after lowering`);
+      }
+    }
+
+    // Statements that end by returning e's value, or setting a variable to it.
+    function block(e: SExpr, to: { set: string } | "return", d: string): string[] {
+      const out: string[] = [];
+      if (e.k === "let") {
+        out.push(`${d}${local(e.i)} = ${ex(e.value, out, d)};`);
+        return [...out, ...block(e.body, to, d)];
+      }
+      if (e.k === "if") {
+        const c = ex(e.cond, out, d);
+        return [...out, `${d}if (${c}) {`, ...block(e.then, to, d + "  "), `${d}} else {`, ...block(e.else, to, d + "  "), `${d}}`];
+      }
+      if (to === "return" && e.k === "call" && e.fn === i && e.tail) {
+        // The loop's next round: every new value computed before any is set.
+        const xs = e.args.map((a) => ex(a, out, d)), ts = xs.map(() => temp());
+        xs.forEach((x, j) => out.push(`${d}const ${ts[j]} = ${x};`));
+        ts.forEach((t, j) => out.push(`${d}${local(j)} = ${t};`));
+        return [...out, `${d}continue;`];
+      }
+      const x = ex(e, out, d);
+      return [...out, to === "return" ? `${d}return ${x};` : `${d}${to.set} = ${x};`];
+    }
+
+    // One from the budget per call, and per round of the loop.
+    const spend = (d: string) => (f.spends ? [`${d}if (--fuel < 0) throw R.OUT;`] : []);
+    const params = f.params.map((_, j) => local(j)), locals = f.locals.map((_, j) => local(f.params.length + j));
+    const body = loops ? ["  for (;;) {", ...spend("    "), ...block(f.body, "return", "    "), "  }"] : [...spend("  "), ...block(f.body, "return", "  ")];
+    return [`// ${f.name.replace(/\n/g, " ")}`, `function ${names[i]}(${params.join(", ")}) {`, ...(locals.length ? [`  let ${locals.join(", ")};`] : []), ...body, "}"].join("\n");
+  }
+}
+
+// What a variable starts as.
+function zero(t: LType): string {
+  if (t === "f64" || t === "int32") return "0";
+  if (t === "i32") return "false";
+  if (t === "int") return "0";
+  if (t === "text") return '""';
+  if (typeof t === "object" && isRecord(t)) return `[${t.fields.map((x) => zero(x.t)).join(", ")}]`;
+  if (typeof t === "object" && isData(t)) return "null";
+  return "null";
+}
+
+function kidsOf(e: SExpr): SExpr[] {
+  switch (e.k) {
+    case "op": case "call": case "make": case "new": case "rt": case "world": return e.args;
+    case "if": return [e.cond, e.then, e.else];
+    case "let": return [e.value, e.body];
+    case "get": case "field": case "tag": return [e.rec];
+    case "closure": return e.caps;
+    case "apply": return [e.fn, ...e.args];
+    case "case": return [e.scrut, ...e.arms.filter((a): a is SExpr => !!a)];
+    case "budget": return [e.body, e.otherwise];
+    case "attempt": return [e.body, e.ok, e.otherwise];
+    case "abort": return [e.reason];
+    case "handle": return [e.body, e.arm];
+    case "set": return [e.rec, e.value, e.then];
+    default: return [];
+  }
+}
+
+// The functions, by their place in ir.funcs.
+export function loadCoreJs(ir: CoreIR): ((...xs: unknown[]) => unknown)[] {
+  const { js, names } = emitCoreJs(ir);
+  const R = { ...RUNTIME, abort: (reason: unknown, esc: number): never => { throw new Aborted(reason, esc); } };
+  const all = new Function("R", js)(R) as Record<string, (...xs: unknown[]) => unknown>;
+  return names.map((n) => all[n]);
+}
