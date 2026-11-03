@@ -1,6 +1,7 @@
 # Hosts as handlers: named rows and the world's effects in std
 
 **Status (2026-10-31).** Built (Ersagun agreed 2026-10-31): L55 #709, L58.
+The world's answers in one log (L186, 2026-11-03) is a design rule, not built yet.
 L58 named View, Handler and Sound, the rows written in std's types. Main
 and a sound's maker stay ledger entries, since no type spells them. This note covers BACKLOG
 L58 (named rows for the hosts) and L55 (Console, Files and Network declared
@@ -88,6 +89,50 @@ row Making sound = Cells, Diverge
 - Prior art: Koka's effect aliases (`alias io = <console, fsys, net, …>`)
   name a row once and use it in types. Credit them in CREDITS.md when
   built.
+
+## L186: the world's answers, in one log
+
+**The rule.** Every answer a program gets from outside itself goes
+through one place a host can keep a log of. Nothing else may reach the
+program. Then any run can be replayed exactly, stepped back through, or
+saved as a test whose inputs are its log
+(BLIND-SPOTS-2026-11-03.md §6). A program's own computation needs no
+log: given the same answers, it does the same thing (SPEC §6.6 says the
+host's answers are the only thing that may differ between two runs).
+
+**What goes in the log**, in the order the program received it:
+
+- each world operation the program performed and what it was answered:
+  `read line`, `read file`, `file exists`, `list folder`, `random`,
+  `now`, `fetch text` and a background fetch's result when it arrives;
+- each event a page or a sound receives from outside: a click, a key, a
+  timer, an audio block's input. A handler's run is the answer to "what
+  happened";
+- once fibers come (L60), which fiber ran next, so the seeded scheduler's
+  order replays too.
+
+Writes (`print`, `write file`, `log`) are not answers. A replay checks them
+against the log instead, which is how a replayed test says where a run
+went another way.
+
+**Where it lands.** The evaluator's host is the `World` interface in
+run.ts, and every world answer already goes through it. Logging is a
+wrapper, `logged(world)`, that records each call with its arguments and
+answer, and replaying is a `World` that answers from a log and fails on a
+call the log doesn't have. Pages send events in through one entry, so
+the page host logs them there. The compiled runtimes (runtime.js, the C
+and WASI hosts) have their own world objects, and the same rule holds for
+them. A target may not answer the program from anywhere else, so a new
+host or a new world effect lands with its line in the log.
+
+**Not decided here:** how a log is stored and shown (an editor
+timeline, say). `seeded` needs no log: it answers Random inside the
+program, so its numbers replay by themselves.
+
+**Prior art.** Elm's time-travel debugger (Laszlo Pandy, 2014); Mozilla's
+rr, which records at the system-call boundary; Redux DevTools;
+FoundationDB's deterministic simulation. These are influences, and
+CREDITS.md gets a line when this is built.
 
 ## Order
 

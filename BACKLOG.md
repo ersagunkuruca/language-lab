@@ -269,7 +269,6 @@ agent with inertia. All later goals.
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | L185 | Text decisions: NFC where text enters from the world (equality stays code points); case mapping takes a locale as an argument or effect (Turkish i/İ, ı/I); `graphemes(t)`; collation as a separate order by locale | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §4 | P3 | M | |
-| L186 | Design note in HOSTS.md: every world answer goes through one log a host can keep, so any run can be replayed exactly, stepped back, or saved as a test's inputs (with the seeded scheduler once fibers land) | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §6 | P3 | S | |
 | L187 | Error messages as one table (id, message, usual fix, the gesture that fixes it) with a smallest program per problem as its test | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §8 | P3 | M | |
 | L188 | Dates and times: Instant, calendar Date, Duration (on units.ts), time zone; now and the local zone as world effects (java.time, Temporal, influence) | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §9 | P3 | M | |
 
@@ -292,8 +291,6 @@ agent with inertia. All later goals.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L199 | Fuel steps depend on the checker: a definition the checker learns to prove ending stops spending fuel, so `with fuel(n, …)` can change answer. Decide: count every call, or keep it and say a checker change may change fuel answers (SPEC §5.6) | [SPEC](docs/language/SPEC.md) §12 S4 | P3 | S | |
-| L201 | A definition marked as another's direction (POLAR) must give the same answers in the same canonical order as the search: a test that checks it on the examples' directions | [SPEC](docs/language/SPEC.md) §12 S14 | P3 | S | |
 
 ## T: Testing and fast feedback
 
