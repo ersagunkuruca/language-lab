@@ -177,6 +177,9 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
           () => call(S.count, search()),
           () => k.call(S.first, k.thunk(() => call(S.fuel, k.lit(r.pick([0, 1, 3, 8, 20, 200])), k.thunk(() => call(wander, small(60), sub("I"))))), k.thunk(() => sub("I"))),
           () => k.call(S.first, search(), k.thunk(() => sub("I"))),
+          // A search under a budget (C145): several answers, the first
+          // taken, or none, which gives the otherwise as running out does.
+          () => k.call(S.first, k.thunk(() => call(S.fuel, k.lit(r.pick([0, 3, 200])), search())), k.thunk(() => sub("I"))),
           () => call(INT_OPS.abs, sub("I")),
           () => orElse(call(INT_OPS.wholePart, sub("F"))),
           () => call(lib("set size"), call(lib("as set"), sub("L"))),
