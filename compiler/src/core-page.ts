@@ -7,7 +7,7 @@ import { equal } from "../../ters/src/lang/run.ts";
 import { Cells } from "../../ters/src/lang/cells.ts";
 import { browserWorld, pageStorage } from "../../ters/src/lang/browser.ts";
 import { mountHtml, type Doc, type Node_ } from "../../ters/src/lang/html.ts";
-import { coreCall, coreRuntime, type TableSpec } from "./core-js.ts";
+import { coreCall, coreRuntime, type TableSpec } from "./core-rt.ts";
 import type { Code } from "../../ters/src/model.ts";
 
 type Defs = Record<string, (...xs: unknown[]) => unknown>;

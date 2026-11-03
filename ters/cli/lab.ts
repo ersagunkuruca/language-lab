@@ -314,7 +314,7 @@ switch (command) {
       const why = lowered.refused.get(main);
       if (why) fail(`${p.names[main] ?? "main"} isn't compiled through the core IR: it ${why}`);
       const here = (f: string) => resolve(import.meta.dirname, f);
-      return coreModule(lowered, p.names[main] ?? "main", here("../../compiler/src/core-js.ts"), here("../src/lang/world.ts"));
+      return coreModule(lowered, p.names[main] ?? "main", here("../../compiler/src/core-rt.ts"), here("../src/lang/world.ts"));
     };
     if (esbuild) {
       await esbuild.build({

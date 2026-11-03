@@ -1,6 +1,7 @@
 // A page as one HTML file (WEB.md): `lab build-web` and editor/build.ts.
 
 import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import type { Code, Id } from "../src/model.ts";
 import { isCall } from "../src/model.ts";
 import type { Names } from "../src/presentation.ts";
@@ -80,12 +81,33 @@ export async function webCorePage(title: string, code: Code, info: Info, names: 
   const why = lowered.refused.get(main);
   if (why) throw new Error(`${names[main] ?? "main"} isn't compiled through the core IR: it ${why}`);
   const { build } = await esbuild();
+  const script = corePageScript(lowered, names[main] ?? "main", JSON.parse(at("../../compiler/src/core-page.ts")), title);
   const out = await build({
-    stdin: { contents: corePageScript(lowered, names[main] ?? "main", JSON.parse(at("../../compiler/src/core-page.ts")), title), resolveDir: here, sourcefile: "page.js", loader: "js" },
+    stdin: { contents: script, resolveDir: here, sourcefile: "page.js", loader: "js" },
     bundle: true, platform: "browser", format: "iife", target: "es2022", minify: true, write: false, logLevel: "warning",
+    plugins: carriesProgram(script) ? [] : [withoutSolver],
   });
   return pageShell(title, out.outputFiles[0].text);
 }
+
+// A printed page that solves nothing and looks inside no function
+// (C149): the evaluator's solver, checker and library aren't run, though
+// run.ts, which the page's cells and mount share, imports them. They are
+// left out, each export a function saying so, so the page is about 75 KB,
+// not 3.3 MB (the prelude's and trees' JSON, through arith.ts).
+// (The same test as core-js.ts's codeFor, which carries the nodes then.)
+const carriesProgram = (script: string) => /R\.rt\("(solve|exists")/.test(script);
+const SOLVER = /[\\/]src[\\/]lang[\\/](arith|relate|solve|modes|directions|derive)\.ts$/;
+const withoutSolver = {
+  name: "without the solver",
+  setup(b: { onLoad(o: { filter: RegExp }, f: (a: { path: string }) => { contents: string; loader: "js" }): void }) {
+    b.onLoad({ filter: SOLVER }, (a) => {
+      const text = readFileSync(a.path, "utf8");
+      const names = [...text.matchAll(/^export (?:function\*?|const|let|class) (\w+)/gm), ...[...text.matchAll(/^export \{([^}]*)\}/gm)].flatMap((m) => m[1].split(",").map((x) => [, x.trim().split(/\s+as\s+/).pop()!] as const))].map((m) => m[1]);
+      return { contents: names.map((n) => `export function ${n}() { throw new Error("this page was made without the solver"); }`).join("\n"), loader: "js" };
+    });
+  },
+};
 
 // All of page-runtime.ts as one script that sets `$lab`, for pages made
 // without a bundler (page.ts pageFile): the editor's "Save page".
