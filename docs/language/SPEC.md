@@ -301,9 +301,14 @@ definition is never written specially to run backwards.
 7.2. A **use** names a definition (or a builtin, or an interface's
 field) and the ports it is given. It gives the other ports, together,
 from one solution. Calls and uses are one node kind (L130): a use is a
-call that names its given ports, and its found ports are bound for a
-body. Whether they come out as a tuple instead is *pending* (L179). That
-choice changes the shape, not the meaning below.
+call that names its given ports. Its found ports come out as a **tuple**
+in port order (§7.2b), or as the one value when it finds one port
+(decided in L179, built as L211). A use written the older way binds its
+found ports to names for a body instead; that is the same as giving the
+tuple and taking it apart, `let a, b = polar(length = 2, angle = 0) in …`.
+Today a use with no body is read as that one, with a name for each found
+port and their tuple as its body (L211a), so every engine runs it as it
+runs any use.
 
 7.2a. A **definition with results** is written as a condition on all its
 ports and names some of them its results. Its type is the function of
