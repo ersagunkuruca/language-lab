@@ -146,7 +146,6 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 |---|---|---|---|---|---|
 | C143 | A stop in compiled code names the node it came from: compiled JS, WebAssembly and C carry each node's id where they can stop (Abort, overflow, no answer, a hole), so `lab run` of compiled code and a page print it and the editor selects it (source maps, influence) | [ASPECTS-2026-11-03b](docs/reports/reviews/ASPECTS-2026-11-03b.md) 269 | P3 | M | |
 | C150 | Words as machine words (L193): Word8 to Word64 compiled to u8/u16/u32/u64 (WASM i32/i64, C's uint8_t to uint64_t, JS numbers with `>>> 0` or BigInt.asUintN) instead of an Int record wrapped by `bits and`; and `shifted down` on WASM and C (today `scalar: no`; and, or, xor are in since C150a). Measured on words.test.ts's FNV-1a and xorshift | L193 | P3 | M | |
-| C157 | Passes that read a written cons chain also read a `list of` call, so `k.list` and the editor can write one (L181d): scalar.ts's constant lists for shaders (~line 919), compile.ts's cell reuse and `pushInto` (~2367, ~2494), and any other `target === CONS` walk over expressions. Until then `k.list` keeps writing conses | L181 | P2 | S | |
 
 ## L: Language and library
 
