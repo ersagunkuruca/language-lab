@@ -58,7 +58,7 @@ import { bindsOf, bodyOf } from "./uses.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { ARRAY, TABLE, HASH_SET, CELL, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, PATH as PATH_T, STRING, Subst, type Row, type Type } from "../../ters/src/lang/types.ts";
-import { ABORT, ABORT_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, HASH_SET_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, NOW_OP, OPTIONAL, ORDER_V, PAIR_V, RATIO, S, SET, SHOW_ANY, shownImplementations, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
+import { tupleType, ABORT, ABORT_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, HASH_SET_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, NOW_OP, OPTIONAL, ORDER_V, PAIR_V, RATIO, S, SET, SHOW_ANY, shownImplementations, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
 import { liftLets } from "../../ters/src/lang/lift-lets.ts";
 import { solvesOnce } from "../../ters/src/lang/run.ts";
 import { inlineLists } from "./inline-lets.ts";
@@ -701,10 +701,26 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   let underBudget = false;
   const diverges = (t: Type | undefined) => !!t && t.t === "fn" && info.subst.resolveRow(t.eff).effs.includes(DIVERGE);
 
+  // A definition's type as its lambda is written. A definition with results
+  // (L128) has the type of its forward reading (polar from x and y to its
+  // length and angle), while its lambda takes every port and gives the
+  // condition on them, which is what a call given all its ports runs
+  // (L128d2, infer.ts asPredicate): that is the function lowered here;
+  // a use read another way goes through results.ts.
+  function defType(def: Id): Type | undefined {
+    const t = info.typeOf.get(def) && info.subst.zonk(info.typeOf.get(def)!);
+    const d = code.nodes[def], lam = d?.kind === "def" && d.body ? code.nodes[d.body] : undefined;
+    if (t?.t !== "fn" || d?.kind !== "def" || !d.results?.length || lam?.kind !== "lambda" || lam.params.length === t.params.length) return t;
+    const rs = d.results, ins = lam.params.filter((p) => !rs.includes(p));
+    const outs = rs.length === 1 ? [t.ret] : t.ret.t === "con" && t.ret.id === tupleType(rs.length) ? t.ret.args : null;
+    if (!outs || ins.length !== t.params.length) return t;
+    return { t: "fn", params: lam.params.map((p) => (rs.includes(p) ? outs[rs.indexOf(p)] : t.params[ins.indexOf(p)])), ret: { t: "con", id: BOOL, args: [] }, eff: t.eff };
+  }
+
   // The function index for `def` at these types, lowering it (and what it
   // calls) first.
   function func(def: Id, types: At = new Map()): number {
-    const raw = info.typeOf.get(def) && info.subst.zonk(info.typeOf.get(def)!);
+    const raw = defType(def);
     const t = raw && put(raw, types);
     if (!opts.data && !underBudget && diverges(t)) throw new Refused(`calls ${nm(def)}, which ${MAY_NOT_FINISH}`);
     const used = raw ? [...new Set(vars(raw))].filter((v) => types.has(v)).sort((a, b) => a - b) : [];
@@ -1021,7 +1037,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
         if (t?.kind === "def") {
           // What the callee's type variables and rows are here.
           const types: At = new Map();
-          const ct = info.typeOf.get(target) && info.subst.zonk(info.typeOf.get(target)!);
+          const ct = defType(target);
           if (ct?.t === "fn") { ct.params.forEach((p, j) => n.args[j] && bindVars(p, zonk(n.args[j]), types)); bindVars(ct.ret, zonk(id), types); }
           const fn = func(target, types);
           n.args.forEach((a, j) => {
