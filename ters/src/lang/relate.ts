@@ -59,11 +59,11 @@ import { children, dependencies, ownerOfTypeParts, subtree, useTarget, type Call
 import { derivativeLambda, gradientLambda } from "./derive.ts";
 import { fieldShapes, look, type TypeEnv } from "./nested.ts";
 import { B, impl } from "../prelude.ts";
-import { bool, close, DEF_VALUE, fromList, makeRunner, META, equal as valueEqual, showValue, caseName, compareValues, variantOrder, ORDER_VALUES, type Data, type Value } from "./run.ts";
+import { bool, close, DEF_VALUE, fromList, makeRunner, resolvedFor, META, equal as valueEqual, showValue, caseName, compareValues, variantOrder, ORDER_VALUES, type Data, type Value } from "./run.ts";
 import { NUMERIC, relationFor } from "./equations.ts";
 import { analyzer, type Choice, type Exec, type Fn, type Mode, type Plan } from "./modes.ts";
 import { seededGenerator } from "./random.ts";
-import { needsResolving, preludeDef, resolveArithmetic } from "./arith.ts";
+import { needsResolving, preludeDef } from "./arith.ts";
 import { infer } from "./infer.ts";
 import { ALGEBRAIC_OPS, ALGEBRAIC_V, ofAlg, toAlg } from "./std.ts";
 import * as Alg from "./algebraic.ts";
@@ -765,6 +765,9 @@ export interface Options {
   // Told, when a function run backwards from a known text (its result)
   // finds no answer, how far the reading got (L70c; stuckReading words it).
   stuck?: (r: Reading) => void;
+  // The program's check, when the caller has it (the editor does): the
+  // search then doesn't check the whole program again first (I158).
+  info?: ReturnType<typeof infer>;
 }
 
 // One analyzer per program, brought up to date as nodes are added.
@@ -830,8 +833,8 @@ export function interpreter(given: Code, opts: Options = {}) {
   if (!ready) {
     // The generic + resolved to each type's own first (arith.ts), as the
     // evaluator does; a program from the evaluator is resolved already.
-    const code = needsResolving(given) ? resolveArithmetic(given, infer(given)).code : given;
-    prepared.set(given, (ready = { code, owner: ownerOfTypeParts(code) }));
+    const r = needsResolving(given) ? resolvedFor(given, opts.info ?? infer(given), opts.names) : { code: given, info: opts.info };
+    prepared.set(given, (ready = { code: r.code, info: r.info, owner: ownerOfTypeParts(r.code) }));
   }
   const code = ready.code;
   const nodes = code.nodes;
@@ -1281,7 +1284,7 @@ export function interpreter(given: Code, opts: Options = {}) {
       // ray marcher's trace enters 94,000 in half a second), so a call that
       // runs long (a march that never hits) stops where the search would.
       let entries = 0;
-      try { prep.info = infer(code); prep.runner = makeRunner(code, prep.info, { print: () => {}, entered: () => { if (++entries % 100 === 0 && !prep.spend!()) throw new OutOfSteps(); } }); } catch { prep.runner = null; }
+      try { prep.info ??= infer(code); prep.runner = makeRunner(code, prep.info, { print: () => {}, entered: () => { if (++entries % 100 === 0 && !prep.spend!()) throw new OutOfSteps(); } }); } catch { prep.runner = null; }
     }
     const r = prep.runner;
     if (!r || (!gradient && !performsOnlyChoice(c.lambda))) return null;

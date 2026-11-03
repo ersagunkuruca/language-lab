@@ -1003,7 +1003,18 @@ function firstCall(info: T.Info, def: Id): Value[] | undefined {
   // any run, short or long (I136: the long run made + New definition a
   // second slower; I157: the short one, a new main's run, 0.35 s more).
   if (!calledDefs(doc.code).has(def)) return undefined;
-  return mainCalls(info, entry).get(body.id) ?? mainCalls(info, entry, true).get(body.id);
+  const short = mainCalls(info, entry).get(body.id);
+  if (short || longRuns.has(doc.code)) return short ?? mainCalls(info, entry, true).get(body.id);
+  // The long run (up to 1.6 s) waits until the definition has drawn, and
+  // draws it again if it found a value for it (I158: Spacetime's
+  // `reversed` opened in 2.2 s, nearly all of it this run).
+  const was = doc.code, open = ui.def;
+  const go = () => {
+    if (doc.code !== was || longRuns.has(was)) return;
+    if (mainCalls(info, entry, true).get(body.id) && ui.def === open) render();
+  };
+  if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => setTimeout(go, 0)); else setTimeout(go, 0);
+  return undefined;
 }
 const PASSED = "‹what main passes›";
 
@@ -1233,7 +1244,7 @@ function runBackwards(info: T.Info, known: Id[]): Backwards {
   // A short look on the page, so the first answer shows at once; what
   // that cuts short, the worker searches to the end (BACKLOG E127).
   const until = Date.now() + BACK_MS;
-  Object.assign(out, searchBackwards(doc.code, ui.def, values, pres().names, () => Date.now() > until));
+  Object.assign(out, searchBackwards(doc.code, ui.def, values, pres().names, () => Date.now() > until, info));
   if (out.cut) searchOn(key, values, out.plan);
   backwardsCache.set(key, out);
   return out;

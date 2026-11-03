@@ -7,6 +7,7 @@
 import type { Code, Id } from "../ters/src/model.ts";
 import type { Names } from "../ters/src/presentation.ts";
 import { relate, showTerm } from "../ters/src/lang/relate.ts";
+import type { Info } from "../ters/src/lang/infer.ts";
 
 export interface Found { answers: { values: Record<string, string>; free: string[]; residual: string[] }[]; more: boolean; error?: string; cut?: boolean }
 export type BackAsk = { backwards: true; code: Code; names: Names; def: Id; values: Record<string, unknown> };
@@ -16,13 +17,13 @@ const fmt = (x: number) => (Number.isInteger(x) ? String(x) : String(Math.round(
 
 // Searches until it has its answers, runs out of steps, or `stop` says so
 // (then `cut` is set: there may be more to find).
-export function searchBackwards(code: Code, def: Id, values: Record<string, unknown>, names: Names, stop: () => boolean = () => false): Found {
+export function searchBackwards(code: Code, def: Id, values: Record<string, unknown>, names: Names, stop: () => boolean = () => false, info?: Info): Found {
   const out: Found = { answers: [], more: false };
   let steps = 0;
   try {
     const seen = new Set<string>();
     let tries = 0;
-    for (const a of relate(code, def, values, { spend: () => ++steps < STEPS && !(out.cut = stop()), names })) {
+    for (const a of relate(code, def, values, { spend: () => ++steps < STEPS && !(out.cut = stop()), names, info })) {
       // Cut short, the search fails what it hadn't time to try, so an
       // answer it gives then may be wrong: Countdown's solutions read []
       // until the full search found its 49 (I71).
