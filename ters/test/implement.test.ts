@@ -5,7 +5,8 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { base, baseNames } from "../src/lang/load.ts";
 import { TRIG, TRIG_OPS } from "../src/lang/std.ts";
 import { NUMBER, showIn } from "../src/lang/types.ts";
-import type { Id, NodeOf } from "../src/model.ts";
+import type { Id, NodeOf, Call } from "../src/model.ts";
+import { isCall } from "../src/model.ts";
 import { fillValue, fillings, implement, implementable, infer, interfaces, setProgramPins } from "../../editor/typed.ts";
 import { B } from "../src/prelude.ts";
 import { addOperation, newDefinition, setOperation } from "../src/lang/toplevel.ts";
@@ -34,7 +35,7 @@ test("implement for a type makes the record with a hole per operation, typed at 
   setProgramPins(r.pin!);
   const after = infer(r.code, { ...names, ...r.names });
   setProgramPins({});
-  const body = r.code.nodes[(r.code.nodes[def] as NodeOf<"def">).body!] as NodeOf<"call">;
+  const body = r.code.nodes[(r.code.nodes[def] as NodeOf<"def">).body!] as Call;
   assert.equal(body.args.length, 9);
   // log, asin and acos have no answer outside their domain: Choice (L125b).
   for (const hole of body.args.slice(0, 4)) assert.equal(showIn(after.holes.get(hole)!.expected, names, after.subst), "(Wave) -> Wave");
@@ -97,7 +98,7 @@ test("typed text calls an interface's operation", () => {
     const r = fillValue(code, names, info, hole, text, four);
     assert.ok(r.ok, !r.ok ? r.reason : "");
     if (!r.ok) return;
-    const call = r.code.nodes[hole] as NodeOf<"call">;
+    const call = r.code.nodes[hole] as Call;
     assert.equal((r.code.nodes[call.fn] as NodeOf<"ref">).target, op, text);
   }
   // The palette offers one twice there, the operation: the record's

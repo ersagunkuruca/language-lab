@@ -54,7 +54,7 @@
 
 import { FN } from "../../../invertible/src/expr.js";
 import type { Code, Id, Node, NodeData, NodeOf } from "../model.ts";
-import { children, freshId, ownerOfTypeParts, useTarget, useNode } from "../model.ts";
+import { children, freshId, ownerOfTypeParts, useTarget, useNode, isCall, type Call } from "../model.ts";
 import { fieldShapes } from "./nested.ts";
 import type { Names } from "../presentation.ts";
 import { impl } from "../prelude.ts";
@@ -162,7 +162,7 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
       for (const a of n.arms) { const v = shapeOf((nodes[a] as NodeOf<"arm">).body, ctx, seen); if (v) return v; }
       return null;
     }
-    if (n.kind !== "call") return null;
+    if (!isCall(n)) return null;
     const head = nodes[n.fn];
     // The inputs' shapes are read before the body's definition is marked
     // as seen: a product of a product is no recursion (I133).
@@ -187,7 +187,7 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
   }
   // map parts, zip parts and total, differentiated part by part: part j of
   // map parts(f, v) is f(v.j), so its derivative is that call's.
-  function partsD(n: NodeOf<"call">, which: Id, ctx: Ctx): E {
+  function partsD(n: Call, which: Id, ctx: Ctx): E {
     const records = which === S.total ? n.args : n.args.slice(1);
     const variant = shapeOf(records[0], ctx);
     if (!variant) {
@@ -210,7 +210,7 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
   // record (a Float64 being a record of one part): part by part, f's slope
   // with each part's own. A record whose derivative is 0 gives zeros of its
   // shape, map parts((part) => 0, x).
-  function partsAtRunTime(n: NodeOf<"call">, which: Id, records: Id[], ds: E[], ctx: Ctx): E {
+  function partsAtRunTime(n: Call, which: Id, records: Id[], ds: E[], ctx: Ctx): E {
     const zero = (d: E) => isNum(d, 0);
     if (which === S.total) return zero(ds[0]) ? numE(0) : { k: "build", build: () => callN(ref(S.total), place(ds[0])) };
     const late = (build: () => Id): E => ({ k: "build", build, record: true });
@@ -350,7 +350,7 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
   function depends(id: Id, dep: Set<Id>): boolean {
     const n = nodes[id];
     if (n.kind === "ref") return dep.has(n.target);
-    if (n.kind === "call" && nodes[n.fn].kind === "lambda") {
+    if (isCall(n) && nodes[n.fn].kind === "lambda") {
       const lam = nodes[n.fn] as NodeOf<"lambda">;
       const inner = new Set(dep);
       n.args.forEach((a, i) => { if (depends(a, dep)) inner.add(lam.params[i]); });
@@ -366,7 +366,7 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
 
   const isFail = (id: Id) => {
     const n = nodes[id];
-    return n.kind === "call" && nodes[n.fn].kind === "ref" && (nodes[n.fn] as NodeOf<"ref">).target === S.fail;
+    return isCall(n) && nodes[n.fn].kind === "ref" && (nodes[n.fn] as NodeOf<"ref">).target === S.fail;
   };
 
   // The derivative of expression `id`, given the derivatives of the
@@ -387,7 +387,7 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
           if (Object.values(ARITH).includes(head.target) && OPS[head.target] && shapeOf(n.args[0], ctx)) {
             const parts = n.args.length === 1 ? S.mapParts : S.zipParts;
             const call = add({ kind: "call", fn: add({ kind: "ref", target: parts }), args: [add({ kind: "ref", target: BUILTIN[OPS[head.target]] }), ...n.args] });
-            return partsD(nodes[call] as NodeOf<"call">, parts, ctx);
+            return partsD(nodes[call] as Call, parts, ctx);
           }
           if (OPS[head.target]) return chain(OPS[head.target], n.args, ctx);
           // floor and mod jump (at whole numbers, at multiples of b), so
@@ -440,7 +440,7 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
   // placed.
   // `ds`: the inputs' derivatives when the caller has them (read outside
   // the definition being inlined, so a product of a product is no recursion).
-  function letD(n: NodeOf<"call">, lam: NodeOf<"lambda">, ctx: Ctx, ds?: E[]): E {
+  function letD(n: Call, lam: NodeOf<"lambda">, ctx: Ctx, ds?: E[]): E {
     const sub = new Map(ctx.sub), d = new Map(ctx.d), shape = new Map(ctx.shape);
     const slots = lam.params.map((p, i) => {
       const slot = { p, np: "", dp: "", dv: ds?.[i] ?? D(n.args[i], ctx), bound: false };
@@ -486,7 +486,7 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
   // it's called, as if its body were written there: its partials would be
   // records, and a generic one (the vectors module's) has no one record.
   const inlining = new Set<Id>();
-  function defD(n: NodeOf<"call">, def: Id, ctx: Ctx): E {
+  function defD(n: Call, def: Id, ctx: Ctx): E {
     const args = n.args;
     const ds = args.map((a) => D(a, ctx));
     if (ds.some(variantOf) || shapeOf(n.id, ctx)) {
@@ -519,7 +519,7 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
 
   // A function value we can't see statically: ask for its derivative when
   // the program runs.
-  function unknownD(n: NodeOf<"call">, ctx: Ctx): E {
+  function unknownD(n: Call, ctx: Ctx): E {
     if (n.args.length !== 1) return cant("only functions of one number can be differentiated at run time");
     if (depends(n.fn, new Set(ctx.d.keys()))) return cant("the function being called depends on the variable itself");
     const du = D(n.args[0], ctx);
@@ -740,7 +740,7 @@ export function gradientLambda(code: Code, fn: { lambda: Id }, variant: Id): Id 
 
 const derivativeCall = (code: Code, id: Id, which: Id = S.derivative): id is Id => {
   const n = code.nodes[id];
-  return n?.kind === "call" && n.args.length === 1 && code.nodes[n.fn]?.kind === "ref" && (code.nodes[n.fn] as NodeOf<"ref">).target === which;
+  return isCall(n) && n.args.length === 1 && code.nodes[n.fn]?.kind === "ref" && (code.nodes[n.fn] as NodeOf<"ref">).target === which;
 };
 
 // Does derivative(arg) have a slope everywhere f has a value? It does when
@@ -772,7 +772,7 @@ export function smoothDerivative(code: Code, arg: Id): boolean {
 // gradient(f) the same way, given `variants`: the record a gradient call
 // is over (the checker knows it; the code alone doesn't).
 export function expandDerivatives(code: Code, names: Names, variants: (call: Id) => Id | null = () => null): { code: Code; names: Names; expanded: Id[] } {
-  const arg = (id: Id) => (code.nodes[id] as NodeOf<"call">).args[0];
+  const arg = (id: Id) => (code.nodes[id] as Call).args[0];
   const grads = new Map<Id, Id>();
   for (const id of Object.keys(code.nodes)) {
     const v = derivativeCall(code, id, S.gradient) ? variants(id) : null;
@@ -783,7 +783,7 @@ export function expandDerivatives(code: Code, names: Names, variants: (call: Id)
   const out: Code = { nodes: { ...code.nodes }, defs: [...code.defs] };
   const d = deriver(out, names);
   for (const id of calls) {
-    const f = (out.nodes[id] as NodeOf<"call">).args[0];
+    const f = (out.nodes[id] as Call).args[0];
     const lam = grads.has(id) ? d.gradient(knownLambda(out, f)!, grads.get(id)!) : d.lambda(knownFunction(out, f)!, 0);
     // The call node itself becomes the lambda, so whatever points at it
     // (the call that applies it, usually) now applies the derivative.

@@ -5,6 +5,7 @@
 
 import { discharge } from "./ledger.ts";
 import type { Code, Id, Node, NodeOf } from "../model.ts";
+import { isCall } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { B, impl } from "../prelude.ts";
 import { MASK_TYPES, NAMED_ROWS, ARRAY, TABLE, HASH_SET, CELL, PATH, JOB, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NETWORK, NUMBER, STRING, type Row, type Subst, type Type } from "./types.ts";
@@ -1272,7 +1273,7 @@ export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 // inner call that has to stay visible on its own (a graph's named dot).
 export const ASSOCIATIVE = new Set<Id>([B.add, B.mul, S.and, S.or, S.concat]);
 export function chainOperands(code: Code, id: Id, keep: (id: Id) => boolean = () => false): Id[] | null {
-  const head = (n: Node | undefined) => (n?.kind === "call" && n.args.length === 2 ? code.nodes[n.fn] : undefined);
+  const head = (n: Node | undefined) => (isCall(n) && n.args.length === 2 ? code.nodes[n.fn] : undefined);
   const f = head(code.nodes[id]);
   if (f?.kind !== "ref" || !ASSOCIATIVE.has(f.target)) return null;
   const op = f.target;

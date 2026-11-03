@@ -20,7 +20,7 @@
 // doesn't keep it in.
 
 import type { Code, Id, NodeOf } from "../../ters/src/model.ts";
-import { isUse } from "../../ters/src/model.ts";
+import { isUse, isCall, type Call } from "../../ters/src/model.ts";
 import { freshId, subtree } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { infer, type Info } from "../../ters/src/lang/infer.ts";
@@ -35,7 +35,7 @@ export function hoistInvariants(code: Code, info: Info, names: Names): { code: C
   // nothing it is given can bring one in). The type at the call itself
   // isn't asked: its row is the caller's, joined (compile.ts
   // performsNothing reads calls the same way).
-  const plainCall = (call: NodeOf<"call">, defsOnly: boolean): boolean => {
+  const plainCall = (call: Call, defsOnly: boolean): boolean => {
     const f = nodes[call.fn];
     if (f?.kind !== "ref") return false;
     const target = nodes[f.target];
@@ -50,19 +50,19 @@ export function hoistInvariants(code: Code, info: Info, names: Names): { code: C
     const t = ty(call.fn);
     return t.t === "fn" && !t.params.some((x) => info.subst.zonk(x).t === "fn");
   };
-  const pure = (call: NodeOf<"call">) => plainCall(call, true);
+  const pure = (call: Call) => plainCall(call, true);
   // Nothing inside it may do anything either, nor make a function.
   const quiet = (id: Id): boolean => subtree({ nodes, defs: [] }, id).every((x) => {
     const n = nodes[x];
     if (n.kind === "lambda" || isUse(n) || n.kind === "hole") return false;
-    return n.kind !== "call" || plainCall(n, false);
+    return !isCall(n) || plainCall(n, false);
   });
   let hoisted = 0;
   // The lambdas given to calls, outermost first.
   const ids = code.defs.flatMap((d) => subtree(code, d));
   for (const id of ids) {
     const call = nodes[id];
-    if (call?.kind !== "call" || nodes[call.fn]?.kind === "lambda") continue;
+    if (!isCall(call) || nodes[call.fn]?.kind === "lambda") continue;
     for (const a of call.args) {
       // A lambda of no inputs is a thunk: run once or not at all (first's
       // body and fallback), so moving its work out saves nothing and runs
@@ -76,11 +76,11 @@ export function hoistInvariants(code: Code, info: Info, names: Names): { code: C
       const walk = (x: Id) => {
         const n = nodes[x];
         if (!n || n.kind === "lambda") return;
-        if (n.kind === "call" && pure(n) && quiet(x) && !subtree({ nodes, defs: [] }, x).some((y) => nodes[y]?.kind === "ref" && inside.has((nodes[y] as NodeOf<"ref">).target))) {
+        if (isCall(n) && pure(n) && quiet(x) && !subtree({ nodes, defs: [] }, x).some((y) => nodes[y]?.kind === "ref" && inside.has((nodes[y] as NodeOf<"ref">).target))) {
           found.push(x);
           return;
         }
-        if (n.kind === "call") { walk(n.fn); n.args.forEach(walk); return; }
+        if (isCall(n)) { walk(n.fn); n.args.forEach(walk); return; }
         if (n.kind === "match" || n.kind === "fold") { walk(n.scrutinee); n.arms.forEach((arm) => walk((nodes[arm] as NodeOf<"arm">).body)); if (n.kind === "match" && n.otherwise) walk(n.otherwise); return; }
       };
       walk(lam.body);
@@ -92,7 +92,7 @@ export function hoistInvariants(code: Code, info: Info, names: Names): { code: C
       const binders = found.map((x) => {
         const b = freshId();
         nodes[b] = { id: b, kind: "binder" };
-        const name = nodes[(nodes[x] as NodeOf<"call">).fn];
+        const name = nodes[(nodes[x] as Call).fn];
         names = { ...names, [b]: `${name?.kind === "ref" ? names[name.target] ?? "value" : "value"}, once` };
         const value = freshId();
         nodes[value] = { ...nodes[x], id: value };

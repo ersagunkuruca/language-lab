@@ -6,7 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { replace, type NodeOf } from "../src/model.ts";
+import { replace, type NodeOf, isCall, type Call } from "../src/model.ts";
 import { fillings, infer } from "../src/lang/infer.ts";
 import { checkOptions, loadProgram } from "../src/lang/load.ts";
 import { pinsOf } from "../src/lang/signatures.ts";
@@ -22,7 +22,7 @@ for (const name of ["calculus", "backwards", "queens"]) {
     const p = loadProgram(join(import.meta.dirname, "../examples", name));
     // The example's own calls: the library's (some ten thousand nodes now)
     // made this a half-hour run, each filling a whole check.
-    const calls = Object.values(p.own.nodes).filter((n): n is NodeOf<"call"> => n.kind === "call" && n.args.length > 0);
+    const calls = Object.values(p.own.nodes).filter((n): n is Call => isCall(n) && n.args.length > 0);
     const bad: string[] = [];
     for (const c of sweep(calls.filter((_, i) => i % 9 === 0))) {
       const hole = c.args[0];
@@ -42,7 +42,7 @@ for (const name of ["calculus", "backwards", "queens"]) {
 // other function of the same type.
 test("a call's function as a hole: every function of the right type is offered, checked on its own units", () => {
   const p = loadProgram(join(import.meta.dirname, "../examples/physics"));
-  const mul = Object.values(p.code.nodes).find((n): n is NodeOf<"call"> => n.kind === "call" && p.code.nodes[n.fn].kind === "ref" && (p.code.nodes[n.fn] as NodeOf<"ref">).target === "builtin.mul")!;
+  const mul = Object.values(p.code.nodes).find((n): n is Call => isCall(n) && p.code.nodes[n.fn].kind === "ref" && (p.code.nodes[n.fn] as NodeOf<"ref">).target === "builtin.mul")!;
   const code = replace(p.code, mul.fn, () => ({ kind: "hole" }));
   const info = infer(code);
   const offered = fillings(code, info, mul.fn).flatMap((f) => (f.kind === "ref" ? [f.target] : []));
@@ -59,7 +59,7 @@ test("the palette offers one + − · for Float64s and Ints alike, and a program
   const own = /^builtin\.(int\.)?(add|sub|mul|neg|less)$/;
   for (const [name, op] of [["physics", "builtin.mul"], ["wc", "builtin.int.add"]]) {
     const p = loadProgram(join(import.meta.dirname, "../examples", name));
-    const c = Object.values(p.own.nodes).find((n): n is NodeOf<"call"> => n.kind === "call" && (p.code.nodes[n.fn] as NodeOf<"ref">).target === op)!;
+    const c = Object.values(p.own.nodes).find((n): n is Call => isCall(n) && (p.code.nodes[n.fn] as NodeOf<"ref">).target === op)!;
     const code = replace(p.code, c.fn, () => ({ kind: "hole" }));
     const offered = fillings(code, infer(code, p.pres.names), c.fn).flatMap((f) => (f.kind === "ref" ? [f.target] : []));
     for (const g of [ARITH.add, ARITH.sub, ARITH.mul]) assert.ok(offered.includes(g), `${name}: ${g} offered`);
@@ -111,7 +111,7 @@ test("where any type goes, a new function is offered, and fills", () => {
   assert.deepEqual(lambdas.map((g) => (g as { arity: number }).arity), [1, 2]);
   for (const g of lambdas) assert.equal(infer(fillHole(code, {}, hole, g).code).errors.length, info.errors.length);
   // Where the type is fixed, it isn't: x + □ takes a number.
-  const sum = Object.values(code.nodes).find((n): n is NodeOf<"call"> => n.kind === "call" && (code.nodes[n.fn] as NodeOf<"ref">).target === B.add)!;
+  const sum = Object.values(code.nodes).find((n): n is Call => isCall(n) && (code.nodes[n.fn] as NodeOf<"ref">).target === B.add)!;
   const fixed = replace(code, sum.args[1], () => ({ kind: "hole" }));
   assert.ok(!fillings(fixed, infer(fixed), sum.args[1]).some((g) => g.kind === "lambda"));
 });

@@ -46,11 +46,11 @@
 
 import { resolveArithmetic } from "../../ters/src/lang/arith.ts";
 import type { Code, Id, NodeOf } from "../../ters/src/model.ts";
-import { dependencies, subtree } from "../../ters/src/model.ts";
+import { dependencies, subtree, isCall, type Call } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
-import { ARRAY, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, STRING, type Row, type Type } from "../../ters/src/lang/types.ts";
-import { ABORT, ABORT_OP, ALGEBRAIC_V, ARRAY_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, ORDER_V, PAIR_V, RATIO, S, SET, SHOW_ANY, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
+import { ARRAY, TABLE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, STRING, type Row, type Type } from "../../ters/src/lang/types.ts";
+import { ABORT, ABORT_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, ORDER_V, PAIR_V, RATIO, S, SET, SHOW_ANY, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
 import { liftLets } from "../../ters/src/lang/lift-lets.ts";
 import { inlineLists } from "./inline-lets.ts";
 import { STOPS } from "./stops.ts";
@@ -65,6 +65,11 @@ import { runtime } from "./wasm-rt.ts";
 // A shader (or a ray marcher's loop) may call what might not finish only
 // under a literal with fuel; the rest of its type must be empty.
 // std's Array's builtins: runtime functions, one copy per item type.
+// std's Table's jobs (C63h), by their runtime functions' names.
+const TABLE_RT: Record<Id, string> = {
+  [TABLE_OPS.empty]: "empty", [TABLE_OPS.put]: "put", [TABLE_OPS.remove]: "remove", [TABLE_OPS.has]: "has",
+  [TABLE_OPS.size]: "size", [TABLE_OPS.at]: "at", [TABLE_OPS.entries]: "entries",
+};
 const ARRAY_RT: Record<Id, string> = {
   [ARRAY_OPS.empty]: "array.empty", [ARRAY_OPS.of]: "array.of", [ARRAY_OPS.items]: "array.items",
   [ARRAY_OPS.length]: "array.length", [ARRAY_OPS.at]: "array.at", [ARRAY_OPS.push]: "array.push",
@@ -126,8 +131,15 @@ export type WType = "int" | "text";
 // functions are named by (`array.push.a0`); `list`: List of its items,
 // when a job takes or gives one.
 export interface AType { key: string; name: string; item: LType; index: number; list: DType | null }
-export type LType = SType | WType | RType | DType | FType | AType;
+// std's Table (C63h): Map as a hash table, in C only, for Int and Text
+// keys (c.ts `tableC`). `index`: its place in Lowered.tables, which its
+// runtime functions are named by (`table.put.t0`); `entries`: each List
+// of (key, value) pairs `table entries` gives (`table.entries.t0.e1`): a
+// key nothing fixes is held as an Int, its pairs' may be another type.
+export interface TType { key: string; name: string; keyT: "int" | "text"; value: LType; index: number; entries: DType[] }
+export type LType = SType | WType | RType | DType | FType | AType | TType;
 export const isArray = (t: LType): t is AType => typeof t === "object" && "item" in t;
+export const isTable = (t: LType): t is TType => typeof t === "object" && "keyT" in t;
 export const isData = (t: LType): t is DType => typeof t === "object" && "cases" in t;
 export const isRecord = (t: LType): t is RType => typeof t === "object" && "variant" in t;
 export const isFn = (t: LType): t is FType => typeof t === "object" && "result" in t;
@@ -328,7 +340,7 @@ export interface SFunc { def: Id; name: string; params: LType[]; result: LType; 
 // computed a number Float32 can't hold, so a Float32 run differs from it.
 // `shader`: lowered with `shader` and not `data` (C66c): Int is int32, and
 // no answer is the flag, not a status (wasm.ts takes both).
-export interface Lowered { funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; arrays: AType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info; escapes: DType[]; rounded: Set<Id>; shader?: true }
+export interface Lowered { funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; arrays: AType[]; tables: TType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info; escapes: DType[]; rounded: Set<Id>; shader?: true }
 
 class Refused extends Error {}
 
@@ -392,7 +404,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   // would be the clifford functions' generic folds again), and what the
   // derivatives made is staged in turn.
   const later = expandDerivatives(code, names, (call) => {
-    const f = info.subst.zonk(info.typeOf.get((code.nodes[call] as NodeOf<"call">).args[0]) ?? { t: "var", v: -1 });
+    const f = info.subst.zonk(info.typeOf.get((code.nodes[call] as Call).args[0]) ?? { t: "var", v: -1 });
     return f.t === "fn" && f.params[0]?.t === "con" ? recordVariant(code, f.params[0].id) : null;
   });
   if (later.expanded.length) {
@@ -434,6 +446,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   const datas = new Map<string, DType>();
   const fns = new Map<string, FType>();
   const arrays = new Map<string, AType>();
+  const tables = new Map<string, TType>();
   const shapes: Shape[] = [];
   // Effects whose operations all never return (Abort's shape, LANGUAGE.md
   // "Effects you define"), by their operations: each compiles as Abort does
@@ -457,9 +470,14 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   // What a partial function (`data`) may do besides answer: have no answer,
   // not finish (running out of a budget), or abort; and the world's effects.
   const partialEff = (e: Id) => e === CHOICE || e === DIVERGE || escaping(e);
-  // Random only under a `seeded` (C106): a root that draws one nobody
-  // seeds is refused below.
+  // Random under a `seeded` (C106), or drawn from the world (C136).
   const allowedEff = (e: Id) => partialEff(e) || e === CONSOLE || e === FILES || (!!opts.data && e === RANDOM);
+  // Some root draws a number nobody seeds (C136): the world seeds
+  // Random's generator then, at the first draw.
+  const worldRandom = !!opts.data && roots.some((r) => {
+    const raw = info.typeOf.get(r) && info.subst.zonk(info.typeOf.get(r)!);
+    return raw?.t === "fn" && info.subst.resolveRow(raw.eff).effs.includes(RANDOM);
+  });
   const OTHER = opts.data ? "something other than Float64, Bool or data of them" : opts.records ? "something other than Float64, Bool or a record of them" : "something other than Float64 or Bool";
 
   // The profile's type for t, or null if t isn't in it.
@@ -491,6 +509,16 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     // values of them.
     // At any depth (List (Optional (List a)), sort's runs of nothing): the
     // type's key is made from its arguments as they are.
+    if (opts.data && t.t === "con" && t.id === TABLE) {
+      // A key no put ever fixes (an empty map nothing is put in) is an Int.
+      const k = !t.args[0] || unconstrained(t.args[0]) ? "int" : stype(t.args[0], inside), value = t.args[1] && stype(freed(t.args[1]), inside);
+      if ((k !== "int" && k !== "text") || !value) return null;
+      const key = `${t.id}<${k},${show(freed(t.args[1]))}>`;
+      if (tables.has(key)) return tables.get(key)!;
+      const h: TType = { key, name: "Table", keyT: k, value, index: tables.size, entries: [] };
+      tables.set(key, h);
+      return h;
+    }
     if (opts.data && t.args.some(freeInside)) t = { ...t, args: t.args.map(freed) };
     if (t.id === NUMBER) return "f64";
     if (t.id === BOOL) return "i32";
@@ -522,6 +550,11 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     const args = new Map(td.params.map((p, i) => [p, t.args[i]] as const));
     const te = (tid: Id): Type | null => {
       const n = code.nodes[tid];
+      // A field holding a function (C126), with the effects it names.
+      if (n?.kind === "tfun") {
+        const ps = n.params.map(te), ret = te(n.result);
+        return ps.every((x) => x) && ret ? { t: "fn", params: ps as Type[], ret, eff: { effs: n.effects ?? [], tail: null } } : null;
+      }
       if (n?.kind !== "tref") return null;
       if (args.has(n.target)) return args.get(n.target)!;
       const xs = n.args.map(te);
@@ -586,7 +619,10 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   };
   const vars = (t: Type): number[] => (t.t === "var" ? [t.v] : t.t === "con" ? t.args.flatMap(vars) : [...t.params.flatMap(vars), ...vars(t.ret), ...(t.eff.tail === null ? [] : [t.eff.tail])]);
   const keyOf = (t: LType): string => (typeof t === "string" ? t : t.key);
-  const show = (t: Type): string => (t.t === "con" ? `${t.id}<${t.args.map(show).join(",")}>` : t.t === "var" ? `?${t.v}` : `fn(${t.params.map(show).join(",")})>${show(t.ret)}`);
+  // A type's key; a function's says whether it may have no answer, as its
+  // lowered type does (I152: a list of functions that choose and one of
+  // functions that don't were one type, holding either).
+  const show = (t: Type): string => (t.t === "con" ? `${t.id}<${t.args.map(show).join(",")}>` : t.t === "var" ? `?${t.v}` : `fn(${t.params.map(show).join(",")})>${show(t.ret)}${opts.data && info.subst.resolveRow(t.eff).effs.some(partialEff) ? "!" : ""}`);
 
   const funcs: SFunc[] = [];
   const index = new Map<Id, number>();
@@ -802,7 +838,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           if (target !== ARRAY_OPS.of) return { k: "rt", fn: `${ARRAY_RT[target]}.a${a.index}`, args: args() };
           const items: Id[] = [];
           let l = code.nodes[n.args[0]];
-          for (; l?.kind === "call" && code.nodes[l.fn]?.kind === "ref" && (code.nodes[l.fn] as NodeOf<"ref">).target === CONS; l = code.nodes[l.args[1]]) items.push(l.args[0]);
+          for (; isCall(l) && code.nodes[l.fn]?.kind === "ref" && (code.nodes[l.fn] as NodeOf<"ref">).target === CONS; l = code.nodes[l.args[1]]) items.push(l.args[0]);
           if (!(l?.kind === "ref" && l.target === NIL)) throw new Refused("makes an array of a list that isn't written out (a shader's array has its size where it's made)");
           return { k: "rt", fn: `${ARRAY_RT[target]}.a${a.index}`, args: items.map((x) => expr(x, env, f, false)) };
         }
@@ -824,6 +860,16 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           const l = ts.find(isData);
           if (l) a.list = l;
           return { k: "rt", fn: `${ARRAY_RT[target] ?? "array.replaceAt"}.a${a.index}`, args: args() };
+        }
+        if (opts.data && TABLE_RT[target]) {
+          // The table's type, from the argument or the answer that is one;
+          // the list of its entries where the job gives one.
+          const ts = [...n.args, id].map((a) => { const t = stype(zonk(a)); if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(a))}`); return t; });
+          const h = ts.find(isTable);
+          if (!h) throw new Refused(`uses ${nm(target)} on no table`);
+          const l = target === TABLE_OPS.entries ? ts.find(isData) : undefined;
+          if (l && !h.entries.includes(l)) h.entries.push(l);
+          return { k: "rt", fn: `table.${TABLE_RT[target]}.t${h.index}${l ? `.e${h.entries.indexOf(l)}` : ""}`, args: args() };
         }
         if (opts.data && RT[target]) {
           // What it takes and gives in, so List Text is one of the module's types.
@@ -856,7 +902,15 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
         }
         if (opts.data && target === CELL_OPS.changed) return changed(n, id, env, f);
         if (target === SET && n.args.length === 3) return setField(n, id, env, f);
-        if (opts.data && target === RANDOM_OP) return { k: "rt", fn: "rand.next", args: [] };
+        if (opts.data && target === RANDOM_OP) {
+          const next: SExpr = { k: "rt", fn: "rand.next", args: [] };
+          if (!worldRandom) return next;
+          // Nobody may have seeded it (C136): the world seeds the
+          // generator at its first draw, so draws under a seeded still
+          // give the seeded numbers and an outer one goes on after.
+          const tmp = f.locals.push("f64") - 1;
+          return { k: "if", cond: { k: "rt", fn: "rand.unset", args: [] }, then: { k: "let", i: tmp, value: { k: "rt", fn: "rand.seed", args: [{ k: "world", op: "randomSeed", aborts: false, args: [], t: "f64" }] }, body: next }, else: next, t: "f64" };
+        }
         if (opts.data && target === S.seeded) return seeded(n, id, env, f);
         if (target === S.valueOf && opts.data) return valueOf(n, id, env, f);
         if (target === S.oneOf && opts.data && n.args.length === 1) {
@@ -993,6 +1047,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     if (isArray(t)) return { k: "call", fn: arrayLoop(t, "="), args: [x, y], tail };
     if (t === "int") return { k: "rt", fn: "int.equal", args: [x, y] };
     if (t === "text") return { k: "rt", fn: "text.equal", args: [x, y] };
+    if (isTable(t)) throw new Refused("compares tables (their meaning does, in the library)");
     if (t !== "f64") return { k: "call", fn: equality(t), args: [x, y], tail };
     // Two Float64s within 1e-9 relative to their size (run.ts sameNumber).
     // Each side once: a local if it isn't one already.
@@ -1030,6 +1085,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     if (t === "int32") return pick({ k: "op", op: "ieq", args: [x, y] }, { k: "op", op: "iless", args: [x, y] });
     if (t === "text") return pick({ k: "rt", fn: "text.equal", args: [x, y] }, { k: "rt", fn: "text.less", args: [x, y] });
     if (isArray(t)) return { k: "call", fn: arrayLoop(t, "<"), args: [x, y], tail };
+    if (isTable(t)) throw new Refused("compares tables (their meaning does, in the library)");
     return { k: "call", fn: ordering(t), args: [x, y], tail };
   }
   // equal ("=") or compare ("<") on two arrays, as the evaluator has them
@@ -1129,8 +1185,31 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     if (t === "i32") return { k: "if", cond: x, then: { k: "text", v: nm(TRUE) }, else: { k: "text", v: nm(FALSE) }, t: "text" };
     // Quoted as JSON.stringify quotes it (run.ts showValue, C102).
     if (t === "text") return { k: "rt", fn: "text.quoted", args: [x] };
-    if (t === "int32" || isFn(t) || isArray(t)) throw new Refused(`shows ${isFn(t) ? "a function" : isArray(t) ? "an array" : "an Int in 32 bits"} (not in WebAssembly and C yet)`);
+    if (t === "int32" || isFn(t)) throw new Refused(`shows ${isFn(t) ? "a function" : "an Int in 32 bits"} (not in WebAssembly and C yet)`);
+    if (isArray(t)) return { k: "call", fn: showingArray(t), args: [x], tail };
+    if (isTable(t)) throw new Refused("shows a table (its meaning does, in the library)");
     return { k: "call", fn: showing(t), args: [x], tail };
+  }
+  // show on an array, "array [a, b]" as run.ts writes it (I156): the
+  // first item, then a loop of tail calls adding ", " and item k to the
+  // text so far, so a long array shows in constant stack.
+  function showingArray(t: AType): number {
+    const key = `$${t.key}`;
+    if (index.has(key)) return index.get(key)!;
+    if (opts.shader) throw new Refused("shows an array (not in shaders yet)");
+    const g: SFunc = { def: ARRAY, name: `${t.name}.show`, params: [t], result: "text", locals: [t], body: { k: "text", v: "" }, spends: false, budgeted: false, inner: true };
+    index.set(key, funcs.push(g) - 1);
+    const h: SFunc = { def: ARRAY, name: `${t.name}.show.from`, params: [t, "text", "int"], result: "text", locals: [t, "text", "int"], body: { k: "text", v: "" }, spends: false, budgeted: false, inner: true };
+    const hi = funcs.push(h) - 1;
+    const loc = (i: number): SExpr => ({ k: "local", i }), rt = (fn: string, ...args: SExpr[]): SExpr => ({ k: "rt", fn: `${fn}.a${t.index}`, args });
+    const text = (v: string): SExpr => ({ k: "text", v }), int = (v: bigint): SExpr => ({ k: "int", v });
+    const item = (fn: SFunc, k: SExpr) => shown(rt("array.get", loc(0), k), t.item, fn, false);
+    const empty: SExpr = { k: "rt", fn: "int.equal", args: [rt("array.length", loc(0)), int(0n)] };
+    g.body = { k: "if", cond: empty, then: text("array []"), else: { k: "call", fn: hi, args: [loc(0), joined(text("array ["), item(g, int(0n))), int(1n)], tail: true }, t: "text" };
+    const [k, sofar] = [loc(2), loc(1)];
+    h.body = { k: "if", cond: { k: "rt", fn: "int.equal", args: [k, rt("array.length", loc(0))] }, then: joined(sofar, text("]")),
+      else: { k: "call", fn: hi, args: [loc(0), joined(sofar, text(", "), item(h, k)), { k: "rt", fn: "int.add", args: [k, int(1n)] }], tail: true }, t: "text" };
+    return index.get(key)!;
   }
   // Text joined, left to right.
   const joined = (...parts: SExpr[]): SExpr => parts.reduce((a, b) => ({ k: "rt", fn: "text.concat", args: [a, b] }));
@@ -1459,10 +1538,10 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   }
 
   // Whether a call of first is first(() => with fuel(…), …), a budget.
-  function isBudget(n: NodeOf<"call">): boolean {
+  function isBudget(n: Call): boolean {
     const a = n.args[0] ? code.nodes[n.args[0]] : undefined;
     const body = a?.kind === "lambda" && !a.params.length ? code.nodes[a.body] : null;
-    return (code.nodes[n.fn] as NodeOf<"ref">).target === S.first && body?.kind === "call" && code.nodes[body.fn]?.kind === "ref" && (code.nodes[body.fn] as NodeOf<"ref">).target === S.fuel;
+    return (code.nodes[n.fn] as NodeOf<"ref">).target === S.first && isCall(body) && code.nodes[body.fn]?.kind === "ref" && (code.nodes[body.fn] as NodeOf<"ref">).target === S.fuel;
   }
   // first, optional, all and count of a search written in place: the
   // search, lowered with `one of` where it chooses, and what the handler
@@ -1470,7 +1549,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   // below (several) makes it code.
   // first with a fallback, or count, in a shader: the search's flag, kept
   // by the printer (`shader` above).
-  function flagged(n: NodeOf<"call">, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
+  function flagged(n: Call, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
     const target = (code.nodes[n.fn] as NodeOf<"ref">).target;
     const thunk = (x: Id | undefined) => { const l = x && code.nodes[x]; return l && l.kind === "lambda" && !l.params.length ? l.body : null; };
     const search = thunk(n.args[0]), dflt = target === S.first ? thunk(n.args[1]) : null;
@@ -1489,7 +1568,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     : t === "int32" ? { k: "op", op: "iadd", args: [x, countOf(t, 1)] } : { k: "op", op: "add", args: [x, countOf(t, 1)] };
   // How many searches' bodies each function is lowering now.
   const searching = new Map<SFunc, number>();
-  function attempt(n: NodeOf<"call">, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
+  function attempt(n: Call, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
     const target = (code.nodes[n.fn] as NodeOf<"ref">).target;
     const thunk = (x: Id | undefined) => { const l = x && code.nodes[x]; return l && l.kind === "lambda" && !l.params.length ? l.body : null; };
     const search = thunk(n.args[0]), dflt = target === S.first ? thunk(n.args[1]) : null;
@@ -1567,6 +1646,10 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
         const r = runtime(e.fn).result;
         if (r === "int" && !opts.data) return "int32";
         if (r === "i32" || r === "int" || r === "f64" || r === "text") return r;
+        const tm = /^table\.\w+\.t(\d+)(?:\.e(\d+))?$/.exec(e.fn), h = tm && [...tables.values()][Number(tm[1])];
+        if (h && r === "table") return h;
+        if (h && r === "value") return h.value;
+        if (h && r === "list" && tm![2]) return h.entries[Number(tm![2])];
         const a = /\.a(\d+)$/.exec(e.fn) && [...arrays.values()][Number(/\.a(\d+)$/.exec(e.fn)![1])];
         if (a && r === "array") return a;
         if (a && r === "item") return a.item;
@@ -1808,14 +1891,14 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   // changeAt does.
   type PathStep = { field: Id } | { item: Id };
   function stepsOfPath(id: Id): PathStep[] {
-    const n = code.nodes[id], head = n?.kind === "call" ? code.nodes[n.fn] : undefined;
+    const n = code.nodes[id], head = isCall(n) ? code.nodes[n.fn] : undefined;
     const op = head?.kind === "ref" ? head.target : undefined;
-    if (n?.kind === "call" && op === CELL_OPS.path && n.args.length === 1) {
+    if (isCall(n) && op === CELL_OPS.path && n.args.length === 1) {
       const l = code.nodes[n.args[0]];
       if (l?.kind === "lambda" && l.params.length === 1) {
         const fields: PathStep[] = [];
         let b = code.nodes[l.body];
-        for (; b?.kind === "call" && b.args.length === 1; b = code.nodes[b.args[0]]) {
+        for (; isCall(b) && b.args.length === 1; b = code.nodes[b.args[0]]) {
           const h = code.nodes[b.fn];
           if (h?.kind !== "ref" || code.nodes[h.target]?.kind !== "field") break;
           fields.unshift({ field: h.target });
@@ -1823,11 +1906,11 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
         if (b?.kind === "ref" && b.target === l.params[0]) return fields;
       }
     }
-    if (n?.kind === "call" && op === CELL_OPS.itemPath && n.args.length === 2) return [...stepsOfPath(n.args[0]), { item: n.args[1] }];
-    if (n?.kind === "call" && op === CELL_OPS.thenPath && n.args.length === 2) return [...stepsOfPath(n.args[0]), ...stepsOfPath(n.args[1])];
+    if (isCall(n) && op === CELL_OPS.itemPath && n.args.length === 2) return [...stepsOfPath(n.args[0]), { item: n.args[1] }];
+    if (isCall(n) && op === CELL_OPS.thenPath && n.args.length === 2) return [...stepsOfPath(n.args[0]), ...stepsOfPath(n.args[1])];
     throw new Refused("changes a value at a path that isn't written out where it's used (a chain of fields and items)");
   }
-  function changed(n: NodeOf<"call">, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
+  function changed(n: Call, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
     const t = stype(zonk(id)), xt = stype(zonk(n.args[2]));
     if (!t || !xt) throw new Refused(`changes ${whyNot(zonk(t ? n.args[2] : id))}`);
     const steps = stepsOfPath(n.args[1]);
@@ -1843,7 +1926,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   // set(field, record, value) (C106): the path is fields written in place
   // (the checker insists), so the record is made again along it with that
   // field changed, the way changed does for a path of fields.
-  function setField(n: NodeOf<"call">, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
+  function setField(n: Call, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
     const t = stype(zonk(id)), xt = stype(zonk(n.args[2]));
     if (!t || !xt) throw new Refused(`sets a field of ${whyNot(zonk(t ? n.args[2] : id))}`);
     const path = fieldPath(code, n.args[0]);
@@ -1895,7 +1978,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   // seeded(seed, body) (C106): the generator's words as the body found
   // them are kept, it's seeded, the body runs, and they're put back, so an
   // outer seeded goes on where it was. random() is rand.next.
-  function seeded(n: NodeOf<"call">, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
+  function seeded(n: Call, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
     const t = stype(zonk(id));
     if (!t || n.args.length !== 2) throw new Refused(`seeds Random around ${whyNot(zonk(id))}`);
     const lam = code.nodes[n.args[1]];
@@ -1912,7 +1995,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     return lets.reduceRight<SExpr>((e, [i, value]) => ({ k: "let", i, value, body: e }), { k: "local", i: v });
   }
   // value of(o): o's value if it's some, no answer if it's none.
-  function valueOf(n: NodeOf<"call">, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
+  function valueOf(n: Call, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
     const d = stype(zonk(n.args[0])), t = stype(zonk(id));
     if (!d || !isData(d) || !t) throw new Refused(`takes the value of ${whyNot(zonk(d ? id : n.args[0]))}`);
     const s = f.locals.push(d) - 1, some = d.cases.findIndex((c) => c.variant === SOME);
@@ -1921,18 +2004,18 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
 
   // first(() => with fuel(n, () => body), () => otherwise), and nothing
   // else made of those two.
-  function budget(n: NodeOf<"call">, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
+  function budget(n: Call, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
     const thunk = (x: Id | undefined) => { const l = x && code.nodes[x]; return l && l.kind === "lambda" && !l.params.length ? l.body : null; };
     const action = thunk(n.args[0]), otherwise = thunk(n.args[1]);
     const inner = action ? code.nodes[action] : null;
-    const head = inner?.kind === "call" ? code.nodes[inner.fn] : null;
+    const head = isCall(inner) ? code.nodes[inner.fn] : null;
     const shape = `only as a budget, ${BUDGET}`;
-    if ((code.nodes[n.fn] as NodeOf<"ref">).target !== S.first || !action || !otherwise || inner?.kind !== "call" || head?.kind !== "ref" || head.target !== S.fuel || inner.args.length !== 2)
+    if ((code.nodes[n.fn] as NodeOf<"ref">).target !== S.first || !action || !otherwise || !isCall(inner) || head?.kind !== "ref" || head.target !== S.fuel || inner.args.length !== 2)
       throw new Refused(`uses first or with fuel, which a shader takes ${shape}`);
     // A number written down, rounded to Float32 maybe (NUMBERS.md).
     const rounded = code.nodes[inner.args[0]];
-    const under = rounded?.kind === "call" && code.nodes[rounded.fn]?.kind === "ref" && (code.nodes[rounded.fn] as NodeOf<"ref">).target === S.float32 && rounded.args.length === 1;
-    const amount = under ? code.nodes[(rounded as NodeOf<"call">).args[0]] : rounded, body = thunk(inner.args[1]);
+    const under = isCall(rounded) && code.nodes[rounded.fn]?.kind === "ref" && (code.nodes[rounded.fn] as NodeOf<"ref">).target === S.float32 && rounded.args.length === 1;
+    const amount = under ? code.nodes[(rounded as Call).args[0]] : rounded, body = thunk(inner.args[1]);
     if (!body) throw new Refused(`uses with fuel, which a shader takes ${shape}`);
     if (amount?.kind !== "lit" || typeof amount.value !== "number") throw new Refused("has a budget that isn't a number written down (a shader's bound is fixed when it's built)");
     const v = under ? Math.fround(amount.value) : amount.value;
@@ -1954,7 +2037,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   // the record's fields would be written by hand. A part that is already
   // an expression (the record was just built) is used as it is; otherwise
   // the record goes in a local first, so it's computed once.
-  function parts(n: NodeOf<"call">, env: Map<Id, number>, f: SFunc): SExpr {
+  function parts(n: Call, env: Map<Id, number>, f: SFunc): SExpr {
     const target = (code.nodes[n.fn] as NodeOf<"ref">).target;
     const recs = target === S.total ? n.args : n.args.slice(1);
     const t = stype(zonk(recs[0]));
@@ -2003,7 +2086,6 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   for (const r of roots) {
     const from = funcs.length, shaped = shapes.length;
     const raw = info.typeOf.get(r) && info.subst.zonk(info.typeOf.get(r)!), given = defaults(r);
-    if (opts.data && raw?.t === "fn" && info.subst.resolveRow(raw.eff).effs.includes(RANDOM)) { refused.set(r, "draws a random number nobody seeds (the world's Random isn't in WebAssembly and C yet): seed it with seeded"); continue; }
     rootVars = new Set(raw ? vars(raw).filter((v) => !given.has(v)) : []);
     try { func(r, given); several_(from); modCons(from); } catch (e) {
       if (!(e instanceof Refused)) throw e;
@@ -2019,8 +2101,8 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   }
   for (const [r, why] of unstarted) if (!refused.has(r)) refused.set(r, why);
   // Refusals by definition; those of one specialization stay inside.
-  const niche = opts.data ? niches(funcs, [...records.values()], [...datas.values()], [...arrays.values()], [...fns.values()], shapes) : new Set<string>();
-  return { funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()].filter((d) => !niche.has(d.key)), arrays: [...arrays.values()], fns: [...fns.values()], shapes, code, info, escapes: escapes.map((e) => stype({ t: "con", id: e, args: [] }) as DType), rounded, ...(opts.shader && !opts.data ? { shader: true as const } : {}) };
+  const niche = opts.data ? niches(funcs, [...records.values()], [...datas.values()], [...arrays.values()], [...fns.values()], shapes, [...tables.values()]) : new Set<string>();
+  return { funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()].filter((d) => !niche.has(d.key)), arrays: [...arrays.values()], tables: [...tables.values()], fns: [...fns.values()], shapes, code, info, escapes: escapes.map((e) => stype({ t: "con", id: e, args: [] }) as DType), rounded, ...(opts.shader && !opts.data ? { shader: true as const } : {}) };
 }
 
 // A Float64 is finite (L125c2, FLOAT-VALUES-2026-11-01.md §2), on
@@ -2057,7 +2139,7 @@ const guard = (bad: SExpr, why: SExpr, ok: SExpr): SExpr => ({ k: "if", cond: ba
 // match tests which f64 it is, and every type that held one holds an f64
 // instead. Gives the keys of the data types no longer used.
 type Niche = { values: number[]; test: (c: number, x: SExpr) => SExpr };
-function niches(funcs: SFunc[], records: RType[], datas: DType[], arrays: AType[], fns: FType[], shapes: Shape[]): Set<string> {
+function niches(funcs: SFunc[], records: RType[], datas: DType[], arrays: AType[], fns: FType[], shapes: Shape[], tables: TType[] = []): Set<string> {
   const plain = (t: LType) => t === "f64";
   const op = (o: Op, ...args: SExpr[]): SExpr => ({ k: "op", op: o, args });
   const is = (x: SExpr, v: number): SExpr => op("equal", x, { k: "num", v });
@@ -2092,6 +2174,7 @@ function niches(funcs: SFunc[], records: RType[], datas: DType[], arrays: AType[
   for (const r of records) r.fields.forEach((x) => { x.t = ty(x.t); });
   for (const d of datas) d.cases.forEach((c) => c.fields.forEach((x) => { x.t = ty(x.t); }));
   for (const a of arrays) a.item = ty(a.item);
+  for (const h of tables) h.value = ty(h.value);
   for (const t of [...fns, ...shapes.map((sh) => sh.t)]) { t.params = t.params.map(ty); t.result = ty(t.result); }
   for (const sh of shapes) sh.caps = sh.caps.map(ty);
   for (const f of funcs) {

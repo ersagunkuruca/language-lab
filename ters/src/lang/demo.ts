@@ -3,7 +3,7 @@
 
 import { join } from "node:path";
 import { root } from "../io.ts";
-import { get, replace, type Id, type NodeOf } from "../model.ts";
+import { get, replace, type Id, type NodeOf, isCall, type Call } from "../model.ts";
 import { fillings, infer, type Filling } from "./infer.ts";
 import { loadProgram } from "./load.ts";
 import { addVariant, fillHole } from "./refactor.ts";
@@ -70,7 +70,7 @@ for (const [id, h] of ti.holes) {
 
 const each = algebra.named("for each");
 const lam = get(algebra.code, get(algebra.code, each, "def").body!, "lambda");
-const rec = Object.values(algebra.code.nodes).find((n) => n.kind === "call" && algebra.code.nodes[n.fn].kind === "ref" && (algebra.code.nodes[n.fn] as NodeOf<"ref">).target === each && n.args[0] !== lam.params[0] && algebra.code.nodes[n.args[0]].kind === "ref") as NodeOf<"call">;
+const rec = Object.values(algebra.code.nodes).find((n) => isCall(n) && algebra.code.nodes[n.fn].kind === "ref" && (algebra.code.nodes[n.fn] as NodeOf<"ref">).target === each && n.args[0] !== lam.params[0] && algebra.code.nodes[n.args[0]].kind === "ref") as Call;
 const looped = replace(algebra.code, rec.args[0], () => ({ kind: "ref", target: lam.params[0] }));
 console.log(`\n  for each recurses on the rest of the list: ${showType(ai.typeOf.get(each)!, names)}`);
 console.log(`  Make it recurse on the whole list instead:  ${showType(infer(looped, names).typeOf.get(each)!, names)}`);
@@ -79,6 +79,6 @@ console.log(`  and main, which uses it, becomes:           ${showType(infer(loop
 function contains(code: typeof algebra.code, root: Id, id: Id): boolean {
   const n = code.nodes[root];
   if (root === id) return true;
-  const kids = n.kind === "def" ? (n.body ? [n.body] : []) : n.kind === "lambda" ? [n.body] : n.kind === "call" ? [n.fn, ...n.args] : n.kind === "fold" || n.kind === "match" ? [n.scrutinee, ...n.arms] : n.kind === "arm" ? [n.body] : [];
+  const kids = n.kind === "def" ? (n.body ? [n.body] : []) : n.kind === "lambda" ? [n.body] : isCall(n) ? [n.fn, ...n.args] : n.kind === "fold" || n.kind === "match" ? [n.scrutinee, ...n.arms] : n.kind === "arm" ? [n.body] : [];
   return kids.some((k) => contains(code, k, id));
 }

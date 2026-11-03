@@ -176,9 +176,9 @@ test("staged in Float32, a rounded value isn't rounded again: the ray marcher's 
   const lowered = lowerScalar(code, info, w.names, [colour], { records: true, shader: true });
   assert.ok(!lowered.refused.has(colour));
   const twice = lowered.code.defs.flatMap((d) => subtree(lowered.code, d)).map((id) => lowered.code.nodes[id]).filter((n) => {
-    if (n.kind !== "call") return false;
+    if (!isCall(n)) return false;
     const f = lowered.code.nodes[n.fn], a = lowered.code.nodes[n.args[0]];
-    const inner = a?.kind === "call" ? lowered.code.nodes[a.fn] : undefined;
+    const inner = isCall(a) ? lowered.code.nodes[a.fn] : undefined;
     return f?.kind === "ref" && f.target === S.float32 && inner?.kind === "ref" && inner.target === S.float32;
   });
   assert.equal(twice.length, 0);

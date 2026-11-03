@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { root } from "../src/io.ts";
 import type { Id } from "../src/model.ts";
+import { isCall } from "../src/model.ts";
 import { infer } from "../src/lang/infer.ts";
 import { loadProgram } from "../src/lang/load.ts";
 
@@ -55,7 +56,7 @@ const grabbed = (svg: El, id: Id) => svg.all().find((e) => e.getAttribute("data-
 const frames = (svg: El, el: El) => { const out: El[] = []; for (let e = el.parentElement; e; e = e.parentElement) for (const c of e.children) if (/\brg\b/.test(c.getAttribute("class") ?? "")) out.push(c); return out; };
 
 const calls = p.code.nodes;
-const safe = Object.values(calls).find((n) => n.kind === "call" && calls[n.fn].kind === "ref" && p.pres.names[(calls[n.fn] as { target: Id }).target] === "safe")!.id;
+const safe = Object.values(calls).find((n) => isCall(n) && calls[n.fn].kind === "ref" && p.pres.names[(calls[n.fn] as { target: Id }).target] === "safe")!.id;
 
 const frameOf = (svg: El, id: Id) => svg.all().find((e) => e.getAttribute("data-frame") === id)!;
 const box = (svg: El, el: El) => { const a = at(svg, el); return { ...a, w: Number(el.getAttribute("width")), h: Number(el.getAttribute("height")) }; };
@@ -113,7 +114,7 @@ test("a binding shown as let and get nodes has get nodes and no wires to its use
 // its arguments were dragged (to the right of the call, for instance).
 test("wires leave from the outputs they belong to, after any move", () => {
   const offsets: Record<Id, { x: number; y: number }> = {};
-  for (const n of Object.values(calls)) if (n.kind === "call" && calls[n.fn].kind === "ref") offsets[n.id] = { x: 260, y: 20 };
+  for (const n of Object.values(calls)) if (isCall(n) && calls[n.fn].kind === "ref") offsets[n.id] = { x: 260, y: 20 };
   const svg = draw(offsets);
   const outs = svg.all().filter((e) => e.tagName === "circle" && /\boutp\b/.test(e.getAttribute("class") ?? "")).map((c) => at(svg, c));
   const starts = svg.all().filter((e) => e.tagName === "path" && /^tw\b/.test(e.getAttribute("class") ?? "") && !/use/.test(e.getAttribute("class") ?? ""))

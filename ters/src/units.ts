@@ -11,7 +11,7 @@
 // isn't in scope.
 
 import type { Code, Id, Node } from "./model.ts";
-import { get, useTarget } from "./model.ts";
+import { get, useTarget, isCall } from "./model.ts";
 
 // Angles are plain numbers, as in SI: a radian is a length over a length.
 export const BASE = ["m", "s", "kg", "A"] as const;
@@ -337,7 +337,7 @@ function termName(code: Code, names: Record<Id, string>, term: string): string |
   const n = code.nodes[id];
   if (names[id]) return names[id];
   if (n?.kind === "ref") return names[n.target];
-  if (n?.kind === "call" && code.nodes[n.fn]?.kind === "ref") { const f = names[(code.nodes[n.fn] as { target: Id }).target]; return f && `${f}(…)`; }
+  if (isCall(n) && code.nodes[n.fn]?.kind === "ref") { const f = names[(code.nodes[n.fn] as { target: Id }).target]; return f && `${f}(…)`; }
   return undefined;
 }
 

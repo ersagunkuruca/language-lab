@@ -32,7 +32,7 @@
 // do.
 
 import type { Code, Id, Node, NodeData, NodeOf } from "../model.ts";
-import { isUse } from "../model.ts";
+import { isUse, isCall } from "../model.ts";
 import { children, freshId, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { impl, type Op } from "../prelude.ts";
@@ -91,7 +91,7 @@ export function stageCalls(code: Code, info: Info, names: Names, only?: Id[], co
 
   for (const id of only ?? Object.keys(nodes)) {
     const n = nodes[id];
-    if (n?.kind !== "call") continue;
+    if (!isCall(n)) continue;
     const f = nodes[n.fn];
     if (f?.kind !== "ref" || nodes[f.target]?.kind !== "def") continue;
     const def = nodes[f.target] as NodeOf<"def">;
@@ -204,14 +204,14 @@ export function stageProgram(code: Code, info: Info, names: Names, open?: Id[]):
   // Copies for the calls given data, and for the calls inside them given it
   // in turn, then checked (their calls need types) and their calls worked
   // out; the program is checked once more at the end.
-  const calls = Object.keys(code.nodes).filter((id) => code.nodes[id].kind === "call");
+  const calls = Object.keys(code.nodes).filter((id) => isCall(code.nodes[id]));
   const copies = specialiseCalls(code, info, names, calls);
   if (copies.copies.length) {
     ({ code, names } = copies);
     copies.copies.forEach((c) => copied.add(c));
     keep = copies.sites.flatMap(([, n]) => children(n));
     if (check()) {
-      stage(copies.inner.filter((id) => code.nodes[id]?.kind === "call"));
+      stage(copies.inner.filter((id) => isCall(code.nodes[id])));
       // A copy is kept only where it paid: some call in it worked out, or
       // it calls a copy that did. Other calls go back to the definition.
       const paid = new Set(copies.copies.filter((c) => subtree(code, c).some((id) => staged.has(id))));
@@ -277,7 +277,7 @@ export function specialiseCalls(code: Code, info: Info, names: Names, calls: Id[
   while (todo.length) {
     const id = todo.pop()!;
     const n = nodes[id];
-    if (n?.kind !== "call") continue;
+    if (!isCall(n)) continue;
     const f = nodes[n.fn];
     if (f?.kind !== "ref" || nodes[f.target]?.kind !== "def") continue;
     const def = nodes[f.target] as NodeOf<"def">;
@@ -326,7 +326,7 @@ export function specialiseCalls(code: Code, info: Info, names: Names, calls: Id[
       out.defs.push(copy);
       made.push(copy);
       // The copy's own calls may be given the data too.
-      for (const c of subtree(out, body)) if (nodes[c].kind === "call") { inner.push(c); todo.push(c); within.set(c, copy); }
+      for (const c of subtree(out, body)) if (isCall(nodes[c])) { inner.push(c); todo.push(c); within.set(c, copy); }
     }
     sites.push([id, n, copy, within.get(id) ?? null]);
     nodes[id] = nodes[copy].kind === "def" && nodes[(nodes[copy] as NodeOf<"def">).body!]?.kind !== "lambda" && whole(n.args.length, keys)
@@ -418,8 +418,8 @@ function copyTree(code: Code, names: Names, root: Id, map: Map<Id, Id>, fixed = 
   const known = new Map<Id, Id>();
   for (const id of ids) {
     const n = code.nodes[id];
-    const lam = n.kind === "call" ? code.nodes[n.fn] : null;
-    if (n.kind === "call" && lam?.kind === "lambda" && lam.params.length === 1 && n.args.length === 1 && closedTree(code, n.args[0], fixed)) known.set(lam.params[0], n.args[0]);
+    const lam = isCall(n) ? code.nodes[n.fn] : null;
+    if (isCall(n) && lam?.kind === "lambda" && lam.params.length === 1 && n.args.length === 1 && closedTree(code, n.args[0], fixed)) known.set(lam.params[0], n.args[0]);
   }
   for (const [old, fresh] of map) {
     const n = code.nodes[old];

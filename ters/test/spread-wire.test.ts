@@ -7,7 +7,7 @@ import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
 import { ARITH, tupleVariant } from "../src/lang/std.ts";
-import type { NodeOf } from "../src/model.ts";
+import type { NodeOf, Call } from "../src/model.ts";
 import { useVar } from "../../editor/typed.ts";
 
 test("a tuple wired onto a node whose inputs are empty fills them all, in order", () => {
@@ -21,7 +21,7 @@ test("a tuple wired onto a node whose inputs are empty fills them all, in order"
   const r = useVar(code, names, info, main, p, holes[1]);
   assert.ok(r.ok, !r.ok ? r.reason : "");
   if (!r.ok) return;
-  const call = r.code.nodes[use] as NodeOf<"call">;
+  const call = r.code.nodes[use] as Call;
   assert.equal(call.args.length, 1);
   assert.deepEqual(r.code.nodes[call.args[0]], { id: call.args[0], kind: "ref", target: p });
   assert.deepEqual(infer(r.code, r.names).errors, []);

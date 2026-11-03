@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { root } from "../src/io.ts";
-import { replace, subtree, type NodeOf } from "../src/model.ts";
+import { replace, subtree, type NodeOf, isCall, type Call } from "../src/model.ts";
 import { loadProgram } from "../src/lang/load.ts";
 import { renderLet } from "../src/render/letseq.ts";
 import { fillValue, infer } from "../../editor/typed.ts";
@@ -14,7 +14,7 @@ import { fillValue, infer } from "../../editor/typed.ts";
 test("typed text reads a field as the blocks print it", () => {
   const p = loadProgram(join(root, "examples", "mandelbrot"));
   const { code } = p, names = p.pres.names, escape = p.named("escape");
-  const re = subtree(code, escape).map((x) => code.nodes[x]).find((n): n is NodeOf<"call"> => n.kind === "call" && code.nodes[n.fn]?.kind === "ref" && names[(code.nodes[n.fn] as NodeOf<"ref">).target] === "re" && code.nodes[(code.nodes[n.fn] as NodeOf<"ref">).target].kind === "field")!;
+  const re = subtree(code, escape).map((x) => code.nodes[x]).find((n): n is Call => isCall(n) && code.nodes[n.fn]?.kind === "ref" && names[(code.nodes[n.fn] as NodeOf<"ref">).target] === "re" && code.nodes[(code.nodes[n.fn] as NodeOf<"ref">).target].kind === "field")!;
   assert.ok(re);
   const open = replace(code, re.id, () => ({ kind: "hole" }));
   const info = infer(open, names);
@@ -78,8 +78,8 @@ test("typed text reads a function's named results back in", async () => {
   const p = loadProgram(join(root, "examples", "mandelbrot"));
   const { code } = p, names = p.pres.names, hsi = p.named("hsi colour");
   const valueOf = (n: string) => {
-    const l = subtree(code, hsi).map((id) => code.nodes[id]).find((x) => x.kind === "call" && code.nodes[x.fn]?.kind === "lambda" && (code.nodes[x.fn] as NodeOf<"lambda">).params.some((b) => names[b] === n)) as NodeOf<"call">;
-    return subtree(code, l.args[0]).filter((x) => code.nodes[x].kind === "call");
+    const l = subtree(code, hsi).map((id) => code.nodes[id]).find((x) => isCall(x) && code.nodes[x.fn]?.kind === "lambda" && (code.nodes[x.fn] as NodeOf<"lambda">).params.some((b) => names[b] === n)) as Call;
+    return subtree(code, l.args[0]).filter((x) => isCall(code.nodes[x]));
   };
   const made = makeFunction(code, names, infer(code, names), hsi, [...valueOf("r"), ...valueOf("g")]);
   assert.ok(made.ok);
@@ -109,8 +109,8 @@ test("the blocks read a tuple's parts by their result ports' names", async () =>
   const p = loadProgram(join(root, "examples", "mandelbrot"));
   const { code } = p, names = p.pres.names, hsi = p.named("hsi colour");
   const valueOf = (n: string) => {
-    const l = subtree(code, hsi).map((id) => code.nodes[id]).find((x) => x.kind === "call" && code.nodes[x.fn]?.kind === "lambda" && (code.nodes[x.fn] as NodeOf<"lambda">).params.some((b) => names[b] === n)) as NodeOf<"call">;
-    return subtree(code, l.args[0]).filter((x) => code.nodes[x].kind === "call");
+    const l = subtree(code, hsi).map((id) => code.nodes[id]).find((x) => isCall(x) && code.nodes[x.fn]?.kind === "lambda" && (code.nodes[x.fn] as NodeOf<"lambda">).params.some((b) => names[b] === n)) as Call;
+    return subtree(code, l.args[0]).filter((x) => isCall(code.nodes[x]));
   };
   const made = makeFunction(code, names, infer(code, names), hsi, [...valueOf("r"), ...valueOf("g")]);
   assert.ok(made.ok);
@@ -119,7 +119,7 @@ test("the blocks read a tuple's parts by their result ports' names", async () =>
   const text = renderBlocks(made.code, pres, infer(made.code, made.names), hsi);
   assert.match(text, /r = results\.r\n/);
   assert.match(text, /g = results\.g\n/);
-  const reads = subtree(made.code, hsi).map((x) => made.code.nodes[x]).filter((n): n is NodeOf<"call"> => n.kind === "call" && /^std\.tuple2\.tuple\.(first|second)$/.test((made.code.nodes[n.fn] as NodeOf<"ref">).target ?? ""));
+  const reads = subtree(made.code, hsi).map((x) => made.code.nodes[x]).filter((n): n is Call => isCall(n) && /^std\.tuple2\.tuple\.(first|second)$/.test((made.code.nodes[n.fn] as NodeOf<"ref">).target ?? ""));
   assert.equal(reads.length, 2);
   const g = reads.find((n) => (made.code.nodes[n.fn] as NodeOf<"ref">).target.endsWith("second"))!;
   const open = replace(made.code, g.id, () => ({ kind: "hole" }));
@@ -146,7 +146,7 @@ test("typed show of a value not known yet leaves its type open", async () => {
   const r = fillValue(code, names, info, hole, "show(n)", f);
   assert.ok(r.ok, !r.ok ? r.reason : "");
   if (!r.ok) return;
-  const call = r.code.nodes[hole] as NodeOf<"call">;
+  const call = r.code.nodes[hole] as Call;
   assert.equal((r.code.nodes[call.fn] as NodeOf<"ref">).target, SHOW_ANY);
 });
 
@@ -166,7 +166,7 @@ test("typed call of a name whose other meaning has fewer inputs reads", async ()
   assert.ok(r.ok, !r.ok ? r.reason : "");
   if (!r.ok) return;
   // The program's own div is the one read (E220).
-  const call = r.code.nodes[hole] as NodeOf<"call">;
+  const call = r.code.nodes[hole] as Call;
   assert.equal((r.code.nodes[call.fn] as NodeOf<"ref">).target, div);
 });
 
@@ -308,13 +308,13 @@ test("typed text reads else, lists of expressions, steps and holes", async () =>
     return r.ok ? { code: r.code, at: r.code.nodes[hole] } : null;
   };
   const first = fill("first(a, else b)")!;
-  assert.ok((first.at as NodeOf<"call">).args.every((x) => { const l = first.code.nodes[x] as NodeOf<"lambda">; return l.kind === "lambda" && l.params.length === 0; }));
+  assert.ok((first.at as Call).args.every((x) => { const l = first.code.nodes[x] as NodeOf<"lambda">; return l.kind === "lambda" && l.params.length === 0; }));
   const list = fill('[show(a + 1), "x"]')!;
-  assert.equal((list.code.nodes[(list.at as NodeOf<"call">).fn] as NodeOf<"ref">).target, CONS);
+  assert.equal((list.code.nodes[(list.at as Call).fn] as NodeOf<"ref">).target, CONS);
   const step = fill("x = a + 1; x · x")!;
-  assert.equal(step.code.nodes[(step.at as NodeOf<"call">).fn].kind, "lambda");
+  assert.equal(step.code.nodes[(step.at as Call).fn].kind, "lambda");
   const later = fill("a + □")!;
-  assert.ok((later.at as NodeOf<"call">).args.some((x) => later.code.nodes[x].kind === "hole"));
+  assert.ok((later.at as Call).args.some((x) => later.code.nodes[x].kind === "hole"));
 });
 
 // A number given where an action giving something else goes says so, at
@@ -383,7 +383,7 @@ test("typed steps and a step before a one-action body", async () => {
   const r = fillValue(code, names, infer(code, names), hole, 'print("a"); print("b")', f);
   assert.ok(r.ok, !r.ok ? r.reason : "");
   if (!r.ok) return;
-  const call = r.code.nodes[hole] as NodeOf<"call">;
+  const call = r.code.nodes[hole] as Call;
   assert.equal(call.kind, "call");
   const lam = r.code.nodes[call.fn] as NodeOf<"lambda">;
   assert.equal(r.names[lam.params[0]], "_");
@@ -406,7 +406,7 @@ test("typed ≠ and != read as not equal", async () => {
   for (const text of ["a ≠ b", "a != b"]) {
     const r = fillValue(code, names, infer(code, names), hole, text, f);
     assert.ok(r.ok, `${text}: ${!r.ok ? r.reason : ""}`);
-    if (r.ok) assert.equal((r.code.nodes[(r.code.nodes[hole] as NodeOf<"call">).fn] as NodeOf<"ref">).target, "builtin.not", text);
+    if (r.ok) assert.equal((r.code.nodes[(r.code.nodes[hole] as Call).fn] as NodeOf<"ref">).target, "builtin.not", text);
   }
   const left = fillValue(code, names, infer(code, names), hole, "a.head <> b", f);
   assert.ok(!left.ok && /after \.head/.test(left.reason), !left.ok ? left.reason : "");
@@ -445,7 +445,7 @@ test("a stub's callers choose a shared name's meaning", async () => {
   const code = base(k.code), names = baseNames(k.names);
   const r = fillValue(code, names, infer(code, names), hole, "length(w)", g);
   assert.ok(r.ok, !r.ok ? r.reason : "");
-  if (r.ok) assert.equal((r.code.nodes[(r.code.nodes[hole] as NodeOf<"call">).fn] as NodeOf<"ref">).target, "builtin.text.length");
+  if (r.ok) assert.equal((r.code.nodes[(r.code.nodes[hole] as Call).fn] as NodeOf<"ref">).target, "builtin.text.length");
 });
 
 // A field two types share, read on an input nothing has settled, isn't
@@ -471,7 +471,7 @@ test("a call of a shared name says which meaning it took", async () => {
   const { tookType } = await import("../../editor/typed.ts");
   const p = loadProgram(join(root, "..", "compiler/gaps/clinic"));
   const info = infer(p.code, p.pres.names);
-  const calls = Object.values(p.own.nodes).filter((n): n is NodeOf<"call"> => n.kind === "call" && p.code.nodes[n.fn]?.kind === "ref");
+  const calls = Object.values(p.own.nodes).filter((n): n is Call => isCall(n) && p.code.nodes[n.fn]?.kind === "ref");
   const named = (name: string) => calls.find((c) => p.pres.names[(p.code.nodes[c.fn] as NodeOf<"ref">).target] === name)!;
   assert.equal(tookType(p.code, info, p.pres.names, named("as float64").id), "as float64 : (Int) -> Float64");
   assert.equal(tookType(p.code, info, p.pres.names, named("heap size").id), null);

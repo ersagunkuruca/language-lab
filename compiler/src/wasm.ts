@@ -36,7 +36,7 @@
 import { Aborted, type Runtime, type World } from "../../ters/src/lang/run.ts";
 import { MATH_DATA, MATH_DATA_AT } from "./wasm-math.ts";
 import { assemble, POW5, runtime, textBytes, WASI_IMPORTS, type RtFn, type VT } from "./wasm-rt.ts";
-import { fails, isArray, isData, isFn, kids, mapKids, OPS, STOPS, type AType, type DType, type FType, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc, type SType } from "./scalar.ts";
+import { fails, isArray, isTable, isData, isFn, kids, mapKids, OPS, STOPS, type AType, type DType, type FType, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc, type SType, type TType } from "./scalar.ts";
 
 // int32 (an Int in 32 bits) is the shaders' only (C66c); WebAssembly has Int.
 const VAL: Record<SType | "i64", number> = { f64: 0x7c, i32: 0x7f, int32: 0x7f, i64: 0x7e };
@@ -236,7 +236,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
   }
   const arrayOf = (f?: RtFn): AType => { const a = f?.array !== undefined ? lowered.arrays[f.array] : undefined; if (!a) throw new Error(`${f?.name}: no array type`); return a; };
   const caseIndex = (d: DType, c: number) => baseIndex.get(d.key)! + 1 + c;
-  const isRec = (t: MType): t is RType | DType | FType | AType => typeof t !== "string";
+  const isRec = (t: MType): t is RType | DType | FType | AType => { if (typeof t === "object" && isTable(t)) throw new Error("std's Table isn't in WebAssembly yet (C63j)"); return typeof t !== "string"; };
   // The runtime's names for types and functions.
   // `list` in a runtime function is the list type it names (List Text if none).
   const listOf = (f?: RtFn) => {
@@ -263,18 +263,19 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
       if (t === "list") return { bytes: typeOf(listOf(f)), text: `(ref null $${structs[baseIndex.get(listOf(f).key)!].name})` };
       if (t === "option") return { bytes: typeOf(optionOf()), text: `(ref null $${structs[baseIndex.get(OPTION_TEXT)!].name})` };
       if (t === "void") throw new Error("nothing isn't a value type");
+      if (t === "table" || t === "key" || t === "value") throw new Error("std's Table isn't in WebAssembly yet (C63j)");
       if (t === "array" || t === "item") {
         const m = t === "array" ? arrayOf(f) : arrayOf(f).item;
-        return { bytes: typeOf(m), text: m === "text" ? "(ref null $bytes)" : isRec(m) ? `(ref null $${structs[refIndex(m)].name})` : m === "int" ? "eqref" : m };
+        return { bytes: typeOf(m), text: m === "text" ? "(ref null $bytes)" : isRec(m) ? `(ref null $${structs[refIndex(m)].name})` : m === "int" ? "eqref" : m as string };
       }
       if (t === "buf" || t === "items") { const k = arrIndex.get(arrayOf(f).key)! - (t === "buf" ? 1 : 2); return { bytes: [0x63, ...s(k)], text: `(ref null $${structs[k].name})` }; }
-      return { bytes: typeOf(t), text: t === "text" ? "(ref null $bytes)" : t === "int" ? "eqref" : t === "mag" ? "(ref null $u32s)" : t };
+      return { bytes: typeOf(t), text: t === "text" ? "(ref null $bytes)" : t === "int" ? "eqref" : t === "mag" ? "(ref null $u32s)" : t as string };
     },
   });
   const resolve = resolver();
   const rtIndex = (n: string) => fnIndex(funcs.length + helpers.length + rts.findIndex((f) => f.name === n));
   const refIndex = (t: RType | DType | FType | AType) => (isArray(t) ? arrIndex.get(t.key)! : isData(t) ? baseIndex.get(t.key)! : isFn(t) ? cloIndex.get(t.key)! : recIndex.get(t.key)!);
-  const typeOf = (t: MType): number[] => (t === "text" ? [0x63, ...s(bytesIndex)] : isRec(t) ? [0x63, ...s(refIndex(t))] : t === "int" ? [0x63, 0x6d] : t === "mag" ? [0x63, ...s(u32sIndex)] : [VAL[t]]);
+  const typeOf = (t: MType): number[] => (t === "text" ? [0x63, ...s(bytesIndex)] : isRec(t) ? [0x63, ...s(refIndex(t))] : t === "int" ? [0x63, 0x6d] : t === "mag" ? [0x63, ...s(u32sIndex)] : [VAL[t as keyof typeof VAL]]);
   const keyOf = (t: MType) => (isRec(t) ? t.key : t);
   // A partial function (one answer or none) gives a status after its
   // answer: 0 for an answer, 1 for none.
@@ -365,7 +366,7 @@ export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Modul
       ].join("\n"),
     });
   }
-  const rtType = (f: RtFn, t: VT): MType | null => (t === "list" ? listOf(f) : t === "option" ? optionOf() : t === "void" ? null : t === "array" ? arrayOf(f) : t === "item" ? arrayOf(f).item : t === "buf" || t === "items" ? null : t);
+  const rtType = (f: RtFn, t: VT): MType | null => (t === "table" || t === "key" || t === "value" ? null : t === "list" ? listOf(f) : t === "option" ? optionOf() : t === "void" ? null : t === "array" ? arrayOf(f) : t === "item" ? arrayOf(f).item : t === "buf" || t === "items" ? null : t);
   const rtSig = rts.map((f) => sig(f.params.map(([, t]) => rtType(f, t)!), rtType(f, f.result), f.partial));
   const rtCode = rts.map((f) => assemble(f, resolver(f)));
   const struct = (x: (typeof structs)[number]) => {
@@ -752,6 +753,8 @@ function worldOf(rt: Runtime, exports: () => Record<string, (...xs: unknown[]) =
   const tried = <T>(f: () => T): [T | null, number] => { try { return [f(), 0]; } catch (e) { reason = (e as Error).message; return [null, 2]; } };
   const unit = (f: () => void) => tried(f)[1];
   return {
+    // A seed for Random's generator, 32 bits (C136).
+    randomSeed: () => Math.floor(Math.random() * 4294967296),
     print: (t: unknown) => rt.print(text(t)),
     printError: (t: unknown) => w("error")(text(t)),
     readInput: () => tried(() => make(w("input")())),

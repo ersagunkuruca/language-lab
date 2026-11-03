@@ -78,7 +78,7 @@ test("examples/raymarch: the ray marcher goes to the GPU whole, normals and all"
   const info = infer(code, names);
   assert.deepEqual(info.errors, []);
   const variant = (call: Id) => {
-    const f = info.subst.zonk(info.typeOf.get((code.nodes[call] as NodeOf<"call">).args[0])!);
+    const f = info.subst.zonk(info.typeOf.get((code.nodes[call] as Call).args[0])!);
     return f.t === "fn" && f.params[0].t === "con" ? recordVariant(code, f.params[0].id) : null;
   };
   const x = expandDerivatives(code, names, variant);

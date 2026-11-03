@@ -33,7 +33,7 @@
 // test/modes.test.ts compares what it says with what relate.ts does.
 
 import type { Code, Id, Node, NodeOf, Use } from "../model.ts";
-import { children, derived, derivedFrom, ownerOfTypeParts, subtree, useTarget } from "../model.ts";
+import { children, derived, derivedFrom, ownerOfTypeParts, subtree, useTarget, isCall, type Call } from "../model.ts";
 import { NUMERIC } from "./equations.ts";
 import { planSolve, type SolvePlan } from "./solve.ts";
 import { computedForward } from "./directions.ts";
@@ -188,14 +188,14 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
     return r;
   };
   const union = (a: Id, b: Id) => { const x = find(a), y = find(b); if (x !== y) parent.set(x, y); };
-  const isLet = (n: NodeOf<"call">) => nodes[n.fn]?.kind === "lambda" && (nodes[n.fn] as NodeOf<"lambda">).params.length === n.args.length;
+  const isLet = (n: Call) => nodes[n.fn]?.kind === "lambda" && (nodes[n.fn] as NodeOf<"lambda">).params.length === n.args.length;
   // Nodes can be added while a program runs (a derivative is a new
   // lambda), so the slots are brought up to date when one is asked for.
   const seen = new Set<Id>();
   const scan = (n: Node) => {
     seen.add(n.id);
     if (n.kind === "ref" && nodes[n.target]?.kind === "binder") union(n.id, n.target);
-    if (n.kind === "call" && isLet(n)) {
+    if (isCall(n) && isLet(n)) {
       const lam = nodes[n.fn] as NodeOf<"lambda">;
       lam.params.forEach((p, i) => union(p, n.args[i]));
       union(n.id, lam.body);
@@ -237,7 +237,7 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
   const nonEmptyText = (id: Id): boolean => {
     const n = nodes[id];
     if (n.kind === "lit") return typeof n.value === "string" && n.value !== "";
-    if (n.kind !== "call") return false;
+    if (!isCall(n)) return false;
     const f = nodes[n.fn];
     if (f?.kind !== "ref") return false;
     return f.target === S.show || (f.target === S.concat && n.args.some(nonEmptyText));
@@ -426,7 +426,7 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
 
   const describe = (s: Id) => {
     const n = nodes[s];
-    return n?.kind === "binder" ? nm(s) : n?.kind === "call" ? `the value of a call of ${describeFn(n.fn)}` : `a ${n?.kind ?? "value"}`;
+    return n?.kind === "binder" ? nm(s) : isCall(n) ? `the value of a call of ${describeFn(n.fn)}` : `a ${n?.kind ?? "value"}`;
   };
   const describeFn = (id: Id): string => { const n = nodes[id]; return n?.kind === "ref" ? nm(n.target) : n?.kind ?? id; };
 
@@ -525,7 +525,7 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
   const within = (from: number, to: number[], strictly: (sides: Id[]) => boolean[] = () => to.map(() => false)) =>
     (ss: Id[], st: St): [Id, Size][] => { const s = strictly(ss); return to.map((i, k) => [ss[i], s[k] ? strict(st.sizes.get(ss[from])) : same(st.sizes.get(ss[from]))]); };
 
-  function callGoal(n: NodeOf<"call">, ctx: Ctx): Goal {
+  function callGoal(n: Call, ctx: Ctx): Goal {
     const sides = [...n.args, n.id];
     const o = n.args.length;
     const all = n.args.map((_, i) => i);
@@ -609,7 +609,7 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
     return lam ? `${lam}|${[...known].sort().join(",")}|${[...spec].map(([i, g]) => `${i}=${fnKey(g)}`).sort().join(",")}` : null;
   }
 
-  function builtinGoal(id: Id, text: string, n: NodeOf<"call">, sides: Id[], ctx: Ctx): Goal {
+  function builtinGoal(id: Id, text: string, n: Call, sides: Id[], ctx: Ctx): Goal {
     const o = n.args.length;
     const ins = n.args.map((_, i) => i);
     const call: Exec = { k: "call", node: n.id };
@@ -693,7 +693,7 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
   function heads(id: Id): Set<Id> | null {
     const n = nodes[id];
     if (n?.kind === "ref") return nodes[n.target]?.kind === "variant" ? new Set([n.target]) : null;
-    if (n?.kind === "call") {
+    if (isCall(n)) {
       if (isLet(n)) return heads((nodes[n.fn] as NodeOf<"lambda">).body);
       const f = nodes[n.fn];
       if (f?.kind !== "ref") return null;

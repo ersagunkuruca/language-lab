@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { root } from "../src/io.ts";
-import { subtree, type NodeOf } from "../src/model.ts";
+import { subtree, type NodeOf, isCall, type Call } from "../src/model.ts";
 import { loadProgram } from "../src/lang/load.ts";
 import { renderLet } from "../src/render/letseq.ts";
 import { definitionFrom, infer, liftToDefinition, makeFunction } from "../../editor/typed.ts";
@@ -17,7 +17,7 @@ test("a group of one value out becomes a function called in its place", () => {
   const { code } = p, names = p.pres.names, fall = p.named("fall");
   const info = infer(code, names);
   const was = renderLet(code, p.pres, fall);
-  const muls = subtree(code, fall).map((id) => code.nodes[id]).filter((n): n is NodeOf<"call"> => n.kind === "call" && names[(code.nodes[n.fn] as NodeOf<"ref">).target] === "multiply");
+  const muls = subtree(code, fall).map((id) => code.nodes[id]).filter((n): n is Call => isCall(n) && names[(code.nodes[n.fn] as NodeOf<"ref">).target] === "multiply");
   const drop = muls.filter((m) => m.args.some((a) => muls.some((x) => x.id === a)) || muls.some((x) => x.args.includes(m.id)));
   assert.equal(drop.length, 3, was);
   const r = makeFunction(code, names, info, fall, drop.map((m) => m.id));
@@ -37,8 +37,8 @@ test("a group of several values out gives them back as a tuple", () => {
   const { code } = p, names = p.pres.names, hsi = p.named("hsi colour");
   const info = infer(code, names);
   const valueOf = (n: string) => {
-    const l = subtree(code, hsi).map((id) => code.nodes[id]).find((x) => x.kind === "call" && code.nodes[x.fn]?.kind === "lambda" && (code.nodes[x.fn] as NodeOf<"lambda">).params.some((b) => names[b] === n)) as NodeOf<"call">;
-    return subtree(code, l.args[0]).filter((x) => code.nodes[x].kind === "call");
+    const l = subtree(code, hsi).map((id) => code.nodes[id]).find((x) => isCall(x) && code.nodes[x.fn]?.kind === "lambda" && (code.nodes[x.fn] as NodeOf<"lambda">).params.some((b) => names[b] === n)) as Call;
+    return subtree(code, l.args[0]).filter((x) => isCall(code.nodes[x]));
   };
   const r = makeFunction(code, names, info, hsi, [...valueOf("r"), ...valueOf("g")]);
   assert.ok(r.ok, !r.ok ? r.reason : "");
@@ -61,7 +61,7 @@ test("a group made a definition is in the side menu and called where it was", ()
   const p = loadProgram(join(root, "examples", "physics"));
   const { code } = p, names = p.pres.names, fall = p.named("fall");
   const info = infer(code, names);
-  const muls = subtree(code, fall).map((id) => code.nodes[id]).filter((n): n is NodeOf<"call"> => n.kind === "call" && names[(code.nodes[n.fn] as NodeOf<"ref">).target] === "multiply");
+  const muls = subtree(code, fall).map((id) => code.nodes[id]).filter((n): n is Call => isCall(n) && names[(code.nodes[n.fn] as NodeOf<"ref">).target] === "multiply");
   const drop = muls.filter((m) => m.args.some((a) => muls.some((x) => x.id === a)) || muls.some((x) => x.args.includes(m.id)));
   const r = definitionFrom(code, names, info, fall, drop.map((m) => m.id));
   assert.ok(r.ok, !r.ok ? r.reason : "");
@@ -118,7 +118,7 @@ test("a function of drift and drop names its inputs and reads its results by nam
   const p = loadProgram(join(root, "examples", "physics"));
   const { code } = p, names = p.pres.names, fall = p.named("fall");
   const info = infer(code, names);
-  const muls = subtree(code, fall).map((id) => code.nodes[id]).filter((n): n is NodeOf<"call"> => n.kind === "call" && names[(code.nodes[n.fn] as NodeOf<"ref">).target] === "multiply");
+  const muls = subtree(code, fall).map((id) => code.nodes[id]).filter((n): n is Call => isCall(n) && names[(code.nodes[n.fn] as NodeOf<"ref">).target] === "multiply");
   const drift = muls.find((m) => m.args.some((a) => names[(code.nodes[a] as NodeOf<"ref">).target] === "speed"))!;
   const drop = muls.find((m) => m !== drift && !muls.some((x) => x.args.includes(m.id)))!;
   const r = makeFunction(code, names, info, fall, [drift.id, drop.id]);

@@ -13,7 +13,7 @@
 // type (C52). A map's keys or a set's items that hold one would be ordered
 // by the tree's shape, so such a program keeps the definition.
 
-import { dependencies, freshId, mapIds, merge, subtree, type Code, type Id, type Node, type NodeOf, isUse } from "../model.ts";
+import { dependencies, freshId, mapIds, merge, subtree, type Code, type Id, type Node, type NodeOf, isUse, isCall, type Call } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { infer, type Info } from "./infer.ts";
 import { Lang } from "./dsl.ts";
@@ -40,7 +40,9 @@ export interface Chosen { code: Code; names: Names; chosen: string[]; insiders: 
 // `hostMaps`: the program runs where std's Table is (the evaluator and
 // compiled JavaScript), so a Map may be a hash table changed in place
 // (C63b); WebAssembly, C and shaders have none.
-export interface LibraryOptions { hostMaps?: boolean }
+// `cTables`: the program is compiled to C, whose runtime has a Map table
+// for Int and Text keys (C63h, compiler/src/c.ts `tableC`).
+export interface LibraryOptions { hostMaps?: boolean; cTables?: boolean }
 
 export function withLibraryRepresentations(code: Code, info: Info, names: Names, main: Id, defs: Id[], asked: Representation[] = [], options: LibraryOptions = {}): Chosen {
   const skip = new Set<Id>();
@@ -75,7 +77,8 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
     // A hash table only where it is (hostMaps), and only where every map
     // has one holder, so a put changing it in place can't be seen.
     const rows = LIBRARY.reps.filter((r) => r.of === ty && r.byType && !skip.has(r.name + " " + ty)
-      && (!r.oneHolder || (options.hostMaps && inPlace(code, info, main, defs, r))));
+      && (!r.oneHolder || (options.hostMaps && inPlace(code, info, main, defs, r))
+        || (options.cTables && ty === MAP && inPlace(code, info, main, defs, r, true))));
     if (!rows.length || !uses(code, main, [spec, ...rows]).length) continue;
     const tree = choose(code, main, [spec, ...rows]).rep;
     if (tree === spec || keyed(info, defs, code, ty) || generic(info, defs, code, tree)) continue;
@@ -125,18 +128,18 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
     // doesn't use the rest needs only the first: its row's head, down the
     // left of the tree, not the whole list (GAPS.md M3).
     if (n.kind === "match") {
-      const s = code.nodes[n.scrutinee], f = s?.kind === "call" ? code.nodes[s.fn] : undefined;
-      const head = s?.kind === "call" && f?.kind === "ref" && s.args[0] ? rowOf(s.args[0])?.heads?.[f.target] : undefined;
+      const s = code.nodes[n.scrutinee], f = isCall(s) ? code.nodes[s.fn] : undefined;
+      const head = isCall(s) && f?.kind === "ref" && s.args[0] ? rowOf(s.args[0])?.heads?.[f.target] : undefined;
       const cons = n.arms.map((a) => code.nodes[a] as NodeOf<"arm">).find((a) => a.variant === CONS);
       const rest = cons?.binds[1];
       if (head && rest && !subtree(code, cons.body).some((x) => { const r = code.nodes[x]; return r.kind === "ref" && r.target === rest; })) {
         const r = freshId();
         nodes[r] = { id: r, kind: "ref", target: head };
-        nodes[s.id] = { ...(s as NodeOf<"call">), fn: r };
+        nodes[s.id] = { ...(s as Call), fn: r };
       }
       continue;
     }
-    if (n.kind !== "call") continue;
+    if (!isCall(n)) continue;
     const f = code.nodes[n.fn];
     const job = f?.kind === "ref" ? BY_VALUE[f.target] : undefined;
     if (!job || !n.args[0]) continue;
@@ -310,7 +313,8 @@ function asMeanings(k: Lang, code: Code, info: Info, names: Names, chosen: Repre
 // it (C71): every version of a table stays a value (std.ts Table), so a
 // map read again after a change is still right; one holder is what makes
 // each change constant.
-function inPlace(code: Code, info: Info, main: Id, defs: Id[], row: Representation): boolean {
+// `simple`: Int and Text keys only (C's table, C63h).
+function inPlace(code: Code, info: Info, main: Id, defs: Id[], row: Representation, simple = false): boolean {
   for (const id of defs.flatMap((d) => subtree(code, d))) {
     const t0 = info.typeOf.get(id);
     if (!t0) continue;
@@ -326,6 +330,7 @@ function inPlace(code: Code, info: Info, main: Id, defs: Id[], row: Representati
     if (k.t !== "con") return false;
     const inner = (a: Type) => { const z = info.subst.zonk(a); return z.t !== "var" && hashable(z, within); };
     if (k.id === INT || k.id === STRING) return true;
+    if (simple) return false;
     if (/^std\.tuple\d+$/.test(k.id)) return k.args.every(inner);
     const d = code.nodes[k.id], td = d?.kind === "def" && d.body ? code.nodes[d.body] : null;
     if (td?.kind !== "typedef" || td.effect || td.interface || td.variants.length !== 1 || within.has(k.id)) return false;
@@ -388,7 +393,7 @@ function generic(info: Info, defs: Id[], code: Code, rep: Representation): boole
   const seen = (t: Type, vs: Set<number>): Type => (t.t === "var" ? (vs.has(t.v) ? t : { t: "con", id: "", args: [] }) : t.t === "con" ? { ...t, args: t.args.map((x) => seen(x, vs)) } : t.t === "fn" ? { ...t, params: t.params.map((x) => seen(x, vs)), ret: seen(t.ret, vs) } : t);
   return defs.some((d) => subtree(code, d).some((id) => {
     const n = code.nodes[id];
-    if (n.kind !== "call") return false;
+    if (!isCall(n)) return false;
     const f = code.nodes[n.fn];
     const scheme = f?.kind === "ref" && !(f.target in rep.impl) ? info.schemes.get(f.target) : undefined;
     if (scheme?.type.t !== "fn") return false;
@@ -517,8 +522,8 @@ function listBoundary(code: Code, info: Info, defs: Id[], rep: Representation, a
   };
   // `List x` with no list in x: the boundary can turn it into an array.
   const plainList = (p: Type, t: Type) => p.t === "con" && p.id === LIST && (t = info.subst.zonk(t)).t === "con" && t.id === LIST && !t.args.some(hasList);
-  const calledBy = new Map<Id, NodeOf<"call">>();
-  for (const d of reached) for (const id of subtree(code, d)) { const n = code.nodes[id]; if (n.kind === "call") calledBy.set(n.fn, n); }
+  const calledBy = new Map<Id, Call>();
+  for (const d of reached) for (const id of subtree(code, d)) { const n = code.nodes[id]; if (isCall(n)) calledBy.set(n.fn, n); }
   for (const d of reached) for (const id of subtree(code, d)) {
     const n = code.nodes[id];
     if (isUse(n)) return null;

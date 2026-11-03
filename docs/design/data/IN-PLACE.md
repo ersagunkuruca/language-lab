@@ -179,6 +179,48 @@ young generation.
 - **Nothing in the editor.** The evaluator keeps the definitions. Running
   in the editor stays the oracle the compiled code is checked against.
 
+## Step 2 on WebAssembly and C (C63's rest, planned 2026-11-03)
+
+WebAssembly and C have no host Map, so the chooser gives them trees
+(library-reps.ts `hostMaps: false`). Two ways to give them the table were
+looked at:
+
+- **A table written in the language over Array.** Nothing new in the
+  compilers, but WebAssembly's `replace at` copies the array (it has no
+  counts to tell it holds the only one, wasm-rt.ts `array.replaceAt`), so
+  each put would cost n there. Not taken.
+- **A table type in the scalar lowering, as Array is.** `AType` already
+  shows the way: one set of runtime functions per item type
+  (`array.push.a3`), written by c.ts `arrayC` and the WebAssembly runtime.
+  A table is one more such type, by key and value type. Taken.
+
+What it is, per target:
+
+- **C:** open addressing, keys and values in two buffers. A put or
+  remove changes the table in place when its count is 1 (Perceus's reuse,
+  as `array.replaceAt` does since C93c). Otherwise Baker's rerooting, as
+  below, so every version stays a value, as on JavaScript. (C63h first
+  copied the table there, as planned: routes' `link` reads its forest
+  after a put on it, so each put copied the whole table, and 60,000 roads
+  took 9.8 s against the tree's 1.0 s. Rerooting made it 0.37 s.)
+- **WebAssembly:** no counts, so Baker's rerooting, as std.ts's `Table`:
+  the newest version owns the buffers, and an older one is a chain of
+  changes that undo back to it. Reading an old version reroots.
+- **Keys:** Int and Text first (an Int's hash from its value or its
+  limbs, a Text's from its bytes, FNV-1a), then tuples and records of
+  them (C63f, C63g's keys). Float64 keys keep the tree, as on JavaScript.
+- **Order:** `entries of` and folds sort the keys with the key type's
+  compare, so the meaning is the same sorted Map (n log n, as now).
+
+Steps, one PR each: C63h a Map table in C (Int and Text keys), C63i Set
+in C, C63j both in WebAssembly, C63k tuple and record keys. Each is
+measured on routes with `lab native` and the WebAssembly the rounds run,
+and kept only if it is faster than the tree there.
+
+C63h, done: `lab native` gives a Map with Int or Text keys C's table
+(library-reps.ts `cTables`). On routes with 20,000 towns and 60,000 roads
+the program takes 0.37 s, against 0.99 s with the trees, the same output.
+
 ## M5, measured again
 
 GAPS.md M5 (leaving the depth count out of the tree jobs) was measured

@@ -15,7 +15,7 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { withLibraryRepresentations } from "../src/lang/library-reps.ts";
 import { COMPARE, CONS, INT_OPS, LIST, NIL, PAIR_V, S, SHOW_ANY } from "../src/lang/std.ts";
 import { DIVERGE, NUMBER, STRING } from "../src/lang/types.ts";
-import { subtree, type Id } from "../src/model.ts";
+import { subtree, type Id, isCall } from "../src/model.ts";
 
 const L = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY.names[d] === name)!;
 
@@ -590,7 +590,7 @@ test("a fold over a list stored as a tree that doesn't read the rest walks its i
   const sum = c.code.defs.find((d) => c.names[d] === "sum" && d !== L("sum"))!;
   const fold = subtree(c.code, sum).map((x) => c.code.nodes[x]).find((n) => n.kind === "fold")!;
   const by = c.code.nodes[(fold as { scrutinee: Id }).scrutinee];
-  assert.ok(by.kind === "call" && (c.code.nodes[by.fn] as { target?: Id }).target === items, "sum's fold is over the tree's items");
+  assert.ok(isCall(by) && (c.code.nodes[by.fn] as { target?: Id }).target === items, "sum's fold is over the tree's items");
   const info2 = infer(c.code, c.names, undefined, { ...checkOptions, insiders: [...checkOptions.insiders!, ...c.insiders] });
   const r = makeRunner(c.code, info2, { print: () => {}, names: c.names });
   const one = (x: unknown) => { for (const v of x as Iterable<unknown>) return v; };

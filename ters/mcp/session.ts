@@ -12,7 +12,7 @@
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import type { Code, Id, NodeOf } from "../src/model.ts";
-import { collect, subtree } from "../src/model.ts";
+import { collect, subtree, isCall, type Call } from "../src/model.ts";
 import { sameEverywhere, sharedPlaces } from "../src/lang/patterns.ts";
 import type { Comments, Names, Presentation, Style } from "../src/presentation.ts";
 import { root } from "../src/io.ts";
@@ -355,7 +355,7 @@ export class Session {
       const r = T.addStep(this.code, this.names, info, def, before === def ? undefined : before);
       if (!r.ok || !r.dot) return r.ok ? { ok: false, reason: "no step added" } : r;
       const names = { ...r.names, [r.dot]: name.trim() || "_" };
-      const let_ = Object.values(r.code.nodes).find((n): n is NodeOf<"call"> => n.kind === "call" && (r.code.nodes[n.fn] as { params?: Id[] }).params?.[0] === r.dot)!;
+      const let_ = Object.values(r.code.nodes).find((n): n is Call => isCall(n) && (r.code.nodes[n.fn] as { params?: Id[] }).params?.[0] === r.dot)!;
       const hole = let_.args[0];
       if (!value.trim()) return { ok: true, code: r.code, names };
       return T.fillValue(r.code, names, editorInfo(r.code, names), hole, value, def);

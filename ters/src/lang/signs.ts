@@ -22,7 +22,7 @@
 // Haskell's path-sensitive refinements, which a divisor `{v /= 0}` asks
 // for by annotation; here it's inferred. CREDITS.md.
 
-import { children, type Code, type Id, type NodeOf, isUse } from "../model.ts";
+import { children, type Code, type Id, type NodeOf, isUse, isCall } from "../model.ts";
 import { B } from "../prelude.ts";
 import { ARITH, FALSE, INT_OPS, RATIO, S, TRUE } from "./std.ts";
 
@@ -89,7 +89,7 @@ export function signAnalysis(code: Code) {
     if (!a || !b || depth > 4) return false;
     if (a.kind === "ref" && b.kind === "ref") return a.target === b.target;
     if (a.kind === "lit" && b.kind === "lit") return a.value === b.value;
-    if (a.kind !== "call" || b.kind !== "call" || a.args.length !== b.args.length) return false;
+    if (!isCall(a) || !isCall(b) || a.args.length !== b.args.length) return false;
     const f = target(a.fn);
     if (!f || f !== target(b.fn)) return false;
     const pure = code.nodes[f]?.kind === "field" || ADD.has(f) || SUB.has(f) || MUL.has(f) || NEGATE.has(f);
@@ -117,13 +117,13 @@ export function signAnalysis(code: Code) {
     const p = parentOf(b), pn = p ? code.nodes[p] : undefined;
     if (pn?.kind !== "lambda") return undefined;
     const call = parentOf(p!), cn = call ? code.nodes[call] : undefined;
-    return cn?.kind === "call" && cn.fn === p ? cn.args[pn.params.indexOf(b)] : undefined;
+    return isCall(cn) && cn.fn === p ? cn.args[pn.params.indexOf(b)] : undefined;
   };
 
   // What a test being `holds` says about the binder b.
   const said = (cond: Id, holds: boolean, b: Id, env: Env, depth: number): Signs => {
     const n = code.nodes[cond];
-    if (n?.kind !== "call" || depth > 8) return ANY;
+    if (!isCall(n) || depth > 8) return ANY;
     const f = target(n.fn), [x, y] = n.args;
     const is = (a: Id | undefined) => a !== undefined && target(a) === b;
     const go = (c: Id, h: boolean) => said(c, h, b, env, depth + 1);
@@ -185,7 +185,7 @@ export function signAnalysis(code: Code) {
       if (n.otherwise) s |= of(n.otherwise, env, depth + 1);
       return s || ANY;
     }
-    if (n.kind !== "call") return ANY;
+    if (!isCall(n)) return ANY;
     const fnode = code.nodes[n.fn];
     if (fnode?.kind === "lambda") return of(fnode.body, env, depth + 1);
     const f = target(n.fn);
@@ -208,7 +208,7 @@ export function signAnalysis(code: Code) {
     // A sum of squares, total(zip parts(·, x, x)), is never negative.
     if (f === S.total) {
       const z = code.nodes[n.args[0]];
-      if (z?.kind === "call" && target(z.fn) === S.zipParts && MUL.has(target(z.args[0]) ?? "") && target(z.args[1]) !== undefined && target(z.args[1]) === target(z.args[2])) return NONNEG;
+      if (isCall(z) && target(z.fn) === S.zipParts && MUL.has(target(z.args[0]) ?? "") && target(z.args[1]) !== undefined && target(z.args[1]) === target(z.args[2])) return NONNEG;
     }
     // A definition's call: its body, its inputs known from here.
     const d = code.nodes[f], body = d?.kind === "def" && d.body ? code.nodes[d.body] : undefined;
@@ -223,7 +223,7 @@ export function signAnalysis(code: Code) {
   // Is this call to a partial builtin always answered?
   const answeredIn = (call: Id, env: Env): boolean => {
     const n = code.nodes[call];
-    if (n?.kind !== "call") return false;
+    if (!isCall(n)) return false;
     const f = target(n.fn), ok = f ? PARTIAL[f] : undefined;
     return !!ok && ok((i) => (n.args[i] ? of(n.args[i], env) : ANY), (i) => (n.args[i] ? numLit(n.args[i], env) : null));
   };
@@ -240,7 +240,7 @@ export function signAnalysis(code: Code) {
       for (const id of subtreeOf(body.body)) {
         const n = code.nodes[id];
         if (isUse(n)) return false;
-        if (n?.kind !== "call") continue;
+        if (!isCall(n)) continue;
         const fn = code.nodes[n.fn];
         if (fn?.kind === "lambda") continue;
         const f = target(n.fn);
@@ -263,7 +263,7 @@ export function signAnalysis(code: Code) {
   const subtreeOf = (root: Id): Id[] => { const out: Id[] = []; const go = (id: Id) => { out.push(id); const n = code.nodes[id]; if (n) for (const c of children(n)) go(c); }; go(root); return out; };
   const totalCall = (call: Id, searches: (f: Id) => boolean): boolean => {
     const n = code.nodes[call];
-    if (n?.kind !== "call") return false;
+    if (!isCall(n)) return false;
     const f = target(n.fn), d = f ? code.nodes[f] : undefined, body = d?.kind === "def" && d.body ? code.nodes[d.body] : undefined;
     if (body?.kind !== "lambda" || body.params.length !== n.args.length) return false;
     const env: Env = new Map(body.params.map((p, i) => [p, { signs: of(n.args[i]), lit: numLit(n.args[i]) }]));

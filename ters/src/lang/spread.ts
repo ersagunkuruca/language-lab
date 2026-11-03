@@ -11,7 +11,7 @@
 // none, and the nodes the person wrote keep their ids.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
-import { freshId } from "../model.ts";
+import { freshId, isCall, type Call } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { infer, type Info } from "./infer.ts";
 import { tuplePart, tupleVariant } from "./std.ts";
@@ -20,7 +20,7 @@ import { tuplePart, tupleVariant } from "./std.ts";
 type Bare = Node extends infer N ? (N extends Node ? Omit<N, "id"> : never) : never;
 
 export function spreadTuples(code: Code, info: Info, names: Names): { code: Code; info: Info; names: Names } {
-  const calls = [...(info.spread ?? [])].filter((id) => code.nodes[id]?.kind === "call");
+  const calls = [...(info.spread ?? [])].filter((id) => isCall(code.nodes[id]));
   const reshaped = [...(info.reshape ?? [])].filter(([id]) => code.nodes[id]);
   if (!calls.length && !reshaped.length) return { code, info, names };
   const nodes: Record<Id, Node> = { ...code.nodes };
@@ -43,7 +43,7 @@ export function spreadTuples(code: Code, info: Info, names: Names): { code: Code
     }
   }
   for (const id of calls) {
-    const n = nodes[id] as NodeOf<"call">;
+    const n = nodes[id] as Call;
     const t = info.typeOf.get(n.args[0]), r = t && info.subst.resolve(t);
     const size = r?.t === "con" ? r.args.length : 0;
     if (size < 2) continue;

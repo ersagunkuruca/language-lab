@@ -34,7 +34,7 @@
 // same, by the language's own abstract evaluation over a finite lattice
 // (Cousot and Cousot, POPL 1977). CREDITS.md.
 
-import { children as childIds, dependencies, subtree, type Code, type Id, type Node, type NodeOf } from "../model.ts";
+import { children as childIds, dependencies, subtree, type Code, type Id, type Node, type NodeOf, isCall, type Call } from "../model.ts";
 import type { Info } from "./infer.ts";
 import { LIBRARY } from "./library.ts";
 import { makeRunner, type Value } from "./run.ts";
@@ -104,7 +104,7 @@ export function algebrasOf(code: Code, info: Info): Map<Id, Algebra> {
   for (const d of code.defs) {
     const def = code.nodes[d] as NodeOf<"def">;
     const body = def?.kind === "def" && def.body ? code.nodes[def.body] : undefined;
-    if (body?.kind !== "call" || (code.nodes[body.fn] as Node)?.kind !== "ref" || (code.nodes[body.fn] as NodeOf<"ref">).target !== CL.algebra) continue;
+    if (!isCall(body) || (code.nodes[body.fn] as Node)?.kind !== "ref" || (code.nodes[body.fn] as NodeOf<"ref">).target !== CL.algebra) continue;
     try {
       const al = r.value(d) as { tag: Id; fields: Value[] };
       if (al?.tag !== ALGEBRA_V) continue;
@@ -187,7 +187,7 @@ const versor = (alg: Algebra, r: number) => {
 // the program's own definitions, with what its inputs are there, and may
 // answer for it (a summary) instead of reading it through; `onValue` sees
 // each node read and what it was.
-interface Hooks { onCall?: (call: NodeOf<"call">, args: V[]) => V | undefined; onValue?: (id: Id, v: V) => void }
+interface Hooks { onCall?: (call: Call, args: V[]) => V | undefined; onValue?: (id: Id, v: V) => void }
 function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: Hooks = {}) {
   const algebras = algebrasOf(code, info);
   const byVariant = new Map([...algebras.values()].map((a) => [a.variant, a]));
@@ -271,8 +271,8 @@ function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: H
     let id = at;
     for (;;) {
       const n = nodes[id];
-      const f = n?.kind === "call" ? nodes[n.fn] : undefined;
-      if (n?.kind === "call" && f?.kind === "ref" && f.target === CONS) { check(n.args[0], ev(n.args[0], env, depth + 1)); id = n.args[1]; continue; }
+      const f = isCall(n) ? nodes[n.fn] : undefined;
+      if (isCall(n) && f?.kind === "ref" && f.target === CONS) { check(n.args[0], ev(n.args[0], env, depth + 1)); id = n.args[1]; continue; }
       const v = ev(id, env, depth + 1);
       if (v.k === "list" && v.item) check(id, v.item);
       return;
@@ -342,7 +342,7 @@ function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: H
     return ev(f.lambda.body, env, depth + 1);
   };
 
-  const call = (n: NodeOf<"call">, env: Map<Id, V>, depth: number): V => {
+  const call = (n: Call, env: Map<Id, V>, depth: number): V => {
     const fnNode = nodes[n.fn];
     const target = fnNode?.kind === "ref" ? fnNode.target : null;
     const arg = (i: number) => ev(n.args[i], env, depth + 1);
@@ -481,7 +481,7 @@ function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: H
     let c = nodes[id];
     for (;;) {
       if (c?.kind === "ref" && c.target === NIL) return out;
-      if (c?.kind !== "call") return null;
+      if (!isCall(c)) return null;
       const f = nodes[c.fn];
       if (f?.kind === "ref" && f.target === NIL) return out;
       if (f?.kind !== "ref" || f.target !== CONS) return null;
@@ -536,7 +536,7 @@ export function valueMasks(code: Code, info: Info, open: Iterable<Id>): Map<Id, 
       if (!n || set.has(id)) return;
       if (n.kind === "lambda" && id !== (nodes[d] as NodeOf<"def">).body) return;
       set.add(id);
-      if (n.kind === "call" && nodes[n.fn]?.kind === "lambda") { set.add(n.fn); walk(node(n.fn).body); n.args.forEach(walk); return; }
+      if (isCall(n) && nodes[n.fn]?.kind === "lambda") { set.add(n.fn); walk(node(n.fn).body); n.args.forEach(walk); return; }
       for (const c of childIds(n)) walk(c);
     };
     const lam = nodes[(nodes[d] as NodeOf<"def">).body!] as NodeOf<"lambda">;
@@ -562,9 +562,9 @@ export function valueMasks(code: Code, info: Info, open: Iterable<Id>): Map<Id, 
   for (const d of fnDefs) if (!reachedDefs.has(d)) wide.add(d);
   const sites = new Map<Id, Id>(); // call → callee
   for (const n of reached) {
-    if (n.kind === "call") { const f = nodes[n.fn]; if (f?.kind === "ref" && isFn.has(f.target)) sites.set(n.id, f.target); }
+    if (isCall(n)) { const f = nodes[n.fn]; if (f?.kind === "ref" && isFn.has(f.target)) sites.set(n.id, f.target); }
   }
-  const called = new Set([...sites.keys()].map((c) => (nodes[c] as NodeOf<"call">).fn));
+  const called = new Set([...sites.keys()].map((c) => (nodes[c] as Call).fn));
   for (const n of reached) if (n.kind === "ref" && isFn.has(n.target) && !called.has(n.id)) wide.add(n.target);
   // A call from no definition's own nodes (inside a lambda handed on, or
   // outside every definition) widens its callee.

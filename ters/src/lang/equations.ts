@@ -24,7 +24,8 @@
 
 import { defineRelation } from "../../../invertible/src/index.js";
 import { call, num, v } from "../../../invertible/src/expr.js";
-import type { Code, Id, NodeOf } from "../model.ts";
+import type { Code, Id, NodeOf, Call } from "../model.ts";
+import { isCall } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { impl } from "../prelude.ts";
 import { ARITH, S, TRUE } from "./std.ts";
@@ -85,7 +86,7 @@ const targetOf = (code: Code, id: Id, env: Env): Id | null => { const n = code.n
 
 // A call to a lambda or to a defined function, with its parameters bound to
 // the arguments' expressions. A let is the first kind.
-function inline(code: Code, n: NodeOf<"call">, env: Env, ctx: Ctx, then: (body: Id, env: Env, ctx: Ctx) => void) {
+function inline(code: Code, n: Call, env: Env, ctx: Ctx, then: (body: Id, env: Env, ctx: Ctx) => void) {
   const h = head(code, n.fn, env);
   const lam = lambdaOf(code, h.id);
   if (!lam || lam.params.length !== n.args.length) throw new NotEquations("this call isn't arithmetic");
@@ -143,7 +144,7 @@ export function holds(code: Code, id: Id, env: Env, ctx: Ctx, eqs: Eq[], law = f
   const n = code.nodes[id];
   if (n?.kind === "ref" && n.target === TRUE) return;
   if (n?.kind === "ref" && isCode(env.get(n.target))) { const b = use(env.get(n.target) as Deferred); return holds(code, b.id, b.env, ctx, eqs, law); }
-  if (n?.kind !== "call") throw new NotEquations("only equal, and, for some and lets read as equations");
+  if (!isCall(n)) throw new NotEquations("only equal, and, for some and lets read as equations");
   const f = targetOf(code, n.fn, env);
   if (f === S.and) { for (const a of n.args) holds(code, a, env, ctx, eqs, law); return; }
   if (f === S.hence) { holds(code, n.args[0], env, ctx, eqs, law); holds(code, n.args[1], env, ctx, eqs, true); return; }

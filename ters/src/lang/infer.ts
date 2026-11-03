@@ -13,7 +13,7 @@
 import { sharing } from "./shared-fields.ts";
 import { PARTIAL, signAnalysis } from "./signs.ts";
 import type { Code, Id, Node, NodeOf, Use } from "../model.ts";
-import { isUse, useTarget } from "../model.ts";
+import { isUse, useTarget, isCall, type Call } from "../model.ts";
 import { nodesWhere, ownerOfTypeParts, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { unitProblems, UnitsBefore } from "../units.ts";
@@ -390,7 +390,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
 
   const mono = new Map<Id, Type>();
   let current: Id[] = [];
-  const recursiveCalls: { call: NodeOf<"call">; params: Type[]; args: Type[] }[] = [];
+  const recursiveCalls: { call: Call; params: Type[]; args: Type[] }[] = [];
   for (const group of groups) {
     current = group;
     for (const d of group) mono.set(d, s.fresh());
@@ -424,7 +424,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       const members = new Set(group);
       for (const id of subtree(code, d)) {
         const n = code.nodes[id];
-        if (n?.kind !== "call") continue;
+        if (!isCall(n)) continue;
         const f = code.nodes[n.fn], v = f?.kind === "ref" ? code.nodes[f.target] : undefined;
         if (v?.kind !== "variant") continue;
         for (const [i, a] of n.args.entries()) {
@@ -687,7 +687,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       case "call": {
         // gradient(f) needs f's type first: which record it's over. In
         // gradient(f)(p), p's type says so too, when f is generic.
-        const isGradient = (c: Node | undefined) => c?.kind === "call" && c.args.length === 1 && code.nodes[c.fn]?.kind === "ref" && (code.nodes[c.fn] as NodeOf<"ref">).target === S.gradient;
+        const isGradient = (c: Node | undefined) => isCall(c) && c.args.length === 1 && code.nodes[c.fn]?.kind === "ref" && (code.nodes[c.fn] as NodeOf<"ref">).target === S.gradient;
         const gradient = isGradient(n);
         const applied = isGradient(code.nodes[n.fn]) ? n.args.map((a) => expr(a, env, row)) : null;
         if (applied?.length === 1) {
@@ -820,7 +820,12 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         const reshapedBefore = s.reshaped;
         try {
           s.tupleOf = tupleType;
-          try { s.unify(fr, { t: "fn", params, ret, eff: callRow }); } finally { s.tupleOf = null; }
+          // A function value whose row is closed (a field's `(Int) -> Int`)
+          // does only what it names: its row goes inside this one, as a
+          // search's does, so this code may do more beside the call (I153).
+          let here = callRow;
+          if (!search && fr.t === "fn" && s.resolveRow(fr.eff).tail === null) { here = s.freshRow(); s.subs.push({ from: here, to: row, at: id }); }
+          try { s.unify(fr, { t: "fn", params, ret, eff: here }); } finally { s.tupleOf = null; }
           if (s.reshaped > reshapedBefore) reshape(n, f, args, s.reshaped - reshapedBefore);
         } catch (e) {
           if (e instanceof WorldError) {
@@ -910,7 +915,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // written right there: its result fails only where f does, so it has f's
   // effects and no Choice (src/lang/derive.ts, smoothDerivative). Any other
   // derivative(f) takes the builtin's own type, Choice included.
-  function smoothDerivative(n: NodeOf<"call">): Type | null {
+  function smoothDerivative(n: Call): Type | null {
     const head = code.nodes[n.fn];
     if (head?.kind !== "ref" || head.target !== S.derivative || n.args.length !== 1 || !hasSmoothDerivative(code, n.args[0])) return null;
     const e = s.freshRow();
@@ -922,7 +927,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // gradient(f) the same way, once f's type says which record it takes:
   // over a record of Float64s, every part's slope must be readable; over a
   // Float64, it's derivative.
-  function smoothGradient(n: NodeOf<"call">, ft: Type): Type | null {
+  function smoothGradient(n: Call, ft: Type): Type | null {
     const point = at.get(n.id);
     if (point) { const fr = s.resolve(ft); if (fr.t === "fn" && fr.params.length === 1) { try { s.clone().unify(fr.params[0], point); s.unify(fr.params[0], point); } catch { /* reported at the call */ } } }
     const f = s.zonk(ft);
@@ -946,7 +951,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // p.second)) or ((x, y) ↦ f(tuple(x, y))). Only an input given right
   // here can be wrapped: a meeting deeper inside (a list of functions) is
   // refused, as before.
-  function reshape(n: NodeOf<"call">, f: Type, args: Type[], count: number) {
+  function reshape(n: Call, f: Type, args: Type[], count: number) {
     const ft = s.resolve(f);
     const params = ft.t === "fn" ? ft.params : [];
     let found = 0;
@@ -1066,7 +1071,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     catch (e) { if (e instanceof EffectError) err(n.id, `running ${nm(useTarget(code.nodes, n))} backwards performs ${effName(e)}, which nothing here handles`); else throw e; }
   }
 
-  function callee(n: NodeOf<"call">): string {
+  function callee(n: Call): string {
     const f = code.nodes[n.fn];
     return f.kind === "ref" ? nm(f.target) : "this function";
   }
@@ -1225,14 +1230,14 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       const t = sc && s.zonk(sc.type);
       if (!t || t.t !== "con" || !typedefOf(t.id)?.interface || freeVars(t, s).vars.size) continue;
       const body = code.nodes[(code.nodes[d] as NodeOf<"def">).body!];
-      const fn = body?.kind === "call" ? code.nodes[body.fn] : null;
+      const fn = isCall(body) ? code.nodes[body.fn] : null;
       if (fn?.kind !== "ref" || fn.target !== typedefOf(t.id)!.variants[0]) { err(d, `${nm(d)} is an implementation of ${nm(t.id)}, so it is written as the record itself: ${nm(typedefOf(t.id)!.variants[0])}(…) with each operation`); continue; }
       const key = implementationKey(t.id, t.args[0]), other = table.get(key);
       if (other) err(d, `${nm(other)} and ${nm(d)} are both ${show(t)}: a type has one implementation of an interface, so keep one`);
       else table.set(key, d);
       // A field left to its ways needs a way that ends in fields it gives
       // (WAYS.md, L96b): said here, before anything runs.
-      const args = (body as NodeOf<"call">).args, variant = code.nodes[fn.target] as NodeOf<"variant">;
+      const args = (body as Call).args, variant = code.nodes[fn.target] as NodeOf<"variant">;
       // A field with results (POLAR.md) is given by a definition that
       // declares the same results; checked in results(), with its direction.
       variant.fields.forEach((f, i) => { const fl = code.nodes[f], a = code.nodes[args[i]]; if (fl?.kind === "field" && fl.results && a?.kind === "ref" && !leftToWays(code, args[i])) resultsGiven.push({ impl: d, field: f, by: a.target }); });
@@ -1300,7 +1305,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // fields mapped and fields listed are written out per type where they are
   // used (fields-by-type.ts, L162b), so both types must be known there.
   for (const n of Object.values(code.nodes)) {
-    if (n.kind !== "call") continue;
+    if (!isCall(n)) continue;
     const f = code.nodes[n.fn];
     if (f?.kind !== "ref" || (f.target !== FIELDS.mapped && f.target !== FIELDS.listed)) continue;
     // Its inputs not written yet: the holes say so (the palette offers it
@@ -1326,8 +1331,8 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   }
   // A representation's job (REPRESENTATIONS.md, L108): `job(of, by, cost)`
   // does t's job `of` at r, so `by` has of's type with r for t.
-  for (const id of nodesWhere(code, "call", (n) => n.kind === "call")) {
-    const n = code.nodes[id] as NodeOf<"call">;
+  for (const id of nodesWhere(code, "call", (n) => isCall(n))) {
+    const n = code.nodes[id] as Call;
     if (n.args.length !== 3) continue;
     const f = code.nodes[n.fn];
     if (f?.kind !== "ref" || f.target !== JOBS.job) continue;
@@ -1464,7 +1469,7 @@ function matchersOf(code: Code): Set<Id> {
   if (!m) {
     m = new Set();
     for (const n of Object.values(code.nodes)) {
-      if (n.kind !== "call") continue;
+      if (!isCall(n)) continue;
       const f = code.nodes[n.fn], by = code.nodes[n.args[0]];
       if (f?.kind === "ref" && f.target === JOBS.matchBy && by?.kind === "ref") m.add(by.target);
     }
@@ -1487,11 +1492,11 @@ function piecesOf(code: Code): Set<Id> {
       if (lam?.kind !== "lambda" || !lam.params.length) continue;
       const cases = new Set(lam.params.slice(1)), input = lam.params[0];
       for (const id of subtree(code, lam.body)) {
-        const n = code.nodes[id], f = n.kind === "call" ? code.nodes[n.fn] : null;
-        if (n.kind !== "call" || f?.kind !== "ref" || !cases.has(f.target)) continue;
+        const n = code.nodes[id], f = isCall(n) ? code.nodes[n.fn] : null;
+        if (!isCall(n) || f?.kind !== "ref" || !cases.has(f.target)) continue;
         for (const a of n.args) {
-          const c = code.nodes[a], g = c?.kind === "call" ? code.nodes[c.fn] : null, x = c?.kind === "call" ? code.nodes[c.args[0]] : null;
-          if (c?.kind === "call" && c.args.length === 1 && g?.kind === "ref" && x?.kind === "ref" && x.target === input) m.add(g.target);
+          const c = code.nodes[a], g = isCall(c) ? code.nodes[c.fn] : null, x = isCall(c) ? code.nodes[c.args[0]] : null;
+          if (isCall(c) && c.args.length === 1 && g?.kind === "ref" && x?.kind === "ref" && x.target === input) m.add(g.target);
         }
       }
     }
@@ -1503,7 +1508,7 @@ function piecesOf(code: Code): Set<Id> {
 // A let's function that calls itself by its name (BACKLOG L84): the let's
 // binder, when the call's function is a lambda and its i-th input is a
 // lambda that refers to the i-th parameter.
-export function recursiveLet(code: Code, call: NodeOf<"call">, i: number): Id | null {
+export function recursiveLet(code: Code, call: Call, i: number): Id | null {
   const f = code.nodes[call.fn], a = code.nodes[call.args[i]];
   if (f?.kind !== "lambda" || a?.kind !== "lambda" || !f.params[i]) return null;
   const p = f.params[i];
@@ -1537,7 +1542,7 @@ function appliesTo(code: Code, c: Id): Applies {
     const n = id === undefined ? null : code.nodes[id];
     if (n?.kind === "ref") return size.get(n.target);
     // An item of a list is a piece of it (keep's one of).
-    if (n?.kind === "call" && code.nodes[n.fn]?.kind === "ref" && (code.nodes[n.fn] as NodeOf<"ref">).target === S.oneOf) {
+    if (isCall(n) && code.nodes[n.fn]?.kind === "ref" && (code.nodes[n.fn] as NodeOf<"ref">).target === S.oneOf) {
       const of = sizeOf(n.args[0]);
       return of && new Map([...of.keys()].map((i) => [i, true]));
     }
@@ -1545,7 +1550,7 @@ function appliesTo(code: Code, c: Id): Applies {
   };
   const calls = new Map<number, Map<number, boolean>[][]>();
   const escapes = new Set<number>();
-  const walk = (id: Id, at?: { call: NodeOf<"call">; pos: number }) => {
+  const walk = (id: Id, at?: { call: Call; pos: number }) => {
     const n = code.nodes[id];
     if (!n) return;
     if (n.kind === "ref" && fnParam.has(n.target)) {
@@ -1558,7 +1563,7 @@ function appliesTo(code: Code, c: Id): Applies {
       escapes.add(k);
       return;
     }
-    if (n.kind === "call") {
+    if (isCall(n)) {
       const f = code.nodes[n.fn];
       if (f?.kind === "ref" && fnParam.has(f.target)) {
         const k = fnParam.get(f.target)!;
@@ -1610,8 +1615,8 @@ function terminates(code: Code, group: Id[], lambdaOf = (d: Id) => { const body 
     const sizeOf = (id: Id | undefined): Map<number, boolean> | undefined => {
       const n = id === undefined ? null : code.nodes[id];
       if (n?.kind === "ref") return size.get(n.target);
-      const g = n?.kind === "call" && n.args.length === 1 ? code.nodes[n.fn] : null;
-      if (n?.kind === "call" && g?.kind === "ref" && piecesOf(code).has(g.target)) {
+      const g = isCall(n) && n.args.length === 1 ? code.nodes[n.fn] : null;
+      if (isCall(n) && g?.kind === "ref" && piecesOf(code).has(g.target)) {
         const of = sizeOf(n.args[0]);
         return of && new Map([...of.keys()].map((i) => [i, true]));
       }
@@ -1621,7 +1626,7 @@ function terminates(code: Code, group: Id[], lambdaOf = (d: Id) => { const body 
     const walk = (id: Id) => {
       const n = code.nodes[id];
       if (n.kind === "ref" && inGroup.has(n.target)) ok = false;
-      if (n.kind === "call") {
+      if (isCall(n)) {
         const f = code.nodes[n.fn];
         // A function of the group given to one that only calls it on
         // pieces of its other inputs (L146: `map(args, show formula)`).
@@ -1667,7 +1672,7 @@ function terminates(code: Code, group: Id[], lambdaOf = (d: Id) => { const body 
       // A representation's match (REPRESENTATIONS.md; array of List's,
       // C30d3b) takes its first argument apart like a match: the
       // parameters of the functions given to it are pieces of it.
-      if (n.kind === "call" && code.nodes[n.fn]?.kind === "ref" && matchersOf(code).has((code.nodes[n.fn] as NodeOf<"ref">).target)) {
+      if (isCall(n) && code.nodes[n.fn]?.kind === "ref" && matchersOf(code).has((code.nodes[n.fn] as NodeOf<"ref">).target)) {
         const from = sizeOf(n.args[0]);
         if (from) for (const a of n.args.slice(1)) {
           const l = code.nodes[a];
@@ -2007,7 +2012,7 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   // programs keep and which is what the generic resolves to.
   // `by its ways` only for an implementation's field that has a way.
   const wayField = () => {
-    const call = Object.values(code.nodes).find((n): n is NodeOf<"call"> => n.kind === "call" && n.args.includes(hole));
+    const call = Object.values(code.nodes).find((n): n is Call => isCall(n) && n.args.includes(hole));
     const v = call && code.nodes[call.fn]?.kind === "ref" ? code.nodes[(code.nodes[call.fn] as NodeOf<"ref">).target] : null;
     return v?.kind === "variant" && waysIn(code).has(v.fields[call!.args.indexOf(hole)]);
   };

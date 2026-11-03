@@ -39,7 +39,13 @@ const SEED = Number(process.env.SEED ?? 1), COUNT = Number(process.env.FUZZ ?? 4
 
 // The inputs every definition is called with.
 // The last: Ints past 64 bits and a Float64 near the top (C115).
-const INPUTS: [number, bigint, bigint[]][] = [[0, 0n, []], [2.5, 3n, [1n, 2n, 3n]], [-1, -2n, [5n, -4n]], [1e300, 2n ** 64n + 1n, [2n ** 62n, -(2n ** 63n), 7n]]];
+// FUZZ_LONG=n adds a list of n items (C128): recursion that isn't a tail
+// call, maps, folds and sorts over it, where an engine's stack shows. Off by
+// default: at a thousand items, seeds 2 and 9 ran out of memory and a sweep
+// of 40 seeds took over half an hour (a generated program may grow a list
+// at each step of a recursion, as append(xs, xs) does).
+const LONG = Number(process.env.FUZZ_LONG ?? 0);
+const INPUTS: [number, bigint, bigint[]][] = [[0, 0n, []], [2.5, 3n, [1n, 2n, 3n]], [-1, -2n, [5n, -4n]], [1e300, 2n ** 64n + 1n, [2n ** 62n, -(2n ** 63n), 7n]], ...(LONG ? [[0.5, 1n, Array.from({ length: LONG }, (_, i) => BigInt((i * 7919) % 201 - 100))] as [number, bigint, bigint[]]] : [])];
 
 test(`generated programs: the evaluator, compiled JavaScript, WebAssembly and C give the same text (C101, seed ${SEED})`, async () => {
   const p = program(SEED, COUNT, INPUTS.map(([, , xs]) => xs));
@@ -66,7 +72,8 @@ test(`generated programs: the evaluator, compiled JavaScript, WebAssembly and C 
   // `entry`: call e(x, n, j), whose list the program holds (C120), so a
   // list stored another way never comes in from outside.
   type Built = { code: typeof p.code; info: typeof p.info; names: typeof p.names };
-  const engines = async (q: Built, tag: string, js = true, native = true, entry = false) => {
+  // `wasm` false: C alone (its own tables, C63h).
+  const engines = async (q: Built, tag: string, js = true, native = true, entry = false, wasm = true) => {
     const roots = entry ? p.entries : p.defs.map((d) => d.def), name = (i: number) => `${entry ? "e" : "g"}${i}`;
     if (js) {
     const path = join(mkdtempSync(join(tmpdir(), "fuzz-")), "out.mjs");
@@ -78,6 +85,8 @@ test(`generated programs: the evaluator, compiled JavaScript, WebAssembly and C 
 
     const lowered = lowerScalar(q.code, q.info, q.names, roots, { data: true });
     assert.deepEqual([...lowered.refused.entries()].map(([d, why]) => `${q.names[d]}: ${why}`), [], `seed ${SEED}${tag}`);
+    const fns = roots.map((def) => lowered.funcs.findIndex((g) => g.def === def && !g.inner));
+    if (wasm) {
     const w = await instantiate(emitWasm(lowered)) as unknown as Record<string, (...a: unknown[]) => unknown>;
     // A List Int made by the module's own makers, from the end.
     const list = (xs: bigint[], t: LType): unknown => {
@@ -85,13 +94,13 @@ test(`generated programs: the evaluator, compiled JavaScript, WebAssembly and C 
       const maker = (v: Id) => { const c = t.cases.find((x) => x.variant === v)!; return (w[`${t.name}.${c.name}(${t.key})`] ?? w[`${t.name}.${c.name}`]) as (...a: unknown[]) => unknown; };
       return xs.reduceRight<unknown>((l, x) => maker(CONS)(toInt(w, x), l), maker(NIL)());
     };
-    const fns = roots.map((def) => lowered.funcs.findIndex((g) => g.def === def && !g.inner));
     fns.forEach((fi, i) => {
       const f = lowered.funcs[fi];
       INPUTS.forEach(([x, n, xs], j) => {
         check(stopped(() => fromText(w, w[f.name](x, toInt(w, n), entry ? toInt(w, BigInt(j)) : list(xs, f.params[2])) as never)), i, j, `WebAssembly${tag}`);
       });
     });
+    }
 
     if (!skip) {
     const calls = fns.flatMap((fi) => INPUTS.map(([x, n, xs], j): [number, Value[]] => [fi, entry ? [x, norm(n), norm(BigInt(j))] : args(x, n, xs)]));
@@ -119,6 +128,15 @@ test(`generated programs: the evaluator, compiled JavaScript, WebAssembly and C 
       p.entries.forEach((e, i) => INPUTS.forEach(([x, n], j) => check(stopped(() => { for (const v of rc.call(rc.value(e), x, norm(n), norm(BigInt(j)))) return v as unknown as string; return "no answer"; }), i, j, `the evaluator${tag}`)));
     }
     await engines({ code: c.code, info, names: c.names }, tag, hostMaps, !hostMaps, true);
+  }
+  // C's own Map table, for Int and Text keys (C63h).
+  if (!skip) {
+    const c = withLibraryRepresentations(p.code, p.info, p.names, p.main, p.own, [], { cTables: true });
+    if (c.chosen.some((x) => x.includes("hash table"))) {
+      const info = infer(c.code, c.names, undefined, { ...checkOptions, insiders: [...checkOptions.insiders!, ...c.insiders] });
+      assert.deepEqual(info.errors.map((e) => e.message), [], `seed ${SEED}, ${c.chosen.join(", ")}`);
+      await engines({ code: c.code, info, names: c.names }, ` (${c.chosen.join(", ")})`, false, true, true, false);
+    }
   }
   assert.deepEqual(differ, []);
 });
