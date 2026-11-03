@@ -94,7 +94,7 @@ export const $sameNumber = (a, b) => $fin(a) === $fin(b);
 // Only an overflow makes one, so that's the reason $fin gives.
 // An Abort performed where the operation was, as in the evaluator, so a
 // handler of Abort in the program gets it.
-const $stop = (why) => $perform(ABORT, ABORT_OP, [why]);
+export const $stop = (why) => $perform(ABORT, ABORT_OP, [why]);
 // run.ts's own late checks (numberOrder, showValue) throw; the same Abort.
 const performed = (f) => (...xs) => { try { return f(...xs); } catch (e) { if (e instanceof Aborted) return $stop(e.reason); throw e; } };
 const OVERFLOW = 'the answer is too big for a Float64 (overflow)';

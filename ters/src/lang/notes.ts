@@ -213,6 +213,7 @@ export const NOTES: Comments = {
   "builtin.array.pushFront": "The array with one more item at the front. Compiled JS writes into free room before the items when nothing else has taken it.",
   "builtin.text.slice": "The characters from position from up to (not including) to, counting from 0.",
   "builtin.list.of": "A list written out: list of(1, 2, 3) is [1, 2, 3], one input per item, in order.",
+  "builtin.stop": "Stops the program with this reason, as an overflow does: no handler catches it. The library uses it where a pure operation is given parts that don't fit, as + on tensors of different shapes.",
     "builtin.text.characters": "The text as a list of its characters.",
   "builtin.text.split": "The pieces of a text between each occurrence of a separator.",
   "builtin.text.joinAll": "The texts with a separator between each two.",

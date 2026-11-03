@@ -441,6 +441,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     [S.less]: (a, b) => one(bool(numberOrder(a as number, b as number) < 0)),
     // Showing an overflow uses it (L218).
     [S.show]: (x) => ((x as number) - (x as number) === 0 ? one(floatText(x as number)) : overflowed()),
+    [S.stop]: (why) => { throw new Aborted(why as string); },
     [S.equal]: (a, b) => one(bool(equal(a, b, usedSameNumber))),
     [COMPARE]: (a, b) => one(ORDER_VALUES[compareValues(a, b, (cmpOrder ??= variantOrder(code))) + 1]),
     [S.and]: (a, b) => one(bool((a as Data).tag === TRUE && (b as Data).tag === TRUE)),

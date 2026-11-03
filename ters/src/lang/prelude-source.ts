@@ -1754,6 +1754,17 @@ export function buildPrelude(): Module {
         T(shape, k.call(map, k.call(indicesOf, shape), k.fn(["at"], (rix) => k.call(tsum, k.call(map, diag, k.fn(["d"], (d) =>
           itemFitting(sa, xs, k.call(map, k.call(INT_OPS.range, r), k.fn(["axis"], (p) => k.if(k.call(contains, ij, p), d, k.call(itemAt, rix, k.call(placeOf, free, p, k.int(0)), k.int(0))))))))))))))),
       k.call(ABORT_OP, texts(k.lit("traced: two different axes of the same length, of a "), k.call(shapeText, sa), k.lit(" tensor"))))))));
+  // Step c (L51c): a Tensor of a Number has + − · −x item by item, for any
+  // Number (one implementation with a type parameter, L219). Shapes that
+  // differ stop the program, naming both, as an overflow stops (Ersagun's
+  // choice, 2026-11-03): Arithmetic's operations are pure, so not abort.
+  const itemByItem = (what: string, op: Id) => def(`tensor ${what}`, ["first", "second"], (a, b) => tenOf(a, (sa, xs) => tenOf(b, (sb, ys) =>
+    k.if(k.equal(sa, sb),
+      T(sa, k.call(map, k.call(zipped, xs, ys), k.fn(["pair"], (p) => entry(p, (x, y) => k.call(op, x, y), ["x", "y"])))),
+      k.call(S.stop, texts(k.lit(`tensor ${what}: a `), k.call(shapeText, sa), k.lit(" tensor and a "), k.call(shapeText, sb), k.lit(" one")))))));
+  const tensorAdd = itemByItem("sum", ARITH.add), tensorSub = itemByItem("difference", ARITH.sub), tensorMul = itemByItem("product item by item", ARITH.mul);
+  const tensorNeg = def("tensor negated", ["tensor"], (t) => tenOf(t, (sh, xs) => T(sh, k.call(map, xs, k.fn(["x"], (x) => k.call(ARITH.neg, x))))));
+  arithmetics.push(impl("arithmetic at tensor", ARITHMETIC_V, [tensorAdd, tensorSub, tensorMul, tensorNeg]));
   // State (L16, std.ts's State): with state(initial, action) runs the
   // action with get state and put state answered, and gives its value and
   // the last state. Each case answers with a function of the state so far
@@ -1776,7 +1787,7 @@ export function buildPrelude(): Module {
       { variant: PIPE_OPS.finished, names: [], body: () => k.call(k.call(rest, k.x(NONE)), p) },
     ])) },
   ], ["value", (v) => k.fn(["pipe"], () => v)]), k.call(pipeOf, pr)));
-  const matrixHelpers = [listDot, eliminated, backSubstituted, determinantOf];
+  const matrixHelpers = [listDot, eliminated, backSubstituted, determinantOf, tensorAdd, tensorSub, tensorMul, tensorNeg];
   // The three set operations: one walk down both sorted lists at once,
   // keeping what each wants from the smaller head, the shape of merge
   // sorted.

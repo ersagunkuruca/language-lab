@@ -82,6 +82,9 @@ export const FIXED_TYPE = "std.fixed";
 // std's words (L193): their + − · −x < are the prelude's implementations,
 // checked like a type of the program's own, not a name the checker knows.
 export const WORD_TYPES: ReadonlySet<Id> = new Set(["std.word8", "std.word16", "std.word32", "std.word64"]);
+// The library's types whose + − · or < is an implementation in the library,
+// found as a program's own type's is: the words, and Tensor (L51c).
+const IMPLEMENTED: ReadonlySet<Id> = new Set([...WORD_TYPES, "std.tensor"]);
 // The square matrices and their sizes (std.ts MAT2 to MAT4).
 export const MATRIX_SIZE: Record<string, number> = { "std.mat2": 2, "std.mat3": 3, "std.mat4": 4 };
 // A cell holding an `a` (src/lang/cells.ts). Not plain data: two cells
@@ -294,7 +297,7 @@ export class Subst {
     // does is known once every implementation is (infer). A record whose
     // fields are or can be Float64s does + − · −x part by part when it has
     // none of its own (arith.ts), so for + it is one now, as before.
-    if (t.t === "con" && ((!t.id.startsWith("std.") && !t.id.startsWith("type.")) || WORD_TYPES.has(t.id))) {
+    if (t.t === "con" && ((!t.id.startsWith("std.") && !t.id.startsWith("type.")) || IMPLEMENTED.has(t.id))) {
       const fields = this.recordFields(t.id, t.args);
       const numeric = kind === "arith" && !!fields?.length && fields.every((f) => { const r = this.resolve(f); return r.t === "var" || (r.t === "con" && r.id === NUMBER); });
       if (!numeric) { this.wanted.push({ t, iface: kind === "arith" ? "std.arithmetic" : "std.ordered", at: this.site }); return; }

@@ -28,7 +28,7 @@ import { resultsAsFunctions, usesResultsAsFunction } from "./results-fn.ts";
 import { freshId } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { B } from "../prelude.ts";
-import { implementationKey, type Info } from "./infer.ts";
+import { implementationOf, type Info } from "./infer.ts";
 import { interfaceOps, leftToWays, NEUTRAL, pickWays, waysIn, type BuiltinCost } from "./ways.ts";
 import { ALGEBRAIC_OPS, ARITH, ARITH_FIELD, COMPLEX_V, DUAL_V, FIXED_V, INT_OPS, RATIO, S } from "./std.ts";
 import { ALGEBRAIC_TYPE, COMPLEX_TYPE, DUAL_TYPE, FIXED_TYPE, MATRIX_SIZE, INT, NUMBER, RATIONAL_TYPE, type Row, type Scheme, type Type } from "./types.ts";
@@ -132,7 +132,7 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
   const int: Type = { t: "con", id: INT, args: [] };
   // Int only if it has every interface the variable needs (Haskell's
   // defaulting tries each type in turn the same way).
-  const fitsAt = (v: number, t: Type) => [...(s.needs.get(v)?.keys() ?? [])].every((i) => info.implementations?.has(implementationKey(i, t)));
+  const fitsAt = (v: number, t: Type) => [...(s.needs.get(v)?.keys() ?? [])].every((i) => !!implementationOf(info, i, t));
   const intFits = (v: number) => fitsAt(v, int);
   // A variable only Int can stand for (one needing Bits, L193) is Int.
   const otherwise = (v: number): Type => ((s.whole.has(v) && !s.fractional.has(v) && !s.numbers.has(v) && s.arith.has(v)) || !fitsAt(v, num)) && intFits(v) ? int : num;
@@ -278,7 +278,7 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
     const field = (nodes[id] as NodeOf<"ref">).target, iface = ops.get(field)!;
     let at = close(opAt.get(id) ?? num, env);
     if (at.t === "var") at = num;
-    const impl = info.implementations?.get(implementationKey(iface, at));
+    const impl = implementationOf(info, iface, at);
     if (!impl) throw new Error(`${show(at)} has no ${names[iface] ?? iface}`);
     const body = code.nodes[(code.nodes[impl] as NodeOf<"def">).body!] as Call;
     const variant = (code.nodes[(code.nodes[body.fn] as NodeOf<"ref">).target] as NodeOf<"variant">);
@@ -393,7 +393,7 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
       if (nodes[id].kind === "ref" && (nodes[id] as NodeOf<"ref">).target in ARITH_FIELD) {
         const t = typeOf.get(id), c = t && close(t, env), x = c?.t === "fn" ? c.params[0] : null;
         const f = ARITH_FIELD[(nodes[id] as NodeOf<"ref">).target];
-        if (x?.t === "con" && info.implementations?.has(implementationKey(f.iface, x))) { nodes[id] = { id, kind: "ref", target: f.field }; opAt.set(id, x); }
+        if (x?.t === "con" && !!implementationOf(info, f.iface, x)) { nodes[id] = { id, kind: "ref", target: f.field }; opAt.set(id, x); }
       }
       if (nodes[id].kind === "ref" && ops.has((nodes[id] as NodeOf<"ref">).target)) implement(id, env);
       if (isUse(nodes[id]) && ops.has(useTarget(nodes, (nodes[id] as Use)))) implementSolve(id, env);

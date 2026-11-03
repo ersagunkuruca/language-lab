@@ -403,6 +403,9 @@ program catches them**:
 - running out of memory;
 - a page's update running past its budget;
 - a later operation's rest resumed twice (§6.4).
+- `stop with(reason)`: a pure operation given parts that don't fit,
+  where no answer or Choice would do, as `+` on tensors of different
+  shapes (L51c, like Haskell's `error`).
 
 A stop is a property of the whole run, not a value: a program can't
 test for one, and engines agree on which programs stop only up to §3.3's
