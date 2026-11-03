@@ -215,7 +215,7 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
   if (!from && !slotsOf.has(code)) slotsOf.set(code, { parent: new Map(parent), seen });
   const slot = find;
   // The plans of a lambda made after the analyzer was.
-  const fresh = (lam: Id) => { if (!seen.has(lam) && (!base?.seen.has(lam) || from!.changed.has(lam))) refresh(); };
+  const fresh = (lam: Id) => { if (!seen.has(lam) && (!base?.seen.has(lam) || from!.changed.has(lam))) { refresh(); verdicts.clear(); } };
 
   // Binders a lambda uses from outside itself.
   const freeOf = new Map<Id, Id[]>();
@@ -929,21 +929,32 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
     const s = solveKey(n);
     return { v, key: s && keyOf({ k: "def", id: useTarget(nodes, n) }, s.known, s.spec) };
   });
+  // Each mode asked for, once worked out (C154): `checked` starts each one
+  // afresh so its recursion is checked whole, and the checker asks again
+  // at every call given a function (compass staged: 12 s of 14). The
+  // program doesn't change under an analyzer, so neither does the answer.
+  const verdicts = new Map<string, Verdict | null>();
+  const once = <T extends Verdict | null>(k: string, get: () => T): T => {
+    if (verdicts.has(k)) return verdicts.get(k) as T;
+    const v = get();
+    verdicts.set(k, v);
+    return v;
+  };
   // known: parameter positions as "0", "1", …, and "out".
-  const ofMode = (def: Id, known: string[], spec: Map<number, Fn> = new Map()) =>
-    checked(() => ({ v: mode({ k: "def", id: def }, new Set(known), spec), key: keyOf({ k: "def", id: def }, new Set(known), spec) }))!;
+  const ofMode = (def: Id, known: string[], spec: Map<number, Fn> = new Map()) => once(`mode|${keyOf({ k: "def", id: def }, new Set(known), spec)}`, () =>
+    checked(() => ({ v: mode({ k: "def", id: def }, new Set(known), spec), key: keyOf({ k: "def", id: def }, new Set(known), spec) }))!);
 
   // The function a definition gives back (`(f, g) ↦ (x) ↦ …`), run
   // forward with the definition's parameters at spec known to be those
   // functions: the prelude's conjugate, given its f.
-  const ofReturned = (def: Id, spec: Map<number, Fn>): Verdict | null => checked(() => {
+  const ofReturned = (def: Id, spec: Map<number, Fn>): Verdict | null => once(`returned|${def}|${[...spec].map(([i, f]) => `${i}=${fnKey(f)}`).sort().join(",")}`, () => checked(() => {
     const outerLam = nodes[(nodes[def] as NodeOf<"def">).body!];
     const inner = outerLam?.kind === "lambda" ? nodes[outerLam.body] : undefined;
     if (outerLam?.kind !== "lambda" || inner?.kind !== "lambda") return { v: null, key: null };
     const outer = new Map([...spec].map(([i, f]) => [slot(outerLam.params[i]), f] as [Id, Fn]));
     const known = new Set(inner.params.map((_, i) => String(i)));
     return { v: lambdaMode(inner.id, known, new Map(), def, outer), key: modeKey(inner.id, known, new Map(), outer) };
-  });
+  }));
 
   // The plan relate.ts runs for a function in a mode, and for a value
   // defined once (with its result known or not).
