@@ -11,6 +11,8 @@ import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
+import { runInNewContext } from "node:vm";
+import { FakeEl, fakeDoc } from "../../ters/test/fakedom.ts";
 import type { Runtime, World } from "../../ters/src/lang/run.ts";
 import { equal, fromList, makeRunner, runProgram, type Data, type Value } from "../../ters/src/lang/run.ts";
 import { Cells } from "../../ters/src/lang/cells.ts";
@@ -136,3 +138,30 @@ function handlersOf(v: Value, call: (f: Value, ...xs: Value[]) => Value): Value[
   const own = (fromList(d.fields[1]) as Data[]).filter((a) => a.tag === HTML_V.on).map((a) => a.fields[1]);
   return [...own, ...fromList(d.fields[2]).flatMap((c) => handlersOf(c, call))];
 }
+
+// lab build-web --core (C137c9): the page's script, printed from the core
+// IR, draws what compile.ts's page draws, in a fake document, and again
+// after each element with a click handler is clicked, in order.
+test("lab build-web --core writes a page that draws and reacts as lab build-web's", () => {
+  const lab = join(import.meta.dirname, "../../ters/cli/lab.ts"), compass = join(examples, "compass");
+  const dir = mkdtempSync(join(tmpdir(), "core-page-"));
+  const page = (flags: string[]) => {
+    const out = join(dir, `${flags.length}.html`);
+    const r = spawnSync(process.execPath, [lab, "build-web", compass, ...flags, "-o", out], { encoding: "utf8" });
+    assert.equal(r.status, 0, r.stderr);
+    const body = new FakeEl("body");
+    runInNewContext(/<script>([\s\S]*)<\/script>/.exec(readFileSync(out, "utf8"))![1], { document: { ...fakeDoc(), body }, localStorage: undefined, console, requestAnimationFrame: () => 0, TextEncoder, TextDecoder });
+    return body;
+  };
+  const clickable = (e: FakeEl): FakeEl[] => [...(e.listeners.has("click") ? [e] : []), ...e.kids.flatMap((k) => (k instanceof FakeEl ? clickable(k) : []))];
+  const want = page([]), got = page(["--core"]);
+  assert.equal(got.html(), want.html());
+  const a = clickable(want), b = clickable(got);
+  assert.equal(b.length, a.length);
+  assert.ok(a.length >= 4, `${a.length} clickable`);
+  for (let i = 0; i < a.length; i++) { a[i].fire("click"); b[i].fire("click"); assert.equal(got.html(), want.html(), `after click ${i}`); }
+  // One that doesn't lower says why.
+  const r = spawnSync(process.execPath, [lab, "build-web", join(examples, "dice"), "--core", "-o", join(dir, "dice.html")], { encoding: "utf8" });
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /isn't compiled through the core IR: it builds now/);
+});
