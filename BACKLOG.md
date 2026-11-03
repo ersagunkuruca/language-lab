@@ -22,7 +22,7 @@ language, then more targets or speed (WORKFLOW.md "Priority").
 |---|---|---|
 | E Editor | "Editor lane" | E211 the bigger programs as editor examples (one a PR), L70c's editor half (mark where a failed read stopped), L147b; then E200b, E103 |
 | C Compiler and targets | "Compiler lane" | C93's rest, C86, C40's rest; then C30, C63, C67 |
-| L Language and library | "Language lane" | L130 (with the Editor lane: one node kind for call and solve), L128d, L99, L61 |
+| L Language and library | "Language lane" | L184 (old saved programs keep opening; before L130's flip), L130 (with the Editor lane: one node kind for call and solve), L128d, L99, L61 |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -61,6 +61,14 @@ New items land here until the next triage gives them a lane and a priority.
 |---|---|---|---|---|---|
 | E200b | A click that only selects still redraws the whole graph. After step 1 (#1119) a click in Constructions is 55 to 120 ms: the inspector ~25 ms, the graph ~20, putting the scroll places back ~20 (the layout the new page forces). Step 2, patch the graph instead of drawing it again on a selection, has to redo everything the selection changes there: the `sel` class (every `[data-id]` but `.use-hit`), the lit binding and its uses (`scene.lit`, item groups, `.tw.use` wires), the resize grip of a selected node, and the layering that draws the selection's outermost frame over its neighbours (two groups per layer). The last needs elements moved between the groups, or a fall back to drawing when the selection's top frame changes. Worth it only if clicks still feel slow | [REVIEW-2026-11-02b](docs/reports/reviews/REVIEW-2026-11-02b.md) §4 | P3 | M | step 1 done; step 2 measured, not started |
 | E103 | **Bug.** Adding a value in a definition run backwards (physics `fall`) takes about 4 s; five stages (#478 to #504) took fall's holes from 48 s to 18.5 s in all. Stopped by the 10% rule. **Measured again 2026-11-01:** 23 holes 121 s, the worst 22 s, of which the plan comparison per offer 5.7 s and whole checks for offers whose plan changed 10.4 s; E133a took the node copies off (→ 18 s); E133b took the analyzer's full scan per offer off (worst 12.7 s, all 23 holes 67 s); E103c (#898) checks once for every offer that makes the same of the group's types and plans, each offer's units on their own (fall's 23 holes 80 → 47 s, the worst 16 → 8 s, measured on a busy machine; same offers); E103d (#902): a filled program's solves and calls are listed from the program's, not by scanning its ~10,000 nodes in `useDirections` and the jobs check (all 23 holes 50 → 30 s, the worst 10.6 → 4.2 s; same offers); E103e (#938): an offer's units are checked once, not again inside its whole check (23 holes 30 → 23 s, the worst 4.2 → 3.7 s); **measured again 2026-11-01 21:40** (busy machine, all 23 holes ~31 s): the plans compared per candidate 8.2 s (7,452 plans, ~1.1 ms each), the type-group checks 10 s (2,229 distinct groups, ~4.5 ms each: an offer of another shape makes fall's own type another shape, so few share), the whole checks of risky offers 7.7 s (400, ~19 ms each; checking their units apart buys nothing). Stopped by the 10% rule: the next stage needs a new idea, such as checking a group's callers against its new type instead of a whole inference, or a plan that can tell from the filling alone that it can't change; what's left is the checks' own work. **Measured again 2026-11-02** (all 23 holes 29.7 s, the worst 5.2 s, fall's whole body): that hole asks 1,221 plan comparisons and 645 distinct type-and-plan checks for 113 offers kept, because a changed plan is part of the check's key and most candidates change it a little. The next idea is infer.ts's (Language lane): where only a plan changes, check the solves' verdicts (Diverge, how many answers) instead of a whole inference of the group | E100 | P3 | M | |
+
+### Blind spots ([BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md))
+
+| id | item | source | pri | size | status |
+|---|---|---|---|---|---|
+| E229 | Effect rows as permissions: before an opened file's main first runs, say which world effects it uses (fetch, storage, time…) and answer only those allowed; `lab run --allow fetch=host` the same for the CLI (hosts.ts answers only what was granted) | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §5 | P3 | M | |
+| E230 | When an edit changes a definition's cost order or a type's chosen representation, say so next to the edit and name the use that caused it (cost.ts, E159's panel) | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §7 | P3 | M | |
+| E231 | Keyboard-only and screen-reader use of the editor, done part by part with E228's split; the daily QA format gains both checks | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §10 | P3 | L | |
 
 ## C: Compiler and targets
 
@@ -114,6 +122,12 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 | C42 | Data-parallel `map` and associative folds on a thread pool, later as compute shaders (NESL, Futhark) | LANGUAGE-NEEDS-2026-10-24 | P3 | L | after C30 |
 | C43 | Or-parallel `all`/`count` and speculative `first` in canonical order, with work stealing (Cilk, Aurora/Muse) | LANGUAGE-NEEDS-2026-10-24 | P3 | L | after C41 |
 | C44 | Fibers in native C (own stacks, an event loop) and in WASM (JSPI) | LANGUAGE-NEEDS-2026-10-24 | P3 | L | after C40 |
+
+### Blind spots ([BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md))
+
+| id | item | source | pri | size | status |
+|---|---|---|---|---|---|
+| C140 | **Bug.** A page's `property(name, value)` sets any attribute: `on…` attributes and `javascript:` in href/src/action/formaction run script from data. Refuse them in html.ts and the static HTML of `lab run`/`build-web`; say so in WEB.md (Elm's virtual DOM does the same, influence) | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §2 | P2 | S | |
 
 ## L: Language and library
 
@@ -227,6 +241,16 @@ agent with inertia. All later goals.
 | L22 | Profiles inferred like effects and shown in the editor ("runs on the GPU") | REVIEW-2026-10-22b §5 | P3 | L | |
 | L24 | Research as it becomes blocking: costs from folds, laws proved by fusion, fast invertible parsing | ROADMAP 8 | P3 | L | |
 
+### Blind spots ([BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md))
+
+| id | item | source | pri | size | status |
+|---|---|---|---|---|---|
+| L184 | Saved programs survive language changes: one node-schema version (with L178's table) and an upgrade step per shape change, run in a chain on open; a test opens a corpus of real old files (the round boards in project files) and checks each opens, checks and gives the same main. Std meaning changes get a new id or a step, never a silent change. Land before L130's flip | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §1 | P1 | M | |
+| L185 | Text decisions: NFC where text enters from the world (equality stays code points); case mapping takes a locale as an argument or effect (Turkish i/İ, ı/I); `graphemes(t)`; collation as a separate order by locale | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §4 | P3 | M | |
+| L186 | Design note in HOSTS.md: every world answer goes through one log a host can keep, so any run can be replayed exactly, stepped back, or saved as a test's inputs (with the seeded scheduler once fibers land) | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §6 | P3 | S | |
+| L187 | Error messages as one table (id, message, usual fix, the gesture that fixes it) with a smallest program per problem as its test | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §8 | P3 | M | |
+| L188 | Dates and times: Instant, calendar Date, Duration (on units.ts), time zone; now and the local zone as world effects (java.time, Temporal, influence) | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §9 | P3 | M | |
+
 ## T: Testing and fast feedback
 
 The thread that owns `.github/workflows` and the browser checks. Plan:
@@ -247,3 +271,4 @@ Not lane work; the coordinator does these or asks Ersagun.
 | P3 | A per-repo Actions budget, or a public repo for free Actions | thread "GitHub Actions cost" | P3 | Ersagun's call |
 | P4 | Lanes' squash merges carry every commit message of their long-lived branch (#952's lists C52, C30, C40 2a to 2d, C65, C66a to C66c3, I79 … before its own): squash with the PR's own title and summary only | [REVIEW-2026-11-01b](docs/reports/reviews/REVIEW-2026-11-01b.md) §8 | P3 | |
 | P7 | A foundation row every fourth item in each lane; the weekly review tracks kind tests across the code (2,805), tests reached by a one-line text.ts edit (145/150 + 44/44) and readers of a kind's fields | [FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md) §10 | P2 | |
+| P8 | Add a LICENSE (and say what examples and programs written in Ters carry) once Ersagun picks one | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §3 | P1 | Ersagun's call |
