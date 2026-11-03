@@ -355,7 +355,7 @@ function kidsOf(e: SExpr): SExpr[] {
 // The functions, by their place in ir.funcs. `rt`: the console and files.
 export function loadCoreJs(ir: CoreIR, rt: Runtime = { print: () => {} }): ((...xs: unknown[]) => unknown)[] {
   const { js, names, worlds } = emitCoreJs(ir);
-  const all = new Function("R", js)(coreRuntime(ir.tables.map(tableSpec), worlds, rt, ir.code)) as Record<string, (...xs: unknown[]) => unknown>;
+  const all = new Function("R", js)(coreRuntime(ir.tables.map(tableSpec), worlds, rt, ir.code, ir.info)) as Record<string, (...xs: unknown[]) => unknown>;
   // A Float64 handed back to the host is a use of it (SPEC §3.3, C156):
   // too big, it stops there.
   const fin = (x: number) => { if (x - x !== 0) throw new Stopped(STOPS[STOPS.length - 1]); return x; };
@@ -396,7 +396,7 @@ export function coreModule(ir: CoreIR, name: string, runtime: string, world: str
 
 // The program's nodes, for a module whose solves the evaluator's solver
 // runs (C137c11): only when it has one.
-const codeFor = (ir: CoreIR, js: string) => (/R\.rt\("(solve|exists")/.test(js) ? JSON.stringify({ nodes: ir.code.nodes, defs: ir.code.defs }) : "undefined");
+const codeFor = (ir: CoreIR, js: string) => (/R\.rt\("(solve|exists"|derive:)/.test(js) ? JSON.stringify({ nodes: ir.code.nodes, defs: ir.code.defs }) : "undefined");
 
 // A page's script (C137c9, `lab build-web --core`): the printed functions,
 // with core-page.ts (`page`, which a bundler takes in) drawing main.

@@ -5,7 +5,8 @@
 // reads scalar.ts's tables), so nothing here needs the compiler.
 
 import { CONS, FALSE, HASH_SET_OPS, NIL, NONE, S, SOME, STD_IMPL, STD_MANY, TABLE_OPS, TRUE } from "../../ters/src/lang/std.ts";
-import { META, cellOps, equal, solveAnswers, toList, type Runtime, type Value, type World } from "../../ters/src/lang/run.ts";
+import { META, cellOps, equal, makeRunner, solveAnswers, toList, type Runtime, type Value, type World } from "../../ters/src/lang/run.ts";
+import type { Info } from "../../ters/src/lang/infer.ts";
 import { Cells, NoValue } from "../../ters/src/lang/cells.ts";
 import { NoAnswer } from "../../ters/src/lang/html.ts";
 import { satisfiable } from "../../ters/src/lang/relate.ts";
@@ -13,7 +14,7 @@ import { givenInOrder } from "../../ters/src/lang/ports.ts";
 import { worldRandom } from "../../ters/src/lang/random.ts";
 import * as I from "../../ters/src/lang/int.ts";
 import * as T from "../../ters/src/lang/text.ts";
-import { useTarget, type Code, type Id, type Use } from "../../ters/src/model.ts";
+import { ownerOfTypeParts, useTarget, type Code, type Id, type Use } from "../../ters/src/model.ts";
 import { STOPS } from "./stops.ts";
 
 export class Unsupported extends Error {}
@@ -81,8 +82,9 @@ function randFns(r: Uint32Array): Record<string, (...xs: never[]) => unknown> {
 // `builtin`: the evaluator's builtin it is, and whether it gives a Bool,
 // as the printer read them (core-js.ts builtinOf).
 export type BuiltinOf = [Id, boolean];
-function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Record<string, (...xs: never[]) => unknown>, cells?: Record<Id, (...xs: Value[]) => Value | undefined>, code?: Code, spend?: () => boolean): (...xs: unknown[]) => unknown {
+function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Record<string, (...xs: never[]) => unknown>, cells?: Record<Id, (...xs: Value[]) => Value | undefined>, code?: Code, spend?: () => boolean, info?: Info, rt?: Runtime): (...xs: unknown[]) => unknown {
   if (name.startsWith("host:")) return hostFn(name, cells);
+  if (name.startsWith("derive:")) return deriveFn(name.slice(7), code, info, rt);
   if (name.startsWith("solve:")) return solveFn(name.slice(6), code, false, spend);
   if (name.startsWith("solveAll:")) return solveFn(name.slice(9), code, true, spend);
   if (name === "exists") return (f) => { if (!code) throw new Unsupported("for some without the program"); return satisfiable(code, f); };
@@ -114,6 +116,26 @@ function hostFn(name: string, cells?: Record<Id, (...xs: Value[]) => Value | und
   if (one) return (...xs) => out(one(...xs.map(inn)));
   if (many) return (...xs) => { const r = many(...xs.map(inn)); if (!r.length) throw FAIL; return out(r[0]); };
   return () => { throw new Unsupported(name); };
+}
+// derivative(f) or gradient(f) of a function value (C137c20, scalar.ts):
+// the evaluator's, on the program's code, which looks inside f (a printed
+// closure carries its lambda and captures, RUNTIME.closure's src). What
+// it gives is the evaluator's function, a stream of answers: called here
+// for its one, and carrying its node so it can be looked inside again (a
+// second derivative). Without the checker's info (a module or a page),
+// the evaluator runs on what compiled JS's $loadProgram gives it.
+function deriveFn(id: Id, code?: Code, info?: Info, rt?: Runtime): (...xs: unknown[]) => unknown {
+  if (!code) return () => { throw new Unsupported(`${id} without the program`); };
+  let runner: ReturnType<typeof makeRunner> | undefined;
+  const plain = (g: (...xs: unknown[]) => Iterable<unknown>) => {
+    const p = (...xs: unknown[]) => { for (const v of g(...xs.map(inn))) return v; throw FAIL; };
+    return Object.assign(p, { [META]: (g as unknown as Record<symbol, unknown>)[META] });
+  };
+  return (f) => {
+    runner ??= makeRunner(code, info ?? ({ divergent: new Set(), owner: ownerOfTypeParts(code) } as unknown as Info), rt ?? { print: () => {} });
+    for (const g of (runner.value(id) as (f: unknown) => Iterable<unknown>)(f)) return plain(g as (...xs: unknown[]) => Iterable<unknown>);
+    throw new Error(`no ${id}`);
+  };
 }
 // A relation run some way with one answer (C137c11, scalar.ts solveUse):
 // the evaluator's solve on the program's code, its first answer's values.
@@ -243,10 +265,11 @@ function worldFn(op: string, rt: Runtime): (...xs: unknown[]) => unknown {
 
 // What the printed functions are given as R: the runtime, the tables'
 // and the world's operations, a fresh generator.
-export function coreRuntime(tables: TableSpec[], worlds: string[], rt: Runtime, code?: Code) {
+// `info`: the checker's, where the program is loaded in the same process.
+export function coreRuntime(tables: TableSpec[], worlds: string[], rt: Runtime, code?: Code, info?: Info) {
   const rand = randFns(new Uint32Array(4)), cells = cellFns(rt.cells ?? new Cells(equal));
   let spend = () => true;
-  return { ...RUNTIME, spending: (f: () => boolean) => { spend = f; }, rt: (n: string, b?: BuiltinOf) => rtFn(n, b, tables, rand, cells, code, () => spend()), worlds: worlds.map((op) => worldFn(op, rt)), abort: (reason: unknown, esc: number): never => { throw new Aborted(reason, esc); } };
+  return { ...RUNTIME, spending: (f: () => boolean) => { spend = f; }, rt: (n: string, b?: BuiltinOf) => rtFn(n, b, tables, rand, cells, code, () => spend(), info, rt), worlds: worlds.map((op) => worldFn(op, rt)), abort: (reason: unknown, esc: number): never => { throw new Aborted(reason, esc); } };
 }
 
 // How the evaluator's runtime (a page's mount, html.ts) calls a function
