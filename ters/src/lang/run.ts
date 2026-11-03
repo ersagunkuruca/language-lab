@@ -1055,17 +1055,11 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   };
 }
 
-// A value leaving the program: every Float64 in it finite, or the stop.
-function handedOut(v: Value): Value {
-  const todo: unknown[] = [v];
-  for (let n = 0; todo.length && n < 1e6; n++) {
-    const x = todo.pop();
-    if (typeof x === "number") { if (x - x !== 0) overflowed(); }
-    else if (Array.isArray(x)) todo.push(...x);
-    else if (x && typeof x === "object" && "fields" in x) todo.push(...(x as Data).fields);
-  }
-  return v;
-}
+// A Float64 leaving the program: finite, or the stop. Only an answer that
+// is a number is looked at: walking a list or a record handed out would
+// make every answer cost its size (rep-costs.test.ts), so an overflow
+// inside one leaves as IEEE's ∞ (C156 says what compiled code does).
+const handedOut = (v: Value): Value => (typeof v === "number" && v - v !== 0 ? overflowed() : v);
 
 // Run an action (a definition of type () -> ...). Only effects the runtime
 // can handle may be left: the world's, Diverge, Log, Random, Time, Wait and
