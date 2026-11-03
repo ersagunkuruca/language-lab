@@ -145,6 +145,23 @@ test("Log may run under Choice: it isn't the world", () => {
   assert.deepEqual(p.out.logs, ["1", "2"]);
 });
 
+test("a use's given ports run before it solves, in port order, whatever order the file keeps them in (SPEC §7.2b, S10)", () => {
+  const p = program((k) => {
+    const add = k.def("add");
+    k.define(add, k.fn(["a", "b"], (a, b) => k.call(B.add, a, b)));
+    const [a, b] = (k.code.nodes[(k.code.nodes[add] as { body: Id }).body] as unknown as { params: Id[] }).params;
+    const main = k.def("main");
+    // `out` is written first and `b` second; port order is a, b, out.
+    k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.solve(add,
+      { out: k.seq(k.call(LOG_OP, k.lit("out")), k.lit(5)), [b]: k.seq(k.call(LOG_OP, k.lit("b")), k.lit(2)) },
+      { [a]: "a" }, ({ [a]: x }) => x)))));
+    return main;
+  });
+  assert.deepEqual(p.errors, []);
+  assert.deepEqual(p.run(), ["3"]);
+  assert.deepEqual(p.out.logs, ["b", "out"]);
+});
+
 test("the checker: unhandled effects, incomplete handlers, answers that aren't one value, effects with parameters", () => {
   const p = program((k) => {
     const ask = k.effect("Ask", [["ask", [], () => k.tref("type.number")], ["tell", [["n", () => k.tref("type.number")]], () => k.tref("std.unit")]]);

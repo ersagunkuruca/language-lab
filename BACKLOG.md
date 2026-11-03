@@ -140,6 +140,7 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| C147 | A use's given ports in port order in compiled code (SPEC §7.2b, L198): compile.ts `givenOf` (Object.values, or planSolve's known order), core-js.ts, scalar.ts and compiler/src/modes.ts evaluate them in `givenInOrder` (ters/src/lang/ports.ts), as the evaluator does since L198; a test with effects in given ports written out of order | SPEC S10 | P3 | S | |
 
 ### What a good language needs ([ASPECTS-2026-11-03b](docs/reports/reviews/ASPECTS-2026-11-03b.md))
 
@@ -293,7 +294,6 @@ agent with inertia. All later goals.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L198 | Write down the order of a use's answers after the canonical first (fair interleaving today, so `all` of a use has no specified order), when effects in a use's given ports run, and whether engines must follow the evaluator's path order or only its answers (S3, S5, S10); land with or after L130 | [SPEC](docs/language/SPEC.md) §12 S3, S5, S10 | P2 | S | after L130 |
 | L199 | Fuel steps depend on the checker: a definition the checker learns to prove ending stops spending fuel, so `with fuel(n, …)` can change answer. Decide: count every call, or keep it and say a checker change may change fuel answers (SPEC §5.6) | [SPEC](docs/language/SPEC.md) §12 S4 | P3 | S | |
 | L200 | LIBRARY.md's `compare` says NaN sorts after every Float64, but NaN isn't a value since L125: fix the line at its source in library/reference.ts | [SPEC](docs/language/SPEC.md) §12 S11 | P3 | S | |
 | L201 | A definition marked as another's direction (POLAR) must give the same answers in the same canonical order as the search: a test that checks it on the examples' directions | [SPEC](docs/language/SPEC.md) §12 S14 | P3 | S | |
