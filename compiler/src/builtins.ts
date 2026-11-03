@@ -163,6 +163,9 @@ export const TARGETS: Record<Id, Target> = {
   // A representation's jobs (REPRESENTATIONS.md) are read by the compiler,
   // not run; as values they are records.
   ...Object.fromEntries(Object.values(JOBS).map((id) => [id, { js: "impl", scalar: no("a representation is read by the compiler, not run") }])),
+  [INT_OPS.bitAnd]: { js: "impl", scalar: no("words on WASM and C as machine words are the Compiler lane's (L193)") },
+  [INT_OPS.bitOr]: { js: "impl", scalar: no("words on WASM and C as machine words are the Compiler lane's (L193)") },
+  [INT_OPS.bitXor]: { js: "impl", scalar: no("words on WASM and C as machine words are the Compiler lane's (L193)") },
   [INT_OPS.shiftDown]: { js: "impl", scalar: no("Fixed on WASM and C is FIXED-POINT.md step 3, an i64 where the range is known") },
   [INT_OPS.less]: { js: test(([a, b]) => `(${a} < ${b})`), scalar: INT },
   [INT_OPS.quotient]: { js: "partial", scalar: INT },

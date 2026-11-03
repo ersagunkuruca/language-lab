@@ -692,6 +692,9 @@ export const INT_OPS = {
   neg: builtin("int.neg", "negate", pure([int], int), I.neg),
   abs: builtin("int.abs", "abs", pure([int], int), I.abs),
   shiftDown: builtin("int.shiftDown", "shifted down", pure([int, int], int), I.shiftDown),
+  bitAnd: builtin("int.bitAnd", "int bits and", pure([int, int], int), I.bitAnd),
+  bitOr: builtin("int.bitOr", "int bits or", pure([int, int], int), I.bitOr),
+  bitXor: builtin("int.bitXor", "int bits xor", pure([int, int], int), I.bitXor),
   less: builtin("int.less", "less than", pure([int, int], bool), (a: I.Int, b: I.Int) => truth(I.less(a, b))),
   quotient: choice("int.quotient", "quotient", [int, int], int, I.quotient),
   remainder: choice("int.remainder", "remainder", [int, int], int, I.remainder),
@@ -1255,6 +1258,30 @@ export const SHOWN = typedef("std.shown", "Shown", ["a"], [
   ["shown", [["as shown", ([a]) => tfun([tref(a)], tref(STRING), [])]]],
 ], false, true);
 export const SHOWN_V = "std.shown.shown";
+// Wrapping integers (BACKLOG L193, ASPECTS-2026-11-03 142, 143): Word8,
+// Word32 and Word64 are arithmetic mod 2ⁿ, an Int from 0 to 2ⁿ − 1 kept
+// in `bits`, for hashes, generators, binary formats and samples, which an
+// Int that never overflows can't say. + − · wrap, < is unsigned; the
+// constructor is private (a word of 300 at Word8 would break the rule), so
+// `as word8(n)` makes one from any Int, keeping its low bits. The
+// representation picks the machine word (Compiler lane). Bits is the
+// interface for and, or, xor and shifts, so a hash is written once for
+// every width. After Shown, so ids above don't move.
+export const WORD_SIZES = [8, 32, 64] as const;
+const word = (n: number) => typedef(`std.word${n}`, `Word${n}`, [], [[`word${n}`, [["bits", () => tref(INT)]]]], false, false, `${n}-bit words`);
+export const WORD8 = word(8), WORD32 = word(32), WORD64 = word(64);
+export const WORD_V = { 8: "std.word8.word8", 32: "std.word32.word32", 64: "std.word64.word64" } as const;
+for (const n of WORD_SIZES) { SMART[WORD_V[n]] = `as word${n}`; (nodes.find((x) => x.id === WORD_V[n]) as NodeOf<"variant">).private = true; }
+export const BITS = typedef("std.bits", "Bits", ["a"], [
+  ["bits", [
+    ["bits and", ([a]) => tfun([tref(a), tref(a)], tref(a), [])],
+    ["bits or", ([a]) => tfun([tref(a), tref(a)], tref(a), [])],
+    ["bits xor", ([a]) => tfun([tref(a), tref(a)], tref(a), [])],
+    ["shifted up", ([a]) => tfun([tref(a), tref(INT)], tref(a), [])],
+    ["shifted down", ([a]) => tfun([tref(a), tref(INT)], tref(a), [])],
+  ]],
+], false, true);
+export const BITS_V = "std.bits.bits";
 export function tupleType(n: number): Id { return `std.tuple${n}`; }
 export const tupleVariant = (n: number): Id => `std.tuple${n}.tuple`;
 export const tuplePart = (n: number, i: number): Id => `std.tuple${n}.tuple.${PART_NAMES[i]}`;
@@ -1290,7 +1317,7 @@ export function onTodaysIds<T>(x: T, from = (x as { shape?: unknown } | null)?.s
 }
 export const tupleSize = (id: Id): number | null => { const m = /^std\.tuple(\d)$/.exec(id); return m ? Number(m[1]) : null; };
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, MATRIX, STATE, SEND, RECEIVE, PIPE, SHOWN] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, MATRIX, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one

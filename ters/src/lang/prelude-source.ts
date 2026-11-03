@@ -9,7 +9,7 @@ import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { library } from "./programs.ts";
-import { ABORT_OP, ARITH, CELL_OPS, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, TICKET_V, AWAIT_OP, START_TIMER_OP, NOW_OP, WAIT_OP, BRANCH_V, DUAL_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, DIVISION_V, SHOWN_V, EXTENDED_V, ALGEBRAIC_OPS, CHECK_OP, RANDOM_OP, QUEUE_V, PRIORITY_QUEUE_V, MATRIX_V, STATE_OPS, PIPE_OPS, std } from "./std.ts";
+import { ABORT_OP, ARITH, CELL_OPS, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, TICKET_V, AWAIT_OP, START_TIMER_OP, NOW_OP, WAIT_OP, BRANCH_V, DUAL_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, DIVISION_V, SHOWN_V, BITS_V, WORD_SIZES, WORD_V, EXTENDED_V, ALGEBRAIC_OPS, CHECK_OP, RANDOM_OP, QUEUE_V, PRIORITY_QUEUE_V, MATRIX_V, STATE_OPS, PIPE_OPS, std } from "./std.ts";
 
 export function buildPrelude(): Module {
   const k = new Lang();
@@ -1020,6 +1020,38 @@ export function buildPrelude(): Module {
 
   // Each number type's + − · −x and < (INTERFACES.md step 4): the one +
   // at a type is its Arithmetic's, found by the type. Not offered: + is.
+  // Words (BACKLOG L193, std.ts's Word8 to Word64): an Int from 0 to
+  // 2ⁿ − 1 in `bits`. + − · and −x keep the low n bits of the Int's own
+  // (two's complement, so −1 at Word8 is 255); < compares the bits, so it is
+  // unsigned; and, or, xor are the Int's, and a shift up drops what passes
+  // the top. As in C's unsigned types, Java's int and Rust's wrapping_add.
+  const intShiftUp = k.def("shifted up int");
+  k.define(intShiftUp, k.fn(["x", "n"], (x, by) => k.call(INT_OPS.shiftDown, x, k.call(INT_OPS.neg, by))));
+  const wordDefs = WORD_SIZES.map((w) => {
+    const V = WORD_V[w], top = () => k.int((1n << BigInt(w)) - 1n);
+    const wrap = (x: Id) => k.call(V, k.call(INT_OPS.bitAnd, x, top()));
+    const bitsOf = (v: Id, f: (b: Id) => Id, name = "bits") => k.match(v, [{ variant: V, names: [name], body: ([b]) => f(b) }]);
+    const two = (name: string, f: (a: Id, b: Id) => Id) => { const d = k.def(name); k.define(d, k.fn(["x", "y"], (x, y) => bitsOf(x, (a) => bitsOf(y, (b) => f(a, b), "bits₂")))); return d; };
+    const shift = (name: string, f: (a: Id, n: Id) => Id) => { const d = k.def(name); k.define(d, k.fn(["x", "n"], (x, by) => bitsOf(x, (a) => f(a, by)))); return d; };
+    const as = k.def(`as word${w}`);
+    k.define(as, k.fn(["whole"], (x) => wrap(x)));
+    const add = two(`add word${w}`, (a, b) => wrap(k.call(INT_OPS.add, a, b)));
+    const sub = two(`subtract word${w}`, (a, b) => wrap(k.call(INT_OPS.sub, a, b)));
+    const mul = two(`multiply word${w}`, (a, b) => wrap(k.call(INT_OPS.mul, a, b)));
+    const neg = k.def(`negate word${w}`);
+    k.define(neg, k.fn(["x"], (x) => bitsOf(x, (a) => wrap(k.call(INT_OPS.neg, a)))));
+    const less = two(`word${w} less than`, (a, b) => k.call(INT_OPS.less, a, b));
+    const and = two(`word${w} bits and`, (a, b) => k.call(V, k.call(INT_OPS.bitAnd, a, b)));
+    const or = two(`word${w} bits or`, (a, b) => k.call(V, k.call(INT_OPS.bitOr, a, b)));
+    const xor = two(`word${w} bits xor`, (a, b) => k.call(V, k.call(INT_OPS.bitXor, a, b)));
+    const up = shift(`word${w} shifted up`, (a, by) => wrap(k.call(INT_OPS.shiftDown, a, k.call(INT_OPS.neg, by))));
+    const down = shift(`word${w} shifted down`, (a, by) => wrap(k.call(INT_OPS.shiftDown, a, by)));
+    const show = k.def(`show word${w}`);
+    k.define(show, k.fn(["x"], (x) => bitsOf(x, (a) => k.call(INT_OPS.show, a))));
+    return { w, as, add, sub, mul, neg, less, and, or, xor, up, down, show };
+  });
+  const wordHelpers = wordDefs.flatMap((d) => [d.add, d.sub, d.mul, d.neg, d.less, d.and, d.or, d.xor, d.up, d.down, d.show]);
+  const wordMakers = wordDefs.map((d) => d.as);
   const impl = (name: string, v: Id, ops: Id[]) => { const d = k.def(name); k.define(d, k.call(v, ...ops.map((o) => k.x(o)))); return d; };
   const arithmetics = [
     impl("arithmetic at float64", ARITHMETIC_V, [B.add, B.sub, B.mul, B.neg]),
@@ -1035,6 +1067,7 @@ export function buildPrelude(): Module {
     impl("arithmetic at fixed", ARITHMETIC_V, [addX, subX, mulX, negX]),
     ...matProducts.map((m, i) => impl(`arithmetic at mat${i + 2}`, ARITHMETIC_V, [addParts, subParts, m, negParts])),
     impl("ordered at fixed", ORDERED_V, [lessX]),
+    ...wordDefs.flatMap((d) => [impl(`arithmetic at word${d.w}`, ARITHMETIC_V, [d.add, d.sub, d.mul, d.neg]), impl(`ordered at word${d.w}`, ORDERED_V, [d.less])]),
     // Text's < is `comes before`, alphabetical (L152): at most, smaller,
     // larger and the rest take Text, and no + − · does.
     impl("ordered at text", ORDERED_V, [TEXT_OPS.less]),
@@ -1055,6 +1088,12 @@ export function buildPrelude(): Module {
     impl("shown at rational", SHOWN_V, [showF]),
     impl("shown at complex", SHOWN_V, [showC]),
     impl("shown at fixed", SHOWN_V, [showX]),
+    ...wordDefs.map((d) => impl(`shown at word${d.w}`, SHOWN_V, [d.show])),
+  ];
+  // and, or, xor and shifts (L193): Int's own and each word's.
+  const bitses = [
+    impl("bits at int", BITS_V, [INT_OPS.bitAnd, INT_OPS.bitOr, INT_OPS.bitXor, intShiftUp, INT_OPS.shiftDown]),
+    ...wordDefs.map((d) => impl(`bits at word${d.w}`, BITS_V, [d.and, d.or, d.xor, d.up, d.down])),
   ];
 
   // Sorting by the order on plain data (`compare`, L66): a merge sort
@@ -1831,7 +1870,7 @@ export function buildPrelude(): Module {
   const simulatedHelpers = [readyAt, earliest, readyTimes, tiedAt, pickAt, nextDraw, firstDraw, simulatedWorld, simulatedClock];
   const awaitHelpers = [startBranch, waiting, goOn, finished, settle, firstDone, raceSettle, ...simulatedHelpers];
 
-  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, spaced, optionalParens, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, determinant, inverted, leastSquares, withState, changeState, piped, ticketId, anyOf, together, race, within, simulated, near];
+  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, spaced, optionalParens, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, determinant, inverted, leastSquares, withState, changeState, piped, ticketId, ...wordMakers, anyOf, together, race, within, simulated, near];
   // Each number's own show, from before the generic one showed every number
   // (L153, L156): kept so programs saved before still open, not offered.
   const perTypeShows = [showF, showC, showD, showX];
@@ -2051,6 +2090,10 @@ export function buildPrelude(): Module {
     [sqrtX]: "√x for Fixed, rounded down to a step, the same bits on every machine; no answer below 0.",
     ...Object.fromEntries(divisions.map((d) => [d, "How this number type divides (Division): its own divide. Found by its type, so not offered: divide is."])),
     ...Object.fromEntries(showns.map((d) => [d, "How this number type shows (Shown): `show any` uses it. Found by its type, so not offered."])),
+    ...Object.fromEntries(bitses.map((d) => [d, "This type's and, or, xor and shifts (Bits). Found by its type, so not offered: bits and, bits or, bits xor, shifted up and shifted down are."])),
+    ...Object.fromEntries(wordHelpers.map((d) => [d, "One of a word's own operations, kept to its n bits. Found by its type through Arithmetic, Ordered, Bits or Shown, so not offered."])),
+    [intShiftUp]: "x shifted up n places: x · 2ⁿ. Int's shifted up in Bits.",
+    ...Object.fromEntries(wordMakers.map((d, i) => [d, `The ${WORD_SIZES[i]}-bit word of an Int: its low ${WORD_SIZES[i]} bits, so as word8(300) is 44 and as word8(−1) is 255. + − · wrap around, < is unsigned, and bits and, or, xor and shifts work on it. Its bits are the Int in its field bits.`])),
     ...Object.fromEntries(arithmetics.map((d) => [d, "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are."])),
     [ticketId]: "The same ticket with what it gives forgotten (a Ticket Unit), so tickets of different types can go in one list for any of.",
     [anyOf]: "A ticket for whichever of these tickets is ready first: await(any of(tickets)) gives its position, from 0.",
@@ -2061,9 +2104,9 @@ export function buildPrelude(): Module {
     ...Object.fromEntries(awaitHelpers.map((d) => [d, simulatedHelpers.includes(d) ? "A helper of simulated. Not offered in the palette." : "A helper of together and race. Not offered in the palette."])),
     [applied]: "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette.",
   };
-  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, ...awaitHelpers, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarD, unpolarX, vector, asinBy, acosBy, asinF, acosF, asinX, acosX, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, divF, divC, divD, divX, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...matrixHelpers, pipeOf, ...laws], merge(prelude, std));
+  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, ...awaitHelpers, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarD, unpolarX, vector, asinBy, acosBy, asinF, acosF, asinX, acosX, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, divF, divC, divD, divX, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...matrixHelpers, pipeOf, ...laws], merge(prelude, std));
   if (!p.ok) throw new Error(`the prelude can't be published: ${p.reason}`);
   const at = (d: Id) => p.rename.get(d)!;
   const notes = Object.fromEntries(Object.entries(comments).map(([d, c]) => [at(d), c]));
-  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [...awaitHelpers, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, divF, divC, divD, divX, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...matrixHelpers, pipeOf, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarD, unpolarX, vector, asinBy, acosBy, asinF, acosF, asinX, acosX, ...laws].map(at));
+  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [...awaitHelpers, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, divF, divC, divD, divX, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...matrixHelpers, pipeOf, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarD, unpolarX, vector, asinBy, acosBy, asinF, acosF, asinX, acosX, ...laws].map(at));
 }
