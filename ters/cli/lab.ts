@@ -10,7 +10,7 @@
 //   lab hosts <program>                  print a hosts/js.js to start from: the program's own effects (FOREIGN.md)
 //   lab test <program> [--fresh]         run the tests: definitions whose row has Check (TESTS-IN-THE-LANGUAGE.md);
 //                                        results kept by hash in .lab/checks.json, --fresh ignores them
-//   lab build-web <program> [-o app.html] a page: one HTML file, opened anywhere (WEB.md)
+//   lab build-web <program> [-o app.html] [--core]  a page: one HTML file, opened anywhere (WEB.md)
 //   lab build-app <program> [-o folder]  a page as an installable, offline app, and a Capacitor project
 //   lab mcp [program]                    an MCP server on stdin/stdout (mcp/server.ts)
 //   lab diff <before.json> <after.json>  what changed, by definition and name (merge-files.ts)
@@ -55,7 +55,7 @@ import { CFLAGS, emitC } from "../../compiler/src/c.ts";
 import { lowerScalar } from "../../compiler/src/scalar.ts";
 import { coreModule } from "../../compiler/src/core-js.ts";
 import { execFileSync } from "node:child_process";
-import { recordings, webPage } from "./web.ts";
+import { recordings, webCorePage, webPage } from "./web.ts";
 import { appFolder } from "./app.ts";
 import { soundOf } from "./sound.ts";
 import { readWav, writeWav } from "./wav.ts";
@@ -76,7 +76,7 @@ usage:
   lab test <program> [--fresh]          run each definition that performs Check, check each accepted answer in examples.json
                                         and each representation's jobs against its type's through meaning;
                                         an unchanged test's result is kept by hash (.lab/checks.json), --fresh runs it again
-  lab build-web <program> [-o app.html] one HTML file running the page main returns
+  lab build-web <program> [-o app.html] [--core]  one HTML file running the page main returns (--core: printed from the core IR)
   lab build-app <program> [-o folder]   that page as an app for phones: a PWA in folder/www, and a Capacitor project
   lab mcp [program]                     an MCP server over stdio: an LLM views, edits, runs and tests programs
   lab render <program> in.wav [-o out.wav] [--block n] [--compiled]
@@ -341,7 +341,13 @@ switch (command) {
   case "build-web": {
     const o = rest.indexOf("-o");
     const out = o >= 0 ? rest[o + 1] ?? fail("-o needs a file") : `${basename(resolve(path)).replace(/\.json$/, "")}.html`;
-    writeFileSync(out, await webPage(p.title, p.code, p.info, p.names, main, pageHost));
+    // --core (C137c9): printed from the core IR instead of compile.ts.
+    if (rest.includes("--core")) {
+      if (pageHost) fail("a page with hosts/js.js isn't made from the core IR yet");
+      let page: string;
+      try { page = await webCorePage(p.title, p.code, p.info, p.names, p.own, main); } catch (e) { fail((e as Error).message); }
+      writeFileSync(out, page);
+    } else writeFileSync(out, await webPage(p.title, p.code, p.info, p.names, main, pageHost));
     // A recording the page plays, from the program's folder (AUDIO.md).
     const copied = recordings(p.code).filter((f) => existsSync(join(path, f)) && statSync(path).isDirectory());
     for (const f of copied) copyFileSync(join(path, f), join(dirname(out), f));

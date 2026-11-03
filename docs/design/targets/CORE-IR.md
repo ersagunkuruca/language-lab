@@ -44,7 +44,11 @@ model, so each feature has been written twice in the compiler
   a cell or a place in one is an opaque value (`host`), and a function's
   type may name a page's effects (View, Handler, Sound). bounce, compass
   and constructions show the same HTML as in the evaluator, before and
-  after their handlers run (core-js.test.ts).
+  after their handlers run (core-js.test.ts). Step c9: `lab build-web
+  --core`, a page whose script is printed this way and drawn by
+  compiler/src/core-page.ts (the evaluator's cells and mount, the
+  browser's world); compass's draws and reacts to clicks as compile.ts's
+  page does. Not yet: a page with sound or a hosts/js.js.
 - (d) compile.ts retired piece by piece.
 
 ## What it holds
