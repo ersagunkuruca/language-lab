@@ -55,10 +55,10 @@
 // The text follows the WGSL spec, https://www.w3.org/TR/WGSL/.
 
 import type { Id } from "../../ters/src/model.ts";
-import { isArray, isRecord, noData, unchecked, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc, type DType, type FType, type WType, type AType } from "./scalar.ts";
+import { isArray, isRecord, noData, unchecked, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc, type DType, type FType, type WType, type AType, type TType } from "./scalar.ts";
 
 // A shader has no data with several cases (`data` in scalar.ts is for WebAssembly).
-type GType = Exclude<LType, DType | FType | WType | AType>;
+type GType = Exclude<LType, DType | FType | WType | AType | TType>;
 export interface ShaderFunc { def: Id; name: string; wgsl: string; params: GType[]; result: GType }
 // structs: the WGSL name of each record type and of its fields.
 // matrices: the functions (indices in lowered.funcs) that print a linear

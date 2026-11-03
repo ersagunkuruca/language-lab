@@ -196,10 +196,13 @@ looked at:
 
 What it is, per target:
 
-- **C:** open addressing on a counted cell, keys and values in two
-  buffers. A put or remove changes the table in place when its count is 1
-  (Perceus's reuse, as `array.replaceAt` does since C93c), and copies it
-  otherwise, so every version stays a value, as on JavaScript.
+- **C:** open addressing, keys and values in two buffers. A put or
+  remove changes the table in place when its count is 1 (Perceus's reuse,
+  as `array.replaceAt` does since C93c). Otherwise Baker's rerooting, as
+  below, so every version stays a value, as on JavaScript. (C63h first
+  copied the table there, as planned: routes' `link` reads its forest
+  after a put on it, so each put copied the whole table, and 60,000 roads
+  took 9.8 s against the tree's 1.0 s. Rerooting made it 0.37 s.)
 - **WebAssembly:** no counts, so Baker's rerooting, as std.ts's `Table`:
   the newest version owns the buffers, and an older one is a chain of
   changes that undo back to it. Reading an old version reroots.
@@ -213,6 +216,10 @@ Steps, one PR each: C63h a Map table in C (Int and Text keys), C63i Set
 in C, C63j both in WebAssembly, C63k tuple and record keys. Each is
 measured on routes with `lab native` and the WebAssembly the rounds run,
 and kept only if it is faster than the tree there.
+
+C63h, done: `lab native` gives a Map with Int or Text keys C's table
+(library-reps.ts `cTables`). On routes with 20,000 towns and 60,000 roads
+the program takes 0.37 s, against 0.99 s with the trees, the same output.
 
 ## M5, measured again
 

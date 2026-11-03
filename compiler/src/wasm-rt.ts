@@ -26,7 +26,7 @@ import { STOPS } from "./stops.ts";
 // `i64` a plain machine word, which the functions below compute with.
 // `mag` a big Int's magnitude, an array of 32-bit limbs.
 // An array function's (C66) own types: the view, its item, its buffer and the buffer's items.
-export type VT = "i32" | "i64" | "int" | "mag" | "f64" | "text" | "list" | "option" | "void" | "array" | "item" | "buf" | "items";
+export type VT = "i32" | "i64" | "int" | "mag" | "f64" | "text" | "list" | "option" | "void" | "array" | "item" | "buf" | "items" | "table" | "key" | "value";
 
 export interface RtFn {
   name: string;
@@ -6456,7 +6456,24 @@ const shaderOf = (k: number): Omit<RtFn, "name"> => ({
 });
 const hasInt = (f: Omit<RtFn, "name">) => !f.native && [...f.params.map(([, t]) => t), f.result].includes("int");
 const raw = (n: string) => { const f = R[n] ?? WASI[n] ?? MATH[n]; return f && hasInt(f) ? `${n}.i64` : n; };
+// std's Table's functions (C63h): only their shapes, for the lowering and
+// C, whose copies per table type c.ts writes (`tableC`); WebAssembly has
+// no table yet.
+const TABLES: Record<string, Omit<RtFn, "name" | "body" | "locals" | "uses">> = {
+  empty: { params: [], result: "table" },
+  put: { params: [["t", "table"], ["k", "key"], ["v", "value"]], result: "table" },
+  remove: { params: [["t", "table"], ["k", "key"]], result: "table" },
+  has: { params: [["t", "table"], ["k", "key"]], result: "i32" },
+  size: { params: [["t", "table"]], result: "int" },
+  at: { params: [["t", "table"], ["k", "key"]], result: "value", partial: true },
+  entries: { params: [["t", "table"]], result: "list" },
+};
 export const runtime = (name: string): RtFn => {
+  const tb = /^table\.(\w+)\.t\d+(?:\.e\d+)?$/.exec(name);
+  if (tb) {
+    if (!TABLES[tb[1]]) throw new Error(`no runtime function ${name}`);
+    return { ...TABLES[tb[1]], name, locals: [], uses: [], body: "unreachable" };
+  }
   // An array function's copy for one item type (C66): the template, told which.
   const at = /^(array\.\w+)\.a(\d+)(\.i64)?$/.exec(name);
   const of = at && /^array\.of(\d+)$/.exec(at[1]);
