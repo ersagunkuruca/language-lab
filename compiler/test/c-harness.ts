@@ -67,8 +67,11 @@ export const compile = (c: string) => {
   execFileSync(cc, [...CFLAGS, "-pthread", "-Wall", "-Werror", "-Wno-unknown-warning-option", "-Wno-unused-function", "-Wno-maybe-uninitialized", "-Wno-free-nonheap-object", "-Wno-unused-but-set-variable", "-Wno-unused-variable", "-Wno-unknown-pragmas", ...(process.env.NATIVE_CFLAGS ?? "").split(" ").filter(Boolean), "-o", exe, src, "-lm"]);
   return exe;
 };
-export function build(lowered: CoreIR) {
-  const exe = compile(emitC(lowered, { harness: true }).c);
+// sin, cos and the rest are fdlibm's here, the same bits as the evaluator's
+// (Node's Math), so a test can compare to the bit; the platform's libm,
+// within a few ulp (C144), is checked by c.test.ts on its own.
+export function build(lowered: CoreIR, math: "platform" | "fdlibm" = "fdlibm") {
+  const exe = compile(emitC(lowered, { harness: true, math }).c);
   return (calls: [number, Value[]][]) => {
     const input = calls.map(([i, xs]) => { const out = [String(i)]; xs.forEach((x, j) => encode(x, lowered.funcs[i].params[j], out)); return out.join(" "); }).join("\n") + "\n";
     const lines = execFileSync(exe, { input, maxBuffer: 1 << 28 }).toString().trim().split("\n");

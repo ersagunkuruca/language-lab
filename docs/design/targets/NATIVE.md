@@ -27,9 +27,13 @@ holds one item on, and `first of array` has no answer when it is empty.
   physics, the ray marcher's colours and the strip integral give the
   evaluator's bits, built with GCC and with clang
   (`compiler/test/c.test.ts`). sin, cos, tan, exp, log, pow and atan2 are
-  V8's fdlibm, the code Node's Math runs, translated from C++ to C by
-  `compiler/math/to-c.ts` (into `src/c-math.ts`). On 140,000 inputs (any
-  bits, the edges, large arguments) they give exactly Node's bits.
+  the platform's libm, within a few ulp of the evaluator's (SPEC §3.2,
+  C144): on 140,000 inputs (any bits, the edges, large arguments) glibc's
+  are within 4 ulp of Node's, and differ in the last bits on about 3,800.
+  With `emitC`'s `math: "fdlibm"` they are V8's fdlibm, the code Node's
+  Math runs, translated from C++ to C by `compiler/math/to-c.ts` (into
+  `src/c-math.ts`), which gives exactly Node's bits; the agreement tests
+  build that way.
 - **N2.** Data has counts:
   - lists, trees, Optional and the lowering's frames are cells, with a
     static cell for each case with no fields;
@@ -182,7 +186,8 @@ are, since the C compiler may reorder those freely.
 
 - + − × ÷, sqrt and floor are exact in C, as in JavaScript.
 - `mod` is fmod twice, as runtime.js's `$mod`.
-- The Math functions are fdlibm (above).
+- The Math functions are libm's, within a few ulp, or fdlibm's, the same
+  bits (above).
 
 The compiler must be told two things, which `CFLAGS` in c.ts carries:
 

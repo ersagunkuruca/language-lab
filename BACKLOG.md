@@ -140,7 +140,6 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| C144 | Library maths from the platform (SPEC §3.2, S12, Ersagun 2026-11-03): C calls libm's sin, cos, tan, exp, log, pow and atan2 instead of carrying V8's fdlibm (c-math.ts), WebAssembly in a browser keeps Math's, WASI keeps fdlibm (it has no maths of its own); the agreement tests (fuzz, wasm, native) compare those functions within a few ulp, and +, −, ·, /, sqrt still to the bit | [SPEC](docs/language/SPEC.md) §3.2 | P3 | M | |
 
 ### What a good language needs ([ASPECTS-2026-11-03b](docs/reports/reviews/ASPECTS-2026-11-03b.md))
 

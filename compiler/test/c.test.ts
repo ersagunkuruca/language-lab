@@ -60,10 +60,20 @@ test("records are structs: the ray marcher's colours in C, exactly the evaluator
   at.forEach((xs, k) => assert.deepStrictEqual(got[k].value, first(r.call(r.value(lowered.funcs[colour].def), ...xs)), `colour(${xs})`));
 });
 
-test("sin, cos, tan, exp, log, pow and atan2 in C: V8's fdlibm, the same bits as Node's Math", { skip }, () => {
+// How many Float64s apart two are (0: the same bits; −0 and 0 are 0).
+const ulps = (a: number, b: number) => {
+  const ordered = (x: number) => { const i = new BigInt64Array(new Float64Array([x + 0]).buffer)[0]; return i < 0n ? -(i & 0x7fffffffffffffffn) : i; };
+  const d = ordered(a) - ordered(b);
+  return Number(d < 0n ? -d : d);
+};
+// The platform's libm (C144, SPEC §3.2) is within a few ulp of the
+// evaluator's (Node's Math); fdlibm, carried with `math: "fdlibm"`, is the
+// same bits. Both on the same 140,000 calls.
+for (const math of ["fdlibm", "platform"] as const)
+test(`sin, cos, tan, exp, log, pow and atan2 in C: ${math === "fdlibm" ? "V8's fdlibm, the same bits as Node's Math" : "the platform's libm, within 4 ulp of Node's Math"}`, { skip }, () => {
   const p = maths();
   const lowered = lowerScalar(p.code, p.info, p.names, Object.values(p.defs));
-  const run = build(lowered);
+  const run = build(lowered, math);
   const F = { sin: Math.sin, cos: Math.cos, tan: Math.tan, exp: Math.exp, log: Math.log, pow: Math.pow, atan2: (y: number, x: number) => Math.atan2(y + 0, x + 0) } as Record<string, (x: number, y: number) => number>; // −0 is 0 (L125a): atan2(−0, −1) is π
   let seed = 11n;
   const next = () => Number((seed = (seed * 6364136223846793005n + 1442695040888963407n) % 2n ** 64n) >> 11n) / 2 ** 53;
@@ -82,7 +92,13 @@ test("sin, cos, tan, exp, log, pow and atan2 in C: V8's fdlibm, the same bits as
     }
   }
   const got = run(calls);
-  calls.forEach(([i, xs], k) => assert.ok(typeof want[k] === "number" ? Object.is(got[k].value, want[k]) : JSON.stringify(got[k].value) === JSON.stringify(want[k]), `${lowered.funcs[i].name}(${xs}): ${JSON.stringify(got[k].value)}, not ${JSON.stringify(want[k])}`));
+  const near = (a: unknown, b: number) => (math === "fdlibm" ? Object.is(a, b) : typeof a === "number" && ulps(a, b) <= 4);
+  let apart = 0;
+  calls.forEach(([i, xs], k) => {
+    if (typeof want[k] === "number" && typeof got[k].value === "number" && !Object.is(got[k].value, want[k])) apart++;
+    assert.ok(typeof want[k] === "number" ? near(got[k].value, want[k] as number) : JSON.stringify(got[k].value) === JSON.stringify(want[k]), `${lowered.funcs[i].name}(${xs}): ${JSON.stringify(got[k].value)}, not ${JSON.stringify(want[k])}`);
+  });
+  if (math === "platform") console.log(`libm and Node's Math differ in the last bits on ${apart} of ${calls.length} calls`);
 });
 
 test("tail calls are loops in C, and a budget runs out where the evaluator's does", { skip }, () => {
