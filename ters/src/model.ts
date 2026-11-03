@@ -130,6 +130,16 @@ export const useTarget = (nodes: Record<Id, Node>, u: Use): Id => {
 // A new use of `target`: adds the ref to it through `add`.
 export const useNode = (add: (n: NodeData) => Id, target: Id, given: Record<string, Id>, binds: Record<string, Id>, body: Id): Omit<Use, "id"> =>
   ({ kind: "call", fn: add({ kind: "ref", target }), given, binds, body });
+// An interface's field with results (POLAR.md, L97c), read as a function
+// (L128d): which of its ports are its inputs and which its results, each
+// a position among its ports, in the order the function takes and gives
+// them. Null for a field without results.
+export const fieldPorts = (nodes: Record<Id, Node>, f: NodeOf<"field">): { ins: number[]; outs: number[] } | null => {
+  if (!f.results) return null;
+  const t = nodes[f.type];
+  const n = t?.kind === "tfun" ? t.params.length : 0;
+  return { ins: Array.from({ length: n }, (_, i) => i).filter((i) => !f.results!.includes(i)), outs: f.results };
+};
 // A saved program's nodes as today's (L130d): a use was its own kind,
 // `solve`, naming its relation directly; it is a call whose `fn` is a ref.
 // The ref's id comes from the use's, so loading the same file twice gives

@@ -13,7 +13,7 @@
 // one predicate with a definition per mode, promised to agree.
 
 import type { Code, Id, Node, NodeOf, Use } from "../model.ts";
-import { isUse, useTarget, isCall, type Call } from "../model.ts";
+import { isUse, useTarget, isCall, fieldPorts, type Call } from "../model.ts";
 import { derivedFrom, nodesWhere, subtree } from "../model.ts";
 import { S } from "./std.ts";
 
@@ -49,18 +49,23 @@ export function directionProblem(code: Code, d: Id, nm: (id: Id) => string): str
 // its other direction (Trig's polar and unpolar, POLAR.md step 3). Ports
 // are positions there, so only the function changes.
 function fieldDirection(code: Code, n: Use, f: NodeOf<"field">): Retargeted | null {
-  const given = Object.keys(n.given).filter((k) => k !== "out").map(Number);
+  // Its given ports, by name where the field names them.
+  const name = (g: NodeOf<"field">, k: string) => (k === "out" ? k : g.ports?.[Number(k)] ?? k);
+  const given = Object.keys(n.given).filter((k) => k !== "out").map((k) => name(f, k));
   const reads = (g: NodeOf<"field">) => {
-    const ty = code.nodes[g.type];
-    const ins = ty?.kind === "tfun" ? ty.params.map((_, i) => i).filter((i) => !g.results!.includes(i)) : [];
+    const ins = fieldPorts(code.nodes, g)?.ins.map((i) => name(g, String(i))) ?? [];
     return ins.length === given.length && ins.every((i) => given.includes(i));
   };
   if (reads(f)) return null;
   const v = Object.values(code.nodes).find((x): x is NodeOf<"variant"> => x.kind === "variant" && x.fields.includes(f.id));
-  const ports = (g: NodeOf<"field">) => (g.ports ?? []).join();
+  const ports = (g: NodeOf<"field">) => [...(g.ports ?? [])].sort().join();
   for (const id of v?.fields ?? []) {
     const g = code.nodes[id];
-    if (g?.kind === "field" && g.results && id !== f.id && g.ports && ports(g) === ports(f) && reads(g)) return { use: n, target: id };
+    if (g?.kind !== "field" || !g.results || id === f.id || !g.ports || ports(g) !== ports(f) || !reads(g)) continue;
+    // The same ports, perhaps in another order: each moved to g's position.
+    const key = (k: string) => (k === "out" ? k : String(g.ports!.indexOf(name(f, k))));
+    const re = (r: Record<string, Id>) => Object.fromEntries(Object.entries(r).map(([k, x]) => [key(k), x]));
+    return { use: { ...n, given: re(n.given), binds: re(n.binds) }, target: id };
   }
   return null;
 }
@@ -73,7 +78,7 @@ type Retargeted = { use: Use; target: Id };
 // null when none does (the relation is then solved as it always was).
 export function directionFor(code: Code, n: Use, ways = directionsIn(code)): Retargeted | null {
   const f = code.nodes[useTarget(code.nodes, n)];
-  if (f?.kind === "field" && f.results) return fieldDirection(code, n, f);
+  if (f?.kind === "field" && fieldPorts(code.nodes, f)) return fieldDirection(code, n, f);
   const ds = ways.get(useTarget(code.nodes, n));
   const theirs = ds && paramsOf(code, useTarget(code.nodes, n));
   if (!theirs) return null;
@@ -94,7 +99,7 @@ export function directionFor(code: Code, n: Use, ways = directionsIn(code)): Ret
 // Every such solve rewritten; the same code back when there are none.
 export function useDirections(code: Code): Code {
   const ways = directionsIn(code);
-  const asked = (n: Use) => { const f = code.nodes[useTarget(code.nodes, n)]; return ways.has(useTarget(code.nodes, n)) || (f?.kind === "field" && !!f.results); };
+  const asked = (n: Use) => { const f = code.nodes[useTarget(code.nodes, n)]; return ways.has(useTarget(code.nodes, n)) || (f?.kind === "field" && !!fieldPorts(code.nodes, f)); };
   let nodes: Code["nodes"] | null = null;
   const rewritten: Id[] = [];
   for (const id of nodesWhere(code, "use", isUse)) {

@@ -14,7 +14,7 @@
 // the same: one printer. A piece with an id stands for that node.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
-import { isUse, useTarget, isCall, type Call } from "../model.ts";
+import { isUse, useTarget, isCall, fieldPorts, type Call } from "../model.ts";
 import { children, resolveRefs, subtree } from "../model.ts";
 import { givenBy } from "./directions.ts";
 import type { Notation, Presentation } from "../presentation.ts";
@@ -461,7 +461,7 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
       // An interface's field with results (POLAR.md), in the direction it
       // declares: x, y = polar(r, t), a result nobody reads as _.
       if (f?.kind === "field" && f.results) {
-        const fr = f.results, ins = Object.keys(n.given).filter((k) => k !== "out").map(Number).sort((a, b) => a - b);
+        const fr = fieldPorts(code.nodes, f)!.outs, ins = Object.keys(n.given).filter((k) => k !== "out").map(Number).sort((a, b) => a - b);
         if (ins.every((i) => !fr.includes(i)) && Object.keys(n.binds).every((k) => fr.includes(Number(k)))) {
           const bound = Object.values(n.binds);
           enter(bound);

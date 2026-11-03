@@ -13,7 +13,7 @@
 import { sharing } from "./shared-fields.ts";
 import { PARTIAL, signAnalysis } from "./signs.ts";
 import type { Code, Id, Node, NodeOf, Use } from "../model.ts";
-import { isUse, useTarget, isCall, type Call } from "../model.ts";
+import { isUse, useTarget, isCall, fieldPorts, type Call } from "../model.ts";
 import { nodesWhere, ownerOfTypeParts, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { unitProblems, UnitsBefore } from "../units.ts";
@@ -972,13 +972,13 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     // definition answers it, in the direction the field declares, with one
     // answer. Ports are positions.
     const field = code.nodes[useTarget(code.nodes, n)];
-    if (field?.kind === "field" && field.results) {
-      const ty = code.nodes[field.type];
-      const ins = ty?.kind === "tfun" ? ty.params.map((_, i) => i).filter((i) => !field.results!.includes(i)) : [];
+    const fp = field?.kind === "field" ? fieldPorts(code.nodes, field) : null;
+    if (field?.kind === "field" && fp) {
+      const { ins, outs } = fp;
       const given = Object.keys(n.given).filter((k) => k !== "out").map(Number);
       const port = (i: number) => field.ports?.[i] ?? String(i);
-      if (given.length !== ins.length || !ins.every((i) => given.includes(i)) || !Object.keys(n.binds).every((k) => field.results!.includes(Number(k))))
-        err(n.id, `${nm(useTarget(code.nodes, n))} gives ${field.results.map(port).join(", ")} from ${ins.map(port).join(", ")}`);
+      if (given.length !== ins.length || !ins.every((i) => given.includes(i)) || !Object.keys(n.binds).every((k) => outs.includes(Number(k))))
+        err(n.id, `${nm(useTarget(code.nodes, n))} gives ${outs.map(port).join(", ")} from ${ins.map(port).join(", ")}`);
       relationalSolve(n, env, row, inner, false, undefined, true);
       return expr(n.body, inner, row);
     }
@@ -1241,7 +1241,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       const args = (body as Call).args, variant = code.nodes[fn.target] as NodeOf<"variant">;
       // A field with results (POLAR.md) is given by a definition that
       // declares the same results; checked in results(), with its direction.
-      variant.fields.forEach((f, i) => { const fl = code.nodes[f], a = code.nodes[args[i]]; if (fl?.kind === "field" && fl.results && a?.kind === "ref" && !leftToWays(code, args[i])) resultsGiven.push({ impl: d, field: f, by: a.target }); });
+      variant.fields.forEach((f, i) => { const fl = code.nodes[f], a = code.nodes[args[i]]; if (fl?.kind === "field" && fieldPorts(code.nodes, fl) && a?.kind === "ref" && !leftToWays(code, args[i])) resultsGiven.push({ impl: d, field: f, by: a.target }); });
       if ((!reuse || reuse.only.has(d)) && args.some((a) => leftToWays(code, a))) {
         const pick = pickWays(code, ways ??= waysIn(code), variant, args);
         const stuck = variant.fields.filter((f) => !pick.has(f));
@@ -1325,8 +1325,10 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     const fl = code.nodes[field] as NodeOf<"field">, d = code.nodes[by];
     const lam = d?.kind === "def" && d.body ? code.nodes[d.body] : null;
     const port = (i: number) => fl.ports?.[i] ?? String(i);
-    const want = `${fl.results!.map(port).join(", ")} from ${(fl.ports ?? []).filter((_, i) => !fl.results!.includes(i)).join(", ")}`;
-    const same = d?.kind === "def" && lam?.kind === "lambda" && d.results?.length === fl.results!.length && d.results.every((r, i) => lam.params.indexOf(r) === fl.results![i]);
+    const fp = fieldPorts(code.nodes, fl)!;
+    const want = `${fp.outs.map(port).join(", ")} from ${fp.ins.map(port).join(", ")}`;
+    // Read as functions (L128d): the same number of inputs and of results.
+    const same = d?.kind === "def" && lam?.kind === "lambda" && d.results?.length === fp.outs.length && lam.params.length - d.results.length === fp.ins.length;
     if (!same) err(impl, `${nm(impl)} gives ${nm(field)} as ${nm(by)}, which must name its results the way ${nm(field)} does: ${want}`);
     else if (info.directions?.get(by)?.length) err(impl, `${nm(impl)} gives ${nm(field)} as ${nm(by)}, which must give ${want} with one answer, and it may give several or none`);
   }
