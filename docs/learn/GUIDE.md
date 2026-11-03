@@ -15,8 +15,8 @@ don't change your programs in the editor.
 
 Want the ideas first? [Learn](LEARN.md) has a gentle start for new
 programmers and one for people new to functional programming. The
-[tutorial](TUTORIAL.md) goes deeper, and [LANGUAGE.md](../language/LANGUAGE.md) has
-every detail.
+[tutorial](TUTORIAL.md) goes deeper, and [the language reference](../language/LANGUAGE.md)
+has every detail.
 
 ---
 
@@ -28,11 +28,11 @@ Open the editor. In the **Programs** list on the left, pick
 Under the program's name are its **definitions**. A definition is a named
 piece of the program, usually a function. This one has `die`, `two dice`,
 `a hundred rolls`, `times rolled`, `the first`, `most`, `bar`, `bars`,
-`landed`, `credits` and `main`.
+`landed`, `credits`, `main` and `styles`.
 
 ![The two dice program open on main](guide/dice-main.png)
 
-The window has four parts:
+The window has five parts:
 
 - **Programs**, on the left. Click a definition to open it.
 - **The graph**, in the middle at the top. The definition is drawn as
@@ -40,8 +40,9 @@ The window has four parts:
 - **Text**, in the middle below the graph. It's the same definition,
   written out. **Blocks** is the view to read. Steps, Nested and Lisp are
   other ways of writing the same thing.
-- **Run** and the **inspector**, on the right. Run runs things. The
-  inspector shows what you've selected.
+- **Run**, on the right at the top. It runs things.
+- **The inspector**, on the right below Run. It shows what you've
+  selected.
 
 The graph and the text are two drawings of the same thing.
 
@@ -55,7 +56,8 @@ parts. So you can't make a typo or a syntax error.
 2. Click **Throw 100** a few times and watch the bars. The green bars grow
    toward the red ticks, which show what fair dice give on average.
 3. Click **Roll 100 with seed 7** twice. You get the same hundred rolls
-   both times.
+   both times. A **seed** is the number random numbers start from: the
+   same seed always gives the same rolls (section 5).
 
 ?[main of two dice, read-only: the page runs under Run](index.html?embed&readonly&program=dice&def=main)
 
@@ -112,6 +114,9 @@ Let's make the "Roll 100" button use a random seed instead of 7. Open
 write(rolls, append(‹a hundred rolls›(7), read(rolls)))
 ```
 
+`rolls` is a **cell**, a value that can change. `read(rolls)` reads it and
+`write(rolls, …)` changes it. Section 8 says more.
+
 1. Click the `7`. The inspector says **Literal**, which means a value
    written out, of type `Float64`.
 2. Press **Delete**. The `7` becomes a hole, `□Float64`, and the palette
@@ -124,7 +129,8 @@ The status line at the bottom says *Filled with die(). No holes left in
 this definition.*
 
 The page runs again. Now each click on that button rolls a die for the
-seed, so you get one of six different hundreds. The label still says
+seed. A die gives 1 to 6, so there are six seeds it can pick, and you
+get one of six possible sets of a hundred rolls. The label still says
 "seed 7". That's only text, and you can change it the same way.
 
 The palette sorts what fits into groups:
@@ -252,13 +258,15 @@ column = ‹one of›(range(size))
 if safe(column, board) then cons(column, board) else fail()
 ```
 
-For each row, it picks a column. If a queen there could be taken, it
-gives up on that pick.
+This is the eight queens puzzle: put eight chess queens on a board so that
+no two can take each other. For each row, it picks a column. If a queen
+there could be taken, it gives up on that pick.
 
 There's no loop that tries every column. The handler does the trying.
 Open `main` to see three handlers:
 
-- `first(queens(8), else nil)` gives the first board that works.
+- `first(queens(8), else nil)` gives the first board that works. The
+  `else nil` is what it gives if no board works: an empty list.
 - `count(queens(8))` gives how many boards work: 92.
 - `all(queens(6))` gives every board, as a list.
 
@@ -298,7 +306,8 @@ because it's text. You get `name` is `"Ada"`.
 
 Nobody wrote an "un-greet" function. The editor works it out.
 
-**Try it:** run `magnitude` backwards from `5`.
+**Try it:** open `magnitude` in the same program. It gives a number's size
+without its sign. Run it backwards from `5`: you get −5 and 5.
 
 ?[square, live: tick result, untick x, and give it 9](index.html?embed&program=backwards&def=square)
 
@@ -323,9 +332,11 @@ A page's `main` doesn't print anything. The Run pane *is* the page.
 
 To add a button, copy one that's there:
 
-1. Click the `(` right after `named` on the `"hundred"` button, and press
-   Ctrl+C.
-2. With it still selected, the inspector says *Item 5 of 5 in the list*.
+1. Select the whole `"hundred"` button. In the Blocks text, clicking a
+   call's opening bracket selects the whole call, so click the `(` right
+   after `named` on that button. Press Ctrl+C.
+2. With it still selected, the inspector says *Item 5 of 5 in the list*:
+   it's the last of the five parts listed together there.
    Press **Add one after**. That leaves a hole in the list, after the
    "hundred" button.
 3. Paste into the hole with Ctrl+V.
@@ -408,8 +419,8 @@ the file to get your version back.
 This guide is our own and borrows no teaching material. The programs it
 uses credit their sources on screen and in [CREDITS.md](../language/CREDITS.md):
 
-- The seeded rolls are xoshiro128** by David Blackman and Sebastiano
-  Vigna (adapted code).
+- The seeded rolls come from xoshiro128**, a random number generator by
+  David Blackman and Sebastiano Vigna (adapted code).
 - The clock that runs each frame follows Fran (Elliott and Hudak) and Elm
   (prior art).
 - Effects with handlers you choose follow Koka and Eff (prior art).
