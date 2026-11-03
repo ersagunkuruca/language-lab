@@ -71,6 +71,29 @@ const viewOf = (call: Mount["call"], f: Value): Value | null => { try { return c
 
 const SVG = "http://www.w3.org/2000/svg";
 
+// An attribute a page may set from its data (C140, BLIND-SPOTS-2026-11-03
+// §2): not one that runs script. An event is `on(…)`, never an `on…`
+// attribute holding code; a link, source or form target isn't a
+// `javascript:` (or `vbscript:`) address, nor `data:` other than an image;
+// `srcdoc` (a page inside, scripts and all) isn't set; and a name is a
+// name, so static HTML can't be broken out of. The browser drops spaces
+// and controls in an address's scheme, so they are dropped before looking.
+// Influence: Elm's virtual DOM (elm/virtual-dom, Evan Czaplicki) leaves out
+// `on…` attributes and `javascript:` addresses set as attributes.
+const URL_ATTRIBUTES = new Set(["href", "src", "action", "formaction", "xlink:href", "poster", "background", "cite", "ping"]);
+export function unsafeAttribute(name: string, value: string): string | null {
+  if (!/^[A-Za-z_:][-A-Za-z0-9_:.]*$/.test(name)) return `"${name}" isn't an attribute's name`;
+  const n = name.toLowerCase();
+  if (n.startsWith("on")) return `${name} would run its text as script: an event is on("${n.slice(2)}", …)`;
+  if (n === "srcdoc") return "srcdoc would run the page inside, scripts and all";
+  if (URL_ATTRIBUTES.has(n)) {
+    const v = value.replace(/[\u0000-\u0020]/g, "").toLowerCase();
+    if (v.startsWith("javascript:") || v.startsWith("vbscript:")) return `${name} would run script (${v.slice(0, v.indexOf(":") + 1)})`;
+    if (v.startsWith("data:") && (!v.startsWith("data:image/") || v.startsWith("data:image/svg"))) return `${name} would open data that isn't an image`;
+  }
+  return null;
+}
+
 // Properties the page reads back from the element itself, so they are set
 // as properties: what the user typed or ticked replaces the attribute.
 const LIVE = new Set(["value", "checked"]);
@@ -164,7 +187,12 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
             // Svelte's rule for bind:value (Rich Harris): leave the field
             // alone when it already shows this, so typing isn't disturbed.
             else if (name === "value") { if (e.value !== value) e.value = value; }
-            else e.setAttribute(name, value);
+            else {
+              // One that runs script is left off, with the reason (C140).
+              const why = unsafeAttribute(name, value);
+              if (why) { e.removeAttribute?.(name); console.warn(`a page's attribute was left off: ${why}`); }
+              else e.setAttribute(name, value);
+            }
           });
         } else if (a.tag === HTML_V.on) {
           const then = a.fields[1];
@@ -269,7 +297,7 @@ export function htmlText(v: Value, call: Mount["call"], raw = false): string {
     case HTML_V.part: { const v = viewOf(call, d.fields[0]); return v === null ? "" : htmlText(v, call, raw); }
     case HTML_V.element: {
       const attrs = (fromList(d.fields[1]) as Data[]).filter((a) => a.tag === HTML_V.property)
-        .flatMap((a) => { const v = viewOf(call, a.fields[1]); return v === null ? [] : [` ${a.fields[0]}="${esc(String(v))}"`]; }).join("");
+        .flatMap((a) => { const v = viewOf(call, a.fields[1]); return v === null || unsafeAttribute(String(a.fields[0]), String(v)) ? [] : [` ${a.fields[0]}="${esc(String(v))}"`]; }).join("");
       const rawText = d.fields[0] === "style" || d.fields[0] === "script";
       return `<${d.fields[0]}${attrs}>${fromList(d.fields[2]).map((c) => htmlText(c, call, rawText)).join("")}</${d.fields[0]}>`;
     }
