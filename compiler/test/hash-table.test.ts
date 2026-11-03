@@ -41,7 +41,10 @@ function program(n: number, opts: { floats?: boolean; old?: boolean; remove?: bo
   // With `remainders`, a key is i's remainder by 151 (C has no shifted
   // down yet).
   // With `pairs`, a key is (i ÷ 8, i ÷ 32 shown): a pair of an Int and a Text (C63f).
-  const pairKey = (i: Id) => k.call(Spot ? Spot.v.spot : PAIR_V, opts.record === "floats" ? k.call(INT_OPS.toNumber, k.call(INT_OPS.shiftDown, i, k.int(3))) : k.call(INT_OPS.shiftDown, i, k.int(3)), k.call(SHOW_ANY, k.call(INT_OPS.shiftDown, i, k.int(5))));
+  // With `remainders`, (i's remainder by 37, i's by 11 shown).
+  const rem = (i: Id, m: number) => k.call(S.first, k.thunk(() => k.call(INT_OPS.remainder, i, k.int(m))), k.thunk(() => k.int(0)));
+  const third = (i: Id) => (opts.remainders ? rem(i, 37) : k.call(INT_OPS.shiftDown, i, k.int(3)));
+  const pairKey = (i: Id) => k.call(Spot ? Spot.v.spot : PAIR_V, opts.record === "floats" ? k.call(INT_OPS.toNumber, third(i)) : third(i), k.call(SHOW_ANY, opts.remainders ? rem(i, 11) : k.call(INT_OPS.shiftDown, i, k.int(5))));
   const key = (i: Id) => opts.pairs || opts.record ? pairKey(i) : opts.floats ? k.call(B.mul, k.call(S.mod, i, k.lit(37)), k.lit(0.5)) : opts.remainders ? k.call(S.first, k.thunk(() => k.call(INT_OPS.remainder, i, k.int(151))), k.thunk(() => k.int(0))) : k.call(INT_OPS.shiftDown, i, k.int(1));
   const counts = k.def("counts");
   k.define(counts, k.fold(opts.floats ? k.call(S.range, k.lit(n)) : k.call(INT_OPS.range, k.int(n)), [
@@ -243,4 +246,21 @@ test("in C, a set of Ints is C's hash set, and prints what the definition prints
   assert.equal(lowered.tables.length, 1);
   const out = execFileSync(cc(emitC(lowered, { main: p.main }).c), { encoding: "utf8" });
   assert.deepEqual(out.split("\n").slice(0, -1), lines);
+});
+
+// C63k: keys that are pairs of an Int and a Text, or a record of them, in
+// C too, listed in compare's order part by part.
+test("in C, a map keyed by pairs or records of Ints and Texts is C's hash table, and prints what the definition prints (C63k)", { skip }, () => {
+  for (const o of [{ pairs: true }, { record: "ints" as const }]) {
+    const p = program(300, { ...o, old: true, remove: true, list: true, remainders: true });
+    const c = chosen(p, false, true);
+    assert.deepEqual(c.chosen, ["Map as hash table"]);
+    const { lines, info } = printed(c.code, c.names, p.main, c.insiders);
+    assert.deepEqual(lines, printed(p.code, p.names, p.main).lines);
+    const lowered = lowerScalar(c.code, info, c.names, [p.main], { data: true });
+    assert.deepEqual([...lowered.refused.values()], []);
+    assert.equal(lowered.tables.length, 1);
+    const out = execFileSync(cc(emitC(lowered, { main: p.main }).c), { encoding: "utf8" });
+    assert.deepEqual(out.split("\n").slice(0, -1), lines);
+  }
 });
