@@ -146,6 +146,12 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 |---|---|---|---|---|---|
 | C140 | **Bug.** A page's `property(name, value)` sets any attribute: `on…` attributes and `javascript:` in href/src/action/formaction run script from data. Refuse them in html.ts and the static HTML of `lab run`/`build-web`; say so in WEB.md (Elm's virtual DOM does the same, influence) | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §2 | P2 | S | |
 
+### The spec ([SPEC](docs/language/SPEC.md) §12)
+
+| id | item | source | pri | size | status |
+|---|---|---|---|---|---|
+| C141 | Shaders and the spec (S6, S12): either the shader profile refuses what it can't keep (Int past 32 bits, an unchecked Float64 overflow) or SPEC §10.3 declares it an approximation with its own written meaning; and decide whether library maths must give the evaluator's bits on every target or only be within an ulp | [SPEC](docs/language/SPEC.md) §12 S6, S12 | P3 | S | |
+
 ## L: Language and library
 
 Numbers first (Ersagun, 2026-10-24 07:01), then the rest of
@@ -285,6 +291,16 @@ agent with inertia. All later goals.
 | L194 | README for someone arriving cold: introduce `lab` once (it's used everywhere and never explained: worst 1), say Ters is the experiment, move build steps to their own section, drop "lane", gloss or move the specialist demos' maths, fix the "compiled JavaScript only" vs "Targets built" contradiction | [OUTSIDER-READ-2026-11-03](docs/reports/reviews/OUTSIDER-READ-2026-11-03.md) §1 | P2 | S | |
 | L195 | TUTORIAL.md in teaching order: every term before its first use (dots, holes, ports, `solve`, `one of`, Choice, shaders), the unparseable sentences of 3.6 and 3.8 rewritten (worst 2), no BACKLOG ids (L107), file names, maintainer notes or CONFUSING.md in the text, one name for the relational interpreter / solver / search, `↦` vs `=>` | [OUTSIDER-READ-2026-11-03](docs/reports/reviews/OUTSIDER-READ-2026-11-03.md) §3 | P2 | M | |
 | L196 | LEARN.md and GUIDE.md: the guide's definition list and pane count match the screen, `seed`, cells and `magnitude` explained where first used, the "click the `(`" step rewritten, the learn page's raw file link gone | [OUTSIDER-READ-2026-11-03](docs/reports/reviews/OUTSIDER-READ-2026-11-03.md) §2, §4 | P3 | S | |
+
+### The spec ([SPEC](docs/language/SPEC.md) §12)
+
+| id | item | source | pri | size | status |
+|---|---|---|---|---|---|
+| L197 | **Ersagun's call.** Float64 `equal` treats numbers within ~1e-9 (relative) as the same, so it isn't transitive and disagrees with `compare` and map keys (both exact). Choose: exact `equal` with the tolerance kept inside the solver, or keep it and say so in SPEC §2.7 | [SPEC](docs/language/SPEC.md) §12 S1 | P2 | M | |
+| L198 | Write down the order of a use's answers after the canonical first (fair interleaving today, so `all` of a use has no specified order), when effects in a use's given ports run, and whether engines must follow the evaluator's path order or only its answers (S3, S5, S10); land with or after L130 | [SPEC](docs/language/SPEC.md) §12 S3, S5, S10 | P2 | S | after L130 |
+| L199 | Fuel steps depend on the checker: a definition the checker learns to prove ending stops spending fuel, so `with fuel(n, …)` can change answer. Decide: count every call, or keep it and say a checker change may change fuel answers (SPEC §5.6) | [SPEC](docs/language/SPEC.md) §12 S4 | P3 | S | |
+| L200 | LIBRARY.md's `compare` says NaN sorts after every Float64, but NaN isn't a value since L125: fix the line at its source in library/reference.ts | [SPEC](docs/language/SPEC.md) §12 S11 | P3 | S | |
+| L201 | A definition marked as another's direction (POLAR) must give the same answers in the same canonical order as the search: a test that checks it on the examples' directions | [SPEC](docs/language/SPEC.md) §12 S14 | P3 | S | |
 
 ## T: Testing and fast feedback
 

@@ -194,6 +194,13 @@ Proposed in [STABLE-REFERENCES.md](../design/data/STABLE-REFERENCES.md) (BACKLOG
 | The nested to-do outline (cells-programs.ts `outlineProgram`, L100) | Influence | TodoMVC (Addy Osmani, Sindre Sorhus and others) as the shape of a to-do demo; Solid's stores demo of nested to-dos (Ryan Carniato). Written fresh. |
 | The nested to-do's look (cells-programs.ts `styles`, `draw item`) | Influence | Round ticks before the title and small actions that show on hover, as in to-do apps such as Things (Cultured Code) and Todoist (Doist). Our own rules and colours, written fresh; credited on the page. |
 
+## The specification
+
+| What | Label | Who and where |
+|---|---|---|
+| A prose spec with a reference implementation as its tie-breaker, and conformance as agreeing with it ([SPEC.md](SPEC.md) §0, §10) | Influence | The [WebAssembly specification](https://webassembly.github.io/spec/) and its reference interpreter (W3C WebAssembly Community Group). No text copied. |
+| Static meaning (types) kept apart from dynamic meaning (running) in the spec (SPEC.md §4 against §5 to §8) | Influence | *The Definition of Standard ML* (Milner, Tofte, Harper and MacQueen, MIT Press, 1997). Ours is prose, not a formal semantics. |
+
 ## Choice: failure and many answers
 
 | What | Label | Who and where |
