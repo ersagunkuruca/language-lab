@@ -195,8 +195,8 @@ export const TARGETS: Record<Id, Target> = {
   [ARRAY_OPS.replaceAt]: { js: "impl", scalar: written("scalar.ts: with `data`, array.replaceAt, one copy per item type (C93c); not on shaders") },
   // A hash table changed in place (C63b): std.ts's own, on a JS Map. Not on
   // WebAssembly or C: the chooser doesn't pick it for them.
-  ...Object.fromEntries(Object.entries(TABLE_OPS).map(([k, id]): [Id, Target] => [id, { js: k === "at" ? "partial" : "impl", scalar: no("a hash table is JavaScript's Map, or C's own (C63h): WebAssembly keeps the tree") }])),
-  ...Object.fromEntries(Object.values(HASH_SET_OPS).map((id): [Id, Target] => [id, { js: "impl", scalar: no("a hash set is JavaScript's Map, or C's own (C63i): WebAssembly keeps the tree") }])),
+  ...Object.fromEntries(Object.entries(TABLE_OPS).map(([k, id]): [Id, Target] => [id, { js: k === "at" ? "partial" : "impl", scalar: no("a hash table is JavaScript's Map, or C's and WebAssembly's own (C63h, C63j), lowered as its own type") }])),
+  ...Object.fromEntries(Object.values(HASH_SET_OPS).map((id): [Id, Target] => [id, { js: "impl", scalar: no("a hash set is JavaScript's Map, or C's and WebAssembly's own (C63i, C63j), lowered as its own type") }])),
   [TEXT_OPS.length]: { js: "impl", scalar: DATA },
   [TEXT_OPS.slice]: { js: "impl", scalar: DATA },
   [TEXT_OPS.characters]: { js: "impl", scalar: DATA },

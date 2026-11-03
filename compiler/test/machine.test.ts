@@ -55,7 +55,7 @@ test("machine: as WebAssembly (WASI), the same (C92)", () => {
 });
 
 // The WebAssembly takes the chooser's representations too, as `lab native`
-// does (no hash tables there): Map and Set as trees, lists as trees. primes
+// does: Map and Set as its own hash tables (C63j), lists as trees. primes
 // 5000 took 5.3 s with cons lists, about 60 ms as trees (C93).
 test("machine: its WebAssembly stores lists as trees, and agrees at a bigger size (C93)", () => {
   const t = performance.now();
