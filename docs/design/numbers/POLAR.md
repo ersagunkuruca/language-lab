@@ -62,7 +62,9 @@ of searching. This is how `polar(x = 3, y = 4)` becomes `unpolar` at the
 type's Trig, with one answer and no Choice, where the numeric solver today
 gives a Choice of angles. The checker states that the direction's ports are
 the relation's and that the direction is the one the definition declares;
-whether the two agree is a law, checked by T7 like any pair of ways.
+the law is that every answer the direction gives holds for the relation
+(SPEC §7.6): it chooses among the relation's answers, and its first is the
+canonical one in that direction (directions.test.ts checks it, L201).
 
 **Costs pick.** WAYS.md step 2 already lets a written field lose to a
 cheaper way. Float64 on JS has `Math.sin`, `Math.cos` and `Math.atan2` and
