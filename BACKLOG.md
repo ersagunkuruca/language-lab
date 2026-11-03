@@ -152,7 +152,7 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | C143 | A stop in compiled code names the node it came from: compiled JS, WebAssembly and C carry each node's id where they can stop (Abort, overflow, no answer, a hole), so `lab run` of compiled code and a page print it and the editor selects it (source maps, influence) | [ASPECTS-2026-11-03b](docs/reports/reviews/ASPECTS-2026-11-03b.md) 269 | P3 | M | |
-| C147 | A module or page printed from the core IR loads in about 200 ms, against compile.ts's 75 (wc): its bundle is 4.6 MB, of which the prelude's and trees' JSON are 3.4 MB, pulled in because run.ts imports arith.ts, whose `preludeDef` finds library definitions by name in them. Only a program that solves or looks inside a function needs them; the rest of the runtime (relate, infer, modes) is there for the same reason. Split what a printed program calls from what the solver needs, and load the second only with a solve | C137c15 (measured 2026-11-03) | P2 | M | |
+| C149 | A module or page printed from the core IR loads in about 200 ms, against compile.ts's 75 (wc): its bundle is 4.6 MB, of which the prelude's and trees' JSON are 3.4 MB, pulled in because run.ts imports arith.ts, whose `preludeDef` finds library definitions by name in them. Only a program that solves or looks inside a function needs them; the rest of the runtime (relate, infer, modes) is there for the same reason. Split what a printed program calls from what the solver needs, and load the second only with a solve | C137c15 (measured 2026-11-03) | P2 | M | |
 
 ## L: Language and library
 
