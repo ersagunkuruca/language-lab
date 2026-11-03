@@ -5,7 +5,7 @@ import { Lang } from "../../ters/src/lang/dsl.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
-import { ABORT_OP, ARRAY_OPS, CONS, LIST, FALSE, FIRST, INT_OPS, NIL, PAIR_V, RANDOM_OP, S, SECOND, SET, SHOW_ANY, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
+import { ABORT_OP, ARRAY_OPS, CONS, RATIO, LIST, FALSE, FIRST, INT_OPS, NIL, PAIR_V, RANDOM_OP, S, SECOND, SET, SHOW_ANY, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
 import { INT, NUMBER, STRING } from "../../ters/src/lang/types.ts";
 import { B } from "../../ters/src/prelude.ts";
 import type { Id } from "../../ters/src/model.ts";
@@ -19,8 +19,8 @@ function random(seed: number) {
 
 // Float64, Int, Bool, List Int, Text, a data type of three cases (Shape),
 // a record (Box), List Float64 and List Shape (C119), and a tuple
-// (Int, Float64) (C120), and an Array Int (C129).
-type Ty = "F" | "I" | "B" | "L" | "T" | "D" | "R" | "P" | "Q" | "U" | "A";
+// (Int, Float64) (C120), an Array Int (C129) and a fraction (C130).
+type Ty = "F" | "I" | "B" | "L" | "T" | "D" | "R" | "P" | "Q" | "U" | "A" | "X";
 type Scope = Record<Ty, Id[]>;
 
 export function program(seed: number, count: number, inputs: bigint[][] = []) {
@@ -62,7 +62,7 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
       const shape = r.int(12);
       if (shape === 0) return k.if(sub("B"), sub(t), sub(t));
       if (shape === 1) {
-        const u = r.pick<Ty>(["F", "I", "L", "T", "D", "R", "P", "Q", "U", "A"]);
+        const u = r.pick<Ty>(["F", "I", "L", "T", "D", "R", "P", "Q", "U", "A", "X"]);
         return k.let(fresh(), sub(u), (v) => gen(t, { ...s, [u]: [...s[u], v] }, depth - 1));
       }
       if (shape === 3) return k.match(sub("D"), [
@@ -143,6 +143,7 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
           () => call(lib("length"), r.next() < 0.5 ? sub("P") : sub("Q")),
           () => call(FIRST, sub("U")),
           () => call(ARRAY_OPS.length, sub("A")),
+          () => k.match(sub("X"), [{ variant: RATIO, names: [fresh(), fresh()], body: (tb) => r.pick(tb) }]),
           () => orElse(call(ARRAY_OPS.at, sub("A"), sub("I"))),
           () => orElse(call(ARRAY_OPS.first, sub("A"))),
           () => call(lib("item at"), sub("L"), sub("I"), sub("I")),
@@ -217,6 +218,8 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
           () => k.equal(sub("P"), sub("P")),
           () => k.equal(sub("Q"), sub("Q")),
           () => k.equal(sub("U"), sub("U")),
+          () => k.equal(sub("X"), sub("X")),
+          () => call(lib("fraction less than"), sub("X"), sub("X")),
           () => call(lib("contains"), sub("Q"), sub("D")),
           () => call(S.not, sub("B")),
           () => k.equal(sub("T"), sub("T")),
@@ -265,6 +268,8 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
           () => call(SHOW_ANY, sub("Q")),
           () => call(SHOW_ANY, sub("U")),
           () => call(SHOW_ANY, sub("A")),
+          () => call(SHOW_ANY, sub("X")),
+          () => call(lib("show fraction"), sub("X")),
           () => call(SHOW_ANY, call(lib("merge maps"), textMap(), textMap())),
           () => call(SHOW_ANY, textSet()),
           () => call(TEXT_OPS.joinAll, call(lib("keys of"), textMap()), sub("T")),
@@ -328,6 +333,21 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
           () => call(ARRAY_OPS.replaceAt, sub("A"), small(4), sub("I")),
         ])();
       }
+      case "X": {
+        // Fractions (C130): made from Ints, kept in lowest terms, a 0
+        // bottom with no answer.
+        const orElse = (e: Id) => k.call(S.first, k.thunk(() => e), k.thunk(() => sub("X")));
+        if (leaf) return call(lib("as fraction"), k.int(r.int(7) - 3));
+        return r.pick<() => Id>([
+          () => orElse(call(lib("fraction"), sub("I"), sub("I"))),
+          () => call(lib("as fraction"), sub("I")),
+          () => call(lib("add fractions"), sub("X"), sub("X")),
+          () => call(lib("subtract fractions"), sub("X"), sub("X")),
+          () => call(lib("multiply fractions"), sub("X"), sub("X")),
+          () => call(lib("negate fraction"), sub("X")),
+          () => orElse(call(lib("divide fractions"), sub("X"), sub("X"))),
+        ])();
+      }
       case "U": {
         if (leaf) return call(PAIR_V, k.int(r.int(5) - 2), k.lit(r.pick([0, 0.5, -3])));
         return r.pick<() => Id>([
@@ -355,7 +375,7 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
     k.define(h, k.fn(["b", "s", "m"], (b, s0, m) =>
       k.let("c0", call(Box.f["box.count"], b), (c0) =>
         k.let("m0", call(INT_OPS.add, m, k.int(0)), (m0) => {
-          const sc = (more: Partial<Scope> = {}): Scope => ({ F: [...(more.F ?? [])], I: [c0, m0, ...(more.I ?? [])], L: [], B: [], T: [], D: [s0], R: [b], P: [], Q: [], U: [], A: [] });
+          const sc = (more: Partial<Scope> = {}): Scope => ({ F: [...(more.F ?? [])], I: [c0, m0, ...(more.I ?? [])], L: [], B: [], T: [], D: [s0], R: [b], P: [], Q: [], U: [], A: [], X: [] });
           return k.match(s0, [
             { variant: shape_.dot, names: [], body: () => gen("I", sc(), 3) },
             { variant: shape_.circle, names: [fresh()], body: ([rad]) => gen("I", sc({ F: [rad] }), 3) },
@@ -370,9 +390,9 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
   for (let i = 0; i < 4; i++) {
     const h = k.def(`rec${i}`);
     k.define(h, k.fn(["xs", "a"], (xs, a) => k.match(xs, [
-      { variant: NIL, names: [], body: () => gen("I", { F: [], I: [a], L: [], B: [], T: [], D: [], R: [], P: [], Q: [], U: [], A: [] }, 2) },
-      { variant: CONS, names: [fresh(), fresh()], body: ([hd, tl]) => k.let(fresh(), call(h, tl, gen("I", { F: [], I: [a, hd], L: [tl], B: [], T: [], D: [], R: [], P: [], Q: [], U: [], A: [] }, 2)), (got) =>
-        gen("I", { F: [], I: [got, hd, a], L: [tl], B: [], T: [], D: [], R: [], P: [], Q: [], U: [], A: [] }, 2)) },
+      { variant: NIL, names: [], body: () => gen("I", { F: [], I: [a], L: [], B: [], T: [], D: [], R: [], P: [], Q: [], U: [], A: [], X: [] }, 2) },
+      { variant: CONS, names: [fresh(), fresh()], body: ([hd, tl]) => k.let(fresh(), call(h, tl, gen("I", { F: [], I: [a, hd], L: [tl], B: [], T: [], D: [], R: [], P: [], Q: [], U: [], A: [], X: [] }, 2)), (got) =>
+        gen("I", { F: [], I: [got, hd, a], L: [tl], B: [], T: [], D: [], R: [], P: [], Q: [], U: [], A: [], X: [] }, 2)) },
     ])));
     recursive.push(h);
   }
@@ -398,14 +418,14 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
   const defs: { def: Id; result: Ty }[] = [];
   for (let i = 0; i < count; i++) {
     calls = false;
-    const result = r.pick<Ty>(["F", "I", "B", "L", "T", "D", "R", "P", "Q", "U", "A"]), def = k.def(`g${i}`);
+    const result = r.pick<Ty>(["F", "I", "B", "L", "T", "D", "R", "P", "Q", "U", "A", "X"]), def = k.def(`g${i}`);
     // Its inputs are a Float64, an Int and a List Int: each used once
     // first, so its type is that whatever the body does.
     k.define(def, k.fn(["x", "n", "xs"], (x, n, xs) =>
       k.let("x0", call(B.add, x, k.lit(0)), (x0) =>
         k.let("n0", call(INT_OPS.add, n, k.int(0)), (n0) =>
           k.let("xs0", call(lib("append"), xs, k.list(n0)), (xs0) =>
-            call(SHOW_ANY, gen(result, { F: [x0], I: [n0], L: [xs0], B: [], T: [], D: [], R: [], P: [], Q: [], U: [], A: [] }, 4)))))));
+            call(SHOW_ANY, gen(result, { F: [x0], I: [n0], L: [xs0], B: [], T: [], D: [], R: [], P: [], Q: [], U: [], A: [], X: [] }, 4)))))));
     defs.push({ def, result });
     if (!calls) callable.push(def);
   }
