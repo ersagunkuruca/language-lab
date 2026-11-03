@@ -326,7 +326,8 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
     if (lam?.kind !== "lambda") throw new Error(`${names[useTarget(nodes, n)] ?? useTarget(nodes, n)} is given by ${names[target] ?? target}, which isn't a definition of its ports`);
     const key = (k: string) => (k === "out" ? k : lam.params[Number(k)]);
     const re = (r: Record<string, Id>) => Object.fromEntries(Object.entries(r).map(([k, v]) => [key(k), v]));
-    nodes[id] = { ...n, fn: target, given: re(n.given), binds: re(n.binds) };
+    nodes[id] = { ...n, given: re(n.given), binds: re(n.binds) };
+    nodes[n.fn] = { id: n.fn, kind: "ref", target };
   };
 
   // A relational solve of a generic definition runs it at the types the
@@ -344,7 +345,8 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
     if (from?.kind !== "lambda" || to?.kind !== "lambda") return;
     const key = (k: string) => (k === "out" ? k : to.params[from.params.indexOf(k)] ?? k);
     const re = (r: Record<string, Id>) => Object.fromEntries(Object.entries(r).map(([k, v]) => [key(k), v]));
-    nodes[id] = { ...n, fn: target, given: re(n.given), binds: re(n.binds) };
+    nodes[id] = { ...n, given: re(n.given), binds: re(n.binds) };
+    nodes[n.fn] = { id: n.fn, kind: "ref", target };
   };
 
   // Resolve every use under `root`, at these types.

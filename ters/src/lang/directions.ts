@@ -48,7 +48,7 @@ export function directionProblem(code: Code, d: Id, nm: (id: Id) => string): str
 // of the same interface over the same ports, reading them the other way, is
 // its other direction (Trig's polar and unpolar, POLAR.md step 3). Ports
 // are positions there, so only the function changes.
-function fieldDirection(code: Code, n: Use, f: NodeOf<"field">): Use | null {
+function fieldDirection(code: Code, n: Use, f: NodeOf<"field">): Retargeted | null {
   const given = Object.keys(n.given).filter((k) => k !== "out").map(Number);
   const reads = (g: NodeOf<"field">) => {
     const ty = code.nodes[g.type];
@@ -60,14 +60,18 @@ function fieldDirection(code: Code, n: Use, f: NodeOf<"field">): Use | null {
   const ports = (g: NodeOf<"field">) => (g.ports ?? []).join();
   for (const id of v?.fields ?? []) {
     const g = code.nodes[id];
-    if (g?.kind === "field" && g.results && id !== f.id && g.ports && ports(g) === ports(f) && reads(g)) return { ...n, fn: id };
+    if (g?.kind === "field" && g.results && id !== f.id && g.ports && ports(g) === ports(f) && reads(g)) return { use: n, target: id };
   }
   return null;
 }
 
+// A use rewritten to run another relation: its ports renamed for that one
+// (`use`), and the relation its ref then points at (`target`).
+type Retargeted = { use: Use; target: Id };
+
 // The solve rewritten onto the direction that its given ports ask for, or
 // null when none does (the relation is then solved as it always was).
-export function directionFor(code: Code, n: Use, ways = directionsIn(code)): Use | null {
+export function directionFor(code: Code, n: Use, ways = directionsIn(code)): Retargeted | null {
   const f = code.nodes[useTarget(code.nodes, n)];
   if (f?.kind === "field" && f.results) return fieldDirection(code, n, f);
   const ds = ways.get(useTarget(code.nodes, n));
@@ -82,7 +86,7 @@ export function directionFor(code: Code, n: Use, ways = directionsIn(code)): Use
     if (ins.length !== given.size || !ins.every((i) => given.has(i))) continue;
     const key = (k: string) => (k === "out" ? k : mine[theirs.indexOf(k)]);
     const re = (r: Record<string, Id>) => Object.fromEntries(Object.entries(r).map(([k, v]) => [key(k), v]));
-    return { ...n, fn: d, given: re(n.given), binds: re(n.binds) };
+    return { use: { ...n, given: re(n.given), binds: re(n.binds) }, target: d };
   }
   return null;
 }
@@ -97,7 +101,11 @@ export function useDirections(code: Code): Code {
     const n = code.nodes[id] as Use;
     if (!asked(n)) continue;
     const r = directionFor(code, n, ways);
-    if (r) { (nodes ??= { ...code.nodes })[n.id] = r; rewritten.push(n.id); }
+    if (!r) continue;
+    nodes ??= { ...code.nodes };
+    nodes[n.id] = r.use;
+    nodes[n.fn] = { id: n.fn, kind: "ref", target: r.target };
+    rewritten.push(n.id, n.fn);
   }
   if (!nodes) return code;
   // Derived from this program by the solves rewritten, so a scan of the
