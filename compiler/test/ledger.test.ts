@@ -1,7 +1,7 @@
 // ledger (ters/examples/ledger), GAPS.md round 3's program, built
-// in the editor by clicks: the evaluator, the compiled code and the
-// hand-written ideal must print the same and exit the same way, failures
-// included.
+// in the editor by clicks: the evaluator, the compiled code, the core IR's
+// JavaScript and the hand-written ideal must print the same and exit the
+// same way, failures included.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -11,6 +11,7 @@ const w = await ways();
 const all = (args: string[], files: Record<string, string>) => {
   const want = w.ideal(args, files);
   assert.deepEqual(w.compiled(args, files), want);
+  assert.deepEqual(w.core(args, files), want);
   assert.deepEqual(w.evaluator(args, files), want);
   return want;
 };

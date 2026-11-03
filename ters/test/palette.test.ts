@@ -12,7 +12,7 @@ import { checkOptions, loadProgram } from "../src/lang/load.ts";
 import { pinsOf } from "../src/lang/signatures.ts";
 import { showType, type Type } from "../src/lang/types.ts";
 import { fillHole } from "../src/lang/refactor.ts";
-import { sweep } from "./helpers.ts";
+import { capped, sweep } from "./helpers.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { base } from "../src/lang/load.ts";
 import { B } from "../src/prelude.ts";
@@ -24,11 +24,12 @@ for (const name of ["calculus", "backwards", "queens"]) {
     // made this a half-hour run, each filling a whole check.
     const calls = Object.values(p.own.nodes).filter((n): n is Call => isCall(n) && n.args.length > 0);
     const bad: string[] = [];
-    for (const c of sweep(calls.filter((_, i) => i % 9 === 0))) {
+    // Eight calls a change, ten fillings each (T12); all of them nightly.
+    for (const c of capped(sweep(calls.filter((_, i) => i % 9 === 0)), 8)) {
       const hole = c.args[0];
       const code = replace(p.code, hole, () => ({ kind: "hole" }));
       const info = infer(code);
-      for (const f of fillings(code, info, hole)) {
+      for (const f of capped(fillings(code, info, hole), 10)) {
         if (infer(fillHole(code, {}, hole, f).code).errors.length > info.errors.length) bad.push(`${hole}: ${JSON.stringify(f)}`);
       }
     }
