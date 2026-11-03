@@ -9,7 +9,7 @@
 // "<original>~<call>", so it can't be edited by accident, and a call inside
 // it can be shown inline too.
 
-import { subtree, type Code, type Id, type Node } from "../ters/src/model.ts";
+import { isCall, subtree, type Call, type Code, type Id, type Node } from "../ters/src/model.ts";
 import type { Names } from "../ters/src/presentation.ts";
 
 export interface InlineView {
@@ -23,7 +23,7 @@ export interface InlineView {
 // body is a function.
 export function inlinable(code: Code, call: Id): Id | null {
   const c = code.nodes[call];
-  if (c?.kind !== "call") return null;
+  if (!isCall(c)) return null;
   const f = code.nodes[c.fn];
   if (f?.kind !== "ref") return null;
   const d = code.nodes[f.target];

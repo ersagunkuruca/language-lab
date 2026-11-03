@@ -10,7 +10,7 @@ import { children, collect, freshId, parentAt, parentOf, replace, subtree, swapI
 import type { Names, Notation, Presentation } from "../ters/src/presentation.ts";
 import blocksStyle from "../ters/styles/blocks.json" with { type: "json" };
 import { fillings, implementationKey, infer as check, type Filling, type Info } from "../ters/src/lang/infer.ts";
-import { isPublished, isUse, useNode, useTarget, type Use } from "../ters/src/model.ts";
+import { isCall, isPublished, isUse, useNode, useTarget, type Call, type Use } from "../ters/src/model.ts";
 import { LIBRARY, PRELUDE, TREES } from "../ters/src/lang/library.ts";
 import { B } from "../ters/src/prelude.ts";
 import { pinsOf, type Pins } from "../ters/src/lang/signatures.ts";
@@ -80,7 +80,7 @@ export const typeOf = (info: Info | null, id: Id, names: Names): string | null =
 // "as float64 : (Fixed) -> Float64" (E223). Null for a name only one has.
 const sharedNames = new WeakMap<Names, Map<string, number>>();
 export function tookType(code: Code, info: Info | null, names: Names, id: Id): string | null {
-  const n = code.nodes[id], f = n?.kind === "call" ? code.nodes[n.fn] : n;
+  const n = code.nodes[id], f = isCall(n) ? code.nodes[n.fn] : n;
   const name = f?.kind === "ref" ? names[f.target] : undefined;
   if (!info || f?.kind !== "ref" || !name) return null;
   let m = sharedNames.get(names);
@@ -102,7 +102,7 @@ export function renderTyped(code: Code, pres: Presentation, info: Info | null, d
   const errorAt = new Map((info?.errors ?? []).map((e) => [e.id, e.message]));
   const cls = (id: Id | undefined, c: string | undefined) => (id ? `x ${c ?? ""}${selected === id ? " sel" : ""}${errorAt.has(id) ? " err" : ""}` : c);
   const title = (id: Id | undefined, more?: string) => {
-    const took = id && code.nodes[id]?.kind === "call" ? tookType(code, info, pres.names, id) : null;
+    const took = id && isCall(code.nodes[id]) ? tookType(code, info, pres.names, id) : null;
     const said = id ? errorAt.get(id) ?? ([ownTypeOf(id), took].filter(Boolean).join("\n") || undefined) : undefined;
     return said && more ? `${said}\n\n${more}` : said ?? more;
   };
@@ -407,7 +407,7 @@ function overloaded(t: Typed, names: Names): string[] {
 export function whyNotHere(code: Code, names: Names, info: Info, hole: Id, text: string): string | null {
   const all = { ...display, ...names };
   const target = Object.keys(all).find((d) => all[d] === text.trim() && code.nodes[d]);
-  if (!target || !Object.values(code.nodes).some((n) => n.kind === "call" && n.fn === hole)) return null;
+  if (!target || !Object.values(code.nodes).some((n) => isCall(n) && n.fn === hole)) return null;
   const r = fill(code, names, info, hole, { kind: "ref", target, type: { t: "var", v: -1 } }, text.trim());
   return r.ok ? null : `${text.trim()} doesn't fit here: ${r.reason}`;
 }
@@ -418,7 +418,7 @@ export function whyNotHere(code: Code, names: Names, info: Info, hole: Id, text:
 // onto a list written out needs none: it already reads [x, a].)
 export function simplify(code: Code, names: Names, info: Info, id: Id): TEdit | null {
   const n = code.nodes[id];
-  if (n?.kind !== "call" || n.args.length !== 2) return null;
+  if (!isCall(n) || n.args.length !== 2) return null;
   const f = code.nodes[n.fn];
   if (f?.kind !== "ref" || !isPublished(f.target) || ({ ...display, ...names })[f.target] !== "append") return null;
   // A list written out: its cons cells, and the nil that ends them.
@@ -427,7 +427,7 @@ export function simplify(code: Code, names: Names, info: Info, id: Id): TEdit | 
     for (let at = l; ; ) {
       const c = code.nodes[at];
       if (c?.kind === "ref" && c.target === NIL) return { cells: out, nil: at };
-      if (c?.kind !== "call" || (code.nodes[c.fn] as NodeOf<"ref">)?.target !== CONS) return null;
+      if (!isCall(c) || (code.nodes[c.fn] as NodeOf<"ref">)?.target !== CONS) return null;
       out.push(at);
       at = c.args[1];
     }
@@ -438,7 +438,7 @@ export function simplify(code: Code, names: Names, info: Info, id: Id): TEdit | 
   if (a && !a.cells.length) { root = back; gone = [front]; next = code; }
   else if (b && !b.cells.length) { root = front; gone = [back]; next = code; }
   else if (a && b) {
-    const last = code.nodes[a.cells.at(-1)!] as NodeOf<"call">;
+    const last = code.nodes[a.cells.at(-1)!] as Call;
     next = { ...code, nodes: { ...code.nodes, [last.id]: { ...last, args: [last.args[0], back] } } };
     root = front; gone = [a.nil];
   } else return null;
@@ -1056,7 +1056,7 @@ export function toHole(code: Code, names: Names, info: Info, id: Id): TEdit {
 // a function of nothing goes, as () => the part. One edit with the fill.
 export function wrapInto(code: Code, names: Names, before: Info, at: Id, kept: Code, inserted = false): TEdit {
   const wrapper = code.nodes[at];
-  const slots = wrapper?.kind === "call" ? wrapper.args : wrapper?.kind === "lambda" ? [wrapper.body] : [];
+  const slots = isCall(wrapper) ? wrapper.args : wrapper?.kind === "lambda" ? [wrapper.body] : [];
   const open = slots.filter((x) => code.nodes[x]?.kind === "hole");
   if (!open.length) return { ok: false, reason: "that has no empty input to put it in" };
   const part = freshId();
@@ -1454,7 +1454,7 @@ export function useVar(code: Code, names: Names, info: Info, defId: Id, binder: 
 function spreadInto(code: Code, names: Names, info: Info, binder: Id, slot: Id): TEdit | null {
   const t = info.typeOf.get(binder), z = t && info.subst.zonk(t);
   const at = parentOf(code, slot), p = at && code.nodes[at.parent];
-  if (z?.t !== "con" || !/^std\.tuple\d$/.test(z.id) || p?.kind !== "call" || !p.args.includes(slot)) return null;
+  if (z?.t !== "con" || !/^std\.tuple\d$/.test(z.id) || !isCall(p) || !p.args.includes(slot)) return null;
   if (p.args.length !== z.args.length || p.args.some((a) => code.nodes[a]?.kind !== "hole")) return null;
   const r = freshId();
   const next = collect(replace({ ...code, nodes: { ...code.nodes, [r]: { id: r, kind: "ref", target: binder } } }, p.id, () => ({ kind: "call", fn: p.fn, args: [r] })));
@@ -1472,7 +1472,7 @@ function spreadInto(code: Code, names: Names, info: Info, binder: Id, slot: Id):
 // when what reads it no longer type-checks (a Choice where one value was).
 export function turnable(code: Code, call: Id): { def: NodeOf<"def">; params: Id[] } | null {
   const n = code.nodes[call];
-  if (n?.kind !== "call") return null;
+  if (!isCall(n)) return null;
   const f = code.nodes[n.fn];
   const d = f?.kind === "ref" ? code.nodes[f.target] : null;
   if (d?.kind !== "def" || !d.body || d.results?.length) return null;
@@ -1487,7 +1487,7 @@ export function turnable(code: Code, call: Id): { def: NodeOf<"def">; params: Id
 // menu leaves out the turns this rules out; it's cheap, from the types.
 export function turnMismatch(code: Code, names: Names, info: Info | null, call: Id, k: number): string | null {
   const t = turnable(code, call), n = code.nodes[call];
-  if (!t || n?.kind !== "call") return null;
+  if (!t || !isCall(n)) return null;
   const res = typeOf(info, call, names), inp = typeOf(info, n.args[k], names);
   if (!res || !inp || res === inp) return null;
   const nm = (id: Id) => names[id] ?? display[id] ?? "it";
@@ -1498,7 +1498,7 @@ const an = (t: string) => (/^[AEIOU]/.test(t) ? `an ${t}` : `a ${t}`);
 export function turnAround(code: Code, names: Names, info: Info, call: Id, k: number): TEdit {
   const t = turnable(code, call);
   if (!t) return { ok: false, reason: "only a call of a definition with one result can be turned around" };
-  const n = code.nodes[call] as NodeOf<"call">;
+  const n = code.nodes[call] as Call;
   if (n.args.some((a) => code.nodes[a]?.kind === "hole")) return { ok: false, reason: "fill its inputs first: the one turned becomes the result given, the others stay given" };
   const mismatch = turnMismatch(code, names, info, call, k);
   if (mismatch) return { ok: false, reason: mismatch };
@@ -1549,16 +1549,16 @@ export function turnBack(code: Code, names: Names, info: Info, solve: Id): TEdit
 // names.json like any other, so it can have none; then the views show a
 // handle (•1, •2) that is never stored.
 
-const lets = (code: Code, defId: Id): NodeOf<"call">[] => {
-  const out: NodeOf<"call">[] = [];
+const lets = (code: Code, defId: Id): Call[] => {
+  const out: Call[] = [];
   const def = code.nodes[defId] as NodeOf<"def">;
   const stack = def.body ? [def.body] : [];
   while (stack.length) {
     const n = code.nodes[stack.pop()!];
     if (!n) continue;
     if (isUse(n)) { stack.push(n.body, ...Object.values(n.given).reverse()); continue; }
-    if (n.kind === "call" && code.nodes[n.fn]?.kind === "lambda") out.push(n);
-    if (n.kind === "call") stack.push(...[...n.args, n.fn].reverse());
+    if (isCall(n) && code.nodes[n.fn]?.kind === "lambda") out.push(n);
+    if (isCall(n)) stack.push(...[...n.args, n.fn].reverse());
     else if (n.kind === "lambda") stack.push(n.body);
     else if (n.kind === "match" || n.kind === "fold") stack.push(...(n.kind === "match" && n.otherwise ? [n.otherwise] : []), ...[...n.arms].reverse(), n.scrutinee);
     else if (n.kind === "arm") stack.push(n.body);
@@ -1704,7 +1704,7 @@ export function makeFunction(code: Code, names: Names, info: Info, defId: Id, me
     if (!n) return;
     order.push(id);
     const cs = children(n);
-    (n.kind === "call" && code.nodes[n.fn]?.kind === "lambda" ? [...n.args, n.fn] : cs).forEach(walk);
+    (isCall(n) && code.nodes[n.fn]?.kind === "lambda" ? [...n.args, n.fn] : cs).forEach(walk);
   };
   walk(defId);
   const roots = [...region].filter((m) => kinds.includes(code.nodes[m].kind) && !region.has(parent(m) ?? "")).sort((x, y) => order.indexOf(x) - order.indexOf(y));
@@ -1766,7 +1766,7 @@ export function makeFunction(code: Code, names: Names, info: Info, defId: Id, me
     const mk = freshId(), cref = freshId();
     nodes[cref] = { id: cref, kind: "ref", target: tupleVariant(n) };
     nodes[mk] = { id: mk, kind: "call", fn: cref, args: roots };
-    const outNames = roots.map((r, i) => { const at_ = parentOf(code, r); const l = at_ && code.nodes[at_.parent]; const f = l?.kind === "call" && code.nodes[l.fn]?.kind === "lambda" ? (code.nodes[l.fn] as NodeOf<"lambda">).params[at_!.index ?? 0] : undefined; return f && names[f] && names[f] !== "_" ? names[f] : `value ${i + 1}`; });
+    const outNames = roots.map((r, i) => { const at_ = parentOf(code, r); const l = at_ && code.nodes[at_.parent]; const f = isCall(l) && code.nodes[l.fn]?.kind === "lambda" ? (code.nodes[l.fn] as NodeOf<"lambda">).params[at_!.index ?? 0] : undefined; return f && names[f] && names[f] !== "_" ? names[f] : `value ${i + 1}`; });
     const results = roots.map(() => freshId());
     results.forEach((b, i) => { nodes[b] = { id: b, kind: "binder" }; nn[b] = outNames[i]; });
     nodes[lam] = { id: lam, kind: "lambda", params, body: mk, results };
@@ -1783,7 +1783,7 @@ export function makeFunction(code: Code, names: Names, info: Info, defId: Id, me
   } else {
     // The record: Part results, one field per value out, named for where
     // it went (drift, drop) or by its place.
-    const names_ = roots.map((r, i) => { const at_ = parentOf(code, r); const l = at_ && code.nodes[at_.parent]; const f = l?.kind === "call" && code.nodes[l.fn]?.kind === "lambda" ? (code.nodes[l.fn] as NodeOf<"lambda">).params[at_!.index ?? 0] : undefined; return f && names[f] && names[f] !== "_" ? names[f] : `value ${i + 1}`; });
+    const names_ = roots.map((r, i) => { const at_ = parentOf(code, r); const l = at_ && code.nodes[at_.parent]; const f = isCall(l) && code.nodes[l.fn]?.kind === "lambda" ? (code.nodes[l.fn] as NodeOf<"lambda">).params[at_!.index ?? 0] : undefined; return f && names[f] && names[f] !== "_" ? names[f] : `value ${i + 1}`; });
     const { nodes, add } = { nodes: next.nodes, add: (n: NodeData) => { const id = freshId(); nodes[id] = { ...n, id } as Node; return id; } };
     const build = (t: { target: Id; args: unknown[] }): Id => add({ kind: "tref", target: t.target, args: (t.args as { target: Id; args: unknown[] }[]).map(build) });
     fields.forEach((f, i) => { nodes[f] = { id: f, kind: "field", type: build(types[i]!) }; nn[f] = names_[i]; });
@@ -1818,7 +1818,7 @@ export function makeFunction(code: Code, names: Names, info: Info, defId: Id, me
   // and in4 (BACKLOG I131).
   const fills = (x: Id): string | undefined => {
     const at = parentOf(code, x), c = at && code.nodes[at.parent];
-    if (at?.slot !== "args" || c?.kind !== "call") return undefined;
+    if (at?.slot !== "args" || !isCall(c)) return undefined;
     const f = code.nodes[c.fn], d = f?.kind === "ref" ? code.nodes[f.target] : undefined;
     const lam = d?.kind === "def" && d.body ? code.nodes[d.body] : undefined;
     const q = lam?.kind === "lambda" ? lam.params[at.index ?? 0] : undefined;
@@ -1850,7 +1850,7 @@ export function addStep(code: Code, names: Names, info: Info, defId: Id, before?
   const top = def?.body ? code.nodes[def.body] : null;
   if (!top) return { ok: false, reason: "this definition has no body yet: fill it first" };
   if (top.kind === "typedef") return { ok: false, reason: "a data type has no steps; add a case or a field instead" };
-  if (before !== undefined && (!["lit", "ref", "call", "lambda", "match", "fold", "hole"].includes(code.nodes[before]?.kind) || !subtree(code, defId).includes(before)))
+  if (before !== undefined && (!["lit", "ref", "call", "lambda", "match", "fold", "hole"].includes(code.nodes[before]?.kind) || isUse(code.nodes[before]) || !subtree(code, defId).includes(before)))
     return { ok: false, reason: "a step goes before a value of this definition" };
   const at = (before !== undefined ? stepAround(code, defId, before) : null) ?? (top.kind === "lambda" ? top.body : def.body!);
   const dot = freshId(), hole = freshId(), lam = freshId(), let_ = freshId();
@@ -1875,11 +1875,11 @@ export function performs(info: Info, lam: Id): boolean {
 export function addActionStep(code: Code, names: Names, info: Info, step: Id): TEdit {
   const one = (id: Id | undefined) => { const n = id ? code.nodes[id] : undefined; return n?.kind === "lambda" && n.params.length === 1; };
   const at = parentOf(code, step), p = at ? code.nodes[at.parent] : undefined;
-  const x = at?.slot === "args" && p?.kind === "call" && p.args.length === 1 && one(p.fn) ? p.id
-    : at?.slot === "body" && one(at.parent) && Object.values(code.nodes).some((c) => c.kind === "call" && c.fn === at.parent && c.args.length === 1) ? step
+  const x = at?.slot === "args" && isCall(p) && p.args.length === 1 && one(p.fn) ? p.id
+    : at?.slot === "body" && one(at.parent) && Object.values(code.nodes).some((c) => isCall(c) && c.fn === at.parent && c.args.length === 1) ? step
     // A function whose whole body is one action, (e) => write(a, x): its
     // first step (E190).
-    : at?.slot === "body" && p?.kind === "lambda" && code.nodes[step]?.kind === "call" && performs(info, p.id) ? step
+    : at?.slot === "body" && p?.kind === "lambda" && isCall(code.nodes[step]) && performs(info, p.id) ? step
     : null;
   if (!x) return { ok: false, reason: "it isn't a step of an action" };
   const b = freshId(), hole = freshId(), lam = freshId(), let_ = freshId();
@@ -2040,14 +2040,14 @@ export function implement(code: Code, names: Names, info: Info, iface: Id, type:
 
 export interface Row { kind: "list" | "chain"; root: Id; op?: Id; items: Id[]; spine: Id[] }
 
-const consOf = (code: Code, id: Id): NodeOf<"call"> | null => {
+const consOf = (code: Code, id: Id): Call | null => {
   const n = code.nodes[id];
-  const f = n?.kind === "call" ? code.nodes[n.fn] : undefined;
-  return n?.kind === "call" && f?.kind === "ref" && f.target === CONS && n.args.length === 2 ? n : null;
+  const f = isCall(n) ? code.nodes[n.fn] : undefined;
+  return isCall(n) && f?.kind === "ref" && f.target === CONS && n.args.length === 2 ? n : null;
 };
 const opOf = (code: Code, id: Id): Id | null => {
   const n = code.nodes[id];
-  const f = n?.kind === "call" && n.args.length === 2 ? code.nodes[n.fn] : undefined;
+  const f = isCall(n) && n.args.length === 2 ? code.nodes[n.fn] : undefined;
   return f?.kind === "ref" && ASSOCIATIVE.has(f.target) ? f.target : null;
 };
 
@@ -2068,7 +2068,7 @@ export function rowAt(code: Code, root: Id): Row | null {
   const op = opOf(code, root);
   if (!op) return null;
   const items: Id[] = [];
-  const walk = (a: Id) => { if (a !== root && opOf(code, a) !== op) items.push(a); else for (const b of (code.nodes[a] as NodeOf<"call">).args) walk(b); };
+  const walk = (a: Id) => { if (a !== root && opOf(code, a) !== op) items.push(a); else for (const b of (code.nodes[a] as Call).args) walk(b); };
   walk(root);
   return { kind: "chain", root, op, items, spine: [] };
 }
@@ -2138,7 +2138,7 @@ export function removeItem(code: Code, names: Names, info: Info, row: Row, at: n
   } else {
     const item = row.items[at];
     const up = parentOf(code, item)!;
-    const pair = code.nodes[up.parent] as NodeOf<"call">;
+    const pair = code.nodes[up.parent] as Call;
     if (!parentOf(code, up.parent)) return { ok: false, reason: "this has nowhere to put what's left" };
     next = swapIn(code, up.parent, pair.args[up.index === 0 ? 1 : 0]);
   }
@@ -2164,7 +2164,7 @@ export function moveItemTo(code: Code, names: Names, info: Info, row: Row, from:
   const places = row.items.map((i) => parentOf(code, i)!);
   const next: Code = { nodes: { ...code.nodes }, defs: code.defs };
   places.forEach((p, i) => {
-    const n = next.nodes[p.parent] as NodeOf<"call">;
+    const n = next.nodes[p.parent] as Call;
     const args = [...n.args];
     args[p.index!] = order[i];
     next.nodes[p.parent] = { ...n, args };
@@ -2260,7 +2260,7 @@ export function liftToDefinition(code: Code, names: Names, info: Info, defId: Id
   }
   // Its name: what it's bound to (part = (z) => …), else the definition's.
   const at = parentOf(code, lam), p = at && code.nodes[at.parent];
-  const boundTo = at?.slot === "args" && p?.kind === "call" && code.nodes[p.fn]?.kind === "lambda" ? (code.nodes[p.fn] as NodeOf<"lambda">).params[at.index!] : undefined;
+  const boundTo = at?.slot === "args" && isCall(p) && code.nodes[p.fn]?.kind === "lambda" ? (code.nodes[p.fn] as NodeOf<"lambda">).params[at.index!] : undefined;
   const taken = new Set(code.defs.map((x) => names[x] ?? display[x]));
   const base = (boundTo && names[boundTo] && names[boundTo] !== "_" ? names[boundTo] : `${names[defId] ?? "a"} part`);
   let label = base;
@@ -2303,8 +2303,8 @@ export function liftToDefinition(code: Code, names: Names, info: Info, defId: Id
   next.nodes[def] = { id: def, kind: "def", body };
   // part = (z) => … made a definition part leaves part = part behind:
   // the value goes, and its uses read the definition.
-  if (!used.length && boundTo && p?.kind === "call") {
-    const let_ = next.nodes[p.id] as NodeOf<"call">, bl = next.nodes[let_.fn] as NodeOf<"lambda">, i = bl.params.indexOf(boundTo);
+  if (!used.length && boundTo && isCall(p)) {
+    const let_ = next.nodes[p.id] as Call, bl = next.nodes[let_.fn] as NodeOf<"lambda">, i = bl.params.indexOf(boundTo);
     for (const u of usesOf(next, boundTo)) next.nodes[u] = { ...(next.nodes[u] as NodeOf<"ref">), target: def };
     next.nodes[bl.id] = { ...bl, params: bl.params.filter((_, j) => j !== i) };
     next.nodes[let_.id] = { ...let_, args: let_.args.filter((_, j) => j !== i) };

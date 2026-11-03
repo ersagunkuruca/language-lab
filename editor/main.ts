@@ -16,7 +16,7 @@ import mathStyle from "../ters/styles/math.json" with { type: "json" };
 import plainStyle from "../ters/styles/plain.json" with { type: "json" };
 import lispStyle from "../ters/styles/lisp.json" with { type: "json" };
 import { hashDef } from "../ters/src/hash.ts";
-import { children, freshId, get, ID_PATTERN, isPublished, isUse, useTarget, merge, parentOf, resolveRefs, subtree, type Code, type Id, type Node, type NodeOf } from "../ters/src/model.ts";
+import { children, freshId, get, ID_PATTERN, isCall, isPublished, isUse, useTarget, type Call, merge, parentOf, resolveRefs, subtree, type Code, type Id, type Node, type NodeOf } from "../ters/src/model.ts";
 import { INT } from "../ters/src/lang/types.ts";
 import { formatUnit, infer as unitInfer, NAMED, type Unit } from "../ters/src/units.ts";
 import { layer, type Comments, type Hints, type Names, type Presentation, type Style } from "../ters/src/presentation.ts";
@@ -797,7 +797,7 @@ function calleeDef(id: Id): Id | null {
   if (!n) return null;
   let t: Id | null = null;
   if (isUse(n)) t = useTarget(doc.code.nodes, n);
-  else if (n.kind === "call") { const fn = node(n.fn); t = fn?.kind === "ref" ? fn.target : null; }
+  else if (isCall(n)) { const fn = node(n.fn); t = fn?.kind === "ref" ? fn.target : null; }
   else if (n.kind === "ref") t = n.target;
   return t && node(t)?.kind === "def" ? t : null;
 }
@@ -956,7 +956,7 @@ function seedOf(info: T.Info, def: Id): string[] | null {
     if (n?.kind === "lit") return typeof n.value === "number" || /^-?\d+$/.test(n.value) ? String(n.value) : JSON.stringify(n.value);
     if (n?.kind === "ref") return n.target === TRUE ? "true" : n.target === FALSE ? "false" : n.target === NIL ? "[]" : null;
     const items: string[] = [];
-    for (let m: Node | undefined = n; m?.kind === "call"; ) {
+    for (let m: Node | undefined = n; isCall(m); ) {
       const f = nodes[m.fn];
       if (f?.kind !== "ref" || f.target !== CONS || m.args.length !== 2) return null;
       const t = text(m.args[0]);
@@ -969,7 +969,7 @@ function seedOf(info: T.Info, def: Id): string[] | null {
     return null;
   };
   for (const n of Object.values(nodes)) {
-    if (n.kind !== "call") continue;
+    if (!isCall(n)) continue;
     const f = nodes[n.fn];
     if (f?.kind !== "ref" || f.target !== def) continue;
     const args = n.args.map(text);
@@ -1439,7 +1439,7 @@ function kindLabel(id: Id): string {
   if (n.kind === "binder" && isTypeParam(id)) return "Type parameter";
   if (n.kind === "binder") return T.isDot(doc.code, ui.def, id) ? "Dot" : "Variable";
   if (n.kind === "def") return "Definition";
-  if (n.kind === "call") return node(n.fn)?.kind === "lambda" ? "Let" : implementationOps(doc.code, n.fn) ? "Implementation" : "Step (call)";
+  if (isCall(n)) return node(n.fn)?.kind === "lambda" ? "Let" : implementationOps(doc.code, n.fn) ? "Implementation" : "Step (call)";
   if (n.kind === "field" && isOperation(doc.code, id)) return "Operation";
   return ({ lit: "Literal", ref: "Reference", lambda: "Function", hole: "Hole", builtin: "Builtin", match: "Match", fold: "Fold", arm: "Arm", variant: "Case", field: "Field", solve: "Solve" } as Record<string, string>)[n.kind] ?? n.kind;
 }
@@ -1622,7 +1622,7 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
   // since the hole's type alone doesn't (BACKLOG E153).
   const up = hole ? parentsOf(doc.code).get(id) ?? null : null;
   const upn = up?.slot === "args" ? node(up.parent) : null;
-  const ops = upn?.kind === "call" ? implementationOps(doc.code, upn.fn) : null;
+  const ops = isCall(upn) ? implementationOps(doc.code, upn.fn) : null;
   const at = ops ? /^(\S+) (.+)$/.exec(T.typeOf(info, up!.parent, names) ?? "") : null;
   if (ops && at && up?.index !== undefined) out.append(h("p", { class: "hint" }, `This is ${names[ops[up.index]] ?? "an operation"} at ${at[2]}: what ${at[1]}'s ${names[ops[up.index]] ?? "operation"} does for a ${at[2]}. Write it as a function, or pick one that fits.`));
   else if (t) out.append(h("div", { class: "typeline" }, h("span", {}, "type"), h("code", {}, t)));
@@ -1636,7 +1636,7 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
 
   const callee = calleeDef(id) ?? (n.kind === "ref" && node(n.target)?.kind === "variant" ? info.owner.get(n.target) ?? null : null);
   // The call itself, or its head (the name clicked to select it).
-  const call = inlinable(doc.code, id) ? id : n.kind === "ref" ? Object.values(doc.code.nodes).find((c) => c.kind === "call" && c.fn === id && inlinable(doc.code, c.id))?.id : undefined;
+  const call = inlinable(doc.code, id) ? id : n.kind === "ref" ? Object.values(doc.code.nodes).find((c) => isCall(c) && c.fn === id && inlinable(doc.code, c.id))?.id : undefined;
   if ((callee && callee !== ui.def) || call) out.append(h("div", { class: "acts" },
     callee && callee !== ui.def ? h("button", { class: "btn", type: "button", "data-act": "goto", "data-target": callee }, `Open ${namer.name(callee)}`) : null,
     call ? h("button", { class: "btn", type: "button", "data-act": "inline", "data-target": call, title: "Draw the call as the definition's body, in place. A view only." }, (doc.layout.inline ?? []).includes(call) ? "Collapse" : "Show inline") : null));
@@ -1752,7 +1752,7 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
     out.append(h("label", { class: "field", for: "f-lit" }, h("span", {}, `${n.of === INT ? "Int" : typeof n.value === "number" ? "Float64" : "Text"} · code.json`), input));
   }
 
-  const isExprNode = ["lit", "ref", "call", "lambda", "match", "fold"].includes(n.kind) && !doc.code.defs.includes(id);
+  const isExprNode = ["lit", "ref", "call", "lambda", "match", "fold"].includes(n.kind) && !isUse(n) && !doc.code.defs.includes(id);
   if (isExprNode) {
     const splittable = T.scopeAt(doc.code, ui.def, id).filter((b) => T.dataTypeOf(doc.code, info, b));
     // An input whose type nothing fixes yet splits as any data type the
@@ -1766,7 +1766,7 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
       h("button", { class: "btn", type: "button", "data-act": "t-replace", title: "Pick what goes here instead, from the palette" }, "Replace with…"),
       wrappable(id) ? h("button", { class: "btn", type: "button", "data-act": "t-wrap", title: "Put it inside a call or a function from the palette: it becomes one of its inputs" }, "Wrap in…") : null,
       h("button", { class: "btn danger", type: "button", "data-act": "t-clear" }, "Clear to a hole"),
-      n.kind === "call" && doc.code.nodes[n.fn].kind !== "lambda" ? h("button", { class: "btn", type: "button", "data-act": "t-swap", title: "Keep its inputs and pick another function that takes them" }, "Change the function…") : null,
+      isCall(n) && doc.code.nodes[n.fn].kind !== "lambda" ? h("button", { class: "btn", type: "button", "data-act": "t-swap", title: "Keep its inputs and pick another function that takes them" }, "Change the function…") : null,
       splittable.length || guessed.length ? h("button", { class: `btn${ui.mode === "split" ? " on" : ""}`, type: "button", "data-act": "split" }, "Split by cases…") : null));
     // A step of an action (print this, then that): its place in the order.
     const earlier = Top.moveStep(doc.code, doc.names.short, id, -1), later = Top.moveStep(doc.code, doc.names.short, id, 1);
@@ -1903,9 +1903,9 @@ function paletteFor(hole: Id, m: NonNullable<UI["menu"]>) {
 // else is its own step.
 function stepAt(id: Id): Id {
   for (const n of Object.values(doc.code.nodes)) {
-    const f = n.kind === "call" ? doc.code.nodes[n.fn] : undefined;
+    const f = isCall(n) ? doc.code.nodes[n.fn] : undefined;
     const i = f?.kind === "lambda" ? f.params.indexOf(id) : -1;
-    if (i >= 0) return (n as NodeOf<"call">).args[i];
+    if (i >= 0) return (n as Call).args[i];
   }
   return id;
 }
@@ -1958,7 +1958,7 @@ function parentsOf(code: Code) {
   const set = (c: Id | null | undefined, parent: Id, slot: string, index?: number) => { if (c && !m!.has(c)) m!.set(c, { parent, slot, ...(index !== undefined ? { index } : {}) }); };
   for (const n of Object.values(code.nodes)) {
     if (isUse(n)) { set(n.body, n.id, "body"); Object.values(n.given).forEach((g) => set(g, n.id, "given")); }
-    else if (n.kind === "call") { set(n.fn, n.id, "fn"); n.args.forEach((a, i) => set(a, n.id, "args", i)); }
+    else if (isCall(n)) { set(n.fn, n.id, "fn"); n.args.forEach((a, i) => set(a, n.id, "args", i)); }
     else if (n.kind === "lambda" || n.kind === "arm" || n.kind === "def") set(n.body, n.id, "body");
     else if (n.kind === "match" || n.kind === "fold") { set(n.scrutinee, n.id, "scrutinee"); if (n.kind === "match") set(n.otherwise, n.id, "otherwise"); n.arms.forEach((a) => set(a, n.id, "arms")); }
   }
@@ -1977,7 +1977,7 @@ function enclosing(id: Id): Id | null {
     if (!n || n.kind === "def" || at.parent === ui.def) return null;
     // A let's call and its function only hold steps; a definition's own
     // function is the definition.
-    const letCall = (c: Node | undefined) => c?.kind === "call" && node(c.fn)?.kind === "lambda";
+    const letCall = (c: Node | undefined) => isCall(c) && node(c.fn)?.kind === "lambda";
     if (letCall(n)) continue;
     if (n.kind === "lambda") { const o = up(n.id); const on = o ? node(o.parent) : undefined; if (!o || on?.kind === "def" || (letCall(on) && o.slot === "fn")) continue; }
     if ((["call", "match", "fold", "lambda"].includes(n.kind) || isUse(n)) && drawn(n.id)) return n.id;
@@ -1995,7 +1995,7 @@ function fillPalette(hole: Id, info: T.Info, names: Names, field = "f-query"): H
   // at a hole of any type it would otherwise come before calling it.
   // Where a call's function goes (Change the function…), functions are
   // what's wanted, and they will be called.
-  const head = Object.values(doc.code.nodes).some((n) => n.kind === "call" && n.fn === hole);
+  const head = Object.values(doc.code.nodes).some((n) => isCall(n) && n.fn === hole);
   // Where a function goes, writing one here is often what's meant.
   // What a representation is written with (match by, match as written)
   // comes last: it's for writing one, not for a program's values (I141).
@@ -2198,7 +2198,7 @@ const readTyped = (info: T.Info, hole: Id, text: string) => cachedTyped(info, `f
 // whole body's lambda or a step's own let.
 function wrappable(id: Id): boolean {
   const n = doc.code.nodes[id];
-  return !!n && ["lit", "ref", "call", "lambda", "match", "fold"].includes(n.kind) && !doc.code.defs.includes(id) && !(n.kind === "call" && doc.code.nodes[n.fn]?.kind === "lambda") && defBody(ui.def)?.id !== id;
+  return !!n && ["lit", "ref", "call", "lambda", "match", "fold"].includes(n.kind) && !isUse(n) && !doc.code.defs.includes(id) && !(isCall(n) && doc.code.nodes[n.fn]?.kind === "lambda") && defBody(ui.def)?.id !== id;
 }
 
 // ---------------------------------------------------------------- structure
@@ -2666,7 +2666,7 @@ function paramRow(info: T.Info, names: Names, p: Id, of: Id = ui.def) {
 function innerLambda(id: Id | null): NodeOf<"lambda"> | null {
   const n = id ? node(id) : null;
   if (n?.kind !== "lambda" || n.id === defBody(ui.def)?.id) return null;
-  return Object.values(doc.code.nodes).some((c) => c.kind === "call" && c.fn === n.id) ? null : n;
+  return Object.values(doc.code.nodes).some((c) => isCall(c) && c.fn === n.id) ? null : n;
 }
 const inputOf = (binder: Id) => Object.values(doc.code.nodes).find((l) => l.kind === "lambda" && l.params.includes(binder))?.id ?? null;
 
@@ -2889,7 +2889,7 @@ function fnSet(id: Id, picked: Id[]): { members: Id[]; what: string; group?: Id 
 // written inside it, itself first (E208). A name or a number alone is
 // none: there's nothing to make a function of.
 function partCalls(id: Id): Id[] {
-  return subtree(doc.code, id).filter((x) => doc.code.nodes[x]?.kind === "call");
+  return subtree(doc.code, id).filter((x) => isCall(doc.code.nodes[x]));
 }
 
 function ungroup(g: Id) {
@@ -2931,6 +2931,8 @@ function deepFunctions(def: Id): Id[] {
   const kids = (id: Id): Id[] => {
     const n = node(id);
     if (!n) return [];
+    // A use's parts as a solve's were: what it's given, its body.
+    if (isUse(n)) return children(n).filter((c) => node(c)?.kind !== "binder" && c !== (n as { fn?: Id }).fn);
     switch (n.kind) {
       case "call": return node(n.fn)?.kind === "ref" ? n.args : [n.fn, ...n.args];
       case "lambda": case "arm": return [n.body];
@@ -2953,7 +2955,7 @@ function deepFunctions(def: Id): Id[] {
       if (!top && big(body)) out.push(id);
       return walk(body, false);
     }
-    if (n.kind === "call" && node(n.fn)?.kind === "lambda") { n.args.forEach((a) => walk(a, false)); return walk((node(n.fn) as NodeOf<"lambda">).body, false); }
+    if (isCall(n) && node(n.fn)?.kind === "lambda") { n.args.forEach((a) => walk(a, false)); return walk((node(n.fn) as NodeOf<"lambda">).body, false); }
     if (n.kind === "arm" && big(n.body)) out.push(id);
     for (const c of children(n)) walk(c, false);
   };
@@ -3086,9 +3088,9 @@ function graphMenu(info: T.Info): HTMLElement | null {
     if (doc.code.nodes[id] && doc.code.nodes[id].kind !== "hole") rows.push(item("Clear it (leave a hole)", "clear", "A hole of the same type stays in its place"));
     if (doc.code.nodes[id] && doc.code.nodes[id].kind !== "hole") rows.push(item("Delete it", "delete", "Only this node: a hole stays in its place, and what's wired into it is kept, loose"));
     const n = doc.code.nodes[id];
-    if (n?.kind === "call" && doc.code.nodes[n.fn].kind !== "lambda") rows.push(item("Change the function…", "swap", "Keep its inputs and pick another function that takes them"));
+    if (isCall(n) && doc.code.nodes[n.fn].kind !== "lambda") rows.push(item("Change the function…", "swap", "Keep its inputs and pick another function that takes them"));
     // Turn a call around (E168): an input swaps sides with the result.
-    const turn = n?.kind === "call" ? T.turnable(doc.code, id) : null;
+    const turn = isCall(n) ? T.turnable(doc.code, id) : null;
     const pName = (p: Id) => names[p] ?? "it";
     // Only the inputs that can stand for the result (I129).
     if (turn) turn.params.forEach((p, k) => T.turnMismatch(doc.code, names, info, id, k) || rows.push(item(`Work out ${pName(p)} from the result`, `turn-${k}`, `Turn it around: what goes into ${pName(p)} becomes the result given, and the node gives ${pName(p)} instead. Changes the code; Undo puts it back`, why(() => T.turnAround(doc.code, doc.names.short, info, id, k)))));
@@ -3231,7 +3233,7 @@ function menuAction(act: string, target: Id | undefined) {
       // Change the function: the function becomes a hole and the inputs stay
       // where they are, so the palette offers what takes them. Replace with:
       // the part itself becomes the hole, and the palette offers what fits.
-      const fn = act === "swap" ? (doc.code.nodes[target!] as NodeOf<"call">).fn : target!;
+      const fn = act === "swap" ? (doc.code.nodes[target!] as Call).fn : target!;
       const r = T.toHole(doc.code, doc.names.short, info, fn);
       const note = act === "swap" ? "The function is a hole now and its inputs stayed: pick another from the palette. Escape puts it back." : "Pick what goes here from the palette. Escape or Undo puts back what was here.";
       if (!applyT(r.ok ? { ...r, note } : r)) return;
@@ -4045,7 +4047,7 @@ function select(id: Id | null) {
   else if (id && TOUCH && onePane()) {
     const info = typesOf(), names = typedPres().names, n = doc.code.nodes[id];
     const t = info ? T.typeOf(info, id, names) : null;
-    const head = n?.kind === "call" ? doc.code.nodes[n.fn] : n;
+    const head = isCall(n) ? doc.code.nodes[n.fn] : n;
     const name = head?.kind === "ref" ? names[head.target] : names[id];
     if (n) { ui.note = `${kindLabel(id)}${name ? ` ${name}` : ""}${t ? ` : ${t}` : ""}. Its panel is in Run & more.`; ui.refused = false; }
   }
@@ -4567,7 +4569,7 @@ document.addEventListener("keydown", (e) => {
     // can be done to it: Change the function first for a call, Replace
     // with first for anything else.
     if (edit) edit.focus();
-    else menuForSelected(doc.code.nodes[ui.selected]?.kind === "call" ? "swap" : "replace");
+    else menuForSelected(isCall(doc.code.nodes[ui.selected]) ? "swap" : "replace");
     return;
   }
   if (!typing && (e.key === "Delete" || e.key === "Backspace") && ui.selected) {
