@@ -144,7 +144,7 @@ whose functions are written in Ters, which only that program carries.
   **stop** (§8.3) when its value is **used**, and not before: shown,
   compared, branched on, divided by, shown as text, handed out of the
   program as an answer (a Float64 given to the host; inside a list or a
-  record it isn't looked at yet, C156), or given to an operation that
+  record it isn't looked at yet), or given to an operation that
   would turn it back into a finite number (`1 / x`, `exp`, `atan2`,
   `x ^ 0`). Its whole part has none (`Choice`), as for any number with no
   whole part. + − · and the other operations that
@@ -460,7 +460,7 @@ hasn't been chosen. None is answered here. Rows are in BACKLOG.md.
 | # | question | today | row |
 |---|---|---|---|
 | S1 | **Float64 `equal` within 1e-9.** Decided 2026-11-03 (Ersagun): `equal` becomes exact, and the tolerance stays only inside the solver (§2.7). | done: exact on every engine, the tolerance only in the solver | L197 |
-| S2 | **An overflow nothing uses.** Decided 2026-11-03 (Ersagun): it never stops; an overflow stops where its value is used, on every engine (§3.3). | done: the evaluator carries it to its use as compiled code did; finite.test.ts checks the evaluator, JS and WebAssembly agree | L218 |
+| S2 | **An overflow nothing uses.** Decided 2026-11-03 (Ersagun): it never stops; an overflow stops where its value is used, on every engine (§3.3). | done: the evaluator carries it to its use as compiled code did; finite.test.ts checks the evaluator, compiled JS, the core IR's JS, WebAssembly and C agree, a Float64 answer handed to the host included (C156) | L218 |
 | S3 | **The order of a use's answers after the first.** Decided (L198, 2026-11-03): the evaluator's search order, on every engine (§7.4). | written; every engine runs the same solver | L198 |
 | S4 | **Fuel counts depend on the checker.** Decided (L199, 2026-11-03): kept, and written down: what counts is the checker's, and a checker change that stops counting a definition is a change of meaning (§5.6). | written; evaluator and the core IR count the same way | L199 |
 | S5 | **When a stopped search had effects.** Decided (L198): an engine runs the paths in the evaluator's order, so handled effects on a search's paths happen as the evaluator's do (§7.4). | written; the fuzz test checks it | L198 |

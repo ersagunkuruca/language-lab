@@ -26,6 +26,7 @@ import type { Code, Id } from "../../ters/src/model.ts";
 import * as I from "../../ters/src/lang/int.ts";
 import { ARRAY_RT, RT, isData, isRecord, lowerScalar, type CoreIR, type LType, type Op, type SExpr, type SFunc, type TType } from "./scalar.ts";
 import { runtime } from "./wasm-rt.ts";
+import { STOPS } from "./stops.ts";
 import { Aborted, FAIL, OUT, RUNTIME, Stopped, Unsupported, coreRuntime, runCoreFn, type BuiltinOf, type MainSpec, type TableSpec } from "./core-rt.ts";
 // The runtime is core-rt.ts's; these are here too, for the tests and
 // tools that print and run in one.
@@ -291,7 +292,10 @@ function kidsOf(e: SExpr): SExpr[] {
 export function loadCoreJs(ir: CoreIR, rt: Runtime = { print: () => {} }): ((...xs: unknown[]) => unknown)[] {
   const { js, names, worlds } = emitCoreJs(ir);
   const all = new Function("R", js)(coreRuntime(ir.tables.map(tableSpec), worlds, rt, ir.code)) as Record<string, (...xs: unknown[]) => unknown>;
-  return names.map((n) => all[n]);
+  // A Float64 handed back to the host is a use of it (SPEC §3.3, C156):
+  // too big, it stops there.
+  const fin = (x: number) => { if (x - x !== 0) throw new Stopped(STOPS[STOPS.length - 1]); return x; };
+  return names.map((n, i) => { const f = all[n]; return ir.funcs[i]?.result === "f64" && !ir.shader ? (...xs: unknown[]) => fin(f(...xs) as number) : f; });
 }
 
 // What running a main needs to know of it: whether it takes the

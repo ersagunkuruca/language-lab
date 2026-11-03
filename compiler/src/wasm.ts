@@ -71,7 +71,10 @@ const INT32_RT: Op[] = ["iadd", "isub", "imul", "ineg", "iabs", "iquot", "irem",
 // Where a shader's flag is set or read.
 const flagged = (e: SExpr): boolean => e.k === "attempt" || (e.k === "rt" && /^array\.at32\./.test(e.fn)) || (e.k === "zero" && !!e.none) || (e.k === "op" && ["iquot", "irem", "ipow", "iwhole"].includes(e.op)) || kids(e).some(flagged);
 
-export interface Module { bytes: Uint8Array; wat: string; exports: string[] }
+// `floats`: the exports whose answer is a Float64, which instantiate
+// checks as it leaves for the host (SPEC §3.3, C156); partial ones give
+// it with their status.
+export interface Module { bytes: Uint8Array; wat: string; exports: string[]; floats?: { name: string; partial: boolean }[] }
 
 // `wasi`: a WASI command instead, its world written over
 // wasi_snapshot_preview1 (wasm-rt.ts) and `_start` running main as
@@ -746,7 +749,8 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean } = {}): Module
     ")",
   ].join("\n");
 
-  return { bytes, wat: text + "\n", exports: [...entries.map(([f]) => exportName(f)), ...helpers.map((x) => x.name), ...rtExports.map((f) => RT_EXPORTS[f.name])] };
+  const floats = shader ? [] : entries.filter(([f]) => f.result === "f64").map(([f]) => ({ name: exportName(f), partial: !!f.partial }));
+  return { bytes, wat: text + "\n", exports: [...entries.map(([f]) => exportName(f)), ...helpers.map((x) => x.name), ...rtExports.map((f) => RT_EXPORTS[f.name])], floats };
 }
 
 const uses = (e: SExpr, op: Op): boolean => (e.k === "op" && e.op === op) || kids(e).some((k) => uses(k, op));
@@ -761,7 +765,15 @@ export async function instantiate(m: Module, rt: Runtime = { print: () => {} }):
   let ex: Record<string, (...xs: unknown[]) => unknown> = {};
   const { instance } = await WebAssembly.instantiate(m.bytes, { Math: { sin: Math.sin, cos: Math.cos, tan: Math.tan, exp: Math.exp, log: Math.log, pow: Math.pow, atan2: Math.atan2, stop: (i: number) => { throw new Aborted(STOPS[i]); } }, world: worldOf(rt, () => ex) });
   ex = instance.exports as unknown as typeof ex;
-  return instance.exports as unknown as Record<string, (...xs: number[]) => number>;
+  if (!m.floats?.length) return instance.exports as unknown as Record<string, (...xs: number[]) => number>;
+  // A Float64 handed back to the host is a use of it: too big, it stops.
+  const out: Record<string, unknown> = { ...ex };
+  const fin = (x: number) => { if (x - x !== 0) throw new Aborted(STOPS[STOPS.length - 1]); return x; };
+  for (const { name, partial } of m.floats) {
+    const f = ex[name];
+    out[name] = partial ? (...xs: unknown[]) => { const r = f(...xs) as [number, number]; if (r[1] === 0) fin(r[0]); return r; } : (...xs: unknown[]) => fin(f(...xs) as number);
+  }
+  return out as Record<string, (...xs: number[]) => number>;
 }
 
 // The imports from "world": texts in and out through the module's own
