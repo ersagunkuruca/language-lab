@@ -8,8 +8,7 @@ import type { Info } from "../src/lang/infer.ts";
 import { pageShell } from "../src/lang/page.ts";
 import { HTML_V } from "../src/lang/std.ts";
 import { compile } from "../../compiler/src/compile.ts";
-import { lowerScalar } from "../../compiler/src/scalar.ts";
-import { corePageScript } from "../../compiler/src/core-js.ts";
+import { corePageScript, lowerCore } from "../../compiler/src/core-js.ts";
 
 const here = import.meta.dirname;
 const esbuild = () => import("esbuild").catch(() => { throw new Error("a page needs esbuild to bundle it (npm install in ters/)"); });
@@ -77,7 +76,7 @@ $$startPage(defs[${JSON.stringify(name)}], ${JSON.stringify(title)}${worklet});
 // sound or a host file isn't made this way yet.
 export async function webCorePage(title: string, code: Code, info: Info, names: Names, own: Id[], main: Id): Promise<string> {
   if (hasSound(code)) throw new Error("a page with sound isn't made from the core IR yet");
-  const lowered = lowerScalar(code, info, names, own, { data: true, host: true });
+  const lowered = lowerCore(code, info, names, own);
   const why = lowered.refused.get(main);
   if (why) throw new Error(`${names[main] ?? "main"} isn't compiled through the core IR: it ${why}`);
   const { build } = await esbuild();
