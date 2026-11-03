@@ -161,7 +161,13 @@ export const $partial = Object.fromEntries(Object.entries($many).map(([id, f]) =
 { const whole = $partial[INT_OPS.wholePart]; $partial[INT_OPS.wholePart] = (x) => whole($fin(x)); }
 export { setPath as $setPath } from '../../ters/src/lang/records.ts';
 import { showValue, caseName, compareValues, ORDER_VALUES } from '../../ters/src/lang/run.ts';
-export const $showAny = performed((v, names) => showValue(v, null, names, true));
+// `shown`: each case of a type with a Shown implementation (L205), and
+// that implementation, a value or the function giving it (C148).
+const shownThrough = (shown) => (v) => {
+  const s = shown[v.tag];
+  return s === undefined ? undefined : (typeof s === "function" ? s() : s).fields[0](v);
+};
+export const $showAny = performed((v, names, shown) => showValue(v, null, names, true, shown && Object.keys(shown).length ? shownThrough(shown) : undefined));
 export const $caseName = performed((v, names) => caseName(v, names));
 // `compare` (L66): `order` is each case's place in its type (compile.ts
 // writes it as $order), so cases compare as in the evaluator.
