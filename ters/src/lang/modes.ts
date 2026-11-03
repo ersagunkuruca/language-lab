@@ -33,7 +33,7 @@
 // test/modes.test.ts compares what it says with what relate.ts does.
 
 import type { Code, Id, Node, NodeOf, Use } from "../model.ts";
-import { children, derived, derivedFrom, ownerOfTypeParts, subtree, useTarget, isCall, type Call, isUse } from "../model.ts";
+import { children, derived, derivedFrom, ownerOfTypeParts, subtree, useTarget, isCall, type Call, isUse, bindsOf, bodyOf } from "../model.ts";
 import { NUMERIC } from "./equations.ts";
 import { planSolve, type SolvePlan } from "./solve.ts";
 import { computedForward } from "./directions.ts";
@@ -495,8 +495,8 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
         case "call":
           if (isUse(n)) {
             Object.values(n.given).forEach(walk);
-            out.push(solveGoal(n, ctx), sameValue(n.body, n.id));
-            walk(n.body);
+            out.push(solveGoal(n, ctx), sameValue(bodyOf(n), n.id));
+            walk(bodyOf(n));
             return;
           }
           if (isLet(n)) { n.args.forEach(walk); walk((nodes[n.fn] as NodeOf<"lambda">).body); return; }
@@ -875,7 +875,7 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
   // A solve inside: the function in the mode it names.
   function solveGoal(n: Use, ctx: Ctx): Goal {
     const givenSlots = Object.values(n.given).map(slot);
-    const bound = Object.values(n.binds).map(slot);
+    const bound = Object.values(bindsOf(n)).map(slot);
     return {
       text: `solve ${nm(useTarget(nodes, n))}`, slots: [...givenSlots, ...bound], exec: { k: "solve", node: n.id },
       ready: (st) => {

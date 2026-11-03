@@ -61,7 +61,7 @@ const target = (n: Node): Id | null =>
 function kids(n: Node): Id[] {
   switch (n.kind) {
     case "call":
-      if (isUse(n)) return [n.fn, ...Object.values(n.given), ...Object.values(n.binds), n.body];
+      if (isUse(n)) return [n.fn, ...Object.values(n.given), ...Object.values(n.binds ?? {}), ...(n.body === undefined ? [] : [n.body])];
       return [n.fn, ...n.args];
     case "lambda": return [...n.params, n.body];
     case "typedef": return [...n.params, ...n.variants];
@@ -195,9 +195,10 @@ function canon(code: Code, defId: Id, group: Map<Id, number | null>, memo: Map<I
           // Evaluated in canonical order, so binders are numbered the same
           // whatever order the record's keys were written in.
           const given = sorted(n.given).map(([k, e]) => [k, go(e)]);
-          const binds = sorted(n.binds).map(([k, e]) => [k, go(e)]);
+          const binds = sorted(n.binds ?? {}).map(([k, e]) => [k, go(e)]);
           // The same form as when a use was its own kind, so no hash changed.
-          return ["solve", defRef(useTarget(code.nodes, n)), given, binds, go(n.body)];
+          // A use with no body (L211b) gives its ports as one value: no body to hash.
+          return ["solve", defRef(useTarget(code.nodes, n)), given, binds, n.body === undefined ? null : go(n.body)];
         }
         const f = go(n.fn), args = n.args.map(go);
         // Operands of a commutative op sorted by their own form (PORTS

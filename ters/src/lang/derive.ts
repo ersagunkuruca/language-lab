@@ -54,7 +54,7 @@
 
 import { FN } from "../../../invertible/src/expr.js";
 import type { Code, Id, Node, NodeData, NodeOf } from "../model.ts";
-import { children, freshId, ownerOfTypeParts, useTarget, useNode, isCall, type Call, isUse } from "../model.ts";
+import { children, freshId, ownerOfTypeParts, useTarget, useNode, isCall, type Call, isUse, bindsOf, bodyOf } from "../model.ts";
 import { fieldShapes } from "./nested.ts";
 import type { Names } from "../presentation.ts";
 import { impl } from "../prelude.ts";
@@ -321,8 +321,8 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
         if (isUse(n)) {
           const sub = new Map(ctx.sub);
           const given = Object.fromEntries(Object.entries(n.given).map(([k, e]) => [k, copy(e, ctx)]));
-          const binds = Object.fromEntries(Object.entries(n.binds).map(([k, b]) => [k, fresh([b], sub)[0]]));
-          return add(useNode(add, useTarget(nodes, n), given, binds, copy(n.body, { ...ctx, sub })));
+          const binds = Object.fromEntries(Object.entries(bindsOf(n)).map(([k, b]) => [k, fresh([b], sub)[0]]));
+          return add(useNode(add, useTarget(nodes, n), given, binds, copy(bodyOf(n), { ...ctx, sub })));
 
         }
         return add({ kind: "call", fn: copy(n.fn, ctx), args: n.args.map((a) => copy(a, ctx)) });
