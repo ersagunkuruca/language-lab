@@ -89,6 +89,13 @@ test("a type's own show through Shown: show any shows a version as 1.9 (L205)", 
     k.define(text, k.fn(["v"], (v) => k.match(v, [{ variant: V.v.version, names: ["m", "n"], body: ([m, n]) => k.text(k.call(INT_OPS.show, m), k.lit("."), k.call(INT_OPS.show, n)) }])));
     const d = k.def("shown at version");
     k.define(d, k.call(SHOWN_V, k.x(text)));
+    // Inside a search too: run backwards from its text, the version is
+    // found by showing each candidate the same way.
+    const shows = k.def("shows as");
+    k.define(shows, k.fn(["t", "v"], (t, v) => k.and(k.equal(v, k.call(S.oneOf, k.list(k.call(V.v.version, k.int(1), k.int(9)), k.call(V.v.version, k.int(2), k.int(0))))), k.equal(t, k.call(SHOW_ANY, v)))));
+    const [t, v] = (k.code.nodes[(k.code.nodes[shows] as { body: Id }).body] as unknown as { params: Id[] }).params;
+    const found = k.def("which shows as 2.0");
+    k.define(found, k.call(S.first, k.thunk(() => k.solve(shows, { [t]: k.lit("2.0"), out: k.true }, { [v]: "v" }, ({ [v]: x }) => k.call(SHOW_ANY, x))), k.thunk(() => k.lit("none"))));
   });
   assert.deepEqual(p.info.errors.map((e) => e.message), []);
   const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });
@@ -96,4 +103,5 @@ test("a type's own show through Shown: show any shows a version as 1.9 (L205)", 
   // The quaternion, with no Shown, shows as before.
   assert.equal(r.value(at("the older")), "1.9");
   assert.equal(r.value(at("a sum")), "quaternion(5, 5, 5, 5)");
+  assert.equal(r.value(at("which shows as 2.0")), "2.0");
 });
