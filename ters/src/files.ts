@@ -85,7 +85,7 @@ export function fromFile(text: string, baseFor: (typed: boolean) => Code): { fil
   const code: Code = { nodes: { ...base.nodes, ...(c.nodes as Record<Id, Node>) }, defs: [...base.defs, ...(c.defs as Id[])] };
   for (const d of c.defs as Id[]) if (code.nodes[d]?.kind !== "def") return { error: `definition ${d} is missing` };
   // A use with no body gives its produced ports as a tuple (L211).
-  fillUses(code);
+  fillUses(code, Object.keys(c.nodes));
   // Every id the program points at must be there. A published one that
   // isn't comes from a module that isn't loaded.
   const needed = strings(x.needs) ? x.needs : {};

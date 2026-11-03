@@ -63,9 +63,11 @@ export function usePorts(code: Code, n: { fn: Id }): string[] | null {
 // ids come from the use's, so filling the same program twice gives the
 // same nodes. A use whose ports aren't known (a hole, an unknown target)
 // is left alone.
-export function fillUses(code: Code): void {
-  for (const [id, n] of Object.entries(code.nodes)) {
-    if (n.kind !== "call" || !n.given || (n as { body?: Id }).body !== undefined) continue;
+// `own`: the nodes to look at (a program's own, not the library under it).
+export function fillUses(code: Code, own: Iterable<Id> = Object.keys(code.nodes)): void {
+  for (const id of own) {
+    const n = code.nodes[id];
+    if (n?.kind !== "call" || !n.given || (n as { body?: Id }).body !== undefined) continue;
     const ports = usePorts(code, n);
     const produced = ports?.filter((k) => !(k in n.given!));
     if (!produced?.length || produced.length > TUPLE_MAX) continue;

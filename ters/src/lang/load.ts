@@ -16,7 +16,7 @@ import { fillUses } from "./ports.ts";
 const read = <T>(path: string, fallback: T): T => (existsSync(path) ? onTodaysIds(JSON.parse(readFileSync(path, "utf8"))) : fallback);
 
 // A use with no body is read as the tuple of its produced ports (L211).
-export const base = (code: Code): Code => { const c = merge(LIBRARY.code, code); fillUses(c); return c; };
+export const base = (code: Code): Code => { const c = merge(LIBRARY.code, code); fillUses(c, Object.keys(code.nodes)); return c; };
 export const baseNames = (...layers: Names[]): Names => layer<Names>(LIBRARY.names, ...layers);
 // What the checker is given with every program: the modules' pins, and
 // which of their definitions are helpers.
