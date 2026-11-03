@@ -105,7 +105,7 @@ test("lab compile --core writes a module that runs main as lab run does", () => 
 // lists them): each run in its own cells.
 test("the pages whose main lowers show the same HTML, before and after their handlers run, as in the evaluator (C137c8)", () => {
   const ran: string[] = [];
-  for (const name of ["bounce", "compass", "constructions", "dice", "pig", "tumble"]) {
+  for (const name of ["bounce", "compass", "constructions", "converter", "dice", "pig", "spacetime", "tumble"]) {
     const p = load(name);
     const main = p.code.defs.find((d) => p.pres.names[d] === "main" && p.own.defs.includes(d))!;
     const l = lowerScalar(p.code, p.info, p.pres.names, p.own.defs, { data: true, host: true });
@@ -115,7 +115,8 @@ test("the pages whose main lowers show the same HTML, before and after their han
     const views = (handlers: number) => {
       const ev = new Cells(equal), co = new Cells(equal);
       // The same clock and the same draws in both (dice's rolls).
-      const world = () => { let x = 0; return { now: () => 1000, random: () => (x = (x * 7 + 3) % 11) / 11 }; };
+      // Files in memory too (converter keeps its quantities in one).
+      const world = () => { let x = 0; const files = new Map<string, string>(); return { now: () => 1000, random: () => (x = (x * 7 + 3) % 11) / 11, fileExists: (f: string) => files.has(f), readFile: (f: string) => { if (!files.has(f)) throw new Error(`no such file: ${f}`); return files.get(f)!; }, writeFile: (f: string, t: string) => void files.set(f, t), appendFile: (f: string, t: string) => void files.set(f, (files.get(f) ?? "") + t), listFolder: () => [...files.keys()].sort() }; };
       const a = evaluatorCall(makeRunner(p.code, p.info, { print: () => {}, names: p.pres.names, cells: ev, world: world() }).value(main));
       const b = loadCoreJs(l, { print: () => {}, cells: co, world: world() })[fi]() as Value;
       const shown = [[htmlText(a, evaluatorCall), htmlText(b, coreCall)]];
