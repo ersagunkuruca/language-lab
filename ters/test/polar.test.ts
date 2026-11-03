@@ -15,7 +15,7 @@ import { makeRunner, type Value } from "../src/lang/run.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { pickWays, waysIn } from "../src/lang/ways.ts";
-import { DUAL_V, FIXED_V, S, SHOW_ANY, TRIG_OPS, TRIG_ACOS, TRIG_ASIN, TRIG_POLAR, TRIG_UNPOLAR, TRIG_V } from "../src/lang/std.ts";
+import { DUAL_V, FIXED_V, S, SHOW_ANY, TRIG_OPS, TRIG_ACOS, TRIG_ASIN, TRIG_POLAR, TRIG_UNPOLAR, TRIG_V, tupleVariant } from "../src/lang/std.ts";
 import { showType, NUMBER } from "../src/lang/types.ts";
 import { B } from "../src/prelude.ts";
 import type { Id } from "../src/model.ts";
@@ -69,7 +69,7 @@ test("a polar asked a way neither direction reads is an error that says the dire
   assert.ok(info.errors.some((e) => e.message === "polar gives x, y from length, angle"), String(info.errors.map((e) => e.message)));
 });
 
-function angle(declare: boolean, more?: (k: Lang, ctor: Id) => void) {
+function angle(declare: boolean | "function", more?: (k: Lang, ctor: Id) => void) {
   const k = new Lang(LIBRARY.code);
   const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
   const A = k.type("Angle", [], [["angle", [["radians", () => k.tref(NUMBER)]]]]);
@@ -77,9 +77,13 @@ function angle(declare: boolean, more?: (k: Lang, ctor: Id) => void) {
   const lift = (name: string, f: Id) => def(name, () => k.fn(["a"], (a) => un(a, (r) => k.call(A.v.angle, k.call(f, r)))));
   const [tan, exp, log] = (["tan", "exp", "log"] as const).map((op) => lift(`angle ${op}`, B[op]));
   const rad = (a: Id) => k.call(A.f["angle.radians"], a);
-  const polar = def("angle polar", () => k.fn(["length", "angle", "x", "y"], (l, t, x, y) =>
-    k.and(k.equal(x, k.call(A.v.angle, k.call(B.mul, rad(l), k.call(B.cos, rad(t))))), k.equal(y, k.call(A.v.angle, k.call(B.mul, rad(l), k.call(B.sin, rad(t))))))));
-  if (declare) k.results(polar, "x", "y");
+  const polar = declare === "function"
+    // A plain function of polar's type (L128d4): (length, angle) → (x, y).
+    ? def("angle polar", () => k.fn(["length", "angle"], (l, t) =>
+      k.call(tupleVariant(2), k.call(A.v.angle, k.call(B.mul, rad(l), k.call(B.cos, rad(t)))), k.call(A.v.angle, k.call(B.mul, rad(l), k.call(B.sin, rad(t)))))))
+    : def("angle polar", () => k.fn(["length", "angle", "x", "y"], (l, t, x, y) =>
+      k.and(k.equal(x, k.call(A.v.angle, k.call(B.mul, rad(l), k.call(B.cos, rad(t))))), k.equal(y, k.call(A.v.angle, k.call(B.mul, rad(l), k.call(B.sin, rad(t))))))));
+  if (declare === true) k.results(polar, "x", "y");
   const unpolar = def("angle unpolar", () => k.fn(["length", "angle", "x", "y"], (l, t, x, y) => k.and(
     k.equal(l, k.call(A.v.angle, k.call(B.sqrt, k.call(B.add, k.call(B.mul, rad(x), rad(x)), k.call(B.mul, rad(y), rad(y)))))),
     k.equal(t, k.call(A.v.angle, k.call(B.atan2, rad(y), rad(x)))))));
@@ -95,6 +99,15 @@ function angle(declare: boolean, more?: (k: Lang, ctor: Id) => void) {
 
 test("a type that gives only polar gets sin and cos from it", async () => {
   const { code, names, info } = angle(true);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const { evaluated, compiled } = await both(code, info, names, ["the cosine", "the sine"]);
+  const num = (v: Value) => Number(/angle\((.*)\)/.exec(String(v))![1]);
+  assert.ok(Math.abs(num(evaluated[0]) - Math.cos(0.3)) < 1e-9 && Math.abs(num(evaluated[1]) - Math.sin(0.3)) < 1e-9, String(evaluated));
+  assert.deepEqual(compiled, evaluated);
+});
+
+test("polar is given by any function of its type, (length, angle) → x, y: sin and cos come from it, evaluated and compiled (L128d4)", async () => {
+  const { code, names, info } = angle("function");
   assert.deepEqual(info.errors.map((e) => e.message), []);
   const { evaluated, compiled } = await both(code, info, names, ["the cosine", "the sine"]);
   const num = (v: Value) => Number(/angle\((.*)\)/.exec(String(v))![1]);
