@@ -73,6 +73,7 @@ Each note says why, then gives the plan as steps; each step is a backlog row.
 | [EXACT-REALS.md](design/numbers/EXACT-REALS.md) | Exact algebraic numbers (√2·√2 is 2), lazy reals later | partly built (L88) |
 | [FLOAT-VALUES-2026-11-01.md](design/numbers/FLOAT-VALUES-2026-11-01.md) | Which IEEE values `Float64` keeps: finite with one zero, ±∞ as `Extended a`, NaN as stored "no answer" (Rust-style niches) | decided 2026-11-01, to build (L125) |
 | [FIXED-POINT.md](design/numbers/FIXED-POINT.md) | `Fixed`, the same bits on every machine, for games | partly built (L89) |
+| [MATHEMATICS-AS-LIBRARIES-2026-11-03.md](design/numbers/MATHEMATICS-AS-LIBRARIES-2026-11-03.md) | Should Clifford, Complex and the rest be in the core? No: libraries, with the core naming none of them; audit, measurement, embeddings as the core mechanism for generalization; rows L202 to L209, E237 | discussion, rows open |
 
 ### Representations, data and cells
 
