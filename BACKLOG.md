@@ -31,6 +31,7 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
+| I160 | Check: opening every example one after another showed "Not kept in this browser: its storage is full" on notebook. Browsing shouldn't fill storage; if it does, opening must not save, or old copies must be dropped | [OUTSIDER-READ-2026-11-03](docs/reports/reviews/OUTSIDER-READ-2026-11-03.md) (screen text, notebook) | 2026-11-03 |
 | I157 | **Bug.** + New definition freezes the page 3 to 4 s (Insertion sort 3.2 s, gap 2.8; physics 4.8, gap 3.6; Tumble 5.1, gap 4.3); QA14 measured 1.5 to 2.8 s | QA 11-03 H1 | 2026-11-03 |
 | I158 | **Bug.** Opening a definition freezes 1 to 2 s in many programs, old ones too: Numbers & physics `polar` 1.1 s (none over 0.8 s in QA12), Spacetime `reversed` 2.2 s, calc `blank` 1.8 s, `read numbers` 1.5 s | QA 11-03 H2 | 2026-11-03 |
 | I159 | Bigger program machine's Run main takes 15 s for five small assembler programs (in the worker, page stays live) | QA 11-03 L1 | 2026-11-03 |
@@ -76,6 +77,16 @@ New items land here until the next triage gives them a lane and a priority.
 |---|---|---|---|---|---|
 | E232 | Pause and step a run in the editor: stop at a node, step, see each effect answered so far, step back (on L186's log). Today "Show values" shows one finished run | [ASPECTS-2026-11-03](docs/reports/reviews/ASPECTS-2026-11-03.md) 204, 205 | P3 | L | after L186 |
 | E233 | A profile on the graph: time, calls and allocations per definition from a run, beside cost.ts's order (E230 says when the order changes; this says where a run spends its time) | [ASPECTS-2026-11-03](docs/reports/reviews/ASPECTS-2026-11-03.md) 125, 206 | P3 | M | |
+
+### Plain words for newcomers ([OUTSIDER-READ-2026-11-03](docs/reports/reviews/OUTSIDER-READ-2026-11-03.md))
+
+Rewrite only what the outside reader marked; the next outsider read checks it.
+
+| id | item | source | pri | size | status |
+|---|---|---|---|---|---|
+| E234 | The editor's own help in plain words: the node right-click menu's garbled lines ("it gives on what this gave", "first among the steps this is in", "a function, part, of what comes in"), file names in help (layout.json, drafts.json, code.json), "Reingold–Tilford" in a menu, empty tooltips "layer" and "style", "Run … backwards" read as "runs main backwards", the Guide's stray lone labels, "lab test" in the accept tooltip, Pick vs select | [OUTSIDER-READ-2026-11-03](docs/reports/reviews/OUTSIDER-READ-2026-11-03.md) §5 | P2 | M | |
+| E235 | A first screen a newcomer can follow: it opens on Numbers & physics `main` with `for some`, `solve rotate, show ×2, …` and "handles Choice"; label the three notation toggles, say what "the program is the tree" and the Cells button mean, or open somewhere gentler | [OUTSIDER-READ-2026-11-03](docs/reports/reviews/OUTSIDER-READ-2026-11-03.md) §5, worst 5 | P2 | S | |
+| E236 | Example names and comments an outsider can read: one line on what each example is (Conjugation, Lockstep, Countdown), a gloss for maths and audio words in the comments (PGA, motor, Cl(2, 0), rapidity, Haar's split, Rec. 709), and clearer definition names in machine and clinic (`make outc`, `read d a a`, `new m2`) | [OUTSIDER-READ-2026-11-03](docs/reports/reviews/OUTSIDER-READ-2026-11-03.md) §5 | P3 | M | |
 
 ## C: Compiler and targets
 
@@ -266,6 +277,14 @@ agent with inertia. All later goals.
 | L191 | Network beyond `fetch text`: a request with method, headers and body, a response with status, headers and body (Text or L189's Bytes), as Network operations answered by the world or a test's handler | [ASPECTS-2026-11-03](docs/reports/reviews/ASPECTS-2026-11-03.md) 162 | P2 | M | |
 | L192 | Resources live only inside their handler: a file, audio device or socket is released when its handler ends and can't escape it (effects, not linear types). Design note first; it closes LANGUAGE.md's "resource misuse: not addressed" row | [ASPECTS-2026-11-03](docs/reports/reviews/ASPECTS-2026-11-03.md) 97, 123 | P3 | M | |
 | L193 | Wrapping integers as a meaning: arithmetic mod 2^n (`Word8`, `Word32`, `Word64`) for hashes, PRNGs, binary formats and audio samples, which unbounded Int can't say; the representation picks the machine word | [ASPECTS-2026-11-03](docs/reports/reviews/ASPECTS-2026-11-03.md) 142, 143 | P3 | M | |
+
+### Plain words for newcomers ([OUTSIDER-READ-2026-11-03](docs/reports/reviews/OUTSIDER-READ-2026-11-03.md))
+
+| id | item | source | pri | size | status |
+|---|---|---|---|---|---|
+| L194 | README for someone arriving cold: introduce `lab` once (it's used everywhere and never explained: worst 1), say Ters is the experiment, move build steps to their own section, drop "lane", gloss or move the specialist demos' maths, fix the "compiled JavaScript only" vs "Targets built" contradiction | [OUTSIDER-READ-2026-11-03](docs/reports/reviews/OUTSIDER-READ-2026-11-03.md) §1 | P2 | S | |
+| L195 | TUTORIAL.md in teaching order: every term before its first use (dots, holes, ports, `solve`, `one of`, Choice, shaders), the unparseable sentences of 3.6 and 3.8 rewritten (worst 2), no BACKLOG ids (L107), file names, maintainer notes or CONFUSING.md in the text, one name for the relational interpreter / solver / search, `↦` vs `=>` | [OUTSIDER-READ-2026-11-03](docs/reports/reviews/OUTSIDER-READ-2026-11-03.md) §3 | P2 | M | |
+| L196 | LEARN.md and GUIDE.md: the guide's definition list and pane count match the screen, `seed`, cells and `magnitude` explained where first used, the "click the `(`" step rewritten, the learn page's raw file link gone | [OUTSIDER-READ-2026-11-03](docs/reports/reviews/OUTSIDER-READ-2026-11-03.md) §2, §4 | P3 | S | |
 
 ## T: Testing and fast feedback
 
