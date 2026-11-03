@@ -31,6 +31,9 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
+| I157 | **Bug.** + New definition freezes the page 3 to 4 s (Insertion sort 3.2 s, gap 2.8; physics 4.8, gap 3.6; Tumble 5.1, gap 4.3); QA14 measured 1.5 to 2.8 s | QA 11-03 H1 | 2026-11-03 |
+| I158 | **Bug.** Opening a definition freezes 1 to 2 s in many programs, old ones too: Numbers & physics `polar` 1.1 s (none over 0.8 s in QA12), Spacetime `reversed` 2.2 s, calc `blank` 1.8 s, `read numbers` 1.5 s | QA 11-03 H2 | 2026-11-03 |
+| I159 | Bigger program machine's Run main takes 15 s for five small assembler programs (in the worker, page stays live) | QA 11-03 L1 | 2026-11-03 |
 | I110 | Check main: 49 of its last 60 runs cancelled while queued, a run takes ~19 of its 20 minutes, "affected" reaches 93 of 97 test files. Look at why std.ts and the prelude reach every test; lanes check the latest run when starting an item | REVIEW-2026-11-01 §6 | 2026-11-01 |
 | I154 | A list written out with a thousand items (a table of data pasted in) stops the checker: "Maximum call stack size exceeded" in infer.ts, which walks the list as a thousand nested calls of the list maker, one stack frame each (500 items check). The evaluator, staging and the compilers walk it the same way. Either walk a chain of the list maker in a loop in each pass, or keep a written list as one node of n items | C128 (fuzz test, 2026-11-03) | 2026-11-03 |
 
