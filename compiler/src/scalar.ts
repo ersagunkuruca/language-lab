@@ -57,7 +57,7 @@ import { dependencies, subtree, isCall, type Call, isUse, useTarget, type Use } 
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { ARRAY, TABLE, HASH_SET, CELL, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, PATH as PATH_T, STRING, Subst, type Row, type Type } from "../../ters/src/lang/types.ts";
-import { ABORT, ABORT_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, HASH_SET_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, NOW_OP, OPTIONAL, ORDER_V, PAIR_V, RATIO, S, SET, SHOW_ANY, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
+import { ABORT, ABORT_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, HASH_SET_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, NOW_OP, OPTIONAL, ORDER_V, PAIR_V, RATIO, S, SET, SHOW_ANY, shownImplementations, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
 import { liftLets } from "../../ters/src/lang/lift-lets.ts";
 import { solvesOnce } from "../../ters/src/lang/run.ts";
 import { inlineLists } from "./inline-lets.ts";
@@ -383,6 +383,15 @@ const MAY_NOT_FINISH = `may not finish (its type has Diverge): on a GPU that han
 
 // The definitions the roots reach, every type, and the builtins: what
 // the scalar profile and compile (C67) stage and check again (C90).
+// The same, and the Shown implementations `show any` shows through when
+// what the roots reach shows a value (L205, C148). `own`: only those of
+// types not in std (the scalar lowering shows std's own way).
+export function reachedWithShows(code: Code, roots: Id[], info: Info, own = false): Code {
+  const reached = reachedFrom(code, roots);
+  const showns = [...shownImplementations(info)].flatMap(([t, d]) => (own && t.startsWith("std.") ? [] : [d]));
+  const shows = showns.length && Object.values(reached.nodes).some((n) => n.kind === "ref" && n.target === SHOW_ANY);
+  return shows ? reachedFrom(code, [...roots, ...showns]) : reached;
+}
 export function reachedFrom(code: Code, roots: Id[]): Code {
   const reach = new Set<Id>();
   for (const r of roots) { reach.add(r); for (const d of dependencies(code, r)) reach.add(d); }
@@ -415,7 +424,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   // Only what the roots reach is staged and checked again, as compile
   // does (C67): the editor's picture of the ray marcher, with its PGA
   // motor, was checked over the whole library each time (C90).
-  code = reachedFrom(code, roots);
+  code = reachedWithShows(code, roots, info, true);
   if (opts.data) opts = { ...opts, records: true };
   // Calls given data written down (an algebra's signature and basis) are
   // worked out as far as that data goes (stage.ts, C65): what's left is
@@ -665,6 +674,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   const funcs: SFunc[] = [];
   const index = new Map<Id, number>();
   const refused = new Map<Id, string>();
+  const showns = shownImplementations(info);
   const inProgress = new Set<Id>();
   // Whether what's being lowered runs under a budget, so a call to
   // something that might not finish is allowed: inside a budget's body, or
@@ -1324,6 +1334,18 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     const g: SFunc = { def: t.def, name: `${t.name}.show`, params: [t], result: "text", locals: [t], body: { k: "text", v: "" }, spends: false, budgeted: false, inner: true };
     index.set(key, funcs.push(g) - 1);
     const a: SExpr = { k: "local", i: 0 }, text = (v: string): SExpr => ({ k: "text", v });
+    // A type of the program's own with a Shown implementation shows through
+    // its `show`, as in the evaluator (L205, C148). std's number types
+    // (Rational, Complex, Fixed, the words) show as below for now.
+    const impl = opts.data && !t.def.startsWith("std.") ? showns.get(t.def) : undefined;
+    if (impl && code.defs.includes(impl)) {
+      const it = info.typeOf.get(impl) && stype(info.subst.zonk(info.typeOf.get(impl)!));
+      const ft = it && isRecord(it) ? it.fields[0]?.t : undefined;
+      if (it && isRecord(it) && ft && isFn(ft)) {
+        g.body = { k: "apply", fn: { k: "get", rec: { k: "call", fn: func(impl), args: [], tail: false }, t: it, i: 0 }, t: ft, args: [a], tail: true, tmp: g.locals.push(ft) - 1 };
+        return index.get(key)!;
+      }
+    }
     // Case c's text, from its fields (part j) and their types.
     const one = (v: Id, fts: LType[], part: (j: number) => SExpr): SExpr => {
       const fields = fts.map((ft, j) => shown(part(j), ft, g, false));

@@ -376,6 +376,10 @@ examples. They are a language design item, for after T1 to T6.
 | T10 | Editing scenarios in Node, on a stand-in for Playwright's page | process | medium |
 | T11 | Drags in Node too; a short nightly browser check for real layout | process | medium |
 
+2026-11-03: the full unit run had grown from 410 s to 35 to 40 minutes;
+[TEST-SPEED-2026-11-03](../reports/TEST-SPEED-2026-11-03.md) has why, and
+rows T12 to T14 (and L216, L217) the fixes.
+
 T1 alone gives back most of the 10 minutes. T2 to T4 make the checks
 themselves fast, also for threads before they push. T7 is the interesting
 one and the one that fits the language best.

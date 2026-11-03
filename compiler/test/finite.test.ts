@@ -138,3 +138,36 @@ test("a WASI program stops with the evaluator's reason and exit code", async () 
   [stdout, stderr].forEach((fd) => closeSync(fd));
   assert.deepEqual([got, readFileSync(join(io, "out"), "utf8"), readFileSync(join(io, "err"), "utf8")], [1, "0.25\n", "the answer is too big for a Float64 (overflow)\n"]);
 });
+
+// SPEC §3.3 (Ersagun 2026-11-03, L218): an overflow stops the program only
+// when its value is used. `big` overflows and nothing reads it, so every
+// engine answers 5; showing it, comparing it, or dividing by it uses it.
+test("an overflow nothing uses never stops: the evaluator, compiled JavaScript and WebAssembly answer 5", async () => {
+  const k = new Lang();
+  const cases: [string, (big: Id) => Id][] = [
+    ["unused", () => k.lit(5)],
+    ["shown", (big) => k.call(S.show, big)],
+    ["compared", (big) => k.if(k.call(S.less, big, k.lit(0)), k.lit(1), k.lit(2))],
+    ["divided by", (big) => k.call(B.div, k.lit(1), big)],
+    ["carried then shown", (big) => k.call(S.show, k.call(B.mul, k.call(B.add, big, big), k.lit(2)))],
+  ];
+  const defs = cases.map(([name, f]): [string, Id] => {
+    const d = k.def(name);
+    k.define(d, k.fn(["x"], (x) => k.let("big", k.call(B.mul, k.call(B.add, x, k.lit(0)), k.lit(1e300)), (big) => f(big))));
+    return [name, d];
+  });
+  const code = base(k.code), names = { ...baseNames(), ...k.names }, info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const r = makeRunner(code, info, { print: () => {}, names });
+  const evaluated = defs.map(([, d]) => said(() => { for (const v of r.call(r.value(d), 1e10)) return v; }));
+  const OVER = "stops: the answer is too big for a Float64 (overflow)";
+  assert.deepEqual(evaluated, ["5", OVER, OVER, OVER, OVER]);
+  const path = join(mkdtempSync(join(tmpdir(), "unused-")), "unused.js");
+  writeFileSync(path, compile(code, info, names, { runtime: pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href, exports: defs.map(([n]) => n) }));
+  const js = (await import(pathToFileURL(path).href)).defs as Record<string, (x: number) => unknown>;
+  assert.deepEqual(defs.map(([n]) => said(() => { const v = js[n](1e10) as { next?: unknown } & Iterable<unknown>; return typeof v?.next === "function" ? [...v][0] : v; })), evaluated);
+  const lowered = lowerScalar(code, info, names, defs.map(([, d]) => d), { data: true });
+  const w = (await instantiate(emitWasm(lowered))) as unknown as Record<string, (x: number) => unknown>;
+  const wasm = defs.map(([, d]) => { const f = lowered.funcs.find((g) => g.def === d)!; return said(() => { let v = w[f.name](1e10); if (f.partial) { const [x, st] = v as [unknown, number]; if (st !== 0) return undefined; v = x; } return f.result === "text" ? fromText(w as never, v) : v; }); });
+  assert.deepEqual(wasm, evaluated);
+});

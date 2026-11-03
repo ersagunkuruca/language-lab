@@ -31,7 +31,7 @@ import { oneAnswer } from "./modes.ts";
 import { computedForward } from "./directions.ts";
 import { discharge } from "./ledger.ts";
 import * as Alg from "./algebraic.ts";
-import { floatText, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, COMPLEX_V, FIXED_V, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, SHOWN, CASE_NAME, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std.ts";
+import { floatText, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, COMPLEX_V, FIXED_V, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, shownImplementations, CASE_NAME, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std.ts";
 import { intLit } from "./int.ts";
 import { JETS } from "./jets.ts";
 import { answerFromHost, effectOfOperation, hostedEffects, type Hosts } from "./hosts.ts";
@@ -136,10 +136,13 @@ export const close = (a: number, b: number) => {
 // tolerance stays where the solver checks an answer it found (relate.ts
 // unify). NOTES.md "Equality".
 export const sameNumber = (a: number, b: number) => a === b;
+// The program's `equal`: an overflow reaching it stops (SPEC §3.3, L218),
+// comparing is a use. The runtime's own comparisons (a cell written back
+// with what it holds) aren't the program's, and don't stop.
+export const usedSameNumber = (a: number, b: number) => (a - a !== 0 || b - b !== 0 ? overflowed() : a === b);
 
 // With its own stack, so two long lists can be compared.
-export function equal(a: Value, b: Value): boolean {
-  const same = sameNumber;
+export function equal(a: Value, b: Value, same = sameNumber): boolean {
   const todo: [Value, Value][] = [[a, b]];
   for (let p; (p = todo.pop());) {
     const [x, y] = p;
@@ -358,16 +361,21 @@ export function noAnswer(op: string, args: number[]): string | null {
     : null;
 }
 // The answers of a Float64 operation: none where it has none (`/`, `sqrt`,
-// `log`, `^` and `mod` carry Choice for it, L125b), and an overflow, or a
-// value that isn't finite, stops the program with the reason.
+// `log`, `^` and `mod` carry Choice for it, L125b). An overflow stops the
+// program only when its value is used (SPEC §3.3, Ersagun 2026-11-03,
+// L218): until then it is carried as IEEE's ∞ or NaN, which + − · keep,
+// so an overflow nothing uses never stops, on any engine. An operation
+// that would turn one back into a finite number (1 / ∞, exp(−∞), 0 · ∞'s
+// neighbours, ∞ mod x) uses it, and so do comparing, showing and
+// converting (sameNumber, numberOrder, showValue). The stop is one no
+// handler catches (R8 §1, L166).
 export function finiteFloat(op: string, r: number, args: number[]): Iterable<number> {
-  if (Number.isFinite(r)) return [r];
-  if (noAnswer(op, args)) return [];
-  // A stop no handler catches (R8 §1, L166): compiled code finds an
-  // overflow late, after it may have left a handler, so a handler of Abort
-  // seeing it would make the engines disagree.
-  throw new Aborted(args.some((x) => !Number.isFinite(x)) ? "a Float64 that isn't finite reached arithmetic"
-    : op === S.float32 ? "the number is too big for a Float32 (overflow)" : "the answer is too big for a Float64 (overflow)");
+  // Only numbers are carried: anything else here (a fraction where the
+  // definition, as written, adds Float64s) is a wrong input, a stop.
+  if (!args.every((x) => typeof x === "number")) throw new Aborted("a Float64 operation was given something that isn't a Float64");
+  if (Number.isFinite(r)) return args.every((x) => x - x === 0) ? [r] : overflowed();
+  if (args.every((x) => x - x === 0) && noAnswer(op, args)) return [];
+  return [r];
 }
 
 // resolveArithmetic's answer for a version of the code and its check: the
@@ -409,11 +417,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   const only = (f: Fn, ...xs: Value[]): Value => { for (const v of f(...xs)) return v; throw new Error("a pure function gave no value"); };
   // A value of a type with a Shown implementation (std.ts SHOWN, L205)
   // shows through it: the implementation's `show`, run here.
-  const showns = new Map<Id, Id>();
-  for (const [key, d] of info.implementations ?? []) {
-    const m = key.startsWith(`${SHOWN}|`) ? /"t":"con","id":"([^"]+)"/.exec(key.slice(SHOWN.length + 1)) : null;
-    if (m) showns.set(m[1], d);
-  }
+  const showns = shownImplementations(info);
   const shownBy = showns.size ? (v: Data): string | undefined => {
     const d = showns.get(info.owner.get(v.tag) ?? "");
     if (!d) return undefined;
@@ -427,15 +431,17 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   // L125a, L125b): an operation with no answer at its inputs fails (its
   // Choice), and an overflow is an Abort, performed where it was.
   for (const [op, f] of Object.entries(impl)) builtins[`builtin.${op}`] = op === "atan2"
-    ? (y, x) => one(f((y as number) + 0, (x as number) + 0)) // −0 is 0: atan2(−0, −1) is π
+    ? (y, x) => finiteFloat(op, f((y as number) + 0, (x as number) + 0), [y as number, x as number]) // −0 is 0: atan2(−0, −1) is π
     : (...a) => finiteFloat(op, f(...(a as number[])), a as number[]);
   for (const [id, f] of Object.entries(STD_IMPL)) builtins[id] = id === S.mod || id === S.abs || id === S.floor || id === S.float32
     ? (...a) => finiteFloat(id === S.mod ? "mod" : id, f(...a) as number, a as number[])
     : (...a) => one(f(...a));
   for (const [id, f] of Object.entries(STD_MANY)) builtins[id] = (...a) => f(...a);
   Object.assign(builtins, {
-    [S.less]: (a, b) => one(bool((a as number) < (b as number))),
-    [S.equal]: (a, b) => one(bool(equal(a, b))),
+    [S.less]: (a, b) => one(bool(numberOrder(a as number, b as number) < 0)),
+    // Showing an overflow uses it (L218).
+    [S.show]: (x) => ((x as number) - (x as number) === 0 ? one(floatText(x as number)) : overflowed()),
+    [S.equal]: (a, b) => one(bool(equal(a, b, usedSameNumber))),
     [COMPARE]: (a, b) => one(ORDER_VALUES[compareValues(a, b, (cmpOrder ??= variantOrder(code))) + 1]),
     [S.and]: (a, b) => one(bool((a as Data).tag === TRUE && (b as Data).tag === TRUE)),
     [S.or]: (a, b) => one(bool((a as Data).tag === TRUE || (b as Data).tag === TRUE)),
@@ -1042,9 +1048,23 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     // What each node of a copy at another number type copies.
     copyOf,
     value: (def: Id) => refValue(def, null),
-    // Call a function value and stream its results.
-    call: (f: Value, ...args: Value[]) => (f as Fn)(...args),
+    // Call a function value and stream its results. An answer handed out
+    // to the host is used (SPEC §3.3, L218): one with an overflow in it
+    // stops, as compiled code's does.
+    call: function* (f: Value, ...args: Value[]) { for (const v of (f as Fn)(...args) as Iterable<Value>) yield handedOut(v); },
   };
+}
+
+// A value leaving the program: every Float64 in it finite, or the stop.
+function handedOut(v: Value): Value {
+  const todo: unknown[] = [v];
+  for (let n = 0; todo.length && n < 1e6; n++) {
+    const x = todo.pop();
+    if (typeof x === "number") { if (x - x !== 0) overflowed(); }
+    else if (Array.isArray(x)) todo.push(...x);
+    else if (x && typeof x === "object" && "fields" in x) todo.push(...(x as Data).fields);
+  }
+  return v;
 }
 
 // Run an action (a definition of type () -> ...). Only effects the runtime

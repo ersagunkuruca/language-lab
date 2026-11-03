@@ -693,7 +693,9 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   const solve = (id: Id, n: Use): Sub => {
     const of = useTarget(code.nodes, n);
     const label = (k: string) => (k === "out" ? "result" : portLabel(code, names, of, k));
-    const boundKeys = Object.keys(n.binds);
+    // A use that gives its ports as a tuple (L211) binds none: it has one
+    // output, the tuple, like a call.
+    const bound = n.binds ?? {}, boundKeys = Object.keys(bound);
     // Used the way the definition declares (RESULTS.md), it reads as a
     // call with one output per result, and its relation holding (= true)
     // goes without saying; another direction says "solve".
@@ -723,13 +725,13 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const rows = Math.max(givenKeys.length, boundKeys.length);
     // A solved port reads "port → its name" when the two differ: sized as
     // drawn, so a row's two labels don't run together (BACKLOG I132).
-    const outLabel = (k: string) => { const b = n.binds[k]; return name(b) === label(k) ? label(k) : `${label(k)} → ${name(b)}`; };
+    const outLabel = (k: string) => { const b = bound[k]; return name(b) === label(k) ? label(k) : `${label(k)} → ${name(b)}`; };
     const lw = (i: number) => (givenKeys[i] ? tw(label(givenKeys[i]), 6.6) : 0), rw = (i: number) => (boundKeys[i] ? tw(outLabel(boundKeys[i]), 6.6) : 0);
     const bw = Math.max(70, tw(title, 8.2) + 24, tw(badge, 6.4) + 16, ...Array.from({ length: Math.max(givenKeys.length, boundKeys.length) }, (_, i) => lw(i) + rw(i) + 36));
     const top = 34;
     const bh = top + rows * 20 + 6;
     const portY = (i: number) => top + i * 20 + 8;
-    boundKeys.forEach((k, i) => sources.set(n.binds[k], { item: id, dx: bw + 6, dy: portY(i) }));
+    boundKeys.forEach((k, i) => sources.set(bound[k], { item: id, dx: bw + 6, dy: portY(i) }));
     item(id, bw, bh, (g) => {
       g.append(titled(s("rect", { width: bw, height: bh, rx: 7, class: `cn rel${choice ? " eff" : ""}${sel(id)}${errs.has(id) ? " err" : ""}`, "data-id": id, "data-move": id }), typeOf(id)));
       g.append(titled(s("text", { x: bw / 2, y: 12, class: "badge", "text-anchor": "middle" }, badge), why));
@@ -738,13 +740,15 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
         g.append(titled(s("circle", { cx: 0, cy: portY(i), r: 5, class: "inp", "data-slot": n.given[k] }), typeOf(n.given[k])));
         g.append(s("text", { x: 9, y: portY(i) + 4, class: "portl" }, label(k)));
       });
+      if (n.body === undefined) g.append(titled(s("circle", { cx: bw, cy: bh / 2, r: 5, class: "outp", "data-out": id }), "Drag onto another input to share this value there"));
       boundKeys.forEach((k, i) => {
-        const b = n.binds[k];
+        const b = bound[k];
         g.append(s("text", { x: bw - 9, y: portY(i) + 4, class: "portl", "text-anchor": "end" }, outLabel(k)));
         g.append(titled(s("circle", { cx: bw, cy: portY(i), r: 6, class: `src${sel(b)}`, "data-src": b, "data-id": b }), `${name(b)}${typeOf(b) ? ` : ${typeOf(b)}` : ""}`));
       });
     }, { name: title });
-    const { sub, bx } = withArgs(inputs, kids, bw, bh, id, portY);
+    const { sub, bx, by } = withArgs(inputs, kids, bw, bh, id, portY);
+    if (n.body === undefined) return { ...sub, outX: bx + bw, outY: by + bh / 2, out: { item: id, dx: bw, dy: bh / 2 } };
     const body = lay(n.body);
     const x = bx + bw + 40, y = Math.max(0, (sub.h - body.h) / 2);
     shift(sub.at, body, x, y);

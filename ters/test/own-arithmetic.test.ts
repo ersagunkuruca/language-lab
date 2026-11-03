@@ -21,6 +21,7 @@ import { B } from "../src/prelude.ts";
 import { INT, NUMBER } from "../src/lang/types.ts";
 import { subtree, type Id } from "../src/model.ts";
 import { compile } from "../../compiler/src/compile.ts";
+import { loadCoreJs, lowerCore } from "../../compiler/src/core-js.ts";
 
 const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 const lib = (name: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === name)!;
@@ -83,7 +84,7 @@ test("a type with no + or < of its own is told so where it is used", () => {
   assert.match(p.info.errors.filter((e) => inside.has(e.id)).map((e) => e.message).join("; "), /Version isn't a Number .*and has no \+ − · of its own: give it one, a definition of type Arithmetic Version/);
 });
 
-test("a type's own show through Shown: show any shows a version as 1.9 (L205)", () => {
+test("a type's own show through Shown: show any shows a version as 1.9 (L205), compiled too (C148)", async () => {
   const p = program((k, V) => {
     const text = k.def("version text");
     k.define(text, k.fn(["v"], (v) => k.match(v, [{ variant: V.v.version, names: ["m", "n"], body: ([m, n]) => k.text(k.call(INT_OPS.show, m), k.lit("."), k.call(INT_OPS.show, n)) }])));
@@ -94,6 +95,9 @@ test("a type's own show through Shown: show any shows a version as 1.9 (L205)", 
     const shows = k.def("shows as");
     k.define(shows, k.fn(["t", "v"], (t, v) => k.and(k.equal(v, k.call(S.oneOf, k.list(k.call(V.v.version, k.int(1), k.int(9)), k.call(V.v.version, k.int(2), k.int(0))))), k.equal(t, k.call(SHOW_ANY, v)))));
     const [t, v] = (k.code.nodes[(k.code.nodes[shows] as { body: Id }).body] as unknown as { params: Id[] }).params;
+    // Inside a list, as each item is shown.
+    const list = k.def("versions shown");
+    k.define(list, k.call(SHOW_ANY, k.list(k.call(V.v.version, k.int(1), k.int(9)), k.call(V.v.version, k.int(2), k.int(0)))));
     const found = k.def("which shows as 2.0");
     k.define(found, k.call(S.first, k.thunk(() => k.solve(shows, { [t]: k.lit("2.0"), out: k.true }, { [v]: "v" }, ({ [v]: x }) => k.call(SHOW_ANY, x))), k.thunk(() => k.lit("none"))));
   });
@@ -104,4 +108,15 @@ test("a type's own show through Shown: show any shows a version as 1.9 (L205)", 
   assert.equal(r.value(at("the older")), "1.9");
   assert.equal(r.value(at("a sum")), "quaternion(5, 5, 5, 5)");
   assert.equal(r.value(at("which shows as 2.0")), "2.0");
+  assert.equal(r.value(at("versions shown")), "[1.9, 2.0]");
+  const path = join(mkdtempSync(join(tmpdir(), "own-")), "shown.js");
+  writeFileSync(path, compile(p.code, p.info, p.names, { runtime, exports: ["the older", "a sum", "versions shown"] }));
+  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
+  assert.deepEqual(["the older", "a sum", "versions shown"].map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), ["1.9", "quaternion(5, 5, 5, 5)", "[1.9, 2.0]"]);
+  // And JavaScript printed from the core IR, which WebAssembly and C share.
+  const ds = ["the older", "a sum", "versions shown"].map(at);
+  const l = lowerCore(p.code, p.info, p.names, ds);
+  assert.deepEqual(ds.flatMap((d) => (l.refused.has(d) ? [`${p.names[d]}: ${l.refused.get(d)}`] : [])), []);
+  const fs = loadCoreJs(l);
+  assert.deepEqual(ds.map((d) => fs[l.funcs.findIndex((g) => g.name === p.names[d] && !g.inner)]()), ["1.9", "quaternion(5, 5, 5, 5)", "[1.9, 2.0]"]);
 });

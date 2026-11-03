@@ -22,7 +22,7 @@ language, then more targets or speed (WORKFLOW.md "Priority").
 |---|---|---|
 | E Editor | "Editor lane" | E211 the bigger programs as editor examples (one a PR), L70c's editor half (mark where a failed read stopped), L147b; then E200b, E103 |
 | C Compiler and targets | "Compiler lane" | C93's rest, C86, C40's rest; then C30, C67 |
-| L Language and library | "Language lane" | (queue empty; next by priority from the table below) |
+| L Language and library | "Language lane" | L216 and T12 (test speed, TEST-SPEED-2026-11-03), then next by priority from the table below |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -31,7 +31,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I110 | Check main: 49 of its last 60 runs cancelled while queued, a run takes ~19 of its 20 minutes, "affected" reaches 93 of 97 test files. Look at why std.ts and the prelude reach every test; lanes check the latest run when starting an item | REVIEW-2026-11-01 §6 | 2026-11-01 |
 | I154 | A list written out with a thousand items (a table of data pasted in) stops the checker: "Maximum call stack size exceeded" in infer.ts, which walks the list as a thousand nested calls of the list maker, one stack frame each (500 items check). The evaluator, staging and the compilers walk it the same way. Either walk a chain of the list maker in a loop in each pass, or keep a written list as one node of n items | C128 (fuzz test, 2026-11-03) | 2026-11-03 |
 
 ## E: Editor
@@ -45,14 +44,13 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E228 | editor/main.ts (4,589 lines, 254 kind tests) split by job (a: one element maker, editor/dom.ts; b: run runtimes and views, editor/runViews.ts; c: the Guide, editor/guide.ts; d: the solver's derived program, editor/solverText.ts) (selection, palette, run, files); the palette and inspector read L178's schema instead of switching on kinds | [FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md) §11 | P3 | L | |
+| E228 | editor/main.ts (4,589 lines, 254 kind tests) split by job (a: one element maker, editor/dom.ts; b: run runtimes and views, editor/runViews.ts; c: the Guide, editor/guide.ts; d: the solver's derived program, editor/solverText.ts; e: the picture and the page, editor/pagePanel.ts, through a `PageHost`; f: the Selected panel's row, unit and Same as parts, editor/selectedParts.ts; g: values and test results, editor/runViews.ts) (selection, palette, run, files); the palette and inspector read L178's schema instead of switching on kinds | [FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md) §11 | P3 | L | |
 
 ### Writing programs in the editor
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | E237 | The editor's literals and display for library number types through L204's and L205's interfaces, not editor/typed.ts's own list (`EXOTIC`, the Rational literal paths) | [MATHEMATICS-AS-LIBRARIES](docs/design/numbers/MATHEMATICS-AS-LIBRARIES-2026-11-03.md) | P3 | M | after L204, L205 |
-| E239 | A text literal typed in the editor or read by the text view is stored in NFC (L214a, TEXT-2026-11-03.md §1), so `"é"` typed either way is the same literal and the same key as text from the world | L214a | P3 | S | |
 
 ### Speed of editing
 
@@ -89,6 +87,7 @@ New targets and speed rank below every language item (Ersagun,
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| C156 | C carries an overflow to its use (SPEC §3.3, S2, L218): finite.test.ts checks the evaluator, JavaScript and WebAssembly answer 5 for `let big = x · 1e300 in 5`; C and the shaders aren't checked yet. An answer handed to the host is a use there too | L218 | P2 | S | |
 | C137 | The compiled targets on one lowering. compile.ts (3,435 lines) lowers JS straight from the model while WebAssembly, C, WGSL and js-scalar share scalar.ts's core IR, so each feature is built twice in the compiler. (a) From now on nothing goes into compile.ts alone: a model-to-model pass or the shared lowering (written in compile.ts's header and CORE-IR.md); (b) done: `Lowered` is `CoreIR`, its contract in docs/design/targets/CORE-IR.md; (c) a JavaScript printer from it, grown until it runs compile.ts's examples, checked by I111 and the differential test: c1 to c17 done (`lab compile --core`, `lab build-web --core`; the evaluator's values; the evaluator's builtins with no lowering, by id; cells and page effects, the world's clock and draws, 6 pages agree; solves through the evaluator's solver, its budget spent, given closures that carry their nodes; core-js.ts: data, Int, Text, arrays, tables, seeded Random, searches, budgets, aborts, the world; every fuzz program and the 16 examples whose main lowers agree with the evaluator, core-js.test.ts), next: the pages and examples that don't lower (pig's handler parameter, tumble's Animate, a function choosing among several answers (conjugate, pedal), several answers under a budget (backwards), physics' polar, a relation whose type is one reading of it (L130), derivative), deep recursion that isn't a tail call (numbers as defined overflows the stack); (d) compile.ts retired piece by piece | [FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md) §2 | P2 | L | |
 | C138 | C30's aim first: an `array` representation of List written in the language and chosen by the representation layer, on the core IR, replacing compile.ts's 50 CONS/NIL tests and the per-target copies (C30d2, C30d3) | [FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md) §3 | P2 | L | |
 | C139 | Library types out of the core passes: id tests on library constructors and functions (compile.ts 188, scalar.ts 152, run.ts 82) become representations or builtin records, retired with C137's printer | [FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md) §7 | P3 | M | |
@@ -141,7 +140,6 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| C148 | `show any` through `Shown` in compiled code (L205a): runtime.js `$showAny` and scalar.ts's show call a type's Shown implementation when it has one, as the evaluator does; own-arithmetic.test.ts's version shown as 1.9 compiled too | L205 | P2 | S | |
 
 ### What a good language needs ([ASPECTS-2026-11-03b](docs/reports/reviews/ASPECTS-2026-11-03b.md))
 
@@ -166,6 +164,8 @@ all of these.
 | L181 | A written list is one call to the list maker with n inputs (PORTS §4), not n nested `cons` calls, so a 1,000-item list is depth 1 in every pass (I154: the checker overflows its stack today) | [FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md) §6 | P2 | M | |
 | L182 | Flags as hidden kinds: every new node attribute goes through L178's schema; as L128d and L130 land, `def.results`, `def.direction` and `field.results/ports` become ports on the definition's type | [FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md) §8 | P3 | M | |
 | L215 | Check per definition group, cached ([CHECK-BY-GROUP-2026-11-03.md](docs/design/tools/CHECK-BY-GROUP-2026-11-03.md)), one PR each: (a) closed group results keyed by the group's hashes, its dependencies' schemes, the implementations it needs and the options, with a randomized cache-against-scratch test; (b) a `Checker` cache on the editor's edit path, timed on I157, I158 and a one-character edit in Constructions; (c) typedef groups, units, modes in the cache; (d) `reuse` removed | L183, FOUNDATIONS-2026-11-03 §9 | P3 | L | design done |
+| L216 | Check the library once per process: its check is kept, and a program's check reuses it and checks only the program's own definitions (L215's library case, ahead of it). Today each small program in a test re-checks all 495 library definitions: 6,823 full checks, about 2,200 s, 53% of the unit tests. With `reuse` 14 examples gave the same errors and schemes, 22 times faster; 20 threw (`null.params`), which this row fixes. The editor's opens and edits get it too (I157 to I159). Compare against a scratch check on every example | [TEST-SPEED-2026-11-03](docs/reports/TEST-SPEED-2026-11-03.md) | P1 | M | |
+| L217 | Resolve the library's arithmetic once per process: `makeRunner`'s `resolveArithmetic` walks the library again for every new program (2,999 calls, about 300 s in the unit tests) | [TEST-SPEED-2026-11-03](docs/reports/TEST-SPEED-2026-11-03.md) | P2 | S | after L216 |
 
 ### Bugs and gaps found by programs
 
@@ -188,8 +188,8 @@ all of these.
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | L203 | Grade masks for any library: grades.ts reads which parts can be nonzero from the table and the code, not from the prelude's `clifford …` names and std's `Algebra` constructor (the only compiled-speed gap L202 measured). Step a done: a copy of the prelude's definitions is known by its meaning's hash. Left: the general reading, for a library of its own | [MATHEMATICS-AS-LIBRARIES](docs/design/numbers/MATHEMATICS-AS-LIBRARIES-2026-11-03.md) | P2 | M | |
-| L204 | Number types by interface only: types.ts `requireArith`, infer.ts `isNumberType`, arith.ts `DATA_NUMBERS` and the per-type literal constructors become Arithmetic, Ordered and a literal interface ("from a fraction", INTERFACES.md); `std.` types stop skipping the lookup; `MATRIX_SIZE` goes; Rational's and Algebraic's ordering in run.ts and compile.ts goes through Ordered | [MATHEMATICS-AS-LIBRARIES](docs/design/numbers/MATHEMATICS-AS-LIBRARIES-2026-11-03.md) | P2 | L | |
-| L205 | Showing by interface: L205a done (std's `Shown` interface, the prelude's Rational, Complex and Fixed implement it, and `show any` in the evaluator shows a value of a type with one through it, so a type of the program's own shows its own way). L205b done (a search's `show any` shows the same way, relate.ts given the runner's resolver). Left: the editor's chips pass a resolver (Editor lane; run.ts would export one made from a program's check), then run.ts `showValue`'s Rational, Complex and Fixed branches go; compiled code is C148 | [MATHEMATICS-AS-LIBRARIES](docs/design/numbers/MATHEMATICS-AS-LIBRARIES-2026-11-03.md) | P2 | M | steps a, b done |
+| L204 | Number types by interface only (tried 2026-11-03: sending every std type through the lookup broke 8 tests, because the lookup's end-of-check error loses the call-site messages, "needs List here, and a number isn't one", and a module published alone has no Float64 implementation to find; step a needs the wanted check to give those messages first): types.ts `requireArith`, infer.ts `isNumberType`, arith.ts `DATA_NUMBERS` and the per-type literal constructors become Arithmetic, Ordered and a literal interface ("from a fraction", INTERFACES.md); `std.` types stop skipping the lookup; `MATRIX_SIZE` goes; Rational's and Algebraic's ordering in run.ts and compile.ts goes through Ordered | [MATHEMATICS-AS-LIBRARIES](docs/design/numbers/MATHEMATICS-AS-LIBRARIES-2026-11-03.md) | P2 | L | |
+| L205 | Showing by interface: L205a done (std's `Shown` interface, the prelude's Rational, Complex and Fixed implement it, and `show any` in the evaluator shows a value of a type with one through it, so a type of the program's own shows its own way). L205b done (a search's `show any` shows the same way, relate.ts given the runner's resolver). Left: the editor's chips pass a resolver (Editor lane; run.ts would export one made from a program's check), then run.ts `showValue`'s Rational, Complex and Fixed branches go; compiled code done (C148) | [MATHEMATICS-AS-LIBRARIES](docs/design/numbers/MATHEMATICS-AS-LIBRARIES-2026-11-03.md) | P2 | M | steps a, b done |
 | L206 | The evaluator's speed without jets by hash: stage known-data calls in the evaluator (stage.ts) or let a library declare its host implementation beside the definition; retire jets.ts's list. Measured by L202 | [MATHEMATICS-AS-LIBRARIES](docs/design/numbers/MATHEMATICS-AS-LIBRARIES-2026-11-03.md) | P3 | M | |
 | L207 | The number types leave std.ts for a published `numbers` module written in the language (Rational, Complex, Dual, Fixed, Mat2 to Mat4, Matrix, Algebra, Table entry, Trig, Extended), ids kept for saved programs (L184). After L204 and L205. Algebraic stays host code, registered by the module | [MATHEMATICS-AS-LIBRARIES](docs/design/numbers/MATHEMATICS-AS-LIBRARIES-2026-11-03.md) | P3 | L | |
 | L208 | Generalization as a feature (Ersagun 2026-11-03 09:38): an embedding is a representation whose meaning keeps the operations; the checker inserts only canonical (unique) ones and the rest are named; two canonical paths must agree; laws checked (T7). Design note first; literals become the embedding from Int (with L204) | [MATHEMATICS-AS-LIBRARIES](docs/design/numbers/MATHEMATICS-AS-LIBRARIES-2026-11-03.md) | P2 | L | |
@@ -301,6 +301,9 @@ docs/process/TESTING.md. T7 is in lane L.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| T12 | Each sweep checks a fixed number of things per change (say 40 fillings or wires), rotating by SWEEP_AT, all of it nightly. The eighth today is of targets, and each target tries every filling, which grew with the library: lang.test.ts's palette sweep 615 s (once about 30 s for all of it), dots physics 295 s, palette calculus 98 s. Lane L, since its runs pay for it | [TEST-SPEED-2026-11-03](docs/reports/TEST-SPEED-2026-11-03.md) | P1 | S | |
+| T13 | Measure the full run again after L216 and T12, then decide (Ersagun) whether a change to std.ts, the prelude or the checker runs a capped fast set, with Check main and the nightly running the rest. Today any such change reaches 199 of 202 files, so `affected` is the full run (I110) | [TEST-SPEED-2026-11-03](docs/reports/TEST-SPEED-2026-11-03.md), I110 | P2 | S | after L216, T12 |
+| T14 | The single slow tests left after L216: Tumble's clear backwards 74 s, tree of List 50 s, every builtin backwards 103 s, core-js examples and pages 116 s, editing's swapAndUndo 43 s. Each becomes a sweep or gets a smaller input, toward 5 s a file | [TEST-SPEED-2026-11-03](docs/reports/TEST-SPEED-2026-11-03.md) | P3 | M | after L216 |
 
 ## Coordinator and process
 

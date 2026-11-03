@@ -215,7 +215,7 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
   if (!from && !slotsOf.has(code)) slotsOf.set(code, { parent: new Map(parent), seen });
   const slot = find;
   // The plans of a lambda made after the analyzer was.
-  const fresh = (lam: Id) => { if (!seen.has(lam) && (!base?.seen.has(lam) || from!.changed.has(lam))) refresh(); };
+  const fresh = (lam: Id) => { if (!seen.has(lam) && (!base?.seen.has(lam) || from!.changed.has(lam))) { refresh(); verdicts.clear(); } };
 
   // Binders a lambda uses from outside itself.
   const freeOf = new Map<Id, Id[]>();
@@ -332,10 +332,36 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
 
   function run(st: St, need: Id[], ctx: Ctx): Verdict {
     const steps: Exec[] = [];
+    // What a goal said when last asked stands until a slot it asked about
+    // is known or measured (C155): whether a goal is ready, and how,
+    // reads only which slots are known and their sizes (and modes worked
+    // out once). So each step asks again only the goals a new slot
+    // concerns, not all of them: compass, staged, has a lambda of 1,121
+    // goals, each asked at each step.
+    const said = new Map<Goal, Firing | null>(), watching = new Map<Id, Goal[]>();
+    const known = st.known, sizes = st.sizes, has = known.has.bind(known), size = sizes.get.bind(sizes);
+    let asked: Id[] = [];
+    const touched = (s: Id) => {
+      for (const g of watching.get(s) ?? []) said.delete(g);
+      watching.delete(s);
+    };
+    const learn = (s: Id) => { if (!known.has(s)) { known.add(s); touched(s); } };
+    const ask = (g: Goal): Firing | null => {
+      if (said.has(g)) return said.get(g)!;
+      asked = [];
+      known.has = (x: Id) => { asked.push(x); return has(x); };
+      sizes.get = (x: Id) => { asked.push(x); return size(x); };
+      let f: Firing | null;
+      try { f = g.ready(st) ?? (g.slots.length && g.slots.every((s) => st.known.has(s)) ? checkOf() : null); }
+      finally { delete (known as { has?: unknown }).has; delete (sizes as { get?: unknown }).get; }
+      said.set(g, f);
+      for (const x of asked) { const w = watching.get(x); if (w) w.push(g); else watching.set(x, [g]); }
+      return f;
+    };
     for (;;) {
       let best: { g: Goal; f: Firing } | null = null;
       for (const g of st.goals) {
-        const f = g.ready(st) ?? (g.slots.length && g.slots.every((s) => st.known.has(s)) ? checkOf() : null);
+        const f = ask(g);
         if (f && (!best || f.cost < best.f.cost)) best = { g, f };
       }
       if (!best) {
@@ -348,7 +374,7 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
         const eqs = st.goals.filter((g) => g.numeric).map((g, i) => ({ g, i, u: unknowns(g) })).sort((a, b) => a.u - b.u || a.i - b.i).map((e) => e.g);
         if (!eqs.length) break;
         st.goals = st.goals.filter((g) => !g.numeric);
-        for (const g of eqs) for (const s of g.slots) st.known.add(s);
+        for (const g of eqs) for (const s of g.slots) learn(s);
         st.answers = both(st.answers, MANY);
         st.dynamic.push(`equations solved together: ${eqs.map((g) => g.text).join(", ")}`);
         st.order.push("equations together");
@@ -377,8 +403,8 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
       }
       if (!f.branches && !st.posted?.has(g)) steps.push(st.soft && !g.numeric ? { ...(f.exec ?? g.exec), waits: true } : f.exec ?? g.exec);
       f.chosen?.();
-      for (const s of f.gives) st.known.add(s);
-      for (const [s, z] of f.sizes ?? []) st.sizes.set(s, mergeSize(st.sizes.get(s), z));
+      for (const s of f.gives) learn(s);
+      for (const [s, z] of f.sizes ?? []) { st.sizes.set(s, mergeSize(st.sizes.get(s), z)); touched(s); }
       st.answers = both(st.answers, f.answers);
       if (!f.ends) { st.ends = false; st.loops.push(f.why ?? g.text); }
       if (f.dynamic) st.dynamic.push(f.dynamic);
@@ -929,21 +955,32 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
     const s = solveKey(n);
     return { v, key: s && keyOf({ k: "def", id: useTarget(nodes, n) }, s.known, s.spec) };
   });
+  // Each mode asked for, once worked out (C154): `checked` starts each one
+  // afresh so its recursion is checked whole, and the checker asks again
+  // at every call given a function (compass staged: 12 s of 14). The
+  // program doesn't change under an analyzer, so neither does the answer.
+  const verdicts = new Map<string, Verdict | null>();
+  const once = <T extends Verdict | null>(k: string, get: () => T): T => {
+    if (verdicts.has(k)) return verdicts.get(k) as T;
+    const v = get();
+    verdicts.set(k, v);
+    return v;
+  };
   // known: parameter positions as "0", "1", …, and "out".
-  const ofMode = (def: Id, known: string[], spec: Map<number, Fn> = new Map()) =>
-    checked(() => ({ v: mode({ k: "def", id: def }, new Set(known), spec), key: keyOf({ k: "def", id: def }, new Set(known), spec) }))!;
+  const ofMode = (def: Id, known: string[], spec: Map<number, Fn> = new Map()) => once(`mode|${keyOf({ k: "def", id: def }, new Set(known), spec)}`, () =>
+    checked(() => ({ v: mode({ k: "def", id: def }, new Set(known), spec), key: keyOf({ k: "def", id: def }, new Set(known), spec) }))!);
 
   // The function a definition gives back (`(f, g) ↦ (x) ↦ …`), run
   // forward with the definition's parameters at spec known to be those
   // functions: the prelude's conjugate, given its f.
-  const ofReturned = (def: Id, spec: Map<number, Fn>): Verdict | null => checked(() => {
+  const ofReturned = (def: Id, spec: Map<number, Fn>): Verdict | null => once(`returned|${def}|${[...spec].map(([i, f]) => `${i}=${fnKey(f)}`).sort().join(",")}`, () => checked(() => {
     const outerLam = nodes[(nodes[def] as NodeOf<"def">).body!];
     const inner = outerLam?.kind === "lambda" ? nodes[outerLam.body] : undefined;
     if (outerLam?.kind !== "lambda" || inner?.kind !== "lambda") return { v: null, key: null };
     const outer = new Map([...spec].map(([i, f]) => [slot(outerLam.params[i]), f] as [Id, Fn]));
     const known = new Set(inner.params.map((_, i) => String(i)));
     return { v: lambdaMode(inner.id, known, new Map(), def, outer), key: modeKey(inner.id, known, new Map(), outer) };
-  });
+  }));
 
   // The plan relate.ts runs for a function in a mode, and for a value
   // defined once (with its result known or not).

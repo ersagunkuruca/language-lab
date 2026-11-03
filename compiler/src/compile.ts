@@ -32,7 +32,7 @@
 // search fall back to the solver at run time, with the plan made once.
 
 import { givenInOrder } from "../../ters/src/lang/ports.ts";
-import { reachedFrom } from "./scalar.ts";
+import { reachedWithShows } from "./scalar.ts";
 import { resolveArithmetic } from "../../ters/src/lang/arith.ts";
 import { intLit } from "../../ters/src/lang/int.ts";
 import { hostOp, ownOperations } from "../../ters/src/lang/hosts.ts";
@@ -40,7 +40,7 @@ import { children, dependencies, subtree, type Code, type Id, type Node, type No
 import type { Names } from "../../ters/src/presentation.ts";
 import { CHOICE, DIVERGE, INT, NUMBER, STRING, Subst, type Row, type Type } from "../../ters/src/lang/types.ts";
 import { fieldShapes, shapeOf, type Shape } from "../../ters/src/lang/nested.ts";
-import { ALGEBRAIC_V, AWAIT_OP, BOOL, CELL_OPS, COMPARE, CONS, FALSE, INT_OPS, LIST, NIL, ORDER_V, RANDOM, RANDOM_OP, RATIO, S, SET, SIGS, TEXT_OPS, TRUE, UNIT_V, NONE, SOME } from "../../ters/src/lang/std.ts";
+import { ALGEBRAIC_V, AWAIT_OP, BOOL, CELL_OPS, COMPARE, CONS, FALSE, INT_OPS, LIST, NIL, ORDER_V, RANDOM, RANDOM_OP, RATIO, S, SET, SHOW_ANY, shownImplementations, SIGS, TEXT_OPS, TRUE, UNIT_V, NONE, SOME } from "../../ters/src/lang/std.ts";
 import { fieldPath, placePath } from "../../ters/src/lang/records.ts";
 import { planSolve } from "../../ters/src/lang/solve.ts";
 import { oneAnswer as solvedOnce } from "../../ters/src/lang/modes.ts";
@@ -126,11 +126,12 @@ function throughNames(code: Code): Code {
 }
 
 // The definitions the exports reach, every type, and the builtins (all of
-// them when an export isn't found).
-function reachedFromExports(code: Code, names: Names, exports: string[]): Code {
+// them when an export isn't found), and the Shown implementations a show
+// shows through (C148).
+function reachedFromExports(code: Code, names: Names, exports: string[], info: Info): Code {
   const roots = exports.map((x) => code.defs.findLast((d) => names[d] === x));
   if (roots.some((r) => !r)) return code;
-  return reachedFrom(code, roots as Id[]);
+  return reachedWithShows(code, roots as Id[], info);
 }
 
 export function compile(code: Code, info: Info, names: Names, opts: Options): string {
@@ -157,7 +158,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // types still hold for what's left, so this needs no check of its own.
   // Before hoisting, whose check again was over the whole library too
   // (sheet: 1.6 s of its 2.4 s compile).
-  code = reachedFromExports(code, names, opts.exports);
+  code = reachedFromExports(code, names, opts.exports, info);
   // Cells kept plainly when nothing reads them reactively (L99f): no
   // formula, each or each of, and no page (Html), whose watchers do.
   const refs = Object.values(code.nodes).flatMap((n) => (n.kind === "ref" ? [n.target] : []));
@@ -3332,6 +3333,15 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     if (!def) throw new Error(`no definition named ${name}`);
     exported.push(`  ${JSON.stringify(name)}: ${asValue(spec(def, new Map()))},`);
   }
+  // Each type's Shown implementation, by the cases it has (C148): the
+  // runtime's $showAny shows a value made by one through its `show`.
+  const showsAny = Object.values(code.nodes).some((n) => n.kind === "ref" && n.target === SHOW_ANY);
+  const shownBy = showsAny ? [...shownImplementations(info)].flatMap(([t, d]) => {
+    const def = code.nodes[t], body = def?.kind === "def" && def.body ? code.nodes[def.body] : undefined;
+    if (!code.defs.includes(d) || body?.kind !== "typedef") return [];
+    const impl = asValue(spec(d, new Map()));
+    return body.variants.map((v) => `${JSON.stringify(v)}: ${impl}`);
+  }) : [];
   const made: [Spec, string][] = [];
   for (let s; (s = queue.shift());) made.push([s, body(s)]);
   // Asking which copy a call needs makes that copy, so a search that is only
@@ -3343,7 +3353,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     js = js.replace(/\/\/[^\n]*|\/\*.*?\*\//g, "");
     for (const [s, b] of made) if (!keep.has(s.name) && uses(js, s.name)) { keep.add(s.name); reach(b); }
   };
-  reach(exported.join("\n") + solverCode.join("\n") + constants.join("\n"));
+  reach(exported.join("\n") + solverCode.join("\n") + constants.join("\n") + shownBy.join("\n"));
   // A copy in a cycle with no heap copy of its own: called from the heap
   // as it is.
   for (const [s, b] of made) if (keep.has(s.name)) out.push(heapCalled.has(s.name) && !heapCopies.has(s.name) ? `${b}\nfunction* ${s.name}$h(...a) {\nreturn ${s.name}(...a);\n}` : b);
@@ -3367,6 +3377,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     ...orders,
     ...([...out, ...exported, ...solverCode, ...constants, ...orders].some((b) => /\$order(?![\w$])/.test(b)) ? [`const $order = new Map(${JSON.stringify(Object.values(code.nodes).flatMap((n) => (n.kind === "typedef" ? n.variants.map((v, i) => [v, i]) : [])))});`] : []),
     ...([...out, ...exported, ...solverCode, ...constants].some((b) => b.includes("$showAny(") || b.includes("$caseName(")) ? [`const $names = ${JSON.stringify(Object.fromEntries(Object.values(code.nodes).filter((n) => n.kind === "variant" && names[n.id] !== undefined).map((n) => [n.id, names[n.id]])))};`] : []),
+    ...([...out, ...exported, ...solverCode, ...constants].some((b) => b.includes("$showAny(")) ? [`const $shown = {${shownBy.join(", ")}};`] : []),
     ...(usesCells ? [`$useCells(${!tracksCells});`] : []),
     ...solverCode,
     ...constants,
