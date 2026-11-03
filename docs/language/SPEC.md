@@ -116,9 +116,15 @@ no answer (§5) when the divisor is 0.
 3.2. **Float64** is the finite IEEE 754 binary64 numbers with **one
 zero**. −0, the infinities and NaN are not values. Each operation gives
 the correctly rounded IEEE result where IEEE requires one (`+ − · /`,
-`sqrt`). For `sin`, `exp` and the other library functions, the engines
-must give the same bits as the evaluator; today they share fdlibm's
-algorithms so that they do.
+`sqrt`), so those agree to the bit on every engine. For `sin`, `exp`,
+`pow` and the other library functions an engine uses its platform's
+own (JavaScript's `Math`, C's libm, a GPU's built-ins) and must be
+**within a few ulp** of the true value, not the evaluator's bits
+(decided 2026-11-03, S12): a program compiled for a platform doesn't
+carry a maths library of its own. A platform with none (WASI) carries
+one. A program that needs the same bits on every machine (a lockstep
+game) says so by its type: Fixed (§3.4), or a library number type
+whose functions are written in Ters, which only that program carries.
 
 3.3. **Leaving the finite floats** happens in two ways (FLOAT-VALUES
 §2):
@@ -384,9 +390,13 @@ compiled JavaScript doesn't run operations answered later yet (C40).
 - **data**: plus data, closures, Int, Text, Choice, handlers and the
   world (WebAssembly and C).
 
-The **shader** profile (WGSL) doesn't conform today: an Int is 32 bits
-and gives up past that, as a budget running out does, and a Float64
-overflow gives a GPU's ∞ or NaN unchecked, in f32. *Open*, S6.
+The **shader** profile (WGSL) is a declared approximation with its own
+meaning (decided 2026-11-03, S6): a Float64 is computed as a GPU's
+32-bit float, an Int as 32 bits that gives up past that as a budget
+running out does, a Float64 overflow gives the GPU's ∞ or NaN
+unchecked, and the library functions are the GPU's built-ins. It
+promises the evaluator's answers only to that precision; a program that
+needs exact answers doesn't run as a shader.
 
 ## 11. What this page leaves to other documents
 
@@ -412,13 +422,13 @@ hasn't been chosen. None is answered here. Rows are in BACKLOG.md.
 | S3 | **The order of a use's answers after the first.** The backwards search is a fair interleaving (miniKanren), so the order depends on the search's internals. `first` is fixed (canonical), but `all` of a use lists answers in an order nothing specifies. Spec it as canonical order, or say `all` of a use is a set? | evaluator only; compiled code runs uses through the same solver | L198 |
 | S4 | **Fuel counts depend on the checker.** A step is a call into a definition the checker couldn't prove ends (§5.6). When the checker gets smarter, a definition stops counting, and the same `with fuel(n, …)` can go from no answer to an answer. Count every call, or keep it and say a checker change can change fuel answers? | evaluator and the core IR count the same way | L199 |
 | S5 | **When a stopped search had effects.** §5.2 performs an effect once per path. With `first`, paths after the first answer don't run. Does a conforming engine have to run paths in exactly the evaluator's order, or only give the same answers? (Printing inside a search is already a type error, so this matters only for handled effects like `Log` and `State`.) | evaluator's order; the fuzz test checks it | L198 |
-| S6 | **Shaders.** Is the shader profile a conforming target with refusals (Int past 32 bits and overflow refused, or checked) or a declared approximation with its own meaning? | approximation, not written down | C141 |
+| S6 | **Shaders.** Decided 2026-11-03 (Ersagun): a declared approximation with its own meaning, written in §10.3 | written | C141 |
 | S7 | **Text.** Normalisation where text enters, grapheme clusters, case mapping and locales. | code points only | L185 |
 | S8 | **The merged use's shape** (tuple or body). | pending | L179 |
 | S9 | **Strict positivity.** | kept | L107 |
 | S10 | **Evaluation order inside a use.** §5.1 is left to right for calls. A use solves its ports in the order the solver finds best. Are effects in a use's given ports evaluated left to right by port order, and before solving? | evaluated before solving; port order not written down | L198 |
 | S11 | **`compare` on Float64** is documented in LIBRARY.md as putting NaN after every other Float64, but NaN isn't a value (§3.2). A stale line. | doc only | L200 |
-| S12 | **Library functions' bits.** §3.2 asks every engine for the evaluator's bits on `sin`, `exp`, `pow`. Is that the rule (it is today, through fdlibm), or is "within an ulp" enough, which shaders and future targets would need? | same bits on JS, WebAssembly and C | C141 |
+| S12 | **Library functions' bits.** Decided 2026-11-03 (Ersagun): the platform's own, within a few ulp (§3.2); exact agreement across machines comes from a type that asks for it | C and WASI still carry fdlibm for the evaluator's bits; the agreement tests are exact | C144 |
 | S13 | **The hash misses meaning** (L178): an effect and a data type of one shape, a literal arm's value. §1.3 is the rule L178 implements. | bug | L178 |
 | S14 | **A direction's law** (§7.6): nothing checks that a definition marked as another's direction gives the same answers. | promised by the author | L201 |
 
