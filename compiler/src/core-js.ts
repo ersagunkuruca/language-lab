@@ -18,14 +18,14 @@
 // the evaluator's (C137c2), Random seeded is random.ts's generator, and
 // the world is the evaluator's Runtime (C137c3, runCoreMain).
 
-import { ARRAY_OPS, FALSE, HASH_SET_OPS, NONE, S, SOME, STD_IMPL, STD_MANY, TABLE_OPS, TRUE } from "../../ters/src/lang/std.ts";
-import { cellOps, equal, toList, type Runtime, type Value, type World } from "../../ters/src/lang/run.ts";
+import { ARRAY_OPS, CONS, FALSE, HASH_SET_OPS, NIL, NONE, S, SOME, STD_IMPL, STD_MANY, TABLE_OPS, TRUE } from "../../ters/src/lang/std.ts";
+import { cellOps, equal, solveAnswers, toList, type Runtime, type Value, type World } from "../../ters/src/lang/run.ts";
 import { Cells, NoValue } from "../../ters/src/lang/cells.ts";
 import { NoAnswer } from "../../ters/src/lang/html.ts";
 import { worldRandom } from "../../ters/src/lang/random.ts";
 import * as I from "../../ters/src/lang/int.ts";
 import * as T from "../../ters/src/lang/text.ts";
-import type { Id } from "../../ters/src/model.ts";
+import { useTarget, type Code, type Id, type Use } from "../../ters/src/model.ts";
 import { ARRAY_RT, RT, isData, isRecord, type CoreIR, type LType, type Op, type SExpr, type SFunc, type TType } from "./scalar.ts";
 import { runtime } from "./wasm-rt.ts";
 import { STOPS } from "./stops.ts";
@@ -100,8 +100,11 @@ function randFns(r: Uint32Array): Record<string, (...xs: never[]) => unknown> {
     "rand.restore": (a: number, b: number, c: number, d: number) => { r.set([a, b, c, d]); return 0; },
   };
 }
-function rtFn(name: string, tables?: TableSpec[], rand?: Record<string, (...xs: never[]) => unknown>, cells?: Record<Id, (...xs: Value[]) => Value | undefined>): (...xs: unknown[]) => unknown {
+function rtFn(name: string, tables?: TableSpec[], rand?: Record<string, (...xs: never[]) => unknown>, cells?: Record<Id, (...xs: Value[]) => Value | undefined>, code?: Code): (...xs: unknown[]) => unknown {
   if (name.startsWith("host:")) return hostFn(name, cells);
+  if (name.startsWith("solve:")) return solveFn(name.slice(6), code);
+  if (name.startsWith("solveAll:")) return solveFn(name.slice(9), code, true);
+  if (name.startsWith("pick:")) { const [, j, bool] = name.split(":"); return (xs) => { const v = (xs as Value[])[Number(j)]; return bool ? (v as unknown) === true || (v as { tag?: Id }).tag === TRUE : v; }; }
   const tm = TABLE.exec(name);
   if (tm && tables) return tableFn(tm[1], tables[Number(tm[2])]);
   if (rand?.[name]) return rand[name] as (...xs: unknown[]) => unknown;
@@ -131,6 +134,30 @@ function hostFn(name: string, cells?: Record<Id, (...xs: Value[]) => Value | und
   if (many) return (...xs) => { const r = many(...xs.map(inn)); if (!r.length) throw FAIL; return out(r[0]); };
   return () => { throw new Unsupported(name); };
 }
+// A relation run some way with one answer (C137c11, scalar.ts solveUse):
+// the evaluator's solve on the program's code, its first answer's values.
+function solveFn(id: Id, code?: Code, all = false): (...xs: unknown[]) => unknown {
+  if (!code) return () => { throw new Unsupported(`solve ${id} without the program`); };
+  const n = code.nodes[id] as Use, keys = Object.keys(n.given);
+  const answers = (xs: unknown[]) => solveAnswers(code, n, Object.fromEntries(keys.map((k, i) => [k, inn(xs[i])])));
+  // Every answer, a List of them (`solveAll`) made as it is read: a
+  // periodic solution (an angle) has no end, and `one of` it stops at the
+  // first that the rest of the search takes, as the evaluator's does.
+  if (all) return (...xs) => lazyList(answers(xs));
+  return (...xs) => {
+    for (const bound of answers(xs)) return bound;
+    throw new Error(`solving ${useTarget(code.nodes, n)} this way gives exactly one answer, and it gave none`);
+  };
+}
+class LazyCell {
+  private cell?: { tag: Id; fields: unknown[] };
+  private it: Iterator<unknown>;
+  constructor(it: Iterator<unknown>) { this.it = it; }
+  private get forced() { if (!this.cell) { const r = this.it.next(); this.cell = r.done ? { tag: NIL, fields: [] } : { tag: CONS, fields: [r.value, new LazyCell(this.it)] }; } return this.cell; }
+  get tag() { return this.forced.tag; }
+  get fields() { return this.forced.fields; }
+}
+const lazyList = (it: Iterator<unknown>) => new LazyCell(it);
 const inn = (x: unknown) => (typeof x === "boolean" ? { tag: x ? TRUE : FALSE, fields: [] } : x);
 // Cells' operations (run.ts cellOps) on the runtime's handler, calling the
 // program's closures: no answer is a formula with no value.
@@ -349,15 +376,15 @@ function worldFn(op: string, rt: Runtime): (...xs: unknown[]) => unknown {
 
 // What the printed functions are given as R: the runtime, the tables'
 // and the world's operations, a fresh generator.
-export function coreRuntime(tables: TableSpec[], worlds: string[], rt: Runtime) {
+export function coreRuntime(tables: TableSpec[], worlds: string[], rt: Runtime, code?: Code) {
   const rand = randFns(new Uint32Array(4)), cells = cellFns(rt.cells ?? new Cells(equal));
-  return { ...RUNTIME, rt: (n: string) => rtFn(n, tables, rand, cells), worlds: worlds.map((op) => worldFn(op, rt)), abort: (reason: unknown, esc: number): never => { throw new Aborted(reason, esc); } };
+  return { ...RUNTIME, rt: (n: string) => rtFn(n, tables, rand, cells, code), worlds: worlds.map((op) => worldFn(op, rt)), abort: (reason: unknown, esc: number): never => { throw new Aborted(reason, esc); } };
 }
 
 // The functions, by their place in ir.funcs. `rt`: the console and files.
 export function loadCoreJs(ir: CoreIR, rt: Runtime = { print: () => {} }): ((...xs: unknown[]) => unknown)[] {
   const { js, names, worlds } = emitCoreJs(ir);
-  const all = new Function("R", js)(coreRuntime(ir.tables.map(tableSpec), worlds, rt)) as Record<string, (...xs: unknown[]) => unknown>;
+  const all = new Function("R", js)(coreRuntime(ir.tables.map(tableSpec), worlds, rt, ir.code)) as Record<string, (...xs: unknown[]) => unknown>;
   return names.map((n) => all[n]);
 }
 
@@ -406,13 +433,17 @@ export function coreModule(ir: CoreIR, name: string, runtime: string, world: str
     `import { coreRuntime, runCoreFn } from ${JSON.stringify(runtime)};`,
     `import { nodeWorld } from ${JSON.stringify(world)};`,
     "const rt = { print: (s) => console.log(s), world: nodeWorld() };",
-    `const R = coreRuntime(${JSON.stringify(ir.tables.map(tableSpec))}, ${JSON.stringify(worlds)}, rt);`,
+    `const R = coreRuntime(${JSON.stringify(ir.tables.map(tableSpec))}, ${JSON.stringify(worlds)}, rt, ${codeFor(ir, js)});`,
     "const defs = (function (R) {",
     js,
     "})(R);",
     `process.exitCode = runCoreFn(defs.${names[fi]}, ${JSON.stringify(m)}, process.argv.slice(2), rt);`,
   ].join("\n");
 }
+
+// The program's nodes, for a module whose solves the evaluator's solver
+// runs (C137c11): only when it has one.
+const codeFor = (ir: CoreIR, js: string) => (/R\.rt\("solve/.test(js) ? JSON.stringify({ nodes: ir.code.nodes, defs: ir.code.defs }) : "undefined");
 
 // A page's script (C137c9, `lab build-web --core`): the printed functions,
 // with core-page.ts (`page`, which a bundler takes in) drawing main.
@@ -424,6 +455,6 @@ export function corePageScript(ir: CoreIR, name: string, page: string, title: st
     `import { startCorePage } from ${JSON.stringify(page)};`,
     `startCorePage(${JSON.stringify(ir.tables.map(tableSpec))}, ${JSON.stringify(worlds)}, (R) => {`,
     js,
-    `}, ${JSON.stringify(names[fi])}, ${JSON.stringify(title)});`,
+    `}, ${JSON.stringify(names[fi])}, ${JSON.stringify(title)}, ${codeFor(ir, js)});`,
   ].join("\n");
 }

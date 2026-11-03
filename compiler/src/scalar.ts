@@ -52,12 +52,14 @@
 
 import { resolveArithmetic } from "../../ters/src/lang/arith.ts";
 import type { Code, Id, NodeOf } from "../../ters/src/model.ts";
-import { dependencies, subtree, isCall, type Call, isUse } from "../../ters/src/model.ts";
+import { dependencies, subtree, isCall, type Call, isUse, useTarget, type Use } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { ARRAY, TABLE, HASH_SET, CELL, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, PATH as PATH_T, STRING, Subst, type Row, type Type } from "../../ters/src/lang/types.ts";
 import { ABORT, ABORT_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, HASH_SET_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, NOW_OP, ORDER_V, PAIR_V, RATIO, S, SET, SHOW_ANY, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
 import { liftLets } from "../../ters/src/lang/lift-lets.ts";
+import { solvesOnce } from "../../ters/src/lang/run.ts";
+import { planSolve } from "../../ters/src/lang/solve.ts";
 import { inlineLists } from "./inline-lets.ts";
 import { STOPS } from "./stops.ts";
 import { fieldIndex, fieldPath } from "../../ters/src/lang/records.ts";
@@ -66,7 +68,7 @@ import { stageProgram } from "../../ters/src/lang/stage.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { discharge } from "../../ters/src/lang/ledger.ts";
 import { scalarOp, TARGETS } from "./builtins.ts";
-import { AUDIO_BLOCK, HANDLER_ROW, PAGE_HANDLER, PAGE_VIEW, SIGS, SOUND_ROW, VIEW_ROW, STD_IMPL, STD_MANY } from "../../ters/src/lang/std.ts";
+import { AUDIO_BLOCK, HANDLER_ROW, LIST, PAGE_HANDLER, PAGE_VIEW, SIGS, SOUND_ROW, VIEW_ROW, STD_IMPL, STD_MANY } from "../../ters/src/lang/std.ts";
 // Cells' operations JavaScript from the core IR takes from the evaluator
 // (run.ts cellOps), `path` aside: it looks inside its function.
 // The effects a page's views and handlers may have (std.ts PAGE_VIEW,
@@ -363,6 +365,10 @@ export interface SFunc { def: Id; name: string; params: LType[]; result: LType; 
 export interface CoreIR { funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; arrays: AType[]; tables: TType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info; escapes: DType[]; rounded: Set<Id>; shader?: true }
 
 class Refused extends Error {}
+// A solve's answers, a List of opaque values (each one answer's binds),
+// for JavaScript from the core IR (C137c11).
+const ANSWERS: DType = { key: "answers", name: "List", def: LIST, cases: [{ variant: NIL, name: "nil", fields: [] }, { variant: CONS, name: "cons", fields: [{ name: "item", t: "host" }] }] };
+ANSWERS.cases[1].fields.push({ name: "rest", t: ANSWERS });
 
 // The largest budget: counts are kept in f32 on a GPU, whole up to 2^24.
 export const MAX_FUEL = 2 ** 24;
@@ -776,7 +782,10 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
         throw new Refused(`uses ${nm(n.target)} as a value (functions and data need a heap)`);
       }
       case "call": {
-        if (isUse(n)) throw new Refused("solves a relation (not in this profile yet)");
+        if (isUse(n)) {
+          if (!opts.host) throw new Refused("solves a relation (not in this profile yet)");
+          return solveUse(n, env, f, tail);
+        }
         const head = code.nodes[n.fn];
         if (head.kind === "lambda") {
           // A let: each argument goes into a new local.
@@ -1087,6 +1096,32 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     if (ts.some((t) => typeof t === "object" && boolInside(t!))) throw new Refused(`uses ${nm(target)} on data holding a Bool, which isn't lowered yet`);
     const t = ts[ts.length - 1]!;
     return { k: "rt", fn: `host:${target}${t === "i32" ? ":bool" : ""}`, args: n.args.map((a) => expr(a, env, f, false)), host: { t, partial: effs.includes(CHOICE) || !!STD_MANY[target] || target === CELL_OPS.read || target === CELL_OPS.readAt } };
+  }
+  // A relation run some way with one answer, for JavaScript from the core
+  // IR (C137c11): the evaluator's solve (run.ts solveAnswers) gives the
+  // binds' values, as one opaque value taken apart into locals, and the
+  // body sees them. One with several answers is a search, not lowered yet.
+  function solveUse(n: Use, env: Map<Id, number>, f: SFunc, tail: boolean): SExpr {
+    const name = nm(useTarget(code.nodes, n));
+    // Where the definition has no Choice and no search is around (the
+    // checker found the solve always answers), its first answer is the one,
+    // as in the evaluator. Otherwise the solver's answers are `one of` a
+    // list of them made as it is read (core-js.ts; a periodic angle has no
+    // end). The relational interpreter's aren't lowered yet: its search
+    // runs with the program's budget (fuel), which this doesn't give it.
+    const once = solvesOnce(code, n) || (!f.partial && !searching.get(f));
+    if (!once && planSolve(code, n).mode === "relational") throw new Refused(`solves ${name} backwards with several answers, which isn't lowered yet`);
+    const given = Object.values(n.given), binds = Object.values(n.binds);
+    for (const g of given) { const t = stype(zonk(g)); if (!t) throw new Refused(`solves ${name} given ${whyNot(zonk(g))}`); if (typeof t === "object" && boolInside(t)) throw new Refused(`solves ${name} given data holding a Bool, which isn't lowered yet`); }
+    const ts = binds.map((b) => { const t = stype(zonk(b)); if (!t) throw new Refused(`solves ${name} for ${whyNot(zonk(b))}`); if (typeof t === "object" && boolInside(t)) throw new Refused(`solves ${name} for data holding a Bool, which isn't lowered yet`); return t; });
+    const all = f.locals.push("host") - 1;
+    let inner = new Map(env);
+    const lets = binds.map((b, j) => { const i = f.locals.push(ts[j]) - 1; inner = new Map(inner).set(b, i); return { i, value: { k: "rt", fn: `pick:${j}${ts[j] === "i32" ? ":bool" : ""}`, args: [{ k: "local", i: all }], host: { t: ts[j], partial: false } } as SExpr }; });
+    const body = lets.reduceRight<SExpr>((e, l) => ({ k: "let", i: l.i, value: l.value, body: e }), expr(n.body, inner, f, tail));
+    const solved: SExpr = once
+      ? { k: "rt", fn: `solve:${n.id}`, args: given.map((g) => expr(g, env, f, false)), host: { t: "host", partial: false } }
+      : { k: "choose", list: { k: "rt", fn: `solveAll:${n.id}`, args: given.map((g) => expr(g, env, f, false)), host: { t: ANSWERS, partial: false } }, t: ANSWERS };
+    return { k: "let", i: all, value: solved, body };
   }
   function boolInside(t: LType, seen = new Set<LType>()): boolean {
     if (t === "i32") return true;
