@@ -99,8 +99,10 @@ it, can't compare two functions, and can't show one.
 data and tuples. Functions can't be compared. `compare`
 gives a total order: numbers by value, text by code point, cases in the
 order their type lists them, then fields left to right. On Float64,
-`compare` is exact but `equal` treats two numbers within about 1e-9 of
-each other (relative) as the same (*open*, S1).
+`equal` is exact, like `compare` and map keys: two Float64s are equal
+only when they are the same Float64 (Ersagun's decision, 2026-11-03).
+The solver keeps its own tolerance when it checks an answer it found.
+Today `equal` still uses a tolerance of about 1e-9; L197 changes it.
 
 ## 3. Numbers
 
@@ -392,7 +394,7 @@ hasn't been chosen. None is answered here. Rows are in BACKLOG.md.
 
 | # | question | today | row |
 |---|---|---|---|
-| S1 | **Float64 `equal` within 1e-9.** `equal` calls two Float64s within about 1e-9 (relative) the same, so it isn't transitive (a = b and b = c, but not a = c), and it disagrees with `compare` (exact) and with map keys (exact). The tolerance is there so a solved equation's answers satisfy it. Should `equal` be exact, with the tolerance only inside the solver, or stay as it is? This is a language decision. | evaluator, compiled JS and the core IR all use the same tolerance, so engines agree | L197 |
+| S1 | **Float64 `equal` within 1e-9.** Decided 2026-11-03 (Ersagun): `equal` becomes exact, and the tolerance stays only inside the solver (§2.7). | evaluator, compiled JS and the core IR still use the tolerance until L197 lands | L197 |
 | S2 | **An overflow nothing uses.** §3.3 lets engines differ on whether it stops. Is that freedom the meaning, or should every engine stop like the evaluator? Today the agreement tests only compare programs that don't overflow, which this page now says. | decided by FLOAT-VALUES; written here | none |
 | S3 | **The order of a use's answers after the first.** The backwards search is a fair interleaving (miniKanren), so the order depends on the search's internals. `first` is fixed (canonical), but `all` of a use lists answers in an order nothing specifies. Spec it as canonical order, or say `all` of a use is a set? | evaluator only; compiled code runs uses through the same solver | L198 |
 | S4 | **Fuel counts depend on the checker.** A step is a call into a definition the checker couldn't prove ends (§5.6). When the checker gets smarter, a definition stops counting, and the same `with fuel(n, …)` can go from no answer to an answer. Count every call, or keep it and say a checker change can change fuel answers? | evaluator and the core IR count the same way | L199 |
