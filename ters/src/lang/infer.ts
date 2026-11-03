@@ -820,7 +820,12 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         const reshapedBefore = s.reshaped;
         try {
           s.tupleOf = tupleType;
-          try { s.unify(fr, { t: "fn", params, ret, eff: callRow }); } finally { s.tupleOf = null; }
+          // A function value whose row is closed (a field's `(Int) -> Int`)
+          // does only what it names: its row goes inside this one, as a
+          // search's does, so this code may do more beside the call (I153).
+          let here = callRow;
+          if (!search && fr.t === "fn" && s.resolveRow(fr.eff).tail === null) { here = s.freshRow(); s.subs.push({ from: here, to: row, at: id }); }
+          try { s.unify(fr, { t: "fn", params, ret, eff: here }); } finally { s.tupleOf = null; }
           if (s.reshaped > reshapedBefore) reshape(n, f, args, s.reshaped - reshapedBefore);
         } catch (e) {
           if (e instanceof WorldError) {
