@@ -731,7 +731,11 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         }
         const early = gradient ? n.args.map((a) => expr(a, env, row)) : null;
         const subsBefore = s.subs.length;
-        const f = smoothDerivative(n) ?? (early && smoothGradient(n, early[0])) ?? expr(n.fn, env, row);
+        const f0 = smoothDerivative(n) ?? (early && smoothGradient(n, early[0])) ?? expr(n.fn, env, row);
+        // A definition with results given all its ports is the condition
+        // on them (L128d2), as inside another relation: polar(r, t, x, y).
+        const fnNode = code.nodes[n.fn], cd = fnNode?.kind === "ref" ? code.nodes[fnNode.target] : undefined;
+        const f = cd?.kind === "def" && cd.results?.length && cd.body && resultsOf.has(cd.body) && (code.nodes[cd.body] as NodeOf<"lambda">).params.length === n.args.length ? asPredicate(f0, cd.id) : f0;
         for (let i = subsBefore; i < s.subs.length; i++) s.subs[i].at ??= id;
         let args = early ?? applied ?? n.args.map((a, i) => {
           // A recursive let (BACKLOG L84): a let is `(name ↦ body)(value)`,
