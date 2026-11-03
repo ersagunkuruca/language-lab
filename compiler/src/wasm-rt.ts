@@ -7036,6 +7036,10 @@ const WASI: Record<string, Omit<RtFn, "name">> = {
       call $wasi_proc_exit
       unreachable`,
   },
+  // The fuel, read, and swapped for another (C137c21: the rest of a search
+  // run on the budget outside the one it is in).
+  "fuel.get": { params: [], result: "f64", locals: [], uses: [], body: "global.get $fuel" },
+  "fuel.swap": { params: [["x", "f64"]], result: "f64", locals: [], uses: [], body: "global.get $fuel\nlocal.get $x\nglobal.set $fuel" },
   // A stop with a reason (L51c), as wasi.stop with the program's words.
   "wasi.stopWith": {
     params: [["t", "text"]], result: "f64", locals: [], uses: ["wasi.line", "wasi_proc_exit"],

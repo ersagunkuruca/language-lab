@@ -121,7 +121,7 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
     function tried(e: Extract<SExpr, { k: "attempt" }>, pre: string[], d: string): string {
       const ok = temp(), label = temp(), [save, back] = keep();
       const body = within(`{ ${ok} = false; break ${label}; }`, () => block(e.body, { set: local(e.res), fails: true }, d + "  "));
-      pre.push(`${d}${save}let ${ok} = true;`, `${d}${label}: try {`, ...body, `${d}  if (${local(e.res)} === R.FAIL) ${ok} = false;`, `${d}} catch (x) {`, `${d}  if (x !== R.FAIL) throw x;`, `${d}  ${back}${ok} = false;`, `${d}}`);
+      pre.push(`${d}${save}let ${ok} = true;`, `${d}${label}: try {`, ...body, `${d}  if (${local(e.res)} === R.FAIL) ${ok} = false;`, `${d}} catch (x) {`, `${d}  if (x !== R.FAIL${e.spent ? " && x !== R.OUT" : ""}) throw x;`, `${d}  ${back}${ok} = false;`, `${d}}`);
       return ok;
     }
     // A call's inputs where a statement begins: one that is a partial call
@@ -202,6 +202,9 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
         }
         case "rt": {
           const xs = e.args.map((a) => ex(a, pre, d));
+          // The fuel is this module's own (C137c21).
+          if (e.fn === "fuel.get") return "fuel";
+          if (e.fn === "fuel.swap") { const t = temp(); pre.push(`${d}const ${t} = fuel;`, `${d}fuel = ${xs[0]};`); return t; }
           return `${rtName(e.fn)}(${xs.join(", ")})`;
         }
         case "world": { const xs = e.args.map((a) => ex(a, pre, d)); return `${worldName(e.op)}(${xs.join(", ")})`; }
