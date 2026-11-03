@@ -22,7 +22,7 @@ language, then more targets or speed (WORKFLOW.md "Priority").
 |---|---|---|
 | E Editor | "Editor lane" | E211 the bigger programs as editor examples (one a PR), L70c's editor half (mark where a failed read stopped), L147b; then E200b, E103 |
 | C Compiler and targets | "Compiler lane" | C93's rest, C86, C40's rest; then C30, C67 |
-| L Language and library | "Language lane" | L184 (old saved programs keep opening), L128d, L99, L61 |
+| L Language and library | "Language lane" | L128d, L99, L61 |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -97,7 +97,7 @@ New targets and speed rank below every language item (Ersagun,
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| C137 | The compiled targets on one lowering. compile.ts (3,435 lines) lowers JS straight from the model while WebAssembly, C, WGSL and js-scalar share scalar.ts's core IR, so each feature is built twice in the compiler. (a) From now on nothing goes into compile.ts alone: a model-to-model pass or the shared lowering (written in compile.ts's header and CORE-IR.md); (b) done: `Lowered` is `CoreIR`, its contract in docs/design/targets/CORE-IR.md; (c) a JavaScript printer from it, grown until it runs compile.ts's examples, checked by I111 and the differential test: c1 to c6 done (`lab compile --core`; the evaluator's values; core-js.ts: data, Int, Text, arrays, tables, seeded Random, searches, budgets, aborts, the world; every fuzz program and the 11 examples whose main lowers agree with the evaluator, core-js.test.ts), next: the 16 that don't lower (Html for pages, relations, derivative, Fixed), deep recursion that isn't a tail call (numbers as defined overflows the stack); (d) compile.ts retired piece by piece | [FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md) §2 | P2 | L | |
+| C137 | The compiled targets on one lowering. compile.ts (3,435 lines) lowers JS straight from the model while WebAssembly, C, WGSL and js-scalar share scalar.ts's core IR, so each feature is built twice in the compiler. (a) From now on nothing goes into compile.ts alone: a model-to-model pass or the shared lowering (written in compile.ts's header and CORE-IR.md); (b) done: `Lowered` is `CoreIR`, its contract in docs/design/targets/CORE-IR.md; (c) a JavaScript printer from it, grown until it runs compile.ts's examples, checked by I111 and the differential test: c1 to c7 done (`lab compile --core`; the evaluator's values; the evaluator's builtins with no lowering, by id; core-js.ts: data, Int, Text, arrays, tables, seeded Random, searches, budgets, aborts, the world; every fuzz program and the 13 examples whose main lowers agree with the evaluator, core-js.test.ts), next: the 15 that don't lower (Html for pages: the View and Handler effects and cells; relations; derivative; effects' handler), deep recursion that isn't a tail call (numbers as defined overflows the stack); (d) compile.ts retired piece by piece | [FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md) §2 | P2 | L | |
 | C138 | C30's aim first: an `array` representation of List written in the language and chosen by the representation layer, on the core IR, replacing compile.ts's 50 CONS/NIL tests and the per-target copies (C30d2, C30d3) | [FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md) §3 | P2 | L | |
 | C139 | Library types out of the core passes: id tests on library constructors and functions (compile.ts 188, scalar.ts 152, run.ts 82) become representations or builtin records, retired with C137's printer | [FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md) §7 | P3 | M | |
 
@@ -150,6 +150,12 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | C141 | Shaders and the spec (S6, S12): either the shader profile refuses what it can't keep (Int past 32 bits, an unchecked Float64 overflow) or SPEC §10.3 declares it an approximation with its own written meaning; and decide whether library maths must give the evaluator's bits on every target or only be within an ulp | [SPEC](docs/language/SPEC.md) §12 S6, S12 | P3 | S | |
+
+### What a good language needs ([ASPECTS-2026-11-03b](docs/reports/reviews/ASPECTS-2026-11-03b.md))
+
+| id | item | source | pri | size | status |
+|---|---|---|---|---|---|
+| C143 | A stop in compiled code names the node it came from: compiled JS, WebAssembly and C carry each node's id where they can stop (Abort, overflow, no answer, a hole), so `lab run` of compiled code and a page print it and the editor selects it (source maps, influence) | [ASPECTS-2026-11-03b](docs/reports/reviews/ASPECTS-2026-11-03b.md) 269 | P3 | M | |
 
 ## L: Language and library
 
@@ -274,7 +280,6 @@ agent with inertia. All later goals.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L184 | Saved programs survive language changes: one node-schema version (with L178's table) and an upgrade step per shape change, run in a chain on open; a test opens a corpus of real old files (the round boards in project files) and checks each opens, checks and gives the same main. Std meaning changes get a new id or a step, never a silent change. L130's flip (#1266) has the first such step, `upgradeUses` in `onTodaysIds` (a saved `solve` read as a call), with no version number yet | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §1 | P1 | M | |
 | L185 | Text decisions: NFC where text enters from the world (equality stays code points); case mapping takes a locale as an argument or effect (Turkish i/İ, ı/I); `graphemes(t)`; collation as a separate order by locale | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §4 | P3 | M | |
 | L186 | Design note in HOSTS.md: every world answer goes through one log a host can keep, so any run can be replayed exactly, stepped back, or saved as a test's inputs (with the seeded scheduler once fibers land) | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §6 | P3 | S | |
 | L187 | Error messages as one table (id, message, usual fix, the gesture that fixes it) with a smallest program per problem as its test | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §8 | P3 | M | |

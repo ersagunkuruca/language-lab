@@ -134,7 +134,7 @@ export const useNode = (add: (n: NodeData) => Id, target: Id, given: Record<stri
 // `solve`, naming its relation directly; it is a call whose `fn` is a ref.
 // The ref's id comes from the use's, so loading the same file twice gives
 // the same nodes.
-export function upgradeUses(nodes: Record<Id, unknown>): void {
+function upgradeUses(nodes: Record<Id, unknown>): void {
   for (const [id, n] of Object.entries(nodes)) {
     const o = n as { kind?: string; fn?: Id };
     if (o?.kind !== "solve" || typeof o.fn !== "string") continue;
@@ -143,6 +143,17 @@ export function upgradeUses(nodes: Record<Id, unknown>): void {
     nodes[id] = { ...o, kind: "call", fn: ref };
   }
 }
+
+// Every change to the shape of saved nodes, in order (L184). A program
+// saved at shape n has the steps after the nth run on its nodes when it
+// opens; one saved before shapes were numbered has them all run, so each
+// step leaves nodes already in its shape alone. A change to the shape adds
+// a step at the end; an old step is never edited.
+export const SHAPE_STEPS: { what: string; step: (nodes: Record<Id, unknown>) => void }[] = [
+  { what: "a use is a call whose fn is a ref (L130d)", step: upgradeUses },
+];
+export const SHAPE = SHAPE_STEPS.length;
+export const toTodaysShape = (nodes: Record<Id, unknown>, from = 0): void => { for (const s of SHAPE_STEPS.slice(from)) s.step(nodes); };
 
 // What gets stored on disk as code.json. `defs` is the list of top-level
 // definitions; there are no modules, imports or files, just reachable defs.

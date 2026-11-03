@@ -15,7 +15,7 @@
 // loose parts (editor/drafts.ts), kept apart from the code; a file without
 // them opens with none.
 
-import { isPublished, type Code, type Id, type Node } from "./model.ts";
+import { isPublished, SHAPE, type Code, type Id, type Node } from "./model.ts";
 import type { Comments, Names } from "./presentation.ts";
 import { LIBRARY } from "./lang/library.ts";
 import { needs, pointsAt } from "./lang/modules.ts";
@@ -29,6 +29,10 @@ export const FORMAT = "projectional-program";
 export interface ProgramFile {
   format: typeof FORMAT;
   version: 1 | 2;
+  // The shape of its nodes (model.ts SHAPE): a file saved before a change
+  // of shape has the steps since run when it opens (L184). Absent before
+  // shapes were numbered.
+  shape?: number;
   title: string;
   typed: boolean;
   code: Code;
@@ -56,7 +60,7 @@ export function own(code: Code, base: Code): Code {
 
 export function toFile(p: Omit<ProgramFile, "format" | "version" | "needs">, base: Code): string {
   const code = own(p.code, base);
-  const file: ProgramFile = { format: FORMAT, version: 2, ...p, code, needs: needs(code, LIBRARY) };
+  const file: ProgramFile = { format: FORMAT, version: 2, ...p, shape: SHAPE, code, needs: needs(code, LIBRARY) };
   return JSON.stringify(file, null, 1);
 }
 

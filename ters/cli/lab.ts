@@ -302,7 +302,7 @@ switch (command) {
     const core = rest.includes("--core");
     const source = (inCheckout: boolean): string => {
       if (!core) return compiled(p, main, inCheckout);
-      const lowered = lowerScalar(p.code, p.info, p.names, p.own, { data: true });
+      const lowered = lowerScalar(p.code, p.info, p.names, p.own, { data: true, host: true });
       const why = lowered.refused.get(main);
       if (why) fail(`${p.names[main] ?? "main"} isn't compiled through the core IR: it ${why}`);
       const here = (f: string) => resolve(import.meta.dirname, f);

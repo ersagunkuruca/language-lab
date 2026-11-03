@@ -12,9 +12,9 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import type { Runtime, World } from "../../ters/src/lang/run.ts";
-import { runProgram } from "../../ters/src/lang/run.ts";
+import { makeRunner, runProgram } from "../../ters/src/lang/run.ts";
 import { lowerScalar } from "../src/scalar.ts";
-import { runCoreMain } from "../src/core-js.ts";
+import { loadCoreJs, runCoreMain } from "../src/core-js.ts";
 import { examples, load } from "../src/program.ts";
 import { book as chaptersBook } from "../gaps/chapters.ts";
 import { book as ledgerBook } from "../gaps/ledger.ts";
@@ -52,8 +52,16 @@ test("the examples whose main lowers to the core IR say the same in JavaScript p
     const p = load(name);
     const main = p.code.defs.find((d) => p.pres.names[d] === "main" && p.own.defs.includes(d));
     if (!main) continue;
-    const l = lowerScalar(p.code, p.info, p.pres.names, p.own.defs, { data: true });
+    const l = lowerScalar(p.code, p.info, p.pres.names, p.own.defs, { data: true, host: true });
     if (l.refused.has(main)) { refused.push(`${name}: ${l.refused.get(main)}`); continue; }
+    const mt = p.info.typeOf.get(main);
+    if (mt && p.info.subst.zonk(mt).t !== "fn") {
+      // A main that is a value (lockstep's Text): the same value.
+      const fi = l.funcs.findIndex((g) => g.name === "main" && !g.inner && !g.budgeted);
+      assert.deepEqual(loadCoreJs(l)[fi](), makeRunner(p.code, p.info, { print: () => {}, names: p.pres.names }).value(main), name);
+      ran.push(name);
+      continue;
+    }
     const [args, files] = inputs[name]?.() ?? [[], {}];
     const want = world(files), got = world(files);
     const exit = runProgram(p.code, p.info, main, args, { ...want.rt, names: p.pres.names });
@@ -61,7 +69,7 @@ test("the examples whose main lowers to the core IR say the same in JavaScript p
     ran.push(name);
   }
   console.log(`ran ${ran.join(", ")}\nnot lowered:\n  ${refused.join("\n  ")}`);
-  assert.ok(ran.length >= 12, `ran ${ran.join(", ")}`);
+  assert.ok(ran.length >= 13, `ran ${ran.join(", ")}`);
 });
 
 // lab compile --core (C137c5): a module that runs main in Node, printed

@@ -34,7 +34,12 @@ model, so each feature has been written twice in the compiler
   the reason they don't lower. Step c5 is `lab compile --core`, a module
   that runs main in Node printed this way. Step c6 gives it the
   evaluator's values (`{ tag, fields }`, closures as functions), so pages
-  and cells can take them as they are.
+  and cells can take them as they are. Step c7: a builtin the core IR
+  has no lowering for is the evaluator's own, called by its id, when the
+  lowering is for this printer (`lowerScalar`'s `host` option, which
+  WebAssembly, C and WGSL never set): one without effects past Choice and
+  Diverge, not taking or giving a Bool inside data. lockstep's Fixed runs
+  so (13 examples).
 - (d) compile.ts retired piece by piece.
 
 ## What it holds
