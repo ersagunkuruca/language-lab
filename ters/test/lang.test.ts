@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { hashDef } from "../src/hash.ts";
 import { root } from "../src/io.ts";
-import { get, replace, subtree, type Code, type Id, type NodeOf } from "../src/model.ts";
+import { get, replace, subtree, type Code, type Id, type NodeOf, isCall, type Call } from "../src/model.ts";
 import { infer, fillings } from "../src/lang/infer.ts";
 import { base, baseNames, loadProgram } from "../src/lang/load.ts";
 import { addVariant, fillHole } from "../src/lang/refactor.ts";
@@ -156,7 +156,7 @@ test("totality is inferred: recursion on a smaller piece is total, anything else
   const info = infer(p.code, p.pres.names);
   assert.ok(!info.divergent.has(each));
   // Recurse on the whole list instead of the rest: no longer smaller.
-  const recursive = Object.values(p.code.nodes).find((n) => n.kind === "call" && p.code.nodes[n.fn].kind === "ref" && (p.code.nodes[n.fn] as NodeOf<"ref">).target === each && p.code.nodes[n.args[0]].kind === "ref" && n.args[0] !== lam.params[0]) as NodeOf<"call">;
+  const recursive = Object.values(p.code.nodes).find((n) => isCall(n) && p.code.nodes[n.fn].kind === "ref" && (p.code.nodes[n.fn] as NodeOf<"ref">).target === each && p.code.nodes[n.args[0]].kind === "ref" && n.args[0] !== lam.params[0]) as Call;
   const code = replace(p.code, recursive.args[0], () => ({ kind: "ref", target: lam.params[0] }));
   const after = infer(code, p.pres.names);
   assert.ok(after.divergent.has(each));

@@ -116,6 +116,11 @@ export type NodeOf<K extends Kind> = Extract<Node, { kind: K }>;
 export type Use = NodeOf<"solve">;
 export const isUse = (n: Node | undefined | null): n is Use => n?.kind === "solve";
 export const useOf = (n: Node | undefined | null): Use | null => (isUse(n) ? n : null);
+// A call that gives every input by position: read it through these, not
+// through the `call` kind, which a use joins when call and solve become
+// one kind (L130d).
+export type Call = NodeOf<"call">;
+export const isCall = (n: Node | undefined | null): n is Call => n?.kind === "call";
 // The relation a use runs: a definition, a field or a builtin. Ask this,
 // not the use's `fn`, which becomes an expression when call and solve are
 // one kind (L130d).
@@ -272,7 +277,7 @@ export function replace(code: Code, id: Id, build: (code: Code) => NodeData): Co
 // A solve's given value hangs under its port's name (`key`, slot "given").
 export function parentOf(code: Code, id: Id): { parent: Id; slot: string; index?: number; key?: string } | null {
   for (const n of Object.values(code.nodes)) {
-    if (n.kind === "call") {
+    if (isCall(n)) {
       if (n.fn === id) return { parent: n.id, slot: "fn" };
       const i = n.args.indexOf(id);
       if (i >= 0) return { parent: n.id, slot: "args", index: i };
@@ -298,7 +303,7 @@ export function parentAt(code: Code, id: Id): Parent | null {
     const at = new Map<Id, Parent>();
     const put = (child: Id | null | undefined, p: Parent) => { if (child != null && !at.has(child)) at.set(child, p); };
     for (const n of Object.values(code.nodes)) {
-      if (n.kind === "call") { put(n.fn, { parent: n.id, slot: "fn" }); n.args.forEach((a, i) => put(a, { parent: n.id, slot: "args", index: i })); }
+      if (isCall(n)) { put(n.fn, { parent: n.id, slot: "fn" }); n.args.forEach((a, i) => put(a, { parent: n.id, slot: "args", index: i })); }
       else if (n.kind === "lambda" || n.kind === "arm" || n.kind === "def") put(n.body, { parent: n.id, slot: "body" });
       else if (n.kind === "match" || n.kind === "fold") { put(n.scrutinee, { parent: n.id, slot: "scrutinee" }); if (n.kind === "match") put(n.otherwise, { parent: n.id, slot: "otherwise" }); }
       else if (isUse(n)) { put(n.body, { parent: n.id, slot: "body" }); for (const key of Object.keys(n.given)) put(n.given[key], { parent: n.id, slot: "given", key }); }

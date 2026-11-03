@@ -647,7 +647,8 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| L96d | The ways agree: each of the prelude's seven Trig ways is a law against Float64's own field (`lab test`, test/prelude-laws.test.ts), and a test checks every way has a law that runs it (WAYS.md step 4) | this PR |
+| L96d | The ways agree: each of the prelude's seven Trig ways is a law against Float64's own field (`lab test`, test/prelude-laws.test.ts), and a test checks every way has a law that runs it (WAYS.md step 4) | #1227 |
+| L130a3 | Plain calls read through `Call` and `isCall` (model.ts) in every ters/ and compiler/ reader, so the coming flip of call and solve into one kind leaves them alone | this PR |
 | L99d | Compiled JS's `each` and `each of` hand their rows tracked views, as the evaluator's do (runtime.js `$listViews`): a tick three deep on the compiled outline runs its line and the count and makes no row (compiler/test/outline-views.test.ts, STABLE-REFERENCES.md §2) | #1225 |
 | L98b | Keys: `key path(p, by, k)`, the item of the list at p whose part at `by` is k, found when the path is used, so one path keeps naming the same item through inserts and moves (cells.ts `resolved`, evaluator and compiled JS; test/key-paths.test.ts, STABLE-REFERENCES.md §1) | #1223 |
 | L130a2 | A use's relation is read through `useTarget(nodes, u)` and a new use is built through `useNode(add, target, given, binds, body)` (model.ts), in ters/src and compiler/src, so the flip to one call kind changes only those two | #1219 |

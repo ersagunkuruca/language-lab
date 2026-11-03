@@ -11,7 +11,7 @@
 // at most once (Peyton Jones and Marlow, "Secrets of the Glasgow Haskell
 // Compiler inliner", JFP 2002), kept to the lists a fold or fusion looks for.
 
-import { subtree, type Code, type Id, type NodeOf } from "../../ters/src/model.ts";
+import { subtree, type Code, type Id, type NodeOf, isCall } from "../../ters/src/model.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { STORAGES } from "../../ters/src/lang/represent.ts";
 
@@ -36,7 +36,7 @@ function candidate(code: Code, info: Info): { let: Id; value: Id; ref: Id; body:
   const pure = (id: Id) => subtree(code, id).every((x) => {
     const c = code.nodes[x];
     if (c.kind === "ref" || c.kind === "lit") return true;
-    if (c.kind !== "call") return false;
+    if (!isCall(c)) return false;
     const f = code.nodes[c.fn], t = info.typeOf.get(c.fn) && info.subst.zonk(info.typeOf.get(c.fn)!);
     return f.kind === "ref" && code.nodes[f.target]?.kind === "builtin" && t?.t === "fn" && !info.subst.resolveRow(t.eff).effs.length;
   });
@@ -47,7 +47,7 @@ function candidate(code: Code, info: Info): { let: Id; value: Id; ref: Id; body:
     if (id === target) return true;
     const n = code.nodes[id];
     if (!n) return false;
-    if (n.kind === "call") {
+    if (isCall(n)) {
       const f = code.nodes[n.fn];
       const let_ = f?.kind === "lambda" && f.params.length === n.args.length;
       return n.args.some((a) => once(a, target)) || (let_ && once(f.body, target));
@@ -58,12 +58,12 @@ function candidate(code: Code, info: Info): { let: Id; value: Id; ref: Id; body:
   };
   for (const id of code.defs.flatMap((d) => subtree(code, d))) {
     const c = code.nodes[id];
-    if (c.kind !== "call" || c.args.length !== 1) continue;
+    if (!isCall(c) || c.args.length !== 1) continue;
     const lam = code.nodes[c.fn];
     if (lam?.kind !== "lambda" || lam.params.length !== 1) continue;
     const value = code.nodes[c.args[0]], b = lam.params[0];
-    const made = value?.kind === "call" ? code.nodes[value.fn] : undefined;
-    if (value?.kind !== "call" || made?.kind !== "ref" || !MAKERS.has(made.target) || !value.args.every(pure)) continue;
+    const made = isCall(value) ? code.nodes[value.fn] : undefined;
+    if (!isCall(value) || made?.kind !== "ref" || !MAKERS.has(made.target) || !value.args.every(pure)) continue;
     const refs = subtree(code, lam.body).filter((x) => { const r = code.nodes[x]; return r.kind === "ref" && r.target === b; });
     if (refs.length === 1 && once(lam.body, refs[0])) return { let: c.id, value: value.id, ref: refs[0], body: lam.body };
   }

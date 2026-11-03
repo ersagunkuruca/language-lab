@@ -28,7 +28,7 @@
 // writing the case in; and lambda lifting (Johnsson, 1985) for the values
 // the cases use.
 
-import { freshId, mapIds, subtree, type Code, type Id, type Node, type NodeOf } from "../../ters/src/model.ts";
+import { freshId, mapIds, subtree, type Code, type Id, type Node, type NodeOf, isCall, type Call } from "../../ters/src/model.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { SIGS } from "../../ters/src/lang/std.ts";
 import { DIVERGE, Subst, type Type } from "../../ters/src/lang/types.ts";
@@ -44,8 +44,8 @@ export function fuseHandlers(code: Code, info: Info, names: Names): { code: Code
     const body = def ? (code.nodes[def] as NodeOf<"def">).body : null;
     return body && (code.nodes[body] as NodeOf<"typedef">)?.effect ? def! : null;
   };
-  const opOf = (id: Id): Id | null => { const n = nodes[id]; if (n?.kind !== "call") return null; const f = nodes[n.fn]; return f?.kind === "ref" && nodes[f.target]?.kind === "variant" ? effectOf(f.target) && f.target : null; };
-  const calleeDef = (id: Id): Id | null => { const n = nodes[id]; if (n?.kind !== "call") return null; const f = nodes[n.fn]; return f?.kind === "ref" && nodes[f.target]?.kind === "def" && code.nodes[f.target] ? f.target : null; };
+  const opOf = (id: Id): Id | null => { const n = nodes[id]; if (!isCall(n)) return null; const f = nodes[n.fn]; return f?.kind === "ref" && nodes[f.target]?.kind === "variant" ? effectOf(f.target) && f.target : null; };
+  const calleeDef = (id: Id): Id | null => { const n = nodes[id]; if (!isCall(n)) return null; const f = nodes[n.fn]; return f?.kind === "ref" && nodes[f.target]?.kind === "def" && code.nodes[f.target] ? f.target : null; };
   // A callee's own type: a builtin's signature (its variables are its
   // own, not the program's), or a definition's scheme.
   const ownType = (target: Id): { fn: boolean; params: Type[]; effs: Id[] } | null => {
@@ -76,7 +76,7 @@ export function fuseHandlers(code: Code, info: Info, names: Names): { code: Code
   const quiet = (root: Id) => kids(root).every((id) => {
     const c = nodes[id];
     if (c.kind === "lambda") return isLet(id);
-    if (c.kind !== "call") return true;
+    if (!isCall(c)) return true;
     const f = nodes[c.fn];
     if (f?.kind === "lambda") return true;
     if (f?.kind !== "ref" || opOf(id)) return false;
@@ -89,7 +89,7 @@ export function fuseHandlers(code: Code, info: Info, names: Names): { code: Code
     const c = nodes[id];
     if (c.kind === "lambda") return isLet(id);
     if (c.kind === "match") return !handlerEffect(c);
-    if (c.kind !== "call") return true;
+    if (!isCall(c)) return true;
     const f = nodes[c.fn];
     if (f?.kind === "lambda") return true;
     if (f?.kind !== "ref" || opOf(id)) return false;
@@ -100,7 +100,7 @@ export function fuseHandlers(code: Code, info: Info, names: Names): { code: Code
   });
   // A lambda called right where it's written: a let.
   const parentCall = new Map<Id, Id>();
-  for (const [id, n] of Object.entries(nodes)) if (n.kind === "call") parentCall.set(n.fn, id);
+  for (const [id, n] of Object.entries(nodes)) if (isCall(n)) parentCall.set(n.fn, id);
   const isLet = (lam: Id) => parentCall.has(lam);
 
   // Copy a subtree with fresh ids for everything in it; `swap` maps ids
@@ -110,7 +110,7 @@ export function fuseHandlers(code: Code, info: Info, names: Names): { code: Code
     const inside = kids(root);
     for (const id of inside) { const f = freshId(); fresh.set(id, f); if (names[id] ?? newNames[id]) newNames[f] = names[id] ?? newNames[id]; }
     for (const id of inside) { const n = mapIds(nodes[id], (x) => fresh.get(x) ?? swap.get(x) ?? x); nodes[n.id] = n; }
-    for (const id of inside) { const n = nodes[fresh.get(id)!]; if (n.kind === "call") parentCall.set(n.fn, n.id); }
+    for (const id of inside) { const n = nodes[fresh.get(id)!]; if (isCall(n)) parentCall.set(n.fn, n.id); }
     return fresh.get(root)!;
   };
   const ref = (target: Id): Id => { const id = freshId(); nodes[id] = { id, kind: "ref", target }; return id; };
@@ -131,7 +131,7 @@ export function fuseHandlers(code: Code, info: Info, names: Names): { code: Code
     const h = nodes[lam.body];
     if (!h || !handlerEffect(h)) return null;
     const s = nodes[(h as NodeOf<"match">).scrutinee];
-    if (s?.kind !== "call" || s.args.length) return null;
+    if (!isCall(s) || s.args.length) return null;
     const f = nodes[s.fn];
     const at = f?.kind === "ref" ? lam.params.indexOf(f.target) : -1;
     // The handler doesn't call itself, and the input is used once.
@@ -145,7 +145,7 @@ export function fuseHandlers(code: Code, info: Info, names: Names): { code: Code
       if (!d) continue;
       const w = wrapper(d);
       if (!w) continue;
-      const c = nodes[id] as NodeOf<"call">;
+      const c = nodes[id] as Call;
       const thunk = nodes[c.args[w.at]];
       if (thunk?.kind !== "lambda" || thunk.params.length || c.args.some((a, i) => i !== w.at && !simple(a))) continue;
       // The handler with the inputs put in (a name given for one: that
@@ -160,7 +160,7 @@ export function fuseHandlers(code: Code, info: Info, names: Names): { code: Code
         for (const x of kids(h)) { const r = nodes[x]; if (r.kind === "ref" && r.target === w.lam.params[i]) nodes[x] = { ...nodes[a], id: x } as Node; }
       }
       nodes[m.scrutinee] = { ...nodes[thunk.body], id: m.scrutinee } as Node;
-      if (nodes[m.scrutinee].kind === "call") parentCall.set((nodes[m.scrutinee] as NodeOf<"call">).fn, m.scrutinee);
+      if (isCall(nodes[m.scrutinee])) parentCall.set((nodes[m.scrutinee] as Call).fn, m.scrutinee);
       nodes[id] = { ...m, id } as Node;
       fused++;
       inlineWrappers(id);
@@ -213,7 +213,7 @@ export function fuseHandlers(code: Code, info: Info, names: Names): { code: Code
         if (n.kind === "ref" && nodes[n.target]?.kind === "builtin" && (effectsOf(n.target) ?? []).includes(e)) return false;
         // A function known only when it runs (an input called), which
         // may perform it.
-        if (n.kind === "call") {
+        if (isCall(n)) {
           const f = nodes[n.fn];
           const known = (f?.kind === "ref" && ["def", "builtin", "variant"].includes(nodes[f.target]?.kind ?? "")) || (f?.kind === "lambda" && isLet(n.fn));
           if (!known) {
@@ -224,7 +224,7 @@ export function fuseHandlers(code: Code, info: Info, names: Names): { code: Code
           }
         }
         // A definition taking a function that may perform it.
-        if (n.kind === "call") {
+        if (isCall(n)) {
           const t = info.typeOf.get(n.fn), z = t && info.subst.zonk(t);
           if (z?.t === "fn" && z.params.some((p) => { const q = info.subst.zonk(p); return q.t === "fn" && info.subst.resolveRow(q.eff).effs.includes(e); })) return false;
         }
@@ -238,7 +238,7 @@ export function fuseHandlers(code: Code, info: Info, names: Names): { code: Code
     const writeIn = (root: Id, values: Map<Id, Id>) => {
       for (const x of kids(root)) {
         const n = nodes[x];
-        if (n.kind !== "call") continue;
+        if (!isCall(n)) continue;
         const op = opOf(x);
         if (op && arms.has(op)) {
           const arm = arms.get(op)!;
@@ -247,7 +247,7 @@ export function fuseHandlers(code: Code, info: Info, names: Names): { code: Code
           const body = copy(arm.body, new Map([...values, ...arm.binds.map((b, i) => [b, own[i]] as const)]));
           // The case's inputs as a let; one nobody uses, pure, left out.
           const keep = own.map((b, i) => [b, n.args[i]] as const).filter(([b, a]) => kids(body).some((y) => { const r = nodes[y]; return r.kind === "ref" && r.target === b; }) || !pure(a));
-          if (!keep.length) { nodes[x] = { ...nodes[body], id: x } as Node; if (nodes[x].kind === "call") parentCall.set((nodes[x] as NodeOf<"call">).fn, x); continue; }
+          if (!keep.length) { nodes[x] = { ...nodes[body], id: x } as Node; if (isCall(nodes[x])) parentCall.set((nodes[x] as Call).fn, x); continue; }
           const params = keep.map(([b]) => b);
           const lam = freshId();
           nodes[lam] = { id: lam, kind: "lambda", params, body };
@@ -283,7 +283,7 @@ export function fuseHandlers(code: Code, info: Info, names: Names): { code: Code
     }
     writeIn(h.scrutinee, new Map());
     nodes[h.id] = { ...nodes[h.scrutinee], id: h.id } as Node;
-    if (nodes[h.id].kind === "call") parentCall.set((nodes[h.id] as NodeOf<"call">).fn, h.id);
+    if (isCall(nodes[h.id])) parentCall.set((nodes[h.id] as Call).fn, h.id);
     fused++;
     return true;
   };

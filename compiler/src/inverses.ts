@@ -15,7 +15,7 @@
 // partial evaluation (Futamura, 1971; Jones, Gomard and Sestoft, 1993).
 
 import type { Code, Id, Node, NodeOf } from "../../ters/src/model.ts";
-import { freshId } from "../../ters/src/model.ts";
+import { freshId, isCall } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
 
@@ -38,7 +38,7 @@ export function expandInverses(code: Code, names: Names): { code: Code; names: N
   };
   const calls = (target: Id | undefined, id: Id) => {
     const n = out.nodes[id];
-    if (n?.kind !== "call" || !target) return null;
+    if (!isCall(n) || !target) return null;
     const f = out.nodes[n.fn];
     return f?.kind === "ref" && f.target === target ? n : null;
   };

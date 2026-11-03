@@ -18,7 +18,7 @@ import { infer } from "../../ters/src/lang/infer.ts";
 import { B } from "../../ters/src/prelude.ts";
 import { S } from "../../ters/src/lang/std.ts";
 import { expandDerivatives, recordVariant } from "../../ters/src/lang/derive.ts";
-import { merge, type Id, type NodeOf } from "../../ters/src/model.ts";
+import { merge, type Id, type NodeOf, type Call } from "../../ters/src/model.ts";
 
 test("calculus: the same definitions the WASM printer takes, as f32 functions", () => {
   const p = load("calculus");
@@ -78,7 +78,7 @@ test("examples/raymarch: the ray marcher goes to the GPU whole, normals and all"
   const info = infer(code, names);
   assert.deepEqual(info.errors, []);
   const variant = (call: Id) => {
-    const f = info.subst.zonk(info.typeOf.get((code.nodes[call] as NodeOf<"call">).args[0])!);
+    const f = info.subst.zonk(info.typeOf.get((code.nodes[call] as Call).args[0])!);
     return f.t === "fn" && f.params[0].t === "con" ? recordVariant(code, f.params[0].id) : null;
   };
   const x = expandDerivatives(code, names, variant);

@@ -19,7 +19,7 @@
 // keep each case's fields apart, as the language did before.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
-import { freshId } from "../model.ts";
+import { freshId, isCall, type Call } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { infer, type Info } from "./infer.ts";
 import { S, SET } from "./std.ts";
@@ -99,7 +99,7 @@ export function sharedFields(code: Code, info: Info, names: Names): { code: Code
   // a step on a field of a one-case type its own `with`. Each value is bound
   // once, by a lambda applied to it.
   for (const n of Object.values(code.nodes)) {
-    if (n.kind !== "call" || n.args.length !== 3 || (code.nodes[n.fn] as { target?: Id })?.target !== SET) continue;
+    if (!isCall(n) || n.args.length !== 3 || (code.nodes[n.fn] as { target?: Id })?.target !== SET) continue;
     const path = fieldPath(code, n.args[0]);
     if (!path || !path.some((f) => shared(f))) continue;
     const step = (value: Id, fs: Id[]): Id => {
@@ -114,7 +114,7 @@ export function sharedFields(code: Code, info: Info, names: Names): { code: Code
       return add({ kind: "call", fn: add({ kind: "lambda", params: [y], body }), args: [value] });
     };
     const whole = step(n.args[1], path);
-    nodes[n.id] = { ...(nodes[whole] as NodeOf<"call">), id: n.id };
+    nodes[n.id] = { ...(nodes[whole] as Call), id: n.id };
     changed = true;
   }
   for (const n of Object.values(nodes)) {

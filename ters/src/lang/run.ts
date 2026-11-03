@@ -15,7 +15,7 @@
 // (Console, Files) have one handler, the runtime's `World`; Log, Abort,
 // Random, Time and Wait, when nothing in the program handles them, go to it too.
 
-import { dependencies, subtree, type Code, type Id, type NodeOf, type Use, useTarget } from "../model.ts";
+import { dependencies, subtree, type Code, type Id, type NodeOf, type Use, useTarget, isCall, type Call } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { impl } from "../prelude.ts";
 import type { Info } from "./infer.ts";
@@ -215,7 +215,7 @@ interface Kids { kids: Data[]; folded: (results: Value[]) => Value[] }
 // steps, not n² (a choice may resume a frame more than once).
 type Done = { v: Value; n: number; up: Done } | null
 type Frame = { next: Frame | null } & (
-  | { t: "parts"; ids: Id[]; i: number; vals: Value[]; env: Env; n: NodeOf<"call"> | Use }
+  | { t: "parts"; ids: Id[]; i: number; vals: Value[]; env: Env; n: Call | Use }
   | { t: "match"; n: NodeOf<"match">; env: Env }
   | { t: "fold"; n: NodeOf<"fold">; env: Env }
   | { t: "foldChild"; ctx: FoldCtx; d: Data; arm: FoldArm; kids: Kids; results: Done }
@@ -790,7 +790,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
 
     // Evaluate the parts of a call (or a solve's givens) left to right,
     // earlier choices varying slowest.
-    parts(ids: Id[], i: number, vals: Value[], env: Env, n: NodeOf<"call"> | Use) {
+    parts(ids: Id[], i: number, vals: Value[], env: Env, n: Call | Use) {
       for (; i < ids.length; i++) {
         const a = this.atom(ids[i], env);
         if (a === undefined) {
@@ -799,7 +799,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         }
         vals.push(a);
       }
-      if (n.kind === "call") {
+      if (isCall(n)) {
         const head = code.nodes[n.fn];
         if (head.kind === "lambda") return this.eval(head.body, bind(env, head.params, vals));
         return this.apply(vals[0], vals.slice(1));

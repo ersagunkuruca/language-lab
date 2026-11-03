@@ -11,7 +11,7 @@
 // The runtime decides by cost whether to (a branch worth less than a
 // thread hop runs in place, C41); this only marks the calls it may.
 
-import { subtree, type Code, type Id, type NodeOf } from "../model.ts";
+import { subtree, type Code, type Id, type NodeOf, isCall } from "../model.ts";
 import { preludeDef } from "./arith.ts";
 import type { Info } from "./infer.ts";
 import { ABORT, CONS, NIL, SIGS } from "./std.ts";
@@ -33,7 +33,7 @@ function ownEffects(code: Code, info: Info, body: Id): Set<Id> | null {
   const effsOf = (t: Type | undefined) => { if (t?.t === "fn") t.eff.effs.forEach((e) => out.add(e)); };
   for (const id of subtree(code, body)) {
     const n = code.nodes[id];
-    if (n?.kind === "call") {
+    if (isCall(n)) {
       const f = code.nodes[n.fn];
       if (f?.kind !== "ref") return null;
       const target = code.nodes[f.target];
@@ -67,14 +67,14 @@ export function pureTogethers(code: Code, info: Info): Set<Id> {
   const out = new Set<Id>();
   if (!together) return out;
   for (const n of Object.values(code.nodes)) {
-    if (n.kind !== "call" || n.args.length !== 1) continue;
+    if (!isCall(n) || n.args.length !== 1) continue;
     const f = code.nodes[n.fn];
     if (f?.kind !== "ref" || (f as NodeOf<"ref">).target !== together) continue;
     // The actions written in place, each a lambda of nothing.
     const list: Id[] = [];
     for (let e = code.nodes[n.args[0]]; ; ) {
       if (e?.kind === "ref" && e.target === NIL) break;
-      if (e?.kind !== "call" || code.nodes[e.fn]?.kind !== "ref" || (code.nodes[e.fn] as NodeOf<"ref">).target !== CONS) { list.length = 0; list.push(""); break; }
+      if (!isCall(e) || code.nodes[e.fn]?.kind !== "ref" || (code.nodes[e.fn] as NodeOf<"ref">).target !== CONS) { list.length = 0; list.push(""); break; }
       list.push(e.args[0]);
       e = code.nodes[e.args[1]];
     }

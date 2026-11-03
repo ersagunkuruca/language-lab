@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { root } from "../src/io.ts";
-import { get, type Id, type NodeOf } from "../src/model.ts";
+import { get, type Id, type NodeOf, isCall, type Call } from "../src/model.ts";
 import { JOBS } from "../src/lang/std.ts";
 import { infer } from "../src/lang/infer.ts";
 import { loadProgram } from "../src/lang/load.ts";
@@ -73,8 +73,8 @@ test("the program writes its representations, and a job of the wrong type is ref
   assert.equal(names[binary.impl[SUCC]], "succ′");
   assert.equal(names[int.impl.match], "match Nat (Int)");
   assert.deepEqual([binary.cost[p.named("multiply")], unary.cost.fold, binary.cost.space], ["log² n", "n", "log n"]);
-  const succJob = Object.values(p.code.nodes).find((n) => n.kind === "call" && (p.code.nodes[n.fn] as { target?: Id }).target === JOBS.job
-    && (p.code.nodes[n.args[1]] as { target?: Id }).target === binary.impl[SUCC]) as NodeOf<"call">;
+  const succJob = Object.values(p.code.nodes).find((n) => isCall(n) && (p.code.nodes[n.fn] as { target?: Id }).target === JOBS.job
+    && (p.code.nodes[n.args[1]] as { target?: Id }).target === binary.impl[SUCC]) as Call;
   const wrong = { ...p.code, nodes: { ...p.code.nodes, [succJob.args[1]]: { id: succJob.args[1], kind: "ref" as const, target: p.named("number′") } } };
   const errors = infer(wrong, names).errors.map((e) => e.message);
   assert.deepEqual(errors, ["this does (Nat) -> Nat's job at Binary, so its type is (Binary) -> Binary, not (Binary) -> Float64"]);

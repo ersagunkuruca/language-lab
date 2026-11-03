@@ -13,7 +13,7 @@
 // one predicate with a definition per mode, promised to agree.
 
 import type { Code, Id, Node, NodeOf, Use } from "../model.ts";
-import { isUse, useTarget } from "../model.ts";
+import { isUse, useTarget, isCall, type Call } from "../model.ts";
 import { derivedFrom, nodesWhere, subtree } from "../model.ts";
 import { S } from "./std.ts";
 
@@ -113,7 +113,7 @@ export function useDirections(code: Code): Code {
 export function givenBy(code: Code, b: Id, results: Id[]): Id[] | null {
   const node = (id: Id) => code.nodes[id];
   const parts: Id[] = [];
-  const calls = (n: Node | undefined, f: Id): n is NodeOf<"call"> => n?.kind === "call" && n.args.length === 2 && node(n.fn)?.kind === "ref" && (node(n.fn) as NodeOf<"ref">).target === f;
+  const calls = (n: Node | undefined, f: Id): n is Call => isCall(n) && n.args.length === 2 && node(n.fn)?.kind === "ref" && (node(n.fn) as NodeOf<"ref">).target === f;
   const flat = (id: Id) => { const n = node(id); if (calls(n, S.and)) { flat(n.args[0]); flat(n.args[1]); } else parts.push(id); };
   flat(b);
   if (parts.length !== results.length) return null;

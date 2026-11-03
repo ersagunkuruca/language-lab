@@ -24,6 +24,7 @@ import { TARGETS } from "../src/builtins.ts";
 import { emitWasm, instantiate } from "../src/wasm.ts";
 import { emitWgsl } from "../src/wgsl.ts";
 import type { Id } from "../../ters/src/model.ts";
+import { isCall } from "../../ters/src/model.ts";
 import { compile } from "../src/compile.ts";
 
 // Builtins whose first input must be written in place, so a plain
@@ -148,7 +149,7 @@ test("every number builtin has a unit rule", () => {
   for (const id of numberOnly) {
     const { code, f } = calling(id);
     // f's own call: the library's nodes (published, "@…") call it too.
-    const call = Object.values(code.nodes).find((n) => !n.id.startsWith("@") && n.kind === "call" && (code.nodes[n.fn] as { target?: Id }).target === id)!;
+    const call = Object.values(code.nodes).find((n) => !n.id.startsWith("@") && isCall(n) && (code.nodes[n.fn] as { target?: Id }).target === id)!;
     assert.ok(constraints(code, f).some((c) => c.node === call.id), `${name(id)}: units.ts has no rule for it`);
   }
 });

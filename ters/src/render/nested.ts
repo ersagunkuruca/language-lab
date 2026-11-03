@@ -2,7 +2,7 @@
 // tree is.
 
 import type { Code, Id } from "../model.ts";
-import { get, useTarget } from "../model.ts";
+import { get, useTarget, isCall } from "../model.ts";
 import type { Presentation } from "../presentation.ts";
 import { Namer } from "./namer.ts";
 import { atom, callText, comment, Footnotes, lambdaText, unread, type R } from "./expr.ts";
@@ -63,8 +63,8 @@ export function renderNested(code: Code, pres: Presentation, defId: Id): string 
   // An action's steps (a; b; c) at the top of a definition: one a line,
   // as they run.
   const steps = (id: Id): Id[] => {
-    const n = code.nodes[id], f = n?.kind === "call" ? code.nodes[n.fn] : null;
-    return n?.kind === "call" && f?.kind === "lambda" && f.params.every((p) => unread(code, p, f.body)) ? [...n.args, ...steps(f.body)] : [id];
+    const n = code.nodes[id], f = isCall(n) ? code.nodes[n.fn] : null;
+    return isCall(n) && f?.kind === "lambda" && f.params.every((p) => unread(code, p, f.body)) ? [...n.args, ...steps(f.body)] : [id];
   };
   const head = comment(pres, namer, defId);
   const top = def.body === null ? null : code.nodes[def.body];

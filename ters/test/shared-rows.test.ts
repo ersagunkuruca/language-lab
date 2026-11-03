@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { root } from "../src/io.ts";
-import { replace, subtree, type NodeOf } from "../src/model.ts";
+import { replace, subtree, type NodeOf, type Call } from "../src/model.ts";
 import { infer } from "../src/lang/infer.ts";
 import { loadProgram } from "../src/lang/load.ts";
 import { sameEverywhere, shape, sharedPlaces } from "../src/lang/patterns.ts";
@@ -22,7 +22,7 @@ const load = () => loadProgram(join(root, "examples", "ledger"));
 test("changing the otherwise a shared row reads as changes every place it stands for, in one edit", () => {
   const { l, info, places, at } = setup();
   assert.ok(places.length >= 2);
-  const call = l.code.nodes[at(l.code, 0)] as NodeOf<"call">;
+  const call = l.code.nodes[at(l.code, 0)] as Call;
   // Give ‹bad line› a different argument in the first copy: its first input's own name.
   const edited = replace(l.code, call.args[0], () => ({ kind: "lit", value: "?" }));
   const same = sameEverywhere(l.code, edited, info);
@@ -40,7 +40,7 @@ test("changing the otherwise a shared row reads as changes every place it stands
 test("a copy changed to read its own row's names is that row's alone", () => {
   const { l, info, places, at } = setup();
   const i = places.findIndex((p) => p.binds.length);
-  const call = l.code.nodes[at(l.code, i)] as NodeOf<"call">;
+  const call = l.code.nodes[at(l.code, i)] as Call;
   const edited = replace(l.code, call.args[0], () => ({ kind: "ref", target: places[i].binds[0] }));
   const same = sameEverywhere(l.code, edited, info);
   assert.equal(same.places, 0);

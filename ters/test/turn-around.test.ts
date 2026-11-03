@@ -7,7 +7,8 @@ import { base, baseNames } from "../src/lang/load.ts";
 import { makeRunner } from "../src/lang/run.ts";
 import { ARITH } from "../src/lang/std.ts";
 import { NUMBER } from "../src/lang/types.ts";
-import type { NodeOf } from "../src/model.ts";
+import type { NodeOf, Call } from "../src/model.ts";
+import { isCall } from "../src/model.ts";
 import { infer, turnAround, turnBack, turnable } from "../../editor/typed.ts";
 
 const first = (v: unknown) => { if (v && typeof v === "object" && Symbol.iterator in v) for (const x of v as Iterable<unknown>) return x; return v; };
@@ -53,7 +54,7 @@ test("a turn that can't work says why", async () => {
   const callOf = (dir: string, def: string, fn: string) => {
     const p = loadProgram(join(root, "examples", dir));
     const names = p.pres.names, d = p.named(def);
-    const c = subtree(p.code, d).map((x) => p.code.nodes[x]).find((n): n is NodeOf<"call"> => n.kind === "call" && names[(p.code.nodes[n.fn] as NodeOf<"ref">).target ?? ""] === fn)!;
+    const c = subtree(p.code, d).map((x) => p.code.nodes[x]).find((n): n is Call => isCall(n) && names[(p.code.nodes[n.fn] as NodeOf<"ref">).target ?? ""] === fn)!;
     assert.ok(c, `${def} calls ${fn}`);
     return { code: p.code, names, info: infer(p.code, names), call: c.id };
   };

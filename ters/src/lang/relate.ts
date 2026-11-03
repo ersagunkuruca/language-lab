@@ -55,7 +55,7 @@ import { plan, relation, stream } from "../../../invertible/src/relation.js";
 import { call as ecall, evaluate as evaluateSolverExpr, num as enum_, show as eshow, simplify, v as evar } from "../../../invertible/src/expr.js";
 import type { Code, Id, NodeOf, Use } from "../model.ts";
 import type { Names } from "../presentation.ts";
-import { children, dependencies, ownerOfTypeParts, subtree, useTarget } from "../model.ts";
+import { children, dependencies, ownerOfTypeParts, subtree, useTarget, type Call } from "../model.ts";
 import { derivativeLambda, gradientLambda } from "./derive.ts";
 import { fieldShapes, look, type TypeEnv } from "./nested.ts";
 import { B, impl } from "../prelude.ts";
@@ -1075,7 +1075,7 @@ export function interpreter(given: Code, opts: Options = {}) {
         for (const b of freeBinders(e.node)) env.set(b, sl(f, b));
         return eq(sl(f, e.node), { k: "closure", lambda: e.node, env });
       }
-      case "call": return callGoal(nodes[e.node] as NodeOf<"call">, f, e.callee);
+      case "call": return callGoal(nodes[e.node] as Call, f, e.callee);
       case "same": return e.a === e.b ? succeed : eq(sl(f, e.a), sl(f, e.b));
       case "case": return eq(sl(f, e.value), dataT(e.variant, e.binds.map((b) => sl(f, b))));
       case "unfold": return unfoldGoal(e, f);
@@ -1084,13 +1084,13 @@ export function interpreter(given: Code, opts: Options = {}) {
     }
   }
 
-  const isBuiltinCall = (id: Id) => { const h = nodes[(nodes[id] as NodeOf<"call">).fn]; return h.kind === "ref" && nodes[h.target]?.kind === "builtin"; };
+  const isBuiltinCall = (id: Id) => { const h = nodes[(nodes[id] as Call).fn]; return h.kind === "ref" && nodes[h.target]?.kind === "builtin"; };
 
   // What a waiting goal needs: a call its inputs or its value, a solve
   // what it's given, a fold one level down its part or its result.
   function needs(e: Exec, f: Frame): (s: State) => boolean {
     if (e.k === "call") {
-      const n = nodes[e.node] as NodeOf<"call">;
+      const n = nodes[e.node] as Call;
       const ins = n.args.map((a) => sl(f, a)), out = sl(f, n.id);
       return (s) => ins.every((t) => known(t, s)) || known(out, s);
     }
@@ -1103,13 +1103,13 @@ export function interpreter(given: Code, opts: Options = {}) {
   }
   // What needs reads.
   function reads(e: Exec, f: Frame): Term[] | undefined {
-    if (e.k === "call") { const n = nodes[e.node] as NodeOf<"call">; return [...n.args.map((a) => sl(f, a)), sl(f, n.id)]; }
+    if (e.k === "call") { const n = nodes[e.node] as Call; return [...n.args.map((a) => sl(f, a)), sl(f, n.id)]; }
     if (e.k === "solve") return Object.values((nodes[e.node] as Use).given).map((x) => sl(f, x));
     if (e.k === "unfold") return [sl(f, e.part), sl(f, e.result)];
     return undefined;
   }
   const waitText = (e: Exec): string => {
-    if (e.k === "call") { const h = nodes[(nodes[e.node] as NodeOf<"call">).fn]; return h.kind === "ref" ? opts.names?.[h.target] ?? stdNames[h.target] ?? "call" : "call"; }
+    if (e.k === "call") { const h = nodes[(nodes[e.node] as Call).fn]; return h.kind === "ref" ? opts.names?.[h.target] ?? stdNames[h.target] ?? "call" : "call"; }
     return e.k === "solve" ? "solve" : "fold";
   };
 
@@ -1148,7 +1148,7 @@ export function interpreter(given: Code, opts: Options = {}) {
     }
   }
 
-  function callGoal(n: NodeOf<"call">, f: Frame, callee?: Mode): Goal {
+  function callGoal(n: Call, f: Frame, callee?: Mode): Goal {
     const args = n.args.map((a) => sl(f, a)), out = sl(f, n.id), fn = sl(f, n.fn);
     const head = nodes[n.fn];
     const applyG: Goal = (s) => apply(walk(fn, s), args, out, callee)(s);

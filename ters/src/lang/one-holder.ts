@@ -34,7 +34,7 @@
 // Moura, 2019) decide ownership from the program.
 
 import type { Code, Id, NodeOf } from "../model.ts";
-import { subtree } from "../model.ts";
+import { subtree, isCall, type Call } from "../model.ts";
 import type { Info } from "./infer.ts";
 import { COMPARE, S, SHOW_ANY } from "./std.ts";
 import { CHOICE, type Type } from "./types.ts";
@@ -144,7 +144,7 @@ export function oneHolder(code: Code, info: Info, entry: Id, types: Set<Id>, job
     const place = (id: Id): string | null => {
       const n = nodes[id];
       if (n?.kind === "ref") return nodes[n.target]?.kind === "binder" && isTracked(n.target) ? pathOf(n.target) : null;
-      if (n?.kind === "call" && n.args.length === 1 && nodes[n.fn]?.kind === "ref" && nodes[(nodes[n.fn] as NodeOf<"ref">).target]?.kind === "field") {
+      if (isCall(n) && n.args.length === 1 && nodes[n.fn]?.kind === "ref" && nodes[(nodes[n.fn] as NodeOf<"ref">).target]?.kind === "field") {
         const base = place(n.args[0]);
         return base === null ? null : cut(`${base}/${fieldIndex((nodes[n.fn] as NodeOf<"ref">).target)}`);
       }
@@ -189,7 +189,7 @@ export function oneHolder(code: Code, info: Info, entry: Id, types: Set<Id>, job
           return;
       }
     };
-    const call = (n: NodeOf<"call">, consume: boolean, st: Walk) => {
+    const call = (n: Call, consume: boolean, st: Walk) => {
       const f = nodes[n.fn];
       // let x = e in body: a name given to a place is that place.
       if (f?.kind === "lambda") {
@@ -215,7 +215,7 @@ export function oneHolder(code: Code, info: Info, entry: Id, types: Set<Id>, job
         for (const a of n.args) {
           const inner: Walk = { consumed: new Set(before), captured: st.captured };
           const body = nodes[(nodes[a] as NodeOf<"lambda">).body];
-          if (body?.kind === "call" && nodes[body.fn]?.kind === "ref" && nodes[(nodes[body.fn] as NodeOf<"ref">).target]?.kind !== "field") args(body, inner, true);
+          if (isCall(body) && nodes[body.fn]?.kind === "ref" && nodes[(nodes[body.fn] as NodeOf<"ref">).target]?.kind !== "field") args(body, inner, true);
           else ev((nodes[a] as NodeOf<"lambda">).body, consume, inner);
           inner.consumed.forEach((c) => st.consumed.add(c));
         }
@@ -226,7 +226,7 @@ export function oneHolder(code: Code, info: Info, entry: Id, types: Set<Id>, job
     };
     // A call's arguments, in order; a place given whole is used when the
     // function runs, after all of them; closures given run then too.
-    const args = (n: NodeOf<"call">, st: Walk, last: boolean) => {
+    const args = (n: Call, st: Walk, last: boolean) => {
       const f = nodes[n.fn], target = f?.kind === "ref" ? f.target : null, tn = target ? nodes[target] : null;
       const modeAt = (i: number): Mode => {
         if (tn?.kind === "def") return modeOf(target!, i);

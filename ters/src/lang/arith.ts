@@ -23,7 +23,7 @@
 // keep working, and the meaning hash is of the program as written.
 
 import type { Code, Id, Node, NodeData, NodeOf, Use } from "../model.ts";
-import { isUse, useTarget } from "../model.ts";
+import { isUse, useTarget, isCall, type Call } from "../model.ts";
 import { freshId } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { B } from "../prelude.ts";
@@ -273,7 +273,7 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
     if (at.t === "var") at = num;
     const impl = info.implementations?.get(implementationKey(iface, at));
     if (!impl) throw new Error(`${show(at)} has no ${names[iface] ?? iface}`);
-    const body = code.nodes[(code.nodes[impl] as NodeOf<"def">).body!] as NodeOf<"call">;
+    const body = code.nodes[(code.nodes[impl] as NodeOf<"def">).body!] as Call;
     const variant = (code.nodes[(code.nodes[body.fn] as NodeOf<"ref">).target] as NodeOf<"variant">);
     const arg = body.args[variant.fields.indexOf(field)];
     const given = code.nodes[arg];
@@ -444,7 +444,7 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
     const each: Type = { t: "fn", params: at.arity === 1 ? [num] : [num, num], ret: num, eff: pure };
     const parts = at.arity === 1 ? S.mapParts : S.zipParts;
     const partsType: Type = { t: "fn", params: [each, ...(at.arity === 1 ? [x] : [x, x])], ret: x, eff: pure };
-    const call = parent && nodes[parent].kind === "call" && (nodes[parent] as NodeOf<"call">).fn === id ? (nodes[parent] as NodeOf<"call">) : null;
+    const call = parent && isCall(nodes[parent]) && (nodes[parent] as Call).fn === id ? (nodes[parent] as Call) : null;
     if (call) {
       nodes[id] = { id, kind: "ref", target: parts };
       typeOf.set(id, partsType);

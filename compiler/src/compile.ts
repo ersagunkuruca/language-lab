@@ -29,7 +29,7 @@ import { reachedFrom } from "./scalar.ts";
 import { resolveArithmetic } from "../../ters/src/lang/arith.ts";
 import { intLit } from "../../ters/src/lang/int.ts";
 import { hostOp, ownOperations } from "../../ters/src/lang/hosts.ts";
-import { children, dependencies, subtree, type Code, type Id, type Node, type NodeOf, type Use, isUse, useTarget } from "../../ters/src/model.ts";
+import { children, dependencies, subtree, type Code, type Id, type Node, type NodeOf, type Use, isUse, useTarget, isCall, type Call } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { CHOICE, DIVERGE, INT, NUMBER, STRING, Subst, type Row, type Type } from "../../ters/src/lang/types.ts";
 import { fieldShapes, shapeOf, type Shape } from "../../ters/src/lang/nested.ts";
@@ -106,7 +106,7 @@ function throughNames(code: Code): Code {
   };
   let nodes: Code["nodes"] | null = null;
   for (const n of Object.values(code.nodes)) {
-    if (n.kind !== "call") continue;
+    if (!isCall(n)) continue;
     const f = code.nodes[n.fn];
     if (f?.kind !== "ref" || code.nodes[f.target]?.kind !== "def") continue;
     let to = f.target;
@@ -136,7 +136,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // no node table when nothing else looks inside functions. A derivative
   // of a function known only at run time still asks the runtime.
   const x = expandDerivatives(code, names, (call) => {
-    const f = info.subst.zonk(info.typeOf.get((code.nodes[call] as NodeOf<"call">).args[0]) ?? { t: "var", v: -1 });
+    const f = info.subst.zonk(info.typeOf.get((code.nodes[call] as Call).args[0]) ?? { t: "var", v: -1 });
     return f.t === "fn" && f.params[0]?.t === "con" ? recordVariant(code, f.params[0].id) : null;
   });
   if (x.expanded.length) {
@@ -261,7 +261,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           if (v?.kind !== "variant" || !v.returns || v.later || !effectOf(arm.variant)) continue;
           const waits = subtree(code, arm.body).some((id) => {
             const c = code.nodes[id];
-            if (c.kind !== "call") return false;
+            if (!isCall(c)) return false;
             const f = code.nodes[c.fn];
             return (f?.kind === "ref" && code.nodes[f.target]?.kind === "variant" && isLater(f.target)) || laterFn(ty(c.fn));
           });
@@ -282,9 +282,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     const todo: Id[] = [];
     const reach = (id: Id) => { for (const x of subtree(code, id)) { const r = code.nodes[x]; if (r.kind === "ref" && isDef(r.target) && !underFuel.has(r.target)) { underFuel.add(r.target); todo.push(r.target); } } };
     const heads = new Set<Id>();
-    for (const n of Object.values(code.nodes)) if (n.kind === "call") heads.add(n.fn);
+    for (const n of Object.values(code.nodes)) if (isCall(n)) heads.add(n.fn);
     for (const n of Object.values(code.nodes)) {
-      if (n.kind === "call" && code.nodes[n.fn].kind === "ref" && (code.nodes[n.fn] as NodeOf<"ref">).target === S.fuel) n.args.forEach(reach);
+      if (isCall(n) && code.nodes[n.fn].kind === "ref" && (code.nodes[n.fn] as NodeOf<"ref">).target === S.fuel) n.args.forEach(reach);
       if (n.kind === "ref" && isDef(n.target) && !heads.has(n.id) && !underFuel.has(n.target)) { underFuel.add(n.target); todo.push(n.target); }
     }
     for (let d = todo.pop(); d !== undefined; d = todo.pop()) reach(d);
@@ -427,7 +427,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     const add = (vs: Set<number>) => { for (const v of vs) { const w = toScheme.get(v); if (w !== undefined && sc.vars.includes(w)) out.add(w); } };
     for (const x of subtree(code, def)) {
       const n = code.nodes[x];
-      if (n.kind === "call" && refTarget(n.fn) === COMPARE && n.args[0]) add(varsOf(ty(n.args[0]), new Set()));
+      if (isCall(n) && refTarget(n.fn) === COMPARE && n.args[0]) add(varsOf(ty(n.args[0]), new Set()));
       if (n.kind !== "ref" || n.target === def || code.nodes[n.target]?.kind !== "def") continue;
       const g = compared(n.target);
       if (!g.size) continue;
@@ -665,7 +665,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // The expressions a definition's answer can be: through lets and matches.
   const tailsOf = (id: Id): Id[] => {
     const n = code.nodes[id];
-    if (n.kind === "call" && code.nodes[n.fn].kind === "lambda") return tailsOf(node<"lambda">(n.fn).body);
+    if (isCall(n) && code.nodes[n.fn].kind === "lambda") return tailsOf(node<"lambda">(n.fn).body);
     if (n.kind === "match" && !handlerOf(n)) return [...n.arms.flatMap((a) => tailsOf(node<"arm">(a).body)), ...(n.otherwise ? tailsOf(n.otherwise) : [])];
     return [id];
   };
@@ -682,7 +682,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         const ks = new Set<number>();
         for (const leaf of tailsOf(node<"lambda">(node<"def">(def).body!).body)) {
           const n = code.nodes[leaf];
-          if (n.kind === "call" && refTarget(n.fn) === v) n.args.forEach((a, i) => { if (isList(ty(a))) ks.add(i); });
+          if (isCall(n) && refTarget(n.fn) === v) n.args.forEach((a, i) => { if (isList(ty(a))) ks.add(i); });
         }
         if (ks.size === 1) r = { rec: v, k: [...ks][0] };
       }
@@ -699,15 +699,15 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   //    item is pushed first, then the call writes the rest.
   //  - "field": the arm's answer is the record's list itself, the one use
   //    of it (the compressor, which keeps the level in a cell).
-  function intoMatch(m: NodeOf<"match">, shape: Into): { kind: "pass" | "field"; call: NodeOf<"call">; arm: NodeOf<"arm">; to: Into; head?: Id } | null {
-    const c = code.nodes[m.scrutinee], g = c.kind === "call" ? refTarget(c.fn) : null;
+  function intoMatch(m: NodeOf<"match">, shape: Into): { kind: "pass" | "field"; call: Call; arm: NodeOf<"arm">; to: Into; head?: Id } | null {
+    const c = code.nodes[m.scrutinee], g = isCall(c) ? refTarget(c.fn) : null;
     if (handlerOf(m) || m.otherwise || m.arms.length !== 1 || !g || code.nodes[g]?.kind !== "def") return null;
     const to = intoShape(g), arm = node<"arm">(m.arms[0]);
     if (!to?.rec || arm.variant !== to.rec) return null;
-    const call = c as NodeOf<"call">, b = code.nodes[arm.body];
-    if (shape.rec !== null && sameInto(shape, to) && b.kind === "call" && refTarget(b.fn) === to.rec) {
+    const call = c as Call, b = code.nodes[arm.body];
+    if (shape.rec !== null && sameInto(shape, to) && isCall(b) && refTarget(b.fn) === to.rec) {
       const l = code.nodes[b.args[to.k]], o = code.nodes[b.args[1 - to.k]];
-      if (l.kind === "call" && refTarget(l.fn) === CONS && refTarget(l.args[1]) === arm.binds[to.k] && refTarget(b.args[1 - to.k]) === arm.binds[1 - to.k] && o.kind === "ref" && !mentionsAny(l.args[0], arm.binds))
+      if (isCall(l) && refTarget(l.fn) === CONS && refTarget(l.args[1]) === arm.binds[to.k] && refTarget(b.args[1 - to.k]) === arm.binds[1 - to.k] && o.kind === "ref" && !mentionsAny(l.args[0], arm.binds))
         return { kind: "pass", call, arm, to, head: l.args[0] };
     }
     if (shape.rec === null) {
@@ -731,10 +731,10 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // answers (the pedal's `out = as loud as(…)`, then the block itself when
   // the pedal is off): the value is written first, and another answer
   // takes its place.
-  function letInto(n: Node, shape: Into): { p: Id; call: NodeOf<"call">; body: Id } | null {
-    if (shape.rec !== null || n.kind !== "call" || code.nodes[n.fn].kind !== "lambda") return null;
+  function letInto(n: Node, shape: Into): { p: Id; call: Call; body: Id } | null {
+    if (shape.rec !== null || !isCall(n) || code.nodes[n.fn].kind !== "lambda") return null;
     const f = node<"lambda">(n.fn), v = code.nodes[n.args[0]];
-    if (f.params.length !== 1 || v?.kind !== "call") return null;
+    if (f.params.length !== 1 || !isCall(v)) return null;
     const g = refTarget(v.fn);
     if (!g || code.nodes[g]?.kind !== "def" || !sameInto(intoShape(g), shape) || !intoGain(g)) return null;
     const uses = subtree(code, f.body).filter((x) => refTarget(x) === f.params[0]);
@@ -743,13 +743,13 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   function gainsIn(id: Id, shape: Into, def: Id | null): boolean {
     const n = code.nodes[id];
     if (letInto(n, shape)) return true;
-    if (n.kind === "call" && code.nodes[n.fn].kind === "lambda") return gainsIn(node<"lambda">(n.fn).body, shape, def);
+    if (isCall(n) && code.nodes[n.fn].kind === "lambda") return gainsIn(node<"lambda">(n.fn).body, shape, def);
     if (n.kind === "match" && !handlerOf(n)) {
       const m = intoMatch(n, shape);
       if (m) return m.kind === "pass" || intoGain(refTarget(m.call.fn)!);
       return n.arms.some((a) => gainsIn(node<"arm">(a).body, shape, def)) || (!!n.otherwise && gainsIn(n.otherwise, shape, def));
     }
-    if (n.kind !== "call") return false;
+    if (!isCall(n)) return false;
     const f = refTarget(n.fn);
     if (shape.rec === null && f === CONS) return true;
     if (shape.rec !== null && f === shape.rec) return refTarget(n.args[shape.k]) !== NIL;
@@ -835,7 +835,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // A call's function parameters given functions with at most one answer:
   // a lambda written in place whose body has one, or a parameter of the
   // copy being written that is one of those itself.
-  function semiArgs(n: NodeOf<"call">, def: Id | null, given: Set<Id>): Set<Id> | null {
+  function semiArgs(n: Call, def: Id | null, given: Set<Id>): Set<Id> | null {
     const f = code.nodes[n.fn];
     if (reflective || f?.kind !== "ref" || !isFnDef(f.target)) return null;
     const params = node<"lambda">(node<"def">(f.target).body!).params, called = semiParams(f.target);
@@ -975,7 +975,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const ok = new Set(lam.params), fine = new Set<Id>();
       for (const id of subtree(code, lam.body)) {
         const n = code.nodes[id];
-        if (n.kind !== "call") continue;
+        if (!isCall(n)) continue;
         fine.add(n.fn);
         const f = code.nodes[n.fn];
         if (f?.kind === "ref" && f.target === def) n.args.forEach((a, i) => { const r = code.nodes[a]; if (r?.kind === "ref" && r.target === lam.params[i]) fine.add(a); });
@@ -995,7 +995,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const callee = new Set<Id>();
       for (const id of subtree(code, lam.body)) {
         const n = code.nodes[id];
-        if (n.kind === "call") callee.add(n.fn);
+        if (isCall(n)) callee.add(n.fn);
       }
       for (const id of subtree(code, lam.body)) {
         const n = code.nodes[id];
@@ -1031,11 +1031,11 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     }
     const binders: Id[] = [];
     for (const def of code.defs) if (code.nodes[def]?.kind === "def" && isFnDef(def) && !info.divergent.has(def)) binders.push(...node<"lambda">(node<"def">(def).body!).params);
-    for (const n of Object.values(code.nodes)) if (n.kind === "call" && code.nodes[n.fn].kind === "lambda") binders.push(...node<"lambda">(n.fn).params);
+    for (const n of Object.values(code.nodes)) if (isCall(n) && code.nodes[n.fn].kind === "lambda") binders.push(...node<"lambda">(n.fn).params);
     const walk = (r: Id, set: Set<Id>, grow: boolean): boolean => {
       const p = code.nodes[parent.get(r)!];
       if (p?.kind === "fold") return p.scrutinee === r && arrayFold(p);
-      if (p?.kind !== "call" || p.fn === r) return false;
+      if (!isCall(p) || p.fn === r) return false;
       const i = p.args.indexOf(r), f = code.nodes[p.fn];
       if (f.kind === "lambda") return set.has(f.params[i]);
       if (f.kind !== "ref") return false;
@@ -1073,7 +1073,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         const cons = p.arms.map((a) => node<"arm">(a)).find((a) => a.variant === CONS);
         return !cons || viewable.has(cons.binds[1]);
       }
-      if (p?.kind !== "call" || p.fn === r) return false;
+      if (!isCall(p) || p.fn === r) return false;
       const f = code.nodes[p.fn];
       return f.kind === "ref" && code.nodes[f.target]?.kind === "def" && isFnDef(f.target) && viewable.has(params(f.target)[p.args.indexOf(r)]);
     };
@@ -1100,7 +1100,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   const up = new Map<Id, Id>();
   for (const n of Object.values(code.nodes)) for (const c of children(n)) up.set(c, n.id);
   const INF = 1e9;
-  const isLet = (id: Id) => { const p = code.nodes[up.get(id)!]; return p?.kind === "call" && p.fn === id; };
+  const isLet = (id: Id) => { const p = code.nodes[up.get(id)!]; return isCall(p) && p.fn === id; };
   const handlerMatch = (n: Node) => n.kind === "match" && !!handlerOf(n);
   const mentions = (id: Id, b: Id) => subtree(code, id).some((x) => { const n = code.nodes[x]; return n.kind === "ref" && n.target === b; });
   // The most times `b` is used on one run of `id`: a match's arms are
@@ -1196,7 +1196,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       if (n.target === NIL) return true;
       return ownedAt(n.target, id, own, assume);
     }
-    if (n.kind === "call") {
+    if (isCall(n)) {
       const f = code.nodes[n.fn];
       if (f.kind === "lambda") return owned(f.body, own, assume);
       if (f.kind !== "ref") return false;
@@ -1236,7 +1236,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   }
   // Does this call take the `$own` copy: every own parameter given an
   // owned list?
-  function ownCall(n: NodeOf<"call">, own: boolean, assume = new Set<Id>()): boolean {
+  function ownCall(n: Call, own: boolean, assume = new Set<Id>()): boolean {
     const def = node<"ref">(n.fn).target;
     if (!inPlace(def) || !once.has(n.id)) return false;
     const params = node<"lambda">(node<"def">(def).body!).params, mine = ownParams(def);
@@ -1265,7 +1265,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     for (const n of Object.values(code.nodes)) {
       if (n.kind !== "ref" || code.nodes[n.target]?.kind !== "def") continue;
       const p = code.nodes[up.get(n.id)!];
-      if (!(p?.kind === "call" && p.fn === n.id)) asValue.add(n.target);
+      if (!(isCall(p) && p.fn === n.id)) asValue.add(n.target);
     }
     for (const def of code.defs) {
       if (code.nodes[def]?.kind !== "def" || !isFnDef(def) || exported.has(def) || asValue.has(def)) continue;
@@ -1294,7 +1294,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     if (n.kind === "lit") return true;
     const variant = (r: Id) => { const t = code.nodes[r]; return t?.kind === "ref" && code.nodes[t.target]?.kind === "variant" && !effectOf(t.target); };
     if (n.kind === "ref") return variant(id) && node<"variant">(n.target).fields.length === 0;
-    return n.kind === "call" && variant(n.fn) && n.args.length === node<"variant">(node<"ref">(n.fn).target).fields.length && n.args.every(isConst);
+    return isCall(n) && variant(n.fn) && n.args.length === node<"variant">(node<"ref">(n.fn).target).fields.length && n.args.every(isConst);
   }
   function hoist(js: string): string {
     if (!constNames.has(js)) {
@@ -1432,7 +1432,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     // The copy of a definition a call needs: by the effects of its
     // arguments' types, and which of its Choice-typed function parameters
     // get a lambda written in place that doesn't choose.
-    function defCall(n: NodeOf<"call">): Spec {
+    function defCall(n: Call): Spec {
       const f = node<"ref">(n.fn);
       const plain = new Set<Id>(), arr = new Map<Id, Kind | "view">(), quietArgs = new Map<Id, Id>();
       if (!reflective && isFnDef(f.target)) {
@@ -1475,7 +1475,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       return s;
     }
     // A call's arguments, each an array where the copy takes one.
-    function argsOf(n: NodeOf<"call">, s: Spec): string[] {
+    function argsOf(n: Call, s: Spec): string[] {
       const params = node<"lambda">(node<"def">(s.def).body!).params;
       return n.args.map((a, i) => (s.arr.has(params[i]) ? arrArg(a, s.arr.get(params[i])!) : boolParams.has(params[i]) ? exBool(a) : ex(a)));
     }
@@ -1495,7 +1495,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     function viewArg(id: Id, probe = false): { a: string; i: string } | null {
       const n = code.nodes[id];
       if (n.kind === "ref") return views.get(n.target) ?? null;
-      if (n.kind !== "call" || code.nodes[n.fn].kind !== "ref" || streamy(id)) return null;
+      if (!isCall(n) || code.nodes[n.fn].kind !== "ref" || streamy(id)) return null;
       const f = node<"ref">(n.fn).target;
       // A probe writes no code (I155): writing the text's JS here ran
       // before this definition's names were set up.
@@ -1509,7 +1509,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     // search runs as it does as a value, with the solve writing into an
     // array of its own, and the other way's list copied into one.
     let arrayAt: { solve: Id; d: string } | null = null;
-    function firstArray(n: NodeOf<"call">): string | null {
+    function firstArray(n: Call): string | null {
       const body = thunk(n.args[0]), g = thunk(n.args[1]);
       if (reflective || !body || !g) return null;
       const tails = tailsOf(body.body), sv = code.nodes[tails[0]];
@@ -1527,7 +1527,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     // A copy's parameters as JS names: a view is two.
     const paramNames = (s: Spec) => node<"lambda">(node<"def">(s.def).body!).params.flatMap((p) => (s.arr.get(p) === "view" ? [local(p), `${local(p)}$i`] : [local(p)]));
     // A call's arguments in the same order, for a loop's inputs.
-    function loopArgs(n: NodeOf<"call">, s: Spec): string[] {
+    function loopArgs(n: Call, s: Spec): string[] {
       const params = node<"lambda">(node<"def">(s.def).body!).params;
       return argsOf(n, s).flatMap((a, i) => { if (s.arr.get(params[i]) !== "view") return [a]; const v = viewArg(n.args[i])!; return [v.a, v.i]; });
     }
@@ -1571,7 +1571,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       if (cons && !onlyMatched(cons)) return null;
       const n = code.nodes[id];
       if (n.kind === "ref" && views.has(n.target)) return { pre: "", ...views.get(n.target)! };
-      if (reflective || n.kind !== "call" || code.nodes[n.fn].kind !== "ref" || streamy(id)) return null;
+      if (reflective || !isCall(n) || code.nodes[n.fn].kind !== "ref" || streamy(id)) return null;
       const f = node<"ref">(n.fn).target;
       if (f !== TEXT_OPS.split && f !== TEXT_OPS.characters) return null;
       const a = temp("a");
@@ -1587,7 +1587,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     function arrayKind(id: Id, held = false): Kind | null {
       const n = code.nodes[id];
       if (n.kind === "ref") return n.target === NIL ? (held ? "back" : null) : arrNow.get(n.target) ?? null;
-      if (n.kind !== "call" || code.nodes[n.fn].kind !== "ref" || streamy(id)) return null;
+      if (!isCall(n) || code.nodes[n.fn].kind !== "ref" || streamy(id)) return null;
       const f = node<"ref">(n.fn).target;
       if (f === TEXT_OPS.split || f === TEXT_OPS.characters) return "front";
       return f === CONS && code.nodes[n.args[1]].kind === "ref" && arrayKind(n.args[1], held) === "back" ? "back" : null;
@@ -1600,7 +1600,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         const kind = arrNow.get(n.target);
         return kind ? { js: local(n.target), kind } : null;
       }
-      if (n.kind !== "call" || code.nodes[n.fn].kind !== "ref" || streamy(id)) return null;
+      if (!isCall(n) || code.nodes[n.fn].kind !== "ref" || streamy(id)) return null;
       const f = node<"ref">(n.fn).target;
       if (f === TEXT_OPS.split || f === TEXT_OPS.characters) return { js: `$text.${f === TEXT_OPS.split ? "split" : "characters"}(${n.args.map(ex).join(", ")})`, kind: "front" };
       // Onto a list kept from the other end. Only onto a name or nil, so the
@@ -1651,7 +1651,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     }
 
     // Does this call's callee produce a stream (is it a generator)?
-    function callStreams(n: NodeOf<"call">): boolean {
+    function callStreams(n: Call): boolean {
       const f = code.nodes[n.fn];
       if (f.kind === "ref") {
         const t = code.nodes[f.target];
@@ -1700,8 +1700,8 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const n = code.nodes[id];
       if (n.kind === "ref" && (n.target === TRUE || n.target === FALSE)) return String(n.target === TRUE);
       if (n.kind === "ref" && boolParams.has(n.target)) return local(n.target);
-      if (n.kind === "call" && code.nodes[n.fn].kind === "ref" && boolFns.has(node<"ref">(n.fn).target)) return `${local(node<"ref">(n.fn).target)}(${n.args.map(ex).join(", ")})`;
-      if (n.kind === "call" && code.nodes[n.fn].kind === "ref") {
+      if (isCall(n) && code.nodes[n.fn].kind === "ref" && boolFns.has(node<"ref">(n.fn).target)) return `${local(node<"ref">(n.fn).target)}(${n.args.map(ex).join(", ")})`;
+      if (isCall(n) && code.nodes[n.fn].kind === "ref") {
         const target = node<"ref">(n.fn).target;
         if (INLINE[target]?.bool) return INLINE[target].js(n.args.map(INLINE[target]?.boolArgs ? exBool : ex), n.args.map(narrowText));
         if (target === S.equal) return equality(n);
@@ -1715,7 +1715,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       }
       // A let that only names other locals (a handler's case written in,
       // C64c): its names are the locals', and its body is the expression.
-      if (n.kind === "call" && code.nodes[n.fn].kind === "lambda" && !streamy(id) && aliases(n)) return exBool(node<"lambda">(n.fn).body);
+      if (isCall(n) && code.nodes[n.fn].kind === "lambda" && !streamy(id) && aliases(n)) return exBool(node<"lambda">(n.fn).body);
       // An if on a condition, as JS's ?: with no function made for it.
       if (n.kind === "match" && !handlerOf(n) && !streamy(id) && isBoolMatch(n)) {
         const [t, f] = boolArms(n);
@@ -1726,7 +1726,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     }
     // Can this let's inputs be the locals they're given? Each is a ref to a
     // local binder written as its name, and the input has no name yet.
-    function aliases(n: NodeOf<"call">): boolean {
+    function aliases(n: Call): boolean {
       const f = node<"lambda">(n.fn);
       const ok = f.params.every((p, i) => {
         const a = code.nodes[n.args[i]];
@@ -1735,7 +1735,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       if (ok) f.params.forEach((p, i) => idents.set(p, local((code.nodes[n.args[i]] as NodeOf<"ref">).target)));
       return ok;
     }
-    function equality(n: NodeOf<"call">): string {
+    function equality(n: Call): string {
       // A name against a value built in place (`t = word("let")`): a tag
       // test and its fields, with nothing built (GAPS.md G2).
       for (const [a, b] of [[0, 1], [1, 0]]) {
@@ -1750,9 +1750,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     // literals, names, or such values again.
     function builtAt(id: Id): { variant: Id; args: Id[] } | null {
       const n = code.nodes[id];
-      const v = n.kind === "ref" ? n.target : n.kind === "call" && code.nodes[n.fn].kind === "ref" ? node<"ref">(n.fn).target : null;
+      const v = n.kind === "ref" ? n.target : isCall(n) && code.nodes[n.fn].kind === "ref" ? node<"ref">(n.fn).target : null;
       if (!v || code.nodes[v]?.kind !== "variant" || [CONS, NIL, TRUE, FALSE, UNIT_V].includes(v) || effectOf(v)) return null;
-      const args = n.kind === "call" ? n.args : [];
+      const args = isCall(n) ? n.args : [];
       return args.length === node<"variant">(v).fields.length ? { variant: v, args } : null;
     }
     function shaped(id: Id): boolean {
@@ -1829,9 +1829,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     }
     // set(…) at n with any sets of the same record inside it, innermost
     // first.
-    function setNested(n: NodeOf<"call">): string {
-      const links: NodeOf<"call">[] = [];
-      for (let c: Node | undefined = n; c?.kind === "call" && c.args.length === 3 && code.nodes[c.fn]?.kind === "ref" && (code.nodes[c.fn] as NodeOf<"ref">).target === SET && fieldPath(code, c.args[0]); c = code.nodes[c.args[1]]) links.unshift(c);
+    function setNested(n: Call): string {
+      const links: Call[] = [];
+      for (let c: Node | undefined = n; isCall(c) && c.args.length === 3 && code.nodes[c.fn]?.kind === "ref" && (code.nodes[c.fn] as NodeOf<"ref">).target === SET && fieldPath(code, c.args[0]); c = code.nodes[c.args[1]]) links.unshift(c);
       const record = ex(links[0].args[1]);
       return setChain(record, links.map((l) => ({ path: fieldPath(code, l.args[0])!, value: ex(l.args[2]) })));
     }
@@ -1945,7 +1945,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     }
 
     // A call with one result.
-    function call(n: NodeOf<"call">): string {
+    function call(n: Call): string {
       const f = code.nodes[n.fn];
       laterArgs(n);
       if (f.kind === "lambda") return block(n.id);
@@ -1998,7 +1998,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     // evaluator's in its last bits, as any compiler's reassociation does.
     // Prior art: constant folding of affine maps (LLVM's and MLIR's affine
     // analysis); the product rule is the textbook matrix of a composition.
-    function linearCall(n: NodeOf<"call">): string | null {
+    function linearCall(n: Call): string | null {
       const l = reflective ? null : linearOf(n.id);
       return l && l.args !== n.args ? emitLinear(l.map, l.args) : null;
     }
@@ -2006,7 +2006,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     // folds its own argument in too when that is a linear call that pays.
     function linearOf(id: Id, fold = true): { map: LinearMap; args: Id[] } | null {
       const n = code.nodes[id];
-      if (n.kind !== "call") return null;
+      if (!isCall(n)) return null;
       const f = code.nodes[n.fn];
       if (f.kind !== "ref" || code.nodes[f.target]?.kind !== "def" || spends(f.target)) return null;
       const def = node<"def">(f.target);
@@ -2062,7 +2062,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     // the callee would call it as a plain function (`map`'s, whose row is
     // any): its generator would come back unrun, so that waits for C40's
     // next step.
-    function laterArgs(n: NodeOf<"call">) {
+    function laterArgs(n: Call) {
       const f = code.nodes[n.fn];
       if (!n.args.some((a) => laterFn(ty(a), sp.lat))) return;
       // A search written in place, inside a generator (handlerEx).
@@ -2078,7 +2078,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     // Handlers whose thunks are written in place become loops; otherwise
     // the runtime's versions are called with the thunks as values.
     const thunk = (id: Id) => (code.nodes[id].kind === "lambda" && !node<"lambda">(id).params.length ? node<"lambda">(id) : null);
-    function handlerEx(h: Id, n: NodeOf<"call">): string {
+    function handlerEx(h: Id, n: Call): string {
       const body = thunk(n.args[h === S.fuel ? 1 : 0]);
       // The search runs inside an arrow function of its own, so that its
       // searches can take closures for the rest (GAPS.md G11); stopping
@@ -2140,7 +2140,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     function performsNothing(root: Id): boolean {
       return subtree(code, root).every((id) => {
         const c = code.nodes[id];
-        if (c.kind !== "call") return true;
+        if (!isCall(c)) return true;
         const f = code.nodes[c.fn];
         if (f?.kind !== "ref" || effectOf(f.target)) return false;
         const t = ty(c.fn);
@@ -2294,7 +2294,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const same = (a: Id, i: number) => { const x = code.nodes[a]; return x.kind === "ref" && x.target === reuse?.binds[i]; };
       const n = code.nodes[id];
       if (streamy(id)) throw new Error(`internal: ${id} in ${names[sp.def]} has Choice but is compiled as a plain expression`);
-      if (n.kind === "call" && code.nodes[n.fn].kind === "lambda") {
+      if (isCall(n) && code.nodes[n.fn].kind === "lambda") {
         const li = out.into && !out.into.done ? letInto(n, out.into.shape) : null;
         const t = li ? intoCallee(li.call, out.into!.shape) : null;
         if (li && t) {
@@ -2335,7 +2335,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         }
         const s = temp("s");
         const scrut = code.nodes[n.scrutinee];
-        if (scrut.kind === "call" && code.nodes[scrut.fn].kind === "ref" && node<"ref">(scrut.fn).target === COMPARE) {
+        if (isCall(scrut) && code.nodes[scrut.fn].kind === "ref" && node<"ref">(scrut.fn).target === COMPARE) {
           // A match on `compare`: on the number, with no Order built.
           const at: Id[] = [ORDER_V.before, ORDER_V.same, ORDER_V.after];
           const cases = n.arms.map((a) => node<"arm">(a)).map((a) => `case ${at.indexOf(a.variant) - 1}: {\n${ret(a.body, tail, out, reuse)}\n}`);
@@ -2353,7 +2353,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       if (n.kind === "fold" && !out.bool) return out === RETURN ? foldLoop(n) : out.leaf(foldEx(n));
       if (out.into) { const js = intoJs(n, tail, out); if (js !== null) return js; }
       // A cons built in the matched cell, which nothing else holds.
-      const inCell = reuse && n.kind === "call" && code.nodes[n.fn].kind === "ref" && node<"ref">(n.fn).target === CONS && !isConst(id) &&
+      const inCell = reuse && isCall(n) && code.nodes[n.fn].kind === "ref" && node<"ref">(n.fn).target === CONS && !isConst(id) &&
         !mentions(id, reuse.cell) && clearOf(id, reuse.cell, reuse.root) ? reuse.s : null;
       if (tail && holes && holeCall(n)) {
         // Tail recursion modulo cons (G22): the cell is made now with its
@@ -2361,7 +2361,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         // again to fill that field. Friedman and Wise, "Unwinding stylized
         // recursions into iterations" (1975); OCaml's [@tail_mod_cons].
         jumps = true;
-        const c = n as NodeOf<"call">, last = c.args.length - 1;
+        const c = n as Call, last = c.args.length - 1;
         const lam = node<"lambda">(d.body!);
         const fields = c.args.slice(0, last).map(ex);
         const args = loopArgs(node<"call">(c.args[last]), sp);
@@ -2374,7 +2374,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           `${spend}${paramNames(sp).map((p, i) => `${p}$in = ${args[i]};`).join("\n")}\ncontinue;`;
       }
       if (inCell) {
-        const c = n as NodeOf<"call">, vs = c.args.map((a, i) => (same(a, i) ? null : [temp(i ? "t" : "h"), ex(a)]));
+        const c = n as Call, vs = c.args.map((a, i) => (same(a, i) ? null : [temp(i ? "t" : "h"), ex(a)]));
         const set = vs.flatMap((v, i) => (v ? [`${inCell}.fields[${i}] = ${v[0]};`] : []));
         const lets = vs.filter((v) => v).map((v) => `${v![0]} = ${v![1]}`);
         return `${lets.length ? `const ${lets.join(", ")};\n` : ""}${set.join("\n")}\n${out.leaf(inCell)}`;
@@ -2384,15 +2384,15 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         // again with them: no JS stack (COMPILER.md, stage 2½).
         jumps = true;
         const lam = node<"lambda">(d.body!);
-        const args = loopArgs(n as NodeOf<"call">, sp);
+        const args = loopArgs(n as Call, sp);
         const spend = spends(sp.def) ? "$spendOrThrow();\n" : "";
         return `${spend}${paramNames(sp).map((p, i) => `${p}$in = ${args[i]};`).join("\n")}\ncontinue;`;
       }
       // `first` of one answer or none, given back from here: its statements
       // in place, then the other way (GAPS.md P6; G24 in a closure).
-      const body = n.kind === "call" && !reflective && refTo(n.fn, S.first) ? thunk(n.args[0]) : null;
+      const body = isCall(n) && !reflective && refTo(n.fn, S.first) ? thunk(n.args[0]) : null;
       if (body && oneAnswer(body.body, null)) {
-        const c = n as NodeOf<"call">, g = thunk(c.args[1]);
+        const c = n as Call, g = thunk(c.args[1]);
         const leaf = (v: string) => out.leaf(out.bool ? `(${v}.tag === ${JSON.stringify(TRUE)})` : v);
         return `${scoped(false, () => st(body.body, leaf))}\n${g ? ret(g.body, tail, out) : leaf(`${ex(c.args[1])}()`)}`;
       }
@@ -2417,7 +2417,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     // A constructor (not an effect) whose last field is a call of the
     // definition to itself.
     function holeCall(n: Node): boolean {
-      if (n.kind !== "call" || !n.args.length) return false;
+      if (!isCall(n) || !n.args.length) return false;
       const f = code.nodes[n.fn];
       if (f.kind !== "ref" || code.nodes[f.target].kind !== "variant" || effectOf(f.target)) return false;
       return selfCall(code.nodes[n.args[n.args.length - 1]]);
@@ -2425,7 +2425,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     // Is there one in a tail position of `id`? The same positions as ret's.
     function fillsHoles(id: Id): boolean {
       const n = code.nodes[id];
-      if (n.kind === "call" && code.nodes[n.fn].kind === "lambda") return fillsHoles(node<"lambda">(n.fn).body);
+      if (isCall(n) && code.nodes[n.fn].kind === "lambda") return fillsHoles(node<"lambda">(n.fn).body);
       if (n.kind === "match") {
         if (handlerOf(n)) return false;
         return n.arms.some((a) => fillsHoles(node<"arm">(a).body)) || (!!n.otherwise && fillsHoles(n.otherwise));
@@ -2447,7 +2447,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     const intoDone = new Set<Id>();
     // The `$into` copy a call can hand the array to, if it has one worth
     // having.
-    function intoCallee(n: NodeOf<"call">, shape: Into): Spec | null {
+    function intoCallee(n: Call, shape: Into): Spec | null {
       const g = refTarget(n.fn);
       if (!g || code.nodes[g]?.kind !== "def" || !sameInto(intoShape(g), shape) || !intoGain(g) || callStreams(n)) return null;
       const c = defCall(n);
@@ -2455,7 +2455,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       return spec(c.def, c.rho, c.plain, false, c.arr, false, false, shape, c.lat, keyAt(c), c.semi);
     }
     // A call that writes into the array `d`: a jump if it is this copy.
-    function intoCallJs(n: NodeOf<"call">, t: Spec, tail: boolean, d: string, pre = ""): string {
+    function intoCallJs(n: Call, t: Spec, tail: boolean, d: string, pre = ""): string {
       if (tail && t.name === sp.name) {
         jumps = true;
         const args = loopArgs(n, t);
@@ -2480,7 +2480,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     function pushInto(id: Id, d: string): string {
       const n = code.nodes[id];
       if (n.kind === "ref" && n.target === NIL) return "";
-      if (n.kind === "call" && refTarget(n.fn) === CONS) return `${d}.push(${ex(n.args[0])});\n${pushInto(n.args[1], d)}`;
+      if (isCall(n) && refTarget(n.fn) === CONS) return `${d}.push(${ex(n.args[0])});\n${pushInto(n.args[1], d)}`;
       return `$pushList(${d}, ${ex(id)});\n`;
     }
     function intoJs(n: Node, tail: boolean, out: Out): string | null {
@@ -2488,7 +2488,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       if (n.kind === "ref" && intoDone.has(n.target)) return "return;";
       if (done) return null;
       if (shape.rec === null && n.kind === "ref" && n.target === NIL) return "return;";
-      if (n.kind !== "call") return null;
+      if (!isCall(n)) return null;
       const f = refTarget(n.fn);
       if (shape.rec === null && f === CONS) return `${pushInto(n.id, d)}return;`;
       if (shape.rec !== null && f === shape.rec) {
@@ -2497,12 +2497,12 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         const parts = n.args.map((a, i) => (i === shape.k ? pushInto(a, d) : `const ${o} = ${ex(a)};\n`));
         return `${parts.join("")}return ${o};`;
       }
-      const t = intoCallee(n as NodeOf<"call">, shape);
-      return t ? intoCallJs(n as NodeOf<"call">, t, tail, d) : null;
+      const t = intoCallee(n as Call, shape);
+      return t ? intoCallJs(n as Call, t, tail, d) : null;
     }
 
     function selfCall(n: Node): boolean {
-      if (n.kind !== "call") return false;
+      if (!isCall(n)) return false;
       const f = code.nodes[n.fn];
       return f.kind === "ref" && f.target === sp.def && defCall(n).name === sp.name;
     }
@@ -2545,7 +2545,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       return subtree(code, id).every((x) => {
         const c = code.nodes[x];
         if (isUse(c)) return false;
-        if (c.kind !== "call") return true;
+        if (!isCall(c)) return true;
         const t = ty(c.fn), f = code.nodes[c.fn];
         if (f.kind === "ref" && info.divergent.has(f.target)) return false;
         if (t.t !== "fn") return false;
@@ -2567,7 +2567,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const shape = (x: Id): Step | null => {
         const b = code.nodes[x];
         if (b.kind === "ref" && b.target === rest) return (acc) => acc;
-        if (b.kind === "call" && b.args.length === 2 && code.nodes[b.fn].kind === "ref") {
+        if (isCall(b) && b.args.length === 2 && code.nodes[b.fn].kind === "ref") {
           const f = node<"ref">(b.fn).target;
           if (!ORDERLESS.has(f) || (op && op !== f)) return null;
           const [p, q] = b.args;
@@ -2606,7 +2606,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     const onlyChoice = (id: Id) => subtree(code, id).every((x) => {
       const c = code.nodes[x];
       if (isUse(c)) return false;
-      if (c.kind !== "call") return true;
+      if (!isCall(c)) return true;
       const t = ty(c.fn), f = code.nodes[c.fn];
       if (f.kind === "ref" && info.divergent.has(f.target)) return false;
       if (t.t !== "fn") return false;
@@ -2621,10 +2621,10 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         const param = (id: Id) => { const x = code.nodes[id]; return x.kind === "ref" ? lam.params.indexOf(x.target) : -1; };
         const b = code.nodes[lam.body];
         // all(() => let x = one of(list) in E): E's answers for each item.
-        if (b.kind === "call" && refTo(b.fn, S.all) && thunk(b.args[0])) {
+        if (isCall(b) && refTo(b.fn, S.all) && thunk(b.args[0])) {
           const c = code.nodes[thunk(b.args[0])!.body];
-          const v = c.kind === "call" && code.nodes[c.fn].kind === "lambda" && c.args.length === 1 ? code.nodes[c.args[0]] : null;
-          if (c.kind === "call" && v?.kind === "call" && refTo(v.fn, S.oneOf) && param(v.args[0]) >= 0) {
+          const v = isCall(c) && code.nodes[c.fn].kind === "lambda" && c.args.length === 1 ? code.nodes[c.args[0]] : null;
+          if (isCall(c) && isCall(v) && refTo(v.fn, S.oneOf) && param(v.args[0]) >= 0) {
             const li = param(v.args[0]), inner = node<"lambda">(c.fn);
             if (!uses(inner.body, lam.params[li]) && onlyChoice(inner.body))
               r = { li, emit: (item, next) => `const ${local(inner.params[0])} = ${item};\n${st(inner.body, next)}` };
@@ -2635,9 +2635,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           const li = param(b.scrutinee), arms = b.arms.map((a) => node<"arm">(a));
           const nil = arms.find((a) => a.variant === NIL), cons = arms.find((a) => a.variant === CONS);
           const body = cons && code.nodes[cons.body];
-          if (nil && cons && refTo(nil.body, NIL) && body?.kind === "call" && refTo(body.fn, CONS)) {
+          if (nil && cons && refTo(nil.body, NIL) && isCall(body) && refTo(body.fn, CONS)) {
             const [e, more] = body.args, again = code.nodes[more];
-            const same = again.kind === "call" && refTo(again.fn, def) && again.args.every((a, i) => refTo(a, i === li ? cons.binds[1] : lam.params[i]));
+            const same = isCall(again) && refTo(again.fn, def) && again.args.every((a, i) => refTo(a, i === li ? cons.binds[1] : lam.params[i]));
             if (same && !uses(e, cons.binds[1]) && pure(e)) r = { li, emit: (item, next) => `const ${local(cons.binds[0])} = ${item};\n${next(ex(e))}` };
           }
         }
@@ -2647,7 +2647,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     }
     // Where the items end up: the call's list argument, what to set up
     // before the loop, what each item does, and the value after it.
-    function sinkOf(n: NodeOf<"call">): { li: number; before: string; each: (item: string) => string; after: string } | null {
+    function sinkOf(n: Call): { li: number; before: string; each: (item: string) => string; after: string } | null {
       const f = code.nodes[n.fn];
       if (f.kind !== "ref") return null;
       if (f.target === TEXT_OPS.joinAll) {
@@ -2676,19 +2676,19 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         each: (x) => `${referenced.has(fwd.on.binds[0]) ? `const ${local(fwd.on.binds[0])} = ${x};\n` : ""}${acc} = ${fwd.step(acc)};`,
       };
     }
-    function fused(n: NodeOf<"call">): string | null {
+    function fused(n: Call): string | null {
       if (reflective || streamy(n.id)) return null;
       const top = code.nodes[n.fn];
       if (top.kind !== "ref") return null;
       const seen = new Set<Id>([sp.def, top.target]);
-      const chain: { call: NodeOf<"call">; def: Id; emit: Emit }[] = [];
+      const chain: { call: Call; def: Id; emit: Emit }[] = [];
       const sink = sinkOf(n);
       if (!sink) return null;
       let at: Id | null = n.args[sink.li];
       // Walk down through steps to the list they start from.
       for (;;) {
         const c: Node | null = at ? code.nodes[at] : null;
-        if (!c || c.kind !== "call" || code.nodes[c.fn].kind !== "ref") break;
+        if (!c || !isCall(c) || code.nodes[c.fn].kind !== "ref") break;
         const d: Id = node<"ref">(c.fn).target, step: { li: number; emit: Emit } | null = code.nodes[d].kind === "def" ? stepOf(d) : null;
         if (!step || seen.has(d)) break;
         seen.add(d);
@@ -2885,8 +2885,8 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     function onlyFieldsOf(id: Id, b: Id): boolean {
       const all = subtree(code, id), read = new Set<Id>();
       for (const x of all) {
-        const c = code.nodes[x], f = c.kind === "call" && c.args.length === 1 ? code.nodes[c.fn] : null;
-        if (c.kind === "call" && f?.kind === "ref" && code.nodes[f.target].kind === "field") read.add(c.args[0]);
+        const c = code.nodes[x], f = isCall(c) && c.args.length === 1 ? code.nodes[c.fn] : null;
+        if (isCall(c) && f?.kind === "ref" && code.nodes[f.target].kind === "field") read.add(c.args[0]);
       }
       return all.every((x) => !refTo(x, b) || read.has(x));
     }
@@ -2928,7 +2928,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     function guarded(id: Id, js: string, k: K): string {
       if (!fueled || !subtree(code, id).some((x) => {
         const c = code.nodes[x];
-        if (c.kind !== "call") return false;
+        if (!isCall(c)) return false;
         const t = ty(c.fn);
         return t.t === "fn" && (t.eff.effs.includes(DIVERGE) || t.eff.tail !== null);
       })) return k(js);
@@ -2977,7 +2977,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const kind = code.nodes[id].kind;
       // A let: its bindings as statements, then its body (not a closure).
       const n = code.nodes[id];
-      if (n.kind === "call" && code.nodes[n.fn].kind === "lambda") {
+      if (isCall(n) && code.nodes[n.fn].kind === "lambda") {
         const f = node<"lambda">(n.fn);
         return f.params.map((p, j) => bindLet(p, letArg(p, n.args[j]))).join("") + parts([...ids.slice(0, i), f.body, ...ids.slice(i + 1)], k, i, acc);
       }
@@ -2992,7 +2992,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const items: Id[] = [];
       for (let n = code.nodes[id]; ; n = code.nodes[n.args[1]]) {
         if (n.kind === "ref" && n.target === NIL) return items.length && items.length <= 4 ? items : null;
-        if (n.kind !== "call" || !refTo(n.fn, CONS)) return null;
+        if (!isCall(n) || !refTo(n.fn, CONS)) return null;
         const x = code.nodes[n.args[0]];
         if (!(x.kind === "lit" || (x.kind === "ref" && code.nodes[x.target]?.kind === "variant" && !node<"variant">(x.target).fields.length))) return null;
         items.push(n.args[0]);
@@ -3010,7 +3010,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       return `for (const ${r} of (function* () {\n${scoped(false, () => gen((v) => `yield ${v};`))}\n})()) {\n${k(r)}\n}`;
     }
 
-    function stCall(n: NodeOf<"call">, k: K): string {
+    function stCall(n: Call, k: K): string {
       const f = code.nodes[n.fn];
       if (f.kind === "lambda") {
         // A let given an array keeps it (GAPS.md G21); making one has no
@@ -3130,7 +3130,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         if (isBoolMatch(n)) {
           const [t, e] = boolArms(n);
           const sc = code.nodes[n.scrutinee];
-          const c = (sc.kind === "call" && !streamy(n.scrutinee)) || (sc.kind === "ref" && boolParams.has(sc.target)) ? exBool(n.scrutinee) : `(${s}.tag === ${JSON.stringify(TRUE)})`;
+          const c = (isCall(sc) && !streamy(n.scrutinee)) || (sc.kind === "ref" && boolParams.has(sc.target)) ? exBool(n.scrutinee) : `(${s}.tag === ${JSON.stringify(TRUE)})`;
           return `if (${c}) {\n${st(t, y)}\n} else {\n${st(e, y)}\n}`;
         }
         const v = temp("s");
@@ -3202,9 +3202,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       // there ends the copy too. Each is a jump (C89).
       const tails = (id: Id) => {
         const x = code.nodes[id];
-        if (x.kind === "call" && code.nodes[x.fn].kind === "lambda") { if (!x.args.some(streamy)) tails(node<"lambda">(x.fn).body); }
+        if (isCall(x) && code.nodes[x.fn].kind === "lambda") { if (!x.args.some(streamy)) tails(node<"lambda">(x.fn).body); }
         else if (x.kind === "match") { if (!handlerOf(x) && !streamy(x.scrutinee)) { x.arms.forEach((a) => tails(node<"arm">(a).body)); if (x.otherwise) tails(x.otherwise); } }
-        else if (x.kind === "call" && refTarget(x.fn) === sp.def && !x.args.some(streamy)) singleTails.add(id);
+        else if (isCall(x) && refTarget(x.fn) === sp.def && !x.args.some(streamy)) singleTails.add(id);
       };
       if (sp.out) {
         const rec = unpackOf(sp)!;
