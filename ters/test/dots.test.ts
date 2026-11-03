@@ -6,7 +6,7 @@ import type { Code, Id } from "../src/model.ts";
 import { infer } from "../src/lang/infer.ts";
 import { loadProgram } from "../src/lang/load.ts";
 import { runMain } from "../src/lang/run.ts";
-import { sweep } from "./helpers.ts";
+import { capped, sweep } from "./helpers.ts";
 import { addDot, dotHandles, isDot, removeDot, usesOf, useVar } from "../../editor/typed.ts";
 
 const load = (name: string) => loadProgram(join(root, "examples", name));
@@ -34,11 +34,11 @@ for (const program of ["queens", "relations", "physics"]) test(`${program}: a do
   const main = p.named("main");
   const before = output(p.code, p.pres.names, main);
   let tried = 0;
-  // Which wires take a dot is quick to find; the checks on each are a sweep.
-  const wires = p.own.defs.flatMap((d) => under(p.code, d).map((slot) => ({ d, slot, r: addDot(p.code, p.pres.names, info, d, slot) })));
-  const taking = wires.filter((w) => w.r.ok);
-  assert.ok(taking.length > 10, `only ${taking.length} wires took a dot`);
-  for (const { d, r } of sweep(taking)) {
+  // Forty wires a change (T12), every one nightly; a dot is put on each.
+  const wires = capped(sweep(p.own.defs.flatMap((d) => under(p.code, d).map((slot) => ({ d, slot })))), 40);
+  const taking = wires.map((w) => ({ ...w, r: addDot(p.code, p.pres.names, info, w.d, w.slot) })).filter((w) => w.r.ok);
+  assert.ok(taking.length > 3, `only ${taking.length} wires took a dot`);
+  for (const { d, r } of taking) {
     if (!r.ok) continue;
     tried++;
     const dot = r.select!;

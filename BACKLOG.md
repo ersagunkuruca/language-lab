@@ -22,7 +22,7 @@ language, then more targets or speed (WORKFLOW.md "Priority").
 |---|---|---|
 | E Editor | "Editor lane" | L211's later step (a use's produced ports drawn as outputs), E228's rest, E231's rest; then E200b, E103 |
 | C Compiler and targets | "Compiler lane" | C93's rest, C86, C40's rest; then C30, C67 |
-| L Language and library | "Language lane" | T12 (test speed, TEST-SPEED-2026-11-03), then next by priority from the table below |
+| L Language and library | "Language lane" | next by priority from the table below |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -296,7 +296,6 @@ docs/process/TESTING.md. T7 is in lane L.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| T12 | Each sweep checks a fixed number of things per change (say 40 fillings or wires), rotating by SWEEP_AT, all of it nightly. The eighth today is of targets, and each target tries every filling, which grew with the library: lang.test.ts's palette sweep 615 s (once about 30 s for all of it), dots physics 295 s, palette calculus 98 s. Lane L, since its runs pay for it | [TEST-SPEED-2026-11-03](docs/reports/TEST-SPEED-2026-11-03.md) | P1 | S | |
 | T14 | The single slow tests left after L216: Tumble's clear backwards 74 s, tree of List 50 s, every builtin backwards 103 s, core-js examples and pages 116 s, editing's swapAndUndo 43 s. Each becomes a sweep or gets a smaller input, toward 5 s a file | [TEST-SPEED-2026-11-03](docs/reports/TEST-SPEED-2026-11-03.md) | P3 | M | |
 
 ## Coordinator and process

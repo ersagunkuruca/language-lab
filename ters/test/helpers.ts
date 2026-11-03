@@ -26,3 +26,15 @@ const AT = Number(process.env.SWEEP_AT) || 0;
 export const sweepShare = 1 / SLICES;
 export const inSweep = (i: number) => (i + AT) % SLICES === 0;
 export const sweep = <T,>(items: T[]): T[] => items.filter((_, i) => inSweep(i));
+
+// Each sweep also checks a fixed number of things per change (T12): a slice
+// grew with the library (a target tries every filling the palette offers),
+// so a slice is held to `n` of its items, spread over it and rotating with
+// SWEEP_AT. SWEEP=all checks everything.
+export const SWEEP_CAP = process.env.SWEEP === "all" ? Infinity : 40;
+export const capped = <T,>(items: T[], n = SWEEP_CAP): T[] => {
+  if (items.length <= n) return items;
+  const step = items.length / n;
+  return Array.from({ length: n }, (_, j) => items[(Math.floor(j * step) + AT) % items.length]);
+};
+
