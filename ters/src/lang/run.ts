@@ -1042,9 +1042,17 @@ export function runMain(code: Code, info: Info, def: Id, rt: Runtime = { print: 
 function start(code: Code, info: Info, def: Id, t: Type, args: Value[], rt: Runtime): Value {
   const problem = typeError(code, info, def, rt.names ?? {}) ?? leftover(t, rt.names ?? {}, hostedEffects(code, rt.hosts));
   if (problem) throw new Error(problem);
-  const r = makeRunner(code, info, rt);
+  const r = makeRunner(code, info, rt.cells || tracks(code, def) ? rt : { ...rt, cells: new Cells(equal, true) });
   for (const v of r.call(r.value(def), ...args)) return v;
   throw new Error("no result");
+}
+// Whether what `def` reaches reads cells reactively: a formula, an each
+// or a page's watcher. When nothing does, its cells are kept plainly, the
+// State handler's way (cells.ts `plain`, L99e).
+const REACTIVE: readonly Id[] = [CELL_OPS.formula, CELL_OPS.each, CELL_OPS.eachOf];
+export function tracks(code: Code, def: Id): boolean {
+  const reached = new Set(dependencies(code, def));
+  return REACTIVE.some((op) => reached.has(op));
 }
 // A program that doesn't type-check isn't run: what it would do is
 // whatever the evaluator happens to do with values of the wrong type (a

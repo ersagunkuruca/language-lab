@@ -11,7 +11,7 @@ import { counterProgram, fractionsProgram } from "../src/lang/cells-programs.ts"
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { Lang } from "../src/lang/dsl.ts";
-import { equal, makeRunner, runMain, type Value } from "../src/lang/run.ts";
+import { equal, makeRunner, runMain, tracks, type Value } from "../src/lang/run.ts";
 import { CELL_OPS, S } from "../src/lang/std.ts";
 import { showType } from "../src/lang/types.ts";
 import { evaluatorCall, mountHtml } from "../src/lang/html.ts";
@@ -204,4 +204,29 @@ test("handOver writes the changed cells to the cells made in the same order", ()
   assert.deepEqual(to.peek(b2), data(3));
   assert.equal(to.peek(c2), 6);
   assert.equal(to.peek(d2), 0);
+});
+
+// ---------------------------------------------------------------- kept plainly (L99e)
+
+test("cells kept plainly: a write is a store, nothing is compared, and undo still works", () => {
+  let compared = 0;
+  const c = new Cells((a, b) => { compared++; return equal(a, b); }, true);
+  const a = c.cell([1, 2, 3] as unknown as Value);
+  for (let i = 0; i < 100; i++) c.write(a, [i] as unknown as Value);
+  assert.deepEqual(c.read(a), [99]);
+  assert.equal(compared, 0);
+  assert.throws(() => c.formula(() => 1 as Value), /kept plainly/);
+});
+
+test("a program with no formula, each or page keeps its cells plainly; one with them tracks", () => {
+  const k = new Lang();
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.let("c", k.call(CELL_OPS.cell, k.lit(1)), (c) => k.seq(k.call(CELL_OPS.write, k.x(c), k.lit(2)), k.call(CELL_OPS.read, k.x(c))))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  assert.equal(tracks(code, main), false);
+  assert.equal(runMain(code, info, main, { print: () => {}, names }), 2);
+  const p = counterProgram();
+  assert.equal(tracks(base(p.code), p.main), true);
 });

@@ -285,8 +285,17 @@ export class Cells {
   kept: { cell: Value; first: Value }[] | null = null;
   onWrite: ((place: number, v: Value) => void) | null = null;
 
-  constructor(same: (a: Value, b: Value) => boolean = Object.is) {
+  // The plain State handler (STABLE-REFERENCES.md §2, L99e): for a program
+  // with no formula, watcher, each or page, nothing ever reads a cell
+  // reactively, so a write is a store and a read a load. Nothing is
+  // compared, copied out of views (there are none) or diffed: writing a
+  // list of n items costs 1, not n. Prior art: the State effect's handler
+  // (std State, L16a), which this is.
+  readonly plain: boolean;
+
+  constructor(same: (a: Value, b: Value) => boolean = Object.is, plain = false) {
     this.same = same;
+    this.plain = plain;
   }
 
   private node(compute: (() => Value) | null, value: Value | undefined, label: string, watcher = false): CellNode {
@@ -302,7 +311,7 @@ export class Cells {
 
   // Solid's createSignal.
   cell(initial: Value, label = "cell"): Value {
-    const n = this.node(null, this.plainOf(initial), label), c = this.wrap(n), place = this.made++;
+    const n = this.node(null, this.plain ? initial : this.plainOf(initial), label), c = this.wrap(n), place = this.made++;
     this.order.set(n, place);
     this.onCell?.(c, place);
     this.kept?.push({ cell: c, first: n.value as Value });
@@ -311,6 +320,7 @@ export class Cells {
 
   // Solid's createMemo, lazy: nothing runs until the first read.
   formula(compute: () => Value, label = "formula"): Value {
+    if (this.plain) throw new Error("cells kept plainly have no formulas, watchers or each");
     return this.wrap(this.node(compute, undefined, label));
   }
 
@@ -321,6 +331,7 @@ export class Cells {
   }
 
   private readNode(n: CellNode, at?: Step[]): Value {
+    if (this.plain) return n.value as Value;
     // The reader depends on it even if computing it stops part way, so it
     // runs again when what the formula read changes.
     const r = this.current;
@@ -348,6 +359,12 @@ export class Cells {
     const n = nodeOf(c);
     if (!n) throw new Error("write needs a cell");
     if (n.compute) throw new Error("a formula can't be written: write the cells it reads");
+    if (this.plain) {
+      if (this.journal) { const old = n.value as Value; this.journal.undo.push(() => { n.value = old; }); }
+      n.value = v;
+      if (this.onWrite) this.onWrite(this.order.get(n)!, v);
+      return;
+    }
     // The value it holds, written back: nothing to copy or compare (a
     // cell never holds a view, C85).
     if (at === undefined && v === n.value) return;
@@ -399,7 +416,7 @@ export class Cells {
     if (n.compute) throw new Error("a formula can't be written: write the cells it reads");
     const old = n.value as Value;
     if (at.some((s) => "key" in s)) { at = resolved(old, at, lists); what = { ...what, at }; }
-    const next = changeAt(old, at, (part) => { const v = change(part); return v === undefined ? v : this.plainOf(v); }, lists);
+    const next = changeAt(old, at, (part) => { const v = change(part); return v === undefined || this.plain ? v : this.plainOf(v); }, lists);
     if (next !== old) this.write(c, next, at, what);
   }
 
@@ -512,6 +529,7 @@ export class Cells {
   // Solid's createEffect: run now, and again whenever a cell it read
   // changes. Watchers are how the outside world (a page) observes cells.
   watch(run: () => void, label = "watcher"): CellNode {
+    if (this.plain) throw new Error("cells kept plainly have no formulas, watchers or each");
     const n = this.node(() => { run(); return undefined as unknown as Value; }, undefined, label, true);
     this.update(n);
     return n;
@@ -564,6 +582,7 @@ export class Cells {
   // This is Solid's mapArray, which its <For> is built on. `list` turns the
   // language's lists into arrays and back.
   each(items: Value, f: (item: Value) => Value, list: Lists, label = "each"): Value {
+    if (this.plain) throw new Error("cells kept plainly have no formulas, watchers or each");
     return this.mapRows(nodeOf(items), null, f, list, label);
   }
 
@@ -573,6 +592,7 @@ export class Cells {
   // step added makes one row and leaves the item's own row as it was.
   // Over a plain list, the list mapped once.
   eachOf(items: Value, f: (item: Value) => Value, list: Lists, label = "each of"): Value {
+    if (this.plain) throw new Error("cells kept plainly have no formulas, watchers or each");
     const at = typeof items === "object" && items !== null ? LIST_AT.get(items as unknown as object) : undefined;
     if (at && at.n.compute === null && !at.n.disposed) return this.mapRows(at.n, at, f, list, label);
     return this.mapRows(this.node(null, this.plainOf(items), label), null, f, list, label);
