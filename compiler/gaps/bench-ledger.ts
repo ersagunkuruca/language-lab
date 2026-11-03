@@ -1,4 +1,4 @@
-// ledger: evaluator, compiled and ideal, on files of growing size. The
+// ledger: evaluator, compiled, the core IR's JavaScript (C137) and ideal, on files of growing size. The
 // numbers in GAPS.md, round 3, come from this.
 // Run: node gaps/bench-ledger.ts   (or npm run gaps)
 
@@ -15,18 +15,19 @@ const time = (f: () => unknown, runs: number) => {
 const ms = (x: number) => `${x < 10 ? x.toFixed(2) : x.toFixed(0)} ms`.padStart(10);
 
 console.log(`ledger: totals by account and by month of a file kept in memory (in one process, median)\n`);
-console.log(`${"file".padEnd(26)} ${"evaluator".padStart(10)} ${"compiled".padStart(10)} ${"ideal".padStart(10)}  compiled/ideal`);
+console.log(`${"file".padEnd(26)} ${"evaluator".padStart(10)} ${"compiled".padStart(10)} ${"core IR".padStart(10)} ${"ideal".padStart(10)}  compiled/ideal  core/ideal`);
 // Before G22 (C19) the compiled `entries` ran out of JS stack past about
 // 5000 lines in a process with the default stack; now it is a loop.
 for (const n of [100, 1000, 3000, 10000, 50000]) {
   const files = { "l.csv": book(n) }, args = ["l.csv"];
   const want = w.ideal(args, files);
   assert.deepEqual(w.compiled(args, files), want);
+  assert.deepEqual(w.core(args, files), want);
   const small = n <= 3000;
   if (small) assert.deepEqual(w.evaluator(args, files), want);
   const ev = small ? time(() => w.evaluator(args, files), 3) : NaN;
   const runs = n >= 3000 ? 11 : 31;
-  const c = time(() => w.compiled(args, files), runs), i = time(() => w.ideal(args, files), runs);
+  const c = time(() => w.compiled(args, files), runs), k = time(() => w.core(args, files), runs), i = time(() => w.ideal(args, files), runs);
   const label = `${n} entries, ${(files["l.csv"].length / 1024).toFixed(0)} KB`;
-  console.log(`${label.padEnd(26)} ${Number.isNaN(ev) ? "(skipped)".padStart(10) : ms(ev)} ${ms(c)} ${ms(i)}  ${(c / i).toFixed(1)}×`);
+  console.log(`${label.padEnd(26)} ${Number.isNaN(ev) ? "(skipped)".padStart(10) : ms(ev)} ${ms(c)} ${ms(k)} ${ms(i)}  ${`${(c / i).toFixed(1)}×`.padStart(14)}  ${`${(k / i).toFixed(1)}×`.padStart(10)}`);
 }
