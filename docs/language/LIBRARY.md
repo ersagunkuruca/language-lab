@@ -392,6 +392,13 @@ Bytes are a sequence of whole numbers from 0 to 255, for binary formats, files, 
 - **utf8 of** : `(Text) -> Bytes`. The text's UTF-8 bytes (RFC 3629): each character's code point in one to four bytes. utf8 of("é") is [195, 169].
 - **text of utf8** : `(Bytes) -[Abort]-> Text`. The text UTF-8 bytes spell, the other way from utf8 of. Stops on bytes that aren't UTF-8: a following byte where a character starts, or the bytes ending inside a character.
 
+## JSON
+
+Json is JSON's values as data: null, a Bool, a Float64, a Text, a list, or an object whose fields are named and in order. json printed writes one as JSON text.
+
+- **Json** (type). A JSON value (RFC 8259): null, a Bool, a Float64, a Text, a list of them or an object of named ones, in order. json printed writes one as JSON text.
+- **json printed** : `(Json) -> Text`. The JSON text of a Json value (RFC 8259): json printed(json object([("a", json list([json number(1), json null]))])) is {"a":[1,null]}. Text is quoted with ", \ and control characters escaped.
+
 ## Representations
 
 A type can be stored as another type, written as one definition (REPRESENTATIONS.md): what a stored value means, which definitions do the type's jobs, and what each costs. The compiler picks the cheapest for the jobs a program uses; nothing changes where the values are used.
