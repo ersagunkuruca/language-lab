@@ -83,7 +83,6 @@ Rewrite only what the outside reader marked; the next outsider read checks it.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E235 | A first screen a newcomer can follow: it opens on Numbers & physics `main` with `for some`, `solve rotate, show ×2, …` and "handles Choice"; label the three notation toggles, say what "the program is the tree" and the Cells button mean, or open somewhere gentler | [OUTSIDER-READ-2026-11-03](docs/reports/reviews/OUTSIDER-READ-2026-11-03.md) §5, worst 5 | P2 | S | |
 | E236 | Example names and comments an outsider can read: one line on what each example is (Conjugation, Lockstep, Countdown), a gloss for maths and audio words in the comments (PGA, motor, Cl(2, 0), rapidity, Haar's split, Rec. 709), and clearer definition names in machine and clinic (`make outc`, `read d a a`, `new m2`) | [OUTSIDER-READ-2026-11-03](docs/reports/reviews/OUTSIDER-READ-2026-11-03.md) §5 | P3 | M | |
 
 ## C: Compiler and targets

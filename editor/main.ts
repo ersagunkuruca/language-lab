@@ -328,8 +328,12 @@ const OPENING = TOUCH
   ? "A typed program. Tap anything to select it and see its type; tap a hole for a palette of only what fits there; long-press anything for a menu."
   : "A typed program. Hover anything for its type; click a hole for a palette of only what fits there.";
 
+// A first visit opens on the definition that shows the first program off
+// (Numbers & physics' fall, four lines run in any direction), not on its
+// main, which is the hardest page of it (E235, from the outsider read).
+const firstVisit = (() => { try { return !EMBED && !ASKED.get("program") && !localStorage.getItem("projectional-guide-seen"); } catch { return false; } })();
 const ui: UI = {
-  def: defNamed(ASKED.get("def") ?? "") || startDef(),
+  def: defNamed(ASKED.get("def") ?? "") || (firstVisit ? showcase() : startDef()),
   pane: "graph",
   back: [],
   selected: null,
@@ -4334,7 +4338,7 @@ function draw() {
 
   app.replaceChildren(
     h("header", { class: "bar" },
-      h("div", { class: "brand" }, h("strong", {}, "Ters"), h("span", {}, "the program is the tree")),
+      h("div", { class: "brand" }, h("strong", {}, "Ters"), h("span", { title: "A program is stored as a tree of nodes, not as text: the graph and the text below are two views of that one tree" }, "the program is the tree")),
       h("div", { class: "controls" },
         ui.back.length ? h("button", { class: "btn back", type: "button", "data-act": "back" }, `← ${new Namer(doc.code, p, ui.back.at(-1)!).name(ui.back.at(-1)!)}`) : null,
         cycling(seg("layer", ui.layer, [["short", "Short names"], ["descriptive", "Descriptive"]])),
@@ -4348,7 +4352,7 @@ function draw() {
         h("div", { class: "links" },
           h("a", { class: "btn", href: "learn.html", title: "Learn the language: pick where to start, from a five-year-old's first steps to the whole language (LEARN.md)" }, "Learn"),
           h("a", { class: "btn", href: "tutorial.html#credits" }, "Credits"),
-          h("a", { class: "btn", href: "reactive.html", title: "Reactivity and values on demand, through the Cells effect" }, "Cells")))),
+          h("a", { class: "btn", href: "reactive.html", title: "Another page of examples: values that update by themselves when what they depend on changes, as in a spreadsheet (the Cells effect)" }, "Cells")))),
     h("main", { class: "grid is-typed", style: dockStyle(onPage), "data-pane": ui.pane },
       navigator(p),
       graphMenu(info),
