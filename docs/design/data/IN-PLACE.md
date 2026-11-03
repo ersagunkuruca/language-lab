@@ -226,6 +226,11 @@ each holding true. Routes' sets keep their trees (the frontier reads its
 smallest), so routes is unchanged; the fuzz test runs C's sets on 13 of
 seeds 1 to 40.
 
+C63k, done (before C63j, being smaller): keys and items in C may be
+tuples and records of Ints and Texts too, as on JavaScript, hashed,
+compared and ordered part by part (c.ts `tableC` `leaves`). Routes'
+frontier still keeps its tree, so routes is unchanged.
+
 ## M5, measured again
 
 GAPS.md M5 (leaving the depth count out of the tree jobs) was measured

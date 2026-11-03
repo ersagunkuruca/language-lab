@@ -141,7 +141,7 @@ export interface AType { key: string; name: string; item: LType; index: number; 
 // key nothing fixes is held as an Int, its pairs' may be another type.
 // `set`: std's Hash set (C63i), its items the keys, each holding true
 // (a Bool), its entries the List of its items.
-export interface TType { key: string; name: string; keyT: "int" | "text"; value: LType; index: number; entries: DType[]; set: boolean }
+export interface TType { key: string; name: string; keyT: "int" | "text" | RType; value: LType; index: number; entries: DType[]; set: boolean }
 export type LType = SType | WType | RType | DType | FType | AType | TType;
 export const isArray = (t: LType): t is AType => typeof t === "object" && "item" in t;
 export const isTable = (t: LType): t is TType => typeof t === "object" && "keyT" in t;
@@ -518,10 +518,12 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       // A key no put ever fixes (an empty map nothing is put in) is an Int.
       const set = t.id === HASH_SET;
       const k = !t.args[0] || unconstrained(t.args[0]) ? "int" : stype(t.args[0], inside), value = set ? "i32" : t.args[1] && stype(freed(t.args[1]), inside);
-      if ((k !== "int" && k !== "text") || !value) return null;
-      const key = `${t.id}<${k}${set ? "" : `,${show(freed(t.args[1]))}`}>`;
+      // A tuple or record of Ints and Texts too (C63k), as JavaScript's.
+      const hashable = (x: LType | null): boolean => x === "int" || x === "text" || (!!x && isRecord(x) && !x.mutable && x.fields.length > 0 && x.fields.every((f) => hashable(f.t)));
+      if (!hashable(k) || !value) return null;
+      const key = `${t.id}<${typeof k === "string" ? k : (k as RType).key}${set ? "" : `,${show(freed(t.args[1]))}`}>`;
       if (tables.has(key)) return tables.get(key)!;
-      const h: TType = { key, name: set ? "HashSet" : "Table", keyT: k, value, index: tables.size, entries: [], set };
+      const h: TType = { key, name: set ? "HashSet" : "Table", keyT: k as TType["keyT"], value, index: tables.size, entries: [], set };
       tables.set(key, h);
       return h;
     }
