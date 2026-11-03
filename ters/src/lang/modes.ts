@@ -332,10 +332,36 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
 
   function run(st: St, need: Id[], ctx: Ctx): Verdict {
     const steps: Exec[] = [];
+    // What a goal said when last asked stands until a slot it asked about
+    // is known or measured (C155): whether a goal is ready, and how,
+    // reads only which slots are known and their sizes (and modes worked
+    // out once). So each step asks again only the goals a new slot
+    // concerns, not all of them: compass, staged, has a lambda of 1,121
+    // goals, each asked at each step.
+    const said = new Map<Goal, Firing | null>(), watching = new Map<Id, Goal[]>();
+    const known = st.known, sizes = st.sizes, has = known.has.bind(known), size = sizes.get.bind(sizes);
+    let asked: Id[] = [];
+    const touched = (s: Id) => {
+      for (const g of watching.get(s) ?? []) said.delete(g);
+      watching.delete(s);
+    };
+    const learn = (s: Id) => { if (!known.has(s)) { known.add(s); touched(s); } };
+    const ask = (g: Goal): Firing | null => {
+      if (said.has(g)) return said.get(g)!;
+      asked = [];
+      known.has = (x: Id) => { asked.push(x); return has(x); };
+      sizes.get = (x: Id) => { asked.push(x); return size(x); };
+      let f: Firing | null;
+      try { f = g.ready(st) ?? (g.slots.length && g.slots.every((s) => st.known.has(s)) ? checkOf() : null); }
+      finally { delete (known as { has?: unknown }).has; delete (sizes as { get?: unknown }).get; }
+      said.set(g, f);
+      for (const x of asked) { const w = watching.get(x); if (w) w.push(g); else watching.set(x, [g]); }
+      return f;
+    };
     for (;;) {
       let best: { g: Goal; f: Firing } | null = null;
       for (const g of st.goals) {
-        const f = g.ready(st) ?? (g.slots.length && g.slots.every((s) => st.known.has(s)) ? checkOf() : null);
+        const f = ask(g);
         if (f && (!best || f.cost < best.f.cost)) best = { g, f };
       }
       if (!best) {
@@ -348,7 +374,7 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
         const eqs = st.goals.filter((g) => g.numeric).map((g, i) => ({ g, i, u: unknowns(g) })).sort((a, b) => a.u - b.u || a.i - b.i).map((e) => e.g);
         if (!eqs.length) break;
         st.goals = st.goals.filter((g) => !g.numeric);
-        for (const g of eqs) for (const s of g.slots) st.known.add(s);
+        for (const g of eqs) for (const s of g.slots) learn(s);
         st.answers = both(st.answers, MANY);
         st.dynamic.push(`equations solved together: ${eqs.map((g) => g.text).join(", ")}`);
         st.order.push("equations together");
@@ -377,8 +403,8 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
       }
       if (!f.branches && !st.posted?.has(g)) steps.push(st.soft && !g.numeric ? { ...(f.exec ?? g.exec), waits: true } : f.exec ?? g.exec);
       f.chosen?.();
-      for (const s of f.gives) st.known.add(s);
-      for (const [s, z] of f.sizes ?? []) st.sizes.set(s, mergeSize(st.sizes.get(s), z));
+      for (const s of f.gives) learn(s);
+      for (const [s, z] of f.sizes ?? []) { st.sizes.set(s, mergeSize(st.sizes.get(s), z)); touched(s); }
       st.answers = both(st.answers, f.answers);
       if (!f.ends) { st.ends = false; st.loops.push(f.why ?? g.text); }
       if (f.dynamic) st.dynamic.push(f.dynamic);
