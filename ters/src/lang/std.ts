@@ -1261,6 +1261,17 @@ export const SHOWN = typedef("std.shown", "Shown", ["a"], [
   ["shown", [["as shown", ([a]) => tfun([tref(a)], tref(STRING), [])]]],
 ], false, true);
 export const SHOWN_V = "std.shown.shown";
+// Each type with a Shown implementation, and the definition implementing
+// it: what `show any` shows a value of that type through, in the
+// evaluator (run.ts) and in compiled code (C148).
+export function shownImplementations(info: { implementations?: Map<string, Id> }): Map<Id, Id> {
+  const showns = new Map<Id, Id>();
+  for (const [key, d] of info.implementations ?? []) {
+    const m = key.startsWith(`${SHOWN}|`) ? /"t":"con","id":"([^"]+)"/.exec(key.slice(SHOWN.length + 1)) : null;
+    if (m) showns.set(m[1], d);
+  }
+  return showns;
+}
 // Wrapping integers (BACKLOG L193, ASPECTS-2026-11-03 142, 143): Word8,
 // Word32 and Word64 are arithmetic mod 2ⁿ, an Int from 0 to 2ⁿ − 1 kept
 // in `bits`, for hashes, generators, binary formats and samples, which an

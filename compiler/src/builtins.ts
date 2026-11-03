@@ -109,7 +109,7 @@ export const TARGETS: Record<Id, Target> = {
   [S.gradient]: { js: written("`$derivative` over the record's fields, as derivative"), scalar: LOOKS },
   [SET]: { js: written("setCall(): `$setPath` along the field written in place"), scalar: written("setField(): the record made again along the field path, the rest kept (C106)") },
   // Cases print with the names the program was compiled with ($names).
-  [SHOW_ANY]: { js: op(([a]) => `$showAny(${a}, $names)`), scalar: DATA },
+  [SHOW_ANY]: { js: op(([a]) => `$showAny(${a}, $names, $shown)`), scalar: DATA },
   [CASE_NAME]: { js: op(([a]) => `$caseName(${a}, $names)`), scalar: written("the case's name as a text constant, a case on the tag (C99)") },
   // Cases compare in the order their types declare them ($order).
   [COMPARE]: { js: op(([a, b]) => `$compare(${a}, ${b}, $order)`), scalar: DATA },
