@@ -533,8 +533,8 @@ values is every value.
 ```
 ‹instruction of›(op, words, line) =
   match op
-    "set" → read d a(make set, op, words, line)
-    "add" → read d a a(make add, op, words, line)
+    "set" → read a register and a value(make set, op, words, line)
+    "add" → read a register and two values(make add, op, words, line)
     …
     otherwise → bad(line, "no instruction named " ++ op)
 ```

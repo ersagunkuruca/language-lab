@@ -83,7 +83,6 @@ Rewrite only what the outside reader marked; the next outsider read checks it.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E236 | Example names and comments an outsider can read: one line on what each example is (Conjugation, Lockstep, Countdown), a gloss for maths and audio words in the comments (PGA, motor, Cl(2, 0), rapidity, Haar's split, Rec. 709), and clearer definition names in machine and clinic (`make outc`, `read d a a`, `new m2`) | [OUTSIDER-READ-2026-11-03](docs/reports/reviews/OUTSIDER-READ-2026-11-03.md) §5 | P3 | M | |
 
 ## C: Compiler and targets
 

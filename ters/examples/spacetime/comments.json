@@ -8,7 +8,7 @@
   "t3i55k8b6scpl3v6ajcmmqdvj7": "The part along I = γ₀γ₁γ₂γ₃.",
   "s5ep3mr03n6dk673b4vmg2n6n2": "x σ₁ + y σ₂ + z σ₃, where σₖ = γₖγ₀: a vector in the space of the observer whose time is γ₀ (Hestenes' spacetime split).",
   "dj0kvj1lod5lqsl7647futvhce": "The electromagnetic field as one bivector, F = E + I B (units with c = 1).",
-  "a6iavg2u3unhrkkhsgghmagufr": "The rapidity of a speed β: artanh β = ½ log((1 + β)/(1 − β)). Boosts along one line add their rapidities, the way turns about one axis add their angles.",
+  "a6iavg2u3unhrkkhsgghmagufr": "The rapidity of a speed β, a measure of speed that adds up along a line where speeds themselves don't: artanh β = ½ log((1 + β)/(1 − β)). Boosts along one line add their rapidities, the way turns about one axis add their angles.",
   "af7nqnq2h4833665ci981nd98i": "tanh φ, the speed that a rapidity φ stands for. It rises steeply and then flattens out just under 1, the speed of light.",
   "v1e7gtv4j73ufcnil4mairpp9g": "The rotor that boosts by velocity β along x: e^(φ/2 σ₁), with rapidity φ = artanh β. σ₁ squares to +1, so clifford exp gives cosh and sinh: a boost is a hyperbolic rotation.",
   "mhlk2mjtf0fkk6rtjjgcq66vij": "β, the speed of a four-velocity as a fraction of c: its γ₁ part over its γ₀ part.",
