@@ -50,7 +50,13 @@ model, so each feature has been written twice in the compiler
   browser's world); compass's draws and reacts to clicks as compile.ts's
   page does. Not yet: a page with sound or a hosts/js.js. Step c10: the
   clock (`now`) and a draw nothing seeded are the world's, as in the
-  evaluator, so dice lowers (4 pages).
+  evaluator, so dice lowers (4 pages). Step c11: a relation run some way
+  (a solve): the evaluator's solve (run.ts `solveAnswers`) on the
+  program's nodes, which a module carries when it has one. One answer is
+  taken where the definition has no Choice and no search is around;
+  otherwise the solver's answers are `one of` a list made as it is read.
+  The relational interpreter's several answers aren't lowered yet (its
+  search runs on the program's budget). relations runs (14 examples).
 - (d) compile.ts retired piece by piece.
 
 ## What it holds

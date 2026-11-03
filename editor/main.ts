@@ -29,7 +29,7 @@ import { renderNested } from "../ters/src/render/nested.ts";
 import { renderSexpr } from "../ters/src/render/sexpr.ts";
 import { Namer } from "../ters/src/render/namer.ts";
 import { BOOL, CHECK, CONS, FALSE, FIXED_V, HTML_V, MAP_V, NIL, onTodaysIds, SET_V, SOME, TRUE } from "../ters/src/lang/std.ts";
-import { CHOICE, DIVERGE, NUMBER, STRING, WORLD, showIn, type Type } from "../ters/src/lang/types.ts";
+import { CHOICE, DIVERGE, FILES as FILES_EFFECT, NETWORK, NUMBER, STRING, WORLD, showIn, type Type } from "../ters/src/lang/types.ts";
 import { implementationKey } from "../ters/src/lang/infer.ts";
 import { renderBlocks } from "../ters/src/lang/render.ts";
 import { definedAs, fromList, META, needsHandling, OutOfSteps, showValue, toList, withSteps, type Data, type Value, type World } from "../ters/src/lang/run.ts";
@@ -134,10 +134,17 @@ interface Doc {
   // the definition each belongs to, and the variables their inputs stand for.
   loose?: Record<Id, Id>;
   home?: Record<Id, Id>;
+  // Opened from a file (E229): before its main first touches the network
+  // or files, Run asks which of them to allow. `allowed` is what was said.
+  opened?: boolean;
+  allowed?: Id[];
+  denied?: Id[];
 }
 
 interface UI {
   def: Id;
+  // The definition whose Run is asking what a program from a file may do (E229).
+  allowing?: Id | null;
   // On a phone, the one pane shown (the others are a tap away).
   pane: "nav" | "graph" | "text" | "side";
   back: Id[];
@@ -471,7 +478,9 @@ const UNSAVED = "Not kept in this browser: its storage is full. Save file keeps 
 function save() {
   docs[doc.program] = doc;
   if (EMBED) return;
-  const all = Object.fromEntries(Object.entries(docs).map(([k, d]) => [k, kept(d)]));
+  // An example as shipped isn't kept: it opens from the page again (I160:
+  // opening every example one after another filled the store, 5 MB).
+  const all = Object.fromEntries(Object.entries(docs).filter(([k, d]) => k.startsWith(MINE) || d.edited).map(([k, d]) => [k, kept(d)]));
   try { localStorage.setItem(STORE, JSON.stringify({ current: doc.program, docs: all, held })); }
   catch { ui.note = ui.note ? `${ui.note} ${UNSAVED}` : UNSAVED; }
 }
@@ -558,7 +567,7 @@ function openFile() {
     if ("error" in r) { ui.note = `Can't open ${f.name}: ${r.error}. Nothing changed.`; ui.refused = true; ui.touched = []; return render(); }
     const x = r.file;
     if (!x.typed) { ui.note = `Can't open ${f.name}: it's from before every program was typed, and its networks are gone. Nothing changed.`; ui.refused = true; ui.touched = []; return render(); }
-    addProgram({ title: x.title, typed: x.typed, code: x.drafts ? join(r.code, x.drafts) : r.code, names: { short: x.names, descriptive: x.descriptive }, comments: x.comments, hints: {}, layout: x.layout, examples: x.examples, signatures: x.signatures, loose: x.drafts?.of, home: x.drafts?.home },
+    addProgram({ opened: true, title: x.title, typed: x.typed, code: x.drafts ? join(r.code, x.drafts) : r.code, names: { short: x.names, descriptive: x.descriptive }, comments: x.comments, hints: {}, layout: x.layout, examples: x.examples, signatures: x.signatures, loose: x.drafts?.of, home: x.drafts?.home },
       `Opened ${f.name} as a program of your own. Edits are kept in this browser; Save file writes them out.`);
   });
   input.click();
@@ -3563,7 +3572,7 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
     const given = action || value ? null : runGiven();
     const label = [namer.name(ui.def), ...given?.args ?? []].join(" ");
     box.append(going ? h("button", { class: "btn", type: "button", "data-act": "t-stop" }, `Stop ${namer.name(ui.def)}`)
-      : h("button", { class: "btn", type: "button", "data-act": "t-run" }, `Run ${label}`));
+      : ui.allowing === ui.def ? permissionsPanel(namer, permissionsAsked(ui.def)) : h("button", { class: "btn", type: "button", "data-act": "t-run" }, `Run ${label}`));
     if (given) box.append(h("p", { class: "hint" }, `As lab run gives it: ${given.args.join(", ")}. ${Object.keys(given.files).join(", ")} ${Object.keys(given.files).length > 1 ? "come" : "comes"} with the example; what the run writes stays in this browser.`));
     if (ui.output?.def === ui.def) {
       box.append(h("pre", { class: "text out" }, ui.output.lines.join("\n") || (going ? "Running…" : "(no output)")));
@@ -3983,6 +3992,25 @@ function profileView(namer: Namer, profile: Profile): HTMLElement {
 }
 // main as compiled by its last run, and the code it was compiled from.
 let compiledFor: { code: Code; def: Id; args?: string[]; compiled: Compiled } | null = null;
+// The world effects Run asks about for a program opened from a file
+// (E229): what it can reach outside the page. Console only prints here,
+// and Random and Time read nothing of yours.
+const ASKED_EFFECTS: [Id, string][] = [[NETWORK, "reads web pages and other addresses on the internet"], [FILES_EFFECT, "reads and writes its files, kept in this browser"]];
+function permissionsAsked(def: Id): Id[] {
+  if (!doc.opened) return [];
+  const info = typesOf(), t = info?.typeOf.get(def);
+  const z = t && info ? info.subst.zonk(t) : null;
+  const effs = z?.t === "fn" ? z.eff.effs : [];
+  return ASKED_EFFECTS.map(([e]) => e).filter((e) => effs.includes(e));
+}
+function permissionsPanel(namer: Namer, effs: Id[]): HTMLElement {
+  const names = pres().names;
+  return h("div", { class: "allow" },
+    h("p", { class: "hint" }, `${titleOf(doc)} came from a file. Before ${namer.name(ui.def)} runs, say what it may do; what you don't allow fails with a reason when the program tries it.`),
+    ...ASKED_EFFECTS.filter(([e]) => effs.includes(e)).map(([e, what]) => h("label", { class: "field check" },
+      h("input", { type: "checkbox", "data-allow": e, ...(doc.allowed?.includes(e) ? { checked: "" } : {}) }), h("span", {}, `${names[e] ?? e}: ${what}`))),
+    h("div", { class: "acts" }, h("button", { class: "btn", type: "button", "data-act": "t-allow-run" }, `Run ${namer.name(ui.def)}`)));
+}
 function runTyped() {
   stopRun();
   const def = ui.def, title = titleOf(doc), prefix = `lab:${title}:`;
@@ -3994,7 +4022,9 @@ function runTyped() {
   if (given) for (const [name, text] of Object.entries(given.files)) if (!files.some(([k]) => k === prefix + name)) files.push([prefix + name, text]);
   const w = (running = newWorker());
   const code = prog(), same = compiledFor && compiledFor.code === code && compiledFor.def === def && JSON.stringify(compiledFor.args) === JSON.stringify(given?.args);
-  const ask: RunAsk = { code, names: pres().names, pins: heldPins?.all ?? doc.signatures ?? NO_PINS, def, title, files, args: given?.args, ...(same ? { compiled: compiledFor!.compiled } : {}) };
+  // A program from a file runs with only what was allowed (E229).
+  const asked = permissionsAsked(def), deny = asked.filter((e) => !doc.allowed?.includes(e));
+  const ask: RunAsk = { code, names: pres().names, pins: heldPins?.all ?? doc.signatures ?? NO_PINS, def, title, files, args: given?.args, ...(same ? { compiled: compiledFor!.compiled } : {}), ...(deny.length ? { deny } : {}) };
   ui.output = { def, lines: [], running: true };
   w.onmessage = (e: MessageEvent<RunSays>) => {
     if (running !== w || !ui.output) return;
@@ -4512,7 +4542,20 @@ document.addEventListener("click", (e) => {
     if (a === "t-clear" && ui.selected && typesOf()) return void applyT(T.toHole(doc.code, doc.names.short, typesOf()!, ui.selected));
     if (a === "more") { const open = !!document.querySelector(".bar")?.classList.toggle("more-open"); act.setAttribute("aria-expanded", String(open)); return; }
     if (a === "split") { ui.mode = ui.mode === "split" ? null : "split"; return render(); }
-    if (a === "t-run" && typesOf()) return runTyped();
+    if (a === "t-run" && typesOf()) {
+      // A program opened from a file asks first (E229), once.
+      const asked = permissionsAsked(ui.def);
+      if (asked.some((e) => !doc.allowed?.includes(e) && !doc.denied?.includes(e))) { ui.allowing = ui.def; return render(); }
+      return runTyped();
+    }
+    if (a === "t-allow-run") {
+      const boxes = [...document.querySelectorAll<HTMLInputElement>("[data-allow]")];
+      doc = { ...doc, allowed: boxes.filter((b) => b.checked).map((b) => b.dataset.allow!), denied: boxes.filter((b) => !b.checked).map((b) => b.dataset.allow!) };
+      docs[doc.program] = doc;
+      ui.allowing = null;
+      save();
+      return runTyped();
+    }
     if (a === "t-stop") return stopRun("Stopped.");
     if (a === "page-restart") { page.for = null; ui.note = "Started the page again: every cell is back to its first value."; return render(); }
     if (a === "page-hush") { page.now?.hush?.(); ui.note = "Stopped every sound the page was playing."; return render(); }

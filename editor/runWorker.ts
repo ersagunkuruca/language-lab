@@ -14,6 +14,7 @@ import type { Pins } from "../ters/src/lang/signatures.ts";
 import { browserWorld, type Store } from "../ters/src/lang/browser.ts";
 import { mainProblem, runMain, runProgram, showValue, type World } from "../ters/src/lang/run.ts";
 import type { Info } from "../ters/src/lang/infer.ts";
+import { FILES, NETWORK } from "../ters/src/lang/types.ts";
 import { LIBRARY } from "../ters/src/lang/library.ts";
 import { withLibraryRepresentations } from "../ters/src/lang/library-reps.ts";
 import { infer, setDisplayNames, setProgramPins } from "./typed.ts";
@@ -25,7 +26,7 @@ import { $Aborted } from "../compiler/src/runtime.js";
 
 // `compiled`: main as compiled JavaScript from an earlier run of this same
 // code (E238), so the run needs no checking or compiling again.
-export type RunAsk = { code: Code; names: Names; pins: Pins; def: Id; title: string; files: [string, string][]; args?: string[]; compiled?: Compiled };
+export type RunAsk = { code: Code; names: Names; pins: Pins; def: Id; title: string; files: [string, string][]; args?: string[]; compiled?: Compiled; deny?: Id[] };
 export type Compiled = { program: string; name: string };
 // args: main takes the command line's words, as `lab run` gives them (E212).
 // A page compiled the way "Open in a tab" does (page.ts pageFile), off the
@@ -61,7 +62,7 @@ self.onmessage = (e: MessageEvent<RunAsk | BackAsk | CompileAsk>) => {
     const { code, def, values, names } = e.data, until = Date.now() + 60000;
     return post(searchBackwards(code, def, values, names, () => Date.now() > until));
   }
-  const { code, names, pins, def, title, files, args, compiled: before } = e.data;
+  const { code, names, pins, def, title, files, args, compiled: before, deny } = e.data;
   const kept = new Map(files), wrote = new Map<string, string>();
   const store: Store = {
     getItem: (k) => kept.get(k) ?? null,
@@ -74,7 +75,8 @@ self.onmessage = (e: MessageEvent<RunAsk | BackAsk | CompileAsk>) => {
   const flush = () => { if (lines.length) post({ lines }); lines = []; sent = Date.now(); };
   try {
     const print = (line: string) => { lines.push(line); if (Date.now() - sent > 100) flush(); };
-    if (before && runCompiled(before, args, browserWorld(store, title), print, flush, () => [...wrote])) return;
+    const world = denied(browserWorld(store, title), deny ?? [], names);
+    if (before && runCompiled(before, args, world, print, flush, () => [...wrote])) return;
     setDisplayNames(names);
     setProgramPins(pins);
     // std's Map stored the way the chooser picks (library-reps.ts, C47),
@@ -99,7 +101,7 @@ self.onmessage = (e: MessageEvent<RunAsk | BackAsk | CompileAsk>) => {
         if ((++entries & 255) === 0) { const now = performance.now(); ms.set(d, (ms.get(d) ?? 0) + now - last); last = now; }
       },
       print,
-      names: lib.names, world: browserWorld(store, title),
+      names: lib.names, world,
       stuck: (r: Reading) => { stuck = { text: r.text, at: r.at, expected: [...r.expected], said: stuckReading(r), times: (stuck?.times ?? 0) + 1 }; },
     };
     // main as compiled JavaScript when it compiles (E238): machine's run
@@ -120,6 +122,18 @@ self.onmessage = (e: MessageEvent<RunAsk | BackAsk | CompileAsk>) => {
     post({ error: (err as Error).message, files: [...wrote], ...(stuck ? { stuck } : {}) });
   }
 };
+
+// A world that refuses what a program from a file wasn't allowed (E229):
+// each of the effect's answers fails with the reason.
+const ANSWERS: Record<Id, (keyof World)[]> = {
+  [NETWORK]: ["fetchText", "startFetch"],
+  [FILES]: ["readFile", "writeFile", "appendFile", "fileExists", "listFolder"],
+};
+function denied(world: World, deny: Id[], names: Names): World {
+  const out = { ...world } as Record<string, unknown>;
+  for (const e of deny) for (const k of ANSWERS[e] ?? []) if (k in world) out[k] = () => { throw new Error(`${names[e] ?? e} isn't allowed for this program: Run asked, and it wasn't ticked`); };
+  return out as unknown as World;
+}
 
 // Whether anything main reaches, the library's definitions included, runs
 // a function backwards.

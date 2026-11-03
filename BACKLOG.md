@@ -22,7 +22,7 @@ language, then more targets or speed (WORKFLOW.md "Priority").
 |---|---|---|
 | E Editor | "Editor lane" | E211 the bigger programs as editor examples (one a PR), L70c's editor half (mark where a failed read stopped), L147b; then E200b, E103 |
 | C Compiler and targets | "Compiler lane" | C93's rest, C86, C40's rest; then C30, C67 |
-| L Language and library | "Language lane" | L99, L61 |
+| L Language and library | "Language lane" | L61 |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -31,7 +31,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I160 | Check: opening every example one after another showed "Not kept in this browser: its storage is full" on notebook. Browsing shouldn't fill storage; if it does, opening must not save, or old copies must be dropped | [OUTSIDER-READ-2026-11-03](docs/reports/reviews/OUTSIDER-READ-2026-11-03.md) (screen text, notebook) | 2026-11-03 |
 | I110 | Check main: 49 of its last 60 runs cancelled while queued, a run takes ~19 of its 20 minutes, "affected" reaches 93 of 97 test files. Look at why std.ts and the prelude reach every test; lanes check the latest run when starting an item | REVIEW-2026-11-01 §6 | 2026-11-01 |
 | I154 | A list written out with a thousand items (a table of data pasted in) stops the checker: "Maximum call stack size exceeded" in infer.ts, which walks the list as a thousand nested calls of the list maker, one stack frame each (500 items check). The evaluator, staging and the compilers walk it the same way. Either walk a chain of the list maker in a loop in each pass, or keep a written list as one node of n items | C128 (fuzz test, 2026-11-03) | 2026-11-03 |
 
@@ -65,7 +64,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E229 | Effect rows as permissions: before an opened file's main first runs, say which world effects it uses (fetch, storage, time…) and answer only those allowed; `lab run --allow fetch=host` the same for the CLI (hosts.ts answers only what was granted) | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §5 | P3 | M | |
 | E230b | When an edit changes which way an implementation's field is worked out (ways.ts) and its cost order (cost.ts), say so next to the edit and name the use that caused it, as E230 does for representations | E230 | P3 | M | |
 | E231 | Keyboard-only and screen-reader use of the editor, done part by part with E228's split; the daily QA format gains both checks | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §10 | P3 | L | |
 
@@ -91,7 +89,7 @@ New targets and speed rank below every language item (Ersagun,
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| C137 | The compiled targets on one lowering. compile.ts (3,435 lines) lowers JS straight from the model while WebAssembly, C, WGSL and js-scalar share scalar.ts's core IR, so each feature is built twice in the compiler. (a) From now on nothing goes into compile.ts alone: a model-to-model pass or the shared lowering (written in compile.ts's header and CORE-IR.md); (b) done: `Lowered` is `CoreIR`, its contract in docs/design/targets/CORE-IR.md; (c) a JavaScript printer from it, grown until it runs compile.ts's examples, checked by I111 and the differential test: c1 to c10 done (`lab compile --core`, `lab build-web --core`; the evaluator's values; the evaluator's builtins with no lowering, by id; cells and page effects, the world's clock and draws, 4 pages agree; core-js.ts: data, Int, Text, arrays, tables, seeded Random, searches, budgets, aborts, the world; every fuzz program and the 13 examples whose main lowers agree with the evaluator, core-js.test.ts), next: the pages and examples that don't lower (pig's handler parameter, tumble's Animate, relations in 6, derivative, effects' handler), deep recursion that isn't a tail call (numbers as defined overflows the stack); (d) compile.ts retired piece by piece | [FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md) §2 | P2 | L | |
+| C137 | The compiled targets on one lowering. compile.ts (3,435 lines) lowers JS straight from the model while WebAssembly, C, WGSL and js-scalar share scalar.ts's core IR, so each feature is built twice in the compiler. (a) From now on nothing goes into compile.ts alone: a model-to-model pass or the shared lowering (written in compile.ts's header and CORE-IR.md); (b) done: `Lowered` is `CoreIR`, its contract in docs/design/targets/CORE-IR.md; (c) a JavaScript printer from it, grown until it runs compile.ts's examples, checked by I111 and the differential test: c1 to c11 done (`lab compile --core`, `lab build-web --core`; the evaluator's values; the evaluator's builtins with no lowering, by id; cells and page effects, the world's clock and draws, 4 pages agree; solves through the evaluator's solver; core-js.ts: data, Int, Text, arrays, tables, seeded Random, searches, budgets, aborts, the world; every fuzz program and the 14 examples whose main lowers agree with the evaluator, core-js.test.ts), next: the pages and examples that don't lower (pig's handler parameter, tumble's Animate, the relational interpreter's several answers in 5, physics' `hence`, derivative, effects' handler), deep recursion that isn't a tail call (numbers as defined overflows the stack); (d) compile.ts retired piece by piece | [FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md) §2 | P2 | L | |
 | C138 | C30's aim first: an `array` representation of List written in the language and chosen by the representation layer, on the core IR, replacing compile.ts's 50 CONS/NIL tests and the per-target copies (C30d2, C30d3) | [FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md) §3 | P2 | L | |
 | C139 | Library types out of the core passes: id tests on library constructors and functions (compile.ts 188, scalar.ts 152, run.ts 82) become representations or builtin records, retired with C137's printer | [FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md) §7 | P3 | M | |
 
@@ -213,7 +211,6 @@ all of these.
 |---|---|---|---|---|---|
 | L61 | Better data structures as representations: a meaning (List, Map, Set) plus representations (array, HAMT, balanced tree, RRB vector) chosen per value, no new node kinds. `Map` and `Set` done (L65); written in the language since L108b | Ersagun 2026-10-24 | P1 | L | Map and Set done |
 | L98 | A cell owns its value and a write is an edit at a path (STABLE-REFERENCES.md §1): positions done (L98a), keys done (L98b, `key path`). Next: the in-place store is C56's representation | Ersagun 2026-10-29 | P2 | L | steps 1, 2 done |
-| L99 | Reads tracked by path, so data in cells stays plain (§2): `each` follows edits (L99a), tracked views (L99b), nested lists (L99c), compiled JS's rows reading through views (L99d), cells kept plainly in the evaluator when nothing reads them reactively (L99e) done. Next: the same plain handler for compiled JS | Ersagun 2026-10-29 | P2 | L | 5 steps done |
 | L101 | **Later goal**: multithreading where uniqueness allows it (rayon), effect rows deciding what runs side by side (§5) | Ersagun 2026-10-29 | P3 | L | |
 | L21 | Folds: a `build` row for user producers, folds with `Choice` asking the table | ROADMAP 5 | P3 | L | |
 
