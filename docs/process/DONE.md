@@ -731,7 +731,8 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| L51d | Tensors (L51) done: a bigger program, a two-layer network's forward pass (8 × 6 and 3 × 8 weights, ReLU between) as two contractions plus biases, evaluated and compiled to the hand-worked answer (ters/test/tensor-network.test.ts); the other engines are C160 | this PR |
+| L211c | The checker types a use with no body (one load didn't fill) by its produced ports: the port alone or their tuple in port order, each typed where its binder would be (infer.ts `useResult`, test bodyless-use.test.ts) | this PR |
+| L51d | Tensors (L51) done: a bigger program, a two-layer network's forward pass (8 × 6 and 3 × 8 weights, ReLU between) as two contractions plus biases, evaluated and compiled to the hand-worked answer (ters/test/tensor-network.test.ts); the other engines are C160 | #1402 |
 | L208a | Design note for embeddings, generalization as a feature (docs/design/numbers/EMBEDDINGS.md): one canonical `Embedding a b` per pair, inserted only where both types are known, the diamond rule, and steps b to f | #1401 |
 | L204a | A library type's + − · and < are looked up from the library's own implementations (the layer under a program) instead of a hand list of names; one without is still told so where it is used | #1400 |
 | L211b | A use's `binds` and `body` are optional in the model (model.ts), read through `bindsOf`/`bodyOf` everywhere in ters/src (the checker, the evaluator, relate, modes, arith, render, hash, units and the rest); a bodyless use hashes with no body. Nothing changes what runs: `fillUses` still fills a bodyless use at load. The compiler (C158, #1375) and the editor (E240) were ready | #1399 |

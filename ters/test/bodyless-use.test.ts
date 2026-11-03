@@ -58,3 +58,32 @@ test("a use that produces two ports is their tuple, in port order: polar gives x
   assert.equal(runMain(p.code, p.info, p.main, { print: () => {}, names: p.names }), "(2, 0)");
   assert.equal(await compiled(p), "(2, 0)");
 });
+
+// The checker types a use that load didn't fill (L211c): the same type as
+// the filled one, from its ports alone.
+function unfilled(build: (k: Lang) => { fn: Id; given: Record<string, Id> }) {
+  const k = new Lang();
+  const { fn, given } = build(k);
+  const main = k.def("main");
+  const use = k.useOf(fn, given);
+  k.define(main, k.thunk(() => k.call(SHOW_ANY, use)));
+  const code: Code = base(k.code), names = baseNames(k.names);
+  code.nodes[use] = k.code.nodes[use];
+  return { info: infer(code, names), names, use, node: code.nodes[use] as NodeOf<"call"> };
+}
+
+test("the checker types a use with no body by its produced ports, one or a tuple", () => {
+  const one = unfilled((k) => ({ fn: B.add, given: { 0: k.lit(2), out: k.lit(5) } }));
+  assert.equal(one.node.body, undefined);
+  assert.deepEqual(one.info.errors.map((e) => e.message), []);
+  assert.equal(showType(one.info.typeOf.get(one.use)!, one.names), "Float64");
+  const two = unfilled((k) => {
+    const polar = k.def("polar");
+    k.define(polar, k.fn(["length", "angle", "x", "y"], (r, t, x, y) => k.and(k.equal(x, k.call(B.mul, r, k.call(B.cos, t))), k.equal(y, k.call(B.mul, r, k.call(B.sin, t))))));
+    k.results(polar, "x", "y");
+    const [r, t] = (k.code.nodes[(k.code.nodes[polar] as NodeOf<"def">).body!] as NodeOf<"lambda">).params;
+    return { fn: polar, given: { [r]: k.lit(2), [t]: k.lit(0), out: k.true } };
+  });
+  assert.deepEqual(two.info.errors.map((e) => e.message), []);
+  assert.match(showType(two.info.typeOf.get(two.use)!, two.names), /^\(Float64, Float64\)|Tuple2/);
+});
