@@ -689,6 +689,10 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     const constant = (!!opts.data || (!!opts.shader && !!t && t.t === "con" && t.id === ARRAY)) && !!t && t.t !== "fn" && !!lam && !["lambda", "typedef", "builtin"].includes(lam.kind);
     if (!constant && (!t || t.t !== "fn" || lam?.kind !== "lambda")) fail("is not a function written in the program");
     const ft = (constant ? { t: "fn", params: [], ret: t, eff: null } : t) as Extract<Type, { t: "fn" }>;
+    // A relation whose type is one of its readings (L130: polar read from
+    // x and y to its length and angle) has fewer inputs in its type than its
+    // lambda has ports: its body would read ports that aren't there (C146).
+    if (!constant && lam?.kind === "lambda" && lam.params.length !== ft.params.length) fail(`is a relation whose type is one reading of it (${ft.params.length} of its ${lam.params.length} ports in), not lowered yet`);
     // An input that can be anything is one the body never looks at (∂f/∂x
     // of a function that has an input the slope doesn't depend on, say).
     // It's taken as a Float64, and calls must pass one.
