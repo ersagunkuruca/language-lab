@@ -2492,6 +2492,8 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const n = code.nodes[id];
       if (n.kind === "ref" && n.target === NIL) return "";
       if (isCall(n) && refTarget(n.fn) === CONS) return `${d}.push(${ex(n.args[0])});\n${pushInto(n.args[1], d)}`;
+      // Written as one `list of` (L181): its items in order.
+      if (isCall(n) && refTarget(n.fn) === S.listOf) return n.args.map((a) => `${d}.push(${ex(a)});\n`).join("");
       return `$pushList(${d}, ${ex(id)});\n`;
     }
     function intoJs(n: Node, tail: boolean, out: Out): string | null {
@@ -2501,7 +2503,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       if (shape.rec === null && n.kind === "ref" && n.target === NIL) return "return;";
       if (!isCall(n)) return null;
       const f = refTarget(n.fn);
-      if (shape.rec === null && f === CONS) return `${pushInto(n.id, d)}return;`;
+      if (shape.rec === null && (f === CONS || f === S.listOf)) return `${pushInto(n.id, d)}return;`;
       if (shape.rec !== null && f === shape.rec) {
         // The fields in order: the list pushed, the other kept.
         const o = temp("o");
@@ -3003,6 +3005,12 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     // generator and run k once, after it.
     function fewConstants(id: Id): Id[] | null {
       const items: Id[] = [];
+      const written = code.nodes[id];
+      // Written as one `list of` (L181).
+      if (isCall(written) && refTo(written.fn, S.listOf)) {
+        const few = written.args.length && written.args.length <= 4 && written.args.every((a) => { const x = code.nodes[a]; return x.kind === "lit" || (x.kind === "ref" && code.nodes[x.target]?.kind === "variant" && !node<"variant">(x.target).fields.length); });
+        return few ? [...written.args] : null;
+      }
       for (let n = code.nodes[id]; ; n = code.nodes[n.args[1]]) {
         if (n.kind === "ref" && n.target === NIL) return items.length && items.length <= 4 ? items : null;
         if (!isCall(n) || !refTo(n.fn, CONS)) return null;
@@ -3367,7 +3375,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // as it is.
   for (const [s, b] of made) if (keep.has(s.name)) out.push(heapCalled.has(s.name) && !heapCopies.has(s.name) ? `${b}\nfunction* ${s.name}$h(...a) {\nreturn ${s.name}(...a);\n}` : b);
 
-  const helpers = ["$isLater", "$no", "$answered", "$stream0", "$showAny", "$caseName", "$compare", "$int", "$text", "$impl", "$many", "$partial", "$setPath", "$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$snoc", "$fromBack", "$range", "$eq", "$show", "$mod", "$fin", "$finOut", "$div", "$sqrt", "$log", "$pow", "$divN", "$sqrtN", "$logN", "$powN", "$modN", "$mapParts", "$zipParts", "$total", "$first", "$firstS",
+  const helpers = ["$isLater", "$no", "$answered", "$stream0", "$showAny", "$caseName", "$compare", "$int", "$text", "$impl", "$many", "$partial", "$setPath", "$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$snoc", "$fromBack", "$range", "$eq", "$show", "$stop", "$mod", "$fin", "$finOut", "$div", "$sqrt", "$log", "$pow", "$divN", "$sqrtN", "$logN", "$powN", "$modN", "$mapParts", "$zipParts", "$total", "$first", "$firstS",
     "$all", "$count", "$oneOf", "$fail", "$lift", "$one", "$hole", "$fuel", "$enter", "$caught", "$leave", "$spend", "$spendOrThrow", "$outOfFuel", "$ok", "$clean", "$key",
     "$close", "$near", "$sameNumber", "$planned", "$solveRuntime", "$print", "$FN", "$perform", "$setHosts", "$random", "$handle", "$handleS", "$io", "$seeded", "$seededS", "$optional", "$cells", "$useCells", "$listArrays", "$listViews", "$path", "$spread", "$self", "$foldNested", "$drive", "$rec", "$pushList", "$withInto", "$intoArray", "$later", "$awaited", "$handleL", "$handleLG", "$handleG", "$performG",
     "$ORDER", "$compareN", "$numberOrder", "$intOrder", "$textOrder",

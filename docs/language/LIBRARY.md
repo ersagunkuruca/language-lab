@@ -365,7 +365,7 @@ A Matrix of any size holds its items row by row. Sums, products and a matrix tim
 
 ## Tensors
 
-A tensor is a shape, its axis lengths, and its items with the last axis changing fastest: tensor of([2, 3], [1, 2, 3, 4, 5, 6]) is 2 × 3. Any rank: [] is a single number, [n] a vector, [r, c] a matrix. Shapes are checked when the program runs, and a mismatch stops it and names both shapes.
+A tensor is a shape, its axis lengths, and its items with the last axis changing fastest: tensor of([2, 3], [1, 2, 3, 4, 5, 6]) is 2 × 3. Any rank: [] is a single number, [n] a vector, [r, c] a matrix. Shapes are checked when the program runs, and a mismatch stops it and names both shapes. Tensors of any Number have + − · −x item by item (· is not the matrix product: that is contracted); different shapes stop the program.
 
 - **Tensor** (type). A tensor of any rank: its shape (the axis lengths) and its items with the last axis changing fastest. Built with tensor of; a shape mismatch stops the program and names both shapes, as the shape isn't in the type yet.
 - **tensor of** : `(List Int, List a) -[Abort]-> Tensor a`. The tensor with this shape and these items, the last axis changing fastest: tensor of([2, 3], [1, 2, 3, 4, 5, 6]) has rows [1, 2, 3] and [4, 5, 6]. Stops when the items don't fill the shape.
@@ -408,6 +408,7 @@ A computation with the Choice effect may have no answer, one, or several, like a
 
 - **one of** : `(List a) -[Choice]-> a`. Any item of the list: a Choice with one answer per item. all, first or count decide what to do with them.
 - **fail** : `() -[Choice]-> a`. No answer. In a search it drops this path.
+- **stop with** : `(Text) -> a`. Stops the program with this reason, as an overflow does: no handler catches it. The library uses it where a pure operation is given parts that don't fit, as + on tensors of different shapes.
 - **all** : `(() -[Choice, e]-> a) -[e]-> List a`. Every answer a search gives, as a list. The search's Choice ends here.
 - **first** : `(() -[Choice]-> a, () -[e]-> a) -[e]-> a`. The first answer a search gives, or the default when it gives none.
 - **count** : `(() -[Choice, e]-> a) -[e]-> Int`. How many answers a search gives.

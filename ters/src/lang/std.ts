@@ -390,6 +390,10 @@ export const S = {
   // `cons` calls. Its type is written for one item; the checker gives a
   // call with n inputs n of them (infer.ts).
   listOf: builtin("list.of", "list of", (s) => { const a = s.fresh(); return fn([a], list(a), s.freshRow()); }, (...xs: unknown[]) => listOf(xs)),
+  // A stop with a reason (SPEC §8.4, L51c): no handler catches it, as an
+  // overflow. For a rule that a pure operation can't keep any other way, as
+  // + on tensors of different shapes. Haskell's `error`. run.ts runs it.
+  stop: builtin("stop", "stop with", (s) => fn([str], s.fresh(), s.freshRow())),
   less: builtin("less", "less than", pure([num, num], bool)),
   // Only plain data can be compared: two functions that do the same thing
   // can't be told equal, and comparing them by where they live isn't

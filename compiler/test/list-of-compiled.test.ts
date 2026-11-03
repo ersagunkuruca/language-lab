@@ -88,3 +88,31 @@ test("ten thousand written items on the core IR: its JavaScript, WebAssembly and
     assert.deepEqual(got.map((g) => g.value), [want, ev(4)]);
   }
 });
+
+// The passes that read a list written out (C157) read a `list of` too:
+// a shader's array has its size from it, and `one of` a few constants is
+// written out in compiled JavaScript.
+test("a short `list of`: a shader's array, and one of a few constants", async () => {
+  const { ARRAY_OPS } = await import("../../ters/src/lang/std.ts");
+  const { loadJs } = await import("../src/js-scalar.ts");
+  const { emitWgsl } = await import("../src/wgsl.ts");
+  const k = new Lang(LIBRARY.code);
+  const palette = k.def("palette"), picks = k.def("picks");
+  k.define(palette, k.fn(["i"], (i) => k.call(S.first, k.thunk(() => k.call(ARRAY_OPS.at, k.call(ARRAY_OPS.of, k.listOf(k.lit(0.1), k.lit(0.5), k.lit(0.9))), i)), k.thunk(() => k.lit(-1)))));
+  k.define(picks, k.fn(["x"], (x) => k.call(S.all, k.thunk(() => k.call(B.add, x, k.call(S.oneOf, k.listOf(k.lit(1), k.lit(2), k.lit(3))))))));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const r = makeRunner(code, info, { print: () => {}, names });
+  const ev = (d: string, ...xs: unknown[]) => { for (const v of r.call(r.value(d), ...(xs as never[]))) return v; };
+  const lowered = lowerScalar(code, info, names, [palette], { records: true, shader: true });
+  assert.deepEqual([...lowered.refused.values()], []);
+  assert.match(emitWgsl(lowered).wgsl, /array<f32, 3>\(0\.1, 0\.5, 0\.9\)/);
+  const js = loadJs(lowered);
+  for (const i of [-1, 0, 2, 3]) assert.equal(js.get(palette)!(BigInt(i)), ev(palette, BigInt(i)), `palette ${i}`);
+  const source = compile(code, info, names, { runtime, exports: ["picks"] });
+  const path = join(mkdtempSync(join(tmpdir(), "list-of-")), "picks.mjs");
+  writeFileSync(path, source);
+  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, (x: number) => unknown>;
+  assert.deepEqual(defs.picks(10), ev(picks, 10));
+  assert.ok(!source.includes("builtin.list.of"), "one of a few constants is written out, not a list made and walked");
+});

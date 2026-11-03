@@ -916,6 +916,8 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           if (target !== ARRAY_OPS.of) return { k: "rt", fn: `${ARRAY_RT[target]}.a${a.index}`, args: args() };
           const items: Id[] = [];
           let l = code.nodes[n.args[0]];
+          // Written as one `list of` (L181), or as conses onto nil.
+          if (isCall(l) && code.nodes[l.fn]?.kind === "ref" && (code.nodes[l.fn] as NodeOf<"ref">).target === S.listOf) return { k: "rt", fn: `${ARRAY_RT[target]}.a${a.index}`, args: l.args.map((x) => expr(x, env, f, false)) };
           for (; isCall(l) && code.nodes[l.fn]?.kind === "ref" && (code.nodes[l.fn] as NodeOf<"ref">).target === CONS; l = code.nodes[l.args[1]]) items.push(l.args[0]);
           if (!(l?.kind === "ref" && l.target === NIL)) throw new Refused("makes an array of a list that isn't written out (a shader's array has its size where it's made)");
           return { k: "rt", fn: `${ARRAY_RT[target]}.a${a.index}`, args: items.map((x) => expr(x, env, f, false)) };

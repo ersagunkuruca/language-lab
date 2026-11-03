@@ -122,3 +122,26 @@ test("contracted works on Int tensors too: the one + and ·", async () => {
   assert.deepEqual(p.info.errors.map((e) => e.message), []);
   assert.equal(ran(p), "[23]");
 });
+
+// Step c (L51c): + − · −x item by item, one Arithmetic (Tensor a) for any
+// Number a (L219). Different shapes stop, as an overflow does: no handler
+// catches it (Ersagun's choice, 2026-11-03).
+test("tensors of a Number add, subtract, multiply item by item and negate", async () => {
+  assert.equal(await both((k, t) => k.call(ARITH.add, t, t)), "tensor([2, 3], [2, 4, 6, 8, 10, 12])");
+  assert.equal(await both((k, t) => k.call(ARITH.sub, k.call(ARITH.mul, t, t), t)), "tensor([2, 3], [0, 2, 6, 12, 20, 30])");
+  assert.equal(await both((k, t) => k.call(ARITH.neg, t)), "tensor([2, 3], [-1, -2, -3, -4, -5, -6])");
+  const ints = (k: Lang, ...xs: number[]) => k.listOf(...xs.map((x) => k.int(x)));
+  assert.equal(await both((k) => k.call(ARITH.add, k.call(lib("tensor of"), ints(k, 2), ints(k, 1, 2)), k.call(lib("tensor of"), ints(k, 2), ints(k, 10, 20)))), "tensor([2], [11, 22])");
+});
+
+test("+ on tensors of different shapes stops, naming both, evaluated and compiled", async () => {
+  const p = program((k, t) => k.call(ARITH.add, t, k.call(lib("reshaped"), t, k.listOf(k.int(3), k.int(2)))));
+  assert.deepEqual(p.info.errors.map((e) => e.message), []);
+  assert.throws(() => ran(p), (e: unknown) => e instanceof Aborted && /tensor sum: a 2 × 3 tensor and a 3 × 2 one/.test(e.reason));
+  await assert.rejects(async () => compiled(p), /tensor sum: a 2 × 3 tensor and a 3 × 2 one/);
+});
+
+test("a tensor of Texts has no +", () => {
+  const p = program((k) => { const tx = k.call(lib("tensor of"), k.listOf(k.int(1)), k.listOf(k.lit("a"))); return k.call(ARITH.add, tx, tx); });
+  assert.match(p.info.errors.map((e) => e.message).join("; "), /Text/);
+});
