@@ -151,6 +151,12 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 |---|---|---|---|---|---|
 | C141 | Shaders and the spec (S6, S12): either the shader profile refuses what it can't keep (Int past 32 bits, an unchecked Float64 overflow) or SPEC §10.3 declares it an approximation with its own written meaning; and decide whether library maths must give the evaluator's bits on every target or only be within an ulp | [SPEC](docs/language/SPEC.md) §12 S6, S12 | P3 | S | |
 
+### What a good language needs ([ASPECTS-2026-11-03b](docs/reports/reviews/ASPECTS-2026-11-03b.md))
+
+| id | item | source | pri | size | status |
+|---|---|---|---|---|---|
+| C141 | A stop in compiled code names the node it came from: compiled JS, WebAssembly and C carry each node's id where they can stop (Abort, overflow, no answer, a hole), so `lab run` of compiled code and a page print it and the editor selects it (source maps, influence) | [ASPECTS-2026-11-03b](docs/reports/reviews/ASPECTS-2026-11-03b.md) 269 | P3 | M | |
+
 ## L: Language and library
 
 Numbers first (Ersagun, 2026-10-24 07:01), then the rest of
