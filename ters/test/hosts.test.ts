@@ -67,7 +67,7 @@ test("without a host the effect is still unhandled; a wrong answer is an Abort w
 
 // L125f: a Float64 is finite, so NaN or ±∞ from the host is refused at
 // the border, like any wrong answer; float32's overflow stops the program
-// where it is used, here shown (S2, L216).
+// where it is used, here shown (S2, L218).
 test("a host's NaN or ∞ is refused at the border; float32 overflow stops the program where it is shown", () => {
   const p = program();
   for (const bad of [Infinity, -Infinity, NaN]) {

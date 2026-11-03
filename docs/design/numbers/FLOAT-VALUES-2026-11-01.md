@@ -123,7 +123,7 @@ rule makes this sound: **an overflow nobody uses may not be reported**, as
 in Haskell's imprecise exceptions, where pure code that fails says only
 that it fails, not exactly where. (2026-11-03, SPEC S2: made exact. An
 overflow nobody uses is *never* reported, on any engine; the evaluator
-carries it to its use as compiled code does, L216.)
+carries it to its use as compiled code does, L218.)
 
 `Choice` on division is the real cost of the proposal for programmers: a
 function that divides by something the compiler can't prove nonzero gets

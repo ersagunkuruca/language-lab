@@ -31,7 +31,7 @@ import { oneAnswer } from "./modes.ts";
 import { computedForward } from "./directions.ts";
 import { discharge } from "./ledger.ts";
 import * as Alg from "./algebraic.ts";
-import { floatText, INT_OPS, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, COMPLEX_V, FIXED_V, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, shownImplementations, CASE_NAME, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std.ts";
+import { floatText, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, COMPLEX_V, FIXED_V, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, shownImplementations, CASE_NAME, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std.ts";
 import { intLit } from "./int.ts";
 import { JETS } from "./jets.ts";
 import { answerFromHost, effectOfOperation, hostedEffects, type Hosts } from "./hosts.ts";
@@ -135,12 +135,14 @@ export const close = (a: number, b: number) => {
 // wasn't an equivalence on Float64s and disagreed with `compare`. The
 // tolerance stays where the solver checks an answer it found (relate.ts
 // unify). NOTES.md "Equality".
-// An overflow reaching it stops (SPEC §3.3, L216): comparing is a use.
-export const sameNumber = (a: number, b: number) => (a - a !== 0 || b - b !== 0 ? overflowed() : a === b);
+export const sameNumber = (a: number, b: number) => a === b;
+// The program's `equal`: an overflow reaching it stops (SPEC §3.3, L218),
+// comparing is a use. The runtime's own comparisons (a cell written back
+// with what it holds) aren't the program's, and don't stop.
+export const usedSameNumber = (a: number, b: number) => (a - a !== 0 || b - b !== 0 ? overflowed() : a === b);
 
 // With its own stack, so two long lists can be compared.
-export function equal(a: Value, b: Value): boolean {
-  const same = sameNumber;
+export function equal(a: Value, b: Value, same = sameNumber): boolean {
   const todo: [Value, Value][] = [[a, b]];
   for (let p; (p = todo.pop());) {
     const [x, y] = p;
@@ -361,7 +363,7 @@ export function noAnswer(op: string, args: number[]): string | null {
 // The answers of a Float64 operation: none where it has none (`/`, `sqrt`,
 // `log`, `^` and `mod` carry Choice for it, L125b). An overflow stops the
 // program only when its value is used (SPEC §3.3, Ersagun 2026-11-03,
-// L216): until then it is carried as IEEE's ∞ or NaN, which + − · keep,
+// L218): until then it is carried as IEEE's ∞ or NaN, which + − · keep,
 // so an overflow nothing uses never stops, on any engine. An operation
 // that would turn one back into a finite number (1 / ∞, exp(−∞), 0 · ∞'s
 // neighbours, ∞ mod x) uses it, and so do comparing, showing and
@@ -437,11 +439,9 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   for (const [id, f] of Object.entries(STD_MANY)) builtins[id] = (...a) => f(...a);
   Object.assign(builtins, {
     [S.less]: (a, b) => one(bool(numberOrder(a as number, b as number) < 0)),
-    // Showing an overflow uses it (L216).
+    // Showing an overflow uses it (L218).
     [S.show]: (x) => ((x as number) - (x as number) === 0 ? one(floatText(x as number)) : overflowed()),
-    // Turning an overflow into a whole number uses it (L216).
-    [INT_OPS.wholePart]: (x) => ((x as number) - (x as number) === 0 ? I.wholePart(x as number) : overflowed()),
-    [S.equal]: (a, b) => one(bool(equal(a, b))),
+    [S.equal]: (a, b) => one(bool(equal(a, b, usedSameNumber))),
     [COMPARE]: (a, b) => one(ORDER_VALUES[compareValues(a, b, (cmpOrder ??= variantOrder(code))) + 1]),
     [S.and]: (a, b) => one(bool((a as Data).tag === TRUE && (b as Data).tag === TRUE)),
     [S.or]: (a, b) => one(bool((a as Data).tag === TRUE || (b as Data).tag === TRUE)),
@@ -1048,9 +1048,23 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     // What each node of a copy at another number type copies.
     copyOf,
     value: (def: Id) => refValue(def, null),
-    // Call a function value and stream its results.
-    call: (f: Value, ...args: Value[]) => (f as Fn)(...args),
+    // Call a function value and stream its results. An answer handed out
+    // to the host is used (SPEC §3.3, L218): one with an overflow in it
+    // stops, as compiled code's does.
+    call: function* (f: Value, ...args: Value[]) { for (const v of (f as Fn)(...args) as Iterable<Value>) yield handedOut(v); },
   };
+}
+
+// A value leaving the program: every Float64 in it finite, or the stop.
+function handedOut(v: Value): Value {
+  const todo: unknown[] = [v];
+  for (let n = 0; todo.length && n < 1e6; n++) {
+    const x = todo.pop();
+    if (typeof x === "number") { if (x - x !== 0) overflowed(); }
+    else if (Array.isArray(x)) todo.push(...x);
+    else if (x && typeof x === "object" && "fields" in x) todo.push(...(x as Data).fields);
+  }
+  return v;
 }
 
 // Run an action (a definition of type () -> ...). Only effects the runtime

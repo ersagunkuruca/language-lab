@@ -139,7 +139,7 @@ test("a WASI program stops with the evaluator's reason and exit code", async () 
   assert.deepEqual([got, readFileSync(join(io, "out"), "utf8"), readFileSync(join(io, "err"), "utf8")], [1, "0.25\n", "the answer is too big for a Float64 (overflow)\n"]);
 });
 
-// SPEC §3.3 (Ersagun 2026-11-03, L216): an overflow stops the program only
+// SPEC §3.3 (Ersagun 2026-11-03, L218): an overflow stops the program only
 // when its value is used. `big` overflows and nothing reads it, so every
 // engine answers 5; showing it, comparing it, or dividing by it uses it.
 test("an overflow nothing uses never stops: the evaluator, compiled JavaScript and WebAssembly answer 5", async () => {
