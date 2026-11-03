@@ -328,7 +328,9 @@ export type SExpr =
   // first, optional, all and count over a search with one answer or none:
   // body's answer goes into local res and ok is the value; if it has
   // none, otherwise is.
-  | { k: "attempt"; body: SExpr; res: number; ok: SExpr; otherwise: SExpr; t: LType }
+  // `spent`: running out of fuel inside is no answer here too, where a
+  // printer tells the two apart (core-js.ts; C137c21's rest of a search).
+  | { k: "attempt"; body: SExpr; res: number; ok: SExpr; otherwise: SExpr; t: LType; spent?: true }
   // abort(reason) (`data`): the computation ends, out to the nearest
   // handler of Abort, which gets the reason in local `reason` and gives
   // arm's value instead (a match on Abort). With `esc`, another operation
@@ -1823,7 +1825,6 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     if (e.k === "choose") return true;
     if (e.k === "call" && !e.cps && funcs[e.fn].multi) return true;
     if (e.k === "search") return !!e.dflt && several(e.dflt);
-    if (e.k === "budget" && several(e.body)) throw new Refused("chooses among several answers under a budget (not in WebAssembly yet)");
     if (e.k === "handle" && several(e.body)) throw new Refused("handles Abort around a search with several answers (not in WebAssembly yet)");
     return kids(e).some(several);
   }
@@ -1966,6 +1967,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
         const j = join(k, e.result, g, arms(e.arms));
         return { ...e, arms: e.arms.map((a) => a && cps(a, j, tail, g)), result: "i32" };
       }
+      case "budget": if (!several(e.otherwise)) return outside(e, k, g); break;
       case "attempt": {
         if (several(e.body)) break;
         const j = join(k, e.t, g, arms([e.ok, e.otherwise]));
@@ -1976,6 +1978,33 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       return inOrder(kids(e), (vs, tl) => { let j = 0; return k.gen(untail(mapKids(e, () => vs[j++])), tl); }, tail, g);
     }
     throw new Refused("chooses among several answers where WebAssembly can't yet");
+  }
+  // `with fuel` around several answers (C137c21): each answer goes on to
+  // the rest of the search, which runs on the fuel of the budget outside,
+  // so the fuel is swapped around it. The outside's fuel is kept in a box
+  // (the rest may be moved into a join or a closure), put back after the
+  // budget whichever way it ends. As in the evaluator, running out ends
+  // that budget's search: the inside's has no more answers; once the
+  // outside's ran out, the rest isn't run again and nothing after answers.
+  function outside(e: Extract<SExpr, { k: "budget" }>, k: Cont, g: SFunc): SExpr {
+    const box = boxOf("f64"), b = g.locals.push(box) - 1;
+    const got: SExpr = { k: "get", rec: local(b), t: box, i: 0 };
+    const swap = (x: SExpr): SExpr => ({ k: "rt", fn: "fuel.swap", args: [x] });
+    const fail: SExpr = { k: "fail" };
+    const ranOut: SExpr = { k: "op", op: "less", args: [got, { k: "num", v: 0 }] };
+    const rest: Cont = {
+      // The answer is worked out inside, on the inside's fuel; then the rest.
+      gen: (v) => {
+        const answer = g.locals.push(e.t) - 1, inner = g.locals.push("f64") - 1, r = g.locals.push("i32") - 1;
+        const back = (then: SExpr): SExpr => ({ k: "set", rec: local(b), t: box, i: 0, value: swap(local(inner)), then });
+        const run: SExpr = { k: "attempt", body: k.gen(local(answer), false), res: r, ok: back(local(r)), otherwise: back(fail), t: "i32", spent: true };
+        return { k: "let", i: answer, value: v, body: { k: "if", cond: ranOut, then: fail, else: { k: "let", i: inner, value: swap(got), body: run }, t: "i32" } };
+      },
+    };
+    const inside: SExpr = { ...e, body: cps(e.body, rest, false, g), otherwise: fail, t: "i32", res: g.locals.push("i32") - 1 };
+    const r = g.locals.push("i32") - 1, put = (then: SExpr): SExpr => ({ k: "let", i: g.locals.push("f64") - 1, value: swap(got), body: then });
+    const wrapped: SExpr = { k: "attempt", body: inside, res: r, ok: put({ k: "if", cond: ranOut, then: fail, else: local(r), t: "i32" }), otherwise: put(fail), t: "i32" };
+    return { k: "let", i: b, value: { k: "make", t: box, args: [{ k: "rt", fn: "fuel.get", args: [] }] }, body: wrapped };
   }
   // A handler's search, now that it's known whether it has several answers.
   function handled(e: Extract<SExpr, { k: "search" }>, g: SFunc): SExpr {
