@@ -293,7 +293,6 @@ agent with inertia. All later goals.
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | L199 | Fuel steps depend on the checker: a definition the checker learns to prove ending stops spending fuel, so `with fuel(n, …)` can change answer. Decide: count every call, or keep it and say a checker change may change fuel answers (SPEC §5.6) | [SPEC](docs/language/SPEC.md) §12 S4 | P3 | S | |
-| L201 | A definition marked as another's direction (POLAR) must give the same answers in the same canonical order as the search: a test that checks it on the examples' directions | [SPEC](docs/language/SPEC.md) §12 S14 | P3 | S | |
 
 ## T: Testing and fast feedback
 
