@@ -75,6 +75,7 @@ import { fieldIndex, fieldPath, setPath } from "./records.ts";
 import { CHOICE, DIVERGE, INT, type Type } from "./types.ts";
 import { around, resultBounds, within, type Iv } from "./bounds.ts";
 import { Subst } from "./types.ts";
+import { filled } from "./ports.ts";
 
 export class NotInvertible extends Error {}
 
@@ -837,7 +838,9 @@ export function interpreter(given: Code, opts: Options = {}) {
     // The generic + resolved to each type's own first (arith.ts), as the
     // evaluator does; a program from the evaluator is resolved already.
     const r = needsResolving(given) ? resolvedFor(given, opts.info ?? infer(given), opts.names) : { code: given, info: opts.info };
-    prepared.set(given, (ready = { code: r.code, info: r.info, owner: ownerOfTypeParts(r.code) }));
+    // A use with no body is read with its ports bound (L211e).
+    const code = filled(r.code);
+    prepared.set(given, (ready = { code, info: r.info, owner: ownerOfTypeParts(code) }));
   }
   const code = ready.code;
   const nodes = code.nodes;

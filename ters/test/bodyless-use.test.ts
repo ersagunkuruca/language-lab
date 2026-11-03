@@ -92,3 +92,20 @@ test("the checker types a use with no body by its produced ports, one or a tuple
   assert.match(showType(two.info.typeOf.get(two.use)!, two.names), /^\(Float64, Float64\)|Tuple2/);
   assert.equal(two.run(), "(2, 0)");
 });
+
+test("a use with no body inside a relation is read with its ports bound (L211e): x = 10 − y given y = 3 is 7", () => {
+  const k = new Lang();
+  const rel = k.def("rest of ten");
+  let inner = "";
+  k.define(rel, k.fn(["x", "y"], (x, y) => { inner = k.useOf(B.add, { 0: y, out: k.lit(10) }); return k.equal(x, inner); }));
+  k.results(rel, "x");
+  const [, y] = (k.code.nodes[(k.code.nodes[rel] as NodeOf<"def">).body!] as NodeOf<"lambda">).params;
+  const main = k.def("main");
+  const use = k.useOf(rel, { [y]: k.lit(3), out: k.true });
+  k.define(main, k.thunk(() => k.call(SHOW_ANY, use)));
+  const code: Code = base(k.code), names = baseNames(k.names);
+  for (const u of [inner, use]) code.nodes[u] = k.code.nodes[u];
+  const info = infer(code, names);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  assert.equal(runMain(code, info, main, { print: () => {}, names }), "7");
+});
