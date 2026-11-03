@@ -716,9 +716,16 @@ const worldBuiltin = {
 // Cells' handler: one per program, or the one the host gives (a page that
 // watches cells shares its own).
 import { Cells, Pending, changeAt, listEdits, pathValue, stepsOf } from '../../ters/src/lang/cells.ts';
-let cells = null;
+let cells = null, cellsChosen = false;
 export const $cells = () => (cells ??= new Cells($eq));
-export function $setCells(c) { cells = c; }
+export function $setCells(c) { cells = c; cellsChosen = false; }
+// A program that nothing reads reactively (no formula, each or page) keeps
+// its cells plainly, a write a store (cells.ts plain, L99f). Several
+// programs in one process share this runtime: once one needs tracking,
+// cells stay tracked, which serves the plain ones too.
+export function $useCells(plain) {
+  if (!cells || (cellsChosen && cells.plain && !plain)) { cells = new Cells($eq, plain); cellsChosen = true; }
+}
 // Places and edits at them (L98): a path is cells.ts's, and an edit is the
 // handler's, with the compiled code's lists.
 export const $path = {
