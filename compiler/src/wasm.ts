@@ -38,7 +38,7 @@ import { Aborted, type Runtime, type World } from "../../ters/src/lang/run.ts";
 import { MATH_DATA, MATH_DATA_AT } from "./wasm-math.ts";
 import { assemble, POW5, runtime, textBytes, WASI_IMPORTS, type RtFn, type VT } from "./wasm-rt.ts";
 import { TABLE_RT, tableRt } from "./wasm-table.ts";
-import { fails, isArray, isTable, isData, isFn, kids, mapKids, OPS, STOPS, type AType, type DType, type FType, type LType, type CoreIR, type Op, type RType, type SExpr, type SFunc, type SType, type TType } from "./scalar.ts";
+import { fails, listSteps, isArray, isTable, isData, isFn, kids, mapKids, OPS, STOPS, type AType, type DType, type FType, type LType, type CoreIR, type Op, type RType, type SExpr, type SFunc, type SType, type TType } from "./scalar.ts";
 
 // int32 (an Int in 32 bits) is the shaders' only (C66c); WebAssembly has Int.
 const VAL: Record<SType | "i64", number> = { f64: 0x7c, i32: 0x7f, int32: 0x7f, i64: 0x7e };
@@ -493,6 +493,13 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean } = {}): Module
       case "make": return [...e.args.flatMap(code1), 0xfb, 0x00, ...u(recIndex.get(e.t.key)!)];
       case "get": return [...code1(e.rec), 0xfb, 0x02, ...u(recIndex.get(e.t.key)!), ...u(e.i)];
       case "new": return [0x41, ...s(e.c), ...e.args.flatMap(code1), 0xfb, 0x00, ...u(caseIndex(e.t, e.c))];
+      // The items in order on the stack, then from the last: each into
+      // `item`, made into a cons onto `acc` (L181b).
+      case "list": {
+        const [nil, cons] = listSteps(e);
+        const step = [0x21, ...u(e.item), ...code1(cons), 0x21, ...u(e.acc)];
+        return [...e.items.flatMap(code1), ...code1(nil), 0x21, ...u(e.acc), ...e.items.flatMap(() => step), 0x20, ...u(e.acc)];
+      }
       // ref.cast to the case, then its field (after the case's number).
       case "field": { const k = caseIndex(e.t, e.c); return [...code1(e.rec), 0xfb, 0x16, ...s(k), 0xfb, 0x02, ...u(k), ...u(e.i + 1)]; }
       case "tag": return [...code1(e.rec), 0xfb, 0x02, ...u(baseIndex.get(e.t.key)!), 0x00];
@@ -640,6 +647,11 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean } = {}): Module
       case "make": return [...e.args.map(w), `${d}struct.new ${recName(e.t)}`].join("\n");
       case "get": return `${w(e.rec)}\n${d}struct.get ${recName(e.t)} ${e.i}`;
       case "new": return [`${d}i32.const ${e.c}`, ...e.args.map(w), `${d}struct.new ${sname(caseIndex(e.t, e.c))}`].join("\n");
+      case "list": {
+        const [nil, cons] = listSteps(e);
+        const step = [`${d}local.set ${local(f, e.item)}`, w(cons), `${d}local.set ${local(f, e.acc)}`].join("\n");
+        return [...e.items.map(w), w(nil), `${d}local.set ${local(f, e.acc)}`, ...e.items.map(() => step), `${d}local.get ${local(f, e.acc)}`].join("\n");
+      }
       case "field": { const k = sname(caseIndex(e.t, e.c)); return `${w(e.rec)}\n${d}ref.cast (ref ${k})\n${d}struct.get ${k} ${e.i + 1}`; }
       case "tag": return `${w(e.rec)}\n${d}struct.get ${recName(e.t)} 0`;
       case "closure": return [`${d}ref.func ${id(funcs[e.fn])}`, ...e.caps.map(w), `${d}struct.new ${sname(shapeIndex[e.shape])}`].join("\n");

@@ -57,7 +57,7 @@ import { FDLIBM_C } from "./c-math.ts";
 import { BASE, cName, POSIX, RESERVED, RT_C, runtimeC, WORLD_H, type ListNames } from "./c-rt.ts";
 import { runtime } from "./wasm-rt.ts";
 import { STOPS } from "./stops.ts";
-import { fails, isArray, isTable, isData, isFn, isRecord, kids, mapKids, OPS, type AType, type TType, type DType, type FType, type LType, type CoreIR, type Op, type RType, type SExpr, type SFunc } from "./scalar.ts";
+import { fails, listSteps, isArray, isTable, isData, isFn, isRecord, kids, mapKids, OPS, type AType, type TType, type DType, type FType, type LType, type CoreIR, type Op, type RType, type SExpr, type SFunc } from "./scalar.ts";
 
 // What a C compiler needs to keep the evaluator's numbers. -fwrapv: fdlibm
 // shifts signed ints past their top bit (pow's test for an odd exponent).
@@ -75,7 +75,7 @@ const FDLIBM: Partial<Record<Op, string>> = {
 // The same functions from the platform's libm (C144).
 const PLATFORM: Partial<Record<Op, string>> = { sin: "sin", cos: "cos", tan: "tan", exp: "exp", log: "log", pow: "pow", atan2: "atan2" };
 const PRINTED = new Set<SExpr["k"]>([
-  "num", "bool", "local", "let", "if", "op", "call", "make", "get", "budget", "new", "field", "tag", "case",
+  "num", "bool", "local", "let", "if", "op", "call", "make", "get", "budget", "new", "list", "field", "tag", "case",
   "closure", "cap", "apply", "fail", "attempt", "set", "zero", "int", "text", "rt", "abort", "handle", "world",
 ]);
 // std's Array's runtime functions, one copy per item type (scalar.ts).
@@ -343,7 +343,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     // One that makes a new value of the input's type is an update (machine's
     // `stored`): it keeps the input, so the fields it moves on have one
     // holder and are changed in place.
-    const made = new Set(walk(f.body).flatMap((e) => (e.k === "make" || e.k === "new" ? [e.t.key] : [])));
+    const made = new Set(walk(f.body).flatMap((e) => (e.k === "make" || e.k === "new" || e.k === "list" ? [e.t.key] : [])));
     const c = new Set(f.params.flatMap((t, j) => (((isRecord(t) && !t.mutable && counted(t)) || isData(t)) && !made.has((t as RType).key) ? [j] : [])));
     if (c.size) lent.set(i, c);
   }
@@ -608,19 +608,26 @@ int main(int argc, char **argv) {
     function args(es: SExpr[], pre: string[], d: string, after: Set<number>): string[] {
       const xs: string[] = [];
       const mark = pending.length;
+      // What the ones after each read, from the end once (a written list
+      // has ten thousand, L181b); a set shared while nothing adds to it.
+      const laters: Set<number>[] = new Array(es.length);
+      for (let k = es.length - 1, acc = after; k >= 0; k--) { laters[k] = acc; const s = free(es[k]); if (s.size) acc = union(acc, s); }
+      // The earlier ones that would go into temps: not numbers, not held yet.
+      let open: number[] = [];
       es.forEach((a, k) => {
-        const later = union(after, ...es.slice(k + 1).map(free));
+        const later = laters[k];
         // The earlier ones go into temps (owned, so a way out drops them)
         // if this one has statements: named before it's printed.
-        const held = xs.flatMap((x, j) => (/^(\d[\w.+-]*|\(-?[\d.e+-]+\))$/.test(x) || pending.some((p) => p.v === x) ? [] : [{ j, t: typeOf(es[j], f.locals) }]))
-          .map(({ j, t }) => ({ j, t, v: temp(t) }));
+        const held = open.map((j) => ({ j, t: typeOf(es[j], f.locals) })).map(({ j, t }) => ({ j, t, v: temp(t) }));
         pending.push(...held);
         const mine: string[] = [];
         const x = ex(a, mine, d, later);
         if (mine.length) {
           for (const h of held) { pre.push(`${d}${h.v} = ${xs[h.j]};`); xs[h.j] = h.v; }
           pre.push(...mine);
+          open = [];
         } else pending.splice(pending.length - held.length);
+        if (!/^(\d[\w.+-]*|\(-?[\d.e+-]+\))$/.test(x) && !pending.some((p) => p.v === x)) open.push(k);
         xs.push(x);
       });
       pending.splice(mark);
@@ -717,6 +724,17 @@ int main(int argc, char **argv) {
           const made = `${v} = lab_new(sizeof(${n}), ${tnum.get(e.t.key)}, ${e.c});`;
           if (r) { r.alive = false; r.used = true; }
           pre.push(r ? `${d}if (${r.v}) { ${v} = ${r.v}; ${v}->type = ${tnum.get(e.t.key)}; ${v}->tag = ${e.c}; } else ${made}` : `${d}${made}`, ...xs.map((x, k) => `${d}((${n} *)${v})->f${k} = ${x};`));
+          return v;
+        }
+        // A written list (L181b): its items in order, then a cell for each
+        // from the last, onto the empty case.
+        case "list": {
+          const xs = args(e.items, pre, d, after), c = e.t.cases[e.c], n = cname(e.t, e.c), v = temp(e.t);
+          pre.push(`${d}${v} = (&${cname(e.t, e.t.cases.findIndex((x) => !x.fields.length))});`);
+          const cell = temp(e.t);
+          for (let k = xs.length - 1; k >= 0; k--) {
+            pre.push(`${d}${cell} = lab_new(sizeof(${n}), ${tnum.get(e.t.key)}, ${e.c}); ${c.fields.map((x, j) => `((${n} *)${cell})->f${j} = ${x.t === e.t ? v : xs[k]};`).join(" ")} ${v} = ${cell};`);
+          }
           return v;
         }
         case "field": return borrow(e.rec, e.t.cases[e.c].fields[e.i].t, (r) => `((${cname(e.t, e.c)} *)${r})->f${e.i}`, pre, d, after);
@@ -998,7 +1016,7 @@ int main(int argc, char **argv) {
       ? ["  for (;;) {", ...spend("    "), ...unread("    "), ...block(f.body, "return", "    ", new Set()), "  }"]
       : [...spend("  "), ...unread("  "), ...block(f.body, "return", "  ", new Set())];
     // Only the locals the body uses (the lowering's own for budgets aren't).
-    const all = body.join("\n"), named = decls.filter((x) => new RegExp(`\\b${/(\w+);$/.exec(x)![1]}\\b`).test(all));
+    const words = new Set(body.join("\n").match(/\w+/g)), named = decls.filter((x) => words.has(/(\w+);$/.exec(x)![1]));
     const text = [`// ${f.name.replace(/\n/g, " ")}`, `${header(i, !!mine)} {`, ...named, ...body, "}"].join("\n");
     if (!mine) return text;
     // The one the host and closures call: it owns its inputs.
@@ -1012,7 +1030,7 @@ int main(int argc, char **argv) {
       case "local": return locals[e.i];
       case "bool": case "tag": return "i32";
       case "op": return OPS[e.op].t;
-      case "new": return e.t;
+      case "new": case "list": return e.t;
       case "field": return e.t.cases[e.c].fields[e.i].t;
       case "get": return e.t.fields[e.i].t;
       case "make": case "zero": return e.t;
