@@ -50,6 +50,7 @@
 // answer, fallback and all. n is a number written down, so the bound is
 // known when the shader is built.
 
+import { givenInOrder } from "../../ters/src/lang/ports.ts";
 import { resolveArithmetic } from "../../ters/src/lang/arith.ts";
 import type { Code, Id, NodeOf } from "../../ters/src/model.ts";
 import { dependencies, subtree, isCall, type Call, isUse, useTarget, type Use } from "../../ters/src/model.ts";
@@ -1126,7 +1127,9 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     // list of them made as it is read (core-js.ts; a periodic angle has no
     // end, nor may a backwards search), which spends the program's budget.
     const once = solvesOnce(code, n) || (!f.partial && !searching.get(f));
-    const given = Object.values(n.given), binds = Object.values(n.binds);
+    // In port order (C147), as the evaluator computes them and core-js.ts's
+    // solve reads them.
+    const given = givenInOrder(code, n).map((k) => n.given[k]), binds = Object.values(n.binds);
     for (const g of given) { const t = stype(zonk(g)); if (!t) throw new Refused(`solves ${name} given ${whyNot(zonk(g))}`); if (typeof t === "object" && boolInside(t)) throw new Refused(`solves ${name} given data holding a Bool, which isn't lowered yet`); }
     const ts = binds.map((b) => { const t = stype(zonk(b)); if (!t) throw new Refused(`solves ${name} for ${whyNot(zonk(b))}`); if (typeof t === "object" && boolInside(t)) throw new Refused(`solves ${name} for data holding a Bool, which isn't lowered yet`); return t; });
     const all = f.locals.push("host") - 1;

@@ -31,6 +31,7 @@
 // emitted as straight-line code (src/relation.ts). Plans that need numeric
 // search fall back to the solver at run time, with the plan made once.
 
+import { givenInOrder } from "../../ters/src/lang/ports.ts";
 import { reachedFrom } from "./scalar.ts";
 import { resolveArithmetic } from "../../ters/src/lang/arith.ts";
 import { intLit } from "../../ters/src/lang/int.ts";
@@ -554,7 +555,10 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // The expressions a solve node hands over: all of its given ports for the
   // interpreter, only the solver's known ones (not a predicate's out = true)
   // for a planned direction.
-  const givenOf = (n: Use) => (relational(n) ? Object.values(n.given) : planSolve(code, n).known.map((k) => n.given[k]));
+  // A use's given ports in port order, as the evaluator computes them
+  // (SPEC §7.2b, L198, C147); every solver takes them in that order.
+  const knownInOrder = (n: Use) => { const o = givenInOrder(code, n); return [...planSolve(code, n).known].sort((x, y) => o.indexOf(x) - o.indexOf(y)); };
+  const givenOf = (n: Use) => (relational(n) ? givenInOrder(code, n) : knownInOrder(n)).map((k) => n.given[k]);
   // The binders a lambda closes over: used inside it, bound outside it.
   function captured(lambda: Id): Id[] {
     const inside = subtree(code, lambda);
@@ -1334,13 +1338,13 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       if (relational(n)) {
         // A mode with several answers, or a goal that waits: the relational
         // interpreter runs it.
-        const given = Object.keys(n.given), ps = given.map((_, i) => `g${i}`);
+        const given = givenInOrder(code, n), ps = given.map((_, i) => `g${i}`);
         solverCode.push(`// ${names[useTarget(code.nodes, n)] ?? useTarget(code.nodes, n)}, run backwards by the relational interpreter: given ${given.map(label).join(", ")}, ` +
           `solve for ${Object.keys(n.binds).map(label).join(", ")}\nfunction ${name}(${ps.join(", ")}) {\n` +
           `return $relate($program, ${JSON.stringify(useTarget(code.nodes, n))}, { ${given.map((g, i) => `${JSON.stringify(g)}: ${ps[i]}`).join(", ")} }, ${JSON.stringify(Object.keys(n.binds))});\n}`);
         return name;
       }
-      const c = compileSolve(name, planSolve(code, n).rel!, planSolve(code, n).known, Object.keys(n.binds), names[useTarget(code.nodes, n)] ?? useTarget(code.nodes, n), label);
+      const c = compileSolve(name, planSolve(code, n).rel!, knownInOrder(n), Object.keys(n.binds), names[useTarget(code.nodes, n)] ?? useTarget(code.nodes, n), label);
       solverCode.push(c.code);
       if (c.once) onceSolvers.add(n.id);
     }
