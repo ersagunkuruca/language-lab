@@ -2237,6 +2237,17 @@ export function storedAs(code: Code, info: Info, names: Names, own: Id[], type: 
   return { rep: c.rep.name, jobs: c.jobs };
 }
 
+// How each type with a choice of representations is stored when main runs
+// (storedAs for every such type at once), by type (E230).
+export function storedAll(code: Code, info: Info, names: Names, own: Id[], main: Id | null): Map<Id, { rep: string; jobs: string[] }> {
+  const out = new Map<Id, { rep: string; jobs: string[] }>();
+  if (!main || info.errors.length) return out;
+  const byType = new Map<Id, ReturnType<typeof representationsIn>>();
+  for (const r of representationsIn(code, info, names, own)) byType.set(r.of, [...(byType.get(r.of) ?? []), r]);
+  for (const [type, reps] of byType) if (reps.length >= 2) { const c = choose(code, main, reps); out.set(type, { rep: c.rep.name, jobs: c.jobs }); }
+  return out;
+}
+
 // A function inside a definition made a definition of its own, in the
 // side menu with the rest (BACKLOG E164, Ersagun 2026-11-01: "we should
 // be able to somehow turn each lambda into a function"). What it uses from

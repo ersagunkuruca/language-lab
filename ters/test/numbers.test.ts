@@ -182,3 +182,12 @@ test("the editor's stored-as line is the chooser's: Nat is stored as int for mai
   assert.equal(storedAs(p.code, info, names, p.own.defs, nat, p.named("main"))?.rep, "int");
   assert.equal(storedAs(p.code, info, names, p.own.defs, nat, null), null);
 });
+
+// Every type's choice at once, as an edit's note compares them (E230).
+test("storedAll gives each type's choice, the same as storedAs", async () => {
+  const { storedAll, storedAs } = await import("../../editor/typed.ts");
+  const all = storedAll(p.code, info, names, p.own.defs, p.named("main"));
+  const nat = reps[0].of;
+  assert.equal(all.get(nat)?.rep, storedAs(p.code, info, names, p.own.defs, nat, p.named("main"))?.rep);
+  assert.equal(storedAll(p.code, info, names, p.own.defs, null).size, 0);
+});
