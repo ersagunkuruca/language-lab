@@ -3347,11 +3347,14 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // Asking which copy a call needs makes that copy, so a search that is only
   // ever called through its `$k` copy also has a generator nobody uses.
   // Keep what the exports reach.
-  const uses = (js: string, name: string) => new RegExp(`(?<![\\p{L}\\p{N}_$])${name.replace(/\$/g, "\\$")}(?![\\p{L}\\p{N}_$])`, "u").test(js);
+  // The names a piece of code uses, read once (C156): a test of each name
+  // against each kept body was most of a compile's own time.
+  const namesIn = (js: string) => new Set(js.replace(/\/\/[^\n]*|\/\*.*?\*\//g, "").match(/[\p{L}\p{N}_$]+/gu) ?? []);
+  const bodyOf = new Map(made.map(([s, b]) => [s.name, b]));
   const keep = new Set<string>();
   const reach = (js: string) => {
-    js = js.replace(/\/\/[^\n]*|\/\*.*?\*\//g, "");
-    for (const [s, b] of made) if (!keep.has(s.name) && uses(js, s.name)) { keep.add(s.name); reach(b); }
+    const todo = [js];
+    for (let b; (b = todo.pop()) !== undefined;) for (const n of namesIn(b)) if (!keep.has(n) && bodyOf.has(n)) { keep.add(n); todo.push(bodyOf.get(n)!); }
   };
   reach(exported.join("\n") + solverCode.join("\n") + constants.join("\n") + shownBy.join("\n"));
   // A copy in a cycle with no heap copy of its own: called from the heap
