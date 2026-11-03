@@ -1003,7 +1003,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| T13 | Only the fast set before a merge (Ersagun 2026-11-03, "Only fast set"): `npm run affected` leaves out the test files measured at 5 s or more (ters/test/slow.json, written by `-- --time`) unless the change edits that file, and says how many; `--full` runs them; Check main runs with `--full`, the nightly with `--all`. WORKFLOW.md says so | this PR |
+| T13 | Only the fast set before a merge (Ersagun 2026-11-03, "Only fast set"): `npm run affected` leaves out the test files measured at 5 s or more (ters/test/slow.json, written by `-- --time`) unless the change edits that file, and says how many; `--full` runs them; Check main runs with `--full`, the nightly with `--all`. WORKFLOW.md says so | #1357 |
 | W7 | The tutorial's pictures, case by case: each picture of a definition is now that definition embedded (discriminant, magnitude, queens, fall live, rotate, to polar, cubic, cubic′; fall's Run picture folded into its live embed); the editor, the right-click menu and the let/get view are retaken from today's editor | this PR |
 | W6 | Every Try it in GUIDE.md (sections 1 to 9) has the editor embedded under it: read-only where the step only reads, live where it edits (main of two dice, Effects area, queens main, square backwards, a hundred rolls); edits there aren't kept | #714 |
 | W5 | TUTORIAL.md in plainer words, like the guide (W3): short sentences, one idea per paragraph, lists for gestures and steps; the out-of-date banner is gone (its points were already fixed in the text), the editor tour is its own short section, and the screenshots are marked as from 2026-10-22 | #713 |
