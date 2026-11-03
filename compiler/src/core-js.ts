@@ -201,9 +201,16 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
   const rtName = (n: string) => { if (!rts.has(n)) rts.set(n, `rt${rts.size}`); return rts.get(n)!; };
   const worlds: string[] = [];
   const worldName = (op: string) => { let i = worlds.indexOf(op); if (i < 0) i = worlds.push(op) - 1; return `w${i}`; };
+  // Data written out whole (an operator list, a case with no fields) is
+  // made once, at load, not at each call: nothing changes a value but a
+  // search's box (`set`), which is never constant.
+  const consts = new Map<string, string>();
+  const constName = (src: string) => { if (!consts.has(src)) consts.set(src, `c${consts.size}`); return consts.get(src)!; };
+  const constant = (e: SExpr): boolean => ["num", "int", "text", "bool"].includes(e.k) || ((e.k === "new" || (e.k === "make" && !e.t.mutable)) && e.args.every(constant));
   const text = ir.funcs.map((f, i) => func(f, i));
   const js = [
     "let fuel = Infinity;",
+    ...[...consts].map(([src, v]) => `const ${v} = ${src};`),
     // A backwards search spends the budget too (C137c12).
     "R.spending(() => --fuel >= 0);",
     ...[...rts].map(([n, v]) => `const ${v} = R.rt(${JSON.stringify(n)});`),
@@ -251,9 +258,9 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
           const xs = e.args.map((a) => ex(a, pre, d));
           return `${names[e.fn]}(${xs.join(", ")})`;
         }
-        case "make": return `{ tag: ${JSON.stringify(e.t.variant)}, fields: [${e.args.map((a) => ex(a, pre, d)).join(", ")}] }`;
+        case "make": { const v = `{ tag: ${JSON.stringify(e.t.variant)}, fields: [${e.args.map((a) => ex(a, pre, d)).join(", ")}] }`; return constant(e) ? constName(v) : v; }
         case "get": return `${ex(e.rec, pre, d)}.fields[${e.i}]`;
-        case "new": return `{ tag: ${JSON.stringify(e.t.cases[e.c].variant)}, fields: [${e.args.map((a) => ex(a, pre, d)).join(", ")}] }`;
+        case "new": { const v = `{ tag: ${JSON.stringify(e.t.cases[e.c].variant)}, fields: [${e.args.map((a) => ex(a, pre, d)).join(", ")}] }`; return constant(e) ? constName(v) : v; }
         case "field": return `${ex(e.rec, pre, d)}.fields[${e.i}]`;
         case "tag": return `R.caseOf(${ex(e.rec, pre, d)}, ${JSON.stringify(e.t.cases.map((c) => c.variant))})`;
         case "closure": return `R.closure(${names[e.fn]}, [${e.caps.map((a) => ex(a, pre, d)).join(", ")}]${e.src ? `, ${JSON.stringify(e.src)}` : ""})`;
