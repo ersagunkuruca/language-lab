@@ -186,10 +186,18 @@ export function fails(e: SExpr, funcs: SFunc[]): boolean {
     default: return kids(e).some((a) => fails(a, funcs));
   }
 }
+// A written list's empty case, and its case made of `item` onto `acc`:
+// what a printer builds it from, from the last item (L181b).
+export function listSteps(e: Extract<SExpr, { k: "list" }>): [SExpr, SExpr] {
+  const nil = e.t.cases.findIndex((x) => !x.fields.length);
+  const fields = e.t.cases[e.c].fields.map((x): SExpr => ({ k: "local", i: x.t === e.t ? e.acc : e.item }));
+  return [{ k: "new", t: e.t, c: nil, args: [] }, { k: "new", t: e.t, c: e.c, args: fields }];
+}
 // The expressions directly inside e.
 export function kids(e: SExpr): SExpr[] {
   switch (e.k) {
     case "op": case "call": case "make": case "new": case "rt": case "world": return e.args;
+    case "list": return e.items;
     case "if": return [e.cond, e.then, e.else];
     case "let": return [e.value, e.body];
     case "get": case "field": case "tag": return [e.rec];
@@ -210,6 +218,7 @@ export function kids(e: SExpr): SExpr[] {
 export function mapKids(e: SExpr, f: (x: SExpr) => SExpr): SExpr {
   switch (e.k) {
     case "op": case "call": case "make": case "new": case "rt": case "world": return { ...e, args: e.args.map(f) } as SExpr;
+    case "list": return { ...e, items: e.items.map(f) };
     case "if": return { ...e, cond: f(e.cond), then: f(e.then), else: f(e.else) };
     case "let": return { ...e, value: f(e.value), body: f(e.body) };
     case "get": case "field": case "tag": return { ...e, rec: f(e.rec) } as SExpr;
@@ -235,6 +244,7 @@ export function mapLocals(e: SExpr, m: (i: number) => number): SExpr {
     case "case": return { ...r, s: m(r.s) };
     case "attempt": case "search": return { ...r, res: m(r.res) };
     case "apply": return { ...r, tmp: m(r.tmp) };
+    case "list": return { ...r, item: m(r.item), acc: m(r.acc) };
     case "handle": return { ...r, reason: m(r.reason), save: m(r.save) };
     case "budget": return { ...r, save: m(r.save), res: m(r.res) };
     default: return r;
@@ -250,6 +260,7 @@ function freeLocals(e: SExpr): number[] {
       case "case": set.add(x.s); break;
       case "attempt": case "search": set.add(x.res); break;
       case "apply": set.add(x.tmp); break;
+      case "list": set.add(x.item); set.add(x.acc); break;
       case "handle": set.add(x.reason); set.add(x.save); break;
       case "budget": set.add(x.save); set.add(x.res); break;
     }
@@ -289,6 +300,11 @@ export type SExpr =
   // checker says so, or the match just looked).
   | { k: "new"; t: DType; c: number; args: SExpr[] }
   | { k: "field"; rec: SExpr; t: DType; c: number; i: number }
+  // A written list (`list of`, L181b): items in order, each a value of
+  // case c's head, made into case c from the end onto t's empty case. Flat,
+  // so ten thousand items are one node; a printer evaluates them in order
+  // and builds from the last with locals `item` and `acc`.
+  | { k: "list"; t: DType; c: number; items: SExpr[]; item: number; acc: number }
   // The number of a value's case, from 0 in the order written.
   | { k: "tag"; rec: SExpr; t: DType }
   // A function as a value: `fn` takes the closure, then t's inputs, and
@@ -1001,6 +1017,14 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           return { k: "call", fn, args: args(), tail };
         }
         if (opts.records && t?.kind === "variant") return build(target, zonk(id), args());
+        // A written list (L181b): one flat node, however many items.
+        if (opts.data && target === S.listOf) {
+          const lt = stype(zonk(id));
+          const c = lt && isData(lt) ? lt.cases.findIndex((x) => x.variant === CONS) : -1;
+          if (!lt || !isData(lt) || c < 0) throw new Refused(`writes a list whose items are ${OTHER}`);
+          const head = lt.cases[c].fields.find((x) => x.t !== lt)!.t;
+          return { k: "list", t: lt, c, items: args(), item: f.locals.push(head) - 1, acc: f.locals.push(lt) - 1 };
+        }
         if (opts.records && t?.kind === "field" && n.args.length === 1) {
           const r = stype(zonk(n.args[0]));
           if (r && isData(r)) {
@@ -1778,7 +1802,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       case "text": return "text";
       case "op": return OPS[e.op].t;
       case "call": return funcs[e.fn].multi ? "i32" : funcs[e.fn].result;
-      case "make": case "new": case "closure": case "world": case "if": case "attempt": case "handle": case "budget": case "search": case "choose": case "zero": return e.k === "choose" ? e.t.cases.find((c) => c.variant === CONS)!.fields[0].t : e.t;
+      case "make": case "new": case "list": case "closure": case "world": case "if": case "attempt": case "handle": case "budget": case "search": case "choose": case "zero": return e.k === "choose" ? e.t.cases.find((c) => c.variant === CONS)!.fields[0].t : e.t;
       case "get": return e.t.fields[e.i].t;
       case "field": return e.t.cases[e.c].fields[e.i].t;
       case "apply": return e.t.result;
