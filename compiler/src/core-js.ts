@@ -21,7 +21,7 @@ import { fromList, toList, type Runtime, type Value, type World } from "../../te
 import * as I from "../../ters/src/lang/int.ts";
 import * as T from "../../ters/src/lang/text.ts";
 import type { Id } from "../../ters/src/model.ts";
-import { ARRAY_RT, RT, isData, isRecord, type CoreIR, type LType, type Op, type RType, type SExpr, type SFunc, type TType } from "./scalar.ts";
+import { ARRAY_RT, RT, isData, isRecord, type CoreIR, type LType, type Op, type SExpr, type SFunc, type TType } from "./scalar.ts";
 import { runtime } from "./wasm-rt.ts";
 import { STOPS } from "./stops.ts";
 
@@ -59,11 +59,20 @@ const OWN: Record<string, (...xs: never[]) => unknown> = {
 // Map with Baker's versions), a record key given as the evaluator's
 // record and taken back from its entries.
 const TABLE = /^table\.(\w+)\.t(\d+)(?:\.e\d+)?$/;
-const keyIn = (t: TType["keyT"]) => (typeof t === "object" ? (k: unknown): unknown => recordIn(t, k) : (k: unknown) => k);
-const recordIn = (t: RType, k: unknown): unknown => ({ tag: t.variant, fields: t.fields.map((f, i) => (typeof f.t === "object" && isRecord(f.t) ? recordIn(f.t, (k as unknown[])[i]) : (k as unknown[])[i])) });
+// What the runtime needs of the program's types, as plain data a module
+// can carry: a key (null for an Int, Text or Float64; a record's variant
+// and its fields' keys), a table, and the case numbers of the lists and
+// optionals the world gives.
+export type KeySpec = null | { variant: Id; fields: KeySpec[] };
+export interface TableSpec { set: boolean; key: KeySpec }
+export interface Cases { none: number; some: number; cons: number; nil: number }
+const keySpec = (t: LType): KeySpec => (typeof t === "object" && isRecord(t) ? { variant: t.variant, fields: t.fields.map((f) => keySpec(f.t)) } : null);
+export const tableSpec = (t: TType): TableSpec => ({ set: t.set, key: keySpec(t.keyT as LType) });
+export const casesOf = (t: LType): Cases => { const c = (v: Id) => (isData(t) ? t.cases.findIndex((x) => x.variant === v) : -1); return { none: c(NONE), some: c(SOME), cons: c(CONS), nil: c(NIL) }; };
+const recordIn = (t: KeySpec, k: unknown): unknown => (t === null ? k : { tag: t.variant, fields: t.fields.map((f, i) => recordIn(f, (k as unknown[])[i])) });
 const recordOut = (k: unknown): unknown => (typeof k === "object" && k !== null && "fields" in k ? (k as { fields: unknown[] }).fields.map(recordOut) : k);
-function tableFn(op: string, t: TType): (...xs: unknown[]) => unknown {
-  const key = keyIn(t.keyT), bool = (v: unknown) => (v as { tag: Id }).tag === TRUE;
+function tableFn(op: string, t: TableSpec): (...xs: unknown[]) => unknown {
+  const key = (k: unknown) => recordIn(t.key, k), bool = (v: unknown) => (v as { tag: Id }).tag === TRUE;
   const impl = (id: Id) => STD_IMPL[id] as (...xs: unknown[]) => unknown;
   switch (op) {
     case "empty": return () => impl(TABLE_OPS.empty)();
@@ -96,9 +105,9 @@ function randFns(r: Uint32Array): Record<string, (...xs: never[]) => unknown> {
     "rand.restore": (a: number, b: number, c: number, d: number) => { r.set([a, b, c, d]); return 0; },
   };
 }
-function rtFn(name: string, ir?: CoreIR, rand?: Record<string, (...xs: never[]) => unknown>): (...xs: unknown[]) => unknown {
+function rtFn(name: string, tables?: TableSpec[], rand?: Record<string, (...xs: never[]) => unknown>): (...xs: unknown[]) => unknown {
   const tm = TABLE.exec(name);
-  if (tm && ir) return tableFn(tm[1], ir.tables[Number(tm[2])]);
+  if (tm && tables) return tableFn(tm[1], tables[Number(tm[2])]);
   if (rand?.[name]) return rand[name] as (...xs: unknown[]) => unknown;
   const base = name.replace(/\.a\d+$/, "");
   if (OWN[base]) return OWN[base] as (...xs: unknown[]) => unknown;
@@ -125,14 +134,14 @@ export const RUNTIME = {
 };
 
 // The source of a function of the runtime giving every function, by name.
-// `worlds`: the world's operations it calls, with their results' types,
-// which the loader gives as R.worlds in that order.
-export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: [string, LType][] } {
+// `worlds`: the world's operations it calls, with the case numbers of
+// what they give, which the loader gives as R.worlds in that order.
+export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: [string, Cases][] } {
   const names = ir.funcs.map((_, i) => `f${i}`);
   const rts = new Map<string, string>();
   const rtName = (n: string) => { if (!rts.has(n)) rts.set(n, `rt${rts.size}`); return rts.get(n)!; };
-  const worlds: [string, LType][] = [];
-  const worldName = (op: string, t: LType) => { let i = worlds.findIndex(([o]) => o === op); if (i < 0) i = worlds.push([op, t]) - 1; return `w${i}`; };
+  const worlds: [string, Cases][] = [];
+  const worldName = (op: string, t: LType) => { let i = worlds.findIndex(([o]) => o === op); if (i < 0) i = worlds.push([op, casesOf(t)]) - 1; return `w${i}`; };
   const text = ir.funcs.map((f, i) => func(f, i));
   const js = [
     "let fuel = Infinity;",
@@ -291,52 +300,85 @@ function kidsOf(e: SExpr): SExpr[] {
 
 // The world's operations (scalar.ts WORLD_OPS) over the evaluator's
 // Runtime, as wasm.ts's worldOf: one that fails aborts with its reason.
-function worldFn(op: string, t: LType, rt: Runtime): (...xs: unknown[]) => unknown {
+function worldFn(op: string, c: Cases, rt: Runtime): (...xs: unknown[]) => unknown {
   const w = <K extends keyof World>(k: K): World[K] => {
     const f = rt.world?.[k];
     if (!f) return (() => { throw new Error(`this runtime can't ${k === "error" ? "write to standard error" : k}`); }) as unknown as World[K];
     return f.bind(rt.world) as World[K];
   };
   const tried = <T>(f: () => T): T => { try { return f(); } catch (e) { if (e instanceof Aborted) throw e; throw new Aborted((e as Error).message, 0); } };
-  const c = (v: Id) => (isData(t) ? t.cases.findIndex((x) => x.variant === v) : -1);
   switch (op) {
     case "randomSeed": return () => Math.floor(Math.random() * 4294967296);
     case "print": return (s) => { rt.print(s as string); return []; };
     case "printError": return (s) => { w("error")(s as string); return []; };
     case "readInput": return () => tried(() => w("input")());
-    case "readLine": return () => tried(() => { const l = w("readLine")(); return l === null ? [c(NONE)] : [c(SOME), l]; });
+    case "readLine": return () => tried(() => { const l = w("readLine")(); return l === null ? [c.none] : [c.some, l]; });
     case "readFile": return (p) => tried(() => w("readFile")(p as string));
     case "writeFile": return (p, s) => tried(() => { w("writeFile")(p as string, s as string); return []; });
     case "appendFile": return (p, s) => tried(() => { w("appendFile")(p as string, s as string); return []; });
     case "fileExists": return (p) => w("fileExists")(p as string);
-    case "listFolder": return (p) => tried(() => w("listFolder")(p as string).reduceRight<unknown[]>((tail, x) => [c(CONS), x, tail], [c(NIL)]));
+    case "listFolder": return (p) => tried(() => w("listFolder")(p as string).reduceRight<unknown[]>((tail, x) => [c.cons, x, tail], [c.nil]));
   }
   return () => { throw new Unsupported(`world ${op}`); };
+}
+
+// What the printed functions are given as R: the runtime, the tables'
+// and the world's operations, a fresh generator.
+export function coreRuntime(tables: TableSpec[], worlds: [string, Cases][], rt: Runtime) {
+  const rand = randFns(new Uint32Array(4));
+  return { ...RUNTIME, rt: (n: string) => rtFn(n, tables, rand), worlds: worlds.map(([op, c]) => worldFn(op, c, rt)), abort: (reason: unknown, esc: number): never => { throw new Aborted(reason, esc); } };
 }
 
 // The functions, by their place in ir.funcs. `rt`: the console and files.
 export function loadCoreJs(ir: CoreIR, rt: Runtime = { print: () => {} }): ((...xs: unknown[]) => unknown)[] {
   const { js, names, worlds } = emitCoreJs(ir);
-  const rand = randFns(new Uint32Array(4));
-  const R = { ...RUNTIME, rt: (n: string) => rtFn(n, ir, rand), worlds: worlds.map(([op, t]) => worldFn(op, t, rt)), abort: (reason: unknown, esc: number): never => { throw new Aborted(reason, esc); } };
-  const all = new Function("R", js)(R) as Record<string, (...xs: unknown[]) => unknown>;
+  const all = new Function("R", js)(coreRuntime(ir.tables.map(tableSpec), worlds, rt)) as Record<string, (...xs: unknown[]) => unknown>;
   return names.map((n) => all[n]);
 }
 
-// Runs main as wasm.ts's runMain does: given the arguments as a List of
-// Texts if it takes them; an abort or a stop nobody handles is written to
-// standard error, and the exit code is 1.
-export function runCoreMain(ir: CoreIR, name: string, args: string[], rt: Runtime): number {
+// What running a main needs to know of it: whether it takes the
+// arguments (and the case numbers of their list), and what it gives.
+export interface MainSpec { args: Cases | null; result: "f64" | "int" | "other" }
+function mainOf(ir: CoreIR, name: string): [number, MainSpec] {
   const fi = ir.funcs.findIndex((g) => g.name === name && !g.inner && !g.budgeted), f = ir.funcs[fi];
   if (!f || f.params.length > 1) throw new Error(`${name}: not compiled, or not a main`);
-  const fn = loadCoreJs(ir, rt)[fi], err = rt.world?.error ?? rt.print;
-  const list = (t: LType) => { if (!isData(t)) throw new Error("main takes a List of Texts"); const c = (v: Id) => t.cases.findIndex((x) => x.variant === v); return args.reduceRight<unknown[]>((tail, x) => [c(CONS), x, tail], [c(NIL)]); };
+  if (f.params.length && !isData(f.params[0])) throw new Error(`${name} takes something other than a List of Texts`);
+  return [fi, { args: f.params.length ? casesOf(f.params[0]) : null, result: f.result === "f64" ? "f64" : f.result === "int" ? "int" : "other" }];
+}
+
+// Runs a main as wasm.ts's runMain does: given the arguments as a List of
+// Texts if it takes them; an abort or a stop nobody handles is written to
+// standard error, and the exit code is 1.
+export function runCoreFn(fn: (...xs: unknown[]) => unknown, m: MainSpec, args: string[], rt: Runtime): number {
+  const err = rt.world?.error ?? rt.print;
   let v: unknown;
-  try { v = fn(...(f.params.length ? [list(f.params[0])] : [])); } catch (e) {
+  try { v = fn(...(m.args ? [args.reduceRight<unknown[]>((tail, x) => [m.args!.cons, x, tail], [m.args.nil])] : [])); } catch (e) {
     if (e instanceof Aborted) { err(String(e.reason)); return 1; }
     if (e instanceof Stopped) { err(e.message); return 1; }
-    if (e === FAIL) throw new Error(`${name} had no answer`);
+    if (e === FAIL) throw new Error("main had no answer");
     throw e;
   }
-  return f.result === "f64" ? Number(v) : f.result === "int" ? Number(v) : 0;
+  return m.result === "other" ? 0 : Number(v);
+}
+export function runCoreMain(ir: CoreIR, name: string, args: string[], rt: Runtime): number {
+  const [fi, m] = mainOf(ir, name);
+  return runCoreFn(loadCoreJs(ir, rt)[fi], m, args, rt);
+}
+
+// The program as a module that runs main in Node (C137c5, `lab compile
+// --core`): the printed functions, with the runtime imported from
+// `runtime` (this file, which a bundler takes in) and Node's world.
+export function coreModule(ir: CoreIR, name: string, runtime: string, world: string): string {
+  const [fi, m] = mainOf(ir, name);
+  const { js, names, worlds } = emitCoreJs(ir);
+  return [
+    `import { coreRuntime, runCoreFn } from ${JSON.stringify(runtime)};`,
+    `import { nodeWorld } from ${JSON.stringify(world)};`,
+    "const rt = { print: (s) => console.log(s), world: nodeWorld() };",
+    `const R = coreRuntime(${JSON.stringify(ir.tables.map(tableSpec))}, ${JSON.stringify(worlds)}, rt);`,
+    "const defs = (function (R) {",
+    js,
+    "})(R);",
+    `process.exitCode = runCoreFn(defs.${names[fi]}, ${JSON.stringify(m)}, process.argv.slice(2), rt);`,
+  ].join("\n");
 }

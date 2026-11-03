@@ -4,6 +4,7 @@
 //   lab run <program> [arguments…]       run `main` with the evaluator; a page
 //                                        prints as static HTML (WEB.md)
 //   lab compile <program> [-o out.mjs]   compile to a JavaScript module that runs `main`
+//     --core                             through the core IR (compiler/src/core-js.ts, C137), as WebAssembly and C are
 //   lab native <program> [-o out]        compile to a native program through C (NATIVE.md)
 //   lab check <program>                  type-check, and list the definitions with their types
 //   lab hosts <program>                  print a hosts/js.js to start from: the program's own effects (FOREIGN.md)
@@ -52,6 +53,7 @@ import { nodeWorld } from "../src/lang/world.ts";
 import { compile } from "../../compiler/src/compile.ts";
 import { CFLAGS, emitC } from "../../compiler/src/c.ts";
 import { lowerScalar } from "../../compiler/src/scalar.ts";
+import { coreModule } from "../../compiler/src/core-js.ts";
 import { execFileSync } from "node:child_process";
 import { recordings, webPage } from "./web.ts";
 import { appFolder } from "./app.ts";
@@ -67,6 +69,7 @@ const USAGE = `lab: the command line for Ters, the language
 usage:
   lab run <program> [arguments…]        run main with the evaluator (a page prints as static HTML)
   lab compile <program> [-o out.mjs]    compile to a JavaScript module that runs main
+    [--core]                            through the core IR, as WebAssembly and C are (C137)
   lab native <program> [-o out]         compile to a native program through C, with $CC (default cc)
   lab check <program>                   type-check, and list the definitions and their types
   lab hosts <program>                   print a hosts/js.js answering the program's own effects, to start from (FOREIGN.md)
@@ -294,15 +297,26 @@ switch (command) {
     // starts fast; without esbuild (a dev dependency), a module that
     // imports the runtime from this checkout.
     const esbuild = await import("esbuild").catch(() => null);
+    // --core (C137c5): printed from the core IR, which WebAssembly and C
+    // print too, instead of compile.ts.
+    const core = rest.includes("--core");
+    const source = (inCheckout: boolean): string => {
+      if (!core) return compiled(p, main, inCheckout);
+      const lowered = lowerScalar(p.code, p.info, p.names, p.own, { data: true });
+      const why = lowered.refused.get(main);
+      if (why) fail(`${p.names[main] ?? "main"} isn't compiled through the core IR: it ${why}`);
+      const here = (f: string) => resolve(import.meta.dirname, f);
+      return coreModule(lowered, p.names[main] ?? "main", here("../../compiler/src/core-js.ts"), here("../src/lang/world.ts"));
+    };
     if (esbuild) {
       await esbuild.build({
-        stdin: { contents: compiled(p, main, false), resolveDir: import.meta.dirname, sourcefile: basename(out), loader: "js" },
+        stdin: { contents: source(false), resolveDir: import.meta.dirname, sourcefile: basename(out), loader: "js" },
         bundle: true, platform: "node", format: "esm", outfile: out, logLevel: "warning",
         banner: { js: `// ${p.title}, compiled by lab (ters/cli/lab.ts), with its runtime. Run: node <this file> [arguments…]` },
         plugins: [onlyWhatIsUsed],
       });
     } else {
-      writeFileSync(out, compiled(p, main, true));
+      writeFileSync(out, source(true));
       process.stderr.write("lab: esbuild isn't installed (npm install in ters/), so the output imports the runtime from this checkout\n");
     }
     process.stderr.write(`lab: wrote ${out}; run it with: node ${out} [arguments…]\n`);

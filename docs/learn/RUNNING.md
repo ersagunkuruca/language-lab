@@ -53,6 +53,7 @@ In `ters/`, with `node cli/lab.ts` (or `lab` if linked):
 lab run examples/wc a.txt         # main with the evaluator, the real console and files
 lab check examples/wc             # types of every definition
 lab compile examples/wc -o wc.mjs # a JavaScript module that runs main
+lab compile examples/wc --core -o wc.mjs # the same, printed from the core IR as WebAssembly and C are (C137, to replace the first)
 lab native examples/wc -o wc      # a native program through C
 lab build-web examples/dice       # one HTML file running the page
 lab build-app examples/dice       # the page as a phone app (PWA + Capacitor)

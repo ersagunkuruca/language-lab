@@ -7,9 +7,10 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { readdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { spawnSync } from "node:child_process";
 import type { Runtime, World } from "../../ters/src/lang/run.ts";
 import { runProgram } from "../../ters/src/lang/run.ts";
 import { lowerScalar } from "../src/scalar.ts";
@@ -61,4 +62,21 @@ test("the examples whose main lowers to the core IR say the same in JavaScript p
   }
   console.log(`ran ${ran.join(", ")}\nnot lowered:\n  ${refused.join("\n  ")}`);
   assert.ok(ran.length >= 12, `ran ${ran.join(", ")}`);
+});
+
+// lab compile --core (C137c5): a module that runs main in Node, printed
+// from the core IR, says what lab run says, standard error and exit
+// code too.
+test("lab compile --core writes a module that runs main as lab run does", () => {
+  const lab = join(import.meta.dirname, "../../ters/cli/lab.ts"), wc = join(examples, "wc");
+  const dir = mkdtempSync(join(tmpdir(), "core-"));
+  writeFileSync(join(dir, "a.txt"), "two words\nand three more\n");
+  const run = (args: string[]) => { const r = spawnSync(process.execPath, args, { cwd: dir, encoding: "utf8", input: "" }); return [r.stdout, r.stderr, r.status]; };
+  const made = run([lab, "compile", wc, "--core", "-o", "wc.mjs"]);
+  assert.equal(made[2], 0, String(made[1]));
+  for (const args of [["a.txt"], ["-l", "a.txt", "nope"], []]) assert.deepEqual(run(["wc.mjs", ...args]), run([lab, "run", wc, ...args]), args.join(" "));
+  // One that doesn't lower says why, and writes nothing.
+  const page = run([lab, "compile", join(examples, "dice"), "--core", "-o", "dice.mjs"]);
+  assert.notEqual(page[2], 0);
+  assert.match(String(page[1]), /isn't compiled through the core IR: it takes or gives Html/);
 });
