@@ -99,6 +99,11 @@ const $stop = (why) => $perform(ABORT, ABORT_OP, [why]);
 const performed = (f) => (...xs) => { try { return f(...xs); } catch (e) { if (e instanceof Aborted) return $stop(e.reason); throw e; } };
 const OVERFLOW = 'the answer is too big for a Float64 (overflow)';
 export const $fin = (x) => (x - x === 0 ? x : $stop(OVERFLOW));
+// An exported definition whose answer is a Float64 (compile.ts): the
+// answer checked as it leaves for the host (SPEC §3.3, C156).
+// A Choice function exported is a stream of answers, not looked at here.
+const $finIf = (v) => (typeof v === "number" ? $fin(v) : v);
+export const $finOut = (f) => (typeof f === "function" ? (...xs) => $finIf(f(...xs)) : $finIf(f));
 export const $div = (a, b) => (b === 0 ? $stop('x / 0 has no answer') : a / $fin(b));
 export const $sqrt = (a) => (a < 0 ? $stop('the square root of a negative number has no answer') : Math.sqrt(a));
 export const $log = (a) => (a <= 0 ? $stop('the log of 0 or less has no answer') : Math.log(a));

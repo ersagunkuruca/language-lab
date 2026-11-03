@@ -25,6 +25,9 @@ import type { Id } from "../../ters/src/model.ts";
 import { compile } from "../src/compile.ts";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitWasm, fromText, instantiate } from "../src/wasm.ts";
+import { build, skip as noC } from "./c-harness.ts";
+import { loadCoreJs, lowerCore } from "../src/core-js.ts";
+import { Stopped } from "../src/core-rt.ts";
 
 // Each definition takes two Float64s and shows its answer.
 const CASES: [string, (k: Lang, a: Id, b: Id) => Id][] = [
@@ -142,7 +145,7 @@ test("a WASI program stops with the evaluator's reason and exit code", async () 
 // SPEC §3.3 (Ersagun 2026-11-03, L218): an overflow stops the program only
 // when its value is used. `big` overflows and nothing reads it, so every
 // engine answers 5; showing it, comparing it, or dividing by it uses it.
-test("an overflow nothing uses never stops: the evaluator, compiled JavaScript and WebAssembly answer 5", async () => {
+test("an overflow nothing uses never stops: every engine answers 5", async () => {
   const k = new Lang();
   const cases: [string, (big: Id) => Id][] = [
     ["unused", () => k.lit(5)],
@@ -150,6 +153,8 @@ test("an overflow nothing uses never stops: the evaluator, compiled JavaScript a
     ["compared", (big) => k.if(k.call(S.less, big, k.lit(0)), k.lit(1), k.lit(2))],
     ["divided by", (big) => k.call(B.div, k.lit(1), big)],
     ["carried then shown", (big) => k.call(S.show, k.call(B.mul, k.call(B.add, big, big), k.lit(2)))],
+    // Handed to the host as the answer: a use there too (C156).
+    ["returned", (big) => big],
   ];
   const defs = cases.map(([name, f]): [string, Id] => {
     const d = k.def(name);
@@ -161,7 +166,7 @@ test("an overflow nothing uses never stops: the evaluator, compiled JavaScript a
   const r = makeRunner(code, info, { print: () => {}, names });
   const evaluated = defs.map(([, d]) => said(() => { for (const v of r.call(r.value(d), 1e10)) return v; }));
   const OVER = "stops: the answer is too big for a Float64 (overflow)";
-  assert.deepEqual(evaluated, ["5", OVER, OVER, OVER, OVER]);
+  assert.deepEqual(evaluated, ["5", OVER, OVER, OVER, OVER, OVER]);
   const path = join(mkdtempSync(join(tmpdir(), "unused-")), "unused.js");
   writeFileSync(path, compile(code, info, names, { runtime: pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href, exports: defs.map(([n]) => n) }));
   const js = (await import(pathToFileURL(path).href)).defs as Record<string, (x: number) => unknown>;
@@ -170,4 +175,12 @@ test("an overflow nothing uses never stops: the evaluator, compiled JavaScript a
   const w = (await instantiate(emitWasm(lowered))) as unknown as Record<string, (x: number) => unknown>;
   const wasm = defs.map(([, d]) => { const f = lowered.funcs.find((g) => g.def === d)!; return said(() => { let v = w[f.name](1e10); if (f.partial) { const [x, st] = v as [unknown, number]; if (st !== 0) return undefined; v = x; } return f.result === "text" ? fromText(w as never, v) : v; }); });
   assert.deepEqual(wasm, evaluated);
+  // The core IR's JavaScript (C137c).
+  const core = lowerCore(code, info, names, defs.map(([, d]) => d)), fs = loadCoreJs(core);
+  assert.deepEqual(defs.map(([, d]) => said(() => { try { return fs[core.funcs.findIndex((g) => g.def === d && !g.inner)](1e10); } catch (e) { if (e instanceof Stopped) throw new Aborted(e.message); throw e; } })), evaluated);
+  // C (C156): a value handed back to the host is a use there too.
+  if (!noC) {
+    const got = build(lowered)(defs.map(([, d]) => [lowered.funcs.findIndex((g) => g.def === d), [1e10]]));
+    assert.deepEqual(got.map(({ value: v }) => (v === undefined ? "undefined" : typeof v === "object" && v && "aborted" in v ? `stops: ${(v as { aborted: string }).aborted}` : String(v))), evaluated);
+  }
 });
