@@ -33,7 +33,7 @@ import { CHOICE, DIVERGE, NUMBER, STRING, WORLD, showIn, type Type } from "../te
 import { implementationKey } from "../ters/src/lang/infer.ts";
 import { renderBlocks } from "../ters/src/lang/render.ts";
 import { definedAs, fromList, META, needsHandling, OutOfSteps, showValue, toList, withSteps, type Data, type Value, type World } from "../ters/src/lang/run.ts";
-import type { CompileAsk, CompileSays, RunAsk, Profile, RunSays, Stuck } from "./runWorker.ts";
+import type { CompileAsk, CompileSays, Compiled, RunAsk, Profile, RunSays, Stuck } from "./runWorker.ts";
 import { searchBackwards, type BackAsk, type Found } from "./backSearch.ts";
 import { hostSkeleton } from "../ters/src/lang/hosts.ts";
 import { trace, type Trace } from "../ters/src/lang/trace.ts";
@@ -153,7 +153,7 @@ interface UI {
   newKind: "function" | "value" | "type" | "effect" | "interface";
   query: string;
   refused: boolean;
-  output: { def: Id; lines: string[]; error?: string; running?: boolean; stuck?: Stuck; profile?: Profile } | null;
+  output: { def: Id; lines: string[]; error?: string; running?: boolean; stuck?: Stuck; profile?: Profile; compiled?: boolean } | null;
   // The graph's right-click menu: what it was for, where (screen, world).
   // `blocks`: opened from the Blocks pane, so the graph's layout items
   // (tidy, pick, fit) aren't offered.
@@ -3541,6 +3541,7 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
       if (ui.output.error) box.append(h("p", { class: "status-line bad" }, ui.output.error));
       if (ui.output.stuck) box.append(stuckView(ui.output.stuck));
       if (ui.output.profile) box.append(profileView(namer, ui.output.profile));
+      if (ui.output.compiled) box.append(h("p", { class: "hint", title: "main compiled to JavaScript, as Open in a tab and lab compile do: the same output, much faster than the evaluator, but with no record of where the run went" }, "Ran compiled."));
     }
   } else if (z?.t === "fn" && z.eff.effs.some((e) => WORLD.includes(e))) {
     // Run backwards is a search, and a search would touch the world once
@@ -3951,6 +3952,8 @@ function profileView(namer: Namer, profile: Profile): HTMLElement {
       h("tr", {}, h("th", {}, "definition"), h("th", {}, "calls"), h("th", { title: "About how much of the run's time was spent in it, itself (not in what it calls), sampled" }, "time")),
       ...rows.map((p) => h("tr", {}, h("td", {}, pick(p.def, namer.name(p.def))), h("td", {}, p.calls.toLocaleString("en")), h("td", {}, total ? `${share(p.ms)} · ${p.ms} ms` : "")))));
 }
+// main as compiled by its last run, and the code it was compiled from.
+let compiledFor: { code: Code; def: Id; args?: string[]; compiled: Compiled } | null = null;
 function runTyped() {
   stopRun();
   const def = ui.def, title = titleOf(doc), prefix = `lab:${title}:`;
@@ -3961,7 +3964,8 @@ function runTyped() {
   const given = runGiven();
   if (given) for (const [name, text] of Object.entries(given.files)) if (!files.some(([k]) => k === prefix + name)) files.push([prefix + name, text]);
   const w = (running = newWorker());
-  const ask: RunAsk = { code: prog(), names: pres().names, pins: heldPins?.all ?? doc.signatures ?? NO_PINS, def, title, files, args: given?.args };
+  const code = prog(), same = compiledFor && compiledFor.code === code && compiledFor.def === def && JSON.stringify(compiledFor.args) === JSON.stringify(given?.args);
+  const ask: RunAsk = { code, names: pres().names, pins: heldPins?.all ?? doc.signatures ?? NO_PINS, def, title, files, args: given?.args, ...(same ? { compiled: compiledFor!.compiled } : {}) };
   ui.output = { def, lines: [], running: true };
   w.onmessage = (e: MessageEvent<RunSays>) => {
     if (running !== w || !ui.output) return;
@@ -3969,7 +3973,9 @@ function runTyped() {
     if ("lines" in m) { ui.output = { ...ui.output, lines: [...ui.output.lines, ...m.lines] }; render(); return; }
     try { for (const [k, v] of m.files) localStorage.setItem(k, v); } catch { /* no storage */ }
     const lines = "done" in m && m.shown !== "unit" ? [...ui.output.lines, `→ ${m.shown}`] : ui.output.lines;
-    ui.output = { def, lines, error: "error" in m ? m.error : undefined, running: false, ...(m.stuck ? { stuck: m.stuck } : {}), ...(m.profile?.length ? { profile: m.profile } : {}) };
+    ui.output = { def, lines, error: "error" in m ? m.error : undefined, running: false, ...(m.stuck ? { stuck: m.stuck } : {}), ...("profile" in m && m.profile?.length ? { profile: m.profile } : {}), ...(m.compiled ? { compiled: true } : {}) };
+    // The compiled main is kept for the next run of this same code (E238).
+    compiledFor = m.compiled ? { code: ask.code, def, args: ask.args, compiled: m.compiled } : null;
     running = null;
     w.terminate();
     render();
