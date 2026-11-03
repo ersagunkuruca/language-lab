@@ -177,6 +177,17 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
           // A recursive helper of the program's own, and a function
           // given to one with what's in scope closed over (C121).
           () => (recursive.length ? call(r.pick(recursive), sub("L"), sub("I")) : sub("I")),
+          // Functions as values in a list (C125): each closes over its
+          // item and what's in scope, then all are applied and summed, or
+          // the first one found by a fold.
+          () => {
+            const fs = call(lib("map"), sub("L"), k.fn([fresh()], (v) => k.fn([fresh()], (w) => gen("I", { ...s, I: [...s.I, v, w] }, depth - 1))));
+            if (r.next() < 0.5) return call(lib("sum"), call(lib("map"), fs, k.fn([fresh()], (f) => k.call(f, sub("I")))));
+            return k.call(k.fold(fs, [
+              { variant: NIL, names: [], body: () => k.fn([fresh()], (z) => z) },
+              { variant: CONS, names: [fresh(), fresh()], results: [null, fresh()], body: ([f], [, g]) => k.fn([fresh()], (z) => k.call(g!, k.call(f, z))) },
+            ]), sub("I"));
+          },
           () => (higher.length ? call(r.pick(higher), k.fn([fresh()], (v) => gen("I", { ...s, I: [...s.I, v] }, depth - 1)), sub("I")) : sub("I")),
         ])();
       }
