@@ -60,5 +60,5 @@ test("the examples whose main lowers to the core IR say the same in JavaScript p
     ran.push(name);
   }
   console.log(`ran ${ran.join(", ")}\nnot lowered:\n  ${refused.join("\n  ")}`);
-  assert.ok(ran.length >= 11, `ran ${ran.join(", ")}`);
+  assert.ok(ran.length >= 12, `ran ${ran.join(", ")}`);
 });
