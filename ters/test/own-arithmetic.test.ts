@@ -16,7 +16,7 @@ import { infer } from "../src/lang/infer.ts";
 import { makeRunner, type Value } from "../src/lang/run.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
-import { ARITH, ARITHMETIC_V, INT_OPS, ORDERED_V, S, SHOW_ANY } from "../src/lang/std.ts";
+import { ARITH, ARITHMETIC_V, INT_OPS, ORDERED_V, S, SHOW_ANY, SHOWN_V } from "../src/lang/std.ts";
 import { B } from "../src/prelude.ts";
 import { INT, NUMBER } from "../src/lang/types.ts";
 import { subtree, type Id } from "../src/model.ts";
@@ -81,4 +81,19 @@ test("a type with no + or < of its own is told so where it is used", () => {
   const d = p.code.defs.find((x) => p.names[x] === "versions added")!;
   const inside = new Set(subtree(p.code, d));
   assert.match(p.info.errors.filter((e) => inside.has(e.id)).map((e) => e.message).join("; "), /Version isn't a Number .*and has no \+ − · of its own: give it one, a definition of type Arithmetic Version/);
+});
+
+test("a type's own show through Shown: show any shows a version as 1.9 (L205)", () => {
+  const p = program((k, V) => {
+    const text = k.def("version text");
+    k.define(text, k.fn(["v"], (v) => k.match(v, [{ variant: V.v.version, names: ["m", "n"], body: ([m, n]) => k.text(k.call(INT_OPS.show, m), k.lit("."), k.call(INT_OPS.show, n)) }])));
+    const d = k.def("shown at version");
+    k.define(d, k.call(SHOWN_V, k.x(text)));
+  });
+  assert.deepEqual(p.info.errors.map((e) => e.message), []);
+  const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });
+  const at = (n: string) => p.code.defs.find((d) => p.names[d] === n)!;
+  // The quaternion, with no Shown, shows as before.
+  assert.equal(r.value(at("the older")), "1.9");
+  assert.equal(r.value(at("a sum")), "quaternion(5, 5, 5, 5)");
 });

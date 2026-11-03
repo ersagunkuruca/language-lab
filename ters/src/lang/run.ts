@@ -30,7 +30,7 @@ import { oneAnswer } from "./modes.ts";
 import { computedForward } from "./directions.ts";
 import { discharge } from "./ledger.ts";
 import * as Alg from "./algebraic.ts";
-import { floatText, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, COMPLEX_V, FIXED_V, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, CASE_NAME, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std.ts";
+import { floatText, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, COMPLEX_V, FIXED_V, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, SHOWN, CASE_NAME, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std.ts";
 import { intLit } from "./int.ts";
 import { JETS } from "./jets.ts";
 import { answerFromHost, effectOfOperation, hostedEffects, type Hosts } from "./hosts.ts";
@@ -406,6 +406,20 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   const cells = rt.cells ?? new Cells(equal);
   // The one result of a pure function (the parts builtins take only those).
   const only = (f: Fn, ...xs: Value[]): Value => { for (const v of f(...xs)) return v; throw new Error("a pure function gave no value"); };
+  // A value of a type with a Shown implementation (std.ts SHOWN, L205)
+  // shows through it: the implementation's `show`, run here.
+  const showns = new Map<Id, Id>();
+  for (const [key, d] of info.implementations ?? []) {
+    const m = key.startsWith(`${SHOWN}|`) ? /"t":"con","id":"([^"]+)"/.exec(key.slice(SHOWN.length + 1)) : null;
+    if (m) showns.set(m[1], d);
+  }
+  const shownBy = showns.size ? (v: Data): string | undefined => {
+    const d = showns.get(info.owner.get(v.tag) ?? "");
+    if (!d) return undefined;
+    const show = (refValue(d, null) as Data).fields[0] as Fn;
+    for (const t of show(v)) return t as string;
+    return undefined;
+  } : undefined;
   const builtins: Record<Id, Fn> = {};
   let cmpOrder: Map<Id, number> | undefined;
   // Float64 is the finite floats with one zero (FLOAT-VALUES-2026-11-01.md,
@@ -457,7 +471,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       if (!path) throw new Error("path needs a field, a path of fields, or (t) ↦ t");
       return one(pathValue(path.map((f) => ({ field: fieldIndex(code, f) }))));
     },
-    [SHOW_ANY]: (v) => one(showValue(v, code, rt.names ?? stdNames, true)),
+    [SHOW_ANY]: (v) => one(showValue(v, code, rt.names ?? stdNames, true, shownBy)),
     [CASE_NAME]: (v) => one(caseName(v, rt.names ?? stdNames)),
     [SET]: (get, record, value) => {
       const m = (get as unknown as Record<symbol, { lambda?: Id; prim?: Id }>)[META];
@@ -1152,25 +1166,30 @@ function fixedText(steps: bigint): string {
 // `asNumber` shows a Fixed or an Extended as the number it stands for:
 // what `show` gives, the Run panel and a wire's value (L153). Without it a
 // value shows as the constructor it is built from.
-export function showValue(v: Value, code: Code, names: Names, asNumber = false): string {
+// `shown`, given, shows a value of a type with a Shown implementation
+// (L205) through it; without it (the editor's chips, relate.ts) the
+// prelude's number types show the same way by their tags below.
+export function showValue(v: Value, code: Code, names: Names, asNumber = false, shown?: (v: Data) => string | undefined): string {
+  const go = (x: Value) => showValue(x, code, names, asNumber, shown);
+  if (shown && typeof v === "object" && v !== null && typeof v !== "function" && "tag" in v) { const t = shown(v); if (t !== undefined) return t; }
   if (typeof v === "bigint") return String(v);
   if (typeof v === "number") return v - v === 0 ? floatText(v) : overflowed();
   if (typeof v === "string") return JSON.stringify(v);
   if (typeof v === "function") return nodeOf(v) ? "<cell>" : "<function>";
-  if (v.tag === ARRAY_TAG) return `array [${v.fields.slice(1).map((x) => showValue(x, code, names, asNumber)).join(", ")}]`;
-  if (v.tag === CONS || v.tag === NIL) return `[${fromList(v).map((x) => showValue(x, code, names, asNumber)).join(", ")}]`;
+  if (v.tag === ARRAY_TAG) return `array [${v.fields.slice(1).map((x) => go(x)).join(", ")}]`;
+  if (v.tag === CONS || v.tag === NIL) return `[${fromList(v).map((x) => go(x)).join(", ")}]`;
   // Float64 types show as numbers, as `show fraction` and `show complex` do.
-  if (v.tag === RATIO) { const [top, bottom] = v.fields.map((x) => showValue(x, code, names, asNumber)); return bottom === "1" ? top : `${top}/${bottom}`; }
+  if (v.tag === RATIO) { const [top, bottom] = v.fields.map((x) => go(x)); return bottom === "1" ? top : `${top}/${bottom}`; }
   if (v.tag === ALGEBRAIC_V) return Alg.show(algebraicOf(v));
-  if (v.tag === COMPLEX_V) { const [re, im] = v.fields as number[]; return `${showValue(re, code, names, asNumber)} ${im < 0 ? "−" : "+"} ${showValue(Math.abs(im), code, names, asNumber)}i`; }
+  if (v.tag === COMPLEX_V) { const [re, im] = v.fields as number[]; return `${go(re)} ${im < 0 ? "−" : "+"} ${go(Math.abs(im))}i`; }
   if (asNumber && v.tag === FIXED_V && (typeof v.fields[0] === "number" || typeof v.fields[0] === "bigint")) return fixedText(BigInt(v.fields[0]));
   // An Extended number reads as the number, or −∞ and +∞ (L125d).
-  if (asNumber && v.tag === EXTENDED_V.finite) return showValue(v.fields[0], code, names, asNumber);
+  if (asNumber && v.tag === EXTENDED_V.finite) return go(v.fields[0]);
   if (asNumber && (v.tag === EXTENDED_V.minus || v.tag === EXTENDED_V.plus)) return v.tag === EXTENDED_V.minus ? "−∞" : "+∞";
   // A tuple reads as its type does, (1, "a") for an (Int, Text) (L143).
-  if (TUPLE_TAG.test(v.tag)) return `(${v.fields.map((x) => showValue(x, code, names, asNumber)).join(", ")})`;
+  if (TUPLE_TAG.test(v.tag)) return `(${v.fields.map((x) => go(x)).join(", ")})`;
   const name = names[v.tag] ?? v.tag;
-  return v.fields.length ? `${name}(${v.fields.map((x) => showValue(x, code, names, asNumber)).join(", ")})` : name;
+  return v.fields.length ? `${name}(${v.fields.map((x) => go(x)).join(", ")})` : name;
 }
 const TUPLE_TAG = /^std\.tuple[2-8]\.tuple$/;
 // The name of the case a value was made by (std.ts CASE_NAME): "" for a

@@ -1245,6 +1245,16 @@ export const PIPE = typedef(PIPE_ID, "Pipe", ["a", "e"], [
   ["sent", [["item", ([a]) => tref(a)], ["more", ([a, e], self) => tfun([], tref(self, tref(a), node({ id: `${PIPE_ID}.e.arg`, kind: "tref", target: e, args: [] })), [e])]]],
 ]);
 export const PIPE_OPS = { send: "std.send.send", receive: "std.receive.receive", finished: "std.pipe.finished", sent: "std.pipe.sent" } as const;
+// How a value of a type shows as text, as an interface (BACKLOG L205,
+// MATHEMATICS-AS-LIBRARIES-2026-11-03.md): `show any` shows a value of a
+// type with an implementation through it, so a type of your own shows its
+// own way, `shown at quaternion = shown(show quaternion)`. The prelude's
+// number types are implementations, not names run.ts knows. After the
+// pipe, so ids above don't move.
+export const SHOWN = typedef("std.shown", "Shown", ["a"], [
+  ["shown", [["show", ([a]) => tfun([tref(a)], tref(STRING), [])]]],
+], false, true);
+export const SHOWN_V = "std.shown.shown";
 export function tupleType(n: number): Id { return `std.tuple${n}`; }
 export const tupleVariant = (n: number): Id => `std.tuple${n}.tuple`;
 export const tuplePart = (n: number, i: number): Id => `std.tuple${n}.tuple.${PART_NAMES[i]}`;
@@ -1280,7 +1290,7 @@ export function onTodaysIds<T>(x: T, from = (x as { shape?: unknown } | null)?.s
 }
 export const tupleSize = (id: Id): number | null => { const m = /^std\.tuple(\d)$/.exec(id); return m ? Number(m[1]) : null; };
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, MATRIX, STATE, SEND, RECEIVE, PIPE] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, MATRIX, STATE, SEND, RECEIVE, PIPE, SHOWN] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one
