@@ -25,6 +25,7 @@
 import { givenInOrder } from "../../ters/src/lang/ports.ts";
 import type { Code, Id, NodeOf, Use } from "../../ters/src/model.ts";
 import { useTarget, type Call } from "../../ters/src/model.ts";
+import { bindsOf } from "./uses.ts";
 import { analyzer, determinism, type Exec, type Plan } from "../../ters/src/lang/modes.ts";
 import { CONS, INT_OPS, NIL, S } from "../../ters/src/lang/std.ts";
 import { B } from "../../ters/src/prelude.ts";
@@ -341,7 +342,7 @@ export function modeCompiler(code: Code, names: Record<Id, string>) {
       const ins = order(given), outs = portsOf(lam).filter((p) => !ins.includes(p));
       const gs = given.map((_, i) => `g${i}`);
       const at = (p: string) => gs[given.indexOf(p)];
-      const pick = Object.keys(n.binds).map((k) => (outs.length === 1 ? "r" : `r[${outs.indexOf(portOf(k))}]`));
+      const pick = Object.keys(bindsOf(n)).map((k) => (outs.length === 1 ? "r" : `r[${outs.indexOf(portOf(k))}]`));
       out.push(`// ${names[useTarget(nodes, n)] ?? useTarget(nodes, n)}, run backwards (${d}): its plan written out\nfunction ${name}(${gs.join(", ")}) {\nconst r = ${f}(${ins.map(at).join(", ")});\nreturn r === $no ? [] : [[${pick.join(", ")}]];\n}\n` +
         // At most one answer: its binds (one bind as itself), or $no
         // (GAPS.md P2).
