@@ -14,7 +14,7 @@
 // the same: one printer. A piece with an id stands for that node.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
-import { isUse, useTarget, isCall, fieldPorts, type Call, bindsOf, bodyOf } from "../model.ts";
+import { isUse, useTarget, isCall, fieldPorts, type Call, bindsOf } from "../model.ts";
 import { children, resolveRefs, subtree } from "../model.ts";
 import { givenBy } from "./directions.ts";
 import type { Notation, Presentation } from "../presentation.ts";
@@ -179,6 +179,8 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
   // Does this expression need lines of its own?
   const tall = (id: Id): boolean => {
     const n = node(id);
+    // A use with no body is an expression (L211f): it is tall when a given is.
+    if (isUse(n) && n.body === undefined) return Object.values(n.given).some(tall);
     if (n.kind === "match" || n.kind === "fold" || isUse(n) || isLet(n)) return true;
     if (isCall(n)) return [n.fn, ...n.args].some(tall);
     if (n.kind === "lambda") return tall(n.body);
@@ -247,6 +249,13 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
         return { p: [part("lam", [pn("("), ...commas(params.map((b) => [b])), pn(")"), ...named, pn(" => "), ...body], id)], prec: 0 };
       }
       case "call": {
+        // A use with no body (L211f) reads as a call naming its given
+        // ports, a predicate's out = true left out: polar(length = 2, angle = 0).
+        if (isUse(n) && n.body === undefined) {
+          const t = useTarget(code.nodes, n), outTrue = (e: Id) => { const g = node(e); return g?.kind === "ref" && g.target === TRUE; };
+          const given = Object.entries(n.given).filter(([k, e]) => !(k === "out" && outTrue(e)));
+          return atom(part("use", [part("ref fn", [nameOf(t)], t), pn("("), ...commas(given.map(([k, e]) => [pn(`${k === "out" ? "result" : portLabel(code, names, t, k)} = `), ...inline(e).p])), pn(")")], id));
+        }
         if (isUse(n)) return atom(part("use", ["‹use›"], id));
         const items = listItems(id);
         if (items) return atom(part("call", [pn("["), ...commas(items.map((i) => inline(i).p)), pn("]")], id));
@@ -439,7 +448,7 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
       }
       return hold([ln(...lead, kw(`${handles ? "handle" : n.kind} `), ...inline(n.scrutinee).p), grp(arms)]);
     }
-    if (isUse(n)) {
+    if (isUse(n) && n.body !== undefined) {
       // A use of a definition with results, in the direction it declares
       // (RESULTS.md): length, angle = polar(x, y), the results side by side.
       const f = node(useTarget(code.nodes, n));
@@ -456,7 +465,7 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
           const bound = order.map((r) => bindsOf(n)[r]);
           const args = declared ? ins.map((p) => inline(n.given[p]).p) : ports.filter((p) => p in n.given).map((p) => [pn(`${portLabel(code, names, useTarget(code.nodes, n), p)} = `), ...inline(n.given[p]).p]);
           enter(bound);
-          const out = hold([ln(...lead, ...commas(bound.map((b) => [bind(b)])), pn(" = "), part("ref fn", [nameOf(useTarget(code.nodes, n))], useTarget(code.nodes, n)), pn("("), ...commas(args), pn(")")), grp(block(bodyOf(n), []))]);
+          const out = hold([ln(...lead, ...commas(bound.map((b) => [bind(b)])), pn(" = "), part("ref fn", [nameOf(useTarget(code.nodes, n))], useTarget(code.nodes, n)), pn("("), ...commas(args), pn(")")), grp(block(n.body!, []))]);
           leave(bound);
           return out;
         }
@@ -469,7 +478,7 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
           const bound = Object.values(bindsOf(n));
           enter(bound);
           const outs = fr.map((i) => (String(i) in bindsOf(n) ? [bind(bindsOf(n)[String(i)])] : [pn("_")]));
-          const out = hold([ln(...lead, ...commas(outs), pn(" = "), part("ref fn", [nameOf(useTarget(code.nodes, n))], useTarget(code.nodes, n)), pn("("), ...commas(ins.map((i) => inline(n.given[String(i)]).p)), pn(")")), grp(block(bodyOf(n), []))]);
+          const out = hold([ln(...lead, ...commas(outs), pn(" = "), part("ref fn", [nameOf(useTarget(code.nodes, n))], useTarget(code.nodes, n)), pn("("), ...commas(ins.map((i) => inline(n.given[String(i)]).p)), pn(")")), grp(block(n.body!, []))]);
           leave(bound);
           return out;
         }
@@ -480,7 +489,7 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
       const bound = Object.values(bindsOf(n));
       enter(bound);
       const wanted = commas(Object.entries(bindsOf(n)).map(([k, b]) => (nameOf(b) === label(k) ? [bind(b)] : [pn(`${label(k)} as `), bind(b)])));
-      const out = hold([ln(...lead, kw("solve "), part("ref fn", [nameOf(useTarget(code.nodes, n))], useTarget(code.nodes, n)), pn("("), ...givenArgs, pn(")"), kw(" for "), ...wanted), grp(block(bodyOf(n), []))]);
+      const out = hold([ln(...lead, kw("solve "), part("ref fn", [nameOf(useTarget(code.nodes, n))], useTarget(code.nodes, n)), pn("("), ...givenArgs, pn(")"), kw(" for "), ...wanted), grp(block(n.body!, []))]);
       leave(bound);
       return out;
     }
