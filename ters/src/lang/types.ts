@@ -351,8 +351,22 @@ export class Subst {
   }
   freshRow(effs: Id[] = []): Row { return { effs, tail: this.next++ }; }
 
+  // Path compression (L220, as in union-find, Tarjan 1975): every variable
+  // walked is pointed at the end of its chain, so a long chain (a written
+  // list of ten thousand items) is walked once, not once per use. It means
+  // the same, since a substitution never deletes; in a trial the write
+  // lands in the trial's own layer (OverMap), so the base is untouched.
   resolve(t: Type): Type {
+    if (t.t !== "var" || !this.types.has(t.v)) return t;
+    const start = t;
     while (t.t === "var" && this.types.has(t.v)) t = this.types.get(t.v)!;
+    let v: Type = start;
+    while (v.t === "var" && v !== t) {
+      const next = this.types.get(v.v);
+      if (!next || next === t) break;
+      this.types.set(v.v, t);
+      v = next;
+    }
     return t;
   }
 
