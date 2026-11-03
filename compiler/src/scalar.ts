@@ -55,7 +55,7 @@ import type { Code, Id, NodeOf } from "../../ters/src/model.ts";
 import { dependencies, subtree, isCall, type Call, isUse } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
-import { ARRAY, TABLE, HASH_SET, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, STRING, type Row, type Type } from "../../ters/src/lang/types.ts";
+import { ARRAY, TABLE, HASH_SET, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, STRING, Subst, type Row, type Type } from "../../ters/src/lang/types.ts";
 import { ABORT, ABORT_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, HASH_SET_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, ORDER_V, PAIR_V, RATIO, S, SET, SHOW_ANY, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
 import { liftLets } from "../../ters/src/lang/lift-lets.ts";
 import { inlineLists } from "./inline-lets.ts";
@@ -66,6 +66,7 @@ import { stageProgram } from "../../ters/src/lang/stage.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { discharge } from "../../ters/src/lang/ledger.ts";
 import { scalarOp, TARGETS } from "./builtins.ts";
+import { SIGS, STD_IMPL, STD_MANY } from "../../ters/src/lang/std.ts";
 import { runtime } from "./wasm-rt.ts";
 
 // A shader (or a ray marcher's loop) may call what might not finish only
@@ -166,7 +167,7 @@ export function fails(e: SExpr, funcs: SFunc[]): boolean {
     case "fail": case "abort": return true;
     case "world": return e.aborts || e.args.some((a) => fails(a, funcs));
     case "call": return !!funcs[e.fn]?.partial || e.args.some((a) => fails(a, funcs));
-    case "rt": return !!runtime(e.fn).partial || e.args.some((a) => fails(a, funcs));
+    case "rt": return !!(e.host ? e.host.partial : runtime(e.fn).partial) || e.args.some((a) => fails(a, funcs));
     case "apply": return !!e.t.partial || kids(e).some((a) => fails(a, funcs));
     // An abort goes on through first and budgets, so their bodies count.
     case "attempt": case "budget": return kids(e).some((a) => fails(a, funcs));
@@ -251,7 +252,7 @@ export type SExpr =
   | { k: "int"; v: bigint }
   | { k: "text"; v: string }
   // A function of the runtime (wasm-rt.ts) by name.
-  | { k: "rt"; fn: string; args: SExpr[] }
+  | { k: "rt"; fn: string; args: SExpr[]; host?: { t: LType; partial: boolean } }
   | { k: "bool"; v: boolean }
   | { k: "local"; i: number }
   | { k: "op"; op: Op; args: SExpr[] }
@@ -382,7 +383,7 @@ export function reachedFrom(code: Code, roots: Id[]): Code {
 // 0 and the like set it, the code goes on with zeros, and the `first`
 // looks at it when its search ends. Shaders have no side effects, so going
 // on computes nothing anyone sees.
-export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean } = {}): CoreIR {
+export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean } = {}): CoreIR {
   // The generic + resolved to each type's own operation first
   // (ters/src/lang/arith.ts): nothing here sees a generic one.
   ({ code, info, names } = resolveArithmetic(code, info, names));
@@ -958,6 +959,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           if (!r || !isRecord(r)) throw new Refused(`takes ${nm(target)} of something that isn't a record of Float64s and Bools`);
           return { k: "get", rec: expr(n.args[0], env, f, false), t: r, i: fieldIndex(code, target) };
         }
+        if (opts.host && (STD_IMPL[target] || STD_MANY[target])) return host(n, target, id, env, f);
         const why = TARGETS[target]?.scalar;
         throw new Refused(`uses ${nm(target)}, which isn't in the scalar profile${why && typeof why === "object" && "no" in why ? `: it ${why.no}` : ""}`);
       }
@@ -1052,6 +1054,31 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       case "hole": throw new Refused("has a hole");
       default: throw new Refused(`has a ${n.kind}`);
     }
+  }
+
+  // A builtin with no lowering of its own, for JavaScript from the core IR
+  // only (C137c7, `host`): the evaluator's own, called by its id, as the
+  // values are the evaluator's. Not one with effects past Choice and
+  // Diverge (the evaluator's runtime would be needed), nor one taking or
+  // giving a Bool inside data (a Bool is a boolean only at the top).
+  function host(n: Call, target: Id, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
+    const sig = SIGS[target]?.(new Subst());
+    const effs = sig?.t === "fn" ? info.subst.resolveRow(sig.eff).effs : [];
+    const bad = effs.find((e) => e !== CHOICE && e !== DIVERGE);
+    if (bad) throw new Refused(`uses ${nm(target)}, which has ${nm(bad)} and isn't lowered yet`);
+    const ts = [...n.args, id].map((a) => stype(zonk(a)));
+    ts.forEach((t, i) => { if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk([...n.args, id][i]))}`); });
+    if (ts.some((t) => typeof t === "object" && boolInside(t!))) throw new Refused(`uses ${nm(target)} on data holding a Bool, which isn't lowered yet`);
+    const t = ts[ts.length - 1]!;
+    return { k: "rt", fn: `host:${target}${t === "i32" ? ":bool" : ""}`, args: n.args.map((a) => expr(a, env, f, false)), host: { t, partial: effs.includes(CHOICE) || !!STD_MANY[target] } };
+  }
+  function boolInside(t: LType, seen = new Set<LType>()): boolean {
+    if (t === "i32") return true;
+    if (typeof t !== "object" || seen.has(t)) return false;
+    seen.add(t);
+    if (isRecord(t)) return t.fields.some((x) => boolInside(x.t, seen));
+    if (isData(t)) return t.cases.some((c) => c.fields.some((x) => boolInside(x.t, seen)));
+    return false;
   }
 
   // equal on values of type t, by the evaluator's rule (run.ts equal).
@@ -1657,6 +1684,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       case "let": return typeIn(e.body, g);
       case "set": return typeIn(e.then, g);
       case "rt": {
+        if (e.host) return e.host.t;
         const r = runtime(e.fn).result;
         if (r === "int" && !opts.data) return "int32";
         if (r === "i32" || r === "int" || r === "f64" || r === "text") return r;

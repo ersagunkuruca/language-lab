@@ -18,7 +18,7 @@
 // the evaluator's (C137c2), Random seeded is random.ts's generator, and
 // the world is the evaluator's Runtime (C137c3, runCoreMain).
 
-import { ARRAY_OPS, HASH_SET_OPS, NONE, S, SOME, STD_IMPL, STD_MANY, TABLE_OPS, TRUE } from "../../ters/src/lang/std.ts";
+import { ARRAY_OPS, FALSE, HASH_SET_OPS, NONE, S, SOME, STD_IMPL, STD_MANY, TABLE_OPS, TRUE } from "../../ters/src/lang/std.ts";
 import { toList, type Runtime, type World } from "../../ters/src/lang/run.ts";
 import * as I from "../../ters/src/lang/int.ts";
 import * as T from "../../ters/src/lang/text.ts";
@@ -96,6 +96,7 @@ function randFns(r: Uint32Array): Record<string, (...xs: never[]) => unknown> {
   };
 }
 function rtFn(name: string, tables?: TableSpec[], rand?: Record<string, (...xs: never[]) => unknown>): (...xs: unknown[]) => unknown {
+  if (name.startsWith("host:")) return hostFn(name);
   const tm = TABLE.exec(name);
   if (tm && tables) return tableFn(tm[1], tables[Number(tm[2])]);
   if (rand?.[name]) return rand[name] as (...xs: unknown[]) => unknown;
@@ -110,6 +111,19 @@ function rtFn(name: string, tables?: TableSpec[], rand?: Record<string, (...xs: 
   const conv = base === "array.get" ? (xs: unknown[]) => [xs[0], I.norm(BigInt(xs[1] as number))] : (xs: unknown[]) => xs;
   if (one) return (...xs) => out(one(...conv(xs)));
   return (...xs) => { const r = many!(...conv(xs)); if (!r.length) throw FAIL; return out(r[0]); };
+}
+
+// A builtin the core IR has no lowering for (C137c7, scalar.ts host):
+// the evaluator's own, by its id, a Bool given turned to the evaluator's
+// and one given back (`:bool`) turned back; no answer is FAIL.
+function hostFn(name: string): (...xs: unknown[]) => unknown {
+  const [, id, bool] = name.split(":");
+  const one = STD_IMPL[id], many = STD_MANY[id];
+  const inn = (x: unknown) => (typeof x === "boolean" ? { tag: x ? TRUE : FALSE, fields: [] } : x);
+  const out = bool ? (v: unknown) => (v as { tag: Id }).tag === TRUE : (v: unknown) => v;
+  if (one) return (...xs) => out(one(...xs.map(inn)));
+  if (many) return (...xs) => { const r = many(...xs.map(inn)); if (!r.length) throw FAIL; return out(r[0]); };
+  return () => { throw new Unsupported(name); };
 }
 
 export const RUNTIME = {
