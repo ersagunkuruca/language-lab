@@ -22,6 +22,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
+import { availableParallelism } from "node:os";
 
 const top = resolve(import.meta.dirname, "../..");
 const git = (...args: string[]) => execFileSync("git", args, { cwd: top, encoding: "utf8" }).trim();
@@ -95,7 +96,9 @@ const runs: { what: string; cwd: string; cmd: string[] }[] = [];
 for (const p of PACKAGES) {
   const mine = chosen.filter((t) => t.startsWith(p + "/")).map((t) => relative(p, t));
   // Node runs (cores - 1) files at a time, one on a two-core runner.
-  if (mine.length) runs.push({ what: `${p}: ${mine.length} of ${tests.filter((t) => t.startsWith(p + "/")).length} test files`, cwd: p, cmd: ["node", "--test", "--test-concurrency=2", "--test-reporter=dot", ...mine] });
+  // As many test files at once as the machine has cores (it was 2, half
+  // of a 4-core container's).
+  if (mine.length) runs.push({ what: `${p}: ${mine.length} of ${tests.filter((t) => t.startsWith(p + "/")).length} test files`, cwd: p, cmd: ["node", "--test", `--test-concurrency=${availableParallelism()}`, "--test-reporter=dot", ...mine] });
 }
 if (page && browser) {
   runs.push({ what: "build the pages", cwd: "ters", cmd: ["node", "../editor/build.ts"] });
