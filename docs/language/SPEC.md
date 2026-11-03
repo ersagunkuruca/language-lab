@@ -102,7 +102,10 @@ order their type lists them, then fields left to right. On Float64,
 `equal` is exact, like `compare` and map keys: two Float64s are equal
 only when they are the same Float64 (Ersagun's decision, 2026-11-03).
 The solver keeps its own tolerance when it checks an answer it found
-(L197).
+(L197), and the prelude's `near(a, b)` (within 1e-9, relative) is how a
+program says "the same up to rounding". A relation over Float64s checked
+forward shows the rounding: `polar(0, 2, 2, π/2)` is false, since
+2·cos(π/2) is 1.2e-16 (Ersagun's choice, 2026-11-03).
 
 ## 3. Numbers
 

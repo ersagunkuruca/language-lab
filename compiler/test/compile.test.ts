@@ -729,7 +729,8 @@ test("a generic function used at one type only compares as that type (GAPS.md G1
   assert.match(body("same"), /x === y/);
   assert.match(body("either"), /\$eq\(/);
   assert.equal(defs.texts().tag, FALSE);
-  assert.equal(defs.numbers().tag, TRUE);
+  // 0.1 + 0.2 isn't 0.3 exactly, and equal is exact (L197).
+  assert.equal(defs.numbers().tag, FALSE);
 });
 
 test("a self tail call compiles to a loop: a million steps, and each step's closures keep their own values", async () => {
@@ -1042,7 +1043,7 @@ test("a fold over a range named by a let first is a counted loop too, and a rang
 // generic function never changes the answer. REVIEW-2026-10-26.md §1.2: an
 // Int past 2^28 is a BigInt, so a Float64 that happens to be whole keeps its
 // tolerance: 1e12 and 1e12 + 1 as Float64s are equal, as Ints they aren't.
-test("equal compares Ints exactly and Float64s to float precision, at every type", async () => {
+test("equal compares Ints and Float64s exactly, at every type (L197)", async () => {
   const k = new Lang();
   const same = k.def("same"), main = k.def("main");
   k.define(same, k.fn(["a", "b"], (a, b) => k.equal(a, b)));
@@ -1058,7 +1059,7 @@ test("equal compares Ints exactly and Float64s to float precision, at every type
   const { defs, code, info } = await compiledDefs(k, ["main"], "equal.js");
   const want: string[] = [];
   runMain(code, info, main, { print: (s) => want.push(s), names: { ...baseNames(), ...k.names } });
-  assert.deepEqual(want, ["[false, false, false, false, true, true, true, true, true, true, true]"]);
+  assert.deepEqual(want, ["[false, false, false, false, true, true, false, false, false, false, false]"]);
   assert.deepEqual(printed(() => defs.main(), $setPrint), want);
 });
 

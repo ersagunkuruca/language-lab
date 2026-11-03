@@ -125,7 +125,8 @@ couldn't see", and fuel as "recursion with a budget".
   and the palette only offers the right one, but a reader of the blocks can't
   see which `+` it is.
 - `equal` on numbers was approximate (1e-9) until L197 (2026-11-03): it is
-  exact now, and only the solver takes two near numbers for one.
+  exact now; `near(a, b)` (the prelude) says "the same up to rounding",
+  and the solver takes two near numbers for one.
 - The docs overlap: LANGUAGE, BACKWARDS, NUMBERS, COMPILER, REVIEW and this
   tutorial each restate parts of the model and the error table. LANGUAGE.md
   should be the reference, the rest should link to it.

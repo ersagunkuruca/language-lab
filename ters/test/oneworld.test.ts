@@ -45,7 +45,9 @@ test("a network is a predicate: its type is Bool and main prints what it says", 
     "landing times(29.62, 5) = 2 -3.019367992",
     "rotate (1, 0) by a quarter turn = (0, 1)",
     "what lands on (0, 2) after a quarter turn = (2, 0)",
-    "polar(0, 2, 2, π/2) = true",
+    // 2·cos(π/2) is 1.2e-16, not 0: equal is exact (L197, Ersagun's
+    // choice of 2026-11-03), so checked forward the rounding shows.
+    "polar(0, 2, 2, π/2) = false",
     "for some y, angle: polar(1, y, 2, angle) = true",
     "for some y, angle: polar(3, y, 2, angle) = false",
   ]);
