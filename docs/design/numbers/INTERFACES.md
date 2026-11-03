@@ -96,6 +96,14 @@ The checker and arith.ts grow from what `+` already does:
    (interface, type) to definition, built once per check. Two entries for
    one pair is an error that names both. A program can't quietly change
    what `sin` means at a type the library already covers.
+   An implementation may also have type parameters (L219): `arithmetic at
+   duo : Arithmetic (Duo a)` covers a duo of any a that has a `+` of its
+   own, as Haskell's instance contexts (Wadler and Blott 1989). Its type
+   must be the interface at a type constructor over distinct variables, one
+   per constructor (`Duo a`, not `Duo Int` beside `Duo a`). A type with no
+   closed entry is matched against it by unification, so what the
+   implementation's fields need of `a` is asked of the item type in turn:
+   a duo of Texts is "Text has no Arithmetic".
 3. **Resolving** (arith.ts). Generic definitions are copied per type, as
    now. A use of a field at a type becomes the implementation's argument
    for that field. When the implementation is a constructor call whose

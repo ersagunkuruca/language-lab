@@ -1277,10 +1277,26 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   function implementations() {
     const table = info.implementations!;
     let ways: Ways | undefined;
+    // An implementation with type parameters (L219), `Arithmetic (Tensor
+    // a)` for any Number a: found for a type by matching its arguments,
+    // with whatever its scheme asks of them asked of the type's own
+    // (Haskell's instance contexts; Wadler and Blott, POPL 1989).
+    const generic: { def: Id; iface: Id; con: Id; scheme: Scheme }[] = [];
     for (const d of valueDefs) {
       const sc = info.schemes.get(d);
       const t = sc && s.zonk(sc.type);
-      if (!t || t.t !== "con" || !typedefOf(t.id)?.interface || freeVars(t, s).vars.size) continue;
+      if (!t || t.t !== "con" || !typedefOf(t.id)?.interface) continue;
+      if (freeVars(t, s).vars.size) {
+        const at = s.resolve(t.args[0] ?? { t: "var", v: -1 });
+        // Only a type constructor over distinct variables (Haskell 98's rule), so a type matches one at most.
+        const vs = at.t === "con" ? at.args.map((a) => s.resolve(a)) : [];
+        if (at.t === "con" && vs.every((v) => v.t === "var") && new Set(vs.map((v) => (v as { v: number }).v)).size === vs.length) {
+          const other = generic.find((g) => g.iface === t.id && g.con === at.id);
+          if (other) err(d, `${nm(other.def)} and ${nm(d)} are both ${show(t)}: a type has one implementation of an interface, so keep one`);
+          else generic.push({ def: d, iface: t.id, con: at.id, scheme: sc! });
+        }
+        continue;
+      }
       const body = code.nodes[(code.nodes[d] as NodeOf<"def">).body!];
       const fn = isCall(body) ? code.nodes[body.fn] : null;
       if (fn?.kind !== "ref" || fn.target !== typedefOf(t.id)!.variants[0]) { err(d, `${nm(d)} is an implementation of ${nm(t.id)}, so it is written as the record itself: ${nm(typedefOf(t.id)!.variants[0])}(…) with each operation`); continue; }
@@ -1302,6 +1318,18 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     for (const w of s.wanted) {
       const t = s.zonk(w.t);
       if (table.has(implementationKey(w.iface, t))) continue;
+      // A generic one: its interface's type, instantiated, is this one;
+      // what it asks of its variables is now asked of t's arguments (new
+      // wanted entries, checked by this same loop). Kept under t's own key,
+      // so arith.ts and the compilers find it as they find any.
+      const g = t.t === "con" ? generic.find((x) => x.iface === w.iface && x.con === t.id) : undefined;
+      if (g) {
+        const was = s.site;
+        s.site = w.at;
+        try { s.unify(instantiate(g.scheme, s, w.at), { t: "con", id: g.iface, args: [t] }); table.set(implementationKey(w.iface, t), g.def); continue; }
+        catch (e) { if (!(e instanceof TypeError || e instanceof ArithError || e instanceof NumbersError)) throw e; }
+        finally { s.site = was; }
+      }
       const of = show({ t: "con", id: w.iface, args: [t] });
       // + − · and < say what a Number is first, as they always have.
       if (w.iface === "std.arithmetic" || w.iface === "std.ordered") {

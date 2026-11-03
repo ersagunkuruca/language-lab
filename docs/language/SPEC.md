@@ -199,7 +199,10 @@ whether to lift this; *open*, S9).
 
 4.6. **Interfaces** (`+`, `<`, `Division`, …) are resolved by the checker
 to one implementation per use before anything runs. Which implementation
-a use gets is decided by types alone.
+a use gets is decided by types alone. An implementation may have type
+parameters (`Arithmetic (Duo a)`); a type with no implementation of its
+own is matched against those by unification, and what they need of their
+parameters is asked in turn (L219).
 
 ## 5. Evaluation, and Choice
 
