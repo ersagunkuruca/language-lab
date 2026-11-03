@@ -23,7 +23,7 @@
 // keep working, and the meaning hash is of the program as written.
 
 import type { Code, Id, Node, NodeData, NodeOf, Use } from "../model.ts";
-import { isUse, useTarget, isCall, fieldPorts, type Call } from "../model.ts";
+import { isUse, useTarget, isCall, fieldPorts, type Call, bindsOf, bodyOf } from "../model.ts";
 import { resultsAsFunctions, usesResultsAsFunction } from "./results-fn.ts";
 import { freshId } from "../model.ts";
 import type { Names } from "../presentation.ts";
@@ -239,8 +239,8 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
         if (isUse(n)) {
           c.fn = kid(n.fn);
           c.given = Object.fromEntries(Object.entries(n.given).map(([k, v]) => [k, kid(v)]));
-          c.binds = Object.fromEntries(Object.entries(n.binds).map(([k, v]) => [k, kid(v)]));
-          c.body = kid(n.body);
+          c.binds = Object.fromEntries(Object.entries(bindsOf(n)).map(([k, v]) => [k, kid(v)]));
+          c.body = kid(bodyOf(n));
           break;
         }
         c.fn = kid(n.fn); c.args = n.args.map(kid); break;
@@ -336,13 +336,13 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
       // the field's direction is a call of it, its results taken apart.
       // let r = f(inputs) in (results ↦ body)(r.first, r.second, …)
       const k = fp1.outs.length;
-      const outT: Type[] = fp1.outs.map((o) => { const b = n.binds[String(o)]; return (b ? typeOf.get(b) : undefined) ?? num; });
+      const outT: Type[] = fp1.outs.map((o) => { const b = bindsOf(n)[String(o)]; return (b ? typeOf.get(b) : undefined) ?? num; });
       const resT: Type = k === 1 ? outT[0] : { t: "con", id: `std.tuple${k}`, args: outT };
-      const bodyT = typeOf.get(n.body) ?? num;
+      const bodyT = typeOf.get(bodyOf(n)) ?? num;
       const ins = fp1.ins.map((i) => n.given[String(i)]);
       const call = add({ kind: "call", fn: add({ kind: "ref", target }, { t: "fn", params: ins.map((g) => typeOf.get(g) ?? num), ret: resT, eff: pure }), args: ins }, resT);
-      const binders = fp1.outs.map((o, i) => n.binds[String(o)] ?? add({ kind: "binder" }, outT[i]));
-      const inner = add({ kind: "lambda", params: binders, body: n.body }, { t: "fn", params: outT, ret: bodyT, eff: pure });
+      const binders = fp1.outs.map((o, i) => bindsOf(n)[String(o)] ?? add({ kind: "binder" }, outT[i]));
+      const inner = add({ kind: "lambda", params: binders, body: bodyOf(n) }, { t: "fn", params: outT, ret: bodyT, eff: pure });
       if (k === 1) { nodes[id] = { id, kind: "call", fn: inner, args: [call] } as Node; delete nodes[n.fn]; return; }
       const r = add({ kind: "binder" }, resT);
       const parts = fp1.outs.map((_, i) => add({ kind: "call", fn: add({ kind: "ref", target: `std.tuple${k}.tuple.${["first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth"][i]}` }, { t: "fn", params: [resT], ret: outT[i], eff: pure }), args: [add({ kind: "ref", target: r }, resT)] }, outT[i]));
@@ -362,7 +362,7 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
       return i >= 0 && ins[i] ? ins[i] : o >= 0 && outs[o] ? outs[o] : lam.params[Number(k)];
     };
     const re = (r: Record<string, Id>) => Object.fromEntries(Object.entries(r).map(([k, v]) => [key(k), v]));
-    nodes[id] = { ...n, given: re(n.given), binds: re(n.binds) };
+    nodes[id] = { ...n, given: re(n.given), binds: re(bindsOf(n)) };
     nodes[n.fn] = { id: n.fn, kind: "ref", target };
   };
 
@@ -381,7 +381,7 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
     if (from?.kind !== "lambda" || to?.kind !== "lambda") return;
     const key = (k: string) => (k === "out" ? k : to.params[from.params.indexOf(k)] ?? k);
     const re = (r: Record<string, Id>) => Object.fromEntries(Object.entries(r).map(([k, v]) => [key(k), v]));
-    nodes[id] = { ...n, given: re(n.given), binds: re(n.binds) };
+    nodes[id] = { ...n, given: re(n.given), binds: re(bindsOf(n)) };
     nodes[n.fn] = { id: n.fn, kind: "ref", target };
   };
 
@@ -418,7 +418,7 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
       const kids: Id[] = [];
       switch (n.kind) {
         case "call":
-          if (isUse(n)) { kids.push(...Object.values(n.given), n.body); break; }
+          if (isUse(n)) { kids.push(...Object.values(n.given), bodyOf(n)); break; }
           kids.push(n.fn, ...n.args); break;
         case "lambda": kids.push(n.body); break;
         case "def": if (n.body) kids.push(n.body); break;

@@ -17,7 +17,7 @@
 
 import { bordered } from "./border.ts";
 import { givenInOrder } from "./ports.ts";
-import { dependencies, subtree, type Code, type Id, type NodeOf, type Use, useTarget, isCall, type Call, isUse } from "../model.ts";
+import { dependencies, subtree, type Code, type Id, type NodeOf, type Use, useTarget, isCall, type Call, isUse, bindsOf, bodyOf } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { impl } from "../prelude.ts";
 import type { Info } from "./infer.ts";
@@ -101,7 +101,7 @@ export function* solveAnswers(code: Code, n: Use, known: Record<string, unknown>
   const p = planSolve(code, n);
   if (p.mode === "relational") {
     for (const sol of relate(code, useTarget(code.nodes, n), known, opts)) {
-      const bound = Object.keys(n.binds).map((k) => toValue(sol.values[k]));
+      const bound = Object.keys(bindsOf(n)).map((k) => toValue(sol.values[k]));
       if (bound.some((v) => v === undefined)) continue; // not pinned down: not an answer
       yield bound as Value[];
     }
@@ -111,8 +111,8 @@ export function* solveAnswers(code: Code, n: Use, known: Record<string, unknown>
   const values = Object.fromEntries(p.known.map((k) => [k, known[k] as number]));
   for (const sol of solutions(p.rel!, values)) {
     // A port the equations leave free has no value: not a solution.
-    if (Object.keys(n.binds).some((k) => sol[k] === null || sol[k] === undefined)) continue;
-    yield Object.keys(n.binds).map((k) => sol[k]!);
+    if (Object.keys(bindsOf(n)).some((k) => sol[k] === null || sol[k] === undefined)) continue;
+    yield Object.keys(bindsOf(n)).map((k) => sol[k]!);
   }
 }
 
@@ -943,7 +943,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         if (r.done) throw new Error(`solving ${rt.names?.[useTarget(code.nodes, n)] ?? useTarget(code.nodes, n)} this way gives exactly one answer, and it gave none`);
         answers = [r.value];
       }
-      this.from(answers, (bound) => this.eval(n.body, bind(env, Object.values(n.binds), bound as Value[])));
+      this.from(answers, (bound) => this.eval(bodyOf(n), bind(env, Object.values(bindsOf(n)), bound as Value[])));
     }
   }
 

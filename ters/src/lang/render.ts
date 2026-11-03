@@ -14,7 +14,7 @@
 // the same: one printer. A piece with an id stands for that node.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
-import { isUse, useTarget, isCall, fieldPorts, type Call } from "../model.ts";
+import { isUse, useTarget, isCall, fieldPorts, type Call, bindsOf, bodyOf } from "../model.ts";
 import { children, resolveRefs, subtree } from "../model.ts";
 import { givenBy } from "./directions.ts";
 import type { Notation, Presentation } from "../presentation.ts";
@@ -447,16 +447,16 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
       if (f?.kind === "def" && f.results && lam?.kind === "lambda") {
         const results = f.results, ins = lam.params.filter((p) => !results.includes(p));
         const outTrue = node(n.given.out)?.kind === "ref" && (node(n.given.out) as NodeOf<"ref">).target === TRUE;
-        const declared = Object.keys(n.given).length === ins.length + 1 && ins.every((p) => p in n.given) && Object.keys(n.binds).length === results.length && results.every((r) => r in n.binds);
+        const declared = Object.keys(n.given).length === ins.length + 1 && ins.every((p) => p in n.given) && Object.keys(bindsOf(n)).length === results.length && results.every((r) => r in bindsOf(n));
         // Another direction names what it's given, and its results are
         // the ports it binds, in the definition's order.
-        const ports = lam.params, other = Object.keys(n.given).every((k) => k === "out" || ports.includes(k)) && Object.keys(n.binds).every((k) => ports.includes(k));
+        const ports = lam.params, other = Object.keys(n.given).every((k) => k === "out" || ports.includes(k)) && Object.keys(bindsOf(n)).every((k) => ports.includes(k));
         if (outTrue && (declared || other)) {
-          const order = declared ? results : ports.filter((p) => p in n.binds);
-          const bound = order.map((r) => n.binds[r]);
+          const order = declared ? results : ports.filter((p) => p in bindsOf(n));
+          const bound = order.map((r) => bindsOf(n)[r]);
           const args = declared ? ins.map((p) => inline(n.given[p]).p) : ports.filter((p) => p in n.given).map((p) => [pn(`${portLabel(code, names, useTarget(code.nodes, n), p)} = `), ...inline(n.given[p]).p]);
           enter(bound);
-          const out = hold([ln(...lead, ...commas(bound.map((b) => [bind(b)])), pn(" = "), part("ref fn", [nameOf(useTarget(code.nodes, n))], useTarget(code.nodes, n)), pn("("), ...commas(args), pn(")")), grp(block(n.body, []))]);
+          const out = hold([ln(...lead, ...commas(bound.map((b) => [bind(b)])), pn(" = "), part("ref fn", [nameOf(useTarget(code.nodes, n))], useTarget(code.nodes, n)), pn("("), ...commas(args), pn(")")), grp(block(bodyOf(n), []))]);
           leave(bound);
           return out;
         }
@@ -465,11 +465,11 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
       // declares: x, y = polar(r, t), a result nobody reads as _.
       if (f?.kind === "field" && fieldPorts(code.nodes, f)) {
         const fr = fieldPorts(code.nodes, f)!.outs, ins = Object.keys(n.given).filter((k) => k !== "out").map(Number).sort((a, b) => a - b);
-        if (ins.every((i) => !fr.includes(i)) && Object.keys(n.binds).every((k) => fr.includes(Number(k)))) {
-          const bound = Object.values(n.binds);
+        if (ins.every((i) => !fr.includes(i)) && Object.keys(bindsOf(n)).every((k) => fr.includes(Number(k)))) {
+          const bound = Object.values(bindsOf(n));
           enter(bound);
-          const outs = fr.map((i) => (String(i) in n.binds ? [bind(n.binds[String(i)])] : [pn("_")]));
-          const out = hold([ln(...lead, ...commas(outs), pn(" = "), part("ref fn", [nameOf(useTarget(code.nodes, n))], useTarget(code.nodes, n)), pn("("), ...commas(ins.map((i) => inline(n.given[String(i)]).p)), pn(")")), grp(block(n.body, []))]);
+          const outs = fr.map((i) => (String(i) in bindsOf(n) ? [bind(bindsOf(n)[String(i)])] : [pn("_")]));
+          const out = hold([ln(...lead, ...commas(outs), pn(" = "), part("ref fn", [nameOf(useTarget(code.nodes, n))], useTarget(code.nodes, n)), pn("("), ...commas(ins.map((i) => inline(n.given[String(i)]).p)), pn(")")), grp(block(bodyOf(n), []))]);
           leave(bound);
           return out;
         }
@@ -477,10 +477,10 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
       // solve polar(x = …, y = …) for length, angle as r, θ
       const label = (k: string) => (k === "out" ? "result" : portLabel(code, names, useTarget(code.nodes, n), k));
       const givenArgs = commas(Object.entries(n.given).map(([k, e]) => [pn(`${label(k)} = `), ...inline(e).p]));
-      const bound = Object.values(n.binds);
+      const bound = Object.values(bindsOf(n));
       enter(bound);
-      const wanted = commas(Object.entries(n.binds).map(([k, b]) => (nameOf(b) === label(k) ? [bind(b)] : [pn(`${label(k)} as `), bind(b)])));
-      const out = hold([ln(...lead, kw("solve "), part("ref fn", [nameOf(useTarget(code.nodes, n))], useTarget(code.nodes, n)), pn("("), ...givenArgs, pn(")"), kw(" for "), ...wanted), grp(block(n.body, []))]);
+      const wanted = commas(Object.entries(bindsOf(n)).map(([k, b]) => (nameOf(b) === label(k) ? [bind(b)] : [pn(`${label(k)} as `), bind(b)])));
+      const out = hold([ln(...lead, kw("solve "), part("ref fn", [nameOf(useTarget(code.nodes, n))], useTarget(code.nodes, n)), pn("("), ...givenArgs, pn(")"), kw(" for "), ...wanted), grp(block(bodyOf(n), []))]);
       leave(bound);
       return out;
     }

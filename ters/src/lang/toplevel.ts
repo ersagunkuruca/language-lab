@@ -13,7 +13,7 @@
 // any other edit.
 
 import type { Code, Id, Node, NodeData, NodeOf, Use } from "../model.ts";
-import { isUse, useTarget, isCall, type Call } from "../model.ts";
+import { isUse, useTarget, isCall, type Call, bindsOf } from "../model.ts";
 import { children, collect, freshId, ownerOfTypeParts, parentAt, parentOf, replace, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 
@@ -67,7 +67,7 @@ function scopesWith(code: Code, def: Id, binder: Id): Id[] {
     if (!x) return;
     const fresh = x.kind === "lambda" ? x.params
       : x.kind === "arm" ? [...x.binds, ...x.results.filter((r): r is Id => r !== null)]
-      : isUse(x) ? Object.values(x.binds)
+      : isUse(x) ? Object.values(bindsOf(x))
       : x.kind === "typedef" ? x.params : [];
     const inner = fresh.length ? [...scope, ...fresh] : scope;
     if (inner.includes(binder)) inner.forEach((b) => out.add(b));
@@ -263,7 +263,7 @@ export function removeParameter(code: Code, names: Names, def: Id, param: Id, le
   const calls = callsOf(code, def);
   for (const c of calls) nodes[c.id] = { ...c, args: c.args.filter((_, j) => j !== i) };
   for (const sv of solvesOf(code, def)) {
-    if (param in sv.binds) return { ok: false, reason: `${nameOf(names, param)} is what a solve of ${nameOf(names, def)} works out; remove that solve first` };
+    if (param in bindsOf(sv)) return { ok: false, reason: `${nameOf(names, param)} is what a solve of ${nameOf(names, def)} works out; remove that solve first` };
     const { [param]: _, ...given } = sv.given;
     nodes[sv.id] = { ...sv, given };
   }

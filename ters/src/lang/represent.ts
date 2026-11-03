@@ -14,7 +14,7 @@
 // meaning: tests check every implementation against the definition it
 // replaces, through `meaning`.
 
-import { children, dependencies, freshId, subtree, type Code, type Id, type Node, type NodeData, type NodeOf, isCall, type Call, isUse } from "../model.ts";
+import { children, dependencies, freshId, subtree, type Code, type Id, type Node, type NodeData, type NodeOf, isCall, type Call, isUse, bindsOf, bodyOf } from "../model.ts";
 import type { Info } from "./infer.ts";
 import { CONS, COST, INT_OPS, JOBS, LIST, REPRESENTATION_V, S, TEXT_OPS, writtenItems } from "./std.ts";
 import { NUMBER } from "./types.ts";
@@ -390,8 +390,8 @@ export function represent(code: Code, entries: Id[], rep: Representation, keep: 
         if (isUse(n)) {
           c.fn = kid(n.fn);
           c.given = Object.fromEntries(Object.entries(n.given).map(([k, v]) => [k, kid(v)]));
-          c.binds = Object.fromEntries(Object.entries(n.binds).map(([k, v]) => [k, kid(v)]));
-          c.body = kid(n.body);
+          c.binds = Object.fromEntries(Object.entries(bindsOf(n)).map(([k, v]) => [k, kid(v)]));
+          c.body = kid(bodyOf(n));
           break;
         }
         c.fn = kid(n.fn); c.args = n.args.map(kid); break;
@@ -475,7 +475,7 @@ export function represent(code: Code, entries: Id[], rep: Representation, keep: 
 function childrenOf(n: Node): Id[] {
   switch (n.kind) {
     case "call":
-      if (isUse(n)) return [...Object.values(n.given), n.body];
+      if (isUse(n)) return [...Object.values(n.given), bodyOf(n)];
       return [n.fn, ...n.args];
     case "lambda": return [n.body];
     case "def": return n.body ? [n.body] : [];
