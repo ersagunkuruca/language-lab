@@ -48,6 +48,8 @@ const OWN: Record<string, (...xs: never[]) => unknown> = {
   "text.quoted": (t: string) => JSON.stringify(t),
   "int.exact": (a: I.Int, b: I.Int) => I.norm(big(a) / big(b)),
   "int.gcd": (a: I.Int, b: I.Int) => { let x = big(a) < 0n ? -big(a) : big(a), y = big(b) < 0n ? -big(b) : big(b); while (y) [x, y] = [y, x % y]; return I.norm(x); },
+  // run.ts's, which the evaluator has outside std.ts.
+  "number.range": (n: number) => Array.from({ length: Math.max(0, n) }, (_, i) => i).reduceRight<unknown[]>((tail, x) => [1, x, tail], [0]),
   "text.size": (t: string) => Buffer.byteLength(t, "utf8"),
   "text.bytes": (t: string, a: number, b: number) => Buffer.from(t, "utf8").subarray(a, b).toString("utf8"),
   // Where the character that ends at byte i (> 0) starts.
