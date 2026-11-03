@@ -27,7 +27,7 @@ https://ersagunkuruca.github.io/language-lab/.
 
 The examples ship with it, in the *Programs* list on the left. This
 tutorial uses *Numbers & physics*, *Insertion sort*, *Eight queens*,
-*Calculus*, *Run backwards*, *Relations in programs* and the two shaders.
+*Calculus*, *Run backwards*, *Relations in programs* and *Shader: ray marching*.
 *+ New program* starts an empty one of your own.
 
 ![The editor: programs on the left, the graph in the middle with the text
@@ -51,8 +51,9 @@ and between three ways of writing arithmetic. It also has *Undo* and
 *Redo*. Drag the gutters between panes to resize them.
 
 Colour means something in only a few places. Blue is what's selected, and
-values. Purple is dots. Amber is holes and refusals. Everything else is
-grey.
+values. Purple is dots, the places where a value branches out (3.3).
+Amber is holes, the parts not filled in yet (3.5), and edits the editor
+refuses. Everything else is grey.
 
 Most of the pictures below are the editor itself, embedded in the page.
 The read-only ones can't be changed, but you can click and hover in them.
@@ -112,7 +113,7 @@ changes once it's made.
 That's why a program can be drawn. Every value is a node, and every use of
 it is a wire.
 
-?[discriminant, read-only: three inputs, four calls, one result; the blue chips are the values for the example inputs 1, −3, 2](index.html?embed&readonly&program=numbers&def=%CE%94)
+?[discriminant, read-only: three inputs, four calls, one result; the small blue labels show each value when the inputs are 1, −3 and 2](index.html?embed&readonly&program=numbers&def=%CE%94)
 
 ### 2. Functions are values too
 
@@ -125,8 +126,11 @@ on the right.
 
 ### 3. A "let" just names a value so you can use it twice
 
-`column = one of(range(size))` in the queens program doesn't store
-anything anywhere. It means: this value, used in these two places.
+The eight queens program (a classic puzzle: place eight queens on a
+chessboard so that none attacks another) has
+`column = one of(range(size))`, which picks a column for a queen. That
+line doesn't store anything anywhere. It means: this value, used in these
+two places.
 
 In the editor that's a **dot** on a wire, with two wires coming out of it.
 
@@ -165,7 +169,10 @@ queens : (Float64) -[Choice]-> List Float64
 main   : () -[Console]-> Unit
 ```
 
-Read `-[Choice]->` as "an arrow that may give several answers, or none".
+Read `-[Choice]->` as "an arrow that may give several answers, or none",
+and `-[Console]->` as "an arrow that may print or read". `Float64` is an
+ordinary number with a decimal point. `Unit` is the type with just one
+value: what `main` gives back when only what it does matters.
 
 You never write types. The editor works them out, and shows them when you
 hover and in each frame's title.
@@ -176,17 +183,40 @@ That's all the functional programming you need.
 
 ## Part 3: The language
 
+**The words used below**, one word per thing, as the editor's *Guide* tab
+uses them. Each is explained in its own section; this is the list to come
+back to.
+
+| word | what it is |
+|---|---|
+| node | something that works out a value: a call, an if, a match, a fold, a solve (3.2) |
+| wire | carries a value from an output (or dot) to an input (3.2) |
+| chip | the small blue label showing the value on a wire (3.2) |
+| dot | where a value starts and branches: an input of a function, or a let (3.3) |
+| frame | a function not called yet: inputs on the left, result on the right (3.4) |
+| scope | the part of the program where a frame's inputs exist: inside that frame (3.4) |
+| hole | a value not filled in yet, with a type (3.5) |
+| fold | walking a data type case by case, each piece with its answer already worked out (3.8) |
+| effect | something a function does besides give a value: print, fail, give several answers (3.9) |
+| badge | the effects a node has, or the effect it handles (3.9) |
+| `Choice` | the effect "may give several answers, or none" (3.9) |
+| `one of` | gives each item of a list as a separate answer (3.9) |
+| pure | has no effects (3.9) |
+| port | an input or the result of a function, any of which can be given (3.10) |
+| solve | any function run backwards: you give some ports, the solver works out the rest (3.10) |
+| shader | a program that is a picture, drawn by the graphics card (3.13) |
+
 ### 3.1 The program is the tree; names are stickers
 
 There's no source text.
 
 The program is stored as nodes, each with an id, in a file called
-`code.json`. Everything else is kept in separate files: names
-(`names.*.json`), comments (`comments.json`), where things sit on the
-canvas (`layout.json`), and example inputs (`examples.json`).
+`code.json`. Everything else is kept in separate files beside it: names,
+comments, where things sit on the canvas, and example inputs.
 
-The *Files* tab lists them. It also shows the program's **meaning hash**,
-a fingerprint of what the program does.
+The *Files* tab lists them. It also shows the program's **meaning hash**:
+a fingerprint worked out from the nodes alone. It changes when the
+program's code does, and not when you rename, comment or move things.
 
 What this buys you:
 
@@ -209,7 +239,8 @@ the *Files* tab: `code.json` and the meaning hash never change.
 ### 3.2 Nodes and wires
 
 A **node** works out a value. It can be a function call, an `if`, a
-`match`, a `fold` or a `solve`.
+`match` (3.7), a `fold` (3.8) or a `solve` (a function run backwards,
+3.10).
 
 A node's inputs are hollow circles on its left. Its output is the filled
 circle on its right. A **wire** carries a value from an output to an
@@ -236,7 +267,7 @@ shrinks to a dot. Hover over it to see the value.
 - Drag an input's wire into empty space to remove it. The input becomes a
   hole.
 - Drag a node to move it. It stays exactly where you put it, and nothing
-  else moves. Alt-drag moves a dot.
+  else moves. Alt-drag moves a dot (3.3).
 - Shift-click or shift-drag to pick several nodes. Dragging one moves them
   all.
 - *Fit* and *100%* zoom the canvas. It goes on forever in every direction.
@@ -246,18 +277,19 @@ shrinks to a dot. Hover over it to see the value.
 - On a hole: the palette, with a search box.
 - On empty space: *Add a value here*, which makes a new dot holding a hole,
   for you to fill and wire in.
-- On a node: open it, show it inline, put a dot on it, clear it, or
+- On a node: open it, show it inline (draw the function it calls right
+  there, 3.6), put a dot on it, clear it to a hole, or
   *Change the function…*. That keeps a call's inputs and offers every
   function that takes them, so you can turn `·` into `+`.
-- On a dot or port: *Show as let and get nodes* (see 3.3).
+- On a dot, or on an input or result of a definition: *Show as let and
+  get nodes* (see 3.3).
 
 *Tidy everything* lays the whole graph out again, the same way every time.
 Tidying only the picked nodes spaces just those out.
 
 Where wires still cross, one hops over the other, like a bridge. Where a
 wire runs under a node, its hidden stretch shows faintly on top, like a
-tunnel. [NODE-EDITOR.md](../design/editor/NODE-EDITOR.md) has the
-reasons.
+tunnel.
 
 ![Right-clicking column in queens](tutorial/menu.png)
 
@@ -275,8 +307,9 @@ uses it. Two things are dots:
 There's no `let` node in the code. Removing a dot with one wire out puts
 the value back on that wire.
 
-A dot that nothing reads is a step done only for what it does, like each
-`print` in `main`. Those dots are drawn hollow.
+Some steps are there only for what they do, not for a value: each `print`
+in `main` prints, and nothing uses what it gives back. Such a step's dot
+has no wires out, and it's drawn hollow.
 
 Sometimes a dot's wires run far across the graph. Right-click it and pick
 *Show as let and get nodes*. The dot becomes a **let** node where the value
@@ -296,8 +329,9 @@ What it gives back leaves on its right.
 A whole definition is a frame too. Its title shows its name and the type
 the editor worked out, like `queens : (Float64) -[Choice]-> List Float64`.
 
-Frames nest. A node can't leave the frame its inputs come from: if you drag
-it out, the frame grows to keep it inside.
+Frames nest. A frame's inputs exist only inside it (that's its
+**scope**), so a node that uses them can't leave it: if you drag the node
+out, the frame grows to keep it inside.
 
 ### 3.5 Holes: the program is allowed to be unfinished
 
@@ -305,7 +339,7 @@ A **hole**, drawn `□`, is a value not filled in yet. It knows its type.
 
 Select a hole and the inspector lists only the things that fit there:
 
-- values in scope
+- values available there: the inputs and dots of the frames around it
 - calls, which arrive with one hole per input
 - constructors, numbers, text and functions
 - "match …" and "fold …" for each value whose type has cases
@@ -316,7 +350,8 @@ A program with holes still runs, until it reaches one.
 
 1. In the blocks, click the body of the `else` case of the `if`.
 2. Press *Clear to a hole*. The hole needs a `List Float64`.
-3. Look at the palette. It offers `items`, `tail`, `tail′`, `nil`,
+3. Look at the palette. It offers `items`, `tail`, `tail′` (the answer
+   already worked out for `tail`, see 3.8), `nil`,
    `cons(□, □)`, `append(□, □)`, `insert(□, □)`, `sort(□)` and other
    things that make lists. It doesn't offer `x` or `head`, because those
    are numbers.
@@ -333,8 +368,9 @@ palette picks only.
   the whole program as one file: code, names, comments and layout.
 - A program has a **comment**, and so does each definition. Write it in
   the *Program* tab. Say what the program is, and whose code or ideas it
-  builds on. A shader shows its comment above its picture. **Credits** in
-  the top bar comes [here](#credits), to the language's own.
+  builds on. A program that draws a picture (a shader, 3.13) shows its
+  comment above the picture. **Credits** in the top bar opens
+  [the credits](#credits) for the language itself.
 - **+ New definition** makes a function, a value, a data type or an
   effect. For a function, give its inputs. With no inputs, it's an action
   you can run.
@@ -342,24 +378,27 @@ palette picks only.
   type the way it's written: first what it is (Float64, Int, Text, Bool,
   a data type, or the type itself). If that type takes arguments, you
   pick each one the same way. So for a pair of a whole number and text,
-  pick *Tuple2*, then *Int*, then *Text*: `(Int, Text)`.
-- A data type or an effect can take **type parameters**, as `List a` and
-  `State s` do: *Add the type parameter* on the type gives it an `a`
-  (then `b`, …, or the name you type), and a field can then hold an `a`.
-  A field holding the type itself becomes `Stack a` with it. An
-  operation of an effect can have its own, fresh at each call, like
-  `await : Ticket a → a`. Select one to rename it; × removes one no field
-  uses.
+  pick *Tuple2* (a pair, written `(a, b)`), then *Int*, then *Text*:
+  `(Int, Text)`.
+- A data type can take **type parameters**, as `List a` does: a list of
+  anything, where `a` stands for the item's type. *Add the type
+  parameter* on the type gives it an `a` (then `b`, …, or the name you
+  type), and a field can then hold an `a`. If a type `Stack` gets a
+  parameter, a field that holds a `Stack` now holds a `Stack a`. Select a
+  parameter to rename it. × removes it, once no field uses it. Effects
+  (3.9) take type parameters the same way.
 - In a type with only one case, a field is also the function that reads
-  it. The palette offers `pages(□)` for a chapter's page count, and
-  `first(□)` and `second(□)` for a tuple `(a, b)`. A type with several cases is taken
+  it. For a `Chapter` type with one case and a `pages` field, the palette
+  offers `pages(□)`; for a pair `(a, b)`, it offers `first(□)` and
+  `second(□)`. A type with several cases is taken
   apart with a match instead, since the field may not be there.
 - The *Definition* tab renames a definition, adds, reorders and removes
   inputs, and deletes it. A new input gives every call a hole for it, so
   no call is ever missing an argument.
-- *Pin this type*, in the same tab, means edits inside must keep the type.
-- A definition from a published library is read-only. *Copy into my
-  program* gives you your own version to change.
+- *Pin this type*, in the same tab, means edits inside must keep the type
+  (3.13).
+- A definition from a published library (3.13) is read-only. *Copy into
+  my program* gives you your own version to change.
 - **Copy** (Ctrl+C), **cut** (Ctrl+X) and **paste** (Ctrl+V on a hole) move
   whole parts, with their dots and names.
 - **Show inline** draws a call as the body of the function it calls, right
@@ -409,17 +448,20 @@ So a missing case can't be written.
 reads it: `first(p)`.
 
 `set(field, record, value)` gives the record with one field changed. The
-field can be a path: `set((p) ↦ p.home.city, ada, "Paris")`.
+field can be a path: if `ada` is a person record,
+`set((p) => p.home.city, ada, "Paris")` gives a copy of `ada` whose home
+city is Paris. (`(p) => …` is a function written in place.)
 
-There's nothing new behind `set`. It's the field read, run backwards, with
-the rest of the record given.
+There's nothing new behind `set`. It's the field read, run backwards
+(3.10), with the rest of the record given.
 
 **Whole numbers and text.** `Int` is whole numbers, and it never overflows:
-past 2²⁸ it switches to big integers. `Float64` is floating point. The two
-don't mix unless you convert, with `as float64` or `whole part`.
+it grows as big as it needs to. `Float64` is numbers with a decimal point.
+The two don't mix unless you convert, with `as float64` or `whole part`.
 
-Where there's no whole answer, there's no answer. `quotient` by zero
-gives `Choice` (see 3.9), not a crash.
+Where there's no answer, there's no answer, not a crash. `quotient`
+(whole-number division) by zero has none, and so does `sqrt` of a
+negative. The type says so with `Choice` (3.9).
 
 Text has `length`, `slice`, `split`, `join all`, `find` and more. An emoji
 counts as one character.
@@ -443,9 +485,9 @@ the whole program.
 In the graph, a fold has the same shape as a match. The case frames just
 have the extra inputs.
 
-A fold always finishes. It also works on trees whose children are in a
-list, like an HTML document or JSON. There, the folded value of the
-children is the list of their results.
+A fold always finishes. It also works on trees that keep each node's
+children in a list, like an HTML document or JSON. There, each node's case
+gets a list: one result for each of its children.
 
 The eight queens program is a fold over the rows. For each row, it picks a
 column, and keeps it only if it's safe.
@@ -458,12 +500,14 @@ strictly smaller: a piece that a match took apart from it. (This method is
 called size-change termination.)
 
 That covers one input shrinking, inputs that swap places, functions that
-call each other, and Ackermann-style orders.
+call each other, and two inputs where the first shrinks or stays the same
+and the second shrinks when the first doesn't.
 
-Anything else gets the `Diverge` effect in its type, and so does
-everything that calls it. `newton` in *Calculus* has `Diverge`, because
-nothing in it gets smaller. `with fuel(100, …)` turns that into `Choice`:
-it gives up after 100 steps.
+Anything else gets the `Diverge` effect ("might not finish") in its type,
+and so does everything that calls it. `newton` in *Calculus* has
+`Diverge`, because nothing in it gets smaller. `with fuel(100, …)` gives
+it a budget of 100 steps: past that it gives up with no answer, so
+`Diverge` becomes `Choice` (3.9).
 
 **A data type can hold itself**, directly or through other types. Think of
 a list's rest, a tree's branches, an outline item's `children: List Item`,
@@ -472,28 +516,31 @@ or two types that hold each other.
 Two rules keep "smaller" honest:
 
 - A type can't take itself as the input of a function in one of its own
-  fields. Through `knot = wrap(f: knot → Float64)`, a function could call
-  itself without any recursion the checker can see.
+  fields. If it could, a type `knot` with a field `f: knot → Float64`
+  would let a function hand a `knot` to its own `f`, and so call itself
+  without any call the checker can see coming back.
 - Only functions can be recursive. `ones = cons(1, ones)` is refused, so
   all data is finite.
 
-Whether to drop the first rule is an open question (BACKLOG L107).
+Whether to drop the first rule is still an open question.
 
 ### 3.9 Effects
 
 A node that performs an effect carries a **badge**: a small word naming
-the effect. These are the effects:
+the effect. These are the effects. *Removed by* is what handles each
+one, so it no longer shows in the type outside. *Unhandled* means nothing
+in the program handles it and the system running the program answers.
 
 | effect | what it means | made by | removed by |
 |---|---|---|---|
-| `Choice` | may give several answers, or none | `one of(list)`, `fail()`, `value of(optional)`, running a function backwards | `first(action, fallback)`, `all(action)`, `count(action)`, `optional(action)` |
-| `Abort` | stops, with a reason | `abort(reason)`, a missing file | a `match` with an `abort(reason)` case; at the top, the run ends with the reason |
-| `Log` | debugging output | `log(line)` | a `match` with a `log(line)` case; at the top, standard error |
+| `Choice` | may give several answers, or none | `one of(list)`, `fail()`, `value of(optional)` (what's inside a `some`), running a function backwards | `first(action, fallback)`, `all(action)`, `count(action)`, `optional(action)` |
+| `Abort` | stops, with a reason | `abort(reason)`, a missing file | a `match` with an `abort(reason)` case; unhandled, the run ends with the reason |
+| `Log` | debugging output | `log(line)` | a `match` with a `log(line)` case; unhandled, standard error |
 | `Console` | reads and prints | `print(text)`, `read line()` | the runtime |
 | `Files` | reads and writes files | `read file`, `write file`, … | the runtime |
-| `Random` | draws random numbers | `random()` | `seeded(seed, action)`, or a match; at the top, the world's randomness |
-| `Time` | reads the clock | `now()` | a match (a test's fixed clock); at the top, the clock |
-| `Wait` | pauses | `wait(milliseconds)` | a match; at the top, the runtime |
+| `Random` | draws random numbers | `random()` | `seeded(seed, action)`, or a match; unhandled, real random numbers |
+| `Time` | reads the clock | `now()` | a match (a test can answer with a fixed time); unhandled, the clock |
+| `Wait` | pauses | `wait(milliseconds)` | a match; unhandled, the runtime |
 | `Network` | fetches over HTTP | `fetch text(url)` | the runtime |
 | `Diverge` | might not finish | recursion the checker can't see ends | the runtime, or `with fuel(n, action)` |
 | `Cells` | reads cells, makes cells and formulas | `cell(x)`, `formula(action)`, `read(c)` | the runtime (below) |
@@ -507,11 +554,15 @@ languages do with separate features:
   `fail()` if the pick isn't safe. There's no search code. `first` gives
   one board, `count` gives 92, and `all` gives every board.
 - **Absence.** There's no `null`. "Might not have a value" is `Choice` in
-  the type, and something has to handle it before `main`. When you need to
+  the type, and a `first`, `all`, `count` or `optional` inside the
+  program has to handle it, because `main` may not finish with it. When
+  you need to
   *keep* an absent value in a list or a record, use `Optional`: `none` or
   `some(value)`, a case you match on.
-- **Filtering.** `keep(list, test)` is just
-  `all(() => item = one of(list); if test(item) then item else fail())`.
+- **Filtering.** `keep(list, test)` is just `all` of this action: let
+  `item` be `one of(list)` (a name for a value, as in 3.3, not an
+  assignment), then `if test(item) then item else fail()`. Every item that
+  passes is an answer, and `all` collects them.
 - **Several answers from running backwards.** See 3.10.
 
 **Abort is failure with a reason**, and gives only one answer. `read file`
@@ -545,23 +596,26 @@ declare your own effect, use *+ New definition*, then *Effect*.
 
 **Two safety rules:**
 
-- A definition's own value must be pure. Anything that acts is an
-  *action*: a function with no inputs, like the `() =>` frames that
-  handlers take.
-- The world (`Console`, `Files`) can't be touched while a `Choice` is
-  open. Otherwise a search could print something on a path it later
-  abandons. Handle the search first, then act on its result.
+- A definition's own value must be **pure**: working it out has no
+  effects. Anything that acts is an *action*, a function with no inputs,
+  `() => …`, which acts only when it's called. That's why handlers take
+  the computation they handle as a `() =>` frame.
+- The world (`Console`, `Files`) can't be touched during a search, inside
+  a `first`, `all` or the like. Otherwise a search could print something
+  on a path it later abandons. Handle the search first, then act on its
+  result.
 
 Effects combine with no extra machinery. `map` has the type
-`(List a, (a) -[e]-> b) -[e]-> List b`. Whatever effects the function you
-pass in has (`e`), `map` has too. There's no separate `map` for functions
+`(List a, (a) -[e]-> b) -[e]-> List b`. Just as `a` and `b` stand for any
+types, `e` stands for any effects: whatever effects the function you pass
+in has, `map` has too. There's no separate `map` for functions
 with effects.
 
 **Try it.** Open *Eight queens*, then `main`, and press *Run main*. You
 get the first solution for 8, the count (92), and all four solutions for 6.
 
 **Cells: values that change.** One more effect is how a page reacts to
-clicks, the way Solid.js does it:
+clicks, the way the JavaScript library Solid.js does it:
 
 - `count = cell(0)` makes a cell.
 - `read(count)` reads it.
@@ -578,12 +632,11 @@ runs the first time something reads it, and again only after a cell it
 read has changed.
 
 Because a formula runs only when it's read, and only once, data can go on
-forever. A continued fraction whose rest is a formula works out its terms
-as you ask for them.
+forever: a sequence whose rest is a formula makes its next item only when
+something reads it.
 
 Both run live on the
 [Cells page](https://ersagunkuruca.github.io/language-lab/reactive.html).
-LANGUAGE.md, "Cells", has the details.
 
 ### 3.10 Running any function backwards
 
@@ -594,7 +647,7 @@ But you can give it any of its ports, and ask for the others.
 
 The *Run* pane lists the ports of the definition you're looking at, each
 with a tick box. Ticked ports are the ones you give. The others are worked
-out. Which ones are ticked is kept in `layout.json`, not in the code, so
+out. Which ones are ticked is kept with the layout, not in the code, so
 flipping them changes the direction, not the program.
 
 This isn't only for arithmetic. Every node has a backwards reading
@@ -602,8 +655,8 @@ This isn't only for arithmetic. Every node has a backwards reading
 
 - a constructor takes its value apart
 - an `if` becomes a choice between its cases
-- a fold becomes an unfold
-- `join text` tries every way to cut the text
+- a fold (3.8) builds the data back up, a piece at a time
+- joining texts tries every way to cut a text into pieces
 
 Some examples from *Run backwards*:
 
@@ -612,10 +665,11 @@ Some examples from *Run backwards*:
   `"10 20 30"`, it gives `[10, 20, 30]`. Nobody wrote a parser.
 - `greet` builds `"hello, " ++ name`. Run backwards on `"hello, Ada"`, it
   finds `Ada`.
-- `map(square, list) = [4, 9]`, run backwards, gives four lists.
+- `map(square, list) = [4, 9]`, run backwards, gives four lists:
+  `[2, 3]`, `[2, −3]`, `[−2, 3]` and `[−2, −3]`.
 
-Some things only run forwards: `print`, `floor`, and comparisons that
-would have to produce a number. When that happens, the checker or the
+Some things only run forwards: `print`, `floor`, and a comparison asked
+for one of its numbers (`x < 3` being true doesn't say which `x`). When that happens, the checker or the
 search says so instead of guessing.
 
 **A function that says true or false is a set of equations.** `fall` has
@@ -626,15 +680,16 @@ four inputs:
 Each `=` in it is an equation. `and` puts several together. A dot on a
 wire, like `drift` or `drop`, is just a name for part of an equation.
 
-Run it with *holds* ticked and set to `true`. It solves for whichever
+Its result is called *holds*. Run it with *holds* ticked and set to
+`true`. It solves for whichever
 ports you left unticked, keeping the equations true.
 
 Give it `distance` and ask for `time`. Thrown down at 5 m/s, a fall of
 29.62 m takes 2 s. The other root, about −3.02 s, is listed as another
-answer. *The program it derives for this direction* shows the quadratic
-formula the solver worked out.
+answer. In the *Run* pane, *The program it derives for this direction*
+shows the quadratic formula the solver worked out.
 
-Two more words make true-or-false functions as expressive as wiring:
+Two more words help write such true-or-false functions:
 
 - **`for some`** names a value that isn't an input.
   `rotate(x, y, turn, x′, y′)` says: for some `length` and `angle`,
@@ -643,22 +698,24 @@ Two more words make true-or-false functions as expressive as wiring:
   says `x = length · cos(angle)` and `y = length · sin(angle)`, hence
   `x² + y² = length²`. That extra fact gives the solver a way in: from `x`
   and `y`, it finds `length` with a square root, with no search. It
-  doesn't count as an extra condition.
+  can't rule out any answer, because it's already true whenever the
+  first two are.
 
 ?[rotate, read-only: two polars that share a length and an angle, inside for some](index.html?embed&readonly&program=numbers&def=rotate)
 
 **Units are part of the type.** Put `m` on `distance` and `m/s²` on
-`gravity`, and the rest is worked out: `period` comes out in seconds, and
-`drift` and `drop` in metres. To set a unit, select an input or a number;
+`gravity`, and the rest is worked out: `drift` and `drop` come out in
+metres. To set a unit, select an input or a number;
 *Unit* shows chips to pick from.
 
 An edit that would add metres to seconds is refused, like any other type
 error. A plain number has no unit. `9.81 m/s²` carries its unit.
 
-**`=` on numbers allows a tiny difference.** Two numbers are equal when
-they agree to within one part in a billion. So `0.1 + 0.2` equals `0.3`.
-That's what a wire between two quantities should mean, and it's why `fall`
-can be solved and then checked.
+**`=` on numbers is exact.** `0.1 + 0.2 = 0.3` is false, as in most
+languages, because neither side is exactly three tenths. When you mean
+"close enough", use `near(a, b)`. The solver itself allows a tiny
+difference when it checks an answer it found, which is why `fall` can be
+solved.
 
 **Solve nodes** do the same thing inside a program (see *Relations in
 programs*). The ports you give it are its inputs. The ones it solves for
@@ -667,7 +724,7 @@ come out on its right, all from the same solution.
 ?[to polar, read-only: a solve node inside a program](index.html?embed&readonly&program=relations&def=to%20polar)
 
 Its effect depends on the direction. If there's always exactly one answer,
-like the missing number in a sum, it's pure. If there may be several, or
+like the missing number in a sum, it's pure: no effect at all. If there may be several, or
 none, it's `Choice`.
 
 For example, `square` read backwards (`x · x = y`) gives both roots of 9
@@ -696,12 +753,16 @@ differentiation, written in the language itself.
 Where it can't read a slope, as through `floor`, the derivative fails
 there, so its type has `Choice`. When the function is written right where
 `derivative` is applied, and every slope can be read, the checker knows
-the derivative fails only where the function does, and drops the
+the derivative can't fail where the function works, and drops the
 `Choice`.
 
-**That's how the ray marcher gets its normals.** Its points are `Vec`s.
-`shade` asks for `unit(gradient((q) ↦ scene(q, time))(p))`. `gradient` is
-the slope of the scene along x, y and z, with time held still, as one Vec.
+**That's how the ray marcher gets its normals.** *Shader: ray marching*
+draws a 3D scene (3.13), and to shade a point it needs the surface's
+normal, the direction the surface faces there. Its points are `Vec`s,
+3D vectors, and `scene` says how far a point is from the nearest surface.
+`shade` asks for `unit(gradient((q) => scene(q, time))(p))`. `gradient`
+is the slope of the scene along x, y and z, with time held still, as one
+Vec.
 
 There's no derivative code in the program. Change `scene`, and the normals
 follow. For the GPU, the compiler generates the gradient's code before it
@@ -724,7 +785,7 @@ you can reach light up, and the others say why not.
 |---|---|---|
 | syntax | impossible | there is no text |
 | unknown name, typo | impossible | references are ids picked from a list |
-| name clash, shadowing, capture | impossible | binders are ids; equal names get a subscript on screen |
+| two things with one name | impossible | nothing is found by its name; equal names get a subscript on screen |
 | wrong number of arguments | prevented | a call is made with one hole per input; adding an input adds a hole to every call |
 | type mismatch | prevented | holes only offer what fits; edits that add one are refused |
 | unit mismatch | prevented | units are part of `Float64`'s type |
@@ -734,11 +795,11 @@ you can reach light up, and the others say why not.
 | errors without a reason | checked | `Abort` carries one; your own effects carry typed ones |
 | unhandled effect | checked | effects are in types; `main` can't keep `Choice` |
 | side effects on an abandoned search | checked | the world can't be touched while a `Choice` is open |
-| comparing functions | checked | `equal` needs plain data |
+| comparing functions | checked | `equal` works on data (numbers, text, cases), not on functions |
 | non-termination | inferred | it shows up as `Diverge` in the type |
 | unfinished program | allowed | holes have types; it runs until it reaches one |
-| `sqrt` of a negative, `÷ 0` on `Float64` | runtime | `Float64` follows IEEE (NaN, Infinity); `Int` division by zero has no answer |
-| logic errors | not prevented | running backwards gives round-trip laws to test against |
+| `sqrt` of a negative, `÷ 0` | checked | no answer, which is `Choice` in the type; a number too big to hold stops the run |
+| logic errors | not prevented | running a function backwards and then forwards should give back what you started with, which tests can check |
 
 The *Checks* tab lists these live for whatever program is open.
 [LANGUAGE.md](../language/LANGUAGE.md) has the full table, with the test
@@ -761,17 +822,17 @@ is reported at the definition, not at some caller far away.
 
 - **The evaluator**, which *Run* uses. It has no stack limit: summing a
   million numbers by recursion works.
-- **The relational interpreter**, which runs anything backwards.
+- **The solver**, which runs any function backwards: arithmetic it
+  solves directly, anything else by searching for inputs that fit.
 - **The compiler** ([COMPILER.md](../design/targets/COMPILER.md)), which
   turns a program into JavaScript, WebAssembly, C or a GPU shader. Eight
   queens runs about 600× faster compiled, and its search becomes the
   backtracking loop you'd write by hand. Compiled programs are tested to
   print exactly what the evaluator prints.
 
-[RUNNING.md](RUNNING.md) has every way a program runs.
-
-**Some programs are pictures.** If a program has a `colour` of
-`(x, y, time)`, or a `red`, a `green` and a `blue`, it's drawn above *Run*.
+**Some programs are pictures.** If a program has a definition named
+`colour` taking `(x, y, time)`, or definitions named `red`, `green` and
+`blue`, it's drawn above *Run*: a **shader**.
 The compiler turns it into a GPU shader, and the browser draws it every
 frame with WebGPU. Edit any definition it uses, and the picture is drawn
 again.
@@ -781,26 +842,13 @@ to the GPU (because it uses text, say), the picture says why.
 
 **Try it.** Open *Shader: ray marching* and change a number in `sky`.
 
-**Data can be stored differently from how it's written.** A proof of
-concept writes `factorial` on counting numbers built from `zero` and
-`succ`, and runs it on ordinary binary numbers, through a rewrite the
-definition never mentions. It isn't in the editor yet.
+**Data can be stored differently from how it's written.** `factorial`
+can be written on counting numbers built from `zero` and `succ` ("one
+more than"), and still run on ordinary binary numbers: the compiler
+changes how they're stored, and the definition never mentions it. The
+editor doesn't show this yet.
 [NUMBERS.md](../design/numbers/NUMBERS.md) has how, and how much of it is
 built.
-
-### 3.14 The words, in one place
-
-These are the words the editor's *Guide* tab uses, one word per thing:
-
-| word | what it is |
-|---|---|
-| node | something that works out a value: a call, an if, a match, a fold, a solve |
-| wire | carries a value from an output (or dot) to an input |
-| dot | where a value starts and branches: an input of a function, or a let |
-| frame | a function not called yet: inputs on the left, result on the right |
-| hole | a value not filled in yet, with a type |
-| badge | the effects a node has, or the effect it handles |
-| solve | any function run backwards: you give some ports, it works out the rest |
 
 ---
 
@@ -811,10 +859,7 @@ These are the words the editor's *Guide* tab uses, one word per thing:
 - The language reference is [LANGUAGE.md](../language/LANGUAGE.md).
   Running backwards is [BACKWARDS.md](../language/BACKWARDS.md). Numbers
   and how data is stored are in [NUMBERS.md](../design/numbers/NUMBERS.md).
-- What's still confusing is in [CONFUSING.md](../design/CONFUSING.md), and
-  what's next is in [BACKLOG.md](../../BACKLOG.md). Every document is in
-  [the docs index](../README.md).
-- The screenshots are in `docs/learn/tutorial/`, retaken on 2026-10-31.
+- Every document is in [the docs index](../README.md).
 
 ## Credits
 
@@ -826,11 +871,12 @@ language borrows freely:
 - effect handlers from Koka and OCaml 5
 - `Choice` from Verse
 - running functions backwards from Prolog and miniKanren, whose search
-  `relate.ts` adapts
-- fusion from Wadler, and from Gill, Launchbury and Peyton Jones
+  the solver adapts
+- fusion (the compiler merging a chain of list steps into one loop) from
+  Wadler, and from Gill, Launchbury and Peyton Jones
 - continued-fraction arithmetic from Gosper
 - cells from Solid.js
-- reroute dots from Blender
+- reroute dots from Blender's node editor
 
 The *Shader: ray marching* example uses John C. Hart's sphere tracing, and
 Inigo Quilez's torus, smooth minimum and soft shadow formulas. Each
