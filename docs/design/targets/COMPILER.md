@@ -800,6 +800,7 @@ compiler/src/wasm.ts       the core IR as a WebAssembly module (binary and text)
 compiler/src/c.ts          the core IR as C (NATIVE.md)
 compiler/src/wgsl.ts       the core IR's scalar profile as a WGSL shader
 compiler/src/core-js.ts    the core IR as JavaScript (C137c), to replace compile.ts; run by the fuzz test
+compiler/src/core-page.ts  a page from it (`lab build-web --core`): the evaluator's cells and mount, the browser's world
 compiler/src/fixtures.ts   small programs for the tests and the benchmark
 compiler/src/program.ts    load, check and compile an example
 compiler/build.ts          writes compiler/out/*.js

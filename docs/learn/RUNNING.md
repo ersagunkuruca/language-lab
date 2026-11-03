@@ -56,6 +56,7 @@ lab compile examples/wc -o wc.mjs # a JavaScript module that runs main
 lab compile examples/wc --core -o wc.mjs # the same, printed from the core IR as WebAssembly and C are (C137, to replace the first)
 lab native examples/wc -o wc      # a native program through C
 lab build-web examples/dice       # one HTML file running the page
+lab build-web examples/compass --core # the same, printed from the core IR (C137; not every page lowers yet)
 lab build-app examples/dice       # the page as a phone app (PWA + Capacitor)
 lab render examples/pedal in.wav  # play a sound over a WAV file
 ```
