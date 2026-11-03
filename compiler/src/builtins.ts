@@ -80,7 +80,7 @@ export const TARGETS: Record<Id, Target> = {
   [S.mod]: { js: op(([a, b]) => `$mod(${a}, ${b})`), scalar: "mod" },
   [S.less]: { js: test(([a, b]) => `(${fin(a)} < ${fin(b)})`), scalar: "less" },
   [S.and]: { js: test(([a, b]) => `(${a} && ${b})`, true), scalar: "and" },
-  [S.hence]: { js: test(([a, b]) => `(${a} && ${b})`, true), scalar: no("a predicate's `hence` is `and` run forward; not in the profile yet") },
+  [S.hence]: { js: test(([a, b]) => `(${a} && ${b})`, true), scalar: "and" },
   [S.or]: { js: test(([a, b]) => `(${a} || ${b})`, true), scalar: "or" },
   [S.not]: { js: test(([a]) => `!${a}`, true), scalar: "not" },
   [S.equal]: { js: written("equality(): one rule on every type, specialized by type"), scalar: written("the same rule on Float64s, inline") },

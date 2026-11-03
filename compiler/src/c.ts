@@ -6,9 +6,12 @@
 //
 // The numbers are the evaluator's, bit for bit, on any C compiler that
 // keeps IEEE 754's rules: + − × ÷, sqrt and floor are exact in C as in
-// JavaScript, `mod` is fmod twice (as runtime.js's `$mod`), and sin, cos,
-// tan, exp, log, pow and atan2 are V8's fdlibm translated to C (c-math.ts),
-// which is what Node's Math runs. What a compiler may do to that, it must
+// JavaScript, and `mod` is fmod twice (as runtime.js's `$mod`). sin, cos,
+// tan, exp, log, pow and atan2 are the platform's own, libm's, within a few
+// ulp of the evaluator's (SPEC §3.2, Ersagun 2026-11-03, C144); with
+// `math: "fdlibm"` they are V8's fdlibm translated to C (c-math.ts), what
+// Node's Math runs, the same bits, which the agreement tests build with.
+// What a compiler may do to the rest, it must
 // be told not to: contract a·b + c into one fused step (GCC does on
 // aarch64 unless -ffp-contract=off), or keep x87's extra bits on 32-bit
 // x86 (-msse2 -mfpmath=sse). CFLAGS has the flags.
@@ -69,6 +72,8 @@ const LIBM: Partial<Record<Op, string>> = { sqrt: "sqrt", abs: "fabs", floor: "f
 const FDLIBM: Partial<Record<Op, string>> = {
   sin: "lab_fdlibm_sin", cos: "lab_fdlibm_cos", tan: "lab_fdlibm_tan", exp: "lab_fdlibm_exp", log: "lab_fdlibm_log", pow: "lab_fdlibm_pow", atan2: "lab_fdlibm_atan2",
 };
+// The same functions from the platform's libm (C144).
+const PLATFORM: Partial<Record<Op, string>> = { sin: "sin", cos: "cos", tan: "tan", exp: "exp", log: "log", pow: "pow", atan2: "atan2" };
 const PRINTED = new Set<SExpr["k"]>([
   "num", "bool", "local", "let", "if", "op", "call", "make", "get", "budget", "new", "field", "tag", "case",
   "closure", "cap", "apply", "fail", "attempt", "set", "zero", "int", "text", "rt", "abort", "handle", "world",
@@ -161,7 +166,11 @@ interface Target { label: string; keep: Set<number>; pending: number }
 // List Text) if it takes them, on a thread with a big stack (1 GiB of
 // address space, used only as deep as the program goes); its Int or Float64
 // is the exit code, and an Abort's reason goes to standard error, with 1.
-export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string } = {}): CProgram {
+// `math`: where sin, cos, tan, exp, log, pow and atan2 come from: the
+// platform's libm (the default), or V8's fdlibm carried in the program, the
+// same bits as Node's Math (the agreement tests).
+export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string; math?: "platform" | "fdlibm" } = {}): CProgram {
+  const LIBRARY = opts.math === "fdlibm" ? FDLIBM : PLATFORM;
   const { shapes } = lowered;
   // A value that can't be had (a search's k given no answer) is the
   // expression it's in failing, when nothing before it in that
@@ -317,7 +326,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string 
     return `${ty(f.result)} ${lending ? bnames.get(i) : names.get(i)}(${f.params.map((t, j) => `${ty(t)} p${j}`).join(", ") || "void"})`;
   };
   const fuel = kept.some((i) => funcs[i].spends || walk(funcs[i].body).some((e) => e.k === "budget"));
-  const math = kept.some((i) => walk(funcs[i].body).some((e) => e.k === "op" && e.op in FDLIBM));
+  const math = opts.math === "fdlibm" && kept.some((i) => walk(funcs[i].body).some((e) => e.k === "op" && e.op in FDLIBM));
   for (const i of kept) funcs[i].body = readFirst(funcs[i], funcs);
   // Inputs lent, not given (C94, Perceus's borrowed parameters): a record
   // or cell input the body only reads fields of, or lends on in turn, is
@@ -779,7 +788,7 @@ int main(int argc, char **argv) {
           if (e.op === "float32") return `((double)(float)${xs[0]})`;
           if (e.op === "mod") return `lab_mod(${xs.join(", ")})`;
           if (e.op === "stop") return `lab_stop(${xs[0]})`;
-          return `${LIBM[e.op] ?? FDLIBM[e.op]}(${xs.join(", ")})`;
+          return `${LIBM[e.op] ?? LIBRARY[e.op]}(${xs.join(", ")})`;
         }
         default: throw new Error(`${e.k} in C comes with NATIVE.md's stage N4`);
       }

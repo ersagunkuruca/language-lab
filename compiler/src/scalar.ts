@@ -56,7 +56,7 @@ import { dependencies, subtree, isCall, type Call, isUse, useTarget, type Use } 
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { ARRAY, TABLE, HASH_SET, CELL, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, PATH as PATH_T, STRING, Subst, type Row, type Type } from "../../ters/src/lang/types.ts";
-import { ABORT, ABORT_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, HASH_SET_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, NOW_OP, ORDER_V, PAIR_V, RATIO, S, SET, SHOW_ANY, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
+import { ABORT, ABORT_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, HASH_SET_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, NOW_OP, OPTIONAL, ORDER_V, PAIR_V, RATIO, S, SET, SHOW_ANY, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
 import { liftLets } from "../../ters/src/lang/lift-lets.ts";
 import { solvesOnce } from "../../ters/src/lang/run.ts";
 import { inlineLists } from "./inline-lets.ts";
@@ -689,6 +689,10 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     const constant = (!!opts.data || (!!opts.shader && !!t && t.t === "con" && t.id === ARRAY)) && !!t && t.t !== "fn" && !!lam && !["lambda", "typedef", "builtin"].includes(lam.kind);
     if (!constant && (!t || t.t !== "fn" || lam?.kind !== "lambda")) fail("is not a function written in the program");
     const ft = (constant ? { t: "fn", params: [], ret: t, eff: null } : t) as Extract<Type, { t: "fn" }>;
+    // A relation whose type is one of its readings (L130: polar read from
+    // x and y to its length and angle) has fewer inputs in its type than its
+    // lambda has ports: its body would read ports that aren't there (C146).
+    if (!constant && lam?.kind === "lambda" && lam.params.length !== ft.params.length) fail(`is a relation whose type is one reading of it (${ft.params.length} of its ${lam.params.length} ports in), not lowered yet`);
     // An input that can be anything is one the body never looks at (∂f/∂x
     // of a function that has an input the slope doesn't depend on, say).
     // It's taken as a Float64, and calls must pass one.
@@ -2140,7 +2144,19 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     underBudget = true;
     let inside: SExpr;
     try { inside = expr(body, env, f, false); } finally { underBudget = outer; }
-    return { k: "budget", n: v, body: inside, otherwise: alone ? { k: "fail" } : expr(otherwise!, env, f, false), t, save, res };
+    if (alone || !opts.data) return { k: "budget", n: v, body: inside, otherwise: alone ? { k: "fail" } : expr(otherwise!, env, f, false), t, save, res };
+    // With `data`: the body's first answer, if it has one, is optional's,
+    // so a body with no answer gives `otherwise` as running out does (as in
+    // the evaluator, where first sees no answer either way), and a body with
+    // several answers is a search like any other's (C137c14). `otherwise`
+    // runs after the budget, outside it, as there.
+    const ot = stype({ t: "con", id: OPTIONAL, args: [zonk(id)] });
+    if (!ot || !isData(ot)) throw new Refused(`has a budget whose value is ${OTHER}`);
+    const some = ot.cases.findIndex((c) => c.variant === SOME), none = ot.cases.findIndex((c) => c.variant === NONE);
+    const found: SExpr = { k: "search", kind: "optional", body: inside, res: f.locals.push(t) - 1, t: ot, bt: t };
+    const ran: SExpr = { k: "budget", n: v, body: found, otherwise: { k: "new", t: ot, c: none, args: [] }, t: ot, save, res: f.locals.push(ot) - 1 };
+    const s = f.locals.push(ot) - 1;
+    return { k: "case", scrut: ran, s, t: ot, result: t, arms: ot.cases.map((_, ci): SExpr => (ci === some ? { k: "field", rec: { k: "local", i: s }, t: ot, c: ci, i: 0 } : expr(otherwise!, env, f, false))) };
   }
 
   // A root that may not finish is refused as a place to start, even when

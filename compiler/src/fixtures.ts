@@ -380,6 +380,10 @@ export function several() {
     some: d("some over", ["xs", "n"], (xs, m) => k.call(S.optional, k.thunk(() => k.let("x", k.call(pick, xs), (x) => k.if(k.call(S.less, m, x), k.call(B.mul, x, n(10)), k.call(S.fail)))))),
     checked: d("all checked", ["xs"], (xs) => k.call(S.all, k.thunk(() => k.call(checked, xs)))),
     caught: d("caught", ["xs"], (xs) => k.match(k.call(S.count, k.thunk(() => k.call(checked, xs))), [{ variant: ABORT_OP, names: ["why"], body: () => n(-1) }])),
+    // Under a budget (C137c14): several answers, the first taken; and a
+    // body with no answer, which gives the otherwise as running out does.
+    firstWithin: d("first big within", ["xs", "n"], (xs, m) => within(k, 100_000, () => k.let("s", k.call(sums, xs), (s) => k.if(k.call(S.less, m, s), s, k.call(S.fail))), () => n(-1))),
+    noneWithin: d("none within", ["xs", "n"], (xs, m) => within(k, 100_000, () => k.match(xs, [{ variant: CONS, names: ["x", "rest"], body: ([x]) => k.if(k.call(S.less, m, x), x, k.call(S.fail)) }, { variant: NIL, names: [], body: () => k.call(S.fail) }]), () => n(-1))),
   };
   const code = base(k.code);
   const names = { ...baseNames(), ...k.names };
