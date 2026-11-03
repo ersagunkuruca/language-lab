@@ -231,6 +231,16 @@ tuples and records of Ints and Texts too, as on JavaScript, hashed,
 compared and ordered part by part (c.ts `tableC` `leaves`). Routes'
 frontier still keeps its tree, so routes is unchanged.
 
+C63j, done: WebAssembly has the tables too (compiler/src/wasm-table.ts),
+Map and Set, every key C has, written for each table's types as C's are.
+With no counts to tell a table has one holder, every change makes a new
+newest version and the old one becomes the change back (Baker's
+rerooting, as JavaScript's). 200,000 puts and lookups over 50,000 Int
+keys: 400 ms on trees, 87 ms on the table. Machine's WebAssembly takes
+them (its time is in its lists, so about the same). A key nothing fixes
+(an empty map nothing is put in) is held as a Float64 on both, as its
+entries' keys are.
+
 ## M5, measured again
 
 GAPS.md M5 (leaving the depth count out of the tree jobs) was measured

@@ -26,6 +26,7 @@ import { $setPrint } from "../src/runtime.js";
 import { execFileSync } from "node:child_process";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitC } from "../src/c.ts";
+import { emitWasm, runMain as runWasm } from "../src/wasm.ts";
 import { compile as cc, skip } from "./c-harness.ts";
 
 const L = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY.names[d] === name)!;
@@ -67,10 +68,10 @@ function program(n: number, opts: { floats?: boolean; old?: boolean; remove?: bo
   return { code: base(k.code), names: baseNames(k.names), main, own: [counts, main] };
 }
 
-function chosen(p: ReturnType<typeof program>, hostMaps = true, cTables = false) {
+function chosen(p: ReturnType<typeof program>, hostMaps = true, tables = false) {
   const info = infer(p.code, p.names, undefined, checkOptions);
   assert.deepEqual(info.errors.map((e) => e.message), []);
-  return withLibraryRepresentations(p.code, info, p.names, p.main, p.own, [], { hostMaps, cTables });
+  return withLibraryRepresentations(p.code, info, p.names, p.main, p.own, [], { hostMaps, tables });
 }
 
 const printed = (code: ReturnType<typeof program>["code"], names: Record<Id, string>, main: Id, insiders: Id[] = []) => {
@@ -262,5 +263,29 @@ test("in C, a map keyed by pairs or records of Ints and Texts is C's hash table,
     assert.equal(lowered.tables.length, 1);
     const out = execFileSync(cc(emitC(lowered, { main: p.main }).c), { encoding: "utf8" });
     assert.deepEqual(out.split("\n").slice(0, -1), lines);
+  }
+});
+
+// C63j: WebAssembly's own tables (wasm-table.ts), rerooted as
+// JavaScript's: the same programs print the same, old versions too.
+test("in WebAssembly, maps and sets of Ints, and maps keyed by pairs and records, are its hash tables, and print what the definition prints, old versions too (C63j)", async () => {
+  const programs = [
+    program(300, { old: true, remove: true, list: true, remainders: true }),
+    setProgram(300, { old: true, remainders: true }),
+    program(300, { pairs: true, old: true, remove: true, list: true, remainders: true }),
+    program(300, { record: "ints", old: true, remove: true, list: true, remainders: true }),
+  ];
+  for (const p of programs) {
+    const c = chosen(p, false, true);
+    assert.equal(c.chosen.length, 1);
+    assert.match(c.chosen[0], /hash table/);
+    const { lines, info } = printed(c.code, c.names, p.main, c.insiders);
+    assert.deepEqual(lines, printed(p.code, p.names, p.main).lines);
+    const lowered = lowerScalar(c.code, info, c.names, [p.main], { data: true });
+    assert.deepEqual([...lowered.refused.values()], []);
+    assert.equal(lowered.tables.length, 1);
+    const got: string[] = [];
+    await runWasm(lowered, emitWasm(lowered), lowered.funcs.find((g) => g.def === p.main && !g.inner)!.name, [], { print: (x) => got.push(x) });
+    assert.deepEqual(got, lines);
   }
 });

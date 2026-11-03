@@ -52,10 +52,10 @@ const lines = (printed: string[]) => printed.join("").split("\n").filter((l, i, 
 
 // The program with the representations the chooser picks: `hostMaps` where
 // std's Table is (compiled JavaScript), not for WebAssembly and C, which
-// take what `lab native` takes (C93).
+// take what `lab native` takes (C93): their own tables (C63h to C63k).
 function chosenFor(p: ReturnType<typeof load>, own: string[], main: string, hostMaps: boolean) {
   const options = p.options as Parameters<typeof infer>[3];
-  const lib = withLibraryRepresentations(p.code, p.info, p.pres.names, main, own, [], { hostMaps });
+  const lib = withLibraryRepresentations(p.code, p.info, p.pres.names, main, own, [], { hostMaps, tables: !hostMaps });
   const info = infer(lib.code, lib.names, undefined, { ...options, insiders: [...(options?.insiders ?? []), ...lib.insiders] });
   if (info.errors.length) throw new Error(`machine on ${lib.chosen.join(", ")}: ${info.errors.map((e) => e.message).join("; ")}`);
   return { code: lib.code, info, names: lib.names, chosen: lib.chosen };
