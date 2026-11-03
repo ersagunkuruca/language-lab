@@ -92,9 +92,10 @@ export const $sameNumber = (a, b) => $fin(a) === $fin(b);
 // (builtins.ts says where); before then IEEE keeps it ∞ or NaN, and an
 // overflow nothing uses isn't reported (Haskell's imprecise exceptions).
 // Only an overflow makes one, so that's the reason $fin gives.
-// An Abort performed where the operation was, as in the evaluator, so a
-// handler of Abort in the program gets it.
-export const $stop = (why) => $perform(ABORT, ABORT_OP, [why]);
+// A stop (SPEC §8.4, L221): it ends the run with its reason, and no handler
+// in the program gets it, as in the evaluator (run.ts throws Aborted past
+// every handler).
+export const $stop = (why) => { throw new Aborted(why); };
 // run.ts's own late checks (numberOrder, showValue) throw; the same Abort.
 const performed = (f) => (...xs) => { try { return f(...xs); } catch (e) { if (e instanceof Aborted) return $stop(e.reason); throw e; } };
 const OVERFLOW = 'the answer is too big for a Float64 (overflow)';
