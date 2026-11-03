@@ -32,7 +32,6 @@ New items land here until the next triage gives them a lane and a priority.
 | id | item | source | added |
 |---|---|---|---|
 | I160 | Check: opening every example one after another showed "Not kept in this browser: its storage is full" on notebook. Browsing shouldn't fill storage; if it does, opening must not save, or old copies must be dropped | [OUTSIDER-READ-2026-11-03](docs/reports/reviews/OUTSIDER-READ-2026-11-03.md) (screen text, notebook) | 2026-11-03 |
-| I157 | **Bug.** + New definition freezes the page 3 to 4 s (Insertion sort 3.2 s, gap 2.8; physics 4.8, gap 3.6; Tumble 5.1, gap 4.3); QA14 measured 1.5 to 2.8 s | QA 11-03 H1 | 2026-11-03 |
 | I158 | **Bug.** Opening a definition freezes 1 to 2 s in many programs, old ones too: Numbers & physics `polar` 1.1 s (none over 0.8 s in QA12), Spacetime `reversed` 2.2 s, calc `blank` 1.8 s, `read numbers` 1.5 s | QA 11-03 H2 | 2026-11-03 |
 | I159 | Bigger program machine's Run main takes 15 s for five small assembler programs (in the worker, page stays live) | QA 11-03 L1 | 2026-11-03 |
 | I110 | Check main: 49 of its last 60 runs cancelled while queued, a run takes ~19 of its 20 minutes, "affected" reaches 93 of 97 test files. Look at why std.ts and the prelude reach every test; lanes check the latest run when starting an item | REVIEW-2026-11-01 §6 | 2026-11-01 |
