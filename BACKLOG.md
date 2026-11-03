@@ -32,7 +32,7 @@ New items land here until the next triage gives them a lane and a priority.
 | id | item | source | added |
 |---|---|---|---|
 | I160 | Check: opening every example one after another showed "Not kept in this browser: its storage is full" on notebook. Browsing shouldn't fill storage; if it does, opening must not save, or old copies must be dropped | [OUTSIDER-READ-2026-11-03](docs/reports/reviews/OUTSIDER-READ-2026-11-03.md) (screen text, notebook) | 2026-11-03 |
-| I159 | Bigger program machine's Run main takes 15 s for five small assembler programs (in the worker, page stays live) | QA 11-03 L1 | 2026-11-03 |
+| I159 | Bigger program machine's Run main takes 15 s for five small assembler programs (in the worker, page stays live). Not the editor: `lab run compiler/gaps/machine primes.asm` takes the same 15 s, about 4 s checking and choosing representations and 8 s in the evaluator's loop (run.ts go, step, apply, refValue; no single hot spot) for 82,280 machine steps; compiled JS runs it in 0.2 s. Evaluator speed, for the Compiler lane | QA 11-03 L1 | 2026-11-03 |
 | I110 | Check main: 49 of its last 60 runs cancelled while queued, a run takes ~19 of its 20 minutes, "affected" reaches 93 of 97 test files. Look at why std.ts and the prelude reach every test; lanes check the latest run when starting an item | REVIEW-2026-11-01 §6 | 2026-11-01 |
 | I154 | A list written out with a thousand items (a table of data pasted in) stops the checker: "Maximum call stack size exceeded" in infer.ts, which walks the list as a thousand nested calls of the list maker, one stack frame each (500 items check). The evaluator, staging and the compilers walk it the same way. Either walk a chain of the list maker in a loop in each pass, or keep a written list as one node of n items | C128 (fuzz test, 2026-11-03) | 2026-11-03 |
 
@@ -83,7 +83,6 @@ Rewrite only what the outside reader marked; the next outsider read checks it.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E234 | The editor's own help in plain words: the node right-click menu's garbled lines ("it gives on what this gave", "first among the steps this is in", "a function, part, of what comes in"), file names in help (layout.json, drafts.json, code.json), "Reingold–Tilford" in a menu, empty tooltips "layer" and "style", "Run … backwards" read as "runs main backwards", the Guide's stray lone labels, "lab test" in the accept tooltip, Pick vs select | [OUTSIDER-READ-2026-11-03](docs/reports/reviews/OUTSIDER-READ-2026-11-03.md) §5 | P2 | M | |
 | E235 | A first screen a newcomer can follow: it opens on Numbers & physics `main` with `for some`, `solve rotate, show ×2, …` and "handles Choice"; label the three notation toggles, say what "the program is the tree" and the Cells button mean, or open somewhere gentler | [OUTSIDER-READ-2026-11-03](docs/reports/reviews/OUTSIDER-READ-2026-11-03.md) §5, worst 5 | P2 | S | |
 | E236 | Example names and comments an outsider can read: one line on what each example is (Conjugation, Lockstep, Countdown), a gloss for maths and audio words in the comments (PGA, motor, Cl(2, 0), rapidity, Haar's split, Rec. 709), and clearer definition names in machine and clinic (`make outc`, `read d a a`, `new m2`) | [OUTSIDER-READ-2026-11-03](docs/reports/reviews/OUTSIDER-READ-2026-11-03.md) §5 | P3 | M | |
 
