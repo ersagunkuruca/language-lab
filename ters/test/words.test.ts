@@ -1,4 +1,4 @@
-// Wrapping integers (BACKLOG L193): Word8, Word32 and Word64 are
+// Wrapping integers (BACKLOG L193): Word8, Word16, Word32 and Word64 are
 // arithmetic mod 2ⁿ through the one + − · < and Bits' and, or, xor and
 // shifts. FNV-1a is written once for any width and gives the published
 // 32- and 64-bit hashes; xorshift32 gives Marsaglia's sequence. Evaluated
@@ -31,14 +31,15 @@ const xorshift = (x: number) => { x ^= x << 13; x >>>= 0; x ^= x >>> 17; x ^= x 
 test("words wrap, compare unsigned, and hash and generate as C's unsigned types do, evaluated and compiled", async () => {
   const k = new Lang(LIBRARY.code);
   const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
-  const w = (n: 8 | 32 | 64, x: number | bigint) => k.call(lib(`as word${n}`), k.int(x));
+  const w = (n: 8 | 16 | 32 | 64, x: number | bigint) => k.call(lib(`as word${n}`), k.int(x));
   const names: string[] = [];
   // A word shows through its Shown in the evaluator; compiled show any
   // doesn't ask Shown yet (C148), so the words are shown by their own.
-  const show = (name: string, v: () => Id, n?: 8 | 32 | 64) => { names.push(name); def(name, () => k.call(n ? lib(`show word${n}`) : SHOW_ANY, v())); };
+  const show = (name: string, v: () => Id, n?: 8 | 16 | 32 | 64) => { names.push(name); def(name, () => k.call(n ? lib(`show word${n}`) : SHOW_ANY, v())); };
   show("300 at Word8", () => w(8, 300), 8);
   show("−1 at Word8", () => w(8, -1), 8);
   show("255 + 1", () => k.call(ARITH.add, w(8, 255), w(8, 1)), 8);
+  show("a 16-bit sample wraps", () => k.call(ARITH.add, w(16, 32767), w(16, 32769)), 16);
   show("0 − 1 at Word32", () => k.call(ARITH.sub, w(32, 0), w(32, 1)), 32);
   show("−x at Word64", () => k.call(ARITH.neg, w(64, 1)), 64);
   show("product at Word32", () => k.call(ARITH.mul, w(32, 0x10001), w(32, 0x10001)), 32);
@@ -70,7 +71,7 @@ test("words wrap, compare unsigned, and hash and generate as C's unsigned types 
   const at = (n: string) => code.defs.find((d) => nm[d] === n)!;
   const got = Object.fromEntries(names.map((n) => [n, r.value(at(n))]));
   assert.deepEqual(got, {
-    "300 at Word8": "44", "−1 at Word8": "255", "255 + 1": "0", "0 − 1 at Word32": "4294967295", "−x at Word64": String(2n ** 64n - 1n),
+    "300 at Word8": "44", "−1 at Word8": "255", "255 + 1": "0", "a 16-bit sample wraps": "0", "0 − 1 at Word32": "4294967295", "−x at Word64": String(2n ** 64n - 1n),
     "product at Word32": String((0x10001n * 0x10001n) & 0xffffffffn), "unsigned less": "true", "shifted up drops the top": "2",
     "Int xor": "6", "Int and of a negative": "255", "bits field": String(2 ** 32),
     "fnv1a 32 of foobar": String(fnv(text, 32n, 2166136261n, 16777619n)), "fnv1a 64 of foobar": String(fnv(text, 64n, 14695981039346656037n, 1099511628211n)),
