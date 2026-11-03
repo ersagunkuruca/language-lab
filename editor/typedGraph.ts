@@ -522,9 +522,13 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     }
   };
 
-  // [3, 1, 2] is cons(3, cons(1, cons(2, nil))): drawn as the one list it
-  // is, an input per item, as the text shows it.
+  // [3, 1, 2] is list of(3, 1, 2), or cons(3, cons(1, cons(2, nil))) as
+  // older programs keep it: drawn as the one list it is, an input per
+  // item, as the text shows it.
   const listItems = (id: Id): Id[] | null => {
+    // Written as one `list of` call (L181), its inputs are the items.
+    const top = node(id), tf = isCall(top) ? node(top.fn) : null;
+    if (isCall(top) && tf?.kind === "ref" && tf.target === S.listOf) return [...top.args];
     const out: Id[] = [];
     for (let n = node(id); ; n = node((n as Call).args[1])) {
       if (n.kind === "ref" && n.target === NIL) return out;

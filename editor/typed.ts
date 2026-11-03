@@ -431,7 +431,30 @@ export function simplify(code: Code, names: Names, info: Info, id: Id): TEdit | 
       at = c.args[1];
     }
   };
-  const [front, back] = n.args, a = cells(front), b = cells(back);
+  // Or one `list of` call (L181): its inputs.
+  const flat = (l: Id): Id[] | null => {
+    const c = listOfCall(code, l);
+    if (c) return c.args;
+    const k = cells(l);
+    return k ? k.cells.map((x) => (code.nodes[x] as Call).args[0]) : null;
+  };
+  const [front, back] = n.args;
+  // Either side written as `list of`: the two become one `list of` call.
+  if (listOfCall(code, front) || listOfCall(code, back)) {
+    const xs = flat(front), ys = flat(back);
+    if (!(xs && !xs.length) && !(ys && !ys.length) && !(xs && ys)) return null;
+    let next: Code, root: Id;
+    if (xs && !xs.length) { root = back; next = code; }
+    else if (ys && !ys.length) { root = front; next = code; }
+    else {
+      root = freshId();
+      const fn = freshId();
+      next = { ...code, nodes: { ...code.nodes, [fn]: { id: fn, kind: "ref", target: S.listOf }, [root]: { id: root, kind: "call", fn, args: [...xs!, ...ys!] } } };
+    }
+    next = collect(swapIn(next, id, root));
+    return guardTyped(info, next, names, root, xs?.length && ys?.length ? "Simplified: one list, written out." : "Simplified: appending an empty list changes nothing.");
+  }
+  const a = cells(front), b = cells(back);
   if (!a && !(b && !b.cells.length)) return null;
   let next: Code, root: Id, gone: Id[];
   if (a && !a.cells.length) { root = back; gone = [front]; next = code; }
@@ -682,6 +705,14 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
   const items = /^\[[\s\S]*\]$/.test(t) ? topLevel(t.slice(1, -1)) : undefined;
   if (items) {
     const tail = items.length && /^\s*\.\./.test(items[items.length - 1]) ? items.pop()!.trim().slice(2) : undefined;
+    // Written out, a list is one call of `list of` with an input per item
+    // (L181): [a, b, c] is depth 1 however long it is. With a tail
+    // ([a, ..rest]) it is still cons cells onto the tail.
+    if (tail === undefined && items.length) {
+      const parts = items.map((x) => typedOut(x, code, names, scope));
+      const bad = parts.find((x) => "error" in x);
+      return bad ?? { op: S.listOf, args: parts as Typed[] };
+    }
     let list: Typed | { error: string } = tail !== undefined ? typedOut(tail, code, names, scope) : { value: { tag: NIL, fields: [] } as Value };
     for (const x of items.reverse()) {
       if ("error" in list) break;
@@ -783,8 +814,7 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
     // a shorthand to type; the text prints it with its brackets (E221).
     const one = (id: Id) => { const d = code.nodes[id]; const b = d?.kind === "def" && d.body ? code.nodes[d.body] : null; return b?.kind === "lambda" ? b.params.length : -1; };
     if (alts.length && args.length > 1 && args.every((a) => !("error" in a)) && alts.every((id) => one(id) === 1)) {
-      const list = (args as Typed[]).reduceRight<Typed>((rest, item) => ({ op: CONS, args: [item, rest] }), { value: { tag: NIL, fields: [] } as Value });
-      return { op: alts[0], args: [list], alts };
+      return { op: alts[0], args: [{ op: S.listOf, args: args as Typed[] }], alts };
     }
     if (alts.length && args.every((a) => !("error" in a))) return { op: alts[0], args: args as Typed[], alts };
     // What's wrong, not where (BACKLOG I115): the name, or what's wrong
@@ -948,7 +978,15 @@ function written(code: Code, names: Names, info: Info, hole: Id, text: string, t
     const id = place ?? freshId();
     if (fit && typeof v === "number" && Number.isInteger(v)) { open.set(id, { n: v }); nodes[id] = { id, kind: "hole" }; }
     else if (typeof v === "number" || typeof v === "string") nodes[id] = { id, kind: "lit", value: nfc(v) };
-    else if (typeof v === "object" && "tag" in v) {
+    else if (typeof v === "object" && "tag" in v && v.tag === CONS) {
+      // A list value written out is one `list of` call (L181, E241).
+      const items: Value[] = [];
+      let at: Value = v;
+      while (typeof at === "object" && at !== null && "tag" in at && at.tag === CONS) { items.push(at.fields[0]); at = at.fields[1]; }
+      const fn = freshId();
+      nodes[fn] = { id: fn, kind: "ref", target: S.listOf };
+      nodes[id] = { id, kind: "call", fn, args: items.map((x) => build(x)) };
+    } else if (typeof v === "object" && "tag" in v) {
       const fn = v.fields.length ? freshId() : id;
       nodes[fn] = { id: fn, kind: "ref", target: v.tag };
       if (v.fields.length) nodes[id] = { id, kind: "call", fn, args: v.fields.map((x) => build(x)) };
@@ -2039,12 +2077,19 @@ export function implement(code: Code, names: Names, info: Info, iface: Id, type:
 // add one, move one, take one out. The program keeps its pairs; these edits
 // rewire them, so the meaning changes only where you asked.
 
-export interface Row { kind: "list" | "chain"; root: Id; op?: Id; items: Id[]; spine: Id[] }
+// A list written as one `list of` call (L181) is `flat`: its items are the
+// call's inputs, and it has no spine.
+export interface Row { kind: "list" | "chain"; root: Id; op?: Id; items: Id[]; spine: Id[]; flat?: true }
 
 const consOf = (code: Code, id: Id): Call | null => {
   const n = code.nodes[id];
   const f = isCall(n) ? code.nodes[n.fn] : undefined;
   return isCall(n) && f?.kind === "ref" && f.target === CONS && n.args.length === 2 ? n : null;
+};
+const listOfCall = (code: Code, id: Id): Call | null => {
+  const n = code.nodes[id];
+  const f = isCall(n) ? code.nodes[n.fn] : undefined;
+  return isCall(n) && f?.kind === "ref" && f.target === S.listOf ? n : null;
 };
 const opOf = (code: Code, id: Id): Id | null => {
   const n = code.nodes[id];
@@ -2056,6 +2101,7 @@ const opOf = (code: Code, id: Id): Id | null => {
 // and spine[items.length] the nil that ends the list.
 export function rowAt(code: Code, root: Id): Row | null {
   const n = code.nodes[root];
+  if (listOfCall(code, root)) return { kind: "list", root, items: [...(n as Call).args], spine: [], flat: true };
   if ((n?.kind === "ref" && n.target === NIL) || consOf(code, root)) {
     const items: Id[] = [], spine: Id[] = [];
     for (let at = root; ; ) {
@@ -2080,7 +2126,8 @@ export function rowOfItem(code: Code, id: Id): { row: Row; at: number } | null {
   const up = parentAt(code, id);
   if (!up || up.slot !== "args") return null;
   let root = up.parent;
-  if (consOf(code, root) && up.index === 0) {
+  if (listOfCall(code, root)) { /* its inputs are its items */ }
+  else if (consOf(code, root) && up.index === 0) {
     for (let p = parentAt(code, root); p && p.slot === "args" && p.index === 1 && consOf(code, p.parent); p = parentAt(code, root)) root = p.parent;
   } else {
     const op = opOf(code, root);
@@ -2099,6 +2146,13 @@ export function addItem(code: Code, names: Names, info: Info, row: Row, at: numb
   const hole = freshId(), pair = freshId(), head = freshId();
   let next: Code;
   let made: Node;
+  if (row.flat) {
+    const n = code.nodes[row.root] as Call;
+    next = { nodes: { ...code.nodes, [row.root]: { ...n, args: [...n.args.slice(0, at), hole, ...n.args.slice(at)] } }, defs: code.defs };
+    next.nodes[hole] = { id: hole, kind: "hole" };
+    const where = at >= row.items.length ? "at the end" : at === 0 ? "first" : `as the ${ordinal(at + 1)}`;
+    return guardTyped(info, next, names, hole, `A new item ${where}: fill its hole.`);
+  }
   if (row.kind === "list") {
     const tail = row.spine[at];
     if (!parentOf(code, tail)) return { ok: false, reason: "this list has nowhere to grow" };
@@ -2132,7 +2186,10 @@ export function addItemFrom(code: Code, names: Names, info: Info, defId: Id, row
 // Take items[at] out of the row.
 export function removeItem(code: Code, names: Names, info: Info, row: Row, at: number): TEdit {
   let next: Code;
-  if (row.kind === "list") {
+  if (row.flat) {
+    const n = code.nodes[row.root] as Call;
+    next = { nodes: { ...code.nodes, [row.root]: { ...n, args: n.args.filter((_, i) => i !== at) } }, defs: code.defs };
+  } else if (row.kind === "list") {
     const cell = row.spine[at];
     if (!parentOf(code, cell)) return { ok: false, reason: "this list can't lose its first item here" };
     next = swapIn(code, cell, consOf(code, cell)!.args[1]);
