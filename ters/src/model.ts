@@ -240,21 +240,48 @@ export function get<K extends Kind>(code: Code, id: Id, kind?: K): NodeOf<K> {
   return n as NodeOf<K>;
 }
 
+// Every attribute of every kind of node, said once (L178b,
+// FOUNDATIONS-2026-11-03.md §1): a child slot (nodes under this one, in
+// the order walkers visit them), a reference to a node elsewhere, an
+// attribute that is part of the meaning (the hash must cover it, hash.ts),
+// or one that only shapes how it is shown. The type makes it complete: a
+// new attribute on a kind that isn't listed here doesn't typecheck.
+export type Slot = "child" | "ref" | "meaning" | "presentation";
+type Schema = { [K in Kind]: { readonly [A in Exclude<keyof Extract<Node, { kind: K }>, "id" | "kind">]-?: Slot } };
+export const SCHEMA: Schema = {
+  lit: { value: "meaning", unit: "meaning", of: "meaning" },
+  binder: { unit: "meaning" },
+  ref: { target: "ref" },
+  // A plain call's args, or a use's given, binds and body.
+  call: { fn: "child", args: "child", given: "child", binds: "child", body: "child" },
+  // `results` names the parts of the tuple the body gives: binders, so
+  // children, which the hash leaves out (the body's tuple says how many).
+  lambda: { params: "child", body: "child", results: "child" },
+  def: { body: "child", way: "ref", results: "meaning", cost: "meaning", direction: "ref" },
+  builtin: { op: "meaning" },
+  hole: {},
+  typedef: { params: "child", variants: "child", effect: "meaning", interface: "meaning", unique: "meaning", row: "ref" },
+  variant: { params: "child", fields: "child", returns: "child", later: "meaning", private: "meaning" },
+  field: { type: "child", ports: "meaning", same: "ref" },
+  tref: { target: "ref", args: "child" },
+  tfun: { params: "child", result: "child", effects: "ref" },
+  match: { scrutinee: "child", arms: "child", otherwise: "child" },
+  fold: { scrutinee: "child", arms: "child" },
+  arm: { value: "child", variant: "ref", binds: "child", results: "child", body: "child" },
+};
+
+// The ids in one attribute's value: an id, a list of ids (nulls skipped),
+// or a record of them.
+const idsIn = (v: unknown): Id[] =>
+  typeof v === "string" ? [v] : Array.isArray(v) ? v.filter((x): x is Id => typeof x === "string") : v && typeof v === "object" ? (Object.values(v) as Id[]) : [];
+
+// The nodes under n, in the order its kind's child slots are listed.
 export function children(n: Node): Id[] {
-  switch (n.kind) {
-    case "call": return n.given ? [n.fn, ...Object.values(n.given), ...Object.values(n.binds), n.body] : [n.fn, ...n.args];
-    case "lambda": return [...n.params, n.body, ...(n.results ?? [])];
-    case "def": return n.body ? [n.body] : [];
-    case "typedef": return [...n.params, ...n.variants];
-    case "variant": return [...(n.params ?? []), ...n.fields, ...(n.returns ? [n.returns] : [])];
-    case "field": return [n.type];
-    case "tref": return n.args;
-    case "tfun": return [...n.params, n.result];
-    case "match": return [n.scrutinee, ...n.arms, ...(n.otherwise ? [n.otherwise] : [])];
-    case "fold": return [n.scrutinee, ...n.arms];
-    case "arm": return [...(n.value ? [n.value] : []), ...n.binds, ...n.results.filter((r): r is Id => r !== null), n.body];
-    default: return [];
-  }
+  const slots = SCHEMA[n.kind] as Record<string, Slot> | undefined;
+  if (!slots) return [];
+  const out: Id[] = [];
+  for (const [a, slot] of Object.entries(slots)) if (slot === "child") out.push(...idsIn((n as Record<string, unknown>)[a]));
+  return out;
 }
 
 // Every node id under `root`, in pre-order. Does not follow refs.
