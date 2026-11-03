@@ -71,6 +71,7 @@ Each note says why, then gives the plan as steps; each step is a backlog row.
 | [RESULTS.md](design/numbers/RESULTS.md) | A definition with several named results, `length, angle = polar(x, y)` | partly built: language done, editor I65, compiler C55 |
 | [POLAR.md](design/numbers/POLAR.md) | `polar` as the relation behind trigonometry | partly built (L97) |
 | [MATRICES.md](design/numbers/MATRICES.md) | Linear maps, geometry and matrices: functions stored as matrices, Clifford rotors, a linear-algebra library | partly built (L44) |
+| [TENSORS-2026-11-03.md](design/numbers/TENSORS-2026-11-03.md) | Tensors (L51): a shape and items row-major, one `contracted`, Arithmetic item by item, shapes checked at run time | design; steps a to d open |
 | [EXACT-REALS.md](design/numbers/EXACT-REALS.md) | Exact algebraic numbers (√2·√2 is 2), lazy reals later | partly built (L88) |
 | [FLOAT-VALUES-2026-11-01.md](design/numbers/FLOAT-VALUES-2026-11-01.md) | Which IEEE values `Float64` keeps: finite with one zero, ±∞ as `Extended a`, NaN as stored "no answer" (Rust-style niches) | decided 2026-11-01, to build (L125) |
 | [FIXED-POINT.md](design/numbers/FIXED-POINT.md) | `Fixed`, the same bits on every machine, for games | partly built (L89) |
