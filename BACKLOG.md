@@ -144,7 +144,6 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| C140 | **Bug.** A page's `property(name, value)` sets any attribute: `on…` attributes and `javascript:` in href/src/action/formaction run script from data. Refuse them in html.ts and the static HTML of `lab run`/`build-web`; say so in WEB.md (Elm's virtual DOM does the same, influence) | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §2 | P2 | S | |
 
 ### The spec ([SPEC](docs/language/SPEC.md) §12)
 

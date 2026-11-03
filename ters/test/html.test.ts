@@ -11,7 +11,7 @@ import { equal, fromList, makeRunner, runMain, toList, type Data, type Value } f
 import { CELL_OPS, CONS, HTML_V, S } from "../src/lang/std.ts";
 import { Cells } from "../src/lang/cells.ts";
 import { Lang } from "../src/lang/dsl.ts";
-import { evaluatorCall, mountHtml } from "../src/lang/html.ts";
+import { evaluatorCall, htmlText, mountHtml } from "../src/lang/html.ts";
 import { merge } from "../src/model.ts";
 import { B } from "../src/prelude.ts";
 import { fakeDoc, FakeEl } from "./fakedom.ts";
@@ -100,6 +100,31 @@ test("for each keeps the row of an item that's still there, cells and all; new i
   // a's row is gone, and its watchers with it: its button does nothing now.
   click("+", a);
   assert.deepEqual(rows().map(shown), ["c0", "b1"]);
+});
+
+// C140 (BLIND-SPOTS-2026-11-03 §2): data can't make a page run script
+// through an attribute, live or in the static HTML lab run prints.
+test("an attribute that would run script is left off: on… names, javascript: and data: addresses, srcdoc, a name that isn't one", () => {
+  const prop = (name: string, value: string) => ({ tag: HTML_V.property, fields: [name, (() => value) as never] });
+  const attrs = [
+    prop("onclick", "alert(1)"), prop("OnError", "alert(1)"), prop("href", " Java\tScript:alert(1)"), prop("src", "vbscript:x"),
+    prop("action", "data:text/html,<script>alert(1)</script>"), prop("formaction", "javascript:x"), prop("srcdoc", "<script>x</script>"),
+    prop("x\"><script>alert(1)</script", "y"), prop("href", "data:image/svg+xml,<svg onload=alert(1)>"),
+    // Kept: ordinary ones, an image as data, a word that only has "on" in it.
+    prop("href", "https://example.com/javascript:"), prop("src", "data:image/png;base64,AAAA"), prop("title", "javascript:not a link"), prop("class", "on"),
+  ];
+  const page = { tag: HTML_V.element, fields: ["a", toList(attrs as never), toList([])] } as Data;
+  const call = (f: Value, ...a: Value[]) => (f as (...a: Value[]) => Value)(...a);
+  const warn = console.warn;
+  const said: string[] = [];
+  console.warn = (s: string) => said.push(s);
+  try {
+    const e = mountHtml(page, { cells: new Cells(), doc: fakeDoc(), call }) as FakeEl;
+    assert.deepEqual([...e.attrs], [["href", "https://example.com/javascript:"], ["src", "data:image/png;base64,AAAA"], ["title", "javascript:not a link"], ["class", "on"]]);
+    assert.equal(said.length, 9);
+    assert.match(said[0], /onclick would run its text as script: an event is on\("click", …\)/);
+  } finally { console.warn = warn; }
+  assert.equal(htmlText(page, call), '<a href="https://example.com/javascript:" src="data:image/png;base64,AAAA" title="javascript:not a link" class="on"></a>');
 });
 
 test("on(\"frame\") comes once each time the browser draws, while its element is on the page", () => {
