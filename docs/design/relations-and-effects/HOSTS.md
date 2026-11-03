@@ -125,9 +125,9 @@ and WASI hosts) have their own world objects, and the same rule holds for
 them. A target may not answer the program from anywhere else, so a new
 host or a new world effect lands with its line in the log.
 
-**Not decided here.** How a log is stored and shown (an editor
-timeline), and whether `seeded` answers count. They don't: `seeded`
-answers inside the program, so its numbers replay without a log.
+**Not decided here:** how a log is stored and shown (an editor
+timeline, say). `seeded` needs no log: it answers Random inside the
+program, so its numbers replay by themselves.
 
 **Prior art.** Elm's time-travel debugger (Laszlo Pandy, 2014); Mozilla's
 rr, which records at the system-call boundary; Redux DevTools;
