@@ -551,3 +551,25 @@ test("a record holding a function, in C (C126)", { skip }, async () => {
   const i = lowered.funcs.findIndex((x) => x.def === g && !x.inner);
   sameAndFreed(build(lowered), inputs.map((xs): [number, Value[]] => [i, xs]), (_, xs) => first(r.call(r.value(g), ...xs))!, () => "g");
 });
+
+// I156: show of an array, in C: the evaluator's text, every cell freed.
+test("show of an array, in C (I156)", { skip }, async () => {
+  const { Lang } = await import("../../ters/src/lang/dsl.ts");
+  const { infer } = await import("../../ters/src/lang/infer.ts");
+  const { base, baseNames, checkOptions } = await import("../../ters/src/lang/load.ts");
+  const { LIBRARY } = await import("../../ters/src/lang/library.ts");
+  const { ARRAY_OPS, CONS, SHOW_ANY } = await import("../../ters/src/lang/std.ts");
+  const k = new Lang(LIBRARY.code);
+  const g = k.def("g");
+  // The rest after a 0 in front, so the items are Ints.
+  k.define(g, k.fn(["ys"], (ys) => k.call(SHOW_ANY, k.call(ARRAY_OPS.rest, k.call(ARRAY_OPS.of, k.call(CONS, k.int(0), ys))))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const lowered = lowerScalar(code, info, names, [g], { data: true });
+  assert.deepEqual([...lowered.refused.entries()], []);
+  const r = makeRunner(code, info, { print: () => {} });
+  const i = lowered.funcs.findIndex((x) => x.def === g && !x.inner);
+  const inputs = [[], [7n], [1n, -2n, 3n]].map((ys) => [toList(ys.map(norm))] as Value[]);
+  sameAndFreed(build(lowered), inputs.map((xs): [number, Value[]] => [i, xs]), (_, xs) => first(r.call(r.value(g), ...xs))!, () => "g");
+});

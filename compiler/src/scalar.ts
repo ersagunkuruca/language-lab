@@ -1137,8 +1137,30 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     if (t === "i32") return { k: "if", cond: x, then: { k: "text", v: nm(TRUE) }, else: { k: "text", v: nm(FALSE) }, t: "text" };
     // Quoted as JSON.stringify quotes it (run.ts showValue, C102).
     if (t === "text") return { k: "rt", fn: "text.quoted", args: [x] };
-    if (t === "int32" || isFn(t) || isArray(t)) throw new Refused(`shows ${isFn(t) ? "a function" : isArray(t) ? "an array" : "an Int in 32 bits"} (not in WebAssembly and C yet)`);
+    if (t === "int32" || isFn(t)) throw new Refused(`shows ${isFn(t) ? "a function" : "an Int in 32 bits"} (not in WebAssembly and C yet)`);
+    if (isArray(t)) return { k: "call", fn: showingArray(t), args: [x], tail };
     return { k: "call", fn: showing(t), args: [x], tail };
+  }
+  // show on an array, "array [a, b]" as run.ts writes it (I156): the
+  // first item, then a loop of tail calls adding ", " and item k to the
+  // text so far, so a long array shows in constant stack.
+  function showingArray(t: AType): number {
+    const key = `$${t.key}`;
+    if (index.has(key)) return index.get(key)!;
+    if (opts.shader) throw new Refused("shows an array (not in shaders yet)");
+    const g: SFunc = { def: ARRAY, name: `${t.name}.show`, params: [t], result: "text", locals: [t], body: { k: "text", v: "" }, spends: false, budgeted: false, inner: true };
+    index.set(key, funcs.push(g) - 1);
+    const h: SFunc = { def: ARRAY, name: `${t.name}.show.from`, params: [t, "text", "int"], result: "text", locals: [t, "text", "int"], body: { k: "text", v: "" }, spends: false, budgeted: false, inner: true };
+    const hi = funcs.push(h) - 1;
+    const loc = (i: number): SExpr => ({ k: "local", i }), rt = (fn: string, ...args: SExpr[]): SExpr => ({ k: "rt", fn: `${fn}.a${t.index}`, args });
+    const text = (v: string): SExpr => ({ k: "text", v }), int = (v: bigint): SExpr => ({ k: "int", v });
+    const item = (fn: SFunc, k: SExpr) => shown(rt("array.get", loc(0), k), t.item, fn, false);
+    const empty: SExpr = { k: "rt", fn: "int.equal", args: [rt("array.length", loc(0)), int(0n)] };
+    g.body = { k: "if", cond: empty, then: text("array []"), else: { k: "call", fn: hi, args: [loc(0), joined(text("array ["), item(g, int(0n))), int(1n)], tail: true }, t: "text" };
+    const [k, sofar] = [loc(2), loc(1)];
+    h.body = { k: "if", cond: { k: "rt", fn: "int.equal", args: [k, rt("array.length", loc(0))] }, then: joined(sofar, text("]")),
+      else: { k: "call", fn: hi, args: [loc(0), joined(sofar, text(", "), item(h, k)), { k: "rt", fn: "int.add", args: [k, int(1n)] }], tail: true }, t: "text" };
+    return index.get(key)!;
   }
   // Text joined, left to right.
   const joined = (...parts: SExpr[]): SExpr => parts.reduce((a, b) => ({ k: "rt", fn: "text.concat", args: [a, b] }));
