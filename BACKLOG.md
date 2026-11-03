@@ -287,7 +287,6 @@ agent with inertia. All later goals.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L196 | LEARN.md and GUIDE.md: the guide's definition list and pane count match the screen, `seed`, cells and `magnitude` explained where first used, the "click the `(`" step rewritten, the learn page's raw file link gone | [OUTSIDER-READ-2026-11-03](docs/reports/reviews/OUTSIDER-READ-2026-11-03.md) §2, §4 | P3 | S | |
 
 ### The spec ([SPEC](docs/language/SPEC.md) §12)
 
