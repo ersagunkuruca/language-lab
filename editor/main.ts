@@ -26,7 +26,7 @@ import { renderLet } from "../ters/src/render/letseq.ts";
 import { renderNested } from "../ters/src/render/nested.ts";
 import { renderSexpr } from "../ters/src/render/sexpr.ts";
 import { Namer } from "../ters/src/render/namer.ts";
-import { BOOL, CHECK, CONS, FALSE, FIXED_V, HTML_V, NIL, onTodaysIds, SOME, TRUE } from "../ters/src/lang/std.ts";
+import { BOOL, CHECK, CONS, FALSE, FIXED_V, HTML_V, NIL, onTodaysIds, S, SOME, TRUE } from "../ters/src/lang/std.ts";
 import { CHOICE, DIVERGE, FILES as FILES_EFFECT, NETWORK, NUMBER, STRING, WORLD, showIn, type Type } from "../ters/src/lang/types.ts";
 import { implementationKey } from "../ters/src/lang/infer.ts";
 import { renderBlocks } from "../ters/src/lang/render.ts";
@@ -985,6 +985,11 @@ function seedOf(info: T.Info, def: Id): string[] | null {
     if (n?.kind === "lit") return typeof n.value === "number" || /^-?\d+$/.test(n.value) ? String(n.value) : JSON.stringify(n.value);
     if (n?.kind === "ref") return n.target === TRUE ? "true" : n.target === FALSE ? "false" : n.target === NIL ? "[]" : null;
     const items: string[] = [];
+    // A list written as one `list of` call (L181).
+    if (isCall(n) && nodes[n.fn]?.kind === "ref" && (nodes[n.fn] as NodeOf<"ref">).target === S.listOf) {
+      const all = n.args.map(text);
+      return all.every((t) => t !== null) ? `[${all.join(", ")}]` : null;
+    }
     for (let m: Node | undefined = n; isCall(m); ) {
       const f = nodes[m.fn];
       if (f?.kind !== "ref" || f.target !== CONS || m.args.length !== 2) return null;

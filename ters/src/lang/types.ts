@@ -162,10 +162,12 @@ export interface Sub { from: Row; to: Row; at?: Id }
 // A map or set read through to another that it leaves alone: what it adds
 // is its own. A trial (Subst.trial) starts with nothing of its own instead
 // of copying thousands of bindings. Nothing deletes from a substitution.
-class OverMap<K, V> extends Map<K, V> {
+export class OverMap<K, V> extends Map<K, V> {
   private under: ReadonlyMap<K, V>;
   constructor(under: ReadonlyMap<K, V>) { super(); this.under = under; }
   override get(k: K) { return super.has(k) ? super.get(k) : this.under.get(k); }
+  // What this one added, without what it reads through to.
+  own(): MapIterator<[K, V]> { return super.entries(); }
   override has(k: K) { return super.has(k) || this.under.has(k); }
   override get size() { let n = this.under.size; for (const k of super.keys()) if (!this.under.has(k)) n++; return n; }
   override *entries(): MapIterator<[K, V]> { yield* super.entries(); for (const e of this.under) if (!super.has(e[0])) yield e; }
@@ -174,7 +176,7 @@ class OverMap<K, V> extends Map<K, V> {
   override [Symbol.iterator]() { return this.entries(); }
   override forEach(f: (v: V, k: K, m: Map<K, V>) => void) { for (const [k, v] of this.entries()) f(v, k, this); }
 }
-class OverSet<K> extends Set<K> {
+export class OverSet<K> extends Set<K> {
   private under: ReadonlySet<K>;
   constructor(under: ReadonlySet<K>) { super(); this.under = under; }
   override has(k: K) { return super.has(k) || this.under.has(k); }
