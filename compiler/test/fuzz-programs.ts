@@ -5,7 +5,7 @@ import { Lang } from "../../ters/src/lang/dsl.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
-import { ABORT_OP, CONS, FALSE, FIRST, INT_OPS, NIL, PAIR_V, RANDOM_OP, S, SECOND, SET, SHOW_ANY, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
+import { ABORT_OP, CONS, LIST, FALSE, FIRST, INT_OPS, NIL, PAIR_V, RANDOM_OP, S, SECOND, SET, SHOW_ANY, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
 import { INT, NUMBER, STRING } from "../../ters/src/lang/types.ts";
 import { B } from "../../ters/src/prelude.ts";
 import type { Id } from "../../ters/src/model.ts";
@@ -33,6 +33,8 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
   const Shape = k.type("Shape", [], [["dot", []], ["circle", [["radius", float]]], ["rect", [["width", integer], ["height", float]]]]);
   const Box = k.type("Box", [], [["box", [["count", integer], ["size", float]]]]);
   const shape_ = Shape.v, box = Box.v;
+  // A record holding a function, a record and a list of data (C126).
+  const Kit = k.type("Kit", [], [["kit", [["step", () => k.tfun([integer()], integer())], ["inner", () => k.tref(Box.def)], ["shapes", () => k.tref(LIST, k.tref(Shape.def))]]]]);
   // An effect of the program's own whose operations never return (C123):
   // performed inside a handler of it, through lets, matches and closures.
   const Escape = k.effect("Escape", [["bail", [["code", () => integer()]], null], ["quit", [["why", () => k.tref(STRING)], ["by", float]], null]]);
@@ -47,6 +49,8 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
     // as each engine chooses).
     const mapOf = () => call(lib("as map"), call(lib("zipped"), sub("L"), sub("L")));
     const setOf = () => call(lib("as set"), sub("L"));
+    // Its step's type has no Choice, so its body is under a first.
+    const kitOf = () => call(Kit.v.kit, k.fn([fresh()], (v) => k.call(S.first, k.thunk(() => gen("I", { ...s, I: [...s.I, v] }, depth - 1)), k.thunk(() => k.int(0)))), sub("R"), sub("Q"));
     // Text keys and items (C122): a Map Text Int and a Set Text, from a
     // text split at spaces and commas.
     const words = () => call(TEXT_OPS.split, call(S.concat, sub("T"), k.lit(r.pick([" a b", ",x,y", "", " é 🎉"]))), k.lit(r.pick([" ", ","])));
@@ -187,6 +191,15 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
               { variant: NIL, names: [], body: () => k.fn([fresh()], (z) => z) },
               { variant: CONS, names: [fresh(), fresh()], results: [null, fresh()], body: ([f], [, g]) => k.fn([fresh()], (z) => k.call(g!, k.call(f, z))) },
             ]), sub("I"));
+          },
+          // A kit (C126): its function applied, its box's count, its shapes'
+          // length, after a set of its inner box now and then.
+          () => {
+            const kit = kitOf();
+            const pick = r.int(3);
+            if (pick === 0) return k.call(call(Kit.f["kit.step"], kit), sub("I"));
+            if (pick === 1) return call(Box.f["box.count"], call(Kit.f["kit.inner"], r.next() < 0.5 ? kit : call(SET, k.x(Kit.f["kit.inner"]), kit, sub("R"))));
+            return call(lib("length"), call(Kit.f["kit.shapes"], kit));
           },
           () => (higher.length ? call(r.pick(higher), k.fn([fresh()], (v) => gen("I", { ...s, I: [...s.I, v] }, depth - 1)), sub("I")) : sub("I")),
         ])();
