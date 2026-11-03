@@ -731,7 +731,8 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| L211f | A use with no body in derive.ts and the renderers: blocks show it as a call naming its given ports, `add(… = 2, result = 5)`, and an expression rather than a block; sexpr and nested leave out the binds and body | this PR |
+| L189a | `Bytes`: std's type (whole numbers 0 to 255, checked by `bytes of`), `byte items`, `byte count`, and UTF-8 written in the language, `utf8 of` and `text of utf8` (RFC 3629), evaluated and compiled the same as the host's TextEncoder (test bytes.test.ts) | this PR |
+| L211f | A use with no body in derive.ts and the renderers: blocks show it as a call naming its given ports, `add(… = 2, result = 5)`, and an expression rather than a block; sexpr and nested leave out the binds and body | #1406 |
 | L211e | A use with no body inside a relation: the modes analysis and the relational interpreter read the program with such uses' ports bound, as fillUses reads them (ports.ts `filled`, once per program) | #1405 |
 | L211d | The evaluator runs a use with no body: its answers are its produced ports (ports.ts `answerKeys`), the value the one port or their tuple; arith.ts, represent.ts, counting.ts, one-holder.ts and units.ts read one through model.ts `useKids` | #1404 |
 | L211c | The checker types a use with no body (one load didn't fill) by its produced ports: the port alone or their tuple in port order, each typed where its binder would be (infer.ts `useResult`, test bodyless-use.test.ts) | #1403 |

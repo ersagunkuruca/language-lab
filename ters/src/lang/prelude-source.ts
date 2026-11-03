@@ -9,7 +9,7 @@ import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { library } from "./programs.ts";
-import { ABORT_OP, ARITH, CELL_OPS, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, TICKET_V, AWAIT_OP, START_TIMER_OP, NOW_OP, WAIT_OP, BRANCH_V, DUAL_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, DIVISION_V, SHOWN_V, BITS_V, WORD_SIZES, WORD_V, EXTENDED_V, ALGEBRAIC_OPS, CHECK_OP, RANDOM_OP, QUEUE_V, PRIORITY_QUEUE_V, MATRIX_V, TENSOR_V, STATE_OPS, PIPE_OPS, std } from "./std.ts";
+import { ABORT_OP, ARITH, CELL_OPS, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, TICKET_V, AWAIT_OP, START_TIMER_OP, NOW_OP, WAIT_OP, BRANCH_V, DUAL_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, DIVISION_V, SHOWN_V, BITS_V, WORD_SIZES, WORD_V, EXTENDED_V, ALGEBRAIC_OPS, CHECK_OP, RANDOM_OP, QUEUE_V, PRIORITY_QUEUE_V, MATRIX_V, TENSOR_V, BYTES_V, STATE_OPS, PIPE_OPS, std } from "./std.ts";
 
 export function buildPrelude(): Module {
   const k = new Lang();
@@ -2002,7 +2002,48 @@ export function buildPrelude(): Module {
   const simulatedHelpers = [readyAt, earliest, readyTimes, tiedAt, pickAt, nextDraw, firstDraw, simulatedWorld, simulatedClock];
   const awaitHelpers = [startBranch, waiting, goOn, finished, settle, firstDone, raceSettle, ...simulatedHelpers];
 
-  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, spaced, optionalParens, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, determinant, inverted, leastSquares, tensorOf, tensorShape, tensorItems, rank, tensorSize, tensorEntry, tensorMap, tensorZipWith, reshaped, contracted, transposedBy, traced, withState, changeState, piped, ticketId, ...wordMakers, anyOf, together, race, within, simulated, near];
+  // Bytes (L189): a list of Ints 0 to 255, checked when made. UTF-8 is
+  // written here in the language (RFC 3629): a code point in one to four
+  // bytes, a lead byte saying how many follow, each following one 10xxxxxx.
+  const Bt = (xs: Id) => k.call(BYTES_V, xs);
+  const bytesIn = (b: Id, f: (xs: Id) => Id) => k.match(b, [{ variant: BYTES_V, names: ["items"], body: ([xs]) => f(xs) }]);
+  const isByte = def("is byte", ["number"], (n) => k.if(iLess(n, k.int(0)), k.false, iLess(n, k.int(256))));
+  const bytesOf = def("bytes of", ["items"], (xs) => k.if(k.call(allPass, xs, k.x(isByte)), Bt(xs),
+    k.call(ABORT_OP, k.lit("bytes of: every item is a byte, a whole number from 0 to 255"))));
+  const byteItems = def("byte items", ["bytes"], (b) => bytesIn(b, (xs) => xs));
+  const byteCount = def("byte count", ["bytes"], (b) => bytesIn(b, (xs) => k.call(length, xs)));
+  // Shifts and masks, which have one answer where quotient has none for 0.
+  const q = (a: Id, n: number) => k.call(INT_OPS.shiftDown, a, k.int(Math.log2(n))), r64 = (a: Id) => k.call(INT_OPS.bitAnd, a, k.int(63));
+  const cont = (a: Id) => iAdd(k.int(128), r64(a));
+  const utf8Code = def("utf8 code", ["code point"], (c) => k.if(iLess(c, k.int(0x80)), k.list(c),
+    k.if(iLess(c, k.int(0x800)), k.list(iAdd(k.int(0xc0), q(c, 64)), cont(c)),
+    k.if(iLess(c, k.int(0x10000)), k.list(iAdd(k.int(0xe0), q(c, 4096)), cont(q(c, 64)), cont(c)),
+    k.list(iAdd(k.int(0xf0), q(c, 262144)), cont(q(c, 4096)), cont(q(c, 64)), cont(c))))));
+  const utf8Of = def("utf8 of", ["text"], (t) => Bt(k.call(flatMap, k.call(TEXT_OPS.characters, t), k.fn(["character"], (ch) =>
+    k.call(utf8Code, k.call(S.first, k.thunk(() => k.call(TEXT_OPS.code, ch)), k.thunk(() => k.int(0))))))));
+  // The characters the bytes spell: `decoded` reads a lead byte, `decoded
+  // after` the bytes that follow it, then the next character.
+  const bad = (why: string) => k.call(ABORT_OP, k.lit(`text of utf8: ${why}`));
+  const decoded = k.def("utf8 characters"), decodedAfter = k.def("utf8 character after");
+  k.define(decodedAfter, k.fn(["bytes", "following", "so far"], (xs, n, acc) => k.if(iSame(n, k.int(0)),
+    k.call(CONS, k.call(S.first, k.thunk(() => k.call(TEXT_OPS.fromCode, acc)), k.thunk(() => bad("a code point that is no character"))), k.call(decoded, xs)),
+    k.match(xs, [
+      { variant: NIL, names: [], body: () => bad("the bytes end inside a character") },
+      { variant: CONS, names: ["byte", "rest"], body: ([c, rest]) => k.if(k.call(S.and, k.call(S.not, iLess(c, k.int(0x80))), iLess(c, k.int(0xc0))),
+        k.call(decodedAfter, rest, k.call(INT_OPS.sub, n, k.int(1)), iAdd(iMul(acc, k.int(64)), k.call(INT_OPS.sub, c, k.int(0x80)))),
+        bad("a character's following byte isn't 10xxxxxx")) },
+    ]))));
+  const lead = (xs: Id, b: Id, n: number, base: number) => k.call(decodedAfter, xs, k.int(n), k.call(INT_OPS.sub, b, k.int(base)));
+  k.define(decoded, k.fn(["bytes"], (xs) => k.match(xs, [
+    { variant: NIL, names: [], body: () => k.x(NIL) },
+    { variant: CONS, names: ["byte", "rest"], body: ([b, rest]) => k.if(iLess(b, k.int(0x80)), lead(rest, b, 0, 0),
+      k.if(iLess(b, k.int(0xc0)), bad("a following byte where a character starts"),
+      k.if(iLess(b, k.int(0xe0)), lead(rest, b, 1, 0xc0),
+      k.if(iLess(b, k.int(0xf0)), lead(rest, b, 2, 0xe0),
+      k.if(iLess(b, k.int(0xf8)), lead(rest, b, 3, 0xf0), bad("a byte no character starts with")))))) },
+  ])));
+  const textOfUtf8 = def("text of utf8", ["bytes"], (b) => bytesIn(b, (xs) => k.call(TEXT_OPS.joinAll, k.call(decoded, xs), k.lit(""))));
+  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, spaced, optionalParens, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, determinant, inverted, leastSquares, tensorOf, tensorShape, tensorItems, rank, tensorSize, tensorEntry, tensorMap, tensorZipWith, reshaped, contracted, transposedBy, traced, bytesOf, byteItems, byteCount, utf8Of, textOfUtf8, withState, changeState, piped, ticketId, ...wordMakers, anyOf, together, race, within, simulated, near];
   // Each number's own show, from before the generic one showed every number
   // (L153, L156): kept so programs saved before still open, not offered.
   const perTypeShows = [showF, showC, showD, showX];
@@ -2147,6 +2188,11 @@ export function buildPrelude(): Module {
     [matrixTimesVector]: "The matrix times the list as a column: one item per row. The list must have one item per column, or the program stops with both sizes.",
     [solved]: "The list x with matrix times vector(m, x) = b, for a square Float64 matrix, by Gaussian elimination with partial pivoting. No answer when the matrix is singular (a pivot is 0).",
     [determinant]: "The determinant of a square Float64 matrix: 0 when it is singular. Other sizes stop the program.",
+    [bytesOf]: "The bytes with these items, each a whole number from 0 to 255: bytes of([104, 105]) is the bytes of \"hi\". Stops when an item isn't a byte.",
+    [byteItems]: "The bytes as their list of Ints, each 0 to 255.",
+    [byteCount]: "How many bytes there are.",
+    [utf8Of]: "The text's UTF-8 bytes (RFC 3629): each character's code point in one to four bytes. utf8 of(\"é\") is [195, 169].",
+    [textOfUtf8]: "The text UTF-8 bytes spell, the other way from utf8 of. Stops on bytes that aren't UTF-8: a following byte where a character starts, or the bytes ending inside a character.",
     [tensorOf]: "The tensor with this shape and these items, the last axis changing fastest: tensor of([2, 3], [1, 2, 3, 4, 5, 6]) has rows [1, 2, 3] and [4, 5, 6]. Stops when the items don't fill the shape.",
     [tensorShape]: "A tensor's axis lengths: [2, 3] for a 2 × 3 one, [] for a single number.",
     [tensorItems]: "A tensor's items, the last axis changing fastest.",
