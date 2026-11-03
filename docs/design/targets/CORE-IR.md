@@ -26,6 +26,8 @@ model, so each feature has been written twice in the compiler
   profile's values and control, with Int, Text and Array through the
   evaluator's own builtins; the fuzz test runs it beside WebAssembly and
   C, and skips (and names) the runtime functions it doesn't have yet.
+  Step c2 adds tables and Hash sets (the evaluator's Table) and seeded
+  Random, so every generated program runs; the world is next.
 - (d) compile.ts retired piece by piece.
 
 ## What it holds
