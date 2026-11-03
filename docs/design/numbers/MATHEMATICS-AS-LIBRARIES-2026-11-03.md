@@ -151,7 +151,11 @@ would be) does not type-check today. The checker reports "my times works
 only on records of Float64s" and a pinned-signature mismatch, because the
 copy's types are not `std.` types and the prelude is checked against
 signatures the copy did not get. I did not trace it to the end; L202
-below makes it a test.
+below makes it a test. **Since (L202, 2026-11-03):** the copy, all 21
+`clifford …` definitions under new ids, checks and gives the prelude's
+answers evaluated and compiled, in Cl(3, 0) and PGA
+(ters/test/library-copy.test.ts). The speed gaps stay L203 (grade masks by
+name) and L206 (jets by hash).
 
 ## What the core must give libraries
 
