@@ -276,10 +276,20 @@ definition is never written specially to run backwards.
 
 7.2. A **use** names a definition (or a builtin, or an interface's
 field) and the ports it is given. It gives the other ports, together,
-from one solution. Today the node is `solve`, whose found ports are bound
-for a body. After L130 calls and uses are one node kind; whether the
-found ports come out as a tuple or into a body is *pending* (L179). That
+from one solution. Calls and uses are one node kind (L130): a use is a
+call that names its given ports, and its found ports are bound for a
+body. Whether they come out as a tuple instead is *pending* (L179). That
 choice changes the shape, not the meaning below.
+
+7.2a. A **definition with results** is written as a condition on all its
+ports and names some of them its results. Its type is the function of
+that declared direction, its other ports to a tuple of its results (one
+result is its value): `sum and difference(s, d) → a, b` is
+`(Float64, Float64) → (Float64, Float64)`. Called, or passed on as a
+value, it runs as its use in that direction; a use may still ask it any
+other way. Given all its ports, `polar(r, t, x, y)`, it is the condition
+on them, true or false, as inside another relation. An interface's field with results is typed the same way:
+Trig's `polar` is `(length, angle) → x, y` (L128d).
 
 7.3. **Effects of a use.** The checker works out from the direction how
 many answers it can have:

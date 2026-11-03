@@ -14,7 +14,7 @@ import { fromFile, toFile } from "../src/files.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { infer } from "../src/lang/infer.ts";
 import { showType } from "../src/lang/types.ts";
-import { SHAPE, SHAPE_STEPS } from "../src/model.ts";
+import { SHAPE, SHAPE_STEPS, toTodaysShape } from "../src/model.ts";
 
 const CORPUS: [string, string][] = [
   ["sheet", "(List Text) -[Console, Diverge, Files, Abort]-> a"],
@@ -44,4 +44,13 @@ test("a file is saved at today's shape, and a file at today's shape runs no step
   assert.equal(JSON.parse(again).shape, SHAPE);
   const back = fromFile(again, () => LIBRARY.code);
   assert.ok(!("error" in back));
+});
+
+test("a saved use of unpolar moves its ports to the function's order, (x, y) → length, angle (L128d3)", () => {
+  const nodes: Record<string, unknown> = {
+    u: { id: "u", kind: "call", fn: "u.fn", given: { 2: "x", 3: "y", out: "t" }, binds: { 1: "angle" }, body: "b" },
+    "u.fn": { id: "u.fn", kind: "ref", target: "std.trig.trig.unpolar" },
+  };
+  toTodaysShape(nodes, 1);
+  assert.deepEqual(nodes.u, { id: "u", kind: "call", fn: "u.fn", given: { 0: "x", 1: "y", out: "t" }, binds: { 3: "angle" }, body: "b" });
 });

@@ -460,7 +460,7 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
       }
       // An interface's field with results (POLAR.md), in the direction it
       // declares: x, y = polar(r, t), a result nobody reads as _.
-      if (f?.kind === "field" && f.results) {
+      if (f?.kind === "field" && fieldPorts(code.nodes, f)) {
         const fr = fieldPorts(code.nodes, f)!.outs, ins = Object.keys(n.given).filter((k) => k !== "out").map(Number).sort((a, b) => a - b);
         if (ins.every((i) => !fr.includes(i)) && Object.keys(n.binds).every((k) => fr.includes(Number(k)))) {
           const bound = Object.values(n.binds);

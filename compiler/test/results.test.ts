@@ -25,9 +25,9 @@ test("a direction the relational interpreter ran is a call per bound result, eva
   const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
   const D = (a: Id, b: number) => k.call(DUAL_V, a, k.lit(b));
   // Both results, and the angle alone, of a Dual's unpolar.
-  def("both", () => k.fn(["a"], (a) => k.solve(TRIG_UNPOLAR, { 2: D(a, 1), 3: D(k.lit(4), 0), out: k.true }, { 0: "length", 1: "angle" }, ({ 0: r, 1: t }) =>
+  def("both", () => k.fn(["a"], (a) => k.solve(TRIG_UNPOLAR, { 0: D(a, 1), 1: D(k.lit(4), 0), out: k.true }, { 2: "length", 3: "angle" }, ({ 2: r, 3: t }) =>
     k.text(k.call(SHOW_ANY, r), k.lit(" "), k.call(SHOW_ANY, t)))));
-  def("angle alone", () => k.fn(["a"], (a) => k.solve(TRIG_UNPOLAR, { 2: D(a, 1), 3: D(k.lit(4), 0), out: k.true }, { 1: "angle" }, ({ 1: t }) => k.call(SHOW_ANY, t))));
+  def("angle alone", () => k.fn(["a"], (a) => k.solve(TRIG_UNPOLAR, { 0: D(a, 1), 1: D(k.lit(4), 0), out: k.true }, { 3: "angle" }, ({ 3: t }) => k.call(SHOW_ANY, t))));
   const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
   assert.deepEqual(info.errors.map((e) => e.message), []);
   const js = compile(code, info, names, { runtime, exports: ["both", "angle alone"] });
@@ -56,10 +56,10 @@ test("results bound together share their work, and give what the evaluator gives
   const k = new Lang(LIBRARY.code);
   const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
   const X = (a: Id) => k.call(FIXED_V, a);
-  def("fixed both", () => k.fn(["a", "b"], (a, b) => k.solve(TRIG_UNPOLAR, { 2: X(a), 3: X(b), out: k.true }, { 0: "length", 1: "angle" }, ({ 0: r, 1: t }) =>
+  def("fixed both", () => k.fn(["a", "b"], (a, b) => k.solve(TRIG_UNPOLAR, { 0: X(a), 1: X(b), out: k.true }, { 2: "length", 3: "angle" }, ({ 2: r, 3: t }) =>
     k.text(k.call(SHOW_ANY, r), k.lit(" "), k.call(SHOW_ANY, t)))));
   const D = (a: Id, b: number) => k.call(DUAL_V, a, k.lit(b));
-  def("dual both", () => k.fn(["a", "b"], (a, b) => k.solve(TRIG_UNPOLAR, { 2: D(a, 1), 3: D(b, 0), out: k.true }, { 0: "length", 1: "angle" }, ({ 0: r, 1: t }) =>
+  def("dual both", () => k.fn(["a", "b"], (a, b) => k.solve(TRIG_UNPOLAR, { 0: D(a, 1), 1: D(b, 0), out: k.true }, { 2: "length", 3: "angle" }, ({ 2: r, 3: t }) =>
     k.text(k.call(SHOW_ANY, r), k.lit(" "), k.call(SHOW_ANY, t)))));
   const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
   assert.deepEqual(info.errors.map((e) => e.message), []);
