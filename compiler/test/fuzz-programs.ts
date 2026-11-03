@@ -60,6 +60,11 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
     const words = () => call(TEXT_OPS.split, call(S.concat, sub("T"), k.lit(r.pick([" a b", ",x,y", "", " é 🎉"]))), k.lit(r.pick([" ", ","])));
     const textMap = () => call(lib("as map"), call(lib("zipped"), words(), sub("L")));
     const textSet = () => call(lib("as set"), words());
+    // Keys and items that are pairs of an Int and a Text (C63f, C63k),
+    // which every target's hash tables take.
+    const pairOf = () => call(PAIR_V, sub("I"), sub("T"));
+    const pairMap = () => call(lib("as map"), call(lib("zipped"), call(lib("zipped"), sub("L"), words()), sub("L")));
+    const pairSet = () => call(lib("as set"), call(lib("zipped"), sub("L"), words()));
     // A search with several answers (C134): an item of a list, kept where
     // a condition on it holds, then worked on.
     const search = () => k.thunk(() => k.let(fresh(), call(S.oneOf, sub("L")), (v) =>
@@ -197,6 +202,9 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
           () => (handling ? k.if(sub("B"), r.next() < 0.5 ? call(Escape.op.bail, sub("I")) : call(Escape.op.quit, sub("T"), sub("F")), sub("I")) : sub("I")),
           () => call(lib("map size"), call(lib("put"), textMap(), sub("T"), sub("I"))),
           () => orElse(call(lib("value at"), textMap(), sub("T"))),
+          () => call(lib("map size"), call(lib("put"), pairMap(), pairOf(), sub("I"))),
+          () => orElse(call(lib("value at"), pairMap(), pairOf())),
+          () => call(lib("set size"), call(lib("add item"), pairSet(), pairOf())),
           () => call(lib("set size"), call(lib("set union"), textSet(), textSet())),
           // A recursive helper of the program's own, and a function
           // given to one with what's in scope closed over (C121).
@@ -248,6 +256,8 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
           () => call(lib("has item"), call(lib("set union"), setOf(), setOf()), sub("I")),
           () => call(lib("has key"), call(lib("remove key"), textMap(), sub("T")), sub("T")),
           () => call(lib("has item"), call(lib("set difference"), textSet(), textSet()), sub("T")),
+          () => call(lib("has key"), call(lib("remove key"), pairMap(), pairOf()), pairOf()),
+          () => call(lib("has item"), call(lib("set union"), pairSet(), pairSet()), pairOf()),
           () => k.equal(sub("D"), sub("D")),
           () => k.equal(sub("R"), sub("R")),
         ])();
@@ -296,6 +306,8 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
           () => call(SHOW_ANY, call(lib("merge maps"), textMap(), textMap())),
           () => call(SHOW_ANY, textSet()),
           () => call(TEXT_OPS.joinAll, call(lib("keys of"), textMap()), sub("T")),
+          () => call(SHOW_ANY, call(lib("keys of"), pairMap())),
+          () => call(SHOW_ANY, call(lib("items of"), pairSet())),
           () => k.call(S.first, k.thunk(() => call(lib("smallest item"), textSet())), k.thunk(() => sub("T"))),
           // Lists of tuples: zipped, sorted (by the Int, then the Float64).
           () => call(SHOW_ANY, call(lib("sort"), call(lib("zipped"), sub("L"), sub("P")))),
