@@ -19,7 +19,7 @@
 // the world is the evaluator's Runtime (C137c3, runCoreMain).
 
 import { ARRAY_OPS, CONS, FALSE, HASH_SET_OPS, NIL, NONE, S, SOME, STD_IMPL, STD_MANY, TABLE_OPS, TRUE } from "../../ters/src/lang/std.ts";
-import { cellOps, equal, solveAnswers, toList, type Runtime, type Value, type World } from "../../ters/src/lang/run.ts";
+import { META, cellOps, equal, solveAnswers, toList, type Runtime, type Value, type World } from "../../ters/src/lang/run.ts";
 import { Cells, NoValue } from "../../ters/src/lang/cells.ts";
 import { NoAnswer } from "../../ters/src/lang/html.ts";
 import { worldRandom } from "../../ters/src/lang/random.ts";
@@ -181,7 +181,14 @@ export const RUNTIME = {
   // A closure: a function of its inputs, calling its code with itself
   // first, holding what it captured, so the evaluator's runtime (a page,
   // the library) calls it as any function.
-  closure: (code: (...xs: unknown[]) => unknown, caps: unknown[]) => { const c = Object.assign((...xs: unknown[]) => code(c, ...xs), { caps }); return c; },
+  // `src` (C137c13): the lambda it came from and the binders its captures
+  // are, or the builtin, as the evaluator's closures carry (run.ts META),
+  // so the evaluator's solver can look inside one it is given.
+  closure: (code: (...xs: unknown[]) => unknown, caps: unknown[], src?: { lambda: Id; binders: Id[]; bools: number[] } | { prim: Id }) => {
+    const c = Object.assign((...xs: unknown[]) => code(c, ...xs), { caps });
+    if (src) Object.assign(c, { [META]: "prim" in src ? src : { lambda: src.lambda, env: new Map(src.binders.map((b, j) => [b, src.bools.includes(j) ? { tag: caps[j] ? TRUE : FALSE, fields: [] } : caps[j]])) } });
+    return c;
+  },
   show: STD_IMPL[S.show],
 };
 
@@ -249,7 +256,7 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
         case "new": return `{ tag: ${JSON.stringify(e.t.cases[e.c].variant)}, fields: [${e.args.map((a) => ex(a, pre, d)).join(", ")}] }`;
         case "field": return `${ex(e.rec, pre, d)}.fields[${e.i}]`;
         case "tag": return `R.caseOf(${ex(e.rec, pre, d)}, ${JSON.stringify(e.t.cases.map((c) => c.variant))})`;
-        case "closure": return `R.closure(${names[e.fn]}, [${e.caps.map((a) => ex(a, pre, d)).join(", ")}])`;
+        case "closure": return `R.closure(${names[e.fn]}, [${e.caps.map((a) => ex(a, pre, d)).join(", ")}]${e.src ? `, ${JSON.stringify(e.src)}` : ""})`;
         case "cap": return `l0.caps[${e.i}]`;
         case "apply": {
           const c = ex(e.fn, pre, d), xs = e.args.map((a) => ex(a, pre, d));

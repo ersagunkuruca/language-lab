@@ -74,7 +74,7 @@ test("the examples whose main lowers to the core IR say the same in JavaScript p
     ran.push(name);
   }
   console.log(`ran ${ran.join(", ")}\nnot lowered:\n  ${refused.join("\n  ")}`);
-  assert.ok(ran.length >= 14, `ran ${ran.join(", ")}`);
+  assert.ok(ran.length >= 16, `ran ${ran.join(", ")}`);
 });
 
 // lab compile --core (C137c5): a module that runs main in Node, printed
@@ -134,7 +134,7 @@ test("the pages whose main lowers show the same HTML, before and after their han
     ran.push(name);
   }
   console.log(`pages ${ran.join(", ")}`);
-  assert.ok(ran.length >= 4, `pages ${ran.join(", ")}`);
+  assert.ok(ran.length >= 6, `pages ${ran.join(", ")}`);
 });
 
 // A page's handlers, in the order it lists them, each part's view called once.

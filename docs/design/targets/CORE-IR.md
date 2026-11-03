@@ -62,7 +62,13 @@ model, so each feature has been written twice in the compiler
   closure calling the evaluator's; a solve given a function is refused by
   name (the solver looks inside it, and a printed closure carries no
   nodes yet: inverse's five examples). The fuzz test lowers for this
-  printer as `lab compile --core` does.
+  printer as `lab compile --core` does. Step c13: a printed closure
+  carries where it came from (the core IR's `closure.src`: its lambda and
+  the binders its captures are, or the builtin), as the evaluator's
+  closures do (run.ts META), so the solver looks inside one it is given:
+  converter and spacetime run and their pages agree (16 examples, 6
+  pages). conjugate and pedal now stop at a function choosing among
+  several answers.
 - (d) compile.ts retired piece by piece.
 
 ## What it holds
