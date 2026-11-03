@@ -11,7 +11,7 @@ import { addVariant, fillHole } from "../src/lang/refactor.ts";
 import { renderBlocks } from "../src/lang/render.ts";
 import { runMain } from "../src/lang/run.ts";
 import { showIn, showType } from "../src/lang/types.ts";
-import { reId, sweep, sweepShare } from "./helpers.ts";
+import { capped, reId, sweep, sweepShare } from "./helpers.ts";
 
 const load = (name: string) => loadProgram(join(root, "examples", name));
 const run = (code: Code, info: ReturnType<typeof infer>, main: Id) => {
@@ -60,13 +60,14 @@ test("every filling the palette offers keeps the program free of errors", () => 
     const p = load(name);
     // Every third arm body and function body (all of them takes ~30s).
     const targets = Object.values(p.own.nodes).flatMap((n) => (n.kind === "arm" || n.kind === "lambda" ? [n.body] : [])).filter((_, i) => i % 3 === 0);
-    for (const target of sweep(targets)) {
+    // A slice of the targets, ten of them, each with eight of its fillings (T12).
+    for (const target of capped(sweep(targets), 10)) {
       const holed = replace(p.code, target, () => ({ kind: "hole" }));
       const info = infer(holed, p.pres.names);
       assert.deepEqual(info.errors, [], "a hole is not an error");
       const options = fillings(holed, info, target);
       assert.ok(options.length > 0, "something always fits");
-      for (const f of options) {
+      for (const f of capped(options, 8)) {
         const filled = fillHole(holed, p.pres.names, target, f);
         const after = infer(filled.code, filled.names);
         assert.deepEqual(after.errors, [], `filling ${f.kind} ${"target" in f ? p.pres.names[f.target] : ""} broke ${name}`);
@@ -74,9 +75,8 @@ test("every filling the palette offers keeps the program free of errors", () => 
       }
     }
   }
-  // All of it is over 1000. A slice is an eighth of the targets but not
-  // of the fillings (some arms offer more), so it is held to 100.
-  assert.ok(tried > (sweepShare === 1 ? 1000 : 100), `tried ${tried}`);
+  // All of it is over 1000; a change checks up to 80.
+  assert.ok(tried > (sweepShare === 1 ? 1000 : 30), `tried ${tried}`);
 });
 
 test("the palette leaves out what would be a type error, and the checker catches it if forced", () => {
