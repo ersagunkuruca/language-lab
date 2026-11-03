@@ -296,7 +296,7 @@ test("typed line of fields and shows reads though its readings are many", async 
 test("typed text reads else, lists of expressions, steps and holes", async () => {
   const { Lang } = await import("../src/lang/dsl.ts");
   const { base, baseNames } = await import("../src/lang/load.ts");
-  const { CONS } = await import("../src/lang/std.ts");
+  const { S } = await import("../src/lang/std.ts");
   const fill = (text: string) => {
     const k = new Lang();
     const f = k.def("f");
@@ -310,7 +310,9 @@ test("typed text reads else, lists of expressions, steps and holes", async () =>
   const first = fill("first(a, else b)")!;
   assert.ok((first.at as Call).args.every((x) => { const l = first.code.nodes[x] as NodeOf<"lambda">; return l.kind === "lambda" && l.params.length === 0; }));
   const list = fill('[show(a + 1), "x"]')!;
-  assert.equal((list.code.nodes[(list.at as Call).fn] as NodeOf<"ref">).target, CONS);
+  // Written out, one `list of` call with an input per item (L181, E241).
+  assert.equal((list.code.nodes[(list.at as Call).fn] as NodeOf<"ref">).target, S.listOf);
+  assert.equal((list.at as Call).args.length, 2);
   const step = fill("x = a + 1; x · x")!;
   assert.equal(step.code.nodes[(step.at as Call).fn].kind, "lambda");
   const later = fill("a + □")!;
@@ -507,4 +509,33 @@ test("typed text is stored in NFC", () => {
   if (!r.ok) return;
   const filled = Object.values(r.code.nodes).find((n) => n.kind === "lit" && typeof n.value === "string" && n.value.startsWith("caf"));
   assert.equal((filled as NodeOf<"lit">).value, "café");
+});
+
+// A list written as one `list of` call is a row (E241): an item is added,
+// moved and taken out among the call's inputs.
+test("a list of call is edited as a row", async () => {
+  const { Lang } = await import("../src/lang/dsl.ts");
+  const { base, baseNames } = await import("../src/lang/load.ts");
+  const { addItem, moveItem, removeItem, rowAt, rowOfItem } = await import("../../editor/typed.ts");
+  const k = new Lang();
+  const f = k.def("f");
+  let hole = "";
+  k.define(f, k.fn([], () => (hole = k.hole())));
+  const code0 = base(k.code), names = baseNames(k.names);
+  const r = fillValue(code0, names, infer(code0, names), hole, "[1, 2, 3]", f);
+  assert.ok(r.ok, !r.ok ? r.reason : "");
+  if (!r.ok) return;
+  const lits = (c: typeof code0) => (c.nodes[hole] as Call).args.map((x) => (c.nodes[x] as NodeOf<"lit">).value ?? c.nodes[x].kind);
+  const row = rowAt(r.code, hole)!;
+  assert.ok(row?.flat);
+  assert.deepEqual(rowOfItem(r.code, row.items[1])?.at, 1);
+  const added = addItem(r.code, r.names, infer(r.code, r.names), row, 1);
+  assert.ok(added.ok);
+  if (added.ok) assert.deepEqual(lits(added.code), [1, "hole", 2, 3]);
+  const moved = moveItem(r.code, r.names, infer(r.code, r.names), row, 0, 1);
+  assert.ok(moved.ok);
+  if (moved.ok) assert.deepEqual(lits(moved.code), [2, 1, 3]);
+  const gone = removeItem(r.code, r.names, infer(r.code, r.names), row, 2);
+  assert.ok(gone.ok);
+  if (gone.ok) assert.deepEqual(lits(gone.code), [1, 2]);
 });
