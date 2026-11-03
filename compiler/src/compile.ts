@@ -791,8 +791,8 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         case "lit": case "ref": case "hole": case "lambda": return true;
         case "match": return !handlerOf(n) && one(n.scrutinee) && n.arms.every((a) => one(node<"arm">(a).body)) && (!n.otherwise || one(n.otherwise));
         case "fold": return one(n.scrutinee) && n.arms.every((a) => one(node<"arm">(a).body));
-        case "solve": return givenOf(n).every(one) && (solver(n), onceSolvers.has(n.id)) && one(n.body);
         case "call": {
+          if (isUse(n)) return givenOf(n).every(one) && (solver(n), onceSolvers.has(n.id)) && one(n.body);
           if (!n.args.every(one)) return false;
           const f = code.nodes[n.fn];
           if (f.kind === "lambda") return one(f.body);
@@ -1224,7 +1224,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     const p = code.nodes[up.get(b)!];
     if (p?.kind === "lambda") {
       if (isLet(p.id)) {
-        const call = node<"call">(up.get(p.id)!);
+        const call = node<"call">(up.get(p.id)!) as Call;
         return usesOf(p.body, b) <= 1 && owned(call.args[p.params.indexOf(b)], own, assume);
       }
       const def = code.nodes[up.get(p.id)!];
@@ -1643,6 +1643,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       let r = false;
       switch (n.kind) {
         case "call": {
+          if (isUse(n)) { r = !solvedOnce(code, n) || Object.values(n.given).some(streamy) || streamy(n.body); break; }
           const f = code.nodes[n.fn];
           if (f.kind === "lambda") r = n.args.some(streamy) || streamy(f.body);
           else r = streamy(n.fn) || n.args.some(streamy) || callStreams(n);
@@ -1650,7 +1651,6 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         }
         case "match": r = streamy(n.scrutinee) || n.arms.some((a) => streamy(node<"arm">(a).body)) || (!!n.otherwise && streamy(n.otherwise)); break;
         case "fold": r = streamy(n.scrutinee) || n.arms.some((a) => streamy(node<"arm">(a).body)); break;
-        case "solve": r = !solvedOnce(code, n) || Object.values(n.given).some(streamy) || streamy(n.body); break;
       }
       memo.set(id, r);
       return r;
@@ -1690,13 +1690,15 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         case "ref": return refValue(n);
         case "hole": return `$hole(${JSON.stringify(id)})`;
         case "lambda": return lambda(n);
-        case "call": return call(n);
+        case "call":
+          if (isUse(n)) {
+            const binds = Object.values(n.binds).map(local);
+            return `((${binds.join(", ")}) => ${ex(n.body)})(...$one(${solver(n)}(${givenOf(n).map(ex).join(", ")})))`;
+
+          }
+          return call(n);
         case "match": return match(n);
         case "fold": return foldEx(n);
-        case "solve": {
-          const binds = Object.values(n.binds).map(local);
-          return `((${binds.join(", ")}) => ${ex(n.body)})(...$one(${solver(n)}(${givenOf(n).map(ex).join(", ")})))`;
-        }
         default: throw new Error(`can't compile a ${n.kind}`);
       }
     }
@@ -2370,7 +2372,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
         const c = n as Call, last = c.args.length - 1;
         const lam = node<"lambda">(d.body!);
         const fields = c.args.slice(0, last).map(ex);
-        const args = loopArgs(node<"call">(c.args[last]), sp);
+        const args = loopArgs(node<"call">(c.args[last]) as Call, sp);
         const spend = spends(sp.def) ? "$spendOrThrow();\n" : "";
         let cell = inCell;
         const made = cell ? same(c.args[0], 0) ? "" : `${cell}.fields[0] = ${fields[0]};\n` : `const ${(cell = temp("cell"))} = { tag: ${tag(node<"ref">(c.fn).target)}, fields: [${[...fields, "undefined"].join(", ")}] };\n`;
@@ -2945,7 +2947,21 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       if (!streamy(id)) return guarded(id, ex(id), k);
       const n = code.nodes[id];
       switch (n.kind) {
-        case "call": return stCall(n, k);
+        case "call":
+          if (isUse(n)) {
+            return parts(givenOf(n), (vals) => {
+              const sol = temp("sol");
+              const bs = Object.values(n.binds).map((b, i) => `const ${local(b)} = ${sol}[${i}];`).join(" ");
+              const f = solver(n);
+              const bound = Object.values(n.binds);
+              if (arrayAt?.solve === n.id) { const { d } = arrayAt; return `${d}.length = 0;\nif (${f}$into(${[d, ...vals].join(", ")})) {\nconst ${local(bound[0])} = ${d};\n${st(n.body, k)}\n}`; }
+              if (onceSolvers.has(n.id) && bound.length === 1) return `const ${local(bound[0])} = ${f}$one(${vals.join(", ")});\nif (${local(bound[0])} !== $no) {\n${st(n.body, k)}\n}`;
+              if (onceSolvers.has(n.id)) return `const ${sol} = ${f}$one(${vals.join(", ")});\nif (${sol} !== $no) {\n${bs}\n${st(n.body, k)}\n}`;
+              return `for (const ${sol} of ${f}(${vals.join(", ")})) {\n${bs}\n${st(n.body, k)}\n}`;
+            });
+
+          }
+          return stCall(n, k);
         case "match": {
           if (!handlerOf(n)) return stMatch(n, k);
           if (n.arms.some((a) => isLater(node<"arm">(a).variant))) throw notYet("an operation answered later handled around a search");
@@ -2953,18 +2969,6 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
           return `for (const ${r} of $handleS(${JSON.stringify(handlerOf(n))}, ${answers}, ${escapes}, function* () {\n${scoped(false, () => st(n.scrutinee, (v) => `yield ${v};`))}\n})) {\n${k(r)}\n}`;
         }
         case "fold": return stFold(n, k);
-        case "solve": {
-          return parts(givenOf(n), (vals) => {
-            const sol = temp("sol");
-            const bs = Object.values(n.binds).map((b, i) => `const ${local(b)} = ${sol}[${i}];`).join(" ");
-            const f = solver(n);
-            const bound = Object.values(n.binds);
-            if (arrayAt?.solve === n.id) { const { d } = arrayAt; return `${d}.length = 0;\nif (${f}$into(${[d, ...vals].join(", ")})) {\nconst ${local(bound[0])} = ${d};\n${st(n.body, k)}\n}`; }
-            if (onceSolvers.has(n.id) && bound.length === 1) return `const ${local(bound[0])} = ${f}$one(${vals.join(", ")});\nif (${local(bound[0])} !== $no) {\n${st(n.body, k)}\n}`;
-            if (onceSolvers.has(n.id)) return `const ${sol} = ${f}$one(${vals.join(", ")});\nif (${sol} !== $no) {\n${bs}\n${st(n.body, k)}\n}`;
-            return `for (const ${sol} of ${f}(${vals.join(", ")})) {\n${bs}\n${st(n.body, k)}\n}`;
-          });
-        }
         default: throw new Error(`internal: a ${n.kind} with Choice`);
       }
     }

@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { hashDef } from "../src/hash.ts";
 import { root } from "../src/io.ts";
-import { get, replace, subtree, type Code, type Id, type NodeOf, isCall, type Call } from "../src/model.ts";
+import { get, replace, subtree, type Code, type Id, type NodeOf, isCall, type Call, useOf } from "../src/model.ts";
 import { infer, fillings } from "../src/lang/infer.ts";
 import { base, baseNames, loadProgram } from "../src/lang/load.ts";
 import { addVariant, fillHole } from "../src/lang/refactor.ts";
@@ -224,7 +224,7 @@ test("relations: a direction is chosen at the use site, and its effect is inferr
   ]);
   // Polar given only x: not enough to solve, and the checker says so.
   const toPolar = get(p.code, get(p.code, p.named("to polar"), "def").body!, "lambda");
-  const solve = get(p.code, toPolar.body, "solve");
+  const solve = useOf(p.code.nodes[toPolar.body])!;
   const [x] = Object.keys(solve.given);
   const code = replace(p.code, solve.id, () => ({ ...solve, given: { [x]: solve.given[x], out: solve.given.out } }));
   assert.ok(infer(code, p.pres.names).errors.some((e) => /needs 1 more known port/.test(e.message)));

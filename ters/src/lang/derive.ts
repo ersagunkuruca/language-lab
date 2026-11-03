@@ -54,7 +54,7 @@
 
 import { FN } from "../../../invertible/src/expr.js";
 import type { Code, Id, Node, NodeData, NodeOf } from "../model.ts";
-import { children, freshId, ownerOfTypeParts, useTarget, useNode, isCall, type Call } from "../model.ts";
+import { children, freshId, ownerOfTypeParts, useTarget, useNode, isCall, type Call, isUse } from "../model.ts";
 import { fieldShapes } from "./nested.ts";
 import type { Names } from "../presentation.ts";
 import { impl } from "../prelude.ts";
@@ -317,7 +317,15 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
       case "lit": return add({ kind: "lit", value: n.value, ...(n.of ? { of: n.of } : {}) });
       case "hole": return add({ kind: "hole" });
       case "ref": return ctx.sub.has(n.target) ? ctx.sub.get(n.target)!() : ref(n.target);
-      case "call": return add({ kind: "call", fn: copy(n.fn, ctx), args: n.args.map((a) => copy(a, ctx)) });
+      case "call":
+        if (isUse(n)) {
+          const sub = new Map(ctx.sub);
+          const given = Object.fromEntries(Object.entries(n.given).map(([k, e]) => [k, copy(e, ctx)]));
+          const binds = Object.fromEntries(Object.entries(n.binds).map(([k, b]) => [k, fresh([b], sub)[0]]));
+          return add(useNode(add, useTarget(nodes, n), given, binds, copy(n.body, { ...ctx, sub })));
+
+        }
+        return add({ kind: "call", fn: copy(n.fn, ctx), args: n.args.map((a) => copy(a, ctx)) });
       case "lambda": {
         const sub = new Map(ctx.sub);
         const params = fresh(n.params, sub);
@@ -334,12 +342,6 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
         const scrutinee = copy(n.scrutinee, ctx);
         return n.kind === "fold" ? add({ kind: "fold", scrutinee, arms })
           : add({ kind: "match", scrutinee, arms, otherwise: n.otherwise ? copy(n.otherwise, ctx) : null });
-      }
-      case "solve": {
-        const sub = new Map(ctx.sub);
-        const given = Object.fromEntries(Object.entries(n.given).map(([k, e]) => [k, copy(e, ctx)]));
-        const binds = Object.fromEntries(Object.entries(n.binds).map(([k, b]) => [k, fresh([b], sub)[0]]));
-        return add(useNode(add, useTarget(nodes, n), given, binds, copy(n.body, { ...ctx, sub })));
       }
       default: throw new NotDifferentiable(`can't copy a ${n.kind}`);
     }
@@ -378,6 +380,7 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
     switch (n.kind) {
       case "ref": return ctx.d.get(n.target) ?? numE(0);
       case "call": {
+        if (isUse(n)) return cant("can't differentiate through a relation used backwards");
         const head = nodes[n.fn];
         if (head.kind === "lambda") return letD(n, head, ctx);
         if (head.kind === "ref") {

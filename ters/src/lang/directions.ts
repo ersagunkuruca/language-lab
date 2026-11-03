@@ -93,7 +93,7 @@ export function useDirections(code: Code): Code {
   const asked = (n: Use) => { const f = code.nodes[useTarget(code.nodes, n)]; return ways.has(useTarget(code.nodes, n)) || (f?.kind === "field" && !!f.results); };
   let nodes: Code["nodes"] | null = null;
   const rewritten: Id[] = [];
-  for (const id of nodesWhere(code, "solve", (n) => isUse(n))) {
+  for (const id of nodesWhere(code, "use", isUse)) {
     const n = code.nodes[id] as Use;
     if (!asked(n)) continue;
     const r = directionFor(code, n, ways);

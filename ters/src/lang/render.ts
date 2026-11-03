@@ -244,6 +244,7 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
         return { p: [part("lam", [pn("("), ...commas(params.map((b) => [b])), pn(")"), ...named, pn(" => "), ...body], id)], prec: 0 };
       }
       case "call": {
+        if (isUse(n)) return atom(part("use", ["‹use›"], id));
         const items = listItems(id);
         if (items) return atom(part("call", [pn("["), ...commas(items.map((i) => inline(i).p)), pn("]")], id));
         const f = node(n.fn);

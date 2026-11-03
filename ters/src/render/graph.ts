@@ -3,7 +3,7 @@
 // let binding disappears entirely.
 
 import type { Code, Id } from "../model.ts";
-import { get } from "../model.ts";
+import { get, isUse } from "../model.ts";
 import type { Presentation } from "../presentation.ts";
 import { Namer } from "./namer.ts";
 
@@ -36,6 +36,7 @@ export function renderGraph(code: Code, pres: Presentation, defId: Id): string {
       }
       case "lambda": return declare(key(id), `[${q("λ " + n.params.map((p) => namer.name(p)).join(", "))}]`);
       case "call": {
+        if (isUse(n)) throw new Error("unexpected use in expression");
         const fn = code.nodes[n.fn];
         if (fn.kind === "lambda") {
           n.args.forEach((arg, i) => {

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { FN } from "../../invertible/src/expr.js";
 import { root } from "../src/io.ts";
-import { get, replace, type Code, type Id, type NodeOf } from "../src/model.ts";
+import { get, replace, type Code, type Id, type NodeOf, type Call, type Use, isUse, useTarget } from "../src/model.ts";
 import { impl } from "../src/prelude.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
@@ -160,7 +160,7 @@ test("backwards: types say Choice, Diverge when the search may not end, and prin
   // but each step reads a shorter text, so it ends (modes.ts). It was
   // typed Diverge before the mode analysis.
   const read = get(p.code, get(p.code, p.named("read numbers"), "def").body!, "lambda");
-  const fuel = get(p.code, read.body, "call");
+  const fuel = get(p.code, read.body, "call") as Call;
   const thunk = get(p.code, fuel.args[1], "lambda");
   const bare = replace(p.code, read.body, (c) => ({ ...c.nodes[thunk.body] } as never));
   assert.equal(showType(infer(bare, p.pres.names).typeOf.get(p.named("read numbers"))!, p.pres.names), "(Text) -[Choice]-> List Float64");
@@ -354,13 +354,13 @@ test("differentiate: recursion, functions passed in, and what isn't differentiab
 test("a parameter whose id is all digits is labelled by its name", () => {
   const { code, pres: { names } } = load("backwards");
   for (const n of Object.values(code.nodes)) {
-    if (n.kind !== "solve") continue;
+    if (!isUse(n)) continue;
     for (const k of [...Object.keys(n.given), ...Object.keys(n.binds)]) {
-      assert.equal(typeof portLabel(code, names, n.fn, k), "string", `${n.id} ${k}`);
+      assert.equal(typeof portLabel(code, names, useTarget(code.nodes, n), k), "string", `${n.id} ${k}`);
     }
   }
-  const greet = Object.values(code.nodes).find((n): n is NodeOf<"solve"> => n.kind === "solve" && "19718686" in n.binds)!;
-  assert.equal(portLabel(code, names, greet.fn, "19718686"), names["19718686"]);
+  const greet = Object.values(code.nodes).find((n): n is Use => isUse(n) && "19718686" in n.binds)!;
+  assert.equal(portLabel(code, names, useTarget(code.nodes, greet), "19718686"), names["19718686"]);
   assert.equal(portLabel(code, names, "builtin.concat", "1"), "b");
 });
 

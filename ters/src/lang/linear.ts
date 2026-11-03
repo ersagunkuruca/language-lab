@@ -27,6 +27,7 @@
 // j-th basis vector.
 
 import type { Code, Id, NodeOf } from "../model.ts";
+import { isUse } from "../model.ts";
 import { impl, type Op } from "../prelude.ts";
 import { ARITH } from "./std.ts";
 import { NUMBER } from "./types.ts";
@@ -187,6 +188,7 @@ function read(code: Code, fn: Id): LinearMap {
       case "lambda":
         return { k: "closure", lambda: n, env };
       case "call":
+        if (isUse(n)) return no();
         return apply(ev(n.fn, env), n.args.map((a) => ev(a, env)));
       case "match": {
         if (n.arms.length !== 1 || n.otherwise) return no();

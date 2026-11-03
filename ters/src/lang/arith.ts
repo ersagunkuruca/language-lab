@@ -231,16 +231,19 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
     const kid = (x: Id) => copyTree(x, renames, env);
     switch (n.kind) {
       case "ref": c.target = renames.get(n.target) ?? n.target; break;
-      case "call": c.fn = kid(n.fn); c.args = n.args.map(kid); break;
+      case "call":
+        if (isUse(n)) {
+          c.fn = kid(n.fn);
+          c.given = Object.fromEntries(Object.entries(n.given).map(([k, v]) => [k, kid(v)]));
+          c.binds = Object.fromEntries(Object.entries(n.binds).map(([k, v]) => [k, kid(v)]));
+          c.body = kid(n.body);
+          break;
+        }
+        c.fn = kid(n.fn); c.args = n.args.map(kid); break;
       case "lambda": c.params = n.params.map(kid); c.body = kid(n.body); if (n.results) c.results = n.results.map(kid); break;
       case "match": c.scrutinee = kid(n.scrutinee); c.arms = n.arms.map(kid); c.otherwise = n.otherwise && kid(n.otherwise); break;
       case "fold": c.scrutinee = kid(n.scrutinee); c.arms = n.arms.map(kid); break;
       case "arm": c.binds = n.binds.map(kid); c.results = n.results.map((r) => r && kid(r)); c.body = kid(n.body); break;
-      case "solve":
-        c.given = Object.fromEntries(Object.entries(n.given).map(([k, v]) => [k, kid(v)]));
-        c.binds = Object.fromEntries(Object.entries(n.binds).map(([k, v]) => [k, kid(v)]));
-        c.body = kid(n.body);
-        break;
     }
     nodes[fresh] = c as unknown as Node;
     copyOf.set(fresh, copyOf.get(id) ?? id);
@@ -376,13 +379,14 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
       if (n.kind === "lit" && n.of !== undefined && DATA_NUMBERS.has(n.of)) { literal(n); return; }
       const kids: Id[] = [];
       switch (n.kind) {
-        case "call": kids.push(n.fn, ...n.args); break;
+        case "call":
+          if (isUse(n)) { kids.push(...Object.values(n.given), n.body); break; }
+          kids.push(n.fn, ...n.args); break;
         case "lambda": kids.push(n.body); break;
         case "def": if (n.body) kids.push(n.body); break;
         case "match": kids.push(n.scrutinee, ...n.arms, ...(n.otherwise ? [n.otherwise] : [])); break;
         case "fold": kids.push(n.scrutinee, ...n.arms); break;
         case "arm": kids.push(n.body); break;
-        case "solve": kids.push(...Object.values(n.given), n.body); break;
       }
       for (const k of kids) walk(k, id);
     };

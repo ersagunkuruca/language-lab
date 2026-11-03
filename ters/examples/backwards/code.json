@@ -203,8 +203,8 @@
     },
     "a024521c": {
       "id": "a024521c",
-      "kind": "solve",
-      "fn": "b795c829",
+      "kind": "call",
+      "fn": "a024521c.fn",
       "given": {
         "out": "54984164"
       },
@@ -302,8 +302,8 @@
     },
     "6b216d57": {
       "id": "6b216d57",
-      "kind": "solve",
-      "fn": "f5057927",
+      "kind": "call",
+      "fn": "6b216d57.fn",
       "given": {
         "out": "0d99a7cb"
       },
@@ -413,8 +413,8 @@
     },
     "5387641d": {
       "id": "5387641d",
-      "kind": "solve",
-      "fn": "builtin.concat",
+      "kind": "call",
+      "fn": "5387641d.fn",
       "given": {
         "out": "a0b30029"
       },
@@ -481,8 +481,8 @@
     },
     "a26f67ce": {
       "id": "a26f67ce",
-      "kind": "solve",
-      "fn": "@su0m8djlkg5cq4b68i0klesqia",
+      "kind": "call",
+      "fn": "a26f67ce.fn",
       "given": {
         "out": "e07f18b8"
       },
@@ -554,8 +554,8 @@
     },
     "f0a9de91": {
       "id": "f0a9de91",
-      "kind": "solve",
-      "fn": "@9902gjnadddgv3jrh6ir29nf4q",
+      "kind": "call",
+      "fn": "f0a9de91.fn",
       "given": {
         "@9902gjnadddgv3jrh6ir29nf4q:3": "cb798254",
         "out": "087436e3"
@@ -692,8 +692,8 @@
     },
     "aaa45601": {
       "id": "aaa45601",
-      "kind": "solve",
-      "fn": "055b62ce",
+      "kind": "call",
+      "fn": "aaa45601.fn",
       "given": {
         "0c032c6a": "ca0c6bff",
         "out": "c3937a5b"
@@ -1857,6 +1857,36 @@
       "kind": "lambda",
       "params": [],
       "body": "e5729b92"
+    },
+    "a024521c.fn": {
+      "id": "a024521c.fn",
+      "kind": "ref",
+      "target": "b795c829"
+    },
+    "6b216d57.fn": {
+      "id": "6b216d57.fn",
+      "kind": "ref",
+      "target": "f5057927"
+    },
+    "5387641d.fn": {
+      "id": "5387641d.fn",
+      "kind": "ref",
+      "target": "builtin.concat"
+    },
+    "a26f67ce.fn": {
+      "id": "a26f67ce.fn",
+      "kind": "ref",
+      "target": "@su0m8djlkg5cq4b68i0klesqia"
+    },
+    "f0a9de91.fn": {
+      "id": "f0a9de91.fn",
+      "kind": "ref",
+      "target": "@9902gjnadddgv3jrh6ir29nf4q"
+    },
+    "aaa45601.fn": {
+      "id": "aaa45601.fn",
+      "kind": "ref",
+      "target": "055b62ce"
     }
   },
   "defs": [

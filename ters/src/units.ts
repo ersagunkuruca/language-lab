@@ -11,7 +11,7 @@
 // isn't in scope.
 
 import type { Code, Id, Node } from "./model.ts";
-import { get, useTarget, isCall } from "./model.ts";
+import { get, useTarget, isCall, isUse } from "./model.ts";
 
 // Angles are plain numbers, as in SI: a radian is a length over a length.
 export const BASE = ["m", "s", "kg", "A"] as const;
@@ -122,6 +122,16 @@ export function constraints(code: Code, defId: Id, prefix = "", bindings: Map<Id
       }
       case "lambda": n.params.forEach(declare); visit(n.body); return;
       case "call": {
+        if (isUse(n)) {
+          // A call read sideways: each port is a given expression or a binder.
+          Object.values(n.given).forEach(visit);
+          const term = (k: string) => (n.given[k] ? t(n.given[k]) : n.binds[k] ? t(n.binds[k]) : `${prefix}${id}:${k}`);
+          if (code.nodes[useTarget(code.nodes, n)]?.kind === "def") out.push(...calleeConstraints(code, useTarget(code.nodes, n), term, `${prefix}${id}/`, [...path, defId]));
+          else if (code.nodes[useTarget(code.nodes, n)]?.kind === "builtin") out.push(...rules((code.nodes[useTarget(code.nodes, n)] as { op: string }).op, term, id, id));
+          visit(n.body);
+          same(id, n.body, "solve", id);
+          return;
+        }
         const fn = code.nodes[n.fn];
         n.args.forEach(visit);
         const port = (k: string) => (k === "out" ? t(id) : t(n.args[+k]));
@@ -148,16 +158,6 @@ export function constraints(code: Code, defId: Id, prefix = "", bindings: Map<Id
           same(id, arm.body, "a case", id);
         }
         if (n.kind === "match" && n.otherwise) { visit(n.otherwise); same(id, n.otherwise, "a case", id); }
-        return;
-      }
-      case "solve": {
-        // A call read sideways: each port is a given expression or a binder.
-        Object.values(n.given).forEach(visit);
-        const term = (k: string) => (n.given[k] ? t(n.given[k]) : n.binds[k] ? t(n.binds[k]) : `${prefix}${id}:${k}`);
-        if (code.nodes[useTarget(code.nodes, n)]?.kind === "def") out.push(...calleeConstraints(code, useTarget(code.nodes, n), term, `${prefix}${id}/`, [...path, defId]));
-        else if (code.nodes[useTarget(code.nodes, n)]?.kind === "builtin") out.push(...rules((code.nodes[useTarget(code.nodes, n)] as { op: string }).op, term, id, id));
-        visit(n.body);
-        same(id, n.body, "solve", id);
         return;
       }
       default: return;

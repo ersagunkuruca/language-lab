@@ -46,7 +46,7 @@ export function expandInverses(code: Code, names: Names): { code: Code; names: N
   const inverse = (id: Id, fn: Id, y: Id) => {
     const p = param(fn)!, x = add({ kind: "binder" } as Omit<Node, "id">);
     more[x] = names[p] ?? "x";
-    out.nodes[id] = { id, kind: "solve", fn: (out.nodes[fn] as NodeOf<"ref">).target, given: { out: y }, binds: { [p]: x }, body: ref(x) } as Node;
+    out.nodes[id] = { id, kind: "call", fn, given: { out: y }, binds: { [p]: x }, body: ref(x) };
   };
   const expanded: Id[] = [];
   for (const id of Object.keys(code.nodes)) {

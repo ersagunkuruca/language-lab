@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { root } from "../src/io.ts";
-import { get, subtree, type Code, type Id, type NodeOf } from "../src/model.ts";
+import { get, subtree, type Code, type Id, type NodeOf, isUse, useTarget } from "../src/model.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { LIBRARY } from "../src/lang/library.ts";
@@ -220,10 +220,10 @@ test("every relational solve in the examples has a mode that isn't stuck, and it
     const own = JSON.parse(readFileSync(join(root, "examples", e, "code.json"), "utf8")) as Code;
     const a = analyzer(p.code, p.pres.names);
     for (const n of Object.values(own.nodes)) {
-      if (n.kind !== "solve" || planSolve(p.code, n as NodeOf<"solve">).mode !== "relational") continue;
-      const v = a.ofSolve(n as NodeOf<"solve">)!;
-      assert.equal(v.stuck.length, 0, `${e}: ${p.pres.names[n.fn]}: ${describeVerdict(v)}`);
-      seen.push(`${e}: ${p.pres.names[n.fn] ?? n.fn}: ${describeVerdict(v)}`);
+      if (!isUse(n) || planSolve(p.code, n).mode !== "relational") continue;
+      const v = a.ofSolve(n)!;
+      assert.equal(v.stuck.length, 0, `${e}: ${p.pres.names[useTarget(p.code.nodes, n)]}: ${describeVerdict(v)}`);
+      seen.push(`${e}: ${p.pres.names[useTarget(p.code.nodes, n)] ?? useTarget(p.code.nodes, n)}: ${describeVerdict(v)}`);
     }
   }
   // Today every one of these is typed Choice, and map and show numbers

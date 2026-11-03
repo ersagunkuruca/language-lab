@@ -2,7 +2,7 @@
 // tree is.
 
 import type { Code, Id } from "../model.ts";
-import { get, useTarget, isCall } from "../model.ts";
+import { get, useTarget, isCall, isUse } from "../model.ts";
 import type { Presentation } from "../presentation.ts";
 import { Namer } from "./namer.ts";
 import { atom, callText, comment, Footnotes, lambdaText, unread, type R } from "./expr.ts";
@@ -17,6 +17,13 @@ export function nestedExpr(code: Code, pres: Presentation, namer: Namer, notes: 
       case "hole": r = atom("□"); break;
       case "lambda": r = lambdaText(code, namer, n.params, expr(n.body)); break;
       case "call": {
+        if (isUse(n)) {
+          // A port is the callee's parameter, named as it is, or its result.
+          const given = Object.entries(n.given).map(([k, e]) => `${k === "out" ? "out" : namer.name(k)} = ${expr(e).text}`).join(", ");
+          const wanted = Object.values(n.binds).map((b) => namer.name(b)).join(", ");
+          r = atom(`solve ${namer.name(useTarget(code.nodes, n))}(${given}) for ${wanted} → ${expr(n.body).text}`);
+          break;
+        }
         // Steps done one after another (print this, then that): a; b.
         const f = code.nodes[n.fn];
         if (f.kind === "lambda" && f.params.every((p) => unread(code, p, f.body))) {
@@ -38,13 +45,6 @@ export function nestedExpr(code: Code, pres: Presentation, namer: Namer, notes: 
         });
         if (n.kind === "match" && n.otherwise) arms.push(`otherwise → ${expr(n.otherwise).text}`);
         r = atom(`${n.kind} ${expr(n.scrutinee).text} { ${arms.join("; ")} }`);
-        break;
-      }
-      case "solve": {
-        // A port is the callee's parameter, named as it is, or its result.
-        const given = Object.entries(n.given).map(([k, e]) => `${k === "out" ? "out" : namer.name(k)} = ${expr(e).text}`).join(", ");
-        const wanted = Object.values(n.binds).map((b) => namer.name(b)).join(", ");
-        r = atom(`solve ${namer.name(useTarget(code.nodes, n))}(${given}) for ${wanted} → ${expr(n.body).text}`);
         break;
       }
       default: throw new Error(`unexpected ${n.kind} in expression`);
