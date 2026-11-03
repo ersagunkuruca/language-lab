@@ -55,6 +55,10 @@ export function usePorts(code: Code, n: { fn: Id }): string[] | null {
   return sig?.t === "fn" ? [...sig.params.map((_, i) => String(i)), "out"] : null;
 }
 
+// The ports a use answers (L211d): its binders', in order, or with no
+// body the ones it produces, the ports not given, in port order.
+export const answerKeys = (code: Code, n: Use): string[] => (n.body !== undefined ? Object.keys(n.binds ?? {}) : (usePorts(code, n) ?? []).filter((k) => !(k in n.given)));
+
 // A use with no body (L211, PORTS-2026-11-01.md §3 "Decided (L179)") gives
 // its produced ports, the ones not given, in port order, as a tuple, or
 // the one value when it produces one. Until the readers take it as it is,
