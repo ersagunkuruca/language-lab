@@ -47,6 +47,7 @@ export const NOTES: Comments = {
   "std.receive": "Asks for the next item: piped answers it with some(item) from the producer's next send, or none once the producer has finished.",
   "std.pipe": "A producer run to its next send: finished, or sent(item, more), where more runs it on to the send after.",
   "std.word8": "Whole numbers from 0 to 255 that wrap around: + − · keep the low 8 bits, so 255 + 1 is 0. Made by as word8. For bytes and binary formats.",
+  "std.word16": "Whole numbers from 0 to 65,535 that wrap around: + − · keep the low 16 bits. Made by as word16. For 16-bit audio samples and binary formats.",
   "std.word32": "Whole numbers from 0 to 2³² − 1 that wrap around: + − · keep the low 32 bits. Made by as word32. For hashes (FNV-1a), generators (xorshift) and samples.",
   "std.word64": "Whole numbers from 0 to 2⁶⁴ − 1 that wrap around: + − · keep the low 64 bits. Made by as word64. For 64-bit hashes and generators.",
   "std.bits.bits.bits and": "The bits both a and b have: at a word, its n bits; at Int, two's complement (a negative has ones going on forever).",
