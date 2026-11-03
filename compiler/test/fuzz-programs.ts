@@ -170,6 +170,7 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
           () => orElse(call(INT_OPS.power, call(INT_OPS.remainder, sub("I"), k.int(10)), call(INT_OPS.remainder, sub("I"), k.int(20)))),
           () => call(lib("sum"), sub("L")),
           () => call(S.count, search()),
+          () => k.call(S.first, k.thunk(() => call(S.fuel, k.lit(r.pick([0, 1, 3, 8, 20, 200])), k.thunk(() => call(wander, small(60), sub("I"))))), k.thunk(() => sub("I"))),
           () => k.call(S.first, search(), k.thunk(() => sub("I"))),
           () => call(INT_OPS.abs, sub("I")),
           () => orElse(call(INT_OPS.wholePart, sub("F"))),
@@ -425,6 +426,15 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
     }
   }
 
+  // A recursion on an Int that may not end, as far as the checker can
+  // tell (Diverge): Collatz's steps from n, counted onto c. The
+  // definitions call it under `with fuel` (C135), so every engine must
+  // spend the same fuel per call and run out at the same call.
+  const wander = k.def("wander");
+  k.define(wander, k.fn(["n", "c"], (n, c) => k.if(call(INT_OPS.less, n, k.int(2)), c,
+    call(wander, k.if(k.equal(k.call(S.first, k.thunk(() => call(INT_OPS.remainder, n, k.int(2))), k.thunk(() => k.int(0))), k.int(0)),
+      k.call(S.first, k.thunk(() => call(INT_OPS.quotient, n, k.int(2))), k.thunk(() => k.int(0))),
+      call(INT_OPS.add, call(INT_OPS.mul, n, k.int(3)), k.int(1))), call(INT_OPS.add, c, k.int(1))))));
   // Helpers from a box, a shape and an Int to an Int, which the
   // definitions call: some only read the box's fields, some make boxes.
   const helpers: Id[] = [], recursive: Id[] = [], higher: Id[] = [], generic: Id[] = [], genericDefs: Id[] = [];
@@ -512,5 +522,5 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
   const main = k.def("main");
   k.define(main, k.thunk(() => k.list(...entries.map((e) => call(e, k.lit(2.5), k.int(3), k.int(1))))));
   const code = base(k.code), names2 = baseNames(k.names);
-  return { code, names: names2, info: infer(code, names2, undefined, checkOptions), defs, entries, main, own: [...helpers, ...recursive, ...higher, ...genericDefs, ...defs.map((d) => d.def), lists, ...entries, main] };
+  return { code, names: names2, info: infer(code, names2, undefined, checkOptions), defs, entries, main, own: [wander, ...helpers, ...recursive, ...higher, ...genericDefs, ...defs.map((d) => d.def), lists, ...entries, main] };
 }
