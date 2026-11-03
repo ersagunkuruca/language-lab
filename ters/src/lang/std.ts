@@ -5,7 +5,8 @@
 
 import { discharge } from "./ledger.ts";
 import type { Code, Id, Node, NodeOf } from "../model.ts";
-import { isCall, upgradeUses } from "../model.ts";
+import { isCall, toTodaysShape } from "../model.ts";
+import moved0 from "../../library/moved.json" with { type: "json" };
 import type { Names } from "../presentation.ts";
 import { B, impl } from "../prelude.ts";
 import { MASK_TYPES, NAMED_ROWS, ARRAY, TABLE, HASH_SET, CELL, PATH, JOB, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NETWORK, NUMBER, STRING, type Row, type Subst, type Type } from "./types.ts";
@@ -1253,15 +1254,26 @@ export const RENAMED_IDS: Record<Id, Id> = {
   "std.pair": "std.tuple2", "std.pair.type": "std.tuple2.type", "std.pair.a": "std.tuple2.a", "std.pair.b": "std.tuple2.b",
   "std.pair.pair": "std.tuple2.tuple", "std.pair.pair.fst": "std.tuple2.tuple.first", "std.pair.pair.snd": "std.tuple2.tuple.second",
 };
-// A saved value (a program's code, names, comments) with each renamed id
-// in it, as a key or a string, read as today's.
-export function onTodaysIds<T>(x: T): T {
-  if (typeof x === "string") return (RENAMED_IDS[x] ?? x) as T;
-  if (Array.isArray(x)) return x.map(onTodaysIds) as T;
+// Library definitions whose content changed, old id to today's (L184,
+// written by library/build.ts). A part of one (`@def:3`) moves with it.
+const MOVED = moved0 as Record<Id, Id>;
+const todaysId = (id: string): string => {
+  const renamed = RENAMED_IDS[id] ?? MOVED[id];
+  if (renamed) return renamed;
+  const at = id.startsWith("@") ? id.indexOf(":") : -1;
+  return at > 0 && MOVED[id.slice(0, at)] ? MOVED[id.slice(0, at)] + id.slice(at) : id;
+};
+// A saved value (a program's code, names, comments) read as today's: each
+// renamed or moved id in it, as a key or a string, and its nodes moved
+// through every change of shape since the one it was saved at (`shape`,
+// model.ts SHAPE_STEPS; all of them when it has none).
+export function onTodaysIds<T>(x: T, from = (x as { shape?: unknown } | null)?.shape): T {
+  const shape = typeof from === "number" ? from : 0;
+  if (typeof x === "string") return todaysId(x) as T;
+  if (Array.isArray(x)) return x.map((v) => onTodaysIds(v, shape)) as T;
   if (x && typeof x === "object") {
-    const o = Object.fromEntries(Object.entries(x).map(([k, v]) => [RENAMED_IDS[k] ?? k, onTodaysIds(v)]));
-    // A saved use (kind `solve`) is a call today (L130d).
-    if (o.nodes && typeof o.nodes === "object" && !Array.isArray(o.nodes)) upgradeUses(o.nodes as Record<Id, unknown>);
+    const o = Object.fromEntries(Object.entries(x).map(([k, v]) => [todaysId(k), onTodaysIds(v, shape)]));
+    if (o.nodes && typeof o.nodes === "object" && !Array.isArray(o.nodes)) toTodaysShape(o.nodes as Record<Id, unknown>, shape);
     return o as T;
   }
   return x;

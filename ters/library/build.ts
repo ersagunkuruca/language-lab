@@ -55,6 +55,15 @@ console.log(`trees: ${t.code.defs.length} definitions, ${t.representations!.leng
 const newIds: Record<string, string> = {};
 for (const mod of [m, v, h]) for (const d of mod.code.defs) newIds[mod.names[d] ?? d] = d;
 const moved = Object.entries(oldIds).flatMap(([name, old]) => (newIds[name] && newIds[name] !== old ? [[old, newIds[name]] as const] : []));
+// A saved program refers to library definitions by id, so one whose content
+// changed keeps opening: its old id is read as the new one (moved.json, read
+// by std.ts onTodaysIds; L184). Every move is kept, the older ones pointed
+// on at today's id.
+const movedPath = join(here, "moved.json");
+const kept: Record<string, string> = existsSync(movedPath) ? JSON.parse(readFileSync(movedPath, "utf8")) : {};
+for (const [a, b] of moved) kept[a] = b;
+const today = (id: string) => { for (const seen = new Set<string>(); kept[id] && !seen.has(id);) { seen.add(id); id = kept[id]; } return id; };
+save(movedPath, Object.fromEntries(Object.keys(kept).sort().map((a) => [a, today(a)] as const).filter(([a, b]) => a !== b)));
 
 // Examples, with the library just written.
 const { adoptLibrary } = await import("../src/lang/library.ts");

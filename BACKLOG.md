@@ -22,7 +22,7 @@ language, then more targets or speed (WORKFLOW.md "Priority").
 |---|---|---|
 | E Editor | "Editor lane" | E211 the bigger programs as editor examples (one a PR), L70c's editor half (mark where a failed read stopped), L147b; then E200b, E103 |
 | C Compiler and targets | "Compiler lane" | C93's rest, C86, C40's rest; then C30, C67 |
-| L Language and library | "Language lane" | L184 (old saved programs keep opening), L128d, L99, L61 |
+| L Language and library | "Language lane" | L128d, L99, L61 |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -280,7 +280,6 @@ agent with inertia. All later goals.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L184 | Saved programs survive language changes: one node-schema version (with L178's table) and an upgrade step per shape change, run in a chain on open; a test opens a corpus of real old files (the round boards in project files) and checks each opens, checks and gives the same main. Std meaning changes get a new id or a step, never a silent change. L130's flip (#1266) has the first such step, `upgradeUses` in `onTodaysIds` (a saved `solve` read as a call), with no version number yet | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §1 | P1 | M | |
 | L185 | Text decisions: NFC where text enters from the world (equality stays code points); case mapping takes a locale as an argument or effect (Turkish i/İ, ı/I); `graphemes(t)`; collation as a separate order by locale | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §4 | P3 | M | |
 | L186 | Design note in HOSTS.md: every world answer goes through one log a host can keep, so any run can be replayed exactly, stepped back, or saved as a test's inputs (with the seeded scheduler once fibers land) | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §6 | P3 | S | |
 | L187 | Error messages as one table (id, message, usual fix, the gesture that fixes it) with a smallest program per problem as its test | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §8 | P3 | M | |
