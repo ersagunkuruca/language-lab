@@ -586,7 +586,10 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   };
   const vars = (t: Type): number[] => (t.t === "var" ? [t.v] : t.t === "con" ? t.args.flatMap(vars) : [...t.params.flatMap(vars), ...vars(t.ret), ...(t.eff.tail === null ? [] : [t.eff.tail])]);
   const keyOf = (t: LType): string => (typeof t === "string" ? t : t.key);
-  const show = (t: Type): string => (t.t === "con" ? `${t.id}<${t.args.map(show).join(",")}>` : t.t === "var" ? `?${t.v}` : `fn(${t.params.map(show).join(",")})>${show(t.ret)}`);
+  // A type's key; a function's says whether it may have no answer, as its
+  // lowered type does (I152: a list of functions that choose and one of
+  // functions that don't were one type, holding either).
+  const show = (t: Type): string => (t.t === "con" ? `${t.id}<${t.args.map(show).join(",")}>` : t.t === "var" ? `?${t.v}` : `fn(${t.params.map(show).join(",")})>${show(t.ret)}${opts.data && info.subst.resolveRow(t.eff).effs.some(partialEff) ? "!" : ""}`);
 
   const funcs: SFunc[] = [];
   const index = new Map<Id, number>();
