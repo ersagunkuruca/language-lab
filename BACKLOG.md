@@ -22,7 +22,7 @@ language, then more targets or speed (WORKFLOW.md "Priority").
 |---|---|---|
 | E Editor | "Editor lane" | E211 the bigger programs as editor examples (one a PR), L70c's editor half (mark where a failed read stopped), L147b; then E200b, E103 |
 | C Compiler and targets | "Compiler lane" | C93's rest, C86, C40's rest; then C30, C67 |
-| L Language and library | "Language lane" | (queue empty; next by priority from the table below) |
+| L Language and library | "Language lane" | L216 and T12 (test speed, TEST-SPEED-2026-11-03), then next by priority from the table below |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -31,7 +31,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I110 | Check main: 49 of its last 60 runs cancelled while queued, a run takes ~19 of its 20 minutes, "affected" reaches 93 of 97 test files. Look at why std.ts and the prelude reach every test; lanes check the latest run when starting an item | REVIEW-2026-11-01 §6 | 2026-11-01 |
 | I154 | A list written out with a thousand items (a table of data pasted in) stops the checker: "Maximum call stack size exceeded" in infer.ts, which walks the list as a thousand nested calls of the list maker, one stack frame each (500 items check). The evaluator, staging and the compilers walk it the same way. Either walk a chain of the list maker in a loop in each pass, or keep a written list as one node of n items | C128 (fuzz test, 2026-11-03) | 2026-11-03 |
 
 ## E: Editor
@@ -166,6 +165,8 @@ all of these.
 | L181 | A written list is one call to the list maker with n inputs (PORTS §4), not n nested `cons` calls, so a 1,000-item list is depth 1 in every pass (I154: the checker overflows its stack today) | [FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md) §6 | P2 | M | |
 | L182 | Flags as hidden kinds: every new node attribute goes through L178's schema; as L128d and L130 land, `def.results`, `def.direction` and `field.results/ports` become ports on the definition's type | [FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md) §8 | P3 | M | |
 | L215 | Check per definition group, cached ([CHECK-BY-GROUP-2026-11-03.md](docs/design/tools/CHECK-BY-GROUP-2026-11-03.md)), one PR each: (a) closed group results keyed by the group's hashes, its dependencies' schemes, the implementations it needs and the options, with a randomized cache-against-scratch test; (b) a `Checker` cache on the editor's edit path, timed on I157, I158 and a one-character edit in Constructions; (c) typedef groups, units, modes in the cache; (d) `reuse` removed | L183, FOUNDATIONS-2026-11-03 §9 | P3 | L | design done |
+| L216 | Check the library once per process: its check is kept, and a program's check reuses it and checks only the program's own definitions (L215's library case, ahead of it). Today each small program in a test re-checks all 495 library definitions: 6,823 full checks, about 2,200 s, 53% of the unit tests. With `reuse` 14 examples gave the same errors and schemes, 22 times faster; 20 threw (`null.params`), which this row fixes. The editor's opens and edits get it too (I157 to I159). Compare against a scratch check on every example | [TEST-SPEED-2026-11-03](docs/reports/TEST-SPEED-2026-11-03.md) | P1 | M | |
+| L217 | Resolve the library's arithmetic once per process: `makeRunner`'s `resolveArithmetic` walks the library again for every new program (2,999 calls, about 300 s in the unit tests) | [TEST-SPEED-2026-11-03](docs/reports/TEST-SPEED-2026-11-03.md) | P2 | S | after L216 |
 
 ### Bugs and gaps found by programs
 
@@ -301,6 +302,9 @@ docs/process/TESTING.md. T7 is in lane L.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| T12 | Each sweep checks a fixed number of things per change (say 40 fillings or wires), rotating by SWEEP_AT, all of it nightly. The eighth today is of targets, and each target tries every filling, which grew with the library: lang.test.ts's palette sweep 615 s (once about 30 s for all of it), dots physics 295 s, palette calculus 98 s. Lane L, since its runs pay for it | [TEST-SPEED-2026-11-03](docs/reports/TEST-SPEED-2026-11-03.md) | P1 | S | |
+| T13 | Measure the full run again after L216 and T12, then decide (Ersagun) whether a change to std.ts, the prelude or the checker runs a capped fast set, with Check main and the nightly running the rest. Today any such change reaches 199 of 202 files, so `affected` is the full run (I110) | [TEST-SPEED-2026-11-03](docs/reports/TEST-SPEED-2026-11-03.md), I110 | P2 | S | after L216, T12 |
+| T14 | The single slow tests left after L216: Tumble's clear backwards 74 s, tree of List 50 s, every builtin backwards 103 s, core-js examples and pages 116 s, editing's swapAndUndo 43 s. Each becomes a sweep or gets a smaller input, toward 5 s a file | [TEST-SPEED-2026-11-03](docs/reports/TEST-SPEED-2026-11-03.md) | P3 | M | after L216 |
 
 ## Coordinator and process
 
