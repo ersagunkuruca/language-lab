@@ -317,10 +317,23 @@ export function analyzer(code: Code, names: Record<Id, string> = {}, { plansOnly
   interface Ctx { key: string; ports: Port[]; fns: Map<Id, Fn>; def: Id | null }
 
   // The function a slot holds, when it's known before running.
+  // A let's binder whose value names a definition or builtin outright, `let
+  // f = equal in f(a, b)` (a dot on the wire, L222): that one, as if named.
+  let lets: Map<Id, Id> | undefined;
+  const letNamed = (b: Id): Id | undefined => {
+    if (!lets) {
+      lets = new Map();
+      for (const n of Object.values(nodes)) {
+        if (!isCall(n) || !isLet(n)) continue;
+        (nodes[n.fn] as NodeOf<"lambda">).params.forEach((p, i) => { const v = nodes[n.args[i]]; if (v?.kind === "ref" && nodes[v.target]?.kind !== "binder") lets!.set(p, v.target); });
+      }
+    }
+    return lets.get(b);
+  };
   function fnAt(id: Id, ctx: Ctx): Fn | null {
     const n = nodes[id];
     if (n.kind === "ref") {
-      const t = nodes[n.target];
+      const t = nodes[letNamed(n.target) ?? n.target];
       if (t.kind === "def" || t.kind === "builtin" || t.kind === "variant" || t.kind === "field") return { k: t.kind, id: t.id };
       return ctx.fns.get(slot(n.target)) ?? null;
     }
