@@ -2,9 +2,9 @@
 // (MATHEMATICS-AS-LIBRARIES-2026-11-03.md, BACKLOG L202): the prelude's
 // Clifford definitions copied under new ids, as a third-party library
 // would hold them, type-check, and give the prelude's answers evaluated
-// and compiled. What the copy doesn't get yet is the prelude's speed where
-// a pass finds a definition by its name (grade masks, L203) or its hash
-// (jets, L206); this test pins only the meaning.
+// and compiled, and its grade masks (L203a: the reading knows a definition
+// by its meaning's hash, not its id). Jets (L206) still find the
+// prelude's definitions only.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -17,6 +17,7 @@ import { infer } from "../src/lang/infer.ts";
 import { makeRunner, type Value } from "../src/lang/run.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
+import { bladeMask } from "../src/lang/grades.ts";
 import { renameCode } from "../src/lang/modules.ts";
 import { SHOW_ANY } from "../src/lang/std.ts";
 import { NUMBER } from "../src/lang/types.ts";
@@ -62,6 +63,10 @@ test("the prelude's Clifford definitions copied under new ids check and give the
     show("grade 2", () => k.call(f("clifford grade"), cl3(), k.int(2), a3));
     show("pga product", () => k.call(f("clifford product"), pga(), pa, pb));
     show("pga regressive", () => k.call(f("clifford regressive"), pga(), pa, pb));
+    // Not shown, so the grade reading (L203) sees the multivector.
+    const al = k.def(`${who} cl3`);
+    k.define(al, cl3());
+    k.define(k.def(`${who} masked`), k.fn(["v", "w"], (v, w) => k.call(f("clifford outer"), k.x(al), k.call(f("clifford grade"), k.x(al), k.int(1), v), k.call(f("clifford grade"), k.x(al), k.int(1), w))));
   }
   const own = base(k.code);
   const code: Code = { nodes: { ...own.nodes, ...copy.nodes }, defs: [...own.defs, ...copy.defs] }, nm = baseNames(k.names);
@@ -77,4 +82,10 @@ test("the prelude's Clifford definitions copied under new ids check and give the
   const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
   const compiled = Object.fromEntries(names.map((n) => [n, typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n]]));
   assert.deepEqual(compiled, evaluated);
+  // The copy's definitions are known by their meaning's hash (L203a), so
+  // its masks are the prelude's: the outer product of two vectors is a
+  // bivector, three parts of eight.
+  const masks = ["prelude", "copy"].map((who) => bladeMask(code, info, at(`${who} masked`))?.mask);
+  // Parts: 1, e1, e2, e12, e3, e13, e23, e123.
+  assert.deepEqual(masks, [0b1101000, 0b1101000]);
 });
