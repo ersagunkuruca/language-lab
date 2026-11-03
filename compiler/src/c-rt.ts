@@ -331,6 +331,33 @@ const FNS: Record<string, Fn> = {
   "int.gcd": { uses: ["int.abs"], c: `static lab_int lab_int_gcd(lab_int x, lab_int y) { x = lab_int_abs(x); y = lab_int_abs(y); while (y != LAB_SMALL(0)) { if (LAB_IS_SMALL(x) && LAB_IS_SMALL(y)) { int64_t a = LAB_VAL(x), b = LAB_VAL(y); while (b) { int64_t t = a % b; a = b; b = t; } return LAB_SMALL(a); } lab_int r; lab__floordiv(x, y, 0, &r); lab_int_drop(x); x = y; y = r; } return x; }` },
   // x over g, g at least 0 and dividing x (int.gcd's); 0 when g is 0.
   "int.exact": { uses: [], c: `static lab_int lab_int_exact(lab_int x, lab_int g) { lab_int q; if (g == LAB_SMALL(0)) { lab_int_drop(x); return LAB_SMALL(0); } lab__floordiv(x, g, &q, 0); lab_int_drop(x); lab_int_drop(g); return q; }` },
+  // and, or, xor in two's complement with ones going on forever for a
+  // negative, as BigInt's (int.ts bitAnd, C150): on the words when both
+  // are small, else limb by limb, each turned to two's complement
+  // (~m + 1) as it is read, and back.
+  "int.bits": { uses: [], c: `static lab_int lab__int_bits(lab_int x, lab_int y, int op) {
+  if (LAB_IS_SMALL(x) && LAB_IS_SMALL(y)) { int64_t a = LAB_VAL(x), b = LAB_VAL(y); return lab__int64(op == 0 ? (a & b) : op == 1 ? (a | b) : (a ^ b)); }
+  lab__mag a, b;
+  lab__mag_of(x, &a); lab__mag_of(y, &b);
+  uint32_t n = (a.n > b.n ? a.n : b.n) + 1, *r = lab__limbs(n);
+  int neg = op == 0 ? (a.neg & b.neg) : op == 1 ? (a.neg | b.neg) : (a.neg ^ b.neg);
+  uint64_t ca = 1, cb = 1, cr = 1;
+  for (uint32_t i = 0; i < n; i++) {
+    uint64_t u = i < a.n ? a.d[i] : 0, v = i < b.n ? b.d[i] : 0;
+    if (a.neg) { u = (u ^ 0xffffffffu) + ca; ca = u >> 32; u &= 0xffffffffu; }
+    if (b.neg) { v = (v ^ 0xffffffffu) + cb; cb = v >> 32; v &= 0xffffffffu; }
+    uint64_t w = op == 0 ? (u & v) : op == 1 ? (u | v) : (u ^ v);
+    if (neg) { w = (w ^ 0xffffffffu) + cr; cr = w >> 32; w &= 0xffffffffu; }
+    r[i] = (uint32_t)w;
+  }
+  lab_int out = lab__int(neg, r, n);
+  free(r);
+  lab_int_drop(x); lab_int_drop(y);
+  return out;
+}` },
+  "int.bitAnd": { uses: ["int.bits"], c: `static lab_int lab_int_bitAnd(lab_int a, lab_int b) { return lab__int_bits(a, b, 0); }` },
+  "int.bitOr": { uses: ["int.bits"], c: `static lab_int lab_int_bitOr(lab_int a, lab_int b) { return lab__int_bits(a, b, 1); }` },
+  "int.bitXor": { uses: ["int.bits"], c: `static lab_int lab_int_bitXor(lab_int a, lab_int b) { return lab__int_bits(a, b, 2); }` },
   "int.quotient": { uses: [], c: `static lab_int lab_int_quotient(lab_int x, lab_int y) { lab_int q; if (y == LAB_SMALL(0)) { lab_int_drop(x); lab_st = 1; return LAB_SMALL(0); } lab__floordiv(x, y, &q, 0); lab_int_drop(x); lab_int_drop(y); return q; }` },
   "int.remainder": { uses: [], c: `static lab_int lab_int_remainder(lab_int x, lab_int y) { lab_int r; if (y == LAB_SMALL(0)) { lab_int_drop(x); lab_st = 1; return LAB_SMALL(0); } lab__floordiv(x, y, 0, &r); lab_int_drop(x); lab_int_drop(y); return r; }` },
   // A negative power has no answer; 0, 1 and −1 to any power are small.

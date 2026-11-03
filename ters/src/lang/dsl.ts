@@ -228,6 +228,11 @@ export class Lang extends Builder {
     return items.reduceRight((tail, x) => this.call(CONS, x, tail), this.x(NIL));
   }
 
+  // A written list as one call with an input per item (L181).
+  listOf(...items: Id[]): Id {
+    return this.call(S.listOf, ...items);
+  }
+
   text(...parts: Id[]): Id {
     return parts.reduce((a, b) => this.call(S.concat, a, b));
   }

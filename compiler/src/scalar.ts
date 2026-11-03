@@ -112,6 +112,8 @@ export const RT: Record<Id, string> = {
   // No answer or one (Choice): runtime functions that give a status too.
   [INT_OPS.quotient]: "int.quotient", [INT_OPS.remainder]: "int.remainder", [INT_OPS.power]: "int.power",
   [INT_OPS.read]: "int.read", [INT_OPS.wholePart]: "int.wholePart",
+  // and, or, xor on Int (C150, L193's words keep their low bits by them).
+  [INT_OPS.bitAnd]: "int.bitAnd", [INT_OPS.bitOr]: "int.bitOr", [INT_OPS.bitXor]: "int.bitXor",
   [TEXT_OPS.find]: "text.find", [TEXT_OPS.code]: "text.code", [TEXT_OPS.fromCode]: "text.fromCode",
   [TEXT_OPS.readNumber]: "text.readNumber",
 };

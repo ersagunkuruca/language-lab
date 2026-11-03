@@ -3331,7 +3331,13 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     // and may use a name a module also uses (plus, minus).
     const def = code.defs.findLast((d) => names[d] === name);
     if (!def) throw new Error(`no definition named ${name}`);
-    exported.push(`  ${JSON.stringify(name)}: ${asValue(spec(def, new Map()))},`);
+    // A Float64 handed back to the host is a use of it (SPEC §3.3, C156):
+    // too big, it stops there. Only a plain answer; one inside a list or a
+    // record isn't looked at yet.
+    const t = info.schemes.get(def)?.type, z = t && sub.zonk(t), ret = z?.t === "fn" ? sub.zonk(z.ret) : z;
+    const float = ret?.t === "con" && ret.id === NUMBER;
+    const v = asValue(spec(def, new Map()));
+    exported.push(`  ${JSON.stringify(name)}: ${float ? `$finOut(${v})` : v},`);
   }
   // Each type's Shown implementation, by the cases it has (C148): the
   // runtime's $showAny shows a value made by one through its `show`.
@@ -3361,7 +3367,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // as it is.
   for (const [s, b] of made) if (keep.has(s.name)) out.push(heapCalled.has(s.name) && !heapCopies.has(s.name) ? `${b}\nfunction* ${s.name}$h(...a) {\nreturn ${s.name}(...a);\n}` : b);
 
-  const helpers = ["$isLater", "$no", "$answered", "$stream0", "$showAny", "$caseName", "$compare", "$int", "$text", "$impl", "$many", "$partial", "$setPath", "$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$snoc", "$fromBack", "$range", "$eq", "$show", "$mod", "$fin", "$div", "$sqrt", "$log", "$pow", "$divN", "$sqrtN", "$logN", "$powN", "$modN", "$mapParts", "$zipParts", "$total", "$first", "$firstS",
+  const helpers = ["$isLater", "$no", "$answered", "$stream0", "$showAny", "$caseName", "$compare", "$int", "$text", "$impl", "$many", "$partial", "$setPath", "$T", "$F", "$unit", "$nil", "$cons", "$bool", "$toList", "$snoc", "$fromBack", "$range", "$eq", "$show", "$mod", "$fin", "$finOut", "$div", "$sqrt", "$log", "$pow", "$divN", "$sqrtN", "$logN", "$powN", "$modN", "$mapParts", "$zipParts", "$total", "$first", "$firstS",
     "$all", "$count", "$oneOf", "$fail", "$lift", "$one", "$hole", "$fuel", "$enter", "$caught", "$leave", "$spend", "$spendOrThrow", "$outOfFuel", "$ok", "$clean", "$key",
     "$close", "$near", "$sameNumber", "$planned", "$solveRuntime", "$print", "$FN", "$perform", "$setHosts", "$random", "$handle", "$handleS", "$io", "$seeded", "$seededS", "$optional", "$cells", "$useCells", "$listArrays", "$listViews", "$path", "$spread", "$self", "$foldNested", "$drive", "$rec", "$pushList", "$withInto", "$intoArray", "$later", "$awaited", "$handleL", "$handleLG", "$handleG", "$performG",
     "$ORDER", "$compareN", "$numberOrder", "$intOrder", "$textOrder",
