@@ -150,7 +150,7 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 - **or** : `(Bool, Bool) -> Bool`. Either true.
 - **not** : `(Bool) -> Bool`. true becomes false and false true.
 - **equal** : `(a, a) -> Bool`. Whether two values are the same: numbers, text, and data made of them. Functions can't be compared.
-- **compare** : `(a, a) -> Order`. How two values are ordered: before, same or after. Float64s by value, exactly (as equal compares them), with NaN after every other Float64; text alphabetically; cases in the order their type lists them; then field by field. sort, maps and sets use it.
+- **compare** : `(a, a) -> Order`. How two values are ordered: before, same or after. Float64s by value, exactly (as equal compares them); text alphabetically; cases in the order their type lists them; then field by field. sort, maps and sets use it.
 - **Order** (type). What compare answers: before, same or after.
 - **show** : `(a) -> Text`. Any plain value as text, the way it would be written: show([1, 2]) is "[1, 2]". Every number type shows as its number: a fraction 1/3, a Fixed by show fixed's digits, an Extended as its number or +∞ and −∞.
 - **case name** : `(a) -> Text`. The name of the case the value was made by, as text: case name(some(3)) is "some", case name([]) is "nil". A number or a text was made by no case and gives "".
