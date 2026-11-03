@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { bool, type Value } from "../../ters/src/lang/run.ts";
 import { norm } from "../../ters/src/lang/int.ts";
 import { TRUE } from "../../ters/src/lang/std.ts";
-import { isRecord, type DType, type LType, type Lowered, type RType } from "../src/scalar.ts";
+import { isRecord, type DType, type LType, type CoreIR, type RType } from "../src/scalar.ts";
 import { CFLAGS, emitC } from "../src/c.ts";
 
 export const cc = process.env.CC ?? "cc";
@@ -67,7 +67,7 @@ export const compile = (c: string) => {
   execFileSync(cc, [...CFLAGS, "-pthread", "-Wall", "-Werror", "-Wno-unknown-warning-option", "-Wno-unused-function", "-Wno-maybe-uninitialized", "-Wno-free-nonheap-object", "-Wno-unused-but-set-variable", "-Wno-unused-variable", "-Wno-unknown-pragmas", ...(process.env.NATIVE_CFLAGS ?? "").split(" ").filter(Boolean), "-o", exe, src, "-lm"]);
   return exe;
 };
-export function build(lowered: Lowered) {
+export function build(lowered: CoreIR) {
   const exe = compile(emitC(lowered, { harness: true }).c);
   return (calls: [number, Value[]][]) => {
     const input = calls.map(([i, xs]) => { const out = [String(i)]; xs.forEach((x, j) => encode(x, lowered.funcs[i].params[j], out)); return out.join(" "); }).join("\n") + "\n";

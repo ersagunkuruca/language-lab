@@ -116,6 +116,7 @@ Each note says why, then gives the plan as steps; each step is a backlog row.
 | doc | what it is | status |
 |---|---|---|
 | [COMPILER.md](design/targets/COMPILER.md) | The compiler's design: effect types decide the code's shape | current |
+| [CORE-IR.md](design/targets/CORE-IR.md) | The core IR every compiled target but compiled JavaScript prints, and its contract (C137) | current |
 | [README.md](../compiler/README.md) | Using the compiler: commands, files, tests | current |
 | [GAPS.md](reports/GAPS.md) | Bigger-program rounds: compiled output against ideal hand-written code, gap by gap | current (rounds 1 to 5) |
 | [WASM.md](design/targets/WASM.md) | WebAssembly, with WASI | built (W1 to W4) |

@@ -1,5 +1,11 @@
 // A compiler from the typed core (ters/src/lang) to JavaScript.
 //
+// To be retired (C137, docs/design/targets/CORE-IR.md): the other targets
+// print the core IR (scalar.ts), and this file lowers the model a second
+// way. Nothing new goes in here alone: a feature or optimisation goes into
+// a model-to-model pass (liftLets, expandInverses, fuseHandlers) or into
+// the core IR's lowering.
+//
 // The evaluator (run.ts) treats every expression as a lazy stream of
 // results, because any of them might be a Choice. The compiler doesn't have
 // to guess: the checker has already worked out, in each function's type,

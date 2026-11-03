@@ -37,7 +37,7 @@ import { Aborted, type Runtime, type World } from "../../ters/src/lang/run.ts";
 import { MATH_DATA, MATH_DATA_AT } from "./wasm-math.ts";
 import { assemble, POW5, runtime, textBytes, WASI_IMPORTS, type RtFn, type VT } from "./wasm-rt.ts";
 import { TABLE_RT, tableRt } from "./wasm-table.ts";
-import { fails, isArray, isTable, isData, isFn, kids, mapKids, OPS, STOPS, type AType, type DType, type FType, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc, type SType, type TType } from "./scalar.ts";
+import { fails, isArray, isTable, isData, isFn, kids, mapKids, OPS, STOPS, type AType, type DType, type FType, type LType, type CoreIR, type Op, type RType, type SExpr, type SFunc, type SType, type TType } from "./scalar.ts";
 
 // int32 (an Int in 32 bits) is the shaders' only (C66c); WebAssembly has Int.
 const VAL: Record<SType | "i64", number> = { f64: 0x7c, i32: 0x7f, int32: 0x7f, i64: 0x7e };
@@ -75,7 +75,7 @@ export interface Module { bytes: Uint8Array; wat: string; exports: string[] }
 // `wasi`: a WASI command instead, its world written over
 // wasi_snapshot_preview1 (wasm-rt.ts) and `_start` running main as
 // runMain does, for hosts with no JavaScript (wasmtime).
-export function emitWasm(lowered: Lowered, opts: { wasi?: boolean } = {}): Module {
+export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean } = {}): Module {
   const wasi = !!opts.wasi;
   // A shader's lowering (C66c, `lowered.shader`): Int in 32 bits, and no
   // answer is the flag $none that `first` and `count` look at, as WGSL
@@ -803,7 +803,7 @@ export function textList(ex: Record<string, (...xs: never[]) => unknown>, xs: st
 // the arguments (a list of texts) or nothing, it gives the exit code (an
 // Int or a Float64), or anything else for 0; an Abort nothing handled
 // writes its reason to standard error and exits with 1.
-export async function runMain(lowered: Lowered, m: Module, name: string, args: string[], rt: Runtime): Promise<number> {
+export async function runMain(lowered: CoreIR, m: Module, name: string, args: string[], rt: Runtime): Promise<number> {
   const f = lowered.funcs.find((g) => g.name === name && !g.inner && !g.budgeted);
   if (!f || f.params.length > 1) throw new Error(`${name}: not compiled, or not a main`);
   const ex = (await instantiate(m, rt)) as unknown as Record<string, (...xs: unknown[]) => unknown>;

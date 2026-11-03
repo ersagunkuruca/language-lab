@@ -9,7 +9,7 @@
 // just recurses. Lower with `{ records: true }` to have records. A budget
 // (with fuel) is one variable, `fuel`, spent as in WGSL and WebAssembly.
 
-import { noData, unchecked, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc } from "./scalar.ts";
+import { noData, unchecked, type LType, type CoreIR, type Op, type RType, type SExpr, type SFunc } from "./scalar.ts";
 
 const INFIX: Partial<Record<Op, string>> = {
   add: "+", sub: "-", mul: "*", div: "/", less: "<", equal: "===", beq: "===", and: "&&", or: "||", iless: "<", ieq: "===",
@@ -34,7 +34,7 @@ const MATH: Partial<Record<Op, string>> = {
 
 // The source of a function returning every function of the profile, by
 // name, and the names.
-export function emitJs(lowered: Lowered): { js: string; names: Map<number, string> } {
+export function emitJs(lowered: CoreIR): { js: string; names: Map<number, string> } {
   // A picture's CPU fallback, as the GPU: no finiteness checks (L125c2).
   const funcs = lowered.funcs.map((f) => ({ ...f, body: unchecked(f.body) }));
   const names = new Map(funcs.map((f, i) => [i, `f${i}`]));
@@ -140,7 +140,7 @@ export function emitJs(lowered: Lowered): { js: string; names: Map<number, strin
 }
 
 // The functions themselves, by definition id.
-export function loadJs(lowered: Lowered): Map<string, (...xs: number[]) => unknown> {
+export function loadJs(lowered: CoreIR): Map<string, (...xs: number[]) => unknown> {
   const { js, names } = emitJs(lowered);
   const all = new Function(js)() as Record<string, (...xs: number[]) => unknown>;
   return new Map(lowered.funcs.map((f, i) => [f.def, all[names.get(i)!]]));

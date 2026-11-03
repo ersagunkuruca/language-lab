@@ -54,7 +54,7 @@ import { FDLIBM_C } from "./c-math.ts";
 import { BASE, cName, POSIX, RESERVED, RT_C, runtimeC, WORLD_H, type ListNames } from "./c-rt.ts";
 import { runtime } from "./wasm-rt.ts";
 import { STOPS } from "./stops.ts";
-import { fails, isArray, isTable, isData, isFn, isRecord, kids, mapKids, OPS, type AType, type TType, type DType, type FType, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc } from "./scalar.ts";
+import { fails, isArray, isTable, isData, isFn, isRecord, kids, mapKids, OPS, type AType, type TType, type DType, type FType, type LType, type CoreIR, type Op, type RType, type SExpr, type SFunc } from "./scalar.ts";
 
 // What a C compiler needs to keep the evaluator's numbers. -fwrapv: fdlibm
 // shifts signed ints past their top bit (pow's test for an odd exponent).
@@ -161,7 +161,7 @@ interface Target { label: string; keep: Set<number>; pending: number }
 // List Text) if it takes them, on a thread with a big stack (1 GiB of
 // address space, used only as deep as the program goes); its Int or Float64
 // is the exit code, and an Abort's reason goes to standard error, with 1.
-export function emitC(lowered: Lowered, opts: { harness?: boolean; main?: string } = {}): CProgram {
+export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string } = {}): CProgram {
   const { shapes } = lowered;
   // A value that can't be had (a search's k given no answer) is the
   // expression it's in failing, when nothing before it in that
