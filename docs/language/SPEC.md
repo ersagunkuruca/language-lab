@@ -287,7 +287,8 @@ that declared direction, its other ports to a tuple of its results (one
 result is its value): `sum and difference(s, d) → a, b` is
 `(Float64, Float64) → (Float64, Float64)`. Called, or passed on as a
 value, it runs as its use in that direction; a use may still ask it any
-other way. An interface's field with results is typed the same way:
+other way. Given all its ports, `polar(r, t, x, y)`, it is the condition
+on them, true or false, as inside another relation. An interface's field with results is typed the same way:
 Trig's `polar` is `(length, angle) → x, y` (L128d).
 
 7.3. **Effects of a use.** The checker works out from the direction how

@@ -45,13 +45,16 @@ function refsToRewrite(code: Code): { ref: NodeOf<"ref">; ports: { ins: string[]
   const parents = new Map<Id, Id>();
   for (const n of Object.values(code.nodes)) for (const c of children(n)) parents.set(c, n.id);
   return refs.flatMap((ref) => {
+    const ports = portsOf(code.nodes, ref.target)!;
     const p = parents.get(ref.id), parent = p ? code.nodes[p] : undefined;
     if (parent?.kind === "call" && parent.given !== undefined && parent.fn === ref.id) return [];
+    // Given all its ports it is the condition on them, called as it always was.
+    if (isCall(parent) && parent.fn === ref.id && parent.args.length === ports.ins.length + ports.outs.length) return [];
     if (isCall(parent) && parent.fn !== ref.id) {
       const callee = code.nodes[parent.fn];
       if (callee?.kind === "ref" && code.nodes[callee.target]?.kind === "variant") return [];
     }
-    return [{ ref, ports: portsOf(code.nodes, ref.target)!, parent }];
+    return [{ ref, ports, parent }];
   });
 }
 
