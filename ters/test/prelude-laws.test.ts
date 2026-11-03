@@ -8,14 +8,26 @@ import { infer } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { runTests, testsIn } from "../src/lang/tests.ts";
+import { isUse, subtree, useTarget } from "../src/model.ts";
 
 test("the prelude's laws hold on small values", () => {
   const code = base(LIBRARY.code), names = { ...baseNames(), ...LIBRARY.names }, info = infer(code, names);
   const laws = testsIn(info, LIBRARY.code.defs);
-  assert.deepEqual(laws.map((d) => names[d]).sort(), ["from polar undoes modulus and angle", "polar undoes unpolar"]);
+  assert.deepEqual(laws.map((d) => names[d]).sort(), ["acos by unpolar agrees at Float64", "asin by unpolar agrees at Float64", "cos by polar agrees at Float64", "cos by sin agrees at Float64", "from polar undoes modulus and angle", "polar by sincos agrees at Float64", "polar undoes unpolar", "sin by cos agrees at Float64", "sin by polar agrees at Float64"]);
   for (const r of runTests(code, info, names, laws)) {
     assert.equal(r.error, undefined, r.name);
     assert.ok(r.cases >= 10, `${r.name}: ${r.cases}`);
     assert.deepEqual(r.failures, [], r.name);
   }
+});
+
+// WAYS.md step 4 (L96d): every way the prelude gives is checked by a law
+// against a field it stands for, so a new way comes with its law.
+test("every way in the prelude has a law that runs it", () => {
+  const code = base(LIBRARY.code), names = { ...baseNames(), ...LIBRARY.names }, info = infer(code, names);
+  const laws = testsIn(info, LIBRARY.code.defs);
+  const reached = new Set(laws.flatMap((d) => subtree(code, d).flatMap((id) => { const n = code.nodes[id]; return n.kind === "ref" ? [n.target] : isUse(n) ? [useTarget(code.nodes, n)] : []; })));
+  const ways = LIBRARY.code.defs.filter((d) => (code.nodes[d] as { way?: string }).way);
+  assert.ok(ways.length >= 7, `${ways.length} ways`);
+  assert.deepEqual(ways.filter((w) => !reached.has(w)).map((w) => names[w]), []);
 });

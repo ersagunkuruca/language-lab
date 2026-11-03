@@ -404,7 +404,35 @@ export function buildPrelude(): Module {
     k.solve(TRIG_UNPOLAR, { 2: a, 3: b, out: k.true }, { 0: "length", 1: "angle" }, ({ 0: r, 1: t }) =>
       k.solve(TRIG_POLAR, { 0: r, 1: t, out: k.true }, { 2: "x", 3: "y" }, ({ 2: x, 3: y }) =>
         expect(k.equal(C(x, y), z), "polar(unpolar(x, y)) = (x, y)"))))));
-  const laws = [lawFromPolar, lawPolar];
+  // Ways agree (WAYS.md step 4, BACKLOG L96d): each way of a Trig field
+  // against Float64's own field on small values, as T7 laws, so `lab test`
+  // and test/prelude-laws.test.ts run them. Float64's = has its tolerance:
+  // the ways are other roundings of one real function. asin and acos are
+  // given a sine and a cosine, which are in their domain.
+  const agrees = (way: Id, own: (x: Id) => Id, what: string, input = (x: Id) => x) => {
+    const d = k.def(`${what} agrees at Float64`);
+    // Two small Float64s mixed, so more values are tried than one gives,
+    // and kept within [−3, 3]: far out, x + π/2 rounds away more than the
+    // tolerance (1e9 + π/2 is off by 6e-8), a disagreement of floats, not
+    // of the ways.
+    k.define(d, k.fn(["x", "y"], (x, y) => k.let("given", input(k.call(B.mul, k.lit(3), k.call(B.sin, k.call(B.add, x, k.call(B.mul, y, k.lit(0.37)))))), (v) => expect(k.equal(k.call(way, v), own(v)), `${what}(x) = its field at Float64`))));
+    return d;
+  };
+  // polar by sincos is a relation: it holds of Float64's own polar's answer.
+  const polarAgrees = k.def("polar by sincos agrees at Float64");
+  k.define(polarAgrees, k.fn(["length", "angle"], (r, t) => k.let("r", k.call(B.add, r, k.lit(0)), (rr) =>
+    k.solve(TRIG_POLAR, { 0: rr, 1: t, out: k.true }, { 2: "x", 3: "y" }, ({ 2: x, 3: y }) =>
+      expect(k.call(polarBy, rr, t, x, y), "polar by sincos holds of Float64's polar")))));
+  const wayLaws = [
+    agrees(cosBySin, (v) => k.call(B.cos, v), "cos by sin"),
+    agrees(sinByCos, (v) => k.call(B.sin, v), "sin by cos"),
+    agrees(sinByPolar, (v) => k.call(B.sin, v), "sin by polar"),
+    agrees(cosByPolar, (v) => k.call(B.cos, v), "cos by polar"),
+    agrees(asinBy, (v) => k.call(asinF, v), "asin by unpolar", (x) => k.call(B.sin, x)),
+    agrees(acosBy, (v) => k.call(acosF, v), "acos by unpolar", (x) => k.call(B.cos, x)),
+    polarAgrees,
+  ];
+  const laws = [lawFromPolar, lawPolar, ...wayLaws];
 
   // Dual numbers (INTERFACES.md step 3): value + slope·ε with ε² = 0, so
   // a function given dual(x, 1) gives its value and its slope at x.
