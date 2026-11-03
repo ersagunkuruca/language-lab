@@ -27,7 +27,8 @@ model, so each feature has been written twice in the compiler
   evaluator's own builtins; the fuzz test runs it beside WebAssembly and
   C, and skips (and names) the runtime functions it doesn't have yet.
   Step c2 adds tables and Hash sets (the evaluator's Table) and seeded
-  Random, so every generated program runs; the world is next.
+  Random, so every generated program runs. Step c3 adds the world
+  (`runCoreMain`), checked on wc, ledger, chapters and calc's mains.
 - (d) compile.ts retired piece by piece.
 
 ## What it holds

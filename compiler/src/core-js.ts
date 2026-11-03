@@ -13,10 +13,11 @@
 // handler; a budget running out is `OUT`. A runtime function or world
 // operation this printer doesn't have yet throws `Unsupported` when it is
 // reached, so a program runs as far as it can. Tables and Hash sets are
-// the evaluator's (C137c2), and Random seeded is random.ts's generator.
+// the evaluator's (C137c2), Random seeded is random.ts's generator, and
+// the world is the evaluator's Runtime (C137c3, runCoreMain).
 
-import { ARRAY_OPS, HASH_SET_OPS, S, STD_IMPL, STD_MANY, TABLE_OPS, TRUE } from "../../ters/src/lang/std.ts";
-import { fromList, toList, type Value } from "../../ters/src/lang/run.ts";
+import { ARRAY_OPS, CONS, HASH_SET_OPS, NIL, NONE, S, SOME, STD_IMPL, STD_MANY, TABLE_OPS, TRUE } from "../../ters/src/lang/std.ts";
+import { fromList, toList, type Runtime, type Value, type World } from "../../ters/src/lang/run.ts";
 import * as I from "../../ters/src/lang/int.ts";
 import * as T from "../../ters/src/lang/text.ts";
 import type { Id } from "../../ters/src/model.ts";
@@ -122,18 +123,23 @@ export const RUNTIME = {
 };
 
 // The source of a function of the runtime giving every function, by name.
-export function emitCoreJs(ir: CoreIR): { js: string; names: string[] } {
+// `worlds`: the world's operations it calls, with their results' types,
+// which the loader gives as R.worlds in that order.
+export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: [string, LType][] } {
   const names = ir.funcs.map((_, i) => `f${i}`);
   const rts = new Map<string, string>();
   const rtName = (n: string) => { if (!rts.has(n)) rts.set(n, `rt${rts.size}`); return rts.get(n)!; };
+  const worlds: [string, LType][] = [];
+  const worldName = (op: string, t: LType) => { let i = worlds.findIndex(([o]) => o === op); if (i < 0) i = worlds.push([op, t]) - 1; return `w${i}`; };
   const text = ir.funcs.map((f, i) => func(f, i));
   const js = [
     "let fuel = Infinity;",
     ...[...rts].map(([n, v]) => `const ${v} = R.rt(${JSON.stringify(n)});`),
+    ...worlds.map((_, i) => `const w${i} = R.worlds[${i}];`),
     ...text,
     `return { ${names.join(", ")} };`,
   ].join("\n");
-  return { js, names };
+  return { js, names, worlds };
 
   function func(f: SFunc, i: number): string {
     let temps = 0;
@@ -197,7 +203,7 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[] } {
           const xs = e.args.map((a) => ex(a, pre, d));
           return `${rtName(e.fn)}(${xs.join(", ")})`;
         }
-        case "world": return `R.unsupported(${JSON.stringify(`world ${e.op}`)})`;
+        case "world": { const xs = e.args.map((a) => ex(a, pre, d)); return `${worldName(e.op, e.t)}(${xs.join(", ")})`; }
         case "fail": return "R.fail()";
         case "attempt": {
           const ok = temp(), t = temp();
@@ -281,11 +287,54 @@ function kidsOf(e: SExpr): SExpr[] {
   }
 }
 
-// The functions, by their place in ir.funcs.
-export function loadCoreJs(ir: CoreIR): ((...xs: unknown[]) => unknown)[] {
-  const { js, names } = emitCoreJs(ir);
+// The world's operations (scalar.ts WORLD_OPS) over the evaluator's
+// Runtime, as wasm.ts's worldOf: one that fails aborts with its reason.
+function worldFn(op: string, t: LType, rt: Runtime): (...xs: unknown[]) => unknown {
+  const w = <K extends keyof World>(k: K): World[K] => {
+    const f = rt.world?.[k];
+    if (!f) return (() => { throw new Error(`this runtime can't ${k === "error" ? "write to standard error" : k}`); }) as unknown as World[K];
+    return f.bind(rt.world) as World[K];
+  };
+  const tried = <T>(f: () => T): T => { try { return f(); } catch (e) { if (e instanceof Aborted) throw e; throw new Aborted((e as Error).message, 0); } };
+  const c = (v: Id) => (isData(t) ? t.cases.findIndex((x) => x.variant === v) : -1);
+  switch (op) {
+    case "randomSeed": return () => Math.floor(Math.random() * 4294967296);
+    case "print": return (s) => { rt.print(s as string); return []; };
+    case "printError": return (s) => { w("error")(s as string); return []; };
+    case "readInput": return () => tried(() => w("input")());
+    case "readLine": return () => tried(() => { const l = w("readLine")(); return l === null ? [c(NONE)] : [c(SOME), l]; });
+    case "readFile": return (p) => tried(() => w("readFile")(p as string));
+    case "writeFile": return (p, s) => tried(() => { w("writeFile")(p as string, s as string); return []; });
+    case "appendFile": return (p, s) => tried(() => { w("appendFile")(p as string, s as string); return []; });
+    case "fileExists": return (p) => w("fileExists")(p as string);
+    case "listFolder": return (p) => tried(() => w("listFolder")(p as string).reduceRight<unknown[]>((tail, x) => [c(CONS), x, tail], [c(NIL)]));
+  }
+  return () => { throw new Unsupported(`world ${op}`); };
+}
+
+// The functions, by their place in ir.funcs. `rt`: the console and files.
+export function loadCoreJs(ir: CoreIR, rt: Runtime = { print: () => {} }): ((...xs: unknown[]) => unknown)[] {
+  const { js, names, worlds } = emitCoreJs(ir);
   const rand = randFns(new Uint32Array(4));
-  const R = { ...RUNTIME, rt: (n: string) => rtFn(n, ir, rand), abort: (reason: unknown, esc: number): never => { throw new Aborted(reason, esc); } };
+  const R = { ...RUNTIME, rt: (n: string) => rtFn(n, ir, rand), worlds: worlds.map(([op, t]) => worldFn(op, t, rt)), abort: (reason: unknown, esc: number): never => { throw new Aborted(reason, esc); } };
   const all = new Function("R", js)(R) as Record<string, (...xs: unknown[]) => unknown>;
   return names.map((n) => all[n]);
+}
+
+// Runs main as wasm.ts's runMain does: given the arguments as a List of
+// Texts if it takes them; an abort or a stop nobody handles is written to
+// standard error, and the exit code is 1.
+export function runCoreMain(ir: CoreIR, name: string, args: string[], rt: Runtime): number {
+  const fi = ir.funcs.findIndex((g) => g.name === name && !g.inner && !g.budgeted), f = ir.funcs[fi];
+  if (!f || f.params.length > 1) throw new Error(`${name}: not compiled, or not a main`);
+  const fn = loadCoreJs(ir, rt)[fi], err = rt.world?.error ?? rt.print;
+  const list = (t: LType) => { if (!isData(t)) throw new Error("main takes a List of Texts"); const c = (v: Id) => t.cases.findIndex((x) => x.variant === v); return args.reduceRight<unknown[]>((tail, x) => [c(CONS), x, tail], [c(NIL)]); };
+  let v: unknown;
+  try { v = fn(...(f.params.length ? [list(f.params[0])] : [])); } catch (e) {
+    if (e instanceof Aborted) { err(String(e.reason)); return 1; }
+    if (e instanceof Stopped) { err(e.message); return 1; }
+    if (e === FAIL) throw new Error(`${name} had no answer`);
+    throw e;
+  }
+  return f.result === "f64" ? Number(v) : f.result === "int" ? Number(v) : 0;
 }
