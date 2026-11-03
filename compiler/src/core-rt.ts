@@ -157,6 +157,35 @@ export const RUNTIME = {
   // (C137c15), which is cheap; where that answer is used inside an
   // expression, or by the evaluator's runtime, it is thrown, as before.
   ck: <T>(v: T): T => { if ((v as unknown) === FAIL) throw FAIL; return v; },
+  // Runs a heap copy (core-js.ts, C137c18): each yield names a heap copy
+  // to call and its inputs, whose answer (or exception) goes back in where
+  // it yielded; the calls waiting are an array, not frames on the stack.
+  // runtime.js's $drive, for compiled JS.
+  drive: (g: Generator<[(...xs: unknown[]) => Generator, unknown[]], unknown, unknown>): unknown => {
+    const stack: Generator[] = [g];
+    let v: unknown, thrown = false;
+    for (;;) {
+      const top = stack[stack.length - 1];
+      let r: IteratorResult<unknown, unknown>;
+      try { r = thrown ? top.throw(v) : top.next(v); } catch (e) {
+        stack.pop();
+        if (!stack.length) throw e;
+        v = e;
+        thrown = true;
+        continue;
+      }
+      thrown = false;
+      if (r.done) {
+        stack.pop();
+        v = r.value;
+        if (!stack.length) return v;
+      } else {
+        const [fn, xs] = r.value as [(...xs: unknown[]) => Generator, unknown[]];
+        stack.push(fn(...xs));
+        v = undefined;
+      }
+    }
+  },
   // A function value applied: a printed closure's code directly, so its
   // FAIL comes back as a value; any other function (the evaluator's) by
   // calling it, its thrown FAIL taken as the value.
