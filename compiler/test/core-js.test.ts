@@ -24,7 +24,7 @@ import { infer } from "../../ters/src/lang/infer.ts";
 import { B } from "../../ters/src/prelude.ts";
 import type { Id } from "../../ters/src/model.ts";
 import { lowerScalar } from "../src/scalar.ts";
-import { FAIL, loadCoreJs, runCoreMain } from "../src/core-js.ts";
+import { FAIL, loadCoreJs, lowerCore, runCoreMain } from "../src/core-js.ts";
 import { examples, load } from "../src/program.ts";
 import { book as chaptersBook } from "../gaps/chapters.ts";
 import { book as ledgerBook } from "../gaps/ledger.ts";
@@ -62,7 +62,7 @@ test("the examples whose main lowers to the core IR say the same in JavaScript p
     const p = load(name);
     const main = p.code.defs.find((d) => p.pres.names[d] === "main" && p.own.defs.includes(d));
     if (!main) continue;
-    const l = lowerScalar(p.code, p.info, p.pres.names, p.own.defs, { data: true, host: true });
+    const l = lowerCore(p.code, p.info, p.pres.names, p.own.defs);
     if (l.refused.has(main)) { refused.push(`${name}: ${l.refused.get(main)}`); continue; }
     const mt = p.info.typeOf.get(main);
     if (mt && p.info.subst.zonk(mt).t !== "fn") {
@@ -79,7 +79,7 @@ test("the examples whose main lowers to the core IR say the same in JavaScript p
     ran.push(name);
   }
   console.log(`ran ${ran.join(", ")}\nnot lowered:\n  ${refused.join("\n  ")}`);
-  assert.ok(ran.length >= 16, `ran ${ran.join(", ")}`);
+  assert.ok(ran.length >= 17, `ran ${ran.join(", ")}`);
 });
 
 // lab compile --core (C137c5): a module that runs main in Node, printed
@@ -113,7 +113,7 @@ test("the pages whose main lowers show the same HTML, before and after their han
   for (const name of ["bounce", "compass", "constructions", "converter", "dice", "pig", "spacetime", "tumble"]) {
     const p = load(name);
     const main = p.code.defs.find((d) => p.pres.names[d] === "main" && p.own.defs.includes(d))!;
-    const l = lowerScalar(p.code, p.info, p.pres.names, p.own.defs, { data: true, host: true });
+    const l = lowerCore(p.code, p.info, p.pres.names, p.own.defs);
     if (l.refused.has(main)) continue;
     const fi = l.funcs.findIndex((g) => g.name === "main" && !g.inner && !g.budgeted);
     const coreCall = (f: Value, ...xs: Value[]): Value => { try { return (f as unknown as (...a: Value[]) => Value)(...xs); } catch (e) { if (e === FAIL) throw new NoAnswer(); throw e; } };

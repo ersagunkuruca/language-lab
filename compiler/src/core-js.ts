@@ -18,16 +18,19 @@
 // the evaluator's (C137c2), Random seeded is random.ts's generator, and
 // the world is the evaluator's Runtime (C137c3, runCoreMain).
 
+import { givenInOrder } from "../../ters/src/lang/ports.ts";
 import { ARRAY_OPS, CONS, FALSE, HASH_SET_OPS, NIL, NONE, S, SOME, STD_IMPL, STD_MANY, TABLE_OPS, TRUE } from "../../ters/src/lang/std.ts";
 import { META, cellOps, equal, solveAnswers, toList, type Runtime, type Value, type World } from "../../ters/src/lang/run.ts";
 import { Cells, NoValue } from "../../ters/src/lang/cells.ts";
 import { NoAnswer } from "../../ters/src/lang/html.ts";
 import { satisfiable } from "../../ters/src/lang/relate.ts";
+import { fusedProgram } from "./handlers.ts";
+import type { Info } from "../../ters/src/lang/infer.ts";
 import { worldRandom } from "../../ters/src/lang/random.ts";
 import * as I from "../../ters/src/lang/int.ts";
 import * as T from "../../ters/src/lang/text.ts";
 import { useTarget, type Code, type Id, type Use } from "../../ters/src/model.ts";
-import { ARRAY_RT, RT, isData, isRecord, type CoreIR, type LType, type Op, type SExpr, type SFunc, type TType } from "./scalar.ts";
+import { ARRAY_RT, RT, isData, isRecord, lowerScalar, type CoreIR, type LType, type Op, type SExpr, type SFunc, type TType } from "./scalar.ts";
 import { runtime } from "./wasm-rt.ts";
 import { STOPS } from "./stops.ts";
 
@@ -142,7 +145,7 @@ function hostFn(name: string, cells?: Record<Id, (...xs: Value[]) => Value | und
 // solve spends its innermost fuel; false ends the search there.
 function solveFn(id: Id, code?: Code, all = false, spend?: () => boolean): (...xs: unknown[]) => unknown {
   if (!code) return () => { throw new Unsupported(`solve ${id} without the program`); };
-  const n = code.nodes[id] as Use, keys = Object.keys(n.given);
+  const n = code.nodes[id] as Use, keys = givenInOrder(code, n);
   const answers = (xs: unknown[]) => solveAnswers(code, n, Object.fromEntries(keys.map((k, i) => [k, inn(xs[i])])), { spend });
   // Every answer, a List of them (`solveAll`) made as it is read: a
   // periodic solution (an angle) has no end, and `one of` it stops at the
@@ -404,6 +407,15 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
     const body = loops ? ["  for (;;) {", ...spend("    "), ...block(f.body, "return", "    "), "  }"] : [...spend("  "), ...block(f.body, "return", "  ")];
     return [`// ${f.name.replace(/\n/g, " ")}`, `function ${names[i]}(${params.join(", ")}) {`, ...(locals.length ? [`  let ${locals.join(", ")};`] : []), ...body, "}"].join("\n");
   }
+}
+
+// The program lowered for this printer (`host`), after the passes every
+// printer takes: handlers the compiler can see put into the code they
+// handle (handlers.ts, C64b), so a program's own effect answered in place
+// (effects' Ask) needs no handler at run time (C137c17).
+export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roots: Id[]): CoreIR {
+  const f = fusedProgram(code, info, names);
+  return lowerScalar(f.code, f.info, f.names, roots, { data: true, host: true });
 }
 
 // What a variable starts as.

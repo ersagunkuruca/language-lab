@@ -96,7 +96,7 @@ export const solvesOnce = (code: Code, n: Use): boolean => (planSolve(code, n).m
 // its binds, in order. A relation run backwards is the relational
 // interpreter's (relate.ts); one the solver plans, its equations' (solve.ts).
 // The evaluator's, and JavaScript printed from the core IR's (core-js.ts).
-export function* solveAnswers(code: Code, n: Use, known: Record<string, unknown>, opts: { spend?: () => boolean; names?: Names; stuck?: (r: Reading) => void; info?: Info } = {}): Generator<Value[]> {
+export function* solveAnswers(code: Code, n: Use, known: Record<string, unknown>, opts: { spend?: () => boolean; names?: Names; stuck?: (r: Reading) => void; info?: Info; shown?: (v: Data) => string | undefined } = {}): Generator<Value[]> {
   const p = planSolve(code, n);
   if (p.mode === "relational") {
     for (const sol of relate(code, useTarget(code.nodes, n), known, opts)) {
@@ -929,7 +929,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       // A solve with exactly one answer (oneAnswer, MODES.md), or results
       // each computed from the inputs (directions.ts), leaves no choice
       // point: its first answer is the answer.
-      let answers: Iterable<Value[]> = solveAnswers(code, n, known, { spend, names: rt.names, stuck: rt.stuck, info });
+      let answers: Iterable<Value[]> = solveAnswers(code, n, known, { spend, names: rt.names, stuck: rt.stuck, info, shown: shownBy });
       if (solvesOnce(code, n)) {
         const r = (answers as Generator<Value[]>).next();
         if (r.done) throw new Error(`solving ${rt.names?.[useTarget(code.nodes, n)] ?? useTarget(code.nodes, n)} this way gives exactly one answer, and it gave none`);

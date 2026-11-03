@@ -17,6 +17,7 @@ import { CONS, FALSE, NIL, S, SHOW_ANY, TRUE } from "../../ters/src/lang/std.ts"
 import { NUMBER } from "../../ters/src/lang/types.ts";
 import { B } from "../../ters/src/prelude.ts";
 import { compile } from "../src/compile.ts";
+import { loadCoreJs, lowerCore } from "../src/core-js.ts";
 import { compileProgram, load } from "../src/program.ts";
 import { $setPrint } from "../src/runtime.js";
 
@@ -1143,4 +1144,32 @@ test("a list a definition writes into an array is walked by index where it's onl
   const xs = [0.5, 1.25, -3, 8];
   const r = makeRunner(code, info, { print: () => {} });
   assert.equal(defs.main(toList(xs)), [...r.call(r.value(main), toList(xs))][0]);
+});
+
+// A use's given ports are computed in port order, whatever order the file
+// keeps them in, as in the evaluator (SPEC §7.2b, L198, C147): compiled
+// JavaScript and JavaScript from the core IR print in the same order.
+test("a use's given ports run in port order in compiled code, as in the evaluator (C147)", async () => {
+  const k = new Lang();
+  const add = k.def("add");
+  k.define(add, k.fn(["a", "b"], (a, b) => k.call(B.add, a, b)));
+  const [a, b] = (k.code.nodes[(k.code.nodes[add] as { body: Id }).body] as unknown as { params: Id[] }).params;
+  const said = (what: string, v: number) => k.seq(k.call(S.print, k.lit(what)), k.lit(v));
+  const main = k.def("main");
+  // `out` is written first and `b` second; port order is a, b, out.
+  k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.solve(add, { out: said("out", 5), [b]: said("b", 2) }, { [a]: "a" }, ({ [a]: x }) => x)))));
+  const code = base(k.code), names = { ...baseNames(), ...k.names }, info = infer(code, names);
+  assert.deepEqual(info.errors, []);
+  const want: string[] = [];
+  runMain(code, info, main, { print: (s) => want.push(s) });
+  assert.deepEqual(want, ["b", "out", "3"]);
+  const file = join(dir, "given-order.js");
+  writeFileSync(file, compile(code, info, names, { runtime, exports: ["main"] }));
+  const defs = (await import(pathToFileURL(file).href)).defs;
+  assert.deepEqual(printed(() => defs.main(), $setPrint), want, "compiled JavaScript");
+  const l = lowerCore(code, info, names, [main]);
+  assert.equal(l.refused.get(main), undefined);
+  const core: string[] = [];
+  loadCoreJs(l, { print: (s) => core.push(s) })[l.funcs.findIndex((g) => g.name === "main" && !g.inner)]();
+  assert.deepEqual(core, want, "JavaScript from the core IR");
 });

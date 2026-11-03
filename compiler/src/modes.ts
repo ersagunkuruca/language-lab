@@ -22,6 +22,7 @@
 // an answer. The cells that would hold them are left out, and a call of a
 // mode for the rest hands the array on.
 
+import { givenInOrder } from "../../ters/src/lang/ports.ts";
 import type { Code, Id, NodeOf, Use } from "../../ters/src/model.ts";
 import { useTarget, type Call } from "../../ters/src/model.ts";
 import { analyzer, determinism, type Exec, type Plan } from "../../ters/src/lang/modes.ts";
@@ -331,13 +332,14 @@ export function modeCompiler(code: Code, names: Record<Id, string>) {
     if (def.kind !== "def") return null;
     const lam = nodes[def.body!] as NodeOf<"lambda">;
     const portOf = (k: string) => (k === "out" ? "out" : String(lam.params.indexOf(k)));
-    const given = Object.keys(n.given).map(portOf);
+    // In port order (C147), as compile.ts passes them.
+    const given = givenInOrder({ nodes } as Code, n).map(portOf);
     if (given.includes("-1")) return null;
     const mark = out.length, size = made.size;
     try {
       const f = modeFn(useTarget(nodes, n), given, emit);
       const ins = order(given), outs = portsOf(lam).filter((p) => !ins.includes(p));
-      const gs = Object.keys(n.given).map((_, i) => `g${i}`);
+      const gs = given.map((_, i) => `g${i}`);
       const at = (p: string) => gs[given.indexOf(p)];
       const pick = Object.keys(n.binds).map((k) => (outs.length === 1 ? "r" : `r[${outs.indexOf(portOf(k))}]`));
       out.push(`// ${names[useTarget(nodes, n)] ?? useTarget(nodes, n)}, run backwards (${d}): its plan written out\nfunction ${name}(${gs.join(", ")}) {\nconst r = ${f}(${ins.map(at).join(", ")});\nreturn r === $no ? [] : [[${pick.join(", ")}]];\n}\n` +

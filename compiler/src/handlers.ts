@@ -32,6 +32,7 @@ import { freshId, mapIds, subtree, type Code, type Id, type Node, type NodeOf, i
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { SIGS } from "../../ters/src/lang/std.ts";
 import { DIVERGE, Subst, type Type } from "../../ters/src/lang/types.ts";
+import { infer } from "../../ters/src/lang/infer.ts";
 
 type Names = Record<Id, string>;
 
@@ -309,4 +310,19 @@ export function fuseHandlers(code: Code, info: Info, names: Names): { code: Code
     }
   }
   return fused ? { code: { nodes, defs }, names: newNames, fused } : null;
+}
+
+// fuseHandlers a round at a time, each round checked again; a round that
+// doesn't check is dropped. compile.ts's lowering and the core IR's
+// (core-js.ts lowerCore) both take the program this way.
+export function fusedProgram(code: Code, info: Info, names: Names): { code: Code; info: Info; names: Names } {
+  for (let round = 0; round < 8; round++) {
+    const f = fuseHandlers(code, info, names);
+    if (!f) break;
+    const checked = infer(f.code, f.names);
+    if (checked.errors.length) break;
+    ({ code, names } = f);
+    info = checked;
+  }
+  return { code, info, names };
 }

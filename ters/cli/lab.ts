@@ -53,7 +53,7 @@ import { allowedOnly, nodeWorld } from "../src/lang/world.ts";
 import { compile } from "../../compiler/src/compile.ts";
 import { CFLAGS, emitC } from "../../compiler/src/c.ts";
 import { lowerScalar } from "../../compiler/src/scalar.ts";
-import { coreModule } from "../../compiler/src/core-js.ts";
+import { coreModule, lowerCore } from "../../compiler/src/core-js.ts";
 import { execFileSync } from "node:child_process";
 import { recordings, webCorePage, webPage } from "./web.ts";
 import { appFolder } from "./app.ts";
@@ -310,7 +310,7 @@ switch (command) {
     const core = rest.includes("--core");
     const source = (inCheckout: boolean): string => {
       if (!core) return compiled(p, main, inCheckout);
-      const lowered = lowerScalar(p.code, p.info, p.names, p.own, { data: true, host: true });
+      const lowered = lowerCore(p.code, p.info, p.names, p.own);
       const why = lowered.refused.get(main);
       if (why) fail(`${p.names[main] ?? "main"} isn't compiled through the core IR: it ${why}`);
       const here = (f: string) => resolve(import.meta.dirname, f);
