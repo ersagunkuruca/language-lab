@@ -377,6 +377,9 @@ A tensor is a shape, its axis lengths, and its items with the last axis changing
 - **tensor map** : `((a) -[e]-> b, Tensor a) -[e]-> Tensor b`. Each item through f, the shape kept.
 - **tensor zip with** : `((a, b) -[Abort, e]-> c, Tensor a, Tensor b) -[Abort, e]-> Tensor c`. f of the two tensors' items at each index. Stops when their shapes differ, and says both.
 - **reshaped** : `(Tensor a, List Int) -[Abort]-> Tensor a`. The same items read with another shape of the same size: a 2 × 3 tensor reshaped to [3, 2] or [6]. Stops when the sizes differ.
+- **contracted** : `(Tensor a, Tensor a, List (Int, Int)) -[Abort]-> Tensor a where a is a Number`. The product of two tensors summed over each pair of axes in pairs, (axis of the first, axis of the second), of the same length; the axes left, the first's then the second's, are the result's (Einstein summation, numpy.einsum). Matrix product is contracted(a, b, [(1, 0)]), a dot product contracted(u, v, [(0, 0)]), the outer product contracted(a, b, []).
+- **transposed by** : `(Tensor a, List Int) -[Abort]-> Tensor a where a is a Number`. The tensor with its axes reordered: axis order[k] becomes axis k. transposed by(m, [1, 0]) is a matrix's transpose.
+- **traced** : `(Tensor a, Int, Int) -[Abort]-> Tensor a where a is a Number`. The sum over the diagonal of two axes of the same length: traced(m, 0, 1) is a square matrix's trace.
 
 ## Representations
 

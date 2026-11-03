@@ -15,7 +15,7 @@ import { infer } from "../src/lang/infer.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { Aborted, runMain } from "../src/lang/run.ts";
-import { ARITH, S, SHOW_ANY, TENSOR_V } from "../src/lang/std.ts";
+import { ARITH, PAIR_V, S, SHOW_ANY, TENSOR_V } from "../src/lang/std.ts";
 
 const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 const lib = (name: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === name)!;
@@ -81,4 +81,44 @@ test("a tensor is made by tensor of: its constructor is the library's", () => {
   k.define(d, k.call(TENSOR_V, k.listOf(k.int(2)), k.listOf(k.lit(1))));
   const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
   assert.ok(info.errors.some((e) => /tensor of/.test(e.message)), info.errors.map((e) => e.message).join("; "));
+});
+
+// Step b: one contraction, and a transpose and a trace.
+const pairs = (k: Lang, ...ps: [number, number][]) => k.listOf(...ps.map(([a, b]) => k.call(PAIR_V, k.int(a), k.int(b))));
+const items = (k: Lang, t: Id) => k.call(lib("tensor items"), t);
+const tensor = (k: Lang, shape: number[], xs: number[]) => k.call(lib("tensor of"), k.listOf(...shape.map((x) => k.int(x))), k.listOf(...xs.map((x) => k.lit(x))));
+
+test("contracted over one pair is matrix product, the same as Matrix's; over none the outer product; over both a dot", async () => {
+  // [[1, 2, 3], [4, 5, 6]] times [[1, 0], [0, 1], [1, 1]] is [[4, 5], [10, 11]].
+  const b = (k: Lang) => tensor(k, [3, 2], [1, 0, 0, 1, 1, 1]);
+  assert.equal(await both((k, t) => items(k, k.call(lib("contracted"), t, b(k), pairs(k, [1, 0])))), "[4, 5, 10, 11]");
+  assert.equal(await both((k, t) => k.call(lib("tensor shape"), k.call(lib("contracted"), t, b(k), pairs(k, [1, 0])))), "[2, 2]");
+  const rows = (k: Lang, rs: number[][]) => k.call(lib("matrix of rows"), k.listOf(...rs.map((r) => k.listOf(...r.map((x) => k.lit(x))))));
+  assert.equal(await both((k) => k.call(lib("matrix rows"), k.call(lib("matrix product"), rows(k, [[1, 2, 3], [4, 5, 6]]), rows(k, [[1, 0], [0, 1], [1, 1]])))), "[[4, 5], [10, 11]]");
+  const u = (k: Lang) => tensor(k, [3], [1, 2, 3]);
+  assert.equal(await both((k) => items(k, k.call(lib("contracted"), u(k), u(k), pairs(k, [0, 0])))), "[14]");
+  assert.equal(await both((k) => k.call(lib("tensor shape"), k.call(lib("contracted"), u(k), u(k), pairs(k)))), "[3, 3]");
+  // The whole 2 × 3 tensor against itself on both axes: 1 + 4 + … + 36.
+  assert.equal(await both((k, t) => items(k, k.call(lib("contracted"), t, t, pairs(k, [0, 0], [1, 1])))), "[91]");
+});
+
+test("transposed by reorders the axes; traced sums a diagonal; a pair or order that doesn't fit stops", async () => {
+  assert.equal(await both((k, t) => items(k, k.call(lib("transposed by"), t, k.listOf(k.int(1), k.int(0))))), "[1, 4, 2, 5, 3, 6]");
+  assert.equal(await both((k) => items(k, k.call(lib("traced"), tensor(k, [2, 2], [1, 2, 3, 4]), k.int(0), k.int(1)))), "[5]");
+  const stops = (body: (k: Lang, t: Id) => Id, why: RegExp) => {
+    const p = program(body);
+    assert.deepEqual(p.info.errors.map((e) => e.message), []);
+    assert.throws(() => ran(p), (e: unknown) => e instanceof Aborted && why.test(e.reason));
+  };
+  stops((k, t) => k.call(lib("contracted"), t, t, pairs(k, [1, 0])), /contracted: the pairs don't fit a 2 × 3 tensor and a 2 × 3 one/);
+  stops((k, t) => k.call(lib("transposed by"), t, k.listOf(k.int(0), k.int(0))), /transposed by: the order doesn't name each axis of a 2 × 3 tensor once/);
+  stops((k, t) => k.call(lib("traced"), t, k.int(0), k.int(1)), /traced: two different axes of the same length, of a 2 × 3 tensor/);
+});
+
+test("contracted works on Int tensors too: the one + and ·", async () => {
+  const p = program((k) => items(k, k.call(lib("contracted"),
+    k.call(lib("tensor of"), k.listOf(k.int(2)), k.listOf(k.int(2), k.int(3))),
+    k.call(lib("tensor of"), k.listOf(k.int(2)), k.listOf(k.int(4), k.int(5))), pairs(k, [0, 0]))));
+  assert.deepEqual(p.info.errors.map((e) => e.message), []);
+  assert.equal(ran(p), "[23]");
 });
