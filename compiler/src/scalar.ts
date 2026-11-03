@@ -256,6 +256,12 @@ function freeLocals(e: SExpr): number[] {
   return read.filter((i) => !set.has(i));
 }
 
+// Where a closure came from, for JavaScript from the core IR (C137c13): the
+// lambda written in place (or a definition's), and the binders its captures
+// are; or a builtin. The evaluator's solver looks inside a function it is
+// given (relate.ts fromValue), so the printed closure carries this as the
+// evaluator's closures do (run.ts META). Other printers ignore it.
+export type ClosureSrc = { lambda: Id; binders: Id[]; bools: number[] } | { prim: Id };
 export type SExpr =
   | { k: "num"; v: number }
   | { k: "int"; v: bigint }
@@ -284,7 +290,7 @@ export type SExpr =
   | { k: "tag"; rec: SExpr; t: DType }
   // A function as a value: `fn` takes the closure, then t's inputs, and
   // reads what it captured (in shapes[shape]) with cap.
-  | { k: "closure"; t: FType; fn: number; shape: number; caps: SExpr[] }
+  | { k: "closure"; t: FType; fn: number; shape: number; caps: SExpr[]; src?: ClosureSrc }
   | { k: "cap"; t: FType; shape: number; i: number }
   // Calling a closure: it goes into local tmp, then its code is called
   // with it and the inputs.
@@ -1113,7 +1119,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     // end, nor may a backwards search), which spends the program's budget.
     const once = solvesOnce(code, n) || (!f.partial && !searching.get(f));
     const given = Object.values(n.given), binds = Object.values(n.binds);
-    for (const g of given) { const t = stype(zonk(g)); if (!t) throw new Refused(`solves ${name} given ${whyNot(zonk(g))}`); if (isFn(t)) throw new Refused(`solves ${name} given a function, which the solver looks inside (a closure printed here can't be yet)`); if (typeof t === "object" && boolInside(t)) throw new Refused(`solves ${name} given data holding a Bool, which isn't lowered yet`); }
+    for (const g of given) { const t = stype(zonk(g)); if (!t) throw new Refused(`solves ${name} given ${whyNot(zonk(g))}`); if (typeof t === "object" && boolInside(t)) throw new Refused(`solves ${name} given data holding a Bool, which isn't lowered yet`); }
     const ts = binds.map((b) => { const t = stype(zonk(b)); if (!t) throw new Refused(`solves ${name} for ${whyNot(zonk(b))}`); if (typeof t === "object" && boolInside(t)) throw new Refused(`solves ${name} for data holding a Bool, which isn't lowered yet`); return t; });
     const all = f.locals.push("host") - 1;
     let inner = new Map(env);
@@ -1361,7 +1367,8 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     let inner = new Map(n.params.map((p, j) => [p, j + 1]));
     const lets = free.map((b, j) => { const i = g.locals.push(caps[j]) - 1; inner = new Map(inner).set(b, i); return { i, value: { k: "cap", t, shape, i: j } as SExpr }; });
     g.body = lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), expr(n.body, inner, g, true));
-    return { k: "closure", t, fn: gi, shape, caps: free.map((b): SExpr => ({ k: "local", i: env.get(b)! })) };
+    const src: ClosureSrc | undefined = opts.host && !caps.some((c) => typeof c === "object" && boolInside(c)) ? { lambda: n.id, binders: free, bools: caps.flatMap((c, j) => (c === "i32" ? [j] : [])) } : undefined;
+    return { k: "closure", t, fn: gi, shape, caps: free.map((b): SExpr => ({ k: "local", i: env.get(b)! })), ...(src ? { src } : {}) };
   }
   // A definition used as a value: a closure that calls it, made once.
   function named(def: Id, id: Id, t: FType): SExpr {
@@ -1378,7 +1385,9 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       g.body = { k: "call", fn: func(def, types), args: t.params.map((_, j): SExpr => ({ k: "local", i: j + 1 })), tail: true };
       shapeOfNamed.set(key, shape);
     }
-    return { k: "closure", t, fn: index.get(key)!, shape: shapeOfNamed.get(key)!, caps: [] };
+    const body = (code.nodes[def] as NodeOf<"def">).body;
+    const src: ClosureSrc | undefined = opts.host && body && code.nodes[body]?.kind === "lambda" ? { lambda: body, binders: [], bools: [] } : undefined;
+    return { k: "closure", t, fn: index.get(key)!, shape: shapeOfNamed.get(key)!, caps: [], ...(src ? { src } : {}) };
   }
   const shapeOfNamed = new Map<string, number>();
   // A builtin used as a value, for JavaScript from the core IR (C137c12):
@@ -1397,7 +1406,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       g.body = { k: "rt", fn: `host:${target}${t.result === "i32" ? ":bool" : ""}`, args: t.params.map((_, j): SExpr => ({ k: "local", i: j + 1 })), host: { t: t.result, partial: !!t.partial } };
       shapeOfNamed.set(key, shape);
     }
-    return { k: "closure", t, fn: index.get(key)!, shape: shapeOfNamed.get(key)!, caps: [] };
+    return { k: "closure", t, fn: index.get(key)!, shape: shapeOfNamed.get(key)!, caps: [], src: { prim: target } };
   }
 
   // A fold's result binder used once, by the call that computes it.
