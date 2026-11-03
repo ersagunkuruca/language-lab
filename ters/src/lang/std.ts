@@ -1252,7 +1252,7 @@ export const PIPE_OPS = { send: "std.send.send", receive: "std.receive.receive",
 // number types are implementations, not names run.ts knows. After the
 // pipe, so ids above don't move.
 export const SHOWN = typedef("std.shown", "Shown", ["a"], [
-  ["shown", [["show", ([a]) => tfun([tref(a)], tref(STRING), [])]]],
+  ["shown", [["as shown", ([a]) => tfun([tref(a)], tref(STRING), [])]]],
 ], false, true);
 export const SHOWN_V = "std.shown.shown";
 export function tupleType(n: number): Id { return `std.tuple${n}`; }
