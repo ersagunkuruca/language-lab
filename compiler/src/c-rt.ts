@@ -359,6 +359,21 @@ const FNS: Record<string, Fn> = {
   "int.bitAnd": { uses: ["int.bits"], c: `static lab_int lab_int_bitAnd(lab_int a, lab_int b) { return lab__int_bits(a, b, 0); }` },
   "int.bitOr": { uses: ["int.bits"], c: `static lab_int lab_int_bitOr(lab_int a, lab_int b) { return lab__int_bits(a, b, 1); }` },
   "int.bitXor": { uses: ["int.bits"], c: `static lab_int lab_int_bitXor(lab_int a, lab_int b) { return lab__int_bits(a, b, 2); }` },
+  // floor(a / 2ⁿ), a negative n shifting up (int.ts shiftDown, C150b):
+  // a 64-bit shift when both are small and n ≥ 0, else floor division by
+  // 2ⁿ (or · 2⁻ⁿ); past a's last limb only its sign is left.
+  "int.shiftDown": {
+    uses: ["int.quotient", "int.power", "int.mul"],
+    c: `static lab_int lab_int_shiftDown(lab_int a, lab_int n) {
+  int neg = LAB_IS_SMALL(a) ? LAB_VAL(a) < 0 : LAB_BIG(a)->neg;
+  if (!LAB_IS_SMALL(n)) { if (LAB_BIG(n)->neg) lab_oom(); lab_int_drop(a); lab_int_drop(n); return LAB_SMALL(neg ? -1 : 0); }
+  int64_t k = LAB_VAL(n);
+  if (k < 0) return lab_int_mul(a, lab_int_power(LAB_SMALL(2), lab__int64(-k)));
+  if (LAB_IS_SMALL(a)) return lab__int64(LAB_VAL(a) >> (k < 63 ? k : 63));
+  if ((uint64_t)k > 32 * (uint64_t)LAB_BIG(a)->n) { lab_int_drop(a); return LAB_SMALL(neg ? -1 : 0); }
+  return lab_int_quotient(a, lab_int_power(LAB_SMALL(2), n));
+}`,
+  },
   "int.quotient": { uses: [], c: `static lab_int lab_int_quotient(lab_int x, lab_int y) { lab_int q; if (y == LAB_SMALL(0)) { lab_int_drop(x); lab_st = 1; return LAB_SMALL(0); } lab__floordiv(x, y, &q, 0); lab_int_drop(x); lab_int_drop(y); return q; }` },
   "int.remainder": { uses: [], c: `static lab_int lab_int_remainder(lab_int x, lab_int y) { lab_int r; if (y == LAB_SMALL(0)) { lab_int_drop(x); lab_st = 1; return LAB_SMALL(0); } lab__floordiv(x, y, 0, &r); lab_int_drop(x); lab_int_drop(y); return r; }` },
   // A negative power has no answer; 0, 1 and −1 to any power are small.
