@@ -32,7 +32,9 @@ model, so each feature has been written twice in the compiler
   Step c4 runs every example whose main lowers (11 of them) against the
   evaluator (compiler/test/core-js.test.ts), which lists the others with
   the reason they don't lower. Step c5 is `lab compile --core`, a module
-  that runs main in Node printed this way.
+  that runs main in Node printed this way. Step c6 gives it the
+  evaluator's values (`{ tag, fields }`, closures as functions), so pages
+  and cells can take them as they are.
 - (d) compile.ts retired piece by piece.
 
 ## What it holds

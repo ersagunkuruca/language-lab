@@ -108,14 +108,9 @@ test(`generated programs: the evaluator, compiled JavaScript, WebAssembly and C 
     // throws Unsupported, and isn't compared.
     {
     const cj = loadCoreJs(lowered);
-    const list = (xs: bigint[], t: LType): unknown => {
-      if (!isData(t)) throw new Error("not a list");
-      const c = (v: Id) => t.cases.findIndex((x) => x.variant === v);
-      return xs.reduceRight<unknown>((l, x) => [c(CONS), norm(x), l], [c(NIL)]);
-    };
     fns.forEach((fi, i) => INPUTS.forEach(([x, n, xs], j) => {
       let got: unknown;
-      try { got = cj[fi](x, norm(n), entry ? norm(BigInt(j)) : list(xs, lowered.funcs[fi].params[2])); } catch (e) {
+      try { got = cj[fi](x, norm(n), entry ? norm(BigInt(j)) : toList(xs.map(norm))); } catch (e) {
         if (e instanceof Unsupported) { unsupported.add(e.message); return; }
         got = e === FAIL ? "no answer" : "stop";
       }
