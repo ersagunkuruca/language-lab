@@ -80,9 +80,8 @@ export type Node =
   // each call and rigid in the case that handles it. `await(ticket: Ticket
   // a) → a` has its own a.
   | { id: Id; kind: "variant"; fields: Id[]; returns?: Id; later?: true; private?: true; params?: Id[] }
-  // `results` (an interface's field, POLAR.md): the positions of the
-  // ports it gives, when its type is a predicate over its ports read as a
-  // function with several results; `ports` names them for the text.
+  // `ports` (an interface's field with results, POLAR.md, L128d3): its
+  // type is a function and these name its inputs, then its results.
   // `same`: another case's field of the same type that this one is (L168,
   // SHARED-FIELDS-2026-11-02.md), so `x.to` reads it on every case that
   // has it. It names the first case's field, which names none.

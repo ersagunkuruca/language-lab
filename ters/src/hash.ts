@@ -19,7 +19,7 @@
 //   - The hash is SHA-256 (src/sha256.ts), cut to 130 bits: the size of a
 //     fresh id, and far past where two different definitions could share one.
 
-import type { Code, Id, Node } from "./model.ts";
+import type { Code, Id, Node, NodeOf } from "./model.ts";
 import { isUse, useTarget } from "./model.ts";
 import { ownerOfTypeParts } from "./model.ts";
 import { base32, sha256 } from "./sha256.ts";
@@ -32,8 +32,15 @@ export const digest = (x: unknown): string => base32(sha256(JSON.stringify(x)));
 // backwards, or through one of a data type's cases and fields.
 export function defDeps(code: Code, def: Id, owner = ownerOfTypeParts(code)): Id[] {
   const out = new Set<Id>();
-  const body = (code.nodes[def] as { body?: Id | null })?.body;
+  const d0 = code.nodes[def] as { body?: Id | null; direction?: Id; way?: Id };
+  const body = d0?.body;
   if (!body) return [];
+  // The relation a direction is of, and the type whose operation a way
+  // gives, are hashed into it (L178a).
+  for (let t of [d0.direction, d0.way]) {
+    if (t && owner.has(t)) t = owner.get(t)!;
+    if (t && t !== def && code.nodes[t]?.kind === "def") out.add(t);
+  }
   const todo: Id[] = [body];
   while (todo.length) {
     const n = code.nodes[todo.pop()!];
@@ -58,13 +65,13 @@ function kids(n: Node): Id[] {
       return [n.fn, ...n.args];
     case "lambda": return [...n.params, n.body];
     case "typedef": return [...n.params, ...n.variants];
-    case "variant": return [...(n.params ?? []), ...n.fields];
+    case "variant": return [...(n.params ?? []), ...n.fields, ...(n.returns ? [n.returns] : [])];
     case "field": return [n.type];
     case "tref": return n.args;
     case "tfun": return [...n.params, n.result];
     case "match": return [n.scrutinee, ...n.arms, ...(n.otherwise ? [n.otherwise] : [])];
     case "fold": return [n.scrutinee, ...n.arms];
-    case "arm": return [...n.binds, ...n.results.filter((r): r is Id => r !== null), n.body];
+    case "arm": return [...(n.value ? [n.value] : []), ...n.binds, ...n.results.filter((r): r is Id => r !== null), n.body];
     default: return [];
   }
 }
@@ -206,13 +213,25 @@ function canon(code: Code, defId: Id, group: Map<Id, number | null>, memo: Map<I
       // (Dual and Complex are both two Float64s) says so, or the two would
       // be one type by their hashes. Only written when present, so every
       // hash from before stays.
-      case "typedef": return n.row ? ["row", n.row.map(defRef)] : n.unique ? ["type", n.params.map(go), n.variants.map(go), ["unique", n.unique]] : ["type", n.params.map(go), n.variants.map(go)];
+      case "typedef": {
+        if (n.row) return ["row", n.row.map(defRef)];
+        // An effect and an interface aren't a data type of the same shape
+        // (L178a): said only when so, so a data type's hash stays.
+        const marks = [...(n.unique ? [["unique", n.unique]] : []), ...(n.effect ? [["effect"]] : []), ...(n.interface ? [["interface"]] : [])];
+        return ["type", n.params.map(go), n.variants.map(go), ...marks];
+      }
       // An operation's own type variables, only when it has some, so every
       // hash from before stays.
-      case "variant": return n.params?.length ? ["variant", ["own", n.params.map(go)], n.fields.map(go)] : ["variant", n.fields.map(go)];
+      case "variant": {
+        // An operation's result type, and whether it is answered later or
+        // private, are its meaning too (L178a); only when present.
+        const marks = [...(n.returns ? [["returns", go(n.returns)]] : []), ...(n.later ? [["later"]] : []), ...(n.private ? [["private"]] : [])];
+        return n.params?.length ? ["variant", ["own", n.params.map(go)], n.fields.map(go), ...marks] : ["variant", n.fields.map(go), ...marks];
+      }
       // A shared field (L168) says which case's field it is, by position;
       // only when present, so every hash from before stays.
-      case "field": return n.same ? ["field", go(n.type), ["same", ...samePlace(n.same)]] : ["field", go(n.type)];
+      // How many ports it names says how many results it gives (L128d3).
+      case "field": return [...(n.same ? ["field", go(n.type), ["same", ...samePlace(n.same)]] : ["field", go(n.type)]), ...(n.ports ? [["ports", n.ports.length]] : [])];
       case "tref": {
         const head = binders.has(n.target) ? ["var", binders.get(n.target)] : defRef(n.target);
         return ["tref", head, ...n.args.map(go)];
@@ -220,12 +239,26 @@ function canon(code: Code, defId: Id, group: Map<Id, number | null>, memo: Map<I
       case "tfun": return n.effects?.length ? ["tfun", n.params.map(go), go(n.result), n.effects.map(defRef)] : ["tfun", n.params.map(go), go(n.result)];
       case "match": return ["match", go(n.scrutinee), n.arms.map(go), n.otherwise ? go(n.otherwise) : null];
       case "fold": return ["fold", go(n.scrutinee), n.arms.map(go)];
-      case "arm": return ["arm", part(n.variant), n.binds.map(go), n.results.map((r) => (r ? go(r) : null)), go(n.body)];
+      // An arm on a literal (L164c) is its value, not its node's id (L178a).
+      case "arm": return ["arm", n.value ? ["value", go(n.value)] : part(n.variant), n.binds.map(go), n.results.map((r) => (r ? go(r) : null)), go(n.body)];
       default: throw new Error(`unexpected ${n.kind}`);
     }
   };
   // An extern has no content to hash, so its identity is its id.
-  return def.body === null ? ["extern", defId] : go(def.body);
+  if (def.body === null) return ["extern", defId];
+  const body = go(def.body);
+  // What the definition says about itself besides its body (L178a): its
+  // results (by place among its inputs), the relation it is a direction
+  // of, the operation it is a way of and that way's cost. Only when
+  // present, so every other hash stays.
+  const d = code.nodes[defId] as NodeOf<"def">, lam = code.nodes[def.body];
+  const marks = [
+    ...(d.results ? [["results", d.results.map((r) => (lam?.kind === "lambda" ? lam.params.indexOf(r) : -1))]] : []),
+    ...(d.direction ? [["direction", defRef(d.direction)]] : []),
+    ...(d.way ? [["way", part(d.way)]] : []),
+    ...(d.cost !== undefined ? [["cost", d.cost]] : []),
+  ];
+  return marks.length ? ["def", body, ...marks] : body;
 }
 
 // Units are part of the meaning: a length and a time with the same number are
