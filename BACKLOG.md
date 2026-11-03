@@ -66,7 +66,7 @@ New items land here until the next triage gives them a lane and a priority.
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | E229 | Effect rows as permissions: before an opened file's main first runs, say which world effects it uses (fetch, storage, time…) and answer only those allowed; `lab run --allow fetch=host` the same for the CLI (hosts.ts answers only what was granted) | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §5 | P3 | M | |
-| E230 | When an edit changes a definition's cost order or a type's chosen representation, say so next to the edit and name the use that caused it (cost.ts, E159's panel) | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §7 | P3 | M | |
+| E230b | When an edit changes which way an implementation's field is worked out (ways.ts) and its cost order (cost.ts), say so next to the edit and name the use that caused it, as E230 does for representations | E230 | P3 | M | |
 | E231 | Keyboard-only and screen-reader use of the editor, done part by part with E228's split; the daily QA format gains both checks | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §10 | P3 | L | |
 
 ### What a good language needs ([ASPECTS-2026-11-03](docs/reports/reviews/ASPECTS-2026-11-03.md))
