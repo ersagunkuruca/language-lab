@@ -190,9 +190,12 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
 
   // cons(a, cons(b, nil)) is shown as [a, b]: a list is a notation for
   // nested constructors, nothing more.
+  // A `list of` call (L181) is the same list, written flat.
   const listItems = (id: Id): Id[] | null => {
     const items: Id[] = [];
-    for (let n = node(id); ; ) {
+    const top = node(id);
+    if (isCall(top) && node(top.fn).kind === "ref" && (node(top.fn) as NodeOf<"ref">).target === S.listOf) return [...top.args];
+    for (let n = top; ; ) {
       if (n.kind === "ref" && n.target === NIL) return items;
       if (!isCall(n) || node(n.fn).kind !== "ref" || (node(n.fn) as NodeOf<"ref">).target !== CONS) return null;
       items.push(n.args[0]);
