@@ -109,3 +109,21 @@ test("a use with no body inside a relation is read with its ports bound (L211e):
   assert.deepEqual(info.errors.map((e) => e.message), []);
   assert.equal(runMain(code, info, main, { print: () => {}, names }), "7");
 });
+
+test("a use with no body reads as a call naming its given ports (L211f), in blocks and as an s-expression", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { root } = await import("../src/io.ts");
+  const { renderBlocks } = await import("../src/lang/render.ts");
+  const { renderSexpr } = await import("../src/render/sexpr.ts");
+  const k = new Lang();
+  const main = k.def("main");
+  const use = k.useOf(B.add, { 0: k.lit(2), out: k.lit(5) });
+  k.define(main, k.thunk(() => k.call(SHOW_ANY, use)));
+  const code: Code = base(k.code), names = baseNames(k.names);
+  code.nodes[use] = k.code.nodes[use];
+  const pres = { names, comments: {}, hints: {}, style: JSON.parse(readFileSync(join(root, "styles", "blocks.json"), "utf8")) };
+  const text = renderBlocks(code, pres, infer(code, names), main);
+  assert.match(text, /add\([^)]*= 2, result = 5\)/);
+  assert.doesNotMatch(text, /‹use›|for /);
+  assert.match(renderSexpr(code, pres, main), /\(solve add \(\(\S+ 2\) \(out 5\)\)\)/);
+});
