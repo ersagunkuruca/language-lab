@@ -10,11 +10,13 @@ import { root } from "../io.ts";
 import type { Options } from "./infer.ts";
 import { LIBRARY, PRELUDE, TREES } from "./library.ts";
 import { onTodaysIds } from "./std.ts";
+import { fillUses } from "./ports.ts";
 
 // A saved file, with ids since renamed read as today's (std.ts RENAMED_IDS).
 const read = <T>(path: string, fallback: T): T => (existsSync(path) ? onTodaysIds(JSON.parse(readFileSync(path, "utf8"))) : fallback);
 
-export const base = (code: Code): Code => merge(LIBRARY.code, code);
+// A use with no body is read as the tuple of its produced ports (L211).
+export const base = (code: Code): Code => { const c = merge(LIBRARY.code, code); fillUses(c, Object.keys(code.nodes)); return c; };
 export const baseNames = (...layers: Names[]): Names => layer<Names>(LIBRARY.names, ...layers);
 // What the checker is given with every program: the modules' pins, and
 // which of their definitions are helpers.

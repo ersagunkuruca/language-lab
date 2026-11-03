@@ -708,6 +708,8 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
+| L211a | A use with no body gives the ports it produces, the ones not given, as a tuple in port order, or the one value when it produces one: read at load (ports.ts `usePorts`, `fillUses`, called from load.ts `base` and files.ts `fromFile`) as the use that binds each produced port and gives their tuple back, so the checker, the evaluator and the compilers run it unchanged. DSL `useOf`. SPEC §7.2. Test ters/test/bodyless-use.test.ts (add, polar; evaluated and compiled) | this PR |
+| L193b | Word16 beside Word8, Word32 and Word64 (Ersagun asked), for 16-bit audio samples and binary formats: `as word16`, the same Arithmetic, Ordered, Shown and Bits, after Bits in std so ids don't move | this PR |
 | L218b | An answer handed out is checked only when it is a Float64 itself: walking every list or record handed out made each answer cost its size, and broke rep-costs.test.ts after #1354 | this PR |
 | L218 | An overflow stops only when its value is used (SPEC S2, Ersagun chose 2026-11-03): the evaluator carries ∞ through + − · as compiled code does and stops where it is shown, compared, branched on, divided by, converted, or turned back into a finite number (run.ts finiteFloat, sameNumber, less, show, whole part), so `let big = x · 1e300 in 5` is 5 in the evaluator, compiled JS and WebAssembly (compiler/test/finite.test.ts). SPEC §3.3 and §10.1 say so | #1354 |
 | L193b | Word16 beside Word8, Word32 and Word64 (Ersagun asked), for 16-bit audio samples and binary formats: `as word16`, the same Arithmetic, Ordered, Shown and Bits, after Bits in std so ids don't move | #1342 |

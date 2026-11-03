@@ -182,6 +182,14 @@ export class Lang extends Builder {
     return this.add(useNode((n) => this.add(n), fn, g, binds, this.x(body(binds))));
   }
 
+  // Use relation `fn` with `given` ports and no body (L211): it gives the
+  // ports it produces, the ones not given, as a tuple in port order, or the
+  // one value when it produces one.
+  useOf(fn: Id, given: Record<string, Id>): Id {
+    const g = Object.fromEntries(Object.entries(given).map(([k, e]) => [k, this.x(e)]));
+    return this.add({ kind: "call", fn: this.add({ kind: "ref", target: fn }), given: g } as never);
+  }
+
   // An Int literal: exact at any size.
   int(value: number | bigint | string): Id {
     const v = typeof value === "number" ? value : BigInt(value);
