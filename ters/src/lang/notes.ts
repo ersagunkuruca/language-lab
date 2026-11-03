@@ -46,6 +46,7 @@ export const NOTES: Comments = {
   "std.send": "Hands an item onward: piped(producer, consumer) answers it with the consumer's next receive.",
   "std.receive": "Asks for the next item: piped answers it with some(item) from the producer's next send, or none once the producer has finished.",
   "std.pipe": "A producer run to its next send: finished, or sent(item, more), where more runs it on to the send after.",
+  "std.shown": "An interface: how a type's values show as text. show any shows a value of a type that implements it through its as shown, so a type of your own shows its own way with a definition of type Shown T. Rational, Complex and Fixed do (the prelude's).",
   "std.matrix": "A matrix of any size: its row and column counts and its items row by row. Built with matrix of rows; a size mismatch stops the program and names both sizes, as the size isn't in the type.",
   "std.priority queue": "Items by priority, lowest first: prioritized adds one, soonest and without soonest take it. Two with one priority leave in the order they were added. A simulation's event list.",
   "std.division.division.divide": "a ÷ b, at any number but Int: exact at Rational, Fixed and Algebraic, floating point at Float64, the complex quotient at Complex. Dividing by 0 has no answer, so it has Choice.",

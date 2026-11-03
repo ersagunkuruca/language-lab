@@ -998,6 +998,10 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           return { k: "get", rec: expr(n.args[0], env, f, false), t: r, i: fieldIndex(code, target) };
         }
         if (opts.host && (STD_IMPL[target] || STD_MANY[target] || (HOST_CELLS.has(target)))) return host(n, target, id, env, f);
+        // for some(x => …), for JavaScript from the core IR (C137c16): the
+        // evaluator's relational interpreter (relate.ts satisfiable) on the
+        // closure, which carries its lambda (closure.src).
+        if (opts.host && target === S.exists && n.args.length === 1) return { k: "rt", fn: "exists", args: [expr(n.args[0], env, f, false)], host: { t: "i32", partial: false } };
         const why = TARGETS[target]?.scalar;
         throw new Refused(`uses ${nm(target)}, which isn't in the scalar profile${why && typeof why === "object" && "no" in why ? `: it ${why.no}` : ""}`);
       }

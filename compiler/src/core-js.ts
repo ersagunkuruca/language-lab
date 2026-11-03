@@ -22,6 +22,7 @@ import { ARRAY_OPS, CONS, FALSE, HASH_SET_OPS, NIL, NONE, S, SOME, STD_IMPL, STD
 import { META, cellOps, equal, solveAnswers, toList, type Runtime, type Value, type World } from "../../ters/src/lang/run.ts";
 import { Cells, NoValue } from "../../ters/src/lang/cells.ts";
 import { NoAnswer } from "../../ters/src/lang/html.ts";
+import { satisfiable } from "../../ters/src/lang/relate.ts";
 import { worldRandom } from "../../ters/src/lang/random.ts";
 import * as I from "../../ters/src/lang/int.ts";
 import * as T from "../../ters/src/lang/text.ts";
@@ -104,6 +105,7 @@ function rtFn(name: string, tables?: TableSpec[], rand?: Record<string, (...xs: 
   if (name.startsWith("host:")) return hostFn(name, cells);
   if (name.startsWith("solve:")) return solveFn(name.slice(6), code, false, spend);
   if (name.startsWith("solveAll:")) return solveFn(name.slice(9), code, true, spend);
+  if (name === "exists") return (f) => { if (!code) throw new Unsupported("for some without the program"); return satisfiable(code, f); };
   if (name.startsWith("pick:")) { const [, j, bool] = name.split(":"); return (xs) => { const v = (xs as Value[])[Number(j)]; return bool ? (v as unknown) === true || (v as { tag?: Id }).tag === TRUE : v; }; }
   const tm = TABLE.exec(name);
   if (tm && tables) return tableFn(tm[1], tables[Number(tm[2])]);
@@ -172,6 +174,17 @@ function cellFns(cells: Cells) {
 export const RUNTIME = {
   FAIL, OUT, Aborted, Unsupported, rt: rtFn,
   fail: (): never => { throw FAIL; },
+  // A printed partial function says it has no answer by giving FAIL
+  // (C137c15), which is cheap; where that answer is used inside an
+  // expression, or by the evaluator's runtime, it is thrown, as before.
+  ck: <T>(v: T): T => { if ((v as unknown) === FAIL) throw FAIL; return v; },
+  // A function value applied: a printed closure's code directly, so its
+  // FAIL comes back as a value; any other function (the evaluator's) by
+  // calling it, its thrown FAIL taken as the value.
+  ap: (f: { code?: (...xs: unknown[]) => unknown } & ((...xs: unknown[]) => unknown), ...xs: unknown[]) => {
+    if (f.code) return f.code(f, ...xs);
+    try { return f(...xs); } catch (e) { if (e === FAIL) return FAIL; throw e; }
+  },
   stop: (i: number): never => { throw new Stopped(STOPS[i]); },
   mod: (a: number, b: number) => ((a % b) + b) % b,
   unsupported: (what: string): never => { throw new Unsupported(what); },
@@ -185,7 +198,7 @@ export const RUNTIME = {
   // are, or the builtin, as the evaluator's closures carry (run.ts META),
   // so the evaluator's solver can look inside one it is given.
   closure: (code: (...xs: unknown[]) => unknown, caps: unknown[], src?: { lambda: Id; binders: Id[]; bools: number[] } | { prim: Id }) => {
-    const c = Object.assign((...xs: unknown[]) => code(c, ...xs), { caps });
+    const c: ((...xs: unknown[]) => unknown) & { caps: unknown[]; code: typeof code } = Object.assign((...xs: unknown[]) => RUNTIME.ck(code(c, ...xs)), { caps, code });
     if (src) Object.assign(c, { [META]: "prim" in src ? src : { lambda: src.lambda, env: new Map(src.binders.map((b, j) => [b, src.bools.includes(j) ? { tag: caps[j] ? TRUE : FALSE, fields: [] } : caps[j]])) } });
     return c;
   },
@@ -216,7 +229,9 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
     ...[...rts].map(([n, v]) => `const ${v} = R.rt(${JSON.stringify(n)});`),
     ...worlds.map((_, i) => `const w${i} = R.worlds[${i}];`),
     ...text,
-    `return { ${names.join(", ")} };`,
+    // A partial function given out says no answer by throwing, as the
+    // evaluator's runtime expects.
+    `return { ${names.map((n, i) => (ir.funcs[i].partial ? `${n}: (...xs) => R.ck(${n}(...xs))` : n)).join(", ")} };`,
   ].join("\n");
   return { js, names, worlds };
 
@@ -226,6 +241,39 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
     const local = (j: number) => `l${j}`;
     const self = (e: SExpr): boolean => (e.k === "call" && e.fn === i && e.tail) || kidsOf(e).some(self);
     const loops = self(f.body);
+    // How a statement leaves when what it reads has no answer (C137c15): the
+    // function gives FAIL, or the nearest attempt in it takes its
+    // otherwise; null where it must be thrown (a budget's or a handler's
+    // body, which put things back as it passes).
+    let onFail: string | null = f.partial ? "return R.FAIL;" : null;
+    const within = <T>(exit: string | null, run: () => T): T => { const outer = onFail; onFail = exit; try { return run(); } finally { onFail = outer; } };
+    // e's value where a statement begins (a let's value, an if's test), so
+    // nothing computed before it waits: a partial call's FAIL is checked
+    // here and leaves by onFail, without a throw.
+    // An attempt's body, run: the name of the Bool saying it answered.
+    function tried(e: Extract<SExpr, { k: "attempt" }>, pre: string[], d: string): string {
+      const ok = temp(), label = temp();
+      const body = within(`{ ${ok} = false; break ${label}; }`, () => block(e.body, { set: local(e.res), fails: true }, d + "  "));
+      pre.push(`${d}let ${ok} = true;`, `${d}${label}: try {`, ...body, `${d}  if (${local(e.res)} === R.FAIL) ${ok} = false;`, `${d}} catch (x) {`, `${d}  if (x !== R.FAIL) throw x;`, `${d}  ${ok} = false;`, `${d}}`);
+      return ok;
+    }
+    // A call's inputs where a statement begins: one that is a partial call
+    // is checked as a slot when everything before it is a value already
+    // (so computing it first changes no order).
+    function inputs(args: SExpr[], out: string[], d: string): string[] {
+      const atomic = (a: SExpr) => ["local", "num", "int", "text", "bool", "cap"].includes(a.k);
+      return args.map((a, j) => (args.slice(0, j).every(atomic) ? slot(a, out, d) : ex(a, out, d)));
+    }
+    function slot(e: SExpr, out: string[], d: string): string {
+      const partial = (e.k === "call" && ir.funcs[e.fn].partial) || (e.k === "apply" && e.t.partial);
+      if (!onFail || !partial) return ex(e, out, d);
+      let c: string;
+      if (e.k === "call") c = `${names[e.fn]}(${inputs(e.args, out, d).join(", ")})`;
+      else { const fn = ex(e.fn, out, d), xs = inputs(e.args, out, d); out.push(`${d}${local(e.tmp)} = ${fn};`); c = `R.ap(${[local(e.tmp), ...xs].join(", ")})`; }
+      const t = temp();
+      out.push(`${d}const ${t} = ${c};`, `${d}if (${t} === R.FAIL) ${onFail}`);
+      return t;
+    }
 
     // An expression, with the statements it needs first.
     function ex(e: SExpr, pre: string[], d: string): string {
@@ -256,7 +304,8 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
           // Its inputs computed first: a call's own statements must not
           // come between them.
           const xs = e.args.map((a) => ex(a, pre, d));
-          return `${names[e.fn]}(${xs.join(", ")})`;
+          const c = `${names[e.fn]}(${xs.join(", ")})`;
+          return ir.funcs[e.fn].partial ? `R.ck(${c})` : c;
         }
         case "make": { const v = `{ tag: ${JSON.stringify(e.t.variant)}, fields: [${e.args.map((a) => ex(a, pre, d)).join(", ")}] }`; return constant(e) ? constName(v) : v; }
         case "get": return `${ex(e.rec, pre, d)}.fields[${e.i}]`;
@@ -268,7 +317,7 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
         case "apply": {
           const c = ex(e.fn, pre, d), xs = e.args.map((a) => ex(a, pre, d));
           pre.push(`${d}${local(e.tmp)} = ${c};`);
-          return `${local(e.tmp)}(${xs.join(", ")})`;
+          return e.t.partial ? `R.ck(R.ap(${[local(e.tmp), ...xs].join(", ")}))` : `${local(e.tmp)}(${xs.join(", ")})`;
         }
         case "case": {
           pre.push(`${d}${local(e.s)} = ${ex(e.scrut, pre, d)};`);
@@ -285,21 +334,20 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
         case "world": { const xs = e.args.map((a) => ex(a, pre, d)); return `${worldName(e.op)}(${xs.join(", ")})`; }
         case "fail": return "R.fail()";
         case "attempt": {
-          const ok = temp(), t = temp();
-          pre.push(`${d}let ${ok} = true;`, `${d}try {`, ...block(e.body, { set: local(e.res) }, d + "  "), `${d}} catch (x) {`, `${d}  if (x !== R.FAIL) throw x;`, `${d}  ${ok} = false;`, `${d}}`);
+          const ok = tried(e, pre, d), t = temp();
           pre.push(`${d}let ${t};`, `${d}if (${ok}) {`, ...block(e.ok, { set: t }, d + "  "), `${d}} else {`, ...block(e.otherwise, { set: t }, d + "  "), `${d}}`);
           return t;
         }
         case "budget": {
           const s = temp(), out = temp(), t = temp();
-          pre.push(`${d}const ${s} = fuel;`, `${d}fuel = ${e.n};`, `${d}let ${t}, ${out} = false;`, `${d}try {`, ...block(e.body, { set: t }, d + "  "), `${d}} catch (x) {`, `${d}  if (x !== R.OUT) { fuel = ${s}; throw x; }`, `${d}  ${out} = true;`, `${d}}`, `${d}fuel = ${s};`);
+          pre.push(`${d}const ${s} = fuel;`, `${d}fuel = ${e.n};`, `${d}let ${t}, ${out} = false;`, `${d}try {`, ...within(null, () => block(e.body, { set: t }, d + "  ")), `${d}} catch (x) {`, `${d}  if (x !== R.OUT) { fuel = ${s}; throw x; }`, `${d}  ${out} = true;`, `${d}}`, `${d}fuel = ${s};`);
           pre.push(`${d}if (${out}) {`, ...block(e.otherwise, { set: t }, d + "  "), `${d}}`);
           return t;
         }
         case "abort": return `R.abort(${ex(e.reason, pre, d)}, ${e.esc ?? 0})`;
         case "handle": {
           const t = temp();
-          pre.push(`${d}let ${t};`, `${d}try {`, ...block(e.body, { set: t }, d + "  "), `${d}} catch (x) {`, `${d}  if (!(x instanceof R.Aborted) || x.esc !== ${e.esc ?? 0}) throw x;`, `${d}  ${local(e.reason)} = x.reason;`, ...block(e.arm, { set: t }, d + "  "), `${d}}`);
+          pre.push(`${d}let ${t};`, `${d}try {`, ...within(null, () => block(e.body, { set: t }, d + "  ")), `${d}} catch (x) {`, `${d}  if (!(x instanceof R.Aborted) || x.esc !== ${e.esc ?? 0}) throw x;`, `${d}  ${local(e.reason)} = x.reason;`, ...block(e.arm, { set: t }, d + "  "), `${d}}`);
           return t;
         }
         case "set": { const r = ex(e.rec, pre, d); pre.push(`${d}${r}.fields[${e.i}] = ${ex(e.value, pre, d)};`); return ex(e.then, pre, d); }
@@ -308,14 +356,35 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
     }
 
     // Statements that end by returning e's value, or setting a variable to it.
-    function block(e: SExpr, to: { set: string } | "return", d: string): string[] {
+    // `fails` (or a return from a partial function): the value may be FAIL,
+    // which whoever reads it checks, so no answer here is that value.
+    function block(e: SExpr, to: { set: string; fails?: true } | "return", d: string): string[] {
       const out: string[] = [];
+      const failable = to === "return" ? !!f.partial : !!to.fails;
+      const give = (x: string) => [...out, to === "return" ? `${d}return ${x};` : `${d}${to.set} = ${x};`];
+      if (failable && e.k === "fail") return give("R.FAIL");
+      if (failable && e.k === "call" && ir.funcs[e.fn].partial && !(to === "return" && e.fn === i && e.tail)) return give(`${names[e.fn]}(${inputs(e.args, out, d).join(", ")})`);
+      if (failable && e.k === "attempt") {
+        const ok = tried(e, out, d);
+        return [...out, `${d}if (${ok}) {`, ...block(e.ok, to, d + "  "), `${d}} else {`, ...block(e.otherwise, to, d + "  "), `${d}}`];
+      }
+      if (failable && e.k === "apply" && e.t.partial) {
+        const c = ex(e.fn, out, d), xs = inputs(e.args, out, d);
+        out.push(`${d}${local(e.tmp)} = ${c};`);
+        return give(`R.ap(${[local(e.tmp), ...xs].join(", ")})`);
+      }
+      if (failable && e.k === "case") {
+        out.push(`${d}${local(e.s)} = ${slot(e.scrut, out, d)};`, `${d}switch (${local(e.s)}.tag) {`);
+        e.arms.forEach((a, c) => { if (a) out.push(`${d}  case ${JSON.stringify(e.t.cases[c].variant)}: {`, ...block(a, to, d + "    "), ...(to === "return" ? [] : [`${d}    break;`]), `${d}  }`); });
+        out.push(`${d}}`);
+        return out;
+      }
       if (e.k === "let") {
-        out.push(`${d}${local(e.i)} = ${ex(e.value, out, d)};`);
+        out.push(`${d}${local(e.i)} = ${slot(e.value, out, d)};`);
         return [...out, ...block(e.body, to, d)];
       }
       if (e.k === "if") {
-        const c = ex(e.cond, out, d);
+        const c = slot(e.cond, out, d);
         return [...out, `${d}if (${c}) {`, ...block(e.then, to, d + "  "), `${d}} else {`, ...block(e.else, to, d + "  "), `${d}}`];
       }
       if (to === "return" && e.k === "call" && e.fn === i && e.tail) {
@@ -462,7 +531,7 @@ export function coreModule(ir: CoreIR, name: string, runtime: string, world: str
 
 // The program's nodes, for a module whose solves the evaluator's solver
 // runs (C137c11): only when it has one.
-const codeFor = (ir: CoreIR, js: string) => (/R\.rt\("solve/.test(js) ? JSON.stringify({ nodes: ir.code.nodes, defs: ir.code.defs }) : "undefined");
+const codeFor = (ir: CoreIR, js: string) => (/R\.rt\("(solve|exists")/.test(js) ? JSON.stringify({ nodes: ir.code.nodes, defs: ir.code.defs }) : "undefined");
 
 // A page's script (C137c9, `lab build-web --core`): the printed functions,
 // with core-page.ts (`page`, which a bundler takes in) drawing main.
