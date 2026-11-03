@@ -1677,6 +1677,83 @@ export function buildPrelude(): Module {
       k.call(ABORT_OP, texts(k.lit("tensor zip with: a "), k.call(shapeText, sa), k.lit(" tensor and a "), k.call(shapeText, sb), k.lit(" one")))))));
   const reshaped = def("reshaped", ["tensor", "shape"], (t, sh) => tenOf(t, (was, xs) => k.if(iSame(k.call(shapeSize, sh), k.call(length, xs)), T(sh, xs),
     k.call(ABORT_OP, texts(k.lit("reshaped: a "), k.call(shapeText, was), k.lit(" tensor can't be read as "), k.call(shapeText, sh))))));
+  // Step b: contraction over named pairs of axes (Einstein summation, as
+  // numpy.einsum), a transpose by an axis order, and a trace.
+  const tsum = k.def("tensor items added");
+  k.define(tsum, k.fn(["items"], (xs) => k.match(xs, [
+    { variant: NIL, names: [], body: () => k.lit(0) },
+    { variant: CONS, names: ["item", "rest"], body: ([x, rest]) => k.call(ARITH.add, x, k.call(tsum, rest)) },
+  ])));
+  // Every index of a shape, row-major.
+  const indicesOf = k.def("indices of");
+  k.define(indicesOf, k.fn(["shape"], (sh) => k.match(sh, [
+    { variant: NIL, names: [], body: () => k.call(CONS, k.x(NIL), k.x(NIL)) },
+    { variant: CONS, names: ["length", "rest"], body: ([n, rest]) => k.let("later indices", k.call(indicesOf, rest), (laters) => k.call(flatMap, k.call(INT_OPS.range, n), k.fn(["i"], (i) =>
+      k.call(map, laters, k.fn(["later"], (later) => k.call(CONS, i, later)))))) },
+  ])));
+  // Where an index known to fit is among the items.
+  const rowMajor = k.def("row-major offset");
+  k.define(rowMajor, k.fn(["shape", "index", "so far"], (sh, ix, acc) => k.match(sh, [
+    { variant: NIL, names: [], body: () => acc },
+    { variant: CONS, names: ["length", "rest"], body: ([n, rest]) => k.match(ix, [
+      { variant: CONS, names: ["position", "later"], body: ([i, later]) => k.call(rowMajor, rest, later, iAdd(iMul(acc, n), i)) },
+    ], acc) },
+  ])));
+  const itemFitting = (sh: Id, xs: Id, ix: Id) => k.call(itemAt, xs, k.call(rowMajor, sh, ix, k.int(0)), k.lit(0));
+  // Where x is in a list of Ints, or −1.
+  const placeOf = k.def("place of axis");
+  k.define(placeOf, k.fn(["axes", "axis", "from"], (as, x, i) => k.match(as, [
+    { variant: NIL, names: [], body: () => k.int(-1) },
+    { variant: CONS, names: ["first", "rest"], body: ([y, rest]) => k.if(iSame(y, x), i, k.call(placeOf, rest, x, iAdd(i, k.int(1)))) },
+  ])));
+  const axesBut = k.def("axes but");
+  k.define(axesBut, k.fn(["axes", "taken"], (as, taken) => k.match(as, [
+    { variant: NIL, names: [], body: () => k.x(NIL) },
+    { variant: CONS, names: ["first", "rest"], body: ([y, rest]) => k.if(k.call(contains, taken, y), k.call(axesBut, rest, taken), k.call(CONS, y, k.call(axesBut, rest, taken))) },
+  ])));
+  const lengthsAt = (sh: Id, axes: Id) => k.call(map, axes, k.fn(["axis"], (p) => k.call(itemAt, sh, p, k.int(0))));
+  const axesInRange = (axes: Id, r: Id) => k.call(allPass, axes, k.fn(["axis"], (p) => k.call(S.and, k.call(S.not, iLess(p, k.int(0))), iLess(p, r))));
+  const axesOnce = k.def("axes once each");
+  k.define(axesOnce, k.fn(["axes"], (as) => k.match(as, [
+    { variant: NIL, names: [], body: () => k.true },
+    { variant: CONS, names: ["first", "rest"], body: ([y, rest]) => k.call(S.and, k.call(S.not, k.call(contains, rest, y)), k.call(axesOnce, rest)) },
+  ])));
+  const once = (axes: Id) => k.call(axesOnce, axes);
+  // An index of `rank` axes: an axis paired at place q reads the summed
+  // index's q, the others the result index's, in order from `start`.
+  const indexFor = (r: Id, paired: Id, free: Id, start: Id, summed: Id, result: Id) => k.call(map, k.call(INT_OPS.range, r), k.fn(["axis"], (p) =>
+    k.let("place", k.call(placeOf, paired, p, k.int(0)), (q) => k.if(iLess(q, k.int(0)),
+      k.call(itemAt, result, iAdd(start, k.call(placeOf, free, p, k.int(0))), k.int(0)),
+      k.call(itemAt, summed, q, k.int(0))))));
+  const firsts = (ps: Id) => k.call(map, ps, k.fn(["pair"], (pr) => entry(pr, (x) => x, ["a axis", "b axis"])));
+  const seconds = (ps: Id) => k.call(map, ps, k.fn(["pair"], (pr) => entry(pr, (_x, y) => y, ["a axis", "b axis"])));
+  const contracted = def("contracted", ["first", "second", "pairs"], (a, b, ps) => tenOf(a, (sa, xs) => tenOf(b, (sb, ys) =>
+    k.let("a axes", firsts(ps), (as) => k.let("b axes", seconds(ps), (bs) =>
+      k.let("a rank", k.call(length, sa), (ra) => k.let("b rank", k.call(length, sb), (rb) =>
+        k.if(k.call(S.and, k.call(S.and, axesInRange(as, ra), axesInRange(bs, rb)), k.call(S.and, k.call(S.and, once(as), once(bs)), k.equal(lengthsAt(sa, as), lengthsAt(sb, bs)))),
+          k.let("a free", k.call(axesBut, k.call(INT_OPS.range, ra), as), (fa) => k.let("b free", k.call(axesBut, k.call(INT_OPS.range, rb), bs), (fb) =>
+            k.let("shape", k.call(append, lengthsAt(sa, fa), lengthsAt(sb, fb)), (shape) => k.let("summed indices", k.call(indicesOf, lengthsAt(sa, as)), (sums) =>
+              k.let("b starts", k.call(length, fa), (bStart) => T(shape,
+              k.call(map, k.call(indicesOf, shape), k.fn(["at"], (rix) => k.call(tsum, k.call(map, sums, k.fn(["summed"], (kix) =>
+                k.call(ARITH.mul,
+                  itemFitting(sa, xs, indexFor(ra, as, fa, k.int(0), kix, rix)),
+                  itemFitting(sb, ys, indexFor(rb, bs, fb, bStart, kix, rix)))))))))))))),
+          k.call(ABORT_OP, texts(k.lit("contracted: the pairs don't fit a "), k.call(shapeText, sa), k.lit(" tensor and a "), k.call(shapeText, sb), k.lit(" one: each pair needs an axis of each, of the same length, each axis in one pair at most")))))))))));
+  // Axis order[k] of the tensor becomes axis k.
+  const transposedBy = def("transposed by", ["tensor", "order"], (t, order) => tenOf(t, (sa, xs) => k.let("rank", k.call(length, sa), (r) =>
+    k.if(k.call(S.and, iSame(k.call(length, order), r), k.call(S.and, axesInRange(order, r), once(order))),
+      k.let("shape", lengthsAt(sa, order), (shape) => T(shape, k.call(map, k.call(indicesOf, shape), k.fn(["at"], (nix) =>
+        itemFitting(sa, xs, k.call(map, k.call(INT_OPS.range, r), k.fn(["axis"], (p) => k.call(itemAt, nix, k.call(placeOf, order, p, k.int(0)), k.int(0))))))))),
+      k.call(ABORT_OP, texts(k.lit("transposed by: the order doesn't name each axis of a "), k.call(shapeText, sa), k.lit(" tensor once")))))));
+  // The sum over the diagonal of two axes of the same length.
+  const traced = def("traced", ["tensor", "first axis", "second axis"], (t, i, j) => tenOf(t, (sa, xs) => k.let("rank", k.call(length, sa), (r) =>
+    k.let("both", k.call(CONS, i, k.call(CONS, j, k.x(NIL))), (ij) =>
+    k.if(k.call(S.and, k.call(S.and, axesInRange(ij, r), once(ij)), iSame(k.call(itemAt, sa, i, k.int(0)), k.call(itemAt, sa, j, k.int(0)))),
+      k.let("free", k.call(axesBut, k.call(INT_OPS.range, r), ij), (free) => k.let("shape", lengthsAt(sa, free), (shape) =>
+        k.let("diagonal", k.call(INT_OPS.range, k.call(itemAt, sa, i, k.int(0))), (diag) =>
+        T(shape, k.call(map, k.call(indicesOf, shape), k.fn(["at"], (rix) => k.call(tsum, k.call(map, diag, k.fn(["d"], (d) =>
+          itemFitting(sa, xs, k.call(map, k.call(INT_OPS.range, r), k.fn(["axis"], (p) => k.if(k.call(contains, ij, p), d, k.call(itemAt, rix, k.call(placeOf, free, p, k.int(0)), k.int(0))))))))))))))),
+      k.call(ABORT_OP, texts(k.lit("traced: two different axes of the same length, of a "), k.call(shapeText, sa), k.lit(" tensor"))))))));
   // State (L16, std.ts's State): with state(initial, action) runs the
   // action with get state and put state answered, and gives its value and
   // the last state. Each case answers with a function of the state so far
@@ -1914,7 +1991,7 @@ export function buildPrelude(): Module {
   const simulatedHelpers = [readyAt, earliest, readyTimes, tiedAt, pickAt, nextDraw, firstDraw, simulatedWorld, simulatedClock];
   const awaitHelpers = [startBranch, waiting, goOn, finished, settle, firstDone, raceSettle, ...simulatedHelpers];
 
-  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, spaced, optionalParens, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, determinant, inverted, leastSquares, tensorOf, tensorShape, tensorItems, rank, tensorSize, tensorEntry, tensorMap, tensorZipWith, reshaped, withState, changeState, piped, ticketId, ...wordMakers, anyOf, together, race, within, simulated, near];
+  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, spaced, optionalParens, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, determinant, inverted, leastSquares, tensorOf, tensorShape, tensorItems, rank, tensorSize, tensorEntry, tensorMap, tensorZipWith, reshaped, contracted, transposedBy, traced, withState, changeState, piped, ticketId, ...wordMakers, anyOf, together, race, within, simulated, near];
   // Each number's own show, from before the generic one showed every number
   // (L153, L156): kept so programs saved before still open, not offered.
   const perTypeShows = [showF, showC, showD, showX];
@@ -2068,6 +2145,9 @@ export function buildPrelude(): Module {
     [tensorMap]: "Each item through f, the shape kept.",
     [tensorZipWith]: "f of the two tensors' items at each index. Stops when their shapes differ, and says both.",
     [reshaped]: "The same items read with another shape of the same size: a 2 × 3 tensor reshaped to [3, 2] or [6]. Stops when the sizes differ.",
+    [contracted]: "The product of two tensors summed over each pair of axes in pairs, (axis of the first, axis of the second), of the same length; the axes left, the first's then the second's, are the result's (Einstein summation, numpy.einsum). Matrix product is contracted(a, b, [(1, 0)]), a dot product contracted(u, v, [(0, 0)]), the outer product contracted(a, b, []).",
+    [transposedBy]: "The tensor with its axes reordered: axis order[k] becomes axis k. transposed by(m, [1, 0]) is a matrix's transpose.",
+    [traced]: "The sum over the diagonal of two axes of the same length: traced(m, 0, 1) is a square matrix's trace.",
     [leastSquares]: "The x making matrix times vector(m, x) nearest the vector, by least squares, for a Float64 matrix with at least as many rows as columns: a line through points. No answer when the columns aren't independent.",
     [withState]: "Runs the action with get state and put state answered, starting from initial, and gives (its value, the last state): with state(0, () ↦ put state(get state() + 1)) is ((), 1).",
     [changeState]: "Puts f(the state) as the state: change state((n) ↦ n + 1).",
