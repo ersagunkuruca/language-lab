@@ -95,7 +95,7 @@ export const TARGETS: Record<Id, Target> = {
   // Searches and their handlers: loops, or closures for the rest.
   [S.oneOf]: { js: written("searches: a loop over the choices, or `$oneOf` as a value"), scalar: no("chooses among several: a shader has one answer per pixel (WebAssembly takes it)") },
   [S.fail]: { js: written("searches: no answer here"), scalar: CHOOSES },
-  [S.stop]: { js: op(([a]) => `$stop(${a})`), scalar: { no: "stops with a reason (L51c)" } },
+  [S.stop]: { js: op(([a]) => `$stop(${a})`), scalar: written("with `data`, a world operation that ends the program (L51c)") },
   // Replaced by a way before compiling (arith.ts, WAYS.md).
   [S.byItsWays]: { js: written("an implementation's field, replaced by one of its ways before compiling"), scalar: no("is replaced by one of its ways before compiling") },
   [S.all]: { js: written("handlerEx(): a loop collecting the answers"), scalar: CHOOSES },
@@ -167,7 +167,7 @@ export const TARGETS: Record<Id, Target> = {
   [INT_OPS.bitAnd]: { js: "impl", scalar: INT },
   [INT_OPS.bitOr]: { js: "impl", scalar: INT },
   [INT_OPS.bitXor]: { js: "impl", scalar: INT },
-  [INT_OPS.shiftDown]: { js: "impl", scalar: no("Fixed on WASM and C is FIXED-POINT.md step 3, an i64 where the range is known") },
+  [INT_OPS.shiftDown]: { js: "impl", scalar: INT },
   [INT_OPS.less]: { js: test(([a, b]) => `(${a} < ${b})`), scalar: INT },
   [INT_OPS.quotient]: { js: "partial", scalar: INT },
   [INT_OPS.remainder]: { js: "partial", scalar: INT },

@@ -4942,6 +4942,97 @@ ${drop}
   // Floor division (int.ts): the i64 way while both fit, but for the
   // smallest i64 over -1, else the limbs; with the signs apart and a
   // remainder, the quotient is one further down.
+  // floor(a / 2ⁿ), a negative n shifting up (int.ts shiftDown, C150b):
+  // an i64 shift when both fit one and n ≥ 0, else floor division by 2ⁿ
+  // (or · 2⁻ⁿ), and past a's last limb only its sign is left.
+  "int.shiftDown": {
+    params: [["a", "int"], ["n", "int"]], result: "int", locals: [["k", "i64"], ["m", "i32"]], uses: ["int.small", "int.of", "int.negative", "int.limbs", "int.quotient", "int.power", "int.mul"], native: true,
+    body: `
+      local.get $n
+      ref.test $huge
+      if void
+        local.get $n
+        call $int.negative
+        if void
+          unreachable
+        end
+        i64.const -1
+        i64.const 0
+        local.get $a
+        call $int.negative
+        select
+        call $int.of
+        return
+      end
+      local.get $n
+      call $int.small
+      local.set $k
+      local.get $k
+      i64.const 0
+      i64.lt_s
+      if void
+        local.get $a
+        i32.const 2
+        ref.i31
+        i64.const 0
+        local.get $k
+        i64.sub
+        call $int.of
+        call $int.power
+        drop
+        call $int.mul
+        return
+      end
+      local.get $a
+      ref.test $huge
+      i32.eqz
+      if void
+        local.get $a
+        call $int.small
+        local.get $k
+        i64.const 63
+        local.get $k
+        i64.const 63
+        i64.lt_s
+        select
+        i64.shr_s
+        call $int.of
+        return
+      end
+      ;; Past the last limb: only the sign is left.
+      local.get $a
+      call $int.limbs
+      local.tee $m
+      i32.const 0
+      local.get $m
+      i32.sub
+      local.get $m
+      i32.const 0
+      i32.lt_s
+      select
+      i64.extend_i32_u
+      i64.const 32
+      i64.mul
+      local.get $k
+      i64.lt_s
+      if void
+        i64.const -1
+        i64.const 0
+        local.get $a
+        call $int.negative
+        select
+        call $int.of
+        return
+      end
+      local.get $a
+      i32.const 2
+      ref.i31
+      local.get $n
+      call $int.power
+      drop
+      call $int.quotient
+      drop`,
+  },
   "int.quotient": {
     params: [["a", "int"], ["b", "int"]], result: "int", locals: [["st", "i32"], ["na", "i32"], ["nb", "i32"], ["q", "mag"]], uses: ["int.small", "int.of", "int.negative", "int.mag", "int.norm", "int64.quotient", "mag.divrem", "mag.add", "mag.of"], native: true, partial: true,
     body: `
@@ -6941,6 +7032,17 @@ const WASI: Record<string, Omit<RtFn, "name">> = {
     params: [["i", "f64"]], result: "f64", locals: [], uses: ["wasi.line", "wasi_proc_exit"],
     body: `
       ${STOPS.map((why, i) => `local.get $i\n      f64.const ${i}\n      f64.eq\n      if void\n        i32.const 2\n        ${lit(why)}\n        call $wasi.line\n      end`).join("\n      ")}
+      i32.const 1
+      call $wasi_proc_exit
+      unreachable`,
+  },
+  // A stop with a reason (L51c), as wasi.stop with the program's words.
+  "wasi.stopWith": {
+    params: [["t", "text"]], result: "f64", locals: [], uses: ["wasi.line", "wasi_proc_exit"],
+    body: `
+      i32.const 2
+      local.get $t
+      call $wasi.line
       i32.const 1
       call $wasi_proc_exit
       unreachable`,
