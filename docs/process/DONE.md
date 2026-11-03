@@ -623,7 +623,8 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| L98b | Keys: `key path(p, by, k)`, the item of the list at p whose part at `by` is k, found when the path is used, so one path keeps naming the same item through inserts and moves (cells.ts `resolved`, evaluator and compiled JS; test/key-paths.test.ts, STABLE-REFERENCES.md §1) | this PR |
+| L99d | Compiled JS's `each` and `each of` hand their rows tracked views, as the evaluator's do (runtime.js `$listViews`): a tick three deep on the compiled outline runs its line and the count and makes no row (compiler/test/outline-views.test.ts, STABLE-REFERENCES.md §2) | this PR |
+| L98b | Keys: `key path(p, by, k)`, the item of the list at p whose part at `by` is k, found when the path is used, so one path keeps naming the same item through inserts and moves (cells.ts `resolved`, evaluator and compiled JS; test/key-paths.test.ts, STABLE-REFERENCES.md §1) | #1223 |
 | L130a2 | A use's relation is read through `useTarget(nodes, u)` and a new use is built through `useNode(add, target, given, binds, body)` (model.ts), in ters/src and compiler/src, so the flip to one call kind changes only those two | #1219 |
 | L130b | The compiler (compiler/src) reads a use through `Use` and `isUse` too, the second step of one node kind for call and solve | #1216 |
 | L130a | Uses read through `Use`, `isUse` and `useOf` (model.ts) in every ters/src reader instead of the `solve` kind, the first step of one node kind for call and solve (PORTS-2026-11-01.md "The merge, step by step"); no change in the saved format | #1215 |

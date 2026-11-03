@@ -129,8 +129,8 @@ export const TARGETS: Record<Id, Target> = {
   // throws, which ends whatever formula is reading it, as in the evaluator.
   [CELL_OPS.cell]: { js: op(([a]) => `$cells().cell(${a})`), scalar: CELLS },
   [CELL_OPS.formula]: { js: op(([f]) => `$cells().formula(${f})`), scalar: CELLS },
-  [CELL_OPS.each]: { js: op(([c, f]) => `$cells().each(${c}, ${f}, $listArrays)`), scalar: CELLS },
-  [CELL_OPS.eachOf]: { js: op(([l, f]) => `$cells().eachOf(${l}, ${f}, $listArrays)`), scalar: CELLS },
+  [CELL_OPS.each]: { js: op(([c, f]) => `$cells().each(${c}, ${f}, $listViews)`), scalar: CELLS },
+  [CELL_OPS.eachOf]: { js: op(([l, f]) => `$cells().eachOf(${l}, ${f}, $listViews)`), scalar: CELLS },
   [CELL_OPS.read]: { js: op(([c]) => `$cells().read(${c})`), scalar: CELLS },
   [CELL_OPS.write]: { js: op(([c, v]) => `($cells().write(${c}, ${v}), $unit)`), scalar: CELLS },
   // Places and edits at them (L98): runtime.js $path, on the same handler.
