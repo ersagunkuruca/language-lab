@@ -223,7 +223,14 @@ ends.
 **steps**. A step is one call into a definition the checker couldn't
 prove ends (one with `Diverge` in its own type). When the budget runs
 out, there is no answer (`Choice`). So `with fuel` turns `Diverge` into
-`Choice`. (*Open*, S4: this ties an answer to how clever the checker is.)
+`Choice`. Which definitions count is the checker's, so it is part of the
+meaning (S4, L199): when the checker learns to prove a definition ends,
+calls into it stop counting, and a `with fuel(n, …)` may then find an
+answer where it found none, or a different first one. Such a checker
+change is a change of meaning, made on this page with the test that
+shows it, as a change of search order is (§7.4). Counting every call
+instead would make a refactoring (a helper split in two) change fuel
+answers just the same, and would cost a count in every compiled call.
 
 5.7. **No stack limit.** Recursion depth is limited by memory, not by an
 engine's stack. An engine that runs out of memory stops (§8.3).
@@ -444,7 +451,7 @@ hasn't been chosen. None is answered here. Rows are in BACKLOG.md.
 | S1 | **Float64 `equal` within 1e-9.** Decided 2026-11-03 (Ersagun): `equal` becomes exact, and the tolerance stays only inside the solver (§2.7). | done: exact on every engine, the tolerance only in the solver | L197 |
 | S2 | **An overflow nothing uses.** §3.3 lets engines differ on whether it stops. Is that freedom the meaning, or should every engine stop like the evaluator? Today the agreement tests only compare programs that don't overflow, which this page now says. | decided by FLOAT-VALUES; written here | none |
 | S3 | **The order of a use's answers after the first.** Decided (L198, 2026-11-03): the evaluator's search order, on every engine (§7.4). | written; every engine runs the same solver | L198 |
-| S4 | **Fuel counts depend on the checker.** A step is a call into a definition the checker couldn't prove ends (§5.6). When the checker gets smarter, a definition stops counting, and the same `with fuel(n, …)` can go from no answer to an answer. Count every call, or keep it and say a checker change can change fuel answers? | evaluator and the core IR count the same way | L199 |
+| S4 | **Fuel counts depend on the checker.** Decided (L199, 2026-11-03): kept, and written down: what counts is the checker's, and a checker change that stops counting a definition is a change of meaning (§5.6). | written; evaluator and the core IR count the same way | L199 |
 | S5 | **When a stopped search had effects.** Decided (L198): an engine runs the paths in the evaluator's order, so handled effects on a search's paths happen as the evaluator's do (§7.4). | written; the fuzz test checks it | L198 |
 | S6 | **Shaders.** Decided 2026-11-03 (Ersagun): a declared approximation with its own meaning, written in §10.3 | written | C141 |
 | S7 | **Text.** Normalisation where text enters, grapheme clusters, case mapping and locales. | code points only | L185 |
