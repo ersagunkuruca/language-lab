@@ -64,9 +64,24 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
   const consts = new Map<string, string>();
   const constName = (src: string) => { if (!consts.has(src)) consts.set(src, `c${consts.size}`); return consts.get(src)!; };
   const constant = (e: SExpr): boolean => ["num", "int", "text", "bool"].includes(e.k) || ((e.k === "new" || (e.k === "make" && !e.t.mutable)) && e.args.every(constant));
-  const text = ir.funcs.map((f, i) => func(f, i));
+  // Deep recursion on the heap (C137c18, compile.ts's C21): a function in
+  // a cycle of calls that aren't all its own tail calls (`x + sum(rest)`)
+  // takes a JavaScript frame per call, and the stack holds some thousands.
+  // Each gets a second copy, a generator whose calls in its cycle yield
+  // what to call instead; past DEPTH plain calls deep, a call runs that
+  // copy, and R.drive keeps the calls waiting in an array.
+  const deep = deepFuncs(ir.funcs);
+  const gens = names.map((n) => `${n}$h`);
+  const text = ir.funcs.flatMap((f, i) => {
+    if (!deep.has(i)) return [func(f, i, null)];
+    const ps = f.params.map((_, j) => `l${j}`).join(", ");
+    const plain = func(f, i, null).replace(`function ${names[i]}(`, `function ${names[i]}$b(`);
+    return [`// ${f.name.replace(/\n/g, " ")} (past ${DEPTH} calls deep, its copy on the heap)\nfunction ${names[i]}(${ps}) {\n  if (depth > ${DEPTH}) return R.drive(${gens[i]}(${ps}));\n  depth++;\n  const r = ${names[i]}$b(${ps});\n  depth--;\n  return r;\n}`, plain, func(f, i, deep.get(i)!)];
+  });
   const js = [
     "let fuel = Infinity;",
+    // Plain calls of functions with a heap copy on JavaScript's stack now.
+    "let depth = 0;",
     ...[...consts].map(([src, v]) => `const ${v} = ${src};`),
     // A backwards search spends the budget too (C137c12).
     "R.spending(() => --fuel >= 0);",
@@ -75,12 +90,20 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
     ...text,
     // A partial function given out says no answer by throwing, as the
     // evaluator's runtime expects.
-    `return { ${names.map((n, i) => (ir.funcs[i].partial ? `${n}: (...xs) => R.ck(${n}(...xs))` : n)).join(", ")} };`,
+    // A call from outside starts at the depth it found, whatever it threw.
+    `return { ${names.map((n, i) => {
+      const c = ir.funcs[i].partial ? `R.ck(${n}(...xs))` : `${n}(...xs)`;
+      return deep.size ? `${n}: (...xs) => { const d = depth; try { return ${c}; } finally { depth = d; } }` : ir.funcs[i].partial ? `${n}: (...xs) => ${c}` : n;
+    }).join(", ")} };`,
   ].join("\n");
   return { js, names, worlds };
 
-  function func(f: SFunc, i: number): string {
+  // `cycle`: writing the heap copy, whose calls of these yield.
+  function func(f: SFunc, i: number, cycle: Set<number> | null): string {
     let temps = 0;
+    const call = (fn: number, xs: string[]) => (cycle?.has(fn) ? `(yield [${gens[fn]}, [${xs.join(", ")}]])` : `${names[fn]}(${xs.join(", ")})`);
+    // A catch that goes on puts the depth back as it was at its try.
+    const keep = () => { if (!deep.size) return ["", ""]; const t = temp(); return [`const ${t} = depth; `, `depth = ${t}; `]; };
     const temp = () => `t${temps++}`;
     const local = (j: number) => `l${j}`;
     const self = (e: SExpr): boolean => (e.k === "call" && e.fn === i && e.tail) || kidsOf(e).some(self);
@@ -96,9 +119,9 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
     // here and leaves by onFail, without a throw.
     // An attempt's body, run: the name of the Bool saying it answered.
     function tried(e: Extract<SExpr, { k: "attempt" }>, pre: string[], d: string): string {
-      const ok = temp(), label = temp();
+      const ok = temp(), label = temp(), [save, back] = keep();
       const body = within(`{ ${ok} = false; break ${label}; }`, () => block(e.body, { set: local(e.res), fails: true }, d + "  "));
-      pre.push(`${d}let ${ok} = true;`, `${d}${label}: try {`, ...body, `${d}  if (${local(e.res)} === R.FAIL) ${ok} = false;`, `${d}} catch (x) {`, `${d}  if (x !== R.FAIL) throw x;`, `${d}  ${ok} = false;`, `${d}}`);
+      pre.push(`${d}${save}let ${ok} = true;`, `${d}${label}: try {`, ...body, `${d}  if (${local(e.res)} === R.FAIL) ${ok} = false;`, `${d}} catch (x) {`, `${d}  if (x !== R.FAIL) throw x;`, `${d}  ${back}${ok} = false;`, `${d}}`);
       return ok;
     }
     // A call's inputs where a statement begins: one that is a partial call
@@ -112,7 +135,7 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
       const partial = (e.k === "call" && ir.funcs[e.fn].partial) || (e.k === "apply" && e.t.partial);
       if (!onFail || !partial) return ex(e, out, d);
       let c: string;
-      if (e.k === "call") c = `${names[e.fn]}(${inputs(e.args, out, d).join(", ")})`;
+      if (e.k === "call") c = call(e.fn, inputs(e.args, out, d));
       else { const fn = ex(e.fn, out, d), xs = inputs(e.args, out, d); out.push(`${d}${local(e.tmp)} = ${fn};`); c = `R.ap(${[local(e.tmp), ...xs].join(", ")})`; }
       const t = temp();
       out.push(`${d}const ${t} = ${c};`, `${d}if (${t} === R.FAIL) ${onFail}`);
@@ -148,7 +171,7 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
           // Its inputs computed first: a call's own statements must not
           // come between them.
           const xs = e.args.map((a) => ex(a, pre, d));
-          const c = `${names[e.fn]}(${xs.join(", ")})`;
+          const c = call(e.fn, xs);
           return ir.funcs[e.fn].partial ? `R.ck(${c})` : c;
         }
         case "make": { const v = `{ tag: ${JSON.stringify(e.t.variant)}, fields: [${e.args.map((a) => ex(a, pre, d)).join(", ")}] }`; return constant(e) ? constName(v) : v; }
@@ -189,15 +212,15 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
           return t;
         }
         case "budget": {
-          const s = temp(), out = temp(), t = temp();
-          pre.push(`${d}const ${s} = fuel;`, `${d}fuel = ${e.n};`, `${d}let ${t}, ${out} = false;`, `${d}try {`, ...within(null, () => block(e.body, { set: t }, d + "  ")), `${d}} catch (x) {`, `${d}  if (x !== R.OUT) { fuel = ${s}; throw x; }`, `${d}  ${out} = true;`, `${d}}`, `${d}fuel = ${s};`);
+          const s = temp(), out = temp(), t = temp(), [save, back] = keep();
+          pre.push(`${d}${save}const ${s} = fuel;`, `${d}fuel = ${e.n};`, `${d}let ${t}, ${out} = false;`, `${d}try {`, ...within(null, () => block(e.body, { set: t }, d + "  ")), `${d}} catch (x) {`, `${d}  if (x !== R.OUT) { fuel = ${s}; throw x; }`, `${d}  ${back}${out} = true;`, `${d}}`, `${d}fuel = ${s};`);
           pre.push(`${d}if (${out}) {`, ...block(e.otherwise, { set: t }, d + "  "), `${d}}`);
           return t;
         }
         case "abort": return `R.abort(${ex(e.reason, pre, d)}, ${e.esc ?? 0})`;
         case "handle": {
-          const t = temp();
-          pre.push(`${d}let ${t};`, `${d}try {`, ...within(null, () => block(e.body, { set: t }, d + "  ")), `${d}} catch (x) {`, `${d}  if (!(x instanceof R.Aborted) || x.esc !== ${e.esc ?? 0}) throw x;`, `${d}  ${local(e.reason)} = x.reason;`, ...block(e.arm, { set: t }, d + "  "), `${d}}`);
+          const t = temp(), [save, back] = keep();
+          pre.push(`${d}${save}let ${t};`, `${d}try {`, ...within(null, () => block(e.body, { set: t }, d + "  ")), `${d}} catch (x) {`, `${d}  if (!(x instanceof R.Aborted) || x.esc !== ${e.esc ?? 0}) throw x;`, `${d}  ${back}${local(e.reason)} = x.reason;`, ...block(e.arm, { set: t }, d + "  "), `${d}}`);
           return t;
         }
         case "set": { const r = ex(e.rec, pre, d); pre.push(`${d}${r}.fields[${e.i}] = ${ex(e.value, pre, d)};`); return ex(e.then, pre, d); }
@@ -213,7 +236,7 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
       const failable = to === "return" ? !!f.partial : !!to.fails;
       const give = (x: string) => [...out, to === "return" ? `${d}return ${x};` : `${d}${to.set} = ${x};`];
       if (failable && e.k === "fail") return give("R.FAIL");
-      if (failable && e.k === "call" && ir.funcs[e.fn].partial && !(to === "return" && e.fn === i && e.tail)) return give(`${names[e.fn]}(${inputs(e.args, out, d).join(", ")})`);
+      if (failable && e.k === "call" && ir.funcs[e.fn].partial && !(to === "return" && e.fn === i && e.tail)) return give(call(e.fn, inputs(e.args, out, d)));
       if (failable && e.k === "attempt") {
         const ok = tried(e, out, d);
         return [...out, `${d}if (${ok}) {`, ...block(e.ok, to, d + "  "), `${d}} else {`, ...block(e.otherwise, to, d + "  "), `${d}}`];
@@ -254,7 +277,7 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
     const spend = (d: string) => (f.spends ? [`${d}if (--fuel < 0) throw R.OUT;`] : []);
     const params = f.params.map((_, j) => local(j)), locals = f.locals.map((_, j) => local(f.params.length + j));
     const body = loops ? ["  for (;;) {", ...spend("    "), ...block(f.body, "return", "    "), "  }"] : [...spend("  "), ...block(f.body, "return", "  ")];
-    return [`// ${f.name.replace(/\n/g, " ")}`, `function ${names[i]}(${params.join(", ")}) {`, ...(locals.length ? [`  let ${locals.join(", ")};`] : []), ...body, "}"].join("\n");
+    return [`// ${f.name.replace(/\n/g, " ")}${cycle ? ", its calls in its cycle yielded to R.drive" : ""}`, `function${cycle ? "*" : ""} ${cycle ? gens[i] : names[i]}(${params.join(", ")}) {`, ...(locals.length ? [`  let ${locals.join(", ")};`] : []), ...body, "}"].join("\n");
   }
 }
 
@@ -276,6 +299,38 @@ function zero(t: LType): string {
   if (typeof t === "object" && isRecord(t)) return `{ tag: ${JSON.stringify(t.variant)}, fields: [${t.fields.map((x) => zero(x.t)).join(", ")}] }`;
   if (typeof t === "object" && isData(t)) return "null";
   return "null";
+}
+
+const DEPTH = 1000;
+
+// The functions with a heap copy, each with the functions of its cycle
+// (the ones it calls that call it back): those in a cycle of two or more,
+// or calling themselves other than as the loop's next round.
+function deepFuncs(funcs: SFunc[]): Map<number, Set<number>> {
+  const calls = funcs.map((f, me) => {
+    const out = new Set<number>();
+    let other = false;
+    const walk = (e: SExpr, tail: boolean): void => {
+      if (e.k === "call") { out.add(e.fn); if (e.fn === me && !(e.tail && tail)) other = true; }
+      // Only a call where block() makes the loop counts as the loop.
+      const inTail = (x: SExpr) => tail && (e.k === "case" ? x !== e.scrut : e.k === "let" ? x === e.body : e.k === "if" ? x !== e.cond : false);
+      kidsOf(e).forEach((x) => walk(x, inTail(x)));
+    };
+    walk(f.body, true);
+    return { out, other };
+  });
+  const reach = funcs.map((_, i) => {
+    const seen = new Set<number>(), todo = [...calls[i].out];
+    for (let j; (j = todo.pop()) !== undefined;) if (!seen.has(j)) { seen.add(j); todo.push(...calls[j].out); }
+    return seen;
+  });
+  const deep = new Map<number, Set<number>>();
+  funcs.forEach((_, i) => {
+    if (!reach[i].has(i)) return;
+    const cycle = new Set([...reach[i]].filter((j) => reach[j].has(i)));
+    if (cycle.size > 1 || calls[i].other) deep.set(i, cycle);
+  });
+  return deep;
 }
 
 function kidsOf(e: SExpr): SExpr[] {
