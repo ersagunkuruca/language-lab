@@ -4,7 +4,7 @@
 // stack of every pass (I154).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -14,6 +14,8 @@ import { infer } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { runMain } from "../src/lang/run.ts";
+import { renderBlocks } from "../src/lang/render.ts";
+import { root } from "../src/io.ts";
 import { S } from "../src/lang/std.ts";
 import { showType } from "../src/lang/types.ts";
 
@@ -49,4 +51,17 @@ test("ten thousand items are checked and run, depth one", () => {
   const p = program((k) => Array.from({ length: 10_000 }, (_, i) => k.lit(i % 7)));
   assert.deepEqual(p.info.errors.map((e) => e.message), []);
   assert.equal(runMain(p.code, p.info, p.main, { print: () => {}, names: p.names }), String(Array.from({ length: 10_000 }, (_, i) => i % 7).reduce((a, b) => a + b, 0)));
+});
+
+test("a written list reads as [a, b, c], as the nested conses do (L181c)", () => {
+  const k = new Lang(LIBRARY.code);
+  const flat = k.def("flat"), nested = k.def("nested");
+  k.define(flat, k.listOf(k.lit(1), k.lit(2), k.lit(3)));
+  k.define(nested, k.list(k.lit(1), k.lit(2), k.lit(3)));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names);
+  const pres = { names, comments: {}, hints: {}, style: JSON.parse(readFileSync(join(root, "styles", "blocks.json"), "utf8")) };
+  const text = (d: string) => renderBlocks(code, pres, info, d).split("\n").slice(1).join(" ").trim();
+  assert.equal(text(flat).replace("flat", "nested"), text(nested));
+  assert.match(text(flat), /\[1, 2, 3\]/);
 });

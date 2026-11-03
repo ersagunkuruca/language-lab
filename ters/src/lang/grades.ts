@@ -293,6 +293,7 @@ function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: H
       const n = nodes[id];
       const f = isCall(n) ? nodes[n.fn] : undefined;
       if (isCall(n) && f?.kind === "ref" && f.target === CONS) { check(n.args[0], ev(n.args[0], env, depth + 1)); id = n.args[1]; continue; }
+      if (isCall(n) && f?.kind === "ref" && f.target === S.listOf) { for (const x of n.args) check(x, ev(x, env, depth + 1)); return; }
       const v = ev(id, env, depth + 1);
       if (v.k === "list" && v.item) check(id, v.item);
       return;
