@@ -46,6 +46,14 @@ L99).
   knows HTML. Buttons, rows, columns, fields and lists are ordinary
   prelude functions that build `element`s (below), not variants: the
   uniformity rule says a button is a function, not a node kind.
+  One limit, so a page can't be made to run script from its data (C140):
+  an attribute that would run script is left off, live (with a warning
+  saying why) and in the static HTML. That is a name starting with `on`
+  (an event is `on(…)`, a function, never text), a `javascript:` or
+  `vbscript:` address (or `data:` other than an image) in `href`, `src`,
+  `action`, `formaction` and the other address attributes, `srcdoc`, and a
+  name that isn't a name. Influence: Elm's virtual DOM does the same
+  (elm/virtual-dom, Evan Czaplicki).
 - **What do events do?** An `on` handler gets the `Event` (the target's
   value, or `"true"`/`"false"` for a checkbox, and the key) and may read
   and write cells, print to the browser console, and save files (which
