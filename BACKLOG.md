@@ -302,7 +302,6 @@ agent with inertia. All later goals.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L197 | Float64 `equal` exact (Ersagun's decision 2026-11-03): today it treats numbers within ~1e-9 (relative) as the same, so it isn't transitive and disagrees with `compare` and map keys. Make `equal` exact on every engine (run.ts `close`, runtime.js, scalar.ts), keep the tolerance only where the solver checks an answer it found (relate.ts unify, solve), and see which examples' outputs move | [SPEC](docs/language/SPEC.md) S1 | P2 | M | |
 | L198 | Write down the order of a use's answers after the canonical first (fair interleaving today, so `all` of a use has no specified order), when effects in a use's given ports run, and whether engines must follow the evaluator's path order or only its answers (S3, S5, S10); land with or after L130 | [SPEC](docs/language/SPEC.md) §12 S3, S5, S10 | P2 | S | after L130 |
 | L199 | Fuel steps depend on the checker: a definition the checker learns to prove ending stops spending fuel, so `with fuel(n, …)` can change answer. Decide: count every call, or keep it and say a checker change may change fuel answers (SPEC §5.6) | [SPEC](docs/language/SPEC.md) §12 S4 | P3 | S | |
 | L200 | LIBRARY.md's `compare` says NaN sorts after every Float64, but NaN isn't a value since L125: fix the line at its source in library/reference.ts | [SPEC](docs/language/SPEC.md) §12 S11 | P3 | S | |

@@ -659,6 +659,7 @@ superseded.
 | id | item | PR |
 |---|---|---|
 | L96d | The ways agree: each of the prelude's seven Trig ways is a law against Float64's own field (`lab test`, test/prelude-laws.test.ts), and a test checks every way has a law that runs it (WAYS.md step 4) | #1227 |
+| L197 | Float64 `equal` exact on every engine (run.ts `sameNumber`, runtime.js `$sameNumber`, scalar.ts), as `compare` and map keys; the solver keeps its tolerance (`close`) when it checks an answer it found (relate.ts unify). The equality tests say so; no example output moved | this PR |
 | L130a3 | Plain calls read through `Call` and `isCall` (model.ts) in every ters/ and compiler/ reader, so the coming flip of call and solve into one kind leaves them alone | #1250 |
 | L130d | `call` and `solve` one node kind: a use is a call whose `fn` is a ref to the relation, with `given`, `binds` and `body` in place of `args`; its hash is the form a solve had, so no id changed; a saved `solve` is read as a call (`upgradeUses` in `onTodaysIds`) and the four examples that held one were rewritten | #1266 |
 | L130e | Every read of `args` on a call that may be a use decided: the flip made `args` absent on a use, so the checker lists each one, and #1266 settled them all (a use is handled first or does what the walker's default did). The remaining `as Call` casts are on calls already known to be plain (a let, a builtin's own call, `isCall` before) | this PR |

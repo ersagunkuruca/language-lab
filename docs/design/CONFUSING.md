@@ -124,8 +124,8 @@ couldn't see", and fuel as "recursion with a budget".
 - `Int` and `Float64` share every operation's name. The types tell them apart
   and the palette only offers the right one, but a reader of the blocks can't
   see which `+` it is.
-- `equal` on numbers is approximate (1e-9). That's the right default for a
-  wire, but bit-exact comparison has no name yet.
+- `equal` on numbers was approximate (1e-9) until L197 (2026-11-03): it is
+  exact now, and only the solver takes two near numbers for one.
 - The docs overlap: LANGUAGE, BACKWARDS, NUMBERS, COMPILER, REVIEW and this
   tutorial each restate parts of the model and the error table. LANGUAGE.md
   should be the reference, the rest should link to it.

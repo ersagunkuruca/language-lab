@@ -57,10 +57,10 @@ const LISTS = { from: fromList, to: toList as (xs: Value[]) => Value };
 // What each needs to hand its rows tracked views (cells.ts, L99).
 const LIST_VIEWS = { cons: CONS, nil: NIL, isList: (v: Value) => typeof v === "object" && (v.tag === CONS || v.tag === NIL) };
 
-// Float64s stand for reals and floats only approximate them, so two numbers
-// are equal when they agree to the precision floats carry. Otherwise a
-// predicate like distance = speed·time + ½·g·time² would be false for the
-// very values the solver found for it. `sameNumber` below says where.
+// Two numbers near enough that the solver takes one for the other when it
+// checks an answer it found (relate.ts unify): floats only approximate
+// reals, and √2 squared is 2.0000000000000004. `equal` is exact
+// (`sameNumber` below); this tolerance is the solver's alone (L197).
 // Only a finite gap is near: past the largest float the tolerance itself is
 // ∞, which would make ∞ equal to −∞, and 1e308 to ∞ (BACKLOG L81).
 export const close = (a: number, b: number) => {
@@ -68,25 +68,15 @@ export const close = (a: number, b: number) => {
   return a === b || (gap < Infinity && gap <= 1e-9 * (1 + Math.abs(a) + Math.abs(b)));
 };
 
-// How two numbers compare, one rule for every type, whichever way a
-// program runs: the evaluator, backwards (relate.ts unify) and compiled
-// (runtime.js $sameNumber, and scalar.ts for WASM and the GPU). Two JS
-// numbers are equal within `close`, which is what solving equations over
-// floats needs: √2 squared is 2.0000000000000004, and √1e17 squared is
-// 1.0000000000000002e17. An Int is exact all the same: it is a JS number
-// only below 2^28, where two different whole numbers are always further
-// apart than `close` allows, and a BigInt beyond, which is compared
-// exactly (int.ts; REVIEW-2026-10-26.md §1.2). So the value says what it
-// is, and no wholeness test is needed.
-//
-// It used to be type-directed (near on Float64s, exact on Ints, this rule on
-// a type variable), so inlining a generic function changed answers, and
-// backwards every number was near (REVIEW-2026-10-22b.md §2). Then it was
-// exact on any two whole floats, which took the tolerance away from big
-// Float64s (every float past 2^52 is whole). The price that stays: no
-// tolerance is transitive, so it isn't an equivalence on Float64s, which is
-// why `compare` orders them exactly. NOTES.md "Equality".
-export const sameNumber = (a: number, b: number) => close(a, b);
+// How `equal` compares two numbers, one rule for every type, whichever way
+// a program runs: the evaluator and compiled (runtime.js $sameNumber, and
+// scalar.ts for WASM and the GPU). Exactly, as `compare` orders them and
+// map keys are told apart (Ersagun's decision 2026-11-03, SPEC.md S1,
+// L197). It used to be within `close`, which isn't transitive, so it
+// wasn't an equivalence on Float64s and disagreed with `compare`. The
+// tolerance stays where the solver checks an answer it found (relate.ts
+// unify). NOTES.md "Equality".
+export const sameNumber = (a: number, b: number) => a === b;
 
 // With its own stack, so two long lists can be compared.
 export function equal(a: Value, b: Value): boolean {
