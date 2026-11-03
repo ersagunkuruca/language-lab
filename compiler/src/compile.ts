@@ -1497,7 +1497,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       if (n.kind === "ref") return views.get(n.target) ?? null;
       if (n.kind !== "call" || code.nodes[n.fn].kind !== "ref" || streamy(id)) return null;
       const f = node<"ref">(n.fn).target;
-      if (f === TEXT_OPS.split || f === TEXT_OPS.characters) return { a: arraySource(id)!.js, i: "0" };
+      // A probe writes no code (I155): writing the text's JS here ran
+      // before this definition's names were set up.
+      if (f === TEXT_OPS.split || f === TEXT_OPS.characters) return { a: probe ? "" : arraySource(id)!.js, i: "0" };
       if (f === S.first) { const a = firstArray(n); return a ? { a, i: "0" } : null; }
       const t = code.nodes[f]?.kind === "def" ? intoCallee(n, { rec: null, k: 0 }) : null;
       return t ? { a: probe ? "" : `$intoArray(${[t.name, ...argsOf(n, t)].join(", ")})`, i: "0" } : null;
