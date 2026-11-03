@@ -1068,6 +1068,15 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
         // evaluator's relational interpreter (relate.ts satisfiable) on the
         // closure, which carries its lambda (closure.src).
         if (opts.host && target === S.exists && n.args.length === 1) return { k: "rt", fn: "exists", args: [expr(n.args[0], env, f, false)], host: { t: "i32", partial: false } };
+        // derivative(f) and gradient(f) of a function value, for JavaScript
+        // from the core IR (C137c20): the evaluator's, which looks inside
+        // the closure (it carries its lambda, closure.src); what it gives
+        // is the evaluator's function, called for its one answer.
+        if (opts.host && (target === S.derivative || target === S.gradient) && n.args.length === 1) {
+          const t = stype(zonk(id));
+          if (!t || !isFn(t)) throw new Refused(`takes ${nm(target)} giving ${whyNot(zonk(id))}`);
+          return { k: "rt", fn: `derive:${target}`, args: [expr(n.args[0], env, f, false)], host: { t, partial: false } };
+        }
         const why = TARGETS[target]?.scalar;
         throw new Refused(`uses ${nm(target)}, which isn't in the scalar profile${why && typeof why === "object" && "no" in why ? `: it ${why.no}` : ""}`);
       }
