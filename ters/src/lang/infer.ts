@@ -22,6 +22,7 @@ import { planSolve, runsBackwards, solvesInWholeNumbers } from "./solve.ts";
 import { computedForward, directionProblem, useDirections } from "./directions.ts";
 import { analyzer, derivedFrom, determinism, oneAnswer, solveMode, type Fn } from "./modes.ts";
 import { smoothDerivative as hasSmoothDerivative, smoothGradient as hasSmoothGradient, recordVariant, forgetDerived } from "./derive.ts";
+import { usePorts } from "./ports.ts";
 import { BOOL, CELL_OPS, LIST, DIVISION, FIELDS, JOBS, S, SET, SIGS, SMART, TRUE, TUPLE_MAX, tupleType } from "./std.ts";
 import { countedCalls } from "./counting.ts";
 import { ratioParts } from "./int.ts";
@@ -190,6 +191,29 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   const err = (id: Id, message: string, missing?: Problem["missing"]) => info.errors.push(missing ? { id, message, missing } : { id, message });
   const nm = (id: Id) => names[id] ?? id;
   const show = (t: Type) => showT(s.zonk(t), names);
+  // A use with no body (L211c) gives its produced ports, the ones not
+  // given, as one value: the port alone, or their tuple in port order.
+  // Each port's type is found where a binder's is; with no binder it is
+  // kept here by port.
+  const producedTypes = new Map<Id, Map<string, Type>>();
+  const produced = (n: Use): string[] => (usePorts(code, n) ?? []).filter((k) => !(k in n.given));
+  // The ports a use names for its answers: its binders', or with no body
+  // the ones it produces.
+  const answerPorts = (n: Use): [string, Id | undefined][] => (n.body === undefined ? produced(n).map((k) => [k, undefined]) : Object.entries(bindsOf(n)));
+  const setPort = (n: Use, k: string, b: Id | undefined, t: Type, inner: Map<Id, Type>) => {
+    if (b === undefined) { let m = producedTypes.get(n.id); if (!m) producedTypes.set(n.id, (m = new Map())); m.set(k, t); return; }
+    inner.set(b, t); info.typeOf.set(b, t);
+  };
+  function useResult(n: Use, inner: Map<Id, Type>, row: Row): Type {
+    if (n.body !== undefined) return expr(n.body, inner, row);
+    const ks = produced(n), m = producedTypes.get(n.id);
+    const parts = ks.map((k) => m?.get(k) ?? s.fresh());
+    if (!parts.length) { err(n.id, `this use of ${nm(useTarget(code.nodes, n))} gives every port, so it produces nothing`); return s.fresh(); }
+    if (parts.length === 1) return parts[0];
+    if (parts.length > TUPLE_MAX) { err(n.id, `this use of ${nm(useTarget(code.nodes, n))} produces ${parts.length} ports, more than a tuple holds (${TUPLE_MAX})`); return s.fresh(); }
+    return { t: "con", id: tupleType(parts.length), args: parts };
+  }
+
   // The modes of this program, made when a call first needs them.
   let modes: ReturnType<typeof analyzer> | undefined;
   let signs: ReturnType<typeof signAnalysis> | undefined;
@@ -1084,7 +1108,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       if (given.length !== ins.length || !ins.every((i) => given.includes(i)) || !Object.keys(bindsOf(n)).every((k) => outs.includes(Number(k))))
         err(n.id, `${nm(useTarget(code.nodes, n))} gives ${outs.map(port).join(", ")} from ${ins.map(port).join(", ")}`);
       relationalSolve(n, env, row, inner, false, undefined, true);
-      return expr(bodyOf(n), inner, row);
+      return useResult(n, inner, row);
     }
     // A given that is an Int makes the solve a whole-number one (L38),
     // found from its type, not from how the function is written.
@@ -1101,7 +1125,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       // (A hole is a gap the editor already shows; the search runs up to it.)
       if (v?.stuck.length && !v.stuck.includes("a hole")) err(n.id, `${nm(useTarget(code.nodes, n))} can't be run this way: ${v.stuck.find((x) => x.startsWith("nothing gives")) ?? `${v.stuck[0]} never gets what it needs`}`);
       relationalSolve(n, env, row, inner, v ? !v.ends : true, v?.loops[0], oneAnswer(code, n), givenTypes);
-      return expr(bodyOf(n), inner, row);
+      return useResult(n, inner, row);
     }
     // A predicate's out = true is a Bool; every other port is a number.
     const outTrue = (k: string) => !!p?.predicate && k === "out";
@@ -1111,14 +1135,14 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     const open = Object.entries(n.given).filter(([k]) => !outTrue(k) && s.resolve(givenTypes.get(k)!).t === "var");
     if (open.length && runsBackwards(code, useTarget(code.nodes, n))) waiting.push({ solve: n.id, givens: open.map(([k, g]) => [g, givenTypes.get(k)!]) });
     for (const [k, g] of Object.entries(n.given)) if (!open.some(([o]) => o === k) || !runsBackwards(code, useTarget(code.nodes, n))) unifyAt(g, outTrue(k) ? bool : num, givenTypes.get(k)!, "a given port");
-    for (const b of Object.values(bindsOf(n))) { inner.set(b, num); info.typeOf.set(b, num); }
+    for (const [k, b] of answerPorts(n)) setPort(n, k, b, outTrue(k) ? bool : num, inner);
     if (p) {
       const ports = p.rel!.ports;
       for (const k of [...Object.keys(n.given), ...Object.keys(bindsOf(n))]) if (!ports.includes(k) && !outTrue(k)) err(n.id, `${nm(useTarget(code.nodes, n))} has no port ${k}`);
       if (p.status !== "solved") err(n.id, `${nm(useTarget(code.nodes, n))} needs ${p.needMore} more known port${p.needMore === 1 ? "" : "s"} to be solved this way`);
       else if (!p.unique && !computedForward(code, n)) choice(n.id, row, [CHOICE], `solving ${nm(useTarget(code.nodes, n))} this way may give several answers or none (Choice), which nothing here handles`);
     }
-    return expr(bodyOf(n), inner, row);
+    return useResult(n, inner, row);
   }
 
   function choice(id: Id, row: Row, effs: Id[], message: string) {
@@ -1152,15 +1176,14 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       const gt = givenTypes?.get(k) ?? expr(g, env, row);
       if (pt) unifyAt(g, pt, gt, "a given port"); else err(n.id, `${nm(useTarget(code.nodes, n))} has no port ${k}`);
     }
-    for (const [k, b] of Object.entries(bindsOf(n))) {
+    for (const [k, b] of answerPorts(n)) {
       const pt = portType(k) ?? s.fresh();
       if (!portType(k)) err(n.id, `${nm(useTarget(code.nodes, n))} has no port ${k}`);
       // An answer is a value found by search; a function can't be guessed.
       try { s.requirePlain(pt); } catch (e) {
-        if (e instanceof PlainError) err(n.id, `${nm(b)} can't be solved for: it has functions in it, and functions can't be guessed`); else throw e;
+        if (e instanceof PlainError) err(n.id, `${b === undefined ? `port ${k}` : nm(b)} can't be solved for: it has functions in it, and functions can't be guessed`); else throw e;
       }
-      inner.set(b, pt);
-      info.typeOf.set(b, pt);
+      setPort(n, k, b, pt, inner);
     }
     const own = s.resolveRow(ft.eff).effs;
     // Searching runs a function many times over and drops most of the runs,
@@ -1527,7 +1550,7 @@ export function resumedTwice(code: Code, body: Id, rest: Id): Id | null {
     switch (n.kind) {
       case "ref": return n.target === rest ? 1 : 0;
       case "call":
-        if (isUse(n)) return sum([...Object.values(n.given), bodyOf(n)]);
+        if (isUse(n)) return sum([...Object.values(n.given), ...(n.body === undefined ? [] : [n.body])]);
         return sum([n.fn, ...n.args]);
       case "lambda": return Math.min(uses(n.body), 1) + (uses(n.body) > 1 ? flag(n.body) : 0);
       case "match": {
@@ -1553,7 +1576,7 @@ export function resumedTwice(code: Code, body: Id, rest: Id): Id | null {
 function kids(n: Node): Id[] {
   switch (n.kind) {
     case "call":
-      if (isUse(n)) return [...Object.values(n.given), bodyOf(n)];
+      if (isUse(n)) return [...Object.values(n.given), ...(n.body === undefined ? [] : [n.body])];
       return [n.fn, ...n.args];
     case "lambda": return [n.body];
     case "match": return [n.scrutinee, ...n.arms, ...(n.otherwise ? [n.otherwise] : [])];
