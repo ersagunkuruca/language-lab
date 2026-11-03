@@ -214,7 +214,7 @@ all of these.
 |---|---|---|---|---|---|
 | L61 | Better data structures as representations: a meaning (List, Map, Set) plus representations (array, HAMT, balanced tree, RRB vector) chosen per value, no new node kinds. `Map` and `Set` done (L65); written in the language since L108b | Ersagun 2026-10-24 | P1 | L | Map and Set done |
 | L98 | A cell owns its value and a write is an edit at a path (STABLE-REFERENCES.md §1): positions done (L98a), keys done (L98b, `key path`). Next: the in-place store is C56's representation | Ersagun 2026-10-29 | P2 | L | steps 1, 2 done |
-| L99 | Reads tracked by path, so data in cells stays plain (§2): `each` follows edits (L99a), tracked views (L99b), nested lists (L99c), compiled JS's rows reading through views (L99d) done. Next: a plain `State` handler for the cells (the std `State` of L16a is the model) | Ersagun 2026-10-29 | P2 | L | 4 steps done |
+| L99 | Reads tracked by path, so data in cells stays plain (§2): `each` follows edits (L99a), tracked views (L99b), nested lists (L99c), compiled JS's rows reading through views (L99d), cells kept plainly in the evaluator when nothing reads them reactively (L99e) done. Next: the same plain handler for compiled JS | Ersagun 2026-10-29 | P2 | L | 5 steps done |
 | L101 | **Later goal**: multithreading where uniqueness allows it (rayon), effect rows deciding what runs side by side (§5) | Ersagun 2026-10-29 | P3 | L | |
 | L21 | Folds: a `build` row for user producers, folds with `Choice` asking the table | ROADMAP 5 | P3 | L | |
 
