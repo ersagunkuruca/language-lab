@@ -272,7 +272,7 @@ agent with inertia. All later goals.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L185 | Text decisions: NFC where text enters from the world (equality stays code points); case mapping takes a locale as an argument or effect (Turkish i/İ, ı/I); `graphemes(t)`; collation as a separate order by locale | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §4 | P3 | M | |
+| L214 | Text as decided in [TEXT-2026-11-03.md](docs/design/data/TEXT-2026-11-03.md) (L185), one PR each: (a) NFC where text enters (read file, fetch text, read line, a page's field, stored literals) and `normalized`, first; (b) `Locale`, `uppercase`/`lowercase` taking it, `my locale` as a world effect, today's A-to-Z ones renamed `ascii …`; (c) `graphemes`, `grapheme count`; (d) `collated(locale)` | L185, BLIND-SPOTS-2026-11-03 §4 | P3 | M | decided |
 | L187 | Error messages as one table (id, message, usual fix, the gesture that fixes it) with a smallest program per problem as its test | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §8 | P3 | M | |
 | L188 | Dates and times: Instant, calendar Date, Duration (on units.ts), time zone; now and the local zone as world effects (java.time, Temporal, influence) | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §9 | P3 | M | |
 

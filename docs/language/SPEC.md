@@ -88,8 +88,13 @@ maps with the same entries are equal and show the same, whatever order
 they were built in.
 
 2.5. **Text** is a sequence of Unicode code points. `length` counts code
-points; equality and order compare code points. Normalisation and
-grapheme clusters are not part of the meaning yet (*open*, S7).
+points; equality and order compare code points. Text that enters from
+the world (a file, a fetch, a page's field, a stored literal) is in
+Normalization Form C, so equality is code points and still what people
+expect; text a program builds itself is not normalised again. Case
+mapping takes a locale as an argument, grapheme clusters are a separate
+operation, and an order for people is a separate collation, never
+`compare` (decided, S7, TEXT-2026-11-03.md; built in steps, L214).
 
 2.6. **Functions** are values. A function remembers the code it was made
 from (so it can be run backwards, §7), but a program can't look inside
@@ -454,7 +459,7 @@ hasn't been chosen. None is answered here. Rows are in BACKLOG.md.
 | S4 | **Fuel counts depend on the checker.** Decided (L199, 2026-11-03): kept, and written down: what counts is the checker's, and a checker change that stops counting a definition is a change of meaning (§5.6). | written; evaluator and the core IR count the same way | L199 |
 | S5 | **When a stopped search had effects.** Decided (L198): an engine runs the paths in the evaluator's order, so handled effects on a search's paths happen as the evaluator's do (§7.4). | written; the fuzz test checks it | L198 |
 | S6 | **Shaders.** Decided 2026-11-03 (Ersagun): a declared approximation with its own meaning, written in §10.3 | written | C141 |
-| S7 | **Text.** Normalisation where text enters, grapheme clusters, case mapping and locales. | code points only | L185 |
+| S7 | **Text.** Decided (L185, TEXT-2026-11-03.md): code-point equality with NFC where text enters from the world; case mapping by a locale argument (the user's locale a world effect); graphemes beside characters; collation a separate order; the Unicode version is std's. | decided, NFC not built yet | L214 |
 | S8 | **The merged use's shape** (tuple or body). | pending | L179 |
 | S9 | **Strict positivity.** | kept | L107 |
 | S10 | **Evaluation order inside a use.** Decided (L198): given ports first, in port order, then the solve (§7.2b). | the evaluator (L198); compiled code: C147 | L198 |
