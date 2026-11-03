@@ -11,10 +11,15 @@ import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
+import { runInNewContext } from "node:vm";
+import { FakeEl, fakeDoc } from "../../ters/test/fakedom.ts";
 import type { Runtime, World } from "../../ters/src/lang/run.ts";
-import { makeRunner, runProgram } from "../../ters/src/lang/run.ts";
+import { equal, fromList, makeRunner, runProgram, type Data, type Value } from "../../ters/src/lang/run.ts";
+import { Cells } from "../../ters/src/lang/cells.ts";
+import { evaluatorCall, htmlText, NoAnswer } from "../../ters/src/lang/html.ts";
+import { HTML_V } from "../../ters/src/lang/std.ts";
 import { lowerScalar } from "../src/scalar.ts";
-import { loadCoreJs, runCoreMain } from "../src/core-js.ts";
+import { FAIL, loadCoreJs, runCoreMain } from "../src/core-js.ts";
 import { examples, load } from "../src/program.ts";
 import { book as chaptersBook } from "../gaps/chapters.ts";
 import { book as ledgerBook } from "../gaps/ledger.ts";
@@ -86,5 +91,77 @@ test("lab compile --core writes a module that runs main as lab run does", () => 
   // One that doesn't lower says why, and writes nothing.
   const page = run([lab, "compile", join(examples, "dice"), "--core", "-o", "dice.mjs"]);
   assert.notEqual(page[2], 0);
-  assert.match(String(page[1]), /isn't compiled through the core IR: it takes or gives Html/);
+  assert.match(String(page[1]), /isn't compiled through the core IR: it builds now/);
+});
+
+// Pages through the core IR (C137c8): the cells are the evaluator's
+// (run.ts cellOps), and a page's views and handlers may have the page's
+// effects. Every page whose main lowers shows the same HTML in both, and
+// again after each of its first handlers runs (in the order the page
+// lists them): each run in its own cells.
+test("the pages whose main lowers show the same HTML, before and after their handlers run, as in the evaluator (C137c8)", () => {
+  const ran: string[] = [];
+  for (const name of ["bounce", "compass", "constructions", "dice", "pig", "tumble"]) {
+    const p = load(name);
+    const main = p.code.defs.find((d) => p.pres.names[d] === "main" && p.own.defs.includes(d))!;
+    const l = lowerScalar(p.code, p.info, p.pres.names, p.own.defs, { data: true, host: true });
+    if (l.refused.has(main)) continue;
+    const fi = l.funcs.findIndex((g) => g.name === "main" && !g.inner && !g.budgeted);
+    const coreCall = (f: Value, ...xs: Value[]): Value => { try { return (f as unknown as (...a: Value[]) => Value)(...xs); } catch (e) { if (e === FAIL) throw new NoAnswer(); throw e; } };
+    const views = (handlers: number) => {
+      const ev = new Cells(equal), co = new Cells(equal);
+      const a = evaluatorCall(makeRunner(p.code, p.info, { print: () => {}, names: p.pres.names, cells: ev }).value(main));
+      const b = loadCoreJs(l, { print: () => {}, cells: co })[fi]() as Value;
+      const shown = [[htmlText(a, evaluatorCall), htmlText(b, coreCall)]];
+      const ha = handlersOf(a, evaluatorCall), hb = handlersOf(b, coreCall);
+      assert.equal(ha.length, hb.length, name);
+      const event: Value = { tag: HTML_V.event, fields: ["1", "", 0, 0, 0] };
+      for (let i = 0; i < Math.min(handlers, ha.length); i++) {
+        evaluatorCall(ha[i], event); coreCall(hb[i], event);
+        shown.push([htmlText(a, evaluatorCall), htmlText(b, coreCall)]);
+      }
+      return shown;
+    };
+    const shown = views(6);
+    for (const [i, [want, got]] of shown.entries()) assert.equal(got, want, `${name}, after ${i} handlers`);
+    ran.push(name);
+  }
+  console.log(`pages ${ran.join(", ")}`);
+  assert.ok(ran.length >= 3, `pages ${ran.join(", ")}`);
+});
+
+// A page's handlers, in the order it lists them, each part's view called once.
+function handlersOf(v: Value, call: (f: Value, ...xs: Value[]) => Value): Value[] {
+  const d = v as Data;
+  if (d.tag === HTML_V.part) { let w: Value; try { w = call(d.fields[0]); } catch (e) { if (e instanceof NoAnswer) return []; throw e; } return handlersOf(w, call); }
+  if (d.tag !== HTML_V.element) return [];
+  const own = (fromList(d.fields[1]) as Data[]).filter((a) => a.tag === HTML_V.on).map((a) => a.fields[1]);
+  return [...own, ...fromList(d.fields[2]).flatMap((c) => handlersOf(c, call))];
+}
+
+// lab build-web --core (C137c9): the page's script, printed from the core
+// IR, draws what compile.ts's page draws, in a fake document, and again
+// after each element with a click handler is clicked, in order.
+test("lab build-web --core writes a page that draws and reacts as lab build-web's", () => {
+  const lab = join(import.meta.dirname, "../../ters/cli/lab.ts"), compass = join(examples, "compass");
+  const dir = mkdtempSync(join(tmpdir(), "core-page-"));
+  const page = (flags: string[]) => {
+    const out = join(dir, `${flags.length}.html`);
+    const r = spawnSync(process.execPath, [lab, "build-web", compass, ...flags, "-o", out], { encoding: "utf8" });
+    assert.equal(r.status, 0, r.stderr);
+    const body = new FakeEl("body");
+    runInNewContext(/<script>([\s\S]*)<\/script>/.exec(readFileSync(out, "utf8"))![1], { document: { ...fakeDoc(), body }, localStorage: undefined, console, requestAnimationFrame: () => 0, TextEncoder, TextDecoder });
+    return body;
+  };
+  const clickable = (e: FakeEl): FakeEl[] => [...(e.listeners.has("click") ? [e] : []), ...e.kids.flatMap((k) => (k instanceof FakeEl ? clickable(k) : []))];
+  const want = page([]), got = page(["--core"]);
+  assert.equal(got.html(), want.html());
+  const a = clickable(want), b = clickable(got);
+  assert.equal(b.length, a.length);
+  assert.ok(a.length >= 4, `${a.length} clickable`);
+  for (let i = 0; i < a.length; i++) { a[i].fire("click"); b[i].fire("click"); assert.equal(got.html(), want.html(), `after click ${i}`); }
+  // One that doesn't lower says why.
+  const r = spawnSync(process.execPath, [lab, "build-web", join(examples, "dice"), "--core", "-o", join(dir, "dice.html")], { encoding: "utf8" });
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /isn't compiled through the core IR: it builds now/);
 });

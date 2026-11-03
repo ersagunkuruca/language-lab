@@ -1,7 +1,7 @@
 {
   "6p40oarauhdcihhmi2s41ap4v0": "A sample as a point of saturation space: atanh, written as log(2 / (1 − x) − 1) / 2 so x appears once and running it backwards is one answer (tanh).",
   "p3689sdkb9acrs9rn1effptkjh": "Overdrive: scale the sample in saturation space and come back, tanh(amount · atanh(x)). It keeps −1 to 1, is the sample itself at amount 1, and pushes towards ±1 as amount grows, a soft clipper whose way back nobody wrote.",
-  "gtggrege5fntpp0jnoqqma0750": "Haar's split in lifting steps: each pair of samples as their difference (the fast band) and the second plus half of it, their average (the slow band). Each step has one unknown when run backwards, so the join is plain arithmetic. An odd sample out is no split.",
+  "gtggrege5fntpp0jnoqqma0750": "Haar's split (the simplest wavelet, splitting a sound into a slow and a fast band) in lifting steps: each pair of samples as their difference (the fast band) and the second plus half of it, their average (the slow band). Each step has one unknown when run backwards, so the join is plain arithmetic. An odd sample out is no split.",
   "i90rf905lbj53b6vquo0h0htnv": "Overdrive the slow band and leave the fast one: the low strings break up, the pick attack stays clean.",
   "@7oqrouv1btl6kt56s12kr7t7k0": "The larger of two numbers.",
   "dfhu269hvu9gf9l1ec2u3msrh2": "The loudest sample of a block.",

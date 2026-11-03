@@ -303,7 +303,7 @@ export function typedGraph(code: Code, pres: Presentation, info: Info | null, de
         : changed(scene, hooks.at, arrangeAll(scene, hooks.folded));
       const n = Object.keys(moved).length;
       const frame = only?.length === 1 && scene.frames.has(only[0]);
-      hooks.moved(moved, n ? `Tidied ${frame ? "what's inside" : only ? "those nodes" : "the graph"}: ${n} moved. Only layout.json changed.` : only && !frame ? "Already tidy: nothing overlaps." : "Already tidy: laying it out again moves nothing.");
+      hooks.moved(moved, n ? `Tidied ${frame ? "what's inside" : only ? "those nodes" : "the graph"}: ${n} moved. Only the layout changed.` : only && !frame ? "Already tidy: nothing overlaps." : "Already tidy: laying it out again moves nothing.");
     },
   };
 }

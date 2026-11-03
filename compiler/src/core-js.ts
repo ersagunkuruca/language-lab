@@ -19,7 +19,9 @@
 // the world is the evaluator's Runtime (C137c3, runCoreMain).
 
 import { ARRAY_OPS, FALSE, HASH_SET_OPS, NONE, S, SOME, STD_IMPL, STD_MANY, TABLE_OPS, TRUE } from "../../ters/src/lang/std.ts";
-import { toList, type Runtime, type World } from "../../ters/src/lang/run.ts";
+import { cellOps, equal, toList, type Runtime, type Value, type World } from "../../ters/src/lang/run.ts";
+import { Cells, NoValue } from "../../ters/src/lang/cells.ts";
+import { NoAnswer } from "../../ters/src/lang/html.ts";
 import * as I from "../../ters/src/lang/int.ts";
 import * as T from "../../ters/src/lang/text.ts";
 import type { Id } from "../../ters/src/model.ts";
@@ -40,6 +42,8 @@ const MATH: Partial<Record<Op, string>> = { sqrt: "sqrt", abs: "abs", floor: "fl
 // turned between the two forms; the rest written here.
 const BUILTIN = new Map<string, Id>([...Object.entries(RT), ...Object.entries(ARRAY_RT), [ARRAY_OPS.replaceAt, "array.replaceAt"]].map(([id, n]) => [n, id]));
 const big = (x: I.Int) => BigInt(x);
+// UTF-8 as a browser has it too (a page's script, C137c9).
+const UTF8 = new TextEncoder();
 const OWN: Record<string, (...xs: never[]) => unknown> = {
   "int.equal": (a: I.Int, b: I.Int) => a === b,
   "int.less": (a: I.Int, b: I.Int) => a < b,
@@ -50,10 +54,10 @@ const OWN: Record<string, (...xs: never[]) => unknown> = {
   "int.gcd": (a: I.Int, b: I.Int) => { let x = big(a) < 0n ? -big(a) : big(a), y = big(b) < 0n ? -big(b) : big(b); while (y) [x, y] = [y, x % y]; return I.norm(x); },
   // run.ts's, which the evaluator has outside std.ts.
   "number.range": (n: number) => toList(Array.from({ length: Math.max(0, n) }, (_, i) => i)),
-  "text.size": (t: string) => Buffer.byteLength(t, "utf8"),
-  "text.bytes": (t: string, a: number, b: number) => Buffer.from(t, "utf8").subarray(a, b).toString("utf8"),
+  "text.size": (t: string) => UTF8.encode(t).length,
+  "text.bytes": (t: string, a: number, b: number) => new TextDecoder().decode(UTF8.encode(t).subarray(a, b)),
   // Where the character that ends at byte i (> 0) starts.
-  "text.before": (t: string, i: number) => { const b = Buffer.from(t, "utf8"); do i--; while (i > 0 && (b[i] & 0xc0) === 0x80); return i; },
+  "text.before": (t: string, i: number) => { const b = UTF8.encode(t); do i--; while (i > 0 && (b[i] & 0xc0) === 0x80); return i; },
 };
 // A Table or Hash set (C63h, C63i) is the evaluator's (std.ts Table: a
 // Map with Baker's versions), a record key given as the evaluator's
@@ -95,15 +99,15 @@ function randFns(r: Uint32Array): Record<string, (...xs: never[]) => unknown> {
     "rand.restore": (a: number, b: number, c: number, d: number) => { r.set([a, b, c, d]); return 0; },
   };
 }
-function rtFn(name: string, tables?: TableSpec[], rand?: Record<string, (...xs: never[]) => unknown>): (...xs: unknown[]) => unknown {
-  if (name.startsWith("host:")) return hostFn(name);
+function rtFn(name: string, tables?: TableSpec[], rand?: Record<string, (...xs: never[]) => unknown>, cells?: Record<Id, (...xs: Value[]) => Value | undefined>): (...xs: unknown[]) => unknown {
+  if (name.startsWith("host:")) return hostFn(name, cells);
   const tm = TABLE.exec(name);
   if (tm && tables) return tableFn(tm[1], tables[Number(tm[2])]);
   if (rand?.[name]) return rand[name] as (...xs: unknown[]) => unknown;
   const base = name.replace(/\.a\d+$/, "");
   if (OWN[base]) return OWN[base] as (...xs: unknown[]) => unknown;
   const id = BUILTIN.get(base === "array.get" ? "array.at" : base);
-  const one = id && STD_IMPL[id], many = id && STD_MANY[id];
+  const one = id ? STD_IMPL[id] : undefined, many = id ? STD_MANY[id] : undefined;
   if (!one && !many) return () => { throw new Unsupported(name); };
   const meta = runtime(name);
   const out = meta.result === "i32" ? (v: unknown) => (typeof v === "object" && v !== null && "tag" in v ? (v as { tag: Id }).tag === TRUE : v) : (v: unknown) => v;
@@ -116,14 +120,23 @@ function rtFn(name: string, tables?: TableSpec[], rand?: Record<string, (...xs: 
 // A builtin the core IR has no lowering for (C137c7, scalar.ts host):
 // the evaluator's own, by its id, a Bool given turned to the evaluator's
 // and one given back (`:bool`) turned back; no answer is FAIL.
-function hostFn(name: string): (...xs: unknown[]) => unknown {
+function hostFn(name: string, cells?: Record<Id, (...xs: Value[]) => Value | undefined>): (...xs: unknown[]) => unknown {
   const [, id, bool] = name.split(":");
+  const out = bool ? (v: unknown) => v === true || (v as { tag?: Id }).tag === TRUE : (v: unknown) => v;
+  const cell = cells?.[id];
+  if (cell) return (...xs) => { const v = cell(...(xs.map(inn) as Value[])); if (v === undefined) throw FAIL; return out(v); };
   const one = STD_IMPL[id], many = STD_MANY[id];
-  const inn = (x: unknown) => (typeof x === "boolean" ? { tag: x ? TRUE : FALSE, fields: [] } : x);
-  const out = bool ? (v: unknown) => (v as { tag: Id }).tag === TRUE : (v: unknown) => v;
   if (one) return (...xs) => out(one(...xs.map(inn)));
   if (many) return (...xs) => { const r = many(...xs.map(inn)); if (!r.length) throw FAIL; return out(r[0]); };
   return () => { throw new Unsupported(name); };
+}
+const inn = (x: unknown) => (typeof x === "boolean" ? { tag: x ? TRUE : FALSE, fields: [] } : x);
+// Cells' operations (run.ts cellOps) on the runtime's handler, calling the
+// program's closures: no answer is a formula with no value.
+function cellFns(cells: Cells) {
+  return cellOps(cells, (f, ...xs) => {
+    try { return inn((f as unknown as (...a: unknown[]) => unknown)(...xs)) as Value; } catch (e) { if (e === FAIL) throw new NoValue("gave no value"); throw e; }
+  });
 }
 
 export const RUNTIME = {
@@ -334,8 +347,8 @@ function worldFn(op: string, rt: Runtime): (...xs: unknown[]) => unknown {
 // What the printed functions are given as R: the runtime, the tables'
 // and the world's operations, a fresh generator.
 export function coreRuntime(tables: TableSpec[], worlds: string[], rt: Runtime) {
-  const rand = randFns(new Uint32Array(4));
-  return { ...RUNTIME, rt: (n: string) => rtFn(n, tables, rand), worlds: worlds.map((op) => worldFn(op, rt)), abort: (reason: unknown, esc: number): never => { throw new Aborted(reason, esc); } };
+  const rand = randFns(new Uint32Array(4)), cells = cellFns(rt.cells ?? new Cells(equal));
+  return { ...RUNTIME, rt: (n: string) => rtFn(n, tables, rand, cells), worlds: worlds.map((op) => worldFn(op, rt)), abort: (reason: unknown, esc: number): never => { throw new Aborted(reason, esc); } };
 }
 
 // The functions, by their place in ir.funcs. `rt`: the console and files.
@@ -344,6 +357,12 @@ export function loadCoreJs(ir: CoreIR, rt: Runtime = { print: () => {} }): ((...
   const all = new Function("R", js)(coreRuntime(ir.tables.map(tableSpec), worlds, rt)) as Record<string, (...xs: unknown[]) => unknown>;
   return names.map((n) => all[n]);
 }
+
+// How the evaluator's runtime (a page's mount, html.ts) calls a function
+// printed here: its value, no answer being html.ts's NoAnswer.
+export const coreCall = (f: Value, ...xs: Value[]): Value => {
+  try { return (f as unknown as (...a: Value[]) => Value)(...xs); } catch (e) { if (e === FAIL) throw new NoAnswer(); throw e; }
+};
 
 // What running a main needs to know of it: whether it takes the
 // arguments, and what it gives.
@@ -389,5 +408,19 @@ export function coreModule(ir: CoreIR, name: string, runtime: string, world: str
     js,
     "})(R);",
     `process.exitCode = runCoreFn(defs.${names[fi]}, ${JSON.stringify(m)}, process.argv.slice(2), rt);`,
+  ].join("\n");
+}
+
+// A page's script (C137c9, `lab build-web --core`): the printed functions,
+// with core-page.ts (`page`, which a bundler takes in) drawing main.
+export function corePageScript(ir: CoreIR, name: string, page: string, title: string): string {
+  const fi = ir.funcs.findIndex((g) => g.name === name && !g.inner && !g.budgeted);
+  if (fi < 0 || ir.funcs[fi].params.length) throw new Error(`${name}: not compiled, or not a page's main`);
+  const { js, names, worlds } = emitCoreJs(ir);
+  return [
+    `import { startCorePage } from ${JSON.stringify(page)};`,
+    `startCorePage(${JSON.stringify(ir.tables.map(tableSpec))}, ${JSON.stringify(worlds)}, (R) => {`,
+    js,
+    `}, ${JSON.stringify(names[fi])}, ${JSON.stringify(title)});`,
   ].join("\n");
 }

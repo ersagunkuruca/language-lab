@@ -52,6 +52,14 @@ const browserFetch = async (url: string): Promise<string> => {
   return r.text();
 };
 
+// localStorage, or a map when the browser refuses it (a sandboxed frame,
+// some private windows): the page works, and forgets on reload.
+export const pageStorage = (): Store => {
+  try { if (globalThis.localStorage) return globalThis.localStorage; } catch { /* refused */ }
+  const m = new Map<string, string>();
+  return { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => void m.set(k, String(v)), removeItem: (k) => void m.delete(k), get length() { return m.size; }, key: (i) => [...m.keys()][i] ?? null };
+};
+
 export function browserWorld(store: Store, program: string, console_ = console, clock?: Clock): World {
   const prefix = `lab:${program}:`;
   let tick: Value | null = null;

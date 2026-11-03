@@ -57,6 +57,37 @@ const LISTS = { from: fromList, to: toList as (xs: Value[]) => Value };
 // What each needs to hand its rows tracked views (cells.ts, L99).
 const LIST_VIEWS = { cons: CONS, nil: NIL, isList: (v: Value) => typeof v === "object" && (v.tag === CONS || v.tag === NIL) };
 
+// Cells' operations on a handler (cells.ts), by builtin id, for every
+// runner of a program's values: the evaluator's here, and JavaScript
+// printed from the core IR (compiler/src/core-js.ts). `call` runs a
+// function the program gave and answers its value, or throws NoValue. A
+// read with no answer (a formula that gave none, or no item at a place)
+// is undefined. `path` is the evaluator's alone: it looks inside the
+// function it is given.
+export function cellOps(cells: Cells, call: (f: Value, ...xs: Value[]) => Value): Record<Id, (...xs: Value[]) => Value | undefined> {
+  const listsHere = { ...LISTS, views: LIST_VIEWS };
+  const noValue = (f: () => Value) => { try { return f(); } catch (e) { if (e instanceof NoValue) return undefined; throw e; } };
+  return {
+    [CELL_OPS.cell]: (v) => cells.cell(v),
+    [CELL_OPS.formula]: (f) => cells.formula(() => call(f)),
+    [CELL_OPS.each]: (items, f) => cells.each(items, (x) => call(f, x), listsHere),
+    [CELL_OPS.eachOf]: (items, f) => cells.eachOf(items, (x) => call(f, x), listsHere),
+    // A formula that gave no value (it ran out of `with fuel`) is a read
+    // with no answer; it is computed again at the next read.
+    [CELL_OPS.read]: (c) => noValue(() => cells.read(c)),
+    [CELL_OPS.write]: (c, v) => (cells.write(c, v), unit),
+    [CELL_OPS.itemPath]: (p, i) => pathValue([...stepsOf(p)!, { item: Number(i) }]),
+    [CELL_OPS.thenPath]: (p, q) => pathValue([...stepsOf(p)!, ...stepsOf(q)!]),
+    [CELL_OPS.keyPath]: (p, by, k) => pathValue([...stepsOf(p)!, { key: k, by: stepsOf(by)! }]),
+    [CELL_OPS.readAt]: (c, p) => noValue(() => cells.readAt(c, stepsOf(p)!, LISTS) as Value),
+    [CELL_OPS.writeAt]: (c, p, v) => (cells.edit(c, stepsOf(p)!, () => v, LISTS), unit),
+    [CELL_OPS.changed]: (v, p, x) => changeAt(v, stepsOf(p)!, () => x, LISTS),
+    [CELL_OPS.insertAt]: (c, p, i, v) => (cells.edit(c, stepsOf(p)!, (l) => toList(listEdits.insert(fromList(l), Number(i), v)), LISTS, { at: stepsOf(p)!, kind: "insert", i: Number(i) }), unit),
+    [CELL_OPS.removeAt]: (c, p, i) => (cells.edit(c, stepsOf(p)!, (l) => { const xs = listEdits.remove(fromList(l), Number(i)); return xs && toList(xs); }, LISTS, { at: stepsOf(p)!, kind: "remove", i: Number(i) }), unit),
+    [CELL_OPS.moveAt]: (c, p, a, b) => (cells.edit(c, stepsOf(p)!, (l) => { const xs = listEdits.move(fromList(l), Number(a), Number(b)); return xs && toList(xs); }, LISTS, { at: stepsOf(p)!, kind: "move", from: Number(a), to: Number(b) }), unit),
+  };
+}
+
 // Two numbers near enough that the solver takes one for the other when it
 // checks an answer it found (relate.ts unify): floats only approximate
 // reals, and √2 squared is 2.0000000000000004. `equal` is exact
@@ -311,10 +342,27 @@ export function finiteFloat(op: string, r: number, args: number[]): Iterable<num
     : op === S.float32 ? "the number is too big for a Float32 (overflow)" : "the answer is too big for a Float64 (overflow)");
 }
 
+// resolveArithmetic's answer for a version of the code and its check: the
+// editor makes a runner for each of a definition's traces when it opens
+// (its values, main's run for its seed, a backward search), and resolving
+// calc took about a second each time (I158). What it gives isn't changed
+// after (makeRunner copies the nodes before writing).
+// Keyed by the program and its check only: the names change only the
+// wording of a refusal (thrown, so not kept) and the names it gives back,
+// which no caller here reads.
+const resolved = new WeakMap<Code, WeakMap<Info, { code: Code; info: Info }>>();
+export function resolvedFor(code: Code, info: Info, names: Names | undefined): { code: Code; info: Info } {
+  let byInfo = resolved.get(code);
+  if (!byInfo) resolved.set(code, (byInfo = new WeakMap()));
+  let r = byInfo.get(info);
+  if (!r) { const { code: c, info: i } = resolveArithmetic(code, info, names ?? {}); byInfo.set(info, (r = { code: c, info: i })); }
+  return r;
+}
+
 export function makeRunner(code: Code, info: Info, rt: Runtime) {
   // The generic + resolved to each type's own (arith.ts); a program
   // without one is unchanged.
-  ({ code, info } = resolveArithmetic(code, info, rt.names ?? {}));
+  ({ code, info } = resolvedFor(code, info, rt.names));
   // A copy at another number type is entered as the lambda it copies.
   const copyOf = info.copyOf;
   // Our own copy of the node table: `derivative` writes new code into it.
@@ -373,25 +421,8 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     // the body has come. Otherwise fetched now, so the ticket is ready at
     // once on any clock (L150).
     [IO.startFetch]: (u) => one(rt.world?.startFetch ? timers.fetch(rt.world.startFetch(u as string)) : { tag: TICKET_V.timer, fields: [0, world("fetchText")(u as string)] }),
-    [CELL_OPS.cell]: (v) => one(cells.cell(v)),
-    [CELL_OPS.formula]: (f) => one(cells.formula(() => {
-      for (const v of (f as Fn)()) return v;
-      throw new NoValue("this formula gave no value");
-    })),
-    [CELL_OPS.each]: (items, f) => one(cells.each(items, (x) => {
-      for (const v of (f as Fn)(x)) return v;
-      throw new NoValue("each gave no value for an item");
-    }, { ...LISTS, views: LIST_VIEWS })),
-    [CELL_OPS.eachOf]: (items, f) => one(cells.eachOf(items, (x) => {
-      for (const v of (f as Fn)(x)) return v;
-      throw new NoValue("each of gave no value for an item");
-    }, { ...LISTS, views: LIST_VIEWS })),
-    // A formula that gave no value (it ran out of `with fuel`) is a read
-    // with no answer; it is computed again at the next read.
-    [CELL_OPS.read]: (c) => {
-      try { return one(cells.read(c)); } catch (e) { if (e instanceof NoValue) return []; throw e; }
-    },
-    [CELL_OPS.write]: (c, v) => (cells.write(c, v), one(unit)),
+    // Cells' operations (cellOps, below), the evaluator's way: a stream.
+    ...Object.fromEntries(Object.entries(cellOps(cells, (f, ...xs) => { for (const v of (f as Fn)(...xs)) return v; throw new NoValue("gave no value"); })).map(([id, f]) => [id, (...xs: Value[]) => { const v = f(...xs); return v === undefined ? [] : one(v); }])),
     // Places and edits at them (L98, cells.ts).
     [CELL_OPS.path]: (get) => {
       const m = (get as unknown as Record<symbol, { lambda?: Id; prim?: Id }>)[META];
@@ -399,17 +430,6 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       if (!path) throw new Error("path needs a field, a path of fields, or (t) ↦ t");
       return one(pathValue(path.map((f) => ({ field: fieldIndex(code, f) }))));
     },
-    [CELL_OPS.itemPath]: (p, i) => one(pathValue([...stepsOf(p)!, { item: Number(i) }])),
-    [CELL_OPS.thenPath]: (p, q) => one(pathValue([...stepsOf(p)!, ...stepsOf(q)!])),
-    [CELL_OPS.keyPath]: (p, by, k) => one(pathValue([...stepsOf(p)!, { key: k, by: stepsOf(by)! }])),
-    [CELL_OPS.readAt]: (c, p) => {
-      try { const v = cells.readAt(c, stepsOf(p)!, LISTS); return v === undefined ? [] : one(v); } catch (e) { if (e instanceof NoValue) return []; throw e; }
-    },
-    [CELL_OPS.writeAt]: (c, p, v) => (cells.edit(c, stepsOf(p)!, () => v, LISTS), one(unit)),
-    [CELL_OPS.changed]: (v, p, x) => one(changeAt(v, stepsOf(p)!, () => x, LISTS)),
-    [CELL_OPS.insertAt]: (c, p, i, v) => (cells.edit(c, stepsOf(p)!, (l) => toList(listEdits.insert(fromList(l), Number(i), v)), LISTS, { at: stepsOf(p)!, kind: "insert", i: Number(i) }), one(unit)),
-    [CELL_OPS.removeAt]: (c, p, i) => (cells.edit(c, stepsOf(p)!, (l) => { const xs = listEdits.remove(fromList(l), Number(i)); return xs && toList(xs); }, LISTS, { at: stepsOf(p)!, kind: "remove", i: Number(i) }), one(unit)),
-    [CELL_OPS.moveAt]: (c, p, a, b) => (cells.edit(c, stepsOf(p)!, (l) => { const xs = listEdits.move(fromList(l), Number(a), Number(b)); return xs && toList(xs); }, LISTS, { at: stepsOf(p)!, kind: "move", from: Number(a), to: Number(b) }), one(unit)),
     [SHOW_ANY]: (v) => one(showValue(v, code, rt.names ?? stdNames, true)),
     [CASE_NAME]: (v) => one(caseName(v, rt.names ?? stdNames)),
     [SET]: (get, record, value) => {
@@ -868,7 +888,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         if (p.mode === "relational") {
           // Each step that might unfold forever spends the innermost fuel.
           const spend = () => { const f = fuel(); return !(f && --f.left < 0); };
-          for (const sol of relate(code, useTarget(code.nodes, n), known, { spend, names: rt.names, stuck: rt.stuck })) {
+          for (const sol of relate(code, useTarget(code.nodes, n), known, { spend, names: rt.names, stuck: rt.stuck, info })) {
             const bound = Object.keys(n.binds).map((k) => toValue(sol.values[k]));
             if (bound.some((v) => v === undefined)) continue; // not pinned down: not an answer
             yield bound as Value[];

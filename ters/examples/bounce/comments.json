@@ -18,7 +18,7 @@
   "tql2br7qfadtk60igbbiof9cj6": "The box and the bodies, each drawn as its outline inside the circle it bounces at.",
   "op8tel23ukjlc6o4h3kr7ut5nj": "A multivector of Cl(2, 0): a number, two vectors e₁ e₂ and the bivector e₁e₂, the plane itself.",
   "85sm0k9ok59goomactarcev77q": "A multivector of Cl(3, 0): a number, three vectors, three bivectors (planes) and the trivector e₁e₂e₃.",
-  "av062ml49hubglk5moisb09uo2": "The flat world: Cl(2, 0), two basis vectors that square to 1. Nothing points away from the viewer and the camera's rotor is 1.",
+  "av062ml49hubglk5moisb09uo2": "The flat world: Cl(2, 0), the geometric algebra of the plane, where points, turns and moves are all multivectors: two basis vectors that square to 1. Nothing points away from the viewer and the camera's rotor is 1.",
   "sgaelnhhiqb6ct37jnnbh3ruuv": "Cl(3, 0), the algebra of the solid world, made once: three basis vectors that square to 1.",
   "5jiabppbktmq5et506f68n3p45": "The solid world: Cl(3, 0), three basis vectors that square to 1. e₃ points at the viewer, and the camera looks from a little above and to the side: the product of two rotors, e^(−0.175 e₂₃) and e^(−0.25 e₁₃).",
   "1iikjvnpfkfbru6gdu3n2vprm6": "The walls of the flat world, drawn as a body that never moves.",

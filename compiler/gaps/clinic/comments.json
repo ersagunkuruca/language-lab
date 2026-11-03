@@ -1,3 +1,4 @@
 {
-  "program": "A walk-in clinic simulated one event at a time (bigger-program round 10, written in the editor). Credits: the waiting room and the events are leftist heaps, and the last events a two-list queue, both as in Chris Okasaki's Purely Functional Data Structures (1998; the leftist heap is Clark Crane's, 1972): adaptation of code. The running mean and spread are Welford's method (B. P. Welford, 1962): adaptation of an algorithm."
+  "program": "A walk-in clinic simulated one event at a time (bigger-program round 10, written in the editor). Credits: the waiting room and the events are leftist heaps, and the last events a two-list queue, both as in Chris Okasaki's Purely Functional Data Structures (1998; the leftist heap is Clark Crane's, 1972): adaptation of code. The running mean and spread are Welford's method (B. P. Welford, 1962): adaptation of an algorithm.",
+  "a9hg0oc2kpop1ajci215obghp6": "Welford's running sum of squared differences from the mean, with one more value in: what the spread of waiting times is worked out from."
 }

@@ -24,6 +24,7 @@
 
 import type { Code, Id, Node, NodeData, NodeOf, Use } from "../model.ts";
 import { isUse, useTarget, isCall, fieldPorts, type Call } from "../model.ts";
+import { resultsAsFunctions, usesResultsAsFunction } from "./results-fn.ts";
 import { freshId } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { B } from "../prelude.ts";
@@ -76,7 +77,7 @@ export const usesGenericArithmetic = (code: Code) => {
 // A plain number literal is some Number (infer.ts), so a program with one
 // may need resolving too; with the types at hand, only when one isn't
 // already a Float64.
-export const needsResolving = (code: Code) => usesGenericArithmetic(code) || usesFieldsByType(code) || usesSetSeveral(code) || usesSetThrough(code) || usesLiteralMatch(code) || usesSharedFields(code) || hasRecursiveLet(code) || Object.values(code.nodes).some(plainNumber);
+export const needsResolving = (code: Code) => usesGenericArithmetic(code) || usesResultsAsFunction(code) || usesFieldsByType(code) || usesSetSeveral(code) || usesSetThrough(code) || usesLiteralMatch(code) || usesSharedFields(code) || hasRecursiveLet(code) || Object.values(code.nodes).some(plainNumber);
 const plainNumber = (n: Node) => n.kind === "lit" && n.of === undefined && typeof n.value === "number";
 const someLiteralNotFloat64 = (code: Code, info: Info) => Object.values(code.nodes).some((n) => {
   if (!plainNumber(n)) return false;
@@ -111,6 +112,7 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
   ({ code, info, names } = liftLets(code, info, names));
   ({ code, info, names } = literalMatch(code, info, names));
   ({ code, info, names } = spreadTuples(code, info, names));
+  ({ code, info, names } = resultsAsFunctions(code, info, names));
   ({ code, info, names } = fieldsByType(code, info, names));
   ({ code, info, names } = setThrough(code, info, names));
   ({ code, info, names } = setSeveral(code, info, names));
@@ -317,7 +319,10 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
     if (sc && constrained(sc).length) {
       const at: Env = new Map();
       const a = close(opAt.get(id) ?? num, env);
-      const fieldType = close({ t: "fn", params: [a, a, a, a], ret: { t: "con", id: "std.bool", args: [] }, eff: pure }, env);
+      // The field's own type, at a (L128d3): its inputs to its results.
+      const f0 = nodes[useTarget(nodes, n)], fp0 = f0?.kind === "field" ? fieldPorts(nodes, f0) : null;
+      const k = fp0?.outs.length ?? 2;
+      const fieldType = close({ t: "fn", params: (fp0?.ins ?? [0, 1]).map(() => a), ret: k === 1 ? a : { t: "con", id: `std.tuple${k}`, args: Array.from({ length: k }, () => a) }, eff: pure }, env);
       bind(sc.type, fieldType, new Set(constrained(sc)), at);
       target = instance(target, at, sc);
     }

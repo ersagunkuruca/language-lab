@@ -8,6 +8,8 @@ import type { Info } from "../src/lang/infer.ts";
 import { pageShell } from "../src/lang/page.ts";
 import { HTML_V } from "../src/lang/std.ts";
 import { compile } from "../../compiler/src/compile.ts";
+import { lowerScalar } from "../../compiler/src/scalar.ts";
+import { corePageScript } from "../../compiler/src/core-js.ts";
 
 const here = import.meta.dirname;
 const esbuild = () => import("esbuild").catch(() => { throw new Error("a page needs esbuild to bundle it (npm install in ters/)"); });
@@ -65,6 +67,22 @@ $$startPage(defs[${JSON.stringify(name)}], ${JSON.stringify(title)}${worklet});
 `,
       resolveDir: here, sourcefile: "page.js", loader: "js",
     },
+    bundle: true, platform: "browser", format: "iife", target: "es2022", minify: true, write: false, logLevel: "warning",
+  });
+  return pageShell(title, out.outputFiles[0].text);
+}
+
+// The same page printed from the core IR (C137c9, `lab build-web --core`),
+// which WebAssembly and C print too: core-page.ts draws it. A page with
+// sound or a host file isn't made this way yet.
+export async function webCorePage(title: string, code: Code, info: Info, names: Names, own: Id[], main: Id): Promise<string> {
+  if (hasSound(code)) throw new Error("a page with sound isn't made from the core IR yet");
+  const lowered = lowerScalar(code, info, names, own, { data: true, host: true });
+  const why = lowered.refused.get(main);
+  if (why) throw new Error(`${names[main] ?? "main"} isn't compiled through the core IR: it ${why}`);
+  const { build } = await esbuild();
+  const out = await build({
+    stdin: { contents: corePageScript(lowered, names[main] ?? "main", JSON.parse(at("../../compiler/src/core-page.ts")), title), resolveDir: here, sourcefile: "page.js", loader: "js" },
     bundle: true, platform: "browser", format: "iife", target: "es2022", minify: true, write: false, logLevel: "warning",
   });
   return pageShell(title, out.outputFiles[0].text);

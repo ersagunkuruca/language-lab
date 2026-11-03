@@ -86,7 +86,7 @@ export type Node =
   // `same`: another case's field of the same type that this one is (L168,
   // SHARED-FIELDS-2026-11-02.md), so `x.to` reads it on every case that
   // has it. It names the first case's field, which names none.
-  | { id: Id; kind: "field"; type: Id; results?: number[]; ports?: string[]; same?: Id }
+  | { id: Id; kind: "field"; type: Id; ports?: string[]; same?: Id }
   // Type expressions, used for fields. target is a typedef's def, a builtin
   // type (type.number, type.string) or one of the typedef's param binders.
   | { id: Id; kind: "tref"; target: Id; args: Id[] }
@@ -130,15 +130,15 @@ export const useTarget = (nodes: Record<Id, Node>, u: Use): Id => {
 // A new use of `target`: adds the ref to it through `add`.
 export const useNode = (add: (n: NodeData) => Id, target: Id, given: Record<string, Id>, binds: Record<string, Id>, body: Id): Omit<Use, "id"> =>
   ({ kind: "call", fn: add({ kind: "ref", target }), given, binds, body });
-// An interface's field with results (POLAR.md, L97c), read as a function
-// (L128d): which of its ports are its inputs and which its results, each
-// a position among its ports, in the order the function takes and gives
-// them. Null for a field without results.
+// An interface's field with results (POLAR.md, L97c): a field whose type
+// is a function and whose ports are named, its inputs first and then its
+// results (L128d3). Which positions are its inputs and which its results;
+// null for any other field.
 export const fieldPorts = (nodes: Record<Id, Node>, f: NodeOf<"field">): { ins: number[]; outs: number[] } | null => {
-  if (!f.results) return null;
   const t = nodes[f.type];
-  const n = t?.kind === "tfun" ? t.params.length : 0;
-  return { ins: Array.from({ length: n }, (_, i) => i).filter((i) => !f.results!.includes(i)), outs: f.results };
+  if (!f.ports || t?.kind !== "tfun" || f.ports.length <= t.params.length) return null;
+  const at = (from: number, to: number) => Array.from({ length: to - from }, (_, i) => from + i);
+  return { ins: at(0, t.params.length), outs: at(t.params.length, f.ports.length) };
 };
 // A saved program's nodes as today's (L130d): a use was its own kind,
 // `solve`, naming its relation directly; it is a call whose `fn` is a ref.
@@ -159,8 +159,20 @@ function upgradeUses(nodes: Record<Id, unknown>): void {
 // opens; one saved before shapes were numbered has them all run, so each
 // step leaves nodes already in its shape alone. A change to the shape adds
 // a step at the end; an old step is never edited.
+// Trig's unpolar was a predicate over (length, angle, x, y); it is the
+// function (x, y) → length, angle now, its ports numbered in that order.
+function unpolarInOrder(nodes: Record<Id, unknown>): void {
+  const swap: Record<string, string> = { 0: "2", 1: "3", 2: "0", 3: "1" };
+  const re = (r: Record<string, Id>) => Object.fromEntries(Object.entries(r).map(([k, v]) => [swap[k] ?? k, v]));
+  for (const [id, x] of Object.entries(nodes)) {
+    const n = x as { kind?: string; fn?: Id; given?: Record<string, Id>; binds?: Record<string, Id> };
+    const f = n.fn !== undefined ? (nodes[n.fn] as { kind?: string; target?: Id } | undefined) : undefined;
+    if (n.kind === "call" && n.given && n.binds && f?.kind === "ref" && f.target === "std.trig.trig.unpolar") nodes[id] = { ...n, given: re(n.given), binds: re(n.binds) };
+  }
+}
 export const SHAPE_STEPS: { what: string; step: (nodes: Record<Id, unknown>) => void }[] = [
   { what: "a use is a call whose fn is a ref (L130d)", step: upgradeUses },
+  { what: "unpolar's ports in the order of its function, (x, y) → length, angle (L128d3)", step: unpolarInOrder },
 ];
 export const SHAPE = SHAPE_STEPS.length;
 export const toTodaysShape = (nodes: Record<Id, unknown>, from = 0): void => { for (const s of SHAPE_STEPS.slice(from)) s.step(nodes); };

@@ -159,7 +159,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean } = {}): Module
   const exportNames = new Map<SFunc, string>(), taken = new Set<string>();
   const exportName = (f: SFunc): string => {
     if (exportNames.size === 0) for (const g of funcs) {
-      let n = taken.has(g.name) ? `${g.name}(${g.params.map((t) => (t === "f64" ? "Float64" : t === "i32" ? "Bool" : t === "int" || t === "int32" ? "Int" : t === "text" ? "Text" : isFn(t) ? "Function" : t.name)).join(", ")})` : g.name;
+      let n = taken.has(g.name) ? `${g.name}(${g.params.map((t) => (t === "f64" ? "Float64" : t === "i32" ? "Bool" : t === "int" || t === "int32" ? "Int" : t === "text" ? "Text" : t === "host" ? "Cell" : isFn(t) ? "Function" : t.name)).join(", ")})` : g.name;
       for (let k = 2, base = n; taken.has(n); k++) n = `${base} ${k}`;
       taken.add(n);
       exportNames.set(g, n);

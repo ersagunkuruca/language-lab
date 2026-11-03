@@ -104,7 +104,9 @@ test("a type that gives only polar gets sin and cos from it", async () => {
 
 test("polar is given by a definition with the same results", () => {
   const { info } = angle(false);
-  assert.ok(info.errors.some((e) => e.message === "trig at angle gives polar as angle polar, which must name its results the way polar does: x, y from length, angle"), String(info.errors.map((e) => e.message)));
+  // polar is the function (length, angle) → x, y (L128d3); a predicate
+  // over the four ports that names no results isn't one.
+  assert.ok(info.errors.some((e) => e.message === "trig needs (Angle, Angle) -> (Angle, Angle) here, got (Angle, Angle, Angle, Angle) -> Bool"), String(info.errors.map((e) => e.message)));
 });
 
 test("Dual gives sin and cos and gets polar by them; Fixed and Float64 give polar", () => {
@@ -128,7 +130,7 @@ test("Dual gives sin and cos and gets polar by them; Fixed and Float64 give pola
 test("length, angle = unpolar(x, y) at Float64, Dual and Fixed, evaluated and compiled", async () => {
   const k = new Lang(LIBRARY.code);
   const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
-  const un = (x: Id, y: Id, f: (r: Id, t: Id) => Id) => k.solve(TRIG_UNPOLAR, { 2: x, 3: y, out: k.true }, { 0: "length", 1: "angle" }, ({ 0: r, 1: t }) => f(r, t));
+  const un = (x: Id, y: Id, f: (r: Id, t: Id) => Id) => k.solve(TRIG_UNPOLAR, { 0: x, 1: y, out: k.true }, { 2: "length", 3: "angle" }, ({ 2: r, 3: t }) => f(r, t));
   const both2 = (a: Id, b: Id) => k.text(k.call(SHOW_ANY, a), k.lit(" "), k.call(SHOW_ANY, b));
   def("at float64", () => un(k.lit(3), k.lit(4), both2));
   const D = (a: number, b: number) => k.call(DUAL_V, k.lit(a), k.lit(b));

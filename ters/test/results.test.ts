@@ -5,7 +5,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { Code, NodeOf } from "../src/model.ts";
+import type { Code, Id, NodeOf } from "../src/model.ts";
 import type { Presentation, Style } from "../src/presentation.ts";
 import blocksStyle from "../styles/blocks.json" with { type: "json" };
 import { Lang } from "../src/lang/dsl.ts";
@@ -13,7 +13,7 @@ import { infer } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
 import { renderBlocks } from "../src/lang/render.ts";
 import { runMain } from "../src/lang/run.ts";
-import { SHOW_ANY } from "../src/lang/std.ts";
+import { SHOW_ANY, tuplePart } from "../src/lang/std.ts";
 import { showType } from "../src/lang/types.ts";
 import { B } from "../src/prelude.ts";
 
@@ -37,8 +37,8 @@ test("a definition with results reads as inputs → results, and a use binds the
   assert.deepEqual(p.info.errors.map((e) => e.message), []);
   assert.match(p.text(p.sd), /‹sum and difference›\(s, d\) → a, b = s = a \+ b and d = a − b/);
   assert.match(p.text(p.main), /‹half sum›, ‹half difference› = ‹sum and difference›\(5, 1\)/);
-  // Still the predicate it was: its type is over all four ports.
-  assert.equal(showType(p.info.typeOf.get(p.sd)!, p.names), "(Float64, Float64, Float64, Float64) -> Bool");
+  // The function of its direction (L128d2): its inputs to its results.
+  assert.equal(showType(p.info.typeOf.get(p.sd)!, p.names), "(Float64, Float64) -> (Float64, Float64)");
 });
 
 test("the use runs: one solution for both results, pure when the direction has one answer", () => {
@@ -47,6 +47,25 @@ test("the use runs: one solution for both results, pure when the direction has o
   const v = runMain(p.code, p.info, p.main, { print: (s) => out.push(s), names: p.names });
   assert.equal(v, "3 2");
   assert.equal(showType(p.info.typeOf.get(p.main)!, p.names), "() -> Text");
+});
+
+test("called as the function it is, it runs as its use: a tuple of its results, and passed on as a value too (L128d2)", () => {
+  const p = program(["a", "b"], false);
+  const k = p.k;
+  const part = (t: Id, i: number) => k.call(tuplePart(2, i), t);
+  const called = k.def("called");
+  k.define(called, k.thunk(() => k.let("r", k.call(p.sd, k.lit(5), k.lit(1)), (r) => k.text(k.call(SHOW_ANY, part(k.x(r), 0)), k.lit(" "), k.call(SHOW_ANY, part(k.x(r), 1))))));
+  const passed = k.def("passed");
+  k.define(passed, k.thunk(() => k.call(SHOW_ANY, k.call(k.fn(["g"], (g) => k.call(g, k.lit(5), k.lit(1))), k.x(p.sd)))));
+  const asValue = k.def("as a value");
+  k.define(asValue, k.thunk(() => k.let("f", k.x(p.sd), (f) => k.call(SHOW_ANY, k.call(f, k.lit(9), k.lit(1))))));
+  const code: Code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  assert.equal(showType(info.typeOf.get(called)!, names), "() -> Text");
+  assert.equal(runMain(code, info, called, { print: () => {}, names }), "3 2");
+  assert.equal(runMain(code, info, passed, { print: () => {}, names }), "(3, 2)");
+  assert.equal(runMain(code, info, asValue, { print: () => {}, names }), "(5, 4)");
 });
 
 test("results the other ports don't pin down are an error at the definition", () => {

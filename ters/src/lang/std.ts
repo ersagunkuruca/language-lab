@@ -243,25 +243,25 @@ export const TRIG = typedef("std.trig", "Trig", ["a"], [
 ], false, true);
 export const TRIG_V = "std.trig.trig";
 export const TRIG_OPS = Object.fromEntries(TRIG_NAMES.map((op) => [op, `${TRIG_V}.${op}`])) as Record<(typeof TRIG_NAMES)[number], Id>;
-// Trig's polar (POLAR.md, BACKLOG L97c): a field with results, the
-// predicate polar(length, angle, x, y) read as (length, angle) → x, y. A
-// use is a solve of it, `x, y = polar(r, t)`, resolved like any field to
-// what the type gives. Its type's nodes have ids of their own, so the ids
+// Trig's polar (POLAR.md, BACKLOG L97c): a field with results, typed as
+// the plain function (length, angle) → x, y (L128d3), its ports named in
+// that order. A use solves it, `x, y = polar(r, t)`, resolved like any
+// field to what the type gives. Its type's nodes have ids of their own, so the ids
 // after Trig don't move.
 export const TRIG_POLAR = `${TRIG_V}.polar`;
 {
   const port = (i: number) => node({ id: `${TRIG_POLAR}.t${i}`, kind: "tref", target: `${TRIG}.a`, args: [] });
-  const type = node({ id: `${TRIG_POLAR}.type`, kind: "tfun", params: [0, 1, 2, 3].map(port), result: node({ id: `${TRIG_POLAR}.t4`, kind: "tref", target: BOOL, args: [] }), effects: [] });
-  named(node({ id: TRIG_POLAR, kind: "field", type, results: [2, 3], ports: ["length", "angle", "x", "y"] }), "polar");
+  const type = node({ id: `${TRIG_POLAR}.type`, kind: "tfun", params: [0, 1].map(port), result: node({ id: `${TRIG_POLAR}.t4`, kind: "tref", target: tupleType(2), args: [2, 3].map(port) }), effects: [] });
+  named(node({ id: TRIG_POLAR, kind: "field", type, ports: ["length", "angle", "x", "y"] }), "polar");
   (nodes.find((n) => n.id === TRIG_V) as NodeOf<"variant">).fields.push(TRIG_POLAR);
 }
-// And its other direction, unpolar: the same four ports read as (x, y) →
-// length, angle (L97c2), atan2 and the length of a vector at once.
+// And its other direction, unpolar: the same four ports as the function
+// (x, y) → length, angle (L97c2), atan2 and the length of a vector at once.
 export const TRIG_UNPOLAR = `${TRIG_V}.unpolar`;
 {
   const port = (i: number) => node({ id: `${TRIG_UNPOLAR}.t${i}`, kind: "tref", target: `${TRIG}.a`, args: [] });
-  const type = node({ id: `${TRIG_UNPOLAR}.type`, kind: "tfun", params: [0, 1, 2, 3].map(port), result: node({ id: `${TRIG_UNPOLAR}.t4`, kind: "tref", target: BOOL, args: [] }), effects: [] });
-  named(node({ id: TRIG_UNPOLAR, kind: "field", type, results: [0, 1], ports: ["length", "angle", "x", "y"] }), "unpolar");
+  const type = node({ id: `${TRIG_UNPOLAR}.type`, kind: "tfun", params: [0, 1].map(port), result: node({ id: `${TRIG_UNPOLAR}.t4`, kind: "tref", target: tupleType(2), args: [2, 3].map(port) }), effects: [] });
+  named(node({ id: TRIG_UNPOLAR, kind: "field", type, ports: ["x", "y", "length", "angle"] }), "unpolar");
   (nodes.find((n) => n.id === TRIG_V) as NodeOf<"variant">).fields.push(TRIG_UNPOLAR);
 }
 // asin and acos (POLAR.md, L97c3): angles read off unpolar, (a) -[Choice]-> a:
@@ -1245,7 +1245,7 @@ export const PIPE = typedef(PIPE_ID, "Pipe", ["a", "e"], [
   ["sent", [["item", ([a]) => tref(a)], ["more", ([a, e], self) => tfun([], tref(self, tref(a), node({ id: `${PIPE_ID}.e.arg`, kind: "tref", target: e, args: [] })), [e])]]],
 ]);
 export const PIPE_OPS = { send: "std.send.send", receive: "std.receive.receive", finished: "std.pipe.finished", sent: "std.pipe.sent" } as const;
-export const tupleType = (n: number): Id => `std.tuple${n}`;
+export function tupleType(n: number): Id { return `std.tuple${n}`; }
 export const tupleVariant = (n: number): Id => `std.tuple${n}.tuple`;
 export const tuplePart = (n: number, i: number): Id => `std.tuple${n}.tuple.${PART_NAMES[i]}`;
 // Ids that were renamed, as a saved program may still use them: std's Pair

@@ -5,9 +5,9 @@
   "gjbfn9gkpsc3stdqb4vevhv2ni": "A point as seen from `centre`: the move that puts `centre` at the origin.",
   "gjberemg2tp7c1l7qviv5b4mrg": "A quarter turn about the origin, anticlockwise.",
   "qnvkqo06nhh5ftbjc41dvvnjhj": "A quarter turn about any point: the turn about the origin, done in the point's own frame (object space against world space).",
-  "h5fradvq8oqdt1t6d19hk06uvk": "Haar's split: each pair of samples as their average (the slow band) and half their difference (the fast band). Run backwards it joins them again.",
-  "bc3492eg05kckkm4ml9pet06ro": "Halve the fast band and keep the slow one: a treble cut that leaves the low end alone.",
+  "h5fradvq8oqdt1t6d19hk06uvk": "Haar's split (the simplest wavelet, splitting a sound into a slow and a fast band): each pair of samples as their average (the slow band) and half their difference (the fast band). Run backwards it joins them again.",
+  "bc3492eg05kckkm4ml9pet06ro": "Halve the fast band and keep the slow one: a treble cut (less high-pitched sound) that leaves the low end alone.",
   "pc02eo6vkt4vdvp1j6lhddt9c7": "The signal with its highs softened: split, soften, join. A pedal's multiband compressor is this with a crossover for the split and a compressor for the change.",
-  "bm3m8tetgroatk1rb6u1tk39p9": "Each edit done in another space and brought back, beside the same edit done in place.",
+  "bm3m8tetgroatk1rb6u1tk39p9": "Conjugation: to make a change, move into a space where the change is simple, make it there, and move back (f⁻¹ ∘ g ∘ f), as a Rubik's cube move does. Three edits done that way: brighter colours (in linear light, the light itself rather than the stored number), a quarter turn about any point, and softer highs in a sound. Each is shown beside the same edit done in place.",
   "program": "Ersagun's idea: go to another space, act, come back, as in a Rubik's cube commutator. Conjugation, f⁻¹ ∘ g ∘ f, is standard group theory.\nTextbook: the 2.2 power is the simple form of the sRGB transfer curve (IEC 61966-2-1); doubling light in linear light, not in stored values, is standard colour practice.\nPrior art: the band split is the Haar wavelet (Alfréd Haar, 1910); a multiband compressor splits with a crossover filter instead."
 }
