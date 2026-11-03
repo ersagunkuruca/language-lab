@@ -100,10 +100,10 @@ function randFns(r: Uint32Array): Record<string, (...xs: never[]) => unknown> {
     "rand.restore": (a: number, b: number, c: number, d: number) => { r.set([a, b, c, d]); return 0; },
   };
 }
-function rtFn(name: string, tables?: TableSpec[], rand?: Record<string, (...xs: never[]) => unknown>, cells?: Record<Id, (...xs: Value[]) => Value | undefined>, code?: Code): (...xs: unknown[]) => unknown {
+function rtFn(name: string, tables?: TableSpec[], rand?: Record<string, (...xs: never[]) => unknown>, cells?: Record<Id, (...xs: Value[]) => Value | undefined>, code?: Code, spend?: () => boolean): (...xs: unknown[]) => unknown {
   if (name.startsWith("host:")) return hostFn(name, cells);
-  if (name.startsWith("solve:")) return solveFn(name.slice(6), code);
-  if (name.startsWith("solveAll:")) return solveFn(name.slice(9), code, true);
+  if (name.startsWith("solve:")) return solveFn(name.slice(6), code, false, spend);
+  if (name.startsWith("solveAll:")) return solveFn(name.slice(9), code, true, spend);
   if (name.startsWith("pick:")) { const [, j, bool] = name.split(":"); return (xs) => { const v = (xs as Value[])[Number(j)]; return bool ? (v as unknown) === true || (v as { tag?: Id }).tag === TRUE : v; }; }
   const tm = TABLE.exec(name);
   if (tm && tables) return tableFn(tm[1], tables[Number(tm[2])]);
@@ -136,10 +136,12 @@ function hostFn(name: string, cells?: Record<Id, (...xs: Value[]) => Value | und
 }
 // A relation run some way with one answer (C137c11, scalar.ts solveUse):
 // the evaluator's solve on the program's code, its first answer's values.
-function solveFn(id: Id, code?: Code, all = false): (...xs: unknown[]) => unknown {
+// `spend`: one step of the printed program's budget, as the evaluator's
+// solve spends its innermost fuel; false ends the search there.
+function solveFn(id: Id, code?: Code, all = false, spend?: () => boolean): (...xs: unknown[]) => unknown {
   if (!code) return () => { throw new Unsupported(`solve ${id} without the program`); };
   const n = code.nodes[id] as Use, keys = Object.keys(n.given);
-  const answers = (xs: unknown[]) => solveAnswers(code, n, Object.fromEntries(keys.map((k, i) => [k, inn(xs[i])])));
+  const answers = (xs: unknown[]) => solveAnswers(code, n, Object.fromEntries(keys.map((k, i) => [k, inn(xs[i])])), { spend });
   // Every answer, a List of them (`solveAll`) made as it is read: a
   // periodic solution (an angle) has no end, and `one of` it stops at the
   // first that the rest of the search takes, as the evaluator's does.
@@ -195,6 +197,8 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
   const text = ir.funcs.map((f, i) => func(f, i));
   const js = [
     "let fuel = Infinity;",
+    // A backwards search spends the budget too (C137c12).
+    "R.spending(() => --fuel >= 0);",
     ...[...rts].map(([n, v]) => `const ${v} = R.rt(${JSON.stringify(n)});`),
     ...worlds.map((_, i) => `const w${i} = R.worlds[${i}];`),
     ...text,
@@ -378,7 +382,8 @@ function worldFn(op: string, rt: Runtime): (...xs: unknown[]) => unknown {
 // and the world's operations, a fresh generator.
 export function coreRuntime(tables: TableSpec[], worlds: string[], rt: Runtime, code?: Code) {
   const rand = randFns(new Uint32Array(4)), cells = cellFns(rt.cells ?? new Cells(equal));
-  return { ...RUNTIME, rt: (n: string) => rtFn(n, tables, rand, cells, code), worlds: worlds.map((op) => worldFn(op, rt)), abort: (reason: unknown, esc: number): never => { throw new Aborted(reason, esc); } };
+  let spend = () => true;
+  return { ...RUNTIME, spending: (f: () => boolean) => { spend = f; }, rt: (n: string) => rtFn(n, tables, rand, cells, code, () => spend()), worlds: worlds.map((op) => worldFn(op, rt)), abort: (reason: unknown, esc: number): never => { throw new Aborted(reason, esc); } };
 }
 
 // The functions, by their place in ir.funcs. `rt`: the console and files.

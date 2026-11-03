@@ -59,7 +59,6 @@ import { ARRAY, TABLE, HASH_SET, CELL, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, 
 import { ABORT, ABORT_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, HASH_SET_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, NOW_OP, ORDER_V, PAIR_V, RATIO, S, SET, SHOW_ANY, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
 import { liftLets } from "../../ters/src/lang/lift-lets.ts";
 import { solvesOnce } from "../../ters/src/lang/run.ts";
-import { planSolve } from "../../ters/src/lang/solve.ts";
 import { inlineLists } from "./inline-lets.ts";
 import { STOPS } from "./stops.ts";
 import { fieldIndex, fieldPath } from "../../ters/src/lang/records.ts";
@@ -779,6 +778,10 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           if (ct) bindVars(ct, zonk(id), types);
           return { k: "call", fn: func(n.target, types), args: [], tail };
         }
+        if (opts.host && (STD_IMPL[n.target] || STD_MANY[n.target])) {
+          const t = stype(zonk(id));
+          if (t && isFn(t)) return builtinValue(n.target, t);
+        }
         throw new Refused(`uses ${nm(n.target)} as a value (functions and data need a heap)`);
       }
       case "call": {
@@ -1107,12 +1110,10 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     // checker found the solve always answers), its first answer is the one,
     // as in the evaluator. Otherwise the solver's answers are `one of` a
     // list of them made as it is read (core-js.ts; a periodic angle has no
-    // end). The relational interpreter's aren't lowered yet: its search
-    // runs with the program's budget (fuel), which this doesn't give it.
+    // end, nor may a backwards search), which spends the program's budget.
     const once = solvesOnce(code, n) || (!f.partial && !searching.get(f));
-    if (!once && planSolve(code, n).mode === "relational") throw new Refused(`solves ${name} backwards with several answers, which isn't lowered yet`);
     const given = Object.values(n.given), binds = Object.values(n.binds);
-    for (const g of given) { const t = stype(zonk(g)); if (!t) throw new Refused(`solves ${name} given ${whyNot(zonk(g))}`); if (typeof t === "object" && boolInside(t)) throw new Refused(`solves ${name} given data holding a Bool, which isn't lowered yet`); }
+    for (const g of given) { const t = stype(zonk(g)); if (!t) throw new Refused(`solves ${name} given ${whyNot(zonk(g))}`); if (isFn(t)) throw new Refused(`solves ${name} given a function, which the solver looks inside (a closure printed here can't be yet)`); if (typeof t === "object" && boolInside(t)) throw new Refused(`solves ${name} given data holding a Bool, which isn't lowered yet`); }
     const ts = binds.map((b) => { const t = stype(zonk(b)); if (!t) throw new Refused(`solves ${name} for ${whyNot(zonk(b))}`); if (typeof t === "object" && boolInside(t)) throw new Refused(`solves ${name} for data holding a Bool, which isn't lowered yet`); return t; });
     const all = f.locals.push("host") - 1;
     let inner = new Map(env);
@@ -1380,6 +1381,24 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     return { k: "closure", t, fn: index.get(key)!, shape: shapeOfNamed.get(key)!, caps: [] };
   }
   const shapeOfNamed = new Map<string, number>();
+  // A builtin used as a value, for JavaScript from the core IR (C137c12):
+  // a closure that calls the evaluator's, as `host` calls it.
+  function builtinValue(target: Id, t: FType): SExpr {
+    const key = `&${target}|${t.key}`;
+    if (!index.has(key)) {
+      const sig = SIGS[target]?.(new Subst());
+      const bad = (sig?.t === "fn" ? info.subst.resolveRow(sig.eff).effs : []).find((e) => e !== CHOICE && e !== DIVERGE);
+      if (bad) throw new Refused(`uses ${nm(target)} as a value, which has ${nm(bad)} and isn't lowered yet`);
+      if ([...t.params, t.result].some((x) => typeof x === "object" && boolInside(x))) throw new Refused(`uses ${nm(target)} as a value on data holding a Bool, which isn't lowered yet`);
+      const shape = shapes.push({ t, caps: [] }) - 1;
+      const g: SFunc = { def: target, name: `${nm(target)}.value`, params: [t, ...t.params], result: t.result, locals: [t, ...t.params], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true, ...(t.partial ? { partial: true } : {}) };
+      index.set(key, funcs.push(g) - 1);
+      closureCode.add(index.get(key)!);
+      g.body = { k: "rt", fn: `host:${target}${t.result === "i32" ? ":bool" : ""}`, args: t.params.map((_, j): SExpr => ({ k: "local", i: j + 1 })), host: { t: t.result, partial: !!t.partial } };
+      shapeOfNamed.set(key, shape);
+    }
+    return { k: "closure", t, fn: index.get(key)!, shape: shapeOfNamed.get(key)!, caps: [] };
+  }
 
   // A fold's result binder used once, by the call that computes it.
   const inlined = new Map<Id, Extract<SExpr, { k: "call" }>>();
