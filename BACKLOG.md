@@ -144,7 +144,6 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| C147 | A use's given ports in port order in compiled code (SPEC §7.2b, L198): compile.ts `givenOf` (Object.values, or planSolve's known order), core-js.ts, scalar.ts and compiler/src/modes.ts evaluate them in `givenInOrder` (ters/src/lang/ports.ts), as the evaluator does since L198; a test with effects in given ports written out of order | SPEC S10 | P3 | S | |
 | C148 | `show any` through `Shown` in compiled code (L205a): runtime.js `$showAny` and scalar.ts's show call a type's Shown implementation when it has one, as the evaluator does; own-arithmetic.test.ts's version shown as 1.9 compiled too | L205 | P2 | S | |
 
 ### What a good language needs ([ASPECTS-2026-11-03b](docs/reports/reviews/ASPECTS-2026-11-03b.md))

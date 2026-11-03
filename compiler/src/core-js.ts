@@ -18,6 +18,7 @@
 // the evaluator's (C137c2), Random seeded is random.ts's generator, and
 // the world is the evaluator's Runtime (C137c3, runCoreMain).
 
+import { givenInOrder } from "../../ters/src/lang/ports.ts";
 import { ARRAY_OPS, CONS, FALSE, HASH_SET_OPS, NIL, NONE, S, SOME, STD_IMPL, STD_MANY, TABLE_OPS, TRUE } from "../../ters/src/lang/std.ts";
 import { META, cellOps, equal, solveAnswers, toList, type Runtime, type Value, type World } from "../../ters/src/lang/run.ts";
 import { Cells, NoValue } from "../../ters/src/lang/cells.ts";
@@ -144,7 +145,7 @@ function hostFn(name: string, cells?: Record<Id, (...xs: Value[]) => Value | und
 // solve spends its innermost fuel; false ends the search there.
 function solveFn(id: Id, code?: Code, all = false, spend?: () => boolean): (...xs: unknown[]) => unknown {
   if (!code) return () => { throw new Unsupported(`solve ${id} without the program`); };
-  const n = code.nodes[id] as Use, keys = Object.keys(n.given);
+  const n = code.nodes[id] as Use, keys = givenInOrder(code, n);
   const answers = (xs: unknown[]) => solveAnswers(code, n, Object.fromEntries(keys.map((k, i) => [k, inn(xs[i])])), { spend });
   // Every answer, a List of them (`solveAll`) made as it is read: a
   // periodic solution (an angle) has no end, and `one of` it stops at the
