@@ -13,3 +13,7 @@
 
 # lab test keeps results by hash here (TESTS-IN-THE-LANGUAGE.md §4)
 .lab/
+
+# Dependencies live in ters/node_modules. No trailing slash, so a
+# node_modules symlink (from a worktree setup) is ignored too.
+node_modules
