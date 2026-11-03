@@ -48,7 +48,9 @@ model, so each feature has been written twice in the compiler
   --core`, a page whose script is printed this way and drawn by
   compiler/src/core-page.ts (the evaluator's cells and mount, the
   browser's world); compass's draws and reacts to clicks as compile.ts's
-  page does. Not yet: a page with sound or a hosts/js.js.
+  page does. Not yet: a page with sound or a hosts/js.js. Step c10: the
+  clock (`now`) and a draw nothing seeded are the world's, as in the
+  evaluator, so dice lowers (4 pages).
 - (d) compile.ts retired piece by piece.
 
 ## What it holds
