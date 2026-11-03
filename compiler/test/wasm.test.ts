@@ -752,6 +752,8 @@ test("several answers in WebAssembly: choices in called functions, arguments and
     some: lists.flatMap((xs) => [0, 4, 9].map((n) => [xs, n])),
     checked: lists.map((xs) => [xs]),
     caught: lists.map((xs) => [xs]),
+    firstWithin: lists.flatMap((xs) => [0, 5, 13, 100].map((n) => [xs, n])),
+    noneWithin: lists.flatMap((xs) => [0, 3, 100].map((n) => [xs, n])),
   };
   let compared = 0;
   for (const [name, inputs] of Object.entries(cases)) {
@@ -762,7 +764,7 @@ test("several answers in WebAssembly: choices in called functions, arguments and
       compared++;
     }
   }
-  assert.equal(compared, 71);
+  assert.equal(compared, 106);
   // queens: a fold that chooses each row's column, under first, all and count.
   const q = load("queens");
   const lq = lowerScalar(q.code, q.info, q.pres.names, q.own.defs, { data: true });
