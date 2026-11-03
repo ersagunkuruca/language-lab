@@ -64,7 +64,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E229b | `lab run --allow network,files` (and `--allow fetch=host`): the command line answers only the world effects it's given, as the editor's Run does for a program opened from a file (E229); hosts.ts and world.ts refuse the rest with the reason | E229 | P3 | S | |
 | E230b | When an edit changes which way an implementation's field is worked out (ways.ts) and its cost order (cost.ts), say so next to the edit and name the use that caused it, as E230 does for representations | E230 | P3 | M | |
 | E231 | Keyboard-only and screen-reader use of the editor, done part by part with E228's split; the daily QA format gains both checks | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §10 | P3 | L | |
 
