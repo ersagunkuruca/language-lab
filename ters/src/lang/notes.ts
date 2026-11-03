@@ -164,7 +164,7 @@ export const NOTES: Comments = {
   "builtin.and": "Both true.",
   "builtin.or": "Either true.",
   "builtin.not": "true becomes false and false true.",
-  "builtin.compare": "How two values are ordered: before, same or after. Float64s by value, exactly (as equal compares them), with NaN after every other Float64; text alphabetically; cases in the order their type lists them; then field by field. sort, maps and sets use it.",
+  "builtin.compare": "How two values are ordered: before, same or after. Float64s by value, exactly (as equal compares them); text alphabetically; cases in the order their type lists them; then field by field. sort, maps and sets use it.",
   "builtin.showAny": "Any plain value as text, the way it would be written: show([1, 2]) is \"[1, 2]\". Every number type shows as its number: a fraction 1/3, a Fixed by show fixed's digits, an Extended as its number or +∞ and −∞.",
   "builtin.caseName": "The name of the case the value was made by, as text: case name(some(3)) is \"some\", case name([]) is \"nil\". A number or a text was made by no case and gives \"\".",
 

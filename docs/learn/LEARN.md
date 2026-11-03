@@ -9,7 +9,7 @@ on to the next.
 
 ## Never written a program?
 
-**[For a five-year-old](tutorial.html#part-1-for-a-five-year-old)**
+**[Part 1: machines and strings](tutorial.html#part-1-for-a-five-year-old)**
 
 Machines, strings and stickers. What this is, with no programming words at
 all. Two minutes.
@@ -33,18 +33,18 @@ step by step. Every section ends with one thing to try.
 
 **[The tutorial, part 3](tutorial.html#part-3-the-language)**
 
-One idea at a time: the program as a tree, holes, data and `match`, loops
-as folds, effects, running a function backwards, calculus. Each idea is
-shown in the editor.
+One idea at a time: the program as a tree, unfinished parts, data and its
+cases, walking data instead of looping, effects, running a function
+backwards, calculus. Each idea is shown in the editor.
 
-For every detail, there's [LANGUAGE.md](../language/LANGUAGE.md).
+For every detail, there's [the language reference](../language/LANGUAGE.md).
 
 ---
 
 ## A first look
 
-This is the dice program's `two dice`, live. Click any part to see what it
-is.
+This is a function from the two dice example program: it rolls two dice
+and adds them up. Click any part to see what it is.
 
 ?[two dice, read-only: click a part to see its type](index.html?embed&readonly&program=dice&def=two%20dice)
 

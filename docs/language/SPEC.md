@@ -297,6 +297,13 @@ other way. Given all its ports, `polar(r, t, x, y)`, it is the condition
 on them, true or false, as inside another relation. An interface's field with results is typed the same way:
 Trig's `polar` is `(length, angle) → x, y` (L128d).
 
+7.2b. **Order inside a use** (S10, L198). A use evaluates its given ports
+first, each to its value, and only then solves. They are evaluated in
+**port order**: the order its definition lists its parameters, then `out`
+(a field's or a builtin's ports by position), not the order a saved file
+happens to keep them in. Their effects happen in that order, as a call's
+inputs' do (§5.1).
+
 7.3. **Effects of a use.** The checker works out from the direction how
 many answers it can have:
 
@@ -310,8 +317,18 @@ many answers it can have:
 make the relation hold. Only fully known answers count: an answer that
 leaves a port free (a line or plane of solutions, `0 · x = 0`) is not an
 answer of a use. Its **first** answer is the **canonical** one (the
-positive square root, the principal angle). The order of the rest is
-*open* (S3).
+positive square root, the principal angle). The rest come in the
+**evaluator's search order** (S3, S5, L198): its search interleaves the
+relation's alternatives fairly (miniKanren's interleaving, `solveAnswers`
+in run.ts), so `all` of a use is a list in that order, the same on every
+engine. Every engine runs a use's search in that order, not only to the
+same answers: an effect handled inside the program (`Log`, `State`) that a
+path performs happens once per path the evaluator tries, in that order, and
+`first` stops after the paths its first answer needed. Today every engine
+runs a use through the same solver, which is how they agree; an engine with
+a search of its own must keep the order. The order is the reference
+implementation's rather than written out here, and may be stated as a rule
+later; a change to it is a change of meaning, made on this page.
 
 7.5. **What can't run backwards** is refused by the checker (printing,
 the world's operations, cells, solving for a function) or waits until
@@ -419,15 +436,15 @@ hasn't been chosen. None is answered here. Rows are in BACKLOG.md.
 |---|---|---|---|
 | S1 | **Float64 `equal` within 1e-9.** Decided 2026-11-03 (Ersagun): `equal` becomes exact, and the tolerance stays only inside the solver (§2.7). | done: exact on every engine, the tolerance only in the solver | L197 |
 | S2 | **An overflow nothing uses.** §3.3 lets engines differ on whether it stops. Is that freedom the meaning, or should every engine stop like the evaluator? Today the agreement tests only compare programs that don't overflow, which this page now says. | decided by FLOAT-VALUES; written here | none |
-| S3 | **The order of a use's answers after the first.** The backwards search is a fair interleaving (miniKanren), so the order depends on the search's internals. `first` is fixed (canonical), but `all` of a use lists answers in an order nothing specifies. Spec it as canonical order, or say `all` of a use is a set? | evaluator only; compiled code runs uses through the same solver | L198 |
+| S3 | **The order of a use's answers after the first.** Decided (L198, 2026-11-03): the evaluator's search order, on every engine (§7.4). | written; every engine runs the same solver | L198 |
 | S4 | **Fuel counts depend on the checker.** A step is a call into a definition the checker couldn't prove ends (§5.6). When the checker gets smarter, a definition stops counting, and the same `with fuel(n, …)` can go from no answer to an answer. Count every call, or keep it and say a checker change can change fuel answers? | evaluator and the core IR count the same way | L199 |
-| S5 | **When a stopped search had effects.** §5.2 performs an effect once per path. With `first`, paths after the first answer don't run. Does a conforming engine have to run paths in exactly the evaluator's order, or only give the same answers? (Printing inside a search is already a type error, so this matters only for handled effects like `Log` and `State`.) | evaluator's order; the fuzz test checks it | L198 |
+| S5 | **When a stopped search had effects.** Decided (L198): an engine runs the paths in the evaluator's order, so handled effects on a search's paths happen as the evaluator's do (§7.4). | written; the fuzz test checks it | L198 |
 | S6 | **Shaders.** Decided 2026-11-03 (Ersagun): a declared approximation with its own meaning, written in §10.3 | written | C141 |
 | S7 | **Text.** Normalisation where text enters, grapheme clusters, case mapping and locales. | code points only | L185 |
 | S8 | **The merged use's shape** (tuple or body). | pending | L179 |
 | S9 | **Strict positivity.** | kept | L107 |
-| S10 | **Evaluation order inside a use.** §5.1 is left to right for calls. A use solves its ports in the order the solver finds best. Are effects in a use's given ports evaluated left to right by port order, and before solving? | evaluated before solving; port order not written down | L198 |
-| S11 | **`compare` on Float64** is documented in LIBRARY.md as putting NaN after every other Float64, but NaN isn't a value (§3.2). A stale line. | doc only | L200 |
+| S10 | **Evaluation order inside a use.** Decided (L198): given ports first, in port order, then the solve (§7.2b). | the evaluator (L198); compiled code: C147 | L198 |
+| S11 | **`compare` on Float64** was documented in LIBRARY.md as putting NaN after every other Float64, but NaN isn't a value (§3.2). Fixed at its source, the note in ters/src/lang/notes.ts (L200). | fixed | L200 |
 | S12 | **Library functions' bits.** Decided 2026-11-03 (Ersagun): the platform's own, within a few ulp (§3.2); exact agreement across machines comes from a type that asks for it | C calls libm (C144); WASI carries fdlibm, having no maths of its own; the agreement tests build C with fdlibm to compare to the bit, and c.test.ts checks libm within 4 ulp | C144 |
 | S13 | **The hash misses meaning** (L178): an effect and a data type of one shape, a literal arm's value. §1.3 is the rule L178 implements. | bug | L178 |
 | S14 | **A direction's law** (§7.6): nothing checks that a definition marked as another's direction gives the same answers. | promised by the author | L201 |

@@ -15,6 +15,7 @@
 // (Console, Files) have one handler, the runtime's `World`; Log, Abort,
 // Random, Time and Wait, when nothing in the program handles them, go to it too.
 
+import { givenInOrder } from "./ports.ts";
 import { dependencies, subtree, type Code, type Id, type NodeOf, type Use, useTarget, isCall, type Call, isUse } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { impl } from "../prelude.ts";
@@ -799,7 +800,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       switch (n.kind) {
         case "lit": case "ref": case "lambda": return this.ret(this.atom(id, env)!);
         case "call": {
-          if (isUse(n)) return this.parts(Object.values(n.given), 0, [], env, n);
+          if (isUse(n)) return this.parts(givenInOrder(code, n).map((k) => n.given[k]), 0, [], env, n);
           const head = code.nodes[n.fn];
           const target = head.kind === "ref" ? head.target : null;
           // Each call into a possibly-divergent definition spends fuel, if a
@@ -906,7 +907,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     }
 
     solve(n: Use, vals: Value[], env: Env) {
-      const keys = Object.keys(n.given);
+      const keys = givenInOrder(code, n);
       const known = Object.fromEntries(keys.map((k, i) => [k, vals[i]]));
       const fuel = () => this.fuel;
       // Each step that might unfold forever spends the innermost fuel.
