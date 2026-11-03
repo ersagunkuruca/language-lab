@@ -49,7 +49,7 @@ import { pageDocument } from "../src/lang/page.ts";
 import { showType } from "../src/lang/types.ts";
 import { choose, jobProblem, represent, representationsIn, type Representation } from "../src/lang/represent.ts";
 import { withLibraryRepresentations } from "../src/lang/library-reps.ts";
-import { nodeWorld } from "../src/lang/world.ts";
+import { allowedOnly, nodeWorld } from "../src/lang/world.ts";
 import { compile } from "../../compiler/src/compile.ts";
 import { CFLAGS, emitC } from "../../compiler/src/c.ts";
 import { lowerScalar } from "../../compiler/src/scalar.ts";
@@ -84,6 +84,8 @@ usage:
 options:
   --main <name>    the entry point (default: main)
   --as-defined     ignore the program's representations and run the definitions as written
+  --allow <list>   lab run answers only these: network, files, fetch=host (the network for one host);
+                   without it a run reaches everything
 A program is a file saved by the editor, or a folder like examples/sort.`;
 
 interface Program { title: string; code: Code; own: Id[]; names: Names; info: Info; reps: Representation[]; options?: unknown }
@@ -236,6 +238,12 @@ const defined = argv.indexOf("--as-defined");
 if (defined >= 0) argv.splice(defined, 1);
 const at = argv.indexOf("--main");
 if (at >= 0) { mainName = argv[at + 1] ?? fail("--main needs a name"); argv.splice(at, 2); }
+// `--allow network,files,fetch=host`: answer only these world effects
+// (E229b). Without it the run reaches everything, as before.
+const allowAt = argv.indexOf("--allow");
+let allow: string[] | null = null;
+if (allowAt >= 0) { allow = (argv[allowAt + 1] ?? fail("--allow needs a list, such as network,files")).split(",").filter(Boolean); argv.splice(allowAt, 2); }
+const world = () => (allow ? allowedOnly(nodeWorld(), allow) : nodeWorld());
 const [command, path, ...rest] = argv;
 // An MCP server for an LLM to read, change and run programs (mcp/server.ts).
 if (command === "mcp") { (await import("../mcp/server.ts")).serve(path); await new Promise(() => {}); }
@@ -283,11 +291,11 @@ switch (command) {
       // Every text, part and attribute called once, and the handlers left
       // out: server-side rendering without a server.
       const cells = new Cells(equal);
-      const page = runMain(p.code, p.info, main, { print: (s) => console.error(s), names: p.names, cells, world: nodeWorld(), hosts });
+      const page = runMain(p.code, p.info, main, { print: (s) => console.error(s), names: p.names, cells, world: world(), hosts });
       process.stdout.write(pageDocument(p.title, htmlText(page, evaluatorCall)));
       break;
     }
-    process.exitCode = runProgram(p.code, p.info, main, rest, { print: (s) => console.log(s), names: p.names, world: nodeWorld(), hosts });
+    process.exitCode = runProgram(p.code, p.info, main, rest, { print: (s) => console.log(s), names: p.names, world: world(), hosts });
     break;
   }
   case "compile": {

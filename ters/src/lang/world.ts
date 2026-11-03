@@ -128,3 +128,21 @@ fetch(url).then(async (r) => {
   done("");
 }, (e) => done(String(e.cause?.message ?? e.message)));
 `;
+
+// A world that answers only what it's allowed (E229b, `lab run --allow`):
+// "network", "files", or "fetch=host" (the network, for that host only).
+// What isn't allowed fails with the reason, as an Abort the program can
+// handle where the answer can fail, and as an error where it can't.
+export function allowedOnly(world: World, allow: string[]): World {
+  const network = allow.includes("network"), files = allow.includes("files");
+  const hosts = allow.filter((a) => a.startsWith("fetch=")).map((a) => a.slice(6));
+  const refuse = (what: string) => () => { throw new Error(`${what} isn't allowed: lab run was given --allow ${allow.join(",") || "nothing"}`); };
+  const out: World = { ...world };
+  if (!files) for (const k of ["readFile", "writeFile", "appendFile", "fileExists", "listFolder"] as const) out[k] = refuse("Files") as never;
+  if (!network) {
+    const ok = (url: string) => { try { return hosts.includes(new URL(url).host); } catch { return false; } };
+    out.fetchText = (url) => (ok(url) ? world.fetchText(url) : refuse(`Network (${url})`)());
+    if (world.startFetch) out.startFetch = (url) => (ok(url) ? world.startFetch!(url) : refuse(`Network (${url})`)());
+  }
+  return out;
+}
