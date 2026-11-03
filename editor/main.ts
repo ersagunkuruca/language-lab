@@ -999,9 +999,11 @@ function firstCall(info: T.Info, def: Id): Value[] | undefined {
   if (!entry || entry === def || body?.kind !== "lambda") return undefined;
   // Not reached in the short run: once per version of the code, a longer
   // one, which gets past a move (Tumble's fall, fill, cascade: I29f).
-  // Only for a definition something calls: a new one isn't reached by any
-  // run (I136: the long run made + New definition a second slower).
-  return mainCalls(info, entry).get(body.id) ?? (calledDefs(doc.code).has(def) ? mainCalls(info, entry, true).get(body.id) : undefined);
+  // Only for a definition something names: a new one isn't reached by
+  // any run, short or long (I136: the long run made + New definition a
+  // second slower; I157: the short one, a new main's run, 0.35 s more).
+  if (!calledDefs(doc.code).has(def)) return undefined;
+  return mainCalls(info, entry).get(body.id) ?? mainCalls(info, entry, true).get(body.id);
 }
 const PASSED = "‹what main passes›";
 
