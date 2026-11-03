@@ -166,7 +166,7 @@ export const TARGETS: Record<Id, Target> = {
   [INT_OPS.bitAnd]: { js: "impl", scalar: INT },
   [INT_OPS.bitOr]: { js: "impl", scalar: INT },
   [INT_OPS.bitXor]: { js: "impl", scalar: INT },
-  [INT_OPS.shiftDown]: { js: "impl", scalar: no("Fixed on WASM and C is FIXED-POINT.md step 3, an i64 where the range is known") },
+  [INT_OPS.shiftDown]: { js: "impl", scalar: INT },
   [INT_OPS.less]: { js: test(([a, b]) => `(${a} < ${b})`), scalar: INT },
   [INT_OPS.quotient]: { js: "partial", scalar: INT },
   [INT_OPS.remainder]: { js: "partial", scalar: INT },

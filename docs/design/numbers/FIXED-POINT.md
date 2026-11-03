@@ -6,7 +6,9 @@ harder problem" (BACKLOG L89).
 
 **Status (2026-10-30).** Steps 1, 2 and 4 are built: `Fixed` with its
 arithmetic, exact `show`, CORDIC trig, and examples/lockstep, which is in
-the editor's example menu. Step 3, `i64` on WASM and C, is open.
+the editor's example menu. Fixed runs on WASM and C through Int since
+C150b (2026-11-03, Int's `shifted down` there). Step 3, an `i64` on WASM
+and C where the range is known, is open.
 
 ## Short answer
 
