@@ -89,9 +89,9 @@ test("lab compile --core writes a module that runs main as lab run does", () => 
   assert.equal(made[2], 0, String(made[1]));
   for (const args of [["a.txt"], ["-l", "a.txt", "nope"], []]) assert.deepEqual(run(["wc.mjs", ...args]), run([lab, "run", wc, ...args]), args.join(" "));
   // One that doesn't lower says why, and writes nothing.
-  const page = run([lab, "compile", join(examples, "dice"), "--core", "-o", "dice.mjs"]);
+  const page = run([lab, "compile", join(examples, "pig"), "--core", "-o", "pig.mjs"]);
   assert.notEqual(page[2], 0);
-  assert.match(String(page[1]), /isn't compiled through the core IR: it builds now/);
+  assert.match(String(page[1]), /isn't compiled through the core IR: it calls written into/);
 });
 
 // Pages through the core IR (C137c8): the cells are the evaluator's
@@ -110,8 +110,10 @@ test("the pages whose main lowers show the same HTML, before and after their han
     const coreCall = (f: Value, ...xs: Value[]): Value => { try { return (f as unknown as (...a: Value[]) => Value)(...xs); } catch (e) { if (e === FAIL) throw new NoAnswer(); throw e; } };
     const views = (handlers: number) => {
       const ev = new Cells(equal), co = new Cells(equal);
-      const a = evaluatorCall(makeRunner(p.code, p.info, { print: () => {}, names: p.pres.names, cells: ev }).value(main));
-      const b = loadCoreJs(l, { print: () => {}, cells: co })[fi]() as Value;
+      // The same clock and the same draws in both (dice's rolls).
+      const world = () => { let x = 0; return { now: () => 1000, random: () => (x = (x * 7 + 3) % 11) / 11 }; };
+      const a = evaluatorCall(makeRunner(p.code, p.info, { print: () => {}, names: p.pres.names, cells: ev, world: world() }).value(main));
+      const b = loadCoreJs(l, { print: () => {}, cells: co, world: world() })[fi]() as Value;
       const shown = [[htmlText(a, evaluatorCall), htmlText(b, coreCall)]];
       const ha = handlersOf(a, evaluatorCall), hb = handlersOf(b, coreCall);
       assert.equal(ha.length, hb.length, name);
@@ -127,7 +129,7 @@ test("the pages whose main lowers show the same HTML, before and after their han
     ran.push(name);
   }
   console.log(`pages ${ran.join(", ")}`);
-  assert.ok(ran.length >= 3, `pages ${ran.join(", ")}`);
+  assert.ok(ran.length >= 4, `pages ${ran.join(", ")}`);
 });
 
 // A page's handlers, in the order it lists them, each part's view called once.
@@ -161,7 +163,7 @@ test("lab build-web --core writes a page that draws and reacts as lab build-web'
   assert.ok(a.length >= 4, `${a.length} clickable`);
   for (let i = 0; i < a.length; i++) { a[i].fire("click"); b[i].fire("click"); assert.equal(got.html(), want.html(), `after click ${i}`); }
   // One that doesn't lower says why.
-  const r = spawnSync(process.execPath, [lab, "build-web", join(examples, "dice"), "--core", "-o", join(dir, "dice.html")], { encoding: "utf8" });
+  const r = spawnSync(process.execPath, [lab, "build-web", join(examples, "pig"), "--core", "-o", join(dir, "pig.html")], { encoding: "utf8" });
   assert.equal(r.status, 2);
-  assert.match(r.stderr, /isn't compiled through the core IR: it builds now/);
+  assert.match(r.stderr, /isn't compiled through the core IR: it calls written into/);
 });

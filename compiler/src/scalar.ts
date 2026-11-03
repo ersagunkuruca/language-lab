@@ -56,7 +56,7 @@ import { dependencies, subtree, isCall, type Call, isUse } from "../../ters/src/
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { ARRAY, TABLE, HASH_SET, CELL, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, PATH as PATH_T, STRING, Subst, type Row, type Type } from "../../ters/src/lang/types.ts";
-import { ABORT, ABORT_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, HASH_SET_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, ORDER_V, PAIR_V, RATIO, S, SET, SHOW_ANY, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
+import { ABORT, ABORT_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, HASH_SET_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, NOW_OP, ORDER_V, PAIR_V, RATIO, S, SET, SHOW_ANY, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
 import { liftLets } from "../../ters/src/lang/lift-lets.ts";
 import { inlineLists } from "./inline-lets.ts";
 import { STOPS } from "./stops.ts";
@@ -927,11 +927,17 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(id))}`);
           return { k: "world", ...WORLD_OPS[target], args: args(), t };
         }
+        // The clock, for JavaScript from the core IR (C137c10): the world's,
+        // as the evaluator answers a `now` nothing handles.
+        if (opts.host && target === NOW_OP) return { k: "world", op: "now", aborts: false, args: [], t: "f64" };
         if (opts.data && target === CELL_OPS.changed) return changed(n, id, env, f);
         if (target === SET && n.args.length === 3) return setField(n, id, env, f);
         if (opts.data && target === RANDOM_OP) {
           const next: SExpr = { k: "rt", fn: "rand.next", args: [] };
           if (!worldRandom) return next;
+          // For JavaScript from the core IR (C137c10), a draw nothing seeded
+          // is the world's, as the evaluator's is (rt.world.random).
+          if (opts.host) return { k: "if", cond: { k: "rt", fn: "rand.unset", args: [] }, then: { k: "world", op: "random", aborts: false, args: [], t: "f64" }, else: next, t: "f64" };
           // Nobody may have seeded it (C136): the world seeds the
           // generator at its first draw, so draws under a seeded still
           // give the seeded numbers and an outer one goes on after.

@@ -33,7 +33,7 @@ import { CHOICE, DIVERGE, NUMBER, STRING, WORLD, showIn, type Type } from "../te
 import { implementationKey } from "../ters/src/lang/infer.ts";
 import { renderBlocks } from "../ters/src/lang/render.ts";
 import { definedAs, fromList, META, needsHandling, OutOfSteps, showValue, toList, withSteps, type Data, type Value, type World } from "../ters/src/lang/run.ts";
-import type { CompileAsk, CompileSays, RunAsk, RunSays, Stuck } from "./runWorker.ts";
+import type { CompileAsk, CompileSays, Compiled, RunAsk, Profile, RunSays, Stuck } from "./runWorker.ts";
 import { searchBackwards, type BackAsk, type Found } from "./backSearch.ts";
 import { hostSkeleton } from "../ters/src/lang/hosts.ts";
 import { trace, type Trace } from "../ters/src/lang/trace.ts";
@@ -153,7 +153,7 @@ interface UI {
   newKind: "function" | "value" | "type" | "effect" | "interface";
   query: string;
   refused: boolean;
-  output: { def: Id; lines: string[]; error?: string; running?: boolean; stuck?: Stuck } | null;
+  output: { def: Id; lines: string[]; error?: string; running?: boolean; stuck?: Stuck; profile?: Profile; compiled?: boolean } | null;
   // The graph's right-click menu: what it was for, where (screen, world).
   // `blocks`: opened from the Blocks pane, so the graph's layout items
   // (tidy, pick, fit) aren't offered.
@@ -405,6 +405,31 @@ let wrapping: { hole: Id; kept: Code; info: T.Info; graph: boolean } | null = nu
 const openWith = new WeakMap<Doc, Id>();
 // The one open before an edit's own step changed it (applyT's `then`).
 let openBefore: Id | null = null;
+// How the program's types are stored when main runs, once per version of
+// the code (E230): an edit that changes one says so in its note.
+const storedCache = new WeakMap<Code, Map<Id, { rep: string; jobs: string[] }>>();
+// `checked`: only from a check already made (before an edit, typesOf would
+// let go of a type held for the hole the edit is about to make).
+function storedNow(checked = false): Map<Id, { rep: string; jobs: string[] }> {
+  let s = storedCache.get(doc.code);
+  if (!s) {
+    const info = checked ? typedInfo.get(doc.code)?.info : typesOf();
+    if (!info && checked) return new Map();
+    try { s = info ? T.storedAll(doc.code, info, pres().names, ownDefs(), defNamed("main") ?? null) : new Map(); } catch { s = new Map(); }
+    storedCache.set(doc.code, s);
+  }
+  return s;
+}
+// "Stack is now stored as …" for each type whose choice the edit changed.
+function storageChanges(before: Map<Id, { rep: string; jobs: string[] }>): string {
+  const after = storedNow(), names = pres().names;
+  const said: string[] = [];
+  for (const [type, a] of after) {
+    const b = before.get(type);
+    if (b && b.rep !== a.rep) said.push(`${names[type] ?? "A type"} is now stored as ${a.rep}, not ${b.rep}: main's jobs on it are now ${a.jobs.map((j) => names[j] ?? j).join(", ")}.`);
+  }
+  return said.join(" ");
+}
 function commit(next: Partial<Doc>, touched: string[], note: string) {
   ui.menu = null;
   if (READONLY && (next.code || next.names)) {
@@ -418,9 +443,13 @@ function commit(next: Partial<Doc>, touched: string[], note: string) {
   if (!filled) { openWith.set(doc, openBefore ?? ui.def); undo.push(doc); keepUndo(); }
   openBefore = null;
   redo.length = 0;
+  // A program with a choice of how a type is stored (two representations
+  // or more) is told when an edit changes the choice.
+  const stored = next.code && next.code !== doc.code ? storedNow(true) : null;
   doc = { ...doc, ...next, edited: true };
   ui.touched = touched;
   ui.note = note;
+  if (stored?.size) { const changed = storageChanges(stored); if (changed) ui.note = `${note} ${changed}`; }
   ui.mode = null;
   ui.query = "";
   ui.refused = false;
@@ -3540,6 +3569,8 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
       box.append(h("pre", { class: "text out" }, ui.output.lines.join("\n") || (going ? "Running…" : "(no output)")));
       if (ui.output.error) box.append(h("p", { class: "status-line bad" }, ui.output.error));
       if (ui.output.stuck) box.append(stuckView(ui.output.stuck));
+      if (ui.output.profile) box.append(profileView(namer, ui.output.profile));
+      if (ui.output.compiled) box.append(h("p", { class: "hint", title: "main compiled to JavaScript, as Open in a tab and lab compile do: the same output, much faster than the evaluator, but with no record of where the run went" }, "Ran compiled."));
     }
   } else if (z?.t === "fn" && z.eff.effs.some((e) => WORLD.includes(e))) {
     // Run backwards is a search, and a search would touch the world once
@@ -3937,6 +3968,21 @@ function stuckView(st: Stuck): HTMLElement {
     h("pre", { class: "text out stuck-at", title: st.said }, from > start ? "…" : "", before,
       h("mark", { class: "stuck-mark", title: "Where the reading stopped" }, here && here !== "\n" ? here : "⏎"), after, to < end ? "…" : ""));
 }
+// Where the finished run spent its time (E233): the program's own
+// definitions, most time first, each a link to open it. The time is
+// sampled (runWorker.ts), so small shares are rough; calls are exact.
+function profileView(namer: Namer, profile: Profile): HTMLElement {
+  const total = profile.reduce((t, p) => t + p.ms, 0);
+  const rows = profile.filter((p) => doc.code.nodes[p.def]).slice(0, 8);
+  const share = (ms: number) => (total ? `${Math.round((100 * ms) / total)}%` : "");
+  return h("details", { class: "profile" },
+    h("summary", {}, `Where the run went: ${rows.length} of ${profile.length} definition${profile.length === 1 ? "" : "s"}`),
+    h("table", { class: "profile-t" },
+      h("tr", {}, h("th", {}, "definition"), h("th", {}, "calls"), h("th", { title: "About how much of the run's time was spent in it, itself (not in what it calls), sampled" }, "time")),
+      ...rows.map((p) => h("tr", {}, h("td", {}, pick(p.def, namer.name(p.def))), h("td", {}, p.calls.toLocaleString("en")), h("td", {}, total ? `${share(p.ms)} · ${p.ms} ms` : "")))));
+}
+// main as compiled by its last run, and the code it was compiled from.
+let compiledFor: { code: Code; def: Id; args?: string[]; compiled: Compiled } | null = null;
 function runTyped() {
   stopRun();
   const def = ui.def, title = titleOf(doc), prefix = `lab:${title}:`;
@@ -3947,7 +3993,8 @@ function runTyped() {
   const given = runGiven();
   if (given) for (const [name, text] of Object.entries(given.files)) if (!files.some(([k]) => k === prefix + name)) files.push([prefix + name, text]);
   const w = (running = newWorker());
-  const ask: RunAsk = { code: prog(), names: pres().names, pins: heldPins?.all ?? doc.signatures ?? NO_PINS, def, title, files, args: given?.args };
+  const code = prog(), same = compiledFor && compiledFor.code === code && compiledFor.def === def && JSON.stringify(compiledFor.args) === JSON.stringify(given?.args);
+  const ask: RunAsk = { code, names: pres().names, pins: heldPins?.all ?? doc.signatures ?? NO_PINS, def, title, files, args: given?.args, ...(same ? { compiled: compiledFor!.compiled } : {}) };
   ui.output = { def, lines: [], running: true };
   w.onmessage = (e: MessageEvent<RunSays>) => {
     if (running !== w || !ui.output) return;
@@ -3955,7 +4002,9 @@ function runTyped() {
     if ("lines" in m) { ui.output = { ...ui.output, lines: [...ui.output.lines, ...m.lines] }; render(); return; }
     try { for (const [k, v] of m.files) localStorage.setItem(k, v); } catch { /* no storage */ }
     const lines = "done" in m && m.shown !== "unit" ? [...ui.output.lines, `→ ${m.shown}`] : ui.output.lines;
-    ui.output = { def, lines, error: "error" in m ? m.error : undefined, running: false, ...(m.stuck ? { stuck: m.stuck } : {}) };
+    ui.output = { def, lines, error: "error" in m ? m.error : undefined, running: false, ...(m.stuck ? { stuck: m.stuck } : {}), ...("profile" in m && m.profile?.length ? { profile: m.profile } : {}), ...(m.compiled ? { compiled: true } : {}) };
+    // The compiled main is kept for the next run of this same code (E238).
+    compiledFor = m.compiled ? { code: ask.code, def, args: ask.args, compiled: m.compiled } : null;
     running = null;
     w.terminate();
     render();

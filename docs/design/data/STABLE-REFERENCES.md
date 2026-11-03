@@ -162,6 +162,14 @@ Reactive or plain is the handler's choice. Under a plain `State` handler a
 write is a store; under `Cells` it wakes readers. A program with no formula,
 watcher or page can have its tracking removed altogether.
 
+**Built (L99e): cells kept plainly**, in the evaluator. When what a run's
+main reaches has no `formula`, `each` or `each of` (and the run isn't a
+page's, which brings its own handler), run.ts gives it `new Cells(equal,
+true)`: a read is a load and a write a store. Nothing is compared, copied
+out of views or diffed, so writing a list of n items costs 1 instead of n.
+A choice undone still undoes the write. Compiled JS still keeps its cells
+tracked; picking the plain handler there is the next step.
+
 **Built (L99a): `each` driven by the edits**, in the evaluator and compiled
 JS. Every edit tells the handler what it was (an insert at i, a remove at
 i, a move, or a write at a place). `each` keeps the edits made to its list

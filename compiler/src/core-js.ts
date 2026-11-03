@@ -22,6 +22,7 @@ import { ARRAY_OPS, FALSE, HASH_SET_OPS, NONE, S, SOME, STD_IMPL, STD_MANY, TABL
 import { cellOps, equal, toList, type Runtime, type Value, type World } from "../../ters/src/lang/run.ts";
 import { Cells, NoValue } from "../../ters/src/lang/cells.ts";
 import { NoAnswer } from "../../ters/src/lang/html.ts";
+import { worldRandom } from "../../ters/src/lang/random.ts";
 import * as I from "../../ters/src/lang/int.ts";
 import * as T from "../../ters/src/lang/text.ts";
 import type { Id } from "../../ters/src/model.ts";
@@ -331,6 +332,8 @@ function worldFn(op: string, rt: Runtime): (...xs: unknown[]) => unknown {
   const tried = <T>(f: () => T): T => { try { return f(); } catch (e) { if (e instanceof Aborted) throw e; throw new Aborted((e as Error).message, 0); } };
   switch (op) {
     case "randomSeed": return () => Math.floor(Math.random() * 4294967296);
+    case "now": return () => (rt.world?.now ?? Date.now)();
+    case "random": return () => (rt.world?.random ?? worldRandom)();
     case "print": return (s) => { rt.print(s as string); return []; };
     case "printError": return (s) => { w("error")(s as string); return []; };
     case "readInput": return () => tried(() => w("input")());
