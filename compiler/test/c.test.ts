@@ -16,7 +16,7 @@ import { nodeWorld } from "../../ters/src/lang/world.ts";
 import { book } from "../gaps/ledger.ts";
 import { norm } from "../../ters/src/lang/int.ts";
 import { TRUE } from "../../ters/src/lang/std.ts";
-import { isRecord, lowerScalar, type DType, type LType, type Lowered, type RType } from "../src/scalar.ts";
+import { isRecord, lowerScalar, type DType, type LType, type CoreIR, type RType } from "../src/scalar.ts";
 import { CFLAGS, emitC } from "../src/c.ts";
 import { load } from "../src/program.ts";
 import { area, choices, numberTexts, fuzzFinds, fuzzFindInputs, caseNameInputs, caseNames, changeInputs, changes, escapes, randomInputs, randoms, fractionInputs, fractions, maths, ordered, orderedInputs, roses, sameLists, showInputs, shows, stopsWith, worldly } from "../src/fixtures.ts";

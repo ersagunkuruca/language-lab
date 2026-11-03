@@ -1,3 +1,9 @@
+// The core IR (docs/design/targets/CORE-IR.md, C137b): what WebAssembly,
+// C, WGSL and js-scalar.ts print, and what compiled JavaScript is to be
+// printed from too. It began as the scalar profile, below, and has grown
+// data, closures, searches, handlers, the world, Int, Text, arrays and
+// tables; CORE-IR.md has its contract.
+//
 // The scalar profile: the part of the language that needs no heap.
 //
 // A definition is in it when its inputs and result are Float64 or Bool, and
@@ -130,12 +136,12 @@ type At = Map<number, Type | Row>;
 export type WType = "int" | "text";
 // std's Array (`data`, C66): a view, a start and a length, on a buffer
 // with free room at both ends, as compiled JS keeps it (runtime.js, C30d1).
-// `index`: its place in Lowered.arrays, which the runtime's array
+// `index`: its place in CoreIR.arrays, which the runtime's array
 // functions are named by (`array.push.a0`); `list`: List of its items,
 // when a job takes or gives one.
 export interface AType { key: string; name: string; item: LType; index: number; list: DType | null }
 // std's Table (C63h): Map as a hash table, in C only, for Int and Text
-// keys (c.ts `tableC`). `index`: its place in Lowered.tables, which its
+// keys (c.ts `tableC`). `index`: its place in CoreIR.tables, which its
 // runtime functions are named by (`table.put.t0`); `entries`: each List
 // of (key, value) pairs `table entries` gives (`table.entries.t0.e1`): a
 // key nothing fixes is held as an Int, its pairs' may be another type.
@@ -291,7 +297,7 @@ export type SExpr =
   // handler of Abort, which gets the reason in local `reason` and gives
   // arm's value instead (a match on Abort). With `esc`, another operation
   // that never returns (C34): status 2 + esc, `reason` the operation as a
-  // value of its effect's type (Lowered.escapes[esc - 1]), and the
+  // value of its effect's type (CoreIR.escapes[esc - 1]), and the
   // handler with that `esc` takes it.
   | { k: "abort"; reason: SExpr; esc?: number }
   // An operation on the world (WORLD_OPS), with its result's type.
@@ -345,7 +351,7 @@ export interface SFunc { def: Id; name: string; params: LType[]; result: LType; 
 // computed a number Float32 can't hold, so a Float32 run differs from it.
 // `shader`: lowered with `shader` and not `data` (C66c): Int is int32, and
 // no answer is the flag, not a status (wasm.ts takes both).
-export interface Lowered { funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; arrays: AType[]; tables: TType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info; escapes: DType[]; rounded: Set<Id>; shader?: true }
+export interface CoreIR { funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; arrays: AType[]; tables: TType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info; escapes: DType[]; rounded: Set<Id>; shader?: true }
 
 class Refused extends Error {}
 
@@ -376,7 +382,7 @@ export function reachedFrom(code: Code, roots: Id[]): Code {
 // 0 and the like set it, the code goes on with zeros, and the `first`
 // looks at it when its search ends. Shaders have no side effects, so going
 // on computes nothing anyone sees.
-export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean } = {}): Lowered {
+export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean } = {}): CoreIR {
   // The generic + resolved to each type's own operation first
   // (ters/src/lang/arith.ts): nothing here sees a generic one.
   ({ code, info, names } = resolveArithmetic(code, info, names));

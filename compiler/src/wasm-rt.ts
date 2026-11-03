@@ -39,10 +39,10 @@ export interface RtFn {
   // The list type `list` stands for, by key (List Text when not given).
   list?: string;
   // An array function's copy (C66): the Array type it is for, by its
-  // place in Lowered.arrays (`array.push.a0`); `list` is then List of its items.
+  // place in CoreIR.arrays (`array.push.a0`); `list` is then List of its items.
   array?: number;
   // A table function's copy (C63j, wasm-table.ts): the table type, by its
-  // place in Lowered.tables, and the types its body names besides.
+  // place in CoreIR.tables, and the types its body names besides.
   table?: number;
   types?: Record<string, unknown>;
   // A builtin with no answer or one (Choice): it gives its answer and a

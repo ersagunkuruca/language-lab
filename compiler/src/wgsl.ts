@@ -55,7 +55,7 @@
 // The text follows the WGSL spec, https://www.w3.org/TR/WGSL/.
 
 import type { Id } from "../../ters/src/model.ts";
-import { isArray, isRecord, noData, unchecked, type LType, type Lowered, type Op, type RType, type SExpr, type SFunc, type DType, type FType, type WType, type AType, type TType } from "./scalar.ts";
+import { isArray, isRecord, noData, unchecked, type LType, type CoreIR, type Op, type RType, type SExpr, type SFunc, type DType, type FType, type WType, type AType, type TType } from "./scalar.ts";
 
 // A shader has no data with several cases (`data` in scalar.ts is for WebAssembly).
 type GType = Exclude<LType, DType | FType | WType | AType | TType>;
@@ -197,7 +197,7 @@ function unrounded(e: SExpr): SExpr {
   }
 }
 
-export function emitWgsl(lowered: Lowered): Shader {
+export function emitWgsl(lowered: CoreIR): Shader {
   if (lowered.data.length || lowered.fns.length) throw new Error("a shader can't have data types with several cases: lower without `data`");
   // No finiteness checks (L125c2): a GPU can't stop, and WGSL may assume
   // there's nothing but finite floats, which is Float64's meaning.
