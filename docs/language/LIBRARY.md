@@ -381,6 +381,17 @@ A tensor is a shape, its axis lengths, and its items with the last axis changing
 - **transposed by** : `(Tensor a, List Int) -[Abort]-> Tensor a where a is a Number`. The tensor with its axes reordered: axis order[k] becomes axis k. transposed by(m, [1, 0]) is a matrix's transpose.
 - **traced** : `(Tensor a, Int, Int) -[Abort]-> Tensor a where a is a Number`. The sum over the diagonal of two axes of the same length: traced(m, 0, 1) is a square matrix's trace.
 
+## Bytes
+
+Bytes are a sequence of whole numbers from 0 to 255, for binary formats, files, hashes and the network. They mean their list of Ints, checked when made. utf8 of and text of utf8 turn text into its UTF-8 bytes and back.
+
+- **Bytes** (type). A byte sequence: whole numbers from 0 to 255, made by bytes of (which checks each) or utf8 of. It means its list of Ints, read with byte items.
+- **bytes of** : `(List Int) -[Abort]-> Bytes`. The bytes with these items, each a whole number from 0 to 255: bytes of([104, 105]) is the bytes of "hi". Stops when an item isn't a byte.
+- **byte items** : `(Bytes) -> List Int`. The bytes as their list of Ints, each 0 to 255.
+- **byte count** : `(Bytes) -> Int`. How many bytes there are.
+- **utf8 of** : `(Text) -> Bytes`. The text's UTF-8 bytes (RFC 3629): each character's code point in one to four bytes. utf8 of("é") is [195, 169].
+- **text of utf8** : `(Bytes) -[Abort]-> Text`. The text UTF-8 bytes spell, the other way from utf8 of. Stops on bytes that aren't UTF-8: a following byte where a character starts, or the bytes ending inside a character.
+
 ## Representations
 
 A type can be stored as another type, written as one definition (REPRESENTATIONS.md): what a stored value means, which definitions do the type's jobs, and what each costs. The compiler picks the cheapest for the jobs a program uses; nothing changes where the values are used.
