@@ -347,6 +347,17 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     return (code.nodes[td.variants[0]] as NodeOf<"variant">).fields.map((f) => typeExpr((code.nodes[f] as NodeOf<"field">).type, params));
   };
 
+  // A type's + − · or < waits for the end of the check (L204a) when the
+  // type is this code's own, or is the library's and has one there: the
+  // layer under knows every implementation it has. Else a use is told now.
+  const lowerHas = new Set<string>();
+  for (const k of layer?.implementations?.keys() ?? []) {
+    const bar = k.indexOf("|"), iface = k.slice(0, bar), rest = k.slice(bar + 1);
+    const con = rest.startsWith("@") ? rest.slice(1) : (JSON.parse(rest) as Type).t === "con" ? (JSON.parse(rest) as { id: Id }).id : null;
+    if (con) lowerHas.add(`${iface} ${con}`);
+  }
+  s.waits = (id, iface) => (layer && (id.startsWith("std.") || id.startsWith("type.")) ? lowerHas.has(`${iface} ${id}`) : !!typedefOf(id));
+
   // --- strict positivity
   // A data type may not take itself as an input in its own fields, directly
   // or through another type. With `knot = wrap(f: knot → Float64)`,
