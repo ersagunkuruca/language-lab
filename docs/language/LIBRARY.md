@@ -207,6 +207,7 @@ Text is a string of characters (Unicode code points). Positions count from 0. Te
 
 A list is written [1, 2, 3]. There are no loops: map, keep and for each go through a list, and fold (a construct, not a function) walks any data.
 
+- **list of** : `(a) -> List a`. A list written out: list of(1, 2, 3) is [1, 2, 3], one input per item, in order.
 - **List** (type). A list: nil (empty), or cons(head, tail), an item in front of a list. [1, 2, 3] is how one is written.
 - **Unit** (type). The type with one value, unit: what an action that only does something gives back.
 - **Tuple2** (type). 2 values side by side, shown (A, B): the inputs or the results of a function as one value. A function of 2 inputs given one tuple takes it apart, so f(p) is f(x, y) when p is a tuple of them.

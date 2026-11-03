@@ -22,7 +22,7 @@ import { planSolve, runsBackwards, solvesInWholeNumbers } from "./solve.ts";
 import { computedForward, directionProblem, useDirections } from "./directions.ts";
 import { analyzer, derivedFrom, determinism, oneAnswer, solveMode, type Fn } from "./modes.ts";
 import { smoothDerivative as hasSmoothDerivative, smoothGradient as hasSmoothGradient, recordVariant, forgetDerived } from "./derive.ts";
-import { BOOL, CELL_OPS, DIVISION, FIELDS, JOBS, S, SET, SIGS, SMART, TRUE, TUPLE_MAX, tupleType } from "./std.ts";
+import { BOOL, CELL_OPS, LIST, DIVISION, FIELDS, JOBS, S, SET, SIGS, SMART, TRUE, TUPLE_MAX, tupleType } from "./std.ts";
 import { countedCalls } from "./counting.ts";
 import { ratioParts } from "./int.ts";
 import { fieldPath, fieldPaths, placePath, readPaths } from "./records.ts";
@@ -731,7 +731,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         }
         const early = gradient ? n.args.map((a) => expr(a, env, row)) : null;
         const subsBefore = s.subs.length;
-        const f0 = smoothDerivative(n) ?? (early && smoothGradient(n, early[0])) ?? expr(n.fn, env, row);
+        const f0 = smoothDerivative(n) ?? (early && smoothGradient(n, early[0])) ?? listOfType(n) ?? expr(n.fn, env, row);
         // A definition with results given all its ports is the condition
         // on them (L128d2), as inside another relation: polar(r, t, x, y).
         const fnNode = code.nodes[n.fn], cd = fnNode?.kind === "ref" ? code.nodes[fnNode.target] : undefined;
@@ -948,6 +948,16 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // written right there: its result fails only where f does, so it has f's
   // effects and no Choice (src/lang/derive.ts, smoothDerivative). Any other
   // derivative(f) takes the builtin's own type, Choice included.
+  // A written list (L181): `list of` with n inputs takes n items of one type.
+  function listOfType(n: Call): Type | null {
+    const f = code.nodes[n.fn];
+    if (f?.kind !== "ref" || f.target !== S.listOf) return null;
+    const a = s.fresh();
+    const t: Type = { t: "fn", params: n.args.map(() => a), ret: { t: "con", id: LIST, args: [a] }, eff: s.freshRow() };
+    info.typeOf.set(n.fn, t);
+    return t;
+  }
+
   function smoothDerivative(n: Call): Type | null {
     const head = code.nodes[n.fn];
     if (head?.kind !== "ref" || head.target !== S.derivative || n.args.length !== 1 || !hasSmoothDerivative(code, n.args[0])) return null;
