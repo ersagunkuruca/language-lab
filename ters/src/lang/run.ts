@@ -88,6 +88,32 @@ export function cellOps(cells: Cells, call: (f: Value, ...xs: Value[]) => Value)
   };
 }
 
+// Whether a solve has exactly one answer (oneAnswer, MODES.md), or results
+// each computed from the inputs (directions.ts): its first is the answer.
+export const solvesOnce = (code: Code, n: Use): boolean => (planSolve(code, n).mode === "relational" ? oneAnswer(code, n) : computedForward(code, n));
+// A solve's answers (a relation run some way, L41): each the values of
+// its binds, in order. A relation run backwards is the relational
+// interpreter's (relate.ts); one the solver plans, its equations' (solve.ts).
+// The evaluator's, and JavaScript printed from the core IR's (core-js.ts).
+export function* solveAnswers(code: Code, n: Use, known: Record<string, unknown>, opts: { spend?: () => boolean; names?: Names; stuck?: (r: Reading) => void; info?: Info } = {}): Generator<Value[]> {
+  const p = planSolve(code, n);
+  if (p.mode === "relational") {
+    for (const sol of relate(code, useTarget(code.nodes, n), known, opts)) {
+      const bound = Object.keys(n.binds).map((k) => toValue(sol.values[k]));
+      if (bound.some((v) => v === undefined)) continue; // not pinned down: not an answer
+      yield bound as Value[];
+    }
+    return;
+  }
+  // A predicate's out = true isn't one of the solver's ports.
+  const values = Object.fromEntries(p.known.map((k) => [k, known[k] as number]));
+  for (const sol of solutions(p.rel!, values)) {
+    // A port the equations leave free has no value: not a solution.
+    if (Object.keys(n.binds).some((k) => sol[k] === null || sol[k] === undefined)) continue;
+    yield Object.keys(n.binds).map((k) => sol[k]!);
+  }
+}
+
 // Two numbers near enough that the solver takes one for the other when it
 // checks an answer it found (relate.ts unify): floats only approximate
 // reals, and √2 squared is 2.0000000000000004. `equal` is exact
@@ -882,32 +908,14 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     solve(n: Use, vals: Value[], env: Env) {
       const keys = Object.keys(n.given);
       const known = Object.fromEntries(keys.map((k, i) => [k, vals[i]]));
-      const p = planSolve(code, n);
       const fuel = () => this.fuel;
-      const bodies = function* (): Generator<Value[]> {
-        if (p.mode === "relational") {
-          // Each step that might unfold forever spends the innermost fuel.
-          const spend = () => { const f = fuel(); return !(f && --f.left < 0); };
-          for (const sol of relate(code, useTarget(code.nodes, n), known, { spend, names: rt.names, stuck: rt.stuck, info })) {
-            const bound = Object.keys(n.binds).map((k) => toValue(sol.values[k]));
-            if (bound.some((v) => v === undefined)) continue; // not pinned down: not an answer
-            yield bound as Value[];
-          }
-          return;
-        }
-          // A predicate's out = true isn't one of the solver's ports.
-        const values = Object.fromEntries(p.known.map((k) => [k, known[k] as number]));
-        for (const sol of solutions(p.rel!, values)) {
-          // A port the equations leave free has no value: not a solution.
-          if (Object.keys(n.binds).some((k) => sol[k] === null || sol[k] === undefined)) continue;
-          yield Object.keys(n.binds).map((k) => sol[k]!);
-        }
-      };
+      // Each step that might unfold forever spends the innermost fuel.
+      const spend = () => { const f = fuel(); return !(f && --f.left < 0); };
       // A solve with exactly one answer (oneAnswer, MODES.md), or results
       // each computed from the inputs (directions.ts), leaves no choice
       // point: its first answer is the answer.
-      let answers: Iterable<Value[]> = bodies();
-      if (p.mode === "relational" ? oneAnswer(code, n) : computedForward(code, n)) {
+      let answers: Iterable<Value[]> = solveAnswers(code, n, known, { spend, names: rt.names, stuck: rt.stuck, info });
+      if (solvesOnce(code, n)) {
         const r = (answers as Generator<Value[]>).next();
         if (r.done) throw new Error(`solving ${rt.names?.[useTarget(code.nodes, n)] ?? useTarget(code.nodes, n)} this way gives exactly one answer, and it gave none`);
         answers = [r.value];

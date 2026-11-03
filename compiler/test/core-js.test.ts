@@ -74,7 +74,7 @@ test("the examples whose main lowers to the core IR say the same in JavaScript p
     ran.push(name);
   }
   console.log(`ran ${ran.join(", ")}\nnot lowered:\n  ${refused.join("\n  ")}`);
-  assert.ok(ran.length >= 13, `ran ${ran.join(", ")}`);
+  assert.ok(ran.length >= 14, `ran ${ran.join(", ")}`);
 });
 
 // lab compile --core (C137c5): a module that runs main in Node, printed
@@ -88,6 +88,10 @@ test("lab compile --core writes a module that runs main as lab run does", () => 
   const made = run([lab, "compile", wc, "--core", "-o", "wc.mjs"]);
   assert.equal(made[2], 0, String(made[1]));
   for (const args of [["a.txt"], ["-l", "a.txt", "nope"], []]) assert.deepEqual(run(["wc.mjs", ...args]), run([lab, "run", wc, ...args]), args.join(" "));
+  // One whose solves the evaluator's solver runs carries the program's nodes (C137c11).
+  const relations = join(examples, "relations");
+  assert.equal(run([lab, "compile", relations, "--core", "-o", "relations.mjs"])[2], 0);
+  assert.deepEqual(run(["relations.mjs"]), run([lab, "run", relations]));
   // One that doesn't lower says why, and writes nothing.
   const page = run([lab, "compile", join(examples, "pig"), "--core", "-o", "pig.mjs"]);
   assert.notEqual(page[2], 0);
