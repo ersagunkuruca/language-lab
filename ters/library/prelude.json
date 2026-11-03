@@ -79605,6 +79605,1347 @@
         ],
         "body": "@ftp8qslhk7a2c3dmp5d5rpsitg:5"
       },
+      "@22kva3bfbgshsbbn46t53oed46": {
+        "id": "@22kva3bfbgshsbbn46t53oed46",
+        "kind": "def",
+        "body": "@22kva3bfbgshsbbn46t53oed46:1"
+      },
+      "@22kva3bfbgshsbbn46t53oed46:2": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:2",
+        "kind": "binder"
+      },
+      "@22kva3bfbgshsbbn46t53oed46:3": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:3",
+        "kind": "binder"
+      },
+      "@22kva3bfbgshsbbn46t53oed46:5": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:5",
+        "kind": "ref",
+        "target": "@22kva3bfbgshsbbn46t53oed46:2"
+      },
+      "@22kva3bfbgshsbbn46t53oed46:7": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:7",
+        "kind": "binder"
+      },
+      "@22kva3bfbgshsbbn46t53oed46:8": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:8",
+        "kind": "binder"
+      },
+      "@22kva3bfbgshsbbn46t53oed46:10": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:10",
+        "kind": "ref",
+        "target": "@22kva3bfbgshsbbn46t53oed46:3"
+      },
+      "@22kva3bfbgshsbbn46t53oed46:12": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:12",
+        "kind": "binder"
+      },
+      "@22kva3bfbgshsbbn46t53oed46:13": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:13",
+        "kind": "binder"
+      },
+      "@22kva3bfbgshsbbn46t53oed46:16": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:16",
+        "kind": "ref",
+        "target": "builtin.equal"
+      },
+      "@22kva3bfbgshsbbn46t53oed46:17": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:17",
+        "kind": "ref",
+        "target": "@22kva3bfbgshsbbn46t53oed46:7"
+      },
+      "@22kva3bfbgshsbbn46t53oed46:18": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:18",
+        "kind": "ref",
+        "target": "@22kva3bfbgshsbbn46t53oed46:12"
+      },
+      "@22kva3bfbgshsbbn46t53oed46:15": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:15",
+        "kind": "call",
+        "fn": "@22kva3bfbgshsbbn46t53oed46:16",
+        "args": [
+          "@22kva3bfbgshsbbn46t53oed46:17",
+          "@22kva3bfbgshsbbn46t53oed46:18"
+        ]
+      },
+      "@22kva3bfbgshsbbn46t53oed46:26": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:26",
+        "kind": "ref",
+        "target": "@u6ulqtprp7t04gefhq2qrf9fqi"
+      },
+      "@22kva3bfbgshsbbn46t53oed46:27": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:27",
+        "kind": "ref",
+        "target": "@22kva3bfbgshsbbn46t53oed46:8"
+      },
+      "@22kva3bfbgshsbbn46t53oed46:28": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:28",
+        "kind": "ref",
+        "target": "@22kva3bfbgshsbbn46t53oed46:13"
+      },
+      "@22kva3bfbgshsbbn46t53oed46:25": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:25",
+        "kind": "call",
+        "fn": "@22kva3bfbgshsbbn46t53oed46:26",
+        "args": [
+          "@22kva3bfbgshsbbn46t53oed46:27",
+          "@22kva3bfbgshsbbn46t53oed46:28"
+        ]
+      },
+      "@22kva3bfbgshsbbn46t53oed46:30": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:30",
+        "kind": "binder"
+      },
+      "@22kva3bfbgshsbbn46t53oed46:32": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:32",
+        "kind": "ref",
+        "target": "@22kva3bfbgshsbbn46t53oed46:30"
+      },
+      "@22kva3bfbgshsbbn46t53oed46:34": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:34",
+        "kind": "binder"
+      },
+      "@22kva3bfbgshsbbn46t53oed46:35": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:35",
+        "kind": "binder"
+      },
+      "@22kva3bfbgshsbbn46t53oed46:37": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:37",
+        "kind": "ref",
+        "target": "builtin.arith.add"
+      },
+      "@22kva3bfbgshsbbn46t53oed46:38": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:38",
+        "kind": "ref",
+        "target": "@22kva3bfbgshsbbn46t53oed46:34"
+      },
+      "@22kva3bfbgshsbbn46t53oed46:39": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:39",
+        "kind": "ref",
+        "target": "@22kva3bfbgshsbbn46t53oed46:35"
+      },
+      "@22kva3bfbgshsbbn46t53oed46:36": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:36",
+        "kind": "call",
+        "fn": "@22kva3bfbgshsbbn46t53oed46:37",
+        "args": [
+          "@22kva3bfbgshsbbn46t53oed46:38",
+          "@22kva3bfbgshsbbn46t53oed46:39"
+        ]
+      },
+      "@22kva3bfbgshsbbn46t53oed46:33": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:33",
+        "kind": "arm",
+        "variant": "std.tuple2.tuple",
+        "binds": [
+          "@22kva3bfbgshsbbn46t53oed46:34",
+          "@22kva3bfbgshsbbn46t53oed46:35"
+        ],
+        "results": [
+          null,
+          null
+        ],
+        "body": "@22kva3bfbgshsbbn46t53oed46:36"
+      },
+      "@22kva3bfbgshsbbn46t53oed46:31": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:31",
+        "kind": "match",
+        "scrutinee": "@22kva3bfbgshsbbn46t53oed46:32",
+        "arms": [
+          "@22kva3bfbgshsbbn46t53oed46:33"
+        ],
+        "otherwise": null
+      },
+      "@22kva3bfbgshsbbn46t53oed46:29": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:29",
+        "kind": "lambda",
+        "params": [
+          "@22kva3bfbgshsbbn46t53oed46:30"
+        ],
+        "body": "@22kva3bfbgshsbbn46t53oed46:31"
+      },
+      "@22kva3bfbgshsbbn46t53oed46:24": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:24",
+        "kind": "ref",
+        "target": "@9902gjnadddgv3jrh6ir29nf4q"
+      },
+      "@22kva3bfbgshsbbn46t53oed46:23": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:23",
+        "kind": "call",
+        "fn": "@22kva3bfbgshsbbn46t53oed46:24",
+        "args": [
+          "@22kva3bfbgshsbbn46t53oed46:25",
+          "@22kva3bfbgshsbbn46t53oed46:29"
+        ]
+      },
+      "@22kva3bfbgshsbbn46t53oed46:21": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:21",
+        "kind": "ref",
+        "target": "std.tensor.tensor"
+      },
+      "@22kva3bfbgshsbbn46t53oed46:22": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:22",
+        "kind": "ref",
+        "target": "@22kva3bfbgshsbbn46t53oed46:7"
+      },
+      "@22kva3bfbgshsbbn46t53oed46:20": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:20",
+        "kind": "call",
+        "fn": "@22kva3bfbgshsbbn46t53oed46:21",
+        "args": [
+          "@22kva3bfbgshsbbn46t53oed46:22",
+          "@22kva3bfbgshsbbn46t53oed46:23"
+        ]
+      },
+      "@22kva3bfbgshsbbn46t53oed46:45": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:45",
+        "kind": "lit",
+        "value": "tensor sum: a "
+      },
+      "@22kva3bfbgshsbbn46t53oed46:49": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:49",
+        "kind": "ref",
+        "target": "@m7697stg6dcj6k0u0hrn9ggd7f"
+      },
+      "@22kva3bfbgshsbbn46t53oed46:50": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:50",
+        "kind": "ref",
+        "target": "@22kva3bfbgshsbbn46t53oed46:7"
+      },
+      "@22kva3bfbgshsbbn46t53oed46:48": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:48",
+        "kind": "call",
+        "fn": "@22kva3bfbgshsbbn46t53oed46:49",
+        "args": [
+          "@22kva3bfbgshsbbn46t53oed46:50"
+        ]
+      },
+      "@22kva3bfbgshsbbn46t53oed46:53": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:53",
+        "kind": "lit",
+        "value": " tensor and a "
+      },
+      "@22kva3bfbgshsbbn46t53oed46:57": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:57",
+        "kind": "ref",
+        "target": "@m7697stg6dcj6k0u0hrn9ggd7f"
+      },
+      "@22kva3bfbgshsbbn46t53oed46:58": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:58",
+        "kind": "ref",
+        "target": "@22kva3bfbgshsbbn46t53oed46:12"
+      },
+      "@22kva3bfbgshsbbn46t53oed46:56": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:56",
+        "kind": "call",
+        "fn": "@22kva3bfbgshsbbn46t53oed46:57",
+        "args": [
+          "@22kva3bfbgshsbbn46t53oed46:58"
+        ]
+      },
+      "@22kva3bfbgshsbbn46t53oed46:59": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:59",
+        "kind": "lit",
+        "value": " one"
+      },
+      "@22kva3bfbgshsbbn46t53oed46:55": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:55",
+        "kind": "ref",
+        "target": "builtin.concat"
+      },
+      "@22kva3bfbgshsbbn46t53oed46:54": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:54",
+        "kind": "call",
+        "fn": "@22kva3bfbgshsbbn46t53oed46:55",
+        "args": [
+          "@22kva3bfbgshsbbn46t53oed46:56",
+          "@22kva3bfbgshsbbn46t53oed46:59"
+        ]
+      },
+      "@22kva3bfbgshsbbn46t53oed46:52": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:52",
+        "kind": "ref",
+        "target": "builtin.concat"
+      },
+      "@22kva3bfbgshsbbn46t53oed46:51": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:51",
+        "kind": "call",
+        "fn": "@22kva3bfbgshsbbn46t53oed46:52",
+        "args": [
+          "@22kva3bfbgshsbbn46t53oed46:53",
+          "@22kva3bfbgshsbbn46t53oed46:54"
+        ]
+      },
+      "@22kva3bfbgshsbbn46t53oed46:47": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:47",
+        "kind": "ref",
+        "target": "builtin.concat"
+      },
+      "@22kva3bfbgshsbbn46t53oed46:46": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:46",
+        "kind": "call",
+        "fn": "@22kva3bfbgshsbbn46t53oed46:47",
+        "args": [
+          "@22kva3bfbgshsbbn46t53oed46:48",
+          "@22kva3bfbgshsbbn46t53oed46:51"
+        ]
+      },
+      "@22kva3bfbgshsbbn46t53oed46:44": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:44",
+        "kind": "ref",
+        "target": "builtin.concat"
+      },
+      "@22kva3bfbgshsbbn46t53oed46:43": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:43",
+        "kind": "call",
+        "fn": "@22kva3bfbgshsbbn46t53oed46:44",
+        "args": [
+          "@22kva3bfbgshsbbn46t53oed46:45",
+          "@22kva3bfbgshsbbn46t53oed46:46"
+        ]
+      },
+      "@22kva3bfbgshsbbn46t53oed46:42": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:42",
+        "kind": "ref",
+        "target": "builtin.stop"
+      },
+      "@22kva3bfbgshsbbn46t53oed46:41": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:41",
+        "kind": "call",
+        "fn": "@22kva3bfbgshsbbn46t53oed46:42",
+        "args": [
+          "@22kva3bfbgshsbbn46t53oed46:43"
+        ]
+      },
+      "@22kva3bfbgshsbbn46t53oed46:19": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:19",
+        "kind": "arm",
+        "variant": "std.bool.true",
+        "binds": [],
+        "results": [],
+        "body": "@22kva3bfbgshsbbn46t53oed46:20"
+      },
+      "@22kva3bfbgshsbbn46t53oed46:40": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:40",
+        "kind": "arm",
+        "variant": "std.bool.false",
+        "binds": [],
+        "results": [],
+        "body": "@22kva3bfbgshsbbn46t53oed46:41"
+      },
+      "@22kva3bfbgshsbbn46t53oed46:14": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:14",
+        "kind": "match",
+        "scrutinee": "@22kva3bfbgshsbbn46t53oed46:15",
+        "arms": [
+          "@22kva3bfbgshsbbn46t53oed46:19",
+          "@22kva3bfbgshsbbn46t53oed46:40"
+        ],
+        "otherwise": null
+      },
+      "@22kva3bfbgshsbbn46t53oed46:11": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:11",
+        "kind": "arm",
+        "variant": "std.tensor.tensor",
+        "binds": [
+          "@22kva3bfbgshsbbn46t53oed46:12",
+          "@22kva3bfbgshsbbn46t53oed46:13"
+        ],
+        "results": [
+          null,
+          null
+        ],
+        "body": "@22kva3bfbgshsbbn46t53oed46:14"
+      },
+      "@22kva3bfbgshsbbn46t53oed46:9": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:9",
+        "kind": "match",
+        "scrutinee": "@22kva3bfbgshsbbn46t53oed46:10",
+        "arms": [
+          "@22kva3bfbgshsbbn46t53oed46:11"
+        ],
+        "otherwise": null
+      },
+      "@22kva3bfbgshsbbn46t53oed46:6": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:6",
+        "kind": "arm",
+        "variant": "std.tensor.tensor",
+        "binds": [
+          "@22kva3bfbgshsbbn46t53oed46:7",
+          "@22kva3bfbgshsbbn46t53oed46:8"
+        ],
+        "results": [
+          null,
+          null
+        ],
+        "body": "@22kva3bfbgshsbbn46t53oed46:9"
+      },
+      "@22kva3bfbgshsbbn46t53oed46:4": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:4",
+        "kind": "match",
+        "scrutinee": "@22kva3bfbgshsbbn46t53oed46:5",
+        "arms": [
+          "@22kva3bfbgshsbbn46t53oed46:6"
+        ],
+        "otherwise": null
+      },
+      "@22kva3bfbgshsbbn46t53oed46:1": {
+        "id": "@22kva3bfbgshsbbn46t53oed46:1",
+        "kind": "lambda",
+        "params": [
+          "@22kva3bfbgshsbbn46t53oed46:2",
+          "@22kva3bfbgshsbbn46t53oed46:3"
+        ],
+        "body": "@22kva3bfbgshsbbn46t53oed46:4"
+      },
+      "@kslbajed4v3fp9h71c38dec7j2": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2",
+        "kind": "def",
+        "body": "@kslbajed4v3fp9h71c38dec7j2:1"
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:2": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:2",
+        "kind": "binder"
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:3": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:3",
+        "kind": "binder"
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:5": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:5",
+        "kind": "ref",
+        "target": "@kslbajed4v3fp9h71c38dec7j2:2"
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:7": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:7",
+        "kind": "binder"
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:8": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:8",
+        "kind": "binder"
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:10": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:10",
+        "kind": "ref",
+        "target": "@kslbajed4v3fp9h71c38dec7j2:3"
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:12": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:12",
+        "kind": "binder"
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:13": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:13",
+        "kind": "binder"
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:16": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:16",
+        "kind": "ref",
+        "target": "builtin.equal"
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:17": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:17",
+        "kind": "ref",
+        "target": "@kslbajed4v3fp9h71c38dec7j2:7"
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:18": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:18",
+        "kind": "ref",
+        "target": "@kslbajed4v3fp9h71c38dec7j2:12"
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:15": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:15",
+        "kind": "call",
+        "fn": "@kslbajed4v3fp9h71c38dec7j2:16",
+        "args": [
+          "@kslbajed4v3fp9h71c38dec7j2:17",
+          "@kslbajed4v3fp9h71c38dec7j2:18"
+        ]
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:26": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:26",
+        "kind": "ref",
+        "target": "@u6ulqtprp7t04gefhq2qrf9fqi"
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:27": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:27",
+        "kind": "ref",
+        "target": "@kslbajed4v3fp9h71c38dec7j2:8"
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:28": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:28",
+        "kind": "ref",
+        "target": "@kslbajed4v3fp9h71c38dec7j2:13"
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:25": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:25",
+        "kind": "call",
+        "fn": "@kslbajed4v3fp9h71c38dec7j2:26",
+        "args": [
+          "@kslbajed4v3fp9h71c38dec7j2:27",
+          "@kslbajed4v3fp9h71c38dec7j2:28"
+        ]
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:30": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:30",
+        "kind": "binder"
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:32": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:32",
+        "kind": "ref",
+        "target": "@kslbajed4v3fp9h71c38dec7j2:30"
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:34": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:34",
+        "kind": "binder"
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:35": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:35",
+        "kind": "binder"
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:37": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:37",
+        "kind": "ref",
+        "target": "builtin.arith.sub"
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:38": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:38",
+        "kind": "ref",
+        "target": "@kslbajed4v3fp9h71c38dec7j2:34"
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:39": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:39",
+        "kind": "ref",
+        "target": "@kslbajed4v3fp9h71c38dec7j2:35"
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:36": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:36",
+        "kind": "call",
+        "fn": "@kslbajed4v3fp9h71c38dec7j2:37",
+        "args": [
+          "@kslbajed4v3fp9h71c38dec7j2:38",
+          "@kslbajed4v3fp9h71c38dec7j2:39"
+        ]
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:33": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:33",
+        "kind": "arm",
+        "variant": "std.tuple2.tuple",
+        "binds": [
+          "@kslbajed4v3fp9h71c38dec7j2:34",
+          "@kslbajed4v3fp9h71c38dec7j2:35"
+        ],
+        "results": [
+          null,
+          null
+        ],
+        "body": "@kslbajed4v3fp9h71c38dec7j2:36"
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:31": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:31",
+        "kind": "match",
+        "scrutinee": "@kslbajed4v3fp9h71c38dec7j2:32",
+        "arms": [
+          "@kslbajed4v3fp9h71c38dec7j2:33"
+        ],
+        "otherwise": null
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:29": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:29",
+        "kind": "lambda",
+        "params": [
+          "@kslbajed4v3fp9h71c38dec7j2:30"
+        ],
+        "body": "@kslbajed4v3fp9h71c38dec7j2:31"
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:24": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:24",
+        "kind": "ref",
+        "target": "@9902gjnadddgv3jrh6ir29nf4q"
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:23": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:23",
+        "kind": "call",
+        "fn": "@kslbajed4v3fp9h71c38dec7j2:24",
+        "args": [
+          "@kslbajed4v3fp9h71c38dec7j2:25",
+          "@kslbajed4v3fp9h71c38dec7j2:29"
+        ]
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:21": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:21",
+        "kind": "ref",
+        "target": "std.tensor.tensor"
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:22": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:22",
+        "kind": "ref",
+        "target": "@kslbajed4v3fp9h71c38dec7j2:7"
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:20": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:20",
+        "kind": "call",
+        "fn": "@kslbajed4v3fp9h71c38dec7j2:21",
+        "args": [
+          "@kslbajed4v3fp9h71c38dec7j2:22",
+          "@kslbajed4v3fp9h71c38dec7j2:23"
+        ]
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:45": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:45",
+        "kind": "lit",
+        "value": "tensor difference: a "
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:49": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:49",
+        "kind": "ref",
+        "target": "@m7697stg6dcj6k0u0hrn9ggd7f"
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:50": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:50",
+        "kind": "ref",
+        "target": "@kslbajed4v3fp9h71c38dec7j2:7"
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:48": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:48",
+        "kind": "call",
+        "fn": "@kslbajed4v3fp9h71c38dec7j2:49",
+        "args": [
+          "@kslbajed4v3fp9h71c38dec7j2:50"
+        ]
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:53": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:53",
+        "kind": "lit",
+        "value": " tensor and a "
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:57": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:57",
+        "kind": "ref",
+        "target": "@m7697stg6dcj6k0u0hrn9ggd7f"
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:58": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:58",
+        "kind": "ref",
+        "target": "@kslbajed4v3fp9h71c38dec7j2:12"
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:56": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:56",
+        "kind": "call",
+        "fn": "@kslbajed4v3fp9h71c38dec7j2:57",
+        "args": [
+          "@kslbajed4v3fp9h71c38dec7j2:58"
+        ]
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:59": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:59",
+        "kind": "lit",
+        "value": " one"
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:55": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:55",
+        "kind": "ref",
+        "target": "builtin.concat"
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:54": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:54",
+        "kind": "call",
+        "fn": "@kslbajed4v3fp9h71c38dec7j2:55",
+        "args": [
+          "@kslbajed4v3fp9h71c38dec7j2:56",
+          "@kslbajed4v3fp9h71c38dec7j2:59"
+        ]
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:52": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:52",
+        "kind": "ref",
+        "target": "builtin.concat"
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:51": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:51",
+        "kind": "call",
+        "fn": "@kslbajed4v3fp9h71c38dec7j2:52",
+        "args": [
+          "@kslbajed4v3fp9h71c38dec7j2:53",
+          "@kslbajed4v3fp9h71c38dec7j2:54"
+        ]
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:47": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:47",
+        "kind": "ref",
+        "target": "builtin.concat"
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:46": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:46",
+        "kind": "call",
+        "fn": "@kslbajed4v3fp9h71c38dec7j2:47",
+        "args": [
+          "@kslbajed4v3fp9h71c38dec7j2:48",
+          "@kslbajed4v3fp9h71c38dec7j2:51"
+        ]
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:44": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:44",
+        "kind": "ref",
+        "target": "builtin.concat"
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:43": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:43",
+        "kind": "call",
+        "fn": "@kslbajed4v3fp9h71c38dec7j2:44",
+        "args": [
+          "@kslbajed4v3fp9h71c38dec7j2:45",
+          "@kslbajed4v3fp9h71c38dec7j2:46"
+        ]
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:42": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:42",
+        "kind": "ref",
+        "target": "builtin.stop"
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:41": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:41",
+        "kind": "call",
+        "fn": "@kslbajed4v3fp9h71c38dec7j2:42",
+        "args": [
+          "@kslbajed4v3fp9h71c38dec7j2:43"
+        ]
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:19": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:19",
+        "kind": "arm",
+        "variant": "std.bool.true",
+        "binds": [],
+        "results": [],
+        "body": "@kslbajed4v3fp9h71c38dec7j2:20"
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:40": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:40",
+        "kind": "arm",
+        "variant": "std.bool.false",
+        "binds": [],
+        "results": [],
+        "body": "@kslbajed4v3fp9h71c38dec7j2:41"
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:14": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:14",
+        "kind": "match",
+        "scrutinee": "@kslbajed4v3fp9h71c38dec7j2:15",
+        "arms": [
+          "@kslbajed4v3fp9h71c38dec7j2:19",
+          "@kslbajed4v3fp9h71c38dec7j2:40"
+        ],
+        "otherwise": null
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:11": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:11",
+        "kind": "arm",
+        "variant": "std.tensor.tensor",
+        "binds": [
+          "@kslbajed4v3fp9h71c38dec7j2:12",
+          "@kslbajed4v3fp9h71c38dec7j2:13"
+        ],
+        "results": [
+          null,
+          null
+        ],
+        "body": "@kslbajed4v3fp9h71c38dec7j2:14"
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:9": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:9",
+        "kind": "match",
+        "scrutinee": "@kslbajed4v3fp9h71c38dec7j2:10",
+        "arms": [
+          "@kslbajed4v3fp9h71c38dec7j2:11"
+        ],
+        "otherwise": null
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:6": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:6",
+        "kind": "arm",
+        "variant": "std.tensor.tensor",
+        "binds": [
+          "@kslbajed4v3fp9h71c38dec7j2:7",
+          "@kslbajed4v3fp9h71c38dec7j2:8"
+        ],
+        "results": [
+          null,
+          null
+        ],
+        "body": "@kslbajed4v3fp9h71c38dec7j2:9"
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:4": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:4",
+        "kind": "match",
+        "scrutinee": "@kslbajed4v3fp9h71c38dec7j2:5",
+        "arms": [
+          "@kslbajed4v3fp9h71c38dec7j2:6"
+        ],
+        "otherwise": null
+      },
+      "@kslbajed4v3fp9h71c38dec7j2:1": {
+        "id": "@kslbajed4v3fp9h71c38dec7j2:1",
+        "kind": "lambda",
+        "params": [
+          "@kslbajed4v3fp9h71c38dec7j2:2",
+          "@kslbajed4v3fp9h71c38dec7j2:3"
+        ],
+        "body": "@kslbajed4v3fp9h71c38dec7j2:4"
+      },
+      "@t0fb752m16rrje76drcv0fo95b": {
+        "id": "@t0fb752m16rrje76drcv0fo95b",
+        "kind": "def",
+        "body": "@t0fb752m16rrje76drcv0fo95b:1"
+      },
+      "@t0fb752m16rrje76drcv0fo95b:2": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:2",
+        "kind": "binder"
+      },
+      "@t0fb752m16rrje76drcv0fo95b:3": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:3",
+        "kind": "binder"
+      },
+      "@t0fb752m16rrje76drcv0fo95b:5": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:5",
+        "kind": "ref",
+        "target": "@t0fb752m16rrje76drcv0fo95b:2"
+      },
+      "@t0fb752m16rrje76drcv0fo95b:7": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:7",
+        "kind": "binder"
+      },
+      "@t0fb752m16rrje76drcv0fo95b:8": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:8",
+        "kind": "binder"
+      },
+      "@t0fb752m16rrje76drcv0fo95b:10": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:10",
+        "kind": "ref",
+        "target": "@t0fb752m16rrje76drcv0fo95b:3"
+      },
+      "@t0fb752m16rrje76drcv0fo95b:12": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:12",
+        "kind": "binder"
+      },
+      "@t0fb752m16rrje76drcv0fo95b:13": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:13",
+        "kind": "binder"
+      },
+      "@t0fb752m16rrje76drcv0fo95b:16": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:16",
+        "kind": "ref",
+        "target": "builtin.equal"
+      },
+      "@t0fb752m16rrje76drcv0fo95b:17": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:17",
+        "kind": "ref",
+        "target": "@t0fb752m16rrje76drcv0fo95b:7"
+      },
+      "@t0fb752m16rrje76drcv0fo95b:18": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:18",
+        "kind": "ref",
+        "target": "@t0fb752m16rrje76drcv0fo95b:12"
+      },
+      "@t0fb752m16rrje76drcv0fo95b:15": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:15",
+        "kind": "call",
+        "fn": "@t0fb752m16rrje76drcv0fo95b:16",
+        "args": [
+          "@t0fb752m16rrje76drcv0fo95b:17",
+          "@t0fb752m16rrje76drcv0fo95b:18"
+        ]
+      },
+      "@t0fb752m16rrje76drcv0fo95b:26": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:26",
+        "kind": "ref",
+        "target": "@u6ulqtprp7t04gefhq2qrf9fqi"
+      },
+      "@t0fb752m16rrje76drcv0fo95b:27": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:27",
+        "kind": "ref",
+        "target": "@t0fb752m16rrje76drcv0fo95b:8"
+      },
+      "@t0fb752m16rrje76drcv0fo95b:28": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:28",
+        "kind": "ref",
+        "target": "@t0fb752m16rrje76drcv0fo95b:13"
+      },
+      "@t0fb752m16rrje76drcv0fo95b:25": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:25",
+        "kind": "call",
+        "fn": "@t0fb752m16rrje76drcv0fo95b:26",
+        "args": [
+          "@t0fb752m16rrje76drcv0fo95b:27",
+          "@t0fb752m16rrje76drcv0fo95b:28"
+        ]
+      },
+      "@t0fb752m16rrje76drcv0fo95b:30": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:30",
+        "kind": "binder"
+      },
+      "@t0fb752m16rrje76drcv0fo95b:32": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:32",
+        "kind": "ref",
+        "target": "@t0fb752m16rrje76drcv0fo95b:30"
+      },
+      "@t0fb752m16rrje76drcv0fo95b:34": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:34",
+        "kind": "binder"
+      },
+      "@t0fb752m16rrje76drcv0fo95b:35": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:35",
+        "kind": "binder"
+      },
+      "@t0fb752m16rrje76drcv0fo95b:37": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:37",
+        "kind": "ref",
+        "target": "builtin.arith.mul"
+      },
+      "@t0fb752m16rrje76drcv0fo95b:38": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:38",
+        "kind": "ref",
+        "target": "@t0fb752m16rrje76drcv0fo95b:34"
+      },
+      "@t0fb752m16rrje76drcv0fo95b:39": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:39",
+        "kind": "ref",
+        "target": "@t0fb752m16rrje76drcv0fo95b:35"
+      },
+      "@t0fb752m16rrje76drcv0fo95b:36": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:36",
+        "kind": "call",
+        "fn": "@t0fb752m16rrje76drcv0fo95b:37",
+        "args": [
+          "@t0fb752m16rrje76drcv0fo95b:38",
+          "@t0fb752m16rrje76drcv0fo95b:39"
+        ]
+      },
+      "@t0fb752m16rrje76drcv0fo95b:33": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:33",
+        "kind": "arm",
+        "variant": "std.tuple2.tuple",
+        "binds": [
+          "@t0fb752m16rrje76drcv0fo95b:34",
+          "@t0fb752m16rrje76drcv0fo95b:35"
+        ],
+        "results": [
+          null,
+          null
+        ],
+        "body": "@t0fb752m16rrje76drcv0fo95b:36"
+      },
+      "@t0fb752m16rrje76drcv0fo95b:31": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:31",
+        "kind": "match",
+        "scrutinee": "@t0fb752m16rrje76drcv0fo95b:32",
+        "arms": [
+          "@t0fb752m16rrje76drcv0fo95b:33"
+        ],
+        "otherwise": null
+      },
+      "@t0fb752m16rrje76drcv0fo95b:29": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:29",
+        "kind": "lambda",
+        "params": [
+          "@t0fb752m16rrje76drcv0fo95b:30"
+        ],
+        "body": "@t0fb752m16rrje76drcv0fo95b:31"
+      },
+      "@t0fb752m16rrje76drcv0fo95b:24": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:24",
+        "kind": "ref",
+        "target": "@9902gjnadddgv3jrh6ir29nf4q"
+      },
+      "@t0fb752m16rrje76drcv0fo95b:23": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:23",
+        "kind": "call",
+        "fn": "@t0fb752m16rrje76drcv0fo95b:24",
+        "args": [
+          "@t0fb752m16rrje76drcv0fo95b:25",
+          "@t0fb752m16rrje76drcv0fo95b:29"
+        ]
+      },
+      "@t0fb752m16rrje76drcv0fo95b:21": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:21",
+        "kind": "ref",
+        "target": "std.tensor.tensor"
+      },
+      "@t0fb752m16rrje76drcv0fo95b:22": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:22",
+        "kind": "ref",
+        "target": "@t0fb752m16rrje76drcv0fo95b:7"
+      },
+      "@t0fb752m16rrje76drcv0fo95b:20": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:20",
+        "kind": "call",
+        "fn": "@t0fb752m16rrje76drcv0fo95b:21",
+        "args": [
+          "@t0fb752m16rrje76drcv0fo95b:22",
+          "@t0fb752m16rrje76drcv0fo95b:23"
+        ]
+      },
+      "@t0fb752m16rrje76drcv0fo95b:45": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:45",
+        "kind": "lit",
+        "value": "tensor product item by item: a "
+      },
+      "@t0fb752m16rrje76drcv0fo95b:49": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:49",
+        "kind": "ref",
+        "target": "@m7697stg6dcj6k0u0hrn9ggd7f"
+      },
+      "@t0fb752m16rrje76drcv0fo95b:50": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:50",
+        "kind": "ref",
+        "target": "@t0fb752m16rrje76drcv0fo95b:7"
+      },
+      "@t0fb752m16rrje76drcv0fo95b:48": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:48",
+        "kind": "call",
+        "fn": "@t0fb752m16rrje76drcv0fo95b:49",
+        "args": [
+          "@t0fb752m16rrje76drcv0fo95b:50"
+        ]
+      },
+      "@t0fb752m16rrje76drcv0fo95b:53": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:53",
+        "kind": "lit",
+        "value": " tensor and a "
+      },
+      "@t0fb752m16rrje76drcv0fo95b:57": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:57",
+        "kind": "ref",
+        "target": "@m7697stg6dcj6k0u0hrn9ggd7f"
+      },
+      "@t0fb752m16rrje76drcv0fo95b:58": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:58",
+        "kind": "ref",
+        "target": "@t0fb752m16rrje76drcv0fo95b:12"
+      },
+      "@t0fb752m16rrje76drcv0fo95b:56": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:56",
+        "kind": "call",
+        "fn": "@t0fb752m16rrje76drcv0fo95b:57",
+        "args": [
+          "@t0fb752m16rrje76drcv0fo95b:58"
+        ]
+      },
+      "@t0fb752m16rrje76drcv0fo95b:59": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:59",
+        "kind": "lit",
+        "value": " one"
+      },
+      "@t0fb752m16rrje76drcv0fo95b:55": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:55",
+        "kind": "ref",
+        "target": "builtin.concat"
+      },
+      "@t0fb752m16rrje76drcv0fo95b:54": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:54",
+        "kind": "call",
+        "fn": "@t0fb752m16rrje76drcv0fo95b:55",
+        "args": [
+          "@t0fb752m16rrje76drcv0fo95b:56",
+          "@t0fb752m16rrje76drcv0fo95b:59"
+        ]
+      },
+      "@t0fb752m16rrje76drcv0fo95b:52": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:52",
+        "kind": "ref",
+        "target": "builtin.concat"
+      },
+      "@t0fb752m16rrje76drcv0fo95b:51": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:51",
+        "kind": "call",
+        "fn": "@t0fb752m16rrje76drcv0fo95b:52",
+        "args": [
+          "@t0fb752m16rrje76drcv0fo95b:53",
+          "@t0fb752m16rrje76drcv0fo95b:54"
+        ]
+      },
+      "@t0fb752m16rrje76drcv0fo95b:47": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:47",
+        "kind": "ref",
+        "target": "builtin.concat"
+      },
+      "@t0fb752m16rrje76drcv0fo95b:46": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:46",
+        "kind": "call",
+        "fn": "@t0fb752m16rrje76drcv0fo95b:47",
+        "args": [
+          "@t0fb752m16rrje76drcv0fo95b:48",
+          "@t0fb752m16rrje76drcv0fo95b:51"
+        ]
+      },
+      "@t0fb752m16rrje76drcv0fo95b:44": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:44",
+        "kind": "ref",
+        "target": "builtin.concat"
+      },
+      "@t0fb752m16rrje76drcv0fo95b:43": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:43",
+        "kind": "call",
+        "fn": "@t0fb752m16rrje76drcv0fo95b:44",
+        "args": [
+          "@t0fb752m16rrje76drcv0fo95b:45",
+          "@t0fb752m16rrje76drcv0fo95b:46"
+        ]
+      },
+      "@t0fb752m16rrje76drcv0fo95b:42": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:42",
+        "kind": "ref",
+        "target": "builtin.stop"
+      },
+      "@t0fb752m16rrje76drcv0fo95b:41": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:41",
+        "kind": "call",
+        "fn": "@t0fb752m16rrje76drcv0fo95b:42",
+        "args": [
+          "@t0fb752m16rrje76drcv0fo95b:43"
+        ]
+      },
+      "@t0fb752m16rrje76drcv0fo95b:19": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:19",
+        "kind": "arm",
+        "variant": "std.bool.true",
+        "binds": [],
+        "results": [],
+        "body": "@t0fb752m16rrje76drcv0fo95b:20"
+      },
+      "@t0fb752m16rrje76drcv0fo95b:40": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:40",
+        "kind": "arm",
+        "variant": "std.bool.false",
+        "binds": [],
+        "results": [],
+        "body": "@t0fb752m16rrje76drcv0fo95b:41"
+      },
+      "@t0fb752m16rrje76drcv0fo95b:14": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:14",
+        "kind": "match",
+        "scrutinee": "@t0fb752m16rrje76drcv0fo95b:15",
+        "arms": [
+          "@t0fb752m16rrje76drcv0fo95b:19",
+          "@t0fb752m16rrje76drcv0fo95b:40"
+        ],
+        "otherwise": null
+      },
+      "@t0fb752m16rrje76drcv0fo95b:11": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:11",
+        "kind": "arm",
+        "variant": "std.tensor.tensor",
+        "binds": [
+          "@t0fb752m16rrje76drcv0fo95b:12",
+          "@t0fb752m16rrje76drcv0fo95b:13"
+        ],
+        "results": [
+          null,
+          null
+        ],
+        "body": "@t0fb752m16rrje76drcv0fo95b:14"
+      },
+      "@t0fb752m16rrje76drcv0fo95b:9": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:9",
+        "kind": "match",
+        "scrutinee": "@t0fb752m16rrje76drcv0fo95b:10",
+        "arms": [
+          "@t0fb752m16rrje76drcv0fo95b:11"
+        ],
+        "otherwise": null
+      },
+      "@t0fb752m16rrje76drcv0fo95b:6": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:6",
+        "kind": "arm",
+        "variant": "std.tensor.tensor",
+        "binds": [
+          "@t0fb752m16rrje76drcv0fo95b:7",
+          "@t0fb752m16rrje76drcv0fo95b:8"
+        ],
+        "results": [
+          null,
+          null
+        ],
+        "body": "@t0fb752m16rrje76drcv0fo95b:9"
+      },
+      "@t0fb752m16rrje76drcv0fo95b:4": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:4",
+        "kind": "match",
+        "scrutinee": "@t0fb752m16rrje76drcv0fo95b:5",
+        "arms": [
+          "@t0fb752m16rrje76drcv0fo95b:6"
+        ],
+        "otherwise": null
+      },
+      "@t0fb752m16rrje76drcv0fo95b:1": {
+        "id": "@t0fb752m16rrje76drcv0fo95b:1",
+        "kind": "lambda",
+        "params": [
+          "@t0fb752m16rrje76drcv0fo95b:2",
+          "@t0fb752m16rrje76drcv0fo95b:3"
+        ],
+        "body": "@t0fb752m16rrje76drcv0fo95b:4"
+      },
+      "@f94facbi2cleaugljrfq30kr57": {
+        "id": "@f94facbi2cleaugljrfq30kr57",
+        "kind": "def",
+        "body": "@f94facbi2cleaugljrfq30kr57:1"
+      },
+      "@f94facbi2cleaugljrfq30kr57:2": {
+        "id": "@f94facbi2cleaugljrfq30kr57:2",
+        "kind": "binder"
+      },
+      "@f94facbi2cleaugljrfq30kr57:4": {
+        "id": "@f94facbi2cleaugljrfq30kr57:4",
+        "kind": "ref",
+        "target": "@f94facbi2cleaugljrfq30kr57:2"
+      },
+      "@f94facbi2cleaugljrfq30kr57:6": {
+        "id": "@f94facbi2cleaugljrfq30kr57:6",
+        "kind": "binder"
+      },
+      "@f94facbi2cleaugljrfq30kr57:7": {
+        "id": "@f94facbi2cleaugljrfq30kr57:7",
+        "kind": "binder"
+      },
+      "@f94facbi2cleaugljrfq30kr57:15": {
+        "id": "@f94facbi2cleaugljrfq30kr57:15",
+        "kind": "binder"
+      },
+      "@f94facbi2cleaugljrfq30kr57:17": {
+        "id": "@f94facbi2cleaugljrfq30kr57:17",
+        "kind": "ref",
+        "target": "builtin.arith.neg"
+      },
+      "@f94facbi2cleaugljrfq30kr57:18": {
+        "id": "@f94facbi2cleaugljrfq30kr57:18",
+        "kind": "ref",
+        "target": "@f94facbi2cleaugljrfq30kr57:15"
+      },
+      "@f94facbi2cleaugljrfq30kr57:16": {
+        "id": "@f94facbi2cleaugljrfq30kr57:16",
+        "kind": "call",
+        "fn": "@f94facbi2cleaugljrfq30kr57:17",
+        "args": [
+          "@f94facbi2cleaugljrfq30kr57:18"
+        ]
+      },
+      "@f94facbi2cleaugljrfq30kr57:14": {
+        "id": "@f94facbi2cleaugljrfq30kr57:14",
+        "kind": "lambda",
+        "params": [
+          "@f94facbi2cleaugljrfq30kr57:15"
+        ],
+        "body": "@f94facbi2cleaugljrfq30kr57:16"
+      },
+      "@f94facbi2cleaugljrfq30kr57:12": {
+        "id": "@f94facbi2cleaugljrfq30kr57:12",
+        "kind": "ref",
+        "target": "@9902gjnadddgv3jrh6ir29nf4q"
+      },
+      "@f94facbi2cleaugljrfq30kr57:13": {
+        "id": "@f94facbi2cleaugljrfq30kr57:13",
+        "kind": "ref",
+        "target": "@f94facbi2cleaugljrfq30kr57:7"
+      },
+      "@f94facbi2cleaugljrfq30kr57:11": {
+        "id": "@f94facbi2cleaugljrfq30kr57:11",
+        "kind": "call",
+        "fn": "@f94facbi2cleaugljrfq30kr57:12",
+        "args": [
+          "@f94facbi2cleaugljrfq30kr57:13",
+          "@f94facbi2cleaugljrfq30kr57:14"
+        ]
+      },
+      "@f94facbi2cleaugljrfq30kr57:9": {
+        "id": "@f94facbi2cleaugljrfq30kr57:9",
+        "kind": "ref",
+        "target": "std.tensor.tensor"
+      },
+      "@f94facbi2cleaugljrfq30kr57:10": {
+        "id": "@f94facbi2cleaugljrfq30kr57:10",
+        "kind": "ref",
+        "target": "@f94facbi2cleaugljrfq30kr57:6"
+      },
+      "@f94facbi2cleaugljrfq30kr57:8": {
+        "id": "@f94facbi2cleaugljrfq30kr57:8",
+        "kind": "call",
+        "fn": "@f94facbi2cleaugljrfq30kr57:9",
+        "args": [
+          "@f94facbi2cleaugljrfq30kr57:10",
+          "@f94facbi2cleaugljrfq30kr57:11"
+        ]
+      },
+      "@f94facbi2cleaugljrfq30kr57:5": {
+        "id": "@f94facbi2cleaugljrfq30kr57:5",
+        "kind": "arm",
+        "variant": "std.tensor.tensor",
+        "binds": [
+          "@f94facbi2cleaugljrfq30kr57:6",
+          "@f94facbi2cleaugljrfq30kr57:7"
+        ],
+        "results": [
+          null,
+          null
+        ],
+        "body": "@f94facbi2cleaugljrfq30kr57:8"
+      },
+      "@f94facbi2cleaugljrfq30kr57:3": {
+        "id": "@f94facbi2cleaugljrfq30kr57:3",
+        "kind": "match",
+        "scrutinee": "@f94facbi2cleaugljrfq30kr57:4",
+        "arms": [
+          "@f94facbi2cleaugljrfq30kr57:5"
+        ],
+        "otherwise": null
+      },
+      "@f94facbi2cleaugljrfq30kr57:1": {
+        "id": "@f94facbi2cleaugljrfq30kr57:1",
+        "kind": "lambda",
+        "params": [
+          "@f94facbi2cleaugljrfq30kr57:2"
+        ],
+        "body": "@f94facbi2cleaugljrfq30kr57:3"
+      },
+      "@8996sj4dfpsvpqdvasnr3cgmsp": {
+        "id": "@8996sj4dfpsvpqdvasnr3cgmsp",
+        "kind": "def",
+        "body": "@8996sj4dfpsvpqdvasnr3cgmsp:1"
+      },
+      "@8996sj4dfpsvpqdvasnr3cgmsp:3": {
+        "id": "@8996sj4dfpsvpqdvasnr3cgmsp:3",
+        "kind": "ref",
+        "target": "@22kva3bfbgshsbbn46t53oed46"
+      },
+      "@8996sj4dfpsvpqdvasnr3cgmsp:4": {
+        "id": "@8996sj4dfpsvpqdvasnr3cgmsp:4",
+        "kind": "ref",
+        "target": "@kslbajed4v3fp9h71c38dec7j2"
+      },
+      "@8996sj4dfpsvpqdvasnr3cgmsp:5": {
+        "id": "@8996sj4dfpsvpqdvasnr3cgmsp:5",
+        "kind": "ref",
+        "target": "@t0fb752m16rrje76drcv0fo95b"
+      },
+      "@8996sj4dfpsvpqdvasnr3cgmsp:6": {
+        "id": "@8996sj4dfpsvpqdvasnr3cgmsp:6",
+        "kind": "ref",
+        "target": "@f94facbi2cleaugljrfq30kr57"
+      },
+      "@8996sj4dfpsvpqdvasnr3cgmsp:2": {
+        "id": "@8996sj4dfpsvpqdvasnr3cgmsp:2",
+        "kind": "ref",
+        "target": "std.arithmetic.arithmetic"
+      },
+      "@8996sj4dfpsvpqdvasnr3cgmsp:1": {
+        "id": "@8996sj4dfpsvpqdvasnr3cgmsp:1",
+        "kind": "call",
+        "fn": "@8996sj4dfpsvpqdvasnr3cgmsp:2",
+        "args": [
+          "@8996sj4dfpsvpqdvasnr3cgmsp:3",
+          "@8996sj4dfpsvpqdvasnr3cgmsp:4",
+          "@8996sj4dfpsvpqdvasnr3cgmsp:5",
+          "@8996sj4dfpsvpqdvasnr3cgmsp:6"
+        ]
+      },
       "@go4eqh5o6pvomac0lnut74mvc3": {
         "id": "@go4eqh5o6pvomac0lnut74mvc3",
         "kind": "def",
@@ -86796,6 +88137,10 @@
       "@0m18rcpvvrci98j2a74v7fa44p",
       "@ralvjoe9bje0o44jgkb1ovr33s",
       "@d4jv39li5kqrkf76j4ao7bgh56",
+      "@22kva3bfbgshsbbn46t53oed46",
+      "@kslbajed4v3fp9h71c38dec7j2",
+      "@t0fb752m16rrje76drcv0fo95b",
+      "@f94facbi2cleaugljrfq30kr57",
       "@mjepml6vqs6t0ll1qgvecjb5re",
       "@978o1pot245hpvgj5oa13l1rtb",
       "@or93p8njnmkvu1492d2hlq7u2p",
@@ -86838,6 +88183,7 @@
       "@lqb89d5scvmjsf57qfmaor4239",
       "@g9q5jlp5kg108qsl8loqhv15gc",
       "@k8mice5ebistb8hbuqbvhrm8hj",
+      "@8996sj4dfpsvpqdvasnr3cgmsp",
       "@ja1cj8ju2354fe6dvfpffd5nnp",
       "@aovjlp9v0llkjiehftnnc07vvn",
       "@it5edk39jlshcdjjf8en74p4og",
@@ -100828,6 +102174,208 @@
       },
       "plain": []
     },
+    "@22kva3bfbgshsbbn46t53oed46": {
+      "vars": [
+        0
+      ],
+      "rows": [
+        1
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.tensor",
+            "args": [
+              {
+                "t": "var",
+                "v": 0
+              }
+            ]
+          },
+          {
+            "t": "con",
+            "id": "std.tensor",
+            "args": [
+              {
+                "t": "var",
+                "v": 0
+              }
+            ]
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.tensor",
+          "args": [
+            {
+              "t": "var",
+              "v": 0
+            }
+          ]
+        },
+        "eff": {
+          "effs": [],
+          "tail": 1
+        }
+      },
+      "plain": [
+        0
+      ],
+      "arith": [
+        0
+      ]
+    },
+    "@kslbajed4v3fp9h71c38dec7j2": {
+      "vars": [
+        0
+      ],
+      "rows": [
+        1
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.tensor",
+            "args": [
+              {
+                "t": "var",
+                "v": 0
+              }
+            ]
+          },
+          {
+            "t": "con",
+            "id": "std.tensor",
+            "args": [
+              {
+                "t": "var",
+                "v": 0
+              }
+            ]
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.tensor",
+          "args": [
+            {
+              "t": "var",
+              "v": 0
+            }
+          ]
+        },
+        "eff": {
+          "effs": [],
+          "tail": 1
+        }
+      },
+      "plain": [
+        0
+      ],
+      "arith": [
+        0
+      ]
+    },
+    "@t0fb752m16rrje76drcv0fo95b": {
+      "vars": [
+        0
+      ],
+      "rows": [
+        1
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.tensor",
+            "args": [
+              {
+                "t": "var",
+                "v": 0
+              }
+            ]
+          },
+          {
+            "t": "con",
+            "id": "std.tensor",
+            "args": [
+              {
+                "t": "var",
+                "v": 0
+              }
+            ]
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.tensor",
+          "args": [
+            {
+              "t": "var",
+              "v": 0
+            }
+          ]
+        },
+        "eff": {
+          "effs": [],
+          "tail": 1
+        }
+      },
+      "plain": [
+        0
+      ],
+      "arith": [
+        0
+      ]
+    },
+    "@f94facbi2cleaugljrfq30kr57": {
+      "vars": [
+        0
+      ],
+      "rows": [
+        1
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.tensor",
+            "args": [
+              {
+                "t": "var",
+                "v": 0
+              }
+            ]
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.tensor",
+          "args": [
+            {
+              "t": "var",
+              "v": 0
+            }
+          ]
+        },
+        "eff": {
+          "effs": [],
+          "tail": 1
+        }
+      },
+      "plain": [
+        0
+      ],
+      "arith": [
+        0
+      ]
+    },
     "@mjepml6vqs6t0ll1qgvecjb5re": {
       "vars": [],
       "rows": [],
@@ -101740,6 +103288,34 @@
         ]
       },
       "plain": []
+    },
+    "@8996sj4dfpsvpqdvasnr3cgmsp": {
+      "vars": [
+        0
+      ],
+      "rows": [],
+      "type": {
+        "t": "con",
+        "id": "std.arithmetic",
+        "args": [
+          {
+            "t": "con",
+            "id": "std.tensor",
+            "args": [
+              {
+                "t": "var",
+                "v": 0
+              }
+            ]
+          }
+        ]
+      },
+      "plain": [
+        0
+      ],
+      "arith": [
+        0
+      ]
     },
     "@ja1cj8ju2354fe6dvfpffd5nnp": {
       "vars": [],
@@ -105247,6 +106823,42 @@
     "@ftp8qslhk7a2c3dmp5d5rpsitg:72": "at",
     "@ftp8qslhk7a2c3dmp5d5rpsitg:79": "d",
     "@ftp8qslhk7a2c3dmp5d5rpsitg:92": "axis",
+    "@22kva3bfbgshsbbn46t53oed46": "tensor sum",
+    "@22kva3bfbgshsbbn46t53oed46:2": "first",
+    "@22kva3bfbgshsbbn46t53oed46:3": "second",
+    "@22kva3bfbgshsbbn46t53oed46:7": "shape",
+    "@22kva3bfbgshsbbn46t53oed46:8": "items",
+    "@22kva3bfbgshsbbn46t53oed46:12": "shape",
+    "@22kva3bfbgshsbbn46t53oed46:13": "items",
+    "@22kva3bfbgshsbbn46t53oed46:30": "pair",
+    "@22kva3bfbgshsbbn46t53oed46:34": "x",
+    "@22kva3bfbgshsbbn46t53oed46:35": "y",
+    "@kslbajed4v3fp9h71c38dec7j2": "tensor difference",
+    "@kslbajed4v3fp9h71c38dec7j2:2": "first",
+    "@kslbajed4v3fp9h71c38dec7j2:3": "second",
+    "@kslbajed4v3fp9h71c38dec7j2:7": "shape",
+    "@kslbajed4v3fp9h71c38dec7j2:8": "items",
+    "@kslbajed4v3fp9h71c38dec7j2:12": "shape",
+    "@kslbajed4v3fp9h71c38dec7j2:13": "items",
+    "@kslbajed4v3fp9h71c38dec7j2:30": "pair",
+    "@kslbajed4v3fp9h71c38dec7j2:34": "x",
+    "@kslbajed4v3fp9h71c38dec7j2:35": "y",
+    "@t0fb752m16rrje76drcv0fo95b": "tensor product item by item",
+    "@t0fb752m16rrje76drcv0fo95b:2": "first",
+    "@t0fb752m16rrje76drcv0fo95b:3": "second",
+    "@t0fb752m16rrje76drcv0fo95b:7": "shape",
+    "@t0fb752m16rrje76drcv0fo95b:8": "items",
+    "@t0fb752m16rrje76drcv0fo95b:12": "shape",
+    "@t0fb752m16rrje76drcv0fo95b:13": "items",
+    "@t0fb752m16rrje76drcv0fo95b:30": "pair",
+    "@t0fb752m16rrje76drcv0fo95b:34": "x",
+    "@t0fb752m16rrje76drcv0fo95b:35": "y",
+    "@f94facbi2cleaugljrfq30kr57": "tensor negated",
+    "@f94facbi2cleaugljrfq30kr57:2": "tensor",
+    "@f94facbi2cleaugljrfq30kr57:6": "shape",
+    "@f94facbi2cleaugljrfq30kr57:7": "items",
+    "@f94facbi2cleaugljrfq30kr57:15": "x",
+    "@8996sj4dfpsvpqdvasnr3cgmsp": "arithmetic at tensor",
     "@go4eqh5o6pvomac0lnut74mvc3": "with state",
     "@go4eqh5o6pvomac0lnut74mvc3:2": "initial",
     "@go4eqh5o6pvomac0lnut74mvc3:3": "action",
@@ -105623,6 +107235,10 @@
     "@g6lf3pecclif5gmjgag0itdisi": "A helper of the matrix operations. Not offered.",
     "@ngrotsnaotcertknapkndhe3am": "A helper of the matrix operations. Not offered.",
     "@nd9aa3ja4hrj86por7s6ebn16j": "A helper of the matrix operations. Not offered.",
+    "@22kva3bfbgshsbbn46t53oed46": "A helper of the matrix operations. Not offered.",
+    "@kslbajed4v3fp9h71c38dec7j2": "A helper of the matrix operations. Not offered.",
+    "@t0fb752m16rrje76drcv0fo95b": "A helper of the matrix operations. Not offered.",
+    "@f94facbi2cleaugljrfq30kr57": "A helper of the matrix operations. Not offered.",
     "@4un6mdiqbochbaqhhjj52c3260": "The queue's (priority, item) pairs, soonest first.",
     "@eocjqjkkqpf37csfu127nl3mt9": "The map's smallest key, in compare's order; no answer when the map is empty. value at(m, smallest key(m)) is what it holds.",
     "@649pc2u0aim1kk4c93qokf1l54": "The map's largest key, in compare's order; no answer when the map is empty.",
@@ -105796,6 +107412,7 @@
     "@lqb89d5scvmjsf57qfmaor4239": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
     "@g9q5jlp5kg108qsl8loqhv15gc": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
     "@k8mice5ebistb8hbuqbvhrm8hj": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
+    "@8996sj4dfpsvpqdvasnr3cgmsp": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
     "@e9fsfaqqmkbqi45m9thp36ep42": "The same ticket with what it gives forgotten (a Ticket Unit), so tickets of different types can go in one list for any of.",
     "@s80979s95urnfent649ge9ikvu": "A ticket for whichever of these tickets is ready first: await(any of(tickets)) gives its position, from 0.",
     "@1o5g8v7mf0toapgikplsnlelu1": "Runs the actions side by side: each runs until it awaits a ticket, and whichever ticket is ready first goes on, until every action has its value. The values come back in the actions' order (as JavaScript's Promise.all).",

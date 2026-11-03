@@ -91,6 +91,12 @@ export interface Info {
 // An implementation's place in Info.implementations: its interface and the
 // closed type it is at.
 export const implementationKey = (iface: Id, t: Type) => `${iface}|${JSON.stringify(t)}`;
+// An implementation with type parameters (L219) is also kept by its type
+// constructor alone, so a use whose item type is settled later (an open
+// literal's Float64) still finds it.
+export const genericKey = (iface: Id, con: Id) => `${iface}|@${con}`;
+export const implementationOf = (info: Info, iface: Id, t: Type): Id | undefined =>
+  info.implementations?.get(implementationKey(iface, t)) ?? (t.t === "con" ? info.implementations?.get(genericKey(iface, t.id)) : undefined);
 
 // pins: signatures that definitions must keep and callers see
 // (signatures.ts). hidden: definitions that can be used where they are
@@ -1293,7 +1299,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         if (at.t === "con" && vs.every((v) => v.t === "var") && new Set(vs.map((v) => (v as { v: number }).v)).size === vs.length) {
           const other = generic.find((g) => g.iface === t.id && g.con === at.id);
           if (other) err(d, `${nm(other.def)} and ${nm(d)} are both ${show(t)}: a type has one implementation of an interface, so keep one`);
-          else generic.push({ def: d, iface: t.id, con: at.id, scheme: sc! });
+          else { generic.push({ def: d, iface: t.id, con: at.id, scheme: sc! }); table.set(genericKey(t.id, at.id), d); }
         }
         continue;
       }
@@ -1891,7 +1897,7 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   // where Text does.
   const implemented = (s: Subst, from: number) => s.wanted.slice(from).every((w) => {
     const t = s.zonk(w.t);
-    return t.t !== "con" || !!info.implementations?.has(implementationKey(w.iface, t));
+    return t.t !== "con" || !!implementationOf(info, w.iface, t);
   });
   const fits = (t: Type, asCall: boolean): Subst | null => {
     const s = info.subst.trial();
