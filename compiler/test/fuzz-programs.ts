@@ -5,7 +5,7 @@ import { Lang } from "../../ters/src/lang/dsl.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
-import { ABORT_OP, CONS, LIST, FALSE, FIRST, INT_OPS, NIL, PAIR_V, RANDOM_OP, S, SECOND, SET, SHOW_ANY, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
+import { ABORT_OP, ARRAY_OPS, CONS, LIST, FALSE, FIRST, INT_OPS, NIL, PAIR_V, RANDOM_OP, S, SECOND, SET, SHOW_ANY, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
 import { INT, NUMBER, STRING } from "../../ters/src/lang/types.ts";
 import { B } from "../../ters/src/prelude.ts";
 import type { Id } from "../../ters/src/model.ts";
@@ -19,8 +19,8 @@ function random(seed: number) {
 
 // Float64, Int, Bool, List Int, Text, a data type of three cases (Shape),
 // a record (Box), List Float64 and List Shape (C119), and a tuple
-// (Int, Float64) (C120).
-type Ty = "F" | "I" | "B" | "L" | "T" | "D" | "R" | "P" | "Q" | "U";
+// (Int, Float64) (C120), and an Array Int (C129).
+type Ty = "F" | "I" | "B" | "L" | "T" | "D" | "R" | "P" | "Q" | "U" | "A";
 type Scope = Record<Ty, Id[]>;
 
 export function program(seed: number, count: number, inputs: bigint[][] = []) {
@@ -62,7 +62,7 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
       const shape = r.int(12);
       if (shape === 0) return k.if(sub("B"), sub(t), sub(t));
       if (shape === 1) {
-        const u = r.pick<Ty>(["F", "I", "L", "T", "D", "R", "P", "Q", "U"]);
+        const u = r.pick<Ty>(["F", "I", "L", "T", "D", "R", "P", "Q", "U", "A"]);
         return k.let(fresh(), sub(u), (v) => gen(t, { ...s, [u]: [...s[u], v] }, depth - 1));
       }
       if (shape === 3) return k.match(sub("D"), [
@@ -142,6 +142,9 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
           () => call(lib("length"), sub("L")),
           () => call(lib("length"), r.next() < 0.5 ? sub("P") : sub("Q")),
           () => call(FIRST, sub("U")),
+          () => call(ARRAY_OPS.length, sub("A")),
+          () => orElse(call(ARRAY_OPS.at, sub("A"), sub("I"))),
+          () => orElse(call(ARRAY_OPS.first, sub("A"))),
           () => call(lib("item at"), sub("L"), sub("I"), sub("I")),
           () => call(Box.f["box.count"], sub("R")),
           () => call(TEXT_OPS.length, sub("T")),
@@ -246,6 +249,7 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
           () => call(lib("items of"), call(lib("set difference"), setOf(), setOf())),
           () => k.call(S.first, k.thunk(() => call(lib("queue items"), call(lib("dequeued"), call(lib("queue of"), sub("L"))))), k.thunk(() => sub("L"))),
           () => call(lib("range from"), small(20), small(20)),
+          () => call(ARRAY_OPS.items, sub("A")),
           () => call(lib("flat map"), sub("L"), k.fn([fresh()], (v) => k.list(v, gen("I", { ...s, I: [...s.I, v] }, depth - 1)))),
           () => call(lib("keep"), sub("L"), k.fn([fresh()], (v) => gen("B", { ...s, I: [...s.I, v] }, depth - 1))),
         ])();
@@ -260,6 +264,7 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
           () => call(SHOW_ANY, sub("P")),
           () => call(SHOW_ANY, sub("Q")),
           () => call(SHOW_ANY, sub("U")),
+          () => call(SHOW_ANY, call(ARRAY_OPS.items, sub("A"))),
           () => call(SHOW_ANY, call(lib("merge maps"), textMap(), textMap())),
           () => call(SHOW_ANY, textSet()),
           () => call(TEXT_OPS.joinAll, call(lib("keys of"), textMap()), sub("T")),
@@ -313,6 +318,16 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
           () => call(lib("keep"), sub("Q"), k.fn([fresh()], (v) => gen("B", { ...s, D: [...s.D, v] }, depth - 1))),
         ])();
       }
+      case "A": {
+        if (leaf) return call(ARRAY_OPS.of, k.list(...Array.from({ length: r.int(4) }, () => k.int(r.int(9) - 4))));
+        return r.pick<() => Id>([
+          () => call(ARRAY_OPS.of, sub("L")),
+          () => call(ARRAY_OPS.push, sub("A"), sub("I")),
+          () => call(ARRAY_OPS.pushFront, sub("A"), sub("I")),
+          () => call(ARRAY_OPS.rest, sub("A")),
+          () => call(ARRAY_OPS.replaceAt, sub("A"), small(4), sub("I")),
+        ])();
+      }
       case "U": {
         if (leaf) return call(PAIR_V, k.int(r.int(5) - 2), k.lit(r.pick([0, 0.5, -3])));
         return r.pick<() => Id>([
@@ -340,7 +355,7 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
     k.define(h, k.fn(["b", "s", "m"], (b, s0, m) =>
       k.let("c0", call(Box.f["box.count"], b), (c0) =>
         k.let("m0", call(INT_OPS.add, m, k.int(0)), (m0) => {
-          const sc = (more: Partial<Scope> = {}): Scope => ({ F: [...(more.F ?? [])], I: [c0, m0, ...(more.I ?? [])], L: [], B: [], T: [], D: [s0], R: [b], P: [], Q: [], U: [] });
+          const sc = (more: Partial<Scope> = {}): Scope => ({ F: [...(more.F ?? [])], I: [c0, m0, ...(more.I ?? [])], L: [], B: [], T: [], D: [s0], R: [b], P: [], Q: [], U: [], A: [] });
           return k.match(s0, [
             { variant: shape_.dot, names: [], body: () => gen("I", sc(), 3) },
             { variant: shape_.circle, names: [fresh()], body: ([rad]) => gen("I", sc({ F: [rad] }), 3) },
@@ -355,9 +370,9 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
   for (let i = 0; i < 4; i++) {
     const h = k.def(`rec${i}`);
     k.define(h, k.fn(["xs", "a"], (xs, a) => k.match(xs, [
-      { variant: NIL, names: [], body: () => gen("I", { F: [], I: [a], L: [], B: [], T: [], D: [], R: [], P: [], Q: [], U: [] }, 2) },
-      { variant: CONS, names: [fresh(), fresh()], body: ([hd, tl]) => k.let(fresh(), call(h, tl, gen("I", { F: [], I: [a, hd], L: [tl], B: [], T: [], D: [], R: [], P: [], Q: [], U: [] }, 2)), (got) =>
-        gen("I", { F: [], I: [got, hd, a], L: [tl], B: [], T: [], D: [], R: [], P: [], Q: [], U: [] }, 2)) },
+      { variant: NIL, names: [], body: () => gen("I", { F: [], I: [a], L: [], B: [], T: [], D: [], R: [], P: [], Q: [], U: [], A: [] }, 2) },
+      { variant: CONS, names: [fresh(), fresh()], body: ([hd, tl]) => k.let(fresh(), call(h, tl, gen("I", { F: [], I: [a, hd], L: [tl], B: [], T: [], D: [], R: [], P: [], Q: [], U: [], A: [] }, 2)), (got) =>
+        gen("I", { F: [], I: [got, hd, a], L: [tl], B: [], T: [], D: [], R: [], P: [], Q: [], U: [], A: [] }, 2)) },
     ])));
     recursive.push(h);
   }
@@ -383,14 +398,14 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
   const defs: { def: Id; result: Ty }[] = [];
   for (let i = 0; i < count; i++) {
     calls = false;
-    const result = r.pick<Ty>(["F", "I", "B", "L", "T", "D", "R", "P", "Q", "U"]), def = k.def(`g${i}`);
+    const result = r.pick<Ty>(["F", "I", "B", "L", "T", "D", "R", "P", "Q", "U", "A"]), def = k.def(`g${i}`);
     // Its inputs are a Float64, an Int and a List Int: each used once
     // first, so its type is that whatever the body does.
     k.define(def, k.fn(["x", "n", "xs"], (x, n, xs) =>
       k.let("x0", call(B.add, x, k.lit(0)), (x0) =>
         k.let("n0", call(INT_OPS.add, n, k.int(0)), (n0) =>
           k.let("xs0", call(lib("append"), xs, k.list(n0)), (xs0) =>
-            call(SHOW_ANY, gen(result, { F: [x0], I: [n0], L: [xs0], B: [], T: [], D: [], R: [], P: [], Q: [], U: [] }, 4)))))));
+            ((v) => call(SHOW_ANY, result === "A" ? call(ARRAY_OPS.items, v) : v))(gen(result, { F: [x0], I: [n0], L: [xs0], B: [], T: [], D: [], R: [], P: [], Q: [], U: [], A: [] }, 4)))))));
     defs.push({ def, result });
     if (!calls) callable.push(def);
   }
