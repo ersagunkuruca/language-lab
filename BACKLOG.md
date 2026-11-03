@@ -287,7 +287,6 @@ agent with inertia. All later goals.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L194 | README for someone arriving cold: introduce `lab` once (it's used everywhere and never explained: worst 1), say Ters is the experiment, move build steps to their own section, drop "lane", gloss or move the specialist demos' maths, fix the "compiled JavaScript only" vs "Targets built" contradiction | [OUTSIDER-READ-2026-11-03](docs/reports/reviews/OUTSIDER-READ-2026-11-03.md) §1 | P2 | S | |
 | L195 | TUTORIAL.md in teaching order: every term before its first use (dots, holes, ports, `solve`, `one of`, Choice, shaders), the unparseable sentences of 3.6 and 3.8 rewritten (worst 2), no BACKLOG ids (L107), file names, maintainer notes or CONFUSING.md in the text, one name for the relational interpreter / solver / search, `↦` vs `=>` | [OUTSIDER-READ-2026-11-03](docs/reports/reviews/OUTSIDER-READ-2026-11-03.md) §3 | P2 | M | |
 | L196 | LEARN.md and GUIDE.md: the guide's definition list and pane count match the screen, `seed`, cells and `magnitude` explained where first used, the "click the `(`" step rewritten, the learn page's raw file link gone | [OUTSIDER-READ-2026-11-03](docs/reports/reviews/OUTSIDER-READ-2026-11-03.md) §2, §4 | P3 | S | |
 
