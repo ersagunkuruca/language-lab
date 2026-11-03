@@ -52,6 +52,7 @@ New items land here until the next triage gives them a lane and a priority.
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | E237 | The editor's literals and display for library number types through L204's and L205's interfaces, not editor/typed.ts's own list (`EXOTIC`, the Rational literal paths) | [MATHEMATICS-AS-LIBRARIES](docs/design/numbers/MATHEMATICS-AS-LIBRARIES-2026-11-03.md) | P3 | M | after L204, L205 |
+| E239 | A text literal typed in the editor or read by the text view is stored in NFC (L214a, TEXT-2026-11-03.md §1), so `"é"` typed either way is the same literal and the same key as text from the world | L214a | P3 | S | |
 
 ### Speed of editing
 
@@ -149,6 +150,7 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 | C143 | A stop in compiled code names the node it came from: compiled JS, WebAssembly and C carry each node's id where they can stop (Abort, overflow, no answer, a hole), so `lab run` of compiled code and a page print it and the editor selects it (source maps, influence) | [ASPECTS-2026-11-03b](docs/reports/reviews/ASPECTS-2026-11-03b.md) 269 | P3 | M | |
 | C149 | A module or page printed from the core IR loads in about 200 ms, against compile.ts's 75 (wc): its bundle is 4.6 MB, of which the prelude's and trees' JSON are 3.4 MB, pulled in because run.ts imports arith.ts, whose `preludeDef` finds library definitions by name in them. Only a program that solves or looks inside a function needs them; the rest of the runtime (relate, infer, modes) is there for the same reason. Split what a printed program calls from what the solver needs, and load the second only with a solve | C137c15 (measured 2026-11-03) | P2 | M | |
 | C150 | Words as machine words (L193): Word8, Word32 and Word64 compiled to u8/u32/u64 (WASM i32/i64, C's uint8_t to uint64_t, JS numbers with `>>> 0` or BigInt.asUintN) instead of an Int record wrapped by `bits and`; and, or, xor and shifts on WASM and C (today `scalar: no`). Measured on words.test.ts's FNV-1a and xorshift | L193 | P3 | M | |
+| C151 | Text from the world in NFC on C (L214a, TEXT-2026-11-03.md §1): c-rt's read line, read file, list folder and fetch normalise what they read, as the evaluator, compiled JS and WASM's host do (ters/src/lang/border.ts); needs the composition tables, written once (TEXT §"How each target does it") | L214a | P3 | M | |
 
 ## L: Language and library
 
@@ -269,7 +271,7 @@ agent with inertia. All later goals.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L214 | Text as decided in [TEXT-2026-11-03.md](docs/design/data/TEXT-2026-11-03.md) (L185), one PR each: (a) NFC where text enters (read file, fetch text, read line, a page's field, stored literals) and `normalized`, first; (b) `Locale`, `uppercase`/`lowercase` taking it, `my locale` as a world effect, today's A-to-Z ones renamed `ascii …`; (c) `graphemes`, `grapheme count`; (d) `collated(locale)` | L185, BLIND-SPOTS-2026-11-03 §4 | P3 | M | decided |
+| L214 | Text as decided in [TEXT-2026-11-03.md](docs/design/data/TEXT-2026-11-03.md) (L185), one PR each: (a) done: NFC where text enters (read input, read line, read file, list folder, fetch text, start fetch, a page's field) in the evaluator, compiled JS and WASM's host, and `normalized`; stored literals are E239 and C's host C151; (b) `Locale`, `uppercase`/`lowercase` taking it, `my locale` as a world effect, today's A-to-Z ones renamed `ascii …`; (c) `graphemes`, `grapheme count`; (d) `collated(locale)` | L185, BLIND-SPOTS-2026-11-03 §4 | P3 | M | decided |
 | L187 | Error messages as one table (id, message, usual fix, the gesture that fixes it) with a smallest program per problem as its test | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §8 | P3 | M | |
 | L188 | Dates and times: Instant, calendar Date, Duration (on units.ts), time zone; now and the local zone as world effects (java.time, Temporal, influence) | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §9 | P3 | M | |
 
