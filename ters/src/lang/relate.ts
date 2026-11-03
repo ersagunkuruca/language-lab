@@ -59,7 +59,7 @@ import { children, dependencies, ownerOfTypeParts, subtree, useTarget, type Call
 import { derivativeLambda, gradientLambda } from "./derive.ts";
 import { fieldShapes, look, type TypeEnv } from "./nested.ts";
 import { B, impl } from "../prelude.ts";
-import { bool, close, DEF_VALUE, fromList, makeRunner, META, sameNumber, equal as valueEqual, showValue, caseName, compareValues, variantOrder, ORDER_VALUES, type Data, type Value } from "./run.ts";
+import { bool, close, DEF_VALUE, fromList, makeRunner, META, equal as valueEqual, showValue, caseName, compareValues, variantOrder, ORDER_VALUES, type Data, type Value } from "./run.ts";
 import { NUMERIC, relationFor } from "./equations.ts";
 import { analyzer, type Choice, type Exec, type Fn, type Mode, type Plan } from "./modes.ts";
 import { seededGenerator } from "./random.ts";
@@ -274,8 +274,11 @@ function unify(a: Term, b: Term, s: State): State | null {
   if (a === b) return s;
   if (a instanceof LVar) return bindVar(s, a, b);
   if (b instanceof LVar) return bindVar(s, b, a);
-  // The same rule as `equal` forward (run.ts sameNumber): Ints exactly.
-  if (typeof a === "number" && typeof b === "number") return sameNumber(a, b) ? s : null;
+  // Near (run.ts close): the solver checks an answer it computed in floats,
+  // so √2 squared is 2 here, though `equal` is exact (L197). An Int is a JS
+  // number only below 2^28, where two different whole numbers are further
+  // apart than `close` allows, and a BigInt beyond: Ints stay exact.
+  if (typeof a === "number" && typeof b === "number") return close(a, b) ? s : null;
   if (typeof a !== "object" || typeof b !== "object") return null;
   if (isData(a) && isData(b)) {
     if (a.tag !== b.tag || a.fields.length !== b.fields.length) return null;

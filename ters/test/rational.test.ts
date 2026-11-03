@@ -45,7 +45,7 @@ function program() {
     quotient: def("quotient", () => all(() => k.call(show, k.call(divide, f(3, 4), f(3, 8))))),
     byZero: def("by zero", () => all(() => k.call(divide, f(1, 2), f(0, 5)))),
     noBottom: def("no bottom", () => all(() => f(1, 0))),
-    near: def("near", () => all(() => k.call(asNumber, f(1, 4)))),
+    quarter: def("quarter", () => all(() => k.call(asNumber, f(1, 4)))),
     // Past 2⁵³: still exact.
     big: def("big", () => all(() => k.call(show, k.call(ARITH.mul, k.call(fraction, k.int("9007199254740993"), k.int(2)), f(2, 3))))),
   };
@@ -53,7 +53,7 @@ function program() {
   return { code, names, info: infer(code, names, undefined, checkOptions), defs };
 }
 
-const NAMES = ["total", "tenths", "lowest", "product", "difference", "doubled", "least", "quotient", "by zero", "no bottom", "near", "big"];
+const NAMES = ["total", "tenths", "lowest", "product", "difference", "doubled", "least", "quotient", "by zero", "no bottom", "quarter", "big"];
 const items = (v: Value): Value[] => { const out: Value[] = []; let l = v as { fields: Value[] }; while (l.fields.length) { out.push(l.fields[0]); l = l.fields[1] as { fields: Value[] }; } return out; };
 const plain = (v: unknown): unknown => JSON.parse(JSON.stringify(v, (_, x) => (typeof x === "bigint" ? `${x}n` : x)));
 
@@ -90,7 +90,7 @@ test("exact answers, in lowest terms; no answer at a zero bottom", async () => {
   assert.deepEqual(e.quotient, ["2"]);
   assert.deepEqual(e["by zero"], []);
   assert.deepEqual(e["no bottom"], []);
-  assert.deepEqual(e.near, [0.25]);
+  assert.deepEqual(e.quarter, [0.25]);
   assert.deepEqual(e.big, ["3002399751580331"]);
 });
 

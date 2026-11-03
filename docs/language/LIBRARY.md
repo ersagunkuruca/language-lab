@@ -40,6 +40,7 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 - **show** : `(Float64) -> Text`. A Float64 as text: show(2.5) is "2.5". Up to nine decimals, so 0.1 + 0.2 shows 0.3; a nonzero number smaller than 0.000001 shows exactly, as 1e-12, never as 0.
 - **range** : `(Float64) -> List Float64`. The Float64s 0, 1, … up to n − 1, as a list.
 - **show decimals** : `(Float64, Int) -> Text`. x as text with `places` digits after the point, rounded half away from 0 and keeping trailing zeros: show decimals(2.5, 3) is "2.500", show decimals(-0.0004, 3) is "0.000". For when show's up to nine places would jump about.
+- **near** : `(Float64, Float64) -> Bool`. Whether two Float64s agree to the precision floats carry: within 1e-9 of each other, relative to their size. equal is exact, so √2 · √2 isn't equal to 2, but it is near it.
 - **quotient** : `(Int, Int) -[Choice]-> Int`. a ÷ b rounded down to a whole number. No answer (Choice) when b is 0.
 - **remainder** : `(Int, Int) -[Choice]-> Int`. What's left of a after quotient(a, b) times b; it has b's sign. No answer when b is 0.
 - **power** : `(Int, Int) -[Choice]-> Int`. a to the power b for Ints. No answer when b is negative.
@@ -149,7 +150,7 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 - **or** : `(Bool, Bool) -> Bool`. Either true.
 - **not** : `(Bool) -> Bool`. true becomes false and false true.
 - **equal** : `(a, a) -> Bool`. Whether two values are the same: numbers, text, and data made of them. Functions can't be compared.
-- **compare** : `(a, a) -> Order`. How two values are ordered: before, same or after. Float64s by value, exactly (unlike equal, which lets two Float64s within about 1e-9 be equal), with NaN after every other Float64; text alphabetically; cases in the order their type lists them; then field by field. sort, maps and sets use it.
+- **compare** : `(a, a) -> Order`. How two values are ordered: before, same or after. Float64s by value, exactly (as equal compares them), with NaN after every other Float64; text alphabetically; cases in the order their type lists them; then field by field. sort, maps and sets use it.
 - **Order** (type). What compare answers: before, same or after.
 - **show** : `(a) -> Text`. Any plain value as text, the way it would be written: show([1, 2]) is "[1, 2]". Every number type shows as its number: a fraction 1/3, a Fixed by show fixed's digits, an Extended as its number or +∞ and −∞.
 - **case name** : `(a) -> Text`. The name of the case the value was made by, as text: case name(some(3)) is "some", case name([]) is "nil". A number or a text was made by no case and gives "".
