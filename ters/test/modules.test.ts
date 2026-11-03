@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { isPublished, merge, MergeClash, subtree, type Code, type Id, type Node, type NodeOf } from "../src/model.ts";
+import { isPublished, merge, MergeClash, subtree, type Code, type Id, type Node, type NodeOf, type Call } from "../src/model.ts";
 import { B } from "../src/prelude.ts";
 import { hashDef } from "../src/hash.ts";
 import { hex, sha256 } from "../src/sha256.ts";
@@ -158,7 +158,7 @@ test("sameAs: a draft with a library definition's hash, or another draft's, is s
   assert.ok(code.defs.includes(map) && code.defs.includes(sq));
   // Edited into x + x, sq matches nothing, and square nothing either.
   const lam = code.nodes[(code.nodes[sq] as NodeOf<"def">).body!] as NodeOf<"lambda">;
-  const op = (code.nodes[lam.body] as NodeOf<"call">).fn;
+  const op = (code.nodes[lam.body] as Call).fn;
   const edited = { ...code, nodes: { ...code.nodes, [op]: { ...code.nodes[op], target: B.add } as Node } };
   const after = sameAs(edited, LIBRARY);
   assert.equal(after.get(sq), undefined);

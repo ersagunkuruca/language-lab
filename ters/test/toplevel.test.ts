@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isPublished, subtree, type Code, type Id, type Node, type NodeOf } from "../src/model.ts";
+import { isPublished, subtree, type Code, type Id, type Node, type NodeOf, isCall, type Call } from "../src/model.ts";
 import { B } from "../src/prelude.ts";
 import type { Names } from "../src/presentation.ts";
 import { fillings, infer, type Filling } from "../src/lang/infer.ts";
@@ -99,13 +99,13 @@ test("a program written from nothing: a data type, a function over it, and a mai
   // A new input: every call to area gets a hole for it, so the program
   // stays well-formed; removing it again drops the argument.
   const scale = s.ok(Top.addParameter(s.code, s.names, area, "scale"));
-  const areaCall = Object.values(s.code.nodes).find((n) => n.kind === "call" && (s.code.nodes[n.fn] as NodeOf<"ref">).target === area) as NodeOf<"call">;
+  const areaCall = Object.values(s.code.nodes).find((n) => isCall(n) && (s.code.nodes[n.fn] as NodeOf<"ref">).target === area) as Call;
   assert.equal(areaCall.args.length, 2);
   assert.equal(s.code.nodes[areaCall.args[1]].kind, "hole");
   s.ok(Top.moveParameter(s.code, s.names, area, scale, -1));
-  assert.equal(s.code.nodes[(s.code.nodes[areaCall.id] as NodeOf<"call">).args[0]].kind, "hole");
+  assert.equal(s.code.nodes[(s.code.nodes[areaCall.id] as Call).args[0]].kind, "hole");
   s.ok(Top.removeParameter(s.code, s.names, area, scale));
-  assert.equal((s.code.nodes[areaCall.id] as NodeOf<"call">).args.length, 1);
+  assert.equal((s.code.nodes[areaCall.id] as Call).args.length, 1);
   out.length = 0;
   runMain(s.code, s.info(), main, { print: (l) => out.push(l) });
   assert.deepEqual(out, ["12"]);
@@ -113,7 +113,7 @@ test("a program written from nothing: a data type, a function over it, and a mai
   // A field added to circle: the constructor call gets a hole, the arm a
   // binder. Removing it drops both.
   const label = s.ok(Top.addField(s.code, s.names, shape, circle, "label", { target: "type.string", args: [] }));
-  const made = Object.values(s.code.nodes).find((n) => n.kind === "call" && (s.code.nodes[n.fn] as NodeOf<"ref">)?.target === circle) as NodeOf<"call">;
+  const made = Object.values(s.code.nodes).find((n) => isCall(n) && (s.code.nodes[n.fn] as NodeOf<"ref">)?.target === circle) as Call;
   assert.equal(made.args.length, 2);
   assert.equal(binds(circle).length, 2);
   s.ok(Top.removeField(s.code, s.names, circle, label));
@@ -132,7 +132,7 @@ test("a program written from nothing: a data type, a function over it, and a mai
     t.ok(Top.removeParameter(t.code, t.names, area, p, true));
     assert.equal((t.code.nodes[(t.code.nodes[area] as NodeOf<"def">).body!] as NodeOf<"lambda">).params.length, 0);
     for (const u of used) assert.equal(t.code.nodes[u].kind, "hole");
-    assert.equal((t.code.nodes[areaCall.id] as NodeOf<"call">).args.length, 0);
+    assert.equal((t.code.nodes[areaCall.id] as Call).args.length, 0);
   }
   assert.match(s.refused(Top.removeCase(s.code, s.names, shape, circle)), /made in 1 place/);
   assert.match(s.refused(Top.newDefinition(s.code, s.names, "area", { kind: "value" })), /already/);
@@ -242,7 +242,7 @@ test("a program saved to a file opens again as the same program, and a broken fi
   assert.deepEqual(infer(r.code, baseNames(r.file.names)).errors, []);
 
   const broken = JSON.parse(text);
-  const some = Object.keys(broken.code.nodes).find((k) => broken.code.nodes[k].kind === "call")!;
+  const some = Object.keys(broken.code.nodes).find((k) => isCall(broken.code.nodes[k]))!;
   broken.code.nodes[some].fn = "nowhere";
   const e = fromFile(JSON.stringify(broken), () => empty);
   assert.ok("error" in e && /points at nowhere/.test(e.error));
@@ -356,14 +356,14 @@ test("show inline: a call drawn as its callee's body is a let, and type-checks t
   const { join } = await import("node:path");
   const p = loadProgram(join(import.meta.dirname, "../examples/sort"));
   const insert = p.named("insert");
-  const call = Object.values(p.code.nodes).find((n) => n.kind === "call" && (p.code.nodes[n.fn] as NodeOf<"ref">).target === insert)!.id;
+  const call = Object.values(p.code.nodes).find((n) => isCall(n) && (p.code.nodes[n.fn] as NodeOf<"ref">).target === insert)!.id;
   const v = inlineView(p.code, p.pres.names, [call]);
-  const c = v.code.nodes[call] as NodeOf<"call">;
+  const c = v.code.nodes[call] as Call;
   assert.equal(v.code.nodes[c.fn].kind, "lambda");
   assert.equal(v.names[(v.code.nodes[c.fn] as NodeOf<"lambda">).params[0]], "x");
   assert.ok([...v.from.keys()].every((id) => id === call || id.endsWith(`~${call}`)));
   assert.deepEqual(infer(v.code, v.names).errors, []);
-  assert.equal(p.code.nodes[(p.code.nodes[call] as NodeOf<"call">).fn].kind, "ref", "the program itself is untouched");
+  assert.equal(p.code.nodes[(p.code.nodes[call] as Call).fn].kind, "ref", "the program itself is untouched");
   const out: string[] = [];
   runMain(v.code, infer(v.code, v.names), p.named("main"), { print: (s) => out.push(s) });
   assert.deepEqual(out, ["[1, 2, 3]"]);
@@ -607,7 +607,7 @@ test("a step can go inside one arm of a match: it runs there, just before that a
   const r = T.addStep(p.code, p.pres.names, info, insert, arm.body);
   assert.ok(r.ok, r.ok ? "" : r.reason);
   if (!r.ok) return;
-  const now = r.code.nodes[(r.code.nodes[arm.id] as NodeOf<"arm">).body] as NodeOf<"call">;
+  const now = r.code.nodes[(r.code.nodes[arm.id] as NodeOf<"arm">).body] as Call;
   assert.equal(now.kind, "call");
   const lam = r.code.nodes[now.fn] as NodeOf<"lambda">;
   assert.deepEqual([lam.kind, lam.params, lam.body], ["lambda", [r.dot], arm.body]);
@@ -629,7 +629,7 @@ test("arithmetic typed where a value goes is calls of the operators: 2 × (3 −
   const show = (id: Id): string => {
     const n = r.code.nodes[id];
     if (n.kind === "lit") return String(n.value);
-    const c = n as NodeOf<"call">;
+    const c = n as Call;
     return `${(r.code.nodes[c.fn] as NodeOf<"ref">).target}(${c.args.map(show).join(", ")})`;
   };
   assert.equal(show(lit.id), `${ARITH.sub}(${ARITH.mul}(2, ${ARITH.sub}(3, 1)), -1)`);
@@ -648,7 +648,7 @@ test("arithmetic typed in the palette reads the names in scope: x * 2 in double(
   }
   const r = T.fillValue(s.code, s.all(), s.info(), hole, "x * 2", double);
   if (!r.ok) return;
-  const c = r.code.nodes[hole] as NodeOf<"call">;
+  const c = r.code.nodes[hole] as Call;
   assert.deepEqual([(r.code.nodes[c.fn] as NodeOf<"ref">).target, (r.code.nodes[c.args[0]] as NodeOf<"ref">).target], [ARITH.mul, x]);
   // Out of scope it is nothing, and a name alone is the list's.
   assert.equal(T.fillValue(s.code, s.all(), s.info(), hole, "y * 2", double).ok, false);
@@ -684,7 +684,7 @@ test("a call typed in the palette reads as it prints: sqrt(x + 1) in double(x)",
   }
   const r = T.fillValue(s.code, s.all(), s.info(), hole, "sqrt(x)", double);
   if (!r.ok) return;
-  const c = r.code.nodes[hole] as NodeOf<"call">;
+  const c = r.code.nodes[hole] as Call;
   assert.deepEqual([s.all()[(r.code.nodes[c.fn] as NodeOf<"ref">).target], (r.code.nodes[c.args[0]] as NodeOf<"ref">).target], ["sqrt", x]);
   // A name nothing has, or a call that doesn't type-check, is nothing.
   assert.equal(T.fillValue(s.code, s.all(), s.info(), hole, "nope(x)", double).ok, false);
@@ -854,7 +854,7 @@ test("an action with no inputs becomes a value, and back", async () => {
   if (!v.ok) return;
   assert.notEqual(v.code.nodes[(v.code.nodes[symbols] as NodeOf<"def">).body!].kind, "lambda");
   assert.equal(subtree(v.code, g).filter((x) => (v.code.nodes[x] as NodeOf<"ref">).target === symbols).length, 2);
-  const zero = (c: Code) => subtree(c, g).filter((x) => c.nodes[x].kind === "call" && !(c.nodes[x] as NodeOf<"call">).args.length).length;
+  const zero = (c: Code) => subtree(c, g).filter((x) => isCall(c.nodes[x]) && !(c.nodes[x] as Call).args.length).length;
   assert.equal(zero(v.code), 0);
   assert.equal(infer(v.code).errors.length, infer(code).errors.length);
   const back = toggleValue(v.code, v.names, symbols);

@@ -13,7 +13,7 @@
 // any other edit.
 
 import type { Code, Id, Node, NodeData, NodeOf, Use } from "../model.ts";
-import { isUse, useTarget } from "../model.ts";
+import { isUse, useTarget, isCall, type Call } from "../model.ts";
 import { children, collect, freshId, ownerOfTypeParts, parentAt, parentOf, replace, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 
@@ -78,8 +78,8 @@ function scopesWith(code: Code, def: Id, binder: Id): Id[] {
 }
 
 const refsTo = (code: Code, target: Id) => Object.values(code.nodes).filter((n): n is NodeOf<"ref"> => n.kind === "ref" && n.target === target);
-const callsOf = (code: Code, target: Id) => Object.values(code.nodes).filter((n): n is NodeOf<"call"> => {
-  if (n.kind !== "call") return false;
+const callsOf = (code: Code, target: Id) => Object.values(code.nodes).filter((n): n is Call => {
+  if (!isCall(n)) return false;
   if (n.fn === target) return true;
   const f = code.nodes[n.fn];
   return f?.kind === "ref" && f.target === target;
@@ -236,7 +236,7 @@ export function toggleValue(code: Code, names: Names, def: Id): Top {
   if (body.kind === "lambda" && (body.params.length || body.results?.length)) return { ok: false, reason: `${nameOf(names, def)} has inputs; only one with none can be a value` };
   const { nodes, add } = builder(code);
   const own = new Set(subtree(code, def));
-  const calls = Object.values(code.nodes).filter((n): n is NodeOf<"call"> => n.kind === "call" && !n.args.length && code.nodes[n.fn]?.kind === "ref" && (code.nodes[n.fn] as NodeOf<"ref">).target === def);
+  const calls = Object.values(code.nodes).filter((n): n is Call => isCall(n) && !n.args.length && code.nodes[n.fn]?.kind === "ref" && (code.nodes[n.fn] as NodeOf<"ref">).target === def);
   const called = new Set(calls.map((c) => c.fn));
   if (body.kind === "lambda") {
     nodes[def] = { ...d, body: body.body };
@@ -661,21 +661,21 @@ export function typeHeads(code: Code, type: Id, variant?: Id): { target: Id; ari
 // do v2, …, then the last step, whose value is the action's. The let of a
 // value: the call that applies a one-input function to it, if it is one.
 // Both read `code` only, so its parent index serves (model.ts parentAt).
-function letOf(code: Code, value: Id): { call: NodeOf<"call">; lam: NodeOf<"lambda"> } | null {
+function letOf(code: Code, value: Id): { call: Call; lam: NodeOf<"lambda"> } | null {
   const at = parentAt(code, value);
   const call = at?.slot === "args" ? code.nodes[at.parent] : null;
-  if (call?.kind !== "call" || call.args.length !== 1) return null;
+  if (!isCall(call) || call.args.length !== 1) return null;
   const lam = code.nodes[call.fn];
   return lam?.kind === "lambda" && lam.params.length === 1 ? { call, lam } : null;
 }
 // The let whose function's body is `id`: the step before it.
-function letAround(code: Code, id: Id): { call: NodeOf<"call">; lam: NodeOf<"lambda"> } | null {
+function letAround(code: Code, id: Id): { call: Call; lam: NodeOf<"lambda"> } | null {
   const at = parentAt(code, id);
   const lam = at?.slot === "body" ? code.nodes[at.parent] : null;
   if (lam?.kind !== "lambda" || lam.params.length !== 1) return null;
   const by = parentAt(code, lam.id);
   const call = by?.slot === "fn" ? code.nodes[by.parent] : null;
-  return call?.kind === "call" && call.args.length === 1 ? { call, lam } : null;
+  return isCall(call) && call.args.length === 1 ? { call, lam } : null;
 }
 const mentions = (code: Code, root: Id, b: Id) => subtree(code, root).some((id) => { const n = code.nodes[id]; return n.kind === "ref" && n.target === b; });
 
@@ -686,7 +686,7 @@ const mentions = (code: Code, root: Id, b: Id) => subtree(code, root).some((id) 
 export function moveStep(code: Code, names: Names, step: Id, by: -1 | 1): Top {
   const self = letOf(code, step);
   // The pair to swap: an outer let and what its function's body does next.
-  let outer: { call: NodeOf<"call">; lam: NodeOf<"lambda"> } | null;
+  let outer: { call: Call; lam: NodeOf<"lambda"> } | null;
   if (by < 0) outer = self ? letAround(code, self.call.id) : letAround(code, step);
   else outer = self;
   if (!self && !letAround(code, step)) return { ok: false, reason: "it isn't a step of an action" };
@@ -694,7 +694,7 @@ export function moveStep(code: Code, names: Names, step: Id, by: -1 | 1): Top {
   const nodes = { ...code.nodes };
   const v0 = outer.call.args[0], b0 = outer.lam.params[0];
   const inner = code.nodes[outer.lam.body];
-  const next = inner.kind === "call" ? letOf(code, inner.args[0] ?? "") : null;
+  const next = isCall(inner) ? letOf(code, inner.args[0] ?? "") : null;
   if (next && next.call.id === inner.id) {
     // Two lets: swap their bindings. The later value can't use the earlier's.
     const v1 = next.call.args[0], b1 = next.lam.params[0];

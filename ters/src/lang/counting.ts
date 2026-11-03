@@ -18,6 +18,7 @@
 // take a counted input as one that strictly shrinks at that call.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
+import { isCall } from "../model.ts";
 import { ARITH, FALSE, INT_OPS, S, TRUE } from "./std.ts";
 import { INT } from "./types.ts";
 
@@ -56,7 +57,7 @@ export function countedCalls(code: Code, self: Id, lam: NodeOf<"lambda">): Set<s
   };
   const guardsOf = (cond: Id, holds: boolean): Guard[] => {
     const n = nodes[cond];
-    if (n?.kind !== "call") return [];
+    if (!isCall(n)) return [];
     const f = nodes[n.fn];
     if (f?.kind !== "ref") return [];
     if (f.target === S.not) return guardsOf(n.args[0], !holds);
@@ -80,12 +81,12 @@ export function countedCalls(code: Code, self: Id, lam: NodeOf<"lambda">): Set<s
     const n = nodes[id];
     if (!n) return;
     if (n.kind === "ref" && n.target === self) { other = true; return; }
-    if (n.kind === "call" && nodes[n.fn]?.kind === "ref" && (nodes[n.fn] as NodeOf<"ref">).target === self) {
+    if (isCall(n) && nodes[n.fn]?.kind === "ref" && (nodes[n.fn] as NodeOf<"ref">).target === self) {
       const call: SelfCall = { call: id, unchanged: new Set(), counts: [] };
       n.args.forEach((a, j) => {
         if (inputOf(a) === j) { call.unchanged.add(j); return; }
         const m = nodes[a];
-        if (m?.kind !== "call") return;
+        if (!isCall(m)) return;
         const op = nodes[m.fn];
         if (op?.kind !== "ref") return;
         const up = UP.has(op.target), down = DOWN.has(op.target);

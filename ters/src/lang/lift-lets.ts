@@ -15,18 +15,18 @@
 // Like arith.ts, the program comes back unchanged when it has none.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
-import { freshId, subtree } from "../model.ts";
+import { freshId, subtree, isCall, type Call } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { infer, recursiveLet, type Info } from "./infer.ts";
 
 // `every`: every let whose value is a function, recursive or not, outer
 // ones first, so an inner one that calls an outer one calls its
 // definition (the GPU, WebAssembly and C have no closures: scalar.ts, C54).
-function find(code: Code, every = false, kept = new Set<Id>()): { call: NodeOf<"call">; i: number; p: Id } | null {
+function find(code: Code, every = false, kept = new Set<Id>()): { call: Call; i: number; p: Id } | null {
   const ids = every ? code.defs.flatMap((d) => subtree(code, d)) : Object.keys(code.nodes);
   for (const id of ids) {
     const n = code.nodes[id];
-    if (n?.kind !== "call" || code.nodes[n.fn]?.kind !== "lambda") continue;
+    if (!isCall(n) || code.nodes[n.fn]?.kind !== "lambda") continue;
     for (let i = 0; i < n.args.length; i++) {
       const f = code.nodes[n.fn] as NodeOf<"lambda">;
       const p = every ? (code.nodes[n.args[i]]?.kind === "lambda" && !kept.has(n.args[i]) && f.params.length === n.args.length ? f.params[i] : null) : recursiveLet(code, n, i);
@@ -68,8 +68,8 @@ export function liftLets(code: Code, info: Info, names: Names = {}, every = fals
       nodes[body] = { id: body, kind: "call", fn: ref(helper), args: [...given.map(ref), ...params.map(ref)] };
       nodes[id] = { id, kind: "lambda", params, body };
     };
-    const callers = new Map<Id, NodeOf<"call">>();
-    for (const x of inside) { const n = nodes[x]; if (n?.kind === "call") callers.set(n.fn, n); }
+    const callers = new Map<Id, Call>();
+    for (const x of inside) { const n = nodes[x]; if (isCall(n)) callers.set(n.fn, n); }
     for (const x of inside) {
       const n = nodes[x];
       if (n?.kind !== "ref") continue;
@@ -79,7 +79,7 @@ export function liftLets(code: Code, info: Info, names: Names = {}, every = fals
         if (c) {
           // name(xs) is helper(free…, xs)
           nodes[x] = { ...n, target: helper };
-          nodes[c.id] = { ...(nodes[c.id] as NodeOf<"call">), args: [...outer.map(ref), ...(nodes[c.id] as NodeOf<"call">).args] };
+          nodes[c.id] = { ...(nodes[c.id] as Call), args: [...outer.map(ref), ...(nodes[c.id] as Call).args] };
         } else if (free.length) wrapper(x, outer);
         else nodes[x] = { ...n, target: helper };
       }
@@ -97,7 +97,7 @@ export function liftLets(code: Code, info: Info, names: Names = {}, every = fals
       // that's every use of the name, the let has nothing left to bind.
       const around = subtree(work(), (nodes[call.fn] as NodeOf<"lambda">).body);
       const heads = new Map<Id, Id>();
-      for (const x of around) { const m = nodes[x]; if (m?.kind === "call") heads.set(m.fn, m.id); }
+      for (const x of around) { const m = nodes[x]; if (isCall(m)) heads.set(m.fn, m.id); }
       let other = false;
       for (const x of around) {
         const m = nodes[x];
@@ -105,11 +105,11 @@ export function liftLets(code: Code, info: Info, names: Names = {}, every = fals
         const c = heads.get(x);
         if (!c) { other = true; continue; }
         nodes[x] = { ...m, target: helper };
-        nodes[c] = { ...(nodes[c] as NodeOf<"call">), args: [...free.map(ref), ...(nodes[c] as NodeOf<"call">).args] };
+        nodes[c] = { ...(nodes[c] as Call), args: [...free.map(ref), ...(nodes[c] as Call).args] };
       }
       if (other) kept.add(fn.id);
       else {
-        const let_ = nodes[call.fn] as NodeOf<"lambda">, at = nodes[call.id] as NodeOf<"call">;
+        const let_ = nodes[call.fn] as NodeOf<"lambda">, at = nodes[call.id] as Call;
         const params = let_.params.filter((_, k) => k !== i), args = at.args.filter((_, k) => k !== i);
         if (params.length) { nodes[let_.id] = { ...let_, params }; nodes[call.id] = { ...at, args }; }
         else nodes[call.id] = { ...nodes[let_.body], id: call.id };

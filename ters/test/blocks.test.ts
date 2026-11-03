@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { root } from "../src/io.ts";
 import { infer } from "../src/lang/infer.ts";
 import { loadProgram } from "../src/lang/load.ts";
-import { subtree } from "../src/model.ts";
+import { subtree, isCall } from "../src/model.ts";
 import { ARITH } from "../src/lang/std.ts";
 
 class El {
@@ -124,7 +124,7 @@ test("a definition's name hovers as its own type", () => {
 test("holes of a generic + show their type without the where clause", () => {
   const p = loadProgram(join(root, "examples", "physics"));
   const def = p.named("fall");
-  const add = Object.values(p.code.nodes).find((n) => n.kind === "call" && n.args.length === 2 && subtree(p.code, def).includes(n.id) && (p.code.nodes[n.fn] as { target?: string }).target === "builtin.add") as { fn: string; args: string[] } | undefined;
+  const add = Object.values(p.code.nodes).find((n) => isCall(n) && n.args.length === 2 && subtree(p.code, def).includes(n.id) && (p.code.nodes[n.fn] as { target?: string }).target === "builtin.add") as { fn: string; args: string[] } | undefined;
   assert.ok(add, "fall adds");
   // the generic + the palette offers, on two holes
   const nodes = { ...p.code.nodes, [add!.fn]: { ...p.code.nodes[add!.fn], target: ARITH.add } as typeof p.code.nodes[string] };

@@ -4,7 +4,8 @@
 // text as in the graph, and the text reader reads results.drift back as
 // that part. Without names the part reads by its place, results.first.
 
-import type { Code, Id, NodeOf } from "../model.ts";
+import type { Code, Id, NodeOf, Call } from "../model.ts";
+import { isCall } from "../model.ts";
 import { TUPLE_MAX, tuplePart } from "./std.ts";
 
 // What each let's dot holds, per program: found once.
@@ -13,7 +14,7 @@ function letValue(code: Code, b: Id): Id | undefined {
   let m = lets.get(code.nodes);
   if (!m) {
     m = new Map();
-    for (const c of Object.values(code.nodes)) if (c.kind === "call") { const l = code.nodes[c.fn]; if (l?.kind === "lambda") l.params.forEach((p, i) => c.args[i] && m!.set(p, c.args[i])); }
+    for (const c of Object.values(code.nodes)) if (isCall(c)) { const l = code.nodes[c.fn]; if (l?.kind === "lambda") l.params.forEach((p, i) => c.args[i] && m!.set(p, c.args[i])); }
     lets.set(code.nodes, m);
   }
   return m.get(b);
@@ -21,10 +22,10 @@ function letValue(code: Code, b: Id): Id | undefined {
 
 // The function or call `e` stands for, through names and dots (`e` a
 // dot itself, too).
-function follow(code: Code, e: Id | undefined): NodeOf<"lambda"> | NodeOf<"call"> | null {
+function follow(code: Code, e: Id | undefined): NodeOf<"lambda"> | Call | null {
   for (let hops = 0; e && hops < 8; hops++) {
     const x = code.nodes[e];
-    if (x?.kind === "lambda" || x?.kind === "call") return x;
+    if (x?.kind === "lambda" || isCall(x)) return x;
     if (x?.kind === "binder") { e = letValue(code, e); continue; }
     if (x?.kind !== "ref") return null;
     const t = code.nodes[x.target];
@@ -36,7 +37,7 @@ function follow(code: Code, e: Id | undefined): NodeOf<"lambda"> | NodeOf<"call"
 // The named result ports of the function whose call `from` is.
 export function resultPorts(code: Code, from: Id): Id[] | undefined {
   const c = follow(code, from);
-  const fn = c?.kind === "call" ? follow(code, c.fn) : null;
+  const fn = isCall(c) ? follow(code, c.fn) : null;
   return fn?.kind === "lambda" ? fn.results : undefined;
 }
 

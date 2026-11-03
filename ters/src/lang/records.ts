@@ -4,7 +4,7 @@
 // the projections rather than written (REVIEW.md §5.3). The checker accepts
 // only a field or a path of fields, so every update has exactly one answer.
 
-import { children, ownerOfTypeParts, type Code, type Id, type NodeOf } from "../model.ts";
+import { children, ownerOfTypeParts, type Code, type Id, type NodeOf, isCall, type Call } from "../model.ts";
 
 // The fields `id` reads, outermost first, if it is a field or a lambda of
 // one parameter that only takes fields of it; otherwise null. With
@@ -22,7 +22,7 @@ export function fieldPath(code: Code, id: Id, unfinished = false): Id[] | null {
 function pathFrom(code: Code, body: Id, param: Id, unfinished: boolean): Id[] | null {
   const path: Id[] = [];
   let e = code.nodes[body];
-  while (e?.kind === "call" && e.args.length === 1) {
+  while (isCall(e) && e.args.length === 1) {
     const head = code.nodes[e.fn];
     if (unfinished && head?.kind === "hole") { e = code.nodes[e.args[0]]; continue; }
     if (head?.kind !== "ref" || code.nodes[head.target]?.kind !== "field") return null;
@@ -43,8 +43,8 @@ const TUPLE = /^std\.tuple[2-8]\.tuple$/;
 export function fieldPaths(code: Code, id: Id, unfinished = false): Id[][] | null {
   const n = code.nodes[id];
   if (n?.kind !== "lambda" || n.params.length !== 1) return null;
-  const body = code.nodes[n.body], head = body?.kind === "call" ? code.nodes[body.fn] : undefined;
-  if (body?.kind !== "call" || head?.kind !== "ref" || !TUPLE.test(head.target)) return null;
+  const body = code.nodes[n.body], head = isCall(body) ? code.nodes[body.fn] : undefined;
+  if (!isCall(body) || head?.kind !== "ref" || !TUPLE.test(head.target)) return null;
   const paths = body.args.map((a) => pathFrom(code, a, n.params[0], unfinished));
   if (paths.some((p) => !p)) return null;
   const inside = (a: Id[], b: Id[]) => a.length > 0 && a.length <= b.length && a.every((f, i) => b[i] === f);
@@ -125,8 +125,8 @@ export function readPaths(code: Code, id: Id): { paths: Id[][]; uses: { node: Id
   const p = n.params[0];
   // A tuple of paths with one twice or inside another is several fields
   // set wrongly, not a function: refused as such.
-  const b = code.nodes[n.body], head = b?.kind === "call" ? code.nodes[b.fn] : undefined;
-  if (b?.kind === "call" && head?.kind === "ref" && TUPLE.test(head.target) && b.args.every((a) => pathFrom(code, a, p, false))) return null;
+  const b = code.nodes[n.body], head = isCall(b) ? code.nodes[b.fn] : undefined;
+  if (isCall(b) && head?.kind === "ref" && TUPLE.test(head.target) && b.args.every((a) => pathFrom(code, a, p, false))) return null;
   const found: { node: Id; path: Id[] }[] = [];
   let whole = false;
   const walk = (e: Id) => {
@@ -149,7 +149,7 @@ export function readPaths(code: Code, id: Id): { paths: Id[][]; uses: { node: Id
     // The node at the depth of its path's part: p.a.b read with p.a kept is
     // p.a's node, one field call down.
     let at = node;
-    for (let d = path.length - paths[i].length; d > 0; d--) at = (code.nodes[at] as NodeOf<"call">).args[0];
+    for (let d = path.length - paths[i].length; d > 0; d--) at = (code.nodes[at] as Call).args[0];
     return { node: at, path: i };
   });
   return { paths, uses };

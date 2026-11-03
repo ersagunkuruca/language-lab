@@ -23,7 +23,7 @@
 // mode for the rest hands the array on.
 
 import type { Code, Id, NodeOf, Use } from "../../ters/src/model.ts";
-import { useTarget } from "../../ters/src/model.ts";
+import { useTarget, type Call } from "../../ters/src/model.ts";
 import { analyzer, determinism, type Exec, type Plan } from "../../ters/src/lang/modes.ts";
 import { CONS, INT_OPS, NIL, S } from "../../ters/src/lang/std.ts";
 import { B } from "../../ters/src/prelude.ts";
@@ -36,7 +36,7 @@ export interface ModeEmit {
   value(id: Id): string | null;
   // A call whose arguments are all known, run forward; null when it can't
   // be. `partial`: the answer may be $no (a builtin with Choice).
-  forward(call: NodeOf<"call">, args: string[]): { js: string; partial?: boolean } | null;
+  forward(call: Call, args: string[]): { js: string; partial?: boolean } | null;
   tag(variant: Id): string;
 }
 
@@ -181,7 +181,7 @@ export function modeCompiler(code: Code, names: Record<Id, string>) {
   }
 
   const fails = (plan: Plan) => plan.steps.some((e) => {
-    const f = e.k === "call" ? nodes[(nodes[e.node] as NodeOf<"call">).fn] : undefined;
+    const f = e.k === "call" ? nodes[(nodes[e.node] as Call).fn] : undefined;
     return f?.kind === "ref" && f.target === S.fail;
   });
 
@@ -216,12 +216,12 @@ export function modeCompiler(code: Code, names: Record<Id, string>) {
         }
         break;
       }
-      case "call": call(nodes[e.node] as NodeOf<"call">, e.callee?.known ?? null, e.callee?.spec.length ?? 0, sc); break;
+      case "call": call(nodes[e.node] as Call, e.callee?.known ?? null, e.callee?.spec.length ?? 0, sc); break;
       default: throw new Unsupported(`a ${e.k} goal`);
     }
   }
 
-  function call(n: NodeOf<"call">, callee: string[] | null, specs: number, sc: Scope) {
+  function call(n: Call, callee: string[] | null, specs: number, sc: Scope) {
     const head = nodes[n.fn];
     if (head.kind !== "ref" || nodes[head.target]?.kind === "binder") throw new Unsupported("a function known only when it runs");
     const t = nodes[head.target];

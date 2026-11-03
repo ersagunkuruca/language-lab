@@ -2,6 +2,7 @@
 
 import { join } from "node:path";
 import type { Code, Id } from "../src/model.ts";
+import { isCall } from "../src/model.ts";
 import type { Names } from "../src/presentation.ts";
 import type { Info } from "../src/lang/infer.ts";
 import { pageShell } from "../src/lang/page.ts";
@@ -29,7 +30,7 @@ const hasSound = (code: Code) => Object.values(code.nodes).some((n) => n.kind ==
 export function recordings(code: Code): string[] {
   const out = new Set<string>();
   for (const n of Object.values(code.nodes)) {
-    if (n.kind !== "call") continue;
+    if (!isCall(n)) continue;
     const f = code.nodes[n.fn], a = code.nodes[n.args[0]];
     if (f?.kind === "ref" && f.target === HTML_V.recording && a?.kind === "lit" && typeof a.value === "string" && !/^[a-z]+:|^\/|\.\./i.test(a.value)) out.add(a.value);
   }

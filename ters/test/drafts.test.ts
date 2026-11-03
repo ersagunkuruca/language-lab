@@ -3,7 +3,7 @@
 // program is the same as without them and they're kept apart.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { Code, Id, NodeOf } from "../src/model.ts";
+import type { Code, Id, NodeOf, Call } from "../src/model.ts";
 import type { Names } from "../src/presentation.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
@@ -30,7 +30,7 @@ test("a part set loose is a definition of its own, taking the variables it used 
   const { code, names } = greet();
   // Take name ++ "!" out of greet, leaving a hole where it was.
   const r = setLoose(code, {}, {}, "greet", "inner", ["name"]);
-  const holed: Code = { ...r.code, nodes: { ...r.code.nodes, outer: { ...(r.code.nodes.outer as NodeOf<"call">), args: ["hi", "gap"] }, gap: { id: "gap", kind: "hole" } } };
+  const holed: Code = { ...r.code, nodes: { ...r.code.nodes, outer: { ...(r.code.nodes.outer as Call), args: ["hi", "gap"] }, gap: { id: "gap", kind: "hole" } } };
   assert.deepEqual(looseOf(holed, r.of, "greet"), [r.def]);
   const lam = holed.nodes[(holed.nodes[r.def] as NodeOf<"def">).body!] as NodeOf<"lambda">;
   assert.equal(lam.kind, "lambda", "it takes name as an input");

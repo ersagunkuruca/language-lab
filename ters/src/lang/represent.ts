@@ -14,7 +14,7 @@
 // meaning: tests check every implementation against the definition it
 // replaces, through `meaning`.
 
-import { children, dependencies, freshId, subtree, type Code, type Id, type Node, type NodeData, type NodeOf } from "../model.ts";
+import { children, dependencies, freshId, subtree, type Code, type Id, type Node, type NodeData, type NodeOf, isCall, type Call } from "../model.ts";
 import type { Info } from "./infer.ts";
 import { CONS, COST, INT_OPS, JOBS, LIST, REPRESENTATION_V, S, TEXT_OPS } from "./std.ts";
 import { NUMBER } from "./types.ts";
@@ -79,7 +79,7 @@ export function representationsIn(code: Code, info: Info, names: Record<Id, stri
   for (const d of defs) {
     const def = code.nodes[d];
     const body = def?.kind === "def" && def.body ? code.nodes[def.body] : null;
-    if (body?.kind !== "call" || refOf(body.fn) !== REPRESENTATION_V) continue;
+    if (!isCall(body) || refOf(body.fn) !== REPRESENTATION_V) continue;
     const ty = info.typeOf.get(body.id), t = ty && info.subst.zonk(ty);
     if (t?.t !== "con" || t.args.length !== 2) continue;
     const [m, space, jobs] = body.args;
@@ -88,8 +88,8 @@ export function representationsIn(code: Code, info: Info, names: Record<Id, stri
     // t is what the meaning gives; for `(x) => x`, the type whose
     // constructors the jobs name.
     const listed: Id[] = [];
-    for (let l = code.nodes[jobs]; l?.kind === "call" && refOf(l.fn) === CONS; l = code.nodes[l.args[1]]) listed.push(l.args[0]);
-    const named = listed.map((j) => { const n = code.nodes[j], kind = n?.kind === "call" ? refOf(n.fn) : null; return n?.kind === "call" && (kind === JOBS.job || kind === JOBS.asWritten) ? refOf(n.args[0]) : null; });
+    for (let l = code.nodes[jobs]; isCall(l) && refOf(l.fn) === CONS; l = code.nodes[l.args[1]]) listed.push(l.args[0]);
+    const named = listed.map((j) => { const n = code.nodes[j], kind = isCall(n) ? refOf(n.fn) : null; return isCall(n) && (kind === JOBS.job || kind === JOBS.asWritten) ? refOf(n.args[0]) : null; });
     const [ty0, as] = t.args.map((a) => info.subst.zonk(a));
     const of = ty0.t === "con" ? ty0.id : named.map((v) => v && info.owner.get(v)).find(Boolean);
     if (!of || (!same && as.t !== "con")) continue;
@@ -99,7 +99,7 @@ export function representationsIn(code: Code, info: Info, names: Record<Id, stri
     // The jobs, a list written out: cons(job, rest) down to nil.
     for (const id of listed) {
       const j = code.nodes[id];
-      if (j?.kind !== "call") continue;
+      if (!isCall(j)) continue;
       const kind = refOf(j.fn), a = j.args.map(refOf), cost = costOf(j.args[j.args.length - 1]);
       // How equal, show and compare see it, when it isn't one spelling per value.
       const seen = kind === JOBS.equalBy ? "equal" : kind === JOBS.showBy ? "show" : kind === JOBS.compareBy ? "compare" : null;
@@ -164,7 +164,7 @@ function headRefs(code: Code): Set<Id> {
   for (const n of Object.values(code.nodes)) {
     if (n.kind !== "match") continue;
     const s = code.nodes[n.scrutinee];
-    if (s?.kind !== "call" || code.nodes[s.fn]?.kind !== "ref") continue;
+    if (!isCall(s) || code.nodes[s.fn]?.kind !== "ref") continue;
     const cons = n.arms.map((a) => code.nodes[a] as NodeOf<"arm">).find((a) => a?.variant === CONS), rest = cons?.binds[1];
     if (rest && !subtree(code, cons.body).some((x) => { const y = code.nodes[x]; return y.kind === "ref" && y.target === rest; })) r.add(s.fn);
   }
@@ -186,7 +186,7 @@ export function uses(code: Code, entry: Id, reps: Representation[]): string[] {
       // A constructor given a field a match took out of another value
       // (`x :: rest` in a cons arm): its own job, since a representation
       // that hides that field shares it with the value it came from.
-      if (n.kind === "call") {
+      if (isCall(n)) {
         const c = code.nodes[n.fn];
         const v = c?.kind === "ref" && variants.has(c.target) ? c.target : null;
         if (v) n.args.forEach((a, i) => { const r = code.nodes[a], f = r?.kind === "ref" ? fieldOf.get(r.target) : undefined; if (f?.[0] === v && f[1] === i) out.add(ontoField(v, i)); });
@@ -256,7 +256,7 @@ export function looped(code: Code, entry: Id, reps: Representation[]): Set<strin
     }
     if (n.kind === "ref" && graph.has(n.target)) visit(n.target, loop);
     if (n.kind === "fold") { walk(n.scrutinee, loop); for (const a of n.arms) walk(a, true); return; }
-    if (n.kind === "call") {
+    if (isCall(n)) {
       walk(n.fn, loop);
       // A thunk (no parameters) is run once or not at all: `first`'s.
       for (const a of n.args) { const l = code.nodes[a]; walk(a, loop || (l?.kind === "lambda" && l.params.length > 0)); }
@@ -449,7 +449,7 @@ export function represent(code: Code, entries: Id[], rep: Representation, keep: 
   // same way, a function used once at its call (Peyton Jones and Marlow,
   // "Secrets of the Glasgow Haskell Compiler inliner", JFP 2002).
   const inline = (id: Id) => {
-    const c = nodes[id] as NodeOf<"call">, job = (nodes[c.fn] as NodeOf<"ref">).target;
+    const c = nodes[id] as Call, job = (nodes[c.fn] as NodeOf<"ref">).target;
     const def = code.nodes[job];
     const fn = def?.kind === "def" && def.body ? code.nodes[def.body] : undefined;
     if (fn?.kind !== "lambda" || fn.params.length !== c.args.length || directRefs(code, job).includes(job)) return;
@@ -537,9 +537,9 @@ export const STORAGES: Storage[] = [CELLS, TEXT, COUNTED, COUNTED_INT];
 export interface FoldPlan { rep: Storage; on: Id }
 export function foldPlan(code: Code, fold: NodeOf<"fold">): FoldPlan {
   const input = code.nodes[fold.scrutinee];
-  const made = input?.kind === "call" ? code.nodes[input.fn] : undefined;
+  const made = isCall(input) ? code.nodes[input.fn] : undefined;
   for (const rep of STORAGES) {
-    if (!rep.meaning || made?.kind !== "ref" || made.target !== rep.meaning || input?.kind !== "call") continue;
+    if (!rep.meaning || made?.kind !== "ref" || made.target !== rep.meaning || !isCall(input)) continue;
     if (fold.arms.some((a) => readsHidden(code, code.nodes[a] as NodeOf<"arm">, rep))) continue;
     return { rep, on: input.args[0] };
   }

@@ -14,7 +14,7 @@
 // the same: one printer. A piece with an id stands for that node.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
-import { isUse, useTarget } from "../model.ts";
+import { isUse, useTarget, isCall, type Call } from "../model.ts";
 import { children, resolveRefs, subtree } from "../model.ts";
 import { givenBy } from "./directions.ts";
 import type { Notation, Presentation } from "../presentation.ts";
@@ -111,7 +111,7 @@ export function looseParts(code: Code, def: Id, home: Record<Id, Id>): { params:
 // A fold to a function, applied to starting values: a fold with
 // accumulators (BACKLOG E62), when every case is a function of the same
 // inputs, by name. queens' safe: fold placed from distance = 1.
-export function foldFrom(code: Code, n: NodeOf<"call">, nameOf: (id: Id) => string): { fold: NodeOf<"fold">; arms: { arm: NodeOf<"arm">; lam: NodeOf<"lambda"> }[] } | null {
+export function foldFrom(code: Code, n: Call, nameOf: (id: Id) => string): { fold: NodeOf<"fold">; arms: { arm: NodeOf<"arm">; lam: NodeOf<"lambda"> }[] } | null {
   const f = code.nodes[n.fn];
   if (f?.kind !== "fold" || !n.args.length) return null;
   const arms = f.arms.map((a) => { const arm = code.nodes[a] as NodeOf<"arm">, lam = code.nodes[arm.body]; return { arm, lam: lam.kind === "lambda" ? lam : null }; });
@@ -155,7 +155,7 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
 
   const node = (id: Id) => code.nodes[id];
   const isBool = (n: NodeOf<"match">) => n.arms.length === 2 && n.arms.every((a) => [TRUE, FALSE].includes((node(a) as NodeOf<"arm">).variant));
-  const isLet = (n: Node): boolean => n.kind === "call" && node(n.fn).kind === "lambda";
+  const isLet = (n: Node): boolean => isCall(n) && node(n.fn).kind === "lambda";
   // A match whose arms are an effect's operations handles it.
   const isHandler = (n: NodeOf<"match">) => {
     const owner = n.arms.length ? info?.owner.get((node(n.arms[0]) as NodeOf<"arm">).variant) : undefined;
@@ -164,7 +164,7 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
   };
 
   const takesApart = (n: NodeOf<"match">) => takenApart(code, info, n);
-  const fromFold = (n: NodeOf<"call">) => (n.args.some(tall) ? null : foldFrom(code, n, base));
+  const fromFold = (n: Call) => (n.args.some(tall) ? null : foldFrom(code, n, base));
 
   // Steps before a value: lets, and values taken apart.
   const hasSteps = (id: Id) => { const n = node(id); return isLet(n) || (n.kind === "match" && takesApart(n)); };
@@ -180,7 +180,7 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
   const tall = (id: Id): boolean => {
     const n = node(id);
     if (n.kind === "match" || n.kind === "fold" || isUse(n) || isLet(n)) return true;
-    if (n.kind === "call") return [n.fn, ...n.args].some(tall);
+    if (isCall(n)) return [n.fn, ...n.args].some(tall);
     if (n.kind === "lambda") return tall(n.body);
     return false;
   };
@@ -194,7 +194,7 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
     const items: Id[] = [];
     for (let n = node(id); ; ) {
       if (n.kind === "ref" && n.target === NIL) return items;
-      if (n.kind !== "call" || node(n.fn).kind !== "ref" || (node(n.fn) as NodeOf<"ref">).target !== CONS) return null;
+      if (!isCall(n) || node(n.fn).kind !== "ref" || (node(n.fn) as NodeOf<"ref">).target !== CONS) return null;
       items.push(n.args[0]);
       n = node(n.args[1]);
     }
@@ -236,8 +236,8 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
         // them written out, `=> body` otherwise (editor/typed.ts reads both).
         const ports = n.results?.length ? n.results : null;
         const b = ports ? node(n.body) : undefined;
-        const f = b?.kind === "call" ? node(b.fn) : undefined;
-        const parts = !ports ? null : ports.length === 1 ? [n.body] : b?.kind === "call" && f?.kind === "ref" && f.target === tupleVariant(ports.length) && b.args.length === ports.length ? b.args : null;
+        const f = isCall(b) ? node(b.fn) : undefined;
+        const parts = !ports ? null : ports.length === 1 ? [n.body] : isCall(b) && f?.kind === "ref" && f.target === tupleVariant(ports.length) && b.args.length === ports.length ? b.args : null;
         const named = ports ? [pn(" → "), ...commas(ports.map((r) => [bind(r)]))] : [];
         const body = parts ? commas(parts.map((e) => inline(e).p)) : inline(n.body).p;
         leave(n.params);
@@ -296,13 +296,13 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
   const table = (id: Id): { fn: Id; rows: { at: Id; cells: Id[] }[] } | null => {
     const n = node(id), t = info?.typeOf.get(id);
     const r = t ? info!.subst.resolve(t) : null;
-    if (n.kind !== "call" || n.args.length !== 1 || r?.t !== "con" || (r.id !== MAP_TYPE && r.id !== SET_TYPE)) return null;
+    if (!isCall(n) || n.args.length !== 1 || r?.t !== "con" || (r.id !== MAP_TYPE && r.id !== SET_TYPE)) return null;
     const items = listItems(n.args[0]);
     if (!items?.length) return null;
     const rows = items.map((x) => {
       const c = node(x);
       if (r.id === SET_TYPE) return { at: x, cells: [x] };
-      return c.kind === "call" && node(c.fn).kind === "ref" && (node(c.fn) as NodeOf<"ref">).target === PAIR_V ? { at: x, cells: c.args } : null;
+      return isCall(c) && node(c.fn).kind === "ref" && (node(c.fn) as NodeOf<"ref">).target === PAIR_V ? { at: x, cells: c.args } : null;
     });
     return rows.every((x) => x) ? { fn: n.fn, rows: rows as { at: Id; cells: Id[] }[] } : null;
   };
@@ -315,8 +315,8 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
     const hold = (kids: Blk[], cls = "blk") => [grp(kids, 0, id, cls)];
     // An implementation reads as its operations, one a line (area: …): it
     // is the interface's record at a type, which no one calls by name.
-    const ops = n.kind === "call" ? implementationOps(code, n.fn) : null;
-    if (ops && n.kind === "call" && ops.length === n.args.length) {
+    const ops = isCall(n) ? implementationOps(code, n.fn) : null;
+    if (ops && isCall(n) && ops.length === n.args.length) {
       const lines = n.args.flatMap((a, i) => block(a, [part("fld", [nameOf(ops[i])], ops[i]), pn(": ")]));
       return hold(lead.length ? [ln(...trimEnd(lead)), grp(lines)] : lines);
     }
@@ -341,7 +341,7 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
       return hold([ln(...lead, pn("[")), grp(rows), ln(pn("]"))]);
     }
     if (!tall(id)) return [ln(...lead, ...inline(id).p)];
-    if (n.kind === "call" && isLet(n)) {
+    if (isCall(n) && isLet(n)) {
       // A run of steps is one column, each step its own line: x = …, then
       // the next, not each one nested inside the one before (the right-
       // nested lets are how the tree holds an order, not how it reads).
@@ -486,7 +486,7 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
       leave(n.params);
       return out;
     }
-    if (n.kind === "call") {
+    if (isCall(n)) {
       // A call with a tall argument: the tall parts go on their own lines.
       const f = node(n.fn);
       const head = f.kind === "ref" ? [part("ref fn", [nameOf(f.target)], n.fn)] : [pn("("), ...inline(n.fn).p, pn(")")];
@@ -598,8 +598,8 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
     const ports = !results.length && body.results?.length ? body.results : null;
     if (ports) {
       const b = node(body.body);
-      const f = b?.kind === "call" ? node(b.fn) : undefined;
-      const parts = ports.length === 1 ? [body.body] : b?.kind === "call" && f?.kind === "ref" && f.target === tupleVariant(ports.length) && b.args.length === ports.length ? b.args : null;
+      const f = isCall(b) ? node(b.fn) : undefined;
+      const parts = ports.length === 1 ? [body.body] : isCall(b) && f?.kind === "ref" && f.target === tupleVariant(ports.length) && b.args.length === ports.length ? b.args : null;
       const named = [...head, pn(" → "), ...commas(ports.map((r) => [bind(r)])), pn(" = ")];
       if (parts) out.push(ln(...named, ...commas(parts.map((e) => inline(e).p))));
       else out.push(...hang(body.body, named));

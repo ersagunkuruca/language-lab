@@ -46,7 +46,7 @@
 
 import { resolveArithmetic } from "../../ters/src/lang/arith.ts";
 import type { Code, Id, NodeOf } from "../../ters/src/model.ts";
-import { dependencies, subtree } from "../../ters/src/model.ts";
+import { dependencies, subtree, isCall, type Call } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { ARRAY, TABLE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, STRING, type Row, type Type } from "../../ters/src/lang/types.ts";
@@ -404,7 +404,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   // would be the clifford functions' generic folds again), and what the
   // derivatives made is staged in turn.
   const later = expandDerivatives(code, names, (call) => {
-    const f = info.subst.zonk(info.typeOf.get((code.nodes[call] as NodeOf<"call">).args[0]) ?? { t: "var", v: -1 });
+    const f = info.subst.zonk(info.typeOf.get((code.nodes[call] as Call).args[0]) ?? { t: "var", v: -1 });
     return f.t === "fn" && f.params[0]?.t === "con" ? recordVariant(code, f.params[0].id) : null;
   });
   if (later.expanded.length) {
@@ -838,7 +838,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           if (target !== ARRAY_OPS.of) return { k: "rt", fn: `${ARRAY_RT[target]}.a${a.index}`, args: args() };
           const items: Id[] = [];
           let l = code.nodes[n.args[0]];
-          for (; l?.kind === "call" && code.nodes[l.fn]?.kind === "ref" && (code.nodes[l.fn] as NodeOf<"ref">).target === CONS; l = code.nodes[l.args[1]]) items.push(l.args[0]);
+          for (; isCall(l) && code.nodes[l.fn]?.kind === "ref" && (code.nodes[l.fn] as NodeOf<"ref">).target === CONS; l = code.nodes[l.args[1]]) items.push(l.args[0]);
           if (!(l?.kind === "ref" && l.target === NIL)) throw new Refused("makes an array of a list that isn't written out (a shader's array has its size where it's made)");
           return { k: "rt", fn: `${ARRAY_RT[target]}.a${a.index}`, args: items.map((x) => expr(x, env, f, false)) };
         }
@@ -1538,10 +1538,10 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   }
 
   // Whether a call of first is first(() => with fuel(…), …), a budget.
-  function isBudget(n: NodeOf<"call">): boolean {
+  function isBudget(n: Call): boolean {
     const a = n.args[0] ? code.nodes[n.args[0]] : undefined;
     const body = a?.kind === "lambda" && !a.params.length ? code.nodes[a.body] : null;
-    return (code.nodes[n.fn] as NodeOf<"ref">).target === S.first && body?.kind === "call" && code.nodes[body.fn]?.kind === "ref" && (code.nodes[body.fn] as NodeOf<"ref">).target === S.fuel;
+    return (code.nodes[n.fn] as NodeOf<"ref">).target === S.first && isCall(body) && code.nodes[body.fn]?.kind === "ref" && (code.nodes[body.fn] as NodeOf<"ref">).target === S.fuel;
   }
   // first, optional, all and count of a search written in place: the
   // search, lowered with `one of` where it chooses, and what the handler
@@ -1549,7 +1549,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   // below (several) makes it code.
   // first with a fallback, or count, in a shader: the search's flag, kept
   // by the printer (`shader` above).
-  function flagged(n: NodeOf<"call">, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
+  function flagged(n: Call, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
     const target = (code.nodes[n.fn] as NodeOf<"ref">).target;
     const thunk = (x: Id | undefined) => { const l = x && code.nodes[x]; return l && l.kind === "lambda" && !l.params.length ? l.body : null; };
     const search = thunk(n.args[0]), dflt = target === S.first ? thunk(n.args[1]) : null;
@@ -1568,7 +1568,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     : t === "int32" ? { k: "op", op: "iadd", args: [x, countOf(t, 1)] } : { k: "op", op: "add", args: [x, countOf(t, 1)] };
   // How many searches' bodies each function is lowering now.
   const searching = new Map<SFunc, number>();
-  function attempt(n: NodeOf<"call">, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
+  function attempt(n: Call, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
     const target = (code.nodes[n.fn] as NodeOf<"ref">).target;
     const thunk = (x: Id | undefined) => { const l = x && code.nodes[x]; return l && l.kind === "lambda" && !l.params.length ? l.body : null; };
     const search = thunk(n.args[0]), dflt = target === S.first ? thunk(n.args[1]) : null;
@@ -1891,14 +1891,14 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   // changeAt does.
   type PathStep = { field: Id } | { item: Id };
   function stepsOfPath(id: Id): PathStep[] {
-    const n = code.nodes[id], head = n?.kind === "call" ? code.nodes[n.fn] : undefined;
+    const n = code.nodes[id], head = isCall(n) ? code.nodes[n.fn] : undefined;
     const op = head?.kind === "ref" ? head.target : undefined;
-    if (n?.kind === "call" && op === CELL_OPS.path && n.args.length === 1) {
+    if (isCall(n) && op === CELL_OPS.path && n.args.length === 1) {
       const l = code.nodes[n.args[0]];
       if (l?.kind === "lambda" && l.params.length === 1) {
         const fields: PathStep[] = [];
         let b = code.nodes[l.body];
-        for (; b?.kind === "call" && b.args.length === 1; b = code.nodes[b.args[0]]) {
+        for (; isCall(b) && b.args.length === 1; b = code.nodes[b.args[0]]) {
           const h = code.nodes[b.fn];
           if (h?.kind !== "ref" || code.nodes[h.target]?.kind !== "field") break;
           fields.unshift({ field: h.target });
@@ -1906,11 +1906,11 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
         if (b?.kind === "ref" && b.target === l.params[0]) return fields;
       }
     }
-    if (n?.kind === "call" && op === CELL_OPS.itemPath && n.args.length === 2) return [...stepsOfPath(n.args[0]), { item: n.args[1] }];
-    if (n?.kind === "call" && op === CELL_OPS.thenPath && n.args.length === 2) return [...stepsOfPath(n.args[0]), ...stepsOfPath(n.args[1])];
+    if (isCall(n) && op === CELL_OPS.itemPath && n.args.length === 2) return [...stepsOfPath(n.args[0]), { item: n.args[1] }];
+    if (isCall(n) && op === CELL_OPS.thenPath && n.args.length === 2) return [...stepsOfPath(n.args[0]), ...stepsOfPath(n.args[1])];
     throw new Refused("changes a value at a path that isn't written out where it's used (a chain of fields and items)");
   }
-  function changed(n: NodeOf<"call">, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
+  function changed(n: Call, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
     const t = stype(zonk(id)), xt = stype(zonk(n.args[2]));
     if (!t || !xt) throw new Refused(`changes ${whyNot(zonk(t ? n.args[2] : id))}`);
     const steps = stepsOfPath(n.args[1]);
@@ -1926,7 +1926,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   // set(field, record, value) (C106): the path is fields written in place
   // (the checker insists), so the record is made again along it with that
   // field changed, the way changed does for a path of fields.
-  function setField(n: NodeOf<"call">, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
+  function setField(n: Call, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
     const t = stype(zonk(id)), xt = stype(zonk(n.args[2]));
     if (!t || !xt) throw new Refused(`sets a field of ${whyNot(zonk(t ? n.args[2] : id))}`);
     const path = fieldPath(code, n.args[0]);
@@ -1978,7 +1978,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   // seeded(seed, body) (C106): the generator's words as the body found
   // them are kept, it's seeded, the body runs, and they're put back, so an
   // outer seeded goes on where it was. random() is rand.next.
-  function seeded(n: NodeOf<"call">, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
+  function seeded(n: Call, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
     const t = stype(zonk(id));
     if (!t || n.args.length !== 2) throw new Refused(`seeds Random around ${whyNot(zonk(id))}`);
     const lam = code.nodes[n.args[1]];
@@ -1995,7 +1995,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     return lets.reduceRight<SExpr>((e, [i, value]) => ({ k: "let", i, value, body: e }), { k: "local", i: v });
   }
   // value of(o): o's value if it's some, no answer if it's none.
-  function valueOf(n: NodeOf<"call">, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
+  function valueOf(n: Call, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
     const d = stype(zonk(n.args[0])), t = stype(zonk(id));
     if (!d || !isData(d) || !t) throw new Refused(`takes the value of ${whyNot(zonk(d ? id : n.args[0]))}`);
     const s = f.locals.push(d) - 1, some = d.cases.findIndex((c) => c.variant === SOME);
@@ -2004,18 +2004,18 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
 
   // first(() => with fuel(n, () => body), () => otherwise), and nothing
   // else made of those two.
-  function budget(n: NodeOf<"call">, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
+  function budget(n: Call, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
     const thunk = (x: Id | undefined) => { const l = x && code.nodes[x]; return l && l.kind === "lambda" && !l.params.length ? l.body : null; };
     const action = thunk(n.args[0]), otherwise = thunk(n.args[1]);
     const inner = action ? code.nodes[action] : null;
-    const head = inner?.kind === "call" ? code.nodes[inner.fn] : null;
+    const head = isCall(inner) ? code.nodes[inner.fn] : null;
     const shape = `only as a budget, ${BUDGET}`;
-    if ((code.nodes[n.fn] as NodeOf<"ref">).target !== S.first || !action || !otherwise || inner?.kind !== "call" || head?.kind !== "ref" || head.target !== S.fuel || inner.args.length !== 2)
+    if ((code.nodes[n.fn] as NodeOf<"ref">).target !== S.first || !action || !otherwise || !isCall(inner) || head?.kind !== "ref" || head.target !== S.fuel || inner.args.length !== 2)
       throw new Refused(`uses first or with fuel, which a shader takes ${shape}`);
     // A number written down, rounded to Float32 maybe (NUMBERS.md).
     const rounded = code.nodes[inner.args[0]];
-    const under = rounded?.kind === "call" && code.nodes[rounded.fn]?.kind === "ref" && (code.nodes[rounded.fn] as NodeOf<"ref">).target === S.float32 && rounded.args.length === 1;
-    const amount = under ? code.nodes[(rounded as NodeOf<"call">).args[0]] : rounded, body = thunk(inner.args[1]);
+    const under = isCall(rounded) && code.nodes[rounded.fn]?.kind === "ref" && (code.nodes[rounded.fn] as NodeOf<"ref">).target === S.float32 && rounded.args.length === 1;
+    const amount = under ? code.nodes[(rounded as Call).args[0]] : rounded, body = thunk(inner.args[1]);
     if (!body) throw new Refused(`uses with fuel, which a shader takes ${shape}`);
     if (amount?.kind !== "lit" || typeof amount.value !== "number") throw new Refused("has a budget that isn't a number written down (a shader's bound is fixed when it's built)");
     const v = under ? Math.fround(amount.value) : amount.value;
@@ -2037,7 +2037,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   // the record's fields would be written by hand. A part that is already
   // an expression (the record was just built) is used as it is; otherwise
   // the record goes in a local first, so it's computed once.
-  function parts(n: NodeOf<"call">, env: Map<Id, number>, f: SFunc): SExpr {
+  function parts(n: Call, env: Map<Id, number>, f: SFunc): SExpr {
     const target = (code.nodes[n.fn] as NodeOf<"ref">).target;
     const recs = target === S.total ? n.args : n.args.slice(1);
     const t = stype(zonk(recs[0]));

@@ -24,7 +24,7 @@
 // Conway, 1996); dead-result elimination is the same idea in any optimiser.
 
 import type { Code, Id, Node, NodeOf } from "../../ters/src/model.ts";
-import { isUse, useTarget } from "../../ters/src/model.ts";
+import { isUse, useTarget, isCall, type Call } from "../../ters/src/model.ts";
 import { freshId, mapIds, subtree } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { PAIR_V, TRUE } from "../../ters/src/lang/std.ts";
@@ -152,10 +152,10 @@ export function solvesAsCalls(code: Code, names: Names): { code: Code; names: Na
         return add({ kind: "match", scrutinee, arms: made, otherwise } as Omit<Node, "id">);
       }
     }
-    const lets = ns.map((n) => n?.kind === "call" ? code.nodes[n.fn] : undefined);
-    const l0 = lets[0], c0 = n0 as NodeOf<"call">;
-    if (l0?.kind === "lambda" && lets.every((l, k) => l?.kind === "lambda" && l.params.length === l0.params.length && (ns[k] as NodeOf<"call">).args.length === c0.args.length)
-      && agree((k) => c0.args.every((a, i) => same(a, (ns[k] as NodeOf<"call">).args[i], subs[0], subs[k])))) {
+    const lets = ns.map((n) => isCall(n) ? code.nodes[n.fn] : undefined);
+    const l0 = lets[0], c0 = n0 as Call;
+    if (l0?.kind === "lambda" && lets.every((l, k) => l?.kind === "lambda" && l.params.length === l0.params.length && (ns[k] as Call).args.length === c0.args.length)
+      && agree((k) => c0.args.every((a, i) => same(a, (ns[k] as Call).args[i], subs[0], subs[k])))) {
       shared.n++;
       const args = c0.args.map((a) => copy(a, subs[0]));
       const params = fresh(l0.params, (k) => (lets[k] as typeof l0).params) as Id[];
@@ -176,7 +176,7 @@ export function solvesAsCalls(code: Code, names: Names): { code: Code; names: Na
       const out: Id[] = [];
       const walk = (id: Id) => {
         const n = code.nodes[id];
-        if (n?.kind === "call") {
+        if (isCall(n)) {
           out.push(id);
           n.args.forEach(walk);
           const f = code.nodes[n.fn];
@@ -197,7 +197,7 @@ export function solvesAsCalls(code: Code, names: Names): { code: Code; names: Na
     });
     // Candidates, the largest first, with the result each is in.
     const cands = es.flatMap((e, k) => sure(e).filter((id) => {
-      const n = code.nodes[id] as NodeOf<"call">;
+      const n = code.nodes[id] as Call;
       if (code.nodes[n.fn]?.kind !== "ref" || !n.args.length) return false;
       return subtree(code, id).every((x) => { const r = code.nodes[x]; return r?.kind !== "ref" || !local[k].has(r.target); });
     }).map((id) => ({ id, k, size: subtree(code, id).length })));
@@ -241,7 +241,7 @@ export function solvesAsCalls(code: Code, names: Names): { code: Code; names: Na
     made.set(key, nd);
     return nd;
   };
-  const isTrue = (id: Id | undefined) => id === undefined || refTo(id) === TRUE || (code.nodes[id]?.kind === "call" && refTo((code.nodes[id] as NodeOf<"call">).fn) === TRUE && (code.nodes[id] as NodeOf<"call">).args.length === 0);
+  const isTrue = (id: Id | undefined) => id === undefined || refTo(id) === TRUE || (isCall(code.nodes[id]) && refTo((code.nodes[id] as Call).fn) === TRUE && (code.nodes[id] as Call).args.length === 0);
   const expanded: Id[] = [];
   for (const n of Object.values(code.nodes)) {
     // Only what the relational interpreter would run: a direction the

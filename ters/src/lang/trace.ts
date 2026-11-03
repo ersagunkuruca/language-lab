@@ -13,6 +13,7 @@
 // neither is anything that calls one.
 
 import type { Code, Id, NodeOf } from "../model.ts";
+import { isCall } from "../model.ts";
 import type { Info } from "./infer.ts";
 import { DEF_VALUE, makeRunner, type Data, type Runtime, type Value } from "./run.ts";
 
@@ -52,7 +53,7 @@ function traceOn(written: Code, info: Info, def: Id, args: Value[], entered: Run
     for (const x of xs) return x;
     throw Object.assign(new Error("no answer (a Choice with none)"), { id });
   };
-  const divergent = (id: Id) => { if (entered) return false; const n = code.nodes[id]; return n.kind === "call" && code.nodes[n.fn].kind === "ref" && info.divergent.has((code.nodes[n.fn] as NodeOf<"ref">).target); };
+  const divergent = (id: Id) => { if (entered) return false; const n = code.nodes[id]; return isCall(n) && code.nodes[n.fn].kind === "ref" && info.divergent.has((code.nodes[n.fn] as NodeOf<"ref">).target); };
 
   const handler = (n: NodeOf<"match">) => {
     const owner = n.arms.length ? info.owner.get((code.nodes[n.arms[0]] as NodeOf<"arm">).variant) : undefined;
@@ -73,7 +74,7 @@ function traceOn(written: Code, info: Info, def: Id, args: Value[], entered: Run
         // its parts, f(p) spread: arith.ts) is run as it runs; what went
         // into it is shown as written (BACKLOG I122).
         const ran = r.code.nodes[id];
-        if (ran !== n && !(ran?.kind === "call" && ran.fn === n.fn && ran.args.length === n.args.length && ran.args.every((a, i) => a === n.args[i]) && r.code.nodes[n.fn] === head)) v = first(r.ev(id, env), id);
+        if (ran !== n && !(isCall(ran) && ran.fn === n.fn && ran.args.length === n.args.length && ran.args.every((a, i) => a === n.args[i]) && r.code.nodes[n.fn] === head)) v = first(r.ev(id, env), id);
         else if (head.kind === "lambda") {
           // A let: its dots get the values, then its body runs.
           const inner = new Map(env);

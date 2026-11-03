@@ -19,7 +19,7 @@
 // construct.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
-import { freshId } from "../model.ts";
+import { freshId, isCall, type Call } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { infer, type Info } from "./infer.ts";
 import { fieldPaths } from "./records.ts";
@@ -28,7 +28,7 @@ import { SET, tuplePart } from "./std.ts";
 type Bare = Node extends infer N ? (N extends Node ? Omit<N, "id"> : never) : never;
 
 const severalAt = (code: Code, n: Node): Id[][] | null => {
-  if (n.kind !== "call" || n.args.length !== 3) return null;
+  if (!isCall(n) || n.args.length !== 3) return null;
   const fn = code.nodes[n.fn];
   return fn?.kind === "ref" && fn.target === SET ? fieldPaths(code, n.args[0]) : null;
 };
@@ -43,7 +43,7 @@ export function setSeveral(code: Code, info: Info, names: Names): { code: Code; 
   const ref = (target: Id) => add({ kind: "ref", target });
   const out: Names = { ...names };
   for (const { id, paths } of calls) {
-    const n = nodes[id] as NodeOf<"call">;
+    const n = nodes[id] as Call;
     const size = paths.length;
     // One field's path as a lambda of its own: q ↦ q.home.city.
     const one = (path: Id[]) => {
@@ -52,7 +52,7 @@ export function setSeveral(code: Code, info: Info, names: Names): { code: Code; 
       return add({ kind: "lambda", params: [q], body: path.reduce<Id>((e, f) => add({ kind: "call", fn: ref(f), args: [e] }), ref(q)) });
     };
     const value = nodes[n.args[2]];
-    const written = value?.kind === "call" && nodes[value.fn]?.kind === "ref" && (nodes[value.fn] as NodeOf<"ref">).target === `std.tuple${size}.tuple` ? value.args : null;
+    const written = isCall(value) && nodes[value.fn]?.kind === "ref" && (nodes[value.fn] as NodeOf<"ref">).target === `std.tuple${size}.tuple` ? value.args : null;
     const whole = written ? null : add({ kind: "binder" });
     if (whole) out[whole] = "parts";
     const part = (i: number) => (written ? written[i] : add({ kind: "call", fn: ref(tuplePart(size, i)), args: [ref(whole!)] }));
@@ -62,7 +62,7 @@ export function setSeveral(code: Code, info: Info, names: Names): { code: Code; 
     // tuple, (parts ↦ set(…))(value).
     nodes[id] = whole
       ? { id, kind: "call", fn: add({ kind: "lambda", params: [whole], body: nested }), args: [n.args[2]] }
-      : { ...(nodes[nested] as NodeOf<"call">), id };
+      : { ...(nodes[nested] as Call), id };
     if (!whole) delete nodes[nested];
   }
   const next: Code = { ...code, nodes };

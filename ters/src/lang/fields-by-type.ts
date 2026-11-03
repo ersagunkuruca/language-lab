@@ -21,7 +21,7 @@
 // generic step is written out per type once, as GHC's deriving does.
 
 import type { Code, Id, Node } from "../model.ts";
-import { freshId } from "../model.ts";
+import { freshId, isCall } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { infer, type Info } from "./infer.ts";
 import { CONS, FIELDS, NIL } from "./std.ts";
@@ -43,7 +43,7 @@ function cases(code: Code, t: Type | undefined): { id: Id; variants: Id[] } | nu
 // picked fields'. Null while either is open.
 function typesAt(code: Code, info: Info, call: Id): { whole: Type; part: Type } | null {
   const n = code.nodes[call];
-  if (n?.kind !== "call" || n.args.length !== (code.nodes[n.fn]?.kind === "ref" && (code.nodes[n.fn] as { target: Id }).target === FIELDS.mapped ? 2 : 1)) return null;
+  if (!isCall(n) || n.args.length !== (code.nodes[n.fn]?.kind === "ref" && (code.nodes[n.fn] as { target: Id }).target === FIELDS.mapped ? 2 : 1)) return null;
   const at = (id: Id) => { const t = info.typeOf.get(id); return t && info.subst.zonk(t); };
   const whole = at(n.args[0]);
   const target = (code.nodes[n.fn] as { target: Id }).target;
@@ -64,7 +64,7 @@ export function fieldsByType(code: Code, info: Info, names: Names): { code: Code
   const made = new Map<string, Id>();
   let changed = false;
   for (const n of Object.values(code.nodes)) {
-    if (n.kind !== "call") continue;
+    if (!isCall(n)) continue;
     const fnNode = code.nodes[n.fn];
     if (fnNode?.kind !== "ref" || !OPS.has(fnNode.target)) continue;
     const at = typesAt(code, info, n.id);

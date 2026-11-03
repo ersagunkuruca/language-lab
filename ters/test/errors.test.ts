@@ -11,6 +11,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Id } from "../src/model.ts";
+import { isCall } from "../src/model.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { fillings, infer } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
@@ -132,7 +133,7 @@ test("a call made from the palette has one hole per input", () => {
   const e = fillHole(p.code, p.names, hole, f);
   const call = e.code.nodes[hole];
   assert.equal(call.kind, "call");
-  if (call.kind !== "call") return;
+  if (!isCall(call)) return;
   assert.equal(call.args.length, 3);
   assert.ok(call.args.every((a) => e.code.nodes[a].kind === "hole"));
 });

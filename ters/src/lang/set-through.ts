@@ -24,7 +24,7 @@
 // rather than written.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
-import { freshId } from "../model.ts";
+import { freshId, isCall, type Call } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { preludeDef } from "./arith.ts";
 import { infer, type Info } from "./infer.ts";
@@ -34,7 +34,7 @@ import { SET, tuplePart, tupleVariant } from "./std.ts";
 type Bare = Node extends infer N ? (N extends Node ? Omit<N, "id"> : never) : never;
 
 const throughAt = (code: Code, n: Node) => {
-  if (n.kind !== "call" || n.args.length !== 3) return null;
+  if (!isCall(n) || n.args.length !== 3) return null;
   const fn = code.nodes[n.fn];
   return fn?.kind === "ref" && fn.target === SET ? readPaths(code, n.args[0]) : null;
 };
@@ -50,7 +50,7 @@ export function setThrough(code: Code, info: Info, names: Names): { code: Code; 
   const ref = (target: Id) => add({ kind: "ref", target });
   const out: Names = { ...names };
   for (const { id, paths, uses } of calls) {
-    const n = nodes[id] as NodeOf<"call">;
+    const n = nodes[id] as Call;
     const f = nodes[n.args[0]] as NodeOf<"lambda">, p = f.params[0];
     const size = paths.length;
     // Each read of a field is now the parameter, or its part.
