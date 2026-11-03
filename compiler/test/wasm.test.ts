@@ -919,3 +919,36 @@ test("lists of functions that choose and of ones that don't are two types in Web
     assert.equal(String(got), String(first(r.call(r.value(g), ...xs))), `g(${n}, [${ys}])`);
   }
 });
+
+// C126: a record holding a function: built with a closure, its field read
+// and called. WebAssembly and C refused it ("isn't a record of Float64s
+// and Bools"): a field's function type wasn't read.
+test("a record holding a function, in WebAssembly (C126)", async () => {
+  const { LIST } = await import("../../ters/src/lang/std.ts");
+  const { Lang } = await import("../../ters/src/lang/dsl.ts");
+  const { infer } = await import("../../ters/src/lang/infer.ts");
+  const { base, baseNames, checkOptions } = await import("../../ters/src/lang/load.ts");
+  const { LIBRARY } = await import("../../ters/src/lang/library.ts");
+  const { INT_OPS } = await import("../../ters/src/lang/std.ts");
+  const { INT } = await import("../../ters/src/lang/types.ts");
+  const k = new Lang(LIBRARY.code);
+  const L = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
+  // A kit: a step (a function closing over n's list), and a list.
+  const Kit = k.type("Kit", [], [["kit", [["step", () => k.tfun([k.tref(INT)], k.tref(INT))], ["items", () => k.tref(LIST, k.tref(INT))]]]]);
+  const g = k.def("g");
+  k.define(g, k.fn(["n", "ys"], (n, ys) => k.let("xs", k.call(L("append"), ys, k.list(n)), (xs) => k.let("kit", k.call(Kit.v.kit, k.fn(["w"], (w) => k.call(INT_OPS.add, w, k.call(L("length"), xs))), xs), (kit) =>
+    k.call(INT_OPS.add, k.call(k.call(Kit.f["kit.step"], kit), n), k.call(L("sum"), k.call(Kit.f["kit.items"], kit)))))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const lowered = lowerScalar(code, info, names, [g], { data: true });
+  assert.deepEqual([...lowered.refused.entries()], []);
+  const r = makeRunner(code, info, { print: () => {} });
+  const inputs = ([[3n, [1n, 2n]], [0n, []], [-4n, [7n]]] as [bigint, bigint[]][]).map(([n, ys]) => [norm(n), toList(ys.map(norm))]);
+  const w = await instantiate(emitWasm(lowered)) as unknown as Exports;
+  const f = lowered.funcs.find((x) => x.def === g && !x.inner)!;
+  for (const xs of inputs) {
+    const got = fromWasm(w, (w[f.name] as (...a: unknown[]) => unknown)(...xs.map((x, i) => toWasm(w, x, f.params[i]))), f.result);
+    assert.equal(String(got), String(first(r.call(r.value(g), ...xs))));
+  }
+});
