@@ -731,7 +731,8 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| L211d | The evaluator runs a use with no body: its answers are its produced ports (ports.ts `answerKeys`), the value the one port or their tuple; arith.ts, represent.ts, counting.ts, one-holder.ts and units.ts read one through model.ts `useKids` | this PR |
+| L211e | A use with no body inside a relation: the modes analysis and the relational interpreter read the program with such uses' ports bound, as fillUses reads them (ports.ts `filled`, once per program) | this PR |
+| L211d | The evaluator runs a use with no body: its answers are its produced ports (ports.ts `answerKeys`), the value the one port or their tuple; arith.ts, represent.ts, counting.ts, one-holder.ts and units.ts read one through model.ts `useKids` | #1404 |
 | L211c | The checker types a use with no body (one load didn't fill) by its produced ports: the port alone or their tuple in port order, each typed where its binder would be (infer.ts `useResult`, test bodyless-use.test.ts) | #1403 |
 | L51d | Tensors (L51) done: a bigger program, a two-layer network's forward pass (8 × 6 and 3 × 8 weights, ReLU between) as two contractions plus biases, evaluated and compiled to the hand-worked answer (ters/test/tensor-network.test.ts); the other engines are C160 | #1402 |
 | L208a | Design note for embeddings, generalization as a feature (docs/design/numbers/EMBEDDINGS.md): one canonical `Embedding a b` per pair, inserted only where both types are known, the diamond rule, and steps b to f | #1401 |
