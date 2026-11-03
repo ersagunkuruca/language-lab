@@ -79,12 +79,6 @@ export const ALGEBRAIC_TYPE = "std.algebraic";
 // prelude's · (the product rule) and no <.
 export const DUAL_TYPE = "std.dual";
 export const FIXED_TYPE = "std.fixed";
-// std's words (L193): their + − · −x < are the prelude's implementations,
-// checked like a type of the program's own, not a name the checker knows.
-export const WORD_TYPES: ReadonlySet<Id> = new Set(["std.word8", "std.word16", "std.word32", "std.word64"]);
-// The library's types whose + − · or < is an implementation in the library,
-// found as a program's own type's is: the words, and Tensor (L51c).
-const IMPLEMENTED: ReadonlySet<Id> = new Set([...WORD_TYPES, "std.tensor"]);
 // The square matrices and their sizes (std.ts MAT2 to MAT4).
 export const MATRIX_SIZE: Record<string, number> = { "std.mat2": 2, "std.mat3": 3, "std.mat4": 4 };
 // A cell holding an `a` (src/lang/cells.ts). Not plain data: two cells
@@ -205,6 +199,12 @@ export class Subst {
   // For a data type applied to args: its fields' types, if it has one
   // case, or null. Set by the checker.
   recordFields: (id: Id, args: Type[]) => Type[] | null = () => null;
+  // Whether a type's + − · or < (the interface iface) is looked up once
+  // every implementation is known, at the end of the check (L204a): a
+  // type defined in the code being checked, or a type under it (the
+  // library's) that has one there. Any other type has none, and is told so
+  // where it is used. infer sets it; this is the rule with nothing known.
+  waits: (id: Id, iface: Id) => boolean = (id) => !id.startsWith("std.") && !id.startsWith("type.");
   // Type variables that may only stand for a number type, and which kind.
   arith = new Map<number, Arith>();
   // Type variables that may not be Int: a literal's with a fraction part.
@@ -240,6 +240,7 @@ export class Subst {
     s.plainArgs = this.plainArgs;
     s.numbers = new Set(this.numbers);
     s.recordFields = this.recordFields;
+    s.waits = this.waits;
     s.arith = new Map(this.arith);
     s.fractional = new Set(this.fractional);
     s.whole = new Set(this.whole);
@@ -262,6 +263,7 @@ export class Subst {
     s.plainArgs = this.plainArgs;
     s.numbers = new OverSet(this.numbers);
     s.recordFields = this.recordFields;
+    s.waits = this.waits;
     s.arith = new OverMap(this.arith);
     s.fractional = new OverSet(this.fractional);
     s.whole = new OverSet(this.whole);
@@ -299,10 +301,11 @@ export class Subst {
     // does is known once every implementation is (infer). A record whose
     // fields are or can be Float64s does + − · −x part by part when it has
     // none of its own (arith.ts), so for + it is one now, as before.
-    if (t.t === "con" && ((!t.id.startsWith("std.") && !t.id.startsWith("type.")) || IMPLEMENTED.has(t.id))) {
+    const iface = kind === "arith" ? "std.arithmetic" : "std.ordered";
+    if (t.t === "con" && this.waits(t.id, iface)) {
       const fields = this.recordFields(t.id, t.args);
       const numeric = kind === "arith" && !!fields?.length && fields.every((f) => { const r = this.resolve(f); return r.t === "var" || (r.t === "con" && r.id === NUMBER); });
-      if (!numeric) { this.wanted.push({ t, iface: kind === "arith" ? "std.arithmetic" : "std.ordered", at: this.site }); return; }
+      if (!numeric) { this.wanted.push({ t, iface, at: this.site }); return; }
     }
     if (kind === "arith" && t.t === "con" && this.recordFields(t.id, t.args)?.length) {
       try { this.requireNumbers(t); } catch (e) { if (e instanceof NumbersError) throw new ArithError(kind); throw e; }
