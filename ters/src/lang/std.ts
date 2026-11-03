@@ -1261,7 +1261,7 @@ export const SHOWN = typedef("std.shown", "Shown", ["a"], [
   ["shown", [["as shown", ([a]) => tfun([tref(a)], tref(STRING), [])]]],
 ], false, true);
 export const SHOWN_V = "std.shown.shown";
-// Wrapping integers (BACKLOG L193, ASPECTS-2026-11-03 142, 143): Word8,
+// Wrapping integers (BACKLOG L193, ASPECTS-2026-11-03 142, 143): Word8, Word16,
 // Word32 and Word64 are arithmetic mod 2ⁿ, an Int from 0 to 2ⁿ − 1 kept
 // in `bits`, for hashes, generators, binary formats and samples, which an
 // Int that never overflows can't say. + − · wrap, < is unsigned; the
@@ -1270,11 +1270,12 @@ export const SHOWN_V = "std.shown.shown";
 // representation picks the machine word (Compiler lane). Bits is the
 // interface for and, or, xor and shifts, so a hash is written once for
 // every width. After Shown, so ids above don't move.
-export const WORD_SIZES = [8, 32, 64] as const;
+export const WORD_SIZES = [8, 16, 32, 64] as const;
 const word = (n: number) => typedef(`std.word${n}`, `Word${n}`, [], [[`word${n}`, [["bits", () => tref(INT)]]]], false, false, `${n}-bit words`);
 export const WORD8 = word(8), WORD32 = word(32), WORD64 = word(64);
-export const WORD_V = { 8: "std.word8.word8", 32: "std.word32.word32", 64: "std.word64.word64" } as const;
-for (const n of WORD_SIZES) { SMART[WORD_V[n]] = `as word${n}`; (nodes.find((x) => x.id === WORD_V[n]) as NodeOf<"variant">).private = true; }
+export const WORD_V = { 8: "std.word8.word8", 16: "std.word16.word16", 32: "std.word32.word32", 64: "std.word64.word64" } as const;
+const privateWord = (n: 8 | 16 | 32 | 64) => { SMART[WORD_V[n]] = `as word${n}`; (nodes.find((x) => x.id === WORD_V[n]) as NodeOf<"variant">).private = true; };
+for (const n of [8, 32, 64] as const) privateWord(n);
 export const BITS = typedef("std.bits", "Bits", ["a"], [
   ["bits", [
     ["bits and", ([a]) => tfun([tref(a), tref(a)], tref(a), [])],
@@ -1285,6 +1286,10 @@ export const BITS = typedef("std.bits", "Bits", ["a"], [
   ]],
 ], false, true);
 export const BITS_V = "std.bits.bits";
+// Word16 (Ersagun 2026-11-03: "No Word16?"), for 16-bit audio samples and
+// binary formats. After Bits, so ids above don't move.
+export const WORD16 = word(16);
+privateWord(16);
 export function tupleType(n: number): Id { return `std.tuple${n}`; }
 export const tupleVariant = (n: number): Id => `std.tuple${n}.tuple`;
 export const tuplePart = (n: number, i: number): Id => `std.tuple${n}.tuple.${PART_NAMES[i]}`;
@@ -1320,7 +1325,7 @@ export function onTodaysIds<T>(x: T, from = (x as { shape?: unknown } | null)?.s
 }
 export const tupleSize = (id: Id): number | null => { const m = /^std\.tuple(\d)$/.exec(id); return m ? Number(m[1]) : null; };
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, MATRIX, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, MATRIX, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS, WORD16] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one

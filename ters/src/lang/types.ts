@@ -81,7 +81,7 @@ export const DUAL_TYPE = "std.dual";
 export const FIXED_TYPE = "std.fixed";
 // std's words (L193): their + − · −x < are the prelude's implementations,
 // checked like a type of the program's own, not a name the checker knows.
-export const WORD_TYPES: ReadonlySet<Id> = new Set(["std.word8", "std.word32", "std.word64"]);
+export const WORD_TYPES: ReadonlySet<Id> = new Set(["std.word8", "std.word16", "std.word32", "std.word64"]);
 // The square matrices and their sizes (std.ts MAT2 to MAT4).
 export const MATRIX_SIZE: Record<string, number> = { "std.mat2": 2, "std.mat3": 3, "std.mat4": 4 };
 // A cell holding an `a` (src/lang/cells.ts). Not plain data: two cells
