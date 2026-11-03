@@ -9,7 +9,7 @@ import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { library } from "./programs.ts";
-import { ABORT_OP, ARITH, CELL_OPS, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, TICKET_V, AWAIT_OP, START_TIMER_OP, NOW_OP, WAIT_OP, BRANCH_V, DUAL_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, DIVISION_V, SHOWN_V, BITS_V, WORD_SIZES, WORD_V, EXTENDED_V, ALGEBRAIC_OPS, CHECK_OP, RANDOM_OP, QUEUE_V, PRIORITY_QUEUE_V, MATRIX_V, STATE_OPS, PIPE_OPS, std } from "./std.ts";
+import { ABORT_OP, ARITH, CELL_OPS, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, TICKET_V, AWAIT_OP, START_TIMER_OP, NOW_OP, WAIT_OP, BRANCH_V, DUAL_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, DIVISION_V, SHOWN_V, BITS_V, WORD_SIZES, WORD_V, EXTENDED_V, ALGEBRAIC_OPS, CHECK_OP, RANDOM_OP, QUEUE_V, PRIORITY_QUEUE_V, MATRIX_V, TENSOR_V, STATE_OPS, PIPE_OPS, std } from "./std.ts";
 
 export function buildPrelude(): Module {
   const k = new Lang();
@@ -1633,6 +1633,50 @@ export function buildPrelude(): Module {
     k.if(iSame(r, k.call(length, v)),
       k.let("flipped", k.call(transposed, m), (t) => k.call(solved, k.call(matrixProduct, t, m), k.call(matrixTimesVector, t, v))),
       k.call(ABORT_OP, texts(k.lit("least squares: a "), sizeText(r, c), k.lit(" matrix and a vector of "), k.call(INT_OPS.show, k.call(length, v)), k.lit("; it needs one item per row"))))));
+  // Tensors (L51, TENSORS-2026-11-03.md step a): a shape and its items
+  // row-major, written in the language like the matrices above.
+  const T = (shape: Id, xs: Id) => k.call(TENSOR_V, shape, xs);
+  const tenOf = (t: Id, f: (shape: Id, xs: Id) => Id) => k.match(t, [{ variant: TENSOR_V, names: ["shape", "items"], body: ([sh, xs]) => f(sh, xs) }]);
+  const shapeSize = k.def("shape size");
+  k.define(shapeSize, k.fn(["shape"], (sh) => k.match(sh, [
+    { variant: NIL, names: [], body: () => k.int(1) },
+    { variant: CONS, names: ["length", "rest"], body: ([n, rest]) => iMul(n, k.call(shapeSize, rest)) },
+  ])));
+  const shapeText = k.def("shape text");
+  k.define(shapeText, k.fn(["shape"], (sh) => k.match(sh, [
+    { variant: NIL, names: [], body: () => k.lit("[]") },
+    { variant: CONS, names: ["length", "rest"], body: ([n, rest]) => k.match(rest, [
+      { variant: NIL, names: [], body: () => k.call(INT_OPS.show, n) },
+    ], texts(k.call(INT_OPS.show, n), k.lit(" × "), k.call(shapeText, rest))) },
+  ])));
+  const tensorOf = def("tensor of", ["shape", "items"], (sh, xs) => k.if(iSame(k.call(length, xs), k.call(shapeSize, sh)), T(sh, xs),
+    k.call(ABORT_OP, texts(k.lit("tensor of: a "), k.call(shapeText, sh), k.lit(" shape holds "), k.call(INT_OPS.show, k.call(shapeSize, sh)), k.lit(" items, not "), k.call(INT_OPS.show, k.call(length, xs))))));
+  const tensorShape = def("tensor shape", ["tensor"], (t) => tenOf(t, (sh) => sh));
+  const tensorItems = def("tensor items", ["tensor"], (t) => tenOf(t, (_sh, xs) => xs));
+  const rank = def("rank", ["tensor"], (t) => tenOf(t, (sh) => k.call(length, sh)));
+  const tensorSize = def("tensor size", ["tensor"], (t) => tenOf(t, (_sh, xs) => k.call(length, xs)));
+  // Where an index's item is among the items, row-major: each axis's
+  // position, then the next axis's within it. No answer for an index of
+  // the wrong length or out of its axis.
+  const tensorOffset = k.def("tensor offset");
+  k.define(tensorOffset, k.fn(["shape", "index", "so far"], (sh, ix, acc) => k.match(sh, [
+    { variant: NIL, names: [], body: () => k.match(ix, [{ variant: NIL, names: [], body: () => acc }], k.call(S.fail)) },
+    { variant: CONS, names: ["length", "rest"], body: ([n, rest]) => k.match(ix, [
+      { variant: CONS, names: ["position", "later"], body: ([i, later]) => k.if(k.call(S.or, iLess(i, k.int(0)), k.call(S.not, iLess(i, n))), k.call(S.fail),
+        k.call(tensorOffset, rest, later, iAdd(iMul(acc, n), i))) },
+    ], k.call(S.fail)) },
+  ])));
+  const tensorEntry = def("tensor entry", ["tensor", "index"], (t, ix) => tenOf(t, (sh, xs) =>
+    k.match(k.call(drop, xs, k.call(tensorOffset, sh, ix, k.int(0))), [
+      { variant: CONS, names: ["item", "rest"], body: ([x]) => x },
+    ], k.call(S.fail))));
+  const tensorMap = def("tensor map", ["f", "tensor"], (f, t) => tenOf(t, (sh, xs) => T(sh, k.call(map, xs, f))));
+  const tensorZipWith = def("tensor zip with", ["f", "first", "second"], (f, a, b) => tenOf(a, (sa, xs) => tenOf(b, (sb, ys) =>
+    k.if(k.equal(sa, sb),
+      T(sa, k.call(map, k.call(zipped, xs, ys), k.fn(["pair"], (p) => entry(p, (x, y) => k.call(f, x, y), ["x", "y"])))),
+      k.call(ABORT_OP, texts(k.lit("tensor zip with: a "), k.call(shapeText, sa), k.lit(" tensor and a "), k.call(shapeText, sb), k.lit(" one")))))));
+  const reshaped = def("reshaped", ["tensor", "shape"], (t, sh) => tenOf(t, (was, xs) => k.if(iSame(k.call(shapeSize, sh), k.call(length, xs)), T(sh, xs),
+    k.call(ABORT_OP, texts(k.lit("reshaped: a "), k.call(shapeText, was), k.lit(" tensor can't be read as "), k.call(shapeText, sh))))));
   // State (L16, std.ts's State): with state(initial, action) runs the
   // action with get state and put state answered, and gives its value and
   // the last state. Each case answers with a function of the state so far
@@ -1870,7 +1914,7 @@ export function buildPrelude(): Module {
   const simulatedHelpers = [readyAt, earliest, readyTimes, tiedAt, pickAt, nextDraw, firstDraw, simulatedWorld, simulatedClock];
   const awaitHelpers = [startBranch, waiting, goOn, finished, settle, firstDone, raceSettle, ...simulatedHelpers];
 
-  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, spaced, optionalParens, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, determinant, inverted, leastSquares, withState, changeState, piped, ticketId, ...wordMakers, anyOf, together, race, within, simulated, near];
+  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, spaced, optionalParens, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, determinant, inverted, leastSquares, tensorOf, tensorShape, tensorItems, rank, tensorSize, tensorEntry, tensorMap, tensorZipWith, reshaped, withState, changeState, piped, ticketId, ...wordMakers, anyOf, together, race, within, simulated, near];
   // Each number's own show, from before the generic one showed every number
   // (L153, L156): kept so programs saved before still open, not offered.
   const perTypeShows = [showF, showC, showD, showX];
@@ -2015,6 +2059,15 @@ export function buildPrelude(): Module {
     [matrixTimesVector]: "The matrix times the list as a column: one item per row. The list must have one item per column, or the program stops with both sizes.",
     [solved]: "The list x with matrix times vector(m, x) = b, for a square Float64 matrix, by Gaussian elimination with partial pivoting. No answer when the matrix is singular (a pivot is 0).",
     [determinant]: "The determinant of a square Float64 matrix: 0 when it is singular. Other sizes stop the program.",
+    [tensorOf]: "The tensor with this shape and these items, the last axis changing fastest: tensor of([2, 3], [1, 2, 3, 4, 5, 6]) has rows [1, 2, 3] and [4, 5, 6]. Stops when the items don't fill the shape.",
+    [tensorShape]: "A tensor's axis lengths: [2, 3] for a 2 × 3 one, [] for a single number.",
+    [tensorItems]: "A tensor's items, the last axis changing fastest.",
+    [rank]: "How many axes a tensor has: 2 for a matrix, 1 for a vector, 0 for a single number.",
+    [tensorSize]: "How many items a tensor has: its axis lengths multiplied.",
+    [tensorEntry]: "The item at an index, one position per axis from 0: tensor entry(t, [1, 2]) is row 1, column 2. No answer outside the shape.",
+    [tensorMap]: "Each item through f, the shape kept.",
+    [tensorZipWith]: "f of the two tensors' items at each index. Stops when their shapes differ, and says both.",
+    [reshaped]: "The same items read with another shape of the same size: a 2 × 3 tensor reshaped to [3, 2] or [6]. Stops when the sizes differ.",
     [leastSquares]: "The x making matrix times vector(m, x) nearest the vector, by least squares, for a Float64 matrix with at least as many rows as columns: a line through points. No answer when the columns aren't independent.",
     [withState]: "Runs the action with get state and put state answered, starting from initial, and gives (its value, the last state): with state(0, () ↦ put state(get state() + 1)) is ((), 1).",
     [changeState]: "Puts f(the state) as the state: change state((n) ↦ n + 1).",

@@ -363,6 +363,21 @@ A Matrix of any size holds its items row by row. Sums, products and a matrix tim
 - **inverted** : `(Matrix Float64) -[Choice, Abort]-> Matrix Float64`. The inverse of a square Float64 matrix: matrix product(m, inverted(m)) is the identity. No answer when the matrix is singular.
 - **least squares** : `(Matrix Float64, List Float64) -[Choice, Abort]-> List Float64`. The x making matrix times vector(m, x) nearest the vector, by least squares, for a Float64 matrix with at least as many rows as columns: a line through points. No answer when the columns aren't independent.
 
+## Tensors
+
+A tensor is a shape, its axis lengths, and its items with the last axis changing fastest: tensor of([2, 3], [1, 2, 3, 4, 5, 6]) is 2 × 3. Any rank: [] is a single number, [n] a vector, [r, c] a matrix. Shapes are checked when the program runs, and a mismatch stops it and names both shapes.
+
+- **Tensor** (type). A tensor of any rank: its shape (the axis lengths) and its items with the last axis changing fastest. Built with tensor of; a shape mismatch stops the program and names both shapes, as the shape isn't in the type yet.
+- **tensor of** : `(List Int, List a) -[Abort]-> Tensor a`. The tensor with this shape and these items, the last axis changing fastest: tensor of([2, 3], [1, 2, 3, 4, 5, 6]) has rows [1, 2, 3] and [4, 5, 6]. Stops when the items don't fill the shape.
+- **tensor shape** : `(Tensor a) -> List Int`. A tensor's axis lengths: [2, 3] for a 2 × 3 one, [] for a single number.
+- **tensor items** : `(Tensor a) -> List a`. A tensor's items, the last axis changing fastest.
+- **rank** : `(Tensor a) -> Int`. How many axes a tensor has: 2 for a matrix, 1 for a vector, 0 for a single number.
+- **tensor size** : `(Tensor a) -> Int`. How many items a tensor has: its axis lengths multiplied.
+- **tensor entry** : `(Tensor a, List Int) -[Choice]-> a`. The item at an index, one position per axis from 0: tensor entry(t, [1, 2]) is row 1, column 2. No answer outside the shape.
+- **tensor map** : `((a) -[e]-> b, Tensor a) -[e]-> Tensor b`. Each item through f, the shape kept.
+- **tensor zip with** : `((a, b) -[Abort, e]-> c, Tensor a, Tensor b) -[Abort, e]-> Tensor c`. f of the two tensors' items at each index. Stops when their shapes differ, and says both.
+- **reshaped** : `(Tensor a, List Int) -[Abort]-> Tensor a`. The same items read with another shape of the same size: a 2 × 3 tensor reshaped to [3, 2] or [6]. Stops when the sizes differ.
+
 ## Representations
 
 A type can be stored as another type, written as one definition (REPRESENTATIONS.md): what a stored value means, which definitions do the type's jobs, and what each costs. The compiler picks the cheapest for the jobs a program uses; nothing changes where the values are used.
