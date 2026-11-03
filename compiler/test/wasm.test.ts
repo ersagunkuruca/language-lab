@@ -952,3 +952,32 @@ test("a record holding a function, in WebAssembly (C126)", async () => {
     assert.equal(String(got), String(first(r.call(r.value(g), ...xs))));
   }
 });
+
+// I156: show of an array, "array [1, 2]" as the evaluator writes it.
+// WebAssembly and C refused it ("shows an array").
+test("show of an array, in WebAssembly (I156)", async () => {
+  const { Lang } = await import("../../ters/src/lang/dsl.ts");
+  const { infer } = await import("../../ters/src/lang/infer.ts");
+  const { base, baseNames, checkOptions } = await import("../../ters/src/lang/load.ts");
+  const { LIBRARY } = await import("../../ters/src/lang/library.ts");
+  const { ARRAY_OPS, CONS, SHOW_ANY } = await import("../../ters/src/lang/std.ts");
+  const k = new Lang(LIBRARY.code);
+  const g = k.def("g");
+  // The rest after a 0 in front, so the items are Ints.
+  k.define(g, k.fn(["ys"], (ys) => k.call(SHOW_ANY, k.call(ARRAY_OPS.rest, k.call(ARRAY_OPS.of, k.call(CONS, k.int(0), ys))))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const lowered = lowerScalar(code, info, names, [g], { data: true });
+  assert.deepEqual([...lowered.refused.entries()], []);
+  const r = makeRunner(code, info, { print: () => {} });
+  const w = await instantiate(emitWasm(lowered)) as unknown as Exports;
+  const f = lowered.funcs.find((x) => x.def === g && !x.inner)!;
+  const want = ["array []", "array [7]", "array [1, -2, 3]"];
+  [[], [7n], [1n, -2n, 3n]].forEach((ys, j) => {
+    const xs = toList(ys.map(norm));
+    const got = fromWasm(w, (w[f.name] as (...a: unknown[]) => unknown)(toWasm(w, xs, f.params[0])), f.result);
+    assert.equal(String(got), want[j]);
+    assert.equal(String(got), String(first(r.call(r.value(g), xs))));
+  });
+});

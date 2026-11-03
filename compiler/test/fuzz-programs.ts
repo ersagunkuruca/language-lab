@@ -264,7 +264,7 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
           () => call(SHOW_ANY, sub("P")),
           () => call(SHOW_ANY, sub("Q")),
           () => call(SHOW_ANY, sub("U")),
-          () => call(SHOW_ANY, call(ARRAY_OPS.items, sub("A"))),
+          () => call(SHOW_ANY, sub("A")),
           () => call(SHOW_ANY, call(lib("merge maps"), textMap(), textMap())),
           () => call(SHOW_ANY, textSet()),
           () => call(TEXT_OPS.joinAll, call(lib("keys of"), textMap()), sub("T")),
@@ -405,7 +405,7 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
       k.let("x0", call(B.add, x, k.lit(0)), (x0) =>
         k.let("n0", call(INT_OPS.add, n, k.int(0)), (n0) =>
           k.let("xs0", call(lib("append"), xs, k.list(n0)), (xs0) =>
-            ((v) => call(SHOW_ANY, result === "A" ? call(ARRAY_OPS.items, v) : v))(gen(result, { F: [x0], I: [n0], L: [xs0], B: [], T: [], D: [], R: [], P: [], Q: [], U: [], A: [] }, 4)))))));
+            call(SHOW_ANY, gen(result, { F: [x0], I: [n0], L: [xs0], B: [], T: [], D: [], R: [], P: [], Q: [], U: [], A: [] }, 4)))))));
     defs.push({ def, result });
     if (!calls) callable.push(def);
   }
