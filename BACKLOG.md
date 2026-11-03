@@ -31,7 +31,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I160 | Check: opening every example one after another showed "Not kept in this browser: its storage is full" on notebook. Browsing shouldn't fill storage; if it does, opening must not save, or old copies must be dropped | [OUTSIDER-READ-2026-11-03](docs/reports/reviews/OUTSIDER-READ-2026-11-03.md) (screen text, notebook) | 2026-11-03 |
 | I110 | Check main: 49 of its last 60 runs cancelled while queued, a run takes ~19 of its 20 minutes, "affected" reaches 93 of 97 test files. Look at why std.ts and the prelude reach every test; lanes check the latest run when starting an item | REVIEW-2026-11-01 §6 | 2026-11-01 |
 | I154 | A list written out with a thousand items (a table of data pasted in) stops the checker: "Maximum call stack size exceeded" in infer.ts, which walks the list as a thousand nested calls of the list maker, one stack frame each (500 items check). The evaluator, staging and the compilers walk it the same way. Either walk a chain of the list maker in a loop in each pass, or keep a written list as one node of n items | C128 (fuzz test, 2026-11-03) | 2026-11-03 |
 
