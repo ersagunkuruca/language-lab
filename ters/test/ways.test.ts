@@ -109,3 +109,17 @@ test("a way's declared cost counts: a way costing 10 loses to the written field 
   const variant = code.nodes[(code.nodes[body.fn] as { target: Id }).target] as never as Parameters<typeof pickWays>[2];
   assert.equal(pickWays(code, waysIn(code), variant, body.args, (b) => (b === B.cos ? 5 : 1)).get(TRIG_OPS.cos), null);
 });
+
+// The editor's note after an edit (E230b) compares these: giving sin
+// instead of cos turns which way works out the other.
+test("the editor's waysChosen: cos by its way when sin is given, sin by its way when cos is", async () => {
+  const { waysChosen } = await import("../../editor/typed.ts");
+  const pick = (gives: "sin" | "cos") => {
+    const p = program(gives), impl = p.code.defs.find((d) => p.names[d] === "trig at angle")!;
+    const own = p.code.defs.filter((d) => !LIBRARY.code.nodes[d]);
+    return [...waysChosen(p.code, p.info, own).values()].filter((w) => w.impl === impl).map((w) => [p.names[w.field], w.way ? "a way" : "as written"]);
+  };
+  const s = Object.fromEntries(pick("sin")), c = Object.fromEntries(pick("cos"));
+  assert.equal(s.cos, "a way");
+  assert.equal(c.sin, "a way");
+});

@@ -25,6 +25,7 @@ import { ratioParts, read as readInt } from "../ters/src/lang/int.ts";
 import { DEF_VALUE, type Value } from "../ters/src/lang/run.ts";
 import { parseValue } from "../ters/src/lang/values.ts";
 import { choose, representationsIn } from "../ters/src/lang/represent.ts";
+import { leftToWays, pickWays, waysIn } from "../ters/src/lang/ways.ts";
 import { blocksOf, blocksText, litLabel, type Blk, type Piece } from "../ters/src/lang/render.ts";
 import { matchRows, patternText, shape, sharedOtherwise } from "../ters/src/lang/patterns.ts";
 
@@ -2245,6 +2246,25 @@ export function storedAll(code: Code, info: Info, names: Names, own: Id[], main:
   const byType = new Map<Id, ReturnType<typeof representationsIn>>();
   for (const r of representationsIn(code, info, names, own)) byType.set(r.of, [...(byType.get(r.of) ?? []), r]);
   for (const [type, reps] of byType) if (reps.length >= 2) { const c = choose(code, main, reps); out.set(type, { rep: c.rep.name, jobs: c.jobs }); }
+  return out;
+}
+
+// Which way works out each field an implementation leaves to its ways
+// (WAYS.md, ways.ts pickWays), as "impl field" to the way's definition
+// (E230b): an edit that changes one says so.
+export function waysChosen(code: Code, info: Info, own: Id[]): Map<string, { impl: Id; field: Id; way: Id | null }> {
+  const out = new Map<string, { impl: Id; field: Id; way: Id | null }>();
+  const mine = new Set(own);
+  let ways: ReturnType<typeof waysIn> | undefined;
+  for (const impl of info.implementations?.values() ?? []) {
+    if (!mine.has(impl)) continue;
+    const d = code.nodes[impl], body = d?.kind === "def" && d.body ? code.nodes[d.body] : null;
+    if (!isCall(body)) continue;
+    const fn = code.nodes[body.fn], variant = fn?.kind === "ref" ? code.nodes[fn.target] : null;
+    if (variant?.kind !== "variant" || !body.args.some((a) => leftToWays(code, a))) continue;
+    const pick = pickWays(code, (ways ??= waysIn(code)), variant, body.args);
+    variant.fields.forEach((f, i) => { if (leftToWays(code, body.args[i]) || pick.get(f)) out.set(`${impl} ${f}`, { impl, field: f, way: pick.get(f) ?? null }); });
+  }
   return out;
 }
 
