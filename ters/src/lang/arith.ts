@@ -328,6 +328,27 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
     }
     const d = nodes[target];
     const lam = d?.kind === "def" && d.body ? nodes[d.body] : null;
+    const f1 = nodes[useTarget(nodes, n)], fp1 = f1?.kind === "field" ? fieldPorts(nodes, f1) : null;
+    if (fp1 && !(d?.kind === "def" && d.results?.length)) {
+      // Given by a plain function of the field's type (L128d4): the use in
+      // the field's direction is a call of it, its results taken apart.
+      // let r = f(inputs) in (results ↦ body)(r.first, r.second, …)
+      const k = fp1.outs.length;
+      const outT: Type[] = fp1.outs.map((o) => { const b = n.binds[String(o)]; return (b ? typeOf.get(b) : undefined) ?? num; });
+      const resT: Type = k === 1 ? outT[0] : { t: "con", id: `std.tuple${k}`, args: outT };
+      const bodyT = typeOf.get(n.body) ?? num;
+      const ins = fp1.ins.map((i) => n.given[String(i)]);
+      const call = add({ kind: "call", fn: add({ kind: "ref", target }, { t: "fn", params: ins.map((g) => typeOf.get(g) ?? num), ret: resT, eff: pure }), args: ins }, resT);
+      const binders = fp1.outs.map((o, i) => n.binds[String(o)] ?? add({ kind: "binder" }, outT[i]));
+      const inner = add({ kind: "lambda", params: binders, body: n.body }, { t: "fn", params: outT, ret: bodyT, eff: pure });
+      if (k === 1) { nodes[id] = { id, kind: "call", fn: inner, args: [call] } as Node; delete nodes[n.fn]; return; }
+      const r = add({ kind: "binder" }, resT);
+      const parts = fp1.outs.map((_, i) => add({ kind: "call", fn: add({ kind: "ref", target: `std.tuple${k}.tuple.${["first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth"][i]}` }, { t: "fn", params: [resT], ret: outT[i], eff: pure }), args: [add({ kind: "ref", target: r }, resT)] }, outT[i]));
+      const outer = add({ kind: "lambda", params: [r], body: add({ kind: "call", fn: inner, args: parts }, bodyT) }, { t: "fn", params: [resT], ret: bodyT, eff: pure });
+      nodes[id] = { id, kind: "call", fn: outer, args: [call] } as Node;
+      delete nodes[n.fn];
+      return;
+    }
     if (lam?.kind !== "lambda") throw new Error(`${names[useTarget(nodes, n)] ?? useTarget(nodes, n)} is given by ${names[target] ?? target}, which isn't a definition of its ports`);
     // The field's inputs are the definition's, in order, and its results
     // the definition's results (L128d): the field read as a function.

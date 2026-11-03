@@ -35,7 +35,9 @@ test("a network is a predicate: its type is Bool and main prints what it says", 
   assert.deepEqual(info.errors, []);
   const type = (n: string) => showType(info.typeOf.get(p.named(n))!, p.pres.names);
   assert.equal(type("fall"), "(Float64, Float64, Float64, Float64) -> Bool");
-  assert.equal(type("rotate"), "(Float64, Float64, Float64, Float64, Float64) -> Bool");
+  // rotate names its results, so it is the function of that direction
+  // (L128d2); given all five ports it is still the condition on them.
+  assert.equal(type("rotate"), "(Float64, Float64, Float64) -> (Float64, Float64)");
   assert.equal(type("landing times"), "(Float64, Float64) -> List Float64");
   const lines: string[] = [];
   runMain(p.code, info, p.named("main"), { print: (s) => lines.push(s) });

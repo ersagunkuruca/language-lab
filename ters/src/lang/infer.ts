@@ -1371,6 +1371,8 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     const fp = fieldPorts(code.nodes, fl)!;
     const want = `${fp.outs.map(port).join(", ")} from ${fp.ins.map(port).join(", ")}`;
     // Read as functions (L128d): the same number of inputs and of results.
+    // Or any function of the field's type, its record says (L128d4).
+    if (d?.kind === "def" && !d.results) continue;
     const same = d?.kind === "def" && lam?.kind === "lambda" && d.results?.length === fp.outs.length && lam.params.length - d.results.length === fp.ins.length;
     if (!same) err(impl, `${nm(impl)} gives ${nm(field)} as ${nm(by)}, which must name its results the way ${nm(field)} does: ${want}`);
     else if (info.directions?.get(by)?.length) err(impl, `${nm(impl)} gives ${nm(field)} as ${nm(by)}, which must give ${want} with one answer, and it may give several or none`);
