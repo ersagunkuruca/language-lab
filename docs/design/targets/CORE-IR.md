@@ -29,6 +29,9 @@ model, so each feature has been written twice in the compiler
   Step c2 adds tables and Hash sets (the evaluator's Table) and seeded
   Random, so every generated program runs. Step c3 adds the world
   (`runCoreMain`), checked on wc, ledger, chapters and calc's mains.
+  Step c4 runs every example whose main lowers (11 of them) against the
+  evaluator (compiler/test/core-js.test.ts), which lists the others with
+  the reason they don't lower.
 - (d) compile.ts retired piece by piece.
 
 ## What it holds
@@ -159,6 +162,8 @@ What a printer may rely on:
 - JavaScript from the core IR (core-js.ts) runs in the fuzz test too, so
   the lowering is checked once more without a WebAssembly or C printer
   between.
-- I111's agreement test (examples-agree.test.ts) runs the examples.
+- I111's agreement test (examples-agree.test.ts) runs the examples, and
+  core-js.test.ts runs the ones that lower through JavaScript from the
+  core IR.
 - Each printer's own tests (wasm.test.ts, c.test.ts, wgsl tests,
   js-scalar.test.ts).
