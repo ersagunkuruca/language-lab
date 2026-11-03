@@ -39,11 +39,12 @@ export interface Chosen { code: Code; names: Names; chosen: string[]; insiders: 
 // The check made is handed back as `info`.
 // `hostMaps`: the program runs where std's Table is (the evaluator and
 // compiled JavaScript), so a Map may be a hash table changed in place
-// (C63b); WebAssembly, C and shaders have none.
-// `cTables`: the program is compiled to C, whose runtime has a Map table
-// for Int and Text keys (C63h, compiler/src/c.ts `tableC`), a Set table
-// for Int and Text items (C63i), and tuples and records of them (C63k).
-export interface LibraryOptions { hostMaps?: boolean; cTables?: boolean }
+// (C63b); WebAssembly, C and shaders have none, but see `tables`.
+// `tables`: the program is compiled to C or WebAssembly, whose runtimes
+// have their own Map and Set tables for Int and Text keys and tuples and
+// records of them (C63h, C63i, C63k: compiler/src/c.ts `tableC`; C63j:
+// compiler/src/wasm-table.ts).
+export interface LibraryOptions { hostMaps?: boolean; tables?: boolean }
 
 export function withLibraryRepresentations(code: Code, info: Info, names: Names, main: Id, defs: Id[], asked: Representation[] = [], options: LibraryOptions = {}): Chosen {
   const skip = new Set<Id>();
@@ -79,7 +80,7 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
     // has one holder, so a put changing it in place can't be seen.
     const rows = LIBRARY.reps.filter((r) => r.of === ty && r.byType && !skip.has(r.name + " " + ty)
       && (!r.oneHolder || (options.hostMaps && inPlace(code, info, main, defs, r))
-        || (options.cTables && (ty === MAP || ty === SET_TYPE) && inPlace(code, info, main, defs, r))));
+        || (options.tables && (ty === MAP || ty === SET_TYPE) && inPlace(code, info, main, defs, r))));
     if (!rows.length || !uses(code, main, [spec, ...rows]).length) continue;
     const tree = choose(code, main, [spec, ...rows]).rep;
     if (tree === spec || keyed(info, defs, code, ty) || generic(info, defs, code, tree)) continue;

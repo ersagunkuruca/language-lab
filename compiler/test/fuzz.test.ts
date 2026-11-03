@@ -72,8 +72,7 @@ test(`generated programs: the evaluator, compiled JavaScript, WebAssembly and C 
   // `entry`: call e(x, n, j), whose list the program holds (C120), so a
   // list stored another way never comes in from outside.
   type Built = { code: typeof p.code; info: typeof p.info; names: typeof p.names };
-  // `wasm` false: C alone (its own tables, C63h).
-  const engines = async (q: Built, tag: string, js = true, native = true, entry = false, wasm = true) => {
+  const engines = async (q: Built, tag: string, js = true, native = true, entry = false) => {
     const roots = entry ? p.entries : p.defs.map((d) => d.def), name = (i: number) => `${entry ? "e" : "g"}${i}`;
     if (js) {
     const path = join(mkdtempSync(join(tmpdir(), "fuzz-")), "out.mjs");
@@ -86,7 +85,7 @@ test(`generated programs: the evaluator, compiled JavaScript, WebAssembly and C 
     const lowered = lowerScalar(q.code, q.info, q.names, roots, { data: true });
     assert.deepEqual([...lowered.refused.entries()].map(([d, why]) => `${q.names[d]}: ${why}`), [], `seed ${SEED}${tag}`);
     const fns = roots.map((def) => lowered.funcs.findIndex((g) => g.def === def && !g.inner));
-    if (wasm) {
+    {
     const w = await instantiate(emitWasm(lowered)) as unknown as Record<string, (...a: unknown[]) => unknown>;
     // A List Int made by the module's own makers, from the end.
     const list = (xs: bigint[], t: LType): unknown => {
@@ -129,13 +128,13 @@ test(`generated programs: the evaluator, compiled JavaScript, WebAssembly and C 
     }
     await engines({ code: c.code, info, names: c.names }, tag, hostMaps, !hostMaps, true);
   }
-  // C's own Map table, for Int and Text keys (C63h).
-  if (!skip) {
-    const c = withLibraryRepresentations(p.code, p.info, p.names, p.main, p.own, [], { cTables: true });
+  // C's and WebAssembly's own Map and Set tables (C63h to C63k).
+  {
+    const c = withLibraryRepresentations(p.code, p.info, p.names, p.main, p.own, [], { tables: true });
     if (c.chosen.some((x) => x.includes("hash table"))) {
       const info = infer(c.code, c.names, undefined, { ...checkOptions, insiders: [...checkOptions.insiders!, ...c.insiders] });
       assert.deepEqual(info.errors.map((e) => e.message), [], `seed ${SEED}, ${c.chosen.join(", ")}`);
-      await engines({ code: c.code, info, names: c.names }, ` (${c.chosen.join(", ")})`, false, true, true, false);
+      await engines({ code: c.code, info, names: c.names }, ` (${c.chosen.join(", ")})`, false, true, true);
     }
   }
   assert.deepEqual(differ, []);

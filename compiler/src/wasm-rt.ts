@@ -26,7 +26,7 @@ import { STOPS } from "./stops.ts";
 // `i64` a plain machine word, which the functions below compute with.
 // `mag` a big Int's magnitude, an array of 32-bit limbs.
 // An array function's (C66) own types: the view, its item, its buffer and the buffer's items.
-export type VT = "i32" | "i64" | "int" | "mag" | "f64" | "text" | "list" | "option" | "void" | "array" | "item" | "buf" | "items" | "table" | "key" | "value";
+export type VT = "i32" | "i64" | "int" | "mag" | "f64" | "text" | "list" | "option" | "void" | "array" | "item" | "buf" | "items" | "table" | "key" | "value" | "tstore" | "tkeys" | "tvals" | "tst" | "tpath";
 
 export interface RtFn {
   name: string;
@@ -41,6 +41,10 @@ export interface RtFn {
   // An array function's copy (C66): the Array type it is for, by its
   // place in Lowered.arrays (`array.push.a0`); `list` is then List of its items.
   array?: number;
+  // A table function's copy (C63j, wasm-table.ts): the table type, by its
+  // place in Lowered.tables, and the types its body names besides.
+  table?: number;
+  types?: Record<string, unknown>;
   // A builtin with no answer or one (Choice): it gives its answer and a
   // status, 0 for an answer and 1 for none, as the module's own
   // one-answer functions do (wasm.ts).

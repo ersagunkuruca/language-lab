@@ -1058,7 +1058,8 @@ int main(int argc, char **argv) {
     // A key is an Int, a Text, or a record (a tuple) of them (C63k): its
     // parts in order, `leaves`, hashed, compared and ordered one by one.
     const kt = t.keyT, int = kt === "int", K = ty(kt);
-    const leaves = (x: LType, at: string): ["int" | "text", string][] => (x === "int" || x === "text" ? [[x, at]] : (x as RType).fields.flatMap((f, j) => leaves(f.t, `${at}.f${j}`)));
+    // A Float64 key is one nothing fixes: none is ever made.
+    const leaves = (x: LType, at: string): ["int" | "text" | "f64", string][] => (x === "int" || x === "text" || x === "f64" ? [[x, at]] : (x as RType).fields.flatMap((f, j) => leaves(f.t, `${at}.f${j}`)));
     const parts = (at: string) => leaves(kt, at);
     const kinds = new Set(parts("").map(([x]) => x));
     const dupK = (x: string) => (counted(kt) ? dup(kt, x) : x), dropK = (x: string) => (counted(kt) ? drop(kt, x) : "");
@@ -1079,8 +1080,9 @@ static inline int lab__ei_t${i}(lab_int a, lab_int b) {
   for (uint32_t j = 0; j < LAB_TN(k); j++) h = (h ^ LAB_TB(k)[j]) * 0x100000001b3u;
   return h ^ (h >> 32);
 }
-static inline int lab__et_t${i}(lab_cell *a, lab_cell *b) { return LAB_TN(a) == LAB_TN(b) && memcmp(LAB_TB(a), LAB_TB(b), LAB_TN(a)) == 0; }`] : [])];
-    const out = [`// ${t.set ? `Hash set ${i}: ${int ? "Int" : kt === "text" ? "Text" : "tuple"} items` : `Table ${i}: ${int ? "Int" : kt === "text" ? "Text" : "tuple"} keys, ${V} values`}.
+static inline int lab__et_t${i}(lab_cell *a, lab_cell *b) { return LAB_TN(a) == LAB_TN(b) && memcmp(LAB_TB(a), LAB_TB(b), LAB_TN(a)) == 0; }`] : []), ...(kinds.has("f64") ? [`static inline uint64_t lab__hf_t${i}(double k) { uint64_t h; memcpy(&h, &k, 8); return h * 0x9e3779b97f4a7c15u; }
+static inline int lab__ef_t${i}(double a, double b) { return a == b; }`] : [])];
+    const out = [`// ${t.set ? `Hash set ${i}: ${int ? "Int" : typeof kt === "string" ? kt : "tuple"} items` : `Table ${i}: ${int ? "Int" : typeof kt === "string" ? kt : "tuple"} keys, ${V} values`}.
 ${leafHelpers.join("\n")}
 static inline uint64_t lab__hash_t${i}(${K} k) {
   uint64_t h = 0;
@@ -1211,6 +1213,7 @@ ${kinds.has("int") ? `static inline int lab__ci_t${i}(lab_int a, lab_int b) {
   if (p.neg != q.neg) return p.neg ? -1 : 1;
   return p.neg ? lab__cmp(q.d, q.n, p.d, p.n) : lab__cmp(p.d, p.n, q.d, q.n);
 }` : ""}
+${kinds.has("f64") ? `static inline int lab__cf_t${i}(double a, double b) { return a < b ? -1 : a > b; }` : ""}
 ${kinds.has("text") ? `static inline int lab__ct_t${i}(lab_cell *a, lab_cell *b) {
   uint32_t n = LAB_TN(a) < LAB_TN(b) ? LAB_TN(a) : LAB_TN(b);
   int r = memcmp(LAB_TB(a), LAB_TB(b), n);
