@@ -124,6 +124,9 @@ export function bodyOf(n: Use): Id {
   if (n.body === undefined) throw new Error(`a use whose ports aren't known gives its ports as one value (${n.id})`);
   return n.body;
 }
+// A use's given expressions and its body when it has one, as a pass that
+// walks every expression reads them (L211d).
+export const useKids = (n: Use): Id[] => (n.body === undefined ? Object.values(n.given) : [...Object.values(n.given), n.body]);
 export const isUse = (n: Node | undefined | null): n is Use => n?.kind === "call" && n.given !== undefined;
 export const useOf = (n: Node | undefined | null): Use | null => (isUse(n) ? n : null);
 // A call that gives every input by position.

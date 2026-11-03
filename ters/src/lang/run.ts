@@ -16,8 +16,8 @@
 // Random, Time and Wait, when nothing in the program handles them, go to it too.
 
 import { bordered } from "./border.ts";
-import { givenInOrder } from "./ports.ts";
-import { dependencies, subtree, type Code, type Id, type NodeOf, type Use, useTarget, isCall, type Call, isUse, bindsOf, bodyOf } from "../model.ts";
+import { answerKeys, givenInOrder } from "./ports.ts";
+import { dependencies, subtree, type Code, type Id, type NodeOf, type Use, useTarget, isCall, type Call, isUse, bindsOf } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { impl } from "../prelude.ts";
 import type { Info } from "./infer.ts";
@@ -31,7 +31,7 @@ import { oneAnswer } from "./modes.ts";
 import { computedForward } from "./directions.ts";
 import { discharge } from "./ledger.ts";
 import * as Alg from "./algebraic.ts";
-import { floatText, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, COMPLEX_V, FIXED_V, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, shownImplementations, CASE_NAME, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std.ts";
+import { tupleVariant, floatText, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, COMPLEX_V, FIXED_V, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, shownImplementations, CASE_NAME, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std.ts";
 import { intLit } from "./int.ts";
 import { JETS } from "./jets.ts";
 import { answerFromHost, effectOfOperation, hostedEffects, type Hosts } from "./hosts.ts";
@@ -101,7 +101,7 @@ export function* solveAnswers(code: Code, n: Use, known: Record<string, unknown>
   const p = planSolve(code, n);
   if (p.mode === "relational") {
     for (const sol of relate(code, useTarget(code.nodes, n), known, opts)) {
-      const bound = Object.keys(bindsOf(n)).map((k) => toValue(sol.values[k]));
+      const bound = answerKeys(code, n).map((k) => toValue(sol.values[k]));
       if (bound.some((v) => v === undefined)) continue; // not pinned down: not an answer
       yield bound as Value[];
     }
@@ -111,8 +111,8 @@ export function* solveAnswers(code: Code, n: Use, known: Record<string, unknown>
   const values = Object.fromEntries(p.known.map((k) => [k, known[k] as number]));
   for (const sol of solutions(p.rel!, values)) {
     // A port the equations leave free has no value: not a solution.
-    if (Object.keys(bindsOf(n)).some((k) => sol[k] === null || sol[k] === undefined)) continue;
-    yield Object.keys(bindsOf(n)).map((k) => sol[k]!);
+    if (answerKeys(code, n).some((k) => sol[k] === null || sol[k] === undefined)) continue;
+    yield answerKeys(code, n).map((k) => sol[k]!);
   }
 }
 
@@ -943,7 +943,10 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         if (r.done) throw new Error(`solving ${rt.names?.[useTarget(code.nodes, n)] ?? useTarget(code.nodes, n)} this way gives exactly one answer, and it gave none`);
         answers = [r.value];
       }
-      this.from(answers, (bound) => this.eval(bodyOf(n), bind(env, Object.values(bindsOf(n)), bound as Value[])));
+      // With no body (L211d) the use is its answer: the one port, or the
+      // tuple of them in port order.
+      if (n.body === undefined) this.from(answers, (bound) => this.ret(bound.length === 1 ? bound[0] : { tag: tupleVariant(bound.length), fields: bound as Value[] }));
+      else this.from(answers, (bound) => this.eval(n.body!, bind(env, Object.values(bindsOf(n)), bound as Value[])));
     }
   }
 

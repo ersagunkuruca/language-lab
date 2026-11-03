@@ -22,7 +22,7 @@ import { planSolve, runsBackwards, solvesInWholeNumbers } from "./solve.ts";
 import { computedForward, directionProblem, useDirections } from "./directions.ts";
 import { analyzer, derivedFrom, determinism, oneAnswer, solveMode, type Fn } from "./modes.ts";
 import { smoothDerivative as hasSmoothDerivative, smoothGradient as hasSmoothGradient, recordVariant, forgetDerived } from "./derive.ts";
-import { usePorts } from "./ports.ts";
+import { answerKeys } from "./ports.ts";
 import { BOOL, CELL_OPS, LIST, DIVISION, FIELDS, JOBS, S, SET, SIGS, SMART, TRUE, TUPLE_MAX, tupleType } from "./std.ts";
 import { countedCalls } from "./counting.ts";
 import { ratioParts } from "./int.ts";
@@ -196,7 +196,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // Each port's type is found where a binder's is; with no binder it is
   // kept here by port.
   const producedTypes = new Map<Id, Map<string, Type>>();
-  const produced = (n: Use): string[] => (usePorts(code, n) ?? []).filter((k) => !(k in n.given));
+  const produced = (n: Use): string[] => answerKeys(code, n);
   // The ports a use names for its answers: its binders', or with no body
   // the ones it produces.
   const answerPorts = (n: Use): [string, Id | undefined][] => (n.body === undefined ? produced(n).map((k) => [k, undefined]) : Object.entries(bindsOf(n)));

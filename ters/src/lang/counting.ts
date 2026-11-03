@@ -18,7 +18,7 @@
 // take a counted input as one that strictly shrinks at that call.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
-import { isCall, isUse, bodyOf } from "../model.ts";
+import { isCall, isUse, useKids } from "../model.ts";
 import { ARITH, FALSE, INT_OPS, S, TRUE } from "./std.ts";
 import { INT } from "./types.ts";
 
@@ -35,7 +35,7 @@ const isPositiveInt = (n: Node | undefined) => n?.kind === "lit" && n.of === INT
 function kids(n: Node): Id[] {
   switch (n.kind) {
     case "call":
-      if (isUse(n)) return [...Object.values(n.given), bodyOf(n)];
+      if (isUse(n)) return useKids(n);
       return [n.fn, ...n.args];
     case "lambda": return [n.body];
     case "match": return [n.scrutinee, ...n.arms, ...(n.otherwise ? [n.otherwise] : [])];
