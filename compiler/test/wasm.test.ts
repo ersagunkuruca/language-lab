@@ -880,3 +880,42 @@ test("what the generated programs found, in WebAssembly: a sum of an empty list 
   const f = lowered.funcs.find((g) => g.def === p.defs.summedNothing && !g.inner)!;
   for (const n of [0n, 3n]) assert.equal(w[f.name](toInt(w, n) as never), 0);
 });
+
+// I152: a list of functions that may have no answer and a list of ones that
+// always do were one WebAssembly type, so the second held closures of the
+// first's type and the module didn't validate. Found by the fuzz test.
+test("lists of functions that choose and of ones that don't are two types in WebAssembly (I152)", async () => {
+  const { Lang } = await import("../../ters/src/lang/dsl.ts");
+  const { infer } = await import("../../ters/src/lang/infer.ts");
+  const { base, baseNames, checkOptions } = await import("../../ters/src/lang/load.ts");
+  const { LIBRARY } = await import("../../ters/src/lang/library.ts");
+  const { CONS, INT_OPS, NIL, S } = await import("../../ters/src/lang/std.ts");
+  const k = new Lang(LIBRARY.code);
+  const L = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
+  // Each list's functions composed by a fold, then applied to n: the sum's,
+  // plus the quotients' (or 0 when one has none).
+  const g = k.def("g");
+  k.define(g, k.fn(["n", "ys"], (n, ys) => k.let("xs", k.call(L("append"), ys, k.list(n)), (xs) => {
+    const composed = (fs: string) => k.call(k.fold(fs, [
+      { variant: NIL, names: [], body: () => k.fn(["z"], (z) => z) },
+      { variant: CONS, names: ["f", "rest"], results: [null, "after"], body: ([f], [, after]) => k.fn(["z"], (z) => k.call(after!, k.call(f, z))) },
+    ]), n);
+    const each = (op: string) => k.call(L("map"), xs, k.fn(["v"], (v) => k.fn(["w"], (w) => k.call(op, w, v))));
+    return k.call(INT_OPS.add, composed(each(INT_OPS.add)), k.call(S.first, k.thunk(() => composed(each(INT_OPS.quotient))), k.thunk(() => k.int(0))));
+  })));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const lowered = lowerScalar(code, info, names, [g], { data: true });
+  assert.deepEqual([...lowered.refused.entries()], []);
+  const m = emitWasm(lowered);
+  assert.ok(WebAssembly.validate(m.bytes));
+  const w = await instantiate(m) as unknown as Exports;
+  const f = lowered.funcs.find((x) => x.def === g && !x.inner)!;
+  const r = makeRunner(code, info, { print: () => {} });
+  for (const [n, ys] of [[3n, [1n, 2n]], [0n, [5n]], [-7n, []]] as [bigint, bigint[]][]) {
+    const xs = [norm(n), toList(ys.map(norm))];
+    const got = fromWasm(w, (w[f.name] as (...a: unknown[]) => unknown)(...xs.map((x, i) => toWasm(w, x, f.params[i]))), f.result);
+    assert.equal(String(got), String(first(r.call(r.value(g), ...xs))), `g(${n}, [${ys}])`);
+  }
+});
