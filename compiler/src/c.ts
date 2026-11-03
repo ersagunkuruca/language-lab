@@ -1059,7 +1059,7 @@ int main(int argc, char **argv) {
     const dupK = (x: string) => (int ? `lab_int_dup(${x})` : `lab_dup(${x})`), dropK = (x: string) => (int ? `lab_int_drop(${x});` : `lab_drop(${x});`);
     const dupV = (x: string) => (counted(t.value) ? dup(t.value, x) : x), dropV = (x: string) => (counted(t.value) ? drop(t.value, x) : "");
     const has = (op: string) => arrayFns.has(`table.${op}.t${i}`);
-    const out = [`// Table ${i}: ${int ? "Int" : "Text"} keys, ${V} values.
+    const out = [`// ${t.set ? `Hash set ${i}: ${int ? "Int" : "Text"} items` : `Table ${i}: ${int ? "Int" : "Text"} keys, ${V} values`}.
 static inline uint64_t lab__hash_t${i}(${K} k) {
 ${int ? `  uint64_t h;
   if (LAB_IS_SMALL(k)) h = (uint64_t)LAB_VAL(k);
@@ -1199,10 +1199,13 @@ ${int ? `  if (LAB_IS_SMALL(a) && LAB_IS_SMALL(b)) return LAB_VAL(a) < LAB_VAL(b
 }`);
     for (const { d, j } of lists) {
       const tag = d.cases.findIndex((c) => c.fields.length > 0), head = d.cases[tag].fields.findIndex((x) => x.t !== d);
-      const cons = cname(d, tag), nil = cname(d, 1 - tag), pair = d.cases[tag].fields[head].t as RType, P = ty(pair);
+      const cons = cname(d, tag), nil = cname(d, 1 - tag), item = d.cases[tag].fields[head].t;
+      // A set's items are its keys; a map's entries, pairs.
+      const made = t.set ? (item === t.keyT ? dupK("t->ks[ix[j]]") : zero(item))
+        : `(${ty(item)}){ ${(item as RType).fields[0].t === t.keyT ? dupK("t->ks[ix[j]]") : zero((item as RType).fields[0].t)}, ${dupV("t->vs[ix[j]]")} }`;
       // A key nothing ever fixed (an empty map nothing is put in) is held
       // as an Int, its entries' as another type: none are ever made.
-      out.push(`// The entries as a list of pairs, in compare's order of their keys.
+      out.push(`// The entries as a list of ${t.set ? "items" : "pairs"}, in compare's order of their keys.
 static lab_cell *lab_table_entries_t${i}_e${j}(lab_cell *c) {
   lab__reroot_t${i}((${T} *)c);
   ${S} *t = ((${T} *)c)->cur;
@@ -1214,7 +1217,7 @@ static lab_cell *lab_table_entries_t${i}_e${j}(lab_cell *c) {
   lab_cell *acc = &${nil};
   for (uint32_t j = n; j-- > 0;) {
     ${cons} *e = lab_new(sizeof(${cons}), ${tnum.get(d.key)}, ${tag});
-    e->f${head} = (${P}){ ${pair.fields[0].t === t.keyT ? dupK("t->ks[ix[j]]") : zero(pair.fields[0].t)}, ${dupV("t->vs[ix[j]]")} };
+    e->f${head} = ${made};
     e->f${1 - head} = acc; acc = (lab_cell *)e;
   }
   free(ix);

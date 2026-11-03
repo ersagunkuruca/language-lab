@@ -49,8 +49,8 @@ import type { Code, Id, NodeOf } from "../../ters/src/model.ts";
 import { dependencies, subtree } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
-import { ARRAY, TABLE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, STRING, type Row, type Type } from "../../ters/src/lang/types.ts";
-import { ABORT, ABORT_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, ORDER_V, PAIR_V, RATIO, S, SET, SHOW_ANY, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
+import { ARRAY, TABLE, HASH_SET, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, STRING, type Row, type Type } from "../../ters/src/lang/types.ts";
+import { ABORT, ABORT_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, HASH_SET_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, ORDER_V, PAIR_V, RATIO, S, SET, SHOW_ANY, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
 import { liftLets } from "../../ters/src/lang/lift-lets.ts";
 import { inlineLists } from "./inline-lets.ts";
 import { STOPS } from "./stops.ts";
@@ -69,6 +69,9 @@ import { runtime } from "./wasm-rt.ts";
 const TABLE_RT: Record<Id, string> = {
   [TABLE_OPS.empty]: "empty", [TABLE_OPS.put]: "put", [TABLE_OPS.remove]: "remove", [TABLE_OPS.has]: "has",
   [TABLE_OPS.size]: "size", [TABLE_OPS.at]: "at", [TABLE_OPS.entries]: "entries",
+  // A hash set (C63i) is the table of its items, each holding true.
+  [HASH_SET_OPS.empty]: "empty", [HASH_SET_OPS.add]: "put", [HASH_SET_OPS.remove]: "remove", [HASH_SET_OPS.has]: "has",
+  [HASH_SET_OPS.size]: "size", [HASH_SET_OPS.items]: "entries",
 };
 const ARRAY_RT: Record<Id, string> = {
   [ARRAY_OPS.empty]: "array.empty", [ARRAY_OPS.of]: "array.of", [ARRAY_OPS.items]: "array.items",
@@ -136,7 +139,9 @@ export interface AType { key: string; name: string; item: LType; index: number; 
 // runtime functions are named by (`table.put.t0`); `entries`: each List
 // of (key, value) pairs `table entries` gives (`table.entries.t0.e1`): a
 // key nothing fixes is held as an Int, its pairs' may be another type.
-export interface TType { key: string; name: string; keyT: "int" | "text"; value: LType; index: number; entries: DType[] }
+// `set`: std's Hash set (C63i), its items the keys, each holding true
+// (a Bool), its entries the List of its items.
+export interface TType { key: string; name: string; keyT: "int" | "text"; value: LType; index: number; entries: DType[]; set: boolean }
 export type LType = SType | WType | RType | DType | FType | AType | TType;
 export const isArray = (t: LType): t is AType => typeof t === "object" && "item" in t;
 export const isTable = (t: LType): t is TType => typeof t === "object" && "keyT" in t;
@@ -509,13 +514,14 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     // values of them.
     // At any depth (List (Optional (List a)), sort's runs of nothing): the
     // type's key is made from its arguments as they are.
-    if (opts.data && t.t === "con" && t.id === TABLE) {
+    if (opts.data && t.t === "con" && (t.id === TABLE || t.id === HASH_SET)) {
       // A key no put ever fixes (an empty map nothing is put in) is an Int.
-      const k = !t.args[0] || unconstrained(t.args[0]) ? "int" : stype(t.args[0], inside), value = t.args[1] && stype(freed(t.args[1]), inside);
+      const set = t.id === HASH_SET;
+      const k = !t.args[0] || unconstrained(t.args[0]) ? "int" : stype(t.args[0], inside), value = set ? "i32" : t.args[1] && stype(freed(t.args[1]), inside);
       if ((k !== "int" && k !== "text") || !value) return null;
-      const key = `${t.id}<${k},${show(freed(t.args[1]))}>`;
+      const key = `${t.id}<${k}${set ? "" : `,${show(freed(t.args[1]))}`}>`;
       if (tables.has(key)) return tables.get(key)!;
-      const h: TType = { key, name: "Table", keyT: k, value, index: tables.size, entries: [] };
+      const h: TType = { key, name: set ? "HashSet" : "Table", keyT: k, value, index: tables.size, entries: [], set };
       tables.set(key, h);
       return h;
     }
@@ -867,9 +873,9 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           const ts = [...n.args, id].map((a) => { const t = stype(zonk(a)); if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(a))}`); return t; });
           const h = ts.find(isTable);
           if (!h) throw new Refused(`uses ${nm(target)} on no table`);
-          const l = target === TABLE_OPS.entries ? ts.find(isData) : undefined;
+          const l = target === TABLE_OPS.entries || target === HASH_SET_OPS.items ? ts.find(isData) : undefined;
           if (l && !h.entries.includes(l)) h.entries.push(l);
-          return { k: "rt", fn: `table.${TABLE_RT[target]}.t${h.index}${l ? `.e${h.entries.indexOf(l)}` : ""}`, args: args() };
+          return { k: "rt", fn: `table.${TABLE_RT[target]}.t${h.index}${l ? `.e${h.entries.indexOf(l)}` : ""}`, args: target === HASH_SET_OPS.add ? [...args(), { k: "bool", v: true }] : args() };
         }
         if (opts.data && RT[target]) {
           // What it takes and gives in, so List Text is one of the module's types.
