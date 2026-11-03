@@ -23,7 +23,7 @@
 // keep working, and the meaning hash is of the program as written.
 
 import type { Code, Id, Node, NodeData, NodeOf, Use } from "../model.ts";
-import { isUse, useTarget, isCall, fieldPorts, type Call, bindsOf, bodyOf } from "../model.ts";
+import { isUse, useTarget, isCall, fieldPorts, type Call, bindsOf, useKids } from "../model.ts";
 import { resultsAsFunctions, usesResultsAsFunction } from "./results-fn.ts";
 import { freshId } from "../model.ts";
 import type { Names } from "../presentation.ts";
@@ -239,8 +239,8 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
         if (isUse(n)) {
           c.fn = kid(n.fn);
           c.given = Object.fromEntries(Object.entries(n.given).map(([k, v]) => [k, kid(v)]));
-          c.binds = Object.fromEntries(Object.entries(bindsOf(n)).map(([k, v]) => [k, kid(v)]));
-          c.body = kid(bodyOf(n));
+          if (n.binds) c.binds = Object.fromEntries(Object.entries(n.binds).map(([k, v]) => [k, kid(v)]));
+          if (n.body !== undefined) c.body = kid(n.body);
           break;
         }
         c.fn = kid(n.fn); c.args = n.args.map(kid); break;
@@ -338,11 +338,14 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
       const k = fp1.outs.length;
       const outT: Type[] = fp1.outs.map((o) => { const b = bindsOf(n)[String(o)]; return (b ? typeOf.get(b) : undefined) ?? num; });
       const resT: Type = k === 1 ? outT[0] : { t: "con", id: `std.tuple${k}`, args: outT };
-      const bodyT = typeOf.get(bodyOf(n)) ?? num;
       const ins = fp1.ins.map((i) => n.given[String(i)]);
       const call = add({ kind: "call", fn: add({ kind: "ref", target }, { t: "fn", params: ins.map((g) => typeOf.get(g) ?? num), ret: resT, eff: pure }), args: ins }, resT);
+      // With no body (L211d) the use is the call itself: its result is
+      // the one port, or the tuple of them.
+      if (n.body === undefined) { nodes[id] = { ...nodes[call], id } as Node; delete nodes[call]; delete nodes[n.fn]; return; }
+      const bodyT = typeOf.get(n.body) ?? num;
       const binders = fp1.outs.map((o, i) => bindsOf(n)[String(o)] ?? add({ kind: "binder" }, outT[i]));
-      const inner = add({ kind: "lambda", params: binders, body: bodyOf(n) }, { t: "fn", params: outT, ret: bodyT, eff: pure });
+      const inner = add({ kind: "lambda", params: binders, body: n.body }, { t: "fn", params: outT, ret: bodyT, eff: pure });
       if (k === 1) { nodes[id] = { id, kind: "call", fn: inner, args: [call] } as Node; delete nodes[n.fn]; return; }
       const r = add({ kind: "binder" }, resT);
       const parts = fp1.outs.map((_, i) => add({ kind: "call", fn: add({ kind: "ref", target: `std.tuple${k}.tuple.${["first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth"][i]}` }, { t: "fn", params: [resT], ret: outT[i], eff: pure }), args: [add({ kind: "ref", target: r }, resT)] }, outT[i]));
@@ -418,7 +421,7 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
       const kids: Id[] = [];
       switch (n.kind) {
         case "call":
-          if (isUse(n)) { kids.push(...Object.values(n.given), bodyOf(n)); break; }
+          if (isUse(n)) { kids.push(...useKids(n)); break; }
           kids.push(n.fn, ...n.args); break;
         case "lambda": kids.push(n.body); break;
         case "def": if (n.body) kids.push(n.body); break;

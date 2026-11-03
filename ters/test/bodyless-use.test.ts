@@ -69,14 +69,18 @@ function unfilled(build: (k: Lang) => { fn: Id; given: Record<string, Id> }) {
   k.define(main, k.thunk(() => k.call(SHOW_ANY, use)));
   const code: Code = base(k.code), names = baseNames(k.names);
   code.nodes[use] = k.code.nodes[use];
-  return { info: infer(code, names), names, use, node: code.nodes[use] as NodeOf<"call"> };
+  const info = infer(code, names);
+  const run = () => runMain(code, info, main, { print: () => {}, names });
+  return { info, names, use, node: code.nodes[use] as NodeOf<"call">, run };
 }
 
-test("the checker types a use with no body by its produced ports, one or a tuple", () => {
+test("the checker types a use with no body by its produced ports, one or a tuple, and the evaluator runs it", () => {
   const one = unfilled((k) => ({ fn: B.add, given: { 0: k.lit(2), out: k.lit(5) } }));
   assert.equal(one.node.body, undefined);
   assert.deepEqual(one.info.errors.map((e) => e.message), []);
   assert.equal(showType(one.info.typeOf.get(one.use)!, one.names), "Float64");
+  // The evaluator runs it too (L211d).
+  assert.equal(one.run(), "3");
   const two = unfilled((k) => {
     const polar = k.def("polar");
     k.define(polar, k.fn(["length", "angle", "x", "y"], (r, t, x, y) => k.and(k.equal(x, k.call(B.mul, r, k.call(B.cos, t))), k.equal(y, k.call(B.mul, r, k.call(B.sin, t))))));
@@ -86,4 +90,5 @@ test("the checker types a use with no body by its produced ports, one or a tuple
   });
   assert.deepEqual(two.info.errors.map((e) => e.message), []);
   assert.match(showType(two.info.typeOf.get(two.use)!, two.names), /^\(Float64, Float64\)|Tuple2/);
+  assert.equal(two.run(), "(2, 0)");
 });

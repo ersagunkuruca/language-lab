@@ -11,7 +11,7 @@
 // isn't in scope.
 
 import type { Code, Id, Node } from "./model.ts";
-import { get, useTarget, isCall, isUse, bindsOf, bodyOf } from "./model.ts";
+import { get, useTarget, isCall, isUse, bindsOf } from "./model.ts";
 
 // Angles are plain numbers, as in SI: a radian is a length over a length.
 export const BASE = ["m", "s", "kg", "A"] as const;
@@ -128,8 +128,7 @@ export function constraints(code: Code, defId: Id, prefix = "", bindings: Map<Id
           const term = (k: string) => (n.given[k] ? t(n.given[k]) : bindsOf(n)[k] ? t(bindsOf(n)[k]) : `${prefix}${id}:${k}`);
           if (code.nodes[useTarget(code.nodes, n)]?.kind === "def") out.push(...calleeConstraints(code, useTarget(code.nodes, n), term, `${prefix}${id}/`, [...path, defId]));
           else if (code.nodes[useTarget(code.nodes, n)]?.kind === "builtin") out.push(...rules((code.nodes[useTarget(code.nodes, n)] as { op: string }).op, term, id, id));
-          visit(bodyOf(n));
-          same(id, bodyOf(n), "solve", id);
+          if (n.body !== undefined) { visit(n.body); same(id, n.body, "solve", id); }
           return;
         }
         const fn = code.nodes[n.fn];
