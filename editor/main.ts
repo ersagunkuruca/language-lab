@@ -412,28 +412,37 @@ let wrapping: { hole: Id; kept: Code; info: T.Info; graph: boolean } | null = nu
 const openWith = new WeakMap<Doc, Id>();
 // The one open before an edit's own step changed it (applyT's `then`).
 let openBefore: Id | null = null;
-// How the program's types are stored when main runs, once per version of
-// the code (E230): an edit that changes one says so in its note.
-const storedCache = new WeakMap<Code, Map<Id, { rep: string; jobs: string[] }>>();
+// How the program's types are stored when main runs (E230), and which way
+// works out each field left to its ways (E230b), once per version of the
+// code: an edit that changes one says so in its note.
+type Chosen = { stored: Map<Id, { rep: string; jobs: string[] }>; ways: ReturnType<typeof T.waysChosen> };
+const storedCache = new WeakMap<Code, Chosen>();
+const NOTHING_CHOSEN: Chosen = { stored: new Map(), ways: new Map() };
 // `checked`: only from a check already made (before an edit, typesOf would
 // let go of a type held for the hole the edit is about to make).
-function storedNow(checked = false): Map<Id, { rep: string; jobs: string[] }> {
+function storedNow(checked = false): Chosen {
   let s = storedCache.get(doc.code);
   if (!s) {
     const info = checked ? typedInfo.get(doc.code)?.info : typesOf();
-    if (!info && checked) return new Map();
-    try { s = info ? T.storedAll(doc.code, info, pres().names, ownDefs(), defNamed("main") ?? null) : new Map(); } catch { s = new Map(); }
+    if (!info && checked) return NOTHING_CHOSEN;
+    try { s = info ? { stored: T.storedAll(doc.code, info, pres().names, ownDefs(), defNamed("main") ?? null), ways: info.errors.length ? new Map() : T.waysChosen(doc.code, info, ownDefs()) } : NOTHING_CHOSEN; } catch { s = NOTHING_CHOSEN; }
     storedCache.set(doc.code, s);
   }
   return s;
 }
-// "Stack is now stored as …" for each type whose choice the edit changed.
-function storageChanges(before: Map<Id, { rep: string; jobs: string[] }>): string {
+// "Stack is now stored as …", "plus of Vec is now worked out by …", for
+// each choice the edit changed.
+function storageChanges(before: Chosen): string {
   const after = storedNow(), names = pres().names;
   const said: string[] = [];
-  for (const [type, a] of after) {
-    const b = before.get(type);
+  for (const [type, a] of after.stored) {
+    const b = before.stored.get(type);
     if (b && b.rep !== a.rep) said.push(`${names[type] ?? "A type"} is now stored as ${a.rep}, not ${b.rep}: main's jobs on it are now ${a.jobs.map((j) => names[j] ?? j).join(", ")}.`);
+  }
+  const way = (w: Id | null) => (w ? `by ${names[w] ?? "a way"}` : "as written");
+  for (const [k, a] of after.ways) {
+    const b = before.ways.get(k);
+    if (b && b.way !== a.way) said.push(`${names[a.field] ?? "A field"} of ${names[a.impl] ?? "an implementation"} is now worked out ${way(a.way)}, not ${way(b.way)}: the cheapest way now.`);
   }
   return said.join(" ");
 }
@@ -456,7 +465,7 @@ function commit(next: Partial<Doc>, touched: string[], note: string) {
   doc = { ...doc, ...next, edited: true };
   ui.touched = touched;
   ui.note = note;
-  if (stored?.size) { const changed = storageChanges(stored); if (changed) ui.note = `${note} ${changed}`; }
+  if (stored && (stored.stored.size || stored.ways.size)) { const changed = storageChanges(stored); if (changed) ui.note = `${note} ${changed}`; }
   ui.mode = null;
   ui.query = "";
   ui.refused = false;
