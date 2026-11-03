@@ -59,7 +59,6 @@ import { ARRAY, TABLE, HASH_SET, CELL, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, 
 import { ABORT, ABORT_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, HASH_SET_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, NOW_OP, ORDER_V, PAIR_V, RATIO, S, SET, SHOW_ANY, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
 import { liftLets } from "../../ters/src/lang/lift-lets.ts";
 import { solvesOnce } from "../../ters/src/lang/run.ts";
-import { planSolve } from "../../ters/src/lang/solve.ts";
 import { inlineLists } from "./inline-lets.ts";
 import { STOPS } from "./stops.ts";
 import { fieldIndex, fieldPath } from "../../ters/src/lang/records.ts";
@@ -257,6 +256,12 @@ function freeLocals(e: SExpr): number[] {
   return read.filter((i) => !set.has(i));
 }
 
+// Where a closure came from, for JavaScript from the core IR (C137c13): the
+// lambda written in place (or a definition's), and the binders its captures
+// are; or a builtin. The evaluator's solver looks inside a function it is
+// given (relate.ts fromValue), so the printed closure carries this as the
+// evaluator's closures do (run.ts META). Other printers ignore it.
+export type ClosureSrc = { lambda: Id; binders: Id[]; bools: number[] } | { prim: Id };
 export type SExpr =
   | { k: "num"; v: number }
   | { k: "int"; v: bigint }
@@ -285,7 +290,7 @@ export type SExpr =
   | { k: "tag"; rec: SExpr; t: DType }
   // A function as a value: `fn` takes the closure, then t's inputs, and
   // reads what it captured (in shapes[shape]) with cap.
-  | { k: "closure"; t: FType; fn: number; shape: number; caps: SExpr[] }
+  | { k: "closure"; t: FType; fn: number; shape: number; caps: SExpr[]; src?: ClosureSrc }
   | { k: "cap"; t: FType; shape: number; i: number }
   // Calling a closure: it goes into local tmp, then its code is called
   // with it and the inputs.
@@ -779,6 +784,10 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
           if (ct) bindVars(ct, zonk(id), types);
           return { k: "call", fn: func(n.target, types), args: [], tail };
         }
+        if (opts.host && (STD_IMPL[n.target] || STD_MANY[n.target])) {
+          const t = stype(zonk(id));
+          if (t && isFn(t)) return builtinValue(n.target, t);
+        }
         throw new Refused(`uses ${nm(n.target)} as a value (functions and data need a heap)`);
       }
       case "call": {
@@ -1107,10 +1116,8 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     // checker found the solve always answers), its first answer is the one,
     // as in the evaluator. Otherwise the solver's answers are `one of` a
     // list of them made as it is read (core-js.ts; a periodic angle has no
-    // end). The relational interpreter's aren't lowered yet: its search
-    // runs with the program's budget (fuel), which this doesn't give it.
+    // end, nor may a backwards search), which spends the program's budget.
     const once = solvesOnce(code, n) || (!f.partial && !searching.get(f));
-    if (!once && planSolve(code, n).mode === "relational") throw new Refused(`solves ${name} backwards with several answers, which isn't lowered yet`);
     const given = Object.values(n.given), binds = Object.values(n.binds);
     for (const g of given) { const t = stype(zonk(g)); if (!t) throw new Refused(`solves ${name} given ${whyNot(zonk(g))}`); if (typeof t === "object" && boolInside(t)) throw new Refused(`solves ${name} given data holding a Bool, which isn't lowered yet`); }
     const ts = binds.map((b) => { const t = stype(zonk(b)); if (!t) throw new Refused(`solves ${name} for ${whyNot(zonk(b))}`); if (typeof t === "object" && boolInside(t)) throw new Refused(`solves ${name} for data holding a Bool, which isn't lowered yet`); return t; });
@@ -1360,7 +1367,8 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     let inner = new Map(n.params.map((p, j) => [p, j + 1]));
     const lets = free.map((b, j) => { const i = g.locals.push(caps[j]) - 1; inner = new Map(inner).set(b, i); return { i, value: { k: "cap", t, shape, i: j } as SExpr }; });
     g.body = lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), expr(n.body, inner, g, true));
-    return { k: "closure", t, fn: gi, shape, caps: free.map((b): SExpr => ({ k: "local", i: env.get(b)! })) };
+    const src: ClosureSrc | undefined = opts.host && !caps.some((c) => typeof c === "object" && boolInside(c)) ? { lambda: n.id, binders: free, bools: caps.flatMap((c, j) => (c === "i32" ? [j] : [])) } : undefined;
+    return { k: "closure", t, fn: gi, shape, caps: free.map((b): SExpr => ({ k: "local", i: env.get(b)! })), ...(src ? { src } : {}) };
   }
   // A definition used as a value: a closure that calls it, made once.
   function named(def: Id, id: Id, t: FType): SExpr {
@@ -1377,9 +1385,29 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       g.body = { k: "call", fn: func(def, types), args: t.params.map((_, j): SExpr => ({ k: "local", i: j + 1 })), tail: true };
       shapeOfNamed.set(key, shape);
     }
-    return { k: "closure", t, fn: index.get(key)!, shape: shapeOfNamed.get(key)!, caps: [] };
+    const body = (code.nodes[def] as NodeOf<"def">).body;
+    const src: ClosureSrc | undefined = opts.host && body && code.nodes[body]?.kind === "lambda" ? { lambda: body, binders: [], bools: [] } : undefined;
+    return { k: "closure", t, fn: index.get(key)!, shape: shapeOfNamed.get(key)!, caps: [], ...(src ? { src } : {}) };
   }
   const shapeOfNamed = new Map<string, number>();
+  // A builtin used as a value, for JavaScript from the core IR (C137c12):
+  // a closure that calls the evaluator's, as `host` calls it.
+  function builtinValue(target: Id, t: FType): SExpr {
+    const key = `&${target}|${t.key}`;
+    if (!index.has(key)) {
+      const sig = SIGS[target]?.(new Subst());
+      const bad = (sig?.t === "fn" ? info.subst.resolveRow(sig.eff).effs : []).find((e) => e !== CHOICE && e !== DIVERGE);
+      if (bad) throw new Refused(`uses ${nm(target)} as a value, which has ${nm(bad)} and isn't lowered yet`);
+      if ([...t.params, t.result].some((x) => typeof x === "object" && boolInside(x))) throw new Refused(`uses ${nm(target)} as a value on data holding a Bool, which isn't lowered yet`);
+      const shape = shapes.push({ t, caps: [] }) - 1;
+      const g: SFunc = { def: target, name: `${nm(target)}.value`, params: [t, ...t.params], result: t.result, locals: [t, ...t.params], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true, ...(t.partial ? { partial: true } : {}) };
+      index.set(key, funcs.push(g) - 1);
+      closureCode.add(index.get(key)!);
+      g.body = { k: "rt", fn: `host:${target}${t.result === "i32" ? ":bool" : ""}`, args: t.params.map((_, j): SExpr => ({ k: "local", i: j + 1 })), host: { t: t.result, partial: !!t.partial } };
+      shapeOfNamed.set(key, shape);
+    }
+    return { k: "closure", t, fn: index.get(key)!, shape: shapeOfNamed.get(key)!, caps: [], src: { prim: target } };
+  }
 
   // A fold's result binder used once, by the call that computes it.
   const inlined = new Map<Id, Extract<SExpr, { k: "call" }>>();

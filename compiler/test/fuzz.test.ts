@@ -104,11 +104,14 @@ test(`generated programs: the evaluator, compiled JavaScript, WebAssembly and C 
     });
     }
 
-    // JavaScript printed from the core IR (C137c). What it can't run yet
-    // throws Unsupported, and isn't compared.
+    // JavaScript printed from the core IR (C137c), lowered as `lab compile
+    // --core` lowers it (`host`: the evaluator's builtins where the core IR
+    // has none). What it can't run yet throws Unsupported, and isn't compared.
     {
-    const cj = loadCoreJs(lowered);
-    fns.forEach((fi, i) => INPUTS.forEach(([x, n, xs], j) => {
+    const hosted = lowerScalar(q.code, q.info, q.names, roots, { data: true, host: true });
+    assert.deepEqual([...hosted.refused.entries()].map(([d, why]) => `${q.names[d]}: ${why}`), [], `seed ${SEED}${tag}, host`);
+    const cj = loadCoreJs(hosted);
+    roots.map((def) => hosted.funcs.findIndex((g) => g.def === def && !g.inner)).forEach((fi, i) => INPUTS.forEach(([x, n, xs], j) => {
       let got: unknown;
       try { got = cj[fi](x, norm(n), entry ? norm(BigInt(j)) : toList(xs.map(norm))); } catch (e) {
         if (e instanceof Unsupported) { unsupported.add(e.message); return; }
