@@ -2061,7 +2061,66 @@ export function buildPrelude(): Module {
     { variant: JSON_V.object, names: ["fields"], body: ([fs]) => texts(k.lit("{"), k.call(TEXT_OPS.joinAll, k.call(map, fs, k.fn(["field"], (f) =>
       entry(f, (name, v) => texts(k.call(jsonQuoted, name), k.lit(":"), k.call(jsonPrinted, v)), ["name", "value"]))), k.lit(",")), k.lit("}")) },
   ])));
-  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, spaced, optionalParens, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, determinant, inverted, leastSquares, tensorOf, tensorShape, tensorItems, rank, tensorSize, tensorEntry, tensorMap, tensorZipWith, reshaped, contracted, transposedBy, traced, bytesOf, byteItems, byteCount, utf8Of, textOfUtf8, jsonPrinted, withState, changeState, piped, ticketId, ...wordMakers, anyOf, together, race, within, simulated, near];
+  // Reading JSON (L190b, RFC 8259): a recursive descent over the text's
+  // characters, each reader giving its value and the characters after it.
+  // \u escapes outside the Basic Multilingual Plane (surrogate pairs) are
+  // not joined yet.
+  const jChars = (t: string) => k.call(TEXT_OPS.characters, k.lit(t));
+  const jIs = (c: Id, t: string) => k.equal(c, k.lit(t));
+  const jBad = (why: string) => k.call(ABORT_OP, k.lit(`json read: ${why}`));
+  const jPair = (a: Id, b: Id) => k.call(PAIR_V, a, b);
+  const jHead = (cs: Id, ends: string, f: (c: Id, rest: Id) => Id) => k.match(cs, [
+    { variant: NIL, names: [], body: () => jBad(ends) },
+    { variant: CONS, names: ["character", "rest"], body: ([c, r]) => f(c, r) },
+  ]);
+  const jSkipped = k.def("json skipped");
+  k.define(jSkipped, k.fn(["characters"], (cs) => k.match(cs, [
+    { variant: NIL, names: [], body: () => k.x(NIL) },
+    { variant: CONS, names: ["character", "rest"], body: ([c, r]) => k.if(k.call(contains, jChars(" \n\t\r"), c), k.call(jSkipped, r), cs) },
+  ])));
+  const jValue = k.def("json value"), jString = k.def("json string"), jItems = k.def("json items"), jFields = k.def("json fields"), jNumber = k.def("json number span"), jHex = k.def("json hex");
+  k.define(jHex, k.fn(["digits", "so far"], (ds, acc) => k.match(ds, [
+    { variant: NIL, names: [], body: () => acc },
+    { variant: CONS, names: ["digit", "rest"], body: ([d, r]) => k.match(k.call(positionOf, jChars("0123456789abcdef"), k.call(lowercase, d)), [
+      { variant: NONE, names: [], body: () => jBad("\\u needs four hex digits") },
+      { variant: SOME, names: ["value"], body: ([i]) => k.call(jHex, r, iAdd(iMul(acc, k.int(16)), i)) },
+    ]) },
+  ])));
+  const jEscaped = (e: Id) => k.if(jIs(e, "n"), k.lit("\n"), k.if(jIs(e, "t"), k.lit("\t"), k.if(jIs(e, "r"), k.lit("\r"), k.if(jIs(e, "b"), k.lit("\b"), k.if(jIs(e, "f"), k.lit("\f"), e)))));
+  k.define(jString, k.fn(["characters", "so far"], (cs, acc) => jHead(cs, "the text ends inside a string", (c, r) =>
+    k.if(jIs(c, "\""), jPair(acc, r), k.if(jIs(c, "\\"), jHead(r, "the text ends inside a string", (e, r2) =>
+      k.if(jIs(e, "u"), k.call(jString, k.call(drop, r2, k.int(4)), k.call(S.concat, acc, k.call(S.first,
+        k.thunk(() => k.call(TEXT_OPS.fromCode, k.call(jHex, k.call(take, r2, k.int(4)), k.int(0)))), k.thunk(() => jBad("a \\u escape that is no character"))))),
+      k.call(jString, r2, k.call(S.concat, acc, jEscaped(e))))),
+    k.call(jString, r, k.call(S.concat, acc, c)))))));
+  k.define(jNumber, k.fn(["characters", "so far"], (cs, acc) => k.match(cs, [
+    { variant: NIL, names: [], body: () => jPair(acc, k.x(NIL)) },
+    { variant: CONS, names: ["character", "rest"], body: ([c, r]) => k.if(k.call(contains, jChars("0123456789+-.eE"), c), k.call(jNumber, r, k.call(S.concat, acc, c)), jPair(acc, cs)) },
+  ])));
+  const jWord = (cs: Id, word: string, v: () => Id) => k.if(k.equal(k.call(take, cs, k.int(word.length)), jChars(word)), jPair(v(), k.call(drop, cs, k.int(word.length))), jBad(`expected ${word}`));
+  k.define(jValue, k.fn(["characters"], (cs0) => k.let("start", k.call(jSkipped, cs0), (cs) => jHead(cs, "the text ends where a value goes", (c, r) =>
+    k.if(jIs(c, "n"), jWord(cs, "null", () => k.x(JSON_V.null)),
+    k.if(jIs(c, "t"), jWord(cs, "true", () => k.call(JSON_V.bool, k.true)),
+    k.if(jIs(c, "f"), jWord(cs, "false", () => k.call(JSON_V.bool, k.false)),
+    k.if(jIs(c, "\""), entry(k.call(jString, r, k.lit("")), (t, rest) => jPair(k.call(JSON_V.text, t), rest), ["text", "rest"]),
+    k.if(jIs(c, "["), k.let("inside", k.call(jSkipped, r), (ins) => jHead(ins, "the text ends inside a list", (c2, r2) => k.if(jIs(c2, "]"), jPair(k.call(JSON_V.list, k.x(NIL)), r2), k.call(jItems, ins, k.x(NIL))))),
+    k.if(jIs(c, "{"), k.let("inside", k.call(jSkipped, r), (ins) => jHead(ins, "the text ends inside an object", (c2, r2) => k.if(jIs(c2, "}"), jPair(k.call(JSON_V.object, k.x(NIL)), r2), k.call(jFields, ins, k.x(NIL))))),
+    entry(k.call(jNumber, cs, k.lit("")), (digits, rest) => jPair(k.call(JSON_V.number, k.call(S.first, k.thunk(() => k.call(TEXT_OPS.readNumber, digits)), k.thunk(() => jBad("expected a value")))), rest), ["digits", "rest"])))))))))));
+  k.define(jItems, k.fn(["characters", "so far"], (cs, acc) => entry(k.call(jValue, cs), (v, rest) => k.let("after", k.call(jSkipped, rest), (a) =>
+    jHead(a, "the text ends inside a list", (c, r) => k.if(jIs(c, ","), k.call(jItems, r, k.call(CONS, v, acc)),
+      k.if(jIs(c, "]"), jPair(k.call(JSON_V.list, k.call(reverse, k.call(CONS, v, acc))), r), jBad("expected , or ] in a list"))))), ["value", "rest"])));
+  k.define(jFields, k.fn(["characters", "so far"], (cs0, acc) => k.let("at", k.call(jSkipped, cs0), (cs) => jHead(cs, "the text ends inside an object", (c, r) =>
+    k.if(jIs(c, "\""), entry(k.call(jString, r, k.lit("")), (name, r2) => k.let("colon", k.call(jSkipped, r2), (cl) => jHead(cl, "the text ends inside an object", (c2, r3) =>
+      k.if(jIs(c2, ":"), entry(k.call(jValue, r3), (v, r4) => k.let("next", k.call(jSkipped, r4), (nx) => jHead(nx, "the text ends inside an object", (c3, r5) =>
+        k.if(jIs(c3, ","), k.call(jFields, r5, k.call(CONS, jPair(name, v), acc)),
+        k.if(jIs(c3, "}"), jPair(k.call(JSON_V.object, k.call(reverse, k.call(CONS, jPair(name, v), acc))), r5), jBad("expected , or } in an object"))))), ["value", "rest"]),
+      jBad("expected : after a field's name")))), ["name", "rest"]),
+    jBad("expected a field's name in quotes"))))));
+  const jsonRead = def("json read", ["text"], (t) => entry(k.call(jValue, k.call(TEXT_OPS.characters, t)), (v, rest) => k.match(k.call(jSkipped, rest), [
+    { variant: NIL, names: [], body: () => v },
+    { variant: CONS, names: ["character", "after"], body: () => jBad("text after the value") },
+  ]), ["value", "rest"]));
+  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, spaced, optionalParens, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, determinant, inverted, leastSquares, tensorOf, tensorShape, tensorItems, rank, tensorSize, tensorEntry, tensorMap, tensorZipWith, reshaped, contracted, transposedBy, traced, bytesOf, byteItems, byteCount, utf8Of, textOfUtf8, jsonPrinted, jsonRead, withState, changeState, piped, ticketId, ...wordMakers, anyOf, together, race, within, simulated, near];
   // Each number's own show, from before the generic one showed every number
   // (L153, L156): kept so programs saved before still open, not offered.
   const perTypeShows = [showF, showC, showD, showX];
@@ -2206,6 +2265,7 @@ export function buildPrelude(): Module {
     [matrixTimesVector]: "The matrix times the list as a column: one item per row. The list must have one item per column, or the program stops with both sizes.",
     [solved]: "The list x with matrix times vector(m, x) = b, for a square Float64 matrix, by Gaussian elimination with partial pivoting. No answer when the matrix is singular (a pivot is 0).",
     [determinant]: "The determinant of a square Float64 matrix: 0 when it is singular. Other sizes stop the program.",
+    [jsonRead]: "The Json value a JSON text spells (RFC 8259), the other way from json printed: json read(\"[1, true]\") is json list([json number(1), json bool(true)]). Stops on text that isn't JSON, saying where.",
     [jsonPrinted]: "The JSON text of a Json value (RFC 8259): json printed(json object([(\"a\", json list([json number(1), json null]))])) is {\"a\":[1,null]}. Text is quoted with \", \\ and control characters escaped.",
     [bytesOf]: "The bytes with these items, each a whole number from 0 to 255: bytes of([104, 105]) is the bytes of \"hi\". Stops when an item isn't a byte.",
     [byteItems]: "The bytes as their list of Ints, each 0 to 255.",

@@ -394,10 +394,11 @@ Bytes are a sequence of whole numbers from 0 to 255, for binary formats, files, 
 
 ## JSON
 
-Json is JSON's values as data: null, a Bool, a Float64, a Text, a list, or an object whose fields are named and in order. json printed writes one as JSON text.
+Json is JSON's values as data: null, a Bool, a Float64, a Text, a list, or an object whose fields are named and in order. json printed writes one as JSON text, and json read reads it back.
 
 - **Json** (type). A JSON value (RFC 8259): null, a Bool, a Float64, a Text, a list of them or an object of named ones, in order. json printed writes one as JSON text.
 - **json printed** : `(Json) -> Text`. The JSON text of a Json value (RFC 8259): json printed(json object([("a", json list([json number(1), json null]))])) is {"a":[1,null]}. Text is quoted with ", \ and control characters escaped.
+- **json read** : `(Text) -[Diverge, Abort]-> Json`. The Json value a JSON text spells (RFC 8259), the other way from json printed: json read("[1, true]") is json list([json number(1), json bool(true)]). Stops on text that isn't JSON, saying where.
 
 ## Representations
 
