@@ -20,8 +20,8 @@ function random(seed: number) {
 // Float64, Int, Bool, List Int, Text, a data type of three cases (Shape),
 // a record (Box), List Float64 and List Shape (C119), and a tuple
 // (Int, Float64) (C120), an Array Int (C129), a fraction (C130) and a
-// complex number (C131).
-type Ty = "F" | "I" | "B" | "L" | "T" | "D" | "R" | "P" | "Q" | "U" | "A" | "X" | "Z";
+// complex number (C131), and a Map Int Int held and passed on (C132).
+type Ty = "F" | "I" | "B" | "L" | "T" | "D" | "R" | "P" | "Q" | "U" | "A" | "X" | "Z" | "M";
 type Scope = Record<Ty, Id[]>;
 
 export function program(seed: number, count: number, inputs: bigint[][] = []) {
@@ -48,7 +48,9 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
     // An Int from −m to m: a remainder by m, which has an answer.
     // A Map Int Int from two lists, and a Set Int (trees or hash tables,
     // as each engine chooses).
-    const mapOf = () => call(lib("as map"), call(lib("zipped"), sub("L"), sub("L")));
+    // Maps are values like any other (C132): let, matched on, folded,
+    // returned, so each engine's representation is held and passed on.
+    const mapOf = () => sub("M");
     const setOf = () => call(lib("as set"), sub("L"));
     // Its step's type has no Choice, so its body is under a first.
     const kitOf = () => call(Kit.v.kit, k.fn([fresh()], (v) => k.call(S.first, k.thunk(() => gen("I", { ...s, I: [...s.I, v] }, depth - 1)), k.thunk(() => k.int(0)))), sub("R"), sub("Q"));
@@ -63,7 +65,7 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
       const shape = r.int(12);
       if (shape === 0) return k.if(sub("B"), sub(t), sub(t));
       if (shape === 1) {
-        const u = r.pick<Ty>(["F", "I", "L", "T", "D", "R", "P", "Q", "U", "A", "X", "Z"]);
+        const u = r.pick<Ty>(["F", "I", "L", "T", "D", "R", "P", "Q", "U", "A", "X", "Z", "M"]);
         return k.let(fresh(), sub(u), (v) => gen(t, { ...s, [u]: [...s[u], v] }, depth - 1));
       }
       if (shape === 3) return k.match(sub("D"), [
@@ -276,6 +278,7 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
           () => call(SHOW_ANY, sub("X")),
           () => call(lib("show fraction"), sub("X")),
           () => call(SHOW_ANY, sub("Z")),
+          () => call(SHOW_ANY, sub("M")),
           () => call(lib("show complex"), sub("Z")),
           () => call(SHOW_ANY, call(lib("merge maps"), textMap(), textMap())),
           () => call(SHOW_ANY, textSet()),
@@ -377,6 +380,15 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
           () => orElse(call(lib(r.pick(["complex asin", "complex acos"])), sub("Z"))),
         ])();
       }
+      case "M": {
+        if (leaf) return r.next() < 0.5 ? k.x(lib("empty map")) : call(lib("as map"), call(lib("zipped"), sub("L"), sub("L")));
+        return r.pick<() => Id>([
+          () => call(lib("as map"), call(lib("zipped"), sub("L"), sub("L"))),
+          () => call(lib("put"), sub("M"), sub("I"), sub("I")),
+          () => call(lib("remove key"), sub("M"), sub("I")),
+          () => call(lib("merge maps"), sub("M"), sub("M")),
+        ])();
+      }
       case "U": {
         if (leaf) return call(PAIR_V, k.int(r.int(5) - 2), k.lit(r.pick([0, 0.5, -3])));
         return r.pick<() => Id>([
@@ -404,7 +416,7 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
     k.define(h, k.fn(["b", "s", "m"], (b, s0, m) =>
       k.let("c0", call(Box.f["box.count"], b), (c0) =>
         k.let("m0", call(INT_OPS.add, m, k.int(0)), (m0) => {
-          const sc = (more: Partial<Scope> = {}): Scope => ({ F: [...(more.F ?? [])], I: [c0, m0, ...(more.I ?? [])], L: [], B: [], T: [], D: [s0], R: [b], P: [], Q: [], U: [], A: [], X: [], Z: [] });
+          const sc = (more: Partial<Scope> = {}): Scope => ({ F: [...(more.F ?? [])], I: [c0, m0, ...(more.I ?? [])], L: [], B: [], T: [], D: [s0], R: [b], P: [], Q: [], U: [], A: [], X: [], Z: [], M: [] });
           return k.match(s0, [
             { variant: shape_.dot, names: [], body: () => gen("I", sc(), 3) },
             { variant: shape_.circle, names: [fresh()], body: ([rad]) => gen("I", sc({ F: [rad] }), 3) },
@@ -419,9 +431,9 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
   for (let i = 0; i < 4; i++) {
     const h = k.def(`rec${i}`);
     k.define(h, k.fn(["xs", "a"], (xs, a) => k.match(xs, [
-      { variant: NIL, names: [], body: () => gen("I", { F: [], I: [a], L: [], B: [], T: [], D: [], R: [], P: [], Q: [], U: [], A: [], X: [], Z: [] }, 2) },
-      { variant: CONS, names: [fresh(), fresh()], body: ([hd, tl]) => k.let(fresh(), call(h, tl, gen("I", { F: [], I: [a, hd], L: [tl], B: [], T: [], D: [], R: [], P: [], Q: [], U: [], A: [], X: [], Z: [] }, 2)), (got) =>
-        gen("I", { F: [], I: [got, hd, a], L: [tl], B: [], T: [], D: [], R: [], P: [], Q: [], U: [], A: [], X: [], Z: [] }, 2)) },
+      { variant: NIL, names: [], body: () => gen("I", { F: [], I: [a], L: [], B: [], T: [], D: [], R: [], P: [], Q: [], U: [], A: [], X: [], Z: [], M: [] }, 2) },
+      { variant: CONS, names: [fresh(), fresh()], body: ([hd, tl]) => k.let(fresh(), call(h, tl, gen("I", { F: [], I: [a, hd], L: [tl], B: [], T: [], D: [], R: [], P: [], Q: [], U: [], A: [], X: [], Z: [], M: [] }, 2)), (got) =>
+        gen("I", { F: [], I: [got, hd, a], L: [tl], B: [], T: [], D: [], R: [], P: [], Q: [], U: [], A: [], X: [], Z: [], M: [] }, 2)) },
     ])));
     recursive.push(h);
   }
@@ -447,14 +459,14 @@ export function program(seed: number, count: number, inputs: bigint[][] = []) {
   const defs: { def: Id; result: Ty }[] = [];
   for (let i = 0; i < count; i++) {
     calls = false;
-    const result = r.pick<Ty>(["F", "I", "B", "L", "T", "D", "R", "P", "Q", "U", "A", "X", "Z"]), def = k.def(`g${i}`);
+    const result = r.pick<Ty>(["F", "I", "B", "L", "T", "D", "R", "P", "Q", "U", "A", "X", "Z", "M"]), def = k.def(`g${i}`);
     // Its inputs are a Float64, an Int and a List Int: each used once
     // first, so its type is that whatever the body does.
     k.define(def, k.fn(["x", "n", "xs"], (x, n, xs) =>
       k.let("x0", call(B.add, x, k.lit(0)), (x0) =>
         k.let("n0", call(INT_OPS.add, n, k.int(0)), (n0) =>
           k.let("xs0", call(lib("append"), xs, k.list(n0)), (xs0) =>
-            call(SHOW_ANY, gen(result, { F: [x0], I: [n0], L: [xs0], B: [], T: [], D: [], R: [], P: [], Q: [], U: [], A: [], X: [], Z: [] }, 4)))))));
+            call(SHOW_ANY, gen(result, { F: [x0], I: [n0], L: [xs0], B: [], T: [], D: [], R: [], P: [], Q: [], U: [], A: [], X: [], Z: [], M: [] }, 4)))))));
     defs.push({ def, result });
     if (!calls) callable.push(def);
   }
