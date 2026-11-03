@@ -1,0 +1,37 @@
+// The Guide tab (split out of main.ts, E228c): what each part of the graph
+// is, with a small picture of it drawn in the graph's own classes, and how
+// editing works. main.ts opens it on a first visit.
+import { h } from "./dom.ts";
+import { s as svg } from "./canvas.ts";
+
+const text = (x: number, y: number, t: string, cls: string, anchor = "middle") => svg("text", { x, y, class: cls, "text-anchor": anchor }, t);
+
+export function guide(): HTMLElement {
+  const pic = (w: number, ...els: SVGElement[]) => { const r = svg("svg", { viewBox: `0 0 ${w} 40`, width: w, height: 40, class: "tgraph", "aria-hidden": "true" }); r.append(...els); return r; };
+  const box = (x: number, label: string, cls = "cn") => [svg("rect", { x, y: 6, width: 56, height: 28, rx: 7, class: cls }), text(x + 28, 25, label, "cl")];
+  const wire = (x1: number, x2: number, y = 20, cls = "tw") => svg("path", { d: `M${x1},${y} C${(x1 + x2) / 2},${y} ${(x1 + x2) / 2},${y} ${x2},${y}`, class: cls });
+  const items: [string, SVGElement, string][] = [
+    ["Node", pic(80, ...box(12, "add"), svg("circle", { cx: 12, cy: 20, r: 5, class: "inp" }), svg("circle", { cx: 68, cy: 20, r: 5, class: "outp" })),
+      "Something that computes a value: a function call, an if, a match, a fold. Inputs are the hollow circles on its left, its output is the filled circle on its right."],
+    ["Wire", pic(80, wire(10, 70), svg("circle", { cx: 10, cy: 20, r: 4, class: "outp" }), svg("circle", { cx: 70, cy: 20, r: 5, class: "inp" })),
+      "Carries a value from an output to an input. Drag from an output or a dot onto an input to make one; drag an input's wire into empty space to remove it."],
+    ["Dot", pic(80, svg("path", { d: "M22,24 C46,24 46,10 72,10", class: "tw use" }), svg("path", { d: "M22,24 C46,24 46,36 72,36", class: "tw use" }), svg("circle", { cx: 16, cy: 24, r: 6, class: "reroute" }), text(16, 12, "a", "dotl")),
+      "Where a value starts and branches out to every place that uses it. A function's parameters are dots on its frame's left edge; a dot on a wire is a let. Click any wire to put a dot on it; select a dot to name it, or leave it unnamed (•1). Right-click it to show it as a let node with a small get node at every use instead of wires."],
+    ["Frame", pic(80, svg("rect", { x: 4, y: 3, width: 72, height: 34, rx: 9, class: "rg lam" }), text(12, 15, "(x) =>", "rt", "start"), svg("circle", { cx: 4, cy: 26, r: 6, class: "reroute" })),
+      "A function that hasn't been called yet: its parameters are the dots on its left, what it gives back leaves on its right. Each case of an if, match or fold is a frame wired into that node."],
+    ["Hole", pic(80, svg("rect", { x: 10, y: 8, width: 56, height: 24, rx: 12, class: "pill hole" }), text(38, 24, "□", "pl")),
+      "A value not filled in yet. It knows its type; select it and the side panel lists only what fits. The program runs until it reaches one."],
+    ["Badge", pic(80, svg("rect", { x: 12, y: 2, width: 56, height: 36, rx: 7, class: "cn eff" }), text(40, 13, "Choice", "badge"), text(40, 31, "fail", "cl")),
+      "The effects a node has; a definition's type lists them too, between the arrows: (Float64) -[Random]-> Float64. Choice: several answers, or none. Random: draws numbers (die). Time: reads the clock. Abort: stops with a reason. Log: debugging output. Console: reads and prints. Files: reads and writes files. Network: reads from the web. Cells and Update: a page's state. Diverge: might not finish. And effects you declare (+ New definition, Effect). “handles …” marks a node that takes care of one, so it stops there: first or all for Choice, seeded for Random, a handle match for Abort, Log and yours."],
+    ["Solve", pic(80, ...box(12, "polar", "cn rel"), svg("circle", { cx: 12, cy: 20, r: 5, class: "inp" }), svg("circle", { cx: 68, cy: 20, r: 6, class: "reroute" })),
+      "Any function run backwards: you give it some of its ports (inputs, left) and it works out the rest, which leave as dots on its right. A function that says true or false, built from equal and and, is a set of equations, so it runs in every direction. Run does the same for the definition you're looking at."],
+  ];
+  return h("section", { class: "guide", "aria-label": "Guide" },
+    h("p", { class: "hint" }, "One program, two views: the graph above and the text below (Blocks, or Steps, Nested and Lisp to read it other ways). Click anything in either to select it: Selected, in this panel, shows its type and what you can do with it. Delete or Clear to a hole leaves a hole (□); a hole's panel lists only what fits there, and you can type a value or arithmetic too: 3, \"hi\", [1, 2], x * 2, (x) => x + 1. Replace with… does both in one step. Copy, Cut and Paste (Ctrl+C, X, V) move whole parts between holes. An item of a list, or one input of a + b + c, can be added beside, moved earlier or later, or taken out from its panel; in the graph, the + under a node's inputs adds one at the end. An action's steps (print this, then that) run top to bottom: in the graph they're numbered in one column with a dashed line from each to the next, and Do it earlier or later, on a step's menu or in its panel, moves one. In the blocks, Tab steps through the parts, Enter edits one, Shift+F10 opens its menu; double-click a name to open its definition."),
+    h("p", { class: "hint" }, "While a definition has a hole, its type is kept as it was, so a fill that would change it (one that does Random where it didn't, say) isn't offered. The hole's panel says so; Let it loosen there lets the type follow the body again."),
+    h("p", { class: "hint" }, "Run, above, runs main. On any other definition it runs that definition backwards: tick the ports you know and it works out the rest. Show values writes what each part computes into the graph."),
+    h("div", { class: "guide-items" }, ...items.map(([t, p, d]) => h("div", { class: "guide-item" }, p, h("div", {}, h("strong", {}, t), h("p", {}, d))))),
+    h("p", { class: "hint" }, "Right-click in the graph for a menu: fill a hole, add a value, tidy, show a binding as let and get nodes. Long wires? Right-click the empty canvas and pick “Show every value as let and get nodes”: each value gets a let node where it's bound and a small get node at each use. Drag a node to move it (that only changes the layout, not the code); shift-click or shift-drag to pick several. Where wires cross, one hops over the other; where one passes under a node, it shows faintly over it. Double-click a node to open the function it calls. Every change goes through the same checks, so if something would break the program, it's refused and the status line says why."),
+    h("p", { class: "hint" }, "Delete takes out one node: its place becomes a hole, and whatever was wired into it is kept, loose, in a dashed frame beside the graph and at the end of the text as _1, _2, …. Loose parts are type-checked but never run, and are saved as drafts, apart from the program. Drag a loose part's output onto an empty input to wire it back in; dragging a wire off an input leaves its value loose too; Delete on a loose part throws it away."),
+    h("p", { class: "hint" }, "Where a program adapts someone's code or follows someone's idea, its comments say so: a definition's, or the program's own (in the Program tab, and above a picture). Credits, in the menu, lists every influence and source of the language itself."));
+}
