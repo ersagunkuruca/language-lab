@@ -86,30 +86,47 @@ export function follow(ev: PointerEvent, move: (e: PointerEvent) => void, end: (
 }
 
 // Drag to connect: a dashed line follows the pointer; every element matching
-// `targets` is marked .can or .cannot up front, and hovering one that can't
-// take the wire shows why. `drop` gets the target under the pointer (or
+// `targets` is marked .can or .cannot as the drag goes, and hovering one that
+// can't take the wire shows why. `drop` gets the target under the pointer (or
 // null for empty space) if the pointer moved.
+// A verdict can be a whole check of the program (seconds for every input of
+// a big definition: pressing on a dot in Constructions' main froze the page
+// for 40 s), so none is asked on a press that doesn't move. Once it moves,
+// the one under the pointer is asked at once and the rest a few ms a frame,
+// unless each takes long.
 export function connectDrag(root: SVGSVGElement, ev: PointerEvent, targets: string, verdict: ((t: Element) => string | null) | null, drop: (target: Element | null, e: PointerEvent) => void) {
   const a = svgPoint(root, ev);
   const line = s("path", { class: "wire-pending" });
   const why = s("text", { class: "why" });
   root.append(line, why);
   const verdicts = new Map<Element, string | null>();
-  if (verdict) {
-    for (const t of root.querySelectorAll(targets)) {
-      const r = verdict(t);
-      verdicts.set(t, r);
-      t.classList.add(r ? "cannot" : "can");
-    }
-    root.classList.add("dragging");
-  }
-  let moved = false;
+  const judge = (t: Element): string | null => {
+    if (!verdict) return null;
+    if (verdicts.has(t)) return verdicts.get(t)!;
+    const r = verdict(t);
+    verdicts.set(t, r);
+    t.classList.add(r ? "cannot" : "can");
+    return r;
+  };
+  let moved = false, done = false;
+  let left: Element[] = [];
+  const more = () => {
+    if (done) return;
+    const start = performance.now();
+    while (left.length && performance.now() < start + 8) judge(left.shift()!);
+    // Verdicts that take long each (a whole check) aren't marked ahead:
+    // only the one under the pointer is asked, so the drag keeps up.
+    if (left.length && performance.now() - start < 50) requestAnimationFrame(more);
+  };
   const move = (e: PointerEvent) => {
     const b = svgPoint(root, e);
-    if (Math.abs(b.x - a.x) + Math.abs(b.y - a.y) > 4) moved = true;
+    if (!moved && Math.abs(b.x - a.x) + Math.abs(b.y - a.y) > 4) {
+      moved = true;
+      if (verdict) { root.classList.add("dragging"); left = [...root.querySelectorAll(targets)]; requestAnimationFrame(more); }
+    }
     line.setAttribute("d", `M${a.x},${a.y} L${b.x},${b.y}`);
-    const over = document.elementFromPoint(e.clientX, e.clientY)?.closest(targets);
-    const reason = over ? verdicts.get(over) : null;
+    const over = moved ? document.elementFromPoint(e.clientX, e.clientY)?.closest(targets) : null;
+    const reason = over ? judge(over) : null;
     why.textContent = reason ?? "";
     why.setAttribute("x", String(b.x + 10));
     why.setAttribute("y", String(b.y - 8));
@@ -118,6 +135,7 @@ export function connectDrag(root: SVGSVGElement, ev: PointerEvent, targets: stri
   // A wire cut short (a second finger, the browser taking the touch)
   // goes nowhere: it doesn't clear what it was dragged from.
   follow(ev, move, (e, cut) => {
+    done = true;
     line.remove();
     why.remove();
     root.classList.remove("dragging");
