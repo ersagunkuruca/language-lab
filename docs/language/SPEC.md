@@ -444,7 +444,7 @@ hasn't been chosen. None is answered here. Rows are in BACKLOG.md.
 | S8 | **The merged use's shape** (tuple or body). | pending | L179 |
 | S9 | **Strict positivity.** | kept | L107 |
 | S10 | **Evaluation order inside a use.** Decided (L198): given ports first, in port order, then the solve (§7.2b). | the evaluator (L198); compiled code: C147 | L198 |
-| S11 | **`compare` on Float64** is documented in LIBRARY.md as putting NaN after every other Float64, but NaN isn't a value (§3.2). A stale line. | doc only | L200 |
+| S11 | **`compare` on Float64** was documented in LIBRARY.md as putting NaN after every other Float64, but NaN isn't a value (§3.2). Fixed at its source, the note in ters/src/lang/notes.ts (L200). | fixed | L200 |
 | S12 | **Library functions' bits.** Decided 2026-11-03 (Ersagun): the platform's own, within a few ulp (§3.2); exact agreement across machines comes from a type that asks for it | C calls libm (C144); WASI carries fdlibm, having no maths of its own; the agreement tests build C with fdlibm to compare to the bit, and c.test.ts checks libm within 4 ulp | C144 |
 | S13 | **The hash misses meaning** (L178): an effect and a data type of one shape, a literal arm's value. §1.3 is the rule L178 implements. | bug | L178 |
 | S14 | **A direction's law** (§7.6): nothing checks that a definition marked as another's direction gives the same answers. | promised by the author | L201 |
