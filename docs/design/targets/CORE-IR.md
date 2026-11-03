@@ -22,7 +22,10 @@ model, so each feature has been written twice in the compiler
 - (b) The core IR named and its contract written down (this note).
 - (c) A JavaScript printer from the core IR, grown until it runs the
   examples compile.ts runs. I111's agreement test and the fuzz test
-  (C101) are the check.
+  (C101) are the check. Step c1 is compiler/src/core-js.ts: the `data`
+  profile's values and control, with Int, Text and Array through the
+  evaluator's own builtins; the fuzz test runs it beside WebAssembly and
+  C, and skips (and names) the runtime functions it doesn't have yet.
 - (d) compile.ts retired piece by piece.
 
 ## What it holds
@@ -150,6 +153,9 @@ What a printer may rely on:
   programs on the evaluator, compiled JavaScript, WebAssembly and C,
   through the chooser's representations too, and wants the same text from
   each.
+- JavaScript from the core IR (core-js.ts) runs in the fuzz test too, so
+  the lowering is checked once more without a WebAssembly or C printer
+  between.
 - I111's agreement test (examples-agree.test.ts) runs the examples.
 - Each printer's own tests (wasm.test.ts, c.test.ts, wgsl tests,
   js-scalar.test.ts).

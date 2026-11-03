@@ -799,6 +799,7 @@ compiler/src/scalar.ts     the core IR (CORE-IR.md): check, refuse with a reason
 compiler/src/wasm.ts       the core IR as a WebAssembly module (binary and text), tail calls as return_call
 compiler/src/c.ts          the core IR as C (NATIVE.md)
 compiler/src/wgsl.ts       the core IR's scalar profile as a WGSL shader
+compiler/src/core-js.ts    the core IR as JavaScript (C137c), to replace compile.ts; run by the fuzz test
 compiler/src/fixtures.ts   small programs for the tests and the benchmark
 compiler/src/program.ts    load, check and compile an example
 compiler/build.ts          writes compiler/out/*.js
