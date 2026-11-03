@@ -8,6 +8,15 @@
 //   npm run affected -- --all      everything, every sweep in full (the nightly run)
 //   npm run affected -- --browser  the browser tests too, when the change reaches them
 //   npm run affected -- --list     say what would run, run nothing
+//   npm run affected -- --full     every test file it reaches, the slow ones too
+//   npm run affected -- --time     time every test file, alone, with the per-change
+//                                  sweep slice, and write the slow ones to test/slow.json
+//
+// Before a merge only the fast set runs (Ersagun 2026-11-03, T13): of the
+// files a change reaches, those measured under SLOW_CAP seconds
+// (test/slow.json), and any test file the change edits itself. The slow
+// files it reaches run after the merge in Check main (`--full`) and in the
+// nightly run (`--all`).
 //
 // A test file runs when it, or anything it imports (through any chain, in
 // ters, compiler or invertible), changed. The examples are read at
@@ -19,8 +28,8 @@
 // package's setup (package.json, the lockfile, tsconfig) runs everything,
 // and prose and pictures run nothing.
 
-import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { availableParallelism } from "node:os";
 
@@ -30,6 +39,8 @@ const argv = process.argv.slice(2);
 const all = argv.includes("--all");
 const listOnly = argv.includes("--list");
 const browser = all || argv.includes("--browser");
+const timing = argv.includes("--time");
+const full = all || timing || argv.includes("--full");
 const [base = "origin/main", head] = argv.filter((a) => !a.startsWith("--"));
 
 const PACKAGES = ["ters", "compiler", "invertible"];
@@ -71,7 +82,7 @@ const tests = sources.filter((f) => /\.test\.(ts|js)$/.test(f));
 const editorPage = ["editor/main.ts", "editor/page.html"];
 const bundles: Record<string, string[]> = { "ters/test/draws.test.ts": [...editorPage, "editor/smoke-saved.json"], "ters/test/editing.test.ts": editorPage };
 const chosen = tests.filter((t) => {
-  if (all || setup) return true;
+  if (all || setup || timing) return true;
   const reach = closure([t, ...(bundles[t] ?? [])]);
   if (code.some((f) => reach.has(f))) return true;
   // Data the tests read at run time: the library and the examples.
@@ -92,9 +103,46 @@ const gpu = all || setup || code.some((f) => closure(["compiler/gpu.ts"]).has(f)
 const soundInputs = closure(["ters/test/sound-browser.ts", "ters/cli/web.ts", "ters/src/lang/page-runtime.ts", "ters/src/lang/audio-worklet.ts"]);
 const sound = all || setup || code.some((f) => soundInputs.has(f) || f.startsWith("ters/examples/pedal/"));
 
+// The slow files (T13): left for Check main and the nightly run, unless
+// the change edits the test file itself.
+const SLOW_CAP = 5;
+const slowPath = join(top, "ters/test/slow.json");
+const slow: Record<string, number> = existsSync(slowPath) ? (JSON.parse(readFileSync(slowPath, "utf8")) as { files: Record<string, number> }).files : {};
+const left = full ? [] : chosen.filter((t) => t in slow && !code.includes(t));
+const fast = chosen.filter((t) => !left.includes(t));
+
+if (timing) {
+  // Each file alone, as many at once as there are cores; the wall time of
+  // each is what a change waits for it.
+  const times: Record<string, number> = {};
+  const todo = [...chosen];
+  let failedFiles = 0;
+  const one = (): Promise<void> => {
+    const t = todo.shift();
+    if (!t) return Promise.resolve();
+    const p = PACKAGES.find((q) => t.startsWith(q + "/"))!;
+    const start = Date.now();
+    return new Promise<void>((done) => {
+      const c = spawn("node", ["--test", "--test-reporter=dot", relative(p, t)], { cwd: join(top, p), stdio: "ignore", env: process.env });
+      c.on("close", (status) => {
+        times[t] = Math.round((Date.now() - start) / 100) / 10;
+        if (status !== 0) { failedFiles++; console.log(`  failed: ${t}`); }
+        console.log(`  ${times[t]} s  ${t}`);
+        done();
+      });
+    }).then(one);
+  };
+  await Promise.all(Array.from({ length: availableParallelism() }, one));
+  const files = Object.fromEntries(Object.entries(times).filter(([, s]) => s >= SLOW_CAP).sort((a, b) => b[1] - a[1]));
+  const kept = Object.fromEntries(Object.entries(slow).filter(([f]) => !(f in times) && tests.includes(f)));
+  writeFileSync(slowPath, JSON.stringify({ cap: SLOW_CAP, measured: new Date().toISOString().slice(0, 10), files: { ...kept, ...files } }, null, 1) + "\n");
+  console.log(`${Object.keys(files).length} of ${chosen.length} files take ${SLOW_CAP} s or more: written to test/slow.json`);
+  process.exit(failedFiles ? 1 : 0);
+}
+
 const runs: { what: string; cwd: string; cmd: string[] }[] = [];
 for (const p of PACKAGES) {
-  const mine = chosen.filter((t) => t.startsWith(p + "/")).map((t) => relative(p, t));
+  const mine = fast.filter((t) => t.startsWith(p + "/")).map((t) => relative(p, t));
   // Node runs (cores - 1) files at a time, one on a two-core runner.
   // As many test files at once as the machine has cores (it was 2, half
   // of a 4-core container's).
@@ -111,6 +159,7 @@ if (sound && browser) runs.push({ what: "sound in a browser", cwd: "ters", cmd: 
 console.log(all ? "everything, every sweep in full" : `${changed.length} files changed since ${base}${setup ? ", a package's setup among them: everything" : ""}`);
 for (const r of runs) console.log(`  ${r.what}`);
 if (!browser && (page || gpu || sound)) console.log("  (the browser tests it reaches run tonight, or now with --browser)");
+if (left.length) console.log(`  (${left.length} slow file${left.length === 1 ? "" : "s"} it reaches run after the merge, in Check main, or now with --full)`);
 if (!runs.length) console.log("  nothing to test");
 if (listOnly) process.exit(0);
 

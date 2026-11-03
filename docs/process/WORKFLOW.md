@@ -126,16 +126,22 @@ of text; they were these cells logging every finished row).
   number isn't known before the PR exists, so write "this PR" and fill it
   in with the lane's next PR: a push only for the number costs a CI run.
 - Credit external ideas as the project instructions say.
-- Before pushing, run the tests your change reaches: `npm run affected`
-  in ters (unit tests in all three packages; `-- --list` says
-  which). The browser tests (the editor, shaders, sound, the GPU check)
+- Before pushing, run the fast set of the tests your change reaches:
+  `npm run affected` in ters (unit tests in all three packages; `-- --list`
+  says which). It leaves out the files measured at 5 s or more
+  (`ters/test/slow.json`), unless your change edits that test file, and
+  says how many it left (Ersagun 2026-11-03, T13: "Only fast set"). They
+  run after the merge in Check main and in the nightly run; `-- --full`
+  runs them now, for a change you think is risky. Remeasure with
+  `npm run affected -- --time` when the list looks stale (it
+  rewrites slow.json). The browser tests (the editor, shaders, sound, the GPU check)
   take about ten minutes, so they run once a night, not per change; run
   them before pushing only when a change is risky for the page, with
   `npm run affected -- --browser` (set CHROMIUM to a Chromium if Chrome
   isn't installed). A pull
   request's CI only type-checks. A merge deploys in about two minutes;
-  "Check main" runs the same selection beside the deploy, from the last
-  commit it passed, without the browser tests, and reports without
+  "Check main" runs every file the change reaches, the slow ones too,
+  beside the deploy, from the last commit it passed, without the browser tests, and reports without
   stopping it. After merging, look
   at Check main for your commit: if it is red, whoever broke main fixes it
   next. `npm run affected -- --all` runs everything with every sweep in
