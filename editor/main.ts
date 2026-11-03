@@ -3400,7 +3400,10 @@ function graphHooks(info: T.Info) {
       const s = Object.values(doc.code.nodes).find((n) => isUse(n) && Object.values(n.binds).includes(id));
       return s ? (applyT(T.turnBack(doc.code, doc.names.short, info, s.id)), true) : false;
     },
-    canUse: (b: Id, slot: Id) => { const r = useOver(info, b, slot); return r.ok ? null : r.reason; },
+    // Whether a wire can go there, asked for each input a drag passes: the
+    // edit wired straight in, one check, not Delete's loose part and then
+    // the wire (two more). The loose part never stops a program (I161).
+    canUse: (b: Id, slot: Id) => { const r = T.useVar(doc.code, doc.names.short, info, ui.def, b, slot); return r.ok ? null : r.reason; },
     use: (b: Id, slot: Id) => void applyT(useOver(info, b, slot)),
     clear: (slot: Id) => void applyT(T.unwire(doc.code, doc.names.short, info, ui.def, doc.loose ?? {}, doc.home ?? {}, slot)),
     // A dot put on a wire by a click sits where you clicked, and nothing
