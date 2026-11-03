@@ -10,7 +10,7 @@ PR.
 language since L108b, REPRESENTATIONS.md), and maps and sets drawn as
 tables (E79). The in-place hash table is built too (C63b-C63k, on
 JavaScript, WebAssembly and C), so L61 is done (2026-11-03). A HAMT and RRB
-vectors wait for a program that measures the need (BACKLOG L210).
+vectors wait for a program that measures the need (BACKLOG L212).
 
 ## Short answer
 
