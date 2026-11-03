@@ -41,7 +41,8 @@ export interface Chosen { code: Code; names: Names; chosen: string[]; insiders: 
 // compiled JavaScript), so a Map may be a hash table changed in place
 // (C63b); WebAssembly, C and shaders have none.
 // `cTables`: the program is compiled to C, whose runtime has a Map table
-// for Int and Text keys (C63h, compiler/src/c.ts `tableC`).
+// for Int and Text keys (C63h, compiler/src/c.ts `tableC`), and a Set
+// table for Int and Text items (C63i).
 export interface LibraryOptions { hostMaps?: boolean; cTables?: boolean }
 
 export function withLibraryRepresentations(code: Code, info: Info, names: Names, main: Id, defs: Id[], asked: Representation[] = [], options: LibraryOptions = {}): Chosen {
@@ -78,7 +79,7 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
     // has one holder, so a put changing it in place can't be seen.
     const rows = LIBRARY.reps.filter((r) => r.of === ty && r.byType && !skip.has(r.name + " " + ty)
       && (!r.oneHolder || (options.hostMaps && inPlace(code, info, main, defs, r))
-        || (options.cTables && ty === MAP && inPlace(code, info, main, defs, r, true))));
+        || (options.cTables && (ty === MAP || ty === SET_TYPE) && inPlace(code, info, main, defs, r, true))));
     if (!rows.length || !uses(code, main, [spec, ...rows]).length) continue;
     const tree = choose(code, main, [spec, ...rows]).rep;
     if (tree === spec || keyed(info, defs, code, ty) || generic(info, defs, code, tree)) continue;

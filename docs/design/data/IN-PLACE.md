@@ -221,6 +221,11 @@ C63h, done: `lab native` gives a Map with Int or Text keys C's table
 (library-reps.ts `cTables`). On routes with 20,000 towns and 60,000 roads
 the program takes 0.37 s, against 0.99 s with the trees, the same output.
 
+C63i, done: a Set of Ints or Texts is C's table too, its items the keys,
+each holding true. Routes' sets keep their trees (the frontier reads its
+smallest), so routes is unchanged; the fuzz test runs C's sets on 13 of
+seeds 1 to 40.
+
 ## M5, measured again
 
 GAPS.md M5 (leaving the depth count out of the tree jobs) was measured

@@ -172,12 +172,12 @@ test("compiled JavaScript on the hash table prints what the evaluator prints", a
 
 // Set as a hash table (C63d): the same, for a set of Ints built by adding
 // in a fold, then asked about, listed and taken apart.
-function setProgram(n: number, opts: { old?: boolean } = {}) {
+function setProgram(n: number, opts: { old?: boolean; remainders?: boolean } = {}) {
   const k = new Lang(LIBRARY.code);
   const seen = k.def("seen");
   k.define(seen, k.fold(k.call(INT_OPS.range, k.int(n)), [
     { variant: NIL, names: [], body: () => k.x(L("empty set")) },
-    { variant: CONS, names: ["i", "rest"], results: [null, "added"], body: ([i], [, s]) => k.call(L("add item"), s!, k.call(INT_OPS.shiftDown, i, k.int(2))) },
+    { variant: CONS, names: ["i", "rest"], results: [null, "added"], body: ([i], [, s]) => k.call(L("add item"), s!, opts.remainders ? k.call(S.first, k.thunk(() => k.call(INT_OPS.remainder, i, k.int(101))), k.thunk(() => k.int(0))) : k.call(INT_OPS.shiftDown, i, k.int(2))) },
   ]));
   const show = (x: Id) => k.call(S.print, k.call(SHOW_ANY, x));
   const main = k.def("main");
@@ -187,6 +187,7 @@ function setProgram(n: number, opts: { old?: boolean } = {}) {
     show(k.call(L("has item"), s, k.int(5000))),
     ...(opts.old ? [k.let("more", k.call(L("add item"), s, k.int(5000)), (more) => k.seq(show(k.call(L("has item"), more, k.int(5000))), show(k.call(L("has item"), s, k.int(5000)))))] : []),
     k.let("less", k.call(L("remove item"), s, k.int(7)), (less) => k.seq(show(k.call(L("set size"), less)), show(k.call(L("has item"), less, k.int(7))))),
+    ...(opts.remainders ? [show(k.call(L("items of"), s))] : []),
   ))));
   return { code: base(k.code), names: baseNames(k.names), main, own: [seen, main] };
 }
@@ -220,6 +221,21 @@ test("in C, a map of Int keys is C's hash table, and prints what the definition 
   const p = program(300, { old: true, remove: true, list: true, remainders: true });
   const c = chosen(p, false, true);
   assert.deepEqual(c.chosen, ["Map as hash table"]);
+  const { lines, info } = printed(c.code, c.names, p.main, c.insiders);
+  assert.deepEqual(lines, printed(p.code, p.names, p.main).lines);
+  const lowered = lowerScalar(c.code, info, c.names, [p.main], { data: true });
+  assert.deepEqual([...lowered.refused.values()], []);
+  assert.equal(lowered.tables.length, 1);
+  const out = execFileSync(cc(emitC(lowered, { main: p.main }).c), { encoding: "utf8" });
+  assert.deepEqual(out.split("\n").slice(0, -1), lines);
+});
+
+// C63i: a set of Ints in C is C's table of its items too, its old
+// version read again after an add and a remove.
+test("in C, a set of Ints is C's hash set, and prints what the definition prints, its old version too (C63i)", { skip }, () => {
+  const p = setProgram(300, { old: true, remainders: true });
+  const c = chosen(p, false, true);
+  assert.deepEqual(c.chosen, ["Set as hash table"]);
   const { lines, info } = printed(c.code, c.names, p.main, c.insiders);
   assert.deepEqual(lines, printed(p.code, p.names, p.main).lines);
   const lowered = lowerScalar(c.code, info, c.names, [p.main], { data: true });
