@@ -4717,6 +4717,228 @@ ${drop}
       end
       i32.const 0`,
   },
+  // and, or and xor ($op 0, 1, 2) of two Ints in two's complement with
+  // ones going on forever for a negative, as BigInt's (int.ts bitAnd,
+  // C150): on the i64s when neither is a $huge, else limb by limb, each
+  // turned to two's complement (~m + 1) as it is read, and back.
+  "int.bits": {
+    params: [["a", "int"], ["b", "int"], ["op", "i32"]], result: "int", locals: [["x", "i64"], ["y", "i64"], ["v", "i64"], ["na", "i32"], ["nb", "i32"], ["neg", "i32"], ["ma", "mag"], ["mb", "mag"], ["r", "mag"], ["n", "i32"], ["i", "i32"], ["ca", "i64"], ["cb", "i64"], ["cr", "i64"]], uses: ["int.small", "int.of", "int.negative", "int.mag", "int.norm", "mag.at", "mag.trim"], native: true,
+    body: `
+      local.get $a
+      ref.test $huge
+      local.get $b
+      ref.test $huge
+      i32.or
+      i32.eqz
+      if void
+        local.get $a
+        call $int.small
+        local.set $x
+        local.get $b
+        call $int.small
+        local.set $y
+      local.get $op
+      i32.eqz
+      if i64
+        local.get $x
+        local.get $y
+        i64.and
+      else
+        local.get $op
+        i32.const 1
+        i32.eq
+        if i64
+          local.get $x
+          local.get $y
+          i64.or
+        else
+          local.get $x
+          local.get $y
+          i64.xor
+        end
+      end
+        call $int.of
+        return
+      end
+      local.get $a
+      call $int.negative
+      local.set $na
+      local.get $b
+      call $int.negative
+      local.set $nb
+      local.get $a
+      call $int.mag
+      local.set $ma
+      local.get $b
+      call $int.mag
+      local.set $mb
+      ;; one limb more than the longer, for the sign
+      local.get $ma
+      array.len
+      local.get $mb
+      array.len
+      local.get $ma
+      array.len
+      local.get $mb
+      array.len
+      i32.gt_u
+      select
+      i32.const 1
+      i32.add
+      local.tee $n
+      array.new_default $u32s
+      local.set $r
+      local.get $op
+      i32.eqz
+      if i32
+        local.get $na
+        local.get $nb
+        i32.and
+      else
+        local.get $op
+        i32.const 1
+        i32.eq
+        if i32
+          local.get $na
+          local.get $nb
+          i32.or
+        else
+          local.get $na
+          local.get $nb
+          i32.xor
+        end
+      end
+      local.set $neg
+      i64.const 1
+      local.set $ca
+      i64.const 1
+      local.set $cb
+      i64.const 1
+      local.set $cr
+      block void
+        loop void
+          local.get $i
+          local.get $n
+          i32.ge_u
+          br_if 1
+          local.get $ma
+          local.get $i
+          call $mag.at
+          local.set $x
+      local.get $na
+      if void
+        local.get $x
+        i64.const 4294967295
+        i64.xor
+        local.get $ca
+        i64.add
+        local.tee $x
+        i64.const 32
+        i64.shr_u
+        local.set $ca
+        local.get $x
+        i64.const 4294967295
+        i64.and
+        local.set $x
+      end
+          local.get $mb
+          local.get $i
+          call $mag.at
+          local.set $y
+      local.get $nb
+      if void
+        local.get $y
+        i64.const 4294967295
+        i64.xor
+        local.get $cb
+        i64.add
+        local.tee $y
+        i64.const 32
+        i64.shr_u
+        local.set $cb
+        local.get $y
+        i64.const 4294967295
+        i64.and
+        local.set $y
+      end
+      local.get $op
+      i32.eqz
+      if i64
+        local.get $x
+        local.get $y
+        i64.and
+      else
+        local.get $op
+        i32.const 1
+        i32.eq
+        if i64
+          local.get $x
+          local.get $y
+          i64.or
+        else
+          local.get $x
+          local.get $y
+          i64.xor
+        end
+      end
+          local.set $v
+      local.get $neg
+      if void
+        local.get $v
+        i64.const 4294967295
+        i64.xor
+        local.get $cr
+        i64.add
+        local.tee $v
+        i64.const 32
+        i64.shr_u
+        local.set $cr
+        local.get $v
+        i64.const 4294967295
+        i64.and
+        local.set $v
+      end
+          local.get $r
+          local.get $i
+          local.get $v
+          i32.wrap_i64
+          array.set $u32s
+          local.get $i
+          i32.const 1
+          i32.add
+          local.set $i
+          br 0
+        end
+      end
+      local.get $neg
+      local.get $r
+      call $mag.trim
+      call $int.norm`,
+  },
+  "int.bitAnd": {
+    params: [["a", "int"], ["b", "int"]], result: "int", locals: [], uses: ["int.bits"], native: true,
+    body: `
+      local.get $a
+      local.get $b
+      i32.const 0
+      call $int.bits`,
+  },
+  "int.bitOr": {
+    params: [["a", "int"], ["b", "int"]], result: "int", locals: [], uses: ["int.bits"], native: true,
+    body: `
+      local.get $a
+      local.get $b
+      i32.const 1
+      call $int.bits`,
+  },
+  "int.bitXor": {
+    params: [["a", "int"], ["b", "int"]], result: "int", locals: [], uses: ["int.bits"], native: true,
+    body: `
+      local.get $a
+      local.get $b
+      i32.const 2
+      call $int.bits`,
+  },
   // Floor division (int.ts): the i64 way while both fit, but for the
   // smallest i64 over -1, else the limbs; with the signs apart and a
   // remainder, the quotient is one further down.
