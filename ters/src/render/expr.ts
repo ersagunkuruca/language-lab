@@ -26,6 +26,9 @@ export function callText(pres: Presentation, namer: Namer, fn: Node, args: R[], 
     const p = nota.prec ?? 9;
     return { text: `${nota.glyph}${paren(args[0], args[0].prec > p)}`, prec: p };
   }
+  // A tuple is written as its type is, (1, "a"), not tuple(1, "a")
+  // (L143): the design writes tuples that way, and show does (L143a).
+  if (head && /^std\.tuple\d\.tuple$/.test(head) && args.length >= 2) return atom(`(${args.map((a) => a.text).join(", ")})`);
   // fnText marks footnotes, so it runs at most once.
   const fr = head ? undefined : fnText();
   const name = fr ? paren(fr, fr.prec === ATOM) : nota?.glyph ?? namer.name(head!);
