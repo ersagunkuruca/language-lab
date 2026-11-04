@@ -3393,7 +3393,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // Keep what the exports reach.
   // The names a piece of code uses, read once (C156): a test of each name
   // against each kept body was most of a compile's own time.
-  const namesIn = (js: string) => new Set(js.replace(/\/\/[^\n]*|\/\*.*?\*\//g, "").match(/[\p{L}\p{N}_$]+/gu) ?? []);
+  // Strings go first, so a "//" inside one (an address, "http://…") isn't
+  // read as a comment hiding the rest of its line (L191c).
+  const namesIn = (js: string) => new Set(js.replace(/"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|\/\/[^\n]*|\/\*.*?\*\//g, "").match(/[\p{L}\p{N}_$]+/gu) ?? []);
   const bodyOf = new Map(made.map(([s, b]) => [s.name, b]));
   const keep = new Set<string>();
   const reach = (js: string) => {
