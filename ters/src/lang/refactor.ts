@@ -5,7 +5,7 @@
 // adds a hole arm to every case analysis that needs one.
 
 import type { Code, Id, Node, NodeData, NodeOf } from "../model.ts";
-import { children, freshId, ownerOfTypeParts, useNode } from "../model.ts";
+import { children, freshId, ownerOfTypeParts, portsOf, useNode } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import type { Filling } from "./infer.ts";
 import { INT, NUMBER, STRING, type Type } from "./types.ts";
@@ -138,9 +138,9 @@ export function fillHole(code: Code, names: Names, hole: Id, f: Filling, library
     // to write.
     case "use": {
       const d = code.nodes[f.target] as NodeOf<"def">;
-      const params = (code.nodes[d.body!] as NodeOf<"lambda">).params, results = d.results ?? [];
+      const ports = portsOf(code.nodes, d.id), inputs = ports?.condition ? ports.inputs : (code.nodes[d.body!] as NodeOf<"lambda">).params, results = ports?.condition ? ports.results : [];
       const taken = namesInScope(code, names, hole);
-      const given: Record<string, Id> = Object.fromEntries(params.filter((p) => !results.includes(p)).map((p) => [p, add({ kind: "hole" })]));
+      const given: Record<string, Id> = Object.fromEntries(inputs.map((p) => [p, add({ kind: "hole" })]));
       given.out = add({ kind: "ref", target: TRUE });
       const binds = Object.fromEntries(results.map((r) => {
         const b = add({ kind: "binder" });
