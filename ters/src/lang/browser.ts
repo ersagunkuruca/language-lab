@@ -11,7 +11,10 @@
 // else does: a time-varying value, as in Fran (Conal Elliott and Paul
 // Hudak, "Functional reactive animation", ICFP 1997) and Elm's subscriptions
 // to time. Outside a part (in an event handler) it is the current frame's
-// time. A page can't `wait`: its types say so (std.ts), and this refuses.
+// time. A part can't `wait` (its type says so, std.ts), but an event
+// handler may (C40, PAGE-WAITS-2026-11-03.md): a wait throws Pending,
+// ready when the time has passed, and the handler's run goes on from there
+// (the evaluator keeps its machine), what it did before the wait landed.
 //
 // `fetch text` can't wait either, so a fetch whose reply hasn't come
 // throws Pending (cells.ts) after reading a cell that is written when the
@@ -44,6 +47,8 @@ export interface Clock {
   frame(f: () => void): void;
   time?(): number;
   fetch?(url: string): Promise<string>;
+  // Ready after that many milliseconds (a test's; by default setTimeout).
+  after?(ms: number): Promise<void>;
 }
 
 const browserFetch = async (url: string): Promise<string> => {
@@ -108,7 +113,11 @@ export function browserWorld(store: Store, program: string, console_ = console, 
       }
       return clock.cells.read(tick) as number;
     },
-    wait: () => { throw new Error("a page can't wait; read now() in a part to animate"); },
+    wait: (ms) => {
+      if (!clock) throw new Error("waiting needs a page");
+      const after = clock.after ?? ((t: number) => new Promise<void>((r) => setTimeout(r, t)));
+      throw new Pending(after(Math.max(0, ms)), `${ms} ms`, false);
+    },
     fetchText: (url) => {
       if (!clock) throw new Error("fetching needs a page");
       const { cells } = clock;

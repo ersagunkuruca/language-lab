@@ -214,7 +214,11 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
               try {
                 cells.attempt(() => withSteps(steps, run), (e) => e instanceof Pending && !e.resume);
               } catch (err) {
-                if (err instanceof Pending) { const go = err.resume; err.ready.then(() => fire(go ? () => { for (const v of go()) return v; } : run)); }
+                // A wait (C40) can't be asked again from the start (its
+                // timer would start again), so a run that can't go on from
+                // it says so instead.
+                if (err instanceof Pending && !err.resume && !err.again) console.error(`${name} handler waits, and this page can't go on from a wait yet: it runs in the editor's preview (C40)`);
+                else if (err instanceof Pending) { const go = err.resume; err.ready.then(() => fire(go ? () => { for (const v of go()) return v; } : run)); }
                 else if (err instanceof OutOfSteps) console.error(`${name} handler ${STUCK}`);
                 else console.error(err);
               }
