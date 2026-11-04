@@ -1100,8 +1100,10 @@ once per run and remembers the response, so a search that backtracks
 never sends a POST twice; a program that means to send the same request
 twice says what differs. This is the Fetch standard's Request and
 Response, and Elm's Http, where a request is a value a runtime sends.
-Evaluated and compiled to JavaScript on the command line; pages and bytes
-bodies are still to come (BACKLOG L191).
+Evaluated and compiled to JavaScript, on the command line and in a page,
+where a handler that sends stops there and goes on when the response
+lands, as with `fetch text` (L191b); bodies as bytes are still to come
+(BACKLOG L191).
 
 ### Cells: reactivity and values on demand
 
