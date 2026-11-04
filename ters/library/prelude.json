@@ -101726,6 +101726,177 @@
         ],
         "body": "@n4rdeot09oefmif8tpa05i7ve7:3"
       },
+      "@4rrimcsrkqnfgbor9uv4d4p0qu": {
+        "id": "@4rrimcsrkqnfgbor9uv4d4p0qu",
+        "kind": "def",
+        "body": "@4rrimcsrkqnfgbor9uv4d4p0qu:1"
+      },
+      "@4rrimcsrkqnfgbor9uv4d4p0qu:2": {
+        "id": "@4rrimcsrkqnfgbor9uv4d4p0qu:2",
+        "kind": "binder"
+      },
+      "@4rrimcsrkqnfgbor9uv4d4p0qu:3": {
+        "id": "@4rrimcsrkqnfgbor9uv4d4p0qu:3",
+        "kind": "binder"
+      },
+      "@4rrimcsrkqnfgbor9uv4d4p0qu:13": {
+        "id": "@4rrimcsrkqnfgbor9uv4d4p0qu:13",
+        "kind": "binder"
+      },
+      "@4rrimcsrkqnfgbor9uv4d4p0qu:18": {
+        "id": "@4rrimcsrkqnfgbor9uv4d4p0qu:18",
+        "kind": "binder"
+      },
+      "@4rrimcsrkqnfgbor9uv4d4p0qu:23": {
+        "id": "@4rrimcsrkqnfgbor9uv4d4p0qu:23",
+        "kind": "ref",
+        "target": "@3c7r8ujk3ii28tegpnpo8f02l5"
+      },
+      "@4rrimcsrkqnfgbor9uv4d4p0qu:24": {
+        "id": "@4rrimcsrkqnfgbor9uv4d4p0qu:24",
+        "kind": "ref",
+        "target": "@4rrimcsrkqnfgbor9uv4d4p0qu:13"
+      },
+      "@4rrimcsrkqnfgbor9uv4d4p0qu:25": {
+        "id": "@4rrimcsrkqnfgbor9uv4d4p0qu:25",
+        "kind": "ref",
+        "target": "@4rrimcsrkqnfgbor9uv4d4p0qu:18"
+      },
+      "@4rrimcsrkqnfgbor9uv4d4p0qu:22": {
+        "id": "@4rrimcsrkqnfgbor9uv4d4p0qu:22",
+        "kind": "call",
+        "fn": "@4rrimcsrkqnfgbor9uv4d4p0qu:23",
+        "args": [
+          "@4rrimcsrkqnfgbor9uv4d4p0qu:24",
+          "@4rrimcsrkqnfgbor9uv4d4p0qu:25"
+        ]
+      },
+      "@4rrimcsrkqnfgbor9uv4d4p0qu:21": {
+        "id": "@4rrimcsrkqnfgbor9uv4d4p0qu:21",
+        "kind": "lambda",
+        "params": [],
+        "body": "@4rrimcsrkqnfgbor9uv4d4p0qu:22"
+      },
+      "@4rrimcsrkqnfgbor9uv4d4p0qu:27": {
+        "id": "@4rrimcsrkqnfgbor9uv4d4p0qu:27",
+        "kind": "lit",
+        "value": ""
+      },
+      "@4rrimcsrkqnfgbor9uv4d4p0qu:26": {
+        "id": "@4rrimcsrkqnfgbor9uv4d4p0qu:26",
+        "kind": "lambda",
+        "params": [],
+        "body": "@4rrimcsrkqnfgbor9uv4d4p0qu:27"
+      },
+      "@4rrimcsrkqnfgbor9uv4d4p0qu:20": {
+        "id": "@4rrimcsrkqnfgbor9uv4d4p0qu:20",
+        "kind": "ref",
+        "target": "builtin.first"
+      },
+      "@4rrimcsrkqnfgbor9uv4d4p0qu:19": {
+        "id": "@4rrimcsrkqnfgbor9uv4d4p0qu:19",
+        "kind": "call",
+        "fn": "@4rrimcsrkqnfgbor9uv4d4p0qu:20",
+        "args": [
+          "@4rrimcsrkqnfgbor9uv4d4p0qu:21",
+          "@4rrimcsrkqnfgbor9uv4d4p0qu:26"
+        ]
+      },
+      "@4rrimcsrkqnfgbor9uv4d4p0qu:17": {
+        "id": "@4rrimcsrkqnfgbor9uv4d4p0qu:17",
+        "kind": "lambda",
+        "params": [
+          "@4rrimcsrkqnfgbor9uv4d4p0qu:18"
+        ],
+        "body": "@4rrimcsrkqnfgbor9uv4d4p0qu:19"
+      },
+      "@4rrimcsrkqnfgbor9uv4d4p0qu:15": {
+        "id": "@4rrimcsrkqnfgbor9uv4d4p0qu:15",
+        "kind": "ref",
+        "target": "@9902gjnadddgv3jrh6ir29nf4q"
+      },
+      "@4rrimcsrkqnfgbor9uv4d4p0qu:16": {
+        "id": "@4rrimcsrkqnfgbor9uv4d4p0qu:16",
+        "kind": "ref",
+        "target": "@4rrimcsrkqnfgbor9uv4d4p0qu:2"
+      },
+      "@4rrimcsrkqnfgbor9uv4d4p0qu:14": {
+        "id": "@4rrimcsrkqnfgbor9uv4d4p0qu:14",
+        "kind": "call",
+        "fn": "@4rrimcsrkqnfgbor9uv4d4p0qu:15",
+        "args": [
+          "@4rrimcsrkqnfgbor9uv4d4p0qu:16",
+          "@4rrimcsrkqnfgbor9uv4d4p0qu:17"
+        ]
+      },
+      "@4rrimcsrkqnfgbor9uv4d4p0qu:12": {
+        "id": "@4rrimcsrkqnfgbor9uv4d4p0qu:12",
+        "kind": "lambda",
+        "params": [
+          "@4rrimcsrkqnfgbor9uv4d4p0qu:13"
+        ],
+        "body": "@4rrimcsrkqnfgbor9uv4d4p0qu:14"
+      },
+      "@4rrimcsrkqnfgbor9uv4d4p0qu:10": {
+        "id": "@4rrimcsrkqnfgbor9uv4d4p0qu:10",
+        "kind": "ref",
+        "target": "@9902gjnadddgv3jrh6ir29nf4q"
+      },
+      "@4rrimcsrkqnfgbor9uv4d4p0qu:11": {
+        "id": "@4rrimcsrkqnfgbor9uv4d4p0qu:11",
+        "kind": "ref",
+        "target": "@4rrimcsrkqnfgbor9uv4d4p0qu:3"
+      },
+      "@4rrimcsrkqnfgbor9uv4d4p0qu:9": {
+        "id": "@4rrimcsrkqnfgbor9uv4d4p0qu:9",
+        "kind": "call",
+        "fn": "@4rrimcsrkqnfgbor9uv4d4p0qu:10",
+        "args": [
+          "@4rrimcsrkqnfgbor9uv4d4p0qu:11",
+          "@4rrimcsrkqnfgbor9uv4d4p0qu:12"
+        ]
+      },
+      "@4rrimcsrkqnfgbor9uv4d4p0qu:7": {
+        "id": "@4rrimcsrkqnfgbor9uv4d4p0qu:7",
+        "kind": "ref",
+        "target": "std.list.cons"
+      },
+      "@4rrimcsrkqnfgbor9uv4d4p0qu:8": {
+        "id": "@4rrimcsrkqnfgbor9uv4d4p0qu:8",
+        "kind": "ref",
+        "target": "@4rrimcsrkqnfgbor9uv4d4p0qu:2"
+      },
+      "@4rrimcsrkqnfgbor9uv4d4p0qu:6": {
+        "id": "@4rrimcsrkqnfgbor9uv4d4p0qu:6",
+        "kind": "call",
+        "fn": "@4rrimcsrkqnfgbor9uv4d4p0qu:7",
+        "args": [
+          "@4rrimcsrkqnfgbor9uv4d4p0qu:8",
+          "@4rrimcsrkqnfgbor9uv4d4p0qu:9"
+        ]
+      },
+      "@4rrimcsrkqnfgbor9uv4d4p0qu:5": {
+        "id": "@4rrimcsrkqnfgbor9uv4d4p0qu:5",
+        "kind": "ref",
+        "target": "@e2mg6v3g7lcjgim6558dmg1o7f"
+      },
+      "@4rrimcsrkqnfgbor9uv4d4p0qu:4": {
+        "id": "@4rrimcsrkqnfgbor9uv4d4p0qu:4",
+        "kind": "call",
+        "fn": "@4rrimcsrkqnfgbor9uv4d4p0qu:5",
+        "args": [
+          "@4rrimcsrkqnfgbor9uv4d4p0qu:6"
+        ]
+      },
+      "@4rrimcsrkqnfgbor9uv4d4p0qu:1": {
+        "id": "@4rrimcsrkqnfgbor9uv4d4p0qu:1",
+        "kind": "lambda",
+        "params": [
+          "@4rrimcsrkqnfgbor9uv4d4p0qu:2",
+          "@4rrimcsrkqnfgbor9uv4d4p0qu:3"
+        ],
+        "body": "@4rrimcsrkqnfgbor9uv4d4p0qu:4"
+      },
       "@r7dorj9as9anofgaa01rsjf70m": {
         "id": "@r7dorj9as9anofgaa01rsjf70m",
         "kind": "def",
@@ -112410,6 +112581,7 @@
       "@fhvhg9sk4p5l7g82qa6iqvv63m",
       "@cts9af36tq0a7hq767qovbqpng",
       "@n4rdeot09oefmif8tpa05i7ve7",
+      "@4rrimcsrkqnfgbor9uv4d4p0qu",
       "@m5bcgf805s7kagfa27nlk7kb60",
       "@81u53t1p3l7ch4mscq7a6leacg",
       "@sh175nmd89dru9dv40tangbsam",
@@ -124435,6 +124607,60 @@
       },
       "plain": []
     },
+    "@4rrimcsrkqnfgbor9uv4d4p0qu": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.list",
+            "args": [
+              {
+                "t": "con",
+                "id": "type.string",
+                "args": []
+              }
+            ]
+          },
+          {
+            "t": "con",
+            "id": "std.list",
+            "args": [
+              {
+                "t": "con",
+                "id": "std.map",
+                "args": [
+                  {
+                    "t": "con",
+                    "id": "type.string",
+                    "args": []
+                  },
+                  {
+                    "t": "con",
+                    "id": "type.string",
+                    "args": []
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "type.string",
+          "args": []
+        },
+        "eff": {
+          "effs": [],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
     "@m5bcgf805s7kagfa27nlk7kb60": {
       "vars": [],
       "rows": [
@@ -134546,6 +134772,11 @@
     "@n4rdeot09oefmif8tpa05i7ve7:10": "header",
     "@n4rdeot09oefmif8tpa05i7ve7:11": "rows",
     "@n4rdeot09oefmif8tpa05i7ve7:16": "row",
+    "@4rrimcsrkqnfgbor9uv4d4p0qu": "csv of records",
+    "@4rrimcsrkqnfgbor9uv4d4p0qu:2": "columns",
+    "@4rrimcsrkqnfgbor9uv4d4p0qu:3": "records",
+    "@4rrimcsrkqnfgbor9uv4d4p0qu:13": "record",
+    "@4rrimcsrkqnfgbor9uv4d4p0qu:18": "column",
     "@r7dorj9as9anofgaa01rsjf70m": "base64 groups",
     "@r7dorj9as9anofgaa01rsjf70m:2": "bytes",
     "@r7dorj9as9anofgaa01rsjf70m:8": "first",
@@ -134884,6 +135115,7 @@
     "@2p8estt33jsooosbk6qlq998sk": "The items a json list holds; no answer for any other kind.",
     "@e2mg6v3g7lcjgim6558dmg1o7f": "Rows of fields as CSV text (RFC 4180), a line each: a field with a comma, a quote or a line break is quoted, its quotes doubled.",
     "@n4rdeot09oefmif8tpa05i7ve7": "The records of a CSV text whose first line names its columns, each a map from those names to the row's fields: csv records(\"name,age\\nAda,36\") is one map, name to Ada and age to 36 (Python's csv.DictReader). A short row leaves the last names out.",
+    "@4rrimcsrkqnfgbor9uv4d4p0qu": "A CSV text of records, the other way from csv records: the column names as its first line, then each record's value at each name, empty where it has none (Python's csv.DictWriter).",
     "@cts9af36tq0a7hq767qovbqpng": "The rows of fields a CSV text holds (RFC 4180), the other way from csv printed: quoted fields may hold commas, doubled quotes and line breaks; lines end in LF or CRLF. Stops when the text ends inside a quoted field.",
     "@i3605cgohlm9dad70qrhpqq5hv": "The JSON text of a Json value (RFC 8259): json printed(json object([(\"a\", json list([json number(1), json null]))])) is {\"a\":[1,null]}. Text is quoted with \", \\ and control characters escaped.",
     "@iq044k6dto1s16ehvfe3vm8iuc": "The bytes as Base64 text (RFC 4648): every three bytes as four characters from A to Z, a to z, 0 to 9, + and /, with = filling the last group: base64 of(utf8 of(\"hi\")) is \"aGk=\".",
@@ -135316,6 +135548,7 @@
     "@e2mg6v3g7lcjgim6558dmg1o7f",
     "@cts9af36tq0a7hq767qovbqpng",
     "@n4rdeot09oefmif8tpa05i7ve7",
+    "@4rrimcsrkqnfgbor9uv4d4p0qu",
     "@sh175nmd89dru9dv40tangbsam",
     "@rh5r2fmc1rcjranmbg2ufo7qs7",
     "@dfl1vakd0b3svfnlv3cluokg8f",
