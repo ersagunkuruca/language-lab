@@ -59,6 +59,9 @@ export const PROBLEMS: Problem[] = [
   { id: "release-given-something", says: /^a release is given nothing: release → …$/, fix: "Take the names off the release arm: it runs on every exit, with nothing to be given." },
   { id: "release-acts", says: /^a release runs on every exit, so it may only log: this one performs .+$/, fix: "Let the release only log (or close a file the library keeps open); do anything else after the handler, or in its normal finish." },
   { id: "resumed-twice", says: /^this resumes the rest of .+ a second time: the rest runs once, so resume it on one path only$/, fix: "Resume the rest once on each path: keep the value the first resume gives and use it, instead of resuming again." },
+  { id: "finish-not-function", says: /^a handler's normal finish is a function written in place, given the computation's value: done\(x\) → …$/, fix: "Write the handler's otherwise arm as a function of the computation's value, done(x) → …, or take it off to give that value as it is." },
+  { id: "later-case-chooses", says: /^this case may give several answers or none, so it could resume the rest of .+ more than once: handle the Choice here/, fix: "The rest of the computation runs once: wrap the search in the case in first or optional, and resume the rest with the one answer it gives.", gesture: "Select the search, Wrap in…, then pick first." },
+  { id: "release-lets-choice", says: /^a handler with a release can't let a Choice through, since a search could leave it and come back after the release/, fix: "Handle the Choice inside the handler, around the search (first, all, count or optional), so nothing comes back after the release has run.", gesture: "Select the search, Wrap in…, then pick first or all." },
   { id: "type-as-value", says: /^.+ is a type, not a value$/, fix: "A type says what values look like and can't be used as one: use one of its cases, or a value of that type." },
 ];
 
