@@ -36,6 +36,7 @@ import { Aborted, FAIL, OUT, RUNTIME, Stopped, Unsupported, coreRuntime, runCore
 // tools that print and run in one.
 // The solver too, for the programs run here that solve (core-solve.ts).
 import { writtenOut } from "./core-solve.ts";
+import { trackReads } from "./cell-paths.ts";
 export { Aborted, FAIL, OUT, RUNTIME, Stopped, Unsupported, coreCall, coreRuntime, runCoreFn, type MainSpec, type TableSpec } from "./core-rt.ts";
 
 
@@ -361,7 +362,10 @@ export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roo
     if (checked.errors.length <= info.errors.length) ({ code, names, info } = { code: inv.code, names: inv.names, info: checked });
   }
   const f = fusedProgram(code, info, names);
-  return lowerScalar(f.code, f.info, f.names, roots, { data: true, host: true });
+  const ir = lowerScalar(f.code, f.info, f.names, roots, { data: true, host: true });
+  // Reads that wait on the places their values are used at (C162).
+  trackReads(ir);
+  return ir;
 }
 
 // What a variable starts as.

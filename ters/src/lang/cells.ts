@@ -289,6 +289,7 @@ export class Cells {
   // Where a row's reads through its item's view go while each makes it.
   private row: CellNode | null = null;
   private shape: Lists | null = null;
+  private compared: Lists | null = null;
   // Each cell's place in the order cells were made, told when it's made
   // and with each write: a page with sound sends its writes to the audio
   // thread's run of main, whose cells were made in the same order
@@ -355,6 +356,13 @@ export class Cells {
   // A read whose value the compiler followed (C162): the reader waits on
   // these places of it only (keys as keyOf makes them, with meets' `*/`
   // and `=`), as if it had read each with read at.
+  // How lists look, so a whole new value is compared with the old one
+  // place by place (`differences`) from the first write, not only once
+  // `each` made a view: its readers of places then wake only for theirs.
+  // Only for comparing: what's written is looked through for views only
+  // once a view was made (plainOf).
+  knowLists(lists: Lists): void { this.compared ??= lists; }
+
   readPaths(c: Value, keys: string[]): Value {
     const n = nodeOf(c);
     if (!n) throw new Error("read needs a cell");
@@ -413,7 +421,8 @@ export class Cells {
     // A whole new value: the places where it differs from the old one,
     // what they share skipped, so only their readers wake (C86, as Solid's
     // `reconcile` diffs an immutable value into a store).
-    const ats = at ? [at] : was !== undefined && this.shape ? differences(was, v, this.shape) : null;
+    const lists = this.shape ?? this.compared;
+    const ats = at ? [at] : was !== undefined && lists ? differences(was, v, lists) : null;
     const keys = ats?.map(keyOf);
     if (what && at && what.kind !== "write") for (const o of n.observers) o.shift?.(what, at);
     const hits = (at: Step[]) => (seen: Seen) => {

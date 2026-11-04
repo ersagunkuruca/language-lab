@@ -61,6 +61,8 @@ export function fromList(v: Value): Value[] {
 const LISTS = { from: fromList, to: toList as (xs: Value[]) => Value };
 // What each needs to hand its rows tracked views (cells.ts, L99).
 const LIST_VIEWS = { cons: CONS, nil: NIL, isList: (v: Value) => typeof v === "object" && (v.tag === CONS || v.tag === NIL) };
+// The evaluator's lists with them, as Cells compares values by (C162).
+export const LIST_SHAPE = { ...LISTS, views: LIST_VIEWS };
 
 // Cells' operations on a handler (cells.ts), by builtin id, for every
 // runner of a program's values: the evaluator's here, and JavaScript
@@ -70,7 +72,7 @@ const LIST_VIEWS = { cons: CONS, nil: NIL, isList: (v: Value) => typeof v === "o
 // is undefined. `path` is the evaluator's alone: it looks inside the
 // function it is given.
 export function cellOps(cells: Cells, call: (f: Value, ...xs: Value[]) => Value): Record<Id, (...xs: Value[]) => Value | undefined> {
-  const listsHere = { ...LISTS, views: LIST_VIEWS };
+  const listsHere = LIST_SHAPE;
   const noValue = (f: () => Value) => { try { return f(); } catch (e) { if (e instanceof NoValue) return undefined; throw e; } };
   return {
     [CELL_OPS.cell]: (v) => cells.cell(v),
