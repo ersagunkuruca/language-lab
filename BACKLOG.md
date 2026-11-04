@@ -31,7 +31,7 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I167 | + New definition still freezes about a second (1.3 to 1.8 s to the status line, gaps 0.8 to 1.0 s), down from 3 to 5 s (I157). Where it goes (Insertion sort, 11-04): the edit's guard checks the whole program (`guardTyped`, 0.53 s), then the panel draws (0.33 s, of which 0.15 s was a run of the hole-only body for values, skipped since I167a), then the hole's fillings, a frame later (0.6 s). A guard of only the added definition (signatures.ts `recheck`) took 26 ms but gives an Info that isn't a layer over the library's, and the palette then lost the inputs in scope: it needs `infer` to check an addition as a layer. | QA 11-04 L1 | 2026-11-04 |
+| I167 | + New definition still freezes about 0.6 s, in two long tasks (Insertion sort, 11-04 evening, after L215's cached checks and I167b): the edit, 0.25 s (its guard 53 ms now, the panel drawn 0.17 s, of it the inspector 0.13 s), then the hole's fillings a frame later, 0.39 s (finding them 0.3 s, mostly the checks of fillings that may pin the new definition's type, byKind 80 ms, whole 62 ms). Was 1.3 to 1.8 s, and 3 to 5 s before I157. | QA 11-04 L1 | 2026-11-04 |
 
 ## E: Editor
 

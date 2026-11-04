@@ -128108,7 +128108,6 @@
         },
         "eff": {
           "effs": [
-            "effect.diverge",
             "std.abort"
           ],
           "tail": 0
