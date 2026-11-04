@@ -26,7 +26,8 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| E228k | Run backwards out of editor/main.ts into editor/backwards.ts, through a `BackHost`: the ports you know and their values, the short search and the whole one in a worker, Stop, accepting an answer, and the panel | this PR |
+| I165 | Page programs (Bounce, Constructions, Spacetime, board) logged "no value" about 60 times a second, on and after leaving them. Since C40i (#1424) a page's handler may wait, so compiled handlers are generators; one that doesn't wait yields nothing and returns its value, and the compiled page's call (html.ts `compiledCall`) took a generator with no yield for a search with no answer. It now takes the returned value. Test: web.test.ts | this PR |
+| E228k | Run backwards out of editor/main.ts into editor/backwards.ts, through a `BackHost`: the ports you know and their values, the short search and the whole one in a worker, Stop, accepting an answer, and the panel | #1444 |
 | E231c | Run by keyboard and screen reader: the keyboard stays on Run as it becomes Stop and back (a button that had the focus keeps it across a redraw, or hands it to the one standing in for it), what the run prints is a live log read out as it comes, and a failure is an alert | #1441 |
 | E228j | The values a definition opens with out of editor/main.ts into editor/seeds.ts, through a `SeedHost`: what a call in the program passes it, or what main's dry run (a page drawn and its handlers run, a picture at a pixel or two) first calls it with, and a port's text read as a value | #1438 |
 | E243 | Turning a call around ("Work out x from the result") makes a use with no body, L211's shape, giving the one port it isn't given; "Use it forwards", or a double-click on its output, turns one of those back, and still takes a use in the old shape (turn-around.test) | #1435 |

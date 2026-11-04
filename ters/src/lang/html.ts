@@ -59,10 +59,14 @@ export const evaluatorCall = (f: Value, ...args: Value[]): Value => {
   throw new NoAnswer();
 };
 // Compiled code gives a value, or a stream of answers when it searches.
+// A function that may wait (C40) is a generator too, one that yields
+// nothing when it doesn't wait and returns its value (a page's handlers
+// are, since their row holds Wait): that value is the answer (I165).
 export const compiledCall = (f: Value, ...args: Value[]): Value => {
   const r = (f as (...a: Value[]) => Value)(...args) as unknown;
   if (r && typeof r === "object" && typeof (r as Iterator<Value>).next === "function" && Symbol.iterator in (r as object)) {
-    for (const v of r as Iterable<Value>) return v;
+    const first = (r as Iterator<Value>).next();
+    if (!first.done || first.value !== undefined) return first.value;
     throw new NoAnswer();
   }
   return r as Value;
