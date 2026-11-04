@@ -31,7 +31,7 @@ import { B } from "../prelude.ts";
 import { implementationOf, type Info } from "./infer.ts";
 import { interfaceOps, leftToWays, NEUTRAL, pickWays, waysIn, type BuiltinCost } from "./ways.ts";
 import { ALGEBRAIC_OPS, ARITH, ARITH_FIELD, EMBEDDING, EMBEDDING_MAP, COMPLEX_V, DUAL_V, FIXED_V, INT_OPS, LITERAL, LITERAL_V, RATIO, S } from "./std.ts";
-import { ALGEBRAIC_TYPE, COMPLEX_TYPE, DUAL_TYPE, FIXED_TYPE, MATRIX_SIZE, INT, NUMBER, RATIONAL_TYPE, OverMap, type Row, type Scheme, type Type } from "./types.ts";
+import { ALGEBRAIC_TYPE, COMPLEX_TYPE, DUAL_TYPE, FIXED_TYPE, INT, NUMBER, RATIONAL_TYPE, OverMap, type Row, type Scheme, type Type } from "./types.ts";
 import { PRELUDE_DEFS } from "./prelude-ids.ts";
 import { ratioParts } from "./int.ts";
 import { recordVariant } from "./derive.ts";
@@ -503,9 +503,10 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
   };
 
   // A plain number literal at the Number its use needs: an Int, a fraction
-  // (0.25 is 1/4 exactly: the digits as written), a Complex with 0i, a
-  // matrix with it down the diagonal (that many times the identity), a
-  // record with it in every part; a Float64 as it is.
+  // (0.25 is 1/4 exactly: the digits as written), a Complex with 0i, a type
+  // with a Literal its from fraction (a matrix: that many times the
+  // identity, L204c), a record of Float64s with it in every part; a
+  // Float64 as it is.
   const numberLiteral = (n: NodeOf<"lit">, env: Env) => {
     const t = close(typeOf.get(n.id) ?? num, env), x = n.value as number;
     // At Float64 it says so, so checking the resolved program again (the
@@ -536,8 +537,7 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
     if (!variant) return;
     const fields = (code.nodes[variant] as NodeOf<"variant">).fields;
     const fn = add({ kind: "ref", target: variant }, { t: "fn", params: fields.map(() => num), ret: t, eff: pure });
-    const size = MATRIX_SIZE[t.id];
-    nodes[n.id] = { id: n.id, kind: "call", fn, args: fields.map((_, i) => add({ kind: "lit", value: size && i % (size + 1) !== 0 ? 0 : x }, num)) };
+    nodes[n.id] = { id: n.id, kind: "call", fn, args: fields.map(() => add({ kind: "lit", value: x }, num)) };
     typeOf.set(n.id, t);
   };
 
