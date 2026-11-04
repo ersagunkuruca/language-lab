@@ -12,7 +12,7 @@ import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { makeRunner } from "../../ters/src/lang/run.ts";
 import { CONS, NIL, S } from "../../ters/src/lang/std.ts";
 import { B } from "../../ters/src/prelude.ts";
-import { loadCoreJs, lowerCore } from "../src/core-js.ts";
+import { emitCoreJs, loadCoreJs, lowerCore } from "../src/core-js.ts";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitWasm, instantiate } from "../src/wasm.ts";
 import { build, skip } from "./c-harness.ts";
@@ -43,7 +43,7 @@ function program() {
   });
   const code = base(k.code), names = baseNames(k.names), info = infer(code, names);
   assert.deepEqual(info.errors.map((e) => e.message), []);
-  return { code, names, info, defs };
+  return { code, names, info, defs, down };
 }
 const XS = [0, 1, 2, 3];
 const list = (v: unknown): number[] => { const out: number[] = []; for (let c = v as { tag: string; fields: unknown[] }; c.fields.length; c = c.fields[1] as typeof c) out.push(c.fields[0] as number); return out; };
@@ -70,4 +70,15 @@ test("with fuel around several answers, the rest spending the budget outside: th
     assert.deepEqual(got.map((g) => g.value), want, "C");
     assert.ok(got.every((g) => g.live === 0));
   }
+});
+
+// The fuel is endless outside a budget, so a program that sets none spends
+// none (C171): down alone counts nothing on any target; under the scores'
+// budgets it spends.
+test("a function that may not end spends fuel only where a budget is set", () => {
+  const p = program();
+  const spends = (roots: string[]) => lowerScalar(p.code, p.info, p.names, roots, { data: true }).funcs.filter((f) => f.name === "down").map((f) => f.spends);
+  assert.deepEqual(spends([p.down]), [false]);
+  assert.ok(spends(p.defs.map((d) => d.score)).every(Boolean));
+  assert.doesNotMatch(emitCoreJs(lowerCore(p.code, p.info, p.names, [p.down])).js, /fuel/);
 });

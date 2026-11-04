@@ -376,7 +376,11 @@ test("a solve with exactly one answer is a plain call: no Choice, no generator",
     return main;
   });
   assert.deepEqual(r.lines, ["3"]);
-  assert.match(r.js, /function sum_of\(p\) \{\n  return .*\$one\(solve\$0\(p\)\)/);
+  // The answer may be bound before it is used; what matters is one plain
+  // call of the solve, with no generator and no stream of answers.
+  const body = /function sum_of\(p\) \{\n([\s\S]*?)\n\}/.exec(r.js)?.[1] ?? "";
+  assert.match(body, /\$one\(solve\$0\(p\)\)/);
+  assert.doesNotMatch(body, /\$many|\$stream|yield/);
 });
 
 // Text from the world enters in Normalization Form C (TEXT-2026-11-03.md,

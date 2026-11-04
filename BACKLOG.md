@@ -49,7 +49,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E251 | Move a let's function to its own definition (lifted, with what it reads around it as new inputs, as lift-lets.ts does) and the reverse, Put inside (a definition used in one place becomes a let there), so def or let is one click and never a rewrite; needs L224 so neither move changes the type | Ersagun 2026-11-04 13:23 (Learn thread: defs vs lambdas) | P2 | M | after L224 |
 
 ### Speed of editing
 
@@ -142,8 +141,8 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | C167 | Solves compiled on the core IR as compile.ts's plans were: the closed form at compile time (relations' `split` as `(s + d) / 2`, `(s − d) / 2`), the evaluator's solver only where a plan truly searches at run time, and then only the nodes that solve reads, not the program's whole node table (calc 337 KB of escaped JSON, 2,529 nodes). Split out of C137 | [DEBUG-AND-SPEED-2026-11-04](docs/design/targets/DEBUG-AND-SPEED-2026-11-04.md) §1, Ersagun 2026-11-04 | P2 | L | |
-| C170 | No names or id strings in compiled code: data tags as small numbers per type (names only inside generated show code), builtins bound directly instead of looked up by id (`R.rt("number.show", …)`), no `// definition name` comments; what a tool needs goes in C143's map | [DEBUG-AND-SPEED-2026-11-04](docs/design/targets/DEBUG-AND-SPEED-2026-11-04.md) §4 | P3 | M | |
-| C171 | Checks the types already rule out left out: a number taken from a list of finite Float64 isn't checked again (sort's insert checks twice per step); no search budget set up where nothing searches | [DEBUG-AND-SPEED-2026-11-04](docs/design/targets/DEBUG-AND-SPEED-2026-11-04.md) §5 | P3 | M | |
+| C170 | No names or id strings in compiled code: data tags as small numbers per type (names only inside generated show code), builtins bound directly instead of looked up by id (`R.rt("number.show", …)`), no `// definition name` comments; what a tool needs goes in C143's map. Done: no comments naming definitions (C170a) | [DEBUG-AND-SPEED-2026-11-04](docs/design/targets/DEBUG-AND-SPEED-2026-11-04.md) §4 | P3 | M | |
+| C171 | Checks the types already rule out left out: a number taken from a list of finite Float64 isn't checked again (sort's insert checks twice per step); no search budget set up where nothing searches. Done: where no budget is set, nothing spends fuel and no fuel is set up (C171a) | [DEBUG-AND-SPEED-2026-11-04](docs/design/targets/DEBUG-AND-SPEED-2026-11-04.md) §5 | P3 | M | |
 | C172 | A compiled run (JS, WebAssembly, C, a page) keeps L186's log of the world's answers, so the evaluator replays it and the editor steps it as E232 does for the evaluator's runs (HOSTS.md: the compiled runtimes' worlds aren't logged yet) | [DEBUG-AND-SPEED-2026-11-04](docs/design/targets/DEBUG-AND-SPEED-2026-11-04.md), E232 | P3 | M | |
 
 ## L: Language and library
