@@ -788,7 +788,8 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         return s.fresh();
       case "builtin":
         if (SIGS[target]) return SIGS[target](s);
-        err(id, `${nm(target)} has no type`);
+        // A built-in type (Float64, Int, Text, …) used as a value.
+        err(id, target.startsWith("type.") ? `${nm(target)} is a type, not a value` : `${nm(target)} has no type`);
         return s.fresh();
       case "variant": {
         const def = owner.get(target)!;
@@ -1032,7 +1033,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
           args = fr.params;
         }
         if (fr.t === "fn" && fr.params.length !== args.length) {
-          err(id, `${callee(n)} takes ${fr.params.length} inputs, given ${args.length}`);
+          err(id, `${callee(n)} takes ${fr.params.length} input${fr.params.length === 1 ? "" : "s"}, given ${args.length}`);
           t = fr.ret;
           break;
         }
