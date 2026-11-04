@@ -25,6 +25,12 @@ views at run time; or views only where a reader reads a few places of a
 big value (they cost per place read, and a column's filter reads every
 card).
 
+**Next (C162, Ersagun 2026-11-04):** (c), as the compile-time half of
+STABLE-REFERENCES.md §2 ("the compiler picks the view only where a
+watcher or formula reads"). L98's paths are the stable references, L99's
+views find a reader's paths at run time, and C162 finds them at compile
+time on the core IR, subscribing to them with no view.
+
 C86 comes from GAPS round 8, B2. The board example keeps its whole state
 in one cell. A running frame changes one card's time. An add appends one
 card. Either way, every reader of the cell runs again: the three columns'
