@@ -1181,7 +1181,10 @@ row has no `Abort`, so a view that fetches has to catch it and show
 something; a handler may let it go (the page logs it).
 
 `send request(request)` sends any request: `request(method, url,
-headers, body)`, a header being a `tuple(name, value)`, and gives a
+headers, body)`, a header being a `tuple(name, value)` and the body
+`Bytes`, as HTTP sends it (`utf8 of("…")` writes a text there, and
+`text of utf8(response.body)` reads one back; an image or any other
+binary body goes as it is), and gives a
 `response(status, headers, body)` whatever the status, so a 404 is a
 response to look at, not an `Abort`; it aborts only when the request
 can't be sent. It is a `Network` operation too, so a handler can answer
