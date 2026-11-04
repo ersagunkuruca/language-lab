@@ -570,7 +570,18 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
   // Not with `seeded` as well, whose draws aren't on that stack.
   const handlesRandom = !!opts.host && Object.values(code.nodes).some((n) => n.kind === "arm" && n.variant === RANDOM_OP);
   if (handlesRandom) tailOps.set(RANDOM_OP, RANDOM);
-  const tailEffs = new Set(tailOps.values());
+  // A program's own effect whose operations are answered later (step 3:
+  // tumble's Animate, ANSWERED-LATER.md): its case is given the rest, so
+  // the performer runs in continuation passing (several_), and a perform
+  // hands the case the rest it was given (core-rt.ts `perform:`).
+  const laterOps = new Map<Id, Id>();
+  for (const n of opts.host ? Object.values(code.nodes) : []) {
+    if (n.kind !== "def" || !n.body || n.id.startsWith("std.")) continue;
+    const td = code.nodes[n.body];
+    if (td?.kind === "typedef" && td.effect && td.variants.length && td.variants.every((v: Id) => { const x = code.nodes[v] as NodeOf<"variant">; return x.returns && x.later; })) td.variants.forEach((v: Id) => laterOps.set(v, n.id));
+  }
+  const laterEffs = new Set(laterOps.values());
+  const tailEffs = new Set([...tailOps.values(), ...laterEffs]);
   let drawn = false;
   // Every effect's operations, for refusing what isn't lowered yet.
   const effectOps = new Set(Object.values(code.nodes).flatMap((n) => {
@@ -613,7 +624,7 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
       // A type that may wait is one only once a closure of it does (a page
       // handler's row says Wait whether it waits or not, and so do the
       // functions its row reaches): its closures' code asks (NeedsSeveral).
-      const chooses = effs.includes(CHOICE) && severalTypes.has(key), waits = !!opts.host && (effs.includes(WAIT) || effs.includes(AWAIT)) && severalTypes.has(key);
+      const chooses = effs.includes(CHOICE) && severalTypes.has(key), waits = !!opts.host && (effs.includes(WAIT) || effs.includes(AWAIT) || effs.some((e) => laterEffs.has(e))) && severalTypes.has(key);
       if (chooses || waits) {
         const sk = `${key}*`;
         if (!fns.has(sk)) fns.set(sk, { key: sk, params: [...params as LType[], kOf(result)], result: "i32", partial: true, several: true, answer: result, ...(chooses ? { chooses } : {}), ...(waits ? { waits } : {}) } as FType);
@@ -1066,6 +1077,12 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
           const e = opOf.get(target)!;
           return { k: "abort", reason: build(target, { t: "con", id: e, args: [] }, args()), esc: escapeOf(e) };
         }
+        if (laterOps.has(target)) {
+          const t = stype(zonk(id));
+          if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(id))}`);
+          const e = laterOps.get(target)!, op = (code.nodes[(code.nodes[e] as NodeOf<"def">).body!] as NodeOf<"typedef">).variants.indexOf(target);
+          return { k: "world", op: `perform:${e}:${op}`, aborts: false, args: args(), t, suspends: true };
+        }
         if (tailOps.has(target) && !drawn) {
           if (target === RANDOM_OP) {
             if (Object.values(code.nodes).some((x) => x.kind === "ref" && x.target === S.seeded)) throw new Refused("handles Random beside seeded (not lowered yet)");
@@ -1178,6 +1195,8 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
           const arm = expr(arms[0].body, new Map(env).set(arms[0].binds[0], reason), f, false);
           return { k: "handle", body, reason, arm, t, save };
         }
+        const later = arms.length ? laterOps.get(arms[0].variant) : undefined;
+        if (later && arms.every((a) => laterOps.get(a.variant) === later) && !n.otherwise) return handleOps(n, later, id, env, f, true);
         const pushed = arms.length ? tailOps.get(arms[0].variant) : undefined;
         if (pushed && arms.every((a) => tailOps.get(a.variant) === pushed) && !n.otherwise) return handleOps(n, pushed, id, env, f);
         const handled = opts.data && arms.length ? opOf.get(arms[0].variant) : undefined;
@@ -1573,7 +1592,9 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
   // them after, however it ends (core-rt.ts `handleOps:`). A case runs
   // with them popped, so what it performs goes to the handler outside,
   // as in the evaluator.
-  function handleOps(n: NodeOf<"match">, e: Id, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
+  // `later`: each case is given the rest, last, and the code it handles
+  // takes the rest of the run (several_): core-rt.ts `handleK:`.
+  function handleOps(n: NodeOf<"match">, e: Id, id: Id, env: Map<Id, number>, f: SFunc, later = false): SExpr {
     const t = stype(zonk(id));
     if (!t) throw new Refused(`handles ${nm(e)} with a value that is ${OTHER}`);
     const ops = (code.nodes[(code.nodes[e] as NodeOf<"def">).body!] as NodeOf<"typedef">).variants;
@@ -1593,12 +1614,20 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
       return closureOf(a.id, a.binds, ps as LType[], a.body, r);
     });
     const body = closureOf(n.scrutinee, [], [], n.scrutinee, t);
+    if (later) return { k: "rt", fn: `handleK:${e}`, args: [body, ...cases], host: { t, partial: true } };
     if (body.k === "closure" && (body.t.several || waits(funcs[body.fn].body))) throw new Refused(`handles ${nm(e)} around a wait or several answers (not lowered yet)`);
     return { k: "rt", fn: `handleOps:${e}${t === "i32" ? ":bool" : ""}`, args: [body, ...cases], host: { t, partial: true } };
   }
   // A partial function type of these, keyed as stype keys one.
+  // One whose closures turned out to take the rest (NeedsSeveral) is
+  // that one's several type.
   function fnOf(params: LType[], result: LType): FType {
     const key = `fn(${params.map(keyOf).join(",")})>${keyOf(result)}!`;
+    if (severalTypes.has(key)) {
+      const sk = `${key}*`;
+      if (!fns.has(sk)) fns.set(sk, { key: sk, params: [...params, kOf(result)], result: "i32", partial: true, several: true, answer: result, waits: true });
+      return fns.get(sk)!;
+    }
     if (!fns.has(key)) fns.set(key, { key, params, result, partial: true });
     return fns.get(key)!;
   }

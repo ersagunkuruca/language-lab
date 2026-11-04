@@ -100,6 +100,26 @@ function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Re
       try { return (body as () => unknown)(); } finally { s.pop(); }
     };
   }
+  // A program's own effect answered later (scalar.ts handleOps `later`,
+  // C137c24): the code it handles takes the rest of its run, its end
+  // keeping its value in the handler's box; a case is given the rest, which
+  // runs with the handler pushed again (a deep handler) and gives what
+  // the handler then gives. Each rest is run at most once (the effect
+  // says so), one after another, so one box per handler does: whatever
+  // ends last (the code, or a case) leaves the handler's value in it.
+  // Prior art: CPS for effect handlers (Hillerström and Lindley), here
+  // only for the performers of such an effect (selective, as Koka and
+  // Effekt).
+  if (name.startsWith("handleK:")) {
+    const e = name.split(":")[1];
+    return (body, ...cases) => {
+      const s = handlers.get(e) ?? handlers.set(e, []).get(e)!;
+      const frame = Object.assign(cases as Cases, { box: { v: undefined as unknown } });
+      s.push(frame);
+      try { (body as { code: (...xs: unknown[]) => unknown }).code(body, (x: unknown) => { frame.box.v = x; return true; }); } finally { s.pop(); }
+      return frame.box.v;
+    };
+  }
   if (name.startsWith("handled:")) { const e = name.slice(8); return () => !!handlers.get(e)?.length; }
   if (name.startsWith("perform:")) {
     const [, e, op] = name.split(":");
@@ -274,7 +294,19 @@ export const RUNTIME = {
 // it's ready, runs the rest as a step of its own. As the evaluator's
 // (run.ts `unhandled` and `paused`), awaiting a fetch on its way looks
 // again every few milliseconds.
-function worldFn(op: string, rt: Runtime, timers: Timers): (...xs: unknown[]) => unknown {
+function worldFn(op: string, rt: Runtime, timers: Timers, handlers: Map<string, Cases[]>): (...xs: unknown[]) => unknown {
+  // An operation answered later (handleK above): the case gets the rest.
+  if (op.startsWith("perform:")) {
+    const [, e, i] = op.split(":");
+    return (...xs) => {
+      const k = xs.pop(), s = handlers.get(e);
+      if (!s?.length) throw new Error(`nothing handles ${e}`);
+      const frame = s.pop() as Cases & { box: { v: unknown } };
+      const rest = (y: unknown) => { s.push(frame); try { RUNTIME.ap(k as never, y); } finally { s.pop(); } return frame.box.v; };
+      try { frame.box.v = frame[Number(i)](...xs, rest); } finally { s.push(frame); }
+      return true;
+    };
+  }
   const w = <K extends keyof World>(k: K): World[K] => {
     const f = rt.world?.[k];
     if (!f) return (() => { throw new Error(`this runtime can't ${k === "error" ? "write to standard error" : k}`); }) as unknown as World[K];
@@ -326,7 +358,7 @@ export function coreRuntime(tables: TableSpec[], worlds: string[], rt: Runtime, 
   const timers = worldTimers((m) => { throw new Aborted(m, 0); });
   let spend = () => true;
   const handlers = new Map<string, Cases[]>();
-  return { ...RUNTIME, spending: (f: () => boolean) => { spend = f; }, rt: (n: string, b?: BuiltinOf) => rtFn(n, b, tables, rand, cells, code, () => spend(), info, rt, handlers), worlds: worlds.map((op) => worldFn(op, rt, timers)), abort: (reason: unknown, esc: number): never => { throw new Aborted(reason, esc); } };
+  return { ...RUNTIME, spending: (f: () => boolean) => { spend = f; }, rt: (n: string, b?: BuiltinOf) => rtFn(n, b, tables, rand, cells, code, () => spend(), info, rt, handlers), worlds: worlds.map((op) => worldFn(op, rt, timers, handlers)), abort: (reason: unknown, esc: number): never => { throw new Aborted(reason, esc); } };
 }
 
 // How the evaluator's runtime (a page's mount, html.ts) calls a function
