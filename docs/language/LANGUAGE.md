@@ -764,6 +764,7 @@ The effects:
 | `Abort` | `abort(reason)` | a match with an `abort(reason)` case; at the top, the run ends (exit code 1) |
 | `Log` | `log(line)` | a match with a `log(line)` case; at the top, standard error |
 | `Random` | `random()` | `seeded(seed, action)`, or a match; at the top, the world's randomness |
+| `Settings` | `my locale()` | a match; at the top, the runtime (the computer's language) |
 | `Time` | `now()` | a match (a test's fixed clock); at the top, the clock |
 | `Wait` | `wait(milliseconds)` | a match; at the top, the runtime (not in a page) |
 | `Diverge` | (any recursion the checker can't see ends) | the runtime, or `with fuel(n, action)` |
@@ -1242,9 +1243,9 @@ builtin's type takes away exactly what its row says.
 | where | takes away | why |
 |---|---|---|
 | a match on an effect's operations | any effect declared with operations (Abort, Log, Random, your own) | a case for each operation says what it does: the handler |
-| a page's event handler | Cells, Update, Console, Files, Abort, Diverge, Time, Wait, Await, Network, Random, Log | the page runtime runs a handler when its event comes, under a step budget, and logs an Abort; a log line goes to the browser's console; a wait lands what the handler did so far, and the rest runs when it's answered |
-| a page's text, part or attribute value | Cells, Diverge, Time, Network, Log, Choice | the page runtime runs a view in a watcher, under a step budget, after main has returned; a view with no answer shows nothing; a log line goes to the browser's console, once per run |
-| a program's main | Console, Files, Update, Cells, Diverge, Network, Log, Abort, Random, Time, Wait, Await | the runtime handles them around main: the world, cells, the clock, timers and the web; an Abort ends the program with its reason |
+| a page's event handler | Cells, Update, Console, Files, Abort, Diverge, Time, Wait, Await, Network, Random, Log, Settings | the page runtime runs a handler when its event comes, under a step budget, and logs an Abort; a log line goes to the browser's console; a wait lands what the handler did so far, and the rest runs when it's answered |
+| a page's text, part or attribute value | Cells, Diverge, Time, Network, Log, Choice, Settings | the page runtime runs a view in a watcher, under a step budget, after main has returned; a view with no answer shows nothing; a log line goes to the browser's console, once per run |
+| a program's main | Console, Files, Update, Cells, Diverge, Network, Log, Abort, Random, Time, Wait, Await, Settings | the runtime handles them around main: the world, cells, the clock, timers and the web; an Abort ends the program with its reason |
 | a shader | Diverge | only under a literal with fuel, which gives each pixel a step budget |
 | a sound's block function | Cells, Update, Random, Diverge | the audio runtime runs it on each block, under a step budget, with Random seeded; a block that doesn't finish plays silence |
 | a sound's maker | Cells, Diverge | the audio runtime runs it once to get the block function, and in a page once more in the audio thread, so it may only make cells |
