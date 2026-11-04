@@ -8,8 +8,8 @@ import { infer } from "../src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { PROBLEMS, problemOf } from "../src/lang/problems.ts";
-import { NUMBER } from "../src/lang/types.ts";
-import { ARITH, FALSE, FIELDS, INT_OPS, JSON_OPS, LOG_OP, S, SOME, TRUE } from "../src/lang/std.ts";
+import { COMPLEX_TYPE, NUMBER, RATIONAL_TYPE } from "../src/lang/types.ts";
+import { ARITH, CELL_OPS, DIVIDE, EMBEDDING_V, FALSE, FIELDS, INT_OPS, JSON_OPS, LOG_OP, RELEASE_V, S, SET, SHOWN_V, SOME, TRIG_OPS, TRUE } from "../src/lang/std.ts";
 
 const bools = (k: Lang, b: string, extra: Parameters<Lang["match"]>[1] = []) =>
   k.match(b, [{ variant: TRUE, names: [], body: () => k.lit(1) }, { variant: FALSE, names: [], body: () => k.lit(2) }, ...extra]);
@@ -43,7 +43,7 @@ const SMALLEST: Record<string, (k: Lang) => void> = {
   "one-tuple-or-inputs": (k) => { const f = k.def("f"); k.define(f, k.fn(["a", "b"], (a) => k.call(S.not, a))); k.define(k.def("p"), k.call(f, k.x(TRUE))); },
   "not-an-operation": (k) => { const a = ask(k); k.define(k.def("p"), k.thunk(() => k.handle(k.call(a.op.ask), [...answered(k, a, () => k.lit(1)), { variant: LOG_OP, names: ["l"], body: () => k.lit(1) }]))); },
   "answer-not-one": (k) => { const a = ask(k); k.define(k.def("p"), k.thunk(() => k.handle(k.call(a.op.ask), answered(k, a, () => k.call(S.oneOf, k.list(k.lit(1), k.lit(2))))))); },
-  "no-implementation": (k) => { const t = k.type("Colour", [], [["red", []], ["blue", []]]); k.define(k.def("p"), k.call(ARITH.add, k.x(t.v.red), k.x(t.v.blue))); k.define(k.def("q"), k.call(S.equal, k.x(t.v.red), k.lit(1))); },
+  "no-implementation": (k) => { const t = k.type("Colour", [], [["red", []], ["blue", []]]); k.define(k.def("p"), k.call(ARITH.add, k.x(t.v.red), k.x(t.v.blue))); k.define(k.def("q"), k.call(S.equal, k.x(t.v.red), k.lit(1))); k.define(k.def("r"), k.call(TRIG_OPS.sin, k.x(t.v.red))); },
   "type-as-value": (k) => k.define(k.def("p"), k.x(NUMBER)),
   "fields-type-unknown": (k) => k.define(k.def("p"), k.fn(["v"], (v) => k.call(FIELDS.listed, v))),
   "json-type-unknown": (k) => k.define(k.def("p"), k.fn(["v"], (v) => k.call(JSON_OPS.of, v))),
@@ -62,6 +62,33 @@ const SMALLEST: Record<string, (k: Lang) => void> = {
   "takes-itself": (k) => { k.type("Bad", [], [["bad", [["f", (self) => k.tfun([k.tref(self)], k.tref(NUMBER))]]]]); },
   "not-an-effect": (k) => { const t = k.type("Colour", [], [["red", []]]); k.type("Box", [], [["box", [["f", () => k.tfun([], k.tref(NUMBER), [t.def])]]]]); },
   "one-row-parameter": (k) => { k.type("Box", ["e", "r"], [["box", [["f", (_self, ps) => k.tfun([], k.tref(NUMBER), ps)]]]]); },
+  "case-never-runs": (k) => k.define(k.def("p"), k.fn(["b"], (b) => k.match(b, [{ variant: TRUE, names: [], body: () => k.lit(1) }, { variant: FALSE, names: [], body: () => k.lit(2) }], k.lit(3)))),
+  "needs-otherwise": (k) => k.define(k.def("p"), k.fn(["x"], (x) => k.byValue(x, [[k.lit(1), k.lit(2)]]))),
+  "one-implementation": (k) => { const t = k.type("Colour", [], [["red", []]]); for (const n of ["shown at colour", "shown at colour again"]) k.define(k.def(n), k.call(SHOWN_V, k.fn(["c"], (c) => k.match(c, [{ variant: t.v.red, names: [], body: () => k.lit("red") }])))); },
+  "int-divide": (k) => k.define(k.def("p"), k.thunk(() => k.call(S.first, k.thunk(() => k.call(DIVIDE, k.int(1), k.int(2))), k.thunk(() => k.int(0))))),
+  "value-case-not-value": (k) => k.define(k.def("p"), k.fn(["x"], (x) => k.byValue(x, [[k.x(TRUE), k.lit(1)]], k.lit(2)))),
+  "release-given-something": (k) => { const a = ask(k); k.define(k.def("p"), k.thunk(() => k.match(k.call(a.op.ask), [...answered(k, a, () => k.lit(1)), { variant: RELEASE_V, names: ["x"], body: () => k.x("std.unit.unit") }]))); },
+  "release-acts": (k) => { const a = ask(k); k.define(k.def("p"), k.thunk(() => k.handle(k.call(a.op.ask), answered(k, a, () => k.lit(1)), undefined, () => k.call(S.print, k.lit("a"))))); },
+  "resumed-twice": (k) => { const a = k.effect("Wait", [["wait", [], () => k.tref(NUMBER), "later"]]); k.define(k.def("p"), k.thunk(() => k.handle(k.call(a.op.wait), [{ variant: a.op.wait, names: ["go"], body: ([go]) => k.seq(k.call(go, k.lit(1)), k.call(go, k.lit(2))) }]))); },
+  "finish-not-function": (k) => { const a = ask(k); k.define(k.def("p"), k.thunk(() => k.match(k.call(a.op.ask), answered(k, a, () => k.lit(1)), k.lit(2)))); },
+  "later-case-chooses": (k) => { const a = k.effect("Wait", [["wait", [], () => k.tref(NUMBER), "later"]]); k.define(k.def("p"), k.thunk(() => k.handle(k.call(a.op.wait), [{ variant: a.op.wait, names: ["go"], body: ([go]) => k.call(go, k.call(S.oneOf, k.list(k.lit(1), k.lit(2)))) }]))); },
+  "release-lets-choice": (k) => { const a = ask(k); k.define(k.def("p"), k.thunk(() => k.handle(k.seq(k.call(a.op.ask), k.call(S.oneOf, k.list(k.lit(1), k.lit(2)))), answered(k, a, () => k.lit(1)), undefined, () => k.x("std.unit.unit")))); },
+  "embedding-open": (k) => k.define(k.def("p"), k.call(EMBEDDING_V, k.fn(["x"], (x) => x))),
+  "embedding-not-record": (k) => k.define(k.def("p"), k.let("e", k.call(EMBEDDING_V, k.fn(["x"], (x) => k.call(S.show, x))), (e) => e)),
+  "embedding-itself": (k) => k.define(k.def("p"), k.call(EMBEDDING_V, k.fn(["x"], (x) => k.call(INT_OPS.add, x, k.int(0))))),
+  "embedding-twice": (k) => k.define(k.def("p"), k.call(EMBEDDING_V, k.x(INT_OPS.toNumber))),
+  "implementation-not-record": (k) => { const t = k.type("Colour", [], [["red", []]]); k.define(k.def("p"), k.let("s", k.call(SHOWN_V, k.fn(["c"], (c) => k.match(c, [{ variant: t.v.red, names: [], body: () => k.lit("red") }]))), (s) => s)); },
+  "set-not-field": (k) => { k.type("Pt", [], [["pt", [["x", () => k.tref(NUMBER)]]]]); k.define(k.def("p"), k.fn(["r"], (r) => k.call(SET, k.fn(["q"], () => k.lit(1)), r, k.lit(2)))); },
+  "path-not-field": (k) => k.define(k.def("p"), k.call(CELL_OPS.path, k.fn(["t"], () => k.lit(1)))),
+  "results-unreachable": (k) => { const f = k.def("f"); k.define(f, k.fn(["a", "b"], (a, b) => k.call(ARITH.less, a, b))); k.results(f, "b"); },
+  "effect-as-type": (k) => { const a = ask(k); const t = k.type("Box", [], [["box", [["c", () => k.tref(a.def)]]]]); k.define(k.def("p"), k.fn(["b"], (b) => k.call(t.f["box.c"], b))); },
+  "interface-shape": (k) => { const d = k.interface("Sized", "a", [["size", (a) => k.tfun([k.tref(a)], k.tref(NUMBER))]]); (k.code.nodes[(k.code.nodes[d.def] as { body: string }).body] as { params: string[] }).params.push(k.binder("b")); },
+  "operation-not-function": (k) => { k.interface("Sized", "a", [["size", (a) => k.tref(a)]]); },
+  "fraction-literal": (k) => k.define(k.def("p"), k.at(RATIONAL_TYPE, "1/0")),
+  "number-literal": (k) => k.define(k.def("p"), k.at(COMPLEX_TYPE, "a")),
+  "shared-different-types": (k) => { const t = k.type("Shape", [], [["dot", [["r", () => k.tref(NUMBER)]]], ["disc", [["r", () => k.tref("type.text")]]]]); (k.code.nodes[t.f["disc.r"]] as { same?: string }).same = t.f["dot.r"]; k.define(k.def("p"), k.fn(["s"], (s) => k.call(t.f["dot.r"], s))); },
+  "shared-field-wrong": (k) => { const t = k.type("Shape", [], [["dot", [["r", () => k.tref(NUMBER)], ["q", () => k.tref(NUMBER)]]], ["disc", [["r", () => k.tref(NUMBER)]]]]); (k.code.nodes[t.f["dot.q"]] as { same?: string }).same = t.f["dot.r"]; k.define(k.def("p"), k.fn(["s"], (s) => k.call(t.f["dot.r"], s))); },
+  "mask-takes-one": (k) => { const t = k.type("Trail", [], [["trail", [["at", () => k.tref("type.vector of")]]]]); k.define(k.def("p"), k.fn(["s"], (s) => k.call(t.f["trail.at"], s))); },
   "not-a-number": (k) => k.define(k.def("p"), k.fn(["b"], (b) => k.match(b, [{ variant: TRUE, names: [], body: () => k.lit(1) }, { variant: FALSE, names: [], body: () => k.lit("a") }]))),
 };
 

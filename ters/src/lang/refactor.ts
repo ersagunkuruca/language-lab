@@ -91,8 +91,19 @@ function unique(name: string, taken: Set<string>): string {
 
 // The names of the binders `hole` can see: those of every node around it
 // that binds (a definition's lambda, a match's arms, a solve).
+// The path is found once for a program and hole (I167c: the palette fills
+// one hole with each of its offers, and each looked for it from the top).
+const scopePaths = new WeakMap<Code, Map<Id, Id[]>>();
 function namesInScope(code: Code, names: Names, hole: Id): Set<string> {
   const out = new Set<string>();
+  let paths = scopePaths.get(code);
+  if (!paths) scopePaths.set(code, (paths = new Map()));
+  const known = paths.get(hole);
+  // Still the path to it, in case the nodes were changed in place.
+  if (known && known.every((id, i) => code.nodes[id] && children(code.nodes[id]).includes(known[i + 1] ?? hole))) {
+    for (const id of known) for (const c of children(code.nodes[id])) if (code.nodes[c]?.kind === "binder" && names[c]) out.add(names[c]);
+    return out;
+  }
   const path: Id[] = [];
   const find = (id: Id): boolean => {
     if (id === hole) return true;
@@ -106,6 +117,7 @@ function namesInScope(code: Code, names: Names, hole: Id): Set<string> {
   for (const d of code.defs) {
     if (!find(d)) continue;
     for (const id of path) for (const c of children(code.nodes[id])) if (code.nodes[c]?.kind === "binder" && names[c]) out.add(names[c]);
+    paths.set(hole, path);
     break;
   }
   return out;

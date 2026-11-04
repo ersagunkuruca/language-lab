@@ -24,7 +24,7 @@
 // (Mokhov, Mitchell and Peyton Jones, ICFP 2018) for early cutoff.
 
 import type { Code, Id, NodeOf } from "../model.ts";
-import { isUse, subtree } from "../model.ts";
+import { conditionResults, isUse, subtree } from "../model.ts";
 import type { Info, Options } from "./infer.ts";
 import type { Arith, Row, Scheme, Subst, Type } from "./types.ts";
 
@@ -240,7 +240,7 @@ export class CheckCache {
         missed.forEach((m, i) => {
           for (const d of m.group) {
             const n = code.nodes[d] as NodeOf<"def">;
-            if (n.results || n.direction || n.way || subtree(code, d).some((id) => isUse(code.nodes[id]))) bad.add(i);
+            if (conditionResults(code.nodes, d) || n.direction || n.way || subtree(code, d).some((id) => isUse(code.nodes[id]))) bad.add(i);
           }
         });
         // Each variable's group, from every type the check gave: one met

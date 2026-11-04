@@ -13,7 +13,7 @@
 // any other edit.
 
 import type { Code, Id, Node, NodeData, NodeOf, Use } from "../model.ts";
-import { isUse, useTarget, isCall, type Call, bindsOf } from "../model.ts";
+import { conditionResults, isUse, useTarget, isCall, type Call, bindsOf } from "../model.ts";
 import { children, collect, freshId, ownerOfTypeParts, parentAt, parentOf, replace, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 
@@ -539,10 +539,11 @@ export function setWay(code: Code, names: Names, def: Id, way: { cost: number | 
 export function addDirection(code: Code, names: Names, rel: Id, results: number[], rawName: string): Top {
   const r = code.nodes[rel];
   const lam = r?.kind === "def" && r.body ? code.nodes[r.body] : null;
-  if (r?.kind !== "def" || !r.results?.length || lam?.kind !== "lambda") return { ok: false, reason: "only a definition with results has other directions" };
+  const rr = r?.kind === "def" ? conditionResults(code.nodes, rel) : undefined;
+  if (r?.kind !== "def" || !rr?.length || lam?.kind !== "lambda") return { ok: false, reason: "only a definition with results has other directions" };
   const rs = [...new Set(results)].filter((i) => i >= 0 && i < lam.params.length).sort((a, b) => a - b);
   if (!rs.length || rs.length === lam.params.length) return { ok: false, reason: "a direction gives some of the ports from the others: pick at least one result and leave one input" };
-  if (rs.length === r.results.length && rs.every((i) => r.results!.includes(lam.params[i]))) return { ok: false, reason: `that is ${nameOf(names, rel)}'s own direction` };
+  if (rs.length === rr.length && rs.every((i) => rr.includes(lam.params[i]))) return { ok: false, reason: `that is ${nameOf(names, rel)}'s own direction` };
   const port = (i: number) => nameOf(names, lam.params[i]);
   let name = trim(rawName);
   if (!name) for (let i = 1; !name || nameTaken(code, names, name); i++) name = `${nameOf(names, rel)} for ${rs.map(port).join(", ")}${i > 1 ? ` ${i}` : ""}`;
@@ -554,7 +555,7 @@ export function addDirection(code: Code, names: Names, rel: Id, results: number[
   // the hole for how each is worked out from the given ports.
   const eq = (i: number) => add({ kind: "call", fn: add({ kind: "ref", target: "builtin.equal" }), args: [add({ kind: "ref", target: params[i] }), add({ kind: "hole" })] });
   const body = rs.slice(1).reduce((acc, i) => add({ kind: "call", fn: add({ kind: "ref", target: "builtin.and" }), args: [acc, eq(i)] }), eq(rs[0]));
-  const def = add({ kind: "def", body: add({ kind: "lambda", params, body }), results: rs.map((i) => params[i]), direction: rel });
+  const def = add({ kind: "def", body: add({ kind: "lambda", params, body, results: rs.map((i) => params[i]) }), direction: rel });
   nn[def] = name;
   return { ok: true, code: { nodes, defs: [...code.defs, def] }, names: nn, select: def,
     note: `New direction of ${nameOf(names, rel)}, ${name}: ${rs.map(port).join(", ")} from ${lam.params.map((_, i) => i).filter((i) => !rs.includes(i)).map(port).join(", ")}. Fill each result's hole with how it is worked out; a solve of ${nameOf(names, rel)} given those then uses it instead of searching.` };

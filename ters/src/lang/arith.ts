@@ -23,7 +23,7 @@
 // keep working, and the meaning hash is of the program as written.
 
 import type { Code, Id, Node, NodeData, NodeOf, Use } from "../model.ts";
-import { isUse, useTarget, isCall, fieldPorts, type Call, bindsOf, useKids, portsOf } from "../model.ts";
+import { conditionResults, isUse, useTarget, isCall, fieldPorts, type Call, bindsOf, useKids, portsOf } from "../model.ts";
 import { resultsAsFunctions, usesResultsAsFunction } from "./results-fn.ts";
 import { freshId, layerOf, nodesWhere, offLayer, scanningOnLayer } from "../model.ts";
 import type { Names } from "../presentation.ts";
@@ -374,7 +374,7 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
     const d = nodes[target];
     const lam = d?.kind === "def" && d.body ? nodes[d.body] : null;
     const f1 = nodes[useTarget(nodes, n)], fp1 = f1?.kind === "field" ? fieldPorts(nodes, f1) : null;
-    if (fp1 && !(d?.kind === "def" && d.results?.length)) {
+    if (fp1 && !(d?.kind === "def" && conditionResults(nodes, d.id)?.length)) {
       // Given by a plain function of the field's type (L128d4): the use in
       // the field's direction is a call of it, its results taken apart.
       // let r = f(inputs) in (results ↦ body)(r.first, r.second, …)

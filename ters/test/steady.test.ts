@@ -155,3 +155,42 @@ test("steady atan2 gives fdlibm's bits, which are V8's Math.atan2's, and compile
   for (let i = 0; i < 300; i++) cases.push([spread(i), spread(i + 3 + (i % 4))]);
   await twoInputs("atan2", Math.atan2, cases);
 });
+
+// Steady (L210f): a Float64 whose Trig is the steady module's. sin, cos,
+// exp and the rest written at a Steady are steady sin, cos and exp, a
+// number written there is its Float64, and + and ÷ are Float64's: so
+// sin(steady(x) + 0.25) is steady sin(x + 0.25), in the evaluator and in
+// compiled JavaScript alike.
+test("at a Steady, sin, exp and the rest are the steady ones, through Trig", async () => {
+  const { ARITH, DIVIDE, TRIG_OPS, TRIG_ASIN } = await import("../src/lang/std.ts");
+  const type = STEADY.exports.find((d) => LIBRARY.names[d] === "Steady")!;
+  const typedef = LIBRARY.code.nodes[(LIBRARY.code.nodes[type] as { body: string }).body] as { variants: string[] };
+  const SV = typedef.variants[0];
+  const k = new Lang(LIBRARY.code);
+  const value = (v: string) => k.match(v, [{ variant: SV, names: ["value"], body: ([x]) => x }]);
+  const at = (f: string, g: (s: string) => string) => { const d = k.def(f); k.define(d, k.fn(["x"], (x) => value(g(k.call(ARITH.add, k.call(SV, x), k.lit(0.25)))))); return d; };
+  const mine = {
+    sin: at("my sin", (s) => k.call(TRIG_OPS.sin, s)), cos: at("my cos", (s) => k.call(TRIG_OPS.cos, s)), tan: at("my tan", (s) => k.call(TRIG_OPS.tan, s)),
+    exp: at("my exp", (s) => k.call(TRIG_OPS.exp, s)), asin: at("my asin", (s) => k.call(TRIG_ASIN, k.call(DIVIDE, s, k.lit(8)))),
+  };
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const r = makeRunner(code, info, { print: () => {} });
+  const ir = lowerCore(code, info, names, Object.values(mine));
+  assert.deepEqual([...ir.refused.values()], []);
+  // V8's sin is fdlibm's too, so the bits alone can't tell: the compiled
+  // program carries the steady ones.
+  for (const f of ["sin", "exp", "asin"]) assert.ok(ir.funcs.some((g) => g.name === `steady ${f}`), `steady ${f} not compiled in: ${ir.funcs.map((g) => g.name).join(", ")}`);
+  const fs = loadCoreJs(ir);
+  const first = (v: unknown) => [...(v as Iterable<unknown>)][0];
+  for (const [f, d] of Object.entries(mine)) {
+    const core = fs[ir.funcs.findIndex((g) => g.name === names[d] && !g.inner)];
+    for (const x of [-3, -0.4, 0, 0.1, 1, 2.5, 7]) {
+      const want = f === "asin" ? first(r.call(r.value(steady("steady asin")), ((x + 0.25) / 8) as Value)) : first(r.call(r.value(steady(`steady ${f}`)), (x + 0.25) as Value));
+      const got = first(r.call(r.value(d), x as Value));
+      assert.ok(Object.is(got, want), `${f}(${x} + 0.25) is ${got} at Steady, steady ${f} gives ${want}`);
+      const c = core(x) as unknown;
+      assert.ok(Object.is(typeof c === "object" && c !== null ? first(c) : c, got), `core IR ${f}(${x})`);
+    }
+  }
+});

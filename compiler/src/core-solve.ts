@@ -17,10 +17,9 @@ import { modeCompiler, type ModeEmit } from "./modes.ts";
 import { compileSolve } from "./relation.ts";
 import { planSolve } from "../../ters/src/lang/solve.ts";
 import { bindsOf } from "./uses.ts";
-import { $FN, $clean, $close, $key, $ok, $planned, $solveRuntime } from "./runtime.js";
-import { CONS, NIL } from "../../ters/src/lang/std.ts";
+import { $FN, $clean, $close, $key, $ok, $planned, $solveRuntime, plans } from "./plan-rt.js";
 import { ownerOfTypeParts, useTarget, type Code, type Id, type NodeOf, type Use } from "../../ters/src/model.ts";
-import { FAIL, Unsupported, inn, useSolver, type Solver } from "./core-rt.ts";
+import { FAIL, Unsupported, inn, lazyList, usePlans, useSolver, type Solver } from "./core-rt.ts";
 
 // derivative(f) or gradient(f) of a function value (C137c20, scalar.ts):
 // the evaluator's, on the program's code, which looks inside f (a printed
@@ -60,7 +59,7 @@ export function solveFn(id: Id, code?: Code, all = false, spend?: () => boolean)
   if (all) return (...xs) => lazyList(answers(xs)[Symbol.iterator]());
   return (...xs) => {
     for (const bound of answers(xs)) return bound;
-    throw new Error(`solving ${useTarget(code.nodes, n)} this way gives exactly one answer, and it gave none`);
+    throw new Error(noAnswer(code, id));
   };
 }
 // A solve's plan written out once as a JavaScript function, as compile.ts's
@@ -81,15 +80,13 @@ function planWritten(given: Code, id: Id): ((...xs: unknown[]) => Iterable<Value
     if (binds.join() !== answerKeys(given, given.nodes[id] as Use).join()) return null;
     const p = planSolve(code, n);
     if (p.mode === "solver") {
-      if (p.status !== "solved") return null;
-      const order = givenInOrder(given, given.nodes[id] as Use), known = [...p.known].sort((a, b) => order.indexOf(a) - order.indexOf(b));
-      const c = compileSolve("solve$", p.rel as never, known, binds);
-      const f = new Function("$planned", "$solveRuntime", "$ok", "$clean", "$key", "$close", "$FN", `"use strict";\n${c.code}\nreturn solve$;`)($planned, $solveRuntime, $ok, $clean, $key, $close, $FN) as (...xs: unknown[]) => Iterable<Value[]>;
-      const at = known.map((k) => order.indexOf(k));
-      return (...xs) => f(...at.map((i) => xs[i]));
+      const w = solverPlan(given, id);
+      if (!w) return null;
+      return new Function(...PLAN_NAMES, `"use strict";\n${w}`)($planned, $solveRuntime, $ok, $clean, $key, $close, $FN) as (...xs: unknown[]) => Iterable<Value[]>;
     }
+    const m = modePlan(given, id);
+    if (!m) return null;
     let runner: ReturnType<typeof makeRunner> | undefined;
-    const fns: ((...xs: Value[]) => unknown)[] = [], consts: unknown[] = [];
     const NO = Symbol("no answer");
     // A function the evaluator runs forward: its first answer, or none.
     const forward = (target: Id) => (...xs: Value[]) => {
@@ -97,6 +94,24 @@ function planWritten(given: Code, id: Id): ((...xs: unknown[]) => Iterable<Value
       for (const v of (runner.value(target) as (...a: Value[]) => Iterable<Value>)(...xs)) return v;
       return NO;
     };
+    const make = new Function("$no", "$eq", "$int", "F", "K", `"use strict";\n${m.code}\nreturn solve$;`);
+    return make(NO, equal, { add: intAdd, sub: intSub, neg: intNeg }, m.forwards.map(forward), m.consts) as (...xs: unknown[]) => Value[][];
+  } catch {
+    return null;
+  }
+}
+// A relational solve whose mode has one answer or none (MODES.md), its
+// plan written out by modes.ts as `solve$` over $no, $eq (run.ts equal),
+// $int (int.ts add, sub, neg), F (the functions it runs forward, by
+// `forwards`) and K (its literals, `consts`). Null when it isn't one.
+export function modePlan(given: Code, id: Id): { code: string; forwards: Id[]; consts: unknown[] } | null {
+  try {
+    const code = filled(needsResolving(given) ? resolvedFor(given, infer(given), undefined).code : given);
+    const n = code.nodes[id] as Use | undefined;
+    if (!n) return null;
+    if (Object.keys(bindsOf(n)).join() !== answerKeys(given, given.nodes[id] as Use).join()) return null;
+    if (planSolve(code, n).mode === "solver") return null;
+    const forwards: Id[] = [], consts: unknown[] = [];
     const emit: ModeEmit = {
       value(v) {
         const x = code.nodes[v];
@@ -115,31 +130,48 @@ function planWritten(given: Code, id: Id): ((...xs: unknown[]) => Iterable<Value
         const f = code.nodes[c.fn];
         const t = f?.kind === "ref" ? code.nodes[f.target] : undefined;
         if (f?.kind !== "ref" || (t?.kind !== "builtin" && t?.kind !== "def")) return null;
-        fns.push(forward(f.target));
-        return { js: `F[${fns.length - 1}](${args.join(", ")})`, partial: true };
+        forwards.push(f.target);
+        return { js: `F[${forwards.length - 1}](${args.join(", ")})`, partial: true };
       },
       tag: (v) => JSON.stringify(v),
     };
     const modes = modeCompiler(code, {});
     if (!modes.solver(n, "solve$", emit)) return null;
-    const make = new Function("$no", "$eq", "$int", "F", "K", `"use strict";\n${modes.code.join("\n")}\nreturn solve$;`);
-    return make(NO, equal, { add: intAdd, sub: intSub, neg: intNeg }, fns, consts) as (...xs: unknown[]) => Value[][];
+    return { code: modes.code.join("\n"), forwards, consts };
   } catch {
     return null;
   }
 }
+// What a written-out plan calls, from plan-rt.js (core-rt.ts RUNTIME.plans).
+export const PLAN_NAMES = ["$planned", "$solveRuntime", "$ok", "$clean", "$key", "$close", "$FN"] as const;
+// A solve the equations' solver plans (relation.ts compileSolve, C137d8)
+// as a function body over PLAN_NAMES, returning the function from the
+// solve's givens (givenInOrder) to its answers' binds (answerKeys): the
+// plan core-js.ts prints, so the program's nodes needn't be shipped
+// (C167a). Null when the solve isn't one the solver plans.
+export function solverPlan(given: Code, id: Id): string | null {
+  try {
+    const code = filled(needsResolving(given) ? resolvedFor(given, infer(given), undefined).code : given);
+    const n = code.nodes[id] as Use | undefined;
+    if (!n) return null;
+    const binds = Object.keys(bindsOf(n));
+    if (binds.join() !== answerKeys(given, given.nodes[id] as Use).join()) return null;
+    const p = planSolve(code, n);
+    if (p.mode !== "solver" || p.status !== "solved") return null;
+    const order = givenInOrder(given, given.nodes[id] as Use), known = [...p.known].sort((a, b) => order.indexOf(a) - order.indexOf(b));
+    const c = compileSolve("solve$", p.rel as never, known, binds);
+    const at = known.map((k) => order.indexOf(k));
+    return `${c.code}\nreturn (...xs) => solve$(${at.map((i) => `xs[${i}]`).join(", ")});`;
+  } catch {
+    return null;
+  }
+}
+// What a solve's error says when it gives no answer and must give one.
+export const noAnswer = (code: Code, id: Id) => `solving ${useTarget(code.nodes, code.nodes[id] as Use)} this way gives exactly one answer, and it gave none`;
 // Whether this solve's plan is written out (above), rather than run by the
 // evaluator's solver on every call (C137d9: a sound that solves that way
 // is too slow for the audio thread).
 export const writtenOut = (code: Code, id: Id): boolean => planWritten(code, id) !== null;
-class LazyCell {
-  private cell?: { tag: Id; fields: unknown[] };
-  private it: Iterator<unknown>;
-  constructor(it: Iterator<unknown>) { this.it = it; }
-  private get forced() { if (!this.cell) { const r = this.it.next(); this.cell = r.done ? { tag: NIL, fields: [] } : { tag: CONS, fields: [r.value, new LazyCell(this.it)] }; } return this.cell; }
-  get tag() { return this.forced.tag; }
-  get fields() { return this.forced.fields; }
-}
-const lazyList = (it: Iterator<unknown>) => new LazyCell(it);
 export const solver: Solver = { derive: deriveFn, solve: solveFn, exists: (code, f) => satisfiable(code, f as never) };
 useSolver(solver);
+usePlans(plans);

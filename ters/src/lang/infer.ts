@@ -16,7 +16,7 @@ import { sharing } from "./shared-fields.ts";
 import { PARTIAL, signAnalysis } from "./signs.ts";
 import type { Code, Id, Node, NodeOf, Use } from "../model.ts";
 import { isUse, useTarget, isCall, fieldPorts, type Call, bindsOf, bodyOf } from "../model.ts";
-import { dependencies, nodesWhere, ownerOfTypeParts, portsOf, subtree } from "../model.ts";
+import { conditionResults, dependencies, nodesWhere, ownerOfTypeParts, portsOf, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { unitProblems, UnitsBefore } from "../units.ts";
 import { fillHole } from "./refactor.ts";
@@ -473,13 +473,13 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // The bodies of definitions with results, and the type each has as a
   // condition on all its ports (L128d2).
   const resultsOf = new Map<Id, Id[]>();
-  for (const d of valueDefs) { const n = code.nodes[d] as NodeOf<"def">; if (n.results && n.body && code.nodes[n.body]?.kind === "lambda") resultsOf.set(n.body, n.results); }
+  for (const d of valueDefs) { const n = code.nodes[d] as NodeOf<"def">; const rs = conditionResults(code.nodes, d); if (rs && n.body) resultsOf.set(n.body, rs); }
   const predicates = new Map<Id, Type>();
   // A definition with results' type, the function of its direction, read
   // back as the condition on all its ports, in order: what a use of it in
   // any direction, or another direction of it, is typed against.
   const asPredicate = (t: Type, d: Id): Type => {
-    const def = code.nodes[d] as NodeOf<"def">, lam = code.nodes[def.body!] as NodeOf<"lambda">, rs = def.results!;
+    const def = code.nodes[d] as NodeOf<"def">, lam = code.nodes[def.body!] as NodeOf<"lambda">, rs = conditionResults(code.nodes, d)!;
     const f = s.resolve(t);
     if (f.t !== "fn") return t;
     const ret = s.resolve(f.ret);
@@ -952,7 +952,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         const ret = expr(n.body, inner, bodyRow);
         // Named result ports (L128b): the body gives a tuple of that many,
         // each part named by its binder; one result is the value itself.
-        if (n.results?.length) {
+        if (n.results?.length && !resultsOf.has(id) && !n.results.every((r) => n.params.includes(r))) {
           const parts = n.results.map((r) => { const rt = s.fresh(); info.typeOf.set(r, rt); return rt; });
           const want: Type = parts.length === 1 ? parts[0] : parts.length <= TUPLE_MAX ? { t: "con", id: tupleType(parts.length), args: parts } : s.fresh();
           if (parts.length > TUPLE_MAX) err(id, `a function gives at most ${TUPLE_MAX} results`);
@@ -1021,7 +1021,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         // A definition with results given all its ports is the condition
         // on them (L128d2), as inside another relation: polar(r, t, x, y).
         const fnNode = code.nodes[n.fn], cd = fnNode?.kind === "ref" ? code.nodes[fnNode.target] : undefined;
-        const f = cd?.kind === "def" && cd.results?.length && cd.body && resultsOf.has(cd.body) && (code.nodes[cd.body] as NodeOf<"lambda">).params.length === n.args.length ? asPredicate(f0, cd.id) : f0;
+        const f = cd?.kind === "def" && conditionResults(code.nodes, cd.id)?.length && cd.body && resultsOf.has(cd.body) && (code.nodes[cd.body] as NodeOf<"lambda">).params.length === n.args.length ? asPredicate(f0, cd.id) : f0;
         for (let i = subsBefore; i < s.subs.length; i++) s.subs[i].at ??= id;
         let args = early ?? applied ?? n.args.map((a, i) => pre.get(i) ?? letValue(n, a, i, env, row));
         const ret = s.fresh();
@@ -1355,7 +1355,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     // then results.
     const fp = t.kind === "field" ? fieldPorts(code.nodes, t) : null;
     const tupled = (ret: Type, k: number): Type[] => { const r = s.resolve(ret); return k === 1 ? [ret] : r.t === "con" && r.id === tupleType(k) ? r.args : Array.from({ length: k }, () => s.fresh()); };
-    const viewed = t.kind === "def" && t.results && code.nodes[t.body!]?.kind === "lambda" ? s.resolve(asPredicate(fnT, t.id))
+    const viewed = t.kind === "def" && conditionResults(code.nodes, t.id) && code.nodes[t.body!]?.kind === "lambda" ? s.resolve(asPredicate(fnT, t.id))
       : fp ? { t: "fn" as const, params: [...fnT.params, ...tupled(fnT.ret, fp.outs.length)], ret: bool, eff: fnT.eff } : fnT;
     if (viewed.t !== "fn") return;
     const ft = viewed;
@@ -1679,15 +1679,15 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // inputs pin down, said here at the definition rather than at a use.
   function results() {
     for (const d of valueDefs) {
-      const def = code.nodes[d] as NodeOf<"def">;
-      if (!def.results) continue;
+      const def = code.nodes[d] as NodeOf<"def">, defResults = conditionResults(code.nodes, d);
+      if (!defResults) continue;
       // Not rechecked: its direction is as it was. (The palette's check of
       // each filling looked again at every definition with results, 25 ms
       // a filling: adding a value on physics fall took 18 s, I69.)
       if (reuse && !reuse.only.has(d)) { const was = reuse.from.directions?.get(d); if (was) (info.directions ??= new Map()).set(d, was); continue; }
       const lam = def.body ? code.nodes[def.body] : null;
       if (lam?.kind !== "lambda") { err(d, `${nm(d)} has results, so it is a function of its ports`); continue; }
-      const odd = def.results.filter((r, i) => !lam.params.includes(r) || def.results!.indexOf(r) !== i);
+      const odd = defResults.filter((r, i) => !lam.params.includes(r) || defResults.indexOf(r) !== i);
       if (odd.length) { err(d, `${nm(d)}'s results are some of its own ports, each once: ${odd.map(nm).join(", ")} isn't`); continue; }
       const sc = info.schemes.get(d), pr = predicates.get(lam.id), t = pr && s.zonk(pr);
       if (t?.t === "fn" && !(t.ret.t === "con" && t.ret.id === BOOL)) { err(d, `${nm(d)} has results, so it is a predicate over its ports (it gives true or false), not ${show(t.ret)}`); continue; }
@@ -1772,8 +1772,9 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     const want = `${fp.outs.map(port).join(", ")} from ${fp.ins.map(port).join(", ")}`;
     // Read as functions (L128d): the same number of inputs and of results.
     // Or any function of the field's type, its record says (L128d4).
-    if (d?.kind === "def" && !d.results) continue;
-    const same = d?.kind === "def" && lam?.kind === "lambda" && d.results?.length === fp.outs.length && lam.params.length - d.results.length === fp.ins.length;
+    const dRes = d?.kind === "def" ? conditionResults(code.nodes, d.id) : undefined;
+    if (d?.kind === "def" && !dRes) continue;
+    const same = d?.kind === "def" && lam?.kind === "lambda" && dRes?.length === fp.outs.length && lam.params.length - dRes.length === fp.ins.length;
     if (!same) err(impl, `${nm(impl)} gives ${nm(field)} as ${nm(by)}, which must name its results the way ${nm(field)} does: ${want}`);
     else if (info.directions?.get(by)?.length) err(impl, `${nm(impl)} gives ${nm(field)} as ${nm(by)}, which must give ${want} with one answer, and it may give several or none`);
   }
@@ -2234,7 +2235,7 @@ export function resultsDirection(code: Code, d: Id, names: Names = {}): { why: s
   const add = (n: Node) => { nodes[n.id] = n; return n.id; };
   const given = Object.fromEntries(ins.map((p) => [p, add({ id: `${d}:given:${p}`, kind: "hole" })]));
   given.out = add({ id: `${d}:true`, kind: "ref", target: TRUE });
-  const binds = Object.fromEntries(def.results!.map((r) => [r, add({ id: `${d}:as:${r}`, kind: "binder" })]));
+  const binds = Object.fromEntries(conditionResults(code.nodes, d)!.map((r) => [r, add({ id: `${d}:as:${r}`, kind: "binder" })]));
   const fn = add({ id: `${d}:fn`, kind: "ref", target: d });
   const use: Use = { id: `${d}:results`, kind: "call", fn, given, binds, body: add({ id: `${d}:body`, kind: "hole" }) };
   add(use);
@@ -2314,7 +2315,7 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
     forgetNodes(scratch ??= { ...code.nodes });
     const r = fillHole(code, {}, hole, f, {}, scratch);
     undo = r.undo;
-    derivedFrom(r.code, code, subtree(r.code, hole));
+    derivedFrom(r.code, code, subtree(r.code, hole), true);
     return (last = [f, r.code])[1];
   };
   let before: Problem[] | undefined;
@@ -2398,7 +2399,7 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   // A definition with results is checked by its direction's verdict too
   // (results(), and an implementation that gives it), which its body
   // decides: splitting an input there is checked against the program.
-  const withResults = h.group.some((d) => { const n = code.nodes[d]; return n?.kind === "def" && !!n.results; });
+  const withResults = h.group.some((d) => { const n = code.nodes[d]; return n?.kind === "def" && !!conditionResults(code.nodes, d); });
   // A definition with results here or among what depends on this one has
   // a direction its body decides, so each filling asks it again (I100):
   // one with something else where a result's length was used can leave a
@@ -2407,7 +2408,7 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   // direction as it was is checked like any other; one that
   // loses a result is refused, and one that changes its effects (an
   // implementation may need one answer) is checked against the program.
-  const directions = new Map([...affected].flatMap((d) => { const n = code.nodes[d]; return n?.kind === "def" && !!n.results && code.nodes[n.body!]?.kind === "lambda" ? [[d, JSON.stringify(resultsDirection(code, d))] as const] : []; }).filter(([, r]) => !r.includes('"why"')));
+  const directions = new Map([...affected].flatMap((d) => { const n = code.nodes[d]; return n?.kind === "def" && !!conditionResults(code.nodes, d) ? [[d, JSON.stringify(resultsDirection(code, d))] as const] : []; }).filter(([, r]) => !r.includes('"why"')));
   const direction = (f: Filling): "same" | "lost" | "changed" => {
     let out: "same" | "changed" = "same";
     for (const [d, was] of directions) {
@@ -2542,7 +2543,7 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   // brings (Choice, say) is checked against the whole program.
   for (const d of info.schemes.keys()) {
     const n = code.nodes[d];
-    if (info.hidden.has(d) || n?.kind !== "def" || !n.results?.length || code.nodes[n.body ?? ""]?.kind !== "lambda") continue;
+    if (info.hidden.has(d) || n?.kind !== "def" || !conditionResults(code.nodes, d)?.length || code.nodes[n.body ?? ""]?.kind !== "lambda") continue;
     const f: Filling = { kind: "use", target: d };
     if (whole(f)) out.push(f);
   }

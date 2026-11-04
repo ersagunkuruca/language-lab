@@ -25,7 +25,7 @@ import { fusedProgram } from "./handlers.ts";
 import { infer, type Info } from "../../ters/src/lang/infer.ts";
 import { expandInverses } from "./inverses.ts";
 import { hoistInvariants } from "./hoist.ts";
-import type { Code, Id, NodeOf } from "../../ters/src/model.ts";
+import { ownerOfTypeParts, type Code, type Id, type NodeOf } from "../../ters/src/model.ts";
 import { effectOfOperation, hostOp, ownOperations } from "../../ters/src/lang/hosts.ts";
 import * as I from "../../ters/src/lang/int.ts";
 import { ARRAY_RT, kids, listSteps, RT, isData, isRecord, lowerScalar, reachedWithShows, type CoreIR, type LType, type Op, type SExpr, type SFunc, type TType } from "./scalar.ts";
@@ -35,7 +35,30 @@ import { Aborted, FAIL, OUT, RUNTIME, Stopped, Unsupported, coreRuntime, runCore
 // The runtime is core-rt.ts's; these are here too, for the tests and
 // tools that print and run in one.
 // The solver too, for the programs run here that solve (core-solve.ts).
-import { writtenOut } from "./core-solve.ts";
+import { PLAN_NAMES, modePlan, noAnswer, solverPlan, writtenOut } from "./core-solve.ts";
+// A solve (`solve:<id>` or `solveAll:<id>`) as its printed plan, or null
+// where the evaluator's solver runs it: one the equations' solver plans
+// (C167a), or a mode plan whose forward calls are builtins and whose
+// literals are plain (C167b). Worked out once per program (emitCoreJs is
+// run more than once on one IR: usesSolver, solvesSlowly).
+const plans = new WeakMap<Code, Map<string, string | null>>();
+const plain = (v: unknown) => typeof v === "string" || typeof v === "boolean" || (typeof v === "number" && Number.isFinite(v) && !Object.is(v, -0));
+const printSolve = (code: Code, fn: string): string | null => {
+  const m = /^(solve|solveAll):(.*)$/.exec(fn);
+  if (!m) return null;
+  const [, way, id] = m, rest = `${way === "solveAll"}, ${JSON.stringify(noAnswer(code, id))}`;
+  const sp = solverPlan(code, id);
+  if (sp) return `R.planned(({ ${PLAN_NAMES.join(", ")} }) => {\n${sp}\n}, ${rest})`;
+  const mp = modePlan(code, id);
+  if (!mp || !mp.forwards.every((f) => code.nodes[f]?.kind === "builtin") || !mp.consts.every(plain)) return null;
+  return `R.moded(($no, $eq, $int, F, K) => {\n${mp.code}\nreturn solve$;\n}, ${JSON.stringify(mp.forwards)}, ${JSON.stringify(mp.consts)}, ${rest})`;
+};
+const planOf = (code: Code, fn: string): string | null => {
+  let m = plans.get(code);
+  if (!m) plans.set(code, (m = new Map()));
+  if (!m.has(fn)) m.set(fn, printSolve(code, fn));
+  return m.get(fn)!;
+};
 import { trackReads } from "./cell-paths.ts";
 export { Aborted, FAIL, OUT, RUNTIME, Stopped, Unsupported, coreCall, coreRuntime, runCoreFn, type MainSpec, type TableSpec } from "./core-rt.ts";
 
@@ -66,7 +89,8 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
   // A closure carries its lambda's and captures' ids (C137c13) only for a
   // solver (or set and path) to look inside it: in a program with none, it doesn't
   // (C169), and no Map is made per closure.
-  const looks = (e: SExpr): boolean => (e.k === "rt" && LOOKS_INSIDE.test(e.fn)) || kids(e).some(looks);
+  const printedPlan = (fn: string) => planOf(ir.code, fn) !== null;
+  const looks = (e: SExpr): boolean => (e.k === "rt" && LOOKS_INSIDE.test(e.fn) && !printedPlan(e.fn)) || kids(e).some(looks);
   const carries = ir.funcs.some((f) => looks(f.body));
   const rts = new Map<string, string>();
   const rtName = (n: string) => { if (!rts.has(n)) rts.set(n, `rt${rts.size}`); return rts.get(n)!; };
@@ -126,7 +150,14 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
     ...[...consts].map(([src, v]) => `const ${v} = ${src};`),
     // A backwards search spends the budget too (C137c12).
     ...(fuel ? ["R.spending(() => --fuel >= 0);"] : []),
-    ...[...rts].map(([n, v]) => { const b = builtinOf(n); return `const ${v} = R.rt(${JSON.stringify(n)}${b ? `, ${JSON.stringify(b)}` : ""});`; }),
+    ...[...rts].map(([n, v]) => {
+      // A solve the equations' solver plans, its plan printed (C167a): no
+      // node table and no evaluator for it.
+      const plan = planOf(ir.code, n);
+      if (plan) return `const ${v} = ${plan};`;
+      const b = builtinOf(n);
+      return `const ${v} = R.rt(${JSON.stringify(n)}${b ? `, ${JSON.stringify(b)}` : ""});`;
+    }),
     ...worlds.map((_, i) => `const w${i} = R.worlds[${i}];`),
     ...text,
     // A partial function given out says no answer by throwing, as the
@@ -456,7 +487,7 @@ export function loadCoreJs(ir: CoreIR, rt: Runtime = { print: () => {} }, hostOp
 export interface Printed { js: string; names: string[]; worlds: string[]; tables: TableSpec[]; f64: boolean[]; code?: Code; checked?: true }
 export function printed(ir: CoreIR): Printed {
   const { js, names, worlds } = emitCoreJs(ir);
-  return { js, names, worlds, tables: ir.tables.map(tableSpec), f64: ir.funcs.map((f) => f.result === "f64" && !ir.shader), ...(solving(js) ? { code: { nodes: ir.code.nodes, defs: ir.code.defs } } : {}), ...(/R\.rt\("derive:/.test(js) ? { checked: true as const } : {}) };
+  return { js, names, worlds, tables: ir.tables.map(tableSpec), f64: ir.funcs.map((f) => f.result === "f64" && !ir.shader), ...(solving(js) ? { code: solverCode(ir, js) } : {}), ...(/R\.rt\("derive:/.test(js) ? { checked: true as const } : {}) };
 }
 export function loadPrinted(p: Printed, rt: Runtime = { print: () => {} }, code: Code | undefined = p.code, info?: Info, hostOps?: HostOps): ((...xs: unknown[]) => unknown)[] {
   const all = new Function("R", p.js)(coreRuntime(p.tables, p.worlds, rt, code, info, hostOps)) as Record<string, (...xs: unknown[]) => unknown>;
@@ -501,10 +532,16 @@ export function coreModule(ir: CoreIR, name: string, runtime: string, world: str
   const code = codeFor(ir, js);
   return [
     `import { coreRuntime, runCoreFn } from ${JSON.stringify(runtime)};`,
-    ...solverFor(code, runtime),
+    ...solverFor(code, runtime, js),
     `import { nodeWorld } from ${JSON.stringify(world)};`,
     ...(hosts ? [`import $hostAnswers from ${JSON.stringify(hosts.file)};`] : []),
-    `const rt = { print: (s) => console.log(s), world: nodeWorld()${hosts ? ", hosts: $hostAnswers" : ""} };`,
+    // With TERS_LOG set, the world's answers are logged to that file
+    // (L186's log, C172a), for \`lab run --replay\` to give the evaluator.
+    `import { logged, logText } from ${JSON.stringify(world.replace(/[^/]*$/, "worldlog.ts"))};`,
+    `import { writeFileSync as $writeLog } from "node:fs";`,
+    "const $logTo = process.env.TERS_LOG, $logged = $logTo ? logged(nodeWorld()) : null;",
+    "if ($logged) process.on(\"exit\", () => $writeLog($logTo, logText($logged.log)));",
+    `const rt = { print: (s) => console.log(s), world: $logged ? $logged.world : nodeWorld()${hosts ? ", hosts: $hostAnswers" : ""} };`,
     `const R = coreRuntime(${JSON.stringify(ir.tables.map(tableSpec))}, ${JSON.stringify(worlds)}, rt, ${code}${hosts ? `, undefined, ${JSON.stringify(hosts.ops)}` : ""});`,
     "const defs = (function (R) {",
     js,
@@ -533,7 +570,36 @@ export const usesSolver = (ir: CoreIR): boolean => solving(emitCoreJs(ir).js);
 // (C137d7, C137d9).
 export const solvesSlowly = (ir: CoreIR): boolean =>
   [...emitCoreJs(ir).js.matchAll(/R\.rt\("(?:(solve|solveAll):([^"]*)"|exists"|derive:)/g)].some((m) => !m[1] || !writtenOut(ir.code, JSON.parse(`"${m[2]}"`)));
-const codeFor = (ir: CoreIR, js: string) => (solving(js) ? `JSON.parse(${JSON.stringify(JSON.stringify({ nodes: ir.code.nodes, defs: ir.code.defs }))})` : "undefined");
+const codeFor = (ir: CoreIR, js: string) => (solving(js) ? `JSON.parse(${JSON.stringify(JSON.stringify(solverCode(ir, js)))})` : "undefined");
+// The nodes the evaluator's solver reads (C167c): those a solve's use
+// reaches, through any id a node holds, and those of the lambdas a printed
+// closure carries. spacetime's one solve reads 15 of its 39,966 nodes
+// (5.2 MB of them). A derivative or `for some` is given a function made
+// anywhere, so a program with one gets all of them.
+export function solverCode(ir: CoreIR, js: string): Code {
+  if (/R\.rt\("(exists"|derive:)/.test(js)) return { nodes: ir.code.nodes, defs: ir.code.defs };
+  const nodes = ir.code.nodes as Record<string, unknown>;
+  const roots = [...js.matchAll(/R\.rt\("(?:solve|solveAll):([^"]*)"/g), ...js.matchAll(/\\?"lambda\\?":\\?"([^"\\]*)/g)].map((m) => JSON.parse(`"${m[1]}"`) as string);
+  const seen = new Set<string>(roots.filter((r) => r in nodes)), todo = [...seen];
+  const walk = (v: unknown): void => {
+    if (typeof v === "string") { if (v in nodes && !seen.has(v)) { seen.add(v); todo.push(v); } }
+    else if (Array.isArray(v)) v.forEach(walk);
+    else if (v && typeof v === "object") for (const [k, x] of Object.entries(v)) { walk(k); walk(x); }
+  };
+  // And what is found the other way: a variant's type (run.ts's owner), a
+  // lambda's definition (relate.ts, modes.ts), and every interface's
+  // implementations (show and compare of a value find them by its type).
+  const owner = ownerOfTypeParts(ir.code);
+  const add = (id: string | undefined) => { if (id && id in nodes && !seen.has(id)) { seen.add(id); todo.push(id); } };
+  for (const d of ir.info.implementations?.values() ?? []) add(d);
+  for (let before = -1; before !== seen.size; ) {
+    before = seen.size;
+    while (todo.length) walk(nodes[todo.pop()!]);
+    for (const id of [...seen]) add(owner.get(id));
+    for (const d of ir.code.defs) if (seen.has((nodes[d] as { body?: string } | undefined)?.body ?? "")) add(d);
+  }
+  return { nodes: Object.fromEntries([...seen].map((k) => [k, nodes[k]])) as Code["nodes"], defs: ir.code.defs.filter((d) => seen.has(d)) };
+}
 
 // A program's hosts/js.js (FOREIGN.md, C137d5): where it is, and the
 // program's own operations by `effect:index`, as a perform names them
@@ -554,11 +620,13 @@ export function hostOpsOf(code: Code, names: Record<Id, string>): HostOps {
 // its nodes (one that solves): it carries the library (C137d1).
 // `beside` a global's name ($core, a prebuilt runtime: corePageRuntime):
 // the solver is in it.
-const solverFor = (code: string, beside: string) => {
-  if (code === "undefined") return [];
-  if (beside.startsWith("$")) return [`${beside}.useSolver(${beside}.solver);`];
+// And plan-rt.js, for one whose solves' plans are printed (C167a).
+const solverFor = (code: string, beside: string, js: string) => {
   const at = (f: string) => JSON.stringify(beside.replace(/[^/]*$/, f));
-  return [`import { useSolver } from ${at("core-rt.ts")};`, `import { solver } from ${at("core-solve.ts")};`, "useSolver(solver);"];
+  const plans = !/R\.planned\(\(\{/.test(js) ? [] : beside.startsWith("$") ? [`${beside}.usePlans(${beside}.plans);`] : [`import { usePlans } from ${at("core-rt.ts")};`, `import { plans } from ${at("plan-rt.js")};`, "usePlans(plans);"];
+  if (code === "undefined") return plans;
+  if (beside.startsWith("$")) return [...plans, `${beside}.useSolver(${beside}.solver);`];
+  return [...plans, `import { useSolver } from ${at("core-rt.ts")};`, `import { solver } from ${at("core-solve.ts")};`, "useSolver(solver);"];
 };
 
 // What a script takes from its runtime: imported from the file a bundler
@@ -578,7 +646,7 @@ export function corePageScript(ir: CoreIR, name: string, page: string, title: st
   const code = codeFor(ir, js);
   return wrapped(page, [
     using("startCorePage", page),
-    ...solverFor(code, page),
+    ...solverFor(code, page, js),
     ...(hosts ? [`import $hostAnswers from ${JSON.stringify(hosts.file)};`] : []),
     `startCorePage(${JSON.stringify(ir.tables.map(tableSpec))}, ${JSON.stringify(worlds)}, (R) => {`,
     js,
@@ -598,7 +666,7 @@ export function coreSoundScript(ir: CoreIR, name: string, sound: string, hosts?:
   const code = codeFor(ir, js);
   return wrapped(sound, [
     using("startCoreSound", sound),
-    ...solverFor(code, sound),
+    ...solverFor(code, sound, js),
     ...(hosts ? [`import $hostAnswers from ${JSON.stringify(hosts.file)};`] : []),
     `startCoreSound(${JSON.stringify(ir.tables.map(tableSpec))}, ${JSON.stringify(worlds)}, (R) => {`,
     js,

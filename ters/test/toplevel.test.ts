@@ -947,7 +947,7 @@ test("a relation's other direction: the same ports, others given, a hole for how
   s.ok(Top.newDefinition(s.code, s.names, "polar", { kind: "function", params: ["length", "angle", "x", "y"] }));
   const polar = s.def("polar");
   const lam = s.code.nodes[(s.code.nodes[polar] as NodeOf<"def">).body!] as NodeOf<"lambda">;
-  s.code = { ...s.code, nodes: { ...s.code.nodes, [polar]: { ...(s.code.nodes[polar] as NodeOf<"def">), results: lam.params.slice(2) } } };
+  s.code = { ...s.code, nodes: { ...s.code.nodes, [lam.id]: { ...lam, results: lam.params.slice(2) } } };
   assert.match(s.refused(Top.addDirection(s.code, s.names, polar, [2, 3], "")), /own direction/);
   assert.match(s.refused(Top.addDirection(s.code, s.names, polar, [], "")), /at least one result/);
   const back = s.ok(Top.addDirection(s.code, s.names, polar, [0, 1], ""));
@@ -956,7 +956,7 @@ test("a relation's other direction: the same ports, others given, a hole for how
   assert.equal(d.direction, polar);
   const ps = (s.code.nodes[d.body!] as NodeOf<"lambda">).params;
   assert.deepEqual(ps.map((p) => s.names[p]), ["length", "angle", "x", "y"]);
-  assert.deepEqual(d.results, ps.slice(0, 2));
+  assert.deepEqual((s.code.nodes[d.body!] as NodeOf<"lambda">).results, ps.slice(0, 2));
   s.ok(Top.dropDirection(s.code, s.names, back));
   assert.equal((s.code.nodes[back] as NodeOf<"def">).direction, undefined);
   s.ok(Top.newDefinition(s.code, s.names, "plain", { kind: "function", params: ["a"] }));

@@ -94,8 +94,8 @@ export const SECTIONS: Section[] = [
   { title: "Cells and pages", intro: "A page is a value of type Html that main returns. Cells hold what changes; a part of the page that reads a cell is drawn again when the cell changes, and a button's handler writes cells.",
     ids: [...b("cells.cell", "cells.read", "cells.write", "cells.formula", "cells.each", "cells.eachOf", "cells.path", "cells.itemPath", "cells.thenPath", "cells.keyPath", "cells.readAt", "cells.writeAt", "cells.insertAt", "cells.removeAt", "cells.moveAt", "cells.changed"), ...prelude("item where", "change"), ...t("html", "attribute", "event", "input"), "std.row.view", "std.row.handler", "std.row.sound",
       ...html("div", "span", "p", "h1", "h2", "section", "footer", "label", "ul", "li", "strong", "tag", "words", "button", "input", "attribute", "with", "styled", "named", "classed", "for each", "rule", "media", "style sheet", "px", "joined")] },
-  { title: "The same bits on every machine", intro: "sin, cos, exp, ^ and the rest are each platform's own (JavaScript's, C's, a GPU's), so two machines can differ in the last bit or two. The steady module's are written in Ters as fdlibm writes them, with only + − · / and comparisons, so every machine gives the same bits: for a lockstep game or a replay that must agree.",
-    ids: steady("steady sin", "steady cos", "steady tan", "steady exp", "steady log", "steady pow", "steady atan", "steady atan2", "steady asin", "steady acos") },
+  { title: "The same bits on every machine", intro: "sin, cos, exp, ^ and the rest are each platform's own (JavaScript's, C's, a GPU's), so two machines can differ in the last bit or two. The steady module's are written in Ters as fdlibm writes them, with only + − · / and comparisons, so every machine gives the same bits: for a lockstep game or a replay that must agree. Steady is a Float64 that uses them: sin, cos, exp and the rest written at a Steady are the steady ones, and its + − · ÷ and < are Float64's, so a program's Steady numbers agree everywhere and its other numbers keep the platform's.",
+    ids: steady("Steady", "steady sin", "steady cos", "steady tan", "steady exp", "steady log", "steady pow", "steady atan", "steady atan2", "steady asin", "steady acos") },
   { title: "Points, colours and slopes", intro: "A record whose fields are all Float64s (a point, a direction, a colour) can be worked on part by part, and the vectors module is written that way.",
     ids: [...b("mapParts", "zipParts", "total", "set", "fields.mapped", "fields.listed", "derivative", "gradient"), ...vectors("plus", "minus", "times", "scale", "dot", "magnitude", "distance", "unit", "mix", "clamp", "reflect")] },
 ];
@@ -126,7 +126,7 @@ export function reference(): string {
     const ty = info.typeOf.get(d);
     return ty ? showType(ty, LIBRARY.names) : "";
   };
-  const isType = (d: Id) => std.defs.includes(d);
+  const isType = (d: Id) => std.defs.includes(d) || LIBRARY.code.nodes[(LIBRARY.code.nodes[d] as { body?: Id } | undefined)?.body ?? ""]?.kind === "typedef";
   const module = (d: Id) => LIBRARY.modules.find((m) => m.exports.includes(d))?.title;
   const out = [
     "# The library",

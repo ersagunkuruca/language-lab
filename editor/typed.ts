@@ -6,7 +6,7 @@
 // checked by re-inferring the whole program and refused if it adds an error.
 
 import type { Code, Id, Node, NodeData, NodeOf } from "../ters/src/model.ts";
-import { children, collect, freshId, parentAt, parentOf, replace, subtree, swapIn } from "../ters/src/model.ts";
+import { children, collect, freshId, parentAt, parentOf, portsOf, replace, subtree, swapIn } from "../ters/src/model.ts";
 import type { Names, Notation, Presentation } from "../ters/src/presentation.ts";
 import blocksStyle from "../ters/styles/blocks.json" with { type: "json" };
 import { fillings, implementationKey, implementationOf, infer as check, type Filling, type Info, type Options } from "../ters/src/lang/infer.ts";
@@ -1573,7 +1573,7 @@ export function turnable(code: Code, call: Id): { def: NodeOf<"def">; params: Id
   if (!isCall(n)) return null;
   const f = code.nodes[n.fn];
   const d = f?.kind === "ref" ? code.nodes[f.target] : null;
-  if (d?.kind !== "def" || !d.body || d.results?.length) return null;
+  if (d?.kind !== "def" || !d.body || portsOf(code.nodes, (f as NodeOf<"ref">).target)?.condition) return null;
   const lam = code.nodes[d.body];
   if (lam?.kind !== "lambda" || lam.params.length !== n.args.length || !n.args.length) return null;
   return { def: d, params: lam.params };
@@ -1994,9 +1994,10 @@ export function addActionStep(code: Code, names: Names, info: Info, step: Id): T
 // port order. With none it is the plain predicate again. The checker says
 // whether the others pin them down.
 export function setResults(code: Code, names: Names, info: Info, def: Id, results: Id[]): TEdit {
-  const { results: _, ...d } = code.nodes[def] as NodeOf<"def">;
-  const params = (code.nodes[d.body!] as NodeOf<"lambda">).params, rs = params.filter((p) => results.includes(p));
-  const nodes = { ...code.nodes, [def]: rs.length ? { ...d, results: rs } : d };
+  const d = code.nodes[def] as NodeOf<"def">;
+  const { results: _, ...lam } = code.nodes[d.body!] as NodeOf<"lambda">;
+  const params = lam.params, rs = params.filter((p) => results.includes(p));
+  const nodes = { ...code.nodes, [lam.id]: rs.length ? { ...lam, results: rs } : lam };
   const nm = (id: Id) => names[id] ?? display[id] ?? id;
   return guardTyped(info, { ...code, nodes }, names, def, rs.length ? `${nm(def)} gives ${rs.map(nm).join(", ")} from ${params.filter((p) => !rs.includes(p)).map(nm).join(", ") || "nothing"}.` : `${nm(def)} has no results: a predicate on all its ports again.`);
 }
@@ -2419,7 +2420,7 @@ export function insideOf(code: Code, def: Id): { host: Id } | { reason: string }
   if (d?.kind !== "def" || !d.body) return { reason: "only a definition goes inside another" };
   if (LIBRARY.code.nodes[def]) return { reason: "the library's definitions stay where they are" };
   if (code.nodes[d.body]?.kind !== "lambda") return { reason: "only a function goes inside: a value or a type stays a definition" };
-  if (d.results || d.way || d.direction) return { reason: "a definition with results, or a way or direction of another, stays one" };
+  if (portsOf(code.nodes, def)?.condition || d.way || d.direction) return { reason: "a definition with results, or a way or direction of another, stays one" };
   const mine = new Set(subtree(code, def));
   const outside = usesOf(code, def).filter((u) => !mine.has(u));
   const holders = code.defs.filter((x) => x !== def && outside.some((u) => subtree(code, x).includes(u)));

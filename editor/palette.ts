@@ -3,7 +3,7 @@
 // by name, symbol, other names and comments, and what's typed read as a
 // value once typing pauses. What it reads of the editor comes through
 // `PaletteHost`.
-import { isCall, subtree, type Code, type Id, type NodeOf } from "../ters/src/model.ts";
+import { isCall, portsOf, subtree, type Code, type Id, type NodeOf } from "../ters/src/model.ts";
 import type { Names } from "../ters/src/presentation.ts";
 import { showIn, type Type } from "../ters/src/lang/types.ts";
 import { LIBRARY } from "../ters/src/lang/library.ts";
@@ -54,8 +54,8 @@ export function palette(host: PaletteHost) {
       case "lit": return [f.of === "number" ? "a number" : f.of === "int" ? "an integer" : "a text", f.of === "number" ? "Float64" : f.of === "int" ? "Int" : "Text", "literals"];
       case "lambda": return [`(${Array.from({ length: f.arity }, () => "□").join(", ")}) => □`, "a function you write here", "new function"];
       case "use": {
-        const d = node(f.target) as NodeOf<"def">, ps = (node(d.body!) as NodeOf<"lambda">).params;
-        return [`${d.results!.map(nm).join(", ")} = ${nm(f.target)}(${ps.filter((q) => !d.results!.includes(q)).map(() => "□").join(", ")})`, `its results, named, in what you write next`, "results"];
+        const ps = portsOf(doc().code.nodes, f.target)!;
+        return [`${ps.results.map(nm).join(", ")} = ${nm(f.target)}(${ps.inputs.map(() => "□").join(", ")})`, `its results, named, in what you write next`, "results"];
       }
       // A record with one field new (E214): machine with pc changed.
       case "set": return [`${nm(f.on)} with ${nm(f.field)} changed`, `set((…) ↦ ….${nm(f.field)}, ${nm(f.on)}, □): the same ${nm(f.type)}, only its ${nm(f.field)} new`, "one field changed"];
