@@ -25,7 +25,7 @@
 import type { Code, Id, Node, NodeData, NodeOf, Use } from "../model.ts";
 import { isUse, useTarget, isCall, fieldPorts, type Call, bindsOf, useKids } from "../model.ts";
 import { resultsAsFunctions, usesResultsAsFunction } from "./results-fn.ts";
-import { freshId } from "../model.ts";
+import { freshId, nodesWhere, scanningOnLayer } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { B } from "../prelude.ts";
 import { implementationOf, type Info } from "./infer.ts";
@@ -68,7 +68,7 @@ export const preludeDef = (name: string): Id | undefined =>
 
 export const usesGenericArithmetic = (code: Code) => {
   const ops = interfaceOps(code);
-  return Object.values(code.nodes).some((n) => (n.kind === "ref" && (n.target in AT || ops.has(n.target))) || (isUse(n) && ops.has(useTarget(code.nodes, n))) || (n.kind === "lit" && n.of !== undefined && DATA_NUMBERS.has(n.of)));
+  return nodesWhere(code, "generic arithmetic", (n) => (n.kind === "ref" && (n.target in AT || ops.has(n.target))) || (isUse(n) && ops.has(useTarget(code.nodes, n))) || (n.kind === "lit" && n.of !== undefined && DATA_NUMBERS.has(n.of))).length > 0;
 };
 
 // Whether resolveArithmetic changes anything: it also lifts recursive lets
@@ -77,10 +77,10 @@ export const usesGenericArithmetic = (code: Code) => {
 // A plain number literal is some Number (infer.ts), so a program with one
 // may need resolving too; with the types at hand, only when one isn't
 // already a Float64.
-export const needsResolving = (code: Code) => usesGenericArithmetic(code) || usesResultsAsFunction(code) || usesFieldsByType(code) || usesSetSeveral(code) || usesSetThrough(code) || usesLiteralMatch(code) || usesSharedFields(code) || hasRecursiveLet(code) || Object.values(code.nodes).some(plainNumber);
+export const needsResolving = (code: Code) => usesGenericArithmetic(code) || usesResultsAsFunction(code) || usesFieldsByType(code) || usesSetSeveral(code) || usesSetThrough(code) || usesLiteralMatch(code) || usesSharedFields(code) || hasRecursiveLet(code) || nodesWhere(code, "plain number", plainNumber).length > 0;
 const plainNumber = (n: Node) => n.kind === "lit" && n.of === undefined && typeof n.value === "number";
-const someLiteralNotFloat64 = (code: Code, info: Info) => Object.values(code.nodes).some((n) => {
-  if (!plainNumber(n)) return false;
+const someLiteralNotFloat64 = (code: Code, info: Info) => nodesWhere(code, "plain number", plainNumber).some((id) => {
+  const n = code.nodes[id];
   const t = info.typeOf.get(n.id), r = t && (info.subst ? info.subst.resolve(t) : t);
   return !!r && !(r.t === "con" && r.id === NUMBER);
 });
@@ -106,6 +106,9 @@ function decimal(x: number): string {
 // can change which way gives a field (WAYS.md "Costs"); target-neutral
 // when not given.
 export function resolveArithmetic(code: Code, info: Info, names: Names = {}, costOf: BuiltinCost = NEUTRAL): { code: Code; info: Info; names: Names } {
+  return scanningOnLayer(code, () => resolving(code, info, names, costOf));
+}
+function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost): { code: Code; info: Info; names: Names } {
   // A relation's own directions first (directions.ts), so the evaluator and
   // the compiler run a solve the way the checker typed it.
   code = useDirections(code);

@@ -12,7 +12,7 @@
 // unchanged when it has none, and the nodes the person wrote keep their ids.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
-import { children, fieldPorts, freshId, isCall } from "../model.ts";
+import { children, fieldPorts, freshId, isCall, nodesWhere } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { infer, type Info } from "./infer.ts";
 import { TRUE, tupleVariant } from "./std.ts";
@@ -40,7 +40,7 @@ function portsOf(nodes: Record<Id, Node>, target: Id): { ins: string[]; outs: st
 // interface's record, which stays the definition it names (arith.ts reads
 // it there to resolve the field's uses).
 function refsToRewrite(code: Code): { ref: NodeOf<"ref">; ports: { ins: string[]; outs: string[] }; parent?: Node }[] {
-  const refs = Object.values(code.nodes).filter((n): n is NodeOf<"ref"> => n.kind === "ref" && !!portsOf(code.nodes, n.target));
+  const refs = nodesWhere(code, "ref with results", (n) => n.kind === "ref" && !!portsOf(code.nodes, n.target)).map((id) => code.nodes[id] as NodeOf<"ref">);
   if (!refs.length) return [];
   const parents = new Map<Id, Id>();
   for (const n of Object.values(code.nodes)) for (const c of children(n)) parents.set(c, n.id);

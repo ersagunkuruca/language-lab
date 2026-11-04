@@ -4,7 +4,7 @@
 
 import { join } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
-import { merge, type Code, type Id } from "../model.ts";
+import { merge, onLayer, type Code, type Id } from "../model.ts";
 import { layer, type Names, type Presentation, type Style } from "../presentation.ts";
 import { root } from "../io.ts";
 import type { Options } from "./infer.ts";
@@ -15,7 +15,9 @@ import { onTodaysIds } from "./std.ts";
 const read = <T>(path: string, fallback: T): T => (existsSync(path) ? onTodaysIds(JSON.parse(readFileSync(path, "utf8"))) : fallback);
 
 // A use with no body is read as the tuple of its produced ports (L211).
-export const base = (code: Code): Code => merge(LIBRARY.code, code);
+// On the library as its layer (model.ts onLayer, L217): the passes that
+// scan every node look at the library's once per process.
+export const base = (code: Code): Code => onLayer(merge(LIBRARY.code, code), LIBRARY.code);
 export const baseNames = (...layers: Names[]): Names => layer<Names>(LIBRARY.names, ...layers);
 // What the checker is given with every program: the modules' pins, and
 // which of their definitions are helpers.

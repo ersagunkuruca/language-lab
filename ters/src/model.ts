@@ -461,6 +461,32 @@ const sameNode = (a: Node, b: Node) => JSON.stringify(a) === JSON.stringify(b);
 export const derived = new WeakMap<Code, { base: Code; changed: Set<Id> }>();
 export function derivedFrom(code: Code, base: Code, changed: Iterable<Id>) { derived.set(code, { base, changed: new Set(changed) }); }
 const picked = new WeakMap<Code, Map<string, Id[]>>();
+const picksOf = (code: Code, kind: string, keep: (n: Node) => boolean): Id[] => {
+  let all = picked.get(code);
+  if (!all) picked.set(code, (all = new Map()));
+  let out = all.get(kind);
+  if (!out) all.set(kind, (out = nodesWhere(code, kind, keep)));
+  return out;
+};
+// A program put on a layer of code under it, the library (load.ts base,
+// L217). `scanningOnLayer` reads it, for one step that doesn't change it,
+// as derived from the layer by the nodes that aren't the layer's own (the
+// same object): each scan in the step reads the layer's picks, scanned
+// once per process, and looks only at the rest. Which nodes those are is
+// asked again at each step, since a program may be changed in place
+// between. A pick must depend only on the node and the nodes it reaches,
+// which on the layer are the layer's.
+const layers = new WeakMap<Code, Code>();
+export function onLayer(code: Code, layer: Code): Code { layers.set(code, layer); return code; }
+export function scanningOnLayer<T>(code: Code, step: () => T): T {
+  const layer = layers.get(code);
+  if (!layer || derived.has(code)) return step();
+  const under = layer.nodes, changed = new Set<Id>();
+  for (const id in code.nodes) if (code.nodes[id] !== under[id]) changed.add(id);
+  for (const id in under) if (!(id in code.nodes)) changed.add(id);
+  derived.set(code, { base: layer, changed });
+  try { return step(); } finally { derived.delete(code); }
+}
 // The ids of the nodes `keep` picks, `kind` naming the pick. For a derived
 // program: its base's (scanned once), those still there and still picked,
 // and the changed nodes picked (E103d: a whole check of each palette offer
@@ -468,10 +494,7 @@ const picked = new WeakMap<Code, Map<string, Id[]>>();
 export function nodesWhere(code: Code, kind: string, keep: (n: Node) => boolean): Id[] {
   const from = derived.get(code);
   if (!from) return Object.values(code.nodes).filter(keep).map((n) => n.id);
-  let all = picked.get(from.base);
-  if (!all) picked.set(from.base, (all = new Map()));
-  let base = all.get(kind);
-  if (!base) all.set(kind, (base = nodesWhere(from.base, kind, keep)));
+  const base = picksOf(from.base, kind, keep);
   const out = base.filter((id) => !from.changed.has(id) && code.nodes[id] && keep(code.nodes[id]));
   for (const id of from.changed) if (code.nodes[id] && keep(code.nodes[id])) out.push(id);
   return out;
