@@ -35,15 +35,29 @@ import { Aborted, FAIL, OUT, RUNTIME, Stopped, Unsupported, coreRuntime, runCore
 // The runtime is core-rt.ts's; these are here too, for the tests and
 // tools that print and run in one.
 // The solver too, for the programs run here that solve (core-solve.ts).
-import { PLAN_NAMES, noAnswer, solverPlan, writtenOut } from "./core-solve.ts";
-// Each solve's printed plan, worked out once per program (emitCoreJs is
+import { PLAN_NAMES, modePlan, noAnswer, solverPlan, writtenOut } from "./core-solve.ts";
+// A solve (`solve:<id>` or `solveAll:<id>`) as its printed plan, or null
+// where the evaluator's solver runs it: one the equations' solver plans
+// (C167a), or a mode plan whose forward calls are builtins and whose
+// literals are plain (C167b). Worked out once per program (emitCoreJs is
 // run more than once on one IR: usesSolver, solvesSlowly).
 const plans = new WeakMap<Code, Map<string, string | null>>();
-const planOf = (code: Code, id: string): string | null => {
+const plain = (v: unknown) => typeof v === "string" || typeof v === "boolean" || (typeof v === "number" && Number.isFinite(v) && !Object.is(v, -0));
+const printSolve = (code: Code, fn: string): string | null => {
+  const m = /^(solve|solveAll):(.*)$/.exec(fn);
+  if (!m) return null;
+  const [, way, id] = m, rest = `${way === "solveAll"}, ${JSON.stringify(noAnswer(code, id))}`;
+  const sp = solverPlan(code, id);
+  if (sp) return `R.planned(({ ${PLAN_NAMES.join(", ")} }) => {\n${sp}\n}, ${rest})`;
+  const mp = modePlan(code, id);
+  if (!mp || !mp.forwards.every((f) => code.nodes[f]?.kind === "builtin") || !mp.consts.every(plain)) return null;
+  return `R.moded(($no, $eq, $int, F, K) => {\n${mp.code}\nreturn solve$;\n}, ${JSON.stringify(mp.forwards)}, ${JSON.stringify(mp.consts)}, ${rest})`;
+};
+const planOf = (code: Code, fn: string): string | null => {
   let m = plans.get(code);
   if (!m) plans.set(code, (m = new Map()));
-  if (!m.has(id)) m.set(id, solverPlan(code, id));
-  return m.get(id)!;
+  if (!m.has(fn)) m.set(fn, printSolve(code, fn));
+  return m.get(fn)!;
 };
 import { trackReads } from "./cell-paths.ts";
 export { Aborted, FAIL, OUT, RUNTIME, Stopped, Unsupported, coreCall, coreRuntime, runCoreFn, type MainSpec, type TableSpec } from "./core-rt.ts";
@@ -75,7 +89,7 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
   // A closure carries its lambda's and captures' ids (C137c13) only for a
   // solver (or set and path) to look inside it: in a program with none, it doesn't
   // (C169), and no Map is made per closure.
-  const printedPlan = (fn: string) => { const m = /^solve(?:All)?:(.*)$/.exec(fn); return !!m && planOf(ir.code, m[1]) !== null; };
+  const printedPlan = (fn: string) => planOf(ir.code, fn) !== null;
   const looks = (e: SExpr): boolean => (e.k === "rt" && LOOKS_INSIDE.test(e.fn) && !printedPlan(e.fn)) || kids(e).some(looks);
   const carries = ir.funcs.some((f) => looks(f.body));
   const rts = new Map<string, string>();
@@ -139,8 +153,8 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
     ...[...rts].map(([n, v]) => {
       // A solve the equations' solver plans, its plan printed (C167a): no
       // node table and no evaluator for it.
-      const sm = /^(solve|solveAll):(.*)$/.exec(n), plan = sm && planOf(ir.code, sm[2]);
-      if (plan) return `const ${v} = R.planned(({ ${PLAN_NAMES.join(", ")} }) => {\n${plan}\n}, ${sm![1] === "solveAll"}, ${JSON.stringify(noAnswer(ir.code, sm![2]))});`;
+      const plan = planOf(ir.code, n);
+      if (plan) return `const ${v} = ${plan};`;
       const b = builtinOf(n);
       return `const ${v} = R.rt(${JSON.stringify(n)}${b ? `, ${JSON.stringify(b)}` : ""});`;
     }),
@@ -574,7 +588,7 @@ export function hostOpsOf(code: Code, names: Record<Id, string>): HostOps {
 // And plan-rt.js, for one whose solves' plans are printed (C167a).
 const solverFor = (code: string, beside: string, js: string) => {
   const at = (f: string) => JSON.stringify(beside.replace(/[^/]*$/, f));
-  const plans = !/R\.planned\(/.test(js) ? [] : beside.startsWith("$") ? [`${beside}.usePlans(${beside}.plans);`] : [`import { usePlans } from ${at("core-rt.ts")};`, `import { plans } from ${at("plan-rt.js")};`, "usePlans(plans);"];
+  const plans = !/R\.planned\(\(\{/.test(js) ? [] : beside.startsWith("$") ? [`${beside}.usePlans(${beside}.plans);`] : [`import { usePlans } from ${at("core-rt.ts")};`, `import { plans } from ${at("plan-rt.js")};`, "usePlans(plans);"];
   if (code === "undefined") return plans;
   if (beside.startsWith("$")) return [...plans, `${beside}.useSolver(${beside}.solver);`];
   return [...plans, `import { useSolver } from ${at("core-rt.ts")};`, `import { solver } from ${at("core-solve.ts")};`, "useSolver(solver);"];

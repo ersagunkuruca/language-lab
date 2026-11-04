@@ -19,3 +19,17 @@ test("relations' solves are printed plans: no node table, no evaluator (C167a)",
   assert.match(m, /import \{ plans \} from "\/x\/plan-rt\.js"/);
   assert.doesNotMatch(m, /core-solve|"nodes"/);
 });
+
+// A relational solve's mode plan is printed too (C167b), its forward
+// calls the builtins' own: the pedal's solves are all printed, so its
+// page ships no nodes, and backwards' greeting taken apart is one.
+test("mode plans are printed, with builtins run forward (C167b)", () => {
+  const pedal = load("pedal"), page = pedal.named("main");
+  const ir = lowerCore(pedal.code, pedal.info, pedal.pres.names, [page]);
+  const { js } = emitCoreJs(ir);
+  assert.match(js, /R\.moded\(/);
+  assert.match(js, /"builtin\.div"/);
+  assert.equal(usesSolver(ir), false);
+  const b = load("backwards"), main = b.named("main");
+  assert.match(emitCoreJs(lowerCore(b.code, b.info, b.pres.names, [main])).js, /R\.moded\([\s\S]*"hello, "/);
+});

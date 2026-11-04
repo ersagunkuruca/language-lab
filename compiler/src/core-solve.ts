@@ -84,8 +84,9 @@ function planWritten(given: Code, id: Id): ((...xs: unknown[]) => Iterable<Value
       if (!w) return null;
       return new Function(...PLAN_NAMES, `"use strict";\n${w}`)($planned, $solveRuntime, $ok, $clean, $key, $close, $FN) as (...xs: unknown[]) => Iterable<Value[]>;
     }
+    const m = modePlan(given, id);
+    if (!m) return null;
     let runner: ReturnType<typeof makeRunner> | undefined;
-    const fns: ((...xs: Value[]) => unknown)[] = [], consts: unknown[] = [];
     const NO = Symbol("no answer");
     // A function the evaluator runs forward: its first answer, or none.
     const forward = (target: Id) => (...xs: Value[]) => {
@@ -93,6 +94,24 @@ function planWritten(given: Code, id: Id): ((...xs: unknown[]) => Iterable<Value
       for (const v of (runner.value(target) as (...a: Value[]) => Iterable<Value>)(...xs)) return v;
       return NO;
     };
+    const make = new Function("$no", "$eq", "$int", "F", "K", `"use strict";\n${m.code}\nreturn solve$;`);
+    return make(NO, equal, { add: intAdd, sub: intSub, neg: intNeg }, m.forwards.map(forward), m.consts) as (...xs: unknown[]) => Value[][];
+  } catch {
+    return null;
+  }
+}
+// A relational solve whose mode has one answer or none (MODES.md), its
+// plan written out by modes.ts as `solve$` over $no, $eq (run.ts equal),
+// $int (int.ts add, sub, neg), F (the functions it runs forward, by
+// `forwards`) and K (its literals, `consts`). Null when it isn't one.
+export function modePlan(given: Code, id: Id): { code: string; forwards: Id[]; consts: unknown[] } | null {
+  try {
+    const code = filled(needsResolving(given) ? resolvedFor(given, infer(given), undefined).code : given);
+    const n = code.nodes[id] as Use | undefined;
+    if (!n) return null;
+    if (Object.keys(bindsOf(n)).join() !== answerKeys(given, given.nodes[id] as Use).join()) return null;
+    if (planSolve(code, n).mode === "solver") return null;
+    const forwards: Id[] = [], consts: unknown[] = [];
     const emit: ModeEmit = {
       value(v) {
         const x = code.nodes[v];
@@ -111,15 +130,14 @@ function planWritten(given: Code, id: Id): ((...xs: unknown[]) => Iterable<Value
         const f = code.nodes[c.fn];
         const t = f?.kind === "ref" ? code.nodes[f.target] : undefined;
         if (f?.kind !== "ref" || (t?.kind !== "builtin" && t?.kind !== "def")) return null;
-        fns.push(forward(f.target));
-        return { js: `F[${fns.length - 1}](${args.join(", ")})`, partial: true };
+        forwards.push(f.target);
+        return { js: `F[${forwards.length - 1}](${args.join(", ")})`, partial: true };
       },
       tag: (v) => JSON.stringify(v),
     };
     const modes = modeCompiler(code, {});
     if (!modes.solver(n, "solve$", emit)) return null;
-    const make = new Function("$no", "$eq", "$int", "F", "K", `"use strict";\n${modes.code.join("\n")}\nreturn solve$;`);
-    return make(NO, equal, { add: intAdd, sub: intSub, neg: intNeg }, fns, consts) as (...xs: unknown[]) => Value[][];
+    return { code: modes.code.join("\n"), forwards, consts };
   } catch {
     return null;
   }
