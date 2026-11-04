@@ -34,6 +34,11 @@ answers of a solve that has one way to an answer (atanh run backwards,
 compiled pedal from 6× to 2.9× the hand-written one: rounding without a
 string, one-answer solves and modes written plainly, and the compressor
 writing its block straight into an array.
+Printed from the core IR (C137d8), the pedal plays about 8 300 blocks a
+second, 22 times real time (it was 34 a second while the evaluator's
+solver ran its two solves for each sample): inverse(f, …) of a named f
+becomes a solve on f, as compile.ts has it, and each solve's plan is
+written out once when the program loads, the equations' or the mode's.
 A4 is done: the editor's preview plays the pedal (Editor lane).
 The pedal you can hear (BACKLOG L30): Softer and Harder sounded like
 volume, because at drive 8 a quiet strum mostly got louder. Now the

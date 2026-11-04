@@ -22,7 +22,8 @@
 import { ARRAY_OPS } from "../../ters/src/lang/std.ts";
 import { toList, type Runtime } from "../../ters/src/lang/run.ts";
 import { fusedProgram } from "./handlers.ts";
-import type { Info } from "../../ters/src/lang/infer.ts";
+import { infer, type Info } from "../../ters/src/lang/infer.ts";
+import { expandInverses } from "./inverses.ts";
 import type { Code, Id, NodeOf } from "../../ters/src/model.ts";
 import { effectOfOperation, hostOp, ownOperations } from "../../ters/src/lang/hosts.ts";
 import * as I from "../../ters/src/lang/int.ts";
@@ -321,6 +322,14 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
 // handle (handlers.ts, C64b), so a program's own effect answered in place
 // (effects' Ask) needs no handler at run time (C137c17).
 export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roots: Id[]): CoreIR {
+  // inverse(f, …) of a named f is a solve on f (inverses.ts), as compile.ts
+  // has it: the equations' solver or a mode's plan, not the relational
+  // interpreter calling a function it is handed (the pedal's atanh, C137d8).
+  const inv = expandInverses(code, names);
+  if (inv.expanded.length) {
+    const checked = infer(inv.code, inv.names);
+    if (checked.errors.length <= info.errors.length) ({ code, names, info } = { code: inv.code, names: inv.names, info: checked });
+  }
   const f = fusedProgram(code, info, names);
   return lowerScalar(f.code, f.info, f.names, roots, { data: true, host: true });
 }
