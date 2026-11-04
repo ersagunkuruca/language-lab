@@ -772,6 +772,9 @@ export interface Options {
   // How a value of a type with a Shown implementation shows (L205), the
   // evaluator's own, so `show any` inside a search shows as outside it.
   shown?: (v: Data) => string | undefined;
+  // How compare orders a value of a type with an Ordered implementation
+  // (L204g), the evaluator's own.
+  ordered?: (x: Data, y: Data) => number | undefined;
 }
 
 // One analyzer per program, brought up to date as nodes are added.
@@ -1668,7 +1671,7 @@ export function interpreter(given: Code, opts: Options = {}) {
     // isn't a search worth making.
     const many = STD_MANY[id] ?? (STD_IMPL[id] ? (...xs: Value[]) => [STD_IMPL[id](...xs)] : id === SHOW_ANY ? (x: Value) => [showValue(x, code, opts.names ?? stdNames, true, opts.shown)]
       : id === CASE_NAME ? (x: Value) => [caseName(x, opts.names ?? stdNames)]
-      : id === COMPARE ? (a: Value, b: Value) => [ORDER_VALUES[compareValues(a, b, variantOrder(code)) + 1]] : null);
+      : id === COMPARE ? (a: Value, b: Value) => [ORDER_VALUES[compareValues(a, b, variantOrder(code), opts.ordered) + 1]] : null);
     const algOp = id === ALGEBRAIC_OPS.add ? "add" : id === ALGEBRAIC_OPS.sub ? "sub" : id === ALGEBRAIC_OPS.mul ? "mul" : id === ALGEBRAIC_OPS.neg ? "neg" : null;
     if (many && algOp) {
       // As an Int operation (intEquation), with an input unknown an
