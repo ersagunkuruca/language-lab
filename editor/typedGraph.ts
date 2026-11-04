@@ -33,7 +33,7 @@
 // (a tunnel). NODE-EDITOR.md says why.
 
 import type { Code, Id, NodeOf, Use } from "../ters/src/model.ts";
-import { isCall, isUse, useTarget, type Call } from "../ters/src/model.ts";
+import { isCall, isUse, portsOf, useTarget, type Call } from "../ters/src/model.ts";
 import type { Presentation } from "../ters/src/presentation.ts";
 import type { Info } from "../ters/src/lang/infer.ts";
 import { ASSOCIATIVE, chainOperands, CONS, NIL, S, SIGS, TRUE, FALSE, TUPLE_MAX, tupleVariant } from "../ters/src/lang/std.ts";
@@ -562,7 +562,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
         // asks: first(queens(8), else nil) in the text.
         // A function that names its results (L128b) gives each part to
         // its own port on the right edge, a tuple(…) of them not drawn.
-        const rs = n.results ?? [];
+        const rs = portsOf(code.nodes, id)?.results ?? [];
         return region(id, params.length ? paramsTitle(params.map(name)) : "action", params, body, "lam", rs, tupleParts(body, rs.length));
       }
       case "match": case "fold": return cases(id, n);
@@ -760,9 +760,10 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     // call with one output per result, and its relation holding (= true)
     // goes without saying; another direction says "solve".
     const fd = code.nodes[of]?.kind === "def" ? (code.nodes[of] as NodeOf<"def">) : null;
-    const declared = !!fd?.results?.length && fd.results.length === boundKeys.length && fd.results.every((r) => boundKeys.includes(r));
+    const fp = fd ? portsOf(code.nodes, of) : null, rs = fp?.condition ? fp.results : [];
+    const declared = !!rs.length && rs.length === boundKeys.length && rs.every((r) => boundKeys.includes(r));
     const holds = (v: Id) => { const t = code.nodes[v]; return t?.kind === "ref" && t.target === "std.bool.true"; };
-    const fl = fd?.body && code.nodes[fd.body]?.kind === "lambda" ? (code.nodes[fd.body] as NodeOf<"lambda">).params : [];
+    const fl = fp?.condition ? [...fp.inputs, ...fp.results] : fd?.body && code.nodes[fd.body]?.kind === "lambda" ? (code.nodes[fd.body] as NodeOf<"lambda">).params : [];
     const at = (k: string) => (fl.includes(k) ? fl.indexOf(k) : fl.length);
     const givenKeys = Object.keys(n.given).filter((k) => !(declared && k === "out" && holds(n.given[k]))).sort((a, b) => at(a) - at(b));
     const inputs = givenKeys.map((k) => n.given[k]);
@@ -1047,15 +1048,16 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   const body = def.body ? node(def.body) : null;
   // A definition with results is titled by the direction it declares, as
   // the text shows it: its inputs, the effects of finding them, the results.
-  const resultsType = (d: NodeOf<"def">, l: NodeOf<"lambda">) => {
-    const effs = info?.directions?.get(defId), bare = (p: Id) => typeOf(p).split(" where ")[0];
-    if (!effs || !l.params.every((p) => typeOf(p))) return typeOf(defId);
-    const ins = l.params.filter((p) => !d.results!.includes(p));
-    return `(${ins.map(bare).join(", ")}) ${effs.length ? `-[${effs.map(name).join(", ")}]->` : "->"} ${d.results!.map((r) => `${name(r)}: ${bare(r)}`).join(", ")}`;
+  // Its ports as model.ts portsOf reads them (L225c), in either stored form.
+  const ports = portsOf(code.nodes, defId), declared = ports?.condition ? ports : null;
+  const resultsType = (p: { inputs: Id[]; results: Id[] }) => {
+    const effs = info?.directions?.get(defId), bare = (q: Id) => typeOf(q).split(" where ")[0];
+    if (!effs || ![...p.inputs, ...p.results].every((q) => typeOf(q))) return typeOf(defId);
+    return `(${p.inputs.map(bare).join(", ")}) ${effs.length ? `-[${effs.map(name).join(", ")}]->` : "->"} ${p.results.map((r) => `${name(r)}: ${bare(r)}`).join(", ")}`;
   };
   let top: Sub;
   if (lp) top = region(defId, `loose : ${typeOf(lp.expr)}, not used yet`, lp.params, lp.expr, "loose");
-  else if (body?.kind === "lambda" && def.results?.length) top = region(defId, `${name(defId)} : ${resultsType(def, body)}`, body.params.filter((p) => !def.results!.includes(p)), body.body, "def", def.results.filter((r) => body.params.includes(r)));
+  else if (body?.kind === "lambda" && declared) top = region(defId, `${name(defId)} : ${resultsType(declared)}`, declared.inputs, body.body, "def", declared.results);
   else if (body?.kind === "lambda") top = region(defId, `${name(defId)} : ${typeOf(defId)}`, body.params, body.body, "def");
   else if (body?.kind === "typedef") top = typeFrame(body);
   else if (body) top = lay(def.body!);
