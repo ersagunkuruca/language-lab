@@ -392,7 +392,9 @@ export const OPS = {
 // `multi`: it has several answers (W4d): it takes the rest of the search
 // as its last input and gives what that gives; `answer` is the type of
 // its answers.
-export interface SFunc { def: Id; name: string; params: LType[]; result: LType; locals: LType[]; body: SExpr; spends: boolean; budgeted: boolean; inner?: boolean; partial?: boolean; multi?: true; answer?: LType }
+// `value`: a definition that isn't a function (sheet's `symbols`), whose
+// value a printer may work out once (core-js.ts, C137d17).
+export interface SFunc { def: Id; name: string; params: LType[]; result: LType; locals: LType[]; body: SExpr; spends: boolean; budgeted: boolean; inner?: boolean; partial?: boolean; multi?: true; answer?: LType; value?: true }
 // `code` and `info` are the program that was lowered: the one given, or
 // a copy with its derivatives generated, where funcs[i].def lives.
 // rounded: definitions with a call worked out when compiled (stage.ts) that
@@ -840,7 +842,7 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
     const i = funcs.length;
     index.set(key, i);
     inProgress.add(def);
-    const f: SFunc = { def, name: nm(def), params: params as LType[], result: result!, locals: [...params as LType[]], body: { k: "num", v: 0 }, spends: info.divergent.has(def), budgeted, ...(partial ? { partial } : {}) };
+    const f: SFunc = { def, name: nm(def), params: params as LType[], result: result!, locals: [...params as LType[]], body: { k: "num", v: 0 }, spends: info.divergent.has(def), budgeted, ...(partial ? { partial } : {}), ...(constant ? { value: true as const } : {}) };
     funcs.push(f);
     const outer = underBudget, outerAt = at, shaped = shapes.length;
     try {
