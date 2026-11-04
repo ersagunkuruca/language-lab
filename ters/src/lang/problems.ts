@@ -47,6 +47,7 @@ export const PROBLEMS: Problem[] = [
   { id: "not-folded", says: /^.+ is not recursive, so it has no folded value$/, fix: "Only a field that holds the type itself (a list's rest, a tree's branches) has a folded value: name a result only for those, or use a match." },
   { id: "effect-folded", says: /^.+ is an effect; its operations are handled with a match, not folded$/, fix: "Handle the effect with a handler, whose cases match its operations, instead of a fold." },
   { id: "too-many-results", says: /^a function gives at most \d+ results$/, fix: "Give at most 8 results: put the others together in a type with one case, and give that." },
+  { id: "results-not-predicate", says: /^.+ has results, so it is (a function of its ports|a predicate over its ports \(it gives true or false\), not .+)$/, fix: "A definition with results is a relation over its ports: write it as a function of all of them that says whether they agree (true or false), or take its results off and let it give its value." },
   { id: "type-as-value", says: /^.+ is a type, not a value$/, fix: "A type says what values look like and can't be used as one: use one of its cases, or a value of that type." },
 ];
 
