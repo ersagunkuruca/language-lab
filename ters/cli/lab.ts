@@ -18,7 +18,7 @@
 //   lab merge <base> <ours> <theirs> [path]
 //                                        git's merge driver for program files: id by id, ours
 //                                        written with theirs taken in (SHARING.md §6)
-//   lab render <program> in.wav [-o out.wav] [--block n] [--compiled]
+//   lab render <program> in.wav [-o out.wav] [--block n] [--compiled [--compile-ts]]
 //                                        play a sound over a WAV file (AUDIO.md)
 //
 // A program is a file saved by the editor (Save file), or a folder of side
@@ -82,7 +82,7 @@ usage:
   lab build-web <program> [-o app.html] [--core|--compile-ts]  one HTML file running the page main returns (from the core IR where it lowers)
   lab build-app <program> [-o folder]   that page as an app for phones: a PWA in folder/www, and a Capacitor project
   lab mcp [program]                     an MCP server over stdio: an LLM views, edits, runs and tests programs
-  lab render <program> in.wav [-o out.wav] [--block n] [--compiled]
+  lab render <program> in.wav [-o out.wav] [--block n] [--compiled [--compile-ts]]
                                         play the sound main makes over a WAV file, n samples a block (default 128)
 options:
   --main <name>    the entry point (default: main)
@@ -396,7 +396,8 @@ switch (command) {
     if (!Number.isInteger(size) || size < 2 || size % 2) fail("--block takes an even number of samples, 2 or more");
     let wav;
     try { wav = readWav(readFileSync(input)); } catch (e) { fail(`${input}: ${(e as Error).message}`); }
-    const played = playBlocks(await soundOf(p, def, compiled ? "compiled" : "evaluator"), wav.samples, size);
+    // --compiled: the core IR's JavaScript (C137d3); with --compile-ts, compile.ts's.
+    const played = playBlocks(await soundOf(p, def, !compiled ? "evaluator" : rest.includes("--compile-ts") ? "compiled" : "core"), wav.samples, size);
     const to = out ?? input.replace(/(\.wav)?$/i, ".out.wav");
     writeFileSync(to, writeWav({ rate: wav.rate, samples: played.out }));
     if (played.silent.length) process.stderr.write(`lab: ${played.silent.length} block${played.silent.length === 1 ? "" : "s"} played silence, the first (block ${played.silent[0].block}) because ${played.silent[0].why}\n`);
