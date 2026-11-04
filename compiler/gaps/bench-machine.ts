@@ -33,8 +33,8 @@ const cases: [string, string][] = [
   ["sort 100", sized("sort", 100)], ["sort 400", sized("sort", 400)], ["sort 1000", sized("sort", 1000)],
   ["hello", source("hello")],
 ];
-const names: (Name | "native")[] = ["evaluator", "compiled", "wasm", "native", "ideal"];
-console.log(["program", "steps", ...names, "compiled/ideal"].join("\t"));
+const names: (Name | "native")[] = ["evaluator", "compiled", "core", "wasm", "native", "ideal"];
+console.log(["program", "steps", ...names, "compiled/ideal", "core/ideal"].join("\t"));
 for (const [label, text] of cases) {
   const files = { "p.asm": text }, args = [...flags, "p.asm"];
   const ideal = w.ideal(args, files);
@@ -61,6 +61,6 @@ for (const [label, text] of cases) {
     ms[name] = median(times);
     row.push(`${ms[name].toFixed(ms[name] < 10 ? 1 : 0)} ms`);
   }
-  row.push(`${(ms.compiled / ms.ideal).toFixed(0)}×`);
+  row.push(`${(ms.compiled / ms.ideal).toFixed(0)}×`, `${(ms.core / ms.ideal).toFixed(0)}×`);
   console.log(row.join("\t"));
 }
