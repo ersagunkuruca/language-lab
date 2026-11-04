@@ -582,6 +582,8 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   const mono = new Map<Id, Type>();
   // A let's binders whose value is generic, and their schemes (L224).
   const letSchemes = new Map<Id, Scheme>();
+  // Each binder given to a call, where (L29 closingUse).
+  let passed: Map<Id, [Call, number][]> | null = null;
   let current: Id[] = [];
   const recursiveCalls: { call: Call; params: Type[]; args: Type[] }[] = [];
   const cached = opts.cache?.begin({ code, info, s, deps, layer, opts, valueDefs, typeDefs: code.defs.filter((d) => isTypeDef(d)) });
@@ -728,6 +730,31 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       catch (e) { if (e instanceof EffectError) err(a, `${nm(p)} might not finish, and it is used where only a function that surely finishes fits`); else throw e; }
     }
     return t;
+  }
+
+  // A function input whose row some use closes (BACKLOG L29): given to a
+  // case whose field says what it does, or to a definition already checked
+  // whose input does. That use is made first, so a call of the input
+  // before it, under a handler (first, say), puts the input's row inside
+  // the call's instead of making the handler's its own; order no longer
+  // decides. Only these two uses: their types are known before the body.
+  function closingUse(p: Id): Type | null {
+    if (!passed) {
+      passed = new Map();
+      for (const x of Object.values(code.nodes)) {
+        if (!isCall(x)) continue;
+        x.args.forEach((a, i) => { const r = code.nodes[a]; if (r?.kind === "ref" && code.nodes[r.target]?.kind === "binder") passed!.set(r.target, [...(passed!.get(r.target) ?? []), [x, i]]); });
+      }
+    }
+    for (const [c, i] of passed.get(p) ?? []) {
+      const f = code.nodes[c.fn], target = f?.kind === "ref" ? code.nodes[f.target] : undefined;
+      let t: Type | undefined;
+      if (target?.kind === "variant") { const def = owner.get(target.id); if (def && !isEffect(def)) t = dataType(def).fields(target.id)[i]; }
+      else if (target?.kind === "def" && info.schemes.has(target.id) && !mono.has(target.id)) { const ft = s.resolve(instantiate(info.schemes.get(target.id)!, s)); if (ft.t === "fn" && ft.params.length === c.args.length) t = ft.params[i]; }
+      const r = t && s.resolve(t);
+      if (r?.t === "fn" && s.resolveRow(r.eff).tail === null) return r;
+    }
+    return null;
   }
 
   // A type's scheme over the variables and rows given, with what each of
@@ -920,6 +947,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       case "lambda": {
         const inner = new Map(env);
         const params = n.params.map((p) => { const pt = s.fresh(); inner.set(p, pt); info.typeOf.set(p, pt); return pt; });
+        n.params.forEach((p, i) => { const c = closingUse(p); if (c) try { s.unify(params[i], c); } catch (e) { if (!(e instanceof TypeError)) throw e; } });
         const bodyRow = s.freshRow();
         const ret = expr(n.body, inner, bodyRow);
         // Named result ports (L128b): the body gives a tuple of that many,

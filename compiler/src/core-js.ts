@@ -28,7 +28,7 @@ import { hoistInvariants } from "./hoist.ts";
 import type { Code, Id, NodeOf } from "../../ters/src/model.ts";
 import { effectOfOperation, hostOp, ownOperations } from "../../ters/src/lang/hosts.ts";
 import * as I from "../../ters/src/lang/int.ts";
-import { ARRAY_RT, listSteps, RT, isData, isRecord, lowerScalar, reachedWithShows, type CoreIR, type LType, type Op, type SExpr, type SFunc, type TType } from "./scalar.ts";
+import { ARRAY_RT, kids, listSteps, RT, isData, isRecord, lowerScalar, reachedWithShows, type CoreIR, type LType, type Op, type SExpr, type SFunc, type TType } from "./scalar.ts";
 import { runtime } from "./wasm-rt.ts";
 import { siteOf, STOPS } from "./stops.ts";
 import { Aborted, FAIL, OUT, RUNTIME, Stopped, Unsupported, coreRuntime, runCoreFn, type BuiltinOf, type HostOps, type MainSpec, type TableSpec } from "./core-rt.ts";
@@ -61,6 +61,11 @@ const MATH: Partial<Record<Op, string>> = { sqrt: "sqrt", abs: "abs", floor: "fl
 // R.worlds in that order.
 export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: string[] } {
   const names = ir.funcs.map((_, i) => `f${i}`);
+  // A closure carries its lambda's and captures' ids (C137c13) only for a
+  // solver (or set and path) to look inside it: in a program with none, it doesn't
+  // (C169), and no Map is made per closure.
+  const looks = (e: SExpr): boolean => (e.k === "rt" && LOOKS_INSIDE.test(e.fn)) || kids(e).some(looks);
+  const carries = ir.funcs.some((f) => looks(f.body));
   const rts = new Map<string, string>();
   const rtName = (n: string) => { if (!rts.has(n)) rts.set(n, `rt${rts.size}`); return rts.get(n)!; };
   const worlds: string[] = [];
@@ -223,7 +228,7 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
         // answers) is given one when called from outside (core-rt.ts).
         case "closure": {
           const rest = e.t.waits || e.t.several;
-          const c = `R.closure(${names[e.fn]}, [${e.caps.map((a) => ex(a, pre, d)).join(", ")}]${e.src || rest ? `, ${e.src ? JSON.stringify(e.src) : "undefined"}` : ""}${rest ? ", true" : ""})`;
+          const src = carries ? e.src : undefined, c = `R.closure(${names[e.fn]}, [${e.caps.map((a) => ex(a, pre, d)).join(", ")}]${src || rest ? `, ${src ? JSON.stringify(src) : "undefined"}` : ""}${rest ? ", true" : ""})`;
           // One that captures nothing is the same function every time, so
           // it's made once, at load (C137d18): sheet's tokenizer made one
           // per character for its fold.
@@ -434,12 +439,26 @@ function kidsOf(e: SExpr): SExpr[] {
 // The functions, by their place in ir.funcs. `rt`: the console and files.
 // `hostOps`: the operations rt.hosts answers (hostOpsOf).
 export function loadCoreJs(ir: CoreIR, rt: Runtime = { print: () => {} }, hostOps?: HostOps): ((...xs: unknown[]) => unknown)[] {
+  return loadPrinted(printed(ir), rt, ir.code, ir.info, hostOps);
+}
+
+// A lowered program as printed, which is plain data (E245c): kept for a
+// run of the same code again, or built with the site for a shipped
+// example, and loaded with no lowering. `code`: the program's nodes when
+// its solves need them (codeFor), else none. `f64`: which functions give
+// a Float64 back to the host. `checked`: a derivative needs the check's
+// types too, which aren't data, so such a program is lowered each time.
+export interface Printed { js: string; names: string[]; worlds: string[]; tables: TableSpec[]; f64: boolean[]; code?: Code; checked?: true }
+export function printed(ir: CoreIR): Printed {
   const { js, names, worlds } = emitCoreJs(ir);
-  const all = new Function("R", js)(coreRuntime(ir.tables.map(tableSpec), worlds, rt, ir.code, ir.info, hostOps)) as Record<string, (...xs: unknown[]) => unknown>;
+  return { js, names, worlds, tables: ir.tables.map(tableSpec), f64: ir.funcs.map((f) => f.result === "f64" && !ir.shader), ...(solving(js) ? { code: { nodes: ir.code.nodes, defs: ir.code.defs } } : {}), ...(/R\.rt\("derive:/.test(js) ? { checked: true as const } : {}) };
+}
+export function loadPrinted(p: Printed, rt: Runtime = { print: () => {} }, code: Code | undefined = p.code, info?: Info, hostOps?: HostOps): ((...xs: unknown[]) => unknown)[] {
+  const all = new Function("R", p.js)(coreRuntime(p.tables, p.worlds, rt, code, info, hostOps)) as Record<string, (...xs: unknown[]) => unknown>;
   // A Float64 handed back to the host is a use of it (SPEC §3.3, C156):
   // too big, it stops there.
   const fin = (x: number) => { if (x - x !== 0) throw new Stopped(STOPS[STOPS.length - 1]); return x; };
-  return names.map((n, i) => { const f = all[n]; return ir.funcs[i]?.result === "f64" && !ir.shader ? (...xs: unknown[]) => fin(f(...xs) as number) : f; });
+  return p.names.map((n, i) => { const f = all[n]; return p.f64[i] ? (...xs: unknown[]) => fin(f(...xs) as number) : f; });
 }
 
 // What running a main needs to know of it: whether it takes the
@@ -494,6 +513,9 @@ export function coreModule(ir: CoreIR, name: string, runtime: string, world: str
 // As a string parsed once, which is smaller and quicker to load than
 // the same object written out.
 const solving = (js: string) => /R\.rt\("(solve|exists"|derive:)/.test(js);
+// The runtime calls that look inside a function given them, by name: the
+// evaluator's solver, and `set` and `path` taking a field's function.
+const LOOKS_INSIDE = /^(solve:|solveAll:|exists$|derive:|host:builtin\.set\b|host:builtin\.cells\.path\b)/;
 // Whether the program runs the evaluator's solver (a solve, `for some`, a
 // derivative): far slower than compile.ts's plans for now, so a sound
 // isn't played this way (C137d7).
