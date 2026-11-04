@@ -68,6 +68,16 @@ export function publish(code: Code, names: Names, defs: Id[], base: Code): Resul
     if (hasHole(code, d)) return { ok: false, reason: `${nm(d)} isn't finished: it has a hole` };
   }
   const h = hashes(code, drafts);
+  // Two drafts of the same content get one id, so one would silently stand
+  // for the other (L223: two std types of one shape hash alike, so `time
+  // hour` and `date year` did). Same name is one definition twice; a
+  // different name is refused.
+  const seen = new Map<string, Id>();
+  for (const d of drafts) {
+    const other = seen.get(h.get(d)!);
+    if (other !== undefined && nm(other) !== nm(d)) return { ok: false, reason: `${nm(other)} and ${nm(d)} have the same content, so one would stand for the other: make them differ` };
+    seen.set(h.get(d)!, d);
+  }
   const rename = new Map<Id, Id>();
   for (const d of drafts) {
     const id = `@${h.get(d)}`;
