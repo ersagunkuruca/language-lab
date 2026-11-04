@@ -3,6 +3,7 @@
 // stops at the fetch, keeps what it did, and goes on from there when the
 // reply lands. Nothing before the fetch happens twice.
 
+import { LIBRARY } from "../src/lang/library.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Lang } from "../src/lang/dsl.ts";
@@ -12,6 +13,7 @@ import { showPage } from "../src/lang/page.ts";
 import type { Id } from "../src/model.ts";
 import { REQUEST_V, RESPONSE_V } from "../src/lang/network.ts";
 import { ABORT_OP, CELL_OPS, HTML_V, INT_OPS, IO, S } from "../src/lang/std.ts";
+const lib = (name: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === name)!;
 import { fakeDoc, FakeEl, FakeText } from "./fakedom.ts";
 
 const memory = () => { const m = new Map<string, string>(); return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v), removeItem: (k: string) => void m.delete(k), get length() { return m.size; }, key: (i: number) => [...m.keys()][i] ?? null }; };
@@ -140,10 +142,10 @@ test("one click fetches an address once; a view's fetch is kept for the page", a
 // L191b: send request on a page. A click's handler sends a POST, stops
 // there and goes on with the response when it lands; a 404 is a response.
 test("a click sends a request and goes on with its response", async () => {
-  const k = new Lang();
+  const k = new Lang(LIBRARY.code);
   const main = k.def("main");
-  const req = (path: string) => k.call(REQUEST_V, k.lit("POST"), k.lit(path), k.list(), k.lit("hi"));
-  const status = (r: Id) => k.match(r, [{ variant: RESPONSE_V, names: ["status", "headers", "body"], body: ([st, , b]) => k.text(k.call(INT_OPS.show, st), k.lit(" "), b) }]);
+  const req = (path: string) => k.call(REQUEST_V, k.lit("POST"), k.lit(path), k.list(), k.call(lib("utf8 of"), k.lit("hi")));
+  const status = (r: Id) => k.match(r, [{ variant: RESPONSE_V, names: ["status", "headers", "body"], body: ([st, , b]) => k.text(k.call(INT_OPS.show, st), k.lit(" "), k.call(lib("text of utf8"), b)) }]);
   k.define(main, k.thunk(() => k.call(HTML_V.element, k.lit("button"), k.list(k.call(HTML_V.on, k.lit("click"), k.fn(["e"], () => k.seq(
     k.call(S.print, status(k.call(IO.sendRequest, req("/save")))),
     k.call(S.print, status(k.call(IO.sendRequest, req("/missing")))))))), k.list(k.call(HTML_V.text, k.thunk(() => k.lit("+")))))));
@@ -154,7 +156,7 @@ test("a click sends a request and goes on with its response", async () => {
   const printed: string[] = [];
   const page = showPage({ code, info, names, main, program: "t", doc: fakeDoc(), store: memory(), frame: () => {},
     console: { log: (l: string) => printed.push(l), error: (l: string) => printed.push(l) },
-    send: async (r) => { sent.push(`${r.method} ${r.url} ${r.body}`); return r.url === "/save" ? { status: 201, headers: [], body: "saved" } : { status: 404, headers: [], body: "no" }; } });
+    send: async (r) => { sent.push(`${r.method} ${r.url} ${new TextDecoder().decode(r.body)}`); return { status: r.url === "/save" ? 201 : 404, headers: [], body: new TextEncoder().encode(r.url === "/save" ? "saved" : "no") }; } });
   const button = page.root as FakeEl;
   button.fire("click");
   await new Promise((r) => setTimeout(r, 10));

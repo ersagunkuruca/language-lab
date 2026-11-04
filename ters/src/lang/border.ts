@@ -19,7 +19,5 @@ export function bordered<K extends keyof World>(world: Partial<World>, k: K, f: 
   if (ENTERING.has(k)) return ((...a: unknown[]) => nfc(g(...a))) as World[K];
   // A background fetch's body, when it has come.
   if (k === "startFetch") return ((u: string) => { const poll = g(u) as () => { text: string } | { error: string } | null; return () => { const r = poll(); return r && "text" in r ? { text: nfc(r.text) } : r; }; }) as World[K];
-  // A response's body (L191).
-  if (k === "sendRequest") return ((r: unknown) => { const a = g(r) as { body: string }; return { ...a, body: nfc(a.body) }; }) as World[K];
   return g as World[K];
 }
