@@ -13,7 +13,7 @@ import { notes, ways, type Name } from "../gaps/notebook.ts";
 const w = await ways();
 const all = (args: string[], files: Record<string, string>, slow = false) => {
   const want = w.ideal(args, files);
-  const others: Name[] = slow ? ["compiled", "compiled, trees", "compiled, table"] : ["evaluator", "evaluator, trees", "compiled", "compiled, trees", "compiled, table"];
+  const others: Name[] = slow ? ["compiled", "compiled, trees", "compiled, table", "core, trees", "core, table"] : ["evaluator", "evaluator, trees", "compiled", "compiled, trees", "compiled, table", "core, trees", "core, table"];
   for (const way of others) assert.deepEqual(w[way](args, files), want, way);
   return want;
 };

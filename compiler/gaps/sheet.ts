@@ -15,13 +15,14 @@ import { runProgram, type World } from "../../ters/src/lang/run.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { withLibraryRepresentations } from "../../ters/src/lang/library-reps.ts";
 import { compile } from "../src/compile.ts";
+import { coreMain, lowerCore } from "../src/core-js.ts";
 import { examples, load } from "../src/program.ts";
 import { $setPrint, $setWorld, $Aborted, $toList } from "../src/runtime.js";
 import { sheet as ideal } from "./sheet.ideal.js";
 
 export interface Run { out: string[]; err: string[]; code: number; wrote: Record<string, string> }
 export type Way = (args: string[], files: Record<string, string>) => Run;
-export type Name = "evaluator" | "evaluator, chosen" | "compiled" | "compiled, chosen" | "ideal";
+export type Name = "evaluator" | "evaluator, chosen" | "compiled" | "compiled, chosen" | "core, chosen" | "ideal";
 
 function reader(files: Record<string, string>) {
   return (p: string) => {
@@ -67,8 +68,20 @@ export async function ways(): Promise<Record<Name, Way> & { chosen: string[] }> 
     try { code = Number(f($toList(args))); } catch (e) { if (!(e instanceof $Aborted)) throw e; err.push(e.reason); code = 1; }
     return { out, err, code, wrote };
   };
+  // Printed from the core IR (C137d15), which compile.ts gives way to.
+  const core = (p: typeof plain): Way => {
+    const rt: { print: (s: string) => void; world?: World } = { print: () => {} };
+    const run = coreMain(lowerCore(p.code, p.info, p.names, [main]), "main", rt);
+    return (args, files) => {
+      const out: string[] = [], err: string[] = [], wrote: Record<string, string> = {};
+      rt.print = (s) => out.push(s);
+      rt.world = world(files, err, wrote);
+      return { out, err, code: run(args), wrote };
+    };
+  };
   return {
     chosen: chosen.chosen,
+    "core, chosen": core(chosen),
     evaluator: evaluator(plain),
     "evaluator, chosen": evaluator(chosen),
     compiled: compiled(await built(plain, "sheet.js")),
