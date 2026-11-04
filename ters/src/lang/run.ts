@@ -33,8 +33,8 @@ import { oneAnswer } from "./modes.ts";
 import { computedForward } from "./directions.ts";
 import { discharge } from "./ledger.ts";
 import * as Alg from "./algebraic.ts";
-import { hostLocale } from "./text.ts";
-import { tupleVariant, floatText, LOCALE_V, MY_LOCALE_OP, SETTINGS, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, COMPLEX_V, FIXED_V, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, shownImplementations, CASE_NAME, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std.ts";
+import { hostLocale, hostZone } from "./text.ts";
+import { tupleVariant, floatText, LOCALE_V, MY_LOCALE_OP, MY_ZONE_OP, SETTINGS, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, COMPLEX_V, FIXED_V, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, shownImplementations, CASE_NAME, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std.ts";
 import { intLit } from "./int.ts";
 import { JETS } from "./jets.ts";
 import { answerFromHost, effectOfOperation, hostedEffects, type Hosts } from "./hosts.ts";
@@ -336,6 +336,8 @@ export interface World {
   // Settings' (L214b2): the user's language as a BCP 47 tag. A world
   // without one answers the host's (Intl).
   locale?(): string;
+  // And the user's time zone, an IANA name (L188d2).
+  timeZone?(): string;
   // Time's and Wait's: milliseconds since 1970, and pausing.
   now(): number;
   wait(ms: number): void;
@@ -730,6 +732,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       if (op === RANDOM_OP) return this.ret((rt.world?.random ?? worldRandom)());
       if (op === NOW_OP) return this.ret((rt.world?.now ?? Date.now)());
       if (op === MY_LOCALE_OP) return this.ret({ tag: LOCALE_V, fields: [(rt.world?.locale ?? hostLocale)()] });
+      if (op === MY_ZONE_OP) return this.ret((rt.world?.timeZone ?? hostZone)());
       // A page's handler waits by stopping here (C40): the world throws
       // Pending, and the run goes on from here when it's ready, answered.
       if (op === WAIT_OP) {

@@ -15,7 +15,7 @@ import { infer } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { runMain } from "../src/lang/run.ts";
-import { LOCALE_V, MY_LOCALE_OP, SHOW_ANY, TEXT_OPS } from "../src/lang/std.ts";
+import { LOCALE_V, MY_LOCALE_OP, MY_ZONE_OP, SHOW_ANY, TEXT_OPS } from "../src/lang/std.ts";
 import { $main, $setWorld } from "../../compiler/src/runtime.js";
 
 const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
@@ -77,7 +77,7 @@ test("my locale: from the world, or from a handler", async () => {
   const up = () => k.call(TEXT_OPS.uppercase, k.lit("iyi"), k.call(MY_LOCALE_OP));
   k.define(main, k.thunk(() => k.call(SHOW_ANY, k.listOf(
     up(),
-    k.handle(up(), [{ variant: MY_LOCALE_OP, names: [], body: () => k.call(LOCALE_V, k.lit("en")) }])))));
+    k.handle(up(), [{ variant: MY_LOCALE_OP, names: [], body: () => k.call(LOCALE_V, k.lit("en")) }, { variant: MY_ZONE_OP, names: [], body: () => k.call(MY_ZONE_OP) }])))));
   const code = base(k.code), names = baseNames(k.names);
   const info = infer(code, names);
   assert.deepEqual(info.errors.map((e) => e.message), []);
