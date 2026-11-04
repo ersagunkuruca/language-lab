@@ -96,7 +96,7 @@ export async function webCorePage(title: string, code: Code, info: Info, names: 
 // left out, each export a function saying so, so the page is about 75 KB,
 // not 3.3 MB (the prelude's and trees' JSON, through arith.ts).
 // (The same test as core-js.ts's codeFor, which carries the nodes then.)
-const carriesProgram = (script: string) => /R\.rt\("(solve|exists")/.test(script);
+const carriesProgram = (script: string) => /R\.rt\("(solve|exists"|derive:)/.test(script);
 const SOLVER = /[\\/]src[\\/]lang[\\/](arith|relate|solve|modes|directions|derive)\.ts$/;
 const withoutSolver = {
   name: "without the solver",

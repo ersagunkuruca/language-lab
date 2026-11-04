@@ -31,6 +31,8 @@ import { STOPS } from "./stops.ts";
 import { Aborted, FAIL, OUT, RUNTIME, Stopped, Unsupported, coreRuntime, runCoreFn, type BuiltinOf, type MainSpec, type TableSpec } from "./core-rt.ts";
 // The runtime is core-rt.ts's; these are here too, for the tests and
 // tools that print and run in one.
+// The solver too, for the programs run here that solve (core-solve.ts).
+import "./core-solve.ts";
 export { Aborted, FAIL, OUT, RUNTIME, Stopped, Unsupported, coreCall, coreRuntime, runCoreFn, type MainSpec, type TableSpec } from "./core-rt.ts";
 
 
@@ -415,11 +417,13 @@ export function runCoreMain(ir: CoreIR, name: string, args: string[], rt: Runtim
 export function coreModule(ir: CoreIR, name: string, runtime: string, world: string): string {
   const [fi, m] = mainOf(ir, name);
   const { js, names, worlds } = emitCoreJs(ir);
+  const code = codeFor(ir, js);
   return [
     `import { coreRuntime, runCoreFn } from ${JSON.stringify(runtime)};`,
+    ...solverFor(code, runtime),
     `import { nodeWorld } from ${JSON.stringify(world)};`,
     "const rt = { print: (s) => console.log(s), world: nodeWorld() };",
-    `const R = coreRuntime(${JSON.stringify(ir.tables.map(tableSpec))}, ${JSON.stringify(worlds)}, rt, ${codeFor(ir, js)});`,
+    `const R = coreRuntime(${JSON.stringify(ir.tables.map(tableSpec))}, ${JSON.stringify(worlds)}, rt, ${code});`,
     "const defs = (function (R) {",
     js,
     "})(R);",
@@ -431,16 +435,26 @@ export function coreModule(ir: CoreIR, name: string, runtime: string, world: str
 // runs (C137c11): only when it has one.
 const codeFor = (ir: CoreIR, js: string) => (/R\.rt\("(solve|exists"|derive:)/.test(js) ? JSON.stringify({ nodes: ir.code.nodes, defs: ir.code.defs }) : "undefined");
 
+// The solver, next to the runtime, imported only by a program that has
+// its nodes (one that solves): it carries the library (C137d1).
+const solverFor = (code: string, beside: string) => {
+  if (code === "undefined") return [];
+  const at = (f: string) => JSON.stringify(beside.replace(/[^/]*$/, f));
+  return [`import { useSolver } from ${at("core-rt.ts")};`, `import { solver } from ${at("core-solve.ts")};`, "useSolver(solver);"];
+};
+
 // A page's script (C137c9, `lab build-web --core`): the printed functions,
 // with core-page.ts (`page`, which a bundler takes in) drawing main.
 export function corePageScript(ir: CoreIR, name: string, page: string, title: string): string {
   const fi = ir.funcs.findIndex((g) => g.name === name && !g.inner && !g.budgeted);
   if (fi < 0 || ir.funcs[fi].params.length) throw new Error(`${name}: not compiled, or not a page's main`);
   const { js, names, worlds } = emitCoreJs(ir);
+  const code = codeFor(ir, js);
   return [
     `import { startCorePage } from ${JSON.stringify(page)};`,
+    ...solverFor(code, page),
     `startCorePage(${JSON.stringify(ir.tables.map(tableSpec))}, ${JSON.stringify(worlds)}, (R) => {`,
     js,
-    `}, ${JSON.stringify(names[fi])}, ${JSON.stringify(title)}, ${codeFor(ir, js)});`,
+    `}, ${JSON.stringify(names[fi])}, ${JSON.stringify(title)}, ${code});`,
   ].join("\n");
 }
