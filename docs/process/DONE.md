@@ -836,7 +836,8 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| L187k | One more row in the problem table, with its smallest program: `results-not-predicate` (results named on a definition that gives a value other than true or false) | this PR |
+| L187l | One more row in the problem table, with its smallest program: `takes-itself` (a type whose field is a function taking the type, the positivity rule) | this PR |
+| L187k | One more row in the problem table, with its smallest program: `results-not-predicate` (results named on a definition that gives a value other than true or false) | #1597 |
 | L187j | Three more rows in the problem table, with their smallest programs: `not-folded` (a fold naming a result for a field that isn't recursive), `effect-folded`, `too-many-results`; `wrong-type` also takes "expected …, got …" (a handler given something of another type) | #1596 |
 | L187i | One more row in the problem table, `field-of-one-case` (a field read on a value whose type has it in one case only), and `no-implementation` also takes the message for a number written where a type with no Literal implementation goes; each with its smallest program | #1595 |
 | L187h | Three more rows in the problem table, with their smallest programs: `no-port`, `needs-more-ports`, `not-backwards` (solve of a value or an acting function); a solve of something that can't run backwards names it instead of giving its id | #1594 |
