@@ -39,5 +39,12 @@
   "i28ofbgfmn6ht0jlnaqj6uvv1r": "The first time within dt that a body reaches a wall or another body (each pair read both ways, and a body with itself never touches).",
   "mvockdr39ai88h7fk5vr6df2ea": "The world dt later in one go: every body moves, meets the walls, then each pair meets once.",
   "r44smql5v3gv40uj2d7elpaa80": "The world left seconds later, stepping to the first impact each time (and a hair past it, so the bodies touch and bounced and off the walls see them), at most tries times; then the rest in one go. So a fast body meets what it would have jumped over in one frame (continuous collision detection with a sub-step cap).",
-  "7p5nuvl4c0md0v209oaamsdmhj": "One frame in one go, as step was before it stepped to impacts: two fast balls can pass through each other."
+  "7p5nuvl4c0md0v209oaamsdmhj": "One frame in one go, as step was before it stepped to impacts: two fast balls can pass through each other.",
+  "3m7n4rbaea4nc0llb8q58mrdp0": "The unit vector from b's centre to a's.",
+  "rvkqmte3c7lq14ghs101h4h24q": "How far apart two balls' surfaces are (below 0 when they overlap).",
+  "ms3lmvqhak27s1nmmdjnruf8cr": "How fast a moves towards b along the line between them (below 0 when closing in).",
+  "u3566euoqlqjcpb69aa66lblr1": "A speculative contact (Catto): if a and b would close more than their gap this frame, a's share of the change that has them close only that far, so they end the frame touching and bounce the next. Read along the line between them at the start of the frame, it can stop two that would have passed (a ghost bump).",
+  "ute44qij7knnq63hqq1l132cs5": "The body moving at v.",
+  "rk3ihrhfoelloj57h0slieto9i": "Every body's velocity after its speculative contacts with all the others (each pair read both ways, equal masses).",
+  "6upfhhfup64745vu5kmpnhga4c": "One frame by speculative contacts instead of stepping to impacts (L121, beside step and plain step). On flat bodies and solid bodies, evaluated: about as cheap as plain step (one more pass over the pairs), where step costs 10 to 30% more; a ball closing on another at 80 units a second stops touching it instead of passing; but a ball going past another at 40 units a second, 0.1 off its line, is bumped, which step doesn't do."
 }
