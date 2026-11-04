@@ -14,7 +14,7 @@ import blocksStyle from "../ters/styles/blocks.json" with { type: "json" };
 import mathStyle from "../ters/styles/math.json" with { type: "json" };
 import plainStyle from "../ters/styles/plain.json" with { type: "json" };
 import lispStyle from "../ters/styles/lisp.json" with { type: "json" };
-import { children, freshId, ID_PATTERN, isCall, isUse, useTarget, type Call, merge, parentOf, resolveRefs, subtree, type Code, type Id, type Node, type NodeOf } from "../ters/src/model.ts";
+import { children, freshId, ID_PATTERN, isCall, isUse, portsOf, useTarget, type Call, merge, parentOf, resolveRefs, subtree, type Code, type Id, type Node, type NodeOf } from "../ters/src/model.ts";
 import { INT } from "../ters/src/lang/types.ts";
 import { layer, type Comments, type Hints, type Names, type Presentation, type Style } from "../ters/src/presentation.ts";
 import { implementationOps, isOperation } from "../ters/src/lang/records.ts";
@@ -1066,10 +1066,12 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
   const fnBody = n.kind === "def" && n.body ? node(n.body) : null;
   const dt = n.kind === "def" ? info.typeOf.get(id) : undefined, rt = dt ? info.subst.resolve(dt) : null;
   if (n.kind === "def" && fnBody?.kind === "lambda" && fnBody.params.length > 1 && rt?.t === "fn" && info.subst.resolve(rt.ret).t === "con" && (info.subst.resolve(rt.ret) as { id: Id }).id === BOOL) {
-    const rs = n.results ?? [];
+    // Its ports as model.ts portsOf reads them (L225c), in either stored form.
+    const ports = portsOf(doc.code.nodes, id), rs = ports?.condition ? ports.results : [];
+    const all = ports?.condition ? [...ports.inputs, ...ports.results] : fnBody.params;
     out.append(h("div", { class: "sub-head" }, "Results · code.json"),
       h("p", { class: "hint" }, rs.length ? `Gives ${rs.map((r) => names[r] ?? r).join(", ")} from the other ports. Click a port to make it an input or a result.` : "A true or false of its ports. Make some of them results, and it reads as a function that gives them: x, y = polar(length, angle)."),
-      h("div", { class: "acts" }, ...fnBody.params.map((q) => {
+      h("div", { class: "acts" }, ...all.map((q) => {
         const on = rs.includes(q);
         const b = h("button", { class: `btn${on ? " on" : ""}`, type: "button", "aria-pressed": String(on), title: on ? "A result: click to make it an input" : "An input: click to make it a result" }, `${on ? "→ " : ""}${names[q] ?? q}`);
         b.addEventListener("click", () => applyT(T.setResults(doc.code, doc.names.short, info, id, on ? rs.filter((r) => r !== q) : [...rs, q])));
@@ -1088,7 +1090,7 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
       go.addEventListener("click", () => runTop(info, Top.addDirection(doc.code, doc.names.short, id, ticks.flatMap((t, i) => (t.cb.checked ? [i] : [])), ""), (r) => { ui.back = [ui.def]; ui.def = r.select; ui.selected = null; }));
       out.append(h("div", { class: "sub-head" }, "Other directions · code.json"),
         h("p", { class: "hint" }, dirs.length ? "Each gives other ports from the rest; a solve given those uses it instead of searching." : `None: a solve of ${names[id] ?? "it"} given its results searches. A direction says how to work out other ports from the rest, as unpolar does for polar.`),
-        ...dirs.map((d) => row(pick(d, names[d] ?? "a direction", `gives ${((node(d) as NodeOf<"def">).results ?? []).map((r) => names[r] ?? "?").join(", ")}`))),
+        ...dirs.map((d) => row(pick(d, names[d] ?? "a direction", `gives ${(portsOf(doc.code.nodes, d)?.results ?? []).map((r) => names[r] ?? "?").join(", ")}`))),
         h("p", { class: "hint" }, "The ports a new direction gives:"), ...ticks.map((t) => t.el), h("div", { class: "acts" }, go));
     }
   }
