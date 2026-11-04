@@ -55,6 +55,10 @@ export const PROBLEMS: Problem[] = [
   { id: "needs-otherwise", says: /^a choice by value needs a case for every other value$/, fix: "Add an otherwise arm for the values no case names: no list of numbers or texts is all of them." },
   { id: "one-implementation", says: /^.+ and .+ are both .+: a type has one implementation of an interface, so keep one$/, fix: "Keep one of the two definitions and delete the other, or give the other a different type; a program that wants a second way calls it by its own name." },
   { id: "int-divide", says: /^Int has no divide: /, fix: "Divide Ints with quotient and remainder, or make them a Float64 (as float64) or a fraction (as fraction) first." },
+  { id: "value-case-not-value", says: /^this match chooses by value, so each case is a value: a number or a text$/, fix: "Write each case as a number or a text the value is compared with; to choose by a value's case (true, some, a case of your type) match on its cases instead." },
+  { id: "release-given-something", says: /^a release is given nothing: release → …$/, fix: "Take the names off the release arm: it runs on every exit, with nothing to be given." },
+  { id: "release-acts", says: /^a release runs on every exit, so it may only log: this one performs .+$/, fix: "Let the release only log (or close a file the library keeps open); do anything else after the handler, or in its normal finish." },
+  { id: "resumed-twice", says: /^this resumes the rest of .+ a second time: the rest runs once, so resume it on one path only$/, fix: "Resume the rest once on each path: keep the value the first resume gives and use it, instead of resuming again." },
   { id: "type-as-value", says: /^.+ is a type, not a value$/, fix: "A type says what values look like and can't be used as one: use one of its cases, or a value of that type." },
 ];
 
