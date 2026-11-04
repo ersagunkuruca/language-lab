@@ -130,6 +130,8 @@ test("a handler running a recursion that may not end, given a built value, may n
 // BACKLOG I39b, found building Tumble: run backwards from a board of holes,
 // clear's goals each answer at once, and nested one call per goal until
 // the stack ran out. They now go on from a fresh stack past a depth.
+// 3,000 steps (T14): without the fresh stack it overflows between 2,500
+// and 3,000, and each step costs more than the last (5,000 took 54 s).
 test("Tumble's clear, run backwards from a board of holes, searches within its budget instead of overflowing", () => {
   const p = load("tumble");
   const info = infer(p.code, p.pres.names);
@@ -139,8 +141,8 @@ test("Tumble's clear, run backwards from a board of holes, searches within its b
   const holes = (v: unknown): unknown => typeof v === "number" ? -1 : v && typeof v === "object" && "fields" in v ? { ...v, fields: (v as { fields: unknown[] }).fields.map(holes) } : v;
   const out = holes(first(r.call(r.value(p.named("clear")), board)));
   let steps = 0;
-  assert.doesNotThrow(() => { for (const _ of relate(p.code, p.named("clear"), { out }, { spend: () => ++steps < 5000 })) break; });
-  assert.ok(steps >= 5000, `${steps} steps`);
+  assert.doesNotThrow(() => { for (const _ of relate(p.code, p.named("clear"), { out }, { spend: () => ++steps < 3000 })) break; });
+  assert.ok(steps >= 3000, `${steps} steps`);
 });
 
 // inverse(f, y) has Choice and Diverge for any f. Called with a function
