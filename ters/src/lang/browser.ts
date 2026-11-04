@@ -32,6 +32,7 @@
 
 import { Pending, type Cells } from "./cells.ts";
 import { worldRandom } from "./random.ts";
+import { requestKey, type PlainRequest, type PlainResponse } from "./network.ts";
 import type { Value, World } from "./run.ts";
 
 // What's used of localStorage (Storage), so tests can pass a map.
@@ -51,6 +52,8 @@ export interface Clock {
   frame(f: () => void): void;
   time?(): number;
   fetch?(url: string): Promise<string>;
+  // A test's network for send request (L191b); by default the browser's.
+  send?(request: PlainRequest): Promise<PlainResponse>;
   // Ready after that many milliseconds (a test's; by default setTimeout).
   after?(ms: number): Promise<void>;
 }
@@ -59,6 +62,14 @@ const browserFetch = async (url: string): Promise<string> => {
   const r = await fetch(url);
   if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
   return r.text();
+};
+
+// Any status is a response; only a request that can't be sent fails.
+const browserSend = async (q: PlainRequest): Promise<PlainResponse> => {
+  const init: RequestInit = { method: q.method, headers: q.headers };
+  if (q.body !== "" && !["GET", "HEAD"].includes(q.method.toUpperCase())) init.body = q.body;
+  const r = await fetch(q.url, init);
+  return { status: r.status, headers: [...r.headers], body: await r.text() };
 };
 
 // localStorage, or a map when the browser refuses it (a sandboxed frame,
@@ -72,7 +83,7 @@ export const pageStorage = (): Store => {
 export function browserWorld(store: Store, program: string, console_ = console, clock?: Clock): World {
   const prefix = `lab:${program}:`;
   let tick: Value | null = null;
-  type Fetch = { landed: Value; ready: Promise<unknown>; text?: string; error?: string };
+  type Fetch = { landed: Value; ready: Promise<unknown>; done?: { value: unknown }; error?: string };
   const fetched = new Map<string, Fetch>();
   const byEvent = new WeakMap<object, Map<string, Fetch>>();
   const memo = (event: object | null) => {
@@ -80,6 +91,27 @@ export function browserWorld(store: Store, program: string, console_ = console, 
     let m = byEvent.get(event);
     if (!m) byEvent.set(event, (m = new Map()));
     return m;
+  };
+  // What the page asked the network, remembered for its event (or the
+  // page, for a view): the answer once it has landed, else Pending, read
+  // after a cell the landing writes, so a view runs again then.
+  const ask = (key: string, start: () => Promise<unknown>, failed: (why: string) => string, what: string): unknown => {
+    if (!clock) throw new Error("fetching needs a page");
+    const { cells } = clock;
+    const asked = memo(cells.event);
+    let f = asked.get(key);
+    if (!f) {
+      const landed = cells.cell(0, "fetched");
+      const ready = start().then(
+        (value) => { f!.done = { value }; },
+        (e) => { f!.error = failed((e as Error).message); },
+      ).then(() => cells.write(landed, 1));
+      asked.set(key, (f = { landed, ready }));
+    }
+    if (f.done) return f.done.value;
+    if (f.error !== undefined) throw new Error(f.error);
+    cells.read(f.landed);
+    throw new Pending(f.ready, what);
   };
   const none = () => { throw new Error("a page has no standard input"); };
   const read = (path: string) => {
@@ -130,23 +162,9 @@ export function browserWorld(store: Store, program: string, console_ = console, 
       const after = clock.after ?? ((t: number) => new Promise<void>((r) => setTimeout(r, t)));
       throw new Pending(after(Math.max(0, ms)), `${ms} ms`, false);
     },
-    fetchText: (url) => {
-      if (!clock) throw new Error("fetching needs a page");
-      const { cells } = clock;
-      const asked = memo(cells.event);
-      let f = asked.get(url);
-      if (!f) {
-        const landed = cells.cell(0, "fetched");
-        const ready = (clock.fetch ?? browserFetch)(url).then(
-          (text) => { f!.text = text; },
-          (e) => { f!.error = `could not fetch ${url}: ${(e as Error).message}`; },
-        ).then(() => cells.write(landed, 1));
-        asked.set(url, (f = { landed, ready }));
-      }
-      if (f.text !== undefined) return f.text;
-      if (f.error !== undefined) throw new Error(f.error);
-      cells.read(f.landed);
-      throw new Pending(f.ready, url);
-    },
+    fetchText: (url) => ask(url, () => (clock?.fetch ?? browserFetch)(url), (e) => `could not fetch ${url}: ${e}`, url) as string,
+    // Any request (L191b), answered as fetch text is: the page goes on
+    // when the response lands, and one event sends each request once.
+    sendRequest: (r) => ask(`send ${requestKey(r)}`, () => (clock?.send ?? browserSend)(r), (e) => `could not send ${r.method} ${r.url}: ${e}`, r.url) as PlainResponse,
   };
 }
