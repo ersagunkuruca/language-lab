@@ -1,5 +1,9 @@
 # A page that waits (C40 design, 2026-11-03)
 
+**Decided** (Ersagun, 2026-11-04): (A) and (i). **Built** in the evaluator
+(C40i): steps 1 to 3 and the test (ters/test/page-waits.test.ts). Left:
+step 4, compiled pages, which say they can't go on from a wait yet.
+
 C40's last open piece: an event handler on a page that waits, as in
 "click Save → show *saving…* → wait for the timer or the server → show
 *saved*". Programs on the command line can do this already. There, `wait`

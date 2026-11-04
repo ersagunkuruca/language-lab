@@ -96,8 +96,8 @@ export const CHECK_OP = "std.check.expect";
 // match can answer it (a test's fixed clock). In a page, a part that reads
 // it runs again every animation frame (browser.ts), so a clock is a part
 // that shows `now()`. Wait: `wait(ms)` pauses the program, on the command
-// line. Its own effect, so a page, whose parts and handlers may not wait,
-// says so in their types.
+// line. Its own effect, so a page's parts, which may not wait, say so in
+// their types; a page's handlers may (C40, PAGE_HANDLER).
 export const TIME = typedef("std.time", "Time", [], [["now", [], () => tref(NUMBER)]], true);
 export const WAIT = typedef("std.wait", "Wait", [], [["wait", [["milliseconds", () => tref(NUMBER)]], () => tref(UNIT)]], true);
 export const NOW_OP = "std.time.now", WAIT_OP = "std.wait.wait";
@@ -123,8 +123,14 @@ const tfun = (params: Id[], result: Id, effects: Id[]) => node({ id: `std.t${tn+
 // on a path that is abandoned. A handler still handles its own Choice.
 export const PAGE_VIEW: readonly Id[] = discharge("a page's text, part or attribute value", [CELLS, DIVERGE, TIME, NETWORK, LOG, CHOICE],
   "the page runtime runs a view in a watcher, under a step budget, after main has returned; a view with no answer shows nothing; a log line goes to the browser's console, once per run");
-export const PAGE_HANDLER: readonly Id[] = discharge("a page's event handler", [CELLS, UPDATE, CONSOLE, FILES, ABORT, DIVERGE, TIME, NETWORK, RANDOM, LOG],
-  "the page runtime runs a handler when its event comes, under a step budget, and logs an Abort; a log line goes to the browser's console");
+// A handler may wait (C40, PAGE-WAITS-2026-11-03.md, Ersagun 2026-11-04):
+// `wait`, and `await` of a timer, a fetch or `any of`. What it wrote
+// before a wait lands and shows then; it goes on when the wait is
+// answered, the next stretch a step of its own. Another event meanwhile
+// runs too, the two taking turns at their waits. Await is named by its
+// id: it is defined further down.
+export const PAGE_HANDLER: readonly Id[] = discharge("a page's event handler", [CELLS, UPDATE, CONSOLE, FILES, ABORT, DIVERGE, TIME, WAIT, "std.await", NETWORK, RANDOM, LOG],
+  "the page runtime runs a handler when its event comes, under a step budget, and logs an Abort; a log line goes to the browser's console; a wait lands what the handler did so far, and the rest runs when it's answered");
 // A sound (AUDIO.md): a function from a block of samples to the block to
 // play, made by a function that makes its cells. The runtime runs the
 // block function on the audio thread, 375 times a second, so its row is

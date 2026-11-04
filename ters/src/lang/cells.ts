@@ -246,9 +246,13 @@ export class Pending extends Error {
   // run is taken back and runs again from the start (null: it stopped
   // inside a builtin's call, which can't be kept).
   resume?: (() => Iterable<unknown>) | null;
-  constructor(ready: Promise<unknown>, what: string) {
+  // Whether asking again from the start gets further: a fetch's reply is
+  // kept, so it does; a timer (C40) would start again, so it doesn't.
+  again: boolean;
+  constructor(ready: Promise<unknown>, what: string, again = true) {
     super(`still waiting for ${what}`);
     this.ready = ready;
+    this.again = again;
   }
 }
 

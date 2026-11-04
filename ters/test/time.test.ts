@@ -9,7 +9,7 @@ import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { runMain } from "../src/lang/run.ts";
 import { browserWorld } from "../src/lang/browser.ts";
 import { nodeWorld } from "../src/lang/world.ts";
-import { Cells } from "../src/lang/cells.ts";
+import { Cells, Pending } from "../src/lang/cells.ts";
 import { HTML_V, NOW_OP, S, WAIT_OP } from "../src/lang/std.ts";
 
 test("the clock: the world's when nothing answers, a match's when one does", () => {
@@ -62,5 +62,7 @@ test("the browser's clock is a cell written each frame, once something reads it"
   const fs = frames; frames = []; fs.forEach((f) => f());
   assert.deepEqual(seen, [100, 116]);
   assert.equal(frames.length, 1);
-  assert.throws(() => w.wait(5), /can't wait/);
+  // A wait stops the run until the time has passed (C40: a handler may
+  // wait, page-waits.test.ts).
+  assert.throws(() => w.wait(5), (e: unknown) => e instanceof Pending && !e.again);
 });
