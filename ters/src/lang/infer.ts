@@ -2314,7 +2314,7 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
     forgetNodes(scratch ??= { ...code.nodes });
     const r = fillHole(code, {}, hole, f, {}, scratch);
     undo = r.undo;
-    derivedFrom(r.code, code, subtree(r.code, hole));
+    derivedFrom(r.code, code, subtree(r.code, hole), true);
     return (last = [f, r.code])[1];
   };
   let before: Problem[] | undefined;

@@ -478,9 +478,26 @@ const sameNode = (a: Node, b: Node) => JSON.stringify(a) === JSON.stringify(b);
 // scanning every node can start from the other program's.
 // `stable`: a node not changed is the base's own object, and so is every
 // node it reaches, so what was picked of it stands (a program on its layer).
-export const derived = new WeakMap<Code, { base: Code; changed: Set<Id>; stable?: boolean }>();
-export function derivedFrom(code: Code, base: Code, changed: Iterable<Id>) { derived.set(code, { base, changed: new Set(changed) }); }
+// `same`: only that a node not changed is the base's own object and none
+// is gone, so a scan keeps the base's picks but for the changed (a
+// palette's filled program, written into a copy of the base's nodes).
+export const derived = new WeakMap<Code, { base: Code; changed: Set<Id>; stable?: boolean; same?: boolean }>();
+export function derivedFrom(code: Code, base: Code, changed: Iterable<Id>, same = false) { derived.set(code, { base, changed: new Set(changed), ...(same ? { same } : {}) }); }
 const picked = new WeakMap<Code, Map<string, Id[]>>();
+// The picks but the changed ones: a copy, and the few changed among them
+// taken out by their positions, not a test of each pick (I167c: a filled
+// program's scans each read the thousands of the base's).
+const positions = new WeakMap<Id[], Map<Id, number>>();
+function without(picks: Id[], changed: Set<Id>): Id[] {
+  if (changed.size > 64) return picks.filter((id) => !changed.has(id));
+  let at = positions.get(picks);
+  if (!at) positions.set(picks, (at = new Map(picks.map((id, i) => [id, i]))));
+  const drop: number[] = [];
+  for (const id of changed) { const i = at.get(id); if (i !== undefined) drop.push(i); }
+  const out = picks.slice();
+  if (drop.length) { drop.sort((a, b) => b - a); for (const i of drop) out.splice(i, 1); }
+  return out;
+}
 const picksOf = (code: Code, kind: string, keep: (n: Node) => boolean): Id[] => {
   let all = picked.get(code);
   if (!all) picked.set(code, (all = new Map()));
@@ -538,7 +555,7 @@ export function nodesWhere(code: Code, kind: string, keep: (n: Node) => boolean)
   const from = derived.get(code);
   if (!from) return Object.values(code.nodes).filter(keep).map((n) => n.id);
   const base = picksOf(from.base, kind, keep);
-  const out = from.stable ? base.filter((id) => !from.changed.has(id)) : base.filter((id) => !from.changed.has(id) && code.nodes[id] && keep(code.nodes[id]));
+  const out = from.stable || from.same ? without(base, from.changed) : base.filter((id) => !from.changed.has(id) && code.nodes[id] && keep(code.nodes[id]));
   for (const id of from.changed) if (code.nodes[id] && keep(code.nodes[id])) out.push(id);
   return out;
 }
