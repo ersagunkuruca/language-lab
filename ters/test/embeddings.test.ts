@@ -3,15 +3,23 @@
 // small values: the library's five keep + − · and <, a wrong map doesn't.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { compile } from "../../compiler/src/compile.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { embeddingLaws, embeddingsIn } from "../src/lang/embed-laws.ts";
 import { infer } from "../src/lang/infer.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
-import { COMPLEX_V, EMBEDDING_V, INT_OPS } from "../src/lang/std.ts";
+import { ARITH, COMPLEX_V, EMBEDDING_V, INT_OPS, SHOW_ANY } from "../src/lang/std.ts";
+import { runMain } from "../src/lang/run.ts";
+import { B } from "../src/prelude.ts";
 
 const lib = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
 const near = lib("near");
+const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 
 function program(build: (k: Lang) => void) {
   const k = new Lang(LIBRARY.code);
@@ -50,4 +58,41 @@ test("an embedding is between two known types, once a pair, written as the recor
   assert.ok(errors(open).some((m) => /anything is an embedding, so both its types are known ones/.test(m)), String(errors(open)));
   const self = (k: Lang) => { const d = k.def("same"); k.define(d, k.call(EMBEDDING_V, k.fn(["x"], (x) => k.call(INT_OPS.add, x, k.int(0))))); };
   assert.ok(errors(self).some((m) => /same embeds Int in itself/.test(m)), String(errors(self)));
+});
+
+// The checker inserts a canonical embedding (L208c): where a known type is
+// given for another it embeds in, and on the smaller side of + − · <.
+test("an Int given where a Float64 goes, and Int + Float64, go through int in float64", () => {
+  const p = program((k) => {
+    const half = k.def("half");
+    k.define(half, k.fn(["x"], (x) => k.call(B.mul, x, k.lit(0.5))));
+    const count = k.def("count");
+    k.define(count, k.int(3));
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.call(SHOW_ANY, k.listOf(k.call(half, k.x(count)), k.call(ARITH.add, k.x(count), k.call(half, k.lit(1)))))));
+    const less = k.def("less");
+    k.define(less, k.thunk(() => k.call(SHOW_ANY, k.call(ARITH.less, k.call(half, k.lit(5)), k.x(count)))));
+  });
+  assert.deepEqual(p.info.errors.map((e) => e.message), []);
+  assert.equal(p.info.embedded?.size, 3);
+  const main = p.code.defs.find((d) => p.names[d] === "main")!;
+  assert.equal(runMain(p.code, p.info, main, { print: () => {}, names: p.names }), "[1.5, 3.5]");
+  const less = p.code.defs.find((d) => p.names[d] === "less")!;
+  assert.equal(runMain(p.code, p.info, less, { print: () => {}, names: p.names }), "true");
+});
+
+test("Int + Rational lifts the Int through int in rational: 3 + 1/1 is 4, in the evaluator and compiled JavaScript", async () => {
+  const p = program((k) => {
+    const count = k.def("count");
+    k.define(count, k.int(3));
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.call(SHOW_ANY, k.call(ARITH.add, k.x(count), k.call(lib("as fraction"), k.int(1))))));
+  });
+  assert.deepEqual(p.info.errors.map((e) => e.message), []);
+  const main = p.code.defs.find((d) => p.names[d] === "main")!;
+  assert.equal(runMain(p.code, p.info, main, { print: () => {}, names: p.names }), "4");
+  const path = join(mkdtempSync(join(tmpdir(), "embed-")), "main.mjs");
+  writeFileSync(path, compile(p.code, p.info, p.names, { runtime, exports: ["main"] }));
+  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, () => unknown>;
+  assert.equal(typeof defs.main === "function" ? defs.main() : defs.main, "4");
 });

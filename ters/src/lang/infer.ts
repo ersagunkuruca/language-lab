@@ -23,7 +23,7 @@ import { computedForward, directionProblem, useDirections } from "./directions.t
 import { analyzer, derivedFrom, determinism, oneAnswer, solveMode, type Fn } from "./modes.ts";
 import { smoothDerivative as hasSmoothDerivative, smoothGradient as hasSmoothGradient, recordVariant, forgetDerived } from "./derive.ts";
 import { answerKeys } from "./ports.ts";
-import { BOOL, CELL_OPS, EMBEDDING, LIST, DIVISION, FIELDS, JOBS, S, SET, SIGS, SMART, TRUE, TUPLE_MAX, tupleType } from "./std.ts";
+import { ARITH, BOOL, CELL_OPS, EMBEDDING, EMBEDDING_V, LIST, DIVISION, FIELDS, JOBS, S, SET, SIGS, SMART, TRUE, TUPLE_MAX, tupleType } from "./std.ts";
 import { countedCalls } from "./counting.ts";
 import { ratioParts } from "./int.ts";
 import { fieldPath, fieldPaths, placePath, readPaths } from "./records.ts";
@@ -88,6 +88,9 @@ export interface Info {
   // a generic one at that type (L38: Int's · run backwards in whole
   // numbers).
   solveAt?: Map<Id, Type>;
+  // Each expression the checker lifts through a canonical embedding (L208c,
+  // EMBEDDINGS.md), to the embedding: arith.ts inserts its map there.
+  embedded?: Map<Id, { def: Id; from: Type; to: Type }>;
 }
 
 // An implementation's place in Info.implementations: its interface and the
@@ -489,7 +492,41 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     if (sc) { info.schemes.set(d, sc); info.typeOf.set(d, sc.type); }
     if (reuse.from.divergent.has(d)) info.divergent.add(d);
   }
-  const groups = sccs(reuse ? valueDefs.filter((d) => reuse.only.has(d)) : valueDefs, deps);
+  // Embeddings are checked first (L208c), so a use anywhere after finds
+  // the program's own as it finds the library's.
+  const isEmbeddingDef = (d: Id) => { const b = (code.nodes[d] as NodeOf<"def">).body, n = b ? code.nodes[b] : undefined, f = isCall(n) ? code.nodes[n.fn] : undefined; return f?.kind === "ref" && f.target === EMBEDDING_V; };
+  const embeddingDefs = valueDefs.filter(isEmbeddingDef);
+  const checkOrder = [...embeddingDefs, ...valueDefs.filter((d) => !embeddingDefs.includes(d))];
+  const groups = sccs(reuse ? checkOrder.filter((d) => reuse.only.has(d)) : checkOrder, deps);
+  // The canonical embedding of a in b, when one is declared: the library's
+  // (the layer under) or one of this code's already checked.
+  const embeddingOf = (a: Type, b: Type): Id | undefined => {
+    const key = implementationKey(EMBEDDING, { t: "con", id: EMBEDDING, args: [a, b] });
+    const below = layer?.implementations?.get(key);
+    if (below) return below;
+    return embeddingDefs.find((d) => { const sc = info.schemes.get(d); return sc && implementationKey(EMBEDDING, s.zonk(sc.type)) === key; });
+  };
+  const closedType = (t: Type): Type | null => { const r = s.zonk(t); return r.t === "con" && !freeVars(r, s).vars.size ? r : null; };
+  const sameType = (a: Type, b: Type) => JSON.stringify(a) === JSON.stringify(b);
+  // + − · and < with sides of two types, one embedding in the other: the
+  // smaller side is lifted (Lean 4's binop%).
+  const LIFTED = new Set<Id>([ARITH.add, ARITH.sub, ARITH.mul, ARITH.less]);
+  const liftThrough = (n: Call, callee: Id | null, fr: Type & { t: "fn" }, params: Type[]) => {
+    const mark = (at: Id, def: Id, from: Type, to: Type) => (info.embedded ??= new Map()).set(at, { def, from, to });
+    if (callee && LIFTED.has(callee) && params.length === 2) {
+      const [a, b] = params.map(closedType);
+      if (!a || !b || sameType(a, b)) return;
+      const up = embeddingOf(a, b), down = up ? undefined : embeddingOf(b, a);
+      if (up) { mark(n.args[0], up, a, b); params[0] = b; } else if (down) { mark(n.args[1], down, b, a); params[1] = a; }
+      return;
+    }
+    fr.params.forEach((p, i) => {
+      const want = closedType(p), got = params[i] && closedType(params[i]);
+      if (!want || !got || sameType(want, got)) return;
+      const e = embeddingOf(got, want);
+      if (e) { mark(n.args[i], e, got, want); params[i] = want; }
+    });
+  };
 
   const mono = new Map<Id, Type>();
   let current: Id[] = [];
@@ -939,6 +976,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         const back = given?.kind === "ref" && current.includes(given.target) && fr.t === "var";
         const params = back ? args.map(() => s.fresh()) : args;
         if (back) recursiveCalls.push({ call: n, params, args });
+        if (!back && fr.t === "fn" && fr.params.length === params.length) liftThrough(n, given?.kind === "ref" ? given.target : null, fr, params);
         const reshapedBefore = s.reshaped;
         try {
           s.tupleOf = tupleType;

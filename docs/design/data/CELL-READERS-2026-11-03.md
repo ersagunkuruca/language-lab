@@ -1,5 +1,30 @@
 # Waking only the readers a write concerns (C86 design, 2026-11-03)
 
+**Measured (C86b, 2026-11-04; Ersagun agreed to (b)):** built as step 1
+says, and checked on the fast set and board.test.ts (both green). Then
+measured with bench-board.ts, the evaluator at 200 cards, best of three:
+
+| | before | with tracked reads |
+|---|---|---|
+| a running frame | 19 ms | 8.8 ms |
+| an add, per card | 11 ms | 33 to 40 ms |
+| the whole session | 6.4 s | 10.4 to 12 s |
+
+A frame is half as long, because a card's time is no longer read by the
+columns. But every reader that still runs again (on an add, the list has
+changed) now reads through a view per card it touches, and that costs
+more than it saves. Three cheaper versions were tried: a view's places
+taken from the view around it, views made once per place, and list cells
+as plain objects instead of Proxies. They took the add from 82 ms to
+33 ms, still 3× before. Step 2's gate says to stop there, so it isn't
+merged. The patch is kept in the project files
+(compiler-lane/c86b-tracked-reads.patch).
+
+What would let it pass: (c), the compiler's own paths, which need no
+views at run time; or views only where a reader reads a few places of a
+big value (they cost per place read, and a column's filter reads every
+card).
+
 C86 comes from GAPS round 8, B2. The board example keeps its whole state
 in one cell. A running frame changes one card's time. An add appends one
 card. Either way, every reader of the cell runs again: the three columns'
