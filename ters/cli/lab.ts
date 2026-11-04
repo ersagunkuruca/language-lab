@@ -43,7 +43,7 @@ import { infer, type Info } from "../src/lang/infer.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { sameLines } from "../src/lang/modules.ts";
 import { baseNames, checkOptions, loadProgram } from "../src/lang/load.ts";
-import { equal, mainProblem, pageProblem, runMain, runProgram } from "../src/lang/run.ts";
+import { equal, mainProblem, pageProblem, runMain, runProgram, type World } from "../src/lang/run.ts";
 import { Cells } from "../src/lang/cells.ts";
 import { evaluatorCall, htmlText } from "../src/lang/html.ts";
 import { hasSound, pageDocument } from "../src/lang/page.ts";
@@ -51,6 +51,7 @@ import { showType } from "../src/lang/types.ts";
 import { choose, jobProblem, represent, representationsIn, type Representation } from "../src/lang/represent.ts";
 import { withLibraryRepresentations } from "../src/lang/library-reps.ts";
 import { allowedOnly, nodeWorld } from "../src/lang/world.ts";
+import { readLog, replaying, type LogEntry } from "../src/lang/worldlog.ts";
 import { compile } from "../../compiler/src/compile.ts";
 import { CFLAGS, emitC } from "../../compiler/src/c.ts";
 import { lowerScalar } from "../../compiler/src/scalar.ts";
@@ -70,6 +71,8 @@ import { evaluatorHash, readKept, resultKeys, writeKept } from "./checks.ts";
 const USAGE = `lab: the command line for Ters, the language
 usage:
   lab run <program> [arguments…]        run main with the evaluator (a page prints as static HTML)
+    [--replay log.json]                 answering from a run's log of the world's answers, such as a compiled
+                                        program writes when TERS_LOG=log.json is set
   lab compile <program> [-o out.mjs]    compile to a JavaScript module that runs main
     [--core|--compile-ts]               through the core IR, as WebAssembly and C are (C137), or compile.ts
                                         where main doesn't lower there; --core: only the core IR, --compile-ts: only compile.ts
@@ -246,7 +249,19 @@ if (at >= 0) { mainName = argv[at + 1] ?? fail("--main needs a name"); argv.spli
 const allowAt = argv.indexOf("--allow");
 let allow: string[] | null = null;
 if (allowAt >= 0) { allow = (argv[allowAt + 1] ?? fail("--allow needs a list, such as network,files")).split(",").filter(Boolean); argv.splice(allowAt, 2); }
-const world = () => (allow ? allowedOnly(nodeWorld(), allow) : nodeWorld());
+// `--replay log.json`: answer from a run's log of the world's answers
+// (L186), such as a compiled program writes with TERS_LOG set (C172a).
+const replayAt = argv.indexOf("--replay");
+let replay: LogEntry[] | null = null;
+if (replayAt >= 0) { replay = readLog(readFileSync(argv[replayAt + 1] ?? fail("--replay needs a log file"), "utf8")); argv.splice(replayAt, 2); }
+// A replay checks each write against the log and does none, but the
+// lines a run prints to stderr are still printed, as the run printed them.
+const replayed = (log: LogEntry[]): World => {
+  const real = nodeWorld(), r = replaying(log, real) as unknown as Record<string, (...a: unknown[]) => unknown>;
+  const shown = (op: "error" | "log") => (...a: unknown[]) => { r[op](...a); return (real[op] as (...x: unknown[]) => unknown)(...a); };
+  return { ...r, error: shown("error"), log: shown("log") } as unknown as World;
+};
+const world = () => (replay ? replayed(replay) : allow ? allowedOnly(nodeWorld(), allow) : nodeWorld());
 const [command, path, ...rest] = argv;
 // An MCP server for an LLM to read, change and run programs (mcp/server.ts).
 if (command === "mcp") { (await import("../mcp/server.ts")).serve(path); await new Promise(() => {}); }

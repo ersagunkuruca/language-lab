@@ -84,3 +84,9 @@ export function replaying(log: LogEntry[], like: World, until?: number, onPause?
   }
   return out as unknown as World;
 }
+
+// A log as text and back (C172a): what a compiled run writes for the
+// evaluator to replay. JSON, with bytes (read bytes) kept as bytes.
+export const logText = (log: LogEntry[]): string => JSON.stringify(log, (_, v) => (v instanceof Uint8Array ? { bytes: [...v] } : v));
+export const readLog = (text: string): LogEntry[] =>
+  JSON.parse(text, (_, v) => (v && typeof v === "object" && !Array.isArray(v) && Object.keys(v).length === 1 && Array.isArray(v.bytes) ? Uint8Array.from(v.bytes) : v)) as LogEntry[];
