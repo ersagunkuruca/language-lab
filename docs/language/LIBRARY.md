@@ -558,7 +558,7 @@ Each of these puts its effect in the type of every function that uses it, so `di
 - **Log** (type). An effect: log(line) is debugging output. It can run anywhere, even inside a search; when nothing handles it the line goes to standard error (in a page, the browser's console).
 - **Check** (type). An effect for tests: expect(holds, what) says what should hold. A definition that performs it is a test, and lab test runs it on its saved inputs and on small values, reporting every expect that failed with the inputs it failed on.
 - **Console** (type). An effect: print, print error, read input and read line. A match with a case for each answers them (a test collects what was printed); with nothing around it, the console answers.
-- **Files** (type). An effect: read file, write file, add to file, file exists and list folder. A match with a case for each answers them (a test gives a file of its own); with nothing around it, the file system answers.
+- **Files** (type). An effect: read file, write file, add to file, file exists, list folder, read bytes and write bytes. A match with a case for each answers them (a test gives a file of its own); with nothing around it, the file system answers.
 - **Network** (type). An effect: fetch text, start fetch and send request. A match with a fetch text(url) or send request(request) case answers it; with nothing around it, the web answers.
 - **print** : `(Text) -[Console]-> Unit`. Writes a line of text to the console.
 - **print error** : `(Text) -[Console]-> Unit`. Writes a line to standard error.
@@ -569,6 +569,8 @@ Each of these puts its effect in the type of every function that uses it, so `di
 - **add to file** : `(Text, Text) -[Files, Abort]-> Unit`. Adds text to the end of a file.
 - **file exists** : `(Text) -[Files]-> Bool`. Whether there's a file at this path.
 - **list folder** : `(Text) -[Files, Abort]-> List Text`. The names of the files in a folder.
+- **read bytes** : `(Text) -[Files, Abort]-> Bytes`. A file's bytes as they are, with no decoding: for images, sound and binary formats. text of utf8(read bytes(path)) reads it as text. Aborts if the file can't be read.
+- **write bytes** : `(Text, Bytes) -[Files, Abort]-> Unit`. Writes bytes to a file as they are, replacing what was there: write bytes("out.bin", bytes of([0, 255])). Aborts if the file can't be written.
 - **fetch text** : `(Text) -[Network, Abort]-> Text`. The text at a web address. Aborts if the request fails. The same as await(start fetch(url)).
 - **start fetch** : `(Text) -[Network, Abort]-> Ticket Text`. Starts fetching the text at a web address and gives a ticket for it, so together and race can wait on it beside timers and other fetches: together([() => await(start fetch(a)), () => await(start fetch(b))]). Aborts where it is awaited if the request fails. Run from the command line, evaluated or compiled, the fetch goes on in the background and the ticket is ready when the body has come, so fetches overlap; on a page it is fetched when it starts, and the ticket is ready at once.
 - **send request** : `(Request) -[Network, Abort]-> Response`. Sends a Request (method, address, headers, body) and gives its Response, whatever its status: check response.status. Aborts only when it can't be sent. The same request is sent once per run, so a search that tries again doesn't send it twice.

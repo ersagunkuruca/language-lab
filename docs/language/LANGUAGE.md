@@ -759,7 +759,7 @@ The effects:
 |---|---|---|
 | `Choice` | `one of(list)`, `fail()`, `value of(optional)` | `first(action, fallback)`, `all(action)`, `count(action)`, `optional(action)` |
 | `Console` | `print(text)`, `print error(text)`, `read line()`, `read input()` | a match; at the top, the runtime |
-| `Files` | `read file`, `write file`, `add to file`, `file exists`, `list folder` | a match; at the top, the runtime |
+| `Files` | `read file`, `write file`, `add to file`, `file exists`, `list folder`, `read bytes`, `write bytes` | a match; at the top, the runtime |
 | `Network` | `fetch text(url)`, `start fetch(url)`, `send request(request)` | a match; at the top, the runtime |
 | `Abort` | `abort(reason)` | a match with an `abort(reason)` case; at the top, the run ends (exit code 1) |
 | `Log` | `log(line)` | a match with a `log(line)` case; at the top, standard error |

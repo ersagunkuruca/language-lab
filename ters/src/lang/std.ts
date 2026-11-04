@@ -504,6 +504,11 @@ export const IO = {
   appendFile: world("io.appendFile", "add to file", [str, str], unit, [FILES, ABORT]),
   fileExists: world("io.fileExists", "file exists", [str], bool, [FILES]),
   listFolder: world("io.listFolder", "list folder", [str], list(str), [FILES, ABORT]),
+  // A file's bytes as they are, and bytes written as they are (L189c,
+  // bytes.ts): no UTF-8 decoding or NFC, for images, sound and binary
+  // formats.
+  readBytes: world("io.readBytes", "read bytes", [str], { t: "con", id: "std.bytes", args: [] }, [FILES, ABORT]),
+  writeBytes: world("io.writeBytes", "write bytes", [str, { t: "con", id: "std.bytes", args: [] }], unit, [FILES, ABORT]),
   // The body of a GET, as text. Aborts when it can't be had (no network,
   // a status that isn't 2xx). Fetched once per address per run.
   fetchText: world("io.fetchText", "fetch text", [str], str, [NETWORK, ABORT]),
@@ -567,17 +572,21 @@ export const CONSOLE_TYPE = typedef(CONSOLE, "Console", [], [
   ["read input", [], text],
   ["read line", [], () => tref(OPTIONAL, tref(STRING))],
 ], true);
+const fixedTref = (id: Id, target: Id, ...args: Id[]) => node({ id, kind: "tref", target, args });
 export const FILES_TYPE = typedef(FILES, "Files", [], [
   ["read file", [["path", text]], text],
   ["write file", [["path", text], ["text", text]], () => tref(UNIT)],
   ["add to file", [["path", text], ["text", text]], () => tref(UNIT)],
   ["file exists", [["path", text]], () => tref(BOOL)],
   ["list folder", [["path", text]], () => tref(LIST, tref(STRING))],
+  // Their types are nodes with ids of their own, so numbered ids after
+  // them don't move (as start fetch's, below).
+  ["read bytes", [["path", () => fixedTref(`${FILES}.read bytes.path.type`, STRING)]], () => fixedTref(`${FILES}.read bytes.returns`, "std.bytes")],
+  ["write bytes", [["path", () => fixedTref(`${FILES}.write bytes.path.type`, STRING)], ["bytes", () => fixedTref(`${FILES}.write bytes.bytes.type`, "std.bytes")]], () => fixedTref(`${FILES}.write bytes.returns`, UNIT)],
 ], true);
 // start fetch's types are nodes with ids of their own, so the numbered
 // ones after them (the tuples') don't move: a saved program may hold
 // std's type nodes.
-const fixedTref = (id: Id, target: Id, ...args: Id[]) => node({ id, kind: "tref", target, args });
 export const NETWORK_TYPE = typedef(NETWORK, "Network", [], [
   ["fetch text", [["url", text]], text],
   ["start fetch", [["url", () => fixedTref(`${NETWORK}.start fetch.url.type`, STRING)]],
@@ -588,7 +597,7 @@ export const NETWORK_TYPE = typedef(NETWORK, "Network", [], [
 // Each builtin that acts on the world, by the operation it performs.
 export const WORLD_OPS: Record<Id, Id> = {
   [S.print]: `${CONSOLE}.print`, [IO.printError]: `${CONSOLE}.print error`, [IO.readInput]: `${CONSOLE}.read input`, [IO.readLine]: `${CONSOLE}.read line`,
-  [IO.readFile]: `${FILES}.read file`, [IO.writeFile]: `${FILES}.write file`, [IO.appendFile]: `${FILES}.add to file`, [IO.fileExists]: `${FILES}.file exists`, [IO.listFolder]: `${FILES}.list folder`,
+  [IO.readFile]: `${FILES}.read file`, [IO.writeFile]: `${FILES}.write file`, [IO.appendFile]: `${FILES}.add to file`, [IO.fileExists]: `${FILES}.file exists`, [IO.listFolder]: `${FILES}.list folder`, [IO.readBytes]: `${FILES}.read bytes`, [IO.writeBytes]: `${FILES}.write bytes`,
   [IO.fetchText]: `${NETWORK}.fetch text`, [IO.startFetch]: `${NETWORK}.start fetch`, [IO.sendRequest]: `${NETWORK}.send request`,
 };
 for (const v of Object.values(WORLD_OPS)) (nodes.find((n) => n.id === v) as NodeOf<"variant">).private = true;
