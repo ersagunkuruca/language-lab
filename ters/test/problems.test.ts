@@ -9,7 +9,7 @@ import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { PROBLEMS, problemOf } from "../src/lang/problems.ts";
 import { NUMBER } from "../src/lang/types.ts";
-import { ARITH, DIVIDE, FALSE, FIELDS, INT_OPS, JSON_OPS, LOG_OP, S, SHOWN_V, SOME, TRIG_OPS, TRUE } from "../src/lang/std.ts";
+import { ARITH, DIVIDE, FALSE, FIELDS, INT_OPS, JSON_OPS, LOG_OP, S, RELEASE_V, SHOWN_V, SOME, TRIG_OPS, TRUE } from "../src/lang/std.ts";
 
 const bools = (k: Lang, b: string, extra: Parameters<Lang["match"]>[1] = []) =>
   k.match(b, [{ variant: TRUE, names: [], body: () => k.lit(1) }, { variant: FALSE, names: [], body: () => k.lit(2) }, ...extra]);
@@ -66,6 +66,10 @@ const SMALLEST: Record<string, (k: Lang) => void> = {
   "needs-otherwise": (k) => k.define(k.def("p"), k.fn(["x"], (x) => k.byValue(x, [[k.lit(1), k.lit(2)]]))),
   "one-implementation": (k) => { const t = k.type("Colour", [], [["red", []]]); for (const n of ["shown at colour", "shown at colour again"]) k.define(k.def(n), k.call(SHOWN_V, k.fn(["c"], (c) => k.match(c, [{ variant: t.v.red, names: [], body: () => k.lit("red") }])))); },
   "int-divide": (k) => k.define(k.def("p"), k.thunk(() => k.call(S.first, k.thunk(() => k.call(DIVIDE, k.int(1), k.int(2))), k.thunk(() => k.int(0))))),
+  "value-case-not-value": (k) => k.define(k.def("p"), k.fn(["x"], (x) => k.byValue(x, [[k.x(TRUE), k.lit(1)]], k.lit(2)))),
+  "release-given-something": (k) => { const a = ask(k); k.define(k.def("p"), k.thunk(() => k.match(k.call(a.op.ask), [...answered(k, a, () => k.lit(1)), { variant: RELEASE_V, names: ["x"], body: () => k.x("std.unit.unit") }]))); },
+  "release-acts": (k) => { const a = ask(k); k.define(k.def("p"), k.thunk(() => k.handle(k.call(a.op.ask), answered(k, a, () => k.lit(1)), undefined, () => k.call(S.print, k.lit("a"))))); },
+  "resumed-twice": (k) => { const a = k.effect("Wait", [["wait", [], () => k.tref(NUMBER), "later"]]); k.define(k.def("p"), k.thunk(() => k.handle(k.call(a.op.wait), [{ variant: a.op.wait, names: ["go"], body: ([go]) => k.seq(k.call(go, k.lit(1)), k.call(go, k.lit(2))) }]))); },
   "not-a-number": (k) => k.define(k.def("p"), k.fn(["b"], (b) => k.match(b, [{ variant: TRUE, names: [], body: () => k.lit(1) }, { variant: FALSE, names: [], body: () => k.lit("a") }]))),
 };
 
