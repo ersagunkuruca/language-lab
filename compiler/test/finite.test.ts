@@ -120,7 +120,8 @@ test("WebAssembly stops where the evaluator does, with the same reason", async (
 });
 
 // Under WASI the stop writes its reason to standard error and exits with 1,
-// after what the program printed: as `lab run` does.
+// after what the program printed: as `lab run` does. It says the
+// definition after the reason too (C143b).
 test("a WASI program stops with the evaluator's reason and exit code", async () => {
   const k = new Lang();
   const main = k.def("main");
@@ -139,7 +140,7 @@ test("a WASI program stops with the evaluator's reason and exit code", async () 
   const wasi = new WASI({ version: "preview1", args: ["main"], stdout, stderr, returnOnExit: true });
   const got = wasi.start(await WebAssembly.instantiate(await WebAssembly.compile(m.bytes), wasi.getImportObject() as WebAssembly.Imports));
   [stdout, stderr].forEach((fd) => closeSync(fd));
-  assert.deepEqual([got, readFileSync(join(io, "out"), "utf8"), readFileSync(join(io, "err"), "utf8")], [1, "0.25\n", "the answer is too big for a Float64 (overflow)\n"]);
+  assert.deepEqual([got, readFileSync(join(io, "out"), "utf8"), readFileSync(join(io, "err"), "utf8")], [1, "0.25\n", "the answer is too big for a Float64 (overflow) (in main)\n"]);
 });
 
 // SPEC §3.3 (Ersagun 2026-11-03, L218): an overflow stops the program only
