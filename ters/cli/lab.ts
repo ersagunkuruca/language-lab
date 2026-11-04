@@ -55,7 +55,7 @@ import { readLog, replaying, type LogEntry } from "../src/lang/worldlog.ts";
 import { compile } from "../../compiler/src/compile.ts";
 import { CFLAGS, emitC } from "../../compiler/src/c.ts";
 import { lowerScalar } from "../../compiler/src/scalar.ts";
-import { coreModule, hostOpsOf, lowerCore, solvesSlowly } from "../../compiler/src/core-js.ts";
+import { coreMap, coreModule, hostOpsOf, lowerCore, solvesSlowly } from "../../compiler/src/core-js.ts";
 import { execFileSync } from "node:child_process";
 import { recordings, webCorePage, webPage } from "./web.ts";
 import { appFolder } from "./app.ts";
@@ -339,8 +339,12 @@ switch (command) {
       const here = (f: string) => resolve(import.meta.dirname, f);
       // Its hosts/js.js, bundled in or imported from beside the program (C137d5).
       const host = pageHost ? { file: inCheckout ? pathToFileURL(pageHost).href : pageHost, ops: hostOpsOf(p.code, p.names) } : undefined;
+      map = coreMap(lowered);
       return coreModule(lowered, p.names[main] ?? "main", here("../../compiler/src/core-rt.ts"), here("../src/lang/world.ts"), host);
     };
+    // Beside the module, its map (C143c): ids only, the editor and tools
+    // join the names.
+    let map: object | null = null;
     if (esbuild) {
       await esbuild.build({
         stdin: { contents: source(false), resolveDir: import.meta.dirname, sourcefile: basename(out), loader: "js" },
@@ -352,7 +356,8 @@ switch (command) {
       writeFileSync(out, source(true));
       process.stderr.write("lab: esbuild isn't installed (npm install in ters/), so the output imports the runtime from this checkout\n");
     }
-    process.stderr.write(`lab: wrote ${out}; run it with: node ${out} [arguments…]\n`);
+    if (map) writeFileSync(`${out}.map.json`, `${JSON.stringify(map, null, 1)}\n`);
+    process.stderr.write(`lab: wrote ${out}${map ? ` (and ${out}.map.json)` : ""}; run it with: node ${out} [arguments…]\n`);
     break;
   }
   case "native": {

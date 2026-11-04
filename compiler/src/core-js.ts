@@ -568,6 +568,17 @@ export function coreModule(ir: CoreIR, name: string, runtime: string, world: str
   ].join("\n");
 }
 
+// What a tool needs to go from the printed JavaScript back to the program
+// (C143c, DEBUG-AND-SPEED-2026-11-04 §4), kept beside the output, never in
+// it, and ids only: the node each printed function was lowered from (a
+// definition, or a lambda or a fold's arm inside one), by its name (fN;
+// its copies are fN$b, fN$h, fN$w and fN$v), and each stop site's node and
+// definition, by the number a stop carries (C143a, stops.ts).
+export function coreMap(ir: CoreIR): { version: 1; functions: Record<string, Id>; stops: { node: Id; def: Id }[] } {
+  const { names } = emitCoreJs(ir);
+  return { version: 1, functions: Object.fromEntries(names.map((n, i) => [n, ir.funcs[i].def])), stops: (ir.stops ?? []).map(({ node, def }) => ({ node, def })) };
+}
+
 // The program's nodes, for a module whose solves the evaluator's solver
 // runs (C137c11): only when it has one.
 // As a string parsed once, which is smaller and quicker to load than
