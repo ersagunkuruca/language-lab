@@ -13,7 +13,8 @@ import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
-import { makeRunner, type Value } from "../src/lang/run.ts";
+import { makeRunner, showerFor, type Value } from "../src/lang/run.ts";
+import { runTests } from "../src/lang/tests.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { ARITH, ARITHMETIC_V, INT_OPS, ORDERED_V, S, SHOW_ANY, SHOWN_V } from "../src/lang/std.ts";
@@ -120,3 +121,28 @@ test("a type's own show through Shown: show any shows a version as 1.9 (L205), c
   const fs = loadCoreJs(l);
   assert.deepEqual(ds.map((d) => fs[l.funcs.findIndex((g) => g.name === p.names[d] && !g.inner)]()), ["1.9", "quaternion(5, 5, 5, 5)", "[1.9, 2.0]"]);
 });
+
+// L205c: a host shows values the way the program's show any does, so lab
+// test's accepted answers, and the editor's chips once they use it, read a
+// version as 1.9 too.
+test("showerFor and lab test show a type's own values through its Shown", () => {
+  let latest!: Id, version!: Id;
+  const p = program((k, V) => {
+    version = V.v.version;
+    const text = k.def("version text");
+    k.define(text, k.fn(["v"], (v) => k.match(v, [{ variant: V.v.version, names: ["m", "n"], body: ([m, n]) => k.text(k.call(INT_OPS.show, m), k.lit("."), k.call(INT_OPS.show, n)) }])));
+    k.define(k.def("shown at version"), k.call(SHOWN_V, k.x(text)));
+    latest = k.def("latest");
+    k.define(latest, k.fn(["a"], (a) => k.call(lib("larger"), a, k.call(V.v.version, k.int(2), k.int(0)))));
+  });
+  assert.deepEqual(p.info.errors.map((e) => e.message), []);
+  const show = showerFor(p.code, p.info, p.names);
+  const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });
+  assert.equal(show({ tag: version, fields: [3, 1] }), "3.1");
+  assert.equal(show({ tag: "std.list.cons", fields: [{ tag: version, fields: [3, 1] }, { tag: "std.list.nil", fields: [] }] }), "[3.1]");
+  // Numbers and the library's own show as before.
+  assert.equal(show(r.value(at(p, "the older"))), JSON.stringify("1.9"));
+  const [res] = runTests(p.code, p.info, p.names, [latest], { [latest]: [{ inputs: ["version(3, 1)"], answer: "3.1" }] });
+  assert.deepEqual(res.failures, []);
+});
+const at = (p: { code: { defs: Id[] }; names: Record<string, string> }, n: string) => p.code.defs.find((d) => p.names[d] === n)!;
