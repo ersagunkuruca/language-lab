@@ -181,9 +181,14 @@ function unpolarInOrder(nodes: Record<Id, unknown>): void {
     if (n.kind === "call" && n.given && n.binds && f?.kind === "ref" && f.target === "std.trig.trig.unpolar") nodes[id] = { ...n, given: re(n.given), binds: re(n.binds) };
   }
 }
+// A step that needs to know the library's definitions (a use's ports) is
+// given them here by src/lang/library.ts once the library is built; until
+// then it leaves the nodes as they are, which is a shape it still reads.
+export const shapeHooks: { usesGiveTheirPorts?: (nodes: Record<Id, unknown>) => void } = {};
 export const SHAPE_STEPS: { what: string; step: (nodes: Record<Id, unknown>) => void }[] = [
   { what: "a use is a call whose fn is a ref (L130d)", step: upgradeUses },
   { what: "unpolar's ports in the order of its function, (x, y) → length, angle (L128d3)", step: unpolarInOrder },
+  { what: "a use gives its produced ports, its body a let of them (L211g)", step: (nodes) => shapeHooks.usesGiveTheirPorts?.(nodes) },
 ];
 export const SHAPE = SHAPE_STEPS.length;
 export const toTodaysShape = (nodes: Record<Id, unknown>, from = 0): void => { for (const s of SHAPE_STEPS.slice(from)) s.step(nodes); };

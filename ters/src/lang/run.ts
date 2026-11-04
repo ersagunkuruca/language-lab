@@ -714,7 +714,12 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       if (op === ABORT_OP) throw new Aborted(args[0] as string);
       if (op === RANDOM_OP) return this.ret((rt.world?.random ?? worldRandom)());
       if (op === NOW_OP) return this.ret((rt.world?.now ?? Date.now)());
-      if (op === WAIT_OP) return (world("wait")(args[0] as number), this.ret(unit));
+      // A page's handler waits by stopping here (C40): the world throws
+      // Pending, and the run goes on from here when it's ready, answered.
+      if (op === WAIT_OP) {
+        try { world("wait")(args[0] as number); } catch (e) { this.paused(e, () => this.ret(unit)); }
+        return this.ret(unit);
+      }
       // Console's, Files' and Network's operations (L145): as their builtins.
       const builtin = worldBuiltins.get(op);
       if (builtin) return this.apply(builtin, args);
@@ -728,12 +733,18 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         try { w = timers.when(t, now); } catch (e) { if (e instanceof Aborted) return this.perform(ABORT_OP, [e.reason]); throw e; }
         // A fetch still on its way: look again every few milliseconds, or
         // at a timer's deadline if that comes first (L150b).
+        // On a page the wait stops the run (C40): it goes on from here
+        // when ready, looking again at a fetch still on its way, and
+        // otherwise answered as the timer's deadline has passed.
+        const answer = (w: { at: number; first?: number }) => (w.first !== undefined ? this.apply(t.fields[1], [w.first]) : this.ret(t.tag === TICKET_V.timer || t.tag === TICKET_V.at ? t.fields[1] : timers.value(t) ?? unit));
         try {
           while (w.at > now && timers.pending(t)) { world("wait")(Math.min(5, w.at - now)); now = clock(); w = timers.when(t, now); }
-        } catch (e) { if (e instanceof Aborted) return this.perform(ABORT_OP, [e.reason]); throw e; }
-        if (w.at > now) world("wait")(w.at - now);
-        if (w.first !== undefined) return this.apply(t.fields[1], [w.first]);
-        return this.ret(t.tag === TICKET_V.timer || t.tag === TICKET_V.at ? t.fields[1] : timers.value(t) ?? unit);
+        } catch (e) {
+          if (e instanceof Aborted) return this.perform(ABORT_OP, [e.reason]);
+          this.paused(e, () => this.unhandled(op, args));
+        }
+        if (w.at > now) { const at = w; try { world("wait")(w.at - now); } catch (e) { this.paused(e, () => answer(at)); } }
+        return answer(w);
       }
       if (op === CHECK_OP && rt.check) return (rt.check((args[0] as Data).tag === TRUE, args[1] as string), this.ret(unit));
       // A program's own effect, answered by its host (L69a); a missing or
@@ -744,6 +755,17 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         return this.ret(v);
       }
       throw new Error(`nothing handles ${rt.names?.[op] ?? stdNames[op] ?? op}`);
+    }
+
+    // A Pending from the world, rethrown: in a page's run (depth 1) with
+    // how to go on from here once it's ready (L59, C40), inside a builtin's
+    // call with none. Anything else is rethrown as it is.
+    paused(e: unknown, then: () => void): never {
+      if (e instanceof Pending) {
+        if (depth === 1 && e.resume === undefined) { let used = false; e.resume = () => { if (used) throw new Error("a page's run was resumed twice"); used = true; then(); return going(this); }; }
+        else if (depth > 1) e.resume = null;
+      }
+      throw e;
     }
 
     handle(h: Id, args: Value[]): void {
