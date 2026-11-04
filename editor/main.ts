@@ -47,7 +47,8 @@ import { filesPanels, fnv, userCode } from "./filesPanel.ts";
 import { graphMenu as graphMenuOf } from "./graphMenu.ts";
 import { shower } from "./shown.ts";
 import { pagePanels } from "./pagePanel.ts";
-import { lawPanel, profileView, stuckView, valueView } from "./runViews.ts";
+import { answersView, lawPanel, profileView, stuckView, valueView } from "./runViews.ts";
+import type { LogEntry } from "../ters/src/lang/worldlog.ts";
 import { fromFile, toFile } from "../ters/src/files.ts";
 import { flattened, matchRows, sameEverywhere } from "../ters/src/lang/patterns.ts";
 import { showPin, type Pins } from "../ters/src/lang/signatures.ts";
@@ -163,7 +164,7 @@ export interface UI {
   newKind: "function" | "value" | "type" | "effect" | "interface";
   query: string;
   refused: boolean;
-  output: { def: Id; lines: string[]; error?: string; running?: boolean; stuck?: Stuck; profile?: Profile; compiled?: boolean } | null;
+  output: { def: Id; lines: string[]; error?: string; running?: boolean; stuck?: Stuck; profile?: Profile; compiled?: boolean; answers?: LogEntry[] } | null;
   // What Run gives a program that reads standard input, by program (I168).
   stdin?: Record<string, string>;
   // The graph's right-click menu: what it was for, where (screen, world).
@@ -1801,6 +1802,7 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
       if (ui.output.error) box.append(h("p", { class: "status-line bad", role: "alert" }, ui.output.error));
       if (ui.output.stuck) box.append(stuckView(ui.output.stuck));
       if (ui.output.profile) box.append(profileView(namer, ui.output.profile, doc.code, pick));
+      if (ui.output.answers) box.append(answersView(ui.output.answers));
       if (ui.output.compiled) box.append(h("p", { class: "hint", title: "main compiled to JavaScript, as Open in a tab and lab compile do: the same output, much faster than the evaluator, but with no record of where the run went" }, "Ran compiled."));
     }
   } else if (z?.t === "fn" && z.eff.effs.some((e) => WORLD.includes(e))) {

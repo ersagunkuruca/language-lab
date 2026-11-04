@@ -1,7 +1,9 @@
 # Hosts as handlers: named rows and the world's effects in std
 
 **Status (2026-10-31).** Built (Ersagun agreed 2026-10-31): L55 #709, L58.
-The world's answers in one log (L186, 2026-11-03) is a design rule, not built yet.
+The world's answers in one log (L186, 2026-11-03) is a design rule. The evaluator's half is built
+(E232a, 2026-11-04): ters/src/lang/worldlog.ts `logged` and `replaying`, and the editor's Run
+shows the log. Pages' events and the compiled runtimes' own worlds aren't logged yet.
 L58 named View, Handler and Sound, the rows written in std's types. Main
 and a sound's maker stay ledger entries, since no type spells them. This note covers BACKLOG
 L58 (named rows for the hosts) and L55 (Console, Files and Network declared
