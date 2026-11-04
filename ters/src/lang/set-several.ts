@@ -19,7 +19,7 @@
 // construct.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
-import { freshId, isCall, type Call } from "../model.ts";
+import { nodesWhere, freshId, isCall, type Call } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { infer, type Info } from "./infer.ts";
 import { fieldPaths } from "./records.ts";
@@ -33,10 +33,11 @@ const severalAt = (code: Code, n: Node): Id[][] | null => {
   return fn?.kind === "ref" && fn.target === SET ? fieldPaths(code, n.args[0]) : null;
 };
 
-export const usesSetSeveral = (code: Code) => Object.values(code.nodes).some((n) => severalAt(code, n));
+const settingSeveral = (code: Code) => nodesWhere(code, "set several", (n) => !!severalAt(code, n));
+export const usesSetSeveral = (code: Code) => settingSeveral(code).length > 0;
 
 export function setSeveral(code: Code, info: Info, names: Names): { code: Code; info: Info; names: Names } {
-  const calls = Object.values(code.nodes).flatMap((n) => { const paths = severalAt(code, n); return paths ? [{ id: n.id, paths }] : []; });
+  const calls = settingSeveral(code).flatMap((id) => { const paths = severalAt(code, code.nodes[id]); return paths ? [{ id, paths }] : []; });
   if (!calls.length) return { code, info, names };
   const nodes: Record<Id, Node> = { ...code.nodes };
   const add = (n: Bare): Id => { const id = freshId(); nodes[id] = { ...n, id } as Node; return id; };

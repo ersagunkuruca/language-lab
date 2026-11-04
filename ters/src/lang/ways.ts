@@ -5,7 +5,7 @@
 // field left to its ways has a way that ends in a field the
 // implementation gives, before anything runs.
 
-import { children, type Code, type Id, type NodeOf, isUse, useTarget } from "../model.ts";
+import { children, nodesWhere, type Code, type Id, type NodeOf, isUse, useTarget } from "../model.ts";
 import { S } from "./std.ts";
 import { add, less, possible, steps, type Cost } from "./cost.ts";
 
@@ -27,8 +27,9 @@ export type Ways = Map<Id, { def: Id; uses: Set<Id>; cost: number }[]>;
 // of it, and the fields each one uses.
 export function waysIn(code: Code, ops: Map<Id, Id> = interfaceOps(code)): Ways {
   const ways: Ways = new Map();
-  for (const n of Object.values(code.nodes)) {
-    if (n.kind !== "def" || !n.way || !n.body) continue;
+  for (const id of nodesWhere(code, "way", (n) => n.kind === "def" && !!n.way && !!n.body)) {
+    const n = code.nodes[id] as NodeOf<"def">;
+    if (!n.body || !n.way) continue;
     const uses = new Set<Id>();
     const look = (x: Id) => { const m = code.nodes[x]; if (m.kind === "ref" && ops.has(m.target)) uses.add(m.target); if (isUse(m) && ops.has(useTarget(code.nodes, m))) uses.add(useTarget(code.nodes, m)); children(m).forEach(look); };
     look(n.body);

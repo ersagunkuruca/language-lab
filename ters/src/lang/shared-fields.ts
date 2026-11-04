@@ -19,7 +19,7 @@
 // keep each case's fields apart, as the language did before.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
-import { freshId, isCall, type Call } from "../model.ts";
+import { nodesWhere, freshId, isCall, type Call } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { infer, type Info } from "./infer.ts";
 import { S, SET } from "./std.ts";
@@ -55,7 +55,7 @@ function typeOf(code: Code, field: Id): NodeOf<"typedef"> | null {
   return null;
 }
 
-export const usesSharedFields = (code: Code) => Object.values(code.nodes).some((n) => n.kind === "field" && !!n.same);
+export const usesSharedFields = (code: Code) => nodesWhere(code, "shared field", (n) => n.kind === "field" && !!n.same).length > 0;
 
 export function sharedFields(code: Code, info: Info, names: Names): { code: Code; info: Info; names: Names } {
   if (!usesSharedFields(code)) return { code, info, names };

@@ -11,6 +11,7 @@ import type { Names, Notation, Presentation } from "../ters/src/presentation.ts"
 import blocksStyle from "../ters/styles/blocks.json" with { type: "json" };
 import { fillings, implementationKey, infer as check, type Filling, type Info } from "../ters/src/lang/infer.ts";
 import { isCall, isPublished, isUse, useNode, useTarget, type Call, type Use } from "../ters/src/model.ts";
+import { answerKeys } from "../ters/src/lang/ports.ts";
 import { LIBRARY, PRELUDE, TREES } from "../ters/src/lang/library.ts";
 import { B } from "../ters/src/prelude.ts";
 import { pinsOf, type Pins } from "../ters/src/lang/signatures.ts";
@@ -1540,14 +1541,12 @@ export function turnAround(code: Code, names: Names, info: Info, call: Id, k: nu
   const mismatch = turnMismatch(code, names, info, call, k);
   if (mismatch) return { ok: false, reason: mismatch };
   const p = t.params[k], nm = (id: Id) => names[id] ?? display[id] ?? "it";
-  const b = freshId(), use = freshId();
+  // A use with no body (L211): it gives the one port not given, p.
+  const fn = freshId();
   const given: Record<string, Id> = { out: n.args[k] };
   t.params.forEach((q, i) => { if (i !== k) given[q] = n.args[i]; });
-  const extra: Node[] = [];
-  const next = replace(code, call, () => useNode((d) => { const id = freshId(); extra.push({ id, ...d } as Node); return id; }, t.def.id, given, { [p]: b }, use));
-  for (const x of extra) next.nodes[x.id] = x;
-  next.nodes[b] = { id: b, kind: "binder" };
-  next.nodes[use] = { id: use, kind: "ref", target: b };
+  const next = replace(code, call, () => ({ kind: "call", fn, given }) as Omit<Use, "id">);
+  next.nodes[fn] = { id: fn, kind: "ref", target: t.def.id };
   // A search that can't get from the result back to this input (split:
   // nothing gives sum), said as what it means.
   try {
@@ -1559,7 +1558,7 @@ export function turnAround(code: Code, names: Names, info: Info, call: Id, k: nu
       return { ok: false, reason: none ? `${nm(t.def.id)} can't work out ${nm(p)} from its result: nothing in its body gives ${none.slice("nothing gives ".length)} back when the rest is given` : `${nm(t.def.id)} can't work out ${nm(p)} from its result: ${stuck[0]} never gets what it needs` };
     }
   } catch {}
-  return guardTyped(info, next, { ...names, [b]: nm(p) }, call, `Turned ${nm(t.def.id)} around: what went into ${nm(p)} is now its result, given, and it works out ${nm(p)}. Double-click what it gives, or use its menu, to turn it back; Undo does too.`);
+  return guardTyped(info, next, names, call, `Turned ${nm(t.def.id)} around: what went into ${nm(p)} is now its result, given, and it works out ${nm(p)}. Double-click what it gives, or use its menu, to turn it back; Undo does too.`);
 }
 
 // The other way: a solve that works out one input of a definition from
@@ -1568,11 +1567,12 @@ export function turnBack(code: Code, names: Names, info: Info, solve: Id): TEdit
   const n = code.nodes[solve];
   if (!isUse(n)) return { ok: false, reason: "it isn't turned around" };
   const d = code.nodes[useTarget(code.nodes, n)], lam = d?.kind === "def" && d.body ? code.nodes[d.body] : null;
-  // A use that gives what it works out as a tuple (L211) has nothing to turn back.
-  if (!n.binds || n.body === undefined) return { ok: false, reason: "it gives what it works out as one value" };
-  const bound = Object.keys(n.binds), body = code.nodes[n.body];
+  // What it works out: with no body (L211) the ports it produces, else
+  // what it binds, given back as they are.
+  const bound = n.body === undefined ? answerKeys(code, n) : Object.keys(n.binds ?? {});
   if (lam?.kind !== "lambda" || bound.length !== 1 || bound[0] === "out" || !("out" in n.given)) return { ok: false, reason: "it works out more than one input, or the result" };
-  if (body?.kind !== "ref" || body.target !== n.binds[bound[0]]) return { ok: false, reason: "it does more with what it works out than give it" };
+  const body = n.body === undefined ? null : code.nodes[n.body];
+  if (n.body !== undefined && (body?.kind !== "ref" || body.target !== n.binds?.[bound[0]])) return { ok: false, reason: "it does more with what it works out than give it" };
   if (lam.params.some((q) => q !== bound[0] && !(q in n.given))) return { ok: false, reason: "not every other input is given" };
   const fn = freshId();
   const next = replace(code, solve, () => ({ kind: "call", fn, args: lam.params.map((q) => (q === bound[0] ? n.given.out : n.given[q])) }));

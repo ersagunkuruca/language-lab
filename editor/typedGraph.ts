@@ -813,7 +813,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
         // The one output that is the whole value shares it when dragged.
         const all = k === "(all)" || outKeys.length === 1;
         g.append(s("text", { x: bw - 9, y: portY(i) + 4, class: "portl", "text-anchor": "end" }, outText(k)));
-        g.append(titled(s("circle", { cx: bw, cy: portY(i), r: 5, class: "outp", ...(all ? { "data-out": id } : {}) }), all ? "Drag onto another input to share this value there" : `${label(k)}: wired to what reads it`));
+        g.append(titled(s("circle", { cx: bw, cy: portY(i), r: 5, class: "outp", "data-turn": id, ...(all ? { "data-out": id } : {}) }), all ? "Drag onto another input to share this value there" : `${label(k)}: wired to what reads it`));
       });
       boundKeys.forEach((k, i) => {
         const b = bound[k];
@@ -1699,8 +1699,9 @@ function interact(canvas: Canvas, scene: Scene, hooks: GraphHooks, picked: Set<I
     else if (Math.hypot(e.clientX - down.x, e.clientY - down.y) < 4) { if (picked.size) { picked.clear(); draw(hooks.at); } hooks.select(null); }
   });
   root.addEventListener("dblclick", (e) => {
-    const port = (e.target as Element).closest("circle.inp[data-slot], circle.src[data-src]");
-    const at = port?.getAttribute("data-slot") ?? port?.getAttribute("data-src");
+    // A bare use's output turns it back as a solved binder's does (L211).
+    const port = (e.target as Element).closest("circle.inp[data-slot], circle.src[data-src], circle.outp[data-turn]");
+    const at = port?.getAttribute("data-slot") ?? port?.getAttribute("data-src") ?? port?.getAttribute("data-turn");
     if (at && hooks.turn?.(at)) return;
     const t = (e.target as Element).closest("[data-id]");
     if (t) hooks.open(t.getAttribute("data-id")!);

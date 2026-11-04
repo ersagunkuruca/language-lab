@@ -23,7 +23,7 @@
 // aren't all listed.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
-import { freshId } from "../model.ts";
+import { nodesWhere, freshId } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { infer, type Info } from "./infer.ts";
 import { FALSE, S, TRUE } from "./std.ts";
@@ -33,10 +33,11 @@ type Bare = Node extends infer N ? (N extends Node ? Omit<N, "id"> : never) : ne
 const byValue = (code: Code, n: Node): n is NodeOf<"match"> =>
   n.kind === "match" && n.arms.some((a) => !!(code.nodes[a] as NodeOf<"arm"> | undefined)?.value);
 
-export const usesLiteralMatch = (code: Code) => Object.values(code.nodes).some((n) => byValue(code, n));
+const byValueIn = (code: Code) => nodesWhere(code, "match by value", (n) => byValue(code, n));
+export const usesLiteralMatch = (code: Code) => byValueIn(code).length > 0;
 
 export function literalMatch(code: Code, info: Info, names: Names): { code: Code; info: Info; names: Names } {
-  const matches = Object.values(code.nodes).filter((n) => byValue(code, n)) as NodeOf<"match">[];
+  const matches = byValueIn(code).map((id) => code.nodes[id]) as NodeOf<"match">[];
   if (!matches.length) return { code, info, names };
   const nodes: Record<Id, Node> = { ...code.nodes };
   const out: Names = { ...names };
