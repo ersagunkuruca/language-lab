@@ -23,7 +23,7 @@ import { computedForward, directionProblem, useDirections } from "./directions.t
 import { analyzer, derivedFrom, determinism, oneAnswer, solveMode, type Fn } from "./modes.ts";
 import { smoothDerivative as hasSmoothDerivative, smoothGradient as hasSmoothGradient, recordVariant, forgetDerived } from "./derive.ts";
 import { answerKeys } from "./ports.ts";
-import { BOOL, CELL_OPS, LIST, DIVISION, FIELDS, JOBS, S, SET, SIGS, SMART, TRUE, TUPLE_MAX, tupleType } from "./std.ts";
+import { BOOL, CELL_OPS, EMBEDDING, LIST, DIVISION, FIELDS, JOBS, S, SET, SIGS, SMART, TRUE, TUPLE_MAX, tupleType } from "./std.ts";
 import { countedCalls } from "./counting.ts";
 import { ratioParts } from "./int.ts";
 import { fieldPath, fieldPaths, placePath, readPaths } from "./records.ts";
@@ -1359,6 +1359,21 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // interface at a closed type, one for each pair; then every known type a
   // use asked for an interface must have one.
   const resultsGiven: { impl: Id; field: Id; by: Id }[] = [];
+  // An embedding (EMBEDDINGS.md, L208b): between two known types, written
+  // as the record, at most one for a pair; kept with the implementations,
+  // under its whole type, for the checker to insert later (L208c).
+  function embedding(d: Id, t: Type & { t: "con" }) {
+    const table = info.implementations!;
+    if (freeVars(t, s).vars.size) { err(d, `${nm(d)} is an embedding, so both its types are known ones: ${show(t)} leaves one open`); return; }
+    const body = code.nodes[(code.nodes[d] as NodeOf<"def">).body!];
+    const fn = isCall(body) ? code.nodes[body.fn] : null;
+    if (fn?.kind !== "ref" || fn.target !== typedefOf(EMBEDDING)!.variants[0]) { err(d, `${nm(d)} is an embedding, so it is written as the record itself: embedding(map: …)`); return; }
+    const [a, b] = t.args.map((x) => s.resolve(x));
+    if (JSON.stringify(a) === JSON.stringify(b)) { err(d, `${nm(d)} embeds ${show(a)} in itself: an embedding goes from one type into another`); return; }
+    const key = implementationKey(EMBEDDING, t), other = table.get(key);
+    if (other && other !== d) err(d, `${nm(other)} and ${nm(d)} both embed ${show(a)} in ${show(b)}: a type goes into another one way, so keep one, and call any other by its name`);
+    else table.set(key, d);
+  }
   function implementations() {
     const table = info.implementations!;
     let ways: Ways | undefined;
@@ -1370,6 +1385,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     for (const d of valueDefs) {
       const sc = info.schemes.get(d);
       const t = sc && s.zonk(sc.type);
+      if (t?.t === "con" && t.id === EMBEDDING) { embedding(d, t); continue; }
       if (!t || t.t !== "con" || !typedefOf(t.id)?.interface) continue;
       if (freeVars(t, s).vars.size) {
         const at = s.resolve(t.args[0] ?? { t: "var", v: -1 });
