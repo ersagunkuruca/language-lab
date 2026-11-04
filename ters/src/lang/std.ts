@@ -800,6 +800,10 @@ export const TEXT_OPS = {
   // NFC (L214a): text from the world already is; text built from pieces
   // may not be ("e" ++ "\u0301").
   normalized: builtin("text.normalized", "normalized", pure([str], str), (t: string) => t.normalize("NFC")),
+  // What a reader sees as characters (L214c, TEXT-2026-11-03.md §3):
+  // `characters` and `length` stay code points, which slicing counts.
+  graphemes: builtin("text.graphemes", "graphemes", pure([str], list(str)), (t: string) => listOf(T.graphemes(t))),
+  graphemeCount: builtin("text.graphemeCount", "grapheme count", pure([str], int), T.graphemeCount),
 };
 
 // Arrays (BACKLOG C30d, REPRESENTATIONS.md step 5): a list's items side by
