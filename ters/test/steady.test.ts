@@ -80,3 +80,37 @@ test("sin past 2^20·π/2 stops with its reason, until Payne and Hanek's reducti
   const r = makeRunner(p.code, p.info, { print: () => {} });
   assert.throws(() => [...(r.call(r.value(p.own[0]), 2e6 as Value) as Iterable<unknown>)], /below 1,647,100/);
 });
+
+// pow takes two inputs: its own cases, the edges of fdlibm's branches
+// among them (y whole or not, x near 1 with a huge y, results that
+// overflow, underflow or are subnormal).
+test("steady pow gives fdlibm's bits, which are V8's Math.pow's, and compiled JavaScript gives the same", async () => {
+  const k = new Lang(LIBRARY.code);
+  const d = k.def("my pow");
+  k.define(d, k.fn(["x", "y"], (x, y) => k.call(steady("steady pow"), x, y)));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const r = makeRunner(code, info, { print: () => {} });
+  const cases: [number, number][] = [[2, 10], [2, 0.5], [0, 2], [-1, 3], [1, 1e300], [10, 308], [2, -1074], [2, -1075], [2, 1023], [0.5, 1074], [-2, 3], [-2, 1023], [1.0000001, 1e12], [0.9999999, 1e12], [3, 2 ** 40], [7, -0.5], [1e-310, 0.25]];
+  for (let i = 0; i < 300; i++) {
+    const kind = i % 5;
+    const x = kind === 0 ? rnd() * 10 : kind === 1 ? -Math.ceil(rnd() * 20) : kind === 2 ? 1 + (rnd() - 0.5) * 1e-7 : kind === 3 ? Math.exp((rnd() - 0.5) * 1400) : rnd() * 1e-300;
+    const y = kind === 1 ? Math.round((rnd() - 0.5) * 40) || 1 : kind === 2 ? (rnd() - 0.5) * 1e10 : (rnd() - 0.5) * 60;
+    cases.push([x, y]);
+  }
+  const path = join(mkdtempSync(join(tmpdir(), "steady-pow-")), "main.mjs");
+  writeFileSync(path, compile(code, info, names, { runtime, exports: ["my pow"] }));
+  const compiled = (await import(pathToFileURL(path).href)).defs["my pow"] as (x: number, y: number) => unknown;
+  const ir = lowerCore(code, info, names, [d]);
+  assert.deepEqual([...ir.refused.values()], []);
+  const core = loadCoreJs(ir)[ir.funcs.findIndex((g) => g.name === "my pow" && !g.inner)];
+  for (const [x, y] of cases) {
+    const want = Math.pow(x, y);
+    if (!Number.isFinite(want)) continue;
+    const [got] = r.call(r.value(d), x as Value, y as Value) as Iterable<unknown>;
+    assert.ok(Object.is(got, want === 0 ? 0 : want), `pow(${x}, ${y}) = ${got}, Math.pow ${want}`);
+    const c = compiled(x, y);
+    assert.ok(Object.is(typeof c === "object" ? [...(c as Iterable<number>)][0] : c, got), `compile.ts pow(${x}, ${y})`);
+    assert.ok(Object.is(core(x, y), got), `core IR pow(${x}, ${y})`);
+  }
+});
