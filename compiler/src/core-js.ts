@@ -23,12 +23,13 @@ import { ARRAY_OPS } from "../../ters/src/lang/std.ts";
 import { toList, type Runtime } from "../../ters/src/lang/run.ts";
 import { fusedProgram } from "./handlers.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
-import type { Code, Id } from "../../ters/src/model.ts";
+import type { Code, Id, NodeOf } from "../../ters/src/model.ts";
+import { effectOfOperation, hostOp, ownOperations } from "../../ters/src/lang/hosts.ts";
 import * as I from "../../ters/src/lang/int.ts";
 import { ARRAY_RT, listSteps, RT, isData, isRecord, lowerScalar, type CoreIR, type LType, type Op, type SExpr, type SFunc, type TType } from "./scalar.ts";
 import { runtime } from "./wasm-rt.ts";
 import { STOPS } from "./stops.ts";
-import { Aborted, FAIL, OUT, RUNTIME, Stopped, Unsupported, coreRuntime, runCoreFn, type BuiltinOf, type MainSpec, type TableSpec } from "./core-rt.ts";
+import { Aborted, FAIL, OUT, RUNTIME, Stopped, Unsupported, coreRuntime, runCoreFn, type BuiltinOf, type HostOps, type MainSpec, type TableSpec } from "./core-rt.ts";
 // The runtime is core-rt.ts's; these are here too, for the tests and
 // tools that print and run in one.
 // The solver too, for the programs run here that solve (core-solve.ts).
@@ -387,9 +388,10 @@ function kidsOf(e: SExpr): SExpr[] {
 }
 
 // The functions, by their place in ir.funcs. `rt`: the console and files.
-export function loadCoreJs(ir: CoreIR, rt: Runtime = { print: () => {} }): ((...xs: unknown[]) => unknown)[] {
+// `hostOps`: the operations rt.hosts answers (hostOpsOf).
+export function loadCoreJs(ir: CoreIR, rt: Runtime = { print: () => {} }, hostOps?: HostOps): ((...xs: unknown[]) => unknown)[] {
   const { js, names, worlds } = emitCoreJs(ir);
-  const all = new Function("R", js)(coreRuntime(ir.tables.map(tableSpec), worlds, rt, ir.code, ir.info)) as Record<string, (...xs: unknown[]) => unknown>;
+  const all = new Function("R", js)(coreRuntime(ir.tables.map(tableSpec), worlds, rt, ir.code, ir.info, hostOps)) as Record<string, (...xs: unknown[]) => unknown>;
   // A Float64 handed back to the host is a use of it (SPEC §3.3, C156):
   // too big, it stops there.
   const fin = (x: number) => { if (x - x !== 0) throw new Stopped(STOPS[STOPS.length - 1]); return x; };
@@ -416,7 +418,9 @@ export function runCoreMain(ir: CoreIR, name: string, args: string[], rt: Runtim
 // The program as a module that runs main in Node (C137c5, `lab compile
 // --core`): the printed functions, with the runtime imported from
 // `runtime` (this file, which a bundler takes in) and Node's world.
-export function coreModule(ir: CoreIR, name: string, runtime: string, world: string): string {
+// `hosts`: the program's hosts/js.js, imported, and its operations
+// (hostOpsOf), which it answers where nothing in the program handles them.
+export function coreModule(ir: CoreIR, name: string, runtime: string, world: string, hosts?: Hosts): string {
   const [fi, m] = mainOf(ir, name);
   const { js, names, worlds } = emitCoreJs(ir);
   const code = codeFor(ir, js);
@@ -424,8 +428,9 @@ export function coreModule(ir: CoreIR, name: string, runtime: string, world: str
     `import { coreRuntime, runCoreFn } from ${JSON.stringify(runtime)};`,
     ...solverFor(code, runtime),
     `import { nodeWorld } from ${JSON.stringify(world)};`,
-    "const rt = { print: (s) => console.log(s), world: nodeWorld() };",
-    `const R = coreRuntime(${JSON.stringify(ir.tables.map(tableSpec))}, ${JSON.stringify(worlds)}, rt, ${code});`,
+    ...(hosts ? [`import $hostAnswers from ${JSON.stringify(hosts.file)};`] : []),
+    `const rt = { print: (s) => console.log(s), world: nodeWorld()${hosts ? ", hosts: $hostAnswers" : ""} };`,
+    `const R = coreRuntime(${JSON.stringify(ir.tables.map(tableSpec))}, ${JSON.stringify(worlds)}, rt, ${code}${hosts ? `, undefined, ${JSON.stringify(hosts.ops)}` : ""});`,
     "const defs = (function (R) {",
     js,
     "})(R);",
@@ -439,6 +444,21 @@ export function coreModule(ir: CoreIR, name: string, runtime: string, world: str
 // the same object written out.
 const codeFor = (ir: CoreIR, js: string) => (/R\.rt\("(solve|exists"|derive:)/.test(js) ? `JSON.parse(${JSON.stringify(JSON.stringify({ nodes: ir.code.nodes, defs: ir.code.defs }))})` : "undefined");
 
+// A program's hosts/js.js (FOREIGN.md, C137d5): where it is, and the
+// program's own operations by `effect:index`, as a perform names them
+// (scalar.ts), with what the border needs of each (hosts.ts hostOp).
+export interface Hosts { file: string; ops: HostOps }
+export function hostOpsOf(code: Code, names: Record<Id, string>): HostOps {
+  const out: HostOps = {};
+  for (const op of ownOperations(code)) {
+    const e = effectOfOperation(code, op);
+    if (!e) continue;
+    const i = (code.nodes[(code.nodes[e] as NodeOf<"def">).body!] as NodeOf<"typedef">).variants.indexOf(op);
+    out[`${e}:${i}`] = { ...hostOp(code, names, op), op };
+  }
+  return out;
+}
+
 // The solver, next to the runtime, imported only by a program that has
 // its nodes (one that solves): it carries the library (C137d1).
 const solverFor = (code: string, beside: string) => {
@@ -451,7 +471,7 @@ const solverFor = (code: string, beside: string) => {
 // with core-page.ts (`page`, which a bundler takes in) drawing main.
 // `worklet`: a page with sound, its audio thread's script (coreSoundScript
 // bundled), which the page plays (C137d4).
-export function corePageScript(ir: CoreIR, name: string, page: string, title: string, worklet?: string): string {
+export function corePageScript(ir: CoreIR, name: string, page: string, title: string, worklet?: string, hosts?: Hosts): string {
   const fi = ir.funcs.findIndex((g) => g.name === name && !g.inner && !g.budgeted);
   if (fi < 0 || ir.funcs[fi].params.length) throw new Error(`${name}: not compiled, or not a page's main`);
   const { js, names, worlds } = emitCoreJs(ir);
@@ -459,9 +479,10 @@ export function corePageScript(ir: CoreIR, name: string, page: string, title: st
   return [
     `import { startCorePage } from ${JSON.stringify(page)};`,
     ...solverFor(code, page),
+    ...(hosts ? [`import $hostAnswers from ${JSON.stringify(hosts.file)};`] : []),
     `startCorePage(${JSON.stringify(ir.tables.map(tableSpec))}, ${JSON.stringify(worlds)}, (R) => {`,
     js,
-    `}, ${JSON.stringify(names[fi])}, ${JSON.stringify(title)}, ${code}${worklet === undefined ? "" : `, ${JSON.stringify(worklet)}`});`,
+    `}, ${JSON.stringify(names[fi])}, ${JSON.stringify(title)}, ${code}, ${worklet === undefined ? "undefined" : JSON.stringify(worklet)}${hosts ? `, { answers: $hostAnswers, ops: ${JSON.stringify(hosts.ops)} }` : ""});`,
   ].join("\n");
 }
 

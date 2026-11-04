@@ -211,7 +211,7 @@ test("a page bundles its hosts/js.js and asks it", async () => {
   const { Lang } = await import("../src/lang/dsl.ts");
   const { base, baseNames } = await import("../src/lang/load.ts");
   const { infer } = await import("../src/lang/infer.ts");
-  const { webPage } = await import("../cli/web.ts");
+  const { webPage, webCorePage } = await import("../cli/web.ts");
   const { HTML_V } = await import("../src/lang/std.ts");
   const k = new Lang(LIBRARY.code);
   const dev = k.effect("Device", [["name of", [["id", () => k.tref("type.int")]], () => k.tref("type.string")]]);
@@ -221,9 +221,11 @@ test("a page bundles its hosts/js.js and asks it", async () => {
   assert.deepEqual(info.errors.map((e) => e.message), []);
   const host = join(dir, "device-host.js");
   writeFileSync(host, `export default { ${JSON.stringify(dev.op["name of"])}: (id) => "phone " + id };\n`);
-  const html = await webPage("device", code, info, names, main, host);
-  const script = /<script>([\s\S]*)<\/script>/.exec(html)![1];
-  const body = new FakeEl("body");
-  runInNewContext(script, { document: { ...fakeDoc(), body }, localStorage: memoryStore(), console });
-  assert.match((body.kids[0] as FakeEl).html(), /<p>phone 7<\/p>/);
+  // compile.ts's page and the core IR's (C137d5).
+  for (const html of [await webPage("device", code, info, names, main, host), await webCorePage("device", code, info, names, k.code.defs, main, host)]) {
+    const script = /<script>([\s\S]*)<\/script>/.exec(html)![1];
+    const body = new FakeEl("body");
+    runInNewContext(script, { document: { ...fakeDoc(), body }, localStorage: memoryStore(), console, TextEncoder });
+    assert.match((body.kids[0] as FakeEl).html(), /<p>phone 7<\/p>/);
+  }
 });

@@ -7,6 +7,7 @@
 import { FALSE, HASH_SET_OPS, NONE, S, SOME, STD_IMPL, STD_MANY, TABLE_OPS, TICKET_V, TRUE } from "../../ters/src/lang/std.ts";
 import { META, cellOps, equal, unit, type Data, toList, type Runtime, type Value, type World } from "../../ters/src/lang/run.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
+import { answerByShapes, type HostOp } from "../../ters/src/lang/hosts.ts";
 import { Cells, NoValue, Pending } from "../../ters/src/lang/cells.ts";
 import { worldTimers, type Timers } from "../../ters/src/lang/timers.ts";
 import { NoAnswer } from "../../ters/src/lang/html.ts";
@@ -83,7 +84,7 @@ function randFns(r: Uint32Array): Record<string, (...xs: never[]) => unknown> {
 // as the printer read them (core-js.ts builtinOf).
 export type BuiltinOf = [Id, boolean];
 type Cases = ((...xs: unknown[]) => unknown)[];
-function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Record<string, (...xs: never[]) => unknown>, cells?: Record<Id, (...xs: Value[]) => Value | undefined>, code?: Code, spend?: () => boolean, info?: Info, rt?: Runtime, handlers = new Map<string, Cases[]>()): (...xs: unknown[]) => unknown {
+function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Record<string, (...xs: never[]) => unknown>, cells?: Record<Id, (...xs: Value[]) => Value | undefined>, code?: Code, spend?: () => boolean, info?: Info, rt?: Runtime, handlers = new Map<string, Cases[]>(), hostOps?: HostOps): (...xs: unknown[]) => unknown {
   if (name.startsWith("host:")) return hostFn(name, cells);
   // A program's own effect whose cases answer in place (scalar.ts
   // handleOps, C137): a handler pushes its cases while the code it handles
@@ -121,9 +122,18 @@ function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Re
   }
   if (name.startsWith("handled:")) { const e = name.slice(8); return () => !!handlers.get(e)?.length; }
   if (name.startsWith("perform:")) {
-    const [, e, op] = name.split(":");
+    const [, e, op, bool] = name.split(":");
+    // The program's own operation nothing in it handles: its host's
+    // answer (hosts/js.js, FOREIGN.md), checked at the border as the
+    // evaluator checks it, a wrong one being the program's Abort (C137d5).
+    const host = hostOps?.[`${e}:${op}`];
     return (...xs) => {
       const s = handlers.get(e);
+      if (!s?.length && host) {
+        let v: unknown;
+        try { v = answerByShapes(host, rt?.hosts ?? {}, host.op, xs.map(inn) as Value[]); } catch (err) { throw new Aborted((err as Error).message, 0); }
+        return bool ? (v as Data).tag === TRUE : v;
+      }
       if (!s?.length) throw new Error(`nothing handles ${code?.nodes[e] ? e : "the operation"}`);
       const h = s.pop()!;
       try { return h[Number(op)](...xs); } finally { s.push(h); }
@@ -321,12 +331,15 @@ function worldFn(op: string, rt: Runtime, timers: Timers, handlers: Map<string, 
 // What the printed functions are given as R: the runtime, the tables'
 // and the world's operations, a fresh generator.
 // `info`: the checker's, where the program is loaded in the same process.
-export function coreRuntime(tables: TableSpec[], worlds: string[], rt: Runtime, code?: Code, info?: Info) {
+// `hostOps`: the program's own operations a host may answer, by
+// `effect:index` (core-js.ts hostOpsOf).
+export type HostOps = Record<string, HostOp & { op: Id }>;
+export function coreRuntime(tables: TableSpec[], worlds: string[], rt: Runtime, code?: Code, info?: Info, hostOps?: HostOps) {
   const rand = randFns(new Uint32Array(4)), cells = cellFns(rt.cells ?? new Cells(equal));
   const timers = worldTimers((m) => { throw new Aborted(m, 0); });
   let spend = () => true;
   const handlers = new Map<string, Cases[]>();
-  return { ...RUNTIME, spending: (f: () => boolean) => { spend = f; }, rt: (n: string, b?: BuiltinOf) => rtFn(n, b, tables, rand, cells, code, () => spend(), info, rt, handlers), worlds: worlds.map((op) => worldFn(op, rt, timers, handlers)), abort: (reason: unknown, esc: number): never => { throw new Aborted(reason, esc); } };
+  return { ...RUNTIME, spending: (f: () => boolean) => { spend = f; }, rt: (n: string, b?: BuiltinOf) => rtFn(n, b, tables, rand, cells, code, () => spend(), info, rt, handlers, hostOps), worlds: worlds.map((op) => worldFn(op, rt, timers, handlers)), abort: (reason: unknown, esc: number): never => { throw new Aborted(reason, esc); } };
 }
 
 // How the evaluator's runtime (a page's mount, html.ts) calls a function
