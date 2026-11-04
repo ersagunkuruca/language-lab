@@ -110,6 +110,18 @@ test("publishing needs finished definitions, and takes what they use with them",
   assert.ok(!r.ok && /has a hole/.test(r.reason));
 });
 
+test("publishing refuses two definitions of one content under different names (L223)", () => {
+  const k = new Lang();
+  const twice = (name: string) => { const d = k.def(name); k.define(d, k.fn(["x"], (x) => k.call(INT_OPS.add, x, k.int(1)))); return d; };
+  const a = twice("one more"), b = twice("successor");
+  const p = publish(merge(CORE, k.code), k.names, [a, b], CORE);
+  assert.ok(!p.ok && /one more and successor have the same content/.test(p.reason));
+  const same = new Lang();
+  const c = same.def("one more"); same.define(c, same.fn(["x"], (x) => same.call(INT_OPS.add, x, same.int(1))));
+  const d = same.def("one more"); same.define(d, same.fn(["x"], (x) => same.call(INT_OPS.add, x, same.int(1))));
+  assert.ok(publish(merge(CORE, same.code), same.names, [c, d], CORE).ok);
+});
+
 test("the examples use the prelude instead of carrying their own copies", () => {
   for (const name of ["queens", "algebra", "calculus", "backwards", "relations", "physics"]) {
     const p = loadProgram(join(root, "examples", name));

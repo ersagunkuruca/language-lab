@@ -724,14 +724,17 @@ export function buildPrelude(): Module {
       ]) },
     ]) },
   ])));
-  const pairUp = k.def("blades with");
-  k.define(pairUp, k.fn(["blades", "basis"], (bs, es) => k.match(bs, [
+  const zipped = k.def("zipped");
+  k.define(zipped, k.fn(["first", "second"], (xs, ys) => k.match(xs, [
     { variant: NIL, names: [], body: () => NIL },
-    { variant: CONS, names: ["blade", "blades₂"], body: ([b, bs2]) => k.match(es, [
+    { variant: CONS, names: ["x", "xs rest"], body: ([x, xr]) => k.match(ys, [
       { variant: NIL, names: [], body: () => NIL },
-      { variant: CONS, names: ["element", "basis₂"], body: ([e, es2]) => k.call(CONS, k.call(PAIR_V, b, e), k.call(pairUp, bs2, es2)) },
+      { variant: CONS, names: ["y", "ys rest"], body: ([y, yr]) => k.call(CONS, k.call(PAIR_V, x, y), k.call(zipped, xr, yr)) },
     ]) },
   ])));
+  // Pairs each blade with its basis element (once its own `blades with`,
+  // which was zipped under another name: L223).
+  const pairUp = zipped;
   // The basis element of a blade, or `none` (a zero) when no element has it.
   const elementOf = k.def("element of blade");
   k.define(elementOf, k.fn(["pairs", "blade", "none"], (ps, bl, no) => k.match(ps, [
@@ -1239,14 +1242,6 @@ export function buildPrelude(): Module {
   // Python's zip do; numbered counts from 0, as positions do (L140); all
   // pass and any pass stop at the first item that decides (Haskell's all
   // and any; `all` and `any of` were taken).
-  const zipped = k.def("zipped");
-  k.define(zipped, k.fn(["first", "second"], (xs, ys) => k.match(xs, [
-    { variant: NIL, names: [], body: () => NIL },
-    { variant: CONS, names: ["x", "xs rest"], body: ([x, xr]) => k.match(ys, [
-      { variant: NIL, names: [], body: () => NIL },
-      { variant: CONS, names: ["y", "ys rest"], body: ([y, yr]) => k.call(CONS, k.call(PAIR_V, x, y), k.call(zipped, xr, yr)) },
-    ]) },
-  ])));
   const numberedFrom = k.def("numbered from");
   k.define(numberedFrom, k.fn(["list", "from"], (xs, from) => k.match(xs, [
     { variant: NIL, names: [], body: () => NIL },
