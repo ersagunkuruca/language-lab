@@ -436,7 +436,12 @@ export function structure(host: StructureHost) {
     // Duplicating checks the whole program, so it's worked out on the click.
     const typeDef = code.nodes[(code.nodes[ui.def] as NodeOf<"def">).body ?? ""]?.kind === "typedef";
     const dup = () => { const r = T.duplicate(code, sh, info, ui.def); if (r.ok) { ui.def = r.select!; ui.back = []; } applyT(r); };
+    // A function used in one place goes inside it, as a let (E251); the
+    // let's Make it a definition brings it out again.
+    const inside = T.insideOf(code, ui.def);
+    const putIn = () => { const r = T.putInside(code, sh, info, ui.def); if (r.ok) { ui.def = r.select!; ui.selected = null; ui.back = []; } applyT(r); };
     out.append(h("div", { class: "acts" },
+      "host" in inside ? edit(`Put inside ${names[inside.host] ?? "its one use"}`, `${dname} as a let in ${names[inside.host] ?? "the definition using it"}, the one place it's used: the same meaning, one definition fewer. Undo puts it back`, { ok: true }, putIn) : null,
       edit(`Duplicate ${dname}`, "A copy to change, next to it; the original stays as it is", typeDef ? { ok: false, reason: "the copy's cases would share the original's names: make a new type with + New definition" } : { ok: true }, dup),
       edit(`Delete ${dname}`, "Delete this definition", del, () => runTop(info, del, (r) => { ui.def = r.select; ui.selected = null; ui.back = []; }), "btn danger")));
     return out;
