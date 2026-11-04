@@ -764,7 +764,7 @@ The effects:
 | `Abort` | `abort(reason)` | a match with an `abort(reason)` case; at the top, the run ends (exit code 1) |
 | `Log` | `log(line)` | a match with a `log(line)` case; at the top, standard error |
 | `Random` | `random()` | `seeded(seed, action)`, or a match; at the top, the world's randomness |
-| `Settings` | `my locale()` | a match; at the top, the runtime (the computer's language) |
+| `Settings` | `my locale()`, `my time zone()` | a match; at the top, the runtime (the computer's language) |
 | `Time` | `now()` | a match (a test's fixed clock); at the top, the clock |
 | `Wait` | `wait(milliseconds)` | a match; at the top, the runtime (not in a page) |
 | `Diverge` | (any recursion the checker can't see ends) | the runtime, or `with fuel(n, action)` |

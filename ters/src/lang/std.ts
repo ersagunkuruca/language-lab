@@ -814,6 +814,14 @@ export const TEXT_OPS = {
   lowercase: builtin("text.lowercase", "lowercase", pure([str, { t: "con", id: "std.locale", args: [] }], str), (t: string, l: { fields: unknown[] }) => T.lowercase(t, l.fields[0] as string)),
 };
 
+// Time zones by name (L188c2, d2): how far a zone's clocks are ahead of
+// UTC at an instant, in seconds, by the host's time zone database (the
+// IANA one, as Intl reads it); no answer for a zone it doesn't know. Pure:
+// the same zone at the same instant gives the same offset.
+export const ZONE_OPS = {
+  offset: choice("time.zoneOffset", "zone offset", [str, { t: "con", id: "std.instant", args: [] }], num, (zone: string, i: { fields: unknown[] }) => T.zoneOffset(zone, i.fields[0] as number)),
+};
+
 // Arrays (BACKLOG C30d, REPRESENTATIONS.md step 5): a list's items side by
 // side, so an item is read by its position in constant time. An array is
 // a view, a start and a length, on a buffer with free room at both ends,
@@ -1449,8 +1457,8 @@ export const LOCALE_V = "std.locale.locale";
 // locale()`, the language the person running the program uses, for
 // uppercase, lowercase and collated. An effect, so a function that
 // depends on it says so, and a test answers it with a match.
-export const SETTINGS = typedef("std.settings", "Settings", [], [["my locale", [], () => tref("std.locale")]], true);
-export const MY_LOCALE_OP = "std.settings.my locale";
+export const SETTINGS = typedef("std.settings", "Settings", [], [["my locale", [], () => tref("std.locale")], ["my time zone", [], () => tref(STRING)]], true);
+export const MY_LOCALE_OP = "std.settings.my locale", MY_ZONE_OP = "std.settings.my time zone";
 export const EMBEDDING_MAP = "std.embedding.embedding.map";
 export function tupleType(n: number): Id { return `std.tuple${n}`; }
 export const tupleVariant = (n: number): Id => `std.tuple${n}.tuple`;

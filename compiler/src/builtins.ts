@@ -9,7 +9,7 @@
 
 import type { Id } from "../../ters/src/model.ts";
 import { B } from "../../ters/src/prelude.ts";
-import { ALGEBRAIC_OPS, ARITH, ARRAY_OPS, HASH_SET_OPS, TABLE_OPS, CELL_OPS, COMPARE, INT_OPS, IO, JOBS, S, SET, SHOW_ANY, CASE_NAME, TEXT_OPS } from "../../ters/src/lang/std.ts";
+import { ZONE_OPS, ALGEBRAIC_OPS, ARITH, ARRAY_OPS, HASH_SET_OPS, TABLE_OPS, CELL_OPS, COMPARE, INT_OPS, IO, JOBS, S, SET, SHOW_ANY, CASE_NAME, TEXT_OPS } from "../../ters/src/lang/std.ts";
 import type { Op } from "./scalar.ts";
 
 // JavaScript for a call, from its arguments' JavaScript. `narrow[i]`:
@@ -214,6 +214,7 @@ export const TARGETS: Record<Id, Target> = {
   [TEXT_OPS.uppercase]: { js: "impl", scalar: DATA },
   [TEXT_OPS.lowercase]: { js: "impl", scalar: DATA },
   [TEXT_OPS.collate]: { js: "impl", scalar: DATA },
+  [ZONE_OPS.offset]: { js: "partial", scalar: DATA },
   [TEXT_OPS.split]: { js: "impl", scalar: DATA },
   [TEXT_OPS.joinAll]: { js: "impl", scalar: DATA },
   [TEXT_OPS.find]: { js: "partial", scalar: DATA },

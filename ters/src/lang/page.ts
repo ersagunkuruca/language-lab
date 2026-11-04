@@ -14,6 +14,8 @@ import { Cells } from "./cells.ts";
 import { evaluatorCall, mountHtml, type Doc, type Node_ } from "./html.ts";
 import { equal, pageProblem, runMain } from "./run.ts";
 import { compile } from "../../../compiler/src/compile.ts";
+import { corePageScript, coreSoundScript, lowerCore } from "../../../compiler/src/core-js.ts";
+import type { CoreIR } from "../../../compiler/src/scalar.ts";
 import { HTML_V } from "./std.ts";
 import { recordingWorld, soundPlayer } from "./audio-page.ts";
 
@@ -137,6 +139,20 @@ export function pageFile(title: string, runtime: string, code: Code, info: Info,
   const sound = worklet && hasSound(code) ? `, ${JSON.stringify(workletFile(worklet, code, info, names, main))}` : "";
   return pageShell(title, runtime, `(() => {\n${program}\n$lab.startPage(defs[${JSON.stringify(name)}], ${JSON.stringify(title)}${sound});\n})();`);
 }
+
+// The same page printed from the core IR (C137d6), made without a bundler
+// as pageFile makes compile.ts's: `runtime` is cli/web.ts corePageRuntime
+// prebuilt, and a page with sound gives `worklet`, coreWorkletRuntime.
+// Throws when main isn't compiled through the core IR, with why.
+export function corePageFile(title: string, runtime: string, code: Code, info: Info, names: Names, own: Id[], main: Id, worklet?: string): string {
+  const ir = lowerCore(code, info, names, own);
+  const why = ir.refused.get(main);
+  if (why) throw new Error(`${names[main] ?? "main"} isn't compiled through the core IR: it ${why}`);
+  const sound = worklet && hasSound(code) ? coreWorkletFile(worklet, ir, names[main]) : undefined;
+  return pageShell(title, runtime, corePageScript(ir, names[main], "$core", title, sound));
+}
+// The audio thread's script for it: `runtime` is coreWorkletRuntime.
+export const coreWorkletFile = (runtime: string, ir: CoreIR, name: string): string => `${runtime}\n${coreSoundScript(ir, name, "$core")}`;
 
 // Does the program play sound (a `listen` attribute anywhere)?
 export const hasSound = (code: Code) => Object.values(code.nodes).some((n) => n.kind === "ref" && n.target === HTML_V.listen);
