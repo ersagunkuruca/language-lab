@@ -17,7 +17,7 @@
 // JavaScript's (non-overlapping, left to right), show is std.ts's show.
 
 import { MATH } from "./wasm-math.ts";
-import { STOPS } from "./stops.ts";
+import { SITES, STOPS } from "./stops.ts";
 
 // A value type, as the runtime functions name them: `text` is a
 // reference to the byte array, `list` to a List Text of the module.
@@ -7404,6 +7404,15 @@ const WASI: Record<string, Omit<RtFn, "name">> = {
   "wasi.stop": {
     params: [["i", "f64"]], result: "f64", locals: [], uses: ["wasi.line", "wasi_proc_exit"],
     body: `
+      local.get $i
+      local.get $i
+      f64.const ${SITES}
+      f64.div
+      f64.floor
+      f64.const ${SITES}
+      f64.mul
+      f64.sub
+      local.set $i
       ${STOPS.map((why, i) => `local.get $i\n      f64.const ${i}\n      f64.eq\n      if void\n        i32.const 2\n        ${lit(why)}\n        call $wasi.line\n      end`).join("\n      ")}
       i32.const 1
       call $wasi_proc_exit

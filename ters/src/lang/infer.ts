@@ -1646,8 +1646,10 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // A number written where a type of the program's own goes (L204b) is
   // spelled by its Literal's from fraction; with none, only a record of
   // Float64s takes it, in every part.
-  for (const n of Object.values(code.nodes)) {
-    if (n.kind !== "lit" || n.of || typeof n.value !== "number") continue;
+  // These scans start from a base program's (model.ts nodesWhere, E248):
+  // a palette's offers each scanned every node three times.
+  for (const id of nodesWhere(code, "number lit", (n) => n.kind === "lit" && !n.of && typeof n.value === "number")) {
+    const n = code.nodes[id] as NodeOf<"lit">;
     const t0 = info.typeOf.get(n.id), t = t0 && s.zonk(t0);
     if (t?.t !== "con" || t.id.startsWith("std.") || t.id.startsWith("type.") || t.id.startsWith("pin.") || !typedefOf(t.id) || implementationOf(info, LITERAL, t)) continue;
     const fields = s.recordFields(t.id, t.args);
@@ -1656,8 +1658,8 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   }
   // fields mapped and fields listed are written out per type where they are
   // used (fields-by-type.ts, L162b), so both types must be known there.
-  for (const n of Object.values(code.nodes)) {
-    if (!isCall(n)) continue;
+  for (const id of nodesWhere(code, "call", (n) => isCall(n))) {
+    const n = code.nodes[id] as Call;
     const f = code.nodes[n.fn];
     if (f?.kind !== "ref" || (f.target !== FIELDS.mapped && f.target !== FIELDS.listed)) continue;
     // Its inputs not written yet: the holes say so (the palette offers it
@@ -1673,8 +1675,8 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // json of and from json are written out per type (json-by-type.ts,
   // L190d2), so the type must be known where they are used and have a
   // spelling.
-  for (const n of Object.values(code.nodes)) {
-    if (!isCall(n)) continue;
+  for (const c of nodesWhere(code, "call", (n) => isCall(n))) {
+    const n = code.nodes[c] as Call;
     const f = code.nodes[n.fn];
     if (f?.kind !== "ref" || (f.target !== JSON_OPS.of && f.target !== JSON_OPS.from)) continue;
     if (n.args.some((a) => code.nodes[a]?.kind === "hole")) continue;

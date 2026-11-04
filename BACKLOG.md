@@ -55,6 +55,7 @@ New items land here until the next triage gives them a lane and a priority.
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | E245 | Compiled output built with the site, keyed by the program's hash (Ersagun 2026-11-04: "can't we have cached builds?"): the editor compiles a shipped example only after an edit reaches it. E245a done: page previews (prebuilt/, editor/prebuild.ts); E245b done: pictures (opening raymarch, 11 s of blocked page to 5 s). Left: (c) Run main's core-IR JavaScript, made on Run rather than on opening, so it saves less | Ersagun 2026-11-04 | P2 | M | Editor lane |
+| E248 | The text reader (`lab mcp`'s replace, editor/typed.ts) has no Int literal: `tries − 1` reads 1 as a Number, so a count can't be an Int written as text (L119 set Bounce's by hand in code.json). Also `√(x)` isn't read (`sqrt` is), nor a lambda applied in place, `((t) => …)(x)` | L119 | P3 | S | |
 | E103 | **Bug.** Adding a value in a definition run backwards (physics `fall`) takes about 4 s; five stages (#478 to #504) took fall's holes from 48 s to 18.5 s in all. Stopped by the 10% rule. **Measured again 2026-11-01:** 23 holes 121 s, the worst 22 s, of which the plan comparison per offer 5.7 s and whole checks for offers whose plan changed 10.4 s; E133a took the node copies off (→ 18 s); E133b took the analyzer's full scan per offer off (worst 12.7 s, all 23 holes 67 s); E103c (#898) checks once for every offer that makes the same of the group's types and plans, each offer's units on their own (fall's 23 holes 80 → 47 s, the worst 16 → 8 s, measured on a busy machine; same offers); E103d (#902): a filled program's solves and calls are listed from the program's, not by scanning its ~10,000 nodes in `useDirections` and the jobs check (all 23 holes 50 → 30 s, the worst 10.6 → 4.2 s; same offers); E103e (#938): an offer's units are checked once, not again inside its whole check (23 holes 30 → 23 s, the worst 4.2 → 3.7 s); **measured again 2026-11-01 21:40** (busy machine, all 23 holes ~31 s): the plans compared per candidate 8.2 s (7,452 plans, ~1.1 ms each), the type-group checks 10 s (2,229 distinct groups, ~4.5 ms each: an offer of another shape makes fall's own type another shape, so few share), the whole checks of risky offers 7.7 s (400, ~19 ms each; checking their units apart buys nothing). Stopped by the 10% rule: the next stage needs a new idea, such as checking a group's callers against its new type instead of a whole inference, or a plan that can tell from the filling alone that it can't change; what's left is the checks' own work. **Measured again 2026-11-02** (all 23 holes 29.7 s, the worst 5.2 s, fall's whole body): that hole asks 1,221 plan comparisons and 645 distinct type-and-plan checks for 113 offers kept, because a changed plan is part of the check's key and most candidates change it a little. The next idea is infer.ts's (Language lane): where only a plan changes, check the solves' verdicts (Diverge, how many answers) instead of a whole inference of the group | E100 | P3 | M | |
 
 ### Blind spots ([BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md))
@@ -135,7 +136,7 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| C143 | A stop in compiled code names the node it came from: compiled JS, WebAssembly and C carry each node's id where they can stop (Abort, overflow, no answer, a hole), so `lab run` of compiled code and a page print it and the editor selects it (source maps, influence) | [ASPECTS-2026-11-03b](docs/reports/reviews/ASPECTS-2026-11-03b.md) 269 | P3 | M | |
+| C143 | A stop in compiled code names the node it came from: compiled JS, WebAssembly and C carry each node's id where they can stop (Abort, overflow, no answer, a hole), so `lab run` of compiled code and a page print it and the editor selects it (source maps, influence). C143a done: compiled JS and WebAssembly's stops carry the node and definition (the core IR's `stops`); left are C and WASI printing where, `lab run` printing the definition, and the editor selecting the node (Editor lane) | [ASPECTS-2026-11-03b](docs/reports/reviews/ASPECTS-2026-11-03b.md) 269 | P3 | M | |
 
 ## L: Language and library
 
@@ -220,9 +221,7 @@ agent with inertia. All later goals.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L119 | **Later goal**: Bounce's continuous collisions: time of impact for ball and ball (a quadratic, S₁(t)·S₂(t) = −r₁r₂ for conformal spheres) and ball and wall (linear), once for 2D and 3D; step to the first impact with a sub-step cap; a "bullet through a thin wall" case beside the plain step | Ersagun 2026-11-01 | P3 | M | |
-| L120 | **Later goal**: time of impact for rotating shapes along a PGA motor (screw motion) by conservative advancement (Mirtich); the compiler choosing it or the closed form by cost (WAYS.md) | Ersagun 2026-11-01 | P3 | L | after L119, shapes other than balls |
-| L121 | **Later goal**: speculative contacts in Bounce, compared with L119 on the same scene (cost per frame, ghost bumps) | Ersagun 2026-11-01 | P3 | S | after L119 |
+| L120 | **Later goal**: time of impact for rotating shapes along a PGA motor (screw motion) by conservative advancement (Mirtich); the compiler choosing it or the closed form by cost (WAYS.md) | Ersagun 2026-11-01 | P3 | L | shapes other than balls |
 | L122 | **Later goal**: an agent with inertia, decoupled: navigation-mesh A* (from routes' frontier), the funnel, corners as arcs, the time-optimal speed profile (forward and backward pass), a follower; one page, a hand-made mesh | Ersagun 2026-11-01 | P3 | L | |
 | L123 | **Later goal**: the coupled search: Hybrid A*-style over position and velocity, motion primitives exact under linear drag, L122's path length / top speed as the heuristic; compared with L122 on the same map | Ersagun 2026-11-01 | P3 | L | after L122 |
 | L124 | **Later goal**: a rapidity speed cap (velocity as a boost in Cl(2, 1)) beside linear drag on L122's page; optional | Ersagun 2026-11-01 | P3 | M | after L122 |
@@ -267,7 +266,7 @@ docs/process/TESTING.md. T7 is in lane L.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| T14 | The single slow tests left after L216: editing's swapAndUndo 43 s (core-js done: T14a; tree of List: T14b; Tumble's clear: T14c; every builtin backwards is under a second now). Each becomes a sweep or gets a smaller input, toward 5 s a file | [TEST-SPEED-2026-11-03](docs/reports/TEST-SPEED-2026-11-03.md) | P3 | M | |
+| T14 | The single slow tests left after L216: editing's swapAndUndo, 63 s since E248 (core-js done: T14a; tree of List: T14b; Tumble's clear: T14c; every builtin backwards is under a second now). Each becomes a sweep or gets a smaller input, toward 5 s a file | [TEST-SPEED-2026-11-03](docs/reports/TEST-SPEED-2026-11-03.md) | P3 | M | |
 
 ## Coordinator and process
 

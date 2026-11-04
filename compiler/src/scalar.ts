@@ -62,7 +62,7 @@ import { RELEASE_V, tupleType, ABORT, ABORT_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OP
 import { liftLets } from "../../ters/src/lang/lift-lets.ts";
 import { solvesOnce } from "../../ters/src/lang/run.ts";
 import { inlineLists } from "./inline-lets.ts";
-import { STOPS } from "./stops.ts";
+import { SITES, STOPS } from "./stops.ts";
 import { fieldIndex, fieldPath } from "../../ters/src/lang/records.ts";
 import { expandDerivatives, recordVariant } from "../../ters/src/lang/derive.ts";
 import { stageProgram } from "../../ters/src/lang/stage.ts";
@@ -412,7 +412,9 @@ export interface SFunc { def: Id; name: string; params: LType[]; result: LType; 
 // `shader`: lowered with `shader` and not `data` (C66c): Int is int32, and
 // no answer is the flag, not a status (wasm.ts takes both). `int32`:
 // lowered without `data`, shader or not (C163): an Int is an int32.
-export interface CoreIR { funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; arrays: AType[]; tables: TType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info; escapes: DType[]; rounded: Set<Id>; shader?: true; int32?: true }
+// `stops`: where each stop site is (C143, stops.ts): the node a stop was
+// lowered from, and the definition it is in.
+export interface CoreIR { stops?: { node: Id; def: Id }[]; funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; arrays: AType[]; tables: TType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info; escapes: DType[]; rounded: Set<Id>; shader?: true; int32?: true }
 
 class Refused extends Error {}
 // A closure of a function type, at `key`, gives several answers: lowering
@@ -482,6 +484,20 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
 }
 
 function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean }, severalTypes: Set<string>): CoreIR {
+  const outer = stopSite;
+  try { return lowerOnceIn(code, info, names, roots, opts, severalTypes); } finally { stopSite = outer; }
+}
+function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean }, severalTypes: Set<string>): CoreIR {
+  // Where each stop is lowered from (C143): the node being lowered, and
+  // the sites met so far, one a node.
+  let here: { node: Id; def: Id } | null = null;
+  const sites: { node: Id; def: Id }[] = [], siteAt = new Map<Id, number>();
+  stopSite = () => {
+    if (!here) return -1;
+    let i = siteAt.get(here.node);
+    if (i === undefined) { i = sites.push(here) - 1; siteAt.set(here.node, i); }
+    return i;
+  };
   // A use with no body, as the use that binds its ports (C161, uses.ts).
   ({ code, info } = withBodies(code, info, names));
   // The generic + resolved to each type's own operation first
@@ -910,6 +926,11 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
   }
 
   function expr(id: Id, env: Map<Id, number>, f: SFunc, tail: boolean): SExpr {
+    const was = here;
+    here = { node: id, def: f.def };
+    try { return exprAt(id, env, f, tail); } finally { here = was; }
+  }
+  function exprAt(id: Id, env: Map<Id, number>, f: SFunc, tail: boolean): SExpr {
     const n = code.nodes[id];
     switch (n.kind) {
       case "lit": {
@@ -2593,7 +2614,7 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
   for (const [r, why] of unstarted) if (!refused.has(r)) refused.set(r, why);
   // Refusals by definition; those of one specialization stay inside.
   const niche = opts.data ? niches(funcs, [...records.values()], [...datas.values()], [...arrays.values()], [...fns.values()], shapes, [...tables.values()]) : new Set<string>();
-  const ir: CoreIR = { funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()].filter((d) => !niche.has(d.key)), arrays: [...arrays.values()], tables: [...tables.values()], fns: [...fns.values()], shapes, code, info, escapes: escapes.map((e) => stype({ t: "con", id: e, args: [] }) as DType), rounded, ...(opts.shader && !opts.data ? { shader: true as const } : {}), ...(!opts.data ? { int32: true as const } : {}) };
+  const ir: CoreIR = { stops: sites, funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()].filter((d) => !niche.has(d.key)), arrays: [...arrays.values()], tables: [...tables.values()], fns: [...fns.values()], shapes, code, info, escapes: escapes.map((e) => stype({ t: "con", id: e, args: [] }) as DType), rounded, ...(opts.shader && !opts.data ? { shader: true as const } : {}), ...(!opts.data ? { int32: true as const } : {}) };
   // A record's Int field proved to fit 32 bits, stored as a machine word
   // (C150e): WebAssembly and C, not core JS, whose values the host reads.
   if (opts.data && !opts.host) { machineWords(ir); wideProducts(ir); }
@@ -2619,7 +2640,10 @@ const [DIV0, MOD0, SQRT, LOG, POW0, POWNEG, OVERFLOW] = STOPS.map((_, i) => i);
 // Abort a handler in the program gets: it ends the program.
 const num = (v: number): SExpr => ({ k: "num", v });
 const op = (o: Op, ...args: SExpr[]): SExpr => ({ k: "op", op: o, args });
-const stopWith = (i: number): SExpr => op("stop", num(i));
+// The stop's site (C143, stops.ts): which node it is lowered from, set by
+// lowerScalar while it lowers one.
+let stopSite: () => number = () => -1;
+const stopWith = (i: number): SExpr => op("stop", num(i + SITES * (stopSite() + 1)));
 const stop = stopWith;
 const iff = (cond: SExpr, then: SExpr, otherwise: SExpr): SExpr => ({ k: "if", cond, then, else: otherwise, t: "f64" });
 // When bad, the stops in why; otherwise ok.
