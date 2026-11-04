@@ -4,18 +4,16 @@
 // function is named with the builtin's id where it has one (the printer
 // reads scalar.ts's tables), so nothing here needs the compiler.
 
-import { CONS, FALSE, HASH_SET_OPS, NIL, NONE, S, SOME, STD_IMPL, STD_MANY, TABLE_OPS, TICKET_V, TRUE } from "../../ters/src/lang/std.ts";
-import { META, cellOps, equal, unit, type Data, makeRunner, solveAnswers, toList, type Runtime, type Value, type World } from "../../ters/src/lang/run.ts";
+import { FALSE, HASH_SET_OPS, NONE, S, SOME, STD_IMPL, STD_MANY, TABLE_OPS, TICKET_V, TRUE } from "../../ters/src/lang/std.ts";
+import { META, cellOps, equal, unit, type Data, toList, type Runtime, type Value, type World } from "../../ters/src/lang/run.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { Cells, NoValue, Pending } from "../../ters/src/lang/cells.ts";
 import { worldTimers, type Timers } from "../../ters/src/lang/timers.ts";
 import { NoAnswer } from "../../ters/src/lang/html.ts";
-import { satisfiable } from "../../ters/src/lang/relate.ts";
-import { givenInOrder } from "../../ters/src/lang/ports.ts";
 import { worldRandom } from "../../ters/src/lang/random.ts";
 import * as I from "../../ters/src/lang/int.ts";
 import * as T from "../../ters/src/lang/text.ts";
-import { ownerOfTypeParts, useTarget, type Code, type Id, type Use } from "../../ters/src/model.ts";
+import type { Code, Id } from "../../ters/src/model.ts";
 import { STOPS } from "./stops.ts";
 
 export class Unsupported extends Error {}
@@ -25,7 +23,8 @@ export const FAIL = { fail: true }, OUT = { out: true };
 
 const big = (x: I.Int) => BigInt(x);
 // UTF-8 as a browser has it too (a page's script, C137c9).
-const UTF8 = new TextEncoder();
+let utf8: TextEncoder | undefined;
+const UTF8 = { encode: (t: string) => (utf8 ??= new TextEncoder()).encode(t) };
 const OWN: Record<string, (...xs: never[]) => unknown> = {
   "int.equal": (a: I.Int, b: I.Int) => a === b,
   "int.less": (a: I.Int, b: I.Int) => a < b,
@@ -130,10 +129,15 @@ function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Re
       try { return h[Number(op)](...xs); } finally { s.push(h); }
     };
   }
-  if (name.startsWith("derive:")) return deriveFn(name.slice(7), code, info, rt);
-  if (name.startsWith("solve:")) return solveFn(name.slice(6), code, false, spend);
-  if (name.startsWith("solveAll:")) return solveFn(name.slice(9), code, true, spend);
-  if (name === "exists") return (f) => { if (!code) throw new Unsupported("for some without the program"); return satisfiable(code, f); };
+  if (/^(derive|solve|solveAll):|^exists$/.test(name)) {
+    // The evaluator's solver (core-solve.ts), which a printed program
+    // takes in only when it solves: it carries the library.
+    if (!SOLVER) return () => { throw new Unsupported(`${name} without core-solve.ts`); };
+    if (name.startsWith("derive:")) return SOLVER.derive(name.slice(7), code, info, rt);
+    if (name.startsWith("solve:")) return SOLVER.solve(name.slice(6), code, false, spend);
+    if (name.startsWith("solveAll:")) return SOLVER.solve(name.slice(9), code, true, spend);
+    return (f) => { if (!code) throw new Unsupported("for some without the program"); return SOLVER!.exists(code, f); };
+  }
   if (name.startsWith("pick:")) { const [, j, bool] = name.split(":"); return (xs) => { const v = (xs as Value[])[Number(j)]; return bool ? (v as unknown) === true || (v as { tag?: Id }).tag === TRUE : v; }; }
   const tm = TABLE.exec(name);
   if (tm && tables) return tableFn(tm[1], tables[Number(tm[2])]);
@@ -163,53 +167,15 @@ function hostFn(name: string, cells?: Record<Id, (...xs: Value[]) => Value | und
   if (many) return (...xs) => { const r = many(...xs.map(inn)); if (!r.length) throw FAIL; return out(r[0]); };
   return () => { throw new Unsupported(name); };
 }
-// derivative(f) or gradient(f) of a function value (C137c20, scalar.ts):
-// the evaluator's, on the program's code, which looks inside f (a printed
-// closure carries its lambda and captures, RUNTIME.closure's src). What
-// it gives is the evaluator's function, a stream of answers: called here
-// for its one, and carrying its node so it can be looked inside again (a
-// second derivative). Without the checker's info (a module or a page),
-// the evaluator runs on what compiled JS's $loadProgram gives it.
-function deriveFn(id: Id, code?: Code, info?: Info, rt?: Runtime): (...xs: unknown[]) => unknown {
-  if (!code) return () => { throw new Unsupported(`${id} without the program`); };
-  let runner: ReturnType<typeof makeRunner> | undefined;
-  const plain = (g: (...xs: unknown[]) => Iterable<unknown>) => {
-    const p = (...xs: unknown[]) => { for (const v of g(...xs.map(inn))) return v; throw FAIL; };
-    return Object.assign(p, { [META]: (g as unknown as Record<symbol, unknown>)[META] });
-  };
-  return (f) => {
-    runner ??= makeRunner(code, info ?? ({ divergent: new Set(), owner: ownerOfTypeParts(code) } as unknown as Info), rt ?? { print: () => {} });
-    for (const g of (runner.value(id) as (f: unknown) => Iterable<unknown>)(f)) return plain(g as (...xs: unknown[]) => Iterable<unknown>);
-    throw new Error(`no ${id}`);
-  };
-}
-// A relation run some way with one answer (C137c11, scalar.ts solveUse):
-// the evaluator's solve on the program's code, its first answer's values.
-// `spend`: one step of the printed program's budget, as the evaluator's
-// solve spends its innermost fuel; false ends the search there.
-function solveFn(id: Id, code?: Code, all = false, spend?: () => boolean): (...xs: unknown[]) => unknown {
-  if (!code) return () => { throw new Unsupported(`solve ${id} without the program`); };
-  const n = code.nodes[id] as Use, keys = givenInOrder(code, n);
-  const answers = (xs: unknown[]) => solveAnswers(code, n, Object.fromEntries(keys.map((k, i) => [k, inn(xs[i])])), { spend });
-  // Every answer, a List of them (`solveAll`) made as it is read: a
-  // periodic solution (an angle) has no end, and `one of` it stops at the
-  // first that the rest of the search takes, as the evaluator's does.
-  if (all) return (...xs) => lazyList(answers(xs));
-  return (...xs) => {
-    for (const bound of answers(xs)) return bound;
-    throw new Error(`solving ${useTarget(code.nodes, n)} this way gives exactly one answer, and it gave none`);
-  };
-}
-class LazyCell {
-  private cell?: { tag: Id; fields: unknown[] };
-  private it: Iterator<unknown>;
-  constructor(it: Iterator<unknown>) { this.it = it; }
-  private get forced() { if (!this.cell) { const r = this.it.next(); this.cell = r.done ? { tag: NIL, fields: [] } : { tag: CONS, fields: [r.value, new LazyCell(this.it)] }; } return this.cell; }
-  get tag() { return this.forced.tag; }
-  get fields() { return this.forced.fields; }
-}
-const lazyList = (it: Iterator<unknown>) => new LazyCell(it);
-const inn = (x: unknown) => (typeof x === "boolean" ? { tag: x ? TRUE : FALSE, fields: [] } : x);
+// What core-solve.ts gives, once it is imported.
+export type Solver = {
+  derive: (id: Id, code?: Code, info?: Info, rt?: Runtime) => (...xs: unknown[]) => unknown;
+  solve: (id: Id, code?: Code, all?: boolean, spend?: () => boolean) => (...xs: unknown[]) => unknown;
+  exists: (code: Code, f: unknown) => unknown;
+};
+let SOLVER: Solver | undefined;
+export const useSolver = (s: Solver) => { SOLVER = s; };
+export const inn = (x: unknown) => (typeof x === "boolean" ? { tag: x ? TRUE : FALSE, fields: [] } : x);
 // Cells' operations (run.ts cellOps) on the runtime's handler, calling the
 // program's closures: no answer is a formula with no value.
 function cellFns(cells: Cells) {

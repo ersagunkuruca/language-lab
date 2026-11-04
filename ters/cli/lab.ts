@@ -4,13 +4,14 @@
 //   lab run <program> [arguments…]       run `main` with the evaluator; a page
 //                                        prints as static HTML (WEB.md)
 //   lab compile <program> [-o out.mjs]   compile to a JavaScript module that runs `main`
-//     --core                             through the core IR (compiler/src/core-js.ts, C137), as WebAssembly and C are
+//     through the core IR (compiler/src/core-js.ts, C137), as WebAssembly and C are, or compile.ts
+//     where main doesn't lower there; --core: the core IR only, --compile-ts: compile.ts only
 //   lab native <program> [-o out]        compile to a native program through C (NATIVE.md)
 //   lab check <program>                  type-check, and list the definitions with their types
 //   lab hosts <program>                  print a hosts/js.js to start from: the program's own effects (FOREIGN.md)
 //   lab test <program> [--fresh]         run the tests: definitions whose row has Check (TESTS-IN-THE-LANGUAGE.md);
 //                                        results kept by hash in .lab/checks.json, --fresh ignores them
-//   lab build-web <program> [-o app.html] [--core]  a page: one HTML file, opened anywhere (WEB.md)
+//   lab build-web <program> [-o app.html] [--core|--compile-ts]  a page: one HTML file, opened anywhere (WEB.md)
 //   lab build-app <program> [-o folder]  a page as an installable, offline app, and a Capacitor project
 //   lab mcp [program]                    an MCP server on stdin/stdout (mcp/server.ts)
 //   lab diff <before.json> <after.json>  what changed, by definition and name (merge-files.ts)
@@ -70,14 +71,15 @@ const USAGE = `lab: the command line for Ters, the language
 usage:
   lab run <program> [arguments…]        run main with the evaluator (a page prints as static HTML)
   lab compile <program> [-o out.mjs]    compile to a JavaScript module that runs main
-    [--core]                            through the core IR, as WebAssembly and C are (C137)
+    [--core|--compile-ts]               through the core IR, as WebAssembly and C are (C137), or compile.ts
+                                        where main doesn't lower there; --core: only the core IR, --compile-ts: only compile.ts
   lab native <program> [-o out]         compile to a native program through C, with $CC (default cc)
   lab check <program>                   type-check, and list the definitions and their types
   lab hosts <program>                   print a hosts/js.js answering the program's own effects, to start from (FOREIGN.md)
   lab test <program> [--fresh]          run each definition that performs Check, check each accepted answer in examples.json
                                         and each representation's jobs against its type's through meaning;
                                         an unchanged test's result is kept by hash (.lab/checks.json), --fresh runs it again
-  lab build-web <program> [-o app.html] [--core]  one HTML file running the page main returns (--core: printed from the core IR)
+  lab build-web <program> [-o app.html] [--core|--compile-ts]  one HTML file running the page main returns (from the core IR where it lowers)
   lab build-app <program> [-o folder]   that page as an app for phones: a PWA in folder/www, and a Capacitor project
   lab mcp [program]                     an MCP server over stdio: an LLM views, edits, runs and tests programs
   lab render <program> in.wav [-o out.wav] [--block n] [--compiled]
@@ -306,16 +308,26 @@ switch (command) {
     // starts fast; without esbuild (a dev dependency), a module that
     // imports the runtime from this checkout.
     const esbuild = await import("esbuild").catch(() => null);
-    // --core (C137c5): printed from the core IR, which WebAssembly and C
-    // print too, instead of compile.ts.
-    const core = rest.includes("--core");
+    // Printed from the core IR (C137c5), which WebAssembly and C print too,
+    // since C137d1 unless main doesn't lower there: then compile.ts, which
+    // is being retired (C137), and it says so. --core insists on the core
+    // IR, --compile-ts on compile.ts.
+    const core = !rest.includes("--compile-ts");
     const source = (inCheckout: boolean): string => {
       if (!core) return compiled(p, main, inCheckout);
       const lowered = lowerCore(p.code, p.info, p.names, p.own);
       const why = lowered.refused.get(main);
-      if (why) fail(`${p.names[main] ?? "main"} isn't compiled through the core IR: it ${why}`);
+      if (why && rest.includes("--core")) fail(`${p.names[main] ?? "main"} isn't compiled through the core IR: it ${why}`);
+      if (why) { process.stderr.write(`lab: ${p.names[main] ?? "main"} isn't compiled through the core IR (it ${why}), so through compile.ts\n`); return compiled(p, main, inCheckout); }
       const here = (f: string) => resolve(import.meta.dirname, f);
-      return coreModule(lowered, p.names[main] ?? "main", here("../../compiler/src/core-rt.ts"), here("../src/lang/world.ts"));
+      const src = coreModule(lowered, p.names[main] ?? "main", here("../../compiler/src/core-rt.ts"), here("../src/lang/world.ts"));
+      // A program that solves runs the evaluator's solver (core-solve.ts),
+      // which carries the whole library (about 6 MB); compile.ts's bundle
+      // carries only what it uses, so it makes those until the core IR
+      // solves on its own (C137d2).
+      if (!src.includes("/core-solve.ts\"") || rest.includes("--core")) return src;
+      process.stderr.write(`lab: ${p.names[main] ?? "main"} solves through the evaluator's solver on the core IR, which carries the library, so it is compiled through compile.ts\n`);
+      return compiled(p, main, inCheckout);
     };
     if (esbuild) {
       await esbuild.build({
@@ -350,13 +362,21 @@ switch (command) {
   case "build-web": {
     const o = rest.indexOf("-o");
     const out = o >= 0 ? rest[o + 1] ?? fail("-o needs a file") : `${basename(resolve(path)).replace(/\.json$/, "")}.html`;
-    // --core (C137c9): printed from the core IR instead of compile.ts.
-    if (rest.includes("--core")) {
-      if (pageHost) fail("a page with hosts/js.js isn't made from the core IR yet");
-      let page: string;
-      try { page = await webCorePage(p.title, p.code, p.info, p.names, p.own, main); } catch (e) { fail((e as Error).message); }
-      writeFileSync(out, page);
-    } else writeFileSync(out, await webPage(p.title, p.code, p.info, p.names, main, pageHost));
+    // Printed from the core IR (C137c9), since C137d1 unless the page
+    // doesn't lower there (or has hosts/js.js): then compile.ts, saying so.
+    // --core insists on the core IR, --compile-ts on compile.ts.
+    const insist = rest.includes("--core");
+    let page: string | null = null;
+    if (!rest.includes("--compile-ts")) {
+      if (pageHost && insist) fail("a page with hosts/js.js isn't made from the core IR yet");
+      if (!pageHost) {
+        try { page = await webCorePage(p.title, p.code, p.info, p.names, p.own, main); } catch (e) {
+          if (insist) fail((e as Error).message);
+          process.stderr.write(`lab: ${(e as Error).message.replace(/^lab: /, "")}, so the page is made by compile.ts\n`);
+        }
+      }
+    }
+    writeFileSync(out, page ?? await webPage(p.title, p.code, p.info, p.names, main, pageHost));
     // A recording the page plays, from the program's folder (AUDIO.md).
     const copied = recordings(p.code).filter((f) => existsSync(join(path, f)) && statSync(path).isDirectory());
     for (const f of copied) copyFileSync(join(path, f), join(dirname(out), f));
