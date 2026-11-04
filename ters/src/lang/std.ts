@@ -804,6 +804,10 @@ export const TEXT_OPS = {
   // `characters` and `length` stay code points, which slicing counts.
   graphemes: builtin("text.graphemes", "graphemes", pure([str], list(str)), (t: string) => listOf(T.graphemes(t))),
   graphemeCount: builtin("text.graphemeCount", "grapheme count", pure([str], int), T.graphemeCount),
+  // Case in a language (L214b, TEXT-2026-11-03.md §2): the same text in
+  // the same Locale gives the same answer, so they are pure.
+  uppercase: builtin("text.uppercase", "uppercase", pure([str, { t: "con", id: "std.locale", args: [] }], str), (t: string, l: { fields: unknown[] }) => T.uppercase(t, l.fields[0] as string)),
+  lowercase: builtin("text.lowercase", "lowercase", pure([str, { t: "con", id: "std.locale", args: [] }], str), (t: string, l: { fields: unknown[] }) => T.lowercase(t, l.fields[0] as string)),
 };
 
 // Arrays (BACKLOG C30d, REPRESENTATIONS.md step 5): a list's items side by
@@ -1431,6 +1435,12 @@ export const REQUEST = typedef("std.request", "Request", [], [
 export const RESPONSE = typedef("std.response", "Response", [], [
   ["response", [["status", () => tref(INT)], ["headers", headersT], ["body", () => tref(STRING)]]],
 ]);
+// A language, as a BCP 47 tag ("tr", "en-GB"), for what depends on it:
+// case (L214b), later collation (L214d).
+export const LOCALE = typedef("std.locale", "Locale", [], [
+  ["locale", [["tag", () => tref(STRING)]]],
+]);
+export const LOCALE_V = "std.locale.locale";
 export const EMBEDDING_MAP = "std.embedding.embedding.map";
 export function tupleType(n: number): Id { return `std.tuple${n}`; }
 export const tupleVariant = (n: number): Id => `std.tuple${n}.tuple`;
@@ -1467,7 +1477,7 @@ export function onTodaysIds<T>(x: T, from = (x as { shape?: unknown } | null)?.s
 }
 export const tupleSize = (id: Id): number | null => { const m = /^std\.tuple(\d)$/.exec(id); return m ? Number(m[1]) : null; };
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, MATRIX, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS, WORD16, TENSOR, BYTES, JSON_TYPE, DATE, TIME_OF_DAY, INSTANT, EMBEDDING, REQUEST, RESPONSE] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, MATRIX, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS, WORD16, TENSOR, BYTES, JSON_TYPE, DATE, TIME_OF_DAY, INSTANT, EMBEDDING, REQUEST, RESPONSE, LOCALE] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one
