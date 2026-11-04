@@ -731,7 +731,8 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| L188a | Calendar dates: std's `Date` and the prelude's date of, day number and date of day number (Howard Hinnant's algorithms), weekday, added days, days between, leap year, days in month and date text, written in the language and checked against JavaScript's Date (dates.test.ts) | this PR |
+| L188e | `date read`: ISO 8601 year-month-day text to a Date, written in the language, the other way from date text; any other text stops (dates.test.ts) | this PR |
+| L188a | Calendar dates: std's `Date` and the prelude's date of, day number and date of day number (Howard Hinnant's algorithms), weekday, added days, days between, leap year, days in month and date text, written in the language and checked against JavaScript's Date (dates.test.ts) | #1410 |
 | L190b | `json read`: JSON text to a Json value, a recursive descent written in the language, stopping with where the text isn't JSON; reads what JSON.stringify writes, evaluated and compiled (json.test.ts) | #1409 |
 | L190a | JSON: std's `Json` type and `json printed`, written in the language (RFC 8259: text quoted with ", \\ and control characters escaped), the same text as JSON.stringify, evaluated and compiled (test json.test.ts) | #1408 |
 | L189a | `Bytes`: std's type (whole numbers 0 to 255, checked by `bytes of`), `byte items`, `byte count`, and UTF-8 written in the language, `utf8 of` and `text of utf8` (RFC 3629), evaluated and compiled the same as the host's TextEncoder (test bytes.test.ts) | #1407 |
