@@ -324,6 +324,12 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
     const spend = (d: string) => (f.spends ? [`${d}if (--fuel < 0) throw R.OUT;`] : []);
     const params = f.params.map((_, j) => local(j)), locals = f.locals.map((_, j) => local(f.params.length + j));
     const body = loops ? ["  for (;;) {", ...spend("    "), ...block(f.body, "return", "    "), "  }"] : [...spend("  "), ...block(f.body, "return", "  ")];
+    // A definition that isn't a function is worked out once, at its first
+    // use, as compile.ts has it (`??=`): sheet's `symbols`, a set made from
+    // a written list, was made again for every character (C137d17).
+    if (f.value && !cycle && !deep.has(i) && !f.partial && !f.spends && !f.budgeted && !params.length) {
+      return [`// ${f.name.replace(/\n/g, " ")} (worked out once)`, `let ${names[i]}$v;`, `function ${names[i]}() { return ${names[i]}$v ??= ${names[i]}$w(); }`, `function ${names[i]}$w() {`, ...(locals.length ? [`  let ${locals.join(", ")};`] : []), ...body, "}"].join("\n");
+    }
     return [`// ${f.name.replace(/\n/g, " ")}${cycle ? ", its calls in its cycle yielded to R.drive" : ""}`, `function${cycle ? "*" : ""} ${cycle ? gens[i] : names[i]}(${params.join(", ")}) {`, ...(locals.length ? [`  let ${locals.join(", ")};`] : []), ...body, "}"].join("\n");
   }
 }
