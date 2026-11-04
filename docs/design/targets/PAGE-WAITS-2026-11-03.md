@@ -1,8 +1,15 @@
 # A page that waits (C40 design, 2026-11-03)
 
 **Decided** (Ersagun, 2026-11-04): (A) and (i). **Built** in the evaluator
-(C40i): steps 1 to 3 and the test (ters/test/page-waits.test.ts). Left:
-step 4, compiled pages, which say they can't go on from a wait yet.
+(C40i): steps 1 to 3 and the test (ters/test/page-waits.test.ts). Step 4
+**built** on the core IR (`lab build-web --core`), not as a generator
+but with C137c22's continuations: a handler's type with Wait or Await
+takes the rest of its run last (scalar.ts FType `waits`), and the world's
+wait keeps that rest in its Pending, so html.ts lands the stretch and runs
+the rest later as the evaluator's does (core-rt.ts `worldFn`; test
+compiler/test/page-waits-core.test.ts). Not yet: compile.ts's pages (its
+own way out, C137d), a main that waits on the core IR, and a wait inside
+a search or `with fuel`, which are refused by name.
 
 C40's last open piece: an event handler on a page that waits, as in
 "click Save → show *saving…* → wait for the timer or the server → show

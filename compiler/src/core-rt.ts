@@ -4,10 +4,11 @@
 // function is named with the builtin's id where it has one (the printer
 // reads scalar.ts's tables), so nothing here needs the compiler.
 
-import { CONS, FALSE, HASH_SET_OPS, NIL, NONE, S, SOME, STD_IMPL, STD_MANY, TABLE_OPS, TRUE } from "../../ters/src/lang/std.ts";
-import { META, cellOps, equal, makeRunner, solveAnswers, toList, type Runtime, type Value, type World } from "../../ters/src/lang/run.ts";
+import { CONS, FALSE, HASH_SET_OPS, NIL, NONE, S, SOME, STD_IMPL, STD_MANY, TABLE_OPS, TICKET_V, TRUE } from "../../ters/src/lang/std.ts";
+import { META, cellOps, equal, unit, type Data, makeRunner, solveAnswers, toList, type Runtime, type Value, type World } from "../../ters/src/lang/run.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
-import { Cells, NoValue } from "../../ters/src/lang/cells.ts";
+import { Cells, NoValue, Pending } from "../../ters/src/lang/cells.ts";
+import { worldTimers, type Timers } from "../../ters/src/lang/timers.ts";
 import { NoAnswer } from "../../ters/src/lang/html.ts";
 import { satisfiable } from "../../ters/src/lang/relate.ts";
 import { givenInOrder } from "../../ters/src/lang/ports.ts";
@@ -227,8 +228,12 @@ export const RUNTIME = {
   // `src` (C137c13): the lambda it came from and the binders its captures
   // are, or the builtin, as the evaluator's closures carry (run.ts META),
   // so the evaluator's solver can look inside one it is given.
-  closure: (code: (...xs: unknown[]) => unknown, caps: unknown[], src?: { lambda: Id; binders: Id[]; bools: number[] } | { prim: Id }) => {
-    const c: ((...xs: unknown[]) => unknown) & { caps: unknown[]; code: typeof code } = Object.assign((...xs: unknown[]) => RUNTIME.ck(code(c, ...xs)), { caps, code });
+  // `rest` (C40 step 4): its code takes the rest of the run last, as a
+  // page handler that waits does; called from outside, the rest keeps
+  // the answer, and a wait goes on by it later (core-rt.ts worldFn).
+  closure: (code: (...xs: unknown[]) => unknown, caps: unknown[], src?: { lambda: Id; binders: Id[]; bools: number[] } | { prim: Id }, rest?: boolean) => {
+    const whole = (...xs: unknown[]) => { let out: unknown; RUNTIME.ck(code(c, ...xs, (v: unknown) => { out = v; return true; })); return out; };
+    const c: ((...xs: unknown[]) => unknown) & { caps: unknown[]; code: typeof code } = Object.assign(rest ? whole : (...xs: unknown[]) => RUNTIME.ck(code(c, ...xs)), { caps, code });
     if (src) Object.assign(c, { [META]: "prim" in src ? src : { lambda: src.lambda, env: new Map(src.binders.map((b, j) => [b, src.bools.includes(j) ? { tag: caps[j] ? TRUE : FALSE, fields: [] } : caps[j]])) } });
     return c;
   },
@@ -237,14 +242,39 @@ export const RUNTIME = {
 
 // The world's operations (scalar.ts WORLD_OPS) over the evaluator's
 // Runtime, as wasm.ts's worldOf: one that fails aborts with its reason.
-function worldFn(op: string, rt: Runtime): (...xs: unknown[]) => unknown {
+// A page handler's wait or await (C40 step 4, PAGE-WAITS-2026-11-03.md)
+// is given the rest of the handler, k: where the world can wait (Node's
+// sleeps) k runs now; a page's world throws Pending instead, which keeps
+// how to go on, so html.ts lands what the handler did so far and, once
+// it's ready, runs the rest as a step of its own. As the evaluator's
+// (run.ts `unhandled` and `paused`), awaiting a fetch on its way looks
+// again every few milliseconds.
+function worldFn(op: string, rt: Runtime, timers: Timers): (...xs: unknown[]) => unknown {
   const w = <K extends keyof World>(k: K): World[K] => {
     const f = rt.world?.[k];
     if (!f) return (() => { throw new Error(`this runtime can't ${k === "error" ? "write to standard error" : k}`); }) as unknown as World[K];
     return f.bind(rt.world) as World[K];
   };
   const tried = <T>(f: () => T): T => { try { return f(); } catch (e) { if (e instanceof Aborted) throw e; throw new Aborted((e as Error).message, 0); } };
+  const clock = () => (rt.world?.now ?? Date.now)();
+  const sleep = (ms: number) => w("wait")(ms);
+  const paused = (e: unknown, then: () => unknown): never => {
+    if (e instanceof Pending && e.resume === undefined) { let used = false; e.resume = () => { if (used) throw new Error("a page's run was resumed twice"); used = true; then(); return []; }; }
+    throw e;
+  };
+  const awaited = (t: Data, k: unknown): unknown => {
+    let now = clock(), at = timers.when(t, now);
+    const answer = (a: { at: number; first?: number }) => RUNTIME.ap(k as never, a.first !== undefined ? (t.fields[1] as (x: number) => unknown)(a.first) : t.tag === TICKET_V.timer || t.tag === TICKET_V.at ? t.fields[1] : timers.value(t) ?? unit);
+    try {
+      while (at.at > now && timers.pending(t)) { sleep(Math.min(5, at.at - now)); now = clock(); at = timers.when(t, now); }
+    } catch (e) { paused(e, () => awaited(t, k)); }
+    if (at.at > now) { const a = at; try { sleep(at.at - now); } catch (e) { paused(e, () => answer(a)); } }
+    return answer(at);
+  };
   switch (op) {
+    case "startTimer": return (ms) => timers.start(clock(), ms as number);
+    case "wait": return (ms, k) => { try { sleep(ms as number); } catch (e) { paused(e, () => RUNTIME.ap(k as never, unit)); } return RUNTIME.ap(k as never, unit); };
+    case "await": return (t, k) => awaited(t as Data, k);
     case "randomSeed": return () => Math.floor(Math.random() * 4294967296);
     // A stop with a reason (L51c): the program ends, as an overflow's stop.
     case "stopWith": return (why) => { throw new Stopped(why as string); };
@@ -268,8 +298,9 @@ function worldFn(op: string, rt: Runtime): (...xs: unknown[]) => unknown {
 // `info`: the checker's, where the program is loaded in the same process.
 export function coreRuntime(tables: TableSpec[], worlds: string[], rt: Runtime, code?: Code, info?: Info) {
   const rand = randFns(new Uint32Array(4)), cells = cellFns(rt.cells ?? new Cells(equal));
+  const timers = worldTimers((m) => { throw new Aborted(m, 0); });
   let spend = () => true;
-  return { ...RUNTIME, spending: (f: () => boolean) => { spend = f; }, rt: (n: string, b?: BuiltinOf) => rtFn(n, b, tables, rand, cells, code, () => spend(), info, rt), worlds: worlds.map((op) => worldFn(op, rt)), abort: (reason: unknown, esc: number): never => { throw new Aborted(reason, esc); } };
+  return { ...RUNTIME, spending: (f: () => boolean) => { spend = f; }, rt: (n: string, b?: BuiltinOf) => rtFn(n, b, tables, rand, cells, code, () => spend(), info, rt), worlds: worlds.map((op) => worldFn(op, rt, timers)), abort: (reason: unknown, esc: number): never => { throw new Aborted(reason, esc); } };
 }
 
 // How the evaluator's runtime (a page's mount, html.ts) calls a function

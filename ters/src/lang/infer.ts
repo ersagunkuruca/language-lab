@@ -71,6 +71,8 @@ export interface Info {
   // type, to the node it is a copy of (as written), so a Run fed by a
   // call into the copy still finds the definition (I29).
   copyOf?: Map<Id, Id>;
+  // The check of the library this one reads through to (L216), if any.
+  layer?: Info;
   // Calls whose Choice was dropped because their inputs answer them
   // (L125b): x / 2, or period(1, 9.81). A compiler calls them plainly.
   answered?: Set<Id>;
@@ -184,6 +186,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   const libraryType = (def: Id) => !library || library.has(def);
   const info: Info = { typeOf: new Map(), schemes: new Map(), errors: [], holes: new Map(), divergent: new Set(), subst: s, owner, hidden: new Set(opts.hidden ?? []), options: opts, implementations: new Map(), opAt: new Map(), answered: new Set(), spread: new Set(), reshape: new Map() };
   if (layer) {
+    info.layer = layer;
     info.typeOf = new OverMap(layer.typeOf);
     info.opAt = new OverMap(layer.opAt ?? new Map());
     info.answered = new OverSet(layer.answered ?? new Set());
