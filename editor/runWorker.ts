@@ -30,8 +30,9 @@ import { $Aborted } from "../compiler/src/runtime.js";
 
 // `compiled`: main as compiled JavaScript from an earlier run of this same
 // code (E238), so the run needs no checking or compiling again.
-// `replay`: answer from an earlier run's log instead of the world (E232b).
-export type RunAsk = { code: Code; names: Names; pins: Pins; def: Id; title: string; files: [string, string][]; args?: string[]; compiled?: Compiled; deny?: Id[]; stdin?: string; replay?: LogEntry[] };
+// `replay`: answer from an earlier run's log instead of the world (E232b);
+// `until`: give only that many of its answers, then pause (E232c).
+export type RunAsk = { code: Code; names: Names; pins: Pins; def: Id; title: string; files: [string, string][]; args?: string[]; compiled?: Compiled; deny?: Id[]; stdin?: string; replay?: LogEntry[]; until?: number };
 export type Compiled = { program: string; name: string };
 // args: main takes the command line's words, as `lab run` gives them (E212).
 // A page compiled the way "Open in a tab" does (page.ts pageFile), off the
@@ -50,12 +51,12 @@ export type Profile = { def: Id; calls: number; ms: number }[];
 // `compiled`: main ran as compiled JavaScript (E238), so there's no profile.
 // `core`: main ran printed from the core IR (E244), which isn't kept.
 // `answers`: what the world answered the run, in order (E232a).
-export type RunSays = { lines: string[] } | { done: true; shown: string; files: [string, string][]; stuck?: Stuck; profile?: Profile; compiled?: Compiled; core?: true; answers?: LogEntry[] } | { error: string; files: [string, string][]; stuck?: Stuck; compiled?: Compiled; core?: true; answers?: LogEntry[] };
+export type RunSays = { lines: string[] } | { done: true; shown: string; files: [string, string][]; stuck?: Stuck; profile?: Profile; compiled?: Compiled; core?: true; answers?: LogEntry[]; paused?: true } | { error: string; files: [string, string][]; stuck?: Stuck; compiled?: Compiled; core?: true; answers?: LogEntry[]; paused?: true };
 
 // The run's log of the world's answers (worldlog.ts), sent with its end.
-let answers: LogEntry[] | null = null;
+let answers: LogEntry[] | null = null, paused = false;
 // The whole log, writes and bytes too, so Run again can answer from it.
-const post = (m: RunSays | Found | CompileSays) => (self as unknown as Worker).postMessage(answers && ("done" in m || ("error" in m && "files" in m)) ? { ...m, answers } : m);
+const post = (m: RunSays | Found | CompileSays) => (self as unknown as Worker).postMessage(answers && ("done" in m || ("error" in m && "files" in m)) ? { ...m, answers, ...(paused ? { paused: true } : {}) } : m);
 
 // Standard input typed into Run's box (I168), read as `lab run` reads a
 // pipe (world.ts): read input takes the rest, read line a line at a time
@@ -77,7 +78,7 @@ function withInput(world: World, stdin: string | undefined): World {
 }
 
 self.onmessage = (e: MessageEvent<RunAsk | BackAsk | CompileAsk>) => {
-  answers = null;
+  answers = null; paused = false;
   if ("compilePage" in e.data) {
     const { code, names, pins, main, core } = e.data;
     try {
@@ -101,7 +102,7 @@ self.onmessage = (e: MessageEvent<RunAsk | BackAsk | CompileAsk>) => {
     const { code, def, values, names } = e.data, until = Date.now() + 60000;
     return post(searchBackwards(code, def, values, names, () => Date.now() > until));
   }
-  const { code, names, pins, def, title, files, args, compiled: before, deny, stdin, replay } = e.data;
+  const { code, names, pins, def, title, files, args, compiled: before, deny, stdin, replay, until } = e.data;
   const kept = new Map(files), wrote = new Map<string, string>();
   const store: Store = {
     getItem: (k) => kept.get(k) ?? null,
@@ -113,9 +114,10 @@ self.onmessage = (e: MessageEvent<RunAsk | BackAsk | CompileAsk>) => {
   let lines: string[] = [], sent = Date.now(), stuck: Stuck | undefined;
   const flush = () => { if (lines.length) post({ lines }); lines = []; sent = Date.now(); };
   try {
-    const print = (line: string) => { lines.push(line); if (Date.now() - sent > 100) flush(); };
+    // Paused, the run prints nothing more: what shows is where it was.
+    const print = (line: string) => { if (paused) return; lines.push(line); if (Date.now() - sent > 100) flush(); };
     const real = denied(withInput(browserWorld(store, title), stdin), deny ?? [], names);
-    const logging = logged(replay ? replaying(replay, real) : real);
+    const logging = logged(replay ? replaying(replay, real, until, () => { paused = true; }) : real);
     const world = logging.world;
     answers = logging.log;
     if (before && runCompiled(before, args, world, print, flush, () => [...wrote])) return;
