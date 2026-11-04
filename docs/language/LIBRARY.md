@@ -469,6 +469,8 @@ An Instant is a moment, as seconds since 1970-01-01 00:00:00 UTC; a duration is 
 - **instant read** : `(Text) -[Abort]-> Instant`. The instant an ISO 8601 text writes, year-month-dayThour:minute:second then Z for UTC or an offset ±hh:mm: instant read("2026-11-04T12:30:00+03:00") is the same instant as instant read("2026-11-04T09:30:00Z"). The other way from instant text and instant text in. Stops on any other text.
 - **offset text** : `(Float64) -> Text`. An offset from UTC as ISO 8601 writes it, in whole minutes: offset text(hours(3)) is "+03:00", offset text(seconds(0)) is "Z".
 - **instant text in** : `(Instant, Float64) -> Text`. The instant as ISO 8601 writes it where clocks are this far ahead of UTC: instant text in(instant read("2026-11-04T09:30:00Z"), hours(3)) is "2026-11-04T12:30:00+03:00". A fixed offset, not a time zone's rules.
+- **duration text** : `(Float64) -> Text`. The duration as ISO 8601 writes it, in hours, minutes and whole seconds: duration text(minutes(90)) is "PT1H30M", a negative one "-PT45S", none "PT0S" (java.time's Duration, Temporal's sign).
+- **duration read** : `(Text) -[Abort]-> Float64`. The duration an ISO 8601 text writes, PT then hours H, minutes M and seconds S in that order, any of them left out: duration read("PT1H30M") is minutes(90). The other way from duration text. Stops on any other text.
 - **current instant** : `() -[Time]-> Instant`. The instant now, from the program's clock (Time): instant text(current instant()) is the time in UTC. In a test, simulated runs it on a clock that starts at instant of(0).
 - **wait for** : `(Float64) -[Wait]-> Unit`. Waits for a duration (Wait): wait for(seconds(2)). The same as wait with the duration in milliseconds.
 
