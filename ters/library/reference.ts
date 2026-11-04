@@ -43,7 +43,7 @@ export const SECTIONS: Section[] = [
       ...t("fixed"), ...prelude("as fixed"), fixedAsFloat, ...prelude("square root fixed"),
       ...t("word8", "word16", "word32", "word64"), ...prelude("as word8", "as word16", "as word32", "as word64"), ...t("bits"), ...["bits and", "bits or", "bits xor", "shifted up", "shifted down"].map((op) => `std.bits.bits.${op}`), ...b("int.bitAnd", "int.bitOr", "int.bitXor"),
       ...t("extended"), ...prelude("extended less", "extended add", "extended negate", "extended subtract", "extended multiply", "minimum", "maximum"),
-      ...t("dual"), ...prelude("slope by duals", "dual table"),
+      ...t("dual"), ...prelude("as dual", "slope by duals", "dual table"),
       ...t("algebraic"), ...b("algebraic.sqrt", "algebraic.root", "algebraic.divide", "algebraic.ofRational", "algebraic.asFraction", "algebraic.digits", "algebraic.toNumber", "algebraic.show"),
       ...b("sin", "cos", "tan", "exp", "log"), ...b("add", "sub", "mul", "neg", "less", "int.add", "int.sub", "int.mul", "int.neg", "int.less", "algebraic.add", "algebraic.sub", "algebraic.mul", "algebraic.neg", "algebraic.less", "algebraic.fraction")] },
   { title: "True and false, sameness and order", intro: "", ids: [...t("bool"), ...b("and", "or", "not", "equal", "compare"), ...t("order"), ...b("showAny", "caseName"), ...t("shown")] },
