@@ -3142,8 +3142,9 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
       : ui.allowing === ui.def ? permissionsPanel(namer, permissionsAsked(ui.def)) : h("button", { class: "btn", type: "button", "data-act": "t-run" }, `Run ${label}`));
     if (given) box.append(h("p", { class: "hint" }, `As lab run gives it: ${given.args.join(", ")}. ${Object.keys(given.files).join(", ")} ${Object.keys(given.files).length > 1 ? "come" : "comes"} with the example; what the run writes stays in this browser.`));
     if (ui.output?.def === ui.def) {
-      box.append(h("pre", { class: "text out" }, ui.output.lines.join("\n") || (going ? "Running…" : "(no output)")));
-      if (ui.output.error) box.append(h("p", { class: "status-line bad" }, ui.output.error));
+      // What it prints is read out as it comes (a log), and a failure at once.
+      box.append(h("pre", { class: "text out", role: "log", "aria-live": "polite", "aria-label": `What ${namer.name(ui.def)} printed` }, ui.output.lines.join("\n") || (going ? "Running…" : "(no output)")));
+      if (ui.output.error) box.append(h("p", { class: "status-line bad", role: "alert" }, ui.output.error));
       if (ui.output.stuck) box.append(stuckView(ui.output.stuck));
       if (ui.output.profile) box.append(profileView(namer, ui.output.profile, doc.code, pick));
       if (ui.output.compiled) box.append(h("p", { class: "hint", title: "main compiled to JavaScript, as Open in a tab and lab compile do: the same output, much faster than the evaluator, but with no record of where the run went" }, "Ran compiled."));
@@ -3302,6 +3303,9 @@ function typedChecks(namer: Namer, info: T.Info): HTMLElement {
 }
 
 // ---------------------------------------------------------------- frame
+
+// The button the keyboard goes to when the one it was on is gone.
+const FOCUS_NEXT: Record<string, string> = { "t-run": "t-stop", "t-stop": "t-run", "t-allow-run": "t-stop" };
 
 // On a narrow screen a cycling group shows only its choice, and tapping it
 // goes to the next (the top bar then fits without scrolling).
@@ -3485,6 +3489,9 @@ function draw() {
   // only changes the selection leaves the text where it was.
   const scroll = SCROLLERS.map((q) => [...document.querySelectorAll(q)].map((g) => [g.scrollLeft, g.scrollTop]));
   const focused = document.activeElement?.id;
+  // A button that had the keyboard keeps it across the redraw, or hands it
+  // to the one standing in for it: Run becomes Stop and back (E231c).
+  const act = (document.activeElement as HTMLElement | null)?.dataset?.act;
   const info = typesOf();
   if (!info) { app.replaceChildren(h("p", { class: "status refused" }, "This program can't be type-checked. Undo, or Reset to the example.")); return; }
   T.setDisplayNames(p.names);
@@ -3517,6 +3524,10 @@ function draw() {
   const restore = () => {
     SCROLLERS.forEach((q, k) => document.querySelectorAll(q).forEach((g, i) => { if (scroll[k][i]) [g.scrollLeft, g.scrollTop] = scroll[k][i]; }));
     if (focused) document.getElementById(focused)?.focus();
+    else if (act) {
+      const q = (a: string) => document.querySelector<HTMLElement>(`[data-act="${a}"]`);
+      (q(act) ?? q(FOCUS_NEXT[act] ?? ""))?.focus({ preventScroll: true });
+    }
   };
 
   // Embedded: the definition's graph over its blocks, as the editor shows
