@@ -166,7 +166,7 @@ export const $partial = Object.fromEntries(Object.entries($many).map(([id, f]) =
 // A Float64 made a whole number is a conversion: it must be finite (L125c).
 { const whole = $partial[INT_OPS.wholePart]; $partial[INT_OPS.wholePart] = (x) => whole($fin(x)); }
 export { setPath as $setPath } from '../../ters/src/lang/records.ts';
-import { showValue, caseName, compareValues, ORDER_VALUES } from '../../ters/src/lang/run.ts';
+import { showValue, caseName, compareValues, stdOrdered, ORDER_VALUES } from '../../ters/src/lang/run.ts';
 // `shown`: each case of a type with a Shown implementation (L205), and
 // that implementation, a value or the function giving it (C148).
 const shownThrough = (shown) => (v) => {
@@ -177,13 +177,26 @@ export const $showAny = performed((v, names, shown) => showValue(v, null, names,
 export const $caseName = performed((v, names) => caseName(v, names));
 // `compare` (L66): `order` is each case's place in its type (compile.ts
 // writes it as $order), so cases compare as in the evaluator.
-export const $compare = performed((a, b, order) => ORDER_VALUES[compareValues(a, b, order) + 1]);
+// `ordered`: each case of a type with an Ordered implementation, and the
+// implementation (compile.ts writes it as $ordered, L204i): such a value
+// is ordered by its `less`, as the evaluator's orderedBy does.
+const orderedThrough = (ordered) => {
+  if (!ordered || !Object.keys(ordered).length) return undefined;
+  const yes = (x) => x === true || x?.tag === TRUE;
+  return (x, y) => {
+    const o = ordered[x.tag];
+    if (o === undefined || ordered[y.tag] !== o) return stdOrdered(x, y);
+    const less = (typeof o === "function" ? o() : o).fields[0];
+    return yes(less(x, y)) ? -1 : yes(less(y, x)) ? 1 : 0;
+  };
+};
+export const $compare = performed((a, b, order, ordered) => ORDER_VALUES[compareValues(a, b, order, orderedThrough(ordered)) + 1]);
 // `compare` at its type (compile.ts, GAPS.md M4): -1, 0 or 1. An Int has
 // one spelling (a number while small, a BigInt beyond), and < works across
 // the two. A text by code point: `<` on code units agrees unless one of
 // them has a character past the basic plane.
 export const $ORDER = ORDER_VALUES;
-export const $compareN = performed(compareValues);
+export const $compareN = performed((a, b, order, ordered) => compareValues(a, b, order, orderedThrough(ordered)));
 import { numberOrder } from '../../ters/src/lang/run.ts';
 export const $numberOrder = (a, b) => (a - a !== 0 || b - b !== 0 ? $stop(OVERFLOW) : numberOrder(a, b));
 export const $intOrder = (a, b) => (a === b ? 0 : a < b ? -1 : 1);
