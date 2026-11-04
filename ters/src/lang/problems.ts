@@ -70,6 +70,11 @@ export const PROBLEMS: Problem[] = [
   { id: "set-not-field", says: /^set needs a field here, a path of fields such as /, fix: "Give set the field to change, (p) ↦ p.address.city, or a function that reads the record only through its fields; a function that ignores the record has nothing to set." },
   { id: "path-not-field", says: /^path needs a field here, a path of fields such as /, fix: "Give path a function that reads fields one after another, (t) ↦ t.address.city, or (t) ↦ t for the whole." },
   { id: "results-unreachable", says: /^.+'s results can't all be found from .+: .+$/, fix: "Write the relation so each result is found from the other ports: an equation for it (b = a + 1) rather than a test such as <, which has many answers or none." },
+  { id: "effect-as-type", says: /^.+ is an effect, not a type of values$/, fix: "An effect names what a function may do, not a value: put it among a function type's effects, (…) -[Ask]-> …, or use a type of values here." },
+  { id: "interface-shape", says: /^.+ is an interface: it takes one type and has one case, its operations$/, fix: "Give the interface one type parameter and one case whose fields are its operations; a second type goes in the operations' own types." },
+  { id: "operation-not-function", says: /^.+ is an operation of the interface .+, so its type is a function$/, fix: "Give the operation a function type over the interface's type, (a) -> Float64; a constant is a function of no inputs, () -> a." },
+  { id: "fraction-literal", says: /^.+ isn't a fraction: write a whole number, or top\/bottom with the bottom not 0$/, fix: "Write the fraction as top/bottom with whole numbers and a bottom that isn't 0, such as 3/4, or a whole number." },
+  { id: "number-literal", says: /^.+ isn't a number$/, fix: "Write a number here, such as 2 or 0.5." },
   { id: "type-as-value", says: /^.+ is a type, not a value$/, fix: "A type says what values look like and can't be used as one: use one of its cases, or a value of that type." },
 ];
 
