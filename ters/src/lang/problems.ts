@@ -75,6 +75,9 @@ export const PROBLEMS: Problem[] = [
   { id: "operation-not-function", says: /^.+ is an operation of the interface .+, so its type is a function$/, fix: "Give the operation a function type over the interface's type, (a) -> Float64; a constant is a function of no inputs, () -> a." },
   { id: "fraction-literal", says: /^.+ isn't a fraction: write a whole number, or top\/bottom with the bottom not 0$/, fix: "Write the fraction as top/bottom with whole numbers and a bottom that isn't 0, such as 3/4, or a whole number." },
   { id: "number-literal", says: /^.+ isn't a number$/, fix: "Write a number here, such as 2 or 0.5." },
+  { id: "shared-different-types", says: /^.+ is shared by cases where it has different types \(/, fix: "Give the shared field one type in every case that shares it, or keep the fields apart (take same off) and match to reach each." },
+  { id: "shared-field-wrong", says: /^.+ (is the same as a field of another type|is the same as a field that is itself another's|is in one case twice)$/, fix: "Say a field is the same as one field of another case of the same type, once per case: point it at that case's own field, not at one that is itself shared, or at a field of another type." },
+  { id: "mask-takes-one", says: /^.+ takes one type, the algebra's multivectors$/, fix: "Give the mask the algebra's multivector type, Vector of M." },
   { id: "type-as-value", says: /^.+ is a type, not a value$/, fix: "A type says what values look like and can't be used as one: use one of its cases, or a value of that type." },
 ];
 
