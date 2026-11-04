@@ -802,9 +802,13 @@ continuation in such a field (Tumble's `parked`, whose `Chain.rest` says
 only `Diverge`) does `Diverge` and nothing else, and a page handler that
 does much more may still call it. Only the outer row
 opens; its parameters keep their types. This is Koka's `open` (Leijen,
-"Type directed compilation of row-typed algebraic effects"). Uses are
-checked in order, so a use that fixes the row to something wider before
-the closing use still clashes with it.
+"Type directed compilation of row-typed algebraic effects"). The order of
+the uses doesn't decide (L29): before a function's body is checked, each
+input it gives to a case's field or to a definition already checked whose
+input says what it does takes that type, so a call of it earlier, under
+`first` (which handles a `Choice`), puts its row inside the call's instead
+of giving it first's. `f` called under `first` and then stored in a field
+that says it does nothing is a pure `f`, either way round.
 
 The effects:
 
