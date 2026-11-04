@@ -24,10 +24,11 @@ import { toList, type Runtime } from "../../ters/src/lang/run.ts";
 import { fusedProgram } from "./handlers.ts";
 import { infer, type Info } from "../../ters/src/lang/infer.ts";
 import { expandInverses } from "./inverses.ts";
+import { hoistInvariants } from "./hoist.ts";
 import type { Code, Id, NodeOf } from "../../ters/src/model.ts";
 import { effectOfOperation, hostOp, ownOperations } from "../../ters/src/lang/hosts.ts";
 import * as I from "../../ters/src/lang/int.ts";
-import { ARRAY_RT, listSteps, RT, isData, isRecord, lowerScalar, type CoreIR, type LType, type Op, type SExpr, type SFunc, type TType } from "./scalar.ts";
+import { ARRAY_RT, listSteps, RT, isData, isRecord, lowerScalar, reachedWithShows, type CoreIR, type LType, type Op, type SExpr, type SFunc, type TType } from "./scalar.ts";
 import { runtime } from "./wasm-rt.ts";
 import { STOPS } from "./stops.ts";
 import { Aborted, FAIL, OUT, RUNTIME, Stopped, Unsupported, coreRuntime, runCoreFn, type BuiltinOf, type HostOps, type MainSpec, type TableSpec } from "./core-rt.ts";
@@ -332,6 +333,12 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
 // handle (handlers.ts, C64b), so a program's own effect answered in place
 // (effects' Ask) needs no handler at run time (C137c17).
 export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roots: Id[]): CoreIR {
+  // Work a lambda redoes on every call though nothing in it changes, done
+  // once before (hoist.ts, C81), as compile.ts has it: sheet's columns
+  // used, walked again for every row (C137d16). On what the roots reach,
+  // so its check again isn't over the whole library.
+  const h = hoistInvariants(reachedWithShows(code, roots, info), info, names);
+  if (h.hoisted) ({ code, info, names } = h);
   // inverse(f, …) of a named f is a solve on f (inverses.ts), as compile.ts
   // has it: the equations' solver or a mode's plan, not the relational
   // interpreter calling a function it is handed (the pedal's atanh, C137d8).
