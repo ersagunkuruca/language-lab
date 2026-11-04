@@ -13,7 +13,8 @@ import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
 import { runMain } from "../src/lang/run.ts";
-import { SHOW_ANY } from "../src/lang/std.ts";
+import { SHOW_ANY, tuplePart } from "../src/lang/std.ts";
+import { SHAPE_STEPS } from "../src/model.ts";
 import { showType } from "../src/lang/types.ts";
 import { B } from "../src/prelude.ts";
 
@@ -126,4 +127,32 @@ test("a use with no body reads as a call naming its given ports (L211f), in bloc
   assert.match(text, /add\([^)]*= 2, result = 5\)/);
   assert.doesNotMatch(text, /‹use›|for /);
   assert.match(renderSexpr(code, pres, main), /\(solve add \(\(\S+ 2\) \(out 5\)\)\)/);
+});
+
+// A saved use with binds and a body moves to today's shape (L211g): no
+// body, the old body a let of its value, a binder's read a part of that.
+test("a saved use moves to the bodyless shape and runs the same: its body a let, binder reads parts (L211g)", async () => {
+  const k = new Lang();
+  const polar = k.def("polar");
+  k.define(polar, k.fn(["length", "angle", "x", "y"], (r, t, x, y) => k.and(k.equal(x, k.call(B.mul, r, k.call(B.cos, t))), k.equal(y, k.call(B.mul, r, k.call(B.sin, t))))));
+  k.results(polar, "x", "y");
+  const main = k.def("main"), one = k.def("one");
+  const use = k.use(polar, [k.lit(2), k.lit(0)], ["x", "y"], (x, y) => k.call(B.add, k.call(B.mul, x, k.lit(10)), y));
+  k.define(main, k.thunk(() => k.call(SHOW_ANY, use)));
+  const single = k.solve(B.add, { 0: k.lit(2), out: k.lit(5) }, { 1: "b" }, (b) => b[1]);
+  k.define(one, k.thunk(() => k.call(SHOW_ANY, single)));
+  const saved = JSON.parse(JSON.stringify(k.code.nodes)) as Record<Id, unknown>;
+  SHAPE_STEPS[2].step(saved);
+  const moved = saved[use] as NodeOf<"call">, bare = saved[`${use}.use`] as NodeOf<"call">;
+  assert.equal(moved.fn, `${use}.let`);
+  assert.equal(bare.body, undefined);
+  assert.equal(bare.binds, undefined);
+  assert.ok(Object.values(saved).some((n) => (n as NodeOf<"ref">).target === tuplePart(2, 1)));
+  assert.equal((saved[single] as NodeOf<"call">).body, undefined);
+  const code: Code = base({ nodes: saved as Code["nodes"], defs: k.code.defs }), names = baseNames(k.names);
+  const info = infer(code, names);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  assert.equal(runMain(code, info, main, { print: () => {}, names }), "20");
+  assert.equal(runMain(code, info, one, { print: () => {}, names }), "3");
+  assert.equal(await compiled({ code, names, info, main, use }), "20");
 });

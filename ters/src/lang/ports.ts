@@ -5,7 +5,7 @@
 
 import type { Code, Id, Node, Use } from "../model.ts";
 import { fieldPorts, useTarget } from "../model.ts";
-import { SIGS, TUPLE_MAX, tupleVariant } from "./std.ts";
+import { SIGS, TUPLE_MAX, tupleVariant, tuplePart } from "./std.ts";
 import { Subst } from "./types.ts";
 
 // The binders naming the result ports of the function an expression is: a
@@ -105,3 +105,51 @@ export function filled(code: Code): Code {
   return out;
 }
 
+
+// A saved use that binds its ports and has a body, moved to today's shape
+// (L211g, model.ts SHAPE_STEPS): the use gives its produced ports with no
+// body, and its old body becomes a let of that, in the use's place. A read
+// of a port's old binder becomes a part read of the let's variable
+// (`value.second` for the second produced port), or the variable itself
+// when the use produces one. A body that only gives the one binder back is
+// the use itself. A use whose ports aren't known here, one that binds a
+// port it doesn't produce, or one whose binder carries a unit (a let's
+// variable can't say a part's) stays as it is: binds and body are still
+// read. `library`: the definitions a use may run, besides the program's.
+export function usesGiveTheirPorts(nodes: Record<Id, unknown>, library: Record<Id, Node>): void {
+  const all = Object.assign(Object.create(library) as Record<Id, Node>, nodes as Record<Id, Node>);
+  const code: Code = { nodes: all, defs: [] };
+  const reads = new Map<Id, Id[]>();
+  for (const x of Object.values(nodes)) { const r = x as Node; if (r?.kind === "ref") reads.set(r.target, [...(reads.get(r.target) ?? []), r.id]); }
+  for (const id of Object.keys(nodes)) {
+    const n = nodes[id] as Node;
+    if (n?.kind !== "call" || !n.given || !n.binds || n.body === undefined) continue;
+    const produced = (usePorts(code, n) ?? []).filter((k) => !(k in n.given!));
+    const binds = n.binds, body = n.body;
+    if (!produced.length || produced.length > TUPLE_MAX || Object.keys(binds).some((k) => !produced.includes(k))) continue;
+    if (Object.values(binds).some((b) => (nodes[b] as { unit?: unknown } | undefined)?.unit)) continue;
+    const bare = { ...n } as Record<string, unknown>;
+    delete bare.binds; delete bare.body;
+    const only = produced.length === 1 ? binds[produced[0]] : undefined;
+    const b = nodes[body] as Node | undefined;
+    if (only !== undefined && b?.kind === "ref" && b.target === only && (reads.get(only) ?? []).length === 1) {
+      nodes[id] = bare; delete nodes[body]; delete nodes[only];
+      continue;
+    }
+    const use = `${id}.use`, fn = `${id}.let`, value = `${id}.value`;
+    nodes[use] = { ...bare, id: use };
+    nodes[value] = { id: value, kind: "binder" };
+    nodes[fn] = { id: fn, kind: "lambda", params: [value], body };
+    nodes[id] = { id, kind: "call", fn, args: [use] };
+    for (const [port, binder] of Object.entries(binds)) {
+      for (const r of reads.get(binder) ?? []) {
+        if (produced.length === 1) { nodes[r] = { id: r, kind: "ref", target: value }; continue; }
+        const part = `${r}.part`, of = `${r}.of`;
+        nodes[part] = { id: part, kind: "ref", target: tuplePart(produced.length, produced.indexOf(port)) };
+        nodes[of] = { id: of, kind: "ref", target: value };
+        nodes[r] = { id: r, kind: "call", fn: part, args: [of] };
+      }
+      delete nodes[binder];
+    }
+  }
+}
