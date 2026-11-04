@@ -86,6 +86,35 @@ test("size-change: a call that keeps every argument the same size is Diverge", (
   assert.ok(p.effects(spin).includes(DIVERGE));
 });
 
+// Recursion on a list a function gives back (BACKLOG I84, Bounce's `bump
+// pairs`): no piece of the input, but no longer than one, so the call
+// still shrinks by length (spine.ts). One that gives back a list as long
+// as the input, or longer, doesn't.
+test("size-change: recursion on a list given back no longer, inside a pair, is total", () => {
+  const defs: Record<string, Id> = {};
+  const p = program((k) => {
+    const def = (name: string, ps: string[], body: (...xs: Id[]) => Id) => { const d = k.def(name); defs[name] = d; k.define(d, k.fn(ps, body)); return d; };
+    const split = (of: Id, body: (n: Id, rest: Id) => Id) => k.match(of, [{ variant: PAIR_V, names: ["n", "rest"], body: ([n, rest]) => body(n, rest) }]);
+    // Rebuilds the list one cons per cons, counting: as long as xs.
+    const passAlong = def("pass along", ["xs"], (xs) => k.match(xs, [
+      { variant: NIL, names: [], body: () => k.call(PAIR_V, k.lit(0), k.x(NIL)) },
+      { variant: CONS, names: ["h", "t"], body: ([h, t]) => split(k.call(defs["pass along"], t), (n, rest) => k.call(PAIR_V, n, k.call(CONS, h, rest))) },
+    ]));
+    const same = def("same", ["xs"], (xs) => k.call(PAIR_V, k.lit(0), xs));
+    const longer = def("longer", ["xs"], (xs) => k.call(PAIR_V, k.lit(0), k.call(CONS, k.lit(1), xs)));
+    const walk = (name: string, through: Id, onTail: boolean) => { def(name, ["xs"], (xs) => k.match(xs, [
+      { variant: NIL, names: [], body: () => k.lit(0) },
+      { variant: CONS, names: ["h", "t"], body: ([, t]) => split(k.call(through, onTail ? t : xs), (_, rest) => k.call(defs[name], rest)) },
+    ])); };
+    walk("walk", passAlong, true);
+    walk("walk same", same, false);
+    walk("walk longer", longer, true);
+  });
+  assert.deepEqual(p.errors, []);
+  for (const d of ["pass along", "walk"]) assert.ok(!p.effects(defs[d]).includes(DIVERGE), `${d}: ${p.type(defs[d])}`);
+  for (const d of ["walk same", "walk longer"]) assert.ok(p.effects(defs[d]).includes(DIVERGE), `${d}: ${p.type(defs[d])}`);
+});
+
 // Recursion through a function that calls what it is given on pieces of
 // its other inputs (BACKLOG L146): `map(args, copy)` over a case's list
 // field shrinks, as sheet's `show formula` does; map over a list holding

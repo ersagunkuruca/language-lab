@@ -33,13 +33,14 @@
 // test/modes.test.ts compares what it says with what relate.ts does.
 
 import type { Code, Id, Node, NodeOf, Use } from "../model.ts";
-import { children, derived, derivedFrom, ownerOfTypeParts, subtree, useTarget, isCall, type Call, isUse, bindsOf, bodyOf } from "../model.ts";
+import { children, dependencies, derived, derivedFrom, ownerOfTypeParts, subtree, useTarget, isCall, type Call, isUse, bindsOf, bodyOf } from "../model.ts";
 import { NUMERIC } from "./equations.ts";
 import { planSolve, type SolvePlan } from "./solve.ts";
 import { computedForward } from "./directions.ts";
 import { countedCalls } from "./counting.ts";
 import { INT_OPS, S, SET, STD_IMPL, STD_MANY, TEXT_OPS } from "./std.ts";
 import { filled } from "./ports.ts";
+import { spineTerminates } from "./spine.ts";
 
 // How many answers: whether there can be none, and whether there can be
 // more than one. det = neither, semidet = may fail, multi = may give
@@ -920,6 +921,15 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
 
   // ----------------------------------------------------------- ending
 
+  // Run forward, a definition that ends by lengths (spine.ts, I84) ends
+  // here too, given functions that don't lead back to it.
+  const byLength = (k: string) => {
+    const [lam, known, ...given] = k.split("|"), body = nodes[lam];
+    const d = code.defs.find((d) => (nodes[d] as NodeOf<"def">).body === lam);
+    if (!d || body?.kind !== "lambda" || known !== body.params.map((_, i) => String(i)).sort().join(",")) return false;
+    const fns = given.join(",").split(",").filter(Boolean).map((x) => x.slice(x.indexOf("=") + 1));
+    return fns.every((f) => f.startsWith("def:") && !dependencies(code, f.slice(4)).includes(d)) && spineTerminates(code, [d], () => body);
+  };
   // Size-change: every composed graph from a mode back to itself that's
   // its own square needs a port that strictly shrinks around it.
   // from: only the call graphs reachable from this mode.
@@ -949,7 +959,7 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
         if (h.to === g.from) todo.push(compose(h, g));
       }
     }
-    const bad = [...all.values()].filter((g) => g.from === g.to && key(compose(g, g)) === key(g) && !g.arcs.some(([i, j, s]) => i === j && s));
+    const bad = [...all.values()].filter((g) => g.from === g.to && key(compose(g, g)) === key(g) && !g.arcs.some(([i, j, s]) => i === j && s) && !byLength(g.from));
     return { ok: !bad.length, at: [...new Set(bad.map((g) => g.from))] };
   }
 
