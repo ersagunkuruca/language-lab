@@ -636,6 +636,18 @@ function insertEmbeddings(code: Code, info: Info): { code: Code; info: Info } {
   // map(x) of the embedding, its nodes named after `at`.
   const wrap = (x: Id, at: Id, e: { def: Id; from: Type; to: Type }): Id => {
     const emb: Type = { t: "con", id: EMBEDDING, args: [e.from, e.to] }, fn: Type = { t: "fn", params: [e.from], ret: e.to, eff: none };
+    // An embedding whose map is named is that function's call, as int in
+    // rational's `as fraction(i)`: what a shader and a backwards search
+    // run without reading a function out of a record.
+    const body = code.nodes[(code.nodes[e.def] as NodeOf<"def"> | undefined)?.body ?? ""], arg = isCall(body) && body.args.length === 1 ? code.nodes[body.args[0]] : undefined;
+    if (arg?.kind === "ref") {
+      const f = `${at}.map`;
+      nodes[f] = { id: f, kind: "ref", target: arg.target };
+      nodes[at] = { id: at, kind: "call", fn: f, args: [x] };
+      typeOf.set(f, fn);
+      typeOf.set(at, e.to);
+      return at;
+    }
     const field = `${at}.field`, of = `${at}.of`, map = `${at}.map`;
     nodes[field] = { id: field, kind: "ref", target: EMBEDDING_MAP };
     nodes[of] = { id: of, kind: "ref", target: e.def };
@@ -675,5 +687,7 @@ function insertEmbeddings(code: Code, info: Info): { code: Code; info: Info } {
     if (n.kind !== "call" || !n.args?.some((a) => info.embedded!.has(a))) continue;
     nodes[n.id] = { ...n, args: n.args.map(lift) } as Node;
   }
-  return { code: { ...code, nodes }, info: { ...info, typeOf } };
+  // The lifts are in the code now: resolving it again (a backwards search's
+  // evaluator does) mustn't wrap them twice, which made a call its own input.
+  return { code: { ...code, nodes }, info: { ...info, typeOf, embedded: undefined } };
 }

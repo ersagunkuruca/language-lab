@@ -54,7 +54,8 @@ export interface Picture {
   // The program's WGSL, and the fragment shader around it.
   wgsl: string;
   fragment: string;
-  // Settles once the first frame is drawn.
+  // Settles once the first frame is drawn and, with a check, the
+  // evaluator has been compared with the GPU.
   ready: Promise<void>;
   stop: () => void;
 }
@@ -180,9 +181,12 @@ fn fragment(@builtin(position) at: vec4f) -> @location(0) vec4f {
   const d = await device;
   if (typeof d === "string") return { ...picture, ready: cpu(d) };
 
-  // Check first: on some drivers, reading a buffer back after the canvas
-  // has started presenting fails.
-  if (o.check) await check(d, o.check);
+  // The GPU's side of the check first: on some drivers, reading a buffer
+  // back after the canvas has started presenting fails. The evaluator's
+  // side runs after the first frame, a little at a time: it takes seconds
+  // (a minute for the ray marcher on a slow machine), and the page stayed
+  // blank and frozen all that time.
+  const compare = o.check ? await check(d, o.check) : null;
   const module = d.createShaderModule({ code: fragment });
   const errors = (await module.getCompilationInfo()).messages.filter((m) => m.type === "error");
   if (errors.length) throw new Error(errors.map((m) => `${m.lineNum}:${m.linePos} ${m.message}`).join("\n"));
@@ -250,10 +254,12 @@ fn fragment(@builtin(position) at: vec4f) -> @location(0) vec4f {
   };
   draw();
   status.textContent = `WebGPU · ${canvas.width}×${canvas.height}`;
-  return picture;
+  return compare ? { ...picture, ready: compare() } : picture;
 
-  // The GPU against the evaluator, at a grid of points and a few times.
-  async function check(d: GPUDevice, el: HTMLElement) {
+  // The GPU against the evaluator, at a grid of points and a few times: the
+  // GPU's answers now, and a function that compares the evaluator's with
+  // them, yielding to the page every few milliseconds.
+  async function check(d: GPUDevice, el: HTMLElement): Promise<() => Promise<void>> {
     const points: number[][] = [];
     for (const t of [0, 1.5, 4]) for (let i = 0; i < 6; i++) for (let j = 0; j < 6; j++) points.push([-1 + (2 * i + 1) / 6, -1 + (2 * j + 1) / 6, t]);
     const kernel = `${shader.wgsl}
@@ -289,15 +295,39 @@ fn main(@builtin(global_invocation_id) g: vec3u) {
     enc.copyBufferToBuffer(out, 0, read, 0, points.length * 12);
     d.queue.submit([enc.finish()]);
     await read.mapAsync(GPUMapMode.READ);
-    const got = new Float32Array(read.getMappedRange());
+    const got = new Float32Array(read.getMappedRange()).slice();
+    read.unmap();
+    return () => compareWith(el, points, got);
+  }
+
+  async function compareWith(el: HTMLElement, points: number[][], got: Float32Array) {
+    el.textContent = "Checking against the evaluator…";
     // The points as f32, so only the computation differs. A picture can be
     // chaotic (the Mandelbrot set's edge): there the GPU's sin and cos, good
     // only to 2^-11, move a point to a different colour. So up to 1 in 20
     // points may differ; a wrong lowering moves far more than that.
-    const diffs = points.map((p, i) => Math.max(...evaluate(Math.fround(p[0]), Math.fround(p[1]), Math.fround(p[2])).map((want, k) => Math.abs(got[3 * i + k] - want)))).sort((a, b) => a - b);
-    const apart = diffs.filter((x) => x >= 2e-3).length, skip = Math.min(apart, Math.floor(points.length / 20));
+    // The points in an order that spreads them over the picture and the
+    // times (41 is prime to 108), so that the ones checked within the
+    // budget, a few seconds of the evaluator, stand for all of them.
+    const diffs: number[] = [];
+    const start = performance.now();
+    let since = start;
+    for (let n = 0; n < points.length; n++) {
+      const i = (n * 41) % points.length, p = points[i];
+      diffs.push(Math.max(...evaluate(Math.fround(p[0]), Math.fround(p[1]), Math.fround(p[2])).map((want, k) => Math.abs(got[3 * i + k] - want))));
+      if (performance.now() - since > 20) {
+        if (performance.now() - start > 5000 && diffs.length >= 12) break;
+        el.textContent = `Checking against the evaluator… ${n + 1} of ${points.length} points`;
+        await new Promise((go) => setTimeout(go, 0));
+        if (stopped) return;
+        since = performance.now();
+      }
+    }
+    diffs.sort((a, b) => a - b);
+    const apart = diffs.filter((x) => x >= 2e-3).length, skip = Math.min(apart, Math.floor(diffs.length / 20));
     const worst = diffs[diffs.length - 1 - skip];
-    el.textContent = `Checked against the evaluator: ${points.length} points × 3 channels, largest difference ${worst.toExponential(1)}${skip ? ` leaving out ${skip} point${skip > 1 ? "s" : ""} where the picture is chaotic` : ""} (the evaluator ${in32 ? "rounds to 32-bit floats as the GPU does" : "in 64-bit floats, the GPU in 32"}).`;
+    const many = diffs.length === points.length ? `${points.length} points` : `${diffs.length} of ${points.length} points (the evaluator is slow here; the rest would take too long)`;
+    el.textContent = `Checked against the evaluator: ${many} × 3 channels, largest difference ${worst.toExponential(1)}${skip ? ` leaving out ${skip} point${skip > 1 ? "s" : ""} where the picture is chaotic` : ""} (the evaluator ${in32 ? "rounds to 32-bit floats as the GPU does" : "in 64-bit floats, the GPU in 32"}).`;
     el.dataset.worst = String(worst);
   }
 

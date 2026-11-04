@@ -1,5 +1,5 @@
-// board in three ways, in one process: the evaluator and the compiler's
-// output drawing the page (main) into a fake document, and the
+// board in four ways, in one process: the evaluator, the compiler's
+// output and the JavaScript printed from the core IR (C137d19) drawing the page (main) into a fake document, and the
 // hand-written ideal (board.ideal.js) drawing the same page by hand. Each
 // gets the same scripted session (cards added through the quick-add field,
 // moved, renamed, pointed, filtered, searched, undone and redone, a focus
@@ -18,10 +18,12 @@ import { equal, runMain, type World } from "../../ters/src/lang/run.ts";
 import { compiledCall, evaluatorCall, mountHtml } from "../../ters/src/lang/html.ts";
 import { FakeEl, FakeText, fakeDoc } from "../../ters/test/fakedom.ts";
 import { compile } from "../src/compile.ts";
+import { loadCoreJs, lowerCore } from "../src/core-js.ts";
+import { coreCall } from "../src/core-rt.ts";
 import { $eq, $setCells, $setWorld } from "../src/runtime.js";
 import { mount as ideal } from "./board.ideal.js";
 
-export type Name = "evaluator" | "compiled" | "ideal";
+export type Name = "evaluator" | "compiled" | "core" | "ideal";
 
 // Frames: the page asks for one with requestAnimationFrame; frame() runs
 // what's waiting, at 60 a second.
@@ -60,6 +62,9 @@ export async function ways(): Promise<Record<Name, Mount>> {
   const runtime = pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href;
   writeFileSync(join(dir, "board.js"), compile(code, info, names, { runtime, exports: ["main"] }));
   const compiled = (await import(pathToFileURL(join(dir, "board.js")).href)).defs.main as () => unknown;
+  // Lowered to the core IR once, and loaded on each mount's cells, which
+  // its runtime holds from the start (core-rt.ts), as core-page.ts does.
+  const ir = lowerCore(code, info, names, [main]), fi = ir.funcs.findIndex((g) => g.name === names[main] && !g.inner);
   return {
     evaluator: () => {
       const cells = new Cells(equal);
@@ -71,6 +76,11 @@ export async function ways(): Promise<Record<Name, Mount>> {
       $setCells(cells);
       $setWorld(world({}));
       return mountHtml(compiled() as never, { cells, doc: fakeDoc(), call: compiledCall }) as FakeEl;
+    },
+    core: () => {
+      const cells = new Cells(equal);
+      const fns = loadCoreJs(ir, { print: () => {}, world: world({}), cells });
+      return mountHtml(fns[fi]() as never, { cells, doc: fakeDoc(), call: coreCall }) as FakeEl;
     },
     ideal: () => ideal(fakeDoc(), world({})) as FakeEl,
   };

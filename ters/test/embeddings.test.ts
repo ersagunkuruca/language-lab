@@ -17,6 +17,8 @@ import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import type { Id } from "../src/model.ts";
 import { ARITH, COMPLEX_V, EMBEDDING_V, INT_OPS, S, SHOW_ANY, TEXT_OPS } from "../src/lang/std.ts";
 import { runMain } from "../src/lang/run.ts";
+import { relate } from "../src/lang/relate.ts";
+import { RATIO } from "../src/lang/std.ts";
 import type { Pins } from "../src/lang/signatures.ts";
 import { INT, NUMBER, type Type } from "../src/lang/types.ts";
 import { B } from "../src/prelude.ts";
@@ -196,6 +198,24 @@ test("a definition pinned to a Float64 whose body gives an Int is lifted: 3 and 
     return { [ratio]: pin(float) };
   });
   assert.match(q.info.errors.map((e) => e.message).join("\n"), /ratio is pinned to Float64, and this makes it Text/);
+});
+
+// A search sees the lifts too (L208g): its evaluator resolves the
+// resolved code again, which once wrapped a lift twice, making the call
+// its own input (out of memory).
+test("a backwards search through a lifted Int: add fractions(x, count) at x = 1/2 is 7/2", () => {
+  const p = program((k) => {
+    const count = k.def("count");
+    k.define(count, k.int(3));
+    const g = k.def("g");
+    k.define(g, k.fn(["x"], (x) => k.call(lib("add fractions"), x, k.x(count))));
+  });
+  assert.deepEqual(p.info.errors.map((e) => e.message), []);
+  const g = p.code.defs.find((d) => p.names[d] === "g")!;
+  const x = (p.code.nodes[(p.code.nodes[g] as { body: Id }).body] as { params: Id[] }).params[0];
+  let steps = 0;
+  const [answer] = relate(p.code, g, { [x]: { tag: RATIO, fields: [1, 2] } }, { info: p.info, names: p.names, spend: () => ++steps < 20000 });
+  assert.deepEqual(answer?.values.out, { tag: RATIO, fields: [7, 2] });
 });
 
 // The diamond rule (L208d, diamonds.ts): two paths between the same types
