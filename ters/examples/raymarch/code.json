@@ -3637,11 +3637,6 @@
       "id": "augkfkpq7rjeg7dbmacuh77upa",
       "kind": "binder"
     },
-    "rbhbq5mobu41gdb7d00mdqetsb": {
-      "id": "rbhbq5mobu41gdb7d00mdqetsb",
-      "kind": "lit",
-      "value": 1000
-    },
     "kjj3bte82308os9utgm3fgdd0s": {
       "id": "kjj3bte82308os9utgm3fgdd0s",
       "kind": "ref",
@@ -3672,31 +3667,11 @@
         "ibf3ri17jrivm5k03eet5rt2ke"
       ]
     },
-    "jk7i6ivacj1kpjj3r032oss91e": {
-      "id": "jk7i6ivacj1kpjj3r032oss91e",
-      "kind": "lambda",
-      "params": [],
-      "body": "s4sihim31hnsnau036f6216vc6"
-    },
-    "t8k6m0rau9arrv3c1h6ukc9ep2": {
-      "id": "t8k6m0rau9arrv3c1h6ukc9ep2",
-      "kind": "ref",
-      "target": "builtin.fuel"
-    },
-    "gkn2sjrre5jqbs60am5ioebg1p": {
-      "id": "gkn2sjrre5jqbs60am5ioebg1p",
-      "kind": "call",
-      "fn": "t8k6m0rau9arrv3c1h6ukc9ep2",
-      "args": [
-        "rbhbq5mobu41gdb7d00mdqetsb",
-        "jk7i6ivacj1kpjj3r032oss91e"
-      ]
-    },
     "6im91h1gp747cq1pv1i8bj9cfq": {
       "id": "6im91h1gp747cq1pv1i8bj9cfq",
       "kind": "lambda",
       "params": [],
-      "body": "gkn2sjrre5jqbs60am5ioebg1p"
+      "body": "s4sihim31hnsnau036f6216vc6"
     },
     "i1ten24t681serk72urjhajbbn": {
       "id": "i1ten24t681serk72urjhajbbn",
