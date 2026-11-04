@@ -189,7 +189,7 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
           if (e.op === "not") return `(!${xs[0]})`;
           if (e.op === "mod") return `R.mod(${xs.join(", ")})`;
           // With where it is (C143), when the site is known.
-          if (e.op === "stop") { const c = e.args[0].k === "num" ? e.args[0].v : -1, at = c >= 0 ? ir.stops?.[siteOf(c)] : undefined; return at ? `R.stop(${xs[0]}, ${JSON.stringify(at.node)}, ${JSON.stringify(at.def)})` : `R.stop(${xs[0]})`; }
+          if (e.op === "stop") { const c = e.args[0].k === "num" ? e.args[0].v : -1, at = c >= 0 ? ir.stops?.[siteOf(c)] : undefined; return at ? `R.stop(${xs[0]}, ${[at.node, at.def, ...(at.name ? [at.name] : [])].map((x) => JSON.stringify(x)).join(", ")})` : `R.stop(${xs[0]})`; }
           if (MATH[e.op]) return `Math.${MATH[e.op]}(${xs.join(", ")})`;
           return `R.unsupported(${JSON.stringify(`op ${e.op}`)})`;
         }

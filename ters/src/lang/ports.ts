@@ -4,10 +4,9 @@
 // position.
 
 import type { Code, Id, Node, Use } from "../model.ts";
-import { derived, derivedFrom, fieldPorts, onLayer, useTarget } from "../model.ts";
+import { fieldPorts, onLayer, useTarget } from "../model.ts";
 import { SIGS, TUPLE_MAX, tupleVariant, tuplePart } from "./std.ts";
 import { Subst } from "./types.ts";
-import { forgetSpine } from "./spine.ts";
 
 // The binders naming the result ports of the function an expression is: a
 // lambda written there, or a definition (or a let's name) bound to one.
@@ -100,7 +99,6 @@ const filledOnce = new WeakMap<Code, Code>();
 const bareIn = (code: Code, ids: Iterable<Id>) => [...ids].filter((id) => { const n = code.nodes[id]; return n?.kind === "call" && !!(n as Use).given && (n as Use).body === undefined; });
 export function filled(code: Code): Code {
   let out = filledOnce.get(code);
-  if (!out && derived.has(code)) out = filledFrom(code);
   if (!out) {
     const bare = bareIn(code, Object.keys(code.nodes));
     if (!bare.length) out = code;
@@ -115,40 +113,6 @@ export function filled(code: Code): Code {
     } else { out = { ...code, nodes: { ...code.nodes } }; fillUses(out, bare); }
     filledOnce.set(code, out);
   }
-  return out;
-}
-
-// A program made from another by changing a few nodes (a palette's
-// filling, model.ts `derived`): the other's filled nodes with the changed
-// ones put in, and itself derived from that, so the modes analysis starts
-// from its slots (E248). Filling every node again, then scanning every
-// one for slots, was most of each offer's plan since L211e. The palette
-// writes each filling into one set of nodes, taking the last one out
-// first (infer.ts fillings); the filled nodes follow it the same way, in
-// one copy changed in place, instead of a copy of every node per offer.
-const mirrors = new WeakMap<object, { fb: Code; nodes: Record<Id, Node>; put: Id[] }>();
-function filledFrom(code: Code): Code {
-  const from = derived.get(code)!;
-  const fb = filled(from.base);
-  const bare = bareIn(code, from.changed);
-  if (fb === from.base && !bare.length) return code;
-  if (bare.length) {
-    const out: Code = { ...code, nodes: { ...fb.nodes } };
-    for (const id of from.changed) { if (id in code.nodes) out.nodes[id] = code.nodes[id]; else delete out.nodes[id]; }
-    fillUses(out, bare);
-    derivedFrom(out, fb, [...from.changed, ...Object.keys(out.nodes).filter((id) => out.nodes[id] !== fb.nodes[id])]);
-    return out;
-  }
-  let m = mirrors.get(code.nodes);
-  if (!m || m.fb !== fb) mirrors.set(code.nodes, (m = { fb, nodes: { ...fb.nodes }, put: [] }));
-  else {
-    for (const id of m.put) { if (id in fb.nodes) m.nodes[id] = fb.nodes[id]; else delete m.nodes[id]; }
-    forgetSpine(m.nodes);
-  }
-  m.put = [...from.changed];
-  for (const id of m.put) { if (id in code.nodes) m.nodes[id] = code.nodes[id]; else delete m.nodes[id]; }
-  const out: Code = { ...code, nodes: m.nodes };
-  derivedFrom(out, fb, from.changed);
   return out;
 }
 

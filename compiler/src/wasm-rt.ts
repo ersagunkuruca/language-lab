@@ -7158,6 +7158,38 @@ const TABLES: Record<string, Omit<RtFn, "name" | "body" | "locals" | "uses">> = 
   at: { params: [["t", "table"], ["k", "key"]], result: "value", partial: true },
   entries: { params: [["t", "table"]], result: "list" },
 };
+// A stop's reason to standard error and exit 1 (L125c2), followed by the
+// definition it is in when its site has a name (C143b): `sites` are the
+// lowering's stop sites, so wasm.ts writes this function for each module.
+export function wasiStop(sites: { name?: string }[]): Omit<RtFn, "name"> {
+  const named = sites.map((x, j) => [x.name, j] as const).filter((x): x is readonly [string, number] => !!x[0]);
+  return {
+    params: [["i", "f64"]], result: "f64", locals: [["s", "f64"], ["t", "text"]], uses: ["wasi.line", "wasi_proc_exit", ...(named.length ? ["text.concat"] : [])],
+    body: `
+      local.get $i
+      f64.const ${SITES}
+      f64.div
+      f64.floor
+      local.tee $s
+      f64.const ${SITES}
+      f64.mul
+      local.get $i
+      f64.sub
+      f64.neg
+      local.set $i
+      ${lit(STOPS[0])}
+      local.set $t
+      ${STOPS.map((why, i) => `local.get $i\n      f64.const ${i}\n      f64.eq\n      if void\n        ${lit(why)}\n        local.set $t\n      end`).join("\n      ")}
+      ${named.map(([name, j]) => `local.get $s\n      f64.const ${j + 1}\n      f64.eq\n      if void\n        local.get $t\n        ${lit(` (in ${name})`)}\n        call $text.concat\n        local.set $t\n      end`).join("\n      ")}
+      i32.const 2
+      local.get $t
+      call $wasi.line
+      i32.const 1
+      call $wasi_proc_exit
+      unreachable`,
+  };
+}
+
 export const runtime = (name: string): RtFn => {
   const tb = /^table\.(\w+)\.t\d+(?:\.e\d+)?$/.exec(name);
   if (tb) {
@@ -7401,23 +7433,7 @@ const WASI: Record<string, Omit<RtFn, "name">> = {
   },
   // The program stops with STOPS[i] (L125c2): its reason to standard
   // error, then exit 1, as an Abort nothing handled does.
-  "wasi.stop": {
-    params: [["i", "f64"]], result: "f64", locals: [], uses: ["wasi.line", "wasi_proc_exit"],
-    body: `
-      local.get $i
-      local.get $i
-      f64.const ${SITES}
-      f64.div
-      f64.floor
-      f64.const ${SITES}
-      f64.mul
-      f64.sub
-      local.set $i
-      ${STOPS.map((why, i) => `local.get $i\n      f64.const ${i}\n      f64.eq\n      if void\n        i32.const 2\n        ${lit(why)}\n        call $wasi.line\n      end`).join("\n      ")}
-      i32.const 1
-      call $wasi_proc_exit
-      unreachable`,
-  },
+  "wasi.stop": wasiStop([]),
   // The fuel, read, and swapped for another (C137c21: the rest of a search
   // run on the budget outside the one it is in).
   "fuel.get": { params: [], result: "f64", locals: [], uses: [], body: "global.get $fuel" },
