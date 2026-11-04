@@ -611,8 +611,8 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     // (a lazy stream's `next : () -> Stream`) that calls back into the
     // group. The group itself is fine; the field is what wants a function
     // that surely finishes, so the message names the field and its fix.
-    // Guarded corecursion, which would take it as it is, is NUMBERS.md
-    // stage 5.
+    // Guarded corecursion (L16, byPieces) takes a field's function that
+    // gives back the group's value; this is one that does more with it.
     const lazyField = (d: Id, group: Id[]): { at: Id; message: string } | null => {
       const members = new Set(group);
       for (const id of subtree(code, d)) {
@@ -1983,6 +1983,39 @@ function terminates(code: Code, group: Id[], lambdaOf = (d: Id) => { const body 
 }
 function byPieces(code: Code, group: Id[], lambdaOf: (d: Id) => Node | null): boolean {
   const inGroup = new Set(group);
+  // Guarded corecursion (L16, NUMBERS.md stage 5; Coquand 1993, Giménez
+  // 1995): a group whose every call into itself is in a function stored in
+  // a constructor's field (a stream's `rest`), and is what that function
+  // gives back, whole or as a field of a value it makes, with no call into
+  // the group in that call's own inputs or in what it matches on. Then a
+  // member runs no member: it makes its value and returns, and running a
+  // field's function makes one more value the same way. Consuming all of
+  // it is the consumer's recursion, checked there. A group that also
+  // recurs now is checked as before, its lazy calls counted as calls.
+  const mentions = (x: Id) => subtree(code, x).some((y) => { const r = code.nodes[y]; return r?.kind === "ref" && inGroup.has(r.target); });
+  const guarded = (id: Id): boolean => {
+    const n = code.nodes[id];
+    if (!mentions(id)) return true;
+    if (isCall(n)) {
+      const f = code.nodes[n.fn];
+      if (f?.kind === "ref" && inGroup.has(f.target)) return !n.args.some(mentions);
+      if (f?.kind === "ref" && code.nodes[f.target]?.kind === "variant") return n.args.every((a) => guardedLambda(a) || guarded(a));
+      return false;
+    }
+    if (n.kind === "match") return !mentions(n.scrutinee) && n.arms.every((a) => guarded((code.nodes[a] as NodeOf<"arm">).body)) && (!n.otherwise || guarded(n.otherwise));
+    return false;
+  };
+  const guardedLambda = (a: Id): boolean => { const l = code.nodes[a]; return l?.kind === "lambda" && mentions(a) && guarded(l.body); };
+  // Every call into the group behind such a field: nothing recurs now.
+  const eager = (id: Id): boolean => {
+    const n = code.nodes[id];
+    if (!n || !mentions(id)) return false;
+    if (n.kind === "ref") return true;
+    if (isCall(n) && code.nodes[n.fn]?.kind === "ref" && code.nodes[(code.nodes[n.fn] as NodeOf<"ref">).target]?.kind === "variant")
+      return n.args.some((a) => !guardedLambda(a) && eager(a));
+    return kids(n).some(eager);
+  };
+  if (group.every((d) => { const lam = lambdaOf(d); return lam?.kind === "lambda" && !eager(lam.body); })) return true;
   const graphs: CallGraph[] = [];
   for (const d of group) {
     const lam = lambdaOf(d);
