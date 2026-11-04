@@ -101,7 +101,20 @@ export function selection(host: SelectionHost) {
     return (call ?? hit).dataset.id!;
   }
 
-  function select(id: Id | null) {
+  // What a part is, said in a line: its kind, its name, its type.
+  function describe(id: Id): string | null {
+    const info = typesOf(), names = typedPres().names, n = doc().code.nodes[id];
+    if (!n) return null;
+    const t = info ? T.typeOf(info, id, names) : null;
+    const head = isCall(n) ? doc().code.nodes[n.fn] : n;
+    const name = head?.kind === "ref" ? names[head.target] : names[id];
+    return `${kindLabel(id)}${name ? ` ${name}` : ""}${t ? ` : ${t}` : ""}`;
+  }
+
+  // `say`: selected from the keyboard, so a screen reader reads out what
+  // it is, from a live region a render doesn't replace (page.html #sr-say,
+  // E231f).
+  function select(id: Id | null, say = false) {
     // Re-rendering on a repeat click would detach the element before its
     // dblclick fires, and go-to-definition is a dblclick.
     // One pane at a time: a hole's palette is in the side pane, so show it,
@@ -115,13 +128,12 @@ export function selection(host: SelectionHost) {
     // other pane and there's no hover, so what was tapped and its type go on
     // the status line, where the tap is (E203).
     else if (id && TOUCH && onePane()) {
-      const info = typesOf(), names = typedPres().names, n = doc().code.nodes[id];
-      const t = info ? T.typeOf(info, id, names) : null;
-      const head = isCall(n) ? doc().code.nodes[n.fn] : n;
-      const name = head?.kind === "ref" ? names[head.target] : names[id];
-      if (n) { ui.note = `${kindLabel(id)}${name ? ` ${name}` : ""}${t ? ` : ${t}` : ""}. Its panel is in Run & more.`; ui.refused = false; }
+      const d = describe(id);
+      if (d) { ui.note = `${d}. Its panel is in Run & more.`; ui.refused = false; }
     }
     render();
+    const live = say ? document.getElementById("sr-say") : null;
+    if (live) live.textContent = (id && describe(id)) || "";
   }
 
   return { enclosing, menuForSelected, blocksKind, blocksHit, select };

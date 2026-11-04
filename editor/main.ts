@@ -1263,6 +1263,8 @@ function stepAt(id: Id): Id {
 }
 
 // Selecting, and the part a part is in (editor/selection.ts, E228q).
+// The graph takes the keyboard as the blocks do (E231f).
+const GRAPH_KEYS = "The graph: Tab steps through its parts, Enter edits one, Alt+Up goes to what it's in, Shift+F10 or the Menu key opens its menu";
 const { enclosing, menuForSelected, blocksKind, blocksHit, select } = selection({
   doc: () => doc, ui, render: () => render(), typesOf: () => typesOf(), typedPres: () => typedPres(), kindLabel: (id) => kindLabel(id), onePane: () => onePane(), touch: TOUCH,
 });
@@ -2140,7 +2142,7 @@ function draw() {
           // The page runs only in its main's embed: a data type's embed
           // (Tumble's Board) has nothing to restart or save.
           ? [h("section", { class: "panel" }, pictureSection(info), pageMain(ownDefs(), info, pres().names) === ui.def ? pageSection(info) : null, typedRunPanel(namer, info))]
-          : [h("section", { class: "panel p-graph", "aria-label": "Graph" }, h("div", { class: "graph-host" }, graphOf(info))),
+          : [h("section", { class: "panel p-graph", "aria-label": "Graph" }, h("div", { class: "graph-host", tabindex: "0", "aria-label": GRAPH_KEYS }, graphOf(info))),
             h("section", { class: "panel p-text", "aria-label": "Text" }, h("div", { class: "body" }, textView)),
             ui.selected && !READONLY ? h("section", { class: "panel", "aria-label": "Selected" }, typedInspector(namer, typedPres(), info)) : null])),
       // The opening hint takes a line of a small frame: only a real note shows.
@@ -2172,7 +2174,7 @@ function draw() {
       h("div", { class: "center" },
         h("section", { class: "panel p-graph", "aria-label": "Graph" },
           h("div", { class: "tabs" }, ...ui.tabs.map(tab), h("span", { class: "hint", title: GRAPH_HINT }, GRAPH_HINT)),
-          h("div", { class: "graph-host" }, graphOf(info))),
+          h("div", { class: "graph-host", tabindex: "0", "aria-label": GRAPH_KEYS }, graphOf(info))),
         h("div", { class: "gutter row", "data-gutter": "text-h", "aria-hidden": "true" }),
         h("section", { class: "panel p-text", "aria-label": "Text" },
           h("div", { class: "text-head" }, h("h2", {}, "Text"),
@@ -2395,15 +2397,15 @@ document.addEventListener("keydown", (e) => {
     const next = e.shiftKey ? (at < 0 ? shown.length - 1 : at - 1) : at + 1;
     if (next >= 0 && next < shown.length) {
       e.preventDefault();
-      select(shown[next]);
-      document.querySelector<HTMLElement>(".blocks-wrap")?.focus({ preventScroll: true });
+      select(shown[next], true);
+      (document.querySelector<HTMLElement>(".blocks-wrap") ?? document.querySelector<HTMLElement>(".p-graph .graph-host"))?.focus({ preventScroll: true });
       document.querySelector(".blocks-wrap .sel")?.scrollIntoView({ block: "nearest" });
     }
     return;
   }
   if (inProgram && ui.selected && e.altKey && e.key === "ArrowUp") {
     const outer = enclosing(ui.selected);
-    if (outer) { e.preventDefault(); select(outer); }
+    if (outer) { e.preventDefault(); select(outer, true); }
     return;
   }
   if (inProgram && ui.selected && (e.key === "ContextMenu" || (e.key === "F10" && e.shiftKey))) {
