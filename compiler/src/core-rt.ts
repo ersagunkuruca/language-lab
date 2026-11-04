@@ -4,7 +4,7 @@
 // function is named with the builtin's id where it has one (the printer
 // reads scalar.ts's tables), so nothing here needs the compiler.
 
-import { FALSE, HASH_SET_OPS, NONE, S, SOME, STD_IMPL, STD_MANY, TABLE_OPS, TICKET_V, TRUE } from "../../ters/src/lang/std.ts";
+import { CONS, FALSE, HASH_SET_OPS, NIL, NONE, S, SOME, STD_IMPL, STD_MANY, TABLE_OPS, TICKET_V, TRUE } from "../../ters/src/lang/std.ts";
 import { LIST_SHAPE, META, cellOps, equal, unit, type Data, toList, type Runtime, type Value, type World } from "../../ters/src/lang/run.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { answerByShapes, type HostOp } from "../../ters/src/lang/hosts.ts";
@@ -197,6 +197,30 @@ export type Solver = {
 let SOLVER: Solver | undefined;
 export const useSolver = (s: Solver) => { SOLVER = s; };
 export const inn = (x: unknown) => (typeof x === "boolean" ? { tag: x ? TRUE : FALSE, fields: [] } : x);
+// A List made as it is read (`solveAll`): a periodic solution (an angle)
+// has no end, and `one of` it stops at the first that the rest of the
+// search takes, as the evaluator's does.
+class LazyCell {
+  private cell?: { tag: Id; fields: unknown[] };
+  private it: Iterator<unknown>;
+  constructor(it: Iterator<unknown>) { this.it = it; }
+  private get forced() { if (!this.cell) { const r = this.it.next(); this.cell = r.done ? { tag: NIL, fields: [] } : { tag: CONS, fields: [r.value, new LazyCell(this.it)] }; } return this.cell; }
+  get tag() { return this.forced.tag; }
+  get fields() { return this.forced.fields; }
+}
+export const lazyList = (it: Iterator<unknown>): unknown => new LazyCell(it);
+// A solve whose plan the compiler wrote out (C167a, core-solve.ts
+// solverPlan): `make`, given what plans call (plan-rt.js, which a printed
+// program takes in only when it has one: usePlans), gives each answer's
+// binds. Every answer as a List (`all`), or the first; `none` says the
+// solve gave none.
+let PLANS: Record<string, unknown> | undefined;
+export const usePlans = (p: Record<string, unknown>) => { PLANS = p; };
+export const planned = (make: (p: Record<string, unknown>) => (...xs: unknown[]) => Iterable<unknown>, all: boolean, none: string) => {
+  if (!PLANS) return () => { throw new Unsupported("a written-out solve without plan-rt.js"); };
+  const answers = make(PLANS);
+  return all ? (...xs: unknown[]) => lazyList(answers(...xs)[Symbol.iterator]()) : (...xs: unknown[]) => { for (const bound of answers(...xs)) return bound; throw new Error(none); };
+};
 // Cells' operations (run.ts cellOps) on the runtime's handler, calling the
 // program's closures: no answer is a formula with no value.
 function cellFns(cells: Cells) {
@@ -206,7 +230,7 @@ function cellFns(cells: Cells) {
 }
 
 export const RUNTIME = {
-  FAIL, OUT, Aborted, Unsupported,
+  FAIL, OUT, Aborted, Unsupported, planned,
   fail: (): never => { throw FAIL; },
   // A printed partial function says it has no answer by giving FAIL
   // (C137c15), which is cheap; where that answer is used inside an

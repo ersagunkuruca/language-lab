@@ -4,5 +4,6 @@
 // page-runtime.ts is for compile.ts's: core-page.ts and the solver.
 
 export { mountCorePage, startCorePage } from "./core-page.ts";
-export { useSolver } from "./core-rt.ts";
+export { usePlans, useSolver } from "./core-rt.ts";
+export { plans } from "./plan-rt.js";
 export { solver } from "./core-solve.ts";
