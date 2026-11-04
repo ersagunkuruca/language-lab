@@ -100,7 +100,15 @@ checker.
 Row L215, one PR each:
 
 - (a) Closed group results and their keys, with the randomized test.
-  `infer`'s `reuse` is built on them.
+  Done (L215a): ters/src/lang/check-cache.ts, `infer(..., { cache })`.
+  As built, the key holds the group's nodes (with their ids, since the
+  results are by node), not their hashes, and every value definition's
+  nodes stand in for "the implementations it needs" (an implementation or
+  embedding is a value), so an edit to a value rechecks everything. Not
+  kept: a group with a problem or a hole, one that runs a definition
+  backwards (its modes are the callee's body's), definitions with results
+  or directions, and a group sharing a type variable with another.
+  `reuse` stays until (d).
 - (b) The `Checker` cache in the editor's edit path, timed on I157 and
   I158's steps and on a one-character edit in Constructions.
 - (c) Typedef groups and the per-program parts above in the cache.
