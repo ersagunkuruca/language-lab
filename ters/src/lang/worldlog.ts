@@ -53,24 +53,32 @@ const same = (a: unknown, b: unknown): boolean => JSON.stringify(a, plain) === J
 const plain = (_: string, v: unknown) => (v instanceof Uint8Array ? [...v] : v);
 
 export class WentAnotherWay extends Error {}
+// A replay stopped on purpose, after the answers it was let give (E232c).
+export class Paused extends Error {}
 
 // A World that answers what `log` says the world answered, in order. A
 // call the log doesn't have next, or a write unlike the one logged, stops
-// the run, saying where.
-export function replaying(log: LogEntry[], like: World): World {
-  let at = 0;
+// the run, saying where. With `until`, it gives that many answers and
+// then pauses: the next answer asked throws Paused, and from then on
+// nothing more is answered or written, so a run shows where it was.
+export function replaying(log: LogEntry[], like: World, until?: number, onPause?: () => void): World {
+  let at = 0, given = 0, paused = false;
+  const pause = () => { if (!paused) onPause?.(); paused = true; throw new Paused(`paused after ${given} answer${given === 1 ? "" : "s"}`); };
   const next = (op: string, args: unknown[]): LogEntry => {
+    if (paused) pause();
+    if (!WRITES.has(op) && until !== undefined && given >= until) pause();
     const e = log[at];
     const said = (x: { op: string; args: unknown[] }) => `${x.op}(${x.args.map((a) => JSON.stringify(a, plain)).join(", ")})`;
     if (!e) throw new WentAnotherWay(`the replay went another way after ${at} entries: the run asked ${said({ op, args })}, and the log had ended`);
     if (e.op !== op || !same(e.args, args)) throw new WentAnotherWay(`the replay went another way at entry ${at + 1}: the log has ${said(e)}, the run asked ${said({ op, args })}`);
     at++;
+    if (!WRITES.has(op)) given++;
     return e;
   };
   const out = {} as Record<string, unknown>;
   for (const [op, f] of Object.entries(like)) {
     if (typeof f !== "function") continue;
-    if (WRITES.has(op)) out[op] = (...args: unknown[]) => { next(op, args); };
+    if (WRITES.has(op)) out[op] = (...args: unknown[]) => { if (!paused) next(op, args); };
     else if (op === "startFetch") out[op] = (url: string) => () => (log[at]?.op === "fetchArrived" && same(log[at].args, [url]) ? next("fetchArrived", [url]).answer : null);
     else out[op] = (...args: unknown[]) => { const e = next(op, args); if (e.threw !== undefined) throw new Error(e.threw); return e.answer; };
   }

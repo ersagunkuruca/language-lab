@@ -3,7 +3,7 @@
 // way says where.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { logged, replaying, WentAnotherWay } from "../src/lang/worldlog.ts";
+import { logged, Paused, replaying, WentAnotherWay } from "../src/lang/worldlog.ts";
 import type { World } from "../src/lang/run.ts";
 
 const fake = (): World & { said: string[] } => {
@@ -41,4 +41,15 @@ test("a replay that goes another way says where", () => {
   const w = replaying(log, fake());
   w.readLine();
   assert.throws(() => w.random(), (e: unknown) => e instanceof WentAnotherWay && /entry 2: the log has readLine\(\), the run asked random\(\)/.test((e as Error).message));
+});
+
+test("a replay let give two answers pauses at the third, and writes nothing after", () => {
+  const { world, log } = logged(fake());
+  program(world);
+  const w = replaying(log, fake(), 2);
+  assert.equal(w.readLine(), "line 1");
+  assert.equal(w.readLine(), "line 2");
+  assert.throws(() => w.readLine(), Paused);
+  assert.doesNotThrow(() => w.log("after"));
+  assert.throws(() => w.random(), Paused);
 });

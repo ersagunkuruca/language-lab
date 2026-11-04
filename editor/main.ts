@@ -164,7 +164,7 @@ export interface UI {
   newKind: "function" | "value" | "type" | "effect" | "interface";
   query: string;
   refused: boolean;
-  output: { def: Id; lines: string[]; error?: string; running?: boolean; stuck?: Stuck; profile?: Profile; compiled?: boolean; answers?: LogEntry[] } | null;
+  output: { def: Id; lines: string[]; error?: string; running?: boolean; stuck?: Stuck; profile?: Profile; compiled?: boolean; answers?: LogEntry[]; replayed?: boolean; paused?: number } | null;
   // What Run gives a program that reads standard input, by program (I168).
   stdin?: Record<string, string>;
   // The graph's right-click menu: what it was for, where (screen, world).
@@ -1802,7 +1802,8 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
       if (ui.output.error) box.append(h("p", { class: "status-line bad", role: "alert" }, ui.output.error));
       if (ui.output.stuck) box.append(stuckView(ui.output.stuck));
       if (ui.output.profile) box.append(profileView(namer, ui.output.profile, doc.code, pick));
-      if (ui.output.answers) box.append(answersView(ui.output.answers));
+      if (ui.output.paused !== undefined) box.append(h("p", { class: "hint", role: "status" }, `Paused after answer ${ui.output.paused} of ${ui.output.answers?.filter((e) => !e.write).length ?? 0}: what it printed by then. Step on, or Run again with these answers for the rest.`));
+      if (ui.output.answers?.some((e) => !e.write)) box.append(answersView(ui.output.answers, ui.output.replayed, ui.output.paused));
       if (ui.output.compiled) box.append(h("p", { class: "hint", title: "main compiled to JavaScript, as Open in a tab and lab compile do: the same output, much faster than the evaluator, but with no record of where the run went" }, "Ran compiled."));
     }
   } else if (z?.t === "fn" && z.eff.effs.some((e) => WORLD.includes(e))) {
@@ -2279,6 +2280,8 @@ document.addEventListener("click", (e) => {
     if (a === "t-clear" && ui.selected && typesOf()) return void applyT(T.toHole(doc.code, doc.names.short, typesOf()!, ui.selected));
     if (a === "more") { const open = !!document.querySelector(".bar")?.classList.toggle("more-open"); act.setAttribute("aria-expanded", String(open)); return; }
     if (a === "split") { ui.mode = ui.mode === "split" ? null : "split"; return render(); }
+    if (a === "t-replay" && typesOf() && ui.output?.def === ui.def && ui.output.answers) return runTyped(ui.output.answers);
+    if (a === "t-replay-to" && typesOf() && ui.output?.def === ui.def && ui.output.answers) return runTyped(ui.output.answers, Number(act.dataset.at));
     if (a === "t-run" && typesOf()) {
       // A program opened from a file asks first (E229), once.
       const asked = permissionsAsked(ui.def);

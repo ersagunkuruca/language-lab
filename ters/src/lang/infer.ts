@@ -25,7 +25,7 @@ import { computedForward, directionProblem, useDirections } from "./directions.t
 import { analyzer, derivedFrom, determinism, oneAnswer, solveMode, type Fn } from "./modes.ts";
 import { smoothDerivative as hasSmoothDerivative, smoothGradient as hasSmoothGradient, recordVariant, forgetDerived } from "./derive.ts";
 import { answerKeys } from "./ports.ts";
-import { FILE_OPS, KEPT_FILES, JSON_OPS, RELEASE_V, ARITH, BOOL, CELL_OPS, EMBEDDING, EMBEDDING_V, LIST, DIVISION, FIELDS, JOBS, S, SET, SIGS, SMART, TRUE, TUPLE_MAX, tupleType } from "./std.ts";
+import { LITERAL, FILE_OPS, KEPT_FILES, JSON_OPS, RELEASE_V, ARITH, BOOL, CELL_OPS, EMBEDDING, EMBEDDING_V, LIST, DIVISION, FIELDS, JOBS, S, SET, SIGS, SMART, TRUE, TUPLE_MAX, tupleType } from "./std.ts";
 import { countedCalls } from "./counting.ts";
 import { ratioParts } from "./int.ts";
 import { fieldPath, fieldPaths, placePath, readPaths } from "./records.ts";
@@ -1587,6 +1587,17 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   settle();
   implementations();
   results();
+  // A number written where a type of the program's own goes (L204b) is
+  // spelled by its Literal's from fraction; with none, only a record of
+  // Float64s takes it, in every part.
+  for (const n of Object.values(code.nodes)) {
+    if (n.kind !== "lit" || n.of || typeof n.value !== "number") continue;
+    const t0 = info.typeOf.get(n.id), t = t0 && s.zonk(t0);
+    if (t?.t !== "con" || t.id.startsWith("std.") || t.id.startsWith("type.") || t.id.startsWith("pin.") || !typedefOf(t.id) || implementationOf(info, LITERAL, t)) continue;
+    const fields = s.recordFields(t.id, t.args);
+    if (fields?.length && fields.every((f) => { const r = s.resolve(f); return r.t === "con" && r.id === NUMBER; })) continue;
+    err(n.id, `a number written where ${show(t)} goes needs ${show(t)}'s own from fraction, since it isn't a record of Float64s: give it one, a definition of type Literal ${show(t)}`);
+  }
   // fields mapped and fields listed are written out per type where they are
   // used (fields-by-type.ts, L162b), so both types must be known there.
   for (const n of Object.values(code.nodes)) {
