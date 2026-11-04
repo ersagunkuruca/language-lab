@@ -70,8 +70,10 @@ test("a compiled program has the stack the evaluator doesn't need: calc on 20,00
   // one file with its runtime, importing nothing from this checkout
   assert.doesNotMatch(readFileSync(compiled, "utf8"), /^import .* from "(file:|\/)/m);
   // and only the modules it uses: not the published library (C82, 3.3 MB
-  // before), which only a program that looks inside functions needs.
-  assert.ok(readFileSync(compiled, "utf8").length < 500_000, "calc's bundle carries the library");
+  // before; 6 MB with the core IR's solver, C137d2). calc solves (its
+  // `inverse`), so it carries the evaluator's solver and its own nodes,
+  // about 0.9 MB.
+  assert.ok(readFileSync(compiled, "utf8").length < 1_200_000, "calc's bundle carries the library");
   const deep = "(".repeat(20000) + "6 * 7" + ")".repeat(20000) + "\n1 / 0\n";
   assert.deepEqual(node([compiled], deep), { code: 1, out: "42\n", err: "calc: line 2: division by zero\n" });
 });
