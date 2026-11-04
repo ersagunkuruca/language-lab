@@ -83,8 +83,33 @@ function randFns(r: Uint32Array): Record<string, (...xs: never[]) => unknown> {
 // `builtin`: the evaluator's builtin it is, and whether it gives a Bool,
 // as the printer read them (core-js.ts builtinOf).
 export type BuiltinOf = [Id, boolean];
-function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Record<string, (...xs: never[]) => unknown>, cells?: Record<Id, (...xs: Value[]) => Value | undefined>, code?: Code, spend?: () => boolean, info?: Info, rt?: Runtime): (...xs: unknown[]) => unknown {
+type Cases = ((...xs: unknown[]) => unknown)[];
+function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Record<string, (...xs: never[]) => unknown>, cells?: Record<Id, (...xs: Value[]) => Value | undefined>, code?: Code, spend?: () => boolean, info?: Info, rt?: Runtime, handlers = new Map<string, Cases[]>()): (...xs: unknown[]) => unknown {
   if (name.startsWith("host:")) return hostFn(name, cells);
+  // A program's own effect whose cases answer in place (scalar.ts
+  // handleOps, C137): a handler pushes its cases while the code it handles
+  // runs, and a perform calls the nearest one's, with it popped while the
+  // case runs, as the evaluator's machine finds the nearest handler.
+  // Prior art: dynamically bound handlers for tail-resumptive operations
+  // (Koka's evidence vectors; Xie and Leijen, ICFP 2021).
+  if (name.startsWith("handleOps:")) {
+    const e = name.split(":")[1];
+    return (body, ...cases) => {
+      const s = handlers.get(e) ?? handlers.set(e, []).get(e)!;
+      s.push(cases as Cases);
+      try { return (body as () => unknown)(); } finally { s.pop(); }
+    };
+  }
+  if (name.startsWith("handled:")) { const e = name.slice(8); return () => !!handlers.get(e)?.length; }
+  if (name.startsWith("perform:")) {
+    const [, e, op] = name.split(":");
+    return (...xs) => {
+      const s = handlers.get(e);
+      if (!s?.length) throw new Error(`nothing handles ${code?.nodes[e] ? e : "the operation"}`);
+      const h = s.pop()!;
+      try { return h[Number(op)](...xs); } finally { s.push(h); }
+    };
+  }
   if (name.startsWith("derive:")) return deriveFn(name.slice(7), code, info, rt);
   if (name.startsWith("solve:")) return solveFn(name.slice(6), code, false, spend);
   if (name.startsWith("solveAll:")) return solveFn(name.slice(9), code, true, spend);
@@ -300,7 +325,8 @@ export function coreRuntime(tables: TableSpec[], worlds: string[], rt: Runtime, 
   const rand = randFns(new Uint32Array(4)), cells = cellFns(rt.cells ?? new Cells(equal));
   const timers = worldTimers((m) => { throw new Aborted(m, 0); });
   let spend = () => true;
-  return { ...RUNTIME, spending: (f: () => boolean) => { spend = f; }, rt: (n: string, b?: BuiltinOf) => rtFn(n, b, tables, rand, cells, code, () => spend(), info, rt), worlds: worlds.map((op) => worldFn(op, rt, timers)), abort: (reason: unknown, esc: number): never => { throw new Aborted(reason, esc); } };
+  const handlers = new Map<string, Cases[]>();
+  return { ...RUNTIME, spending: (f: () => boolean) => { spend = f; }, rt: (n: string, b?: BuiltinOf) => rtFn(n, b, tables, rand, cells, code, () => spend(), info, rt, handlers), worlds: worlds.map((op) => worldFn(op, rt, timers)), abort: (reason: unknown, esc: number): never => { throw new Aborted(reason, esc); } };
 }
 
 // How the evaluator's runtime (a page's mount, html.ts) calls a function
