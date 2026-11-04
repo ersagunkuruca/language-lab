@@ -12,6 +12,7 @@ import { corePageRuntimeText, coreWorkletRuntimeText, newWorker, pageRuntimeText
 import type { CompileAsk, CompileSays } from "./runWorker.ts";
 import { drawPicture, pictureEntries, type Picture } from "./picture.ts";
 import { handOver, type Cells } from "../ters/src/lang/cells.ts";
+import { lowerCore, usesSolver } from "../compiler/src/core-js.ts";
 import { PAGE_BASE, corePageFile, hasSound, pageFile, pageMain, showPage, type Preview } from "../ters/src/lang/page.ts";
 import type { Doc as PageDoc, Node_ } from "../ters/src/lang/html.ts";
 
@@ -222,7 +223,7 @@ export function pagePanels(host: PageHost) {
   // I109). Once per version of the program: Restart swaps it in at once. A
   // page with sound stays interpreted, since here its sound plays from the
   // evaluator's page (audio-page.ts), and the status line says so. Runs and inspection don't use the page, so they don't change.
-  const compiledPages = new WeakMap<Code, string | null>(); // null: it didn't compile
+  const compiledPages = new WeakMap<Code, { program: string; core?: true } | null>(); // null: it didn't compile
   let compiling: Worker | null = null;
   function compilePage(main: Id) {
     compiling?.terminate();
@@ -238,26 +239,41 @@ export function pagePanels(host: PageHost) {
       w.terminate();
       if (compiling !== w) return;
       compiling = null;
-      compiledPages.set(code, "program" in m ? m.program : null);
+      compiledPages.set(code, "program" in m ? m : null);
       if (page.for !== code) return;
-      if ("program" in m) swapCompiled(code, m.program, main);
+      if ("program" in m) swapCompiled(code, m, main);
       else page.status.textContent = `Interpreted: the page couldn't be compiled (${m.error}).`;
     };
     w.onmessage = (e: MessageEvent<CompileSays>) => done(e.data);
     w.onerror = (e) => { e.preventDefault(); done({ error: e.message || "the compiler failed" }); };
-    const ask: CompileAsk = { compilePage: true, code, names: pres().names, pins: pins(), main };
+    const ask: CompileAsk = { compilePage: true, code, names: pres().names, pins: pins(), main, core: !!corePageRuntimeText() };
     w.postMessage(ask);
   }
   // The compiled program and a fresh copy of the page runtime (cli/web.ts
   // pageRuntime) evaluated here, so the page's elements are made in the
   // same document as the interpreted page's and go into the frame the same way.
-  function swapCompiled(code: Code, program: string, main: Id) {
-    type Lab = { mountPage(main: unknown, program: string, o: object): { root: Node_; cells: Pick<Cells, "write" | "batch">; kept: NonNullable<Cells["kept"]>; stop(): void } };
+  // One printed from the core IR (E244) runs on a fresh copy of its runtime
+  // (cli/web.ts corePageRuntime): its script's call of startCorePage is
+  // caught, and what it was given mounted here (core-page.ts mountCorePage).
+  type Mounted = { root: Node_; cells: Pick<Cells, "write" | "batch">; kept: NonNullable<Cells["kept"]>; stop(): void };
+  function swapCompiled(code: Code, made: { program: string; core?: true }, main: Id) {
+    type Lab = { mountPage(main: unknown, program: string, o: object): Mounted };
+    type Core = { mountCorePage(...a: unknown[]): Mounted };
     let m;
     try {
-      const lab = new Function(`${pageRuntimeText()}\nreturn $lab;`)() as Lab;
-      const defs = new Function("$lab", `${program}\nreturn defs;`)(lab) as Record<string, unknown>;
-      m = lab.mountPage(defs[pres().names[main]], titleOf(doc()), { doc: page.maker, store: localStorage, frame: (f: () => void) => requestAnimationFrame(f), ran: flashRan });
+      const o = { doc: page.maker, store: localStorage, frame: (f: () => void) => requestAnimationFrame(f), ran: flashRan };
+      if (made.core) {
+        const core = new Function(`${corePageRuntimeText()}\nreturn $core;`)() as Core & Record<string, unknown>;
+        let given: unknown[] | null = null;
+        new Function("$core", made.program)({ ...core, startCorePage: (...a: unknown[]) => { given = a; } });
+        if (!given) throw new Error("the core IR's script started no page");
+        const [tables, worlds, defs, name, , nodes] = given as unknown[];
+        m = core.mountCorePage(tables, worlds, defs, name, titleOf(doc()), nodes, o);
+      } else {
+        const lab = new Function(`${pageRuntimeText()}\nreturn $lab;`)() as Lab;
+        const defs = new Function("$lab", `${made.program}\nreturn defs;`)(lab) as Record<string, unknown>;
+        m = lab.mountPage(defs[pres().names[main]], titleOf(doc()), o);
+      }
       if (page.now?.kept) handOver(page.now.kept, m.kept, m.cells);
     } catch (e) {
       m?.stop();
@@ -280,8 +296,13 @@ export function pagePanels(host: PageHost) {
     const info = typesOf();
     const main = info && pageMain(ownDefs(), info, pres().names);
     if (!info || !main) return null;
-    const title = titleOf(doc()), name = `${slug(title)}.html`, core = corePageRuntimeText();
+    const title = titleOf(doc()), name = `${slug(title)}.html`;
+    let core = corePageRuntimeText();
     let why = "this editor has no core IR runtime";
+    // A sound that solves would run the evaluator's solver for every block
+    // on the core IR, too slow for the audio thread: compile.ts's, as lab
+    // build-web does (C137d7).
+    if (core && hasSound(prog())) { try { if (usesSolver(lowerCore(prog(), info, pres().names, ownDefs()))) { why = "its sound solves, which the core IR does too slowly for the audio thread"; core = ""; } } catch { /* corePageFile says why */ } }
     if (core) {
       try { return { html: corePageFile(title, core, prog(), info, pres().names, ownDefs(), main, coreWorkletRuntimeText()), name, via: "" }; } catch (e) { why = (e as Error).message; }
     }

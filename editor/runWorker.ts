@@ -13,6 +13,7 @@ import type { Names } from "../ters/src/presentation.ts";
 import type { Pins } from "../ters/src/lang/signatures.ts";
 import { browserWorld, type Store } from "../ters/src/lang/browser.ts";
 import { shower } from "./shown.ts";
+import { corePageScript, lowerCore } from "../compiler/src/core-js.ts";
 import { mainProblem, runMain, runProgram, type World } from "../ters/src/lang/run.ts";
 import type { Info } from "../ters/src/lang/infer.ts";
 import { FILES, NETWORK } from "../ters/src/lang/types.ts";
@@ -32,8 +33,10 @@ export type Compiled = { program: string; name: string };
 // args: main takes the command line's words, as `lab run` gives them (E212).
 // A page compiled the way "Open in a tab" does (page.ts pageFile), off the
 // page's thread: the preview swaps it in when it's ready (main.ts startPage).
-export type CompileAsk = { compilePage: true; code: Code; names: Names; pins: Pins; main: Id };
-export type CompileSays = { program: string } | { error: string };
+export type CompileAsk = { compilePage: true; code: Code; names: Names; pins: Pins; main: Id; core?: boolean };
+// `core`: printed from the core IR (core-js.ts corePageScript), the
+// script calling $core.startCorePage; else compile.ts's (E244).
+export type CompileSays = { program: string; core?: true } | { error: string };
 // Where the last read of a text run backwards stopped, when one found no
 // answer (L70c): the text, the place, what was looked for there, and how
 // many reads stopped.
@@ -67,11 +70,18 @@ function withInput(world: World, stdin: string | undefined): World {
 
 self.onmessage = (e: MessageEvent<RunAsk | BackAsk | CompileAsk>) => {
   if ("compilePage" in e.data) {
-    const { code, names, pins, main } = e.data;
+    const { code, names, pins, main, core } = e.data;
     try {
       setDisplayNames(names);
       setProgramPins(pins);
-      return post({ program: compile(code, infer(code, names), names, { runtime: "$lab", exports: [names[main]], link: "global" }) });
+      const info = infer(code, names);
+      // From the core IR where main lowers there, as Save page does.
+      const own = code.defs.filter((d) => !LIBRARY.code.nodes[d]);
+      if (core) try {
+        const ir = lowerCore(code, info, names, own);
+        if (!ir.refused.has(main)) return post({ program: corePageScript(ir, names[main], "$core", ""), core: true });
+      } catch { /* compile.ts's, below */ }
+      return post({ program: compile(code, info, names, { runtime: "$lab", exports: [names[main]], link: "global" }) });
     } catch (err) {
       return post({ error: (err as Error).message });
     }
