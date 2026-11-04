@@ -78,13 +78,13 @@ $$startPage(defs[${JSON.stringify(name)}], ${JSON.stringify(title)}${worklet});
 // whose sound solves (C137d7).
 // `hosts`: the program's hosts/js.js, bundled in and asked (C137d5).
 export async function webCorePage(title: string, code: Code, info: Info, names: Names, own: Id[], main: Id, hosts?: string): Promise<string> {
-  if (hosts && hasSound(code)) throw new Error("a page with sound and hosts/js.js isn't made from the core IR yet");
   const lowered = lowerCore(code, info, names, own);
   const why = lowered.refused.get(main);
   if (why) throw new Error(`${names[main] ?? "main"} isn't compiled through the core IR: it ${why}`);
   const { build } = await esbuild();
-  const worklet = hasSound(code) ? await coreSoundWorklet(lowered, names[main] ?? "main") : undefined;
-  const script = corePageScript(lowered, names[main] ?? "main", JSON.parse(at("../../compiler/src/core-page.ts")), title, worklet, hosts ? { file: hosts, ops: hostOpsOf(code, names) } : undefined);
+  const asked = hosts ? { file: hosts, ops: hostOpsOf(code, names) } : undefined;
+  const worklet = hasSound(code) ? await coreSoundWorklet(lowered, names[main] ?? "main", asked) : undefined;
+  const script = corePageScript(lowered, names[main] ?? "main", JSON.parse(at("../../compiler/src/core-page.ts")), title, worklet, asked);
   const out = await build({
     stdin: { contents: script, resolveDir: here, sourcefile: "page.js", loader: "js" },
     bundle: true, platform: "browser", format: "iife", target: "es2022", minify: true, write: false, logLevel: "warning",
@@ -94,10 +94,11 @@ export async function webCorePage(title: string, code: Code, info: Info, names: 
 }
 
 // A page with sound's audio thread script from the core IR (C137d4),
-// bundled as soundWorklet bundles compile.ts's.
-export async function coreSoundWorklet(lowered: ReturnType<typeof lowerCore>, name: string): Promise<string> {
+// bundled as soundWorklet bundles compile.ts's; with the program's
+// hosts/js.js, which main asks again there (C137d10).
+export async function coreSoundWorklet(lowered: ReturnType<typeof lowerCore>, name: string, hosts?: { file: string; ops: ReturnType<typeof hostOpsOf> }): Promise<string> {
   const { build } = await esbuild();
-  const script = coreSoundScript(lowered, name, JSON.parse(at("../../compiler/src/core-sound.ts")));
+  const script = coreSoundScript(lowered, name, JSON.parse(at("../../compiler/src/core-sound.ts")), hosts);
   const out = await build({
     stdin: { contents: script, resolveDir: here, sourcefile: "worklet.js", loader: "js" },
     bundle: true, platform: "browser", format: "iife", target: "es2022", minify: true, write: false, logLevel: "warning",
