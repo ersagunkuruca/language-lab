@@ -15,7 +15,7 @@ const time = (f: () => unknown, runs: number) => {
   return ts.sort((a, b) => a - b)[runs >> 1];
 };
 const ms = (x: number) => (Number.isNaN(x) ? "(skipped)" : `${x < 10 ? x.toFixed(2) : x.toFixed(0)} ms`).padStart(11);
-const cols: Name[] = ["evaluator", "evaluator, trees", "compiled", "compiled, trees", "compiled, table", "ideal"];
+const cols: Name[] = ["evaluator", "evaluator, trees", "compiled", "compiled, trees", "compiled, table", "core, trees", "core, table", "ideal"];
 
 console.log(`routes: summary, cheapest network and 10 trips and nears over a country kept in memory (in one process, median)\n`);
 console.log(`${"country".padEnd(22)}${cols.map((c) => c.padStart(17)).join("")}  compiled/ideal  trees/ideal  table/ideal`);
