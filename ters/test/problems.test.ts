@@ -60,6 +60,8 @@ const SMALLEST: Record<string, (k: Lang) => void> = {
   "too-many-results": (k) => k.define(k.def("p"), k.gives(["a"], ["r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9"], (a) => a)),
   "results-not-predicate": (k) => { const f = k.def("f"); k.define(f, k.fn(["a", "b"], (a, b) => k.call(ARITH.add, a, b))); k.results(f, "b"); },
   "takes-itself": (k) => { k.type("Bad", [], [["bad", [["f", (self) => k.tfun([k.tref(self)], k.tref(NUMBER))]]]]); },
+  "not-an-effect": (k) => { const t = k.type("Colour", [], [["red", []]]); k.type("Box", [], [["box", [["f", () => k.tfun([], k.tref(NUMBER), [t.def])]]]]); },
+  "one-row-parameter": (k) => { k.type("Box", ["e", "r"], [["box", [["f", (_self, ps) => k.tfun([], k.tref(NUMBER), ps)]]]]); },
   "not-a-number": (k) => k.define(k.def("p"), k.fn(["b"], (b) => k.match(b, [{ variant: TRUE, names: [], body: () => k.lit(1) }, { variant: FALSE, names: [], body: () => k.lit("a") }]))),
 };
 

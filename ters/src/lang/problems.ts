@@ -49,6 +49,8 @@ export const PROBLEMS: Problem[] = [
   { id: "too-many-results", says: /^a function gives at most \d+ results$/, fix: "Give at most 8 results: put the others together in a type with one case, and give that." },
   { id: "results-not-predicate", says: /^.+ has results, so it is (a function of its ports|a predicate over its ports \(it gives true or false\), not .+)$/, fix: "A definition with results is a relation over its ports: write it as a function of all of them that says whether they agree (true or false), or take its results off and let it give its value." },
   { id: "takes-itself", says: /^.+ can't take itself as an input in its own field .+: through it, a function could call itself without recursion and never end$/, fix: "A field may hold a function that gives the type, not one that takes it: give the function the parts it reads instead, or keep the function outside the type." },
+  { id: "not-an-effect", says: /^.+ is not an effect$/, fix: "Name only effects among what a function type may do (an effect, or a row its type takes): a type of values goes in its inputs or result instead." },
+  { id: "one-row-parameter", says: /^a function type in data can take one row parameter, not .+$/, fix: "Let the function type take one row parameter, and put the effects the others stood for in that one row." },
   { id: "type-as-value", says: /^.+ is a type, not a value$/, fix: "A type says what values look like and can't be used as one: use one of its cases, or a value of that type." },
 ];
 
