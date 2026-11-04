@@ -30,7 +30,7 @@ import type { Names } from "../presentation.ts";
 import { B } from "../prelude.ts";
 import { implementationOf, type Info } from "./infer.ts";
 import { interfaceOps, leftToWays, NEUTRAL, pickWays, waysIn, type BuiltinCost } from "./ways.ts";
-import { ALGEBRAIC_OPS, ARITH, ARITH_FIELD, COMPLEX_V, DUAL_V, FIXED_V, INT_OPS, RATIO, S } from "./std.ts";
+import { ALGEBRAIC_OPS, ARITH, ARITH_FIELD, EMBEDDING, EMBEDDING_MAP, COMPLEX_V, DUAL_V, FIXED_V, INT_OPS, RATIO, S } from "./std.ts";
 import { ALGEBRAIC_TYPE, COMPLEX_TYPE, DUAL_TYPE, FIXED_TYPE, MATRIX_SIZE, INT, NUMBER, RATIONAL_TYPE, type Row, type Scheme, type Type } from "./types.ts";
 import { PRELUDE } from "./library.ts";
 import { ratioParts } from "./int.ts";
@@ -109,6 +109,7 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
   // A relation's own directions first (directions.ts), so the evaluator and
   // the compiler run a solve the way the checker typed it.
   code = useDirections(code);
+  ({ code, info } = insertEmbeddings(code, info));
   ({ code, info, names } = liftLets(code, info, names));
   ({ code, info, names } = literalMatch(code, info, names));
   ({ code, info, names } = spreadTuples(code, info, names));
@@ -534,4 +535,35 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
   }
 
   return { code: { nodes, defs }, info: { ...info, typeOf, schemes, divergent, copyOf }, names: outNames };
+}
+
+// Each expression the checker lifted through a canonical embedding (L208c,
+// EMBEDDINGS.md) is given to the embedding's map where it is used: in
+// `add(i, x)` with i an Int and x a Float64, i becomes map(i) of int in
+// float64. The expression keeps its node, so what is known of it (its
+// type, the type an operation in it is at) stays.
+function insertEmbeddings(code: Code, info: Info): { code: Code; info: Info } {
+  if (!info.embedded?.size) return { code, info };
+  const nodes: Record<Id, Node> = { ...code.nodes };
+  const typeOf = new Map(info.typeOf);
+  const none = { effs: [], tail: null };
+  for (const n of Object.values(code.nodes)) {
+    if (n.kind !== "call" || !n.args?.some((a) => info.embedded!.has(a))) continue;
+    nodes[n.id] = { ...n, args: n.args.map((a) => {
+      const e = info.embedded!.get(a);
+      if (!e) return a;
+      const emb: Type = { t: "con", id: EMBEDDING, args: [e.from, e.to] }, fn: Type = { t: "fn", params: [e.from], ret: e.to, eff: none };
+      const field = `${a}.embed.field`, of = `${a}.embed.of`, map = `${a}.embed.map`, at = `${a}.embed`;
+      nodes[field] = { id: field, kind: "ref", target: EMBEDDING_MAP };
+      nodes[of] = { id: of, kind: "ref", target: e.def };
+      nodes[map] = { id: map, kind: "call", fn: field, args: [of] };
+      nodes[at] = { id: at, kind: "call", fn: map, args: [a] };
+      typeOf.set(field, { t: "fn", params: [emb], ret: fn, eff: none });
+      typeOf.set(of, emb);
+      typeOf.set(map, fn);
+      typeOf.set(at, e.to);
+      return at;
+    }) } as Node;
+  }
+  return { code: { ...code, nodes }, info: { ...info, typeOf } };
 }
