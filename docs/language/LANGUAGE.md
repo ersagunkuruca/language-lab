@@ -633,6 +633,17 @@ the same size-change check runs on these sizes. It is a small case of
 sized types (Hughes, Pareto and Sabry, 1996), worked out rather than
 written.
 
+A producer of lazy data ends too (guarded corecursion, L16). When every
+call a group makes into itself is in a function stored in a constructor's
+field, and is what that function gives back (whole, or as a field of a
+value it makes, with no call into the group in its inputs or in what it
+matches on), a member runs no member: it makes one value and returns.
+`from(n) = term(n, () ↦ from(n + 1))` has no `Diverge`, and neither does
+its `rest`. Running the stream to its end is the consumer's recursion:
+`last(s) = last(s.rest())` keeps `Diverge`. A field's function that runs
+what the group made (`() ↦ skip(s).rest()`) isn't guarded, and a group
+that recurs now as well as behind a field is checked as before.
+
 A count is a measure too (L46). A function that calls itself with an
 `Int` input moved by a positive whole number, `steps + 1`, under a test
 that compares it with a bound the call keeps (`steps < 120`, or the
@@ -1271,9 +1282,9 @@ What is deliberately not there, and why:
   definitions not proven to end. One that runs out shows "didn't finish"
   in place of its text or part, and runs again when a cell it read
   changes; a handler that runs out stops, keeping the writes it made. A
-  check for *guarded corecursion* (each step builds a `term` before
-  recursing, under a `formula`) would give productive producers no
-  `Diverge` at all; it isn't written yet.
+  check for *guarded corecursion* gives a producer whose recursion is
+  behind a function field no `Diverge` (L16, beside the termination check); one
+  behind a `formula` is still `Diverge`.
 - **Compiled, Cells runs on the same handler.** The compiler turns
   `cell`, `formula`, `read` and `write` into calls on one `Cells` instance
   in its runtime (cells.ts), so a compiled program updates and remembers
@@ -2009,7 +2020,6 @@ back into the group being hashed is named by its position.
   a function generic over its unit.
 - **Laziness for fold results**, so effects in folds could run top-down.
   (Lazy *data* now exists: a `Cell` in a field, see "Cells".)
-- **Cells, further.** Guarded corecursion, so productive lazy producers
-  have no `Diverge`; a stateful handler form so a
-  program can write its own Cells handler (server-side rendering, tests);
-  async cells (HTTP results) as Solid's resources.
+- **Cells, further.** Async cells (HTTP results) as Solid's resources.
+  (Guarded corecursion is done, L16, beside the termination check; so is the
+  stateful handler form, L16a.)
