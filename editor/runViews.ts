@@ -57,8 +57,8 @@ export function profileView(namer: Namer, profile: Profile, code: Code, pick: (i
 // A value as the Run panel shows it. A map or a set is a table, a row per
 // entry in key order, as the blocks draw one written out
 // (DATA-STRUCTURES.md); anything else is its text.
-export function valueView(v: Value, code: Code, names: Names): HTMLElement {
-  const text = (x: Value) => h("code", {}, showValue(x, code, names, true));
+export function valueView(v: Value, code: Code, names: Names, show: (x: Value, asNumber?: boolean) => string = (x, n) => showValue(x, code, names, n)): HTMLElement {
+  const text = (x: Value) => h("code", {}, show(x, true));
   const tag = typeof v === "object" && v !== null && "tag" in v ? v.tag : null;
   if ((tag === MAP_V || tag === SET_V) && fromList((v as { fields: Value[] }).fields[0]).length) {
     const rows = fromList((v as { fields: Value[] }).fields[0]).map((e) => (tag === MAP_V ? (e as { fields: Value[] }).fields : [e]));

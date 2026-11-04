@@ -51,7 +51,7 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E237 | The editor's literals and display for library number types through L204's and L205's interfaces, not editor/typed.ts's own list (`EXOTIC`, the Rational literal paths) | [MATHEMATICS-AS-LIBRARIES](docs/design/numbers/MATHEMATICS-AS-LIBRARIES-2026-11-03.md) | P3 | M | after L204, L205 |
+| E237 | The editor's literals and display for library number types through L204's and L205's interfaces, not editor/typed.ts's own list (`EXOTIC`, the Rational literal paths). E237a done: values shown through `showerFor` (editor/shown.ts). Left: the literals | [MATHEMATICS-AS-LIBRARIES](docs/design/numbers/MATHEMATICS-AS-LIBRARIES-2026-11-03.md) | P3 | M | after L204, L205 |
 
 ### Speed of editing
 

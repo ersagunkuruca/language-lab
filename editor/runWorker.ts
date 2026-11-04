@@ -12,7 +12,8 @@ import { isUse, subtree } from "../ters/src/model.ts";
 import type { Names } from "../ters/src/presentation.ts";
 import type { Pins } from "../ters/src/lang/signatures.ts";
 import { browserWorld, type Store } from "../ters/src/lang/browser.ts";
-import { mainProblem, runMain, runProgram, showValue, type World } from "../ters/src/lang/run.ts";
+import { shower } from "./shown.ts";
+import { mainProblem, runMain, runProgram, type World } from "../ters/src/lang/run.ts";
 import type { Info } from "../ters/src/lang/infer.ts";
 import { FILES, NETWORK } from "../ters/src/lang/types.ts";
 import { LIBRARY } from "../ters/src/lang/library.ts";
@@ -133,7 +134,7 @@ self.onmessage = (e: MessageEvent<RunAsk | BackAsk | CompileAsk>) => {
     if (made && runCompiled(made, args, rt.world, rt.print, flush, () => [...wrote])) return;
     // With its arguments main gives an exit code, which shows when it isn't 0.
     const exit = (c: number) => (c ? `exit ${c}` : "unit");
-    const shown = args ? exit(runProgram(lib.code, info, def, args, rt)) : showValue(runMain(lib.code, info, def, rt), lib.code, lib.names);
+    const shown = args ? exit(runProgram(lib.code, info, def, args, rt)) : shower(lib.code, info, lib.names)(runMain(lib.code, info, def, rt));
     flush();
     post({ done: true, shown, files: [...wrote], ...(stuck ? { stuck } : {}), profile: profile() });
   } catch (err) {
