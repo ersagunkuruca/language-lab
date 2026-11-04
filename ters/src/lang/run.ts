@@ -34,7 +34,7 @@ import { computedForward } from "./directions.ts";
 import { discharge } from "./ledger.ts";
 import * as Alg from "./algebraic.ts";
 import { hostLocale, hostZone } from "./text.ts";
-import { FILE_OPS, KEPT_FILES, tupleVariant, floatText, LOCALE_V, MY_LOCALE_OP, MY_ZONE_OP, RELEASE_V, SETTINGS, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, COMPLEX_V, FIXED_V, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, shownImplementations, CASE_NAME, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std.ts";
+import { FILE_OPS, KEPT_FILES, tupleVariant, floatText, LOCALE_V, MY_LOCALE_OP, MY_ZONE_OP, RELEASE_V, SETTINGS, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, shownImplementations, implementationsOf, ORDERED, CASE_NAME, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std.ts";
 import { intLit } from "./int.ts";
 import { JETS } from "./jets.ts";
 import { answerFromHost, effectOfOperation, hostedEffects, type Hosts } from "./hosts.ts";
@@ -61,6 +61,8 @@ export function fromList(v: Value): Value[] {
 const LISTS = { from: fromList, to: toList as (xs: Value[]) => Value };
 // What each needs to hand its rows tracked views (cells.ts, L99).
 const LIST_VIEWS = { cons: CONS, nil: NIL, isList: (v: Value) => typeof v === "object" && (v.tag === CONS || v.tag === NIL) };
+// The evaluator's lists with them, as Cells compares values by (C162).
+export const LIST_SHAPE = { ...LISTS, views: LIST_VIEWS };
 
 // Cells' operations on a handler (cells.ts), by builtin id, for every
 // runner of a program's values: the evaluator's here, and JavaScript
@@ -70,7 +72,7 @@ const LIST_VIEWS = { cons: CONS, nil: NIL, isList: (v: Value) => typeof v === "o
 // is undefined. `path` is the evaluator's alone: it looks inside the
 // function it is given.
 export function cellOps(cells: Cells, call: (f: Value, ...xs: Value[]) => Value): Record<Id, (...xs: Value[]) => Value | undefined> {
-  const listsHere = { ...LISTS, views: LIST_VIEWS };
+  const listsHere = LIST_SHAPE;
   const noValue = (f: () => Value) => { try { return f(); } catch (e) { if (e instanceof NoValue) return undefined; throw e; } };
   return {
     [CELL_OPS.cell]: (v) => cells.cell(v),
@@ -100,7 +102,7 @@ export const solvesOnce = (code: Code, n: Use): boolean => (planSolve(code, n).m
 // its binds, in order. A relation run backwards is the relational
 // interpreter's (relate.ts); one the solver plans, its equations' (solve.ts).
 // The evaluator's, and JavaScript printed from the core IR's (core-js.ts).
-export function* solveAnswers(code: Code, n: Use, known: Record<string, unknown>, opts: { spend?: () => boolean; names?: Names; stuck?: (r: Reading) => void; info?: Info; shown?: (v: Data) => string | undefined } = {}): Generator<Value[]> {
+export function* solveAnswers(code: Code, n: Use, known: Record<string, unknown>, opts: { spend?: () => boolean; names?: Names; stuck?: (r: Reading) => void; info?: Info; shown?: (v: Data) => string | undefined; ordered?: (x: Data, y: Data) => number | undefined } = {}): Generator<Value[]> {
   const p = planSolve(code, n);
   if (p.mode === "relational") {
     for (const sol of relate(code, useTarget(code.nodes, n), known, opts)) {
@@ -173,14 +175,16 @@ export const numberOrder = (a: number, b: number): number =>
 // finiteFloat would have said at the operation.
 export const overflowed = (): never => { throw new Aborted("the answer is too big for a Float64 (overflow)"); };
 
-// The order on plain data (L66): numbers by value (Int, Float64 and
-// fractions; Float64 exactly, numberOrder), text by code point, and other
-// cases by their declaration order (`order`: a variant's place in its
-// type, variantOrder), then their fields left to right, so lists go
+// The order on plain data (L66): numbers by value (Int and Float64;
+// Float64 exactly, numberOrder), text by code point, a value of a type with
+// an Ordered implementation by its `less` (`by`, the runner's orderedBy:
+// Rational and Algebraic are the prelude's, L204g; stdOrdered without one), and other cases by
+// their declaration order (`order`: a variant's place in its type,
+// variantOrder), then their fields left to right, so lists go
 // lexicographically with [] first. OCaml's `compare` and Erlang's term
 // order (prior art). -1, 0 or 1. Where `equal` is near on Float64s, this
 // is exact: 0.1 + 0.2 is after 0.3, and equal to it.
-export function compareValues(a: Value, b: Value, order: Map<Id, number>): number {
+export function compareValues(a: Value, b: Value, order: Map<Id, number>, by: (x: Data, y: Data) => number | undefined = stdOrdered): number {
   const todo: [Value, Value][] = [[a, b]];
   for (let p; (p = todo.pop());) {
     const [x, y] = p;
@@ -188,16 +192,24 @@ export function compareValues(a: Value, b: Value, order: Map<Id, number>): numbe
     if (typeof x === "bigint" || typeof y === "bigint") { if (x !== y) return (x as bigint) < (y as bigint) ? -1 : 1; continue; }
     if (typeof x === "string" && typeof y === "string") { if (x !== y) return T.less(x, y) ? -1 : 1; continue; }
     if (typeof x !== "object" || typeof y !== "object") continue;
-    if (x.tag === RATIO && y.tag === RATIO) {
-      const l = I.mul(x.fields[0] as I.Int, y.fields[1] as I.Int), r = I.mul(y.fields[0] as I.Int, x.fields[1] as I.Int);
-      if (l !== r) return I.less(l, r) ? -1 : 1;
-      continue;
-    }
-    if (x.tag === ALGEBRAIC_V && y.tag === ALGEBRAIC_V) { const c = Alg.compare(algebraicOf(x), algebraicOf(y)); if (c) return c; continue; }
+    const c = by(x, y);
+    if (c !== undefined) { if (c) return c; continue; }
     if (x.tag !== y.tag) return (order.get(x.tag) ?? 0) < (order.get(y.tag) ?? 0) ? -1 : 1;
     for (let i = x.fields.length - 1; i >= 0; i--) todo.push([x.fields[i], y.fields[i]]);
   }
   return 0;
+}
+
+// Rational's and Algebraic's order where no runner's orderedBy is given:
+// compiled code's `compare` (runtime.js $compare), until compile.ts orders
+// through Ordered too. The same order as the prelude's implementations.
+export function stdOrdered(x: Data, y: Data): number | undefined {
+  if (x.tag === RATIO && y.tag === RATIO) {
+    const l = I.mul(x.fields[0] as I.Int, y.fields[1] as I.Int), r = I.mul(y.fields[0] as I.Int, x.fields[1] as I.Int);
+    return l === r ? 0 : I.less(l, r) ? -1 : 1;
+  }
+  if (x.tag === ALGEBRAIC_V && y.tag === ALGEBRAIC_V) return Alg.compare(algebraicOf(x), algebraicOf(y));
+  return undefined;
 }
 
 // An Algebraic value as algebraic.ts reads it.
@@ -456,6 +468,16 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     for (const t of show(v)) return t as string;
     return undefined;
   } : undefined;
+  // A value of a type with an Ordered implementation (std.ts ORDERED,
+  // L204g) is ordered by it in `compare`: before when less, after when
+  // the other is less, else the same.
+  const ordereds = implementationsOf(info, ORDERED);
+  const orderedBy = ordereds.size ? (x: Data, y: Data): number | undefined => {
+    const d = ordereds.get(info.owner.get(x.tag) ?? "");
+    if (!d || info.owner.get(y.tag) !== info.owner.get(x.tag)) return undefined;
+    const less = (refValue(d, null) as Data).fields[0] as Fn;
+    return (only(less, x, y) as Data).tag === TRUE ? -1 : (only(less, y, x) as Data).tag === TRUE ? 1 : 0;
+  } : stdOrdered;
   const builtins: Record<Id, Fn> = {};
   let cmpOrder: Map<Id, number> | undefined;
   // Float64 is the finite floats with one zero (FLOAT-VALUES-2026-11-01.md,
@@ -474,7 +496,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     [S.show]: (x) => ((x as number) - (x as number) === 0 ? one(floatText(x as number)) : overflowed()),
     [S.stop]: (why) => { throw new Aborted(why as string); },
     [S.equal]: (a, b) => one(bool(equal(a, b, usedSameNumber))),
-    [COMPARE]: (a, b) => one(ORDER_VALUES[compareValues(a, b, (cmpOrder ??= variantOrder(code))) + 1]),
+    [COMPARE]: (a, b) => one(ORDER_VALUES[compareValues(a, b, (cmpOrder ??= variantOrder(code)), orderedBy) + 1]),
     [S.and]: (a, b) => one(bool((a as Data).tag === TRUE && (b as Data).tag === TRUE)),
     [S.or]: (a, b) => one(bool((a as Data).tag === TRUE || (b as Data).tag === TRUE)),
     [S.not]: (a) => one(bool((a as Data).tag !== TRUE)),
@@ -1056,7 +1078,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       // A solve with exactly one answer (oneAnswer, MODES.md), or results
       // each computed from the inputs (directions.ts), leaves no choice
       // point: its first answer is the answer.
-      let answers: Iterable<Value[]> = solveAnswers(code, n, known, { spend, names: rt.names, stuck: rt.stuck, info, shown: shownBy });
+      let answers: Iterable<Value[]> = solveAnswers(code, n, known, { spend, names: rt.names, stuck: rt.stuck, info, shown: shownBy, ordered: orderedBy });
       if (solvesOnce(code, n)) {
         const r = (answers as Generator<Value[]>).next();
         if (r.done) throw new Error(`solving ${rt.names?.[useTarget(code.nodes, n)] ?? useTarget(code.nodes, n)} this way gives exactly one answer, and it gave none`);
@@ -1291,28 +1313,12 @@ export const DEF_VALUE = "@definition";
 const defOf = new WeakMap<object, Id>();
 export const definedAs = (v: Value): Id | undefined => (typeof v === "function" ? defOf.get(v) : undefined);
 
-// A Fixed's steps of 2⁻³² as `show fixed` writes them: the shortest
-// decimal that reads back to the same steps (Steele and White's
-// free-format digits, 1990), the prelude's `fraction digits` in BigInts.
-function fixedText(steps: bigint): string {
-  const neg = steps < 0n, s = neg ? -steps : steps;
-  const whole = s >> 32n, fraction = s & 0xffffffffn, unit = 1n << 33n;
-  let text = "";
-  for (let r = 2n * fraction, m = 1n, i = 0; fraction && i < 10; i++) {
-    const r10 = r * 10n, m10 = m * 10n, d = r10 >> 33n, rest = r10 - (d << 33n);
-    const low = rest < m10, high = unit - m10 < rest;
-    if (low || high) { text += String(low && (!high || 2n * rest < unit) ? d : d + 1n); break; }
-    text += String(d); r = rest; m = m10;
-  }
-  return `${neg ? "-" : ""}${whole}${text ? `.${text}` : ""}`;
-}
-
-// `asNumber` shows a Fixed or an Extended as the number it stands for:
-// what `show` gives, the Run panel and a wire's value (L153). Without it a
-// value shows as the constructor it is built from.
+// `asNumber` shows an Extended as the number it stands for: what `show`
+// gives, the Run panel and a wire's value (L153). Without it a value shows
+// as the constructor it is built from.
 // `shown`, given, shows a value of a type with a Shown implementation
-// (L205) through it; without it (the editor's chips, relate.ts) the
-// prelude's number types show the same way by their tags below.
+// (L205) through it, Rational, Complex and Fixed among them; without it
+// they show as the constructor too.
 // Shows values as this program's `show any` does (L205c): a type of the
 // program's own with a Shown implementation shows its own way. Made once
 // per check, used for every value.
@@ -1329,11 +1335,11 @@ export function showValue(v: Value, code: Code, names: Names, asNumber = false, 
   if (typeof v === "function") return nodeOf(v) ? "<cell>" : "<function>";
   if (v.tag === ARRAY_TAG) return `array [${v.fields.slice(1).map((x) => go(x)).join(", ")}]`;
   if (v.tag === CONS || v.tag === NIL) return `[${fromList(v).map((x) => go(x)).join(", ")}]`;
-  // Float64 types show as numbers, as `show fraction` and `show complex` do.
-  if (v.tag === RATIO) { const [top, bottom] = v.fields.map((x) => go(x)); return bottom === "1" ? top : `${top}/${bottom}`; }
+  // Rational, Complex and Fixed show through their Shown (the prelude's,
+  // given as `shown`); without it they show as what they're built from,
+  // ratio(1, 3), which parseValue reads back (a seed, L205). Algebraic is
+  // host code, with no Shown of its own.
   if (v.tag === ALGEBRAIC_V) return Alg.show(algebraicOf(v));
-  if (v.tag === COMPLEX_V) { const [re, im] = v.fields as number[]; return `${go(re)} ${im < 0 ? "−" : "+"} ${go(Math.abs(im))}i`; }
-  if (asNumber && v.tag === FIXED_V && (typeof v.fields[0] === "number" || typeof v.fields[0] === "bigint")) return fixedText(BigInt(v.fields[0]));
   // An Extended number reads as the number, or −∞ and +∞ (L125d).
   if (asNumber && v.tag === EXTENDED_V.finite) return go(v.fields[0]);
   if (asNumber && (v.tag === EXTENDED_V.minus || v.tag === EXTENDED_V.plus)) return v.tag === EXTENDED_V.minus ? "−∞" : "+∞";

@@ -115,9 +115,14 @@ the returned parts only. It is step 3, measured after step 2.
    (`differences`) only once a Cells knows how lists look (`shape`, set
    today by the first view `each` makes); step 2 gives it from the
    start on the core IR.
-2. The analysis in compiler/src (a pass on CoreIR, no closures
-   followed), `cells.readPaths` printed by core-js.ts. Then closures
-   followed. Measured with bench-board.ts's `core` way at 1,000 cards, a
+2. Done (C162b): the analysis, compiler/src/cell-paths.ts `trackReads`,
+   run by core-js.ts `lowerCore`, closures followed from the start (board
+   needs them everywhere). Board, 1,000 cards, the core IR: a running
+   frame 3.0 → 2.0 ms, an add unchanged (2.6 ms); its session draws the
+   same. The columns still wake on a frame, as foreseen below. A Cells
+   compares a whole new value place by place from the first write on the
+   core IR (`knowLists`), without looking through it for views, which
+   only `each`'s views need (that look made frames 8 ms when tried). Measured with bench-board.ts's `core` way at 1,000 cards, a
    running frame and an add, and board.test.ts's session checked to
    draw the same.
 3. If the columns' formulas are still what a frame costs: a design call

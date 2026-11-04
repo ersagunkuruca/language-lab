@@ -24,9 +24,16 @@ for (const [label, args] of [["with WebGPU", GPU], ["without WebGPU", ["--disabl
   const page = await browser.newPage({ viewport: { width: 1200, height: 900 } });
   page.on("pageerror", (e) => errors.push(`${label}: ${e.stack ?? e.message}`));
   page.on("console", (m) => { if (m.type() === "error") errors.push(`${label}: ${m.text()}`); });
+  // The longest the page held the browser while starting: a task of many
+  // seconds makes the browser offer to kill the page (it once checked the
+  // GPU against the evaluator, then compiled all three pictures, in one).
+  await page.addInitScript(() => { const w = window as unknown as { longest: number }; w.longest = 0; new PerformanceObserver((l) => { for (const e of l.getEntries()) w.longest = Math.max(w.longest, e.duration); }).observe({ type: "longtask", buffered: true }); });
   await page.goto(url);
   await page.waitForSelector("body[data-ready]", { timeout: 120_000 });
   if ((await page.locator("body").getAttribute("data-ready")) !== "true") errors.push(`${label}: the page stopped with an error`);
+  const held = await page.evaluate(() => (window as unknown as { longest: number }).longest);
+  console.log(`${label}: the longest the page held the browser while starting was ${Math.round(held)} ms`);
+  if (held > 8000) errors.push(`${label}: the page held the browser for ${Math.round(held)} ms at once while starting`);
   for (const section of ["raymarch", "mandelbrot", "ripples"]) {
     const where = `${label}, ${section}`;
     const $ = (c: string) => page.locator(`#${section} .${c}`);

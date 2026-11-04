@@ -669,7 +669,7 @@ A page is a value of type Html that main returns. Cells hold what changes; a par
 
 ## The same bits on every machine
 
-sin, cos, exp, ^ and the rest are each platform's own (JavaScript's, C's, a GPU's), so two machines can differ in the last bit or two. The steady module's are written in Ters as fdlibm writes them, with only + − · / and comparisons, so every machine gives the same bits: for a lockstep game or a replay that must agree. steady sin, cos and tan take |x| below 1,647,100 for now.
+sin, cos, exp, ^ and the rest are each platform's own (JavaScript's, C's, a GPU's), so two machines can differ in the last bit or two. The steady module's are written in Ters as fdlibm writes them, with only + − · / and comparisons, so every machine gives the same bits: for a lockstep game or a replay that must agree.
 
 - **steady sin** : `(Float64) -> Float64` (steady module). sin x with the same bits on every machine: fdlibm's, written in Ters (sin is the platform's own, within a few ulp).
 - **steady cos** : `(Float64) -> Float64` (steady module). cos x with the same bits on every machine: fdlibm's, written in Ters.

@@ -96,14 +96,31 @@ export function fillUses(code: Code, own: Iterable<Id> = Object.keys(code.nodes)
 // relational interpreter, whose slots are binders. Its meaning is the same
 // (L211a); the copy is made once per program, and only when one is there.
 const filledOnce = new WeakMap<Code, Code>();
+const bareIn = (code: Code, ids: Iterable<Id>) => [...ids].filter((id) => { const n = code.nodes[id]; return n?.kind === "call" && !!(n as Use).given && (n as Use).body === undefined; });
 export function filled(code: Code): Code {
   let out = filledOnce.get(code);
   if (!out) {
-    const bare = Object.keys(code.nodes).filter((id) => { const n = code.nodes[id]; return n?.kind === "call" && !!(n as Use).given && (n as Use).body === undefined; });
-    if (bare.length) { out = { ...code, nodes: { ...code.nodes } }; fillUses(out, bare); }
-    else out = code;
+    const bare = bareIn(code, Object.keys(code.nodes));
+    if (!bare.length) out = code;
+    else if (base && bare.some((id) => id in base!.lib.nodes) && onBase(code, base.lib)) {
+      // The library's own uses are filled once, in the same nodes for
+      // every program, so its kept check stays under (infer.ts under).
+      out = { ...code, nodes: { ...code.nodes, ...base.fills } };
+      fillUses(out, bare.filter((id) => !(id in base!.lib.nodes)));
+    } else { out = { ...code, nodes: { ...code.nodes } }; fillUses(out, bare); }
     filledOnce.set(code, out);
   }
+  return out;
+}
+
+// The library under every program, filled once (fillOnce, from library.ts):
+// its uses with no body filled, and the nodes that made.
+let base: { lib: Code; fills: Record<Id, Node> } | null = null;
+const onBase = (code: Code, lib: Code) => { for (const id in lib.nodes) if (code.nodes[id] !== lib.nodes[id]) return false; return true; };
+export function fillOnce(lib: Code): Code {
+  const out: Code = { ...lib, nodes: { ...lib.nodes } };
+  fillUses(out, bareIn(lib, Object.keys(lib.nodes)));
+  base = { lib, fills: Object.fromEntries(Object.entries(out.nodes).filter(([id, n]) => lib.nodes[id] !== n)) };
   return out;
 }
 

@@ -17,7 +17,7 @@ import { makeRunner, showerFor, type Value } from "../src/lang/run.ts";
 import { runTests } from "../src/lang/tests.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
-import { ARITH, ARITHMETIC_V, INT_OPS, ORDERED_V, S, SHOW_ANY, SHOWN_V } from "../src/lang/std.ts";
+import { ARITH, ARITHMETIC_V, COMPARE, INT_OPS, ORDERED_V, S, SHOW_ANY, SHOWN_V } from "../src/lang/std.ts";
 import { B } from "../src/prelude.ts";
 import { INT, NUMBER } from "../src/lang/types.ts";
 import { subtree, type Id } from "../src/model.ts";
@@ -163,3 +163,25 @@ test("the editor's shower shows a type's own values through its Shown, others as
   assert.equal(show({ tag: "std.list.cons", fields: [7, { tag: "std.list.nil", fields: [] }] }), "[7]");
 });
 const at = (p: { code: { defs: Id[] }; names: Record<string, string> }, n: string) => p.code.defs.find((d) => p.names[d] === n)!;
+
+// compare and sort go through a type's Ordered (L204g): a priority whose
+// order is the other way round from its number's sorts the highest first,
+// and the prelude's Rational is ordered by its own `less` the same way.
+test("compare and sort order a type with an Ordered of its own by it", () => {
+  const out: Record<string, Id> = {};
+  const p = program((k) => {
+    const P = k.type("Priority", [], [["priority", [["level", () => k.tref(INT)]]]]);
+    const pr = (n: number) => k.call(P.v.priority, k.int(n));
+    const level = (x: Id, f: (l: Id) => Id) => k.match(x, [{ variant: P.v.priority, names: ["level"], body: ([l]) => f(l) }]);
+    const higher = k.def("higher");
+    k.define(higher, k.fn(["a", "b"], (a, b) => level(a, (la) => level(b, (lb) => k.call(INT_OPS.less, lb, la)))));
+    k.define(k.def("ordered at priority"), k.call(ORDERED_V, k.x(higher)));
+    const def = (name: string, body: Id) => { const d = k.def(name); k.define(d, body); out[name] = d; };
+    def("one against two", k.call(SHOW_ANY, k.call(COMPARE, pr(1), pr(2))));
+    def("two against two", k.call(SHOW_ANY, k.call(COMPARE, pr(2), pr(2))));
+    def("sorted", k.call(SHOW_ANY, k.call(lib("sort"), k.list(pr(1), pr(3), pr(2)))));
+  });
+  assert.deepEqual(p.info.errors.map((e) => e.message), []);
+  const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });
+  assert.deepEqual(["one against two", "two against two", "sorted"].map((n) => r.value(out[n])), ["after", "same", "[priority(3), priority(2), priority(1)]"]);
+});

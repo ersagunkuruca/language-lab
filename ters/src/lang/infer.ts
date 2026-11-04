@@ -141,22 +141,25 @@ const bool: Type = { t: "con", id: BOOL, args: [] };
 // kept, so a program's check reads through to it and checks only its own
 // definitions. It counts only while every one of its nodes is the library's
 // own, unchanged; a program that edits one is checked whole.
-let underAll: { code: Code; names: Names } | null = null;
-const underChecks: { opts: Options; info: Info }[] = [];
-export function checkOnce(code: Code | null, names: Names = {}) { underAll = code && { code, names }; underChecks.length = 0; }
+// `also`: the same library in other forms a program may sit on, each kept
+// apart: the compilers' copy with its uses filled (ports.ts fillOnce).
+let underAll: { codes: Code[]; names: Names } | null = null;
+const underChecks: { lib: Code; opts: Options; info: Info }[] = [];
+export function checkOnce(code: Code | null, names: Names = {}, also: Code[] = []) { underAll = code && { codes: [code, ...also], names }; underChecks.length = 0; }
 let checkingUnder = false;
+const onLib = (code: Code, lib: Code) => { for (const id in lib.nodes) if (code.nodes[id] !== lib.nodes[id]) return false; return true; };
 function under(code: Code, opts: Options): { info: Info; only: Set<Id> } | null {
   if (!underAll || checkingUnder) return null;
-  const lib = underAll.code;
-  for (const id in lib.nodes) if (code.nodes[id] !== lib.nodes[id]) return null;
+  const lib = underAll.codes.find((c) => onLib(code, c));
+  if (!lib) return null;
   const libDefs = new Set(lib.defs);
   const only = new Set(code.defs.filter((d) => !libDefs.has(d)));
   if (!only.size || code.defs.length !== libDefs.size + only.size) return null;
   const same = (a: Options) => a.pins === opts.pins && a.hidden === opts.hidden && a.insiders === opts.insiders && a.library === opts.library;
-  let kept = underChecks.find((c) => same(c.opts));
+  let kept = underChecks.find((c) => c.lib === lib && same(c.opts));
   if (!kept) {
     checkingUnder = true;
-    try { kept = { opts, info: infer(lib, underAll.names, undefined, opts) }; } finally { checkingUnder = false; }
+    try { kept = { lib, opts, info: infer(lib, underAll.names, undefined, opts) }; } finally { checkingUnder = false; }
     // A few kept, the latest first: a caller that makes its options anew
     // each time would otherwise keep a library check for each.
     underChecks.unshift(kept);
