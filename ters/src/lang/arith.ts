@@ -30,7 +30,7 @@ import type { Names } from "../presentation.ts";
 import { B } from "../prelude.ts";
 import { implementationOf, type Info } from "./infer.ts";
 import { interfaceOps, leftToWays, NEUTRAL, pickWays, waysIn, type BuiltinCost } from "./ways.ts";
-import { ALGEBRAIC_OPS, ARITH, ARITH_FIELD, EMBEDDING, EMBEDDING_MAP, COMPLEX_V, DUAL_V, FIXED_V, INT_OPS, RATIO, S } from "./std.ts";
+import { ALGEBRAIC_OPS, ARITH, ARITH_FIELD, EMBEDDING, EMBEDDING_MAP, COMPLEX_V, DUAL_V, FIXED_V, INT_OPS, LITERAL, LITERAL_V, RATIO, S } from "./std.ts";
 import { ALGEBRAIC_TYPE, COMPLEX_TYPE, DUAL_TYPE, FIXED_TYPE, MATRIX_SIZE, INT, NUMBER, RATIONAL_TYPE, OverMap, type Row, type Scheme, type Type } from "./types.ts";
 import { PRELUDE_DEFS } from "./prelude-ids.ts";
 import { ratioParts } from "./int.ts";
@@ -516,6 +516,22 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
     }
     if (t.id === INT) { nodes[n.id] = { id: n.id, ...intLit(BigInt(x)) } as Node; typeOf.set(n.id, int); return; }
     if (t.id === RATIONAL_TYPE || t.id === ALGEBRAIC_TYPE || t.id === COMPLEX_TYPE || t.id === DUAL_TYPE || t.id === FIXED_TYPE) { literal({ ...n, of: t.id, value: t.id === COMPLEX_TYPE || t.id === DUAL_TYPE ? x : decimal(x) }); return; }
+    // A type with a Literal of its own (L204b): its from fraction, given
+    // the number as top/bottom.
+    const impl = implementationOf(info, LITERAL, t);
+    if (impl) {
+      const [top, bottom] = ratioParts(decimal(x)) ?? [0n, 1n];
+      const whole: Type = { t: "con", id: INT, args: [] };
+      const made: Type = { t: "fn", params: [whole, whole], ret: t, eff: pure }, given: Type = { t: "con", id: LITERAL, args: [t] };
+      // match literal at t { literal(f) → f(top, bottom) }: its field read
+      // by its case, so nothing here is an interface's operation to resolve.
+      const f = add({ kind: "binder" }, made);
+      const body = add({ kind: "call", fn: add({ kind: "ref", target: f }, made), args: [add(intLit(top), whole), add(intLit(bottom), whole)] }, t);
+      const arm = add({ kind: "arm", variant: LITERAL_V, binds: [f], results: [null], body } as NodeData, t);
+      nodes[n.id] = { id: n.id, kind: "match", scrutinee: add({ kind: "ref", target: impl }, given), arms: [arm], otherwise: null };
+      typeOf.set(n.id, t);
+      return;
+    }
     const variant = recordVariant(code, t.id);
     if (!variant) return;
     const fields = (code.nodes[variant] as NodeOf<"variant">).fields;

@@ -1490,6 +1490,15 @@ typedef(KEPT_FILES, "Kept files", [], (["open file", "file line", "file add line
 }), true);
 export const FILE_OPS = { open: `${KEPT_FILES}.open file`, line: `${KEPT_FILES}.file line`, addLine: `${KEPT_FILES}.file add line`, close: `${KEPT_FILES}.close file` };
 for (const v of Object.values(FILE_OPS)) (nodes.find((n) => n.id === v) as NodeOf<"variant">).private = true;
+// A number written where a type of the program's own goes (L204b,
+// INTERFACES.md "from a fraction", Haskell's fromRational): 0.25 at it is
+// from fraction(1, 4) of its implementation, so 2 at a quaternion can mean
+// 2 + 0i + 0j + 0k. A record of Float64s with none gets the number in
+// every part, as before.
+export const LITERAL = typedef("std.literal", "Literal", ["a"], [
+  ["literal", [["from fraction", ([a]) => node({ id: "std.literal.from fraction.type", kind: "tfun", params: [fixedTref("std.literal.from fraction.top", INT), fixedTref("std.literal.from fraction.bottom", INT)], result: fixedTref("std.literal.from fraction.result", a), effects: [] })]]],
+], false, true);
+export const LITERAL_V = "std.literal.literal", FROM_FRACTION = "std.literal.literal.from fraction";
 export const RELEASE_V = "std.release.release";
 // The user's settings, read from the world as the time is (L214b2): `my
 // locale()`, the language the person running the program uses, for
@@ -1533,7 +1542,7 @@ export function onTodaysIds<T>(x: T, from = (x as { shape?: unknown } | null)?.s
 }
 export const tupleSize = (id: Id): number | null => { const m = /^std\.tuple(\d)$/.exec(id); return m ? Number(m[1]) : null; };
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, MATRIX, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS, WORD16, TENSOR, BYTES, JSON_TYPE, DATE, TIME_OF_DAY, INSTANT, EMBEDDING, REQUEST, RESPONSE, LOCALE, SETTINGS, RELEASE, OPEN_FILE, KEPT_FILES] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, MATRIX, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS, WORD16, TENSOR, BYTES, JSON_TYPE, DATE, TIME_OF_DAY, INSTANT, EMBEDDING, REQUEST, RESPONSE, LOCALE, SETTINGS, RELEASE, OPEN_FILE, KEPT_FILES, LITERAL] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one
