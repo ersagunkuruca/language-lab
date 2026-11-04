@@ -1331,12 +1331,17 @@ export const SHOWN_V = "std.shown.shown";
 // it: what `show any` shows a value of that type through, in the
 // evaluator (run.ts) and in compiled code (C148).
 export function shownImplementations(info: { implementations?: Map<string, Id> }): Map<Id, Id> {
-  const showns = new Map<Id, Id>();
+  return implementationsOf(info, SHOWN);
+}
+// Each type with an implementation of the interface `iface`, and the
+// definition giving it: Shown's for show any, Ordered's for compare (L204g).
+export function implementationsOf(info: { implementations?: Map<string, Id> }, iface: Id): Map<Id, Id> {
+  const out = new Map<Id, Id>();
   for (const [key, d] of info.implementations ?? []) {
-    const m = key.startsWith(`${SHOWN}|`) ? /"t":"con","id":"([^"]+)"/.exec(key.slice(SHOWN.length + 1)) : null;
-    if (m) showns.set(m[1], d);
+    const m = key.startsWith(`${iface}|`) ? /"t":"con","id":"([^"]+)"/.exec(key.slice(iface.length + 1)) : null;
+    if (m) out.set(m[1], d);
   }
-  return showns;
+  return out;
 }
 // Wrapping integers (BACKLOG L193, ASPECTS-2026-11-03 142, 143): Word8, Word16,
 // Word32 and Word64 are arithmetic mod 2ⁿ, an Int from 0 to 2ⁿ − 1 kept

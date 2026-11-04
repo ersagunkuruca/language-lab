@@ -34,7 +34,7 @@ import { computedForward } from "./directions.ts";
 import { discharge } from "./ledger.ts";
 import * as Alg from "./algebraic.ts";
 import { hostLocale, hostZone } from "./text.ts";
-import { FILE_OPS, KEPT_FILES, tupleVariant, floatText, LOCALE_V, MY_LOCALE_OP, MY_ZONE_OP, RELEASE_V, SETTINGS, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, shownImplementations, CASE_NAME, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std.ts";
+import { FILE_OPS, KEPT_FILES, tupleVariant, floatText, LOCALE_V, MY_LOCALE_OP, MY_ZONE_OP, RELEASE_V, SETTINGS, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, shownImplementations, implementationsOf, ORDERED, CASE_NAME, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std.ts";
 import { intLit } from "./int.ts";
 import { JETS } from "./jets.ts";
 import { answerFromHost, effectOfOperation, hostedEffects, type Hosts } from "./hosts.ts";
@@ -102,7 +102,7 @@ export const solvesOnce = (code: Code, n: Use): boolean => (planSolve(code, n).m
 // its binds, in order. A relation run backwards is the relational
 // interpreter's (relate.ts); one the solver plans, its equations' (solve.ts).
 // The evaluator's, and JavaScript printed from the core IR's (core-js.ts).
-export function* solveAnswers(code: Code, n: Use, known: Record<string, unknown>, opts: { spend?: () => boolean; names?: Names; stuck?: (r: Reading) => void; info?: Info; shown?: (v: Data) => string | undefined } = {}): Generator<Value[]> {
+export function* solveAnswers(code: Code, n: Use, known: Record<string, unknown>, opts: { spend?: () => boolean; names?: Names; stuck?: (r: Reading) => void; info?: Info; shown?: (v: Data) => string | undefined; ordered?: (x: Data, y: Data) => number | undefined } = {}): Generator<Value[]> {
   const p = planSolve(code, n);
   if (p.mode === "relational") {
     for (const sol of relate(code, useTarget(code.nodes, n), known, opts)) {
@@ -175,14 +175,16 @@ export const numberOrder = (a: number, b: number): number =>
 // finiteFloat would have said at the operation.
 export const overflowed = (): never => { throw new Aborted("the answer is too big for a Float64 (overflow)"); };
 
-// The order on plain data (L66): numbers by value (Int, Float64 and
-// fractions; Float64 exactly, numberOrder), text by code point, and other
-// cases by their declaration order (`order`: a variant's place in its
-// type, variantOrder), then their fields left to right, so lists go
+// The order on plain data (L66): numbers by value (Int and Float64;
+// Float64 exactly, numberOrder), text by code point, a value of a type with
+// an Ordered implementation by its `less` (`by`, the runner's orderedBy:
+// Rational and Algebraic are the prelude's, L204g; stdOrdered without one), and other cases by
+// their declaration order (`order`: a variant's place in its type,
+// variantOrder), then their fields left to right, so lists go
 // lexicographically with [] first. OCaml's `compare` and Erlang's term
 // order (prior art). -1, 0 or 1. Where `equal` is near on Float64s, this
 // is exact: 0.1 + 0.2 is after 0.3, and equal to it.
-export function compareValues(a: Value, b: Value, order: Map<Id, number>): number {
+export function compareValues(a: Value, b: Value, order: Map<Id, number>, by: (x: Data, y: Data) => number | undefined = stdOrdered): number {
   const todo: [Value, Value][] = [[a, b]];
   for (let p; (p = todo.pop());) {
     const [x, y] = p;
@@ -190,16 +192,24 @@ export function compareValues(a: Value, b: Value, order: Map<Id, number>): numbe
     if (typeof x === "bigint" || typeof y === "bigint") { if (x !== y) return (x as bigint) < (y as bigint) ? -1 : 1; continue; }
     if (typeof x === "string" && typeof y === "string") { if (x !== y) return T.less(x, y) ? -1 : 1; continue; }
     if (typeof x !== "object" || typeof y !== "object") continue;
-    if (x.tag === RATIO && y.tag === RATIO) {
-      const l = I.mul(x.fields[0] as I.Int, y.fields[1] as I.Int), r = I.mul(y.fields[0] as I.Int, x.fields[1] as I.Int);
-      if (l !== r) return I.less(l, r) ? -1 : 1;
-      continue;
-    }
-    if (x.tag === ALGEBRAIC_V && y.tag === ALGEBRAIC_V) { const c = Alg.compare(algebraicOf(x), algebraicOf(y)); if (c) return c; continue; }
+    const c = by(x, y);
+    if (c !== undefined) { if (c) return c; continue; }
     if (x.tag !== y.tag) return (order.get(x.tag) ?? 0) < (order.get(y.tag) ?? 0) ? -1 : 1;
     for (let i = x.fields.length - 1; i >= 0; i--) todo.push([x.fields[i], y.fields[i]]);
   }
   return 0;
+}
+
+// Rational's and Algebraic's order where no runner's orderedBy is given:
+// compiled code's `compare` (runtime.js $compare), until compile.ts orders
+// through Ordered too. The same order as the prelude's implementations.
+export function stdOrdered(x: Data, y: Data): number | undefined {
+  if (x.tag === RATIO && y.tag === RATIO) {
+    const l = I.mul(x.fields[0] as I.Int, y.fields[1] as I.Int), r = I.mul(y.fields[0] as I.Int, x.fields[1] as I.Int);
+    return l === r ? 0 : I.less(l, r) ? -1 : 1;
+  }
+  if (x.tag === ALGEBRAIC_V && y.tag === ALGEBRAIC_V) return Alg.compare(algebraicOf(x), algebraicOf(y));
+  return undefined;
 }
 
 // An Algebraic value as algebraic.ts reads it.
@@ -458,6 +468,16 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     for (const t of show(v)) return t as string;
     return undefined;
   } : undefined;
+  // A value of a type with an Ordered implementation (std.ts ORDERED,
+  // L204g) is ordered by it in `compare`: before when less, after when
+  // the other is less, else the same.
+  const ordereds = implementationsOf(info, ORDERED);
+  const orderedBy = ordereds.size ? (x: Data, y: Data): number | undefined => {
+    const d = ordereds.get(info.owner.get(x.tag) ?? "");
+    if (!d || info.owner.get(y.tag) !== info.owner.get(x.tag)) return undefined;
+    const less = (refValue(d, null) as Data).fields[0] as Fn;
+    return (only(less, x, y) as Data).tag === TRUE ? -1 : (only(less, y, x) as Data).tag === TRUE ? 1 : 0;
+  } : stdOrdered;
   const builtins: Record<Id, Fn> = {};
   let cmpOrder: Map<Id, number> | undefined;
   // Float64 is the finite floats with one zero (FLOAT-VALUES-2026-11-01.md,
@@ -476,7 +496,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     [S.show]: (x) => ((x as number) - (x as number) === 0 ? one(floatText(x as number)) : overflowed()),
     [S.stop]: (why) => { throw new Aborted(why as string); },
     [S.equal]: (a, b) => one(bool(equal(a, b, usedSameNumber))),
-    [COMPARE]: (a, b) => one(ORDER_VALUES[compareValues(a, b, (cmpOrder ??= variantOrder(code))) + 1]),
+    [COMPARE]: (a, b) => one(ORDER_VALUES[compareValues(a, b, (cmpOrder ??= variantOrder(code)), orderedBy) + 1]),
     [S.and]: (a, b) => one(bool((a as Data).tag === TRUE && (b as Data).tag === TRUE)),
     [S.or]: (a, b) => one(bool((a as Data).tag === TRUE || (b as Data).tag === TRUE)),
     [S.not]: (a) => one(bool((a as Data).tag !== TRUE)),
@@ -1058,7 +1078,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       // A solve with exactly one answer (oneAnswer, MODES.md), or results
       // each computed from the inputs (directions.ts), leaves no choice
       // point: its first answer is the answer.
-      let answers: Iterable<Value[]> = solveAnswers(code, n, known, { spend, names: rt.names, stuck: rt.stuck, info, shown: shownBy });
+      let answers: Iterable<Value[]> = solveAnswers(code, n, known, { spend, names: rt.names, stuck: rt.stuck, info, shown: shownBy, ordered: orderedBy });
       if (solvesOnce(code, n)) {
         const r = (answers as Generator<Value[]>).next();
         if (r.done) throw new Error(`solving ${rt.names?.[useTarget(code.nodes, n)] ?? useTarget(code.nodes, n)} this way gives exactly one answer, and it gave none`);
