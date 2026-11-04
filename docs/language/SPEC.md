@@ -134,7 +134,8 @@ one. A program that needs the same bits on every machine (a lockstep
 game) says so by its type: Fixed (§3.4), or a library number type
 whose functions are written in Ters, which only that program carries. The
 steady module's `steady sin`, `steady cos`, `steady tan`, `steady exp`,
-`steady log` and `steady pow` are those functions (fdlibm's, written in Ters, L210); the type that
+`steady log`, `steady pow`, `steady atan`, `steady atan2`, `steady asin` and
+`steady acos` are those functions (fdlibm's, written in Ters, L210); the type that
 carries them comes later.
 
 3.3. **Leaving the finite floats** happens in two ways (FLOAT-VALUES
