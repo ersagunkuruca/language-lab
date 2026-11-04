@@ -241,7 +241,7 @@ agent with inertia. All later goals.
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | L16 | Guarded corecursion, and a stateful handler form so programs write their own Cells. The stateful handler is done (L16a: std `State` with `with state` written in the prelude); left: guarded corecursion | ROADMAP 4 | P3 | L | step a done |
-| L22 | Profiles inferred like effects and shown in the editor ("runs on the GPU") | REVIEW-2026-10-22b §5 | P3 | L | |
+| L22 | Profiles inferred like effects and shown in the editor ("runs on the GPU"). L22a done: a definition's panel shows where it runs, from the lowering's refusals. Left: the profile inferred in the type, as an effect is, so a caller is told without lowering | REVIEW-2026-10-22b §5 | P3 | L | |
 | L24 | Research as it becomes blocking: costs from folds, laws proved by fusion, fast invertible parsing | ROADMAP 8 | P3 | L | |
 
 ### Blind spots ([BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md))
