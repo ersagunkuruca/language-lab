@@ -46,7 +46,7 @@ import { baseNames, checkOptions, loadProgram } from "../src/lang/load.ts";
 import { equal, mainProblem, pageProblem, runMain, runProgram } from "../src/lang/run.ts";
 import { Cells } from "../src/lang/cells.ts";
 import { evaluatorCall, htmlText } from "../src/lang/html.ts";
-import { pageDocument } from "../src/lang/page.ts";
+import { hasSound, pageDocument } from "../src/lang/page.ts";
 import { showType } from "../src/lang/types.ts";
 import { choose, jobProblem, represent, representationsIn, type Representation } from "../src/lang/represent.ts";
 import { withLibraryRepresentations } from "../src/lang/library-reps.ts";
@@ -54,7 +54,7 @@ import { allowedOnly, nodeWorld } from "../src/lang/world.ts";
 import { compile } from "../../compiler/src/compile.ts";
 import { CFLAGS, emitC } from "../../compiler/src/c.ts";
 import { lowerScalar } from "../../compiler/src/scalar.ts";
-import { coreModule, hostOpsOf, lowerCore } from "../../compiler/src/core-js.ts";
+import { coreModule, hostOpsOf, lowerCore, usesSolver } from "../../compiler/src/core-js.ts";
 import { execFileSync } from "node:child_process";
 import { recordings, webCorePage, webPage } from "./web.ts";
 import { appFolder } from "./app.ts";
@@ -363,7 +363,14 @@ switch (command) {
     const insist = rest.includes("--core");
     let page: string | null = null;
     if (!rest.includes("--compile-ts")) {
-      try { page = await webCorePage(p.title, p.code, p.info, p.names, p.own, main, pageHost); } catch (e) {
+      // A sound that solves runs the evaluator's solver for every block on
+      // the core IR, too slow for the audio thread (the pedal: 34 blocks a
+      // second of the 375 it needs, beside compile.ts's 28,000), so
+      // compile.ts makes that page until the core IR compiles solves (C137d7).
+      // --core makes it anyway.
+      const slow = !insist && hasSound(p.code) && usesSolver(lowerCore(p.code, p.info, p.names, p.own));
+      if (slow) process.stderr.write("lab: the page's sound solves, which the core IR does through the evaluator's solver (too slow for the audio thread), so the page is made by compile.ts\n");
+      else try { page = await webCorePage(p.title, p.code, p.info, p.names, p.own, main, pageHost); } catch (e) {
         if (insist) fail((e as Error).message);
         process.stderr.write(`lab: ${(e as Error).message.replace(/^lab: /, "")}, so the page is made by compile.ts\n`);
       }
@@ -396,7 +403,11 @@ switch (command) {
     let wav;
     try { wav = readWav(readFileSync(input)); } catch (e) { fail(`${input}: ${(e as Error).message}`); }
     // --compiled: the core IR's JavaScript (C137d3); with --compile-ts, compile.ts's.
-    const played = playBlocks(await soundOf(p, def, !compiled ? "evaluator" : rest.includes("--compile-ts") ? "compiled" : "core"), wav.samples, size);
+    // A sound that solves goes through compile.ts, whose plans are far
+    // quicker than the evaluator's solver on the core IR (C137d7).
+    const solves = compiled && !rest.includes("--compile-ts") && usesSolver(lowerCore(p.code, p.info, p.names, [def]));
+    if (solves) process.stderr.write(`lab: ${mainName} solves, which the core IR does through the evaluator's solver (slow), so it is compiled through compile.ts\n`);
+    const played = playBlocks(await soundOf(p, def, !compiled ? "evaluator" : rest.includes("--compile-ts") || solves ? "compiled" : "core"), wav.samples, size);
     const to = out ?? input.replace(/(\.wav)?$/i, ".out.wav");
     writeFileSync(to, writeWav({ rate: wav.rate, samples: played.out }));
     if (played.silent.length) process.stderr.write(`lab: ${played.silent.length} block${played.silent.length === 1 ? "" : "s"} played silence, the first (block ${played.silent[0].block}) because ${played.silent[0].why}\n`);

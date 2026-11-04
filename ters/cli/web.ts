@@ -74,7 +74,8 @@ $$startPage(defs[${JSON.stringify(name)}], ${JSON.stringify(title)}${worklet});
 
 // The same page printed from the core IR (C137c9, `lab build-web --core`),
 // which WebAssembly and C print too: core-page.ts draws it, and a page
-// with sound plays (C137d4).
+// with sound plays (C137d4). `lab build-web` doesn't use it for a page
+// whose sound solves (C137d7).
 // `hosts`: the program's hosts/js.js, bundled in and asked (C137d5).
 export async function webCorePage(title: string, code: Code, info: Info, names: Names, own: Id[], main: Id, hosts?: string): Promise<string> {
   if (hosts && hasSound(code)) throw new Error("a page with sound and hosts/js.js isn't made from the core IR yet");

@@ -43,6 +43,9 @@ function ideal(): Play {
 const blocks = Array.from({ length: 64 }, (_, b) => Array.from({ length: 128 }, (_, i) => 0.4 * Math.sin((2 * Math.PI * 110 * (b * 128 + i)) / 48000)));
 const ways: [string, Play, number][] = [
   ["compiled", await soundOf(prog, p.named("pedal"), "compiled"), 2000],
+  // The core IR's JavaScript (C137d3), which runs atanh backwards with the
+  // evaluator's solver.
+  ["core IR", await soundOf(prog, p.named("pedal"), "core"), 50],
   ["evaluator", await soundOf(prog, p.named("pedal"), "evaluator"), 4],
   ["by hand", ideal(), 20000],
 ];
