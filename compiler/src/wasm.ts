@@ -69,6 +69,8 @@ const INSTR: Partial<Record<Op, [number | number[], string]>> = {
   // A 32-bit machine word (C150f): wrapping, compared unsigned.
   uadd: [0x6a, "i32.add"], usub: [0x6b, "i32.sub"], umul: [0x6c, "i32.mul"], uneg: [[0x41, 0x7f, 0x6c], "i32.const -1 i32.mul"],
   uand: [0x71, "i32.and"], uor: [0x72, "i32.or"], uxor: [0x73, "i32.xor"], uless: [0x49, "i32.lt_u"],
+  u64add: [0x7c, "i64.add"], u64sub: [0x7d, "i64.sub"], u64mul: [0x7e, "i64.mul"], u64neg: [[0x42, 0x7f, 0x7e], "i64.const -1 i64.mul"],
+  u64and: [0x83, "i64.and"], u64or: [0x84, "i64.or"], u64xor: [0x85, "i64.xor"], u64less: [0x54, "i64.lt_u"],
 };
 const INT32_RT: Op[] = ["iadd", "isub", "imul", "ineg", "iabs", "iquot", "irem", "ipow", "iwhole"];
 // Where a shader's flag is set or read.
@@ -171,7 +173,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean } = {}): Module
   const exportNames = new Map<SFunc, string>(), taken = new Set<string>();
   const exportName = (f: SFunc): string => {
     if (exportNames.size === 0) for (const g of funcs) {
-      let n = taken.has(g.name) ? `${g.name}(${g.params.map((t) => (t === "f64" ? "Float64" : t === "i32" ? "Bool" : t === "int" || t === "int32" ? "Int" : t === "text" ? "Text" : t === "host" ? "Cell" : isFn(t) ? "Function" : t.name)).join(", ")})` : g.name;
+      let n = taken.has(g.name) ? `${g.name}(${g.params.map((t) => (t === "f64" ? "Float64" : t === "i32" ? "Bool" : t === "int" || t === "int32" ? "Int" : t === "text" ? "Text" : t === "host" ? "Cell" : t === "i64" ? "Word64" : isFn(t) ? "Function" : t.name)).join(", ")})` : g.name;
       for (let k = 2, base = n; taken.has(n); k++) n = `${base} ${k}`;
       taken.add(n);
       exportNames.set(g, n);

@@ -365,6 +365,12 @@ const FNS: Record<string, Fn> = {
   "word32.widen": { uses: [], c: `static lab_int lab_word32_widen(int32_t x) { return LAB_SMALL((int64_t)(uint32_t)x); }` },
   "word32.narrow": { uses: [], c: `static int32_t lab_word32_narrow(lab_int x) { int32_t r = LAB_IS_SMALL(x) ? (int32_t)(uint32_t)LAB_VAL(x) : 0; lab_int_drop(x); return r; }` },
   "word32.wrap": { uses: [], c: `static int32_t lab_word32_wrap(lab_int x) { uint32_t r = LAB_IS_SMALL(x) ? (uint32_t)LAB_VAL(x) : LAB_BIG(x)->n ? (LAB_BIG(x)->neg ? 0u - LAB_BIG(x)->d[0] : LAB_BIG(x)->d[0]) : 0u; lab_int_drop(x); return (int32_t)r; }` },
+  // A 64-bit machine word (C150h) in an int64_t: one past 2⁶³ is a big
+  // Int of two limbs.
+  "word64.widen": { uses: [], c: `static lab_int lab_word64_widen(int64_t x) { uint64_t u = (uint64_t)x; if (u <= (uint64_t)lab__max) return LAB_SMALL((int64_t)u); uint32_t d[2] = { (uint32_t)u, (uint32_t)(u >> 32) }; return lab__int(0, d, 2); }` },
+  "word64.wrap": { uses: [], c: `static int64_t lab_word64_wrap(lab_int x) { uint64_t r; if (LAB_IS_SMALL(x)) r = (uint64_t)LAB_VAL(x); else { lab_big *b = LAB_BIG(x); r = b->n ? b->d[0] : 0; if (b->n > 1) r |= (uint64_t)b->d[1] << 32; if (b->neg) r = 0u - r; } lab_int_drop(x); return (int64_t)r; }` },
+  "word64.narrow": { uses: ["word64.wrap"], c: `static int64_t lab_word64_narrow(lab_int x) { return lab_word64_wrap(x); }` },
+  "word64.shiftDown": { uses: [], c: `static int64_t lab_word64_shiftDown(int64_t x, lab_int n) { int64_t k = lab__clamp(n); lab_int_drop(n); return k >= 64 || k <= -64 ? 0 : k >= 0 ? (int64_t)((uint64_t)x >> k) : (int64_t)((uint64_t)x << -k); }` },
   "word32.shiftDown": { uses: [], c: `static int32_t lab_word32_shiftDown(int32_t x, lab_int n) { int64_t k = lab__clamp(n); lab_int_drop(n); return k >= 32 || k <= -32 ? 0 : k >= 0 ? (int32_t)((uint32_t)x >> k) : (int32_t)((uint32_t)x << -k); }` },
   // floor(a / 2ⁿ), a negative n shifting up (int.ts shiftDown, C150b):
   // a 64-bit shift when both are small and n ≥ 0, else floor division by

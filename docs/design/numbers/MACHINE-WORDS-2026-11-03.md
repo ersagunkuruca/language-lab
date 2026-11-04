@@ -1,5 +1,8 @@
 # Words as machine words (C150c design, 2026-11-03)
 
+**Done (C150d to C150h, 2026-11-04):** every step below is built, in
+compiler/src/known-bits.ts and compiler/src/machine-words.ts.
+
 Row C150 (from L193): Word8 to Word64 should run as the machine's own
 unsigned words: WASM `i32`/`i64`, C's `uint8_t` to `uint64_t`, JavaScript
 numbers with `>>> 0` (and `Math.imul`) up to 32 bits. Today a word is a
@@ -94,8 +97,11 @@ This goes against "everything is one system".
    The 2 ms over the gate on WebAssembly is the loop's Int counter.
 5. **Gate.** The FNV-1a loop at 32 bits under 10 ms on WASM and C, with
    words.test.ts's published hashes on every target. Stop when the next
-   step buys less than 10%. Left: Word64 as an i64 (a word past 2⁶³ widened through
-   limbs), and Word8's and Word16's narrower masks on their + − ×.
+   step buys less than 10%. Then (C150h) Word64 the same way, as an i64 (a word past
+   2⁶³ widened to an Int of two limbs, any Int kept to its low 64 bits
+   from its two lowest limbs): its FNV-1a loop WebAssembly 380 → 16 ms,
+   C 312 → 9 ms. And Word8's and Word16's + − × and shifts the wrapping
+   op then an and with the mask. All done.
 
 Steps 1 to 3 each make one merged PR. Nothing here changes the language,
 the std words, or what a program means, so no decision is needed from

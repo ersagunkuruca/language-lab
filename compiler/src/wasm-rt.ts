@@ -4985,6 +4985,123 @@ ${drop}
         i32.wrap_i64
       end`,
   },
+  // A 64-bit machine word (C150h) the same way, in an i64: one past 2⁶³
+  // is a $huge of two limbs as an Int.
+  "word64.widen": {
+    params: [["x", "i64"]], result: "int", locals: [["r", "int"]], uses: ["int.of", "int.huge", "int.setLimb"], native: true,
+    body: `
+      local.get $x
+      i64.const 0
+      i64.ge_s
+      if int
+        local.get $x
+        call $int.of
+      else
+        i32.const 0
+        i32.const 2
+        call $int.huge
+        local.set $r
+        local.get $r
+        i32.const 0
+        local.get $x
+        i32.wrap_i64
+        call $int.setLimb
+        local.get $r
+        i32.const 1
+        local.get $x
+        i64.const 32
+        i64.shr_u
+        i32.wrap_i64
+        call $int.setLimb
+        local.get $r
+      end`,
+  },
+  // Any Int's low 64 bits (two's complement): a $huge's two lowest limbs,
+  // negated if it's negative; an Int known to fit is the same.
+  "word64.wrap": {
+    params: [["x", "int"]], result: "i64", locals: [["n", "i32"], ["v", "i64"]], uses: ["int.small", "int.limb", "int.limbs"], native: true,
+    body: `
+      local.get $x
+      call $int.limbs
+      local.tee $n
+      i32.eqz
+      if i64
+        local.get $x
+        call $int.small
+      else
+        local.get $x
+        i32.const 0
+        call $int.limb
+        i64.extend_i32_u
+        local.set $v
+        local.get $n
+        i32.const 1
+        i32.gt_s
+        local.get $n
+        i32.const -1
+        i32.lt_s
+        i32.or
+        if void
+          local.get $v
+          local.get $x
+          i32.const 1
+          call $int.limb
+          i64.extend_i32_u
+          i64.const 32
+          i64.shl
+          i64.or
+          local.set $v
+        end
+        local.get $n
+        i32.const 0
+        i32.lt_s
+        if i64
+          i64.const 0
+          local.get $v
+          i64.sub
+        else
+          local.get $v
+        end
+      end`,
+  },
+  "word64.narrow": {
+    params: [["x", "int"]], result: "i64", locals: [], uses: ["word64.wrap"], native: true,
+    body: `
+      local.get $x
+      call $word64.wrap`,
+  },
+  "word64.shiftDown": {
+    params: [["x", "i64"], ["n", "int"]], result: "i64", locals: [["k", "i64"]], uses: ["int.clamped"], native: true,
+    body: `
+      local.get $n
+      call $int.clamped
+      local.set $k
+      local.get $k
+      i64.const 64
+      i64.ge_s
+      local.get $k
+      i64.const -64
+      i64.le_s
+      i32.or
+      if i64
+        i64.const 0
+      else
+        local.get $k
+        i64.const 0
+        i64.ge_s
+        if i64
+          local.get $x
+          local.get $k
+          i64.shr_u
+        else
+          local.get $x
+          i64.const 0
+          local.get $k
+          i64.sub
+          i64.shl
+        end
+      end`,
+  },
   "word32.shiftDown": {
     params: [["x", "i32"], ["n", "int"]], result: "i32", locals: [["k", "i64"]], uses: ["int.clamped"], native: true,
     body: `
