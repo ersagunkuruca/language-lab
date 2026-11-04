@@ -85,6 +85,8 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean } = {}): Module
   // answer is the flag $none that `first` and `count` look at, as WGSL
   // and js-scalar.ts keep it, not a status, so no function is partial.
   const shader = !!lowered.shader;
+  // Int in 32 bits (C66c's, and the plain profile's since C163).
+  const int32 = shader || !!lowered.int32;
   // A shader's arrays (C66c) are the same Array, with an i32 for their
   // length and index and the flag for `at` past the end (wasm-rt.ts).
   const shaderArrays = (e: SExpr): SExpr => {
@@ -139,7 +141,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean } = {}): Module
   // Ints (W5): an i31, a $big or a $huge; the host makes and reads them with toInt and fromInt.
   // A runtime function on magnitudes alone (text.readNumber) needs their
   // array type too.
-  const ints = !shader && rtNames.some((n) => { const f = rt(n); const ts = [...f.params.map(([, t]) => t), f.result, ...(f.locals ?? []).map(([, t]) => t)]; return ts.includes("int") || ts.includes("mag"); })
+  const ints = !int32 && rtNames.some((n) => { const f = rt(n); const ts = [...f.params.map(([, t]) => t), f.result, ...(f.locals ?? []).map(([, t]) => t)]; return ts.includes("int") || ts.includes("mag"); })
     || funcs.some((f) => [...f.params, ...f.locals, f.result].includes("int") || mentions(f.body, "int"))
     || lowered.records.some((x) => x.fields.some((y) => y.t === "int")) || lowered.data.some((d) => d.cases.some((c) => c.fields.some((y) => y.t === "int")));
   if (ints) ["int.of", "int.small", ...(wasi ? [] : ["int.limbs", "int.limb", "int.huge", "int.setLimb"])].forEach(need);
@@ -357,7 +359,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean } = {}): Module
   // Global 0 the fuel left (when something spends), then the reason of
   // the last abort: the host reads it with Abort.reason when a function
   // gives status 2.
-  const fuel = funcs.some((f) => f.spends || budgets(f.body)) || (shader && rtNames.some((n) => /^int32\.i(add|sub|mul|neg|abs|pow|whole)$/.test(n)));
+  const fuel = funcs.some((f) => f.spends || budgets(f.body)) || (int32 && rtNames.some((n) => /^int32\.i(add|sub|mul|neg|abs|pow|whole)$/.test(n)));
   // $none, a shader's flag (after the others).
   const flags = shader && funcs.some((f) => flagged(f.body));
   const aborts = funcs.some((f) => mentions(f.body, "abort")) || worldReason;
@@ -477,7 +479,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean } = {}): Module
       // An Int: an i31 while it fits, else a $big.
       // Past an i64 (a literal Int as big as 1e300, C101): a $huge of its
       // sign and its magnitude's 32-bit limbs, the lowest first.
-      case "int": return shader ? [0x41, ...sBig(e.v)] : small(e.v) ? [0x41, ...sBig(e.v), 0xfb, 0x1c] : inI64(e.v) ? [0x42, ...sBig(e.v), 0xfb, 0x00, ...u(bigIndex)]
+      case "int": return int32 ? [0x41, ...sBig(e.v)] : small(e.v) ? [0x41, ...sBig(e.v), 0xfb, 0x1c] : inI64(e.v) ? [0x42, ...sBig(e.v), 0xfb, 0x00, ...u(bigIndex)]
         : [0x41, e.v < 0n ? 1 : 0, ...limbs(e.v).flatMap((l) => [0x41, ...sBig(BigInt(l))]), 0xfb, 0x08, ...u(u32sIndex), ...u(limbs(e.v).length), 0xfb, 0x00, ...u(hugeIndex)];
       case "text": { const b = textBytes(e.v); return [...b.flatMap((x) => [0x41, ...s(x)]), 0xfb, 0x08, ...u(bytesIndex), ...u(b.length)]; }
       case "rt": return [...e.args.flatMap(code1), 0x10, ...u(resolve.func(e.fn)), ...(runtime(e.fn).partial ? check(d, fl) : [])];
@@ -632,7 +634,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean } = {}): Module
     const on = (mine: number, dd: string, ld2: number) => (fl < 0 ? [`${dd}drop`] : [`${dd}local.set ${st}`, `${dd}local.get ${st}`, `${dd}local.get ${st}`, `${dd}i32.const ${mine}`, `${dd}i32.ne`, `${dd}br_if ${to(ld2)} ;; not mine: on out`, `${dd}drop`]);
     switch (e.k) {
       case "num": return `${d}f64.const ${e.v}`;
-      case "int": return shader ? `${d}i32.const ${e.v}` : small(e.v) ? `${d}i32.const ${e.v}\n${d}ref.i31` : inI64(e.v) ? `${d}i64.const ${e.v}\n${d}struct.new $big`
+      case "int": return int32 ? `${d}i32.const ${e.v}` : small(e.v) ? `${d}i32.const ${e.v}\n${d}ref.i31` : inI64(e.v) ? `${d}i64.const ${e.v}\n${d}struct.new $big`
         : [`${d}i32.const ${e.v < 0n ? 1 : 0}`, ...limbs(e.v).map((l) => `${d}i32.const ${l}`), `${d}array.new_fixed $u32s ${limbs(e.v).length}`, `${d}struct.new $huge`].join("\n");
       case "text": { const b = textBytes(e.v); return `${d}(array.new_fixed $bytes ${b.length}${b.map((x) => ` (i32.const ${x})`).join("")}) ;; ${JSON.stringify(e.v)}`; }
       case "rt": return [...e.args.map(w), `${d}call $${e.fn}`, ...(runtime(e.fn).partial ? check(ld) : [])].join("\n");

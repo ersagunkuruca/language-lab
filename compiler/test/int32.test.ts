@@ -15,6 +15,7 @@ import { emitWgsl } from "../src/wgsl.ts";
 import { loadJs } from "../src/js-scalar.ts";
 import { ints, shaderArrays } from "../src/fixtures.ts";
 import { emitWasm, instantiate } from "../src/wasm.ts";
+import { build, skip } from "./c-harness.ts";
 
 
 const first = <T>(xs: Iterable<T>) => { for (const x of xs) return x; };
@@ -32,8 +33,8 @@ test("Int in a shader is an i32, with + − × negate and abs checked for overfl
   assert.match(s.wgsl, /var<private> lab_fuel: f32;/);
   assert.match(s.wgsl, /return -2147483647i - 1i;/);
   assert.match(s.wgsl, /f32\(p0\)/);
-  // Without int32 (WebAssembly and C have Int with `data`), it's refused as before.
-  assert.match(lowerScalar(p.code, p.info, p.names, [p.poly]).refused.get(p.poly) ?? "", /Float64/);
+  // With `data`, an Int is the heap's (WebAssembly and C), never int32.
+  assert.deepEqual(lowerScalar(p.code, p.info, p.names, [p.poly], { data: true }).funcs.find((f) => f.def === p.poly)?.params, ["int", "int"]);
 });
 
 test("Int in 32 bits on the CPU: the evaluator's answers, and past 32 bits the budget's fallback", () => {
@@ -132,4 +133,35 @@ test("a shader's arrays in WebAssembly: js-scalar.ts's answers", async () => {
   // The two ends (C66): the rest and a push at the front are the data
   // lowering's, on the same buffer.
   for (const x of [0, 2, -3]) same(p.firstOfNone, x);
+});
+
+// The plain profile (no `data`, no shader: a picture's CPU side, C's
+// scalar functions) holds an Int in 32 bits too (C163), so a count of
+// steps in an Int (raymarch's march, L46b) lowers there: JavaScript,
+// WebAssembly and C give the evaluator's answers within 32 bits, and the
+// budget's fallback past them.
+test("Int in 32 bits in the plain profile: JavaScript, WebAssembly and C, the evaluator's answers (C163)", { skip }, async () => {
+  const p = ints();
+  const roots = [p.poly, p.smaller, p.same, p.sumTo, p.cube];
+  const lowered = lowerScalar(p.code, p.info, p.names, roots, { records: true });
+  assert.deepEqual([...lowered.refused.values()], []);
+  assert.deepEqual(lowered.funcs.find((f) => f.def === p.poly)?.params, ["int32", "int32"]);
+  const r = makeRunner(p.code, p.info, { print: () => {} });
+  const ev = (d: string, ...xs: unknown[]) => { const v = first(r.call(r.value(d), ...(xs.map((x) => (typeof x === "number" && d !== p.sumTo ? BigInt(x) : x)) as never[]))); return typeof v === "bigint" ? Number(v) : v; };
+  const js = loadJs(lowered);
+  const wasm = await instantiate(emitWasm(lowered));
+  const at = (d: string) => lowered.funcs.findIndex((f) => f.def === d);
+  const calls: [number, number[]][] = [];
+  for (const [a, b] of [[3, 4], [-7, 2], [0, -5], [46340, 46340]]) calls.push([at(p.poly), [a, b]], [at(p.smaller), [a, b]]);
+  for (const n of [0, 10, 500]) calls.push([at(p.sumTo), [n]]);
+  for (const a of [1290, 1291]) calls.push([at(p.cube), [a]]);
+  const c = build(lowered)(calls as never);
+  calls.forEach(([i, xs], k) => {
+    const d = lowered.funcs[i].def, name = `${lowered.funcs[i].name}(${xs})`;
+    // 1291³ is past 2³¹: the evaluator's Int holds it; 32 bits give up.
+    const want = d === p.cube && xs[0] === 1291 ? -1 : ev(d, ...xs);
+    assert.equal(js.get(d)!(...xs), want, `JavaScript ${name}`);
+    assert.equal(wasm[lowered.funcs[i].name](...xs), want, `WebAssembly ${name}`);
+    assert.equal(c[k].value, want, `C ${name}`);
+  });
 });

@@ -66,7 +66,17 @@ export const CFLAGS = ["-std=c99", "-O2", "-ffp-contract=off", "-fwrapv"];
 // and, or: both sides, as WebAssembly's i32.and (a side may hold cells
 // its call owns, which skipping it would leak), on Bools that are 0 or 1.
 const INFIX: Partial<Record<Op, string>> = {
-  add: "+", sub: "-", mul: "*", div: "/", less: "<", equal: "==", beq: "==", and: "&", or: "|",
+  add: "+", sub: "-", mul: "*", div: "/", less: "<", equal: "==", beq: "==", and: "&", or: "|", iless: "<", ieq: "==",
+};
+// An Int in 32 bits (C163, the plain profile's; C66c's in shaders): an
+// int32_t, wrapped as WebAssembly's i32 wraps, and past 32 bits it spends
+// the fuel, as a budget running out does (js-scalar.ts, wasm-rt.ts).
+const INT32_C: Partial<Record<Op, string>> = {
+  iadd: "static int32_t lab_iadd(int32_t a, int32_t b) { int64_t r = (int64_t)a + b; if (r > INT32_MAX || r < INT32_MIN) lab_fuel = -1; return (int32_t)(uint32_t)r; }",
+  isub: "static int32_t lab_isub(int32_t a, int32_t b) { int64_t r = (int64_t)a - b; if (r > INT32_MAX || r < INT32_MIN) lab_fuel = -1; return (int32_t)(uint32_t)r; }",
+  imul: "static int32_t lab_imul(int32_t a, int32_t b) { int64_t r = (int64_t)a * b; if (r > INT32_MAX || r < INT32_MIN) lab_fuel = -1; return (int32_t)(uint32_t)r; }",
+  ineg: "static int32_t lab_ineg(int32_t a) { if (a == INT32_MIN) lab_fuel = -1; return (int32_t)(0u - (uint32_t)a); }",
+  iabs: "static int32_t lab_iabs(int32_t a) { if (a == INT32_MIN) lab_fuel = -1; return a < 0 ? (int32_t)(0u - (uint32_t)a) : a; }",
 };
 const LIBM: Partial<Record<Op, string>> = { sqrt: "sqrt", abs: "fabs", floor: "floor" };
 const FDLIBM: Partial<Record<Op, string>> = {
@@ -184,7 +194,9 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     return j >= 0 && strict.slice(0, j).every(pure) ? strict[j] : m;
   };
   const funcs = lowered.funcs.map((f) => ({ ...f, locals: [...f.locals], body: settle(f.body) }));
-  const used = new Set<string>(["new", "free", "unused", "block", "block_end", "dup", "dec", "drop", "fields", "oom", "live", "st", "reason", "fuel", "mod", "in", "out", "bits", "run", "code", "argc", "argv", "hex", "hexd", "word", "token", ...RESERVED, ...lowered.arrays.flatMap((_, i) => ["empty", "of", "items", "length", "at", "push", "first", "rest", "pushFront", "get", "replaceAt"].map((op) => `array_${op}_a${i}`)), ...lowered.tables.flatMap((t, i) => [...["empty", "put", "remove", "has", "size", "at"].map((op) => `table_${op}_t${i}`), ...t.entries.map((_, j) => `table_entries_t${i}_e${j}`), `Table_t${i}`, `Store_t${i}`, ...["find", "change", "grow", "hash", "eq", "cmp", "sort", "made", "store", "reroot"].map((h) => `_${h}_t${i}`)])]);
+  // The Int-in-32-bits helpers the code calls (INT32_C).
+  const int32Used = new Set<Op>();
+  const used = new Set<string>(["iadd", "isub", "imul", "ineg", "iabs", "new", "free", "unused", "block", "block_end", "dup", "dec", "drop", "fields", "oom", "live", "st", "reason", "fuel", "mod", "in", "out", "bits", "run", "code", "argc", "argv", "hex", "hexd", "word", "token", ...RESERVED, ...lowered.arrays.flatMap((_, i) => ["empty", "of", "items", "length", "at", "push", "first", "rest", "pushFront", "get", "replaceAt"].map((op) => `array_${op}_a${i}`)), ...lowered.tables.flatMap((t, i) => [...["empty", "put", "remove", "has", "size", "at"].map((op) => `table_${op}_t${i}`), ...t.entries.map((_, j) => `table_entries_t${i}_e${j}`), `Table_t${i}`, `Store_t${i}`, ...["find", "change", "grow", "hash", "eq", "cmp", "sort", "made", "store", "reroot"].map((h) => `_${h}_t${i}`)])]);
   const ident = (hint: string) => {
     const base = hint.normalize("NFKD").replace(/[^A-Za-z0-9_]+/g, "_").replace(/^_+|_+$/g, "") || "f";
     let n = base;
@@ -197,7 +209,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   // data and functions, calling only what can be printed.
   const refused = new Map<number, string>();
   const why = (t: LType): string | null =>
-    t === "f64" || t === "i32" || t === "int" || t === "text" ? null
+    t === "f64" || t === "i32" || t === "int32" || t === "int" || t === "text" ? null
     : isRecord(t) ? t.fields.map((x) => why(x.t)).find(Boolean) ?? null
     : isData(t) ? null
     : isArray(t) ? why(t.item)
@@ -263,7 +275,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
 
   // Cells of the same fields are one size, so one can take the other's place.
   const layout = (fs: { t: LType }[]) => fs.map((x) => ty(x.t)).join(", ");
-  const ty = (t: LType): string => (t === "f64" ? "double" : t === "i32" ? "int32_t" : t === "int" ? "lab_int" : isRecord(t) && !t.mutable ? sname.get(t.key)! : "lab_cell *");
+  const ty = (t: LType): string => (t === "f64" ? "double" : t === "i32" || t === "int32" ? "int32_t" : t === "int" ? "lab_int" : isRecord(t) && !t.mutable ? sname.get(t.key)! : "lab_cell *");
   // Whether a value of t is a cell, or holds counts (an Int may be a cell).
   const cell = (t: LType) => t === "text" || isData(t) || isFn(t) || isArray(t) || isTable(t) || (isRecord(t) && !!t.mutable);
   const counted = (t: LType): boolean => cell(t) || t === "int" || (isRecord(t) && t.fields.some((x) => counted(x.t)));
@@ -464,7 +476,8 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     ...types,
     ...counts,
     ...(cells ? [`static void lab_fields(lab_cell *c) { switch (c->type) { ${fieldsOf.filter(Boolean).join(" ")} default: break; } }`] : []),
-    ...(text.some((t) => t.includes("lab_fuel")) ? ["static double lab_fuel = INFINITY; // outside any budget, as much as it takes"] : []),
+    ...(int32Used.size || text.some((t) => t.includes("lab_fuel")) ? ["static double lab_fuel = INFINITY; // outside any budget, as much as it takes"] : []),
+    ...[...int32Used].map((op) => INT32_C[op]!),
     ...(text.some((t) => t.includes("lab_mod(")) ? ["static double lab_mod(double a, double b) { return fmod(fmod(a, b) + b, b); }"] : []),
     // A Float64 with no answer or too big (L125c2, stops.ts): the reason
     // to standard error and exit 1, as an Abort nothing handled does.
@@ -672,7 +685,7 @@ int main(int argc, char **argv) {
       switch (e.k) {
         case "num": return num(e.v);
         case "bool": return e.v ? "1" : "0";
-        case "int": return intLit(e.v);
+        case "int": return lowered.int32 ? `((int32_t)${e.v})` : intLit(e.v);
         case "text": return textLit(e.v);
         case "rt": {
           (ARRAY_FN.test(e.fn) || TABLE_FN.test(e.fn) ? arrayFns : rts).add(e.fn);
@@ -808,6 +821,9 @@ int main(int argc, char **argv) {
           if (e.op === "float32") return `((double)(float)${xs[0]})`;
           if (e.op === "mod") return `lab_mod(${xs.join(", ")})`;
           if (e.op === "stop") return `lab_stop(${xs[0]})`;
+          if (e.op === "itof") return `((double)${xs[0]})`;
+          if (INT32_C[e.op]) { int32Used.add(e.op); return `lab_${e.op}(${xs.join(", ")})`; }
+          if (OPS[e.op].t === "int32") throw new Error(`an Int's ${e.op} in 32 bits isn't in C yet`);
           return `${LIBM[e.op] ?? LIBRARY[e.op]}(${xs.join(", ")})`;
         }
         default: throw new Error(`${e.k} in C comes with NATIVE.md's stage N4`);
@@ -1039,7 +1055,7 @@ int main(int argc, char **argv) {
       case "call": return funcs[e.fn].result;
       case "let": case "set": return typeOf(e.k === "let" ? e.body : e.then, locals);
       case "if": case "budget": case "attempt": case "handle": return e.t;
-      case "int": return "int";
+      case "int": return lowered.int32 ? "int32" : "int";
       case "text": return "text";
       case "rt": return rtType(e.fn);
       case "world": return e.t;
@@ -1054,7 +1070,7 @@ int main(int argc, char **argv) {
   // A value that stands for none: what a function gives with no answer,
   // and what a box holds before a search sets it.
   function zero(t: LType): string {
-    return t === "f64" || t === "i32" ? "0" : t === "int" ? "LAB_SMALL(0)" : cell(t) ? "((lab_cell *)0)" : `((${ty(t)}){ ${(t as RType).fields.map((x) => zero(x.t)).join(", ") || "0"} })`;
+    return t === "f64" || t === "i32" || t === "int32" ? "0" : t === "int" ? "LAB_SMALL(0)" : cell(t) ? "((lab_cell *)0)" : `((${ty(t)}){ ${(t as RType).fields.map((x) => zero(x.t)).join(", ") || "0"} })`;
   }
 
   // std's Array (C66b), as in runtime.js and WebAssembly: a view (a
@@ -1424,6 +1440,7 @@ static lab_cell *lab__copy_a${i}(${T} *xs, uint32_t n) {
     const rd = (t: LType): string => {
       if (t === "f64") return "lab_in()";
       if (t === "i32") return "(int32_t)lab_bits()";
+      if (t === "int32") return "lab_i32()";
       if (t === "int") return "lab_int_read(lab_word())";
       if (t === "text") return "lab_hex()";
       const key = (t as RType | DType).key;
@@ -1451,13 +1468,13 @@ static lab_cell *lab__copy_a${i}(${T} *xs, uint32_t n) {
     };
     function pr(t: LType, v: string): string {
       if (t === "f64") return `lab_out(${v});`;
-      if (t === "i32") return `printf(" %d", (int)${v});`;
+      if (t === "i32" || t === "int32") return `printf(" %d", (int)${v});`;
       if (t === "int") return `{ size_t n; char *s = lab__show(${v}, &n); printf(" %s", s); free(s); }`;
       if (t === "text") return `{ printf(" x"); for (uint32_t k = 0; k < LAB_TN(${v}); k++) printf("%02x", LAB_TB(${v})[k]); }`;
       rd(t);
       return `lab_print_${isRecord(t) ? sname.get((t as RType).key) : dname.get((t as DType).key)}(${v});`;
     }
-    const plain = (t: LType, seen = new Set<string>()): boolean => t === "f64" || t === "i32" || t === "int" || t === "text" || (typeof t === "object" && seen.has(t.key))
+    const plain = (t: LType, seen = new Set<string>()): boolean => t === "f64" || t === "i32" || t === "int32" || t === "int" || t === "text" || (typeof t === "object" && seen.has(t.key))
       || (isRecord(t) && !t.mutable && (seen.add(t.key), t.fields.every((x) => plain(x.t, seen))))
       || (isData(t) && (seen.add(t.key), t.cases.every((c) => c.fields.every((x) => plain(x.t, seen)))));
     const cases = kept.map((i) => {
@@ -1480,6 +1497,7 @@ static lab_cell *lab__copy_a${i}(${T} *xs, uint32_t n) {
     return `#include <string.h>
 static uint64_t lab_bits(void) { unsigned long long u = 0; if (scanf("%llx", &u) != 1) return 0; return u; }
 static double lab_in(void) { uint64_t u = lab_bits(); double d; memcpy(&d, &u, 8); return d; }
+static int32_t lab_i32(void) { int v = 0; if (scanf("%d", &v) != 1) return 0; return (int32_t)v; }
 static void lab_out(double d) { uint64_t u; memcpy(&u, &d, 8); printf(" %016llx", (unsigned long long)u); }
 ${ints ? `// A word, and a Text as x then its bytes in hex.
 static int lab_hexd(int c) { return c <= '9' ? c - '0' : (c | 32) - 'a' + 10; }
