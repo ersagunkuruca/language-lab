@@ -54,3 +54,16 @@ test("bytes of stops on an item that isn't a byte, and text of utf8 on bytes tha
   stops((k) => k.call(lib("text of utf8"), k.call(lib("bytes of"), ints(k, [0x80]))), /a following byte where a character starts/);
   stops((k) => k.call(lib("text of utf8"), k.call(lib("bytes of"), ints(k, [0xc3]))), /end inside a character/);
 });
+
+test("base64 of and hex of match Node's Buffer, and read back (L189d)", async () => {
+  for (const n of [0, 1, 2, 3, 4, 5, 6, 7]) {
+    const xs = Array.from({ length: n }, (_, i) => (i * 97 + 200) % 256);
+    const bytes = (k: Lang) => k.call(lib("bytes of"), ints(k, xs));
+    assert.equal(await both((k) => k.call(lib("base64 of"), bytes(k))), JSON.stringify(Buffer.from(xs).toString("base64")));
+    assert.equal(await both((k) => k.call(lib("hex of"), bytes(k))), JSON.stringify(Buffer.from(xs).toString("hex")));
+    assert.equal(await both((k) => k.call(lib("byte items"), k.call(lib("bytes of base64"), k.call(lib("base64 of"), bytes(k))))), `[${xs.join(", ")}]`);
+    assert.equal(await both((k) => k.call(lib("byte items"), k.call(lib("bytes of hex"), k.lit(Buffer.from(xs).toString("hex").toUpperCase())))), `[${xs.join(", ")}]`);
+  }
+  const p = program((k) => k.call(lib("byte items"), k.call(lib("bytes of hex"), k.lit("abc"))));
+  assert.throws(() => runMain(p.code, p.info, p.main, { print: () => {}, names: p.names }), /bytes of hex/);
+});

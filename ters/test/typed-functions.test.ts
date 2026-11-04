@@ -14,7 +14,9 @@ import { fillValue, infer } from "../../editor/typed.ts";
 test("typed text reads a function written out", () => {
   const p = loadProgram(join(root, "examples", "queens"));
   const { code } = p, names = p.pres.names, main = p.named("main");
-  const keep = Object.values(code.nodes).find((n) => isCall(n) && names[(code.nodes[n.fn] as NodeOf<"ref">).target] === "keep") as Call;
+  // The program's own call of keep, not one in the library.
+  const mine = new Set(JSON.parse(readFileSync(join(root, "examples", "queens", "code.json"), "utf8")).defs.flatMap((d: string) => subtree(code, d)));
+  const keep = Object.values(code.nodes).find((n) => mine.has(n.id) && isCall(n) && names[(code.nodes[n.fn] as NodeOf<"ref">).target] === "keep") as Call;
   const hole = keep.args[1];
   const open = replace(code, hole, () => ({ kind: "hole" }));
   const info = infer(open, names);
