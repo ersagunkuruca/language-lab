@@ -9,7 +9,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CELL_OPS, FIELDS, S, SET, SIGS, STD_IMPL, STD_MANY, stdNames } from "../../ters/src/lang/std.ts";
+import { CELL_OPS, FIELDS, JSON_OPS, S, SET, SIGS, STD_IMPL, STD_MANY, stdNames } from "../../ters/src/lang/std.ts";
 import { base, baseNames } from "../../ters/src/lang/load.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { Lang } from "../../ters/src/lang/dsl.ts";
@@ -37,6 +37,8 @@ const IN_PLACE: Record<Id, string> = {
   // which a plain f(x, …) = builtin(x, …) leaves open.
   [FIELDS.mapped]: "fields mapped is written out as a match for the types where it is used, before anything runs; f(x, g) leaves them open (ters/test/fields-by-type.test.ts)",
   [FIELDS.listed]: "fields listed is written out as a match for the types where it is used, before anything runs; f(x) leaves them open (ters/test/fields-by-type.test.ts)",
+  [JSON_OPS.of]: "json of is written out for the value's type where it is used, before anything runs (L190d2); f(x) leaves it open (ters/test/json-by-type.test.ts)",
+  [JSON_OPS.from]: "from json is written out for the wanted type where it is used, before anything runs (L190d2); f(x) leaves it open (ters/test/json-by-type.test.ts)",
 };
 
 const builtins = Object.keys(SIGS).filter((id) => !IN_PLACE[id]);

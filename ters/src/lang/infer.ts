@@ -38,6 +38,7 @@ import {
 } from "./types.ts";
 const FILE_OP_IDS = new Set<Id>(Object.values(FILE_OPS));
 import { DECLARED, discharge } from "./ledger.ts";
+import type { CheckCache } from "./check-cache.ts";
 
 // The searches: they run a function on paths they may abandon or repeat, so
 // its row holds no world effect (std.ts searchRow) and is inside the call's.
@@ -119,7 +120,8 @@ export const implementationOf = (info: Info, iface: Id, t: Type): Id | undefined
 // library: the library's definitions. A private case of a type the program
 // declares itself is private to that program (L165): any of its
 // definitions may build it, as a module's own may build its type's.
-export interface Options { pins?: Pins; hidden?: Iterable<Id>; insiders?: Iterable<Id>; library?: Iterable<Id> }
+// cache: group results kept between checks (L215a, check-cache.ts).
+export interface Options { pins?: Pins; hidden?: Iterable<Id>; insiders?: Iterable<Id>; library?: Iterable<Id>; cache?: CheckCache }
 
 const num: Type = { t: "con", id: NUMBER, args: [] };
 const ARITH_WHAT = {
@@ -579,8 +581,10 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   const mono = new Map<Id, Type>();
   let current: Id[] = [];
   const recursiveCalls: { call: Call; params: Type[]; args: Type[] }[] = [];
+  const cached = opts.cache?.begin({ code, info, s, deps, layer, opts, valueDefs, typeDefs: code.defs.filter((d) => isTypeDef(d)) });
   for (const group of groups) {
     current = group;
+    if (cached?.take(group)) continue;
     for (const d of group) mono.set(d, s.fresh());
     for (const d of group) {
       const body = (code.nodes[d] as NodeOf<"def">).body;
@@ -713,6 +717,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       info.typeOf.set(d, sc.type);
     }
   }
+  cached?.done();
 
   // A pinned definition whose body gives a smaller type than its pin says
   // (a Float64 pinned, the body now an Int, or a function's result so):
@@ -1728,6 +1733,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     h.expected = s.zonk(h.expected);
     h.scope = h.scope.map((b) => ({ id: b.id, type: s.zonk(b.type) }));
   }
+  cached?.end();
   return info;
 }
 
