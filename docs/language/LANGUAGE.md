@@ -337,8 +337,9 @@ value, Float64 and Int numbers (an Int read back must be whole). A field
 missing from an object reads as null, so an Optional field may be left
 out. Like the two above, each use becomes a generated definition for its
 type (`src/lang/json-by-type.ts`), so the type must be known there and hold
-no function; a Map, a Set or Bytes, whose cases are their library's, is
-refused for now.
+no function. A Map with Text keys is an object and one with other keys a
+list of `[key, value]`, a Set a list of its items, and Bytes Base64 text
+(L190d3), each through its library's own definitions.
 
 The **vectors module** (`library/vectors.json`, built from
 `src/lang/vectors-source.ts`) is written on them: `plus`, `minus`,

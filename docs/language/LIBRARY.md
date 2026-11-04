@@ -417,7 +417,7 @@ Json is JSON's values as data: null, a Bool, a Float64, a Text, a list, or an ob
 - **json as text** : `(Json) -[Choice]-> Text`. The Text a json text holds; no answer for any other kind.
 - **json as bool** : `(Json) -[Choice]-> Bool`. The Bool a json bool holds; no answer for any other kind.
 - **json as list** : `(Json) -[Choice]-> List Json`. The items a json list holds; no answer for any other kind.
-- **json of** : `(a) -> Json`. The Json a value spells, by its type: a record as an object of its fields, a case with no fields as its name in a string and one with fields as {"name": {its fields}}, a list or a tuple as a list, Optional as null or the value, Float64 and Int as numbers. json printed(json of(person)) is the JSON text. The value's type must be known where it is used and hold no function.
+- **json of** : `(a) -> Json`. The Json a value spells, by its type: a record as an object of its fields, a case with no fields as its name in a string and one with fields as {"name": {its fields}}, a list or a tuple as a list, Optional as null or the value, Float64 and Int as numbers, a Map with Text keys as an object (other keys: a list of [key, value]), a Set as a list, Bytes as Base64. json printed(json of(person)) is the JSON text. The value's type must be known where it is used and hold no function.
 - **from json** : `(Json) -[Choice]-> a`. The value of the type wanted here that a Json spells, the other way from json of; no answer when the Json has another shape (a field of the wrong kind, an Int that isn't whole). A field missing from an object reads as null, so an Optional field may be left out, and fields the type doesn't have are passed over. from json(json read(text)) reads a program's records from JSON text.
 
 ## CSV

@@ -15,7 +15,7 @@ import { infer } from "../src/lang/infer.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { runMain } from "../src/lang/run.ts";
-import { BOOL, JSON_OPS, LIST, OPTIONAL, S, SHOW_ANY, SOME, NONE, TRUE, FALSE } from "../src/lang/std.ts";
+import { BOOL, JSON_OPS, LIST, OPTIONAL, S, SHOW_ANY, NONE, TRUE, FALSE } from "../src/lang/std.ts";
 import { INT, NUMBER, STRING } from "../src/lang/types.ts";
 
 const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
@@ -99,4 +99,26 @@ test("a recursive type and a tuple go both ways: what json of writes, from json 
   });
   const shown = await both(p);
   assert.deepEqual(JSON.parse(shown), { node: { left: { node: { left: "leaf", item: [1, "a"], right: "leaf" } }, item: [2, "b"], right: "leaf" } });
+});
+
+test("a Map with Text keys is an object, one with other keys a list of [key, value], a Set a list, Bytes Base64", async () => {
+  let back = "";
+  const p = program((k) => {
+    const value = k.call("std.tuple4.tuple",
+      k.call(lib("as map"), k.listOf(k.call("std.tuple2.tuple", k.lit("b"), k.int(2)), k.call("std.tuple2.tuple", k.lit("a"), k.int(1)))),
+      k.call(lib("as map"), k.listOf(k.call("std.tuple2.tuple", k.int(3), k.x(TRUE)))),
+      k.call(lib("as set"), k.listOf(k.lit("y"), k.lit("x"))),
+      k.call(lib("utf8 of"), k.lit("hi!")));
+    const json = k.call(JSON_OPS.of, value);
+    return k.call(SHOW_ANY, k.listOf(k.call(lib("json printed"), json), k.call(S.first, k.thunk(() => k.call(lib("json printed"), k.call(JSON_OPS.of, k.call(back, json)))), k.thunk(() => k.lit("no answer")))));
+  }, (k) => {
+    back = k.def("back");
+    // Using the tuple's parts as a Map, a Map, a Set and Bytes gives from json its type.
+    const typed = k.def("typed");
+    k.define(typed, k.fn(["x"], (x) => k.match(x, [{ variant: "std.tuple4.tuple", names: ["a", "b", "c", "d"], body: ([a, b, c, d]) => k.call("std.tuple4.tuple", k.call(lib("put"), a, k.lit("z"), k.int(0)), k.call(lib("put"), b, k.int(0), k.x(FALSE)), k.call(lib("add item"), c, k.lit("w")), k.call(lib("utf8 of"), k.call(lib("text of utf8"), d))) }])));
+    k.define(back, k.fn(["json"], (js) => k.let("v", k.call(JSON_OPS.from, js), (v) => k.let("same", k.call(typed, v), () => v))));
+  });
+  const out = JSON.parse(await both(p)) as string[];
+  assert.deepEqual(JSON.parse(out[0]), [{ a: 1, b: 2 }, [[3, true]], ["x", "y"], "aGkh"]);
+  assert.deepEqual(JSON.parse(out[1]), JSON.parse(out[0]));
 });
