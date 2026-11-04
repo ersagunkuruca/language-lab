@@ -580,6 +580,8 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // let a Choice out (checked when every row is known).
   const releases: { n: Id; handled: Row }[] = [];
   const mono = new Map<Id, Type>();
+  // A let's binders whose value is generic, and their schemes (L224).
+  const letSchemes = new Map<Id, Scheme>();
   let current: Id[] = [];
   const recursiveCalls: { call: Call; params: Type[]; args: Type[] }[] = [];
   const cached = opts.cache?.begin({ code, info, s, deps, layer, opts, valueDefs, typeDefs: code.defs.filter((d) => isTypeDef(d)) });
@@ -678,19 +680,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     for (const d of group) {
       const t = s.zonk(mono.get(d)!);
       const fv = freeVars(t, s);
-      let sc: Scheme = { vars: [...fv.vars], rows: [...fv.rows], type: t, plain: [...fv.vars].filter((v) => s.plain.has(v)), numbers: [...fv.vars].filter((v) => s.numbers.has(v)) };
-      const arith = [...fv.vars].filter((v) => s.arith.get(v) === "arith"), ordered = [...fv.vars].filter((v) => s.arith.get(v) === "ordered"), less = [...fv.vars].filter((v) => s.arith.get(v) === "less");
-      if (less.length) sc.less = less;
-      if (arith.length) sc.arith = arith;
-      if (ordered.length) sc.ordered = ordered;
-      const fractional = [...fv.vars].filter((v) => s.fractional.has(v));
-      if (fractional.length) sc.fractional = fractional;
-      const whole = [...fv.vars].filter((v) => s.whole.has(v));
-      if (whole.length) sc.whole = whole;
-      const noWorld = [...fv.rows].filter((r) => s.noWorld.has(r));
-      if (noWorld.length) sc.noWorld = noWorld;
-      const needs = [...fv.vars].flatMap((v) => [...(s.needs.get(v)?.keys() ?? [])].map((i) => [v, i] as [number, Id]));
-      if (needs.length) sc.needs = needs;
+      let sc = schemeOf(t, fv);
       const subs = kept.filter(([f, to]) => fv.rows.has(f) && fv.rows.has(to));
       if (subs.length) sc.subs = subs;
       // What a definition does while a Choice it doesn't handle is open:
@@ -719,6 +709,45 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     }
   }
   cached?.done();
+
+  // An input of a call. A recursive let (BACKLOG L84): a let is `(name ↦
+  // body)(value)`, and a value that's a function may call itself by the
+  // name, as ML's `let rec` (monomorphic inside, as there). It's checked for
+  // termination like a definition; lift-lets.ts makes it one. The name is
+  // in scope in any function a let names, so the palette offers it there
+  // before the first call is written.
+  function letValue(n: Call, a: Id, i: number, env: Map<Id, Type>, row: Row): Type {
+    const f = code.nodes[n.fn], p = f?.kind === "lambda" && code.nodes[a]?.kind === "lambda" ? f.params[i] : undefined;
+    if (!p) return expr(a, env, row);
+    const self = s.fresh();
+    const t = expr(a, new Map(env).set(p, self), row);
+    unifyAt(a, self, t);
+    if (!terminates(code, [p], () => code.nodes[a] as NodeOf<"lambda">)) {
+      const r = s.resolve(t);
+      try { if (r.t === "fn") s.unifyRow(r.eff, { effs: [DIVERGE], tail: s.next++ }); }
+      catch (e) { if (e instanceof EffectError) err(a, `${nm(p)} might not finish, and it is used where only a function that surely finishes fits`); else throw e; }
+    }
+    return t;
+  }
+
+  // A type's scheme over the variables and rows given, with what each of
+  // them must be (a number, plain data, an interface it needs).
+  function schemeOf(t: Type, fv: { vars: Set<number>; rows: Set<number> }): Scheme {
+    const sc: Scheme = { vars: [...fv.vars], rows: [...fv.rows], type: t, plain: [...fv.vars].filter((v) => s.plain.has(v)), numbers: [...fv.vars].filter((v) => s.numbers.has(v)) };
+    const arith = [...fv.vars].filter((v) => s.arith.get(v) === "arith"), ordered = [...fv.vars].filter((v) => s.arith.get(v) === "ordered"), less = [...fv.vars].filter((v) => s.arith.get(v) === "less");
+    if (less.length) sc.less = less;
+    if (arith.length) sc.arith = arith;
+    if (ordered.length) sc.ordered = ordered;
+    const fractional = [...fv.vars].filter((v) => s.fractional.has(v));
+    if (fractional.length) sc.fractional = fractional;
+    const whole = [...fv.vars].filter((v) => s.whole.has(v));
+    if (whole.length) sc.whole = whole;
+    const noWorld = [...fv.rows].filter((r) => s.noWorld.has(r));
+    if (noWorld.length) sc.noWorld = noWorld;
+    const needs = [...fv.vars].flatMap((v) => [...(s.needs.get(v)?.keys() ?? [])].map((i) => [v, i] as [number, Id]));
+    if (needs.length) sc.needs = needs;
+    return sc;
+  }
 
   // A pinned definition whose body gives a smaller type than its pin says
   // (a Float64 pinned, the body now an Int, or a function's result so):
@@ -781,7 +810,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     if (!t) { err(id, "points at nothing"); return s.fresh(); }
     switch (t.kind) {
       case "binder":
-        if (env.has(target)) return opened(env.get(target)!);
+        if (env.has(target)) return opened(letSchemes.has(target) ? instantiate(letSchemes.get(target)!, s, id) : env.get(target)!);
         err(id, `${nm(target)} has no value here: it is used outside the function or case that introduces it`);
         return s.fresh();
       case "def":
@@ -933,6 +962,28 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
           at.set(n.fn, applied[0]);
         }
         const early = gradient ? n.args.map((a) => expr(a, env, row)) : null;
+        // A let's value that is a function, `(name ↦ body)(value)`: worked
+        // out before the body, and generic in what nothing around it fixes,
+        // as a definition is (BACKLOG L224, Hindley–Milner's let). Only a
+        // function written there (ML's value restriction): it does nothing
+        // until called, so each use may take it at a type of its own.
+        const fnLam = code.nodes[n.fn];
+        const pre = new Map<number, Type>();
+        if (!early && !applied && fnLam?.kind === "lambda" && fnLam.params.length === n.args.length) n.args.forEach((a, i) => {
+          if (code.nodes[a]?.kind !== "lambda") return;
+          const t = letValue(n, a, i, env, row);
+          pre.set(i, t);
+          const around = { vars: new Set<number>(), rows: new Set<number>() };
+          for (const bt of env.values()) freeVars(bt, s, around.vars, around.rows);
+          for (const mt of mono.values()) freeVars(mt, s, around.vars, around.rows);
+          for (const w of s.wanted) freeVars(w.t, s, around.vars, around.rows);
+          for (const c of s.subs) for (const r of [c.from, c.to]) { const tail = s.resolveRow(r).tail; if (tail !== null) around.rows.add(tail); }
+          const rt = s.resolveRow(row).tail;
+          if (rt !== null) around.rows.add(rt);
+          const own = freeVars(t, s);
+          const vars = new Set([...own.vars].filter((v) => !around.vars.has(v))), rows = new Set([...own.rows].filter((r) => !around.rows.has(r)));
+          if (vars.size || rows.size) letSchemes.set(fnLam.params[i], schemeOf(s.zonk(t), { vars, rows }));
+        });
         const subsBefore = s.subs.length;
         const f0 = smoothDerivative(n) ?? (early && smoothGradient(n, early[0])) ?? listOfType(n) ?? expr(n.fn, env, row);
         // A definition with results given all its ports is the condition
@@ -940,25 +991,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         const fnNode = code.nodes[n.fn], cd = fnNode?.kind === "ref" ? code.nodes[fnNode.target] : undefined;
         const f = cd?.kind === "def" && cd.results?.length && cd.body && resultsOf.has(cd.body) && (code.nodes[cd.body] as NodeOf<"lambda">).params.length === n.args.length ? asPredicate(f0, cd.id) : f0;
         for (let i = subsBefore; i < s.subs.length; i++) s.subs[i].at ??= id;
-        let args = early ?? applied ?? n.args.map((a, i) => {
-          // A recursive let (BACKLOG L84): a let is `(name ↦ body)(value)`,
-          // and a value that's a function may call itself by the name, as
-          // ML's `let rec` (monomorphic inside, as there). It's checked for
-          // termination like a definition; lift-lets.ts makes it one.
-          // The name is in scope in any function a let names, so the
-          // palette offers it there before the first call is written.
-          const f = code.nodes[n.fn], p = f?.kind === "lambda" && code.nodes[a]?.kind === "lambda" ? f.params[i] : undefined;
-          if (!p) return expr(a, env, row);
-          const self = s.fresh();
-          const t = expr(a, new Map(env).set(p, self), row);
-          unifyAt(a, self, t);
-          if (!terminates(code, [p], () => code.nodes[a] as NodeOf<"lambda">)) {
-            const r = s.resolve(t);
-            try { if (r.t === "fn") s.unifyRow(r.eff, { effs: [DIVERGE], tail: s.next++ }); }
-            catch (e) { if (e instanceof EffectError) err(a, `${nm(p)} might not finish, and it is used where only a function that surely finishes fits`); else throw e; }
-          }
-          return t;
-        });
+        let args = early ?? applied ?? n.args.map((a, i) => pre.get(i) ?? letValue(n, a, i, env, row));
         const ret = s.fresh();
         // A search's call does what its function does besides Choice, and
         // the code beside it may do more: its row goes inside this one.

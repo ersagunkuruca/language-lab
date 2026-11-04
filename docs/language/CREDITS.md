@@ -106,6 +106,7 @@ Proposed in [PHYSICS-AND-PLANNING.md](../design/physics/PHYSICS-AND-PLANNING.md)
 | What | Label | Who and where |
 |---|---|---|
 | Inferred types, never written | Textbook | Hindley-Milner (Hindley 1969, Milner 1978, Damas and Milner 1982), `src/lang/infer.ts`. |
+| A let's function is generic, other let values keep one type (L224, `src/lang/infer.ts`) | Prior art | Let-polymorphism as in Damas and Milner 1982, with the value restriction of Andrew Wright, "Simple imperative polymorphism" (LASC 1995): only a function written at the let is generalized, over what nothing around it fixes. Written fresh. |
 | Strictly positive data types | Adapted | The check Coq and Agda use. REVIEW.md §1. |
 | Termination by size-change | Adapted | Lee, Jones and Ben-Amram, "The size-change principle for program termination", POPL 2001. LANGUAGE.md. |
 | Nested data folded through its container | Adapted | Coq's nested inductive types, `src/lang/nested.ts`; in WebAssembly as one mapping function per container type (`compiler/src/scalar.ts` fold). |
