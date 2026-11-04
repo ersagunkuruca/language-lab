@@ -17,7 +17,7 @@ import type { Runtime, World } from "../../ters/src/lang/run.ts";
 import { equal, fromList, makeRunner, runProgram, type Data, type Value } from "../../ters/src/lang/run.ts";
 import { Cells } from "../../ters/src/lang/cells.ts";
 import { evaluatorCall, htmlText, NoAnswer } from "../../ters/src/lang/html.ts";
-import { HTML_V, S, TRUE } from "../../ters/src/lang/std.ts";
+import { HTML_V, S, TRUE, WAIT_OP } from "../../ters/src/lang/std.ts";
 import { Lang } from "../../ters/src/lang/dsl.ts";
 import { base, baseNames } from "../../ters/src/lang/load.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
@@ -42,6 +42,20 @@ const inputs: Record<string, () => [string[], Record<string, string>]> = {
 // and the printer's recursion out of stack (`lab run` runs it through the
 // chooser's representations instead).
 const skip = new Set(["numbers"]);
+
+// Every example lowers since C137c24, so a program that doesn't, saved as
+// the editor saves one: a page whose button counts the answers of a search
+// that waits, which isn't lowered yet.
+function unlowered(): string {
+  const k = new Lang();
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.call(HTML_V.element, k.lit("button"), k.list(k.call(HTML_V.on, k.lit("click"), k.fn(["e"], () =>
+    k.seq(k.call(S.count, k.thunk(() => k.seq(k.call(WAIT_OP, k.lit(5)), k.call(S.oneOf, k.listOf(k.lit(1), k.lit(2)))))), k.call(S.print, k.lit("done")))))), k.list())));
+  const dir = mkdtempSync(join(tmpdir(), "unlowered-"));
+  writeFileSync(join(dir, "code.json"), JSON.stringify(k.code));
+  writeFileSync(join(dir, "names.default.json"), JSON.stringify(k.names));
+  return dir;
+}
 
 // A world in memory: files in a map, everything written collected.
 function world(files: Record<string, string>): { rt: Runtime; out: { printed: string[]; errors: string[]; files: Record<string, string> } } {
@@ -98,9 +112,9 @@ test("lab compile --core writes a module that runs main as lab run does", () => 
   assert.equal(run([lab, "compile", relations, "--core", "-o", "relations.mjs"])[2], 0);
   assert.deepEqual(run(["relations.mjs"]), run([lab, "run", relations]));
   // One that doesn't lower says why, and writes nothing.
-  const page = run([lab, "compile", join(examples, "tumble"), "--core", "-o", "tumble.mjs"]);
+  const page = run([lab, "compile", unlowered(), "--core", "-o", "waits.mjs"]);
   assert.notEqual(page[2], 0);
-  assert.match(String(page[1]), /isn't compiled through the core IR: it calls play/);
+  assert.match(String(page[1]), /isn't compiled through the core IR: .*waits inside count/);
 });
 
 // Pages through the core IR (C137c8): the cells are the evaluator's
@@ -174,9 +188,9 @@ test("lab build-web --core writes a page that draws and reacts as lab build-web'
   assert.ok(a.length >= 4, `${a.length} clickable`);
   for (let i = 0; i < a.length; i++) { a[i].fire("click"); b[i].fire("click"); assert.equal(got.html(), want.html(), `after click ${i}`); }
   // One that doesn't lower says why.
-  const r = spawnSync(process.execPath, [lab, "build-web", join(examples, "tumble"), "--core", "-o", join(dir, "tumble.html")], { encoding: "utf8" });
+  const r = spawnSync(process.execPath, [lab, "build-web", unlowered(), "--core", "-o", join(dir, "waits.html")], { encoding: "utf8" });
   assert.equal(r.status, 2);
-  assert.match(r.stderr, /isn't compiled through the core IR: it calls play/);
+  assert.match(r.stderr, /isn't compiled through the core IR: .*waits inside count/);
 });
 
 // for some(x => …) (C137c16): the evaluator's relational interpreter on a
