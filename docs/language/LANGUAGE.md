@@ -327,6 +327,19 @@ the way GHC writes out `deriving Functor`. So the checker asks for both
 types where it is used, and a definition that takes any value can't use
 them. A case's name as text is `case name(value)` (L162).
 
+**A value to and from Json by its type.** `json of(value)` is the Json a
+value spells and `from json(json)` the value of the type wanted where it is
+used, no answer when the Json has another shape (L190d2). The type decides
+the spelling, as serde's derive does by default: a record is an object of
+its fields, a case with no fields its name as a string and one with fields
+`{"name": {its fields}}`, a list or a tuple a list, Optional null or the
+value, Float64 and Int numbers (an Int read back must be whole). A field
+missing from an object reads as null, so an Optional field may be left
+out. Like the two above, each use becomes a generated definition for its
+type (`src/lang/json-by-type.ts`), so the type must be known there and hold
+no function; a Map, a Set or Bytes, whose cases are their library's, is
+refused for now.
+
 The **vectors module** (`library/vectors.json`, built from
 `src/lang/vectors-source.ts`) is written on them: `plus`, `minus`,
 `times`, `scale`, `dot`, `magnitude`, `distance`, `unit`, `mix`, `clamp`
