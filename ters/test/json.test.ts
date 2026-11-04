@@ -14,7 +14,7 @@ import { infer } from "../src/lang/infer.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { runMain } from "../src/lang/run.ts";
-import { JSON_V, PAIR_V, SHOW_ANY } from "../src/lang/std.ts";
+import { JSON_V, NIL as NIL_ID, PAIR_V, S, SHOW_ANY } from "../src/lang/std.ts";
 
 const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 const lib = (name: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === name)!;
@@ -70,4 +70,17 @@ test("json read stops on text that isn't JSON, saying where", () => {
   stops("nul", /expected null/);
   stops("1 2", /text after the value/);
   stops("\"open", /ends inside a string/);
+});
+
+test("a record read from JSON through json field and json as …, with a default where a part is missing", async () => {
+  const read = (k: Lang, text: string) => k.call(lib("json read"), k.lit(text));
+  const orElse = (k: Lang, body: () => Id, otherwise: () => Id) => k.call(S.first, k.thunk(body), k.thunk(otherwise));
+  const person = '{"name": "Ada", "born": 1815, "tags": ["maths", "engines"], "alive": false}';
+  assert.equal(await both((k) => orElse(k, () => k.call(lib("json as text"), k.call(lib("json field"), read(k, person), k.lit("name"))), () => k.lit("?"))), '"Ada"');
+  assert.equal(await both((k) => orElse(k, () => k.call(lib("json as number"), k.call(lib("json field"), read(k, person), k.lit("born"))), () => k.lit(0))), "1815");
+  assert.equal(await both((k) => k.call(lib("length"), orElse(k, () => k.call(lib("json as list"), k.call(lib("json field"), read(k, person), k.lit("tags"))), () => k.x(NIL_ID)))), "2");
+  assert.equal(await both((k) => orElse(k, () => k.call(lib("json as bool"), k.call(lib("json field"), read(k, person), k.lit("alive"))), () => k.true)), "false");
+  // Missing, or the wrong kind: the default.
+  assert.equal(await both((k) => orElse(k, () => k.call(lib("json as text"), k.call(lib("json field"), read(k, person), k.lit("died"))), () => k.lit("?"))), '"?"');
+  assert.equal(await both((k) => orElse(k, () => k.call(lib("json as text"), k.call(lib("json field"), read(k, person), k.lit("born"))), () => k.lit("?"))), '"?"');
 });
