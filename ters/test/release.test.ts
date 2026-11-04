@@ -96,3 +96,17 @@ test("compiled code says a release isn't compiled yet", () => {
   const l = lowerCore(p.code, p.info, p.names, [p.main]);
   assert.match([...l.refused.values()].join("\n"), /release, which isn't lowered yet/);
 });
+
+test("a with fuel outside running out ends the handler: its release runs once, and the run goes on", () => {
+  // A body that never ends, under the handler, under with fuel, under
+  // optional: running out is no answer, and the handler is released.
+  const p = program((k, ask) => {
+    const spin = k.def("spin");
+    k.define(spin, k.fn(["n"], (n) => k.call(spin, k.call(INT_OPS.add, n, k.int(1)))));
+    return k.call(INT_OPS.add, ask(), k.call(spin, k.int(0)));
+  }, (k, inner) => k.call(S.optional, k.thunk(() => k.call(S.fuel, k.int(50), k.thunk(() => inner)))));
+  assert.deepEqual(p.info.errors.map((e) => e.message), []);
+  p.run();
+  assert.deepEqual(p.logged, ["opened", "closed"]);
+  assert.deepEqual(p.printed, ["none"]);
+});
