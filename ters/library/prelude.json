@@ -106836,6 +106836,120 @@
           "@8rbt9n4tqk7nmj6cmuuh9ss0c9:2"
         ],
         "body": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:3"
+      },
+      "@gp22gjcsrmo4o63mcrjnp287vd": {
+        "id": "@gp22gjcsrmo4o63mcrjnp287vd",
+        "kind": "def",
+        "body": "@gp22gjcsrmo4o63mcrjnp287vd:1"
+      },
+      "@gp22gjcsrmo4o63mcrjnp287vd:7": {
+        "id": "@gp22gjcsrmo4o63mcrjnp287vd:7",
+        "kind": "ref",
+        "target": "std.time.now"
+      },
+      "@gp22gjcsrmo4o63mcrjnp287vd:6": {
+        "id": "@gp22gjcsrmo4o63mcrjnp287vd:6",
+        "kind": "call",
+        "fn": "@gp22gjcsrmo4o63mcrjnp287vd:7",
+        "args": []
+      },
+      "@gp22gjcsrmo4o63mcrjnp287vd:8": {
+        "id": "@gp22gjcsrmo4o63mcrjnp287vd:8",
+        "kind": "lit",
+        "value": 0.001,
+        "unit": {
+          "s": 1
+        }
+      },
+      "@gp22gjcsrmo4o63mcrjnp287vd:5": {
+        "id": "@gp22gjcsrmo4o63mcrjnp287vd:5",
+        "kind": "ref",
+        "target": "builtin.arith.mul"
+      },
+      "@gp22gjcsrmo4o63mcrjnp287vd:4": {
+        "id": "@gp22gjcsrmo4o63mcrjnp287vd:4",
+        "kind": "call",
+        "fn": "@gp22gjcsrmo4o63mcrjnp287vd:5",
+        "args": [
+          "@gp22gjcsrmo4o63mcrjnp287vd:6",
+          "@gp22gjcsrmo4o63mcrjnp287vd:8"
+        ]
+      },
+      "@gp22gjcsrmo4o63mcrjnp287vd:3": {
+        "id": "@gp22gjcsrmo4o63mcrjnp287vd:3",
+        "kind": "ref",
+        "target": "std.instant.instant"
+      },
+      "@gp22gjcsrmo4o63mcrjnp287vd:2": {
+        "id": "@gp22gjcsrmo4o63mcrjnp287vd:2",
+        "kind": "call",
+        "fn": "@gp22gjcsrmo4o63mcrjnp287vd:3",
+        "args": [
+          "@gp22gjcsrmo4o63mcrjnp287vd:4"
+        ]
+      },
+      "@gp22gjcsrmo4o63mcrjnp287vd:1": {
+        "id": "@gp22gjcsrmo4o63mcrjnp287vd:1",
+        "kind": "lambda",
+        "params": [],
+        "body": "@gp22gjcsrmo4o63mcrjnp287vd:2"
+      },
+      "@kl352k9klqkn84lm3slg5v09tn": {
+        "id": "@kl352k9klqkn84lm3slg5v09tn",
+        "kind": "def",
+        "body": "@kl352k9klqkn84lm3slg5v09tn:1"
+      },
+      "@kl352k9klqkn84lm3slg5v09tn:2": {
+        "id": "@kl352k9klqkn84lm3slg5v09tn:2",
+        "kind": "binder"
+      },
+      "@kl352k9klqkn84lm3slg5v09tn:8": {
+        "id": "@kl352k9klqkn84lm3slg5v09tn:8",
+        "kind": "lit",
+        "value": 1000,
+        "unit": {
+          "s": -1
+        }
+      },
+      "@kl352k9klqkn84lm3slg5v09tn:6": {
+        "id": "@kl352k9klqkn84lm3slg5v09tn:6",
+        "kind": "ref",
+        "target": "builtin.arith.mul"
+      },
+      "@kl352k9klqkn84lm3slg5v09tn:7": {
+        "id": "@kl352k9klqkn84lm3slg5v09tn:7",
+        "kind": "ref",
+        "target": "@kl352k9klqkn84lm3slg5v09tn:2"
+      },
+      "@kl352k9klqkn84lm3slg5v09tn:5": {
+        "id": "@kl352k9klqkn84lm3slg5v09tn:5",
+        "kind": "call",
+        "fn": "@kl352k9klqkn84lm3slg5v09tn:6",
+        "args": [
+          "@kl352k9klqkn84lm3slg5v09tn:7",
+          "@kl352k9klqkn84lm3slg5v09tn:8"
+        ]
+      },
+      "@kl352k9klqkn84lm3slg5v09tn:4": {
+        "id": "@kl352k9klqkn84lm3slg5v09tn:4",
+        "kind": "ref",
+        "target": "std.wait.wait"
+      },
+      "@kl352k9klqkn84lm3slg5v09tn:3": {
+        "id": "@kl352k9klqkn84lm3slg5v09tn:3",
+        "kind": "call",
+        "fn": "@kl352k9klqkn84lm3slg5v09tn:4",
+        "args": [
+          "@kl352k9klqkn84lm3slg5v09tn:5"
+        ]
+      },
+      "@kl352k9klqkn84lm3slg5v09tn:1": {
+        "id": "@kl352k9klqkn84lm3slg5v09tn:1",
+        "kind": "lambda",
+        "params": [
+          "@kl352k9klqkn84lm3slg5v09tn:2"
+        ],
+        "body": "@kl352k9klqkn84lm3slg5v09tn:3"
       }
     },
     "defs": [
@@ -107144,6 +107258,8 @@
       "@nkfpbp9ddv7887dlhfo2fg65mf",
       "@92cuhi7kh7uikbftkv4eamup0u",
       "@8rbt9n4tqk7nmj6cmuuh9ss0c9",
+      "@gp22gjcsrmo4o63mcrjnp287vd",
+      "@kl352k9klqkn84lm3slg5v09tn",
       "@go4eqh5o6pvomac0lnut74mvc3",
       "@03ct3j2jgf58me928d79bmo5d0",
       "@guf5849e015ci39pfibalomhps",
@@ -120018,6 +120134,56 @@
       },
       "plain": []
     },
+    "@gp22gjcsrmo4o63mcrjnp287vd": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [],
+        "ret": {
+          "t": "con",
+          "id": "std.instant",
+          "args": []
+        },
+        "eff": {
+          "effs": [
+            "std.time"
+          ],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
+    "@kl352k9klqkn84lm3slg5v09tn": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "type.number",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.unit",
+          "args": []
+        },
+        "eff": {
+          "effs": [
+            "std.wait"
+          ],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
     "@go4eqh5o6pvomac0lnut74mvc3": {
       "vars": [
         0,
@@ -128998,7 +129164,10 @@
     "@8rbt9n4tqk7nmj6cmuuh9ss0c9": "instant read",
     "@8rbt9n4tqk7nmj6cmuuh9ss0c9:2": "text",
     "@8rbt9n4tqk7nmj6cmuuh9ss0c9:5": "parts",
-    "@8rbt9n4tqk7nmj6cmuuh9ss0c9:22": "clock"
+    "@8rbt9n4tqk7nmj6cmuuh9ss0c9:22": "clock",
+    "@gp22gjcsrmo4o63mcrjnp287vd": "current instant",
+    "@kl352k9klqkn84lm3slg5v09tn": "wait for",
+    "@kl352k9klqkn84lm3slg5v09tn:2": "duration"
   },
   "comments": {
     "@7uq2j0i4v8m02boa1jovfc68tl": "Runs the action on each item of the list in turn, for what it does (prints, writes a cell).",
@@ -129173,6 +129342,8 @@
     "@nkfpbp9ddv7887dlhfo2fg65mf": "The time of day in UTC at an instant, in whole seconds (a fraction of a second is dropped).",
     "@92cuhi7kh7uikbftkv4eamup0u": "The instant as ISO 8601 writes it in UTC, whole seconds: instant text(instant of(0)) is \"1970-01-01T00:00:00Z\".",
     "@8rbt9n4tqk7nmj6cmuuh9ss0c9": "The instant an ISO 8601 text writes in UTC, year-month-dayThour:minute:secondZ, the other way from instant text. Stops on any other text.",
+    "@gp22gjcsrmo4o63mcrjnp287vd": "The instant now, from the program's clock (Time): instant text(current instant()) is the time in UTC. In a test, simulated runs it on a clock that starts at instant of(0).",
+    "@kl352k9klqkn84lm3slg5v09tn": "Waits for a duration (Wait): wait for(seconds(2)). The same as wait with the duration in milliseconds.",
     "@p5n63bfvt939jnuhts8a2pfckd": "The time an ISO 8601 text writes, hour:minute:second in two digits each, the other way from time text. Stops on any other text.",
     "@3ocku6i2rgmm849mu8ptrv3osm": "The date as ISO 8601 writes it, year-month-day: date text(date of(2026, 11, 3)) is \"2026-11-03\".",
     "@nj3dvvtm9ktrfpbpnhqqsvas6m": "The value of an object's field with this name, the first if there are several. No answer for a missing field or a value that isn't an object.",
@@ -129645,6 +129816,8 @@
     "@nkfpbp9ddv7887dlhfo2fg65mf",
     "@92cuhi7kh7uikbftkv4eamup0u",
     "@8rbt9n4tqk7nmj6cmuuh9ss0c9",
+    "@gp22gjcsrmo4o63mcrjnp287vd",
+    "@kl352k9klqkn84lm3slg5v09tn",
     "@go4eqh5o6pvomac0lnut74mvc3",
     "@03ct3j2jgf58me928d79bmo5d0",
     "@31uquin8cnli56vptl080ppv4o",
