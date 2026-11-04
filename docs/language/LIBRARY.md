@@ -418,7 +418,7 @@ CSV text as rows of text fields (RFC 4180): csv printed writes rows, quoting a f
 
 ## Dates
 
-A Date is a day in the calendar: its year, month and day. Dates count as days from 1970-01-01 both ways, so adding days, the days between two dates and the weekday are whole-number arithmetic. Times of day are their own type (below); instants and time zones come later.
+A Date is a day in the calendar: its year, month and day. Dates count as days from 1970-01-01 both ways, so adding days, the days between two dates and the weekday are whole-number arithmetic. Times of day and instants are their own types (below); time zones come later.
 
 - **Date** (type). A calendar date: a year, a month 1 to 12 and a day of that month, in the Gregorian calendar extended to every year. Made by date of, which checks it.
 - **date of** : `(Int, Int, Int) -[Abort]-> Date`. The calendar date of a year, a month (1 to 12) and a day of that month: date of(2026, 11, 3). Stops on a month or day the calendar hasn't, such as 30 February.
@@ -437,7 +437,7 @@ A Date is a day in the calendar: its year, month and day. Dates count as days fr
 
 ## Times of day
 
-A Time of day is an hour, a minute and a second, counted as seconds from midnight both ways. Instants, durations and time zones come later.
+A Time of day is an hour, a minute and a second, counted as seconds from midnight both ways. Time zones come later.
 
 - **Time of day** (type). A time of day in whole seconds: an hour 0 to 23, a minute and a second 0 to 59, made by time of, which checks it.
 - **time of** : `(Int, Int, Int) -[Abort]-> Time of day`. The time of day of an hour (0 to 23), a minute and a second (0 to 59): time of(9, 5, 0). Stops on any other.
@@ -448,6 +448,25 @@ A Time of day is an hour, a minute and a second, counted as seconds from midnigh
 - **time of seconds** : `(Int) -> Time of day`. The time of day so many seconds from midnight, wrapping round: time of seconds(90000) is 01:00:00, and a negative count goes back from midnight.
 - **time text** : `(Time of day) -> Text`. The time as ISO 8601 writes it, hour:minute:second: time text(time of(9, 5, 0)) is "09:05:00".
 - **time read** : `(Text) -[Abort]-> Time of day`. The time an ISO 8601 text writes, hour:minute:second in two digits each, the other way from time text. Stops on any other text.
+
+## Instants and durations
+
+An Instant is a moment, as seconds since 1970-01-01 00:00:00 UTC; a duration is a Float64 in seconds, so units check it. Dates and times of day at an instant are in UTC.
+
+- **Instant** (type). An instant: seconds since 1970-01-01 00:00:00 UTC, leap seconds not counted, made by instant of. A duration is a Float64 in seconds.
+- **instant of** : `(Float64) -> Instant`. The instant so many seconds after 1970-01-01 00:00:00 UTC (POSIX time, leap seconds not counted): instant of(0) is 1970-01-01T00:00:00Z.
+- **seconds since 1970** : `(Instant) -> Float64`. The instant as seconds since 1970-01-01 00:00:00 UTC, the other way from instant of.
+- **seconds** : `(a) -> a where a is a Number`. So many seconds, as a duration: a duration is a Float64 in seconds (s), so seconds(90) is minutes(1.5) and units check it isn't added to a length.
+- **minutes** : `(a) -> a where a is a Number`. So many minutes as a duration, 60 s each: minutes(5) is 300 s.
+- **hours** : `(a) -> a where a is a Number`. So many hours as a duration, 3600 s each: hours(2) is 7200 s.
+- **days** : `(a) -> a where a is a Number`. So many days as a duration, 86400 s each. A calendar day can be longer or shorter where clocks change; this is the day of UTC.
+- **later by** : `(Instant, Float64) -> Instant`. The instant a duration after this one, earlier for a negative duration: later by(start, hours(2)).
+- **duration between** : `(Instant, Instant) -> Float64`. The duration from the first instant to the second, negative when the second is earlier.
+- **instant at** : `(Date, Time of day) -> Instant`. The instant a date and a time of day name in UTC: instant at(date of(1970, 1, 2), time of(0, 0, 0)) is a day after instant of(0).
+- **date at** : `(Instant) -> Date`. The date in UTC at an instant.
+- **time at** : `(Instant) -> Time of day`. The time of day in UTC at an instant, in whole seconds (a fraction of a second is dropped).
+- **instant text** : `(Instant) -> Text`. The instant as ISO 8601 writes it in UTC, whole seconds: instant text(instant of(0)) is "1970-01-01T00:00:00Z".
+- **instant read** : `(Text) -[Abort]-> Instant`. The instant an ISO 8601 text writes in UTC, year-month-dayThour:minute:secondZ, the other way from instant text. Stops on any other text.
 
 ## Representations
 

@@ -105393,6 +105393,1449 @@
           "@p5n63bfvt939jnuhts8a2pfckd:2"
         ],
         "body": "@p5n63bfvt939jnuhts8a2pfckd:3"
+      },
+      "@m5tar6lp7n0om03bvgi4rn0ti8": {
+        "id": "@m5tar6lp7n0om03bvgi4rn0ti8",
+        "kind": "def",
+        "body": "@m5tar6lp7n0om03bvgi4rn0ti8:1"
+      },
+      "@m5tar6lp7n0om03bvgi4rn0ti8:2": {
+        "id": "@m5tar6lp7n0om03bvgi4rn0ti8:2",
+        "kind": "binder"
+      },
+      "@m5tar6lp7n0om03bvgi4rn0ti8:6": {
+        "id": "@m5tar6lp7n0om03bvgi4rn0ti8:6",
+        "kind": "lit",
+        "value": 1,
+        "unit": {
+          "s": 1
+        }
+      },
+      "@m5tar6lp7n0om03bvgi4rn0ti8:4": {
+        "id": "@m5tar6lp7n0om03bvgi4rn0ti8:4",
+        "kind": "ref",
+        "target": "builtin.arith.mul"
+      },
+      "@m5tar6lp7n0om03bvgi4rn0ti8:5": {
+        "id": "@m5tar6lp7n0om03bvgi4rn0ti8:5",
+        "kind": "ref",
+        "target": "@m5tar6lp7n0om03bvgi4rn0ti8:2"
+      },
+      "@m5tar6lp7n0om03bvgi4rn0ti8:3": {
+        "id": "@m5tar6lp7n0om03bvgi4rn0ti8:3",
+        "kind": "call",
+        "fn": "@m5tar6lp7n0om03bvgi4rn0ti8:4",
+        "args": [
+          "@m5tar6lp7n0om03bvgi4rn0ti8:5",
+          "@m5tar6lp7n0om03bvgi4rn0ti8:6"
+        ]
+      },
+      "@m5tar6lp7n0om03bvgi4rn0ti8:1": {
+        "id": "@m5tar6lp7n0om03bvgi4rn0ti8:1",
+        "kind": "lambda",
+        "params": [
+          "@m5tar6lp7n0om03bvgi4rn0ti8:2"
+        ],
+        "body": "@m5tar6lp7n0om03bvgi4rn0ti8:3"
+      },
+      "@r861g07spahnspunm49ocir8ch": {
+        "id": "@r861g07spahnspunm49ocir8ch",
+        "kind": "def",
+        "body": "@r861g07spahnspunm49ocir8ch:1"
+      },
+      "@r861g07spahnspunm49ocir8ch:2": {
+        "id": "@r861g07spahnspunm49ocir8ch:2",
+        "kind": "binder"
+      },
+      "@r861g07spahnspunm49ocir8ch:6": {
+        "id": "@r861g07spahnspunm49ocir8ch:6",
+        "kind": "lit",
+        "value": 60,
+        "unit": {
+          "s": 1
+        }
+      },
+      "@r861g07spahnspunm49ocir8ch:4": {
+        "id": "@r861g07spahnspunm49ocir8ch:4",
+        "kind": "ref",
+        "target": "builtin.arith.mul"
+      },
+      "@r861g07spahnspunm49ocir8ch:5": {
+        "id": "@r861g07spahnspunm49ocir8ch:5",
+        "kind": "ref",
+        "target": "@r861g07spahnspunm49ocir8ch:2"
+      },
+      "@r861g07spahnspunm49ocir8ch:3": {
+        "id": "@r861g07spahnspunm49ocir8ch:3",
+        "kind": "call",
+        "fn": "@r861g07spahnspunm49ocir8ch:4",
+        "args": [
+          "@r861g07spahnspunm49ocir8ch:5",
+          "@r861g07spahnspunm49ocir8ch:6"
+        ]
+      },
+      "@r861g07spahnspunm49ocir8ch:1": {
+        "id": "@r861g07spahnspunm49ocir8ch:1",
+        "kind": "lambda",
+        "params": [
+          "@r861g07spahnspunm49ocir8ch:2"
+        ],
+        "body": "@r861g07spahnspunm49ocir8ch:3"
+      },
+      "@ui97ao11ion8c8nrn5tpbtf4uu": {
+        "id": "@ui97ao11ion8c8nrn5tpbtf4uu",
+        "kind": "def",
+        "body": "@ui97ao11ion8c8nrn5tpbtf4uu:1"
+      },
+      "@ui97ao11ion8c8nrn5tpbtf4uu:2": {
+        "id": "@ui97ao11ion8c8nrn5tpbtf4uu:2",
+        "kind": "binder"
+      },
+      "@ui97ao11ion8c8nrn5tpbtf4uu:6": {
+        "id": "@ui97ao11ion8c8nrn5tpbtf4uu:6",
+        "kind": "lit",
+        "value": 3600,
+        "unit": {
+          "s": 1
+        }
+      },
+      "@ui97ao11ion8c8nrn5tpbtf4uu:4": {
+        "id": "@ui97ao11ion8c8nrn5tpbtf4uu:4",
+        "kind": "ref",
+        "target": "builtin.arith.mul"
+      },
+      "@ui97ao11ion8c8nrn5tpbtf4uu:5": {
+        "id": "@ui97ao11ion8c8nrn5tpbtf4uu:5",
+        "kind": "ref",
+        "target": "@ui97ao11ion8c8nrn5tpbtf4uu:2"
+      },
+      "@ui97ao11ion8c8nrn5tpbtf4uu:3": {
+        "id": "@ui97ao11ion8c8nrn5tpbtf4uu:3",
+        "kind": "call",
+        "fn": "@ui97ao11ion8c8nrn5tpbtf4uu:4",
+        "args": [
+          "@ui97ao11ion8c8nrn5tpbtf4uu:5",
+          "@ui97ao11ion8c8nrn5tpbtf4uu:6"
+        ]
+      },
+      "@ui97ao11ion8c8nrn5tpbtf4uu:1": {
+        "id": "@ui97ao11ion8c8nrn5tpbtf4uu:1",
+        "kind": "lambda",
+        "params": [
+          "@ui97ao11ion8c8nrn5tpbtf4uu:2"
+        ],
+        "body": "@ui97ao11ion8c8nrn5tpbtf4uu:3"
+      },
+      "@aiudtpvpfgrjv7afhids8t7hja": {
+        "id": "@aiudtpvpfgrjv7afhids8t7hja",
+        "kind": "def",
+        "body": "@aiudtpvpfgrjv7afhids8t7hja:1"
+      },
+      "@aiudtpvpfgrjv7afhids8t7hja:2": {
+        "id": "@aiudtpvpfgrjv7afhids8t7hja:2",
+        "kind": "binder"
+      },
+      "@aiudtpvpfgrjv7afhids8t7hja:6": {
+        "id": "@aiudtpvpfgrjv7afhids8t7hja:6",
+        "kind": "lit",
+        "value": 86400,
+        "unit": {
+          "s": 1
+        }
+      },
+      "@aiudtpvpfgrjv7afhids8t7hja:4": {
+        "id": "@aiudtpvpfgrjv7afhids8t7hja:4",
+        "kind": "ref",
+        "target": "builtin.arith.mul"
+      },
+      "@aiudtpvpfgrjv7afhids8t7hja:5": {
+        "id": "@aiudtpvpfgrjv7afhids8t7hja:5",
+        "kind": "ref",
+        "target": "@aiudtpvpfgrjv7afhids8t7hja:2"
+      },
+      "@aiudtpvpfgrjv7afhids8t7hja:3": {
+        "id": "@aiudtpvpfgrjv7afhids8t7hja:3",
+        "kind": "call",
+        "fn": "@aiudtpvpfgrjv7afhids8t7hja:4",
+        "args": [
+          "@aiudtpvpfgrjv7afhids8t7hja:5",
+          "@aiudtpvpfgrjv7afhids8t7hja:6"
+        ]
+      },
+      "@aiudtpvpfgrjv7afhids8t7hja:1": {
+        "id": "@aiudtpvpfgrjv7afhids8t7hja:1",
+        "kind": "lambda",
+        "params": [
+          "@aiudtpvpfgrjv7afhids8t7hja:2"
+        ],
+        "body": "@aiudtpvpfgrjv7afhids8t7hja:3"
+      },
+      "@l8ho0ruj9lgr1mauifnbaatt4j": {
+        "id": "@l8ho0ruj9lgr1mauifnbaatt4j",
+        "kind": "def",
+        "body": "@l8ho0ruj9lgr1mauifnbaatt4j:1"
+      },
+      "@l8ho0ruj9lgr1mauifnbaatt4j:2": {
+        "id": "@l8ho0ruj9lgr1mauifnbaatt4j:2",
+        "kind": "binder"
+      },
+      "@l8ho0ruj9lgr1mauifnbaatt4j:8": {
+        "id": "@l8ho0ruj9lgr1mauifnbaatt4j:8",
+        "kind": "lit",
+        "value": 1,
+        "unit": {
+          "s": 1
+        }
+      },
+      "@l8ho0ruj9lgr1mauifnbaatt4j:6": {
+        "id": "@l8ho0ruj9lgr1mauifnbaatt4j:6",
+        "kind": "ref",
+        "target": "builtin.arith.mul"
+      },
+      "@l8ho0ruj9lgr1mauifnbaatt4j:7": {
+        "id": "@l8ho0ruj9lgr1mauifnbaatt4j:7",
+        "kind": "ref",
+        "target": "@l8ho0ruj9lgr1mauifnbaatt4j:2"
+      },
+      "@l8ho0ruj9lgr1mauifnbaatt4j:5": {
+        "id": "@l8ho0ruj9lgr1mauifnbaatt4j:5",
+        "kind": "call",
+        "fn": "@l8ho0ruj9lgr1mauifnbaatt4j:6",
+        "args": [
+          "@l8ho0ruj9lgr1mauifnbaatt4j:7",
+          "@l8ho0ruj9lgr1mauifnbaatt4j:8"
+        ]
+      },
+      "@l8ho0ruj9lgr1mauifnbaatt4j:4": {
+        "id": "@l8ho0ruj9lgr1mauifnbaatt4j:4",
+        "kind": "ref",
+        "target": "std.instant.instant"
+      },
+      "@l8ho0ruj9lgr1mauifnbaatt4j:3": {
+        "id": "@l8ho0ruj9lgr1mauifnbaatt4j:3",
+        "kind": "call",
+        "fn": "@l8ho0ruj9lgr1mauifnbaatt4j:4",
+        "args": [
+          "@l8ho0ruj9lgr1mauifnbaatt4j:5"
+        ]
+      },
+      "@l8ho0ruj9lgr1mauifnbaatt4j:1": {
+        "id": "@l8ho0ruj9lgr1mauifnbaatt4j:1",
+        "kind": "lambda",
+        "params": [
+          "@l8ho0ruj9lgr1mauifnbaatt4j:2"
+        ],
+        "body": "@l8ho0ruj9lgr1mauifnbaatt4j:3"
+      },
+      "@hph304nt0v1b7jk1icg977f7lg": {
+        "id": "@hph304nt0v1b7jk1icg977f7lg",
+        "kind": "def",
+        "body": "@hph304nt0v1b7jk1icg977f7lg:1"
+      },
+      "@hph304nt0v1b7jk1icg977f7lg:2": {
+        "id": "@hph304nt0v1b7jk1icg977f7lg:2",
+        "kind": "binder"
+      },
+      "@hph304nt0v1b7jk1icg977f7lg:4": {
+        "id": "@hph304nt0v1b7jk1icg977f7lg:4",
+        "kind": "ref",
+        "target": "@hph304nt0v1b7jk1icg977f7lg:2"
+      },
+      "@hph304nt0v1b7jk1icg977f7lg:6": {
+        "id": "@hph304nt0v1b7jk1icg977f7lg:6",
+        "kind": "binder"
+      },
+      "@hph304nt0v1b7jk1icg977f7lg:10": {
+        "id": "@hph304nt0v1b7jk1icg977f7lg:10",
+        "kind": "lit",
+        "value": 1,
+        "unit": {
+          "s": -1
+        }
+      },
+      "@hph304nt0v1b7jk1icg977f7lg:8": {
+        "id": "@hph304nt0v1b7jk1icg977f7lg:8",
+        "kind": "ref",
+        "target": "builtin.arith.mul"
+      },
+      "@hph304nt0v1b7jk1icg977f7lg:9": {
+        "id": "@hph304nt0v1b7jk1icg977f7lg:9",
+        "kind": "ref",
+        "target": "@hph304nt0v1b7jk1icg977f7lg:6"
+      },
+      "@hph304nt0v1b7jk1icg977f7lg:7": {
+        "id": "@hph304nt0v1b7jk1icg977f7lg:7",
+        "kind": "call",
+        "fn": "@hph304nt0v1b7jk1icg977f7lg:8",
+        "args": [
+          "@hph304nt0v1b7jk1icg977f7lg:9",
+          "@hph304nt0v1b7jk1icg977f7lg:10"
+        ]
+      },
+      "@hph304nt0v1b7jk1icg977f7lg:5": {
+        "id": "@hph304nt0v1b7jk1icg977f7lg:5",
+        "kind": "arm",
+        "variant": "std.instant.instant",
+        "binds": [
+          "@hph304nt0v1b7jk1icg977f7lg:6"
+        ],
+        "results": [
+          null
+        ],
+        "body": "@hph304nt0v1b7jk1icg977f7lg:7"
+      },
+      "@hph304nt0v1b7jk1icg977f7lg:3": {
+        "id": "@hph304nt0v1b7jk1icg977f7lg:3",
+        "kind": "match",
+        "scrutinee": "@hph304nt0v1b7jk1icg977f7lg:4",
+        "arms": [
+          "@hph304nt0v1b7jk1icg977f7lg:5"
+        ],
+        "otherwise": null
+      },
+      "@hph304nt0v1b7jk1icg977f7lg:1": {
+        "id": "@hph304nt0v1b7jk1icg977f7lg:1",
+        "kind": "lambda",
+        "params": [
+          "@hph304nt0v1b7jk1icg977f7lg:2"
+        ],
+        "body": "@hph304nt0v1b7jk1icg977f7lg:3"
+      },
+      "@l5ihqjk3cq10dc9g4te32um00v": {
+        "id": "@l5ihqjk3cq10dc9g4te32um00v",
+        "kind": "def",
+        "body": "@l5ihqjk3cq10dc9g4te32um00v:1"
+      },
+      "@l5ihqjk3cq10dc9g4te32um00v:2": {
+        "id": "@l5ihqjk3cq10dc9g4te32um00v:2",
+        "kind": "binder"
+      },
+      "@l5ihqjk3cq10dc9g4te32um00v:3": {
+        "id": "@l5ihqjk3cq10dc9g4te32um00v:3",
+        "kind": "binder"
+      },
+      "@l5ihqjk3cq10dc9g4te32um00v:5": {
+        "id": "@l5ihqjk3cq10dc9g4te32um00v:5",
+        "kind": "ref",
+        "target": "@l5ihqjk3cq10dc9g4te32um00v:2"
+      },
+      "@l5ihqjk3cq10dc9g4te32um00v:7": {
+        "id": "@l5ihqjk3cq10dc9g4te32um00v:7",
+        "kind": "binder"
+      },
+      "@l5ihqjk3cq10dc9g4te32um00v:11": {
+        "id": "@l5ihqjk3cq10dc9g4te32um00v:11",
+        "kind": "ref",
+        "target": "builtin.arith.add"
+      },
+      "@l5ihqjk3cq10dc9g4te32um00v:12": {
+        "id": "@l5ihqjk3cq10dc9g4te32um00v:12",
+        "kind": "ref",
+        "target": "@l5ihqjk3cq10dc9g4te32um00v:7"
+      },
+      "@l5ihqjk3cq10dc9g4te32um00v:13": {
+        "id": "@l5ihqjk3cq10dc9g4te32um00v:13",
+        "kind": "ref",
+        "target": "@l5ihqjk3cq10dc9g4te32um00v:3"
+      },
+      "@l5ihqjk3cq10dc9g4te32um00v:10": {
+        "id": "@l5ihqjk3cq10dc9g4te32um00v:10",
+        "kind": "call",
+        "fn": "@l5ihqjk3cq10dc9g4te32um00v:11",
+        "args": [
+          "@l5ihqjk3cq10dc9g4te32um00v:12",
+          "@l5ihqjk3cq10dc9g4te32um00v:13"
+        ]
+      },
+      "@l5ihqjk3cq10dc9g4te32um00v:9": {
+        "id": "@l5ihqjk3cq10dc9g4te32um00v:9",
+        "kind": "ref",
+        "target": "std.instant.instant"
+      },
+      "@l5ihqjk3cq10dc9g4te32um00v:8": {
+        "id": "@l5ihqjk3cq10dc9g4te32um00v:8",
+        "kind": "call",
+        "fn": "@l5ihqjk3cq10dc9g4te32um00v:9",
+        "args": [
+          "@l5ihqjk3cq10dc9g4te32um00v:10"
+        ]
+      },
+      "@l5ihqjk3cq10dc9g4te32um00v:6": {
+        "id": "@l5ihqjk3cq10dc9g4te32um00v:6",
+        "kind": "arm",
+        "variant": "std.instant.instant",
+        "binds": [
+          "@l5ihqjk3cq10dc9g4te32um00v:7"
+        ],
+        "results": [
+          null
+        ],
+        "body": "@l5ihqjk3cq10dc9g4te32um00v:8"
+      },
+      "@l5ihqjk3cq10dc9g4te32um00v:4": {
+        "id": "@l5ihqjk3cq10dc9g4te32um00v:4",
+        "kind": "match",
+        "scrutinee": "@l5ihqjk3cq10dc9g4te32um00v:5",
+        "arms": [
+          "@l5ihqjk3cq10dc9g4te32um00v:6"
+        ],
+        "otherwise": null
+      },
+      "@l5ihqjk3cq10dc9g4te32um00v:1": {
+        "id": "@l5ihqjk3cq10dc9g4te32um00v:1",
+        "kind": "lambda",
+        "params": [
+          "@l5ihqjk3cq10dc9g4te32um00v:2",
+          "@l5ihqjk3cq10dc9g4te32um00v:3"
+        ],
+        "body": "@l5ihqjk3cq10dc9g4te32um00v:4"
+      },
+      "@p3chdv9c8cfqn9u16lhqmt7t0e": {
+        "id": "@p3chdv9c8cfqn9u16lhqmt7t0e",
+        "kind": "def",
+        "body": "@p3chdv9c8cfqn9u16lhqmt7t0e:1"
+      },
+      "@p3chdv9c8cfqn9u16lhqmt7t0e:2": {
+        "id": "@p3chdv9c8cfqn9u16lhqmt7t0e:2",
+        "kind": "binder"
+      },
+      "@p3chdv9c8cfqn9u16lhqmt7t0e:3": {
+        "id": "@p3chdv9c8cfqn9u16lhqmt7t0e:3",
+        "kind": "binder"
+      },
+      "@p3chdv9c8cfqn9u16lhqmt7t0e:5": {
+        "id": "@p3chdv9c8cfqn9u16lhqmt7t0e:5",
+        "kind": "ref",
+        "target": "@p3chdv9c8cfqn9u16lhqmt7t0e:2"
+      },
+      "@p3chdv9c8cfqn9u16lhqmt7t0e:7": {
+        "id": "@p3chdv9c8cfqn9u16lhqmt7t0e:7",
+        "kind": "binder"
+      },
+      "@p3chdv9c8cfqn9u16lhqmt7t0e:9": {
+        "id": "@p3chdv9c8cfqn9u16lhqmt7t0e:9",
+        "kind": "ref",
+        "target": "@p3chdv9c8cfqn9u16lhqmt7t0e:3"
+      },
+      "@p3chdv9c8cfqn9u16lhqmt7t0e:11": {
+        "id": "@p3chdv9c8cfqn9u16lhqmt7t0e:11",
+        "kind": "binder"
+      },
+      "@p3chdv9c8cfqn9u16lhqmt7t0e:13": {
+        "id": "@p3chdv9c8cfqn9u16lhqmt7t0e:13",
+        "kind": "ref",
+        "target": "builtin.arith.sub"
+      },
+      "@p3chdv9c8cfqn9u16lhqmt7t0e:14": {
+        "id": "@p3chdv9c8cfqn9u16lhqmt7t0e:14",
+        "kind": "ref",
+        "target": "@p3chdv9c8cfqn9u16lhqmt7t0e:11"
+      },
+      "@p3chdv9c8cfqn9u16lhqmt7t0e:15": {
+        "id": "@p3chdv9c8cfqn9u16lhqmt7t0e:15",
+        "kind": "ref",
+        "target": "@p3chdv9c8cfqn9u16lhqmt7t0e:7"
+      },
+      "@p3chdv9c8cfqn9u16lhqmt7t0e:12": {
+        "id": "@p3chdv9c8cfqn9u16lhqmt7t0e:12",
+        "kind": "call",
+        "fn": "@p3chdv9c8cfqn9u16lhqmt7t0e:13",
+        "args": [
+          "@p3chdv9c8cfqn9u16lhqmt7t0e:14",
+          "@p3chdv9c8cfqn9u16lhqmt7t0e:15"
+        ]
+      },
+      "@p3chdv9c8cfqn9u16lhqmt7t0e:10": {
+        "id": "@p3chdv9c8cfqn9u16lhqmt7t0e:10",
+        "kind": "arm",
+        "variant": "std.instant.instant",
+        "binds": [
+          "@p3chdv9c8cfqn9u16lhqmt7t0e:11"
+        ],
+        "results": [
+          null
+        ],
+        "body": "@p3chdv9c8cfqn9u16lhqmt7t0e:12"
+      },
+      "@p3chdv9c8cfqn9u16lhqmt7t0e:8": {
+        "id": "@p3chdv9c8cfqn9u16lhqmt7t0e:8",
+        "kind": "match",
+        "scrutinee": "@p3chdv9c8cfqn9u16lhqmt7t0e:9",
+        "arms": [
+          "@p3chdv9c8cfqn9u16lhqmt7t0e:10"
+        ],
+        "otherwise": null
+      },
+      "@p3chdv9c8cfqn9u16lhqmt7t0e:6": {
+        "id": "@p3chdv9c8cfqn9u16lhqmt7t0e:6",
+        "kind": "arm",
+        "variant": "std.instant.instant",
+        "binds": [
+          "@p3chdv9c8cfqn9u16lhqmt7t0e:7"
+        ],
+        "results": [
+          null
+        ],
+        "body": "@p3chdv9c8cfqn9u16lhqmt7t0e:8"
+      },
+      "@p3chdv9c8cfqn9u16lhqmt7t0e:4": {
+        "id": "@p3chdv9c8cfqn9u16lhqmt7t0e:4",
+        "kind": "match",
+        "scrutinee": "@p3chdv9c8cfqn9u16lhqmt7t0e:5",
+        "arms": [
+          "@p3chdv9c8cfqn9u16lhqmt7t0e:6"
+        ],
+        "otherwise": null
+      },
+      "@p3chdv9c8cfqn9u16lhqmt7t0e:1": {
+        "id": "@p3chdv9c8cfqn9u16lhqmt7t0e:1",
+        "kind": "lambda",
+        "params": [
+          "@p3chdv9c8cfqn9u16lhqmt7t0e:2",
+          "@p3chdv9c8cfqn9u16lhqmt7t0e:3"
+        ],
+        "body": "@p3chdv9c8cfqn9u16lhqmt7t0e:4"
+      },
+      "@t1ou64cl7avac07nm62aru3tjc": {
+        "id": "@t1ou64cl7avac07nm62aru3tjc",
+        "kind": "def",
+        "body": "@t1ou64cl7avac07nm62aru3tjc:1"
+      },
+      "@t1ou64cl7avac07nm62aru3tjc:2": {
+        "id": "@t1ou64cl7avac07nm62aru3tjc:2",
+        "kind": "binder"
+      },
+      "@t1ou64cl7avac07nm62aru3tjc:3": {
+        "id": "@t1ou64cl7avac07nm62aru3tjc:3",
+        "kind": "binder"
+      },
+      "@t1ou64cl7avac07nm62aru3tjc:15": {
+        "id": "@t1ou64cl7avac07nm62aru3tjc:15",
+        "kind": "ref",
+        "target": "@3odk99ftbkh7s97uvvv288fpqj"
+      },
+      "@t1ou64cl7avac07nm62aru3tjc:16": {
+        "id": "@t1ou64cl7avac07nm62aru3tjc:16",
+        "kind": "ref",
+        "target": "@t1ou64cl7avac07nm62aru3tjc:2"
+      },
+      "@t1ou64cl7avac07nm62aru3tjc:14": {
+        "id": "@t1ou64cl7avac07nm62aru3tjc:14",
+        "kind": "call",
+        "fn": "@t1ou64cl7avac07nm62aru3tjc:15",
+        "args": [
+          "@t1ou64cl7avac07nm62aru3tjc:16"
+        ]
+      },
+      "@t1ou64cl7avac07nm62aru3tjc:17": {
+        "id": "@t1ou64cl7avac07nm62aru3tjc:17",
+        "kind": "lit",
+        "value": 86400,
+        "of": "type.int"
+      },
+      "@t1ou64cl7avac07nm62aru3tjc:13": {
+        "id": "@t1ou64cl7avac07nm62aru3tjc:13",
+        "kind": "ref",
+        "target": "builtin.int.mul"
+      },
+      "@t1ou64cl7avac07nm62aru3tjc:12": {
+        "id": "@t1ou64cl7avac07nm62aru3tjc:12",
+        "kind": "call",
+        "fn": "@t1ou64cl7avac07nm62aru3tjc:13",
+        "args": [
+          "@t1ou64cl7avac07nm62aru3tjc:14",
+          "@t1ou64cl7avac07nm62aru3tjc:17"
+        ]
+      },
+      "@t1ou64cl7avac07nm62aru3tjc:19": {
+        "id": "@t1ou64cl7avac07nm62aru3tjc:19",
+        "kind": "ref",
+        "target": "@13umq8bgl00dvfol98hcrvitg9"
+      },
+      "@t1ou64cl7avac07nm62aru3tjc:20": {
+        "id": "@t1ou64cl7avac07nm62aru3tjc:20",
+        "kind": "ref",
+        "target": "@t1ou64cl7avac07nm62aru3tjc:3"
+      },
+      "@t1ou64cl7avac07nm62aru3tjc:18": {
+        "id": "@t1ou64cl7avac07nm62aru3tjc:18",
+        "kind": "call",
+        "fn": "@t1ou64cl7avac07nm62aru3tjc:19",
+        "args": [
+          "@t1ou64cl7avac07nm62aru3tjc:20"
+        ]
+      },
+      "@t1ou64cl7avac07nm62aru3tjc:11": {
+        "id": "@t1ou64cl7avac07nm62aru3tjc:11",
+        "kind": "ref",
+        "target": "builtin.int.add"
+      },
+      "@t1ou64cl7avac07nm62aru3tjc:10": {
+        "id": "@t1ou64cl7avac07nm62aru3tjc:10",
+        "kind": "call",
+        "fn": "@t1ou64cl7avac07nm62aru3tjc:11",
+        "args": [
+          "@t1ou64cl7avac07nm62aru3tjc:12",
+          "@t1ou64cl7avac07nm62aru3tjc:18"
+        ]
+      },
+      "@t1ou64cl7avac07nm62aru3tjc:9": {
+        "id": "@t1ou64cl7avac07nm62aru3tjc:9",
+        "kind": "ref",
+        "target": "builtin.int.toNumber"
+      },
+      "@t1ou64cl7avac07nm62aru3tjc:8": {
+        "id": "@t1ou64cl7avac07nm62aru3tjc:8",
+        "kind": "call",
+        "fn": "@t1ou64cl7avac07nm62aru3tjc:9",
+        "args": [
+          "@t1ou64cl7avac07nm62aru3tjc:10"
+        ]
+      },
+      "@t1ou64cl7avac07nm62aru3tjc:21": {
+        "id": "@t1ou64cl7avac07nm62aru3tjc:21",
+        "kind": "lit",
+        "value": 1,
+        "unit": {
+          "s": 1
+        }
+      },
+      "@t1ou64cl7avac07nm62aru3tjc:7": {
+        "id": "@t1ou64cl7avac07nm62aru3tjc:7",
+        "kind": "ref",
+        "target": "builtin.arith.mul"
+      },
+      "@t1ou64cl7avac07nm62aru3tjc:6": {
+        "id": "@t1ou64cl7avac07nm62aru3tjc:6",
+        "kind": "call",
+        "fn": "@t1ou64cl7avac07nm62aru3tjc:7",
+        "args": [
+          "@t1ou64cl7avac07nm62aru3tjc:8",
+          "@t1ou64cl7avac07nm62aru3tjc:21"
+        ]
+      },
+      "@t1ou64cl7avac07nm62aru3tjc:5": {
+        "id": "@t1ou64cl7avac07nm62aru3tjc:5",
+        "kind": "ref",
+        "target": "std.instant.instant"
+      },
+      "@t1ou64cl7avac07nm62aru3tjc:4": {
+        "id": "@t1ou64cl7avac07nm62aru3tjc:4",
+        "kind": "call",
+        "fn": "@t1ou64cl7avac07nm62aru3tjc:5",
+        "args": [
+          "@t1ou64cl7avac07nm62aru3tjc:6"
+        ]
+      },
+      "@t1ou64cl7avac07nm62aru3tjc:1": {
+        "id": "@t1ou64cl7avac07nm62aru3tjc:1",
+        "kind": "lambda",
+        "params": [
+          "@t1ou64cl7avac07nm62aru3tjc:2",
+          "@t1ou64cl7avac07nm62aru3tjc:3"
+        ],
+        "body": "@t1ou64cl7avac07nm62aru3tjc:4"
+      },
+      "@5ko8kevb172ddehstb451ve2n7": {
+        "id": "@5ko8kevb172ddehstb451ve2n7",
+        "kind": "def",
+        "body": "@5ko8kevb172ddehstb451ve2n7:1"
+      },
+      "@5ko8kevb172ddehstb451ve2n7:2": {
+        "id": "@5ko8kevb172ddehstb451ve2n7:2",
+        "kind": "binder"
+      },
+      "@5ko8kevb172ddehstb451ve2n7:11": {
+        "id": "@5ko8kevb172ddehstb451ve2n7:11",
+        "kind": "ref",
+        "target": "@5ko8kevb172ddehstb451ve2n7:2"
+      },
+      "@5ko8kevb172ddehstb451ve2n7:13": {
+        "id": "@5ko8kevb172ddehstb451ve2n7:13",
+        "kind": "binder"
+      },
+      "@5ko8kevb172ddehstb451ve2n7:21": {
+        "id": "@5ko8kevb172ddehstb451ve2n7:21",
+        "kind": "lit",
+        "value": 1,
+        "unit": {
+          "s": -1
+        }
+      },
+      "@5ko8kevb172ddehstb451ve2n7:19": {
+        "id": "@5ko8kevb172ddehstb451ve2n7:19",
+        "kind": "ref",
+        "target": "builtin.arith.mul"
+      },
+      "@5ko8kevb172ddehstb451ve2n7:20": {
+        "id": "@5ko8kevb172ddehstb451ve2n7:20",
+        "kind": "ref",
+        "target": "@5ko8kevb172ddehstb451ve2n7:13"
+      },
+      "@5ko8kevb172ddehstb451ve2n7:18": {
+        "id": "@5ko8kevb172ddehstb451ve2n7:18",
+        "kind": "call",
+        "fn": "@5ko8kevb172ddehstb451ve2n7:19",
+        "args": [
+          "@5ko8kevb172ddehstb451ve2n7:20",
+          "@5ko8kevb172ddehstb451ve2n7:21"
+        ]
+      },
+      "@5ko8kevb172ddehstb451ve2n7:17": {
+        "id": "@5ko8kevb172ddehstb451ve2n7:17",
+        "kind": "ref",
+        "target": "builtin.floor"
+      },
+      "@5ko8kevb172ddehstb451ve2n7:16": {
+        "id": "@5ko8kevb172ddehstb451ve2n7:16",
+        "kind": "call",
+        "fn": "@5ko8kevb172ddehstb451ve2n7:17",
+        "args": [
+          "@5ko8kevb172ddehstb451ve2n7:18"
+        ]
+      },
+      "@5ko8kevb172ddehstb451ve2n7:15": {
+        "id": "@5ko8kevb172ddehstb451ve2n7:15",
+        "kind": "ref",
+        "target": "@ksd4egbi7rrhfg8dnilgrcmp2e"
+      },
+      "@5ko8kevb172ddehstb451ve2n7:14": {
+        "id": "@5ko8kevb172ddehstb451ve2n7:14",
+        "kind": "call",
+        "fn": "@5ko8kevb172ddehstb451ve2n7:15",
+        "args": [
+          "@5ko8kevb172ddehstb451ve2n7:16"
+        ]
+      },
+      "@5ko8kevb172ddehstb451ve2n7:12": {
+        "id": "@5ko8kevb172ddehstb451ve2n7:12",
+        "kind": "arm",
+        "variant": "std.instant.instant",
+        "binds": [
+          "@5ko8kevb172ddehstb451ve2n7:13"
+        ],
+        "results": [
+          null
+        ],
+        "body": "@5ko8kevb172ddehstb451ve2n7:14"
+      },
+      "@5ko8kevb172ddehstb451ve2n7:10": {
+        "id": "@5ko8kevb172ddehstb451ve2n7:10",
+        "kind": "match",
+        "scrutinee": "@5ko8kevb172ddehstb451ve2n7:11",
+        "arms": [
+          "@5ko8kevb172ddehstb451ve2n7:12"
+        ],
+        "otherwise": null
+      },
+      "@5ko8kevb172ddehstb451ve2n7:22": {
+        "id": "@5ko8kevb172ddehstb451ve2n7:22",
+        "kind": "lit",
+        "value": 86400,
+        "of": "type.int"
+      },
+      "@5ko8kevb172ddehstb451ve2n7:9": {
+        "id": "@5ko8kevb172ddehstb451ve2n7:9",
+        "kind": "ref",
+        "target": "builtin.int.quotient"
+      },
+      "@5ko8kevb172ddehstb451ve2n7:8": {
+        "id": "@5ko8kevb172ddehstb451ve2n7:8",
+        "kind": "call",
+        "fn": "@5ko8kevb172ddehstb451ve2n7:9",
+        "args": [
+          "@5ko8kevb172ddehstb451ve2n7:10",
+          "@5ko8kevb172ddehstb451ve2n7:22"
+        ]
+      },
+      "@5ko8kevb172ddehstb451ve2n7:7": {
+        "id": "@5ko8kevb172ddehstb451ve2n7:7",
+        "kind": "lambda",
+        "params": [],
+        "body": "@5ko8kevb172ddehstb451ve2n7:8"
+      },
+      "@5ko8kevb172ddehstb451ve2n7:24": {
+        "id": "@5ko8kevb172ddehstb451ve2n7:24",
+        "kind": "lit",
+        "value": 0,
+        "of": "type.int"
+      },
+      "@5ko8kevb172ddehstb451ve2n7:23": {
+        "id": "@5ko8kevb172ddehstb451ve2n7:23",
+        "kind": "lambda",
+        "params": [],
+        "body": "@5ko8kevb172ddehstb451ve2n7:24"
+      },
+      "@5ko8kevb172ddehstb451ve2n7:6": {
+        "id": "@5ko8kevb172ddehstb451ve2n7:6",
+        "kind": "ref",
+        "target": "builtin.first"
+      },
+      "@5ko8kevb172ddehstb451ve2n7:5": {
+        "id": "@5ko8kevb172ddehstb451ve2n7:5",
+        "kind": "call",
+        "fn": "@5ko8kevb172ddehstb451ve2n7:6",
+        "args": [
+          "@5ko8kevb172ddehstb451ve2n7:7",
+          "@5ko8kevb172ddehstb451ve2n7:23"
+        ]
+      },
+      "@5ko8kevb172ddehstb451ve2n7:4": {
+        "id": "@5ko8kevb172ddehstb451ve2n7:4",
+        "kind": "ref",
+        "target": "@h4rl8subbd4pecr860ov6gvbep"
+      },
+      "@5ko8kevb172ddehstb451ve2n7:3": {
+        "id": "@5ko8kevb172ddehstb451ve2n7:3",
+        "kind": "call",
+        "fn": "@5ko8kevb172ddehstb451ve2n7:4",
+        "args": [
+          "@5ko8kevb172ddehstb451ve2n7:5"
+        ]
+      },
+      "@5ko8kevb172ddehstb451ve2n7:1": {
+        "id": "@5ko8kevb172ddehstb451ve2n7:1",
+        "kind": "lambda",
+        "params": [
+          "@5ko8kevb172ddehstb451ve2n7:2"
+        ],
+        "body": "@5ko8kevb172ddehstb451ve2n7:3"
+      },
+      "@nkfpbp9ddv7887dlhfo2fg65mf": {
+        "id": "@nkfpbp9ddv7887dlhfo2fg65mf",
+        "kind": "def",
+        "body": "@nkfpbp9ddv7887dlhfo2fg65mf:1"
+      },
+      "@nkfpbp9ddv7887dlhfo2fg65mf:2": {
+        "id": "@nkfpbp9ddv7887dlhfo2fg65mf:2",
+        "kind": "binder"
+      },
+      "@nkfpbp9ddv7887dlhfo2fg65mf:6": {
+        "id": "@nkfpbp9ddv7887dlhfo2fg65mf:6",
+        "kind": "ref",
+        "target": "@nkfpbp9ddv7887dlhfo2fg65mf:2"
+      },
+      "@nkfpbp9ddv7887dlhfo2fg65mf:8": {
+        "id": "@nkfpbp9ddv7887dlhfo2fg65mf:8",
+        "kind": "binder"
+      },
+      "@nkfpbp9ddv7887dlhfo2fg65mf:16": {
+        "id": "@nkfpbp9ddv7887dlhfo2fg65mf:16",
+        "kind": "lit",
+        "value": 1,
+        "unit": {
+          "s": -1
+        }
+      },
+      "@nkfpbp9ddv7887dlhfo2fg65mf:14": {
+        "id": "@nkfpbp9ddv7887dlhfo2fg65mf:14",
+        "kind": "ref",
+        "target": "builtin.arith.mul"
+      },
+      "@nkfpbp9ddv7887dlhfo2fg65mf:15": {
+        "id": "@nkfpbp9ddv7887dlhfo2fg65mf:15",
+        "kind": "ref",
+        "target": "@nkfpbp9ddv7887dlhfo2fg65mf:8"
+      },
+      "@nkfpbp9ddv7887dlhfo2fg65mf:13": {
+        "id": "@nkfpbp9ddv7887dlhfo2fg65mf:13",
+        "kind": "call",
+        "fn": "@nkfpbp9ddv7887dlhfo2fg65mf:14",
+        "args": [
+          "@nkfpbp9ddv7887dlhfo2fg65mf:15",
+          "@nkfpbp9ddv7887dlhfo2fg65mf:16"
+        ]
+      },
+      "@nkfpbp9ddv7887dlhfo2fg65mf:12": {
+        "id": "@nkfpbp9ddv7887dlhfo2fg65mf:12",
+        "kind": "ref",
+        "target": "builtin.floor"
+      },
+      "@nkfpbp9ddv7887dlhfo2fg65mf:11": {
+        "id": "@nkfpbp9ddv7887dlhfo2fg65mf:11",
+        "kind": "call",
+        "fn": "@nkfpbp9ddv7887dlhfo2fg65mf:12",
+        "args": [
+          "@nkfpbp9ddv7887dlhfo2fg65mf:13"
+        ]
+      },
+      "@nkfpbp9ddv7887dlhfo2fg65mf:10": {
+        "id": "@nkfpbp9ddv7887dlhfo2fg65mf:10",
+        "kind": "ref",
+        "target": "@ksd4egbi7rrhfg8dnilgrcmp2e"
+      },
+      "@nkfpbp9ddv7887dlhfo2fg65mf:9": {
+        "id": "@nkfpbp9ddv7887dlhfo2fg65mf:9",
+        "kind": "call",
+        "fn": "@nkfpbp9ddv7887dlhfo2fg65mf:10",
+        "args": [
+          "@nkfpbp9ddv7887dlhfo2fg65mf:11"
+        ]
+      },
+      "@nkfpbp9ddv7887dlhfo2fg65mf:7": {
+        "id": "@nkfpbp9ddv7887dlhfo2fg65mf:7",
+        "kind": "arm",
+        "variant": "std.instant.instant",
+        "binds": [
+          "@nkfpbp9ddv7887dlhfo2fg65mf:8"
+        ],
+        "results": [
+          null
+        ],
+        "body": "@nkfpbp9ddv7887dlhfo2fg65mf:9"
+      },
+      "@nkfpbp9ddv7887dlhfo2fg65mf:5": {
+        "id": "@nkfpbp9ddv7887dlhfo2fg65mf:5",
+        "kind": "match",
+        "scrutinee": "@nkfpbp9ddv7887dlhfo2fg65mf:6",
+        "arms": [
+          "@nkfpbp9ddv7887dlhfo2fg65mf:7"
+        ],
+        "otherwise": null
+      },
+      "@nkfpbp9ddv7887dlhfo2fg65mf:4": {
+        "id": "@nkfpbp9ddv7887dlhfo2fg65mf:4",
+        "kind": "ref",
+        "target": "@2b5ekg52hqfr1gec79sl67hh2o"
+      },
+      "@nkfpbp9ddv7887dlhfo2fg65mf:3": {
+        "id": "@nkfpbp9ddv7887dlhfo2fg65mf:3",
+        "kind": "call",
+        "fn": "@nkfpbp9ddv7887dlhfo2fg65mf:4",
+        "args": [
+          "@nkfpbp9ddv7887dlhfo2fg65mf:5"
+        ]
+      },
+      "@nkfpbp9ddv7887dlhfo2fg65mf:1": {
+        "id": "@nkfpbp9ddv7887dlhfo2fg65mf:1",
+        "kind": "lambda",
+        "params": [
+          "@nkfpbp9ddv7887dlhfo2fg65mf:2"
+        ],
+        "body": "@nkfpbp9ddv7887dlhfo2fg65mf:3"
+      },
+      "@92cuhi7kh7uikbftkv4eamup0u": {
+        "id": "@92cuhi7kh7uikbftkv4eamup0u",
+        "kind": "def",
+        "body": "@92cuhi7kh7uikbftkv4eamup0u:1"
+      },
+      "@92cuhi7kh7uikbftkv4eamup0u:2": {
+        "id": "@92cuhi7kh7uikbftkv4eamup0u:2",
+        "kind": "binder"
+      },
+      "@92cuhi7kh7uikbftkv4eamup0u:5": {
+        "id": "@92cuhi7kh7uikbftkv4eamup0u:5",
+        "kind": "binder"
+      },
+      "@92cuhi7kh7uikbftkv4eamup0u:11": {
+        "id": "@92cuhi7kh7uikbftkv4eamup0u:11",
+        "kind": "ref",
+        "target": "@5ko8kevb172ddehstb451ve2n7"
+      },
+      "@92cuhi7kh7uikbftkv4eamup0u:12": {
+        "id": "@92cuhi7kh7uikbftkv4eamup0u:12",
+        "kind": "ref",
+        "target": "@92cuhi7kh7uikbftkv4eamup0u:5"
+      },
+      "@92cuhi7kh7uikbftkv4eamup0u:10": {
+        "id": "@92cuhi7kh7uikbftkv4eamup0u:10",
+        "kind": "call",
+        "fn": "@92cuhi7kh7uikbftkv4eamup0u:11",
+        "args": [
+          "@92cuhi7kh7uikbftkv4eamup0u:12"
+        ]
+      },
+      "@92cuhi7kh7uikbftkv4eamup0u:9": {
+        "id": "@92cuhi7kh7uikbftkv4eamup0u:9",
+        "kind": "ref",
+        "target": "@3ocku6i2rgmm849mu8ptrv3osm"
+      },
+      "@92cuhi7kh7uikbftkv4eamup0u:8": {
+        "id": "@92cuhi7kh7uikbftkv4eamup0u:8",
+        "kind": "call",
+        "fn": "@92cuhi7kh7uikbftkv4eamup0u:9",
+        "args": [
+          "@92cuhi7kh7uikbftkv4eamup0u:10"
+        ]
+      },
+      "@92cuhi7kh7uikbftkv4eamup0u:15": {
+        "id": "@92cuhi7kh7uikbftkv4eamup0u:15",
+        "kind": "lit",
+        "value": "T"
+      },
+      "@92cuhi7kh7uikbftkv4eamup0u:21": {
+        "id": "@92cuhi7kh7uikbftkv4eamup0u:21",
+        "kind": "ref",
+        "target": "@nkfpbp9ddv7887dlhfo2fg65mf"
+      },
+      "@92cuhi7kh7uikbftkv4eamup0u:22": {
+        "id": "@92cuhi7kh7uikbftkv4eamup0u:22",
+        "kind": "ref",
+        "target": "@92cuhi7kh7uikbftkv4eamup0u:5"
+      },
+      "@92cuhi7kh7uikbftkv4eamup0u:20": {
+        "id": "@92cuhi7kh7uikbftkv4eamup0u:20",
+        "kind": "call",
+        "fn": "@92cuhi7kh7uikbftkv4eamup0u:21",
+        "args": [
+          "@92cuhi7kh7uikbftkv4eamup0u:22"
+        ]
+      },
+      "@92cuhi7kh7uikbftkv4eamup0u:19": {
+        "id": "@92cuhi7kh7uikbftkv4eamup0u:19",
+        "kind": "ref",
+        "target": "@a497sm0mi6enaft1btld07p2m6"
+      },
+      "@92cuhi7kh7uikbftkv4eamup0u:18": {
+        "id": "@92cuhi7kh7uikbftkv4eamup0u:18",
+        "kind": "call",
+        "fn": "@92cuhi7kh7uikbftkv4eamup0u:19",
+        "args": [
+          "@92cuhi7kh7uikbftkv4eamup0u:20"
+        ]
+      },
+      "@92cuhi7kh7uikbftkv4eamup0u:23": {
+        "id": "@92cuhi7kh7uikbftkv4eamup0u:23",
+        "kind": "lit",
+        "value": "Z"
+      },
+      "@92cuhi7kh7uikbftkv4eamup0u:17": {
+        "id": "@92cuhi7kh7uikbftkv4eamup0u:17",
+        "kind": "ref",
+        "target": "builtin.concat"
+      },
+      "@92cuhi7kh7uikbftkv4eamup0u:16": {
+        "id": "@92cuhi7kh7uikbftkv4eamup0u:16",
+        "kind": "call",
+        "fn": "@92cuhi7kh7uikbftkv4eamup0u:17",
+        "args": [
+          "@92cuhi7kh7uikbftkv4eamup0u:18",
+          "@92cuhi7kh7uikbftkv4eamup0u:23"
+        ]
+      },
+      "@92cuhi7kh7uikbftkv4eamup0u:14": {
+        "id": "@92cuhi7kh7uikbftkv4eamup0u:14",
+        "kind": "ref",
+        "target": "builtin.concat"
+      },
+      "@92cuhi7kh7uikbftkv4eamup0u:13": {
+        "id": "@92cuhi7kh7uikbftkv4eamup0u:13",
+        "kind": "call",
+        "fn": "@92cuhi7kh7uikbftkv4eamup0u:14",
+        "args": [
+          "@92cuhi7kh7uikbftkv4eamup0u:15",
+          "@92cuhi7kh7uikbftkv4eamup0u:16"
+        ]
+      },
+      "@92cuhi7kh7uikbftkv4eamup0u:7": {
+        "id": "@92cuhi7kh7uikbftkv4eamup0u:7",
+        "kind": "ref",
+        "target": "builtin.concat"
+      },
+      "@92cuhi7kh7uikbftkv4eamup0u:6": {
+        "id": "@92cuhi7kh7uikbftkv4eamup0u:6",
+        "kind": "call",
+        "fn": "@92cuhi7kh7uikbftkv4eamup0u:7",
+        "args": [
+          "@92cuhi7kh7uikbftkv4eamup0u:8",
+          "@92cuhi7kh7uikbftkv4eamup0u:13"
+        ]
+      },
+      "@92cuhi7kh7uikbftkv4eamup0u:4": {
+        "id": "@92cuhi7kh7uikbftkv4eamup0u:4",
+        "kind": "lambda",
+        "params": [
+          "@92cuhi7kh7uikbftkv4eamup0u:5"
+        ],
+        "body": "@92cuhi7kh7uikbftkv4eamup0u:6"
+      },
+      "@92cuhi7kh7uikbftkv4eamup0u:24": {
+        "id": "@92cuhi7kh7uikbftkv4eamup0u:24",
+        "kind": "ref",
+        "target": "@92cuhi7kh7uikbftkv4eamup0u:2"
+      },
+      "@92cuhi7kh7uikbftkv4eamup0u:3": {
+        "id": "@92cuhi7kh7uikbftkv4eamup0u:3",
+        "kind": "call",
+        "fn": "@92cuhi7kh7uikbftkv4eamup0u:4",
+        "args": [
+          "@92cuhi7kh7uikbftkv4eamup0u:24"
+        ]
+      },
+      "@92cuhi7kh7uikbftkv4eamup0u:1": {
+        "id": "@92cuhi7kh7uikbftkv4eamup0u:1",
+        "kind": "lambda",
+        "params": [
+          "@92cuhi7kh7uikbftkv4eamup0u:2"
+        ],
+        "body": "@92cuhi7kh7uikbftkv4eamup0u:3"
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9",
+        "kind": "def",
+        "body": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:1"
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:2": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:2",
+        "kind": "binder"
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:56": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:56",
+        "kind": "lit",
+        "value": "T"
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:54": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:54",
+        "kind": "ref",
+        "target": "builtin.text.split"
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:55": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:55",
+        "kind": "ref",
+        "target": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:2"
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:53": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:53",
+        "kind": "call",
+        "fn": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:54",
+        "args": [
+          "@8rbt9n4tqk7nmj6cmuuh9ss0c9:55",
+          "@8rbt9n4tqk7nmj6cmuuh9ss0c9:56"
+        ]
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:5": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:5",
+        "kind": "binder"
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:12": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:12",
+        "kind": "ref",
+        "target": "@ms3a2v8ka09mr0hqvm9t2d4mq4"
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:13": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:13",
+        "kind": "ref",
+        "target": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:5"
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:11": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:11",
+        "kind": "call",
+        "fn": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:12",
+        "args": [
+          "@8rbt9n4tqk7nmj6cmuuh9ss0c9:13"
+        ]
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:14": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:14",
+        "kind": "lit",
+        "value": 2,
+        "of": "type.int"
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:10": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:10",
+        "kind": "ref",
+        "target": "builtin.equal"
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:9": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:9",
+        "kind": "call",
+        "fn": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:10",
+        "args": [
+          "@8rbt9n4tqk7nmj6cmuuh9ss0c9:11",
+          "@8rbt9n4tqk7nmj6cmuuh9ss0c9:14"
+        ]
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:18": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:18",
+        "kind": "lit",
+        "value": "Z"
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:16": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:16",
+        "kind": "ref",
+        "target": "@5spbl9n0242le2go76pak262k3"
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:17": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:17",
+        "kind": "ref",
+        "target": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:2"
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:15": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:15",
+        "kind": "call",
+        "fn": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:16",
+        "args": [
+          "@8rbt9n4tqk7nmj6cmuuh9ss0c9:17",
+          "@8rbt9n4tqk7nmj6cmuuh9ss0c9:18"
+        ]
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:8": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:8",
+        "kind": "ref",
+        "target": "builtin.and"
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:7": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:7",
+        "kind": "call",
+        "fn": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:8",
+        "args": [
+          "@8rbt9n4tqk7nmj6cmuuh9ss0c9:9",
+          "@8rbt9n4tqk7nmj6cmuuh9ss0c9:15"
+        ]
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:47": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:47",
+        "kind": "lit",
+        "value": 1,
+        "of": "type.int"
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:48": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:48",
+        "kind": "lit",
+        "value": ""
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:45": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:45",
+        "kind": "ref",
+        "target": "@k8goc3glumjd1d6t7gejcpupa9"
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:46": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:46",
+        "kind": "ref",
+        "target": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:5"
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:44": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:44",
+        "kind": "call",
+        "fn": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:45",
+        "args": [
+          "@8rbt9n4tqk7nmj6cmuuh9ss0c9:46",
+          "@8rbt9n4tqk7nmj6cmuuh9ss0c9:47",
+          "@8rbt9n4tqk7nmj6cmuuh9ss0c9:48"
+        ]
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:22": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:22",
+        "kind": "binder"
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:30": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:30",
+        "kind": "lit",
+        "value": 0,
+        "of": "type.int"
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:31": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:31",
+        "kind": "lit",
+        "value": ""
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:28": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:28",
+        "kind": "ref",
+        "target": "@k8goc3glumjd1d6t7gejcpupa9"
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:29": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:29",
+        "kind": "ref",
+        "target": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:5"
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:27": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:27",
+        "kind": "call",
+        "fn": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:28",
+        "args": [
+          "@8rbt9n4tqk7nmj6cmuuh9ss0c9:29",
+          "@8rbt9n4tqk7nmj6cmuuh9ss0c9:30",
+          "@8rbt9n4tqk7nmj6cmuuh9ss0c9:31"
+        ]
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:26": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:26",
+        "kind": "ref",
+        "target": "@4qetcnooqesmt5eg06h3u6kke1"
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:25": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:25",
+        "kind": "call",
+        "fn": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:26",
+        "args": [
+          "@8rbt9n4tqk7nmj6cmuuh9ss0c9:27"
+        ]
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:37": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:37",
+        "kind": "lit",
+        "value": 0,
+        "of": "type.int"
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:41": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:41",
+        "kind": "ref",
+        "target": "builtin.text.length"
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:42": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:42",
+        "kind": "ref",
+        "target": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:22"
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:40": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:40",
+        "kind": "call",
+        "fn": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:41",
+        "args": [
+          "@8rbt9n4tqk7nmj6cmuuh9ss0c9:42"
+        ]
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:43": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:43",
+        "kind": "lit",
+        "value": 1,
+        "of": "type.int"
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:39": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:39",
+        "kind": "ref",
+        "target": "builtin.int.sub"
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:38": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:38",
+        "kind": "call",
+        "fn": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:39",
+        "args": [
+          "@8rbt9n4tqk7nmj6cmuuh9ss0c9:40",
+          "@8rbt9n4tqk7nmj6cmuuh9ss0c9:43"
+        ]
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:35": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:35",
+        "kind": "ref",
+        "target": "builtin.text.slice"
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:36": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:36",
+        "kind": "ref",
+        "target": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:22"
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:34": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:34",
+        "kind": "call",
+        "fn": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:35",
+        "args": [
+          "@8rbt9n4tqk7nmj6cmuuh9ss0c9:36",
+          "@8rbt9n4tqk7nmj6cmuuh9ss0c9:37",
+          "@8rbt9n4tqk7nmj6cmuuh9ss0c9:38"
+        ]
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:33": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:33",
+        "kind": "ref",
+        "target": "@p5n63bfvt939jnuhts8a2pfckd"
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:32": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:32",
+        "kind": "call",
+        "fn": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:33",
+        "args": [
+          "@8rbt9n4tqk7nmj6cmuuh9ss0c9:34"
+        ]
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:24": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:24",
+        "kind": "ref",
+        "target": "@t1ou64cl7avac07nm62aru3tjc"
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:23": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:23",
+        "kind": "call",
+        "fn": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:24",
+        "args": [
+          "@8rbt9n4tqk7nmj6cmuuh9ss0c9:25",
+          "@8rbt9n4tqk7nmj6cmuuh9ss0c9:32"
+        ]
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:21": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:21",
+        "kind": "lambda",
+        "params": [
+          "@8rbt9n4tqk7nmj6cmuuh9ss0c9:22"
+        ],
+        "body": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:23"
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:20": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:20",
+        "kind": "call",
+        "fn": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:21",
+        "args": [
+          "@8rbt9n4tqk7nmj6cmuuh9ss0c9:44"
+        ]
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:52": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:52",
+        "kind": "lit",
+        "value": "instant read: an instant is written year-month-dayThour:minute:secondZ, in UTC, as 2026-11-04T09:30:00Z"
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:51": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:51",
+        "kind": "ref",
+        "target": "std.abort.abort"
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:50": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:50",
+        "kind": "call",
+        "fn": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:51",
+        "args": [
+          "@8rbt9n4tqk7nmj6cmuuh9ss0c9:52"
+        ]
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:19": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:19",
+        "kind": "arm",
+        "variant": "std.bool.true",
+        "binds": [],
+        "results": [],
+        "body": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:20"
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:49": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:49",
+        "kind": "arm",
+        "variant": "std.bool.false",
+        "binds": [],
+        "results": [],
+        "body": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:50"
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:6": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:6",
+        "kind": "match",
+        "scrutinee": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:7",
+        "arms": [
+          "@8rbt9n4tqk7nmj6cmuuh9ss0c9:19",
+          "@8rbt9n4tqk7nmj6cmuuh9ss0c9:49"
+        ],
+        "otherwise": null
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:4": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:4",
+        "kind": "lambda",
+        "params": [
+          "@8rbt9n4tqk7nmj6cmuuh9ss0c9:5"
+        ],
+        "body": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:6"
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:3": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:3",
+        "kind": "call",
+        "fn": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:4",
+        "args": [
+          "@8rbt9n4tqk7nmj6cmuuh9ss0c9:53"
+        ]
+      },
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9:1": {
+        "id": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:1",
+        "kind": "lambda",
+        "params": [
+          "@8rbt9n4tqk7nmj6cmuuh9ss0c9:2"
+        ],
+        "body": "@8rbt9n4tqk7nmj6cmuuh9ss0c9:3"
       }
     },
     "defs": [
@@ -105688,6 +107131,19 @@
       "@2b5ekg52hqfr1gec79sl67hh2o",
       "@a497sm0mi6enaft1btld07p2m6",
       "@p5n63bfvt939jnuhts8a2pfckd",
+      "@m5tar6lp7n0om03bvgi4rn0ti8",
+      "@r861g07spahnspunm49ocir8ch",
+      "@ui97ao11ion8c8nrn5tpbtf4uu",
+      "@aiudtpvpfgrjv7afhids8t7hja",
+      "@l8ho0ruj9lgr1mauifnbaatt4j",
+      "@hph304nt0v1b7jk1icg977f7lg",
+      "@l5ihqjk3cq10dc9g4te32um00v",
+      "@p3chdv9c8cfqn9u16lhqmt7t0e",
+      "@t1ou64cl7avac07nm62aru3tjc",
+      "@5ko8kevb172ddehstb451ve2n7",
+      "@nkfpbp9ddv7887dlhfo2fg65mf",
+      "@92cuhi7kh7uikbftkv4eamup0u",
+      "@8rbt9n4tqk7nmj6cmuuh9ss0c9",
       "@go4eqh5o6pvomac0lnut74mvc3",
       "@03ct3j2jgf58me928d79bmo5d0",
       "@guf5849e015ci39pfibalomhps",
@@ -118187,6 +119643,381 @@
       },
       "plain": []
     },
+    "@m5tar6lp7n0om03bvgi4rn0ti8": {
+      "vars": [
+        0
+      ],
+      "rows": [
+        1
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "var",
+            "v": 0
+          }
+        ],
+        "ret": {
+          "t": "var",
+          "v": 0
+        },
+        "eff": {
+          "effs": [],
+          "tail": 1
+        }
+      },
+      "plain": [
+        0
+      ],
+      "arith": [
+        0
+      ]
+    },
+    "@r861g07spahnspunm49ocir8ch": {
+      "vars": [
+        0
+      ],
+      "rows": [
+        1
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "var",
+            "v": 0
+          }
+        ],
+        "ret": {
+          "t": "var",
+          "v": 0
+        },
+        "eff": {
+          "effs": [],
+          "tail": 1
+        }
+      },
+      "plain": [
+        0
+      ],
+      "arith": [
+        0
+      ]
+    },
+    "@ui97ao11ion8c8nrn5tpbtf4uu": {
+      "vars": [
+        0
+      ],
+      "rows": [
+        1
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "var",
+            "v": 0
+          }
+        ],
+        "ret": {
+          "t": "var",
+          "v": 0
+        },
+        "eff": {
+          "effs": [],
+          "tail": 1
+        }
+      },
+      "plain": [
+        0
+      ],
+      "arith": [
+        0
+      ]
+    },
+    "@aiudtpvpfgrjv7afhids8t7hja": {
+      "vars": [
+        0
+      ],
+      "rows": [
+        1
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "var",
+            "v": 0
+          }
+        ],
+        "ret": {
+          "t": "var",
+          "v": 0
+        },
+        "eff": {
+          "effs": [],
+          "tail": 1
+        }
+      },
+      "plain": [
+        0
+      ],
+      "arith": [
+        0
+      ]
+    },
+    "@l8ho0ruj9lgr1mauifnbaatt4j": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "type.number",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.instant",
+          "args": []
+        },
+        "eff": {
+          "effs": [],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
+    "@hph304nt0v1b7jk1icg977f7lg": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.instant",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "type.number",
+          "args": []
+        },
+        "eff": {
+          "effs": [],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
+    "@l5ihqjk3cq10dc9g4te32um00v": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.instant",
+            "args": []
+          },
+          {
+            "t": "con",
+            "id": "type.number",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.instant",
+          "args": []
+        },
+        "eff": {
+          "effs": [],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
+    "@p3chdv9c8cfqn9u16lhqmt7t0e": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.instant",
+            "args": []
+          },
+          {
+            "t": "con",
+            "id": "std.instant",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "type.number",
+          "args": []
+        },
+        "eff": {
+          "effs": [],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
+    "@t1ou64cl7avac07nm62aru3tjc": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.date",
+            "args": []
+          },
+          {
+            "t": "con",
+            "id": "std.timeofday",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.instant",
+          "args": []
+        },
+        "eff": {
+          "effs": [],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
+    "@5ko8kevb172ddehstb451ve2n7": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.instant",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.date",
+          "args": []
+        },
+        "eff": {
+          "effs": [],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
+    "@nkfpbp9ddv7887dlhfo2fg65mf": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.instant",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.timeofday",
+          "args": []
+        },
+        "eff": {
+          "effs": [],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
+    "@92cuhi7kh7uikbftkv4eamup0u": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.instant",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "type.string",
+          "args": []
+        },
+        "eff": {
+          "effs": [],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
+    "@8rbt9n4tqk7nmj6cmuuh9ss0c9": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "type.string",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.instant",
+          "args": []
+        },
+        "eff": {
+          "effs": [
+            "std.abort"
+          ],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
     "@go4eqh5o6pvomac0lnut74mvc3": {
       "vars": [
         0,
@@ -127129,7 +128960,45 @@
     "@p5n63bfvt939jnuhts8a2pfckd:5": "parts",
     "@p5n63bfvt939jnuhts8a2pfckd:18": "part",
     "@p5n63bfvt939jnuhts8a2pfckd:44": "part",
-    "@p5n63bfvt939jnuhts8a2pfckd:70": "part"
+    "@p5n63bfvt939jnuhts8a2pfckd:70": "part",
+    "@m5tar6lp7n0om03bvgi4rn0ti8": "seconds",
+    "@m5tar6lp7n0om03bvgi4rn0ti8:2": "count",
+    "@r861g07spahnspunm49ocir8ch": "minutes",
+    "@r861g07spahnspunm49ocir8ch:2": "count",
+    "@ui97ao11ion8c8nrn5tpbtf4uu": "hours",
+    "@ui97ao11ion8c8nrn5tpbtf4uu:2": "count",
+    "@aiudtpvpfgrjv7afhids8t7hja": "days",
+    "@aiudtpvpfgrjv7afhids8t7hja:2": "count",
+    "@l8ho0ruj9lgr1mauifnbaatt4j": "instant of",
+    "@l8ho0ruj9lgr1mauifnbaatt4j:2": "seconds",
+    "@hph304nt0v1b7jk1icg977f7lg": "seconds since 1970",
+    "@hph304nt0v1b7jk1icg977f7lg:2": "instant",
+    "@hph304nt0v1b7jk1icg977f7lg:6": "seconds",
+    "@l5ihqjk3cq10dc9g4te32um00v": "later by",
+    "@l5ihqjk3cq10dc9g4te32um00v:2": "instant",
+    "@l5ihqjk3cq10dc9g4te32um00v:3": "duration",
+    "@l5ihqjk3cq10dc9g4te32um00v:7": "seconds",
+    "@p3chdv9c8cfqn9u16lhqmt7t0e": "duration between",
+    "@p3chdv9c8cfqn9u16lhqmt7t0e:2": "earlier",
+    "@p3chdv9c8cfqn9u16lhqmt7t0e:3": "later",
+    "@p3chdv9c8cfqn9u16lhqmt7t0e:7": "seconds",
+    "@p3chdv9c8cfqn9u16lhqmt7t0e:11": "seconds",
+    "@t1ou64cl7avac07nm62aru3tjc": "instant at",
+    "@t1ou64cl7avac07nm62aru3tjc:2": "date",
+    "@t1ou64cl7avac07nm62aru3tjc:3": "time",
+    "@5ko8kevb172ddehstb451ve2n7": "date at",
+    "@5ko8kevb172ddehstb451ve2n7:2": "instant",
+    "@5ko8kevb172ddehstb451ve2n7:13": "seconds",
+    "@nkfpbp9ddv7887dlhfo2fg65mf": "time at",
+    "@nkfpbp9ddv7887dlhfo2fg65mf:2": "instant",
+    "@nkfpbp9ddv7887dlhfo2fg65mf:8": "seconds",
+    "@92cuhi7kh7uikbftkv4eamup0u": "instant text",
+    "@92cuhi7kh7uikbftkv4eamup0u:2": "instant",
+    "@92cuhi7kh7uikbftkv4eamup0u:5": "when",
+    "@8rbt9n4tqk7nmj6cmuuh9ss0c9": "instant read",
+    "@8rbt9n4tqk7nmj6cmuuh9ss0c9:2": "text",
+    "@8rbt9n4tqk7nmj6cmuuh9ss0c9:5": "parts",
+    "@8rbt9n4tqk7nmj6cmuuh9ss0c9:22": "clock"
   },
   "comments": {
     "@7uq2j0i4v8m02boa1jovfc68tl": "Runs the action on each item of the list in turn, for what it does (prints, writes a cell).",
@@ -127291,6 +129160,19 @@
     "@13umq8bgl00dvfol98hcrvitg9": "The time as seconds from midnight, 0 to 86399.",
     "@2b5ekg52hqfr1gec79sl67hh2o": "The time of day so many seconds from midnight, wrapping round: time of seconds(90000) is 01:00:00, and a negative count goes back from midnight.",
     "@a497sm0mi6enaft1btld07p2m6": "The time as ISO 8601 writes it, hour:minute:second: time text(time of(9, 5, 0)) is \"09:05:00\".",
+    "@m5tar6lp7n0om03bvgi4rn0ti8": "So many seconds, as a duration: a duration is a Float64 in seconds (s), so seconds(90) is minutes(1.5) and units check it isn't added to a length.",
+    "@r861g07spahnspunm49ocir8ch": "So many minutes as a duration, 60 s each: minutes(5) is 300 s.",
+    "@ui97ao11ion8c8nrn5tpbtf4uu": "So many hours as a duration, 3600 s each: hours(2) is 7200 s.",
+    "@aiudtpvpfgrjv7afhids8t7hja": "So many days as a duration, 86400 s each. A calendar day can be longer or shorter where clocks change; this is the day of UTC.",
+    "@l8ho0ruj9lgr1mauifnbaatt4j": "The instant so many seconds after 1970-01-01 00:00:00 UTC (POSIX time, leap seconds not counted): instant of(0) is 1970-01-01T00:00:00Z.",
+    "@hph304nt0v1b7jk1icg977f7lg": "The instant as seconds since 1970-01-01 00:00:00 UTC, the other way from instant of.",
+    "@l5ihqjk3cq10dc9g4te32um00v": "The instant a duration after this one, earlier for a negative duration: later by(start, hours(2)).",
+    "@p3chdv9c8cfqn9u16lhqmt7t0e": "The duration from the first instant to the second, negative when the second is earlier.",
+    "@t1ou64cl7avac07nm62aru3tjc": "The instant a date and a time of day name in UTC: instant at(date of(1970, 1, 2), time of(0, 0, 0)) is a day after instant of(0).",
+    "@5ko8kevb172ddehstb451ve2n7": "The date in UTC at an instant.",
+    "@nkfpbp9ddv7887dlhfo2fg65mf": "The time of day in UTC at an instant, in whole seconds (a fraction of a second is dropped).",
+    "@92cuhi7kh7uikbftkv4eamup0u": "The instant as ISO 8601 writes it in UTC, whole seconds: instant text(instant of(0)) is \"1970-01-01T00:00:00Z\".",
+    "@8rbt9n4tqk7nmj6cmuuh9ss0c9": "The instant an ISO 8601 text writes in UTC, year-month-dayThour:minute:secondZ, the other way from instant text. Stops on any other text.",
     "@p5n63bfvt939jnuhts8a2pfckd": "The time an ISO 8601 text writes, hour:minute:second in two digits each, the other way from time text. Stops on any other text.",
     "@3ocku6i2rgmm849mu8ptrv3osm": "The date as ISO 8601 writes it, year-month-day: date text(date of(2026, 11, 3)) is \"2026-11-03\".",
     "@nj3dvvtm9ktrfpbpnhqqsvas6m": "The value of an object's field with this name, the first if there are several. No answer for a missing field or a value that isn't an object.",
@@ -127750,6 +129632,19 @@
     "@2b5ekg52hqfr1gec79sl67hh2o",
     "@a497sm0mi6enaft1btld07p2m6",
     "@p5n63bfvt939jnuhts8a2pfckd",
+    "@m5tar6lp7n0om03bvgi4rn0ti8",
+    "@r861g07spahnspunm49ocir8ch",
+    "@ui97ao11ion8c8nrn5tpbtf4uu",
+    "@aiudtpvpfgrjv7afhids8t7hja",
+    "@l8ho0ruj9lgr1mauifnbaatt4j",
+    "@hph304nt0v1b7jk1icg977f7lg",
+    "@l5ihqjk3cq10dc9g4te32um00v",
+    "@p3chdv9c8cfqn9u16lhqmt7t0e",
+    "@t1ou64cl7avac07nm62aru3tjc",
+    "@5ko8kevb172ddehstb451ve2n7",
+    "@nkfpbp9ddv7887dlhfo2fg65mf",
+    "@92cuhi7kh7uikbftkv4eamup0u",
+    "@8rbt9n4tqk7nmj6cmuuh9ss0c9",
     "@go4eqh5o6pvomac0lnut74mvc3",
     "@03ct3j2jgf58me928d79bmo5d0",
     "@31uquin8cnli56vptl080ppv4o",
