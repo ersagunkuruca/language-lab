@@ -9,7 +9,7 @@ import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { PROBLEMS, problemOf } from "../src/lang/problems.ts";
 import { NUMBER } from "../src/lang/types.ts";
-import { ARITH, DIVIDE, FALSE, FIELDS, INT_OPS, JSON_OPS, LOG_OP, S, RELEASE_V, SHOWN_V, SOME, TRIG_OPS, TRUE } from "../src/lang/std.ts";
+import { ARITH, DIVIDE, EMBEDDING_V, FALSE, FIELDS, INT_OPS, JSON_OPS, LOG_OP, S, RELEASE_V, SHOWN_V, SOME, TRIG_OPS, TRUE } from "../src/lang/std.ts";
 
 const bools = (k: Lang, b: string, extra: Parameters<Lang["match"]>[1] = []) =>
   k.match(b, [{ variant: TRUE, names: [], body: () => k.lit(1) }, { variant: FALSE, names: [], body: () => k.lit(2) }, ...extra]);
@@ -73,6 +73,11 @@ const SMALLEST: Record<string, (k: Lang) => void> = {
   "finish-not-function": (k) => { const a = ask(k); k.define(k.def("p"), k.thunk(() => k.match(k.call(a.op.ask), answered(k, a, () => k.lit(1)), k.lit(2)))); },
   "later-case-chooses": (k) => { const a = k.effect("Wait", [["wait", [], () => k.tref(NUMBER), "later"]]); k.define(k.def("p"), k.thunk(() => k.handle(k.call(a.op.wait), [{ variant: a.op.wait, names: ["go"], body: ([go]) => k.call(go, k.call(S.oneOf, k.list(k.lit(1), k.lit(2)))) }]))); },
   "release-lets-choice": (k) => { const a = ask(k); k.define(k.def("p"), k.thunk(() => k.handle(k.seq(k.call(a.op.ask), k.call(S.oneOf, k.list(k.lit(1), k.lit(2)))), answered(k, a, () => k.lit(1)), undefined, () => k.x("std.unit.unit")))); },
+  "embedding-open": (k) => k.define(k.def("p"), k.call(EMBEDDING_V, k.fn(["x"], (x) => x))),
+  "embedding-not-record": (k) => k.define(k.def("p"), k.let("e", k.call(EMBEDDING_V, k.fn(["x"], (x) => k.call(S.show, x))), (e) => e)),
+  "embedding-itself": (k) => k.define(k.def("p"), k.call(EMBEDDING_V, k.fn(["x"], (x) => k.call(INT_OPS.add, x, k.int(0))))),
+  "embedding-twice": (k) => k.define(k.def("p"), k.call(EMBEDDING_V, k.x(INT_OPS.toNumber))),
+  "implementation-not-record": (k) => { const t = k.type("Colour", [], [["red", []]]); k.define(k.def("p"), k.let("s", k.call(SHOWN_V, k.fn(["c"], (c) => k.match(c, [{ variant: t.v.red, names: [], body: () => k.lit("red") }]))), (s) => s)); },
   "not-a-number": (k) => k.define(k.def("p"), k.fn(["b"], (b) => k.match(b, [{ variant: TRUE, names: [], body: () => k.lit(1) }, { variant: FALSE, names: [], body: () => k.lit("a") }]))),
 };
 
