@@ -54,7 +54,7 @@ import { allowedOnly, nodeWorld } from "../src/lang/world.ts";
 import { compile } from "../../compiler/src/compile.ts";
 import { CFLAGS, emitC } from "../../compiler/src/c.ts";
 import { lowerScalar } from "../../compiler/src/scalar.ts";
-import { coreModule, lowerCore } from "../../compiler/src/core-js.ts";
+import { coreModule, hostOpsOf, lowerCore } from "../../compiler/src/core-js.ts";
 import { execFileSync } from "node:child_process";
 import { recordings, webCorePage, webPage } from "./web.ts";
 import { appFolder } from "./app.ts";
@@ -320,7 +320,9 @@ switch (command) {
       if (why && rest.includes("--core")) fail(`${p.names[main] ?? "main"} isn't compiled through the core IR: it ${why}`);
       if (why) { process.stderr.write(`lab: ${p.names[main] ?? "main"} isn't compiled through the core IR (it ${why}), so through compile.ts\n`); return compiled(p, main, inCheckout); }
       const here = (f: string) => resolve(import.meta.dirname, f);
-      return coreModule(lowered, p.names[main] ?? "main", here("../../compiler/src/core-rt.ts"), here("../src/lang/world.ts"));
+      // Its hosts/js.js, bundled in or imported from beside the program (C137d5).
+      const host = pageHost ? { file: inCheckout ? pathToFileURL(pageHost).href : pageHost, ops: hostOpsOf(p.code, p.names) } : undefined;
+      return coreModule(lowered, p.names[main] ?? "main", here("../../compiler/src/core-rt.ts"), here("../src/lang/world.ts"), host);
     };
     if (esbuild) {
       await esbuild.build({
@@ -356,17 +358,14 @@ switch (command) {
     const o = rest.indexOf("-o");
     const out = o >= 0 ? rest[o + 1] ?? fail("-o needs a file") : `${basename(resolve(path)).replace(/\.json$/, "")}.html`;
     // Printed from the core IR (C137c9), since C137d1 unless the page
-    // doesn't lower there (or has hosts/js.js): then compile.ts, saying so.
+    // doesn't lower there: then compile.ts, saying so.
     // --core insists on the core IR, --compile-ts on compile.ts.
     const insist = rest.includes("--core");
     let page: string | null = null;
     if (!rest.includes("--compile-ts")) {
-      if (pageHost && insist) fail("a page with hosts/js.js isn't made from the core IR yet");
-      if (!pageHost) {
-        try { page = await webCorePage(p.title, p.code, p.info, p.names, p.own, main); } catch (e) {
-          if (insist) fail((e as Error).message);
-          process.stderr.write(`lab: ${(e as Error).message.replace(/^lab: /, "")}, so the page is made by compile.ts\n`);
-        }
+      try { page = await webCorePage(p.title, p.code, p.info, p.names, p.own, main, pageHost); } catch (e) {
+        if (insist) fail((e as Error).message);
+        process.stderr.write(`lab: ${(e as Error).message.replace(/^lab: /, "")}, so the page is made by compile.ts\n`);
       }
     }
     writeFileSync(out, page ?? await webPage(p.title, p.code, p.info, p.names, main, pageHost));
