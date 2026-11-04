@@ -129,7 +129,6 @@ const ARITH_WHAT = {
 };
 const str: Type = { t: "con", id: STRING, args: [] };
 // A number type itself (a pinned variable counts).
-const isNumberType = (t: Type) => t.t === "con" && (t.id === NUMBER || t.id === INT || t.id === RATIONAL_TYPE || t.id === COMPLEX_TYPE || t.id === DUAL_TYPE || t.id === FIXED_TYPE || t.id === ALGEBRAIC_TYPE || t.id.startsWith("pin."));
 // Each number type's own arithmetic, which the generic + − · −x < stand for.
 // And Float64's sin, cos, tan, exp and log, which Trig's are at Float64.
 const PER_TYPE = new Set([...["add", "sub", "mul", "neg", "less"].flatMap((op) => [`builtin.${op}`, `builtin.int.${op}`]), ...["sin", "cos", "tan", "exp", "log"].map((op) => `builtin.${op}`)]);
@@ -391,6 +390,9 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     const con = rest.startsWith("@") ? rest.slice(1) : (JSON.parse(rest) as Type).t === "con" ? (JSON.parse(rest) as { id: Id }).id : null;
     if (con) lowerHas.add(`${iface} ${con}`);
   }
+  // A number type: Float64, Int, a pin's, or one with + − · of its own in
+  // the layer under or here (L204f), for saying a number isn't one.
+  const isNumberType = (t: Type) => t.t === "con" && (t.id === NUMBER || t.id === INT || t.id.startsWith("pin.") || lowerHas.has(`std.arithmetic ${t.id}`) || !!implementationOf(info, "std.arithmetic", t));
   s.waits = (id, iface) => (layer && (id.startsWith("std.") || id.startsWith("type.")) ? lowerHas.has(`${iface} ${id}`) : !!typedefOf(id));
 
   // --- strict positivity
