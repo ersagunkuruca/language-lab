@@ -9,7 +9,7 @@ import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { library } from "./programs.ts";
-import { FILE_OPS, NEXT_LINE_OP, WRITE_LINE_OP, ZONE_OPS, ABORT_OP, ARITH, CELL_OPS, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, TICKET_V, AWAIT_OP, START_TIMER_OP, NOW_OP, WAIT_OP, BRANCH_V, DUAL_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, DIVISION_V, SHOWN_V, BITS_V, WORD_SIZES, WORD_V, EXTENDED_V, ALGEBRAIC_OPS, CHECK_OP, RANDOM_OP, QUEUE_V, PRIORITY_QUEUE_V, MATRIX_V, TENSOR_V, BYTES_V, JSON_V, DATE_V, TIME_OF_DAY_V, INSTANT_V, EMBEDDING_V, STATE_OPS, PIPE_OPS, std } from "./std.ts";
+import { LITERAL_V, FILE_OPS, NEXT_LINE_OP, WRITE_LINE_OP, ZONE_OPS, ABORT_OP, ARITH, CELL_OPS, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, TICKET_V, AWAIT_OP, START_TIMER_OP, NOW_OP, WAIT_OP, BRANCH_V, DUAL_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, DIVISION_V, SHOWN_V, BITS_V, WORD_SIZES, WORD_V, EXTENDED_V, ALGEBRAIC_OPS, CHECK_OP, RANDOM_OP, QUEUE_V, PRIORITY_QUEUE_V, MATRIX_V, TENSOR_V, BYTES_V, JSON_V, DATE_V, TIME_OF_DAY_V, INSTANT_V, EMBEDDING_V, STATE_OPS, PIPE_OPS, std } from "./std.ts";
 
 export function buildPrelude(): Module {
   const k = new Lang();
@@ -1072,6 +1072,14 @@ export function buildPrelude(): Module {
     impl("ordered at algebraic", ORDERED_V, [ALGEBRAIC_OPS.less]),
     impl("arithmetic at fixed", ARITHMETIC_V, [addX, subX, mulX, negX]),
     ...matProducts.map((m, i) => impl(`arithmetic at mat${i + 2}`, ARITHMETIC_V, [addParts, subParts, m, negParts])),
+    // A number at a matrix is that many times the identity (L204c): 2 is
+    // 2 down the diagonal and 0 elsewhere.
+    ...([2, 3, 4] as const).map((size) => {
+      const d = k.def(`literal at mat${size}`);
+      k.define(d, k.call(LITERAL_V, k.fn(["top", "bottom"], (t, b) => k.let("x", k.call(dividedOr, k.call(INT_OPS.toNumber, t), k.call(INT_OPS.toNumber, b), k.lit(0)), (x) =>
+        k.call(MAT_V[size], ...Array.from({ length: size * size }, (_, c) => (c % (size + 1) === 0 ? x : k.lit(0))))))));
+      return d;
+    }),
     impl("ordered at fixed", ORDERED_V, [lessX]),
     ...wordDefs.flatMap((d) => [impl(`arithmetic at word${d.w}`, ARITHMETIC_V, [d.add, d.sub, d.mul, d.neg]), impl(`ordered at word${d.w}`, ORDERED_V, [d.less])]),
     // Text's < is `comes before`, alphabetical (L152): at most, smaller,
