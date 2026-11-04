@@ -49,19 +49,21 @@ test("examples/raymarch: the ray marcher goes to the GPU whole, normals and all"
   assert.deepEqual([...s.refused.keys()], []);
   const funcs = lowered.funcs.map((f) => f.name);
   for (const d of ["march", "shadow", "shade", "trace", "scene", "scale", "unit"]) assert.ok(funcs.includes(d), d);
-  // Only colour is a place to start: the rest may not finish, so they run
-  // under its budget.
-  assert.deepEqual(s.funcs.map((f) => f.name).filter((n) => ["colour", "trace", "march", "shadow", "shade"].includes(n)), ["colour"]);
-  assert.match(s.wgsl, /lab_fuel = 1000\.0;/);
-  // march and shadow call themselves last: loops, each round spending one.
+  // march and shadow count their steps in an Int (L46b), so the checker
+  // sees them end: each is a place to start, and so is everything over them.
+  assert.deepEqual(s.funcs.map((f) => f.name).filter((n) => ["colour", "trace", "march", "shadow", "shade"].includes(n)), ["colour", "trace", "march", "shade", "shadow"]);
+  // march and shadow call themselves last: loops, spending no budget, their
+  // count an i32.
   for (const name of ["march", "shadow"]) {
     const body = s.wgsl.slice(s.wgsl.indexOf(`// ${name}\nfn `));
-    assert.match(body.slice(0, body.indexOf("\n}\n")), /loop \{\n {4}lab_fuel = lab_fuel - 1\.0;[\s\S]*continue;/);
+    const loop = body.slice(0, body.indexOf("\n}\n"));
+    assert.match(loop, /loop \{[\s\S]*lab_iadd\(p\d, 1i\)[\s\S]*continue;/);
+    assert.doesNotMatch(loop, /lab_fuel/);
   }
   // Colours and points are vectors, and the vectors module's operations
   // are the GPU's.
   assert.match(s.wgsl, /\/\/ Colour is a vec3f: red is \.x, green is \.y, blue is \.z\./);
-  assert.match(s.wgsl, /fn march_\d+\(a0: vec3f, a1: vec3f, a2: f32, a3: f32, a4: f32\) -> f32/);
+  assert.match(s.wgsl, /fn march_\d+\(a0: vec3f, a1: vec3f, a2: f32, a3: f32, a4: i32\) -> f32/);
   assert.match(s.wgsl, /fn mix_\d+\(p0: vec3f, p1: vec3f, p2: f32\) -> vec3f \{\n {2}return mix\(p0, p1, p2\);/);
   assert.match(s.wgsl, /fn dot_\d+\(p0: vec3f, p1: vec3f\) -> f32 \{\n {2}return dot\(p0, p1\);/);
   assert.match(s.wgsl, /fn magnitude_\d+\(p0: vec3f\) -> f32 \{\n {2}return length\(p0\);/);

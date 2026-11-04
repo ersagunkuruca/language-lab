@@ -577,10 +577,12 @@ or `red`, `green` and `blue`. The parts map like this:
   compares fallbacks too (`capped` in the fixtures runs out at ten
   calls). n must be a number written down, from 0 to 2²⁴, so the bound is
   fixed when the shader is built. `first` or `with fuel` in any other
-  shape is refused. A step counter inside the loop (march's 120 steps)
-  still decides the picture, but it can't be the guarantee: on a Float64,
-  NaN + 1 is NaN and `less than(120, NaN)` is false, so the checker is
-  right not to trust it.
+  shape is refused. A step counter in a Float64 can't be the guarantee: on
+  a Float64, NaN + 1 is NaN and `less than(120, NaN)` is false, so the
+  checker is right not to trust it. One in an Int can (L46): since L46b
+  the ray marcher's `march` and `shadow` count their steps in Ints and have
+  no `Diverge`; `colour` keeps its budget until the plain scalar profile
+  takes `first` with a fallback (C166).
 - `pow` goes through a small function, because WGSL's `pow` is undefined
   for a negative base. GPUs compute in f32, and WGSL promises `sin` and
   `cos` only to within 2⁻¹¹, so results are close to the evaluator's
