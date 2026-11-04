@@ -415,13 +415,43 @@ test("nested data: a container defined together with the type is refused, not lo
 });
 
 test("a lazy stream maker: the message names the function in the field, and Diverge on the field takes it (L159)", () => {
+  // `next` runs make and then the next of what it made: running it never
+  // stops, so this one isn't guarded corecursion (L16, below).
   const build = (diverge: boolean) => (k: Lang) => {
     const Stream = k.type("Stream", [], [["node", [["next", (self) => k.tfun([], k.tref(self), diverge ? [DIVERGE] : [])]]]]);
     const make = k.def("make");
-    k.define(make, k.fn(["u"], (u) => k.call(Stream.v.node, k.thunk(() => k.call(make, u)))));
+    k.define(make, k.fn(["u"], (u) => k.call(Stream.v.node, k.thunk(() => k.match(k.call(make, u), [{ variant: Stream.v.node, names: ["n"], body: ([n]) => k.call(n) }])))));
   };
   const closed = program(build(false));
   assert.deepEqual(closed.errors, ["the function in node's next calls make, which might not finish, but next's type, () -> Stream, wants one that surely finishes: add Diverge to it, () -[Diverge]-> Stream"]);
   const open = program(build(true));
   assert.deepEqual(open.errors, []);
+});
+
+// Guarded corecursion (BACKLOG L16): a producer whose every call into
+// itself is what a stream's lazy field gives back makes one value and
+// returns, so it has no Diverge, nor does its field. Running the whole
+// stream is the consumer's recursion, which still has it.
+test("guarded corecursion: a stream's producer surely finishes, its consumer to the end doesn't", () => {
+  const defs: Record<string, Id> = {};
+  const p = program((k) => {
+    const Stream = k.type("Stream", [], [["term", [["head", () => k.tref(NUM)], ["rest", (self) => k.tfun([], k.tref(self))]]]]);
+    for (const name of ["from", "twos", "ping", "pong", "doubled", "last", "skip"]) defs[name] = k.def(name);
+    const def = (name: string, ps: string[], body: (...xs: Id[]) => Id) => k.define(defs[name], k.fn(ps, body));
+    const term = (h: Id, rest: () => Id) => k.call(Stream.v.term, h, k.thunk(rest));
+    def("from", ["n"], (n) => term(n, () => k.call(defs.from, k.call(B.add, n, k.lit(1)))));
+    // Two at a time, and a mutual pair: still guarded.
+    def("twos", ["n"], (n) => term(n, () => term(n, () => k.call(defs.twos, n))));
+    def("ping", ["n"], (n) => term(n, () => k.call(defs.pong, n)));
+    def("pong", ["n"], (n) => term(k.call(B.neg, n), () => k.call(defs.ping, n)));
+    // A producer that reads its input's rest inside the field: guarded too.
+    def("doubled", ["s"], (s) => k.match(s, [{ variant: Stream.v.term, names: ["h", "r"], body: ([h, r]) => term(k.call(B.mul, h, k.lit(2)), () => k.call(defs.doubled, k.call(r))) }]));
+    // The last term: runs the stream to its end, which never comes.
+    def("last", ["s"], (s) => k.match(s, [{ variant: Stream.v.term, names: ["h", "r"], body: ([, r]) => k.call(defs.last, k.call(r)) }]));
+    // The field runs what the group made: not guarded.
+    def("skip", ["s"], (s) => term(k.lit(0), () => k.match(k.call(defs.skip, s), [{ variant: Stream.v.term, names: ["h", "r"], body: ([, r]) => k.call(r) }])));
+  });
+  for (const d of ["from", "twos", "ping", "pong", "doubled"]) assert.ok(!p.effects(defs[d]).includes(DIVERGE), `${d}: ${p.type(defs[d])}`);
+  assert.ok(p.effects(defs.last).includes(DIVERGE), p.type(defs.last));
+  assert.ok(p.errors.some((m) => /node's rest|term's rest/.test(m)), p.errors.join("\n"));
 });

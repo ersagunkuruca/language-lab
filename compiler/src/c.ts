@@ -57,6 +57,7 @@ import { FDLIBM_C } from "./c-math.ts";
 import { BASE, cName, POSIX, RESERVED, RT_C, runtimeC, WORLD_H, type ListNames } from "./c-rt.ts";
 import { runtime } from "./wasm-rt.ts";
 const UOPS: Partial<Record<Op, string>> = { uadd: "+", usub: "-", umul: "*", uand: "&", uor: "|", uxor: "^" };
+const U64OPS: Partial<Record<Op, string>> = { u64add: "+", u64sub: "-", u64mul: "*", u64and: "&", u64or: "|", u64xor: "^" };
 import { STOPS } from "./stops.ts";
 import { fails, listSteps, isArray, isTable, isData, isFn, isRecord, kids, mapKids, OPS, type AType, type TType, type DType, type FType, type LType, type CoreIR, type Op, type RType, type SExpr, type SFunc } from "./scalar.ts";
 
@@ -210,7 +211,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   // data and functions, calling only what can be printed.
   const refused = new Map<number, string>();
   const why = (t: LType): string | null =>
-    t === "f64" || t === "i32" || t === "int32" || t === "int" || t === "text" ? null
+    t === "f64" || t === "i32" || t === "int32" || t === "i64" || t === "int" || t === "text" ? null
     : isRecord(t) ? t.fields.map((x) => why(x.t)).find(Boolean) ?? null
     : isData(t) ? null
     : isArray(t) ? why(t.item)
@@ -276,7 +277,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
 
   // Cells of the same fields are one size, so one can take the other's place.
   const layout = (fs: { t: LType }[]) => fs.map((x) => ty(x.t)).join(", ");
-  const ty = (t: LType): string => (t === "f64" ? "double" : t === "i32" || t === "int32" ? "int32_t" : t === "int" ? "lab_int" : isRecord(t) && !t.mutable ? sname.get(t.key)! : "lab_cell *");
+  const ty = (t: LType): string => (t === "f64" ? "double" : t === "i32" || t === "int32" ? "int32_t" : t === "i64" ? "int64_t" : t === "int" ? "lab_int" : isRecord(t) && !t.mutable ? sname.get(t.key)! : "lab_cell *");
   // Whether a value of t is a cell, or holds counts (an Int may be a cell).
   const cell = (t: LType) => t === "text" || isData(t) || isFn(t) || isArray(t) || isTable(t) || (isRecord(t) && !!t.mutable);
   const counted = (t: LType): boolean => cell(t) || t === "int" || (isRecord(t) && t.fields.some((x) => counted(x.t)));
@@ -828,6 +829,10 @@ int main(int argc, char **argv) {
           if (UOPS[e.op]) return `((int32_t)((uint32_t)${xs[0]} ${UOPS[e.op]} (uint32_t)${xs[1]}))`;
           if (e.op === "uneg") return `((int32_t)(0u - (uint32_t)${xs[0]}))`;
           if (e.op === "uless") return `((uint32_t)${xs[0]} < (uint32_t)${xs[1]})`;
+          // And a 64-bit one (C150h).
+          if (U64OPS[e.op]) return `((int64_t)((uint64_t)${xs[0]} ${U64OPS[e.op]} (uint64_t)${xs[1]}))`;
+          if (e.op === "u64neg") return `((int64_t)(0u - (uint64_t)${xs[0]}))`;
+          if (e.op === "u64less") return `((uint64_t)${xs[0]} < (uint64_t)${xs[1]})`;
           if (INT32_C[e.op]) { int32Used.add(e.op); return `lab_${e.op}(${xs.join(", ")})`; }
           if (OPS[e.op].t === "int32") throw new Error(`an Int's ${e.op} in 32 bits isn't in C yet`);
           return `${LIBM[e.op] ?? LIBRARY[e.op]}(${xs.join(", ")})`;
@@ -1085,7 +1090,7 @@ int main(int argc, char **argv) {
   // A value that stands for none: what a function gives with no answer,
   // and what a box holds before a search sets it.
   function zero(t: LType): string {
-    return t === "f64" || t === "i32" || t === "int32" ? "0" : t === "int" ? "LAB_SMALL(0)" : cell(t) ? "((lab_cell *)0)" : `((${ty(t)}){ ${(t as RType).fields.map((x) => zero(x.t)).join(", ") || "0"} })`;
+    return t === "f64" || t === "i32" || t === "int32" || t === "i64" ? "0" : t === "int" ? "LAB_SMALL(0)" : cell(t) ? "((lab_cell *)0)" : `((${ty(t)}){ ${(t as RType).fields.map((x) => zero(x.t)).join(", ") || "0"} })`;
   }
 
   // std's Array (C66b), as in runtime.js and WebAssembly: a view (a
@@ -1456,6 +1461,7 @@ static lab_cell *lab__copy_a${i}(${T} *xs, uint32_t n) {
       if (t === "f64") return "lab_in()";
       if (t === "i32") return "(int32_t)lab_bits()";
       if (t === "int32") return "lab_i32()";
+      if (t === "i64") return "(int64_t)lab_bits()";
       if (t === "int") return "lab_int_read(lab_word())";
       if (t === "text") return "lab_hex()";
       const key = (t as RType | DType).key;
@@ -1484,12 +1490,13 @@ static lab_cell *lab__copy_a${i}(${T} *xs, uint32_t n) {
     function pr(t: LType, v: string): string {
       if (t === "f64") return `lab_out(${v});`;
       if (t === "i32" || t === "int32") return `printf(" %d", (int)${v});`;
+      if (t === "i64") return `printf(" %llu", (unsigned long long)${v});`;
       if (t === "int") return `{ size_t n; char *s = lab__show(${v}, &n); printf(" %s", s); free(s); }`;
       if (t === "text") return `{ printf(" x"); for (uint32_t k = 0; k < LAB_TN(${v}); k++) printf("%02x", LAB_TB(${v})[k]); }`;
       rd(t);
       return `lab_print_${isRecord(t) ? sname.get((t as RType).key) : dname.get((t as DType).key)}(${v});`;
     }
-    const plain = (t: LType, seen = new Set<string>()): boolean => t === "f64" || t === "i32" || t === "int32" || t === "int" || t === "text" || (typeof t === "object" && seen.has(t.key))
+    const plain = (t: LType, seen = new Set<string>()): boolean => t === "f64" || t === "i32" || t === "int32" || t === "i64" || t === "int" || t === "text" || (typeof t === "object" && seen.has(t.key))
       || (isRecord(t) && !t.mutable && (seen.add(t.key), t.fields.every((x) => plain(x.t, seen))))
       || (isData(t) && (seen.add(t.key), t.cases.every((c) => c.fields.every((x) => plain(x.t, seen)))));
     const cases = kept.map((i) => {

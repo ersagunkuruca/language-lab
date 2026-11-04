@@ -53,23 +53,38 @@ function program() {
   def("less", () => k.call(SHOW_ANY, k.call(lib("word32 less than"), w(32, 1), w(32, 4294967295))));
   def("shifts", () => show(32, k.call(op("bits or"), k.call(op("shifted down"), w(32, 4294967295), k.int(40)), k.call(op("shifted up"), w(32, 1), k.int(31)))));
   def("byte", () => show(8, k.call(ARITH.add, w(8, 255), w(8, 3))));
+  def("sub8", () => show(8, k.call(ARITH.sub, w(8, 3), w(8, 5))));
+  def("mul8", () => show(8, k.call(ARITH.mul, w(8, 200), w(8, 3))));
+  def("neg8", () => show(8, k.call(ARITH.neg, w(8, 1))));
+  def("shift8", () => show(8, k.call(op("bits or"), k.call(op("shifted up"), w(8, 3), k.int(7)), k.call(op("shifted up"), w(8, 1), k.int(40)))));
+  def("add16", () => k.call(lib("show word16"), k.call(ARITH.add, k.call(lib("as word16"), k.int(65535)), k.call(lib("as word16"), k.int(2)))));
+  // 64 bits: past 2⁶³ (an Int of two limbs when shown), wrapping, and
+  // compared unsigned across 2⁶³.
+  def("sub64", () => show(64, k.call(ARITH.sub, w(64, 3), w(64, 5))));
+  def("neg64", () => show(64, k.call(ARITH.neg, w(64, 1))));
+  def("square64", () => show(64, k.call(ARITH.mul, w(64, 2n ** 64n - 1n), w(64, 2n ** 64n - 1n))));
+  def("top64", () => show(64, k.call(ARITH.add, w(64, 2n ** 63n), w(64, 2n ** 62n))));
+  def("huge64", () => show(64, w(64, 2n ** 70n + 2n ** 40n + 5n)));
+  def("hugeNeg64", () => show(64, k.call(lib("as word64"), k.call(INT_OPS.neg, k.int(2n ** 70n + 5n)))));
+  def("shifts64", () => show(64, k.call(op("bits xor"), k.call(op("shifted down"), w(64, 2n ** 64n - 1n), k.int(60)), k.call(op("shifted up"), w(64, 3), k.int(62)))));
+  def("less64", () => k.call(SHOW_ANY, k.call(lib("word64 less than"), w(64, 2n ** 62n), w(64, 2n ** 63n + 1n))));
   const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
   return { code, names, info, defs };
 }
 
 const walk = (e: SExpr, f: (x: SExpr) => void) => { f(e); kids(e).forEach((x) => walk(x, f)); };
 
-test("a word's field is a machine word, and its ops wrap on WebAssembly and C as the evaluator's (C150e, C150f, C150g)", { skip }, async () => {
+test("a word's field is a machine word, and its ops wrap on WebAssembly and C as the evaluator's (C150e to C150h)", { skip }, async () => {
   const p = program();
   assert.deepEqual(p.info.errors.map((e) => e.message), []);
   const lowered = lowerScalar(p.code, p.info, p.names, p.defs.map(([, d]) => d), { data: true });
   assert.deepEqual([...lowered.refused.values()], []);
-  // Word8 and Word32 are i32s, with no record around them (C150g); Word64
-  // stays a record of an Int.
+  // Word8 and Word32 are i32s, Word64 an i64 (C150h), with no record
+  // around them (C150g).
   const record = (n: 8 | 32 | 64) => lowered.records.find((t) => t.variant === WORD_V[n]);
-  assert.deepEqual([record(8), record(32), record(64)?.fields[0].t], [undefined, undefined, "int"]);
-  const mulType = lowered.funcs.find((f) => f.name === "multiply word32")!;
-  assert.deepEqual([...mulType.params, mulType.result], ["i32", "i32", "i32"]);
+  assert.deepEqual([record(8), record(32), record(64)], [undefined, undefined, undefined]);
+  const typeOf = (name: string) => { const f = lowered.funcs.find((g) => g.name === name)!; return [...f.params, f.result]; };
+  assert.deepEqual([typeOf("multiply word32"), typeOf("multiply word64")], [["i32", "i32", "i32"], ["i64", "i64", "i64"]]);
   // multiply word32 makes no Int: one wrapping multiply.
   const mul = lowered.funcs.find((f) => f.name === "multiply word32")!, ops: string[] = [];
   walk(mul.body, (e) => { if (e.k === "op" || e.k === "rt") ops.push(e.k === "op" ? e.op : e.fn); });
@@ -78,6 +93,13 @@ test("a word's field is a machine word, and its ops wrap on WebAssembly and C as
   const all = new Set<string>();
   for (const f of lowered.funcs) if (/word32/.test(f.name)) walk(f.body, (e) => { if (e.k === "op") all.add(e.op); if (e.k === "rt") all.add(e.fn); });
   for (const o of ["umul", "usub", "uneg", "uand", "uor", "uxor", "uless", "word32.shiftDown"]) assert.ok(all.has(o), o);
+  // Word8's + is the machine's, then its mask.
+  const add8: string[] = [];
+  walk(lowered.funcs.find((f) => f.name === "add word8")!.body, (e) => { if (e.k === "op") add8.push(e.op); if (e.k === "rt") add8.push(e.fn); });
+  assert.deepEqual(add8, ["uand", "uadd", "word32.narrow"]);
+  const all64 = new Set<string>();
+  for (const f of lowered.funcs) if (/word64/.test(f.name)) walk(f.body, (e) => { if (e.k === "op") all64.add(e.op); if (e.k === "rt") all64.add(e.fn); });
+  for (const o of ["u64mul", "u64add", "u64sub", "u64neg", "u64xor", "u64less", "word64.shiftDown"]) assert.ok(all64.has(o), o);
   for (const o of ["int.mul", "int.sub", "int.bitXor", "int.less"]) assert.ok(!all.has(o), o);
   const r = makeRunner(p.code, p.info, { print: () => {} });
   const wasm = (await instantiate(emitWasm(lowered))) as unknown as Record<string, () => unknown>;

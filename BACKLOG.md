@@ -137,7 +137,6 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | C143 | A stop in compiled code names the node it came from: compiled JS, WebAssembly and C carry each node's id where they can stop (Abort, overflow, no answer, a hole), so `lab run` of compiled code and a page print it and the editor selects it (source maps, influence) | [ASPECTS-2026-11-03b](docs/reports/reviews/ASPECTS-2026-11-03b.md) 269 | P3 | M | |
-| C150 | Words as machine words (L193): Word8 to Word64 compiled to u8/u16/u32/u64 (WASM i32/i64, C's uint8_t to uint64_t, JS numbers with `>>> 0` or BigInt.asUintN) instead of an Int record wrapped by `bits and`; (and, or, xor since C150a, shifted down since C150b: on Int, so each op on a word still wraps by an and). Measured on words.test.ts's FNV-1a and xorshift. Design C150c ([MACHINE-WORDS-2026-11-03](docs/design/numbers/MACHINE-WORDS-2026-11-03.md)): the compiler proves an Int fits a word; C150d known bits of an Int on the core IR done; C150e and C150f done (a record's field under 2³² an i32 on WebAssembly and C, Word32's ops and compare the machine's: FNV-1a 1M steps WebAssembly 150 → 51 ms, C 63 → 12.5 ms); C150g done (a record of one word is the word, any Int kept to its low 32 bits without an and: WebAssembly 51 → 12 ms, C 10 ms); next C150h Word64 as an i64 (a u64 widened through limbs past 2⁶³) and Word8/16's narrower masks | L193 | P3 | M | |
 
 ## L: Language and library
 
@@ -234,7 +233,6 @@ agent with inertia. All later goals.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L16 | Guarded corecursion, and a stateful handler form so programs write their own Cells. The stateful handler is done (L16a: std `State` with `with state` written in the prelude); left: guarded corecursion | ROADMAP 4 | P3 | L | step a done |
 | L22 | Profiles inferred like effects and shown in the editor ("runs on the GPU"). L22a done: a definition's panel shows where it runs, from the lowering's refusals. Left: the profile inferred in the type, as an effect is, so a caller is told without lowering | REVIEW-2026-10-22b §5 | P3 | L | |
 | L24 | Research as it becomes blocking: costs from folds, laws proved by fusion, fast invertible parsing | ROADMAP 8 | P3 | L | |
 
@@ -271,7 +269,7 @@ docs/process/TESTING.md. T7 is in lane L.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| T14 | The single slow tests left after L216: Tumble's clear backwards 74 s, tree of List 50 s, every builtin backwards 103 s, core-js examples and pages 116 s, editing's swapAndUndo 43 s. Each becomes a sweep or gets a smaller input, toward 5 s a file | [TEST-SPEED-2026-11-03](docs/reports/TEST-SPEED-2026-11-03.md) | P3 | M | |
+| T14 | The single slow tests left after L216: Tumble's clear backwards 74 s, tree of List 50 s, every builtin backwards 103 s, editing's swapAndUndo 43 s (core-js done: T14a). Each becomes a sweep or gets a smaller input, toward 5 s a file | [TEST-SPEED-2026-11-03](docs/reports/TEST-SPEED-2026-11-03.md) | P3 | M | |
 
 ## Coordinator and process
 

@@ -132,7 +132,7 @@ export const WORLD_OPS: Record<Id, { op: string; aborts: boolean }> = {
 const BUDGETED = discharge("a shader", [DIVERGE], "only under a literal with fuel, which gives each pixel a step budget");
 
 // Float64, Bool (0 or 1), and Int held in 32 bits (`int32`, shaders: C66c).
-export type SType = "f64" | "i32" | "int32";
+export type SType = "f64" | "i32" | "int32" | "i64";
 // A record: a data type with one case, at particular type arguments.
 // `mutable`: a box the lowering makes (W4d), whose one field a search sets.
 export interface RType { key: string; name: string; def: Id; variant: Id; case?: string; fields: { name: string; t: LType }[]; mutable?: true }
@@ -383,6 +383,9 @@ export const OPS = {
   // machine-words.ts): + − × and negate wrap, `uless` compares unsigned.
   uadd: { t: "i32" }, usub: { t: "i32" }, umul: { t: "i32" }, uneg: { t: "i32" },
   uand: { t: "i32" }, uor: { t: "i32" }, uxor: { t: "i32" }, uless: { t: "i32" },
+  // And a 64-bit one held in an i64 (C150h).
+  u64add: { t: "i64" }, u64sub: { t: "i64" }, u64mul: { t: "i64" }, u64neg: { t: "i64" },
+  u64and: { t: "i64" }, u64or: { t: "i64" }, u64xor: { t: "i64" }, u64less: { t: "i32" },
   // stop(i): the program stops with STOPS[i] (L125c2, finite() below):
   // a WebAssembly host's import, WASI's own line and exit, C's lab_stop.
   stop: { t: "f64" },
@@ -1386,6 +1389,7 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
     if (t === "text") return { k: "rt", fn: "text.equal", args: [x, y] };
     if (isTable(t)) throw new Refused("compares tables (their meaning does, in the library)");
     if (t === "host") throw new Refused("compares a cell, which isn't lowered");
+    if (t === "i64") throw new Error("a machine word is made after lowering (machine-words.ts)");
     if (t !== "f64") return { k: "call", fn: equality(t), args: [x, y], tail };
     // Two Float64s exactly (run.ts sameNumber, L197).
     return { k: "op", op: "equal", args: [x, y] };
@@ -1410,6 +1414,7 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
     if (isArray(t)) return { k: "call", fn: arrayLoop(t, "<"), args: [x, y], tail };
     if (isTable(t)) throw new Refused("compares tables (their meaning does, in the library)");
     if (t === "host") throw new Refused("orders a cell, which isn't lowered");
+    if (t === "i64") throw new Error("a machine word is made after lowering (machine-words.ts)");
     return { k: "call", fn: ordering(t), args: [x, y], tail };
   }
   // equal ("=") or compare ("<") on two arrays, as the evaluator has them
@@ -1513,6 +1518,7 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
     if (isArray(t)) return { k: "call", fn: showingArray(t), args: [x], tail };
     if (isTable(t)) throw new Refused("shows a table (its meaning does, in the library)");
     if (t === "host") throw new Refused("shows a cell, which isn't lowered");
+    if (t === "i64") throw new Error("a machine word is made after lowering (machine-words.ts)");
     return { k: "call", fn: showing(t), args: [x], tail };
   }
   // show on an array, "array [a, b]" as run.ts writes it (I156): the
