@@ -709,8 +709,52 @@ static double lab_rand_restore(double a, double b, double c, double d) { lab__r[
   // ---- The world (N4b): the console and files over the C library and
   // POSIX, failing as Node's world (ters/src/lang/world.ts) does:
   // with its words for a reason, and status 2.
-  "world.fail": {
+  // L186's log of the world's answers (C172b), as worldlog.ts writes it:
+  // with TERS_LOG=file set, each answer the world gives (its arguments and
+  // what came back, or the failure) and each write, as JSON, for
+  // \`lab run --replay\` to give the evaluator.
+  "world.log": {
     uses: [],
+    c: `static FILE *lab_log;
+static int lab_log_state, lab_log_n, lab_log_open;
+static void lab__log_end(void) { if (lab_log) { fputs("]\\n", lab_log); fclose(lab_log); lab_log = 0; } }
+static int lab__log_on(void) {
+  if (!lab_log_state) {
+    lab_log_state = 1;
+    const char *to = getenv("TERS_LOG");
+    if (to && *to && (lab_log = fopen(to, "wb"))) { fputc('[', lab_log); atexit(lab__log_end); }
+  }
+  return lab_log != 0;
+}
+static void lab__log_raw(const char *s) { fputs(s, lab_log); }
+static void lab__log_str(const uint8_t *b, size_t n) {
+  fputc('"', lab_log);
+  for (size_t i = 0; i < n; i++) {
+    uint8_t c = b[i];
+    if (c == '"' || c == '\\\\') { fputc('\\\\', lab_log); fputc(c, lab_log); }
+    else if (c == '\\n') fputs("\\\\n", lab_log);
+    else if (c == '\\r') fputs("\\\\r", lab_log);
+    else if (c == '\\t') fputs("\\\\t", lab_log);
+    else if (c < 0x20) fprintf(lab_log, "\\\\u%04x", c);
+    else fputc(c, lab_log);
+  }
+  fputc('"', lab_log);
+}
+static void lab__log_text(lab_cell *t) { lab__log_str(LAB_TB(t), LAB_TN(t)); }
+// An entry's start, up to its arguments' opening bracket; 0 when no log is kept.
+static int lab__log_begin(const char *op) {
+  if (!lab__log_on()) return 0;
+  fprintf(lab_log, "%s{\\"op\\":\\"%s\\",\\"args\\":[", lab_log_n++ ? "," : "", op);
+  lab_log_open = 1;
+  return 1;
+}
+// After the arguments: what came back is written next, then lab__log_close.
+static void lab__log_answer(void) { lab__log_raw("],\\"answer\\":"); }
+static void lab__log_close(void) { lab__log_raw("}"); lab_log_open = 0; }
+static void lab__log_write(void) { lab__log_raw("],\\"write\\":true}"); lab_log_open = 0; }`,
+  },
+  "world.fail": {
+    uses: ["world.log"],
     c: `static void lab__fail(int e, lab_cell *path) {
   const char *p = (const char *)LAB_TB(path);
   int n = (int)LAB_TN(path);
@@ -724,6 +768,8 @@ static double lab_rand_restore(double a, double b, double c, double d) { lab__r[
   lab_drop(lab_reason);
   lab_reason = lab__text_of(s, (size_t)k);
   free(s);
+  // An answer being logged ends as this failure (C172b).
+  if (lab_log_open) { lab__log_raw("],\\"threw\\":"); lab__log_text(lab_reason); lab__log_raw("}"); lab_log_open = 0; }
   lab_drop(path);
   lab_st = 2;
 }
@@ -748,7 +794,7 @@ static double lab_world_randomSeed(void) {
   if (!s) s = (uint32_t)time(NULL) ^ (uint32_t)clock() ^ (uint32_t)(uintptr_t)&s;
   return (double)s;
 }` },
-  "world.printError": { uses: [], c: `static void lab_world_printError(lab_cell *t) { fflush(stdout); fwrite(LAB_TB(t), 1, LAB_TN(t), stderr); fputc('\\n', stderr); lab_drop(t); }` },
+  "world.printError": { uses: ["world.log"], c: `static void lab_world_printError(lab_cell *t) { if (lab__log_begin("error")) { lab__log_text(t); lab__log_write(); } fflush(stdout); fwrite(LAB_TB(t), 1, LAB_TN(t), stderr); fputc('\\n', stderr); lab_drop(t); }` },
   // All of a stream that's left.
   "world.readAll": {
     uses: [],
@@ -764,13 +810,14 @@ static double lab_world_randomSeed(void) {
   },
   // Text from the world comes in in NFC (C151, c-nfc.ts), as the evaluator's (ters/src/lang/border.ts).
   "world.nfc": { uses: [], get c() { return nfcC(); } },
-  "world.readInput": { uses: ["world.readAll", "world.nfc"], c: `static lab_cell *lab_world_readInput(void) { return lab__nfc(lab__read_all(stdin)); }` },
+  "world.readInput": { uses: ["world.readAll", "world.nfc", "world.log"], c: `static lab_cell *lab_world_readInput(void) { int L = lab__log_begin("input"); lab_cell *t = lab__nfc(lab__read_all(stdin)); if (L) { lab__log_answer(); lab__log_text(t); lab__log_close(); } return t; }` },
   // A line without its end (\n, or \r\n); none at the end of the input.
   "world.readLine": {
-    uses: ["world.nfc"],
+    uses: ["world.nfc", "world.log"],
     c: (o) => `static lab_cell *lab_world_readLine(void) {
+  int L = lab__log_begin("readLine");
   int c = getchar();
-  if (c == EOF) return &${o.nil};
+  if (c == EOF) { if (L) { lab__log_answer(); lab__log_raw("null"); lab__log_close(); } return &${o.nil}; }
   size_t n = 0, cap = 128;
   char *s = malloc(cap);
   if (!s) lab_oom();
@@ -779,18 +826,21 @@ static double lab_world_randomSeed(void) {
   ${o.cons} *r = lab_new(sizeof(${o.cons}), ${o.type}, ${o.tag});
   r->f${o.head} = lab__nfc(lab__text_of(s, n));
   free(s);
+  if (L) { lab__log_answer(); lab__log_text(r->f${o.head}); lab__log_close(); }
   return (lab_cell *)r;
 }`,
   },
   "world.readFile": {
     uses: ["world.fail", "world.readAll", "world.nfc"],
     c: `static lab_cell *lab_world_readFile(lab_cell *path) {
+  if (lab__log_begin("readFile")) lab__log_text(path);
   char *p = lab__cstr(path);
   FILE *f = lab__kind(p) == 2 ? (errno = EISDIR, (FILE *)0) : fopen(p, "rb");
   free(p);
   if (!f) { lab__fail(errno, path); return 0; }
   lab_cell *t = lab__nfc(lab__read_all(f));
   fclose(f);
+  if (lab_log_open) { lab__log_answer(); lab__log_text(t); lab__log_close(); }
   lab_drop(path);
   return t;
 }`,
@@ -798,6 +848,7 @@ static double lab_world_randomSeed(void) {
   "world.put": {
     uses: ["world.fail"],
     c: `static void lab__put(lab_cell *path, lab_cell *t, const char *mode) {
+  if (lab__log_begin(mode[0] == 'a' ? "appendFile" : "writeFile")) { lab__log_text(path); lab__log_raw(","); lab__log_text(t); lab__log_write(); }
   char *p = lab__cstr(path);
   FILE *f = lab__kind(p) == 2 ? (errno = EISDIR, (FILE *)0) : fopen(p, mode);
   free(p);
@@ -809,7 +860,7 @@ static double lab_world_randomSeed(void) {
   },
   "world.writeFile": { uses: ["world.put"], c: `static void lab_world_writeFile(lab_cell *path, lab_cell *t) { lab__put(path, t, "wb"); }` },
   "world.appendFile": { uses: ["world.put"], c: `static void lab_world_appendFile(lab_cell *path, lab_cell *t) { lab__put(path, t, "ab"); }` },
-  "world.fileExists": { uses: ["world.fail"], c: `static int32_t lab_world_fileExists(lab_cell *path) { char *p = lab__cstr(path); int r = lab__kind(p) != 0; free(p); lab_drop(path); return r; }` },
+  "world.fileExists": { uses: ["world.fail"], c: `static int32_t lab_world_fileExists(lab_cell *path) { int L = lab__log_begin("fileExists"); if (L) lab__log_text(path); char *p = lab__cstr(path); int r = lab__kind(p) != 0; free(p); if (L) { lab__log_answer(); lab__log_raw(r ? "true" : "false"); lab__log_close(); } lab_drop(path); return r; }` },
   // A folder's names, sorted as JavaScript sorts texts: by UTF-16 units,
   // so a character past U+FFFF comes before U+E000 to U+FFFF.
   "world.listFolder": {
@@ -834,6 +885,7 @@ static int lab__js_order(const void *x, const void *y) {
   }
 }
 static lab_cell *lab_world_listFolder(lab_cell *path) {
+  if (lab__log_begin("listFolder")) lab__log_text(path);
   char *p = lab__cstr(path);
   int kind = lab__kind(p);
   DIR *dir = kind == 1 ? (errno = ENOTDIR, (DIR *)0) : opendir(p);
@@ -849,8 +901,10 @@ static lab_cell *lab_world_listFolder(lab_cell *path) {
   }
   closedir(dir);
   qsort(xs, n, sizeof *xs, lab__js_order);
+  for (size_t k = 0; k < n; k++) xs[k] = lab__nfc(xs[k]);
+  if (lab_log_open) { lab__log_answer(); lab__log_raw("["); for (size_t k = 0; k < n; k++) { if (k) lab__log_raw(","); lab__log_text(xs[k]); } lab__log_raw("]"); lab__log_close(); }
   lab_cell *acc = &${l.nil};
-  for (size_t k = n; k-- > 0;) { ${l.cons} *c = lab_new(sizeof(${l.cons}), ${l.type}, ${l.tag}); c->f${l.head} = lab__nfc(xs[k]); c->f${1 - l.head} = acc; acc = (lab_cell *)c; }
+  for (size_t k = n; k-- > 0;) { ${l.cons} *c = lab_new(sizeof(${l.cons}), ${l.type}, ${l.tag}); c->f${l.head} = xs[k]; c->f${1 - l.head} = acc; acc = (lab_cell *)c; }
   free(xs);
   lab_drop(path);
   return acc;

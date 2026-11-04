@@ -1,4 +1,5 @@
-// A compiled run keeps L186's log of the world's answers (C172a): with
+// A compiled run keeps L186's log of the world's answers (C172a, and C172b
+// for a native program through C): with
 // TERS_LOG set, a module from `lab compile` writes what the world answered
 // it, and `lab run --replay` gives those answers to the evaluator, which
 // then does what the compiled run did, whatever the world says now.
@@ -9,6 +10,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { skip } from "./c-harness.ts";
 
 test("a compiled run's log of the world's answers replays on the evaluator (C172a)", () => {
   const lab = join(import.meta.dirname, "../../ters/cli/lab.ts"), wc = join(import.meta.dirname, "../../ters/examples/wc");
@@ -26,4 +28,21 @@ test("a compiled run's log of the world's answers replays on the evaluator (C172
   writeFileSync(join(dir, "a.txt"), "one\n");
   assert.deepEqual(run([lab, "run", wc, "--replay", "run.json", "-l", "a.txt", "nope"]), compiled);
   assert.notDeepEqual(run([lab, "run", wc, "-l", "a.txt", "nope"]), compiled);
+});
+
+test("a native program's log of the world's answers replays on the evaluator, its failures too (C172b)", { skip }, () => {
+  const lab = join(import.meta.dirname, "../../ters/cli/lab.ts"), wc = join(import.meta.dirname, "../../ters/examples/wc");
+  const dir = mkdtempSync(join(tmpdir(), "log-c-"));
+  const run = (file: string, args: string[], env: Record<string, string> = {}) => {
+    const r = spawnSync(file, args, { cwd: dir, encoding: "utf8", env: { ...process.env, ...env } });
+    return [r.stdout, r.stderr, r.status] as const;
+  };
+  assert.equal(run(process.execPath, [lab, "native", wc, "-o", "wc"])[2], 0);
+  writeFileSync(join(dir, "a.txt"), "two words\nand three more\n");
+  const native = run(join(dir, "wc"), ["-l", "a.txt", "nope"], { TERS_LOG: "run.json" });
+  const log = JSON.parse(readFileSync(join(dir, "run.json"), "utf8")) as { op: string; threw?: string }[];
+  assert.deepEqual(log.map((e) => e.op), ["readFile", "readFile", "error"]);
+  assert.equal(log[1].threw, "no such file or folder: nope");
+  writeFileSync(join(dir, "a.txt"), "one\n");
+  assert.deepEqual(run(process.execPath, [lab, "run", wc, "--replay", "run.json", "-l", "a.txt", "nope"]), native);
 });
