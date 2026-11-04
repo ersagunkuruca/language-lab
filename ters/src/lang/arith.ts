@@ -637,30 +637,33 @@ function insertEmbeddings(code: Code, info: Info): { code: Code; info: Info } {
     typeOf.set(at, e.to);
     return at;
   };
+  const lift = (a: Id): Id => {
+    const e = info.embedded!.get(a);
+    if (!e) return a;
+    if (!e.of) return wrap(a, `${a}.embed`, e);
+    // A function whose result is lifted (L208c2): a lambda's body is
+    // wrapped where it is; any other function becomes (x…) → map(f(x…)).
+    const lifted: Type = { ...e.of, ret: e.to };
+    const f = code.nodes[a];
+    if (f?.kind === "lambda") {
+      nodes[a] = { ...f, body: wrap(f.body, `${a}.embed`, e) };
+      typeOf.set(a, lifted);
+      return a;
+    }
+    const params = e.of.params.map((t, j) => { const b = `${a}.embed.p${j}`; nodes[b] = { id: b, kind: "binder" }; typeOf.set(b, t); return b; });
+    const refs = params.map((b, j) => { const r = `${a}.embed.r${j}`; nodes[r] = { id: r, kind: "ref", target: b }; typeOf.set(r, e.of!.params[j]); return r; });
+    const call = `${a}.embed.call`, lam = `${a}.embed.fn`;
+    nodes[call] = { id: call, kind: "call", fn: a, args: refs };
+    typeOf.set(call, e.from);
+    nodes[lam] = { id: lam, kind: "lambda", params, body: wrap(call, `${a}.embed`, e) };
+    typeOf.set(lam, lifted);
+    return lam;
+  };
   for (const n of Object.values(code.nodes)) {
+    // A pinned definition's body (L208c4), and a call's inputs.
+    if (n.kind === "def" && n.body && info.embedded.has(n.body)) nodes[n.id] = { ...n, body: lift(n.body) };
     if (n.kind !== "call" || !n.args?.some((a) => info.embedded!.has(a))) continue;
-    nodes[n.id] = { ...n, args: n.args.map((a) => {
-      const e = info.embedded!.get(a);
-      if (!e) return a;
-      if (!e.of) return wrap(a, `${a}.embed`, e);
-      // A function whose result is lifted (L208c2): a lambda's body is
-      // wrapped where it is; any other function becomes (x…) → map(f(x…)).
-      const lifted: Type = { ...e.of, ret: e.to };
-      const f = code.nodes[a];
-      if (f?.kind === "lambda") {
-        nodes[a] = { ...f, body: wrap(f.body, `${a}.embed`, e) };
-        typeOf.set(a, lifted);
-        return a;
-      }
-      const params = e.of.params.map((t, j) => { const b = `${a}.embed.p${j}`; nodes[b] = { id: b, kind: "binder" }; typeOf.set(b, t); return b; });
-      const refs = params.map((b, j) => { const r = `${a}.embed.r${j}`; nodes[r] = { id: r, kind: "ref", target: b }; typeOf.set(r, e.of!.params[j]); return r; });
-      const call = `${a}.embed.call`, lam = `${a}.embed.fn`;
-      nodes[call] = { id: call, kind: "call", fn: a, args: refs };
-      typeOf.set(call, e.from);
-      nodes[lam] = { id: lam, kind: "lambda", params, body: wrap(call, `${a}.embed`, e) };
-      typeOf.set(lam, lifted);
-      return lam;
-    }) } as Node;
+    nodes[n.id] = { ...n, args: n.args.map(lift) } as Node;
   }
   return { code: { ...code, nodes }, info: { ...info, typeOf } };
 }
