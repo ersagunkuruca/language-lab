@@ -9,7 +9,7 @@ import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { library } from "./programs.ts";
-import { ABORT_OP, ARITH, CELL_OPS, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, TICKET_V, AWAIT_OP, START_TIMER_OP, NOW_OP, WAIT_OP, BRANCH_V, DUAL_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, DIVISION_V, SHOWN_V, BITS_V, WORD_SIZES, WORD_V, EXTENDED_V, ALGEBRAIC_OPS, CHECK_OP, RANDOM_OP, QUEUE_V, PRIORITY_QUEUE_V, MATRIX_V, TENSOR_V, BYTES_V, JSON_V, STATE_OPS, PIPE_OPS, std } from "./std.ts";
+import { ABORT_OP, ARITH, CELL_OPS, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, TICKET_V, AWAIT_OP, START_TIMER_OP, NOW_OP, WAIT_OP, BRANCH_V, DUAL_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, DIVISION_V, SHOWN_V, BITS_V, WORD_SIZES, WORD_V, EXTENDED_V, ALGEBRAIC_OPS, CHECK_OP, RANDOM_OP, QUEUE_V, PRIORITY_QUEUE_V, MATRIX_V, TENSOR_V, BYTES_V, JSON_V, DATE_V, STATE_OPS, PIPE_OPS, std } from "./std.ts";
 
 export function buildPrelude(): Module {
   const k = new Lang();
@@ -2120,7 +2120,42 @@ export function buildPrelude(): Module {
     { variant: NIL, names: [], body: () => v },
     { variant: CONS, names: ["character", "after"], body: () => jBad("text after the value") },
   ]), ["value", "rest"]));
-  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, spaced, optionalParens, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, determinant, inverted, leastSquares, tensorOf, tensorShape, tensorItems, rank, tensorSize, tensorEntry, tensorMap, tensorZipWith, reshaped, contracted, transposedBy, traced, bytesOf, byteItems, byteCount, utf8Of, textOfUtf8, jsonPrinted, jsonRead, withState, changeState, piped, ticketId, ...wordMakers, anyOf, together, race, within, simulated, near];
+  // Calendar dates (L188a): the proleptic Gregorian calendar, a date
+  // counted as days from 1970-01-01 both ways by Howard Hinnant's
+  // days_from_civil and civil_from_days ("chrono-Compatible Low-Level Date
+  // Algorithms", 2013), in floor division throughout.
+  const fdiv = (a: Id, n: number) => k.call(S.first, k.thunk(() => k.call(INT_OPS.quotient, a, k.int(n))), k.thunk(() => k.int(0)));
+  const fmod = (a: Id, n: number) => k.call(S.first, k.thunk(() => k.call(INT_OPS.remainder, a, k.int(n))), k.thunk(() => k.int(0)));
+  const iSub = (a: Id, b: Id) => k.call(INT_OPS.sub, a, b);
+  const dateIn = (d: Id, f: (y: Id, m: Id, day: Id) => Id) => k.match(d, [{ variant: DATE_V, names: ["year", "month", "day"], body: ([y, m, dd]) => f(y, m, dd) }]);
+  const leapYear = def("leap year", ["year"], (y) => k.if(iSame(fmod(y, 4), k.int(0)), k.if(iSame(fmod(y, 100), k.int(0)), iSame(fmod(y, 400), k.int(0)), k.true), k.false));
+  const daysInMonth = def("days in month", ["year", "month"], (y, m) => k.if(iSame(m, k.int(2)), k.if(k.call(leapYear, y), k.int(29), k.int(28)),
+    k.if(k.call(contains, k.list(k.int(4), k.int(6), k.int(9), k.int(11)), m), k.int(30), k.int(31))));
+  const between = (x: Id, lo: number, hi: Id) => k.call(S.and, k.call(S.not, iLess(x, k.int(lo))), k.call(S.not, iLess(hi, x)));
+  const dateOf = def("date of", ["year", "month", "day"], (y, m, d) => k.if(k.call(S.and, between(m, 1, k.int(12)), between(d, 1, k.call(daysInMonth, y, m))),
+    k.call(DATE_V, y, m, d), k.call(ABORT_OP, k.lit("date of: a month from 1 to 12 and a day that month has"))));
+  const dateYear = def("date year", ["date"], (d) => dateIn(d, (y) => y));
+  const dateMonth = def("date month", ["date"], (d) => dateIn(d, (_y, m) => m));
+  const dateDay = def("date day", ["date"], (d) => dateIn(d, (_y, _m, dd) => dd));
+  const dayNumber = def("day number", ["date"], (d) => dateIn(d, (y0, m, dd) => k.let("y", iSub(y0, k.if(iLess(k.int(2), m), k.int(0), k.int(1))), (y) =>
+    k.let("era", fdiv(y, 400), (era) => k.let("yoe", iSub(y, iMul(era, k.int(400))), (yoe) =>
+    k.let("doy", iAdd(fdiv(iAdd(iMul(k.int(153), iAdd(m, k.if(iLess(k.int(2), m), k.int(-3), k.int(9)))), k.int(2)), 5), iSub(dd, k.int(1))), (doy) =>
+    k.let("doe", iAdd(iSub(iAdd(iMul(yoe, k.int(365)), fdiv(yoe, 4)), fdiv(yoe, 100)), doy), (doe) =>
+    iSub(iAdd(iMul(era, k.int(146097)), doe), k.int(719468)))))))));
+  const dateOfDay = def("date of day number", ["days"], (z0) => k.let("z", iAdd(z0, k.int(719468)), (z) => k.let("era", fdiv(z, 146097), (era) =>
+    k.let("doe", iSub(z, iMul(era, k.int(146097))), (doe) =>
+    k.let("yoe", fdiv(iSub(iAdd(iSub(doe, fdiv(doe, 1460)), fdiv(doe, 36524)), fdiv(doe, 146096)), 365), (yoe) =>
+    k.let("doy", iSub(doe, iSub(iAdd(iMul(k.int(365), yoe), fdiv(yoe, 4)), fdiv(yoe, 100))), (doy) =>
+    k.let("mp", fdiv(iAdd(iMul(k.int(5), doy), k.int(2)), 153), (mp) =>
+    k.let("month", k.if(iLess(mp, k.int(10)), iAdd(mp, k.int(3)), iSub(mp, k.int(9))), (m) =>
+    k.call(DATE_V, iAdd(iAdd(yoe, iMul(era, k.int(400))), k.if(iLess(k.int(2), m), k.int(0), k.int(1))), m,
+      iAdd(iSub(doy, fdiv(iAdd(iMul(k.int(153), mp), k.int(2)), 5)), k.int(1)))))))))));
+  const weekday = def("weekday", ["date"], (d) => iAdd(fmod(iAdd(k.call(dayNumber, d), k.int(3)), 7), k.int(1)));
+  const addedDays = def("added days", ["date", "days"], (d, n) => k.call(dateOfDay, iAdd(k.call(dayNumber, d), n)));
+  const daysBetween = def("days between", ["from", "to"], (a, b) => iSub(k.call(dayNumber, b), k.call(dayNumber, a)));
+  const twoDigits = (n: Id) => k.call(padStart, k.call(INT_OPS.show, n), k.int(2), k.lit("0"));
+  const dateText = def("date text", ["date"], (d) => dateIn(d, (y, m, dd) => texts(k.call(padStart, k.call(INT_OPS.show, y), k.int(4), k.lit("0")), k.lit("-"), twoDigits(m), k.lit("-"), twoDigits(dd))));
+  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, spaced, optionalParens, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, determinant, inverted, leastSquares, tensorOf, tensorShape, tensorItems, rank, tensorSize, tensorEntry, tensorMap, tensorZipWith, reshaped, contracted, transposedBy, traced, bytesOf, byteItems, byteCount, utf8Of, textOfUtf8, jsonPrinted, jsonRead, dateOf, dateYear, dateMonth, dateDay, leapYear, daysInMonth, dayNumber, dateOfDay, weekday, addedDays, daysBetween, dateText, withState, changeState, piped, ticketId, ...wordMakers, anyOf, together, race, within, simulated, near];
   // Each number's own show, from before the generic one showed every number
   // (L153, L156): kept so programs saved before still open, not offered.
   const perTypeShows = [showF, showC, showD, showX];
@@ -2266,6 +2301,18 @@ export function buildPrelude(): Module {
     [solved]: "The list x with matrix times vector(m, x) = b, for a square Float64 matrix, by Gaussian elimination with partial pivoting. No answer when the matrix is singular (a pivot is 0).",
     [determinant]: "The determinant of a square Float64 matrix: 0 when it is singular. Other sizes stop the program.",
     [jsonRead]: "The Json value a JSON text spells (RFC 8259), the other way from json printed: json read(\"[1, true]\") is json list([json number(1), json bool(true)]). Stops on text that isn't JSON, saying where.",
+    [dateOf]: "The calendar date of a year, a month (1 to 12) and a day of that month: date of(2026, 11, 3). Stops on a month or day the calendar hasn't, such as 30 February.",
+    [dateYear]: "The date's year.",
+    [dateMonth]: "The date's month, 1 to 12.",
+    [dateDay]: "The date's day of its month.",
+    [leapYear]: "Whether the year has 29 February: every fourth year, but not a century unless it is a fourth century (2000 is, 1900 isn't).",
+    [daysInMonth]: "How many days a month of a year has: days in month(2024, 2) is 29.",
+    [dayNumber]: "The date counted in days from 1970-01-01, which is 0; a date before it is negative. Howard Hinnant's days_from_civil.",
+    [dateOfDay]: "The date a day number names, the other way from day number: date of day number(0) is 1970-01-01. Howard Hinnant's civil_from_days.",
+    [weekday]: "The date's day of the week, 1 for Monday to 7 for Sunday (ISO 8601): weekday(date of(1970, 1, 1)) is 4, a Thursday.",
+    [addedDays]: "The date this many days later, or earlier for a negative count: added days(date of(2024, 2, 28), 1) is 2024-02-29.",
+    [daysBetween]: "How many days from the first date to the second, negative when the second is earlier.",
+    [dateText]: "The date as ISO 8601 writes it, year-month-day: date text(date of(2026, 11, 3)) is \"2026-11-03\".",
     [jsonPrinted]: "The JSON text of a Json value (RFC 8259): json printed(json object([(\"a\", json list([json number(1), json null]))])) is {\"a\":[1,null]}. Text is quoted with \", \\ and control characters escaped.",
     [bytesOf]: "The bytes with these items, each a whole number from 0 to 255: bytes of([104, 105]) is the bytes of \"hi\". Stops when an item isn't a byte.",
     [byteItems]: "The bytes as their list of Ints, each 0 to 255.",

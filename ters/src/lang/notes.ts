@@ -58,6 +58,7 @@ export const NOTES: Comments = {
   "std.bits": "An interface: and, or, xor and shifts on a type's bits. Int and the words implement it, so a hash written with bits xor works at Word32 and Word64 alike.",
   "std.shown": "An interface: how a type's values show as text. show any shows a value of a type that implements it through its as shown, so a type of your own shows its own way with a definition of type Shown T. Rational, Complex and Fixed do (the prelude's).",
   "std.matrix": "A matrix of any size: its row and column counts and its items row by row. Built with matrix of rows; a size mismatch stops the program and names both sizes, as the size isn't in the type.",
+  "std.date": "A calendar date: a year, a month 1 to 12 and a day of that month, in the Gregorian calendar extended to every year. Made by date of, which checks it.",
   "std.json": "A JSON value (RFC 8259): null, a Bool, a Float64, a Text, a list of them or an object of named ones, in order. json printed writes one as JSON text.",
   "std.bytes": "A byte sequence: whole numbers from 0 to 255, made by bytes of (which checks each) or utf8 of. It means its list of Ints, read with byte items.",
   "std.tensor": "A tensor of any rank: its shape (the axis lengths) and its items with the last axis changing fastest. Built with tensor of; a shape mismatch stops the program and names both shapes, as the shape isn't in the type yet.",
