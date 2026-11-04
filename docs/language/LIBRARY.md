@@ -417,6 +417,7 @@ CSV text as rows of text fields (RFC 4180): csv printed writes rows, quoting a f
 - **csv printed** : `(List (List Text)) -> Text`. Rows of fields as CSV text (RFC 4180), a line each: a field with a comma, a quote or a line break is quoted, its quotes doubled.
 - **csv rows** : `(Text) -[Abort]-> List (List Text)`. The rows of fields a CSV text holds (RFC 4180), the other way from csv printed: quoted fields may hold commas, doubled quotes and line breaks; lines end in LF or CRLF. Stops when the text ends inside a quoted field.
 - **csv records** : `(Text) -[Abort]-> List (Map Text Text)`. The records of a CSV text whose first line names its columns, each a map from those names to the row's fields: csv records("name,age\nAda,36") is one map, name to Ada and age to 36 (Python's csv.DictReader). A short row leaves the last names out.
+- **csv of records** : `(List Text, List (Map Text Text)) -> Text`. A CSV text of records, the other way from csv records: the column names as its first line, then each record's value at each name, empty where it has none (Python's csv.DictWriter).
 
 ## Dates
 
