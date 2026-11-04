@@ -271,7 +271,7 @@ docs/process/TESTING.md. T7 is in lane L.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| T14 | The single slow tests left after L216: Tumble's clear backwards 74 s, tree of List 50 s, every builtin backwards 103 s, core-js examples and pages 116 s, editing's swapAndUndo 43 s. Each becomes a sweep or gets a smaller input, toward 5 s a file | [TEST-SPEED-2026-11-03](docs/reports/TEST-SPEED-2026-11-03.md) | P3 | M | |
+| T14 | The single slow tests left after L216: Tumble's clear backwards 74 s, tree of List 50 s, every builtin backwards 103 s, editing's swapAndUndo 43 s (core-js done: T14a). Each becomes a sweep or gets a smaller input, toward 5 s a file | [TEST-SPEED-2026-11-03](docs/reports/TEST-SPEED-2026-11-03.md) | P3 | M | |
 
 ## Coordinator and process
 
