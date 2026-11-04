@@ -1,5 +1,10 @@
 # Function values with several answers on the core IR (C137 design, 2026-11-03)
 
+**Built** (C137c22, 2026-11-04): steps 1 to 4. A type pays for the
+continuation only once a closure that chooses reaches it: the lowering
+retries with that type marked (scalar.ts `NeedsSeveral`). conjugate and
+pedal lower; the test is compiler/test/several-closures.test.ts.
+
 Two examples still don't lower to the core IR because they make a
 function value whose body chooses among several answers:
 

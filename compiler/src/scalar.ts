@@ -141,7 +141,12 @@ export interface DType { key: string; name: string; def: Id; cases: { variant: I
 // A function as a value (`data`): a closure, called through its code.
 // `partial`: it may have no answer (Choice, or a budget running out), so
 // its code gives a status after its answer, as a partial SFunc does.
-export interface FType { key: string; params: LType[]; result: LType; partial?: boolean }
+// `several` (C137c22, SEVERAL-ANSWER-FUNCTIONS-2026-11-03.md): a function
+// type with Choice whose closures may give several answers. Its closures
+// take the rest of the search as one more input, last (a continuation of
+// the answer, `answer`), and answer whether it went on, as a definition
+// with several answers does; `result` is that i32.
+export interface FType { key: string; params: LType[]; result: LType; partial?: boolean; several?: true; answer?: LType }
 // What a generic definition's type variables stand for, and its effect
 // rows (by their tail variable: the effects added).
 type At = Map<number, Type | Row>;
@@ -314,7 +319,7 @@ export type SExpr =
   | { k: "cap"; t: FType; shape: number; i: number }
   // Calling a closure: it goes into local tmp, then its code is called
   // with it and the inputs.
-  | { k: "apply"; fn: SExpr; t: FType; args: SExpr[]; tail: boolean; tmp: number }
+  | { k: "apply"; fn: SExpr; t: FType; args: SExpr[]; tail: boolean; tmp: number; cps?: true }
   // A match on t: scrut goes into local s, then the arm for its case
   // runs (null: no arm, which the checker rules out).
   | { k: "case"; scrut: SExpr; s: number; t: DType; arms: (SExpr | null)[]; result: LType }
@@ -392,6 +397,11 @@ export interface SFunc { def: Id; name: string; params: LType[]; result: LType; 
 export interface CoreIR { funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; arrays: AType[]; tables: TType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info; escapes: DType[]; rounded: Set<Id>; shader?: true }
 
 class Refused extends Error {}
+// A closure of a function type, at `key`, gives several answers: lowering
+// starts again with that type's closures taking the rest (C137c22). Only
+// types that need it are transformed, as in Koka's and Effekt's selective
+// CPS; the rest is Mercury's success continuation, as for definitions.
+class NeedsSeveral extends Error { key: string; constructor(key: string) { super(`closures of ${key} give several answers`); this.key = key; } }
 // A solve's answers, a List of opaque values (each one answer's binds),
 // for JavaScript from the core IR (C137c11).
 const ANSWERS: DType = { key: "answers", name: "List", def: LIST, cases: [{ variant: NIL, name: "nil", fields: [] }, { variant: CONS, name: "cons", fields: [{ name: "item", t: "host" }] }] };
@@ -434,6 +444,19 @@ export function reachedFrom(code: Code, roots: Id[]): Code {
 // looks at it when its search ends. Shaders have no side effects, so going
 // on computes nothing anyone sees.
 export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean } = {}): CoreIR {
+  // The function types whose closures give several answers: found as
+  // lowering meets one, and lowered again with them (C137c22). Only those
+  // types' closures pay for taking the rest.
+  const several = new Set<string>();
+  for (;;) {
+    try { return lowerOnce(code, info, names, roots, opts, several); } catch (e) {
+      if (!(e instanceof NeedsSeveral) || several.has(e.key)) throw e;
+      several.add(e.key);
+    }
+  }
+}
+
+function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean }, severalTypes: Set<string>): CoreIR {
   // A use with no body, as the use that binds its ports (C161, uses.ts).
   ({ code, info } = withBodies(code, info, names));
   // The generic + resolved to each type's own operation first
@@ -561,6 +584,11 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       if (params.some((p) => !p) || !result) return null;
       const partial = effs.some(partialEff);
       const key = `fn(${(params as LType[]).map(keyOf).join(",")})>${keyOf(result)}${partial ? "!" : ""}`;
+      if (effs.includes(CHOICE) && severalTypes.has(key)) {
+        const sk = `${key}*`;
+        if (!fns.has(sk)) fns.set(sk, { key: sk, params: [...params as LType[], kOf(result)], result: "i32", partial: true, several: true, answer: result });
+        return fns.get(sk)!;
+      }
       if (!fns.has(key)) fns.set(key, { key, params: params as LType[], result, ...(partial ? { partial } : {}) });
       return fns.get(key)!;
     }
@@ -792,6 +820,8 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       funcs.splice(i);
       shapes.splice(shaped);
       for (const [d2, j] of index) if (j >= i) index.delete(d2);
+      // Closures' code with it (it was left behind, C137c22).
+      for (const j of closureCode) if (j >= i) closureCode.delete(j);
       inProgress.delete(def);
       if (e instanceof Refused) { refused.set(key, e.message); throw new Refused(`calls ${nm(def)}, which ${e.message}`); }
       throw e;
@@ -1190,6 +1220,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     const ts = [...n.args, id].map((a) => stype(zonk(a)));
     ts.forEach((t, i) => { if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk([...n.args, id][i]))}`); });
     if (ts.some((t) => typeof t === "object" && boolInside(t!))) throw new Refused(`uses ${nm(target)} on data holding a Bool, which isn't lowered yet`);
+    if (ts.some((t) => severalInside(t!))) throw new Refused(`uses ${nm(target)} on a function with several answers, which the evaluator's can't call yet`);
     const t = ts[ts.length - 1]!;
     return { k: "rt", fn: `host:${target}${t === "i32" ? ":bool" : ""}`, args: n.args.map((a) => expr(a, env, f, false)), host: { t, partial: effs.includes(CHOICE) || !!STD_MANY[target] || target === CELL_OPS.read || target === CELL_OPS.readAt } };
   }
@@ -1225,6 +1256,17 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     seen.add(t);
     if (isRecord(t)) return t.fields.some((x) => boolInside(x.t, seen));
     if (isData(t)) return t.cases.some((c) => c.fields.some((x) => boolInside(x.t, seen)));
+    return false;
+  }
+
+  // A function with several answers, at t or inside it (C137c22).
+  function severalInside(t: LType, seen = new Set<LType>()): boolean {
+    if (typeof t !== "object" || seen.has(t)) return false;
+    seen.add(t);
+    if (isFn(t)) return !!t.several || t.params.some((x) => severalInside(x, seen)) || severalInside(t.result, seen);
+    if (isRecord(t)) return t.fields.some((x) => severalInside(x.t, seen));
+    if (isData(t)) return t.cases.some((c) => c.fields.some((x) => severalInside(x.t, seen)));
+    if (isArray(t)) return severalInside(t.item, seen);
     return false;
   }
 
@@ -1462,7 +1504,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     if (free.some((b) => inlined.has(b))) throw new Refused("makes a function inside a fold that uses the fold's result (not in WebAssembly yet)");
     const caps = free.map((b) => f.locals[env.get(b)!]);
     const shape = shapes.push({ t, caps }) - 1;
-    const g: SFunc = { def: n.id, name: `${f.name}.λ`, params: [t, ...t.params], result: t.result, locals: [t, ...t.params], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true, ...(t.partial ? { partial: true } : {}) };
+    const g: SFunc = { def: n.id, name: `${f.name}.λ`, params: [t, ...t.params], result: t.several ? t.answer! : t.result, locals: [t, ...t.params], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true, ...(t.partial ? { partial: true } : {}) };
     const gi = funcs.push(g) - 1;
     closureCode.add(gi);
     let inner = new Map(n.params.map((p, j) => [p, j + 1]));
@@ -1476,14 +1518,15 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     const key = `&${def}|${t.key}`;
     if (!index.has(key)) {
       const shape = shapes.push({ t, caps: [] }) - 1;
-      const g: SFunc = { def, name: `${nm(def)}.value`, params: [t, ...t.params], result: t.result, locals: [t, ...t.params], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true, ...(t.partial ? { partial: true } : {}) };
+      const g: SFunc = { def, name: `${nm(def)}.value`, params: [t, ...t.params], result: t.several ? t.answer! : t.result, locals: [t, ...t.params], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true, ...(t.partial ? { partial: true } : {}) };
       index.set(key, funcs.push(g) - 1);
       closureCode.add(index.get(key)!);
       // What its type variables are, from the type it's used at.
       const types: At = new Map();
       const dt = info.typeOf.get(def) && info.subst.zonk(info.typeOf.get(def)!);
       if (dt) bindVars(dt, zonk(id), types);
-      g.body = { k: "call", fn: func(def, types), args: t.params.map((_, j): SExpr => ({ k: "local", i: j + 1 })), tail: true };
+      // A several type's rest, last, isn't the definition's (C137c22).
+      g.body = { k: "call", fn: func(def, types), args: t.params.slice(0, t.several ? -1 : undefined).map((_, j): SExpr => ({ k: "local", i: j + 1 })), tail: true };
       shapeOfNamed.set(key, shape);
     }
     const body = (code.nodes[def] as NodeOf<"def">).body;
@@ -1495,6 +1538,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   // a closure that calls the evaluator's, as `host` calls it.
   function builtinValue(target: Id, t: FType): SExpr {
     const key = `&${target}|${t.key}`;
+    if (t.several) throw new Refused(`uses ${nm(target)} as a value that gives several answers (not lowered yet)`);
     if (!index.has(key)) {
       const sig = SIGS[target]?.(new Subst());
       const bad = (sig?.t === "fn" ? info.subst.resolveRow(sig.eff).effs : []).find((e) => e !== CHOICE && e !== DIVERGE);
@@ -1826,6 +1870,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   function several(e: SExpr): boolean {
     if (e.k === "choose") return true;
     if (e.k === "call" && !e.cps && funcs[e.fn].multi) return true;
+    if (e.k === "apply" && !e.cps && e.t.several) return true;
     if (e.k === "search") return !!e.dflt && several(e.dflt);
     if (e.k === "handle" && several(e.body)) throw new Refused("handles Abort around a search with several answers (not in WebAssembly yet)");
     return kids(e).some(several);
@@ -1846,7 +1891,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       case "make": case "new": case "list": case "closure": case "world": case "if": case "attempt": case "handle": case "budget": case "search": case "choose": case "zero": return e.k === "choose" ? e.t.cases.find((c) => c.variant === CONS)!.fields[0].t : e.t;
       case "get": return e.t.fields[e.i].t;
       case "field": return e.t.cases[e.c].fields[e.i].t;
-      case "apply": return e.t.result;
+      case "apply": return e.t.several && !e.cps ? e.t.answer! : e.t.result;
       case "case": return e.result;
       case "let": return typeIn(e.body, g);
       case "set": return typeIn(e.then, g);
@@ -1918,7 +1963,11 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   // A call of a function with several answers: the rest of the search as
   // a closure (or the caller's own k, when the call is all that's left).
   function callSeveral(fn: number, args: SExpr[], k: Cont, tail: boolean, g: SFunc): SExpr {
-    const t = funcs[fn].answer!, kt = kOf(t);
+    return { k: "call", fn, args: [...args, restOf(funcs[fn].answer!, k, g)], tail, cps: true };
+  }
+  // The rest of a search, k, as a closure taking an answer of type t.
+  function restOf(t: LType, k: Cont, g: SFunc): SExpr {
+    const kt = kOf(t);
     let kv = k.direct;
     if (!kv) {
       const v = g.locals.push(t) - 1;
@@ -1932,7 +1981,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
       c.body = lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), move(code, g, c, fixed));
       kv = { k: "closure", t: kt, fn: ci, shape, caps: free.map(local) };
     }
-    return { k: "call", fn, args: [...args, kv], tail, cps: true };
+    return kv;
   }
   // es in order, then done with their values: those before one with
   // several answers go into locals first, so they're computed once, first.
@@ -1956,6 +2005,8 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     switch (e.k) {
       case "choose": return inOrder([e.list], ([l], tl) => choose(l, e.t, k, tl, g), tail, g);
       case "call": if (funcs[e.fn].multi && !e.cps) return inOrder(e.args, (vs, tl) => callSeveral(e.fn, vs, k, tl, g), tail, g); break;
+      // A closure of a several type is given the rest (C137c22).
+      case "apply": if (e.t.several && !e.cps) return inOrder([e.fn, ...e.args], ([fv, ...vs], tl) => ({ k: "apply", fn: fv, t: e.t, args: [...vs, restOf(e.t.answer!, k, g)], tail: tl, tmp: e.tmp, cps: true }), tail, g); break;
       case "let":
         if (several(e.value)) return cps(e.value, { gen: (v, tl) => ({ k: "let", i: e.i, value: v, body: cps(e.body, k, tl, g) }) }, tail, g);
         return { k: "let", i: e.i, value: untail(e.value), body: cps(e.body, k, tail, g) };
@@ -2042,12 +2093,23 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
     const end = funcs.length;
     for (let changed = true; changed;) {
       changed = false;
-      for (let i = from; i < end; i++) if (!funcs[i].multi && several(funcs[i].body)) { funcs[i].multi = true; funcs[i].answer = funcs[i].result; changed = true; }
+      for (let i = from; i < end; i++) if (!funcs[i].multi && (several(funcs[i].body) || (closureCode.has(i) && (funcs[i].params[0] as FType).several))) { funcs[i].multi = true; funcs[i].answer = funcs[i].result; changed = true; }
     }
     for (let i = from; i < end; i++) {
       const g = funcs[i];
       if (!g.multi) { g.body = handle(g.body, g); continue; }
-      if (closureCode.has(i)) throw new Refused("makes a function that chooses among several answers (not in WebAssembly yet)");
+      // A closure's code: its type says it takes the rest, last; one whose
+      // type doesn't yet starts lowering again (C137c22).
+      if (closureCode.has(i)) {
+        const ct = g.params[0] as FType;
+        if (!ct.several) throw new NeedsSeveral(ct.key);
+        const p = g.params.length - 1, kt = g.params[p] as FType;
+        g.result = "i32";
+        g.partial = true;
+        const k: Cont = { direct: local(p), gen: (v, tail) => ({ k: "apply", fn: local(p), t: kt, args: [v], tail, tmp: g.locals.push(kt) - 1 }) };
+        g.body = cps(handle(g.body, g), k, true, g);
+        continue;
+      }
       const p = g.params.length, kt = kOf(g.answer!);
       const body = mapLocals(g.body, (j) => (j < p ? j : j + 1));
       g.locals = [...g.locals.slice(0, p), kt, ...g.locals.slice(p)];
