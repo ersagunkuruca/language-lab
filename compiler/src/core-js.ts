@@ -439,12 +439,26 @@ function kidsOf(e: SExpr): SExpr[] {
 // The functions, by their place in ir.funcs. `rt`: the console and files.
 // `hostOps`: the operations rt.hosts answers (hostOpsOf).
 export function loadCoreJs(ir: CoreIR, rt: Runtime = { print: () => {} }, hostOps?: HostOps): ((...xs: unknown[]) => unknown)[] {
+  return loadPrinted(printed(ir), rt, ir.code, ir.info, hostOps);
+}
+
+// A lowered program as printed, which is plain data (E245c): kept for a
+// run of the same code again, or built with the site for a shipped
+// example, and loaded with no lowering. `code`: the program's nodes when
+// its solves need them (codeFor), else none. `f64`: which functions give
+// a Float64 back to the host. `checked`: a derivative needs the check's
+// types too, which aren't data, so such a program is lowered each time.
+export interface Printed { js: string; names: string[]; worlds: string[]; tables: TableSpec[]; f64: boolean[]; code?: Code; checked?: true }
+export function printed(ir: CoreIR): Printed {
   const { js, names, worlds } = emitCoreJs(ir);
-  const all = new Function("R", js)(coreRuntime(ir.tables.map(tableSpec), worlds, rt, ir.code, ir.info, hostOps)) as Record<string, (...xs: unknown[]) => unknown>;
+  return { js, names, worlds, tables: ir.tables.map(tableSpec), f64: ir.funcs.map((f) => f.result === "f64" && !ir.shader), ...(solving(js) ? { code: { nodes: ir.code.nodes, defs: ir.code.defs } } : {}), ...(/R\.rt\("derive:/.test(js) ? { checked: true as const } : {}) };
+}
+export function loadPrinted(p: Printed, rt: Runtime = { print: () => {} }, code: Code | undefined = p.code, info?: Info, hostOps?: HostOps): ((...xs: unknown[]) => unknown)[] {
+  const all = new Function("R", p.js)(coreRuntime(p.tables, p.worlds, rt, code, info, hostOps)) as Record<string, (...xs: unknown[]) => unknown>;
   // A Float64 handed back to the host is a use of it (SPEC §3.3, C156):
   // too big, it stops there.
   const fin = (x: number) => { if (x - x !== 0) throw new Stopped(STOPS[STOPS.length - 1]); return x; };
-  return names.map((n, i) => { const f = all[n]; return ir.funcs[i]?.result === "f64" && !ir.shader ? (...xs: unknown[]) => fin(f(...xs) as number) : f; });
+  return p.names.map((n, i) => { const f = all[n]; return p.f64[i] ? (...xs: unknown[]) => fin(f(...xs) as number) : f; });
 }
 
 // What running a main needs to know of it: whether it takes the

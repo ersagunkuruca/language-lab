@@ -50,7 +50,7 @@ console.log(`index.html: ${(page.length / 1024).toFixed(0)} KB`);
 
 // Each shipped page example and picture compiled once, here (E245,
 // prebuild.ts): the editor takes it from prebuilt/ instead of compiling it.
-console.log(`prebuilt/: ${(await prebuild(manifest, site, true)).length} pages and pictures`);
+console.log(`prebuilt/: ${(await prebuild(manifest, site, true)).length} pages, pictures and mains`);
 
 // The tutorial, styled like the editor (same colours and fonts).
 const tokens = page.slice(page.indexOf(":root {"), page.indexOf("* { box-sizing"));
