@@ -116,9 +116,9 @@ export type NodeOf<K extends Kind> = Extract<Node, { kind: K }>;
 // by step", L130).
 export type Use = Extract<NodeOf<"call">, { given: Record<string, Id> }>;
 // A use's binds and body (L211b): a use may come without them, giving its
-// produced ports as one value. ports.ts's fillUses reads one at load as the
-// use binding each port and giving them back, so after a load both are there
-// unless the ports aren't known (a hole, an unknown target).
+// produced ports as one value. A load keeps it so (L211h): each engine takes
+// it as it is, and the passes that work on binders read the copy ports.ts
+// `filled` makes, with each port bound and given back.
 export const bindsOf = (n: Use): Record<string, Id> => n.binds ?? {};
 export function bodyOf(n: Use): Id {
   if (n.body === undefined) throw new Error(`a use whose ports aren't known gives its ports as one value (${n.id})`);

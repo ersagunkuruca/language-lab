@@ -61,8 +61,10 @@ export const answerKeys = (code: Code, n: Use): string[] => (n.body !== undefine
 
 // A use with no body (L211, PORTS-2026-11-01.md §3 "Decided (L179)") gives
 // its produced ports, the ones not given, in port order, as a tuple, or
-// the one value when it produces one. Until the readers take it as it is,
-// it is read as the use that binds each produced port and gives them back:
+// the one value when it produces one. Every engine takes it as it is (L211h:
+// a load no longer fills it); for the passes whose slots are binders,
+// `filled` below reads it as the use that binds each produced port and gives
+// them back:
 // a binder `<use>.bind.<port>` for each, and the body `<use>.tuple`. The
 // ids come from the use's, so filling the same program twice gives the
 // same nodes. A use whose ports aren't known (a hole, an unknown target)
