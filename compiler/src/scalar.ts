@@ -2607,8 +2607,7 @@ const stopWith = (i: number): SExpr => op("stop", num(i));
 const stop = stopWith;
 const iff = (cond: SExpr, then: SExpr, otherwise: SExpr): SExpr => ({ k: "if", cond, then, else: otherwise, t: "f64" });
 // When bad, the stops in why; otherwise ok.
-const guarded = (bad: SExpr, why: SExpr, ok: SExpr): SExpr => ({ k: "if", cond: bad, then: why, else: ok, t: "f64", check: true });
-const guard = guarded;
+const guard = (bad: SExpr, why: SExpr, ok: SExpr): SExpr => ({ k: "if", cond: bad, then: why, else: ok, t: "f64", check: true });
 // e without its checks: what a GPU runs, which can't stop.
 // Optional Float64 and Extended Float64 as one f64 (L125e,
 // FLOAT-VALUES-2026-11-01.md §4, Rust's niche): every Float64 is finite
@@ -2747,12 +2746,13 @@ const LATE: Partial<Record<Op, true>> = { less: true, equal: true, exp: true };
 export const RT_LATE = new Set(["number.show", "number.range", "int.wholePart"]);
 // `none`: no answer is a Choice the function gives (a fail) instead of a
 // stop; "flag": inside a search's body in the plain profile (C166), it
-// raises the flag and goes on with a zero, as a shader's search does, and
-// isn't a check (a printer that drops checks keeps it).
+// raises the flag and goes on with a zero, as a shader's search does. It
+// is still a check: a printer that runs as the GPU does (wgsl.ts,
+// js-scalar.ts) drops it with the others and goes on with NaN, so the
+// copy is the same code there and WGSL's built-ins (length) are kept.
 function checked(f: SFunc, r: Extract<SExpr, { k: "op" }>, none: boolean | "flag" = false): SExpr {
   const [a, b] = r.args;
   const stop = (i: number): SExpr => (none === "flag" && i !== OVERFLOW ? { k: "zero", t: "f64", none: true } : none && i !== OVERFLOW ? { k: "fail" } : stopWith(i));
-  const guard = (bad: SExpr, why: SExpr, ok: SExpr): SExpr => (why.k === "zero" ? iff(bad, why, ok) : guarded(bad, why, ok));
   switch (r.op) {
     case "div": case "mod": {
       const v = lit(b);
