@@ -418,7 +418,7 @@ CSV text as rows of text fields (RFC 4180): csv printed writes rows, quoting a f
 
 ## Dates
 
-A Date is a day in the calendar: its year, month and day. Dates count as days from 1970-01-01 both ways, so adding days, the days between two dates and the weekday are whole-number arithmetic. Times of day, instants and time zones come later.
+A Date is a day in the calendar: its year, month and day. Dates count as days from 1970-01-01 both ways, so adding days, the days between two dates and the weekday are whole-number arithmetic. Times of day are their own type (below); instants and time zones come later.
 
 - **Date** (type). A calendar date: a year, a month 1 to 12 and a day of that month, in the Gregorian calendar extended to every year. Made by date of, which checks it.
 - **date of** : `(Int, Int, Int) -[Abort]-> Date`. The calendar date of a year, a month (1 to 12) and a day of that month: date of(2026, 11, 3). Stops on a month or day the calendar hasn't, such as 30 February.
@@ -434,6 +434,20 @@ A Date is a day in the calendar: its year, month and day. Dates count as days fr
 - **days between** : `(Date, Date) -> Int`. How many days from the first date to the second, negative when the second is earlier.
 - **date text** : `(Date) -> Text`. The date as ISO 8601 writes it, year-month-day: date text(date of(2026, 11, 3)) is "2026-11-03".
 - **date read** : `(Text) -[Abort]-> Date`. The date an ISO 8601 text writes, year-month-day: date read("2026-11-03") is date of(2026, 11, 3), the other way from date text. Stops on any other text, or a day the calendar hasn't.
+
+## Times of day
+
+A Time of day is an hour, a minute and a second, counted as seconds from midnight both ways. Instants, durations and time zones come later.
+
+- **Time of day** (type). A time of day in whole seconds: an hour 0 to 23, a minute and a second 0 to 59, made by time of, which checks it.
+- **time of** : `(Int, Int, Int) -[Abort]-> Time of day`. The time of day of an hour (0 to 23), a minute and a second (0 to 59): time of(9, 5, 0). Stops on any other.
+- **time hour** : `(Time of day) -> Int`. The time's hour, 0 to 23.
+- **time minute** : `(Time of day) -> Int`. The time's minute, 0 to 59.
+- **time second** : `(Time of day) -> Int`. The time's second, 0 to 59.
+- **seconds of day** : `(Time of day) -> Int`. The time as seconds from midnight, 0 to 86399.
+- **time of seconds** : `(Int) -> Time of day`. The time of day so many seconds from midnight, wrapping round: time of seconds(90000) is 01:00:00, and a negative count goes back from midnight.
+- **time text** : `(Time of day) -> Text`. The time as ISO 8601 writes it, hour:minute:second: time text(time of(9, 5, 0)) is "09:05:00".
+- **time read** : `(Text) -[Abort]-> Time of day`. The time an ISO 8601 text writes, hour:minute:second in two digits each, the other way from time text. Stops on any other text.
 
 ## Representations
 
