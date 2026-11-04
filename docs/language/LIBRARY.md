@@ -417,6 +417,7 @@ A Date is a day in the calendar: its year, month and day. Dates count as days fr
 - **added days** : `(Date, Int) -> Date`. The date this many days later, or earlier for a negative count: added days(date of(2024, 2, 28), 1) is 2024-02-29.
 - **days between** : `(Date, Date) -> Int`. How many days from the first date to the second, negative when the second is earlier.
 - **date text** : `(Date) -> Text`. The date as ISO 8601 writes it, year-month-day: date text(date of(2026, 11, 3)) is "2026-11-03".
+- **date read** : `(Text) -[Abort]-> Date`. The date an ISO 8601 text writes, year-month-day: date read("2026-11-03") is date of(2026, 11, 3), the other way from date text. Stops on any other text, or a day the calendar hasn't.
 
 ## Representations
 
