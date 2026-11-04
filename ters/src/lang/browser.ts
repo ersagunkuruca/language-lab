@@ -67,9 +67,9 @@ const browserFetch = async (url: string): Promise<string> => {
 // Any status is a response; only a request that can't be sent fails.
 const browserSend = async (q: PlainRequest): Promise<PlainResponse> => {
   const init: RequestInit = { method: q.method, headers: q.headers };
-  if (q.body !== "" && !["GET", "HEAD"].includes(q.method.toUpperCase())) init.body = q.body;
+  if (q.body.length && !["GET", "HEAD"].includes(q.method.toUpperCase())) init.body = q.body as BodyInit;
   const r = await fetch(q.url, init);
-  return { status: r.status, headers: [...r.headers], body: await r.text() };
+  return { status: r.status, headers: [...r.headers], body: new Uint8Array(await r.arrayBuffer()) };
 };
 
 // localStorage, or a map when the browser refuses it (a sandboxed frame,

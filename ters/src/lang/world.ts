@@ -6,7 +6,7 @@
 // the fetch and the program waits for it. `start fetch` (L150b) runs one
 // in the background and the program looks for its body when it awaits.
 
-import { requestKey, type PlainRequest, type PlainResponse } from "./network.ts";
+import { base64Of, bytesOfBase64, requestKey, type PlainRequest, type PlainResponse } from "./network.ts";
 import { execFileSync, spawn } from "node:child_process";
 import { appendFileSync, closeSync, existsSync, mkdtempSync, openSync, readdirSync, readFileSync, readSync, rmSync, writeFileSync, writeSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -50,7 +50,9 @@ export function nodeWorld(): World {
   const sent = new Map<string, PlainResponse | { error: string }>();
   const sendOnce = (r: PlainRequest): PlainResponse | { error: string } => {
     try {
-      return JSON.parse(execFileSync(process.execPath, ["-e", SEND, JSON.stringify(r)], { encoding: "utf8", maxBuffer: 1 << 28, stdio: ["ignore", "pipe", "pipe"] })) as PlainResponse;
+      // The bodies go through JSON as Base64 (L191c).
+      const got = JSON.parse(execFileSync(process.execPath, ["-e", SEND, JSON.stringify({ ...r, body: base64Of(r.body) })], { encoding: "utf8", maxBuffer: 1 << 28, stdio: ["ignore", "pipe", "pipe"] })) as Omit<PlainResponse, "body"> & { body: string };
+      return { ...got, body: bytesOfBase64(got.body) };
     } catch (e) {
       const why = String((e as { stderr?: string }).stderr ?? "").trim() || (e as Error).message;
       return { error: `could not send ${r.method} ${r.url}: ${why}` };
@@ -164,9 +166,9 @@ fetch(process.argv[1]).then(async (r) => {
 const SEND = `
 const r = JSON.parse(process.argv[1]);
 const init = { method: r.method, headers: r.headers };
-if (r.body !== "" && !["GET", "HEAD"].includes(r.method.toUpperCase())) init.body = r.body;
+if (r.body !== "" && !["GET", "HEAD"].includes(r.method.toUpperCase())) init.body = Buffer.from(r.body, "base64");
 fetch(r.url, init).then(async (res) => {
-  process.stdout.write(JSON.stringify({ status: res.status, headers: [...res.headers], body: await res.text() }));
+  process.stdout.write(JSON.stringify({ status: res.status, headers: [...res.headers], body: Buffer.from(await res.arrayBuffer()).toString("base64") }));
 }, (e) => { process.stderr.write(String(e.cause?.message ?? e.message)); process.exit(2); });
 `;
 

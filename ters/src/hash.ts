@@ -209,7 +209,13 @@ function canon(code: Code, defId: Id, group: Map<Id, number | null>, memo: Map<I
         }
         return ["call", f, ...args];
       }
-      case "lambda": return ["lam", n.params.map(go), go(n.body)];
+      case "lambda": {
+        // A relation written where it is used (L225e) says which of its
+        // inputs are its results, by place, as a definition's marks do for
+        // its own body; only then, so every other hash stays.
+        const rel = id !== def.body && n.results?.length && n.results.every((r) => n.params.includes(r));
+        return rel ? ["lam", n.params.map(go), go(n.body), ["results", n.results!.map((r) => n.params.indexOf(r))]] : ["lam", n.params.map(go), go(n.body)];
+      }
       // `unique`: a type that has the same shape as another but isn't it
       // (Dual and Complex are both two Float64s) says so, or the two would
       // be one type by their hashes. Only written when present, so every

@@ -1452,14 +1452,15 @@ export const EMBEDDING = typedef("std.embedding", "Embedding", ["a", "b"], [
 ]);
 export const EMBEDDING_V = "std.embedding.embedding";
 // A request over the network and its response (L191, network.ts): a
-// header is a name and a value, in the order given. After Embedding, so
-// the ids above don't move.
+// header is a name and a value, in the order given; a body is Bytes
+// (L191c), as HTTP sends it: `utf8 of` writes a text there, `text of
+// utf8` reads one back. After Embedding, so the ids above don't move.
 const headersT = () => tref(LIST, tref(PAIR, tref(STRING), tref(STRING)));
 export const REQUEST = typedef("std.request", "Request", [], [
-  ["request", [["method", () => tref(STRING)], ["url", () => tref(STRING)], ["headers", headersT], ["body", () => tref(STRING)]]],
+  ["request", [["method", () => tref(STRING)], ["url", () => tref(STRING)], ["headers", headersT], ["body", () => tref(BYTES)]]],
 ]);
 export const RESPONSE = typedef("std.response", "Response", [], [
-  ["response", [["status", () => tref(INT)], ["headers", headersT], ["body", () => tref(STRING)]]],
+  ["response", [["status", () => tref(INT)], ["headers", headersT], ["body", () => tref(BYTES)]]],
 ]);
 // A language, as a BCP 47 tag ("tr", "en-GB"), for what depends on it:
 // case (L214b), later collation (L214d).
