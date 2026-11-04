@@ -9,7 +9,7 @@ import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { PROBLEMS, problemOf } from "../src/lang/problems.ts";
 import { NUMBER } from "../src/lang/types.ts";
-import { ARITH, DIVIDE, EMBEDDING_V, FALSE, FIELDS, INT_OPS, JSON_OPS, LOG_OP, S, RELEASE_V, SHOWN_V, SOME, TRIG_OPS, TRUE } from "../src/lang/std.ts";
+import { ARITH, CELL_OPS, DIVIDE, EMBEDDING_V, FALSE, FIELDS, INT_OPS, JSON_OPS, LOG_OP, RELEASE_V, S, SET, SHOWN_V, SOME, TRIG_OPS, TRUE } from "../src/lang/std.ts";
 
 const bools = (k: Lang, b: string, extra: Parameters<Lang["match"]>[1] = []) =>
   k.match(b, [{ variant: TRUE, names: [], body: () => k.lit(1) }, { variant: FALSE, names: [], body: () => k.lit(2) }, ...extra]);
@@ -78,6 +78,9 @@ const SMALLEST: Record<string, (k: Lang) => void> = {
   "embedding-itself": (k) => k.define(k.def("p"), k.call(EMBEDDING_V, k.fn(["x"], (x) => k.call(INT_OPS.add, x, k.int(0))))),
   "embedding-twice": (k) => k.define(k.def("p"), k.call(EMBEDDING_V, k.x(INT_OPS.toNumber))),
   "implementation-not-record": (k) => { const t = k.type("Colour", [], [["red", []]]); k.define(k.def("p"), k.let("s", k.call(SHOWN_V, k.fn(["c"], (c) => k.match(c, [{ variant: t.v.red, names: [], body: () => k.lit("red") }]))), (s) => s)); },
+  "set-not-field": (k) => { k.type("Pt", [], [["pt", [["x", () => k.tref(NUMBER)]]]]); k.define(k.def("p"), k.fn(["r"], (r) => k.call(SET, k.fn(["q"], () => k.lit(1)), r, k.lit(2)))); },
+  "path-not-field": (k) => k.define(k.def("p"), k.call(CELL_OPS.path, k.fn(["t"], () => k.lit(1)))),
+  "results-unreachable": (k) => { const f = k.def("f"); k.define(f, k.fn(["a", "b"], (a, b) => k.call(ARITH.less, a, b))); k.results(f, "b"); },
   "not-a-number": (k) => k.define(k.def("p"), k.fn(["b"], (b) => k.match(b, [{ variant: TRUE, names: [], body: () => k.lit(1) }, { variant: FALSE, names: [], body: () => k.lit("a") }]))),
 };
 
