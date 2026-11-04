@@ -1,4 +1,4 @@
-// The steady module (BACKLOG L210, SPEC §3.2): sin, cos, tan, exp and log on
+// The steady module (BACKLOG L210, SPEC §3.2): sin, cos, tan, exp, log and pow on
 // Float64, written in Ters, so that a program that uses them gets the same
 // bits on every machine. The builtins (`sin`, `exp`, ...) are each
 // platform's own (JavaScript's Math, C's libm, a GPU's) and only agree
@@ -22,13 +22,13 @@
 // Left (L210): sin, cos and tan reduce their argument as fdlibm does up to
 // 2^20·π/2 (|x| below 1,647,100), with a π/2 in up to three parts. Past
 // that fdlibm uses Payne and Hanek's reduction, which isn't written yet,
-// so there they stop with a reason rather than give a wrong answer. pow
+// so there they stop with a reason rather than give a wrong answer. atan2, asin, acos
 // and the rest follow, and so does the number type that carries
 // these (after L204).
 //
 // Adapted, credited in docs/language/CREDITS.md: fdlibm's e_exp.c,
-// e_log.c, k_sin.c, k_cos.c, k_tan.c, e_rem_pio2.c, s_sin.c, s_cos.c and
-// s_tan.c, as V8
+// e_log.c, k_sin.c, k_cos.c, k_tan.c, e_rem_pio2.c, s_sin.c, s_cos.c,
+// s_tan.c and e_pow.c, as V8
 // ports them (src/base/ieee754.cc, BSD licence), whose notices follow.
 //
 // ====================================================
@@ -293,11 +293,105 @@ export function buildSteady(): Module {
         k.call(kTan, y0, y1, sub(L(1), mul(L(2), sub(n, mul(L(2), floor(div(n, L(2)))))))) },
     ])));
 
-  const offered = [sin, cos, tan, exp, log];
+  // pow (fdlibm e_pow.c): log2 x worked out in two parts, times y in two
+  // parts, then 2 to that. The bit tests on y become: y is an odd or even
+  // whole number. What has no answer (a negative x to a fraction, 0 to a
+  // negative) and what overflows are the builtin's own, so they end as
+  // x ^ y does.
+  const PL = [5.99999999999994648725e-01, 4.28571428578550184252e-01, 3.33333329818377432918e-01, 2.72728123808534006489e-01, 2.30660745775561754067e-01, 2.06975017800338417784e-01];
+  const lg2 = 6.93147180559945286227e-01, lg2_h = 6.93147182464599609375e-01, lg2_l = -1.90465429995776804525e-09, ovt = 8.0085662595372944372e-0017;
+  const cp = 9.61796693925975554329e-01, cp_h = 9.61796700954437255859e-01, cp_l = -7.02846165095275826516e-09;
+  const ivln2 = 1.44269504088896338700e+00, ivln2_h = 1.44269502162933349609e+00, ivln2_l = 1.92596299112661746887e-08;
+  const dp_h = [0, 5.84962487220764160156e-01], dp_l = [0, 1.35003920212974897128e-08];
+  const cleared = (v: Id) => k.call(lowCleared, v);
+  // log2 |x| as t1 + t2, t1's low word cleared.
+  const log2Parts = (ax: Id, body: (t1: Id, t2: Id) => Id): Id => let_("e", k.call(exponent, ax), (e) =>
+    let_("m", k.call(scaled, ax, neg(e)), (m) =>
+      let_("j", floor(mul(sub(m, L(1)), L(2 ** 20))), (j) =>
+        let_("kk", iff(le(j, L(0x3988E)), L(0), iff(lt(j, L(0xBB67A)), L(1), L(2))), (kk) =>
+          // kk 2: as 0, with x halved and n one more.
+          let_("n", iff(eq(kk, L(2)), add(e, L(1)), e), (n) =>
+            let_("ix", iff(eq(kk, L(2)), add(L(0x3fe00000), j), add(L(0x3ff00000), j)), (ix) =>
+              let_("a", iff(eq(kk, L(2)), div(m, L(2)), m), (a) =>
+                let_("one", eq(kk, L(1)), (isOne) =>
+                  let_("bp", iff(isOne, L(1.5), L(1)), (bp) =>
+                    let_("u", sub(a, bp), (u) =>
+                      let_("v", div(L(1), add(a, bp)), (v) =>
+                        let_("ss", mul(u, v), (ss) =>
+                          let_("s_h", cleared(ss), (s_h) =>
+                            // t_h: the double whose high word is
+                            // ((ix >> 1) | 0x20000000) + 0x80000 + (k << 18).
+                            let_("H", add(add(add(floor(div(ix, L(2))), L(0x20000000)), L(0x80000)), iff(isOne, L(2 ** 18), L(0))), (H) =>
+                              let_("E", floor(div(H, L(2 ** 20))), (E) =>
+                                let_("t_h", k.call(scaled, add(L(1), div(sub(H, mul(E, L(2 ** 20))), L(2 ** 20))), sub(E, L(1023))), (t_h) =>
+                                  let_("t_l", sub(a, sub(t_h, bp)), (t_l) =>
+                                    let_("s_l", mul(v, sub(sub(u, mul(s_h, t_h)), mul(s_h, t_l))), (s_l) =>
+                                      let_("s2", mul(ss, ss), (s2) =>
+                                        let_("r", add(mul(mul(s2, s2), horner(s2, PL)), mul(s_l, add(s_h, ss))), (r) =>
+                                          let_("s2h", mul(s_h, s_h), (s2h) =>
+                                            let_("t_h", cleared(add(add(L(3), s2h), r)), (t_h2) =>
+                                              let_("t_l", sub(r, sub(sub(t_h2, L(3)), s2h)), (t_l2) =>
+                                                let_("u", mul(s_h, t_h2), (u2) =>
+                                                  let_("v", add(mul(s_l, t_h2), mul(t_l2, ss)), (v2) =>
+                                                    let_("p_h", cleared(add(u2, v2)), (p_h) =>
+                                                      let_("p_l", sub(v2, sub(p_h, u2)), (p_l) =>
+                                                        let_("z_h", mul(L(cp_h), p_h), (z_h) =>
+                                                          let_("z_l", add(add(mul(L(cp_l), p_h), mul(p_l, L(cp))), iff(isOne, L(dp_l[1]), L(dp_l[0]))), (z_l) =>
+                                                            let_("dph", iff(isOne, L(dp_h[1]), L(dp_h[0])), (dph) =>
+                                                              let_("t1", cleared(add(add(add(z_h, z_l), dph), n)), (t1) =>
+                                                                body(t1, sub(z_l, sub(sub(sub(t1, n), dph), z_h))))))))))))))))))))))))))))))))));
+  // |x| within 2^−20 of 1 and |y| past 2^31: log2 by its series.
+  const log2Near = (ax: Id, body: (t1: Id, t2: Id) => Id): Id => let_("t", sub(ax, L(1)), (t) =>
+    let_("w", mul(mul(t, t), sub(L(0.5), mul(t, sub(L(0.3333333333333333333333), mul(t, L(0.25)))))), (w) =>
+      let_("u", mul(L(ivln2_h), t), (u) =>
+        let_("v", sub(mul(t, L(ivln2_l)), mul(w, L(ivln2))), (v) =>
+          let_("t1", cleared(add(u, v)), (t1) => body(t1, sub(v, sub(t1, u))))))));
+  // z · 2^n rounded once, for a z near 1.
+  const timesTwoTo = (z0: Id, n: Id) => let_("z", z0, (z) => iff(gt(n, L(1023)), mul(mul(z, L(2)), k.call(twoTo, sub(n, L(1)))),
+    iff(lt(n, L(-1022)), mul(mul(z, k.call(twoTo, add(n, L(54)))), L(2 ** -54)), mul(z, k.call(twoTo, n)))));
+  // s · 2^(y·(t1 + t2)), or the builtin's overflow, or 0.
+  const powTail = (x: Id, y: Id, sg: Id, t1: Id, t2: Id): Id => let_("y1", cleared(y), (y1) =>
+    let_("p_l", add(mul(sub(y, y1), t1), mul(y, t2)), (p_l) =>
+      let_("p_h", mul(y1, t1), (p_h) =>
+        let_("z", add(p_l, p_h), (z) =>
+          iff(or(gt(z, L(1024)), and(eq(z, L(1024)), gt(add(p_l, L(ovt)), sub(z, p_h)))), k.call(B.pow, x, y),
+            iff(or(lt(z, L(-1075)), and(eq(z, L(-1075)), le(p_l, sub(z, p_h)))), L(0),
+              let_("n", iff(ge(abs(z), L(atMost(0x3fe00000))), let_("nn", floor(add(abs(z), L(0.5))), (nn) => iff(lt(z, L(0)), neg(nn), nn)), L(0)), (n) =>
+                let_("p_h", sub(p_h, n), (ph) =>
+                  let_("t", cleared(add(p_l, ph)), (t) =>
+                    let_("u", mul(t, L(lg2_h)), (u) =>
+                      let_("v", add(mul(sub(p_l, sub(t, ph)), L(lg2)), mul(t, L(lg2_l))), (v) =>
+                        let_("z", add(u, v), (z2) =>
+                          let_("w", sub(v, sub(z2, u)), (w) =>
+                            let_("t", mul(z2, z2), (tt) =>
+                              let_("t1", sub(z2, mul(tt, horner(tt, P))), (tz) =>
+                                let_("r", div(mul(z2, tz), sub(sub(tz, L(2)), add(w, mul(z2, w)))), (r) =>
+                                  mul(sg, timesTwoTo(sub(L(1), sub(r, z2)), n))))))))))))))))));
+  const pow = def("steady pow", ["x", "y"], (x, y) => let_("ax", abs(x), (ax) => let_("ay", abs(y), (ay) =>
+    // y an odd whole number, or an even one (fdlibm's yisint 1 and 2).
+    let_("whole", eq(floor(y), y), (whole) => let_("odd", and(whole, not(eq(floor(div(y, L(2))), div(y, L(2))))), (odd) =>
+      iff(eq(y, L(0)), L(1),
+        iff(eq(y, L(1)), x, iff(eq(y, L(-1)), div(L(1), x), iff(eq(y, L(2)), mul(x, x),
+          iff(and(eq(y, L(0.5)), ge(x, L(0))), k.call(B.sqrt, x),
+            iff(or(eq(ax, L(0)), eq(ax, L(1))),
+              iff(and(lt(x, L(0)), not(whole)), k.call(B.pow, x, y),
+                let_("z", iff(lt(y, L(0)), div(L(1), ax), ax), (z) => iff(and(lt(x, L(0)), odd), neg(z), z))),
+              iff(and(lt(x, L(0)), not(whole)), k.call(B.pow, x, y),
+                let_("s", iff(and(lt(x, L(0)), odd), L(-1), L(1)), (sg) =>
+                  // past 2^64 it must over- or underflow; past 2^31 too, unless x is near 1.
+                  iff(ge(ay, L(atMost(0x41e00000))),
+                    iff(or(and(ge(ay, L(atMost(0x43f00000))), or(and(lt(ax, L(1)), lt(y, L(0))), and(ge(ax, L(1)), gt(y, L(0))))),
+                      or(and(lt(ax, L(below(0x3fefffff))), lt(y, L(0))), and(ge(ax, L(atMost(0x3ff00000))), gt(y, L(0))))), k.call(B.pow, x, y),
+                      iff(or(ge(ay, L(atMost(0x43f00000))), or(lt(ax, L(below(0x3fefffff))), ge(ax, L(atMost(0x3ff00000))))), L(0),
+                        log2Near(ax, (t1, t2) => powTail(x, y, sg, t1, t2)))),
+                    log2Parts(ax, (t1, t2) => powTail(x, y, sg, t1, t2))))))))))))))));
+
+  const offered = [sin, cos, tan, exp, log, pow];
   const comments: Record<Id, string> = {
     [sin]: "sin x with the same bits on every machine: fdlibm's, written in Ters (sin is the platform's own, within a few ulp).",
     [cos]: "cos x with the same bits on every machine: fdlibm's, written in Ters.",
     [tan]: "tan x with the same bits on every machine: fdlibm's, written in Ters. No answer where cos x is 0.",
+    [pow]: "x to the power y with the same bits on every machine: fdlibm's, written in Ters. No answer where x ^ y has none.",
     [exp]: "e^x with the same bits on every machine: fdlibm's, written in Ters.",
     [log]: "The natural log of x with the same bits on every machine: fdlibm's, written in Ters. No answer for x ≤ 0.",
   };
