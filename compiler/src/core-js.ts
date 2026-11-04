@@ -214,7 +214,9 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
         case "tag": return `R.caseOf(${ex(e.rec, pre, d)}, ${JSON.stringify(e.t.cases.map((c) => c.variant))})`;
         // One of a type that waits takes the rest last (C40 step 4): called
         // from outside, it's given a rest that keeps the answer.
-        case "closure": return `R.closure(${names[e.fn]}, [${e.caps.map((a) => ex(a, pre, d)).join(", ")}]${e.src || e.t.waits ? `, ${e.src ? JSON.stringify(e.src) : "undefined"}` : ""}${e.t.waits ? ", true" : ""})`;
+        // A closure that takes the rest (it waits, or gives several
+        // answers) is given one when called from outside (core-rt.ts).
+        case "closure": { const rest = e.t.waits || e.t.several; return `R.closure(${names[e.fn]}, [${e.caps.map((a) => ex(a, pre, d)).join(", ")}]${e.src || rest ? `, ${e.src ? JSON.stringify(e.src) : "undefined"}` : ""}${rest ? ", true" : ""})`; }
         case "cap": return `l0.caps[${e.i}]`;
         case "apply": {
           const c = ex(e.fn, pre, d), xs = e.args.map((a) => ex(a, pre, d));
@@ -447,7 +449,9 @@ const solverFor = (code: string, beside: string) => {
 
 // A page's script (C137c9, `lab build-web --core`): the printed functions,
 // with core-page.ts (`page`, which a bundler takes in) drawing main.
-export function corePageScript(ir: CoreIR, name: string, page: string, title: string): string {
+// `worklet`: a page with sound, its audio thread's script (coreSoundScript
+// bundled), which the page plays (C137d4).
+export function corePageScript(ir: CoreIR, name: string, page: string, title: string, worklet?: string): string {
   const fi = ir.funcs.findIndex((g) => g.name === name && !g.inner && !g.budgeted);
   if (fi < 0 || ir.funcs[fi].params.length) throw new Error(`${name}: not compiled, or not a page's main`);
   const { js, names, worlds } = emitCoreJs(ir);
@@ -457,6 +461,23 @@ export function corePageScript(ir: CoreIR, name: string, page: string, title: st
     ...solverFor(code, page),
     `startCorePage(${JSON.stringify(ir.tables.map(tableSpec))}, ${JSON.stringify(worlds)}, (R) => {`,
     js,
-    `}, ${JSON.stringify(names[fi])}, ${JSON.stringify(title)}, ${code});`,
+    `}, ${JSON.stringify(names[fi])}, ${JSON.stringify(title)}, ${code}${worklet === undefined ? "" : `, ${JSON.stringify(worklet)}`});`,
+  ].join("\n");
+}
+
+// The audio thread's script for a page with sound (C137d4): the printed
+// functions, with core-sound.ts (`sound`, which a bundler takes in)
+// running main again there and playing its block functions.
+export function coreSoundScript(ir: CoreIR, name: string, sound: string): string {
+  const fi = ir.funcs.findIndex((g) => g.name === name && !g.inner && !g.budgeted);
+  if (fi < 0 || ir.funcs[fi].params.length) throw new Error(`${name}: not compiled, or not a page's main`);
+  const { js, names, worlds } = emitCoreJs(ir);
+  const code = codeFor(ir, js);
+  return [
+    `import { startCoreSound } from ${JSON.stringify(sound)};`,
+    ...solverFor(code, sound),
+    `startCoreSound(${JSON.stringify(ir.tables.map(tableSpec))}, ${JSON.stringify(worlds)}, (R) => {`,
+    js,
+    `}, ${JSON.stringify(names[fi])}, ${code});`,
   ].join("\n");
 }
