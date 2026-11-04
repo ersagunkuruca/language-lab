@@ -67,3 +67,16 @@ test("date read reads what date text writes, and stops on anything else", async 
     assert.throws(() => runMain(p.code, p.info, p.main, { print: () => {}, names: p.names }), /date (read|of):/, bad);
   }
 });
+
+test("times of day: seconds from midnight both ways, text, and reading it back (L188c)", async () => {
+  const t = (k: Lang, h: number, m: number, s: number) => k.call(lib("time of"), k.int(h), k.int(m), k.int(s));
+  assert.equal(await both((k) => k.call(lib("time text"), t(k, 9, 5, 0))), '"09:05:00"');
+  assert.equal(await both((k) => k.call(lib("seconds of day"), t(k, 23, 59, 59))), "86399");
+  assert.equal(await both((k) => k.call(lib("time text"), k.call(lib("time of seconds"), k.int(90000)))), '"01:00:00"');
+  assert.equal(await both((k) => k.call(lib("time text"), k.call(lib("time of seconds"), k.int(-1)))), '"23:59:59"');
+  assert.equal(await both((k) => k.listOf(...["time hour", "time minute", "time second"].map((f) => k.call(lib(f), k.call(lib("time read"), k.lit("13:07:42")))))), "[13, 7, 42]");
+  for (const bad of ["24:00:00", "9:05:00", "09:05", "09-05-00"]) {
+    const p = program((k) => k.call(lib("time read"), k.lit(bad)));
+    assert.throws(() => runMain(p.code, p.info, p.main, { print: () => {}, names: p.names }), /time (read|of):/, bad);
+  }
+});
