@@ -48,9 +48,9 @@ const page = readFileSync(here + "page.html", "utf8").replace("<script>/*SCRIPT*
 writeFileSync(site + "index.html", `<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n</head>\n<body>\n${page}</body>\n</html>\n`);
 console.log(`index.html: ${(page.length / 1024).toFixed(0)} KB`);
 
-// Each shipped page example compiled once, here (E245, prebuild.ts): the
-// editor's preview takes it from prebuilt/ instead of compiling it.
-console.log(`prebuilt/: ${prebuild(manifest, site, true).length} pages`);
+// Each shipped page example and picture compiled once, here (E245,
+// prebuild.ts): the editor takes it from prebuilt/ instead of compiling it.
+console.log(`prebuilt/: ${(await prebuild(manifest, site, true)).length} pages and pictures`);
 
 // The tutorial, styled like the editor (same colours and fonts).
 const tokens = page.slice(page.indexOf(":root {"), page.indexOf("* { box-sizing"));
