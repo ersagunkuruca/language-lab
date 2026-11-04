@@ -117,3 +117,11 @@ test("csv of records writes records under a header, and csv records reads them b
   assert.equal(await both((k) => k.call(lib("csv of records"), cols(k), k.call(lib("csv records"), k.lit('name,age\nAda,36\n"Lovelace, A",\nBob')))), JSON.stringify(text));
   assert.equal(await both((k) => k.call(lib("csv of records"), cols(k), k.x(NIL_ID))), JSON.stringify("name,age"));
 });
+
+test("json read joins a \\u surrogate pair into the one character it spells, as JSON.parse does (L190)", async () => {
+  const text = JSON.stringify(["😀 a𝄞", "😀"]).replace("😀", "\\ud83d\\ude00").replace("𝄞", "\\uD834\\uDD1E");
+  const shown = await both((k) => k.call(lib("json printed"), k.call(lib("json read"), k.lit(text))));
+  assert.equal(JSON.parse(shown as string), JSON.stringify(JSON.parse(text)));
+  const p = program((k) => k.call(lib("json read"), k.lit("\"\\ud83d x\"")));
+  assert.throws(() => ran(p), (e: unknown) => /no character/.test(String((e as Error).message ?? e)));
+});
