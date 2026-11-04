@@ -98,9 +98,9 @@ test("lab compile --core writes a module that runs main as lab run does", () => 
   assert.equal(run([lab, "compile", relations, "--core", "-o", "relations.mjs"])[2], 0);
   assert.deepEqual(run(["relations.mjs"]), run([lab, "run", relations]));
   // One that doesn't lower says why, and writes nothing.
-  const page = run([lab, "compile", join(examples, "pig"), "--core", "-o", "pig.mjs"]);
+  const page = run([lab, "compile", join(examples, "tumble"), "--core", "-o", "tumble.mjs"]);
   assert.notEqual(page[2], 0);
-  assert.match(String(page[1]), /isn't compiled through the core IR: it calls written into/);
+  assert.match(String(page[1]), /isn't compiled through the core IR: it calls play/);
 });
 
 // Pages through the core IR (C137c8): the cells are the evaluator's
@@ -121,7 +121,8 @@ test("the pages whose main lowers show the same HTML, before and after their han
       const ev = new Cells(equal), co = new Cells(equal);
       // The same clock and the same draws in both (dice's rolls).
       // Files in memory too (converter keeps its quantities in one).
-      const world = () => { let x = 0; const files = new Map<string, string>(); return { now: () => 1000, random: () => (x = (x * 7 + 3) % 11) / 11, fileExists: (f: string) => files.has(f), readFile: (f: string) => { if (!files.has(f)) throw new Error(`no such file: ${f}`); return files.get(f)!; }, writeFile: (f: string, t: string) => void files.set(f, t), appendFile: (f: string, t: string) => void files.set(f, (files.get(f) ?? "") + t), listFolder: () => [...files.keys()].sort() }; };
+      // A Lehmer generator: a short cycle would never end a game of pig.
+      const world = () => { let x = 1; const files = new Map<string, string>(); return { now: () => 1000, random: () => (x = (x * 16807) % 2147483647) / 2147483647, fileExists: (f: string) => files.has(f), readFile: (f: string) => { if (!files.has(f)) throw new Error(`no such file: ${f}`); return files.get(f)!; }, writeFile: (f: string, t: string) => void files.set(f, t), appendFile: (f: string, t: string) => void files.set(f, (files.get(f) ?? "") + t), listFolder: () => [...files.keys()].sort() }; };
       const a = evaluatorCall(makeRunner(p.code, p.info, { print: () => {}, names: p.pres.names, cells: ev, world: world() }).value(main));
       const b = loadCoreJs(l, { print: () => {}, cells: co, world: world() })[fi]() as Value;
       const shown = [[htmlText(a, evaluatorCall), htmlText(b, coreCall)]];
@@ -173,9 +174,9 @@ test("lab build-web --core writes a page that draws and reacts as lab build-web'
   assert.ok(a.length >= 4, `${a.length} clickable`);
   for (let i = 0; i < a.length; i++) { a[i].fire("click"); b[i].fire("click"); assert.equal(got.html(), want.html(), `after click ${i}`); }
   // One that doesn't lower says why.
-  const r = spawnSync(process.execPath, [lab, "build-web", join(examples, "pig"), "--core", "-o", join(dir, "pig.html")], { encoding: "utf8" });
+  const r = spawnSync(process.execPath, [lab, "build-web", join(examples, "tumble"), "--core", "-o", join(dir, "tumble.html")], { encoding: "utf8" });
   assert.equal(r.status, 2);
-  assert.match(r.stderr, /isn't compiled through the core IR: it calls written into/);
+  assert.match(r.stderr, /isn't compiled through the core IR: it calls play/);
 });
 
 // for some(x => …) (C137c16): the evaluator's relational interpreter on a
