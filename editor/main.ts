@@ -167,6 +167,9 @@ export interface UI {
   output: { def: Id; lines: string[]; error?: string; running?: boolean; stuck?: Stuck; profile?: Profile; compiled?: boolean; answers?: LogEntry[]; replayed?: boolean; paused?: number } | null;
   // What Run gives a program that reads standard input, by program (I168).
   stdin?: Record<string, string>;
+  // Values on the wires shown a step at a time (E232d): only the first
+  // `at` nodes the run worked out, in the order it worked them out.
+  step?: { def: Id; at: number } | null;
   // The graph's right-click menu: what it was for, where (screen, world).
   // `blocks`: opened from the Blocks pane, so the graph's layout items
   // (tidy, pick, fit) aren't offered.
@@ -1696,12 +1699,12 @@ function graphHooks(info: T.Info) {
       void applyT(T.looseOver(doc.code, doc.names.short, info, ui.def, doc.loose ?? {}, doc.home ?? {}, part, slot), undefined, was ? { [slot]: was } : undefined);
     },
     values: (() => {
-      const tr = traced(info);
+      const tr = stepped(info);
       const show = shower(doc.code, info, pres().names);
       return tr ? new Map([...tr.values].map(([id, v]) => [id, show(v, true)])) : undefined;
     })(),
     kinds: (() => {
-      const tr = traced(info);
+      const tr = stepped(info);
       if (!tr) return undefined;
       const out = new Map<Id, string>();
       for (const [id, v] of tr.values) { const k = kindOf(info, v); if (k) out.set(id, k); }
@@ -1821,6 +1824,9 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
     ex ? h("button", { class: "btn", type: "button", "data-act": "t-novalues" }, "Hide values") : null));
   else if (z?.t === "fn" && !EMBED) box.append(h("p", { class: "hint" }, ex ? "The graph shows what every node makes of these values. They're saved in examples.json, not in the code."
     : "The graph shows what every node makes of these values. Change one to keep values of your own, in examples.json, not in the code."));
+  // A step at a time (E232d), once there are values to step through.
+  const bar = tr && !tr.error ? stepBar(info, tr) : null;
+  if (bar) box.append(bar);
   if (tr?.result !== undefined && (action || value)) box.append(h("div", { class: "hint" }, choice ? "Its first answer: " : "Gives ", valueView(tr.result, doc.code, pres().names, shower(doc.code, info, pres().names))));
   // A hole isn't a failure: it is where the program isn't written yet.
   // Nor is a run on values you didn't give: they're only a starting point.
@@ -1873,6 +1879,54 @@ function handledForArgs(z: Type | null): Id[] {
   if (z?.t !== "fn") return [];
   const own = new Set(z.eff.effs);
   return [...new Set(z.params.flatMap((p) => (p.t === "fn" ? p.eff.effs : [])))].filter((e) => !own.has(e) && e !== CHOICE && e !== DIVERGE);
+}
+
+// The trace as far as the step it's shown at (E232d). A trace's values
+// are kept in the order the run worked them out; a step is a call, a use,
+// a match or a fold (what the graph draws a value on), and step k shows
+// what the run had worked out by its k-th.
+const isStepNode = (id: Id) => { const n = node(id); return isCall(n) || isUse(n) || n?.kind === "match" || n?.kind === "fold"; };
+// Where step k ends in the trace's values: how many of them it shows.
+function stepEnd(tr: Trace, k: number): number {
+  if (k <= 0) return 0;
+  let seen = 0, i = 0;
+  for (const id of tr.values.keys()) { i++; if (isStepNode(id) && ++seen === k) return i; }
+  return tr.values.size;
+}
+const stepsOf = (tr: Trace) => [...tr.values.keys()].filter(isStepNode);
+
+function stepped(info: T.Info): Trace | null {
+  const tr = traced(info);
+  const at = ui.step?.def === ui.def ? ui.step.at : null;
+  return tr && at !== null ? { ...tr, values: new Map([...tr.values].slice(0, stepEnd(tr, at))) } : tr;
+}
+
+// Step through the values: what's shown, and the step worked out last
+// selected, so its panel says what it made.
+function stepTo(info: T.Info, at: number | null) {
+  const tr = traced(info);
+  if (!tr) return;
+  const steps = stepsOf(tr);
+  if (at === null || at >= steps.length) { ui.step = null; return render(); }
+  const k = Math.max(0, at);
+  ui.step = { def: ui.def, at: k };
+  if (k > 0) ui.selected = steps[k - 1];
+  render();
+}
+
+function stepBar(info: T.Info, tr: Trace): HTMLElement | null {
+  const steps = stepsOf(tr), n = steps.length;
+  if (n < 2) return null;
+  const at = ui.step?.def === ui.def ? ui.step.at : null;
+  const b = (label: string, to: number | null, title: string, off = false) => h("button", { class: "btn mini", type: "button", "data-act": "t-step", "data-at": to === null ? "all" : String(to), title, disabled: off }, label);
+  const sel = ui.selected ? steps.indexOf(ui.selected) : -1;
+  return h("div", { class: "acts step-bar", role: "group", "aria-label": "Step through the values" },
+    b("⏮", 0, "Back to the start: no values yet", at === 0),
+    b("◀ step back", Math.max(0, (at ?? n) - 1), "One step fewer", at === 0),
+    h("span", { class: "hint", "aria-live": "polite" }, at === null ? `${n} steps` : `step ${at} of ${n}`),
+    b("step on ▶", (at ?? n) + 1, "One step more: the next call, match or fold the run worked out", at === null),
+    at !== null ? b("Show all", null, "Every value again") : null,
+    sel >= 0 && at !== sel + 1 ? b("Stop at the selected part", sel + 1, "Show the run up to where it worked out the selected part") : null);
 }
 
 function traced(info: T.Info): Trace | null {
@@ -2267,6 +2321,7 @@ document.addEventListener("click", (e) => {
     if (a === "new-program") return newProgram();
     if (a === "copy") return copySelected();
     if (a === "t-values") return showValues();
+    if (a === "t-step") { const info = typesOf(); if (info) stepTo(info, act.dataset.at === "all" ? null : Number(act.dataset.at)); return; }
     if (a === "t-novalues") return hideValues();
     if (a === "paste") return pasteIntoSelected();
     if (a === "open-file") return openFile();

@@ -20,7 +20,7 @@ language, then more targets or speed (WORKFLOW.md "Priority").
 
 | lane | thread | next, in order |
 |---|---|---|
-| E Editor | "Editor lane" | E237 (after L204), E232, E103 (after infer.ts's idea) |
+| E Editor | "Editor lane" | E237 (after L204), E103 (after infer.ts's idea) |
 | C Compiler and targets | "Compiler lane" | C137 (retiring compile.ts), C138, C162; then C30, C93 |
 | L Language and library | "Language lane" | next by priority from the table below |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
@@ -67,7 +67,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E232 | Pause and step a run in the editor: stop at a node, step, see each effect answered so far, step back (on L186's log). Today "Show values" shows one finished run. a done: the log (worldlog.ts `logged`, `replaying`) and "What the world answered" under Run main; b done: Run again with these answers; c done: pause after an answer, step on and back, by answers; next, stepping by node (stop at a node, on the trace) | [ASPECTS-2026-11-03](docs/reports/reviews/ASPECTS-2026-11-03.md) 204, 205 | P3 | L | after L186 |
 
 ### Plain words for newcomers ([OUTSIDER-READ-2026-11-03](docs/reports/reviews/OUTSIDER-READ-2026-11-03.md))
 
