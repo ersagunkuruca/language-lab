@@ -41,7 +41,7 @@ import { bindsOf, bodyOf as useBody, withBodies } from "./uses.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { CHOICE, DIVERGE, INT, NUMBER, STRING, Subst, type Row, type Type } from "../../ters/src/lang/types.ts";
 import { fieldShapes, shapeOf, type Shape } from "../../ters/src/lang/nested.ts";
-import { ALGEBRAIC_V, AWAIT_OP, BOOL, CELL_OPS, COMPARE, CONS, FALSE, INT_OPS, LIST, NIL, ORDER_V, RANDOM, RANDOM_OP, RATIO, S, SET, SHOW_ANY, shownImplementations, SIGS, TEXT_OPS, TRUE, UNIT_V, NONE, SOME } from "../../ters/src/lang/std.ts";
+import { RELEASE_V, ALGEBRAIC_V, AWAIT_OP, BOOL, CELL_OPS, COMPARE, CONS, FALSE, INT_OPS, LIST, NIL, ORDER_V, RANDOM, RANDOM_OP, RATIO, S, SET, SHOW_ANY, shownImplementations, SIGS, TEXT_OPS, TRUE, UNIT_V, NONE, SOME } from "../../ters/src/lang/std.ts";
 import { fieldPath, placePath } from "../../ters/src/lang/records.ts";
 import { planSolve } from "../../ters/src/lang/solve.ts";
 import { oneAnswer as solvedOnce } from "../../ters/src/lang/modes.ts";
@@ -136,6 +136,8 @@ function reachedFromExports(code: Code, names: Names, exports: string[], info: I
 }
 
 export function compile(code: Code, info: Info, names: Names, opts: Options): string {
+  // A handler's release (L213a) runs in the evaluator only, so far.
+  for (const n of Object.values(code.nodes)) if (n.kind === "arm" && n.variant === RELEASE_V) throw new Error("a handler with a release isn't compiled yet (L213a): run it in the evaluator");
   // A use with no body, as the use that binds its ports (C161, uses.ts).
   ({ code, info } = withBodies(code, info, names));
   // The generic + resolved to each type's own operation first
