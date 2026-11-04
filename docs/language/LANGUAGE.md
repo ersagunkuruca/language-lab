@@ -760,7 +760,7 @@ The effects:
 | `Choice` | `one of(list)`, `fail()`, `value of(optional)` | `first(action, fallback)`, `all(action)`, `count(action)`, `optional(action)` |
 | `Console` | `print(text)`, `print error(text)`, `read line()`, `read input()` | a match; at the top, the runtime |
 | `Files` | `read file`, `write file`, `add to file`, `file exists`, `list folder` | a match; at the top, the runtime |
-| `Network` | `fetch text(url)` | a match; at the top, the runtime |
+| `Network` | `fetch text(url)`, `start fetch(url)`, `send request(request)` | a match; at the top, the runtime |
 | `Abort` | `abort(reason)` | a match with an `abort(reason)` case; at the top, the run ends (exit code 1) |
 | `Log` | `log(line)` | a match with a `log(line)` case; at the top, standard error |
 | `Random` | `random()` | `seeded(seed, action)`, or a match; at the top, the world's randomness |
@@ -1083,6 +1083,20 @@ transactional memory's retry), so each write still happens once. This is Solid's
 the cells a page already has (`Pending` in `src/lang/cells.ts`). A view's
 row has no `Abort`, so a view that fetches has to catch it and show
 something; a handler may let it go (the page logs it).
+
+`send request(request)` sends any request: `request(method, url,
+headers, body)`, a header being a `tuple(name, value)`, and gives a
+`response(status, headers, body)` whatever the status, so a 404 is a
+response to look at, not an `Abort`; it aborts only when the request
+can't be sent. It is a `Network` operation too, so a handler can answer
+it (a test's fake server) and the world answers what nothing handles.
+The world sends each distinct request (method, address, headers and body)
+once per run and remembers the response, so a search that backtracks
+never sends a POST twice; a program that means to send the same request
+twice says what differs. This is the Fetch standard's Request and
+Response, and Elm's Http, where a request is a value a runtime sends.
+Evaluated and compiled to JavaScript on the command line; pages and bytes
+bodies are still to come (BACKLOG L191).
 
 ### Cells: reactivity and values on demand
 
