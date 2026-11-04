@@ -127,6 +127,24 @@ export function bodyOf(n: Use): Id {
 // A use's given expressions and its body when it has one, as a pass that
 // walks every expression reads them (L211d).
 export const useKids = (n: Use): Id[] => (n.body === undefined ? Object.values(n.given) : [...Object.values(n.given), n.body]);
+// A function's ports (BACKLOG L225): its inputs and its results, in order,
+// read the same way whichever form it is written in. A definition with
+// results is a condition over all its parameters, some of them results
+// (RESULTS.md, `condition`); a lambda with results gives them, its body a
+// tuple of them in order (L128b). Every reader of either goes through this,
+// so the two forms can become one stored form without the readers changing.
+export interface Ports { inputs: Id[]; results: Id[]; condition: boolean }
+export function portsOf(nodes: Record<Id, Node>, id: Id): Ports | null {
+  const n = nodes[id];
+  if (n?.kind === "def") {
+    const lam = n.body === null ? undefined : nodes[n.body];
+    if (lam?.kind !== "lambda") return null;
+    if (n.results?.length) { const rs = n.results; return { inputs: lam.params.filter((p) => !rs.includes(p)), results: rs, condition: true }; }
+    return lam.results?.length ? { inputs: lam.params, results: lam.results, condition: false } : null;
+  }
+  if (n?.kind === "lambda" && n.results?.length) return { inputs: n.params, results: n.results, condition: false };
+  return null;
+}
 export const isUse = (n: Node | undefined | null): n is Use => n?.kind === "call" && n.given !== undefined;
 export const useOf = (n: Node | undefined | null): Use | null => (isUse(n) ? n : null);
 // A call that gives every input by position.

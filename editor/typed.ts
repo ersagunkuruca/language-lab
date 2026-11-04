@@ -2400,6 +2400,58 @@ export function waysOfImplementation(code: Code, impl: Id): { field: Id; given: 
   return variant.fields.map((f, i) => ({ field: f, given: !leftToWays(code, body.args[i]), way: pick.get(f) ?? null, missing: !pick.has(f) }));
 }
 
+// The call whose function is this reference, if it is one.
+function callOf(code: Code, ref: Id): Call | undefined {
+  const at = parentOf(code, ref), c = at && code.nodes[at.parent];
+  return at?.slot === "fn" && isCall(c) ? c : undefined;
+}
+
+// Put inside (E251): a definition used by one other of the program's
+// definitions only, becomes a let there, around that definition's
+// body (inside its inputs), with the same name: the reverse of Make it a
+// definition. Since L224 a let is generic as a definition is, so the
+// program means and checks the same. Its calls of itself are the let's
+// (a recursive let, L84).
+// The definition it would go inside, without checking: the side panel
+// offers Put inside where there is one.
+export function insideOf(code: Code, def: Id): { host: Id } | { reason: string } {
+  const d = code.nodes[def] as NodeOf<"def"> | undefined;
+  if (d?.kind !== "def" || !d.body) return { reason: "only a definition goes inside another" };
+  if (LIBRARY.code.nodes[def]) return { reason: "the library's definitions stay where they are" };
+  if (code.nodes[d.body]?.kind !== "lambda") return { reason: "only a function goes inside: a value or a type stays a definition" };
+  if (d.results || d.way || d.direction) return { reason: "a definition with results, or a way or direction of another, stays one" };
+  const mine = new Set(subtree(code, def));
+  const outside = usesOf(code, def).filter((u) => !mine.has(u));
+  const holders = code.defs.filter((x) => x !== def && outside.some((u) => subtree(code, x).includes(u)));
+  if (!outside.length) return { reason: "nothing uses it, so there's nowhere to put it" };
+  if (holders.length !== 1) return { reason: `${holders.length} definitions use it: only one used by one other goes inside that one` };
+  return { host: holders[0] };
+}
+export function putInside(code: Code, names: Names, info: Info, def: Id): TEdit {
+  const where = insideOf(code, def);
+  if ("reason" in where) return { ok: false, reason: where.reason };
+  const d = code.nodes[def] as NodeOf<"def"> & { body: Id };
+  const host = where.host, h = code.nodes[host] as NodeOf<"def">;
+  if (!h.body) return { ok: false, reason: "the definition using it has no body" };
+  const nodes = { ...code.nodes }, nn: Names = { ...names };
+  const b = freshId();
+  nodes[b] = { id: b, kind: "binder" };
+  nn[b] = names[def] ?? display[def] ?? "part";
+  for (const u of usesOf(code, def)) nodes[u] = { ...(nodes[u] as NodeOf<"ref">), target: b };
+  // Around the body, inside the inputs: what the inputs give is in reach.
+  const top = nodes[h.body], under = top?.kind === "lambda" ? top.body : h.body;
+  const fn = freshId(), let_ = freshId();
+  nodes[fn] = { id: fn, kind: "lambda", params: [b], body: under };
+  nodes[let_] = { id: let_, kind: "call", fn, args: [d.body] };
+  if (top?.kind === "lambda") nodes[top.id] = { ...top, body: let_ };
+  else nodes[host] = { ...h, body: let_ };
+  delete nodes[def];
+  delete nn[def];
+  const next: Code = { nodes, defs: code.defs.filter((x) => x !== def) };
+  return guardTyped(info, next, nn, host, `Put ${nn[b]} inside ${names[host] ?? display[host] ?? "the definition using it"}, as a let around its body: Make it a definition takes it out again.`);
+}
+
+
 // A function inside a definition made a definition of its own, in the
 // side menu with the rest (BACKLOG E164, Ersagun 2026-11-01: "we should
 // be able to somehow turn each lambda into a function"). What it uses from
@@ -2475,7 +2527,30 @@ export function liftToDefinition(code: Code, names: Names, info: Info, defId: Id
     delete nn[boundTo];
     next = collect(next);
   }
-  const r = guardTyped(info, next, nn, def, `Made it a definition, ${label}${used.length ? `, taking ${used.map((u) => names[u] ?? "a value").join(", ")} first` : ""}: it's in the side menu, and ${names[defId] ?? "the definition"} calls it where it was.`);
+  // part = (z) => … using a and b from around it, where part is only
+  // called (E251): each call part(z) is the definition called with them
+  // first, part(a, b, z), and the let goes, so Put inside brings it back
+  // the same. A call inside it, recursion, gives its own first inputs on.
+  // A use of part as a value keeps it as the function calling it.
+  let moved = false;
+  if (used.length && boundTo && isCall(p) && usesOf(next, boundTo).every((u) => callOf(next, u))) {
+    const let_ = next.nodes[p.id] as Call, bl = next.nodes[let_.fn] as NodeOf<"lambda">, i = bl.params.indexOf(boundTo);
+    const lifted = next.nodes[body] as NodeOf<"lambda">, own = new Set(subtree(next, body));
+    const ref = (target: Id) => { const r = freshId(); next.nodes[r] = { id: r, kind: "ref", target }; return r; };
+    for (const u of usesOf(next, boundTo)) {
+      const c = callOf(next, u)!;
+      const first = own.has(u) ? lifted.params.slice(0, used.length) : used;
+      next.nodes[u] = { ...(next.nodes[u] as NodeOf<"ref">), target: def };
+      next.nodes[c.id] = { ...c, args: [...first.map(ref), ...c.args] };
+    }
+    next.nodes[bl.id] = { ...bl, params: bl.params.filter((_, j) => j !== i) };
+    next.nodes[let_.id] = { ...let_, args: let_.args.filter((_, j) => j !== i) };
+    if (bl.params.length === 1) next = swapIn(next, let_.id, bl.body);
+    delete nn[boundTo];
+    next = collect(next);
+    moved = true;
+  }
+  const r = guardTyped(info, next, nn, def, `Made it a definition, ${label}${used.length ? `, taking ${used.map((u) => names[u] ?? "a value").join(", ")} first` : ""}: it's in the side menu, and ${names[defId] ?? "the definition"} ${moved ? "calls it where it called it" : "calls it where it was"}.`);
   return r.ok ? { ...r, def } : r;
 }
 

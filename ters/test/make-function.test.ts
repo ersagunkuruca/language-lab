@@ -44,7 +44,7 @@ test("a group of several values out gives them back as a tuple", () => {
   assert.ok(r.ok, !r.ok ? r.reason : "");
   if (!r.ok) return;
   const text = renderLet(r.code, { ...p.pres, names: r.names }, hsi);
-  assert.match(text, /part = \(saturation, hue\) => tuple\(1 \+ 2 · saturation · cos\(6\.283185307179586 · \(hue − 0\)\), 1 \+ 2 · saturation · cos\(6\.283185307179586 · \(hue − 0\.3333333333333333\)\)\)/);
+  assert.match(text, /part = \(saturation, hue\) => \(1 \+ 2 · saturation · cos\(6\.283185307179586 · \(hue − 0\)\), 1 \+ 2 · saturation · cos\(6\.283185307179586 · \(hue − 0\.3333333333333333\)\)\)/);
   assert.match(text, /results = part\(saturation, hue\)\n\s+r = first\(results\)\n\s+g = second\(results\)/);
   assert.equal(r.code.defs.length, code.defs.length);
   assert.deepEqual(infer(r.code, r.names).errors, []);
@@ -129,4 +129,41 @@ test("a function of drift and drop names its inputs and reads its results by nam
   assert.match(text, /drift = results\.drift/);
   assert.match(text, /drop = results\.drop/);
   assert.deepEqual(infer(r.code, r.names).errors, []);
+});
+
+// Make it a definition and Put inside (BACKLOG E251): g(x) = let stretch =
+// (y) => y · x in stretch(2) + stretch(3). Lifting stretch takes x first and
+// calls it where it was called, stretch(x, 2) + stretch(x, 3), with no let
+// left; Put inside brings the let back around g's body, and either way
+// the program checks.
+test("a let made a definition calls it where it called it, and Put inside brings it back", async () => {
+  const { Lang } = await import("../src/lang/dsl.ts");
+  const { base, baseNames } = await import("../src/lang/load.ts");
+  const { LIBRARY } = await import("../src/lang/library.ts");
+  const { ARITH } = await import("../src/lang/std.ts");
+  const { insideOf, putInside } = await import("../../editor/typed.ts");
+  const k = new Lang(LIBRARY.code);
+  const g = k.def("g");
+  let lam = "";
+  k.define(g, k.fn(["x"], (x) => k.let("stretch", (lam = k.fn(["y"], (y) => k.call(ARITH.mul, y, x))), (s) => k.call(ARITH.add, k.call(s, k.lit(2)), k.call(s, k.lit(3))))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names);
+  assert.deepEqual(info.errors, []);
+  const r = liftToDefinition(code, names, info, g, lam);
+  assert.ok(r.ok, !r.ok ? r.reason : "");
+  if (!r.ok) return;
+  const pres = loadProgram(join(root, "examples", "physics")).pres;
+  const text = renderLet(r.code, { ...pres, names: r.names }, g);
+  assert.match(text, /stretch\(x, 2\)[^]*stretch\(x, 3\)/, text);
+  assert.doesNotMatch(text, /stretch = /, text);
+  const after = infer(r.code, r.names);
+  assert.deepEqual(after.errors, []);
+  assert.deepEqual(insideOf(r.code, r.def!), { host: g });
+  const back = putInside(r.code, r.names, after, r.def!);
+  assert.ok(back.ok, !back.ok ? back.reason : "");
+  if (!back.ok) return;
+  assert.equal(back.code.defs.length, code.defs.length);
+  const again = renderLet(back.code, { ...pres, names: back.names }, g);
+  assert.match(again, /stretch = \(x, y\) =>/, again);
+  assert.deepEqual(infer(back.code, back.names).errors, []);
 });
