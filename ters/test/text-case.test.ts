@@ -43,3 +43,27 @@ test("uppercase and lowercase in a language: Turkish dotted and dotless i", asyn
   const defs = (await import(pathToFileURL(path).href)).defs as Record<string, () => unknown>;
   assert.equal(typeof defs.main === "function" ? defs.main() : defs.main, want);
 });
+
+// L214d: people's order for text in a language, given to sort with;
+// compare and < stay code-point order.
+test("collated: Turkish puts ç after c; sort with keeps equal items in order", async () => {
+  const k = new Lang(LIBRARY.code);
+  const main = k.def("main");
+  const loc = (tag: string) => k.call(LOCALE_V, k.lit(tag));
+  const words = () => k.listOf(k.lit("dağ"), k.lit("çay"), k.lit("cam"), k.lit("Zeytin"), k.lit("ılık"), k.lit("iç"));
+  k.define(main, k.thunk(() => k.call(SHOW_ANY, k.listOf(
+    k.call(SHOW_ANY, k.call(lib("sort with"), words(), k.call(lib("collated"), loc("tr")))),
+    k.call(SHOW_ANY, k.call(lib("sort"), words())),
+    k.call(SHOW_ANY, k.call(TEXT_OPS.collate, k.lit("ä"), k.lit("b"), loc("de"))),
+    k.call(SHOW_ANY, k.call(TEXT_OPS.collate, k.lit("ä"), k.lit("b"), loc("sv")))))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const shown = (xs: string[]) => `[${xs.map((x) => JSON.stringify(x)).join(", ")}]`;
+  const want = shown([shown(["cam", "çay", "dağ", "ılık", "iç", "Zeytin"]), shown(["Zeytin", "cam", "dağ", "iç", "çay", "ılık"]), "before", "after"]);
+  assert.equal(runMain(code, info, main, { print: () => {}, names }), want);
+  const path = join(mkdtempSync(join(tmpdir(), "collate-")), "main.mjs");
+  writeFileSync(path, compile(code, info, names, { runtime, exports: ["main"] }));
+  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, () => unknown>;
+  assert.equal(typeof defs.main === "function" ? defs.main() : defs.main, want);
+});

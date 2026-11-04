@@ -45,6 +45,14 @@ export function graphemes(t: string): string[] {
 const readable = (tag: string): string => { try { return Intl.getCanonicalLocales(tag)[0] ?? "und"; } catch { return "und"; } };
 export const uppercase = (t: string, tag: string): string => t.toLocaleUpperCase(readable(tag));
 export const lowercase = (t: string, tag: string): string => t.toLocaleLowerCase(readable(tag));
+// −1, 0 or 1 in a language's collation (L214d): Intl.Collator, one per tag.
+const collators = new Map<string, Intl.Collator>();
+export function collate(a: string, b: string, tag: string): number {
+  const t = readable(tag);
+  let c = collators.get(t);
+  if (!c) collators.set(t, (c = new Intl.Collator(t)));
+  return Math.sign(c.compare(a, b));
+}
 export const graphemeCount = (t: string): number => { let n = 0; segmenter ??= new Intl.Segmenter("und", { granularity: "grapheme" }); for (const _ of segmenter.segment(t)) n++; return n; };
 
 // The first position where `part` starts; no answer if it isn't there
