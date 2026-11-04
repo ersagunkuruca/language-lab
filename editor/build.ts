@@ -24,6 +24,7 @@ import { corePageRuntime, coreWorkletRuntime, pageRuntime, recordings, webPage, 
 import { infer } from "../ters/src/lang/infer.ts";
 import { loadProgram } from "../ters/src/lang/load.ts";
 import { examplesPlugin, exampleTags, type Manifest } from "./examplesPlugin.ts";
+import { shadersBuilt } from "./shadersBuilt.ts";
 
 const here = new URL(".", import.meta.url).pathname;
 const site = here + "../";
@@ -148,7 +149,11 @@ ${readFileSync(here + "reactive.html", "utf8")}<script>${rjs}</script>
 `);
 
 // The shaders page: shaders.html's text around editor/shaders.ts.
-const sout = await build({ entryPoints: [here + "shaders.ts"], bundle: true, format: "iife", target: "es2022", minify: true, write: false });
+// Its programs are compiled here, once, not in the page (shadersBuilt.ts).
+const shadersStarted = performance.now();
+const built = await shadersBuilt();
+console.log(`shaders.html's programs compiled in ${Math.round((performance.now() - shadersStarted) / 1000)} s`);
+const sout = await build({ entryPoints: [here + "shaders.ts"], bundle: true, format: "iife", target: "es2022", minify: true, write: false, define: { SHADERS_BUILT: JSON.stringify(built) } });
 const sjs = sout.outputFiles[0].text.replace(/<\/script/g, "<\\/script");
 writeFileSync(site + "shaders.html", `<!doctype html>
 <html lang="en">

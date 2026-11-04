@@ -24,8 +24,10 @@ import { withFloat32 } from "../ters/src/lang/float32.ts";
 import { represent } from "../ters/src/lang/represent.ts";
 import { lowerScalar } from "../compiler/src/scalar.ts";
 import { emitWgsl } from "../compiler/src/wgsl.ts";
-import { emitWasm, instantiate } from "../compiler/src/wasm.ts";
-import { loadJs } from "../compiler/src/js-scalar.ts";
+import { emitWasm } from "../compiler/src/wasm.ts";
+import { emitJs } from "../compiler/src/js-scalar.ts";
+import { checkOrder, drawDrawable, pause, POINTS, wasmBytes, type Built, type CpuProgram, type Drawable, type Picture } from "./pictureDraw.ts";
+export { pause, type Picture } from "./pictureDraw.ts";
 
 // The definitions a picture is made of, by name: colour, or red, green and
 // blue. Null when the program has neither.
@@ -50,33 +52,7 @@ export interface PictureOptions {
   still?: number | null;
 }
 
-export interface Picture {
-  // The program's WGSL, and the fragment shader around it.
-  wgsl: string;
-  fragment: string;
-  // Settles once the first frame is drawn and, with a check, the
-  // evaluator has been compared with the GPU.
-  ready: Promise<void>;
-  stop: () => void;
-}
-
 const first = (xs: Iterable<Value>) => { for (const x of xs) return x; };
-// Back to the browser between the long steps, so that no single task holds
-// the page for long enough that the browser offers to kill it.
-export const pause = () => new Promise<void>((go) => setTimeout(go, 0));
-
-let device: Promise<GPUDevice | string> | null = null;
-async function gpu(): Promise<GPUDevice | string> {
-  if (!navigator.gpu) return "this browser has no WebGPU";
-  const adapter = await navigator.gpu.requestAdapter();
-  // Browsers also turn WebGPU off for a while for a page whose shader
-  // stalled the GPU, and then this is what the page sees.
-  if (!adapter) return "WebGPU found no GPU adapter; a browser also turns WebGPU off for a while for a page that froze the GPU, and restarting the browser brings it back";
-  const d = await adapter.requestDevice();
-  // A lost device is asked for again by the next picture.
-  void d.lost.then(() => { device = null; });
-  return d;
-}
 
 // A picture's definitions lowered as a shader has them (C66c): an Int is
 // an i32 and std's Array an array<T, N>, on the GPU and on the CPU alike
@@ -106,13 +82,27 @@ const float32 = new WeakMap<Code, Map<string, { info: Info; names: string; out: 
 
 // Throws, with the compiler's reason, when the entries can't be drawn.
 export async function drawPicture(o: PictureOptions): Promise<Picture> {
-  const { code, info, names, entries, canvas, status } = o;
-  const keys = Object.keys(entries);
-  const started = performance.now();
-  const now = () => o.still ?? (performance.now() - started) / 1000;
-  let stopped = false;
-  const stop = () => { stopped = true; };
+  return drawDrawable(await prepare(o.code, o.info, o.names, o.entries), o);
+}
 
+// The picture compiled once, ahead (shaders.html, from editor/build.ts):
+// the evaluator's answers at every check point and the CPU's program made
+// now, so the page only draws.
+export async function buildPicture(code: Code, info: Info, names: Names, entries: Record<string, Id>): Promise<Built> {
+  const p = await prepare(code, info, names, entries);
+  // The evaluator's answers in the order the page checks them, for a few
+  // seconds of the evaluator (at least 12 points): all 108 of the ray
+  // marcher's take two minutes, too long for every build of the site.
+  const want: (number[] | null)[] = POINTS.map(() => null);
+  const start = performance.now();
+  for (let n = 0; n < POINTS.length && (n < 12 || performance.now() - start < 5000); n++) { const i = checkOrder(n); want[i] = p.want(i); }
+  return { wgsl: p.wgsl, fragment: p.fragment, kernel: p.kernel, in32: p.in32, want, cpu: p.cpu() };
+}
+
+// The shaders for the GPU, the evaluator for the check, and the CPU's
+// program when there's no GPU, each made when first asked.
+async function prepare(code: Code, info: Info, names: Names, entries: Record<string, Id>): Promise<Drawable> {
+  const keys = Object.keys(entries);
   await pause();
   const shader = emitWgsl(lowerPicture(code, info, names, entries));
   await pause();
@@ -134,7 +124,6 @@ export async function drawPicture(o: PictureOptions): Promise<Picture> {
   const rgb = (x: string, y: string, t: string) => keys.length === 3
     ? `vec3f(${keys.map((e) => `${fn(e).wgsl}(${x}, ${y}, ${t})`).join(", ")})`
     : `${toVec}(${fn("colour").wgsl}(${x}, ${y}, ${t}))`;
-
   const fragment = `${shader.wgsl}
 ${helper}struct Frame { size: vec2f, time: f32 }
 @group(0) @binding(0) var<uniform> frame: Frame;
@@ -154,16 +143,18 @@ fn fragment(@builtin(position) at: vec4f) -> @location(0) vec4f {
   return vec4f(clamp(${rgb("x", "y", "frame.time")}, vec3f(0.0), vec3f(1.0)), 1.0);
 }
 `;
-  const picture: Picture = { wgsl: shader.wgsl, fragment: fragment.slice(shader.wgsl.length).trim(), ready: Promise.resolve(), stop };
-
-  // The canvas is drawn at `scale` of its size on screen (times the pixel
-  // ratio), and the browser stretches it to fit.
-  let scale = 1;
-  const fit = () => {
-    const r = canvas.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1);
-    const w = Math.max(1, Math.round(r.width * dpr * scale)), h = Math.max(1, Math.round(r.height * dpr * scale));
-    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
-  };
+  const kernel = `${shader.wgsl}
+${helper}@group(0) @binding(0) var<storage, read> inp: array<f32>;
+@group(0) @binding(1) var<storage, read_write> outp: array<f32>;
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) g: vec3u) {
+  let i = g.x;
+  if (i >= ${POINTS.length}u) { return; }
+  let c = ${rgb("inp[3u * i]", "inp[3u * i + 1u]", "inp[3u * i + 2u]")};
+  outp[3u * i] = c.x;
+  outp[3u * i + 1u] = c.y;
+  outp[3u * i + 2u] = c.z;
+}`;
   // The same program in Float32 (src/lang/float32.ts), as compiler/gpu.ts
   // checks it: the evaluator's check and the CPU's picture round as the GPU
   // does. The program as it is when that can't be made.
@@ -176,267 +167,37 @@ fn fragment(@builtin(position) at: vec4f) -> @location(0) vec4f {
   });
   await pause();
   const cpuSide = in32 ?? { code, info, names };
-  const floats = in32 ? "in 32-bit floats, as the GPU" : "in 64-bit floats";
-  const r = makeRunner(cpuSide.code, cpuSide.info, { print: () => {} });
+  let r: ReturnType<typeof makeRunner> | null = null;
   // The evaluator's colour at (x, y, t).
-  const evaluate = (x: number, y: number, t: number): number[] => keys.length === 3
-    ? keys.map((e) => first(r.call(r.value(entries[e]), x, y, t)) as number)
-    : (first(r.call(r.value(entries.colour), x, y, t)) as { fields: number[] }).fields;
-
-  device ??= gpu();
-  const d = await device;
-  if (typeof d === "string") return { ...picture, ready: cpu(d) };
-
-  // The GPU's side of the check first: on some drivers, reading a buffer
-  // back after the canvas has started presenting fails. The evaluator's
-  // side runs after the first frame, a little at a time: it takes seconds
-  // (a minute for the ray marcher on a slow machine), and the page stayed
-  // blank and frozen all that time.
-  const compare = o.check ? await check(d, o.check) : null;
-  const module = d.createShaderModule({ code: fragment });
-  const errors = (await module.getCompilationInfo()).messages.filter((m) => m.type === "error");
-  if (errors.length) throw new Error(errors.map((m) => `${m.lineNum}:${m.linePos} ${m.message}`).join("\n"));
-  fit();
-  const context = canvas.getContext("webgpu")!;
-  const format = navigator.gpu.getPreferredCanvasFormat();
-  context.configure({ device: d, format, alphaMode: "opaque" });
-  const pipeline = d.createRenderPipeline({
-    layout: "auto",
-    vertex: { module, entryPoint: "vertex" },
-    fragment: { module, entryPoint: "fragment", targets: [{ format }] },
-  });
-  const uniform = d.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
-  const group = d.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: uniform } }] });
-  // A frame of a ray marcher is a lot of work for every pixel, and a GPU
-  // given frames faster than it finishes them queues them up until the
-  // whole browser, which draws with the same GPU, stops responding. So the
-  // next frame waits for this one to finish, and the resolution follows
-  // how long frames take: lower when slower than about 30 a second, higher
-  // again when there's room. It starts small (256 pixels across at most)
-  // so the first frame is quick on any GPU. A still is drawn once, whole.
-  const r0 = canvas.getBoundingClientRect();
-  scale = o.still == null ? Math.min(1, 256 / Math.max(1, Math.max(r0.width, r0.height) * Math.min(2, devicePixelRatio || 1))) : 1;
-  // How long frames take, smoothed, since one slow frame can be the page
-  // being busy rather than the GPU. Never below 128 pixels across.
-  let took = 0;
-  const least = Math.min(1, 128 / Math.max(1, Math.max(r0.width, r0.height) * Math.min(2, devicePixelRatio || 1)));
-  const adapt = (ms: number) => {
-    took = took ? 0.8 * took + 0.2 * ms : ms;
-    if (took > 30) { scale = Math.max(least, scale * Math.max(0.5, Math.sqrt(16 / took))); took = 0; }
-    else if (took < 10 && scale < 1) { scale = Math.min(1, scale * 1.2); took = 0; }
+  const evaluate = (x: number, y: number, t: number): number[] => {
+    r ??= makeRunner(cpuSide.code, cpuSide.info, { print: () => {} });
+    return keys.length === 3
+      ? keys.map((e) => first(r!.call(r!.value(entries[e]), x, y, t)) as number)
+      : (first(r.call(r.value(entries.colour), x, y, t)) as { fields: number[] }).fields;
   };
-  let frames = 0, since = performance.now();
-  // The GPU can be lost while drawing (a driver reset, say): stop and say so.
-  void d.lost.then((info) => {
-    if (stopped) return;
-    stop();
-    status.textContent = `The GPU stopped drawing (${(info.message || info.reason).replace(/\.$/, "")}). Reload the page to draw it again.`;
-  });
-  const draw = () => {
-    if (stopped) return;
-    fit();
-    d.queue.writeBuffer(uniform, 0, new Float32Array([canvas.width, canvas.height, now(), 0]));
-    const enc = d.createCommandEncoder();
-    const pass = enc.beginRenderPass({ colorAttachments: [{ view: context.getCurrentTexture().createView(), loadOp: "clear", storeOp: "store", clearValue: [0, 0, 0, 1] }] });
-    pass.setPipeline(pipeline);
-    pass.setBindGroup(0, group);
-    pass.draw(3);
-    pass.end();
-    d.queue.submit([enc.finish()]);
-    const sent = performance.now();
-    // A frame still not done after a second counts as a very slow one: the
-    // next is drawn smaller, and the picture doesn't stop.
-    void Promise.race([d.queue.onSubmittedWorkDone(), new Promise((go) => setTimeout(go, 1000))]).then(() => {
-      adapt(performance.now() - sent);
-      frames++;
-      const t = performance.now();
-      if (t - since > 1000) {
-        status.textContent = `WebGPU · ${canvas.width}×${canvas.height} · ${Math.round((frames * 1000) / (t - since))} frames a second`;
-        frames = 0;
-        since = t;
-      }
-      if (o.still == null) requestAnimationFrame(draw);
-    });
-  };
-  draw();
-  status.textContent = `WebGPU · ${canvas.width}×${canvas.height}`;
-  return compare ? { ...picture, ready: compare() } : picture;
+  const want = (i: number) => evaluate(Math.fround(POINTS[i][0]), Math.fround(POINTS[i][1]), Math.fround(POINTS[i][2]));
+  return { wgsl: shader.wgsl, fragment, kernel, want, in32: !!in32, cpu: () => cpuProgram(lowerPicture(cpuSide.code, cpuSide.info, cpuSide.names, entries), entries) };
+}
 
-  // The GPU against the evaluator, at a grid of points and a few times: the
-  // GPU's answers now, and a function that compares the evaluator's with
-  // them, yielding to the page every few milliseconds.
-  async function check(d: GPUDevice, el: HTMLElement): Promise<() => Promise<void>> {
-    const points: number[][] = [];
-    for (const t of [0, 1.5, 4]) for (let i = 0; i < 6; i++) for (let j = 0; j < 6; j++) points.push([-1 + (2 * i + 1) / 6, -1 + (2 * j + 1) / 6, t]);
-    const kernel = `${shader.wgsl}
-${helper}@group(0) @binding(0) var<storage, read> inp: array<f32>;
-@group(0) @binding(1) var<storage, read_write> outp: array<f32>;
-@compute @workgroup_size(64)
-fn main(@builtin(global_invocation_id) g: vec3u) {
-  let i = g.x;
-  if (i >= ${points.length}u) { return; }
-  let c = ${rgb("inp[3u * i]", "inp[3u * i + 1u]", "inp[3u * i + 2u]")};
-  outp[3u * i] = c.x;
-  outp[3u * i + 1u] = c.y;
-  outp[3u * i + 2u] = c.z;
-}`;
-    const module = d.createShaderModule({ code: kernel });
-    const buffer = (data: Float32Array, usage: number) => {
-      const b = d.createBuffer({ size: data.byteLength, usage, mappedAtCreation: true });
-      new Float32Array(b.getMappedRange()).set(data);
-      b.unmap();
-      return b;
-    };
-    const inp = buffer(new Float32Array(points.flat()), GPUBufferUsage.STORAGE);
-    const out = buffer(new Float32Array(points.length * 3), GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC);
-    const read = d.createBuffer({ size: points.length * 12, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
-    const pipeline = d.createComputePipeline({ layout: "auto", compute: { module, entryPoint: "main" } });
-    const group = d.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: inp } }, { binding: 1, resource: { buffer: out } }] });
-    const enc = d.createCommandEncoder();
-    const pass = enc.beginComputePass();
-    pass.setPipeline(pipeline);
-    pass.setBindGroup(0, group);
-    pass.dispatchWorkgroups(Math.ceil(points.length / 64));
-    pass.end();
-    enc.copyBufferToBuffer(out, 0, read, 0, points.length * 12);
-    d.queue.submit([enc.finish()]);
-    await read.mapAsync(GPUMapMode.READ);
-    const got = new Float32Array(read.getMappedRange()).slice();
-    read.unmap();
-    return () => compareWith(el, points, got);
-  }
-
-  async function compareWith(el: HTMLElement, points: number[][], got: Float32Array) {
-    el.textContent = "Checking against the evaluator…";
-    // The points as f32, so only the computation differs. A picture can be
-    // chaotic (the Mandelbrot set's edge): there the GPU's sin and cos, good
-    // only to 2^-11, move a point to a different colour. So up to 1 in 20
-    // points may differ; a wrong lowering moves far more than that.
-    // The points in an order that spreads them over the picture and the
-    // times (41 is prime to 108), so that the ones checked within the
-    // budget, a few seconds of the evaluator, stand for all of them.
-    const diffs: number[] = [];
-    const start = performance.now();
-    let since = start;
-    for (let n = 0; n < points.length; n++) {
-      const i = (n * 41) % points.length, p = points[i];
-      diffs.push(Math.max(...evaluate(Math.fround(p[0]), Math.fround(p[1]), Math.fround(p[2])).map((want, k) => Math.abs(got[3 * i + k] - want))));
-      if (performance.now() - since > 20) {
-        if (performance.now() - start > 5000 && diffs.length >= 12) break;
-        el.textContent = `Checking against the evaluator… ${n + 1} of ${points.length} points`;
-        await new Promise((go) => setTimeout(go, 0));
-        if (stopped) return;
-        since = performance.now();
-      }
-    }
-    diffs.sort((a, b) => a - b);
-    const apart = diffs.filter((x) => x >= 2e-3).length, skip = Math.min(apart, Math.floor(diffs.length / 20));
-    const worst = diffs[diffs.length - 1 - skip];
-    const many = diffs.length === points.length ? `${points.length} points` : `${diffs.length} of ${points.length} points (the evaluator is slow here; the rest would take too long)`;
-    el.textContent = `Checked against the evaluator: ${many} × 3 channels, largest difference ${worst.toExponential(1)}${skip ? ` leaving out ${skip} point${skip > 1 ? "s" : ""} where the picture is chaotic` : ""} (the evaluator ${in32 ? "rounds to 32-bit floats as the GPU does" : "in 64-bit floats, the GPU in 32"}).`;
-    el.dataset.worst = String(worst);
-  }
-
-  // Without WebGPU: the same functions as WebAssembly on the CPU (a colour
-  // record read field by field through the module's readers), or as
-  // JavaScript where WebAssembly can't take them. Frame after frame, at a
-  // size that keeps a frame near 25 ms.
-  // The picture's channels at a point, from WebAssembly: red, green and
-  // blue as three exports, or the colour record's fields by its readers
-  // (`Colour.red`, or `Colour.red(key)` where two record types share a name).
-  async function inWasm(lowered: ReturnType<typeof lowerScalar>): Promise<(x: number, y: number, t: number) => number[]> {
-    const w = await instantiate(emitWasm(lowered)) as unknown as Record<string, (...xs: unknown[]) => unknown>;
-    if (keys.length === 3) return (x, y, t) => keys.map((e) => w[e](x, y, t) as number);
+// The CPU's program for a picture: WebAssembly, red, green and blue as
+// three exports, or the colour record's fields by its readers (`Colour.red`,
+// or `Colour.red(key)` where two record types share a name); and
+// JavaScript, for where WebAssembly can't take them or doesn't run.
+function cpuProgram(lowered: ReturnType<typeof lowerScalar>, entries: Record<string, Id>): CpuProgram {
+  const keys = Object.keys(entries);
+  const out = keys.find((k) => lowered.refused.has(entries[k]));
+  if (out) return { refused: `${out} can't be drawn on the CPU either: it ${lowered.refused.get(entries[out])}` };
+  const { js, names } = emitJs(lowered);
+  const fnOf = (def: Id) => names.get(lowered.funcs.findIndex((f) => f.def === def))!;
+  const program: CpuProgram = { js: { source: js, rgb: keys.map((k) => fnOf(entries[k])) } };
+  try {
+    const m = emitWasm(lowered);
+    if (keys.length === 3) return { ...program, wasm: { bytes: wasmBytes(m.bytes), floats: m.floats, rgb: keys } };
     const f = lowered.funcs.find((g) => g.def === entries.colour && g.params.every((p) => p === "f64"));
-    const r = f && typeof f.result === "object" && "fields" in f.result ? f.result : null;
-    if (!r || !w.colour) throw new Error("no colour record to read");
-    const read = r.fields.map((x) => w[`${r.name}.${x.name}(${r.key})`] ?? w[`${r.name}.${x.name}`]);
-    if (read.some((g) => !g)) throw new Error("a field without a reader");
-    return (x, y, t) => { const c = w.colour(x, y, t); return read.map((g) => g(c) as number); };
-  }
-
-  async function cpu(why: string) {
-    const lowered = lowerPicture(cpuSide.code, cpuSide.info, cpuSide.names, entries);
-    const out = keys.find((k) => lowered.refused.has(entries[k]));
-    if (out) { status.textContent = `No GPU here (${why}), and ${out} can't be drawn on the CPU either: it ${lowered.refused.get(entries[out])}.`; return; }
-    const wasm = await inWasm(lowered).catch(() => null);
-    const js = wasm ? null : loadJs(lowered);
-    const colourAt = (x: number, y: number, t: number): number[] => wasm ? wasm(x, y, t)
-      : keys.length === 3 ? keys.map((e) => js!.get(entries[e])!(x, y, t) as number) : js!.get(entries.colour)!(x, y, t) as number[];
-    // A canvas the GPU drew on can't be drawn on any other way.
-    const ctx = canvas.getContext("2d");
-    if (!ctx) { status.textContent = `No GPU now (${why}), and this picture was on the GPU before: reload the page to draw it on the CPU.`; return; }
-    // A moving picture is drawn small enough to keep a frame near 25 ms. A
-    // still one, or a moving one paused (click it), is then drawn again at
-    // the canvas's own size, a slice of rows a frame, over the small one.
-    let size = 64;
-    const how = wasm ? "WebAssembly" : "JavaScript";
-    status.title = `No GPU here (${why}). The same program as ${how}, ${floats}.`;
-    const probe = [-0.7, 0, 0.7].flatMap((x) => [-0.7, 0, 0.7].map((y) => [x, y]));
-    const moving = o.still == null && probe.some(([x, y]) => String(colourAt(x, y, 0.3)) !== String(colourAt(x, y, 1.9)));
-    let paused: number | null = null;
-    const sharp = () => Math.min(512, Math.round((canvas.clientWidth || 256) * Math.min(2, devicePixelRatio || 1)));
-    const pixel = (img: ImageData, n: number, px: number, py: number, t: number) => {
-      const x = (2 * (px + 0.5) - n) / n, y = (n - 2 * (py + 0.5)) / n, at = 4 * (py * n + px);
-      colourAt(x, y, t).forEach((v, k) => { img.data[at + k] = 255 * Math.min(1, Math.max(0, v)); });
-      img.data[at + 3] = 255;
-    };
-    const say = (what: string) => { status.textContent = `Drawn as ${how} on the CPU (no GPU here), ${what}`; };
-    // A frame is drawn a few rows at a time, at most ~10 ms at once, and a
-    // slow one leaves the page as much time again before the next, so a
-    // picture that costs 150 ms a frame doesn't hold the page (E194).
-    let frame = 0;
-    const draw = () => {
-      if (stopped || paused !== null) return;
-      const t = now(), n = size, mine = ++frame;
-      const img = ctx.createImageData(n, n);
-      let row = 0, busy = 0;
-      const rows = () => {
-        if (stopped || paused !== null || mine !== frame) return;
-        const t0 = performance.now();
-        while (row < n && performance.now() - t0 < 10) { for (let px = 0; px < n; px++) pixel(img, n, px, row, t); row++; }
-        busy += performance.now() - t0;
-        if (row < n) { setTimeout(rows, 0); return; }
-        if (canvas.width !== n) canvas.width = canvas.height = n;
-        ctx.putImageData(img, 0, 0);
-        if (busy > 40) size = Math.max(32, Math.round(size * 0.8));
-        else if (busy < 15) size = Math.min(256, Math.round(size * 1.15));
-        if (!moving) return refine(t);
-        say(`${n}×${n}, ${Math.round(busy)} ms a frame. Click it to pause and sharpen.`);
-        if (busy > 40) setTimeout(() => requestAnimationFrame(draw), busy);
-        else requestAnimationFrame(draw);
-      };
-      rows();
-    };
-    // Sharper, without blanking: the small picture scaled up first.
-    const refine = (t: number) => {
-      const n = sharp();
-      if (n <= canvas.width) { say(`${canvas.width}×${canvas.width}.`); return; }
-      const old = document.createElement("canvas");
-      old.width = old.height = canvas.width;
-      old.getContext("2d")!.drawImage(canvas, 0, 0);
-      canvas.width = canvas.height = n;
-      ctx.drawImage(old, 0, 0, n, n);
-      const img = ctx.createImageData(n, n);
-      let row = 0;
-      const slice = () => {
-        if (stopped || (moving && paused === null)) return;
-        const t0 = performance.now(), from = row;
-        while (row < n && performance.now() - t0 < 25) { for (let px = 0; px < n; px++) pixel(img, n, px, row, t); row++; }
-        ctx.putImageData(img, 0, 0, 0, from, n, row - from);
-        say(row < n ? `sharpening: ${Math.round((100 * row) / n)}%` : `${n}×${n}.${moving ? " Paused: click it to play." : ""}`);
-        if (row < n) requestAnimationFrame(slice);
-      };
-      slice();
-    };
-    canvas.onclick = moving ? () => {
-      if (stopped) return;
-      if (paused === null) { paused = now(); refine(paused); }
-      else { paused = null; draw(); }
-    } : null;
-    canvas.style.cursor = moving ? "pointer" : "";
-    say("…");
-    if (o.check) o.check.textContent = "";
-    draw();
-  }
+    const rec = f && typeof f.result === "object" && "fields" in f.result ? f.result : null;
+    if (!rec || !m.exports.includes("colour")) return program;
+    const reads = rec.fields.map((x) => [`${rec.name}.${x.name}(${rec.key})`, `${rec.name}.${x.name}`].find((n) => m.exports.includes(n)));
+    if (reads.some((n) => !n)) return program;
+    return { ...program, wasm: { bytes: wasmBytes(m.bytes), floats: m.floats, colour: "colour", reads: reads as string[] } };
+  } catch { return program; }
 }
