@@ -48,6 +48,7 @@ export const PROBLEMS: Problem[] = [
   { id: "effect-folded", says: /^.+ is an effect; its operations are handled with a match, not folded$/, fix: "Handle the effect with a handler, whose cases match its operations, instead of a fold." },
   { id: "too-many-results", says: /^a function gives at most \d+ results$/, fix: "Give at most 8 results: put the others together in a type with one case, and give that." },
   { id: "results-not-predicate", says: /^.+ has results, so it is (a function of its ports|a predicate over its ports \(it gives true or false\), not .+)$/, fix: "A definition with results is a relation over its ports: write it as a function of all of them that says whether they agree (true or false), or take its results off and let it give its value." },
+  { id: "takes-itself", says: /^.+ can't take itself as an input in its own field .+: through it, a function could call itself without recursion and never end$/, fix: "A field may hold a function that gives the type, not one that takes it: give the function the parts it reads instead, or keep the function outside the type." },
   { id: "type-as-value", says: /^.+ is a type, not a value$/, fix: "A type says what values look like and can't be used as one: use one of its cases, or a value of that type." },
 ];
 
