@@ -7,7 +7,7 @@ import { ways } from "./clinic.ts";
 const sizes = process.argv.slice(2).map(Number);
 for (const hours of sizes.length ? sizes : [8, 40, 200]) {
   const ideal = ways.ideal(hours);
-  for (const way of ["evaluator", "compiled", "ideal"] as const) {
+  for (const way of ["evaluator", "compiled", "core", "ideal"] as const) {
     if (way === "evaluator" && hours > 40) continue;
     const r = way === "ideal" ? ideal : ways[way](hours);
     const same = r.out.join("\n") === ideal.out.join("\n");

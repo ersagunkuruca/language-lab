@@ -19,12 +19,13 @@ import { compile } from "../src/compile.ts";
 import { load } from "../src/program.ts";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitWasm } from "../src/wasm.ts";
+import { coreMain, lowerCore } from "../src/core-js.ts";
 import { $setPrint, $setWorld, $Aborted, $toList } from "../src/runtime.js";
 import { machine as ideal } from "./machine.ideal.js";
 
 export interface Run { out: string[]; err: string[]; code: number }
 export type Way = (args: string[], files: Record<string, string>) => Run;
-export type Name = "evaluator" | "compiled" | "wasm" | "ideal";
+export type Name = "evaluator" | "compiled" | "core" | "wasm" | "ideal";
 export const NAME = "../../compiler/gaps/machine";
 export const folder = join(import.meta.dirname, "machine");
 
@@ -86,6 +87,9 @@ export async function ways(): Promise<Record<Name, Way> & { chosen: string[]; wa
   writeFileSync(join(dir, "machine.js"), compile(chosen.code, chosen.info, chosen.names, { runtime, exports: ["main"] }));
   const compiledMain = (await import(pathToFileURL(join(dir, "machine.js")).href)).defs.main as (args: unknown) => number;
   const wasm = await wasmModule();
+  // Printed from the core IR (C137d19), which compile.ts gives way to.
+  const rt: { print: (s: string) => void; world?: World } = { print: () => {} };
+  const coreRun = coreMain(lowerCore(chosen.code, chosen.info, chosen.names, [main]), "main", rt);
   return {
     chosen: chosen.chosen,
     wasmProblem: typeof wasm === "string" ? wasm : undefined,
@@ -100,6 +104,13 @@ export async function ways(): Promise<Record<Name, Way> & { chosen: string[]; wa
       $setWorld(world(files, err));
       let code: number;
       try { code = Number(compiledMain($toList(args))); } catch (e) { if (!(e instanceof $Aborted)) throw e; err.push(e.reason); code = 1; }
+      return { out: lines(printed), err, code };
+    },
+    core: (args, files) => {
+      const printed: string[] = [], err: string[] = [];
+      rt.print = (s) => printed.push(s + "\n");
+      rt.world = world(files, err);
+      const code = coreRun(args);
       return { out: lines(printed), err, code };
     },
     wasm: (args, files) => {

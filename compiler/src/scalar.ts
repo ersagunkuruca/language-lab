@@ -57,7 +57,7 @@ import { dependencies, subtree, isCall, type Call, isUse, useTarget, type Use } 
 import { bindsOf, bodyOf, withBodies } from "./uses.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
-import { ARRAY, TABLE, HASH_SET, CELL, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, PATH as PATH_T, STRING, Subst, type Row, type Type } from "../../ters/src/lang/types.ts";
+import { ARRAY, TABLE, HASH_SET, CELL, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, PATH as PATH_T, STRING, BUILTIN_EFFECTS, Subst, type Row, type Type } from "../../ters/src/lang/types.ts";
 import { RELEASE_V, tupleType, ABORT, ABORT_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, HASH_SET_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, NOW_OP, OPTIONAL, ORDER_V, PAIR_V, RATIO, S, SET, SHOW_ANY, shownImplementations, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
 import { liftLets } from "../../ters/src/lang/lift-lets.ts";
 import { solvesOnce } from "../../ters/src/lang/run.ts";
@@ -69,6 +69,7 @@ import { stageProgram } from "../../ters/src/lang/stage.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { discharge } from "../../ters/src/lang/ledger.ts";
 import { scalarOp, TARGETS } from "./builtins.ts";
+import { WORLD_OPS as OP_OF_BUILTIN } from "../../ters/src/lang/std.ts";
 import { AUDIO_BLOCK, AWAIT, AWAIT_OP, START_TIMER_OP, WAIT, WAIT_OP, HANDLER_ROW, LIST, PAGE_HANDLER, PAGE_VIEW, SIGS, SOUND_ROW, VIEW_ROW, STD_IMPL, STD_MANY } from "../../ters/src/lang/std.ts";
 // Cells' operations JavaScript from the core IR takes from the evaluator
 // (run.ts cellOps), `path` aside: it looks inside its function.
@@ -561,9 +562,17 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
   // `perform:`), as the evaluator finds the nearest handler. Every case
   // answers in tail position here, since the operation's answer is the
   // case's value.
+  // Console, Files and Network are declared in std too, without the
+  // prefix (L55): one is the program's own only where the program has a
+  // case for one of its operations; otherwise a perform of one by name
+  // (board's `file exists`) is the builtin that performs it, the world's
+  // (C137d19).
+  const arms = new Set(Object.values(code.nodes).flatMap((n) => (n.kind === "arm" && n.variant ? [n.variant] : [])));
+  const notOwn = (n: NodeOf<"def">, td: NodeOf<"typedef">) => n.id.startsWith("std.") || (BUILTIN_EFFECTS.includes(n.id) && !td.variants.some((v) => arms.has(v)));
+  const builtinOf = new Map(Object.entries(OP_OF_BUILTIN).map(([b, v]) => [v, b]));
   const tailOps = new Map<Id, Id>();
   for (const n of opts.host ? Object.values(code.nodes) : []) {
-    if (n.kind !== "def" || !n.body || n.id.startsWith("std.")) continue;
+    if (n.kind !== "def" || !n.body || (code.nodes[n.body]?.kind === "typedef" && notOwn(n, code.nodes[n.body] as NodeOf<"typedef">)) || n.id.startsWith("std.")) continue;
     const td = code.nodes[n.body];
     if (td?.kind === "typedef" && td.effect && td.variants.length && td.variants.every((v: Id) => { const x = code.nodes[v] as NodeOf<"variant">; return x.returns && !x.later; })) td.variants.forEach((v: Id) => tailOps.set(v, n.id));
   }
@@ -578,7 +587,7 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
   // hands the case the rest it was given (core-rt.ts `perform:`).
   const laterOps = new Map<Id, Id>();
   for (const n of opts.host ? Object.values(code.nodes) : []) {
-    if (n.kind !== "def" || !n.body || n.id.startsWith("std.")) continue;
+    if (n.kind !== "def" || !n.body || (code.nodes[n.body]?.kind === "typedef" && notOwn(n, code.nodes[n.body] as NodeOf<"typedef">)) || n.id.startsWith("std.")) continue;
     const td = code.nodes[n.body];
     if (td?.kind === "typedef" && td.effect && td.variants.length && td.variants.every((v: Id) => { const x = code.nodes[v] as NodeOf<"variant">; return x.returns && x.later; })) td.variants.forEach((v: Id) => laterOps.set(v, n.id));
   }
@@ -946,7 +955,7 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
         }
         if (head.kind !== "ref") throw new Refused("calls a computed function (that needs closures)");
         const args = () => n.args.map((a) => expr(a, env, f, false));
-        const target = head.target;
+        const target = (!tailOps.has(head.target) && !laterOps.has(head.target) && builtinOf.get(head.target)) || head.target;
         if (target === S.equal) {
           const t = stype(zonk(n.args[0]));
           if (!t || (typeof t !== "string" && !opts.data)) throw new Refused("compares values that aren't Float64s or Bools");

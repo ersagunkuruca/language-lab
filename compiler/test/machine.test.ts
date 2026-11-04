@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import { sized, source, ways, type Name } from "../gaps/machine.ts";
 
 const w = await ways();
-const all = (args: string[], files: Record<string, string>, others: Name[] = ["evaluator", "compiled"]) => {
+const all = (args: string[], files: Record<string, string>, others: Name[] = ["evaluator", "compiled", "core"]) => {
   const want = w.ideal(args, files);
   for (const way of others) assert.deepEqual(w[way](args, files), want, way);
   return want;

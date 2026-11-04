@@ -12,9 +12,9 @@ import { run, session, ways } from "../gaps/board.ts";
 const w = await ways();
 const phases = ["start", ...session(1).map(([n]) => n)];
 
-for (const n of [0, 12]) test(`board: the three agree on a session with ${n} cards added`, () => {
+for (const n of [0, 12]) test(`board: the four agree on a session with ${n} cards added`, () => {
   const want = run(w.ideal, n).pages;
-  for (const way of ["evaluator", "compiled"] as const) {
+  for (const way of ["evaluator", "compiled", "core"] as const) {
     const got = run(w[way], n).pages;
     got.forEach((p, i) => assert.equal(p, want[i], `${way}, after ${phases[i]}`));
   }
