@@ -574,9 +574,15 @@ export function coreModule(ir: CoreIR, name: string, runtime: string, world: str
 // definition, or a lambda or a fold's arm inside one), by its name (fN;
 // its copies are fN$b, fN$h, fN$w and fN$v), and each stop site's node and
 // definition, by the number a stop carries (C143a, stops.ts).
-export function coreMap(ir: CoreIR): { version: 1; functions: Record<string, Id>; stops: { node: Id; def: Id }[] } {
+// `locals`: for each function, the binder whose value each local lN holds
+// (C143d), where the lowering knows it.
+export function coreMap(ir: CoreIR): { version: 1; functions: Record<string, Id>; locals: Record<string, Record<string, Id>>; stops: { node: Id; def: Id }[] } {
   const { names } = emitCoreJs(ir);
-  return { version: 1, functions: Object.fromEntries(names.map((n, i) => [n, ir.funcs[i].def])), stops: (ir.stops ?? []).map(({ node, def }) => ({ node, def })) };
+  const locals = Object.fromEntries(names.flatMap((n, i) => {
+    const b = Object.entries(ir.funcs[i].binders ?? {}).filter(([, id]) => id);
+    return b.length ? [[n, Object.fromEntries(b.map(([j, id]) => [`l${j}`, id]))]] : [];
+  }));
+  return { version: 1, functions: Object.fromEntries(names.map((n, i) => [n, ir.funcs[i].def])), locals, stops: (ir.stops ?? []).map(({ node, def }) => ({ node, def })) };
 }
 
 // The program's nodes, for a module whose solves the evaluator's solver

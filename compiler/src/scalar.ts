@@ -404,7 +404,9 @@ export const OPS = {
 // its answers.
 // `value`: a definition that isn't a function (sheet's `symbols`), whose
 // value a printer may work out once (core-js.ts, C137d17).
-export interface SFunc { def: Id; name: string; params: LType[]; result: LType; locals: LType[]; body: SExpr; spends: boolean; budgeted: boolean; inner?: boolean; partial?: boolean; multi?: true; answer?: LType; value?: true }
+// `binders`: the binder each local holds, where the lowering read one
+// (C143d, the map's): ids only, by the local's number.
+export interface SFunc { def: Id; name: string; params: LType[]; result: LType; locals: LType[]; body: SExpr; spends: boolean; budgeted: boolean; inner?: boolean; partial?: boolean; multi?: true; answer?: LType; value?: true; binders?: Id[] }
 // `code` and `info` are the program that was lowered: the one given, or
 // a copy with its derivatives generated, where funcs[i].def lives.
 // rounded: definitions with a call worked out when compiled (stage.ts) that
@@ -948,7 +950,8 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       }
       case "ref": {
         if (n.target === TRUE || n.target === FALSE) return { k: "bool", v: n.target === TRUE };
-        if (env.has(n.target)) return { k: "local", i: env.get(n.target)! };
+        // Which binder a local holds, for the map (C143d): noted where it's read.
+        if (env.has(n.target)) { const i = env.get(n.target)!; (f.binders ??= [])[i] = n.target; return { k: "local", i }; }
         const later = inlined.get(n.target);
         if (later) return { ...later, tail };
         // A case with no fields (empty, nothing) written alone.
