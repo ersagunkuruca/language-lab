@@ -487,11 +487,33 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
     walk(root, null);
   };
 
-  // A literal at Rational, Algebraic, Complex or Dual as its constructor's
-  // call: 3 at Dual is dual(3, 0), a constant.
+  // A literal at Rational, Algebraic or Fixed as its constructor's
+  // call; at Complex or Dual through the embedding from Float64 (above).
   const intLit = (v: bigint): NodeData => ({ kind: "lit", value: v >= -9007199254740991n && v <= 9007199254740991n ? Number(v) : String(v), of: INT });
+  // A Float64 literal at a type Float64 embeds in (L208e): map(x) of the
+  // canonical embedding, so 0.5 at Complex is float64 in complex's: no
+  // constructor of its own here.
+  const throughEmbedding = (id: Id, x: number, t: Type): boolean => {
+    const emb: Type = { t: "con", id: EMBEDDING, args: [num, t] };
+    const e = implementationOf(info, EMBEDDING, emb);
+    if (!e) return false;
+    const fn: Type = { t: "fn", params: [num], ret: t, eff: pure };
+    // An embedding whose map is a named function calls it: as complex(x).
+    // A shader can't call a function read from a record.
+    const body = code.nodes[(code.nodes[e] as NodeOf<"def"> | undefined)?.body ?? ""], arg = isCall(body) && body.args.length === 1 ? code.nodes[body.args[0]] : undefined;
+    if (arg?.kind === "ref" && code.nodes[arg.target]?.kind === "def") {
+      nodes[id] = { id, kind: "call", fn: add({ kind: "ref", target: arg.target }, fn), args: [add({ kind: "lit", value: x, of: NUMBER }, num)] };
+      typeOf.set(id, t);
+      return true;
+    }
+    const map = add({ kind: "call", fn: add({ kind: "ref", target: EMBEDDING_MAP }, { t: "fn", params: [emb], ret: fn, eff: pure }), args: [add({ kind: "ref", target: e }, emb)] }, fn);
+    nodes[id] = { id, kind: "call", fn: map, args: [add({ kind: "lit", value: x, of: NUMBER }, num)] };
+    typeOf.set(id, t);
+    return true;
+  };
   const literal = (n: NodeOf<"lit">) => {
     const t: Type = { t: "con", id: n.of!, args: [] };
+    if ((n.of === COMPLEX_TYPE || n.of === DUAL_TYPE) && throughEmbedding(n.id, typeof n.value === "number" ? n.value : 0, t)) return;
     const parts: [NodeData, Type][] = n.of === FIXED_TYPE ? [[intLit(fixedSteps(n.value)), int]]
       : n.of === RATIONAL_TYPE || n.of === ALGEBRAIC_TYPE
       ? (ratioParts(n.value) ?? [0n, 1n]).map((x) => [intLit(x), int])
