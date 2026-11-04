@@ -191,14 +191,17 @@ Text is a string of characters (Unicode code points). Positions count from 0. Te
 - **normalized** : `(Text) -> Text`. The text in Unicode Normalization Form C: "e" with a combining accent becomes the one character "é". Text from the world (a file, a fetch, a line typed in, a page's field) already is; text built from pieces may not be, so normalize before comparing it.
 - **graphemes** : `(Text) -> List Text`. The text as a reader sees its characters (extended grapheme clusters, UAX #29): a flag, an emoji with a skin tone, or "e" with a combining accent is one item. Cut text for a screen on these; characters and length count code points, which slicing uses.
 - **grapheme count** : `(Text) -> Int`. How many characters a reader sees: the length of graphemes(t). "👍🏽" is 1, where length says 2.
+- **uppercase** : `(Text, Locale) -> Text`. The text in capitals as its language writes them: uppercase("istanbul", locale("tr")) is "İSTANBUL", and in English "ISTANBUL". For identifiers, hex and protocols, ascii uppercase changes a to z only.
+- **lowercase** : `(Text, Locale) -> Text`. The text in small letters as its language writes them: lowercase("I", locale("tr")) is "ı". For identifiers and protocols, ascii lowercase changes A to Z only.
+- **Locale** (type). A language, as a BCP 47 tag: locale("tr"), locale("en-GB"). What depends on the language takes one, so it is the same on every machine: uppercase(text, locale), lowercase(text, locale). A tag that can't be read means the root locale.
 - **starts with** : `(Text, Text) -> Bool`. Whether the text begins with this: starts with("# notes", "#") is true. Every text starts with "".
 - **ends with** : `(Text, Text) -> Bool`. Whether the text ends with this: ends with("page.md", ".md") is true. Every text ends with "".
 - **contains text** : `(Text, Text) -> Bool`. Whether the part occurs somewhere in the text: contains text("to do list", "do") is true. Every text contains "". (contains is a list's.)
 - **after prefix** : `(Text, Text) -[Choice]-> Text`. The text without the prefix it starts with: after prefix("r7", "r") is "7". No answer when it doesn't start with it (Choice), so first(after prefix(w, "#"), else w) reads a tag or keeps the word.
 - **is digit** : `(Text) -> Bool`. Whether this is one of the characters 0 to 9.
 - **is letter** : `(Text) -> Bool`. Whether this is one of the English letters a to z or A to Z (other alphabets' letters aren't, yet).
-- **lowercase** : `(Text) -> Text`. The text with A to Z made a to z, everything else as it was: lowercase("Hello, World") is "hello, world".
-- **uppercase** : `(Text) -> Text`. The text with a to z made A to Z, everything else as it was: uppercase("Hello") is "HELLO".
+- **ascii lowercase** : `(Text) -> Text`. The text with A to Z made a to z, everything else as it was (for identifiers, hex and protocols; people's text goes through lowercase(text, locale)): ascii lowercase("Hello, World") is "hello, world".
+- **ascii uppercase** : `(Text) -> Text`. The text with a to z made A to Z, everything else as it was (for identifiers, hex and protocols; people's text goes through uppercase(text, locale)): ascii uppercase("Hello") is "HELLO".
 - **repeated** : `(Text, Int) -> Text`. The text written this many times over: repeated("ab", 3) is "ababab". 0 times, or fewer, is "".
 - **padded start** : `(Text, Int, Text) -> Text`. The text with fill put in front until it is this wide: padded start("7", 3, "0") is "007". A text already as wide is as it was; a fill of several characters is cut where the width ends.
 - **padded end** : `(Text, Int, Text) -> Text`. The text with fill put after it until it is this wide: padded end("ab", 4, ".") is "ab..". For columns of text.
