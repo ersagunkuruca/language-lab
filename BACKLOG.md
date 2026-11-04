@@ -49,6 +49,7 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| E251 | Move a let's function to its own definition (lifted, with what it reads around it as new inputs, as lift-lets.ts does) and the reverse, Put inside (a definition used in one place becomes a let there), so def or let is one click and never a rewrite; needs L224 so neither move changes the type | Ersagun 2026-11-04 13:23 (Learn thread: defs vs lambdas) | P2 | M | after L224 |
 
 ### Speed of editing
 
@@ -161,6 +162,8 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| L224 | Lets generic like defs (Hindley–Milner let-polymorphism): today a let is `(name ↦ body)(value)`, so its name gets one type, and a let's `same(x) = x` used on 3 and on "t" is refused ("same2 works only on a Number") where a def is fine. Generalise a let's value as a definition's is, so moving a helper in or out never changes what type-checks; lift-lets.ts and every target keep working on the result | Ersagun 2026-11-04 13:23 (Learn thread: defs vs lambdas) | P2 | M | |
+| L225 | One meaning for `results`: on a lambda it names the parts of the tuple its body gives (L128b), on a def it marks which parameters are outputs of a predicate (RESULTS.md, L95). Pick one form, the box with ports and a direction (PORTS-2026-11-01), and read the other as a view of it; with L130 | Ersagun 2026-11-04 13:23 (Learn thread: defs vs lambdas) | P2 | M | |
 | L107 | **Open question, not decided** (Ersagun 2026-10-30: "I didn't ask to lift strict positivity BTW, I'm not sure if we should lift that"): drop strict positivity, so a data type may take itself as a function's input in its fields (`knot = wrap(f: knot → Float64)`), with taking one apart carrying Diverge so a function without Diverge still always finishes. Recursive data types themselves (a type holding itself, directly or through others) are allowed and always were; TUTORIAL.md §3.8 says so. If decided yes: LANGUAGE.md "Two rules", TUTORIAL.md §3.8 and the guarantees test | Ersagun 2026-10-30 | P3 | S | open question |
 | T7 | Tests in the language ([TESTS-IN-THE-LANGUAGE.md](docs/design/testing/TESTS-IN-THE-LANGUAGE.md)): T7a `Check`, small values and `lab test` done; T7b accepted answers in examples.json done; T7c results cached by hash: local done (`.lab/checks.json`), CI's cache left (T, S); T7d the editor's tick, difference and accept button done (#829); T7e example sweeps moved to answers and laws, `--compiled` (T, M). Unblocks L108d, L97e | TESTING.md T7 | P2 | L | design, T7a and T7b done |
 
