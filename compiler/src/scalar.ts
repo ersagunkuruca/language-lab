@@ -54,7 +54,7 @@ import { givenInOrder } from "../../ters/src/lang/ports.ts";
 import { resolveArithmetic } from "../../ters/src/lang/arith.ts";
 import type { Code, Id, NodeOf } from "../../ters/src/model.ts";
 import { dependencies, subtree, isCall, type Call, isUse, useTarget, type Use } from "../../ters/src/model.ts";
-import { bindsOf, bodyOf } from "./uses.ts";
+import { bindsOf, bodyOf, withBodies } from "./uses.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { ARRAY, TABLE, HASH_SET, CELL, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, PATH as PATH_T, STRING, Subst, type Row, type Type } from "../../ters/src/lang/types.ts";
@@ -434,6 +434,8 @@ export function reachedFrom(code: Code, roots: Id[]): Code {
 // looks at it when its search ends. Shaders have no side effects, so going
 // on computes nothing anyone sees.
 export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean } = {}): CoreIR {
+  // A use with no body, as the use that binds its ports (C161, uses.ts).
+  ({ code, info } = withBodies(code, info, names));
   // The generic + resolved to each type's own operation first
   // (ters/src/lang/arith.ts): nothing here sees a generic one.
   ({ code, info, names } = resolveArithmetic(code, info, names));
