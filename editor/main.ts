@@ -14,7 +14,6 @@ import blocksStyle from "../ters/styles/blocks.json" with { type: "json" };
 import mathStyle from "../ters/styles/math.json" with { type: "json" };
 import plainStyle from "../ters/styles/plain.json" with { type: "json" };
 import lispStyle from "../ters/styles/lisp.json" with { type: "json" };
-import { hashDef } from "../ters/src/hash.ts";
 import { children, freshId, SCHEMA, ID_PATTERN, isCall, isUse, useTarget, type Call, merge, parentOf, resolveRefs, subtree, type Code, type Id, type Node, type NodeOf } from "../ters/src/model.ts";
 import { INT } from "../ters/src/lang/types.ts";
 import { layer, type Comments, type Hints, type Names, type Presentation, type Style } from "../ters/src/presentation.ts";
@@ -43,6 +42,7 @@ import { backwards } from "./backwards.ts";
 import { selectedParts } from "./selectedParts.ts";
 import { palette, typeName } from "./palette.ts";
 import { structure } from "./structure.ts";
+import { filesPanels, fnv, userCode } from "./filesPanel.ts";
 import { graphMenu as graphMenuOf } from "./graphMenu.ts";
 import { shower } from "./shown.ts";
 import { pagePanels } from "./pagePanel.ts";
@@ -807,28 +807,7 @@ const pres = (names: Names = {}, comments: Comments = doc.comments): Presentatio
   style: { ...styles[ui.style], quote: undefined },
 });
 
-const userCode = (c: Code): Code => ({ nodes: Object.fromEntries(Object.entries(c.nodes).filter(([, n]) => n.kind !== "builtin")), defs: c.defs });
-
-const files = () => [
-  { name: "code.json", get: (d: Doc) => JSON.stringify(userCode(prog(d))) },
-  { name: "drafts.json", get: (d: Doc) => JSON.stringify(draftsOf(d)) },
-  { name: "names.short.json", get: (d: Doc) => JSON.stringify(d.names.short) },
-  { name: "names.descriptive.json", get: (d: Doc) => JSON.stringify(d.names.descriptive) },
-  { name: "comments.json", get: (d: Doc) => JSON.stringify(d.comments) },
-  { name: "layout.json", get: (d: Doc) => JSON.stringify(d.layout) },
-  { name: "examples.json", get: (d: Doc) => JSON.stringify(d.examples ?? {}) },
-];
-
-function fnv(s: string) {
-  let x = 0x811c9dc5;
-  for (let i = 0; i < s.length; i++) x = Math.imul(x ^ s.charCodeAt(i), 0x01000193) >>> 0;
-  return x.toString(16).padStart(8, "0");
-}
-
-
-function semanticHash(code = doc.code): string {
-  try { return hashDef(code, ui.def); } catch { return "—"; }
-}
+const { files, filesPanel } = filesPanels({ doc: () => doc, ui, undo, prog: (d) => prog(d), draftsOf: (d) => draftsOf(d) });
 
 // The def a call, ref or solve refers to, if it's a user def.
 function calleeDef(id: Id): Id | null {
@@ -960,22 +939,6 @@ const { fillPalette } = palette({
   ownDefs: () => ownDefs(), shownNames, words,
 });
 const { rowSection, unitSection, sameLine } = selectedParts({ doc: () => doc, ui, applyT, typedPres: () => typedPres(), isTypeParam: (id) => isTypeParam(id) });
-
-function filesPanel(): HTMLElement {
-  const box = h("div", { class: "files" });
-  const meaning = semanticHash();
-  const prev = undo.at(-1);
-  const prevMeaning = prev && prev.code.nodes[ui.def] ? (() => { try { return hashDef(prev.code, ui.def); } catch { return "—"; } })() : meaning;
-  box.append(h("div", { class: `meaning${meaning !== prevMeaning ? " moved" : ""}` },
-    h("span", {}, "Meaning hash"), h("code", {}, meaning),
-    h("span", { class: "chip" }, meaning === prevMeaning ? "same as before last edit" : "changed by last edit")));
-  for (const f of files()) {
-    const txt = f.get(doc);
-    box.append(h("div", { class: `file${ui.touched.includes(f.name) ? " hot" : ""}` },
-      h("span", { class: "fname" }, f.name), h("code", {}, fnv(txt)), h("span", { class: "fsize" }, `${txt.length} B`)));
-  }
-  return box;
-}
 
 // The same tree printed: as blocks text, or in the classic shapes (steps,
 // nested, Lisp) with the chosen notation. One they can't show says so.
