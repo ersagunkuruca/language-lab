@@ -1063,7 +1063,11 @@ had (no connection, a status that isn't 2xx), so a `match … | abort(why)
 doesn't change anything (RFC 9110 calls it *safe*), and the runtime
 fetches each address once per run and remembers the answer, failures
 included. So a search that backtracks never asks a server twice, and an
-address read twice in one run gives the same text both times.
+address read twice in one run gives the same text both times. On a page a
+run is one event: a click's handler fetches each address once, however
+often it is retried, and the next click asks again, so a page can poll,
+refresh and retry after a failure (L59c). What a view fetched is kept for
+the page, so a view that runs again shows what it asked for.
 
 On the command line the program waits for the reply (Node's world hands
 the request to a child process and blocks on it). A page can't wait, so

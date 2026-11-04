@@ -214,7 +214,12 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
             // builtin's call) the run is taken back (its writes undone, its
             // printing never done: cells.ts attempt) and runs again from
             // the start, with the same event, so it still happens once.
+            // What it fetches is remembered for this event alone (L59c,
+            // browser.ts): the next click asks again.
+            const event = {};
             const fire = (run: () => unknown) => {
+              const was = cells.event;
+              cells.event = event;
               try {
                 cells.attempt(() => withSteps(steps, run), (e) => e instanceof Pending && !e.resume);
               } catch (err) {
@@ -225,7 +230,7 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
                 else if (err instanceof Pending) { const go = err.resume; err.ready.then(() => fire(go ? () => { for (const v of go()) return v; } : run)); }
                 else if (err instanceof OutOfSteps) console.error(`${name} handler ${STUCK}`);
                 else console.error(err);
-              }
+              } finally { cells.event = was; }
             };
             fire(() => m.call(then, { tag: HTML_V.event, fields: [value, ev.key ?? "", x, y, ev.seconds ?? 0] }));
           };
