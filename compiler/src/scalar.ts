@@ -81,6 +81,7 @@ const PAGE_EFFECTS = new Set<Id>([...PAGE_VIEW, ...PAGE_HANDLER, ...AUDIO_BLOCK,
 const HOST_CELLS = new Set(Object.values(CELL_OPS).filter((id) => id !== CELL_OPS.path));
 import { runtime } from "./wasm-rt.ts";
 import { machineWords } from "./machine-words.ts";
+import { wideProducts } from "./wide-products.ts";
 
 // A shader (or a ray marcher's loop) may call what might not finish only
 // under a literal with fuel; the rest of its type must be empty.
@@ -2595,7 +2596,7 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
   const ir: CoreIR = { funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()].filter((d) => !niche.has(d.key)), arrays: [...arrays.values()], tables: [...tables.values()], fns: [...fns.values()], shapes, code, info, escapes: escapes.map((e) => stype({ t: "con", id: e, args: [] }) as DType), rounded, ...(opts.shader && !opts.data ? { shader: true as const } : {}), ...(!opts.data ? { int32: true as const } : {}) };
   // A record's Int field proved to fit 32 bits, stored as a machine word
   // (C150e): WebAssembly and C, not core JS, whose values the host reads.
-  if (opts.data && !opts.host) machineWords(ir);
+  if (opts.data && !opts.host) { machineWords(ir); wideProducts(ir); }
   return ir;
 }
 
