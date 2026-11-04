@@ -160,6 +160,8 @@ export interface UI {
   query: string;
   refused: boolean;
   output: { def: Id; lines: string[]; error?: string; running?: boolean; stuck?: Stuck; profile?: Profile; compiled?: boolean } | null;
+  // What Run gives a program that reads standard input, by program (I168).
+  stdin?: Record<string, string>;
   // The graph's right-click menu: what it was for, where (screen, world).
   // `blocks`: opened from the Blocks pane, so the graph's layout items
   // (tidy, pick, fit) aren't offered.
@@ -2901,6 +2903,7 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
     const going = ui.output?.def === ui.def && ui.output.running;
     const given = action || value ? null : runGiven();
     const label = [namer.name(ui.def), ...given?.args ?? []].join(" ");
+    if (readsInput() && !going && ui.allowing !== ui.def) box.append(stdinBox(), h("p", { class: "hint" }, `What ${namer.name(ui.def)} reads as standard input, as lab run reads what is piped to it.`));
     box.append(going ? h("button", { class: "btn", type: "button", "data-act": "t-stop" }, `Stop ${namer.name(ui.def)}`)
       : ui.allowing === ui.def ? permissionsPanel(namer, permissionsAsked(ui.def)) : h("button", { class: "btn", type: "button", "data-act": "t-run" }, `Run ${label}`));
     if (given) box.append(h("p", { class: "hint" }, `As lab run gives it: ${given.args.join(", ")}. ${Object.keys(given.files).join(", ")} ${Object.keys(given.files).length > 1 ? "come" : "comes"} with the example; what the run writes stays in this browser.`));
@@ -3027,7 +3030,7 @@ function boundedTrace(info: T.Info, args: Value[]): Trace {
 }
 
 // Run main (editor/runPanel.ts, E228i).
-const { stopRun, endRun, runGiven, permissionsAsked, permissionsPanel, runTyped } = runPanel({
+const { stopRun, endRun, runGiven, permissionsAsked, permissionsPanel, runTyped, readsInput, stdinBox } = runPanel({
   doc: () => doc, ui, prog: () => prog(), pres: () => pres(), typesOf: () => typesOf(), titleOf, render: () => render(),
   defNamed, pins: () => heldPins?.all ?? doc.signatures ?? NO_PINS,
 });

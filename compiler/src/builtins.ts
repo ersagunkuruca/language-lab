@@ -209,6 +209,8 @@ export const TARGETS: Record<Id, Target> = {
   [TEXT_OPS.characters]: { js: "impl", scalar: DATA },
   [S.listOf]: { js: "impl", scalar: DATA },
   [TEXT_OPS.normalized]: { js: "impl", scalar: DATA },
+  [TEXT_OPS.graphemes]: { js: "impl", scalar: DATA },
+  [TEXT_OPS.graphemeCount]: { js: "impl", scalar: DATA },
   [TEXT_OPS.split]: { js: "impl", scalar: DATA },
   [TEXT_OPS.joinAll]: { js: "impl", scalar: DATA },
   [TEXT_OPS.find]: { js: "partial", scalar: DATA },

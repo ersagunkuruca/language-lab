@@ -371,6 +371,21 @@ test("typed case names and effect operations read as meant", async () => {
   }
 });
 
+// A program's own case shares its name and size with std's (board's
+// finished, the pipe's finished): a value read back is the program's (I169).
+test("a case read back is the program's own, not the library's of that name", async () => {
+  const { Lang } = await import("../src/lang/dsl.ts");
+  const { base, baseNames } = await import("../src/lang/load.ts");
+  const { parseValue } = await import("../src/lang/values.ts");
+  const k = new Lang();
+  k.type("Stage", [], [["todo", []], ["finished", []]]);
+  const code = base(k.code), names = baseNames(k.names);
+  const mine = Object.keys(k.code.nodes).find((id) => k.names[id] === "finished")!;
+  assert.ok(Object.keys(code.nodes).some((id) => id !== mine && names[id] === "finished"), "the library has a finished too");
+  const r = parseValue("finished", code, names);
+  assert.ok("value" in r && (r.value as { tag: string }).tag === mine);
+});
+
 // Steps whose values nothing reads are typed as they print, a; b, and a
 // function whose whole body is one action takes a step before it (E190).
 test("typed steps and a step before a one-action body", async () => {

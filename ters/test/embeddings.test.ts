@@ -8,13 +8,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { compile } from "../../compiler/src/compile.ts";
+import { loadCoreJs, lowerCore } from "../../compiler/src/core-js.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { embeddingLaws, embeddingsIn } from "../src/lang/embed-laws.ts";
 import { infer } from "../src/lang/infer.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import type { Id } from "../src/model.ts";
-import { ARITH, COMPLEX_V, EMBEDDING_V, INT_OPS, SHOW_ANY } from "../src/lang/std.ts";
+import { ARITH, COMPLEX_V, EMBEDDING_V, INT_OPS, SHOW_ANY, TEXT_OPS } from "../src/lang/std.ts";
 import { runMain } from "../src/lang/run.ts";
 import { B } from "../src/prelude.ts";
 
@@ -102,6 +103,33 @@ test("Int + Rational lifts the Int through int in rational: 3 + 1/1 is 4, in the
   writeFileSync(path, compile(p.code, p.info, p.names, { runtime, exports: ["main"] }));
   const defs = (await import(pathToFileURL(path).href)).defs as Record<string, () => unknown>;
   assert.equal(typeof defs.main === "function" ? defs.main() : defs.main, "4");
+});
+
+// L208c2: a function given where one with a larger result is wanted has
+// its result lifted, a lambda's body where it is and a named function
+// through (x) → map(f(x)).
+test("a function returning Int given where one returning Float64 goes: its result is lifted", async () => {
+  const p = program((k) => {
+    const halfOf = k.def("half of");
+    k.define(halfOf, k.fn(["f"], (f) => k.call(B.mul, k.call(f, k.lit("abc")), k.lit(0.5))));
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.call(SHOW_ANY, k.listOf(
+      k.call(halfOf, k.x(TEXT_OPS.length)),
+      k.call(halfOf, k.fn(["t"], (t) => k.call(INT_OPS.add, k.call(TEXT_OPS.length, t), k.int(2))))))));
+  });
+  assert.deepEqual(p.info.errors.map((e) => e.message), []);
+  assert.equal(p.info.embedded?.size, 2);
+  const main = p.code.defs.find((d) => p.names[d] === "main")!;
+  assert.equal(runMain(p.code, p.info, main, { print: () => {}, names: p.names }), "[1.5, 2.5]");
+  const path = join(mkdtempSync(join(tmpdir(), "embed-")), "main.mjs");
+  writeFileSync(path, compile(p.code, p.info, p.names, { runtime, exports: ["main"] }));
+  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, () => unknown>;
+  assert.equal(typeof defs.main === "function" ? defs.main() : defs.main, "[1.5, 2.5]");
+  // And JavaScript printed from the core IR.
+  const l = lowerCore(p.code, p.info, p.names, [main]);
+  assert.deepEqual([...l.refused.values()], []);
+  const fs = loadCoreJs(l);
+  assert.equal(fs[l.funcs.findIndex((g) => g.name === "main" && !g.inner)](), "[1.5, 2.5]");
 });
 
 // The diamond rule (L208d, diamonds.ts): two paths between the same types

@@ -93,7 +93,9 @@ export interface Info {
   solveAt?: Map<Id, Type>;
   // Each expression the checker lifts through a canonical embedding (L208c,
   // EMBEDDINGS.md), to the embedding: arith.ts inserts its map there.
-  embedded?: Map<Id, { def: Id; from: Type; to: Type }>;
+  // With `of`, the expression is a function and its result is lifted
+  // (L208c2): `of` is the function's type as it was.
+  embedded?: Map<Id, { def: Id; from: Type; to: Type; of?: Type & { t: "fn" } }>;
 }
 
 // An implementation's place in Info.implementations: its interface and the
@@ -516,7 +518,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // smaller side is lifted (Lean 4's binop%).
   const LIFTED = new Set<Id>([ARITH.add, ARITH.sub, ARITH.mul, ARITH.less]);
   const liftThrough = (n: Call, callee: Id | null, fr: Type & { t: "fn" }, params: Type[]) => {
-    const mark = (at: Id, def: Id, from: Type, to: Type) => (info.embedded ??= new Map()).set(at, { def, from, to });
+    const mark = (at: Id, def: Id, from: Type, to: Type, of?: Type & { t: "fn" }) => (info.embedded ??= new Map()).set(at, { def, from, to, ...(of ? { of } : {}) });
     if (callee && LIFTED.has(callee) && params.length === 2) {
       const [a, b] = params.map(closedType);
       if (!a || !b || sameType(a, b)) return;
@@ -525,6 +527,17 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       return;
     }
     fr.params.forEach((p, i) => {
+      // A function given where one with the same inputs and a larger
+      // result is wanted: its result is lifted (L208c2), as `map(names,
+      // length)` where a list of Float64s is wanted.
+      const wf = s.zonk(p), gf = params[i] && s.zonk(params[i]);
+      if (wf.t === "fn" && gf?.t === "fn" && wf.params.length === gf.params.length) {
+        const wr = closedType(wf.ret), gr = closedType(gf.ret);
+        if (!wr || !gr || sameType(wr, gr) || !wf.params.every((q, j) => sameType(s.zonk(q), s.zonk(gf.params[j])))) return;
+        const e = embeddingOf(gr, wr);
+        if (e) { mark(n.args[i], e, gr, wr, gf); params[i] = { ...gf, ret: wr }; }
+        return;
+      }
       const want = closedType(p), got = params[i] && closedType(params[i]);
       if (!want || !got || sameType(want, got)) return;
       const e = embeddingOf(got, want);

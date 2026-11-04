@@ -32,6 +32,15 @@ export function slice(t: string, from: Int, to: Int): string {
 }
 
 export const characters = chars;
+// The extended grapheme clusters (UAX #29, L214c): what a reader sees as
+// one character, a flag, an emoji with its skin tone, "e" with a
+// combining accent. The host's segmenter (Intl.Segmenter, ICU's rules).
+let segmenter: Intl.Segmenter | undefined;
+export function graphemes(t: string): string[] {
+  segmenter ??= new Intl.Segmenter("und", { granularity: "grapheme" });
+  return Array.from(segmenter.segment(t), (s) => s.segment);
+}
+export const graphemeCount = (t: string): number => { let n = 0; segmenter ??= new Intl.Segmenter("und", { granularity: "grapheme" }); for (const _ of segmenter.segment(t)) n++; return n; };
 
 // The first position where `part` starts; no answer if it isn't there
 // (Choice).
