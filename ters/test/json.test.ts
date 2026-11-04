@@ -99,7 +99,7 @@ test("json printed indented is JSON.stringify(value, null, step) (L190f)", async
   const value = { name: "Ada", tags: ["a", "b"], empty: [], none: {}, nested: { deep: [1, { x: null }] }, ok: true };
   for (const step of [2, 4, 0]) {
     const shown = await both((k) => k.call(lib("json printed indented"), k.call(lib("json read"), k.lit(JSON.stringify(value))), k.int(step)));
-    assert.equal(JSON.parse(shown), JSON.stringify(value, null, step));
+    assert.equal(JSON.parse(shown as string), JSON.stringify(value, null, step));
   }
-  assert.equal(JSON.parse(await both((k) => k.call(lib("json printed indented"), k.call(lib("json read"), k.lit("[]")), k.int(2)))), "[]");
+  assert.equal(JSON.parse((await both((k) => k.call(lib("json printed indented"), k.call(lib("json read"), k.lit("[]")), k.int(2)))) as string), "[]");
 });
