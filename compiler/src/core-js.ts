@@ -520,8 +520,9 @@ export function corePageScript(ir: CoreIR, name: string, page: string, title: st
 // The audio thread's script for a page with sound (C137d4): the printed
 // functions, with core-sound.ts (`sound`, which a bundler takes in)
 // running main again there and playing its block functions; `sound`
-// may be a prebuilt runtime's global, as for a page.
-export function coreSoundScript(ir: CoreIR, name: string, sound: string): string {
+// may be a prebuilt runtime's global, as for a page. `hosts`: the
+// program's hosts/js.js, asked there too (C137d10).
+export function coreSoundScript(ir: CoreIR, name: string, sound: string, hosts?: Hosts): string {
   const fi = ir.funcs.findIndex((g) => g.name === name && !g.inner && !g.budgeted);
   if (fi < 0 || ir.funcs[fi].params.length) throw new Error(`${name}: not compiled, or not a page's main`);
   const { js, names, worlds } = emitCoreJs(ir);
@@ -529,8 +530,9 @@ export function coreSoundScript(ir: CoreIR, name: string, sound: string): string
   return wrapped(sound, [
     using("startCoreSound", sound),
     ...solverFor(code, sound),
+    ...(hosts ? [`import $hostAnswers from ${JSON.stringify(hosts.file)};`] : []),
     `startCoreSound(${JSON.stringify(ir.tables.map(tableSpec))}, ${JSON.stringify(worlds)}, (R) => {`,
     js,
-    `}, ${JSON.stringify(names[fi])}, ${code});`,
+    `}, ${JSON.stringify(names[fi])}, ${code}${hosts ? `, { answers: $hostAnswers, ops: ${JSON.stringify(hosts.ops)} }` : ""});`,
   ]);
 }
