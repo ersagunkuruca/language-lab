@@ -19,8 +19,9 @@ import { reasonOf, STOPS } from "./stops.ts";
 
 export class Unsupported extends Error {}
 // `node` and `def`: where in the program it stopped (C143), when the
-// printed program says.
-export class Stopped extends Error { node?: Id; def?: Id; constructor(why: string, at?: { node: Id; def: Id }) { super(why); if (at) { this.node = at.node; this.def = at.def; } } }
+// printed program says; `defName`, the definition's name, which a run of
+// main prints after the reason (C143b).
+export class Stopped extends Error { node?: Id; def?: Id; defName?: string; constructor(why: string, at?: { node: Id; def: Id; name?: string }) { super(why); if (at) { this.node = at.node; this.def = at.def; if (at.name) this.defName = at.name; } } }
 export class Aborted { reason: unknown; esc: number; constructor(reason: unknown, esc: number) { this.reason = reason; this.esc = esc; } }
 export const FAIL = { fail: true }, OUT = { out: true };
 
@@ -247,7 +248,7 @@ export const RUNTIME = {
     if (f.code) return f.code(f, ...xs);
     try { return f(...xs); } catch (e) { if (e === FAIL) return FAIL; throw e; }
   },
-  stop: (i: number, node?: Id, def?: Id): never => { throw new Stopped(reasonOf(i), node && def ? { node, def } : undefined); },
+  stop: (i: number, node?: Id, def?: Id, name?: string): never => { throw new Stopped(reasonOf(i), node && def ? { node, def, name } : undefined); },
   mod: (a: number, b: number) => ((a % b) + b) % b,
   unsupported: (what: string): never => { throw new Unsupported(what); },
   int: (s: string) => I.norm(BigInt(s)),
@@ -385,7 +386,7 @@ export function runCoreFn(fn: (...xs: unknown[]) => unknown, m: MainSpec, args: 
     else v = fn(...xs);
   } catch (e) {
     if (e instanceof Aborted) { err(String(e.reason)); return 1; }
-    if (e instanceof Stopped) { err(e.message); return 1; }
+    if (e instanceof Stopped) { err(e.defName ? `${e.message} (in ${e.defName})` : e.message); return 1; }
     if (e === FAIL) throw new Error("main had no answer");
     throw e;
   }

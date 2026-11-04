@@ -36,7 +36,7 @@
 import { bordered } from "../../ters/src/lang/border.ts";
 import { Aborted, type Runtime, type World } from "../../ters/src/lang/run.ts";
 import { MATH_DATA, MATH_DATA_AT } from "./wasm-math.ts";
-import { assemble, POW5, runtime, textBytes, WASI_IMPORTS, type RtFn, type VT } from "./wasm-rt.ts";
+import { assemble, POW5, runtime, textBytes, WASI_IMPORTS, wasiStop, type RtFn, type VT } from "./wasm-rt.ts";
 import { TABLE_RT, tableRt } from "./wasm-table.ts";
 import { reasonOf, siteOf } from "./stops.ts";
 import type { Id } from "../../ters/src/model.ts";
@@ -126,7 +126,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean } = {}): Module
   // TextList and TextOption makers the module's own helpers.
   const rtNames: string[] = [], wasiImports: string[] = [];
   // A table's functions are written for its types (wasm-table.ts, C63j).
-  const rt = (name: string): RtFn => (TABLE_RT.test(name) ? tableRt(name, lowered.tables) : runtime(name));
+  const rt = (name: string): RtFn => (TABLE_RT.test(name) ? tableRt(name, lowered.tables) : name === "wasi.stop" ? { ...wasiStop(lowered.stops ?? []), name } : runtime(name));
   const need = (name: string) => {
     if (rtNames.includes(name)) return;
     if (name.startsWith("wasi_")) { if (!wasiImports.includes(name)) wasiImports.push(name); return; }

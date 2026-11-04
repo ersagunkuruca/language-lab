@@ -295,8 +295,12 @@ const FNS: Record<string, Fn> = {
     uses: [],
     c: `static lab_int lab_int_mul(lab_int x, lab_int y) {
   if (LAB_IS_SMALL(x) && LAB_IS_SMALL(y)) {
-    int64_t a = LAB_VAL(x), b = LAB_VAL(y);
+    int64_t a = LAB_VAL(x), b = LAB_VAL(y), r;
+#if defined(__GNUC__) || defined(__clang__)
+    if (!__builtin_mul_overflow(a, b, &r)) return lab__int64(r);
+#else
     if (a > -2147483648LL && a < 2147483648LL && b > -2147483648LL && b < 2147483648LL) return lab__int64(a * b);
+#endif
   }
   lab__mag a, b;
   lab__mag_of(x, &a); lab__mag_of(y, &b);
@@ -372,6 +376,22 @@ const FNS: Record<string, Fn> = {
   "word64.narrow": { uses: ["word64.wrap"], c: `static int64_t lab_word64_narrow(lab_int x) { return lab_word64_wrap(x); }` },
   "word64.shiftDown": { uses: [], c: `static int64_t lab_word64_shiftDown(int64_t x, lab_int n) { int64_t k = lab__clamp(n); lab_int_drop(n); return k >= 64 || k <= -64 ? 0 : k >= 0 ? (int64_t)((uint64_t)x >> k) : (int64_t)((uint64_t)x << -k); }` },
   "word32.shiftDown": { uses: [], c: `static int32_t lab_word32_shiftDown(int32_t x, lab_int n) { int64_t k = lab__clamp(n); lab_int_drop(n); return k >= 32 || k <= -32 ? 0 : k >= 0 ? (int32_t)((uint32_t)x >> k) : (int32_t)((uint32_t)x << -k); }` },
+  // floor(a · b / 2ⁿ) for 0 ≤ n < 64 (wide-products.ts, L89): the 128-bit
+  // product of two small Ints, shifted, when the answer is small too;
+  // otherwise the product and the shift.
+  "int.mulShift": {
+    uses: ["int.mul", "int.shiftDown"],
+    c: `static lab_int lab_int_mulShift(lab_int a, lab_int b, lab_int n) {
+#ifdef __SIZEOF_INT128__
+  if (LAB_IS_SMALL(a) && LAB_IS_SMALL(b) && LAB_IS_SMALL(n)) {
+    __extension__ typedef __int128 wide;
+    wide r = ((wide)LAB_VAL(a) * LAB_VAL(b)) >> LAB_VAL(n);
+    if (r >= INT64_MIN && r <= INT64_MAX) return lab__int64((int64_t)r);
+  }
+#endif
+  return lab_int_shiftDown(lab_int_mul(a, b), n);
+}`,
+  },
   // floor(a / 2ⁿ), a negative n shifting up (int.ts shiftDown, C150b):
   // a 64-bit shift when both are small and n ≥ 0, else floor division by
   // 2ⁿ (or · 2⁻ⁿ); past a's last limb only its sign is left.

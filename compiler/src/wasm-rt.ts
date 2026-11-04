@@ -2992,7 +2992,7 @@ ${drop}
       call $int.addsm`,
   },
   "int.mul": {
-    params: [["a", "int"], ["b", "int"]], result: "int", locals: [], uses: ["int.small", "int.of", "int.negative", "int.mag", "mag.mul", "int.norm"], native: true,
+    params: [["a", "int"], ["b", "int"]], result: "int", locals: [["x", "i64"], ["y", "i64"], ["r", "i64"]], uses: ["int.small", "int.of", "int.negative", "int.mag", "mag.mul", "int.norm"], native: true,
     body: `
       local.get $a
       ref.test i31
@@ -3007,6 +3007,55 @@ ${drop}
         i64.mul
         call $int.of
         return
+      end
+      ;; two i64s whose product fits one: it doesn't when r / x isn't y,
+      ;; or x is −1 and y the least i64 (whose quotient traps)
+      local.get $a
+      ref.test $huge
+      local.get $b
+      ref.test $huge
+      i32.or
+      i32.eqz
+      if void
+        local.get $a
+        call $int.small
+        local.tee $x
+        local.get $b
+        call $int.small
+        local.tee $y
+        i64.mul
+        local.set $r
+        local.get $x
+        i64.eqz
+        if void
+          i64.const 0
+          call $int.of
+          return
+        end
+        local.get $x
+        i64.const -1
+        i64.eq
+        if void
+          local.get $y
+          i64.const -9223372036854775808
+          i64.ne
+          if void
+            local.get $r
+            call $int.of
+            return
+          end
+        else
+          local.get $r
+          local.get $x
+          i64.div_s
+          local.get $y
+          i64.eq
+          if void
+            local.get $r
+            call $int.of
+            return
+          end
+        end
       end
       local.get $a
       call $int.negative
@@ -5142,6 +5191,133 @@ ${drop}
   // floor(a / 2ⁿ), a negative n shifting up (int.ts shiftDown, C150b):
   // an i64 shift when both fit one and n ≥ 0, else floor division by 2ⁿ
   // (or · 2⁻ⁿ), and past a's last limb only its sign is left.
+  // floor(a · b / 2ⁿ) for 0 ≤ n < 64 (wide-products.ts, L89): when a and b
+  // fit an i64, their 128-bit product from four 32-bit ones, shifted; when
+  // either is past 64 bits, or the answer is, the product and the shift.
+  "int.mulShift": {
+    params: [["a", "int"], ["b", "int"], ["n", "int"]], result: "int", locals: [["x", "i64"], ["y", "i64"], ["s", "i64"], ["lo", "i64"], ["hi", "i64"], ["p", "i64"], ["q", "i64"], ["r", "i64"]], uses: ["int.small", "int.of", "int.mul", "int.shiftDown"], native: true,
+    body: `
+      local.get $a
+      ref.test $huge
+      local.get $b
+      ref.test $huge
+      i32.or
+      i32.eqz
+      if void
+        local.get $a
+        call $int.small
+        local.set $x
+        local.get $b
+        call $int.small
+        local.set $y
+        local.get $n
+        call $int.small
+        local.set $s
+        local.get $x
+        local.get $y
+        i64.mul
+        local.set $lo
+        ;; the unsigned high half: x1·y1 + carries of x0·y1, x1·y0 and x0·y0
+        local.get $x
+        i64.const 4294967295
+        i64.and
+        local.get $y
+        i64.const 32
+        i64.shr_u
+        i64.mul
+        local.set $p
+        local.get $x
+        i64.const 32
+        i64.shr_u
+        local.get $y
+        i64.const 4294967295
+        i64.and
+        i64.mul
+        local.set $q
+        local.get $x
+        i64.const 4294967295
+        i64.and
+        local.get $y
+        i64.const 4294967295
+        i64.and
+        i64.mul
+        i64.const 32
+        i64.shr_u
+        local.get $p
+        i64.const 4294967295
+        i64.and
+        i64.add
+        local.get $q
+        i64.const 4294967295
+        i64.and
+        i64.add
+        i64.const 32
+        i64.shr_u
+        local.get $p
+        i64.const 32
+        i64.shr_u
+        i64.add
+        local.get $q
+        i64.const 32
+        i64.shr_u
+        i64.add
+        local.get $x
+        i64.const 32
+        i64.shr_u
+        local.get $y
+        i64.const 32
+        i64.shr_u
+        i64.mul
+        i64.add
+        ;; signed: less y when x < 0, less x when y < 0
+        local.get $y
+        i64.const 0
+        local.get $x
+        i64.const 0
+        i64.lt_s
+        select
+        i64.sub
+        local.get $x
+        i64.const 0
+        local.get $y
+        i64.const 0
+        i64.lt_s
+        select
+        i64.sub
+        local.set $hi
+        ;; the low 64 bits of the shifted product, and its sign's check
+        local.get $lo
+        local.get $lo
+        local.get $s
+        i64.shr_u
+        local.get $hi
+        i64.const 64
+        local.get $s
+        i64.sub
+        i64.shl
+        i64.or
+        local.get $s
+        i64.eqz
+        select
+        local.tee $r
+        i64.const 63
+        i64.shr_s
+        local.get $hi
+        local.get $s
+        i64.shr_s
+        i64.eq
+        if void
+          local.get $r
+          call $int.of
+          return
+        end
+      end
+      local.get $a
+      local.get $b
+      call $int.mul
+      local.get $n
+      call $int.shiftDown`,
+  },
   "int.shiftDown": {
     params: [["a", "int"], ["n", "int"]], result: "int", locals: [["k", "i64"], ["m", "i32"]], uses: ["int.small", "int.of", "int.negative", "int.limbs", "int.quotient", "int.power", "int.mul"], native: true,
     body: `
@@ -6982,6 +7158,38 @@ const TABLES: Record<string, Omit<RtFn, "name" | "body" | "locals" | "uses">> = 
   at: { params: [["t", "table"], ["k", "key"]], result: "value", partial: true },
   entries: { params: [["t", "table"]], result: "list" },
 };
+// A stop's reason to standard error and exit 1 (L125c2), followed by the
+// definition it is in when its site has a name (C143b): `sites` are the
+// lowering's stop sites, so wasm.ts writes this function for each module.
+export function wasiStop(sites: { name?: string }[]): Omit<RtFn, "name"> {
+  const named = sites.map((x, j) => [x.name, j] as const).filter((x): x is readonly [string, number] => !!x[0]);
+  return {
+    params: [["i", "f64"]], result: "f64", locals: [["s", "f64"], ["t", "text"]], uses: ["wasi.line", "wasi_proc_exit", ...(named.length ? ["text.concat"] : [])],
+    body: `
+      local.get $i
+      f64.const ${SITES}
+      f64.div
+      f64.floor
+      local.tee $s
+      f64.const ${SITES}
+      f64.mul
+      local.get $i
+      f64.sub
+      f64.neg
+      local.set $i
+      ${lit(STOPS[0])}
+      local.set $t
+      ${STOPS.map((why, i) => `local.get $i\n      f64.const ${i}\n      f64.eq\n      if void\n        ${lit(why)}\n        local.set $t\n      end`).join("\n      ")}
+      ${named.map(([name, j]) => `local.get $s\n      f64.const ${j + 1}\n      f64.eq\n      if void\n        local.get $t\n        ${lit(` (in ${name})`)}\n        call $text.concat\n        local.set $t\n      end`).join("\n      ")}
+      i32.const 2
+      local.get $t
+      call $wasi.line
+      i32.const 1
+      call $wasi_proc_exit
+      unreachable`,
+  };
+}
+
 export const runtime = (name: string): RtFn => {
   const tb = /^table\.(\w+)\.t\d+(?:\.e\d+)?$/.exec(name);
   if (tb) {
@@ -7225,23 +7433,7 @@ const WASI: Record<string, Omit<RtFn, "name">> = {
   },
   // The program stops with STOPS[i] (L125c2): its reason to standard
   // error, then exit 1, as an Abort nothing handled does.
-  "wasi.stop": {
-    params: [["i", "f64"]], result: "f64", locals: [], uses: ["wasi.line", "wasi_proc_exit"],
-    body: `
-      local.get $i
-      local.get $i
-      f64.const ${SITES}
-      f64.div
-      f64.floor
-      f64.const ${SITES}
-      f64.mul
-      f64.sub
-      local.set $i
-      ${STOPS.map((why, i) => `local.get $i\n      f64.const ${i}\n      f64.eq\n      if void\n        i32.const 2\n        ${lit(why)}\n        call $wasi.line\n      end`).join("\n      ")}
-      i32.const 1
-      call $wasi_proc_exit
-      unreachable`,
-  },
+  "wasi.stop": wasiStop([]),
   // The fuel, read, and swapped for another (C137c21: the rest of a search
   // run on the budget outside the one it is in).
   "fuel.get": { params: [], result: "f64", locals: [], uses: [], body: "global.get $fuel" },

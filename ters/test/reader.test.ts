@@ -578,3 +578,23 @@ test("typed fraction at a type with a Literal is a literal of that type, and edi
   assert.ok(e.ok, !e.ok ? e.reason : "");
   if (e.ok) assert.deepEqual({ ...e.code.nodes[half] }, { id: half, kind: "lit", value: "3/4", of: FIXED_TYPE });
 });
+
+// √ reads as it prints, √x and √(x + 1), and a function written out and
+// called where it is, ((t) => t · 2)(x), is a let (E249). On Mandelbrot
+// escape's z.re, cleared to a hole.
+test("typed text reads √ and a function called where it is written", () => {
+  const p = loadProgram(join(root, "examples", "mandelbrot"));
+  const { code } = p, names = p.pres.names, escape = p.named("escape");
+  const re = subtree(code, escape).map((x) => code.nodes[x]).find((n): n is Call => isCall(n) && code.nodes[n.fn]?.kind === "ref" && names[(code.nodes[n.fn] as NodeOf<"ref">).target] === "re" && code.nodes[(code.nodes[n.fn] as NodeOf<"ref">).target].kind === "field")!;
+  const open = replace(code, re.id, () => ({ kind: "hole" }));
+  const info = infer(open, names);
+  const shown = (text: string) => {
+    const r = fillValue(open, names, info, re.id, text, escape);
+    assert.ok(r.ok, !r.ok ? `${text}: ${r.reason}` : "");
+    return r.ok ? renderLet(r.code, { ...p.pres, names: r.names }, escape) : "";
+  };
+  assert.match(shown("√z.re · 2"), /sqrt\(re\(z\)\) · 2|√re\(z\) · 2|√z\.re · 2/);
+  assert.match(shown("√(z.re + 1)"), /sqrt\(re\(z\) \+ 1\)|√\(re\(z\) \+ 1\)|√\(z\.re \+ 1\)/);
+  // One let per input, each printed here as the function it is, called.
+  assert.match(shown("((t, u) => t · u)(z.re, 2)"), /\(\(t\) => \(\(u\) => t · u\)\(2\)\)\(re\(z\)\)/);
+});
