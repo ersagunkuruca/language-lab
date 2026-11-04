@@ -216,7 +216,7 @@ export function palette(host: PaletteHost) {
     const shown = !q ? all : all.filter((x) => symbol(x.l) || also(x.l) || x.l.some((s) => s.toLowerCase().includes(q)) || inNote(x.f)).map((x) => { const r = rank(x); return { ...x, l: found(x, r), r }; }).sort((a, b) => a.r - b.r);
     // Unsearched, the first 40 (the rest are a search away); searched, all.
     const cap = q ? shown.length : 40;
-    const input = h("input", { id: field, type: "search", value: ui.query, autocomplete: "off", spellcheck: "false", placeholder: later ? "Working out what fits here…" : `${all.length} things fit here. Search…` }) as HTMLInputElement;
+    const input = h("input", { id: field, type: "search", value: ui.query, autocomplete: "off", spellcheck: "false", "aria-label": "Search what fits this hole", "aria-controls": `${field}-list`, placeholder: later ? "Working out what fits here…" : `${all.length} things fit here. Search…` }) as HTMLInputElement;
     // Typing redraws the list on every key, but what's typed is read (a
     // whole check per reading) only once typing pauses (E173: 81 keys took
     // 114 s). Enter reads it at once.
@@ -256,7 +256,7 @@ export function palette(host: PaletteHost) {
       }
       if (value) runValue(); else if (shown[0]) run(shown[0]);
     });
-    const list = h("div", { class: "opts palette" });
+    const list = h("div", { class: "opts palette", id: `${field}-list`, role: "group", "aria-label": "What fits here" });
     if (later) list.append(h("p", { class: "hint" }, "Finding what fits…"));
     if (value?.choices) {
       // A field several types have, on a value nothing has settled: which
@@ -299,7 +299,22 @@ export function palette(host: PaletteHost) {
     else if (!shown.length && !value && later) list.append(h("p", { class: "hint" }, "Working out what fits here…"));
     else if (!shown.length && !value && pending && q) list.append(h("p", { class: "hint" }, "Reading what's typed…"));
     else if (!shown.length && !value) list.append(h("p", { class: "hint" }, `Nothing that fits matches. ${why || "Values and arithmetic can be typed too: 3, \"text\", [1, 2], x * 2, (x) => x + 1."}`));
-    return h("div", {}, h("div", { class: "sub-head" }, "Fill · only what type-checks here"), h("div", { class: "picker" }, input, list));
+    // By keyboard (E231d): Down from the search goes into the list, Up and
+    // Down move through it, Home and End to its ends, and Up from its first
+    // row back to the search.
+    const picker = h("div", { class: "picker" }, input, list);
+    picker.addEventListener("keydown", (e) => {
+      if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) return;
+      const opts = [...picker.querySelectorAll<HTMLButtonElement>(".palette .opt")];
+      const at = opts.indexOf(document.activeElement as HTMLButtonElement);
+      if (e.target === input ? e.key !== "ArrowDown" || !opts.length : at < 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.target === input) return opts[0].focus();
+      if (e.key === "ArrowUp" && at === 0) return input.focus();
+      opts[e.key === "Home" ? 0 : e.key === "End" ? opts.length - 1 : Math.min(opts.length - 1, Math.max(0, at + (e.key === "ArrowDown" ? 1 : -1)))].focus();
+    });
+    return h("div", {}, h("div", { class: "sub-head" }, "Fill · only what type-checks here"), picker);
   }
 
   // Typed text in the palette, read once (E173): per program, hole, text
