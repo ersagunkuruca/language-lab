@@ -8,7 +8,7 @@ import { infer } from "../src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { PROBLEMS, problemOf } from "../src/lang/problems.ts";
-import { NUMBER } from "../src/lang/types.ts";
+import { COMPLEX_TYPE, NUMBER, RATIONAL_TYPE } from "../src/lang/types.ts";
 import { ARITH, CELL_OPS, DIVIDE, EMBEDDING_V, FALSE, FIELDS, INT_OPS, JSON_OPS, LOG_OP, RELEASE_V, S, SET, SHOWN_V, SOME, TRIG_OPS, TRUE } from "../src/lang/std.ts";
 
 const bools = (k: Lang, b: string, extra: Parameters<Lang["match"]>[1] = []) =>
@@ -81,6 +81,14 @@ const SMALLEST: Record<string, (k: Lang) => void> = {
   "set-not-field": (k) => { k.type("Pt", [], [["pt", [["x", () => k.tref(NUMBER)]]]]); k.define(k.def("p"), k.fn(["r"], (r) => k.call(SET, k.fn(["q"], () => k.lit(1)), r, k.lit(2)))); },
   "path-not-field": (k) => k.define(k.def("p"), k.call(CELL_OPS.path, k.fn(["t"], () => k.lit(1)))),
   "results-unreachable": (k) => { const f = k.def("f"); k.define(f, k.fn(["a", "b"], (a, b) => k.call(ARITH.less, a, b))); k.results(f, "b"); },
+  "effect-as-type": (k) => { const a = ask(k); const t = k.type("Box", [], [["box", [["c", () => k.tref(a.def)]]]]); k.define(k.def("p"), k.fn(["b"], (b) => k.call(t.f["box.c"], b))); },
+  "interface-shape": (k) => { const d = k.interface("Sized", "a", [["size", (a) => k.tfun([k.tref(a)], k.tref(NUMBER))]]); (k.code.nodes[(k.code.nodes[d.def] as { body: string }).body] as { params: string[] }).params.push(k.binder("b")); },
+  "operation-not-function": (k) => { k.interface("Sized", "a", [["size", (a) => k.tref(a)]]); },
+  "fraction-literal": (k) => k.define(k.def("p"), k.at(RATIONAL_TYPE, "1/0")),
+  "number-literal": (k) => k.define(k.def("p"), k.at(COMPLEX_TYPE, "a")),
+  "shared-different-types": (k) => { const t = k.type("Shape", [], [["dot", [["r", () => k.tref(NUMBER)]]], ["disc", [["r", () => k.tref("type.text")]]]]); (k.code.nodes[t.f["disc.r"]] as { same?: string }).same = t.f["dot.r"]; k.define(k.def("p"), k.fn(["s"], (s) => k.call(t.f["dot.r"], s))); },
+  "shared-field-wrong": (k) => { const t = k.type("Shape", [], [["dot", [["r", () => k.tref(NUMBER)], ["q", () => k.tref(NUMBER)]]], ["disc", [["r", () => k.tref(NUMBER)]]]]); (k.code.nodes[t.f["dot.q"]] as { same?: string }).same = t.f["dot.r"]; k.define(k.def("p"), k.fn(["s"], (s) => k.call(t.f["dot.r"], s))); },
+  "mask-takes-one": (k) => { const t = k.type("Trail", [], [["trail", [["at", () => k.tref("type.vector of")]]]]); k.define(k.def("p"), k.fn(["s"], (s) => k.call(t.f["trail.at"], s))); },
   "not-a-number": (k) => k.define(k.def("p"), k.fn(["b"], (b) => k.match(b, [{ variant: TRUE, names: [], body: () => k.lit(1) }, { variant: FALSE, names: [], body: () => k.lit("a") }]))),
 };
 
