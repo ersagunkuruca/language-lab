@@ -4,7 +4,7 @@
 import { Builder } from "../builder.ts";
 import { merge, useNode, type Code, type Id, type NodeOf } from "../model.ts";
 import { prelude } from "../prelude.ts";
-import { BOOL, CONS, FALSE, NIL, S, std, TRUE, UNIT_V } from "./std.ts";
+import { BOOL, CONS, FALSE, NIL, RELEASE_V, S, std, TRUE, UNIT_V } from "./std.ts";
 import { INT } from "./types.ts";
 import { usesGiveTheirPorts } from "./ports.ts";
 
@@ -80,8 +80,9 @@ export class Lang extends Builder {
   // computation that performs it.
   // A handler; `done` is its case for the normal finish (L57), given the
   // computation's value.
-  handle(body: Id, cases: Case[], done?: [string, (x: Id) => Id]): Id {
-    return this.match(body, cases, done && this.fn([done[0]], done[1]));
+  // `release`: the handler's release case (L213a), last among its cases.
+  handle(body: Id, cases: Case[], done?: [string, (x: Id) => Id], release?: () => Id): Id {
+    return this.match(body, release ? [...cases, { variant: RELEASE_V, names: [], body: release }] : cases, done && this.fn([done[0]], done[1]));
   }
 
   tref(target: Id, ...args: Id[]): Id {

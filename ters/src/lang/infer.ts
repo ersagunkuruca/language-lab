@@ -24,7 +24,7 @@ import { computedForward, directionProblem, useDirections } from "./directions.t
 import { analyzer, derivedFrom, determinism, oneAnswer, solveMode, type Fn } from "./modes.ts";
 import { smoothDerivative as hasSmoothDerivative, smoothGradient as hasSmoothGradient, recordVariant, forgetDerived } from "./derive.ts";
 import { answerKeys } from "./ports.ts";
-import { ARITH, BOOL, CELL_OPS, EMBEDDING, EMBEDDING_V, LIST, DIVISION, FIELDS, JOBS, S, SET, SIGS, SMART, TRUE, TUPLE_MAX, tupleType } from "./std.ts";
+import { RELEASE_V, ARITH, BOOL, CELL_OPS, EMBEDDING, EMBEDDING_V, LIST, DIVISION, FIELDS, JOBS, S, SET, SIGS, SMART, TRUE, TUPLE_MAX, tupleType } from "./std.ts";
 import { countedCalls } from "./counting.ts";
 import { ratioParts } from "./int.ts";
 import { fieldPath, fieldPaths, placePath, readPaths } from "./records.ts";
@@ -545,6 +545,10 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     });
   };
 
+  // A release (L213a) is checked when every row is known (below): it may
+  // only log (checked where it is), and the computation it watches may not
+  // let a Choice out (checked when every row is known).
+  const releases: { n: Id; handled: Row }[] = [];
   const mono = new Map<Id, Type>();
   let current: Id[] = [];
   const recursiveCalls: { call: Call; params: Type[]; args: Type[] }[] = [];
@@ -1350,6 +1354,8 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // the effect, and the match doesn't (the ledger, ledger.ts).
   function handle(n: NodeOf<"match"> | NodeOf<"fold">, effect: Id, arms: NodeOf<"arm">[], env: Map<Id, Type>, row: Row, result: Type): Type {
     if (n.kind === "fold") err(n.id, `${nm(effect)} is an effect; its operations are handled with a match, not folded`);
+    const release = arms.find((a) => a.variant === RELEASE_V);
+    if (release) arms = arms.filter((a) => a !== release);
     const rest = s.next++;
     s.unifyRow({ effs: [], tail: rest }, row);
     const { params, self } = dataType(effect);
@@ -1407,6 +1413,16 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     }
     const missing = typedefOf(effect)!.variants.filter((v) => !seen.has(v));
     if (missing.length) err(n.id, `no case for ${missing.map(nm).join(", ")}: a handler handles every operation of ${nm(effect)}`);
+    if (release) {
+      if (release.binds.length) err(release.id, "a release is given nothing: release → …");
+      // What the release itself does, before its row joins the match's.
+      const own = s.freshRow();
+      unifyAt(release.body, { t: "con", id: "std.unit", args: [] }, expr(release.body, env, own), "the release");
+      const acts = s.resolveRow(own).effs.filter((e) => e !== "std.log");
+      if (acts.length) err(release.body, `a release runs on every exit, so it may only log: this one performs ${acts.map(nm).join(" and ")}`);
+      try { s.unifyRow(own, row); } catch (e) { if (!(e instanceof EffectError)) throw e; }
+      releases.push({ n: n.id, handled });
+    }
     return result;
   }
 
@@ -1616,6 +1632,9 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       if (!(e instanceof TypeError)) throw e;
       err(n.args[1], `this does ${show(of)}'s job at ${show(r)}, so its type is ${show(want)}, not ${show(by)}`);
     }
+  }
+  for (const r of releases) {
+    if (s.resolveRow(r.handled).effs.includes(CHOICE)) err(r.n, "a handler with a release can't let a Choice through, since a search could leave it and come back after the release: handle the Choice inside it (first, all, count or optional)");
   }
   if (again) return infer(code, names, reuse, opts);
   // Under a layer only this check's own are zonked: the layer's are already.
