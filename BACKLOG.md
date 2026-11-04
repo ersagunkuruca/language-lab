@@ -49,7 +49,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E251 | Move a let's function to its own definition (lifted, with what it reads around it as new inputs, as lift-lets.ts does) and the reverse, Put inside (a definition used in one place becomes a let there), so def or let is one click and never a rewrite; needs L224 so neither move changes the type | Ersagun 2026-11-04 13:23 (Learn thread: defs vs lambdas) | P2 | M | after L224 |
 
 ### Speed of editing
 
