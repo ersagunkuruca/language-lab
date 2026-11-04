@@ -807,6 +807,10 @@ export const TEXT_OPS = {
   // Case in a language (L214b, TEXT-2026-11-03.md §2): the same text in
   // the same Locale gives the same answer, so they are pure.
   uppercase: builtin("text.uppercase", "uppercase", pure([str, { t: "con", id: "std.locale", args: [] }], str), (t: string, l: { fields: unknown[] }) => T.uppercase(t, l.fields[0] as string)),
+  // People's order for text in a language (L214d, §4): the Unicode
+  // Collation Algorithm with CLDR's rules for it. compare and < don't
+  // change.
+  collate: builtin("text.collate", "collate", pure([str, str, { t: "con", id: "std.locale", args: [] }], { t: "con", id: "std.order", args: [] }), (a: string, b: string, l: { fields: unknown[] }) => ({ tag: [ORDER_V.before, ORDER_V.same, ORDER_V.after][T.collate(a, b, l.fields[0] as string) + 1], fields: [] })),
   lowercase: builtin("text.lowercase", "lowercase", pure([str, { t: "con", id: "std.locale", args: [] }], str), (t: string, l: { fields: unknown[] }) => T.lowercase(t, l.fields[0] as string)),
 };
 

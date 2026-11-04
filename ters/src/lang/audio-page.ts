@@ -9,7 +9,7 @@
 
 import type { Cells } from "./cells.ts";
 import { listens } from "./audio.ts";
-import { PROCESSOR, type Answers, type Write } from "./audio-worklet.ts";
+import { PROCESSOR, type Answers, type Write } from "./sound-thread.ts";
 import type { El } from "./html.ts";
 import type { Data, Value, World } from "./run.ts";
 import { HTML_V } from "./std.ts";

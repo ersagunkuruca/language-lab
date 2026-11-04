@@ -266,6 +266,7 @@ export const NOTES: Comments = {
   "builtin.text.uppercase": "The text in capitals as its language writes them: uppercase(\"istanbul\", locale(\"tr\")) is \"İSTANBUL\", and in English \"ISTANBUL\". For identifiers, hex and protocols, ascii uppercase changes a to z only.",
   "builtin.text.lowercase": "The text in small letters as its language writes them: lowercase(\"I\", locale(\"tr\")) is \"ı\". For identifiers and protocols, ascii lowercase changes A to Z only.",
   "std.locale": "A language, as a BCP 47 tag: locale(\"tr\"), locale(\"en-GB\"). What depends on the language takes one, so it is the same on every machine: uppercase(text, locale), lowercase(text, locale). A tag that can't be read means the root locale.",
+  "builtin.text.collate": "Which of two texts comes first in a language's order for people, as an Order: collate(\"çay\", \"dağ\", locale(\"tr\")) is before. collated(locale) makes one to give sort with.",
   "builtin.text.normalized": "The text in Unicode Normalization Form C: \"e\" with a combining accent becomes the one character \"é\". Text from the world (a file, a fetch, a line typed in, a page's field) already is; text built from pieces may not be, so normalize before comparing it.",
   "builtin.io.readLine": "The next line typed in, or none at the end.",
   "builtin.io.readFile": "The text in a file. Aborts if it can't be read.",

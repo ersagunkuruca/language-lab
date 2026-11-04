@@ -58279,6 +58279,841 @@
         ],
         "body": "@853gnn2112vv2vvvjj7tq8ljs0:4"
       },
+      "@0j9ln24pgvs4purkgkdku5qqc1": {
+        "id": "@0j9ln24pgvs4purkgkdku5qqc1",
+        "kind": "def",
+        "body": "@0j9ln24pgvs4purkgkdku5qqc1:1"
+      },
+      "@0j9ln24pgvs4purkgkdku5qqc1:2": {
+        "id": "@0j9ln24pgvs4purkgkdku5qqc1:2",
+        "kind": "binder"
+      },
+      "@0j9ln24pgvs4purkgkdku5qqc1:3": {
+        "id": "@0j9ln24pgvs4purkgkdku5qqc1:3",
+        "kind": "binder"
+      },
+      "@0j9ln24pgvs4purkgkdku5qqc1:4": {
+        "id": "@0j9ln24pgvs4purkgkdku5qqc1:4",
+        "kind": "binder"
+      },
+      "@0j9ln24pgvs4purkgkdku5qqc1:6": {
+        "id": "@0j9ln24pgvs4purkgkdku5qqc1:6",
+        "kind": "ref",
+        "target": "@0j9ln24pgvs4purkgkdku5qqc1:3"
+      },
+      "@0j9ln24pgvs4purkgkdku5qqc1:8": {
+        "id": "@0j9ln24pgvs4purkgkdku5qqc1:8",
+        "kind": "ref",
+        "target": "@0j9ln24pgvs4purkgkdku5qqc1:4"
+      },
+      "@0j9ln24pgvs4purkgkdku5qqc1:7": {
+        "id": "@0j9ln24pgvs4purkgkdku5qqc1:7",
+        "kind": "arm",
+        "variant": "std.list.nil",
+        "binds": [],
+        "results": [],
+        "body": "@0j9ln24pgvs4purkgkdku5qqc1:8"
+      },
+      "@0j9ln24pgvs4purkgkdku5qqc1:10": {
+        "id": "@0j9ln24pgvs4purkgkdku5qqc1:10",
+        "kind": "binder"
+      },
+      "@0j9ln24pgvs4purkgkdku5qqc1:11": {
+        "id": "@0j9ln24pgvs4purkgkdku5qqc1:11",
+        "kind": "binder"
+      },
+      "@0j9ln24pgvs4purkgkdku5qqc1:13": {
+        "id": "@0j9ln24pgvs4purkgkdku5qqc1:13",
+        "kind": "ref",
+        "target": "@0j9ln24pgvs4purkgkdku5qqc1:4"
+      },
+      "@0j9ln24pgvs4purkgkdku5qqc1:15": {
+        "id": "@0j9ln24pgvs4purkgkdku5qqc1:15",
+        "kind": "ref",
+        "target": "@0j9ln24pgvs4purkgkdku5qqc1:3"
+      },
+      "@0j9ln24pgvs4purkgkdku5qqc1:14": {
+        "id": "@0j9ln24pgvs4purkgkdku5qqc1:14",
+        "kind": "arm",
+        "variant": "std.list.nil",
+        "binds": [],
+        "results": [],
+        "body": "@0j9ln24pgvs4purkgkdku5qqc1:15"
+      },
+      "@0j9ln24pgvs4purkgkdku5qqc1:17": {
+        "id": "@0j9ln24pgvs4purkgkdku5qqc1:17",
+        "kind": "binder"
+      },
+      "@0j9ln24pgvs4purkgkdku5qqc1:18": {
+        "id": "@0j9ln24pgvs4purkgkdku5qqc1:18",
+        "kind": "binder"
+      },
+      "@0j9ln24pgvs4purkgkdku5qqc1:21": {
+        "id": "@0j9ln24pgvs4purkgkdku5qqc1:21",
+        "kind": "ref",
+        "target": "@0j9ln24pgvs4purkgkdku5qqc1:2"
+      },
+      "@0j9ln24pgvs4purkgkdku5qqc1:22": {
+        "id": "@0j9ln24pgvs4purkgkdku5qqc1:22",
+        "kind": "ref",
+        "target": "@0j9ln24pgvs4purkgkdku5qqc1:17"
+      },
+      "@0j9ln24pgvs4purkgkdku5qqc1:23": {
+        "id": "@0j9ln24pgvs4purkgkdku5qqc1:23",
+        "kind": "ref",
+        "target": "@0j9ln24pgvs4purkgkdku5qqc1:10"
+      },
+      "@0j9ln24pgvs4purkgkdku5qqc1:20": {
+        "id": "@0j9ln24pgvs4purkgkdku5qqc1:20",
+        "kind": "call",
+        "fn": "@0j9ln24pgvs4purkgkdku5qqc1:21",
+        "args": [
+          "@0j9ln24pgvs4purkgkdku5qqc1:22",
+          "@0j9ln24pgvs4purkgkdku5qqc1:23"
+        ]
+      },
+      "@0j9ln24pgvs4purkgkdku5qqc1:37": {
+        "id": "@0j9ln24pgvs4purkgkdku5qqc1:37",
+        "kind": "ref",
+        "target": "@0j9ln24pgvs4purkgkdku5qqc1"
+      },
+      "@0j9ln24pgvs4purkgkdku5qqc1:38": {
+        "id": "@0j9ln24pgvs4purkgkdku5qqc1:38",
+        "kind": "ref",
+        "target": "@0j9ln24pgvs4purkgkdku5qqc1:2"
+      },
+      "@0j9ln24pgvs4purkgkdku5qqc1:39": {
+        "id": "@0j9ln24pgvs4purkgkdku5qqc1:39",
+        "kind": "ref",
+        "target": "@0j9ln24pgvs4purkgkdku5qqc1:11"
+      },
+      "@0j9ln24pgvs4purkgkdku5qqc1:40": {
+        "id": "@0j9ln24pgvs4purkgkdku5qqc1:40",
+        "kind": "ref",
+        "target": "@0j9ln24pgvs4purkgkdku5qqc1:4"
+      },
+      "@0j9ln24pgvs4purkgkdku5qqc1:36": {
+        "id": "@0j9ln24pgvs4purkgkdku5qqc1:36",
+        "kind": "call",
+        "fn": "@0j9ln24pgvs4purkgkdku5qqc1:37",
+        "args": [
+          "@0j9ln24pgvs4purkgkdku5qqc1:38",
+          "@0j9ln24pgvs4purkgkdku5qqc1:39",
+          "@0j9ln24pgvs4purkgkdku5qqc1:40"
+        ]
+      },
+      "@0j9ln24pgvs4purkgkdku5qqc1:34": {
+        "id": "@0j9ln24pgvs4purkgkdku5qqc1:34",
+        "kind": "ref",
+        "target": "std.list.cons"
+      },
+      "@0j9ln24pgvs4purkgkdku5qqc1:35": {
+        "id": "@0j9ln24pgvs4purkgkdku5qqc1:35",
+        "kind": "ref",
+        "target": "@0j9ln24pgvs4purkgkdku5qqc1:10"
+      },
+      "@0j9ln24pgvs4purkgkdku5qqc1:33": {
+        "id": "@0j9ln24pgvs4purkgkdku5qqc1:33",
+        "kind": "call",
+        "fn": "@0j9ln24pgvs4purkgkdku5qqc1:34",
+        "args": [
+          "@0j9ln24pgvs4purkgkdku5qqc1:35",
+          "@0j9ln24pgvs4purkgkdku5qqc1:36"
+        ]
+      },
+      "@0j9ln24pgvs4purkgkdku5qqc1:29": {
+        "id": "@0j9ln24pgvs4purkgkdku5qqc1:29",
+        "kind": "ref",
+        "target": "@0j9ln24pgvs4purkgkdku5qqc1"
+      },
+      "@0j9ln24pgvs4purkgkdku5qqc1:30": {
+        "id": "@0j9ln24pgvs4purkgkdku5qqc1:30",
+        "kind": "ref",
+        "target": "@0j9ln24pgvs4purkgkdku5qqc1:2"
+      },
+      "@0j9ln24pgvs4purkgkdku5qqc1:31": {
+        "id": "@0j9ln24pgvs4purkgkdku5qqc1:31",
+        "kind": "ref",
+        "target": "@0j9ln24pgvs4purkgkdku5qqc1:3"
+      },
+      "@0j9ln24pgvs4purkgkdku5qqc1:32": {
+        "id": "@0j9ln24pgvs4purkgkdku5qqc1:32",
+        "kind": "ref",
+        "target": "@0j9ln24pgvs4purkgkdku5qqc1:18"
+      },
+      "@0j9ln24pgvs4purkgkdku5qqc1:28": {
+        "id": "@0j9ln24pgvs4purkgkdku5qqc1:28",
+        "kind": "call",
+        "fn": "@0j9ln24pgvs4purkgkdku5qqc1:29",
+        "args": [
+          "@0j9ln24pgvs4purkgkdku5qqc1:30",
+          "@0j9ln24pgvs4purkgkdku5qqc1:31",
+          "@0j9ln24pgvs4purkgkdku5qqc1:32"
+        ]
+      },
+      "@0j9ln24pgvs4purkgkdku5qqc1:26": {
+        "id": "@0j9ln24pgvs4purkgkdku5qqc1:26",
+        "kind": "ref",
+        "target": "std.list.cons"
+      },
+      "@0j9ln24pgvs4purkgkdku5qqc1:27": {
+        "id": "@0j9ln24pgvs4purkgkdku5qqc1:27",
+        "kind": "ref",
+        "target": "@0j9ln24pgvs4purkgkdku5qqc1:17"
+      },
+      "@0j9ln24pgvs4purkgkdku5qqc1:25": {
+        "id": "@0j9ln24pgvs4purkgkdku5qqc1:25",
+        "kind": "call",
+        "fn": "@0j9ln24pgvs4purkgkdku5qqc1:26",
+        "args": [
+          "@0j9ln24pgvs4purkgkdku5qqc1:27",
+          "@0j9ln24pgvs4purkgkdku5qqc1:28"
+        ]
+      },
+      "@0j9ln24pgvs4purkgkdku5qqc1:24": {
+        "id": "@0j9ln24pgvs4purkgkdku5qqc1:24",
+        "kind": "arm",
+        "variant": "std.order.before",
+        "binds": [],
+        "results": [],
+        "body": "@0j9ln24pgvs4purkgkdku5qqc1:25"
+      },
+      "@0j9ln24pgvs4purkgkdku5qqc1:19": {
+        "id": "@0j9ln24pgvs4purkgkdku5qqc1:19",
+        "kind": "match",
+        "scrutinee": "@0j9ln24pgvs4purkgkdku5qqc1:20",
+        "arms": [
+          "@0j9ln24pgvs4purkgkdku5qqc1:24"
+        ],
+        "otherwise": "@0j9ln24pgvs4purkgkdku5qqc1:33"
+      },
+      "@0j9ln24pgvs4purkgkdku5qqc1:16": {
+        "id": "@0j9ln24pgvs4purkgkdku5qqc1:16",
+        "kind": "arm",
+        "variant": "std.list.cons",
+        "binds": [
+          "@0j9ln24pgvs4purkgkdku5qqc1:17",
+          "@0j9ln24pgvs4purkgkdku5qqc1:18"
+        ],
+        "results": [
+          null,
+          null
+        ],
+        "body": "@0j9ln24pgvs4purkgkdku5qqc1:19"
+      },
+      "@0j9ln24pgvs4purkgkdku5qqc1:12": {
+        "id": "@0j9ln24pgvs4purkgkdku5qqc1:12",
+        "kind": "match",
+        "scrutinee": "@0j9ln24pgvs4purkgkdku5qqc1:13",
+        "arms": [
+          "@0j9ln24pgvs4purkgkdku5qqc1:14",
+          "@0j9ln24pgvs4purkgkdku5qqc1:16"
+        ],
+        "otherwise": null
+      },
+      "@0j9ln24pgvs4purkgkdku5qqc1:9": {
+        "id": "@0j9ln24pgvs4purkgkdku5qqc1:9",
+        "kind": "arm",
+        "variant": "std.list.cons",
+        "binds": [
+          "@0j9ln24pgvs4purkgkdku5qqc1:10",
+          "@0j9ln24pgvs4purkgkdku5qqc1:11"
+        ],
+        "results": [
+          null,
+          null
+        ],
+        "body": "@0j9ln24pgvs4purkgkdku5qqc1:12"
+      },
+      "@0j9ln24pgvs4purkgkdku5qqc1:5": {
+        "id": "@0j9ln24pgvs4purkgkdku5qqc1:5",
+        "kind": "match",
+        "scrutinee": "@0j9ln24pgvs4purkgkdku5qqc1:6",
+        "arms": [
+          "@0j9ln24pgvs4purkgkdku5qqc1:7",
+          "@0j9ln24pgvs4purkgkdku5qqc1:9"
+        ],
+        "otherwise": null
+      },
+      "@0j9ln24pgvs4purkgkdku5qqc1:1": {
+        "id": "@0j9ln24pgvs4purkgkdku5qqc1:1",
+        "kind": "lambda",
+        "params": [
+          "@0j9ln24pgvs4purkgkdku5qqc1:2",
+          "@0j9ln24pgvs4purkgkdku5qqc1:3",
+          "@0j9ln24pgvs4purkgkdku5qqc1:4"
+        ],
+        "body": "@0j9ln24pgvs4purkgkdku5qqc1:5"
+      },
+      "@fpbskjevmc3stp6qsbfdu9ti8l": {
+        "id": "@fpbskjevmc3stp6qsbfdu9ti8l",
+        "kind": "def",
+        "body": "@fpbskjevmc3stp6qsbfdu9ti8l:1"
+      },
+      "@fpbskjevmc3stp6qsbfdu9ti8l:2": {
+        "id": "@fpbskjevmc3stp6qsbfdu9ti8l:2",
+        "kind": "binder"
+      },
+      "@fpbskjevmc3stp6qsbfdu9ti8l:3": {
+        "id": "@fpbskjevmc3stp6qsbfdu9ti8l:3",
+        "kind": "binder"
+      },
+      "@fpbskjevmc3stp6qsbfdu9ti8l:4": {
+        "id": "@fpbskjevmc3stp6qsbfdu9ti8l:4",
+        "kind": "binder"
+      },
+      "@fpbskjevmc3stp6qsbfdu9ti8l:6": {
+        "id": "@fpbskjevmc3stp6qsbfdu9ti8l:6",
+        "kind": "ref",
+        "target": "@fpbskjevmc3stp6qsbfdu9ti8l:4"
+      },
+      "@fpbskjevmc3stp6qsbfdu9ti8l:11": {
+        "id": "@fpbskjevmc3stp6qsbfdu9ti8l:11",
+        "kind": "ref",
+        "target": "std.optional.some"
+      },
+      "@fpbskjevmc3stp6qsbfdu9ti8l:12": {
+        "id": "@fpbskjevmc3stp6qsbfdu9ti8l:12",
+        "kind": "ref",
+        "target": "@fpbskjevmc3stp6qsbfdu9ti8l:3"
+      },
+      "@fpbskjevmc3stp6qsbfdu9ti8l:10": {
+        "id": "@fpbskjevmc3stp6qsbfdu9ti8l:10",
+        "kind": "call",
+        "fn": "@fpbskjevmc3stp6qsbfdu9ti8l:11",
+        "args": [
+          "@fpbskjevmc3stp6qsbfdu9ti8l:12"
+        ]
+      },
+      "@fpbskjevmc3stp6qsbfdu9ti8l:13": {
+        "id": "@fpbskjevmc3stp6qsbfdu9ti8l:13",
+        "kind": "ref",
+        "target": "std.list.nil"
+      },
+      "@fpbskjevmc3stp6qsbfdu9ti8l:9": {
+        "id": "@fpbskjevmc3stp6qsbfdu9ti8l:9",
+        "kind": "ref",
+        "target": "std.list.cons"
+      },
+      "@fpbskjevmc3stp6qsbfdu9ti8l:8": {
+        "id": "@fpbskjevmc3stp6qsbfdu9ti8l:8",
+        "kind": "call",
+        "fn": "@fpbskjevmc3stp6qsbfdu9ti8l:9",
+        "args": [
+          "@fpbskjevmc3stp6qsbfdu9ti8l:10",
+          "@fpbskjevmc3stp6qsbfdu9ti8l:13"
+        ]
+      },
+      "@fpbskjevmc3stp6qsbfdu9ti8l:7": {
+        "id": "@fpbskjevmc3stp6qsbfdu9ti8l:7",
+        "kind": "arm",
+        "variant": "std.list.nil",
+        "binds": [],
+        "results": [],
+        "body": "@fpbskjevmc3stp6qsbfdu9ti8l:8"
+      },
+      "@fpbskjevmc3stp6qsbfdu9ti8l:15": {
+        "id": "@fpbskjevmc3stp6qsbfdu9ti8l:15",
+        "kind": "binder"
+      },
+      "@fpbskjevmc3stp6qsbfdu9ti8l:16": {
+        "id": "@fpbskjevmc3stp6qsbfdu9ti8l:16",
+        "kind": "binder"
+      },
+      "@fpbskjevmc3stp6qsbfdu9ti8l:18": {
+        "id": "@fpbskjevmc3stp6qsbfdu9ti8l:18",
+        "kind": "ref",
+        "target": "@fpbskjevmc3stp6qsbfdu9ti8l:15"
+      },
+      "@fpbskjevmc3stp6qsbfdu9ti8l:23": {
+        "id": "@fpbskjevmc3stp6qsbfdu9ti8l:23",
+        "kind": "ref",
+        "target": "std.optional.some"
+      },
+      "@fpbskjevmc3stp6qsbfdu9ti8l:24": {
+        "id": "@fpbskjevmc3stp6qsbfdu9ti8l:24",
+        "kind": "ref",
+        "target": "@fpbskjevmc3stp6qsbfdu9ti8l:3"
+      },
+      "@fpbskjevmc3stp6qsbfdu9ti8l:22": {
+        "id": "@fpbskjevmc3stp6qsbfdu9ti8l:22",
+        "kind": "call",
+        "fn": "@fpbskjevmc3stp6qsbfdu9ti8l:23",
+        "args": [
+          "@fpbskjevmc3stp6qsbfdu9ti8l:24"
+        ]
+      },
+      "@fpbskjevmc3stp6qsbfdu9ti8l:21": {
+        "id": "@fpbskjevmc3stp6qsbfdu9ti8l:21",
+        "kind": "ref",
+        "target": "std.list.cons"
+      },
+      "@fpbskjevmc3stp6qsbfdu9ti8l:25": {
+        "id": "@fpbskjevmc3stp6qsbfdu9ti8l:25",
+        "kind": "ref",
+        "target": "@fpbskjevmc3stp6qsbfdu9ti8l:16"
+      },
+      "@fpbskjevmc3stp6qsbfdu9ti8l:20": {
+        "id": "@fpbskjevmc3stp6qsbfdu9ti8l:20",
+        "kind": "call",
+        "fn": "@fpbskjevmc3stp6qsbfdu9ti8l:21",
+        "args": [
+          "@fpbskjevmc3stp6qsbfdu9ti8l:22",
+          "@fpbskjevmc3stp6qsbfdu9ti8l:25"
+        ]
+      },
+      "@fpbskjevmc3stp6qsbfdu9ti8l:19": {
+        "id": "@fpbskjevmc3stp6qsbfdu9ti8l:19",
+        "kind": "arm",
+        "variant": "std.optional.none",
+        "binds": [],
+        "results": [],
+        "body": "@fpbskjevmc3stp6qsbfdu9ti8l:20"
+      },
+      "@fpbskjevmc3stp6qsbfdu9ti8l:27": {
+        "id": "@fpbskjevmc3stp6qsbfdu9ti8l:27",
+        "kind": "binder"
+      },
+      "@fpbskjevmc3stp6qsbfdu9ti8l:30": {
+        "id": "@fpbskjevmc3stp6qsbfdu9ti8l:30",
+        "kind": "ref",
+        "target": "std.optional.none"
+      },
+      "@fpbskjevmc3stp6qsbfdu9ti8l:35": {
+        "id": "@fpbskjevmc3stp6qsbfdu9ti8l:35",
+        "kind": "ref",
+        "target": "@0j9ln24pgvs4purkgkdku5qqc1"
+      },
+      "@fpbskjevmc3stp6qsbfdu9ti8l:36": {
+        "id": "@fpbskjevmc3stp6qsbfdu9ti8l:36",
+        "kind": "ref",
+        "target": "@fpbskjevmc3stp6qsbfdu9ti8l:2"
+      },
+      "@fpbskjevmc3stp6qsbfdu9ti8l:37": {
+        "id": "@fpbskjevmc3stp6qsbfdu9ti8l:37",
+        "kind": "ref",
+        "target": "@fpbskjevmc3stp6qsbfdu9ti8l:3"
+      },
+      "@fpbskjevmc3stp6qsbfdu9ti8l:38": {
+        "id": "@fpbskjevmc3stp6qsbfdu9ti8l:38",
+        "kind": "ref",
+        "target": "@fpbskjevmc3stp6qsbfdu9ti8l:27"
+      },
+      "@fpbskjevmc3stp6qsbfdu9ti8l:34": {
+        "id": "@fpbskjevmc3stp6qsbfdu9ti8l:34",
+        "kind": "call",
+        "fn": "@fpbskjevmc3stp6qsbfdu9ti8l:35",
+        "args": [
+          "@fpbskjevmc3stp6qsbfdu9ti8l:36",
+          "@fpbskjevmc3stp6qsbfdu9ti8l:37",
+          "@fpbskjevmc3stp6qsbfdu9ti8l:38"
+        ]
+      },
+      "@fpbskjevmc3stp6qsbfdu9ti8l:32": {
+        "id": "@fpbskjevmc3stp6qsbfdu9ti8l:32",
+        "kind": "ref",
+        "target": "@fpbskjevmc3stp6qsbfdu9ti8l"
+      },
+      "@fpbskjevmc3stp6qsbfdu9ti8l:33": {
+        "id": "@fpbskjevmc3stp6qsbfdu9ti8l:33",
+        "kind": "ref",
+        "target": "@fpbskjevmc3stp6qsbfdu9ti8l:2"
+      },
+      "@fpbskjevmc3stp6qsbfdu9ti8l:39": {
+        "id": "@fpbskjevmc3stp6qsbfdu9ti8l:39",
+        "kind": "ref",
+        "target": "@fpbskjevmc3stp6qsbfdu9ti8l:16"
+      },
+      "@fpbskjevmc3stp6qsbfdu9ti8l:31": {
+        "id": "@fpbskjevmc3stp6qsbfdu9ti8l:31",
+        "kind": "call",
+        "fn": "@fpbskjevmc3stp6qsbfdu9ti8l:32",
+        "args": [
+          "@fpbskjevmc3stp6qsbfdu9ti8l:33",
+          "@fpbskjevmc3stp6qsbfdu9ti8l:34",
+          "@fpbskjevmc3stp6qsbfdu9ti8l:39"
+        ]
+      },
+      "@fpbskjevmc3stp6qsbfdu9ti8l:29": {
+        "id": "@fpbskjevmc3stp6qsbfdu9ti8l:29",
+        "kind": "ref",
+        "target": "std.list.cons"
+      },
+      "@fpbskjevmc3stp6qsbfdu9ti8l:28": {
+        "id": "@fpbskjevmc3stp6qsbfdu9ti8l:28",
+        "kind": "call",
+        "fn": "@fpbskjevmc3stp6qsbfdu9ti8l:29",
+        "args": [
+          "@fpbskjevmc3stp6qsbfdu9ti8l:30",
+          "@fpbskjevmc3stp6qsbfdu9ti8l:31"
+        ]
+      },
+      "@fpbskjevmc3stp6qsbfdu9ti8l:26": {
+        "id": "@fpbskjevmc3stp6qsbfdu9ti8l:26",
+        "kind": "arm",
+        "variant": "std.optional.some",
+        "binds": [
+          "@fpbskjevmc3stp6qsbfdu9ti8l:27"
+        ],
+        "results": [
+          null
+        ],
+        "body": "@fpbskjevmc3stp6qsbfdu9ti8l:28"
+      },
+      "@fpbskjevmc3stp6qsbfdu9ti8l:17": {
+        "id": "@fpbskjevmc3stp6qsbfdu9ti8l:17",
+        "kind": "match",
+        "scrutinee": "@fpbskjevmc3stp6qsbfdu9ti8l:18",
+        "arms": [
+          "@fpbskjevmc3stp6qsbfdu9ti8l:19",
+          "@fpbskjevmc3stp6qsbfdu9ti8l:26"
+        ],
+        "otherwise": null
+      },
+      "@fpbskjevmc3stp6qsbfdu9ti8l:14": {
+        "id": "@fpbskjevmc3stp6qsbfdu9ti8l:14",
+        "kind": "arm",
+        "variant": "std.list.cons",
+        "binds": [
+          "@fpbskjevmc3stp6qsbfdu9ti8l:15",
+          "@fpbskjevmc3stp6qsbfdu9ti8l:16"
+        ],
+        "results": [
+          null,
+          null
+        ],
+        "body": "@fpbskjevmc3stp6qsbfdu9ti8l:17"
+      },
+      "@fpbskjevmc3stp6qsbfdu9ti8l:5": {
+        "id": "@fpbskjevmc3stp6qsbfdu9ti8l:5",
+        "kind": "match",
+        "scrutinee": "@fpbskjevmc3stp6qsbfdu9ti8l:6",
+        "arms": [
+          "@fpbskjevmc3stp6qsbfdu9ti8l:7",
+          "@fpbskjevmc3stp6qsbfdu9ti8l:14"
+        ],
+        "otherwise": null
+      },
+      "@fpbskjevmc3stp6qsbfdu9ti8l:1": {
+        "id": "@fpbskjevmc3stp6qsbfdu9ti8l:1",
+        "kind": "lambda",
+        "params": [
+          "@fpbskjevmc3stp6qsbfdu9ti8l:2",
+          "@fpbskjevmc3stp6qsbfdu9ti8l:3",
+          "@fpbskjevmc3stp6qsbfdu9ti8l:4"
+        ],
+        "body": "@fpbskjevmc3stp6qsbfdu9ti8l:5"
+      },
+      "@mktutcqgr4iar13rs9r4sb7pmn": {
+        "id": "@mktutcqgr4iar13rs9r4sb7pmn",
+        "kind": "def",
+        "body": "@mktutcqgr4iar13rs9r4sb7pmn:1"
+      },
+      "@mktutcqgr4iar13rs9r4sb7pmn:2": {
+        "id": "@mktutcqgr4iar13rs9r4sb7pmn:2",
+        "kind": "binder"
+      },
+      "@mktutcqgr4iar13rs9r4sb7pmn:3": {
+        "id": "@mktutcqgr4iar13rs9r4sb7pmn:3",
+        "kind": "binder"
+      },
+      "@mktutcqgr4iar13rs9r4sb7pmn:6": {
+        "id": "@mktutcqgr4iar13rs9r4sb7pmn:6",
+        "kind": "ref",
+        "target": "@mktutcqgr4iar13rs9r4sb7pmn:2"
+      },
+      "@mktutcqgr4iar13rs9r4sb7pmn:8": {
+        "id": "@mktutcqgr4iar13rs9r4sb7pmn:8",
+        "kind": "ref",
+        "target": "std.list.nil"
+      },
+      "@mktutcqgr4iar13rs9r4sb7pmn:7": {
+        "id": "@mktutcqgr4iar13rs9r4sb7pmn:7",
+        "kind": "arm",
+        "variant": "std.list.nil",
+        "binds": [],
+        "results": [],
+        "body": "@mktutcqgr4iar13rs9r4sb7pmn:8"
+      },
+      "@mktutcqgr4iar13rs9r4sb7pmn:10": {
+        "id": "@mktutcqgr4iar13rs9r4sb7pmn:10",
+        "kind": "binder"
+      },
+      "@mktutcqgr4iar13rs9r4sb7pmn:11": {
+        "id": "@mktutcqgr4iar13rs9r4sb7pmn:11",
+        "kind": "binder"
+      },
+      "@mktutcqgr4iar13rs9r4sb7pmn:12": {
+        "id": "@mktutcqgr4iar13rs9r4sb7pmn:12",
+        "kind": "binder"
+      },
+      "@mktutcqgr4iar13rs9r4sb7pmn:19": {
+        "id": "@mktutcqgr4iar13rs9r4sb7pmn:19",
+        "kind": "ref",
+        "target": "std.list.nil"
+      },
+      "@mktutcqgr4iar13rs9r4sb7pmn:17": {
+        "id": "@mktutcqgr4iar13rs9r4sb7pmn:17",
+        "kind": "ref",
+        "target": "std.list.cons"
+      },
+      "@mktutcqgr4iar13rs9r4sb7pmn:18": {
+        "id": "@mktutcqgr4iar13rs9r4sb7pmn:18",
+        "kind": "ref",
+        "target": "@mktutcqgr4iar13rs9r4sb7pmn:10"
+      },
+      "@mktutcqgr4iar13rs9r4sb7pmn:16": {
+        "id": "@mktutcqgr4iar13rs9r4sb7pmn:16",
+        "kind": "call",
+        "fn": "@mktutcqgr4iar13rs9r4sb7pmn:17",
+        "args": [
+          "@mktutcqgr4iar13rs9r4sb7pmn:18",
+          "@mktutcqgr4iar13rs9r4sb7pmn:19"
+        ]
+      },
+      "@mktutcqgr4iar13rs9r4sb7pmn:14": {
+        "id": "@mktutcqgr4iar13rs9r4sb7pmn:14",
+        "kind": "ref",
+        "target": "@fpbskjevmc3stp6qsbfdu9ti8l"
+      },
+      "@mktutcqgr4iar13rs9r4sb7pmn:15": {
+        "id": "@mktutcqgr4iar13rs9r4sb7pmn:15",
+        "kind": "ref",
+        "target": "@mktutcqgr4iar13rs9r4sb7pmn:3"
+      },
+      "@mktutcqgr4iar13rs9r4sb7pmn:20": {
+        "id": "@mktutcqgr4iar13rs9r4sb7pmn:20",
+        "kind": "ref",
+        "target": "@mktutcqgr4iar13rs9r4sb7pmn:12"
+      },
+      "@mktutcqgr4iar13rs9r4sb7pmn:13": {
+        "id": "@mktutcqgr4iar13rs9r4sb7pmn:13",
+        "kind": "call",
+        "fn": "@mktutcqgr4iar13rs9r4sb7pmn:14",
+        "args": [
+          "@mktutcqgr4iar13rs9r4sb7pmn:15",
+          "@mktutcqgr4iar13rs9r4sb7pmn:16",
+          "@mktutcqgr4iar13rs9r4sb7pmn:20"
+        ]
+      },
+      "@mktutcqgr4iar13rs9r4sb7pmn:9": {
+        "id": "@mktutcqgr4iar13rs9r4sb7pmn:9",
+        "kind": "arm",
+        "variant": "std.list.cons",
+        "binds": [
+          "@mktutcqgr4iar13rs9r4sb7pmn:10",
+          "@mktutcqgr4iar13rs9r4sb7pmn:11"
+        ],
+        "results": [
+          null,
+          "@mktutcqgr4iar13rs9r4sb7pmn:12"
+        ],
+        "body": "@mktutcqgr4iar13rs9r4sb7pmn:13"
+      },
+      "@mktutcqgr4iar13rs9r4sb7pmn:5": {
+        "id": "@mktutcqgr4iar13rs9r4sb7pmn:5",
+        "kind": "fold",
+        "scrutinee": "@mktutcqgr4iar13rs9r4sb7pmn:6",
+        "arms": [
+          "@mktutcqgr4iar13rs9r4sb7pmn:7",
+          "@mktutcqgr4iar13rs9r4sb7pmn:9"
+        ]
+      },
+      "@mktutcqgr4iar13rs9r4sb7pmn:22": {
+        "id": "@mktutcqgr4iar13rs9r4sb7pmn:22",
+        "kind": "ref",
+        "target": "std.list.nil"
+      },
+      "@mktutcqgr4iar13rs9r4sb7pmn:21": {
+        "id": "@mktutcqgr4iar13rs9r4sb7pmn:21",
+        "kind": "arm",
+        "variant": "std.list.nil",
+        "binds": [],
+        "results": [],
+        "body": "@mktutcqgr4iar13rs9r4sb7pmn:22"
+      },
+      "@mktutcqgr4iar13rs9r4sb7pmn:24": {
+        "id": "@mktutcqgr4iar13rs9r4sb7pmn:24",
+        "kind": "binder"
+      },
+      "@mktutcqgr4iar13rs9r4sb7pmn:25": {
+        "id": "@mktutcqgr4iar13rs9r4sb7pmn:25",
+        "kind": "binder"
+      },
+      "@mktutcqgr4iar13rs9r4sb7pmn:26": {
+        "id": "@mktutcqgr4iar13rs9r4sb7pmn:26",
+        "kind": "binder"
+      },
+      "@mktutcqgr4iar13rs9r4sb7pmn:28": {
+        "id": "@mktutcqgr4iar13rs9r4sb7pmn:28",
+        "kind": "ref",
+        "target": "@mktutcqgr4iar13rs9r4sb7pmn:24"
+      },
+      "@mktutcqgr4iar13rs9r4sb7pmn:30": {
+        "id": "@mktutcqgr4iar13rs9r4sb7pmn:30",
+        "kind": "ref",
+        "target": "@mktutcqgr4iar13rs9r4sb7pmn:26"
+      },
+      "@mktutcqgr4iar13rs9r4sb7pmn:29": {
+        "id": "@mktutcqgr4iar13rs9r4sb7pmn:29",
+        "kind": "arm",
+        "variant": "std.optional.none",
+        "binds": [],
+        "results": [],
+        "body": "@mktutcqgr4iar13rs9r4sb7pmn:30"
+      },
+      "@mktutcqgr4iar13rs9r4sb7pmn:32": {
+        "id": "@mktutcqgr4iar13rs9r4sb7pmn:32",
+        "kind": "binder"
+      },
+      "@mktutcqgr4iar13rs9r4sb7pmn:34": {
+        "id": "@mktutcqgr4iar13rs9r4sb7pmn:34",
+        "kind": "ref",
+        "target": "@0j9ln24pgvs4purkgkdku5qqc1"
+      },
+      "@mktutcqgr4iar13rs9r4sb7pmn:35": {
+        "id": "@mktutcqgr4iar13rs9r4sb7pmn:35",
+        "kind": "ref",
+        "target": "@mktutcqgr4iar13rs9r4sb7pmn:3"
+      },
+      "@mktutcqgr4iar13rs9r4sb7pmn:36": {
+        "id": "@mktutcqgr4iar13rs9r4sb7pmn:36",
+        "kind": "ref",
+        "target": "@mktutcqgr4iar13rs9r4sb7pmn:32"
+      },
+      "@mktutcqgr4iar13rs9r4sb7pmn:37": {
+        "id": "@mktutcqgr4iar13rs9r4sb7pmn:37",
+        "kind": "ref",
+        "target": "@mktutcqgr4iar13rs9r4sb7pmn:26"
+      },
+      "@mktutcqgr4iar13rs9r4sb7pmn:33": {
+        "id": "@mktutcqgr4iar13rs9r4sb7pmn:33",
+        "kind": "call",
+        "fn": "@mktutcqgr4iar13rs9r4sb7pmn:34",
+        "args": [
+          "@mktutcqgr4iar13rs9r4sb7pmn:35",
+          "@mktutcqgr4iar13rs9r4sb7pmn:36",
+          "@mktutcqgr4iar13rs9r4sb7pmn:37"
+        ]
+      },
+      "@mktutcqgr4iar13rs9r4sb7pmn:31": {
+        "id": "@mktutcqgr4iar13rs9r4sb7pmn:31",
+        "kind": "arm",
+        "variant": "std.optional.some",
+        "binds": [
+          "@mktutcqgr4iar13rs9r4sb7pmn:32"
+        ],
+        "results": [
+          null
+        ],
+        "body": "@mktutcqgr4iar13rs9r4sb7pmn:33"
+      },
+      "@mktutcqgr4iar13rs9r4sb7pmn:27": {
+        "id": "@mktutcqgr4iar13rs9r4sb7pmn:27",
+        "kind": "match",
+        "scrutinee": "@mktutcqgr4iar13rs9r4sb7pmn:28",
+        "arms": [
+          "@mktutcqgr4iar13rs9r4sb7pmn:29",
+          "@mktutcqgr4iar13rs9r4sb7pmn:31"
+        ],
+        "otherwise": null
+      },
+      "@mktutcqgr4iar13rs9r4sb7pmn:23": {
+        "id": "@mktutcqgr4iar13rs9r4sb7pmn:23",
+        "kind": "arm",
+        "variant": "std.list.cons",
+        "binds": [
+          "@mktutcqgr4iar13rs9r4sb7pmn:24",
+          "@mktutcqgr4iar13rs9r4sb7pmn:25"
+        ],
+        "results": [
+          null,
+          "@mktutcqgr4iar13rs9r4sb7pmn:26"
+        ],
+        "body": "@mktutcqgr4iar13rs9r4sb7pmn:27"
+      },
+      "@mktutcqgr4iar13rs9r4sb7pmn:4": {
+        "id": "@mktutcqgr4iar13rs9r4sb7pmn:4",
+        "kind": "fold",
+        "scrutinee": "@mktutcqgr4iar13rs9r4sb7pmn:5",
+        "arms": [
+          "@mktutcqgr4iar13rs9r4sb7pmn:21",
+          "@mktutcqgr4iar13rs9r4sb7pmn:23"
+        ]
+      },
+      "@mktutcqgr4iar13rs9r4sb7pmn:1": {
+        "id": "@mktutcqgr4iar13rs9r4sb7pmn:1",
+        "kind": "lambda",
+        "params": [
+          "@mktutcqgr4iar13rs9r4sb7pmn:2",
+          "@mktutcqgr4iar13rs9r4sb7pmn:3"
+        ],
+        "body": "@mktutcqgr4iar13rs9r4sb7pmn:4"
+      },
+      "@ba3augad4vhfua6r0ovqkf9lbk": {
+        "id": "@ba3augad4vhfua6r0ovqkf9lbk",
+        "kind": "def",
+        "body": "@ba3augad4vhfua6r0ovqkf9lbk:1"
+      },
+      "@ba3augad4vhfua6r0ovqkf9lbk:2": {
+        "id": "@ba3augad4vhfua6r0ovqkf9lbk:2",
+        "kind": "binder"
+      },
+      "@ba3augad4vhfua6r0ovqkf9lbk:4": {
+        "id": "@ba3augad4vhfua6r0ovqkf9lbk:4",
+        "kind": "binder"
+      },
+      "@ba3augad4vhfua6r0ovqkf9lbk:5": {
+        "id": "@ba3augad4vhfua6r0ovqkf9lbk:5",
+        "kind": "binder"
+      },
+      "@ba3augad4vhfua6r0ovqkf9lbk:7": {
+        "id": "@ba3augad4vhfua6r0ovqkf9lbk:7",
+        "kind": "ref",
+        "target": "builtin.text.collate"
+      },
+      "@ba3augad4vhfua6r0ovqkf9lbk:8": {
+        "id": "@ba3augad4vhfua6r0ovqkf9lbk:8",
+        "kind": "ref",
+        "target": "@ba3augad4vhfua6r0ovqkf9lbk:4"
+      },
+      "@ba3augad4vhfua6r0ovqkf9lbk:9": {
+        "id": "@ba3augad4vhfua6r0ovqkf9lbk:9",
+        "kind": "ref",
+        "target": "@ba3augad4vhfua6r0ovqkf9lbk:5"
+      },
+      "@ba3augad4vhfua6r0ovqkf9lbk:10": {
+        "id": "@ba3augad4vhfua6r0ovqkf9lbk:10",
+        "kind": "ref",
+        "target": "@ba3augad4vhfua6r0ovqkf9lbk:2"
+      },
+      "@ba3augad4vhfua6r0ovqkf9lbk:6": {
+        "id": "@ba3augad4vhfua6r0ovqkf9lbk:6",
+        "kind": "call",
+        "fn": "@ba3augad4vhfua6r0ovqkf9lbk:7",
+        "args": [
+          "@ba3augad4vhfua6r0ovqkf9lbk:8",
+          "@ba3augad4vhfua6r0ovqkf9lbk:9",
+          "@ba3augad4vhfua6r0ovqkf9lbk:10"
+        ]
+      },
+      "@ba3augad4vhfua6r0ovqkf9lbk:3": {
+        "id": "@ba3augad4vhfua6r0ovqkf9lbk:3",
+        "kind": "lambda",
+        "params": [
+          "@ba3augad4vhfua6r0ovqkf9lbk:4",
+          "@ba3augad4vhfua6r0ovqkf9lbk:5"
+        ],
+        "body": "@ba3augad4vhfua6r0ovqkf9lbk:6"
+      },
+      "@ba3augad4vhfua6r0ovqkf9lbk:1": {
+        "id": "@ba3augad4vhfua6r0ovqkf9lbk:1",
+        "kind": "lambda",
+        "params": [
+          "@ba3augad4vhfua6r0ovqkf9lbk:2"
+        ],
+        "body": "@ba3augad4vhfua6r0ovqkf9lbk:3"
+      },
       "@gfr29kjpphfb63e9m1s4j3v9tl": {
         "id": "@gfr29kjpphfb63e9m1s4j3v9tl",
         "kind": "def",
@@ -112864,6 +113699,10 @@
       "@nmneehuk4kvb3ospun23bbakic",
       "@irfkjcl8gbvhb3n6nd7fas7vr1",
       "@853gnn2112vv2vvvjj7tq8ljs0",
+      "@0j9ln24pgvs4purkgkdku5qqc1",
+      "@fpbskjevmc3stp6qsbfdu9ti8l",
+      "@mktutcqgr4iar13rs9r4sb7pmn",
+      "@ba3augad4vhfua6r0ovqkf9lbk",
       "@unfjip4h2nee7n6lfol4hj1d9c",
       "@2blmsnl9ukc1j86ufq0blk0jbr",
       "@ubptikdi7ue325dem73q1r7b7u",
@@ -119162,6 +120001,276 @@
       "plain": [
         1
       ]
+    },
+    "@0j9ln24pgvs4purkgkdku5qqc1": {
+      "vars": [
+        0
+      ],
+      "rows": [
+        1
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "fn",
+            "params": [
+              {
+                "t": "var",
+                "v": 0
+              },
+              {
+                "t": "var",
+                "v": 0
+              }
+            ],
+            "ret": {
+              "t": "con",
+              "id": "std.order",
+              "args": []
+            },
+            "eff": {
+              "effs": [],
+              "tail": 1
+            }
+          },
+          {
+            "t": "con",
+            "id": "std.list",
+            "args": [
+              {
+                "t": "var",
+                "v": 0
+              }
+            ]
+          },
+          {
+            "t": "con",
+            "id": "std.list",
+            "args": [
+              {
+                "t": "var",
+                "v": 0
+              }
+            ]
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.list",
+          "args": [
+            {
+              "t": "var",
+              "v": 0
+            }
+          ]
+        },
+        "eff": {
+          "effs": [],
+          "tail": 1
+        }
+      },
+      "plain": []
+    },
+    "@fpbskjevmc3stp6qsbfdu9ti8l": {
+      "vars": [
+        0
+      ],
+      "rows": [
+        1
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "fn",
+            "params": [
+              {
+                "t": "var",
+                "v": 0
+              },
+              {
+                "t": "var",
+                "v": 0
+              }
+            ],
+            "ret": {
+              "t": "con",
+              "id": "std.order",
+              "args": []
+            },
+            "eff": {
+              "effs": [],
+              "tail": 1
+            }
+          },
+          {
+            "t": "con",
+            "id": "std.list",
+            "args": [
+              {
+                "t": "var",
+                "v": 0
+              }
+            ]
+          },
+          {
+            "t": "con",
+            "id": "std.list",
+            "args": [
+              {
+                "t": "con",
+                "id": "std.optional",
+                "args": [
+                  {
+                    "t": "con",
+                    "id": "std.list",
+                    "args": [
+                      {
+                        "t": "var",
+                        "v": 0
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.list",
+          "args": [
+            {
+              "t": "con",
+              "id": "std.optional",
+              "args": [
+                {
+                  "t": "con",
+                  "id": "std.list",
+                  "args": [
+                    {
+                      "t": "var",
+                      "v": 0
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "eff": {
+          "effs": [],
+          "tail": 1
+        }
+      },
+      "plain": []
+    },
+    "@mktutcqgr4iar13rs9r4sb7pmn": {
+      "vars": [
+        0
+      ],
+      "rows": [
+        1
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.list",
+            "args": [
+              {
+                "t": "var",
+                "v": 0
+              }
+            ]
+          },
+          {
+            "t": "fn",
+            "params": [
+              {
+                "t": "var",
+                "v": 0
+              },
+              {
+                "t": "var",
+                "v": 0
+              }
+            ],
+            "ret": {
+              "t": "con",
+              "id": "std.order",
+              "args": []
+            },
+            "eff": {
+              "effs": [],
+              "tail": 1
+            }
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.list",
+          "args": [
+            {
+              "t": "var",
+              "v": 0
+            }
+          ]
+        },
+        "eff": {
+          "effs": [],
+          "tail": 1
+        }
+      },
+      "plain": []
+    },
+    "@ba3augad4vhfua6r0ovqkf9lbk": {
+      "vars": [],
+      "rows": [
+        0,
+        1
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.locale",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "fn",
+          "params": [
+            {
+              "t": "con",
+              "id": "type.string",
+              "args": []
+            },
+            {
+              "t": "con",
+              "id": "type.string",
+              "args": []
+            }
+          ],
+          "ret": {
+            "t": "con",
+            "id": "std.order",
+            "args": []
+          },
+          "eff": {
+            "effs": [],
+            "tail": 0
+          }
+        },
+        "eff": {
+          "effs": [],
+          "tail": 1
+        }
+      },
+      "plain": []
     },
     "@unfjip4h2nee7n6lfol4hj1d9c": {
       "vars": [
@@ -134208,6 +135317,35 @@
     "@853gnn2112vv2vvvjj7tq8ljs0:25": "higher",
     "@853gnn2112vv2vvvjj7tq8ljs0:26": "merged",
     "@853gnn2112vv2vvvjj7tq8ljs0:32": "run",
+    "@0j9ln24pgvs4purkgkdku5qqc1": "merge with order",
+    "@0j9ln24pgvs4purkgkdku5qqc1:2": "order",
+    "@0j9ln24pgvs4purkgkdku5qqc1:3": "xs",
+    "@0j9ln24pgvs4purkgkdku5qqc1:4": "ys",
+    "@0j9ln24pgvs4purkgkdku5qqc1:10": "x",
+    "@0j9ln24pgvs4purkgkdku5qqc1:11": "xs rest",
+    "@0j9ln24pgvs4purkgkdku5qqc1:17": "y",
+    "@0j9ln24pgvs4purkgkdku5qqc1:18": "ys rest",
+    "@fpbskjevmc3stp6qsbfdu9ti8l": "add run with order",
+    "@fpbskjevmc3stp6qsbfdu9ti8l:2": "order",
+    "@fpbskjevmc3stp6qsbfdu9ti8l:3": "run",
+    "@fpbskjevmc3stp6qsbfdu9ti8l:4": "slots",
+    "@fpbskjevmc3stp6qsbfdu9ti8l:15": "slot",
+    "@fpbskjevmc3stp6qsbfdu9ti8l:16": "higher",
+    "@fpbskjevmc3stp6qsbfdu9ti8l:27": "held",
+    "@mktutcqgr4iar13rs9r4sb7pmn": "sort with",
+    "@mktutcqgr4iar13rs9r4sb7pmn:2": "list",
+    "@mktutcqgr4iar13rs9r4sb7pmn:3": "order",
+    "@mktutcqgr4iar13rs9r4sb7pmn:10": "item",
+    "@mktutcqgr4iar13rs9r4sb7pmn:11": "rest",
+    "@mktutcqgr4iar13rs9r4sb7pmn:12": "slots",
+    "@mktutcqgr4iar13rs9r4sb7pmn:24": "slot",
+    "@mktutcqgr4iar13rs9r4sb7pmn:25": "higher",
+    "@mktutcqgr4iar13rs9r4sb7pmn:26": "merged",
+    "@mktutcqgr4iar13rs9r4sb7pmn:32": "run",
+    "@ba3augad4vhfua6r0ovqkf9lbk": "collated",
+    "@ba3augad4vhfua6r0ovqkf9lbk:2": "locale",
+    "@ba3augad4vhfua6r0ovqkf9lbk:4": "a",
+    "@ba3augad4vhfua6r0ovqkf9lbk:5": "b",
     "@gfr29kjpphfb63e9m1s4j3v9tl": "put entry",
     "@gfr29kjpphfb63e9m1s4j3v9tl:2": "list",
     "@gfr29kjpphfb63e9m1s4j3v9tl:3": "key",
@@ -135527,6 +136665,10 @@
     "@k8goc3glumjd1d6t7gejcpupa9": "The item at a position, counting from 0, or `otherwise` when the list has none there: item at([a, b, c], 1, z) is b, item at([a], 5, z) is z. n steps.",
     "@35sedp97bd5r0h3hrka4eg489k": "The list with the item at a position, counting from 0, replaced by `by`; the list as it was when it has no item there. n steps.",
     "@7jo18nb68cfe3ph2kh7eegemop": "x as text with `places` digits after the point, rounded half away from 0 and keeping trailing zeros: show decimals(2.5, 3) is \"2.500\", show decimals(-0.0004, 3) is \"0.000\". For when show's up to nine places would jump about.",
+    "@mktutcqgr4iar13rs9r4sb7pmn": "The list in the order order(a, b) gives, an Order: sort with(names, collated(locale(\"tr\"))) sorts names as Turkish does. Items the order calls the same keep their order (stable). n log n steps.",
+    "@0j9ln24pgvs4purkgkdku5qqc1": "Two lists sorted by an order as one. A helper of sort with, not offered.",
+    "@fpbskjevmc3stp6qsbfdu9ti8l": "A helper of sort with, not offered.",
+    "@ba3augad4vhfua6r0ovqkf9lbk": "People's order for text in a language (the Unicode Collation Algorithm with that language's rules): Turkish puts ç after c and ğ after g, German ä with a. Give it to sort with. It never changes compare or <, which stay code-point order.",
     "@853gnn2112vv2vvvjj7tq8ljs0": "The list in the order of key(item), by compare: sort by(roads, length of) puts the shortest first, sort by(rows, (r) → −amount of(r)) the largest. Items with the same key keep their order (a stable sort; Python's key=, Haskell's sortOn). n log n steps, each calling key.",
     "@nmneehuk4kvb3ospun23bbakic": "Two lists sorted by key as one. A helper of sort by, not offered.",
     "@irfkjcl8gbvhb3n6nd7fas7vr1": "A helper of sort by, as add run is of sort. Not offered.",
@@ -135985,6 +137127,8 @@
     "@814l9844a7229lm9tptarpfb1i",
     "@ffvjl4eq3ftk38cuspridvto96",
     "@853gnn2112vv2vvvjj7tq8ljs0",
+    "@mktutcqgr4iar13rs9r4sb7pmn",
+    "@ba3augad4vhfua6r0ovqkf9lbk",
     "@unfjip4h2nee7n6lfol4hj1d9c",
     "@2blmsnl9ukc1j86ufq0blk0jbr",
     "@ubptikdi7ue325dem73q1r7b7u",
