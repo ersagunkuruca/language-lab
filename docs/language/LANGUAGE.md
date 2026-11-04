@@ -867,9 +867,8 @@ match work()
 A release may only log, since it runs on every exit and can't itself fail
 or wait; and a handler with one can't let a `Choice` through, since a
 search could leave its body and come back after the release. The
-evaluator runs releases; compiled code refuses a handler with one for now.
-One exit doesn't release yet: a `with fuel` outside the handler running
-out.
+evaluator runs releases, a `with fuel` outside the handler running out
+included; compiled code refuses a handler with one for now.
 
 The continuation isn't a value, on purpose. Every operation is one of two
 shapes, and those two cover what programs need (errors, configuration,

@@ -417,6 +417,9 @@ export function resolvedFor(code: Code, info: Info, names: Names | undefined): {
 }
 
 export function makeRunner(code: Code, info: Info, rt: Runtime) {
+  // Whether a handler with a release has been entered (L213a): until one
+  // is, a failure has no releases to look for on its way out.
+  let releasing = false;
   // The generic + resolved to each type's own (arith.ts); a program
   // without one is unchanged.
   ({ code, info } = resolvedFor(code, info, rt.names));
@@ -842,12 +845,23 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       }
     }
     releaseAll() {
+      this.releaseUntil(null);
+      this.k = null;
+    }
+    // The releases of the handlers open between here and `stop` (a frame of
+    // this continuation, or null for all of them), innermost first. A
+    // failure leaves for its choice point this way, so a `with fuel`
+    // running out ends the handlers inside it (L213a); a path abandoned
+    // after its value, or one whose frames are gone, has none to run.
+    releaseUntil(stop: Frame | null) {
       const todo: { body: Id; env: Env }[] = [];
-      for (let f = this.k; f; f = f.next) {
+      if (!releasing) return;
+      let f = this.k;
+      for (; f && f !== stop; f = f.next) {
         if (f.t === "handle" && f.release) todo.push({ body: f.release.body, env: f.env });
         else if (f.t === "release" || (f.t === "seq" && f.release)) todo.push({ body: f.body, env: f.env });
       }
-      this.k = null;
+      if (f !== stop) return;
       for (const r of todo) {
         const m = new Machine(null);
         m.eval(r.body, r.env);
@@ -868,6 +882,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
           if ("barrier" in cp) {
             this.cps.pop();
             const f = cp.barrier;
+            this.releaseUntil(f);
             this.k = f.next;
             this.fuel = f.fuel;
             if (f.h === S.all) this.ret(toList(f.acc));
@@ -879,6 +894,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
           ambient = cp.fuel;
           const r = cp.it.next();
           if (r.done) { this.cps.pop(); continue; }
+          this.releaseUntil(cp.k);
           this.k = cp.k;
           this.fuel = cp.fuel;
           cp.use(r.value);
@@ -1046,6 +1062,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       const arms = n.arms.map((a) => code.nodes[a] as NodeOf<"arm">);
       const effect = arms.length ? effectOf(arms[0].variant) : null;
       const release = arms.find((a) => a.variant === RELEASE_V) ?? null;
+      if (release) releasing = true;
       handlers.set(n.id, effect ? { effect, arms: new Map(arms.filter((a) => a !== release).map((a) => [a.variant, a])), release } : null);
     }
     return handlers.get(n.id)!;
