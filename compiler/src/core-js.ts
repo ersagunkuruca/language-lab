@@ -34,7 +34,7 @@ import { Aborted, FAIL, OUT, RUNTIME, Stopped, Unsupported, coreRuntime, runCore
 // The runtime is core-rt.ts's; these are here too, for the tests and
 // tools that print and run in one.
 // The solver too, for the programs run here that solve (core-solve.ts).
-import "./core-solve.ts";
+import { writtenOut } from "./core-solve.ts";
 export { Aborted, FAIL, OUT, RUNTIME, Stopped, Unsupported, coreCall, coreRuntime, runCoreFn, type MainSpec, type TableSpec } from "./core-rt.ts";
 
 
@@ -456,6 +456,14 @@ const solving = (js: string) => /R\.rt\("(solve|exists"|derive:)/.test(js);
 // derivative): far slower than compile.ts's plans for now, so a sound
 // isn't played this way (C137d7).
 export const usesSolver = (ir: CoreIR): boolean => solving(emitCoreJs(ir).js);
+// Whether it runs the evaluator's solver on every call somewhere: a solve
+// whose plan core-solve.ts can't write out (writtenOut), `for some`, a
+// derivative. A sound that does is too slow for the audio thread on the
+// core IR (the pedal's solves, before their plans were written out, played
+// 34 blocks a second of the 375 it needs), so it stays on compile.ts
+// (C137d7, C137d9).
+export const solvesSlowly = (ir: CoreIR): boolean =>
+  [...emitCoreJs(ir).js.matchAll(/R\.rt\("(?:(solve|solveAll):([^"]*)"|exists"|derive:)/g)].some((m) => !m[1] || !writtenOut(ir.code, JSON.parse(`"${m[2]}"`)));
 const codeFor = (ir: CoreIR, js: string) => (solving(js) ? `JSON.parse(${JSON.stringify(JSON.stringify({ nodes: ir.code.nodes, defs: ir.code.defs }))})` : "undefined");
 
 // A program's hosts/js.js (FOREIGN.md, C137d5): where it is, and the

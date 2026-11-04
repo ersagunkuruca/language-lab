@@ -128,6 +128,10 @@ function planWritten(given: Code, id: Id): ((...xs: unknown[]) => Iterable<Value
     return null;
   }
 }
+// Whether this solve's plan is written out (above), rather than run by the
+// evaluator's solver on every call (C137d9: a sound that solves that way
+// is too slow for the audio thread).
+export const writtenOut = (code: Code, id: Id): boolean => planWritten(code, id) !== null;
 class LazyCell {
   private cell?: { tag: Id; fields: unknown[] };
   private it: Iterator<unknown>;

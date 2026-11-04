@@ -20,7 +20,7 @@ import { createContext, runInContext, runInNewContext } from "node:vm";
 import { runMain } from "../src/lang/run.ts";
 import { corePageRuntime, coreSoundWorklet, coreWorkletRuntime, soundWorklet, webCorePage, webPage, workletRuntime, pageRuntime } from "../cli/web.ts";
 import { FakeEl, fakeDoc } from "./fakedom.ts";
-import { lowerCore } from "../../compiler/src/core-js.ts";
+import { lowerCore, solvesSlowly } from "../../compiler/src/core-js.ts";
 import { corePageFile, coreWorkletFile, pageFile, workletFile } from "../src/lang/page.ts";
 import { close } from "../src/lang/run.ts";
 import { CELL_OPS, NOW_OP, RANDOM_OP, S } from "../src/lang/std.ts";
@@ -66,6 +66,18 @@ test("the pedal: the evaluator and the compiled program play the same samples, a
   assert.ok(Math.abs(rms(after) / rms(dry) - 1) < 0.2, `loudness ${rms(after)} against ${rms(dry)}`);
   assert.ok(peak(after) / rms(after) < 0.85 * (peak(dry) / rms(dry)), `crest ${peak(after) / rms(after)}`);
   assert.deepEqual([...playBlocks(await soundOf(p, main, "compiled"), new Float64Array(256)).out], new Array(256).fill(0));
+});
+
+// The pedal's solves (Haar's join and tanh, each run backwards) have their
+// plans written out on the core IR (C137d8), so its page is the core IR's
+// (C137d9); a program whose solve those plans can't write (calculus's
+// derivative) runs the evaluator's solver on every call.
+test("the pedal solves quickly on the core IR, calculus's derivative doesn't", () => {
+  const { p, main } = pedal();
+  assert.equal(solvesSlowly(lowerCore(p.code, p.info, p.names, [main])), false);
+  const c = loadProgram(join(import.meta.dirname, "../examples/calculus"));
+  const info = infer(c.code, c.pres.names, undefined, c.options);
+  assert.equal(solvesSlowly(lowerCore(c.code, info, c.pres.names, [c.named("main")])), true);
 });
 
 // A sound whose state carries from block to block: each block is scaled by

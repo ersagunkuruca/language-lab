@@ -10,6 +10,7 @@
 // effect: totality is inferred, not promised. Data types must be strictly
 // positive, so data can't be used to recurse without recursion.
 
+import { jsonProblem } from "./json-by-type.ts";
 import { diamonds, type Edge } from "./diamonds.ts";
 import { sharing } from "./shared-fields.ts";
 import { PARTIAL, signAnalysis } from "./signs.ts";
@@ -24,7 +25,7 @@ import { computedForward, directionProblem, useDirections } from "./directions.t
 import { analyzer, derivedFrom, determinism, oneAnswer, solveMode, type Fn } from "./modes.ts";
 import { smoothDerivative as hasSmoothDerivative, smoothGradient as hasSmoothGradient, recordVariant, forgetDerived } from "./derive.ts";
 import { answerKeys } from "./ports.ts";
-import { RELEASE_V, ARITH, BOOL, CELL_OPS, EMBEDDING, EMBEDDING_V, LIST, DIVISION, FIELDS, JOBS, S, SET, SIGS, SMART, TRUE, TUPLE_MAX, tupleType } from "./std.ts";
+import { JSON_OPS, RELEASE_V, ARITH, BOOL, CELL_OPS, EMBEDDING, EMBEDDING_V, LIST, DIVISION, FIELDS, JOBS, S, SET, SIGS, SMART, TRUE, TUPLE_MAX, tupleType } from "./std.ts";
 import { countedCalls } from "./counting.ts";
 import { ratioParts } from "./int.ts";
 import { fieldPath, fieldPaths, placePath, readPaths } from "./records.ts";
@@ -1592,6 +1593,18 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     const body = whole?.t === "con" ? code.nodes[whole.id] : undefined, td = body?.kind === "def" && body.body ? code.nodes[body.body] : undefined;
     if (!whole || whole.t !== "con" || td?.kind !== "typedef") err(n.id, `${nm(f.target)} needs the value's data type known here, and it is ${whole ? show(whole) : "open"}: use it where the value's type is known (a definition that takes any value can't say which of its fields to pick)`);
     else if (!part || part.t !== "con") err(n.id, `${nm(f.target)} needs the fields' type known here, and it is ${part ? show(part) : "open"}: ${f.target === FIELDS.mapped ? "give it a function whose input type is known" : "use the list where its items' type is known"}`);
+  }
+  // json of and from json are written out per type (json-by-type.ts,
+  // L190d2), so the type must be known where they are used and have a
+  // spelling.
+  for (const n of Object.values(code.nodes)) {
+    if (!isCall(n)) continue;
+    const f = code.nodes[n.fn];
+    if (f?.kind !== "ref" || (f.target !== JSON_OPS.of && f.target !== JSON_OPS.from)) continue;
+    if (n.args.some((a) => code.nodes[a]?.kind === "hole")) continue;
+    const id = f.target === JSON_OPS.of ? n.args[0] : n.id, t = id && info.typeOf.get(id);
+    const why = jsonProblem(code, t ? s.zonk(t) : undefined, show);
+    if (why) err(n.id, `${nm(f.target)} writes the value by its type, and ${why}: ${f.target === JSON_OPS.of ? "give it a value whose type is known here" : "use it where the type wanted is known (a definition's pinned type, or an input of known type)"}`);
   }
   // Each field with results given by a definition with the same results,
   // in that direction with one answer (POLAR.md, L97c).
