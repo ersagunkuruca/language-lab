@@ -243,7 +243,9 @@ export const RUNTIME = {
   // page handler that waits does; called from outside, the rest keeps
   // the answer, and a wait goes on by it later (core-rt.ts worldFn).
   closure: (code: (...xs: unknown[]) => unknown, caps: unknown[], src?: { lambda: Id; binders: Id[]; bools: number[] } | { prim: Id }, rest?: boolean) => {
-    const whole = (...xs: unknown[]) => { let out: unknown; RUNTIME.ck(code(c, ...xs, (v: unknown) => { out = v; return true; })); return out; };
+    // Called from outside (a page's mount, the host): the first answer,
+    // and none is FAIL.
+    const whole = (...xs: unknown[]) => { let out: unknown = FAIL; RUNTIME.ck(code(c, ...xs, (v: unknown) => { out = v; return true; })); if (out === FAIL) throw FAIL; return out; };
     const c: ((...xs: unknown[]) => unknown) & { caps: unknown[]; code: typeof code } = Object.assign(rest ? whole : (...xs: unknown[]) => RUNTIME.ck(code(c, ...xs)), { caps, code });
     if (src) Object.assign(c, { [META]: "prim" in src ? src : { lambda: src.lambda, env: new Map(src.binders.map((b, j) => [b, src.bools.includes(j) ? { tag: caps[j] ? TRUE : FALSE, fields: [] } : caps[j]])) } });
     return c;

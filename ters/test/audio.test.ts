@@ -18,7 +18,9 @@ import { loadProgram } from "../src/lang/load.ts";
 import { audioProblem, listens, playBlocks } from "../src/lang/audio.ts";
 import { runInNewContext } from "node:vm";
 import { runMain } from "../src/lang/run.ts";
-import { soundWorklet, workletRuntime, pageRuntime } from "../cli/web.ts";
+import { coreSoundWorklet, soundWorklet, webCorePage, webPage, workletRuntime, pageRuntime } from "../cli/web.ts";
+import { FakeEl, fakeDoc } from "./fakedom.ts";
+import { lowerCore } from "../../compiler/src/core-js.ts";
 import { pageFile, workletFile } from "../src/lang/page.ts";
 import { close } from "../src/lang/run.ts";
 import { CELL_OPS, NOW_OP, RANDOM_OP, S } from "../src/lang/std.ts";
@@ -157,6 +159,44 @@ test("the pedal page's worklet plays the pedal, and the page's cell writes reach
   assert.notDeepEqual([...Float32Array.from(offline.slice(128))], input.slice(128));
   assert.deepEqual(said, []);
   assert.deepEqual(listens(evaluatorPage(p, page)).length, 2);
+});
+
+// The same from the core IR (C137d4): its audio thread's script plays what
+// the core IR's sound plays offline, and the page's writes reach it.
+test("the pedal page's worklet from the core IR plays the pedal, and the page's cell writes reach it", async () => {
+  const { p, main, page } = pedal();
+  const ir = lowerCore(p.code, p.info, p.names, [page]);
+  const source = await coreSoundWorklet(ir, p.names[page]);
+  const made: (new (o: object) => { port: { onmessage: ((e: { data: unknown }) => void) | null }; process(i: Float32Array[][], o: Float32Array[][]): boolean })[] = [];
+  const said: unknown[] = [];
+  class AudioWorkletProcessor { port = { onmessage: null, postMessage: (m: unknown) => said.push(m) }; }
+  runInNewContext(source, { registerProcessor: (_: string, processor: never) => made.push(processor), AudioWorkletProcessor, console, TextEncoder, TextDecoder });
+  assert.equal(made.length, 1);
+  const node = new made[0]({ processorOptions: { index: 0 } });
+  const input = [...Float32Array.from(sine(256, 0.3))], offline = playBlocks(await soundOf(p, main, "core"), input, 128).out;
+  const play = (at: number) => {
+    const out = [new Float32Array(128)];
+    assert.equal(node.process([[Float32Array.from(input.slice(at, at + 128))]], [out]), true);
+    return out[0];
+  };
+  assert.deepEqual([...play(0)], [...Float32Array.from(offline.slice(0, 128))]);
+  node.port.onmessage!({ data: { cell: 1, value: 0 } });
+  assert.deepEqual([...play(128)], input.slice(128));
+  assert.deepEqual(said, []);
+  // And `lab build-web` makes the pedal's page from the core IR, carrying
+  // it, and it draws what compile.ts's draws.
+  const drawn = (html: string) => {
+    const body = new FakeEl("body"), store = new Map<string, string>();
+    const localStorage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v), removeItem: (k: string) => void store.delete(k) };
+    runInNewContext(/<script>([\s\S]*)<\/script>/.exec(html)![1], { document: { ...fakeDoc(), body }, localStorage, console, TextEncoder, requestAnimationFrame: () => 0 });
+    return (body.kids[0] as FakeEl).html();
+  };
+  const html = await webCorePage("Pedal", p.code, p.info, p.names, [page], page);
+  assert.match(html, /registerProcessor/);
+  // (The scope's points to 6 places: the core IR runs atanh backwards
+  // with the evaluator's solver, compile.ts with its own plan.)
+  const near = (h: string) => h.replace(/\d+\.\d{7,}/g, (x) => Number(x).toFixed(6));
+  assert.equal(near(drawn(html)), near(drawn(await webPage("Pedal", p.code, p.info, p.names, page))));
 });
 
 // The same worklet made in a browser, the editor's way (A4): the prebuilt
