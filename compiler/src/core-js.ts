@@ -433,7 +433,9 @@ export function coreModule(ir: CoreIR, name: string, runtime: string, world: str
 
 // The program's nodes, for a module whose solves the evaluator's solver
 // runs (C137c11): only when it has one.
-const codeFor = (ir: CoreIR, js: string) => (/R\.rt\("(solve|exists"|derive:)/.test(js) ? JSON.stringify({ nodes: ir.code.nodes, defs: ir.code.defs }) : "undefined");
+// As a string parsed once, which is smaller and quicker to load than
+// the same object written out.
+const codeFor = (ir: CoreIR, js: string) => (/R\.rt\("(solve|exists"|derive:)/.test(js) ? `JSON.parse(${JSON.stringify(JSON.stringify({ nodes: ir.code.nodes, defs: ir.code.defs }))})` : "undefined");
 
 // The solver, next to the runtime, imported only by a program that has
 // its nodes (one that solves): it carries the library (C137d1).

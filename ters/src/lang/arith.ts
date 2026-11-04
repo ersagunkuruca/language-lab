@@ -32,7 +32,7 @@ import { implementationOf, type Info } from "./infer.ts";
 import { interfaceOps, leftToWays, NEUTRAL, pickWays, waysIn, type BuiltinCost } from "./ways.ts";
 import { ALGEBRAIC_OPS, ARITH, ARITH_FIELD, EMBEDDING, EMBEDDING_MAP, COMPLEX_V, DUAL_V, FIXED_V, INT_OPS, RATIO, S } from "./std.ts";
 import { ALGEBRAIC_TYPE, COMPLEX_TYPE, DUAL_TYPE, FIXED_TYPE, MATRIX_SIZE, INT, NUMBER, RATIONAL_TYPE, OverMap, type Row, type Scheme, type Type } from "./types.ts";
-import { PRELUDE } from "./library.ts";
+import { PRELUDE_DEFS } from "./prelude-ids.ts";
 import { ratioParts } from "./int.ts";
 import { recordVariant } from "./derive.ts";
 import { hasRecursiveLet, liftLets } from "./lift-lets.ts";
@@ -62,9 +62,10 @@ const AT: Record<Id, { number: Id; int: Id; arity: 1 | 2 }> = {
 // other: Rational's `add fractions`, Complex's `multiply complex`, Dual's
 // product rule, Algebraic's builtins.
 const DATA_NUMBERS = new Set<Id>([RATIONAL_TYPE, COMPLEX_TYPE, DUAL_TYPE, ALGEBRAIC_TYPE, FIXED_TYPE]);
-// A prelude definition's id, by its name.
-export const preludeDef = (name: string): Id | undefined =>
-  Object.keys(PRELUDE.names).find((id) => PRELUDE.names[id] === name && PRELUDE.code.nodes[id]?.kind === "def");
+// A prelude definition's id, by its name: from a table of the few the
+// passes look for (prelude-ids.ts), so the solver doesn't carry the
+// library to find them (C137d2).
+export const preludeDef = (name: string): Id | undefined => PRELUDE_DEFS[name];
 
 export const usesGenericArithmetic = (code: Code) => {
   const ops = interfaceOps(code);
