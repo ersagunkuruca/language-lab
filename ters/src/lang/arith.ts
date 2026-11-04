@@ -605,22 +605,43 @@ function insertEmbeddings(code: Code, info: Info): { code: Code; info: Info } {
   const nodes: Record<Id, Node> = { ...code.nodes };
   const typeOf = new Map(info.typeOf);
   const none = { effs: [], tail: null };
+  // map(x) of the embedding, its nodes named after `at`.
+  const wrap = (x: Id, at: Id, e: { def: Id; from: Type; to: Type }): Id => {
+    const emb: Type = { t: "con", id: EMBEDDING, args: [e.from, e.to] }, fn: Type = { t: "fn", params: [e.from], ret: e.to, eff: none };
+    const field = `${at}.field`, of = `${at}.of`, map = `${at}.map`;
+    nodes[field] = { id: field, kind: "ref", target: EMBEDDING_MAP };
+    nodes[of] = { id: of, kind: "ref", target: e.def };
+    nodes[map] = { id: map, kind: "call", fn: field, args: [of] };
+    nodes[at] = { id: at, kind: "call", fn: map, args: [x] };
+    typeOf.set(field, { t: "fn", params: [emb], ret: fn, eff: none });
+    typeOf.set(of, emb);
+    typeOf.set(map, fn);
+    typeOf.set(at, e.to);
+    return at;
+  };
   for (const n of Object.values(code.nodes)) {
     if (n.kind !== "call" || !n.args?.some((a) => info.embedded!.has(a))) continue;
     nodes[n.id] = { ...n, args: n.args.map((a) => {
       const e = info.embedded!.get(a);
       if (!e) return a;
-      const emb: Type = { t: "con", id: EMBEDDING, args: [e.from, e.to] }, fn: Type = { t: "fn", params: [e.from], ret: e.to, eff: none };
-      const field = `${a}.embed.field`, of = `${a}.embed.of`, map = `${a}.embed.map`, at = `${a}.embed`;
-      nodes[field] = { id: field, kind: "ref", target: EMBEDDING_MAP };
-      nodes[of] = { id: of, kind: "ref", target: e.def };
-      nodes[map] = { id: map, kind: "call", fn: field, args: [of] };
-      nodes[at] = { id: at, kind: "call", fn: map, args: [a] };
-      typeOf.set(field, { t: "fn", params: [emb], ret: fn, eff: none });
-      typeOf.set(of, emb);
-      typeOf.set(map, fn);
-      typeOf.set(at, e.to);
-      return at;
+      if (!e.of) return wrap(a, `${a}.embed`, e);
+      // A function whose result is lifted (L208c2): a lambda's body is
+      // wrapped where it is; any other function becomes (x…) → map(f(x…)).
+      const lifted: Type = { ...e.of, ret: e.to };
+      const f = code.nodes[a];
+      if (f?.kind === "lambda") {
+        nodes[a] = { ...f, body: wrap(f.body, `${a}.embed`, e) };
+        typeOf.set(a, lifted);
+        return a;
+      }
+      const params = e.of.params.map((t, j) => { const b = `${a}.embed.p${j}`; nodes[b] = { id: b, kind: "binder" }; typeOf.set(b, t); return b; });
+      const refs = params.map((b, j) => { const r = `${a}.embed.r${j}`; nodes[r] = { id: r, kind: "ref", target: b }; typeOf.set(r, e.of!.params[j]); return r; });
+      const call = `${a}.embed.call`, lam = `${a}.embed.fn`;
+      nodes[call] = { id: call, kind: "call", fn: a, args: refs };
+      typeOf.set(call, e.from);
+      nodes[lam] = { id: lam, kind: "lambda", params, body: wrap(call, `${a}.embed`, e) };
+      typeOf.set(lam, lifted);
+      return lam;
     }) } as Node;
   }
   return { code: { ...code, nodes }, info: { ...info, typeOf } };

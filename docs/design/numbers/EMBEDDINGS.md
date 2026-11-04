@@ -93,7 +93,7 @@ ask him before E work starts.
   Rational into Float64 (a lossy one: its laws hold only approximately, as
   Float32's do, so it is checked with near, L197), Float64 into Complex,
   Float64 into Dual.
-- **L208c** (done for arguments and + − · <; a returned value is left). The checker inserts a canonical embedding where a known A is
+- **L208c** (done for arguments and + − · <, and since L208c2 for a function's result: a function given where one with the same inputs and a larger result is wanted, `half of(length)`, is lifted, a lambda's body where it is and a named function as (x) → map(f(x)); a definition's own pinned result and a literal are left). The checker inserts a canonical embedding where a known A is
   given for a known B (infer.ts, at the unify of an argument, field or
   result), and lifts the smaller side of + − · < (arith.ts). Every engine
   then just runs a call, so no compiler work.
