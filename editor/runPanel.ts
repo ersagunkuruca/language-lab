@@ -3,6 +3,7 @@
 // from a file must be allowed first, and the compiled main kept for the
 // next run of the same code. What it reads of the editor comes through
 // `RunHost`.
+import type { LogEntry } from "../ters/src/lang/worldlog.ts";
 import manifest from "./examples.json" with { type: "json" };
 import FILES from "examples:files";
 import type { Code, Id } from "../ters/src/model.ts";
@@ -88,7 +89,10 @@ export function runPanel(host: RunHost) {
     return h("label", { class: "field stdin" }, h("span", {}, "Standard input"), ta);
   }
 
-  function runTyped() {
+  // `replay`: a run's log of the world's answers (E232b): the run answered
+  // from it alone, its writes checked against it, so it does the same
+  // again, or says where an edited program went another way.
+  function runTyped(replay?: LogEntry[]) {
     stopRun();
     const def = ui.def, title = titleOf(doc()), prefix = `lab:${title}:`;
     const files: [string, string][] = [];
@@ -102,7 +106,7 @@ export function runPanel(host: RunHost) {
     // A program from a file runs with only what was allowed (E229).
     const asked = permissionsAsked(def), deny = asked.filter((e) => !doc().allowed?.includes(e));
     const stdin = readsInput() ? ui.stdin?.[doc().program] ?? "" : undefined;
-    const ask: RunAsk = { code, names: pres().names, pins: pins(), def, title, files, args: given?.args, ...(same ? { compiled: compiledFor!.compiled } : {}), ...(deny.length ? { deny } : {}), ...(stdin !== undefined ? { stdin } : {}) };
+    const ask: RunAsk = { code, names: pres().names, pins: pins(), def, title, files, args: given?.args, ...(same ? { compiled: compiledFor!.compiled } : {}), ...(deny.length ? { deny } : {}), ...(stdin !== undefined && !replay ? { stdin } : {}), ...(replay ? { replay } : {}) };
     ui.output = { def, lines: [], running: true };
     w.onmessage = (e: MessageEvent<RunSays>) => {
       if (running !== w || !ui.output) return;
@@ -110,7 +114,7 @@ export function runPanel(host: RunHost) {
       if ("lines" in m) { ui.output = { ...ui.output, lines: [...ui.output.lines, ...m.lines] }; render(); return; }
       try { for (const [k, v] of m.files) localStorage.setItem(k, v); } catch { /* no storage */ }
       const lines = "done" in m && m.shown !== "unit" ? [...ui.output.lines, `→ ${m.shown}`] : ui.output.lines;
-      ui.output = { def, lines, error: "error" in m ? m.error : undefined, running: false, ...(m.stuck ? { stuck: m.stuck } : {}), ...("profile" in m && m.profile?.length ? { profile: m.profile } : {}), ...(m.compiled || m.core ? { compiled: true } : {}), ...(m.answers?.length ? { answers: m.answers } : {}) };
+      ui.output = { def, lines, error: "error" in m ? m.error : undefined, running: false, ...(m.stuck ? { stuck: m.stuck } : {}), ...("profile" in m && m.profile?.length ? { profile: m.profile } : {}), ...(m.compiled || m.core ? { compiled: true } : {}), ...(m.answers?.length ? { answers: m.answers } : {}), ...(replay ? { replayed: true } : {}) };
       // The compiled main is kept for the next run of this same code (E238).
       compiledFor = m.compiled ? { code: ask.code, def, args: ask.args, compiled: m.compiled } : null;
       running = null;

@@ -7,7 +7,7 @@
 // The worker has no localStorage: the program's files come in as a copy,
 // and what the run wrote goes back to the page with the result.
 
-import { logged, type LogEntry } from "../ters/src/lang/worldlog.ts";
+import { logged, replaying, type LogEntry } from "../ters/src/lang/worldlog.ts";
 import type { Code, Id } from "../ters/src/model.ts";
 import { isUse, subtree } from "../ters/src/model.ts";
 import type { Names } from "../ters/src/presentation.ts";
@@ -30,7 +30,8 @@ import { $Aborted } from "../compiler/src/runtime.js";
 
 // `compiled`: main as compiled JavaScript from an earlier run of this same
 // code (E238), so the run needs no checking or compiling again.
-export type RunAsk = { code: Code; names: Names; pins: Pins; def: Id; title: string; files: [string, string][]; args?: string[]; compiled?: Compiled; deny?: Id[]; stdin?: string };
+// `replay`: answer from an earlier run's log instead of the world (E232b).
+export type RunAsk = { code: Code; names: Names; pins: Pins; def: Id; title: string; files: [string, string][]; args?: string[]; compiled?: Compiled; deny?: Id[]; stdin?: string; replay?: LogEntry[] };
 export type Compiled = { program: string; name: string };
 // args: main takes the command line's words, as `lab run` gives them (E212).
 // A page compiled the way "Open in a tab" does (page.ts pageFile), off the
@@ -53,10 +54,8 @@ export type RunSays = { lines: string[] } | { done: true; shown: string; files: 
 
 // The run's log of the world's answers (worldlog.ts), sent with its end.
 let answers: LogEntry[] | null = null;
-const post = (m: RunSays | Found | CompileSays) => (self as unknown as Worker).postMessage(answers && ("done" in m || ("error" in m && "files" in m)) ? { ...m, answers: answers.filter((e) => !e.write).map(sendable) } : m);
-// Bytes go as their count: the log is shown, not replayed, from here.
-const sendable = (e: LogEntry): LogEntry => ({ ...e, args: e.args.map(cut), answer: cut(e.answer) });
-const cut = (v: unknown): unknown => (v instanceof Uint8Array ? `${v.length} bytes` : v);
+// The whole log, writes and bytes too, so Run again can answer from it.
+const post = (m: RunSays | Found | CompileSays) => (self as unknown as Worker).postMessage(answers && ("done" in m || ("error" in m && "files" in m)) ? { ...m, answers } : m);
 
 // Standard input typed into Run's box (I168), read as `lab run` reads a
 // pipe (world.ts): read input takes the rest, read line a line at a time
@@ -102,7 +101,7 @@ self.onmessage = (e: MessageEvent<RunAsk | BackAsk | CompileAsk>) => {
     const { code, def, values, names } = e.data, until = Date.now() + 60000;
     return post(searchBackwards(code, def, values, names, () => Date.now() > until));
   }
-  const { code, names, pins, def, title, files, args, compiled: before, deny, stdin } = e.data;
+  const { code, names, pins, def, title, files, args, compiled: before, deny, stdin, replay } = e.data;
   const kept = new Map(files), wrote = new Map<string, string>();
   const store: Store = {
     getItem: (k) => kept.get(k) ?? null,
@@ -115,7 +114,8 @@ self.onmessage = (e: MessageEvent<RunAsk | BackAsk | CompileAsk>) => {
   const flush = () => { if (lines.length) post({ lines }); lines = []; sent = Date.now(); };
   try {
     const print = (line: string) => { lines.push(line); if (Date.now() - sent > 100) flush(); };
-    const logging = logged(denied(withInput(browserWorld(store, title), stdin), deny ?? [], names));
+    const real = denied(withInput(browserWorld(store, title), stdin), deny ?? [], names);
+    const logging = logged(replay ? replaying(replay, real) : real);
     const world = logging.world;
     answers = logging.log;
     if (before && runCompiled(before, args, world, print, flush, () => [...wrote])) return;
