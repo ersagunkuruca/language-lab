@@ -120,9 +120,12 @@ export function buildPrelude(): Module {
     return d;
   };
   const lowerOne = shifted("lowercase character", "A", "Z", 32), upperOne = shifted("uppercase character", "a", "z", -32);
-  const lowercase = k.def("lowercase");
+  // A to Z only, for identifiers, hex and protocols (L214b): people's text
+  // goes through `uppercase(text, in: locale)`, whose answer depends on
+  // the language (Turkish i goes up to İ).
+  const lowercase = k.def("ascii lowercase");
   k.define(lowercase, k.fn(["text"], (t) => k.call(TEXT_OPS.joinAll, k.call(map, k.call(TEXT_OPS.characters, t), lowerOne), k.lit(""))));
-  const uppercase = k.def("uppercase");
+  const uppercase = k.def("ascii uppercase");
   k.define(uppercase, k.fn(["text"], (t) => k.call(TEXT_OPS.joinAll, k.call(map, k.call(TEXT_OPS.characters, t), upperOne), k.lit(""))));
   // A text's start and end (BACKLOG L134, GAPS round 6 NG2): notebook
   // wrote ends with from length and slice, and routes its blank-line test.
@@ -2407,8 +2410,8 @@ export function buildPrelude(): Module {
     [notBefore]: "Text a ≥ b: b comes before a or is a. Not offered: at most, more than and at least take Text; kept so programs saved before still open.",
     [isDigit]: "Whether this is one of the characters 0 to 9.",
     [isLetter]: "Whether this is one of the English letters a to z or A to Z (other alphabets' letters aren't, yet).",
-    [lowercase]: "The text with A to Z made a to z, everything else as it was: lowercase(\"Hello, World\") is \"hello, world\".",
-    [uppercase]: "The text with a to z made A to Z, everything else as it was: uppercase(\"Hello\") is \"HELLO\".",
+    [lowercase]: "The text with A to Z made a to z, everything else as it was (for identifiers, hex and protocols; people's text goes through lowercase(text, locale)): ascii lowercase(\"Hello, World\") is \"hello, world\".",
+    [uppercase]: "The text with a to z made A to Z, everything else as it was (for identifiers, hex and protocols; people's text goes through uppercase(text, locale)): ascii uppercase(\"Hello\") is \"HELLO\".",
     [lowerOne]: "A helper of lowercase. Not offered in the palette.",
     [upperOne]: "A helper of uppercase. Not offered in the palette.",
     [startsWith]: "Whether the text begins with this: starts with(\"# notes\", \"#\") is true. Every text starts with \"\".",

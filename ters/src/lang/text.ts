@@ -40,6 +40,11 @@ export function graphemes(t: string): string[] {
   segmenter ??= new Intl.Segmenter("und", { granularity: "grapheme" });
   return Array.from(segmenter.segment(t), (s) => s.segment);
 }
+// Case in a language (L214b): the host's (ICU's) mapping for that tag; a
+// tag the host can't read gets the root locale's mapping.
+const readable = (tag: string): string => { try { return Intl.getCanonicalLocales(tag)[0] ?? "und"; } catch { return "und"; } };
+export const uppercase = (t: string, tag: string): string => t.toLocaleUpperCase(readable(tag));
+export const lowercase = (t: string, tag: string): string => t.toLocaleLowerCase(readable(tag));
 export const graphemeCount = (t: string): number => { let n = 0; segmenter ??= new Intl.Segmenter("und", { granularity: "grapheme" }); for (const _ of segmenter.segment(t)) n++; return n; };
 
 // The first position where `part` starts; no answer if it isn't there

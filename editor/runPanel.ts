@@ -9,6 +9,8 @@ import type { Code, Id } from "../ters/src/model.ts";
 import type { Presentation } from "../ters/src/presentation.ts";
 import type { Namer } from "../ters/src/render/namer.ts";
 import { FILES as FILES_EFFECT, NETWORK } from "../ters/src/lang/types.ts";
+import { IO } from "../ters/src/lang/std.ts";
+import { LIBRARY } from "../ters/src/lang/library.ts";
 import type { Pins } from "../ters/src/lang/signatures.ts";
 import type * as T from "./typed.ts";
 import { h } from "./dom.ts";
@@ -70,6 +72,22 @@ export function runPanel(host: RunHost) {
         h("input", { type: "checkbox", "data-allow": e, ...(doc().allowed?.includes(e) ? { checked: "" } : {}) }), h("span", {}, `${names[e] ?? e}: ${what}`))),
       h("div", { class: "acts" }, h("button", { class: "btn", type: "button", "data-act": "t-allow-run" }, `Run ${namer.name(ui.def)}`)));
   }
+  // Does the program read standard input (calc's sums)? Run gives it what
+  // is typed in a box, as lab run gives it a pipe (I168).
+  const reading = new WeakMap<Code, boolean>();
+  function readsInput(): boolean {
+    const code = doc().code;
+    let r = reading.get(code);
+    if (r === undefined) reading.set(code, (r = Object.values(code.nodes).some((n) => n.kind === "ref" && (n.target === IO.readInput || n.target === IO.readLine) && !LIBRARY.code.nodes[n.id])));
+    return r;
+  }
+  function stdinBox(): HTMLElement {
+    const ta = h("textarea", { id: "t-stdin", rows: "3", spellcheck: "false", "aria-label": "Standard input" }) as HTMLTextAreaElement;
+    ta.value = ui.stdin?.[doc().program] ?? "";
+    ta.addEventListener("input", () => { ui.stdin = { ...ui.stdin, [doc().program]: ta.value }; });
+    return h("label", { class: "field stdin" }, h("span", {}, "Standard input"), ta);
+  }
+
   function runTyped() {
     stopRun();
     const def = ui.def, title = titleOf(doc()), prefix = `lab:${title}:`;
@@ -83,7 +101,8 @@ export function runPanel(host: RunHost) {
     const code = prog(), same = compiledFor && compiledFor.code === code && compiledFor.def === def && JSON.stringify(compiledFor.args) === JSON.stringify(given?.args);
     // A program from a file runs with only what was allowed (E229).
     const asked = permissionsAsked(def), deny = asked.filter((e) => !doc().allowed?.includes(e));
-    const ask: RunAsk = { code, names: pres().names, pins: pins(), def, title, files, args: given?.args, ...(same ? { compiled: compiledFor!.compiled } : {}), ...(deny.length ? { deny } : {}) };
+    const stdin = readsInput() ? ui.stdin?.[doc().program] ?? "" : undefined;
+    const ask: RunAsk = { code, names: pres().names, pins: pins(), def, title, files, args: given?.args, ...(same ? { compiled: compiledFor!.compiled } : {}), ...(deny.length ? { deny } : {}), ...(stdin !== undefined ? { stdin } : {}) };
     ui.output = { def, lines: [], running: true };
     w.onmessage = (e: MessageEvent<RunSays>) => {
       if (running !== w || !ui.output) return;
@@ -105,5 +124,5 @@ export function runPanel(host: RunHost) {
 
   // Ends a run without a word: opening another program.
   const endRun = () => { running?.terminate(); running = null; };
-  return { stopRun, endRun, runGiven, permissionsAsked, permissionsPanel, runTyped };
+  return { stopRun, endRun, runGiven, permissionsAsked, permissionsPanel, runTyped, readsInput, stdinBox };
 }
