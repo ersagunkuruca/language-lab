@@ -31,7 +31,7 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I167 | + New definition still freezes about a second (1.3 to 1.8 s to the status line, gaps 0.8 to 1.0 s), down from 3 to 5 s (I157). Where it goes (Insertion sort, 11-04): the edit's guard checks the whole program (`guardTyped`, 0.53 s), then the panel draws (0.33 s), then the hole's fillings, a frame later (0.6 s). A guard of only the added definition (signatures.ts `recheck`) took 26 ms but gives an Info that isn't a layer over the library's, and the palette then lost the inputs in scope: it needs `infer` to check an addition as a layer. | QA 11-04 L1 | 2026-11-04 |
+| I167 | + New definition still freezes about a second (1.3 to 1.8 s to the status line, gaps 0.8 to 1.0 s), down from 3 to 5 s (I157). Where it goes (Insertion sort, 11-04): the edit's guard checks the whole program (`guardTyped`, 0.53 s), then the panel draws (0.33 s, of which 0.15 s was a run of the hole-only body for values, skipped since I167a), then the hole's fillings, a frame later (0.6 s). A guard of only the added definition (signatures.ts `recheck`) took 26 ms but gives an Info that isn't a layer over the library's, and the palette then lost the inputs in scope: it needs `infer` to check an addition as a layer. | QA 11-04 L1 | 2026-11-04 |
 
 ## E: Editor
 

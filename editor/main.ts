@@ -1933,6 +1933,11 @@ function stepBar(info: T.Info, tr: Trace): HTMLElement | null {
 }
 
 function traced(info: T.Info): Trace | null {
+  // A body that is only a hole has no values to show: a new definition's
+  // run would only find the hole, after making a runner for the whole
+  // program (I167, about 0.15 s on Insertion sort).
+  const lam = defBody(ui.def);
+  if (lam?.kind === "lambda" && doc.code.nodes[lam.body]?.kind === "hole") return null;
   const texts = traceInputs(info);
   if (!texts) return null;
   // What performs an effect of your own has values only inside a handler.
