@@ -40,7 +40,8 @@ import { ASSOCIATIVE, chainOperands, CONS, NIL, S, SIGS, TRUE, FALSE, TUPLE_MAX,
 import { CHOICE, DIVERGE, showIn, showType, type Type } from "../ters/src/lang/types.ts";
 import { connectDrag, follow, infiniteCanvas, moveDrag, s, svgPoint, type Canvas, type Pos } from "./canvas.ts";
 import { litLabel, sigType, typeOf as shownType } from "./typed.ts";
-import { partPort, resultPorts } from "../ters/src/lang/results.ts";
+import { partPort, resultPorts, tuplePlace } from "../ters/src/lang/results.ts";
+import { answerKeys } from "../ters/src/lang/ports.ts";
 import { arrange, crossingsOf, curve, curvePoints, frameBoxes, hopPath, overlaps, placeLabels, route, tidy, tunnels, type Box, type TFrame, type TNode, type TWire } from "./graphLayout.ts";
 import { planSolve } from "../ters/src/lang/solve.ts";
 import { B } from "../ters/src/prelude.ts";
@@ -355,6 +356,30 @@ interface Scene {
 interface Sub { w: number; h: number; outX: number; outY: number; out: End; at: Map<Id, Pos> }
 const shift = (into: Map<Id, Pos>, sub: Sub, x: number, y: number) => { for (const [k, p] of sub.at) into.set(k, { x: p.x + x, y: p.y + y }); };
 
+// A let whose value is a use with no body (L211): the use's produced
+// ports are its outputs, each wired straight to what reads it, so the let's
+// dot isn't drawn when nothing reads the value whole. Per program: each
+// let's binder with its value, and the refs to each binder.
+const letsOf = new WeakMap<Code["nodes"], { value: Map<Id, Id>; refs: Map<Id, Id[]>; reader: Map<Id, Id>; holder: Map<Id, Id> }>();
+function lets(code: Code) {
+  let m = letsOf.get(code.nodes);
+  if (!m) {
+    m = { value: new Map(), refs: new Map(), reader: new Map(), holder: new Map() };
+    for (const n of Object.values(code.nodes)) {
+      if (isCall(n)) {
+        const l = code.nodes[n.fn];
+        if (l?.kind === "lambda") l.params.forEach((b, i) => { if (n.args[i]) { m!.value.set(b, n.args[i]); m!.holder.set(n.args[i], b); } });
+        else if (n.args.length === 1) m.reader.set(n.args[0], n.id);
+      }
+      else if (n.kind === "ref" && code.nodes[n.target]?.kind === "binder") m.refs.set(n.target, [...(m.refs.get(n.target) ?? []), n.id]);
+    }
+    letsOf.set(code.nodes, m);
+  }
+  return m;
+}
+// The output End of a bodyless use's i-th produced port, by this key.
+const portKey = (use: Id, i: number) => `${use}.port.${i}`;
+
 function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hooks: GraphHooks, loose = false): Scene {
   const names = pres.names;
   const node = (id: Id) => code.nodes[id];
@@ -367,6 +392,30 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     return n?.kind === "ref" && node(n.target)?.kind === "binder" ? n.target : null;
   };
   const named = (b: Id) => hooks.named.has(b) && name(b) !== "_";
+  // A let's binder holding a use with no body, shown without its dot: the
+  // use and its produced ports (L211).
+  const fedBy = (b: Id): { use: Id; ports: string[] } | null => {
+    if (named(b) || name(b) === "_") return null;
+    const v = lets(code).value.get(b), u = v ? node(v) : undefined;
+    if (!isUse(u) || u.body !== undefined) return null;
+    const ports = answerKeys(code, u);
+    return ports.length ? { use: u.id, ports } : null;
+  };
+  // A part read of such a binder, b.<port>: a wire from that port.
+  const partOf = (id: Id): string | null => {
+    const n = node(id);
+    if (!isCall(n) || n.args.length !== 1) return null;
+    const f = node(n.fn), b = dotOf(n.args[0]);
+    const at = f?.kind === "ref" ? tuplePlace(f.target) : null;
+    const fed = b && at ? fedBy(b) : null;
+    return fed && fed.ports.length === at![1] ? portKey(fed.use, at![0]) : null;
+  };
+  // Drawn without its dot: one port, whose refs are wires from it; or
+  // several, all read by part.
+  const dotless = (b: Id): boolean => {
+    const fed = fedBy(b);
+    return !!fed && (fed.ports.length === 1 || (lets(code).refs.get(b) ?? []).every((r) => { const p = lets(code).reader.get(r); return !!p && !!partOf(p); }));
+  };
   // A loose part's own result: its output wires the part back in, even
   // when it is a lone pill (a literal has no other output).
   const lp = loose ? looseParts(code, defId, hooks.home ?? {}) : null;
@@ -479,6 +528,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   const arg = (a: Id): Sub | null => {
     const d = dotOf(a);
     if (d && !named(d)) return null;
+    if (partOf(a)) return null;
     return lay(a);
   };
 
@@ -486,6 +536,12 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const n = node(id);
     const d = dotOf(id);
     if (d) return useNode(id, d);
+    const pk = partOf(id);
+    if (pk) {
+      const sub = item(id, 10, 18, (g) => g.append(titled(s("circle", { cx: 5, cy: 9, r: 4, class: `inp use${sel(id)}`, "data-slot": id, "data-id": id }), typeOf(id))), { solid: false });
+      useAt(id, pk, { item: id, dx: 1, dy: 9 });
+      return sub;
+    }
     if (isUse(n)) return solve(id, n);
     switch (n.kind) {
       // A text node is clipped shorter than in the blocks: a node is read
@@ -553,7 +609,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     kids.forEach((k, i) => {
       const to: End = { item: boxKey, dx: 0, dy: portY(i, 0) };
       if (!k) {
-        const dt = dotOf(inputs[i]);
+        const dt = dotOf(inputs[i]) ?? partOf(inputs[i]);
         if (dt) useAt(inputs[i], dt, to);
       } else {
         shift(at, k, colW - k.w, y);
@@ -726,16 +782,25 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     } catch {}
     const choice = /Choice|needs|stuck|may not end/.test(badge);
     const title = `${declared ? "" : "solve "}${pres.style.notation[of]?.glyph?.trim() || name(of)}`;
-    const rows = Math.max(givenKeys.length, boundKeys.length);
+    // With no body (L211) its produced ports are its outputs, one per row,
+    // each wired to what reads it; the value whole, when something reads
+    // it so (a dot is drawn), leaves from a last row.
+    const produced = n.body === undefined ? answerKeys(code, n) : [];
+    const holder = lets(code).holder.get(id);
+    const whole = produced.length > 1 && !(holder && dotless(holder));
+    const outKeys = n.body === undefined ? (produced.length ? [...produced, ...(whole ? ["(all)"] : [])] : ["(all)"]) : [];
+    const rows = Math.max(givenKeys.length, boundKeys.length, outKeys.length);
     // A solved port reads "port → its name" when the two differ: sized as
     // drawn, so a row's two labels don't run together (BACKLOG I132).
     const outLabel = (k: string) => { const b = bound[k]; return name(b) === label(k) ? label(k) : `${label(k)} → ${name(b)}`; };
-    const lw = (i: number) => (givenKeys[i] ? tw(label(givenKeys[i]), 6.6) : 0), rw = (i: number) => (boundKeys[i] ? tw(outLabel(boundKeys[i]), 6.6) : 0);
-    const bw = Math.max(70, tw(title, 8.2) + 24, tw(badge, 6.4) + 16, ...Array.from({ length: Math.max(givenKeys.length, boundKeys.length) }, (_, i) => lw(i) + rw(i) + 36));
+    const outText = (k: string) => (k === "(all)" ? "all" : label(k));
+    const lw = (i: number) => (givenKeys[i] ? tw(label(givenKeys[i]), 6.6) : 0), rw = (i: number) => (boundKeys[i] ? tw(outLabel(boundKeys[i]), 6.6) : outKeys[i] ? tw(outText(outKeys[i]), 6.6) : 0);
+    const bw = Math.max(70, tw(title, 8.2) + 24, tw(badge, 6.4) + 16, ...Array.from({ length: rows }, (_, i) => lw(i) + rw(i) + 36));
     const top = 34;
     const bh = top + rows * 20 + 6;
     const portY = (i: number) => top + i * 20 + 8;
     boundKeys.forEach((k, i) => sources.set(bound[k], { item: id, dx: bw + 6, dy: portY(i) }));
+    produced.forEach((_, i) => sources.set(portKey(id, i), { item: id, dx: bw, dy: portY(i) }));
     item(id, bw, bh, (g) => {
       g.append(titled(s("rect", { width: bw, height: bh, rx: 7, class: `cn rel${choice ? " eff" : ""}${sel(id)}${errs.has(id) ? " err" : ""}`, "data-id": id, "data-move": id }), typeOf(id)));
       g.append(titled(s("text", { x: bw / 2, y: 12, class: "badge", "text-anchor": "middle" }, badge), why));
@@ -744,7 +809,12 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
         g.append(titled(s("circle", { cx: 0, cy: portY(i), r: 5, class: "inp", "data-slot": n.given[k] }), typeOf(n.given[k])));
         g.append(s("text", { x: 9, y: portY(i) + 4, class: "portl" }, label(k)));
       });
-      if (n.body === undefined) g.append(titled(s("circle", { cx: bw, cy: bh / 2, r: 5, class: "outp", "data-out": id }), "Drag onto another input to share this value there"));
+      outKeys.forEach((k, i) => {
+        // The one output that is the whole value shares it when dragged.
+        const all = k === "(all)" || outKeys.length === 1;
+        g.append(s("text", { x: bw - 9, y: portY(i) + 4, class: "portl", "text-anchor": "end" }, outText(k)));
+        g.append(titled(s("circle", { cx: bw, cy: portY(i), r: 5, class: "outp", ...(all ? { "data-out": id } : {}) }), all ? "Drag onto another input to share this value there" : `${label(k)}: wired to what reads it`));
+      });
       boundKeys.forEach((k, i) => {
         const b = bound[k];
         g.append(s("text", { x: bw - 9, y: portY(i) + 4, class: "portl", "text-anchor": "end" }, outLabel(k)));
@@ -752,7 +822,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
       });
     }, { name: title });
     const { sub, bx, by } = withArgs(inputs, kids, bw, bh, id, portY);
-    if (n.body === undefined) return { ...sub, outX: bx + bw, outY: by + bh / 2, out: { item: id, dx: bw, dy: bh / 2 } };
+    if (n.body === undefined) { const oy = portY(outKeys.length - 1); return { ...sub, outX: bx + bw, outY: by + oy, out: { item: id, dx: bw, dy: oy } }; }
     const body = lay(n.body);
     const x = bx + bw + 40, y = Math.max(0, (sub.h - body.h) / 2);
     shift(sub.at, body, x, y);
@@ -786,7 +856,13 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
       const vx = sequence ? 0 : colW - v.w;
       shift(at, v, vx, y);
       const py = y + v.outY, x = (sequence ? vx + v.outX : Math.max(colW, vx + v.outX)) + 22;
-      if (named(b)) {
+      const fed = dotless(b) ? fedBy(b) : null;
+      if (fed) {
+        // A use with no body read only by its ports: they are the wires'
+        // sources, and no dot is drawn (L211). One port is the value.
+        if (fed.ports.length === 1) sources.set(b, sources.get(portKey(fed.use, 0))!);
+        right = Math.max(right, vx + v.w);
+      } else if (named(b)) {
         // A let node: `name =`, its value wired in; its uses are get nodes.
         const label = `${name(b)} =`;
         const bw = Math.max(44, tw(label, 8.2) + 20), bh = 26;
