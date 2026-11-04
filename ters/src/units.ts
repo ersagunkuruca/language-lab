@@ -11,7 +11,7 @@
 // isn't in scope.
 
 import type { Code, Id, Node } from "./model.ts";
-import { get, useTarget, isCall, isUse, bindsOf, isPublished } from "./model.ts";
+import { get, useTarget, isCall, isUse, bindsOf, isPublished, children } from "./model.ts";
 
 // Angles are plain numbers, as in SI: a radian is a length over a length.
 export const BASE = ["m", "s", "kg", "A"] as const;
@@ -167,16 +167,114 @@ export function constraints(code: Code, defId: Id, prefix = "", bindings: Map<Id
 }
 
 // A callee's constraints with its ports bound to the caller's terms.
+// A call of a published definition (a module's, L210's steady pow among
+// them) has its callee's constraints said of its ports only: the
+// callee's own constraints with every term inside it eliminated, worked
+// out once per callee and program (Gaussian elimination, as System solves
+// them). Inlining the whole body at each call instead grew as the product
+// of the calls along each path: steady pow's fdlibm steps (L210) made the
+// palette's unit check of one filling take seconds, and editing's
+// swapAndUndo ran out of memory.
+// Kept by the callee's definition node, with every node the summary read
+// (its body's and, through the summaries it used, its callees'), so a
+// program made from another by a few nodes (each filling the palette
+// tries) finds it again while those nodes are the same.
+type Summary = { out: Constraint[]; read: [Id, Node][] };
+const summaries = new WeakMap<Node, Summary>();
+const PORT = "\u0000";
+let summarising: Set<Id> = new Set();
+let reading: [Id, Node][][] = [];
+function summaryOf(code: Code, fn: Id): Constraint[] {
+  const def = code.nodes[fn];
+  const was = summaries.get(def);
+  if (was && was.read.every(([id, n]) => code.nodes[id] === n)) { reading[reading.length - 1]?.push(...was.read); return was.out; }
+  // A callee being summarised calls itself: as when inlining, the inner
+  // call adds nothing.
+  if (summarising.has(fn)) return [];
+  summarising.add(fn);
+  const read: [Id, Node][] = [];
+  reading.push(read);
+  try {
+    const cdef = get(code, fn, "def");
+    const cb = cdef.body ? code.nodes[cdef.body] : null;
+    const map = new Map<Id, string>();
+    if (cb?.kind === "lambda") {
+      cb.params.forEach((p) => map.set(p, PORT + p));
+      map.set(cb.body, PORT + "out");
+    }
+    for (const id of subtreeIds(code, fn)) read.push([id, code.nodes[id]]);
+    const out = project(cb ? constraints(code, fn, "\u0001/", map, []) : [], (t) => t.startsWith(PORT), fn);
+    summaries.set(def, { out, read });
+    return out;
+  } finally {
+    summarising.delete(fn);
+    reading.pop();
+    reading[reading.length - 1]?.push(...read);
+  }
+}
+const subtreeIds = (code: Code, root: Id): Id[] => { const out: Id[] = []; const walk = (id: Id) => { out.push(id); for (const c of children(code.nodes[id])) walk(c); }; walk(root); return out; };
+
+// The constraints `cs` say of the terms `keep` takes, every other term
+// eliminated: a row with another term defines it from the rest, so it is
+// used to take that term out of the others and then dropped. A row left
+// with no terms and a right side is a contradiction, kept as one.
+function project(cs: Constraint[], keep: (t: string) => boolean, fn: Id): Constraint[] {
+  type Row = { coef: Map<string, number>; rhs: Vec; why: string; node?: Id };
+  const rows = new Set<Row>();
+  const uses = new Map<string, Set<Row>>();
+  const index = (r: Row) => { for (const k of r.coef.keys()) { let u = uses.get(k); if (!u) uses.set(k, (u = new Set())); u.add(r); } };
+  for (const c of cs) {
+    const coef = new Map<string, number>();
+    for (const [k, v] of c.terms) coef.set(k, (coef.get(k) ?? 0) + v);
+    for (const [k, v] of coef) if (Math.abs(v) < EPS) coef.delete(k);
+    const r: Row = { coef, rhs: [...c.rhs], why: c.why, node: c.node };
+    rows.add(r);
+    index(r);
+  }
+  for (const [term, users] of uses) {
+    if (keep(term) || !users.size) continue;
+    const pivot = users.values().next().value!;
+    const pv = pivot.coef.get(term)!;
+    rows.delete(pivot);
+    for (const k of pivot.coef.keys()) uses.get(k)?.delete(pivot);
+    for (const r of [...users]) {
+      const c = r.coef.get(term)! / pv;
+      for (const [k, v] of pivot.coef) {
+        const nv = (r.coef.get(k) ?? 0) - c * v;
+        if (Math.abs(nv) < EPS) { r.coef.delete(k); uses.get(k)?.delete(r); }
+        else { if (!r.coef.has(k)) { let u = uses.get(k); if (!u) uses.set(k, (u = new Set())); u.add(r); } r.coef.set(k, nv); }
+      }
+      r.rhs = r.rhs.map((x, i) => x - c * pivot.rhs[i]);
+    }
+  }
+  const out: Constraint[] = [];
+  for (const r of rows) {
+    if (!r.coef.size && r.rhs.every((x) => Math.abs(x) < EPS)) continue;
+    out.push({ terms: [...r.coef], rhs: r.rhs, why: r.coef.size ? r.why : `${r.why} (inside ${fn})`, node: r.node });
+  }
+  return out;
+}
+
 function calleeConstraints(code: Code, fn: Id, port: (k: string) => string, prefix: string, path: Id[]): Constraint[] {
   const cdef = get(code, fn, "def");
   const cb = cdef.body ? code.nodes[cdef.body] : null;
   if (!cb) return [];
-  const map = new Map<Id, string>();
-  if (cb.kind === "lambda") {
-    cb.params.forEach((p) => map.set(p, port(p)));
-    map.set(cb.body, port("out"));
+  // A program's own callee is read through, so a message can name the
+  // terms inside it (drift, drop).
+  if (!isPublished(fn)) {
+    const map = new Map<Id, string>();
+    if (cb.kind === "lambda") {
+      cb.params.forEach((p) => map.set(p, port(p)));
+      map.set(cb.body, port("out"));
+    }
+    return constraints(code, fn, prefix, map, path);
   }
-  return constraints(code, fn, prefix, map, path);
+  const ports = new Map<string, string>();
+  if (cb.kind === "lambda") {
+    cb.params.forEach((p) => ports.set(PORT + p, port(p)));
+    ports.set(PORT + "out", port("out"));
+  }
+  return summaryOf(code, fn).map((c) => ({ ...c, terms: c.terms.map(([t, v]) => [ports.get(t) ?? t, v] as [string, number]) }));
 }
 
 // ---------------------------------------------------------------- solving
