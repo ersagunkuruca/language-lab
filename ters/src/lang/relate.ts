@@ -830,7 +830,7 @@ function solveFraction(op: FractionOp, at: number, xs: (Q | undefined)[]): Q | n
 // sliders spent about 60 ms an input here.
 // The search's budget ran out inside a call worked out forward.
 class OutOfSteps extends Error {}
-const prepared = new WeakMap<Code, { code: Code; owner: Map<Id, Id>; runner?: ReturnType<typeof makeRunner> | null; info?: ReturnType<typeof infer>; spend?: () => boolean }>();
+const prepared = new WeakMap<Code, { code: Code; owner: Map<Id, Id>; recursive: Map<Id, boolean>; runner?: ReturnType<typeof makeRunner> | null; info?: ReturnType<typeof infer>; spend?: () => boolean }>();
 
 export function interpreter(given: Code, opts: Options = {}) {
   let ready = prepared.get(given);
@@ -840,13 +840,15 @@ export function interpreter(given: Code, opts: Options = {}) {
     const r = needsResolving(given) ? resolvedFor(given, opts.info ?? infer(given), opts.names) : { code: given, info: opts.info };
     // A use with no body is read with its ports bound (L211e).
     const code = filled(r.code);
-    prepared.set(given, (ready = { code, info: r.info, owner: ownerOfTypeParts(code) }));
+    prepared.set(given, (ready = { code, info: r.info, owner: ownerOfTypeParts(code), recursive: new Map() }));
   }
   const code = ready.code;
   const nodes = code.nodes;
   const owner = ready.owner;
   const spend = opts.spend ?? (() => true);
-  const recursive = new Map<Id, boolean>();
+  // Which lambdas call themselves: kept with the program, as a solve on a
+  // page's sound relates once a sample (C137d8).
+  const recursive = ready.recursive;
   const fractionOps = new Map<Id, FractionOp>();
   for (const name of FRACTION_OPS) {
     const d = preludeDef(name), n = d ? nodes[d] : undefined;

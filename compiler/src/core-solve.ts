@@ -4,13 +4,22 @@
 // prelude): a printed program imports this only when it solves, and the
 // program hands core-rt.ts these (useSolver).
 
-import { META, makeRunner, solveAnswers } from "../../ters/src/lang/run.ts";
+import { META, equal, makeRunner, resolvedFor, solveAnswers, type Value } from "../../ters/src/lang/run.ts";
 import type { Runtime } from "../../ters/src/lang/run.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { satisfiable } from "../../ters/src/lang/relate.ts";
-import { givenInOrder } from "../../ters/src/lang/ports.ts";
+import { answerKeys, filled, givenInOrder } from "../../ters/src/lang/ports.ts";
+import { needsResolving } from "../../ters/src/lang/arith.ts";
+import { infer } from "../../ters/src/lang/infer.ts";
+import { add as intAdd, intLit, neg as intNeg, sub as intSub } from "../../ters/src/lang/int.ts";
+import { INT } from "../../ters/src/lang/types.ts";
+import { modeCompiler, type ModeEmit } from "./modes.ts";
+import { compileSolve } from "./relation.ts";
+import { planSolve } from "../../ters/src/lang/solve.ts";
+import { bindsOf } from "./uses.ts";
+import { $FN, $clean, $close, $key, $ok, $planned, $solveRuntime } from "./runtime.js";
 import { CONS, NIL } from "../../ters/src/lang/std.ts";
-import { ownerOfTypeParts, useTarget, type Code, type Id, type Use } from "../../ters/src/model.ts";
+import { ownerOfTypeParts, useTarget, type Code, type Id, type NodeOf, type Use } from "../../ters/src/model.ts";
 import { FAIL, Unsupported, inn, useSolver, type Solver } from "./core-rt.ts";
 
 // derivative(f) or gradient(f) of a function value (C137c20, scalar.ts):
@@ -40,15 +49,84 @@ export function deriveFn(id: Id, code?: Code, info?: Info, rt?: Runtime): (...xs
 export function solveFn(id: Id, code?: Code, all = false, spend?: () => boolean): (...xs: unknown[]) => unknown {
   if (!code) return () => { throw new Unsupported(`solve ${id} without the program`); };
   const n = code.nodes[id] as Use, keys = givenInOrder(code, n);
-  const answers = (xs: unknown[]) => solveAnswers(code, n, Object.fromEntries(keys.map((k, i) => [k, inn(xs[i])])), { spend });
+  let written: ((...xs: unknown[]) => Iterable<Value[]>) | null | undefined;
+  const answers = (xs: unknown[]) => {
+    if (written === undefined) written = planWritten(code, id);
+    return written ? written(...xs.map(inn)) : solveAnswers(code, n, Object.fromEntries(keys.map((k, i) => [k, inn(xs[i])])), { spend });
+  };
   // Every answer, a List of them (`solveAll`) made as it is read: a
   // periodic solution (an angle) has no end, and `one of` it stops at the
   // first that the rest of the search takes, as the evaluator's does.
-  if (all) return (...xs) => lazyList(answers(xs));
+  if (all) return (...xs) => lazyList(answers(xs)[Symbol.iterator]());
   return (...xs) => {
     for (const bound of answers(xs)) return bound;
     throw new Error(`solving ${useTarget(code.nodes, n)} this way gives exactly one answer, and it gave none`);
   };
+}
+// A solve's plan written out once as a JavaScript function, as compile.ts's
+// modules have it, rather than worked out again on every call (C137d8):
+// the pedal solves twice a sample. Numbers solved by equations are the
+// solver's plan (relation.ts compileSolve); a relational solve whose mode
+// has one answer or none (det, semidet: MODES.md), the mode's plan
+// (modes.ts), a call in it run forward the evaluator's, on the program's
+// code. Null when the plan can't be written out: the evaluator's solve
+// runs it (solveAnswers). `given`'s ports come in givenInOrder's order;
+// the function gives the answers' binds in answerKeys's.
+function planWritten(given: Code, id: Id): ((...xs: unknown[]) => Iterable<Value[]>) | null {
+  try {
+    const code = filled(needsResolving(given) ? resolvedFor(given, infer(given), undefined).code : given);
+    const n = code.nodes[id] as Use | undefined;
+    if (!n) return null;
+    const binds = Object.keys(bindsOf(n));
+    if (binds.join() !== answerKeys(given, given.nodes[id] as Use).join()) return null;
+    const p = planSolve(code, n);
+    if (p.mode === "solver") {
+      if (p.status !== "solved") return null;
+      const order = givenInOrder(given, given.nodes[id] as Use), known = [...p.known].sort((a, b) => order.indexOf(a) - order.indexOf(b));
+      const c = compileSolve("solve$", p.rel as never, known, binds);
+      const f = new Function("$planned", "$solveRuntime", "$ok", "$clean", "$key", "$close", "$FN", `"use strict";\n${c.code}\nreturn solve$;`)($planned, $solveRuntime, $ok, $clean, $key, $close, $FN) as (...xs: unknown[]) => Iterable<Value[]>;
+      const at = known.map((k) => order.indexOf(k));
+      return (...xs) => f(...at.map((i) => xs[i]));
+    }
+    let runner: ReturnType<typeof makeRunner> | undefined;
+    const fns: ((...xs: Value[]) => unknown)[] = [], consts: unknown[] = [];
+    const NO = Symbol("no answer");
+    // A function the evaluator runs forward: its first answer, or none.
+    const forward = (target: Id) => (...xs: Value[]) => {
+      runner ??= makeRunner(code, { divergent: new Set(), owner: ownerOfTypeParts(code) } as unknown as Info, { print: () => {} });
+      for (const v of (runner.value(target) as (...a: Value[]) => Iterable<Value>)(...xs)) return v;
+      return NO;
+    };
+    const emit: ModeEmit = {
+      value(v) {
+        const x = code.nodes[v];
+        if (x.kind === "lit") {
+          // A number written in the program as itself, as modes.ts reads a
+          // product or quotient by one backwards.
+          const val = x.of === INT ? intLit(x.value) : x.value;
+          if (typeof val === "number" && Number.isFinite(val) && !Object.is(val, -0)) return val < 0 ? `(${val})` : String(val);
+          consts.push(val);
+          return `K[${consts.length - 1}]`;
+        }
+        if (x.kind === "ref" && code.nodes[x.target]?.kind === "variant" && !(code.nodes[x.target] as NodeOf<"variant">).fields.length) return `{ tag: ${JSON.stringify(x.target)}, fields: [] }`;
+        return null;
+      },
+      forward(c, args) {
+        const f = code.nodes[c.fn];
+        const t = f?.kind === "ref" ? code.nodes[f.target] : undefined;
+        if (f?.kind !== "ref" || (t?.kind !== "builtin" && t?.kind !== "def")) return null;
+        fns.push(forward(f.target));
+        return { js: `F[${fns.length - 1}](${args.join(", ")})`, partial: true };
+      },
+      tag: (v) => JSON.stringify(v),
+    };
+    const modes = modeCompiler(code, {});
+    if (!modes.solver(n, "solve$", emit)) return null;
+    const make = new Function("$no", "$eq", "$int", "F", "K", `"use strict";\n${modes.code.join("\n")}\nreturn solve$;`);
+    return make(NO, equal, { add: intAdd, sub: intSub, neg: intNeg }, fns, consts) as (...xs: unknown[]) => Value[][];
+  } catch {
+    return null;
+  }
 }
 class LazyCell {
   private cell?: { tag: Id; fields: unknown[] };

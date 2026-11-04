@@ -54,10 +54,10 @@ test("the pedal: the evaluator and the compiled program play the same samples, a
   // backwards with fractions, the compiled plan with floats).
   assert.deepEqual(ways[1].out, ways[0].out);
   assert.deepEqual(ways[3].out, ways[2].out);
-  // The core IR's JavaScript plays the evaluator's very samples, since
-  // it runs atanh backwards with the evaluator's solver (C137d3).
-  assert.deepEqual(ways[4].out, ways[0].out);
-  assert.deepEqual(ways[5].out, ways[0].out);
+  // The core IR's JavaScript plays the compiled program's very samples:
+  // its solves are the same plans written out (C137d8).
+  assert.deepEqual(ways[4].out, ways[2].out);
+  assert.deepEqual(ways[5].out, ways[2].out);
   ways[0].out.forEach((x, i) => assert.ok(close(x, ways[2].out[i]), `sample ${i}: ${x} against ${ways[2].out[i]}`));
   // It drives, compresses and comes back as loud as it went in: once the
   // loudnesses have followed it in (a few hundredths of a second), a sine
