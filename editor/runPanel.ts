@@ -17,6 +17,8 @@ import type * as T from "./typed.ts";
 import { h } from "./dom.ts";
 import { newWorker } from "./runViews.ts";
 import type { Compiled, RunAsk, RunSays } from "./runWorker.ts";
+import type { CoreMain } from "./coreMain.ts";
+import { prebuilt, prebuiltKey } from "./prebuilt.ts";
 import type { Doc, UI } from "./main.ts";
 
 export interface RunHost {
@@ -54,6 +56,8 @@ export function runPanel(host: RunHost) {
   }
   // main as compiled by its last run, and the code it was compiled from.
   let compiledFor: { code: Code; def: Id; args?: string[]; compiled: Compiled } | null = null;
+  // main as printed from the core IR by its last run (E245c), the same way.
+  let printedFor: { code: Code; def: Id; args?: string[]; core: CoreMain } | null = null;
   // The world effects Run asks about for a program opened from a file
   // (E229): what it can reach outside the page. Console only prints here,
   // and Random and Time read nothing of yours.
@@ -104,11 +108,12 @@ export function runPanel(host: RunHost) {
     const given = runGiven();
     if (given) for (const [name, text] of Object.entries(given.files)) if (!files.some(([k]) => k === prefix + name)) files.push([prefix + name, text]);
     const w = (running = newWorker());
-    const code = prog(), same = compiledFor && compiledFor.code === code && compiledFor.def === def && JSON.stringify(compiledFor.args) === JSON.stringify(given?.args);
+    const code = prog(), sameAs = (k: { code: Code; def: Id; args?: string[] } | null) => !!k && k.code === code && k.def === def && JSON.stringify(k.args) === JSON.stringify(given?.args);
+    const same = sameAs(compiledFor), kept = sameAs(printedFor) ? printedFor!.core : undefined;
     // A program from a file runs with only what was allowed (E229).
     const asked = permissionsAsked(def), deny = asked.filter((e) => !doc().allowed?.includes(e));
     const stdin = readsInput() ? ui.stdin?.[doc().program] ?? "" : undefined;
-    const ask: RunAsk = { code, names: pres().names, pins: pins(), def, title, files, args: given?.args, ...(same ? { compiled: compiledFor!.compiled } : {}), ...(deny.length ? { deny } : {}), ...(stdin !== undefined && !replay ? { stdin } : {}), ...(replay ? { replay, ...(until !== undefined ? { until } : {}) } : {}) };
+    const ask: RunAsk = { code, names: pres().names, pins: pins(), def, title, files, args: given?.args, ...(same ? { compiled: compiledFor!.compiled } : kept ? { core: kept } : {}), ...(deny.length ? { deny } : {}), ...(stdin !== undefined && !replay ? { stdin } : {}), ...(replay ? { replay, ...(until !== undefined ? { until } : {}) } : {}) };
     ui.output = { def, lines: [], running: true };
     w.onmessage = (e: MessageEvent<RunSays>) => {
       if (running !== w || !ui.output) return;
@@ -119,12 +124,16 @@ export function runPanel(host: RunHost) {
       ui.output = { def, lines, error: "error" in m ? m.error : undefined, running: false, ...(m.stuck ? { stuck: m.stuck } : {}), ...("profile" in m && m.profile?.length ? { profile: m.profile } : {}), ...(m.compiled || m.core ? { compiled: true } : {}), ...(replay ? { answers: replay, replayed: true } : m.answers?.length ? { answers: m.answers } : {}), ...(m.paused ? { paused: until, error: undefined } : {}) };
       // The compiled main is kept for the next run of this same code (E238).
       compiledFor = m.compiled ? { code: ask.code, def, args: ask.args, compiled: m.compiled } : null;
+      printedFor = m.printed ? { code: ask.code, def, args: ask.args, core: m.printed } : null;
       running = null;
       w.terminate();
       render();
     };
     w.onerror = (e) => { e.preventDefault(); stopRun(e.message || "the run failed"); };
-    w.postMessage(ask);
+    // A shipped example's main as the site's build printed it (E245c,
+    // prebuild.ts), the first time it runs: none after an edit reaches it.
+    if (same || kept || !manifest.programs.some((p) => p.program === doc().program)) w.postMessage(ask);
+    else void prebuilt<CoreMain>(prebuiltKey("main", code, { main: def }, ask.pins)).then((core) => { if (running === w) w.postMessage(core ? { ...ask, core } : ask); });
     render();
   }
 
