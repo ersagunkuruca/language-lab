@@ -7,7 +7,7 @@ import { TRIG, TRIG_OPS } from "../src/lang/std.ts";
 import { NUMBER, showIn } from "../src/lang/types.ts";
 import type { Id, NodeOf, Call } from "../src/model.ts";
 import { isCall } from "../src/model.ts";
-import { fillValue, fillings, implement, implementable, infer, interfaces, setProgramPins } from "../../editor/typed.ts";
+import { fillValue, fillings, implement, implementable, infer, interfaces, setProgramPins, waysOfImplementation } from "../../editor/typed.ts";
 import { B } from "../src/prelude.ts";
 import { addOperation, newDefinition, setOperation } from "../src/lang/toplevel.ts";
 
@@ -177,4 +177,16 @@ test("implement at Text and at List Float64", () => {
   }
   const left = implementable(code, info, D.def).map((t) => showIn(t, names, info.subst));
   assert.ok(!left.includes("Text") && !left.includes("List Float64"), left.join(", "));
+});
+
+// The Selected panel's "How each operation is worked out" (WAYS.md step 5,
+// L96): the compiler's pick per field of an implementation.
+test("an implementation's picks: Fixed's sin and cos by polar, the rest as written", () => {
+  const fixed = LIBRARY.code.defs.find((d) => LIBRARY.names[d] === "trig at fixed")!;
+  const how = Object.fromEntries(waysOfImplementation(LIBRARY.code, fixed)!.map((p) => [LIBRARY.names[p.field], p.missing ? "missing" : p.way ? LIBRARY.names[p.way] : "written"]));
+  assert.equal(how.sin, "sin by polar");
+  assert.equal(how.cos, "cos by polar");
+  assert.equal(how.polar, "written");
+  // A way itself is a function, not an implementation.
+  assert.equal(waysOfImplementation(LIBRARY.code, LIBRARY.code.defs.find((d) => LIBRARY.names[d] === "sin by polar")!), null);
 });

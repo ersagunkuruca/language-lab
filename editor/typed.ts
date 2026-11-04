@@ -2325,6 +2325,21 @@ export function waysChosen(code: Code, info: Info, own: Id[]): Map<string, { imp
   return out;
 }
 
+// How an implementation's each operation is worked out (WAYS.md step 5,
+// L96): as written, by a way (the compiler's pick, ways.ts `pickWays`, as
+// arith.ts takes it), or left to its ways with none that ends in what it
+// gives. Null for a definition that isn't an implementation.
+export function waysOfImplementation(code: Code, impl: Id): { field: Id; given: boolean; way: Id | null; missing: boolean }[] | null {
+  const d = code.nodes[impl], body = d?.kind === "def" && d.body ? code.nodes[d.body] : null;
+  if (!isCall(body)) return null;
+  const fn = code.nodes[body.fn], variant = fn?.kind === "ref" ? code.nodes[fn.target] : null;
+  if (variant?.kind !== "variant") return null;
+  const iface = Object.values(code.nodes).find((t) => t.kind === "typedef" && t.interface && t.variants.includes(variant.id));
+  if (!iface) return null;
+  const pick = pickWays(code, waysIn(code), variant, body.args);
+  return variant.fields.map((f, i) => ({ field: f, given: !leftToWays(code, body.args[i]), way: pick.get(f) ?? null, missing: !pick.has(f) }));
+}
+
 // A function inside a definition made a definition of its own, in the
 // side menu with the rest (BACKLOG E164, Ersagun 2026-11-01: "we should
 // be able to somehow turn each lambda into a function"). What it uses from
