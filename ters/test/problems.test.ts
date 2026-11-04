@@ -23,7 +23,11 @@ const answered = (k: Lang, a: ReturnType<typeof ask>, answer: () => string): Par
 const param = (k: Lang, f: string, i: number): string => { const d = k.code.nodes[f]; const l = d?.kind === "def" && d.body ? k.code.nodes[d.body] : undefined; return l?.kind === "lambda" ? l.params[i] : ""; };
 
 const SMALLEST: Record<string, (k: Lang) => void> = {
-  "wrong-type": (k) => k.define(k.def("p"), k.call(S.not, k.lit("a"))),
+  "wrong-type": (k) => {
+    k.define(k.def("p"), k.call(S.not, k.lit("a")));
+    const t = k.type("Colour", [], [["red", []]]);
+    k.define(k.def("q"), k.thunk(() => k.handle(k.call(S.print, k.lit("a")), [{ variant: t.v.red, names: [], body: () => k.x("std.unit.unit") }])));
+  },
   "wrong-count": (k) => k.define(k.def("p"), k.call(S.not, k.x(TRUE), k.x(TRUE))),
   "not-a-function": (k) => { const v = k.def("v"); k.define(v, k.lit("a")); k.define(k.def("p"), k.call(v, k.lit(1))); },
   "fraction-at-int": (k) => k.define(k.def("p"), k.call(INT_OPS.add, k.int(1), k.lit(1.5))),
@@ -51,6 +55,9 @@ const SMALLEST: Record<string, (k: Lang) => void> = {
   "needs-more-ports": (k) => { const f = k.def("f"); k.define(f, k.fn(["a", "b"], (a, b) => k.call(ARITH.add, a, b))); k.define(k.def("p"), k.solve(f, {}, { [param(k, f, 0)]: "x", [param(k, f, 1)]: "y" }, (b) => b[param(k, f, 0)])); },
   "not-backwards": (k) => { const v = k.def("v"); k.define(v, k.lit(1)); k.define(k.def("p"), k.solve(v, { out: k.lit(3) }, {}, () => k.lit(0))); },
   "field-of-one-case": (k) => { const t = k.type("Shape", [], [["dot", []], ["disc", [["r", () => k.tref(NUMBER)]]]]); k.define(k.def("p"), k.fn(["s"], (s) => k.call(t.f["disc.r"], s))); },
+  "not-folded": (k) => { const t = k.type("Disc", [], [["disc", [["r", () => k.tref(NUMBER)]]]]); k.define(k.def("p"), k.fn(["s"], (s) => k.fold(s, [{ variant: t.v.disc, names: ["r"], results: ["rr"], body: (b) => b[0] }]))); },
+  "effect-folded": (k) => { const a = ask(k); k.define(k.def("p"), k.thunk(() => k.fold(k.call(a.op.ask), answered(k, a, () => k.lit(1))))); },
+  "too-many-results": (k) => k.define(k.def("p"), k.gives(["a"], ["r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9"], (a) => a)),
   "not-a-number": (k) => k.define(k.def("p"), k.fn(["b"], (b) => k.match(b, [{ variant: TRUE, names: [], body: () => k.lit(1) }, { variant: FALSE, names: [], body: () => k.lit("a") }]))),
 };
 
