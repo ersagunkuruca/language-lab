@@ -61,6 +61,9 @@ export interface Picture {
 }
 
 const first = (xs: Iterable<Value>) => { for (const x of xs) return x; };
+// Back to the browser between the long steps, so that no single task holds
+// the page for long enough that the browser offers to kill it.
+export const pause = () => new Promise<void>((go) => setTimeout(go, 0));
 
 let device: Promise<GPUDevice | string> | null = null;
 async function gpu(): Promise<GPUDevice | string> {
@@ -110,7 +113,9 @@ export async function drawPicture(o: PictureOptions): Promise<Picture> {
   let stopped = false;
   const stop = () => { stopped = true; };
 
+  await pause();
   const shader = emitWgsl(lowerPicture(code, info, names, entries));
+  await pause();
   const fn = (name: string) => {
     const f = shader.funcs.find((f) => f.name === name);
     if (!f) throw new Error(`${name} can't run on the GPU: it ${shader.refused.get(entries[name]) ?? "isn't in the scalar profile"}`);
@@ -169,6 +174,7 @@ fn fragment(@builtin(position) at: vec4f) -> @location(0) vec4f {
       return i.errors.length ? null : { code: c, info: i, names: w.names };
     } catch { return null; }
   });
+  await pause();
   const cpuSide = in32 ?? { code, info, names };
   const floats = in32 ? "in 32-bit floats, as the GPU" : "in 64-bit floats";
   const r = makeRunner(cpuSide.code, cpuSide.info, { print: () => {} });
