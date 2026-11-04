@@ -4957,6 +4957,34 @@ ${drop}
       call $int.small
       i32.wrap_i64`,
   },
+  // Any Int's low 32 bits, as "x bits and 2³²−1" (two's complement):
+  // an i31's or an i64's own, a $huge's lowest limb, negated if it's
+  // negative.
+  "word32.wrap": {
+    params: [["x", "int"]], result: "i32", locals: [], uses: ["int.small", "int.limb", "int.negative"], native: true,
+    body: `
+      local.get $x
+      ref.test $huge
+      if i32
+        local.get $x
+        call $int.negative
+        if i32
+          i32.const 0
+          local.get $x
+          i32.const 0
+          call $int.limb
+          i32.sub
+        else
+          local.get $x
+          i32.const 0
+          call $int.limb
+        end
+      else
+        local.get $x
+        call $int.small
+        i32.wrap_i64
+      end`,
+  },
   "word32.shiftDown": {
     params: [["x", "i32"], ["n", "int"]], result: "i32", locals: [["k", "i64"]], uses: ["int.clamped"], native: true,
     body: `

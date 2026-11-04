@@ -45,6 +45,8 @@ function narrow(x: SExpr): SExpr {
     if (wa && wb && x.fn === "int.bitXor") return { k: "op", op: "uxor", args: [wa, wb] };
     if (x.fn === "int.bitAnd" && b.k === "int" && b.v === TOP32) {
       if (wa) return wa;
+      // A word written as a literal: its bits, worked out now.
+      if (a.k === "int") return rt(NARROW, { k: "int", v: a.v & TOP32 });
       if (a.k === "rt" && a.args.length === 2 && under(a.args[0])) {
         const p = under(a.args[0])!, q = a.args[1], wq = under(q);
         const op = ({ "int.add": "uadd", "int.sub": "usub", "int.mul": "umul" } as Record<string, "uadd" | "usub" | "umul">)[a.fn];
@@ -53,6 +55,8 @@ function narrow(x: SExpr): SExpr {
         if (a.fn === "int.shiftDown") return rt("word32.shiftDown", p, isRt(q, "int.neg") && q.args[0].k === "int" ? { k: "int", v: -q.args[0].v } : q);
       }
       if (isRt(a, "int.neg") && under(a.args[0])) return { k: "op", op: "uneg", args: [under(a.args[0])!] };
+      // Any other Int, kept to its low 32 bits without the and.
+      return rt("word32.wrap", a);
     }
   }
   return rt(NARROW, x);
@@ -96,6 +100,36 @@ export function machineWords(ir: CoreIR): void {
     wordLocal.forEach((i) => { f.locals[i] = "i32"; });
     f.body = rewrite(f, f.body, wordLocal, isWord);
   }
+  // A record of one word is that word (C150g): no struct is made for it,
+  // and its make and get are nothing.
+  const bare = new Set(ir.records.filter((r) => !r.mutable && r.fields.length === 1 && isWord(r, 0)).map((r) => r.key));
+  if (bare.size) unbox(ir, bare);
+}
+
+function unbox(ir: CoreIR, bare: Set<string>): void {
+  const isBare = (t: unknown): boolean => typeof t === "object" && t !== null && isRecord(t as LType) && bare.has((t as RType).key);
+  const strip = (e: SExpr): SExpr => {
+    const r = mapKids(e, strip);
+    if (r.k === "make" && isBare(r.t)) return r.args[0];
+    if (r.k === "get" && isBare(r.t)) return r.rec;
+    return r;
+  };
+  ir.funcs.forEach((f) => { f.body = strip(f.body); });
+  // Every place that names a bare record's type names i32 instead: the
+  // functions' types and bodies, and the types that hold one.
+  const seen = new Set<object>();
+  const swap = (o: unknown) => {
+    if (typeof o !== "object" || o === null || seen.has(o)) return;
+    seen.add(o);
+    const x = o as Record<string, unknown>;
+    for (const k of Object.keys(x)) {
+      if (k === "src") continue;
+      if (isBare(x[k])) x[k] = "i32";
+      else swap(x[k]);
+    }
+  };
+  ir.records = ir.records.filter((r) => !bare.has(r.key));
+  [ir.funcs, ir.records, ir.data, ir.arrays, ir.tables, ir.fns, ir.shapes, ir.escapes].forEach(swap);
 }
 
 function rewrite(f: SFunc, e: SExpr, wordLocal: Set<number>, isWord: (t: RType, i: number) => boolean): SExpr {

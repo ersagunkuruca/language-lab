@@ -11,7 +11,7 @@ import { infer } from "../../ters/src/lang/infer.ts";
 import { makeRunner } from "../../ters/src/lang/run.ts";
 import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
-import { ARITH, BITS_V, SHOW_ANY, WORD_V } from "../../ters/src/lang/std.ts";
+import { ARITH, BITS_V, INT_OPS, SHOW_ANY, WORD_V } from "../../ters/src/lang/std.ts";
 import type { Id } from "../../ters/src/model.ts";
 import { kids, lowerScalar, type SExpr } from "../src/scalar.ts";
 import { emitWasm, fromText, instantiate } from "../src/wasm.ts";
@@ -46,6 +46,9 @@ function program() {
   def("neg", () => show(32, k.call(ARITH.neg, w(32, 1))));
   def("square", () => show(32, k.call(ARITH.mul, w(32, 4294967295), w(32, 4294967295))));
   def("wrapped", () => show(32, w(32, -1)));
+  // Past an i64, and negative past one: a $huge's lowest limb.
+  def("huge", () => show(32, w(32, 2n ** 70n + 5n)));
+  def("hugeNeg", () => show(32, k.call(lib("as word32"), k.call(INT_OPS.neg, k.int(2n ** 70n + 5n)))));
   def("and", () => show(32, k.call(op("bits and"), w(32, 4294967295), w(32, 4042322160))));
   def("less", () => k.call(SHOW_ANY, k.call(lib("word32 less than"), w(32, 1), w(32, 4294967295))));
   def("shifts", () => show(32, k.call(op("bits or"), k.call(op("shifted down"), w(32, 4294967295), k.int(40)), k.call(op("shifted up"), w(32, 1), k.int(31)))));
@@ -56,14 +59,17 @@ function program() {
 
 const walk = (e: SExpr, f: (x: SExpr) => void) => { f(e); kids(e).forEach((x) => walk(x, f)); };
 
-test("a word's field is a machine word, and its ops wrap on WebAssembly and C as the evaluator's (C150e, C150f)", { skip }, async () => {
+test("a word's field is a machine word, and its ops wrap on WebAssembly and C as the evaluator's (C150e, C150f, C150g)", { skip }, async () => {
   const p = program();
   assert.deepEqual(p.info.errors.map((e) => e.message), []);
   const lowered = lowerScalar(p.code, p.info, p.names, p.defs.map(([, d]) => d), { data: true });
   assert.deepEqual([...lowered.refused.values()], []);
-  // Word8 and Word32 are i32s; Word64 stays an Int.
-  const field = (n: 8 | 32 | 64) => lowered.records.find((t) => t.variant === WORD_V[n])!.fields[0].t;
-  assert.deepEqual([field(8), field(32), field(64)], ["i32", "i32", "int"]);
+  // Word8 and Word32 are i32s, with no record around them (C150g); Word64
+  // stays a record of an Int.
+  const record = (n: 8 | 32 | 64) => lowered.records.find((t) => t.variant === WORD_V[n]);
+  assert.deepEqual([record(8), record(32), record(64)?.fields[0].t], [undefined, undefined, "int"]);
+  const mulType = lowered.funcs.find((f) => f.name === "multiply word32")!;
+  assert.deepEqual([...mulType.params, mulType.result], ["i32", "i32", "i32"]);
   // multiply word32 makes no Int: one wrapping multiply.
   const mul = lowered.funcs.find((f) => f.name === "multiply word32")!, ops: string[] = [];
   walk(mul.body, (e) => { if (e.k === "op" || e.k === "rt") ops.push(e.k === "op" ? e.op : e.fn); });

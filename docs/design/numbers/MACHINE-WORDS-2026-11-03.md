@@ -85,10 +85,17 @@ This goes against "everything is one system".
    What is left on WebAssembly is the Int counter and a struct made per
    word.
 4. **Show and compare.** `less` on two words is the unsigned compare, and
-   show widens to Int as now.
+   show widens to Int as now. Done with step 3. Then (C150g) a record of
+   one word is that word, so no struct is made for it (its make and get
+   are nothing, and every type that names it names i32), and any Int
+   masked to 32 bits is kept to its low bits without the and
+   (`word32.wrap`: an i31's or i64's own, a $huge's lowest limb). The
+   loop: WebAssembly 51 → 12 ms, C 12.5 → 10 ms with the process start.
+   The 2 ms over the gate on WebAssembly is the loop's Int counter.
 5. **Gate.** The FNV-1a loop at 32 bits under 10 ms on WASM and C, with
    words.test.ts's published hashes on every target. Stop when the next
-   step buys less than 10%.
+   step buys less than 10%. Left: Word64 as an i64 (a word past 2⁶³ widened through
+   limbs), and Word8's and Word16's narrower masks on their + − ×.
 
 Steps 1 to 3 each make one merged PR. Nothing here changes the language,
 the std words, or what a program means, so no decision is needed from

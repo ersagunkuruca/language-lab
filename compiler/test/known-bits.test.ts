@@ -37,7 +37,8 @@ test("a word's bits are known to fit its width, from where words are made", () =
   const small = def("small", () => k.call(lib("show word8"), k.call(ARITH.add, w(8, 255), w(8, 1))));
   const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
   assert.deepEqual(info.errors.map((e) => e.message), []);
-  const ir = lowerScalar(code, info, names, [h32, h64, xs, small], { data: true });
+  // With a host, so machine-words.ts (which needs these bounds) leaves the IR as lowered.
+  const ir = lowerScalar(code, info, names, [h32, h64, xs, small], { data: true, host: true });
   const kb = knownBits(ir);
   const bitsOf = (n: 8 | 32 | 64) => {
     const r = ir.records.find((t) => t.variant === WORD_V[n]);
@@ -59,7 +60,7 @@ test("a field given an Int with no bound has none, and nor does plain arithmetic
   k.define(read, k.fn(["a", "b"], (a, b) => k.match(k.call(make, a, b), [{ variant: mk, names: ["m", "s"], body: ([m, s]) => k.call(INT_OPS.add, m, s) }])));
   const code = base(k.code), names = { ...baseNames(), ...k.names }, info = infer(code, names);
   assert.deepEqual(info.errors.map((e) => e.message), []);
-  const ir = lowerScalar(code, info, names, [read], { data: true });
+  const ir = lowerScalar(code, info, names, [read], { data: true, host: true });
   const kb = knownBits(ir);
   const r = ir.records.find((t) => t.variant === mk);
   const d = ir.data.find((t) => t.cases.some((c) => c.variant === mk));
