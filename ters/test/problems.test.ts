@@ -39,7 +39,7 @@ const SMALLEST: Record<string, (k: Lang) => void> = {
   "one-tuple-or-inputs": (k) => { const f = k.def("f"); k.define(f, k.fn(["a", "b"], (a) => k.call(S.not, a))); k.define(k.def("p"), k.call(f, k.x(TRUE))); },
   "not-an-operation": (k) => { const a = ask(k); k.define(k.def("p"), k.thunk(() => k.handle(k.call(a.op.ask), [...answered(k, a, () => k.lit(1)), { variant: LOG_OP, names: ["l"], body: () => k.lit(1) }]))); },
   "answer-not-one": (k) => { const a = ask(k); k.define(k.def("p"), k.thunk(() => k.handle(k.call(a.op.ask), answered(k, a, () => k.call(S.oneOf, k.list(k.lit(1), k.lit(2))))))); },
-  "no-implementation": (k) => { const t = k.type("Colour", [], [["red", []], ["blue", []]]); k.define(k.def("p"), k.call(ARITH.add, k.x(t.v.red), k.x(t.v.blue))); },
+  "no-implementation": (k) => { const t = k.type("Colour", [], [["red", []], ["blue", []]]); k.define(k.def("p"), k.call(ARITH.add, k.x(t.v.red), k.x(t.v.blue))); k.define(k.def("q"), k.call(S.equal, k.x(t.v.red), k.lit(1))); },
   "type-as-value": (k) => k.define(k.def("p"), k.x(NUMBER)),
   "fields-type-unknown": (k) => k.define(k.def("p"), k.fn(["v"], (v) => k.call(FIELDS.listed, v))),
   "json-type-unknown": (k) => k.define(k.def("p"), k.fn(["v"], (v) => k.call(JSON_OPS.of, v))),
@@ -50,6 +50,7 @@ const SMALLEST: Record<string, (k: Lang) => void> = {
   "no-port": (k) => { const f = k.def("f"); k.define(f, k.fn(["a"], (a) => k.call(ARITH.add, a, k.lit(1)))); k.define(k.def("p"), k.solve(f, { nope: k.lit(1), out: k.lit(3) }, { [param(k, f, 0)]: "x" }, (b) => b[param(k, f, 0)])); },
   "needs-more-ports": (k) => { const f = k.def("f"); k.define(f, k.fn(["a", "b"], (a, b) => k.call(ARITH.add, a, b))); k.define(k.def("p"), k.solve(f, {}, { [param(k, f, 0)]: "x", [param(k, f, 1)]: "y" }, (b) => b[param(k, f, 0)])); },
   "not-backwards": (k) => { const v = k.def("v"); k.define(v, k.lit(1)); k.define(k.def("p"), k.solve(v, { out: k.lit(3) }, {}, () => k.lit(0))); },
+  "field-of-one-case": (k) => { const t = k.type("Shape", [], [["dot", []], ["disc", [["r", () => k.tref(NUMBER)]]]]); k.define(k.def("p"), k.fn(["s"], (s) => k.call(t.f["disc.r"], s))); },
   "not-a-number": (k) => k.define(k.def("p"), k.fn(["b"], (b) => k.match(b, [{ variant: TRUE, names: [], body: () => k.lit(1) }, { variant: FALSE, names: [], body: () => k.lit("a") }]))),
 };
 
