@@ -8,7 +8,7 @@ import { ways, sheetText, type Name } from "./sheet.ts";
 const w = await ways();
 console.log(`chosen: ${w.chosen.join(", ")}`);
 const sizes = process.argv.slice(2).map(Number);
-const names: Name[] = ["evaluator", "evaluator, chosen", "compiled", "compiled, chosen", "ideal"];
+const names: Name[] = ["evaluator", "evaluator, chosen", "compiled", "compiled, chosen", "core, chosen", "ideal"];
 const median = (xs: number[]) => xs.sort((a, b) => a - b)[Math.floor(xs.length / 2)];
 console.log(["sheet", ...names, "chosen/ideal"].join("\t"));
 for (const rows of sizes.length ? sizes : [50, 200, 1000, 3000]) {
