@@ -38,6 +38,8 @@ import { Aborted, type Runtime, type World } from "../../ters/src/lang/run.ts";
 import { MATH_DATA, MATH_DATA_AT } from "./wasm-math.ts";
 import { assemble, POW5, runtime, textBytes, WASI_IMPORTS, type RtFn, type VT } from "./wasm-rt.ts";
 import { TABLE_RT, tableRt } from "./wasm-table.ts";
+import { reasonOf, siteOf } from "./stops.ts";
+import type { Id } from "../../ters/src/model.ts";
 import { fails, listSteps, isArray, isTable, isData, isFn, kids, mapKids, OPS, STOPS, type AType, type DType, type FType, type LType, type CoreIR, type Op, type RType, type SExpr, type SFunc, type SType, type TType } from "./scalar.ts";
 
 // int32 (an Int in 32 bits) is the shaders' only (C66c); WebAssembly has Int.
@@ -79,11 +81,20 @@ const flagged = (e: SExpr): boolean => e.k === "attempt" || (e.k === "rt" && /^a
 // `floats`: the exports whose answer is a Float64, which instantiate
 // checks as it leaves for the host (SPEC §3.3, C156); partial ones give
 // it with their status.
-export interface Module { bytes: Uint8Array; wat: string; exports: string[]; floats?: { name: string; partial: boolean }[] }
+// `stops`: the lowering's stop sites (C143), so a stop says where.
+export interface Module { bytes: Uint8Array; wat: string; exports: string[]; floats?: { name: string; partial: boolean }[]; stops?: { node: Id; def: Id }[] }
 
 // `wasi`: a WASI command instead, its world written over
 // wasi_snapshot_preview1 (wasm-rt.ts) and `_start` running main as
 // runMain does, for hosts with no JavaScript (wasmtime).
+// A stop's Abort (C143): its reason, and where it is when the module
+// knows the site.
+function stopped(m: Module, code: number): Aborted {
+  const e = new Aborted(reasonOf(code)) as Aborted & { node?: Id; def?: Id }, at = m.stops?.[siteOf(code)];
+  if (at) { e.node = at.node; e.def = at.def; }
+  return e;
+}
+
 export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean } = {}): Module {
   const wasi = !!opts.wasi;
   // A shader's lowering (C66c, `lowered.shader`): Int in 32 bits, and no
@@ -772,7 +783,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean } = {}): Module
   ].join("\n");
 
   const floats = shader ? [] : entries.filter(([f]) => f.result === "f64").map(([f]) => ({ name: exportName(f), partial: !!f.partial }));
-  return { bytes, wat: text + "\n", exports: [...entries.map(([f]) => exportName(f)), ...helpers.map((x) => x.name), ...rtExports.map((f) => RT_EXPORTS[f.name])], floats };
+  return { bytes, wat: text + "\n", exports: [...entries.map(([f]) => exportName(f)), ...helpers.map((x) => x.name), ...rtExports.map((f) => RT_EXPORTS[f.name])], floats, ...(lowered.stops?.length ? { stops: lowered.stops } : {}) };
 }
 
 const uses = (e: SExpr, op: Op): boolean => (e.k === "op" && e.op === op) || kids(e).some((k) => uses(k, op));
@@ -785,7 +796,7 @@ const mentions = (e: SExpr, k: SExpr["k"]): boolean => e.k === k || kids(e).some
 // operation the world doesn't have fails saying so, as there.
 export async function instantiate(m: Module, rt: Runtime = { print: () => {} }): Promise<Record<string, (...xs: number[]) => number>> {
   let ex: Record<string, (...xs: unknown[]) => unknown> = {};
-  const { instance } = await WebAssembly.instantiate(m.bytes, { Math: { sin: Math.sin, cos: Math.cos, tan: Math.tan, exp: Math.exp, log: Math.log, pow: Math.pow, atan2: Math.atan2, stop: (i: number) => { throw new Aborted(STOPS[i]); } }, world: worldOf(rt, () => ex) });
+  const { instance } = await WebAssembly.instantiate(m.bytes, { Math: { sin: Math.sin, cos: Math.cos, tan: Math.tan, exp: Math.exp, log: Math.log, pow: Math.pow, atan2: Math.atan2, stop: (i: number) => { throw stopped(m, i); } }, world: worldOf(rt, () => ex) });
   ex = instance.exports as unknown as typeof ex;
   if (!m.floats?.length) return instance.exports as unknown as Record<string, (...xs: number[]) => number>;
   // A Float64 handed back to the host is a use of it: too big, it stops.

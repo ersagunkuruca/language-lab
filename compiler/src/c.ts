@@ -58,7 +58,7 @@ import { BASE, cName, POSIX, RESERVED, RT_C, runtimeC, WORLD_H, type ListNames }
 import { runtime } from "./wasm-rt.ts";
 const UOPS: Partial<Record<Op, string>> = { uadd: "+", usub: "-", umul: "*", uand: "&", uor: "|", uxor: "^" };
 const U64OPS: Partial<Record<Op, string>> = { u64add: "+", u64sub: "-", u64mul: "*", u64and: "&", u64or: "|", u64xor: "^" };
-import { STOPS } from "./stops.ts";
+import { SITES, STOPS } from "./stops.ts";
 import { fails, listSteps, isArray, isTable, isData, isFn, isRecord, kids, mapKids, OPS, type AType, type TType, type DType, type FType, type LType, type CoreIR, type Op, type RType, type SExpr, type SFunc } from "./scalar.ts";
 
 // What a C compiler needs to keep the evaluator's numbers. -fwrapv: fdlibm
@@ -489,7 +489,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
       // The test harness goes on to its next call instead (lab_stop_at).
       "static jmp_buf *lab_stop_at = 0; static int lab_stopped = 0;",
       "static const char *lab_stop_why = 0; static size_t lab_stop_n = 0;",
-      "static double lab_stop(double i) { if (lab_stop_at) { lab_stopped = (int)i; longjmp(*lab_stop_at, 1); } fflush(stdout); if (i < 0) fprintf(stderr, \"%.*s\\n\", (int)lab_stop_n, lab_stop_why); else fprintf(stderr, \"%s\\n\", lab_stops[(int)i]); exit(1); }"] : []),
+      "static double lab_stop(double i) { if (lab_stop_at) { lab_stopped = (int)i; longjmp(*lab_stop_at, 1); } fflush(stdout); if (i < 0) fprintf(stderr, \"%.*s\\n\", (int)lab_stop_n, lab_stop_why); else fprintf(stderr, \"%s\\n\", lab_stops[(int)i % " + SITES + "]); exit(1); }"] : []),
     ...[...statics.values()].map((x) => x.decl),
     ...(rts.size ? ["", runtimeC(rts, listNames)] : []),
     ...[...arrays.values()].flatMap((a) => arrayC(a)),
@@ -1549,7 +1549,7 @@ int main(void) {
   jmp_buf at;
   lab_stop_at = &at;
   while (scanf("%d", &i) == 1) {
-    if (setjmp(at)) { const char *w = lab_stopped < 0 ? lab_stop_why : lab_stops[lab_stopped]; printf(" ! x"); for (size_t j = 0; lab_stopped < 0 ? j < lab_stop_n : w[j] != 0; j++) printf("%02x", (unsigned char)w[j]); printf(" ;0\\n"); ${cells ? "lab_live = 0; " : ""}continue; }
+    if (setjmp(at)) { const char *w = lab_stopped < 0 ? lab_stop_why : lab_stops[lab_stopped % ${SITES}]; printf(" ! x"); for (size_t j = 0; lab_stopped < 0 ? j < lab_stop_n : w[j] != 0; j++) printf("%02x", (unsigned char)w[j]); printf(" ;0\\n"); ${cells ? "lab_live = 0; " : ""}continue; }
     switch (i) {
 ${cases.join("\n")}
     }

@@ -135,7 +135,7 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| C143 | A stop in compiled code names the node it came from: compiled JS, WebAssembly and C carry each node's id where they can stop (Abort, overflow, no answer, a hole), so `lab run` of compiled code and a page print it and the editor selects it (source maps, influence) | [ASPECTS-2026-11-03b](docs/reports/reviews/ASPECTS-2026-11-03b.md) 269 | P3 | M | |
+| C143 | A stop in compiled code names the node it came from: compiled JS, WebAssembly and C carry each node's id where they can stop (Abort, overflow, no answer, a hole), so `lab run` of compiled code and a page print it and the editor selects it (source maps, influence). C143a done: compiled JS and WebAssembly's stops carry the node and definition (the core IR's `stops`); left are C and WASI printing where, `lab run` printing the definition, and the editor selecting the node (Editor lane) | [ASPECTS-2026-11-03b](docs/reports/reviews/ASPECTS-2026-11-03b.md) 269 | P3 | M | |
 
 ## L: Language and library
 
