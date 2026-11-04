@@ -58,7 +58,9 @@ const MATH: Partial<Record<Op, string>> = { sqrt: "sqrt", abs: "abs", floor: "fl
 
 // The source of a function of the runtime giving every function, by name.
 // `worlds`: the world's operations it calls, which the loader gives as
-// R.worlds in that order.
+// R.worlds in that order. Functions are f0, f1, … with no comment naming
+// their definitions (C170a): a stop names its definition through
+// CoreIR.stops (C143b), and the rest of what a tool needs goes in C143's map.
 export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: string[] } {
   const names = ir.funcs.map((_, i) => `f${i}`);
   // A closure carries its lambda's and captures' ids (C137c13) only for a
@@ -107,7 +109,7 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
     if (!deep.has(i)) return [func(f, i, null)];
     const ps = f.params.map((_, j) => `l${j}`).join(", ");
     const plain = func(f, i, null).replace(`function ${names[i]}(`, `function ${names[i]}$b(`);
-    return [`// ${f.name.replace(/\n/g, " ")} (past ${DEPTH} calls deep, its copy on the heap)\nfunction ${names[i]}(${ps}) {\n  if (depth > ${DEPTH}) return R.drive(${gens[i]}(${ps}));\n  depth++;\n  const r = ${names[i]}$b(${ps});\n  depth--;\n  return r;\n}`, plain, func(f, i, deep.get(i)!)];
+    return [`function ${names[i]}(${ps}) {\n  if (depth > ${DEPTH}) return R.drive(${gens[i]}(${ps}));\n  depth++;\n  const r = ${names[i]}$b(${ps});\n  depth--;\n  return r;\n}`, plain, func(f, i, deep.get(i)!)];
   });
   // The budget, only where one is set or spent from (C171).
   const fuelUsed = (e: SExpr): boolean => e.k === "budget" || (e.k === "rt" && e.fn.startsWith("fuel.")) || kids(e).some(fuelUsed);
@@ -345,9 +347,9 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
     // use, as compile.ts has it (`??=`): sheet's `symbols`, a set made from
     // a written list, was made again for every character (C137d17).
     if (f.value && !cycle && !deep.has(i) && !f.partial && !f.spends && !f.budgeted && !params.length) {
-      return [`// ${f.name.replace(/\n/g, " ")} (worked out once)`, `let ${names[i]}$v;`, `function ${names[i]}() { return ${names[i]}$v ??= ${names[i]}$w(); }`, `function ${names[i]}$w() {`, ...(locals.length ? [`  let ${locals.join(", ")};`] : []), ...body, "}"].join("\n");
+      return [`let ${names[i]}$v;`, `function ${names[i]}() { return ${names[i]}$v ??= ${names[i]}$w(); }`, `function ${names[i]}$w() {`, ...(locals.length ? [`  let ${locals.join(", ")};`] : []), ...body, "}"].join("\n");
     }
-    return [`// ${f.name.replace(/\n/g, " ")}${cycle ? ", its calls in its cycle yielded to R.drive" : ""}`, `function${cycle ? "*" : ""} ${cycle ? gens[i] : names[i]}(${params.join(", ")}) {`, ...(locals.length ? [`  let ${locals.join(", ")};`] : []), ...body, "}"].join("\n");
+    return [`function${cycle ? "*" : ""} ${cycle ? gens[i] : names[i]}(${params.join(", ")}) {`, ...(locals.length ? [`  let ${locals.join(", ")};`] : []), ...body, "}"].join("\n");
   }
 }
 
