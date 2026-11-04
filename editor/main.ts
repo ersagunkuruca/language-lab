@@ -15,7 +15,7 @@ import mathStyle from "../ters/styles/math.json" with { type: "json" };
 import plainStyle from "../ters/styles/plain.json" with { type: "json" };
 import lispStyle from "../ters/styles/lisp.json" with { type: "json" };
 import { hashDef } from "../ters/src/hash.ts";
-import { children, freshId, ID_PATTERN, isCall, isUse, useTarget, type Call, merge, parentOf, resolveRefs, subtree, type Code, type Id, type Node, type NodeOf } from "../ters/src/model.ts";
+import { children, freshId, SCHEMA, ID_PATTERN, isCall, isUse, useTarget, type Call, merge, parentOf, resolveRefs, subtree, type Code, type Id, type Node, type NodeOf } from "../ters/src/model.ts";
 import { INT } from "../ters/src/lang/types.ts";
 import { layer, type Comments, type Hints, type Names, type Presentation, type Style } from "../ters/src/presentation.ts";
 import { implementationOps, isOperation } from "../ters/src/lang/records.ts";
@@ -1309,11 +1309,16 @@ function parentsOf(code: Code) {
   if (m) return m;
   m = new Map();
   const set = (c: Id | null | undefined, parent: Id, slot: string, index?: number) => { if (c && !m!.has(c)) m!.set(c, { parent, slot, ...(index !== undefined ? { index } : {}) }); };
+  // Every child slot of every kind, as model.ts SCHEMA lists them (E228o),
+  // not a list of kinds of its own: a slot a kind gains is known here too.
   for (const n of Object.values(code.nodes)) {
-    if (isUse(n)) { set(n.body, n.id, "body"); Object.values(n.given).forEach((g) => set(g, n.id, "given")); }
-    else if (isCall(n)) { set(n.fn, n.id, "fn"); n.args.forEach((a, i) => set(a, n.id, "args", i)); }
-    else if (n.kind === "lambda" || n.kind === "arm" || n.kind === "def") set(n.body, n.id, "body");
-    else if (n.kind === "match" || n.kind === "fold") { set(n.scrutinee, n.id, "scrutinee"); if (n.kind === "match") set(n.otherwise, n.id, "otherwise"); n.arms.forEach((a) => set(a, n.id, "arms")); }
+    for (const [slot, how] of Object.entries(SCHEMA[n.kind] ?? {})) {
+      if (how !== "child") continue;
+      const v = (n as unknown as Record<string, unknown>)[slot];
+      if (typeof v === "string") set(v, n.id, slot);
+      else if (Array.isArray(v)) v.forEach((c, i) => typeof c === "string" && set(c, n.id, slot, i));
+      else if (v && typeof v === "object") Object.values(v).forEach((c) => typeof c === "string" && set(c, n.id, slot));
+    }
   }
   parents.set(code, m);
   return m;
