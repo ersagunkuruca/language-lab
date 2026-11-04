@@ -15,7 +15,7 @@ import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
-import { makeRunner, type Value } from "../src/lang/run.ts";
+import { fromList, LIST_SHAPE, makeRunner, toList, type Value } from "../src/lang/run.ts";
 import { BOOL, CELL_OPS, S, SHOW_ANY } from "../src/lang/std.ts";
 import { STRING, showType } from "../src/lang/types.ts";
 import { subtree, type Id } from "../src/model.ts";
@@ -274,4 +274,34 @@ test("readPaths: a reader of every item's title and the list's length wakes for 
   assert.deepEqual([titles, whole], [2, 3]);
   c.edit(todos, [], (xs) => [...(xs as unknown as Value[]), item("tea")] as unknown as Value, arrays, { at: [], kind: "insert", i: 3 });
   assert.deepEqual([titles, whole], [3, 4]);
+});
+
+test("readPaths' kept places (C162c): a change inside an item a formula hands on whole puts it into the formula's answer, and only a change it looked at runs it again", () => {
+  const c = new Cells(same);
+  c.knowLists(LIST_SHAPE);
+  const card = (title: string, done: boolean) => ({ tag: "card", fields: [title, done] }) as unknown as Value;
+  const titleOf = (v: Value) => (v as unknown as { fields: Value[] }).fields[0];
+  const start = [card("milk", false), card("bread", true), card("eggs", false)];
+  const cards = c.cell(toList(start));
+  // The cards not done: it looks at each one's done and the list's shape,
+  // and gives back the cards whole.
+  let runs = 0;
+  const open = c.formula(() => {
+    runs++;
+    const xs = fromList(c.readPaths(cards, ["=", "*/f1/"], ["*/"]));
+    return toList(xs.filter((x) => (x as unknown as { fields: Value[] }).fields[1] as unknown !== true));
+  });
+  const seen: string[] = [];
+  c.watch(() => { seen.push(fromList(c.read(open)).map(titleOf).join(" ")); });
+  assert.deepEqual([runs, seen], [1, ["milk eggs"]]);
+  // A title of a card it keeps: put in, not run again.
+  c.write(cards, toList([card("oat milk", false), start[1], start[2]]));
+  assert.deepEqual([runs, seen], [1, ["milk eggs", "oat milk eggs"]]);
+  // A title of a card it left out: its answer is as it was.
+  const now = fromList(c.peek(cards));
+  c.write(cards, toList([now[0], card("rye", true), now[2]]));
+  assert.deepEqual([runs, seen.length], [1, 2]);
+  // A card's done, which it looked at: run again.
+  c.write(cards, toList([now[0], card("rye", false), now[2]]));
+  assert.deepEqual([runs, seen.at(-1)], [2, "oat milk rye eggs"]);
 });

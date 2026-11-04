@@ -50,6 +50,10 @@ export interface CellNode {
   // The paths it read in each source with read at (L98), as keys; a source
   // it read whole with read isn't here.
   paths?: Map<CellNode, string[]>;
+  // A formula's places of a source that its answer holds as they are
+  // (C162c, readPaths' kept keys): a change only inside one is put into
+  // its last answer in place, by identity, instead of running it again.
+  kept?: Map<CellNode, string[]>;
   // each's: the edits made to the list it maps since it last ran (L99),
   // or null once one came that it can't follow (a whole write).
   edits?: Edit[] | null;
@@ -130,6 +134,55 @@ export function meets(p: string, key: string): boolean {
   const n = Math.min(ps.length, ks.length);
   for (let i = 0; i < n; i++) if (ps[i] !== ks[i] && !(ps[i] === "*" && ks[i].startsWith("i"))) return false;
   return ks.length <= ps.length || !only;
+}
+// How many steps of a change at `key` are a kept place `p` (C162c), when
+// the change is at it or inside it; -1 when it isn't.
+function inside(p: string, key: string): number {
+  const ps = p.split("/"), ks = key.split("/");
+  ps.pop(); ks.pop();
+  if (ks.length < ps.length) return -1;
+  for (let i = 0; i < ps.length; i++) if (ps[i] !== ks[i] && !(ps[i] === "*" && ks[i].startsWith("i"))) return -1;
+  return ps.length;
+}
+// v with each part that is `old` (the same object) made `now`, copying
+// only the way down to it; v itself when it holds none.
+// A list is its cons cells here, walked along their tails (a list's rest
+// is no deeper), so only the cells down to the part are copied.
+function replaced(v: Value, old: Value, now: Value, lists: Lists, depth: number): Value {
+  if (v === old) return now;
+  if (depth > 8 || typeof v !== "object" || v === null || !("fields" in v)) return v;
+  // Another value of the part's own case (another card) isn't looked into:
+  // the compiler keeps a place only where the answer holds it whole, and
+  // one of its kind taken apart is needed instead (cell-paths.ts), so the
+  // part isn't inside one. Lists are walked.
+  const d = v as unknown as Data, list = !!lists.views?.isList(v);
+  if (d.tag === (old as unknown as Data).tag && !list) return v;
+  let fields: Value[] | null = null;
+  d.fields.forEach((x, i) => { const y = replaced(x, old, now, lists, list && i === d.fields.length - 1 ? depth : depth + 1); if (y !== x) (fields ??= d.fields.slice())[i] = y; });
+  return fields ? ({ ...d, fields } as unknown as Value) : v;
+}
+// The part at steps, a list's items walked to along its cons cells when
+// that's how lists are (partAt makes the whole list first).
+function partOf(v: Value, steps: Step[], lists: Lists): Value | undefined {
+  const views = lists.views;
+  if (!views || steps.some((s) => "key" in s)) return partAt(v, steps, lists);
+  for (const s of steps) {
+    if (v === undefined || typeof v !== "object" || v === null || !("fields" in v)) return undefined;
+    if ("field" in s) { v = (v as unknown as Data).fields[s.field]; continue; }
+    let d = v as unknown as Data;
+    for (let i = 0; i < (s as { item: number }).item && d.tag === views.cons; i++) d = d.fields[1] as unknown as Data;
+    if (d.tag !== views.cons) return undefined;
+    v = d.fields[0];
+  }
+  return v;
+}
+// How many items of the list v are `x` itself.
+function timesIn(v: Value, x: Value, lists: Lists): number {
+  const views = lists.views;
+  if (!views) return lists.from(v).filter((y) => y === x).length;
+  let n = 0;
+  for (let d = v as unknown as Data; d && d.tag === views.cons; d = d.fields[1] as unknown as Data) if (d.fields[0] === x) n++;
+  return n;
 }
 // Plain data equal: what a key is compared by.
 const sameData = (a: Value, b: Value): boolean => {
@@ -363,13 +416,13 @@ export class Cells {
   // once a view was made (plainOf).
   knowLists(lists: Lists): void { this.compared ??= lists; }
 
-  readPaths(c: Value, keys: string[]): Value {
+  readPaths(c: Value, keys: string[], kept: string[] = []): Value {
     const n = nodeOf(c);
     if (!n) throw new Error("read needs a cell");
-    return this.readNode(n, undefined, keys);
+    return this.readNode(n, undefined, keys, kept);
   }
 
-  private readNode(n: CellNode, at?: Step[], keys?: string[]): Value {
+  private readNode(n: CellNode, at?: Step[], keys?: string[], kept?: string[]): Value {
     if (this.plain) return n.value as Value;
     // The reader depends on it even if computing it stops part way, so it
     // runs again when what the formula read changes.
@@ -379,8 +432,11 @@ export class Cells {
       if (first) { r.sources.push(n); n.observers.add(r); }
       // A read of a place adds the place; a whole read, or a place read
       // after one, keeps the reader waking at every change.
-      if ((at || keys) && n.compute === null && (first || r.paths?.has(n))) (r.paths ??= new Map()).set(n, [...(r.paths.get(n) ?? []), ...(keys ?? [keyOf(at!)])]);
-      else r.paths?.delete(n);
+      if ((at || keys) && n.compute === null && (first || r.paths?.has(n))) {
+        (r.paths ??= new Map()).set(n, [...(r.paths.get(n) ?? []), ...(keys ?? [keyOf(at!)])]);
+        if (kept?.length && (first || r.kept?.has(n))) (r.kept ??= new Map()).set(n, [...(r.kept.get(n) ?? []), ...kept]);
+        else r.kept?.delete(n);
+      } else { r.paths?.delete(n); r.kept?.delete(n); }
     }
     if (n.compute) this.update(n);
     if (n.error !== undefined) throw n.error;
@@ -439,7 +495,7 @@ export class Cells {
       if (!ps || keys!.some((key) => ps.some((p) => meets(p, key))) || ats!.some((at) => o.views?.get(n)?.some(hits(at)))) {
         this.mark(o, DIRTY);
         if (o.rowOf && !o.rowOf.disposed) this.mark(o.rowOf, DIRTY);
-      }
+      } else if (was !== undefined && lists && o.kept?.has(n) && !this.patched(o, o.kept.get(n)!, ats!, keys!, was, v, lists)) this.mark(o, DIRTY);
     }
     if (!this.batching) this.flush();
   }
@@ -821,10 +877,41 @@ export class Cells {
     n.state = CLEAN;
   }
 
+  // A change inside places a formula's answer holds as they were (kept),
+  // outside what it looked at: each such part put into its last answer
+  // where the old one was, found by identity, and its readers woken, as
+  // if it had run again (C162c). An answer that doesn't hold the old part
+  // stays as it is: what it looked at didn't change, so it would leave the
+  // part out again. False when that can't be done: it hasn't an answer
+  // now, the part isn't an object (a number is found by value, not by
+  // identity), or the same part was at more than one place (then which
+  // one it held can't be told).
+  private patched(o: CellNode, kept: string[], ats: Step[][], keys: string[], was: Value, v: Value, lists: Lists): boolean {
+    if (o.state !== CLEAN || o.error !== undefined || o.watcher || o.value === undefined) return false;
+    let answer = o.value as Value;
+    for (let k = 0; k < ats.length; k++) {
+      const n = kept.map((p) => inside(p, keys[k])).find((x) => x >= 0);
+      if (n === undefined) continue;
+      const at = ats[k].slice(0, n), old = partOf(was, at, lists), now = partOf(v, at, lists);
+      if (old === undefined || now === undefined || typeof old !== "object" || old === null) return false;
+      // The one place of the old value that held it.
+      if (at.length && "item" in at[at.length - 1]) {
+        const up = partOf(was, at.slice(0, -1), lists);
+        if (up === undefined || timesIn(up, old, lists) !== 1) return false;
+      }
+      answer = replaced(answer, old, now, lists, 0);
+    }
+    if (answer === o.value) return true;
+    o.value = answer;
+    for (const r of o.observers) this.mark(r, DIRTY);
+    return true;
+  }
+
   private recompute(n: CellNode): void {
     for (const s of n.sources) s.observers.delete(n);
     n.sources = [];
     n.paths = undefined;
+    n.kept = undefined;
     n.views = undefined;
     n.owned.forEach((o) => this.dispose(o));
     n.owned = [];
