@@ -35,6 +35,7 @@ export const PROBLEMS: Problem[] = [
   { id: "no-implementation", says: /^.+ isn't .+, and has no .+ of its own: give it one, a definition of type .+$/, fix: "Give the type its own operations: an implementation of the interface named (Arithmetic for + − ·, Ordered for <).", gesture: "Click the Implement … button under the message." },
   { id: "fields-type-unknown", says: /^fields (mapped|listed) needs (the value's data type|the fields' type) known here/, fix: "Use it where the value's type is known: in a definition whose input has a type of its own (pin it), not one that takes any value." },
   { id: "json-type-unknown", says: /^(json of|from json) writes the value by its type, and /, fix: "Give it a value whose type is known there, or use it where the type wanted is known (a definition's pinned type); a function or an effect has no spelling." },
+  { id: "private-to-library", says: /^.+ is private to the library, which keeps /, fix: "Make the value with the library's own functions, the ones the message names: they keep the rule the private case would let you break (a Rational in lowest terms, a file open only while its body runs)." },
   { id: "type-as-value", says: /^.+ is a type, not a value$/, fix: "A type says what values look like and can't be used as one: use one of its cases, or a value of that type." },
 ];
 

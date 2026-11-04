@@ -40,6 +40,7 @@ const SMALLEST: Record<string, (k: Lang) => void> = {
   "type-as-value": (k) => k.define(k.def("p"), k.x(NUMBER)),
   "fields-type-unknown": (k) => k.define(k.def("p"), k.fn(["v"], (v) => k.call(FIELDS.listed, v))),
   "json-type-unknown": (k) => k.define(k.def("p"), k.fn(["v"], (v) => k.call(JSON_OPS.of, v))),
+  "private-to-library": (k) => k.define(k.def("p"), k.x("std.rational.ratio")),
 };
 
 test("every problem has its smallest program, and its message is that row's alone", () => {
