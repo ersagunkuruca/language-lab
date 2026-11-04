@@ -1,4 +1,4 @@
-// The steady module (BACKLOG L210, SPEC §3.2): sin, cos, exp and log on
+// The steady module (BACKLOG L210, SPEC §3.2): sin, cos, tan, exp and log on
 // Float64, written in Ters, so that a program that uses them gets the same
 // bits on every machine. The builtins (`sin`, `exp`, ...) are each
 // platform's own (JavaScript's Math, C's libm, a GPU's) and only agree
@@ -19,15 +19,16 @@
 // is built. An exponent is found by halving or doubling by powers of two,
 // which is exact.
 //
-// Left (L210): sin and cos reduce their argument as fdlibm does up to
+// Left (L210): sin, cos and tan reduce their argument as fdlibm does up to
 // 2^20·π/2 (|x| below 1,647,100), with a π/2 in up to three parts. Past
 // that fdlibm uses Payne and Hanek's reduction, which isn't written yet,
-// so there they stop with a reason rather than give a wrong answer. pow,
-// tan and the rest follow, and so does the number type that carries
+// so there they stop with a reason rather than give a wrong answer. pow
+// and the rest follow, and so does the number type that carries
 // these (after L204).
 //
 // Adapted, credited in docs/language/CREDITS.md: fdlibm's e_exp.c,
-// e_log.c, k_sin.c, k_cos.c, e_rem_pio2.c, s_sin.c and s_cos.c, as V8
+// e_log.c, k_sin.c, k_cos.c, k_tan.c, e_rem_pio2.c, s_sin.c, s_cos.c and
+// s_tan.c, as V8
 // ports them (src/base/ieee754.cc, BSD licence), whose notices follow.
 //
 // ====================================================
@@ -240,7 +241,7 @@ export function buildSteady(): Module {
     iff(lt(ax, L(atMost(0x3FE921FB))), three(L(0), x, L(0)),
       iff(lt(ax, L(below(0x4002D97C))), nearOne(x, ax),
         iff(lt(ax, L(atMost(0x413921FB))), medium(x, ax),
-          k.call(S.stop, k.lit("steady sin and cos take |x| below 1,647,100 for now (Payne and Hanek's reduction is BACKLOG L210)")))))));
+          k.call(S.stop, k.lit("steady sin, cos and tan take |x| below 1,647,100 for now (Payne and Hanek's reduction is BACKLOG L210)")))))));
   // n mod 4, for a negative n too (C's n & 3).
   const quarter = (n: Id) => sub(n, mul(L(4), floor(div(n, L(4)))));
   const byQuarter = (x: Id, small: Id, arms: (y0: Id, y1: Id) => [Id, Id, Id, Id]) =>
@@ -256,10 +257,47 @@ export function buildSteady(): Module {
   const cos = def("steady cos", ["x"], (x) => byQuarter(x, k.call(kCos, x, L(0)), (y0, y1) =>
     [k.call(kCos, y0, y1), neg(k.call(kSin, y0, y1, yes())), neg(k.call(kCos, y0, y1)), k.call(kSin, y0, y1, yes())]));
 
-  const offered = [sin, cos, exp, log];
+  // tan (fdlibm k_tan.c, s_tan.c). `odd` is 1, or −1 for −1/tan.
+  const Tt = [3.33333333333334091986e-01, 1.33333333333201242699e-01, 5.39682539762260521377e-02, 2.18694882948595424599e-02, 8.86323982359930005737e-03, 3.59207910759131235356e-03,
+    1.45620945432529025516e-03, 5.88041240820264096874e-04, 2.46463134818469906812e-04, 7.81794442939557092300e-05, 7.14072491382608190305e-05, -1.85586374855275456654e-05, 2.59073051863633712884e-05];
+  const pio4 = 7.85398163397448278999e-01, pio4lo = 3.06161699786838301793e-17;
+  // v with its low word cleared (SET_LOW_WORD(v, 0)): towards zero, to the
+  // 20 fraction bits of the high word. A subnormal's high word holds its
+  // top bits at 2^−1042.
+  const lowCleared = def("steady low word cleared", ["v"], (v) => let_("a", abs(v), (a) => iff(eq(a, L(0)), L(0),
+    let_("e", iff(lt(a, L(2 ** -1022)), L(-1022), k.call(exponent, a)), (e) =>
+      let_("t", k.call(scaled, floor(k.call(scaled, a, sub(L(20), e))), sub(e, L(20))), (t) => iff(lt(v, L(0)), neg(t), t))))));
+  // −1/w worked out carefully, w = z0 + v with z0 = w's low word cleared.
+  const minusOver = (w0: Id, v0: Id) => let_("w", w0, (w) => let_("v", v0, (v) =>
+    let_("a", div(L(-1), w), (a) => let_("t", k.call(lowCleared, a), (t) =>
+      let_("s", add(L(1), mul(t, k.call(lowCleared, w))), (s0) => add(t, mul(a, add(s0, mul(t, v)))))))));
+  const kTan = def("steady tangent kernel", ["x", "y", "odd"], (x0, y0, iy) => let_("ax", abs(x0), (ax) =>
+    iff(lt(ax, L(below(0x3E300000))),
+      iff(and(eq(x0, L(0)), eq(iy, L(-1))), div(L(1), ax),
+        iff(eq(iy, L(1)), x0,
+          let_("w", add(x0, y0), (w) => minusOver(w, sub(y0, sub(k.call(lowCleared, w), x0)))))),
+      let_("big", ge(ax, L(word(0x3FE59428))), (big) =>
+        let_("x", iff(big, add(sub(L(pio4), abs(x0)), sub(L(pio4lo), iff(lt(x0, L(0)), neg(y0), y0))), x0), (x) =>
+          let_("y", iff(big, L(0), y0), (y) =>
+            let_("z", mul(x, x), (z) => let_("w", mul(z, z), (w) =>
+              let_("r", horner(w, [Tt[1], Tt[3], Tt[5], Tt[7], Tt[9], Tt[11]]), (r1) =>
+                let_("v", mul(z, horner(w, [Tt[2], Tt[4], Tt[6], Tt[8], Tt[10], Tt[12]])), (v) =>
+                  let_("s", mul(z, x), (s0) =>
+                    let_("r", add(add(y, mul(z, add(mul(s0, add(r1, v)), y))), mul(L(Tt[0]), s0)), (r) =>
+                      let_("w", add(x, r), (ww) =>
+                        iff(big, mul(iff(lt(x0, L(0)), L(-1), L(1)), sub(iy, mul(L(2), sub(x, sub(div(mul(ww, ww), add(ww, iy)), r))))),
+                          iff(eq(iy, L(1)), ww, minusOver(ww, sub(r, sub(k.call(lowCleared, ww), x))))))))))))))))));
+  const tan = def("steady tan", ["x"], (x) =>
+    iff(lt(abs(x), L(atMost(0x3FE921FB))), k.call(kTan, x, L(0), L(1)), k.match(k.call(reduced, x), [
+      { variant: tupleVariant(3), names: ["n", "y0", "y1"], body: ([n, y0, y1]) =>
+        k.call(kTan, y0, y1, sub(L(1), mul(L(2), sub(n, mul(L(2), floor(div(n, L(2)))))))) },
+    ])));
+
+  const offered = [sin, cos, tan, exp, log];
   const comments: Record<Id, string> = {
     [sin]: "sin x with the same bits on every machine: fdlibm's, written in Ters (sin is the platform's own, within a few ulp).",
     [cos]: "cos x with the same bits on every machine: fdlibm's, written in Ters.",
+    [tan]: "tan x with the same bits on every machine: fdlibm's, written in Ters. No answer where cos x is 0.",
     [exp]: "e^x with the same bits on every machine: fdlibm's, written in Ters.",
     [log]: "The natural log of x with the same bits on every machine: fdlibm's, written in Ters. No answer for x ≤ 0.",
   };

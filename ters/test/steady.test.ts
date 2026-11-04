@@ -1,4 +1,4 @@
-// The steady module (L210a): sin, cos, exp and log written in Ters as
+// The steady module (L210a, b): sin, cos, tan, exp and log written in Ters as
 // fdlibm writes them, so every engine gives the same bits. V8's Math.exp
 // and Math.log are fdlibm's (and on Node 22 so are its sin and cos), so
 // the evaluator is checked against them to the bit, and the compiled
@@ -19,7 +19,7 @@ import { makeRunner, type Value } from "../src/lang/run.ts";
 
 const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 const steady = (name: string) => STEADY.exports.find((d) => LIBRARY.names[d] === name)!;
-const FNS = { sin: Math.sin, cos: Math.cos, exp: Math.exp, log: Math.log } as const;
+const FNS = { sin: Math.sin, cos: Math.cos, tan: Math.tan, exp: Math.exp, log: Math.log } as const;
 
 // Inputs over each one's range, and the edges fdlibm's branches turn on.
 let seed = 11;
@@ -30,6 +30,7 @@ const inputs = (f: keyof typeof FNS): number[] => [
     exp: [0, 1, -1, 2 ** -29, 0.34657, 0.3466, 1.0397, 1.04, 709.78, -745.13, -708.4, -720],
     log: [1, 2, 0.5, 5e-324, 2.2250738585072014e-308, 1.7976931348623157e308, 1 + 2 ** -52, 1 - 2 ** -53, Math.SQRT2, 1.4142112731933594, 10, 1e-10],
     sin: [0, 1e-9, 2 ** -28, 0.785398, Math.PI / 4, Math.PI / 2, Math.PI, 2.356194, -100.5, 1647099, ...Array.from({ length: 34 }, (_, i) => (i + 1) * Math.PI / 2)],
+    tan: [0, 1e-9, 2 ** -29, -(2 ** -29), 0.6744, 0.6745, -0.7, 0.785398, Math.PI / 4, 1.5707963267948966, 1.5, -1.5, 3, 100, ...Array.from({ length: 34 }, (_, i) => (i + 1) * Math.PI / 4)],
     cos: [0, 1e-9, 0.3, 0.78125, 0.79, Math.PI / 4, Math.PI / 2, Math.PI, -3, ...Array.from({ length: 34 }, (_, i) => (i + 1) * Math.PI / 2)],
   }[f],
 ];
@@ -41,7 +42,7 @@ function program() {
   return { code, names, info: infer(code, names), own };
 }
 
-test("steady sin, cos, exp and log give fdlibm's bits, which are V8's Math's", () => {
+test("steady sin, cos, tan, exp and log give fdlibm's bits, which are V8's Math's", () => {
   const p = program();
   assert.deepEqual(p.info.errors.map((e) => e.message), []);
   const r = makeRunner(p.code, p.info, { print: () => {} });
