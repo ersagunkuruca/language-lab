@@ -9,7 +9,8 @@ import type { Code, Id, Node, NodeData, NodeOf } from "../ters/src/model.ts";
 import { children, collect, freshId, parentAt, parentOf, replace, subtree, swapIn } from "../ters/src/model.ts";
 import type { Names, Notation, Presentation } from "../ters/src/presentation.ts";
 import blocksStyle from "../ters/styles/blocks.json" with { type: "json" };
-import { fillings, implementationKey, implementationOf, infer as check, type Filling, type Info } from "../ters/src/lang/infer.ts";
+import { fillings, implementationKey, implementationOf, infer as check, type Filling, type Info, type Options } from "../ters/src/lang/infer.ts";
+import { CheckCache } from "../ters/src/lang/check-cache.ts";
 import { isCall, isPublished, isUse, useNode, useTarget, type Call, type Use } from "../ters/src/model.ts";
 import { answerKeys } from "../ters/src/lang/ports.ts";
 import { LIBRARY, PRELUDE, TREES } from "../ters/src/lang/library.ts";
@@ -193,11 +194,21 @@ export const setDisplayNames = (n: Names) => { display = n; };
 let programPins: Pins = {};
 export const setProgramPins = (p: Pins) => { programPins = p; };
 const INSIDERS = [...PRELUDE.code.defs, ...TREES.code.defs];
+// Each definition group's check is kept between checks (L215b,
+// check-cache.ts): an edit checks the groups it changed, and their callers
+// only where a type changed.
+const CACHE = new CheckCache();
+// The options are the same object while the pins are the same, so the
+// library's kept check (L216, infer.ts `under`) is found again: made anew
+// for each check, they missed it, and every edit checked the library too.
+let lastOptions: { pins: Pins; own: [Id, unknown][]; options: Options } | null = null;
 export const infer = (code: Code, names: Names = {}): Info => {
-  const own = Object.fromEntries(Object.entries(programPins).filter(([d]) => code.nodes[d]?.kind === "def"));
+  const own = Object.entries(programPins).filter(([d]) => code.nodes[d]?.kind === "def");
+  const same = lastOptions && lastOptions.pins === programPins && lastOptions.own.length === own.length && own.every(([d, p], i) => lastOptions!.own[i][0] === d && lastOptions!.own[i][1] === p);
   // As load.ts checkOptions: the modules' private cases are theirs to
   // build, a program's own are the program's (L165, E209).
-  return check(code, names, undefined, { pins: { ...LIBRARY.pins, ...own }, hidden: LIBRARY.hidden, insiders: INSIDERS, library: LIBRARY.code.defs });
+  if (!same) lastOptions = { pins: programPins, own, options: { pins: { ...LIBRARY.pins, ...Object.fromEntries(own) }, hidden: LIBRARY.hidden, insiders: INSIDERS, library: LIBRARY.code.defs, cache: CACHE } };
+  return check(code, names, undefined, lastOptions!.options);
 };
 
 // A published definition is named by its content, so it can't change: an
