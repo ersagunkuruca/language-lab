@@ -726,6 +726,14 @@ while the program runs. An implementation passed as a value and taken
 apart with a match is the dispatch you ask for. Prior art: Haskell's type
 classes (Wadler and Blott, 1989) and Rust's traits, `dyn` on request.
 
+A number written where a type of the program's own goes is spelled by that
+type's `Literal` (L204b): `literal at quaternion = literal((top, bottom) =>
+quaternion(top / bottom, 0, 0, 0))` makes `2 · i` the quaternion 2i, and
+`0.25` is `from fraction(1, 4)`, the digits as written (Haskell's
+`fromRational`). A record of Float64s with no `Literal` still takes the
+number in every part; another type with none is told where the number is
+written.
+
 ## Effects, and why not monads
 
 A function type is `(params) -[effects]-> result`. The effect part is a row:

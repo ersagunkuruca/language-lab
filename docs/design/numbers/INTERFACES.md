@@ -209,9 +209,11 @@ and a colour keeps the rule. Literals at a type need one more operation,
    test/own-arithmetic.test.ts gives a quaternion record Hamilton's
    product and a version number an order, so `smaller` works on it. A
    type with neither is told where it is used ("Version isn't a Number,
-   and has no + − · of its own"). Not yet: a literal at a type of your
-   own (`3` as a quaternion), which needs a "from a fraction" field;
-   quaternions as a table (L42, L43).
+   and has no + − · of its own"). A literal at a type of your own (`3`
+   as a quaternion) is its `Literal`'s `from fraction(top, bottom)`
+   (L204b; an interface of its own rather than a field of `Arithmetic`, so
+   no implementation written before needed a new field); quaternions as a
+   table (L42, L43).
 5. **The editor** (lane E): the "interface" toggle on a type, as the
    "effect" one, and `where a has Trig` in types. **Writing an
    implementation is built** (E137): a data type's panel lists every
