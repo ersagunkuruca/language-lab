@@ -15,6 +15,7 @@ import { buildPrelude } from "../src/lang/prelude-source.ts";
 import { buildVectors } from "../src/lang/vectors-source.ts";
 import { buildHtml } from "../src/lang/html-source.ts";
 import { buildTreesModule } from "../src/lang/trees-source.ts";
+import { buildSteady } from "../src/lang/steady-source.ts";
 import { verify } from "../src/lang/modules.ts";
 
 const here = import.meta.dirname;
@@ -27,7 +28,7 @@ const before = (file: string): Record<string, string> => {
   const old = JSON.parse(readFileSync(join(here, file), "utf8")) as { code: { defs: string[] }; names: Record<string, string> };
   return Object.fromEntries(old.code.defs.map((d) => [old.names[d] ?? d, d]));
 };
-const oldIds = { ...before("prelude.json"), ...before("vectors.json"), ...before("html.json") };
+const oldIds = { ...before("prelude.json"), ...before("vectors.json"), ...before("html.json"), ...before("steady.json") };
 
 const m = buildPrelude();
 const wrong = verify(m, merge(prelude, std), true);
@@ -45,6 +46,12 @@ if (hwrong) throw new Error(`html: ${hwrong}`);
 save(join(here, "html.json"), h);
 console.log(`html: ${h.code.defs.length} definitions, ${h.exports.length} offered, ${Object.keys(h.code.nodes).length} nodes`);
 
+const st = buildSteady();
+const stwrong = verify(st, merge(prelude, std), true);
+if (stwrong) throw new Error(`steady: ${stwrong}`);
+save(join(here, "steady.json"), st);
+console.log(`steady: ${st.code.defs.length} definitions, ${st.exports.length} offered, ${Object.keys(st.code.nodes).length} nodes`);
+
 const t = buildTreesModule(m);
 const twrong = verify(t, merge(prelude, std, m.code), true);
 if (twrong) throw new Error(`trees: ${twrong}`);
@@ -53,7 +60,7 @@ console.log(`trees: ${t.code.defs.length} definitions, ${t.representations!.leng
 
 // Definitions whose content changed: old id to new, by name.
 const newIds: Record<string, string> = {};
-for (const mod of [m, v, h]) for (const d of mod.code.defs) newIds[mod.names[d] ?? d] = d;
+for (const mod of [m, v, h, st]) for (const d of mod.code.defs) newIds[mod.names[d] ?? d] = d;
 const moved = Object.entries(oldIds).flatMap(([name, old]) => (newIds[name] && newIds[name] !== old ? [[old, newIds[name]] as const] : []));
 // A saved program refers to library definitions by id, so one whose content
 // changed keeps opening: its old id is read as the new one (moved.json, read
