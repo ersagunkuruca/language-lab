@@ -34,7 +34,7 @@ import { computedForward } from "./directions.ts";
 import { discharge } from "./ledger.ts";
 import * as Alg from "./algebraic.ts";
 import { hostLocale, hostZone } from "./text.ts";
-import { tupleVariant, floatText, LOCALE_V, MY_LOCALE_OP, MY_ZONE_OP, RELEASE_V, SETTINGS, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, COMPLEX_V, FIXED_V, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, shownImplementations, CASE_NAME, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std.ts";
+import { FILE_OPS, KEPT_FILES, tupleVariant, floatText, LOCALE_V, MY_LOCALE_OP, MY_ZONE_OP, RELEASE_V, SETTINGS, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, COMPLEX_V, FIXED_V, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, shownImplementations, CASE_NAME, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std.ts";
 import { intLit } from "./int.ts";
 import { JETS } from "./jets.ts";
 import { answerFromHost, effectOfOperation, hostedEffects, type Hosts } from "./hosts.ts";
@@ -338,6 +338,13 @@ export interface World {
   // A file's bytes as they are, and bytes written (L189c, bytes.ts).
   readBytes?(path: string): Uint8Array;
   writeBytes?(path: string, bytes: Uint8Array): void;
+  // A file kept open by `with open file` (L213c): opened for reading from
+  // its start and adding lines at its end (created if it isn't there), by
+  // a number; its next line without the line break, null at the end.
+  openFile?(path: string): number;
+  fileLine?(file: number): string | null;
+  fileAddLine?(file: number, text: string): void;
+  closeFile?(file: number): void;
   // Random's answer when the program has no handler: a Float64 in [0, 1).
   random(): number;
   // Settings' (L214b2): the user's language as a BCP 47 tag. A world
@@ -751,6 +758,13 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       if (op === NOW_OP) return this.ret((rt.world?.now ?? Date.now)());
       if (op === MY_LOCALE_OP) return this.ret({ tag: LOCALE_V, fields: [(rt.world?.locale ?? hostLocale)()] });
       if (op === MY_ZONE_OP) return this.ret((rt.world?.timeZone ?? hostZone)());
+      // A file the prelude's `with open file` keeps open (L213c): by its
+      // number, which only the library holds. What goes wrong is an answer
+      // (none, false), so the prelude says why where it was opened.
+      if (op === FILE_OPS.open) { try { return this.ret({ tag: SOME, fields: [world("openFile")!(args[0] as string)] }); } catch { return this.ret({ tag: NONE, fields: [] }); } }
+      if (op === FILE_OPS.line) { let l: string | null = null; try { l = world("fileLine")!(args[0] as number); } catch { /* none */ } return this.ret(l === null ? { tag: NONE, fields: [] } : { tag: SOME, fields: [l.normalize("NFC")] }); }
+      if (op === FILE_OPS.addLine) { try { world("fileAddLine")!(args[0] as number, args[1] as string); return this.ret(bool(true)); } catch { return this.ret(bool(false)); } }
+      if (op === FILE_OPS.close) { try { world("closeFile")!(args[0] as number); } catch { /* closing can't fail */ } return this.ret(unit); }
       // A page's handler waits by stopping here (C40): the world throws
       // Pending, and the run goes on from here when it's ready, answered.
       if (op === WAIT_OP) {
@@ -1221,7 +1235,7 @@ function typeError(code: Code, info: Info, def: Id, names: Names): string | null
   }
   return null;
 }
-export const RUNTIME_HANDLES: readonly Id[] = discharge("a program's main", [...WORLD, CELLS, DIVERGE, NETWORK, LOG, ABORT, RANDOM, TIME, WAIT, AWAIT, SETTINGS],
+export const RUNTIME_HANDLES: readonly Id[] = discharge("a program's main", [...WORLD, CELLS, DIVERGE, NETWORK, LOG, ABORT, RANDOM, TIME, WAIT, AWAIT, SETTINGS, KEPT_FILES],
   "the runtime handles them around main: the world, cells, the clock, timers and the web; an Abort ends the program with its reason");
 // The effects of a function's type that something in the program has to
 // handle before it can run: an unhandled Choice, effects you declared.

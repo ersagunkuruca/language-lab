@@ -136,8 +136,6 @@ function reachedFromExports(code: Code, names: Names, exports: string[], info: I
 }
 
 export function compile(code: Code, info: Info, names: Names, opts: Options): string {
-  // A handler's release (L213a) runs in the evaluator only, so far.
-  for (const n of Object.values(code.nodes)) if (n.kind === "arm" && n.variant === RELEASE_V) throw new Error("a handler with a release isn't compiled yet (L213a): run it in the evaluator");
   // A use with no body, as the use that binds its ports (C161, uses.ts).
   ({ code, info } = withBodies(code, info, names));
   // The generic + resolved to each type's own operation first
@@ -164,6 +162,10 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // Before hoisting, whose check again was over the whole library too
   // (sheet: 1.6 s of its 2.4 s compile).
   code = reachedFromExports(code, names, opts.exports, info);
+  // A handler's release (L213a) runs in the evaluator only, so far: a
+  // program that reaches one (the prelude's with open file, L213c) isn't
+  // compiled.
+  for (const n of Object.values(code.nodes)) if (n.kind === "arm" && n.variant === RELEASE_V) throw new Error("a handler with a release isn't compiled yet (L213a): run it in the evaluator");
   // Cells kept plainly when nothing reads them reactively (L99f): no
   // formula, each or each of, and no page (Html), whose watchers do.
   const refs = Object.values(code.nodes).flatMap((n) => (n.kind === "ref" ? [n.target] : []));
