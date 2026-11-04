@@ -86,6 +86,9 @@ const SMALLEST: Record<string, (k: Lang) => void> = {
   "operation-not-function": (k) => { k.interface("Sized", "a", [["size", (a) => k.tref(a)]]); },
   "fraction-literal": (k) => k.define(k.def("p"), k.at(RATIONAL_TYPE, "1/0")),
   "number-literal": (k) => k.define(k.def("p"), k.at(COMPLEX_TYPE, "a")),
+  "shared-different-types": (k) => { const t = k.type("Shape", [], [["dot", [["r", () => k.tref(NUMBER)]]], ["disc", [["r", () => k.tref("type.text")]]]]); (k.code.nodes[t.f["disc.r"]] as { same?: string }).same = t.f["dot.r"]; k.define(k.def("p"), k.fn(["s"], (s) => k.call(t.f["dot.r"], s))); },
+  "shared-field-wrong": (k) => { const t = k.type("Shape", [], [["dot", [["r", () => k.tref(NUMBER)], ["q", () => k.tref(NUMBER)]]], ["disc", [["r", () => k.tref(NUMBER)]]]]); (k.code.nodes[t.f["dot.q"]] as { same?: string }).same = t.f["dot.r"]; k.define(k.def("p"), k.fn(["s"], (s) => k.call(t.f["dot.r"], s))); },
+  "mask-takes-one": (k) => { const t = k.type("Trail", [], [["trail", [["at", () => k.tref("type.vector of")]]]]); k.define(k.def("p"), k.fn(["s"], (s) => k.call(t.f["trail.at"], s))); },
   "not-a-number": (k) => k.define(k.def("p"), k.fn(["b"], (b) => k.match(b, [{ variant: TRUE, names: [], body: () => k.lit(1) }, { variant: FALSE, names: [], body: () => k.lit("a") }]))),
 };
 
