@@ -15,7 +15,7 @@ import { infer } from "../src/lang/infer.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import type { Id } from "../src/model.ts";
-import { ARITH, COMPLEX_V, EMBEDDING_V, INT_OPS, SHOW_ANY, TEXT_OPS } from "../src/lang/std.ts";
+import { ARITH, COMPLEX_V, EMBEDDING_V, INT_OPS, S, SHOW_ANY, TEXT_OPS } from "../src/lang/std.ts";
 import { runMain } from "../src/lang/run.ts";
 import { B } from "../src/prelude.ts";
 
@@ -130,6 +130,36 @@ test("a function returning Int given where one returning Float64 goes: its resul
   assert.deepEqual([...l.refused.values()], []);
   const fs = loadCoreJs(l);
   assert.equal(fs[l.funcs.findIndex((g) => g.name === "main" && !g.inner)](), "[1.5, 2.5]");
+});
+
+// A wanted type known only from an earlier input (L208c3): inverse(half,
+// count) wants a Float64 second because half gives one, so the Int count
+// is lifted once the call doesn't fit as it is, and the search runs on 3.0.
+test("an Int given where an earlier input says a Float64 goes is lifted: inverse(half, count) is 6", async () => {
+  const p = program((k) => {
+    const half = k.def("half");
+    k.define(half, k.fn(["x"], (x) => k.call(B.mul, x, k.lit(0.5))));
+    const count = k.def("count");
+    k.define(count, k.int(3));
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.call(SHOW_ANY, k.call(S.first, k.thunk(() => k.call(lib("inverse"), k.x(half), k.x(count))), k.thunk(() => k.lit(-1))))));
+  });
+  assert.deepEqual(p.info.errors.map((e) => e.message), []);
+  assert.equal(p.info.embedded?.size, 1);
+  const main = p.code.defs.find((d) => p.names[d] === "main")!;
+  assert.equal(runMain(p.code, p.info, main, { print: () => {}, names: p.names }), "6");
+  const path = join(mkdtempSync(join(tmpdir(), "embed-")), "main.mjs");
+  writeFileSync(path, compile(p.code, p.info, p.names, { runtime, exports: ["main"] }));
+  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, () => unknown>;
+  assert.equal(typeof defs.main === "function" ? defs.main() : defs.main, "6");
+  // Text given there has no embedding into Float64: still an error.
+  const q = program((k) => {
+    const half = k.def("half");
+    k.define(half, k.fn(["x"], (x) => k.call(B.mul, x, k.lit(0.5))));
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.call(SHOW_ANY, k.call(S.first, k.thunk(() => k.call(lib("inverse"), k.x(half), k.lit("3"))), k.thunk(() => k.lit(-1))))));
+  });
+  assert.match(q.info.errors.map((e) => e.message).join("\n"), /needs Float64 here, got Text/);
 });
 
 // The diamond rule (L208d, diamonds.ts): two paths between the same types
