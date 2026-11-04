@@ -17,7 +17,7 @@ export interface Problem {
 }
 
 export const PROBLEMS: Problem[] = [
-  { id: "wrong-type", says: /^(?!.* takes \d+ inputs: given one).+ needs .+ here, got .+$/, fix: "Give it a value of the type it names, or change what it's given to that type (a conversion such as as float64, or show for a text)." },
+  { id: "wrong-type", says: /^(?!.* takes \d+ inputs: given one).+ needs .+ here, got .+$|^(.+: )?expected .+, got .+$/, fix: "Give it a value of the type it names, or change what it's given to that type (a conversion such as as float64, or show for a text)." },
   { id: "wrong-count", says: /^.+ takes \d+ inputs?, given \d+$/, fix: "Give it as many inputs as it takes: drop the extra ones, or fill the missing ones." },
   { id: "not-a-function", says: /^.+ is .+, not a function$/, fix: "Only a function can be called: use the value as it is, or call a function that takes it." },
   { id: "fraction-at-int", says: /a number with a fraction part can't be (an Int|one)$/, fix: "Write a whole number, or turn a Float64 into an Int with whole part (or floor first)." },
@@ -44,6 +44,9 @@ export const PROBLEMS: Problem[] = [
   { id: "needs-more-ports", says: /^.+ needs \d+ more known ports? to be solved this way$/, fix: "Give more of its ports a value (an input, or out), so the rest can be found from them." },
   { id: "not-backwards", says: /(^[^ ]+ can't be run backwards|, and a function that acts can't be run backwards)$/, fix: "Solve a function written from relations and with no effects: a value can't be run backwards, and an action (print, read) would act once per guess, so call it forwards instead." },
   { id: "field-of-one-case", says: /^.+ belongs to one case of .+; use a match to reach it, or say in the other cases that their field is the same one$/, fix: "Match on the value and read the field in the arm of the case that has it, or give every case the field (a shared field) so it can be read from any of them." },
+  { id: "not-folded", says: /^.+ is not recursive, so it has no folded value$/, fix: "Only a field that holds the type itself (a list's rest, a tree's branches) has a folded value: name a result only for those, or use a match." },
+  { id: "effect-folded", says: /^.+ is an effect; its operations are handled with a match, not folded$/, fix: "Handle the effect with a handler, whose cases match its operations, instead of a fold." },
+  { id: "too-many-results", says: /^a function gives at most \d+ results$/, fix: "Give at most 8 results: put the others together in a type with one case, and give that." },
   { id: "type-as-value", says: /^.+ is a type, not a value$/, fix: "A type says what values look like and can't be used as one: use one of its cases, or a value of that type." },
 ];
 
