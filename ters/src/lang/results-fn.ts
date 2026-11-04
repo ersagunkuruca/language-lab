@@ -12,7 +12,7 @@
 // unchanged when it has none, and the nodes the person wrote keep their ids.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
-import { children, fieldPorts, freshId, isCall, nodesWhere, parentLookup } from "../model.ts";
+import { fieldPorts, freshId, isCall, nodesWhere, parentLookup } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { infer, type Info } from "./infer.ts";
 import { TRUE, tupleVariant } from "./std.ts";
