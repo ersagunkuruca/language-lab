@@ -133,8 +133,8 @@ carry a maths library of its own. A platform with none (WASI) carries
 one. A program that needs the same bits on every machine (a lockstep
 game) says so by its type: Fixed (§3.4), or a library number type
 whose functions are written in Ters, which only that program carries. The
-steady module's `steady sin`, `steady cos`, `steady exp` and `steady log`
-are those functions (fdlibm's, written in Ters, L210a); the type that
+steady module's `steady sin`, `steady cos`, `steady tan`, `steady exp` and
+`steady log` are those functions (fdlibm's, written in Ters, L210); the type that
 carries them comes later.
 
 3.3. **Leaving the finite floats** happens in two ways (FLOAT-VALUES
