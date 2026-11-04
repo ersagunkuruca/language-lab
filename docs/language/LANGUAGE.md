@@ -836,6 +836,27 @@ match half(n)
 The compiled JavaScript runs it, except beside an operation answered
 later; WASM and C refuse it with a reason for now.
 
+And it may have a **release**, a last case run once when the handler ends,
+however it ends (L213a, RESOURCES-2026-11-03.md): after the normal
+finish; before the case of a handler further out that an operation which
+never returns (an `abort`) went to; and on the way out when nothing caught
+an Abort, or the program stopped. Handlers inside one release first. This
+is what closes what a handler opened, so a resource is a handler and never
+a value:
+
+```
+match work()
+| ask()     → 41
+| release   → log("closed")
+```
+
+A release may only log, since it runs on every exit and can't itself fail
+or wait; and a handler with one can't let a `Choice` through, since a
+search could leave its body and come back after the release. The
+evaluator runs releases; compiled code refuses a handler with one for now.
+One exit doesn't release yet: a `with fuel` outside the handler running
+out.
+
 The continuation isn't a value, on purpose. Every operation is one of two
 shapes, and those two cover what programs need (errors, configuration,
 logging, IO, mocking IO in tests) without first-class continuations:

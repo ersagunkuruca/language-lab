@@ -132,7 +132,10 @@ keeps "a resource is never a value" true.
 
 1. A handler's release case: model, checker (the release's row), evaluator
    and compiled JS. Test: an `Abort` inside the body still runs the
-   release, once.
+   release, once. Built in the evaluator and the checker (L213a,
+   release.test.ts): an arm for std's `release` marker, last among the
+   cases; compiled code refuses it for now, and a `with fuel` outside
+   running out doesn't release yet.
 2. Handler names: `as name` on a handler, operations taking the name, the
    scope error when it escapes. Test: two files open, a line copied from
    one to the other; a function using a name returned from its handler is

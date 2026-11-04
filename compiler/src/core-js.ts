@@ -442,7 +442,12 @@ export function coreModule(ir: CoreIR, name: string, runtime: string, world: str
 // runs (C137c11): only when it has one.
 // As a string parsed once, which is smaller and quicker to load than
 // the same object written out.
-const codeFor = (ir: CoreIR, js: string) => (/R\.rt\("(solve|exists"|derive:)/.test(js) ? `JSON.parse(${JSON.stringify(JSON.stringify({ nodes: ir.code.nodes, defs: ir.code.defs }))})` : "undefined");
+const solving = (js: string) => /R\.rt\("(solve|exists"|derive:)/.test(js);
+// Whether the program runs the evaluator's solver (a solve, `for some`, a
+// derivative): far slower than compile.ts's plans for now, so a sound
+// isn't played this way (C137d7).
+export const usesSolver = (ir: CoreIR): boolean => solving(emitCoreJs(ir).js);
+const codeFor = (ir: CoreIR, js: string) => (solving(js) ? `JSON.parse(${JSON.stringify(JSON.stringify({ nodes: ir.code.nodes, defs: ir.code.defs }))})` : "undefined");
 
 // A program's hosts/js.js (FOREIGN.md, C137d5): where it is, and the
 // program's own operations by `effect:index`, as a perform names them

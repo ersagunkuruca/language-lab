@@ -1453,6 +1453,13 @@ export const LOCALE = typedef("std.locale", "Locale", [], [
   ["locale", [["tag", () => tref(STRING)]]],
 ]);
 export const LOCALE_V = "std.locale.locale";
+// A handler's release (L213a, RESOURCES-2026-11-03.md §1): a case
+// `release → …` after the operations' cases, run once when the handler
+// ends, by any exit (its normal finish, an operation that never returns
+// handled further out, an Abort nothing caught, the stop), so what the
+// handler opened is closed. Not an effect: a marker for that case.
+export const RELEASE = typedef("std.release", "Release", [], [["release", []]]);
+export const RELEASE_V = "std.release.release";
 // The user's settings, read from the world as the time is (L214b2): `my
 // locale()`, the language the person running the program uses, for
 // uppercase, lowercase and collated. An effect, so a function that
@@ -1495,7 +1502,7 @@ export function onTodaysIds<T>(x: T, from = (x as { shape?: unknown } | null)?.s
 }
 export const tupleSize = (id: Id): number | null => { const m = /^std\.tuple(\d)$/.exec(id); return m ? Number(m[1]) : null; };
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, MATRIX, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS, WORD16, TENSOR, BYTES, JSON_TYPE, DATE, TIME_OF_DAY, INSTANT, EMBEDDING, REQUEST, RESPONSE, LOCALE, SETTINGS] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, MATRIX, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS, WORD16, TENSOR, BYTES, JSON_TYPE, DATE, TIME_OF_DAY, INSTANT, EMBEDDING, REQUEST, RESPONSE, LOCALE, SETTINGS, RELEASE] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one

@@ -34,7 +34,7 @@ import { computedForward } from "./directions.ts";
 import { discharge } from "./ledger.ts";
 import * as Alg from "./algebraic.ts";
 import { hostLocale, hostZone } from "./text.ts";
-import { tupleVariant, floatText, LOCALE_V, MY_LOCALE_OP, MY_ZONE_OP, SETTINGS, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, COMPLEX_V, FIXED_V, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, shownImplementations, CASE_NAME, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std.ts";
+import { tupleVariant, floatText, LOCALE_V, MY_LOCALE_OP, MY_ZONE_OP, RELEASE_V, SETTINGS, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, COMPLEX_V, FIXED_V, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, shownImplementations, CASE_NAME, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std.ts";
 import { intLit } from "./int.ts";
 import { JETS } from "./jets.ts";
 import { answerFromHost, effectOfOperation, hostedEffects, type Hosts } from "./hosts.ts";
@@ -257,7 +257,8 @@ interface HandlerFrame { t: "handler"; h: Id; acc: Value[]; otherwise: Value; ba
 // A match handling an effect, waiting for its computation. `base`: the
 // choice points there were when it started, which an operation that never
 // returns cuts back to.
-interface HandleFrame { t: "handle"; effect: Id; arms: Map<Id, NodeOf<"arm">>; done: Id | null; env: Env; base: number; fuel: Fuel | null; next: Frame | null }
+// `release`: its release case (L213a), run once when it ends.
+interface HandleFrame { t: "handle"; effect: Id; arms: Map<Id, NodeOf<"arm">>; done: Id | null; release: NodeOf<"arm"> | null; env: Env; base: number; fuel: Fuel | null; next: Frame | null }
 // An arm of a fold: the fields with folded values, and whether each holds
 // the type nested in a container (List Tree) rather than directly.
 interface FoldArm { arm: NodeOf<"arm">; rec: number[]; nested: boolean[]; shapes: (Shape | null)[] }
@@ -281,6 +282,12 @@ type Frame = { next: Frame | null } & (
   // performed. Looking for a handler from here skips to outside `handler`:
   // a case runs outside the match it belongs to.
   | { t: "answer"; handler: HandleFrame }
+  // A handler's release on its way (L213a): `release` runs `body` and then
+  // gives what came to it (`keep`); `seq` runs `body` after what came
+  // before, the value dropped, a release itself when `release` is set.
+  | { t: "release"; body: Id; env: Env }
+  | { t: "keep"; v: Value }
+  | { t: "seq"; body: Id; env: Env; release: boolean }
   | HandlerFrame
   | HandleFrame
 );
@@ -698,10 +705,18 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         this.push({ t: "answer", handler: h, next: null });
         return this.eval(arm.body, env);
       }
+      // The handlers between here and h end now, their releases first,
+      // innermost first (L213a); then the case; then h's own release.
+      const inner: HandleFrame[] = [];
+      for (let g = this.k; g && g !== h; g = g.t === "answer" ? g.handler.next : g.next) if (g.t === "handle" && g.release) inner.push(g);
       this.cps.length = h.base;
       this.k = h.next;
       this.fuel = h.fuel;
-      this.eval(arm.body, env);
+      if (h.release) this.push({ t: "release", body: h.release.body, env: h.env, next: null });
+      if (!inner.length) return this.eval(arm.body, env);
+      this.push({ t: "seq", body: arm.body, env, release: false, next: null });
+      for (let i = inner.length - 1; i >= 1; i--) this.push({ t: "seq", body: inner[i].release!.body, env: inner[i].env, release: true, next: null });
+      this.eval(inner[0].release!.body, inner[0].env);
     }
 
     // Resume a kept rest with the answer: its frames go on top of the
@@ -816,7 +831,30 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     }
 
     // Run until a value reaches the end of the continuation, or nothing is left.
+    // An exit nothing in the program catches (an Abort at the top, the
+    // stop, a step budget spent) ends every handler still open here: their
+    // releases run, innermost first, before it goes on out (L213a). A page
+    // waiting (Pending) hasn't ended anything.
     go(): Value | typeof DONE {
+      try { return this.going(); } catch (e) {
+        if (!(e instanceof Pending)) this.releaseAll();
+        throw e;
+      }
+    }
+    releaseAll() {
+      const todo: { body: Id; env: Env }[] = [];
+      for (let f = this.k; f; f = f.next) {
+        if (f.t === "handle" && f.release) todo.push({ body: f.release.body, env: f.env });
+        else if (f.t === "release" || (f.t === "seq" && f.release)) todo.push({ body: f.body, env: f.env });
+      }
+      this.k = null;
+      for (const r of todo) {
+        const m = new Machine(null);
+        m.eval(r.body, r.env);
+        try { m.go(); } catch { /* the exit going out is the one to report */ }
+      }
+    }
+    going(): Value | typeof DONE {
       while (true) {
         if (this.mode === EVAL) this.step();
         else if (this.mode === RET) {
@@ -878,7 +916,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         }
         case "match": case "fold": {
           const h = n.kind === "match" ? handlerOf(n) : null;
-          if (h) this.push({ t: "handle", effect: h.effect, arms: h.arms, done: (n as NodeOf<"match">).otherwise, env, base: this.cps.length, fuel: this.fuel, next: null });
+          if (h) this.push({ t: "handle", effect: h.effect, arms: h.arms, done: (n as NodeOf<"match">).otherwise, release: h.release, env, base: this.cps.length, fuel: this.fuel, next: null });
           else this.push({ t: n.kind, n, env, next: null } as Frame);
           return this.eval(n.scrutinee, env);
         }
@@ -946,8 +984,18 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         // The computation a handler watched has its value: that's the
         // match's value, or what its normal finish makes of it (L57),
         // outside the handler. An answer goes back to where it was asked for.
-        case "handle": return f.done ? this.apply(this.atom(f.done, f.env)!, [v]) : this.ret(v);
+        // With a release (L213a), it runs after the normal finish, and the
+        // match's value is what the finish gave.
+        case "handle":
+          if (f.release) {
+            if (!f.done) { this.push({ t: "keep", v, next: null }); return this.eval(f.release.body, f.env); }
+            this.push({ t: "release", body: f.release.body, env: f.env, next: null });
+          }
+          return f.done ? this.apply(this.atom(f.done, f.env)!, [v]) : this.ret(v);
         case "answer": return this.ret(v);
+        case "release": this.push({ t: "keep", v, next: null }); return this.eval(f.body, f.env);
+        case "keep": return this.ret(f.v);
+        case "seq": return this.eval(f.body, f.env);
       }
     }
 
@@ -992,12 +1040,13 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   }
 
   // A match whose cases are an effect's operations is a handler.
-  const handlers = new Map<Id, { effect: Id; arms: Map<Id, NodeOf<"arm">> } | null>();
+  const handlers = new Map<Id, { effect: Id; arms: Map<Id, NodeOf<"arm">>; release: NodeOf<"arm"> | null } | null>();
   const handlerOf = (n: NodeOf<"match">) => {
     if (!handlers.has(n.id)) {
       const arms = n.arms.map((a) => code.nodes[a] as NodeOf<"arm">);
       const effect = arms.length ? effectOf(arms[0].variant) : null;
-      handlers.set(n.id, effect ? { effect, arms: new Map(arms.map((a) => [a.variant, a])) } : null);
+      const release = arms.find((a) => a.variant === RELEASE_V) ?? null;
+      handlers.set(n.id, effect ? { effect, arms: new Map(arms.filter((a) => a !== release).map((a) => [a.variant, a])), release } : null);
     }
     return handlers.get(n.id)!;
   };
