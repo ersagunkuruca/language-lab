@@ -13,7 +13,7 @@ import { compile } from "../src/compile.ts";
 const w = await ways();
 const all = (args: string[], files: Record<string, string>) => {
   const want = w.ideal(args, files);
-  const others: Name[] = ["evaluator", "evaluator, chosen", "compiled", "compiled, chosen"];
+  const others: Name[] = ["evaluator", "evaluator, chosen", "compiled", "compiled, chosen", "core, chosen"];
   for (const way of others) assert.deepEqual(w[way](args, files), want, way);
   return want;
 };
