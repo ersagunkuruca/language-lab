@@ -1009,8 +1009,12 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
           const rt = s.resolveRow(row).tail;
           if (rt !== null) around.rows.add(rt);
           const own = freeVars(t, s);
-          const vars = new Set([...own.vars].filter((v) => !around.vars.has(v))), rows = new Set([...own.rows].filter((r) => !around.rows.has(r)));
-          if (vars.size || rows.size) letSchemes.set(fnLam.params[i], schemeOf(s.zonk(t), { vars, rows }));
+          // Its types only, not its rows: what the function does is one
+          // row for all its uses, as the compiled code calls it one way
+          // (the core IR's worklet runs an action as a generator or not by
+          // the lambda's own row).
+          const vars = new Set([...own.vars].filter((v) => !around.vars.has(v)));
+          if (vars.size) letSchemes.set(fnLam.params[i], schemeOf(s.zonk(t), { vars, rows: new Set() }));
         });
         const subsBefore = s.subs.length;
         const f0 = smoothDerivative(n) ?? (early && smoothGradient(n, early[0])) ?? listOfType(n) ?? expr(n.fn, env, row);
