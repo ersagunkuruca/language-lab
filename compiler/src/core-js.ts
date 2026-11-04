@@ -7,7 +7,8 @@
 // Values are the evaluator's (C137c6), so the evaluator's runtime (the
 // library, tables, pages and cells) takes them as they are: a Float64 is
 // a number, an Int a number while small, else a bigint (int.ts), a Text a
-// string, a record or a data type's value { tag, fields } (run.ts Data),
+// string, a record or a data type's value an object of its case's class
+// with `tag` and its fields (C138c; `fields` gives them as run.ts Data has),
 // a closure a function of its inputs holding what it captured, an Array
 // the evaluator's. Only a Bool differs: a boolean, turned at the runtime's
 // edge. No answer (Choice) is the exception `FAIL`,
@@ -63,6 +64,25 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
   // search's box (`set`), which is never constant.
   const consts = new Map<string, string>();
   const constName = (src: string) => { if (!consts.has(src)) consts.set(src, `c${consts.size}`); return consts.get(src)!; };
+  // One object per constructor (C138c): a class per case, its fields own
+  // properties (f0, f1, …), where { tag, fields: [...] } was two objects.
+  // The evaluator's runtime reads a value's `tag` and `fields` as before
+  // (`fields` a getter giving them as an array), and a value it made
+  // itself (a host builtin's, the world's, an event) is read by its
+  // `fields` where it has no f0.
+  const classes = new Map<string, string>();
+  const made = (variant: Id, xs: string[]): string => {
+    const key = `${variant}/${xs.length}`;
+    if (!classes.has(key)) classes.set(key, `K${classes.size}`);
+    return `new ${classes.get(key)}(${xs.join(", ")})`;
+  };
+  let reads = 0;
+  const read = (rec: string, i: number, pre: string[], d: string): string => {
+    if (/^[\w$.]+$/.test(rec)) return `(${rec}.f${i} ?? ${rec}.fields[${i}])`;
+    const t = `r${reads++}`;
+    pre.push(`${d}const ${t} = ${rec};`);
+    return `(${t}.f${i} ?? ${t}.fields[${i}])`;
+  };
   const constant = (e: SExpr): boolean => ["num", "int", "text", "bool"].includes(e.k) || ((e.k === "new" || (e.k === "make" && !e.t.mutable)) && e.args.every(constant));
   // Deep recursion on the heap (C137c18, compile.ts's C21): a function in
   // a cycle of calls that aren't all its own tail calls (`x + sum(rest)`)
@@ -82,6 +102,11 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
     "let fuel = Infinity;",
     // Plain calls of functions with a heap copy on JavaScript's stack now.
     "let depth = 0;",
+    ...[...classes].map(([key, c]) => {
+      const variant = key.slice(0, key.lastIndexOf("/")), n = Number(key.slice(key.lastIndexOf("/") + 1));
+      const fs = Array.from({ length: n }, (_, j) => `x${j}`);
+      return `class ${c} { constructor(${fs.join(", ")}) { this.tag = ${JSON.stringify(variant)};${fs.map((x, j) => ` this.f${j} = ${x};`).join("")} } get fields() { return [${fs.map((_, j) => `this.f${j}`).join(", ")}]; } }`;
+    }),
     ...[...consts].map(([src, v]) => `const ${v} = ${src};`),
     // A backwards search spends the budget too (C137c12).
     "R.spending(() => --fuel >= 0);",
@@ -150,7 +175,7 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
         case "text": return JSON.stringify(e.v);
         case "bool": return String(e.v);
         case "local": return local(e.i);
-        case "zero": if (e.none) return "R.fail()"; return zero(e.t);
+        case "zero": if (e.none) return "R.fail()"; return zero(e.t, made);
         case "op": {
           const xs = e.args.map((a) => ex(a, pre, d));
           if (INFIX[e.op]) return `(${xs[0]} ${INFIX[e.op]} ${xs[1]})`;
@@ -174,16 +199,16 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
           const c = call(e.fn, xs);
           return ir.funcs[e.fn].partial ? `R.ck(${c})` : c;
         }
-        case "make": { const v = `{ tag: ${JSON.stringify(e.t.variant)}, fields: [${e.args.map((a) => ex(a, pre, d)).join(", ")}] }`; return constant(e) ? constName(v) : v; }
-        case "get": return `${ex(e.rec, pre, d)}.fields[${e.i}]`;
-        case "new": { const v = `{ tag: ${JSON.stringify(e.t.cases[e.c].variant)}, fields: [${e.args.map((a) => ex(a, pre, d)).join(", ")}] }`; return constant(e) ? constName(v) : v; }
+        case "make": { const v = made(e.t.variant, e.args.map((a) => ex(a, pre, d))); return constant(e) ? constName(v) : v; }
+        case "get": return read(ex(e.rec, pre, d), e.i, pre, d);
+        case "new": { const v = made(e.t.cases[e.c].variant, e.args.map((a) => ex(a, pre, d))); return constant(e) ? constName(v) : v; }
         // A written list (L181b): its items in order, made into conses from the last.
         case "list": {
           const [nil, cons] = listSteps(e), xs = e.items.map((a) => ex(a, pre, d));
           const fields = (cons as Extract<SExpr, { k: "new" }>).args.map((a) => ((a as { i: number }).i === e.acc ? "t" : "x")).join(", ");
-          return `[${xs.join(", ")}].reduceRight((t, x) => ({ tag: ${JSON.stringify(e.t.cases[e.c].variant)}, fields: [${fields}] }), ${ex(nil, pre, d)})`;
+          return `[${xs.join(", ")}].reduceRight((t, x) => ${made(e.t.cases[e.c].variant, fields.split(", "))}, ${ex(nil, pre, d)})`;
         }
-        case "field": return `${ex(e.rec, pre, d)}.fields[${e.i}]`;
+        case "field": return read(ex(e.rec, pre, d), e.i, pre, d);
         case "tag": return `R.caseOf(${ex(e.rec, pre, d)}, ${JSON.stringify(e.t.cases.map((c) => c.variant))})`;
         // One of a type that waits takes the rest last (C40 step 4): called
         // from outside, it's given a rest that keeps the answer.
@@ -228,7 +253,7 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
           pre.push(`${d}${save}let ${t};`, `${d}try {`, ...within(null, () => block(e.body, { set: t }, d + "  ")), `${d}} catch (x) {`, `${d}  if (!(x instanceof R.Aborted) || x.esc !== ${e.esc ?? 0}) throw x;`, `${d}  ${back}${local(e.reason)} = x.reason;`, ...block(e.arm, { set: t }, d + "  "), `${d}}`);
           return t;
         }
-        case "set": { const r = ex(e.rec, pre, d); pre.push(`${d}${r}.fields[${e.i}] = ${ex(e.value, pre, d)};`); return ex(e.then, pre, d); }
+        case "set": { const r = ex(e.rec, pre, d); pre.push(`${d}${r}.f${e.i} = ${ex(e.value, pre, d)};`); return ex(e.then, pre, d); }
         case "choose": case "search": throw new Error(`${e.k} is gone after lowering`);
       }
     }
@@ -296,12 +321,12 @@ export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roo
 }
 
 // What a variable starts as.
-function zero(t: LType): string {
+function zero(t: LType, made: (variant: Id, xs: string[]) => string): string {
   if (t === "f64" || t === "int32") return "0";
   if (t === "i32") return "false";
   if (t === "int") return "0";
   if (t === "text") return '""';
-  if (typeof t === "object" && isRecord(t)) return `{ tag: ${JSON.stringify(t.variant)}, fields: [${t.fields.map((x) => zero(x.t)).join(", ")}] }`;
+  if (typeof t === "object" && isRecord(t)) return made(t.variant, t.fields.map((x) => zero(x.t, made)));
   if (typeof t === "object" && isData(t)) return "null";
   return "null";
 }
