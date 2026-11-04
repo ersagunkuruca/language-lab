@@ -239,7 +239,16 @@ const forwardBuiltin = (id: Id) => {
   // A Float64 operation (prelude.ts), as the evaluator runs it: no answer
   // where there is none (x / 0), carried as ∞ where it overflows.
   const op = id.startsWith("builtin.") ? id.slice(8) : "";
-  if (op in impl) return (...xs: unknown[]) => { for (const r of finiteFloat(op, (impl as Record<string, (...a: number[]) => number>)[op](...(xs as number[])), xs as number[])) return r; return NO_ANSWER; };
+  if (op in impl) {
+    const f = (impl as Record<string, (...a: number[]) => number>)[op];
+    // A finite answer of finite numbers is the answer, with no iterator.
+    return (...xs: unknown[]) => {
+      const r = f(...(xs as number[]));
+      if (r - r === 0 && (xs as number[]).every((x) => x - x === 0)) return r;
+      for (const v of finiteFloat(op, r, xs as number[])) return v;
+      return NO_ANSWER;
+    };
+  }
   const one = STD_IMPL[id], many = STD_MANY[id];
   if (one) return (...xs: unknown[]) => one(...(xs as Value[]));
   if (many) return (...xs: unknown[]) => { const r = many(...(xs as Value[])); return r.length ? r[0] : NO_ANSWER; };
