@@ -10,12 +10,13 @@ import { analyze } from "../invertible/src/index.js";
 import { Namer } from "../ters/src/render/namer.ts";
 import { FIXED_V, TRUE } from "../ters/src/lang/std.ts";
 import { CHOICE, DIVERGE, NUMBER, type Type } from "../ters/src/lang/types.ts";
-import { showValue, type Value } from "../ters/src/lang/run.ts";
+import type { Value } from "../ters/src/lang/run.ts";
 import type { Trace } from "../ters/src/lang/trace.ts";
 import type { Saved } from "../ters/src/lang/tests.ts";
 import { formatUnit, infer as unitInfer } from "../ters/src/units.ts";
 import type * as T from "./typed.ts";
 import { h } from "./dom.ts";
+import { shower } from "./shown.ts";
 import { declaresUnits } from "./selectedParts.ts";
 import { newWorker } from "./runViews.ts";
 import { searchBackwards, type BackAsk, type Found } from "./backSearch.ts";
@@ -201,7 +202,7 @@ export function backwards(host: BackHost) {
     const forwards = ports.every((p) => p === "out" || known.includes(p)) && !known.includes("out");
     const forward = (): Backwards | null => {
       const tr = forwards && !missing.length ? traced(info) : null;
-      return tr?.result !== undefined && !tr.error ? { answers: [{ values: { out: showValue(tr.result, doc().code, pres().names) }, free: [], residual: [] }], more: false } : null;
+      return tr?.result !== undefined && !tr.error ? { answers: [{ values: { out: shower(doc().code, info, pres().names)(tr.result) }, free: [], residual: [] }], more: false } : null;
     };
     const dt = info.typeOf.get(ui.def), dz = dt ? info.subst.zonk(dt) : null;
     // An open row chooses only through a function it's given.

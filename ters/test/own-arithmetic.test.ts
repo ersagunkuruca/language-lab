@@ -145,4 +145,21 @@ test("showerFor and lab test show a type's own values through its Shown", () => 
   const [res] = runTests(p.code, p.info, p.names, [latest], { [latest]: [{ inputs: ["version(3, 1)"], answer: "3.1" }] });
   assert.deepEqual(res.failures, []);
 });
+// The editor's chips, wires and Run show the same way (editor/shown.ts):
+// the runner is made only for a value that holds such a type.
+test("the editor's shower shows a type's own values through its Shown, others as before", async () => {
+  const { shower } = await import("../../editor/shown.ts");
+  let version!: Id;
+  const p = program((k, V) => {
+    version = V.v.version;
+    const text = k.def("version text");
+    k.define(text, k.fn(["v"], (v) => k.match(v, [{ variant: V.v.version, names: ["m", "n"], body: ([m, n]) => k.text(k.call(INT_OPS.show, m), k.lit("."), k.call(INT_OPS.show, n)) }])));
+    k.define(k.def("shown at version"), k.call(SHOWN_V, k.x(text)));
+  });
+  assert.deepEqual(p.info.errors.map((e) => e.message), []);
+  const show = shower(p.code, p.info, p.names);
+  assert.equal(shower(p.code, p.info, p.names), show, "one per check");
+  assert.equal(show({ tag: "std.list.cons", fields: [{ tag: version, fields: [3, 1] }, { tag: "std.list.nil", fields: [] }] }), "[3.1]");
+  assert.equal(show({ tag: "std.list.cons", fields: [7, { tag: "std.list.nil", fields: [] }] }), "[7]");
+});
 const at = (p: { code: { defs: Id[] }; names: Record<string, string> }, n: string) => p.code.defs.find((d) => p.names[d] === n)!;
