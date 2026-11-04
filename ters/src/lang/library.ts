@@ -5,7 +5,8 @@ import prelude0 from "../../library/prelude.json" with { type: "json" };
 import vectors0 from "../../library/vectors.json" with { type: "json" };
 import html0 from "../../library/html.json" with { type: "json" };
 import trees0 from "../../library/trees.json" with { type: "json" };
-import { merge, type Code, type Id } from "../model.ts";
+import { merge, shapeHooks, type Code, type Id } from "../model.ts";
+import { usesGiveTheirPorts } from "./ports.ts";
 import { layer, type Comments, type Names } from "../presentation.ts";
 import { prelude, preludeNames } from "../prelude.ts";
 import { adopt, library, type Module } from "./modules.ts";
@@ -29,6 +30,8 @@ export const CORE: Code = merge(prelude, std);
 const lib = library(CORE, layer<Names>(preludeNames, stdNames), MODULES.filter((m) => m !== TREES));
 // The builtins' and std's plain notes (notes.ts) beside the modules' own.
 export const LIBRARY = { ...lib, comments: { ...NOTES, ...lib.comments }, reps: TREES.representations ?? [] };
+// Saved uses move to today's shape knowing the library's ports (L211g).
+shapeHooks.usesGiveTheirPorts = (nodes) => usesGiveTheirPorts(nodes, LIBRARY.code.nodes);
 // Checked once, under every program that leaves it as it is (L216).
 checkOnce(LIBRARY.code, LIBRARY.names);
 

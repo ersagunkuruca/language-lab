@@ -51,6 +51,6 @@ test("a saved use of unpolar moves its ports to the function's order, (x, y) →
     u: { id: "u", kind: "call", fn: "u.fn", given: { 2: "x", 3: "y", out: "t" }, binds: { 1: "angle" }, body: "b" },
     "u.fn": { id: "u.fn", kind: "ref", target: "std.trig.trig.unpolar" },
   };
-  toTodaysShape(nodes, 1);
+  SHAPE_STEPS[1].step(nodes);
   assert.deepEqual(nodes.u, { id: "u", kind: "call", fn: "u.fn", given: { 0: "x", 1: "y", out: "t" }, binds: { 3: "angle" }, body: "b" });
 });
