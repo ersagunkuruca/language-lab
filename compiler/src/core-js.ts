@@ -30,7 +30,7 @@ import { effectOfOperation, hostOp, ownOperations } from "../../ters/src/lang/ho
 import * as I from "../../ters/src/lang/int.ts";
 import { ARRAY_RT, listSteps, RT, isData, isRecord, lowerScalar, reachedWithShows, type CoreIR, type LType, type Op, type SExpr, type SFunc, type TType } from "./scalar.ts";
 import { runtime } from "./wasm-rt.ts";
-import { STOPS } from "./stops.ts";
+import { siteOf, STOPS } from "./stops.ts";
 import { Aborted, FAIL, OUT, RUNTIME, Stopped, Unsupported, coreRuntime, runCoreFn, type BuiltinOf, type HostOps, type MainSpec, type TableSpec } from "./core-rt.ts";
 // The runtime is core-rt.ts's; these are here too, for the tests and
 // tools that print and run in one.
@@ -188,7 +188,8 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
           if (e.op === "neg") return `(-${xs[0]})`;
           if (e.op === "not") return `(!${xs[0]})`;
           if (e.op === "mod") return `R.mod(${xs.join(", ")})`;
-          if (e.op === "stop") return `R.stop(${xs[0]})`;
+          // With where it is (C143), when the site is known.
+          if (e.op === "stop") { const c = e.args[0].k === "num" ? e.args[0].v : -1, at = c >= 0 ? ir.stops?.[siteOf(c)] : undefined; return at ? `R.stop(${xs[0]}, ${JSON.stringify(at.node)}, ${JSON.stringify(at.def)})` : `R.stop(${xs[0]})`; }
           if (MATH[e.op]) return `Math.${MATH[e.op]}(${xs.join(", ")})`;
           return `R.unsupported(${JSON.stringify(`op ${e.op}`)})`;
         }

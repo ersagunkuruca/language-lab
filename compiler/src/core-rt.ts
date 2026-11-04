@@ -15,10 +15,12 @@ import { worldRandom } from "../../ters/src/lang/random.ts";
 import * as I from "../../ters/src/lang/int.ts";
 import * as T from "../../ters/src/lang/text.ts";
 import type { Code, Id } from "../../ters/src/model.ts";
-import { STOPS } from "./stops.ts";
+import { reasonOf, STOPS } from "./stops.ts";
 
 export class Unsupported extends Error {}
-export class Stopped extends Error {}
+// `node` and `def`: where in the program it stopped (C143), when the
+// printed program says.
+export class Stopped extends Error { node?: Id; def?: Id; constructor(why: string, at?: { node: Id; def: Id }) { super(why); if (at) { this.node = at.node; this.def = at.def; } } }
 export class Aborted { reason: unknown; esc: number; constructor(reason: unknown, esc: number) { this.reason = reason; this.esc = esc; } }
 export const FAIL = { fail: true }, OUT = { out: true };
 
@@ -245,7 +247,7 @@ export const RUNTIME = {
     if (f.code) return f.code(f, ...xs);
     try { return f(...xs); } catch (e) { if (e === FAIL) return FAIL; throw e; }
   },
-  stop: (i: number): never => { throw new Stopped(STOPS[i]); },
+  stop: (i: number, node?: Id, def?: Id): never => { throw new Stopped(reasonOf(i), node && def ? { node, def } : undefined); },
   mod: (a: number, b: number) => ((a % b) + b) % b,
   unsupported: (what: string): never => { throw new Unsupported(what); },
   int: (s: string) => I.norm(BigInt(s)),
