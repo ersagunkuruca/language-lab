@@ -13,6 +13,7 @@ import { embeddingLaws, embeddingsIn } from "../src/lang/embed-laws.ts";
 import { infer } from "../src/lang/infer.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
+import type { Id } from "../src/model.ts";
 import { ARITH, COMPLEX_V, EMBEDDING_V, INT_OPS, SHOW_ANY } from "../src/lang/std.ts";
 import { runMain } from "../src/lang/run.ts";
 import { B } from "../src/prelude.ts";
@@ -43,11 +44,17 @@ test("a map that doesn't keep the operations fails its laws: rational in complex
   const p = program((k) => {
     const d = k.def("rational in complex");
     k.define(d, k.call(EMBEDDING_V, k.fn(["q"], (q) => k.call(COMPLEX_V, k.call(lib("as float64"), q), k.lit(1)))));
+    // Int now goes into Complex through Rational and through Float64, so
+    // the way meant is declared (the diamond rule, L208d).
+    const i = k.def("int in complex");
+    k.define(i, k.call(EMBEDDING_V, k.fn(["n"], (n) => k.call(COMPLEX_V, k.call(INT_OPS.toNumber, n), k.lit(0)))));
   });
   assert.deepEqual(p.info.errors.map((e) => e.message), []);
   const laws = embeddingLaws(p.code, p.info, p.names, p.own, near);
   const failed = laws.filter((l) => l.failures.length).map((l) => l.law);
-  assert.deepEqual(failed, ["+", "−", "·", "negation"]);
+  // It also disagrees with going through Float64, and int in complex with
+  // going through it (the diamond rule, L208d).
+  assert.deepEqual(failed, ["+", "−", "·", "negation", "as rational in float64 then float64 in complex", "as int in rational then rational in complex"]);
 });
 
 test("an embedding is between two known types, once a pair, written as the record", () => {
@@ -95,4 +102,34 @@ test("Int + Rational lifts the Int through int in rational: 3 + 1/1 is 4, in the
   writeFileSync(path, compile(p.code, p.info, p.names, { runtime, exports: ["main"] }));
   const defs = (await import(pathToFileURL(path).href)).defs as Record<string, () => unknown>;
   assert.equal(typeof defs.main === "function" ? defs.main() : defs.main, "4");
+});
+
+// The diamond rule (L208d, diamonds.ts): two paths between the same types
+// need a direct embedding, which the laws test checks against each path.
+test("the library's int in float64 agrees with int in rational then rational in float64", () => {
+  const p = program(() => {});
+  const laws = embeddingLaws(p.code, p.info, p.names, undefined, near).filter((l) => l.law.startsWith("as "));
+  assert.deepEqual(laws.map((l) => `${l.embedding}: ${l.law}`), ["int in float64: as int in rational then rational in float64"]);
+  assert.deepEqual(laws.filter((l) => l.error || l.failures.length), []);
+});
+
+test("two ways from one type into another with no direct one are refused, and a direct one settles it", () => {
+  // Four one-field records of an Int: p goes into q and r, each into s.
+  const build = (direct: boolean) => (k: Lang) => {
+    const made = Object.fromEntries(["p", "q", "r", "s"].map((n) => [n, k.type(n.toUpperCase(), [], [[n, [["n", () => k.tref("type.int")]]]])]));
+    const field = (name: string) => made[name].f[`${name}.n`];
+    const variant = (name: string) => made[name].v[name];
+    const into = (from: string, to: string) => {
+      const d = k.def(`${from} in ${to}`);
+      k.define(d, k.call(EMBEDDING_V, k.fn(["x"], (x) => k.call(variant(to), k.call(field(from), x)))));
+    };
+    into("p", "q"); into("p", "r"); into("q", "s"); into("r", "s");
+    if (direct) into("p", "s");
+  };
+  const refused = program(build(false)).info.errors.map((e) => e.message);
+  assert.ok(refused.some((m) => /P goes into S 2 ways \(through Q, through R\), and they may not agree: declare an embedding from P to S/.test(m)), String(refused));
+  const settled = program(build(true));
+  assert.deepEqual(settled.info.errors.map((e) => e.message), []);
+  const laws = embeddingLaws(settled.code, settled.info, settled.names, settled.own, near).filter((l) => l.law.startsWith("as "));
+  assert.deepEqual(laws.map((l) => `${l.embedding}: ${l.law}`).sort(), ["p in s: as p in q then q in s", "p in s: as p in r then r in s"]);
 });
