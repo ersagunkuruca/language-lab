@@ -514,6 +514,10 @@ export const IO = {
   // (simulated's too); fetches that overlap need a world that fetches in
   // the background (L150b).
   startFetch: world("io.startFetch", "start fetch", [str], { t: "con", id: "std.ticket", args: [str] }, [NETWORK, ABORT]),
+  // A request with its method, headers and body, and its response, whatever
+  // its status (L191, network.ts). Aborts only when it can't be sent. Sent
+  // once per run for the same request, as fetch text is.
+  sendRequest: world("io.sendRequest", "send request", [{ t: "con", id: "std.request", args: [] }], { t: "con", id: "std.response", args: [] }, [NETWORK, ABORT]),
 };
 
 // Cells (src/lang/cells.ts, LANGUAGE.md "Cells"): Solid.js's signals and
@@ -578,12 +582,14 @@ export const NETWORK_TYPE = typedef(NETWORK, "Network", [], [
   ["fetch text", [["url", text]], text],
   ["start fetch", [["url", () => fixedTref(`${NETWORK}.start fetch.url.type`, STRING)]],
     () => fixedTref(`${NETWORK}.start fetch.returns`, "std.ticket", fixedTref(`${NETWORK}.start fetch.returns.a`, STRING))],
+  ["send request", [["request", () => fixedTref(`${NETWORK}.send request.request.type`, "std.request")]],
+    () => fixedTref(`${NETWORK}.send request.returns`, "std.response")],
 ], true);
 // Each builtin that acts on the world, by the operation it performs.
 export const WORLD_OPS: Record<Id, Id> = {
   [S.print]: `${CONSOLE}.print`, [IO.printError]: `${CONSOLE}.print error`, [IO.readInput]: `${CONSOLE}.read input`, [IO.readLine]: `${CONSOLE}.read line`,
   [IO.readFile]: `${FILES}.read file`, [IO.writeFile]: `${FILES}.write file`, [IO.appendFile]: `${FILES}.add to file`, [IO.fileExists]: `${FILES}.file exists`, [IO.listFolder]: `${FILES}.list folder`,
-  [IO.fetchText]: `${NETWORK}.fetch text`, [IO.startFetch]: `${NETWORK}.start fetch`,
+  [IO.fetchText]: `${NETWORK}.fetch text`, [IO.startFetch]: `${NETWORK}.start fetch`, [IO.sendRequest]: `${NETWORK}.send request`,
 };
 for (const v of Object.values(WORLD_OPS)) (nodes.find((n) => n.id === v) as NodeOf<"variant">).private = true;
 // A job's two definitions have the same type but for t, which is r in the
@@ -1402,6 +1408,16 @@ export const EMBEDDING = typedef("std.embedding", "Embedding", ["a", "b"], [
   ["embedding", [["map", ([a, b]) => tfun([tref(a)], tref(b), [])]]],
 ]);
 export const EMBEDDING_V = "std.embedding.embedding";
+// A request over the network and its response (L191, network.ts): a
+// header is a name and a value, in the order given. After Embedding, so
+// the ids above don't move.
+const headersT = () => tref(LIST, tref(PAIR, tref(STRING), tref(STRING)));
+export const REQUEST = typedef("std.request", "Request", [], [
+  ["request", [["method", () => tref(STRING)], ["url", () => tref(STRING)], ["headers", headersT], ["body", () => tref(STRING)]]],
+]);
+export const RESPONSE = typedef("std.response", "Response", [], [
+  ["response", [["status", () => tref(INT)], ["headers", headersT], ["body", () => tref(STRING)]]],
+]);
 export const EMBEDDING_MAP = "std.embedding.embedding.map";
 export function tupleType(n: number): Id { return `std.tuple${n}`; }
 export const tupleVariant = (n: number): Id => `std.tuple${n}.tuple`;
@@ -1438,7 +1454,7 @@ export function onTodaysIds<T>(x: T, from = (x as { shape?: unknown } | null)?.s
 }
 export const tupleSize = (id: Id): number | null => { const m = /^std\.tuple(\d)$/.exec(id); return m ? Number(m[1]) : null; };
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, MATRIX, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS, WORD16, TENSOR, BYTES, JSON_TYPE, DATE, TIME_OF_DAY, INSTANT, EMBEDDING] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, MATRIX, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS, WORD16, TENSOR, BYTES, JSON_TYPE, DATE, TIME_OF_DAY, INSTANT, EMBEDDING, REQUEST, RESPONSE] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one

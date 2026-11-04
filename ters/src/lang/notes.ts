@@ -31,7 +31,7 @@ export const NOTES: Comments = {
   "std.row.view": "A named row: what a page's text, part or attribute value may do. Read cells, the clock and the web, log, and run under a step budget (Cells, Diverge, Time, Network, Log). Not print: a view runs whenever what it reads changes.",
   "std.row.handler": "A named row: what a page's event handler may do. Everything a view may, and write cells, print, use files, draw random numbers and abort (the page logs the reason).",
   "std.row.sound": "A named row: what a sound's block function may do on the audio thread. Read and write its cells, draw random numbers (seeded, so a render repeats), and run under a step budget. Nothing that waits or prints.",
-  "effect.network": "An effect: fetch text. A match with a fetch text(url) case answers it; with nothing around it, the web answers.",
+  "effect.network": "An effect: fetch text, start fetch and send request. A match with a fetch text(url) or send request(request) case answers it; with nothing around it, the web answers.",
   "std.event": "What a page's handler is given when its event comes: the field's value, the key pressed, where the pointer is (x, y: in a picture's own units inside an SVG, else pixels from the element's top-left; 0, 0 without a pointer). on(\"frame\", …) comes once each time the browser draws, while its element is on the page, and its seconds are the time since the frame before (0 the first time and for other events): a simulation steps there, as far as that time needs.",
   "std.input": "Where a sound's samples come from: the microphone, or a recording at an address.",
   "std.attribute": "Something attached to a page element: a property (name and value), an on(event, then) handler, or a sound to play when it's clicked.",
@@ -77,6 +77,8 @@ export const NOTES: Comments = {
   "std.extended.minus infinity": "−∞, below every number.",
   "std.extended.finite": "An ordinary number.",
   "std.extended.plus infinity": "+∞, above every number.",
+  "std.request": "A request over the network: request(method: \"POST\", url: …, headers: [tuple(\"content-type\", \"text/plain\")], body: …). send request(r) sends it and gives its Response.",
+  "std.response": "What came back from send request: response(status, headers, body), whatever the status (a 404 is a response, not an Abort).",
   "std.ticket": "Something that will give an a later: await(ticket) waits for it. A timer(milliseconds, value) gives value after that long; the world's tickets come from what it started, such as start timer; first ready is any of's.",
   "std.ticket.ticket": "A ticket the world gave out, by its number.",
   "std.ticket.timer": "Ready after this many milliseconds, with this value.",
@@ -267,6 +269,7 @@ export const NOTES: Comments = {
   "builtin.io.fileExists": "Whether there's a file at this path.",
   "builtin.io.listFolder": "The names of the files in a folder.",
   "builtin.io.fetchText": "The text at a web address. Aborts if the request fails. The same as await(start fetch(url)).",
+  "builtin.io.sendRequest": "Sends a Request (method, address, headers, body) and gives its Response, whatever its status: check response.status. Aborts only when it can't be sent. The same request is sent once per run, so a search that tries again doesn't send it twice.",
   "builtin.io.startFetch": "Starts fetching the text at a web address and gives a ticket for it, so together and race can wait on it beside timers and other fetches: together([() => await(start fetch(a)), () => await(start fetch(b))]). Aborts where it is awaited if the request fails. Run from the command line, evaluated or compiled, the fetch goes on in the background and the ticket is ready when the body has come, so fetches overlap; on a page it is fetched when it starts, and the ticket is ready at once.",
 
   // --- cells: values that change, for pages

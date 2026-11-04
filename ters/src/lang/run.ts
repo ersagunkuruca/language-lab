@@ -15,6 +15,7 @@
 // (Console, Files) have one handler, the runtime's `World`; Log, Abort,
 // Random, Time and Wait, when nothing in the program handles them, go to it too.
 
+import { plainRequest, responseValue, type PlainRequest, type PlainResponse } from "./network.ts";
 import { bordered } from "./border.ts";
 import { answerKeys, givenInOrder } from "./ports.ts";
 import { dependencies, subtree, type Code, type Id, type NodeOf, type Use, useTarget, isCall, type Call, isUse, bindsOf } from "../model.ts";
@@ -336,6 +337,9 @@ export interface World {
   // body, its failure, or null while it is on its way. A world without it
   // fetches when the fetch starts.
   startFetch?(url: string): () => { text: string } | { error: string } | null;
+  // A request with its method, headers and body, and its response (L191),
+  // once per request (the world remembers).
+  sendRequest?(request: PlainRequest): PlainResponse;
 }
 
 // An Abort that nothing in the program handled.
@@ -466,6 +470,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     [IO.fileExists]: (p) => one(bool(world("fileExists")(p as string))),
     [IO.listFolder]: (p) => one(toList(world("listFolder")(p as string))),
     [IO.fetchText]: (u) => one(world("fetchText")(u as string)),
+    [IO.sendRequest]: (r) => one(responseValue(world("sendRequest")!(plainRequest(r))) as Value),
     // In the background where the world can (L150b): a ticket ready when
     // the body has come. Otherwise fetched now, so the ticket is ready at
     // once on any clock (L150).
@@ -523,7 +528,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   // performed where they were called.
   const hosted = hostedEffects(code, rt.hosts);
   const timers = worldTimers((m) => { throw new Aborted(m); });
-  const FALLIBLE = new Set<Fn>([...Object.keys(impl).map((op) => `builtin.${op}`), S.mod, S.float32, IO.readFile, IO.writeFile, IO.appendFile, IO.listFolder, IO.readInput, IO.readLine, IO.fetchText, IO.startFetch].map((id) => builtins[id]));
+  const FALLIBLE = new Set<Fn>([...Object.keys(impl).map((op) => `builtin.${op}`), S.mod, S.float32, IO.readFile, IO.writeFile, IO.appendFile, IO.listFolder, IO.readInput, IO.readLine, IO.fetchText, IO.startFetch, IO.sendRequest].map((id) => builtins[id]));
   function world<K extends keyof World>(k: K): World[K] {
     const f = rt.world?.[k];
     if (!f) return (() => { throw new Error(`this runtime can't ${k === "error" || k === "log" ? "write to standard error" : k}`); }) as unknown as World[K];
