@@ -26,8 +26,8 @@
 // in Ints (`steady reduced far`, L210e) rather than in fdlibm's 24-bit
 // pieces, so there y1 can differ from fdlibm's in its last bits and about
 // one answer in 2,000 rounds the other way from V8's, both within an ulp.
-// Every engine still gives these same bits. Left (L210): the hyperbolic
-// ones, and the number type that carries these (after L204).
+// Every engine still gives these same bits. Steady, the type at the end,
+// carries them through Trig. Left: the hyperbolic ones.
 //
 // Adapted, credited in docs/language/CREDITS.md: fdlibm's e_exp.c,
 // e_log.c, k_sin.c, k_cos.c, k_tan.c, e_rem_pio2.c, s_sin.c, s_cos.c,
@@ -51,7 +51,8 @@ import { merge, type Id } from "../model.ts";
 import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
-import { FALSE, INT_OPS, S, std, TRUE, tupleVariant } from "./std.ts";
+import { ARITHMETIC_V, DIVISION_V, FALSE, INT_OPS, LITERAL_V, ORDERED_V, S, SHOWN_V, std, TRIG_V, TRUE, tupleVariant } from "./std.ts";
+import { NUMBER } from "./types.ts";
 
 // The double whose high word is `hi` and low word 0.
 const word = (hi: number): number => {
@@ -496,7 +497,53 @@ export function buildSteady(): Module {
               let_("c", div(sub(z, mul(df, df)), add(sq, df)), (c) =>
                 mul(L(2), add(df, add(mul(pq(z), sq), c))))))))))));
 
-  const offered = [sin, cos, tan, exp, log, pow, atan, atan2, asin, acos];
+  // The number type that carries them (L210f): a Steady is a Float64 whose
+  // sin, cos, tan, exp, log, polar, unpolar, asin and acos are the ones
+  // above, through Trig, so `sin(x)` at a Steady has the same bits on
+  // every machine, and the rest of a program's numbers keep the
+  // platform's. + − · ÷ and < are Float64's, already the same everywhere,
+  // and a number written where a Steady goes is its Float64 (top ÷
+  // bottom, as both are written). Its one case is public: steady(x) makes
+  // one, and .value reads the Float64 back.
+  const T = k.type("Steady", [], [["steady", [["value", () => k.tref(NUMBER)]]]]);
+  const SV = T.v.steady;
+  const St = (x: Id) => k.call(SV, x);
+  const un = (v: Id, f: (x: Id) => Id, name = "x") => k.match(v, [{ variant: SV, names: [name], body: ([x]) => f(x) }]);
+  const one = (name: string, f: (x: Id) => Id) => def(name, ["a"], (a) => un(a, (x) => St(f(x))));
+  const two = (name: string, f: (x: Id, y: Id) => Id, wrap = true) => def(name, ["a", "b"], (a, b) => un(a, (x) => un(b, (y) => (wrap ? St(f(x, y)) : f(x, y)), "y")));
+  const addS = two("steady add", add), subS = two("steady subtract", sub), mulS = two("steady multiply", mul), divS = two("steady divide", div);
+  const negS = one("steady negate", neg);
+  const lessS = two("steady less than", lt, false);
+  const literalS = def("steady literal", ["top", "bottom"], (t, b) => St(k.call(S.first, k.thunk(() => div(k.call(INT_OPS.toNumber, t), k.call(INT_OPS.toNumber, b))), k.thunk(() => L(0)))));
+  const showS = def("show steady", ["a"], (a) => un(a, (x) => k.call(S.show, x)));
+  const [sinS, cosS, logS, asinS, acosS] = ([["sin", sin], ["cos", cos], ["log", log], ["asin", asin], ["acos", acos]] as const)
+    .map(([n, f]) => one(`steady ${n} at steady`, (x) => k.call(f, x)));
+  // Trig's tan and exp have an answer everywhere. steady tan and exp
+  // divide where the checker can't see the divisor isn't 0 (exp's 2 − c,
+  // with |c| below 0.35; tan's cos x, never 0 at a Float64), so the
+  // first answer is the one, and the 0 after it is never reached.
+  const always = (f: Id) => (x: Id) => k.call(S.first, k.thunk(() => k.call(f, x)), k.thunk(() => L(0)));
+  const tanS = one("steady tan at steady", always(tan)), expS = one("steady exp at steady", always(exp));
+  // polar and unpolar as Float64's are (POLAR.md): (length, angle) ↔ x, y,
+  // by steady cos, sin and atan2, and √, which IEEE rounds the same everywhere.
+  const timesCos = two("steady times cos", (r, t) => mul(r, k.call(cos, t))), timesSin = two("steady times sin", (r, t) => mul(r, k.call(sin, t)));
+  const lengthS = two("steady length", (x, y) => k.call(B.sqrt, add(mul(x, x), mul(y, y)))), angleS = two("steady angle", (x, y) => k.call(atan2, y, x));
+  // As plain functions of Trig's types (L128d4), (length, angle) → (x, y)
+  // and back: with results, their directions would reach steady sin's
+  // reduction past 2^20·π/2 and be read as maybe not finishing.
+  const polarS = def("steady polar", ["length", "angle"], (r, t) => k.call(tupleVariant(2), k.call(timesCos, r, t), k.call(timesSin, r, t)));
+  const unpolarS = def("steady unpolar", ["x", "y"], (x, y) => k.call(tupleVariant(2), k.call(lengthS, x, y), k.call(angleS, x, y)));
+  const impl = (name: string, v: Id, ops: Id[]) => { const d = k.def(name); k.define(d, k.call(v, ...ops.map((o) => k.x(o)))); return d; };
+  const impls = [
+    impl("arithmetic at steady", ARITHMETIC_V, [addS, subS, mulS, negS]),
+    impl("ordered at steady", ORDERED_V, [lessS]),
+    impl("division at steady", DIVISION_V, [divS]),
+    impl("literal at steady", LITERAL_V, [literalS]),
+    impl("shown at steady", SHOWN_V, [showS]),
+    impl("trig at steady", TRIG_V, [sinS, cosS, tanS, expS, logS, polarS, unpolarS, asinS, acosS]),
+  ];
+
+  const offered = [sin, cos, tan, exp, log, pow, atan, atan2, asin, acos, T.def];
   const comments: Record<Id, string> = {
     [sin]: "sin x with the same bits on every machine: fdlibm's, written in Ters (sin is the platform's own, within a few ulp).",
     [cos]: "cos x with the same bits on every machine: fdlibm's, written in Ters.",
@@ -508,10 +555,11 @@ export function buildSteady(): Module {
     [acos]: "The angle whose cosine is x, with the same bits on every machine: fdlibm's, written in Ters. No answer outside −1 to 1.",
     [exp]: "e^x with the same bits on every machine: fdlibm's, written in Ters.",
     [log]: "The natural log of x with the same bits on every machine: fdlibm's, written in Ters. No answer for x ≤ 0.",
+    [T.def]: "A Float64 whose sin, cos, tan, exp, log, polar, unpolar, asin and acos have the same bits on every machine (the steady ones, fdlibm's written in Ters); + − · ÷ and < are Float64's, the same everywhere already. steady(x) makes one, .value reads its Float64. For a lockstep game or a replay: its other numbers keep the platform's functions.",
   };
-  const p = publish(merge(prelude, std, k.code), k.names, offered, merge(prelude, std));
+  const p = publish(merge(prelude, std, k.code), k.names, [...offered, ...impls], merge(prelude, std));
   if (!p.ok) throw new Error(`the steady module can't be published: ${p.reason}`);
   const at = (d: Id) => p.rename.get(d)!;
   const notes = Object.fromEntries(Object.entries(comments).map(([d, c]) => [at(d), c]));
-  return makeModule("steady", p.code, p.names, offered.map(at), p.pins, notes);
+  return makeModule("steady", p.code, p.names, offered.map(at), p.pins, notes, impls.map(at));
 }
