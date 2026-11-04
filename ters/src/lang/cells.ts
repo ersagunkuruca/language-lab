@@ -118,6 +118,19 @@ export interface Lists {
 }
 type Data = { tag: string; fields: Value[] };
 const keyOf = (steps: Step[]) => steps.map((s) => ("item" in s ? `i${s.item}/` : "field" in s ? `f${s.field}/` : "k/")).join("");
+// Does a change at `key` meet a reader's path `p`? A change at the place,
+// around it or inside it does. A path the compiler worked out (C162,
+// readPaths) may also have `*/`, any item of a list, and end in `=`: the
+// place only (a list's length, a value's case), which a change inside it
+// leaves alone.
+export function meets(p: string, key: string): boolean {
+  if (!p.includes("*") && !p.endsWith("=")) return p.startsWith(key) || key.startsWith(p);
+  const only = p.endsWith("="), ps = (only ? p.slice(0, -1) : p).split("/"), ks = key.split("/");
+  ps.pop(); ks.pop();
+  const n = Math.min(ps.length, ks.length);
+  for (let i = 0; i < n; i++) if (ps[i] !== ks[i] && !(ps[i] === "*" && ks[i].startsWith("i"))) return false;
+  return ks.length <= ps.length || !only;
+}
 // Plain data equal: what a key is compared by.
 const sameData = (a: Value, b: Value): boolean => {
   if (a === b) return true;
@@ -339,7 +352,16 @@ export class Cells {
     return this.readNode(n, at);
   }
 
-  private readNode(n: CellNode, at?: Step[]): Value {
+  // A read whose value the compiler followed (C162): the reader waits on
+  // these places of it only (keys as keyOf makes them, with meets' `*/`
+  // and `=`), as if it had read each with read at.
+  readPaths(c: Value, keys: string[]): Value {
+    const n = nodeOf(c);
+    if (!n) throw new Error("read needs a cell");
+    return this.readNode(n, undefined, keys);
+  }
+
+  private readNode(n: CellNode, at?: Step[], keys?: string[]): Value {
     if (this.plain) return n.value as Value;
     // The reader depends on it even if computing it stops part way, so it
     // runs again when what the formula read changes.
@@ -349,7 +371,7 @@ export class Cells {
       if (first) { r.sources.push(n); n.observers.add(r); }
       // A read of a place adds the place; a whole read, or a place read
       // after one, keeps the reader waking at every change.
-      if (at && n.compute === null && (first || r.paths?.has(n))) (r.paths ??= new Map()).set(n, [...(r.paths.get(n) ?? []), keyOf(at)]);
+      if ((at || keys) && n.compute === null && (first || r.paths?.has(n))) (r.paths ??= new Map()).set(n, [...(r.paths.get(n) ?? []), ...(keys ?? [keyOf(at!)])]);
       else r.paths?.delete(n);
     }
     if (n.compute) this.update(n);
@@ -405,7 +427,7 @@ export class Cells {
     for (const o of n.observers) {
       if (o.edits !== undefined) o.edits = what && o.edits ? [...o.edits, what] : null;
       const ps = keys === undefined ? undefined : o.paths?.get(n);
-      if (!ps || keys!.some((key) => ps.some((p) => p.startsWith(key) || key.startsWith(p))) || ats!.some((at) => o.views?.get(n)?.some(hits(at)))) {
+      if (!ps || keys!.some((key) => ps.some((p) => meets(p, key))) || ats!.some((at) => o.views?.get(n)?.some(hits(at)))) {
         this.mark(o, DIRTY);
         if (o.rowOf && !o.rowOf.disposed) this.mark(o.rowOf, DIRTY);
       }
