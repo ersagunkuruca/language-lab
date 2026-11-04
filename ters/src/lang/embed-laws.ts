@@ -19,6 +19,7 @@ import { Lang } from "./dsl.ts";
 import { infer, type Info } from "./infer.ts";
 import { ARITH, CHECK_OP, EMBEDDING, EMBEDDING_MAP } from "./std.ts";
 import { runTests, type TestResult } from "./tests.ts";
+import { shortcuts, type Edge } from "./diamonds.ts";
 import { NUMBER, type Type } from "./types.ts";
 
 export interface EmbeddingLaw extends TestResult { embedding: string; law: string }
@@ -53,6 +54,23 @@ export function embeddingLaws(code: Code, info: Info, names: Names, only?: Set<I
       law(what, ["x", "y"], (x, y) => same(map(k.call(op, x, y)), k.call(op, map(x), map(y))));
     law("negation", ["x"], (x) => same(map(k.call(ARITH.neg, x)), k.call(ARITH.neg, map(x))));
     law("<", ["x", "y"], (x, y) => k.equal(k.call(ARITH.less, x, y), k.call(ARITH.less, map(x), map(y))));
+  }
+  // Each declared embedding agrees with every other path between its types
+  // (the diamond rule, L208d): ι(x) = ι₂(ι₁(x)).
+  const edges: Edge[] = embeddingsIn(info).map((e) => ({ def: e.def, from: JSON.stringify(e.from), to: JSON.stringify(e.to) }));
+  const target = new Map(embeddingsIn(info).map((e) => [e.def, e.to]));
+  for (const { direct, path } of shortcuts(edges)) {
+    if (only && ![direct, ...path].some((e) => only.has(e.def))) continue;
+    const name = names[direct.def] ?? direct.def;
+    const via = path.map((e) => names[e.def] ?? e.def).join(" then ");
+    const t = target.get(direct.def)!, close = t.t === "con" && t.id === NUMBER && near;
+    const mapBy = (def: Id, v: Id) => k.call(k.call(EMBEDDING_MAP, k.x(def)), v);
+    const d = k.def(`${name}: as ${via}`);
+    k.define(d, k.fn(["x"], (x) => {
+      const one = mapBy(direct.def, x), other = path.reduce((v, e) => mapBy(e.def, v), x);
+      return k.call(CHECK_OP, close ? k.call(near!, one, other) : k.equal(one, other), k.lit(`${name} agrees with ${via}`));
+    }));
+    laws.push({ def: d, embedding: name, law: `as ${via}` });
   }
   const full: Code = { nodes: { ...code.nodes, ...k.code.nodes }, defs: [...code.defs, ...laws.map((l) => l.def)] };
   const all2: Names = { ...names, ...k.names };

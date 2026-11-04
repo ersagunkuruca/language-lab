@@ -10,6 +10,7 @@
 // effect: totality is inferred, not promised. Data types must be strictly
 // positive, so data can't be used to recurse without recursion.
 
+import { diamonds, type Edge } from "./diamonds.ts";
 import { sharing } from "./shared-fields.ts";
 import { PARTIAL, signAnalysis } from "./signs.ts";
 import type { Code, Id, Node, NodeOf, Use } from "../model.ts";
@@ -1415,6 +1416,26 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     if (other && other !== d) err(d, `${nm(other)} and ${nm(d)} both embed ${show(a)} in ${show(b)}: a type goes into another one way, so keep one, and call any other by its name`);
     else table.set(key, d);
   }
+  // Two paths of embeddings between the same two types must be settled by
+  // a direct one (L208d, diamonds.ts): said at one of this check's own
+  // embeddings on the paths.
+  function diamondRule() {
+    const edges: (Edge & { a: Type; b: Type })[] = [];
+    for (const [key, def] of info.implementations!) {
+      if (!key.startsWith(`${EMBEDDING}|`)) continue;
+      const t = JSON.parse(key.slice(EMBEDDING.length + 1)) as Type;
+      if (t.t === "con" && t.args.length === 2) edges.push({ def, from: JSON.stringify(t.args[0]), to: JSON.stringify(t.args[1]), a: t.args[0], b: t.args[1] });
+    }
+    if (edges.length < 2) return;
+    const own = new Set(valueDefs.filter((d) => !reuse || reuse.only.has(d)));
+    const typeOfKey = new Map(edges.flatMap((e) => [[e.from, e.a], [e.to, e.b]] as [string, Type][]));
+    for (const dm of diamonds(edges)) {
+      const at = dm.paths.flat().find((e) => own.has(e.def));
+      if (!at) continue;
+      const via = dm.paths.map((p) => p.slice(0, -1).map((e) => show(typeOfKey.get(e.to)!)).join(" and ")).map((x) => (x ? `through ${x}` : "directly"));
+      err(at.def, `${show(typeOfKey.get(dm.from)!)} goes into ${show(typeOfKey.get(dm.to)!)} ${dm.paths.length} ways (${via.join(", ")}), and they may not agree: declare an embedding from ${show(typeOfKey.get(dm.from)!)} to ${show(typeOfKey.get(dm.to)!)}, which the laws test checks against each way`);
+    }
+  }
   function implementations() {
     const table = info.implementations!;
     let ways: Ways | undefined;
@@ -1457,6 +1478,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         if (stuck.length) err(d, `${nm(d)} leaves ${stuck.map(nm).join(", ").replace(/, ([^,]*)$/, " and $1")} to ${stuck.length === 1 ? "its ways" : "their ways"}, and none of them ends in a field it gives: give ${stuck.length === 1 ? "it, or a field its ways use" : "one of them, or a field their ways use"}`);
       }
     }
+    diamondRule();
     for (const w of s.wanted) {
       const t = s.zonk(w.t);
       if (table.has(implementationKey(w.iface, t))) continue;
