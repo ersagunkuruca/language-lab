@@ -581,8 +581,8 @@ or `red`, `green` and `blue`. The parts map like this:
   a Float64, NaN + 1 is NaN and `less than(120, NaN)` is false, so the
   checker is right not to trust it. One in an Int can (L46): since L46b
   the ray marcher's `march` and `shadow` count their steps in Ints and have
-  no `Diverge`; `colour` keeps its budget until the plain scalar profile
-  takes `first` with a fallback (C166).
+  no `Diverge`; since C166 `colour` is `first(trace(…), else magenta)`
+  with no budget at all.
 - `pow` goes through a small function, because WGSL's `pow` is undefined
   for a negative base. GPUs compute in f32, and WGSL promises `sin` and
   `cos` only to within 2⁻¹¹, so results are close to the evaluator's
