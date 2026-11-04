@@ -35,7 +35,16 @@ import { Aborted, FAIL, OUT, RUNTIME, Stopped, Unsupported, coreRuntime, runCore
 // The runtime is core-rt.ts's; these are here too, for the tests and
 // tools that print and run in one.
 // The solver too, for the programs run here that solve (core-solve.ts).
-import { writtenOut } from "./core-solve.ts";
+import { PLAN_NAMES, noAnswer, solverPlan, writtenOut } from "./core-solve.ts";
+// Each solve's printed plan, worked out once per program (emitCoreJs is
+// run more than once on one IR: usesSolver, solvesSlowly).
+const plans = new WeakMap<Code, Map<string, string | null>>();
+const planOf = (code: Code, id: string): string | null => {
+  let m = plans.get(code);
+  if (!m) plans.set(code, (m = new Map()));
+  if (!m.has(id)) m.set(id, solverPlan(code, id));
+  return m.get(id)!;
+};
 import { trackReads } from "./cell-paths.ts";
 export { Aborted, FAIL, OUT, RUNTIME, Stopped, Unsupported, coreCall, coreRuntime, runCoreFn, type MainSpec, type TableSpec } from "./core-rt.ts";
 
@@ -66,7 +75,8 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
   // A closure carries its lambda's and captures' ids (C137c13) only for a
   // solver (or set and path) to look inside it: in a program with none, it doesn't
   // (C169), and no Map is made per closure.
-  const looks = (e: SExpr): boolean => (e.k === "rt" && LOOKS_INSIDE.test(e.fn)) || kids(e).some(looks);
+  const printedPlan = (fn: string) => { const m = /^solve(?:All)?:(.*)$/.exec(fn); return !!m && planOf(ir.code, m[1]) !== null; };
+  const looks = (e: SExpr): boolean => (e.k === "rt" && LOOKS_INSIDE.test(e.fn) && !printedPlan(e.fn)) || kids(e).some(looks);
   const carries = ir.funcs.some((f) => looks(f.body));
   const rts = new Map<string, string>();
   const rtName = (n: string) => { if (!rts.has(n)) rts.set(n, `rt${rts.size}`); return rts.get(n)!; };
@@ -126,7 +136,14 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
     ...[...consts].map(([src, v]) => `const ${v} = ${src};`),
     // A backwards search spends the budget too (C137c12).
     ...(fuel ? ["R.spending(() => --fuel >= 0);"] : []),
-    ...[...rts].map(([n, v]) => { const b = builtinOf(n); return `const ${v} = R.rt(${JSON.stringify(n)}${b ? `, ${JSON.stringify(b)}` : ""});`; }),
+    ...[...rts].map(([n, v]) => {
+      // A solve the equations' solver plans, its plan printed (C167a): no
+      // node table and no evaluator for it.
+      const sm = /^(solve|solveAll):(.*)$/.exec(n), plan = sm && planOf(ir.code, sm[2]);
+      if (plan) return `const ${v} = R.planned(({ ${PLAN_NAMES.join(", ")} }) => {\n${plan}\n}, ${sm![1] === "solveAll"}, ${JSON.stringify(noAnswer(ir.code, sm![2]))});`;
+      const b = builtinOf(n);
+      return `const ${v} = R.rt(${JSON.stringify(n)}${b ? `, ${JSON.stringify(b)}` : ""});`;
+    }),
     ...worlds.map((_, i) => `const w${i} = R.worlds[${i}];`),
     ...text,
     // A partial function given out says no answer by throwing, as the
@@ -501,7 +518,7 @@ export function coreModule(ir: CoreIR, name: string, runtime: string, world: str
   const code = codeFor(ir, js);
   return [
     `import { coreRuntime, runCoreFn } from ${JSON.stringify(runtime)};`,
-    ...solverFor(code, runtime),
+    ...solverFor(code, runtime, js),
     `import { nodeWorld } from ${JSON.stringify(world)};`,
     ...(hosts ? [`import $hostAnswers from ${JSON.stringify(hosts.file)};`] : []),
     `const rt = { print: (s) => console.log(s), world: nodeWorld()${hosts ? ", hosts: $hostAnswers" : ""} };`,
@@ -554,11 +571,13 @@ export function hostOpsOf(code: Code, names: Record<Id, string>): HostOps {
 // its nodes (one that solves): it carries the library (C137d1).
 // `beside` a global's name ($core, a prebuilt runtime: corePageRuntime):
 // the solver is in it.
-const solverFor = (code: string, beside: string) => {
-  if (code === "undefined") return [];
-  if (beside.startsWith("$")) return [`${beside}.useSolver(${beside}.solver);`];
+// And plan-rt.js, for one whose solves' plans are printed (C167a).
+const solverFor = (code: string, beside: string, js: string) => {
   const at = (f: string) => JSON.stringify(beside.replace(/[^/]*$/, f));
-  return [`import { useSolver } from ${at("core-rt.ts")};`, `import { solver } from ${at("core-solve.ts")};`, "useSolver(solver);"];
+  const plans = !/R\.planned\(/.test(js) ? [] : beside.startsWith("$") ? [`${beside}.usePlans(${beside}.plans);`] : [`import { usePlans } from ${at("core-rt.ts")};`, `import { plans } from ${at("plan-rt.js")};`, "usePlans(plans);"];
+  if (code === "undefined") return plans;
+  if (beside.startsWith("$")) return [...plans, `${beside}.useSolver(${beside}.solver);`];
+  return [...plans, `import { useSolver } from ${at("core-rt.ts")};`, `import { solver } from ${at("core-solve.ts")};`, "useSolver(solver);"];
 };
 
 // What a script takes from its runtime: imported from the file a bundler
@@ -578,7 +597,7 @@ export function corePageScript(ir: CoreIR, name: string, page: string, title: st
   const code = codeFor(ir, js);
   return wrapped(page, [
     using("startCorePage", page),
-    ...solverFor(code, page),
+    ...solverFor(code, page, js),
     ...(hosts ? [`import $hostAnswers from ${JSON.stringify(hosts.file)};`] : []),
     `startCorePage(${JSON.stringify(ir.tables.map(tableSpec))}, ${JSON.stringify(worlds)}, (R) => {`,
     js,
@@ -598,7 +617,7 @@ export function coreSoundScript(ir: CoreIR, name: string, sound: string, hosts?:
   const code = codeFor(ir, js);
   return wrapped(sound, [
     using("startCoreSound", sound),
-    ...solverFor(code, sound),
+    ...solverFor(code, sound, js),
     ...(hosts ? [`import $hostAnswers from ${JSON.stringify(hosts.file)};`] : []),
     `startCoreSound(${JSON.stringify(ir.tables.map(tableSpec))}, ${JSON.stringify(worlds)}, (R) => {`,
     js,

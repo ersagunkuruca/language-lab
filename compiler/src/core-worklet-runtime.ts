@@ -3,5 +3,6 @@
 // worklet made without a bundler (page.ts coreWorkletFile, C137d6).
 
 export { startCoreSound } from "./core-sound.ts";
-export { useSolver } from "./core-rt.ts";
+export { usePlans, useSolver } from "./core-rt.ts";
+export { plans } from "./plan-rt.js";
 export { solver } from "./core-solve.ts";
