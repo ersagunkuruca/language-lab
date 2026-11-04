@@ -110,7 +110,7 @@ export function runPanel(host: RunHost) {
       if ("lines" in m) { ui.output = { ...ui.output, lines: [...ui.output.lines, ...m.lines] }; render(); return; }
       try { for (const [k, v] of m.files) localStorage.setItem(k, v); } catch { /* no storage */ }
       const lines = "done" in m && m.shown !== "unit" ? [...ui.output.lines, `→ ${m.shown}`] : ui.output.lines;
-      ui.output = { def, lines, error: "error" in m ? m.error : undefined, running: false, ...(m.stuck ? { stuck: m.stuck } : {}), ...("profile" in m && m.profile?.length ? { profile: m.profile } : {}), ...(m.compiled ? { compiled: true } : {}) };
+      ui.output = { def, lines, error: "error" in m ? m.error : undefined, running: false, ...(m.stuck ? { stuck: m.stuck } : {}), ...("profile" in m && m.profile?.length ? { profile: m.profile } : {}), ...(m.compiled || m.core ? { compiled: true } : {}) };
       // The compiled main is kept for the next run of this same code (E238).
       compiledFor = m.compiled ? { code: ask.code, def, args: ask.args, compiled: m.compiled } : null;
       running = null;
