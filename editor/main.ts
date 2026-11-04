@@ -53,6 +53,7 @@ import type { LogEntry } from "../ters/src/lang/worldlog.ts";
 import { fromFile, toFile } from "../ters/src/files.ts";
 import { flattened, matchRows, sameEverywhere } from "../ters/src/lang/patterns.ts";
 import { showPin, type Pins } from "../ters/src/lang/signatures.ts";
+import { problemOf } from "../ters/src/lang/problems.ts";
 import { inlinable, inlineView, type InlineView } from "./inline.ts";
 import * as Top from "../ters/src/lang/toplevel.ts";
 import { pictureEntries } from "./picture.ts";
@@ -1036,6 +1037,9 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
   if (took) out.append(h("div", { class: "typeline", title: "Several things have this name: this is the one the types picked" }, h("span", {}, "calls"), h("code", {}, took)));
   const err = info.errors.find((e) => e.id === id);
   if (err) out.append(h("p", { class: "status-line bad" }, err.message));
+  // The usual fix, from the problem table (L187, problems.ts).
+  const problem = err ? problemOf(err.message) : undefined;
+  if (problem) out.append(h("p", { class: "hint" }, `Usual fix: ${problem.fix}${problem.gesture ? ` ${problem.gesture}` : ""}`));
   // A type with no implementation of an interface a use needs: write one.
   if (err?.missing) out.append(h("div", { class: "acts" }, implementButton(info, err.missing.iface, err.missing.type, `Implement ${names[err.missing.iface] ?? "it"} for ${showIn(err.missing.type, names, info.subst)}`)));
 
