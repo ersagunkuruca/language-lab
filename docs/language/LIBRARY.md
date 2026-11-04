@@ -467,6 +467,8 @@ An Instant is a moment, as seconds since 1970-01-01 00:00:00 UTC; a duration is 
 - **time at** : `(Instant) -> Time of day`. The time of day in UTC at an instant, in whole seconds (a fraction of a second is dropped).
 - **instant text** : `(Instant) -> Text`. The instant as ISO 8601 writes it in UTC, whole seconds: instant text(instant of(0)) is "1970-01-01T00:00:00Z".
 - **instant read** : `(Text) -[Abort]-> Instant`. The instant an ISO 8601 text writes in UTC, year-month-dayThour:minute:secondZ, the other way from instant text. Stops on any other text.
+- **current instant** : `() -[Time]-> Instant`. The instant now, from the program's clock (Time): instant text(current instant()) is the time in UTC. In a test, simulated runs it on a clock that starts at instant of(0).
+- **wait for** : `(Float64) -[Wait]-> Unit`. Waits for a duration (Wait): wait for(seconds(2)). The same as wait with the duration in milliseconds.
 
 ## Representations
 

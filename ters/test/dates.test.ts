@@ -103,3 +103,11 @@ test("a duration is in seconds, so adding one to a length is a unit error (L188b
   const info = infer(base(k.code), baseNames(k.names), undefined, checkOptions);
   assert.ok(info.errors.some((e) => /unit|m\b|s\b/.test(e.message)), JSON.stringify(info.errors.map((e) => e.message)));
 });
+
+test("current instant reads the clock and wait for waits a duration in milliseconds (L188d)", () => {
+  const p = program((k) => k.let("start", k.call(lib("current instant")), (s) => k.let("waited", k.call(lib("wait for"), k.call(lib("seconds"), k.lit(1.5))), () => k.call(lib("instant text"), s))));
+  const waits: number[] = [];
+  const v = runMain(p.code, p.info, p.main, { print: () => {}, names: p.names, world: { now: () => Date.UTC(2026, 10, 4, 9, 30), wait: (ms: number) => { waits.push(ms); } } } as Parameters<typeof runMain>[3]);
+  assert.equal(v, '"2026-11-04T09:30:00Z"');
+  assert.deepEqual(waits, [1500]);
+});
