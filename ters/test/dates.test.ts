@@ -124,3 +124,14 @@ test("instants at an offset from UTC: written with ±hh:mm and read back (L188c1
     assert.throws(() => runMain(p.code, p.info, p.main, { print: () => {}, names: p.names }), /(instant|time) read:/, bad);
   }
 });
+
+test("durations as ISO 8601 text, both ways (L188e)", async () => {
+  const cases: [number, string][] = [[5400, "PT1H30M"], [-45, "-PT45S"], [0, "PT0S"], [93784, "PT26H3M4S"], [3600, "PT1H"], [61, "PT1M1S"]];
+  assert.equal(await both((k) => k.listOf(...cases.map(([s]) => k.call(lib("duration text"), k.call(lib("seconds"), k.lit(s)))))), JSON.stringify(cases.map(([, t]) => t)).replaceAll(",", ", "));
+  assert.equal(await both((k) => k.listOf(...cases.map(([, t]) => k.call(lib("duration read"), k.lit(t))))), `[${cases.map(([s]) => s).join(", ")}]`);
+  assert.equal(await both((k) => k.call(lib("duration read"), k.lit("PT90M"))), "5400");
+  for (const bad of ["PT", "P1D", "PT1M1H", "PT1H1H", "PTH", "PT1X", "1H", "PT5"]) {
+    const p = program((k) => k.call(lib("duration read"), k.lit(bad)));
+    assert.throws(() => runMain(p.code, p.info, p.main, { print: () => {}, names: p.names }), /duration read:/, bad);
+  }
+});
