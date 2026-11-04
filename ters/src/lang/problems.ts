@@ -33,6 +33,8 @@ export const PROBLEMS: Problem[] = [
   { id: "not-an-operation", says: /^.+ is not an operation of .+$/, fix: "Handle only the effect's own operations: another effect's go to a handler further out, so drop that arm or handle it there." },
   { id: "answer-not-one", says: /^the answer to .+ must be one value, and this may give several or none/, fix: "An operation is answered once: wrap the case's answer in first or optional.", gesture: "Select the answer, Wrap in…, then pick first." },
   { id: "no-implementation", says: /^.+ isn't .+, and has no .+ of its own: give it one, a definition of type .+$/, fix: "Give the type its own operations: an implementation of the interface named (Arithmetic for + − ·, Ordered for <).", gesture: "Click the Implement … button under the message." },
+  { id: "fields-type-unknown", says: /^fields (mapped|listed) needs (the value's data type|the fields' type) known here/, fix: "Use it where the value's type is known: in a definition whose input has a type of its own (pin it), not one that takes any value." },
+  { id: "json-type-unknown", says: /^(json of|from json) writes the value by its type, and /, fix: "Give it a value whose type is known there, or use it where the type wanted is known (a definition's pinned type); a function or an effect has no spelling." },
   { id: "type-as-value", says: /^.+ is a type, not a value$/, fix: "A type says what values look like and can't be used as one: use one of its cases, or a value of that type." },
 ];
 
