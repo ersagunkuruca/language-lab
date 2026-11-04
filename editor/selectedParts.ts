@@ -79,7 +79,8 @@ export function selectedParts(host: SelectedHost) {
     const declared = (n as { unit?: Unit }).unit;
     // A program that declares no units (two dice, say) keeps the chooser
     // folded away: a number there is just a number.
-    const usesUnits = !!declared || Object.values(doc().code.nodes).some((x) => (x as { unit?: Unit }).unit);
+    // Its own nodes: the library's (durations in seconds, L188b) don't count.
+    const usesUnits = !!declared || Object.values(doc().code.nodes).some((x) => (x as { unit?: Unit }).unit && !LIBRARY.code.nodes[x.id]);
     if (!usesUnits && !declarable) return null;
     const box = h(usesUnits ? "div" : "details", usesUnits ? {} : { class: "alts units" }, usesUnits ? h("div", { class: "sub-head" }, "Unit · part of its type") : h("summary", {}, "Give it a unit (m, s, kg…)"),
       h("p", { class: "hint" }, declared ? `Declared ${formatUnit(declared)}.` : u ? `Inferred ${formatUnit(u)} from what it's connected to.` : n.kind === "lit" ? "A plain number." : "Free: nothing pins it down yet, so it fits anywhere."));
