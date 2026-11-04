@@ -692,6 +692,9 @@ const OPS: [string, Id[]][][] = [...new Set([...INFIX.values()].map((g) => g.pre
   return [...level, ...keyed].sort((a, b) => b[0].length - a[0].length);
 });
 const NEGATE = glyphs("prefix").get("−")?.ids ?? [ARITH.neg];
+// The other prefix glyphs but words, read as they print: √x and √(x + 1)
+// (E249).
+const PREFIX = [...glyphs("prefix")].filter(([g]) => g !== "−");
 const namesDef = (v: unknown): boolean => !!v && typeof v === "object" && ((v as { tag?: unknown }).tag === DEF_VALUE || ((v as { fields?: unknown[] }).fields ?? []).some(namesDef));
 function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>): Typed | { error: string } {
   const t = text.trim();
@@ -793,6 +796,27 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
     const a = typedOut(neg[1], code, names, scope);
     const alts = NEGATE.filter((id) => code.nodes[id]);
     if (!("error" in a) && alts.length) return { op: alts[0], args: [a], alts };
+  }
+  for (const [glyph, g] of PREFIX) {
+    if (!t.startsWith(glyph) || t.length === glyph.length) continue;
+    const a = typedOut(t.slice(glyph.length), code, names, scope);
+    const alts = g.ids.filter((id) => code.nodes[id]);
+    if (!("error" in a) && alts.length) return { op: alts[0], args: [a], alts };
+  }
+  // A function written out and called where it is, ((t) => t · 2)(x), is
+  // what a let is (E249): its inputs are steps named for them, given what
+  // the call gives, then its body.
+  const applied = t.startsWith("(") ? closing(t, 0) : -1;
+  if (applied > 0 && applied < t.length - 1 && /^\s*\(/.test(t.slice(applied + 1)) && t.endsWith(")")) {
+    const fn = typedOut(t.slice(1, applied), code, names, scope);
+    const at = applied + 1 + t.slice(applied + 1).indexOf("(");
+    const given = closing(t, at) === t.length - 1 ? topLevel(t.slice(at + 1, -1)) : undefined;
+    if (!("error" in fn) && "params" in fn && !fn.results && given && given.length === fn.params.length) {
+      const args = given.map((x) => typedOut(x, code, names, scope));
+      const bad = args.find((x) => "error" in x);
+      if (bad) return bad;
+      return fn.params.reduceRight<Typed>((rest, p, i) => ({ let: p, be: args[i] as Typed, rest }), fn.body);
+    }
   }
   if (t.startsWith("(") && t.endsWith(")")) { const inner = typedOut(t.slice(1, -1), code, names, scope); if (!("error" in inner)) return inner; }
   // A field read as the blocks print it, board.columns: the field's
@@ -930,6 +954,19 @@ function ifParts(text: string): [string, string, string] | undefined {
   if (then < 0 || els < 0) return undefined;
   const at = (k: number) => words[k].at;
   return [text.slice(2, at(then)).trim(), text.slice(at(then) + 4, at(els)).trim(), text.slice(at(els) + 4).trim()];
+}
+
+// Where the bracket open at `from` closes, outside text: -1 when it doesn't.
+function closing(text: string, from: number): number {
+  let depth = 0, quoted = false;
+  for (let i = from; i < text.length; i++) {
+    const c = text[i];
+    if (c === '"' && text[i - 1] !== "\\") quoted = !quoted;
+    if (quoted) continue;
+    if ("([".includes(c)) depth++;
+    else if (")]".includes(c) && --depth === 0) return i;
+  }
+  return -1;
 }
 
 // Where the last dot outside brackets and text is, before a name (not a
