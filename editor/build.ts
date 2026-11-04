@@ -12,6 +12,7 @@
 //   reactive.html  the Cells programs running live (editor/reactive.ts)
 //   shaders.html   a program compiled to WGSL, drawn by WebGPU
 //                  (editor/shaders.ts)
+//   prebuilt/      the shipped examples compiled ahead (prebuild.ts, E245)
 //   apps/*.html    web apps written in the language (the programs
 //                  editor/examples.json marks page: converter, dice, …),
 //                  each one file built like `lab build-web` (WEB.md)
@@ -24,6 +25,8 @@ import { corePageRuntime, coreWorkletRuntime, pageRuntime, recordings, webPage, 
 import { infer } from "../ters/src/lang/infer.ts";
 import { loadProgram } from "../ters/src/lang/load.ts";
 import { examplesPlugin, exampleTags, type Manifest } from "./examplesPlugin.ts";
+import { shadersBuilt } from "./shadersBuilt.ts";
+import { prebuild } from "./prebuild.ts";
 
 const here = new URL(".", import.meta.url).pathname;
 const site = here + "../";
@@ -44,6 +47,10 @@ const data = text("lab-page-runtime", await pageRuntime()) + text("lab-worklet-r
 const page = readFileSync(here + "page.html", "utf8").replace("<script>/*SCRIPT*/</script>", () => `${data}<script>${js}</script>`);
 writeFileSync(site + "index.html", `<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n</head>\n<body>\n${page}</body>\n</html>\n`);
 console.log(`index.html: ${(page.length / 1024).toFixed(0)} KB`);
+
+// Each shipped page example compiled once, here (E245, prebuild.ts): the
+// editor's preview takes it from prebuilt/ instead of compiling it.
+console.log(`prebuilt/: ${prebuild(manifest, site, true).length} pages`);
 
 // The tutorial, styled like the editor (same colours and fonts).
 const tokens = page.slice(page.indexOf(":root {"), page.indexOf("* { box-sizing"));
@@ -148,7 +155,11 @@ ${readFileSync(here + "reactive.html", "utf8")}<script>${rjs}</script>
 `);
 
 // The shaders page: shaders.html's text around editor/shaders.ts.
-const sout = await build({ entryPoints: [here + "shaders.ts"], bundle: true, format: "iife", target: "es2022", minify: true, write: false });
+// Its programs are compiled here, once, not in the page (shadersBuilt.ts).
+const shadersStarted = performance.now();
+const built = await shadersBuilt();
+console.log(`shaders.html's programs compiled in ${Math.round((performance.now() - shadersStarted) / 1000)} s`);
+const sout = await build({ entryPoints: [here + "shaders.ts"], bundle: true, format: "iife", target: "es2022", minify: true, write: false, define: { SHADERS_BUILT: JSON.stringify(built) } });
 const sjs = sout.outputFiles[0].text.replace(/<\/script/g, "<\\/script");
 writeFileSync(site + "shaders.html", `<!doctype html>
 <html lang="en">

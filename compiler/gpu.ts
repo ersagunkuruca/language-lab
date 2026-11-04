@@ -187,8 +187,11 @@ ${outs.map((x, j) => `  outp[i * ${outWidth}u + ${j}u] = ${x};`).join("\n")}
         return { tag: t.variant, fields: t.fields.map((x) => value(x.t, round)) };
       };
       const runner = isExact ? r32 : r;
-      const want = flatten(f.result, first(runner.call(runner.value(f.def), ...f.params.map((t) => value(t, isExact))))!);
-      const ok = want.every((w, o) => {
+      const answer = first(runner.call(runner.value(f.def), ...f.params.map((t) => value(t, isExact))));
+      // No answer in the evaluator (a square root of a negative, L125b)
+      // is the GPU's NaN, unchecked, as an overflow is (SPEC §10.3).
+      const want = answer === undefined ? Array<number>(outWidth).fill(NaN) : flatten(f.result, answer);
+      const ok = answer === undefined ? want.some((_, o) => Number.isNaN(got[k * outWidth + o])) : want.every((w, o) => {
         const g = got[k * outWidth + o];
         if (typeof w === "boolean") return (g === 1) === w;
         if (Number.isNaN(w)) return Number.isNaN(g);

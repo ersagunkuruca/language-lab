@@ -58,7 +58,7 @@ import { bindsOf, bodyOf, withBodies } from "./uses.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { ARRAY, TABLE, HASH_SET, CELL, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, PATH as PATH_T, STRING, BUILTIN_EFFECTS, Subst, type Row, type Type } from "../../ters/src/lang/types.ts";
-import { RELEASE_V, tupleType, ABORT, ABORT_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, HASH_SET_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, NOW_OP, OPTIONAL, ORDER_V, PAIR_V, RATIO, S, SET, SHOW_ANY, shownImplementations, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
+import { RELEASE_V, tupleType, ABORT, ABORT_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, HASH_SET_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, NOW_OP, OPTIONAL, ORDER_V, PAIR_V, RATIO, S, SET, SHOW_ANY, shownImplementations, implementationsOf, ORDERED, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
 import { liftLets } from "../../ters/src/lang/lift-lets.ts";
 import { solvesOnce } from "../../ters/src/lang/run.ts";
 import { inlineLists } from "./inline-lets.ts";
@@ -401,8 +401,9 @@ export interface SFunc { def: Id; name: string; params: LType[]; result: LType; 
 // rounded: definitions with a call worked out when compiled (stage.ts) that
 // computed a number Float32 can't hold, so a Float32 run differs from it.
 // `shader`: lowered with `shader` and not `data` (C66c): Int is int32, and
-// no answer is the flag, not a status (wasm.ts takes both).
-export interface CoreIR { funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; arrays: AType[]; tables: TType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info; escapes: DType[]; rounded: Set<Id>; shader?: true }
+// no answer is the flag, not a status (wasm.ts takes both). `int32`:
+// lowered without `data`, shader or not (C163): an Int is an int32.
+export interface CoreIR { funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; arrays: AType[]; tables: TType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info; escapes: DType[]; rounded: Set<Id>; shader?: true; int32?: true }
 
 class Refused extends Error {}
 // A closure of a function type, at `key`, gives several answers: lowering
@@ -429,7 +430,10 @@ export function reachedWithShows(code: Code, roots: Id[], info: Info, own = fals
   const reached = reachedFrom(code, roots);
   const showns = [...shownImplementations(info)].flatMap(([t, d]) => (own && t.startsWith("std.") ? [] : [d]));
   const shows = showns.length && Object.values(reached.nodes).some((n) => n.kind === "ref" && n.target === SHOW_ANY);
-  return shows ? reachedFrom(code, [...roots, ...showns]) : reached;
+  // And the Ordered implementations a compare orders through (L204h).
+  const ordereds = [...implementationsOf(info, ORDERED)].flatMap(([t, d]) => (own && t.startsWith("std.") ? [] : [d]));
+  const compares = ordereds.length && Object.values(reached.nodes).some((n) => n.kind === "ref" && n.target === COMPARE);
+  return shows || compares ? reachedFrom(code, [...roots, ...(shows ? showns : []), ...(compares ? ordereds : [])]) : reached;
 }
 export function reachedFrom(code: Code, roots: Id[]): Code {
   const reach = new Set<Id>();
@@ -671,7 +675,9 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
     if (t.id === NUMBER) return "f64";
     if (t.id === BOOL) return "i32";
     if (opts.data && t.id === INT) return "int";
-    if (opts.shader && !opts.data && t.id === INT) return "int32";
+    // Int held in 32 bits wherever Int isn't the heap's (C66c in shaders;
+    // C163 in the plain profile: JavaScript, WebAssembly and C for pictures).
+    if (!opts.data && t.id === INT) return "int32";
     if (opts.data && t.id === STRING) return "text";
     // A cell or a place in one (C137c8): the evaluator's value, opaque here.
     if (opts.host && (t.id === CELL || t.id === PATH_T)) return "host";
@@ -1059,7 +1065,7 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
           for (const a of [...n.args, id]) if (!stype(zonk(a))) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(a))}`);
           return { k: "rt", fn: RT[target], args: RT_LATE.has(RT[target]) ? args().map((a, i) => (stype(zonk(n.args[i])) === "f64" ? fin(f, a) : a)) : args() };
         }
-        if (opts.shader && INT32[target]) return { k: "op", op: INT32[target], args: args() };
+        if (!opts.data && INT32[target]) return { k: "op", op: INT32[target], args: args() };
         // A partial function's x / 0 has no answer there (L125b), unless the
         // checker found this call always answered: then it can only stop.
         // Inside a search's body too: there the search gives the no answer
@@ -2562,7 +2568,7 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
   for (const [r, why] of unstarted) if (!refused.has(r)) refused.set(r, why);
   // Refusals by definition; those of one specialization stay inside.
   const niche = opts.data ? niches(funcs, [...records.values()], [...datas.values()], [...arrays.values()], [...fns.values()], shapes, [...tables.values()]) : new Set<string>();
-  return { funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()].filter((d) => !niche.has(d.key)), arrays: [...arrays.values()], tables: [...tables.values()], fns: [...fns.values()], shapes, code, info, escapes: escapes.map((e) => stype({ t: "con", id: e, args: [] }) as DType), rounded, ...(opts.shader && !opts.data ? { shader: true as const } : {}) };
+  return { funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()].filter((d) => !niche.has(d.key)), arrays: [...arrays.values()], tables: [...tables.values()], fns: [...fns.values()], shapes, code, info, escapes: escapes.map((e) => stype({ t: "con", id: e, args: [] }) as DType), rounded, ...(opts.shader && !opts.data ? { shader: true as const } : {}), ...(!opts.data ? { int32: true as const } : {}) };
 }
 
 // A Float64 is finite (L125c2, FLOAT-VALUES-2026-11-01.md §2), on

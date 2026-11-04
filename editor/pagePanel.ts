@@ -13,6 +13,8 @@ import type { CompileAsk, CompileSays } from "./runWorker.ts";
 import { drawPicture, pictureEntries, type Picture } from "./picture.ts";
 import { handOver, type Cells } from "../ters/src/lang/cells.ts";
 import { lowerCore, solvesSlowly } from "../compiler/src/core-js.ts";
+import { prebuilt, prebuiltKey } from "./prebuilt.ts";
+import type { CompiledPage } from "./pageCompile.ts";
 import { PAGE_BASE, corePageFile, hasSound, pageFile, pageMain, showPage, type Preview } from "../ters/src/lang/page.ts";
 import type { Doc as PageDoc, Node_ } from "../ters/src/lang/html.ts";
 
@@ -228,12 +230,25 @@ export function pagePanels(host: PageHost) {
   function compilePage(main: Id) {
     compiling?.terminate();
     compiling = null;
+    asks++;
     const code = prog();
     if (!page.now) return;
     if (page.now.hush || hasSound(code)) { page.status.textContent = "Interpreted: a page with sound plays from the interpreter in the editor, so it can be slower here. Open in a tab runs it compiled."; return; }
     const made = compiledPages.get(code);
     if (made !== undefined) { if (made) swapCompiled(code, made, main); return; }
     page.status.textContent = "Interpreted while the page compiles; the compiled page takes over in a few seconds, keeping what you do on it.";
+    // A shipped example as shipped was compiled when the site was built
+    // (prebuilt.ts, E245): that program, then, and no compiling here.
+    const asked = ++asks;
+    void prebuilt<CompiledPage>(prebuiltKey("page", code, main, pins())).then((got) => {
+      if (asked !== asks) return;
+      if (!got) return compileHere(code, main);
+      compiledPages.set(code, got);
+      if (page.for === code) swapCompiled(code, got, main);
+    });
+  }
+  let asks = 0;
+  function compileHere(code: Code, main: Id) {
     const w = (compiling = newWorker());
     const done = (m: CompileSays) => {
       w.terminate();

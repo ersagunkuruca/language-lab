@@ -454,7 +454,8 @@ The **shader** profile (WGSL) is a declared approximation with its own
 meaning (decided 2026-11-03, S6): a Float64 is computed as a GPU's
 32-bit float, an Int as 32 bits that gives up past that as a budget
 running out does, a Float64 overflow gives the GPU's ∞ or NaN
-unchecked, and the library functions are the GPU's built-ins. It
+unchecked and a Float64 with no answer (the square root of a negative)
+its NaN, and the library functions are the GPU's built-ins. It
 promises the evaluator's answers only to that precision; a program that
 needs exact answers doesn't run as a shader.
 
