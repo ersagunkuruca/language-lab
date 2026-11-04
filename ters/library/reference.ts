@@ -70,7 +70,7 @@ export const SECTIONS: Section[] = [
   { title: "JSON", intro: "Json is JSON's values as data: null, a Bool, a Float64, a Text, a list, or an object whose fields are named and in order. json printed writes one as JSON text, and json read reads it back.",
     ids: [...t("json"), ...prelude("json printed", "json printed indented", "json read", "json field", "json as number", "json as text", "json as bool", "json as list")] },
   { title: "CSV", intro: "CSV text as rows of text fields (RFC 4180): csv printed writes rows, quoting a field only when it must, and csv rows reads them back.",
-    ids: [...prelude("csv printed", "csv rows")] },
+    ids: [...prelude("csv printed", "csv rows", "csv records")] },
   { title: "Dates", intro: "A Date is a day in the calendar: its year, month and day. Dates count as days from 1970-01-01 both ways, so adding days, the days between two dates and the weekday are whole-number arithmetic. Times of day and instants are their own types (below); time zones come later.",
     ids: [...t("date"), ...prelude("date of", "date year", "date month", "date day", "leap year", "days in month", "day number", "date of day number", "weekday", "added days", "days between", "date text", "date read")] },
   { title: "Times of day", intro: "A Time of day is an hour, a minute and a second, counted as seconds from midnight both ways. Time zones come later.",
