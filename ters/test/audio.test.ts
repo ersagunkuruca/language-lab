@@ -45,13 +45,17 @@ test("the pedal: the evaluator and the compiled program play the same samples, a
   const { p, main } = pedal();
   assert.equal(audioProblem(p.info, main, p.names), null);
   const input = sine(512, 0.3);
-  const ways = await Promise.all((["evaluator", "compiled"] as const).flatMap((way) => [128, 256].map(async (size) => playBlocks(await soundOf(p, main, way), input, size))));
+  const ways = await Promise.all((["evaluator", "compiled", "core"] as const).flatMap((way) => [128, 256].map(async (size) => playBlocks(await soundOf(p, main, way), input, size))));
   for (const w of ways) assert.deepEqual(w.silent, []);
   // Each way the same bits at either block size; the two ways near each
   // other (run.ts close, `near` in the language: the interpreter runs atanh
   // backwards with fractions, the compiled plan with floats).
   assert.deepEqual(ways[1].out, ways[0].out);
   assert.deepEqual(ways[3].out, ways[2].out);
+  // The core IR's JavaScript plays the evaluator's very samples, since
+  // it runs atanh backwards with the evaluator's solver (C137d3).
+  assert.deepEqual(ways[4].out, ways[0].out);
+  assert.deepEqual(ways[5].out, ways[0].out);
   ways[0].out.forEach((x, i) => assert.ok(close(x, ways[2].out[i]), `sample ${i}: ${x} against ${ways[2].out[i]}`));
   // It drives, compresses and comes back as loud as it went in: once the
   // loudnesses have followed it in (a few hundredths of a second), a sine
@@ -83,7 +87,7 @@ test("a sound's cells carry from block to block, the same way compiled; a block 
   const { p, main, loud } = counting();
   assert.equal(audioProblem(p.info, main, p.names), null);
   const ones = new Array(8).fill(1);
-  for (const way of ["evaluator", "compiled"] as const) {
+  for (const way of ["evaluator", "compiled", "core"] as const) {
     assert.deepEqual([...playBlocks(await soundOf(p, main, way), ones, 2).out], [1, 1, 2, 2, 3, 3, 4, 4], way);
   }
   assert.match(audioProblem(p.info, loud, p.names)!, /runs on the audio thread, so it can't have Console/);
