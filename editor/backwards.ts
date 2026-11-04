@@ -231,13 +231,15 @@ export function backwards(host: BackHost) {
       const on = known.includes(p);
       const id = `f-port-${p}`;
       const label = p === "out" ? (pred ? "holds" : "result") : portName(p);
-      const cb = h("input", { type: "checkbox", checked: on, title: on ? "Known: you give it. Untick to solve for it." : "Solved for. Tick to give it instead." }) as HTMLInputElement;
+      // Each named on its own: a label names only its first control, so
+      // the value box beside the tick had no name (E231e).
+      const cb = h("input", { type: "checkbox", checked: on, "aria-label": `${label} is known`, title: on ? "Known: you give it. Untick to solve for it." : "Solved for. Tick to give it instead." }) as HTMLInputElement;
       cb.addEventListener("change", () => setKnown(info, p, cb.checked));
       const shown = r.answers[0]?.values[p];
       // Left free: every value fits (the angle of the origin).
       const any = !!r.answers[0]?.free.includes(p) && shown !== undefined && /^_\d+$/.test(shown);
       const input = on
-        ? h("input", { id, type: "text", value: portText(info, p), autocomplete: "off", spellcheck: "false" }) as HTMLInputElement
+        ? h("input", { id, type: "text", value: portText(info, p), autocomplete: "off", spellcheck: "false", "aria-label": `${label}, the value given` }) as HTMLInputElement
         : h("output", { class: shown === undefined ? "none" : "", title: any ? "Any value fits here" : "" }, shown === undefined ? "?" : any ? "any" : nice(shown));
       if (on) (input as HTMLInputElement).addEventListener("change", () => setPortText(p, (input as HTMLInputElement).value));
       // A multivector result says what it is (L43d).
