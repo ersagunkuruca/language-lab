@@ -27,7 +27,7 @@ const op = (effect: string, name: string) => `${effect}.${name}`;
 const passOn = (k: Lang, effect: string, cases: [string, string[], Id][]) =>
   cases.map(([name, ps, b]) => ({ variant: op(effect, name), names: ps, body: (xs: Id[]) => k.call(b, ...xs) }));
 const otherConsole = (k: Lang) => passOn(k, CONSOLE, [["print error", ["line"], IO.printError], ["read input", [], IO.readInput], ["read line", [], IO.readLine]]);
-const otherFiles = (k: Lang) => passOn(k, FILES, [["write file", ["path", "text"], IO.writeFile], ["add to file", ["path", "text"], IO.appendFile], ["file exists", ["path"], IO.fileExists], ["list folder", ["path"], IO.listFolder]]);
+const otherFiles = (k: Lang) => passOn(k, FILES, [["write file", ["path", "text"], IO.writeFile], ["add to file", ["path", "text"], IO.appendFile], ["file exists", ["path"], IO.fileExists], ["list folder", ["path"], IO.listFolder], ["read bytes", ["path"], IO.readBytes], ["write bytes", ["path", "bytes"], IO.writeBytes]]);
 
 function program() {
   const k = new Lang();
