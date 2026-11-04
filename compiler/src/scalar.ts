@@ -398,7 +398,9 @@ export interface CoreIR { funcs: SFunc[]; refused: Map<Id, string>; records: RTy
 
 class Refused extends Error {}
 // A closure of a function type, at `key`, gives several answers: lowering
-// starts again with that type's closures taking the rest (C137c22).
+// starts again with that type's closures taking the rest (C137c22). Only
+// types that need it are transformed, as in Koka's and Effekt's selective
+// CPS; the rest is Mercury's success continuation, as for definitions.
 class NeedsSeveral extends Error { key: string; constructor(key: string) { super(`closures of ${key} give several answers`); this.key = key; } }
 // A solve's answers, a List of opaque values (each one answer's binds),
 // for JavaScript from the core IR (C137c11).
