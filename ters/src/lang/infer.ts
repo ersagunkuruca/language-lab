@@ -1009,8 +1009,12 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
           const rt = s.resolveRow(row).tail;
           if (rt !== null) around.rows.add(rt);
           const own = freeVars(t, s);
-          const vars = new Set([...own.vars].filter((v) => !around.vars.has(v))), rows = new Set([...own.rows].filter((r) => !around.rows.has(r)));
-          if (vars.size || rows.size) letSchemes.set(fnLam.params[i], schemeOf(s.zonk(t), { vars, rows }));
+          // Its types only, not its rows: what the function does is one
+          // row for all its uses, as the compiled code calls it one way
+          // (the core IR's worklet runs an action as a generator or not by
+          // the lambda's own row).
+          const vars = new Set([...own.vars].filter((v) => !around.vars.has(v)));
+          if (vars.size) letSchemes.set(fnLam.params[i], schemeOf(s.zonk(t), { vars, rows: new Set() }));
         });
         const subsBefore = s.subs.length;
         const f0 = smoothDerivative(n) ?? (early && smoothGradient(n, early[0])) ?? listOfType(n) ?? expr(n.fn, env, row);
@@ -2413,11 +2417,17 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
     }
     return out;
   };
-  const safe = (s: Subst, f: Filling, risky: boolean, mix?: string) => {
+  const safe = (s: Subst, f: Filling, risky: boolean | "field", mix?: string) => {
     if (mix && !risky) { const m = mixChecked(f, mix); if (m !== undefined) return m; }
     const dir = directions.size ? direction(f) : "same";
     if (dir === "lost") return false;
     if (dir === "changed") return whole(f);
+    // An interface's operation (sin, divide) is checked whole, but two of
+    // one interface that leave the group and the hole the same types,
+    // what their variables need included (sin and cos at Trig), pass or
+    // fail together: one check answers for both (I167: a new definition's
+    // 35 operations were 35 checks, 0.3 s).
+    if (risky === "field" && !(withResults && (f.kind === "match" || f.kind === "fold"))) return byKind(`field ${f.kind}|${groupKey(s, [...groupTypes, ...around])}`, f);
     if (risky || (withResults && (f.kind === "match" || f.kind === "fold"))) return whole(f);
     const plan = solves.length ? newPlans(f) : null;
     if (plan !== null) return byKind(`plan ${plan}|${groupKey(s, [...groupTypes, ...around])}`, f);
@@ -2452,7 +2462,7 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   const expected = info.subst.resolve(h.expected);
   const underChoice = near.has(CHOICE) || (expected.t === "fn" && info.subst.resolveRow(expected.eff).effs.includes(CHOICE));
   const mixes = (effs: Id[]) => effs.some((e) => (e === CHOICE ? [...near].some((x) => WORLD.includes(x)) : WORLD.includes(e) && underChoice));
-  const consider = (target: Id, t: Type, risky = false) => {
+  const consider = (target: Id, t: Type, risky: boolean | "field" = false) => {
     const ft = info.subst.resolve(t);
     const effs = ft.t === "fn" ? info.subst.resolveRow(ft.eff).effs : [];
     const mix = mixes(effs) ? [...effs].sort().join(",") : undefined;
@@ -2510,7 +2520,7 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
     // as decides whether there is an implementation.
     // Arithmetic's and Ordered's operations are offered as the one + − · <.
     else if (code.nodes[part].kind === "field" && (def === "std.arithmetic" || def === "std.ordered")) continue;
-    else if (code.nodes[part].kind === "field") { const t = fieldType(code, info.subst, def, part); if (t) consider(part, t, isInterface(code, def)); }
+    else if (code.nodes[part].kind === "field") { const t = fieldType(code, info.subst, def, part); if (t) consider(part, t, isInterface(code, def) && "field"); }
   }
   const lit = (of: "number" | "text" | "int", t: Type) => { const f: Filling = { kind: "lit", of }; const s = fits(t, false); if (s && safe(s, f, false)) out.push(f); };
   lit("number", num);

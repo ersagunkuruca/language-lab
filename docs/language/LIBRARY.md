@@ -669,8 +669,9 @@ A page is a value of type Html that main returns. Cells hold what changes; a par
 
 ## The same bits on every machine
 
-sin, cos, exp, ^ and the rest are each platform's own (JavaScript's, C's, a GPU's), so two machines can differ in the last bit or two. The steady module's are written in Ters as fdlibm writes them, with only + − · / and comparisons, so every machine gives the same bits: for a lockstep game or a replay that must agree.
+sin, cos, exp, ^ and the rest are each platform's own (JavaScript's, C's, a GPU's), so two machines can differ in the last bit or two. The steady module's are written in Ters as fdlibm writes them, with only + − · / and comparisons, so every machine gives the same bits: for a lockstep game or a replay that must agree. Steady is a Float64 that uses them: sin, cos, exp and the rest written at a Steady are the steady ones, and its + − · ÷ and < are Float64's, so a program's Steady numbers agree everywhere and its other numbers keep the platform's.
 
+- **Steady** (type) (steady module). A Float64 whose sin, cos, tan, exp, log, polar, unpolar, asin and acos have the same bits on every machine (the steady ones, fdlibm's written in Ters); + − · ÷ and < are Float64's, the same everywhere already. steady(x) makes one, .value reads its Float64. For a lockstep game or a replay: its other numbers keep the platform's functions.
 - **steady sin** : `(Float64) -> Float64` (steady module). sin x with the same bits on every machine: fdlibm's, written in Ters (sin is the platform's own, within a few ulp).
 - **steady cos** : `(Float64) -> Float64` (steady module). cos x with the same bits on every machine: fdlibm's, written in Ters.
 - **steady tan** : `(Float64) -[Choice]-> Float64` (steady module). tan x with the same bits on every machine: fdlibm's, written in Ters. No answer where cos x is 0.

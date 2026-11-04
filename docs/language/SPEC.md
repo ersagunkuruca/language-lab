@@ -135,8 +135,9 @@ game) says so by its type: Fixed (§3.4), or a library number type
 whose functions are written in Ters, which only that program carries. The
 steady module's `steady sin`, `steady cos`, `steady tan`, `steady exp`,
 `steady log`, `steady pow`, `steady atan`, `steady atan2`, `steady asin` and
-`steady acos` are those functions (fdlibm's, written in Ters, L210); the type that
-carries them comes later.
+`steady acos` are those functions (fdlibm's, written in Ters, L210), and
+**Steady** is the type that carries them: a Float64 whose Trig is theirs,
+so `sin` at a Steady is `steady sin`.
 
 3.3. **Leaving the finite floats** happens in two ways (FLOAT-VALUES
 §2):

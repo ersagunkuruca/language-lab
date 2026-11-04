@@ -53,7 +53,7 @@
 import { givenInOrder } from "../../ters/src/lang/ports.ts";
 import { resolveArithmetic } from "../../ters/src/lang/arith.ts";
 import type { Code, Id, NodeOf } from "../../ters/src/model.ts";
-import { dependencies, subtree, isCall, type Call, isUse, useTarget, type Use } from "../../ters/src/model.ts";
+import { dependencies, portsOf, subtree, isCall, type Call, isUse, useTarget, type Use } from "../../ters/src/model.ts";
 import { bindsOf, bodyOf, withBodies } from "./uses.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
@@ -835,8 +835,9 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   function defType(def: Id): Type | undefined {
     const t = info.typeOf.get(def) && info.subst.zonk(info.typeOf.get(def)!);
     const d = code.nodes[def], lam = d?.kind === "def" && d.body ? code.nodes[d.body] : undefined;
-    if (t?.t !== "fn" || d?.kind !== "def" || !d.results?.length || lam?.kind !== "lambda" || lam.params.length === t.params.length) return t;
-    const rs = d.results, ins = lam.params.filter((p) => !rs.includes(p));
+    const ports = portsOf(code.nodes, def);
+    if (t?.t !== "fn" || !ports?.condition || lam?.kind !== "lambda" || lam.params.length === t.params.length) return t;
+    const rs = ports.results, ins = ports.inputs;
     const outs = rs.length === 1 ? [t.ret] : t.ret.t === "con" && t.ret.id === tupleType(rs.length) ? t.ret.args : null;
     if (!outs || ins.length !== t.params.length) return t;
     return { t: "fn", params: lam.params.map((p) => (rs.includes(p) ? outs[rs.indexOf(p)] : t.params[ins.indexOf(p)])), ret: { t: "con", id: BOOL, args: [] }, eff: t.eff };
