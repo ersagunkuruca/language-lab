@@ -15,7 +15,7 @@
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
 import { isUse, useTarget, isCall, fieldPorts, type Call, bindsOf } from "../model.ts";
-import { children, resolveRefs, subtree } from "../model.ts";
+import { children, portsOf, resolveRefs, subtree } from "../model.ts";
 import { givenBy } from "./directions.ts";
 import type { Notation, Presentation } from "../presentation.ts";
 import { portLabel } from "./equations.ts";
@@ -455,9 +455,10 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
       // A use of a definition with results, in the direction it declares
       // (RESULTS.md): length, angle = polar(x, y), the results side by side.
       const f = node(useTarget(code.nodes, n));
-      const lam = f?.kind === "def" && f.results && f.body ? node(f.body) : null;
-      if (f?.kind === "def" && f.results && lam?.kind === "lambda") {
-        const results = f.results, ins = lam.params.filter((p) => !results.includes(p));
+      const own = f?.kind === "def" ? portsOf(code.nodes, f.id) : null;
+      const lam = own?.condition && f?.kind === "def" ? node(f.body!) as NodeOf<"lambda"> : null;
+      if (own?.condition && lam) {
+        const results = own.results, ins = own.inputs;
         const outTrue = node(n.given.out)?.kind === "ref" && (node(n.given.out) as NodeOf<"ref">).target === TRUE;
         const declared = Object.keys(n.given).length === ins.length + 1 && ins.every((p) => p in n.given) && Object.keys(bindsOf(n)).length === results.length && results.every((r) => r in bindsOf(n));
         // Another direction names what it's given, and its results are

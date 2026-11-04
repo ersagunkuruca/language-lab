@@ -14,7 +14,7 @@
 
 import type { Code, Id, Node, NodeOf, Use } from "../model.ts";
 import { isUse, useTarget, isCall, fieldPorts, type Call, bindsOf } from "../model.ts";
-import { derivedFrom, nodesWhere, subtree } from "../model.ts";
+import { derivedFrom, nodesWhere, portsOf, subtree } from "../model.ts";
 import { S } from "./std.ts";
 
 const paramsOf = (code: Code, d: Id): Id[] | null => {
@@ -147,10 +147,10 @@ export function givenBy(code: Code, b: Id, results: Id[]): Id[] | null {
 // way a function is (sqrt(x² + y²) is no search for a length).
 export function computedForward(code: Code, n: Use): boolean {
   const def = code.nodes[useTarget(code.nodes, n)];
-  if (def?.kind !== "def" || !def.results || !def.body) return false;
-  const lam = code.nodes[def.body];
-  if (lam?.kind !== "lambda") return false;
-  const ins = lam.params.filter((p) => !def.results!.includes(p));
+  const ports = def?.kind === "def" ? portsOf(code.nodes, def.id) : null;
+  if (!ports?.condition || def?.kind !== "def") return false;
+  const lam = code.nodes[def.body!] as NodeOf<"lambda">;
+  const ins = ports.inputs;
   const given = Object.keys(n.given).filter((k) => k !== "out");
-  return given.length === ins.length && ins.every((p) => given.includes(p)) && Object.keys(bindsOf(n)).every((k) => def.results!.includes(k)) && !!givenBy(code, lam.body, def.results);
+  return given.length === ins.length && ins.every((p) => given.includes(p)) && Object.keys(bindsOf(n)).every((k) => ports.results.includes(k)) && !!givenBy(code, lam.body, ports.results);
 }
