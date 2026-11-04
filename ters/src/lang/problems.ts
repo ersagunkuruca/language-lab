@@ -67,6 +67,9 @@ export const PROBLEMS: Problem[] = [
   { id: "embedding-itself", says: /^.+ embeds .+ in itself: an embedding goes from one type into another$/, fix: "An embedding goes between two different types: a map from a type to itself is a plain function, so take embedding off and call it by its name." },
   { id: "embedding-twice", says: /^.+ and .+ both embed .+ in .+: a type goes into another one way, so keep one/, fix: "Keep one embedding for the pair: delete this one, or take embedding off it and call it by its name where you want that way." },
   { id: "implementation-not-record", says: /^.+ is an implementation of .+, so it is written as the record itself: .+\(…\) with each operation$/, fix: "Write the implementation as the interface's record directly, with each operation in place, not computed or passed through a let." },
+  { id: "set-not-field", says: /^set needs a field here, a path of fields such as /, fix: "Give set the field to change, (p) ↦ p.address.city, or a function that reads the record only through its fields; a function that ignores the record has nothing to set." },
+  { id: "path-not-field", says: /^path needs a field here, a path of fields such as /, fix: "Give path a function that reads fields one after another, (t) ↦ t.address.city, or (t) ↦ t for the whole." },
+  { id: "results-unreachable", says: /^.+'s results can't all be found from .+: .+$/, fix: "Write the relation so each result is found from the other ports: an equation for it (b = a + 1) rather than a test such as <, which has many answers or none." },
   { id: "type-as-value", says: /^.+ is a type, not a value$/, fix: "A type says what values look like and can't be used as one: use one of its cases, or a value of that type." },
 ];
 
