@@ -11,7 +11,7 @@
 // isn't in scope.
 
 import type { Code, Id, Node } from "./model.ts";
-import { get, useTarget, isCall, isUse, bindsOf } from "./model.ts";
+import { get, useTarget, isCall, isUse, bindsOf, isPublished } from "./model.ts";
 
 // Angles are plain numbers, as in SI: a radian is a length over a length.
 export const BASE = ["m", "s", "kg", "A"] as const;
@@ -290,7 +290,7 @@ export class UnitsBefore {
   // A filling declares no unit, so the program has one just when the one
   // before it does.
   readonly anyUnit: boolean;
-  constructor(code: Code) { this.code = code; this.anyUnit = Object.values(code.nodes).some((n) => unitOf(n)); }
+  constructor(code: Code) { this.code = code; this.anyUnit = declaresUnit(code); }
   of(d: Id) {
     if (!this.solved.has(d)) {
       const sys = new System(), cs = constraints(this.code, d);
@@ -317,12 +317,19 @@ function conflictsWith(code: Code, d: Id, before?: UnitsBefore): Inference["conf
 // ones in `only` (the palette trying a filling rechecks just the
 // definitions it can affect, `before` its program without the filling).
 // Only programs that declare a unit somewhere are checked: without one,
-// every unit is free and nothing can conflict.
+// every unit is free and nothing can conflict. The library's own units
+// (since L188b the prelude's durations are in seconds) don't count, and
+// its definitions aren't checked again in every program: otherwise every
+// program was checked for units, and tumble's took minutes (inlining
+// calls 20 deep). A program that declares a unit sees a library
+// definition's units where it calls it.
+const declaresUnit = (code: Code) => Object.values(code.nodes).some((n) => unitOf(n) && !isPublished(n.id));
+
 export function unitProblems(code: Code, names: Record<Id, string> = {}, only?: Set<Id>, before?: UnitsBefore): { id: Id; message: string }[] {
-  if (!(before ? before.anyUnit : Object.values(code.nodes).some((n) => unitOf(n)))) return [];
+  if (!(before ? before.anyUnit : declaresUnit(code))) return [];
   const out: { id: Id; message: string }[] = [];
   for (const d of code.defs) {
-    if (only && !only.has(d)) continue;
+    if ((only && !only.has(d)) || isPublished(d)) continue;
     const def = code.nodes[d];
     if (def?.kind !== "def" || !def.body || code.nodes[def.body]?.kind !== "lambda") continue;
     for (const c of conflictsWith(code, d, before)) out.push({ id: c.node ?? d, message: unitMessage(code, c, names) });
