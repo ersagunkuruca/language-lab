@@ -110,3 +110,10 @@ test("csv records reads a CSV with a header line as maps from the header's names
   assert.equal(got, '[map of([("age", "36"), ("name", "Ada")]), map of([("age", ""), ("name", "Lovelace, A")]), map of([("name", "Bob")])]');
   assert.equal(await both((k) => k.call(lib("csv records"), k.lit(""))), "[]");
 });
+
+test("csv of records writes records under a header, and csv records reads them back (L190h)", async () => {
+  const text = 'name,age\nAda,36\n"Lovelace, A",\nBob,';
+  const cols = (k: Lang) => k.listOf(k.lit("name"), k.lit("age"));
+  assert.equal(await both((k) => k.call(lib("csv of records"), cols(k), k.call(lib("csv records"), k.lit('name,age\nAda,36\n"Lovelace, A",\nBob')))), JSON.stringify(text));
+  assert.equal(await both((k) => k.call(lib("csv of records"), cols(k), k.x(NIL_ID))), JSON.stringify("name,age"));
+});
