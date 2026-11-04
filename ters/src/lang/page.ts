@@ -6,6 +6,7 @@
 // program's name, like the built page's; the clock runs on the frames the
 // caller hands out, and stops when the preview does.
 
+import type { PlainRequest, PlainResponse } from "./network.ts";
 import type { Code, Id } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import type { Info } from "./infer.ts";
@@ -48,6 +49,8 @@ export interface PageOptions {
   recordings?: string;
   // How the page fetches (a test's; by default the browser's).
   fetch?: (url: string) => Promise<string>;
+  // And for send request (L191b).
+  send?: (request: PlainRequest) => Promise<PlainResponse>;
   // How the page waits (a test's; by default setTimeout): C40.
   after?: (ms: number) => Promise<void>;
   // Keep the cells the page starts with, for handOver (cells.ts).
@@ -75,7 +78,7 @@ export function showPage(o: PageOptions): Preview {
   const cells = new Cells(equal);
   // The cells main and the first drawing make, for handOver (cells.ts).
   if (o.keepCells) cells.kept = [];
-  const world = recordingWorld(browserWorld(o.store, o.program, out as Console, { cells, frame: (f) => { if (!stopped) o.frame(() => { if (!stopped) f(); }); }, fetch: o.fetch, after: o.after }));
+  const world = recordingWorld(browserWorld(o.store, o.program, out as Console, { cells, frame: (f) => { if (!stopped) o.frame(() => { if (!stopped) f(); }); }, fetch: o.fetch, send: o.send, after: o.after }));
   const run = () => runMain(o.code, o.info, o.main, { print: (line) => cells.later(() => out.log(line)), names: o.names, cells, world });
   const sound = o.worklet && hasSound(o.code) ? soundPlayer(cells, workletFile(o.worklet, o.code, o.info, o.names, o.main), run, o.recordings, world) : null;
   const value = sound ? sound.page : run();

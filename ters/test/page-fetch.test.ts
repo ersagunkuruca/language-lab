@@ -9,6 +9,8 @@ import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { showPage } from "../src/lang/page.ts";
+import type { Id } from "../src/model.ts";
+import { REQUEST_V, RESPONSE_V } from "../src/lang/network.ts";
 import { ABORT_OP, CELL_OPS, HTML_V, INT_OPS, IO, S } from "../src/lang/std.ts";
 import { fakeDoc, FakeEl, FakeText } from "./fakedom.ts";
 
@@ -133,4 +135,29 @@ test("one click fetches an address once; a view's fetch is kept for the page", a
   await settle();
   assert.deepEqual(printed, ["</a 2>", "</a 2>", "</a 3>", "</a 3>"], "the next click asked again");
   assert.deepEqual(asked, ["/view", "/a", "/a"]);
+});
+
+// L191b: send request on a page. A click's handler sends a POST, stops
+// there and goes on with the response when it lands; a 404 is a response.
+test("a click sends a request and goes on with its response", async () => {
+  const k = new Lang();
+  const main = k.def("main");
+  const req = (path: string) => k.call(REQUEST_V, k.lit("POST"), k.lit(path), k.list(), k.lit("hi"));
+  const status = (r: Id) => k.match(r, [{ variant: RESPONSE_V, names: ["status", "headers", "body"], body: ([st, , b]) => k.text(k.call(INT_OPS.show, st), k.lit(" "), b) }]);
+  k.define(main, k.thunk(() => k.call(HTML_V.element, k.lit("button"), k.list(k.call(HTML_V.on, k.lit("click"), k.fn(["e"], () => k.seq(
+    k.call(S.print, status(k.call(IO.sendRequest, req("/save")))),
+    k.call(S.print, status(k.call(IO.sendRequest, req("/missing")))))))), k.list(k.call(HTML_V.text, k.thunk(() => k.lit("+")))))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const sent: string[] = [];
+  const printed: string[] = [];
+  const page = showPage({ code, info, names, main, program: "t", doc: fakeDoc(), store: memory(), frame: () => {},
+    console: { log: (l: string) => printed.push(l), error: (l: string) => printed.push(l) },
+    send: async (r) => { sent.push(`${r.method} ${r.url} ${r.body}`); return r.url === "/save" ? { status: 201, headers: [], body: "saved" } : { status: 404, headers: [], body: "no" }; } });
+  const button = page.root as FakeEl;
+  button.fire("click");
+  await new Promise((r) => setTimeout(r, 10));
+  assert.deepEqual(printed, ["201 saved", "404 no"]);
+  assert.deepEqual(sent, ["POST /save hi", "POST /missing hi"]);
 });
