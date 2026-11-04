@@ -14,7 +14,7 @@
 // the same: one printer. A piece with an id stands for that node.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
-import { isUse, useTarget, isCall, fieldPorts, type Call, bindsOf } from "../model.ts";
+import { conditionResults, isUse, useTarget, isCall, fieldPorts, type Call, bindsOf } from "../model.ts";
 import { children, portsOf, resolveRefs, subtree } from "../model.ts";
 import { givenBy } from "./directions.ts";
 import type { Notation, Presentation } from "../presentation.ts";
@@ -239,7 +239,7 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
         // Named result ports (L128b) after the inputs, as a definition's
         // read: `(a, b) → r1, r2 => e1, e2` when the body is the tuple of
         // them written out, `=> body` otherwise (editor/typed.ts reads both).
-        const ports = n.results?.length ? n.results : null;
+        const ports = n.results?.length && !n.results.every((r) => n.params.includes(r)) ? n.results : null;
         const b = ports ? node(n.body) : undefined;
         const f = isCall(b) ? node(b.fn) : undefined;
         const parts = !ports ? null : ports.length === 1 ? [n.body] : isCall(b) && f?.kind === "ref" && f.target === tupleVariant(ports.length) && b.args.length === ports.length ? b.args : null;
@@ -592,13 +592,14 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
   }
   // A definition with results shows the direction it declares: its inputs,
   // the effects of finding its results, and the results by name.
-  const shape = def.results && body?.kind === "lambda" ? body : null;
+  const defResults = conditionResults(code.nodes, defId);
+  const shape = defResults && body?.kind === "lambda" ? body : null;
   const effs = info?.directions?.get(defId);
   // A constraint on its type variables is said once, at the end.
   const first = shape?.params.map((p) => typeAt(p) ?? "").find((x) => x.includes(" where ")) ?? "", where = first ? first.slice(first.indexOf(" where ")) : "";
   const bare = (p: Id) => typeAt(p)!.split(" where ")[0];
   const t = shape && effs && shape.params.every((p) => typeAt(p))
-    ? `(${shape.params.filter((p) => !def.results!.includes(p)).map(bare).join(", ")}) ${effs.length ? `-[${effs.map(nameOf).join(", ")}]->` : "->"} ${def.results!.map((r) => `${nameOf(r)}: ${bare(r)}`).join(", ")}${where}`
+    ? `(${shape.params.filter((p) => !defResults!.includes(p)).map(bare).join(", ")}) ${effs.length ? `-[${effs.map(nameOf).join(", ")}]->` : "->"} ${defResults!.map((r) => `${nameOf(r)}: ${bare(r)}`).join(", ")}${where}`
     : typeAt(defId);
   if (t) out.push(ln(self(), part("ty big", [` : ${t}`])));
   if (!body) return [...out, ln(self(), pn(" = "), kw("extern"))];
@@ -607,7 +608,7 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
     // A definition with results shows them after its inputs (RESULTS.md),
     // and when each is an expression of the inputs, `= e1, e2` for
     // `r1 = e1 and r2 = e2`.
-    const results = def.results ?? [];
+    const results = defResults ?? [];
     const head = [self(), pn("("), ...commas(body.params.filter((p) => !results.includes(p)).map((p) => [bind(p)])), pn(")")];
     // A function with named result ports (L128b) reads the same way: its
     // results by name after its inputs, and `= e1, e2` when its body is the

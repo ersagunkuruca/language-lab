@@ -28,10 +28,10 @@ test("an operation's result type, later and private are part of its hash", () =>
   assert.equal(new Set(all).size, 4);
 });
 
-// d(a, b) = a = b, with or without b named its result.
+// d(a, b) = a = b, with or without b named its result (on its lambda, L225d).
 const pred = (more: object) => code(
-  { id: "d", kind: "def", body: "l", ...more } as Node,
-  { id: "l", kind: "lambda", params: ["a", "b"], body: "c" },
+  { id: "d", kind: "def", body: "l" } as Node,
+  { id: "l", kind: "lambda", params: ["a", "b"], body: "c", ...more },
   { id: "c", kind: "call", fn: "eq", args: ["ra", "rb"] },
   { id: "eq", kind: "ref", target: "b.eq" },
   { id: "b.eq", kind: "builtin", op: "equal" } as Node,

@@ -13,7 +13,7 @@
 // one predicate with a definition per mode, promised to agree.
 
 import type { Code, Id, Node, NodeOf, Use } from "../model.ts";
-import { isUse, useTarget, isCall, fieldPorts, type Call, bindsOf } from "../model.ts";
+import { conditionResults, isUse, useTarget, isCall, fieldPorts, type Call, bindsOf } from "../model.ts";
 import { derivedFrom, nodesWhere, portsOf, subtree } from "../model.ts";
 import { S } from "./std.ts";
 
@@ -37,8 +37,8 @@ export function directionsIn(code: Code): Map<Id, Id[]> {
 // relation with results, and the same number of ports.
 export function directionProblem(code: Code, d: Id, nm: (id: Id) => string): string | null {
   const n = code.nodes[d] as NodeOf<"def">, of = code.nodes[n.direction!];
-  if (of?.kind !== "def" || !of.results) return `${nm(d)} is a direction of ${nm(n.direction!)}, which has no results to give another direction of`;
-  if (!n.results) return `${nm(d)} is a direction of ${nm(n.direction!)}, so it names its results`;
+  if (of?.kind !== "def" || !conditionResults(code.nodes, of.id)) return `${nm(d)} is a direction of ${nm(n.direction!)}, which has no results to give another direction of`;
+  if (!conditionResults(code.nodes, d)) return `${nm(d)} is a direction of ${nm(n.direction!)}, so it names its results`;
   const mine = paramsOf(code, d), theirs = paramsOf(code, n.direction!);
   if (!mine || !theirs || mine.length !== theirs.length) return `${nm(d)} is a direction of ${nm(n.direction!)}, so it has ${nm(n.direction!)}'s ${theirs?.length ?? 0} ports, in order`;
   return null;
@@ -86,8 +86,9 @@ export function directionFor(code: Code, n: Use, ways = directionsIn(code)): Ret
   if (given.has(-1)) return null;
   for (const d of ds) {
     const mine = paramsOf(code, d), def = code.nodes[d] as NodeOf<"def">;
-    if (!mine || mine.length !== theirs.length || !def.results) continue;
-    const ins = mine.map((p, i) => (def.results!.includes(p) ? -1 : i)).filter((i) => i >= 0);
+    const defResults = conditionResults(code.nodes, d);
+    if (!mine || mine.length !== theirs.length || !defResults) continue;
+    const ins = mine.map((p, i) => (defResults.includes(p) ? -1 : i)).filter((i) => i >= 0);
     if (ins.length !== given.size || !ins.every((i) => given.has(i))) continue;
     const key = (k: string) => (k === "out" ? k : mine[theirs.indexOf(k)]);
     const re = (r: Record<string, Id>) => Object.fromEntries(Object.entries(r).map(([k, v]) => [key(k), v]));

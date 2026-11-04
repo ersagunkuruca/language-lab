@@ -562,7 +562,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
         // asks: first(queens(8), else nil) in the text.
         // A function that names its results (L128b) gives each part to
         // its own port on the right edge, a tuple(…) of them not drawn.
-        const rs = portsOf(code.nodes, id)?.results ?? [];
+        const own = portsOf(code.nodes, id), rs = own && !own.condition ? own.results : [];
         return region(id, params.length ? paramsTitle(params.map(name)) : "action", params, body, "lam", rs, tupleParts(body, rs.length));
       }
       case "match": case "fold": return cases(id, n);

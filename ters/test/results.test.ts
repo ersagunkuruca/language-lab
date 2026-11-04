@@ -80,7 +80,8 @@ test("results are its own ports, each once, and it is a predicate", () => {
   const k = new Lang();
   const twice = k.def("twice");
   k.define(twice, k.fn(["x"], (x) => k.call(B.add, x, x)));
-  (k.code.nodes[twice] as NodeOf<"def">).results = (k.code.nodes[(k.code.nodes[twice] as NodeOf<"def">).body!] as NodeOf<"lambda">).params;
+  const lam = k.code.nodes[(k.code.nodes[twice] as NodeOf<"def">).body!] as NodeOf<"lambda">;
+  lam.results = lam.params;
   const info = infer(base(k.code), baseNames(k.names));
   assert.ok(info.errors.some((e) => /twice has results, so it is a predicate over its ports/.test(e.message)), String(info.errors.map((e) => e.message)));
   const p = program(["a", "a"], false);
