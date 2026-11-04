@@ -101578,6 +101578,154 @@
         ],
         "body": "@cts9af36tq0a7hq767qovbqpng:3"
       },
+      "@n4rdeot09oefmif8tpa05i7ve7": {
+        "id": "@n4rdeot09oefmif8tpa05i7ve7",
+        "kind": "def",
+        "body": "@n4rdeot09oefmif8tpa05i7ve7:1"
+      },
+      "@n4rdeot09oefmif8tpa05i7ve7:2": {
+        "id": "@n4rdeot09oefmif8tpa05i7ve7:2",
+        "kind": "binder"
+      },
+      "@n4rdeot09oefmif8tpa05i7ve7:5": {
+        "id": "@n4rdeot09oefmif8tpa05i7ve7:5",
+        "kind": "ref",
+        "target": "@cts9af36tq0a7hq767qovbqpng"
+      },
+      "@n4rdeot09oefmif8tpa05i7ve7:6": {
+        "id": "@n4rdeot09oefmif8tpa05i7ve7:6",
+        "kind": "ref",
+        "target": "@n4rdeot09oefmif8tpa05i7ve7:2"
+      },
+      "@n4rdeot09oefmif8tpa05i7ve7:4": {
+        "id": "@n4rdeot09oefmif8tpa05i7ve7:4",
+        "kind": "call",
+        "fn": "@n4rdeot09oefmif8tpa05i7ve7:5",
+        "args": [
+          "@n4rdeot09oefmif8tpa05i7ve7:6"
+        ]
+      },
+      "@n4rdeot09oefmif8tpa05i7ve7:8": {
+        "id": "@n4rdeot09oefmif8tpa05i7ve7:8",
+        "kind": "ref",
+        "target": "std.list.nil"
+      },
+      "@n4rdeot09oefmif8tpa05i7ve7:7": {
+        "id": "@n4rdeot09oefmif8tpa05i7ve7:7",
+        "kind": "arm",
+        "variant": "std.list.nil",
+        "binds": [],
+        "results": [],
+        "body": "@n4rdeot09oefmif8tpa05i7ve7:8"
+      },
+      "@n4rdeot09oefmif8tpa05i7ve7:10": {
+        "id": "@n4rdeot09oefmif8tpa05i7ve7:10",
+        "kind": "binder"
+      },
+      "@n4rdeot09oefmif8tpa05i7ve7:11": {
+        "id": "@n4rdeot09oefmif8tpa05i7ve7:11",
+        "kind": "binder"
+      },
+      "@n4rdeot09oefmif8tpa05i7ve7:16": {
+        "id": "@n4rdeot09oefmif8tpa05i7ve7:16",
+        "kind": "binder"
+      },
+      "@n4rdeot09oefmif8tpa05i7ve7:20": {
+        "id": "@n4rdeot09oefmif8tpa05i7ve7:20",
+        "kind": "ref",
+        "target": "@u6ulqtprp7t04gefhq2qrf9fqi"
+      },
+      "@n4rdeot09oefmif8tpa05i7ve7:21": {
+        "id": "@n4rdeot09oefmif8tpa05i7ve7:21",
+        "kind": "ref",
+        "target": "@n4rdeot09oefmif8tpa05i7ve7:10"
+      },
+      "@n4rdeot09oefmif8tpa05i7ve7:22": {
+        "id": "@n4rdeot09oefmif8tpa05i7ve7:22",
+        "kind": "ref",
+        "target": "@n4rdeot09oefmif8tpa05i7ve7:16"
+      },
+      "@n4rdeot09oefmif8tpa05i7ve7:19": {
+        "id": "@n4rdeot09oefmif8tpa05i7ve7:19",
+        "kind": "call",
+        "fn": "@n4rdeot09oefmif8tpa05i7ve7:20",
+        "args": [
+          "@n4rdeot09oefmif8tpa05i7ve7:21",
+          "@n4rdeot09oefmif8tpa05i7ve7:22"
+        ]
+      },
+      "@n4rdeot09oefmif8tpa05i7ve7:18": {
+        "id": "@n4rdeot09oefmif8tpa05i7ve7:18",
+        "kind": "ref",
+        "target": "@0g331hr3hu2cfmis11qhp41fsg"
+      },
+      "@n4rdeot09oefmif8tpa05i7ve7:17": {
+        "id": "@n4rdeot09oefmif8tpa05i7ve7:17",
+        "kind": "call",
+        "fn": "@n4rdeot09oefmif8tpa05i7ve7:18",
+        "args": [
+          "@n4rdeot09oefmif8tpa05i7ve7:19"
+        ]
+      },
+      "@n4rdeot09oefmif8tpa05i7ve7:15": {
+        "id": "@n4rdeot09oefmif8tpa05i7ve7:15",
+        "kind": "lambda",
+        "params": [
+          "@n4rdeot09oefmif8tpa05i7ve7:16"
+        ],
+        "body": "@n4rdeot09oefmif8tpa05i7ve7:17"
+      },
+      "@n4rdeot09oefmif8tpa05i7ve7:13": {
+        "id": "@n4rdeot09oefmif8tpa05i7ve7:13",
+        "kind": "ref",
+        "target": "@9902gjnadddgv3jrh6ir29nf4q"
+      },
+      "@n4rdeot09oefmif8tpa05i7ve7:14": {
+        "id": "@n4rdeot09oefmif8tpa05i7ve7:14",
+        "kind": "ref",
+        "target": "@n4rdeot09oefmif8tpa05i7ve7:11"
+      },
+      "@n4rdeot09oefmif8tpa05i7ve7:12": {
+        "id": "@n4rdeot09oefmif8tpa05i7ve7:12",
+        "kind": "call",
+        "fn": "@n4rdeot09oefmif8tpa05i7ve7:13",
+        "args": [
+          "@n4rdeot09oefmif8tpa05i7ve7:14",
+          "@n4rdeot09oefmif8tpa05i7ve7:15"
+        ]
+      },
+      "@n4rdeot09oefmif8tpa05i7ve7:9": {
+        "id": "@n4rdeot09oefmif8tpa05i7ve7:9",
+        "kind": "arm",
+        "variant": "std.list.cons",
+        "binds": [
+          "@n4rdeot09oefmif8tpa05i7ve7:10",
+          "@n4rdeot09oefmif8tpa05i7ve7:11"
+        ],
+        "results": [
+          null,
+          null
+        ],
+        "body": "@n4rdeot09oefmif8tpa05i7ve7:12"
+      },
+      "@n4rdeot09oefmif8tpa05i7ve7:3": {
+        "id": "@n4rdeot09oefmif8tpa05i7ve7:3",
+        "kind": "match",
+        "scrutinee": "@n4rdeot09oefmif8tpa05i7ve7:4",
+        "arms": [
+          "@n4rdeot09oefmif8tpa05i7ve7:7",
+          "@n4rdeot09oefmif8tpa05i7ve7:9"
+        ],
+        "otherwise": null
+      },
+      "@n4rdeot09oefmif8tpa05i7ve7:1": {
+        "id": "@n4rdeot09oefmif8tpa05i7ve7:1",
+        "kind": "lambda",
+        "params": [
+          "@n4rdeot09oefmif8tpa05i7ve7:2"
+        ],
+        "body": "@n4rdeot09oefmif8tpa05i7ve7:3"
+      },
       "@r7dorj9as9anofgaa01rsjf70m": {
         "id": "@r7dorj9as9anofgaa01rsjf70m",
         "kind": "def",
@@ -112261,6 +112409,7 @@
       "@dnqf5nv4lpvfpe767cs7706dsu",
       "@fhvhg9sk4p5l7g82qa6iqvv63m",
       "@cts9af36tq0a7hq767qovbqpng",
+      "@n4rdeot09oefmif8tpa05i7ve7",
       "@m5bcgf805s7kagfa27nlk7kb60",
       "@81u53t1p3l7ch4mscq7a6leacg",
       "@sh175nmd89dru9dv40tangbsam",
@@ -124241,6 +124390,51 @@
       },
       "plain": []
     },
+    "@n4rdeot09oefmif8tpa05i7ve7": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "type.string",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.list",
+          "args": [
+            {
+              "t": "con",
+              "id": "std.map",
+              "args": [
+                {
+                  "t": "con",
+                  "id": "type.string",
+                  "args": []
+                },
+                {
+                  "t": "con",
+                  "id": "type.string",
+                  "args": []
+                }
+              ]
+            }
+          ]
+        },
+        "eff": {
+          "effs": [
+            "std.abort"
+          ],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
     "@m5bcgf805s7kagfa27nlk7kb60": {
       "vars": [],
       "rows": [
@@ -134347,6 +134541,11 @@
     "@fhvhg9sk4p5l7g82qa6iqvv63m:25": "after",
     "@cts9af36tq0a7hq767qovbqpng": "csv rows",
     "@cts9af36tq0a7hq767qovbqpng:2": "text",
+    "@n4rdeot09oefmif8tpa05i7ve7": "csv records",
+    "@n4rdeot09oefmif8tpa05i7ve7:2": "text",
+    "@n4rdeot09oefmif8tpa05i7ve7:10": "header",
+    "@n4rdeot09oefmif8tpa05i7ve7:11": "rows",
+    "@n4rdeot09oefmif8tpa05i7ve7:16": "row",
     "@r7dorj9as9anofgaa01rsjf70m": "base64 groups",
     "@r7dorj9as9anofgaa01rsjf70m:2": "bytes",
     "@r7dorj9as9anofgaa01rsjf70m:8": "first",
@@ -134684,6 +134883,7 @@
     "@7e2qdft2rbs4t8jcf2rorrta13": "The Bool a json bool holds; no answer for any other kind.",
     "@2p8estt33jsooosbk6qlq998sk": "The items a json list holds; no answer for any other kind.",
     "@e2mg6v3g7lcjgim6558dmg1o7f": "Rows of fields as CSV text (RFC 4180), a line each: a field with a comma, a quote or a line break is quoted, its quotes doubled.",
+    "@n4rdeot09oefmif8tpa05i7ve7": "The records of a CSV text whose first line names its columns, each a map from those names to the row's fields: csv records(\"name,age\\nAda,36\") is one map, name to Ada and age to 36 (Python's csv.DictReader). A short row leaves the last names out.",
     "@cts9af36tq0a7hq767qovbqpng": "The rows of fields a CSV text holds (RFC 4180), the other way from csv printed: quoted fields may hold commas, doubled quotes and line breaks; lines end in LF or CRLF. Stops when the text ends inside a quoted field.",
     "@i3605cgohlm9dad70qrhpqq5hv": "The JSON text of a Json value (RFC 8259): json printed(json object([(\"a\", json list([json number(1), json null]))])) is {\"a\":[1,null]}. Text is quoted with \", \\ and control characters escaped.",
     "@iq044k6dto1s16ehvfe3vm8iuc": "The bytes as Base64 text (RFC 4648): every three bytes as four characters from A to Z, a to z, 0 to 9, + and /, with = filling the last group: base64 of(utf8 of(\"hi\")) is \"aGk=\".",
@@ -135115,6 +135315,7 @@
     "@2p8estt33jsooosbk6qlq998sk",
     "@e2mg6v3g7lcjgim6558dmg1o7f",
     "@cts9af36tq0a7hq767qovbqpng",
+    "@n4rdeot09oefmif8tpa05i7ve7",
     "@sh175nmd89dru9dv40tangbsam",
     "@rh5r2fmc1rcjranmbg2ufo7qs7",
     "@dfl1vakd0b3svfnlv3cluokg8f",

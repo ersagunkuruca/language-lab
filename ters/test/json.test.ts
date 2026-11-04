@@ -103,3 +103,10 @@ test("json printed indented is JSON.stringify(value, null, step) (L190f)", async
   }
   assert.equal(JSON.parse((await both((k) => k.call(lib("json printed indented"), k.call(lib("json read"), k.lit("[]")), k.int(2)))) as string), "[]");
 });
+
+test("csv records reads a CSV with a header line as maps from the header's names (L190g)", async () => {
+  const text = 'name,age\nAda,36\n"Lovelace, A",\nBob';
+  const got = await both((k) => k.call(lib("csv records"), k.lit(text)));
+  assert.equal(got, '[map of([("age", "36"), ("name", "Ada")]), map of([("age", ""), ("name", "Lovelace, A")]), map of([("name", "Bob")])]');
+  assert.equal(await both((k) => k.call(lib("csv records"), k.lit(""))), "[]");
+});
