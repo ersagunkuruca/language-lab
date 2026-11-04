@@ -66,6 +66,9 @@ const INSTR: Partial<Record<Op, [number | number[], string]>> = {
   less: [0x63, "f64.lt"], equal: [0x61, "f64.eq"], beq: [0x46, "i32.eq"], and: [0x71, "i32.and"], or: [0x72, "i32.or"], not: [0x45, "i32.eqz"],
   // Int in 32 bits (`shader`, C66c): the rest are wasm-rt.ts's int32.*.
   iless: [0x48, "i32.lt_s"], ieq: [0x46, "i32.eq"], itof: [0xb7, "f64.convert_i32_s"],
+  // A 32-bit machine word (C150f): wrapping, compared unsigned.
+  uadd: [0x6a, "i32.add"], usub: [0x6b, "i32.sub"], umul: [0x6c, "i32.mul"], uneg: [[0x41, 0x7f, 0x6c], "i32.const -1 i32.mul"],
+  uand: [0x71, "i32.and"], uor: [0x72, "i32.or"], uxor: [0x73, "i32.xor"], uless: [0x49, "i32.lt_u"],
 };
 const INT32_RT: Op[] = ["iadd", "isub", "imul", "ineg", "iabs", "iquot", "irem", "ipow", "iwhole"];
 // Where a shader's flag is set or read.

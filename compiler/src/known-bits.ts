@@ -74,9 +74,13 @@ export function knownBits(ir: CoreIR): KnownBits {
           }
           case "int.bitOr": case "int.bitXor": return a !== null && b !== null ? ones(a > b ? a : b) : null;
           case "int.shiftDown": return a !== null && b !== null ? a : null;
+          // A machine word (machine-words.ts, C150e): the IR after it.
+          case "word32.narrow": return a;
+          case "word32.widen": case "word32.shiftDown": return (1n << 32n) - 1n;
           default: return null;
         }
       }
+      case "op": all(); return /^u(add|sub|mul|neg|and|or|xor)$/.test(e.op) ? (1n << 32n) - 1n : null;
       default: all(); return null;
     }
   };

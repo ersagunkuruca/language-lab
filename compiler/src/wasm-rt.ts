@@ -4939,6 +4939,58 @@ ${drop}
       i32.const 2
       call $int.bits`,
   },
+  // A 32-bit machine word (C150e, machine-words.ts): an i32 holding the
+  // bits, read unsigned; as an Int, and from an Int known to fit. Shifted
+  // down by an Int n (up when n is negative), its answer kept to 32 bits,
+  // as "(x shifted down n) bits and 2³²−1" on the Int.
+  "word32.widen": {
+    params: [["x", "i32"]], result: "int", locals: [], uses: ["int.of"], native: true,
+    body: `
+      local.get $x
+      i64.extend_i32_u
+      call $int.of`,
+  },
+  "word32.narrow": {
+    params: [["x", "int"]], result: "i32", locals: [], uses: ["int.small"], native: true,
+    body: `
+      local.get $x
+      call $int.small
+      i32.wrap_i64`,
+  },
+  "word32.shiftDown": {
+    params: [["x", "i32"], ["n", "int"]], result: "i32", locals: [["k", "i64"]], uses: ["int.clamped"], native: true,
+    body: `
+      local.get $n
+      call $int.clamped
+      local.set $k
+      local.get $k
+      i64.const 32
+      i64.ge_s
+      local.get $k
+      i64.const -32
+      i64.le_s
+      i32.or
+      if i32
+        i32.const 0
+      else
+        local.get $k
+        i64.const 0
+        i64.ge_s
+        if i32
+          local.get $x
+          local.get $k
+          i32.wrap_i64
+          i32.shr_u
+        else
+          local.get $x
+          i64.const 0
+          local.get $k
+          i64.sub
+          i32.wrap_i64
+          i32.shl
+        end
+      end`,
+  },
   // Floor division (int.ts): the i64 way while both fit, but for the
   // smallest i64 over -1, else the limbs; with the signs apart and a
   // remainder, the quotient is one further down.

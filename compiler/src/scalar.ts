@@ -80,6 +80,7 @@ import { AUDIO_BLOCK, AWAIT, AWAIT_OP, START_TIMER_OP, WAIT, WAIT_OP, HANDLER_RO
 const PAGE_EFFECTS = new Set<Id>([...PAGE_VIEW, ...PAGE_HANDLER, ...AUDIO_BLOCK, VIEW_ROW, HANDLER_ROW, SOUND_ROW]);
 const HOST_CELLS = new Set(Object.values(CELL_OPS).filter((id) => id !== CELL_OPS.path));
 import { runtime } from "./wasm-rt.ts";
+import { machineWords } from "./machine-words.ts";
 
 // A shader (or a ray marcher's loop) may call what might not finish only
 // under a literal with fuel; the rest of its type must be empty.
@@ -378,6 +379,10 @@ export const OPS = {
   iless: { t: "i32" }, ieq: { t: "i32" }, itof: { t: "f64" },
   // One answer or none (`shader`): none sets the shader's flag.
   iquot: { t: "int32" }, irem: { t: "int32" }, ipow: { t: "int32" }, iwhole: { t: "int32" },
+  // A 32-bit machine word held in an i32 and read unsigned (C150f,
+  // machine-words.ts): + − × and negate wrap, `uless` compares unsigned.
+  uadd: { t: "i32" }, usub: { t: "i32" }, umul: { t: "i32" }, uneg: { t: "i32" },
+  uand: { t: "i32" }, uor: { t: "i32" }, uxor: { t: "i32" }, uless: { t: "i32" },
   // stop(i): the program stops with STOPS[i] (L125c2, finite() below):
   // a WebAssembly host's import, WASI's own line and exit, C's lab_stop.
   stop: { t: "f64" },
@@ -2581,7 +2586,11 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
   for (const [r, why] of unstarted) if (!refused.has(r)) refused.set(r, why);
   // Refusals by definition; those of one specialization stay inside.
   const niche = opts.data ? niches(funcs, [...records.values()], [...datas.values()], [...arrays.values()], [...fns.values()], shapes, [...tables.values()]) : new Set<string>();
-  return { funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()].filter((d) => !niche.has(d.key)), arrays: [...arrays.values()], tables: [...tables.values()], fns: [...fns.values()], shapes, code, info, escapes: escapes.map((e) => stype({ t: "con", id: e, args: [] }) as DType), rounded, ...(opts.shader && !opts.data ? { shader: true as const } : {}), ...(!opts.data ? { int32: true as const } : {}) };
+  const ir: CoreIR = { funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()].filter((d) => !niche.has(d.key)), arrays: [...arrays.values()], tables: [...tables.values()], fns: [...fns.values()], shapes, code, info, escapes: escapes.map((e) => stype({ t: "con", id: e, args: [] }) as DType), rounded, ...(opts.shader && !opts.data ? { shader: true as const } : {}), ...(!opts.data ? { int32: true as const } : {}) };
+  // A record's Int field proved to fit 32 bits, stored as a machine word
+  // (C150e): WebAssembly and C, not core JS, whose values the host reads.
+  if (opts.data && !opts.host) machineWords(ir);
+  return ir;
 }
 
 // A Float64 is finite (L125c2, FLOAT-VALUES-2026-11-01.md §2), on
