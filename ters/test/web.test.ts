@@ -222,7 +222,7 @@ test("a page bundles its hosts/js.js and asks it", async () => {
   const host = join(dir, "device-host.js");
   writeFileSync(host, `export default { ${JSON.stringify(dev.op["name of"])}: (id) => "phone " + id };\n`);
   // compile.ts's page and the core IR's (C137d5).
-  for (const html of [await webPage("device", code, info, names, main, host), await webCorePage("device", code, info, names, k.code.defs, main, host)]) {
+  for (const html of [await webPage("device", code, info, names, main, host), await webCorePage("device", code, info, names, main, host)]) {
     const script = /<script>([\s\S]*)<\/script>/.exec(html)![1];
     const body = new FakeEl("body");
     runInNewContext(script, { document: { ...fakeDoc(), body }, localStorage: memoryStore(), console, TextEncoder });

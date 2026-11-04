@@ -315,7 +315,9 @@ switch (command) {
     const core = !rest.includes("--compile-ts");
     const source = (inCheckout: boolean): string => {
       if (!core) return compiled(p, main, inCheckout);
-      const lowered = lowerCore(p.code, p.info, p.names, p.own);
+      // Only what main reaches (C168): a definition nothing calls isn't
+      // compiled, so an unreached solve doesn't bring in the node table.
+      const lowered = lowerCore(p.code, p.info, p.names, [main]);
       const why = lowered.refused.get(main);
       if (why && rest.includes("--core")) fail(`${p.names[main] ?? "main"} isn't compiled through the core IR: it ${why}`);
       if (why) { process.stderr.write(`lab: ${p.names[main] ?? "main"} isn't compiled through the core IR (it ${why}), so through compile.ts\n`); return compiled(p, main, inCheckout); }
@@ -343,7 +345,7 @@ switch (command) {
     // with the flags that keep the evaluator's numbers (compiler/src/c.ts).
     const o = rest.indexOf("-o");
     const out = o >= 0 ? rest[o + 1] ?? fail("-o needs a file") : basename(resolve(path)).replace(/\.json$/, "");
-    const lowered = lowerScalar(p.code, p.info, p.names, p.own, { data: true });
+    const lowered = lowerScalar(p.code, p.info, p.names, [main], { data: true });
     let c: string;
     try { c = emitC(lowered, { main }).c; } catch (e) { fail((e as Error).message); }
     writeFileSync(`${out}.c`, c);
@@ -367,9 +369,9 @@ switch (command) {
       // core IR, a solve whose plan isn't written out (core-js.ts
       // solvesSlowly), is too slow for the audio thread, so compile.ts makes
       // that page (C137d7, C137d9). --core makes it anyway.
-      const slow = !insist && hasSound(p.code) && solvesSlowly(lowerCore(p.code, p.info, p.names, p.own));
+      const slow = !insist && hasSound(p.code) && solvesSlowly(lowerCore(p.code, p.info, p.names, [main]));
       if (slow) process.stderr.write("lab: the page's sound solves through the evaluator's solver on the core IR (too slow for the audio thread), so the page is made by compile.ts\n");
-      else try { page = await webCorePage(p.title, p.code, p.info, p.names, p.own, main, pageHost); } catch (e) {
+      else try { page = await webCorePage(p.title, p.code, p.info, p.names, main, pageHost); } catch (e) {
         if (insist) fail((e as Error).message);
         process.stderr.write(`lab: ${(e as Error).message.replace(/^lab: /, "")}, so the page is made by compile.ts\n`);
       }
