@@ -150,7 +150,9 @@ export class FractionError extends TypeError {}
 // One row contained in another: what a search's function does is in what
 // the call of the search does, without being all of it (Koka's subeffecting
 // by `open`, Leijen 2017). `at` is the call it came from.
-export interface Sub { from: Row; to: Row; at?: Id }
+// `open`: a function variable's call (BACKLOG L29): the same row again,
+// unless something closed the function's row by the group's end.
+export interface Sub { from: Row; to: Row; at?: Id; open?: true }
 
 // A map or set read through to another that it leaves alone: what it adds
 // is its own. A trial (Subst.trial) starts with nothing of its own instead

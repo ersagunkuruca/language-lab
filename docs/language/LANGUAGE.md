@@ -795,9 +795,15 @@ continuation in such a field (Tumble's `parked`, whose `Chain.rest` says
 only `Diverge`) does `Diverge` and nothing else, and a page handler that
 does much more may still call it. Only the outer row
 opens; its parameters keep their types. This is Koka's `open` (Leijen,
-"Type directed compilation of row-typed algebraic effects"). Uses are
-checked in order, so a use that fixes the row to something wider before
-the closing use still clashes with it.
+"Type directed compilation of row-typed algebraic effects"). The order of
+the uses of a definition's input doesn't matter (L29): a call of a
+function the definition is given, whose row is still open, puts the function's row inside the call's, and once the
+definition's every use is seen, a row nothing closed is made the call's
+own, as a call's always was, while a closed one only adds its effects to
+the call's. So `f` called under `first` (which handles a `Choice`) and
+then stored in a field that says it does nothing is a pure `f`, as it is
+the other way round. A function taken out of a value (a let, a case's
+field) is still checked in order.
 
 The effects:
 
