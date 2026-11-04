@@ -125,8 +125,24 @@ the returned parts only. It is step 3, measured after step 2.
    only `each`'s views need (that look made frames 8 ms when tried). Measured with bench-board.ts's `core` way at 1,000 cards, a
    running frame and an add, and board.test.ts's session checked to
    draw the same.
-3. If the columns' formulas are still what a frame costs: a design call
-   on the formula's returned parts, put to Ersagun.
+3. Done (C162c): kept places. Put to Ersagun as a choice between kept
+   places found when compiled, views on the returned parts, and stopping;
+   built as the first, which was recommended. The analysis also follows
+   what a value made of others holds whole (`held`: a list a filter kept
+   cards in, the box a search puts its answers in). Taking such a value
+   apart where it may be one of them, by type, needs them whole. Taking
+   apart what only holds them (the list, the box) doesn't. A formula's
+   answer *keeps* what it holds, and the read becomes
+   `readPaths:<needed>|<kept>`. At run time, a change that meets only a
+   kept place (`*/`, a card the column hands on) and nothing the formula
+   looked at is put into the formula's last answer where the old part
+   was, found by identity (cells.ts `patched`). Its readers then wake as
+   if it had run again. An answer without the old part stays as it is,
+   since what it looked at didn't change. It runs again when the part
+   isn't an object, or was at two places of the list. Board at 1,000
+   cards, the core IR: a running frame 2.45 → 1.1 ms, no column formula
+   runs again (each and the card's row do), an add unchanged (2.4 ms),
+   and its session draws the same.
 
 Prior art: Svelte's compile-time dependencies, and the path analyses of
 alias analysis (access paths, Landi and Ryder 1992). Following a closure

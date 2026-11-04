@@ -40,3 +40,27 @@ test("board on the core IR: its reads of the state wait on the places they use (
   assert.ok(reads.length >= 8, `${reads.length} reads followed`);
   assert.ok(reads.some((r) => r.includes("*/")), "a read of every card's field");
 });
+
+test("board on the core IR: a running frame runs no column again, the card's changed time put into the column that holds it (C162c)", async () => {
+  const { lowerCore, emitCoreJs } = await import("../src/core-js.ts");
+  const { program, ways, session } = await import("../gaps/board.ts");
+  const { Cells } = await import("../../ters/src/lang/cells.ts");
+  const { code, info, names, main } = program();
+  const js = emitCoreJs(lowerCore(code, info, names, [main])).js;
+  assert.ok((js.match(/R\.rt\("readPaths:[^"]*\|[^"]*"/g) ?? []).length >= 1, "a column keeps the cards it hands on");
+  const w = await ways();
+  const P = Cells.prototype as unknown as { recompute: (n: { label: string }) => void };
+  const was = P.recompute, runs: string[] = [];
+  let on = false;
+  P.recompute = function (this: unknown, n: { label: string }) { if (on) runs.push(n.label); return was.call(this, n); };
+  try {
+    const root = w.core();
+    for (const [name, act] of session(50)) {
+      on = name === "focus";
+      act(root);
+      if (on) break;
+    }
+  } finally { P.recompute = was; }
+  assert.ok(runs.length > 0, "the frames ran something");
+  assert.equal(runs.filter((l) => l === "formula").length, 0, `formulas run in the frames: ${runs.join(" ")}`);
+});
