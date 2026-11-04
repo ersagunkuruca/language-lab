@@ -67,7 +67,11 @@ export function parseValue(text: string, code: Code, names: Names): { value: Val
     const arity = (tag: Id) => (code.nodes[tag] as { fields: Id[] }).fields.length;
     ws();
     const fields = text[i] === "(" ? (i++, list(")")) : [];
-    const tag = tags.find((t) => arity(t) === fields.length);
+    // Of two cases of one name and size, the program's own (board's
+    // finished, std's pipe's finished): the Run panel prints the program's
+    // value and reads it back (I169).
+    const fit = tags.filter((t) => arity(t) === fields.length);
+    const tag = fit.find((t) => !/^(std|builtin)\./.test(t)) ?? fit[0];
     if (!tag) return fail(`${name} takes ${arity(tags[0])} value${arity(tags[0]) === 1 ? "" : "s"}, not ${fields.length}`);
     return { tag, fields };
   };
