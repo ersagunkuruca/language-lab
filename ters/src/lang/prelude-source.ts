@@ -2126,8 +2126,8 @@ export function buildPrelude(): Module {
   const jsonField = def("json field", ["json", "name"], (j, n) => k.match(j, [{ variant: JSON_V.object, names: ["fields"], body: ([fs]) => k.call(jFieldIn, fs, n) }], k.call(S.fail)));
   // Reading JSON (L190b, RFC 8259): a recursive descent over the text's
   // characters, each reader giving its value and the characters after it.
-  // \u escapes outside the Basic Multilingual Plane (surrogate pairs) are
-  // not joined yet.
+  // \u escapes outside the Basic Multilingual Plane come as surrogate
+  // pairs and are joined (json escape code).
   const jChars = (t: string) => k.call(TEXT_OPS.characters, k.lit(t));
   const jIs = (c: Id, t: string) => k.equal(c, k.lit(t));
   const jBad = (why: string) => k.call(ABORT_OP, k.lit(`json read: ${why}`));
@@ -2150,10 +2150,22 @@ export function buildPrelude(): Module {
     ]) },
   ])));
   const jEscaped = (e: Id) => k.if(jIs(e, "n"), k.lit("\n"), k.if(jIs(e, "t"), k.lit("\t"), k.if(jIs(e, "r"), k.lit("\r"), k.if(jIs(e, "b"), k.lit("\b"), k.if(jIs(e, "f"), k.lit("\f"), e)))));
+  // A \u escape's code, joining a surrogate pair (RFC 8259 §7) into the one
+  // character outside the Basic Multilingual Plane it spells; a lone
+  // surrogate is no character, and fromCode says so.
+  const jSub = (a: Id, b: Id) => k.call(INT_OPS.sub, a, b);
+  const jCode = k.def("json escape code");
+  const jWithin = (x: Id, lo: number, hi: number, yes: () => Id, no: () => Id) => k.if(iLess(x, k.int(lo)), no(), k.if(iLess(x, k.int(hi)), yes(), no()));
+  k.define(jCode, k.fn(["characters"], (cs) => k.let("high", k.call(jHex, k.call(take, cs, k.int(4)), k.int(0)), (hi) => k.let("after", k.call(drop, cs, k.int(4)), (after) =>
+    jWithin(hi, 0xd800, 0xdc00, () => k.if(k.equal(k.call(take, after, k.int(2)), jChars("\\u")),
+      k.let("low", k.call(jHex, k.call(take, k.call(drop, after, k.int(2)), k.int(4)), k.int(0)), (lo) => jWithin(lo, 0xdc00, 0xe000,
+        () => jPair(iAdd(k.int(0x10000), iAdd(iMul(jSub(hi, k.int(0xd800)), k.int(0x400)), jSub(lo, k.int(0xdc00)))), k.call(drop, after, k.int(6))),
+        () => jPair(hi, after))),
+      jPair(hi, after)), () => jPair(hi, after))))));
   k.define(jString, k.fn(["characters", "so far"], (cs, acc) => jHead(cs, "the text ends inside a string", (c, r) =>
     k.if(jIs(c, "\""), jPair(acc, r), k.if(jIs(c, "\\"), jHead(r, "the text ends inside a string", (e, r2) =>
-      k.if(jIs(e, "u"), k.call(jString, k.call(drop, r2, k.int(4)), k.call(S.concat, acc, k.call(S.first,
-        k.thunk(() => k.call(TEXT_OPS.fromCode, k.call(jHex, k.call(take, r2, k.int(4)), k.int(0)))), k.thunk(() => jBad("a \\u escape that is no character"))))),
+      k.if(jIs(e, "u"), entry(k.call(jCode, r2), (code, r3) => k.call(jString, r3, k.call(S.concat, acc, k.call(S.first,
+        k.thunk(() => k.call(TEXT_OPS.fromCode, code)), k.thunk(() => jBad("a \\u escape that is no character"))))), ["code", "rest"]),
       k.call(jString, r2, k.call(S.concat, acc, jEscaped(e))))),
     k.call(jString, r, k.call(S.concat, acc, c)))))));
   k.define(jNumber, k.fn(["characters", "so far"], (cs, acc) => k.match(cs, [
