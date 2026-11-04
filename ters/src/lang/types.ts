@@ -289,10 +289,7 @@ export class Subst {
       this.plain.add(t.v);
       return;
     }
-    if (t.t === "con" && (t.id === NUMBER || t.id === INT || t.id === RATIONAL_TYPE || t.id === ALGEBRAIC_TYPE || t.id === FIXED_TYPE)) return;
-    if (t.t === "con" && t.id === COMPLEX_TYPE) { if (kind !== "arith") throw new ArithError(kind); return; }
-    // Text has < (alphabetical, the prelude's `ordered at text`) and no + − ·.
-    if (t.t === "con" && t.id === STRING) { if (kind !== "less") throw new ArithError(kind); return; }
+    if (t.t === "con" && (t.id === NUMBER || t.id === INT)) return;
     if (t.t === "con" && t.id.startsWith("pin.ordered.")) return;
     if (kind === "less" && t.t === "con" && t.id.startsWith("pin.less.")) return;
     if (kind === "arith" && t.t === "con" && (t.id.startsWith("pin.arith.") || t.id.startsWith("pin.numbers."))) return;
@@ -300,11 +297,14 @@ export class Subst {
     // does is known once every implementation is (infer). A record whose
     // fields are or can be Float64s does + − · −x part by part when it has
     // none of its own (arith.ts), so for + it is one now, as before.
-    const iface = kind === "arith" ? "std.arithmetic" : "std.ordered";
-    if (t.t === "con" && this.waits(t.id, iface)) {
+    // The library's own number types and Text are checked the same way
+    // (L204e): their + − · and < are the prelude's implementations. + and
+    // < together want both.
+    const ifaces = kind === "arith" ? ["std.arithmetic"] : kind === "less" ? ["std.ordered"] : ["std.arithmetic", "std.ordered"];
+    if (t.t === "con" && ifaces.every((iface) => this.waits(t.id, iface))) {
       const fields = this.recordFields(t.id, t.args);
       const numeric = kind === "arith" && !!fields?.length && fields.every((f) => { const r = this.resolve(f); return r.t === "var" || (r.t === "con" && r.id === NUMBER); });
-      if (!numeric) { this.wanted.push({ t, iface, at: this.site }); return; }
+      if (!numeric) { for (const iface of ifaces) this.wanted.push({ t, iface, at: this.site }); return; }
     }
     if (kind === "arith" && t.t === "con" && this.recordFields(t.id, t.args)?.length) {
       try { this.requireNumbers(t); } catch (e) { if (e instanceof NumbersError) throw new ArithError(kind); throw e; }
