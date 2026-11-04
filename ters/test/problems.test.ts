@@ -9,7 +9,7 @@ import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { PROBLEMS, problemOf } from "../src/lang/problems.ts";
 import { NUMBER } from "../src/lang/types.ts";
-import { ARITH, FALSE, FIELDS, INT_OPS, JSON_OPS, LOG_OP, S, SOME, TRUE } from "../src/lang/std.ts";
+import { ARITH, DIVIDE, FALSE, FIELDS, INT_OPS, JSON_OPS, LOG_OP, S, SHOWN_V, SOME, TRIG_OPS, TRUE } from "../src/lang/std.ts";
 
 const bools = (k: Lang, b: string, extra: Parameters<Lang["match"]>[1] = []) =>
   k.match(b, [{ variant: TRUE, names: [], body: () => k.lit(1) }, { variant: FALSE, names: [], body: () => k.lit(2) }, ...extra]);
@@ -43,7 +43,7 @@ const SMALLEST: Record<string, (k: Lang) => void> = {
   "one-tuple-or-inputs": (k) => { const f = k.def("f"); k.define(f, k.fn(["a", "b"], (a) => k.call(S.not, a))); k.define(k.def("p"), k.call(f, k.x(TRUE))); },
   "not-an-operation": (k) => { const a = ask(k); k.define(k.def("p"), k.thunk(() => k.handle(k.call(a.op.ask), [...answered(k, a, () => k.lit(1)), { variant: LOG_OP, names: ["l"], body: () => k.lit(1) }]))); },
   "answer-not-one": (k) => { const a = ask(k); k.define(k.def("p"), k.thunk(() => k.handle(k.call(a.op.ask), answered(k, a, () => k.call(S.oneOf, k.list(k.lit(1), k.lit(2))))))); },
-  "no-implementation": (k) => { const t = k.type("Colour", [], [["red", []], ["blue", []]]); k.define(k.def("p"), k.call(ARITH.add, k.x(t.v.red), k.x(t.v.blue))); k.define(k.def("q"), k.call(S.equal, k.x(t.v.red), k.lit(1))); },
+  "no-implementation": (k) => { const t = k.type("Colour", [], [["red", []], ["blue", []]]); k.define(k.def("p"), k.call(ARITH.add, k.x(t.v.red), k.x(t.v.blue))); k.define(k.def("q"), k.call(S.equal, k.x(t.v.red), k.lit(1))); k.define(k.def("r"), k.call(TRIG_OPS.sin, k.x(t.v.red))); },
   "type-as-value": (k) => k.define(k.def("p"), k.x(NUMBER)),
   "fields-type-unknown": (k) => k.define(k.def("p"), k.fn(["v"], (v) => k.call(FIELDS.listed, v))),
   "json-type-unknown": (k) => k.define(k.def("p"), k.fn(["v"], (v) => k.call(JSON_OPS.of, v))),
@@ -62,6 +62,10 @@ const SMALLEST: Record<string, (k: Lang) => void> = {
   "takes-itself": (k) => { k.type("Bad", [], [["bad", [["f", (self) => k.tfun([k.tref(self)], k.tref(NUMBER))]]]]); },
   "not-an-effect": (k) => { const t = k.type("Colour", [], [["red", []]]); k.type("Box", [], [["box", [["f", () => k.tfun([], k.tref(NUMBER), [t.def])]]]]); },
   "one-row-parameter": (k) => { k.type("Box", ["e", "r"], [["box", [["f", (_self, ps) => k.tfun([], k.tref(NUMBER), ps)]]]]); },
+  "case-never-runs": (k) => k.define(k.def("p"), k.fn(["b"], (b) => k.match(b, [{ variant: TRUE, names: [], body: () => k.lit(1) }, { variant: FALSE, names: [], body: () => k.lit(2) }], k.lit(3)))),
+  "needs-otherwise": (k) => k.define(k.def("p"), k.fn(["x"], (x) => k.byValue(x, [[k.lit(1), k.lit(2)]]))),
+  "one-implementation": (k) => { const t = k.type("Colour", [], [["red", []]]); for (const n of ["shown at colour", "shown at colour again"]) k.define(k.def(n), k.call(SHOWN_V, k.fn(["c"], (c) => k.match(c, [{ variant: t.v.red, names: [], body: () => k.lit("red") }])))); },
+  "int-divide": (k) => k.define(k.def("p"), k.thunk(() => k.call(S.first, k.thunk(() => k.call(DIVIDE, k.int(1), k.int(2))), k.thunk(() => k.int(0))))),
   "not-a-number": (k) => k.define(k.def("p"), k.fn(["b"], (b) => k.match(b, [{ variant: TRUE, names: [], body: () => k.lit(1) }, { variant: FALSE, names: [], body: () => k.lit("a") }]))),
 };
 
