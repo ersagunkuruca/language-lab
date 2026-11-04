@@ -16,7 +16,7 @@ import { sharing } from "./shared-fields.ts";
 import { PARTIAL, signAnalysis } from "./signs.ts";
 import type { Code, Id, Node, NodeOf, Use } from "../model.ts";
 import { isUse, useTarget, isCall, fieldPorts, type Call, bindsOf, bodyOf } from "../model.ts";
-import { dependencies, nodesWhere, ownerOfTypeParts, subtree } from "../model.ts";
+import { dependencies, nodesWhere, ownerOfTypeParts, portsOf, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { unitProblems, UnitsBefore } from "../units.ts";
 import { fillHole } from "./refactor.ts";
@@ -1687,7 +1687,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       if (odd.length) { err(d, `${nm(d)}'s results are some of its own ports, each once: ${odd.map(nm).join(", ")} isn't`); continue; }
       const sc = info.schemes.get(d), pr = predicates.get(lam.id), t = pr && s.zonk(pr);
       if (t?.t === "fn" && !(t.ret.t === "con" && t.ret.id === BOOL)) { err(d, `${nm(d)} has results, so it is a predicate over its ports (it gives true or false), not ${show(t.ret)}`); continue; }
-      const ins = lam.params.filter((p) => !def.results!.includes(p));
+      const ins = portsOf(code.nodes, d)!.inputs;
       const from = ins.length ? ins.map(nm).join(", ") : "nothing";
       const r = resultsDirection(code, d, names);
       if ("effects" in r) (info.directions ??= new Map()).set(d, r.effects);
@@ -2219,7 +2219,7 @@ const isInterface = (code: Code, def: Id): boolean => {
 export function resultsDirection(code: Code, d: Id, names: Names = {}): { why: string } | { effects: Id[] } {
   const def = code.nodes[d] as NodeOf<"def">;
   const lam = code.nodes[def.body!] as NodeOf<"lambda">;
-  const ins = lam.params.filter((p) => !def.results!.includes(p));
+  const ins = portsOf(code.nodes, d)!.inputs;
   // Only what the definition reaches, with every type and builtin: the
   // modes analysis of the whole library for each was 100 to 200 ms (C165).
   const reach = new Set([d, ...dependencies(code, d)]);

@@ -12,7 +12,7 @@
 // unchanged when it has none, and the nodes the person wrote keep their ids.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
-import { fieldPorts, freshId, isCall, nodesWhere, parentLookup } from "../model.ts";
+import { fieldPorts, freshId, isCall, nodesWhere, parentLookup, portsOf as definedPorts } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { infer, type Info } from "./infer.ts";
 import { TRUE, tupleVariant } from "./std.ts";
@@ -22,12 +22,9 @@ type Bare = Node extends infer N ? (N extends Node ? Omit<N, "id"> : never) : ne
 // Its inputs' and results' port keys, in order, when `target` is a
 // definition with results or a field with them; null otherwise.
 function portsOf(nodes: Record<Id, Node>, target: Id): { ins: string[]; outs: string[] } | null {
-  const t = nodes[target];
-  if (t?.kind === "def" && t.results?.length && t.body) {
-    const lam = nodes[t.body];
-    if (lam?.kind !== "lambda") return null;
-    return { ins: lam.params.filter((p) => !t.results!.includes(p)), outs: t.results };
-  }
+  const t = nodes[target], ports = t?.kind === "def" ? definedPorts(nodes, target) : null;
+  if (ports?.condition) return { ins: ports.inputs, outs: ports.results };
+  if (t?.kind === "def") return null;
   if (t?.kind === "field") {
     const fp = fieldPorts(nodes, t);
     return fp && { ins: fp.ins.map(String), outs: fp.outs.map(String) };

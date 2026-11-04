@@ -23,7 +23,7 @@
 // keep working, and the meaning hash is of the program as written.
 
 import type { Code, Id, Node, NodeData, NodeOf, Use } from "../model.ts";
-import { isUse, useTarget, isCall, fieldPorts, type Call, bindsOf, useKids } from "../model.ts";
+import { isUse, useTarget, isCall, fieldPorts, type Call, bindsOf, useKids, portsOf } from "../model.ts";
 import { resultsAsFunctions, usesResultsAsFunction } from "./results-fn.ts";
 import { freshId, layerOf, nodesWhere, offLayer, scanningOnLayer } from "../model.ts";
 import type { Names } from "../presentation.ts";
@@ -401,7 +401,8 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
     // The field's inputs are the definition's, in order, and its results
     // the definition's results (L128d): the field read as a function.
     const field = nodes[useTarget(nodes, n)], fp = field?.kind === "field" ? fieldPorts(nodes, field) : null;
-    const res = d?.kind === "def" ? d.results ?? [] : [], ins = lam.params.filter((p) => !res.includes(p)), outs = res;
+    const own = d?.kind === "def" ? portsOf(nodes, d.id) : null;
+    const res = own?.condition ? own.results : [], ins = own?.condition ? own.inputs : lam.params, outs = res;
     const key = (k: string) => {
       if (k === "out") return k;
       const i = fp?.ins.indexOf(Number(k)) ?? -1, o = fp?.outs.indexOf(Number(k)) ?? -1;

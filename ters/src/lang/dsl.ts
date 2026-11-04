@@ -2,7 +2,7 @@
 // makes nodes with fresh ids and records names in a side table.
 
 import { Builder } from "../builder.ts";
-import { merge, useNode, type Code, type Id, type NodeOf } from "../model.ts";
+import { merge, portsOf, useNode, type Code, type Id, type NodeOf } from "../model.ts";
 import { prelude } from "../prelude.ts";
 import { BOOL, CONS, FALSE, NIL, RELEASE_V, S, std, TRUE, UNIT_V } from "./std.ts";
 import { INT } from "./types.ts";
@@ -166,9 +166,8 @@ export class Lang extends Builder {
   // in order, and its results bound side by side (by the given display
   // names) in body. It is the solve node, read as `a, b = f(x, y)`.
   use(fn: Id, args: Id[], names: string[], body: (...results: Id[]) => Id): Id {
-    const d = this.code.nodes[fn] as NodeOf<"def">;
-    const params = (this.code.nodes[d.body!] as NodeOf<"lambda">).params, results = d.results ?? [];
-    const ins = params.filter((p) => !results.includes(p));
+    const ports = portsOf(this.code.nodes, fn);
+    const results = ports?.condition ? ports.results : [], ins = ports?.condition ? ports.inputs : (this.code.nodes[(this.code.nodes[fn] as NodeOf<"def">).body!] as NodeOf<"lambda">).params;
     if (ins.length !== args.length || names.length !== results.length) throw new Error("a use gives each input and names each result");
     const given: Record<string, Id> = Object.fromEntries(ins.map((p, i) => [p, this.x(args[i])]));
     given.out = this.true;
