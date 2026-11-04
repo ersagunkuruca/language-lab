@@ -58,7 +58,7 @@ export const SECTIONS: Section[] = [
   { title: "Queues", intro: "A Queue gives its items back first in, first out; a Priority queue gives back the item with the lowest priority, and of two with one priority the one added first. Both keep their size, and neither walks itself to add or take.",
     ids: [...t("queue"), ...prelude("empty queue", "queue of", "queued", "front of", "dequeued", "queue size", "queue items"), ...t("priority queue"), ...prelude("empty priority queue", "priority queue of", "prioritized", "soonest", "without soonest", "priority queue size", "priority queue items")] },
   { title: "State", intro: "A value a computation reads and replaces as it goes, answered by a handler written in the language: with state gives the action's value and the last state.",
-    ids: [...t("state"), ...prelude("with state", "change state")] },
+    ids: [...t("state"), ...prelude("with state", "change state"), ...t("open file", "kept files"), ...prelude("with open file")] },
   { title: "Channels", intro: "A producer sends items and a consumer receives them; piped joins the two, and the producer runs only as far as the consumer asks.",
     ids: [...t("send"), ...t("receive"), ...t("pipe"), ...prelude("piped")] },
   { title: "Matrices", intro: "A Matrix of any size holds its items row by row. Sums, products and a matrix times a vector work for every number type and stop with both sizes when they don't fit; solved finds x with m·x = b at Float64. Mat2 to Mat4 are the fixed-size ones geometry uses.",

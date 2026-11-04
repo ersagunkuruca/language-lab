@@ -775,6 +775,7 @@ The effects:
 | `Console` | `print(text)`, `print error(text)`, `read line()`, `read input()` | a match; at the top, the runtime |
 | `Files` | `read file`, `write file`, `add to file`, `file exists`, `list folder`, `read bytes`, `write bytes` | a match; at the top, the runtime |
 | `Network` | `fetch text(url)`, `start fetch(url)`, `send request(request)` | a match; at the top, the runtime |
+| `Open file` | `next line()`, `write line(text)` | `with open file(path, body)` only (L213c) |
 | `Abort` | `abort(reason)` | a match with an `abort(reason)` case; at the top, the run ends (exit code 1) |
 | `Log` | `log(line)` | a match with a `log(line)` case; at the top, standard error |
 | `Random` | `random()` | `seeded(seed, action)`, or a match; at the top, the world's randomness |
@@ -869,6 +870,17 @@ or wait; and a handler with one can't let a `Choice` through, since a
 search could leave its body and come back after the release. The
 evaluator runs releases, a `with fuel` outside the handler running out
 included; compiled code refuses a handler with one for now.
+
+The first resource is a file kept open (L213c): `with open file(path,
+body)` runs `body` with `next line()` (the file's next line, none at the
+end) and `write line(text)` (a line added at its end) answered by that file,
+and its release closes it. The file's number stays inside the prelude's
+handler, whose operations on it (std's `Kept files`, which the runtime
+answers around `main`) are private to the library, so a program can't keep
+an open file, put it in a list or use it after it is closed:
+outside `body`, `next line` is answered by nothing. A release may close the
+file it holds, which can't fail or wait either. Two files open at once wait
+for handler names (RESOURCES step 2): the inner one answers.
 
 The continuation isn't a value, on purpose. Every operation is one of two
 shapes, and those two cover what programs need (errors, configuration,
@@ -1281,7 +1293,7 @@ builtin's type takes away exactly what its row says.
 | a match on an effect's operations | any effect declared with operations (Abort, Log, Random, your own) | a case for each operation says what it does: the handler |
 | a page's event handler | Cells, Update, Console, Files, Abort, Diverge, Time, Wait, Await, Network, Random, Log, Settings | the page runtime runs a handler when its event comes, under a step budget, and logs an Abort; a log line goes to the browser's console; a wait lands what the handler did so far, and the rest runs when it's answered |
 | a page's text, part or attribute value | Cells, Diverge, Time, Network, Log, Choice, Settings | the page runtime runs a view in a watcher, under a step budget, after main has returned; a view with no answer shows nothing; a log line goes to the browser's console, once per run |
-| a program's main | Console, Files, Update, Cells, Diverge, Network, Log, Abort, Random, Time, Wait, Await, Settings | the runtime handles them around main: the world, cells, the clock, timers and the web; an Abort ends the program with its reason |
+| a program's main | Console, Files, Update, Cells, Diverge, Network, Log, Abort, Random, Time, Wait, Await, Settings, Kept files | the runtime handles them around main: the world, cells, the clock, timers and the web; an Abort ends the program with its reason |
 | a shader | Diverge | only under a literal with fuel, which gives each pixel a step budget |
 | a sound's block function | Cells, Update, Random, Diverge | the audio runtime runs it on each block, under a step budget, with Random seeded; a block that doesn't finish plays silence |
 | a sound's maker | Cells, Diverge | the audio runtime runs it once to get the block function, and in a page once more in the audio thread, so it may only make cells |

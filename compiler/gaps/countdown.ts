@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { makeRunner, fromList, toList, type Value } from "../../ters/src/lang/run.ts";
 import { compile } from "../src/compile.ts";
+import { loadCoreJs, lowerCore } from "../src/core-js.ts";
 import { lowerScalar, type DType } from "../src/scalar.ts";
 import { emitWasm, fromText, instantiate } from "../src/wasm.ts";
 import { load } from "../src/program.ts";
@@ -17,7 +18,7 @@ import { solutions as idealSolutions, showExpr } from "./countdown.ideal.js";
 
 export type Way = (numbers: number[], target: number) => string[];
 
-export async function ways(): Promise<Record<"evaluator" | "compiled" | "ideal" | "wasm", Way>> {
+export async function ways(): Promise<Record<"evaluator" | "compiled" | "core" | "ideal" | "wasm", Way>> {
   const p = load("countdown");
   const path = join(mkdtempSync(join(tmpdir(), "countdown-")), "countdown.js");
   writeFileSync(path, compile(p.code, p.info, p.pres.names, { runtime: pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href, exports: ["solutions", "show expr"] }));
@@ -38,8 +39,13 @@ export async function ways(): Promise<Record<"evaluator" | "compiled" | "ideal" 
     for (let r = ex.solutions(xs, target); h("List.case", outT)(r) === 1; r = h("List.cons.tail", outT)(r)) out.push(fromText(ex, ex["show expr"](h("List.cons.head", outT)(r))));
     return out;
   };
+  // Printed from the core IR (C137d13), which compile.ts gives way to.
+  const ir = lowerCore(p.code, p.info, p.pres.names, p.own.defs);
+  const fs = loadCoreJs(ir), at = (name: string) => fs[ir.funcs.findIndex((g) => g.name === name && !g.inner && !g.budgeted)];
+  const [coreSolutions, coreShow] = [at("solutions"), at("show expr")];
   return {
     wasm,
+    core: (numbers, target) => fromList(coreSolutions(toList(numbers), target) as Value).map((e) => coreShow(e) as string),
     evaluator: (numbers, target) => {
       const found = one(r.call(r.value(p.named("solutions")), toList(numbers), target));
       return fromList(found).map((e) => one(r.call(r.value(p.named("show expr")), e)) as string);

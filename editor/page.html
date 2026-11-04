@@ -551,6 +551,7 @@ pre.out { max-height: 260px; overflow: auto; margin: 8px 0 0; }
 .ctx-item:disabled { color: var(--muted); cursor: default; }
 .ctx-why { display: block; margin-top: 1px; font-size: 11.5px; line-height: 1.35; color: var(--muted); }
 .ctx-why.cant { font-style: italic; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .ctx-head { padding: 4px 10px 2px; font: 600 12px var(--font-code); color: var(--muted); }
 .ctx-sep { border-top: 1px solid var(--tone); margin: 4px 0; }
 .tgraph.dragging .cannot { opacity: .25; }
@@ -562,4 +563,6 @@ pre.out { max-height: 260px; overflow: auto; margin: 8px 0 0; }
 }
 </style>
 <div id="app"></div>
+<!-- Outside #app, so a render doesn't replace it: what the keyboard selected, read out (E231f). -->
+<div id="sr-say" class="sr-only" role="status" aria-live="polite"></div>
 <script>/*SCRIPT*/</script>

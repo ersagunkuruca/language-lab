@@ -26,6 +26,14 @@ const big = (x: I.Int) => BigInt(x);
 // UTF-8 as a browser has it too (a page's script, C137c9).
 let utf8: TextEncoder | undefined;
 const UTF8 = { encode: (t: string) => (utf8 ??= new TextEncoder()).encode(t) };
+// Text is indexed by UTF-8 bytes, as WebAssembly and C have it (scalar.ts).
+// A parser asks for pieces of the same text again and again, so the last
+// text's bytes are kept, and a text with no character past ASCII is its
+// own bytes (calc: 40 to 2 times the hand-written one, C137d11).
+let decoder: TextDecoder | undefined, lastText: string | undefined, lastBytes: Uint8Array | undefined, lastAscii = false;
+const known = (t: string) => { if (t !== lastText) { lastText = t; lastAscii = !/[^\x00-\x7f]/.test(t); lastBytes = undefined; } };
+const ascii = (t: string) => (known(t), lastAscii);
+const utf8Of = (t: string) => (known(t), (lastBytes ??= UTF8.encode(t)));
 const OWN: Record<string, (...xs: never[]) => unknown> = {
   "int.equal": (a: I.Int, b: I.Int) => a === b,
   "int.less": (a: I.Int, b: I.Int) => a < b,
@@ -36,10 +44,10 @@ const OWN: Record<string, (...xs: never[]) => unknown> = {
   "int.gcd": (a: I.Int, b: I.Int) => { let x = big(a) < 0n ? -big(a) : big(a), y = big(b) < 0n ? -big(b) : big(b); while (y) [x, y] = [y, x % y]; return I.norm(x); },
   // run.ts's, which the evaluator has outside std.ts.
   "number.range": (n: number) => toList(Array.from({ length: Math.max(0, n) }, (_, i) => i)),
-  "text.size": (t: string) => UTF8.encode(t).length,
-  "text.bytes": (t: string, a: number, b: number) => new TextDecoder().decode(UTF8.encode(t).subarray(a, b)),
+  "text.size": (t: string) => (ascii(t) ? t.length : utf8Of(t).length),
+  "text.bytes": (t: string, a: number, b: number) => (ascii(t) ? t.slice(a, b) : (decoder ??= new TextDecoder()).decode(utf8Of(t).subarray(a, b))),
   // Where the character that ends at byte i (> 0) starts.
-  "text.before": (t: string, i: number) => { const b = UTF8.encode(t); do i--; while (i > 0 && (b[i] & 0xc0) === 0x80); return i; },
+  "text.before": (t: string, i: number) => { if (ascii(t)) return i - 1; const b = utf8Of(t); do i--; while (i > 0 && (b[i] & 0xc0) === 0x80); return i; },
 };
 // A Table or Hash set (C63h, C63i) is the evaluator's (std.ts Table: a
 // Map with Baker's versions), a record key given as the evaluator's

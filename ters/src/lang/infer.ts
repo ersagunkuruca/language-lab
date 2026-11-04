@@ -25,7 +25,7 @@ import { computedForward, directionProblem, useDirections } from "./directions.t
 import { analyzer, derivedFrom, determinism, oneAnswer, solveMode, type Fn } from "./modes.ts";
 import { smoothDerivative as hasSmoothDerivative, smoothGradient as hasSmoothGradient, recordVariant, forgetDerived } from "./derive.ts";
 import { answerKeys } from "./ports.ts";
-import { JSON_OPS, RELEASE_V, ARITH, BOOL, CELL_OPS, EMBEDDING, EMBEDDING_V, LIST, DIVISION, FIELDS, JOBS, S, SET, SIGS, SMART, TRUE, TUPLE_MAX, tupleType } from "./std.ts";
+import { FILE_OPS, KEPT_FILES, JSON_OPS, RELEASE_V, ARITH, BOOL, CELL_OPS, EMBEDDING, EMBEDDING_V, LIST, DIVISION, FIELDS, JOBS, S, SET, SIGS, SMART, TRUE, TUPLE_MAX, tupleType } from "./std.ts";
 import { countedCalls } from "./counting.ts";
 import { ratioParts } from "./int.ts";
 import { fieldPath, fieldPaths, placePath, readPaths } from "./records.ts";
@@ -36,6 +36,7 @@ import {
   type Row, type Scheme, type Type,
   OverMap, OverSet,
 } from "./types.ts";
+const FILE_OP_IDS = new Set<Id>(Object.values(FILE_OPS));
 import { DECLARED, discharge } from "./ledger.ts";
 
 // The searches: they run a function on paths they may abandon or repeat, so
@@ -750,6 +751,10 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         if (isEffect(def)) {
           const { params, self } = dataType(def);
           const op = code.nodes[target] as NodeOf<"variant">;
+          // A file kept open is the library's (L213c): its number never
+          // reaches a program, which opens one with with open file.
+          if (FILE_OP_IDS.has(target) && insiders && !current.every((d) => insiders.has(d)))
+            err(id, `${nm(target)} is private to the library, which keeps a file open only while with open file's body runs: use with open file(path, body), and next line and write line inside it`);
           // Its own type variables are fresh at each call and not in the row (L71a).
           const own = new Map([...params, ...(op.params ?? []).map((p) => [p, s.fresh()] as const)]);
           const eff = s.freshRow([def]);
@@ -1419,7 +1424,11 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       // What the release itself does, before its row joins the match's.
       const own = s.freshRow();
       unifyAt(release.body, { t: "con", id: "std.unit", args: [] }, expr(release.body, env, own), "the release");
-      const acts = s.resolveRow(own).effs.filter((e) => e !== "std.log");
+      // Closing a file the library keeps open (L213c) can't fail or wait
+      // either: a release whose Files is only that may close.
+      const closes = subtree(code, release.body).some((x) => code.nodes[x]?.kind === "ref" && (code.nodes[x] as NodeOf<"ref">).target === FILE_OPS.close)
+        && !subtree(code, release.body).some((x) => { const t = code.nodes[x]?.kind === "ref" ? (code.nodes[x] as NodeOf<"ref">).target : ""; return t !== FILE_OPS.close && t.startsWith(`${KEPT_FILES}.`); });
+      const acts = s.resolveRow(own).effs.filter((e) => e !== "std.log" && !(closes && e === KEPT_FILES));
       if (acts.length) err(release.body, `a release runs on every exit, so it may only log: this one performs ${acts.map(nm).join(" and ")}`);
       try { s.unifyRow(own, row); } catch (e) { if (!(e instanceof EffectError)) throw e; }
       releases.push({ n: n.id, handled });

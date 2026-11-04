@@ -241,7 +241,10 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
           return `${rtName(e.fn)}(${xs.join(", ")})`;
         }
         case "world": { const xs = e.args.map((a) => ex(a, pre, d)); return `${worldName(e.op)}(${xs.join(", ")})`; }
-        case "fail": return "R.fail()";
+        // No answer leaves the way a partial call's FAIL does (onFail),
+        // without a throw; thrown only where it must be (C137d12: calc's
+        // parser spent 41% of its time throwing it).
+        case "fail": if (onFail) { pre.push(`${d}${onFail}`); return "undefined"; } return "R.fail()";
         case "attempt": {
           const ok = tried(e, pre, d), t = temp();
           pre.push(`${d}let ${t};`, `${d}if (${ok}) {`, ...block(e.ok, { set: t }, d + "  "), `${d}} else {`, ...block(e.otherwise, { set: t }, d + "  "), `${d}}`);
@@ -293,6 +296,13 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
       if (e.k === "let") {
         out.push(`${d}${local(e.i)} = ${slot(e.value, out, d)};`);
         return [...out, ...block(e.body, to, d)];
+      }
+      // A field set, then what follows as the statements it is, so a
+      // failure after it is the block's own (keep's next answer asked for).
+      if (e.k === "set") {
+        const r = ex(e.rec, out, d);
+        out.push(`${d}${r}.f${e.i} = ${ex(e.value, out, d)};`);
+        return [...out, ...block(e.then, to, d)];
       }
       if (e.k === "if") {
         const c = slot(e.cond, out, d);
@@ -420,8 +430,15 @@ function mainOf(ir: CoreIR, name: string): [number, MainSpec] {
 }
 
 export function runCoreMain(ir: CoreIR, name: string, args: string[], rt: Runtime): number {
+  return coreMain(ir, name, rt)(args);
+}
+// Main printed once and run as often as asked (the gaps benchmarks,
+// C137d11), each run on what `rt` holds then: its print and world are read
+// at each use.
+export function coreMain(ir: CoreIR, name: string, rt: Runtime): (args: string[]) => number {
   const [fi, m] = mainOf(ir, name);
-  return runCoreFn(loadCoreJs(ir, rt)[fi], m, args, rt);
+  const f = loadCoreJs(ir, rt)[fi];
+  return (args) => runCoreFn(f, m, args, rt);
 }
 
 // The program as a module that runs main in Node (C137c5, `lab compile

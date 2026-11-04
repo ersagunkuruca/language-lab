@@ -14,7 +14,6 @@ import blocksStyle from "../ters/styles/blocks.json" with { type: "json" };
 import mathStyle from "../ters/styles/math.json" with { type: "json" };
 import plainStyle from "../ters/styles/plain.json" with { type: "json" };
 import lispStyle from "../ters/styles/lisp.json" with { type: "json" };
-import { hashDef } from "../ters/src/hash.ts";
 import { children, freshId, ID_PATTERN, isCall, isUse, useTarget, type Call, merge, parentOf, resolveRefs, subtree, type Code, type Id, type Node, type NodeOf } from "../ters/src/model.ts";
 import { INT } from "../ters/src/lang/types.ts";
 import { layer, type Comments, type Hints, type Names, type Presentation, type Style } from "../ters/src/presentation.ts";
@@ -43,10 +42,13 @@ import { backwards } from "./backwards.ts";
 import { selectedParts } from "./selectedParts.ts";
 import { palette, typeName } from "./palette.ts";
 import { structure } from "./structure.ts";
+import { parentsOf, selection } from "./selection.ts";
+import { filesPanels, fnv, userCode } from "./filesPanel.ts";
 import { graphMenu as graphMenuOf } from "./graphMenu.ts";
 import { shower } from "./shown.ts";
 import { pagePanels } from "./pagePanel.ts";
-import { lawPanel, profileView, stuckView, valueView } from "./runViews.ts";
+import { answersView, lawPanel, profileView, stuckView, valueView } from "./runViews.ts";
+import type { LogEntry } from "../ters/src/lang/worldlog.ts";
 import { fromFile, toFile } from "../ters/src/files.ts";
 import { flattened, matchRows, sameEverywhere } from "../ters/src/lang/patterns.ts";
 import { showPin, type Pins } from "../ters/src/lang/signatures.ts";
@@ -162,7 +164,7 @@ export interface UI {
   newKind: "function" | "value" | "type" | "effect" | "interface";
   query: string;
   refused: boolean;
-  output: { def: Id; lines: string[]; error?: string; running?: boolean; stuck?: Stuck; profile?: Profile; compiled?: boolean } | null;
+  output: { def: Id; lines: string[]; error?: string; running?: boolean; stuck?: Stuck; profile?: Profile; compiled?: boolean; answers?: LogEntry[] } | null;
   // What Run gives a program that reads standard input, by program (I168).
   stdin?: Record<string, string>;
   // The graph's right-click menu: what it was for, where (screen, world).
@@ -807,28 +809,7 @@ const pres = (names: Names = {}, comments: Comments = doc.comments): Presentatio
   style: { ...styles[ui.style], quote: undefined },
 });
 
-const userCode = (c: Code): Code => ({ nodes: Object.fromEntries(Object.entries(c.nodes).filter(([, n]) => n.kind !== "builtin")), defs: c.defs });
-
-const files = () => [
-  { name: "code.json", get: (d: Doc) => JSON.stringify(userCode(prog(d))) },
-  { name: "drafts.json", get: (d: Doc) => JSON.stringify(draftsOf(d)) },
-  { name: "names.short.json", get: (d: Doc) => JSON.stringify(d.names.short) },
-  { name: "names.descriptive.json", get: (d: Doc) => JSON.stringify(d.names.descriptive) },
-  { name: "comments.json", get: (d: Doc) => JSON.stringify(d.comments) },
-  { name: "layout.json", get: (d: Doc) => JSON.stringify(d.layout) },
-  { name: "examples.json", get: (d: Doc) => JSON.stringify(d.examples ?? {}) },
-];
-
-function fnv(s: string) {
-  let x = 0x811c9dc5;
-  for (let i = 0; i < s.length; i++) x = Math.imul(x ^ s.charCodeAt(i), 0x01000193) >>> 0;
-  return x.toString(16).padStart(8, "0");
-}
-
-
-function semanticHash(code = doc.code): string {
-  try { return hashDef(code, ui.def); } catch { return "—"; }
-}
+const { files, filesPanel } = filesPanels({ doc: () => doc, ui, undo, prog: (d) => prog(d), draftsOf: (d) => draftsOf(d) });
 
 // The def a call, ref or solve refers to, if it's a user def.
 function calleeDef(id: Id): Id | null {
@@ -960,22 +941,6 @@ const { fillPalette } = palette({
   ownDefs: () => ownDefs(), shownNames, words,
 });
 const { rowSection, unitSection, sameLine } = selectedParts({ doc: () => doc, ui, applyT, typedPres: () => typedPres(), isTypeParam: (id) => isTypeParam(id) });
-
-function filesPanel(): HTMLElement {
-  const box = h("div", { class: "files" });
-  const meaning = semanticHash();
-  const prev = undo.at(-1);
-  const prevMeaning = prev && prev.code.nodes[ui.def] ? (() => { try { return hashDef(prev.code, ui.def); } catch { return "—"; } })() : meaning;
-  box.append(h("div", { class: `meaning${meaning !== prevMeaning ? " moved" : ""}` },
-    h("span", {}, "Meaning hash"), h("code", {}, meaning),
-    h("span", { class: "chip" }, meaning === prevMeaning ? "same as before last edit" : "changed by last edit")));
-  for (const f of files()) {
-    const txt = f.get(doc);
-    box.append(h("div", { class: `file${ui.touched.includes(f.name) ? " hot" : ""}` },
-      h("span", { class: "fname" }, f.name), h("code", {}, fnv(txt)), h("span", { class: "fsize" }, `${txt.length} B`)));
-  }
-  return box;
-}
 
 // The same tree printed: as blocks text, or in the classic shapes (steps,
 // nested, Lisp) with the chosen notation. One they can't show says so.
@@ -1298,45 +1263,12 @@ function stepAt(id: Id): Id {
   return id;
 }
 
-// The expression a part is in, one step out: past the arm or let that
-// only holds it, never the definition itself.
-// Each node's parent, once per version of the code: an arm's is the
-// match or fold holding it, which parentOf doesn't know (I134); one walk
-// of the nodes, not one per step (I135).
-const parents = new WeakMap<Code, Map<Id, { parent: Id; slot: string; index?: number }>>();
-function parentsOf(code: Code) {
-  let m = parents.get(code);
-  if (m) return m;
-  m = new Map();
-  const set = (c: Id | null | undefined, parent: Id, slot: string, index?: number) => { if (c && !m!.has(c)) m!.set(c, { parent, slot, ...(index !== undefined ? { index } : {}) }); };
-  for (const n of Object.values(code.nodes)) {
-    if (isUse(n)) { set(n.body, n.id, "body"); Object.values(n.given).forEach((g) => set(g, n.id, "given")); }
-    else if (isCall(n)) { set(n.fn, n.id, "fn"); n.args.forEach((a, i) => set(a, n.id, "args", i)); }
-    else if (n.kind === "lambda" || n.kind === "arm" || n.kind === "def") set(n.body, n.id, "body");
-    else if (n.kind === "match" || n.kind === "fold") { set(n.scrutinee, n.id, "scrutinee"); if (n.kind === "match") set(n.otherwise, n.id, "otherwise"); n.arms.forEach((a) => set(a, n.id, "arms")); }
-  }
-  parents.set(code, m);
-  return m;
-}
-
-function enclosing(id: Id): Id | null {
-  const ps = parentsOf(doc.code), up = (x: Id) => ps.get(x) ?? null;
-  // Only what a view draws: a call merged into its chain (0.5 · g · t · t
-  // is one ·) or a match read as a longer pattern is passed over (I139).
-  const views = document.querySelector(".blocks-wrap [data-id], .p-graph [data-id]");
-  const drawn = (x: Id) => !views || !!document.querySelector(`.blocks-wrap [data-id="${CSS.escape(x)}"], .p-graph [data-id="${CSS.escape(x)}"]`);
-  for (let at = up(id), hops = 0; at && hops < 16; at = up(at.parent), hops++) {
-    const n = node(at.parent);
-    if (!n || n.kind === "def" || at.parent === ui.def) return null;
-    // A let's call and its function only hold steps; a definition's own
-    // function is the definition.
-    const letCall = (c: Node | undefined) => isCall(c) && node(c.fn)?.kind === "lambda";
-    if (letCall(n)) continue;
-    if (n.kind === "lambda") { const o = up(n.id); const on = o ? node(o.parent) : undefined; if (!o || on?.kind === "def" || (letCall(on) && o.slot === "fn")) continue; }
-    if ((["call", "match", "fold", "lambda"].includes(n.kind) || isUse(n)) && drawn(n.id)) return n.id;
-  }
-  return null;
-}
+// Selecting, and the part a part is in (editor/selection.ts, E228q).
+// The graph takes the keyboard as the blocks do (E231f).
+const GRAPH_KEYS = "The graph: Tab steps through its parts, Enter edits one, Alt+Up goes to what it's in, Shift+F10 or the Menu key opens its menu";
+const { enclosing, menuForSelected, blocksKind, blocksHit, select } = selection({
+  doc: () => doc, ui, render: () => render(), typesOf: () => typesOf(), typedPres: () => typedPres(), kindLabel: (id) => kindLabel(id), onePane: () => onePane(), touch: TOUCH,
+});
 
 // What Wrap in… applies to: a value in an expression, not a definition's
 // whole body's lambda or a step's own let.
@@ -1870,6 +1802,7 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
       if (ui.output.error) box.append(h("p", { class: "status-line bad", role: "alert" }, ui.output.error));
       if (ui.output.stuck) box.append(stuckView(ui.output.stuck));
       if (ui.output.profile) box.append(profileView(namer, ui.output.profile, doc.code, pick));
+      if (ui.output.answers) box.append(answersView(ui.output.answers));
       if (ui.output.compiled) box.append(h("p", { class: "hint", title: "main compiled to JavaScript, as Open in a tab and lab compile do: the same output, much faster than the evaluator, but with no record of where the run went" }, "Ran compiled."));
     }
   } else if (z?.t === "fn" && z.eff.effs.some((e) => WORLD.includes(e))) {
@@ -2048,60 +1981,6 @@ function toProgram() {
   else (document.activeElement as HTMLElement | null)?.blur();
 }
 
-// The graph's menu for the selected part, from the keyboard (Shift+F10, the
-// Menu key, or Enter on a call), next to where the part is drawn; its first
-// item, or the one named, takes the focus. Arrows move through it.
-function menuForSelected(focus?: string) {
-  const id = ui.selected;
-  if (!id) return;
-  const el = document.querySelector(`.p-graph svg.canvas [data-id="${id}"]`) ?? document.querySelector(".blocks-wrap .sel");
-  const r = el?.getBoundingClientRect() ?? { left: 40, bottom: 40 };
-  const blocks = !!el?.closest(".blocks-wrap");
-  const kind: MenuTarget["kind"] = blocks ? blocksKind(id) : el?.closest("[data-src]") ? "binder" : el?.closest("[data-frame]") && id !== ui.def ? "frame" : "node";
-  ui.menu = { target: { kind, id }, x: r.left, y: r.bottom, world: { x: 0, y: 0 }, blocks };
-  ui.query = "";
-  render();
-  const items = [...document.querySelectorAll<HTMLElement>(".ctx-menu .ctx-item:not(:disabled)")];
-  (items.find((b) => b.dataset.menu === focus) ?? items[0])?.focus();
-}
-
-// What a part of the Blocks pane is, for its menu.
-const blocksKind = (id: Id): MenuTarget["kind"] => {
-  const k = doc.code.nodes[id]?.kind;
-  return k === "hole" ? "hole" : k === "binder" ? "binder" : "node";
-};
-
-// The part of the Blocks pane a click or right-click is on. An operator
-// stands for its call, as in the graph, where + is the call's own node.
-function blocksHit(t: EventTarget | null): Id | null {
-  const hit = (t as HTMLElement | null)?.closest?.<HTMLElement>(".blocks-wrap [data-id]");
-  if (!hit) return null;
-  const call = hit.classList.contains("op") || hit.classList.contains("head") ? hit.parentElement?.closest<HTMLElement>("[data-id]") : null;
-  return (call ?? hit).dataset.id!;
-}
-
-function select(id: Id | null) {
-  // Re-rendering on a repeat click would detach the element before its
-  // dblclick fires, and go-to-definition is a dblclick.
-  // One pane at a time: a hole's palette is in the side pane, so show it,
-  // also when the hole was selected already (a new program's is).
-  const toPalette = !!id && doc.code.nodes[id]?.kind === "hole" && onePane() && ui.pane !== "side";
-  if (ui.selected === id) { if (toPalette) { ui.pane = "side"; render(); } return; }
-  ui.mode = null; ui.query = "";
-  ui.selected = id;
-  if (toPalette) ui.pane = "side";
-  // One pane at a time on a touch screen: the Selected panel is in the
-  // other pane and there's no hover, so what was tapped and its type go on
-  // the status line, where the tap is (E203).
-  else if (id && TOUCH && onePane()) {
-    const info = typesOf(), names = typedPres().names, n = doc.code.nodes[id];
-    const t = info ? T.typeOf(info, id, names) : null;
-    const head = isCall(n) ? doc.code.nodes[n.fn] : n;
-    const name = head?.kind === "ref" ? names[head.target] : names[id];
-    if (n) { ui.note = `${kindLabel(id)}${name ? ` ${name}` : ""}${t ? ` : ${t}` : ""}. Its panel is in Run & more.`; ui.refused = false; }
-  }
-  render();
-}
 
 // ---------------------------------------------------------------- guide
 //
@@ -2265,7 +2144,7 @@ function draw() {
           // The page runs only in its main's embed: a data type's embed
           // (Tumble's Board) has nothing to restart or save.
           ? [h("section", { class: "panel" }, pictureSection(info), pageMain(ownDefs(), info, pres().names) === ui.def ? pageSection(info) : null, typedRunPanel(namer, info))]
-          : [h("section", { class: "panel p-graph", "aria-label": "Graph" }, h("div", { class: "graph-host" }, graphOf(info))),
+          : [h("section", { class: "panel p-graph", "aria-label": "Graph" }, h("div", { class: "graph-host", tabindex: "0", "aria-label": GRAPH_KEYS }, graphOf(info))),
             h("section", { class: "panel p-text", "aria-label": "Text" }, h("div", { class: "body" }, textView)),
             ui.selected && !READONLY ? h("section", { class: "panel", "aria-label": "Selected" }, typedInspector(namer, typedPres(), info)) : null])),
       // The opening hint takes a line of a small frame: only a real note shows.
@@ -2297,7 +2176,7 @@ function draw() {
       h("div", { class: "center" },
         h("section", { class: "panel p-graph", "aria-label": "Graph" },
           h("div", { class: "tabs" }, ...ui.tabs.map(tab), h("span", { class: "hint", title: GRAPH_HINT }, GRAPH_HINT)),
-          h("div", { class: "graph-host" }, graphOf(info))),
+          h("div", { class: "graph-host", tabindex: "0", "aria-label": GRAPH_KEYS }, graphOf(info))),
         h("div", { class: "gutter row", "data-gutter": "text-h", "aria-hidden": "true" }),
         h("section", { class: "panel p-text", "aria-label": "Text" },
           h("div", { class: "text-head" }, h("h2", {}, "Text"),
@@ -2520,15 +2399,15 @@ document.addEventListener("keydown", (e) => {
     const next = e.shiftKey ? (at < 0 ? shown.length - 1 : at - 1) : at + 1;
     if (next >= 0 && next < shown.length) {
       e.preventDefault();
-      select(shown[next]);
-      document.querySelector<HTMLElement>(".blocks-wrap")?.focus({ preventScroll: true });
+      select(shown[next], true);
+      (document.querySelector<HTMLElement>(".blocks-wrap") ?? document.querySelector<HTMLElement>(".p-graph .graph-host"))?.focus({ preventScroll: true });
       document.querySelector(".blocks-wrap .sel")?.scrollIntoView({ block: "nearest" });
     }
     return;
   }
   if (inProgram && ui.selected && e.altKey && e.key === "ArrowUp") {
     const outer = enclosing(ui.selected);
-    if (outer) { e.preventDefault(); select(outer); }
+    if (outer) { e.preventDefault(); select(outer, true); }
     return;
   }
   if (inProgram && ui.selected && (e.key === "ContextMenu" || (e.key === "F10" && e.shiftKey))) {

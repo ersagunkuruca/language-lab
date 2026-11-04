@@ -2,6 +2,7 @@
 // main.ts (E228b, E228g): the runtimes the build puts in the page (the
 // worker that runs main, the page and sound runtimes), the views of how a
 // run ended, a value as Run shows it, and a test's results.
+import type { LogEntry } from "../ters/src/lang/worldlog.ts";
 import type { Code, Id } from "../ters/src/model.ts";
 import type { Namer } from "../ters/src/render/namer.ts";
 import type { Profile, Stuck } from "./runWorker.ts";
@@ -56,6 +57,21 @@ export function profileView(namer: Namer, profile: Profile, code: Code, pick: (i
     h("table", { class: "profile-t" },
       h("tr", {}, h("th", { scope: "col" }, "definition"), h("th", { scope: "col" }, "calls"), h("th", { scope: "col", title: "About how much of the run's time was spent in it, itself (not in what it calls), sampled" }, "time")),
       ...rows.map((p) => h("tr", {}, h("td", {}, pick(p.def, namer.name(p.def))), h("td", {}, p.calls.toLocaleString("en")), h("td", {}, total ? `${share(p.ms)} · ${p.ms} ms` : "")))));
+}
+
+// What the world answered the run, in order (L186's log, E232a): each
+// read line, file, random number, time or fetch, and what came back. A
+// run is these answers and the program: given them again, it does the
+// same.
+const OPS: Record<string, string> = { input: "read input", readLine: "read line", readFile: "read file", fileExists: "file exists", listFolder: "list folder", readBytes: "read bytes", random: "random", now: "now", locale: "locale", timeZone: "time zone", fetchText: "fetch text", fetchArrived: "fetch arrived", sendRequest: "send" };
+export function answersView(log: LogEntry[]): HTMLElement {
+  const short = (v: unknown) => { const t = v === undefined ? "" : typeof v === "string" ? JSON.stringify(v) : JSON.stringify(v); return t.length > 80 ? `${t.slice(0, 77)}…` : t; };
+  return h("details", { class: "profile answers" },
+    h("summary", {}, `What the world answered: ${log.length} answer${log.length === 1 ? "" : "s"}`),
+    h("ol", { class: "answers-l" }, ...log.slice(0, 200).map((e) => h("li", {},
+      h("code", {}, `${OPS[e.op] ?? e.op}${e.args.length ? ` ${e.args.map(short).join(" ")}` : ""}`), " → ",
+      e.threw !== undefined ? h("span", { class: "bad" }, `failed: ${e.threw}`) : h("code", {}, short(e.answer))))),
+    log.length > 200 ? h("p", { class: "hint" }, `and ${log.length - 200} more`) : null);
 }
 
 // A value as the Run panel shows it. A map or a set is a table, a row per
