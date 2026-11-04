@@ -519,8 +519,28 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // + − · and < with sides of two types, one embedding in the other: the
   // smaller side is lifted (Lean 4's binop%).
   const LIFTED = new Set<Id>([ARITH.add, ARITH.sub, ARITH.mul, ARITH.less]);
+  const mark = (at: Id, def: Id, from: Type, to: Type, of?: Type & { t: "fn" }) => (info.embedded ??= new Map()).set(at, { def, from, to, ...(of ? { of } : {}) });
+  // A call whose wanted type is known only from its earlier inputs
+  // (inverse(half, count), where half says the second is a Float64): when
+  // it doesn't fit, its inputs are tried in order in a trial, each given
+  // type that doesn't fit lifted through the canonical embedding into the
+  // one wanted there by then. Only a call that failed pays for it.
+  const liftLate = (n: Call, fr: Type & { t: "fn" }, params: Type[]): boolean => {
+    const t = s.trial(), marks: [number, Id, Type, Type][] = [];
+    for (let i = 0; i < params.length; i++) {
+      try { t.unify(fr.params[i], params[i]); continue; } catch (e) { if (!(e instanceof TypeError)) throw e; }
+      const want = t.zonk(fr.params[i]), got = closedType(params[i]);
+      if (want.t !== "con" || freeVars(want, t).vars.size || !got || sameType(want, got)) return false;
+      const e = embeddingOf(got, want);
+      if (!e) return false;
+      marks.push([i, e, got, want]);
+      try { t.unify(fr.params[i], want); } catch (x) { if (!(x instanceof TypeError)) throw x; return false; }
+    }
+    if (!marks.length) return false;
+    for (const [i, e, got, want] of marks) { mark(n.args[i], e, got, want); params[i] = want; }
+    return true;
+  };
   const liftThrough = (n: Call, callee: Id | null, fr: Type & { t: "fn" }, params: Type[]) => {
-    const mark = (at: Id, def: Id, from: Type, to: Type, of?: Type & { t: "fn" }) => (info.embedded ??= new Map()).set(at, { def, from, to, ...(of ? { of } : {}) });
     if (callee && LIFTED.has(callee) && params.length === 2) {
       const [a, b] = params.map(closedType);
       if (!a || !b || sameType(a, b)) return;
@@ -1012,7 +1032,10 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
           // search's does, so this code may do more beside the call (I153).
           let here = callRow;
           if (!search && fr.t === "fn" && s.resolveRow(fr.eff).tail === null) { here = s.freshRow(); s.subs.push({ from: here, to: row, at: id }); }
-          try { s.unify(fr, { t: "fn", params, ret, eff: here }); } finally { s.tupleOf = null; }
+          try {
+            try { s.unify(fr, { t: "fn", params, ret, eff: here }); }
+            catch (e) { if (!(e instanceof TypeError) || e.constructor !== TypeError || back || fr.t !== "fn" || fr.params.length !== params.length || !liftLate(n, fr, params)) throw e; s.unify(fr, { t: "fn", params, ret, eff: here }); }
+          } finally { s.tupleOf = null; }
           if (s.reshaped > reshapedBefore) reshape(n, f, args, s.reshaped - reshapedBefore);
         } catch (e) {
           if (e instanceof WorldError) {
