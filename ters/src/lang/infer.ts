@@ -1656,9 +1656,18 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     if (fields?.length && fields.every((f) => { const r = s.resolve(f); return r.t === "con" && r.id === NUMBER; })) continue;
     err(n.id, `a number written where ${show(t)} goes needs ${show(t)}'s own from fraction, since it isn't a record of Float64s: give it one, a definition of type Literal ${show(t)}`);
   }
+  // The calls of fields mapped, fields listed, json of, from json and job,
+  // found in one pass over the calls (E250: three passes were most of a
+  // palette offer's check).
+  const callsOf = new Map<Id, Id[]>();
+  for (const id of nodesWhere(code, "call", (n) => isCall(n))) {
+    const f = code.nodes[(code.nodes[id] as Call).fn];
+    if (f?.kind === "ref" && (f.target === FIELDS.mapped || f.target === FIELDS.listed || f.target === JSON_OPS.of || f.target === JSON_OPS.from || f.target === JOBS.job)) (callsOf.get(f.target) ?? callsOf.set(f.target, []).get(f.target)!).push(id);
+  }
+  const callsTo = (...ts: Id[]) => ts.flatMap((t) => callsOf.get(t) ?? []);
   // fields mapped and fields listed are written out per type where they are
   // used (fields-by-type.ts, L162b), so both types must be known there.
-  for (const id of nodesWhere(code, "call", (n) => isCall(n))) {
+  for (const id of callsTo(FIELDS.mapped, FIELDS.listed)) {
     const n = code.nodes[id] as Call;
     const f = code.nodes[n.fn];
     if (f?.kind !== "ref" || (f.target !== FIELDS.mapped && f.target !== FIELDS.listed)) continue;
@@ -1675,7 +1684,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // json of and from json are written out per type (json-by-type.ts,
   // L190d2), so the type must be known where they are used and have a
   // spelling.
-  for (const c of nodesWhere(code, "call", (n) => isCall(n))) {
+  for (const c of callsTo(JSON_OPS.of, JSON_OPS.from)) {
     const n = code.nodes[c] as Call;
     const f = code.nodes[n.fn];
     if (f?.kind !== "ref" || (f.target !== JSON_OPS.of && f.target !== JSON_OPS.from)) continue;
@@ -1701,7 +1710,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   }
   // A representation's job (REPRESENTATIONS.md, L108): `job(of, by, cost)`
   // does t's job `of` at r, so `by` has of's type with r for t.
-  for (const id of nodesWhere(code, "call", (n) => isCall(n))) {
+  for (const id of callsTo(JOBS.job)) {
     const n = code.nodes[id] as Call;
     if (n.args.length !== 3) continue;
     const f = code.nodes[n.fn];
