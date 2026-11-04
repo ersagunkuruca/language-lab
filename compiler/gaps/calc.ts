@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { runProgram, type World } from "../../ters/src/lang/run.ts";
 import { compile } from "../src/compile.ts";
+import { coreMain, lowerCore } from "../src/core-js.ts";
 import { load } from "../src/program.ts";
 import { $setPrint, $setWorld, $Aborted } from "../src/runtime.js";
 import { calc as ideal } from "./calc.ideal.js";
@@ -22,12 +23,14 @@ const world = (input: string, err: string[]): World => ({
   readFile: () => { throw new Error("no files"); }, writeFile: () => {}, appendFile: () => {}, fileExists: () => false, listFolder: () => [],
 });
 
-export async function ways(): Promise<Record<"evaluator" | "compiled" | "ideal", Way>> {
+export async function ways(): Promise<Record<"evaluator" | "compiled" | "core" | "ideal", Way>> {
   const p = load("calc");
   const main = p.named("main");
   const path = join(mkdtempSync(join(tmpdir(), "calc-")), "calc.js");
   writeFileSync(path, compile(p.code, p.info, p.pres.names, { runtime: pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href, exports: ["main"] }));
   const compiled = (await import(pathToFileURL(path).href)).defs.main as () => number;
+  const rt: { print: (s: string) => void; world?: World } = { print: () => {} };
+  const core = coreMain(lowerCore(p.code, p.info, p.pres.names, [main]), "main", rt);
   return {
     evaluator: (input) => {
       const out: string[] = [], err: string[] = [];
@@ -41,6 +44,13 @@ export async function ways(): Promise<Record<"evaluator" | "compiled" | "ideal",
       let code: number;
       try { code = Number(compiled()); } catch (e) { if (!(e instanceof $Aborted)) throw e; err.push(e.reason); code = 1; }
       return { out, err, code };
+    },
+    // Printed from the core IR (C137d11), which compile.ts gives way to.
+    core: (input) => {
+      const out: string[] = [], err: string[] = [];
+      rt.print = (s) => out.push(s);
+      rt.world = world(input, err);
+      return { out, err, code: core([]) };
     },
     ideal: (input) => {
       const out: string[] = [], err: string[] = [];

@@ -420,8 +420,15 @@ function mainOf(ir: CoreIR, name: string): [number, MainSpec] {
 }
 
 export function runCoreMain(ir: CoreIR, name: string, args: string[], rt: Runtime): number {
+  return coreMain(ir, name, rt)(args);
+}
+// Main printed once and run as often as asked (the gaps benchmarks,
+// C137d11), each run on what `rt` holds then: its print and world are read
+// at each use.
+export function coreMain(ir: CoreIR, name: string, rt: Runtime): (args: string[]) => number {
   const [fi, m] = mainOf(ir, name);
-  return runCoreFn(loadCoreJs(ir, rt)[fi], m, args, rt);
+  const f = loadCoreJs(ir, rt)[fi];
+  return (args) => runCoreFn(f, m, args, rt);
 }
 
 // The program as a module that runs main in Node (C137c5, `lab compile

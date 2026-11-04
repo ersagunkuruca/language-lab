@@ -26,12 +26,13 @@ test("calc: definitions, every operator, how it parses, and the errors", () => {
   for (const [way, run] of Object.entries(w)) assert.deepEqual(run(input), want, way);
 });
 
-test("calc: random sessions agree three ways", () => {
+test("calc: random sessions agree four ways (the core IR's too)", () => {
   for (const seed of [1, 2, 3]) {
     const input = session(200, seed);
     const want = w.evaluator(input);
     assert.deepEqual(w.compiled(input), want);
     assert.deepEqual(w.ideal(input), want);
+    assert.deepEqual(w.core(input), want);
   }
 });
 
