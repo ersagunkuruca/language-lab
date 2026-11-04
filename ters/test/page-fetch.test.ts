@@ -9,7 +9,7 @@ import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { showPage } from "../src/lang/page.ts";
-import { CELL_OPS, HTML_V, INT_OPS, IO, S } from "../src/lang/std.ts";
+import { ABORT_OP, CELL_OPS, HTML_V, INT_OPS, IO, S } from "../src/lang/std.ts";
 import { fakeDoc, FakeEl, FakeText } from "./fakedom.ts";
 
 const memory = () => { const m = new Map<string, string>(); return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v), removeItem: (k: string) => void m.delete(k), get length() { return m.size; }, key: (i: number) => [...m.keys()][i] ?? null }; };
@@ -52,9 +52,13 @@ test("a click that writes, prints and saves, then fetches, does each once", asyn
   assert.deepEqual(printed, ["clicked", "hello"]);
   assert.equal(texts(root)[0], "1", "the click added 1");
   assert.equal(store.getItem("lab:t:clicks"), "x");
-  // The address is fetched now, so the next click runs straight through.
+  // The next click asks again (L59c: a fetch is remembered for its event),
+  // so it gets the new text.
   button.fire("click");
-  assert.deepEqual(printed, ["clicked", "hello", "clicked", "hello"]);
+  assert.deepEqual(printed, ["clicked", "hello", "clicked"]);
+  land("hello again");
+  await new Promise((r) => setTimeout(r, 10));
+  assert.deepEqual(printed, ["clicked", "hello", "clicked", "hello again"]);
   assert.equal(texts(root)[0], "2");
   assert.equal(store.getItem("lab:t:clicks"), "xx");
 });
@@ -94,4 +98,39 @@ test("a click that fetches twice goes on from each fetch when its reply lands", 
   await settle();
   assert.deepEqual(printed, ["A", "B"]);
   assert.equal(texts(root)[0], "3");
+});
+
+// L59c: a fetch is remembered for its event alone. One click asking the
+// same address twice fetches it once; a view's fetch is the page's, so the
+// view running again (a click writes what it reads) doesn't ask again.
+test("one click fetches an address once; a view's fetch is kept for the page", async () => {
+  const k = new Lang();
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.let("count", k.call(CELL_OPS.cell, k.int(0)), (count) =>
+    k.call(HTML_V.element, k.lit("div"), k.list(), k.list(
+      k.call(HTML_V.text, k.thunk(() => k.text(k.call(INT_OPS.show, k.call(CELL_OPS.read, count)), k.lit(" "), k.handle(k.call(IO.fetchText, k.lit("/view")), [{ variant: ABORT_OP, names: ["why"], body: ([why]) => why }])))),
+      k.call(HTML_V.element, k.lit("button"), k.list(k.call(HTML_V.on, k.lit("click"), k.fn(["e"], () => k.seq(
+        k.call(S.print, k.call(IO.fetchText, k.lit("/a"))),
+        k.call(S.print, k.call(IO.fetchText, k.lit("/a"))),
+        k.call(CELL_OPS.write, count, k.call(INT_OPS.add, k.call(CELL_OPS.read, count), k.int(1))))))), k.list(k.call(HTML_V.text, k.thunk(() => k.lit("+"))))))))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const asked: string[] = [];
+  const printed: string[] = [];
+  const page = showPage({ code, info, names, main, program: "t", doc: fakeDoc(), store: memory(), frame: () => {},
+    console: { log: (l: string) => printed.push(l), error: (l: string) => printed.push(l) }, fetch: (url) => { asked.push(url); return Promise.resolve(`<${url} ${asked.length}>`); } });
+  const root = page.root as FakeEl;
+  const button = (function find(e: FakeEl): FakeEl | undefined { return e.tag === "button" ? e : e.kids.map((c) => (c instanceof FakeEl ? find(c) : undefined)).find(Boolean); })(root)!;
+  const settle = () => new Promise((r) => setTimeout(r, 10));
+  await settle();
+  assert.equal(texts(root)[0], "0 </view 1>");
+  button.fire("click");
+  await settle();
+  assert.deepEqual(printed, ["</a 2>", "</a 2>"]);
+  assert.equal(texts(root)[0], "1 </view 1>", "the view ran again and kept its text");
+  button.fire("click");
+  await settle();
+  assert.deepEqual(printed, ["</a 2>", "</a 2>", "</a 3>", "</a 3>"], "the next click asked again");
+  assert.deepEqual(asked, ["/view", "/a", "/a"]);
 });

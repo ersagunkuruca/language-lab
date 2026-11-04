@@ -24,7 +24,11 @@
 // (html.ts, cells.ts attempt), so what it did before the fetch happens
 // once. This is
 // Solid's createResource and React's Suspense, with the cells a page
-// already has. Each address is fetched once per page load.
+// already has. A handler's fetches are remembered for its event (L59c): the
+// same address twice in one click, or a click run again from the start,
+// is fetched once, and the next click asks again, so a page can poll,
+// refresh and retry. A view's are remembered for the page, so a view that
+// runs again finds what it asked for.
 
 import { Pending, type Cells } from "./cells.ts";
 import { worldRandom } from "./random.ts";
@@ -68,7 +72,15 @@ export const pageStorage = (): Store => {
 export function browserWorld(store: Store, program: string, console_ = console, clock?: Clock): World {
   const prefix = `lab:${program}:`;
   let tick: Value | null = null;
-  const fetched = new Map<string, { landed: Value; ready: Promise<unknown>; text?: string; error?: string }>();
+  type Fetch = { landed: Value; ready: Promise<unknown>; text?: string; error?: string };
+  const fetched = new Map<string, Fetch>();
+  const byEvent = new WeakMap<object, Map<string, Fetch>>();
+  const memo = (event: object | null) => {
+    if (!event) return fetched;
+    let m = byEvent.get(event);
+    if (!m) byEvent.set(event, (m = new Map()));
+    return m;
+  };
   const none = () => { throw new Error("a page has no standard input"); };
   const read = (path: string) => {
     const text = store.getItem(prefix + path);
@@ -121,14 +133,15 @@ export function browserWorld(store: Store, program: string, console_ = console, 
     fetchText: (url) => {
       if (!clock) throw new Error("fetching needs a page");
       const { cells } = clock;
-      let f = fetched.get(url);
+      const asked = memo(cells.event);
+      let f = asked.get(url);
       if (!f) {
         const landed = cells.cell(0, "fetched");
         const ready = (clock.fetch ?? browserFetch)(url).then(
           (text) => { f!.text = text; },
           (e) => { f!.error = `could not fetch ${url}: ${(e as Error).message}`; },
         ).then(() => cells.write(landed, 1));
-        fetched.set(url, (f = { landed, ready }));
+        asked.set(url, (f = { landed, ready }));
       }
       if (f.text !== undefined) return f.text;
       if (f.error !== undefined) throw new Error(f.error);

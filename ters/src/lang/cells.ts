@@ -288,6 +288,11 @@ export class Cells {
   // page compiled (handOver, below).
   kept: { cell: Value; first: Value }[] | null = null;
   onWrite: ((place: number, v: Value) => void) | null = null;
+  // The event a page's handler is running for (html.ts), the same object
+  // through its retries and resumes, so the world remembers a fetch for
+  // that event alone (L59c, browser.ts). Formulas and watchers run outside
+  // any event: what a view fetched is the page's.
+  event: object | null = null;
 
   // The plain State handler (STABLE-REFERENCES.md §2, L99e): for a program
   // with no formula, watcher, each or page, nothing ever reads a cell
@@ -755,6 +760,11 @@ export class Cells {
   // Bring a formula or watcher up to date: a "check" one asks its sources
   // first, and recomputes only if one of them really changed.
   private update(n: CellNode): void {
+    const event = this.event;
+    this.event = null;
+    try { this.updating(n); } finally { this.event = event; }
+  }
+  private updating(n: CellNode): void {
     if (n.state === CHECK) {
       for (const s of n.sources) {
         // A source that stops makes this one run again, and stop the same
