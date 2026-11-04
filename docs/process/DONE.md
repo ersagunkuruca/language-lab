@@ -26,7 +26,8 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| E243 | Turning a call around ("Work out x from the result") makes a use with no body, L211's shape, giving the one port it isn't given; "Use it forwards", or a double-click on its output, turns one of those back, and still takes a use in the old shape (turn-around.test) | this PR |
+| E228j | The values a definition opens with out of editor/main.ts into editor/seeds.ts, through a `SeedHost`: what a call in the program passes it, or what main's dry run (a page drawn and its handlers run, a picture at a pixel or two) first calls it with, and a port's text read as a value | this PR |
+| E243 | Turning a call around ("Work out x from the result") makes a use with no body, L211's shape, giving the one port it isn't given; "Use it forwards", or a double-click on its output, turns one of those back, and still takes a use in the old shape (turn-around.test) | #1435 |
 | E242 | **Bug.** Every program showed the unit chooser open, as if it used units, once the library had durations in seconds (L188b): the check looked at the library's nodes too. Now only the program's own count (editing.test heldSeed was red on main) | #1432 |
 | L211 (the editor's half) | A use with no body draws each produced port as its own output, wired straight to what reads it: a part read of the let's binder (`r.<port>`) is a wire from that port, a read of a one-port use's binder a wire from its one port, and the let's dot isn't drawn unless something reads the tuple whole (then an "all" output carries it). graph.test moves backwards' uses to L211g's shape and checks each wire starts on its port | #1428 |
 | E228i | Run main out of editor/main.ts into editor/runPanel.ts, through a `RunHost`: the worker run, what an example is given on the command line, the effects a program from a file must be allowed, the compiled main kept for the next run | #1392 |
