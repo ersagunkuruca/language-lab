@@ -2618,6 +2618,12 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // A record's Int field proved to fit 32 bits, stored as a machine word
   // (C150e): WebAssembly and C, not core JS, whose values the host reads.
   if (opts.data && !opts.host) { machineWords(ir); wideProducts(ir); }
+  // The fuel is endless outside a budget, so where no budget is set
+  // (`with fuel`, or the fuel a search outside one swaps in) nothing
+  // spends it (C171): no count per call of a function that may not end.
+  // A shader keeps its own (its loops must end).
+  const setsFuel = (e: SExpr): boolean => e.k === "budget" || (e.k === "rt" && e.fn.startsWith("fuel.")) || kids(e).some(setsFuel);
+  if (opts.data && !funcs.some((f) => setsFuel(f.body))) for (const f of funcs) f.spends = false;
   return ir;
 }
 
