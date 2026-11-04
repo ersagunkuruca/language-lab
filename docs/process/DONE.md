@@ -731,7 +731,8 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| L189d | Bytes as text: hex of and bytes of hex, base64 of and bytes of base64 (RFC 4648), written in the language and the same as Node's Buffer for 0 to 7 bytes (bytes.test.ts) | this PR |
+| L188c | Times of day: std's `Time of day` (whole seconds from midnight) and the prelude's time of, time hour, minute and second, seconds of day, time of seconds (wrapping round), time text and time read, ISO 8601, written in the language (dates.test.ts) | this PR |
+| L189d | Bytes as text: hex of and bytes of hex, base64 of and bytes of base64 (RFC 4648), written in the language and the same as Node's Buffer for 0 to 7 bytes (bytes.test.ts) | #1414 |
 | L190e | CSV (RFC 4180) written in the language: csv printed quotes a field only when it must and doubles its quotes; csv rows reads quoted commas, quotes and line breaks, LF or CRLF (json.test.ts) | #1413 |
 | L190d1 | Reading a Json value's parts: json field and json as number, text, bool and list, each with no answer for another kind, so a record is read through `first` with defaults (json.test.ts) | #1412 |
 | L188e | `date read`: ISO 8601 year-month-day text to a Date, written in the language, the other way from date text; any other text stops (dates.test.ts) | #1411 |
