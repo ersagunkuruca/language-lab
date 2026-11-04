@@ -34,7 +34,7 @@ import { computedForward } from "./directions.ts";
 import { discharge } from "./ledger.ts";
 import * as Alg from "./algebraic.ts";
 import { hostLocale, hostZone } from "./text.ts";
-import { FILE_OPS, KEPT_FILES, tupleVariant, floatText, LOCALE_V, MY_LOCALE_OP, MY_ZONE_OP, RELEASE_V, SETTINGS, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, COMPLEX_V, FIXED_V, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, shownImplementations, CASE_NAME, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std.ts";
+import { FILE_OPS, KEPT_FILES, tupleVariant, floatText, LOCALE_V, MY_LOCALE_OP, MY_ZONE_OP, RELEASE_V, SETTINGS, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, shownImplementations, CASE_NAME, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std.ts";
 import { intLit } from "./int.ts";
 import { JETS } from "./jets.ts";
 import { answerFromHost, effectOfOperation, hostedEffects, type Hosts } from "./hosts.ts";
@@ -1293,28 +1293,12 @@ export const DEF_VALUE = "@definition";
 const defOf = new WeakMap<object, Id>();
 export const definedAs = (v: Value): Id | undefined => (typeof v === "function" ? defOf.get(v) : undefined);
 
-// A Fixed's steps of 2⁻³² as `show fixed` writes them: the shortest
-// decimal that reads back to the same steps (Steele and White's
-// free-format digits, 1990), the prelude's `fraction digits` in BigInts.
-function fixedText(steps: bigint): string {
-  const neg = steps < 0n, s = neg ? -steps : steps;
-  const whole = s >> 32n, fraction = s & 0xffffffffn, unit = 1n << 33n;
-  let text = "";
-  for (let r = 2n * fraction, m = 1n, i = 0; fraction && i < 10; i++) {
-    const r10 = r * 10n, m10 = m * 10n, d = r10 >> 33n, rest = r10 - (d << 33n);
-    const low = rest < m10, high = unit - m10 < rest;
-    if (low || high) { text += String(low && (!high || 2n * rest < unit) ? d : d + 1n); break; }
-    text += String(d); r = rest; m = m10;
-  }
-  return `${neg ? "-" : ""}${whole}${text ? `.${text}` : ""}`;
-}
-
-// `asNumber` shows a Fixed or an Extended as the number it stands for:
-// what `show` gives, the Run panel and a wire's value (L153). Without it a
-// value shows as the constructor it is built from.
+// `asNumber` shows an Extended as the number it stands for: what `show`
+// gives, the Run panel and a wire's value (L153). Without it a value shows
+// as the constructor it is built from.
 // `shown`, given, shows a value of a type with a Shown implementation
-// (L205) through it; without it (the editor's chips, relate.ts) the
-// prelude's number types show the same way by their tags below.
+// (L205) through it, Rational, Complex and Fixed among them; without it
+// they show as the constructor too.
 // Shows values as this program's `show any` does (L205c): a type of the
 // program's own with a Shown implementation shows its own way. Made once
 // per check, used for every value.
@@ -1331,11 +1315,11 @@ export function showValue(v: Value, code: Code, names: Names, asNumber = false, 
   if (typeof v === "function") return nodeOf(v) ? "<cell>" : "<function>";
   if (v.tag === ARRAY_TAG) return `array [${v.fields.slice(1).map((x) => go(x)).join(", ")}]`;
   if (v.tag === CONS || v.tag === NIL) return `[${fromList(v).map((x) => go(x)).join(", ")}]`;
-  // Float64 types show as numbers, as `show fraction` and `show complex` do.
-  if (v.tag === RATIO) { const [top, bottom] = v.fields.map((x) => go(x)); return bottom === "1" ? top : `${top}/${bottom}`; }
+  // Rational, Complex and Fixed show through their Shown (the prelude's,
+  // given as `shown`); without it they show as what they're built from,
+  // ratio(1, 3), which parseValue reads back (a seed, L205). Algebraic is
+  // host code, with no Shown of its own.
   if (v.tag === ALGEBRAIC_V) return Alg.show(algebraicOf(v));
-  if (v.tag === COMPLEX_V) { const [re, im] = v.fields as number[]; return `${go(re)} ${im < 0 ? "−" : "+"} ${go(Math.abs(im))}i`; }
-  if (asNumber && v.tag === FIXED_V && (typeof v.fields[0] === "number" || typeof v.fields[0] === "bigint")) return fixedText(BigInt(v.fields[0]));
   // An Extended number reads as the number, or −∞ and +∞ (L125d).
   if (asNumber && v.tag === EXTENDED_V.finite) return go(v.fields[0]);
   if (asNumber && (v.tag === EXTENDED_V.minus || v.tag === EXTENDED_V.plus)) return v.tag === EXTENDED_V.minus ? "−∞" : "+∞";

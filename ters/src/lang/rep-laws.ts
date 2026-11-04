@@ -140,7 +140,7 @@ export function representationLaws(code: Code, info: Info, names: Names, reps: R
   // A case's report, for a failure: which case, given what.
   function showCase(v: Value): string {
     const d = v as { tag?: string; fields?: Value[] };
-    if (!d?.tag?.startsWith("law.case ")) return showValue(v, code, names);
+    if (!d?.tag?.startsWith("law.case ")) return show(v);
     const i = Number(d.tag.slice(9));
     return `case ${i + 1}(${(d.fields ?? []).map(showCase).join(", ")})`;
   }

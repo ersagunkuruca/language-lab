@@ -15,8 +15,9 @@ import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
-import { runMain } from "../src/lang/run.ts";
-import { S, SHOW_ANY } from "../src/lang/std.ts";
+import { equal, runMain, showerFor, showValue, type Value } from "../src/lang/run.ts";
+import { COMPLEX_V, FIXED_V, RATIO, S, SHOW_ANY } from "../src/lang/std.ts";
+import { parseValue } from "../src/lang/values.ts";
 const L = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
 
 const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
@@ -71,4 +72,20 @@ test("L154: a Float64 shows to 9 decimals, and one below 10⁻⁶ in size by the
   ].map((x) => k.call(S.show, x)));
   assert.deepEqual(ran.map((t) => JSON.parse(t)), want);
   assert.deepEqual(compiled.map((t) => JSON.parse(t)), want);
+});
+
+// Rational, Complex and Fixed show through their Shown (L205d): showerFor
+// gives the number, and without the program's Shown (a seed in the
+// editor) the value shows as what it's built from, which reads back.
+test("a Rational, a Complex and a Fixed show by their Shown, and read back from their constructor text", () => {
+  const code = base(LIBRARY.code), names = baseNames(LIBRARY.names);
+  const info = infer(code, names, undefined, checkOptions);
+  const show = showerFor(code, info, names);
+  const values: Value[] = [{ tag: RATIO, fields: [1, 3] }, { tag: COMPLEX_V, fields: [1, -2.5] }, { tag: FIXED_V, fields: [2 ** 31] }];
+  assert.deepEqual(values.map((v) => show(v)), ["1/3", "1 − 2.5i", "0.5"]);
+  for (const v of values) {
+    const text = showValue(v, code, names);
+    const back = parseValue(text, code, names);
+    assert.ok("value" in back && equal(back.value, v), `${text} reads back`);
+  }
 });
