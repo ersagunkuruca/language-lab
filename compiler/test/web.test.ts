@@ -172,8 +172,9 @@ test("fetching in a page: a view keeps what it shows until the reply, a handler 
     "hello | could not fetch /missing: 404 Not Found | later",
     "hello | could not fetch /missing: 404 Not Found | later",
   ]);
-  // Each address asked once, however often it was read.
-  assert.deepEqual(e.asked, ["/greeting", "/missing", "/later"]);
+  // A view's address is asked once, however often it is read; a click's is
+  // asked once per click (L59c), so the second click asks again.
+  assert.deepEqual(e.asked, ["/greeting", "/missing", "/later", "/later"]);
 });
 
 test("a formula that never ends: its part says it didn't finish, and comes back when the cell changes, both ways", async () => {
