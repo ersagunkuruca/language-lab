@@ -118,12 +118,13 @@ export function filled(code: Code): Code {
 // port it doesn't produce, or one whose binder carries a unit (a let's
 // variable can't say a part's) stays as it is: binds and body are still
 // read. `library`: the definitions a use may run, besides the program's.
-export function usesGiveTheirPorts(nodes: Record<Id, unknown>, library: Record<Id, Node>): void {
+// `only`: the uses to move, when not every one.
+export function usesGiveTheirPorts(nodes: Record<Id, unknown>, library: Record<Id, Node>, only?: Id[]): void {
   const all = Object.assign(Object.create(library) as Record<Id, Node>, nodes as Record<Id, Node>);
   const code: Code = { nodes: all, defs: [] };
   const reads = new Map<Id, Id[]>();
   for (const x of Object.values(nodes)) { const r = x as Node; if (r?.kind === "ref") reads.set(r.target, [...(reads.get(r.target) ?? []), r.id]); }
-  for (const id of Object.keys(nodes)) {
+  for (const id of only ?? Object.keys(nodes)) {
     const n = nodes[id] as Node;
     if (n?.kind !== "call" || !n.given || !n.binds || n.body === undefined) continue;
     const produced = (usePorts(code, n) ?? []).filter((k) => !(k in n.given!));

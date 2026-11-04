@@ -32,11 +32,12 @@ function program(results: string[], use = true) {
   return { k, code, names, info, sd, main, text: (d: string) => renderBlocks(code, pres, info, d) };
 }
 
-test("a definition with results reads as inputs → results, and a use binds them side by side", () => {
+test("a definition with results reads as inputs → results, and a use gives them as a tuple read by their names", () => {
   const p = program(["a", "b"]);
   assert.deepEqual(p.info.errors.map((e) => e.message), []);
   assert.match(p.text(p.sd), /‹sum and difference›\(s, d\) → a, b = s = a \+ b and d = a − b/);
-  assert.match(p.text(p.main), /‹half sum›, ‹half difference› = ‹sum and difference›\(5, 1\)/);
+  // The use gives its results as a tuple (L211i), read by the ports' names.
+  assert.match(p.text(p.main), /tuple2 = ‹sum and difference›\(s = 5, d = 1\)\n.*show\(tuple2\.a\) \+\+ " " \+\+ show\(tuple2\.b\)/);
   // The function of its direction (L128d2): its inputs to its results.
   assert.equal(showType(p.info.typeOf.get(p.sd)!, p.names), "(Float64, Float64) -> (Float64, Float64)");
 });
@@ -103,7 +104,7 @@ test("results each given by an expression of the inputs read as = e1, e2", () =>
   assert.match(text, /‹half and double›\(x\) → h, d = x \/ 2, x · 2$/m, text);
 });
 
-test("another direction names what it's given, and binds the ports left, in order", () => {
+test("another direction names what it's given, and gives the ports left, in order", () => {
   const p = program(["a", "b"], false);
   const sd = p.k.code.nodes[p.sd] as NodeOf<"def">;
   const [s, d, a, b] = (p.k.code.nodes[sd.body!] as NodeOf<"lambda">).params;
@@ -112,7 +113,7 @@ test("another direction names what it's given, and binds the ports left, in orde
   const code = base(p.k.code), names = baseNames(p.k.names), info = infer(code, names);
   assert.deepEqual(info.errors.map((e) => e.message), []);
   const pres: Presentation = { names, comments: {}, hints: {}, style: blocksStyle as unknown as Style };
-  assert.match(renderBlocks(code, pres, info, main), /d, b = ‹sum and difference›\(s = 10, a = 3\)/);
+  assert.match(renderBlocks(code, pres, info, main), /tuple2 = ‹sum and difference›\(s = 10, a = 3\)\n.*show\(tuple2\.d\) \+\+ " " \+\+ show\(tuple2\.b\)/);
   assert.equal(runMain(code, info, main, { print: () => {}, names }), "-4 7");
 });
 

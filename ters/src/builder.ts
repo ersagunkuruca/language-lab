@@ -10,7 +10,7 @@ export class Builder {
   code: Code = { nodes: {}, defs: [] };
   names: Names = {};
 
-  private known: Code;
+  protected known: Code;
 
   constructor(known: Code = { nodes: {}, defs: [] }) {
     this.known = known;

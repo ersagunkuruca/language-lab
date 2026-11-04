@@ -51,7 +51,8 @@ test("a solve that a direction answers is that direction: one answer, no Choice,
   assert.deepEqual(p.info.errors.map((e) => e.message), []);
   assert.equal(showType(p.info.typeOf.get(p.main)!, p.names), "() -> Text");
   assert.equal(runMain(p.code, p.info, p.main, { print: () => {}, names: p.names }), "2 1.570796327");
-  assert.match(p.text(p.main), /length, angle = polar\(x = 0, y = 2\)/);
+  // The use gives its ports as a tuple (L211i), read by the ports' names.
+  assert.match(p.text(p.main), /tuple2 = polar\(x = 0, y = 2\)\n.*show\(tuple2\.length\) \+\+ " " \+\+ show\(tuple2\.angle\)/);
 });
 
 test("without the direction the same solve is the search, with its Choice", () => {
