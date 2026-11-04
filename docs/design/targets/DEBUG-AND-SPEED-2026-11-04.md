@@ -31,7 +31,8 @@ compiler can work it out ahead of time by inlining or precomputing.
 2. **Every definition is lowered**, not only what main reaches:
    `lowerCore(p.code, p.info, p.names, p.own)` in ters/cli/lab.ts. calc's
    unreached `inverse` is its only solve, so it alone brings in the node
-   table. calculus: 31 of 41 functions unreached. Row C168.
+   table. calculus: 31 of 41 functions unreached. Row C168, done
+   (calc 1,049 KB → 203 KB).
 3. **Every closure carries its lambda's node id and capture binder ids**
    for a solver, and core-rt.ts makes a Map for each closure, in programs
    that never solve (dice: 9). Row C169.

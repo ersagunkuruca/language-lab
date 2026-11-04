@@ -77,8 +77,9 @@ $$startPage(defs[${JSON.stringify(name)}], ${JSON.stringify(title)}${worklet});
 // with sound plays (C137d4). `lab build-web` doesn't use it for a page
 // whose sound solves (C137d7).
 // `hosts`: the program's hosts/js.js, bundled in and asked (C137d5).
-export async function webCorePage(title: string, code: Code, info: Info, names: Names, own: Id[], main: Id, hosts?: string): Promise<string> {
-  const lowered = lowerCore(code, info, names, own);
+export async function webCorePage(title: string, code: Code, info: Info, names: Names, main: Id, hosts?: string): Promise<string> {
+  // Only what main reaches (C168).
+  const lowered = lowerCore(code, info, names, [main]);
   const why = lowered.refused.get(main);
   if (why) throw new Error(`${names[main] ?? "main"} isn't compiled through the core IR: it ${why}`);
   const { build } = await esbuild();

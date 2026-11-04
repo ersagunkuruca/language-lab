@@ -455,3 +455,30 @@ test("guarded corecursion: a stream's producer surely finishes, its consumer to 
   assert.ok(p.effects(defs.last).includes(DIVERGE), p.type(defs.last));
   assert.ok(p.errors.some((m) => /node's rest|term's rest/.test(m)), p.errors.join("\n"));
 });
+
+// L224: a let's function is generic as a definition is; what it reads from
+// around it, and a let of anything else, keeps one type.
+test("a let's function is generic, as a definition is", () => {
+  const types: Record<string, Id> = {};
+  const p = program((k) => {
+    const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); types[name] = d; return d; };
+    def("same both", () => k.fn(["n"], (n) => k.let("same", k.fn(["x"], (x) => x), (same) => k.call(PAIR_V, k.call(same, n), k.call(same, k.lit("t"))))));
+    const twice = def("twice both", () => k.fn(["n"], (n) => k.let("twice", k.fn(["f", "x"], (f, x) => k.call(f, k.call(f, x))), (tw) =>
+      k.call(PAIR_V, k.call(tw, k.fn(["y"], (y) => k.call(B.add, y, k.lit(1))), n), k.call(tw, k.fn(["s"], (s) => k.text(s, k.lit("!"))), k.lit("a"))))));
+    def("near", () => k.fn(["n"], (n) => k.let("plus", k.fn(["x"], (x) => k.call(B.add, x, n)), (plus) => k.call(plus, k.lit(2)))));
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.call(twice, k.lit(3))))));
+    return main;
+  });
+  assert.deepEqual(p.errors, []);
+  assert.equal(p.type(types["same both"]), "(a) -> (a, Text)");
+  assert.equal(p.type(types["twice both"]), "(Float64) -> (Float64, Text)");
+  assert.equal(p.type(types["near"]), "(Float64) -> Float64");
+  assert.deepEqual(p.run(), ['(5, "a!!")']);
+  // A let of a value that isn't a function keeps one type.
+  const q = program((k) => {
+    const d = k.def("one type");
+    k.define(d, k.fn(["n"], (n) => k.let("xs", k.list(n), (xs) => k.call(PAIR_V, k.call(CONS, k.lit(1), xs), k.call(CONS, k.lit("t"), xs)))));
+  });
+  assert.notDeepEqual(q.errors, []);
+});
