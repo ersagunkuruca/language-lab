@@ -12,6 +12,15 @@ import * as T from "./typed.ts";
 import { edit, h } from "./dom.ts";
 import type { Doc, UI } from "./main.ts";
 
+// Does the program's own code give any node a unit? The library's don't
+// count (durations in seconds, L188b): with them every program would pay
+// for working out units, seconds on a big definition (I164).
+const declaring = new WeakMap<Code, boolean>();
+export function declaresUnits(code: Code): boolean {
+  let d = declaring.get(code);
+  if (d === undefined) declaring.set(code, (d = Object.values(code.nodes).some((x) => (x as { unit?: Unit }).unit && !LIBRARY.code.nodes[x.id])));
+  return d;
+}
 export interface SelectedHost {
   doc(): Doc;
   ui: UI;
@@ -75,12 +84,12 @@ export function selectedParts(host: SelectedHost) {
     const ty = info.typeOf.get(id), shape = ty && info.subst.resolve(ty);
     const declarable = (n.kind === "binder" && !isTypeParam(id) && (!shape || shape.t === "var" || numeric)) || (n.kind === "lit" && typeof n.value === "number");
     if (!declarable && !numeric) return null;
-    const u = (() => { try { return unitInfer(doc().code, ui.def).unit(id); } catch { return undefined; } })();
     const declared = (n as { unit?: Unit }).unit;
     // A program that declares no units (two dice, say) keeps the chooser
     // folded away: a number there is just a number.
     // Its own nodes: the library's (durations in seconds, L188b) don't count.
-    const usesUnits = !!declared || Object.values(doc().code.nodes).some((x) => (x as { unit?: Unit }).unit && !LIBRARY.code.nodes[x.id]);
+    const usesUnits = !!declared || declaresUnits(doc().code);
+    const u = usesUnits ? (() => { try { return unitInfer(doc().code, ui.def).unit(id); } catch { return undefined; } })() : undefined;
     if (!usesUnits && !declarable) return null;
     const box = h(usesUnits ? "div" : "details", usesUnits ? {} : { class: "alts units" }, usesUnits ? h("div", { class: "sub-head" }, "Unit · part of its type") : h("summary", {}, "Give it a unit (m, s, kg…)"),
       h("p", { class: "hint" }, declared ? `Declared ${formatUnit(declared)}.` : u ? `Inferred ${formatUnit(u)} from what it's connected to.` : n.kind === "lit" ? "A plain number." : "Free: nothing pins it down yet, so it fits anywhere."));
