@@ -103,7 +103,8 @@ ask him before E work starts.
 - **L208e** (with L204b; e1 done: a literal at Complex or Dual is map(x) of the embedding from Float64, a plain call of `as complex` or `as dual`, so a shader still lowers it; at Rational, Algebraic and Fixed a literal is their Literal implementation's since L204d, so arith.ts builds no number's constructor). Literals as the embedding from Int, and from
   fractions into anything with ÷; `DATA_NUMBERS` and the per-type literal
   constructors in arith.ts go.
-- **L208f** (Compiler lane, after L43c). An embedding is a representation
+- **L208g** (done). Searches see the lifts: relate's evaluator resolves the resolved code again, and the lifts are no longer listed by then, so none is wrapped twice; a named map is called by name.
+- **L208f** (now L209's first step; Compiler lane, after L43c). An embedding is a representation
   of B by A with meaning ι: the compiler keeps a B that stays in the image
   as an A. Needs the image analysis that grade masks do by name (which
   cases of a value can be non-zero); grade masks become its first user.

@@ -10,7 +10,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
-import { Cells, listEdits, type Lists, type Step } from "../src/lang/cells.ts";
+import { Cells, listEdits, meets, type Lists, type Step } from "../src/lang/cells.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
@@ -251,3 +251,27 @@ test("compiled JavaScript applies the same edits", async () => {
 
 const isUnder = (p: ReturnType<typeof program>, d: Id, id: Id) => subtree(p.code, d).includes(id);
 const listOf = (v: Value): Value[] => { const out: Value[] = []; let l = v as unknown as { fields: Value[] }; while (l.fields.length) { out.push(l.fields[0]); l = l.fields[1] as unknown as { fields: Value[] }; } return out; };
+
+// ---------------------------------------------------------------- paths the compiler works out (C162)
+
+test("meets: a change at, around or inside a path meets it; `*/` is any item, and `=` leaves out changes inside", () => {
+  assert.ok(meets("f0/i2/", "f0/") && meets("f0/i2/", "f0/i2/f1/") && !meets("f0/i2/", "f0/i3/"));
+  assert.ok(meets("f0/*/f1/", "f0/i7/f1/") && meets("f0/*/f1/", "f0/i7/") && meets("f0/*/f1/", "f0/") && meets("f0/*/f1/", "f0/i7/f1/f0/"));
+  assert.ok(!meets("f0/*/f1/", "f0/i7/f2/") && !meets("f0/*/f1/", "f1/"));
+  assert.ok(meets("f0/=", "f0/") && meets("f0/=", "") && !meets("f0/=", "f0/i3/") && !meets("f0/=", "f0/i3/f1/"));
+  assert.ok(meets("f0/*/=", "f0/i3/") && !meets("f0/*/=", "f0/i3/f0/"));
+});
+
+test("readPaths: a reader of every item's title and the list's length wakes for a title or an insert, not for a done tick", () => {
+  const c = new Cells(same);
+  const todos = c.cell([item("milk"), item("bread"), item("eggs")] as unknown as Value);
+  let titles = 0, whole = 0;
+  c.watch(() => { c.readPaths(todos, ["=", "*/f0/"]); titles++; });
+  c.watch(() => { c.read(todos); whole++; });
+  c.edit(todos, [{ item: 1 }, { field: 1 }], () => true as unknown as Value, arrays);
+  assert.deepEqual([titles, whole], [1, 2]);
+  c.edit(todos, [{ item: 2 }, title], () => "ham", arrays);
+  assert.deepEqual([titles, whole], [2, 3]);
+  c.edit(todos, [], (xs) => [...(xs as unknown as Value[]), item("tea")] as unknown as Value, arrays, { at: [], kind: "insert", i: 3 });
+  assert.deepEqual([titles, whole], [3, 4]);
+});
