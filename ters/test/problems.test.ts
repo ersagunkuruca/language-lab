@@ -9,7 +9,7 @@ import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { PROBLEMS, problemOf } from "../src/lang/problems.ts";
 import { NUMBER } from "../src/lang/types.ts";
-import { ARITH, FALSE, INT_OPS, LOG_OP, S, SOME, TRUE } from "../src/lang/std.ts";
+import { ARITH, FALSE, FIELDS, INT_OPS, JSON_OPS, LOG_OP, S, SOME, TRUE } from "../src/lang/std.ts";
 
 const bools = (k: Lang, b: string, extra: Parameters<Lang["match"]>[1] = []) =>
   k.match(b, [{ variant: TRUE, names: [], body: () => k.lit(1) }, { variant: FALSE, names: [], body: () => k.lit(2) }, ...extra]);
@@ -38,6 +38,9 @@ const SMALLEST: Record<string, (k: Lang) => void> = {
   "answer-not-one": (k) => { const a = ask(k); k.define(k.def("p"), k.thunk(() => k.handle(k.call(a.op.ask), answered(k, a, () => k.call(S.oneOf, k.list(k.lit(1), k.lit(2))))))); },
   "no-implementation": (k) => { const t = k.type("Colour", [], [["red", []], ["blue", []]]); k.define(k.def("p"), k.call(ARITH.add, k.x(t.v.red), k.x(t.v.blue))); },
   "type-as-value": (k) => k.define(k.def("p"), k.x(NUMBER)),
+  "fields-type-unknown": (k) => k.define(k.def("p"), k.fn(["v"], (v) => k.call(FIELDS.listed, v))),
+  "json-type-unknown": (k) => k.define(k.def("p"), k.fn(["v"], (v) => k.call(JSON_OPS.of, v))),
+  "private-to-library": (k) => k.define(k.def("p"), k.x("std.rational.ratio")),
 };
 
 test("every problem has its smallest program, and its message is that row's alone", () => {
