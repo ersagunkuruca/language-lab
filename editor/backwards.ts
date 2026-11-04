@@ -16,6 +16,7 @@ import type { Saved } from "../ters/src/lang/tests.ts";
 import { formatUnit, infer as unitInfer } from "../ters/src/units.ts";
 import type * as T from "./typed.ts";
 import { h } from "./dom.ts";
+import { declaresUnits } from "./selectedParts.ts";
 import { newWorker } from "./runViews.ts";
 import { searchBackwards, type BackAsk, type Found } from "./backSearch.ts";
 import { programText, type Step } from "./solverText.ts";
@@ -214,7 +215,7 @@ export function backwards(host: BackHost) {
       const f = forward();
       if (f) r = { ...r, answers: f.answers };
     }
-    const units = (() => { try { return unitInfer(doc().code, ui.def); } catch { return null; } })();
+    const units = declaresUnits(doc().code) ? (() => { try { return unitInfer(doc().code, ui.def); } catch { return null; } })() : null;
     const unitOf = (p: Id) => { const u = p === "out" ? null : units?.unit(p); return u && Object.keys(u).length ? ` ${formatUnit(u)}` : ""; };
     if (pixelSeed(ui.def) && !doc().examples?.[ui.def]) box.append(h("p", { class: "hint" }, "The picture above is this function at every pixel. Here it runs at one of them: change x, y or time to look at another."));
     box.append(h("p", { class: "hint" }, pred
