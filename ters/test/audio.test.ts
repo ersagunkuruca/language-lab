@@ -206,7 +206,7 @@ test("the pedal page's worklet from the core IR plays the pedal, and the page's 
   assert.deepEqual(said, []);
   // And `lab build-web` makes the pedal's page from the core IR, carrying
   // it, and it draws what compile.ts's draws.
-  const html = await webCorePage("Pedal", p.code, p.info, p.names, [page], page);
+  const html = await webCorePage("Pedal", p.code, p.info, p.names, page);
   assert.match(html, /registerProcessor/);
   // (The same points: both run compile.ts's plan for atanh backwards,
   // C137d8.)
@@ -252,7 +252,7 @@ test("a core IR page and worklet made without a bundler play and draw what the b
   const worklet = await coreWorkletRuntime();
   assert.deepEqual(play(coreWorkletFile(worklet, ir, p.names[page])), play(await coreSoundWorklet(ir, p.names[page])));
   const file = corePageFile("Pedal", await corePageRuntime(), p.code, p.info, p.names, [page], page, worklet);
-  assert.equal(drawn(file), drawn(await webCorePage("Pedal", p.code, p.info, p.names, [page], page)));
+  assert.equal(drawn(file), drawn(await webCorePage("Pedal", p.code, p.info, p.names, page)));
 });
 
 // L60: main may read the clock and draw random numbers on a page with
@@ -286,7 +286,7 @@ test("a core IR page with sound and hosts/js.js: its audio thread asks the host 
   assert.deepEqual([...out[0]], [...Float32Array.from(playBlocks(await soundOf(p, main, "core"), [...input], 128).out)]);
   assert.equal(scope.asked, 1);
   // And the page itself is the core IR's, its worklet with it.
-  assert.match(await webCorePage("Pedal", code, info, names, [powered], powered, hosts), /registerProcessor/);
+  assert.match(await webCorePage("Pedal", code, info, names, powered, hosts), /registerProcessor/);
 });
 
 test("a page with sound may read the clock and draw random numbers in main: the audio thread is answered the same", async () => {
