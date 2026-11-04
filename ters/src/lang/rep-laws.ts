@@ -39,7 +39,7 @@ export function representationLaws(code: Code, info: Info, names: Names, reps: R
   const first = (xs: Iterable<Value>) => { for (const x of xs) return x; throw new Error("no answer"); };
   // A job with no inputs (zero, nil) is a value.
   const call = (fn: Id, args: Value[]): Value => { const f = r.value(fn); return !args.length && typeof f !== "function" ? f : first(r.call(f, ...args) as Iterable<Value>); };
-  const show = (v: Value) => showValue(v, code, names);
+  const show = (v: Value) => showValue(v, code, names, false, r.shown);
   const out: LawResult[] = [];
   for (const rep of reps) {
     if (!rep.meaning || rep.type === rep.of) continue;

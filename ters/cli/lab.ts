@@ -320,14 +320,7 @@ switch (command) {
       if (why && rest.includes("--core")) fail(`${p.names[main] ?? "main"} isn't compiled through the core IR: it ${why}`);
       if (why) { process.stderr.write(`lab: ${p.names[main] ?? "main"} isn't compiled through the core IR (it ${why}), so through compile.ts\n`); return compiled(p, main, inCheckout); }
       const here = (f: string) => resolve(import.meta.dirname, f);
-      const src = coreModule(lowered, p.names[main] ?? "main", here("../../compiler/src/core-rt.ts"), here("../src/lang/world.ts"));
-      // A program that solves runs the evaluator's solver (core-solve.ts),
-      // which carries the whole library (about 6 MB); compile.ts's bundle
-      // carries only what it uses, so it makes those until the core IR
-      // solves on its own (C137d2).
-      if (!src.includes("/core-solve.ts\"") || rest.includes("--core")) return src;
-      process.stderr.write(`lab: ${p.names[main] ?? "main"} solves through the evaluator's solver on the core IR, which carries the library, so it is compiled through compile.ts\n`);
-      return compiled(p, main, inCheckout);
+      return coreModule(lowered, p.names[main] ?? "main", here("../../compiler/src/core-rt.ts"), here("../src/lang/world.ts"));
     };
     if (esbuild) {
       await esbuild.build({
