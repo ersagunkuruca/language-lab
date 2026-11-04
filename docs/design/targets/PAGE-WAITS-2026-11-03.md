@@ -7,8 +7,8 @@ but with C137c22's continuations: a handler's type with Wait or Await
 takes the rest of its run last (scalar.ts FType `waits`), and the world's
 wait keeps that rest in its Pending, so html.ts lands the stretch and runs
 the rest later as the evaluator's does (core-rt.ts `worldFn`; test
-compiler/test/page-waits-core.test.ts). Not yet: compile.ts's pages (its
-own way out, C137d), a main that waits on the core IR, and a wait inside
+compiler/test/page-waits-core.test.ts); a main that waits too (C40e2). Not yet: compile.ts's pages (its
+own way out, C137d) and a wait inside
 a search or `with fuel`, which are refused by name.
 
 C40's last open piece: an event handler on a page that waits, as in

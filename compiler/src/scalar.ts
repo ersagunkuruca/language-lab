@@ -2431,9 +2431,6 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
   for (const r of roots) {
     const from = funcs.length, shaped = shapes.length;
     const raw = info.typeOf.get(r) && info.subst.zonk(info.typeOf.get(r)!), given = defaults(r);
-    // Only a page handler goes on from a wait here (C40 step 4): a main
-    // that waits is compile.ts's yet.
-    if (raw?.t === "fn" && info.subst.resolveRow(raw.eff).effs.some((e) => e === WAIT || e === AWAIT)) { refused.set(r, "waits, which only a page's handler does on the core IR yet"); continue; }
     rootVars = new Set(raw ? vars(raw).filter((v) => !given.has(v)) : []);
     try { func(r, given); several_(from); modCons(from); } catch (e) {
       if (!(e instanceof Refused)) throw e;

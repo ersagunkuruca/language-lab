@@ -311,14 +311,20 @@ export const coreCall = (f: Value, ...xs: Value[]): Value => {
 
 // What running a main needs to know of it: whether it takes the
 // arguments, and what it gives.
-export interface MainSpec { args: boolean; result: "f64" | "int" | "other" }
+// `rest`: it takes the rest of its run last (a main that waits, C40), given
+// one that keeps the answer.
+export interface MainSpec { args: boolean; result: "f64" | "int" | "other"; rest?: true }
 // Runs a main as wasm.ts's runMain does: given the arguments as a List of
 // Texts if it takes them; an abort or a stop nobody handles is written to
 // standard error, and the exit code is 1.
 export function runCoreFn(fn: (...xs: unknown[]) => unknown, m: MainSpec, args: string[], rt: Runtime): number {
   const err = rt.world?.error ?? rt.print;
   let v: unknown;
-  try { v = fn(...(m.args ? [toList(args)] : [])); } catch (e) {
+  try {
+    const xs = m.args ? [toList(args)] : [];
+    if (m.rest) fn(...xs, (x: unknown) => { v = x; return true; });
+    else v = fn(...xs);
+  } catch (e) {
     if (e instanceof Aborted) { err(String(e.reason)); return 1; }
     if (e instanceof Stopped) { err(e.message); return 1; }
     if (e === FAIL) throw new Error("main had no answer");
