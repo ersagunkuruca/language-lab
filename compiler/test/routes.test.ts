@@ -15,7 +15,7 @@ import { country, ways, type Name } from "../gaps/routes.ts";
 const w = await ways();
 const all = (args: string[], files: Record<string, string>, slow = false) => {
   const want = w.ideal(args, files);
-  const others: Name[] = slow ? ["compiled", "compiled, trees"] : ["evaluator", "evaluator, trees", "compiled", "compiled, trees"];
+  const others: Name[] = slow ? ["compiled", "compiled, trees", "core, trees", "core, table"] : ["evaluator", "evaluator, trees", "compiled", "compiled, trees", "core, trees", "core, table"];
   for (const way of others) assert.deepEqual(w[way](args, files), want, way);
   return want;
 };
