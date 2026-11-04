@@ -391,6 +391,10 @@ Bytes are a sequence of whole numbers from 0 to 255, for binary formats, files, 
 - **byte count** : `(Bytes) -> Int`. How many bytes there are.
 - **utf8 of** : `(Text) -> Bytes`. The text's UTF-8 bytes (RFC 3629): each character's code point in one to four bytes. utf8 of("é") is [195, 169].
 - **text of utf8** : `(Bytes) -[Abort]-> Text`. The text UTF-8 bytes spell, the other way from utf8 of. Stops on bytes that aren't UTF-8: a following byte where a character starts, or the bytes ending inside a character.
+- **base64 of** : `(Bytes) -> Text`. The bytes as Base64 text (RFC 4648): every three bytes as four characters from A to Z, a to z, 0 to 9, + and /, with = filling the last group: base64 of(utf8 of("hi")) is "aGk=".
+- **bytes of base64** : `(Text) -[Abort]-> Bytes`. The bytes a Base64 text holds, the other way from base64 of. Stops on a character Base64 hasn't.
+- **hex of** : `(Bytes) -> Text`. The bytes as hex text, two digits a byte: hex of(bytes of([0, 255])) is "00ff".
+- **bytes of hex** : `(Text) -[Abort]-> Bytes`. The bytes a hex text holds, two digits a byte in either case. Stops on anything else.
 
 ## JSON
 

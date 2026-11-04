@@ -2204,7 +2204,59 @@ export function buildPrelude(): Module {
     ], k.call(cRows, r, f, row, rows)), k.call(cQuote, r, k.call(S.concat, f, c), row, rows)) },
   ])));
   const csvRows = def("csv rows", ["text"], (t) => k.call(cRows, k.call(TEXT_OPS.characters, t), k.lit(""), k.x(NIL), k.x(NIL)));
-  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, spaced, optionalParens, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, determinant, inverted, leastSquares, tensorOf, tensorShape, tensorItems, rank, tensorSize, tensorEntry, tensorMap, tensorZipWith, reshaped, contracted, transposedBy, traced, bytesOf, byteItems, byteCount, utf8Of, textOfUtf8, jsonPrinted, jsonRead, jsonField, jsonAsNumber, jsonAsText, jsonAsBool, jsonAsList, csvPrinted, csvRows, dateOf, dateYear, dateMonth, dateDay, leapYear, daysInMonth, dayNumber, dateOfDay, weekday, addedDays, daysBetween, dateText, dateRead, withState, changeState, piped, ticketId, ...wordMakers, anyOf, together, race, within, simulated, near];
+  // Bytes as text (L189d): hex, two digits a byte, and Base64 (RFC 4648 §4),
+  // three bytes as four characters, = filling the last group.
+  const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  const b64At = (i: Id) => k.call(itemAt, jChars(B64), i, k.lit("="));
+  const sh = (a: Id, n: number) => k.call(INT_OPS.shiftDown, a, k.int(n)), band = (a: Id, m: number) => k.call(INT_OPS.bitAnd, a, k.int(m));
+  const b64Groups = k.def("base64 groups");
+  k.define(b64Groups, k.fn(["bytes"], (xs) => k.match(xs, [
+    { variant: NIL, names: [], body: () => k.x(NIL) },
+    { variant: CONS, names: ["first", "after first"], body: ([a, r1]) => k.match(r1, [
+      { variant: NIL, names: [], body: () => k.list(b64At(sh(a, 2)), b64At(iMul(band(a, 3), k.int(16))), k.lit("="), k.lit("=")) },
+      { variant: CONS, names: ["second", "after second"], body: ([b, r2]) => k.match(r2, [
+        { variant: NIL, names: [], body: () => k.list(b64At(sh(a, 2)), b64At(iAdd(iMul(band(a, 3), k.int(16)), sh(b, 4))), b64At(iMul(band(b, 15), k.int(4))), k.lit("=")) },
+        { variant: CONS, names: ["third", "rest"], body: ([c, r3]) => k.call(append, k.list(b64At(sh(a, 2)), b64At(iAdd(iMul(band(a, 3), k.int(16)), sh(b, 4))),
+          b64At(iAdd(iMul(band(b, 15), k.int(4)), sh(c, 6))), b64At(band(c, 63))), k.call(b64Groups, r3)) },
+      ]) },
+    ]) },
+  ])));
+  const base64Of = def("base64 of", ["bytes"], (b) => bytesIn(b, (xs) => k.call(TEXT_OPS.joinAll, k.call(b64Groups, xs), k.lit(""))));
+  const b64Bad = () => k.call(ABORT_OP, k.lit("bytes of base64: only A to Z, a to z, 0 to 9, + and /, with = at the end"));
+  const b64Value = (c: Id) => k.match(k.call(positionOf, jChars(B64), c), [
+    { variant: NONE, names: [], body: () => b64Bad() },
+    { variant: SOME, names: ["value"], body: ([i]) => i },
+  ]);
+  const b64Bytes = k.def("base64 bytes");
+  // Four values make three bytes; two or three at the end, one or two.
+  k.define(b64Bytes, k.fn(["values"], (vs) => k.match(vs, [
+    { variant: NIL, names: [], body: () => k.x(NIL) },
+    { variant: CONS, names: ["first", "after first"], body: ([v0, r1]) => k.match(r1, [
+      { variant: CONS, names: ["second", "after second"], body: ([v1, r2]) => k.let("byte one", iAdd(iMul(v0, k.int(4)), sh(v1, 4)), (x) => k.match(r2, [
+        { variant: NIL, names: [], body: () => k.list(x) },
+        { variant: CONS, names: ["third", "after third"], body: ([v2, r3]) => k.let("byte two", iAdd(iMul(band(v1, 15), k.int(16)), sh(v2, 2)), (y) => k.match(r3, [
+          { variant: NIL, names: [], body: () => k.list(x, y) },
+          { variant: CONS, names: ["fourth", "rest"], body: ([v3, r4]) => k.call(CONS, x, k.call(CONS, y, k.call(CONS, iAdd(iMul(band(v2, 3), k.int(64)), v3), k.call(b64Bytes, r4)))) },
+        ])) },
+      ])) },
+    ], b64Bad()) },
+  ])));
+  const bytesOfBase64 = def("bytes of base64", ["text"], (t) => Bt(k.call(b64Bytes, k.call(map, k.call(keep, k.call(TEXT_OPS.characters, t), k.fn(["character"], (c) => k.call(S.not, jIs(c, "=")))), k.fn(["character"], (c) => b64Value(c))))));
+  const hexOf = def("hex of", ["bytes"], (b) => bytesIn(b, (xs) => k.call(TEXT_OPS.joinAll, k.call(map, xs, k.fn(["byte"], (x) => texts(hexAt(sh(x, 4)), hexAt(band(x, 15))))), k.lit(""))));
+  const hexBad = () => k.call(ABORT_OP, k.lit("bytes of hex: two hex digits a byte, 0 to 9 and a to f"));
+  const hexValue = (c: Id) => k.match(k.call(positionOf, jChars("0123456789abcdef"), k.call(lowercase, c)), [
+    { variant: NONE, names: [], body: () => hexBad() },
+    { variant: SOME, names: ["value"], body: ([i]) => i },
+  ]);
+  const hexBytes = k.def("hex bytes");
+  k.define(hexBytes, k.fn(["digits"], (ds) => k.match(ds, [
+    { variant: NIL, names: [], body: () => k.x(NIL) },
+    { variant: CONS, names: ["high", "after high"], body: ([h, r]) => k.match(r, [
+      { variant: CONS, names: ["low", "rest"], body: ([l, rest]) => k.call(CONS, iAdd(iMul(hexValue(h), k.int(16)), hexValue(l)), k.call(hexBytes, rest)) },
+    ], hexBad()) },
+  ])));
+  const bytesOfHex = def("bytes of hex", ["text"], (t) => Bt(k.call(hexBytes, k.call(TEXT_OPS.characters, t))));
+  const offered: Id[] = [extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, spaced, optionalParens, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, determinant, inverted, leastSquares, tensorOf, tensorShape, tensorItems, rank, tensorSize, tensorEntry, tensorMap, tensorZipWith, reshaped, contracted, transposedBy, traced, bytesOf, byteItems, byteCount, utf8Of, textOfUtf8, base64Of, bytesOfBase64, hexOf, bytesOfHex, jsonPrinted, jsonRead, jsonField, jsonAsNumber, jsonAsText, jsonAsBool, jsonAsList, csvPrinted, csvRows, dateOf, dateYear, dateMonth, dateDay, leapYear, daysInMonth, dayNumber, dateOfDay, weekday, addedDays, daysBetween, dateText, dateRead, withState, changeState, piped, ticketId, ...wordMakers, anyOf, together, race, within, simulated, near];
   // Each number's own show, from before the generic one showed every number
   // (L153, L156): kept so programs saved before still open, not offered.
   const perTypeShows = [showF, showC, showD, showX];
@@ -2371,6 +2423,10 @@ export function buildPrelude(): Module {
     [csvPrinted]: "Rows of fields as CSV text (RFC 4180), a line each: a field with a comma, a quote or a line break is quoted, its quotes doubled.",
     [csvRows]: "The rows of fields a CSV text holds (RFC 4180), the other way from csv printed: quoted fields may hold commas, doubled quotes and line breaks; lines end in LF or CRLF. Stops when the text ends inside a quoted field.",
     [jsonPrinted]: "The JSON text of a Json value (RFC 8259): json printed(json object([(\"a\", json list([json number(1), json null]))])) is {\"a\":[1,null]}. Text is quoted with \", \\ and control characters escaped.",
+    [base64Of]: "The bytes as Base64 text (RFC 4648): every three bytes as four characters from A to Z, a to z, 0 to 9, + and /, with = filling the last group: base64 of(utf8 of(\"hi\")) is \"aGk=\".",
+    [bytesOfBase64]: "The bytes a Base64 text holds, the other way from base64 of. Stops on a character Base64 hasn't.",
+    [hexOf]: "The bytes as hex text, two digits a byte: hex of(bytes of([0, 255])) is \"00ff\".",
+    [bytesOfHex]: "The bytes a hex text holds, two digits a byte in either case. Stops on anything else.",
     [bytesOf]: "The bytes with these items, each a whole number from 0 to 255: bytes of([104, 105]) is the bytes of \"hi\". Stops when an item isn't a byte.",
     [byteItems]: "The bytes as their list of Ints, each 0 to 255.",
     [byteCount]: "How many bytes there are.",
