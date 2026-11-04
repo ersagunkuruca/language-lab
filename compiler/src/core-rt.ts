@@ -347,9 +347,12 @@ export function coreRuntime(tables: TableSpec[], worlds: string[], rt: Runtime, 
   // A read the compiler followed (cell-paths.ts, C162): it waits on the
   // places its value is used at only.
   const readPaths = (n: string) => {
-    const keys = n.slice("readPaths:".length).split(",");
+    // `readPaths:<needed>|<kept>`: the places a formula's answer holds as
+    // they are after the bar (C162c).
+    const [need, keep] = n.slice("readPaths:".length).split("|");
+    const keys = need.split(","), kept = keep ? keep.split(",") : [];
     held.knowLists(LIST_SHAPE);
-    return (c: unknown) => { try { return held.readPaths(c as Value, keys); } catch (e) { if (e instanceof NoValue) throw FAIL; throw e; } };
+    return (c: unknown) => { try { return held.readPaths(c as Value, keys, kept); } catch (e) { if (e instanceof NoValue) throw FAIL; throw e; } };
   };
   const timers = worldTimers((m) => { throw new Aborted(m, 0); });
   let spend = () => true;
