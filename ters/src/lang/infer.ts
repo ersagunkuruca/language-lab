@@ -39,6 +39,7 @@ import {
 const FILE_OP_IDS = new Set<Id>(Object.values(FILE_OPS));
 import { DECLARED, discharge } from "./ledger.ts";
 import type { CheckCache } from "./check-cache.ts";
+import { sizeChangeCloses, spineTerminates, type Arc, type CallGraph } from "./spine.ts";
 
 // The searches: they run a function on paths they may abandon or repeat, so
 // its row holds no world effect (std.ts searchRow) and is inside the call's.
@@ -1834,7 +1835,6 @@ function trefTargetsIn(code: Code, tid: Id, out = new Set<Id>()): Set<Id> {
 // Passing a function of the group around as a value counts as possibly
 // divergent. An Int counted towards a bound its guard compares it with
 // (counting.ts, L46) strictly shrinks too: its distance to the bound does.
-type Arc = [from: number, to: number, strict: boolean];
 // The definitions a representation row names as its match (`match by`).
 const matchers = new WeakMap<object, Set<Id>>();
 // What is kept by a nodes object, forgotten when it changes (fillings).
@@ -1852,7 +1852,6 @@ function matchersOf(code: Code): Set<Id> {
   }
   return m;
 }
-interface CallGraph { from: Id; to: Id; arcs: Arc[] }
 // What a representation's match gives its cases as the rest, made from its
 // input by one function (`list tree without first(tree)`, `rest of
 // array(a)`): a piece of that input. Where the match is put in place
@@ -1978,6 +1977,11 @@ function appliesTo(code: Code, c: Id): Applies {
 // `lambdaOf`: the function each member is, a definition's body by default
 // (a recursive let's binder names its lambda).
 function terminates(code: Code, group: Id[], lambdaOf = (d: Id) => { const body = (code.nodes[d] as NodeOf<"def">).body; return body ? code.nodes[body] : null; }): boolean {
+  // By pieces first; then by spines, which follows a list through a
+  // function's result (spine.ts, I84).
+  return byPieces(code, group, lambdaOf) || spineTerminates(code, group, lambdaOf);
+}
+function byPieces(code: Code, group: Id[], lambdaOf: (d: Id) => Node | null): boolean {
   const inGroup = new Set(group);
   const graphs: CallGraph[] = [];
   for (const d of group) {
@@ -2068,29 +2072,7 @@ function terminates(code: Code, group: Id[], lambdaOf = (d: Id) => { const body 
     if (!ok) return false;
   }
 
-  const norm = (from: Id, to: Id, arcs: Arc[]): CallGraph => {
-    const best = new Map<string, Arc>();
-    for (const [i, j, strict] of arcs) {
-      const k = `${i},${j}`;
-      best.set(k, [i, j, strict || (best.get(k)?.[2] ?? false)]);
-    }
-    return { from, to, arcs: [...best.values()].sort((a, b) => a[0] - b[0] || a[1] - b[1]) };
-  };
-  const key = (g: CallGraph) => `${g.from}\u0000${g.to}\u0000${g.arcs.map((a) => a.join(",")).join(";")}`;
-  const compose = (g: CallGraph, h: CallGraph) =>
-    norm(g.from, h.to, g.arcs.flatMap(([i, j, s1]) => h.arcs.filter(([k]) => k === j).map(([, l, s2]): Arc => [i, l, s1 || s2])));
-  const all = new Map<string, CallGraph>();
-  const todo = graphs.map((g) => norm(g.from, g.to, g.arcs));
-  while (todo.length) {
-    const g = todo.pop()!;
-    if (all.has(key(g))) continue;
-    all.set(key(g), g);
-    for (const h of [...all.values()]) {
-      if (g.to === h.from) todo.push(compose(g, h));
-      if (h.to === g.from) todo.push(compose(h, g));
-    }
-  }
-  return [...all.values()].every((g) => g.from !== g.to || key(compose(g, g)) !== key(g) || g.arcs.some(([i, j, strict]) => i === j && strict));
+  return sizeChangeCloses(graphs);
 }
 
 // ---------------------------------------------------------------- editor API

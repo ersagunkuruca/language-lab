@@ -67,15 +67,35 @@ This goes against "everything is one system".
    and in JS a number kept by `>>> 0` (u64 in JS stays BigInt with
    `BigInt.asUintN`, or two halves, whichever measures faster). Reading the
    field as an Int widens it (zero-extend). Building the record narrows it,
-   which is free because the bound is proved.
+   which is free because the bound is proved. Done for 32 bits (C150e, with
+   step 3): compiler/src/machine-words.ts, run by lowerScalar for
+   WebAssembly and C. A record's field under 2³² is an i32 holding the
+   bits (Word8, Word16 and Word32), and a local let to it is one too. Core
+   JS keeps the evaluator's values, which its host reads, so it is left
+   out; Word64 stays an Int, since a word past 2⁶³ fits neither target's
+   i64 (left for C150g).
 3. **Mask after an op becomes the wrapping op.** `bitAnd(add(a, b), 2ⁿ−1)`
    with a and b words gives `a + b` on the word, and the same for subtract,
-   multiply, negate and shift up. Then the Int in between is never made.
+   multiply, negate and shift up. Then the Int in between is never made. Done
+   (C150f) for Word32's + − ×, negate, both shifts (a runtime function
+   taking the Int count), and, or, xor and `less` (step 4's compare, as
+   i32.lt_u). Word8's and Word16's masks are narrower, so their + − × still
+   go through the Int. One million FNV-1a steps (with an Int counter):
+   WebAssembly 150 → 51 ms, C 63 → 12.5 ms including the process start.
+   What is left on WebAssembly is the Int counter and a struct made per
+   word.
 4. **Show and compare.** `less` on two words is the unsigned compare, and
-   show widens to Int as now.
+   show widens to Int as now. Done with step 3. Then (C150g) a record of
+   one word is that word, so no struct is made for it (its make and get
+   are nothing, and every type that names it names i32), and any Int
+   masked to 32 bits is kept to its low bits without the and
+   (`word32.wrap`: an i31's or i64's own, a $huge's lowest limb). The
+   loop: WebAssembly 51 → 12 ms, C 12.5 → 10 ms with the process start.
+   The 2 ms over the gate on WebAssembly is the loop's Int counter.
 5. **Gate.** The FNV-1a loop at 32 bits under 10 ms on WASM and C, with
    words.test.ts's published hashes on every target. Stop when the next
-   step buys less than 10%.
+   step buys less than 10%. Left: Word64 as an i64 (a word past 2⁶³ widened through
+   limbs), and Word8's and Word16's narrower masks on their + − ×.
 
 Steps 1 to 3 each make one merged PR. Nothing here changes the language,
 the std words, or what a program means, so no decision is needed from

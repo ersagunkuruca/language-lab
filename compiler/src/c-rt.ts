@@ -359,6 +359,13 @@ const FNS: Record<string, Fn> = {
   "int.bitAnd": { uses: ["int.bits"], c: `static lab_int lab_int_bitAnd(lab_int a, lab_int b) { return lab__int_bits(a, b, 0); }` },
   "int.bitOr": { uses: ["int.bits"], c: `static lab_int lab_int_bitOr(lab_int a, lab_int b) { return lab__int_bits(a, b, 1); }` },
   "int.bitXor": { uses: ["int.bits"], c: `static lab_int lab_int_bitXor(lab_int a, lab_int b) { return lab__int_bits(a, b, 2); }` },
+  // A 32-bit machine word (C150e, machine-words.ts) held in an int32_t,
+  // read unsigned: as an Int, from an Int known to fit, and shifted down
+  // by an Int n (up when n is negative), kept to 32 bits.
+  "word32.widen": { uses: [], c: `static lab_int lab_word32_widen(int32_t x) { return LAB_SMALL((int64_t)(uint32_t)x); }` },
+  "word32.narrow": { uses: [], c: `static int32_t lab_word32_narrow(lab_int x) { int32_t r = LAB_IS_SMALL(x) ? (int32_t)(uint32_t)LAB_VAL(x) : 0; lab_int_drop(x); return r; }` },
+  "word32.wrap": { uses: [], c: `static int32_t lab_word32_wrap(lab_int x) { uint32_t r = LAB_IS_SMALL(x) ? (uint32_t)LAB_VAL(x) : LAB_BIG(x)->n ? (LAB_BIG(x)->neg ? 0u - LAB_BIG(x)->d[0] : LAB_BIG(x)->d[0]) : 0u; lab_int_drop(x); return (int32_t)r; }` },
+  "word32.shiftDown": { uses: [], c: `static int32_t lab_word32_shiftDown(int32_t x, lab_int n) { int64_t k = lab__clamp(n); lab_int_drop(n); return k >= 32 || k <= -32 ? 0 : k >= 0 ? (int32_t)((uint32_t)x >> k) : (int32_t)((uint32_t)x << -k); }` },
   // floor(a / 2ⁿ), a negative n shifting up (int.ts shiftDown, C150b):
   // a 64-bit shift when both are small and n ≥ 0, else floor division by
   // 2ⁿ (or · 2⁻ⁿ); past a's last limb only its sign is left.

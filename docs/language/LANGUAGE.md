@@ -620,6 +620,19 @@ recursion, and rejects "ping-pong" recursion, where each call shrinks one
 argument while growing the other. A let (a dot) is transparent: naming the
 smaller piece keeps it the smaller piece.
 
+When pieces can't show it, the check tries lengths (I84, `src/lang/spine.ts`).
+A value's spine is how many constructors it has along the fields of its own
+type (a list's length, a tree's node count), and each definition's result,
+or each field of a pair or record it gives back, is read as no longer (or
+shorter) than some of its inputs. Bounce's `bump into each(space, body,
+others)` gives back `(body', others')` with `others'` rebuilt one cons per
+cons, so as long as `others`; `bump pairs` recurs on that `others'`, which
+is no piece of anything but is shorter than the list it took apart. A
+recursive definition's reading is the largest one its own cases keep, and
+the same size-change check runs on these sizes. It is a small case of
+sized types (Hughes, Pareto and Sabry, 1996), worked out rather than
+written.
+
 A count is a measure too (L46). A function that calls itself with an
 `Int` input moved by a positive whole number, `steps + 1`, under a test
 that compares it with a bound the call keeps (`steps < 120`, or the

@@ -56,6 +56,7 @@
 import { FDLIBM_C } from "./c-math.ts";
 import { BASE, cName, POSIX, RESERVED, RT_C, runtimeC, WORLD_H, type ListNames } from "./c-rt.ts";
 import { runtime } from "./wasm-rt.ts";
+const UOPS: Partial<Record<Op, string>> = { uadd: "+", usub: "-", umul: "*", uand: "&", uor: "|", uxor: "^" };
 import { STOPS } from "./stops.ts";
 import { fails, listSteps, isArray, isTable, isData, isFn, isRecord, kids, mapKids, OPS, type AType, type TType, type DType, type FType, type LType, type CoreIR, type Op, type RType, type SExpr, type SFunc } from "./scalar.ts";
 
@@ -823,6 +824,10 @@ int main(int argc, char **argv) {
           if (e.op === "mod") return `lab_mod(${xs.join(", ")})`;
           if (e.op === "stop") return `lab_stop(${xs[0]})`;
           if (e.op === "itof") return `((double)${xs[0]})`;
+          // A 32-bit machine word (C150f): wrapping, compared unsigned.
+          if (UOPS[e.op]) return `((int32_t)((uint32_t)${xs[0]} ${UOPS[e.op]} (uint32_t)${xs[1]}))`;
+          if (e.op === "uneg") return `((int32_t)(0u - (uint32_t)${xs[0]}))`;
+          if (e.op === "uless") return `((uint32_t)${xs[0]} < (uint32_t)${xs[1]})`;
           if (INT32_C[e.op]) { int32Used.add(e.op); return `lab_${e.op}(${xs.join(", ")})`; }
           if (OPS[e.op].t === "int32") throw new Error(`an Int's ${e.op} in 32 bits isn't in C yet`);
           return `${LIBM[e.op] ?? LIBRARY[e.op]}(${xs.join(", ")})`;
