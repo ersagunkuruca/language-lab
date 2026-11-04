@@ -116,7 +116,11 @@ export function backwards(host: BackHost) {
     if (h === undefined) codeHashes.set(doc().code, (h = String(fnv(JSON.stringify(userCode(doc().code))))));
     return h;
   }
-  function runBackwards(info: T.Info, known: Id[]): Backwards {
+  // `look`: the short look on the page first. Without it the worker does
+  // the whole search: a run with every input known is the function run
+  // forwards inside the search, which the step limit can't cut (opening
+  // the ray marcher held the page 1.5 s for it).
+  function runBackwards(info: T.Info, known: Id[], look = true): Backwards {
     const key = JSON.stringify([codeHash(), ui.def, known, known.map((k) => portText(info, k))]);
     const hit = backwardsCache.get(key);
     if (hit && !(hit.cut && searchingKey !== key)) return hit;
@@ -149,7 +153,8 @@ export function backwards(host: BackHost) {
     // A short look on the page, so the first answer shows at once; what
     // that cuts short, the worker searches to the end (BACKLOG E127).
     const until = Date.now() + BACK_MS;
-    Object.assign(out, searchBackwards(doc().code, ui.def, values, pres().names, () => Date.now() > until, info));
+    if (look) Object.assign(out, searchBackwards(doc().code, ui.def, values, pres().names, () => Date.now() > until, info));
+    else out.cut = true;
     if (out.cut) searchOn(key, values, out.plan);
     backwardsCache.set(key, out);
     return out;
@@ -211,7 +216,7 @@ export function backwards(host: BackHost) {
     // either: the search can't run them, and failing it read as a fault (I102).
     const acts = forwards && dz?.t === "fn" ? dz.eff.effs.filter((e) => e !== CHOICE && e !== DIVERGE) : [];
     const handles = handledForArgs(dz);
-    let r: Backwards = (!chooses && forward()) || (missing.length || acts.length || handles.length ? { answers: [], more: false } : runBackwards(info, known));
+    let r: Backwards = (!chooses && forward()) || (missing.length || acts.length || handles.length ? { answers: [], more: false } : runBackwards(info, known, !forwards));
     if (forwards && !missing.length && !r.answers.length && !r.error) {
       const f = forward();
       if (f) r = { ...r, answers: f.answers };
