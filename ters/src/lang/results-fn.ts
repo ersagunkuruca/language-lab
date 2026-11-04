@@ -12,7 +12,7 @@
 // unchanged when it has none, and the nodes the person wrote keep their ids.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
-import { children, fieldPorts, freshId, isCall, nodesWhere } from "../model.ts";
+import { fieldPorts, freshId, isCall, nodesWhere, parentLookup } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { infer, type Info } from "./infer.ts";
 import { TRUE, tupleVariant } from "./std.ts";
@@ -42,11 +42,10 @@ function portsOf(nodes: Record<Id, Node>, target: Id): { ins: string[]; outs: st
 function refsToRewrite(code: Code): { ref: NodeOf<"ref">; ports: { ins: string[]; outs: string[] }; parent?: Node }[] {
   const refs = nodesWhere(code, "ref with results", (n) => n.kind === "ref" && !!portsOf(code.nodes, n.target)).map((id) => code.nodes[id] as NodeOf<"ref">);
   if (!refs.length) return [];
-  const parents = new Map<Id, Id>();
-  for (const n of Object.values(code.nodes)) for (const c of children(n)) parents.set(c, n.id);
+  const parentOf = parentLookup(code);
   return refs.flatMap((ref) => {
     const ports = portsOf(code.nodes, ref.target)!;
-    const p = parents.get(ref.id), parent = p ? code.nodes[p] : undefined;
+    const p = parentOf(ref.id), parent = p ? code.nodes[p] : undefined;
     if (parent?.kind === "call" && parent.given !== undefined && parent.fn === ref.id) return [];
     // Given all its ports it is the condition on them, called as it always was.
     if (isCall(parent) && parent.fn === ref.id && parent.args.length === ports.ins.length + ports.outs.length) return [];
