@@ -26,7 +26,8 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| E231c | Run by keyboard and screen reader: the keyboard stays on Run as it becomes Stop and back (a button that had the focus keeps it across a redraw, or hands it to the one standing in for it), what the run prints is a live log read out as it comes, and a failure is an alert | this PR |
+| E228k | Run backwards out of editor/main.ts into editor/backwards.ts, through a `BackHost`: the ports you know and their values, the short search and the whole one in a worker, Stop, accepting an answer, and the panel | this PR |
+| E231c | Run by keyboard and screen reader: the keyboard stays on Run as it becomes Stop and back (a button that had the focus keeps it across a redraw, or hands it to the one standing in for it), what the run prints is a live log read out as it comes, and a failure is an alert | #1441 |
 | E228j | The values a definition opens with out of editor/main.ts into editor/seeds.ts, through a `SeedHost`: what a call in the program passes it, or what main's dry run (a page drawn and its handlers run, a picture at a pixel or two) first calls it with, and a port's text read as a value | #1438 |
 | E243 | Turning a call around ("Work out x from the result") makes a use with no body, L211's shape, giving the one port it isn't given; "Use it forwards", or a double-click on its output, turns one of those back, and still takes a use in the old shape (turn-around.test) | #1435 |
 | E242 | **Bug.** Every program showed the unit chooser open, as if it used units, once the library had durations in seconds (L188b): the check looked at the library's nodes too. Now only the program's own count (editing.test heldSeed was red on main) | #1432 |
