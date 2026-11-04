@@ -160,8 +160,22 @@ export function signAnalysis(code: Code) {
   };
 
   const entered = new Set<Id>();
+  // Each node's signs worked out once for an env and the definitions
+  // entered: a let's value read through several names, a few lets deep, is
+  // otherwise walked again for every path to it.
+  let inside = "";
+  const memo = new Map<Env, Map<string, Signs>>();
   const of = (id: Id, env: Env = NONE, depth = 0): Signs => {
     if (depth > 40) return ANY;
+    let m = memo.get(env);
+    if (!m) memo.set(env, (m = new Map()));
+    const key = `${inside}|${id}`, known = m.get(key);
+    if (known !== undefined) return known;
+    const s = ofNode(id, env, depth);
+    m.set(key, s);
+    return s;
+  };
+  const ofNode = (id: Id, env: Env, depth: number): Signs => {
     const n = code.nodes[id];
     if (!n) return ANY;
     const lit = numLit(id, env);
@@ -218,7 +232,12 @@ export function signAnalysis(code: Code) {
     }
     return ANY;
   };
-  const within = <T>(d: Id, f: () => T): T => { entered.add(d); try { return f(); } finally { entered.delete(d); } };
+  const within = <T>(d: Id, f: () => T): T => {
+    const was = inside;
+    entered.add(d);
+    inside = [...entered].sort().join(" ");
+    try { return f(); } finally { entered.delete(d); inside = was; }
+  };
 
   // Is this call to a partial builtin always answered?
   const answeredIn = (call: Id, env: Env): boolean => {

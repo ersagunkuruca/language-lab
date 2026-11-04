@@ -11,6 +11,7 @@ import { h } from "./dom.ts";
 import { corePageRuntimeText, coreWorkletRuntimeText, newWorker, pageRuntimeText, workletRuntimeText } from "./runViews.ts";
 import type { CompileAsk, CompileSays } from "./runWorker.ts";
 import { drawPicture, pictureEntries, type Picture } from "./picture.ts";
+import { drawDrawable, drawableOf, type Built } from "./pictureDraw.ts";
 import { handOver, type Cells } from "../ters/src/lang/cells.ts";
 import { lowerCore, solvesSlowly } from "../compiler/src/core-js.ts";
 import { prebuilt, prebuiltKey } from "./prebuilt.ts";
@@ -57,7 +58,11 @@ export function pagePanels(host: PageHost) {
       pic.status.textContent = "Drawing…";
       const shown = (e: unknown) => { pic.canvas.hidden = true; pic.status.textContent = `Can't draw the picture: ${e instanceof Error ? e.message : String(e)}.`; };
       if (errorsIn(info)) shown(new Error("the program has errors; fix them first"));
-      else drawPicture({ code, info, names: pres().names, entries, canvas: pic.canvas, status: pic.status })
+      // As shipped, the picture was compiled when the site was built
+      // (prebuilt.ts, E245): drawn from that, with no compiling here.
+      else prebuilt<Built>(prebuiltKey("picture", code, entries, pins()))
+        .then((built) => (pic.for !== code ? Promise.reject(new Error("redrawn")) : built ? drawDrawable(drawableOf(built), { canvas: pic.canvas, status: pic.status })
+          : drawPicture({ code, info, names: pres().names, entries, canvas: pic.canvas, status: pic.status })))
         .then((p) => { if (pic.for === code) pic.now = p; else p.stop(); },
           (e) => { if (pic.for === code) shown(holesIn(info) ? new Error("the program has holes; fill them first") : e); });
     }
@@ -240,7 +245,7 @@ export function pagePanels(host: PageHost) {
     // A shipped example as shipped was compiled when the site was built
     // (prebuilt.ts, E245): that program, then, and no compiling here.
     const asked = ++asks;
-    void prebuilt<CompiledPage>(prebuiltKey("page", code, main, pins())).then((got) => {
+    void prebuilt<CompiledPage>(prebuiltKey("page", code, { main }, pins())).then((got) => {
       if (asked !== asks) return;
       if (!got) return compileHere(code, main);
       compiledPages.set(code, got);

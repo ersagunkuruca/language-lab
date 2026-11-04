@@ -11,7 +11,10 @@ import type { Code, Id } from "../ters/src/model.ts";
 import type { Pins } from "../ters/src/lang/signatures.ts";
 import { digest, hashes } from "../ters/src/hash.ts";
 
-export const prebuiltKey = (kind: string, code: Code, root: Id, pins: Pins): string => digest([kind, hashes(code, [root]).get(root), pins]);
+export const prebuiltKey = (kind: string, code: Code, roots: Record<string, Id>, pins: Pins): string => {
+  const h = hashes(code, Object.values(roots));
+  return digest([kind, Object.entries(roots).map(([k, d]) => [k, h.get(d)]), pins]);
+};
 
 let index: Promise<Set<string>> | null = null;
 const keys = (): Promise<Set<string>> => (index ??= fetch("prebuilt/index.json").then((r) => (r.ok ? r.json() : [])).then((ks: string[]) => new Set(ks), () => new Set()));

@@ -88,8 +88,11 @@ export async function drawPicture(o: PictureOptions): Promise<Picture> {
 // The picture compiled once, ahead (shaders.html, from editor/build.ts):
 // the evaluator's answers at every check point and the CPU's program made
 // now, so the page only draws.
-export async function buildPicture(code: Code, info: Info, names: Names, entries: Record<string, Id>): Promise<Built> {
+// Without `answers` (the editor's, prebuild.ts: it draws without the check)
+// none of the evaluator's are worked out.
+export async function buildPicture(code: Code, info: Info, names: Names, entries: Record<string, Id>, answers = true): Promise<Built> {
   const p = await prepare(code, info, names, entries);
+  if (!answers) return { wgsl: p.wgsl, fragment: p.fragment, kernel: p.kernel, in32: p.in32, want: POINTS.map(() => null), cpu: p.cpu() };
   // The evaluator's answers in the order the page checks them, for a few
   // seconds of the evaluator (at least 12 points): all 108 of the ray
   // marcher's take two minutes, too long for every build of the site.
@@ -160,7 +163,10 @@ fn main(@builtin(global_invocation_id) g: vec3u) {
   // does. The program as it is when that can't be made.
   const in32 = once(float32, code, info, names, entries, (): Side => {
     try {
-      const w = withFloat32(code, names);
+      // Of the lowered program, which holds only what the picture reaches,
+      // as compiler/gpu.ts does: of the whole library, this and its check
+      // took seconds a picture (C165).
+      const w = withFloat32(lowerPicture(code, info, names, entries).code, names);
       const c = represent(w.code, keys.map((k) => entries[k]), w.rep), i = infer(c, w.names);
       return i.errors.length ? null : { code: c, info: i, names: w.names };
     } catch { return null; }

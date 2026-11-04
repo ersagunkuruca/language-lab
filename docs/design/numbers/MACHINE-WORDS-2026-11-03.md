@@ -58,7 +58,9 @@ This goes against "everything is one system".
    2ⁿ; a match on a record field takes the bound its constructions give
    (taken across the record's construction sites, with "no bound" if any
    one site has none). This step is checked by tests only, with no change
-   to output.
+   to output. Done (C150d): `compiler/src/known-bits.ts`, which finds
+   Word8, Word32 and Word64's `bits` under 2ⁿ in FNV-1a and xorshift32
+   (compiler/test/known-bits.test.ts).
 2. **A field that fits is stored as a word.** Add an SType for an unsigned
    n-bit word (`u32`, `u64`; 8 and 16 held in a u32). It prints as WASM
    `i32`/`i64` with unsigned compare and shift, C's `uint32_t`/`uint64_t`,
