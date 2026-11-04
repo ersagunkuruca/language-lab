@@ -7,6 +7,7 @@
 // The worker has no localStorage: the program's files come in as a copy,
 // and what the run wrote goes back to the page with the result.
 
+import { logged, type LogEntry } from "../ters/src/lang/worldlog.ts";
 import type { Code, Id } from "../ters/src/model.ts";
 import { isUse, subtree } from "../ters/src/model.ts";
 import type { Names } from "../ters/src/presentation.ts";
@@ -47,9 +48,15 @@ export type Stuck = { text: string; at: number; expected: string[]; said: string
 export type Profile = { def: Id; calls: number; ms: number }[];
 // `compiled`: main ran as compiled JavaScript (E238), so there's no profile.
 // `core`: main ran printed from the core IR (E244), which isn't kept.
-export type RunSays = { lines: string[] } | { done: true; shown: string; files: [string, string][]; stuck?: Stuck; profile?: Profile; compiled?: Compiled; core?: true } | { error: string; files: [string, string][]; stuck?: Stuck; compiled?: Compiled; core?: true };
+// `answers`: what the world answered the run, in order (E232a).
+export type RunSays = { lines: string[] } | { done: true; shown: string; files: [string, string][]; stuck?: Stuck; profile?: Profile; compiled?: Compiled; core?: true; answers?: LogEntry[] } | { error: string; files: [string, string][]; stuck?: Stuck; compiled?: Compiled; core?: true; answers?: LogEntry[] };
 
-const post = (m: RunSays | Found | CompileSays) => (self as unknown as Worker).postMessage(m);
+// The run's log of the world's answers (worldlog.ts), sent with its end.
+let answers: LogEntry[] | null = null;
+const post = (m: RunSays | Found | CompileSays) => (self as unknown as Worker).postMessage(answers && ("done" in m || ("error" in m && "files" in m)) ? { ...m, answers: answers.filter((e) => !e.write).map(sendable) } : m);
+// Bytes go as their count: the log is shown, not replayed, from here.
+const sendable = (e: LogEntry): LogEntry => ({ ...e, args: e.args.map(cut), answer: cut(e.answer) });
+const cut = (v: unknown): unknown => (v instanceof Uint8Array ? `${v.length} bytes` : v);
 
 // Standard input typed into Run's box (I168), read as `lab run` reads a
 // pipe (world.ts): read input takes the rest, read line a line at a time
@@ -71,6 +78,7 @@ function withInput(world: World, stdin: string | undefined): World {
 }
 
 self.onmessage = (e: MessageEvent<RunAsk | BackAsk | CompileAsk>) => {
+  answers = null;
   if ("compilePage" in e.data) {
     const { code, names, pins, main, core } = e.data;
     try {
@@ -107,7 +115,9 @@ self.onmessage = (e: MessageEvent<RunAsk | BackAsk | CompileAsk>) => {
   const flush = () => { if (lines.length) post({ lines }); lines = []; sent = Date.now(); };
   try {
     const print = (line: string) => { lines.push(line); if (Date.now() - sent > 100) flush(); };
-    const world = denied(withInput(browserWorld(store, title), stdin), deny ?? [], names);
+    const logging = logged(denied(withInput(browserWorld(store, title), stdin), deny ?? [], names));
+    const world = logging.world;
+    answers = logging.log;
     if (before && runCompiled(before, args, world, print, flush, () => [...wrote])) return;
     setDisplayNames(names);
     setProgramPins(pins);
