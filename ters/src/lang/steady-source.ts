@@ -1,4 +1,5 @@
-// The steady module (BACKLOG L210, SPEC §3.2): sin, cos, tan, exp, log and pow on
+// The steady module (BACKLOG L210, SPEC §3.2): sin, cos, tan, exp, log, pow,
+// atan, atan2, asin and acos on
 // Float64, written in Ters, so that a program that uses them gets the same
 // bits on every machine. The builtins (`sin`, `exp`, ...) are each
 // platform's own (JavaScript's Math, C's libm, a GPU's) and only agree
@@ -22,13 +23,13 @@
 // Left (L210): sin, cos and tan reduce their argument as fdlibm does up to
 // 2^20·π/2 (|x| below 1,647,100), with a π/2 in up to three parts. Past
 // that fdlibm uses Payne and Hanek's reduction, which isn't written yet,
-// so there they stop with a reason rather than give a wrong answer. atan2, asin, acos
-// and the rest follow, and so does the number type that carries
+// so there they stop with a reason rather than give a wrong answer. The hyperbolic
+// ones would follow, and so does the number type that carries
 // these (after L204).
 //
 // Adapted, credited in docs/language/CREDITS.md: fdlibm's e_exp.c,
 // e_log.c, k_sin.c, k_cos.c, k_tan.c, e_rem_pio2.c, s_sin.c, s_cos.c,
-// s_tan.c and e_pow.c, as V8
+// s_tan.c, e_pow.c, s_atan.c, e_atan2.c, e_asin.c and e_acos.c, as V8
 // ports them (src/base/ieee754.cc, BSD licence), whose notices follow.
 //
 // ====================================================
@@ -386,12 +387,79 @@ export function buildSteady(): Module {
                         log2Near(ax, (t1, t2) => powTail(x, y, sg, t1, t2)))),
                     log2Parts(ax, (t1, t2) => powTail(x, y, sg, t1, t2))))))))))))))));
 
-  const offered = [sin, cos, tan, exp, log, pow];
+  // atan (fdlibm s_atan.c): reduced by atan(a) + atan((x − a)/(1 + a·x))
+  // at a = 0.5, 1, 1.5 or ∞, then a polynomial in two halves.
+  const atanhi = [4.63647609000806093515e-01, 7.85398163397448278999e-01, 9.82793723247329054082e-01, 1.57079632679489655800e+00];
+  const atanlo = [2.26987774529616870924e-17, 3.06161699786838301793e-17, 1.39033110312309984516e-17, 6.12323399573676603587e-17];
+  const aT = [3.33333333333329318027e-01, -1.99999999998764832476e-01, 1.42857142725034663711e-01, -1.11111104054623557880e-01, 9.09088713343650656196e-02, -7.69187620504482999495e-02,
+    6.66107313738753120669e-02, -5.83357013379057348645e-02, 4.97687799461593236017e-02, -3.65315727442169155270e-02, 1.62858201153657823623e-02];
+  const atanSum = (x: Id) => let_("z", mul(x, x), (z) => let_("w", mul(z, z), (w) =>
+    add(mul(z, horner(w, [aT[0], aT[2], aT[4], aT[6], aT[8], aT[10]])), mul(w, horner(w, [aT[1], aT[3], aT[5], aT[7], aT[9]])))));
+  const atanAt = (x: Id, ax: Id, id: number, xr0: Id) => let_("xr", xr0, (xr) => let_("z", sub(L(atanhi[id]), sub(sub(mul(xr, atanSum(xr)), L(atanlo[id])), xr)), (z) =>
+    iff(lt(x, L(0)), neg(z), z)));
+  const atan = def("steady atan", ["x"], (x) => let_("ax", abs(x), (ax) =>
+    iff(ge(ax, L(word(0x44100000))), iff(gt(x, L(0)), add(L(atanhi[3]), L(atanlo[3])), sub(neg(L(atanhi[3])), L(atanlo[3]))),
+      iff(lt(ax, L(word(0x3FDC0000))), iff(lt(ax, L(word(0x3E400000))), x, sub(x, mul(x, atanSum(x)))),
+        iff(lt(ax, L(word(0x3FF30000))),
+          iff(lt(ax, L(word(0x3FE60000))), atanAt(x, ax, 0, div(sub(mul(L(2), ax), L(1)), add(L(2), ax))), atanAt(x, ax, 1, div(sub(ax, L(1)), add(ax, L(1))))),
+          iff(lt(ax, L(word(0x40038000))), atanAt(x, ax, 2, div(sub(ax, L(1.5)), add(L(1), mul(L(1.5), ax)))), atanAt(x, ax, 3, div(L(-1), ax))))))));
+  // The high word of a ≥ 0, as a whole number (for atan2's k).
+  const highWord = (a0: Id) => let_("a", a0, (a) => iff(lt(a, L(2 ** -1022)), floor(k.call(scaled, a, L(1042))),
+    let_("e", k.call(exponent, a), (e) => add(mul(add(e, L(1023)), L(2 ** 20)), floor(mul(sub(k.call(scaled, a, neg(e)), L(1)), L(2 ** 20)))))));
+  // atan2 (fdlibm e_atan2.c). One zero, so atan2(0, x) for a negative x is π.
+  const pi = 3.1415926535897931160E+00, pi_o_2 = 1.5707963267948965580E+00, pi_lo = 1.2246467991473531772E-16;
+  const atan2 = def("steady atan2", ["y", "x"], (y, x) =>
+    iff(eq(x, L(1)), k.call(atan, y),
+      iff(eq(y, L(0)), iff(lt(x, L(0)), L(pi), L(0)),
+        iff(eq(x, L(0)), iff(lt(y, L(0)), L(-pi_o_2), L(pi_o_2)),
+          let_("k", floor(div(sub(highWord(abs(y)), highWord(abs(x))), L(2 ** 20))), (kk) =>
+            // m: 2·(x < 0) + (y < 0); past 2^60 the sign of x no longer counts.
+            let_("big", gt(kk, L(60)), (big) =>
+              let_("m", add(iff(and(lt(x, L(0)), not(big)), L(2), L(0)), iff(lt(y, L(0)), L(1), L(0))), (m) =>
+                let_("z", iff(big, add(L(pi_o_2), mul(L(0.5), L(pi_lo))), iff(and(lt(x, L(0)), lt(kk, L(-60))), L(0), k.call(atan, abs(div(y, x))))), (z) =>
+                  iff(eq(m, L(0)), z, iff(eq(m, L(1)), neg(z), iff(eq(m, L(2)), sub(L(pi), sub(z, L(pi_lo))), sub(sub(z, L(pi_lo)), L(pi)))))))))))));
+  // asin and acos (fdlibm e_asin.c, e_acos.c): a rational function of x²
+  // near 0, and of (1 − |x|)/2 with its square root towards ±1.
+  const pS = [1.66666666666666657415e-01, -3.25565818622400915405e-01, 2.01212532134862925881e-01, -4.00555345006794114027e-02, 7.91534994289814532176e-04, 3.47933107596021167570e-05];
+  const qS = [1, -2.40339491173441421878e+00, 2.02094576023350569471e+00, -6.88283971605453293030e-01, 7.70381505559019352791e-02];
+  const pio2_hi = 1.57079632679489655800e+00, pio2_lo = 6.12323399573676603587e-17, pio4_hi = 7.85398163397448278999e-01;
+  const pq = (t0: Id) => let_("t", t0, (t) => div(mul(t, horner(t, pS)), horner(t, qS)));
+  // Outside −1 to 1, no answer: √(1 − x²) has none there, and is a
+  // partial function as the builtins are (one of [] would make it a
+  // search, which compiles to something slower).
+  const none = (x: Id) => k.call(B.sqrt, sub(L(1), mul(x, x)));
+  const asin = def("steady asin", ["x"], (x) => let_("ax", abs(x), (ax) =>
+    iff(ge(ax, L(1)), iff(eq(ax, L(1)), add(mul(x, L(pio2_hi)), mul(x, L(pio2_lo))), none(x)),
+      iff(lt(ax, L(0.5)), iff(lt(ax, L(word(0x3E400000))), x, add(x, mul(x, pq(mul(x, x))))),
+        let_("t", mul(sub(L(1), ax), L(0.5)), (t) =>
+          let_("r", pq(t), (r) =>
+            let_("s", k.call(B.sqrt, t), (sq) =>
+              let_("t", iff(ge(ax, L(word(0x3FEF3333))), sub(L(pio2_hi), sub(mul(L(2), add(sq, mul(sq, r))), L(pio2_lo))),
+                let_("w", k.call(lowCleared, sq), (w) =>
+                  let_("c", div(sub(t, mul(w, w)), add(sq, w)), (c) =>
+                    sub(L(pio4_hi), sub(sub(mul(mul(L(2), sq), r), sub(L(pio2_lo), mul(L(2), c))), sub(L(pio4_hi), mul(L(2), w))))))), (res) =>
+                iff(gt(x, L(0)), res, neg(res))))))))));
+  const acos = def("steady acos", ["x"], (x) => let_("ax", abs(x), (ax) =>
+    iff(ge(ax, L(1)), iff(eq(x, L(1)), L(0), iff(eq(x, L(-1)), add(L(pi), mul(L(2), L(pio2_lo))), none(x))),
+      iff(lt(ax, L(0.5)), iff(lt(ax, L(word(0x3C600001))), add(L(pio2_hi), L(pio2_lo)), sub(L(pio2_hi), sub(x, sub(L(pio2_lo), mul(x, pq(mul(x, x))))))),
+        iff(lt(x, L(0)),
+          let_("z", mul(add(L(1), x), L(0.5)), (z) => let_("s", k.call(B.sqrt, z), (sq) =>
+            sub(L(pi), mul(L(2), add(sq, sub(mul(pq(z), sq), L(pio2_lo))))))),
+          let_("z", mul(sub(L(1), x), L(0.5)), (z) => let_("s", k.call(B.sqrt, z), (sq) =>
+            let_("df", k.call(lowCleared, sq), (df) =>
+              let_("c", div(sub(z, mul(df, df)), add(sq, df)), (c) =>
+                mul(L(2), add(df, add(mul(pq(z), sq), c))))))))))));
+
+  const offered = [sin, cos, tan, exp, log, pow, atan, atan2, asin, acos];
   const comments: Record<Id, string> = {
     [sin]: "sin x with the same bits on every machine: fdlibm's, written in Ters (sin is the platform's own, within a few ulp).",
     [cos]: "cos x with the same bits on every machine: fdlibm's, written in Ters.",
     [tan]: "tan x with the same bits on every machine: fdlibm's, written in Ters. No answer where cos x is 0.",
     [pow]: "x to the power y with the same bits on every machine: fdlibm's, written in Ters. No answer where x ^ y has none.",
+    [atan]: "The angle whose tangent is x, with the same bits on every machine: fdlibm's, written in Ters.",
+    [atan2]: "The angle of the point (x, y), from −π to π, with the same bits on every machine: fdlibm's, written in Ters.",
+    [asin]: "The angle whose sine is x, with the same bits on every machine: fdlibm's, written in Ters. No answer outside −1 to 1.",
+    [acos]: "The angle whose cosine is x, with the same bits on every machine: fdlibm's, written in Ters. No answer outside −1 to 1.",
     [exp]: "e^x with the same bits on every machine: fdlibm's, written in Ters.",
     [log]: "The natural log of x with the same bits on every machine: fdlibm's, written in Ters. No answer for x ≤ 0.",
   };
