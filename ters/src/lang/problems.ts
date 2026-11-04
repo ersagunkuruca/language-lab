@@ -36,6 +36,8 @@ export const PROBLEMS: Problem[] = [
   { id: "fields-type-unknown", says: /^fields (mapped|listed) needs (the value's data type|the fields' type) known here/, fix: "Use it where the value's type is known: in a definition whose input has a type of its own (pin it), not one that takes any value." },
   { id: "json-type-unknown", says: /^(json of|from json) writes the value by its type, and /, fix: "Give it a value whose type is known there, or use it where the type wanted is known (a definition's pinned type); a function or an effect has no spelling." },
   { id: "private-to-library", says: /^.+ is private to the library, which keeps /, fix: "Make the value with the library's own functions, the ones the message names: they keep the rule the private case would let you break (a Rational in lowest terms, a file open only while its body runs)." },
+  { id: "unhandled-effect", says: /performs .+, which nothing here handles$/, fix: "Handle the effect around it with a handler for its operations, or make the definition a function (of no inputs) so whoever calls it handles it." },
+  { id: "no-cases", says: /^a case analysis needs at least one case$/, fix: "Add an arm for one of the value's cases, or an otherwise arm." },
   { id: "type-as-value", says: /^.+ is a type, not a value$/, fix: "A type says what values look like and can't be used as one: use one of its cases, or a value of that type." },
 ];
 
