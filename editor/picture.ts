@@ -88,8 +88,11 @@ export async function drawPicture(o: PictureOptions): Promise<Picture> {
 // The picture compiled once, ahead (shaders.html, from editor/build.ts):
 // the evaluator's answers at every check point and the CPU's program made
 // now, so the page only draws.
-export async function buildPicture(code: Code, info: Info, names: Names, entries: Record<string, Id>): Promise<Built> {
+// Without `answers` (the editor's, prebuild.ts: it draws without the check)
+// none of the evaluator's are worked out.
+export async function buildPicture(code: Code, info: Info, names: Names, entries: Record<string, Id>, answers = true): Promise<Built> {
   const p = await prepare(code, info, names, entries);
+  if (!answers) return { wgsl: p.wgsl, fragment: p.fragment, kernel: p.kernel, in32: p.in32, want: POINTS.map(() => null), cpu: p.cpu() };
   // The evaluator's answers in the order the page checks them, for a few
   // seconds of the evaluator (at least 12 points): all 108 of the ray
   // marcher's take two minutes, too long for every build of the site.
