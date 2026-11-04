@@ -370,10 +370,13 @@ export function loadCoreJs(ir: CoreIR, rt: Runtime = { print: () => {} }): ((...
 // What running a main needs to know of it: whether it takes the
 // arguments, and what it gives.
 function mainOf(ir: CoreIR, name: string): [number, MainSpec] {
-  const fi = ir.funcs.findIndex((g) => g.name === name && !g.inner && !g.budgeted), f = ir.funcs[fi];
-  if (!f || f.params.length > 1) throw new Error(`${name}: not compiled, or not a main`);
-  if (f.params.length && !isData(f.params[0])) throw new Error(`${name} takes something other than a List of Texts`);
-  return [fi, { args: f.params.length > 0, result: f.result === "f64" ? "f64" : f.result === "int" ? "int" : "other" }];
+  // A main that waits (C40) takes the rest of its run last, as a
+  // function with several answers does (scalar.ts several_).
+  const fi = ir.funcs.findIndex((g) => g.name === name && !g.budgeted && (!g.inner || g.multi)), f = ir.funcs[fi];
+  const ps = f?.multi ? f.params.slice(0, -1) : f?.params ?? [], result = f?.multi ? f.answer : f?.result;
+  if (!f || ps.length > 1) throw new Error(`${name}: not compiled, or not a main`);
+  if (ps.length && !isData(ps[0])) throw new Error(`${name} takes something other than a List of Texts`);
+  return [fi, { args: ps.length > 0, result: result === "f64" ? "f64" : result === "int" ? "int" : "other", ...(f.multi ? { rest: true as const } : {}) }];
 }
 
 export function runCoreMain(ir: CoreIR, name: string, args: string[], rt: Runtime): number {
