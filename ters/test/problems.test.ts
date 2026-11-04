@@ -43,6 +43,7 @@ const SMALLEST: Record<string, (k: Lang) => void> = {
   "private-to-library": (k) => k.define(k.def("p"), k.x("std.rational.ratio")),
   "unhandled-effect": (k) => { const a = ask(k); k.define(k.def("p"), k.call(a.op.ask)); },
   "no-cases": (k) => k.define(k.def("p"), k.fn(["b"], (b) => k.match(b, []))),
+  "functions-in-data": (k) => k.define(k.def("p"), k.call(S.equal, k.fn(["x"], (x) => x), k.fn(["x"], (x) => x))),
   "not-a-number": (k) => k.define(k.def("p"), k.fn(["b"], (b) => k.match(b, [{ variant: TRUE, names: [], body: () => k.lit(1) }, { variant: FALSE, names: [], body: () => k.lit("a") }]))),
 };
 
