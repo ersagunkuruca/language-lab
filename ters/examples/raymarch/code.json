@@ -1336,12 +1336,13 @@
     "s32rqtiuifm7an0b7asu0t41nj": {
       "id": "s32rqtiuifm7an0b7asu0t41nj",
       "kind": "lit",
-      "value": 120
+      "value": 120,
+      "of": "type.int"
     },
     "fb5keeno3n274skllire9nic2b": {
       "id": "fb5keeno3n274skllire9nic2b",
       "kind": "ref",
-      "target": "builtin.less"
+      "target": "builtin.int.less"
     },
     "7rrjp0j2pk5jhpakl8cfcug3mu": {
       "id": "7rrjp0j2pk5jhpakl8cfcug3mu",
@@ -1398,12 +1399,13 @@
     "tasrq79jo54qag0ad63trmh73n": {
       "id": "tasrq79jo54qag0ad63trmh73n",
       "kind": "lit",
-      "value": 1
+      "value": 1,
+      "of": "type.int"
     },
     "kqts7vpdfpqgut18nlq1nbbtt4": {
       "id": "kqts7vpdfpqgut18nlq1nbbtt4",
       "kind": "ref",
-      "target": "builtin.add"
+      "target": "builtin.int.add"
     },
     "3tst4o8c0ugbbh8t72469f1kdd": {
       "id": "3tst4o8c0ugbbh8t72469f1kdd",
@@ -1661,12 +1663,13 @@
     "32f47de1l7lvlgfmlpd1qhs9e0": {
       "id": "32f47de1l7lvlgfmlpd1qhs9e0",
       "kind": "lit",
-      "value": 64
+      "value": 64,
+      "of": "type.int"
     },
     "1pmh54jh6hpe25s35olbhmgi9a": {
       "id": "1pmh54jh6hpe25s35olbhmgi9a",
       "kind": "ref",
-      "target": "builtin.less"
+      "target": "builtin.int.less"
     },
     "bpu2t6e9692th4r2itkgmm46vt": {
       "id": "bpu2t6e9692th4r2itkgmm46vt",
@@ -1785,12 +1788,13 @@
     "ojbvcf3ihjofcj4kf268ogttfi": {
       "id": "ojbvcf3ihjofcj4kf268ogttfi",
       "kind": "lit",
-      "value": 1
+      "value": 1,
+      "of": "type.int"
     },
     "l7j76l96712n9o8pi02skki4na": {
       "id": "l7j76l96712n9o8pi02skki4na",
       "kind": "ref",
-      "target": "builtin.add"
+      "target": "builtin.int.add"
     },
     "o1sm2c2qk0qkgij3c13gct67do": {
       "id": "o1sm2c2qk0qkgij3c13gct67do",
@@ -2499,7 +2503,8 @@
     "4m3p1aac4jfsf465n7jc48go8o": {
       "id": "4m3p1aac4jfsf465n7jc48go8o",
       "kind": "lit",
-      "value": 0
+      "value": 0,
+      "of": "type.int"
     },
     "0534ulq3fgrbiqv89f9s61121u": {
       "id": "0534ulq3fgrbiqv89f9s61121u",
@@ -3254,7 +3259,8 @@
     "15kcccltqi31occsqees3pd2ii": {
       "id": "15kcccltqi31occsqees3pd2ii",
       "kind": "lit",
-      "value": 0
+      "value": 0,
+      "of": "type.int"
     },
     "htl5v57d4e8fnq9h5ob9ud91gv": {
       "id": "htl5v57d4e8fnq9h5ob9ud91gv",
