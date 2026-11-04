@@ -20,12 +20,14 @@
 // is built. An exponent is found by halving or doubling by powers of two,
 // which is exact.
 //
-// Left (L210): sin, cos and tan reduce their argument as fdlibm does up to
-// 2^20·π/2 (|x| below 1,647,100), with a π/2 in up to three parts. Past
-// that fdlibm uses Payne and Hanek's reduction, which isn't written yet,
-// so there they stop with a reason rather than give a wrong answer. The hyperbolic
-// ones would follow, and so does the number type that carries
-// these (after L204).
+// sin, cos and tan reduce their argument as fdlibm does up to 2^20·π/2
+// (|x| below 1,647,100), with a π/2 in up to three parts. Past that they
+// use Payne and Hanek's reduction as fdlibm does, but worked out exactly
+// in Ints (`steady reduced far`, L210e) rather than in fdlibm's 24-bit
+// pieces, so there y1 can differ from fdlibm's in its last bits and about
+// one answer in 2,000 rounds the other way from V8's, both within an ulp.
+// Every engine still gives these same bits. Left (L210): the hyperbolic
+// ones, and the number type that carries these (after L204).
 //
 // Adapted, credited in docs/language/CREDITS.md: fdlibm's e_exp.c,
 // e_log.c, k_sin.c, k_cos.c, k_tan.c, e_rem_pio2.c, s_sin.c, s_cos.c,
@@ -49,7 +51,7 @@ import { merge, type Id } from "../model.ts";
 import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
-import { FALSE, S, std, TRUE, tupleVariant } from "./std.ts";
+import { FALSE, INT_OPS, S, std, TRUE, tupleVariant } from "./std.ts";
 
 // The double whose high word is `hi` and low word 0.
 const word = (hi: number): number => {
@@ -62,6 +64,18 @@ const word = (hi: number): number => {
 const below = word;
 // |x| < this ⟺ the high word of |x| is at most `hi`.
 const atMost = (hi: number) => word(hi + 1);
+
+// π by Machin's formula (π/4 = 4·atan(1/5) − atan(1/239)) in BigInts to
+// 1,700 bits, for the reduction past 2^20·π/2: 2/π to 1,280 bits and π/2 to
+// 200, each rounded down.
+const PI_BITS = 1700n;
+const atanInverse = (x: bigint, one: bigint): bigint => {
+  let sum = one / x, term = sum, n = 1n, sign = -1n;
+  for (;;) { term /= x * x; if (term === 0n) return sum; sum += sign * (term / (2n * n + 1n)); sign = -sign; n++; }
+};
+const PI_SCALED = ((one) => 4n * (4n * atanInverse(5n, one) - atanInverse(239n, one)))(1n << PI_BITS);
+const TWO_OVER_PI = (1n << (1281n + PI_BITS)) / PI_SCALED;
+const PI_OVER_TWO = (PI_SCALED << 200n) >> (PI_BITS + 1n);
 
 export function buildSteady(): Module {
   const k = new Lang();
@@ -238,11 +252,43 @@ export function buildSteady(): Module {
       let_("z", add(x, L(pio2_1)), (z) => iff(not(near),
         let_("y0", add(z, L(pio2_1t)), (y0) => three(L(-1), y0, add(sub(z, y0), L(pio2_1t)))),
         let_("z2", add(z, L(pio2_2)), (z2) => let_("y0", add(z2, L(pio2_2t)), (y0) => three(L(-1), y0, add(sub(z2, y0), L(pio2_2t)))))))));
+  // Past 2^20·π/2, Payne and Hanek's idea (1983): x·2/π worked out with
+  // as many of 2/π's bits as x's exponent calls for. Here that's exact, in
+  // Ints, which never overflow: x = m·2^(j − 52) with a whole m below 2^53,
+  // and 2/π is taken to 1,280 bits (TWO_OVER_PI), so x·2/π = m·TWO_OVER_PI
+  // / 2^s with s = 1,332 − j. Its whole part, rounded to the nearest, is n;
+  // the first 200 bits of what's left, from −1/2 to 1/2, times π/2 to 200
+  // bits, is y·2^400, and y0 and y1 are that rounded once and the rest
+  // rounded once. fdlibm's k_rem_pio2.c does the same in 24-bit pieces of
+  // Float64s; this gives y0 + y1 to well past fdlibm's precision.
+  const int = (v: bigint) => k.int(v);
+  const iadd = (a: Id, b: Id) => k.call(INT_OPS.add, a, b);
+  const isub = (a: Id, b: Id) => k.call(INT_OPS.sub, a, b);
+  const imul = (a: Id, b: Id) => k.call(INT_OPS.mul, a, b);
+  const down = (a: Id, b: Id) => k.call(INT_OPS.shiftDown, a, b);
+  const bits = (a: Id, b: Id) => k.call(INT_OPS.bitAnd, a, b);
+  const asFloat = (a: Id) => k.call(INT_OPS.toNumber, a);
+  // A whole Float64 as an Int (every one here is whole and finite).
+  const whole = (v: Id) => k.call(S.first, k.thunk(() => k.call(INT_OPS.wholePart, v)), k.thunk(() => k.int(0)));
+  const far = def("steady reduced far", ["x", "ax"], (x, ax) => let_("j", k.call(exponent, ax), (j) =>
+    let_("m", whole(k.call(scaled, ax, sub(L(52), j))), (m) =>
+      let_("s", whole(sub(L(1332), j)), (s) =>
+        let_("p", imul(m, int(TWO_OVER_PI)), (p) =>
+          let_("f", bits(down(p, isub(s, int(200n))), int((1n << 200n) - 1n)), (f) =>
+            let_("up", k.call(S.not, k.call(INT_OPS.less, f, int(1n << 199n))), (up) =>
+              let_("n", iadd(down(p, s), iff(up, int(1n), int(0n))), (n) =>
+                let_("g", iff(up, isub(f, int(1n << 200n)), f), (g) =>
+                  let_("h", imul(g, int(PI_OVER_TWO)), (h) =>
+                    let_("hf", asFloat(h), (hf) =>
+                      let_("y0", mul(hf, L(2 ** -400)), (y0) =>
+                        let_("y1", mul(asFloat(isub(h, whole(hf))), L(2 ** -400)), (y1) =>
+                          let_("q", asFloat(bits(n, int(7n))), (q) =>
+                            iff(lt(x, L(0)), three(neg(q), neg(y0), neg(y1)), three(q, y0, y1))))))))))))))));
   const reduced = def("steady reduced", ["x"], (x) => let_("ax", abs(x), (ax) =>
     iff(lt(ax, L(atMost(0x3FE921FB))), three(L(0), x, L(0)),
       iff(lt(ax, L(below(0x4002D97C))), nearOne(x, ax),
         iff(lt(ax, L(atMost(0x413921FB))), medium(x, ax),
-          k.call(S.stop, k.lit("steady sin, cos and tan take |x| below 1,647,100 for now (Payne and Hanek's reduction is BACKLOG L210)")))))));
+          k.call(far, x, ax))))));
   // n mod 4, for a negative n too (C's n & 3).
   const quarter = (n: Id) => sub(n, mul(L(4), floor(div(n, L(4)))));
   const byQuarter = (x: Id, small: Id, arms: (y0: Id, y1: Id) => [Id, Id, Id, Id]) =>
