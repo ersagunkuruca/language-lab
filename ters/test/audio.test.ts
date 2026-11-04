@@ -20,7 +20,7 @@ import { createContext, runInContext, runInNewContext } from "node:vm";
 import { runMain } from "../src/lang/run.ts";
 import { corePageRuntime, coreSoundWorklet, coreWorkletRuntime, soundWorklet, webCorePage, webPage, workletRuntime, pageRuntime } from "../cli/web.ts";
 import { FakeEl, fakeDoc } from "./fakedom.ts";
-import { lowerCore, solvesSlowly } from "../../compiler/src/core-js.ts";
+import { hostOpsOf, lowerCore, solvesSlowly } from "../../compiler/src/core-js.ts";
 import { corePageFile, coreWorkletFile, pageFile, workletFile } from "../src/lang/page.ts";
 import { close } from "../src/lang/run.ts";
 import { CELL_OPS, NOW_OP, RANDOM_OP, S } from "../src/lang/std.ts";
@@ -208,10 +208,9 @@ test("the pedal page's worklet from the core IR plays the pedal, and the page's 
   // it, and it draws what compile.ts's draws.
   const html = await webCorePage("Pedal", p.code, p.info, p.names, [page], page);
   assert.match(html, /registerProcessor/);
-  // (The scope's points to 6 places: the core IR runs atanh backwards
-  // with the evaluator's solver, compile.ts with its own plan.)
-  const near = (h: string) => h.replace(/\d+\.\d{7,}/g, (x) => Number(x).toFixed(6));
-  assert.equal(near(drawn(html)), near(drawn(await webPage("Pedal", p.code, p.info, p.names, page))));
+  // (The same points: both run compile.ts's plan for atanh backwards,
+  // C137d8.)
+  assert.equal(drawn(html), drawn(await webPage("Pedal", p.code, p.info, p.names, page)));
 });
 
 // The same worklet made in a browser, the editor's way (A4): the prebuilt
@@ -261,6 +260,35 @@ test("a core IR page and worklet made without a bundler play and draw what the b
 // and the audio thread's run of main is answered the same, in order
 // (replaying), so it makes the same cells: the first clock reading makes
 // the clock's cell on both sides.
+// A page with sound whose main asks its hosts/js.js (FOREIGN.md) is
+// made from the core IR too (C137d10): the audio thread runs main again
+// and asks the same host there.
+test("a core IR page with sound and hosts/js.js: its audio thread asks the host as main runs again", async () => {
+  const { p, main, page } = pedal();
+  const k = new Lang(p.code);
+  const dev = k.effect("Device", [["battery", [], () => k.tref("type.number")]]);
+  const powered = k.def("powered main");
+  k.define(powered, k.fn([], () => k.let("b", k.call(dev.op.battery), () => k.call(page))));
+  const code = merge(p.code, k.code), names = { ...p.names, ...k.names };
+  const info = infer(code, names, undefined, loadProgram(join(import.meta.dirname, "../examples/pedal")).options);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const hosts = join(mkdtempSync(join(tmpdir(), "hosts-")), "js.js");
+  writeFileSync(hosts, `export default { ${JSON.stringify(dev.op.battery)}: () => { globalThis.asked = (globalThis.asked ?? 0) + 1; return 0.5; } };\n`);
+  const ir = lowerCore(code, info, names, [powered]);
+  const source = await coreSoundWorklet(ir, names[powered], { file: hosts, ops: hostOpsOf(code, names) });
+  const made: (new (o: object) => { process(i: Float32Array[][], o: Float32Array[][]): boolean })[] = [];
+  class AudioWorkletProcessor { port = { onmessage: null, postMessage: () => {} }; }
+  const scope: Record<string, unknown> = { registerProcessor: (_: string, processor: never) => made.push(processor), AudioWorkletProcessor, console, TextEncoder, TextDecoder };
+  runInNewContext(source, scope);
+  const node = new made[0]({ processorOptions: { index: 0 } });
+  const input = Float32Array.from(sine(128, 0.3)), out = [new Float32Array(128)];
+  assert.equal(node.process([[input]], [out]), true);
+  assert.deepEqual([...out[0]], [...Float32Array.from(playBlocks(await soundOf(p, main, "core"), [...input], 128).out)]);
+  assert.equal(scope.asked, 1);
+  // And the page itself is the core IR's, its worklet with it.
+  assert.match(await webCorePage("Pedal", code, info, names, [powered], powered, hosts), /registerProcessor/);
+});
+
 test("a page with sound may read the clock and draw random numbers in main: the audio thread is answered the same", async () => {
   const { p, page } = pedal();
   const k = new Lang(p.code);

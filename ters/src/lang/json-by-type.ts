@@ -13,11 +13,15 @@
 //   a record            an object, a field per field, in order
 //   several cases       a case with no fields its name as a string, a
 //                       case with fields {"name": {its fields}}
+//   Map Text v          an object; a Map with other keys a list of
+//                       [key, value]
+//   Set a               a list of its items
+//   Bytes               Base64 text
 // A field missing from an object reads as null, so an Optional field may
 // be left out. Fields the type doesn't have are passed over.
-// Both types must be known where it is used; a function, a type with
-// private cases (a Map, a Set, Bytes) or an effect has no spelling, and the
-// checker says so (infer.ts, `jsonProblem` below).
+// Both types must be known where it is used; a function, another type
+// with private cases or an effect has no spelling, and the checker says so
+// (infer.ts, `jsonProblem` below).
 //
 // Like fields-by-type.ts, each use is pointed at a generated definition
 // for its type, one per type and direction, so the evaluator, relate.ts and
@@ -31,13 +35,20 @@ import { nodesWhere, isCall, type Code, type Id, type NodeOf } from "../model.ts
 import type { Names } from "../presentation.ts";
 import { Lang } from "./dsl.ts";
 import { infer, type Info } from "./infer.ts";
-import { BOOL, CONS, FALSE, INT_OPS, JSON_OPS, JSON_TYPE, JSON_V, LIST, NIL, NONE, OPTIONAL, PAIR_V, S, SOME, TRUE } from "./std.ts";
+import { BOOL, BYTES, CONS, INT_OPS, JSON_OPS, JSON_TYPE, JSON_V, LIST, MAP, NIL, NONE, OPTIONAL, PAIR, PAIR_V, S, SET_TYPE, SOME } from "./std.ts";
 import { INT, NUMBER, STRING, type Type } from "./types.ts";
 
 const OPS = new Set<Id>([JSON_OPS.of, JSON_OPS.from]);
 export const usesJsonByType = (code: Code) => nodesWhere(code, "json by type", (n) => n.kind === "ref" && OPS.has(n.target)).length > 0;
 
 const isTuple = (id: Id) => /^std\.tuple\d+$/.test(id);
+// A Map, a Set and Bytes keep their cases to their library, so they are
+// spelled through the library's own definitions: a Map with Text keys as an
+// object, any other as a list of [key, value]; a Set as a list of its
+// items; Bytes as Base64 text (RFC 4648), as most JSON APIs carry bytes.
+const THROUGH: Record<Id, string[]> = { [MAP]: ["entries of", "as map"], [SET_TYPE]: ["items of", "as set"], [BYTES]: ["base64 of", "bytes of base64"] };
+// The library's definition by its name (a library id is @ and its hash).
+const libraryDef = (code: Code, names: Names, name: string): Id | undefined => code.defs.find((d) => d.startsWith("@") && names[d] === name);
 type Data = { variants: NodeOf<"variant">[]; env: Map<Id, Type> };
 
 // A data type's cases, with its parameters bound to the type's arguments.
@@ -73,7 +84,7 @@ export function jsonProblem(code: Code, t: Type | undefined, show: (t: Type) => 
   const key = JSON.stringify(t);
   if (seen.has(key)) return null;
   seen.add(key);
-  if (t.id === LIST || t.id === OPTIONAL || isTuple(t.id)) {
+  if (t.id === LIST || t.id === OPTIONAL || isTuple(t.id) || t.id in THROUGH) {
     for (const a of t.args) { const p = jsonProblem(code, a, show, seen); if (p) return p; }
     return null;
   }
@@ -94,6 +105,7 @@ export function jsonByType(code: Code, info: Info, names: Names): { code: Code; 
   const at = (id: Id) => { const t = info.typeOf.get(id); return t && info.subst.zonk(t); };
   const nm = (id: Id) => names[id] ?? id;
   const pair = (a: Id, b: Id) => k.call(PAIR_V, a, b);
+  const lib = (name: string) => { const d = libraryDef(code, names, name); if (!d) throw new Error(`json of and from json spell a Map, a Set or Bytes through the library's ${name}, which this program doesn't have`); return d; };
   // The value of a field named `name` among an object's fields, or null.
   let lookup: Id | null = null;
   const fieldIn = (fields: Id, name: string) => {
@@ -134,6 +146,18 @@ export function jsonByType(code: Code, info: Info, names: Names): { code: Code; 
       if (t.id === JSON_TYPE) return v;
       if (t.id === LIST) return k.call(JSON_V.list, k.call(listed(`json items of ${showT(t)}`, sub(t.args[0])), v));
       if (t.id === OPTIONAL) return k.match(v, [{ variant: NONE, names: [], body: () => k.x(JSON_V.null) }, { variant: SOME, names: ["value"], body: ([x]) => k.call(sub(t.args[0]), x) }]);
+      if (t.id in THROUGH) {
+        const out = k.call(lib(THROUGH[t.id][0]), v);
+        if (t.id === BYTES) return k.call(JSON_V.text, out);
+        if (t.id === SET_TYPE) return k.call(JSON_V.list, k.call(listed(`json items of ${showT(t)}`, sub(t.args[0])), out));
+        const [key, value] = t.args;
+        if (key.t === "con" && key.id === STRING) {
+          const entry = k.def(`json field of ${showT(t)}`);
+          k.define(entry, k.fn(["entry"], (e) => k.match(e, [{ variant: PAIR_V, names: ["key", "value"], body: ([a, b]) => pair(a, k.call(sub(value), b)) }])));
+          return k.call(JSON_V.object, k.call(listed(`json fields of ${showT(t)}`, entry), out));
+        }
+        return k.call(JSON_V.list, k.call(listed(`json entries of ${showT(t)}`, sub({ t: "con", id: PAIR, args: [key, value] })), out));
+      }
       const data = dataOf(code, t) as Data;
       const one = data.variants.length === 1 && !isTuple(t.id);
       return k.match(v, data.variants.map((variant) => {
@@ -171,6 +195,18 @@ export function jsonByType(code: Code, info: Info, names: Names): { code: Code; 
       if (t.id === JSON_TYPE) return j;
       if (t.id === LIST) return as(j, JSON_V.list, (xs) => k.call(listed(`items from json at ${showT(t)}`, sub(t.args[0])), xs));
       if (t.id === OPTIONAL) return k.match(j, [{ variant: JSON_V.null, names: [], body: () => k.x(NONE) }], k.call(SOME, k.call(sub(t.args[0]), j)));
+      if (t.id in THROUGH) {
+        const made = (x: Id) => k.call(lib(THROUGH[t.id][1]), x);
+        if (t.id === BYTES) return as(j, JSON_V.text, made);
+        if (t.id === SET_TYPE) return as(j, JSON_V.list, (xs) => made(k.call(listed(`items from json at ${showT(t)}`, sub(t.args[0])), xs)));
+        const [key, value] = t.args;
+        if (key.t === "con" && key.id === STRING) {
+          const entry = k.def(`field from json at ${showT(t)}`);
+          k.define(entry, k.fn(["field"], (e) => k.match(e, [{ variant: PAIR_V, names: ["name", "value"], body: ([a, b]) => pair(a, k.call(sub(value), b)) }])));
+          return as(j, JSON_V.object, (fs) => made(k.call(listed(`fields from json at ${showT(t)}`, entry), fs)));
+        }
+        return as(j, JSON_V.list, (xs) => made(k.call(listed(`entries from json at ${showT(t)}`, sub({ t: "con", id: PAIR, args: [key, value] })), xs)));
+      }
       const data = dataOf(code, t) as Data;
       // A case's fields read from an object's fields, by name.
       const built = (variant: NodeOf<"variant">, fields: Id) => {
