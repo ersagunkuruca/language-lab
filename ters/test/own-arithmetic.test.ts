@@ -191,3 +191,17 @@ test("compare and sort order a type with an Ordered of its own by it, evaluated 
   const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
   assert.deepEqual(names.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), ["after", "same", "[priority(3), priority(2), priority(1)]"]);
 });
+
+// At a type variable compiled code orders through the runtime's general
+// order, given each case's Ordered implementation ($ordered, L204i).
+test("the compiled runtime's general order goes through a case's Ordered", async () => {
+  const { $compareN, $bool } = await import(runtime);
+  const p = (n: number) => ({ tag: "priority", fields: [n] });
+  const ordered = { priority: { tag: "ordered", fields: [(a: { fields: number[] }, b: { fields: number[] }) => $bool(b.fields[0] < a.fields[0])] } };
+  const order = new Map();
+  assert.deepEqual([$compareN(p(1), p(2), order, ordered), $compareN(p(2), p(2), order, ordered), $compareN(p(1), p(2), order)], [1, 0, -1]);
+  // Inside a list too, and Rationals by value without one.
+  const list = (...xs: unknown[]) => xs.reduceRight((t: unknown, h) => ({ tag: "std.list.cons", fields: [h, t] }), { tag: "std.list.nil", fields: [] });
+  assert.equal($compareN(list(p(1)), list(p(2)), order, ordered), 1);
+  assert.equal($compareN({ tag: "std.rational.ratio", fields: [1n, 2n] }, { tag: "std.rational.ratio", fields: [1n, 3n] }, order, ordered), 1);
+});

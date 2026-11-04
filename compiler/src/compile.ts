@@ -406,7 +406,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const fs = (code.nodes[v] as NodeOf<"variant">).fields;
       const each: string[] = [];
       for (let i = 0; i < fs.length; i++) {
-        const o = orderOf(fieldType((code.nodes[fs[i]] as NodeOf<"field">).type)) ?? `((x, y) => $compareN(x, y, $order))`;
+        const o = orderOf(fieldType((code.nodes[fs[i]] as NodeOf<"field">).type)) ?? `((x, y) => $compareN(x, y, $order, $ordered))`;
         if (entry.name === "") break;
         each.push(`c = ${o}(a.fields[${i}], b.fields[${i}]);\nif (c) return c;`);
       }
@@ -418,7 +418,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     entry.js = `function ${name}(a, b) {\n${tags}${body}return 0;\n}`;
     return name;
   };
-  const orderJs = (arg: Id, [a, b]: string[]) => { const o = orderOf(withAt(curAt, ty(arg))); return o ? `${o}(${a}, ${b})` : `$compareN(${a}, ${b}, $order)`; };
+  const orderJs = (arg: Id, [a, b]: string[]) => { const o = orderOf(withAt(curAt, ty(arg))); return o ? `${o}(${a}, ${b})` : `$compareN(${a}, ${b}, $order, $ordered)`; };
   // The copy being written: its `at`, in both its scheme's variables and
   // its body's.
   let curAt: Map<number, Type> = NO_AT;
@@ -3376,6 +3376,16 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     const impl = asValue(spec(d, new Map()));
     return body.variants.map((v) => `${JSON.stringify(v)}: ${impl}`);
   }) : [];
+  // And each type's Ordered implementation (L204i): the runtime's general
+  // order ($compare, $compareN, at a type variable) orders a value made by
+  // one through its `less`.
+  const comparesAny = Object.values(code.nodes).some((n) => n.kind === "ref" && n.target === COMPARE);
+  const orderedBy = comparesAny ? [...ordereds].flatMap(([t, d]) => {
+    const def = code.nodes[t], body = def?.kind === "def" && def.body ? code.nodes[def.body] : undefined;
+    if (!code.defs.includes(d) || body?.kind !== "typedef") return [];
+    const impl = asValue(spec(d, new Map()));
+    return body.variants.map((v) => `${JSON.stringify(v)}: ${impl}`);
+  }) : [];
   const made: [Spec, string][] = [];
   for (let s; (s = queue.shift());) made.push([s, body(s)]);
   // Asking which copy a call needs makes that copy, so a search that is only
@@ -3392,7 +3402,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   };
   // An order through an Ordered implementation (L204h) calls its less.
   const orders = [...orderFns.values()].flatMap((e) => (e.js && e.name ? [e.js] : []));
-  reach(exported.join("\n") + solverCode.join("\n") + constants.join("\n") + shownBy.join("\n") + "\n" + orders.join("\n"));
+  reach(exported.join("\n") + solverCode.join("\n") + constants.join("\n") + shownBy.join("\n") + "\n" + orderedBy.join("\n") + "\n" + orders.join("\n"));
   // A copy in a cycle with no heap copy of its own: called from the heap
   // as it is.
   for (const [s, b] of made) if (keep.has(s.name)) out.push(heapCalled.has(s.name) && !heapCopies.has(s.name) ? `${b}\nfunction* ${s.name}$h(...a) {\nreturn ${s.name}(...a);\n}` : b);
@@ -3413,7 +3423,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     // Only when the code kept shows a case: a library function that does
     // (the html module's px) isn't a reason when nothing calls it.
     ...orders,
-    ...([...out, ...exported, ...solverCode, ...constants, ...orders].some((b) => /\$order(?![\w$])/.test(b)) ? [`const $order = new Map(${JSON.stringify(Object.values(code.nodes).flatMap((n) => (n.kind === "typedef" ? n.variants.map((v, i) => [v, i]) : [])))});`] : []),
+    ...([...out, ...exported, ...solverCode, ...constants, ...orders].some((b) => /\$order(?![\w$])/.test(b)) ? [`const $order = new Map(${JSON.stringify(Object.values(code.nodes).flatMap((n) => (n.kind === "typedef" ? n.variants.map((v, i) => [v, i]) : [])))});`, `const $ordered = {${orderedBy.join(", ")}};`] : []),
     ...([...out, ...exported, ...solverCode, ...constants].some((b) => b.includes("$showAny(") || b.includes("$caseName(")) ? [`const $names = ${JSON.stringify(Object.fromEntries(Object.values(code.nodes).filter((n) => n.kind === "variant" && names[n.id] !== undefined).map((n) => [n.id, names[n.id]])))};`] : []),
     ...([...out, ...exported, ...solverCode, ...constants].some((b) => b.includes("$showAny(")) ? [`const $shown = {${shownBy.join(", ")}};`] : []),
     ...(usesCells ? [`$useCells(${!tracksCells});`] : []),
