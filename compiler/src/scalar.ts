@@ -401,8 +401,9 @@ export interface SFunc { def: Id; name: string; params: LType[]; result: LType; 
 // rounded: definitions with a call worked out when compiled (stage.ts) that
 // computed a number Float32 can't hold, so a Float32 run differs from it.
 // `shader`: lowered with `shader` and not `data` (C66c): Int is int32, and
-// no answer is the flag, not a status (wasm.ts takes both).
-export interface CoreIR { funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; arrays: AType[]; tables: TType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info; escapes: DType[]; rounded: Set<Id>; shader?: true }
+// no answer is the flag, not a status (wasm.ts takes both). `int32`:
+// lowered without `data`, shader or not (C163): an Int is an int32.
+export interface CoreIR { funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; arrays: AType[]; tables: TType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info; escapes: DType[]; rounded: Set<Id>; shader?: true; int32?: true }
 
 class Refused extends Error {}
 // A closure of a function type, at `key`, gives several answers: lowering
@@ -671,7 +672,9 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
     if (t.id === NUMBER) return "f64";
     if (t.id === BOOL) return "i32";
     if (opts.data && t.id === INT) return "int";
-    if (opts.shader && !opts.data && t.id === INT) return "int32";
+    // Int held in 32 bits wherever Int isn't the heap's (C66c in shaders;
+    // C163 in the plain profile: JavaScript, WebAssembly and C for pictures).
+    if (!opts.data && t.id === INT) return "int32";
     if (opts.data && t.id === STRING) return "text";
     // A cell or a place in one (C137c8): the evaluator's value, opaque here.
     if (opts.host && (t.id === CELL || t.id === PATH_T)) return "host";
@@ -1059,7 +1062,7 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
           for (const a of [...n.args, id]) if (!stype(zonk(a))) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(a))}`);
           return { k: "rt", fn: RT[target], args: RT_LATE.has(RT[target]) ? args().map((a, i) => (stype(zonk(n.args[i])) === "f64" ? fin(f, a) : a)) : args() };
         }
-        if (opts.shader && INT32[target]) return { k: "op", op: INT32[target], args: args() };
+        if (!opts.data && INT32[target]) return { k: "op", op: INT32[target], args: args() };
         // A partial function's x / 0 has no answer there (L125b), unless the
         // checker found this call always answered: then it can only stop.
         // Inside a search's body too: there the search gives the no answer
@@ -2562,7 +2565,7 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
   for (const [r, why] of unstarted) if (!refused.has(r)) refused.set(r, why);
   // Refusals by definition; those of one specialization stay inside.
   const niche = opts.data ? niches(funcs, [...records.values()], [...datas.values()], [...arrays.values()], [...fns.values()], shapes, [...tables.values()]) : new Set<string>();
-  return { funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()].filter((d) => !niche.has(d.key)), arrays: [...arrays.values()], tables: [...tables.values()], fns: [...fns.values()], shapes, code, info, escapes: escapes.map((e) => stype({ t: "con", id: e, args: [] }) as DType), rounded, ...(opts.shader && !opts.data ? { shader: true as const } : {}) };
+  return { funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()].filter((d) => !niche.has(d.key)), arrays: [...arrays.values()], tables: [...tables.values()], fns: [...fns.values()], shapes, code, info, escapes: escapes.map((e) => stype({ t: "con", id: e, args: [] }) as DType), rounded, ...(opts.shader && !opts.data ? { shader: true as const } : {}), ...(!opts.data ? { int32: true as const } : {}) };
 }
 
 // A Float64 is finite (L125c2, FLOAT-VALUES-2026-11-01.md §2), on

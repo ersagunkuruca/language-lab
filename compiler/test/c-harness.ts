@@ -27,7 +27,7 @@ const unhex = (w: string) => new Float64Array(new BigUint64Array([BigInt(`0x${w}
 export function encode(v: Value, t: LType, out: string[]): void {
   if (t === "f64") { out.push(hex(v as number)); return; }
   if (t === "i32") { out.push((v as Data).tag === TRUE ? "1" : "0"); return; }
-  if (t === "int") { out.push(String(v)); return; }
+  if (t === "int" || t === "int32") { out.push(String(v)); return; }
   if (t === "text") { out.push(`x${Buffer.from(v as string).toString("hex")}`); return; }
   if (isRecord(t)) { t.fields.forEach((f, j) => encode((v as Data).fields[j], f.t, out)); return; }
   const d = t as DType;
@@ -44,6 +44,7 @@ export function decode(ws: string[], t: LType): Value {
   if (t === "f64") return unhex(ws.shift()!);
   if (t === "i32") return bool(ws.shift() === "1");
   if (t === "int") return norm(BigInt(ws.shift()!));
+  if (t === "int32") return Number(ws.shift()!);
   if (t === "text") return Buffer.from(ws.shift()!.slice(1), "hex").toString();
   if (isRecord(t)) return { tag: (t as RType).variant, fields: t.fields.map((f) => decode(ws, f.t)) };
   const d = t as DType, top: Data = { tag: "", fields: [] };
