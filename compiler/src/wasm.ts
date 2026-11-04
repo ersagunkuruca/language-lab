@@ -87,6 +87,9 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean } = {}): Module
   const shader = !!lowered.shader;
   // Int in 32 bits (C66c's, and the plain profile's since C163).
   const int32 = shader || !!lowered.int32;
+  // No answer as the flag $none (C66c's; the plain profile's inside a
+  // search since C166): every profile but `data`.
+  const flagging = int32;
   // A shader's arrays (C66c) are the same Array, with an i32 for their
   // length and index and the flag for `at` past the end (wasm-rt.ts).
   const shaderArrays = (e: SExpr): SExpr => {
@@ -361,7 +364,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean } = {}): Module
   // gives status 2.
   const fuel = funcs.some((f) => f.spends || budgets(f.body)) || (int32 && rtNames.some((n) => /^int32\.i(add|sub|mul|neg|abs|pow|whole)$/.test(n)));
   // $none, a shader's flag (after the others).
-  const flags = shader && funcs.some((f) => flagged(f.body));
+  const flags = flagging && funcs.some((f) => flagged(f.body));
   const aborts = funcs.some((f) => mentions(f.body, "abort")) || worldReason;
   const reasonG = fuel ? 1 : 0, pow5G = (fuel ? 1 : 0) + (aborts ? 1 : 0), mspG = pow5G + (ryu ? 1 : 0);
   // Another operation that never returns (C34) leaves the operation, a
@@ -544,7 +547,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean } = {}): Module
       case "attempt": {
         // A shader's: the flag saved and cleared, the search, the flag read
         // into the status local and put back, then ok or otherwise by it.
-        if (shader) return [
+        if (flagging) return [
           0x23, ...u(noneG), 0x41, 0x00, 0x24, ...u(noneG), ...code1(e.body), 0x21, ...u(e.res),
           0x23, ...u(noneG), 0x21, ...u(st), 0x24, ...u(noneG),
           0x20, ...u(st), 0x04, ...typeOf(e.t), ...code(e.otherwise, d + 1, fl), 0x05, ...code(e.ok, d + 1, fl), 0x0b,
@@ -572,7 +575,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean } = {}): Module
       }
       // A box's field set (W4d), then what comes after.
       case "set": return [...code1(e.rec), ...code1(e.value), 0xfb, 0x05, ...u(recIndex.get(e.t.key)!), ...u(e.i), ...code1(e.then)];
-      case "zero": return [...(shader && e.none ? [0x41, 0x01, 0x24, ...u(noneG)] : []), ...zero(e.t)];
+      case "zero": return [...(flagging && e.none ? [0x41, 0x01, 0x24, ...u(noneG)] : []), ...zero(e.t)];
       case "choose": case "search": throw new Error(`${f.name}: ${e.k} is lowered away before WebAssembly`);
       case "op": {
         const args = e.args.flatMap(code1);
@@ -689,7 +692,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean } = {}): Module
         ].join("\n");
       }
       case "fail": return `${d}i32.const 1\n${d}br ${to(ld)} ;; no answer`;
-      case "attempt": if (shader) return [
+      case "attempt": if (flagging) return [
         `${d}global.get $none`, `${d}i32.const 0`, `${d}global.set $none`, w(e.body), `${d}local.set ${local(f, e.res)}`,
         `${d}global.get $none`, `${d}local.set ${st}`, `${d}global.set $none`,
         `${d}local.get ${st}`, `${d}(if (result ${ty(e.t)}) ;; no answer`, `${d}  (then`, wat(e.otherwise, f, d + "    ", ld + 1, fl) + ")", `${d}  (else`, wat(e.ok, f, d + "    ", ld + 1, fl) + "))",
@@ -714,7 +717,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean } = {}): Module
         ...(isUnit(e.t) ? [`${d}struct.new ${recName(e.t as RType)}`] : []),
       ].join("\n");
       case "set": return [w(e.rec), w(e.value), `${d}struct.set ${recName(e.t)} ${e.i}`, w(e.then)].join("\n");
-      case "zero": return `${shader && e.none ? `${d}i32.const 1\n${d}global.set $none\n` : ""}${d}${zeroText(e.t)}`;
+      case "zero": return `${flagging && e.none ? `${d}i32.const 1\n${d}global.set $none\n` : ""}${d}${zeroText(e.t)}`;
       case "choose": case "search": throw new Error(`${f.name}: ${e.k} is lowered away before WebAssembly`);
       case "op": return [...e.args.map(w), `${d}${INT32_RT.includes(e.op) ? `call $int32.${e.op}` : hostIndex.has(e.op) ? `call $Math.${e.op}` : e.op === "stop" ? "call $wasi.stop" : math && HOST[e.op] ? `call $math.${e.op}` : e.op === "mod" ? "call $number.mod" : INSTR[e.op]![1]}`].join("\n");
     }

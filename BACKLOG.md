@@ -139,7 +139,6 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 |---|---|---|---|---|---|
 | C143 | A stop in compiled code names the node it came from: compiled JS, WebAssembly and C carry each node's id where they can stop (Abort, overflow, no answer, a hole), so `lab run` of compiled code and a page print it and the editor selects it (source maps, influence) | [ASPECTS-2026-11-03b](docs/reports/reviews/ASPECTS-2026-11-03b.md) 269 | P3 | M | |
 | C150 | Words as machine words (L193): Word8 to Word64 compiled to u8/u16/u32/u64 (WASM i32/i64, C's uint8_t to uint64_t, JS numbers with `>>> 0` or BigInt.asUintN) instead of an Int record wrapped by `bits and`; (and, or, xor since C150a, shifted down since C150b: on Int, so each op on a word still wraps by an and). Measured on words.test.ts's FNV-1a and xorshift. Design C150c ([MACHINE-WORDS-2026-11-03](docs/design/numbers/MACHINE-WORDS-2026-11-03.md)): the compiler proves an Int fits a word; C150d known bits of an Int on the core IR done; next C150e a field that fits stored as a word, C150f the mask after an op as the wrapping op, C150g compare/show and the 10 ms gate | L193 | P3 | M | |
-| C166 | The plain scalar profile (JavaScript, WebAssembly, C) takes `first` with a fallback as a no-answer flag, as the shader profile does (C66c2), not only in the budget shape `first(() => with fuel(n, () => …), () => …)`: then raymarch's `colour` drops `with fuel` (L46b's second half; its trace has Choice from shadow's division) | L46b | P3 | S | |
 
 ## L: Language and library
 

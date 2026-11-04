@@ -454,7 +454,11 @@ export function reachedFrom(code: Code, roots: Id[]): Code {
 // `count`, is a flag the printers keep (lab_none): `fail`, a quotient by
 // 0 and the like set it, the code goes on with zeros, and the `first`
 // looks at it when its search ends. Shaders have no side effects, so going
-// on computes nothing anyone sees.
+// on computes nothing anyone sees. The plain profile (no `data`, no
+// shader) takes `first` with a fallback and `count` the same way since
+// C166: inside the search's body, and in what it calls (lowered again for
+// it), a partial builtin with no answer raises the flag instead of
+// stopping, so raymarch's colour needs no budget around its trace.
 export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean } = {}): CoreIR {
   // The function types whose closures give several answers: found as
   // lowering meets one, and lowered again with them (C137c22). Only those
@@ -789,6 +793,12 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
   // something that might not finish is allowed: inside a budget's body, or
   // inside a definition that itself may only be called under one.
   let underBudget = false;
+  // Lowering inside a search's body in the plain profile (C166): there a
+  // partial builtin with no answer raises the flag `first` and `count`
+  // read, as in a shader, rather than stopping. What such a body calls is
+  // lowered again for it (its key ends `|trying`), so the same definition
+  // called outside any search still stops.
+  let trying = false;
   const diverges = (t: Type | undefined) => !!t && t.t === "fn" && info.subst.resolveRow(t.eff).effs.includes(DIVERGE);
 
   // A definition's type as its lambda is written. A definition with results
@@ -815,7 +825,7 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
     if (!opts.data && !underBudget && diverges(t)) throw new Refused(`calls ${nm(def)}, which ${MAY_NOT_FINISH}`);
     const used = raw ? [...new Set(vars(raw))].filter((v) => types.has(v)).sort((a, b) => a - b) : [];
     const bound = (x: Type | Row) => ("t" in x ? show(x) : `{${x.effs.join(",")}}`);
-    const key = used.length ? `${def}|${used.map((v) => `${v}=${bound(types.get(v)!)}`).join(",")}` : def;
+    const key = (used.length ? `${def}|${used.map((v) => `${v}=${bound(types.get(v)!)}`).join(",")}` : def) + (trying ? "|trying" : "");
     if (index.has(key)) return index.get(key)!;
     if (refused.has(key)) throw new Refused(`calls ${nm(def)}, which ${refused.get(key)}`);
     const d = code.nodes[def] as NodeOf<"def">;
@@ -1070,7 +1080,7 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
         // checker found this call always answered: then it can only stop.
         // Inside a search's body too: there the search gives the no answer
         // (optional's none, first's fallback).
-        if (scalarOp(target)) { const e = { k: "op" as const, op: scalarOp(target)!, args: args() }; return opts.shader ? e : checked(f, e, !!opts.data && (!!f.partial || !!searching.get(f)) && !info.answered?.has(id)); }
+        if (scalarOp(target)) { const e = { k: "op" as const, op: scalarOp(target)!, args: args() }; return opts.shader ? e : checked(f, e, trying ? "flag" : !!opts.data && (!!f.partial || !!searching.get(f)) && !info.answered?.has(id)); }
         if (target === S.mapParts || target === S.zipParts || target === S.total) return parts(n, env, f);
         if (target === S.fail && opts.data) return { k: "fail" };
         if (target === S.fail && opts.shader) {
@@ -1078,7 +1088,7 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
           if (!t) throw new Refused(`fails as ${whyNot(zonk(id))}`);
           return { k: "zero", t, none: true };
         }
-        if (opts.shader && (target === S.first || target === S.count) && !isBudget(n)) return flagged(n, id, env, f);
+        if (!opts.data && (target === S.first || target === S.count) && !isBudget(n)) return flagged(n, id, env, f);
         // A stop with a reason (L51c, SPEC §8.4) ends the program, as an
         // overflow does: no handler gets it. The world says why; what it
         // gives is never used, so the call's value is a zero of its type.
@@ -1945,7 +1955,10 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
     if (!search || (target === S.first && !dflt)) throw new Refused(`uses ${nm(target)} on a search that isn't written in place (as () => …)`);
     const t = stype(zonk(id)), bt = stype(zonk(search));
     if (!t || !bt) throw new Refused(`searches for ${whyNot(zonk(t ? search : id))}`);
-    const res = f.locals.push(bt) - 1, body = expr(search, env, f, false);
+    const res = f.locals.push(bt) - 1, was = trying;
+    trying = !opts.shader;
+    let body: SExpr;
+    try { body = expr(search, env, f, false); } finally { trying = was; }
     return target === S.first
       ? { k: "attempt", body, res, ok: { k: "local", i: res }, otherwise: expr(dflt!, env, f, false), t }
       : { k: "attempt", body, res, ok: countOf(t, 1), otherwise: countOf(t, 0), t };
@@ -2531,7 +2544,7 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
           const ls = fnNode.params.map((p, k) => { const i = f.locals.push("f64") - 1; inner = new Map(inner).set(p, i); return { i, value: xs[k] }; });
           return ls.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), expr(fnNode.body, inner, f, false));
         }
-        if (fnNode.kind === "ref" && scalarOp(fnNode.target)) { const e = { k: "op" as const, op: scalarOp(fnNode.target)!, args: xs }; return opts.shader ? e : checked(f, e); }
+        if (fnNode.kind === "ref" && scalarOp(fnNode.target)) { const e = { k: "op" as const, op: scalarOp(fnNode.target)!, args: xs }; return opts.shader ? e : checked(f, e, trying ? "flag" : false); }
         if (fnNode.kind === "ref" && code.nodes[fnNode.target]?.kind === "def") return { k: "call", fn: func(fnNode.target), args: xs, tail: false };
         throw new Refused("takes the parts with a function that isn't written here (that needs closures)");
       };
@@ -2594,7 +2607,8 @@ const stopWith = (i: number): SExpr => op("stop", num(i));
 const stop = stopWith;
 const iff = (cond: SExpr, then: SExpr, otherwise: SExpr): SExpr => ({ k: "if", cond, then, else: otherwise, t: "f64" });
 // When bad, the stops in why; otherwise ok.
-const guard = (bad: SExpr, why: SExpr, ok: SExpr): SExpr => ({ k: "if", cond: bad, then: why, else: ok, t: "f64", check: true });
+const guarded = (bad: SExpr, why: SExpr, ok: SExpr): SExpr => ({ k: "if", cond: bad, then: why, else: ok, t: "f64", check: true });
+const guard = guarded;
 // e without its checks: what a GPU runs, which can't stop.
 // Optional Float64 and Extended Float64 as one f64 (L125e,
 // FLOAT-VALUES-2026-11-01.md §4, Rust's niche): every Float64 is finite
@@ -2731,10 +2745,14 @@ const isFinite = (l: SExpr) => op("equal", op("sub", l, l), num(0));
 export const fin = (f: SFunc, x: SExpr): SExpr => (lit(x) !== null ? x : held(f, x, (l) => guard(op("not", isFinite(l)), stop(OVERFLOW), l)));
 const LATE: Partial<Record<Op, true>> = { less: true, equal: true, exp: true };
 export const RT_LATE = new Set(["number.show", "number.range", "int.wholePart"]);
-// `none`: no answer is a Choice the function gives (a fail) instead of a stop.
-function checked(f: SFunc, r: Extract<SExpr, { k: "op" }>, none = false): SExpr {
+// `none`: no answer is a Choice the function gives (a fail) instead of a
+// stop; "flag": inside a search's body in the plain profile (C166), it
+// raises the flag and goes on with a zero, as a shader's search does, and
+// isn't a check (a printer that drops checks keeps it).
+function checked(f: SFunc, r: Extract<SExpr, { k: "op" }>, none: boolean | "flag" = false): SExpr {
   const [a, b] = r.args;
-  const stop = (i: number): SExpr => (none && i !== OVERFLOW ? { k: "fail" } : stopWith(i));
+  const stop = (i: number): SExpr => (none === "flag" && i !== OVERFLOW ? { k: "zero", t: "f64", none: true } : none && i !== OVERFLOW ? { k: "fail" } : stopWith(i));
+  const guard = (bad: SExpr, why: SExpr, ok: SExpr): SExpr => (why.k === "zero" ? iff(bad, why, ok) : guarded(bad, why, ok));
   switch (r.op) {
     case "div": case "mod": {
       const v = lit(b);
