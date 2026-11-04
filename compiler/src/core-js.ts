@@ -219,7 +219,14 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
         // from outside, it's given a rest that keeps the answer.
         // A closure that takes the rest (it waits, or gives several
         // answers) is given one when called from outside (core-rt.ts).
-        case "closure": { const rest = e.t.waits || e.t.several; return `R.closure(${names[e.fn]}, [${e.caps.map((a) => ex(a, pre, d)).join(", ")}]${e.src || rest ? `, ${e.src ? JSON.stringify(e.src) : "undefined"}` : ""}${rest ? ", true" : ""})`; }
+        case "closure": {
+          const rest = e.t.waits || e.t.several;
+          const c = `R.closure(${names[e.fn]}, [${e.caps.map((a) => ex(a, pre, d)).join(", ")}]${e.src || rest ? `, ${e.src ? JSON.stringify(e.src) : "undefined"}` : ""}${rest ? ", true" : ""})`;
+          // One that captures nothing is the same function every time, so
+          // it's made once, at load (C137d18): sheet's tokenizer made one
+          // per character for its fold.
+          return e.caps.length ? c : constName(c);
+        }
         case "cap": return `l0.caps[${e.i}]`;
         case "apply": {
           const c = ex(e.fn, pre, d), xs = e.args.map((a) => ex(a, pre, d));
