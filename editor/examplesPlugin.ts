@@ -67,13 +67,19 @@ export const examplesPlugin = (manifest: Manifest, mode: "inline" | "page" = "in
 // element early.
 export function exampleTags(manifest: Manifest): string {
   return foldersOf(manifest).map((f) => {
-    const tables: Record<string, unknown> = {};
-    for (const [table, file] of TABLES) {
-      const path = `${dirOf(f)}${file}.json`;
-      if (existsSync(path)) tables[table] = JSON.parse(readFileSync(path, "utf8"));
-    }
-    const data = dataOf(manifest, f);
-    if (data) tables.data = data;
+    const tables = exampleTables(manifest, f);
     return `<script type="application/json" id="lab-example-${idOf(f)}">${JSON.stringify(tables).replace(/</g, "\\u003c")}</script>\n`;
   }).join("");
+}
+
+// A folder's tables as the editor reads them ("examples:files").
+export function exampleTables(manifest: Manifest, f: string): Record<string, unknown> {
+  const tables: Record<string, unknown> = {};
+  for (const [table, file] of TABLES) {
+    const path = `${dirOf(f)}${file}.json`;
+    if (existsSync(path)) tables[table] = JSON.parse(readFileSync(path, "utf8"));
+  }
+  const data = dataOf(manifest, f);
+  if (data) tables.data = data;
+  return tables;
 }
