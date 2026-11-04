@@ -1252,7 +1252,11 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     const givenTypes = new Map(Object.entries(n.given).map(([k, g]) => [k, expr(g, env, row)] as const));
     if ([...givenTypes.values()].some((t) => { const r = s.resolve(t); return r.t === "con" && r.id === INT; })) solvesInWholeNumbers(code, n.id);
     let p: ReturnType<typeof planSolve> | null = null;
-    try { p = planSolve(code, n); } catch (e) { err(n.id, (e as Error).message); }
+    try { p = planSolve(code, n); } catch (e) {
+      // solve.ts says which function by its id; the message names it.
+      const t = useTarget(code.nodes, n), m = (e as Error).message;
+      err(n.id, m.startsWith(`${t} `) ? `${nm(t)}${m.slice(t.length)}` : m);
+    }
     if (p?.mode === "relational") {
       // Whether this direction ends is its mode's (modes.ts, MODES.md):
       // Diverge only when the search may go on forever, and a direction

@@ -19,6 +19,9 @@ const ask = (k: Lang) => k.effect("Ask", [["ask", [], () => k.tref("type.number"
 const answered = (k: Lang, a: ReturnType<typeof ask>, answer: () => string): Parameters<Lang["match"]>[1] =>
   [{ variant: a.op.ask, names: [], body: answer }, { variant: a.op.tell, names: ["n"], body: () => k.x("std.unit.unit") }];
 
+// A definition's nth input: the port a solve gives or asks by.
+const param = (k: Lang, f: string, i: number): string => { const d = k.code.nodes[f]; const l = d?.kind === "def" && d.body ? k.code.nodes[d.body] : undefined; return l?.kind === "lambda" ? l.params[i] : ""; };
+
 const SMALLEST: Record<string, (k: Lang) => void> = {
   "wrong-type": (k) => k.define(k.def("p"), k.call(S.not, k.lit("a"))),
   "wrong-count": (k) => k.define(k.def("p"), k.call(S.not, k.x(TRUE), k.x(TRUE))),
@@ -44,6 +47,9 @@ const SMALLEST: Record<string, (k: Lang) => void> = {
   "unhandled-effect": (k) => { const a = ask(k); k.define(k.def("p"), k.call(a.op.ask)); },
   "no-cases": (k) => k.define(k.def("p"), k.fn(["b"], (b) => k.match(b, []))),
   "functions-in-data": (k) => k.define(k.def("p"), k.call(S.equal, k.fn(["x"], (x) => x), k.fn(["x"], (x) => x))),
+  "no-port": (k) => { const f = k.def("f"); k.define(f, k.fn(["a"], (a) => k.call(ARITH.add, a, k.lit(1)))); k.define(k.def("p"), k.solve(f, { nope: k.lit(1), out: k.lit(3) }, { [param(k, f, 0)]: "x" }, (b) => b[param(k, f, 0)])); },
+  "needs-more-ports": (k) => { const f = k.def("f"); k.define(f, k.fn(["a", "b"], (a, b) => k.call(ARITH.add, a, b))); k.define(k.def("p"), k.solve(f, {}, { [param(k, f, 0)]: "x", [param(k, f, 1)]: "y" }, (b) => b[param(k, f, 0)])); },
+  "not-backwards": (k) => { const v = k.def("v"); k.define(v, k.lit(1)); k.define(k.def("p"), k.solve(v, { out: k.lit(3) }, {}, () => k.lit(0))); },
   "not-a-number": (k) => k.define(k.def("p"), k.fn(["b"], (b) => k.match(b, [{ variant: TRUE, names: [], body: () => k.lit(1) }, { variant: FALSE, names: [], body: () => k.lit("a") }]))),
 };
 
