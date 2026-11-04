@@ -708,7 +708,10 @@ test("where a fraction goes, a typed 1/2 is one half and a typed 1 is one: as fr
   assert.deepEqual(lits("as fraction(2) · 3"), [[2, INT], [3, RATIONAL_TYPE]]);
   // Where a Float64 goes, 1/2 is still 1 divided by 2.
   assert.deepEqual(lits("1/2 + x · 0.5"), [[1, undefined], [2, undefined], [0.5, undefined]]);
-  assert.equal(T.fillValue(s.code, s.all(), s.info(), hole, "as fraction(1) + 1/0", f).ok, false);
+  // 1/0 is no fraction, so it is 1 divided by 0, a Float64, and the
+  // fraction goes into Float64 through its embedding (L208c).
+  const zero = T.fillValue(s.code, s.all(), s.info(), hole, "as fraction(1) + 1/0", f);
+  assert.ok(zero.ok && subtree(zero.code, hole).some((id) => { const n = zero.code.nodes[id]; return n.kind === "ref" && n.target === "builtin.div"; }));
 });
 
 test("a call typed in the palette may name a function of several words: as fraction(3)", async () => {

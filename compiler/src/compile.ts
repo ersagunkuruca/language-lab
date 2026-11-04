@@ -37,7 +37,7 @@ import { resolveArithmetic } from "../../ters/src/lang/arith.ts";
 import { intLit } from "../../ters/src/lang/int.ts";
 import { hostOp, ownOperations } from "../../ters/src/lang/hosts.ts";
 import { children, dependencies, subtree, type Code, type Id, type Node, type NodeOf, type Use, isUse, useTarget, isCall, type Call } from "../../ters/src/model.ts";
-import { bindsOf, bodyOf as useBody } from "./uses.ts";
+import { bindsOf, bodyOf as useBody, withBodies } from "./uses.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { CHOICE, DIVERGE, INT, NUMBER, STRING, Subst, type Row, type Type } from "../../ters/src/lang/types.ts";
 import { fieldShapes, shapeOf, type Shape } from "../../ters/src/lang/nested.ts";
@@ -136,6 +136,8 @@ function reachedFromExports(code: Code, names: Names, exports: string[], info: I
 }
 
 export function compile(code: Code, info: Info, names: Names, opts: Options): string {
+  // A use with no body, as the use that binds its ports (C161, uses.ts).
+  ({ code, info } = withBodies(code, info, names));
   // The generic + resolved to each type's own operation first
   // (ters/src/lang/arith.ts): nothing here sees a generic one.
   ({ code, info, names } = resolveArithmetic(code, info, names));
