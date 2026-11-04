@@ -6,7 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { load } from "../src/program.ts";
-import { coreModule, emitCoreJs, lowerCore, usesSolver } from "../src/core-js.ts";
+import { coreModule, emitCoreJs, lowerCore, solverCode, usesSolver } from "../src/core-js.ts";
 
 test("relations' solves are printed plans: no node table, no evaluator (C167a)", () => {
   const p = load("relations"), main = p.named("main");
@@ -32,4 +32,14 @@ test("mode plans are printed, with builtins run forward (C167b)", () => {
   assert.equal(usesSolver(ir), false);
   const b = load("backwards"), main = b.named("main");
   assert.match(emitCoreJs(lowerCore(b.code, b.info, b.pres.names, [main])).js, /R\.moded\([\s\S]*"hello, "/);
+});
+
+// Where the evaluator's solver still runs, it gets only the nodes it reads
+// (C167c): converter's one solve reads a couple of hundred of its nodes.
+test("a solve the evaluator runs is given only the nodes it reaches (C167c)", () => {
+  const p = load("converter"), main = p.named("main");
+  const ir = lowerCore(p.code, p.info, p.pres.names, [main]);
+  const c = solverCode(ir, emitCoreJs(ir).js);
+  const n = Object.keys(c.nodes).length;
+  assert.ok(n > 0 && n < Object.keys(ir.code.nodes).length / 4, `${n} nodes`);
 });
