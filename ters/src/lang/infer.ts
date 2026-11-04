@@ -660,13 +660,6 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       if (w.givens.some(([, t]) => { const r = s.resolve(t); return r.t === "con" && r.id === INT; })) { solvesInWholeNumbers(code, w.solve); again = true; }
       else for (const [g, t] of w.givens) unifyAt(g, num, t, "a given port");
     }
-    // A function variable's calls whose row nothing closed: the call's row
-    // is the function's, as before L29; a closed one stays inside it.
-    s.subs = s.subs.filter((c) => {
-      if (!c.open || s.resolveRow(c.from).tail === null) return true;
-      try { s.unifyRow(c.from, c.to); } catch (e) { if (e instanceof EffectError) err(c.at ?? group[0], worldOrEffect(e)); else throw e; }
-      return false;
-    });
     settle();
     const generalized = new Set<number>();
     for (const d of group) freeVars(s.zonk(mono.get(d)!), s, new Set(), generalized);
@@ -1072,15 +1065,6 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
           // search's does, so this code may do more beside the call (I153).
           let here = callRow;
           if (!search && fr.t === "fn" && s.resolveRow(fr.eff).tail === null) { here = s.freshRow(); s.subs.push({ from: here, to: row, at: id }); }
-          // A function given as the definition's input the same way while
-          // its row is still open, until the group's end: if a later use
-          // closed it, what this code may do around the call didn't become
-          // what the function does (BACKLOG L29); if not, the rows are made
-          // one there, as they always were. Only inputs: a function taken
-          // from a value (a let, a case's field) may already share its
-          // row's tail with handlers around it, and making the rows one
-          // late, after those were read, lets a Choice out of them.
-          else if (!search && !back && given?.kind === "ref" && current.some((d) => { const dn = code.nodes[d], l = dn?.kind === "def" && dn.body ? code.nodes[dn.body] : undefined; return l?.kind === "lambda" && l.params.includes(given.target); }) && (fr.t === "var" || (fr.t === "fn" && s.resolveRow(fr.eff).tail !== null))) { here = s.freshRow(); s.subs.push({ from: here, to: row, at: id, open: true }); }
           try {
             try { s.unify(fr, { t: "fn", params, ret, eff: here }); }
             catch (e) { if (!(e instanceof TypeError) || e.constructor !== TypeError || back || fr.t !== "fn" || fr.params.length !== params.length || !liftLate(n, fr, params)) throw e; s.unify(fr, { t: "fn", params, ret, eff: here }); }
