@@ -84,3 +84,13 @@ test("a record read from JSON through json field and json as …, with a default
   assert.equal(await both((k) => orElse(k, () => k.call(lib("json as text"), k.call(lib("json field"), read(k, person), k.lit("died"))), () => k.lit("?"))), '"?"');
   assert.equal(await both((k) => orElse(k, () => k.call(lib("json as text"), k.call(lib("json field"), read(k, person), k.lit("born"))), () => k.lit("?"))), '"?"');
 });
+
+test("csv printed quotes only where it must, and csv rows reads it back, CRLF too (L190e)", async () => {
+  const rows = [["name", "note"], ["Ada", "said \"hi\", twice"], ["Bob", "two\nlines"], ["", "x"]];
+  const lit = (k: Lang) => k.listOf(...rows.map((r) => k.listOf(...r.map((c) => k.lit(c)))));
+  const text = 'name,note\nAda,"said ""hi"", twice"\nBob,"two\nlines"\n,x';
+  assert.equal(await both((k) => k.call(lib("csv printed"), lit(k))), JSON.stringify(text));
+  const back = await both((k) => k.call(lib("csv rows"), k.call(lib("csv printed"), lit(k))));
+  assert.equal(back, await both(lit));
+  assert.equal(await both((k) => k.call(lib("csv rows"), k.lit("a,b\r\nc,d\r\n"))), '[["a", "b"], ["c", "d"]]');
+});

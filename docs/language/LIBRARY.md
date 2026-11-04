@@ -405,6 +405,13 @@ Json is JSON's values as data: null, a Bool, a Float64, a Text, a list, or an ob
 - **json as bool** : `(Json) -[Choice]-> Bool`. The Bool a json bool holds; no answer for any other kind.
 - **json as list** : `(Json) -[Choice]-> List Json`. The items a json list holds; no answer for any other kind.
 
+## CSV
+
+CSV text as rows of text fields (RFC 4180): csv printed writes rows, quoting a field only when it must, and csv rows reads them back.
+
+- **csv printed** : `(List (List Text)) -> Text`. Rows of fields as CSV text (RFC 4180), a line each: a field with a comma, a quote or a line break is quoted, its quotes doubled.
+- **csv rows** : `(Text) -[Abort]-> List (List Text)`. The rows of fields a CSV text holds (RFC 4180), the other way from csv printed: quoted fields may hold commas, doubled quotes and line breaks; lines end in LF or CRLF. Stops when the text ends inside a quoted field.
+
 ## Dates
 
 A Date is a day in the calendar: its year, month and day. Dates count as days from 1970-01-01 both ways, so adding days, the days between two dates and the weekday are whole-number arithmetic. Times of day, instants and time zones come later.
