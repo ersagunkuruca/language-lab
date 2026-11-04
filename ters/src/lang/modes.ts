@@ -48,6 +48,8 @@ export interface Answers { fail: boolean; many: boolean }
 const ONE: Answers = { fail: false, many: false };
 const CHECK: Answers = { fail: true, many: false };
 const MANY: Answers = { fail: true, many: true };
+// The most arms one lambda's search follows (run, in analyzer).
+const PATHS = 4096;
 const both = (a: Answers, b: Answers): Answers => ({ fail: a.fail || b.fail, many: a.many || b.many });
 export const determinism = (a: Answers) => (a.fail ? (a.many ? "nondet" : "semidet") : a.many ? "multi" : "det");
 
@@ -307,7 +309,10 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
     const ctx: Ctx = { key, ports, fns, def };
     st.goals = goalsOf(l.body, ctx);
     const need = [...l.params.map(slot), slot(l.body)];
-    let v = run(st, need, ctx);
+    const outerPaths = paths;
+    paths = 0;
+    let v: Verdict;
+    try { v = run(st, need, ctx); } finally { paths = outerPaths; }
     running.delete(key);
     // Its own recursion, as far as it's known now (a cycle through a mode
     // still being worked out is checked again at the end, in checked()).
@@ -346,6 +351,8 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
 
   // ----------------------------------------------------------- the search
 
+  // The arms searched so far in the lambda being worked out (run below).
+  let paths = 0;
   function run(st: St, need: Id[], ctx: Ctx): Verdict {
     const steps: Exec[] = [];
     // What a goal said when last asked stands until a slot it asked about
@@ -425,6 +432,13 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
       if (!f.ends) { st.ends = false; st.loops.push(f.why ?? g.text); }
       if (f.dynamic) st.dynamic.push(f.dynamic);
       if (f.branches) {
+        // Each arm searches the rest of the lambda on its own, so k ifs in
+        // a row are 2^k searches: steady pow's fdlibm steps (L210) were
+        // millions, and the palette asks for its modes. Past PATHS in one
+        // lambda the search stops and says so, as a run that may give
+        // several answers or none and may not end, which is never too
+        // little.
+        if ((paths += f.branches.length) > PATHS) return { answers: MANY, ends: false, loops: [`${ctx.def ? nm(ctx.def) : "a function"} has too many paths to follow`], stuck: [], dynamic: [...st.dynamic, "too many paths to follow"], order: st.order, plan: { steps } };
         const out = f.branches.map((b) => {
           const sub: St = { soft: st.soft, posted: new Set(st.posted), known: new Set(st.known), sizes: new Map(st.sizes), goals: [...b.goals, ...st.goals], answers: st.answers, ends: st.ends, loops: [...st.loops], dynamic: [...st.dynamic], order: [...st.order, b.text] };
           for (const s of b.gives) sub.known.add(s);
