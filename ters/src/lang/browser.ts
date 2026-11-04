@@ -32,7 +32,7 @@
 
 import { Pending, type Cells } from "./cells.ts";
 import { worldRandom } from "./random.ts";
-import { requestKey, type PlainRequest, type PlainResponse } from "./network.ts";
+import { base64Of, bytesOfBase64, requestKey, type PlainRequest, type PlainResponse } from "./network.ts";
 import type { Value, World } from "./run.ts";
 
 // What's used of localStorage (Storage), so tests can pass a map.
@@ -114,11 +114,20 @@ export function browserWorld(store: Store, program: string, console_ = console, 
     throw new Pending(f.ready, what);
   };
   const none = () => { throw new Error("a page has no standard input"); };
-  const read = (path: string) => {
-    const text = store.getItem(prefix + path);
-    if (text === null) throw new Error(`no such file: ${path}`);
-    return text;
+  // The store holds texts, so a file written as bytes (L189c) is kept as
+  // NUL and its Base64; a text that starts with NUL is kept that way too,
+  // as its UTF-8, so the two never meet. Each reads as the other the way a
+  // file on disk does: a text as its UTF-8, bytes decoded as UTF-8 with
+  // U+FFFD where they aren't.
+  const BYTES = "\u0000";
+  const kept = (path: string) => {
+    const v = store.getItem(prefix + path);
+    if (v === null) throw new Error(`no such file: ${path}`);
+    return v;
   };
+  const read = (path: string) => { const v = kept(path); return v.startsWith(BYTES) ? new TextDecoder().decode(bytesOfBase64(v.slice(1))) : v; };
+  const readBytes = (path: string) => { const v = kept(path); return v.startsWith(BYTES) ? bytesOfBase64(v.slice(1)) : new TextEncoder().encode(v); };
+  const asKept = (text: string) => (text.startsWith(BYTES) ? BYTES + base64Of(new TextEncoder().encode(text)) : text);
   // On a page, an event handler's run may be taken back (cells.ts
   // attempt): its lines are printed only if it's kept, and its file writes
   // are undone if it isn't.
@@ -133,8 +142,10 @@ export function browserWorld(store: Store, program: string, console_ = console, 
     input: none,
     readLine: none,
     readFile: read,
-    writeFile: (path, text) => put(prefix + path, text),
-    appendFile: (path, text) => put(prefix + path, (store.getItem(prefix + path) ?? "") + text),
+    writeFile: (path, text) => put(prefix + path, asKept(text)),
+    appendFile: (path, text) => put(prefix + path, asKept((store.getItem(prefix + path) === null ? "" : read(path)) + text)),
+    readBytes,
+    writeBytes: (path, bytes) => put(prefix + path, BYTES + base64Of(bytes)),
     fileExists: (path) => store.getItem(prefix + path) !== null,
     // Every file, as paths: the store has no folders.
     listFolder: () => {
