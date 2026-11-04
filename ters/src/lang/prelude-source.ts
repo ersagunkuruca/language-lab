@@ -1058,6 +1058,12 @@ export function buildPrelude(): Module {
   });
   const wordHelpers = wordDefs.flatMap((d) => [d.add, d.sub, d.mul, d.neg, d.less, d.and, d.or, d.xor, d.up, d.down, d.show]);
   const wordMakers = wordDefs.map((d) => d.as);
+  const rationalLiteral = k.def("rational literal");
+  k.define(rationalLiteral, k.fn(["top", "bottom"], (t, b) => reduced(t, b)));
+  const fixedLiteral = k.def("fixed literal");
+  k.define(fixedLiteral, k.fn(["top", "bottom"], (t, b) => F(k.call(S.first,
+    k.thunk(() => k.call(INT_OPS.quotient, k.call(INT_OPS.add, k.call(INT_OPS.mul, t, k.int(2 ** 33)), b), k.call(INT_OPS.mul, b, k.int(2)))),
+    k.thunk(() => k.int(0))))));
   const impl = (name: string, v: Id, ops: Id[]) => { const d = k.def(name); k.define(d, k.call(v, ...ops.map((o) => k.x(o)))); return d; };
   const arithmetics = [
     impl("arithmetic at float64", ARITHMETIC_V, [B.add, B.sub, B.mul, B.neg]),
@@ -1080,6 +1086,12 @@ export function buildPrelude(): Module {
         k.call(MAT_V[size], ...Array.from({ length: size * size }, (_, c) => (c % (size + 1) === 0 ? x : k.lit(0))))))));
       return d;
     }),
+    // A number written at Rational, Algebraic or Fixed (L204d): its digits
+    // as top/bottom, kept exactly; at Fixed rounded once to the nearest
+    // step of 2⁻³², halves up, so 0.1 is the same steps on every target.
+    impl("literal at rational", LITERAL_V, [rationalLiteral]),
+    impl("literal at algebraic", LITERAL_V, [ALGEBRAIC_OPS.fraction]),
+    impl("literal at fixed", LITERAL_V, [fixedLiteral]),
     impl("ordered at fixed", ORDERED_V, [lessX]),
     ...wordDefs.flatMap((d) => [impl(`arithmetic at word${d.w}`, ARITHMETIC_V, [d.add, d.sub, d.mul, d.neg]), impl(`ordered at word${d.w}`, ORDERED_V, [d.less])]),
     // Text's < is `comes before`, alphabetical (L152): at most, smaller,
