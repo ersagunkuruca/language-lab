@@ -167,7 +167,7 @@ const at = (p: { code: { defs: Id[] }; names: Record<string, string> }, n: strin
 // compare and sort go through a type's Ordered (L204g): a priority whose
 // order is the other way round from its number's sorts the highest first,
 // and the prelude's Rational is ordered by its own `less` the same way.
-test("compare and sort order a type with an Ordered of its own by it", () => {
+test("compare and sort order a type with an Ordered of its own by it, evaluated and compiled", async () => {
   const out: Record<string, Id> = {};
   const p = program((k) => {
     const P = k.type("Priority", [], [["priority", [["level", () => k.tref(INT)]]]]);
@@ -183,5 +183,11 @@ test("compare and sort order a type with an Ordered of its own by it", () => {
   });
   assert.deepEqual(p.info.errors.map((e) => e.message), []);
   const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });
-  assert.deepEqual(["one against two", "two against two", "sorted"].map((n) => r.value(out[n])), ["after", "same", "[priority(3), priority(2), priority(1)]"]);
+  const names = ["one against two", "two against two", "sorted"];
+  assert.deepEqual(names.map((n) => r.value(out[n])), ["after", "same", "[priority(3), priority(2), priority(1)]"]);
+  // Compiled the same (L204h): compile.ts orders a Priority by its less.
+  const path = join(mkdtempSync(join(tmpdir(), "own-")), "own.js");
+  writeFileSync(path, compile(p.code, p.info, p.names, { runtime, exports: names }));
+  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
+  assert.deepEqual(names.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), ["after", "same", "[priority(3), priority(2), priority(1)]"]);
 });
