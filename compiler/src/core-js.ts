@@ -109,8 +109,11 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
     const plain = func(f, i, null).replace(`function ${names[i]}(`, `function ${names[i]}$b(`);
     return [`// ${f.name.replace(/\n/g, " ")} (past ${DEPTH} calls deep, its copy on the heap)\nfunction ${names[i]}(${ps}) {\n  if (depth > ${DEPTH}) return R.drive(${gens[i]}(${ps}));\n  depth++;\n  const r = ${names[i]}$b(${ps});\n  depth--;\n  return r;\n}`, plain, func(f, i, deep.get(i)!)];
   });
+  // The budget, only where one is set or spent from (C171).
+  const fuelUsed = (e: SExpr): boolean => e.k === "budget" || (e.k === "rt" && e.fn.startsWith("fuel.")) || kids(e).some(fuelUsed);
+  const fuel = ir.funcs.some((f) => f.spends || fuelUsed(f.body));
   const js = [
-    "let fuel = Infinity;",
+    ...(fuel ? ["let fuel = Infinity;"] : []),
     // Plain calls of functions with a heap copy on JavaScript's stack now.
     "let depth = 0;",
     ...[...classes].map(([key, c]) => {
@@ -120,7 +123,7 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
     }),
     ...[...consts].map(([src, v]) => `const ${v} = ${src};`),
     // A backwards search spends the budget too (C137c12).
-    "R.spending(() => --fuel >= 0);",
+    ...(fuel ? ["R.spending(() => --fuel >= 0);"] : []),
     ...[...rts].map(([n, v]) => { const b = builtinOf(n); return `const ${v} = R.rt(${JSON.stringify(n)}${b ? `, ${JSON.stringify(b)}` : ""});`; }),
     ...worlds.map((_, i) => `const w${i} = R.worlds[${i}];`),
     ...text,
