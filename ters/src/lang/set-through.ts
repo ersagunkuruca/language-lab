@@ -24,7 +24,7 @@
 // rather than written.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
-import { freshId, isCall, type Call } from "../model.ts";
+import { nodesWhere, freshId, isCall, type Call } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { preludeDef } from "./arith.ts";
 import { infer, type Info } from "./infer.ts";
@@ -39,10 +39,11 @@ const throughAt = (code: Code, n: Node) => {
   return fn?.kind === "ref" && fn.target === SET ? readPaths(code, n.args[0]) : null;
 };
 
-export const usesSetThrough = (code: Code) => Object.values(code.nodes).some((n) => throughAt(code, n));
+const settingThrough = (code: Code) => nodesWhere(code, "set through", (n) => !!throughAt(code, n));
+export const usesSetThrough = (code: Code) => settingThrough(code).length > 0;
 
 export function setThrough(code: Code, info: Info, names: Names): { code: Code; info: Info; names: Names } {
-  const calls = Object.values(code.nodes).flatMap((n) => { const r = throughAt(code, n); return r ? [{ id: n.id, ...r }] : []; });
+  const calls = settingThrough(code).flatMap((id) => { const r = throughAt(code, code.nodes[id]); return r ? [{ id, ...r }] : []; });
   const inverse = preludeDef("inverse");
   if (!calls.length || !inverse || !code.nodes[inverse]) return { code, info, names };
   const nodes: Record<Id, Node> = { ...code.nodes };
