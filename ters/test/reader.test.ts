@@ -93,7 +93,7 @@ test("typed text reads a function's named results back in", async () => {
     if (!r.ok) return;
     const back = r.code.nodes[lam.id] as NodeOf<"lambda">;
     assert.deepEqual(back.results?.map((b) => r.names[b]), ["red", "green"]);
-    assert.match(renderLet(r.code, { ...p.pres, names: r.names }, hsi), /part = \(saturation, hue\) => tuple\(1 \+ 2 · saturation · cos\(6\.283185307179586 · hue\), /);
+    assert.match(renderLet(r.code, { ...p.pres, names: r.names }, hsi), /part = \(saturation, hue\) => \(1 \+ 2 · saturation · cos\(6\.283185307179586 · hue\), /);
     assert.deepEqual(infer(r.code, r.names).errors, []);
   }
   // As many parts as results, or it says so.
@@ -553,4 +553,28 @@ test("a list of call is edited as a row", async () => {
   const gone = removeItem(r.code, r.names, infer(r.code, r.names), row, 2);
   assert.ok(gone.ok);
   if (gone.ok) assert.deepEqual(lits(gone.code), [1, 2]);
+});
+
+// A fraction typed where a type spelled by its Literal goes is a literal
+// of that type (E237b): 1/3 where a Fixed goes, not Float64's 1 / 3; and
+// one already there is changed as a fraction. Asked of the library's
+// Literal implementations, not a list of number types.
+test("typed fraction at a type with a Literal is a literal of that type, and edits as one", async () => {
+  const { Lang } = await import("../src/lang/dsl.ts");
+  const { base, baseNames } = await import("../src/lang/load.ts");
+  const { ARITH } = await import("../src/lang/std.ts");
+  const { FIXED_TYPE } = await import("../src/lang/types.ts");
+  const { setLit } = await import("../../editor/typed.ts");
+  const k = new Lang();
+  const f = k.def("f");
+  let hole = "", half = "";
+  k.define(f, k.call(ARITH.add, (half = k.at(FIXED_TYPE, "1/2")), (hole = k.hole())));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names);
+  const r = fillValue(code, names, info, hole, "1/3", f);
+  assert.ok(r.ok, !r.ok ? r.reason : "");
+  if (!r.ok) return;
+  assert.deepEqual({ ...r.code.nodes[hole] }, { id: hole, kind: "lit", value: "1/3", of: FIXED_TYPE });
+  const e = setLit(code, names, info, half, "3/4");
+  assert.ok(e.ok, !e.ok ? e.reason : "");
+  if (e.ok) assert.deepEqual({ ...e.code.nodes[half] }, { id: half, kind: "lit", value: "3/4", of: FIXED_TYPE });
 });

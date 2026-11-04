@@ -9,7 +9,7 @@ import type { Code, Id, Node, NodeData, NodeOf } from "../ters/src/model.ts";
 import { children, collect, freshId, parentAt, parentOf, replace, subtree, swapIn } from "../ters/src/model.ts";
 import type { Names, Notation, Presentation } from "../ters/src/presentation.ts";
 import blocksStyle from "../ters/styles/blocks.json" with { type: "json" };
-import { fillings, implementationKey, infer as check, type Filling, type Info } from "../ters/src/lang/infer.ts";
+import { fillings, implementationKey, implementationOf, infer as check, type Filling, type Info } from "../ters/src/lang/infer.ts";
 import { isCall, isPublished, isUse, useNode, useTarget, type Call, type Use } from "../ters/src/model.ts";
 import { answerKeys } from "../ters/src/lang/ports.ts";
 import { LIBRARY, PRELUDE, TREES } from "../ters/src/lang/library.ts";
@@ -20,8 +20,8 @@ import { addVariant, fillHole } from "../ters/src/lang/refactor.ts";
 import { partNamed } from "../ters/src/lang/results.ts";
 import { planSolve } from "../ters/src/lang/solve.ts";
 import { solveMode } from "../ters/src/lang/modes.ts";
-import { ARITH, ASSOCIATIVE, CONS, FALSE, NIL, S, SIGS, TRUE, TUPLE_MAX, tuplePart, tupleVariant } from "../ters/src/lang/std.ts";
-import { ALGEBRAIC_TYPE, FIXED_TYPE, INT, NUMBER, RATIONAL_TYPE, STRING, schemeArith, showIn, showType, type Type } from "../ters/src/lang/types.ts";
+import { ARITH, ARITHMETIC, ASSOCIATIVE, CONS, FALSE, LITERAL, NIL, S, SIGS, TRUE, TUPLE_MAX, tuplePart, tupleVariant } from "../ters/src/lang/std.ts";
+import { INT, NUMBER, STRING, schemeArith, showIn, showType, type Type } from "../ters/src/lang/types.ts";
 import { ratioParts, read as readInt } from "../ters/src/lang/int.ts";
 import { DEF_VALUE, type Value } from "../ters/src/lang/run.ts";
 import { parseValue } from "../ters/src/lang/values.ts";
@@ -539,7 +539,15 @@ function narrow(code: Code, info: Info, top: Typed): Typed {
 // type come last (E175): an input whose value's type is still a variable
 // (a parameter nothing uses yet, a definition still a stub), at a meaning
 // whose own input there is a fixed type.
-const EXOTIC: Id[] = [FIXED_TYPE, RATIONAL_TYPE, ALGEBRAIC_TYPE];
+// The library's number types other than Float64 and Int (Rational,
+// Algebraic, Fixed, Complex, …): the ones with an Arithmetic in the
+// library, asked of it rather than listed (E237b, L204).
+const libraryNumber = (info: Info, t: Type | undefined): boolean =>
+  t?.t === "con" && t.id !== NUMBER && t.id !== INT && t.id.startsWith("std.") && !!implementationOf(info, ARITHMETIC, t);
+// A type whose numbers are spelled by its Literal (L204b, L204d): a
+// fraction written there is that type's from fraction, 1/3 at Rational.
+export const spelledByLiteral = (info: Info, t: Type | undefined): t is Type & { t: "con" } =>
+  t?.t === "con" && t.id !== NUMBER && t.id !== INT && !!implementationOf(info, LITERAL, t);
 const fromLibrary = (id: Id) => !!LIBRARY.code.nodes[id] || !!SIGS[id];
 function leaveOpen(info: Info, t: Typed): Typed {
   const open = (x: Typed): boolean => {
@@ -570,7 +578,7 @@ function leaveOpen(info: Info, t: Typed): Typed {
   // A number type no one asked for (E226): as float64 of a count nothing
   // has settled is Int's or Float64's, not Fixed's, Rational's or
   // Algebraic's, which would make the program count in those.
-  const exoticAt = (op: Id, i: number): boolean => { const { p } = paramAt(op, i); return p?.t === "con" && EXOTIC.includes(p.id); };
+  const exoticAt = (op: Id, i: number): boolean => libraryNumber(info, paramAt(op, i).p);
   if ("params" in t) return { ...t, body: leaveOpen(info, t.body) };
   if ("cond" in t) return { cond: leaveOpen(info, t.cond), then: leaveOpen(info, t.then), else: leaveOpen(info, t.else) };
   if ("let" in t) return { ...t, be: leaveOpen(info, t.be), rest: leaveOpen(info, t.rest) };
@@ -1042,12 +1050,14 @@ function written(code: Code, names: Names, info: Info, hole: Id, text: string, t
     const seen = check({ nodes, defs: code.defs }, names);
     for (const [id, w] of open) {
       const e = seen.holes.get(id)?.expected;
-      const of = e?.t === "con" && (e.id === INT || e.id === RATIONAL_TYPE) ? e.id : undefined;
+      // An Int, or a type whose Literal spells its numbers (Rational, …).
+      const spelled = spelledByLiteral(seen, e);
+      const of = e?.t === "con" && (e.id === INT || spelled) ? e.id : undefined;
       const lit = (v: number | string, at = of) => { const x = freshId(); nodes[x] = { id: x, kind: "lit", value: v, ...(at ? { of: at } : {}) }; return x; };
       if ("n" in w) {
         const n = of && exact !== undefined ? exact : w.n;
         nodes[id] = { id, kind: "lit", value: typeof n === "number" ? n : String(n), ...(of ? { of } : {}) };
-      } else if (of === RATIONAL_TYPE) nodes[id] = { id, kind: "lit", value: `${w.p}/${w.q}`, of };
+      } else if (spelled) nodes[id] = { id, kind: "lit", value: `${w.p}/${w.q}`, of };
       else call(B.div, [lit(w.p, undefined), lit(w.q, undefined)], id);
     }
   }
@@ -1272,12 +1282,14 @@ export function setLit(code: Code, names: Names, info: Info, id: Id, raw: string
     if (n === undefined) return { ok: false, reason: "this is a whole number; that isn't one" };
     return guardTyped(info, replace(code, id, () => ({ kind: "lit", value: typeof n === "number" ? n : String(n), of: INT })), names, id, "Changed a literal.");
   }
-  if (old.of === RATIONAL_TYPE) {
-    // A fraction: a whole number, or one over another (L75).
+  const at: Type | undefined = old.of ? { t: "con", id: old.of, args: [] } : undefined;
+  if (spelledByLiteral(info, at)) {
+    // A fraction: a whole number, or one over another (L75), which the
+    // type's Literal spells out (E237b).
     const parts = ratioParts(raw.trim());
     if (!parts) return { ok: false, reason: "this is a fraction: a whole number, or top/bottom with the bottom not 0" };
     const [p, q] = parts;
-    return guardTyped(info, replace(code, id, () => ({ kind: "lit", value: q === 1n && Number.isSafeInteger(Number(p)) ? Number(p) : `${p}/${q}`, of: RATIONAL_TYPE })), names, id, "Changed a literal.");
+    return guardTyped(info, replace(code, id, () => ({ kind: "lit", value: q === 1n && Number.isSafeInteger(Number(p)) ? Number(p) : `${p}/${q}`, of: at.id })), names, id, "Changed a literal.");
   }
   // Text is stored in NFC (L214a, E239): "é" typed as one character or as
   // "e" and an accent is the same literal, and the same key as text from the world.
