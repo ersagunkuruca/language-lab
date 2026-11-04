@@ -2,6 +2,7 @@
 // main.ts (E228b, E228g): the runtimes the build puts in the page (the
 // worker that runs main, the page and sound runtimes), the views of how a
 // run ended, a value as Run shows it, and a test's results.
+import type { LogEntry } from "../ters/src/lang/worldlog.ts";
 import type { Code, Id } from "../ters/src/model.ts";
 import type { Namer } from "../ters/src/render/namer.ts";
 import type { Profile, Stuck } from "./runWorker.ts";
@@ -56,6 +57,31 @@ export function profileView(namer: Namer, profile: Profile, code: Code, pick: (i
     h("table", { class: "profile-t" },
       h("tr", {}, h("th", { scope: "col" }, "definition"), h("th", { scope: "col" }, "calls"), h("th", { scope: "col", title: "About how much of the run's time was spent in it, itself (not in what it calls), sampled" }, "time")),
       ...rows.map((p) => h("tr", {}, h("td", {}, pick(p.def, namer.name(p.def))), h("td", {}, p.calls.toLocaleString("en")), h("td", {}, total ? `${share(p.ms)} · ${p.ms} ms` : "")))));
+}
+
+// What the world answered the run, in order (L186's log, E232a): each
+// read line, file, random number, time or fetch, and what came back. A
+// run is these answers and the program: given them again, it does the
+// same.
+const OPS: Record<string, string> = { input: "read input", readLine: "read line", readFile: "read file", fileExists: "file exists", listFolder: "list folder", readBytes: "read bytes", random: "random", now: "now", locale: "locale", timeZone: "time zone", fetchText: "fetch text", fetchArrived: "fetch arrived", sendRequest: "send" };
+// Each answer can be stepped to (E232c): Run again given only the answers
+// up to it, paused there, shows what the program had printed by then; the
+// one it's paused at is marked, with a step on and a step back beside it.
+export function answersView(all: LogEntry[], replayed = false, paused?: number): HTMLElement {
+  const log = all.filter((e) => !e.write);
+  const short = (v: unknown) => { const t = v === undefined ? "" : v instanceof Uint8Array ? `${v.length} bytes` : JSON.stringify(v); return t.length > 80 ? `${t.slice(0, 77)}…` : t; };
+  return h("details", { class: "profile answers" },
+    h("summary", {}, `What the world answered: ${log.length} answer${log.length === 1 ? "" : "s"}`),
+    h("ol", { class: "answers-l" }, ...log.slice(0, 200).map((e, i) => h("li", { class: paused === i + 1 ? "at" : "", ...(paused === i + 1 ? { "aria-current": "step" } : {}) },
+      h("code", {}, `${OPS[e.op] ?? e.op}${e.args.length ? ` ${e.args.map(short).join(" ")}` : ""}`), " → ",
+      e.threw !== undefined ? h("span", { class: "bad" }, `failed: ${e.threw}`) : h("code", {}, short(e.answer)),
+      " ", h("button", { class: "btn mini", type: "button", "data-act": "t-replay-to", "data-at": String(i + 1), title: "Run again given the answers up to this one, and pause before the next" }, "pause after it")))),
+    paused !== undefined ? h("p", { class: "acts" },
+      paused > 0 ? h("button", { class: "btn mini", type: "button", "data-act": "t-replay-to", "data-at": String(paused - 1) }, "← step back") : null,
+      paused < log.length ? h("button", { class: "btn mini", type: "button", "data-act": "t-replay-to", "data-at": String(paused + 1) }, "step on →") : null) : null,
+    log.length > 200 ? h("p", { class: "hint" }, `and ${log.length - 200} more`) : null,
+    h("p", { class: "acts" }, h("button", { class: "btn mini", type: "button", "data-act": "t-replay", title: "Run main again, given these same answers instead of asking the world: it does the same, or, after an edit, says where it went another way" }, "Run again with these answers"),
+      replayed ? h("span", { class: "hint" }, " This run was answered from the log.") : null));
 }
 
 // A value as the Run panel shows it. A map or a set is a table, a row per

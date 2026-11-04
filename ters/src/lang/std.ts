@@ -584,6 +584,7 @@ export const FILES_TYPE = typedef(FILES, "Files", [], [
   ["read bytes", [["path", () => fixedTref(`${FILES}.read bytes.path.type`, STRING)]], () => fixedTref(`${FILES}.read bytes.returns`, "std.bytes")],
   ["write bytes", [["path", () => fixedTref(`${FILES}.write bytes.path.type`, STRING)], ["bytes", () => fixedTref(`${FILES}.write bytes.bytes.type`, "std.bytes")]], () => fixedTref(`${FILES}.write bytes.returns`, UNIT)],
 ], true);
+
 // start fetch's types are nodes with ids of their own, so the numbered
 // ones after them (the tuples') don't move: a saved program may hold
 // std's type nodes.
@@ -1467,6 +1468,37 @@ export const LOCALE_V = "std.locale.locale";
 // handled further out, an Abort nothing caught, the stop), so what the
 // handler opened is closed. Not an effect: a marker for that case.
 export const RELEASE = typedef("std.release", "Release", [], [["release", []]]);
+// What a file kept open by `with open file` answers inside it (L213c): its
+// next line, none at the end, and a line added at its end.
+export const OPEN_FILE = typedef("std.open file", "Open file", [], [
+  ["next line", [], () => fixedTref("std.open file.next line.returns", OPTIONAL, fixedTref("std.open file.next line.returns.a", STRING))],
+  ["write line", [["text", () => fixedTref("std.open file.write line.text.type", STRING)]], () => fixedTref("std.open file.write line.returns", UNIT)],
+], true);
+export const NEXT_LINE_OP = "std.open file.next line", WRITE_LINE_OP = "std.open file.write line";
+// The files the prelude's `with open file` keeps open, by number (L213c):
+// a world effect of their own, which only the runtime answers, its
+// operations private to the library, so a file's number never reaches a
+// program. Opening gives none when the file can't be opened, a line none
+// at the end, and adding a line false when it couldn't be written. A
+// release may close a file (it can't fail or wait).
+export const KEPT_FILES = "std.kept files";
+typedef(KEPT_FILES, "Kept files", [], (["open file", "file line", "file add line", "close file"] as const).map((op): [string, [string, TypeOf][], TypeOf] => {
+  const at = (part: string, target: Id, ...args: Id[]) => fixedTref(`${KEPT_FILES}.${op}.${part}`, target, ...args);
+  if (op === "open file") return [op, [["path", () => at("path.type", STRING)]], () => at("returns", OPTIONAL, at("returns.a", INT))];
+  const fields: [string, TypeOf][] = [["file", () => at("file.type", INT)], ...(op === "file add line" ? [["text", () => at("text.type", STRING)] as [string, TypeOf]] : [])];
+  return [op, fields, () => (op === "file line" ? at("returns", OPTIONAL, at("returns.a", STRING)) : at("returns", op === "file add line" ? BOOL : UNIT))];
+}), true);
+export const FILE_OPS = { open: `${KEPT_FILES}.open file`, line: `${KEPT_FILES}.file line`, addLine: `${KEPT_FILES}.file add line`, close: `${KEPT_FILES}.close file` };
+for (const v of Object.values(FILE_OPS)) (nodes.find((n) => n.id === v) as NodeOf<"variant">).private = true;
+// A number written where a type of the program's own goes (L204b,
+// INTERFACES.md "from a fraction", Haskell's fromRational): 0.25 at it is
+// from fraction(1, 4) of its implementation, so 2 at a quaternion can mean
+// 2 + 0i + 0j + 0k. A record of Float64s with none gets the number in
+// every part, as before.
+export const LITERAL = typedef("std.literal", "Literal", ["a"], [
+  ["literal", [["from fraction", ([a]) => node({ id: "std.literal.from fraction.type", kind: "tfun", params: [fixedTref("std.literal.from fraction.top", INT), fixedTref("std.literal.from fraction.bottom", INT)], result: fixedTref("std.literal.from fraction.result", a), effects: [] })]]],
+], false, true);
+export const LITERAL_V = "std.literal.literal", FROM_FRACTION = "std.literal.literal.from fraction";
 export const RELEASE_V = "std.release.release";
 // The user's settings, read from the world as the time is (L214b2): `my
 // locale()`, the language the person running the program uses, for
@@ -1510,7 +1542,7 @@ export function onTodaysIds<T>(x: T, from = (x as { shape?: unknown } | null)?.s
 }
 export const tupleSize = (id: Id): number | null => { const m = /^std\.tuple(\d)$/.exec(id); return m ? Number(m[1]) : null; };
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, MATRIX, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS, WORD16, TENSOR, BYTES, JSON_TYPE, DATE, TIME_OF_DAY, INSTANT, EMBEDDING, REQUEST, RESPONSE, LOCALE, SETTINGS, RELEASE] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, MATRIX, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS, WORD16, TENSOR, BYTES, JSON_TYPE, DATE, TIME_OF_DAY, INSTANT, EMBEDDING, REQUEST, RESPONSE, LOCALE, SETTINGS, RELEASE, OPEN_FILE, KEPT_FILES, LITERAL] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one

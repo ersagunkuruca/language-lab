@@ -141,7 +141,12 @@ keeps "a resource is never a value" true.
    one to the other; a function using a name returned from its handler is
    refused.
 3. The first resource: `with open file(path)` with `read line`, `write
-   line`, after L189 (`Bytes`) for the binary version.
+   line`, after L189 (`Bytes`) for the binary version. Built in the
+   evaluator before step 2 (L213c, open-file.test.ts): `with open file(path,
+   body)` with `next line()` and `write line(text)` (`read line` is
+   Console's already), the file opened to read from its start and add at
+   its end; the file's number is private to the library, and the release
+   closes it. One file at a time until step 2's names.
 4. LANGUAGE.md's error table row becomes "checked".
 
 Each is its own row when it is picked up.
