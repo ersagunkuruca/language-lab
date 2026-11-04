@@ -13,8 +13,9 @@ import type { Names } from "../ters/src/presentation.ts";
 import type { Pins } from "../ters/src/lang/signatures.ts";
 import { browserWorld, type Store } from "../ters/src/lang/browser.ts";
 import { shower } from "./shown.ts";
-import { corePageScript, lowerCore } from "../compiler/src/core-js.ts";
-import { mainProblem, runMain, runProgram, type World } from "../ters/src/lang/run.ts";
+import { corePageScript, loadCoreJs, lowerCore } from "../compiler/src/core-js.ts";
+import { Aborted as CoreAborted, Stopped as CoreStopped } from "../compiler/src/core-rt.ts";
+import { mainProblem, runMain, runProgram, toList, type World } from "../ters/src/lang/run.ts";
 import type { Info } from "../ters/src/lang/infer.ts";
 import { FILES, NETWORK } from "../ters/src/lang/types.ts";
 import { LIBRARY } from "../ters/src/lang/library.ts";
@@ -45,7 +46,8 @@ export type Stuck = { text: string; at: number; expected: string[]; said: string
 // how many times, and about how long the run spent in it.
 export type Profile = { def: Id; calls: number; ms: number }[];
 // `compiled`: main ran as compiled JavaScript (E238), so there's no profile.
-export type RunSays = { lines: string[] } | { done: true; shown: string; files: [string, string][]; stuck?: Stuck; profile?: Profile; compiled?: Compiled } | { error: string; files: [string, string][]; stuck?: Stuck; compiled?: Compiled };
+// `core`: main ran printed from the core IR (E244), which isn't kept.
+export type RunSays = { lines: string[] } | { done: true; shown: string; files: [string, string][]; stuck?: Stuck; profile?: Profile; compiled?: Compiled; core?: true } | { error: string; files: [string, string][]; stuck?: Stuck; compiled?: Compiled; core?: true };
 
 const post = (m: RunSays | Found | CompileSays) => (self as unknown as Worker).postMessage(m);
 
@@ -140,6 +142,9 @@ self.onmessage = (e: MessageEvent<RunAsk | BackAsk | CompileAsk>) => {
     // text read back, L70c) says where its reading stopped only in the
     // evaluator, so such a main runs there.
     const backwards = runsBackwards(lib.code, def);
+    // From the core IR first, as lab build does (E244); compile.ts where
+    // main doesn't lower there.
+    if (!backwards && (args || unitAction(info, def)) && runCore(lib.code, info, lib.names, def, args, rt.world, rt.print, flush, () => [...wrote])) return;
     const made = !backwards && (args || unitAction(info, def)) ? compiledMain(lib.code, info, lib.names, def) : undefined;
     if (made && runCompiled(made, args, rt.world, rt.print, flush, () => [...wrote])) return;
     // With its arguments main gives an exit code, which shows when it isn't 0.
@@ -202,6 +207,30 @@ function compiledMain(code: Code, info: Info, names: Names, def: Id): Compiled |
     // The program's own effects answered by a hosts/js.js: not in the editor.
     return /\$setHosts\(/.test(program) ? undefined : { program, name };
   } catch { return undefined; }
+}
+
+// Run main printed from the core IR (core-js.ts lowerCore, loadCoreJs),
+// answering the same world and printing the same way, as runCompiled
+// below does compile.ts's. false when main doesn't lower there, waits
+// (its rest would come after the answer), or doesn't load: then compile.ts.
+function runCore(code: Code, info: Info, names: Names, def: Id, args: string[] | undefined, world: World, print: (line: string) => void, flush: () => void, files: () => [string, string][]): boolean {
+  if (mainProblem(info, def, names) || !names[def]) return false;
+  let ir, fns;
+  try { ir = lowerCore(code, info, names, [def]); } catch { return false; }
+  if (ir.refused.has(def)) return false;
+  const f = ir.funcs.find((g) => g.name === names[def] && !g.inner && !g.budgeted), fi = f ? ir.funcs.indexOf(f) : -1;
+  if (!f || f.multi || f.params.length !== (args ? 1 : 0)) return false;
+  try { fns = loadCoreJs(ir, { print, world }); } catch { return false; }
+  const ended = (shown: string) => { flush(); post({ done: true, shown, files: files(), core: true }); };
+  try {
+    const v = fns[fi](...(args ? [toList(args)] : []));
+    ended(args ? ((n: number) => (n ? `exit ${n}` : "unit"))(f.result === "int" || f.result === "f64" ? Number(v) : 0) : "unit");
+  } catch (e) {
+    const reason = e instanceof CoreAborted ? String(e.reason) : e instanceof CoreStopped ? e.message : null;
+    if (reason !== null && args) { world.error(reason); ended("exit 1"); }
+    else { flush(); post({ error: reason ?? (e as Error).message, files: files(), core: true }); }
+  }
+  return true;
 }
 
 // Run main compiled, answering the same world and printing the same way as
