@@ -594,8 +594,8 @@ Each of these puts its effect in the type of every function that uses it, so `di
 - **fetch text** : `(Text) -[Network, Abort]-> Text`. The text at a web address. Aborts if the request fails. The same as await(start fetch(url)).
 - **start fetch** : `(Text) -[Network, Abort]-> Ticket Text`. Starts fetching the text at a web address and gives a ticket for it, so together and race can wait on it beside timers and other fetches: together([() => await(start fetch(a)), () => await(start fetch(b))]). Aborts where it is awaited if the request fails. Run from the command line, evaluated or compiled, the fetch goes on in the background and the ticket is ready when the body has come, so fetches overlap; on a page it is fetched when it starts, and the ticket is ready at once.
 - **send request** : `(Request) -[Network, Abort]-> Response`. Sends a Request (method, address, headers, body) and gives its Response, whatever its status: check response.status. Aborts only when it can't be sent. The same request is sent once per run, so a search that tries again doesn't send it twice.
-- **Request** (type). A request over the network: request(method: "POST", url: …, headers: [tuple("content-type", "text/plain")], body: …). send request(r) sends it and gives its Response.
-- **Response** (type). What came back from send request: response(status, headers, body), whatever the status (a 404 is a response, not an Abort).
+- **Request** (type). A request over the network: request(method: "POST", url: …, headers: [tuple("content-type", "text/plain")], body: utf8 of("…")). Its body is Bytes, as HTTP sends it: utf8 of writes a text there. send request(r) sends it and gives its Response.
+- **Response** (type). What came back from send request: response(status, headers, body), whatever the status (a 404 is a response, not an Abort). Its body is Bytes: text of utf8 reads a text from it.
 
 ## Waiting for several things: Await
 
