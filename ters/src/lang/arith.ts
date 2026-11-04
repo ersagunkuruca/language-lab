@@ -30,7 +30,7 @@ import type { Names } from "../presentation.ts";
 import { B } from "../prelude.ts";
 import { implementationOf, type Info } from "./infer.ts";
 import { interfaceOps, leftToWays, NEUTRAL, pickWays, waysIn, type BuiltinCost } from "./ways.ts";
-import { ALGEBRAIC_OPS, ARITH, ARITH_FIELD, EMBEDDING, EMBEDDING_MAP, COMPLEX_V, DUAL_V, FIXED_V, INT_OPS, LITERAL, LITERAL_V, RATIO, S } from "./std.ts";
+import { ARITH, ARITH_FIELD, EMBEDDING, EMBEDDING_MAP, INT_OPS, LITERAL, LITERAL_V, S } from "./std.ts";
 import { ALGEBRAIC_TYPE, COMPLEX_TYPE, DUAL_TYPE, FIXED_TYPE, INT, NUMBER, RATIONAL_TYPE, OverMap, type Row, type Scheme, type Type } from "./types.ts";
 import { PRELUDE_DEFS } from "./prelude-ids.ts";
 import { ratioParts } from "./int.ts";
@@ -88,14 +88,6 @@ const someLiteralNotFloat64 = (code: Code, info: Info) => nodesWhere(code, "plai
 });
 
 // A Float64 literal's digits, as written, as top/bottom: 0.25 is 25/100.
-// A literal at Fixed: its digits as a fraction, rounded once to the nearest
-// step of 2⁻³² (halves up), so 0.1 is the same steps on every target.
-function fixedSteps(v: unknown): bigint {
-  const [top, bottom] = ratioParts(typeof v === "number" ? decimal(v) : (v as string)) ?? [0n, 1n];
-  const twice = 2n * top * 2n ** 32n + bottom, d = 2n * bottom;
-  return twice >= 0n ? twice / d : -((-twice + d - 1n) / d);
-}
-
 function decimal(x: number): string {
   const m = /^(-?)(\d+)(?:\.(\d+))?(?:e([+-]\d+))?$/.exec(String(x));
   if (!m) return "0";
@@ -487,8 +479,6 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
     walk(root, null);
   };
 
-  // A literal at Rational, Algebraic or Fixed as its constructor's
-  // call; at Complex or Dual through the embedding from Float64 (above).
   const intLit = (v: bigint): NodeData => ({ kind: "lit", value: v >= -9007199254740991n && v <= 9007199254740991n ? Number(v) : String(v), of: INT });
   // A Float64 literal at a type Float64 embeds in (L208e): map(x) of the
   // canonical embedding, so 0.5 at Complex is float64 in complex's: no
@@ -511,17 +501,31 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
     typeOf.set(id, t);
     return true;
   };
+  // from fraction(top, bottom) of t's Literal: a named one called by name
+  // (rational literal(1, 4)), as a shader can call it; any other read by
+  // its case, match literal at t { literal(f) → f(top, bottom) }, so
+  // nothing here is an interface's operation to resolve.
+  const throughLiteral = (id: Id, [top, bottom]: [bigint, bigint], t: Type): boolean => {
+    const impl = implementationOf(info, LITERAL, t);
+    if (!impl) return false;
+    const made: Type = { t: "fn", params: [int, int], ret: t, eff: pure }, given: Type = { t: "con", id: LITERAL, args: [t] };
+    const args = () => [add(intLit(top), int), add(intLit(bottom), int)];
+    const body = code.nodes[(code.nodes[impl] as NodeOf<"def"> | undefined)?.body ?? ""], arg = isCall(body) && body.args.length === 1 ? code.nodes[body.args[0]] : undefined;
+    if (arg?.kind === "ref") nodes[id] = { id, kind: "call", fn: add({ kind: "ref", target: arg.target }, made), args: args() };
+    else {
+      const f = add({ kind: "binder" }, made);
+      const call = add({ kind: "call", fn: add({ kind: "ref", target: f }, made), args: args() }, t);
+      const arm = add({ kind: "arm", variant: LITERAL_V, binds: [f], results: [null], body: call } as NodeData, t);
+      nodes[id] = { id, kind: "match", scrutinee: add({ kind: "ref", target: impl }, given), arms: [arm], otherwise: null };
+    }
+    typeOf.set(id, t);
+    return true;
+  };
+  // A literal written at one of them, as 1/3 at Rational.
   const literal = (n: NodeOf<"lit">) => {
     const t: Type = { t: "con", id: n.of!, args: [] };
-    if ((n.of === COMPLEX_TYPE || n.of === DUAL_TYPE) && throughEmbedding(n.id, typeof n.value === "number" ? n.value : 0, t)) return;
-    const parts: [NodeData, Type][] = n.of === FIXED_TYPE ? [[intLit(fixedSteps(n.value)), int]]
-      : n.of === RATIONAL_TYPE || n.of === ALGEBRAIC_TYPE
-      ? (ratioParts(n.value) ?? [0n, 1n]).map((x) => [intLit(x), int])
-      : [[{ kind: "lit", value: typeof n.value === "number" ? n.value : 0 }, num], [{ kind: "lit", value: 0 }, num]];
-    const ctor = n.of === RATIONAL_TYPE ? RATIO : n.of === ALGEBRAIC_TYPE ? ALGEBRAIC_OPS.fraction : n.of === DUAL_TYPE ? DUAL_V : n.of === FIXED_TYPE ? FIXED_V : COMPLEX_V;
-    const fn = add({ kind: "ref", target: ctor }, { t: "fn", params: parts.map(([, pt]) => pt), ret: t, eff: pure });
-    nodes[n.id] = { id: n.id, kind: "call", fn, args: parts.map(([p, pt]) => add(p, pt)) };
-    typeOf.set(n.id, t);
+    if (n.of === COMPLEX_TYPE || n.of === DUAL_TYPE) throughEmbedding(n.id, typeof n.value === "number" ? n.value : 0, t);
+    else throughLiteral(n.id, ratioParts(typeof n.value === "number" ? decimal(n.value) : String(n.value)) ?? [0n, 1n], t);
   };
 
   // A plain number literal at the Number its use needs: an Int, a fraction
@@ -538,23 +542,10 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
       return;
     }
     if (t.id === INT) { nodes[n.id] = { id: n.id, ...intLit(BigInt(x)) } as Node; typeOf.set(n.id, int); return; }
-    if (t.id === RATIONAL_TYPE || t.id === ALGEBRAIC_TYPE || t.id === COMPLEX_TYPE || t.id === DUAL_TYPE || t.id === FIXED_TYPE) { literal({ ...n, of: t.id, value: t.id === COMPLEX_TYPE || t.id === DUAL_TYPE ? x : decimal(x) }); return; }
-    // A type with a Literal of its own (L204b): its from fraction, given
-    // the number as top/bottom.
-    const impl = implementationOf(info, LITERAL, t);
-    if (impl) {
-      const [top, bottom] = ratioParts(decimal(x)) ?? [0n, 1n];
-      const whole: Type = { t: "con", id: INT, args: [] };
-      const made: Type = { t: "fn", params: [whole, whole], ret: t, eff: pure }, given: Type = { t: "con", id: LITERAL, args: [t] };
-      // match literal at t { literal(f) → f(top, bottom) }: its field read
-      // by its case, so nothing here is an interface's operation to resolve.
-      const f = add({ kind: "binder" }, made);
-      const body = add({ kind: "call", fn: add({ kind: "ref", target: f }, made), args: [add(intLit(top), whole), add(intLit(bottom), whole)] }, t);
-      const arm = add({ kind: "arm", variant: LITERAL_V, binds: [f], results: [null], body } as NodeData, t);
-      nodes[n.id] = { id: n.id, kind: "match", scrutinee: add({ kind: "ref", target: impl }, given), arms: [arm], otherwise: null };
-      typeOf.set(n.id, t);
-      return;
-    }
+    if ((t.id === COMPLEX_TYPE || t.id === DUAL_TYPE) && throughEmbedding(n.id, x, t)) return;
+    // A type with a Literal (L204b, the library's Rational, Algebraic and
+    // Fixed since L204d): its from fraction, given the number as top/bottom.
+    if (throughLiteral(n.id, ratioParts(decimal(x)) ?? [0n, 1n], t)) return;
     const variant = recordVariant(code, t.id);
     if (!variant) return;
     const fields = (code.nodes[variant] as NodeOf<"variant">).fields;
