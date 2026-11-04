@@ -15,15 +15,16 @@ const time = (f: () => unknown, runs: number) => {
 const ms = (x: number) => `${x < 10 ? x.toFixed(2) : x.toFixed(0)} ms`.padStart(10);
 
 console.log(`calc on a session of random lines (in one process, output collected)\n`);
-console.log(`${"lines".padStart(6)} ${"evaluator".padStart(10)} ${"compiled".padStart(10)} ${"ideal".padStart(10)}  compiled/ideal`);
+console.log(`${"lines".padStart(6)} ${"evaluator".padStart(10)} ${"compiled".padStart(10)} ${"core IR".padStart(10)} ${"ideal".padStart(10)}  compiled/ideal  core/ideal`);
 for (const n of [500, 2000, 4000]) {
   const input = session(n);
   const want = w.evaluator(input);
   assert.deepEqual(w.compiled(input), want);
   assert.deepEqual(w.ideal(input), want);
+  assert.deepEqual(w.core(input), want);
   const ev = n <= 2000 ? time(() => w.evaluator(input), 1) : NaN;
-  const c = time(() => w.compiled(input), 10), i = time(() => w.ideal(input), 10);
-  console.log(`${String(n).padStart(6)} ${Number.isNaN(ev) ? "(skipped)".padStart(10) : ms(ev)} ${ms(c)} ${ms(i)}  ${(c / i).toFixed(1)}×`);
+  const c = time(() => w.compiled(input), 10), k = time(() => w.core(input), 10), i = time(() => w.ideal(input), 10);
+  console.log(`${String(n).padStart(6)} ${Number.isNaN(ev) ? "(skipped)".padStart(10) : ms(ev)} ${ms(c)} ${ms(k)} ${ms(i)}  ${(c / i).toFixed(1)}×`.padEnd(70) + `${(k / i).toFixed(1)}×`);
 }
 
 // Where each way runs out of stack. The evaluator keeps its continuations
