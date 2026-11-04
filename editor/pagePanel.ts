@@ -8,11 +8,11 @@ import type { Pins } from "../ters/src/lang/signatures.ts";
 import type * as T from "./typed.ts";
 import type { Doc, Program, UI } from "./main.ts";
 import { h } from "./dom.ts";
-import { newWorker, pageRuntimeText, workletRuntimeText } from "./runViews.ts";
+import { corePageRuntimeText, coreWorkletRuntimeText, newWorker, pageRuntimeText, workletRuntimeText } from "./runViews.ts";
 import type { CompileAsk, CompileSays } from "./runWorker.ts";
 import { drawPicture, pictureEntries, type Picture } from "./picture.ts";
 import { handOver, type Cells } from "../ters/src/lang/cells.ts";
-import { PAGE_BASE, hasSound, pageFile, pageMain, showPage, type Preview } from "../ters/src/lang/page.ts";
+import { PAGE_BASE, corePageFile, hasSound, pageFile, pageMain, showPage, type Preview } from "../ters/src/lang/page.ts";
 import type { Doc as PageDoc, Node_ } from "../ters/src/lang/html.ts";
 
 export interface PageHost {
@@ -273,12 +273,19 @@ export function pagePanels(host: PageHost) {
     page.status.textContent = "";
   }
 
-  // The page compiled (page.ts pageFile): saved, or opened in a tab.
-  function pageHtml(): { html: string; name: string } | null {
+  // The page compiled, saved or opened in a tab: printed from the core IR
+  // (page.ts corePageFile, E244), as lab build-web does, or from compile.ts
+  // (pageFile) where main doesn't lower there. `via` says which.
+  function pageHtml(): { html: string; name: string; via: string } | null {
     const info = typesOf();
     const main = info && pageMain(ownDefs(), info, pres().names);
     if (!info || !main) return null;
-    return { html: pageFile(titleOf(doc()), pageRuntimeText(), prog(), info, pres().names, main, workletRuntimeText()), name: `${slug(titleOf(doc()))}.html` };
+    const title = titleOf(doc()), name = `${slug(title)}.html`, core = corePageRuntimeText();
+    let why = "this editor has no core IR runtime";
+    if (core) {
+      try { return { html: corePageFile(title, core, prog(), info, pres().names, ownDefs(), main, coreWorkletRuntimeText()), name, via: "" }; } catch (e) { why = (e as Error).message; }
+    }
+    return { html: pageFile(title, pageRuntimeText(), prog(), info, pres().names, main, workletRuntimeText()), name, via: ` through compile.ts (${why})` };
   }
 
   function savePage(open: boolean) {
@@ -286,13 +293,15 @@ export function pagePanels(host: PageHost) {
     try { made = pageHtml(); } catch (e) { ui.note = `The page couldn't be compiled: ${(e as Error).message}.`; ui.refused = true; render(); return; }
     if (!made) return;
     const url = URL.createObjectURL(new Blob([made.html], { type: "text/html" }));
-    if (open) window.open(url, "_blank");
-    else {
+    if (open) {
+      window.open(url, "_blank");
+      if (made.via) { ui.note = `Opened the page compiled to JavaScript${made.via}.`; render(); }
+    } else {
       const a = document.createElement("a");
       a.href = url;
       a.download = made.name;
       a.click();
-      ui.note = `Saved the page as ${made.name}: one HTML file with the program compiled to JavaScript. Open it in any browser, or put it on any web host.`;
+      ui.note = `Saved the page as ${made.name}: one HTML file with the program compiled to JavaScript${made.via}. Open it in any browser, or put it on any web host.`;
       render();
     }
     setTimeout(() => URL.revokeObjectURL(url), 60_000);

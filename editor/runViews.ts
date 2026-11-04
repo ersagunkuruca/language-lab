@@ -26,6 +26,10 @@ export function newWorker(): Worker { const f = newWorker as { url?: string }; r
 function runtimeText(id: string) { return document.getElementById(id)?.textContent || ""; }
 export function pageRuntimeText() { return runtimeText("lab-page-runtime") || PAGE_RUNTIME; }
 export function workletRuntimeText() { return runtimeText("lab-worklet-runtime") || WORKLET_RUNTIME; }
+// The core IR's (cli/web.ts corePageRuntime, coreWorkletRuntime): only the
+// site's page has them, and "" means none here (E244).
+export function corePageRuntimeText() { return runtimeText("lab-core-page-runtime"); }
+export function coreWorkletRuntimeText() { return runtimeText("lab-core-worklet-runtime"); }
 
 // Where a read of a text run backwards stopped (L70c): its line, marked
 // at the place, and what was looked for there.

@@ -764,7 +764,7 @@ The effects:
 | `Abort` | `abort(reason)` | a match with an `abort(reason)` case; at the top, the run ends (exit code 1) |
 | `Log` | `log(line)` | a match with a `log(line)` case; at the top, standard error |
 | `Random` | `random()` | `seeded(seed, action)`, or a match; at the top, the world's randomness |
-| `Settings` | `my locale()` | a match; at the top, the runtime (the computer's language) |
+| `Settings` | `my locale()`, `my time zone()` | a match; at the top, the runtime (the computer's language) |
 | `Time` | `now()` | a match (a test's fixed clock); at the top, the clock |
 | `Wait` | `wait(milliseconds)` | a match; at the top, the runtime (not in a page) |
 | `Diverge` | (any recursion the checker can't see ends) | the runtime, or `with fuel(n, action)` |
@@ -1100,8 +1100,10 @@ once per run and remembers the response, so a search that backtracks
 never sends a POST twice; a program that means to send the same request
 twice says what differs. This is the Fetch standard's Request and
 Response, and Elm's Http, where a request is a value a runtime sends.
-Evaluated and compiled to JavaScript on the command line; pages and bytes
-bodies are still to come (BACKLOG L191).
+Evaluated and compiled to JavaScript, on the command line and in a page,
+where a handler that sends stops there and goes on when the response
+lands, as with `fetch text` (L191b); bodies as bytes are still to come
+(BACKLOG L191).
 
 ### Cells: reactivity and values on demand
 

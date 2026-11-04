@@ -48,6 +48,23 @@ export const lowercase = (t: string, tag: string): string => t.toLocaleLowerCase
 // The host's language (L214b2): what `my locale()` answers when the world
 // doesn't say.
 export const hostLocale = (): string => { try { return new Intl.DateTimeFormat().resolvedOptions().locale || "und"; } catch { return "und"; } };
+// The host's time zone, an IANA name ("Europe/Istanbul"), for `my time
+// zone()` (L188d2).
+export const hostZone = (): string => { try { return new Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"; } catch { return "UTC"; } };
+// A zone's offset from UTC at an instant, in seconds (L188c2): Intl's
+// "GMT+03:00" read back. No answer for a zone the host doesn't know.
+const zoneFormats = new Map<string, Intl.DateTimeFormat | null>();
+export function zoneOffset(zone: string, seconds: number): number[] {
+  let f = zoneFormats.get(zone);
+  if (f === undefined) { try { f = new Intl.DateTimeFormat("en-US", { timeZone: zone, timeZoneName: "longOffset" }); } catch { f = null; } zoneFormats.set(zone, f); }
+  if (!f || !Number.isFinite(seconds)) return [];
+  const name = f.formatToParts(new Date(seconds * 1000)).find((p) => p.type === "timeZoneName")?.value ?? "";
+  const m = /^GMT(?:([+-−])(\d{1,2})(?::(\d{2}))?(?::(\d{2}))?)?$/.exec(name);
+  if (!m) return [];
+  if (!m[1]) return [0];
+  const off = Number(m[2]) * 3600 + Number(m[3] ?? 0) * 60 + Number(m[4] ?? 0);
+  return [m[1] === "+" ? off : -off];
+}
 // −1, 0 or 1 in a language's collation (L214d): Intl.Collator, one per tag.
 const collators = new Map<string, Intl.Collator>();
 export function collate(a: string, b: string, tag: string): number {
