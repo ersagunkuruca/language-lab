@@ -461,14 +461,23 @@ export function hostOpsOf(code: Code, names: Record<Id, string>): HostOps {
 
 // The solver, next to the runtime, imported only by a program that has
 // its nodes (one that solves): it carries the library (C137d1).
+// `beside` a global's name ($core, a prebuilt runtime: corePageRuntime):
+// the solver is in it.
 const solverFor = (code: string, beside: string) => {
   if (code === "undefined") return [];
+  if (beside.startsWith("$")) return [`${beside}.useSolver(${beside}.solver);`];
   const at = (f: string) => JSON.stringify(beside.replace(/[^/]*$/, f));
   return [`import { useSolver } from ${at("core-rt.ts")};`, `import { solver } from ${at("core-solve.ts")};`, "useSolver(solver);"];
 };
 
+// What a script takes from its runtime: imported from the file a bundler
+// takes in, or from a prebuilt runtime's global ($core, C137d6).
+const using = (names: string, from: string) => (from.startsWith("$") ? `const { ${names} } = ${from};` : `import { ${names} } from ${JSON.stringify(from)};`);
+const wrapped = (from: string, lines: string[]) => (from.startsWith("$") ? ["(() => {", ...lines, "})();"] : lines).join("\n");
+
 // A page's script (C137c9, `lab build-web --core`): the printed functions,
-// with core-page.ts (`page`, which a bundler takes in) drawing main.
+// with core-page.ts (`page`, which a bundler takes in, or the global of
+// a prebuilt core-page-runtime.ts) drawing main.
 // `worklet`: a page with sound, its audio thread's script (coreSoundScript
 // bundled), which the page plays (C137d4).
 export function corePageScript(ir: CoreIR, name: string, page: string, title: string, worklet?: string, hosts?: Hosts): string {
@@ -476,29 +485,30 @@ export function corePageScript(ir: CoreIR, name: string, page: string, title: st
   if (fi < 0 || ir.funcs[fi].params.length) throw new Error(`${name}: not compiled, or not a page's main`);
   const { js, names, worlds } = emitCoreJs(ir);
   const code = codeFor(ir, js);
-  return [
-    `import { startCorePage } from ${JSON.stringify(page)};`,
+  return wrapped(page, [
+    using("startCorePage", page),
     ...solverFor(code, page),
     ...(hosts ? [`import $hostAnswers from ${JSON.stringify(hosts.file)};`] : []),
     `startCorePage(${JSON.stringify(ir.tables.map(tableSpec))}, ${JSON.stringify(worlds)}, (R) => {`,
     js,
     `}, ${JSON.stringify(names[fi])}, ${JSON.stringify(title)}, ${code}, ${worklet === undefined ? "undefined" : JSON.stringify(worklet)}${hosts ? `, { answers: $hostAnswers, ops: ${JSON.stringify(hosts.ops)} }` : ""});`,
-  ].join("\n");
+  ]);
 }
 
 // The audio thread's script for a page with sound (C137d4): the printed
 // functions, with core-sound.ts (`sound`, which a bundler takes in)
-// running main again there and playing its block functions.
+// running main again there and playing its block functions; `sound`
+// may be a prebuilt runtime's global, as for a page.
 export function coreSoundScript(ir: CoreIR, name: string, sound: string): string {
   const fi = ir.funcs.findIndex((g) => g.name === name && !g.inner && !g.budgeted);
   if (fi < 0 || ir.funcs[fi].params.length) throw new Error(`${name}: not compiled, or not a page's main`);
   const { js, names, worlds } = emitCoreJs(ir);
   const code = codeFor(ir, js);
-  return [
-    `import { startCoreSound } from ${JSON.stringify(sound)};`,
+  return wrapped(sound, [
+    using("startCoreSound", sound),
     ...solverFor(code, sound),
     `startCoreSound(${JSON.stringify(ir.tables.map(tableSpec))}, ${JSON.stringify(worlds)}, (R) => {`,
     js,
     `}, ${JSON.stringify(names[fi])}, ${code});`,
-  ].join("\n");
+  ]);
 }

@@ -16,12 +16,12 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { infer } from "../src/lang/infer.ts";
 import { loadProgram } from "../src/lang/load.ts";
 import { audioProblem, listens, playBlocks } from "../src/lang/audio.ts";
-import { runInNewContext } from "node:vm";
+import { createContext, runInContext, runInNewContext } from "node:vm";
 import { runMain } from "../src/lang/run.ts";
-import { coreSoundWorklet, soundWorklet, webCorePage, webPage, workletRuntime, pageRuntime } from "../cli/web.ts";
+import { corePageRuntime, coreSoundWorklet, coreWorkletRuntime, soundWorklet, webCorePage, webPage, workletRuntime, pageRuntime } from "../cli/web.ts";
 import { FakeEl, fakeDoc } from "./fakedom.ts";
 import { lowerCore } from "../../compiler/src/core-js.ts";
-import { pageFile, workletFile } from "../src/lang/page.ts";
+import { corePageFile, coreWorkletFile, pageFile, workletFile } from "../src/lang/page.ts";
 import { close } from "../src/lang/run.ts";
 import { CELL_OPS, NOW_OP, RANDOM_OP, S } from "../src/lang/std.ts";
 import { recordingWorld } from "../src/lang/audio-page.ts";
@@ -161,6 +161,15 @@ test("the pedal page's worklet plays the pedal, and the page's cell writes reach
   assert.deepEqual(listens(evaluatorPage(p, page)).length, 2);
 });
 
+// A page's HTML as its scripts draw it.
+const drawn = (html: string) => {
+  const body = new FakeEl("body"), store = new Map<string, string>();
+  const localStorage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v), removeItem: (k: string) => void store.delete(k) };
+  const context = createContext({ document: { ...fakeDoc(), body }, localStorage, console, TextEncoder, requestAnimationFrame: () => 0 });
+  for (const [, js] of html.matchAll(/<script>([\s\S]*?)<\/script>/g)) runInContext(js, context);
+  return (body.kids[0] as FakeEl).html();
+};
+
 // The same from the core IR (C137d4): its audio thread's script plays what
 // the core IR's sound plays offline, and the page's writes reach it.
 test("the pedal page's worklet from the core IR plays the pedal, and the page's cell writes reach it", async () => {
@@ -185,12 +194,6 @@ test("the pedal page's worklet from the core IR plays the pedal, and the page's 
   assert.deepEqual(said, []);
   // And `lab build-web` makes the pedal's page from the core IR, carrying
   // it, and it draws what compile.ts's draws.
-  const drawn = (html: string) => {
-    const body = new FakeEl("body"), store = new Map<string, string>();
-    const localStorage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v), removeItem: (k: string) => void store.delete(k) };
-    runInNewContext(/<script>([\s\S]*)<\/script>/.exec(html)![1], { document: { ...fakeDoc(), body }, localStorage, console, TextEncoder, requestAnimationFrame: () => 0 });
-    return (body.kids[0] as FakeEl).html();
-  };
   const html = await webCorePage("Pedal", p.code, p.info, p.names, [page], page);
   assert.match(html, /registerProcessor/);
   // (The scope's points to 6 places: the core IR runs atanh backwards
@@ -217,6 +220,28 @@ test("a worklet made without a bundler plays what the bundled one plays", async 
   const made = workletFile(runtime, p.code, p.info, p.names, page);
   assert.deepEqual(play(made), play(await soundWorklet(p.code, p.info, p.names, page)));
   assert.ok(pageFile("Pedal", await pageRuntime(), p.code, p.info, p.names, page, runtime).includes(JSON.stringify(made).slice(0, 200)));
+});
+
+// The core IR's, made in a browser (C137d6): the prebuilt runtimes and the
+// printed program taking its helpers from them, for the editor's "Save
+// page". Its worklet plays what the bundled one plays; its page draws the
+// bundled one's.
+test("a core IR page and worklet made without a bundler play and draw what the bundled ones do", async () => {
+  const { p, page } = pedal();
+  const play = (source: string) => {
+    const made: (new (o: object) => { process(i: Float32Array[][], o: Float32Array[][]): boolean })[] = [];
+    class AudioWorkletProcessor { port = { onmessage: null, postMessage: () => {} }; }
+    runInNewContext(source, { registerProcessor: (_: string, processor: never) => made.push(processor), AudioWorkletProcessor, console, TextEncoder, TextDecoder });
+    const node = new made[0]({ processorOptions: { index: 0 } });
+    const out = [new Float32Array(128)];
+    node.process([[Float32Array.from(sine(128, 0.3))]], [out]);
+    return [...out[0]];
+  };
+  const ir = lowerCore(p.code, p.info, p.names, [page]);
+  const worklet = await coreWorkletRuntime();
+  assert.deepEqual(play(coreWorkletFile(worklet, ir, p.names[page])), play(await coreSoundWorklet(ir, p.names[page])));
+  const file = corePageFile("Pedal", await corePageRuntime(), p.code, p.info, p.names, [page], page, worklet);
+  assert.equal(drawn(file), drawn(await webCorePage("Pedal", p.code, p.info, p.names, [page], page)));
 });
 
 // L60: main may read the clock and draw random numbers on a page with

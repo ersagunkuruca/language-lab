@@ -135,6 +135,20 @@ export async function pageRuntime(): Promise<string> {
   return out.outputFiles[0].text;
 }
 
+// The same for pages printed from the core IR (C137d6): core-page.ts and
+// the solver as one script that sets `$core` (page.ts corePageFile), and
+// the audio thread's (page.ts coreWorkletFile).
+export async function corePageRuntime(): Promise<string> { return prebuilt("../../compiler/src/core-page-runtime.ts", "$core"); }
+export async function coreWorkletRuntime(): Promise<string> { return prebuilt("../../compiler/src/core-worklet-runtime.ts", "$core"); }
+async function prebuilt(entry: string, globalName: string): Promise<string> {
+  const { build } = await esbuild();
+  const out = await build({
+    entryPoints: [join(here, entry)],
+    bundle: true, platform: "browser", format: "iife", globalName, target: "es2022", minify: true, write: false, logLevel: "warning",
+  });
+  return out.outputFiles[0].text;
+}
+
 // The audio thread's runtime, prebuilt the same way (src/lang/worklet-runtime.ts):
 // what the editor puts before a page's compiled program to play its sound
 // (page.ts workletFile).
