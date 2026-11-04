@@ -694,8 +694,15 @@ runs bottom-up, so use `for each` when order matters.
 
 ## Types
 
-Hindley-Milner with let-polymorphism at definitions, checked in dependency
-order with mutually recursive groups together (`src/lang/infer.ts`). Types
+Hindley-Milner with let-polymorphism, checked in dependency
+order with mutually recursive groups together (`src/lang/infer.ts`). A
+let whose value is a function written there is generic as a definition is
+(L224): `let same = (x) ↦ x in (same(3), same("t"))` gives `(3, "t")`, and
+moving a helper into a definition or out of it never changes what
+type-checks. What it reads from around it keeps one type: in `let plus =
+(x) ↦ x + n`, x is n's type. Any other value (a list, a call's result)
+keeps one type, as in ML (Wright's value restriction): it is worked out
+once, so all its uses see the same value. Types
 are inferred from the tree and never stored, the same way names and layout
 are never stored in `code.json`. Writing them down as annotations could be
 added later as a hint layer, keyed by node like everything else.
