@@ -6,6 +6,7 @@ import { Lang } from "../src/lang/dsl.ts";
 import { base, baseNames } from "../src/lang/load.ts";
 import { makeRunner } from "../src/lang/run.ts";
 import { ARITH } from "../src/lang/std.ts";
+import { answerKeys } from "../src/lang/ports.ts";
 import { NUMBER } from "../src/lang/types.ts";
 import type { NodeOf, Call } from "../src/model.ts";
 import { isCall, useOf } from "../src/model.ts";
@@ -30,7 +31,9 @@ test("a call turned around works out its input from the result, and turns back",
   if (!r.ok) return;
   const s = useOf(r.code.nodes[call])!;
   assert.ok(s, "a use");
-  assert.deepEqual(Object.keys(s.binds ?? {}), [(code.nodes[(code.nodes[f] as NodeOf<"def">).body!] as NodeOf<"lambda">).params[0]]);
+  // With no body (L211): it gives the one port it isn't given, x.
+  assert.equal(s.body, undefined);
+  assert.deepEqual(answerKeys(r.code, s), [(code.nodes[(code.nodes[f] as NodeOf<"def">).body!] as NodeOf<"lambda">).params[0]]);
   const after = infer(r.code, r.names);
   assert.equal(first(makeRunner(r.code, after, { print: () => {} }).value(main)), 1.5);
   // Back: the call again, giving f(4) = 9.
