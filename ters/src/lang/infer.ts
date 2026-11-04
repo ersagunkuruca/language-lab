@@ -16,7 +16,7 @@ import { sharing } from "./shared-fields.ts";
 import { PARTIAL, signAnalysis } from "./signs.ts";
 import type { Code, Id, Node, NodeOf, Use } from "../model.ts";
 import { isUse, useTarget, isCall, fieldPorts, type Call, bindsOf, bodyOf } from "../model.ts";
-import { nodesWhere, ownerOfTypeParts, subtree } from "../model.ts";
+import { dependencies, nodesWhere, ownerOfTypeParts, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { unitProblems, UnitsBefore } from "../units.ts";
 import { fillHole } from "./refactor.ts";
@@ -2122,7 +2122,13 @@ export function resultsDirection(code: Code, d: Id, names: Names = {}): { why: s
   const def = code.nodes[d] as NodeOf<"def">;
   const lam = code.nodes[def.body!] as NodeOf<"lambda">;
   const ins = lam.params.filter((p) => !def.results!.includes(p));
-  const nodes: Record<Id, Node> = { ...code.nodes };
+  // Only what the definition reaches, with every type and builtin: the
+  // modes analysis of the whole library for each was 100 to 200 ms (C165).
+  const reach = new Set([d, ...dependencies(code, d)]);
+  const defs = code.defs.filter((x) => reach.has(x) || code.nodes[(code.nodes[x] as NodeOf<"def">).body ?? ""]?.kind === "typedef");
+  const nodes: Record<Id, Node> = {};
+  for (const [id, n] of Object.entries(code.nodes)) if (n.kind === "builtin") nodes[id] = n;
+  for (const x of defs) for (const id of subtree(code, x)) nodes[id] = code.nodes[id];
   const add = (n: Node) => { nodes[n.id] = n; return n.id; };
   const given = Object.fromEntries(ins.map((p) => [p, add({ id: `${d}:given:${p}`, kind: "hole" })]));
   given.out = add({ id: `${d}:true`, kind: "ref", target: TRUE });
@@ -2130,10 +2136,7 @@ export function resultsDirection(code: Code, d: Id, names: Names = {}): { why: s
   const fn = add({ id: `${d}:fn`, kind: "ref", target: d });
   const use: Use = { id: `${d}:results`, kind: "call", fn, given, binds, body: add({ id: `${d}:body`, kind: "hole" }) };
   add(use);
-  const asked = { nodes, defs: code.defs };
-  // The program with this use added: the modes analysis starts from the
-  // program's own slots and scans only the new nodes.
-  derivedFrom(asked, code, [use.id, fn, ...Object.values(given), ...Object.values(binds), bodyOf(use)]);
+  const asked = { nodes, defs };
   try {
     const p = planSolve(asked, use);
     let ends = true;
