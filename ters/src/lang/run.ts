@@ -1085,6 +1085,10 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     // What each node of a copy at another number type copies.
     copyOf,
     value: (def: Id) => refValue(def, null),
+    // How a value of a type with a Shown implementation shows (L205c):
+    // what `show any` and a search's show any give it, for a host showing
+    // values (the editor's chips, lab test's answers) to show them the same.
+    shown: shownBy,
     // Call a function value and stream its results. An answer handed out
     // to the host is used (SPEC §3.3, L218): one with an overflow in it
     // stops, as compiled code's does.
@@ -1221,6 +1225,13 @@ function fixedText(steps: bigint): string {
 // `shown`, given, shows a value of a type with a Shown implementation
 // (L205) through it; without it (the editor's chips, relate.ts) the
 // prelude's number types show the same way by their tags below.
+// Shows values as this program's `show any` does (L205c): a type of the
+// program's own with a Shown implementation shows its own way. Made once
+// per check, used for every value.
+export function showerFor(code: Code, info: Info, names: Names): (v: Value, asNumber?: boolean) => string {
+  const shown = makeRunner(code, info, { print: () => {}, names }).shown;
+  return (v, asNumber = false) => showValue(v, code, names, asNumber, shown);
+}
 export function showValue(v: Value, code: Code, names: Names, asNumber = false, shown?: (v: Data) => string | undefined): string {
   const go = (x: Value) => showValue(x, code, names, asNumber, shown);
   if (shown && typeof v === "object" && v !== null && typeof v !== "function" && "tag" in v) { const t = shown(v); if (t !== undefined) return t; }

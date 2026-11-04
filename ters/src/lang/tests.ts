@@ -15,7 +15,7 @@ import type { Code, Id, NodeOf } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import type { Info } from "./infer.ts";
 import { discharge } from "./ledger.ts";
-import { bool, makeRunner, showValue, toList, unit, type Runtime, type Value } from "./run.ts";
+import { bool, makeRunner, showerFor, toList, unit, type Runtime, type Value } from "./run.ts";
 import { BOOL, CHECK, LIST, RATIO, RATIONAL, UNIT } from "./std.ts";
 import { CHOICE, INT, NUMBER, STRING, type Type } from "./types.ts";
 import { parseValue } from "./values.ts";
@@ -119,7 +119,8 @@ export function savedFrom(json: Record<Id, unknown>): Record<Id, Saved[]> {
 // answer)`, compared as printed (so how a value is stored doesn't matter).
 export function runTests(code: Code, info: Info, names: Names, defs: Id[], saved: Record<Id, Saved[]> = {}, rt: Partial<Runtime> = {}): TestResult[] {
   const tests = new Set(testsIn(info, defs));
-  const show = (v: Value) => showValue(v, code, names);
+  const shower = showerFor(code, info, names);
+  const show = (v: Value) => shower(v);
   const parse = (texts: string[]) => {
     const vs = texts.map((x) => parseValue(x, code, names));
     return vs.every((v) => "value" in v) ? vs.map((v) => (v as { value: Value }).value) : null;
