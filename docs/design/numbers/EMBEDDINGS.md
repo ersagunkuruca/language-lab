@@ -97,7 +97,7 @@ ask him before E work starts.
   given for a known B (infer.ts, at the unify of an argument, field or
   result), and lifts the smaller side of + − · < (arith.ts). Every engine
   then just runs a call, so no compiler work.
-- **L208d.** The diamond rule: paths composed through the declared
+- **L208d** (done, src/lang/diamonds.ts; a path is read with each stretch a declared embedding crosses replaced by it, so the library's Int into Float64 settles Int into Complex and Dual). The diamond rule: paths composed through the declared
   embeddings, refused when two disagree in source and no direct one is
   declared; the laws test compares the direct one with each path.
 - **L208e** (with L204b). Literals as the embedding from Int, and from
