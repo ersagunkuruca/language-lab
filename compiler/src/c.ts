@@ -476,6 +476,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     ...types,
     ...counts,
     ...(cells ? [`static void lab_fields(lab_cell *c) { switch (c->type) { ${fieldsOf.filter(Boolean).join(" ")} default: break; } }`] : []),
+    ...(text.some((t) => t.includes("lab_none")) ? ["static int lab_none = 0; // no answer inside a search (C166)"] : []),
     ...(int32Used.size || text.some((t) => t.includes("lab_fuel")) ? ["static double lab_fuel = INFINITY; // outside any budget, as much as it takes"] : []),
     ...[...int32Used].map((op) => INT32_C[op]!),
     ...(text.some((t) => t.includes("lab_mod(")) ? ["static double lab_mod(double a, double b) { return fmod(fmod(a, b) + b, b); }"] : []),
@@ -798,7 +799,7 @@ int main(int argc, char **argv) {
           return e.t.partial ? checked(c, e.t.result, pre, d, after) : stated(c, e.t.result, pre, d);
         }
         case "fail": pre.push(`${d}lab_st = 1;`, ...out(d, after)); return "0";
-        case "zero": return zero(e.t);
+        case "zero": if (e.none) pre.push(`${d}lab_none = 1;`); return zero(e.t);
         case "set": {
           // The box is borrowed; what it held is dropped.
           const n = sname.get(e.t.key)!, ft = e.t.fields[e.i].t;
@@ -968,6 +969,15 @@ int main(int argc, char **argv) {
         lines.push(`${d}lab_st = 0;`, `${d}${local(e.reason)} = lab_reason;`, `${d}lab_reason = 0;`);
         lines.push(...drops(keep, free(e.arm), after, d), ...block(e.arm, to, d, after));
         if (to !== "return") lines.push(`${d}${done}:;`);
+        return [...pre, ...lines];
+      }
+      if (e.k === "attempt" && lowered.int32) {
+        // The plain profile's search (C166): no answer inside is the flag
+        // lab_none, saved and cleared around the body, as a shader's.
+        const was = temp("i32"), got = temp("i32");
+        const lines = [`${d}${was} = lab_none;`, `${d}lab_none = 0;`];
+        lines.push(`${d}${local(e.res)} = ${ex(e.body, lines, d, union(after, free(e.ok), free(e.otherwise)))};`);
+        lines.push(`${d}${got} = lab_none;`, `${d}lab_none = ${was};`, `${d}if (${got}) {`, ...block(e.otherwise, to, d + "  ", after), `${d}} else {`, ...block(e.ok, to, d + "  ", after), `${d}}`);
         return [...pre, ...lines];
       }
       if (e.k === "attempt" || (e.k === "budget" && fails(e.body, funcs))) {
