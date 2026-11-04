@@ -69,7 +69,7 @@ import { stageProgram } from "../../ters/src/lang/stage.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { discharge } from "../../ters/src/lang/ledger.ts";
 import { scalarOp, TARGETS } from "./builtins.ts";
-import { AUDIO_BLOCK, HANDLER_ROW, LIST, PAGE_HANDLER, PAGE_VIEW, SIGS, SOUND_ROW, VIEW_ROW, STD_IMPL, STD_MANY } from "../../ters/src/lang/std.ts";
+import { AUDIO_BLOCK, AWAIT, AWAIT_OP, START_TIMER_OP, WAIT, WAIT_OP, HANDLER_ROW, LIST, PAGE_HANDLER, PAGE_VIEW, SIGS, SOUND_ROW, VIEW_ROW, STD_IMPL, STD_MANY } from "../../ters/src/lang/std.ts";
 // Cells' operations JavaScript from the core IR takes from the evaluator
 // (run.ts cellOps), `path` aside: it looks inside its function.
 // The effects a page's views and handlers may have (std.ts PAGE_VIEW,
@@ -145,8 +145,10 @@ export interface DType { key: string; name: string; def: Id; cases: { variant: I
 // type with Choice whose closures may give several answers. Its closures
 // take the rest of the search as one more input, last (a continuation of
 // the answer, `answer`), and answer whether it went on, as a definition
-// with several answers does; `result` is that i32.
-export interface FType { key: string; params: LType[]; result: LType; partial?: boolean; several?: true; answer?: LType }
+// with several answers does; `result` is that i32. `chooses`: it is
+// several for its Choice; `waits` (C40 step 4): for a Wait or an Await in
+// its row, whose closures go on from a wait by the rest they were given.
+export interface FType { key: string; params: LType[]; result: LType; partial?: boolean; several?: true; answer?: LType; chooses?: true; waits?: true }
 // What a generic definition's type variables stand for, and its effect
 // rows (by their tail variable: the effects added).
 type At = Map<number, Type | Row>;
@@ -344,7 +346,10 @@ export type SExpr =
   // handler with that `esc` takes it.
   | { k: "abort"; reason: SExpr; esc?: number }
   // An operation on the world (WORLD_OPS), with its result's type.
-  | { k: "world"; op: string; aborts: boolean; args: SExpr[]; t: LType }
+  // `suspends` (C40 step 4): a page handler's wait or await, which goes on
+  // by the rest of the handler; `cps`, that rest given last (t is then
+  // the i32 it answers).
+  | { k: "world"; op: string; aborts: boolean; args: SExpr[]; t: LType; suspends?: true; cps?: true }
   | { k: "handle"; body: SExpr; reason: number; arm: SExpr; t: LType; save: number; esc?: number }
   // W4d, gone after lowering: `one of` a list (t), anywhere, and a
   // handler's search (first, optional, all, count) to be made into code
@@ -584,9 +589,10 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
       if (params.some((p) => !p) || !result) return null;
       const partial = effs.some(partialEff);
       const key = `fn(${(params as LType[]).map(keyOf).join(",")})>${keyOf(result)}${partial ? "!" : ""}`;
-      if (effs.includes(CHOICE) && severalTypes.has(key)) {
+      const chooses = effs.includes(CHOICE) && severalTypes.has(key), waits = !!opts.host && (effs.includes(WAIT) || effs.includes(AWAIT));
+      if (chooses || waits) {
         const sk = `${key}*`;
-        if (!fns.has(sk)) fns.set(sk, { key: sk, params: [...params as LType[], kOf(result)], result: "i32", partial: true, several: true, answer: result });
+        if (!fns.has(sk)) fns.set(sk, { key: sk, params: [...params as LType[], kOf(result)], result: "i32", partial: true, several: true, answer: result, ...(chooses ? { chooses } : {}), ...(waits ? { waits } : {}) } as FType);
         return fns.get(sk)!;
       }
       if (!fns.has(key)) fns.set(key, { key, params: params as LType[], result, ...(partial ? { partial } : {}) });
@@ -1044,6 +1050,15 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
         // The clock, for JavaScript from the core IR (C137c10): the world's,
         // as the evaluator answers a `now` nothing handles.
         if (opts.host && target === NOW_OP) return { k: "world", op: "now", aborts: false, args: [], t: "f64" };
+        // A page handler's waits (C40 step 4): the world's timers, as the
+        // evaluator's (run.ts `unhandled`); a wait or an await goes on by
+        // the rest of the handler, given to it (cps).
+        if (opts.host && (target === WAIT_OP || target === AWAIT_OP || target === START_TIMER_OP)) {
+          const t = stype(zonk(id));
+          if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(id))}`);
+          if (target === START_TIMER_OP) return { k: "world", op: "startTimer", aborts: false, args: args(), t };
+          return { k: "world", op: target === WAIT_OP ? "wait" : "await", aborts: target === AWAIT_OP, args: args(), t, suspends: true };
+        }
         if (opts.data && target === CELL_OPS.changed) return changed(n, id, env, f);
         if (target === SET && n.args.length === 3) return setField(n, id, env, f);
         if (opts.data && target === RANDOM_OP) {
@@ -1871,9 +1886,19 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
     if (e.k === "choose") return true;
     if (e.k === "call" && !e.cps && funcs[e.fn].multi) return true;
     if (e.k === "apply" && !e.cps && e.t.several) return true;
+    if (e.k === "world" && e.suspends && !e.cps) return true;
     if (e.k === "search") return !!e.dflt && several(e.dflt);
     if (e.k === "handle" && several(e.body)) throw new Refused("handles Abort around a search with several answers (not in WebAssembly yet)");
     return kids(e).some(several);
+  }
+  // Whether e may wait (C40 step 4): a search or a budget around a wait
+  // isn't lowered, since the rest it's given would run after it's gone.
+  const waiting = new Set<number>();
+  function waits(e: SExpr): boolean {
+    if (e.k === "world" && e.suspends) return true;
+    if (e.k === "call" && waiting.has(e.fn)) return true;
+    if (e.k === "apply" && e.t.waits) return true;
+    return kids(e).some(waits);
   }
   // A tail call inside e isn't one once e is a value in the rest of a search.
   const untail = (e: SExpr): SExpr => { const r = mapKids(e, untail); return r.k === "call" || r.k === "apply" ? { ...r, tail: false } : r; };
@@ -1888,7 +1913,8 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
       case "text": return "text";
       case "op": return OPS[e.op].t;
       case "call": return funcs[e.fn].multi ? "i32" : funcs[e.fn].result;
-      case "make": case "new": case "list": case "closure": case "world": case "if": case "attempt": case "handle": case "budget": case "search": case "choose": case "zero": return e.k === "choose" ? e.t.cases.find((c) => c.variant === CONS)!.fields[0].t : e.t;
+      case "world": return e.cps ? "i32" : e.t;
+      case "make": case "new": case "list": case "closure": case "if": case "attempt": case "handle": case "budget": case "search": case "choose": case "zero": return e.k === "choose" ? e.t.cases.find((c) => c.variant === CONS)!.fields[0].t : e.t;
       case "get": return e.t.fields[e.i].t;
       case "field": return e.t.cases[e.c].fields[e.i].t;
       case "apply": return e.t.several && !e.cps ? e.t.answer! : e.t.result;
@@ -2007,6 +2033,8 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
       case "call": if (funcs[e.fn].multi && !e.cps) return inOrder(e.args, (vs, tl) => callSeveral(e.fn, vs, k, tl, g), tail, g); break;
       // A closure of a several type is given the rest (C137c22).
       case "apply": if (e.t.several && !e.cps) return inOrder([e.fn, ...e.args], ([fv, ...vs], tl) => ({ k: "apply", fn: fv, t: e.t, args: [...vs, restOf(e.t.answer!, k, g)], tail: tl, tmp: e.tmp, cps: true }), tail, g); break;
+      // A wait is given the rest of the handler (C40 step 4).
+      case "world": if (e.suspends && !e.cps) return inOrder(e.args, (vs) => ({ ...e, args: [...vs, restOf(e.t, k, g)], t: "i32", cps: true }), tail, g); break;
       case "let":
         if (several(e.value)) return cps(e.value, { gen: (v, tl) => ({ k: "let", i: e.i, value: v, body: cps(e.body, k, tl, g) }) }, tail, g);
         return { k: "let", i: e.i, value: untail(e.value), body: cps(e.body, k, tail, g) };
@@ -2020,7 +2048,7 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
         const j = join(k, e.result, g, arms(e.arms));
         return { ...e, arms: e.arms.map((a) => a && cps(a, j, tail, g)), result: "i32" };
       }
-      case "budget": if (!several(e.otherwise)) return outside(e, k, g); break;
+      case "budget": if (waits(e.body)) throw new Refused("waits inside with fuel (not lowered yet)"); if (!several(e.otherwise)) return outside(e, k, g); break;
       case "attempt": {
         if (several(e.body)) break;
         const j = join(k, e.t, g, arms([e.ok, e.otherwise]));
@@ -2072,6 +2100,7 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
         : e.kind === "optional" ? [made(SOME, [answer]), made(NONE, [])] : [made(CONS, [answer, made(NIL, [])]), made(NIL, [])];
       return { k: "attempt", body: e.body, res: e.res, ok, otherwise, t: e.t };
     }
+    if (waits(e.body)) throw new Refused(`waits inside ${e.kind} (not lowered yet)`);
     const acc: LType = e.kind === "count" ? e.t : e.kind === "all" ? e.t : e.bt, box = boxOf(acc);
     const b = g.locals.push(box) - 1, got: SExpr = { k: "get", rec: local(b), t: box, i: 0 };
     const set = (value: SExpr, then: SExpr): SExpr => ({ k: "set", rec: local(b), t: box, i: 0, value, then });
@@ -2094,6 +2123,7 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
     for (let changed = true; changed;) {
       changed = false;
       for (let i = from; i < end; i++) if (!funcs[i].multi && (several(funcs[i].body) || (closureCode.has(i) && (funcs[i].params[0] as FType).several))) { funcs[i].multi = true; funcs[i].answer = funcs[i].result; changed = true; }
+      for (let i = from; i < end; i++) if (!waiting.has(i) && waits(funcs[i].body)) { waiting.add(i); changed = true; }
     }
     for (let i = from; i < end; i++) {
       const g = funcs[i];
@@ -2401,6 +2431,9 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
   for (const r of roots) {
     const from = funcs.length, shaped = shapes.length;
     const raw = info.typeOf.get(r) && info.subst.zonk(info.typeOf.get(r)!), given = defaults(r);
+    // Only a page handler goes on from a wait here (C40 step 4): a main
+    // that waits is compile.ts's yet.
+    if (raw?.t === "fn" && info.subst.resolveRow(raw.eff).effs.some((e) => e === WAIT || e === AWAIT)) { refused.set(r, "waits, which only a page's handler does on the core IR yet"); continue; }
     rootVars = new Set(raw ? vars(raw).filter((v) => !given.has(v)) : []);
     try { func(r, given); several_(from); modCons(from); } catch (e) {
       if (!(e instanceof Refused)) throw e;

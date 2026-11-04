@@ -185,7 +185,9 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
         }
         case "field": return `${ex(e.rec, pre, d)}.fields[${e.i}]`;
         case "tag": return `R.caseOf(${ex(e.rec, pre, d)}, ${JSON.stringify(e.t.cases.map((c) => c.variant))})`;
-        case "closure": return `R.closure(${names[e.fn]}, [${e.caps.map((a) => ex(a, pre, d)).join(", ")}]${e.src ? `, ${JSON.stringify(e.src)}` : ""})`;
+        // One of a type that waits takes the rest last (C40 step 4): called
+        // from outside, it's given a rest that keeps the answer.
+        case "closure": return `R.closure(${names[e.fn]}, [${e.caps.map((a) => ex(a, pre, d)).join(", ")}]${e.src || e.t.waits ? `, ${e.src ? JSON.stringify(e.src) : "undefined"}` : ""}${e.t.waits ? ", true" : ""})`;
         case "cap": return `l0.caps[${e.i}]`;
         case "apply": {
           const c = ex(e.fn, pre, d), xs = e.args.map((a) => ex(a, pre, d));
