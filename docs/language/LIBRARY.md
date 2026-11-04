@@ -402,6 +402,7 @@ Json is JSON's values as data: null, a Bool, a Float64, a Text, a list, or an ob
 
 - **Json** (type). A JSON value (RFC 8259): null, a Bool, a Float64, a Text, a list of them or an object of named ones, in order. json printed writes one as JSON text.
 - **json printed** : `(Json) -> Text`. The JSON text of a Json value (RFC 8259): json printed(json object([("a", json list([json number(1), json null]))])) is {"a":[1,null]}. Text is quoted with ", \ and control characters escaped.
+- **json printed indented** : `(Json, Int) -> Text`. The Json value as text over lines, each item and field on a line of its own and indented step spaces a level: the same text as JavaScript's JSON.stringify(value, null, step). A step below 1 prints it on one line, as json printed.
 - **json read** : `(Text) -[Diverge, Abort]-> Json`. The Json value a JSON text spells (RFC 8259), the other way from json printed: json read("[1, true]") is json list([json number(1), json bool(true)]). Stops on text that isn't JSON, saying where.
 - **json field** : `(Json, Text) -[Choice]-> Json`. The value of an object's field with this name, the first if there are several. No answer for a missing field or a value that isn't an object.
 - **json as number** : `(Json) -[Choice]-> Float64`. The Float64 a json number holds; no answer for any other kind.
