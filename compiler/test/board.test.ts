@@ -28,3 +28,15 @@ for (const n of [0, 12]) test(`board: the four agree on a session with ${n} card
   }
   assert.match(end, /<section class="history">/);
 });
+
+test("board on the core IR: its reads of the state wait on the places they use (C162b)", async () => {
+  const { lowerCore, emitCoreJs } = await import("../src/core-js.ts");
+  const { program } = await import("../gaps/board.ts");
+  const { code, info, names, main } = program();
+  const js = emitCoreJs(lowerCore(code, info, names, [main])).js;
+  const reads = js.match(/R\.rt\("readPaths:[^"]*"/g) ?? [];
+  // The progress bar, the tags, the counts and the history each read a few
+  // places of the cards, not the whole state.
+  assert.ok(reads.length >= 8, `${reads.length} reads followed`);
+  assert.ok(reads.some((r) => r.includes("*/")), "a read of every card's field");
+});

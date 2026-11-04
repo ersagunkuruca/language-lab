@@ -5,7 +5,7 @@
 // reads scalar.ts's tables), so nothing here needs the compiler.
 
 import { FALSE, HASH_SET_OPS, NONE, S, SOME, STD_IMPL, STD_MANY, TABLE_OPS, TICKET_V, TRUE } from "../../ters/src/lang/std.ts";
-import { META, cellOps, equal, unit, type Data, toList, type Runtime, type Value, type World } from "../../ters/src/lang/run.ts";
+import { LIST_SHAPE, META, cellOps, equal, unit, type Data, toList, type Runtime, type Value, type World } from "../../ters/src/lang/run.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { answerByShapes, type HostOp } from "../../ters/src/lang/hosts.ts";
 import { Cells, NoValue, Pending } from "../../ters/src/lang/cells.ts";
@@ -343,11 +343,18 @@ function worldFn(op: string, rt: Runtime, timers: Timers, handlers: Map<string, 
 // `effect:index` (core-js.ts hostOpsOf).
 export type HostOps = Record<string, HostOp & { op: Id }>;
 export function coreRuntime(tables: TableSpec[], worlds: string[], rt: Runtime, code?: Code, info?: Info, hostOps?: HostOps) {
-  const rand = randFns(new Uint32Array(4)), cells = cellFns(rt.cells ?? new Cells(equal));
+  const held = rt.cells ?? new Cells(equal), rand = randFns(new Uint32Array(4)), cells = cellFns(held);
+  // A read the compiler followed (cell-paths.ts, C162): it waits on the
+  // places its value is used at only.
+  const readPaths = (n: string) => {
+    const keys = n.slice("readPaths:".length).split(",");
+    held.knowLists(LIST_SHAPE);
+    return (c: unknown) => { try { return held.readPaths(c as Value, keys); } catch (e) { if (e instanceof NoValue) throw FAIL; throw e; } };
+  };
   const timers = worldTimers((m) => { throw new Aborted(m, 0); });
   let spend = () => true;
   const handlers = new Map<string, Cases[]>();
-  return { ...RUNTIME, spending: (f: () => boolean) => { spend = f; }, rt: (n: string, b?: BuiltinOf) => rtFn(n, b, tables, rand, cells, code, () => spend(), info, rt, handlers, hostOps), worlds: worlds.map((op) => worldFn(op, rt, timers, handlers)), abort: (reason: unknown, esc: number): never => { throw new Aborted(reason, esc); } };
+  return { ...RUNTIME, spending: (f: () => boolean) => { spend = f; }, rt: (n: string, b?: BuiltinOf) => n.startsWith("readPaths:") ? readPaths(n) : rtFn(n, b, tables, rand, cells, code, () => spend(), info, rt, handlers, hostOps), worlds: worlds.map((op) => worldFn(op, rt, timers, handlers)), abort: (reason: unknown, esc: number): never => { throw new Aborted(reason, esc); } };
 }
 
 // How the evaluator's runtime (a page's mount, html.ts) calls a function
