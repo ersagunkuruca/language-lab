@@ -114,7 +114,7 @@ test("a case analysis is created with every case, and a new case reaches every a
   const raw = structuredClone(p.code);
   const tdId = get(raw, type, "def").body!;
   (raw.nodes[tdId] as NodeOf<"typedef">).variants.push(edit.variant);
-  raw.nodes[edit.variant] = edit.code.nodes[edit.variant];
+  for (const id of subtree(edit.code, edit.variant)) raw.nodes[id] = edit.code.nodes[id];
   const missing = infer(raw, edit.names).errors.filter((e) => /no case for tangent/.test(e.message));
   assert.equal(missing.length, 4);
 });
@@ -223,8 +223,8 @@ test("relations: a direction is chosen at the use site, and its effect is inferr
     "square roots(−1) = []",
   ]);
   // Polar given only x: not enough to solve, and the checker says so.
-  const toPolar = get(p.code, get(p.code, p.named("to polar"), "def").body!, "lambda");
-  const solve = useOf(p.code.nodes[toPolar.body])!;
+  // Its solve, the value of the body's let since saved uses have no body (L211g).
+  const solve = subtree(p.code, p.named("to polar")).map((id) => useOf(p.code.nodes[id])).find((u) => u?.given)!;
   const [x] = Object.keys(solve.given);
   const code = replace(p.code, solve.id, () => ({ ...solve, given: { [x]: solve.given[x], out: solve.given.out } }));
   assert.ok(infer(code, p.pres.names).errors.some((e) => /needs 1 more known port/.test(e.message)));
