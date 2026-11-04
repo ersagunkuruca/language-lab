@@ -452,6 +452,17 @@ A Time of day is an hour, a minute and a second, counted as seconds from midnigh
 - **time text** : `(Time of day) -> Text`. The time as ISO 8601 writes it, hour:minute:second: time text(time of(9, 5, 0)) is "09:05:00".
 - **time read** : `(Text) -[Abort]-> Time of day`. The time an ISO 8601 text writes, hour:minute:second in two digits each, the other way from time text. Stops on any other text.
 
+## Embeddings
+
+An Embedding a b is the one map from a type into a larger one that keeps + − · and <, written embedding(map: …), at most one for a pair. lab test checks its laws. EMBEDDINGS.md.
+
+- **Embedding** (type). An embedding of a in b: a map from a into b that keeps the operations (ι(x + y) = ι(x) + ι(y), ι(x · y) = ι(x) · ι(y), ι(−x) = −ι(x), and x < y exactly when ι(x) < ι(y)), written embedding(map: …), at most one for a pair of types. lab test checks those laws. EMBEDDINGS.md.
+- **int in rational** : `Embedding Int Rational`. Int in Rational: n as the fraction n/1, the one map that keeps + − · and <.
+- **int in float64** : `Embedding Int Float64`. Int in Float64: n as the Float64 nearest it, exact up to 2⁵³; + − · agree as closely as Float64 rounds.
+- **rational in float64** : `Embedding Rational Float64`. Rational in Float64: top ÷ bottom, the Float64 nearest the fraction; + − · agree as closely as Float64 rounds.
+- **float64 in complex** : `Embedding Float64 Complex`. Float64 in Complex: x as x + 0i.
+- **float64 in dual** : `Embedding Float64 Dual`. Float64 in Dual: x as the dual number x + 0ε, a constant, whose slope is 0.
+
 ## Instants and durations
 
 An Instant is a moment, as seconds since 1970-01-01 00:00:00 UTC; a duration is a Float64 in seconds, so units check it. Dates and times of day at an instant are in UTC.

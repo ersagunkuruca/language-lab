@@ -62,6 +62,7 @@ import { readWav, writeWav } from "./wav.ts";
 import { audioProblem, BLOCK, playBlocks } from "../src/lang/audio.ts";
 import { runTests, savedFrom } from "../src/lang/tests.ts";
 import { representationLaws } from "../src/lang/rep-laws.ts";
+import { embeddingLaws } from "../src/lang/embed-laws.ts";
 import { hostSkeleton, type Hosts } from "../src/lang/hosts.ts";
 import { evaluatorHash, readKept, resultKeys, writeKept } from "./checks.ts";
 
@@ -444,6 +445,15 @@ switch (command) {
       for (const f of l.failures.slice(0, 3)) console.log(`✗ ${l.rep}'s ${l.job}(${f.inputs.join(", ")}): ${f.what}`);
       if (l.failures.length > 3) console.log(`  … and ${l.failures.length - 3} more`);
     }
+    // The program's own embeddings keep + − · and < (L208b).
+    const near = LIBRARY.code.defs.find((d) => LIBRARY.names[d] === "near");
+    const embedded = p.info.errors.length ? [] : embeddingLaws(p.code, p.info, p.names, new Set(p.own), near);
+    for (const l of embedded) {
+      if (l.error) console.log(`✗ ${l.name}: ${l.error}`);
+      else if (!l.failures.length) console.log(`✓ ${l.embedding} keeps ${l.law} (${l.cases} case${l.cases === 1 ? "" : "s"})`);
+      for (const f of l.failures.slice(0, 3)) console.log(`✗ ${l.embedding} doesn't keep ${l.law} at ${f.inputs.join(", ")}`);
+    }
+    laws.push(...embedded.map((l) => ({ rep: l.embedding, job: l.law, cases: l.cases, failures: l.error ? [{ inputs: [], what: l.error }] : l.failures.map((f) => ({ inputs: f.inputs, what: f.what.join("; ") })) })));
     if (!results.length && !laws.length && !p.info.errors.length) console.log("no tests: a test is a definition that performs Check (expect), or an accepted answer in examples.json");
     process.exitCode = p.info.errors.length || results.some((r) => r.error || r.failures.length) || laws.some((l) => l.failures.length) ? 1 : 0;
     break;

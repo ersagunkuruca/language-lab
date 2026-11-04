@@ -112305,9 +112305,163 @@
           "@b7dd4p4vfsc630jqmd32fpum4d:2"
         ],
         "body": "@b7dd4p4vfsc630jqmd32fpum4d:3"
+      },
+      "@jutrbill49f950loev6glgo6s1:3": {
+        "id": "@jutrbill49f950loev6glgo6s1:3",
+        "kind": "ref",
+        "target": "@4rbu06h29910vsmp9oqdajikk3"
+      },
+      "@jutrbill49f950loev6glgo6s1": {
+        "id": "@jutrbill49f950loev6glgo6s1",
+        "kind": "def",
+        "body": "@jutrbill49f950loev6glgo6s1:1"
+      },
+      "@jutrbill49f950loev6glgo6s1:2": {
+        "id": "@jutrbill49f950loev6glgo6s1:2",
+        "kind": "ref",
+        "target": "std.embedding.embedding"
+      },
+      "@jutrbill49f950loev6glgo6s1:1": {
+        "id": "@jutrbill49f950loev6glgo6s1:1",
+        "kind": "call",
+        "fn": "@jutrbill49f950loev6glgo6s1:2",
+        "args": [
+          "@jutrbill49f950loev6glgo6s1:3"
+        ]
+      },
+      "@u8jcuv28ncvshd49khq2p66s9r:3": {
+        "id": "@u8jcuv28ncvshd49khq2p66s9r:3",
+        "kind": "ref",
+        "target": "builtin.int.toNumber"
+      },
+      "@u8jcuv28ncvshd49khq2p66s9r": {
+        "id": "@u8jcuv28ncvshd49khq2p66s9r",
+        "kind": "def",
+        "body": "@u8jcuv28ncvshd49khq2p66s9r:1"
+      },
+      "@u8jcuv28ncvshd49khq2p66s9r:2": {
+        "id": "@u8jcuv28ncvshd49khq2p66s9r:2",
+        "kind": "ref",
+        "target": "std.embedding.embedding"
+      },
+      "@u8jcuv28ncvshd49khq2p66s9r:1": {
+        "id": "@u8jcuv28ncvshd49khq2p66s9r:1",
+        "kind": "call",
+        "fn": "@u8jcuv28ncvshd49khq2p66s9r:2",
+        "args": [
+          "@u8jcuv28ncvshd49khq2p66s9r:3"
+        ]
+      },
+      "@t12q4tsstleobshkintqdujgri:3": {
+        "id": "@t12q4tsstleobshkintqdujgri:3",
+        "kind": "ref",
+        "target": "@l8i0qr9eq61qtbul6agt1blhsv"
+      },
+      "@t12q4tsstleobshkintqdujgri": {
+        "id": "@t12q4tsstleobshkintqdujgri",
+        "kind": "def",
+        "body": "@t12q4tsstleobshkintqdujgri:1"
+      },
+      "@t12q4tsstleobshkintqdujgri:2": {
+        "id": "@t12q4tsstleobshkintqdujgri:2",
+        "kind": "ref",
+        "target": "std.embedding.embedding"
+      },
+      "@t12q4tsstleobshkintqdujgri:1": {
+        "id": "@t12q4tsstleobshkintqdujgri:1",
+        "kind": "call",
+        "fn": "@t12q4tsstleobshkintqdujgri:2",
+        "args": [
+          "@t12q4tsstleobshkintqdujgri:3"
+        ]
+      },
+      "@5egcabojktobods5dh798la190:3": {
+        "id": "@5egcabojktobods5dh798la190:3",
+        "kind": "ref",
+        "target": "@8o6ptf0efocthvugd6capvcf2l"
+      },
+      "@5egcabojktobods5dh798la190": {
+        "id": "@5egcabojktobods5dh798la190",
+        "kind": "def",
+        "body": "@5egcabojktobods5dh798la190:1"
+      },
+      "@5egcabojktobods5dh798la190:2": {
+        "id": "@5egcabojktobods5dh798la190:2",
+        "kind": "ref",
+        "target": "std.embedding.embedding"
+      },
+      "@5egcabojktobods5dh798la190:1": {
+        "id": "@5egcabojktobods5dh798la190:1",
+        "kind": "call",
+        "fn": "@5egcabojktobods5dh798la190:2",
+        "args": [
+          "@5egcabojktobods5dh798la190:3"
+        ]
+      },
+      "@kmg3db7f3ahj514ove74nbuqa2:4": {
+        "id": "@kmg3db7f3ahj514ove74nbuqa2:4",
+        "kind": "binder"
+      },
+      "@kmg3db7f3ahj514ove74nbuqa2:8": {
+        "id": "@kmg3db7f3ahj514ove74nbuqa2:8",
+        "kind": "lit",
+        "value": 0
+      },
+      "@kmg3db7f3ahj514ove74nbuqa2:6": {
+        "id": "@kmg3db7f3ahj514ove74nbuqa2:6",
+        "kind": "ref",
+        "target": "std.dual.dual"
+      },
+      "@kmg3db7f3ahj514ove74nbuqa2:7": {
+        "id": "@kmg3db7f3ahj514ove74nbuqa2:7",
+        "kind": "ref",
+        "target": "@kmg3db7f3ahj514ove74nbuqa2:4"
+      },
+      "@kmg3db7f3ahj514ove74nbuqa2:5": {
+        "id": "@kmg3db7f3ahj514ove74nbuqa2:5",
+        "kind": "call",
+        "fn": "@kmg3db7f3ahj514ove74nbuqa2:6",
+        "args": [
+          "@kmg3db7f3ahj514ove74nbuqa2:7",
+          "@kmg3db7f3ahj514ove74nbuqa2:8"
+        ]
+      },
+      "@kmg3db7f3ahj514ove74nbuqa2:3": {
+        "id": "@kmg3db7f3ahj514ove74nbuqa2:3",
+        "kind": "lambda",
+        "params": [
+          "@kmg3db7f3ahj514ove74nbuqa2:4"
+        ],
+        "body": "@kmg3db7f3ahj514ove74nbuqa2:5"
+      },
+      "@kmg3db7f3ahj514ove74nbuqa2": {
+        "id": "@kmg3db7f3ahj514ove74nbuqa2",
+        "kind": "def",
+        "body": "@kmg3db7f3ahj514ove74nbuqa2:1"
+      },
+      "@kmg3db7f3ahj514ove74nbuqa2:2": {
+        "id": "@kmg3db7f3ahj514ove74nbuqa2:2",
+        "kind": "ref",
+        "target": "std.embedding.embedding"
+      },
+      "@kmg3db7f3ahj514ove74nbuqa2:1": {
+        "id": "@kmg3db7f3ahj514ove74nbuqa2:1",
+        "kind": "call",
+        "fn": "@kmg3db7f3ahj514ove74nbuqa2:2",
+        "args": [
+          "@kmg3db7f3ahj514ove74nbuqa2:3"
+        ]
       }
     },
     "defs": [
+      "@4rbu06h29910vsmp9oqdajikk3",
+      "@jutrbill49f950loev6glgo6s1",
+      "@u8jcuv28ncvshd49khq2p66s9r",
+      "@l8i0qr9eq61qtbul6agt1blhsv",
+      "@t12q4tsstleobshkintqdujgri",
+      "@8o6ptf0efocthvugd6capvcf2l",
+      "@5egcabojktobods5dh798la190",
+      "@kmg3db7f3ahj514ove74nbuqa2",
       "@9og9ebkquo0l2vo799c7i27067",
       "@jhtpq3g298okp8rpfbapiu6h8b",
       "@tf4scqabknudnlqu92aii2g2oc",
@@ -112357,9 +112511,6 @@
       "@2cffeb22vf6lq91e33uel1np1h",
       "@7oqrouv1btl6kt56s12kr7t7k0",
       "@ch6at4jelj1lg0b916kifrt6tt",
-      "@4rbu06h29910vsmp9oqdajikk3",
-      "@l8i0qr9eq61qtbul6agt1blhsv",
-      "@8o6ptf0efocthvugd6capvcf2l",
       "@7lrku7dm0b5g72i0lrmd8acccv",
       "@aclg13eff4ceaebcksq8gh376d",
       "@poo2a71bl3s61p9glu6dh6brc8",
@@ -112832,6 +112983,189 @@
     ]
   },
   "pins": {
+    "@4rbu06h29910vsmp9oqdajikk3": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "type.int",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.rational",
+          "args": []
+        },
+        "eff": {
+          "effs": [],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
+    "@jutrbill49f950loev6glgo6s1": {
+      "vars": [],
+      "rows": [],
+      "type": {
+        "t": "con",
+        "id": "std.embedding",
+        "args": [
+          {
+            "t": "con",
+            "id": "type.int",
+            "args": []
+          },
+          {
+            "t": "con",
+            "id": "std.rational",
+            "args": []
+          }
+        ]
+      },
+      "plain": []
+    },
+    "@u8jcuv28ncvshd49khq2p66s9r": {
+      "vars": [],
+      "rows": [],
+      "type": {
+        "t": "con",
+        "id": "std.embedding",
+        "args": [
+          {
+            "t": "con",
+            "id": "type.int",
+            "args": []
+          },
+          {
+            "t": "con",
+            "id": "type.number",
+            "args": []
+          }
+        ]
+      },
+      "plain": []
+    },
+    "@l8i0qr9eq61qtbul6agt1blhsv": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.rational",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "type.number",
+          "args": []
+        },
+        "eff": {
+          "effs": [],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
+    "@t12q4tsstleobshkintqdujgri": {
+      "vars": [],
+      "rows": [],
+      "type": {
+        "t": "con",
+        "id": "std.embedding",
+        "args": [
+          {
+            "t": "con",
+            "id": "std.rational",
+            "args": []
+          },
+          {
+            "t": "con",
+            "id": "type.number",
+            "args": []
+          }
+        ]
+      },
+      "plain": []
+    },
+    "@8o6ptf0efocthvugd6capvcf2l": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "type.number",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.complex",
+          "args": []
+        },
+        "eff": {
+          "effs": [],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
+    "@5egcabojktobods5dh798la190": {
+      "vars": [],
+      "rows": [],
+      "type": {
+        "t": "con",
+        "id": "std.embedding",
+        "args": [
+          {
+            "t": "con",
+            "id": "type.number",
+            "args": []
+          },
+          {
+            "t": "con",
+            "id": "std.complex",
+            "args": []
+          }
+        ]
+      },
+      "plain": []
+    },
+    "@kmg3db7f3ahj514ove74nbuqa2": {
+      "vars": [],
+      "rows": [],
+      "type": {
+        "t": "con",
+        "id": "std.embedding",
+        "args": [
+          {
+            "t": "con",
+            "id": "type.number",
+            "args": []
+          },
+          {
+            "t": "con",
+            "id": "std.dual",
+            "args": []
+          }
+        ]
+      },
+      "plain": []
+    },
     "@9og9ebkquo0l2vo799c7i27067": {
       "vars": [
         0
@@ -114884,84 +115218,6 @@
           "effs": [
             "effect.choice"
           ],
-          "tail": 0
-        }
-      },
-      "plain": []
-    },
-    "@4rbu06h29910vsmp9oqdajikk3": {
-      "vars": [],
-      "rows": [
-        0
-      ],
-      "type": {
-        "t": "fn",
-        "params": [
-          {
-            "t": "con",
-            "id": "type.int",
-            "args": []
-          }
-        ],
-        "ret": {
-          "t": "con",
-          "id": "std.rational",
-          "args": []
-        },
-        "eff": {
-          "effs": [],
-          "tail": 0
-        }
-      },
-      "plain": []
-    },
-    "@l8i0qr9eq61qtbul6agt1blhsv": {
-      "vars": [],
-      "rows": [
-        0
-      ],
-      "type": {
-        "t": "fn",
-        "params": [
-          {
-            "t": "con",
-            "id": "std.rational",
-            "args": []
-          }
-        ],
-        "ret": {
-          "t": "con",
-          "id": "type.number",
-          "args": []
-        },
-        "eff": {
-          "effs": [],
-          "tail": 0
-        }
-      },
-      "plain": []
-    },
-    "@8o6ptf0efocthvugd6capvcf2l": {
-      "vars": [],
-      "rows": [
-        0
-      ],
-      "type": {
-        "t": "fn",
-        "params": [
-          {
-            "t": "con",
-            "id": "type.number",
-            "args": []
-          }
-        ],
-        "ret": {
-          "t": "con",
-          "id": "std.complex",
-          "args": []
-        },
-        "eff": {
-          "effs": [],
           "tail": 0
         }
       },
@@ -134924,7 +135180,13 @@
     "@b7dd4p4vfsc630jqmd32fpum4d": "duration read",
     "@b7dd4p4vfsc630jqmd32fpum4d:2": "text",
     "@b7dd4p4vfsc630jqmd32fpum4d:5": "negative",
-    "@b7dd4p4vfsc630jqmd32fpum4d:17": "total"
+    "@b7dd4p4vfsc630jqmd32fpum4d:17": "total",
+    "@jutrbill49f950loev6glgo6s1": "int in rational",
+    "@u8jcuv28ncvshd49khq2p66s9r": "int in float64",
+    "@t12q4tsstleobshkintqdujgri": "rational in float64",
+    "@5egcabojktobods5dh798la190": "float64 in complex",
+    "@kmg3db7f3ahj514ove74nbuqa2:4": "x",
+    "@kmg3db7f3ahj514ove74nbuqa2": "float64 in dual"
   },
   "comments": {
     "@7uq2j0i4v8m02boa1jovfc68tl": "Runs the action on each item of the list in turn, for what it does (prints, writes a cell).",
@@ -135107,6 +135369,11 @@
     "@kl352k9klqkn84lm3slg5v09tn": "Waits for a duration (Wait): wait for(seconds(2)). The same as wait with the duration in milliseconds.",
     "@p5n63bfvt939jnuhts8a2pfckd": "The time an ISO 8601 text writes, hour:minute:second in two digits each, the other way from time text. Stops on any other text.",
     "@3ocku6i2rgmm849mu8ptrv3osm": "The date as ISO 8601 writes it, year-month-day: date text(date of(2026, 11, 3)) is \"2026-11-03\".",
+    "@jutrbill49f950loev6glgo6s1": "Int in Rational: n as the fraction n/1, the one map that keeps + − · and <.",
+    "@u8jcuv28ncvshd49khq2p66s9r": "Int in Float64: n as the Float64 nearest it, exact up to 2⁵³; + − · agree as closely as Float64 rounds.",
+    "@t12q4tsstleobshkintqdujgri": "Rational in Float64: top ÷ bottom, the Float64 nearest the fraction; + − · agree as closely as Float64 rounds.",
+    "@5egcabojktobods5dh798la190": "Float64 in Complex: x as x + 0i.",
+    "@kmg3db7f3ahj514ove74nbuqa2": "Float64 in Dual: x as the dual number x + 0ε, a constant, whose slope is 0.",
     "@h0tkb9mksjarsesmp2ffb5oh30": "The Json value as text over lines, each item and field on a line of its own and indented step spaces a level: the same text as JavaScript's JSON.stringify(value, null, step). A step below 1 prints it on one line, as json printed.",
     "@nj3dvvtm9ktrfpbpnhqqsvas6m": "The value of an object's field with this name, the first if there are several. No answer for a missing field or a value that isn't an object.",
     "@u3fjlv9cius80g2820qalfsi7n": "The Float64 a json number holds; no answer for any other kind.",
@@ -135352,6 +135619,11 @@
     "@evvkvacd5ecmvnt8jl3v6s9n64": "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette."
   },
   "exports": [
+    "@jutrbill49f950loev6glgo6s1",
+    "@u8jcuv28ncvshd49khq2p66s9r",
+    "@t12q4tsstleobshkintqdujgri",
+    "@5egcabojktobods5dh798la190",
+    "@kmg3db7f3ahj514ove74nbuqa2",
     "@9og9ebkquo0l2vo799c7i27067",
     "@jhtpq3g298okp8rpfbapiu6h8b",
     "@tf4scqabknudnlqu92aii2g2oc",
