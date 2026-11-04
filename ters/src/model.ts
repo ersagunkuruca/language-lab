@@ -39,7 +39,7 @@ export type Node =
   // `direction`: this definition, with results, computes another direction
   // of that one (POLAR.md): the same ports in the same order, so a solve of
   // that one given this one's inputs is a solve of this one.
-  | { id: Id; kind: "def"; body: Id | null; way?: Id; results?: Id[]; cost?: number; direction?: Id }
+  | { id: Id; kind: "def"; body: Id | null; way?: Id; cost?: number; direction?: Id }
   | { id: Id; kind: "builtin"; op: string }
   // A hole: an expression not written yet. Programs with holes still render,
   // hash and can be edited; they just can't be evaluated through the hole.
@@ -133,17 +133,31 @@ export const useKids = (n: Use): Id[] => (n.body === undefined ? Object.values(n
 // (RESULTS.md, `condition`); a lambda with results gives them, its body a
 // tuple of them in order (L128b). Every reader of either goes through this,
 // so the two forms can become one stored form without the readers changing.
+//
+// Stored one way since L225d: a lambda's `results`. Results that are among
+// its parameters make the body a condition over all of them; results that
+// aren't are what the body gives.
 export interface Ports { inputs: Id[]; results: Id[]; condition: boolean }
 export function portsOf(nodes: Record<Id, Node>, id: Id): Ports | null {
   const n = nodes[id];
-  if (n?.kind === "def") {
-    const lam = n.body === null ? undefined : nodes[n.body];
-    if (lam?.kind !== "lambda") return null;
-    if (n.results?.length) { const rs = n.results; return { inputs: lam.params.filter((p) => !rs.includes(p)), results: rs, condition: true }; }
-    return lam.results?.length ? { inputs: lam.params, results: lam.results, condition: false } : null;
+  const lam = n?.kind === "def" ? (n.body === null ? undefined : nodes[n.body]) : n;
+  if (lam?.kind !== "lambda" || !lam.results?.length) return null;
+  const rs = lam.results;
+  return rs.every((r) => lam.params.includes(r)) ? { inputs: lam.params.filter((p) => !rs.includes(p)), results: rs, condition: true } : { inputs: lam.params, results: rs, condition: false };
+}
+// A definition's results when its body is a condition over its ports
+// (RESULTS.md): polar's x and y. undefined for any other definition.
+export const conditionResults = (nodes: Record<Id, Node>, id: Id): Id[] | undefined => { const p = portsOf(nodes, id); return p?.condition ? p.results : undefined; };
+// Saved before L225d: a definition's results on the definition. They move
+// to its lambda, which keeps them among its parameters.
+function resultsOnTheLambda(nodes: Record<Id, unknown>): void {
+  for (const x of Object.values(nodes)) {
+    const d = x as { kind?: string; results?: Id[]; body?: Id | null };
+    if (d?.kind !== "def" || !d.results) continue;
+    const lam = d.body ? (nodes[d.body] as { kind?: string; results?: Id[] } | undefined) : undefined;
+    if (lam?.kind === "lambda") lam.results = d.results;
+    delete d.results;
   }
-  if (n?.kind === "lambda" && n.results?.length) return { inputs: n.params, results: n.results, condition: false };
-  return null;
 }
 export const isUse = (n: Node | undefined | null): n is Use => n?.kind === "call" && n.given !== undefined;
 export const useOf = (n: Node | undefined | null): Use | null => (isUse(n) ? n : null);
@@ -207,6 +221,7 @@ export const SHAPE_STEPS: { what: string; step: (nodes: Record<Id, unknown>) => 
   { what: "a use is a call whose fn is a ref (L130d)", step: upgradeUses },
   { what: "unpolar's ports in the order of its function, (x, y) → length, angle (L128d3)", step: unpolarInOrder },
   { what: "a use gives its produced ports, its body a let of them (L211g)", step: (nodes) => shapeHooks.usesGiveTheirPorts?.(nodes) },
+  { what: "a definition's results are its lambda's, among its parameters (L225d)", step: resultsOnTheLambda },
 ];
 export const SHAPE = SHAPE_STEPS.length;
 export const toTodaysShape = (nodes: Record<Id, unknown>, from = 0): void => { for (const s of SHAPE_STEPS.slice(from)) s.step(nodes); };
@@ -256,7 +271,7 @@ export function mapIds(n: Node, f: (id: Id) => Id): Node {
     case "ref": return { ...n, id: f(n.id), target: f(n.target) };
     case "call": return n.given ? { ...n, id: f(n.id), fn: f(n.fn), given: rec(n.given), ...(n.binds && { binds: rec(n.binds) }), ...(n.body !== undefined && { body: f(n.body) }) } : { ...n, id: f(n.id), fn: f(n.fn), args: n.args.map(f) };
     case "lambda": return { ...n, id: f(n.id), params: n.params.map(f), body: f(n.body), ...(n.results ? { results: n.results.map(f) } : {}) };
-    case "def": return { ...n, id: f(n.id), body: n.body === null ? null : f(n.body), ...(n.results ? { results: n.results.map(f) } : {}), ...(n.direction ? { direction: f(n.direction) } : {}) };
+    case "def": return { ...n, id: f(n.id), body: n.body === null ? null : f(n.body), ...(n.direction ? { direction: f(n.direction) } : {}) };
     case "typedef": return { ...n, id: f(n.id), params: n.params.map(f), variants: n.variants.map(f), ...(n.row ? { row: n.row.map(f) } : {}) };
     case "variant": return { ...n, id: f(n.id), fields: n.fields.map(f), ...(n.params ? { params: n.params.map(f) } : {}) };
     case "field": return { ...n, id: f(n.id), type: f(n.type), ...(n.same ? { same: f(n.same) } : {}) };
@@ -292,7 +307,7 @@ export const SCHEMA: Schema = {
   // `results` names the parts of the tuple the body gives: binders, so
   // children, which the hash leaves out (the body's tuple says how many).
   lambda: { params: "child", body: "child", results: "child" },
-  def: { body: "child", way: "ref", results: "meaning", cost: "meaning", direction: "ref" },
+  def: { body: "child", way: "ref", cost: "meaning", direction: "ref" },
   builtin: { op: "meaning" },
   hole: {},
   typedef: { params: "child", variants: "child", effect: "meaning", interface: "meaning", unique: "meaning", row: "ref" },
@@ -316,7 +331,8 @@ export function children(n: Node): Id[] {
   if (!slots) return [];
   const out: Id[] = [];
   for (const [a, slot] of Object.entries(slots)) if (slot === "child") out.push(...idsIn((n as Record<string, unknown>)[a]));
-  return out;
+  // A condition's results are among its parameters (L225d): each once.
+  return n.kind === "lambda" && n.results ? [...new Set(out)] : out;
 }
 
 // Every node id under `root`, in pre-order. Does not follow refs.

@@ -151,7 +151,7 @@ export class Lang extends Builder {
   results(def: Id, ...names: string[]): Id {
     const d = this.code.nodes[def] as NodeOf<"def">;
     const params = (this.code.nodes[d.body!] as NodeOf<"lambda">).params;
-    d.results = names.map((name) => { const p = params.find((q) => this.names[q] === name); if (!p) throw new Error(`no parameter ${name}`); return p; });
+    (this.code.nodes[d.body!] as NodeOf<"lambda">).results = names.map((name) => { const p = params.find((q) => this.names[q] === name); if (!p) throw new Error(`no parameter ${name}`); return p; });
     return def;
   }
 

@@ -1994,9 +1994,10 @@ export function addActionStep(code: Code, names: Names, info: Info, step: Id): T
 // port order. With none it is the plain predicate again. The checker says
 // whether the others pin them down.
 export function setResults(code: Code, names: Names, info: Info, def: Id, results: Id[]): TEdit {
-  const { results: _, ...d } = code.nodes[def] as NodeOf<"def">;
-  const params = (code.nodes[d.body!] as NodeOf<"lambda">).params, rs = params.filter((p) => results.includes(p));
-  const nodes = { ...code.nodes, [def]: rs.length ? { ...d, results: rs } : d };
+  const d = code.nodes[def] as NodeOf<"def">;
+  const { results: _, ...lam } = code.nodes[d.body!] as NodeOf<"lambda">;
+  const params = lam.params, rs = params.filter((p) => results.includes(p));
+  const nodes = { ...code.nodes, [lam.id]: rs.length ? { ...lam, results: rs } : lam };
   const nm = (id: Id) => names[id] ?? display[id] ?? id;
   return guardTyped(info, { ...code, nodes }, names, def, rs.length ? `${nm(def)} gives ${rs.map(nm).join(", ")} from ${params.filter((p) => !rs.includes(p)).map(nm).join(", ") || "nothing"}.` : `${nm(def)} has no results: a predicate on all its ports again.`);
 }

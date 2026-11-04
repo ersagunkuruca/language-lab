@@ -19,7 +19,9 @@ A definition with results is a relation whose result ports are named. Its
 meaning stays what it is today, a predicate over all its ports, so
 `polar(x, y, length, angle)` is still true or false for four numbers. What
 it adds is a declared direction: `length, angle` are what `polar` gives
-when it's given `x, y`. A Bool predicate is the case with no results, and an
+when it's given `x, y`. (Stored since L225d on the definition's lambda,
+as `results` among its parameters; a lambda whose results aren't among its
+parameters gives them instead, PORTS-2026-11-01.md.) A Bool predicate is the case with no results, and an
 ordinary function is the case with one (its `result`). So everything stays
 one system, as Ersagun asked ("everything is one system, no special node
 kinds").

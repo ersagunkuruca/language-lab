@@ -20,7 +20,7 @@
 //     fresh id, and far past where two different definitions could share one.
 
 import type { Code, Id, Node, NodeOf } from "./model.ts";
-import { isUse, useTarget } from "./model.ts";
+import { conditionResults, isUse, useTarget } from "./model.ts";
 import { ownerOfTypeParts } from "./model.ts";
 import { base32, sha256 } from "./sha256.ts";
 
@@ -252,9 +252,9 @@ function canon(code: Code, defId: Id, group: Map<Id, number | null>, memo: Map<I
   // results (by place among its inputs), the relation it is a direction
   // of, the operation it is a way of and that way's cost. Only when
   // present, so every other hash stays.
-  const d = code.nodes[defId] as NodeOf<"def">, lam = code.nodes[def.body];
+  const d = code.nodes[defId] as NodeOf<"def">, lam = code.nodes[def.body], rs = conditionResults(code.nodes, defId);
   const marks = [
-    ...(d.results ? [["results", d.results.map((r) => (lam?.kind === "lambda" ? lam.params.indexOf(r) : -1))]] : []),
+    ...(rs ? [["results", rs.map((r) => (lam?.kind === "lambda" ? lam.params.indexOf(r) : -1))]] : []),
     ...(d.direction ? [["direction", defRef(d.direction)]] : []),
     ...(d.way ? [["way", part(d.way)]] : []),
     ...(d.cost !== undefined ? [["cost", d.cost]] : []),

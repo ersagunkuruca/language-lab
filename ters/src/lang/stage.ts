@@ -32,7 +32,7 @@
 // do.
 
 import type { Code, Id, Node, NodeData, NodeOf } from "../model.ts";
-import { isUse, isCall, bindsOf } from "../model.ts";
+import { conditionResults, isUse, isCall, bindsOf } from "../model.ts";
 import { children, freshId, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { impl, type Op } from "../prelude.ts";
@@ -282,7 +282,7 @@ export function specialiseCalls(code: Code, info: Info, names: Names, calls: Id[
     if (f?.kind !== "ref" || nodes[f.target]?.kind !== "def") continue;
     const def = nodes[f.target] as NodeOf<"def">;
     const lam = def.body ? nodes[def.body] : null;
-    if (def.way || def.results || lam?.kind !== "lambda" || lam.params.length !== n.args.length) continue;
+    if (def.way || conditionResults(nodes, f.target) || lam?.kind !== "lambda" || lam.params.length !== n.args.length) continue;
     const keys = n.args.map(known);
     if (!keys.some((k) => k)) continue;
     // (Calls stageCalls could work out whole are gone by now; those it
