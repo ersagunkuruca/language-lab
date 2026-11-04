@@ -1,8 +1,9 @@
 // `first` with a fallback in the plain scalar profile (C166): a search's
 // body whose division has no answer, there or in a definition it calls,
 // gives the fallback, as in the evaluator and in a shader; the same
-// definition called outside any search still stops. JavaScript,
-// WebAssembly and C.
+// definition called outside any search still stops. WebAssembly and C;
+// JavaScript (js-scalar.ts) runs as the GPU does, its checks dropped, so
+// it gives the evaluator's answers where there is one all the way.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -61,7 +62,8 @@ test("first with a fallback in the plain profile: no answer inside gives the fal
     }
     const want = ev(d, ...xs);
     assert.equal(typeof want, "number", `evaluator ${name}`);
-    assert.equal(js.get(d)!(...xs), want, `JavaScript ${name}`);
+    const whole = (d === p.colour && xs[0] !== 0) || (d === p.inside && xs[1] !== 0);
+    if (whole) assert.equal(js.get(d)!(...xs), want, `JavaScript ${name}`);
     assert.equal(wasm[lowered.funcs[i].name](...xs), want, `WebAssembly ${name}`);
     assert.equal(c[k].value, want, `C ${name}`);
   });
