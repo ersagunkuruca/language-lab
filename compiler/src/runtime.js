@@ -386,6 +386,7 @@ import { ABORT, ABORT_OP, IO, LOG_OP, NONE, NOW_OP, RANDOM, RANDOM_OP, S, SOME, 
 import { CONSOLE, FILES, NETWORK } from '../../ters/src/lang/types.ts';
 import { seededGenerator, worldRandom } from '../../ters/src/lang/random.ts';
 import { plainRequest, responseValue } from '../../ters/src/lang/network.ts';
+import { bytesValue, plainBytes } from '../../ters/src/lang/bytes.ts';
 import { answerByShapes } from '../../ters/src/lang/hosts.ts';
 import { worldTimers } from '../../ters/src/lang/timers.ts';
 export { Aborted as $Aborted };
@@ -717,6 +718,9 @@ export const $io = {
   appendFile: acting(IO.appendFile, (p, t) => (fallible('appendFile')(p, t), $unit)),
   fileExists: acting(IO.fileExists, (p) => $bool(!!world.fileExists?.(p))),
   listFolder: acting(IO.listFolder, (p) => $toList(fallible('listFolder')(p))),
+  // Bytes as they are (L189c, ters/src/lang/bytes.ts).
+  readBytes: acting(IO.readBytes, (p) => bytesValue(fallible('readBytes')(p))),
+  writeBytes: acting(IO.writeBytes, (p, b) => (fallible('writeBytes')(p, plainBytes(b)), $unit)),
   fetchText: acting(IO.fetchText, fallible('fetchText')),
   // A request and its response (L191, ters/src/lang/network.ts), converted
   // as the evaluator converts them.

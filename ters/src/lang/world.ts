@@ -86,6 +86,8 @@ export function nodeWorld(): World {
     appendFile: (path, text) => { try { appendFileSync(path, text); } catch (e) { plain(e, path); } },
     fileExists: (path) => existsSync(path),
     listFolder: (path) => { try { return readdirSync(path).sort(); } catch (e) { return plain(e, path); } },
+    readBytes: (path) => { try { return new Uint8Array(readFileSync(path)); } catch (e) { return plain(e, path); } },
+    writeBytes: (path, bytes) => { try { writeFileSync(path, bytes); } catch (e) { plain(e, path); } },
     fetchText: (url) => {
       let r = fetched.get(url);
       if (!r) fetched.set(url, (r = fetchOnce(url)));
@@ -167,7 +169,7 @@ export function allowedOnly(world: World, allow: string[]): World {
   const hosts = allow.filter((a) => a.startsWith("fetch=")).map((a) => a.slice(6));
   const refuse = (what: string) => () => { throw new Error(`${what} isn't allowed: lab run was given --allow ${allow.join(",") || "nothing"}`); };
   const out: World = { ...world };
-  if (!files) for (const k of ["readFile", "writeFile", "appendFile", "fileExists", "listFolder"] as const) out[k] = refuse("Files") as never;
+  if (!files) for (const k of ["readFile", "writeFile", "appendFile", "fileExists", "listFolder", "readBytes", "writeBytes"] as const) out[k] = refuse("Files") as never;
   if (!network) {
     const ok = (url: string) => { try { return hosts.includes(new URL(url).host); } catch { return false; } };
     out.fetchText = (url) => (ok(url) ? world.fetchText(url) : refuse(`Network (${url})`)());
