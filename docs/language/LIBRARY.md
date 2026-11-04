@@ -400,6 +400,24 @@ Json is JSON's values as data: null, a Bool, a Float64, a Text, a list, or an ob
 - **json printed** : `(Json) -> Text`. The JSON text of a Json value (RFC 8259): json printed(json object([("a", json list([json number(1), json null]))])) is {"a":[1,null]}. Text is quoted with ", \ and control characters escaped.
 - **json read** : `(Text) -[Diverge, Abort]-> Json`. The Json value a JSON text spells (RFC 8259), the other way from json printed: json read("[1, true]") is json list([json number(1), json bool(true)]). Stops on text that isn't JSON, saying where.
 
+## Dates
+
+A Date is a day in the calendar: its year, month and day. Dates count as days from 1970-01-01 both ways, so adding days, the days between two dates and the weekday are whole-number arithmetic. Times of day, instants and time zones come later.
+
+- **Date** (type). A calendar date: a year, a month 1 to 12 and a day of that month, in the Gregorian calendar extended to every year. Made by date of, which checks it.
+- **date of** : `(Int, Int, Int) -[Abort]-> Date`. The calendar date of a year, a month (1 to 12) and a day of that month: date of(2026, 11, 3). Stops on a month or day the calendar hasn't, such as 30 February.
+- **date year** : `(Date) -> Int`. The date's year.
+- **date month** : `(Date) -> Int`. The date's month, 1 to 12.
+- **date day** : `(Date) -> Int`. The date's day of its month.
+- **leap year** : `(Int) -> Bool`. Whether the year has 29 February: every fourth year, but not a century unless it is a fourth century (2000 is, 1900 isn't).
+- **days in month** : `(Int, Int) -> Int`. How many days a month of a year has: days in month(2024, 2) is 29.
+- **day number** : `(Date) -> Int`. The date counted in days from 1970-01-01, which is 0; a date before it is negative. Howard Hinnant's days_from_civil.
+- **date of day number** : `(Int) -> Date`. The date a day number names, the other way from day number: date of day number(0) is 1970-01-01. Howard Hinnant's civil_from_days.
+- **weekday** : `(Date) -> Int`. The date's day of the week, 1 for Monday to 7 for Sunday (ISO 8601): weekday(date of(1970, 1, 1)) is 4, a Thursday.
+- **added days** : `(Date, Int) -> Date`. The date this many days later, or earlier for a negative count: added days(date of(2024, 2, 28), 1) is 2024-02-29.
+- **days between** : `(Date, Date) -> Int`. How many days from the first date to the second, negative when the second is earlier.
+- **date text** : `(Date) -> Text`. The date as ISO 8601 writes it, year-month-day: date text(date of(2026, 11, 3)) is "2026-11-03".
+
 ## Representations
 
 A type can be stored as another type, written as one definition (REPRESENTATIONS.md): what a stored value means, which definitions do the type's jobs, and what each costs. The compiler picks the cheapest for the jobs a program uses; nothing changes where the values are used.
