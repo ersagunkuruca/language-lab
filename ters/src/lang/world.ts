@@ -8,7 +8,7 @@
 
 import { requestKey, type PlainRequest, type PlainResponse } from "./network.ts";
 import { execFileSync, spawn } from "node:child_process";
-import { appendFileSync, existsSync, mkdtempSync, readdirSync, readFileSync, readSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, existsSync, mkdtempSync, openSync, readdirSync, readFileSync, readSync, rmSync, writeFileSync, writeSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { worldRandom } from "./random.ts";
@@ -64,7 +64,30 @@ export function nodeWorld(): World {
       return { error: `could not fetch ${url}: ${why}` };
     }
   };
+  // Files kept open by `with open file` (L213c), by their descriptor: each
+  // read at its own place from the start (a file opened to add at its end
+  // moves its own place to the end on each write), its bytes not yet split
+  // into lines kept, so a line split across two reads is whole.
+  const open = new Map<number, { at: number; rest: Buffer; ended: boolean }>();
+  const piece = Buffer.alloc(1 << 16);
   return {
+    openFile: (path) => { const fd = openSync(path, "a+"); open.set(fd, { at: 0, rest: Buffer.alloc(0), ended: false }); return fd; },
+    fileLine: (fd) => {
+      const f = open.get(fd);
+      if (!f) return null;
+      while (!f.ended && !f.rest.includes(10)) {
+        const n = readSync(fd, piece, 0, piece.length, f.at);
+        if (n === 0) f.ended = true;
+        else { f.at += n; f.rest = Buffer.concat([f.rest, piece.subarray(0, n)]); }
+      }
+      if (!f.rest.length) return null;
+      const end = f.rest.indexOf(10), raw = end < 0 ? f.rest : f.rest.subarray(0, end);
+      f.rest = end < 0 ? Buffer.alloc(0) : f.rest.subarray(end + 1);
+      const line = raw.toString("utf8");
+      return line.endsWith("\r") ? line.slice(0, -1) : line;
+    },
+    fileAddLine: (fd, text) => { if (!open.has(fd)) throw new Error("that file is closed"); writeSync(fd, text + "\n"); },
+    closeFile: (fd) => { if (open.delete(fd)) closeSync(fd); },
     error: (line) => process.stderr.write(line + "\n"),
     log: (line) => process.stderr.write(line + "\n"),
     input: () => {
@@ -169,7 +192,7 @@ export function allowedOnly(world: World, allow: string[]): World {
   const hosts = allow.filter((a) => a.startsWith("fetch=")).map((a) => a.slice(6));
   const refuse = (what: string) => () => { throw new Error(`${what} isn't allowed: lab run was given --allow ${allow.join(",") || "nothing"}`); };
   const out: World = { ...world };
-  if (!files) for (const k of ["readFile", "writeFile", "appendFile", "fileExists", "listFolder", "readBytes", "writeBytes"] as const) out[k] = refuse("Files") as never;
+  if (!files) for (const k of ["readFile", "writeFile", "appendFile", "fileExists", "listFolder", "readBytes", "writeBytes", "openFile"] as const) out[k] = refuse("Files") as never;
   if (!network) {
     const ok = (url: string) => { try { return hosts.includes(new URL(url).host); } catch { return false; } };
     out.fetchText = (url) => (ok(url) ? world.fetchText(url) : refuse(`Network (${url})`)());

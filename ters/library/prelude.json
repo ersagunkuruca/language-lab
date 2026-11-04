@@ -80766,6 +80766,299 @@
         ],
         "body": "@go4eqh5o6pvomac0lnut74mvc3:4"
       },
+      "@m800or3219f6f2o48b2g9eb1u0": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0",
+        "kind": "def",
+        "body": "@m800or3219f6f2o48b2g9eb1u0:1"
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:2": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:2",
+        "kind": "binder"
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:3": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:3",
+        "kind": "binder"
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:6": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:6",
+        "kind": "ref",
+        "target": "std.kept files.open file"
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:7": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:7",
+        "kind": "ref",
+        "target": "@m800or3219f6f2o48b2g9eb1u0:2"
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:5": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:5",
+        "kind": "call",
+        "fn": "@m800or3219f6f2o48b2g9eb1u0:6",
+        "args": [
+          "@m800or3219f6f2o48b2g9eb1u0:7"
+        ]
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:13": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:13",
+        "kind": "lit",
+        "value": "with open file: can't open "
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:12": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:12",
+        "kind": "ref",
+        "target": "builtin.concat"
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:14": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:14",
+        "kind": "ref",
+        "target": "@m800or3219f6f2o48b2g9eb1u0:2"
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:11": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:11",
+        "kind": "call",
+        "fn": "@m800or3219f6f2o48b2g9eb1u0:12",
+        "args": [
+          "@m800or3219f6f2o48b2g9eb1u0:13",
+          "@m800or3219f6f2o48b2g9eb1u0:14"
+        ]
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:10": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:10",
+        "kind": "ref",
+        "target": "std.abort.abort"
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:9": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:9",
+        "kind": "call",
+        "fn": "@m800or3219f6f2o48b2g9eb1u0:10",
+        "args": [
+          "@m800or3219f6f2o48b2g9eb1u0:11"
+        ]
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:8": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:8",
+        "kind": "arm",
+        "variant": "std.optional.none",
+        "binds": [],
+        "results": [],
+        "body": "@m800or3219f6f2o48b2g9eb1u0:9"
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:16": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:16",
+        "kind": "binder"
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:19": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:19",
+        "kind": "ref",
+        "target": "@m800or3219f6f2o48b2g9eb1u0:3"
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:18": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:18",
+        "kind": "call",
+        "fn": "@m800or3219f6f2o48b2g9eb1u0:19",
+        "args": []
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:22": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:22",
+        "kind": "ref",
+        "target": "std.kept files.file line"
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:23": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:23",
+        "kind": "ref",
+        "target": "@m800or3219f6f2o48b2g9eb1u0:16"
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:21": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:21",
+        "kind": "call",
+        "fn": "@m800or3219f6f2o48b2g9eb1u0:22",
+        "args": [
+          "@m800or3219f6f2o48b2g9eb1u0:23"
+        ]
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:20": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:20",
+        "kind": "arm",
+        "variant": "std.open file.next line",
+        "binds": [],
+        "results": [],
+        "body": "@m800or3219f6f2o48b2g9eb1u0:21"
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:25": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:25",
+        "kind": "binder"
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:28": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:28",
+        "kind": "ref",
+        "target": "std.kept files.file add line"
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:29": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:29",
+        "kind": "ref",
+        "target": "@m800or3219f6f2o48b2g9eb1u0:16"
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:30": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:30",
+        "kind": "ref",
+        "target": "@m800or3219f6f2o48b2g9eb1u0:25"
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:27": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:27",
+        "kind": "call",
+        "fn": "@m800or3219f6f2o48b2g9eb1u0:28",
+        "args": [
+          "@m800or3219f6f2o48b2g9eb1u0:29",
+          "@m800or3219f6f2o48b2g9eb1u0:30"
+        ]
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:32": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:32",
+        "kind": "ref",
+        "target": "std.unit.unit"
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:38": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:38",
+        "kind": "lit",
+        "value": "with open file: can't write to "
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:37": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:37",
+        "kind": "ref",
+        "target": "builtin.concat"
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:39": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:39",
+        "kind": "ref",
+        "target": "@m800or3219f6f2o48b2g9eb1u0:2"
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:36": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:36",
+        "kind": "call",
+        "fn": "@m800or3219f6f2o48b2g9eb1u0:37",
+        "args": [
+          "@m800or3219f6f2o48b2g9eb1u0:38",
+          "@m800or3219f6f2o48b2g9eb1u0:39"
+        ]
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:35": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:35",
+        "kind": "ref",
+        "target": "std.abort.abort"
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:34": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:34",
+        "kind": "call",
+        "fn": "@m800or3219f6f2o48b2g9eb1u0:35",
+        "args": [
+          "@m800or3219f6f2o48b2g9eb1u0:36"
+        ]
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:31": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:31",
+        "kind": "arm",
+        "variant": "std.bool.true",
+        "binds": [],
+        "results": [],
+        "body": "@m800or3219f6f2o48b2g9eb1u0:32"
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:33": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:33",
+        "kind": "arm",
+        "variant": "std.bool.false",
+        "binds": [],
+        "results": [],
+        "body": "@m800or3219f6f2o48b2g9eb1u0:34"
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:26": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:26",
+        "kind": "match",
+        "scrutinee": "@m800or3219f6f2o48b2g9eb1u0:27",
+        "arms": [
+          "@m800or3219f6f2o48b2g9eb1u0:31",
+          "@m800or3219f6f2o48b2g9eb1u0:33"
+        ],
+        "otherwise": null
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:24": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:24",
+        "kind": "arm",
+        "variant": "std.open file.write line",
+        "binds": [
+          "@m800or3219f6f2o48b2g9eb1u0:25"
+        ],
+        "results": [
+          null
+        ],
+        "body": "@m800or3219f6f2o48b2g9eb1u0:26"
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:42": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:42",
+        "kind": "ref",
+        "target": "std.kept files.close file"
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:43": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:43",
+        "kind": "ref",
+        "target": "@m800or3219f6f2o48b2g9eb1u0:16"
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:41": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:41",
+        "kind": "call",
+        "fn": "@m800or3219f6f2o48b2g9eb1u0:42",
+        "args": [
+          "@m800or3219f6f2o48b2g9eb1u0:43"
+        ]
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:40": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:40",
+        "kind": "arm",
+        "variant": "std.release.release",
+        "binds": [],
+        "results": [],
+        "body": "@m800or3219f6f2o48b2g9eb1u0:41"
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:17": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:17",
+        "kind": "match",
+        "scrutinee": "@m800or3219f6f2o48b2g9eb1u0:18",
+        "arms": [
+          "@m800or3219f6f2o48b2g9eb1u0:20",
+          "@m800or3219f6f2o48b2g9eb1u0:24",
+          "@m800or3219f6f2o48b2g9eb1u0:40"
+        ],
+        "otherwise": null
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:15": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:15",
+        "kind": "arm",
+        "variant": "std.optional.some",
+        "binds": [
+          "@m800or3219f6f2o48b2g9eb1u0:16"
+        ],
+        "results": [
+          null
+        ],
+        "body": "@m800or3219f6f2o48b2g9eb1u0:17"
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:4": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:4",
+        "kind": "match",
+        "scrutinee": "@m800or3219f6f2o48b2g9eb1u0:5",
+        "arms": [
+          "@m800or3219f6f2o48b2g9eb1u0:8",
+          "@m800or3219f6f2o48b2g9eb1u0:15"
+        ],
+        "otherwise": null
+      },
+      "@m800or3219f6f2o48b2g9eb1u0:1": {
+        "id": "@m800or3219f6f2o48b2g9eb1u0:1",
+        "kind": "lambda",
+        "params": [
+          "@m800or3219f6f2o48b2g9eb1u0:2",
+          "@m800or3219f6f2o48b2g9eb1u0:3"
+        ],
+        "body": "@m800or3219f6f2o48b2g9eb1u0:4"
+      },
       "@03ct3j2jgf58me928d79bmo5d0": {
         "id": "@03ct3j2jgf58me928d79bmo5d0",
         "kind": "def",
@@ -115234,6 +115527,7 @@
       "@kl352k9klqkn84lm3slg5v09tn",
       "@go4eqh5o6pvomac0lnut74mvc3",
       "@03ct3j2jgf58me928d79bmo5d0",
+      "@m800or3219f6f2o48b2g9eb1u0",
       "@guf5849e015ci39pfibalomhps",
       "@31uquin8cnli56vptl080ppv4o",
       "@e9fsfaqqmkbqi45m9thp36ep42",
@@ -129074,6 +129368,52 @@
       },
       "plain": []
     },
+    "@m800or3219f6f2o48b2g9eb1u0": {
+      "vars": [
+        0
+      ],
+      "rows": [
+        1
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "type.string",
+            "args": []
+          },
+          {
+            "t": "fn",
+            "params": [],
+            "ret": {
+              "t": "var",
+              "v": 0
+            },
+            "eff": {
+              "effs": [
+                "std.abort",
+                "std.kept files",
+                "std.open file"
+              ],
+              "tail": 1
+            }
+          }
+        ],
+        "ret": {
+          "t": "var",
+          "v": 0
+        },
+        "eff": {
+          "effs": [
+            "std.abort",
+            "std.kept files"
+          ],
+          "tail": 1
+        }
+      },
+      "plain": []
+    },
     "@guf5849e015ci39pfibalomhps": {
       "vars": [
         0,
@@ -137439,6 +137779,11 @@
     "@go4eqh5o6pvomac0lnut74mvc3:18": "value",
     "@go4eqh5o6pvomac0lnut74mvc3:19": "rest",
     "@go4eqh5o6pvomac0lnut74mvc3:21": "state",
+    "@m800or3219f6f2o48b2g9eb1u0": "with open file",
+    "@m800or3219f6f2o48b2g9eb1u0:2": "path",
+    "@m800or3219f6f2o48b2g9eb1u0:3": "body",
+    "@m800or3219f6f2o48b2g9eb1u0:16": "file",
+    "@m800or3219f6f2o48b2g9eb1u0:25": "text",
     "@03ct3j2jgf58me928d79bmo5d0": "change state",
     "@03ct3j2jgf58me928d79bmo5d0:2": "f",
     "@guf5849e015ci39pfibalomhps": "pipe of",
@@ -138297,6 +138642,7 @@
     "@s1q14k0147k3smo8rk8tmmsu46": "The tensor with its axes reordered: axis order[k] becomes axis k. transposed by(m, [1, 0]) is a matrix's transpose.",
     "@ftp8qslhk7a2c3dmp5d5rpsitg": "The sum over the diagonal of two axes of the same length: traced(m, 0, 1) is a square matrix's trace.",
     "@lt81em4f0lgsdjr0kib134g77m": "The x making matrix times vector(m, x) nearest the vector, by least squares, for a Float64 matrix with at least as many rows as columns: a line through points. No answer when the columns aren't independent.",
+    "@m800or3219f6f2o48b2g9eb1u0": "Runs body with the file at path kept open: next line() is its next line (none at the end), from its start, and write line(text) adds a line at its end; the file is made if it isn't there. It is closed once when body ends, however it ends, so a file is never left open or used after closing: with open file(\"log.txt\", () => write line(\"started\")). Aborts if the file can't be opened or written.",
     "@go4eqh5o6pvomac0lnut74mvc3": "Runs the action with get state and put state answered, starting from initial, and gives (its value, the last state): with state(0, () ↦ put state(get state() + 1)) is ((), 1).",
     "@03ct3j2jgf58me928d79bmo5d0": "Puts f(the state) as the state: change state((n) ↦ n + 1).",
     "@31uquin8cnli56vptl080ppv4o": "Runs the consumer with each receive() answered by the producer's next send(item): some(item), or none once the producer has finished. The producer runs only as far as the consumer asks.",
@@ -138757,6 +139103,7 @@
     "@kl352k9klqkn84lm3slg5v09tn",
     "@go4eqh5o6pvomac0lnut74mvc3",
     "@03ct3j2jgf58me928d79bmo5d0",
+    "@m800or3219f6f2o48b2g9eb1u0",
     "@31uquin8cnli56vptl080ppv4o",
     "@e9fsfaqqmkbqi45m9thp36ep42",
     "@bgtiomun3l04m3pr7gf7b1uk4f",
