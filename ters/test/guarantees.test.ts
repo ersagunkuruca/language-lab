@@ -455,3 +455,25 @@ test("guarded corecursion: a stream's producer surely finishes, its consumer to 
   assert.ok(p.effects(defs.last).includes(DIVERGE), p.type(defs.last));
   assert.ok(p.errors.some((m) => /node's rest|term's rest/.test(m)), p.errors.join("\n"));
 });
+
+// A function variable's effects, checked in any order (BACKLOG L29): f
+// called under first, which handles a Choice, and f stored in a field
+// whose type says it does nothing. Before, the call coming first gave f
+// the Choice its context may do, and the field refused it; now the
+// call's row only takes in f's, settled once every use is seen.
+test("a function in a variable: a use that closes its row wins whichever use comes first", () => {
+  const types: Record<string, string> = {};
+  const p = program((k) => {
+    const box = k.type("box", [], [["box", [["fn", () => k.tfun([k.tref(NUM)], k.tref(NUM))]]]]);
+    const underFirst = (f: Id, x: Id) => k.call(S.first, k.thunk(() => k.call(f, x)), k.thunk(() => k.lit(0)));
+    const def = (name: string, body: (f: Id, x: Id) => Id) => { const d = k.def(name); k.define(d, k.fn(["f", "x"], body)); types[name] = d; };
+    def("called first", (f, x) => k.call(PAIR_V, underFirst(f, x), k.call(box.v.box, f)));
+    def("closed first", (f, x) => k.call(PAIR_V, k.call(box.v.box, f), underFirst(f, x)));
+    // Nothing closes it: the call's row is f's, as before (first's).
+    def("only called", (f, x) => underFirst(f, x));
+  });
+  assert.deepEqual(p.errors, []);
+  assert.equal(p.type(types["called first"]), "((Float64) -> Float64, Float64) -> (Float64, box)");
+  assert.equal(p.type(types["closed first"]), "((Float64) -> Float64, Float64) -> (box, Float64)");
+  assert.equal(p.type(types["only called"]), "((a) -[Choice]-> b, a) -> b");
+});

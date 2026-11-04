@@ -33,7 +33,7 @@
 // test/modes.test.ts compares what it says with what relate.ts does.
 
 import type { Code, Id, Node, NodeOf, Use } from "../model.ts";
-import { children, dependencies, derived, derivedFrom, ownerOfTypeParts, subtree, useTarget, isCall, type Call, isUse, bindsOf, bodyOf } from "../model.ts";
+import { children, dependencies, derived, derivedFrom, ownerOfTypeParts, subtree, useTarget, isCall, isPublished, type Call, isUse, bindsOf, bodyOf } from "../model.ts";
 import { NUMERIC } from "./equations.ts";
 import { planSolve, type SolvePlan } from "./solve.ts";
 import { computedForward } from "./directions.ts";
@@ -173,6 +173,52 @@ function baseSlots(code: Code) {
   return slotsOf.get(code)!;
 }
 
+// A published definition's modes, kept between analyzers (E248): its
+// nodes are named by what they mean, so a mode of one, given only
+// published functions, is the same in every program. The palette asks
+// the modes of a program's solves for each offer, a new program each
+// time, and each one worked out steady's sin or pow again (thousands of
+// paths each). With the verdict, the size-change graphs it reaches, so a
+// caller's recursion is checked as if it had worked the mode out itself.
+type Kept = { v: Verdict; graphs: { from: string; to: string; arcs: [number, number, boolean][] }[] };
+const KEPT_NAMES: Record<Id, string> = {};
+const keptModes = new WeakMap<Record<Id, string>, Map<string, Kept>>();
+const keptFor = (names: Record<Id, string>, plansOnly: boolean) => {
+  const k = Object.keys(names).length ? names : KEPT_NAMES;
+  let m = keptModes.get(k);
+  if (!m) keptModes.set(k, (m = new Map()));
+  return { m, prefix: plansOnly ? "plans|" : "" };
+};
+const fixedFn = (f: Fn) => f.k === "builtin" || isPublished(f.id);
+
+// Each let's binder whose value names a definition or builtin outright,
+// with the nodes that say so. For a program made from another by a few
+// nodes (a palette's offer), the other's, less those the changed nodes
+// touch, and the changed ones' own (E248: each offer scanned every node).
+type Named = { target: Id; by: Id[] };
+const letsKept = new WeakMap<Code, Map<Id, Named>>();
+function letsOf(code: Code): Map<Id, Named> {
+  let out = letsKept.get(code);
+  if (out) return out;
+  const nodes = code.nodes;
+  const add = (n: Node) => {
+    if (!isCall(n)) return;
+    const lam = nodes[n.fn];
+    if (lam?.kind !== "lambda" || lam.params.length !== n.args.length) return;
+    lam.params.forEach((p, i) => { const v = nodes[n.args[i]]; if (v?.kind === "ref" && nodes[v.target]?.kind !== "binder") out!.set(p, { target: v.target, by: [n.id, lam.id, v.id, v.target] }); });
+  };
+  const from = derived.get(code);
+  if (from) {
+    out = new Map([...letsOf(from.base)].filter(([, x]) => !x.by.some((id) => from.changed.has(id))));
+    for (const id of from.changed) if (nodes[id]) add(nodes[id]);
+  } else {
+    out = new Map();
+    for (const n of Object.values(nodes)) add(n);
+  }
+  letsKept.set(code, out);
+  return out;
+}
+
 // plansOnly: for relate.ts, which needs the schedules and not whether
 // they end (the size-change check, run again for each mode planned while
 // the search runs, would be most of its time).
@@ -186,11 +232,15 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
   // Slots: refs to a binder are the binder, a let's parameter is its
   // argument, and a let is its body.
   const parent = new Map<Id, Id>();
+  // A derived program's slots start from its base's (below), read through
+  // rather than copied (E250: a copy of every slot per palette offer).
+  let under: Map<Id, Id> | undefined;
+  const up = (x: Id) => parent.get(x) ?? under?.get(x);
   // With path compression: a long chain of lets and refs is walked once.
   const find = (id: Id): Id => {
     let r = id;
-    while (parent.has(r)) r = parent.get(r)!;
-    for (let x = id; x !== r;) { const up = parent.get(x)!; parent.set(x, r); x = up; }
+    for (let u = up(r); u !== undefined; u = up(r)) r = u;
+    for (let x = id; x !== r;) { const u = up(x)!; parent.set(x, r); x = u; }
     return r;
   };
   const union = (a: Id, b: Id) => { const x = find(a), y = find(b); if (x !== y) parent.set(x, y); };
@@ -215,7 +265,7 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
     ? () => { for (const n of Object.values(nodes)) if (!seen.has(n.id) && (!base.seen.has(n.id) || from!.changed.has(n.id))) scan(n); }
     : () => { for (const n of Object.values(nodes)) if (!seen.has(n.id)) scan(n); };
   if (base) {
-    for (const [k, v] of base.parent) parent.set(k, v);
+    under = base.parent;
     for (const id of from!.changed) if (nodes[id]) scan(nodes[id]);
   } else refresh();
   if (!from && !slotsOf.has(code)) slotsOf.set(code, { parent: new Map(parent), seen });
@@ -267,6 +317,15 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
   };
   const memo = new Map<string, Verdict>();
   const running = new Set<string>();
+  const kept = keptFor(names, plansOnly);
+  // How many published lambdas are being worked out now: one is kept only
+  // when none is, so no recursion of its own is still open.
+  let keeping = 0;
+  const reachable = (from: string) => {
+    const reach = new Set([from]);
+    for (let grew = true; grew;) { grew = false; for (const g of graphs) if (reach.has(g.from) && !reach.has(g.to)) { reach.add(g.to); grew = true; } }
+    return graphs.filter((g) => reach.has(g.from));
+  };
 
   // ----------------------------------------------------------- modes
 
@@ -296,6 +355,12 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
     const hit = memo.get(key);
     if (hit) return hit;
     if (running.has(key)) return { answers: ONE, ends: true, loops: [], stuck: [], dynamic: [], order: [], plan: NO_PLAN };
+    const fixed = isPublished(lam) && [...spec.values(), ...outer.values()].every(fixedFn);
+    if (fixed) {
+      const k = kept.m.get(kept.prefix + key);
+      if (k) { for (const g of k.graphs) graphs.push(g); memo.set(key, k.v); return k.v; }
+      keeping++;
+    }
     running.add(key);
     const st: St = { known: new Set(), sizes: new Map(), goals: [], answers: ONE, ends: true, loops: [], dynamic: [], order: [] };
     const fns = new Map<Id, Fn>(outer);
@@ -313,13 +378,14 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
     const outerPaths = paths;
     paths = 0;
     let v: Verdict;
-    try { v = run(st, need, ctx); } finally { paths = outerPaths; }
+    try { v = run(st, need, ctx); } finally { paths = outerPaths; if (fixed) keeping--; }
     running.delete(key);
     // Its own recursion, as far as it's known now (a cycle through a mode
     // still being worked out is checked again at the end, in checked()).
     const t = plansOnly ? { ok: true } : terminates(key);
     if (!t.ok) v = { ...v, ends: false, loops: [...v.loops, `${def ? nm(def) : "a function"} calls itself on something that isn't smaller`] };
     memo.set(key, v);
+    if (fixed && !keeping) kept.m.set(kept.prefix + key, { v, graphs: reachable(key) });
     return v;
   }
 
@@ -328,17 +394,8 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
   // The function a slot holds, when it's known before running.
   // A let's binder whose value names a definition or builtin outright, `let
   // f = equal in f(a, b)` (a dot on the wire, L222): that one, as if named.
-  let lets: Map<Id, Id> | undefined;
-  const letNamed = (b: Id): Id | undefined => {
-    if (!lets) {
-      lets = new Map();
-      for (const n of Object.values(nodes)) {
-        if (!isCall(n) || !isLet(n)) continue;
-        (nodes[n.fn] as NodeOf<"lambda">).params.forEach((p, i) => { const v = nodes[n.args[i]]; if (v?.kind === "ref" && nodes[v.target]?.kind !== "binder") lets!.set(p, v.target); });
-      }
-    }
-    return lets.get(b);
-  };
+  let lets: Map<Id, Named> | undefined;
+  const letNamed = (b: Id): Id | undefined => (lets ??= letsOf(code)).get(b)?.target;
   function fnAt(id: Id, ctx: Ctx): Fn | null {
     const n = nodes[id];
     if (n.kind === "ref") {

@@ -41,6 +41,9 @@ const SMALLEST: Record<string, (k: Lang) => void> = {
   "fields-type-unknown": (k) => k.define(k.def("p"), k.fn(["v"], (v) => k.call(FIELDS.listed, v))),
   "json-type-unknown": (k) => k.define(k.def("p"), k.fn(["v"], (v) => k.call(JSON_OPS.of, v))),
   "private-to-library": (k) => k.define(k.def("p"), k.x("std.rational.ratio")),
+  "unhandled-effect": (k) => { const a = ask(k); k.define(k.def("p"), k.call(a.op.ask)); },
+  "no-cases": (k) => k.define(k.def("p"), k.fn(["b"], (b) => k.match(b, []))),
+  "not-a-number": (k) => k.define(k.def("p"), k.fn(["b"], (b) => k.match(b, [{ variant: TRUE, names: [], body: () => k.lit(1) }, { variant: FALSE, names: [], body: () => k.lit("a") }]))),
 };
 
 test("every problem has its smallest program, and its message is that row's alone", () => {

@@ -660,6 +660,13 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       if (w.givens.some(([, t]) => { const r = s.resolve(t); return r.t === "con" && r.id === INT; })) { solvesInWholeNumbers(code, w.solve); again = true; }
       else for (const [g, t] of w.givens) unifyAt(g, num, t, "a given port");
     }
+    // A function variable's calls whose row nothing closed: the call's row
+    // is the function's, as before L29; a closed one stays inside it.
+    s.subs = s.subs.filter((c) => {
+      if (!c.open || s.resolveRow(c.from).tail === null) return true;
+      try { s.unifyRow(c.from, c.to); } catch (e) { if (e instanceof EffectError) err(c.at ?? group[0], worldOrEffect(e)); else throw e; }
+      return false;
+    });
     settle();
     const generalized = new Set<number>();
     for (const d of group) freeVars(s.zonk(mono.get(d)!), s, new Set(), generalized);
@@ -1065,6 +1072,15 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
           // search's does, so this code may do more beside the call (I153).
           let here = callRow;
           if (!search && fr.t === "fn" && s.resolveRow(fr.eff).tail === null) { here = s.freshRow(); s.subs.push({ from: here, to: row, at: id }); }
+          // A function given as the definition's input the same way while
+          // its row is still open, until the group's end: if a later use
+          // closed it, what this code may do around the call didn't become
+          // what the function does (BACKLOG L29); if not, the rows are made
+          // one there, as they always were. Only inputs: a function taken
+          // from a value (a let, a case's field) may already share its
+          // row's tail with handlers around it, and making the rows one
+          // late, after those were read, lets a Choice out of them.
+          else if (!search && !back && given?.kind === "ref" && current.some((d) => { const dn = code.nodes[d], l = dn?.kind === "def" && dn.body ? code.nodes[dn.body] : undefined; return l?.kind === "lambda" && l.params.includes(given.target); }) && (fr.t === "var" || (fr.t === "fn" && s.resolveRow(fr.eff).tail !== null))) { here = s.freshRow(); s.subs.push({ from: here, to: row, at: id, open: true }); }
           try {
             try { s.unify(fr, { t: "fn", params, ret, eff: here }); }
             catch (e) { if (!(e instanceof TypeError) || e.constructor !== TypeError || back || fr.t !== "fn" || fr.params.length !== params.length || !liftLate(n, fr, params)) throw e; s.unify(fr, { t: "fn", params, ret, eff: here }); }
@@ -1646,18 +1662,29 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // A number written where a type of the program's own goes (L204b) is
   // spelled by its Literal's from fraction; with none, only a record of
   // Float64s takes it, in every part.
-  for (const n of Object.values(code.nodes)) {
-    if (n.kind !== "lit" || n.of || typeof n.value !== "number") continue;
+  // These scans start from a base program's (model.ts nodesWhere, E248):
+  // a palette's offers each scanned every node three times.
+  for (const id of nodesWhere(code, "number lit", (n) => n.kind === "lit" && !n.of && typeof n.value === "number")) {
+    const n = code.nodes[id] as NodeOf<"lit">;
     const t0 = info.typeOf.get(n.id), t = t0 && s.zonk(t0);
     if (t?.t !== "con" || t.id.startsWith("std.") || t.id.startsWith("type.") || t.id.startsWith("pin.") || !typedefOf(t.id) || implementationOf(info, LITERAL, t)) continue;
     const fields = s.recordFields(t.id, t.args);
     if (fields?.length && fields.every((f) => { const r = s.resolve(f); return r.t === "con" && r.id === NUMBER; })) continue;
     err(n.id, `a number written where ${show(t)} goes needs ${show(t)}'s own from fraction, since it isn't a record of Float64s: give it one, a definition of type Literal ${show(t)}`);
   }
+  // The calls of fields mapped, fields listed, json of, from json and job,
+  // found in one pass over the calls (E250: three passes were most of a
+  // palette offer's check).
+  const callsOf = new Map<Id, Id[]>();
+  for (const id of nodesWhere(code, "call", (n) => isCall(n))) {
+    const f = code.nodes[(code.nodes[id] as Call).fn];
+    if (f?.kind === "ref" && (f.target === FIELDS.mapped || f.target === FIELDS.listed || f.target === JSON_OPS.of || f.target === JSON_OPS.from || f.target === JOBS.job)) (callsOf.get(f.target) ?? callsOf.set(f.target, []).get(f.target)!).push(id);
+  }
+  const callsTo = (...ts: Id[]) => ts.flatMap((t) => callsOf.get(t) ?? []);
   // fields mapped and fields listed are written out per type where they are
   // used (fields-by-type.ts, L162b), so both types must be known there.
-  for (const n of Object.values(code.nodes)) {
-    if (!isCall(n)) continue;
+  for (const id of callsTo(FIELDS.mapped, FIELDS.listed)) {
+    const n = code.nodes[id] as Call;
     const f = code.nodes[n.fn];
     if (f?.kind !== "ref" || (f.target !== FIELDS.mapped && f.target !== FIELDS.listed)) continue;
     // Its inputs not written yet: the holes say so (the palette offers it
@@ -1673,8 +1700,8 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // json of and from json are written out per type (json-by-type.ts,
   // L190d2), so the type must be known where they are used and have a
   // spelling.
-  for (const n of Object.values(code.nodes)) {
-    if (!isCall(n)) continue;
+  for (const c of callsTo(JSON_OPS.of, JSON_OPS.from)) {
+    const n = code.nodes[c] as Call;
     const f = code.nodes[n.fn];
     if (f?.kind !== "ref" || (f.target !== JSON_OPS.of && f.target !== JSON_OPS.from)) continue;
     if (n.args.some((a) => code.nodes[a]?.kind === "hole")) continue;
@@ -1699,7 +1726,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   }
   // A representation's job (REPRESENTATIONS.md, L108): `job(of, by, cost)`
   // does t's job `of` at r, so `by` has of's type with r for t.
-  for (const id of nodesWhere(code, "call", (n) => isCall(n))) {
+  for (const id of callsTo(JOBS.job)) {
     const n = code.nodes[id] as Call;
     if (n.args.length !== 3) continue;
     const f = code.nodes[n.fn];
