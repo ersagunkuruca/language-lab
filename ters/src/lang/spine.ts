@@ -193,6 +193,8 @@ function read(r: Reader, id: Id | undefined, env: Map<Id, Size>): Size {
 // is being worked out (a call back to it from another definition knows
 // nothing of it) or when it isn't a function.
 const summaries = new WeakMap<object, Map<Id, Size | null>>();
+// What is kept of a set of nodes changed in place (ports.ts filledFrom).
+export const forgetSpine = (nodes: object) => { ownFields.delete(nodes); summaries.delete(nodes); };
 const ROUNDS = 8;
 function summary(code: Code, d: Id): Size | null {
   let memo = summaries.get(code.nodes);
