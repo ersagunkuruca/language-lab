@@ -234,6 +234,16 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
         return atom(part(`ref ${cls}`, [nota && nota.fixity === "call" ? nota.glyph : nameOf(n.target)], id));
       }
       case "lambda": {
+        // A relation written where it is used (L225e): its inputs, then its
+        // results, then the condition on them, as a definition with results
+        // reads: `(s, d) → a, b = s = a + b and d = a − b`.
+        const rel = n.results?.length && n.results.every((r) => n.params.includes(r)) ? n.results : null;
+        if (rel) {
+          enter(n.params);
+          const ins = n.params.filter((p) => !rel.includes(p)).map(bind), outs = rel.map(bind), body = inline(n.body).p;
+          leave(n.params);
+          return { p: [part("lam", [pn("("), ...commas(ins.map((b) => [b])), pn(")"), pn(" → "), ...commas(outs.map((b) => [b])), pn(" = "), ...body], id)], prec: 0 };
+        }
         enter(n.params);
         const params = n.params.map(bind);
         // Named result ports (L128b) after the inputs, as a definition's

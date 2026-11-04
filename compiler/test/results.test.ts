@@ -16,6 +16,7 @@ import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { makeRunner } from "../../ters/src/lang/run.ts";
 import { DUAL_V, FIXED_V, INT_OPS, SHOW_ANY, TRIG_UNPOLAR } from "../../ters/src/lang/std.ts";
+import { B } from "../../ters/src/prelude.ts";
 import { compile } from "../src/compile.ts";
 
 const runtime = pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href;
@@ -117,4 +118,24 @@ test("a shared value is found with its operands in either order (C69)", async ()
     const ev = r.call(r.value(at), BigInt(a) as never, BigInt(b) as never);
     assert.deepEqual(out.both(a, b), [...(ev as Iterable<unknown>)][0] ?? ev, `both(${a}, ${b})`);
   }
+});
+
+test("a relation written where it is used compiles to its direction and gives what the evaluator gives (L225e)", async () => {
+  const k = new Lang(LIBRARY.code);
+  const d = k.def("inside");
+  // (s, d, a, b) with results a, b, using c from around it: s = a + b and d = a − b + c.
+  k.define(d, k.fn(["c"], (c) => k.call(SHOW_ANY, k.call(k.relation(["s", "d", "a", "b"], ["a", "b"], (s, dd, a, b) => k.and(k.equal(s, k.call(B.add, a, b)), k.equal(dd, k.call(B.add, k.call(B.sub, a, b), k.x(c))))), k.lit(5), k.lit(1)))));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const js = compile(code, info, names, { runtime, exports: ["inside"] });
+  assert.doesNotMatch(js, /relational interpreter/);
+  const path = join(mkdtempSync(join(tmpdir(), "results-")), "inside.js");
+  writeFileSync(path, js);
+  const out = (await import(pathToFileURL(path).href)).defs as Record<string, (x: number) => unknown>;
+  const r = makeRunner(code, info, { print: () => {}, names });
+  for (const c of [2, 0, -3]) {
+    const ev = r.call(r.value(d), c as never);
+    assert.equal(out.inside(c), typeof ev === "string" ? ev : [...(ev as Iterable<unknown>)][0], `inside(${c})`);
+  }
+  assert.equal(out.inside(2), "(2, 3)");
 });

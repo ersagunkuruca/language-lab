@@ -12,7 +12,7 @@
 // unchanged when it has none, and the nodes the person wrote keep their ids.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
-import { fieldPorts, freshId, isCall, nodesWhere, parentLookup, portsOf as definedPorts } from "../model.ts";
+import { fieldPorts, freshId, isCall, nodesWhere, parentLookup, portsOf as definedPorts, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { infer, type Info } from "./infer.ts";
 import { TRUE, tupleVariant } from "./std.ts";
@@ -54,9 +54,58 @@ function refsToRewrite(code: Code): { ref: NodeOf<"ref">; ports: { ins: string[]
   });
 }
 
-export const usesResultsAsFunction = (code: Code): boolean => refsToRewrite(code).length > 0;
+// A relation written where it is used (L225e, PORTS-2026-11-01.md): a
+// lambda inside a body whose results are among its parameters. Each is
+// lifted out into a definition with results of its own, which takes the
+// variables it uses from around it as further inputs, first (as
+// lift-lets.ts does a recursive let's, Johnsson 1985). In its place is that
+// definition given them, `(r, t) ↦ relation(k, r, t)`, or the definition
+// itself when it uses none; both are then a definition with results called
+// or passed on, which the rest of this pass makes its use.
+function inlineRelation(code: Code): NodeOf<"lambda"> | null {
+  const bodies = new Set(code.defs.map((d) => code.nodes[d]).flatMap((d) => (d?.kind === "def" && d.body ? [d.body] : [])));
+  for (const id of nodesWhere(code, "a relation inside a body", (n) => n.kind === "lambda" && !!n.results?.length && n.results.every((r) => n.params.includes(r)))) {
+    if (!bodies.has(id)) return code.nodes[id] as NodeOf<"lambda">;
+  }
+  return null;
+}
+
+function liftRelations(code: Code, names: Names): { code: Code; names: Names } {
+  if (!inlineRelation(code)) return { code, names };
+  const nodes: Record<Id, Node> = { ...code.nodes }, defs = [...code.defs], out: Names = { ...names };
+  const binder = (like: Id): Id => { const id = freshId(); nodes[id] = { ...(nodes[like] as NodeOf<"binder">), id }; out[id] = out[like] ?? "x"; return id; };
+  const ref = (target: Id): Id => { const id = freshId(); nodes[id] = { id, kind: "ref", target }; return id; };
+  for (let fn = inlineRelation({ nodes, defs }); fn; fn = inlineRelation({ nodes, defs })) {
+    const inside = subtree({ nodes, defs }, fn.id);
+    const bound = new Set(inside.filter((x) => nodes[x]?.kind === "binder"));
+    // The variables it uses from around it, in the order it uses them.
+    const free = [...new Set(inside.flatMap((x) => {
+      const n = nodes[x];
+      return n?.kind === "ref" && nodes[n.target]?.kind === "binder" && !bound.has(n.target) ? [n.target] : [];
+    }))];
+    const outer = free.map(binder), along = new Map(free.map((b, k) => [b, outer[k]]));
+    for (const x of inside) {
+      const n = nodes[x];
+      if (n?.kind === "ref" && along.has(n.target)) nodes[x] = { ...n, target: along.get(n.target)! };
+    }
+    const helper = freshId(), lam = freshId();
+    nodes[lam] = { id: lam, kind: "lambda", params: [...outer, ...fn.params], results: fn.results, body: fn.body };
+    nodes[helper] = { id: helper, kind: "def", body: lam };
+    defs.push(helper);
+    out[helper] = out[fn.id] ?? "relation";
+    if (!free.length) { nodes[fn.id] = { id: fn.id, kind: "ref", target: helper }; continue; }
+    const ins = fn.params.filter((p) => !fn.results!.includes(p)).map(binder);
+    const body = freshId();
+    nodes[body] = { id: body, kind: "call", fn: ref(helper), args: [...free.map(ref), ...ins.map(ref)] };
+    nodes[fn.id] = { id: fn.id, kind: "lambda", params: ins, body };
+  }
+  return { code: { ...code, nodes, defs }, names: out };
+}
+
+export const usesResultsAsFunction = (code: Code): boolean => !!inlineRelation(code) || refsToRewrite(code).length > 0;
 
 export function resultsAsFunctions(code: Code, info: Info, names: Names): { code: Code; info: Info; names: Names } {
+  ({ code, names } = liftRelations(code, names));
   const todo = refsToRewrite(code);
   if (!todo.length) return { code, info, names };
   const nodes: Record<Id, Node> = { ...code.nodes };
