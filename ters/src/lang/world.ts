@@ -6,6 +6,7 @@
 // the fetch and the program waits for it. `start fetch` (L150b) runs one
 // in the background and the program looks for its body when it awaits.
 
+import { requestKey, type PlainRequest, type PlainResponse } from "./network.ts";
 import { execFileSync, spawn } from "node:child_process";
 import { appendFileSync, existsSync, mkdtempSync, readdirSync, readFileSync, readSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -45,6 +46,16 @@ export function nodeWorld(): World {
   };
   // Each address is fetched once per run, failures included.
   const fetched = new Map<string, { text: string } | { error: string }>();
+  // Each distinct request is sent once per run (L191, network.ts).
+  const sent = new Map<string, PlainResponse | { error: string }>();
+  const sendOnce = (r: PlainRequest): PlainResponse | { error: string } => {
+    try {
+      return JSON.parse(execFileSync(process.execPath, ["-e", SEND, JSON.stringify(r)], { encoding: "utf8", maxBuffer: 1 << 28, stdio: ["ignore", "pipe", "pipe"] })) as PlainResponse;
+    } catch (e) {
+      const why = String((e as { stderr?: string }).stderr ?? "").trim() || (e as Error).message;
+      return { error: `could not send ${r.method} ${r.url}: ${why}` };
+    }
+  };
   const fetchOnce = (url: string): { text: string } | { error: string } => {
     try {
       return { text: execFileSync(process.execPath, ["-e", FETCH, url], { encoding: "utf8", maxBuffer: 1 << 28, stdio: ["ignore", "pipe", "pipe"] }) };
@@ -81,6 +92,13 @@ export function nodeWorld(): World {
       if ("error" in r) throw new Error(r.error);
       return r.text;
     },
+    sendRequest: (request) => {
+      const key = requestKey(request);
+      let r = sent.get(key);
+      if (!r) sent.set(key, (r = sendOnce(request)));
+      if ("error" in r) throw new Error(r.error);
+      return r;
+    },
     // In the background (L150b): a child Node fetches into a folder of its
     // own and writes `done` last, so the program goes on and looks when it
     // awaits. A body this run already has is answered at once.
@@ -116,6 +134,17 @@ fetch(process.argv[1]).then(async (r) => {
 }, (e) => { process.stderr.write(String(e.cause?.message ?? e.message)); process.exit(2); });
 `;
 
+// A request sent, its response as JSON on standard output, whatever its
+// status; only a request that can't be sent fails.
+const SEND = `
+const r = JSON.parse(process.argv[1]);
+const init = { method: r.method, headers: r.headers };
+if (r.body !== "" && !["GET", "HEAD"].includes(r.method.toUpperCase())) init.body = r.body;
+fetch(r.url, init).then(async (res) => {
+  process.stdout.write(JSON.stringify({ status: res.status, headers: [...res.headers], body: await res.text() }));
+}, (e) => { process.stderr.write(String(e.cause?.message ?? e.message)); process.exit(2); });
+`;
+
 // The same in the background: the body into body, then done, empty, or
 // holding why not.
 const FETCH_INTO = `
@@ -143,6 +172,7 @@ export function allowedOnly(world: World, allow: string[]): World {
     const ok = (url: string) => { try { return hosts.includes(new URL(url).host); } catch { return false; } };
     out.fetchText = (url) => (ok(url) ? world.fetchText(url) : refuse(`Network (${url})`)());
     if (world.startFetch) out.startFetch = (url) => (ok(url) ? world.startFetch!(url) : refuse(`Network (${url})`)());
+    if (world.sendRequest) out.sendRequest = (r) => (ok(r.url) ? world.sendRequest!(r) : refuse(`Network (${r.url})`)());
   }
   return out;
 }

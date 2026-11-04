@@ -385,6 +385,7 @@ import { Aborted, OutOfSteps, spendStep } from '../../ters/src/lang/run.ts';
 import { ABORT, ABORT_OP, IO, LOG_OP, NONE, NOW_OP, RANDOM, RANDOM_OP, S, SOME, WAIT_OP, WORLD_OPS } from '../../ters/src/lang/std.ts';
 import { CONSOLE, FILES, NETWORK } from '../../ters/src/lang/types.ts';
 import { seededGenerator, worldRandom } from '../../ters/src/lang/random.ts';
+import { plainRequest, responseValue } from '../../ters/src/lang/network.ts';
 import { answerByShapes } from '../../ters/src/lang/hosts.ts';
 import { worldTimers } from '../../ters/src/lang/timers.ts';
 export { Aborted as $Aborted };
@@ -717,6 +718,9 @@ export const $io = {
   fileExists: acting(IO.fileExists, (p) => $bool(!!world.fileExists?.(p))),
   listFolder: acting(IO.listFolder, (p) => $toList(fallible('listFolder')(p))),
   fetchText: acting(IO.fetchText, fallible('fetchText')),
+  // A request and its response (L191, ters/src/lang/network.ts), converted
+  // as the evaluator converts them.
+  sendRequest: acting(IO.sendRequest, (r) => { const a = fallible('sendRequest')(plainRequest(r)); return responseValue({ ...a, body: nfc(a.body) }); }),
   // Fetched now, so the ticket is ready at once on any clock (L150).
   // In the background where the world can and can wait, under a running
   // main (C111, as the evaluator's L150b): a ticket ready when the body has come.

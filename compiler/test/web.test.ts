@@ -19,7 +19,7 @@ import { compile } from "../src/compile.ts";
 import { $eq, $setCells, $setWorld } from "../src/runtime.js";
 import { browserWorld } from "../../ters/src/lang/browser.ts";
 import { Lang } from "../../ters/src/lang/dsl.ts";
-import { ABORT_OP, CELL_OPS, HTML_V, IO, LOG_OP, NOW_OP, S } from "../../ters/src/lang/std.ts";
+import { ABORT_OP, CELL_OPS, HTML_V, INT_OPS, IO, LOG_OP, NOW_OP, S } from "../../ters/src/lang/std.ts";
 import { B } from "../../ters/src/prelude.ts";
 import { HTML_MODULE } from "../../ters/src/lang/library.ts";
 
@@ -290,4 +290,29 @@ test("a page's views and handlers may log: each line goes to the browser's conso
   };
   assert.deepEqual(run("evaluator"), ["drawn", "clicked", "drawn"]);
   assert.deepEqual(run("compiled"), ["drawn", "clicked", "drawn"]);
+});
+
+// A page's handlers may wait (C40i), so compiled ones are generators; one
+// that doesn't wait returns its value, which is no "no value" (I165).
+test("a compiled page's handler that doesn't wait runs without an error", async () => {
+  const k = new Lang();
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.let("n", k.call(CELL_OPS.cell, k.int(0)), (n) =>
+    k.call(HTML_V.element, k.lit("button"), k.list(k.call(HTML_V.on, k.lit("click"), k.fn(["e"], () => k.call(CELL_OPS.write, n, k.call(INT_OPS.add, k.call(CELL_OPS.read, n), k.int(1)))))),
+      k.list(k.call(HTML_V.text, k.thunk(() => k.call(INT_OPS.show, k.call(CELL_OPS.read, n)))))))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const path = join(dir, "handler.js");
+  writeFileSync(path, compile(code, info, names, { runtime, exports: ["main"] }));
+  const compiled = (await import(pathToFileURL(path).href)).defs as Record<string, () => unknown>;
+  const cells = new Cells($eq);
+  $setCells(cells);
+  const root = mountHtml(compiled.main() as never, { cells, doc: fakeDoc(), call: compiledCall }) as FakeEl;
+  const errors: string[] = [];
+  const old = console.error;
+  console.error = (e: unknown) => void errors.push(String(e));
+  try { root.fire("click"); root.fire("click"); } finally { console.error = old; }
+  assert.deepEqual(errors, []);
+  assert.equal(root.html(), "<button>2</button>");
 });
