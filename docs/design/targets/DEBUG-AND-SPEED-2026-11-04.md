@@ -35,7 +35,7 @@ compiler can work it out ahead of time by inlining or precomputing.
    (calc 1,049 KB → 203 KB).
 3. **Every closure carries its lambda's node id and capture binder ids**
    for a solver, and core-rt.ts makes a Map for each closure, in programs
-   that never solve (dice: 9). Row C169.
+   that never solve (dice: 9). Row C169, done.
 4. **Ids as strings, and names as comments.** Tags are compared as strings
    such as `"std.list<type.number<>>.frames.frame"`, builtins are looked up
    by id (`R.rt("number.show", …)`), and each function has a
