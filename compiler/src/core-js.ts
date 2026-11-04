@@ -25,7 +25,7 @@ import { fusedProgram } from "./handlers.ts";
 import { infer, type Info } from "../../ters/src/lang/infer.ts";
 import { expandInverses } from "./inverses.ts";
 import { hoistInvariants } from "./hoist.ts";
-import type { Code, Id, NodeOf } from "../../ters/src/model.ts";
+import { ownerOfTypeParts, type Code, type Id, type NodeOf } from "../../ters/src/model.ts";
 import { effectOfOperation, hostOp, ownOperations } from "../../ters/src/lang/hosts.ts";
 import * as I from "../../ters/src/lang/int.ts";
 import { ARRAY_RT, kids, listSteps, RT, isData, isRecord, lowerScalar, reachedWithShows, type CoreIR, type LType, type Op, type SExpr, type SFunc, type TType } from "./scalar.ts";
@@ -487,7 +487,7 @@ export function loadCoreJs(ir: CoreIR, rt: Runtime = { print: () => {} }, hostOp
 export interface Printed { js: string; names: string[]; worlds: string[]; tables: TableSpec[]; f64: boolean[]; code?: Code; checked?: true }
 export function printed(ir: CoreIR): Printed {
   const { js, names, worlds } = emitCoreJs(ir);
-  return { js, names, worlds, tables: ir.tables.map(tableSpec), f64: ir.funcs.map((f) => f.result === "f64" && !ir.shader), ...(solving(js) ? { code: { nodes: ir.code.nodes, defs: ir.code.defs } } : {}), ...(/R\.rt\("derive:/.test(js) ? { checked: true as const } : {}) };
+  return { js, names, worlds, tables: ir.tables.map(tableSpec), f64: ir.funcs.map((f) => f.result === "f64" && !ir.shader), ...(solving(js) ? { code: solverCode(ir, js) } : {}), ...(/R\.rt\("derive:/.test(js) ? { checked: true as const } : {}) };
 }
 export function loadPrinted(p: Printed, rt: Runtime = { print: () => {} }, code: Code | undefined = p.code, info?: Info, hostOps?: HostOps): ((...xs: unknown[]) => unknown)[] {
   const all = new Function("R", p.js)(coreRuntime(p.tables, p.worlds, rt, code, info, hostOps)) as Record<string, (...xs: unknown[]) => unknown>;
@@ -564,7 +564,36 @@ export const usesSolver = (ir: CoreIR): boolean => solving(emitCoreJs(ir).js);
 // (C137d7, C137d9).
 export const solvesSlowly = (ir: CoreIR): boolean =>
   [...emitCoreJs(ir).js.matchAll(/R\.rt\("(?:(solve|solveAll):([^"]*)"|exists"|derive:)/g)].some((m) => !m[1] || !writtenOut(ir.code, JSON.parse(`"${m[2]}"`)));
-const codeFor = (ir: CoreIR, js: string) => (solving(js) ? `JSON.parse(${JSON.stringify(JSON.stringify({ nodes: ir.code.nodes, defs: ir.code.defs }))})` : "undefined");
+const codeFor = (ir: CoreIR, js: string) => (solving(js) ? `JSON.parse(${JSON.stringify(JSON.stringify(solverCode(ir, js)))})` : "undefined");
+// The nodes the evaluator's solver reads (C167c): those a solve's use
+// reaches, through any id a node holds, and those of the lambdas a printed
+// closure carries. spacetime's one solve reads 15 of its 39,966 nodes
+// (5.2 MB of them). A derivative or `for some` is given a function made
+// anywhere, so a program with one gets all of them.
+export function solverCode(ir: CoreIR, js: string): Code {
+  if (/R\.rt\("(exists"|derive:)/.test(js)) return { nodes: ir.code.nodes, defs: ir.code.defs };
+  const nodes = ir.code.nodes as Record<string, unknown>;
+  const roots = [...js.matchAll(/R\.rt\("(?:solve|solveAll):([^"]*)"/g), ...js.matchAll(/\\?"lambda\\?":\\?"([^"\\]*)/g)].map((m) => JSON.parse(`"${m[1]}"`) as string);
+  const seen = new Set<string>(roots.filter((r) => r in nodes)), todo = [...seen];
+  const walk = (v: unknown): void => {
+    if (typeof v === "string") { if (v in nodes && !seen.has(v)) { seen.add(v); todo.push(v); } }
+    else if (Array.isArray(v)) v.forEach(walk);
+    else if (v && typeof v === "object") for (const [k, x] of Object.entries(v)) { walk(k); walk(x); }
+  };
+  // And what is found the other way: a variant's type (run.ts's owner), a
+  // lambda's definition (relate.ts, modes.ts), and every interface's
+  // implementations (show and compare of a value find them by its type).
+  const owner = ownerOfTypeParts(ir.code);
+  const add = (id: string | undefined) => { if (id && id in nodes && !seen.has(id)) { seen.add(id); todo.push(id); } };
+  for (const d of ir.info.implementations?.values() ?? []) add(d);
+  for (let before = -1; before !== seen.size; ) {
+    before = seen.size;
+    while (todo.length) walk(nodes[todo.pop()!]);
+    for (const id of [...seen]) add(owner.get(id));
+    for (const d of ir.code.defs) if (seen.has((nodes[d] as { body?: string } | undefined)?.body ?? "")) add(d);
+  }
+  return { nodes: Object.fromEntries([...seen].map((k) => [k, nodes[k]])) as Code["nodes"], defs: ir.code.defs.filter((d) => seen.has(d)) };
+}
 
 // A program's hosts/js.js (FOREIGN.md, C137d5): where it is, and the
 // program's own operations by `effect:index`, as a perform names them
