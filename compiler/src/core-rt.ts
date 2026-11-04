@@ -83,8 +83,53 @@ function randFns(r: Uint32Array): Record<string, (...xs: never[]) => unknown> {
 // `builtin`: the evaluator's builtin it is, and whether it gives a Bool,
 // as the printer read them (core-js.ts builtinOf).
 export type BuiltinOf = [Id, boolean];
-function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Record<string, (...xs: never[]) => unknown>, cells?: Record<Id, (...xs: Value[]) => Value | undefined>, code?: Code, spend?: () => boolean, info?: Info, rt?: Runtime): (...xs: unknown[]) => unknown {
+type Cases = ((...xs: unknown[]) => unknown)[];
+function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Record<string, (...xs: never[]) => unknown>, cells?: Record<Id, (...xs: Value[]) => Value | undefined>, code?: Code, spend?: () => boolean, info?: Info, rt?: Runtime, handlers = new Map<string, Cases[]>()): (...xs: unknown[]) => unknown {
   if (name.startsWith("host:")) return hostFn(name, cells);
+  // A program's own effect whose cases answer in place (scalar.ts
+  // handleOps, C137): a handler pushes its cases while the code it handles
+  // runs, and a perform calls the nearest one's, with it popped while the
+  // case runs, as the evaluator's machine finds the nearest handler.
+  // Prior art: dynamically bound handlers for tail-resumptive operations
+  // (Koka's evidence vectors; Xie and Leijen, ICFP 2021).
+  if (name.startsWith("handleOps:")) {
+    const e = name.split(":")[1];
+    return (body, ...cases) => {
+      const s = handlers.get(e) ?? handlers.set(e, []).get(e)!;
+      s.push(cases as Cases);
+      try { return (body as () => unknown)(); } finally { s.pop(); }
+    };
+  }
+  // A program's own effect answered later (scalar.ts handleOps `later`,
+  // C137c24): the code it handles takes the rest of its run, its end
+  // keeping its value in the handler's box; a case is given the rest, which
+  // runs with the handler pushed again (a deep handler) and gives what
+  // the handler then gives. Each rest is run at most once (the effect
+  // says so), one after another, so one box per handler does: whatever
+  // ends last (the code, or a case) leaves the handler's value in it.
+  // Prior art: CPS for effect handlers (Hillerström and Lindley), here
+  // only for the performers of such an effect (selective, as Koka and
+  // Effekt).
+  if (name.startsWith("handleK:")) {
+    const e = name.split(":")[1];
+    return (body, ...cases) => {
+      const s = handlers.get(e) ?? handlers.set(e, []).get(e)!;
+      const frame = Object.assign(cases as Cases, { box: { v: undefined as unknown } });
+      s.push(frame);
+      try { (body as { code: (...xs: unknown[]) => unknown }).code(body, (x: unknown) => { frame.box.v = x; return true; }); } finally { s.pop(); }
+      return frame.box.v;
+    };
+  }
+  if (name.startsWith("handled:")) { const e = name.slice(8); return () => !!handlers.get(e)?.length; }
+  if (name.startsWith("perform:")) {
+    const [, e, op] = name.split(":");
+    return (...xs) => {
+      const s = handlers.get(e);
+      if (!s?.length) throw new Error(`nothing handles ${code?.nodes[e] ? e : "the operation"}`);
+      const h = s.pop()!;
+      try { return h[Number(op)](...xs); } finally { s.push(h); }
+    };
+  }
   if (name.startsWith("derive:")) return deriveFn(name.slice(7), code, info, rt);
   if (name.startsWith("solve:")) return solveFn(name.slice(6), code, false, spend);
   if (name.startsWith("solveAll:")) return solveFn(name.slice(9), code, true, spend);
@@ -249,7 +294,19 @@ export const RUNTIME = {
 // it's ready, runs the rest as a step of its own. As the evaluator's
 // (run.ts `unhandled` and `paused`), awaiting a fetch on its way looks
 // again every few milliseconds.
-function worldFn(op: string, rt: Runtime, timers: Timers): (...xs: unknown[]) => unknown {
+function worldFn(op: string, rt: Runtime, timers: Timers, handlers: Map<string, Cases[]>): (...xs: unknown[]) => unknown {
+  // An operation answered later (handleK above): the case gets the rest.
+  if (op.startsWith("perform:")) {
+    const [, e, i] = op.split(":");
+    return (...xs) => {
+      const k = xs.pop(), s = handlers.get(e);
+      if (!s?.length) throw new Error(`nothing handles ${e}`);
+      const frame = s.pop() as Cases & { box: { v: unknown } };
+      const rest = (y: unknown) => { s.push(frame); try { RUNTIME.ap(k as never, y); } finally { s.pop(); } return frame.box.v; };
+      try { frame.box.v = frame[Number(i)](...xs, rest); } finally { s.push(frame); }
+      return true;
+    };
+  }
   const w = <K extends keyof World>(k: K): World[K] => {
     const f = rt.world?.[k];
     if (!f) return (() => { throw new Error(`this runtime can't ${k === "error" ? "write to standard error" : k}`); }) as unknown as World[K];
@@ -300,7 +357,8 @@ export function coreRuntime(tables: TableSpec[], worlds: string[], rt: Runtime, 
   const rand = randFns(new Uint32Array(4)), cells = cellFns(rt.cells ?? new Cells(equal));
   const timers = worldTimers((m) => { throw new Aborted(m, 0); });
   let spend = () => true;
-  return { ...RUNTIME, spending: (f: () => boolean) => { spend = f; }, rt: (n: string, b?: BuiltinOf) => rtFn(n, b, tables, rand, cells, code, () => spend(), info, rt), worlds: worlds.map((op) => worldFn(op, rt, timers)), abort: (reason: unknown, esc: number): never => { throw new Aborted(reason, esc); } };
+  const handlers = new Map<string, Cases[]>();
+  return { ...RUNTIME, spending: (f: () => boolean) => { spend = f; }, rt: (n: string, b?: BuiltinOf) => rtFn(n, b, tables, rand, cells, code, () => spend(), info, rt, handlers), worlds: worlds.map((op) => worldFn(op, rt, timers, handlers)), abort: (reason: unknown, esc: number): never => { throw new Aborted(reason, esc); } };
 }
 
 // How the evaluator's runtime (a page's mount, html.ts) calls a function
@@ -311,14 +369,20 @@ export const coreCall = (f: Value, ...xs: Value[]): Value => {
 
 // What running a main needs to know of it: whether it takes the
 // arguments, and what it gives.
-export interface MainSpec { args: boolean; result: "f64" | "int" | "other" }
+// `rest`: it takes the rest of its run last (a main that waits, C40), given
+// one that keeps the answer.
+export interface MainSpec { args: boolean; result: "f64" | "int" | "other"; rest?: true }
 // Runs a main as wasm.ts's runMain does: given the arguments as a List of
 // Texts if it takes them; an abort or a stop nobody handles is written to
 // standard error, and the exit code is 1.
 export function runCoreFn(fn: (...xs: unknown[]) => unknown, m: MainSpec, args: string[], rt: Runtime): number {
   const err = rt.world?.error ?? rt.print;
   let v: unknown;
-  try { v = fn(...(m.args ? [toList(args)] : [])); } catch (e) {
+  try {
+    const xs = m.args ? [toList(args)] : [];
+    if (m.rest) fn(...xs, (x: unknown) => { v = x; return true; });
+    else v = fn(...xs);
+  } catch (e) {
     if (e instanceof Aborted) { err(String(e.reason)); return 1; }
     if (e instanceof Stopped) { err(e.message); return 1; }
     if (e === FAIL) throw new Error("main had no answer");

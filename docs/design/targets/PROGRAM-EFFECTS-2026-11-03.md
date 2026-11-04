@@ -1,5 +1,27 @@
 # A program's own effects across function values on the core IR (C137 design, 2026-11-03)
 
+**Built (C137c23, 2026-11-04), step 2 on JavaScript:** pig lowers. Not as
+evidence passed by input yet but in its simplest form, the same meaning:
+a handler whose cases answer in place (every operation of its effect
+returns) pushes its cases while the code it handles runs, and a perform
+calls the nearest, popped while the case runs (scalar.ts `handleOps`,
+core-rt.ts `handleOps:` and `perform:`). Random is handled this way
+where the program handles it, a draw nobody handles still the world's.
+No type changes, so no function type needs the evidence.
+
+**Built (C137c24), step 3 on JavaScript:** tumble lowers, so every
+example does. An operation answered later puts its performers in
+continuation passing (the several-answers machinery: a function type
+whose closures perform it takes the rest last, C137c22); the handler
+runs the code it handles with an end that keeps its value in the
+handler's box, and a perform gives its case the rest, which runs with
+the handler pushed again and gives what the handler then gives
+(core-rt.ts `handleK:`). `at once` calls the rest in its case and
+`parked` keeps it in a Chain to call later. The page test checks tumble through its first six handlers.
+Left: WebAssembly and C (step 4's compile.ts retirement needs only
+JavaScript), and passing the cases as an input where a perform's cost
+matters.
+
 After C137c21, two of the examples that don't lower to the core IR fail
 on a program's own effect:
 

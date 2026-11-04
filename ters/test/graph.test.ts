@@ -188,33 +188,33 @@ test("a use with no body has an output per produced port, wired to what reads ea
   const l = loadProgram(join(root, "examples", "backwards"));
   const nodes = l.code.nodes;
   const moved: { def: Id; use: Id; dot: Id; ports: number; readers: [Id, number][] }[] = [];
+  // The library's uses are in today's shape (L211i): a use with no body,
+  // given to a let of its value, each read of a port a part of the value.
   for (const d of l.code.defs) {
     for (const id of under(nodes, d)) {
       const n = nodes[id];
-      if (n.kind !== "call" || !n.given || !n.binds || n.body === undefined) continue;
-      const bare = `${n.id}.bare`, dot = `${n.id}.dot`, lam = `${n.id}.lam`;
-      const { binds, body, ...rest } = n;
-      nodes[bare] = { ...rest, id: bare } as typeof n;
-      const ports = answerKeys(l.code, nodes[bare] as never);
-      if (ports.length < 1 || ports.length > 8 || ports.some((k) => !binds[k])) { delete nodes[bare]; continue; }
-      nodes[dot] = { id: dot, kind: "binder" };
-      nodes[lam] = { id: lam, kind: "lambda", params: [dot], body: body! };
+      if (n.kind !== "call" || n.given || n.args.length !== 1) continue;
+      const lam = nodes[n.fn], use = nodes[n.args[0]];
+      if (lam?.kind !== "lambda" || lam.params.length !== 1 || use?.kind !== "call" || !use.given || use.body !== undefined) continue;
+      const dot = lam.params[0], ports = answerKeys(l.code, use as never);
+      if (ports.length < 1 || ports.length > 8) continue;
       const readers: [Id, number][] = [];
       for (const r of Object.values(nodes)) {
-        if (r.kind !== "ref") continue;
-        const i = ports.findIndex((k) => binds[k] === r.target);
-        if (i < 0) continue;
-        readers.push([r.id, i]);
-        if (ports.length === 1) nodes[r.id] = { id: r.id, kind: "ref", target: dot };
-        else {
-          const f = `${r.id}.part`, from = `${r.id}.from`;
-          nodes[f] = { id: f, kind: "ref", target: tuplePart(ports.length, i) };
-          nodes[from] = { id: from, kind: "ref", target: dot };
-          nodes[r.id] = { id: r.id, kind: "call", fn: f, args: [from] };
-        }
+        if (ports.length === 1) { if (r.kind === "ref" && r.target === dot) readers.push([r.id, 0]); continue; }
+        if (r.kind !== "call" || r.given || r.args.length !== 1) continue;
+        const f = nodes[r.fn], from = nodes[r.args[0]];
+        if (f?.kind !== "ref" || from?.kind !== "ref" || from.target !== dot) continue;
+        const i = ports.findIndex((_, k) => tuplePart(ports.length, k) === f.target);
+        if (i >= 0) readers.push([r.id, i]);
       }
-      nodes[n.id] = { id: n.id, kind: "call", fn: lam, args: [bare] };
-      moved.push({ def: d, use: bare, dot, ports: ports.length, readers });
+      moved.push({ def: d, use: use.id, dot, ports: ports.length, readers });
+    }
+    // A use whose body only gave its one port is the use itself.
+    for (const id of under(nodes, d)) {
+      const u = nodes[id];
+      if (u.kind !== "call" || !u.given || u.body !== undefined || moved.some((m) => m.use === id)) continue;
+      const ports = answerKeys(l.code, u as never);
+      if (ports.length === 1) moved.push({ def: d, use: id, dot: "", ports: 1, readers: [] });
     }
   }
   assert.ok(moved.some((m) => m.ports > 1) && moved.some((m) => m.ports === 1), JSON.stringify(moved));

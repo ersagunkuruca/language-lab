@@ -94,3 +94,25 @@ test("on the core IR, a second click while the first waits runs too, and each go
   assert.equal(o.shown(), "saved 2");
   assert.deepEqual(o.printed, ["start", "start", "done", "done"]);
 });
+
+// A main that waits (C40, #958 for compile.ts) takes the rest of its run
+// last too, and the world sleeps: the same lines and the same waits as
+// the evaluator's, on a clock that moves only when it waits.
+test("on the core IR, a main that waits prints and waits as the evaluator's", async () => {
+  const { runMain } = await import("../../ters/src/lang/run.ts");
+  const { runCoreMain } = await import("../src/core-js.ts");
+  const k = new Lang();
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.seq(k.call(S.print, k.lit("a")), k.call(WAIT_OP, k.lit(100)), k.call(S.print, k.lit("b")),
+    k.call(AWAIT_OP, k.call(START_TIMER_OP, k.lit(50))), k.call(S.print, k.lit("c")))));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const world = (log: string[]) => { let now = 1000; return { now: () => now, wait: (ms: number) => { log.push(`wait ${ms}`); now += ms; } }; };
+  const want: string[] = [], got: string[] = [];
+  runMain(code, info, main, { print: (s) => want.push(s), names, world: world(want) });
+  const l = lowerCore(code, info, names, [main]);
+  assert.deepEqual([...l.refused.values()], []);
+  assert.equal(runCoreMain(l, "main", [], { print: (s) => got.push(s), world: world(got) }), 0);
+  assert.deepEqual(got, want);
+  assert.deepEqual(got, ["a", "wait 100", "b", "wait 50", "c"]);
+});

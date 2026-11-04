@@ -4,8 +4,9 @@
 // text as in the graph, and the text reader reads results.drift back as
 // that part. Without names the part reads by its place, results.first.
 
-import type { Code, Id, NodeOf, Call } from "../model.ts";
-import { isCall } from "../model.ts";
+import type { Code, Id, Node, NodeOf, Call } from "../model.ts";
+import { isCall, isUse } from "../model.ts";
+import { answerKeys } from "./ports.ts";
 import { TUPLE_MAX, tuplePart } from "./std.ts";
 
 // What each let's dot holds, per program: found once.
@@ -25,7 +26,7 @@ function letValue(code: Code, b: Id): Id | undefined {
 function follow(code: Code, e: Id | undefined): NodeOf<"lambda"> | Call | null {
   for (let hops = 0; e && hops < 8; hops++) {
     const x = code.nodes[e];
-    if (x?.kind === "lambda" || isCall(x)) return x;
+    if (x?.kind === "lambda" || isCall(x) || isUse(x)) return x as NodeOf<"lambda"> | Call;
     if (x?.kind === "binder") { e = letValue(code, e); continue; }
     if (x?.kind !== "ref") return null;
     const t = code.nodes[x.target];
@@ -37,6 +38,9 @@ function follow(code: Code, e: Id | undefined): NodeOf<"lambda"> | Call | null {
 // The named result ports of the function whose call `from` is.
 export function resultPorts(code: Code, from: Id): Id[] | undefined {
   const c = follow(code, from);
+  // A use with no body gives its produced ports, in port order (L211).
+  const u = c as Node | null;
+  if (u && isUse(u) && u.body === undefined) return answerKeys(code, u);
   const fn = isCall(c) ? follow(code, c.fn) : null;
   return fn?.kind === "lambda" ? fn.results : undefined;
 }

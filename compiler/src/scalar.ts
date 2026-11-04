@@ -551,6 +551,38 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
     const td = code.nodes[n.body];
     if (td?.kind === "typedef" && td.effect && td.variants.every((v: Id) => { const x = code.nodes[v] as NodeOf<"variant">; return !x.returns && !x.later; })) td.variants.forEach((v: Id) => opOf.set(v, n.id));
   }
+  // A program's own effects whose operations all return (C137, step 2 of
+  // PROGRAM-EFFECTS-2026-11-03.md), for JavaScript from the core IR: a
+  // handler of one, which fusion (handlers.ts) couldn't write into the
+  // code it handles (Pig's `written into`, whose case writes a cell),
+  // pushes its cases, and a perform calls the nearest (core-rt.ts
+  // `perform:`), as the evaluator finds the nearest handler. Every case
+  // answers in tail position here, since the operation's answer is the
+  // case's value.
+  const tailOps = new Map<Id, Id>();
+  for (const n of opts.host ? Object.values(code.nodes) : []) {
+    if (n.kind !== "def" || !n.body || n.id.startsWith("std.")) continue;
+    const td = code.nodes[n.body];
+    if (td?.kind === "typedef" && td.effect && td.variants.length && td.variants.every((v: Id) => { const x = code.nodes[v] as NodeOf<"variant">; return x.returns && !x.later; })) td.variants.forEach((v: Id) => tailOps.set(v, n.id));
+  }
+  // Random too, where the program handles it (Pig's `recorded into`): a
+  // draw no handler of the program's answers is the world's, as before.
+  // Not with `seeded` as well, whose draws aren't on that stack.
+  const handlesRandom = !!opts.host && Object.values(code.nodes).some((n) => n.kind === "arm" && n.variant === RANDOM_OP);
+  if (handlesRandom) tailOps.set(RANDOM_OP, RANDOM);
+  // A program's own effect whose operations are answered later (step 3:
+  // tumble's Animate, ANSWERED-LATER.md): its case is given the rest, so
+  // the performer runs in continuation passing (several_), and a perform
+  // hands the case the rest it was given (core-rt.ts `perform:`).
+  const laterOps = new Map<Id, Id>();
+  for (const n of opts.host ? Object.values(code.nodes) : []) {
+    if (n.kind !== "def" || !n.body || n.id.startsWith("std.")) continue;
+    const td = code.nodes[n.body];
+    if (td?.kind === "typedef" && td.effect && td.variants.length && td.variants.every((v: Id) => { const x = code.nodes[v] as NodeOf<"variant">; return x.returns && x.later; })) td.variants.forEach((v: Id) => laterOps.set(v, n.id));
+  }
+  const laterEffs = new Set(laterOps.values());
+  const tailEffs = new Set([...tailOps.values(), ...laterEffs]);
+  let drawn = false;
   // Every effect's operations, for refusing what isn't lowered yet.
   const effectOps = new Set(Object.values(code.nodes).flatMap((n) => {
     const td = n.kind === "def" && n.body ? code.nodes[n.body] : null;
@@ -563,7 +595,7 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
   // not finish (running out of a budget), or abort; and the world's effects.
   const partialEff = (e: Id) => e === CHOICE || e === DIVERGE || escaping(e);
   // Random under a `seeded` (C106), or drawn from the world (C136).
-  const allowedEff = (e: Id) => partialEff(e) || e === CONSOLE || e === FILES || (!!opts.data && e === RANDOM) || (!!opts.host && PAGE_EFFECTS.has(e));
+  const allowedEff = (e: Id) => partialEff(e) || e === CONSOLE || e === FILES || (!!opts.data && e === RANDOM) || (!!opts.host && (PAGE_EFFECTS.has(e) || tailEffs.has(e)));
   // Some root draws a number nobody seeds (C136): the world seeds
   // Random's generator then, at the first draw.
   const worldRandom = !!opts.data && roots.some((r) => {
@@ -589,7 +621,10 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
       if (params.some((p) => !p) || !result) return null;
       const partial = effs.some(partialEff);
       const key = `fn(${(params as LType[]).map(keyOf).join(",")})>${keyOf(result)}${partial ? "!" : ""}`;
-      const chooses = effs.includes(CHOICE) && severalTypes.has(key), waits = !!opts.host && (effs.includes(WAIT) || effs.includes(AWAIT));
+      // A type that may wait is one only once a closure of it does (a page
+      // handler's row says Wait whether it waits or not, and so do the
+      // functions its row reaches): its closures' code asks (NeedsSeveral).
+      const chooses = effs.includes(CHOICE) && severalTypes.has(key), waits = !!opts.host && (effs.includes(WAIT) || effs.includes(AWAIT) || effs.some((e) => laterEffs.has(e))) && severalTypes.has(key);
       if (chooses || waits) {
         const sk = `${key}*`;
         if (!fns.has(sk)) fns.set(sk, { key: sk, params: [...params as LType[], kOf(result)], result: "i32", partial: true, several: true, answer: result, ...(chooses ? { chooses } : {}), ...(waits ? { waits } : {}) } as FType);
@@ -797,7 +832,7 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
     // lowered as its arithmetic, so no answer isn't seen here yet (L125c2,
     // L125c3); a Choice of the program's own (fail, one of) is refused
     // where it's used.
-    const effs = all.filter((e) => !BUDGETED.includes(e) && !(partial && partialEff(e)) && !(opts.data && (e === CONSOLE || e === FILES || e === RANDOM)) && !(opts.host && PAGE_EFFECTS.has(e)) && !(e === CHOICE && !opts.data && !opts.shader));
+    const effs = all.filter((e) => !BUDGETED.includes(e) && !(partial && partialEff(e)) && !(opts.data && (e === CONSOLE || e === FILES || e === RANDOM)) && !(opts.host && (PAGE_EFFECTS.has(e) || tailEffs.has(e))) && !(e === CHOICE && !opts.data && !opts.shader));
     if (effs.length) fail(`has effects (${effs.map(nm).join(", ")})`);
     const budgeted = !constant && !opts.data && diverges(ft);
 
@@ -1042,6 +1077,25 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
           const e = opOf.get(target)!;
           return { k: "abort", reason: build(target, { t: "con", id: e, args: [] }, args()), esc: escapeOf(e) };
         }
+        if (laterOps.has(target)) {
+          const t = stype(zonk(id));
+          if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(id))}`);
+          const e = laterOps.get(target)!, op = (code.nodes[(code.nodes[e] as NodeOf<"def">).body!] as NodeOf<"typedef">).variants.indexOf(target);
+          return { k: "world", op: `perform:${e}:${op}`, aborts: false, args: args(), t, suspends: true };
+        }
+        if (tailOps.has(target) && !drawn) {
+          if (target === RANDOM_OP) {
+            if (Object.values(code.nodes).some((x) => x.kind === "ref" && x.target === S.seeded)) throw new Refused("handles Random beside seeded (not lowered yet)");
+            drawn = true;
+            let world: SExpr;
+            try { world = expr(id, env, f, false); } finally { drawn = false; }
+            return { k: "if", cond: { k: "rt", fn: `handled:${RANDOM}`, args: [], host: { t: "i32", partial: false } }, then: { k: "rt", fn: `perform:${RANDOM}:0`, args: [], host: { t: "f64", partial: true } }, else: world, t: "f64" };
+          }
+          const t = stype(zonk(id));
+          if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(id))}`);
+          const e = tailOps.get(target)!, op = (code.nodes[(code.nodes[e] as NodeOf<"def">).body!] as NodeOf<"typedef">).variants.indexOf(target);
+          return { k: "rt", fn: `perform:${e}:${op}${t === "i32" ? ":bool" : ""}`, args: args(), host: { t, partial: true } };
+        }
         if (opts.data && WORLD_OPS[target]) {
           const t = stype(zonk(id));
           if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(id))}`);
@@ -1141,6 +1195,10 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
           const arm = expr(arms[0].body, new Map(env).set(arms[0].binds[0], reason), f, false);
           return { k: "handle", body, reason, arm, t, save };
         }
+        const later = arms.length ? laterOps.get(arms[0].variant) : undefined;
+        if (later && arms.every((a) => laterOps.get(a.variant) === later) && !n.otherwise) return handleOps(n, later, id, env, f, true);
+        const pushed = arms.length ? tailOps.get(arms[0].variant) : undefined;
+        if (pushed && arms.every((a) => tailOps.get(a.variant) === pushed) && !n.otherwise) return handleOps(n, pushed, id, env, f);
         const handled = opts.data && arms.length ? opOf.get(arms[0].variant) : undefined;
         if (handled && handled !== ABORT && arms.every((a) => opOf.get(a.variant) === handled) && !n.otherwise) {
           // A handler of another effect whose operations never return (C34):
@@ -1527,6 +1585,51 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
     g.body = lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), expr(n.body, inner, g, true));
     const src: ClosureSrc | undefined = opts.host && !caps.some((c) => typeof c === "object" && boolInside(c)) ? { lambda: n.id, binders: free, bools: caps.flatMap((c, j) => (c === "i32" ? [j] : [])) } : undefined;
     return { k: "closure", t, fn: gi, shape, caps: free.map((b): SExpr => ({ k: "local", i: env.get(b)! })), ...(src ? { src } : {}) };
+  }
+  // A handler of a program's own effect whose cases answer in place
+  // (tailOps): the code it handles, and each case, as closures given to
+  // the runtime, which pushes the cases while the code runs and pops
+  // them after, however it ends (core-rt.ts `handleOps:`). A case runs
+  // with them popped, so what it performs goes to the handler outside,
+  // as in the evaluator.
+  // `later`: each case is given the rest, last, and the code it handles
+  // takes the rest of the run (several_): core-rt.ts `handleK:`.
+  function handleOps(n: NodeOf<"match">, e: Id, id: Id, env: Map<Id, number>, f: SFunc, later = false): SExpr {
+    const t = stype(zonk(id));
+    if (!t) throw new Refused(`handles ${nm(e)} with a value that is ${OTHER}`);
+    const ops = (code.nodes[(code.nodes[e] as NodeOf<"def">).body!] as NodeOf<"typedef">).variants;
+    const arms = n.arms.map((a) => code.nodes[a] as NodeOf<"arm">);
+    if (!ops.every((v) => arms.some((a) => a.variant === v))) throw new Refused(`handles only some of ${nm(e)}'s operations`);
+    // A closure of `params` giving what `body` gives, made as a lambda is.
+    const closureOf = (at: Id, params: Id[], ts: LType[], body: Id, result: LType): SExpr => {
+      const ft = fnOf(ts, result);
+      const c = lambda({ id: at, kind: "lambda", params, body } as NodeOf<"lambda">, ft, env, f);
+      return c.k === "closure" ? { ...c, src: undefined } : c;
+    };
+    const cases = ops.map((v) => {
+      const a = arms.find((x) => x.variant === v)!;
+      const r = stype(zonk(a.body)), ps = a.binds.map((b) => stype(zonk(b)));
+      if (!r) throw new Refused(`handles ${nm(e)} with a case giving ${whyNot(zonk(a.body))}`);
+      ps.forEach((p, j) => { if (!p) throw new Refused(`handles ${nm(v)} given ${whyNot(zonk(a.binds[j]))}`); });
+      return closureOf(a.id, a.binds, ps as LType[], a.body, r);
+    });
+    const body = closureOf(n.scrutinee, [], [], n.scrutinee, t);
+    if (later) return { k: "rt", fn: `handleK:${e}`, args: [body, ...cases], host: { t, partial: true } };
+    if (body.k === "closure" && (body.t.several || waits(funcs[body.fn].body))) throw new Refused(`handles ${nm(e)} around a wait or several answers (not lowered yet)`);
+    return { k: "rt", fn: `handleOps:${e}${t === "i32" ? ":bool" : ""}`, args: [body, ...cases], host: { t, partial: true } };
+  }
+  // A partial function type of these, keyed as stype keys one.
+  // One whose closures turned out to take the rest (NeedsSeveral) is
+  // that one's several type.
+  function fnOf(params: LType[], result: LType): FType {
+    const key = `fn(${params.map(keyOf).join(",")})>${keyOf(result)}!`;
+    if (severalTypes.has(key)) {
+      const sk = `${key}*`;
+      if (!fns.has(sk)) fns.set(sk, { key: sk, params: [...params, kOf(result)], result: "i32", partial: true, several: true, answer: result, waits: true });
+      return fns.get(sk)!;
+    }
+    if (!fns.has(key)) fns.set(key, { key, params, result, partial: true });
+    return fns.get(key)!;
   }
   // A definition used as a value: a closure that calls it, made once.
   function named(def: Id, id: Id, t: FType): SExpr {
@@ -2431,9 +2534,6 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
   for (const r of roots) {
     const from = funcs.length, shaped = shapes.length;
     const raw = info.typeOf.get(r) && info.subst.zonk(info.typeOf.get(r)!), given = defaults(r);
-    // Only a page handler goes on from a wait here (C40 step 4): a main
-    // that waits is compile.ts's yet.
-    if (raw?.t === "fn" && info.subst.resolveRow(raw.eff).effs.some((e) => e === WAIT || e === AWAIT)) { refused.set(r, "waits, which only a page's handler does on the core IR yet"); continue; }
     rootVars = new Set(raw ? vars(raw).filter((v) => !given.has(v)) : []);
     try { func(r, given); several_(from); modCons(from); } catch (e) {
       if (!(e instanceof Refused)) throw e;
