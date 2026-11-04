@@ -50,6 +50,84 @@ That isn't enough, because board's readers read the whole value,
 `read(state).board.cards`. A reader of the whole value wakes on any
 change. The row notes the fix as a design call.
 
+## C162: how the compiler finds the paths (2026-11-04)
+
+Board on the core IR (bench-board.ts's `core` way since C137d19) shows
+what the analysis has to follow. A column's formula reads `state`, takes
+`.board.cards` and hands it to `shown cards`. That calls the library's
+`filter` with a closure, `matches filter`, which reads a card's tags or
+title. The progress view, the counts and `all tags` work the same way,
+through `map`, `fold` and `filter`. So an analysis that gives up at a
+closure finds nothing on board. It has to follow a known closure into
+the function it's passed to.
+
+**The analysis** runs on the core IR, after lowering, over every
+`cells.read` whose cell holds data:
+
+- A value has a source: a read site, or one of the function's inputs,
+  and the steps taken from it. A field step is `f<i>`, a list's head is
+  `*` (any item), and a list's tail is the list again.
+- What a use needs: `get` and `field` take a step and need nothing. A
+  `case` or `tag` on a list or a type with several cases needs that
+  place *only*: its case, or the list's length, not what's inside.
+  Anything else (an operation, a comparison, `show`, a host builtin, a
+  value put into a new constructor, returned, or captured by a closure
+  that's not followed) needs the whole value there, as a read at that
+  place does today.
+- A call passes its inputs' sources to the callee's summary: for each
+  input, the places it needs, relative to the input. Summaries are found
+  to a fixed point over the call graph (recursion over a list's tail
+  reuses the same summary). Past 16 places, an input needs its whole
+  value.
+- A closure the code makes with a known function (core IR `closure`
+  with `fn`) is followed where it's applied: the callee is summarised
+  for that closure (one summary per function and closure-function
+  input, so `filter` with `matches filter` and `filter` with
+  `has tag` are summarised apart). A closure whose function isn't known
+  there (one read from a field, given by the host) needs its inputs
+  whole.
+- At each read site, the places its value needs become the read's
+  paths: `R.rt("cells.readPaths")(c, ["f0/f1/*/f4", "f0/f1/="])`.
+
+**Cells** take a path with `*` (any item) and a path that ends at a
+place *only* (`=`, a list's length or a case). cells.ts `write` compares
+each difference with a reader's paths. A `*` matches any item. A
+difference inside a place-only path doesn't wake the reader. The
+evaluator and the editor's preview keep their whole reads (or L99's
+views for `each`), which means the same at another speed.
+
+**What this can't do alone.** A column's formula *returns* cards: the
+ones its filter keeps. A returned value needs its whole value, so the
+formula still wakes when a kept card's time changes, and runs its filter
+over every card again. What it saves is the readers that don't hand
+cards on: the counts, the progress bar, `all tags`, the history. To wake
+only the card's row, the formula's answer would have to keep its parts
+as places in `state` (a row of `each` reading card *i*'s time through
+the formula). That is incremental computation, (d) above, or views for
+the returned parts only. It is step 3, measured after step 2.
+
+**Steps:**
+
+1. Done (C162a): cells.ts paths with `*/` and a place-only `=`
+   (`meets`), and `readPaths`, with tests on Cells alone
+   (cell-paths.test.ts). No compiler change, nothing changes for the
+   evaluator. A whole new value is compared with the old one
+   (`differences`) only once a Cells knows how lists look (`shape`, set
+   today by the first view `each` makes); step 2 gives it from the
+   start on the core IR.
+2. The analysis in compiler/src (a pass on CoreIR, no closures
+   followed), `cells.readPaths` printed by core-js.ts. Then closures
+   followed. Measured with bench-board.ts's `core` way at 1,000 cards, a
+   running frame and an add, and board.test.ts's session checked to
+   draw the same.
+3. If the columns' formulas are still what a frame costs: a design call
+   on the formula's returned parts, put to Ersagun.
+
+Prior art: Svelte's compile-time dependencies, and the path analyses of
+alias analysis (access paths, Landi and Ryder 1992). Following a closure
+into the function it's passed to is 1-CFA (Shivers 1991), with summaries
+per callee and closure.
+
 ## Options
 
 **(a) Programs read by path.** board's views use `read at(state, path)`
