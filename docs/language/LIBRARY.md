@@ -128,6 +128,7 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 - **minimum** : `(List a) -> Extended a where a has <`. The smallest of the numbers, as an Extended: +∞ when there are none, so it is minimum's identity and a fold over an empty list still has an answer.
 - **maximum** : `(List a) -> Extended a where a has <`. The largest of the numbers, as an Extended: −∞ when there are none.
 - **Dual** (type). A dual number, value + slope·ε where ε · ε is 0: a record of two Float64s. The same + − · work on it, · by the product rule, and sin, cos, tan, exp and log by the chain rule, so a function given dual(x, 1) gives back its value and its slope at x. slope by duals does that for you (forward-mode automatic differentiation). No <.
+- **as dual** : `(Float64) -> Dual`. The Float64 x as a dual number whose derivative part is 0: a constant.
 - **slope by duals** : `((Dual) -[e]-> Dual, Float64) -[e]-> Float64`. f′(x), worked out by giving f the dual number x + 1ε and reading the slope of what comes back (forward-mode automatic differentiation). f must work on duals: write it with the generic + − · and Trig. derivative(f) gives the same number by differentiating f's code.
 - **dual table** : `List (Table entry Dual)`. Dual numbers' multiplication table: 1 · 1 = 1, 1 · ε = ε, ε · 1 = ε, and ε · ε = 0, which needs no line. table product(dual table, x, y) is x · y.
 - **Algebraic** (type). An exact real number that solves a polynomial equation with whole-number coefficients, like √2 (x² = 2) or the golden ratio (x² = x + 1). Held by that equation and which of its roots it is, so √2 · √2 is exactly 2 and < always answers. The same + − · < work on it. Make one with square root, root, or as algebraic; digits shows as many digits as you ask for (EXACT-REALS.md).
@@ -665,6 +666,21 @@ A page is a value of type Html that main returns. Cells hold what changes; a par
 - **style sheet** : `(List Text) -> Html` (html module). A style element holding these rules.
 - **px** : `(a) -> Text` (html module). A length in pixels, from a Float64 or an Int.
 - **joined** : `(List Text, Text) -> Text` (html module). The texts with between between each two of them.
+
+## The same bits on every machine
+
+sin, cos, exp, ^ and the rest are each platform's own (JavaScript's, C's, a GPU's), so two machines can differ in the last bit or two. The steady module's are written in Ters as fdlibm writes them, with only + − · / and comparisons, so every machine gives the same bits: for a lockstep game or a replay that must agree. steady sin, cos and tan take |x| below 1,647,100 for now.
+
+- **steady sin** : `(Float64) -> Float64` (steady module). sin x with the same bits on every machine: fdlibm's, written in Ters (sin is the platform's own, within a few ulp).
+- **steady cos** : `(Float64) -> Float64` (steady module). cos x with the same bits on every machine: fdlibm's, written in Ters.
+- **steady tan** : `(Float64) -[Choice]-> Float64` (steady module). tan x with the same bits on every machine: fdlibm's, written in Ters. No answer where cos x is 0.
+- **steady exp** : `(Float64) -[Choice]-> Float64` (steady module). e^x with the same bits on every machine: fdlibm's, written in Ters.
+- **steady log** : `(Float64) -[Choice]-> Float64` (steady module). The natural log of x with the same bits on every machine: fdlibm's, written in Ters. No answer for x ≤ 0.
+- **steady pow** : `(Float64, Float64) -[Choice]-> Float64` (steady module). x to the power y with the same bits on every machine: fdlibm's, written in Ters. No answer where x ^ y has none.
+- **steady atan** : `(Float64) -> Float64` (steady module). The angle whose tangent is x, with the same bits on every machine: fdlibm's, written in Ters.
+- **steady atan2** : `(Float64, Float64) -> Float64` (steady module). The angle of the point (x, y), from −π to π, with the same bits on every machine: fdlibm's, written in Ters.
+- **steady asin** : `(Float64) -[Choice]-> Float64` (steady module). The angle whose sine is x, with the same bits on every machine: fdlibm's, written in Ters. No answer outside −1 to 1.
+- **steady acos** : `(Float64) -[Choice]-> Float64` (steady module). The angle whose cosine is x, with the same bits on every machine: fdlibm's, written in Ters. No answer outside −1 to 1.
 
 ## Points, colours and slopes
 

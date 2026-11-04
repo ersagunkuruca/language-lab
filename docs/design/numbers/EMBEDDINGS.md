@@ -100,7 +100,7 @@ ask him before E work starts.
 - **L208d** (done, src/lang/diamonds.ts; a path is read with each stretch a declared embedding crosses replaced by it, so the library's Int into Float64 settles Int into Complex and Dual). The diamond rule: paths composed through the declared
   embeddings, refused when two disagree in source and no direct one is
   declared; the laws test compares the direct one with each path.
-- **L208e** (with L204b). Literals as the embedding from Int, and from
+- **L208e** (with L204b; e1 done: a literal at Complex or Dual is map(x) of the embedding from Float64, a plain call of `as complex` or `as dual`, so a shader still lowers it; at Rational, Algebraic and Fixed a literal is their Literal implementation's since L204d, so arith.ts builds no number's constructor). Literals as the embedding from Int, and from
   fractions into anything with ÷; `DATA_NUMBERS` and the per-type literal
   constructors in arith.ts go.
 - **L208f** (Compiler lane, after L43c). An embedding is a representation

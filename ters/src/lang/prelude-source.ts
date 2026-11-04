@@ -1058,6 +1058,12 @@ export function buildPrelude(): Module {
   });
   const wordHelpers = wordDefs.flatMap((d) => [d.add, d.sub, d.mul, d.neg, d.less, d.and, d.or, d.xor, d.up, d.down, d.show]);
   const wordMakers = wordDefs.map((d) => d.as);
+  const rationalLiteral = k.def("rational literal");
+  k.define(rationalLiteral, k.fn(["top", "bottom"], (t, b) => reduced(t, b)));
+  const fixedLiteral = k.def("fixed literal");
+  k.define(fixedLiteral, k.fn(["top", "bottom"], (t, b) => F(k.call(S.first,
+    k.thunk(() => k.call(INT_OPS.quotient, k.call(INT_OPS.add, k.call(INT_OPS.mul, t, k.int(2 ** 33)), b), k.call(INT_OPS.mul, b, k.int(2)))),
+    k.thunk(() => k.int(0))))));
   const impl = (name: string, v: Id, ops: Id[]) => { const d = k.def(name); k.define(d, k.call(v, ...ops.map((o) => k.x(o)))); return d; };
   const arithmetics = [
     impl("arithmetic at float64", ARITHMETIC_V, [B.add, B.sub, B.mul, B.neg]),
@@ -1080,6 +1086,12 @@ export function buildPrelude(): Module {
         k.call(MAT_V[size], ...Array.from({ length: size * size }, (_, c) => (c % (size + 1) === 0 ? x : k.lit(0))))))));
       return d;
     }),
+    // A number written at Rational, Algebraic or Fixed (L204d): its digits
+    // as top/bottom, kept exactly; at Fixed rounded once to the nearest
+    // step of 2⁻³², halves up, so 0.1 is the same steps on every target.
+    impl("literal at rational", LITERAL_V, [rationalLiteral]),
+    impl("literal at algebraic", LITERAL_V, [ALGEBRAIC_OPS.fraction]),
+    impl("literal at fixed", LITERAL_V, [fixedLiteral]),
     impl("ordered at fixed", ORDERED_V, [lessX]),
     ...wordDefs.flatMap((d) => [impl(`arithmetic at word${d.w}`, ARITHMETIC_V, [d.add, d.sub, d.mul, d.neg]), impl(`ordered at word${d.w}`, ORDERED_V, [d.less])]),
     // Text's < is `comes before`, alphabetical (L152): at most, smaller,
@@ -2452,15 +2464,19 @@ export function buildPrelude(): Module {
   // Embeddings (EMBEDDINGS.md, L208b): the one canonical map from a type
   // into a larger one that keeps + − · and <. Into Float64 it holds only
   // as closely as Float64 rounds, so lab test checks those with near.
+  // A Float64 as a dual number with no derivative part, named so the
+  // embedding (and a literal at Dual, through it) is a plain call.
+  const asD = k.def("as dual");
+  k.define(asD, k.fn(["x"], (x) => k.call(DUAL_V, x, k.lit(0))));
   const embed = (name: string, map: Id) => { const d = k.def(name); k.define(d, k.call(EMBEDDING_V, map)); return d; };
   const embeddings = [
     embed("int in rational", k.x(whole)),
     embed("int in float64", k.x(INT_OPS.toNumber)),
     embed("rational in float64", k.x(toNum)),
     embed("float64 in complex", k.x(asC)),
-    embed("float64 in dual", k.fn(["x"], (x) => k.call(DUAL_V, x, k.lit(0)))),
+    embed("float64 in dual", k.x(asD)),
   ];
-  const offered: Id[] = [...embeddings, extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, spaced, optionalParens, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, sortWith, collated, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, determinant, inverted, leastSquares, tensorOf, tensorShape, tensorItems, rank, tensorSize, tensorEntry, tensorMap, tensorZipWith, reshaped, contracted, transposedBy, traced, bytesOf, byteItems, byteCount, utf8Of, textOfUtf8, base64Of, bytesOfBase64, hexOf, bytesOfHex, jsonPrinted, jsonIndented, jsonRead, jsonField, jsonAsNumber, jsonAsText, jsonAsBool, jsonAsList, csvPrinted, csvRows, csvRecords, csvOfRecords, dateOf, dateYear, dateMonth, dateDay, leapYear, daysInMonth, dayNumber, dateOfDay, weekday, addedDays, daysBetween, dateText, dateRead, timeOf, timeHour, timeMinute, timeSecond, secondsOfDay, timeOfSeconds, timeText, timeRead, secondsD, minute, hour, day, instantOf, secondsSince, laterBy, durationBetween, instantAt, dateAt, timeAt, instantText, instantRead, offsetText, instantTextIn, instantTextInZone, instantInZone, durationText, durationRead, currentInstant, waitFor, withState, changeState, withOpenFile, piped, ticketId, ...wordMakers, anyOf, together, race, within, simulated, near];
+  const offered: Id[] = [...embeddings, extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, spaced, optionalParens, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, asD, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, sortWith, collated, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, determinant, inverted, leastSquares, tensorOf, tensorShape, tensorItems, rank, tensorSize, tensorEntry, tensorMap, tensorZipWith, reshaped, contracted, transposedBy, traced, bytesOf, byteItems, byteCount, utf8Of, textOfUtf8, base64Of, bytesOfBase64, hexOf, bytesOfHex, jsonPrinted, jsonIndented, jsonRead, jsonField, jsonAsNumber, jsonAsText, jsonAsBool, jsonAsList, csvPrinted, csvRows, csvRecords, csvOfRecords, dateOf, dateYear, dateMonth, dateDay, leapYear, daysInMonth, dayNumber, dateOfDay, weekday, addedDays, daysBetween, dateText, dateRead, timeOf, timeHour, timeMinute, timeSecond, secondsOfDay, timeOfSeconds, timeText, timeRead, secondsD, minute, hour, day, instantOf, secondsSince, laterBy, durationBetween, instantAt, dateAt, timeAt, instantText, instantRead, offsetText, instantTextIn, instantTextInZone, instantInZone, durationText, durationRead, currentInstant, waitFor, withState, changeState, withOpenFile, piped, ticketId, ...wordMakers, anyOf, together, race, within, simulated, near];
   // Each number's own show, from before the generic one showed every number
   // (L153, L156): kept so programs saved before still open, not offered.
   const perTypeShows = [showF, showC, showD, showX];
@@ -2704,6 +2720,7 @@ export function buildPrelude(): Module {
     [mergeSorted]: "Two sorted lists as one. A helper of sort, not offered.",
     [addRun]: "A helper of sort: a sorted run added to the slots of runs, like adding 1 to a binary number. Not offered.",
     [asC]: "The Float64 x as a complex number, x + 0i.",
+    [asD]: "The Float64 x as a dual number whose derivative part is 0: a constant.",
     [unitI]: "i, the square root of −1: i · i is −1.",
     [conjC]: "a − bi for a + bi: the same point mirrored across the real line. z · conjugate(z) is |z|².",
     [modulus]: "|z|, how far z is from 0 (the vectors module's magnitude says the same).",

@@ -30,8 +30,8 @@ import type { Names } from "../presentation.ts";
 import { B } from "../prelude.ts";
 import { implementationOf, type Info } from "./infer.ts";
 import { interfaceOps, leftToWays, NEUTRAL, pickWays, waysIn, type BuiltinCost } from "./ways.ts";
-import { ALGEBRAIC_OPS, ARITH, ARITH_FIELD, EMBEDDING, EMBEDDING_MAP, COMPLEX_V, DUAL_V, FIXED_V, INT_OPS, LITERAL, LITERAL_V, RATIO, S } from "./std.ts";
-import { ALGEBRAIC_TYPE, COMPLEX_TYPE, DUAL_TYPE, FIXED_TYPE, INT, NUMBER, RATIONAL_TYPE, OverMap, type Row, type Scheme, type Type } from "./types.ts";
+import { ARITH, ARITH_FIELD, EMBEDDING, EMBEDDING_MAP, INT_OPS, LITERAL, LITERAL_V, S } from "./std.ts";
+import { INT, NUMBER, OverMap, type Row, type Scheme, type Type } from "./types.ts";
 import { PRELUDE_DEFS } from "./prelude-ids.ts";
 import { ratioParts } from "./int.ts";
 import { recordVariant } from "./derive.ts";
@@ -57,12 +57,10 @@ const AT: Record<Id, { number: Id; int: Id; arity: 1 | 2 }> = {
   [ARITH.less]: { number: S.less, int: INT_OPS.less, arity: 2 },
 };
 
-// The number types that are data (std.ts), whose literals are their
-// constructors' calls. Their + − · −x < are the prelude's implementations
-// of Arithmetic and Ordered (INTERFACES.md step 4), found by type like any
-// other: Rational's `add fractions`, Complex's `multiply complex`, Dual's
-// product rule, Algebraic's builtins.
-const DATA_NUMBERS = new Set<Id>([RATIONAL_TYPE, COMPLEX_TYPE, DUAL_TYPE, ALGEBRAIC_TYPE, FIXED_TYPE]);
+// A literal written at a type of its own (`of`, other than Float64 and
+// Int): 1/3 at Rational, 2.5 at Complex. Its type's Literal or the
+// embedding from Float64 spells it out (L204d, L208e1).
+const typedLiteral = (n: Node) => n.kind === "lit" && n.of !== undefined && n.of !== NUMBER && n.of !== INT;
 // A prelude definition's id, by its name: from a table of the few the
 // passes look for (prelude-ids.ts), so the solver doesn't carry the
 // library to find them (C137d2).
@@ -70,7 +68,7 @@ export const preludeDef = (name: string): Id | undefined => PRELUDE_DEFS[name];
 
 export const usesGenericArithmetic = (code: Code) => {
   const ops = interfaceOps(code);
-  return nodesWhere(code, "generic arithmetic", (n) => (n.kind === "ref" && (n.target in AT || ops.has(n.target))) || (isUse(n) && ops.has(useTarget(code.nodes, n))) || (n.kind === "lit" && n.of !== undefined && DATA_NUMBERS.has(n.of))).length > 0;
+  return nodesWhere(code, "generic arithmetic", (n) => (n.kind === "ref" && (n.target in AT || ops.has(n.target))) || (isUse(n) && ops.has(useTarget(code.nodes, n))) || typedLiteral(n)).length > 0;
 };
 
 // Whether resolveArithmetic changes anything: it also lifts recursive lets
@@ -88,14 +86,6 @@ const someLiteralNotFloat64 = (code: Code, info: Info) => nodesWhere(code, "plai
 });
 
 // A Float64 literal's digits, as written, as top/bottom: 0.25 is 25/100.
-// A literal at Fixed: its digits as a fraction, rounded once to the nearest
-// step of 2⁻³² (halves up), so 0.1 is the same steps on every target.
-function fixedSteps(v: unknown): bigint {
-  const [top, bottom] = ratioParts(typeof v === "number" ? decimal(v) : (v as string)) ?? [0n, 1n];
-  const twice = 2n * top * 2n ** 32n + bottom, d = 2n * bottom;
-  return twice >= 0n ? twice / d : -((-twice + d - 1n) / d);
-}
-
 function decimal(x: number): string {
   const m = /^(-?)(\d+)(?:\.(\d+))?(?:e([+-]\d+))?$/.exec(String(x));
   if (!m) return "0";
@@ -470,7 +460,7 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
         return;
       }
       if (plainNumber(n)) { numberLiteral(n as NodeOf<"lit">, env); return; }
-      if (n.kind === "lit" && n.of !== undefined && DATA_NUMBERS.has(n.of)) { literal(n); return; }
+      if (typedLiteral(n)) { literal(n as NodeOf<"lit">); return; }
       const kids: Id[] = [];
       switch (n.kind) {
         case "call":
@@ -487,19 +477,52 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
     walk(root, null);
   };
 
-  // A literal at Rational, Algebraic, Complex or Dual as its constructor's
-  // call: 3 at Dual is dual(3, 0), a constant.
   const intLit = (v: bigint): NodeData => ({ kind: "lit", value: v >= -9007199254740991n && v <= 9007199254740991n ? Number(v) : String(v), of: INT });
+  // A Float64 literal at a type Float64 embeds in (L208e): map(x) of the
+  // canonical embedding, so 0.5 at Complex is float64 in complex's: no
+  // constructor of its own here.
+  const throughEmbedding = (id: Id, x: number, t: Type): boolean => {
+    const emb: Type = { t: "con", id: EMBEDDING, args: [num, t] };
+    const e = implementationOf(info, EMBEDDING, emb);
+    if (!e) return false;
+    const fn: Type = { t: "fn", params: [num], ret: t, eff: pure };
+    // An embedding whose map is a named function calls it: as complex(x).
+    // A shader can't call a function read from a record.
+    const body = code.nodes[(code.nodes[e] as NodeOf<"def"> | undefined)?.body ?? ""], arg = isCall(body) && body.args.length === 1 ? code.nodes[body.args[0]] : undefined;
+    if (arg?.kind === "ref" && code.nodes[arg.target]?.kind === "def") {
+      nodes[id] = { id, kind: "call", fn: add({ kind: "ref", target: arg.target }, fn), args: [add({ kind: "lit", value: x, of: NUMBER }, num)] };
+      typeOf.set(id, t);
+      return true;
+    }
+    const map = add({ kind: "call", fn: add({ kind: "ref", target: EMBEDDING_MAP }, { t: "fn", params: [emb], ret: fn, eff: pure }), args: [add({ kind: "ref", target: e }, emb)] }, fn);
+    nodes[id] = { id, kind: "call", fn: map, args: [add({ kind: "lit", value: x, of: NUMBER }, num)] };
+    typeOf.set(id, t);
+    return true;
+  };
+  // from fraction(top, bottom) of t's Literal: a named one called by name
+  // (rational literal(1, 4)), as a shader can call it; any other read by
+  // its case, match literal at t { literal(f) → f(top, bottom) }, so
+  // nothing here is an interface's operation to resolve.
+  const throughLiteral = (id: Id, [top, bottom]: [bigint, bigint], t: Type): boolean => {
+    const impl = implementationOf(info, LITERAL, t);
+    if (!impl) return false;
+    const made: Type = { t: "fn", params: [int, int], ret: t, eff: pure }, given: Type = { t: "con", id: LITERAL, args: [t] };
+    const args = () => [add(intLit(top), int), add(intLit(bottom), int)];
+    const body = code.nodes[(code.nodes[impl] as NodeOf<"def"> | undefined)?.body ?? ""], arg = isCall(body) && body.args.length === 1 ? code.nodes[body.args[0]] : undefined;
+    if (arg?.kind === "ref") nodes[id] = { id, kind: "call", fn: add({ kind: "ref", target: arg.target }, made), args: args() };
+    else {
+      const f = add({ kind: "binder" }, made);
+      const call = add({ kind: "call", fn: add({ kind: "ref", target: f }, made), args: args() }, t);
+      const arm = add({ kind: "arm", variant: LITERAL_V, binds: [f], results: [null], body: call } as NodeData, t);
+      nodes[id] = { id, kind: "match", scrutinee: add({ kind: "ref", target: impl }, given), arms: [arm], otherwise: null };
+    }
+    typeOf.set(id, t);
+    return true;
+  };
+  // A literal written at one of them, as 1/3 at Rational.
   const literal = (n: NodeOf<"lit">) => {
     const t: Type = { t: "con", id: n.of!, args: [] };
-    const parts: [NodeData, Type][] = n.of === FIXED_TYPE ? [[intLit(fixedSteps(n.value)), int]]
-      : n.of === RATIONAL_TYPE || n.of === ALGEBRAIC_TYPE
-      ? (ratioParts(n.value) ?? [0n, 1n]).map((x) => [intLit(x), int])
-      : [[{ kind: "lit", value: typeof n.value === "number" ? n.value : 0 }, num], [{ kind: "lit", value: 0 }, num]];
-    const ctor = n.of === RATIONAL_TYPE ? RATIO : n.of === ALGEBRAIC_TYPE ? ALGEBRAIC_OPS.fraction : n.of === DUAL_TYPE ? DUAL_V : n.of === FIXED_TYPE ? FIXED_V : COMPLEX_V;
-    const fn = add({ kind: "ref", target: ctor }, { t: "fn", params: parts.map(([, pt]) => pt), ret: t, eff: pure });
-    nodes[n.id] = { id: n.id, kind: "call", fn, args: parts.map(([p, pt]) => add(p, pt)) };
-    typeOf.set(n.id, t);
+    if (!throughLiteral(n.id, ratioParts(typeof n.value === "number" ? decimal(n.value) : String(n.value)) ?? [0n, 1n], t) && typeof n.value === "number") throughEmbedding(n.id, n.value, t);
   };
 
   // A plain number literal at the Number its use needs: an Int, a fraction
@@ -516,23 +539,10 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
       return;
     }
     if (t.id === INT) { nodes[n.id] = { id: n.id, ...intLit(BigInt(x)) } as Node; typeOf.set(n.id, int); return; }
-    if (t.id === RATIONAL_TYPE || t.id === ALGEBRAIC_TYPE || t.id === COMPLEX_TYPE || t.id === DUAL_TYPE || t.id === FIXED_TYPE) { literal({ ...n, of: t.id, value: t.id === COMPLEX_TYPE || t.id === DUAL_TYPE ? x : decimal(x) }); return; }
-    // A type with a Literal of its own (L204b): its from fraction, given
-    // the number as top/bottom.
-    const impl = implementationOf(info, LITERAL, t);
-    if (impl) {
-      const [top, bottom] = ratioParts(decimal(x)) ?? [0n, 1n];
-      const whole: Type = { t: "con", id: INT, args: [] };
-      const made: Type = { t: "fn", params: [whole, whole], ret: t, eff: pure }, given: Type = { t: "con", id: LITERAL, args: [t] };
-      // match literal at t { literal(f) → f(top, bottom) }: its field read
-      // by its case, so nothing here is an interface's operation to resolve.
-      const f = add({ kind: "binder" }, made);
-      const body = add({ kind: "call", fn: add({ kind: "ref", target: f }, made), args: [add(intLit(top), whole), add(intLit(bottom), whole)] }, t);
-      const arm = add({ kind: "arm", variant: LITERAL_V, binds: [f], results: [null], body } as NodeData, t);
-      nodes[n.id] = { id: n.id, kind: "match", scrutinee: add({ kind: "ref", target: impl }, given), arms: [arm], otherwise: null };
-      typeOf.set(n.id, t);
-      return;
-    }
+    // A type with a Literal (L204b, the library's Rational, Algebraic and
+    // Fixed since L204d): its from fraction, given the number as top/bottom.
+    // Else one Float64 embeds in (Complex, Dual): the embedding's map.
+    if (throughLiteral(n.id, ratioParts(decimal(x)) ?? [0n, 1n], t) || throughEmbedding(n.id, x, t)) return;
     const variant = recordVariant(code, t.id);
     if (!variant) return;
     const fields = (code.nodes[variant] as NodeOf<"variant">).fields;
@@ -545,9 +555,9 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
   const operation = (id: Id, t: Type, parent: Id | null) => {
     const at = AT[(nodes[id] as NodeOf<"ref">).target];
     const x = t.t === "fn" ? t.params[0] : num;
-    // Their own are their implementations (above); one they don't have
-    // (< at Complex) is a type error, and the generic is left as it is.
-    if (x.t === "con" && DATA_NUMBERS.has(x.id)) return;
+    // The library's types' own are their implementations (above); one they
+    // don't have (< at Complex) is a type error, and the generic is left.
+    if (x.t === "con" && x.id.startsWith("std.")) return;
     if (x.t === "con" && (x.id === NUMBER || x.id === INT)) {
       nodes[id] = { id, kind: "ref", target: x.id === INT ? at.int : at.number };
       typeOf.set(id, t);
