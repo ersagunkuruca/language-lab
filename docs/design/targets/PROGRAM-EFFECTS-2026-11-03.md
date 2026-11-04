@@ -17,7 +17,7 @@ runs the code it handles with an end that keeps its value in the
 handler's box, and a perform gives its case the rest, which runs with
 the handler pushed again and gives what the handler then gives
 (core-rt.ts `handleK:`). `at once` calls the rest in its case and
-`parked` keeps it in a Chain to call later; both match the evaluator.
+`parked` keeps it in a Chain to call later. The page test checks tumble through its first six handlers.
 Left: WebAssembly and C (step 4's compile.ts retirement needs only
 JavaScript), and passing the cases as an input where a perform's cost
 matters.
