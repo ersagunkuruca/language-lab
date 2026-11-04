@@ -20,6 +20,7 @@ test("countdown: four ways agree on a small instance", () => {
   const want = w.ideal([2, 3, 5, 7, 11], 100);
   assert.equal(want.length, 30);
   assert.deepEqual(w.compiled([2, 3, 5, 7, 11], 100), want);
+  assert.deepEqual(w.core([2, 3, 5, 7, 11], 100), want);
   assert.deepEqual(w.wasm([2, 3, 5, 7, 11], 100), want);
   assert.deepEqual(w.evaluator([2, 3, 5, 7, 11], 100), want);
 });

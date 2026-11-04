@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { runProgram, type World } from "../../ters/src/lang/run.ts";
 import { compile } from "../src/compile.ts";
+import { coreMain, lowerCore } from "../src/core-js.ts";
 import { load } from "../src/program.ts";
 import { $setPrint, $setWorld, $Aborted, $toList } from "../src/runtime.js";
 import { chapters as ideal } from "./chapters.ideal.js";
@@ -40,13 +41,23 @@ const world = (io: ReturnType<typeof disk>["io"], err: string[]): World => ({
   ...io, fileExists: () => false, listFolder: () => [],
 });
 
-export async function ways(): Promise<Record<"evaluator" | "compiled" | "ideal", Way>> {
+export async function ways(): Promise<Record<"evaluator" | "compiled" | "core" | "ideal", Way>> {
   const p = load("chapters");
   const main = p.named("main");
   const path = join(mkdtempSync(join(tmpdir(), "chapters-")), "chapters.js");
   writeFileSync(path, compile(p.code, p.info, p.pres.names, { runtime: pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href, exports: ["main"] }));
   const compiled = (await import(pathToFileURL(path).href)).defs.main as (args: unknown) => number;
+  // Printed from the core IR (C137d13), which compile.ts gives way to.
+  const rt: { print: (s: string) => void; world?: World } = { print: () => {} };
+  const core = coreMain(lowerCore(p.code, p.info, p.pres.names, [main]), "main", rt);
   return {
+    core: (args, start) => {
+      const out: string[] = [], err: string[] = [], d = disk(start);
+      rt.print = (s) => out.push(s);
+      rt.world = world(d.io, err);
+      const code = core(args);
+      return { out, err, code, files: d.left() };
+    },
     evaluator: (args, start) => {
       const out: string[] = [], err: string[] = [], d = disk(start);
       const code = runProgram(p.code, p.info, main, args, { print: (s) => out.push(s), names: p.pres.names, world: world(d.io, err) });
