@@ -14,7 +14,7 @@ import type { Names } from "../ters/src/presentation.ts";
 import type { Pins } from "../ters/src/lang/signatures.ts";
 import { browserWorld, type Store } from "../ters/src/lang/browser.ts";
 import { shower } from "./shown.ts";
-import { corePageScript, loadCoreJs, lowerCore } from "../compiler/src/core-js.ts";
+import { loadCoreJs, lowerCore } from "../compiler/src/core-js.ts";
 import { Aborted as CoreAborted, Stopped as CoreStopped } from "../compiler/src/core-rt.ts";
 import { mainProblem, runMain, runProgram, toList, type World } from "../ters/src/lang/run.ts";
 import type { Info } from "../ters/src/lang/infer.ts";
@@ -22,6 +22,7 @@ import { FILES, NETWORK } from "../ters/src/lang/types.ts";
 import { LIBRARY } from "../ters/src/lang/library.ts";
 import { withLibraryRepresentations } from "../ters/src/lang/library-reps.ts";
 import { infer, setDisplayNames, setProgramPins } from "./typed.ts";
+import { compilePageProgram } from "./pageCompile.ts";
 import { searchBackwards, type BackAsk, type Found } from "./backSearch.ts";
 import { stuckReading, type Reading } from "../ters/src/lang/relate.ts";
 import { compile } from "../compiler/src/compile.ts";
@@ -101,16 +102,8 @@ self.onmessage = (e: MessageEvent<RunAsk | BackAsk | CompileAsk | WhereAsk>) => 
   if ("compilePage" in e.data) {
     const { code, names, pins, main, core } = e.data;
     try {
-      setDisplayNames(names);
-      setProgramPins(pins);
-      const info = infer(code, names);
       // From the core IR where main lowers there, as Save page does.
-      const own = code.defs.filter((d) => !LIBRARY.code.nodes[d]);
-      if (core) try {
-        const ir = lowerCore(code, info, names, own);
-        if (!ir.refused.has(main)) return post({ program: corePageScript(ir, names[main], "$core", ""), core: true });
-      } catch { /* compile.ts's, below */ }
-      return post({ program: compile(code, info, names, { runtime: "$lab", exports: [names[main]], link: "global" }) });
+      return post(compilePageProgram(code, names, pins, main, !!core));
     } catch (err) {
       return post({ error: (err as Error).message });
     }
