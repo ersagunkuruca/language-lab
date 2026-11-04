@@ -4,7 +4,7 @@
 // position.
 
 import type { Code, Id, Node, Use } from "../model.ts";
-import { fieldPorts, useTarget } from "../model.ts";
+import { fieldPorts, onLayer, useTarget } from "../model.ts";
 import { SIGS, TUPLE_MAX, tupleVariant, tuplePart } from "./std.ts";
 import { Subst } from "./types.ts";
 
@@ -107,6 +107,9 @@ export function filled(code: Code): Code {
       // every program, so its kept check stays under (infer.ts under).
       out = { ...code, nodes: { ...code.nodes, ...base.fills } };
       fillUses(out, bare.filter((id) => !(id in base!.lib.nodes)));
+      // On the filled library, so the passes that keep its work (arith.ts
+      // seedFor) read through to it.
+      onLayer(out, base.filled);
     } else { out = { ...code, nodes: { ...code.nodes } }; fillUses(out, bare); }
     filledOnce.set(code, out);
   }
@@ -115,12 +118,12 @@ export function filled(code: Code): Code {
 
 // The library under every program, filled once (fillOnce, from library.ts):
 // its uses with no body filled, and the nodes that made.
-let base: { lib: Code; fills: Record<Id, Node> } | null = null;
+let base: { lib: Code; filled: Code; fills: Record<Id, Node> } | null = null;
 const onBase = (code: Code, lib: Code) => { for (const id in lib.nodes) if (code.nodes[id] !== lib.nodes[id]) return false; return true; };
 export function fillOnce(lib: Code): Code {
   const out: Code = { ...lib, nodes: { ...lib.nodes } };
   fillUses(out, bareIn(lib, Object.keys(lib.nodes)));
-  base = { lib, fills: Object.fromEntries(Object.entries(out.nodes).filter(([id, n]) => lib.nodes[id] !== n)) };
+  base = { lib, filled: out, fills: Object.fromEntries(Object.entries(out.nodes).filter(([id, n]) => lib.nodes[id] !== n)) };
   return out;
 }
 

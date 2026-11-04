@@ -160,7 +160,10 @@ fn main(@builtin(global_invocation_id) g: vec3u) {
   // does. The program as it is when that can't be made.
   const in32 = once(float32, code, info, names, entries, (): Side => {
     try {
-      const w = withFloat32(code, names);
+      // Of the lowered program, which holds only what the picture reaches,
+      // as compiler/gpu.ts does: of the whole library, this and its check
+      // took seconds a picture (C165).
+      const w = withFloat32(lowerPicture(code, info, names, entries).code, names);
       const c = represent(w.code, keys.map((k) => entries[k]), w.rep), i = infer(c, w.names);
       return i.errors.length ? null : { code: c, info: i, names: w.names };
     } catch { return null; }
