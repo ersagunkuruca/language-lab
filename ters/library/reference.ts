@@ -68,7 +68,7 @@ export const SECTIONS: Section[] = [
   { title: "Bytes", intro: "Bytes are a sequence of whole numbers from 0 to 255, for binary formats, files, hashes and the network. They mean their list of Ints, checked when made. utf8 of and text of utf8 turn text into its UTF-8 bytes and back.",
     ids: [...t("bytes"), ...prelude("bytes of", "byte items", "byte count", "utf8 of", "text of utf8", "base64 of", "bytes of base64", "hex of", "bytes of hex")] },
   { title: "JSON", intro: "Json is JSON's values as data: null, a Bool, a Float64, a Text, a list, or an object whose fields are named and in order. json printed writes one as JSON text, and json read reads it back.",
-    ids: [...t("json"), ...prelude("json printed", "json read", "json field", "json as number", "json as text", "json as bool", "json as list")] },
+    ids: [...t("json"), ...prelude("json printed", "json printed indented", "json read", "json field", "json as number", "json as text", "json as bool", "json as list")] },
   { title: "CSV", intro: "CSV text as rows of text fields (RFC 4180): csv printed writes rows, quoting a field only when it must, and csv rows reads them back.",
     ids: [...prelude("csv printed", "csv rows")] },
   { title: "Dates", intro: "A Date is a day in the calendar: its year, month and day. Dates count as days from 1970-01-01 both ways, so adding days, the days between two dates and the weekday are whole-number arithmetic. Times of day and instants are their own types (below); time zones come later.",

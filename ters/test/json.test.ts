@@ -94,3 +94,12 @@ test("csv printed quotes only where it must, and csv rows reads it back, CRLF to
   assert.equal(back, await both(lit));
   assert.equal(await both((k) => k.call(lib("csv rows"), k.lit("a,b\r\nc,d\r\n"))), '[["a", "b"], ["c", "d"]]');
 });
+
+test("json printed indented is JSON.stringify(value, null, step) (L190f)", async () => {
+  const value = { name: "Ada", tags: ["a", "b"], empty: [], none: {}, nested: { deep: [1, { x: null }] }, ok: true };
+  for (const step of [2, 4, 0]) {
+    const shown = await both((k) => k.call(lib("json printed indented"), k.call(lib("json read"), k.lit(JSON.stringify(value))), k.int(step)));
+    assert.equal(JSON.parse(shown), JSON.stringify(value, null, step));
+  }
+  assert.equal(JSON.parse(await both((k) => k.call(lib("json printed indented"), k.call(lib("json read"), k.lit("[]")), k.int(2)))), "[]");
+});
