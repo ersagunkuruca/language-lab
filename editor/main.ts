@@ -27,7 +27,7 @@ import { BOOL, CHECK, CONS, onTodaysIds, SOME, TRUE } from "../ters/src/lang/std
 import { CHOICE, DIVERGE, NUMBER, STRING, WORLD, showIn, type Type } from "../ters/src/lang/types.ts";
 import { implementationKey } from "../ters/src/lang/infer.ts";
 import { renderBlocks } from "../ters/src/lang/render.ts";
-import { needsHandling, OutOfSteps, showValue, type Data, type Value } from "../ters/src/lang/run.ts";
+import { needsHandling, OutOfSteps, type Data, type Value } from "../ters/src/lang/run.ts";
 import type { Profile, Stuck } from "./runWorker.ts";
 import { hostSkeleton } from "../ters/src/lang/hosts.ts";
 import { trace, type Trace } from "../ters/src/lang/trace.ts";
@@ -43,6 +43,7 @@ import { seeds } from "./seeds.ts";
 import { backwards } from "./backwards.ts";
 import { selectedParts } from "./selectedParts.ts";
 import { palette, typeName } from "./palette.ts";
+import { shower } from "./shown.ts";
 import { pagePanels } from "./pagePanel.ts";
 import { lawPanel, profileView, stuckView, valueView } from "./runViews.ts";
 import { fromFile, toFile } from "../ters/src/files.ts";
@@ -2524,7 +2525,8 @@ function graphHooks(info: T.Info) {
     },
     values: (() => {
       const tr = traced(info);
-      return tr ? new Map([...tr.values].map(([id, v]) => [id, showValue(v, doc.code, pres().names, true)])) : undefined;
+      const show = shower(doc.code, info, pres().names);
+      return tr ? new Map([...tr.values].map(([id, v]) => [id, show(v, true)])) : undefined;
     })(),
     kinds: (() => {
       const tr = traced(info);
@@ -2645,7 +2647,7 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
     ex ? h("button", { class: "btn", type: "button", "data-act": "t-novalues" }, "Hide values") : null));
   else if (z?.t === "fn" && !EMBED) box.append(h("p", { class: "hint" }, ex ? "The graph shows what every node makes of these values. They're saved in examples.json, not in the code."
     : "The graph shows what every node makes of these values. Change one to keep values of your own, in examples.json, not in the code."));
-  if (tr?.result !== undefined && (action || value)) box.append(h("div", { class: "hint" }, choice ? "Its first answer: " : "Gives ", valueView(tr.result, doc.code, pres().names)));
+  if (tr?.result !== undefined && (action || value)) box.append(h("div", { class: "hint" }, choice ? "Its first answer: " : "Gives ", valueView(tr.result, doc.code, pres().names, shower(doc.code, info, pres().names))));
   // A hole isn't a failure: it is where the program isn't written yet.
   // Nor is a run on values you didn't give: they're only a starting point.
   // Nor the graph's own time limit (E207): Run main runs it in full. Nor

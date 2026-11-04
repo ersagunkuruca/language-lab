@@ -9,7 +9,7 @@ import type { Info } from "../src/lang/infer.ts";
 import { pageShell } from "../src/lang/page.ts";
 import { HTML_V } from "../src/lang/std.ts";
 import { compile } from "../../compiler/src/compile.ts";
-import { corePageScript, coreSoundScript, lowerCore } from "../../compiler/src/core-js.ts";
+import { corePageScript, coreSoundScript, hostOpsOf, lowerCore } from "../../compiler/src/core-js.ts";
 
 const here = import.meta.dirname;
 const esbuild = () => import("esbuild").catch(() => { throw new Error("a page needs esbuild to bundle it (npm install in ters/)"); });
@@ -74,15 +74,16 @@ $$startPage(defs[${JSON.stringify(name)}], ${JSON.stringify(title)}${worklet});
 
 // The same page printed from the core IR (C137c9, `lab build-web --core`),
 // which WebAssembly and C print too: core-page.ts draws it, and a page
-// with sound plays (C137d4). A page with a host file isn't made this way
-// yet.
-export async function webCorePage(title: string, code: Code, info: Info, names: Names, own: Id[], main: Id): Promise<string> {
+// with sound plays (C137d4).
+// `hosts`: the program's hosts/js.js, bundled in and asked (C137d5).
+export async function webCorePage(title: string, code: Code, info: Info, names: Names, own: Id[], main: Id, hosts?: string): Promise<string> {
+  if (hosts && hasSound(code)) throw new Error("a page with sound and hosts/js.js isn't made from the core IR yet");
   const lowered = lowerCore(code, info, names, own);
   const why = lowered.refused.get(main);
   if (why) throw new Error(`${names[main] ?? "main"} isn't compiled through the core IR: it ${why}`);
   const { build } = await esbuild();
   const worklet = hasSound(code) ? await coreSoundWorklet(lowered, names[main] ?? "main") : undefined;
-  const script = corePageScript(lowered, names[main] ?? "main", JSON.parse(at("../../compiler/src/core-page.ts")), title, worklet);
+  const script = corePageScript(lowered, names[main] ?? "main", JSON.parse(at("../../compiler/src/core-page.ts")), title, worklet, hosts ? { file: hosts, ops: hostOpsOf(code, names) } : undefined);
   const out = await build({
     stdin: { contents: script, resolveDir: here, sourcefile: "page.js", loader: "js" },
     bundle: true, platform: "browser", format: "iife", target: "es2022", minify: true, write: false, logLevel: "warning",

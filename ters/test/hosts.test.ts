@@ -19,6 +19,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { compile } from "../../compiler/src/compile.ts";
+import { hostOpsOf, loadCoreJs, lowerCore } from "../../compiler/src/core-js.ts";
 import { $setPrint } from "../../compiler/src/runtime.js";
 
 function program() {
@@ -80,6 +81,21 @@ test("a host's NaN or ∞ is refused at the border; float32 overflow stops the p
   k.define(main, k.thunk(() => k.call(S.print, k.call(S.show, k.call(S.float32, k.lit(1e39))))));
   const code = base(k.code), names = baseNames(k.names), info = infer(code, names);
   assert.throws(() => runMain(code, info, main, { print: () => {}, names }), /too big for a Float64 \(overflow\)/);
+});
+
+// The core IR's JavaScript (C137d5): the same host, at the same border.
+test("the core IR's JavaScript asks the same host, checked at the same border", () => {
+  const p = program();
+  const ir = lowerCore(p.code, p.info, p.names, p.k.code.defs);
+  const run = (hosts: Record<string, (...xs: unknown[]) => unknown>, def: Id) => {
+    const out: string[] = [];
+    const fi = ir.funcs.findIndex((g) => g.name === p.names[def] && !g.inner && !g.budgeted);
+    loadCoreJs(ir, { print: (s) => out.push(s), hosts }, hostOpsOf(p.code, p.names))[fi]();
+    return out;
+  };
+  assert.deepEqual(run({ [p.dev.op.battery]: () => 0.5, [p.dev.op["name of"]]: (id) => `phone ${String(id)}`, [p.dev.op.ready]: () => true }, p.main), ["phone 7 at 50", "ready"]);
+  assert.deepEqual(run({ [p.dev.op["name of"]]: () => 42 }, p.careful), ["aborted: the host's name of gave 42, not a text"]);
+  assert.deepEqual(run({ [p.dev.op.battery]: () => 1 }, p.careful), [`aborted: hosts/js.js has no answer for name of (${p.dev.op["name of"]})`]);
 });
 
 test("lab hosts: a skeleton with each operation's id, name and types", () => {
