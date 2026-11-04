@@ -159,7 +159,6 @@ all of these.
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | L173b | The rest of REVIEW-2026-11-02d §5, which `lab mcp` couldn't write: machine's `args mapped` as `fields mapped(instruction, f)` is refused because a replaced body loses the parameter's type (the text has no way to say `instruction : Instr`), and board's `card of` as `first where(cards, (c) => c.id = id)` because `c.id` picks among Edit's, Timer's and Card's `id` (E213). Also `zeros` as `copies(count, 0)` turns its type into a generic Number list (L175's question). Needs a parameter's type written in the text, or the editor | [REVIEW-2026-11-02d](docs/reports/reviews/REVIEW-2026-11-02d.md) §5, L173 | P3 | S | |
-| L143 | A tuple shows as `tuple(1, "a")` while its type shows `(Int, Text)`: show done (L143a, #1000); left: the text view's literal as `(1, "a")`, which waits on the editor's reader (Editor lane) | [REVIEW-2026-11-01b](docs/reports/reviews/REVIEW-2026-11-01b.md) §8 | P3 | S | |
 | L29 | Function variables' rows checked in any order (the closing use should win either way). The other half, `inverse(f, …)` typed from f at the call, is done (#701). Tried 2026-11-01: letting an open row be taken in by a closed one where `opened` copies it broke three effects tests (a handler's row then leaks outward), so it needs two passes: rows settled after every use is seen | L14 | P3 | M | needs two passes |
 
 ### Ersagun's current asks

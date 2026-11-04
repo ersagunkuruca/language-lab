@@ -288,6 +288,9 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
           const port = partPort(code, f.target, n.args[0]);
           return atom(part("call", [...paren(args[0], args[0].prec >= ATOM), pn("."), part("ref fn", [nameOf(port && names[port] ? port : f.target)], n.fn)], id));
         }
+        // A tuple is written as its type is, (1, "a") (L143); a click on
+        // its parentheses or commas picks the tuple.
+        if (f.kind === "ref" && /^std\.tuple\d\.tuple$/.test(f.target) && args.length >= 2) return atom(part("call", [pn("("), ...commas(args.map((a) => a.p)), pn(")")], id));
         // A named function's name stands for its call, as an operator's
         // glyph does: clicking it picks the whole call (the editor's
         // Change the function is how the name itself is replaced).
