@@ -193,6 +193,7 @@ Text is a string of characters (Unicode code points). Positions count from 0. Te
 - **grapheme count** : `(Text) -> Int`. How many characters a reader sees: the length of graphemes(t). "👍🏽" is 1, where length says 2.
 - **uppercase** : `(Text, Locale) -> Text`. The text in capitals as its language writes them: uppercase("istanbul", locale("tr")) is "İSTANBUL", and in English "ISTANBUL". For identifiers, hex and protocols, ascii uppercase changes a to z only.
 - **lowercase** : `(Text, Locale) -> Text`. The text in small letters as its language writes them: lowercase("I", locale("tr")) is "ı". For identifiers and protocols, ascii lowercase changes A to Z only.
+- **collate** : `(Text, Text, Locale) -> Order`. Which of two texts comes first in a language's order for people, as an Order: collate("çay", "dağ", locale("tr")) is before. collated(locale) makes one to give sort with.
 - **Locale** (type). A language, as a BCP 47 tag: locale("tr"), locale("en-GB"). What depends on the language takes one, so it is the same on every machine: uppercase(text, locale), lowercase(text, locale). A tag that can't be read means the root locale.
 - **starts with** : `(Text, Text) -> Bool`. Whether the text begins with this: starts with("# notes", "#") is true. Every text starts with "".
 - **ends with** : `(Text, Text) -> Bool`. Whether the text ends with this: ends with("page.md", ".md") is true. Every text ends with "".
@@ -207,6 +208,7 @@ Text is a string of characters (Unicode code points). Positions count from 0. Te
 - **padded end** : `(Text, Int, Text) -> Text`. The text with fill put after it until it is this wide: padded end("ab", 4, ".") is "ab..". For columns of text.
 - **spaced** : `(Text) -> Text`. The text with a space either side: spaced("+") is " + ". Run backwards (inverse) it reads the text with any spaces around it, or none.
 - **optional parens** : `(Bool, Text) -> Text`. The text in parentheses when needed, else as it is. Run backwards it reads the text bare (when not needed) or in parentheses, any number of matched pairs, so a printer that leaves out the ones it needn't print still reads them.
+- **collated** : `(Locale) -> (Text, Text) -> Order`. People's order for text in a language (the Unicode Collation Algorithm with that language's rules): Turkish puts ç after c and ğ after g, German ä with a. Give it to sort with. It never changes compare or <, which stay code-point order.
 
 ## Lists and pairs
 
@@ -233,6 +235,7 @@ A list is written [1, 2, 3]. There are no loops: map, keep and for each go throu
 - **reverse** : `(List a) -> List a`. The list back to front.
 - **sort** : `(List a) -> List a`. The list in order: numbers by value, text alphabetically (by code point), cases in the order their type lists them, then field by field (compare). A merge sort (von Neumann, 1945), bottom-up so it surely finishes: n log n steps.
 - **sort by** : `(List a, (a) -[e]-> b) -[e]-> List a`. The list in the order of key(item), by compare: sort by(roads, length of) puts the shortest first, sort by(rows, (r) → −amount of(r)) the largest. Items with the same key keep their order (a stable sort; Python's key=, Haskell's sortOn). n log n steps, each calling key.
+- **sort with** : `(List a, (a, a) -[e]-> Order) -[e]-> List a`. The list in the order order(a, b) gives, an Order: sort with(names, collated(locale("tr"))) sorts names as Turkish does. Items the order calls the same keep their order (stable). n log n steps.
 - **item at** : `(List a, Int, a) -> a`. The item at a position, counting from 0, or `otherwise` when the list has none there: item at([a, b, c], 1, z) is b, item at([a], 5, z) is z. n steps.
 - **replace at** : `(List a, Int, a) -> List a`. The list with the item at a position, counting from 0, replaced by `by`; the list as it was when it has no item there. n steps.
 - **take** : `(List a, Int) -> List a`. The first count items: take([a, b, c], 2) is [a, b]; a list with fewer gives them all. count steps.

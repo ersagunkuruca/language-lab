@@ -1338,6 +1338,41 @@ export function buildPrelude(): Module {
       ]) },
     ])));
 
+  // Sorting by an order the program gives (L214d): a collation for
+  // people's names, or any (a, b) → Order. The same stable merge sort as
+  // sort by, asking order(y, x) where it asked compare(key(y), key(x)).
+  const mergeWith = k.def("merge with order");
+  k.define(mergeWith, k.fn(["order", "xs", "ys"], (order, xs, ys) => k.match(xs, [
+    { variant: NIL, names: [], body: () => ys },
+    { variant: CONS, names: ["x", "xs rest"], body: ([x, xr]) => k.match(ys, [
+      { variant: NIL, names: [], body: () => xs },
+      { variant: CONS, names: ["y", "ys rest"], body: ([y, yr]) => k.match(k.call(order, y, x), [
+        { variant: ORDER_V.before, names: [], body: () => k.call(CONS, y, k.call(mergeWith, order, xs, yr)) },
+      ], k.call(CONS, x, k.call(mergeWith, order, xr, ys))) },
+    ]) },
+  ])));
+  const addRunWith = k.def("add run with order");
+  k.define(addRunWith, k.fn(["order", "run", "slots"], (order, run, slots) => k.match(slots, [
+    { variant: NIL, names: [], body: () => k.call(CONS, k.call(SOME, run), k.x(NIL)) },
+    { variant: CONS, names: ["slot", "higher"], body: ([slot, higher]) => k.match(slot, [
+      { variant: NONE, names: [], body: () => k.call(CONS, k.call(SOME, run), higher) },
+      { variant: SOME, names: ["held"], body: ([held]) => k.call(CONS, k.x(NONE), k.call(addRunWith, order, k.call(mergeWith, order, run, held), higher)) },
+    ]) },
+  ])));
+  const sortWith = k.def("sort with");
+  k.define(sortWith, k.fn(["list", "order"], (xs, order) => k.fold(
+    k.fold(xs, [
+      { variant: NIL, names: [], body: () => k.x(NIL) },
+      { variant: CONS, names: ["item", "rest"], results: [null, "slots"], body: ([item], [, slots]) => k.call(addRunWith, order, k.call(CONS, item, k.x(NIL)), slots!) },
+    ]), [
+      { variant: NIL, names: [], body: () => k.x(NIL) },
+      { variant: CONS, names: ["slot", "higher"], results: [null, "merged"], body: ([slot], [, merged]) => k.match(slot, [
+        { variant: NONE, names: [], body: () => merged! },
+        { variant: SOME, names: ["run"], body: ([run]) => k.call(mergeWith, order, run, merged!) },
+      ]) },
+    ])));
+  const collated = k.def("collated");
+  k.define(collated, k.fn(["locale"], (l) => k.fn(["a", "b"], (a, b) => k.call(TEXT_OPS.collate, a, b, l))));
   // Maps and sets (L65, DATA-STRUCTURES.md): the entries sorted by key in
   // compare's order with no key twice, the items sorted with none twice,
   // so each has one spelling. Every operation keeps it. Each walks the
@@ -2379,7 +2414,7 @@ export function buildPrelude(): Module {
     embed("float64 in complex", k.x(asC)),
     embed("float64 in dual", k.fn(["x"], (x) => k.call(DUAL_V, x, k.lit(0)))),
   ];
-  const offered: Id[] = [...embeddings, extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, spaced, optionalParens, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, determinant, inverted, leastSquares, tensorOf, tensorShape, tensorItems, rank, tensorSize, tensorEntry, tensorMap, tensorZipWith, reshaped, contracted, transposedBy, traced, bytesOf, byteItems, byteCount, utf8Of, textOfUtf8, base64Of, bytesOfBase64, hexOf, bytesOfHex, jsonPrinted, jsonIndented, jsonRead, jsonField, jsonAsNumber, jsonAsText, jsonAsBool, jsonAsList, csvPrinted, csvRows, csvRecords, csvOfRecords, dateOf, dateYear, dateMonth, dateDay, leapYear, daysInMonth, dayNumber, dateOfDay, weekday, addedDays, daysBetween, dateText, dateRead, timeOf, timeHour, timeMinute, timeSecond, secondsOfDay, timeOfSeconds, timeText, timeRead, secondsD, minute, hour, day, instantOf, secondsSince, laterBy, durationBetween, instantAt, dateAt, timeAt, instantText, instantRead, offsetText, instantTextIn, durationText, durationRead, currentInstant, waitFor, withState, changeState, piped, ticketId, ...wordMakers, anyOf, together, race, within, simulated, near];
+  const offered: Id[] = [...embeddings, extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, spaced, optionalParens, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, sortWith, collated, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, determinant, inverted, leastSquares, tensorOf, tensorShape, tensorItems, rank, tensorSize, tensorEntry, tensorMap, tensorZipWith, reshaped, contracted, transposedBy, traced, bytesOf, byteItems, byteCount, utf8Of, textOfUtf8, base64Of, bytesOfBase64, hexOf, bytesOfHex, jsonPrinted, jsonIndented, jsonRead, jsonField, jsonAsNumber, jsonAsText, jsonAsBool, jsonAsList, csvPrinted, csvRows, csvRecords, csvOfRecords, dateOf, dateYear, dateMonth, dateDay, leapYear, daysInMonth, dayNumber, dateOfDay, weekday, addedDays, daysBetween, dateText, dateRead, timeOf, timeHour, timeMinute, timeSecond, secondsOfDay, timeOfSeconds, timeText, timeRead, secondsD, minute, hour, day, instantOf, secondsSince, laterBy, durationBetween, instantAt, dateAt, timeAt, instantText, instantRead, offsetText, instantTextIn, durationText, durationRead, currentInstant, waitFor, withState, changeState, piped, ticketId, ...wordMakers, anyOf, together, race, within, simulated, near];
   // Each number's own show, from before the generic one showed every number
   // (L153, L156): kept so programs saved before still open, not offered.
   const perTypeShows = [showF, showC, showD, showX];
@@ -2469,6 +2504,10 @@ export function buildPrelude(): Module {
     [itemAt]: "The item at a position, counting from 0, or `otherwise` when the list has none there: item at([a, b, c], 1, z) is b, item at([a], 5, z) is z. n steps.",
     [replaceAt]: "The list with the item at a position, counting from 0, replaced by `by`; the list as it was when it has no item there. n steps.",
     [showDecimals]: "x as text with `places` digits after the point, rounded half away from 0 and keeping trailing zeros: show decimals(2.5, 3) is \"2.500\", show decimals(-0.0004, 3) is \"0.000\". For when show's up to nine places would jump about.",
+    [sortWith]: "The list in the order order(a, b) gives, an Order: sort with(names, collated(locale(\"tr\"))) sorts names as Turkish does. Items the order calls the same keep their order (stable). n log n steps.",
+    [mergeWith]: "Two lists sorted by an order as one. A helper of sort with, not offered.",
+    [addRunWith]: "A helper of sort with, not offered.",
+    [collated]: "People's order for text in a language (the Unicode Collation Algorithm with that language's rules): Turkish puts ç after c and ğ after g, German ä with a. Give it to sort with. It never changes compare or <, which stay code-point order.",
     [sortBy]: "The list in the order of key(item), by compare: sort by(roads, length of) puts the shortest first, sort by(rows, (r) → −amount of(r)) the largest. Items with the same key keep their order (a stable sort; Python's key=, Haskell's sortOn). n log n steps, each calling key.",
     [mergeByKey]: "Two lists sorted by key as one. A helper of sort by, not offered.",
     [addRunByKey]: "A helper of sort by, as add run is of sort. Not offered.",
