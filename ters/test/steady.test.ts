@@ -82,10 +82,32 @@ test("compiled JavaScript gives the evaluator's bits, from compile.ts and from t
   });
 });
 
-test("sin past 2^20·π/2 stops with its reason, until Payne and Hanek's reduction is written", () => {
+// Past 2^20·π/2 the reduction is exact in Ints rather than fdlibm's
+// 24-bit pieces, so y1 can differ from fdlibm's in its last bits, and about
+// one answer in 2,000 is the other side of a rounding from V8's (both
+// within an ulp). Every engine still gives these same bits.
+test("sin, cos and tan past 2^20·π/2: V8's bits but for a rare last-bit rounding, and the same from both printers", async () => {
   const p = program();
   const r = makeRunner(p.code, p.info, { print: () => {} });
-  assert.throws(() => [...(r.call(r.value(p.own[0]), 2e6 as Value) as Iterable<unknown>)], /below 1,647,100/);
+  const ir = lowerCore(p.code, p.info, p.names, p.own);
+  const fs = loadCoreJs(ir);
+  const path = join(mkdtempSync(join(tmpdir(), "steady-")), "main.mjs");
+  writeFileSync(path, compile(p.code, p.info, p.names, { runtime, exports: p.own.map((d) => p.names[d]) }));
+  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, (x: number) => number>;
+  const far = [1647100, 2e6, 1e22, 1.7976931348623157e308, -1.7976931348623157e308, 6381956970095103 * 2 ** 797,
+    ...Array.from({ length: 300 }, (_, i) => (1 + rnd()) * 2 ** (21 + ((i * 7) % 1003)) * (i % 2 ? -1 : 1))];
+  let off = 0;
+  for (const [i, f] of (["sin", "cos", "tan"] as const).entries()) {
+    const d = p.own[i], core = fs[ir.funcs.findIndex((g) => g.name === p.names[d] && !g.inner)];
+    for (const x of far) {
+      const [y] = r.call(r.value(d), x as Value) as Iterable<number>, v8 = FNS[f](x);
+      if (!Object.is(y, v8)) { off++; assert.ok(Math.abs(y - v8) <= Math.abs(v8) * 2 ** -52, `${f}(${x}) is ${y}, V8's ${v8}`); }
+      const c = defs[p.names[d]](x) as unknown;
+      assert.ok(Object.is(typeof c === "object" ? [...(c as Iterable<number>)][0] : c, y), `compile.ts ${f}(${x})`);
+      assert.ok(Object.is(core(x), y), `core IR ${f}(${x})`);
+    }
+  }
+  assert.ok(off <= 3, `${off} of ${3 * far.length} differ from V8 in the last bit`);
 });
 
 // pow takes two inputs: its own cases, the edges of fdlibm's branches
