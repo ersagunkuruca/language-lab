@@ -41,7 +41,7 @@ import { bindsOf, bodyOf as useBody, withBodies } from "./uses.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { CHOICE, DIVERGE, INT, NUMBER, STRING, Subst, type Row, type Type } from "../../ters/src/lang/types.ts";
 import { fieldShapes, shapeOf, type Shape } from "../../ters/src/lang/nested.ts";
-import { RELEASE_V, ALGEBRAIC_V, AWAIT_OP, BOOL, CELL_OPS, COMPARE, CONS, FALSE, INT_OPS, LIST, NIL, ORDER_V, RANDOM, RANDOM_OP, RATIO, S, SET, SHOW_ANY, shownImplementations, SIGS, TEXT_OPS, TRUE, UNIT_V, NONE, SOME } from "../../ters/src/lang/std.ts";
+import { RELEASE_V, ALGEBRAIC_V, AWAIT_OP, BOOL, CELL_OPS, COMPARE, CONS, FALSE, INT_OPS, LIST, NIL, ORDER_V, RANDOM, RANDOM_OP, RATIO, S, SET, SHOW_ANY, shownImplementations, implementationsOf, ORDERED, SIGS, TEXT_OPS, TRUE, UNIT_V, NONE, SOME } from "../../ters/src/lang/std.ts";
 import { fieldPath, placePath } from "../../ters/src/lang/records.ts";
 import { planSolve } from "../../ters/src/lang/solve.ts";
 import { oneAnswer as solvedOnce } from "../../ters/src/lang/modes.ts";
@@ -364,6 +364,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // to the evaluator's order (run.ts compareValues), as a number too.
   // `orderFns`: the functions made, by type.
   const orderFns = new Map<string, { name: string; js: string | null }>();
+  const ordereds = implementationsOf(info, ORDERED);
   const monoDeep = (t: Type): Type => (t.t === "var" ? (monoVars.has(t.v) ? monoDeep(monoVars.get(t.v)!) : t) : t.t === "con" ? { ...t, args: t.args.map(monoDeep) } : t);
   const closedType = (t: Type): boolean => (t.t === "con" ? t.args.every(closedType) : false);
   const orderOf = (t: Type): string | null => {
@@ -372,9 +373,21 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     if (t.id === NUMBER) return "$numberOrder";
     if (t.id === INT) return "$intOrder";
     if (t.id === STRING) return "$textOrder";
+    const key = JSON.stringify(t);
+    // A type with an Ordered implementation (L204h), Rational's and
+    // Algebraic's the prelude's: before when its less says so, after when
+    // the other's is, else the same, as the evaluator's orderedBy.
+    const od = ordereds.get(t.id);
+    if (od && code.defs.includes(od)) {
+      const got = orderFns.get(key);
+      if (got) return got.name;
+      const name = ident(`$order ${key}`, `$order_${names[t.id] ?? "type"}`);
+      const impl = asValue(spec(od, new Map()));
+      orderFns.set(key, { name, js: `function ${name}(a, b) {\nconst o = ${impl}, less = (typeof o === "function" ? o() : o).fields[0];\nconst yes = (x) => x === true || x === $T || x?.tag === $T.tag;\nreturn yes(less(a, b)) ? -1 : yes(less(b, a)) ? 1 : 0;\n}` });
+      return name;
+    }
     const td = code.nodes[(code.nodes[t.id] as { body?: Id })?.body ?? ""];
     if (td?.kind !== "typedef" || td.effect || td.interface || td.variants.some((v) => v === RATIO || v === ALGEBRAIC_V)) return null;
-    const key = JSON.stringify(t);
     const made = orderFns.get(key);
     // One being made is a recursive type: the general order, which keeps
     // its own stack, so a long list can't overflow.
@@ -3377,7 +3390,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     const todo = [js];
     for (let b; (b = todo.pop()) !== undefined;) for (const n of namesIn(b)) if (!keep.has(n) && bodyOf.has(n)) { keep.add(n); todo.push(bodyOf.get(n)!); }
   };
-  reach(exported.join("\n") + solverCode.join("\n") + constants.join("\n") + shownBy.join("\n"));
+  // An order through an Ordered implementation (L204h) calls its less.
+  const orders = [...orderFns.values()].flatMap((e) => (e.js && e.name ? [e.js] : []));
+  reach(exported.join("\n") + solverCode.join("\n") + constants.join("\n") + shownBy.join("\n") + "\n" + orders.join("\n"));
   // A copy in a cycle with no heap copy of its own: called from the heap
   // as it is.
   for (const [s, b] of made) if (keep.has(s.name)) out.push(heapCalled.has(s.name) && !heapCopies.has(s.name) ? `${b}\nfunction* ${s.name}$h(...a) {\nreturn ${s.name}(...a);\n}` : b);
@@ -3387,7 +3402,6 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
     "$close", "$near", "$sameNumber", "$planned", "$solveRuntime", "$print", "$FN", "$perform", "$setHosts", "$random", "$handle", "$handleS", "$io", "$seeded", "$seededS", "$optional", "$cells", "$useCells", "$listArrays", "$listViews", "$path", "$spread", "$self", "$foldNested", "$drive", "$rec", "$pushList", "$withInto", "$intoArray", "$later", "$awaited", "$handleL", "$handleLG", "$handleG", "$performG",
     "$ORDER", "$compareN", "$numberOrder", "$intOrder", "$textOrder",
     ...(reflective ? ["$loadProgram", "$meta", "$prim", "$toEval", "$relate", "$derivative", "$exists"] : [])];
-  const orders = [...orderFns.values()].flatMap((e) => (e.js && e.name ? [e.js] : []));
   // The interpreter's copy of the program, and which definitions spend fuel.
   const program = reflective ? [`const $program = $loadProgram(${JSON.stringify(reflected(code))}, ${JSON.stringify([...info.divergent])});`] : [];
   return indent([

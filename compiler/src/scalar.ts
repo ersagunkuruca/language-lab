@@ -58,7 +58,7 @@ import { bindsOf, bodyOf, withBodies } from "./uses.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { ARRAY, TABLE, HASH_SET, CELL, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, PATH as PATH_T, STRING, BUILTIN_EFFECTS, Subst, type Row, type Type } from "../../ters/src/lang/types.ts";
-import { RELEASE_V, tupleType, ABORT, ABORT_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, HASH_SET_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, NOW_OP, OPTIONAL, ORDER_V, PAIR_V, RATIO, S, SET, SHOW_ANY, shownImplementations, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
+import { RELEASE_V, tupleType, ABORT, ABORT_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, HASH_SET_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, NOW_OP, OPTIONAL, ORDER_V, PAIR_V, RATIO, S, SET, SHOW_ANY, shownImplementations, implementationsOf, ORDERED, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
 import { liftLets } from "../../ters/src/lang/lift-lets.ts";
 import { solvesOnce } from "../../ters/src/lang/run.ts";
 import { inlineLists } from "./inline-lets.ts";
@@ -430,7 +430,10 @@ export function reachedWithShows(code: Code, roots: Id[], info: Info, own = fals
   const reached = reachedFrom(code, roots);
   const showns = [...shownImplementations(info)].flatMap(([t, d]) => (own && t.startsWith("std.") ? [] : [d]));
   const shows = showns.length && Object.values(reached.nodes).some((n) => n.kind === "ref" && n.target === SHOW_ANY);
-  return shows ? reachedFrom(code, [...roots, ...showns]) : reached;
+  // And the Ordered implementations a compare orders through (L204h).
+  const ordereds = [...implementationsOf(info, ORDERED)].flatMap(([t, d]) => (own && t.startsWith("std.") ? [] : [d]));
+  const compares = ordereds.length && Object.values(reached.nodes).some((n) => n.kind === "ref" && n.target === COMPARE);
+  return shows || compares ? reachedFrom(code, [...roots, ...(shows ? showns : []), ...(compares ? ordereds : [])]) : reached;
 }
 export function reachedFrom(code: Code, roots: Id[]): Code {
   const reach = new Set<Id>();
