@@ -39,6 +39,7 @@ export const PROBLEMS: Problem[] = [
   { id: "unhandled-effect", says: /performs .+, which nothing here handles$/, fix: "Handle the effect around it with a handler for its operations, or make the definition a function (of no inputs) so whoever calls it handles it." },
   { id: "no-cases", says: /^a case analysis needs at least one case$/, fix: "Add an arm for one of the value's cases, or an otherwise arm." },
   { id: "not-a-number", says: /^(.+: )?.+ isn't a Number \(Int, Rational, Float64, Fixed, Complex, or one case whose fields are all Float64s\)$/, fix: "Only a number goes there, something + − · work on: give it one, or make every part that must agree with it (the other arms, the other side) the same type." },
+  { id: "functions-in-data", says: /(works only on plain data \(no functions inside\), and this has functions in it|has functions in it, and only plain data can be used here)$/, fix: "Functions can't be compared or written out: compare or keep the data they were made from (a name, a case) instead of the function." },
   { id: "type-as-value", says: /^.+ is a type, not a value$/, fix: "A type says what values look like and can't be used as one: use one of its cases, or a value of that type." },
 ];
 
