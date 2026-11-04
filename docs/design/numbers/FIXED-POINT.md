@@ -7,8 +7,9 @@ harder problem" (BACKLOG L89).
 **Status (2026-10-30).** Steps 1, 2 and 4 are built: `Fixed` with its
 arithmetic, exact `show`, CORDIC trig, and examples/lockstep, which is in
 the editor's example menu. Fixed runs on WASM and C through Int since
-C150b (2026-11-03, Int's `shifted down` there). Step 3, an `i64` on WASM
-and C where the range is known, is open.
+C150b (2026-11-03, Int's `shifted down` there). Step 3 is built too
+(2026-11-04): on WASM and C a Fixed is an i64 while it fits one, and its
+product is one 128-bit step.
 
 ## Short answer
 
@@ -102,7 +103,22 @@ large worlds.
    two edges give a number instead: log of 0 or less is 0, and tan where
    cos is exactly 0 is sin · 2³² steps. L96's ways, or an operation that
    can refuse, would let them say so.
-3. WASM and C lowering to `i64` where the range is known.
+3. WASM and C lowering to `i64` where the range is known. **Built
+   (2026-11-04)**, with the check at run time rather than proved: a Fixed's
+   steps have no bound the compiler can prove (a position grows with the
+   world), so its Int stays Int's tagged one, which is an i64 while it fits
+   and limbs past that. What this step adds is the product.
+   `(a · b) shifted down 32` is one call (compiler/src/wide-products.ts,
+   `int.mulShift`). When both fit an i64 it takes their 128-bit product and
+   shifts it: `__int128` in C, four 32-bit products in WASM. Before, the
+   product of two Fixed values past 1 went to limbs every time. Int's own ·
+   now stays in an i64 whenever the product fits one: C checks with
+   `__builtin_mul_overflow`, and WASM takes the boxed i64s as well as the
+   31-bit ones. Lockstep's cart for a million inputs in C went from 1.3 to
+   1.9 s to 0.3 to 0.6 s, with the process and reading the inputs counted.
+   What is left there is that `tick` and the Fixed literals are worked out
+   again at each step, a quotient each time.
+   Test: compiler/test/wide-products.test.ts.
 4. An example: a lockstep simulation where two runs that share only inputs
    end in the same state, bit for bit. **Built (L89d)**: examples/lockstep,
    a cart on a spring driven by 600 inputs. Evaluated, compiled and worked
