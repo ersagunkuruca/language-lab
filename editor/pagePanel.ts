@@ -12,7 +12,7 @@ import { corePageRuntimeText, coreWorkletRuntimeText, newWorker, pageRuntimeText
 import type { CompileAsk, CompileSays } from "./runWorker.ts";
 import { drawPicture, pictureEntries, type Picture } from "./picture.ts";
 import { handOver, type Cells } from "../ters/src/lang/cells.ts";
-import { lowerCore, usesSolver } from "../compiler/src/core-js.ts";
+import { lowerCore, solvesSlowly } from "../compiler/src/core-js.ts";
 import { PAGE_BASE, corePageFile, hasSound, pageFile, pageMain, showPage, type Preview } from "../ters/src/lang/page.ts";
 import type { Doc as PageDoc, Node_ } from "../ters/src/lang/html.ts";
 
@@ -299,10 +299,10 @@ export function pagePanels(host: PageHost) {
     const title = titleOf(doc()), name = `${slug(title)}.html`;
     let core = corePageRuntimeText();
     let why = "this editor has no core IR runtime";
-    // A sound that solves would run the evaluator's solver for every block
-    // on the core IR, too slow for the audio thread: compile.ts's, as lab
-    // build-web does (C137d7).
-    if (core && hasSound(prog())) { try { if (usesSolver(lowerCore(prog(), info, pres().names, ownDefs()))) { why = "its sound solves, which the core IR does too slowly for the audio thread"; core = ""; } } catch { /* corePageFile says why */ } }
+    // A sound whose solve the core IR can't write out once would run the
+    // evaluator's solver for every block, too slow for the audio thread:
+    // compile.ts's, as lab build-web does (C137d7, C137d9).
+    if (core && hasSound(prog())) { try { if (solvesSlowly(lowerCore(prog(), info, pres().names, ownDefs()))) { why = "its sound solves, which the core IR does too slowly for the audio thread"; core = ""; } } catch { /* corePageFile says why */ } }
     if (core) {
       try { return { html: corePageFile(title, core, prog(), info, pres().names, ownDefs(), main, coreWorkletRuntimeText()), name, via: "" }; } catch (e) { why = (e as Error).message; }
     }
