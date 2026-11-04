@@ -106,6 +106,14 @@ export class Lang extends Builder {
     return f;
   }
 
+  // A relation written where it is used (L225e): a function whose results
+  // are among its inputs, its body a condition on all of them.
+  relation(names: string[], results: string[], body: (...params: Id[]) => Id): Id {
+    const f = this.lambda(names, body), lam = this.code.nodes[f] as NodeOf<"lambda">;
+    lam.results = results.map((r) => { const i = names.indexOf(r); if (i < 0) throw new Error(`no parameter ${r}`); return lam.params[i]; });
+    return f;
+  }
+
   // A thunk: an action with no inputs, what handlers take.
   thunk(body: () => Id): Id {
     return this.lambda([], body);

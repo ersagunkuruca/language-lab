@@ -123,5 +123,13 @@ Mercury compiles each mode.
    polar(□, □)`.
 4. **C55 (compiler lane).** Each direction compiled on its own, unused
    results dropped.
+5. **L225e, built.** A relation written where it is used: a lambda inside
+   a body whose results are among its parameters, read as `(s, d) → a, b
+   = s = a + b and d = a − b`. The checker types it as the function of its
+   declared direction and its body as a condition (a Bool); before
+   anything runs it is lifted out into a definition with results of its
+   own (results-fn.ts), taking what it uses from around it as further
+   inputs first, so the evaluator and every compiler run its use. Its hash
+   says which inputs are its results. The editor writing one is E252.
 
 Then L97 puts Trig behind polar, with L96 choosing how each is computed.
