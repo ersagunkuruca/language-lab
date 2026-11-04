@@ -466,7 +466,9 @@ An Instant is a moment, as seconds since 1970-01-01 00:00:00 UTC; a duration is 
 - **date at** : `(Instant) -> Date`. The date in UTC at an instant.
 - **time at** : `(Instant) -> Time of day`. The time of day in UTC at an instant, in whole seconds (a fraction of a second is dropped).
 - **instant text** : `(Instant) -> Text`. The instant as ISO 8601 writes it in UTC, whole seconds: instant text(instant of(0)) is "1970-01-01T00:00:00Z".
-- **instant read** : `(Text) -[Abort]-> Instant`. The instant an ISO 8601 text writes in UTC, year-month-dayThour:minute:secondZ, the other way from instant text. Stops on any other text.
+- **instant read** : `(Text) -[Abort]-> Instant`. The instant an ISO 8601 text writes, year-month-dayThour:minute:second then Z for UTC or an offset ±hh:mm: instant read("2026-11-04T12:30:00+03:00") is the same instant as instant read("2026-11-04T09:30:00Z"). The other way from instant text and instant text in. Stops on any other text.
+- **offset text** : `(Float64) -> Text`. An offset from UTC as ISO 8601 writes it, in whole minutes: offset text(hours(3)) is "+03:00", offset text(seconds(0)) is "Z".
+- **instant text in** : `(Instant, Float64) -> Text`. The instant as ISO 8601 writes it where clocks are this far ahead of UTC: instant text in(instant read("2026-11-04T09:30:00Z"), hours(3)) is "2026-11-04T12:30:00+03:00". A fixed offset, not a time zone's rules.
 - **current instant** : `() -[Time]-> Instant`. The instant now, from the program's clock (Time): instant text(current instant()) is the time in UTC. In a test, simulated runs it on a clock that starts at instant of(0).
 - **wait for** : `(Float64) -[Wait]-> Unit`. Waits for a duration (Wait): wait for(seconds(2)). The same as wait with the duration in milliseconds.
 

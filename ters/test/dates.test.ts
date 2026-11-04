@@ -111,3 +111,16 @@ test("current instant reads the clock and wait for waits a duration in milliseco
   assert.equal(v, '"2026-11-04T09:30:00Z"');
   assert.deepEqual(waits, [1500]);
 });
+
+test("instants at an offset from UTC: written with ±hh:mm and read back (L188c1)", async () => {
+  const at = (k: Lang, t: string) => k.call(lib("instant read"), k.lit(t));
+  assert.equal(await both((k) => k.call(lib("instant text in"), at(k, "2026-11-04T22:30:00Z"), k.call(lib("hours"), k.lit(3)))), '"2026-11-05T01:30:00+03:00"');
+  assert.equal(await both((k) => k.call(lib("instant text in"), at(k, "2026-11-04T02:00:00Z"), k.call(lib("minutes"), k.lit(-330)))), '"2026-11-03T20:30:00-05:30"');
+  assert.equal(await both((k) => k.call(lib("instant text"), at(k, "2026-11-05T01:30:00+03:00"))), '"2026-11-04T22:30:00Z"');
+  assert.equal(await both((k) => k.call(lib("instant text"), at(k, "2026-11-03T20:30:00-05:30"))), '"2026-11-04T02:00:00Z"');
+  assert.equal(await both((k) => k.call(lib("offset text"), k.call(lib("seconds"), k.lit(0)))), '"Z"');
+  for (const bad of ["2026-11-04T09:30:00+3:00", "2026-11-04T09:30:00+24:00", "2026-11-04T09:30:00*03:00", "2026-11-04T09:30:00"]) {
+    const p = program((k) => at(k, bad));
+    assert.throws(() => runMain(p.code, p.info, p.main, { print: () => {}, names: p.names }), /(instant|time) read:/, bad);
+  }
+});
