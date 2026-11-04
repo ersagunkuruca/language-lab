@@ -131,6 +131,12 @@ const layerId = (l: Info | null) => { if (!l) return 0; let n = layerIds.get(l);
 // A definition's nodes as text. Nodes are never changed in place, so each
 // one's text is kept with it.
 const nodeText = new WeakMap<object, string>();
+// A list of ids as text, kept with the list.
+const idsTexts = new WeakMap<object, string>();
+const idsText = (xs?: Iterable<Id>) => { if (!xs) return null; let t = idsTexts.get(xs); if (t === undefined) idsTexts.set(xs, (t = JSON.stringify([...xs].sort()))); return t; };
+// The data types a layer checked (its parts' owners).
+const layerTypes = new WeakMap<Info, { types: Set<Id> }>();
+const layerParts = (l: Info) => { let p = layerTypes.get(l); if (!p) layerTypes.set(l, (p = { types: new Set(l.owner.values()) })); return p; };
 const nodesText = (code: Code, d: Id) => subtree(code, d).map((id) => { const n = code.nodes[id]; let t = nodeText.get(n); if (t === undefined) nodeText.set(n, (t = JSON.stringify(n))); return t; }).join(",");
 // Long texts that recur (what every group sees) by a short number, so a
 // key doesn't repeat them.
@@ -156,15 +162,21 @@ export class CheckCache {
   // checks each group, done() after the last, and end() before it returns.
   begin(a: { code: Code; info: Info; s: Subst; deps: (d: Id) => Id[]; layer: Info | null; opts: Options; valueDefs: Id[]; typeDefs: Id[] }) {
     const { code, info, s, deps, layer, opts } = a;
+    // Only a check over the library's kept check (L216) uses the cache: a
+    // check of everything is the library's own, made once, or the
+    // palette's trial of one filling, thrown away, and keying either costs
+    // more than it saves.
+    if (!layer) return undefined;
     const start = s.next;
-    const sorted = (xs?: Iterable<Id>) => (xs ? [...xs].sort() : null);
     // What every group sees: the data types, the values (implementations
-    // and embeddings are values), the options and the layer under.
+    // and embeddings are values), the options and the layer under. The
+    // layer's own definitions are as it checked them.
+    const under = layerParts(layer);
     const isValue = (d: Id) => { const b = (code.nodes[d] as NodeOf<"def">).body; return !b || code.nodes[b]?.kind !== "lambda"; };
     const global = intern(JSON.stringify([
-      layerId(layer), sorted(opts.hidden), sorted(opts.insiders), sorted(opts.library),
-      a.typeDefs.map((d) => nodesText(code, d)),
-      a.valueDefs.filter(isValue).map((d) => nodesText(code, d)),
+      layerId(layer), idsText(opts.hidden), idsText(opts.insiders), idsText(opts.library),
+      a.typeDefs.filter((d) => !under.types.has(d)).map((d) => nodesText(code, d)),
+      a.valueDefs.filter((d) => !layer.schemes.has(d) && isValue(d)).map((d) => nodesText(code, d)),
     ]));
     const missed: { group: Id[]; key: string; from: number; to: number }[] = [];
     const keyOf = (group: Id[]): string | null => {
