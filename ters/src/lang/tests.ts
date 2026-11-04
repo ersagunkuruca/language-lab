@@ -16,7 +16,7 @@ import type { Names } from "../presentation.ts";
 import type { Info } from "./infer.ts";
 import { discharge } from "./ledger.ts";
 import { bool, makeRunner, showValue, toList, unit, type Runtime, type Value } from "./run.ts";
-import { BOOL, CHECK, LIST, UNIT } from "./std.ts";
+import { BOOL, CHECK, LIST, RATIO, RATIONAL, UNIT } from "./std.ts";
 import { CHOICE, INT, NUMBER, STRING, type Type } from "./types.ts";
 import { parseValue } from "./values.ts";
 
@@ -35,6 +35,9 @@ export function smallValues(t: Type, code: Code, depth = 3): Value[] | null {
   if (t.id === STRING) return ["", "a", "ab"];
   if (t.id === BOOL) return [bool(false), bool(true)];
   if (t.id === UNIT) return [unit];
+  // Fractions in lowest terms over a positive bottom, as `fraction` makes
+  // them: a record's own small values would give 1/0 and 2/2 (L208b).
+  if (t.id === RATIONAL) return [[0, 1], [1, 1], [-1, 1], [1, 2], [-1, 2], [2, 1], [1, 3], [3, 2]].map((f) => ({ tag: RATIO, fields: f }));
   if (t.id === LIST) {
     const xs = depth > 0 ? smallValues(t.args[0], code, depth - 1) : [];
     if (!xs) return [toList([])];

@@ -86,7 +86,7 @@ ask him before E work starts.
 ## Steps
 
 - **L208a, this note.**
-- **L208b.** std's `Embedding a b` and the check of a declaration: `map`'s
+- **L208b** (done). std's `Embedding a b` and the check of a declaration: `map`'s
   type, one per pair, both types closed. `lab test` checks its laws for
   every Arithmetic and Ordered operation the two types share (rep-laws.ts
   generates the values). The library declares Int into Rational, Int and
