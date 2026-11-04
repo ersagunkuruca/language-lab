@@ -232,11 +232,15 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
   // Slots: refs to a binder are the binder, a let's parameter is its
   // argument, and a let is its body.
   const parent = new Map<Id, Id>();
+  // A derived program's slots start from its base's (below), read through
+  // rather than copied (E250: a copy of every slot per palette offer).
+  let under: Map<Id, Id> | undefined;
+  const up = (x: Id) => parent.get(x) ?? under?.get(x);
   // With path compression: a long chain of lets and refs is walked once.
   const find = (id: Id): Id => {
     let r = id;
-    while (parent.has(r)) r = parent.get(r)!;
-    for (let x = id; x !== r;) { const up = parent.get(x)!; parent.set(x, r); x = up; }
+    for (let u = up(r); u !== undefined; u = up(r)) r = u;
+    for (let x = id; x !== r;) { const u = up(x)!; parent.set(x, r); x = u; }
     return r;
   };
   const union = (a: Id, b: Id) => { const x = find(a), y = find(b); if (x !== y) parent.set(x, y); };
@@ -261,7 +265,7 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
     ? () => { for (const n of Object.values(nodes)) if (!seen.has(n.id) && (!base.seen.has(n.id) || from!.changed.has(n.id))) scan(n); }
     : () => { for (const n of Object.values(nodes)) if (!seen.has(n.id)) scan(n); };
   if (base) {
-    for (const [k, v] of base.parent) parent.set(k, v);
+    under = base.parent;
     for (const id of from!.changed) if (nodes[id]) scan(nodes[id]);
   } else refresh();
   if (!from && !slotsOf.has(code)) slotsOf.set(code, { parent: new Map(parent), seen });
