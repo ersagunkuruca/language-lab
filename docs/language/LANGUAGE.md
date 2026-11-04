@@ -1860,7 +1860,7 @@ The checker's messages are one table too (`src/lang/problems.ts`, L187).
 Each row has an id, the usual fix in a sentence, and, where there is one,
 the editor gesture that makes it. The editor shows that fix under the
 message. `test/problems.test.ts` holds the smallest program that shows
-each one. So far the table covers sixteen of the checker's problems, the
+each one. So far the table covers seventeen of the checker's problems, the
 common ones.
 
 Each row names the test that shows it. The table is generated from

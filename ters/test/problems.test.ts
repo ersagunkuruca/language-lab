@@ -8,6 +8,7 @@ import { infer } from "../src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { PROBLEMS, problemOf } from "../src/lang/problems.ts";
+import { NUMBER } from "../src/lang/types.ts";
 import { ARITH, FALSE, INT_OPS, LOG_OP, S, SOME, TRUE } from "../src/lang/std.ts";
 
 const bools = (k: Lang, b: string, extra: Parameters<Lang["match"]>[1] = []) =>
@@ -36,6 +37,7 @@ const SMALLEST: Record<string, (k: Lang) => void> = {
   "not-an-operation": (k) => { const a = ask(k); k.define(k.def("p"), k.thunk(() => k.handle(k.call(a.op.ask), [...answered(k, a, () => k.lit(1)), { variant: LOG_OP, names: ["l"], body: () => k.lit(1) }]))); },
   "answer-not-one": (k) => { const a = ask(k); k.define(k.def("p"), k.thunk(() => k.handle(k.call(a.op.ask), answered(k, a, () => k.call(S.oneOf, k.list(k.lit(1), k.lit(2))))))); },
   "no-implementation": (k) => { const t = k.type("Colour", [], [["red", []], ["blue", []]]); k.define(k.def("p"), k.call(ARITH.add, k.x(t.v.red), k.x(t.v.blue))); },
+  "type-as-value": (k) => k.define(k.def("p"), k.x(NUMBER)),
 };
 
 test("every problem has its smallest program, and its message is that row's alone", () => {
