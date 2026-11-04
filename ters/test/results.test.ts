@@ -9,6 +9,7 @@ import type { Code, Id, NodeOf } from "../src/model.ts";
 import type { Presentation, Style } from "../src/presentation.ts";
 import blocksStyle from "../styles/blocks.json" with { type: "json" };
 import { Lang } from "../src/lang/dsl.ts";
+import { hashDef } from "../src/hash.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
 import { renderBlocks } from "../src/lang/render.ts";
@@ -140,4 +141,44 @@ test("the palette offers a use of a definition with results, and fills it in", a
   assert.deepEqual(filled.errors.map((x) => x.message), []);
   const pres: Presentation = { names: e.names, comments: {}, hints: {}, style: blocksStyle as unknown as Style };
   assert.match(renderBlocks(e.code, pres, filled, main), /a, b = ‹sum and difference›\(□, □\)/);
+});
+
+test("a relation written where it is used is the function of its declared direction, and runs as its use (L225e)", () => {
+  const k = new Lang();
+  const part = (t: Id, i: number) => k.call(tuplePart(2, i), t);
+  // Inside main: k = 2, and (s, d, a, b) with results a, b: s = a + b and
+  // d = a − b + k, called with 5 and 1 and passed on as a value.
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.let("k", k.lit(2), (c) => k.let("f", k.relation(["s", "d", "a", "b"], ["a", "b"], (s, d, a, b) => k.and(k.equal(s, k.call(B.add, a, b)), k.equal(d, k.call(B.add, k.call(B.sub, a, b), k.x(c))))), (f) =>
+    k.let("r", k.call(k.x(f), k.lit(5), k.lit(1)), (r) => k.text(k.call(SHOW_ANY, part(k.x(r), 0)), k.lit(" "), k.call(SHOW_ANY, part(k.x(r), 1))))))));
+  const plain = k.def("plain");
+  k.define(plain, k.thunk(() => k.call(SHOW_ANY, k.call(k.fn(["g"], (g) => k.call(g, k.lit(9), k.lit(1))), k.relation(["s", "d", "a", "b"], ["a", "b"], (s, d, a, b) => k.and(k.equal(s, k.call(B.add, a, b)), k.equal(d, k.call(B.sub, a, b))))))));
+  const code: Code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const lam = Object.values(code.nodes).find((n) => n.kind === "lambda" && n.results?.length && names[n.params[0]] === "s")!;
+  assert.equal(showType(info.typeOf.get(lam.id)!, names), "(Float64, Float64) -> (Float64, Float64)");
+  const pres: Presentation = { names, comments: {}, hints: {}, style: blocksStyle as unknown as Style };
+  assert.match(renderBlocks(code, pres, info, plain), /\(s, d\) → a, b = s = a \+ b and d = a − b/);
+  assert.equal(runMain(code, info, main, { print: () => {}, names }), "2 3");
+  assert.equal(runMain(code, info, plain, { print: () => {}, names }), "(5, 4)");
+});
+
+test("a relation written where it is used has a condition for its body", () => {
+  const k = new Lang();
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.call(k.relation(["s", "a"], ["a"], (s, a) => k.call(B.add, s, a)), k.lit(1))));
+  const code: Code = base(k.code), names = baseNames(k.names);
+  assert.match(infer(code, names).errors.map((e) => e.message).join("\n"), /a function whose results are among its inputs is a condition on its ports: expected Bool, got Float64/);
+});
+
+test("which inputs a relation written where it is used gives is part of its meaning (L225e)", () => {
+  const hashOf = (results: string[] | null) => {
+    const k = new Lang(), d = k.def("d");
+    const body = (s: Id, a: Id) => k.equal(s, k.call(B.add, a, k.lit(1)));
+    k.define(d, k.thunk(() => results ? k.relation(["s", "a"], results, body) : k.fn(["s", "a"], body)));
+    return hashDef(k.code, d);
+  };
+  assert.notEqual(hashOf(["a"]), hashOf(null));
+  assert.notEqual(hashOf(["a"]), hashOf(["s"]));
 });

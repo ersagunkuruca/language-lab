@@ -962,9 +962,15 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         // A definition with results (L128d2, PORTS §3): its body is a
         // condition on all its ports, and the definition is the function
         // of its declared direction, its inputs to its results.
-        const rs = resultsOf.get(id);
+        // A lambda inside a body whose results are among its inputs is a
+        // relation written where it is used (L225e): a condition on its
+        // ports, typed as the function of its declared direction, as a
+        // definition with results is.
+        const own = !resultsOf.has(id) && n.results?.length && n.results.every((r) => n.params.includes(r)) ? n.results : undefined;
+        if (own) unifyAt(n.body, bool, ret, "a function whose results are among its inputs is a condition on its ports");
+        const rs = resultsOf.get(id) ?? own;
         if (rs) {
-          predicates.set(id, t);
+          if (!own) predicates.set(id, t);
           const part = (p: Id) => params[n.params.indexOf(p)] ?? s.fresh();
           const outs = rs.map(part);
           if (outs.length > TUPLE_MAX) err(id, `a function gives at most ${TUPLE_MAX} results`);
