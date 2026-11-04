@@ -58,3 +58,12 @@ test("added days crosses a leap day, days between counts back, and date of refus
   const p = program((k) => k.call(lib("date of"), k.int(2026), k.int(2), k.int(30)));
   assert.throws(() => runMain(p.code, p.info, p.main, { print: () => {}, names: p.names }), /date of: a month from 1 to 12/);
 });
+
+test("date read reads what date text writes, and stops on anything else", async () => {
+  assert.equal(await both((k) => k.call(lib("date text"), k.call(lib("date read"), k.lit("2024-02-29")))), '"2024-02-29"');
+  assert.equal(await both((k) => k.call(lib("day number"), k.call(lib("date read"), k.lit("1970-01-01")))), "0");
+  for (const bad of ["2024-2-29", "2023-02-29", "2024/02/29", "20x4-01-01", "2024-01"]) {
+    const p = program((k) => k.call(lib("date read"), k.lit(bad)));
+    assert.throws(() => runMain(p.code, p.info, p.main, { print: () => {}, names: p.names }), /date (read|of):/, bad);
+  }
+});
