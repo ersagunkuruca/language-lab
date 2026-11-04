@@ -156,6 +156,10 @@ of text; they were these cells logging every finished row).
   its result at the daily triage, and a red nightly is a P0.
 - Merge when green; the editor rules (click through the live page, run every
   example's main both ways) still apply after editor merges.
+- Squash with the PR's own title and summary only: pass the merge a commit
+  title (the PR title and number) and a commit message (the PR's summary).
+  Left out, the squash carries every commit message of the lane's long-lived
+  branch since it last merged.
 - **Never end a turn waiting for a notice** (Ersagun, 2026-10-31: "threads
   keep waiting for stuff that never happens"). CI, review and merge notices
   often don't arrive. After pushing, check the PR yourself in the same
