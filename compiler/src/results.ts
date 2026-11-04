@@ -28,12 +28,54 @@ import { isUse, useTarget, isCall, type Call } from "../../ters/src/model.ts";
 import { freshId, mapIds, subtree } from "../../ters/src/model.ts";
 import { bindsOf, bodyOf } from "./uses.ts";
 import type { Names } from "../../ters/src/presentation.ts";
-import { PAIR_V, TRUE } from "../../ters/src/lang/std.ts";
+import { PAIR_V, TRUE, tuplePart, tupleVariant } from "../../ters/src/lang/std.ts";
 import { computedForward, givenBy } from "../../ters/src/lang/directions.ts";
 import { planSolve } from "../../ters/src/lang/solve.ts";
 import { COMMUTES } from "../../ters/src/lang/modules.ts";
 
+// A use gives every port it produces, as a tuple (L211), so `_, y =
+// polar(1, t)` is a let of that tuple whose x nobody reads. Where the
+// tuple's only reads are its parts, the use binds only the parts read and
+// its body is the let's: the solve below then calls only their functions.
+function partsRead(code: Code): Code {
+  const reads = new Map<Id, Id[]>(), parent = new Map<Id, Id>();
+  for (const n of Object.values(code.nodes)) {
+    if (n?.kind === "ref") reads.set(n.target, [...(reads.get(n.target) ?? []), n.id]);
+    if (isCall(n)) for (const a of n.args) parent.set(a, n.id);
+  }
+  let out: Code | null = null;
+  for (const c of Object.values(code.nodes)) {
+    if (!isCall(c) || c.args.length !== 1) continue;
+    const lam = code.nodes[c.fn], u = code.nodes[c.args[0]];
+    if (lam?.kind !== "lambda" || lam.params.length !== 1 || !isUse(u) || u.body === undefined || !u.binds) continue;
+    const tuple = code.nodes[u.body];
+    if (!isCall(tuple)) continue;
+    const order = tuple.args.map((a) => { const r = code.nodes[a]; return r?.kind === "ref" ? Object.keys(u.binds!).find((k) => u.binds![k] === r.target) : undefined; });
+    const k = order.length;
+    if (k < 2 || order.some((o) => o === undefined) || new Set(order).size !== k || Object.keys(u.binds).length !== k) continue;
+    const tf = code.nodes[tuple.fn];
+    if (tf?.kind !== "ref" || tf.target !== tupleVariant(k)) continue;
+    const parts = new Map<Id, number>();
+    const ok = (reads.get(lam.params[0]) ?? []).every((r) => {
+      const p = code.nodes[parent.get(r) ?? ""], f = p && isCall(p) ? code.nodes[p.fn] : undefined;
+      const i = f?.kind === "ref" && isCall(p!) && p.args.length === 1 ? order.findIndex((_, j) => f.target === tuplePart(k, j)) : -1;
+      if (i < 0) return false;
+      parts.set(p!.id, i);
+      return true;
+    });
+    const used = new Set(parts.values());
+    if (!ok || used.size === k) continue;
+    out ??= { nodes: { ...code.nodes }, defs: code.defs };
+    for (const [p, i] of parts) out.nodes[p] = { id: p, kind: "ref", target: u.binds[order[i]!] } as Node;
+    const binds = Object.fromEntries([...used].sort((a, b) => a - b).map((i) => [order[i]!, u.binds![order[i]!]]));
+    out.nodes[c.id] = { ...u, id: c.id, binds, body: lam.body } as Node;
+  }
+  return out ?? code;
+}
+
 export function solvesAsCalls(code: Code, names: Names): { code: Code; names: Names; expanded: Id[] } {
+  const was = code;
+  code = partsRead(code);
   const out: Code = { nodes: { ...code.nodes }, defs: [...code.defs] };
   const more: Names = {};
   const add = (n: Omit<Node, "id">) => { const id = freshId(); out.nodes[id] = { id, ...n } as Node; return id; };
@@ -281,5 +323,5 @@ export function solvesAsCalls(code: Code, names: Names): { code: Code; names: Na
     out.nodes[n.id] = { id: n.id, kind: "call", fn: outer, args: inputs.map((p) => n.given[p]) } as Node;
     expanded.push(n.id);
   }
-  return expanded.length ? { code: out, names: { ...names, ...more }, expanded } : { code, names, expanded };
+  return expanded.length ? { code: out, names: { ...names, ...more }, expanded } : { code: was, names, expanded };
 }
