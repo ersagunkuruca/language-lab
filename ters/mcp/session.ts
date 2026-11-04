@@ -25,7 +25,7 @@ import { showType } from "../src/lang/types.ts";
 import { fromFile, own, toFile, type ProgramFile } from "../src/files.ts";
 import { Cells } from "../src/lang/cells.ts";
 import { evaluatorCall, htmlText } from "../src/lang/html.ts";
-import { equal, mainProblem, pageProblem, runProgram, runMain, showValue, withSteps, OutOfSteps, type World } from "../src/lang/run.ts";
+import { equal, mainProblem, pageProblem, runProgram, runMain, showerFor, withSteps, OutOfSteps, type World } from "../src/lang/run.ts";
 import { nodeWorld } from "../src/lang/world.ts";
 import { runTests, savedFrom } from "../src/lang/tests.ts";
 import * as T from "../../editor/typed.ts";
@@ -415,7 +415,7 @@ export class Session {
     const rt = { print: (s: string) => out.push(s), names, world: this.world(out, "") };
     const t = info.typeOf.get(def);
     try {
-      const v = withSteps(STEPS, () => showValue(runMain(r.code, info, def, rt), r.code, names));
+      const v = withSteps(STEPS, () => showerFor(r.code, info, names)(runMain(r.code, info, def, rt)));
       return clip([...out, `= ${v} : ${t ? showType(info.subst.zonk(t), names) : "?"}`]).join("\n");
     } catch (x) {
       if (x instanceof OutOfSteps) return clip([...out, `stopped: still running after ${STEPS.toLocaleString("en")} steps`]).join("\n");
@@ -443,7 +443,7 @@ export class Session {
         // A page prints once, as static HTML (as lab run does).
         if (t?.t === "fn" && !pageProblem(this.info, def, this.allNames)) return `page, as text:\n${pageText(htmlText(runMain(this.code, this.info, def, { ...rt, cells: new Cells(equal) }), evaluatorCall))}`;
         if (!problem) return `exit ${runProgram(this.code, this.info, def, args, rt)}`;
-        return `= ${showValue(runMain(this.code, this.info, def, rt), this.code, this.allNames)}`;
+        return `= ${showerFor(this.code, this.info, this.allNames)(runMain(this.code, this.info, def, rt))}`;
       });
     } catch (e) {
       if (!(e instanceof OutOfSteps) && !out.length) throw e;
