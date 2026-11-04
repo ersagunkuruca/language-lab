@@ -25,7 +25,7 @@
 
 import type { Code, Id, Node, NodeOf } from "../../ters/src/model.ts";
 import { isUse, useTarget, isCall, type Call } from "../../ters/src/model.ts";
-import { freshId, mapIds, subtree } from "../../ters/src/model.ts";
+import { freshId, mapIds, portsOf, subtree } from "../../ters/src/model.ts";
 import { bindsOf, bodyOf } from "./uses.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { PAIR_V, TRUE, tuplePart, tupleVariant } from "../../ters/src/lang/std.ts";
@@ -85,10 +85,10 @@ export function solvesAsCalls(code: Code, names: Names): { code: Code; names: Na
   const shapes = new Map<Id, Map<Id, Id> | null>();
   const shapeOf = (d: Id): Map<Id, Id> | null => {
     if (shapes.has(d)) return shapes.get(d)!;
-    const def = code.nodes[d];
-    const lam = def?.kind === "def" && def.results?.length && def.body ? code.nodes[def.body] : null;
-    const es = lam?.kind === "lambda" && def?.kind === "def" ? givenBy(code, lam.body, def.results!) : null;
-    const got = es ? new Map(def!.kind === "def" ? def!.results!.map((r, i) => [r, es[i]] as const) : []) : null;
+    const def = code.nodes[d], ports = portsOf(code.nodes, d);
+    const lam = ports?.condition && def?.kind === "def" ? code.nodes[def.body!] : null;
+    const es = lam?.kind === "lambda" ? givenBy(code, lam.body, ports!.results) : null;
+    const got = es ? new Map(ports!.results.map((r, i) => [r, es[i]] as const)) : null;
     shapes.set(d, got);
     return got;
   };
@@ -98,8 +98,7 @@ export function solvesAsCalls(code: Code, names: Names): { code: Code; names: Na
   const resultFn = (d: Id, r: Id): Id => {
     const key = `${d} ${r}`;
     if (made.has(key)) return made.get(key)!;
-    const def = code.nodes[d] as NodeOf<"def">, lam = code.nodes[def.body!] as NodeOf<"lambda">;
-    const inputs = lam.params.filter((p) => !def.results!.includes(p));
+    const inputs = portsOf(code.nodes, d)!.inputs;
     const expr = shapeOf(d)!.get(r)!;
     const fresh = new Map<Id, Id>();
     const inside = new Set([...inputs, ...subtree(code, expr)]);
@@ -272,8 +271,7 @@ export function solvesAsCalls(code: Code, names: Names): { code: Code; names: Na
   const togetherFn = (d: Id, rs: Id[]): Id | null => {
     const key = `${d} ${rs.join(" ")}`;
     if (made.has(key)) return made.get(key)!;
-    const def = code.nodes[d] as NodeOf<"def">, lam = code.nodes[def.body!] as NodeOf<"lambda">;
-    const inputs = lam.params.filter((p) => !def.results!.includes(p));
+    const inputs = portsOf(code.nodes, d)!.inputs;
     const gs = inputs.map((p) => { const b = add({ kind: "binder" } as Omit<Node, "id">); if (names[p] !== undefined) more[b] = names[p]; return b; });
     const subs = rs.map(() => new Map(inputs.map((p, i) => [p, gs[i]] as const)));
     const shared = { n: 0 };
@@ -292,21 +290,20 @@ export function solvesAsCalls(code: Code, names: Names): { code: Code; names: Na
     // numeric solver plans is compiled from its plan already, rounded as the
     // evaluator's solver rounds it.
     if (!isUse(n) || !computedForward(code, n) || planSolve(code, n).mode !== "relational" || !shapeOf(useTarget(code.nodes, n))) continue;
-    const def = code.nodes[useTarget(code.nodes, n)] as NodeOf<"def">, lam = code.nodes[def.body!] as NodeOf<"lambda">;
-    const inputs = lam.params.filter((p) => !def.results!.includes(p));
+    const { inputs, results } = portsOf(code.nodes, useTarget(code.nodes, n))!;
     const given = Object.keys(n.given).filter((k) => k !== "out");
     const bound = Object.keys(bindsOf(n));
-    if (!isTrue(n.given.out) || given.length !== inputs.length || !inputs.every((p) => n.given[p] !== undefined) || !bound.length || !bound.every((p) => def.results!.includes(p))) continue;
+    if (!isTrue(n.given.out) || given.length !== inputs.length || !inputs.every((p) => n.given[p] !== undefined) || !bound.length || !bound.every((p) => results.includes(p))) continue;
     // let g… = given in let b… = (r's function)(g…) in body, so each given
     // is worked out once however many results are bound.
     const gs = inputs.map((p) => { const b = add({ kind: "binder" } as Omit<Node, "id">); more[b] = names[p] ?? "given"; return b; });
     const callR = (r: Id) => add({ kind: "call", fn: add({ kind: "ref", target: resultFn(useTarget(code.nodes, n), r) } as Omit<Node, "id">), args: gs.map((g) => add({ kind: "ref", target: g } as Omit<Node, "id">)) } as Omit<Node, "id">);
     // Two or more results that share work come from one function, as pairs
     // taken apart again (C55b).
-    const both = bound.length > 1 ? togetherFn(useTarget(code.nodes, n), def.results!.filter((r) => bound.includes(r))) : null;
+    const both = bound.length > 1 ? togetherFn(useTarget(code.nodes, n), results.filter((r) => bound.includes(r))) : null;
     let lets: Id;
     if (both) {
-      const rs = def.results!.filter((r) => bound.includes(r));
+      const rs = results.filter((r) => bound.includes(r));
       const apart = (v: Id, i: number): Id => {
         if (i === rs.length - 1) return add({ kind: "call", fn: add({ kind: "lambda", params: [bindsOf(n)[rs[i]]], body: bodyOf(n) } as Omit<Node, "id">), args: [v] } as Omit<Node, "id">);
         const rest = add({ kind: "binder" } as Omit<Node, "id">);
