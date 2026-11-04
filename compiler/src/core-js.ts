@@ -120,7 +120,14 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
     pre.push(`${d}const ${t} = ${rec};`);
     return `(${t}.f${i} ?? ${t}.fields[${i}])`;
   };
-  const constant = (e: SExpr): boolean => ["num", "int", "text", "bool"].includes(e.k) || ((e.k === "new" || (e.k === "make" && !e.t.mutable)) && e.args.every(constant));
+  const constant = (e: SExpr): boolean => ["num", "int", "text", "bool"].includes(e.k) || (((e.k === "new" && !stack(e.t)) || (e.k === "make" && !e.t.mutable)) && e.args.every(constant));
+  // A fold's stack (scalar.ts framesOf), which only its own loop down and
+  // loop up see and each uses once: a JavaScript array pushed on the way
+  // down and popped on the way up, not a frame object a value (C137d21).
+  const stack = (t: { inner?: boolean; key: string }) => !!t.inner && t.key.endsWith(".frames");
+  const named = (x: string, pre: string[], d: string) => { if (/^[\w$]+$/.test(x)) return x; const t = `r${reads++}`; pre.push(`${d}const ${t} = ${x};`); return t; };
+  const label = (t: { inner?: boolean; key: string; cases: { variant: string }[] }, c: number) => (stack(t) ? String(c) : JSON.stringify(t.cases[c].variant));
+  const scrutOf = (t: { inner?: boolean; key: string }, x: string) => (stack(t) ? `(${x}.length === 0 ? 0 : 1)` : `${x}.tag`);
   // Deep recursion on the heap (C137c18, compile.ts's C21): a function in
   // a cycle of calls that aren't all its own tail calls (`x + sum(rest)`)
   // takes a JavaScript frame per call, and the stack holds some thousands.
@@ -249,14 +256,25 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
         }
         case "make": { const v = made(e.t.variant, e.args.map((a) => ex(a, pre, d))); return constant(e) ? constName(v) : v; }
         case "get": return read(ex(e.rec, pre, d), e.i, pre, d);
-        case "new": { const v = made(e.t.cases[e.c].variant, e.args.map((a) => ex(a, pre, d))); return constant(e) ? constName(v) : v; }
+        case "new": {
+          if (stack(e.t)) {
+            if (e.c === 0) return "[]";
+            const x = named(ex(e.args[0], pre, d), pre, d), a = named(ex(e.args[1], pre, d), pre, d);
+            return `(${a}.push(${x}), ${a})`;
+          }
+          const v = made(e.t.cases[e.c].variant, e.args.map((a) => ex(a, pre, d)));
+          return constant(e) ? constName(v) : v;
+        }
         // A written list (L181b): its items in order, made into conses from the last.
         case "list": {
           const [nil, cons] = listSteps(e), xs = e.items.map((a) => ex(a, pre, d));
           const fields = (cons as Extract<SExpr, { k: "new" }>).args.map((a) => ((a as { i: number }).i === e.acc ? "t" : "x")).join(", ");
           return `[${xs.join(", ")}].reduceRight((t, x) => ${made(e.t.cases[e.c].variant, fields.split(", "))}, ${ex(nil, pre, d)})`;
         }
-        case "field": return read(ex(e.rec, pre, d), e.i, pre, d);
+        case "field": {
+          if (stack(e.t)) { const a = named(ex(e.rec, pre, d), pre, d); return e.i === 0 ? `${a}[${a}.length - 1]` : `(${a}.pop(), ${a})`; }
+          return read(ex(e.rec, pre, d), e.i, pre, d);
+        }
         case "tag": return `R.caseOf(${ex(e.rec, pre, d)}, ${JSON.stringify(e.t.cases.map((c) => c.variant))})`;
         // One of a type that waits takes the rest last (C40 step 4): called
         // from outside, it's given a rest that keeps the answer.
@@ -279,8 +297,8 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
         case "case": {
           pre.push(`${d}${local(e.s)} = ${ex(e.scrut, pre, d)};`);
           const t = temp();
-          pre.push(`${d}let ${t};`, `${d}switch (${local(e.s)}.tag) {`);
-          e.arms.forEach((a, c) => { if (a) pre.push(`${d}  case ${JSON.stringify(e.t.cases[c].variant)}: {`, ...block(a, { set: t }, d + "    "), `${d}    break;`, `${d}  }`); });
+          pre.push(`${d}let ${t};`, `${d}switch (${scrutOf(e.t, local(e.s))}) {`);
+          e.arms.forEach((a, c) => { if (a) pre.push(`${d}  case ${label(e.t, c)}: {`, ...block(a, { set: t }, d + "    "), `${d}    break;`, `${d}  }`); });
           pre.push(`${d}}`);
           return t;
         }
@@ -339,8 +357,8 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
       // A match hands `to` to its arms, so a self call in one is the
       // loop's next round, not a call as deep as the data (L181b).
       if (e.k === "case") {
-        out.push(`${d}${local(e.s)} = ${slot(e.scrut, out, d)};`, `${d}switch (${local(e.s)}.tag) {`);
-        e.arms.forEach((a, c) => { if (a) out.push(`${d}  case ${JSON.stringify(e.t.cases[c].variant)}: {`, ...block(a, to, d + "    "), ...(to === "return" ? [] : [`${d}    break;`]), `${d}  }`); });
+        out.push(`${d}${local(e.s)} = ${slot(e.scrut, out, d)};`, `${d}switch (${scrutOf(e.t, local(e.s))}) {`);
+        e.arms.forEach((a, c) => { if (a) out.push(`${d}  case ${label(e.t, c)}: {`, ...block(a, to, d + "    "), ...(to === "return" ? [] : [`${d}    break;`]), `${d}  }`); });
         out.push(`${d}}`);
         return out;
       }
