@@ -273,6 +273,16 @@ export function structure(host: StructureHost) {
           h("p", { class: "hint" }, `What it costs besides what it uses (the usual is 1): the compiler takes the cheapest way that ends in what an implementation gives.`),
           h("div", { class: "acts" }, edit("Make it ordinary", `No longer a way of ${names[way] ?? "the operation"}: a definition like any other`, { ok: true }, () => runTop(info, Top.setWay(code, sh, ui.def, null)))));
       }
+      // An implementation: how each operation is worked out, the
+      // compiler's pick, shown and never asked for (WAYS.md step 5, L96;
+      // Ersagun 2026-10-30: "I want the compiler to choose").
+      const picks = T.waysOfImplementation(code, ui.def);
+      if (picks?.some((p) => !p.given || p.way)) {
+        out.append(h("div", { class: "sub-head" }, "How each operation is worked out · the compiler's pick"));
+        for (const p of picks) out.append(row(pick(p.field, names[p.field] ?? "operation",
+          p.missing ? "left to its ways, and none ends in what it gives" : p.way ? `by ${names[p.way] ?? "a way"}${p.given ? ", cheaper than as written" : ""}` : "as written")));
+        out.append(h("p", { class: "hint" }, "The cheapest way that ends in what this implementation gives: an operation left to its ways is worked out from the others, and a way can beat one written here when it costs less."));
+      }
       const params = body?.kind === "lambda" ? body.params : [];
       out.append(h("div", { class: "sub-head" }, `Inputs of ${dname} · code.json`));
       if (!params.length) {
