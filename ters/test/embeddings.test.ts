@@ -17,17 +17,20 @@ import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import type { Id } from "../src/model.ts";
 import { ARITH, COMPLEX_V, EMBEDDING_V, INT_OPS, S, SHOW_ANY, TEXT_OPS } from "../src/lang/std.ts";
 import { runMain } from "../src/lang/run.ts";
+import type { Pins } from "../src/lang/signatures.ts";
+import { INT, NUMBER, type Type } from "../src/lang/types.ts";
 import { B } from "../src/prelude.ts";
 
 const lib = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
 const near = lib("near");
 const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 
-function program(build: (k: Lang) => void) {
+// build may give pins (signatures.ts) for its definitions.
+function program(build: (k: Lang) => void | Pins) {
   const k = new Lang(LIBRARY.code);
-  build(k);
+  const pins = build(k);
   const code = base(k.code), names = baseNames(k.names);
-  const info = infer(code, names, undefined, checkOptions);
+  const info = infer(code, names, undefined, pins ? { ...checkOptions, pins } : checkOptions);
   return { code, names, info, own: new Set(Object.keys(k.code.nodes)) };
 }
 
@@ -160,6 +163,39 @@ test("an Int given where an earlier input says a Float64 goes is lifted: inverse
     k.define(main, k.thunk(() => k.call(SHOW_ANY, k.call(S.first, k.thunk(() => k.call(lib("inverse"), k.x(half), k.lit("3"))), k.thunk(() => k.lit(-1))))));
   });
   assert.match(q.info.errors.map((e) => e.message).join("\n"), /needs Float64 here, got Text/);
+});
+
+// A pinned definition's own result (L208c4): a Float64 pinned, the body an
+// Int, and a function pinned to give a Float64 whose body gives an Int.
+test("a definition pinned to a Float64 whose body gives an Int is lifted: 3 and 4", async () => {
+  const float: Type = { t: "con", id: NUMBER, args: [] }, int: Type = { t: "con", id: INT, args: [] };
+  const pin = (type: Type) => ({ vars: [], rows: [], type, plain: [] });
+  const p = program((k) => {
+    const count = k.def("count");
+    k.define(count, k.int(3));
+    const ratio = k.def("ratio");
+    k.define(ratio, k.x(count));
+    const next = k.def("next");
+    k.define(next, k.fn(["n"], (n) => k.call(INT_OPS.add, n, k.int(1))));
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.call(SHOW_ANY, k.listOf(k.call(ARITH.mul, k.x(ratio), k.lit(1)), k.call(ARITH.mul, k.call(next, k.x(count)), k.lit(1))))));
+    return { [ratio]: pin(float), [next]: pin({ t: "fn", params: [int], ret: float, eff: { effs: [], tail: null } }) };
+  });
+  assert.deepEqual(p.info.errors.map((e) => e.message), []);
+  assert.equal(p.info.embedded?.size, 2);
+  const main = p.code.defs.find((d) => p.names[d] === "main")!;
+  assert.equal(runMain(p.code, p.info, main, { print: () => {}, names: p.names }), "[3, 4]");
+  const path = join(mkdtempSync(join(tmpdir(), "embed-")), "main.mjs");
+  writeFileSync(path, compile(p.code, p.info, p.names, { runtime, exports: ["main"] }));
+  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, () => unknown>;
+  assert.equal(typeof defs.main === "function" ? defs.main() : defs.main, "[3, 4]");
+  // A Text body has no embedding into Float64: the pin is still broken.
+  const q = program((k) => {
+    const ratio = k.def("ratio");
+    k.define(ratio, k.lit("3"));
+    return { [ratio]: pin(float) };
+  });
+  assert.match(q.info.errors.map((e) => e.message).join("\n"), /ratio is pinned to Float64, and this makes it Text/);
 });
 
 // The diamond rule (L208d, diamonds.ts): two paths between the same types

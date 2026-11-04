@@ -696,7 +696,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       const pin = opts.pins?.[d];
       if (pin && code.nodes[d]) {
         const p = fresh(pin, s);
-        if (!fitsPin(sc, p)) err(d, `${nm(d)} is pinned to ${showT(p.type, names, schemeArith(p), [], schemeNeeds(p))}, and this makes it ${showT(t, names, schemeArith(sc), [], schemeNeeds(sc))}`);
+        if (!fitsPin(sc, p) && !liftPinned((code.nodes[d] as NodeOf<"def">).body!, sc, p)) err(d, `${nm(d)} is pinned to ${showT(p.type, names, schemeArith(p), [], schemeNeeds(p))}, and this makes it ${showT(t, names, schemeArith(sc), [], schemeNeeds(sc))}`);
         // Inside, the body's types are the pin's too: an input whose only
         // use was cleared is still the Float64 the pin says, and a hole
         // there expects what the pin does.
@@ -707,6 +707,27 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       mono.delete(d);
       info.typeOf.set(d, sc.type);
     }
+  }
+
+  // A pinned definition whose body gives a smaller type than its pin says
+  // (a Float64 pinned, the body now an Int, or a function's result so):
+  // the body is lifted through the canonical embedding (L208c4), as an
+  // argument would be, when it then keeps the pin.
+  function liftPinned(body: Id, sc: Scheme, p: Scheme): boolean {
+    const got = s.zonk(sc.type), want = s.zonk(p.type);
+    let e: Id | undefined, from: Type | null, to: Type | null, of: (Type & { t: "fn" }) | undefined, lifted: Type;
+    if (got.t === "fn" && want.t === "fn") {
+      from = closedType(got.ret); to = closedType(want.ret);
+      if (!from || !to || sameType(from, to) || got.params.length !== want.params.length) return false;
+      of = got; lifted = { ...got, ret: to };
+    } else {
+      from = closedType(got); to = closedType(want);
+      if (!from || !to || sameType(from, to)) return false;
+      lifted = to;
+    }
+    if (!(e = embeddingOf(from, to)) || !fitsPin({ ...sc, type: lifted }, p)) return false;
+    mark(body, e, from, to, of);
+    return true;
   }
 
   // Does a body of type `sc` keep the pin `p`? Its type, instantiated,

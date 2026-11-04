@@ -25,6 +25,7 @@ import { infer, setDisplayNames, setProgramPins } from "./typed.ts";
 import { searchBackwards, type BackAsk, type Found } from "./backSearch.ts";
 import { stuckReading, type Reading } from "../ters/src/lang/relate.ts";
 import { compile } from "../compiler/src/compile.ts";
+import { lowerScalar } from "../compiler/src/scalar.ts";
 import * as runtime from "../compiler/src/runtime.js";
 import { $Aborted } from "../compiler/src/runtime.js";
 
@@ -41,6 +42,11 @@ export type CompileAsk = { compilePage: true; code: Code; names: Names; pins: Pi
 // `core`: printed from the core IR (core-js.ts corePageScript), the
 // script calling $core.startCorePage; else compile.ts's (E244).
 export type CompileSays = { program: string; core?: true } | { error: string };
+// Where the program's own definitions can run (whereRuns.ts, L22a): the
+// ones a shader can't hold, and the ones WebAssembly and C can't, each
+// with the compiler's reason.
+export type WhereAsk = { whereRuns: true; code: Code; names: Names; pins: Pins };
+export type WhereSays = { gpu: [Id, string][]; native: [Id, string][] } | { error: string };
 // Where the last read of a text run backwards stopped, when one found no
 // answer (L70c): the text, the place, what was looked for there, and how
 // many reads stopped.
@@ -56,7 +62,7 @@ export type RunSays = { lines: string[] } | { done: true; shown: string; files: 
 // The run's log of the world's answers (worldlog.ts), sent with its end.
 let answers: LogEntry[] | null = null, paused = false;
 // The whole log, writes and bytes too, so Run again can answer from it.
-const post = (m: RunSays | Found | CompileSays) => (self as unknown as Worker).postMessage(answers && ("done" in m || ("error" in m && "files" in m)) ? { ...m, answers, ...(paused ? { paused: true } : {}) } : m);
+const post = (m: RunSays | Found | CompileSays | WhereSays) => (self as unknown as Worker).postMessage(answers && ("done" in m || ("error" in m && "files" in m)) ? { ...m, answers, ...(paused ? { paused: true } : {}) } : m);
 
 // Standard input typed into Run's box (I168), read as `lab run` reads a
 // pipe (world.ts): read input takes the rest, read line a line at a time
@@ -77,8 +83,21 @@ function withInput(world: World, stdin: string | undefined): World {
   };
 }
 
-self.onmessage = (e: MessageEvent<RunAsk | BackAsk | CompileAsk>) => {
+self.onmessage = (e: MessageEvent<RunAsk | BackAsk | CompileAsk | WhereAsk>) => {
   answers = null; paused = false;
+  if ("whereRuns" in e.data) {
+    const { code, names, pins } = e.data;
+    try {
+      setDisplayNames(names);
+      setProgramPins(pins);
+      const info = infer(code, names);
+      const own = code.defs.filter((d) => !LIBRARY.code.nodes[d]);
+      const refused = (o: object) => { try { return [...lowerScalar(code, info, names, own, o).refused]; } catch (err) { return own.map((d): [Id, string] => [d, (err as Error).message]); } };
+      return post({ gpu: refused({ records: true, shader: true }), native: refused({ data: true }) });
+    } catch (err) {
+      return post({ error: (err as Error).message });
+    }
+  }
   if ("compilePage" in e.data) {
     const { code, names, pins, main, core } = e.data;
     try {

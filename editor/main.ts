@@ -47,6 +47,7 @@ import { filesPanels, fnv, userCode } from "./filesPanel.ts";
 import { graphMenu as graphMenuOf } from "./graphMenu.ts";
 import { shower } from "./shown.ts";
 import { pagePanels } from "./pagePanel.ts";
+import { whereRuns } from "./whereRuns.ts";
 import { answersView, lawPanel, profileView, stuckView, valueView } from "./runViews.ts";
 import type { LogEntry } from "../ters/src/lang/worldlog.ts";
 import { fromFile, toFile } from "../ters/src/files.ts";
@@ -935,9 +936,11 @@ function kindLabel(id: Id): string {
   return ({ lit: "Literal", ref: "Reference", lambda: "Function", hole: "Hole", builtin: "Builtin", match: "Match", fold: "Fold", arm: "Arm", variant: "Case", field: "Field", solve: "Solve" } as Record<string, string>)[n.kind] ?? n.kind;
 }
 
+const whereRunsOf = whereRuns({ code: () => doc.code, names: () => pres().names, pins: () => heldPins?.all ?? doc.signatures ?? NO_PINS, render: () => render() });
 const { implementButton, makeNamed, newDefinitionForm, pick, row, runTop, structurePanel, words } = structure({
   doc: () => doc, ui, applyT: (e, then, place, pins) => applyT(e, then, place, pins), render: () => render(), topT: (i, r) => topT(i, r), defBody: (d) => defBody(d), defNamed: (n) => defNamed(n),
   ownDefs: () => ownDefs(), typeText: (t, n) => typeText(t, n), pinRow, textField, seg,
+  whereRuns: (d) => whereRunsOf(d),
 });
 const { fillPalette } = palette({
   doc: () => doc, ui, applyT: (e) => applyT(e), render: () => render(), held: () => held, heldReason, loosenButton, makeNamed, implementButton,

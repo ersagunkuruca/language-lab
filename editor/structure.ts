@@ -16,6 +16,7 @@ import * as T from "./typed.ts";
 import { edit, h, type Kid } from "./dom.ts";
 import { typeName } from "./palette.ts";
 import type { Doc, UI } from "./main.ts";
+import type { Where } from "./whereRuns.ts";
 
 export interface StructureHost {
   doc(): Doc;
@@ -31,10 +32,12 @@ export interface StructureHost {
   pinRow(info: T.Info, dname: string): HTMLElement;
   textField(id: string, label: string, placeholder: string, value?: string): { el: HTMLElement; input: HTMLInputElement };
   seg(name: string, value: string, options: [string, string][]): HTMLElement;
+  // Where it can run (whereRuns.ts): undefined while that's worked out.
+  whereRuns(def: Id): Where | "failed" | undefined;
 }
 
 export function structure(host: StructureHost) {
-  const { doc, ui, applyT, render, topT, defBody, defNamed, ownDefs, typeText, pinRow, textField, seg } = host;
+  const { doc, ui, applyT, render, topT, defBody, defNamed, ownDefs, typeText, pinRow, textField, seg, whereRuns } = host;
   const node = (id: Id) => doc().code.nodes[id];
   // A type, picked the way it's written: what it starts with (Float64, Int, a
   // data type, one of the type's own parameters) and, for one that takes
@@ -282,6 +285,18 @@ export function structure(host: StructureHost) {
         for (const p of picks) out.append(row(pick(p.field, names[p.field] ?? "operation",
           p.missing ? "left to its ways, and none ends in what it gives" : p.way ? `by ${names[p.way] ?? "a way"}${p.given ? ", cheaper than as written" : ""}` : "as written")));
         out.append(h("p", { class: "hint" }, "The cheapest way that ends in what this implementation gives: an operation left to its ways is worked out from the others, and a way can beat one written here when it costs less."));
+      }
+      // Where it can run, the compiler's answer (L22a, REVIEW-2026-10-22b
+      // §5): a profile is told, never asked for, as an effect is.
+      const where = whereRuns(ui.def);
+      out.append(h("div", { class: "sub-head" }, "Where it runs · the compiler's answer"));
+      if (where === undefined) out.append(h("p", { class: "hint" }, "Finding out where it can run…"));
+      else if (where === "failed") out.append(h("p", { class: "hint" }, "The compiler couldn't say where it runs."));
+      else {
+        const said = (why: string | null) => (why === null ? "yes" : `no: ${dname} ${why}`);
+        out.append(row(h("span", {}, "A shader, on the GPU"), h("span", { class: "opt-d" }, ` ${said(where.gpu)}`)),
+          row(h("span", {}, "WebAssembly and C"), h("span", { class: "opt-d" }, ` ${said(where.native)}`)),
+          h("p", { class: "hint" }, "The evaluator and compiled JavaScript run everything. A shader holds numbers, Bools and records of them, and nothing that may not finish; WebAssembly and C hold data on a heap too."));
       }
       const params = body?.kind === "lambda" ? body.params : [];
       out.append(h("div", { class: "sub-head" }, `Inputs of ${dname} · code.json`));
