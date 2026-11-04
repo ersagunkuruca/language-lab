@@ -14,7 +14,7 @@ import { infer } from "../src/lang/infer.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { runMain } from "../src/lang/run.ts";
-import { SHOW_ANY } from "../src/lang/std.ts";
+import { ARITH, SHOW_ANY } from "../src/lang/std.ts";
 
 const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 const lib = (name: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === name)!;
@@ -79,4 +79,27 @@ test("times of day: seconds from midnight both ways, text, and reading it back (
     const p = program((k) => k.call(lib("time read"), k.lit(bad)));
     assert.throws(() => runMain(p.code, p.info, p.main, { print: () => {}, names: p.names }), /time (read|of):/, bad);
   }
+});
+
+test("instants: ISO 8601 text both ways against JavaScript's Date, durations in seconds, date and time at (L188b)", async () => {
+  const at = [-1e10, -1, 0, 1, 86399.5, 951782400, 1762248600, 4102444800];
+  const text = (k: Lang) => k.listOf(...at.map((s) => k.call(lib("instant text"), k.call(lib("instant of"), k.lit(s)))));
+  assert.equal(await both(text), JSON.stringify(at.map((s) => new Date(Math.floor(s) * 1000).toISOString().replace(".000", ""))).replaceAll(",", ", "));
+  assert.equal(await both((k) => k.call(lib("seconds since 1970"), k.call(lib("instant read"), k.lit("2025-11-04T09:30:00Z")))), String(Date.UTC(2025, 10, 4, 9, 30) / 1000));
+  assert.equal(await both((k) => k.call(lib("instant text"), k.call(lib("later by"), k.call(lib("instant read"), k.lit("2024-02-28T23:00:00Z")), k.call(lib("hours"), k.lit(2))))), '"2024-02-29T01:00:00Z"');
+  assert.equal(await both((k) => k.call(lib("duration between"), k.call(lib("instant of"), k.lit(10)), k.call(lib("instant of"), k.lit(4)))), "-6");
+  assert.equal(await both((k) => k.call(lib("date text"), k.call(lib("date at"), k.call(lib("instant of"), k.lit(-1))))), '"1969-12-31"');
+  for (const bad of ["2025-11-04 09:30:00Z", "2025-11-04T09:30:00", "2025-11-04T9:30:00Z"]) {
+    const p = program((k) => k.call(lib("instant read"), k.lit(bad)));
+    assert.throws(() => runMain(p.code, p.info, p.main, { print: () => {}, names: p.names }), /(instant|time) read:/, bad);
+  }
+});
+
+test("a duration is in seconds, so adding one to a length is a unit error (L188b)", () => {
+  const k = new Lang(LIBRARY.code);
+  const main = k.def("main");
+  const metre = k.lit(3); (k.code.nodes[metre] as { unit?: object }).unit = { m: 1 };
+  k.define(main, k.thunk(() => k.call(ARITH.add, k.call(lib("minutes"), k.lit(1)), metre)));
+  const info = infer(base(k.code), baseNames(k.names), undefined, checkOptions);
+  assert.ok(info.errors.some((e) => /unit|m\b|s\b/.test(e.message)), JSON.stringify(info.errors.map((e) => e.message)));
 });
