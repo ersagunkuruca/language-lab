@@ -458,7 +458,9 @@ const sameNode = (a: Node, b: Node) => JSON.stringify(a) === JSON.stringify(b);
 // A program made from another by changing a few nodes (the palette's
 // filled programs, BACKLOG E133b), and those nodes: what is found by
 // scanning every node can start from the other program's.
-export const derived = new WeakMap<Code, { base: Code; changed: Set<Id> }>();
+// `stable`: a node not changed is the base's own object, and so is every
+// node it reaches, so what was picked of it stands (a program on its layer).
+export const derived = new WeakMap<Code, { base: Code; changed: Set<Id>; stable?: boolean }>();
 export function derivedFrom(code: Code, base: Code, changed: Iterable<Id>) { derived.set(code, { base, changed: new Set(changed) }); }
 const picked = new WeakMap<Code, Map<string, Id[]>>();
 const picksOf = (code: Code, kind: string, keep: (n: Node) => boolean): Id[] => {
@@ -478,14 +480,37 @@ const picksOf = (code: Code, kind: string, keep: (n: Node) => boolean): Id[] => 
 // which on the layer are the layer's.
 const layers = new WeakMap<Code, Code>();
 export function onLayer(code: Code, layer: Code): Code { layers.set(code, layer); return code; }
+export const layerOf = (code: Code): Code | undefined => layers.get(code);
+// The nodes of a program on its layer that aren't the layer's, while
+// `scanningOnLayer` reads it so.
+export const offLayer = (code: Code): Set<Id> | undefined => { const d = derived.get(code); return d?.stable ? d.changed : undefined; };
 export function scanningOnLayer<T>(code: Code, step: () => T): T {
   const layer = layers.get(code);
   if (!layer || derived.has(code)) return step();
   const under = layer.nodes, changed = new Set<Id>();
   for (const id in code.nodes) if (code.nodes[id] !== under[id]) changed.add(id);
   for (const id in under) if (!(id in code.nodes)) changed.add(id);
-  derived.set(code, { base: layer, changed });
+  derived.set(code, { base: layer, changed, stable: true });
   try { return step(); } finally { derived.delete(code); }
+}
+
+// Each node's parent, as a lookup. For a derived program, its base's
+// parents, found once, beside those of the nodes changed.
+const parentsKept = new WeakMap<Code, Map<Id, Id>>();
+const parentsIn = (code: Code): Map<Id, Id> => {
+  const m = new Map<Id, Id>();
+  for (const n of Object.values(code.nodes)) for (const c of children(n)) m.set(c, n.id);
+  return m;
+};
+export function parentLookup(code: Code): (id: Id) => Id | undefined {
+  const from = derived.get(code);
+  if (!from) { const m = parentsIn(code); return (id) => m.get(id); }
+  let under = parentsKept.get(from.base);
+  if (!under) parentsKept.set(from.base, (under = parentsIn(from.base)));
+  const mine = new Map<Id, Id>();
+  for (const id of from.changed) { const n = code.nodes[id]; if (n) for (const c of children(n)) mine.set(c, id); }
+  const below = under;
+  return (id) => { if (mine.has(id)) return mine.get(id); const p = below.get(id); return p !== undefined && !from.changed.has(p) ? p : undefined; };
 }
 // The ids of the nodes `keep` picks, `kind` naming the pick. For a derived
 // program: its base's (scanned once), those still there and still picked,
@@ -495,7 +520,7 @@ export function nodesWhere(code: Code, kind: string, keep: (n: Node) => boolean)
   const from = derived.get(code);
   if (!from) return Object.values(code.nodes).filter(keep).map((n) => n.id);
   const base = picksOf(from.base, kind, keep);
-  const out = base.filter((id) => !from.changed.has(id) && code.nodes[id] && keep(code.nodes[id]));
+  const out = from.stable ? base.filter((id) => !from.changed.has(id)) : base.filter((id) => !from.changed.has(id) && code.nodes[id] && keep(code.nodes[id]));
   for (const id of from.changed) if (code.nodes[id] && keep(code.nodes[id])) out.push(id);
   return out;
 }

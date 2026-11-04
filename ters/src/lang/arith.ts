@@ -25,13 +25,13 @@
 import type { Code, Id, Node, NodeData, NodeOf, Use } from "../model.ts";
 import { isUse, useTarget, isCall, fieldPorts, type Call, bindsOf, useKids } from "../model.ts";
 import { resultsAsFunctions, usesResultsAsFunction } from "./results-fn.ts";
-import { freshId, nodesWhere, scanningOnLayer } from "../model.ts";
+import { freshId, layerOf, nodesWhere, offLayer, scanningOnLayer } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { B } from "../prelude.ts";
 import { implementationOf, type Info } from "./infer.ts";
 import { interfaceOps, leftToWays, NEUTRAL, pickWays, waysIn, type BuiltinCost } from "./ways.ts";
 import { ALGEBRAIC_OPS, ARITH, ARITH_FIELD, EMBEDDING, EMBEDDING_MAP, COMPLEX_V, DUAL_V, FIXED_V, INT_OPS, RATIO, S } from "./std.ts";
-import { ALGEBRAIC_TYPE, COMPLEX_TYPE, DUAL_TYPE, FIXED_TYPE, MATRIX_SIZE, INT, NUMBER, RATIONAL_TYPE, type Row, type Scheme, type Type } from "./types.ts";
+import { ALGEBRAIC_TYPE, COMPLEX_TYPE, DUAL_TYPE, FIXED_TYPE, MATRIX_SIZE, INT, NUMBER, RATIONAL_TYPE, OverMap, type Row, type Scheme, type Type } from "./types.ts";
 import { PRELUDE } from "./library.ts";
 import { ratioParts } from "./int.ts";
 import { recordVariant } from "./derive.ts";
@@ -106,9 +106,44 @@ function decimal(x: number): string {
 // can change which way gives a field (WAYS.md "Costs"); target-neutral
 // when not given.
 export function resolveArithmetic(code: Code, info: Info, names: Names = {}, costOf: BuiltinCost = NEUTRAL): { code: Code; info: Info; names: Names } {
-  return scanningOnLayer(code, () => resolving(code, info, names, costOf));
+  const r = scanningOnLayer(code, () => resolving(code, info, names, costOf, seedFor(code, info, names, costOf)));
+  return r as { code: Code; info: Info; names: Names };
 }
-function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost): { code: Code; info: Info; names: Names } {
+
+// The library's own resolving (L217b): its definitions at their own types,
+// and the copies they ask for, made once per check of the library and
+// target, and each program's resolving goes on from it with its own
+// definitions. Only for a program on the library (load.ts base) checked on
+// the library's kept check (infer.ts L216), when the steps before leave
+// both as they are and its own implementations are of its own types (an
+// implementation for Int could change which type a library number is).
+type Seed = {
+  layer: Code; nodes: Record<Id, Node>; defs: Id[]; typeOf: Map<Id, Type>; schemes: Map<Id, Scheme>; divergent: Set<Id>; names: Names;
+  copies: Map<string, Id>; opAt: Map<Id, Type>; copyOf: Map<Id, Id>; lifted: Map<string, Id>; chosen: Map<Id, Map<Id, Id | null>>;
+};
+const seeds = new WeakMap<Info, Map<BuiltinCost, Seed | null>>();
+function seedFor(code: Code, info: Info, names: Names, costOf: BuiltinCost): Seed | null {
+  const lib = layerOf(code), under = info.layer;
+  if (!lib || !under || !(info.typeOf instanceof OverMap)) return null;
+  for (const k of info.implementations?.keys() ?? []) {
+    if (under.implementations?.has(k)) continue;
+    const rest = k.slice(k.indexOf("|") + 1), con = rest.startsWith("@") ? rest.slice(1) : null;
+    if (!con || con in lib.nodes || con.startsWith("builtin.")) return null;
+  }
+  // A program's check sets the library's definitions' types again; they
+  // must be the library's.
+  for (const [id, t] of info.typeOf.own()) if (id in lib.nodes) { const u = under.typeOf.get(id); if (t !== u && JSON.stringify(t) !== JSON.stringify(u)) return null; }
+  let byCost = seeds.get(under);
+  if (!byCost) seeds.set(under, (byCost = new Map()));
+  if (!byCost.has(costOf)) {
+    const r = scanningOnLayer(lib, () => resolving(lib, under, names, costOf, null, true));
+    byCost.set(costOf, "layer" in r ? { ...r, layer: lib } : null);
+  }
+  return byCost.get(costOf) ?? null;
+}
+type Snapshot = Omit<Seed, "layer">;
+function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, seed: Seed | null, snapshot = false): { code: Code; info: Info; names: Names } | (Snapshot & { layer: true }) {
+  const given = { code, info };
   // A relation's own directions first (directions.ts), so the evaluator and
   // the compiler run a solve the way the checker typed it.
   code = useDirections(code);
@@ -121,14 +156,24 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost): {
   ({ code, info, names } = setThrough(code, info, names));
   ({ code, info, names } = setSeveral(code, info, names));
   ({ code, info, names } = sharedFields(code, info, names));
-  if (!usesGenericArithmetic(code) && !someLiteralNotFloat64(code, info)) return { code, info, names };
+  if (!snapshot && !usesGenericArithmetic(code) && !someLiteralNotFloat64(code, info)) return { code, info, names };
+  // The library's resolving goes on here only when the steps above left the
+  // program and its check as they were, and every library node is there.
+  const changed = seed && code === given.code && info === given.info ? offLayer(code) : undefined;
+  if (seed && (!changed || [...changed].some((id) => id in seed!.layer.nodes))) seed = null;
+  if (snapshot && (code !== given.code || info !== given.info)) return { code, info, names };
   const s = info.subst;
-  const nodes: Record<Id, Node> = { ...code.nodes };
-  const defs = [...code.defs];
-  const typeOf = new Map(info.typeOf);
+  const own = seed ? [...changed!] : [];
+  const nodes: Record<Id, Node> = seed ? { ...seed.nodes } : { ...code.nodes };
+  for (const id of own) nodes[id] = code.nodes[id];
+  const defs = seed ? [...seed.defs, ...code.defs.filter((d) => !(d in seed!.layer.nodes))] : [...code.defs];
+  const typeOf = seed ? new Map(seed.typeOf) : new Map(info.typeOf);
+  if (seed) for (const [id, t] of (info.typeOf as OverMap<Id, Type>).own()) if (!(id in seed.layer.nodes)) typeOf.set(id, t);
   const schemes = new Map(info.schemes);
+  if (seed) for (const [id, sc] of seed.schemes) if (!(id in code.nodes)) schemes.set(id, sc);
   const divergent = new Set(info.divergent);
-  const outNames: Names = { ...names };
+  if (seed) for (const id of seed.divergent) divergent.add(id);
+  const outNames: Names = { ...names, ...(seed?.names ?? {}) };
 
   type Env = Map<number, Type>;
   // What a number type left open is: Int when a whole literal gave it
@@ -180,7 +225,7 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost): {
     return out;
   };
   // The copy of `def` for these types of its number-type variables.
-  const copies = new Map<string, Id>();
+  const copies = new Map<string, Id>(seed?.copies ?? []);
   const todo: { root: Id; env: Env }[] = [];
   const instance = (def: Id, env: Env, sc: Scheme): Id => {
     const vars = constrained(sc);
@@ -266,13 +311,14 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost): {
   // implementation's own: a ref to what the implementation gives for it,
   // or, when that is more than a ref, to a definition made of it.
   const ops = interfaceOps(code);
-  const opAt = new Map(info.opAt ?? []);
-  const copyOf = new Map(info.copyOf ?? []);
-  const lifted = new Map<string, Id>();
+  const opAt = new Map(seed?.opAt ?? info.opAt ?? []);
+  if (seed && info.opAt instanceof OverMap) for (const [id, t] of info.opAt.own()) opAt.set(id, t);
+  const copyOf = new Map(seed?.copyOf ?? info.copyOf ?? []);
+  const lifted = new Map<string, Id>(seed?.lifted ?? []);
   // Ways (WAYS.md, BACKLOG L96, ways.ts): each implementation's pick,
   // made once.
   const ways = waysIn(code, ops);
-  const chosen = new Map<Id, Map<Id, Id | null>>();
+  const chosen = new Map<Id, Map<Id, Id | null>>(seed?.chosen ?? []);
   const choose = (impl: Id, variant: NodeOf<"variant">, args: Id[]) => {
     let pick = chosen.get(impl);
     if (!pick) chosen.set(impl, (pick = pickWays(code, ways, variant, args, costOf)));
@@ -510,12 +556,20 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost): {
   // Every definition at its own types, its number-type variables Float64;
   // then each copy that made, until none is new.
   for (const d of code.defs) {
+    if (seed && d in seed.layer.nodes) continue;
     const n = code.nodes[d];
     if (n?.kind !== "def" || !n.body) continue;
     const sc = schemes.get(d);
     resolve(n.body, new Map((sc ? constrained(sc) : []).map((v) => [v, otherwise(v)])));
   }
   while (todo.length) { const { root, env } = todo.pop()!; resolve(root, env); }
+  if (snapshot) {
+    const added = (m: Names) => Object.fromEntries(Object.entries(m).filter(([id]) => !(id in names)));
+    // Shared by every program's resolving from here on, so frozen: a
+    // reader that wrote into one would change the next program's.
+    for (const id in nodes) if (nodes[id] !== code.nodes[id]) Object.freeze(nodes[id]);
+    return { layer: true, nodes, defs, typeOf, schemes, divergent, names: added(outNames), copies, opAt, copyOf, lifted, chosen };
+  }
   // What's left open is Float64 (a definition's own id is its Float64
   // version, and a literal nothing pins down is one), so every target sees
   // closed types.
