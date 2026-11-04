@@ -37,11 +37,20 @@ export function palette(host: PaletteHost) {
   const BASE = LIBRARY.code;
   const node = (id: Id) => doc().code.nodes[id];
 
+  // A row's type is shown for the 40 rows drawn, of a thousand and more
+  // that fit (I167: typing every one was 0.14 s of a new definition's
+  // first frame), so it is worked out when it is first read.
+  function lazily(name: string, type: () => string, group: string): [string, string, string] {
+    const l: [string, string, string] = [name, "", group];
+    let t: string | undefined;
+    Object.defineProperty(l, 1, { get: () => (t ??= type()), set: (v: string) => { t = v; }, enumerable: true, configurable: true });
+    return l;
+  }
   function fillLabel(f: T.Filling, info: T.Info, names: Names): [string, string, string] {
     const nm = (id: Id) => names[id] ?? id;
     switch (f.kind) {
-      case "ref": return [nm(f.target), typeName(info, f.type, names), node(f.target)?.kind === "binder" ? "in scope" : node(f.target)?.kind === "variant" ? "constructors" : info.subst.resolve(f.type).t === "fn" ? "functions, not called" : "definitions"];
-      case "call": return [`${nm(f.target)}(${Array.from({ length: f.arity }, () => "□").join(", ")})`, typeName(info, f.type, names), "calls"];
+      case "ref": return lazily(nm(f.target), () => typeName(info, f.type, names), node(f.target)?.kind === "binder" ? "in scope" : node(f.target)?.kind === "variant" ? "constructors" : info.subst.resolve(f.type).t === "fn" ? "functions, not called" : "definitions");
+      case "call": return lazily(`${nm(f.target)}(${Array.from({ length: f.arity }, () => "□").join(", ")})`, () => typeName(info, f.type, names), "calls");
       case "lit": return [f.of === "number" ? "a number" : f.of === "int" ? "an integer" : "a text", f.of === "number" ? "Float64" : f.of === "int" ? "Int" : "Text", "literals"];
       case "lambda": return [`(${Array.from({ length: f.arity }, () => "□").join(", ")}) => □`, "a function you write here", "new function"];
       case "use": {
@@ -136,7 +145,7 @@ export function palette(host: PaletteHost) {
       const l = was?.key === key ? was.l : fillLabel(f, info, names);
       if ((f.kind === "call" || f.kind === "ref") && f.target.startsWith("builtin.representation.")) l[2] = "for representations";
       if (was?.key !== key) labels.set(f, { key, l });
-      return head && l[2] === "functions, not called" ? [l[0], l[1], "functions"] : l;
+      return head && l[2] === "functions, not called" ? lazily(l[0], () => l[1], "functions") : l;
     };
     // Within a group, what the program calls most comes first: print in a
     // new main, not for each because it's alphabetically early.
@@ -174,8 +183,11 @@ export function palette(host: PaletteHost) {
     }
     // Console's print performed by name reads, and does, what builtin print
     // does (L145): one row for both (E184).
-    const plain = new Set(all.filter((x) => !((x.f.kind === "call" || x.f.kind === "ref") && x.f.target.startsWith("effect."))).map((x) => `${x.l[0]}\n${x.l[1]}`));
-    for (let i = all.length - 1; i >= 0; i--) { const x = all[i]; if ((x.f.kind === "call" || x.f.kind === "ref") && x.f.target.startsWith("effect.") && plain.has(`${x.l[0]}\n${x.l[1]}`)) all.splice(i, 1); }
+    // (Types compared only where the names are alike.)
+    const performed = (x: (typeof all)[number]) => (x.f.kind === "call" || x.f.kind === "ref") && x.f.target.startsWith("effect.");
+    const byName = new Set(all.filter(performed).map((x) => x.l[0]));
+    const plain = new Set(all.filter((x) => !performed(x) && byName.has(x.l[0])).map((x) => `${x.l[0]}\n${x.l[1]}`));
+    for (let i = all.length - 1; i >= 0; i--) { const x = all[i]; if (performed(x) && plain.has(`${x.l[0]}\n${x.l[1]}`)) all.splice(i, 1); }
     // Rows that would read the same (show(□) for a Float64, an Int, anything)
     // say what each of their holes takes: show(□: Int).
     const seen = new Map<string, number>();
