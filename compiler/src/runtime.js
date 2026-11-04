@@ -382,6 +382,8 @@ export { FN as $FN } from '../../invertible/src/expr.js';
 // abortive handlers the same way).
 
 import { Aborted, OutOfSteps, spendStep } from '../../ters/src/lang/run.ts';
+import { LOCALE_V, MY_LOCALE_OP } from '../../ters/src/lang/std.ts';
+import { hostLocale } from '../../ters/src/lang/text.ts';
 import { ABORT, ABORT_OP, IO, LOG_OP, NONE, NOW_OP, RANDOM, RANDOM_OP, S, SOME, WAIT_OP, WORLD_OPS } from '../../ters/src/lang/std.ts';
 import { CONSOLE, FILES, NETWORK } from '../../ters/src/lang/types.ts';
 import { seededGenerator, worldRandom } from '../../ters/src/lang/random.ts';
@@ -419,6 +421,7 @@ export function $perform(effect, op, args) {
   if (op === ABORT_OP) throw new Aborted(args[0]);
   if (op === RANDOM_OP) return (world.random ?? worldRandom)();
   if (op === NOW_OP) return (world.now ?? Date.now)();
+  if (op === MY_LOCALE_OP) return { tag: LOCALE_V, fields: [(world.locale ?? hostLocale)()] };
   if (op === WAIT_OP) {
     if (!world.wait) throw new Error("this runtime can't wait");
     world.wait(args[0]);

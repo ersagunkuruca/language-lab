@@ -45,6 +45,9 @@ export function graphemes(t: string): string[] {
 const readable = (tag: string): string => { try { return Intl.getCanonicalLocales(tag)[0] ?? "und"; } catch { return "und"; } };
 export const uppercase = (t: string, tag: string): string => t.toLocaleUpperCase(readable(tag));
 export const lowercase = (t: string, tag: string): string => t.toLocaleLowerCase(readable(tag));
+// The host's language (L214b2): what `my locale()` answers when the world
+// doesn't say.
+export const hostLocale = (): string => { try { return new Intl.DateTimeFormat().resolvedOptions().locale || "und"; } catch { return "und"; } };
 // −1, 0 or 1 in a language's collation (L214d): Intl.Collator, one per tag.
 const collators = new Map<string, Intl.Collator>();
 export function collate(a: string, b: string, tag: string): number {

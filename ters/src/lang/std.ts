@@ -121,7 +121,7 @@ const tfun = (params: Id[], result: Id, effects: Id[]) => node({ id: `std.t${tn+
 // Choice too (L125b, Ersagun 2026-11-01): a view with no answer, one that
 // divides by 0, shows nothing there; a view only reads, so nothing is done
 // on a path that is abandoned. A handler still handles its own Choice.
-export const PAGE_VIEW: readonly Id[] = discharge("a page's text, part or attribute value", [CELLS, DIVERGE, TIME, NETWORK, LOG, CHOICE],
+export const PAGE_VIEW: readonly Id[] = discharge("a page's text, part or attribute value", [CELLS, DIVERGE, TIME, NETWORK, LOG, CHOICE, "std.settings"],
   "the page runtime runs a view in a watcher, under a step budget, after main has returned; a view with no answer shows nothing; a log line goes to the browser's console, once per run");
 // A handler may wait (C40, PAGE-WAITS-2026-11-03.md, Ersagun 2026-11-04):
 // `wait`, and `await` of a timer, a fetch or `any of`. What it wrote
@@ -129,7 +129,7 @@ export const PAGE_VIEW: readonly Id[] = discharge("a page's text, part or attrib
 // answered, the next stretch a step of its own. Another event meanwhile
 // runs too, the two taking turns at their waits. Await is named by its
 // id: it is defined further down.
-export const PAGE_HANDLER: readonly Id[] = discharge("a page's event handler", [CELLS, UPDATE, CONSOLE, FILES, ABORT, DIVERGE, TIME, WAIT, "std.await", NETWORK, RANDOM, LOG],
+export const PAGE_HANDLER: readonly Id[] = discharge("a page's event handler", [CELLS, UPDATE, CONSOLE, FILES, ABORT, DIVERGE, TIME, WAIT, "std.await", NETWORK, RANDOM, LOG, "std.settings"],
   "the page runtime runs a handler when its event comes, under a step budget, and logs an Abort; a log line goes to the browser's console; a wait lands what the handler did so far, and the rest runs when it's answered");
 // A sound (AUDIO.md): a function from a block of samples to the block to
 // play, made by a function that makes its cells. The runtime runs the
@@ -1445,6 +1445,12 @@ export const LOCALE = typedef("std.locale", "Locale", [], [
   ["locale", [["tag", () => tref(STRING)]]],
 ]);
 export const LOCALE_V = "std.locale.locale";
+// The user's settings, read from the world as the time is (L214b2): `my
+// locale()`, the language the person running the program uses, for
+// uppercase, lowercase and collated. An effect, so a function that
+// depends on it says so, and a test answers it with a match.
+export const SETTINGS = typedef("std.settings", "Settings", [], [["my locale", [], () => tref("std.locale")]], true);
+export const MY_LOCALE_OP = "std.settings.my locale";
 export const EMBEDDING_MAP = "std.embedding.embedding.map";
 export function tupleType(n: number): Id { return `std.tuple${n}`; }
 export const tupleVariant = (n: number): Id => `std.tuple${n}.tuple`;
@@ -1481,7 +1487,7 @@ export function onTodaysIds<T>(x: T, from = (x as { shape?: unknown } | null)?.s
 }
 export const tupleSize = (id: Id): number | null => { const m = /^std\.tuple(\d)$/.exec(id); return m ? Number(m[1]) : null; };
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, MATRIX, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS, WORD16, TENSOR, BYTES, JSON_TYPE, DATE, TIME_OF_DAY, INSTANT, EMBEDDING, REQUEST, RESPONSE, LOCALE] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, MATRIX, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS, WORD16, TENSOR, BYTES, JSON_TYPE, DATE, TIME_OF_DAY, INSTANT, EMBEDDING, REQUEST, RESPONSE, LOCALE, SETTINGS] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one
