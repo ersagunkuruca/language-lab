@@ -1400,6 +1400,14 @@ export const JSON_TYPE = typedef("std.json", "Json", [], [
   ["json object", [["fields", (_, self) => tref(LIST, tref(PAIR, tref(STRING), tref(self)))]]],
 ]);
 export const JSON_V = { null: "std.json.json null", bool: "std.json.json bool", number: "std.json.json number", text: "std.json.json text", list: "std.json.json list", object: "std.json.json object" };
+// A program's own values to and from Json by their type (L190d2,
+// json-by-type.ts): written out per type as ordinary definitions before
+// anything runs, so they have no implementation of their own.
+const jsonOpen = (name: string) => () => { throw new Error(`${name} needs the value's type known where it is used`); };
+export const JSON_OPS = {
+  of: builtin("json.of", "json of", (s) => fn([s.fresh(true)], { t: "con", id: JSON_TYPE, args: [] }, s.freshRow()), jsonOpen("json of")),
+  from: builtin("json.from", "from json", (s) => fn([{ t: "con", id: JSON_TYPE, args: [] }], s.fresh(true), s.freshRow([CHOICE])), jsonOpen("from json")),
+};
 // A calendar date (L188, the proleptic Gregorian calendar, as ISO 8601 and
 // java.time's LocalDate): a year, a month 1 to 12 and a day of that month,
 // checked by the prelude's `date of`. After Json, so ids above don't move.
