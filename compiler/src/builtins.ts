@@ -113,7 +113,7 @@ export const TARGETS: Record<Id, Target> = {
   [SHOW_ANY]: { js: op(([a]) => `$showAny(${a}, $names, $shown)`), scalar: DATA },
   [CASE_NAME]: { js: op(([a]) => `$caseName(${a}, $names)`), scalar: written("the case's name as a text constant, a case on the tag (C99)") },
   // Cases compare in the order their types declare them ($order).
-  [COMPARE]: { js: op(([a, b]) => `$compare(${a}, ${b}, $order)`), scalar: DATA },
+  [COMPARE]: { js: op(([a, b]) => `$compare(${a}, ${b}, $order, $ordered)`), scalar: DATA },
   // The world: the runtime's World, set by whoever runs the program.
   [IO.printError]: { js: op(([a]) => `$io.printError(${a})`), scalar: WORLD },
   [IO.readInput]: { js: op(() => `$io.readInput()`), scalar: WORLD },
