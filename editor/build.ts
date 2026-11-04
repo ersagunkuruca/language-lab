@@ -20,7 +20,7 @@ import { build } from "../ters/node_modules/esbuild/lib/main.js";
 import { copyFileSync, readFileSync, writeFileSync } from "node:fs";
 import { markdown } from "./markdown.ts";
 import { mkdirSync } from "node:fs";
-import { pageRuntime, recordings, webPage, workletRuntime } from "../ters/cli/web.ts";
+import { corePageRuntime, coreWorkletRuntime, pageRuntime, recordings, webPage, workletRuntime } from "../ters/cli/web.ts";
 import { infer } from "../ters/src/lang/infer.ts";
 import { loadProgram } from "../ters/src/lang/load.ts";
 import { examplesPlugin, exampleTags, type Manifest } from "./examplesPlugin.ts";
@@ -38,7 +38,9 @@ const worker = await build({ entryPoints: [here + "runWorker.ts"], bundle: true,
 const out = await build({ entryPoints: [here + "main.ts"], bundle: true, format: "iife", target: "es2022", minify: true, write: false, plugins: [examplesPlugin(manifest, "page")], define: { PAGE_RUNTIME: '""', RUN_WORKER: '""', WORKLET_RUNTIME: '""' } });
 const js = out.outputFiles[0].text.replace(/<\/script/g, "<\\/script");
 const text = (id: string, t: string) => `<script type="text/plain" id="${id}">${t.replace(/<\/script/gi, "<\\/script")}</script>\n`;
-const data = text("lab-page-runtime", await pageRuntime()) + text("lab-worklet-runtime", await workletRuntime()) + text("lab-run-worker", worker.outputFiles[0].text) + exampleTags(manifest);
+// The core IR's page and audio runtimes too (E244): Save page prints from
+// the core IR, and from compile.ts only where main doesn't lower there.
+const data = text("lab-page-runtime", await pageRuntime()) + text("lab-worklet-runtime", await workletRuntime()) + text("lab-core-page-runtime", await corePageRuntime()) + text("lab-core-worklet-runtime", await coreWorkletRuntime()) + text("lab-run-worker", worker.outputFiles[0].text) + exampleTags(manifest);
 const page = readFileSync(here + "page.html", "utf8").replace("<script>/*SCRIPT*/</script>", () => `${data}<script>${js}</script>`);
 writeFileSync(site + "index.html", `<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n</head>\n<body>\n${page}</body>\n</html>\n`);
 console.log(`index.html: ${(page.length / 1024).toFixed(0)} KB`);
