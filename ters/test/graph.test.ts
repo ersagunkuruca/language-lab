@@ -176,3 +176,79 @@ test("an action handed to a handler is a frame titled action, not () =>", () => 
   assert.ok(labels.includes("action") && !labels.includes("() =>"), labels.join(" | "));
   assert.ok(labels.includes("(board) =>"), labels.join(" | "));
 });
+
+// A use with no body (L211) gives its produced ports: saved programs are
+// moved to it as a let of the use, each read of an old binder becoming a
+// part read of the let's binder (a plain read for one port). The graph draws
+// each produced port as an output on the use, wired straight to what reads
+// it, with no dot for the let.
+test("a use with no body has an output per produced port, wired to what reads each", async () => {
+  const { answerKeys } = await import("../src/lang/ports.ts");
+  const { tuplePart } = await import("../src/lang/std.ts");
+  const l = loadProgram(join(root, "examples", "backwards"));
+  const nodes = l.code.nodes;
+  const moved: { def: Id; use: Id; dot: Id; ports: number; readers: [Id, number][] }[] = [];
+  for (const d of l.code.defs) {
+    for (const id of under(nodes, d)) {
+      const n = nodes[id];
+      if (n.kind !== "call" || !n.given || !n.binds || n.body === undefined) continue;
+      const bare = `${n.id}.bare`, dot = `${n.id}.dot`, lam = `${n.id}.lam`;
+      const { binds, body, ...rest } = n;
+      nodes[bare] = { ...rest, id: bare } as typeof n;
+      const ports = answerKeys(l.code, nodes[bare] as never);
+      if (ports.length < 1 || ports.length > 8 || ports.some((k) => !binds[k])) { delete nodes[bare]; continue; }
+      nodes[dot] = { id: dot, kind: "binder" };
+      nodes[lam] = { id: lam, kind: "lambda", params: [dot], body: body! };
+      const readers: [Id, number][] = [];
+      for (const r of Object.values(nodes)) {
+        if (r.kind !== "ref") continue;
+        const i = ports.findIndex((k) => binds[k] === r.target);
+        if (i < 0) continue;
+        readers.push([r.id, i]);
+        if (ports.length === 1) nodes[r.id] = { id: r.id, kind: "ref", target: dot };
+        else {
+          const f = `${r.id}.part`, from = `${r.id}.from`;
+          nodes[f] = { id: f, kind: "ref", target: tuplePart(ports.length, i) };
+          nodes[from] = { id: from, kind: "ref", target: dot };
+          nodes[r.id] = { id: r.id, kind: "call", fn: f, args: [from] };
+        }
+      }
+      nodes[n.id] = { id: n.id, kind: "call", fn: lam, args: [bare] };
+      moved.push({ def: d, use: bare, dot, ports: ports.length, readers });
+    }
+  }
+  assert.ok(moved.some((m) => m.ports > 1) && moved.some((m) => m.ports === 1), JSON.stringify(moved));
+  const info = infer(l.code, l.pres.names);
+  for (const m of moved) {
+    const svg = typedGraph(l.code, l.pres, info, m.def, {
+      selected: null, select() {}, open() {}, canUse: () => null, use() {}, clear() {}, addDot() {},
+      canShare: () => () => null, share() {}, at: {}, moved() {}, named: new Set(), folded: new Set(),
+    }).root as unknown as El;
+    assert.equal(svg.all().filter((e) => e.getAttribute("data-src") === m.dot).length, 0, `no dot for ${m.dot}`);
+    const use = grabbed(svg, m.use);
+    assert.ok(use, `${m.use} is drawn`);
+    const outs = use.parentElement!.children.filter((e) => e.tagName === "circle" && /\boutp\b/.test(e.getAttribute("class") ?? "")).map((c) => at(svg, c)).sort((a, b) => a.y - b.y);
+    assert.equal(outs.length, m.ports, `an output per produced port on ${m.use}`);
+    for (const [r, i] of m.readers) {
+      const w = svg.all().find((e) => e.tagName === "path" && e.getAttribute("class") === "use-hit" && e.getAttribute("data-id") === r);
+      assert.ok(w, `a wire to ${r}`);
+      const mm = /^M([-\d.e]+),([-\d.e]+)/.exec(w!.getAttribute("d")!)!, o = at(svg, w!), start = { x: o.x + Number(mm[1]), y: o.y + Number(mm[2]) };
+      assert.ok(Math.abs(outs[i].x - start.x) < 0.5 && Math.abs(outs[i].y - start.y) < 0.5, `the wire to ${r} starts on port ${i} of ${m.use}`);
+    }
+  }
+});
+
+// Every node under a definition, the definition included.
+function under(nodes: Record<Id, unknown>, top: Id): Id[] {
+  const out: Id[] = [], seen = new Set<Id>([top]), todo = [top];
+  while (todo.length) {
+    const id = todo.pop()!;
+    out.push(id);
+    const n = nodes[id] as Record<string, unknown>;
+    for (const [k, v] of Object.entries(n)) {
+      if (k === "target" || k === "id") continue;
+      for (const c of Array.isArray(v) ? v : typeof v === "string" ? [v] : v && typeof v === "object" ? Object.values(v) : []) if (typeof c === "string" && c in nodes && !seen.has(c)) { seen.add(c); todo.push(c); }
+    }
+  }
+  return out;
+}
