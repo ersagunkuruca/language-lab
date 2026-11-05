@@ -28,19 +28,17 @@ test("calc: definitions, every operator, how it parses, and the errors", () => {
 
 test("calc: random sessions agree four ways (the core IR's too)", () => {
   for (const seed of [1, 2, 3]) {
-    // compile.ts's way reads a line with `read expression` in about a
-    // second (C110 s5), so the random sessions are the other three ways;
-    // the lines above are all four.
     const input = session(200, seed);
     const want = w.evaluator(input);
-    assert.deepEqual(w.ideal(input), want);
-    assert.deepEqual(w.core(input), want);
+    for (const way of ["ideal", "compiled", "core"] as const) assert.deepEqual(w[way](input), want, way);
   }
 });
 
 test("calc: parentheses 100,000 deep, and an error 5,000 deep, on the default stack (C21)", () => {
   // JavaScript's stack holds about 1,500 of them: the core IR's written
   // reader keeps its depth on the heap (C110 s5b).
+  // compile.ts's written reader recurses on JavaScript's stack, so this
+  // is the core IR's way only.
   assert.deepEqual(w.core(deep(100_000)), { out: ["1"], err: [], code: 0 });
   const bad = "(".repeat(5000) + "1 +" + ")".repeat(5000);
   const input = [deep(5000), bad, "7 / 0", "1 + 1"].join("\n");
