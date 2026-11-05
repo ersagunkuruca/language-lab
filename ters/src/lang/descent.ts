@@ -113,7 +113,7 @@ export function infixesOf(code: Code, printer: Id, names: Record<Id, string>, re
 // the furthest place a piece was read to or looked for, and what was
 // looked for there.
 export interface Stopped { at: number; expected: Set<string> }
-export type Reader = ((text: string, ...given: Value[]) => Value | null) & { stopped: Stopped };
+export type Reader = ((text: string, ...given: Value[]) => Value | null) & { stopped: Stopped; characterTable: (def: Id) => [string, string][] };
 
 export function descentReader(code: Code, printer: Id, names: Record<Id, string>): Reader {
   const node = (id: Id) => code.nodes[id] as unknown as Any | undefined;
@@ -248,6 +248,17 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
     return (evaluate(fn.body, new Map(env).set(fn.params[0], c)) as { tag?: Id }).tag === TRUE;
   }
   const escapes = new Map<object, [string, string][]>();
+  // What a function of one character writes for c, or null.
+  function written(fn: Any, c: string, env: Env = new Map()): string | null {
+    try { const v = evaluate(fn.body, new Map(env).set(fn.params[0], c)); return typeof v === "string" ? v : null; } catch (e) { if (e instanceof NoAnswer) return null; throw e; }
+  }
+  // The characters among the first 128 it writes as something else, by
+  // what it writes, longest first (L72d).
+  function characterTable(fn: Any, env: Env = new Map()): [string, string][] {
+    let table = escapes.get(fn);
+    if (!table) { table = []; for (let i = 0; i < 128; i++) { const c = String.fromCharCode(i), o = written(fn, c, env); if (o !== null && o !== c && o !== "") table.push([o, c]); } table.sort((a, b) => b[0].length - a[0].length); escapes.set(fn, table); }
+    return table;
+  }
   const spaces = (at: number) => { while (text[at] === " ") at++; return at; };
 
   // Read the Text id prints from `at`: where it ends, the binders it
@@ -366,9 +377,8 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
         // once, read back longest first; any other character, itself where
         // the function writes it as itself.
         if (chars) {
-          const out = (c: string) => { try { const v = evaluate(fn.body, new Map(env).set(fn.params[0], c)); return typeof v === "string" ? v : null; } catch (e) { if (e instanceof NoAnswer) return null; throw e; } };
-          let table = escapes.get(fn);
-          if (!table) { table = []; for (let i = 0; i < 128; i++) { const c = String.fromCharCode(i), o = out(c); if (o !== null && o !== c && o !== "") table.push([o, c]); } table.sort((a, b) => b[0].length - a[0].length); escapes.set(fn, table); }
+          const out = (c: string) => written(fn, c, env);
+          const table = characterTable(fn, env);
           const hit = table.find(([o]) => text.startsWith(o, at));
           if (hit) return [at + hit[0].length, hit[1]];
           if (at >= text.length) return null;
@@ -483,7 +493,9 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
     if (r) expect(r[0]);
     return null;
   };
-  return Object.assign(reader, { stopped });
+  // For reader.ts: a definition of one character's table (L72d2).
+  const tableOf = (def: Id) => { const fn = lambdaOf(def); if (!fn || fn.params.length !== 1) throw new Unsupported(`reads a list's items by ${named(def)}`); return characterTable(fn); };
+  return Object.assign(reader, { stopped, characterTable: tableOf });
 }
 
 // A solve the evaluator would search that reads by descent instead (C110
