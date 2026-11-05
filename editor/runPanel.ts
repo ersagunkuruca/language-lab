@@ -16,7 +16,7 @@ import type { Pins } from "../ters/src/lang/signatures.ts";
 import type * as T from "./typed.ts";
 import { h } from "./dom.ts";
 import { newWorker } from "./runViews.ts";
-import type { Compiled, RunAsk, RunSays } from "./runWorker.ts";
+import type { RunAsk, RunSays } from "./runWorker.ts";
 import type { CoreMain } from "./coreMain.ts";
 import { prebuilt, prebuiltKey } from "./prebuilt.ts";
 import type { Doc, UI } from "./main.ts";
@@ -54,9 +54,8 @@ export function runPanel(host: RunHost) {
     if (!m?.run || doc().title || ui.def !== defNamed("main")) return null;
     return { args: m.run.args, files: m.folders?.[0] ? FILES(m.folders[0]).data ?? {} : {} };
   }
-  // main as compiled by its last run, and the code it was compiled from.
-  let compiledFor: { code: Code; def: Id; args?: string[]; compiled: Compiled } | null = null;
-  // main as printed from the core IR by its last run (E245c), the same way.
+  // main as printed from the core IR by its last run (E245c), and the code
+  // it was printed from.
   let printedFor: { code: Code; def: Id; args?: string[]; core: CoreMain } | null = null;
   // The world effects Run asks about for a program opened from a file
   // (E229): what it can reach outside the page. Console only prints here,
@@ -109,11 +108,11 @@ export function runPanel(host: RunHost) {
     if (given) for (const [name, text] of Object.entries(given.files)) if (!files.some(([k]) => k === prefix + name)) files.push([prefix + name, text]);
     const w = (running = newWorker());
     const code = prog(), sameAs = (k: { code: Code; def: Id; args?: string[] } | null) => !!k && k.code === code && k.def === def && JSON.stringify(k.args) === JSON.stringify(given?.args);
-    const same = sameAs(compiledFor), kept = sameAs(printedFor) ? printedFor!.core : undefined;
+    const kept = sameAs(printedFor) ? printedFor!.core : undefined;
     // A program from a file runs with only what was allowed (E229).
     const asked = permissionsAsked(def), deny = asked.filter((e) => !doc().allowed?.includes(e));
     const stdin = readsInput() ? ui.stdin?.[doc().program] ?? "" : undefined;
-    const ask: RunAsk = { code, names: pres().names, pins: pins(), def, title, files, args: given?.args, ...(same ? { compiled: compiledFor!.compiled } : kept ? { core: kept } : {}), ...(deny.length ? { deny } : {}), ...(stdin !== undefined && !replay ? { stdin } : {}), ...(replay ? { replay, ...(until !== undefined ? { until } : {}) } : {}) };
+    const ask: RunAsk = { code, names: pres().names, pins: pins(), def, title, files, args: given?.args, ...(kept ? { core: kept } : {}), ...(deny.length ? { deny } : {}), ...(stdin !== undefined && !replay ? { stdin } : {}), ...(replay ? { replay, ...(until !== undefined ? { until } : {}) } : {}) };
     ui.output = { def, lines: [], running: true };
     w.onmessage = (e: MessageEvent<RunSays>) => {
       if (running !== w || !ui.output) return;
@@ -121,9 +120,7 @@ export function runPanel(host: RunHost) {
       if ("lines" in m) { ui.output = { ...ui.output, lines: [...ui.output.lines, ...m.lines] }; render(); return; }
       try { for (const [k, v] of m.files) localStorage.setItem(k, v); } catch { /* no storage */ }
       const lines = "done" in m && m.shown !== "unit" ? [...ui.output.lines, `→ ${m.shown}`] : ui.output.lines;
-      ui.output = { def, lines, error: "error" in m ? m.error : undefined, running: false, ...(m.stuck ? { stuck: m.stuck } : {}), ...("profile" in m && m.profile?.length ? { profile: m.profile } : {}), ...(m.compiled || m.core ? { compiled: true } : {}), ...(replay ? { answers: replay, replayed: true } : m.answers?.length ? { answers: m.answers } : {}), ...(m.paused ? { paused: until, error: undefined } : {}), ...("at" in m && m.at ? { at: m.at } : {}) };
-      // The compiled main is kept for the next run of this same code (E238).
-      compiledFor = m.compiled ? { code: ask.code, def, args: ask.args, compiled: m.compiled } : null;
+      ui.output = { def, lines, error: "error" in m ? m.error : undefined, running: false, ...(m.stuck ? { stuck: m.stuck } : {}), ...("profile" in m && m.profile?.length ? { profile: m.profile } : {}), ...(m.core ? { compiled: true } : {}), ...(replay ? { answers: replay, replayed: true } : m.answers?.length ? { answers: m.answers } : {}), ...(m.paused ? { paused: until, error: undefined } : {}), ...("at" in m && m.at ? { at: m.at } : {}) };
       printedFor = m.printed ? { code: ask.code, def, args: ask.args, core: m.printed } : null;
       running = null;
       w.terminate();
@@ -132,7 +129,7 @@ export function runPanel(host: RunHost) {
     w.onerror = (e) => { e.preventDefault(); stopRun(e.message || "the run failed"); };
     // A shipped example's main as the site's build printed it (E245c,
     // prebuild.ts), the first time it runs: none after an edit reaches it.
-    if (same || kept || !manifest.programs.some((p) => p.program === doc().program)) w.postMessage(ask);
+    if (kept || !manifest.programs.some((p) => p.program === doc().program)) w.postMessage(ask);
     else void prebuilt<CoreMain>(prebuiltKey("main", code, { main: def }, ask.pins)).then((core) => { if (running === w) w.postMessage(core ? { ...ask, core } : ask); });
     render();
   }

@@ -22,7 +22,7 @@ import { checkedForRun, coreMain } from "./coreMain.ts";
 
 type Tables = { code?: Code; names?: Names; signatures?: Pins };
 
-export async function prebuild(manifest: Manifest, site: string, core: boolean): Promise<string[]> {
+export async function prebuild(manifest: Manifest, site: string): Promise<string[]> {
   const dir = site + "prebuilt/";
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
@@ -61,7 +61,7 @@ export async function prebuild(manifest: Manifest, site: string, core: boolean):
     // A page with sound stays interpreted in the editor (pagePanel.ts).
     if (!main || hasSound(code)) continue;
     try {
-      write(prebuiltKey("page", code, { main }, pins), compilePageProgram(code, names, pins, main, core));
+      write(prebuiltKey("page", code, { main }, pins), compilePageProgram(code, names, pins, main));
     } catch (e) { console.log(`prebuilt: ${m.program} didn't compile (${(e as Error).message})`); }
   }
   writeFileSync(dir + "index.json", JSON.stringify(keys));

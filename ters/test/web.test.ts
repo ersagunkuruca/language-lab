@@ -75,13 +75,13 @@ test("the browser world keeps files in localStorage, one prefix per program", ()
 // examples/converter, the app at apps/converter.html: every field is the
 // function that shows it, run backwards when typed into.
 test("the converter app: typing in any field moves the others, and text with no answer is marked", async () => {
-  const { webPage } = await import("../cli/web.ts");
+  const { webCorePage } = await import("../cli/web.ts");
   const { loadProgram } = await import("../src/lang/load.ts");
   const { infer } = await import("../src/lang/infer.ts");
   const p = loadProgram(join(import.meta.dirname, "../examples/converter"));
   const info = infer(p.code, p.pres.names, undefined, p.options);
   assert.deepEqual(info.errors, []);
-  const html = await webPage("Converter", p.code, info, p.pres.names, p.named("main"));
+  const html = await webCorePage("Converter", p.code, info, p.pres.names, p.named("main"));
   const run = (store: ReturnType<typeof memoryStore>) => {
     const body = new FakeEl("body");
     runInNewContext(/<script>([\s\S]*)<\/script>/.exec(html)![1], { document: { ...fakeDoc(), body }, localStorage: store, console });
@@ -112,18 +112,18 @@ test("the converter app: typing in any field moves the others, and text with no 
 // world, a hundred seeded rolls that are the same every time, and a status
 // line that reads the clock, so it runs again each frame.
 // Both ways of making the page: `lab build-web`'s bundle, and the editor's
-// "Save page" (page.ts pageFile: the whole runtime prebuilt, then the
-// program compiled as a plain script), which has two scripts.
+// "Save page" (page.ts corePageFile: the whole runtime prebuilt, then the
+// program printed from the core IR as a plain script), which has two scripts.
 for (const way of ["lab build-web", "Save page"]) test(`the dice app (${way}): seeded rolls repeat exactly, and the clock ticks frame by frame`, async () => {
-  const { webPage, pageRuntime } = await import("../cli/web.ts");
-  const { pageFile } = await import("../src/lang/page.ts");
+  const { webCorePage, corePageRuntime } = await import("../cli/web.ts");
+  const { corePageFile } = await import("../src/lang/page.ts");
   const { loadProgram } = await import("../src/lang/load.ts");
   const { infer } = await import("../src/lang/infer.ts");
   const p = loadProgram(join(import.meta.dirname, "../examples/dice"));
   const info = infer(p.code, p.pres.names, undefined, p.options);
   assert.deepEqual(info.errors, []);
-  const html = way === "lab build-web" ? await webPage("Dice", p.code, info, p.pres.names, p.named("main"))
-    : pageFile("Dice", await pageRuntime(), p.code, info, p.pres.names, p.named("main"));
+  const html = way === "lab build-web" ? await webCorePage("Dice", p.code, info, p.pres.names, p.named("main"))
+    : corePageFile("Dice", await corePageRuntime(), p.code, info, p.pres.names, [p.named("main")], p.named("main"));
   // nothing is loaded from anywhere: inline scripts only
   assert.doesNotMatch(html, /<script src|<link /);
   const body = new FakeEl("body");
@@ -192,7 +192,7 @@ test("lab run on a page prints it once as static HTML: values drawn, no script",
 test("every example app the site builds compiles to a page", async () => {
   const { loadProgram } = await import("../src/lang/load.ts");
   const { infer } = await import("../src/lang/infer.ts");
-  const { webPage } = await import("../cli/web.ts");
+  const { webCorePage } = await import("../cli/web.ts");
   // The pages editor/examples.json marks (E205), as build.ts reads it.
   const manifest = JSON.parse(readFileSync(join(import.meta.dirname, "../../editor/examples.json"), "utf8")) as { programs: { page?: boolean; folders?: string[] }[] };
   const apps = manifest.programs.flatMap((p) => (p.page ? p.folders ?? [] : []));
@@ -200,7 +200,7 @@ test("every example app the site builds compiles to a page", async () => {
   for (const name of apps) {
     const p = loadProgram(join(import.meta.dirname, "../examples", name));
     const info = infer(p.code, p.pres.names, undefined, p.options);
-    await assert.doesNotReject(webPage(name, p.code, info, p.pres.names, p.named("main")), name);
+    await assert.doesNotReject(webCorePage(name, p.code, info, p.pres.names, p.named("main")), name);
   }
 });
 
@@ -211,7 +211,7 @@ test("a page bundles its hosts/js.js and asks it", async () => {
   const { Lang } = await import("../src/lang/dsl.ts");
   const { base, baseNames } = await import("../src/lang/load.ts");
   const { infer } = await import("../src/lang/infer.ts");
-  const { webPage, webCorePage } = await import("../cli/web.ts");
+  const { webCorePage } = await import("../cli/web.ts");
   const { HTML_V } = await import("../src/lang/std.ts");
   const k = new Lang(LIBRARY.code);
   const dev = k.effect("Device", [["name of", [["id", () => k.tref("type.int")]], () => k.tref("type.string")]]);
@@ -221,8 +221,8 @@ test("a page bundles its hosts/js.js and asks it", async () => {
   assert.deepEqual(info.errors.map((e) => e.message), []);
   const host = join(dir, "device-host.js");
   writeFileSync(host, `export default { ${JSON.stringify(dev.op["name of"])}: (id) => "phone " + id };\n`);
-  // compile.ts's page and the core IR's (C137d5).
-  for (const html of [await webPage("device", code, info, names, main, host), await webCorePage("device", code, info, names, main, host)]) {
+  // The core IR's page (C137d5).
+  for (const html of [await webCorePage("device", code, info, names, main, host)]) {
     const script = /<script>([\s\S]*)<\/script>/.exec(html)![1];
     const body = new FakeEl("body");
     runInNewContext(script, { document: { ...fakeDoc(), body }, localStorage: memoryStore(), console, TextEncoder });

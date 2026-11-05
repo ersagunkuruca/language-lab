@@ -8521,6 +8521,250 @@
         ],
         "body": "@rgiao27q6ao5m6fv1bic6gdsoh:3"
       },
+      "@vbcnm59k5qr9ffp43vefhicqra": {
+        "id": "@vbcnm59k5qr9ffp43vefhicqra",
+        "kind": "def",
+        "body": "@vbcnm59k5qr9ffp43vefhicqra:1"
+      },
+      "@vbcnm59k5qr9ffp43vefhicqra:2": {
+        "id": "@vbcnm59k5qr9ffp43vefhicqra:2",
+        "kind": "binder"
+      },
+      "@vbcnm59k5qr9ffp43vefhicqra:4": {
+        "id": "@vbcnm59k5qr9ffp43vefhicqra:4",
+        "kind": "ref",
+        "target": "@vbcnm59k5qr9ffp43vefhicqra:2"
+      },
+      "@vbcnm59k5qr9ffp43vefhicqra:6": {
+        "id": "@vbcnm59k5qr9ffp43vefhicqra:6",
+        "kind": "binder"
+      },
+      "@vbcnm59k5qr9ffp43vefhicqra:7": {
+        "id": "@vbcnm59k5qr9ffp43vefhicqra:7",
+        "kind": "binder"
+      },
+      "@vbcnm59k5qr9ffp43vefhicqra:9": {
+        "id": "@vbcnm59k5qr9ffp43vefhicqra:9",
+        "kind": "ref",
+        "target": "builtin.algebraic.fraction"
+      },
+      "@vbcnm59k5qr9ffp43vefhicqra:10": {
+        "id": "@vbcnm59k5qr9ffp43vefhicqra:10",
+        "kind": "ref",
+        "target": "@vbcnm59k5qr9ffp43vefhicqra:6"
+      },
+      "@vbcnm59k5qr9ffp43vefhicqra:11": {
+        "id": "@vbcnm59k5qr9ffp43vefhicqra:11",
+        "kind": "ref",
+        "target": "@vbcnm59k5qr9ffp43vefhicqra:7"
+      },
+      "@vbcnm59k5qr9ffp43vefhicqra:8": {
+        "id": "@vbcnm59k5qr9ffp43vefhicqra:8",
+        "kind": "call",
+        "fn": "@vbcnm59k5qr9ffp43vefhicqra:9",
+        "args": [
+          "@vbcnm59k5qr9ffp43vefhicqra:10",
+          "@vbcnm59k5qr9ffp43vefhicqra:11"
+        ]
+      },
+      "@vbcnm59k5qr9ffp43vefhicqra:5": {
+        "id": "@vbcnm59k5qr9ffp43vefhicqra:5",
+        "kind": "arm",
+        "variant": "std.rational.ratio",
+        "binds": [
+          "@vbcnm59k5qr9ffp43vefhicqra:6",
+          "@vbcnm59k5qr9ffp43vefhicqra:7"
+        ],
+        "results": [
+          null,
+          null
+        ],
+        "body": "@vbcnm59k5qr9ffp43vefhicqra:8"
+      },
+      "@vbcnm59k5qr9ffp43vefhicqra:3": {
+        "id": "@vbcnm59k5qr9ffp43vefhicqra:3",
+        "kind": "match",
+        "scrutinee": "@vbcnm59k5qr9ffp43vefhicqra:4",
+        "arms": [
+          "@vbcnm59k5qr9ffp43vefhicqra:5"
+        ],
+        "otherwise": null
+      },
+      "@vbcnm59k5qr9ffp43vefhicqra:1": {
+        "id": "@vbcnm59k5qr9ffp43vefhicqra:1",
+        "kind": "lambda",
+        "params": [
+          "@vbcnm59k5qr9ffp43vefhicqra:2"
+        ],
+        "body": "@vbcnm59k5qr9ffp43vefhicqra:3"
+      },
+      "@heihpj5dn6ui7ca73m1gf20ak6": {
+        "id": "@heihpj5dn6ui7ca73m1gf20ak6",
+        "kind": "def",
+        "body": "@heihpj5dn6ui7ca73m1gf20ak6:1"
+      },
+      "@heihpj5dn6ui7ca73m1gf20ak6:2": {
+        "id": "@heihpj5dn6ui7ca73m1gf20ak6:2",
+        "kind": "binder"
+      },
+      "@heihpj5dn6ui7ca73m1gf20ak6:4": {
+        "id": "@heihpj5dn6ui7ca73m1gf20ak6:4",
+        "kind": "ref",
+        "target": "@heihpj5dn6ui7ca73m1gf20ak6:2"
+      },
+      "@heihpj5dn6ui7ca73m1gf20ak6:6": {
+        "id": "@heihpj5dn6ui7ca73m1gf20ak6:6",
+        "kind": "binder"
+      },
+      "@heihpj5dn6ui7ca73m1gf20ak6:7": {
+        "id": "@heihpj5dn6ui7ca73m1gf20ak6:7",
+        "kind": "binder"
+      },
+      "@heihpj5dn6ui7ca73m1gf20ak6:9": {
+        "id": "@heihpj5dn6ui7ca73m1gf20ak6:9",
+        "kind": "ref",
+        "target": "builtin.real.fraction"
+      },
+      "@heihpj5dn6ui7ca73m1gf20ak6:10": {
+        "id": "@heihpj5dn6ui7ca73m1gf20ak6:10",
+        "kind": "ref",
+        "target": "@heihpj5dn6ui7ca73m1gf20ak6:6"
+      },
+      "@heihpj5dn6ui7ca73m1gf20ak6:11": {
+        "id": "@heihpj5dn6ui7ca73m1gf20ak6:11",
+        "kind": "ref",
+        "target": "@heihpj5dn6ui7ca73m1gf20ak6:7"
+      },
+      "@heihpj5dn6ui7ca73m1gf20ak6:8": {
+        "id": "@heihpj5dn6ui7ca73m1gf20ak6:8",
+        "kind": "call",
+        "fn": "@heihpj5dn6ui7ca73m1gf20ak6:9",
+        "args": [
+          "@heihpj5dn6ui7ca73m1gf20ak6:10",
+          "@heihpj5dn6ui7ca73m1gf20ak6:11"
+        ]
+      },
+      "@heihpj5dn6ui7ca73m1gf20ak6:5": {
+        "id": "@heihpj5dn6ui7ca73m1gf20ak6:5",
+        "kind": "arm",
+        "variant": "std.rational.ratio",
+        "binds": [
+          "@heihpj5dn6ui7ca73m1gf20ak6:6",
+          "@heihpj5dn6ui7ca73m1gf20ak6:7"
+        ],
+        "results": [
+          null,
+          null
+        ],
+        "body": "@heihpj5dn6ui7ca73m1gf20ak6:8"
+      },
+      "@heihpj5dn6ui7ca73m1gf20ak6:3": {
+        "id": "@heihpj5dn6ui7ca73m1gf20ak6:3",
+        "kind": "match",
+        "scrutinee": "@heihpj5dn6ui7ca73m1gf20ak6:4",
+        "arms": [
+          "@heihpj5dn6ui7ca73m1gf20ak6:5"
+        ],
+        "otherwise": null
+      },
+      "@heihpj5dn6ui7ca73m1gf20ak6:1": {
+        "id": "@heihpj5dn6ui7ca73m1gf20ak6:1",
+        "kind": "lambda",
+        "params": [
+          "@heihpj5dn6ui7ca73m1gf20ak6:2"
+        ],
+        "body": "@heihpj5dn6ui7ca73m1gf20ak6:3"
+      },
+      "@t5p364t1efandnj0qtah1bt71k": {
+        "id": "@t5p364t1efandnj0qtah1bt71k",
+        "kind": "def",
+        "body": "@t5p364t1efandnj0qtah1bt71k:1"
+      },
+      "@t5p364t1efandnj0qtah1bt71k:2": {
+        "id": "@t5p364t1efandnj0qtah1bt71k:2",
+        "kind": "binder"
+      },
+      "@t5p364t1efandnj0qtah1bt71k:5": {
+        "id": "@t5p364t1efandnj0qtah1bt71k:5",
+        "kind": "ref",
+        "target": "builtin.algebraic.fractionParts"
+      },
+      "@t5p364t1efandnj0qtah1bt71k:6": {
+        "id": "@t5p364t1efandnj0qtah1bt71k:6",
+        "kind": "ref",
+        "target": "@t5p364t1efandnj0qtah1bt71k:2"
+      },
+      "@t5p364t1efandnj0qtah1bt71k:4": {
+        "id": "@t5p364t1efandnj0qtah1bt71k:4",
+        "kind": "call",
+        "fn": "@t5p364t1efandnj0qtah1bt71k:5",
+        "args": [
+          "@t5p364t1efandnj0qtah1bt71k:6"
+        ]
+      },
+      "@t5p364t1efandnj0qtah1bt71k:8": {
+        "id": "@t5p364t1efandnj0qtah1bt71k:8",
+        "kind": "binder"
+      },
+      "@t5p364t1efandnj0qtah1bt71k:9": {
+        "id": "@t5p364t1efandnj0qtah1bt71k:9",
+        "kind": "binder"
+      },
+      "@t5p364t1efandnj0qtah1bt71k:11": {
+        "id": "@t5p364t1efandnj0qtah1bt71k:11",
+        "kind": "ref",
+        "target": "std.rational.ratio"
+      },
+      "@t5p364t1efandnj0qtah1bt71k:12": {
+        "id": "@t5p364t1efandnj0qtah1bt71k:12",
+        "kind": "ref",
+        "target": "@t5p364t1efandnj0qtah1bt71k:8"
+      },
+      "@t5p364t1efandnj0qtah1bt71k:13": {
+        "id": "@t5p364t1efandnj0qtah1bt71k:13",
+        "kind": "ref",
+        "target": "@t5p364t1efandnj0qtah1bt71k:9"
+      },
+      "@t5p364t1efandnj0qtah1bt71k:10": {
+        "id": "@t5p364t1efandnj0qtah1bt71k:10",
+        "kind": "call",
+        "fn": "@t5p364t1efandnj0qtah1bt71k:11",
+        "args": [
+          "@t5p364t1efandnj0qtah1bt71k:12",
+          "@t5p364t1efandnj0qtah1bt71k:13"
+        ]
+      },
+      "@t5p364t1efandnj0qtah1bt71k:7": {
+        "id": "@t5p364t1efandnj0qtah1bt71k:7",
+        "kind": "arm",
+        "variant": "std.tuple2.tuple",
+        "binds": [
+          "@t5p364t1efandnj0qtah1bt71k:8",
+          "@t5p364t1efandnj0qtah1bt71k:9"
+        ],
+        "results": [
+          null,
+          null
+        ],
+        "body": "@t5p364t1efandnj0qtah1bt71k:10"
+      },
+      "@t5p364t1efandnj0qtah1bt71k:3": {
+        "id": "@t5p364t1efandnj0qtah1bt71k:3",
+        "kind": "match",
+        "scrutinee": "@t5p364t1efandnj0qtah1bt71k:4",
+        "arms": [
+          "@t5p364t1efandnj0qtah1bt71k:7"
+        ],
+        "otherwise": null
+      },
+      "@t5p364t1efandnj0qtah1bt71k:1": {
+        "id": "@t5p364t1efandnj0qtah1bt71k:1",
+        "kind": "lambda",
+        "params": [
+          "@t5p364t1efandnj0qtah1bt71k:2"
+        ],
+        "body": "@t5p364t1efandnj0qtah1bt71k:3"
+      },
       "@l8i0qr9eq61qtbul6agt1blhsv": {
         "id": "@l8i0qr9eq61qtbul6agt1blhsv",
         "kind": "def",
@@ -93886,6 +94130,9 @@
       "@2cffeb22vf6lq91e33uel1np1h",
       "@7oqrouv1btl6kt56s12kr7t7k0",
       "@ch6at4jelj1lg0b916kifrt6tt",
+      "@vbcnm59k5qr9ffp43vefhicqra",
+      "@heihpj5dn6ui7ca73m1gf20ak6",
+      "@t5p364t1efandnj0qtah1bt71k",
       "@ilortmfvkbjt9bs8q02goksirf",
       "@7b9cdv2j442vm528k59jln7rka",
       "@u6ulqtprp7t04gefhq2qrf9fqi",
@@ -96449,6 +96696,86 @@
           {
             "t": "con",
             "id": "type.int",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.rational",
+          "args": []
+        },
+        "eff": {
+          "effs": [
+            "effect.choice"
+          ],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
+    "@vbcnm59k5qr9ffp43vefhicqra": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.rational",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.algebraic",
+          "args": []
+        },
+        "eff": {
+          "effs": [],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
+    "@heihpj5dn6ui7ca73m1gf20ak6": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.rational",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.real",
+          "args": []
+        },
+        "eff": {
+          "effs": [],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
+    "@t5p364t1efandnj0qtah1bt71k": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.algebraic",
             "args": []
           }
         ],
@@ -111974,6 +112301,18 @@
     "@rgiao27q6ao5m6fv1bic6gdsoh:2": "a",
     "@rgiao27q6ao5m6fv1bic6gdsoh:6": "top",
     "@rgiao27q6ao5m6fv1bic6gdsoh:7": "bottom",
+    "@vbcnm59k5qr9ffp43vefhicqra": "as algebraic",
+    "@vbcnm59k5qr9ffp43vefhicqra:2": "fraction",
+    "@vbcnm59k5qr9ffp43vefhicqra:6": "top",
+    "@vbcnm59k5qr9ffp43vefhicqra:7": "bottom",
+    "@heihpj5dn6ui7ca73m1gf20ak6": "as real",
+    "@heihpj5dn6ui7ca73m1gf20ak6:2": "fraction",
+    "@heihpj5dn6ui7ca73m1gf20ak6:6": "top",
+    "@heihpj5dn6ui7ca73m1gf20ak6:7": "bottom",
+    "@t5p364t1efandnj0qtah1bt71k": "algebraic as fraction",
+    "@t5p364t1efandnj0qtah1bt71k:2": "x",
+    "@t5p364t1efandnj0qtah1bt71k:8": "top",
+    "@t5p364t1efandnj0qtah1bt71k:9": "bottom",
     "@l8i0qr9eq61qtbul6agt1blhsv": "as float64",
     "@l8i0qr9eq61qtbul6agt1blhsv:2": "a",
     "@l8i0qr9eq61qtbul6agt1blhsv:6": "top",
@@ -114405,6 +114744,9 @@
     "@i6p4l1qgd85rvad4tjfm2ses0p": "A helper of simulated. Not offered in the palette.",
     "@chl8inmk3mpufc5vhs8hpmr0da": "A helper of simulated. Not offered in the palette.",
     "@d9frmd3c0md014ho3ed8k674hi": "A helper of simulated. Not offered in the palette.",
+    "@vbcnm59k5qr9ffp43vefhicqra": "A fraction as an Algebraic number, exactly.",
+    "@heihpj5dn6ui7ca73m1gf20ak6": "A fraction as a Real, exactly.",
+    "@t5p364t1efandnj0qtah1bt71k": "The fraction an Algebraic number is, when it is one: algebraic as fraction(√2 · √2) is 2. No answer (Choice) for √2.",
     "@evvkvacd5ecmvnt8jl3v6s9n64": "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette."
   },
   "exports": [
@@ -114458,6 +114800,9 @@
     "@ch6at4jelj1lg0b916kifrt6tt",
     "@4rbu06h29910vsmp9oqdajikk3",
     "@l8i0qr9eq61qtbul6agt1blhsv",
+    "@vbcnm59k5qr9ffp43vefhicqra",
+    "@heihpj5dn6ui7ca73m1gf20ak6",
+    "@t5p364t1efandnj0qtah1bt71k",
     "@ilortmfvkbjt9bs8q02goksirf",
     "@mca1th7em28pbvqqojkmr6cai1",
     "@ueq40neujh75d77kdvfbjmqnts",

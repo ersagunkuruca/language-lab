@@ -60,21 +60,21 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 - **fraction** : `(Int, Int) -[Choice]-> Rational`. top/bottom, exactly, in lowest terms (Euclid's algorithm, textbook); no answer when bottom is 0.
 - **as fraction** : `(Int) -> Rational`. The whole number n as a fraction, n/1.
 - **as float64** : `(Rational) -> Float64`. The nearest Float64.
-- **Complex** (type). A complex number re + im·i, a record of two Float64s. The same + − · work on it (· is the complex product); it has no <.
-- **as complex** : `(Float64) -> Complex`. The Float64 x as a complex number, x + 0i.
-- **i** : `Complex`. i, the square root of −1: i · i is −1.
-- **complex conjugate** : `(Complex) -> Complex`. a − bi for a + bi: the same point mirrored across the real line. z · conjugate(z) is |z|².
-- **modulus** : `(Complex) -> Float64`. |z|, how far z is from 0 (the vectors module's magnitude says the same).
-- **angle of** : `(Complex) -> Float64`. The angle from the positive real line to z, in radians, between −π and π (atan2).
-- **from polar** : `(Float64, Float64) -> Complex`. The complex number size away from 0 at this angle: size·(cos angle + i sin angle).
-- **complex exp** : `(Complex) -> Complex`. e to the z: eᵃ(cos b + i sin b) for a + bi, Euler's formula (textbook). complex exp(i · π) is −1.
-- **complex sqrt** : `(Complex) -> Complex`. √z for a complex number, the root with a real part of 0 or more: complex sqrt(−4) is 2i. Float64's sqrt has no answer below 0; this one always has.
-- **complex log** : `(Complex) -[Choice]-> Complex`. log z for a complex number: log|z| + i·(its angle, between −π and π). complex log(−1) is iπ. No answer at 0.
-- **complex power** : `(Complex, Complex) -[Choice]-> Complex`. z to the power w, e^(w · log z), the principal value: complex power(−8, 1/3) is 1 + 1.732i. 0 to a power with a real part above 0 is 0; to any other, no answer.
-- **complex asin** : `(Complex) -> Complex`. asin z for a complex number, the principal value: complex asin(2) is π/2 + 1.317i. Float64's asin has no answer outside −1 to 1; this one always has.
-- **complex acos** : `(Complex) -> Complex`. acos z for a complex number, the principal value: complex acos(2) is −1.317i. Float64's acos has no answer outside −1 to 1; this one always has.
+- **Complex** (type) (numbers module). A complex number re + im·i, a record of two Float64s. The same + − · work on it (· is the complex product); it has no <.
+- **as complex** : `(Float64) -> Complex` (numbers module). The Float64 x as a complex number, x + 0i.
+- **i** : `Complex` (numbers module). i, the square root of −1: i · i is −1.
+- **complex conjugate** : `(Complex) -> Complex` (numbers module). a − bi for a + bi: the same point mirrored across the real line. z · conjugate(z) is |z|².
+- **modulus** : `(Complex) -> Float64` (numbers module). |z|, how far z is from 0 (the vectors module's magnitude says the same).
+- **angle of** : `(Complex) -> Float64` (numbers module). The angle from the positive real line to z, in radians, between −π and π (atan2).
+- **from polar** : `(Float64, Float64) -> Complex` (numbers module). The complex number size away from 0 at this angle: size·(cos angle + i sin angle).
+- **complex exp** : `(Complex) -> Complex` (numbers module). e to the z: eᵃ(cos b + i sin b) for a + bi, Euler's formula (textbook). complex exp(i · π) is −1.
+- **complex sqrt** : `(Complex) -> Complex` (numbers module). √z for a complex number, the root with a real part of 0 or more: complex sqrt(−4) is 2i. Float64's sqrt has no answer below 0; this one always has.
+- **complex log** : `(Complex) -[Choice]-> Complex` (numbers module). log z for a complex number: log|z| + i·(its angle, between −π and π). complex log(−1) is iπ. No answer at 0.
+- **complex power** : `(Complex, Complex) -[Choice]-> Complex` (numbers module). z to the power w, e^(w · log z), the principal value: complex power(−8, 1/3) is 1 + 1.732i. 0 to a power with a real part above 0 is 0; to any other, no answer.
+- **complex asin** : `(Complex) -> Complex` (numbers module). asin z for a complex number, the principal value: complex asin(2) is π/2 + 1.317i. Float64's asin has no answer outside −1 to 1; this one always has.
+- **complex acos** : `(Complex) -> Complex` (numbers module). acos z for a complex number, the principal value: complex acos(2) is −1.317i. Float64's acos has no answer outside −1 to 1; this one always has.
 - **table product** : `(List (Table entry a), a, a) -> a`. a · b in an algebra given by its multiplication table: each line says what two basis elements multiply to, as times(i, i, −1). Complex numbers, dual numbers and quaternions are each one table (ALGEBRA-TABLES.md).
-- **complex table** : `List (Table entry Complex)`. Complex's multiplication table: 1 · 1 = 1, 1 · i = i, i · 1 = i, i · i = −1. table product(complex table, z, w) is z · w.
+- **complex table** : `List (Table entry Complex)` (numbers module). Complex's multiplication table: 1 · 1 = 1, 1 · i = i, i · 1 = i, i · i = −1. table product(complex table, z, w) is z · w.
 - **clifford table** : `(List Float64, List a) -> List (Table entry a)`. The multiplication table of a Clifford algebra, for table product: its basis vectors square to `squares` (1, −1 or 0 each; Cl(p, q, r) is p ones, q minus ones, r zeros), and `basis` is your record type's basis elements in the order 1, e₁, e₂, e₁e₂, e₃, e₁e₃, e₂e₃, e₁e₂e₃, … . clifford table([−1], …) is the complex numbers, [0] the dual numbers, [1] the split-complex ones, [−1, −1] the quaternions (i = e₁, j = e₂, k = e₁e₂), [1, 1, 1] Cl(3, 0) and [1, 1, 1, 0] projective geometric algebra (ALGEBRA-TABLES.md).
 - **clifford algebra** : `(List Float64, List a) -> Algebra a`. A Clifford algebra, built once: its basis vectors square to `squares` (1, −1 or 0 each) and `basis` is your record type's basis elements, in clifford table's order. It holds the multiplication table, so clifford sandwich, reflect, exp and the others take it and don't build a table on every call. Make it once, as a definition: pga = clifford algebra([1, 1, 1, 0], basis).
 - **clifford product** : `(Algebra a, a, a) -> a`. a · b, the geometric product in the algebra (clifford algebra makes one): table product with the algebra's table.
@@ -94,14 +94,14 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 - **clifford with part** : `(Algebra a, a, List Int, Float64) -> a`. x with its part on a blade, named by its vectors as clifford part names it, set to `value`, the other parts kept: clifford with part(algebra, zero, [1, 2], 2) is 2e₁₂. Several calls build a multivector by blade.
 - **Table entry** (type). One line of an algebra's multiplication table: times(left, right, gives) says left · right is gives, for two basis elements. table product multiplies by a list of them.
 - **Algebra** (type). A Clifford algebra built once by clifford algebra(squares, basis): its signature, its basis, each blade beside its basis element, and its multiplication table. The clifford functions take one, so a product, sandwich, reflection or exp doesn't build a table on every call.
-- **Mat2** (type). A 2 × 2 matrix of Float64s, in rows: mat2(m11, m12, m21, m22). + and − go part by part, · is the matrix product, and a plain number is that many times the identity, so m + 1 adds 1 down the diagonal.
-- **Mat3** (type). A 3 × 3 matrix of Float64s, in rows. + and − go part by part, · is the matrix product, and a plain number is that many times the identity.
-- **Mat4** (type). A 4 × 4 matrix of Float64s, in rows, the size of a 3D transform. + and − go part by part, · is the matrix product, and a plain number is that many times the identity.
-- **matrix table** : `(List (List a)) -> List (Table entry a)`. The multiplication table of n × n matrices, for table product, from rows of basis elements: E_ij · E_jl = E_il and every other product of two of them is 0. Mat2, Mat3 and Mat4 use it for their ·.
-- **Fixed** (type). A fixed-point number: an Int counting steps of 2⁻³², so 1.5 is fixed(6442450944). The same + − · < work on it, with · rounded down to a step, and the answer has the same bits on every machine. A step is 2⁻³² anywhere, so a position far from the origin keeps its precision (FIXED-POINT.md).
-- **as fixed** : `(Int) -> Fixed`. A whole number as a Fixed, exactly.
-- **as float64** : `(Fixed) -> Float64`. A Fixed as the nearest Float64, for drawing or printing. Past 2⁵³ steps (about 2 million) it drops the last bits; the Fixed keeps them.
-- **square root fixed** : `(Fixed) -[Choice]-> Fixed`. √x for Fixed, rounded down to a step, the same bits on every machine; no answer below 0.
+- **Mat2** (type) (numbers module). A 2 × 2 matrix of Float64s, in rows: mat2(m11, m12, m21, m22). + and − go part by part, · is the matrix product, and a plain number is that many times the identity, so m + 1 adds 1 down the diagonal.
+- **Mat3** (type) (numbers module). A 3 × 3 matrix of Float64s, in rows. + and − go part by part, · is the matrix product, and a plain number is that many times the identity.
+- **Mat4** (type) (numbers module). A 4 × 4 matrix of Float64s, in rows, the size of a 3D transform. + and − go part by part, · is the matrix product, and a plain number is that many times the identity.
+- **matrix table** : `(List (List a)) -> List (Table entry a)`. The multiplication table of n × n matrices, for table product, from rows of basis elements: E_ij · E_jl = E_il and every other product of two of them is 0. The numbers module's Mat2, Mat3 and Mat4 use it for their ·.
+- **Fixed** (type) (numbers module). A fixed-point number: an Int counting steps of 2⁻³², so 1.5 is fixed(6442450944). The same + − · < work on it, with · rounded down to a step, and the answer has the same bits on every machine. A step is 2⁻³² anywhere, so a position far from the origin keeps its precision (FIXED-POINT.md).
+- **as fixed** : `(Int) -> Fixed` (numbers module). A whole number as a Fixed, exactly.
+- **as float64** : `(Fixed) -> Float64` (numbers module). A Fixed as the nearest Float64, for drawing or printing. Past 2⁵³ steps (about 2 million) it drops the last bits; the Fixed keeps them.
+- **square root fixed** : `(Fixed) -[Choice]-> Fixed` (numbers module). √x for Fixed, rounded down to a step, the same bits on every machine; no answer below 0.
 - **Word8** (type). Whole numbers from 0 to 255 that wrap around: + − · keep the low 8 bits, so 255 + 1 is 0. Made by as word8. For bytes and binary formats.
 - **Word16** (type). Whole numbers from 0 to 65,535 that wrap around: + − · keep the low 16 bits. Made by as word16. For 16-bit audio samples and binary formats.
 - **Word32** (type). Whole numbers from 0 to 2³² − 1 that wrap around: + − · keep the low 32 bits. Made by as word32. For hashes (FNV-1a), generators (xorshift) and samples.
@@ -127,22 +127,27 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 - **extended multiply** : `(Extended a, Extended a) -[Choice]-> Extended a where a is a Number with <`. a · b with ±∞: −2 · ∞ is −∞ and −∞ · −∞ is ∞. 0 · ∞ has no answer.
 - **minimum** : `(List a) -> Extended a where a has <`. The smallest of the numbers, as an Extended: +∞ when there are none, so it is minimum's identity and a fold over an empty list still has an answer.
 - **maximum** : `(List a) -> Extended a where a has <`. The largest of the numbers, as an Extended: −∞ when there are none.
-- **Dual** (type). A dual number, value + slope·ε where ε · ε is 0: a record of two Float64s. The same + − · work on it, · by the product rule, and sin, cos, tan, exp and log by the chain rule, so a function given dual(x, 1) gives back its value and its slope at x. slope by duals does that for you (forward-mode automatic differentiation). No <.
-- **as dual** : `(Float64) -> Dual`. The Float64 x as a dual number whose derivative part is 0: a constant.
-- **slope by duals** : `((Dual) -[e]-> Dual, Float64) -[e]-> Float64`. f′(x), worked out by giving f the dual number x + 1ε and reading the slope of what comes back (forward-mode automatic differentiation). f must work on duals: write it with the generic + − · and Trig. derivative(f) gives the same number by differentiating f's code.
-- **dual table** : `List (Table entry Dual)`. Dual numbers' multiplication table: 1 · 1 = 1, 1 · ε = ε, ε · 1 = ε, and ε · ε = 0, which needs no line. table product(dual table, x, y) is x · y.
+- **Dual** (type) (numbers module). A dual number, value + slope·ε where ε · ε is 0: a record of two Float64s. The same + − · work on it, · by the product rule, and sin, cos, tan, exp and log by the chain rule, so f(dual(x, 1)) carries f′(x) along with f(x) (forward-mode automatic differentiation).
+- **as dual** : `(Float64) -> Dual` (numbers module). The Float64 x as a dual number whose derivative part is 0: a constant.
+- **slope by duals** : `((Dual) -[e]-> Dual, Float64) -[e]-> Float64` (numbers module). f′(x), worked out by giving f the dual number x + 1ε and reading the slope of what comes back (forward-mode automatic differentiation). f must work on duals: write it with the generic + − · and Trig. derivative(f) gives the same number by differentiating f's code.
+- **dual table** : `List (Table entry Dual)` (numbers module). Dual numbers' multiplication table: 1 · 1 = 1, 1 · ε = ε, ε · 1 = ε, and ε · ε = 0, which needs no line. table product(dual table, x, y) is x · y.
 - **Algebraic** (type). An exact real number that solves a polynomial equation with whole-number coefficients, like √2 (x² = 2) or the golden ratio (x² = x + 1). Held by that equation and which of its roots it is, so √2 · √2 is exactly 2 and < always answers. The same + − · < work on it. Make one with square root, root, or as algebraic; digits shows as many digits as you ask for (EXACT-REALS.md).
 - **Real** (type). An exact real number, held by how it was made (fractions, + − ·), that works itself out as closely as you ask: approximate(x, p) is within 1/2ᵖ. The same + − · work on it. real pi() is π, and real digits shows as many decimals as you ask, and real less than compares two, narrowing until they come apart or the fuel runs out (EXACT-REALS.md, step 4).
+- **as algebraic** : `(Rational) -> Algebraic`. A fraction as an Algebraic number, exactly.
 - **as real** : `(Rational) -> Real`. A fraction as a Real, exactly.
+- **algebraic as fraction** : `(Algebraic) -[Choice]-> Rational`. The fraction an Algebraic number is, when it is one: algebraic as fraction(√2 · √2) is 2. No answer (Choice) for √2.
 - **approximate** : `(Real, Int) -> Int`. approximate(x, p) is an Int m with x within 1/2ᵖ of m/2ᵖ: x lies between (m − 1)/2ᵖ and (m + 1)/2ᵖ. Asking a larger p narrows it; what it works out is kept with the value.
 - **real pi** : `() -> Real`. π as a Real, exactly: real digits(real pi(), 50) gives fifty of its decimals (Machin's formula).
 - **real digits** : `(Real, Int) -> Text`. real digits(x, n) is x rounded to n decimals, as text: right to within one in the last place, since whether a Real is just below or just above a decimal can't always be told.
 - **real less than** : `(Real, Real, Int) -[Choice]-> Bool`. real less than(a, b, fuel) is a < b, worked out by narrowing both until they come apart, to at most 1/2^fuel. Two equal Reals never come apart, so when they are still that close it has no answer (Choice): real less than(real pi(), 22/7, 64) is true.
+- **real exp** : `(Real) -> Real`. real exp(x) is eˣ as a Real, exactly: real digits(real exp(1), 50) gives fifty decimals of e. It asks x for just the precision its answer needs.
+- **real log** : `(Real) -> Real`. real log(x) is the natural log of x as a Real, exactly, for x above 0: real log(real exp(x)) is x. x below 0, or too close to 0 to tell, is an error when the log is worked out.
+- **real sin** : `(Real) -> Real`. real sin(x) is the sine of x as a Real, exactly: real sin(real pi()) is as close to 0 as asked. Far from 0, x is asked to more places, enough to take off the multiples of 2π.
+- **real cos** : `(Real) -> Real`. real cos(x) is the cosine of x as a Real, exactly: real cos(real pi()) is −1 to as many places as asked.
 - **square root** : `(Algebraic) -[Choice]-> Algebraic`. The positive square root, exactly: square root(2) is √2, the root of x² − 2 between 1 and 2. No answer (Choice) for a negative number.
 - **root** : `(Algebraic, Int) -[Choice]-> Algebraic`. The real k-th root: root(8, 3) is 2, root(2, 2) is √2. For an even k the positive one, and no answer (Choice) for a negative number.
 - **divide** : `(Algebraic, Algebraic) -[Choice]-> Algebraic`. a ÷ b exactly. No answer (Choice) when b is 0.
-- **as algebraic** : `(Rational) -> Algebraic`. A fraction as an Algebraic number.
-- **as fraction** : `(Algebraic) -[Choice]-> Rational`. The fraction an Algebraic number is, when it is one: as fraction(√2 · √2) is 2. No answer (Choice) for √2.
+- **algebraic fraction parts** : `(Algebraic) -[Choice]-> (Int, Int)`. An Algebraic number's top and bottom in lowest terms, when it is a fraction; no answer (Choice) for √2. algebraic as fraction gives the Rational.
 - **digits** : `(Algebraic, Int) -> Text`. The first n digits after the point, cut off, worked out exactly: digits(√2, 5) is "1.41421". As many as asked for.
 - **as float64** : `(Algebraic) -> Float64`. The nearest Float64.
 - **show** : `(Algebraic) -> Text`. An Algebraic number as text: 2 or 1/3 when it is a fraction, √2 or −√2 for those, else its first ten digits and an ellipsis.
@@ -228,6 +233,7 @@ Text is a string of characters (Unicode code points). Positions count from 0. Te
 A list is written [1, 2, 3]. There are no loops: map, keep and for each go through a list, and fold (a construct, not a function) walks any data.
 
 - **list of** : `(a) -> List a`. A list written out: list of(1, 2, 3) is [1, 2, 3], one input per item, in order.
+- **unit parts** : `(a) -> List a`. A record of Float64s' basis: one record per field, 1 in that field and 0 in the rest, in field order. Only the type matters, so unit parts(1) at a multivector type is its basis: clifford algebra([1, 1, 1, 0], unit parts(1)).
 - **List** (type). A list: nil (empty), or cons(head, tail), an item in front of a list. [1, 2, 3] is how one is written.
 - **Unit** (type). The type with one value, unit: what an action that only does something gives back.
 - **Tuple2** (type). 2 values side by side, shown (A, B): the inputs or the results of a function as one value. A function of 2 inputs given one tuple takes it apart, so f(p) is f(x, y) when p is a tuple of them.
@@ -274,6 +280,7 @@ A list is written [1, 2, 3]. There are no loops: map, keep and for each go throu
 - **item at** : `(Array a, Int) -[Choice]-> a`. The item at a position, counting from 0, in constant time. No answer when the position is outside the array.
 - **push** : `(Array a, a) -> Array a`. The array with one more item at the end. A copy: the compiler may add in place when nothing else holds the array.
 - **first of array** : `(Array a) -[Choice]-> a`. The array's first item; none of an empty array.
+- **front of array** : `(Array a) -> Optional (a, Array a)`. The array's first item and the rest of it, as an Option: some((item, rest)), or none of an empty array. Run backwards, the array made from them.
 - **rest of array** : `(Array a) -> Array a`. The array without its first item; an empty array stays empty. It shares the items rather than copying them.
 - **push front** : `(Array a, a) -> Array a`. The array with one more item at the front. Compiled JS writes into free room before the items when nothing else has taken it.
 - **first of array if any** : `(Array a) -> Optional a`. The array's first item as an Option: some(item), or none of an empty array. No Choice, so nothing searches around it.
@@ -370,25 +377,25 @@ A producer sends items and a consumer receives them; piped joins the two, and th
 
 A Matrix of any size holds its items row by row. Sums, products and a matrix times a vector work for every number type and stop with both sizes when they don't fit; solved finds x with m·x = b at Float64. Mat2 to Mat4 are the fixed-size ones geometry uses.
 
-- **Matrix** (type). A matrix of any size: its row and column counts and its items row by row. Built with matrix of rows; a size mismatch stops the program and names both sizes, as the size isn't in the type.
-- **matrix of rows** : `(List (List a)) -[Abort]-> Matrix a`. The matrix with these rows: matrix of rows([[1, 2, 3], [4, 5, 6]]) is 2 × 3. Rows of different lengths stop the program.
-- **matrix rows** : `(Matrix a) -> List (List a)`. The matrix's rows, each a list, top to bottom.
-- **row count** : `(Matrix a) -> Int`. How many rows the matrix has.
-- **column count** : `(Matrix a) -> Int`. How many columns the matrix has.
-- **matrix entry** : `(Matrix a, Int, Int) -[Choice]-> a`. The item at a row and a column, counting from 0; no answer outside the matrix.
-- **transposed** : `(Matrix a) -> Matrix a`. The matrix flipped across its diagonal: row i is column i.
-- **identity matrix** : `(Int) -> Matrix a where a is a Number`. The size × size matrix with 1 on its diagonal and 0 elsewhere, for any number type.
-- **matrix scaled** : `(Matrix a, a) -> Matrix a where a is a Number`. Every item times the number.
-- **matrix sum** : `(Matrix a, Matrix a) -[Abort]-> Matrix a where a is a Number`. The two matrices added item by item. Different sizes stop the program, with both sizes.
-- **matrix product** : `(Matrix a, Matrix a) -[Abort]-> Matrix a where a is a Number`. The first matrix times the second: row by column, for any number type. The first's columns must be the second's rows, or the program stops with both sizes.
-- **matrix times vector** : `(Matrix a, List a) -[Abort]-> List a where a is a Number`. The matrix times the list as a column: one item per row. The list must have one item per column, or the program stops with both sizes.
-- **solved** : `(Matrix Float64, List Float64) -[Choice, Abort]-> List Float64`. The list x with matrix times vector(m, x) = b, for a square Float64 matrix, by Gaussian elimination with partial pivoting. No answer when the matrix is singular (a pivot is 0).
-- **factored** : `(Matrix Float64) -[Choice, Abort]-> LU factors`. A square Float64 matrix's LU factors, its Gaussian elimination with partial pivoting done once and kept, for solved with: factor once, then solve for many vectors. A singular matrix's factors have a 0 pivot, and solved with has no answer with them.
-- **solved with** : `(LU factors, List Float64) -[Choice, Abort]-> List Float64`. The list x with matrix times vector(m, x) = b, from m's factors (factored): the elimination solved does, done once for all the vectors solved this way. No answer when the matrix is singular (a pivot is 0).
-- **determinant** : `(Matrix Float64) -[Abort]-> Float64`. The determinant of a square Float64 matrix: 0 when it is singular. Other sizes stop the program.
-- **inverted** : `(Matrix Float64) -[Choice, Abort]-> Matrix Float64`. The inverse of a square Float64 matrix: matrix product(m, inverted(m)) is the identity. No answer when the matrix is singular.
-- **least squares** : `(Matrix Float64, List Float64) -[Choice, Abort]-> List Float64`. The x making matrix times vector(m, x) nearest the vector, by least squares, for a Float64 matrix with at least as many rows as columns: a line through points. No answer when the columns aren't independent.
-- **LU factors** (type). A square matrix's Gaussian elimination, done once by factored and kept: the pivots in the order taken, each pivot's row of U and the multiples taken off the rows below. solved with uses it to solve the matrix for any vector.
+- **Matrix** (type) (numbers module). A matrix of any size: its row and column counts and its items row by row. Built with matrix of rows; a size mismatch stops the program and names both sizes, as the size isn't in the type.
+- **LU factors** (type) (numbers module). A square matrix's Gaussian elimination, done once by factored and kept: the pivots in the order taken, each pivot's row of U and the multiples taken off the rows below. solved with uses it to solve the matrix for any vector.
+- **matrix of rows** : `(List (List a)) -[Abort]-> Matrix a` (numbers module). The matrix with these rows: matrix of rows([[1, 2, 3], [4, 5, 6]]) is 2 × 3. Rows of different lengths stop the program.
+- **matrix rows** : `(Matrix a) -> List (List a)` (numbers module). The matrix's rows, each a list, top to bottom.
+- **row count** : `(Matrix a) -> Int` (numbers module). How many rows the matrix has.
+- **column count** : `(Matrix a) -> Int` (numbers module). How many columns the matrix has.
+- **matrix entry** : `(Matrix a, Int, Int) -[Choice]-> a` (numbers module). The item at a row and a column, counting from 0; no answer outside the matrix.
+- **transposed** : `(Matrix a) -> Matrix a` (numbers module). The matrix flipped across its diagonal: row i is column i.
+- **identity matrix** : `(Int) -> Matrix a where a is a Number` (numbers module). The size × size matrix with 1 on its diagonal and 0 elsewhere, for any number type.
+- **matrix scaled** : `(Matrix a, a) -> Matrix a where a is a Number` (numbers module). Every item times the number.
+- **matrix sum** : `(Matrix a, Matrix a) -[Abort]-> Matrix a where a is a Number` (numbers module). The two matrices added item by item. Different sizes stop the program, with both sizes.
+- **matrix product** : `(Matrix a, Matrix a) -[Abort]-> Matrix a where a is a Number` (numbers module). The first matrix times the second: row by column, for any number type. The first's columns must be the second's rows, or the program stops with both sizes.
+- **matrix times vector** : `(Matrix a, List a) -[Abort]-> List a where a is a Number` (numbers module). The matrix times the list as a column: one item per row. The list must have one item per column, or the program stops with both sizes.
+- **solved** : `(Matrix Float64, List Float64) -[Choice, Abort]-> List Float64` (numbers module). The list x with matrix times vector(m, x) = b, for a square Float64 matrix, by Gaussian elimination with partial pivoting. No answer when the matrix is singular (a pivot is 0).
+- **factored** : `(Matrix Float64) -[Choice, Abort]-> LU factors` (numbers module). A square Float64 matrix's LU factors, its Gaussian elimination with partial pivoting done once and kept, for solved with: factor once, then solve for many vectors. A singular matrix's factors have a 0 pivot, and solved with has no answer with them.
+- **solved with** : `(LU factors, List Float64) -[Choice, Abort]-> List Float64` (numbers module). The list x with matrix times vector(m, x) = b, from m's factors (factored): the elimination solved does, done once for all the vectors solved this way. No answer when the matrix is singular (a pivot is 0).
+- **determinant** : `(Matrix Float64) -[Abort]-> Float64` (numbers module). The determinant of a square Float64 matrix: 0 when it is singular. Other sizes stop the program.
+- **inverted** : `(Matrix Float64) -[Choice, Abort]-> Matrix Float64` (numbers module). The inverse of a square Float64 matrix: matrix product(m, inverted(m)) is the identity. No answer when the matrix is singular.
+- **least squares** : `(Matrix Float64, List Float64) -[Choice, Abort]-> List Float64` (numbers module). The x making matrix times vector(m, x) nearest the vector, by least squares, for a Float64 matrix with at least as many rows as columns: a line through points. No answer when the columns aren't independent.
 
 ## Tensors
 
@@ -430,8 +437,10 @@ Json is JSON's values as data: null, a Bool, a Float64, a Text, a list, or an ob
 
 - **Json** (type). A JSON value (RFC 8259): null, a Bool, a Float64, a Text, a list of them or an object of named ones, in order. json printed writes one as JSON text.
 - **json printed** : `(Json) -> Text`. The JSON text of a Json value (RFC 8259): json printed(json object([("a", json list([json number(1), json null]))])) is {"a":[1,null]}. Text is quoted with ", \ and control characters escaped.
+- **json spelled** : `(Json) -[Choice, Diverge]-> Text`. Every JSON text that spells a Json value (RFC 8259), the one json printed writes first: blanks between the tokens, and each character as itself or escaped. Run backwards it reads JSON. A number is spelled as show writes it first, then any way json read reads it (1.0, 1e3).
+- **blank** : `() -[Choice, Diverge]-> Text`. Spaces, tabs, line ends and carriage returns between a text's tokens: "" first, then any run of them. A printer that writes it prints none, and reads any.
 - **json printed indented** : `(Json, Int) -> Text`. The Json value as text over lines, each item and field on a line of its own and indented step spaces a level: the same text as JavaScript's JSON.stringify(value, null, step). A step below 1 prints it on one line, as json printed.
-- **json read** : `(Text) -[Diverge, Abort]-> Json`. The Json value a JSON text spells (RFC 8259), the other way from json printed: json read("[1, true]") is json list([json number(1), json bool(true)]). Stops on text that isn't JSON, saying where.
+- **json read** : `(Text) -[Diverge, Abort]-> Json`. The Json value a JSON text spells (RFC 8259), json spelled run backwards: json read("[1, true]") is json list([json number(1), json bool(true)]). Stops on text that isn't JSON.
 - **json field** : `(Json, Text) -[Choice]-> Json`. The value of an object's field with this name, the first if there are several. No answer for a missing field or a value that isn't an object.
 - **json as number** : `(Json) -[Choice]-> Float64`. The Float64 a json number holds; no answer for any other kind.
 - **json as text** : `(Json) -[Choice]-> Text`. The Text a json text holds; no answer for any other kind.
@@ -490,8 +499,8 @@ An Embedding a b is the one map from a type into a larger one that keeps + − �
 - **int in rational** : `Embedding Int Rational`. Int in Rational: n as the fraction n/1, the one map that keeps + − · and <.
 - **int in float64** : `Embedding Int Float64`. Int in Float64: n as the Float64 nearest it, exact up to 2⁵³; + − · agree as closely as Float64 rounds.
 - **rational in float64** : `Embedding Rational Float64`. Rational in Float64: top ÷ bottom, the Float64 nearest the fraction; + − · agree as closely as Float64 rounds.
-- **float64 in complex** : `Embedding Float64 Complex`. Float64 in Complex: x as x + 0i.
-- **float64 in dual** : `Embedding Float64 Dual`. Float64 in Dual: x as the dual number x + 0ε, a constant, whose slope is 0.
+- **float64 in complex** : `Embedding Float64 Complex` (numbers module). Float64 in Complex: x as x + 0i.
+- **float64 in dual** : `Embedding Float64 Dual` (numbers module). Float64 in Dual: x as the dual number x + 0ε, a constant, whose slope is 0.
 
 ## Instants and durations
 
@@ -583,6 +592,7 @@ abort(reason) stops with a reason, and its type says so (Abort). attempt catches
 
 Each of these puts its effect in the type of every function that uses it, so `die : () -[Random]-> Float64` says die draws random numbers. Something around it handles the effect: seeded handles Random, a page's button handles what its handler does, and what nothing handles, the world answers when the program runs.
 
+- **Row** (type). A row of effects written as a type's argument: () -[Diverge]-> Row stands for the row Diverge where a data type takes a row of effects.
 - **Random** (type). An effect: random() is a Float64 from 0 up to (not including) 1. seeded(seed, action) answers it with the same numbers every time; with nothing around it, the world's randomness answers.
 - **seeded** : `(Float64, () -[Random, e]-> a) -[e]-> a`. Runs the action with its random() calls answered by a generator started from the seed: the same numbers every time for the same seed. The action's Random ends here.
 - **random item** : `(List a) -[Choice, Random]-> a`. An item of the list drawn at random, each as likely: random item(["a", "b", "c"]). No answer for an empty list (Choice). seeded gives the same draws every time.
@@ -705,6 +715,7 @@ uppercase and lowercase are each host's own (its Unicode version, its locale dat
 - **table uppercase** : `(Text, Locale) -> Text` (cases module). The text in capitals as `uppercase` gives it, written in Ters over the Unicode case tables, so a target with no host to ask (WebAssembly, C) gives the same.
 - **table lowercase** : `(Text, Locale) -> Text` (cases module). The text in small letters as `lowercase` gives it (final sigma included), written in Ters over the Unicode case tables, so a target with no host to ask (WebAssembly, C) gives the same.
 - **table graphemes** : `(Text) -> List Text` (cases module). The text's grapheme clusters, the characters a reader sees, as `graphemes` gives them, written in Ters over the Unicode grapheme tables (UAX #29), so a target with no host to ask (WebAssembly, C) gives the same.
+- **table collated** : `(Text, Text, Locale) -[Choice, Diverge]-> Order` (cases module). Which of two texts comes first in the locale's order, as `collate` gives it, written in Ters over the Unicode Collation Algorithm's tables, so a target with no host to ask (WebAssembly, C) gives the same: the root order, with the locale's own letters where its language has a tailoring the tables hold (Turkish, Spanish, Polish, Swedish and others; L214e5b2).
 
 ## Points, colours and slopes
 

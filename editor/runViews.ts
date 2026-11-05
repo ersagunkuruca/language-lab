@@ -14,8 +14,8 @@ import { runTests, savedFrom, type TestResult } from "../ters/src/lang/tests.ts"
 import type * as T from "./typed.ts";
 import type { Doc } from "./main.ts";
 
-declare const PAGE_RUNTIME: string; // cli/web.ts pageRuntime, put in by editor/build.ts
-declare const WORKLET_RUNTIME: string; // cli/web.ts workletRuntime: a page with sound plays (AUDIO.md)
+declare const CORE_PAGE_RUNTIME: string; // cli/web.ts corePageRuntime, put in by a test's build
+declare const CORE_WORKLET_RUNTIME: string; // cli/web.ts coreWorkletRuntime: a page with sound plays (AUDIO.md)
 declare const RUN_WORKER: string; // editor/runWorker.ts bundled, put in by editor/build.ts
 // esbuild's define writes the text at every use, so each runtime is used
 // once, here (E204): three uses of the worker carried its 3 MB three times.
@@ -25,12 +25,10 @@ export function newWorker(): Worker { const f = newWorker as { url?: string }; r
 // The site's page keeps them as text elements instead (build.ts, E204), so
 // the script it parses before the first drawing is 8 MB shorter.
 function runtimeText(id: string) { return document.getElementById(id)?.textContent || ""; }
-export function pageRuntimeText() { return runtimeText("lab-page-runtime") || PAGE_RUNTIME; }
-export function workletRuntimeText() { return runtimeText("lab-worklet-runtime") || WORKLET_RUNTIME; }
-// The core IR's (cli/web.ts corePageRuntime, coreWorkletRuntime): only the
-// site's page has them, and "" means none here (E244).
-export function corePageRuntimeText() { return runtimeText("lab-core-page-runtime"); }
-export function coreWorkletRuntimeText() { return runtimeText("lab-core-worklet-runtime"); }
+// The core IR's page and audio runtimes (cli/web.ts corePageRuntime,
+// coreWorkletRuntime, E244); "" means none here.
+export function corePageRuntimeText() { return runtimeText("lab-core-page-runtime") || CORE_PAGE_RUNTIME; }
+export function coreWorkletRuntimeText() { return runtimeText("lab-core-worklet-runtime") || CORE_WORKLET_RUNTIME; }
 
 // Where a read of a text run backwards stopped (L70c): its line, marked
 // at the place, and what was looked for there.
