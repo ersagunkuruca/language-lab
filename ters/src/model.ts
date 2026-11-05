@@ -565,15 +565,25 @@ export const layerOf = (code: Code): Code | undefined => layers.get(code);
 export const offLayer = (code: Code): Set<Id> | undefined => { const d = derived.get(code); return d?.stable ? d.changed : undefined; };
 const sizes = new WeakMap<object, number>();
 const sizeOf = (nodes: Record<Id, Node>) => { let n = sizes.get(nodes); if (n === undefined) sizes.set(nodes, (n = Object.keys(nodes).length)); return n; };
+const changedOnLayer = new WeakMap<object, { layer: Code; changed: Set<Id> }>();
 export function scanningOnLayer<T>(code: Code, step: () => T): T {
   const layer = layers.get(code);
   if (!layer || derived.has(code)) return step();
-  const under = layer.nodes, changed = new Set<Id>();
-  let same = 0;
-  for (const id in code.nodes) if (code.nodes[id] !== under[id]) changed.add(id); else same++;
-  // A layer node gone is changed too; when every one is there as it was,
-  // none is gone, and the layer's ~27,000 needn't be walked again (L215c2).
-  if (same !== sizeOf(under)) for (const id in under) if (!(id in code.nodes)) changed.add(id);
+  // Found once per version of the nodes, as sizeOf counts them once: an
+  // edit's check, its panels and its hole's fillings each scan on the
+  // layer, and each walked the ~27,000 ids again (I167i).
+  const kept = changedOnLayer.get(code.nodes);
+  let changed = kept?.layer === layer ? kept.changed : undefined;
+  if (!changed) {
+    const under = layer.nodes;
+    changed = new Set<Id>();
+    let same = 0;
+    for (const id in code.nodes) if (code.nodes[id] !== under[id]) changed.add(id); else same++;
+    // A layer node gone is changed too; when every one is there as it was,
+    // none is gone, and the layer's ~27,000 needn't be walked again (L215c2).
+    if (same !== sizeOf(under)) for (const id in under) if (!(id in code.nodes)) changed.add(id);
+    changedOnLayer.set(code.nodes, { layer, changed });
+  }
   derived.set(code, { base: layer, changed, stable: true });
   try { return step(); } finally { derived.delete(code); }
 }
