@@ -14,7 +14,7 @@
 // didn't. Specializing a function on a known function argument is old:
 // partial evaluation (Futamura, 1971; Jones, Gomard and Sestoft, 1993).
 
-import type { Code, Id, Node, NodeOf } from "../../ters/src/model.ts";
+import type { Bound, Code, Id, Node, NodeOf } from "../../ters/src/model.ts";
 import { freshId, isCall, subtree } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
@@ -46,7 +46,7 @@ export function expandInverses(code: Code, names: Names): { code: Code; names: N
   const inverse = (id: Id, fn: Id, y: Id) => {
     const p = param(fn)!, x = add({ kind: "binder" } as Omit<Node, "id">);
     more[x] = names[p] ?? "x";
-    out.nodes[id] = { id, kind: "call", fn, given: { out: y }, binds: { [p]: x }, body: ref(x) };
+    out.nodes[id] = { id, kind: "call", fn, given: { out: y }, binds: { [p]: x }, body: ref(x) } satisfies Bound;
   };
   const expanded: Id[] = [];
   for (const id of Object.keys(code.nodes)) {
@@ -92,7 +92,7 @@ export function expandInverses(code: Code, names: Names): { code: Code; names: N
     more[x] = names[a.params[a.at]] ?? "x";
     const given: Record<string, Id> = { out: c.args[1] };
     a.params.forEach((p, j) => { if (j !== a.at) given[p] = a.args[j]; });
-    out.nodes[id] = { id, kind: "call", fn: ref(a.f), given, binds: { [a.params[a.at]]: x }, body: ref(x) } as Node;
+    out.nodes[id] = { id, kind: "call", fn: ref(a.f), given, binds: { [a.params[a.at]]: x }, body: ref(x) } satisfies Bound;
     expanded.push(id);
   }
   return expanded.length ? { code: out, names: { ...names, ...more }, expanded } : { code, names, expanded };

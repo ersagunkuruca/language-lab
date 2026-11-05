@@ -408,7 +408,7 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
       return i >= 0 && ins[i] ? ins[i] : o >= 0 && outs[o] ? outs[o] : lam.params[Number(k)];
     };
     const re = (r: Record<string, Id>) => Object.fromEntries(Object.entries(r).map(([k, v]) => [key(k), v]));
-    nodes[id] = { ...n, given: re(n.given), binds: re(bindsOf(n)) };
+    nodes[id] = { ...n, given: re(n.given), ...(isBound(n) && { binds: re(n.binds) }) };
     nodes[n.fn] = { id: n.fn, kind: "ref", target };
   };
 
@@ -427,7 +427,7 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
     if (from?.kind !== "lambda" || to?.kind !== "lambda") return;
     const key = (k: string) => (k === "out" ? k : to.params[from.params.indexOf(k)] ?? k);
     const re = (r: Record<string, Id>) => Object.fromEntries(Object.entries(r).map(([k, v]) => [key(k), v]));
-    nodes[id] = { ...n, given: re(n.given), binds: re(bindsOf(n)) };
+    nodes[id] = { ...n, given: re(n.given), ...(isBound(n) && { binds: re(n.binds) }) };
     nodes[n.fn] = { id: n.fn, kind: "ref", target };
   };
 

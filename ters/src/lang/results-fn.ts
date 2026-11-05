@@ -11,7 +11,7 @@
 // and every compiler target see uses, as they did. The program comes back
 // unchanged when it has none, and the nodes the person wrote keep their ids.
 
-import type { Code, Id, Node, NodeOf } from "../model.ts";
+import type { Bound, Code, Id, Node, NodeOf } from "../model.ts";
 import { fieldPorts, freshId, isCall, nodesWhere, parentLookup, portsOf as definedPorts, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { infer, type Info } from "./infer.ts";
@@ -119,7 +119,8 @@ export function resultsAsFunctions(code: Code, info: Info, names: Names): { code
     const outs = ports.outs.map((k) => add({ kind: "ref", target: binds[k] }));
     const body = outs.length === 1 ? outs[0] : add({ kind: "call", fn: add({ kind: "ref", target: tupleVariant(outs.length) }), args: outs });
     const given = { ...Object.fromEntries(ports.ins.map((k, i) => [k, args[i]])), out: add({ kind: "ref", target: TRUE }) };
-    return { kind: "call", fn: add({ kind: "ref", target }), given, binds, body };
+    const bound: Omit<Bound, "id"> = { kind: "call", fn: add({ kind: "ref", target }), given, binds, body };
+    return bound;
   };
   for (const { ref: n, ports, parent } of todo) {
     if (isCall(parent) && parent.fn === n.id && parent.args.length === ports.ins.length) {

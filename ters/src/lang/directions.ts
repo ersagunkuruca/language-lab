@@ -13,7 +13,7 @@
 // one predicate with a definition per mode, promised to agree.
 
 import type { Code, Id, Node, NodeOf, Use } from "../model.ts";
-import { conditionResults, directionOf, isUse, useTarget, isCall, fieldPorts, type Call, bindsOf } from "../model.ts";
+import { conditionResults, directionOf, isUse, useTarget, isCall, fieldPorts, type Call, bindsOf, isBound } from "../model.ts";
 import { derivedFrom, nodesWhere, portsOf, subtree } from "../model.ts";
 import { S } from "./std.ts";
 
@@ -66,7 +66,7 @@ function fieldDirection(code: Code, n: Use, f: NodeOf<"field">): Retargeted | nu
     // The same ports, perhaps in another order: each moved to g's position.
     const key = (k: string) => (k === "out" ? k : String(g.ports!.indexOf(name(f, k))));
     const re = (r: Record<string, Id>) => Object.fromEntries(Object.entries(r).map(([k, x]) => [key(k), x]));
-    return { use: { ...n, given: re(n.given), binds: re(bindsOf(n)) }, target: id };
+    return { use: { ...n, given: re(n.given), ...(isBound(n) && { binds: re(n.binds) }) }, target: id };
   }
   return null;
 }
@@ -93,7 +93,7 @@ export function directionFor(code: Code, n: Use, ways = directionsIn(code)): Ret
     if (ins.length !== given.size || !ins.every((i) => given.has(i))) continue;
     const key = (k: string) => (k === "out" ? k : mine[theirs.indexOf(k)]);
     const re = (r: Record<string, Id>) => Object.fromEntries(Object.entries(r).map(([k, v]) => [key(k), v]));
-    return { use: { ...n, given: re(n.given), binds: re(bindsOf(n)) }, target: d };
+    return { use: { ...n, given: re(n.given), ...(isBound(n) && { binds: re(n.binds) }) }, target: d };
   }
   return null;
 }
