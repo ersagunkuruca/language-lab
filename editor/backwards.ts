@@ -45,7 +45,7 @@ export interface BackHost {
 }
 
 export function backwards(host: BackHost) {
-  const { doc, ui, pres, render, commit, portsOfDef, returnsBool, seeded, pixelSeed, readPort, traced, kindOf, handledForArgs, userCode, fnv } = host;
+  const { doc, ui, pres, render, commit, portsOfDef, returnsBool, seeded, pixelSeed, readPort, traced, kindOf, handledForArgs } = host;
   const fmt = (x: number) => (Number.isInteger(x) ? String(x) : String(Math.round(x * 1e6) / 1e6));
   // Known ports: as chosen in layout.json, else the usual direction.
   function knownPorts(info: T.Info): Id[] {
@@ -108,12 +108,15 @@ export function backwards(host: BackHost) {
   // The page's own share of opening a definition stays near 300 ms (QA9
   // M1): this short look and the values on the wires (TRACE_MS) split it.
   const BACK_MS = 100;
-  // The program's own code, hashed once per version: ~100 ms on the ray
-  // marcher, and every render asks.
-  const codeHashes = new WeakMap<Code, string>();
+  // Each version of the code by a number of its own, not a hash of it: a
+  // hash was ~100 ms on the ray marcher and ~150 ms on fall per edit (3.7
+  // s of editing's swapAndUndo, T14). Undo gives back the version itself,
+  // so its search is still kept.
+  const codeIds = new WeakMap<Code, string>();
+  let codeCount = 0;
   function codeHash(): string {
-    let h = codeHashes.get(doc().code);
-    if (h === undefined) codeHashes.set(doc().code, (h = String(fnv(JSON.stringify(userCode(doc().code))))));
+    let h = codeIds.get(doc().code);
+    if (h === undefined) codeIds.set(doc().code, (h = String(++codeCount)));
     return h;
   }
   // `look`: the short look on the page first. Without it the worker does
