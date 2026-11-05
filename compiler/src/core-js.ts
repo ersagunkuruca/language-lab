@@ -370,9 +370,13 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
             // The case as a function, so a page's wait (Pending) going out
             // through the handler is resumed inside it again (R.caught).
             const h = temp();
-            pre.push(`${d}${save}let ${t};`, `${d}${fr} = { inRest: false };`, `${d}const ${h} = (x) => {`, `${d}  if (!(x instanceof R.Aborted) || x.esc !== ${e.esc ?? 0} || ${fr}.inRest) throw x;`, `${d}  ${back}${local(e.reason)} = x.reason;`,
-              ...within("return R.FAIL;", () => block(e.arm, { set: t }, d + "  ")), `${d}  return ${t};`, `${d}};`,
-              `${d}try {`, ...within(null, () => block(e.body, { set: t }, d + "  ")), `${d}} catch (x) {`, `${d}  ${t} = R.caught(x, ${h});`, `${d}}`);
+            // On the program's stack of handlers too (C185), so a rest a
+            // handler outside keeps for later, run once this has
+            // returned, still has its aborts caught by it (core-rt.ts).
+            const n = temp();
+            pre.push(`${d}${save}let ${t};`, `${d}const ${h} = (x) => {`, `${d}  if (!(x instanceof R.Aborted) || x.esc !== ${e.esc ?? 0} || ${fr}.inRest) throw x;`, `${d}  ${back}${local(e.reason)} = x.reason;`,
+              ...within("return R.FAIL;", () => block(e.arm, { set: t }, d + "  ")), `${d}  return ${t};`, `${d}};`, `${d}${fr} = { inRest: false, abort: ${h} };`, `${d}const ${n} = R.hin(${fr});`,
+              `${d}try {`, ...within(null, () => block(e.body, { set: t }, d + "  ")), `${d}} catch (x) {`, `${d}  R.hout(${n});`, `${d}  ${t} = R.caught(x, ${h});`, `${d}} finally {`, `${d}  R.hout(${n});`, `${d}}`);
             if (onFail) pre.push(`${d}if (${t} === R.FAIL) ${onFail}`);
             return t;
           }

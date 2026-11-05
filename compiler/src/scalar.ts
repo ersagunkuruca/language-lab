@@ -1921,14 +1921,18 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // as in the evaluator.
   // `later`: each case is given the rest, last, and the code it handles
   // takes the rest of the run (several_): core-rt.ts `handleK:`.
+  // Whether code in f may wait for a handler outside it (C185): f's row
+  // has an effect answered later, or, for the code a handler handles and
+  // its cases (handleOps), what the handler says.
+  const synthWaits = new Map<Id, boolean>();
+  function waitingIn(f: SFunc): boolean {
+    if (synthWaits.has(f.def)) return synthWaits.get(f.def)!;
+    const ft = zonk(f.def);
+    return ft.t === "fn" && info.subst.resolveRow(ft.eff).effs.some((x) => laterEffs.has(x));
+  }
   function handleOps(n: NodeOf<"match">, e: Id, id: Id, env: Map<Id, number>, f: SFunc, later = false, fin?: NodeOf<"lambda">): SExpr {
     const t = stype(zonk(id));
     if (!t) throw new Refused(`handles ${nm(e)} with a value that is ${OTHER}`);
-    // A handler of std's Await whose value is a function (the simulated
-    // world's clock passed along) keeps the rest for later, past the
-    // handlers inside it (start branch's), which the runtime's handlers,
-    // called and returning, can't yet.
-    if (e === AWAIT && isFn(t)) throw new Refused("handles Await keeping the rest for later (the simulated world), which isn't lowered yet (C180)");
     // With a case for the normal finish (C180), the computation's value
     // is the finish's input.
     const tb = fin ? stype(zonk(n.scrutinee)) : t;
@@ -1942,8 +1946,14 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       const c = lambda({ id: at, kind: "lambda", params, body } as NodeOf<"lambda">, ft, env, f);
       return c.k === "closure" ? { ...c, src: undefined } : c;
     };
+    // The code handled may perform this effect, answered later: a
+    // handler inside it is in a function that may wait. A case runs
+    // where the handler is.
+    const here = waitingIn(f);
+    if (later) synthWaits.set(n.scrutinee, true);
     const cases = ops.map((v) => {
       const a = arms.find((x) => x.variant === v)!;
+      synthWaits.set(a.id, here);
       const r = stype(zonk(a.body)), ps = a.binds.map((b) => stype(zonk(b)));
       if (!r) throw new Refused(`handles ${nm(e)} with a case giving ${whyNot(zonk(a.body))}`);
       ps.forEach((p, j) => { if (!p) throw new Refused(`handles ${nm(v)} given ${whyNot(zonk(a.binds[j]))}`); });
@@ -1959,7 +1969,25 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     // A case that leaves the rest out answers at once (L63, L229e): the
     // runtime resumes the rest with its value.
     const now = later ? ops.flatMap((v, i) => (arms.find((x) => x.variant === v)!.binds.length === (code.nodes[v] as NodeOf<"variant">).fields.length ? [i] : [])) : [];
-    if (later) return { k: "rt", fn: `handleK:${e}:${now.join(",")}:${finTag.slice(1) || "-"}:${how}`, args: [body, ...cases, ...finished], host: { t, partial: true } };
+    if (later) {
+      // The cases given where their answer goes (continuation passing).
+      const ks = cases.flatMap((c, i) => (cps(c) ? [i] : []));
+      const name = `handleK:${e}:${now.join(",")}:${finTag.slice(1) || "-"}:${how}:${ks.join(",")}`;
+      // Inside a function that may wait (its row has an effect answered
+      // later), a handler around a wait for one outside it hands its value
+      // on (C185): the simulated world, around start branch's handler, or
+      // its clock's. A case's rest may then wait too, and takes where its
+      // answer goes.
+      const inWaiting = waitingIn(f);
+      if (!inWaiting) return { k: "rt", fn: name, args: [body, ...cases, ...finished], host: { t, partial: true } };
+      ops.forEach((v, i) => {
+        const a = arms.find((x) => x.variant === v)!;
+        if (now.includes(i)) return;
+        const rt = zonk(a.binds[a.binds.length - 1]), st = stype(rt);
+        if (rt.t === "fn" && st && typeof st === "object" && "params" in st && !st.several && info.subst.resolveRow(rt.eff).effs.some((x) => laterEffs.has(x))) throw new NeedsSeveral(st.key);
+      });
+      return { k: "world", op: `${name}:out`, aborts: false, args: [body, ...cases, ...finished], t, suspends: true };
+    }
     if (cps(body) || finTag === ":finK") throw new Refused(`handles ${nm(e)} around a wait or several answers (not lowered yet)`);
     if (tailOwn.has(e)) {
       // C (L213c4): the cases pushed, the code run, and popped however it

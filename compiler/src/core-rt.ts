@@ -29,8 +29,6 @@ export class Unsupported extends Error {}
 export class Stopped extends Error { node?: Id; def?: Id; defName?: string; constructor(why: string, at?: { node: Id; def: Id; name?: string }, name?: string) { super(why); if (at) { this.node = at.node; this.def = at.def; if (at.name) this.defName = at.name; } else if (name) this.defName = name; } }
 export class Aborted { reason: unknown; esc: number; constructor(reason: unknown, esc: number) { this.reason = reason; this.esc = esc; } }
 export const FAIL = { fail: true }, OUT = { out: true };
-// The mark a seeded generator leaves on Random's handlers (C183).
-const SEEDED = { seeded: true };
 
 const big = (x: I.Int) => BigInt(x);
 // UTF-8 as a browser has it too (a page's script, C137c9).
@@ -109,7 +107,49 @@ function randFns(r: Uint32Array): Record<string, (...xs: never[]) => unknown> {
 // as the printer read them (core-js.ts builtinOf).
 export type BuiltinOf = [Id, boolean];
 type Cases = ((...xs: unknown[]) => unknown)[];
-function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Record<string, (...xs: never[]) => unknown>, cells?: Record<Id, (...xs: Value[]) => Value | undefined>, code?: Code, spend?: () => boolean, info?: Info, rt?: Runtime, handlers = new Map<string, Cases[]>(), hostOps?: HostOps): (...xs: unknown[]) => unknown {
+// One stack of the handlers open, of every effect (C185): a perform finds
+// the nearest of its effect and takes it and every one inside it off
+// while its case runs, as the evaluator's machine does, and the rest it
+// gives a case puts them all back. `k`: where what the handler gives goes,
+// changed by each rest a case runs (deep handlers). `ks`: the cases that
+// are given where their answer goes, last (continuation passing).
+// `abort`: a handler of Abort around a wait (core-js.ts `handle`), its
+// case as a function.
+type Frame = Cases & { e: string; k?: (v: unknown) => unknown; now?: Set<number>; ks?: Set<number>; seeded?: true; abort?: (x: unknown) => unknown };
+const nearest = (s: Frame[], e: string) => { for (let i = s.length - 1; i >= 0; i--) if (s[i].e === e) return i; return -1; };
+// A handler whose cases may take the rest (scalar.ts handleOps `later`,
+// C137c24): the code it handles takes the rest of its run, and its value
+// goes where the frame's `k` says. Called and returning (`out` unset):
+// that k keeps it, and it is what the call gives; else `out` is where it
+// goes (a handler inside a function that waits, C185), and the code's own
+// answer is what the call gives.
+function handleK(name: string, handlers: Frame[]): (...xs: unknown[]) => unknown {
+  const [, e, at, finTag, how, cs] = name.split(":"), now = new Set((at ?? "").split(",").filter(Boolean).map(Number));
+  const ks = new Set((cs ?? "").split(",").filter(Boolean).map(Number)), fk = finTag === "-" ? undefined : finTag;
+  return (body, ...cases) => {
+    const out = name.endsWith(":out") ? cases.pop() as (v: unknown) => unknown : undefined;
+    // A case for the normal finish (C180): run on the code's value with
+    // this handler off, what it gives being what the handler gives
+    // (given where that goes when it waits, `finK`).
+    const fin = fk ? cases.pop() : undefined;
+    let box: unknown;
+    const frame = Object.assign(cases as Cases, { e, now, ks, k: out ?? ((v: unknown) => { box = v; return true; }) }) as Frame;
+    const end = (x: unknown) => {
+      if (x === FAIL) return out ? FAIL : frame.k!(x);
+      const i = handlers.lastIndexOf(frame);
+      handlers.splice(i, 1);
+      try { return fk === "finK" ? RUNTIME.ap(fin as never, x, frame.k) : frame.k!(fin ? RUNTIME.ap(fin as never, x) : x); } finally { handlers.splice(i, 0, frame); }
+    };
+    const n = handlers.length;
+    handlers.push(frame);
+    let r: unknown;
+    try {
+      if (how === "d") { const v = (body as () => unknown)(); r = end(v); } else r = (body as { code: (...xs: unknown[]) => unknown }).code(body, end);
+    } finally { handlers.length = n; }
+    return out ? r : box;
+  };
+}
+function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Record<string, (...xs: never[]) => unknown>, cells?: Record<Id, (...xs: Value[]) => Value | undefined>, code?: Code, spend?: () => boolean, info?: Info, rt?: Runtime, handlers: Frame[] = [], hostOps?: HostOps): (...xs: unknown[]) => unknown {
   if (name.startsWith("host:")) return hostFn(name, cells);
   // A program's own effect whose cases answer in place (scalar.ts
   // handleOps, C137): a handler pushes its cases while the code it handles
@@ -124,57 +164,27 @@ function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Re
     const finished = name.endsWith(":fin");
     return (body, ...cases) => {
       const fin = finished ? cases.pop() : undefined;
-      const s = handlers.get(e) ?? handlers.set(e, []).get(e)!;
-      s.push(cases as Cases);
+      const n = handlers.length;
+      handlers.push(Object.assign(cases as Cases, { e }));
       let v: unknown;
-      try { v = (body as () => unknown)(); } finally { s.pop(); }
+      try { v = (body as () => unknown)(); } finally { handlers.length = n; }
       return fin && v !== FAIL ? RUNTIME.ap(fin as never, v) : v;
     };
   }
-  // A program's own effect answered later (scalar.ts handleOps `later`,
-  // C137c24): the code it handles takes the rest of its run, its end
-  // keeping its value in the handler's box; a case is given the rest, which
-  // runs with the handler pushed again (a deep handler) and gives what
-  // the handler then gives. Each rest is run at most once (the effect
-  // says so), one after another, so one box per handler does: whatever
-  // ends last (the code, or a case) leaves the handler's value in it.
+  // A program's own effect answered later (C137c24): handleK above.
   // Prior art: CPS for effect handlers (Hillerström and Lindley), here
   // only for the performers of such an effect (selective, as Koka and
   // Effekt).
-  if (name.startsWith("handleK:")) {
-    const [, e, at, finTag, how] = name.split(":"), now = new Set((at ?? "").split(",").filter(Boolean).map(Number));
-    const fk = finTag === "-" ? undefined : finTag;
-    return (body, ...cases) => {
-      // A case for the normal finish (C180): run on the code's value with
-      // this handler off, what it gives being what the handler gives
-      // (given the rest itself when it waits, `finK`).
-      const fin = fk ? cases.pop() : undefined;
-      const s = handlers.get(e) ?? handlers.set(e, []).get(e)!;
-      const frame = Object.assign(cases as Cases, { box: { v: undefined as unknown }, now });
-      const done = (x: unknown) => { frame.box.v = x; return true; };
-      const end = !fin ? done : (x: unknown) => {
-        if (x === FAIL) return done(x);
-        const i = s.lastIndexOf(frame);
-        s.splice(i, 1);
-        try { if (fk === "finK") RUNTIME.ap(fin as never, x, done); else done(RUNTIME.ap(fin as never, x)); } finally { s.splice(i, 0, frame); }
-        return true;
-      };
-      s.push(frame);
-      try {
-        if (how === "d") { const v = (body as () => unknown)(); if (v !== FAIL) end(v); else done(v); } else (body as { code: (...xs: unknown[]) => unknown }).code(body, end);
-      } finally { s.pop(); }
-      return frame.box.v;
-    };
-  }
+  if (name.startsWith("handleK:")) return handleK(name, handlers);
   // A handler of Abort around several answers or a wait (C182): whether
   // the rest outside it is running.
   if (name === "rest.in") return (f) => { (f as { inRest: boolean }).inRest = true; return true; };
   if (name === "rest.out") return (f) => { (f as { inRest: boolean }).inRest = false; return true; };
   // A seeded generator (C183) is the nearest handler of Random while its
   // body runs: a draw then isn't a handler's of the program's.
-  if (name.startsWith("seeded.in:")) { const e = name.slice(10); return () => { (handlers.get(e) ?? handlers.set(e, []).get(e)!).push(SEEDED as never); return true; }; }
-  if (name.startsWith("seeded.out:")) { const e = name.slice(11); return () => { handlers.get(e)?.pop(); return true; }; }
-  if (name.startsWith("handled:")) { const e = name.slice(8); return () => { const s = handlers.get(e); return !!s?.length && s[s.length - 1] !== (SEEDED as never); }; }
+  if (name.startsWith("seeded.in:")) { const e = name.slice(10); return () => { handlers.push(Object.assign([], { e, seeded: true as const })); return true; }; }
+  if (name.startsWith("seeded.out:")) { const e = name.slice(11); return () => { const i = nearest(handlers, e); if (i >= 0) handlers.splice(i, 1); return true; }; }
+  if (name.startsWith("handled:")) { const e = name.slice(8); return () => { const i = nearest(handlers, e); return i >= 0 && !handlers[i].seeded; }; }
   if (name.startsWith("perform:")) {
     const [, e, op, bool] = name.split(":");
     // The program's own operation nothing in it handles: its host's
@@ -182,15 +192,15 @@ function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Re
     // evaluator checks it, a wrong one being the program's Abort (C137d5).
     const host = hostOps?.[`${e}:${op}`];
     return (...xs) => {
-      const s = handlers.get(e);
-      if (!s?.length && host) {
+      const i = nearest(handlers, e);
+      if (i < 0 && host) {
         let v: unknown;
         try { v = answerByShapes(host, rt?.hosts ?? {}, host.op, xs.map(inn) as Value[]); } catch (err) { throw new Aborted((err as Error).message, 0); }
         return bool ? (v as Data).tag === TRUE : v;
       }
-      if (!s?.length) throw new Error(`nothing handles ${code?.nodes[e] ? e : "the operation"}`);
-      const h = s.pop()!;
-      try { return h[Number(op)](...xs); } finally { s.push(h); }
+      if (i < 0) throw new Error(`nothing handles ${code?.nodes[e] ? e : "the operation"}`);
+      const off = handlers.splice(i);
+      try { return off[0][Number(op)](...xs); } finally { handlers.push(...off); }
     };
   }
   if (/^(derive|solve|solveAll):|^exists$/.test(name)) {
@@ -410,30 +420,58 @@ export const RUNTIME = {
 // it's ready, runs the rest as a step of its own. As the evaluator's
 // (run.ts `unhandled` and `paused`), awaiting a fetch on its way looks
 // again every few milliseconds.
-function worldFn(op: string, rt: Runtime, timers: Timers, handlers: Map<string, Cases[]>): (...xs: unknown[]) => unknown {
+function worldFn(op: string, rt: Runtime, timers: Timers, handlers: Frame[]): (...xs: unknown[]) => unknown {
   // An operation answered later (handleK above): the case gets the rest.
+  // A handler inside a function that waits (C185): given where its value goes.
+  if (op.startsWith("handleK:")) return handleK(op, handlers);
   if (op.startsWith("perform:")) {
-    const [, e, i] = op.split(":");
+    const [, e, i_] = op.split(":");
     // std's Await, which the program handles somewhere (C180): with no
     // handler of the program's open, the world's await and timers.
     // Wait and Time likewise: the world's wait, and its clock.
     const world = e === "std.await" ? [worldFn("await", rt, timers, handlers), worldFn("startTimer", rt, timers, handlers)]
       : e === "std.wait" ? [worldFn("wait", rt, timers, handlers)] : e === "std.time" ? [worldFn("now", rt, timers, handlers)] : undefined;
     return (...xs) => {
-      const k = xs.pop(), s = handlers.get(e);
-      if (!s?.length && world) return e === "std.time" ? RUNTIME.ap(k as never, world[0]()) : i === "0" ? world[0](xs[0], k) : RUNTIME.ap(k as never, world[1](xs[0]));
-      if (!s?.length) throw new Error(`nothing handles ${e}`);
-      const frame = s.pop() as Cases & { box: { v: unknown }; now?: Set<number> };
+      const k = xs.pop(), i = nearest(handlers, e);
+      if (i < 0 && world) return e === "std.time" ? RUNTIME.ap(k as never, world[0]()) : i_ === "0" ? world[0](xs[0], k) : RUNTIME.ap(k as never, world[1](xs[0]));
+      if (i < 0) throw new Error(`nothing handles ${e}`);
+      // The handler and those inside it, off while the case runs; the
+      // rest puts them back, and is told where the handler's value goes
+      // (or keeps it, called and returning).
+      const off = handlers.splice(i) as Frame[], frame = off[0], kk = frame.k!;
       // A rest runs once, as the evaluator's (run.ts).
       let used = false;
-      const rest = (y: unknown) => {
+      const rest = (y: unknown, kr?: (v: unknown) => unknown) => {
         if (used) throw new Error("the rest of the operation was resumed a second time: a rest runs once");
         used = true;
-        s.push(frame); try { RUNTIME.ap(k as never, y); } finally { s.pop(); } return frame.box.v;
+        let box: unknown;
+        frame.k = kr ?? ((v: unknown) => { box = v; return true; });
+        const n = handlers.length;
+        handlers.push(...off);
+        try {
+          const r = RUNTIME.ap(k as never, y);
+          return kr ? r : box;
+        } catch (x0) {
+          // What the rest threw, to the handlers of Abort it was inside
+          // when this kept it, innermost first, as their try/catch would
+          // have had it, each with those outside it put back.
+          let x = x0;
+          for (let j = off.length - 1; j >= 0; j--) {
+            const h = off[j].abort;
+            if (!h) continue;
+            handlers.length = n;
+            handlers.push(...off.slice(0, j));
+            try { const r = RUNTIME.caught(x, h); return kr ? r : box; } catch (y2) { x = y2; }
+          }
+          throw x;
+        } finally { handlers.length = n; }
       };
-      // A case that leaves the rest out answers at once (L63, L229e).
-      try { if (frame.now?.has(Number(i))) rest(frame[Number(i)](...xs)); else frame.box.v = frame[Number(i)](...xs, rest); } finally { s.push(frame); }
-      return true;
+      const j = Number(i_), c = frame[j];
+      try {
+        // A case that leaves the rest out answers at once (L63, L229e).
+        if (frame.now?.has(j)) return frame.ks?.has(j) ? RUNTIME.ap(c as never, ...xs, (v: unknown) => rest(v, kk)) : rest(c(...xs), kk);
+        return frame.ks?.has(j) ? RUNTIME.ap(c as never, ...xs, rest, kk) : kk(c(...xs, rest));
+      } finally { handlers.push(...off); }
     };
   }
   const w = <K extends keyof World>(k: K): World[K] => {
@@ -531,8 +569,11 @@ export function coreRuntime(tables: TableSpec[], worlds: string[], rt: Runtime, 
   };
   const timers = worldTimers((m) => { throw new Aborted(m, 0); });
   let spend = () => true;
-  const handlers = new Map<string, Cases[]>();
-  return { ...RUNTIME, spending: (f: () => boolean) => { spend = f; }, rt: (n: string, b?: BuiltinOf) => n.startsWith("readPaths:") ? readPaths(n) : rtFn(n, b, tables, rand, cells, code, () => spend(), info, rt, handlers, hostOps), worlds: worlds.map((op) => worldFn(op, rt, timers, handlers)), abort: (reason: unknown, esc: number): never => { throw new Aborted(reason, esc); } };
+  const handlers: Frame[] = [];
+  // A handler of Abort around a wait (C185, core-js.ts): on the stack of
+  // handlers while its code runs, `hout` taking it (and what's inside it) off.
+  const hin = (f: Frame) => handlers.push(Object.assign(f, { e: "" })) - 1, hout = (n: number) => { handlers.length = Math.min(handlers.length, n); return true; };
+  return { ...RUNTIME, hin, hout, spending: (f: () => boolean) => { spend = f; }, rt: (n: string, b?: BuiltinOf) => n.startsWith("readPaths:") ? readPaths(n) : rtFn(n, b, tables, rand, cells, code, () => spend(), info, rt, handlers, hostOps), worlds: worlds.map((op) => worldFn(op, rt, timers, handlers)), abort: (reason: unknown, esc: number): never => { throw new Aborted(reason, esc); } };
 }
 
 // How the evaluator's runtime (a page's mount, html.ts) calls a function
