@@ -126,17 +126,16 @@ const knownKey = (v: Value): string => {
   return `#${k}`;
 };
 
-// The operations still read by name (L203c): each has a rule sharper than
+// The operations still read by name (L203): each has a rule sharper than
 // reading its code gives. The sandwich and the reflection keep grades
-// (the grade rule below), the exponential is closed under the product,
-// and a part named by literal vectors is found by its blade. The duals,
-// the regressive product and the versor inverse look up a blade's
-// element or check a number, which the reading doesn't follow, so their
-// code gives every part. The others (the geometric, outer and inner
-// products, the reverse and the involution) are read from their own
-// code, folds over the algebra's known table and blades, with the same
-// masks (grades.test.ts).
-const NAMED = new Set(["regressive", "dual", "undual", "versor inverse", "sandwich", "reflect", "project", "exp", "grade", "part", "with part"]);
+// (the grade rule below), the exponential is closed under the product, a
+// part named by literal vectors is found by its blade, and the versor
+// inverse is the reverse's blades (its code checks a number, which the
+// reading doesn't follow). The others (the geometric, outer, inner and
+// regressive products, the duals, the reverse and the involution) are
+// read from their own code, folds over the algebra's known table and
+// blades, with the same masks (grades.test.ts).
+const NAMED = new Set(["versor inverse", "sandwich", "reflect", "project", "exp", "grade", "part", "with part"]);
 
 const ADD = new Set<Id>([ARITH.add, B.add]), SUB = new Set<Id>([ARITH.sub, B.sub]);
 const MUL = new Set<Id>([ARITH.mul, B.mul]), DIV = new Set<Id>([B.div]), NEG = new Set<Id>([ARITH.neg, B.neg]);
@@ -262,7 +261,18 @@ function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: H
     if (alg && x.fields!.every((f) => typeof f === "number")) return { k: "mask", alg, m: (x.fields as number[]).reduce((m, f, i) => (f !== 0 ? m | (1 << i) : m), 0) };
     return v;
   };
-  const knownOf = (v: V): Value | undefined => (v.k === "known" ? v.v : v.k === "alg" ? v.alg.value : undefined);
+  // A multivector with no part on is known: the record of zeros.
+  const zeros = new Map<Id, Value>();
+  const knownOf = (v: V): Value | undefined => {
+    if (v.k === "known") return v.v;
+    if (v.k === "alg") return v.alg.value;
+    if (v.k === "mask" && v.m === 0 && !v.l) {
+      let z = zeros.get(v.alg.variant);
+      if (!z) zeros.set(v.alg.variant, (z = { tag: v.alg.variant, fields: Array.from({ length: v.alg.parts }, () => 0) } as Value));
+      return z;
+    }
+    return undefined;
+  };
   // What a scrutinee is known to be: read so, or a definition's value.
   const knownAt = (id: Id, v: V): Value | undefined => {
     const k = knownOf(v);
@@ -595,7 +605,7 @@ function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: H
     const vs = n.args.map((a) => ev(a, env, depth + 1));
     if (target && nodes[target]?.kind === "def" && lam(target) && n.args.length && !info.divergent.has(target)) {
       const known = knownCall(n, vs, env);
-      if (known !== undefined) return { k: "known", v: known };
+      if (known !== undefined) return lower({ k: "known", v: known });
     }
     // A let, a lambda applied, a definition of the program: read through.
     if (target && hooks.onCall && nodes[target]?.kind === "def") {

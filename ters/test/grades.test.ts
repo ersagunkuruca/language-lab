@@ -267,18 +267,18 @@ test("a product of the program's own, folded over the algebra's table, has the p
   assert.equal(mask(rotorish), 1 << 5);
 });
 
-// L203c: the geometric, outer and inner products and the reverse are read
-// from the prelude's own code (folds over the algebra's known table and
-// blades; the outer and inner products' tables made by a call that runs,
-// its inputs all known), not by name. On PGA's basis elements that
-// reading gives the masks worked out from the blades (each element times
-// a vector, a bivector and the pseudoscalar). (The duals, the
-// regressive product and the versor inverse are still read by name.)
+// L203c, L203d: the products (geometric, outer, inner, regressive), the
+// reverse and the duals are read from the prelude's own code (folds over
+// the algebra's known table and blades; the outer and inner products'
+// tables, and a blade's element, made by calls that run, their inputs all
+// known), not by name. On PGA's basis elements that reading gives the
+// masks worked out from the blades (each element times a vector, a
+// bivector and the pseudoscalar).
 test("the prelude's Clifford products read from their code give the blades' masks, element by element", () => {
   const a = algebra([1, 1, 1, 0]);
   const { k, def, call } = a;
-  const binaries = ["product", "outer", "inner"] as const;
-  const unaries = ["reverse"] as const;
+  const binaries = ["product", "outer", "inner", "regressive"] as const;
+  const unaries = ["reverse", "dual", "undual"] as const;
   const two = Object.fromEntries(binaries.map((op) => [op, def(`my ${op}`, () => k.fn(["a", "b"], (x, y) => call(op, x, y)))]));
   const one = Object.fromEntries(unaries.map((op) => [op, def(`my ${op}`, () => k.fn(["a"], (x) => call(op, x)))]));
   const { code, info } = a.done();
