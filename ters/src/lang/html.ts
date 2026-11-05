@@ -46,6 +46,10 @@ export interface Mount {
   // A handler that stopped (an Abort, an overflow), beside the console's
   // line: the editor's preview says it under the page, and where (C143).
   stopped?: (e: unknown) => void;
+  // Each event a handler is given, before it runs (C172e: a page's run
+  // logs its events beside the world's answers): the event's name and
+  // what the handler is given of it (value, key, x, y, seconds).
+  heard?: (name: string, at: [string, string, number, number, number]) => void;
 }
 
 // What a part of the page shows when its update ran out of steps: a
@@ -209,6 +213,7 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
             // What was typed enters in NFC (L214a, border.ts).
             const value = target.type === "checkbox" ? String(!!target.checked) : nfc(String(target.value ?? ""));
             const [x, y] = pointer(e, ev);
+            m.heard?.(name, [value, ev.key ?? "", x, y, ev.seconds ?? 0]);
             // One batch per event: the page updates once, after every write.
             // A handler that fetched what hasn't come stops there, what it
             // did so far kept, and goes on from the fetch when the reply

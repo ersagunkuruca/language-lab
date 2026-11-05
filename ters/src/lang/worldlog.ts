@@ -26,8 +26,9 @@ export type LogEntry = {
 // World does is an answer, so a world effect added later is logged too.
 const WRITES = new Set(["error", "log", "writeFile", "appendFile", "writeBytes", "wait"]);
 
-export function logged(world: World): { world: World; log: LogEntry[] } {
-  const log: LogEntry[] = [];
+// `log`: where to keep it, when the caller keeps events there too (a
+// page's run, C172e).
+export function logged(world: World, log: LogEntry[] = []): { world: World; log: LogEntry[] } {
   const out = { ...world } as Record<string, unknown>;
   for (const [op, f] of Object.entries(world)) {
     if (typeof f !== "function") continue;

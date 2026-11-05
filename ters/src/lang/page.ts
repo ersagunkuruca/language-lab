@@ -19,6 +19,7 @@ import { corePageScript, coreSoundScript, lowerCore } from "../../../compiler/sr
 import type { CoreIR } from "../../../compiler/src/scalar.ts";
 import { HTML_V } from "./std.ts";
 import { recordingWorld, soundPlayer } from "./audio-page.ts";
+import { logged, type LogEntry } from "./worldlog.ts";
 
 // The definition a page starts from: the one named `main` that returns an
 // Html and takes nothing. Null when the program has none, so it isn't a page.
@@ -53,6 +54,10 @@ export interface PageOptions {
   send?: (request: PlainRequest) => Promise<PlainResponse>;
   // How the page waits (a test's; by default setTimeout): C40.
   after?: (ms: number) => Promise<void>;
+  // Where the run's log goes (C172e): the world's answers (worldlog.ts)
+  // and, in their places among them, the events its handlers are given
+  // (`{ op: "event", args: [name, value, key, x, y, seconds] }`).
+  log?: LogEntry[];
   // Keep the cells the page starts with, for handOver (cells.ts).
   keepCells?: boolean;
   // A handler that stopped (html.ts Mount).
@@ -80,15 +85,19 @@ export function showPage(o: PageOptions): Preview {
   const cells = new Cells(equal);
   // The cells main and the first drawing make, for handOver (cells.ts).
   if (o.keepCells) cells.kept = [];
-  const world = recordingWorld(browserWorld(o.store, o.program, out as Console, { cells, frame: (f) => { if (!stopped) o.frame(() => { if (!stopped) f(); }); }, fetch: o.fetch, send: o.send, after: o.after }));
+  const browser = browserWorld(o.store, o.program, out as Console, { cells, frame: (f) => { if (!stopped) o.frame(() => { if (!stopped) f(); }); }, fetch: o.fetch, send: o.send, after: o.after });
+  const world = recordingWorld(o.log ? logged(browser, o.log).world : browser);
   const run = () => runMain(o.code, o.info, o.main, { print: (line) => cells.later(() => out.log(line)), names: o.names, cells, world });
   const sound = o.worklet && hasSound(o.code) ? soundPlayer(cells, workletFile(o.worklet, o.code, o.info, o.names, o.main), run, o.recordings, world) : null;
   const value = sound ? sound.page : run();
-  const root = mountHtml(value, { cells, doc: o.doc, call: evaluatorCall, ran: o.ran, listen: sound?.listen, stopped: o.stopped });
+  const root = mountHtml(value, { cells, doc: o.doc, call: evaluatorCall, ran: o.ran, listen: sound?.listen, stopped: o.stopped, heard: o.log && heardInto(o.log) });
   const kept = cells.kept;
   cells.kept = null;
   return { root, cells, kept, stop: () => { stopped = true; sound?.stop(); }, hush: sound ? () => sound.hush() : undefined };
 }
+
+// A handler's event, kept in a page run's log (C172e).
+export const heardInto = (log: LogEntry[]) => (name: string, at: [string, string, number, number, number]) => { log.push({ op: "event", args: [name, ...at] }); };
 
 // A page as one HTML file around its scripts: what `lab build-web` writes,
 // and what the editor's "Save page" gives you. Nothing is loaded from
