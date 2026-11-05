@@ -14,7 +14,7 @@
 // meaning: tests check every implementation against the definition it
 // replaces, through `meaning`.
 
-import { children, dependencies, freshId, subtree, type Code, type Id, type Node, type NodeData, type NodeOf, isCall, type Call, isUse, bindsOf, useKids } from "../model.ts";
+import { children, dependencies, freshId, subtree, type Code, type Id, type Node, type NodeData, type NodeOf, isCall, type Call, isUse, isBound, bindsOf, useKids } from "../model.ts";
 import type { Info } from "./infer.ts";
 import { CONS, COST, INT_OPS, JOBS, LIST, REPRESENTATION_V, S, TEXT_OPS, writtenItems } from "./std.ts";
 import { NUMBER } from "./types.ts";
@@ -390,8 +390,7 @@ export function represent(code: Code, entries: Id[], rep: Representation, keep: 
         if (isUse(n)) {
           c.fn = kid(n.fn);
           c.given = Object.fromEntries(Object.entries(n.given).map(([k, v]) => [k, kid(v)]));
-          if (n.binds) c.binds = Object.fromEntries(Object.entries(n.binds).map(([k, v]) => [k, kid(v)]));
-          if (n.body !== undefined) c.body = kid(n.body);
+          if (isBound(n)) { c.binds = Object.fromEntries(Object.entries(n.binds).map(([k, v]) => [k, kid(v)])); c.body = kid(n.body); }
           break;
         }
         c.fn = kid(n.fn); c.args = n.args.map(kid); break;

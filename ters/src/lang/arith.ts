@@ -23,7 +23,7 @@
 // keep working, and the meaning hash is of the program as written.
 
 import type { Code, Id, Node, NodeData, NodeOf, Use } from "../model.ts";
-import { conditionResults, isUse, useTarget, isCall, fieldPorts, type Call, bindsOf, useKids, portsOf } from "../model.ts";
+import { conditionResults, isUse, isBound, useTarget, isCall, fieldPorts, type Call, bindsOf, useKids, portsOf } from "../model.ts";
 import { resultsAsFunctions, usesResultsAsFunction } from "./results-fn.ts";
 import { freshId, layerOf, nodesWhere, offLayer, scanningOnLayer } from "../model.ts";
 import type { Names } from "../presentation.ts";
@@ -281,8 +281,7 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
         if (isUse(n)) {
           c.fn = kid(n.fn);
           c.given = Object.fromEntries(Object.entries(n.given).map(([k, v]) => [k, kid(v)]));
-          if (n.binds) c.binds = Object.fromEntries(Object.entries(n.binds).map(([k, v]) => [k, kid(v)]));
-          if (n.body !== undefined) c.body = kid(n.body);
+          if (isBound(n)) { c.binds = Object.fromEntries(Object.entries(n.binds).map(([k, v]) => [k, kid(v)])); c.body = kid(n.body); }
           break;
         }
         c.fn = kid(n.fn); c.args = n.args.map(kid); break;
