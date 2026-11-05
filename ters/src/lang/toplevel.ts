@@ -515,6 +515,20 @@ export function setLater(code: Code, names: Names, variant: Id, on: boolean): To
     note: on ? `${nameOf(names, variant)} is answered later now: its handler's case gets the rest of the computation, to resume once, now or later, or drop, and gives what the handler gives.${cases}` : `${nameOf(names, variant)} is answered at once now.${cases}` };
 }
 
+// An effect marked pure, or not (L69d2, FOREIGN.md): its operations are
+// functions of their inputs that the host answers, in no row on the
+// program's word. Only one whose every operation answers at once.
+export function setPure(code: Code, names: Names, effect: Id, on: boolean): Top {
+  const d = code.nodes[effect], td = d?.kind === "def" && d.body ? code.nodes[d.body] : undefined;
+  if (td?.kind !== "typedef" || !td.effect) return { ok: false, reason: "only an effect can be pure" };
+  if (!!td.pure === on) return { ok: false, reason: `${nameOf(names, effect)} is ${on ? "pure" : "an effect in every row"} already` };
+  const waits = td.variants.find((v) => { const op = code.nodes[v] as NodeOf<"variant">; return !op.returns || op.later; });
+  if (on && waits) return { ok: false, reason: `${nameOf(names, waits)} doesn't give an answer at once, so it isn't a function of its inputs` };
+  const { pure: _, ...rest } = td;
+  return { ok: true, code: { nodes: { ...code.nodes, [td.id]: on ? { ...td, pure: true } : rest }, defs: code.defs }, names, select: effect,
+    note: on ? `${nameOf(names, effect)} is pure now: its operations are in no row, answered by the program's host (hosts/js.js) on your word that each is a function of its inputs. Never for the clock, files, the network or randomness.` : `${nameOf(names, effect)} is in every row that performs it again.` };
+}
+
 export function setFieldType(code: Code, names: Names, field: Id, t: TypeSpec): Top {
   const f = code.nodes[field] as NodeOf<"field">;
   const { nodes, add } = builder(code);

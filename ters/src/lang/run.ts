@@ -38,7 +38,7 @@ import * as Alg from "./algebraic.ts";
 import { hostLocale, hostZone } from "./text.ts";
 import { ArrayView, FILE_OPS, KEPT_FILES, tupleVariant, floatText, LOCALE_V, MY_LOCALE_OP, MY_ZONE_OP, RELEASE_V, SETTINGS, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, shownImplementations, implementationsOf, ORDERED, CASE_NAME, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std.ts";
 import { intLit } from "./int.ts";
-import { answerFromHost, effectOfOperation, hostedEffects, pureHosts, stdHosted, type Hosts } from "./hosts.ts";
+import { answerFromHost, effectOfOperation, hostedEffects, pureEffect, pureHosts, stdHosted, type Hosts } from "./hosts.ts";
 import * as I from "./int.ts";
 import * as T from "./text.ts";
 import { Cells, NoValue, Pending, changeAt, listEdits, nodeOf, pathValue, stepsOf } from "./cells.ts";
@@ -865,9 +865,12 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       if (op === CHECK_OP && rt.check) return (rt.check((args[0] as Data).tag === TRUE, args[1] as string), this.ret(unit));
       // A program's own effect, answered by its host (L69a); a missing or
       // wrong answer is an Abort, performed where the operation was.
-      if (rt.hosts && hosted.has(effectOfOperation(code, op) ?? "")) {
+      // A pure effect's (L69d2) is in no row, so nothing checked for its
+      // host before the run: one missing is an Abort here, with the reason.
+      const eff = effectOfOperation(code, op);
+      if (eff && (hosted.has(eff) || pureEffect(code, eff))) {
         let v: Value;
-        try { v = answerFromHost(code, rt.names ?? {}, rt.hosts, op, args) as Value; } catch (e) { return this.perform(ABORT_OP, [(e as Error).message]); }
+        try { v = answerFromHost(code, rt.names ?? {}, rt.hosts ?? {}, op, args) as Value; } catch (e) { return this.perform(ABORT_OP, [(e as Error).message]); }
         return this.ret(v);
       }
       throw new Error(`nothing handles ${rt.names?.[op] ?? stdNames[op] ?? op}`);

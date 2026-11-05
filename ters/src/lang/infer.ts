@@ -482,6 +482,13 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     });
   }
   for (const def of typeDefs) {
+    // A pure effect (L69d2): each operation a function of its inputs, so
+    // each gives an answer at once.
+    const td = typedefOf(def);
+    if (td?.pure) {
+      if (!td.effect) err(def, `only an effect can be pure: ${nm(def)} is a type of values`);
+      else for (const v of td.variants) { const op = code.nodes[v] as NodeOf<"variant">; if (!op.returns || op.later) err(v, `${nm(v)} is an operation of a pure effect, so it gives an answer at once: a function of its inputs`); }
+    }
     // the type itself, and any type it's defined together with
     const self = (t: Id) => t === def || (isTypeDef(t) && reachOf(t).has(def) && reachOf(def).has(t));
     for (const { field, type } of fieldTypes(def)) {
@@ -912,8 +919,12 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
             err(id, `${nm(target)} is private to the library, which keeps a file open only while with open file's body runs: use with open file(path, body), and next line and write line inside it`);
           // Its own type variables are fresh at each call and not in the row (L71a).
           const own = new Map([...params, ...(op.params ?? []).map((p) => [p, s.fresh()] as const)]);
-          const eff = s.freshRow([def]);
-          if (params.size) eff.args = { [def]: (self as { args: Type[] }).args };
+          // A pure effect's operations are functions of their inputs that
+          // a host answers (L69d2, FOREIGN.md): the program's word, so it
+          // is in no row.
+          const pure = !!typedefOf(def)?.pure;
+          const eff = pure ? s.freshRow() : s.freshRow([def]);
+          if (params.size && !pure) eff.args = { [def]: (self as { args: Type[] }).args };
           return { t: "fn", params: op.fields.map((f) => typeExpr((code.nodes[f] as NodeOf<"field">).type, own)), ret: op.returns ? typeExpr(op.returns, own) : s.fresh(), eff };
         }
         if ((t as NodeOf<"variant">).private && insiders && libraryType(def) && !current.every((d) => insiders.has(d)))
