@@ -36,7 +36,7 @@
 import { bordered } from "../../ters/src/lang/border.ts";
 import { Aborted, type Runtime, type World } from "../../ters/src/lang/run.ts";
 import { MATH_DATA, MATH_DATA_AT } from "./wasm-math.ts";
-import { assemble, POW5, runtime, textBytes, WASI_IMPORTS, wasiStop, type RtFn, type VT } from "./wasm-rt.ts";
+import { assemble, byteSlots, POW5, runtime, textBytes, WASI_IMPORTS, wasiStop, type RtFn, type VT } from "./wasm-rt.ts";
 import { TABLE_RT, tableRt } from "./wasm-table.ts";
 import { reasonOf, siteOf } from "./stops.ts";
 import type { Id } from "../../ters/src/model.ts";
@@ -193,7 +193,15 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       ].join("\n"),
     };
   };
-  const rt = (name: string): RtFn => (STACK.test(name) ? stackRt(name) : TABLE_RT.test(name) ? tableRt(name, lowered.tables) : name === "wasi.stop" ? { ...wasiStop(lowered.stops ?? []), name } : runtime(name));
+  // An Array of Ints, which keeps a byte a slot when it can (L189f2b).
+  const byteArray = (a?: AType) => !!a && a.item === "int" && !lowered.int32;
+  const rt = (name: string): RtFn => {
+    if (STACK.test(name)) return stackRt(name);
+    if (TABLE_RT.test(name)) return tableRt(name, lowered.tables);
+    if (name === "wasi.stop") return { ...wasiStop(lowered.stops ?? []), name };
+    const f = runtime(name);
+    return f.array !== undefined && byteArray(lowered.arrays[f.array]) ? byteSlots(f) : f;
+  };
   const need = (name: string) => {
     if (rtNames.includes(name)) return;
     if (name.startsWith("wasi_")) { if (!wasiImports.includes(name)) wasiImports.push(name); return; }
@@ -329,7 +337,8 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   for (const a of lowered.arrays) {
     const k = structs.length;
     structs.push({ name: `items${a.index}`, fields: [], final: true, items: a.item });
-    structs.push({ name: `buf${a.index}`, fields: [{ name: "items", t: "i32", ref: k }, { name: "lo", t: "i32" }, { name: "hi", t: "i32" }], final: true, mutable: true });
+    // An Int array's buffer has its bytes too (L189f2b, wasm-rt.ts byteSlots).
+    structs.push({ name: `buf${a.index}`, fields: [{ name: "items", t: "i32", ref: k }, { name: "lo", t: "i32" }, { name: "hi", t: "i32" }, ...(byteArray(a) ? [{ name: "bytes", t: "i32" as const, ref: bytesIndex }] : [])], final: true, mutable: true });
     structs.push({ name: `array${a.index}`, fields: [{ name: "buf", t: "i32", ref: k + 1 }, { name: "start", t: "i32" }, { name: "n", t: "i32" }], final: true });
     arrIndex.set(a.key, k + 2);
   }
