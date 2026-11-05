@@ -15,7 +15,7 @@ import type { Code, Id, NodeOf } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import type { Info } from "./infer.ts";
 import { discharge } from "./ledger.ts";
-import { bool, makeRunner, showerFor, toList, unit, type Runtime, type Value } from "./run.ts";
+import { bool, makeRunner, showerFor, toList, unit, type Data, type Runtime, type Value } from "./run.ts";
 import { ABORT_OP, BOOL, CHECK, CHECK_OP, FALSE, LIST, RATIO, RATIONAL, TRUE, UNIT } from "./std.ts";
 import { Lang } from "./dsl.ts";
 import { CHOICE, INT, NUMBER, STRING, type Type } from "./types.ts";
@@ -206,7 +206,17 @@ export function compiledValue(v: Value): Value {
   if (typeof v !== "object" || v === null || !("tag" in v) || !Array.isArray(v.fields)) return v;
   if ((v.tag === TRUE || v.tag === FALSE) && v.fields.length === 0) return (v.tag === TRUE) as unknown as Value;
   const fields = v.fields.map(compiledValue);
-  return fields.every((f, i) => f === v.fields[i]) ? v : { ...v, fields };
+  return fields.every((f, i) => f === v.fields[i]) ? v : { tag: v.tag, fields };
+}
+
+// And back (T7e10): a compiled answer's booleans as the evaluator's Bool,
+// so it shows as the accepted answer was written. A compiled case's tag
+// and fields can be its class's getters, so a copy names them.
+export function evaluatorValue(v: unknown): Value {
+  if (typeof v === "boolean") return bool(v);
+  if (typeof v !== "object" || v === null || !("tag" in v) || !Array.isArray((v as Data).fields)) return v as Value;
+  const d = v as Data, fields = d.fields.map(evaluatorValue);
+  return fields.every((f, i) => f === d.fields[i]) ? d : { tag: d.tag, fields };
 }
 
 // The tests again, from another way of running the program (T7e2):
@@ -256,7 +266,7 @@ export function answersAgain(code: Code, info: Info, names: Names, defs: Id[], s
         if (!vs.every((v) => "value" in v)) { failures.push({ inputs: s.inputs, what: ["its saved inputs don't read as values any more"] }); continue; }
         cases++;
         const r = call(vs.map((v) => (v as { value: Value }).value));
-        const got = "value" in r ? show(r.value) : undefined;
+        const got = "value" in r ? show(evaluatorValue(r.value)) : undefined;
         if (got !== s.answer) failures.push({ inputs: s.inputs, what: [got === undefined ? `no answer, accepted ${s.answer}` : `gives ${got}, accepted ${s.answer}`] });
       }
     } catch (e) {
