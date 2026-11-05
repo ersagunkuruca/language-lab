@@ -5,5 +5,19 @@
   ],
   "jd71se0rr08lbrtv67koakumof": [
     "[3, 1, 2]"
+  ],
+  "06tq89vd9bku54904ms4pbp434": [
+    {
+      "main": {
+        "arguments": [],
+        "input": "",
+        "files": {},
+        "printed": [
+          "[1, 2, 3]"
+        ],
+        "errors": [],
+        "exit": 0
+      }
+    }
   ]
 }
