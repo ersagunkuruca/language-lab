@@ -23,7 +23,7 @@ language, then more targets or speed (WORKFLOW.md "Priority").
 | E Editor | "Editor lane" | E237 (after L204), E103 (after infer.ts's idea) |
 | C Compiler and targets | "Compiler lane" | C183, C185, C181 (C184 and C30 with the Editor lane), C93 |
 | L Language and library | "Language lane" | L43, L69d1, L69d2, L21, L118c (evaluator side), L88, L182 (core, run.ts, infer.ts, hosts.ts) |
-| L Language and library | "Language lane B" | L120, L123, L124 (new example programs). Skip L107 (waits on Ersagun) and L24 (research). Take a row from the other list only after telling that lane. |
+| L Language and library | "Language lane B" | L120, L124 (new example programs). Skip L107 (waits on Ersagun) and L24 (research). Take a row from the other list only after telling that lane. |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -96,6 +96,7 @@ New targets and speed rank below every language item (Ersagun,
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| C186 | Map with Float64 keys, and Priority queue (keyed by priority and order), are sorted entry lists in compiled JavaScript: put, has key and prioritized walk them. Example: examples/agent with `cell size` 0.5, whose coupled search looks at about 5,200 states, starts its page in 9 s (0.8 s at 1 m, 1,600 states; a JavaScript prototype with a sorted array takes 2 s); aim under 1 s | L123 (Language lane B) | P2 | M | |
 | C184 | The pedal's sound from the core IR as quick as compile.ts made it: 0.063 ms a block now (42× real time), compile.ts's last 0.036 ms, by hand 0.015 ms. Example: compiler/gaps/bench-audio.ts's core IR row at 0.036 ms a block or less | Ersagun 2026-11-05 20:00 (what compile.ts did that the core IR doesn't yet) | P3 | S | |
 | C175 | Tidy the scalar printer's output (WGSL, and the core IR's other printers that share it). Example: raymarch's WGSL (511 lines). Copies, negations and unread lets done (scalar.ts `tidied`: 511 to 460 lines). Left: share what the gradient's per-axis copies have in common (`sin(0.7 · t)` is computed 20 times); build only the parts of `Pga_2` that are read; work out the time-only motor once per frame, not per pixel | Ersagun 2026-11-05 12:38 (Learn thread: the ray marcher) | P2 | M | |
 | C93 | Lists read and written by position stay cons lists (primes 20000 compiled 47.9 s against 43 ms ideal); steps 1 to 3, (c) and s1 to s3b done (DONE.md). Example: machine's primes 20000 on JavaScript, aim 0.11 s (155 ms now on the core IR, split lists); done when it gets there. Left: (s4) that, and a cost for the split against the trees. WebAssembly and C keep trees until arrays are replaced in place there (C56) | [GAPS round 9](docs/reports/GAPS.md#round-9-machine-an-assembler-and-interpreter-on-every-target-2026-11-02) M1 | P3 | L | |
@@ -208,8 +209,7 @@ agent with inertia. All later goals.
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | L120 | **Later goal**: time of impact for rotating shapes along a PGA motor (screw motion) by conservative advancement (Mirtich); the compiler choosing it or the closed form by cost (WAYS.md) | Ersagun 2026-11-01 | P3 | L | shapes other than balls |
-| L123 | **Later goal**: the coupled search: Hybrid A*-style over position and velocity, motion primitives exact under linear drag, L122's path length / top speed as the heuristic; compared with L122 on the same map | Ersagun 2026-11-01 | P3 | L | after L122 |
-| L124 | **Later goal**: a rapidity speed cap (velocity as a boost in Cl(2, 1)) beside linear drag on L122's page; optional | Ersagun 2026-11-01 | P3 | M | after L122 |
+| L124 | **Later goal**: a rapidity speed cap (velocity as a boost in Cl(2, 1)) beside linear drag on L122's page; optional | Ersagun 2026-11-01 | P3 | M | |
 
 ### Someday
 
