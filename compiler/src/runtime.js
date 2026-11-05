@@ -215,6 +215,7 @@ export const $modN = (a, b) => (b === 0 ? $no : ((a % $fin(b)) + b) % b);
 // A record of Float64s part by part (std.ts); a Float64 is one part.
 export const $mapParts = (f, r) => (typeof r === 'number' ? f(r) : { tag: r.tag, fields: r.fields.map((x) => f(x)) });
 export const $zipParts = (f, a, b) => (typeof a === 'number' ? f(a, b) : { tag: a.tag, fields: a.fields.map((x, i) => f(x, b.fields[i])) });
+export const $unitParts = (r) => $toList(typeof r === 'number' ? [1] : r.fields.map((_, i) => ({ tag: r.tag, fields: r.fields.map((__, j) => (i === j ? 1 : 0)) })));
 export const $total = (r) => (typeof r === 'number' ? r : r.fields.reduce((x, y) => x + y));
 
 // ---- handlers, for when the thunks aren't written in place ---------------
