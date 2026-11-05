@@ -16,7 +16,7 @@ import { sharing } from "./shared-fields.ts";
 import { PARTIAL, signAnalysis } from "./signs.ts";
 import type { Code, Id, Node, NodeOf, Use } from "../model.ts";
 import { isUse, useTarget, isCall, fieldPorts, type Call, bindsOf, bodyOf } from "../model.ts";
-import { conditionResults, dependencies, derived, layerOf, nodesWhere, ownerOfTypeParts, portsOf, scanningOnLayer, subtree } from "../model.ts";
+import { conditionResults, dependencies, derived, layerOf, nodesWhere, offLayer, ownerOfTypeParts, portsOf, scanningOnLayer, subtree } from "../model.ts";
 import { liftRelations } from "./results-fn.ts";
 import type { Names } from "../presentation.ts";
 import { unitProblems, UnitsBefore } from "../units.ts";
@@ -151,7 +151,14 @@ let underAll: { codes: Code[]; names: Names } | null = null;
 const underChecks: { lib: Code; opts: Options; info: Info }[] = [];
 export function checkOnce(code: Code | null, names: Names = {}, also: Code[] = []) { underAll = code && { codes: [code, ...also], names }; underChecks.length = 0; }
 let checkingUnder = false;
-const onLib = (code: Code, lib: Code) => { for (const id in lib.nodes) if (code.nodes[id] !== lib.nodes[id]) return false; return true; };
+// On its layer (E253b), the nodes that aren't the layer's are known: the
+// program is on the library just when none of them is one of its.
+const onLib = (code: Code, lib: Code) => {
+  const off = layerOf(code) === lib ? offLayer(code) : undefined;
+  if (off) { for (const id of off) if (id in lib.nodes) return false; return true; }
+  for (const id in lib.nodes) if (code.nodes[id] !== lib.nodes[id]) return false;
+  return true;
+};
 function under(code: Code, opts: Options): { info: Info; only: Set<Id> } | null {
   if (!underAll || checkingUnder) return null;
   const lib = underAll.codes.find((c) => onLib(code, c));
