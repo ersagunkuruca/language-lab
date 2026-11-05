@@ -303,6 +303,28 @@ const hostFile = existsSync(path) && statSync(path).isDirectory() ? join(path, "
 const hosts: Hosts | undefined = hostFile && existsSync(hostFile) ? (await import(pathToFileURL(resolve(hostFile)).href)).default : undefined;
 // A page or app bundles the same file into its script (L69a3).
 const pageHost = hostFile && existsSync(hostFile) ? resolve(hostFile) : undefined;
+// The program's page, for `lab build-web` and `lab build-app`. Printed
+// from the core IR (C137c9), since C137d1 unless the page doesn't lower
+// there: then compile.ts, saying so. --core insists on the core IR,
+// --compile-ts on compile.ts.
+async function pageFile(): Promise<string> {
+  const insist = rest.includes("--core");
+  let page: string | null = null;
+  if (!rest.includes("--compile-ts")) {
+    // A sound that runs the evaluator's solver for every block on the
+    // core IR, a solve whose plan isn't written out (core-js.ts
+    // solvesSlowly), is too slow for the audio thread, so compile.ts makes
+    // that page (C137d7, C137d9). --core makes it anyway.
+    const slow = !insist && hasSound(p.code) && solvesSlowly(lowerCore(p.code, p.info, p.names, [main]));
+    if (slow) process.stderr.write("lab: the page's sound solves through the evaluator's solver on the core IR (too slow for the audio thread), so the page is made by compile.ts\n");
+    else try { page = await webCorePage(p.title, p.code, p.info, p.names, main, pageHost); } catch (e) {
+      if (insist) fail((e as Error).message);
+      process.stderr.write(`lab: ${(e as Error).message.replace(/^lab: /, "")}, so the page is made by compile.ts\n`);
+    }
+  }
+  return page ?? await webPage(p.title, p.code, p.info, p.names, main, pageHost);
+}
+
 switch (command) {
   case "run": {
     if (staticPage) {
@@ -380,24 +402,7 @@ switch (command) {
   case "build-web": {
     const o = rest.indexOf("-o");
     const out = o >= 0 ? rest[o + 1] ?? fail("-o needs a file") : `${basename(resolve(path)).replace(/\.json$/, "")}.html`;
-    // Printed from the core IR (C137c9), since C137d1 unless the page
-    // doesn't lower there: then compile.ts, saying so.
-    // --core insists on the core IR, --compile-ts on compile.ts.
-    const insist = rest.includes("--core");
-    let page: string | null = null;
-    if (!rest.includes("--compile-ts")) {
-      // A sound that runs the evaluator's solver for every block on the
-      // core IR, a solve whose plan isn't written out (core-js.ts
-      // solvesSlowly), is too slow for the audio thread, so compile.ts makes
-      // that page (C137d7, C137d9). --core makes it anyway.
-      const slow = !insist && hasSound(p.code) && solvesSlowly(lowerCore(p.code, p.info, p.names, [main]));
-      if (slow) process.stderr.write("lab: the page's sound solves through the evaluator's solver on the core IR (too slow for the audio thread), so the page is made by compile.ts\n");
-      else try { page = await webCorePage(p.title, p.code, p.info, p.names, main, pageHost); } catch (e) {
-        if (insist) fail((e as Error).message);
-        process.stderr.write(`lab: ${(e as Error).message.replace(/^lab: /, "")}, so the page is made by compile.ts\n`);
-      }
-    }
-    writeFileSync(out, page ?? await webPage(p.title, p.code, p.info, p.names, main, pageHost));
+    writeFileSync(out, await pageFile());
     // A recording the page plays, from the program's folder (AUDIO.md).
     const copied = recordings(p.code).filter((f) => existsSync(join(path, f)) && statSync(path).isDirectory());
     for (const f of copied) copyFileSync(join(path, f), join(dirname(out), f));
@@ -407,7 +412,8 @@ switch (command) {
   case "build-app": {
     const o = rest.indexOf("-o");
     const out = o >= 0 ? rest[o + 1] ?? fail("-o needs a folder") : basename(resolve(path)).replace(/\.json$/, "");
-    for (const [file, x] of Object.entries(appFolder(p.title, await webPage(p.title, p.code, p.info, p.names, main, pageHost)))) {
+    // Its page as `lab build-web` makes it: from the core IR (C137d24).
+    for (const [file, x] of Object.entries(appFolder(p.title, await pageFile()))) {
       mkdirSync(dirname(join(out, file)), { recursive: true });
       writeFileSync(join(out, file), x);
     }
