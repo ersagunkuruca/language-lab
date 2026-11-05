@@ -182,6 +182,8 @@ export const NOTES: Comments = {
   "builtin.real.fraction": "top/bottom as a Real: what a literal at Real becomes. Not offered: as real is.",
   "builtin.real.ofRational": "A fraction as a Real, exactly.",
   "builtin.real.pi": "π as a Real, exactly: real digits(real pi(), 50) gives fifty of its decimals (Machin's formula).",
+  "builtin.real.exp": "real exp(x) is eˣ as a Real, exactly: real digits(real exp(1), 50) gives fifty decimals of e. It asks x for just the precision its answer needs.",
+  "builtin.real.log": "real log(x) is the natural log of x as a Real, exactly, for x above 0: real log(real exp(x)) is x. x below 0, or too close to 0 to tell, is an error when the log is worked out.",
   "builtin.real.digits": "real digits(x, n) is x rounded to n decimals, as text: right to within one in the last place, since whether a Real is just below or just above a decimal can't always be told.",
   "builtin.real.less": "real less than(a, b, fuel) is a < b, worked out by narrowing both until they come apart, to at most 1/2^fuel. Two equal Reals never come apart, so when they are still that close it has no answer (Choice): real less than(real pi(), 22/7, 64) is true.",
   "builtin.real.approximate": "approximate(x, p) is an Int m with x within 1/2ᵖ of m/2ᵖ: x lies between (m − 1)/2ᵖ and (m + 1)/2ᵖ. Asking a larger p narrows it; what it works out is kept with the value.",
