@@ -44,7 +44,7 @@ import { answerByShapes, type Shape } from "../../ters/src/lang/hosts.ts";
 import { norm } from "../../ters/src/lang/int.ts";
 import { FALSE, TRUE } from "../../ters/src/lang/std.ts";
 import type { HostOps } from "./core-rt.ts";
-import { fails, listSteps, isArray, isTable, isData, isFn, kids, mapKids, OPS, STOPS, type AType, type DType, type FType, type LType, type CoreIR, type Op, type RType, type SExpr, type SFunc, type SType, type TType } from "./scalar.ts";
+import { fails, listSteps, isArray, isTable, isData, isFn, isRecord, kids, mapKids, OPS, STOPS, type AType, type DType, type FType, type LType, type CoreIR, type Op, type RType, type SExpr, type SFunc, type SType, type TType } from "./scalar.ts";
 
 // int32 (an Int in 32 bits) is the shaders' only (C66c); WebAssembly has Int.
 const VAL: Record<SType | "i64", number> = { f64: 0x7c, i32: 0x7f, int32: 0x7f, i64: 0x7e };
@@ -413,6 +413,14 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   const escapes = lowered.escapes.length > 0, escapeG = mspG + (math ? 1 : 0), noneG = escapeG + (escapes ? 1 : 0);
   // Random's generator under `seeded` (C106): four words, $r0 to $r3.
   const rand = rtNames.some((n) => n.startsWith("rand.")), randG = noneG + (flags ? 1 : 0);
+  // A definition's value worked out once (C173): what a function of no
+  // inputs gives is kept in a global of its own the first time it is
+  // called, as the core IR's JavaScript keeps it (core-js.ts, `$v ??=`);
+  // bounce's Clifford table was made again for every step. Only records,
+  // data and texts, which nothing changes in place; a value that is null
+  // is worked out again, as before.
+  const kept = new Map<number, number>();
+  funcs.forEach((f, i) => { if (f.value && !f.params.length && !f.partial && !f.spends && (f.result === "text" || isRecord(f.result) || isData(f.result))) kept.set(i, randG + (rand ? 4 : 0) + kept.size); });
   if (aborts) helpers.push({ name: "Abort.reason", key: "", params: [], result: "text", code: [0x23, ...u(reasonG)], wat: ["global.get $reason"] });
   // For the world's host: lists and optionals of texts, by fixed names
   // (TextList.cons, TextOption.some), whatever else the module has.
@@ -485,6 +493,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     ...(escapes ? [[0x6d, 0x01, 0xd0, 0x6d, 0x0b]] : []),
     ...(flags ? [[0x7f, 0x01, 0x41, 0x00, 0x0b]] : []),
     ...(rand ? [0, 1, 2, 3].map(() => [0x7f, 0x01, 0x41, 0x00, 0x0b]) : []),
+    ...[...kept.keys()].map((i) => { const t = funcs[i].result as MType; return [...typeOf(t), 0x01, 0xd0, ...s(t === "text" ? bytesIndex : refIndex(t as RType)), 0x0b]; }),
   ]);
   const zero = (t: MType) => (t === "text" ? [0xd0, ...s(bytesIndex)] : isRec(t) ? [0xd0, ...s(refIndex(t))] : t === "f64" ? [0x44, ...f64(0)] : t === "int" ? [0xd0, 0x6d] : t === "mag" ? [0xd0, ...s(u32sIndex)] : t === "i64" ? [0x42, 0x00] : [0x41, 0x00]);
   // fuel = fuel - 1; if fuel < 0, return zero (a partial function: and
@@ -534,6 +543,8 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       case "call": {
         // A tail call only to a function that gives what this one gives.
         const g = funcs[e.fn], tail = e.tail && !!g.partial === !!f.partial;
+        const k = kept.get(e.fn);
+        if (k !== undefined) return [0x23, ...u(k), 0xd1, 0x04, 0x40, 0x10, ...u(fnIndex(e.fn)), 0x24, ...u(k), 0x0b, 0x23, ...u(k)];
         return [...e.args.flatMap(code1), tail ? 0x12 : 0x10, ...u(fnIndex(e.fn)), ...(g.partial && !tail ? check(d, fl) : [])];
       }
       case "make": return [...e.args.flatMap(code1), 0xfb, 0x00, ...u(recIndex.get(e.t.key)!)];
@@ -654,7 +665,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     ...section(1, typeSec), ...(imports ? section(2, importSec) : []), ...section(3, funcSec),
     // WASI's memory, then the math functions' (wasm-math.ts).
     ...(wasi ? section(5, vec([[0x00, 0x01], ...(math ? [[0x00, 0x01]] : [])])) : []),
-    ...(fuel || aborts || ryu || math || escapes || flags || rand ? section(6, globalSec) : []), ...section(7, exportSec),
+    ...(fuel || aborts || ryu || math || escapes || flags || rand || kept.size ? section(6, globalSec) : []), ...section(7, exportSec),
     // ref.func needs the functions declared: one declarative segment.
     ...(codeOf.size ? section(9, vec([[0x03, 0x00, ...vec([...codeOf.keys()].map((i) => u(fnIndex(i))))]])) : []),
     ...section(10, codeSec),
@@ -688,6 +699,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       case "if": return `${w(e.cond)}\n${d}(if (result ${ty(e.t)})\n${d}  (then\n${wat(e.then, f, d + "    ", ld + 1, fl)})\n${d}  (else\n${wat(e.else, f, d + "    ", ld + 1, fl)}))`;
       case "call": {
         const g = funcs[e.fn], tail = e.tail && !!g.partial === !!f.partial;
+        if (kept.has(e.fn)) return [`${d}global.get $kept${e.fn}`, `${d}ref.is_null`, `${d}(if (then call ${id(g)} global.set $kept${e.fn}))`, `${d}global.get $kept${e.fn}`].join("\n");
         return [...e.args.map(w), `${d}${tail ? "return_call" : "call"} ${id(g)}`, ...(g.partial && !tail ? check(ld) : [])].join("\n");
       }
       case "make": return [...e.args.map(w), `${d}struct.new ${recName(e.t)}`].join("\n");
@@ -790,6 +802,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     ...(escapes ? ["  (global $escape (mut eqref) (ref.null eq))"] : []),
     ...(flags ? ["  (global $none (mut i32) (i32.const 0))"] : []),
     ...(rand ? [0, 1, 2, 3].map((k) => `  (global $r${k} (mut i32) (i32.const 0))`) : []),
+    ...[...kept.keys()].map((i) => `  (global $kept${i} (mut ${ty(funcs[i].result as MType)}) (${zeroText(funcs[i].result as MType)}))`),
     ...(codeOf.size ? [`  (elem declare func${[...codeOf.keys()].map((i) => ` ${id(funcs[i])}`).join("")})`] : []),
     ...funcs.map((f, i) => {
       const ps = f.params.map((t, i) => ` (param ${local(f, i)} ${ty(t)})`).join("");
