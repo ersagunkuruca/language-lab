@@ -36,7 +36,7 @@ import { reachedWithShows } from "./scalar.ts";
 import { resolveArithmetic } from "../../ters/src/lang/arith.ts";
 import { intLit } from "../../ters/src/lang/int.ts";
 import { hostOp, ownOperations } from "../../ters/src/lang/hosts.ts";
-import { children, dependencies, subtree, type Code, type Id, type Node, type NodeOf, type Use, isUse, useTarget, isCall, type Call } from "../../ters/src/model.ts";
+import { children, dependencies, fieldWayOf, subtree, type Code, type Id, type Node, type NodeOf, type Use, isUse, useTarget, isCall, type Call } from "../../ters/src/model.ts";
 import { bindsOf, bodyOf as useBody, withBodies } from "./uses.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { CHOICE, DIVERGE, INT, NUMBER, STRING, Subst, type Row, type Type } from "../../ters/src/lang/types.ts";
@@ -2041,7 +2041,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       const f = code.nodes[n.fn];
       if (f.kind !== "ref" || code.nodes[f.target]?.kind !== "def" || spends(f.target)) return null;
       const def = node<"def">(f.target);
-      if (def.way || !def.body || code.nodes[def.body].kind !== "lambda") return null;
+      if (fieldWayOf(code.nodes, f.target) || !def.body || code.nodes[def.body].kind !== "lambda") return null;
       if (!linearMaps.has(f.target)) linearMaps.set(f.target, linearMap(code, f.target));
       const map = linearMaps.get(f.target);
       if (!map || map.params.length !== n.args.length || map.params.some((p) => p === null)) return null;

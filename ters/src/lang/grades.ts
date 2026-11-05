@@ -33,7 +33,7 @@
 // same, by the language's own abstract evaluation over a finite lattice
 // (Cousot and Cousot, POPL 1977). CREDITS.md.
 
-import { children as childIds, dependencies, subtree, type Code, type Id, type Node, type NodeOf, isCall, type Call, isUse } from "../model.ts";
+import { children as childIds, dependencies, fieldWayOf, subtree, type Code, type Id, type Node, type NodeOf, isCall, type Call, isUse } from "../model.ts";
 import type { Info } from "./infer.ts";
 import { LIBRARY } from "./library.ts";
 import { makeRunner, type Value } from "./run.ts";
@@ -766,7 +766,7 @@ export function valueMasks(code: Code, info: Info, open: Iterable<Id>): Map<Id, 
   if (!algebrasOf(code, info).size && !recordsOf(code, info).size) return out;
   const nodes = code.nodes;
   // The program's own definitions; the library's are read as before.
-  const fnDefs = code.defs.filter((d) => { const n = nodes[d] as NodeOf<"def">; return !LIBRARY.code.nodes[d] && n?.kind === "def" && !n.way && !!n.body && nodes[n.body]?.kind === "lambda"; });
+  const fnDefs = code.defs.filter((d) => { const n = nodes[d] as NodeOf<"def">; return !LIBRARY.code.nodes[d] && n?.kind === "def" && !fieldWayOf(nodes, d) && !!n.body && nodes[n.body]?.kind === "lambda"; });
   const isFn = new Set(fnDefs);
   // Each definition's own nodes: its body, through lets (a lambda called
   // where it is) but not into a lambda handed on.

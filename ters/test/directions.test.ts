@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import type { Code, NodeOf } from "../src/model.ts";
+import { SHAPE, toTodaysShape } from "../src/model.ts";
 import type { Presentation, Style } from "../src/presentation.ts";
 import blocksStyle from "../styles/blocks.json" with { type: "json" };
 import { Lang } from "../src/lang/dsl.ts";
@@ -115,4 +116,12 @@ test("a direction keeps the law: each answer it gives holds for the relation (SP
   k.results(wrong, "length", "angle");
   k.direction(wrong, polar);
   assert.match(lawBroken(base(k.code), polar, wrong, { x: 3, y: -4 }, ports) ?? "", /doesn't hold/);
+});
+
+// L182c2: a direction is a way of its relation; a program saved with the
+// old `direction` attribute loads with it as a way.
+test("a saved direction loads as a way of its relation (L182c2)", () => {
+  const nodes: Record<string, unknown> = { d: { id: "d", kind: "def", body: "b", direction: "r" } };
+  toTodaysShape(nodes, SHAPE - 1);
+  assert.deepEqual(nodes.d, { id: "d", kind: "def", body: "b", way: "r" });
 });

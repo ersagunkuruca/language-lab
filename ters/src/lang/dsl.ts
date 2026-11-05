@@ -166,7 +166,7 @@ export class Lang extends Builder {
   // `def` gives another direction of `of` (POLAR.md): the same ports in the
   // same order, its own results.
   direction(def: Id, of: Id): Id {
-    (this.code.nodes[def] as NodeOf<"def">).direction = of;
+    (this.code.nodes[def] as NodeOf<"def">).way = of;
     return def;
   }
 

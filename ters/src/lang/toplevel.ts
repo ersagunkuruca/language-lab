@@ -13,7 +13,7 @@
 // any other edit.
 
 import type { Code, Id, Node, NodeData, NodeOf, Use } from "../model.ts";
-import { conditionResults, isUse, useTarget, isCall, type Call, bindsOf } from "../model.ts";
+import { conditionResults, directionOf, fieldWayOf, isUse, useTarget, isCall, type Call, bindsOf } from "../model.ts";
 import { children, collect, freshId, nodesWhere, ownerOfTypeParts, parentAt, parentOf, replace, scanningOnLayer, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 
@@ -536,9 +536,9 @@ export function addWay(code: Code, names: Names, iface: Id, field: Id, rawName: 
 // ordinary definition again (way: null).
 export function setWay(code: Code, names: Names, def: Id, way: { cost: number | null } | null): Top {
   const d = code.nodes[def];
-  if (d?.kind !== "def" || !d.way) return { ok: false, reason: "that isn't a way of an operation" };
+  if (d?.kind !== "def" || !fieldWayOf(code.nodes, def)) return { ok: false, reason: "that isn't a way of an operation" };
   if (way?.cost != null && !(Number.isFinite(way.cost) && way.cost >= 0)) return { ok: false, reason: "a cost is a number, 0 or more" };
-  const { way: field, cost: _, ...plain } = d;
+  const { way: wayOf, cost: _, ...plain } = d, field = wayOf!;
   const nodes = { ...code.nodes, [def]: way ? { ...plain, way: field, ...(way.cost != null ? { cost: way.cost } : {}) } : plain };
   return { ok: true, code: { nodes, defs: code.defs }, names, select: def,
     note: way ? `${nameOf(names, def)} costs ${way.cost ?? "the usual"}${way.cost != null ? " plus what it uses" : ""}.` : `${nameOf(names, def)} is an ordinary definition now, no longer a way of ${nameOf(names, field)}.` };
@@ -568,7 +568,7 @@ export function addDirection(code: Code, names: Names, rel: Id, results: number[
   // the hole for how each is worked out from the given ports.
   const eq = (i: number) => add({ kind: "call", fn: add({ kind: "ref", target: "builtin.equal" }), args: [add({ kind: "ref", target: params[i] }), add({ kind: "hole" })] });
   const body = rs.slice(1).reduce((acc, i) => add({ kind: "call", fn: add({ kind: "ref", target: "builtin.and" }), args: [acc, eq(i)] }), eq(rs[0]));
-  const def = add({ kind: "def", body: add({ kind: "lambda", params, body, results: rs.map((i) => params[i]) }), direction: rel });
+  const def = add({ kind: "def", body: add({ kind: "lambda", params, body, results: rs.map((i) => params[i]) }), way: rel });
   nn[def] = name;
   return { ok: true, code: { nodes, defs: [...code.defs, def] }, names: nn, select: def,
     note: `New direction of ${nameOf(names, rel)}, ${name}: ${rs.map(port).join(", ")} from ${lam.params.map((_, i) => i).filter((i) => !rs.includes(i)).map(port).join(", ")}. Fill each result's hole with how it is worked out; a solve of ${nameOf(names, rel)} given those then uses it instead of searching.` };
@@ -577,8 +577,9 @@ export function addDirection(code: Code, names: Names, rel: Id, results: number[
 // A direction made an ordinary definition again (it keeps its results).
 export function dropDirection(code: Code, names: Names, def: Id): Top {
   const d = code.nodes[def];
-  if (d?.kind !== "def" || !d.direction) return { ok: false, reason: "that isn't a direction of a relation" };
-  const { direction, ...plain } = d;
+  const direction = directionOf(code.nodes, def);
+  if (d?.kind !== "def" || !direction) return { ok: false, reason: "that isn't a direction of a relation" };
+  const { way: _, cost: __, ...plain } = d;
   return { ok: true, code: { nodes: { ...code.nodes, [def]: plain }, defs: code.defs }, names, select: def,
     note: `${nameOf(names, def)} is an ordinary definition now, no longer a direction of ${nameOf(names, direction)}.` };
 }
