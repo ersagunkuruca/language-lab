@@ -561,8 +561,10 @@ function narrow(code: Code, info: Info, top: Typed): Typed {
 // The library's number types other than Float64 and Int (Rational,
 // Algebraic, Fixed, Complex, …): the ones with an Arithmetic in the
 // library, asked of it rather than listed (E237b, L204).
+// std's, or a library module's (Fixed and Rational are the numbers
+// module's since L207).
 const libraryNumber = (info: Info, t: Type | undefined): boolean =>
-  t?.t === "con" && t.id !== NUMBER && t.id !== INT && t.id.startsWith("std.") && !!implementationOf(info, ARITHMETIC, t);
+  t?.t === "con" && t.id !== NUMBER && t.id !== INT && (t.id.startsWith("std.") || !!LIBRARY.code.nodes[t.id]) && !!implementationOf(info, ARITHMETIC, t);
 // A type whose numbers are spelled by its Literal (L204b, L204d): a
 // fraction written there is that type's from fraction, 1/3 at Rational.
 export const spelledByLiteral = (info: Info, t: Type | undefined): t is Type & { t: "con" } =>
