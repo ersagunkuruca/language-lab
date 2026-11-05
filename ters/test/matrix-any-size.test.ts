@@ -14,7 +14,7 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { runMain } from "../src/lang/run.ts";
 import { S, SHOW_ANY } from "../src/lang/std.ts";
 import { showType } from "../src/lang/types.ts";
-const L = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY.names[d] === name)!;
+const L = (name: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === name)!;
 
 
 async function both(lines: (k: Lang) => Id[]): Promise<[string[], string[]]> {

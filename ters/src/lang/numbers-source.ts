@@ -1,7 +1,8 @@
 // The numbers module (BACKLOG L207): the library's number types written in
 // the language, out of std.ts, each with its + − · ÷, its Trig and its
 // embedding as implementations found by its type. Dual (L207a),
-// Complex (L207b) and Mat2 to Mat4 (L207c) so far; Rational and Fixed follow.
+// Complex (L207b) and Mat2 to Mat4 (L207c) and Matrix (L207d) so far; Rational and
+// Fixed follow.
 //
 // Dual numbers (INTERFACES.md step 3): value + slope·ε with ε² = 0, so a
 // function given dual(x, 1) gives its value and its slope at x. + and −
@@ -14,8 +15,8 @@ import { merge, type Id } from "../model.ts";
 import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
-import { ARITHMETIC_V, CHECK_OP, DIVISION_V, EMBEDDING_V, INT_OPS, LITERAL_V, S, SHOWN_V, TIMES_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_V, std } from "./std.ts";
-import { NUMBER } from "./types.ts";
+import { ABORT_OP, ARITH, ARITHMETIC_V, CHECK_OP, CONS, LIST, NIL, PAIR_V, tupleType, DIVISION_V, EMBEDDING_V, INT_OPS, LITERAL_V, S, SHOWN_V, TIMES_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_V, std } from "./std.ts";
+import { INT, NUMBER } from "./types.ts";
 
 // On the prelude, whose laws give Trig's fields Dual leaves to their ways.
 export function buildNumbers(pre: Module): Module {
@@ -199,6 +200,175 @@ export function buildNumbers(pre: Module): Module {
     return d;
   });
 
+  // Matrix (BACKLOG L44, MATRICES.md step 3, L207d): its row and column
+  // counts and its items row by row, one flat list, as BLAS, LAPACK and
+  // NumPy store a dense matrix (row-major). The size isn't in the type
+  // (that needs numbers in types), so a mismatch is found when the program
+  // runs and the message names both sizes. A square matrix's LU factors
+  // (L44g), kept to solve it for many right-hand sides: the rows in the
+  // order elimination took them as pivots, each pivot's row of U, and the
+  // multipliers it took off each row below, by that row's place.
+  const MX = k.type("Matrix", ["a"], [["matrix", [["rows", () => k.tref(INT)], ["columns", () => k.tref(INT)], ["items", (_t, [a]) => k.tref(LIST, k.tref(a))]]]], "matrices of any size");
+  const LU = k.type("LU factors", [], [["lu factors", [["pivots", () => k.tref(LIST, k.tref(INT))], ["uppers", () => k.tref(LIST, k.tref(LIST, k.tref(NUMBER)))], ["multipliers", () => k.tref(LIST, k.tref(LIST, k.tref(tupleType(2), k.tref(INT), k.tref(NUMBER))))]]]], "LU factors");
+  const MXV = MX.v.matrix, LUV = LU.v["lu factors"];
+  const def = (name: string, params: string[], body: (...ps: Id[]) => Id) => { const d = k.def(name); k.define(d, k.fn(params, body)); return d; };
+  const entry = (e: Id, f: (key: Id, value: Id) => Id, names = ["key", "value"]) => k.match(e, [{ variant: PAIR_V, names, body: ([a, b]) => f(a, b) }]);
+  const [allPass, append, dividedOr, drop, flatMap, flatten, itemAt, length, map, numbered, sortBy, take, zipped] = ["all pass", "append", "divided or", "drop", "flat map", "flatten", "item at", "length", "map", "numbered", "sort by", "take", "zipped"].map(lib);
+  // Matrices of any size (L44, MATRICES.md step 3, Matrix): the
+  // items row by row in one list. Products, sums and a matrix times a
+  // vector are for every number type, as + and × are; a size mismatch
+  // stops with both sizes, as NumPy's "shapes (2,3) and (2,2) not
+  // aligned" does. solved(m, b) is the x with m·x = b, by Gaussian
+  // elimination with partial pivoting (the largest pivot first, as
+  // LAPACK's gesv does), at Float64; a singular matrix has no answer.
+  const M = (r: Id, c: Id, xs: Id) => k.call(MXV, r, c, xs);
+  const matOf = (m: Id, f: (r: Id, c: Id, xs: Id) => Id) => k.match(m, [{ variant: MXV, names: ["rows", "columns", "items"], body: ([r, c, xs]) => f(r, c, xs) }]);
+  const iLess = (a: Id, b: Id) => k.call(INT_OPS.less, a, b);
+  const iSame = (a: Id, b: Id) => k.equal(a, b);
+  const iMul = (a: Id, b: Id) => k.call(INT_OPS.mul, a, b);
+  const iAdd = (a: Id, b: Id) => k.call(INT_OPS.add, a, b);
+  const texts = (...parts: Id[]) => parts.reduceRight((acc, t) => k.call(S.concat, t, acc));
+  const sizeText = (r: Id, c: Id) => texts(k.call(INT_OPS.show, r), k.lit(" × "), k.call(INT_OPS.show, c));
+  // Two lists' items multiplied pairwise and added, its own walk.
+  const listDot = k.def("matrix dot");
+  k.define(listDot, k.fn(["first", "second"], (xs, ys) => k.match(xs, [
+    { variant: NIL, names: [], body: () => k.lit(0) },
+    { variant: CONS, names: ["x", "xs rest"], body: ([x, xr]) => k.match(ys, [
+      { variant: NIL, names: [], body: () => k.lit(0) },
+      { variant: CONS, names: ["y", "ys rest"], body: ([y, yr]) => k.call(ARITH.add, k.call(ARITH.mul, x, y), k.call(listDot, xr, yr)) },
+    ]) },
+  ])));
+  const rowsOf = def("matrix rows", ["matrix"], (m) => matOf(m, (r, c, xs) => k.call(map, k.call(INT_OPS.range, r), k.fn(["i"], (i) => k.call(take, k.call(drop, xs, iMul(i, c)), c)))));
+  const matrixOfRows = def("matrix of rows", ["rows"], (rs) => k.match(rs, [
+    { variant: NIL, names: [], body: () => M(k.int(0), k.int(0), k.x(NIL)) },
+    { variant: CONS, names: ["first", "rest"], body: ([first]) => k.let("columns", k.call(length, first), (c) =>
+      k.if(k.call(allPass, rs, k.fn(["row"], (row) => iSame(k.call(length, row), c))),
+        M(k.call(length, rs), c, k.call(flatten, rs)),
+        k.call(ABORT_OP, texts(k.lit("matrix of rows: the rows aren't all "), k.call(INT_OPS.show, c), k.lit(" long"))))) },
+  ]));
+  const rowCount = def("row count", ["matrix"], (m) => matOf(m, (r) => r));
+  const columnCount = def("column count", ["matrix"], (m) => matOf(m, (_r, c) => c));
+  const matrixEntry = def("matrix entry", ["matrix", "row", "column"], (m, i, j) => matOf(m, (r, c, xs) =>
+    k.if(k.call(S.or, k.call(S.or, iLess(i, k.int(0)), k.call(S.not, iLess(i, r))), k.call(S.or, iLess(j, k.int(0)), k.call(S.not, iLess(j, c)))), k.call(S.fail),
+      k.match(k.call(drop, xs, iAdd(iMul(i, c), j)), [
+        { variant: CONS, names: ["item", "rest"], body: ([x]) => x },
+      ], k.call(S.fail)))));
+  const transposed = def("transposed", ["matrix"], (m) => matOf(m, (r, c, xs) => M(c, r,
+    k.call(flatMap, k.call(INT_OPS.range, c), k.fn(["j"], (j) => k.call(flatMap, k.call(INT_OPS.range, r), k.fn(["i"], (i) => k.call(take, k.call(drop, xs, iAdd(iMul(i, c), j)), k.int(1)))))))));
+  const identityMatrix = def("identity matrix", ["size"], (n) => M(n, n,
+    k.call(flatMap, k.call(INT_OPS.range, n), k.fn(["i"], (i) => k.call(map, k.call(INT_OPS.range, n), k.fn(["j"], (j) => k.if(iSame(i, j), k.lit(1), k.lit(0))))))));
+  const matrixScaled = def("matrix scaled", ["matrix", "by"], (m, s) => matOf(m, (r, c, xs) => M(r, c, k.call(map, xs, k.fn(["x"], (x) => k.call(ARITH.mul, s, x))))));
+  const mismatch = (what: string, r1: Id, c1: Id, r2: Id, c2: Id) => k.call(ABORT_OP, texts(k.lit(`${what}: a `), sizeText(r1, c1), k.lit(" matrix and a "), sizeText(r2, c2), k.lit(" one")));
+  const matrixSum = def("matrix sum", ["first", "second"], (a, b) => matOf(a, (r1, c1, xs) => matOf(b, (r2, c2, ys) =>
+    k.if(k.call(S.and, iSame(r1, r2), iSame(c1, c2)),
+      M(r1, c1, k.call(map, k.call(zipped, xs, ys), k.fn(["pair"], (p) => entry(p, (x, y) => k.call(ARITH.add, x, y), ["x", "y"])))),
+      mismatch("matrix sum", r1, c1, r2, c2)))));
+  const matrixProduct = def("matrix product", ["first", "second"], (a, b) => matOf(a, (r1, c1, _xs) => matOf(b, (r2, c2, _ys) =>
+    k.if(iSame(c1, r2),
+      k.let("columns", k.call(rowsOf, k.call(transposed, b)), (cols) =>
+        M(r1, c2, k.call(flatMap, k.call(rowsOf, a), k.fn(["row"], (row) => k.call(map, cols, k.fn(["column"], (col) => k.call(listDot, row, col))))))),
+      mismatch("matrix product", r1, c1, r2, c2)))));
+  const matrixTimesVector = def("matrix times vector", ["matrix", "vector"], (m, v) => matOf(m, (r, c) =>
+    k.if(iSame(c, k.call(length, v)),
+      k.call(map, k.call(rowsOf, m), k.fn(["row"], (row) => k.call(listDot, row, v))),
+      k.call(ABORT_OP, texts(k.lit("matrix times vector: a "), sizeText(r, c), k.lit(" matrix and a vector of "), k.call(INT_OPS.show, k.call(length, v)))))));
+  // Elimination: the row with the largest first item is the pivot; the
+  // others lose their first column, less a multiple of the pivot's. It
+  // counts down the rows, so it ends; a pivot of 0 has no answer (divide
+  // has none). Back substitution then reads the triangle from the bottom.
+  const headOr0 = (row: Id) => k.match(row, [{ variant: CONS, names: ["first", "rest"], body: ([x]) => x }], k.lit(0));
+  const tailOf = (row: Id) => k.match(row, [{ variant: CONS, names: ["first", "rest"], body: ([, rest]) => rest }], k.x(NIL));
+  const eliminated = k.def("eliminated");
+  k.define(eliminated, k.fn(["rows", "count"], (rs, n) => k.if(iLess(n, k.int(1)), k.x(NIL),
+    k.match(k.call(sortBy, rs, k.fn(["row"], (row) => k.call(B.sub, k.lit(0), k.call(S.abs, headOr0(row))))), [
+      { variant: NIL, names: [], body: () => k.x(NIL) },
+      { variant: CONS, names: ["pivot", "others"], body: ([p, others]) => k.let("pivot first", headOr0(p), (a) =>
+        k.call(CONS, p, k.call(eliminated, k.call(map, others, k.fn(["row"], (row) => k.let("factor", k.call(B.div, headOr0(row), a), (f) =>
+          k.call(map, k.call(zipped, tailOf(row), tailOf(p)), k.fn(["pair"], (pr) => entry(pr, (x, y) => k.call(B.sub, x, k.call(B.mul, f, y)), ["x", "y"])))))),
+          k.call(INT_OPS.sub, n, k.int(1))))) },
+    ]))));
+  const backSubstituted = k.def("back substituted");
+  k.define(backSubstituted, k.fn(["triangle"], (t) => k.match(t, [
+    { variant: NIL, names: [], body: () => k.x(NIL) },
+    { variant: CONS, names: ["row", "below"], body: ([row, below]) => k.let("found", k.call(backSubstituted, below), (xs) =>
+      k.let("coefficients", tailOf(row), (cs) => k.let("known", k.call(length, xs), (n) =>
+        k.call(CONS, k.call(B.div, k.call(B.sub, k.call(itemAt, k.call(drop, cs, n), k.int(0), k.lit(0)), k.call(listDot, k.call(take, cs, n), xs)), headOr0(row)), xs)))) },
+  ])));
+  const solved = def("solved", ["matrix", "vector"], (m, v) => matOf(m, (r, c) =>
+    k.if(k.call(S.and, iSame(r, c), iSame(r, k.call(length, v))),
+      k.call(backSubstituted, k.call(eliminated, k.call(map, k.call(zipped, k.call(rowsOf, m), v), k.fn(["pair"], (p) => entry(p, (row, b) => k.call(append, row, k.call(CONS, b, k.x(NIL))), ["row", "b"]))), r)),
+      k.call(ABORT_OP, texts(k.lit("solved: a "), sizeText(r, c), k.lit(" matrix and a vector of "), k.call(INT_OPS.show, k.call(length, v)), k.lit("; it needs a square matrix and one item per row"))))));
+  // Elimination kept (L44g): `factored` does solved's elimination once and
+  // keeps what it did, LAPACK's getrf: the pivots in the order taken, each
+  // pivot's row (U), and the multiple of it taken off each row below (L),
+  // by that row's place in the matrix. `solved with` then does to a vector
+  // what elimination did to the matrix's last column (getrs), and reads
+  // the triangle back as solved does: one elimination for many vectors.
+  const factorsOf = k.def("factors of rows");
+  const placed = (pr: Id, f: (place: Id, row: Id) => Id) => entry(pr, f, ["place", "row"]);
+  k.define(factorsOf, k.fn(["rows", "count"], (rs, n) => k.if(iLess(n, k.int(1)), k.call(LUV, k.x(NIL), k.x(NIL), k.x(NIL)),
+    k.match(k.call(sortBy, rs, k.fn(["pair"], (pr) => placed(pr, (_i, row) => k.call(B.sub, k.lit(0), k.call(S.abs, headOr0(row)))))), [
+      { variant: NIL, names: [], body: () => k.call(LUV, k.x(NIL), k.x(NIL), k.x(NIL)) },
+      { variant: CONS, names: ["pivot", "others"], body: ([pp, others]) => placed(pp, (i, p) => k.let("pivot first", headOr0(p), (a) =>
+        k.let("factors", k.call(map, others, k.fn(["pair"], (pr) => placed(pr, (j, row) => k.call(PAIR_V, j, k.call(B.div, headOr0(row), a))))), (fs) =>
+          k.match(k.call(factorsOf, k.call(map, others, k.fn(["pair"], (pr) => placed(pr, (j, row) => k.let("factor", k.call(B.div, headOr0(row), a), (f) =>
+            k.call(PAIR_V, j, k.call(map, k.call(zipped, tailOf(row), tailOf(p)), k.fn(["pair"], (xy) => entry(xy, (x, y) => k.call(B.sub, x, k.call(B.mul, f, y)), ["x", "y"])))))))), k.call(INT_OPS.sub, n, k.int(1))), [
+            { variant: LUV, names: ["pivots", "uppers", "multipliers"], body: ([ps, us, ms]) => k.call(LUV, k.call(CONS, i, ps), k.call(CONS, p, us), k.call(CONS, fs, ms)) },
+          ])))) },
+    ]))));
+  const factored = def("factored", ["matrix"], (m) => matOf(m, (r, c) => k.if(iSame(r, c), k.call(factorsOf, k.call(numbered, k.call(rowsOf, m)), r),
+    k.call(ABORT_OP, texts(k.lit("factored: a "), sizeText(r, c), k.lit(" matrix; it needs a square one"))))));
+  // The vector's item at a place, among (place, item) pairs.
+  const atPlace = k.def("item at place");
+  k.define(atPlace, k.fn(["pairs", "place"], (ps, i) => k.match(ps, [
+    { variant: NIL, names: [], body: () => k.lit(0) },
+    { variant: CONS, names: ["pair", "rest"], body: ([pr, rest]) => entry(pr, (j, x) => k.if(iSame(j, i), x, k.call(atPlace, rest, i)), ["place", "item"]) },
+  ])));
+  // Forward: each pivot's item, the rows below it less its multiple.
+  const forward = k.def("forward substituted");
+  k.define(forward, k.fn(["pivots", "multipliers", "vector"], (ps, ms, bs) => k.match(ps, [
+    { variant: NIL, names: [], body: () => k.x(NIL) },
+    { variant: CONS, names: ["pivot", "later"], body: ([i, later]) => k.let("y", k.call(atPlace, bs, i), (y) => k.match(ms, [
+      { variant: NIL, names: [], body: () => k.call(CONS, y, k.x(NIL)) },
+      { variant: CONS, names: ["below", "more"], body: ([below, more]) => k.call(CONS, y, k.call(forward, later, more,
+        k.call(map, below, k.fn(["pair"], (pr) => entry(pr, (j, f) => k.call(PAIR_V, j, k.call(B.sub, k.call(atPlace, bs, j), k.call(B.mul, f, y))), ["place", "factor"]))))) },
+    ])) },
+  ])));
+  const solvedWith = def("solved with", ["factors", "vector"], (lu, v) => k.match(lu, [{ variant: LUV, names: ["pivots", "uppers", "multipliers"], body: ([ps, us, ms]) =>
+    k.if(iSame(k.call(length, ps), k.call(length, v)),
+      k.call(backSubstituted, k.call(map, k.call(zipped, us, k.call(forward, ps, ms, k.call(numbered, v))), k.fn(["pair"], (p) => entry(p, (row, y) => k.call(append, row, k.call(CONS, y, k.x(NIL))), ["row", "y"])))),
+      k.call(ABORT_OP, texts(k.lit("solved with: factors of a "), sizeText(k.call(length, ps), k.call(length, ps)), k.lit(" matrix and a vector of "), k.call(INT_OPS.show, k.call(length, v))))) }]));
+  // The determinant and the inverse (L44e), at Float64. The determinant is
+  // the elimination's pivots multiplied, the sign turned for each row a
+  // pivot was moved past (partial pivoting, as LAPACK's getrf); a 0 pivot
+  // is a singular matrix, so 0. The inverse is solved once per column of
+  // the identity, so a singular matrix has no answer.
+  const determinantOf = k.def("determinant of rows");
+  const reducedBy = (p: Id, a: Id) => k.fn(["row"], (row) => k.let("factor", k.call(dividedOr, headOr0(row), a, k.lit(0)), (f) =>
+    k.call(map, k.call(zipped, tailOf(row), tailOf(p)), k.fn(["pair"], (pr) => entry(pr, (x, y) => k.call(B.sub, x, k.call(B.mul, f, y)), ["x", "y"])))));
+  const odd = (i: Id) => k.let("place", k.call(INT_OPS.toNumber, i), (x) => k.call(S.not, k.call(S.equal, k.call(B.mul, k.call(S.floor, k.call(B.mul, x, k.lit(0.5))), k.lit(2)), x)));
+  const pivotStep = (rs: Id, n: Id, i: Id, p: Id) => k.let("pivot first", headOr0(p), (a) => k.if(k.call(S.equal, a, k.lit(0)), k.lit(0),
+    k.let("rest", k.call(determinantOf, k.call(map, k.call(append, k.call(take, rs, i), k.call(drop, rs, k.call(INT_OPS.add, i, k.int(1)))), reducedBy(p, a)), k.call(INT_OPS.sub, n, k.int(1))), (d) =>
+      k.if(odd(i), k.call(B.sub, k.lit(0), k.call(B.mul, a, d)), k.call(B.mul, a, d)))));
+  k.define(determinantOf, k.fn(["rows", "count"], (rs, n) => k.if(iLess(n, k.int(1)), k.lit(1),
+    k.match(k.call(sortBy, k.call(numbered, rs), k.fn(["pair"], (pr) => entry(pr, (_i, row) => k.call(B.sub, k.lit(0), k.call(S.abs, headOr0(row))), ["position", "row"]))), [
+      { variant: NIL, names: [], body: () => k.lit(1) },
+      { variant: CONS, names: ["pivot", "others"], body: ([pp]) => entry(pp, (i, p) => pivotStep(rs, n, i, p), ["position", "row"]) },
+    ]))));
+  const determinant = def("determinant", ["matrix"], (m) => matOf(m, (r, c) => k.if(iSame(r, c), k.call(determinantOf, k.call(rowsOf, m), r),
+    k.call(ABORT_OP, texts(k.lit("determinant: a "), sizeText(r, c), k.lit(" matrix; it needs a square one"))))));
+  const inverted = def("inverted", ["matrix"], (m) => matOf(m, (r, c) => k.if(iSame(r, c),
+    k.call(transposed, k.call(matrixOfRows, k.call(map, k.call(rowsOf, k.call(identityMatrix, r)), k.fn(["column"], (e) => k.call(solved, m, e))))),
+    k.call(ABORT_OP, texts(k.lit("inverted: a "), sizeText(r, c), k.lit(" matrix; it needs a square one"))))));
+  // The best fit when there are more equations than unknowns (L44f): the
+  // x making m·x nearest b, by the normal equations mᵀm·x = mᵀb (Gauss,
+  // 1809; Legendre, 1805). Squaring m loses accuracy LAPACK's QR (gels)
+  // keeps, a later way of the same function.
+  const leastSquares = def("least squares", ["matrix", "vector"], (m, v) => matOf(m, (r, c) =>
+    k.if(iSame(r, k.call(length, v)),
+      k.let("flipped", k.call(transposed, m), (t) => k.call(solved, k.call(matrixProduct, t, m), k.call(matrixTimesVector, t, v))),
+      k.call(ABORT_OP, texts(k.lit("least squares: a "), sizeText(r, c), k.lit(" matrix and a vector of "), k.call(INT_OPS.show, k.call(length, v)), k.lit("; it needs one item per row"))))));
+
   const impl = (name: string, v: Id, ops: Id[]) => { const d = k.def(name); k.define(d, k.call(v, ...ops.map((o) => k.x(o)))); return d; };
   const trigD = k.def("trig at dual");
   k.define(trigD, k.call(TRIG_V, ...[sinD, cosD, tanD, expD, logD].map((d) => k.x(d)), k.x(S.byItsWays), k.x(unpolarD), k.x(S.byItsWays), k.x(S.byItsWays)));
@@ -217,9 +387,9 @@ export function buildNumbers(pre: Module): Module {
     ...matLiterals,
   ];
 
-  const offered = [TC.def, embedC, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, complexTable, T.def, embedD, asD, slopeAt, dualTable, ...mats.map((m) => m.def)];
+  const offered = [TC.def, embedC, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, complexTable, T.def, embedD, asD, slopeAt, dualTable, ...mats.map((m) => m.def), MX.def, LU.def, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, factored, solvedWith, determinant, inverted, leastSquares];
   const laws = [lawFromPolar, lawPolar];
-  const helpers = [addC, subC, mulC, negC, divC, showC, addD, subD, mulD, negD, divD, sinD, cosD, tanD, expD, logD, unpolarD, showD, ...matTables, addParts, subParts, negParts, ...matProducts];
+  const helpers = [addC, subC, mulC, negC, divC, showC, addD, subD, mulD, negD, divD, sinD, cosD, tanD, expD, logD, unpolarD, showD, ...matTables, addParts, subParts, negParts, ...matProducts, listDot, eliminated, backSubstituted, determinantOf];
   const comments: Record<Id, string> = {
     [TC.def]: "A complex number re + im·i, a record of two Float64s. The same + − · work on it (· is the complex product); it has no <.",
     [embedC]: "Float64 in Complex: x as x + 0i.",
@@ -262,6 +432,29 @@ export function buildNumbers(pre: Module): Module {
     [mats[0].def]: "A 2 × 2 matrix of Float64s, in rows: mat2(m11, m12, m21, m22). + and − go part by part, · is the matrix product, and a plain number is that many times the identity, so m + 1 adds 1 down the diagonal.",
     [mats[1].def]: "A 3 × 3 matrix of Float64s, in rows. + and − go part by part, · is the matrix product, and a plain number is that many times the identity.",
     [mats[2].def]: "A 4 × 4 matrix of Float64s, in rows, the size of a 3D transform. + and − go part by part, · is the matrix product, and a plain number is that many times the identity.",
+    [MX.def]: "A matrix of any size: its row and column counts and its items row by row. Built with matrix of rows; a size mismatch stops the program and names both sizes, as the size isn't in the type.",
+    [LU.def]: "A square matrix's Gaussian elimination, done once by factored and kept: the pivots in the order taken, each pivot's row of U and the multiples taken off the rows below. solved with uses it to solve the matrix for any vector.",
+    [matrixOfRows]: "The matrix with these rows: matrix of rows([[1, 2, 3], [4, 5, 6]]) is 2 × 3. Rows of different lengths stop the program.",
+    [rowsOf]: "The matrix's rows, each a list, top to bottom.",
+    [rowCount]: "How many rows the matrix has.",
+    [columnCount]: "How many columns the matrix has.",
+    [matrixEntry]: "The item at a row and a column, counting from 0; no answer outside the matrix.",
+    [transposed]: "The matrix flipped across its diagonal: row i is column i.",
+    [identityMatrix]: "The size × size matrix with 1 on its diagonal and 0 elsewhere, for any number type.",
+    [matrixScaled]: "Every item times the number.",
+    [matrixSum]: "The two matrices added item by item. Different sizes stop the program, with both sizes.",
+    [matrixProduct]: "The first matrix times the second: row by column, for any number type. The first's columns must be the second's rows, or the program stops with both sizes.",
+    [matrixTimesVector]: "The matrix times the list as a column: one item per row. The list must have one item per column, or the program stops with both sizes.",
+    [factored]: "A square Float64 matrix's LU factors, its Gaussian elimination with partial pivoting done once and kept, for solved with: factor once, then solve for many vectors. A singular matrix's factors have a 0 pivot, and solved with has no answer with them.",
+    [solvedWith]: "The list x with matrix times vector(m, x) = b, from m's factors (factored): the elimination solved does, done once for all the vectors solved this way. No answer when the matrix is singular (a pivot is 0).",
+    [solved]: "The list x with matrix times vector(m, x) = b, for a square Float64 matrix, by Gaussian elimination with partial pivoting. No answer when the matrix is singular (a pivot is 0).",
+    [determinant]: "The determinant of a square Float64 matrix: 0 when it is singular. Other sizes stop the program.",
+    [leastSquares]: "The x making matrix times vector(m, x) nearest the vector, by least squares, for a Float64 matrix with at least as many rows as columns: a line through points. No answer when the columns aren't independent.",
+    [inverted]: "The inverse of a square Float64 matrix: matrix product(m, inverted(m)) is the identity. No answer when the matrix is singular.",
+    [listDot]: "A helper of the matrix operations. Not offered.",
+    [eliminated]: "A helper of the matrix operations. Not offered.",
+    [backSubstituted]: "A helper of the matrix operations. Not offered.",
+    [determinantOf]: "A helper of the matrix operations. Not offered.",
   };
   const p = publish(merge(prelude, std, pre.code, k.code), k.names, [...offered, ...impls, ...helpers, ...laws], merge(prelude, std, pre.code));
   if (!p.ok) throw new Error(`the numbers module can't be published: ${p.reason}`);
