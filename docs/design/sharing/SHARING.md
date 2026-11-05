@@ -9,7 +9,7 @@ saying which std they were published on, ids saying their recipe.
 §2 built (L111): upgrades by pin generality, `lab upgrade`, a program's `modules` folder.
 §5 built (L112): names kept per program on upgrade, `--take-names`.
 §4b built (L115): a program's store.json, `lab downgrade`.
-§4 logs built (L114a): signed logs beside module files, `lab broken`; fetching by hash is L114.
+§4 built (L114a, L114): signed logs beside module files, `lab broken`, `lab fetch`.
 
 **In one sentence:** a definition (or a library) keeps one **lineage id**
 for its whole life and gets a **version hash** each time it's published;
@@ -171,6 +171,10 @@ a static site, IPFS, an npm package for the JS target. Logs are small
 signed files hosted the same way. There is no global registry the
 language depends on; a registry is just an index of logs, and anyone can
 run one. How signing and fetching work on each host is a host detail.
+
+Built (L114, 2026-11-05): `lab fetch <program> <url or path>` takes a
+module from any host into the program's modules folder, rehashing every
+definition and checking its log against the program's pinned authors.
 
 **Effects are a supply-chain check for free.** A library's pins carry
 its effects, so a `parse` whose pin has no Network can't reach the
