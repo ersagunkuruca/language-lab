@@ -34,7 +34,7 @@ import { fieldPath, fieldPaths, placePath, readPaths } from "./records.ts";
 import { leftToWays, pickWays, waysIn, type Ways } from "./ways.ts";
 import { fresh, rigid, RIGID, type Pins } from "./signatures.ts";
 import {
-  ALGEBRAIC_TYPE, ARRAY, MASK_TYPES, isRowCarrier, rowCarrier, BUILTIN_EFFECTS, NAMED_ROWS, writtenRow, CELL, PATH, CHOICE, COMPLEX_TYPE, CONSOLE, FIXED_TYPE, DIVERGE, EffectError, ArithError, FractionError, WORLD, WorldError, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, RATIONAL_TYPE, schemeArith, schemeNeeds, showType as showT, STRING, Subst, TypeError,
+  ALGEBRAIC_TYPE, ARRAY, MASK_TYPES, isRowCarrier, rowCarrier, BUILTIN_EFFECTS, NAMED_ROWS, writtenRow, CELL, PATH, CHOICE, CONSOLE, FIXED_TYPE, DIVERGE, EffectError, ArithError, FractionError, WORLD, WorldError, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, RATIONAL_TYPE, schemeArith, schemeNeeds, showType as showT, STRING, Subst, TypeError,
   type Row, type Scheme, type Type,
   OverMap, OverSet,
 } from "./types.ts";
@@ -975,10 +975,12 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
           else s.whole.add(v.v);
           t = v;
         } else t = n.of ? { t: "con", id: n.of, args: [] } : str;
-        // A literal at Rational is a whole number or top/bottom; at
-        // Complex, a Float64 (its real part). arith.ts spells them out.
+        // A literal at Rational is a whole number or top/bottom. arith.ts
+        // spells it out.
         if ((n.of === RATIONAL_TYPE || n.of === ALGEBRAIC_TYPE) && !ratioParts(n.value)) err(id, `${JSON.stringify(n.value)} isn't a fraction: write a whole number, or top/bottom with the bottom not 0`);
-        if (n.of === COMPLEX_TYPE && typeof n.value !== "number") err(id, `${JSON.stringify(n.value)} isn't a number`);
+        // At any other type, digits as written (a whole number, a decimal,
+        // top/bottom), which its Literal or embedding spells out.
+        else if (n.of && n.of !== STRING && typeof n.value === "string" && !/^\s*-?(\d+(\.\d*)?|\.\d+)(e[+-]?\d+)?\s*(\/\s*\d+\s*)?$/i.test(n.value)) err(id, `${JSON.stringify(n.value)} isn't a number`);
         break;
       }
       case "ref": t = refType(id, n.target, env); break;

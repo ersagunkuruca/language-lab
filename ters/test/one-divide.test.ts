@@ -15,11 +15,11 @@ import type { Id } from "../src/model.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
-import { LIBRARY } from "../src/lang/library.ts";
+import { COMPLEX_TYPE, LIBRARY } from "../src/lang/library.ts";
 import { runMain } from "../src/lang/run.ts";
 import { DIVIDE, INT_OPS, S, SHOW_ANY } from "../src/lang/std.ts";
-import { COMPLEX_TYPE, FIXED_TYPE, RATIONAL_TYPE, schemeNeeds, showType } from "../src/lang/types.ts";
-const L = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY.names[d] === name)!;
+import { FIXED_TYPE, RATIONAL_TYPE, schemeNeeds, showType } from "../src/lang/types.ts";
+const L = (name: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === name)!;
 
 const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 

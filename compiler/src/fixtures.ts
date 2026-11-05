@@ -5,12 +5,12 @@ import { Lang } from "../../ters/src/lang/dsl.ts";
 import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { B } from "../../ters/src/prelude.ts";
-import { ABORT_OP, ARITH, ARRAY_OPS, CASE_NAME, CELL_OPS, RANDOM_OP, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, INT_OPS, IO, LIST, NIL, NONE, PAIR_V, S, SECOND, SET, SHOW_ANY, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
+import { ABORT_OP, ARITH, ARRAY_OPS, CASE_NAME, CELL_OPS, RANDOM_OP, COMPARE, CONS, EXTENDED_V, FALSE, INT_OPS, IO, LIST, NIL, NONE, PAIR_V, S, SECOND, SET, SHOW_ANY, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
 // S as the pga fixture names it is its Space type.
 const STD = S;
 import { INT, NUMBER, STRING } from "../../ters/src/lang/types.ts";
 import type { Id } from "../../ters/src/model.ts";
-import { LIBRARY, VECTORS } from "../../ters/src/lang/library.ts";
+import { COMPLEX_V, LIBRARY, VECTORS } from "../../ters/src/lang/library.ts";
 
 // The area under x·x·x − x − 1 from `from`, in `steps` strips of width
 // `width`: a numeric loop written as tail recursion, the way the language
