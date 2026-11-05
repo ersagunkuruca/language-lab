@@ -1,5 +1,5 @@
 // A compiled run keeps L186's log of the world's answers (C172a, and C172b
-// for a native program through C): with
+// for a native program through C, its Random seed too: C172c): with
 // TERS_LOG set, a module from `lab compile` writes what the world answered
 // it, and `lab run --replay` gives those answers to the evaluator, which
 // then does what the compiled run did, whatever the world says now.
@@ -10,6 +10,9 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Lang } from "../../ters/src/lang/dsl.ts";
+import { LIBRARY } from "../../ters/src/lang/library.ts";
+import { RANDOM_OP, S, SHOW_ANY } from "../../ters/src/lang/std.ts";
 import { skip } from "./c-harness.ts";
 
 test("a compiled run's log of the world's answers replays on the evaluator (C172a)", () => {
@@ -45,4 +48,27 @@ test("a native program's log of the world's answers replays on the evaluator, it
   assert.equal(log[1].threw, "no such file or folder: nope");
   writeFileSync(join(dir, "a.txt"), "one\n");
   assert.deepEqual(run(process.execPath, [lab, "run", wc, "--replay", "run.json", "-l", "a.txt", "nope"]), native);
+});
+
+test("a native program logs Random's seed, and the replay draws the same numbers (C172c)", { skip }, () => {
+  const lab = join(import.meta.dirname, "../../ters/cli/lab.ts");
+  const k = new Lang(LIBRARY.code);
+  const main = k.def("main");
+  // [a world draw, a draw under seeded(7), a world draw], shown.
+  k.define(main, k.thunk(() => k.let("a", k.call(RANDOM_OP), (a) =>
+    k.let("b", k.call(S.seeded, k.lit(7), k.thunk(() => k.call(RANDOM_OP))), (b) =>
+      k.let("c", k.call(RANDOM_OP), (c) => k.call(S.print, k.call(SHOW_ANY, k.list(a, b, c))))))));
+  const dir = mkdtempSync(join(tmpdir(), "log-seed-"));
+  writeFileSync(join(dir, "code.json"), JSON.stringify(k.code));
+  writeFileSync(join(dir, "names.default.json"), JSON.stringify(k.names));
+  const run = (file: string, args: string[], env: Record<string, string> = {}) => {
+    const r = spawnSync(file, args, { cwd: dir, encoding: "utf8", env: { ...process.env, ...env } });
+    return [r.stdout, r.stderr, r.status] as const;
+  };
+  assert.equal(run(process.execPath, [lab, "native", dir, "-o", "p"])[2], 0);
+  const native = run(join(dir, "p"), [], { TERS_LOG: "run.json" });
+  const log = JSON.parse(readFileSync(join(dir, "run.json"), "utf8")) as { op: string; answer?: number }[];
+  assert.deepEqual(log.map((e) => e.op), ["randomSeed"]);
+  assert.deepEqual(run(process.execPath, [lab, "run", dir, "--replay", "run.json"]), native);
+  assert.notDeepEqual(run(process.execPath, [lab, "run", dir]), native);
 });

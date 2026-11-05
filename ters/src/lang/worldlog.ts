@@ -11,6 +11,7 @@
 // another way. Influences: Elm's time-travel debugger, rr, Redux DevTools
 // (CREDITS.md).
 import type { World } from "./run.ts";
+import { seededGenerator, type Generator } from "./random.ts";
 
 export type LogEntry = {
   op: string;
@@ -76,10 +77,19 @@ export function replaying(log: LogEntry[], like: World, until?: number, onPause?
     return e;
   };
   const out = {} as Record<string, unknown>;
+  let seed: Generator | null = null;
   for (const [op, f] of Object.entries(like)) {
     if (typeof f !== "function") continue;
     if (WRITES.has(op)) out[op] = (...args: unknown[]) => { if (!paused) next(op, args); };
     else if (op === "startFetch") out[op] = (url: string) => () => (log[at]?.op === "fetchArrived" && same(log[at].args, [url]) ? next("fetchArrived", [url]).answer : null);
+    // A native program draws Random's numbers from a generator the world
+    // seeds at its first draw (C136), and logs the seed (C172c): from
+    // there on the draws are the seeded generator's, as the program's were.
+    else if (op === "random") out[op] = () => {
+      if (paused) pause();
+      if (!seed && log[at]?.op === "randomSeed") seed = seededGenerator(next("randomSeed", []).answer as number);
+      return seed ? seed.next() : next(op, []).answer;
+    };
     else out[op] = (...args: unknown[]) => { const e = next(op, args); if (e.threw !== undefined) throw new Error(e.threw); return e.answer; };
   }
   return out as unknown as World;
