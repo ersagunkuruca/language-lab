@@ -566,6 +566,31 @@ export const offLayer = (code: Code): Set<Id> | undefined => { const d = derived
 const sizes = new WeakMap<object, number>();
 const sizeOf = (nodes: Record<Id, Node>) => { let n = sizes.get(nodes); if (n === undefined) sizes.set(nodes, (n = Object.keys(nodes).length)); return n; };
 const changedOnLayer = new WeakMap<object, { layer: Code; changed: Set<Id> }>();
+// The targets some ref names, once per version of the nodes: on the
+// library's layer the layer's own, found once, and the program's (I167k:
+// the editor's panels each walked the ~27,000 nodes for theirs). A changed
+// library node's old refs still count, which only adds names.
+const refsKept = new WeakMap<object, Set<Id>>();
+const refsIn = (ns: Iterable<Node | undefined>): Set<Id> => { const r = new Set<Id>(); for (const n of ns) if (n?.kind === "ref") r.add(n.target); return r; };
+export function refTargets(code: Code): Set<Id> {
+  let r = refsKept.get(code.nodes);
+  if (r) return r;
+  const layer = layers.get(code), own = layer && !derived.has(code) ? scanningOnLayer(code, () => offLayer(code)) : undefined;
+  if (layer && own) {
+    let under = refsKept.get(layer.nodes);
+    if (!under) refsKept.set(layer.nodes, (under = refsIn(Object.values(layer.nodes))));
+    r = new Set(under);
+    for (const t of refsIn([...own].map((id) => code.nodes[id]))) r.add(t);
+  } else r = refsIn(Object.values(code.nodes));
+  refsKept.set(code.nodes, r);
+  return r;
+}
+// The program's own nodes: on the library's layer those that aren't the
+// layer's, else every node.
+export function ownNodes(code: Code): Node[] {
+  const own = layers.get(code) && !derived.has(code) ? scanningOnLayer(code, () => offLayer(code)) : undefined;
+  return own ? [...own].flatMap((id) => (code.nodes[id] ? [code.nodes[id]] : [])) : Object.values(code.nodes);
+}
 export function scanningOnLayer<T>(code: Code, step: () => T): T {
   const layer = layers.get(code);
   if (!layer || derived.has(code)) return step();

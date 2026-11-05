@@ -4,7 +4,7 @@
 // handlers run, a picture at a pixel or two), and a port's text read as a
 // value. What it reads of the editor comes through `SeedHost`.
 import type { Code, Id, Node, NodeOf } from "../ters/src/model.ts";
-import { isCall, nodesWhere, scanningOnLayer, type Call } from "../ters/src/model.ts";
+import { isCall, nodesWhere, refTargets, scanningOnLayer, type Call } from "../ters/src/model.ts";
 import type { Names, Presentation } from "../ters/src/presentation.ts";
 import { CONS, FALSE, HTML_V, NIL, S, TRUE } from "../ters/src/lang/std.ts";
 import { STRING, type Type } from "../ters/src/lang/types.ts";
@@ -178,7 +178,7 @@ export function seeds(host: SeedHost) {
   const calledSets = new WeakMap<Code, Set<Id>>();
   function calledDefs(code: Code): Set<Id> {
     let r = calledSets.get(code);
-    if (!r) calledSets.set(code, (r = new Set(Object.values(code.nodes).flatMap((n) => (n.kind === "ref" ? [n.target] : [])))));
+    if (!r) calledSets.set(code, (r = refTargets(code)));
     return r;
   }
   // The copy main's run entered for a lambda, when it was one at other
