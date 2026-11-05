@@ -108319,6 +108319,148 @@
         ],
         "body": "@ufvfnqksbuegj6nfjeqil53vk0:3"
       },
+      "@ptsql7r258hmaq5tgqt6gfttam": {
+        "id": "@ptsql7r258hmaq5tgqt6gfttam",
+        "kind": "def",
+        "body": "@ptsql7r258hmaq5tgqt6gfttam:1"
+      },
+      "@ptsql7r258hmaq5tgqt6gfttam:2": {
+        "id": "@ptsql7r258hmaq5tgqt6gfttam:2",
+        "kind": "binder"
+      },
+      "@ptsql7r258hmaq5tgqt6gfttam:21": {
+        "id": "@ptsql7r258hmaq5tgqt6gfttam:21",
+        "kind": "lit",
+        "value": "first"
+      },
+      "@ptsql7r258hmaq5tgqt6gfttam:20": {
+        "id": "@ptsql7r258hmaq5tgqt6gfttam:20",
+        "kind": "ref",
+        "target": "std.list.cons"
+      },
+      "@ptsql7r258hmaq5tgqt6gfttam:22": {
+        "id": "@ptsql7r258hmaq5tgqt6gfttam:22",
+        "kind": "ref",
+        "target": "@ptsql7r258hmaq5tgqt6gfttam:2"
+      },
+      "@ptsql7r258hmaq5tgqt6gfttam:19": {
+        "id": "@ptsql7r258hmaq5tgqt6gfttam:19",
+        "kind": "call",
+        "fn": "@ptsql7r258hmaq5tgqt6gfttam:20",
+        "args": [
+          "@ptsql7r258hmaq5tgqt6gfttam:21",
+          "@ptsql7r258hmaq5tgqt6gfttam:22"
+        ]
+      },
+      "@ptsql7r258hmaq5tgqt6gfttam:5": {
+        "id": "@ptsql7r258hmaq5tgqt6gfttam:5",
+        "kind": "binder"
+      },
+      "@ptsql7r258hmaq5tgqt6gfttam:15": {
+        "id": "@ptsql7r258hmaq5tgqt6gfttam:15",
+        "kind": "lit",
+        "value": ", "
+      },
+      "@ptsql7r258hmaq5tgqt6gfttam:13": {
+        "id": "@ptsql7r258hmaq5tgqt6gfttam:13",
+        "kind": "ref",
+        "target": "builtin.text.joinAll"
+      },
+      "@ptsql7r258hmaq5tgqt6gfttam:14": {
+        "id": "@ptsql7r258hmaq5tgqt6gfttam:14",
+        "kind": "ref",
+        "target": "@ptsql7r258hmaq5tgqt6gfttam:5"
+      },
+      "@ptsql7r258hmaq5tgqt6gfttam:12": {
+        "id": "@ptsql7r258hmaq5tgqt6gfttam:12",
+        "kind": "call",
+        "fn": "@ptsql7r258hmaq5tgqt6gfttam:13",
+        "args": [
+          "@ptsql7r258hmaq5tgqt6gfttam:14",
+          "@ptsql7r258hmaq5tgqt6gfttam:15"
+        ]
+      },
+      "@ptsql7r258hmaq5tgqt6gfttam:16": {
+        "id": "@ptsql7r258hmaq5tgqt6gfttam:16",
+        "kind": "lit",
+        "value": ", "
+      },
+      "@ptsql7r258hmaq5tgqt6gfttam:11": {
+        "id": "@ptsql7r258hmaq5tgqt6gfttam:11",
+        "kind": "ref",
+        "target": "builtin.text.split"
+      },
+      "@ptsql7r258hmaq5tgqt6gfttam:10": {
+        "id": "@ptsql7r258hmaq5tgqt6gfttam:10",
+        "kind": "call",
+        "fn": "@ptsql7r258hmaq5tgqt6gfttam:11",
+        "args": [
+          "@ptsql7r258hmaq5tgqt6gfttam:12",
+          "@ptsql7r258hmaq5tgqt6gfttam:16"
+        ]
+      },
+      "@ptsql7r258hmaq5tgqt6gfttam:9": {
+        "id": "@ptsql7r258hmaq5tgqt6gfttam:9",
+        "kind": "ref",
+        "target": "builtin.equal"
+      },
+      "@ptsql7r258hmaq5tgqt6gfttam:17": {
+        "id": "@ptsql7r258hmaq5tgqt6gfttam:17",
+        "kind": "ref",
+        "target": "@ptsql7r258hmaq5tgqt6gfttam:5"
+      },
+      "@ptsql7r258hmaq5tgqt6gfttam:8": {
+        "id": "@ptsql7r258hmaq5tgqt6gfttam:8",
+        "kind": "call",
+        "fn": "@ptsql7r258hmaq5tgqt6gfttam:9",
+        "args": [
+          "@ptsql7r258hmaq5tgqt6gfttam:10",
+          "@ptsql7r258hmaq5tgqt6gfttam:17"
+        ]
+      },
+      "@ptsql7r258hmaq5tgqt6gfttam:18": {
+        "id": "@ptsql7r258hmaq5tgqt6gfttam:18",
+        "kind": "lit",
+        "value": "split(join all(parts, \", \"), \", \") is parts"
+      },
+      "@ptsql7r258hmaq5tgqt6gfttam:7": {
+        "id": "@ptsql7r258hmaq5tgqt6gfttam:7",
+        "kind": "ref",
+        "target": "std.check.expect"
+      },
+      "@ptsql7r258hmaq5tgqt6gfttam:6": {
+        "id": "@ptsql7r258hmaq5tgqt6gfttam:6",
+        "kind": "call",
+        "fn": "@ptsql7r258hmaq5tgqt6gfttam:7",
+        "args": [
+          "@ptsql7r258hmaq5tgqt6gfttam:8",
+          "@ptsql7r258hmaq5tgqt6gfttam:18"
+        ]
+      },
+      "@ptsql7r258hmaq5tgqt6gfttam:4": {
+        "id": "@ptsql7r258hmaq5tgqt6gfttam:4",
+        "kind": "lambda",
+        "params": [
+          "@ptsql7r258hmaq5tgqt6gfttam:5"
+        ],
+        "body": "@ptsql7r258hmaq5tgqt6gfttam:6"
+      },
+      "@ptsql7r258hmaq5tgqt6gfttam:3": {
+        "id": "@ptsql7r258hmaq5tgqt6gfttam:3",
+        "kind": "call",
+        "fn": "@ptsql7r258hmaq5tgqt6gfttam:4",
+        "args": [
+          "@ptsql7r258hmaq5tgqt6gfttam:19"
+        ]
+      },
+      "@ptsql7r258hmaq5tgqt6gfttam:1": {
+        "id": "@ptsql7r258hmaq5tgqt6gfttam:1",
+        "kind": "lambda",
+        "params": [
+          "@ptsql7r258hmaq5tgqt6gfttam:2"
+        ],
+        "body": "@ptsql7r258hmaq5tgqt6gfttam:3"
+      },
       "@r7dorj9as9anofgaa01rsjf70m": {
         "id": "@r7dorj9as9anofgaa01rsjf70m",
         "kind": "def",
@@ -121567,6 +121709,7 @@
       "@f8g1e1b7no4ekgcf44aul4hedt",
       "@hi608ec2b5l5hig3vbdrh088e2",
       "@ufvfnqksbuegj6nfjeqil53vk0",
+      "@ptsql7r258hmaq5tgqt6gfttam",
       "@f5elide8cqkud5fq2c0qjdfm2u",
       "@kjnioeormvpnbitto13ugdqa5g",
       "@tme5kko5ettktqv6cfn7eims1j",
@@ -141953,6 +142096,40 @@
       },
       "plain": []
     },
+    "@ptsql7r258hmaq5tgqt6gfttam": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.list",
+            "args": [
+              {
+                "t": "con",
+                "id": "type.string",
+                "args": []
+              }
+            ]
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.unit",
+          "args": []
+        },
+        "eff": {
+          "effs": [
+            "std.check"
+          ],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
     "@f5elide8cqkud5fq2c0qjdfm2u": {
       "vars": [],
       "rows": [
@@ -145017,6 +145194,9 @@
     "@ufvfnqksbuegj6nfjeqil53vk0:2": "fields",
     "@ufvfnqksbuegj6nfjeqil53vk0:25": "field",
     "@ufvfnqksbuegj6nfjeqil53vk0:5": "records",
+    "@ptsql7r258hmaq5tgqt6gfttam": "split undoes join all",
+    "@ptsql7r258hmaq5tgqt6gfttam:2": "texts",
+    "@ptsql7r258hmaq5tgqt6gfttam:5": "parts",
     "@r7dorj9as9anofgaa01rsjf70m": "base64 groups",
     "@r7dorj9as9anofgaa01rsjf70m:2": "bytes",
     "@r7dorj9as9anofgaa01rsjf70m:8": "first",
