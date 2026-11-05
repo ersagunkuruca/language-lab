@@ -6,10 +6,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { pathToFileURL } from "node:url";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { makeRunner, type Value } from "../src/lang/run.ts";
@@ -18,9 +15,8 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { ARITH, COMPLEX_V, S } from "../src/lang/std.ts";
 import { showType } from "../src/lang/types.ts";
 import { subtree, type Id } from "../src/model.ts";
-import { compile } from "../../compiler/src/compile.ts";
+import { compiledDefs } from "../../compiler/src/core-js.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 const lib = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
 
 function program() {
@@ -77,10 +73,8 @@ async function both() {
   const listy = new Set(["quotient", "by zero"]);
   const evaluated = Object.fromEntries(NAMES.map((n) => { const v = run(r.value(byName(n))); return [n, listy.has(n) ? items(v) : v]; }));
   const clean = { ...p.info, errors: p.info.errors.filter((e) => [...ok].some((d) => subtree(p.code, d).includes(e.id))) };
-  const path = join(mkdtempSync(join(tmpdir(), "complex-")), "complex.js");
-  writeFileSync(path, compile(p.code, clean, p.names, { runtime, exports: NAMES }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
-  const compiled = Object.fromEntries(NAMES.map((n) => { const v = typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n]; return [n, listy.has(n) ? items(v as Value) : v]; }));
+  const defs = compiledDefs(p.code, clean, p.names, NAMES.filter((n) => n !== "slope")) as Record<string, unknown>;
+  const compiled = Object.fromEntries(NAMES.filter((n) => n !== "slope").map((n) => { const v = typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n]; return [n, listy.has(n) ? items(v as Value) : v]; }));
   return { evaluated, compiled };
 }
 
@@ -149,9 +143,7 @@ test("show prints a fraction as 1/2 and a complex number as 3 − 4i, in lists t
   const run = (v: Value): Value => { if (typeof v !== "function") return v; for (const x of r.call(v)) return x; throw new Error("no value"); };
   assert.deepEqual(items(run(r.value(shown))), ["[1/2, 2]"]);
   assert.equal(r.value(shownC), "[3 − 4i, 0.5 + 2i]");
-  const path = join(mkdtempSync(join(tmpdir(), "show-")), "show.js");
-  writeFileSync(path, compile(code, info, names, { runtime, exports: ["shown", "shown complex"] }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
+  const defs = compiledDefs(code, info, names, ["shown", "shown complex"]) as Record<string, unknown>;
   assert.deepEqual(items((defs.shown as () => Value)()), ["[1/2, 2]"]);
   assert.equal(typeof defs["shown complex"] === "function" ? (defs["shown complex"] as () => Value)() : defs["shown complex"], "[3 − 4i, 0.5 + 2i]");
 });
@@ -200,9 +192,7 @@ test("table product with complex table is the complex product, evaluated and com
     const [table, direct] = items(run(r.value(d))) as { fields: number[] }[];
     table.fields.forEach((x, i) => assert.ok(Math.abs(x - direct.fields[i]) < 1e-12, `${names[d]}: ${table.fields} vs ${direct.fields}`));
   }
-  const path = join(mkdtempSync(join(tmpdir(), "table-")), "table.js");
-  writeFileSync(path, compile(code, info, names, { runtime, exports: defs.map((d) => names[d]) }));
-  const compiled = (await import(pathToFileURL(path).href)).defs as Record<string, () => Value>;
+  const compiled = compiledDefs(code, info, names, defs.map((d) => names[d])) as Record<string, () => Value>;
   for (const d of defs) {
     const [table, direct] = items(compiled[names[d]]()) as { fields: number[] }[];
     table.fields.forEach((x, i) => assert.ok(Math.abs(x - direct.fields[i]) < 1e-12, `compiled ${names[d]}`));

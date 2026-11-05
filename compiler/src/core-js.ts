@@ -19,7 +19,7 @@
 // the evaluator's (C137c2), Random seeded is random.ts's generator, and
 // the world is the evaluator's Runtime (C137c3, runCoreMain).
 
-import { ARRAY_OPS } from "../../ters/src/lang/std.ts";
+import { ARRAY_OPS, FALSE, TRUE } from "../../ters/src/lang/std.ts";
 import { toList, type Runtime } from "../../ters/src/lang/run.ts";
 import { fusedProgram } from "./handlers.ts";
 import { infer, type Info } from "../../ters/src/lang/infer.ts";
@@ -595,6 +595,32 @@ function mainOf(ir: CoreIR, name: string): [number, MainSpec] {
   if (!f || ps.length > 1) throw new Error(`${name}: not compiled, or not a main`);
   if (ps.length && !isData(ps[0])) throw new Error(`${name} takes something other than a List of Texts`);
   return [fi, { args: ps.length > 0, result: result === "f64" ? "f64" : result === "int" ? "int" : "other", ...(f.multi ? { rest: true as const } : {}) }];
+}
+
+// A program's definitions compiled through the core IR, by name, as
+// compile.ts's module gave them (`defs`, C137 r1): each a function, one
+// that takes nothing called with nothing. For tests that compare compiled
+// code with the evaluator. Its values are the core IR's: data are its
+// classes (read by `tag` and `fields`, or turned plain with plainValue).
+export function compiledDefs(code: Code, info: Info, names: Record<Id, string>, exports: string[], rt: Runtime = { print: () => {} }): Record<string, (...xs: unknown[]) => unknown> {
+  const ids = exports.map((n) => code.defs.find((d) => names[d] === n) ?? (() => { throw new Error(`no definition ${n}`); })());
+  const ir = lowerCore(code, info, names, ids);
+  for (const [i, d] of ids.entries()) { const why = ir.refused.get(d); if (why) throw new Error(`${exports[i]} isn't compiled through the core IR: it ${why}`); }
+  const fns = loadCoreJs(ir, rt);
+  return Object.fromEntries(exports.map((n, i) => {
+    const fi = ir.funcs.findIndex((g) => g.def === ids[i] && !g.inner && !g.budgeted);
+    if (fi < 0) throw new Error(`${n}: not compiled`);
+    return [n, fns[fi]];
+  }));
+}
+// A core IR value as the evaluator's: data as plain { tag, fields }, a
+// Bool as its case, inside lists and records too; numbers, texts and
+// functions as they are.
+export function plainValue(v: unknown): unknown {
+  if (typeof v === "boolean") return { tag: v ? TRUE : FALSE, fields: [] };
+  if (typeof v !== "object" || v === null || !("tag" in v)) return v;
+  const d = v as { tag: string; fields: unknown[] };
+  return { tag: d.tag, fields: d.fields.map(plainValue) };
 }
 
 export function runCoreMain(ir: CoreIR, name: string, args: string[], rt: Runtime): number {
