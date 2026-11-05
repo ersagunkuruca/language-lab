@@ -1123,7 +1123,7 @@ function written(code: Code, names: Names, info: Info, hole: Id, text: string, t
   };
   tree(typed, hole);
   if (open.size) {
-    const seen = check({ nodes, defs: code.defs }, names);
+    const seen = check({ nodes, defs: code.defs }, names, undefined, info.options);
     for (const [id, w] of open) {
       const e = seen.holes.get(id)?.expected;
       // An Int, or a type whose Literal spells its numbers (Rational, …).
