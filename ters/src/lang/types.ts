@@ -73,7 +73,6 @@ export const RATIONAL_TYPE = "std.rational";
 // with builtin arithmetic (src/lang/algebraic.ts).
 export const ALGEBRAIC_TYPE = "std.algebraic";
 export const FIXED_TYPE = "std.fixed";
-// The square matrices and their sizes (std.ts MAT2 to MAT4).
 // A cell holding an `a` (src/lang/cells.ts). Not plain data: two cells
 // holding the same value are still two cells.
 export const CELL = "type.cell";

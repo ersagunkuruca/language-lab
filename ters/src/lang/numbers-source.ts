@@ -1,7 +1,7 @@
 // The numbers module (BACKLOG L207): the library's number types written in
 // the language, out of std.ts, each with its + − · ÷, its Trig and its
-// embedding as implementations found by its type. Dual (L207a) and
-// Complex (L207b) so far; Rational, Fixed and the matrices follow.
+// embedding as implementations found by its type. Dual (L207a),
+// Complex (L207b) and Mat2 to Mat4 (L207c) so far; Rational and Fixed follow.
 //
 // Dual numbers (INTERFACES.md step 3): value + slope·ε with ε² = 0, so a
 // function given dual(x, 1) gives its value and its slope at x. + and −
@@ -14,7 +14,7 @@ import { merge, type Id } from "../model.ts";
 import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
-import { ARITHMETIC_V, CHECK_OP, DIVISION_V, EMBEDDING_V, S, SHOWN_V, TIMES_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_V, std } from "./std.ts";
+import { ARITHMETIC_V, CHECK_OP, DIVISION_V, EMBEDDING_V, INT_OPS, LITERAL_V, S, SHOWN_V, TIMES_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_V, std } from "./std.ts";
 import { NUMBER } from "./types.ts";
 
 // On the prelude, whose laws give Trig's fields Dual leaves to their ways.
@@ -170,6 +170,35 @@ export function buildNumbers(pre: Module): Module {
       k.solve(TRIG_POLAR, { 0: r, 1: t, out: k.true }, { 2: "x", 3: "y" }, ({ 2: x, 3: y }) =>
         expect(nearC(C(x, y), z), "polar(unpolar(x, y)) is near (x, y)"))))));
 
+  // Small matrices (BACKLOG L44, L207c): Mat2, Mat3 and Mat4, records of
+  // Float64s in rows (m11, m12, …). + − part by part, · the matrix product
+  // from the matrix-unit table (E_ij · E_jl = E_il, the prelude's matrix
+  // table), and a literal is that many times the identity, so 2 + m adds 2
+  // down the diagonal. Each says it is its own type, as they share shapes
+  // with other records of Float64s.
+  const sizes = [2, 3, 4] as const;
+  const mats = sizes.map((size) => k.type(`Mat${size}`, [], [[`mat${size}`, Array.from({ length: size * size }, (_, i) => [`m${Math.floor(i / size) + 1}${(i % size) + 1}`, () => k.tref(NUMBER)] as [string, () => Id])]], `${size} × ${size} matrices`));
+  const matV = (i: number) => mats[i].v[`mat${sizes[i]}`];
+  const matTables = sizes.map((size, i) => {
+    const units = k.list(...Array.from({ length: size }, (_, r) => k.list(...Array.from({ length: size }, (_, c) =>
+      k.call(matV(i), ...Array.from({ length: size * size }, (_, e) => k.lit(e === r * size + c ? 1 : 0)))))));
+    const d = k.def(`mat${size} table`); k.define(d, k.call(lib("matrix table"), units)); return d;
+  });
+  // + − and −x part by part, at any record of Float64s.
+  const partwise = (name: string, op: Id) => { const d = k.def(name); k.define(d, k.fn(["a", "b"], (a, b) => k.call(S.zipParts, op, a, b))); return d; };
+  const addParts = partwise("add parts", B.add), subParts = partwise("subtract parts", B.sub);
+  const negParts = k.def("negate parts");
+  k.define(negParts, k.fn(["a"], (a) => k.call(S.mapParts, k.x(B.neg), a)));
+  const matProducts = matTables.map((t, i) => { const d = k.def(`multiply mat${sizes[i]}`); k.define(d, k.fn(["a", "b"], (a, b) => k.call(lib("table product"), k.x(t), a, b))); return d; });
+  // A number at a matrix is that many times the identity (L204c): 2 is
+  // 2 down the diagonal and 0 elsewhere.
+  const matLiterals = sizes.map((size, i) => {
+    const d = k.def(`literal at mat${size}`);
+    k.define(d, k.call(LITERAL_V, k.fn(["top", "bottom"], (t, b) => k.let("x", k.call(lib("divided or"), k.call(INT_OPS.toNumber, t), k.call(INT_OPS.toNumber, b), k.lit(0)), (x) =>
+      k.call(matV(i), ...Array.from({ length: size * size }, (_, c) => (c % (size + 1) === 0 ? x : k.lit(0))))))));
+    return d;
+  });
+
   const impl = (name: string, v: Id, ops: Id[]) => { const d = k.def(name); k.define(d, k.call(v, ...ops.map((o) => k.x(o)))); return d; };
   const trigD = k.def("trig at dual");
   k.define(trigD, k.call(TRIG_V, ...[sinD, cosD, tanD, expD, logD].map((d) => k.x(d)), k.x(S.byItsWays), k.x(unpolarD), k.x(S.byItsWays), k.x(S.byItsWays)));
@@ -184,11 +213,13 @@ export function buildNumbers(pre: Module): Module {
     impl("arithmetic at dual", ARITHMETIC_V, [addD, subD, mulD, negD]),
     impl("division at dual", DIVISION_V, [divD]),
     trigD,
+    ...matProducts.map((m, i) => impl(`arithmetic at mat${sizes[i]}`, ARITHMETIC_V, [addParts, subParts, m, negParts])),
+    ...matLiterals,
   ];
 
-  const offered = [TC.def, embedC, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, complexTable, T.def, embedD, asD, slopeAt, dualTable];
+  const offered = [TC.def, embedC, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, complexTable, T.def, embedD, asD, slopeAt, dualTable, ...mats.map((m) => m.def)];
   const laws = [lawFromPolar, lawPolar];
-  const helpers = [addC, subC, mulC, negC, divC, showC, addD, subD, mulD, negD, divD, sinD, cosD, tanD, expD, logD, unpolarD, showD];
+  const helpers = [addC, subC, mulC, negC, divC, showC, addD, subD, mulD, negD, divD, sinD, cosD, tanD, expD, logD, unpolarD, showD, ...matTables, addParts, subParts, negParts, ...matProducts];
   const comments: Record<Id, string> = {
     [TC.def]: "A complex number re + im·i, a record of two Float64s. The same + − · work on it (· is the complex product); it has no <.",
     [embedC]: "Float64 in Complex: x as x + 0i.",
@@ -228,6 +259,9 @@ export function buildNumbers(pre: Module): Module {
     [slopeAt]: "f′(x), worked out by giving f the dual number x + 1ε and reading the slope of what comes back (forward-mode automatic differentiation). f must work on duals: write it with the generic + − · and Trig. derivative(f) gives the same number by differentiating f's code.",
     [dualTable]: "Dual numbers' multiplication table: 1 · 1 = 1, 1 · ε = ε, ε · 1 = ε, and ε · ε = 0, which needs no line. table product(dual table, x, y) is x · y.",
     [showD]: "A dual number as 3 + 2ε. Not offered: the one show shows every number; kept so programs saved before still open.",
+    [mats[0].def]: "A 2 × 2 matrix of Float64s, in rows: mat2(m11, m12, m21, m22). + and − go part by part, · is the matrix product, and a plain number is that many times the identity, so m + 1 adds 1 down the diagonal.",
+    [mats[1].def]: "A 3 × 3 matrix of Float64s, in rows. + and − go part by part, · is the matrix product, and a plain number is that many times the identity.",
+    [mats[2].def]: "A 4 × 4 matrix of Float64s, in rows, the size of a 3D transform. + and − go part by part, · is the matrix product, and a plain number is that many times the identity.",
   };
   const p = publish(merge(prelude, std, pre.code, k.code), k.names, [...offered, ...impls, ...helpers, ...laws], merge(prelude, std, pre.code));
   if (!p.ok) throw new Error(`the numbers module can't be published: ${p.reason}`);
