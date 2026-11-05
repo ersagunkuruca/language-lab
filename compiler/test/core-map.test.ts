@@ -33,7 +33,13 @@ test("the compiled module's map names each function's node and each stop's (C143
   const r = spawnSync(process.execPath, [join(import.meta.dirname, "../../ters/cli/lab.ts"), "compile", join(import.meta.dirname, "../../ters/examples/calc"), "-o", "calc.mjs"], { cwd: dir, encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr);
   const { lines, ...written } = JSON.parse(readFileSync(join(dir, "calc.mjs.map.json"), "utf8"));
-  assert.deepEqual(written, m);
+  // calc's written reader is made with fresh ids each time (inverses.ts,
+  // C110 s5c), so the functions lowered from it differ in id from lowering
+  // to lowering; the rest is the same.
+  const own = (fs: Record<string, string>) => Object.fromEntries(Object.entries(fs).filter(([, id]) => id in p.code.nodes));
+  assert.deepEqual(Object.keys(written.functions), Object.keys(m.functions));
+  assert.deepEqual(own(written.functions), own(m.functions));
+  assert.deepEqual(written.stops, m.stops);
   const js = readFileSync(join(dir, "calc.mjs"), "utf8").split("\n");
   assert.match(js.join("\n"), /function f0\(/);
   // Each printed function's lines in the module as written (C143e): it
@@ -55,4 +61,24 @@ test("a stop's site in the map is the node it is lowered from (C143c)", () => {
   const m = coreMap(ir);
   assert.ok(m.stops.length > 0);
   assert.ok(m.stops.every((s) => s.node in ir.code.nodes && s.def in ir.code.nodes));
+});
+
+// C170d: the program's own cases are tagged by small numbers, the map
+// saying which variant each is, and a stop names its definition with no
+// ids, so the module carries no node ids at all.
+test("a compiled module carries no node ids: its own cases by number, its stops by name (C170d)", () => {
+  const p = load("chapters"), main = p.named("main");
+  const ir = lowerCore(p.code, p.info, p.pres.names, [main]);
+  const m = coreMap(ir);
+  assert.ok(m.tags && Object.keys(m.tags).length > 0);
+  for (const [n, id] of Object.entries(m.tags)) { assert.match(n, /^\d+$/); assert.ok(id.startsWith("box:") || ir.code.nodes[id]?.kind === "variant", id); }
+  const dir = mkdtempSync(join(tmpdir(), "ids-"));
+  const r = spawnSync(process.execPath, [join(import.meta.dirname, "../../ters/cli/lab.ts"), "compile", join(import.meta.dirname, "../../ters/examples/chapters"), "-o", "chapters.mjs"], { cwd: dir, encoding: "utf8" });
+  assert.equal(r.status, 0, r.stderr);
+  const js = readFileSync(join(dir, "chapters.mjs"), "utf8");
+  const ours = js.slice(js.search(/^(?:var|const|let) defs = \(function/m));
+  const ids = new Set(Object.keys(ir.code.nodes).filter((id) => /^[a-z0-9]{26}$/.test(id)));
+  assert.deepEqual([...ours.matchAll(/"([a-z0-9]{26})"/g)].map((x) => x[1]).filter((x) => ids.has(x)), []);
+  assert.match(ours, /\.prototype\.tag = \d+;/);
+  assert.doesNotMatch(ours, /R2?\.stop\(\w+, "/);
 });

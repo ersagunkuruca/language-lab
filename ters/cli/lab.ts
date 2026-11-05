@@ -419,7 +419,7 @@ switch (command) {
       const here = (f: string) => resolve(import.meta.dirname, f);
       // Its hosts/js.js, bundled in or imported from beside the program (C137d5).
       const host = pageHost ? { file: inCheckout ? pathToFileURL(pageHost).href : pageHost, ops: hostOpsOf(p.code, p.names) } : undefined;
-      map = coreMap(lowered);
+      map = coreMap(lowered, !!host);
       return coreModule(lowered, p.names[main] ?? "main", here("../../compiler/src/core-rt.ts"), here("../src/lang/world.ts"), host);
     };
     // Beside the module, its map (C143c): ids only, the editor and tools

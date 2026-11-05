@@ -23,7 +23,7 @@ export class Unsupported extends Error {}
 // `node` and `def`: where in the program it stopped (C143), when the
 // printed program says; `defName`, the definition's name, which a run of
 // main prints after the reason (C143b).
-export class Stopped extends Error { node?: Id; def?: Id; defName?: string; constructor(why: string, at?: { node: Id; def: Id; name?: string }) { super(why); if (at) { this.node = at.node; this.def = at.def; if (at.name) this.defName = at.name; } } }
+export class Stopped extends Error { node?: Id; def?: Id; defName?: string; constructor(why: string, at?: { node: Id; def: Id; name?: string }, name?: string) { super(why); if (at) { this.node = at.node; this.def = at.def; if (at.name) this.defName = at.name; } else if (name) this.defName = name; } }
 export class Aborted { reason: unknown; esc: number; constructor(reason: unknown, esc: number) { this.reason = reason; this.esc = esc; } }
 export const FAIL = { fail: true }, OUT = { out: true };
 
@@ -320,7 +320,8 @@ export const RUNTIME = {
     if (f.code) return f.code(f, ...xs);
     try { return f(...xs); } catch (e) { if (e === FAIL) return FAIL; throw e; }
   },
-  stop: (i: number, node?: Id, def?: Id, name?: string): never => { throw new Stopped(reasonOf(i), node && def ? { node, def, name } : undefined); },
+  // A module's stop has its definition's name and no ids (core-js.ts moduleTags).
+  stop: (i: number, node?: Id | 0, def?: Id | 0, name?: string): never => { throw new Stopped(reasonOf(i), node && def ? { node, def, name } : undefined, name); },
   mod: (a: number, b: number) => ((a % b) + b) % b,
   unsupported: (what: string): never => { throw new Unsupported(what); },
   int: (s: string) => I.norm(BigInt(s)),
