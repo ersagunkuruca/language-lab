@@ -907,6 +907,14 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // The function index for `def` at these types, lowering it (and what it
   // calls) first.
   function func(def: Id, types: At = new Map()): number {
+    // A definition that names another (`twice = double`, I150) is that one,
+    // at the types it has here.
+    const named = code.nodes[def]?.kind === "def" && (code.nodes[def] as NodeOf<"def">).body ? code.nodes[(code.nodes[def] as NodeOf<"def">).body!] : undefined;
+    if (named?.kind === "ref" && named.target !== def && code.nodes[named.target]?.kind === "def") {
+      const here = defType(def), there = defType(named.target), at: At = new Map();
+      if (here && there) bindVars(there, put(here, types), at);
+      return func(named.target, at);
+    }
     const raw = defType(def);
     const t = raw && put(raw, types);
     if (!opts.data && !underBudget && diverges(t)) throw new Refused(`calls ${nm(def)}, which ${MAY_NOT_FINISH}`);

@@ -1,24 +1,18 @@
 // Lists written into arrays (GAPS.md P4, destination passing): a block
-// function that builds its list gives the same items as an array
-// ($arrayOf, what the audio runtimes call) as it does as cells, and a
-// list as long as you like takes no stack.
+// function that builds its list gives its items, and a list as long as you
+// like takes no stack. (compile.ts's $arrayOf, what its audio runtimes
+// called, went with it: C137.)
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { pathToFileURL } from "node:url";
 import { Lang } from "../../ters/src/lang/dsl.ts";
 import { base, baseNames } from "../../ters/src/lang/load.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { CONS, NIL, PAIR_V } from "../../ters/src/lang/std.ts";
 import { B } from "../../ters/src/prelude.ts";
-import { compile } from "../src/compile.ts";
-import { $arrayOf, $fromList, $toList } from "../src/runtime.js";
+import { toList } from "../../ters/src/lang/run.ts";
+import { compiledDefs } from "../src/core-js.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href;
-const dir = mkdtempSync(join(tmpdir(), "into-"));
 
 test("a block function's list as an array: the same items as its cells, and no stack for a long one", async () => {
   const k = new Lang();
@@ -55,19 +49,14 @@ test("a block function's list as an array: the same items as its cells, and no s
   const code = base(k.code), names = { ...baseNames(), ...k.names };
   const info = infer(code, names);
   assert.deepEqual(info.errors, []);
-  const source = compile(code, info, names, { runtime, exports: ["summing", "doubling", "padding"] });
-  writeFileSync(join(dir, "into.js"), source);
-  const defs = (await import(pathToFileURL(join(dir, "into.js")).href)).defs as Record<string, () => (l: unknown) => unknown>;
+  const defs = compiledDefs(code, info, names, ["summing", "doubling", "padding"]) as Record<string, () => (l: unknown) => unknown>;
+  const items = (l: unknown): unknown[] => { const out: unknown[] = []; for (let c = l as { tag: string; fields: unknown[] }; c.tag !== NIL; c = c.fields[1] as typeof c) out.push(c.fields[0]); return out; };
   const xs = [1, 2, 3, 0.5];
-  assert.deepEqual($arrayOf(defs.summing(), $toList(xs)), [1, 6, 18, 3.25]);
-  assert.deepEqual($arrayOf(defs.doubling(), $toList(xs)), [1, -1, 2, -2, 3, -3, 0.5, -0.5]);
-  assert.deepEqual($arrayOf(defs.padding(), $toList(xs)), [1, -1, 2, -2, 3, -3, 0.5, -0.5, 9, -9, 8, -8]);
-  assert.match(source, /\.push\(9\);\n.*\.push\(8\);/);
+  assert.deepEqual(items(defs.summing()(toList(xs))), [1, 6, 18, 3.25]);
+  assert.deepEqual(items(defs.doubling()(toList(xs))), [1, -1, 2, -2, 3, -3, 0.5, -0.5]);
+  assert.deepEqual(items(defs.padding()(toList(xs))), [1, -1, 2, -2, 3, -3, 0.5, -0.5, 9, -9, 8, -8]);
   const long = Array.from({ length: 200_000 }, (_, i) => i % 7);
-  for (const name of ["summing", "doubling", "padding"]) {
-    const f = defs[name]();
-    assert.deepEqual($arrayOf(f, $toList(long)), $fromList(f($toList(long))), name);
-  }
+  for (const name of ["summing", "doubling", "padding"]) assert.equal(items(defs[name]()(toList(long))).length, name === "summing" ? 200_000 : name === "doubling" ? 400_000 : 400_004, name);
 });
 
 // I149: a recursive definition handing on `map(keep(numbered(rest), …), …)`
@@ -96,9 +85,7 @@ test("a definition handing on keep of numbered compiles, and answers as evaluate
   const code = base(k.code), names = baseNames(k.names);
   const info = infer(code, names, undefined, checkOptions);
   assert.deepEqual(info.errors.map((e) => e.message), []);
-  const file = join(dir, "i149.mjs");
-  writeFileSync(file, compile(code, info, names, { runtime, exports: ["answer"] }));
-  const compiled = ((await import(pathToFileURL(file).href)).defs.answer as () => unknown)();
+  const compiled = (compiledDefs(code, info, names, ["answer"]).answer as () => unknown)();
   const r = makeRunner(code, info, { print: () => {} });
   const [want] = r.call(r.value(answer)) as Iterable<unknown>;
   // 1, then [2, 4, 8, 16, 32]'s rest without its item 0, [4, 8, 16, 32];
@@ -125,7 +112,5 @@ test("a definition that names another, called, compiles (I150)", async () => {
   const code = base(k.code), names = baseNames(k.names);
   const info = infer(code, names, undefined, checkOptions);
   assert.deepEqual(info.errors.map((e) => e.message), []);
-  const file = join(dir, "i150.mjs");
-  writeFileSync(file, compile(code, info, names, { runtime, exports: ["answer"] }));
-  assert.equal(Number(((await import(pathToFileURL(file).href)).defs.answer as () => unknown)()), 6);
+  assert.equal(Number((compiledDefs(code, info, names, ["answer"]).answer as () => unknown)()), 6);
 });
