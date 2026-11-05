@@ -136,3 +136,21 @@ test("least squares (L44f): a line through points that aren't on one", async () 
   assert.equal(ran[2], 'refused("least squares: a 2 × 2 matrix and a vector of 3; it needs one item per row")');
   assert.deepEqual(compiled, ran);
 });
+
+// LU factors kept (L44g): factored once, then solved with for each vector,
+// as solved gives; a singular matrix's have a 0 pivot, so no answer, and
+// a wrong size stops.
+test("factored once, solved with for many vectors", async () => {
+  const m = [[2, 1, 1], [4, -6, 0], [-2, 7, 2]], bs = [[5, -2, 9], [1, 0, 0], [0, 1, 0], [3.5, -1, 2]];
+  const [ran, compiled] = await both((k) => [
+    ...bs.flatMap((b) => [k.call(L("solved"), rows(k, ...m), vec(k, ...b)),
+      k.let("factors", k.call(L("factored"), rows(k, ...m)), (f) => k.call(L("solved with"), f, vec(k, ...b)))]),
+    k.call(L("solved with"), k.call(L("factored"), rows(k, [1, 2], [2, 4])), vec(k, 1, 1)),
+    tried(k, k.call(L("solved with"), k.call(L("factored"), rows(k, [1, 0], [0, 1])), vec(k, 1, 2, 3))),
+  ]);
+  for (let i = 0; i < bs.length; i++) assert.equal(ran[2 * i + 1], ran[2 * i], `b = ${bs[i]}`);
+  assert.equal(ran[0], "[1, 1, 2]");
+  assert.equal(ran[8], "none");
+  assert.equal(ran[9], 'refused("solved with: factors of a 2 × 2 matrix and a vector of 3")');
+  assert.deepEqual(compiled, ran);
+});

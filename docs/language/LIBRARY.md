@@ -383,9 +383,12 @@ A Matrix of any size holds its items row by row. Sums, products and a matrix tim
 - **matrix product** : `(Matrix a, Matrix a) -[Abort]-> Matrix a where a is a Number`. The first matrix times the second: row by column, for any number type. The first's columns must be the second's rows, or the program stops with both sizes.
 - **matrix times vector** : `(Matrix a, List a) -[Abort]-> List a where a is a Number`. The matrix times the list as a column: one item per row. The list must have one item per column, or the program stops with both sizes.
 - **solved** : `(Matrix Float64, List Float64) -[Choice, Abort]-> List Float64`. The list x with matrix times vector(m, x) = b, for a square Float64 matrix, by Gaussian elimination with partial pivoting. No answer when the matrix is singular (a pivot is 0).
+- **factored** : `(Matrix Float64) -[Choice, Abort]-> LU factors`. A square Float64 matrix's LU factors, its Gaussian elimination with partial pivoting done once and kept, for solved with: factor once, then solve for many vectors. A singular matrix's factors have a 0 pivot, and solved with has no answer with them.
+- **solved with** : `(LU factors, List Float64) -[Choice, Abort]-> List Float64`. The list x with matrix times vector(m, x) = b, from m's factors (factored): the elimination solved does, done once for all the vectors solved this way. No answer when the matrix is singular (a pivot is 0).
 - **determinant** : `(Matrix Float64) -[Abort]-> Float64`. The determinant of a square Float64 matrix: 0 when it is singular. Other sizes stop the program.
 - **inverted** : `(Matrix Float64) -[Choice, Abort]-> Matrix Float64`. The inverse of a square Float64 matrix: matrix product(m, inverted(m)) is the identity. No answer when the matrix is singular.
 - **least squares** : `(Matrix Float64, List Float64) -[Choice, Abort]-> List Float64`. The x making matrix times vector(m, x) nearest the vector, by least squares, for a Float64 matrix with at least as many rows as columns: a line through points. No answer when the columns aren't independent.
+- **LU factors** (type). A square matrix's Gaussian elimination, done once by factored and kept: the pivots in the order taken, each pivot's row of U and the multiples taken off the rows below. solved with uses it to solve the matrix for any vector.
 
 ## Tensors
 
