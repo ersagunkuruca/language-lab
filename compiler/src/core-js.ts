@@ -362,7 +362,10 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
         case "abort": return `R.abort(${ex(e.reason, pre, d)}, ${e.esc ?? 0})`;
         case "handle": {
           const t = temp(), [save, back] = keep();
-          pre.push(`${d}${save}let ${t};`, `${d}try {`, ...within(null, () => block(e.body, { set: t }, d + "  ")), `${d}} catch (x) {`, `${d}  if (!(x instanceof R.Aborted) || x.esc !== ${e.esc ?? 0}) throw x;`, `${d}  ${back}${local(e.reason)} = x.reason;`, ...block(e.arm, { set: t }, d + "  "), `${d}}`);
+          // Around several answers or a wait (C182): an abort while the
+          // rest of the search runs isn't this handler's.
+          const fr = e.frame === undefined ? "" : local(e.frame);
+          pre.push(`${d}${save}let ${t};`, ...(fr ? [`${d}${fr} = { inRest: false };`] : []), `${d}try {`, ...within(null, () => block(e.body, { set: t }, d + "  ")), `${d}} catch (x) {`, `${d}  if (!(x instanceof R.Aborted) || x.esc !== ${e.esc ?? 0}${fr ? ` || ${fr}.inRest` : ""}) throw x;`, `${d}  ${back}${local(e.reason)} = x.reason;`, ...block(e.arm, { set: t }, d + "  "), `${d}}`);
           return t;
         }
         // A handler's release (L213a3/a4): after its body on every exit, a

@@ -21,7 +21,7 @@ language, then more targets or speed (WORKFLOW.md "Priority").
 | lane | thread | next, in order |
 |---|---|---|
 | E Editor | "Editor lane" | E237 (after L204), E103 (after infer.ts's idea) |
-| C Compiler and targets | "Compiler lane" | C181, C182, C183, C184, C185, C30, C93 |
+| C Compiler and targets | "Compiler lane" | C183, C185, C181 (C184 and C30 with the Editor lane), C93 |
 | L Language and library | "Language lane" | L43, L69d1, L69d2, L21, L118c (evaluator side), L88, L182 (core, run.ts, infer.ts, hosts.ts) |
 | L Language and library | "Language lane B" | L120, L123, L124 (new example programs). Skip L107 (waits on Ersagun) and L24 (research). Take a row from the other list only after telling that lane. |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
@@ -91,7 +91,6 @@ New targets and speed rank below every language item (Ersagun,
 |---|---|---|---|---|---|
 | C185 | A handler of a program's own later effect that keeps the rest for later, around another such handler, through the core IR: the simulated world (std's Await, its value a function of the clock) around start branch. Refused now ("keeping the rest for later"): the runtime's handlers are called and return, so an inner one can't wait on an outer case that hasn't resumed yet; it needs handlers in continuation passing too. Example: branch-effects.test's two printing branches under simulated, compiled as the evaluator gives them | Ersagun 2026-11-05 20:00 (what compile.ts did that the core IR doesn't yet) | P1 | M | |
 | C181 | Waiting (`await`, a fetch) inside a fold or `with fuel` through the core IR: refused today ("waits inside count", "waits inside with fuel"). Example: core-js.test.ts's `unlowered()` program compiled by `lab compile`, printing what `lab run` prints | Ersagun 2026-11-05 20:00 (what compile.ts did that the core IR doesn't yet) | P1 | M | |
-| C182 | Handling Abort around a search with several answers, and `start fetch`, through the core IR on JavaScript: refused today. Example: effects.test.ts's "an abort under Choice cuts the alternatives" and start-fetch.test.ts's programs compiled, their `gap` options gone | Ersagun 2026-11-05 20:00 (what compile.ts did that the core IR doesn't yet) | P2 | M | |
 | C183 | A program's own handler of the world's Console or Files (L145), and Random handled beside `seeded`, through the core IR: refused today (no example program uses them yet). Example: a main that answers `read line` from a list, compiled, as the evaluator gives it | Ersagun 2026-11-05 20:00 (what compile.ts did that the core IR doesn't yet) | P2 | S | |
 
 ### Speed of compiled code

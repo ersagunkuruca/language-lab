@@ -18,7 +18,7 @@ type Let = Extract<SExpr, { k: "let" }>;
 type Rebinds = (e: SExpr, i: number) => boolean;
 // Whether e binds local i afresh (so a read of i after it isn't the input).
 const rebinds: Rebinds = (e, i) => (e.k === "let" && e.i === i) || (e.k === "case" && e.s === i) || ((e.k === "attempt" || e.k === "search") && e.res === i)
-  || (e.k === "apply" && e.tmp === i) || (e.k === "list" && (e.item === i || e.acc === i)) || (e.k === "handle" && (e.reason === i || e.save === i))
+  || (e.k === "apply" && e.tmp === i) || (e.k === "list" && (e.item === i || e.acc === i)) || (e.k === "handle" && (e.reason === i || e.save === i || e.frame === i))
   || (e.k === "budget" && (e.save === i || e.res === i));
 const reads = (e: SExpr, i: number): boolean => (e.k === "local" && e.i === i) || kids(e).some((x) => reads(x, i));
 const binds = (e: SExpr, i: number): boolean => rebinds(e, i) || kids(e).some((x) => binds(x, i));
