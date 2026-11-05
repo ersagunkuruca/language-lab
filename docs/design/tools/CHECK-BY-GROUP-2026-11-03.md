@@ -124,7 +124,10 @@ Row L215, one PR each:
   (Spacetime about 98 to 82 ms an edit).
 - (b) The `Checker` cache in the editor's edit path, timed on I157 and
   I158's steps and on a one-character edit in Constructions.
-- (c) Typedef groups and the per-program parts above in the cache.
+- (c) Typedef groups and the per-program parts above in the cache. (c4) and (c5) measured and not built (2026-11-05): typedef checks
+  are about 1 ms of an edit and units at most 10 ms of Physics' 60, nearly
+  all of it the edited definition and its callers, which a cache can't
+  spare.
 - (d) `reuse` removed, its callers moved to a `Checker`.
 
 ## Credits (prior art)
