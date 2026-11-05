@@ -182,3 +182,15 @@ test("which inputs a relation written where it is used gives is part of its mean
   assert.notEqual(hashOf(["a"]), hashOf(null));
   assert.notEqual(hashOf(["a"]), hashOf(["s"]));
 });
+
+test("a relation written where it is used whose results its inputs don't pin down is told where it is written (L225f)", () => {
+  const k = new Lang();
+  const main = k.def("main");
+  // (s, a, b) with results a and b: s = a + b alone has many answers.
+  let rel = "";
+  k.define(main, k.thunk(() => k.call(SHOW_ANY, k.call((rel = k.relation(["s", "a", "b"], ["a", "b"], (s, a, b) => k.equal(s, k.call(B.add, a, b)))), k.lit(5)))));
+  const code: Code = base(k.code), names = baseNames(k.names);
+  const errs = infer(code, names).errors.filter((e) => e.id === rel).map((e) => e.message);
+  assert.equal(errs.length, 1, String(errs));
+  assert.match(errs[0], /^this relation's results can't all be found from s: /);
+});
