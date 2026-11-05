@@ -151,6 +151,24 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
   // The budget, only where one is set or spent from (C171).
   const fuelUsed = (e: SExpr): boolean => e.k === "budget" || (e.k === "rt" && e.fn.startsWith("fuel.")) || kids(e).some(fuelUsed);
   const fuel = ir.funcs.some((f) => f.spends || fuelUsed(f.body));
+  // A mode plan's data as this program's own (C137d23): made with its
+  // classes and read by their fields, so the program's loops over what
+  // a plan gives see one shape of cons, not two, and reading a field
+  // doesn't make the fields' array.
+  const own = (plan: string) => plan
+    .replace(/\{ tag: ("[^"\\]*"), fields: \[([^[\]{}()]*)\] \}/g, (all, tag: string, args: string) => {
+      const xs = args.trim() ? args.split(", ") : [];
+      return xs.every((x) => /^[\w$]+$/.test(x)) ? made(JSON.parse(tag), xs) : all;
+    })
+    .replace(/\b([\w$]+)\.fields\[(\d+)\]/g, "($1.f$2 ?? $1.fields[$2])");
+  const rtLines = [...rts].map(([n, v]) => {
+    // A solve the equations' solver plans, its plan printed (C167a): no
+    // node table and no evaluator for it.
+    const plan = planOf(ir.code, n);
+    if (plan) return `const ${v} = ${plan.startsWith("R.moded(") ? own(plan) : plan};`;
+    const b = builtinOf(n);
+    return `const ${v} = R.rt(${JSON.stringify(n)}${b ? `, ${JSON.stringify(b)}` : ""});`;
+  });
   const js = [
     ...(fuel ? ["let fuel = Infinity;"] : []),
     // Plain calls of functions with a heap copy on JavaScript's stack now.
@@ -163,14 +181,7 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
     ...[...consts].map(([src, v]) => `const ${v} = ${src};`),
     // A backwards search spends the budget too (C137c12).
     ...(fuel ? ["R.spending(() => --fuel >= 0);"] : []),
-    ...[...rts].map(([n, v]) => {
-      // A solve the equations' solver plans, its plan printed (C167a): no
-      // node table and no evaluator for it.
-      const plan = planOf(ir.code, n);
-      if (plan) return `const ${v} = ${plan};`;
-      const b = builtinOf(n);
-      return `const ${v} = R.rt(${JSON.stringify(n)}${b ? `, ${JSON.stringify(b)}` : ""});`;
-    }),
+    ...rtLines,
     ...worlds.map((_, i) => `const w${i} = R.worlds[${i}];`),
     ...text,
     // A partial function given out says no answer by throwing, as the

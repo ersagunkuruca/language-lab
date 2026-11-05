@@ -33,6 +33,10 @@ test("mode plans are printed, with builtins run forward (C167b)", () => {
   // An answer's value is read where it is used, not through the runtime
   // (C137d22).
   assert.doesNotMatch(js, /R\.rt\("pick:/);
+  // A mode plan's data is made with the program's own classes (C137d23).
+  const plan = js.slice(js.indexOf("R.moded("));
+  assert.match(plan, /new K\d+\(/);
+  assert.doesNotMatch(plan.slice(0, plan.indexOf("return solve$;")), /fields: \[/);
   assert.equal(usesSolver(ir), false);
   const b = load("backwards"), main = b.named("main");
   assert.match(emitCoreJs(lowerCore(b.code, b.info, b.pres.names, [main])).js, /R\.moded\([\s\S]*"hello, "/);
