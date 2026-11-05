@@ -14,7 +14,7 @@
 
 import type { Code, Id, Node, NodeData, NodeOf, Use } from "../model.ts";
 import { conditionResults, isUse, useTarget, isCall, type Call, bindsOf } from "../model.ts";
-import { children, collect, freshId, ownerOfTypeParts, parentAt, parentOf, replace, subtree } from "../model.ts";
+import { children, collect, freshId, nodesWhere, ownerOfTypeParts, parentAt, parentOf, replace, scanningOnLayer, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 
 export type Top = { ok: true; code: Code; names: Names; select: Id; note: string } | { ok: false; reason: string };
@@ -77,9 +77,12 @@ function scopesWith(code: Code, def: Id, binder: Id): Id[] {
   return [...out];
 }
 
-const refsTo = (code: Code, target: Id) => Object.values(code.nodes).filter((n): n is NodeOf<"ref"> => n.kind === "ref" && n.target === target);
-const callsOf = (code: Code, target: Id) => Object.values(code.nodes).filter((n): n is Call => {
-  if (!isCall(n)) return false;
+// The program's refs, calls and uses, each a pick model.ts nodesWhere
+// keeps, so a program read on its layer (scanningOnLayer) reads the
+// library's once (I167).
+const picks = <T extends Node>(code: Code, kind: string, keep: (n: Node) => n is T): T[] => nodesWhere(code, kind, keep).map((id) => code.nodes[id] as T);
+const refsTo = (code: Code, target: Id) => picks(code, "toplevel: ref", (n): n is NodeOf<"ref"> => n.kind === "ref").filter((n) => n.target === target);
+const callsOf = (code: Code, target: Id) => picks(code, "toplevel: call", isCall).filter((n) => {
   if (n.fn === target) return true;
   const f = code.nodes[n.fn];
   return f?.kind === "ref" && f.target === target;
@@ -192,7 +195,7 @@ const lambdaOf = (code: Code, def: Id): NodeOf<"lambda"> | null => {
 };
 
 // The solves that run `def` backwards.
-const solvesOf = (code: Code, def: Id) => Object.values(code.nodes).filter((n): n is Use => isUse(n) && useTarget(code.nodes, n) === def);
+const solvesOf = (code: Code, def: Id) => picks(code, "toplevel: use", isUse).filter((n) => useTarget(code.nodes, n) === def);
 
 export function addParameter(code: Code, names: Names, def: Id, rawName: string): Top {
   const d = code.nodes[def] as NodeOf<"def">;
@@ -258,23 +261,25 @@ export function removeParameter(code: Code, names: Names, def: Id, param: Id, le
   const lam = lambdaOf(code, def);
   const i = lam ? lam.params.indexOf(param) : -1;
   if (!lam || i < 0) return { ok: false, reason: `that isn't one of ${ownerName(code, names, def)}'s inputs` };
-  const uses = refsTo(code, param);
+  // Read on the program's layer, once for the three (I167: each of the
+  // inspector's input rows walked the library's ~27,000 nodes three times).
+  const { uses, calls, solves } = scanningOnLayer(code, () => ({ uses: refsTo(code, param), calls: callsOf(code, def), solves: solvesOf(code, def) }));
   if (uses.length && !leaveHoles) return { ok: false, reason: `${nameOf(names, param)} is used ${uses.length === 1 ? "once" : `${uses.length} times`} in the body; clear those first` };
-  const nodes = { ...code.nodes };
-  for (const r of uses) nodes[r.id] = { id: r.id, kind: "hole" };
-  nodes[lam.id] = { ...lam, params: lam.params.filter((p) => p !== param) };
-  const calls = callsOf(code, def);
-  for (const c of calls) nodes[c.id] = { ...c, args: c.args.filter((_, j) => j !== i) };
-  for (const sv of solvesOf(code, def)) {
-    if (param in bindsOf(sv)) return { ok: false, reason: `${nameOf(names, param)} is what a solve of ${nameOf(names, def)} works out; remove that solve first` };
-    const { [param]: _, ...given } = sv.given;
-    nodes[sv.id] = { ...sv, given };
-  }
-  // Collected when the edit is made, not when its button is drawn (I167).
+  for (const sv of solves) if (param in bindsOf(sv)) return { ok: false, reason: `${nameOf(names, param)} is what a solve of ${nameOf(names, def)} works out; remove that solve first` };
+  // The program copied and collected when the edit is made, not when its
+  // button is drawn (I167).
   let next: Code | undefined;
+  const made = () => {
+    const nodes = { ...code.nodes };
+    for (const r of uses) nodes[r.id] = { id: r.id, kind: "hole" };
+    nodes[lam.id] = { ...lam, params: lam.params.filter((p) => p !== param) };
+    for (const c of calls) nodes[c.id] = { ...c, args: c.args.filter((_, j) => j !== i) };
+    for (const sv of solves) { const { [param]: _, ...given } = sv.given; nodes[sv.id] = { ...sv, given }; }
+    return collect({ nodes, defs: code.defs });
+  };
   const nn = { ...names };
   delete nn[param];
-  return { ok: true, get code() { return (next ??= collect({ nodes, defs: code.defs })); }, names: nn, select: uses[0]?.id ?? def,
+  return { ok: true, get code() { return (next ??= made()); }, names: nn, select: uses[0]?.id ?? def,
     note: `Removed the input ${nameOf(names, param)}.${uses.length ? ` ${uses.length === 1 ? "Its use is a hole now" : `Its ${uses.length} uses are holes now`}.` : ""}${calls.length ? ` Its argument was dropped from ${calls.length} call${calls.length === 1 ? "" : "s"}.` : ""}` };
 }
 
@@ -285,11 +290,15 @@ export function moveParameter(code: Code, names: Names, def: Id, param: Id, by: 
   if (!lam || i < 0) return { ok: false, reason: `that isn't one of ${ownerName(code, names, def)}'s inputs` };
   if (j < 0 || j >= lam.params.length) return { ok: false, reason: by < 0 ? "it's already first" : "it's already last" };
   const swap = <T>(xs: T[]) => { const ys = [...xs]; [ys[i], ys[j]] = [ys[j], ys[i]]; return ys; };
-  const nodes = { ...code.nodes };
-  nodes[lam.id] = { ...lam, params: swap(lam.params) };
-  const calls = callsOf(code, def);
-  for (const c of calls) nodes[c.id] = { ...c, args: swap(c.args) };
-  return { ok: true, code: { nodes, defs: code.defs }, names, select: param,
+  const calls = scanningOnLayer(code, () => callsOf(code, def));
+  let next: Code | undefined;
+  const made = () => {
+    const nodes = { ...code.nodes };
+    nodes[lam.id] = { ...lam, params: swap(lam.params) };
+    for (const c of calls) nodes[c.id] = { ...c, args: swap(c.args) };
+    return { nodes, defs: code.defs };
+  };
+  return { ok: true, get code() { return (next ??= made()); }, names, select: param,
     note: `Moved ${nameOf(names, param)} ${by < 0 ? "earlier" : "later"}.${calls.length ? ` ${calls.length} call${calls.length === 1 ? "" : "s"} swapped their arguments to match.` : ""}` };
 }
 
