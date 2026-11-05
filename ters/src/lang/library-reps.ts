@@ -47,7 +47,10 @@ export interface Chosen { code: Code; names: Names; chosen: string[]; insiders: 
 // records of them (C63h, C63i, C63k: compiler/src/c.ts `tableC`; C63j:
 // compiler/src/wasm-table.ts).
 // `split`: false keeps one representation of List for the whole program
-// (trees where parts of it would take arrays, C93 s3b).
+// (trees where parts of it would take arrays, C93 s3b). Only where
+// `hostMaps` is (JavaScript): WebAssembly's arrays copy on every replace,
+// and machine split took 26 s there for primes 20000 against its trees'
+// 0.3 s (C93 s5).
 export interface LibraryOptions { hostMaps?: boolean; tables?: boolean; split?: boolean }
 
 export function withLibraryRepresentations(code: Code, info: Info, names: Names, main: Id, defs: Id[], asked: Representation[] = [], options: LibraryOptions = {}): Chosen {
@@ -91,7 +94,7 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
     // Lists as trees for the whole, where parts of it would have arrays
     // (machine's step loop): those parts as arrays, the rest as written,
     // converted where a list crosses (rep-split.ts, C93 s3b).
-    if (tree.of === LIST && tree.name === "tree of List" && !chosen.length && options.split !== false) {
+    if (tree.of === LIST && tree.name === "tree of List" && !chosen.length && options.hostMaps && options.split !== false) {
       const s = splitByGroups(code, info, names, main, defs);
       if (s) return s;
     }
