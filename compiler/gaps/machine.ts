@@ -1,5 +1,5 @@
 // machine in its ways, in one process: the evaluator on the program as
-// defined; the compiler's output on the program as `lab compile` stores
+// defined; the core IR's JavaScript on the program as `lab compile` stores
 // it (the chooser's representations); the WebAssembly the program lowers
 // to, run as a WASI command; and the hand-written ideal
 // (machine.ideal.js). Each gets the same arguments and the same files,
@@ -10,22 +10,19 @@
 import { closeSync, mkdtempSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { pathToFileURL } from "node:url";
 import { WASI } from "node:wasi";
 import { runProgram, type World } from "../../ters/src/lang/run.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { withLibraryRepresentations } from "../../ters/src/lang/library-reps.ts";
-import { compile } from "../src/compile.ts";
 import { load } from "../src/program.ts";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitWasm } from "../src/wasm.ts";
 import { coreMain, lowerCore } from "../src/core-js.ts";
-import { $setPrint, $setWorld, $Aborted, $toList } from "../src/runtime.js";
 import { machine as ideal } from "./machine.ideal.js";
 
 export interface Run { out: string[]; err: string[]; code: number }
 export type Way = (args: string[], files: Record<string, string>) => Run;
-export type Name = "evaluator" | "compiled" | "core" | "wasm" | "ideal";
+export type Name = "evaluator" | "core" | "wasm" | "ideal";
 export const NAME = "../../compiler/gaps/machine";
 export const folder = join(import.meta.dirname, "machine");
 
@@ -83,11 +80,8 @@ export async function wasmModule(): Promise<WebAssembly.Module | string> {
 export async function ways(): Promise<Record<Name, Way> & { chosen: string[]; wasmProblem?: string }> {
   const { main, plain, chosen } = programs();
   const dir = mkdtempSync(join(tmpdir(), "machine-"));
-  const runtime = pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href;
-  writeFileSync(join(dir, "machine.js"), compile(chosen.code, chosen.info, chosen.names, { runtime, exports: ["main"] }));
-  const compiledMain = (await import(pathToFileURL(join(dir, "machine.js")).href)).defs.main as (args: unknown) => number;
   const wasm = await wasmModule();
-  // Printed from the core IR (C137d19), which compile.ts gives way to.
+  // Printed from the core IR (C137d19).
   const rt: { print: (s: string) => void; world?: World } = { print: () => {} };
   const coreRun = coreMain(lowerCore(chosen.code, chosen.info, chosen.names, [main]), "main", rt);
   return {
@@ -96,14 +90,6 @@ export async function ways(): Promise<Record<Name, Way> & { chosen: string[]; wa
     evaluator: (args, files) => {
       const printed: string[] = [], err: string[] = [];
       const code = runProgram(plain.code, plain.info, main, args, { print: (s) => printed.push(s + "\n"), names: plain.names, world: world(files, err) });
-      return { out: lines(printed), err, code };
-    },
-    compiled: (args, files) => {
-      const printed: string[] = [], err: string[] = [];
-      $setPrint((s: string) => printed.push(s + "\n"));
-      $setWorld(world(files, err));
-      let code: number;
-      try { code = Number(compiledMain($toList(args))); } catch (e) { if (!(e instanceof $Aborted)) throw e; err.push(e.reason); code = 1; }
       return { out: lines(printed), err, code };
     },
     core: (args, files) => {
