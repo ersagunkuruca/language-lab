@@ -61,7 +61,9 @@ export type Profile = { def: Id; calls: number; ms: number }[];
 // `core`: main ran printed from the core IR (E244); `printed`: what it ran,
 // to keep for running the same code again (E245c).
 // `answers`: what the world answered the run, in order (E232a).
-export type RunSays = { lines: string[] } | { done: true; shown: string; files: [string, string][]; stuck?: Stuck; profile?: Profile; compiled?: Compiled; core?: true; printed?: CoreMain; answers?: LogEntry[]; paused?: true } | { error: string; files: [string, string][]; stuck?: Stuck; compiled?: Compiled; core?: true; printed?: CoreMain; answers?: LogEntry[]; paused?: true };
+// `at`: where a compiled main stopped, its node and definition (C143f).
+export type StopAt = { node: Id; def: Id };
+export type RunSays = { lines: string[] } | { done: true; shown: string; files: [string, string][]; stuck?: Stuck; profile?: Profile; compiled?: Compiled; core?: true; printed?: CoreMain; answers?: LogEntry[]; paused?: true; at?: StopAt } | { error: string; files: [string, string][]; stuck?: Stuck; compiled?: Compiled; core?: true; printed?: CoreMain; answers?: LogEntry[]; paused?: true; at?: StopAt };
 
 // The run's log of the world's answers (worldlog.ts), sent with its end.
 let answers: LogEntry[] | null = null, paused = false;
@@ -221,14 +223,16 @@ function runPrinted(m: CoreMain, info: Info | undefined, args: string[] | undefi
   let fns;
   try { fns = loadPrinted(m.printed, { print, world }, m.printed.code, info); } catch { return false; }
   const kept = m.printed.checked ? {} : { printed: m };
-  const ended = (shown: string) => { flush(); post({ done: true, shown, files: files(), core: true, ...kept }); };
+  const ended = (shown: string, at?: StopAt) => { flush(); post({ done: true, shown, files: files(), core: true, ...kept, ...(at ? { at } : {}) }); };
   try {
     const v = fns[m.at](...(args ? [toList(args)] : []));
     ended(args ? ((n: number) => (n ? `exit ${n}` : "unit"))(m.result !== "other" ? Number(v) : 0) : "unit");
   } catch (e) {
     const reason = e instanceof CoreAborted ? String(e.reason) : e instanceof CoreStopped ? e.message : null;
-    if (reason !== null && args) { world.error(reason); ended("exit 1"); }
-    else { flush(); post({ error: reason ?? (e as Error).message, files: files(), core: true, ...kept }); }
+    // The node a stop was lowered from (C143a), for Run to show (C143f).
+    const at = e instanceof CoreStopped && e.node && e.def ? { node: e.node, def: e.def } : undefined;
+    if (reason !== null && args) { world.error(reason); ended("exit 1", at); }
+    else { flush(); post({ error: reason ?? (e as Error).message, files: files(), core: true, ...kept, ...(at ? { at } : {}) }); }
   }
   return true;
 }
