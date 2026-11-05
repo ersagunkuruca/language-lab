@@ -1,5 +1,5 @@
 // chapters (ters/examples/chapters), the file-writing program of
-// GAPS.md round 2: the evaluator, the compiled code and the hand-written
+// GAPS.md round 2: the evaluator, the core IR's code and the hand-written
 // ideal must print the same, leave the same files and exit the same way,
 // failures included.
 
@@ -10,7 +10,6 @@ import { book, ways } from "../gaps/chapters.ts";
 const w = await ways();
 const all = (args: string[], files: Record<string, string>) => {
   const want = w.ideal(args, files);
-  assert.deepEqual(w.compiled(args, files), want);
   assert.deepEqual(w.core(args, files), want);
   assert.deepEqual(w.stored(args, files), want);
   assert.deepEqual(w.evaluator(args, files), want);

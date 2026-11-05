@@ -18,7 +18,7 @@ import { NUMBER } from "../../ters/src/lang/types.ts";
 import { B } from "../../ters/src/prelude.ts";
 import { compile } from "../src/compile.ts";
 import { loadCoreJs, lowerCore } from "../src/core-js.ts";
-import { compileProgram, load } from "../src/program.ts";
+import { load } from "../src/program.ts";
 import { $setPrint } from "../src/runtime.js";
 
 const runtime = pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href;
@@ -26,7 +26,8 @@ const dir = mkdtempSync(join(tmpdir(), "compiled-"));
 
 async function compiled(name: string, exports: string[]) {
   const file = join(dir, `${name}-${exports.join("-").replace(/\W/g, "")}.js`);
-  writeFileSync(file, compileProgram(name, exports, runtime));
+  const p = load(name);
+  writeFileSync(file, compile(p.code, p.info, p.pres.names, { runtime, exports }));
   return (await import(pathToFileURL(file).href)).defs as Record<string, (...a: unknown[]) => unknown>;
 }
 
@@ -53,7 +54,7 @@ for (const name of ["queens", "algebra", "relations", "backwards", "calculus", "
 // of itself: what it reaches, not every library module.
 test("backwards: the compiled program's own copy holds what it reaches, not the html module", async () => {
   const { CORE, HTML_MODULE } = await import("../../ters/src/lang/library.ts");
-  const source = compileProgram("backwards", ["main"], runtime);
+  const bw = load("backwards"), source = compile(bw.code, bw.info, bw.pres.names, { runtime, exports: ["main"] });
   assert.match(source, /\$loadProgram\(/);
   const unused = HTML_MODULE.code.defs.filter((d) => source.includes(JSON.stringify(d)));
   assert.deepEqual(unused, []);

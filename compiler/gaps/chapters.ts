@@ -1,21 +1,16 @@
-// chapters three ways, in one process: the evaluator, the compiler's
-// output, and the hand-written ideal (chapters.ideal.js). Each gets the same
+// chapters in its ways, in one process: the evaluator, the core IR's
+// JavaScript (as defined and as stored), and the hand-written ideal (chapters.ideal.js). Each gets the same
 // arguments and a world of files kept in memory, and the comparison is what
 // it printed and every file it left. So the measure is the program's own
 // work, not the disk. Used by bench-chapters.ts and by
 // test/chapters.test.ts.
 
-import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { pathToFileURL } from "node:url";
 import { runProgram, type World } from "../../ters/src/lang/run.ts";
-import { compile } from "../src/compile.ts";
 import { coreMain, lowerCore } from "../src/core-js.ts";
 import { load } from "../src/program.ts";
 import { representationsIn } from "../../ters/src/lang/represent.ts";
 import { represented } from "../../ters/cli/represented.ts";
-import { $setPrint, $setWorld, $Aborted, $toList } from "../src/runtime.js";
 import { chapters as ideal } from "./chapters.ideal.js";
 
 export interface Run { out: string[]; err: string[]; code: number; files: Record<string, string> }
@@ -43,13 +38,10 @@ const world = (io: ReturnType<typeof disk>["io"], err: string[]): World => ({
   ...io, fileExists: () => false, listFolder: () => [],
 });
 
-export async function ways(): Promise<Record<"evaluator" | "compiled" | "core" | "stored" | "ideal", Way>> {
+export async function ways(): Promise<Record<"evaluator" | "core" | "stored" | "ideal", Way>> {
   const p = load("chapters");
   const main = p.named("main");
-  const path = join(mkdtempSync(join(tmpdir(), "chapters-")), "chapters.js");
-  writeFileSync(path, compile(p.code, p.info, p.pres.names, { runtime: pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href, exports: ["main"] }));
-  const compiled = (await import(pathToFileURL(path).href)).defs.main as (args: unknown) => number;
-  // Printed from the core IR (C137d13), which compile.ts gives way to.
+  // Printed from the core IR (C137d13).
   const rt: { print: (s: string) => void; world?: World } = { print: () => {} };
   const core = coreMain(lowerCore(p.code, p.info, p.pres.names, [main]), "main", rt);
   // The core IR of the program as `lab compile` stores it: its lists as
@@ -71,14 +63,6 @@ export async function ways(): Promise<Record<"evaluator" | "compiled" | "core" |
     evaluator: (args, start) => {
       const out: string[] = [], err: string[] = [], d = disk(start);
       const code = runProgram(p.code, p.info, main, args, { print: (s) => out.push(s), names: p.pres.names, world: world(d.io, err) });
-      return { out, err, code, files: d.left() };
-    },
-    compiled: (args, start) => {
-      const out: string[] = [], err: string[] = [], d = disk(start);
-      $setPrint((s: string) => out.push(s));
-      $setWorld(world(d.io, err));
-      let code: number;
-      try { code = Number(compiled($toList(args))); } catch (e) { if (!(e instanceof $Aborted)) throw e; err.push(e.reason); code = 1; }
       return { out, err, code, files: d.left() };
     },
     ideal: (args, start) => {

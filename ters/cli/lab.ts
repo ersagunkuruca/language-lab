@@ -4,21 +4,20 @@
 //   lab run <program> [arguments…]       run `main` with the evaluator; a page
 //                                        prints as static HTML (WEB.md)
 //   lab compile <program> [-o out.mjs]   compile to a JavaScript module that runs `main`
-//     through the core IR (compiler/src/core-js.ts, C137), as WebAssembly and C are, or compile.ts
-//     where main doesn't lower there; --core: the core IR only, --compile-ts: compile.ts only
+//     through the core IR (compiler/src/core-js.ts, C137), as WebAssembly and C are
 //   lab native <program> [-o out]        compile to a native program through C (NATIVE.md)
 //   lab check <program>                  type-check, and list the definitions with their types
 //   lab hosts <program> [--c]            print a hosts/js.js (or with --c a hosts/c.c) to start from: the program's own effects (FOREIGN.md)
 //   lab test <program> [--fresh]         run the tests: definitions whose row has Check (TESTS-IN-THE-LANGUAGE.md);
 //                                        results kept by hash in .lab/checks.json, --fresh ignores them
-//   lab build-web <program> [-o app.html] [--core|--compile-ts]  a page: one HTML file, opened anywhere (WEB.md)
+//   lab build-web <program> [-o app.html]  a page: one HTML file, opened anywhere (WEB.md)
 //   lab build-app <program> [-o folder]  a page as an installable, offline app, and a Capacitor project
 //   lab mcp [program]                    an MCP server on stdin/stdout (mcp/server.ts)
 //   lab diff <before.json> <after.json>  what changed, by definition and name (merge-files.ts)
 //   lab merge <base> <ours> <theirs> [path]
 //                                        git's merge driver for program files: id by id, ours
 //                                        written with theirs taken in (SHARING.md §6)
-//   lab render <program> in.wav [-o out.wav] [--block n] [--compiled [--compile-ts]]
+//   lab render <program> in.wav [-o out.wav] [--block n] [--compiled]
 //                                        play a sound over a WAV file (AUDIO.md)
 //
 // A program is a file saved by the editor (Save file), or a folder of side
@@ -46,18 +45,17 @@ import { baseNames, loadProgram, optionsWith } from "../src/lang/load.ts";
 import { equal, mainProblem, pageProblem, runMain, runProgram, showerFor, valueMain, type Value, type World } from "../src/lang/run.ts";
 import { Cells } from "../src/lang/cells.ts";
 import { evaluatorCall, htmlText } from "../src/lang/html.ts";
-import { hasSound, pageDocument } from "../src/lang/page.ts";
+import { pageDocument } from "../src/lang/page.ts";
 import { showType } from "../src/lang/types.ts";
 import { choose, representationsIn } from "../src/lang/represent.ts";
 import { allowedOnly, nodeWorld } from "../src/lang/world.ts";
 import { readLog, replaying, type LogEntry } from "../src/lang/worldlog.ts";
-import { compile } from "../../compiler/src/compile.ts";
 import { CFLAGS, emitC } from "../../compiler/src/c.ts";
 import { lowerScalar } from "../../compiler/src/scalar.ts";
-import { FAIL, codeLines, coreMap, coreModule, hostOpsOf, loadCoreJs, lowerCore, plainValue, runCoreMain, solvesSlowly } from "../../compiler/src/core-js.ts";
+import { FAIL, codeLines, coreMap, coreModule, hostOpsOf, loadCoreJs, lowerCore, plainValue, runCoreMain } from "../../compiler/src/core-js.ts";
 import { withInverses } from "../../compiler/src/inverses.ts";
 import { execFileSync } from "node:child_process";
-import { recordings, webCorePage, webPage } from "./web.ts";
+import { recordings, webCorePage } from "./web.ts";
 import { appFolder } from "./app.ts";
 import { soundOf } from "./sound.ts";
 import { readWav, writeWav } from "./wav.ts";
@@ -74,9 +72,8 @@ usage:
   lab run <program> [arguments…]        run main with the evaluator (a page prints as static HTML)
     [--replay log.json]                 answering from a run's log of the world's answers, such as a compiled
                                         program writes when TERS_LOG=log.json is set
-  lab compile <program> [-o out.mjs]    compile to a JavaScript module that runs main
-    [--core|--compile-ts]               through the core IR, as WebAssembly and C are (C137), or compile.ts
-                                        where main doesn't lower there; --core: only the core IR, --compile-ts: only compile.ts
+  lab compile <program> [-o out.mjs]    compile to a JavaScript module that runs main, through the core IR,
+                                        as WebAssembly and C are
   lab native <program> [-o out]         compile to a native program through C, with $CC (default cc)
   lab check <program>                   type-check, and list the definitions and their types
   lab hosts <program> [--c]             print a hosts/js.js answering the program's own effects, to start from;
@@ -85,10 +82,10 @@ usage:
     [--compiled]                        and each representation's jobs against its type's through meaning;
                                         an unchanged test's result is kept by hash (.lab/checks.json), --fresh runs it again;
                                         --compiled: each accepted answer again, compiled to JavaScript through the core IR
-  lab build-web <program> [-o app.html] [--core|--compile-ts]  one HTML file running the page main returns (from the core IR where it lowers)
+  lab build-web <program> [-o app.html]  one HTML file running the page main returns, from the core IR
   lab build-app <program> [-o folder]   that page as an app for phones: a PWA in folder/www, and a Capacitor project
   lab mcp [program]                     an MCP server over stdio: an LLM views, edits, runs and tests programs
-  lab render <program> in.wav [-o out.wav] [--block n] [--compiled [--compile-ts]]
+  lab render <program> in.wav [-o out.wav] [--block n] [--compiled]
                                         play the sound main makes over a WAV file, n samples a block (default 128)
 options:
   --main <name>    the entry point (default: main)
@@ -249,62 +246,6 @@ const onlyWhatIsUsed: Plugin = {
   },
 };
 
-// The compiled program, and a few lines that run it the way `lab run` does.
-// Recursion that isn't a tail call goes on the heap past 1,000 levels
-// (BACKLOG.md C21), so main runs on Node's own stack, with no thread of its
-// own to start (C26).
-// `files`: import the runtime by absolute file URL, for an unbundled module;
-// otherwise by absolute path, which is what the bundler resolves.
-function compiled(p: Program, main: Id, files: boolean): string {
-  const here = import.meta.dirname;
-  const url = (path: string) => JSON.stringify(files ? pathToFileURL(join(here, path)).href : join(here, path));
-  const name = p.names[main];
-  const takesArgs = (p.info.typeOf.get(main) as { params: unknown[] }).params.length === 1;
-  // The program's hosts/js.js, if it has one (FOREIGN.md, L69a2): bundled in
-  // with the runtime, or imported from beside the program.
-  const host = hostFile && existsSync(hostFile) ? (files ? pathToFileURL(resolve(hostFile)).href : resolve(hostFile)) : undefined;
-  const program = compile(p.code, p.info, p.names, { runtime: JSON.parse(url("../../compiler/src/runtime.js")), exports: [name], steps: false, ...(host ? { hosts: host } : {}) });
-  return `#!/usr/bin/env node
-// ${p.title}, compiled by lab (ters/cli/lab.ts). Run: node <this file> [arguments…]
-${program}
-import { $setWorld as $$setWorld, $setPrint as $$setPrint, $toList as $$toList, $Aborted as $$Aborted, $main as $$main } from ${url("../../compiler/src/runtime.js")};
-import { nodeWorld as $$nodeWorld } from ${url("../src/lang/world.ts")};
-import { writeSync as $$writeSync } from "node:fs";
-{
-  // Standard output goes to the descriptor in large pieces, not a write
-  // per print (GAPS.md G8), flushed before anything goes to standard error
-  // and before the program reads, so a prompt shows before its answer is
-  // read, and the two streams keep their order.
-  // A reader that went away (\`| head\`) closes the pipe: the rest is dropped.
-  const closed = new Set();
-  const write = (fd, text) => {
-    for (let b = Buffer.from(text); b.length && !closed.has(fd);) {
-      try { b = b.subarray($$writeSync(fd, b)); } catch (e) { if (e.code === "EPIPE") closed.add(fd); else if (e.code !== "EAGAIN") throw e; }
-    }
-  };
-  let out = "";
-  const flush = () => { if (out) { write(1, out); out = ""; } };
-  const world = $$nodeWorld();
-  const first = (f) => (...a) => (flush(), f(...a));
-  const error = (line) => { flush(); write(2, line + "\\n"); };
-  $$setWorld({ ...world, error, log: error, input: first(world.input), readLine: first(world.readLine) });
-  $$setPrint((line) => { out += line + "\\n"; if (out.length > 65536) flush(); });
-  // main's value, or the error that ended it. A main that waits (Await,
-  // L71c) is driven by the runtime's $main, on the world's clock (C40).
-  const done = (code) => { process.exitCode = typeof code === "number" || typeof code === "bigint" ? Number(code) : 0; flush(); };
-  const failed = (e) => {
-    flush();
-    if (!(e instanceof $$Aborted)) throw e;
-    error(e.reason);
-    process.exitCode = 1;
-  };
-  let code, ok = false;
-  try { code = $$main(defs[${JSON.stringify(name)}](${takesArgs ? "$$toList(process.argv.slice(2))" : ""})); ok = true; } catch (e) { failed(e); }
-  if (ok) { if (code instanceof Promise) code.then(done, failed); else done(code); }
-}
-`;
-}
-
 const argv = process.argv.slice(2);
 let mainName = "main";
 const defined = argv.indexOf("--as-defined");
@@ -370,26 +311,10 @@ const hostFile = existsSync(path) && statSync(path).isDirectory() ? join(path, "
 const hosts: Hosts | undefined = hostFile && existsSync(hostFile) ? (await import(pathToFileURL(resolve(hostFile)).href)).default : undefined;
 // A page or app bundles the same file into its script (L69a3).
 const pageHost = hostFile && existsSync(hostFile) ? resolve(hostFile) : undefined;
-// The program's page, for `lab build-web` and `lab build-app`. Printed
-// from the core IR (C137c9), since C137d1 unless the page doesn't lower
-// there: then compile.ts, saying so. --core insists on the core IR,
-// --compile-ts on compile.ts.
+// The program's page, for `lab build-web` and `lab build-app`, printed
+// from the core IR (C137c9).
 async function pageFile(): Promise<string> {
-  const insist = rest.includes("--core");
-  let page: string | null = null;
-  if (!rest.includes("--compile-ts")) {
-    // A sound that runs the evaluator's solver for every block on the
-    // core IR, a solve whose plan isn't written out (core-js.ts
-    // solvesSlowly), is too slow for the audio thread, so compile.ts makes
-    // that page (C137d7, C137d9). --core makes it anyway.
-    const slow = !insist && hasSound(p.code) && solvesSlowly(lowerCore(p.code, p.info, p.names, [main]));
-    if (slow) process.stderr.write("lab: the page's sound solves through the evaluator's solver on the core IR (too slow for the audio thread), so the page is made by compile.ts\n");
-    else try { page = await webCorePage(p.title, p.code, p.info, p.names, main, pageHost); } catch (e) {
-      if (insist) fail((e as Error).message);
-      process.stderr.write(`lab: ${(e as Error).message.replace(/^lab: /, "")}, so the page is made by compile.ts\n`);
-    }
-  }
-  return page ?? await webPage(p.title, p.code, p.info, p.names, main, pageHost);
+  try { return await webCorePage(p.title, p.code, p.info, p.names, main, pageHost); } catch (e) { fail((e as Error).message.replace(/^lab: /, "")); }
 }
 
 switch (command) {
@@ -412,19 +337,13 @@ switch (command) {
     // starts fast; without esbuild (a dev dependency), a module that
     // imports the runtime from this checkout.
     const esbuild = await import("esbuild").catch(() => null);
-    // Printed from the core IR (C137c5), which WebAssembly and C print too,
-    // since C137d1 unless main doesn't lower there: then compile.ts, which
-    // is being retired (C137), and it says so. --core insists on the core
-    // IR, --compile-ts on compile.ts.
-    const core = !rest.includes("--compile-ts");
+    // Printed from the core IR (C137c5), which WebAssembly and C print too.
     const source = (inCheckout: boolean): string => {
-      if (!core) return compiled(p, main, inCheckout);
       // Only what main reaches (C168): a definition nothing calls isn't
       // compiled, so an unreached solve doesn't bring in the node table.
       const lowered = lowerCore(p.code, p.info, p.names, [main]);
       const why = lowered.refused.get(main);
-      if (why && rest.includes("--core")) fail(`${p.names[main] ?? "main"} isn't compiled through the core IR: it ${why}`);
-      if (why) { process.stderr.write(`lab: ${p.names[main] ?? "main"} isn't compiled through the core IR (it ${why}), so through compile.ts\n`); return compiled(p, main, inCheckout); }
+      if (why) fail(`${p.names[main] ?? "main"} isn't compiled through the core IR: it ${why}`);
       const here = (f: string) => resolve(import.meta.dirname, f);
       // Its hosts/js.js, bundled in or imported from beside the program (C137d5).
       const host = pageHost ? { file: inCheckout ? pathToFileURL(pageHost).href : pageHost, ops: hostOpsOf(p.code, p.names) } : undefined;
@@ -505,13 +424,8 @@ switch (command) {
     if (!Number.isInteger(size) || size < 2 || size % 2) fail("--block takes an even number of samples, 2 or more");
     let wav;
     try { wav = readWav(readFileSync(input)); } catch (e) { fail(`${input}: ${(e as Error).message}`); }
-    // --compiled: the core IR's JavaScript (C137d3); with --compile-ts, compile.ts's.
-    // A sound that solves through the evaluator's solver on the core IR
-    // (solvesSlowly) goes through compile.ts, whose plans are far quicker
-    // (C137d7, C137d9).
-    const solves = compiled && !rest.includes("--compile-ts") && solvesSlowly(lowerCore(p.code, p.info, p.names, [def]));
-    if (solves) process.stderr.write(`lab: ${mainName} solves through the evaluator's solver on the core IR (slow), so it is compiled through compile.ts\n`);
-    const played = playBlocks(await soundOf(p, def, !compiled ? "evaluator" : rest.includes("--compile-ts") || solves ? "compiled" : "core"), wav.samples, size);
+    // --compiled: the core IR's JavaScript (C137d3).
+    const played = playBlocks(await soundOf(p, def, compiled ? "core" : "evaluator"), wav.samples, size);
     const to = out ?? input.replace(/(\.wav)?$/i, ".out.wav");
     writeFileSync(to, writeWav({ rate: wav.rate, samples: played.out }));
     if (played.silent.length) process.stderr.write(`lab: ${played.silent.length} block${played.silent.length === 1 ? "" : "s"} played silence, the first (block ${played.silent[0].block}) because ${played.silent[0].why}\n`);

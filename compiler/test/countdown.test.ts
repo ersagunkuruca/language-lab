@@ -1,5 +1,5 @@
 // Countdown (ters/examples/countdown), the program of GAPS.md
-// round 2, written in the editor by clicks: the evaluator, the compiled code,
+// round 2, written in the editor by clicks: the evaluator, the core IR's JavaScript,
 // WebAssembly and the hand-written ideal must find the same solutions in
 // the same order.
 
@@ -19,7 +19,6 @@ const w = await ways();
 test("countdown: four ways agree on a small instance", () => {
   const want = w.ideal([2, 3, 5, 7, 11], 100);
   assert.equal(want.length, 30);
-  assert.deepEqual(w.compiled([2, 3, 5, 7, 11], 100), want);
   assert.deepEqual(w.core([2, 3, 5, 7, 11], 100), want);
   assert.deepEqual(w.wasm([2, 3, 5, 7, 11], 100), want);
   assert.deepEqual(w.evaluator([2, 3, 5, 7, 11], 100), want);
@@ -31,7 +30,7 @@ test("countdown: Hutton's example has his 49 solutions, compiled, in WebAssembly
   const want = w.ideal([1, 3, 7, 10, 25, 50], 765);
   assert.equal(want.length, 49);
   assert.equal(want[0], "(((3 − 1) + 7) × (10 + (25 + 50)))");
-  assert.deepEqual(w.compiled([1, 3, 7, 10, 25, 50], 765), want);
+  assert.deepEqual(w.core([1, 3, 7, 10, 25, 50], 765), want);
   assert.deepEqual(w.wasm([1, 3, 7, 10, 25, 50], 765), want);
 });
 

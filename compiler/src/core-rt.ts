@@ -4,6 +4,7 @@
 // function is named with the builtin's id where it has one (the printer
 // reads scalar.ts's tables), so nothing here needs the compiler.
 
+import { bordered } from "../../ters/src/lang/border.ts";
 import { ArrayView, arrayView, CONS, FALSE, HASH_SET_OPS, LOCALE_V, NIL, NONE, S, SOME, STD_IMPL, STD_MANY, TABLE_OPS, TICKET_V, TRUE } from "../../ters/src/lang/std.ts";
 import { hostLocale, hostZone } from "../../ters/src/lang/text.ts";
 import { plainRequest, responseValue } from "../../ters/src/lang/network.ts";
@@ -386,7 +387,8 @@ function worldFn(op: string, rt: Runtime, timers: Timers, handlers: Map<string, 
   const w = <K extends keyof World>(k: K): World[K] => {
     const f = rt.world?.[k];
     if (!f) return (() => { throw new Error(`this runtime can't ${k === "error" ? "write to standard error" : k}`); }) as unknown as World[K];
-    return f.bind(rt.world) as World[K];
+    // Text from the world enters in NFC (L214a), as the evaluator's.
+    return bordered(rt.world!, k, f);
   };
   const tried = <T>(f: () => T): T => { try { return f(); } catch (e) { if (e instanceof Aborted) throw e; throw new Aborted((e as Error).message, 0); } };
   const clock = () => (rt.world?.now ?? Date.now)();

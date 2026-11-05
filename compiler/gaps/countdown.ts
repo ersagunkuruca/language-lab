@@ -1,15 +1,10 @@
-// Countdown three ways, in one process: the evaluator, the compiler's
-// output, and the hand-written ideal (countdown.ideal.js). Each finds every
+// Countdown four ways, in one process: the evaluator, the core IR's
+// JavaScript, WebAssembly, and the hand-written ideal (countdown.ideal.js). Each finds every
 // solution for the same numbers and target and shows them as text, so the
 // comparison is the search itself. Used by bench-countdown.ts and by
 // test/countdown.test.ts.
 
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { pathToFileURL } from "node:url";
 import { makeRunner, fromList, toList, type Value } from "../../ters/src/lang/run.ts";
-import { compile } from "../src/compile.ts";
 import { loadCoreJs, lowerCore } from "../src/core-js.ts";
 import { lowerScalar, type DType } from "../src/scalar.ts";
 import { emitWasm, fromText, instantiate } from "../src/wasm.ts";
@@ -18,11 +13,8 @@ import { solutions as idealSolutions, showExpr } from "./countdown.ideal.js";
 
 export type Way = (numbers: number[], target: number) => string[];
 
-export async function ways(): Promise<Record<"evaluator" | "compiled" | "core" | "ideal" | "wasm", Way>> {
+export async function ways(): Promise<Record<"evaluator" | "core" | "ideal" | "wasm", Way>> {
   const p = load("countdown");
-  const path = join(mkdtempSync(join(tmpdir(), "countdown-")), "countdown.js");
-  writeFileSync(path, compile(p.code, p.info, p.pres.names, { runtime: pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href, exports: ["solutions", "show expr"] }));
-  const c = (await import(pathToFileURL(path).href)).defs as Record<string, (...a: unknown[]) => unknown>;
   const r = makeRunner(p.code, p.info, { print: () => {} });
   const one = (vs: Iterable<Value>) => { for (const v of vs) return v; throw new Error("no value"); };
   // WebAssembly (docs/design/targets/WASM.md, W4d): lists in and out through the
@@ -39,7 +31,7 @@ export async function ways(): Promise<Record<"evaluator" | "compiled" | "core" |
     for (let r = ex.solutions(xs, target); h("List.case", outT)(r) === 1; r = h("List.cons.tail", outT)(r)) out.push(fromText(ex, ex["show expr"](h("List.cons.head", outT)(r))));
     return out;
   };
-  // Printed from the core IR (C137d13), which compile.ts gives way to.
+  // Printed from the core IR (C137d13).
   const ir = lowerCore(p.code, p.info, p.pres.names, p.own.defs);
   const fs = loadCoreJs(ir), at = (name: string) => fs[ir.funcs.findIndex((g) => g.name === name && !g.inner && !g.budgeted)];
   const [coreSolutions, coreShow] = [at("solutions"), at("show expr")];
@@ -50,7 +42,6 @@ export async function ways(): Promise<Record<"evaluator" | "compiled" | "core" |
       const found = one(r.call(r.value(p.named("solutions")), toList(numbers), target));
       return fromList(found).map((e) => one(r.call(r.value(p.named("show expr")), e)) as string);
     },
-    compiled: (numbers, target) => fromList(c.solutions(toList(numbers), target) as Value).map((e) => c["show expr"](e) as string),
     ideal: (numbers, target) => idealSolutions(numbers, target).map(showExpr),
   };
 }

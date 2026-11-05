@@ -12,7 +12,7 @@ for (const n of sizes.length ? sizes : [50, 200, 1000]) {
   const args = ["plan.txt"];
   w.ideal(args, files); // warm
   const ideal = time(() => w.ideal(args, files));
-  for (const way of ["evaluator", "compiled", "core", "ideal"] as const) {
+  for (const way of ["evaluator", "core", "ideal"] as const) {
     if (way === "evaluator" && n > 200) continue;
     if (way !== "ideal") w[way](args, files); // warm
     const r = way === "ideal" ? ideal : time(() => w[way](args, files));

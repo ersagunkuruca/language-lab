@@ -15,12 +15,12 @@ const time = (f: () => unknown, runs: number) => {
   return ts.sort((a, b) => a - b)[runs >> 1];
 };
 const ms = (x: number) => (Number.isNaN(x) ? "(skipped)" : `${x < 10 ? x.toFixed(2) : x.toFixed(0)} ms`).padStart(11);
-const cols: Name[] = ["evaluator", "evaluator, trees", "compiled", "compiled, trees", "compiled, table", "core, trees", "core, table", "ideal"];
+const cols: Name[] = ["evaluator", "evaluator, trees", "core", "core, trees", "core, table", "ideal"];
 const sizes = process.argv.slice(2).map(Number);
 
 console.log(`notebook: index the notes, then a summary and 100 questions (in one process, median)`);
 console.log(`chosen: trees ${w.chosen.trees.join(", ") || "none"}; table ${w.chosen.table.join(", ") || "none"}\n`);
-console.log(`${"notebook".padEnd(22)}${cols.map((c) => c.padStart(17)).join("")}  compiled/ideal  trees/ideal  table/ideal`);
+console.log(`${"notebook".padEnd(22)}${cols.map((c) => c.padStart(17)).join("")}  core/ideal  trees/ideal  table/ideal`);
 for (const n of sizes.length ? sizes : [100, 300, 1000, 3000]) {
   const files = { "n.txt": notes(n) }, args = ["n.txt"];
   const want = w.ideal(args, files);
@@ -33,5 +33,5 @@ for (const n of sizes.length ? sizes : [100, 300, 1000, 3000]) {
   })) as Record<Name, number>;
   const ratio = (x: number) => (Number.isNaN(x) ? "".padStart(11) : `${(x / t.ideal).toFixed(0).padStart(10)}×`);
   const label = `${n} notes, ${(files["n.txt"].length / 1024).toFixed(0)} KB`;
-  console.log(`${label.padEnd(22)}${cols.map((c) => ms(t[c]).padStart(17)).join("")}  ${ratio(t.compiled).padStart(14)}  ${ratio(t["compiled, trees"])}  ${ratio(t["compiled, table"])}`);
+  console.log(`${label.padEnd(22)}${cols.map((c) => ms(t[c]).padStart(17)).join("")}  ${ratio(t.core).padStart(14)}  ${ratio(t["core, trees"])}  ${ratio(t["core, table"])}`);
 }

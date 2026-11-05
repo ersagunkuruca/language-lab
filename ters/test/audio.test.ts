@@ -1,6 +1,6 @@
 // Sounds (AUDIO.md, stage A1): a sound is what its maker returns, a
 // function on blocks of samples with its state in cells. Played over the
-// same samples, the evaluator and the compiled program give the same
+// same samples, the evaluator and the core IR's JavaScript give the same
 // numbers, at any block size a sound mustn't depend on; `lab render` writes what it
 // played to a WAV file.
 
@@ -15,10 +15,10 @@ import { Lang } from "../src/lang/dsl.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { infer } from "../src/lang/infer.ts";
 import { loadProgram } from "../src/lang/load.ts";
-import { audioProblem, listens, playBlocks } from "../src/lang/audio.ts";
+import { audioProblem, playBlocks } from "../src/lang/audio.ts";
 import { createContext, runInContext, runInNewContext } from "node:vm";
 import { runMain } from "../src/lang/run.ts";
-import { corePageRuntime, coreSoundWorklet, coreWorkletRuntime, soundWorklet, webCorePage, webPage, workletRuntime, pageRuntime } from "../cli/web.ts";
+import { corePageRuntime, coreSoundWorklet, coreWorkletRuntime, soundWorklet, webCorePage, workletRuntime, pageRuntime } from "../cli/web.ts";
 import { FakeEl, fakeDoc } from "./fakedom.ts";
 import { hostOpsOf, lowerCore, solvesSlowly } from "../../compiler/src/core-js.ts";
 import { corePageFile, coreWorkletFile, pageFile, workletFile } from "../src/lang/page.ts";
@@ -37,27 +37,22 @@ const peak = (xs: ArrayLike<number>) => Math.max(...Array.from(xs, Math.abs));
 const rms = (xs: ArrayLike<number>) => Math.sqrt(Array.from(xs, (x) => x * x).reduce((a, b) => a + b, 0) / xs.length);
 const sine = (n: number, amp: number) => Array.from({ length: n }, (_, i) => amp * Math.sin((2 * Math.PI * 220 * i) / 48000));
 // The page main returns, from the evaluator.
-const evaluatorPage = (p: ReturnType<typeof pedal>["p"], page: Id) => runMain(p.code, p.info, page, { print: () => {}, names: p.names });
 const pedal = () => {
   const p = loadProgram(join(import.meta.dirname, "../examples/pedal"));
   return { p: { code: p.code, info: infer(p.code, p.pres.names, undefined, p.options), names: p.pres.names }, main: p.named("pedal"), page: p.named("main") };
 };
 
-test("the pedal: the evaluator and the compiled program play the same samples, at blocks of 128 and of 256", async () => {
+test("the pedal: the evaluator and the core IR's JavaScript play the same samples, at blocks of 128 and of 256", async () => {
   const { p, main } = pedal();
   assert.equal(audioProblem(p.info, main, p.names), null);
   const input = sine(512, 0.3);
-  const ways = await Promise.all((["evaluator", "compiled", "core"] as const).flatMap((way) => [128, 256].map(async (size) => playBlocks(await soundOf(p, main, way), input, size))));
+  const ways = await Promise.all((["evaluator", "core"] as const).flatMap((way) => [128, 256].map(async (size) => playBlocks(await soundOf(p, main, way), input, size))));
   for (const w of ways) assert.deepEqual(w.silent, []);
   // Each way the same bits at either block size; the two ways near each
   // other (run.ts close, `near` in the language: the interpreter runs atanh
-  // backwards with fractions, the compiled plan with floats).
+  // backwards with fractions, the core IR's plan with floats, C137d8).
   assert.deepEqual(ways[1].out, ways[0].out);
   assert.deepEqual(ways[3].out, ways[2].out);
-  // The core IR's JavaScript plays the compiled program's very samples:
-  // its solves are the same plans written out (C137d8).
-  assert.deepEqual(ways[4].out, ways[2].out);
-  assert.deepEqual(ways[5].out, ways[2].out);
   ways[0].out.forEach((x, i) => assert.ok(close(x, ways[2].out[i]), `sample ${i}: ${x} against ${ways[2].out[i]}`));
   // It drives, compresses and comes back as loud as it went in: once the
   // loudnesses have followed it in (a few hundredths of a second), a sine
@@ -65,7 +60,7 @@ test("the pedal: the evaluator and the compiled program play the same samples, a
   const after = ways[0].out.slice(128), dry = input.slice(128);
   assert.ok(Math.abs(rms(after) / rms(dry) - 1) < 0.2, `loudness ${rms(after)} against ${rms(dry)}`);
   assert.ok(peak(after) / rms(after) < 0.85 * (peak(dry) / rms(dry)), `crest ${peak(after) / rms(after)}`);
-  assert.deepEqual([...playBlocks(await soundOf(p, main, "compiled"), new Float64Array(256)).out], new Array(256).fill(0));
+  assert.deepEqual([...playBlocks(await soundOf(p, main, "core"), new Float64Array(256)).out], new Array(256).fill(0));
 });
 
 // The pedal's solves (Haar's join and tanh, each run backwards) have their
@@ -101,7 +96,7 @@ test("a sound's cells carry from block to block, the same way compiled; a block 
   const { p, main, loud } = counting();
   assert.equal(audioProblem(p.info, main, p.names), null);
   const ones = new Array(8).fill(1);
-  for (const way of ["evaluator", "compiled", "core"] as const) {
+  for (const way of ["evaluator", "core"] as const) {
     assert.deepEqual([...playBlocks(await soundOf(p, main, way), ones, 2).out], [1, 1, 2, 2, 3, 3, 4, 4], way);
   }
   assert.match(audioProblem(p.info, loud, p.names)!, /runs on the audio thread, so it can't have Console/);
@@ -140,39 +135,6 @@ test("lab render: the pedal over a WAV file, written as one; a program whose mai
   assert.match(bad.stderr, /main can't be a sound/);
 });
 
-// The audio thread's side of the pedal page (audio-worklet.ts), in a
-// stand-in for an AudioWorkletGlobalScope: its processor plays what the
-// pedal plays offline, and a write the page sends over the port (Clean)
-// reaches the cell the block function reads.
-test("the pedal page's worklet plays the pedal, and the page's cell writes reach it", async () => {
-  const { p, main, page } = pedal();
-  const source = await soundWorklet(p.code, p.info, p.names, page);
-  const made: { name: string; processor: new (o: object) => { port: { onmessage: ((e: { data: unknown }) => void) | null; postMessage(m: unknown): void }; process(i: Float32Array[][], o: Float32Array[][]): boolean } }[] = [];
-  const said: unknown[] = [];
-  class AudioWorkletProcessor { port = { onmessage: null, postMessage: (m: unknown) => said.push(m) }; }
-  runInNewContext(source, { registerProcessor: (name: string, processor: never) => made.push({ name, processor }), AudioWorkletProcessor, console });
-  assert.equal(made.length, 1);
-  const node = new made[0].processor({ processorOptions: { index: 0 } });
-  // The browser's samples are 32-bit floats, in and out.
-  const input = [...Float32Array.from(sine(256, 0.3))], offline = playBlocks(await soundOf(p, main, "compiled"), input, 128).out;
-  const play = (at: number) => {
-    const out = [new Float32Array(128), new Float32Array(128)];
-    assert.equal(node.process([[Float32Array.from(input.slice(at, at + 128))]], [out]), true);
-    return out;
-  };
-  const [left, right] = play(0);
-  assert.deepEqual([...left], [...Float32Array.from(offline.slice(0, 128))]);
-  assert.deepEqual([...right], [...left]);
-  // The page's second cell is Clean or Driven: at 0 the next block is the
-  // input as it came, which the pedal's isn't.
-  node.port.onmessage!({ data: { cell: 1, value: 0 } });
-  const [clean] = play(128);
-  assert.deepEqual([...clean], input.slice(128));
-  assert.notDeepEqual([...Float32Array.from(offline.slice(128))], input.slice(128));
-  assert.deepEqual(said, []);
-  assert.deepEqual(listens(evaluatorPage(p, page)).length, 2);
-});
-
 // A page's HTML as its scripts draw it.
 const drawn = (html: string) => {
   const body = new FakeEl("body"), store = new Map<string, string>();
@@ -205,12 +167,10 @@ test("the pedal page's worklet from the core IR plays the pedal, and the page's 
   assert.deepEqual([...play(128)], input.slice(128));
   assert.deepEqual(said, []);
   // And `lab build-web` makes the pedal's page from the core IR, carrying
-  // it, and it draws what compile.ts's draws.
+  // it.
   const html = await webCorePage("Pedal", p.code, p.info, p.names, page);
   assert.match(html, /registerProcessor/);
-  // (The same points: both run compile.ts's plan for atanh backwards,
-  // C137d8.)
-  assert.equal(drawn(html), drawn(await webPage("Pedal", p.code, p.info, p.names, page)));
+  assert.match(drawn(html), /Clean/);
 });
 
 // The same worklet made in a browser, the editor's way (A4): the prebuilt

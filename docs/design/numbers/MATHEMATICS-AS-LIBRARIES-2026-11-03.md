@@ -97,7 +97,7 @@ the prelude. Each is a row below.
 | Ordering | run.ts `compareValues` (line 136), compile.ts `orderOf` (line 369) | Rational and Algebraic named |
 | Solving backwards | relate.ts line 1396 | Rational named for exact roots |
 | Clifford grade masks | grades.ts lines 80 to 85 and 110 | Finds the prelude's `clifford product`, `clifford sandwich` and 15 others **by their names in the library**, and the algebra by std's `Algebra` constructor |
-| The evaluator's fast product | jets.ts `TABLE_PRODUCT` | The prelude's table product by its hash, run as native code |
+| The evaluator's fast product | library/hosts.ts `table product` (L206) | The library's table product, declared by name beside the library's host code and run as native code; test/jets.test.ts checks it against the definition |
 | The editor | editor/typed.ts lines 519, 1007 to 1012, 1237 | Rational, Fixed, Algebraic named for literals and display |
 | Algebraic numbers | algebraic.ts, poly.ts, factor.ts; 18 `algebraic.*` builtins in std.ts | The whole type is host code |
 | The types themselves | std.ts: Rational, Complex, Algebraic, Dual, Fixed, Mat2 to Mat4, Matrix, Algebra, Table entry, Trig, Extended | Declared in TypeScript, in the module every program loads |
