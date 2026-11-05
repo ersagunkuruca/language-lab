@@ -40,3 +40,19 @@ test("nested lists read back by descent, empty ones too (L72b)", () => {
 test("a list with a separator and no item after it, or no closing bracket, has no reading (L72b)", () => {
   for (const line of ["[1,]", "[,1]", "[1", "[1,,2]", "[1 2]", "1]"]) assert.equal(read(line, 0), null, line);
 });
+
+// The reader written as a definition (reader.ts, L72b2): the same
+// readings, run by the evaluator, as compiled targets run it.
+test("the written reader reads the nested lists as descent does (L72b2)", async () => {
+  const { writeReader } = await import("../src/lang/reader.ts");
+  const w = writeReader(code, printer, names);
+  const all = { nodes: { ...code.nodes, ...w.code.nodes }, defs: [...code.defs, ...w.code.defs.filter((d) => !code.defs.includes(d))] }, allNames = { ...names, ...w.names };
+  const info = infer(all, allNames);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const rr = makeRunner(all, info, { print: () => {}, names: allNames });
+  for (const line of ["1", "[]", "[1]", "[1,2,3]", "[[],[[]]]", "[1,[2,3],[],4]", "[1,]", "[1", "[1,,2]", "1]"]) {
+    const got = [...(rr.call(rr.value(w.line), line) as Iterable<Value>)][0];
+    const want = read(line, 0);
+    assert.equal(showValue(got, all, allNames), want === null ? "none" : `some(${shown(want)})`, line);
+  }
+});

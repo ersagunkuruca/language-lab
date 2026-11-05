@@ -27,7 +27,7 @@
 import type { Code, Id } from "../model.ts";
 import { isUse } from "../model.ts";
 import { Lang } from "./dsl.ts";
-import { FALSE, INT_OPS, NONE, S, SOME, TEXT_OPS, TRUE, tupleVariant } from "./std.ts";
+import { CONS, FALSE, INT_OPS, NIL, NONE, S, SOME, TEXT_OPS, TRUE, tupleVariant } from "./std.ts";
 import { firstSets } from "./first-sets.ts";
 import { infixesOf, Unsupported } from "./descent.ts";
 import { INT } from "./types.ts";
@@ -181,6 +181,14 @@ export function writeReader(code: Code, printer: Id, names: Record<Id, string>):
     // own parentheses path reads it (at the outermost inputs, where it
     // needs none).
     if (named(f) === "optional parens") return k.if(copy(n.args[0], env, inputs), none(), piece(n.args[1], text, at, env, inputs, tops, next));
+    // join all(map(xs, the printer), sep): the items read by the reader,
+    // with sep between them, none too (L72b2, as descent.ts).
+    if (named(f) === "join all") {
+      const m = node(n.args[0]), x = m?.kind === "call" && !isUse(m as never) && named(target(m.fn)) === "map" ? target(m.args[0]) : null, s = x ? env.get(x) : undefined;
+      if (!x || !s || "b" in s || target(m!.args[1]) !== printer || given.length) throw new Unsupported("reads join all of something other than an input list of the printer's");
+      return k.let("items", orElse(k.call(listOf(), text, at, copy(n.args[1], env, inputs)), some(at, k.x(NIL))), (r) =>
+        then(k.x(r), (end, v) => next(end, new Map(env).set(x, { b: v }))));
+    }
     if (f === printer) {
       const x = target(n.args[0]), s = x ? env.get(x) : undefined;
       if (!x || !s || "b" in s) throw new Unsupported("reads the printer of something other than an input");
@@ -195,6 +203,20 @@ export function writeReader(code: Code, printer: Id, names: Record<Id, string>):
       : k.let(named(lets[i][0]) || "x", lets[i][1], (b) => go(i + 1, new Map(ins).set(lets[i][0], b)));
     return go(0, inputs);
   };
+
+  // read <printer> list(text, at, sep): one item or more, sep between.
+  let items: Id | null = null;
+  function listOf(): Id {
+    if (items) return items;
+    items = k.def(`read ${title} list`);
+    k.define(items, k.fn(["text", "at", "sep"], (text, at, sep) =>
+      then(k.call(read, text, at), (a, x) => {
+        const len = () => k.call(TEXT_OPS.length, sep), one = () => some(a, k.call(CONS, x, k.x(NIL)));
+        const rest = (from: Id) => orElse(then(k.call(items!, text, from, sep), (b, xs) => some(b, k.call(CONS, x, xs))), one());
+        return k.if(k.call(INT_OPS.less, k.int(0), len()), k.if(startsWith(text, a, k.x(sep), len()), rest(k.call(INT_OPS.add, a, len())), one()), rest(k.x(a)));
+      })));
+    return items;
+  }
 
   const params = ["text", "at", ...given.map((g) => named(g) || "given"), ...given.map((g) => `top ${named(g) || "given"}`)];
   // The printer read from `at`: a primary, then the operators after it.
