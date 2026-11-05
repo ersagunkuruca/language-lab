@@ -17,6 +17,9 @@ import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { Aborted, runMain } from "../src/lang/run.ts";
 import { nodeWorld } from "../src/lang/world.ts";
 import { lowerCore, runCoreMain } from "../../compiler/src/core-js.ts";
+import { compile } from "../../compiler/src/compile.ts";
+import { $setPrint, $setWorld } from "../../compiler/src/runtime.js";
+import { pathToFileURL } from "node:url";
 import { ABORT_OP, ADD_BYTES_OP, FILE_OPS, LOG_OP, NEXT_BYTES_OP, NEXT_LINE_OP, S, SHOW_ANY, WRITE_LINE_OP } from "../src/lang/std.ts";
 
 const lib = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
@@ -94,7 +97,7 @@ test("with open file reads and adds bytes from the place lines are read from", (
 
 // Compiled to JS from the core IR (L213c3): the same lines, bytes, file
 // and one close as the evaluator, the release a `finally`-like catch.
-test("with open file compiled to JS from the core IR does what the evaluator does", () => {
+test("with open file compiled to JS, from the core IR and by compile.ts, does what the evaluator does", async () => {
   const cases: [string, Uint8Array | string, (k: Lang, path: string) => Id][] = [
     ["lines", "first\r\nsecond\nthird", (k, path) => k.call(lib("with open file"), k.lit(path), k.thunk(() => k.listOf(
       k.call(NEXT_LINE_OP), k.seq(k.call(WRITE_LINE_OP, k.lit("added")), k.call(NEXT_LINE_OP)), k.call(NEXT_LINE_OP), k.call(NEXT_LINE_OP))))],
@@ -105,22 +108,28 @@ test("with open file compiled to JS from the core IR does what the evaluator doe
       k.seq(k.call(ADD_BYTES_OP, k.call(lib("bytes of"), k.list(k.int(7), k.int(255)))), k.call(SHOW_ANY, k.call(lib("byte items"), k.call(NEXT_BYTES_OP, k.int(10))))))))],
   ];
   for (const [what, start, body] of cases) {
-    const outcome = (core: boolean) => {
+    const outcome = async (how: "evaluator" | "core" | "compiled") => {
       const path = join(mkdtempSync(join(tmpdir(), "open-file-")), "f");
       writeFileSync(path, start);
       const p = program((k) => body(k, path));
       assert.deepEqual(p.info.errors.map((e) => e.message), [], what);
       const r = run(p), out: string[] = [];
       const rt = { print: (l: string) => out.push(l), names: p.names, world: { ...nodeWorld(), closeFile: (f: number) => { r.closed.push(f); }, log: () => {}, error: (l: string) => out.push(`aborted ${l}`) } };
-      if (core) {
+      if (how === "compiled") {
+        const file = join(mkdtempSync(join(tmpdir(), "open-file-js-")), "main.mjs");
+        writeFileSync(file, compile(p.code, p.info, p.names, { runtime: pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href, exports: ["main"] }));
+        $setWorld(rt.world); $setPrint(rt.print);
+        try { (await import(pathToFileURL(file).href)).defs.main(); } catch (e) { if (!(e instanceof Aborted)) throw e; out.push(`aborted ${e.reason}`); } finally { $setWorld(undefined); $setPrint((l: string) => console.log(l)); }
+      } else if (how === "core") {
         const l = lowerCore(p.code, p.info, p.names, [p.main]);
         assert.deepEqual([...l.refused.values()], [], what);
         runCoreMain(l, "main", [], rt as never);
       } else try { runMain(p.code, p.info, p.main, rt as never); } catch (e) { if (!(e instanceof Aborted)) throw e; out.push(`aborted ${e.reason}`); }
       return { out, file: [...readFileSync(path)], closes: r.closed.length };
     };
-    const want = outcome(false);
+    const want = await outcome("evaluator");
     assert.equal(want.closes, 1, what);
-    assert.deepEqual(outcome(true), want, what);
+    assert.deepEqual(await outcome("core"), want, what);
+    assert.deepEqual(await outcome("compiled"), want, what);
   }
 });

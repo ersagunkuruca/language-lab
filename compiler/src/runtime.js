@@ -361,7 +361,7 @@ export { FN as $FN } from '../../invertible/src/expr.js';
 import { Aborted, OutOfSteps, spendStep } from '../../ters/src/lang/run.ts';
 import { LOCALE_V, MY_LOCALE_OP, MY_ZONE_OP } from '../../ters/src/lang/std.ts';
 import { hostLocale, hostZone } from '../../ters/src/lang/text.ts';
-import { ABORT, ABORT_OP, IO, LOG_OP, NONE, NOW_OP, RANDOM, RANDOM_OP, S, SOME, WAIT_OP, WORLD_OPS } from '../../ters/src/lang/std.ts';
+import { ABORT, ABORT_OP, FILE_OPS, IO, LOG_OP, NONE, NOW_OP, RANDOM, RANDOM_OP, S, SOME, WAIT_OP, WORLD_OPS } from '../../ters/src/lang/std.ts';
 import { CONSOLE, FILES, NETWORK } from '../../ters/src/lang/types.ts';
 import { seededGenerator, worldRandom } from '../../ters/src/lang/random.ts';
 import { plainRequest, responseValue } from '../../ters/src/lang/network.ts';
@@ -416,6 +416,10 @@ export function $perform(effect, op, args) {
   // the world answers them as it answers the builtins that perform them.
   const builtin = worldBuiltin[op];
   if (builtin) return builtin(...args);
+  // The files `with open file` keeps open (L213c6), as run.ts answers
+  // them: what goes wrong is an answer (none, false), never a throw.
+  const kept = KEPT[op];
+  if (kept) return kept(...args);
   throw new Error(`nothing handles ${op}`);
 }
 // The host's answers (hosts/js.js) and what the border needs of each
@@ -663,6 +667,15 @@ export const $seededS = (seed, body) => $handleS(RANDOM, draws(seed), {}, body);
 // operations abort saying so. Failures are an Abort where they were called.
 
 let world = {};
+const tryOr = (f, or) => { try { return f(); } catch { return or; } };
+const KEPT = {
+  [FILE_OPS.open]: (p) => tryOr(() => ({ tag: SOME, fields: [world.openFile(p)] }), { tag: NONE, fields: [] }),
+  [FILE_OPS.line]: (f) => { const l = tryOr(() => world.fileLine(Number(f)), null); return l === null ? { tag: NONE, fields: [] } : { tag: SOME, fields: [l.normalize("NFC")] }; },
+  [FILE_OPS.addLine]: (f, s) => $bool(tryOr(() => (world.fileAddLine(Number(f), s), true), false)),
+  [FILE_OPS.bytes]: (f, n) => bytesValue(tryOr(() => world.fileBytes(Number(f), Math.max(0, Number(n))), null) ?? new Uint8Array(0)),
+  [FILE_OPS.addBytes]: (f, b) => $bool(tryOr(() => (world.fileAddBytes(Number(f), plainBytes(b)), true), false)),
+  [FILE_OPS.close]: (f) => (tryOr(() => world.closeFile(Number(f)), null), $unit),
+};
 export function $setWorld(w) { world = w ?? {}; $random = world.random ?? worldRandom; }
 // Text from the world enters in Normalization Form C (TEXT-2026-11-03.md,
 // L214a), as ters/src/lang/border.ts does for the evaluator.
