@@ -455,6 +455,9 @@ export function resolvedFor(code: Code, info: Info, names: Names | undefined): {
 // (relate.ts `filled` binds a bare use's ports), resolves to itself:
 // resolving it again found nothing to do, after scanning every node of it
 // and the library (T14i: 150 ms for each search's runner in swapAndUndo).
+// What resolvedFor has for this version of the code and its check, if it
+// has worked it out (or been told it is resolved already).
+export const resolvedKnown = (code: Code, info: Info | undefined): { code: Code; info: Info } | undefined => (info ? resolved.get(code)?.get(info) : undefined);
 export function resolvedAlready(code: Code, info: Info): void {
   let byInfo = resolved.get(code);
   if (!byInfo) resolved.set(code, (byInfo = new WeakMap()));
@@ -472,6 +475,10 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   const copyOf = info.copyOf;
   // Our own copy of the node table: `derivative` writes new code into it.
   code = { nodes: { ...code.nodes }, defs: code.defs };
+  // It is resolved: a solve inside the run (relate.ts interpreter) reads
+  // this copy, and resolving it again walked every node twice a solve
+  // (I176: about 1.2 s opening board's `stage from key`).
+  resolvedAlready(code, info);
   const defs = new Map<Id, Value>();
   const one = (x: Value): Iterable<Value> => [x];
   // Closures made by this runner, so the machine can enter them directly

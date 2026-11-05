@@ -22,7 +22,7 @@ language, then more targets or speed (WORKFLOW.md "Priority").
 |---|---|---|
 | E Editor | "Editor lane" | E103, then Language or Compiler rows agreed with those lanes |
 | C Compiler and targets | "Compiler lane" | C41 or C58; C93 to Language lane B; C184 and C30 with the Editor lane |
-| L Language and library | "Language lane" | L209, L44, then L88 and L182 when unblocked (core, run.ts, infer.ts, hosts.ts) |
+| L Language and library | "Language lane" | L44, then L88 and L182 when unblocked (core, run.ts, infer.ts, hosts.ts) |
 | L Language and library | "Language lane B" | L118c (evaluator side, handed over by the Language lane 2026-11-05 22:16; waits on Ersagun, who stopped L118 after step 2), L120 (the compiler choosing a way). Skip L107 (waits on Ersagun) and L24 (research). Take a row from the other list only after telling that lane. |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
@@ -40,7 +40,7 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| I176 | Opening some definitions freezes the page for 1 to 2.2 s. Example: board `stage from key`, 2.3 s with one 2.2 s task (0.8 to 1.1 s in the morning's pass); also Spacetime `scalar part` 2.6 s, machine `all digits` 1.4, board `stage name` 1.3, calc `blank` 1.2. Done when `stage from key` opens in tasks of at most 0.3 s | QA-2026-11-05b M1 | P2 | M | |
+| I179 | Opening some definitions freezes the page for 1 to 2.2 s. Example: board `stage from key`, 2.3 s with one 2.2 s task (0.8 to 1.1 s in the morning's pass); also Spacetime `scalar part` 2.6 s, machine `all digits` 1.4, board `stage name` 1.3, calc `blank` 1.2. After I179a (2026-11-05 23:50): `stage from key` 0.68 s, its longest task 0.61; `stage name` 0.67; Spacetime `scalar part` 2.2 s (task 1.0), machine `all digits` 1.6 (1.6), calc `blank` 1.3 (1.2). Done when `stage from key` opens in tasks of at most 0.3 s | QA-2026-11-05b M1 | P2 | M | a done |
 | I177 | Run main through the evaluator takes 2.6 to 4.5 s even for a small program (relations 2.6 s, calc 4.1 s to print `→ 0`, numbers 4.5 s; compiled runs 0.8 s; `lab run` of calc is instant). Example: calc → `main` → Run main with empty input; done when it prints within 1 s | QA-2026-11-05b M2 | P2 | M | |
 | I178 | Redo's note reads "Redid: code.json changed back.": wrong for Redo, and a file name where words are expected. Example: Insertion sort, cut a part, Ctrl+Z, Ctrl+Shift+Z; done when the note says what was redone in words | QA-2026-11-05b L1 | P3 | S | |
 
@@ -170,7 +170,6 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L209 | Values stored in the smallest structure they stay in, chosen by the compiler through embeddings. Example: a Complex with no imaginary part kept as a Float64 in compiled code (EMBEDDINGS.md L208f, C lane, after L43c). Anything beyond it (a rotor as a quaternion, masks for std's own tables) needs its own row. Showing an inserted embedding in the editor is asked of Ersagun first | [MATHEMATICS-AS-LIBRARIES](docs/design/numbers/MATHEMATICS-AS-LIBRARIES-2026-11-03.md) | P3 | L | |
 | L44 | Linear maps, geometry and matrices ([MATRICES.md](docs/design/numbers/MATRICES.md)). Example: a program's rotation function compiled as a matrix product. Left: the compiler stores linear functions as matrices (C lane, C30b/c) | LANGUAGE-REVIEW-2026-10-24 | P1 | M | a-g done |
 | L118c | The evaluator compiles each definition to JavaScript closures once (closure compilation, Feeley and Lapalme 1987), keeping the heap continuation only where a search or a handler needs it; likely 3-10x on all interpreted code; notebook's Run takes 3.2 s for 100 notes, half of it the evaluator's own machine (GAPS.md round 6 N6) ([EVALUATOR-SPEED-2026-10-31.md](docs/reports/EVALUATOR-SPEED-2026-10-31.md) step 2). For later: Ersagun stopped L118 after step 2. Measured 2026-11-05 (Editor lane): notebook with 500, 1,000 and 2,000 notes and as many queries, `lab run` against the same program compiled through the core IR (`lab compile`): the run itself (startup of 6.3 s taken off) 5.4 s against 0.25, 19.9 against 0.44, 76 against 2.0, 22 to 45 times; nearly all of it the evaluator's own machine (run.ts going, step, resume, apply). So it would earn far more than 10%. First step done (Editor lane, docs/process/DONE.md): `lab run` runs a main that lowers through the core IR's JavaScript, the evaluator for the rest; what is left is the evaluator's own speed, for what doesn't lower and for the editor's Run | Ersagun 2026-10-31 | P3 | L | for later |
 | L88 | Exact reals ([EXACT-REALS.md](docs/design/numbers/EXACT-REALS.md)). Example: `real less than` at Real answers with Diverge instead of fuel. Left: that one <, when a program asks for it | Ersagun 2026-10-26 | P2 | L | e1-e5 done |
