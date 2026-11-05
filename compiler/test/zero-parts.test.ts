@@ -37,3 +37,33 @@ test("Bounce's compiled step multiplies only the parts its vectors, bivectors an
     a.forEach((x, i) => assert.ok(Math.abs(x - b[i]) < 1e-9, `${world}: ${x} against ${b[i]}`));
   }
 });
+
+// On the GPU too (L43): a picture's lowering leaves out the parts known to
+// be 0, so raymarch's motors and points are structs of the parts they
+// have, not all 16 of the projective algebra's, and it draws the same.
+test("raymarch's picture holds its multivectors in smaller structs and draws the same", async () => {
+  const { lowerPicture } = await import("../../editor/picture.ts");
+  const { emitWgsl } = await import("../src/wgsl.ts");
+  const { loadJs } = await import("../src/js-scalar.ts");
+  const p = load("raymarch");
+  const colour = p.code.defs.find((d) => p.pres.names[d] === "colour")!;
+  const drawn = (every: boolean) => {
+    if (every) process.env.NO_ZP = "1"; else delete process.env.NO_ZP;
+    try {
+      const ir = lowerPicture({ ...p.code }, p.info, p.pres.names, { colour });
+      const f = loadJs(ir).get(colour)!, out: unknown[] = [];
+      for (let i = 0; i < 12; i++) for (let j = 0; j < 12; j++) out.push(f(i / 6 - 1, j / 6 - 1, 1.5));
+      return { wgsl: emitWgsl(ir), out: JSON.stringify(out) };
+    } finally { delete process.env.NO_ZP; }
+  };
+  const all = drawn(true), masked = drawn(false);
+  assert.deepEqual([...masked.wgsl.refused.values()], []);
+  // The widest Pga struct the shader makes a value of.
+  const widest = (s: string) => {
+    const sizes = new Map([...s.matchAll(/struct (Pga\w*) \{([^}]*)\}/g)].map((m) => [m[1], m[2].split(":").length - 1]));
+    return Math.max(0, ...[...s.matchAll(/(Pga\w*)\(/g)].map((m) => sizes.get(m[1]) ?? 0));
+  };
+  assert.equal(widest(all.wgsl.wgsl), 16);
+  assert.ok(widest(masked.wgsl.wgsl) < 8, `widest Pga struct ${widest(masked.wgsl.wgsl)}`);
+  assert.equal(masked.out, all.out);
+});

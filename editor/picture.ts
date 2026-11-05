@@ -24,6 +24,7 @@ import { withFloat32 } from "../ters/src/lang/float32.ts";
 import { represent } from "../ters/src/lang/represent.ts";
 import { lowerScalar } from "../compiler/src/scalar.ts";
 import { emitWgsl } from "../compiler/src/wgsl.ts";
+import { envSet, zeroParts } from "../compiler/src/zero-parts.ts";
 import { emitWasm } from "../compiler/src/wasm.ts";
 import { emitJs } from "../compiler/src/js-scalar.ts";
 import { checkOrder, drawDrawable, pause, POINTS, wasmBytes, type Built, type CpuProgram, type Drawable, type Picture } from "./pictureDraw.ts";
@@ -75,7 +76,13 @@ function once<T>(cache: WeakMap<Code, Map<string, { info: Info; names: string; o
   return out;
 }
 export function lowerPicture(code: Code, info: Info, names: Names, entries: Record<string, Id>) {
-  return once(lowered, code, info, names, entries, () => lowerScalar(code, info, names, Object.values(entries), { records: true, shader: true }));
+  return once(lowered, code, info, names, entries, () => {
+    const ir = lowerScalar(code, info, names, Object.values(entries), { records: true, shader: true });
+    // Parts known to be 0 left out, a multivector a smaller struct (L43).
+    if (envSet("NO_ZP")) return ir;
+    const roots = new Set(Object.values(entries));
+    return zeroParts(ir, ir.funcs.flatMap((g, i) => (roots.has(g.def) && !g.inner ? [i] : []))).ir;
+  });
 }
 type Side = { code: Code; info: Info; names: Names } | null;
 const float32 = new WeakMap<Code, Map<string, { info: Info; names: string; out: Side }>>();
