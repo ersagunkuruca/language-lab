@@ -204,7 +204,7 @@ agent with inertia. All later goals.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L120 | **Later goal**: the compiler choosing conservative advancement (examples/impact, L120a, b) or a closed form (Bounce's balls, L119) for a time of impact by cost (WAYS.md); the time when two things touch as a relation solved for t | Ersagun 2026-11-01 | P3 | L | a, b done |
+| L120 | **Later goal**: the time when two things touch as a relation (`gap(a at t, b at t) = 0` solved for t), with conservative advancement and the closed forms as its ways. Done: examples/impact (L120a to c), one `first touch` with a ball's closed form and conservative advancement as a way, the compiler choosing by cost | Ersagun 2026-11-01 | P3 | L | a, b, c done |
 
 ### Someday
 

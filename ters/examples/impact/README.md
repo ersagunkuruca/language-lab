@@ -27,12 +27,24 @@ its own frame's motor. The gap is the distance between the two polygons
 other wholly outside it, else the nearest corner to an edge). No two of
 their points close faster than the sum of what each can move.
 
+Last, one `first touch` for both shapes (L120c). `Collider` is an
+interface: a body gives its gap a fraction into the next frame, the most
+that gap can close in a frame, when in the frame it first touches, and
+itself a frame on. `first touch` has a way, `first touch by advancing`
+(conservative advancement on the other two, declared cost 10). A ball
+gives its first touch in closed form (it moves at a steady velocity, so
+the distance over the speed). The turning stick leaves its first touch to
+its ways. The compiler takes the cheapest for each (WAYS.md): the ball's
+own, one step a frame, and the stick's way, a few steps a frame.
+`until it touches` is written once for both.
+
 ```
 $ lab run examples/impact
 At 60 m/s, spinning 20 rad/s: a step a frame finds it in the wall at frame 5 (0.0833 s); conservative advancement finds it touching at 0.0826 s, in 12 steps.
 At 80 m/s, spinning 15 rad/s: a step a frame never finds it in the wall; conservative advancement finds it touching at 0.0611 s, in 11 steps.
 At 60 m/s at a plank turning 1.0 rad/s: a step a frame finds them overlapping at frame 5 (0.0833 s); conservative advancement finds them touching at 0.0825 s, in 14 steps.
 At 80 m/s at a plank turning 1.0 rad/s: a step a frame never finds them overlapping; conservative advancement finds them touching at 0.0607 s, in 11 steps.
+One first touch: a 5 cm ball at 80 m/s touches at 0.0619 s, in 4 steps; the stick touches at 0.0611 s, in 11 steps.
 Credits: …
 ```
 
@@ -40,9 +52,10 @@ Both times match a JavaScript prototype that turns the corners with
 cos and sin rather than a motor. `lab test examples/impact` checks main's
 answer, and with `--compiled` checks it compiled too.
 
-Every body must spin: a frame's motion with no turn is a slide, which
-`screw centre` can't make a turn of. What L120 leaves: the compiler
-choosing this or a closed form by cost (WAYS.md).
+Every turning body must spin: a frame's motion with no turn is a slide,
+which `screw centre` can't make a turn of (a ball is its own Collider).
+What L120 leaves: the time when two things touch as a relation solved
+for t, with these as its ways.
 
 Credits (printed by main too): conservative advancement is Brian
 Mirtich's, *Impulse-based Dynamic Simulation of Rigid Body Systems*

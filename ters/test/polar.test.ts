@@ -100,8 +100,8 @@ test("a type that gives only polar gets sin and cos from it", async () => {
   const { evaluated, compiled } = await both(code, info, names, ["the cosine", "the sine"]);
   const num = (v: Value) => Number(/angle\((.*)\)/.exec(String(v))![1]);
   assert.ok(Math.abs(num(evaluated[0]) - Math.cos(0.3)) < 1e-9 && Math.abs(num(evaluated[1]) - Math.sin(0.3)) < 1e-9, String(evaluated));
-  // A core IR gap (C137): a Trig left to its ways isn't compiled yet.
-  assert.match(String(compiled), /to its ways/);
+  // Compiled through the core IR, ways included (L120c): the same.
+  assert.deepEqual(compiled, evaluated);
 });
 
 test("polar is given by any function of its type, (length, angle) → x, y: sin and cos come from it, evaluated and compiled (L128d4)", async () => {
@@ -110,8 +110,8 @@ test("polar is given by any function of its type, (length, angle) → x, y: sin 
   const { evaluated, compiled } = await both(code, info, names, ["the cosine", "the sine"]);
   const num = (v: Value) => Number(/angle\((.*)\)/.exec(String(v))![1]);
   assert.ok(Math.abs(num(evaluated[0]) - Math.cos(0.3)) < 1e-9 && Math.abs(num(evaluated[1]) - Math.sin(0.3)) < 1e-9, String(evaluated));
-  // A core IR gap (C137): a Trig left to its ways isn't compiled yet.
-  assert.match(String(compiled), /to its ways/);
+  // Compiled through the core IR, ways included (L120c): the same.
+  assert.deepEqual(compiled, evaluated);
 });
 
 test("polar is given by a definition with the same results", () => {
@@ -189,8 +189,8 @@ test("asin and acos through unpolar: Float64, Dual, Fixed and a type of the prog
   assert.deepEqual(info.errors.map((e) => e.message), []);
   const NAMES = ["at float64 asin", "at float64 acos", "at dual asin", "at fixed asin one", "at fixed acos", "at angle asin"];
   const { evaluated, compiled } = await both(code, info, names, NAMES);
-  // A core IR gap (C137): a Trig left to its ways isn't compiled yet.
-  assert.match(String(compiled), /to its ways/);
+  // Compiled through the core IR, ways included (L120c): the same.
+  assert.deepEqual(compiled, evaluated);
   const near = (a: number, b: number, eps = 1e-9) => assert.ok(Math.abs(a - b) < eps, `${a} is not ${b}`);
   const nums = (v: Value) => String(v).match(/-?[\d.]+(e-?\d+)?/g)!.map(Number);
   near(Number(evaluated[0]), Math.asin(0.5));

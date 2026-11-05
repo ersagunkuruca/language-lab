@@ -115,8 +115,8 @@ test("Fixed: CORDIC sin and cos, tan, exp, log and square root, evaluated and co
     const value = Number(BigInt(shown)) / 2 ** 32, exact = want(Number(steps(...decimalParts(String(v)))) / 2 ** 32);
     assert.ok(Math.abs(value - exact) <= 2e-8 * Math.max(1, Math.abs(exact)), `${op}(${v}) = ${value}, not ${exact}`);
   }
-  // What the core IR doesn't compile yet (C137's gaps), by why.
+  // Compiled through the core IR too, ways included (L120c).
   const { defs, gaps } = compiledEach(code, info, nm, names);
-  for (const why of Object.values(gaps)) assert.match(why, /to its ways/);
+  assert.deepEqual(gaps, {});
   for (const [i, n] of names.entries()) if (defs[n]) assert.deepEqual(plainValue(defs[n]()), got[i], n);
 });
