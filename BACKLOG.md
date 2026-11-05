@@ -208,7 +208,7 @@ agent with inertia. All later goals.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L120 | **Later goal**: time of impact for rotating shapes along a PGA motor (screw motion) by conservative advancement (Mirtich); the compiler choosing it or the closed form by cost (WAYS.md) | Ersagun 2026-11-01 | P3 | L | shapes other than balls |
+| L120 | **Later goal**: time of impact for rotating shapes along a PGA motor (screw motion) by conservative advancement (Mirtich); the compiler choosing it or the closed form by cost (WAYS.md). Done (L120a): examples/impact, a convex polygon against a wall. Left: (b) convex shape against convex shape (the distance between two polygons as the gap, each body's reach about its own screw centre), (c) the compiler choosing it or the closed form by cost | Ersagun 2026-11-01 | P3 | L | a done |
 
 ### Someday
 
