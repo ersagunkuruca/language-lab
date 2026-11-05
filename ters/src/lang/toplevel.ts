@@ -16,6 +16,8 @@ import type { Code, Id, Node, NodeData, NodeOf, Use } from "../model.ts";
 import { conditionResults, directionOf, fieldWayOf, isUse, useTarget, isCall, type Call, bindsOf } from "../model.ts";
 import { children, collect, freshId, nodesWhere, ownerOfTypeParts, parentAt, parentOf, replace, scanningOnLayer, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
+import { Lang } from "./dsl.ts";
+import { cantStep, stepsOf } from "./steps.ts";
 
 export type Top = { ok: true; code: Code; names: Names; select: Id; note: string } | { ok: false; reason: string };
 
@@ -463,6 +465,23 @@ export function setPrivate(code: Code, names: Names, variant: Id, on: boolean): 
   const { private: _, ...open } = v;
   return { ok: true, code: { nodes: { ...code.nodes, [variant]: on ? { ...v, private: true } : open }, defs: code.defs }, names, select: variant,
     note: on ? `${nameOf(names, variant)} is private: this program builds it, and a program that uses the type builds one with this program's functions.` : `${nameOf(names, variant)} is public: anyone may build it.` };
+}
+
+// The steps of an effect (L229, steps.ts): the type `Steps of E`, a case
+// per operation with its rest plus done, and `steps of E`, the handler
+// that gives a computation's first operation of E back as one of them.
+// Made once, from the effect as it is now.
+export function makeSteps(code: Code, names: Names, effect: Id): Top {
+  const why = cantStep(code, effect);
+  if (why) return { ok: false, reason: `${nameOf(names, effect)} can't be stepped over: ${why}` };
+  const made = `steps of ${nameOf(names, effect)}`;
+  if (code.defs.some((d) => names[d] === made)) return { ok: false, reason: `${made} is made already` };
+  const k = new Lang(code);
+  k.code = { nodes: { ...code.nodes }, defs: [...code.defs] };
+  k.names = { ...names };
+  const st = stepsOf(k, effect);
+  return { ok: true, code: k.code, names: k.names, select: st.steps,
+    note: `${made} runs a computation to its first operation of ${nameOf(names, effect)} and gives it back as a Steps of ${nameOf(names, effect)}: a case per operation with the rest of the run, or done with its value. Match it to drive the computation yourself, a scheduler of fibers say.` };
 }
 
 export function setLater(code: Code, names: Names, variant: Id, on: boolean): Top {

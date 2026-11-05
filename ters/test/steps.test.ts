@@ -113,3 +113,19 @@ test("the steps of an effect answered now: Ask stepped, and answered at once els
   assert.deepEqual(await p.compiled(), want);
   assert.deepEqual(p.core(), want);
 });
+
+test("the editor makes the steps of an effect once, and says why it can't", async () => {
+  const { makeSteps } = await import("../src/lang/toplevel.ts");
+  const k = new Lang();
+  const Y = k.effect("Yield", [["yield", [], () => k.tref(UNIT), "later"]]);
+  const r = makeSteps(k.code, k.names, Y.def);
+  assert.ok(r.ok);
+  if (!r.ok) return;
+  assert.equal(r.names[r.select], "steps of Yield");
+  assert.ok(r.code.defs.some((d) => r.names[d] === "Steps of Yield"));
+  const again = makeSteps(r.code, r.names, Y.def);
+  assert.deepEqual(again, { ok: false, reason: "steps of Yield is made already" });
+  const T = k.type("Plain", [], [["one", []]]);
+  const no = makeSteps(k.code, k.names, T.def);
+  assert.equal(no.ok, false);
+});
