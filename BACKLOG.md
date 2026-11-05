@@ -82,7 +82,6 @@ New targets and speed rank below every language item (Ersagun,
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| C178 | Bug: `all(seeded(9, search))`, seeded inside a search that draws, gives other draws in the core IR's JavaScript ([917, 753, 754]) than the evaluator ([917, 812, 963], the same as seeded around the search). Example: compiler/test/effects.test.ts "Random: seeded draws", which asserts the answers differ until this is fixed | C137 r6 | P1 | S | |
 | C179 | Bug: pages on the core IR's JavaScript differ from the evaluator's: a view waiting for its fetch shows the wait's message where the evaluator's shows nothing, and a formula that never ends runs on (no steps stop it, where the evaluator's part says it didn't finish). Example: compiler/test/web.test.ts "fetching in a page", which asserts the pages differ until this is fixed, and "a formula that never ends", drawn by the evaluator only until then | C137 r6 | P1 | M | |
 | C139 | Library types out of the core passes. Example: Extended shows the same on every target through its own Shown. Left: Extended's and the algebras' show (they have no Shown yet). | [FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md) §7 | P3 | M | |
 
