@@ -37,3 +37,21 @@ test("a Choice piece reads by its alternatives, blanks greedily (L72e2)", () => 
   for (const line of ["[1,2]", "[ 1 , 2 ]", "[\n\t1;2\n]", "[-1;  20]"]) assert.deepEqual((read(line, 0) as { fields?: Value[] } | null)?.fields, line.includes("-") ? [-1, 20] : [1, 2], JSON.stringify(line));
   for (const line of ["[1 2]", "[1,,2]", "[ 1,2", " [1,2]"]) assert.equal(read(line, 0), null, JSON.stringify(line));
 });
+
+// The reader written as a definition (reader.ts, L72e2b): a recursive
+// piece (blank) gets a reader of its own, its Choices keeping the reading
+// that goes farther, so compiled targets read as descent does.
+test("the written reader reads a Choice piece as descent does (L72e2b)", async () => {
+  const { writeReader } = await import("../src/lang/reader.ts");
+  const { showValue } = await import("../src/lang/run.ts");
+  const w = writeReader(code, printer, names);
+  const all = { nodes: { ...code.nodes, ...w.code.nodes }, defs: [...code.defs, ...w.code.defs.filter((d) => !code.defs.includes(d))] }, allNames = { ...names, ...w.names };
+  const info = infer(all, allNames);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const rr = makeRunner(all, info, { print: () => {}, names: allNames });
+  for (const line of ["[1,2]", "[ 1 , 2 ]", "[\n\t1;2\n]", "[-1;  20]", "[1 2]", "[1,,2]", "[ 1,2", " [1,2]"]) {
+    const got = [...(rr.call(rr.value(w.line), line) as Iterable<Value>)][0];
+    const want = read(line, 0);
+    assert.equal(showValue(got, all, allNames), want === null ? "none" : `some(${showValue(want, code, names)})`, JSON.stringify(line));
+  }
+});

@@ -70,6 +70,16 @@ export function writeReader(code: Code, printer: Id, names: Record<Id, string>):
     { variant: SOME, names: ["read"], body: ([p]) => k.match(k.x(p), [{ variant: tupleVariant(2), names: ["at", "value"], body: ([a, v]) => f(a, v) }]) },
     { variant: NONE, names: [], body: () => none() },
   ]);
+  // The one of two readings that reads farther, the first if they tie
+  // (L72e2b, as descent.ts reads a Choice).
+  const atOf = (p: Id, f: (at: Id) => Id) => k.match(k.x(p), [{ variant: tupleVariant(2), names: ["at", "value"], body: ([a]) => f(a) }]);
+  const farther = (a: Id, b: Id) => k.match(a, [
+    { variant: SOME, names: ["read"], body: ([p]) => k.match(b, [
+      { variant: SOME, names: ["other"], body: ([q]) => atOf(p, (pa) => atOf(q, (qa) => k.if(k.call(INT_OPS.less, pa, qa), k.call(SOME, q), k.call(SOME, p)))) },
+      { variant: NONE, names: [], body: () => k.call(SOME, p) },
+    ]) },
+    { variant: NONE, names: [], body: () => b },
+  ]);
   // The first of two readings that is one.
   const orElse = (a: Id, b: Id) => k.match(a, [
     { variant: SOME, names: ["read"], body: ([p]) => k.call(SOME, p) },
@@ -166,6 +176,11 @@ export function writeReader(code: Code, printer: Id, names: Record<Id, string>):
         });
         return ways.reduceRight((rest, w) => orElse(w, rest));
       }
+      // A Choice of arms, `if one of([…]) then a else b` (L72e2b): each
+      // read, the one that reads farther kept.
+      const sc = node(n.scrutinee);
+      if (sc?.kind === "call" && !isUse(sc as never) && target(sc.fn) === S.oneOf)
+        return n.arms.map((x) => node(x)!).map((a) => piece(a.body, text, at, env, inputs, tops, next)).reduceRight((rest, w) => farther(w, rest));
       // Each arm of the guard, read, then the guard checked.
       const ways = n.arms.map((x) => node(x)!).map((a) => {
         if (a.variant !== TRUE && a.variant !== FALSE) throw new Unsupported("reads a match that isn't on a Bool");
@@ -199,6 +214,21 @@ export function writeReader(code: Code, printer: Id, names: Record<Id, string>):
       if (!b || !s || "b" in s) throw new Unsupported("reads show of something other than an input");
       return k.let("end", k.call(run, text, at, floatChar()), (end) =>
         then(k.call(floatOf(), text, at, end), (a, v) => next(a, new Map(env).set(b, { b: v }))));
+    }
+    // one of(texts) (L72e2b): the longest of them there first.
+    if (f === S.oneOf) {
+      const l = node(n.args[0]);
+      const items = l?.kind === "call" && !isUse(l as never) && target(l.fn) === S.listOf ? l.args.map((x) => node(x)) : [];
+      if (!items.length || items.some((x) => x?.kind !== "lit")) throw new Unsupported("reads one of something other than texts written out");
+      const texts = items.map((x) => String(x!.value)).sort((a, b) => b.length - a.length);
+      return texts.reduceRight<Id>((rest, t) => orElse(k.if(startsWith(text, at, k.lit(t), k.int([...t].length)), k.let("at", plus(at, [...t].length), (a) => next(a, env)), none()), rest), none());
+    }
+    // A definition that reads itself (L72e2b: blank), given only what is
+    // known: a reader of its own, `read <name>(text, at, inputs…)`, giving
+    // where it ends; its Choices keep the reading that goes farther.
+    if (f && code.nodes[f]?.kind === "def" && callsItself(f) && n.args.every((a) => { const x = target(a), sl = x ? env.get(x) : undefined; return !sl || "b" in sl; })) {
+      const d = pieceReader(f);
+      return then(k.call(d, text, at, ...n.args.map((a) => copy(a, env, inputs))), (a) => next(a, env));
     }
     if (named(f) === "spaced") return k.let("at", k.call(spaces, text, at), (a) => piece(n.args[0], text, a, env, inputs, tops, (a2, e) => k.let("at", k.call(spaces, text, a2), (a3) => next(a3, e))));
     // Needing no parentheses, the arm itself; needing some, the reader's
@@ -246,6 +276,31 @@ export function writeReader(code: Code, printer: Id, names: Record<Id, string>):
       : k.let(named(lets[i][0]) || "x", lets[i][1], (b) => go(i + 1, new Map(ins).set(lets[i][0], b)));
     return go(0, inputs);
   };
+
+  // Whether a definition's body calls it.
+  const callsItself = (f: Id) => {
+    const seen = new Set<Id>();
+    const walk = (id: Id | undefined): boolean => {
+      if (!id || seen.has(id)) return false;
+      seen.add(id);
+      const n = code.nodes[id] as unknown as Record<string, unknown> | undefined;
+      if (!n || (n.kind === "def" && id !== f)) return false;
+      if (n.kind === "ref" && n.target === f) return true;
+      return Object.entries(n).some(([key, v]) => key !== "id" && (typeof v === "string" ? walk(v) : Array.isArray(v) && v.some((x) => typeof x === "string" && walk(x))));
+    };
+    return walk(lambdaOf(f)?.body);
+  };
+  const pieceReaders = new Map<Id, Id>();
+  function pieceReader(f: Id): Id {
+    if (pieceReaders.has(f)) return pieceReaders.get(f)!;
+    const fn = lambdaOf(f);
+    if (!fn) throw new Unsupported(`reads ${named(f)}`);
+    const d = k.def(`read ${named(f) || "piece"}`);
+    pieceReaders.set(f, d);
+    k.define(d, k.fn(["text", "at", ...fn.params.map((p) => named(p) || "x")], (text, at, ...ps) =>
+      piece(fn.body, text, at, new Map(), new Map(fn.params.map((p, j) => [p, ps[j]] as const)), [], (end) => some(end, k.x(end)))));
+    return d;
+  }
 
   // A character a Float64's show may write: a digit, a sign, ".", e or E.
   const floatChar = () => k.fn(["c"], (c) => k.byValue(k.x(c), ["-", "+", ".", "e", "E"].map((x) => [k.lit(x), k.x(TRUE)] as [Id, Id]), isDigit ? k.call(isDigit, c) : k.x(FALSE)));
