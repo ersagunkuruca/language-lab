@@ -767,7 +767,10 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       // A field holding a function (C126), with the effects it names.
       if (n?.kind === "tfun") {
         const ps = n.params.map(te), ret = te(n.result);
-        return ps.every((x) => x) && ret ? { t: "fn", params: ps as Type[], ret, eff: { effs: n.effects ?? [], tail: null } } : null;
+        // The type's row parameter (L149) is the row its argument carries
+        // (the steps of an effect's rests, L229c).
+        const effs = (n.effects ?? []).flatMap((x) => { const a = args.get(x), r = a && info.subst.resolve(a); return r && r.t === "fn" ? info.subst.resolveRow(r.eff).effs : [x]; });
+        return ps.every((x) => x) && ret ? { t: "fn", params: ps as Type[], ret, eff: { effs, tail: null } } : null;
       }
       if (n?.kind !== "tref") return null;
       if (args.has(n.target)) return args.get(n.target)!;
