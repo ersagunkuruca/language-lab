@@ -10,7 +10,6 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { pathToFileURL } from "node:url";
 import { Lang } from "../../ters/src/lang/dsl.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { makeRunner } from "../../ters/src/lang/run.ts";
@@ -23,7 +22,6 @@ import { lowerScalar } from "../src/scalar.ts";
 import { emitWasm, fromInt, instantiate, toInt } from "../src/wasm.ts";
 import { CFLAGS, emitC } from "../src/c.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href;
 
 test("an array pushed twice gives two arrays, and a long run of pushes is linear", async () => {
   const k = new Lang(LIBRARY.code);

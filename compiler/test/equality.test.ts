@@ -6,7 +6,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { equal, sameNumber } from "../../ters/src/lang/run.ts";
-import { $eq } from "../src/runtime.js";
 import { Cells } from "../../ters/src/lang/cells.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { Lang } from "../../ters/src/lang/dsl.ts";
@@ -45,9 +44,7 @@ test("compiled equal gives the evaluator's answer on every boundary pair, at eve
 test("a value is equal to itself without being walked, and a cell written back with what it holds doesn't look (C85)", () => {
   const sealed = { tag: "t", fields: new Proxy([], { get: () => { throw new Error("walked"); } }) };
   const x = { tag: "pair", fields: [1, sealed] };
-  assert.equal($eq(x, x), true);
   assert.equal(equal(x as never, x as never), true);
-  assert.equal($eq({ tag: "pair", fields: [1, sealed] }, { tag: "pair", fields: [2, sealed] }), false);
   const cells = new Cells(equal), c = cells.cell(x as never);
   let woke = 0;
   cells.watch(() => { cells.read(c); woke++; });

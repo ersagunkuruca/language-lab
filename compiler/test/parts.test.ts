@@ -5,15 +5,12 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import { makeRunner, type Value } from "../../ters/src/lang/run.ts";
 import { compiledDefs, plainValue } from "../src/core-js.ts";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitWgsl } from "../src/wgsl.ts";
 import { parts } from "../src/fixtures.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href;
 
 test("vectors module: compiled JavaScript gives the evaluator's values", async () => {
   const p = parts();
