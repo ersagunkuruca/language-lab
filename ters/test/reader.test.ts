@@ -565,7 +565,7 @@ test("typed fraction at a type with a Literal is a literal of that type, and edi
   const { Lang } = await import("../src/lang/dsl.ts");
   const { base, baseNames } = await import("../src/lang/load.ts");
   const { ARITH } = await import("../src/lang/std.ts");
-  const { FIXED_TYPE } = await import("../src/lang/types.ts");
+  const { FIXED_TYPE } = await import("../src/lang/library.ts");
   const { setLit } = await import("../../editor/typed.ts");
   const k = new Lang();
   const f = k.def("f");
