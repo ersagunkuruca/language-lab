@@ -783,6 +783,26 @@ static int lab__kind(const char *p) { struct stat st; return stat(p, &st) ? 0 : 
   "fuel.swap": { uses: [], c: "static double lab_fuel_swap(double x) { double t = lab_fuel; lab_fuel = x; return t; }" },
   // A stop with a reason (L51c): its words, then as lab_stop (c.ts).
   "world.stopWith": { uses: [], c: `static double lab_world_stopWith(lab_cell *t) { lab_stop_why = (const char *)LAB_TB(t); lab_stop_n = LAB_TN(t); return lab_stop(-1); }` },
+  // The world's clock in milliseconds since 1970, and a wait that blocks
+  // (C44a), logged as Node's world logs now and wait (worldlog.ts).
+  "world.now": { uses: ["world.log"], c: `#include <time.h>
+static double lab_world_now(void) {
+  struct timespec ts;
+  clock_gettime(CLOCK_REALTIME, &ts);
+  double ms = (double)ts.tv_sec * 1000.0 + (double)(ts.tv_nsec / 1000000);
+  if (lab__log_begin("now")) { lab__log_answer(); fprintf(lab_log, "%.17g", ms); lab__log_close(); }
+  return ms;
+}` },
+  "world.sleep": { uses: ["world.log"], c: `#include <time.h>
+static double lab_world_sleep(double ms) {
+  if (lab__log_begin("wait")) { fprintf(lab_log, "%.17g", ms); lab__log_write(); }
+  if (ms > 0) {
+    struct timespec ts = { (time_t)(ms / 1000.0), (long)(fmod(ms, 1000.0) * 1000000.0) };
+    while (nanosleep(&ts, &ts) == -1) {}
+  }
+  fflush(stdout);
+  return 0;
+}` },
   "world.print": { uses: [], c: `static void lab_world_print(lab_cell *t) { fwrite(LAB_TB(t), 1, LAB_TN(t), stdout); putchar('\\n'); lab_drop(t); }` },
   // A seed from the world for Random's generator (C136): four bytes of
   // /dev/urandom, or the time and an address where there is none.
