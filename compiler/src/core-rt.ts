@@ -403,6 +403,8 @@ function worldFn(op: string, rt: Runtime, timers: Timers, handlers: Map<string, 
     case "writeFile": return (p, s) => tried(() => { w("writeFile")(p as string, s as string); return []; });
     case "appendFile": return (p, s) => tried(() => { w("appendFile")(p as string, s as string); return []; });
     case "fileExists": return (p) => w("fileExists")(p as string);
+    // A zone's offset (L188), NaN for a zone the host doesn't know.
+    case "zoneOffset": return (z, s) => T.zoneOffset(z as string, s as number)[0] ?? NaN;
     case "listFolder": return (p) => tried(() => toList(w("listFolder")(p as string)));
   }
   return () => { throw new Unsupported(`world ${op}`); };
