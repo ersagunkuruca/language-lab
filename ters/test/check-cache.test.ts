@@ -8,7 +8,7 @@ import { root } from "../src/io.ts";
 import { infer, type Info } from "../src/lang/infer.ts";
 import { CheckCache } from "../src/lang/check-cache.ts";
 import { LIBRARY } from "../src/lang/library.ts";
-import { checkOptions, loadProgram } from "../src/lang/load.ts";
+import { base, checkOptions, loadProgram } from "../src/lang/load.ts";
 import { OverMap, showIn } from "../src/lang/types.ts";
 import { subtree, type Code, type Id, type Node } from "../src/model.ts";
 import type { Names } from "../src/presentation.ts";
@@ -94,4 +94,16 @@ test("a program on the library's layer checks as the same nodes off it (E253)", 
     const plain: Code = { nodes: { ...p.code.nodes }, defs: [...p.code.defs] };
     assert.deepEqual(seen(infer(p.code, p.pres.names, undefined, checkOptions), p.pres.names), seen(infer(plain, p.pres.names, undefined, checkOptions), p.pres.names), example);
   }
+});
+
+test("a program on the library's layer finds its units' conflicts as off it (E253b)", () => {
+  // Whether a program declares a unit is a pick, read on the layer from the
+  // library's: physics with a length declared as a time.
+  const p = loadProgram(join(root, "examples", "physics"));
+  const id = "488golel4ceggodsb7h00un604";
+  const own: Code = { nodes: { ...p.own.nodes, [id]: { ...p.own.nodes[id], unit: { s: 1 } } as Node }, defs: p.own.defs };
+  const code = base(own), plain: Code = { nodes: { ...code.nodes }, defs: [...code.defs] };
+  const on = seen(infer(code, p.pres.names, undefined, checkOptions), p.pres.names);
+  assert.ok(on.errors.some((e) => /unit/.test(e)), JSON.stringify(on.errors));
+  assert.deepEqual(on, seen(infer(plain, p.pres.names, undefined, checkOptions), p.pres.names));
 });
