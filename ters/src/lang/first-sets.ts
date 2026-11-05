@@ -117,6 +117,8 @@ export function firstSets(code: Code, printer: Id, names: Record<Id, string>): F
     if (f === "builtin.fail") return { k: "text", f: NONE };
     if (f === "builtin.int.show") { const v = value(n.args[0], env, depth); return { k: "text", f: v.k === "int" && v.nonNegative ? one("digit") : union(one("digit"), one("-")) }; }
     if (f === printer) return { k: "text", f: one("itself") };
+    // A list's items between separators (L72b): none, or what an item starts with.
+    if (named(f) === "join all") return { k: "text", f: ANY };
     // A definition, or a function written in place, read through its body
     // with what it is given.
     const fn = f && code.nodes[f]?.kind === "def" ? lambdaOf(f) : node(n.fn)?.kind === "lambda" ? node(n.fn) : undefined;

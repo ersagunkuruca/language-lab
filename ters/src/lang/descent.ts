@@ -29,7 +29,7 @@ import { answerKeys } from "./ports.ts";
 import { intLit } from "./int.ts";
 import { INT } from "./types.ts";
 import { FALSE, TRUE } from "./std.ts";
-import { META, type Value } from "./run.ts";
+import { META, toList, type Value } from "./run.ts";
 import { firstSets } from "./first-sets.ts";
 import * as T from "./text.ts";
 import type { Reading } from "./relate.ts";
@@ -290,6 +290,40 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
         return must ? null : read(n.args[1], env, at);
       };
       return parens(at, needed);
+    }
+    // join all(map(xs, g), sep): xs's items each read by g, between seps
+    // (L72b), none too; xs an input list, or the characters of an input
+    // Text, which are then put back together.
+    if (named(f) === "join all") {
+      const m = node(n.args[0]);
+      if (m?.kind !== "call" || isUse(m as never) || named(target(m.fn)) !== "map") throw new Unsupported("reads join all of something other than a map");
+      const sep = evaluate(n.args[1], env);
+      if (typeof sep !== "string") throw new Unsupported("reads join all with a separator not known");
+      const src = node(m.args[0]), chars = src?.kind === "call" && !isUse(src as never) && target(src.fn) === "builtin.text.characters";
+      const xs = chars ? target(src!.args[0]) : target(m.args[0]);
+      if (!xs || !isUnknown(env.get(xs))) throw new Unsupported("reads join all of a list other than an input");
+      const item = (at: number): [number, Value] | null => {
+        const g = node(m.args[1]), gt = target(m.args[1]);
+        if (gt === printer) { if (top.params.length !== 1) throw new Unsupported("reads the printer with other inputs in a list"); return expression(at, []); }
+        const fn = gt && code.nodes[gt]?.kind === "def" ? lambdaOf(gt) : g?.kind === "lambda" ? g : undefined;
+        if (!fn || fn.params.length !== 1) throw new Unsupported(`reads a list's items by ${named(gt) || "this"}`);
+        const r = read(fn.body, new Map(env).set(fn.params[0], { unknown: "int" }), at);
+        const v = r?.[1].get(fn.params[0]);
+        if (!r || v === undefined || isUnknown(v)) return null;
+        return [r[0], v];
+      };
+      const items: Value[] = [];
+      let end = at;
+      for (let first = item(at); first;) {
+        items.push(first[1]); end = first[0];
+        if (!sep ? false : !text.startsWith(sep, end)) break;
+        const next = item(end + sep.length);
+        if (!next) { if (sep) expect(end + sep.length); break; }
+        first = next;
+        if (!sep && first[0] === end) break;
+      }
+      const v = chars ? items.join("") : toList(items);
+      return [end, new Map(env).set(xs, v)];
     }
     if (f === printer) {
       const x = target(n.args[0]);
