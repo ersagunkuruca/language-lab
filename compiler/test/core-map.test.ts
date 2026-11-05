@@ -1,6 +1,7 @@
 // `lab compile` writes the compiled module's map beside it (C143c): each
 // printed function's node by its name, and each stop site's node and
-// definition, ids only, which the module itself no longer carries.
+// definition, and which binder each local holds (C143d), ids only, which
+// the module itself no longer carries.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -19,6 +20,14 @@ test("the compiled module's map names each function's node and each stop's (C143
   assert.equal(Object.keys(m.functions).length, ir.funcs.length);
   assert.ok(Object.values(m.functions).every((id) => id in ir.code.nodes));
   assert.ok(m.stops.every((s) => s.node in ir.code.nodes));
+  // Which binder each local holds (C143d): binders of the program, in
+  // functions the module prints.
+  const held = Object.entries(m.locals);
+  assert.ok(held.length > 0);
+  for (const [fn, ls] of held) {
+    assert.ok(fn in m.functions);
+    for (const [l, id] of Object.entries(ls)) { assert.match(l, /^l\d+$/); assert.equal(ir.code.nodes[id]?.kind, "binder", `${fn}.${l}`); }
+  }
   const dir = mkdtempSync(join(tmpdir(), "map-"));
   const r = spawnSync(process.execPath, [join(import.meta.dirname, "../../ters/cli/lab.ts"), "compile", join(import.meta.dirname, "../../ters/examples/calc"), "-o", "calc.mjs"], { cwd: dir, encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr);
