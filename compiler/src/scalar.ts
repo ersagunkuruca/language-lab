@@ -2079,7 +2079,37 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       },
     };
     if (fails(g.body, funcs)) g.partial = true;
-    return { fn: gi, start: expr(nil.body, env, f, false), array };
+    const start = expr(nil.body, env, f, false);
+    if (opts.host) restAsView((g.body as Extract<SExpr, { k: "if" }>).else, start, array, k, x);
+    return { fn: gi, start, array };
+  }
+  // `array of List`'s own fold hands each arm the rest of the array as it
+  // goes, pushing each item onto what it had: a new array per fold,
+  // though the rest after item k is the array's own items from k. Where
+  // the result so far is a record whose field j starts as an empty array
+  // and becomes push front(that field, the item) at each item, field j is
+  // made a view of the array from k instead (C30 s2b; core-rt.ts
+  // array.from), on the core IR's JavaScript, whose arrays are views.
+  // chapters: 707 to 531 ms.
+  function restAsView(step: SExpr, start: SExpr, array: AType, k: number, x: number) {
+    const push = `array.pushFront.a${array.index}`;
+    if (start.k !== "make") return;
+    // The step: the lets of the item and k, then the call with the new result.
+    let e: SExpr = step;
+    while (e.k === "let") e = e.body;
+    if (e.k !== "call") return;
+    let r = e.args[2];
+    const lets = new Map<number, SExpr>();
+    while (r.k === "let") { lets.set(r.i, r.value); r = r.body; }
+    if (r.k !== "make" || r.t !== start.t) return;
+    const acc = (s: SExpr) => s.k === "local" && (s.i === 2 || (lets.get(s.i)?.k === "local" && (lets.get(s.i) as { i: number }).i === 2));
+    r.args.forEach((a, j) => {
+      const s = start.args[j];
+      if (s?.k !== "rt" || s.fn !== `array.empty.a${array.index}` || a.k !== "rt" || a.fn !== push) return;
+      const [rest, item] = a.args, read = rest.k === "local" ? lets.get(rest.i) : undefined;
+      if (item.k !== "local" || item.i !== x || read?.k !== "get" || read.i !== j || !acc(read.rec)) return;
+      r.args[j] = { k: "rt", fn: `array.from.a${array.index}`, args: [{ k: "local", i: 0 }, { k: "local", i: k }] };
+    });
   }
   // What p's type variables stand for, where c is p at known types.
   function bindVars(p: Type, c: Type, types: At) {
