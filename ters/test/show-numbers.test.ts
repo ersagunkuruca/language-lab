@@ -9,9 +9,9 @@ import type { Id } from "../src/model.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
-import { COMPLEX_V, LIBRARY, FIXED_V } from "../src/lang/library.ts";
+import { COMPLEX_V, LIBRARY, FIXED_V, RATIO_V as RATIO } from "../src/lang/library.ts";
 import { equal, runMain, showerFor, showValue, type Value } from "../src/lang/run.ts";
-import { RATIO, S, SHOW_ANY } from "../src/lang/std.ts";
+import { S, SHOW_ANY } from "../src/lang/std.ts";
 import { parseValue } from "../src/lang/values.ts";
 const L = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
 

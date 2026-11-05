@@ -27,9 +27,8 @@ const of = (...ms: Module[]) => (...names: string[]): Id[] => names.map((name) =
 });
 const prelude = of(PRELUDE, NUMBERS), vectors = of(VECTORS), html = of(HTML_MODULE), steady = of(STEADY), cases = of(CASES);
 // Rational's and Fixed's `as float64`, the one name (L156), in that order.
-// (Fixed's is in the numbers module, L207e.)
-const [ratioAsFloat] = PRELUDE.exports.filter((e) => LIBRARY.names[e] === "as float64");
-const [fixedAsFloat] = NUMBERS.exports.filter((e) => LIBRARY.names[e] === "as float64");
+// (Both in the numbers module, L207e and L207f4.)
+const [ratioAsFloat, fixedAsFloat] = NUMBERS.exports.filter((e) => LIBRARY.names[e] === "as float64");
 const b = (...ops: string[]) => ops.map((op) => `builtin.${op}`);
 const t = (...names: string[]) => names.map((name) => `std.${name}`);
 
@@ -41,7 +40,7 @@ export const SECTIONS: Section[] = [
       ...t("division"), DIVIDE,
       ...b("div", "sqrt", "pow", "atan2", "abs", "floor", "mod", "float32", "show", "range"), ...prelude("show decimals", "near"),
       ...b("int.quotient", "int.remainder", "int.power", "int.lowestTerms", "int.read", "int.toNumber", "int.wholePart", "int.abs", "int.shiftDown", "int.show", "int.range"), ...prelude("whole of", "divided or"), ...prelude("range from"),
-      ...t("rational"), ...prelude("fraction", "as fraction"), ratioAsFloat,
+      ...prelude("Rational", "fraction", "as fraction"), ratioAsFloat,
       ...prelude("Complex", "as complex", "i", "complex conjugate", "modulus", "angle of", "from polar", "complex exp", "complex sqrt", "complex log", "complex power", "complex asin", "complex acos", "table product", "complex table", "clifford table", "clifford algebra", "clifford product", "clifford reverse", "clifford versor inverse", "clifford sandwich", "clifford reflect", "clifford project", "clifford exp", "clifford outer", "clifford inner", "clifford grade", "clifford dual", "clifford undual", "clifford regressive", "clifford part", "clifford with part"), ...t("tableEntry"), ...t("algebra"),
       ...prelude("Mat2", "Mat3", "Mat4", "matrix table"),
       ...prelude("Fixed", "as fixed"), fixedAsFloat, ...prelude("square root fixed"),

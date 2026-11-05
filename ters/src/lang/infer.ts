@@ -983,7 +983,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         // whole number, a decimal, top/bottom), which its Literal or
         // embedding spells out; a bottom of 0 is no number.
         else if (n.of && n.of !== STRING && typeof n.value === "string" && !/^\s*-?(\d+(\.\d*)?|\.\d+)(e[+-]?\d+)?\s*(\/\s*\d+\s*)?$/i.test(n.value)) err(id, `${JSON.stringify(n.value)} isn't a number`);
-        else if (n.of && n.of !== STRING && typeof n.value === "string" && /\/\s*0+\s*$/.test(n.value)) err(id, `${JSON.stringify(n.value)} isn't a fraction: its bottom is 0`);
+        else if (n.of && n.of !== STRING && typeof n.value === "string" && /\/\s*0+\s*$/.test(n.value)) err(id, `${JSON.stringify(n.value)} isn't a fraction: write a whole number, or top/bottom with the bottom not 0`);
         break;
       }
       case "ref": t = refType(id, n.target, env); break;

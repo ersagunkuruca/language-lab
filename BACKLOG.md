@@ -82,8 +82,6 @@ New targets and speed rank below every language item (Ersagun,
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| C178 | Bug: `all(seeded(9, search))`, seeded inside a search that draws, gives other draws in the core IR's JavaScript ([917, 753, 754]) than the evaluator ([917, 812, 963], the same as seeded around the search). Example: compiler/test/effects.test.ts "Random: seeded draws", which asserts the answers differ until this is fixed | C137 r6 | P1 | S | |
-| C179 | Bug: pages on the core IR's JavaScript differ from the evaluator's: a view waiting for its fetch shows the wait's message where the evaluator's shows nothing, and a formula that never ends runs on (no steps stop it, where the evaluator's part says it didn't finish). Example: compiler/test/web.test.ts "fetching in a page", which asserts the pages differ until this is fixed, and "a formula that never ends", drawn by the evaluator only until then | C137 r6 | P1 | M | |
 | C139 | Library types out of the core passes. Example: Extended shows the same on every target through its own Shown. Left: Extended's and the algebras' show (they have no Shown yet). | [FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md) §7 | P3 | M | |
 
 ### Bugs and gaps found by programs
@@ -168,18 +166,16 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L207 | The number types leave std.ts for the `numbers` module written in the language (numbers-source.ts), ids kept for saved programs (L184). Dual, Complex, Mat2 to Mat4, Matrix and Fixed done (L207a to L207e); no builtin's type names Rational (L207f1), compare and the fraction relation find it by its own definitions (L207f2). Example: Rational, with its + − · ÷ <, Literal, Shown and embeddings, is the module's and std.ts names it nowhere; done when it is (signs.ts and tests.ts still name RATIO or RATIONAL; run.ts, relate.ts and infer.ts no longer, L207f2, L207f3). Left after it: Algebra, Table entry, Trig, Extended, each its own row if it earns one. Algebraic stays host code | [MATHEMATICS-AS-LIBRARIES](docs/design/numbers/MATHEMATICS-AS-LIBRARIES-2026-11-03.md) | P3 | L | Dual, Complex, Mat2 to Mat4, Matrix, Fixed done |
 | L209 | Values stored in the smallest structure they stay in, chosen by the compiler through embeddings. Example: a Complex with no imaginary part kept as a Float64 in compiled code (EMBEDDINGS.md L208f, C lane, after L43c). Anything beyond it (a rotor as a quaternion, masks for std's own tables) needs its own row. Showing an inserted embedding in the editor is asked of Ersagun first | [MATHEMATICS-AS-LIBRARIES](docs/design/numbers/MATHEMATICS-AS-LIBRARIES-2026-11-03.md) | P3 | L | |
 | L44 | Linear maps, geometry and matrices ([MATRICES.md](docs/design/numbers/MATRICES.md)). Example: a program's rotation function compiled as a matrix product. Left: the compiler stores linear functions as matrices (C lane, C30b/c) | LANGUAGE-REVIEW-2026-10-24 | P1 | M | a-g done |
 | L43 | Grades as types ([GRADES.md](docs/design/numbers/GRADES.md)): rotors, blade masks, mask tables, staging by mask, the editor's mask names and masks as types done (L43a to L43e3, DONE.md). Example: Bounce, which passes vectors, spins and rotors as one 8-part type; done when it stores only each value's masked parts in compiled JS and WGSL (L43c, with the copies staging makes). Beyond it, a row if it earns one: the editor naming an input's mask in its type (L43e) | NUMBERS.md stage 4, [CLIFFORD-DEMOS](docs/reports/CLIFFORD-DEMOS-2026-10-31.md) B3 | P1 | L | rotors and masks done |
-| L118c | The evaluator compiles each definition to JavaScript closures once (closure compilation, Feeley and Lapalme 1987), keeping the heap continuation only where a search or a handler needs it; likely 3-10x on all interpreted code; notebook's Run takes 3.2 s for 100 notes, half of it the evaluator's own machine (GAPS.md round 6 N6) ([EVALUATOR-SPEED-2026-10-31.md](docs/reports/EVALUATOR-SPEED-2026-10-31.md) step 2). For later: Ersagun stopped L118 after step 2 | Ersagun 2026-10-31 | P3 | L | for later |
+| L118c | The evaluator compiles each definition to JavaScript closures once (closure compilation, Feeley and Lapalme 1987), keeping the heap continuation only where a search or a handler needs it; likely 3-10x on all interpreted code; notebook's Run takes 3.2 s for 100 notes, half of it the evaluator's own machine (GAPS.md round 6 N6) ([EVALUATOR-SPEED-2026-10-31.md](docs/reports/EVALUATOR-SPEED-2026-10-31.md) step 2). For later: Ersagun stopped L118 after step 2. Measured 2026-11-05 (Editor lane): notebook with 500, 1,000 and 2,000 notes and as many queries, `lab run` against the same program compiled through the core IR (`lab compile`): the run itself (startup of 6.3 s taken off) 5.4 s against 0.25, 19.9 against 0.44, 76 against 2.0, 22 to 45 times; nearly all of it the evaluator's own machine (run.ts going, step, resume, apply). So it would earn far more than 10%; but the core IR's JavaScript is that compilation already, and `lab run` handing a program that lowers to it, keeping the evaluator for what it doesn't, may be the smaller step | Ersagun 2026-10-31 | P3 | L | for later |
 | L88 | Exact reals ([EXACT-REALS.md](docs/design/numbers/EXACT-REALS.md)). Example: `real less than` at Real answers with Diverge instead of fuel. Left: that one <, when a program asks for it | Ersagun 2026-10-26 | P2 | L | e1-e5 done |
 
 ### Data and representations (DATA-STRUCTURES.md, REPRESENTATIONS.md)
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L212 | A hash array mapped trie for Map and Set, and RRB vectors (32-wide) for `tree of List`, as further representations ([DATA-STRUCTURES.md](docs/design/data/DATA-STRUCTURES.md) "Later representations"): only when a program measures the need, as C63's hash tables did. Credit Bagwell (HAMT, 2001) and Bagwell and Rompf (RRB, 2012), prior art | L61's rest | P3 | M | |
 | L101 | **Later goal**: multithreading where uniqueness allows it (rayon), effect rows deciding what runs side by side (§5) | Ersagun 2026-10-29 | P3 | L | |
 | L21 | Folds: a `build` row for user producers, folds with `Choice` asking the table | ROADMAP 5 | P3 | L | |
 
@@ -223,7 +219,7 @@ agent with inertia. All later goals.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L22 | Profiles inferred like effects and shown in the editor ("runs on the GPU"). L22a done: a definition's panel shows where it runs, from the lowering's refusals. Left: the profile inferred in the type, as an effect is, so a caller is told without lowering | REVIEW-2026-10-22b §5 | P3 | L | |
+| L22 | Profiles inferred like effects and shown in the editor ("runs on the GPU"). L22a done: a definition's panel shows where it runs, from the lowering's refusals; L22b done: told at once from its own type (profiles.ts). Left: the profile carried in the type, as an effect is, so a caller is told without lowering: not by calls alone, since a call given a list written out is one the lowering unrolls (calculus's parabola calling polynomial) | REVIEW-2026-10-22b §5 | P3 | L | |
 | L24 | Research as it becomes blocking: costs from folds, laws proved by fusion, fast invertible parsing | ROADMAP 8 | P3 | L | |
 
 ### Blind spots ([BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md))

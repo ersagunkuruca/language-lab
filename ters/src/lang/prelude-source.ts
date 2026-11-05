@@ -9,7 +9,7 @@ import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { library } from "./programs.ts";
-import { LITERAL_V, FILE_OPS, NEXT_LINE_OP, WRITE_LINE_OP, NEXT_BYTES_OP, ADD_BYTES_OP, ZONE_OPS, ABORT_OP, ARITH, CELL_OPS, COMPARE, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, TICKET_V, AWAIT_OP, START_TIMER_OP, NOW_OP, WAIT_OP, BRANCH_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, DIVISION_V, SHOWN_V, BITS_V, WORD_SIZES, WORD_V, EXTENDED_V, ALGEBRAIC_OPS, REAL_OPS, CHECK_OP, RANDOM_OP, QUEUE_V, PRIORITY_QUEUE_V, TENSOR_V, BYTES_V, JSON_V, DATE_V, TIME_OF_DAY_V, INSTANT_V, EMBEDDING_V, STATE_OPS, PIPE_OPS, std } from "./std.ts";
+import { LITERAL_V, FILE_OPS, NEXT_LINE_OP, WRITE_LINE_OP, NEXT_BYTES_OP, ADD_BYTES_OP, ZONE_OPS, ABORT_OP, ARITH, CELL_OPS, COMPARE, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, TICKET_V, AWAIT_OP, START_TIMER_OP, NOW_OP, WAIT_OP, BRANCH_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, DIVISION_V, SHOWN_V, BITS_V, WORD_SIZES, WORD_V, EXTENDED_V, ALGEBRAIC_OPS, REAL_OPS, CHECK_OP, RANDOM_OP, QUEUE_V, PRIORITY_QUEUE_V, TENSOR_V, BYTES_V, JSON_V, DATE_V, TIME_OF_DAY_V, INSTANT_V, EMBEDDING_V, STATE_OPS, PIPE_OPS, std } from "./std.ts";
 
 export function buildPrelude(): Module {
   const k = new Lang();
@@ -233,44 +233,6 @@ export function buildPrelude(): Module {
   ]));
   const minimum = extreme("minimum", X.plus, (a, b) => k.call(extLess, a, b));
   const maximum = extreme("maximum", X.minus, (a, b) => k.call(extLess, b, a));
-
-  // Fractions: exact, kept in lowest terms by `lowest terms` (std.ts), so
-  // each has one spelling. The arithmetic is what the one generic `+ − ·
-  // <` resolves to at Rational (arith.ts), so it isn't offered on its own;
-  // `fraction` makes one, `÷` divides, `show fraction` prints 3/4.
-  const pair = (v: Id, f: (a: Id, b: Id) => Id) => k.match(v, [{ variant: PAIR_V, names: ["top", "bottom"], body: ([a, b]) => f(a, b) }]);
-  const ratio = (v: Id, f: (top: Id, bottom: Id) => Id, names = ["top", "bottom"]) => k.match(v, [{ variant: RATIO, names, body: ([a, b]) => f(a, b) }]);
-  const reduced = (top: Id, bottom: Id) => pair(k.call(INT_OPS.lowestTerms, top, bottom), (a, b) => k.call(RATIO, a, b));
-  const i = { add: (a: Id, b: Id) => k.call(INT_OPS.add, a, b), sub: (a: Id, b: Id) => k.call(INT_OPS.sub, a, b), mul: (a: Id, b: Id) => k.call(INT_OPS.mul, a, b) };
-  const two = (name: string, f: (p: Id, q: Id, r: Id, t: Id) => Id) => {
-    const d = k.def(name);
-    k.define(d, k.fn(["a", "b"], (a, b) => ratio(a, (p, q) => ratio(b, (r, t) => f(p, q, r, t), ["top₂", "bottom₂"]))));
-    return d;
-  };
-  const fraction = k.def("fraction");
-  k.define(fraction, k.fn(["top", "bottom"], (top, bottom) => k.if(k.call(S.equal, bottom, k.int(0)), k.call(S.fail), reduced(top, bottom))));
-  const whole = k.def("as fraction");
-  k.define(whole, k.fn(["n"], (n) => k.call(RATIO, n, k.int(1))));
-  const addF = two("add fractions", (p, q, r, t) => reduced(i.add(i.mul(p, t), i.mul(r, q)), i.mul(q, t)));
-  const subF = two("subtract fractions", (p, q, r, t) => reduced(i.sub(i.mul(p, t), i.mul(r, q)), i.mul(q, t)));
-  const mulF = two("multiply fractions", (p, q, r, t) => reduced(i.mul(p, r), i.mul(q, t)));
-  const lessF = two("fraction less than", (p, q, r, t) => k.call(INT_OPS.less, i.mul(p, t), i.mul(r, q)));
-  const negF = k.def("negate fraction");
-  k.define(negF, k.fn(["a"], (a) => ratio(a, (p, q) => k.call(RATIO, k.call(INT_OPS.neg, p), q))));
-  const divF = two("divide fractions", (p, q, r, t) => k.if(k.call(S.equal, r, k.int(0)), k.call(S.fail), reduced(i.mul(p, t), i.mul(q, r))));
-  const showF = k.def("show fraction");
-  k.define(showF, k.fn(["a"], (a) => ratio(a, (p, q) => k.if(k.call(S.equal, q, k.int(1)), k.call(INT_OPS.show, p), k.call(S.concat, k.call(INT_OPS.show, p), k.call(S.concat, k.lit("/"), k.call(INT_OPS.show, q)))))));
-  // Rational into Algebraic and Real, and back from Algebraic (L207f1):
-  // through their builtins' top and bottom, so no builtin names Rational.
-  const ratAlg = k.def("as algebraic");
-  k.define(ratAlg, k.fn(["fraction"], (r) => ratio(r, (p, q) => k.call(ALGEBRAIC_OPS.fraction, p, q))));
-  const ratReal = k.def("as real");
-  k.define(ratReal, k.fn(["fraction"], (r) => ratio(r, (p, q) => k.call(REAL_OPS.fraction, p, q))));
-  const algRat = k.def("algebraic as fraction");
-  k.define(algRat, k.fn(["x"], (x) => pair(k.call(ALGEBRAIC_OPS.fractionParts, x), (p, q) => k.call(RATIO, p, q))));
-  const toNum = k.def("as float64");
-  k.define(toNum, k.fn(["a"], (a) => ratio(a, (p, q) => k.call(B.div, k.call(INT_OPS.toNumber, p), k.call(INT_OPS.toNumber, q)))));
-
   const n = { add: (a: Id, b: Id) => k.call(B.add, a, b), sub: (a: Id, b: Id) => k.call(B.sub, a, b), mul: (a: Id, b: Id) => k.call(B.mul, a, b), div: (a: Id, b: Id) => k.call(B.div, a, b) };
   // An algebra's product from its multiplication table (ALGEBRA-TABLES.md):
   // a and b are records of Float64s, each line says what two basis
@@ -745,22 +707,17 @@ export function buildPrelude(): Module {
   });
   const wordHelpers = wordDefs.flatMap((d) => [d.add, d.sub, d.mul, d.neg, d.less, d.and, d.or, d.xor, d.up, d.down, d.show]);
   const wordMakers = wordDefs.map((d) => d.as);
-  const rationalLiteral = k.def("rational literal");
-  k.define(rationalLiteral, k.fn(["top", "bottom"], (t, b) => reduced(t, b)));
   const impl = (name: string, v: Id, ops: Id[]) => { const d = k.def(name); k.define(d, k.call(v, ...ops.map((o) => k.x(o)))); return d; };
   const arithmetics = [
     impl("arithmetic at float64", ARITHMETIC_V, [B.add, B.sub, B.mul, B.neg]),
     impl("arithmetic at int", ARITHMETIC_V, [INT_OPS.add, INT_OPS.sub, INT_OPS.mul, INT_OPS.neg]),
-    impl("arithmetic at rational", ARITHMETIC_V, [addF, subF, mulF, negF]),
     impl("arithmetic at algebraic", ARITHMETIC_V, [ALGEBRAIC_OPS.add, ALGEBRAIC_OPS.sub, ALGEBRAIC_OPS.mul, ALGEBRAIC_OPS.neg]),
     impl("ordered at float64", ORDERED_V, [S.less]),
     impl("ordered at int", ORDERED_V, [INT_OPS.less]),
-    impl("ordered at rational", ORDERED_V, [lessF]),
     impl("ordered at algebraic", ORDERED_V, [ALGEBRAIC_OPS.less]),
     // A number written at Rational, Algebraic or Fixed (L204d): its digits
     // as top/bottom, kept exactly; at Fixed rounded once to the nearest
     // step of 2⁻³², halves up, so 0.1 is the same steps on every target.
-    impl("literal at rational", LITERAL_V, [rationalLiteral]),
     impl("literal at algebraic", LITERAL_V, [ALGEBRAIC_OPS.fraction]),
     ...wordDefs.flatMap((d) => [impl(`arithmetic at word${d.w}`, ARITHMETIC_V, [d.add, d.sub, d.mul, d.neg]), impl(`ordered at word${d.w}`, ORDERED_V, [d.less])]),
     // Text's < is `comes before`, alphabetical (L152): at most, smaller,
@@ -775,13 +732,11 @@ export function buildPrelude(): Module {
   // Int has none. Not offered: divide is.
   const divisions = [
     impl("division at float64", DIVISION_V, [B.div]),
-    impl("division at rational", DIVISION_V, [divF]),
     impl("division at algebraic", DIVISION_V, [ALGEBRAIC_OPS.divide]),
   ];
 
   // How each number type shows (L205): `show any` asks the type's Shown.
   const showns = [
-    impl("shown at rational", SHOWN_V, [showF]),
     ...wordDefs.map((d) => impl(`shown at word${d.w}`, SHOWN_V, [d.show])),
   ];
   // and, or, xor and shifts (L193): Int's own and each word's.
@@ -2156,14 +2111,12 @@ export function buildPrelude(): Module {
   // as closely as Float64 rounds, so lab test checks those with near.
   const embed = (name: string, map: Id) => { const d = k.def(name); k.define(d, k.call(EMBEDDING_V, map)); return d; };
   const embeddings = [
-    embed("int in rational", k.x(whole)),
     embed("int in float64", k.x(INT_OPS.toNumber)),
-    embed("rational in float64", k.x(toNum)),
   ];
-  const offered: Id[] = [...embeddings, extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, spaced, optionalParens, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, ratAlg, ratReal, algRat, tableProduct, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, sort, sortBy, sortWith, collated, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, tensorOf, tensorShape, tensorItems, rank, tensorSize, tensorEntry, tensorMap, tensorZipWith, reshaped, contracted, transposedBy, traced, bytesOf, byteItems, byteCount, byteAt, utf8Of, textOfUtf8, base64Of, bytesOfBase64, hexOf, bytesOfHex, jsonPrinted, jsonIndented, jsonRead, jsonSpelled, blank, jsonField, jsonAsNumber, jsonAsText, jsonAsBool, jsonAsList, csvPrinted, csvRows, csvRecords, csvOfRecords, dateOf, dateYear, dateMonth, dateDay, leapYear, daysInMonth, dayNumber, dateOfDay, weekday, addedDays, daysBetween, dateText, dateRead, timeOf, timeHour, timeMinute, timeSecond, secondsOfDay, timeOfSeconds, timeText, timeRead, secondsD, minute, hour, day, instantOf, secondsSince, laterBy, durationBetween, instantAt, dateAt, timeAt, instantText, instantRead, offsetText, instantTextIn, instantTextInZone, instantInZone, durationText, durationRead, currentInstant, waitFor, withState, changeState, withOpenFile, piped, ticketId, ...wordMakers, anyOf, together, race, within, simulated, near];
+  const offered: Id[] = [...embeddings, extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, spaced, optionalParens, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, tableProduct, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, sort, sortBy, sortWith, collated, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, tensorOf, tensorShape, tensorItems, rank, tensorSize, tensorEntry, tensorMap, tensorZipWith, reshaped, contracted, transposedBy, traced, bytesOf, byteItems, byteCount, byteAt, utf8Of, textOfUtf8, base64Of, bytesOfBase64, hexOf, bytesOfHex, jsonPrinted, jsonIndented, jsonRead, jsonSpelled, blank, jsonField, jsonAsNumber, jsonAsText, jsonAsBool, jsonAsList, csvPrinted, csvRows, csvRecords, csvOfRecords, dateOf, dateYear, dateMonth, dateDay, leapYear, daysInMonth, dayNumber, dateOfDay, weekday, addedDays, daysBetween, dateText, dateRead, timeOf, timeHour, timeMinute, timeSecond, secondsOfDay, timeOfSeconds, timeText, timeRead, secondsD, minute, hour, day, instantOf, secondsSince, laterBy, durationBetween, instantAt, dateAt, timeAt, instantText, instantRead, offsetText, instantTextIn, instantTextInZone, instantInZone, durationText, durationRead, currentInstant, waitFor, withState, changeState, withOpenFile, piped, ticketId, ...wordMakers, anyOf, together, race, within, simulated, near];
   // Each number's own show, from before the generic one showed every number
   // (L153, L156): kept so programs saved before still open, not offered.
-  const perTypeShows = [showF];
+  const perTypeShows: Id[] = [];
   const mapHelpers = [lastItem, putEntry, updateEntry, removeEntry, lookupEntry, hasEntry, pairsAsEntries, addItem_, removeItem_, hasItem_, unionItems, interItems, diffItems];
   const comments: Record<Id, string> = {
     [each]: "Runs the action on each item of the list in turn, for what it does (prints, writes a cell).",
@@ -2214,8 +2167,6 @@ export function buildPrelude(): Module {
     [extMul]: "a · b with ±∞: −2 · ∞ is −∞ and −∞ · −∞ is ∞. 0 · ∞ has no answer.",
     [minimum]: "The smallest of the numbers, as an Extended: +∞ when there are none, so it is minimum's identity and a fold over an empty list still has an answer.",
     [maximum]: "The largest of the numbers, as an Extended: −∞ when there are none.",
-    [fraction]: "top/bottom, exactly, in lowest terms (Euclid's algorithm, textbook); no answer when bottom is 0.",
-    [whole]: "The whole number n as a fraction, n/1.",
     [positionWhere]: "The position of the first item that passes the test, counting from 0, as some(position): position where([3, 8, 5], (x) ↦ 4 < x) is some(1); none when no item passes.",
     [change]: "The cell given f of what it holds: change(count, (n) ↦ n + 1) is write(count, read(count) + 1). Only event handlers can write.",
     [randomItem]: "An item of the list drawn at random, each as likely: random item([\"a\", \"b\", \"c\"]). No answer for an empty list (Choice). seeded gives the same draws every time.",
@@ -2236,14 +2187,6 @@ export function buildPrelude(): Module {
     [copies]: "A list of count copies of the item: copies(3, 0) is [0, 0, 0]. (repeated is Text's.)",
     [allPass]: "Whether every item passes the test; true for an empty list. Stops at the first that doesn't.",
     [anyPass]: "Whether some item passes the test; false for an empty list. Stops at the first that does.",
-    [divF]: "a ÷ b for fractions, exactly; no answer when b is 0. Not offered: the one divide works on every number but Int; kept so programs saved before still open.",
-    [showF]: "A fraction as 3/4, or 3 when it is whole. Not offered: the one show shows every number; kept so programs saved before still open.",
-    [toNum]: "The nearest Float64.",
-    [addF]: "What + is at Rational. Not offered on its own: + is.",
-    [subF]: "What − is at Rational. Not offered on its own: − is.",
-    [mulF]: "What · is at Rational. Not offered on its own: · is.",
-    [negF]: "What −x is at Rational. Not offered on its own: − is.",
-    [lessF]: "What < is at Rational. Not offered on its own: < is.",
     [sort]: "The list in order: numbers by value, text alphabetically (by code point), cases in the order their type lists them, then field by field (compare). A merge sort (von Neumann, 1945), bottom-up so it surely finishes: n log n steps.",
     [take]: "The first count items: take([a, b, c], 2) is [a, b]; a list with fewer gives them all. count steps.",
     [drop]: "The items after the first count: drop([a, b, c], 2) is [c]; a list with fewer gives []. count steps.",
@@ -2339,9 +2282,7 @@ export function buildPrelude(): Module {
     [waitFor]: "Waits for a duration (Wait): wait for(seconds(2)). The same as wait with the duration in milliseconds.",
     [timeRead]: "The time an ISO 8601 text writes, hour:minute:second in two digits each, the other way from time text. Stops on any other text.",
     [dateText]: "The date as ISO 8601 writes it, year-month-day: date text(date of(2026, 11, 3)) is \"2026-11-03\".",
-    [embeddings[0]]: "Int in Rational: n as the fraction n/1, the one map that keeps + − · and <.",
-    [embeddings[1]]: "Int in Float64: n as the Float64 nearest it, exact up to 2⁵³; + − · agree as closely as Float64 rounds.",
-    [embeddings[2]]: "Rational in Float64: top ÷ bottom, the Float64 nearest the fraction; + − · agree as closely as Float64 rounds.",
+    [embeddings[0]]: "Int in Float64: n as the Float64 nearest it, exact up to 2⁵³; + − · agree as closely as Float64 rounds.",
     [jsonIndented]: "The Json value as text over lines, each item and field on a line of its own and indented step spaces a level: the same text as JavaScript's JSON.stringify(value, null, step). A step below 1 prints it on one line, as json printed.",
     [jsonField]: "The value of an object's field with this name, the first if there are several. No answer for a missing field or a value that isn't an object.",
     [jsonAsNumber]: "The Float64 a json number holds; no answer for any other kind.",
@@ -2426,14 +2367,11 @@ export function buildPrelude(): Module {
     [within]: "The action's value as some(value) if it finishes within this many milliseconds, or none if the timer is ready first; the action is then dropped where it waits.",
     [simulated]: "Runs the action in a simulated world for tests: its timers, now and wait on a clock that starts at 0 and never really waits, and when several tickets are ready at the same moment, which goes on is picked with a second stream of numbers from the same seed, apart from the action's own Random (seeded by seed), so the same seed gives the same schedule every run, even after the action draws more or fewer numbers; another seed may give another, so an order that goes wrong is a seed to paste into a test (FoundationDB's deterministic simulation).",
     ...Object.fromEntries(awaitHelpers.map((d) => [d, simulatedHelpers.includes(d) ? "A helper of simulated. Not offered in the palette." : "A helper of together and race. Not offered in the palette."])),
-    [ratAlg]: "A fraction as an Algebraic number, exactly.",
-    [ratReal]: "A fraction as a Real, exactly.",
-    [algRat]: "The fraction an Algebraic number is, when it is one: algebraic as fraction(√2 · √2) is 2. No answer (Choice) for √2.",
     [applied]: "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette.",
   };
-  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, ...awaitHelpers, ...arithmetics, trigF, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, asinBy, acosBy, asinF, acosF, addF, subF, mulF, negF, lessF, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, divF, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...matrixHelpers, pipeOf, ...laws], merge(prelude, std));
+  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, ...awaitHelpers, ...arithmetics, trigF, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, asinBy, acosBy, asinF, acosF, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...matrixHelpers, pipeOf, ...laws], merge(prelude, std));
   if (!p.ok) throw new Error(`the prelude can't be published: ${p.reason}`);
   const at = (d: Id) => p.rename.get(d)!;
   const notes = Object.fromEntries(Object.entries(comments).map(([d, c]) => [at(d), c]));
-  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [...awaitHelpers, addF, subF, mulF, negF, lessF, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, divF, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...matrixHelpers, pipeOf, ...arithmetics, trigF, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, asinBy, acosBy, asinF, acosF, ...laws].map(at));
+  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [...awaitHelpers, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...matrixHelpers, pipeOf, ...arithmetics, trigF, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, asinBy, acosBy, asinF, acosF, ...laws].map(at));
 }

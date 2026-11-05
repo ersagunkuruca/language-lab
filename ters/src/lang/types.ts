@@ -68,7 +68,6 @@ export const STRING = "type.string";
 export const INT = "type.int";
 // std.ts's Rational (a data type, so its id is std's): exact, ordered,
 // with the prelude's arithmetic.
-export const RATIONAL_TYPE = "std.rational";
 // std.ts's Algebraic: exact roots of polynomials (EXACT-REALS.md), ordered,
 // with builtin arithmetic (src/lang/algebraic.ts).
 export const ALGEBRAIC_TYPE = "std.algebraic";

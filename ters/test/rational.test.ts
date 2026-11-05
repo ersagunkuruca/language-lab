@@ -120,8 +120,7 @@ test("smaller, larger and at most work on Int and fractions too; the old Float64
 // number) or at Complex (its real part), so ratio(1, 2) + 1 needs no
 // `as fraction`. arith.ts spells each as its constructor's call.
 test("literals at Rational and Complex: exact, in lowest terms, checked, and printed as written", async () => {
-  const { RATIONAL_TYPE } = await import("../src/lang/types.ts");
-  const { COMPLEX_TYPE } = await import("../src/lang/library.ts");
+  const { COMPLEX_TYPE, RATIONAL_TYPE } = await import("../src/lang/library.ts");
   const { renderBlocks } = await import("../src/lang/render.ts");
   const k = new Lang(LIBRARY.code);
   const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
@@ -155,17 +154,16 @@ test("literals at Rational and Complex: exact, in lowest terms, checked, and pri
 // any two sides give the third exactly. Through its Int steps it couldn't
 // run: undoing lowest terms has every multiple as an answer.
 test("fractions run backwards exactly: any two sides give the third", async () => {
-  const { RATIONAL_TYPE } = await import("../src/lang/types.ts");
+  const { RATIONAL_TYPE, RATIO_V: RATIO } = await import("../src/lang/library.ts");
   const { relate, showTerm } = await import("../src/lang/relate.ts");
-  const { RATIO } = await import("../src/lang/std.ts");
   const k = new Lang(LIBRARY.code);
   const q = (v: number | string) => k.at(RATIONAL_TYPE, v);
   const fn = (name: string, body: (x: Id) => Id) => { const d = k.def(name); k.define(d, k.fn(["x"], body)); return d; };
   const cases = [
-    { d: fn("third and a half", (a) => k.call(ARITH.add, k.call(ARITH.mul, a, q("1/3")), q("1/2"))), out: [5, 6], want: ["std.rational.ratio(1, 1)"] },
-    { d: fn("half less", (a) => k.call(ARITH.sub, q("1/2"), a)), out: [1, 6], want: ["std.rational.ratio(1, 3)"] },
-    { d: fn("negated", (a) => k.call(ARITH.add, k.call(ARITH.neg, a), q("1/4"))), out: [1, 2], want: ["std.rational.ratio(-1, 4)"] },
-    { d: fn("by three quarters", (a) => k.call(lib("divide fractions"), a, q("3/4"))), out: [2, 1], want: ["std.rational.ratio(3, 2)"] },
+    { d: fn("third and a half", (a) => k.call(ARITH.add, k.call(ARITH.mul, a, q("1/3")), q("1/2"))), out: [5, 6], want: [`${RATIO}(1, 1)`] },
+    { d: fn("half less", (a) => k.call(ARITH.sub, q("1/2"), a)), out: [1, 6], want: [`${RATIO}(1, 3)`] },
+    { d: fn("negated", (a) => k.call(ARITH.add, k.call(ARITH.neg, a), q("1/4"))), out: [1, 2], want: [`${RATIO}(-1, 4)`] },
+    { d: fn("by three quarters", (a) => k.call(lib("divide fractions"), a, q("3/4"))), out: [2, 1], want: [`${RATIO}(3, 2)`] },
     // 0 · x is 0 for every x, and never 1.
     { d: fn("nothing", (a) => k.call(ARITH.mul, q(0), a)), out: [1, 1], want: [] },
   ];

@@ -776,7 +776,22 @@ async function simplifyAppend() {
   await p.close();
 }
 
-const scenarios = { stuckRead, sharedField, matchByValue, deleteAndUndo, swapAndUndo, implementInterface, choiceAction, heldSeed, listItems, sharedRow, matchDeeper, foldFrom, answeredLater, helperAtValue, partToFunction, textPort, newAndDeleteDefinition, undoNewDefinition, keptOnReload, reorderInputs, looseParts, seededRun, shaderOpens, letNodes, simplifyAppend };
+// Where it runs, told from its type at once (L22b): with no worker to
+// lower it, a definition taking a List is still told it can't be a shader.
+async function whereTold() {
+  where = "where it runs, told from its type";
+  const p = await browser.newPage();
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  await p.goto(page);
+  await p.locator('[data-set="program"]', { hasText: "Insertion sort" }).first().click();
+  await p.locator("[data-def]", { hasText: /^insert$/ }).first().click();
+  await p.locator('[data-panel="node"]').click();
+  const side = (await p.locator(".side").first().innerText()).replace(/\s+/g, " ");
+  if (!side.includes("no: insert takes or gives List") || !side.includes("Told from its type")) errors.push(`${where}: the panel says ${side.slice(side.indexOf("Where it runs"), side.indexOf("Where it runs") + 160)}`);
+  await p.close();
+}
+
+const scenarios = { stuckRead, sharedField, matchByValue, deleteAndUndo, swapAndUndo, implementInterface, choiceAction, heldSeed, listItems, sharedRow, matchDeeper, foldFrom, answeredLater, helperAtValue, partToFunction, textPort, newAndDeleteDefinition, undoNewDefinition, keptOnReload, reorderInputs, looseParts, seededRun, shaderOpens, letNodes, simplifyAppend, whereTold };
 for (const [name, run] of Object.entries(scenarios)) {
   test(name, async () => {
     errors.length = 0;

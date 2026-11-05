@@ -151,10 +151,10 @@ test("fetching in a page: a view keeps what it shows until the reply, a handler 
     return { seen, asked };
   };
   const e = await draw("evaluator"), c = await draw("compiled");
-  // C179: on the core IR, a view waiting for its fetch shows the wait's
-  // message where the evaluator's shows nothing. Fails when that's fixed.
+  // A view waiting for its fetch keeps what it showed on the core IR too:
+  // the wait goes past the program's Abort handler (C179).
   assert.deepEqual(c.asked, e.asked);
-  assert.notDeepEqual(c.seen, e.seen, "C179 is fixed: check the pages are the same again");
+  assert.deepEqual(c.seen, e.seen);
   assert.deepEqual(e.seen.map((h) => [...h.matchAll(/<p>(.*?)<\/p>/g)].map((m) => m[1]).join(" | ")), [
     " |  | nothing yet",
     "hello |  | nothing yet",
@@ -202,10 +202,10 @@ test("a formula that never ends: its part says it didn't finish, and comes back 
     seen.push(root.html());
     return seen.map((h) => h.replace(/<button.*/, ""));
   };
-  // C179: on the core IR a formula that never ends runs on, with no
-  // steps to stop it, so only the evaluator's page is drawn here.
+  // On the core IR a definition that may not finish takes steps too (C179).
   const e = draw("evaluator");
   assert.deepEqual(e, ["<p>0", "<p>didn't finish", "<p>0"]);
+  assert.deepEqual(draw("compiled"), e);
 });
 
 test("for each keeps an item's row when the list changes, compiled the same", async () => {

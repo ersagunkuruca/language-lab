@@ -2,18 +2,19 @@
 // a copy of it at each (arith.ts), and as written it is Float64's. Given
 // what a caller gave its copy, the wire values run that copy and show its
 // values on the nodes it copies.
+import { LIBRARY, RATIO_V as RATIO } from "../src/lang/library.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
-import { ARITH, RATIO } from "../src/lang/std.ts";
+import { ARITH } from "../src/lang/std.ts";
 import { trace } from "../src/lang/trace.ts";
 import { showValue, type Value } from "../src/lang/run.ts";
 import type { Id, NodeOf } from "../src/model.ts";
 
 test("values on the wires of a definition main runs at another number type", () => {
-  const k = new Lang();
+  const k = new Lang(LIBRARY.code);
   const twice = k.def("twice");
   let sum = "";
   k.define(twice, k.fn(["x"], (x) => (sum = k.call(ARITH.add, x, x))));

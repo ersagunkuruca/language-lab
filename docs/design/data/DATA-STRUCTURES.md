@@ -123,7 +123,9 @@ and `compare` on a map through `meaning`, since the tree isn't canonical:
 
 - A hash array mapped trie (Bagwell, 2001) where keys hash and only folds
   need the order: folds then sort, which is n log n, so the chooser takes it
-  only when a program does many lookups and few folds.
+  only when a program does many lookups and few folds. Measured for L212
+  (2026-11-05) and not built: notebook with 2,000 notes and 2,000 queries
+  runs in 2.0 s compiled, its maps hash tables already.
 - A hash table changed in place when nobody else holds the map: Perceus
   reuse analysis (#202, native N5c) already finds where a value is unique.
 - Arrays aren't a type: they are C30's representation of `List`.
