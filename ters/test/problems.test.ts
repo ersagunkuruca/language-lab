@@ -51,6 +51,7 @@ const SMALLEST: Record<string, (k: Lang) => unknown> = {
   "fields-type-unknown": (k) => k.define(k.def("p"), k.fn(["v"], (v) => k.call(FIELDS.listed, v))),
   "json-type-unknown": (k) => k.define(k.def("p"), k.fn(["v"], (v) => k.call(JSON_OPS.of, v))),
   "private-to-library": (k) => k.define(k.def("p"), k.x("std.rational.ratio")),
+  "effect-two-types": (k) => { const y = k.effect("Yield", [["yield", [["v", (ps) => k.tref(ps[0])]], () => k.tref("std.unit")]], ["a"]); k.define(k.def("p"), k.thunk(() => k.seq(k.call(y.op.yield, k.x(TRUE)), k.call(y.op.yield, k.lit("hi"))))); },
   "unhandled-effect": (k) => { const a = ask(k); k.define(k.def("p"), k.call(a.op.ask)); },
   "no-cases": (k) => k.define(k.def("p"), k.fn(["b"], (b) => k.match(b, []))),
   "functions-in-data": (k) => k.define(k.def("p"), k.call(S.equal, k.fn(["x"], (x) => x), k.fn(["x"], (x) => x))),
@@ -83,6 +84,12 @@ const SMALLEST: Record<string, (k: Lang) => unknown> = {
   "embedding-open": (k) => k.define(k.def("p"), k.call(EMBEDDING_V, k.fn(["x"], (x) => x))),
   "embedding-not-record": (k) => k.define(k.def("p"), k.let("e", k.call(EMBEDDING_V, k.fn(["x"], (x) => k.call(S.show, x))), (e) => e)),
   "embedding-itself": (k) => k.define(k.def("p"), k.call(EMBEDDING_V, k.fn(["x"], (x) => k.call(INT_OPS.add, x, k.int(0))))),
+  // Two ways from A to D, through B and through C, and none straight.
+  "embedding-ways": (k) => {
+    const t = Object.fromEntries(["a", "b", "c", "d"].map((n) => [n, k.type(n.toUpperCase(), [], [[n, []]]).v[n]]));
+    const into = (from: string, to: string) => k.define(k.def(`${from} to ${to}`), k.call(EMBEDDING_V, k.fn(["x"], (x) => k.match(x, [{ variant: t[from], names: [], body: () => k.x(t[to]) }]))));
+    into("a", "b"); into("b", "d"); into("a", "c"); into("c", "d");
+  },
   "embedding-twice": (k) => k.define(k.def("p"), k.call(EMBEDDING_V, k.x(INT_OPS.toNumber))),
   "implementation-not-record": (k) => { const t = k.type("Colour", [], [["red", []]]); k.define(k.def("p"), k.let("s", k.call(SHOWN_V, k.fn(["c"], (c) => k.match(c, [{ variant: t.v.red, names: [], body: () => k.lit("red") }]))), (s) => s)); },
   "set-not-field": (k) => { k.type("Pt", [], [["pt", [["x", () => k.tref(NUMBER)]]]]); k.define(k.def("p"), k.fn(["r"], (r) => k.call(SET, k.fn(["q"], () => k.lit(1)), r, k.lit(2)))); },
