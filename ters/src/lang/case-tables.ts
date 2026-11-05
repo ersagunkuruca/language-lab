@@ -27,6 +27,17 @@ export interface CaseTables {
   lower: CaseTable;
   // Locale → its upper and lower mappings that differ from the root's.
   locales: Record<string, { upper: [number, number[]][]; lower: [number, number[]][] }>;
+  // What the rules that look around read (L214e2b), as [first, last] runs:
+  // Unicode's Cased and Case_Ignorable (final sigma, Greek's lone ή), and
+  // lists: Soft_Dotted letters, the marks Lithuanian puts a dot before
+  // (combining class 230, read off the host's `lt` lowercase), and the
+  // Greek letters with an accent (an acute, grave or circumflex in their
+  // decomposition), which Greek uppercase drops.
+  cased: [number, number][];
+  ignorable: [number, number][];
+  softDotted: number[];
+  above: number[];
+  greekAccented: number[];
 }
 
 // The locales whose case mapping isn't the root's: SpecialCasing's
@@ -69,16 +80,42 @@ function table(map: (s: string) => string): CaseTable {
   return { runs, several };
 }
 
+// The code points a property holds, as runs.
+function runsOf(has: (c: number) => boolean): [number, number][] {
+  const out: [number, number][] = [];
+  for (let c = 0; c < 0x110000; c++) {
+    if (c === 0xd800) c = 0xe000;
+    if (!has(c)) continue;
+    const last = out.at(-1);
+    if (last && last[1] === c - 1) last[1] = c; else out.push([c, c]);
+  }
+  return out;
+}
+
 function build(): CaseTables {
   const upper = table((s) => s.toUpperCase()), lower = table((s) => s.toLowerCase());
+  const is = (re: RegExp) => (c: number) => re.test(String.fromCodePoint(c));
+  const cased = runsOf(is(/\p{Cased}/u)), ignorable = runsOf(is(/\p{Case_Ignorable}/u));
+  const list = (rs: [number, number][]) => rs.flatMap(([a, b]) => Array.from({ length: b - a + 1 }, (_, i) => a + i));
+  const softDotted = list(runsOf(is(/\p{Soft_Dotted}/u)));
+  const above = list(runsOf((c) => /\p{Mn}/u.test(String.fromCodePoint(c)) && ("I" + String.fromCodePoint(c)).toLocaleLowerCase("lt").startsWith("i\u0307")));
+  const ACCENTS = [0x300, 0x301, 0x342, 0x344];
+  const greekAccented = list(runsOf((c) => /\p{Script=Greek}/u.test(String.fromCodePoint(c)) && /\p{L}/u.test(String.fromCodePoint(c)) && cps(String.fromCodePoint(c).normalize("NFD")).some((x) => ACCENTS.includes(x))));
   const locales: CaseTables["locales"] = {};
   for (const tag of TAILORED) {
     const up: [number, number[]][] = [], down: [number, number[]][] = [];
-    for (const c of differing((s) => s.toLocaleUpperCase(tag), (s) => s.toUpperCase())) up.push([c, cps(String.fromCodePoint(c).toLocaleUpperCase(tag))]);
+    // Each letter as it maps inside a word, before another letter: Greek
+    // keeps a lone ή's tonos, which the rules do (cases-source.ts).
+    const inWord = (s: string) => (s + "a").toLocaleUpperCase(tag).slice(0, -1);
+    const rootInWord = (s: string) => (s + "a").toUpperCase().slice(0, -1);
+    const asked = new Set([...differing((s) => s.toLocaleUpperCase(tag), (s) => s.toUpperCase())]);
+    // Greek's differ inside a word only (ή), so its letters are each asked.
+    for (let c = 0x370; c < 0x2000; c++) if (/\p{Script=Greek}/u.test(String.fromCodePoint(c))) asked.add(c);
+    for (const c of [...asked].sort((a, b) => a - b)) { const x = String.fromCodePoint(c); if (inWord(x) !== rootInWord(x)) up.push([c, cps(inWord(x))]); }
     for (const c of differing((s) => s.toLocaleLowerCase(tag), (s) => s.toLowerCase())) down.push([c, cps(String.fromCodePoint(c).toLocaleLowerCase(tag))]);
     locales[tag] = { upper: up, lower: down };
   }
-  return { upper, lower, locales };
+  return { upper, lower, locales, cased, ignorable, softDotted, above, greekAccented };
 }
 
 // A code point mapped by a table, as the library will (L214e2), with a

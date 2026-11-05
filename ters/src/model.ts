@@ -120,14 +120,20 @@ export type Use = Extract<NodeOf<"call">, { given: Record<string, Id> }>;
 // produced ports as one value. A load keeps it so (L211h): each engine takes
 // it as it is, and the passes that work on binders read the copy ports.ts
 // `filled` makes, with each port bound and given back.
-export const bindsOf = (n: Use): Record<string, Id> => n.binds ?? {};
+// A use with its ports bound and a body (L211l): what ports.ts `filled`
+// makes for the passes whose slots are binders, and what a saved use whose
+// ports aren't known keeps (SHAPE_STEPS). A reader that takes either asks
+// isBound, so the model's use can drop the two fields (L211 l3).
+export type Bound = Use & { binds: Record<string, Id>; body: Id };
+export const isBound = (n: Node | undefined | null): n is Bound => isUse(n) && n.body !== undefined;
+export const bindsOf = (n: Use): Record<string, Id> => (isBound(n) ? n.binds : {});
 export function bodyOf(n: Use): Id {
   if (n.body === undefined) throw new Error(`a use whose ports aren't known gives its ports as one value (${n.id})`);
   return n.body;
 }
 // A use's given expressions and its body when it has one, as a pass that
 // walks every expression reads them (L211d).
-export const useKids = (n: Use): Id[] => (n.body === undefined ? Object.values(n.given) : [...Object.values(n.given), n.body]);
+export const useKids = (n: Use): Id[] => (isBound(n) ? [...Object.values(n.given), n.body] : Object.values(n.given));
 // A function's ports (BACKLOG L225): its inputs and its results, in order,
 // read the same way whichever form it is written in. A definition with
 // results is a condition over all its parameters, some of them results
@@ -290,7 +296,7 @@ export function mapIds(n: Node, f: (id: Id) => Id): Node {
     case "lit": return n.of ? { ...n, id: f(n.id), of: f(n.of) } : { ...n, id: f(n.id) };
     case "binder": case "builtin": case "hole": return { ...n, id: f(n.id) };
     case "ref": return { ...n, id: f(n.id), target: f(n.target) };
-    case "call": return n.given ? { ...n, id: f(n.id), fn: f(n.fn), given: rec(n.given), ...(n.binds && { binds: rec(n.binds) }), ...(n.body !== undefined && { body: f(n.body) }) } : { ...n, id: f(n.id), fn: f(n.fn), args: n.args.map(f) };
+    case "call": return n.given ? { ...n, id: f(n.id), fn: f(n.fn), given: rec(n.given), ...(isBound(n) && { binds: rec(n.binds), body: f(n.body) }) } : { ...n, id: f(n.id), fn: f(n.fn), args: n.args.map(f) };
     case "lambda": return { ...n, id: f(n.id), params: n.params.map(f), body: f(n.body), ...(n.results ? { results: n.results.map(f) } : {}) };
     case "def": return { ...n, id: f(n.id), body: n.body === null ? null : f(n.body), ...(n.way ? { way: f(n.way) } : {}) };
     case "typedef": return { ...n, id: f(n.id), params: n.params.map(f), variants: n.variants.map(f), ...(n.row ? { row: n.row.map(f) } : {}) };

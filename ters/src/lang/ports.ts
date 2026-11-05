@@ -4,7 +4,7 @@
 // position.
 
 import type { Code, Id, Node, Use } from "../model.ts";
-import { derived, derivedFrom, fieldPorts, onLayer, useTarget } from "../model.ts";
+import { derived, derivedFrom, fieldPorts, isBound, onLayer, useTarget } from "../model.ts";
 import { SIGS, TUPLE_MAX, tupleVariant, tuplePart } from "./std.ts";
 import { Subst } from "./types.ts";
 import { forgetSpine } from "./spine.ts";
@@ -191,7 +191,7 @@ export function usesGiveTheirPorts(nodes: Record<Id, unknown>, library: Record<I
   for (const x of Object.values(nodes)) { const r = x as Node; if (r?.kind === "ref") reads.set(r.target, [...(reads.get(r.target) ?? []), r.id]); }
   for (const id of only ?? Object.keys(nodes)) {
     const n = nodes[id] as Node;
-    if (n?.kind !== "call" || !n.given || !n.binds || n.body === undefined) continue;
+    if (!isBound(n)) continue;
     const produced = (usePorts(code, n) ?? []).filter((k) => !(k in n.given!));
     const binds = n.binds, body = n.body;
     if (!produced.length || produced.length > TUPLE_MAX || Object.keys(binds).some((k) => !produced.includes(k))) continue;

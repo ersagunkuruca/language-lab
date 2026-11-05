@@ -25,7 +25,7 @@
 // The size-change check (Lee, Jones and Ben-Amram, 2001) then runs on
 // these sizes as it runs on pieces in infer.ts.
 
-import { isCall, isUse, type Code, type Id, type Node, type NodeOf } from "../model.ts";
+import { isCall, isUse, isBound, type Code, type Id, type Node, type NodeOf } from "../model.ts";
 
 // For each input i of the function being read, whether the value's spine
 // is shorter than input i's (true) or no longer (false). `one`: the value
@@ -129,7 +129,7 @@ function read(r: Reader, id: Id | undefined, env: Map<Id, Size>): Size {
   if (node.kind === "lambda") { read(r, node.body, env); return NONE(); }
   if (isUse(node)) {
     Object.values(node.given).forEach((g) => read(r, g, env));
-    if (node.body !== undefined) read(r, node.body, env);
+    if (isBound(node)) read(r, node.body, env);
     return NONE();
   }
   if (isCall(node)) {

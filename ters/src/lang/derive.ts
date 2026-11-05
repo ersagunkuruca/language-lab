@@ -54,7 +54,7 @@
 
 import { FN } from "../../../invertible/src/expr.js";
 import type { Code, Id, Node, NodeData, NodeOf } from "../model.ts";
-import { children, freshId, ownerOfTypeParts, useTarget, useNode, isCall, type Call, isUse, bindsOf } from "../model.ts";
+import { children, freshId, ownerOfTypeParts, useTarget, useNode, isCall, type Call, isUse, isBound } from "../model.ts";
 import { fieldShapes } from "./nested.ts";
 import type { Names } from "../presentation.ts";
 import { impl } from "../prelude.ts";
@@ -322,8 +322,8 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
           const sub = new Map(ctx.sub);
           const given = Object.fromEntries(Object.entries(n.given).map(([k, e]) => [k, copy(e, ctx)]));
           // With no body (L211f), the copy has none either.
-          if (n.body === undefined) return add({ kind: "call", fn: add({ kind: "ref", target: useTarget(nodes, n) }), given } as NodeData);
-          const binds = Object.fromEntries(Object.entries(bindsOf(n)).map(([k, b]) => [k, fresh([b], sub)[0]]));
+          if (!isBound(n)) return add({ kind: "call", fn: add({ kind: "ref", target: useTarget(nodes, n) }), given } as NodeData);
+          const binds = Object.fromEntries(Object.entries(n.binds).map(([k, b]) => [k, fresh([b], sub)[0]]));
           return add(useNode(add, useTarget(nodes, n), given, binds, copy(n.body, { ...ctx, sub })));
 
         }

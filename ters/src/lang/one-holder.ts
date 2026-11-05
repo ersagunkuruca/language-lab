@@ -34,7 +34,7 @@
 // Moura, 2019) decide ownership from the program.
 
 import type { Code, Id, NodeOf } from "../model.ts";
-import { subtree, isCall, type Call, isUse, bindsOf } from "../model.ts";
+import { subtree, isCall, type Call, isUse, isBound, bindsOf } from "../model.ts";
 import type { Info } from "./infer.ts";
 import { COMPARE, S, SHOW_ANY } from "./std.ts";
 import { CHOICE, type Type } from "./types.ts";
@@ -165,7 +165,7 @@ export function oneHolder(code: Code, info: Info, entry: Id, types: Set<Id>, job
           if (isUse(n)) {
             for (const g of Object.values(n.given)) ev(g, true, st);
             for (const b of Object.values(bindsOf(n))) if (tracked(b)) paths.set(b, b);
-            if (n.body !== undefined) ev(n.body, consume, st);
+            if (isBound(n)) ev(n.body, consume, st);
             return;
           }
           return call(n, consume, st);

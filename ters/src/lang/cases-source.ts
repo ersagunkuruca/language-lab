@@ -6,20 +6,22 @@
 // and test/cases.test.ts checks the two agree.
 //
 // A character maps by its locale's own difference first (Turkish and
-// Azeri's dotted and dotless i), then by the code points that map to
-// several (ß to SS), then by the runs. Two rules look at the letters
-// around, as Unicode's SpecialCasing has them:
+// Azeri's dotted and dotless i, Greek capitals without their accents),
+// then by the code points that map to several (ß to SS), then by the
+// runs. The rules that look at the letters around are SpecialCasing's and
+// CLDR's (L214e2b):
 //  - final sigma: Σ lowercase is ς after a cased letter and not before
-//    one, σ elsewhere. "Cased" here is a letter that has a case mapping,
-//    and a case-ignorable letter between (an apostrophe, a mark) isn't
-//    looked through yet;
+//    one, case-ignorable letters between (an apostrophe, a mark) looked
+//    through;
 //  - Turkish and Azeri: I followed by a combining dot above (U+0307)
-//    lowercases to i, the dot taken in.
-// Greek capitals lose their accents a letter at a time (the table);
-// what Greek uppercase does around them is left: a combining accent after
-// a letter dropped, and a diaeresis added where a dropped accent kept two
-// vowels apart. So is Lithuanian's dot kept before an accent (L214e2 in
-// DONE).
+//    lowercases to i, the dot taken in;
+//  - Lithuanian: I, J and Į keep a dot (U+0307) before an accent above
+//    when lowercased, and lose it after i and j when uppercased;
+//  - Greek uppercase: an ι or υ after a vowel whose accent was dropped
+//    gets a diaeresis (άι is ΑΪ), and a lone ή, "or", keeps its tonos.
+// Text is NFC where it enters (L214a), so Greek's combining accents are
+// mostly composed; one left apart after a letter is kept, unlike the
+// host's Greek uppercase.
 
 import { merge, type Id } from "../model.ts";
 import { prelude } from "../prelude.ts";
@@ -44,6 +46,7 @@ export function buildCases(): Module {
   const sub = (a: Id, b: Id) => k.call(INT_OPS.sub, a, b);
   const and = (a: Id, b: Id) => k.call(S.and, a, b);
   const not = (a: Id) => k.call(S.not, a);
+  const or = (...xs: Id[]) => xs.reduce((a, b) => k.call(S.or, a, b));
   const list = (xs: Id, nil: () => Id, cons: (x: Id, rest: Id) => Id) => k.match(xs, [
     { variant: NIL, names: [], body: nil },
     { variant: CONS, names: ["x", "rest"], body: ([x, rest]) => cons(x, rest) },
@@ -82,8 +85,6 @@ export function buildCases(): Module {
     { variant: NONE, names: [], body: () => k.match(k.call(found, c, sv), [
       { variant: SOME, names: ["to"], body: ([to]) => to },
       { variant: NONE, names: [], body: () => k.call(byRuns, c, rs) }]) }]));
-  // A letter with a case: one of the mappings moves it.
-  const cased = def("has a case", ["code"], (c) => not(and(same(k.call(byRuns, c, k.x(upperRuns)), k.list(c)), same(k.call(byRuns, c, k.x(lowerRuns)), k.list(c)))));
 
   // A locale's language: its tag up to the first "-".
   const language = def("case language", ["locale"], (l) => k.match(l, [{ variant: LOCALE_V, names: ["tag"], body: ([tag]) =>
@@ -97,25 +98,56 @@ export function buildCases(): Module {
   const text = def("case text", ["codes"], (cs) => list(cs, () => k.lit(""), (c, rest) =>
     k.text(k.call(S.first, k.thunk(() => k.call(TEXT_OPS.fromCode, c)), k.thunk(() => k.lit(""))), k.call(me, rest))));
 
+  // A code point among the runs of a property, [first, last] in a flat
+  // list of Ints, in order.
+  const pairs = (name: string, rs: [number, number][]) => { const d = k.def(name); k.define(d, ints(rs.flat())); defs.push(d); return d; };
+  const flat = (name: string, xs: number[]) => { const d = k.def(name); k.define(d, ints(xs)); defs.push(d); return d; };
+  const casedRuns = pairs("cased runs", tables.cased), ignorableRuns = pairs("case ignorable runs", tables.ignorable);
+  const softDotted = flat("soft dotted", tables.softDotted), above = flat("accents above", tables.above), greekAccented = flat("greek accented", tables.greekAccented);
+  const inRuns = def("case in runs", ["code", "runs"], (c, rs) => list(rs, () => k.x(FALSE), (from, r1) => list(r1, () => k.x(FALSE), (to, rest) =>
+    k.if(less(c, from), k.x(FALSE), k.if(less(to, c), k.call(me, c, rest), k.x(TRUE))))));
+  const among = def("case among", ["code", "codes"], (c, xs) => list(xs, () => k.x(FALSE), (x, rest) => k.if(same(x, c), k.x(TRUE), k.call(me, c, rest))));
+  const isCased = (c: Id) => k.call(inRuns, c, k.x(casedRuns)), isIgnorable = (c: Id) => k.call(inRuns, c, k.x(ignorableRuns));
+  // A cased letter comes next, case-ignorable ones looked through.
+  const casedNext = def("cased next", ["codes"], (cs) => list(cs, () => k.x(FALSE), (n, rest) => k.if(isIgnorable(n), k.call(me, rest), isCased(n))));
+  // After a cased letter, case-ignorable ones looked through.
+  const afterNow = (c: Id, after: Id) => k.if(isIgnorable(c), after, isCased(c));
+  const one = (xs: Id, x: number) => same(xs, k.list(k.int(x)));
+  const VOWELS = [0x391, 0x395, 0x397, 0x399, 0x39f, 0x3a5, 0x3a9];
+
   // xs then ys.
   const then = def("case then", ["xs", "ys"], (xs, ys) => list(xs, () => ys, (x, rest) => k.call(CONS, x, k.call(me, rest, ys))));
-  const upperAll = def("upper codes", ["codes", "own"], (cs, o) => list(cs, () => k.list(), (c, rest) =>
-    k.call(then, k.call(mapped, c, o, k.x(upperSeveral), k.x(upperRuns)), k.call(me, rest, o))));
-  // Σ is 0x3A3, σ 0x3C3, ς 0x3C2; I is 0x49, i 0x69, the dot above 0x307.
+  // "accented vowel": the letter before was a Greek vowel whose accent was
+  // dropped; "soft dot": an i or j before, and only marks not above since.
+  const upperAll = def("upper codes", ["codes", "own", "greek", "lithuanian", "after cased", "accented vowel", "soft dot"], (cs, o, el, lt, after, acc, soft) => list(cs, () => k.list(), (c, rest) =>
+    k.if(and(lt, and(soft, same(c, k.int(0x307)))), k.call(me, rest, o, el, lt, after, acc, soft),
+      k.let("mapped", k.call(mapped, c, o, k.x(upperSeveral), k.x(upperRuns)), (m0) =>
+      k.let("accented", and(el, k.call(among, c, k.x(greekAccented))), (accented) =>
+      k.let("upper", k.if(and(el, and(acc, one(m0, 0x399))), k.list(k.int(0x3aa)),
+        k.if(and(el, and(acc, one(m0, 0x3a5))), k.list(k.int(0x3ab)),
+          k.if(and(accented, and(one(m0, 0x397), and(not(after), not(k.call(casedNext, rest))))), k.list(k.int(0x389)), m0))), (m) =>
+      k.call(then, m, k.call(me, rest, o, el, lt, afterNow(c, after),
+        and(accented, list(m, () => k.x(FALSE), (x) => or(...VOWELS.map((v) => same(x, k.int(v)))))),
+        and(lt, k.call(S.or, k.call(among, c, k.x(softDotted)), and(soft, and(isIgnorable(c), not(k.call(among, c, k.x(above)))))))))))))));
+  // An accent above comes next, other marks looked through.
+  const aboveNext0 = def("accent above next", ["codes"], (cs) => list(cs, () => k.x(FALSE), (n, rest) =>
+    k.if(k.call(among, n, k.x(above)), k.x(TRUE), k.if(isIgnorable(n), k.call(me, rest), k.x(FALSE)))));
   // "dotted I": the I before was Turkish's I with a dot, whose dot is
   // taken into the i.
-  const lowerAll = def("lower codes", ["codes", "own", "after cased", "turkic", "dotted I"], (cs, o, after, tk, dotted) => list(cs, () => k.list(), (c, rest) =>
-    k.let("next cased", list(rest, () => k.x(FALSE), (n) => k.call(cased, n)), (nextCased) =>
+  const lowerAll = def("lower codes", ["codes", "own", "after cased", "turkic", "lithuanian", "dotted I"], (cs, o, after, tk, lt, dotted) => list(cs, () => k.list(), (c, rest) =>
     k.let("dot next", list(rest, () => k.x(FALSE), (n) => same(n, k.int(0x307))), (dotNext) =>
-    k.if(and(dotted, same(c, k.int(0x307))), k.call(me, rest, o, after, tk, k.x(FALSE)),
-      k.if(and(same(c, k.int(0x3a3)), and(after, not(nextCased))), k.call(CONS, k.int(0x3c2), k.call(me, rest, o, k.x(TRUE), tk, k.x(FALSE))),
-        k.if(and(tk, and(same(c, k.int(0x49)), dotNext)), k.call(CONS, k.int(0x69), k.call(me, rest, o, k.x(TRUE), tk, k.x(TRUE))),
-          k.call(then, k.call(mapped, c, o, k.x(lowerSeveral), k.x(lowerRuns)), k.call(me, rest, o, k.call(cased, c), tk, k.x(FALSE))))))))));
+    k.let("above next", k.call(aboveNext0, rest), (aboveNext) =>
+    k.if(and(dotted, same(c, k.int(0x307))), k.call(me, rest, o, after, tk, lt, k.x(FALSE)),
+      k.if(and(same(c, k.int(0x3a3)), and(after, not(k.call(casedNext, rest)))), k.call(CONS, k.int(0x3c2), k.call(me, rest, o, k.x(TRUE), tk, lt, k.x(FALSE))),
+        k.if(and(tk, and(same(c, k.int(0x49)), dotNext)), k.call(CONS, k.int(0x69), k.call(me, rest, o, k.x(TRUE), tk, lt, k.x(TRUE))),
+          k.let("mapped", k.call(mapped, c, o, k.x(lowerSeveral), k.x(lowerRuns)), (m) =>
+          k.call(then, k.if(and(lt, and(aboveNext, or(same(c, k.int(0x49)), same(c, k.int(0x4a)), same(c, k.int(0x12e))))), k.call(then, m, k.list(k.int(0x307))), m),
+            k.call(me, rest, o, afterNow(c, after), tk, lt, k.x(FALSE)))))))))));
 
   const upper = def("table uppercase", ["text", "locale"], (t, l) => k.let("language", k.call(language, l), (lang) =>
-    k.call(text, k.call(upperAll, k.call(codes, t), own(lang, trUpper, ltUpper, elUpper)))));
+    k.call(text, k.call(upperAll, k.call(codes, t), own(lang, trUpper, ltUpper, elUpper), same(lang, k.lit("el")), same(lang, k.lit("lt")), k.x(FALSE), k.x(FALSE), k.x(FALSE)))));
   const lower = def("table lowercase", ["text", "locale"], (t, l) => k.let("language", k.call(language, l), (lang) =>
-    k.call(text, k.call(lowerAll, k.call(codes, t), own(lang, trLower, ltLower), k.x(FALSE), turkic(lang), k.x(FALSE)))));
+    k.call(text, k.call(lowerAll, k.call(codes, t), own(lang, trLower, ltLower), k.x(FALSE), turkic(lang), same(lang, k.lit("lt")), k.x(FALSE)))));
 
   // Grapheme clusters (L214e3b): UAX #29's rules over the grapheme tables
   // (grapheme-tables.ts), as `graphemeBreaks` there has them. The tables
@@ -133,7 +165,6 @@ export function buildCases(): Module {
   const clsOf = (kind: Id) => k.call(INT_OPS.shiftDown, kind, k.int(3));
   const pictOf = (kind: Id) => same(k.call(INT_OPS.bitAnd, kind, k.int(4)), k.int(4));
   const conjOf = (kind: Id) => k.call(INT_OPS.bitAnd, kind, k.int(3));
-  const or = (...xs: Id[]) => xs.reduce((a, b) => k.call(S.or, a, b));
   const isCls = (x: Id, ...cs: GraphemeClass[]) => or(...cs.map((c) => same(x, k.int(cl(c)))));
   // Whether the clusters join between a and b, given what the rules that
   // look further know through a: flags in a row, an emoji then Extends
