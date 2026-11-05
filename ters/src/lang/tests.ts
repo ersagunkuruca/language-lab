@@ -16,7 +16,8 @@ import type { Names } from "../presentation.ts";
 import type { Info } from "./infer.ts";
 import { discharge } from "./ledger.ts";
 import { bool, makeRunner, showerFor, toList, unit, type Runtime, type Value } from "./run.ts";
-import { BOOL, CHECK, LIST, RATIO, RATIONAL, UNIT } from "./std.ts";
+import { ABORT_OP, BOOL, CHECK, CHECK_OP, LIST, RATIO, RATIONAL, UNIT } from "./std.ts";
+import { Lang } from "./dsl.ts";
 import { CHOICE, INT, NUMBER, STRING, type Type } from "./types.ts";
 import { parseValue } from "./values.ts";
 
@@ -147,17 +148,74 @@ export function runTests(code: Code, info: Info, names: Names, defs: Id[], saved
         if (failed.length) failures.push({ inputs: s.inputs, what: failed });
       }
       if (tests.has(d)) {
-        const inputs: Value[][] = [];
-        for (const s of saved[d] ?? []) { if (s.answer !== undefined) continue; const args = parse(s.inputs); if (args) inputs.push(args); }
-        const smalls = t.params.map((p) => smallValues(info.subst.zonk(p), code));
-        if (smalls.every((x) => x)) inputs.push(...bySize(smalls as Value[][], CASES - inputs.length));
-        for (const args of inputs) {
+        for (const args of testInputs(code, info, names, d, saved)) {
           cases++;
           failed = [];
           let paths = 0;
           for (const _ of r.call(r.value(d), ...args) as Iterable<Value>) if (++paths >= PATHS) break;
           if (failed.length) failures.push({ inputs: args.map(show), what: failed });
         }
+      }
+    } catch (e) {
+      return { def: d, name, cases, failures, error: (e as Error).message };
+    }
+    return { def: d, name, cases, failures };
+  });
+}
+
+// What a test runs on: its saved inputs (examples.json, the editor's Run),
+// then small values of its inputs' types, smallest first.
+export function testInputs(code: Code, info: Info, names: Names, d: Id, saved: Record<Id, Saved[]>): Value[][] {
+  const t = info.typeOf.get(d) as Type & { t: "fn" };
+  const inputs: Value[][] = [];
+  for (const s of saved[d] ?? []) {
+    if (s.answer !== undefined) continue;
+    const vs = s.inputs.map((x) => parseValue(x, code, names));
+    if (vs.every((v) => "value" in v)) inputs.push(vs.map((v) => (v as { value: Value }).value));
+  }
+  const smalls = t.params.map((p) => smallValues(info.subst.zonk(p), code));
+  if (smalls.every((x) => x)) inputs.push(...bySize(smalls as Value[][], CASES - inputs.length));
+  return inputs;
+}
+
+// Each test as a definition of its own that handles its Check (T7e2), for
+// a way of running the program that has no test runner around it
+// (`lab test --compiled`): `t checked(inputs)` runs t, an expect that holds
+// goes on, and the first that doesn't ends it with its text, as an Abort
+// does; "" when every expect held. Written in the language, so it compiles
+// like any definition.
+export function checkedTests(code: Code, names: Names, tests: Id[]): { code: Code; names: Names; wrappers: Map<Id, Id> } {
+  const k = new Lang(code);
+  const wrappers = new Map<Id, Id>();
+  for (const d of tests) {
+    const lam = code.nodes[(code.nodes[d] as NodeOf<"def">).body ?? ""];
+    if (lam?.kind !== "lambda") continue;
+    const w = k.def(`${names[d] ?? d} checked`);
+    k.define(w, k.fn(lam.params.map((p) => names[p] ?? "x"), (...xs) => k.handle(k.let("checked", k.handle(k.call(d, ...xs), [
+      { variant: CHECK_OP, names: ["holds", "what"], body: ([h, what]) => k.if(h, k.unitValue, k.call(ABORT_OP, what)) },
+    ]), () => k.lit("")), [{ variant: ABORT_OP, names: ["what"], body: ([what]) => what }])));
+    wrappers.set(d, w);
+  }
+  return { code: { nodes: { ...code.nodes, ...k.code.nodes }, defs: [...code.defs, ...k.code.defs] }, names: { ...names, ...k.names }, wrappers };
+}
+
+// The tests again, from another way of running the program (T7e2):
+// `callOf` gives each test's checked definition (checkedTests) on the
+// evaluator's values, or why there is none; a text that isn't "" is the
+// first expect that failed there.
+export function checksAgain(code: Code, info: Info, names: Names, tests: Id[], saved: Record<Id, Saved[]>, callOf: (d: Id) => ((args: Value[]) => Called) | string): Again[] {
+  const show = showerFor(code, info, names);
+  return tests.map((d) => {
+    const name = names[d] ?? d;
+    const call = callOf(d);
+    if (typeof call === "string") return { def: d, name, cases: 0, failures: [], skipped: call };
+    const failures: Failure[] = [];
+    let cases = 0;
+    try {
+      for (const args of testInputs(code, info, names, d, saved)) {
+        cases++;
+        const r = call(args);
+        if ("value" in r && r.value !== "") failures.push({ inputs: args.map((a) => show(a)), what: [String(r.value)] });
       }
     } catch (e) {
       return { def: d, name, cases, failures, error: (e as Error).message };
