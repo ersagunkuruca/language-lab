@@ -472,7 +472,10 @@ export function reachedFrom(code: Code, roots: Id[]): Code {
 // C166: inside the search's body, and in what it calls (lowered again for
 // it), a partial builtin with no answer raises the flag instead of
 // stopping, so raymarch's colour needs no budget around its trace.
-export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean } = {}): CoreIR {
+// `hosted`: the program's own effects its host answers where nothing
+// handles them (FOREIGN.md; for C, hosts/c.c, L69b1): their operations
+// are performed, as compiled JavaScript's are.
+export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id> } = {}): CoreIR {
   // The function types whose closures give several answers: found as
   // lowering meets one, and lowered again with them (C137c22). Only those
   // types' closures pay for taking the rest.
@@ -485,11 +488,11 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   }
 }
 
-function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean }, severalTypes: Set<string>): CoreIR {
+function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id> }, severalTypes: Set<string>): CoreIR {
   const outer = stopSite;
   try { return lowerOnceIn(code, info, names, roots, opts, severalTypes); } finally { stopSite = outer; }
 }
-function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean }, severalTypes: Set<string>): CoreIR {
+function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id> }, severalTypes: Set<string>): CoreIR {
   // Where each stop is lowered from (C143): the node being lowered, and
   // the sites met so far, one a node.
   let here: { node: Id; def: Id } | null = null;
@@ -606,7 +609,8 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   const notOwn = (n: NodeOf<"def">, td: NodeOf<"typedef">) => n.id.startsWith("std.") || (BUILTIN_EFFECTS.includes(n.id) && !td.variants.some((v) => arms.has(v)));
   const builtinOf = new Map(Object.entries(OP_OF_BUILTIN).map(([b, v]) => [v, b]));
   const tailOps = new Map<Id, Id>();
-  for (const n of opts.host ? Object.values(code.nodes) : []) {
+  // Without `host`, only the effects `hosted` names (C's hosts/c.c).
+  for (const n of opts.host ? Object.values(code.nodes) : [...opts.hosted ?? []].flatMap((e) => code.nodes[e] ?? [])) {
     if (n.kind !== "def" || !n.body || (code.nodes[n.body]?.kind === "typedef" && notOwn(n, code.nodes[n.body] as NodeOf<"typedef">)) || n.id.startsWith("std.")) continue;
     const td = code.nodes[n.body];
     if (td?.kind === "typedef" && td.effect && td.variants.length && td.variants.every((v: Id) => { const x = code.nodes[v] as NodeOf<"variant">; return x.returns && !x.later; })) td.variants.forEach((v: Id) => tailOps.set(v, n.id));
@@ -890,7 +894,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     // lowered as its arithmetic, so no answer isn't seen here yet (L125c2,
     // L125c3); a Choice of the program's own (fail, one of) is refused
     // where it's used.
-    const effs = all.filter((e) => !BUDGETED.includes(e) && !(partial && partialEff(e)) && !(opts.data && (e === CONSOLE || e === FILES || e === RANDOM)) && !(opts.host && (PAGE_EFFECTS.has(e) || tailEffs.has(e))) && !(e === CHOICE && !opts.data && !opts.shader));
+    const effs = all.filter((e) => !BUDGETED.includes(e) && !(partial && partialEff(e)) && !(opts.data && (e === CONSOLE || e === FILES || e === RANDOM)) && !(opts.host && (PAGE_EFFECTS.has(e) || tailEffs.has(e))) && !(opts.hosted?.has(e) && tailEffs.has(e)) && !(e === CHOICE && !opts.data && !opts.shader));
     if (effs.length) fail(`has effects (${effs.map(nm).join(", ")})`);
     const budgeted = !constant && !opts.data && diverges(ft);
 
