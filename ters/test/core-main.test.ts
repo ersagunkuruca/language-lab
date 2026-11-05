@@ -18,7 +18,10 @@ function example(program: string) {
   const fs = (m.folders ?? []).map((f) => onTodaysIds(exampleTables(manifest, f) as { code: Code; names: Record<string, string> }));
   const code = merge(LIBRARY.code, fs.map((f) => f.code).reduce((a, b) => merge(a, b)));
   const names = { ...LIBRARY.names, ...Object.assign({}, ...fs.map((f) => f.names ?? {})) };
-  return { code, names, def: code.defs.find((d) => !LIBRARY.code.nodes[d] && names[d] === "main")!, run: m.run };
+  // The folders' pins (signatures.json), as the editor opens the example.
+  const pins = Object.assign({}, ...fs.map((f) => (f as { signatures?: object }).signatures ?? {}));
+  const files = (m.run?.files ?? []).map((f) => [`lab:${program}:${f}`, readFileSync(new URL(`../../${m.folders![0]}/${f}`, import.meta.url), "utf8")]);
+  return { code, names, pins, files, def: code.defs.find((d) => !LIBRARY.code.nodes[d] && names[d] === "main")!, run: m.run };
 }
 
 // The worker's code (editor/runWorker.ts) answering one ask, in Node.
@@ -68,4 +71,16 @@ test("a compiled main that stops says the node and definition it stopped at (C14
   assert.equal(end.core, true, JSON.stringify(end).slice(0, 300));
   assert.match(String(end.error), /overflow/);
   assert.deepEqual(end.at, { node: shown, def: grow });
+});
+
+// I171: machine's pins are in its folder's signatures.json (L173c); without
+// them its fields mapped has no type where it's used, and Run main stopped
+// at once.
+test("machine's Run main, opened as the editor opens it, prints its programs' results", async () => {
+  const { code, names, pins, files, def, run } = example("machine");
+  assert.ok(Object.keys(pins).length, "machine's pins read");
+  const said = await inWorker({ code, names, pins, def, title: "machine", files, args: run?.args });
+  const end = said.at(-1)!;
+  assert.equal(end.error, undefined, String(end.error));
+  assert.ok(printedLines(said).includes("== primes.asm"), printedLines(said).join("\n"));
 });

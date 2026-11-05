@@ -215,7 +215,10 @@ const initialFor = (program: Program): Doc => {
   const fs = (m.folders ?? []).map((f) => onTodaysIds(FILES(f)));
   const all = <K extends keyof (typeof fs)[number]>(k: K) => fs.some((f) => f[k]) ? Object.assign({}, ...fs.map((f) => f[k])) : undefined;
   const d = typedDoc(m.program, fs.map((f) => f.code as Code).reduce((a, b) => merge(a, b)), all("names") ?? {}, all("comments") ?? {}, { layout: all("layout"), examples: all("examples") });
-  return { ...d, names: { short: d.names.short, descriptive: all("descriptive") ?? {} }, hints: all("hints") ?? {} };
+  // Its pins too (signatures.json, L173c), or what they give isn't known
+  // (I171: machine's fields mapped).
+  const signatures = all("signatures") as Pins | undefined;
+  return { ...d, names: { short: d.names.short, descriptive: all("descriptive") ?? {} }, hints: all("hints") ?? {}, ...(signatures ? { signatures } : {}) };
 };
 
 // The nested to-do outline is built in src/lang/cells-programs.ts, where
