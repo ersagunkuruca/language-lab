@@ -2305,6 +2305,9 @@ export function resultsDirection(code: Code, d: Id, names: Names = {}): { why: s
 }
 
 export function fillings(code: Code, info: Info, hole: Id): Filling[] {
+  // On the library's layer, as its check is (E253e): the scans of every
+  // node, of the program and of each filled one, read the library's picks.
+  if (layerOf(code) && !derived.has(code)) return scanningOnLayer(code, () => fillings(code, info, hole));
   const h = info.holes.get(hole);
   if (!h) return [];
   const out: Filling[] = [];
@@ -2402,7 +2405,7 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   // makes the answer two). What the check makes of the body is its plan,
   // so a filling that leaves every plan of the group's solves as it was
   // is checked like any other; one that changes a plan, on its own.
-  const solves = Object.values(code.nodes).filter((n): n is Use => isUse(n) && h.group.includes(useTarget(code.nodes, n)));
+  const solves = nodesWhere(code, "use", isUse).map((id) => code.nodes[id] as Use).filter((n) => h.group.includes(useTarget(code.nodes, n)));
   const plans = (c: Code) => solves.map((n) => {
     try {
       const p = planSolve(c, n);
@@ -2429,14 +2432,17 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   const unitsOf = (c: Code) => new Set(unitProblems(c, {}, affected, units).map((u) => u.message));
   let unitsBefore: Set<string> | undefined;
   const noNewUnits = (now: Set<string>) => [...now].every((m) => (unitsBefore ??= unitsOf(code)).has(m));
+  // A program with no unit declared has none to break, so the filled
+  // program needn't be written (E253e: a new definition's 1,400 offers).
+  const unitsHold = (f: Filling) => !units.anyUnit || noNewUnits(unitsOf(filled(f)));
   const checked = new Map<string, boolean>();
   const byKind = (key: string, f: Filling): boolean => {
     let ok = checked.get(key);
     if (ok === undefined) {
       checked.set(key, (ok = noNew(infer(filled(f), {}, { from: info, only: affected, units, noUnits: true }, info.options).errors)));
-      return ok && noNewUnits(unitsOf(filled(f)));
+      return ok && unitsHold(f);
     }
-    return ok && noNewUnits(unitsOf(filled(f)));
+    return ok && unitsHold(f);
   };
 
   // The plans a filling makes, or null when they are the program's.
@@ -2502,7 +2508,7 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
     // break, and the hole's fit above already holds the group's own
     // constraints (I157: a new definition's 1,068 offers asked ~500
     // checks of it, 3.7 s). Its units are still its own.
-    if (!callers && !held) return noNewUnits(unitsOf(filled(f)));
+    if (!callers && !held) return unitsHold(f);
     return byKind(groupKey(s, [...groupTypes, ...(pinnedGroup ? around : [])]), f);
   };
   // A filling that brings Choice or the world where the other is may break

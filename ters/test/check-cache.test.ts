@@ -117,3 +117,22 @@ test("the editor checks a program merged onto the library on its layer, as off i
   assert.equal(layerOf(code), LIBRARY.code);
   assert.deepEqual(on, seen(infer(plain, p.pres.names, undefined, checkOptions), p.pres.names));
 });
+
+test("a hole's fillings on the library's layer are those off it (E253e)", async () => {
+  const Top = await import("../src/lang/toplevel.ts");
+  const { fillings } = await import("../src/lang/infer.ts");
+  const p = loadProgram(join(root, "examples", "sort"));
+  const r = Top.newDefinition(p.code, p.pres.names, "double", { kind: "function", params: ["x"] });
+  assert.ok(r.ok);
+  const plain: Code = { nodes: { ...r.code.nodes }, defs: [...r.code.defs] };
+  const offers = (code: Code) => {
+    const info = infer(code, r.names, undefined, checkOptions);
+    const hole = subtree(code, code.defs.at(-1)!).find((id) => info.holes.has(id))!;
+    return fillings(code, info, hole).map((f) => `${f.kind} ${"target" in f ? f.target : ""} ${"arity" in f ? f.arity : ""}`);
+  };
+  // The program's own nodes, put back on the library's layer.
+  const own: Code = { nodes: Object.fromEntries(Object.entries(r.code.nodes).filter(([id]) => !LIBRARY.code.nodes[id])), defs: r.code.defs.filter((d) => !LIBRARY.code.nodes[d]) };
+  const on = offers(base(own));
+  assert.ok(on.length > 100, String(on.length));
+  assert.deepEqual(on, offers(plain));
+});
