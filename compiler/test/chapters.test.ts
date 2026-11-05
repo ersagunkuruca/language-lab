@@ -12,6 +12,7 @@ const all = (args: string[], files: Record<string, string>) => {
   const want = w.ideal(args, files);
   assert.deepEqual(w.compiled(args, files), want);
   assert.deepEqual(w.core(args, files), want);
+  assert.deepEqual(w.stored(args, files), want);
   assert.deepEqual(w.evaluator(args, files), want);
   return want;
 };

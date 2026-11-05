@@ -13,6 +13,8 @@ import { runProgram, type World } from "../../ters/src/lang/run.ts";
 import { compile } from "../src/compile.ts";
 import { coreMain, lowerCore } from "../src/core-js.ts";
 import { load } from "../src/program.ts";
+import { representationsIn } from "../../ters/src/lang/represent.ts";
+import { represented } from "../../ters/cli/represented.ts";
 import { $setPrint, $setWorld, $Aborted, $toList } from "../src/runtime.js";
 import { chapters as ideal } from "./chapters.ideal.js";
 
@@ -41,7 +43,7 @@ const world = (io: ReturnType<typeof disk>["io"], err: string[]): World => ({
   ...io, fileExists: () => false, listFolder: () => [],
 });
 
-export async function ways(): Promise<Record<"evaluator" | "compiled" | "core" | "ideal", Way>> {
+export async function ways(): Promise<Record<"evaluator" | "compiled" | "core" | "stored" | "ideal", Way>> {
   const p = load("chapters");
   const main = p.named("main");
   const path = join(mkdtempSync(join(tmpdir(), "chapters-")), "chapters.js");
@@ -50,14 +52,22 @@ export async function ways(): Promise<Record<"evaluator" | "compiled" | "core" |
   // Printed from the core IR (C137d13), which compile.ts gives way to.
   const rt: { print: (s: string) => void; world?: World } = { print: () => {} };
   const core = coreMain(lowerCore(p.code, p.info, p.pres.names, [main]), "main", rt);
+  // The core IR of the program as `lab compile` stores it: its lists as
+  // the chooser picks (arrays, C30), not as written.
+  const prog = { title: "chapters", code: p.code, own: p.own.defs, names: p.pres.names, info: p.info, reps: representationsIn(p.code, p.info, p.pres.names, p.own.defs), options: p.options };
+  const r = represented(prog, main, true);
+  const rt2: { print: (s: string) => void; world?: World } = { print: () => {} };
+  const stored = coreMain(lowerCore(r.code, r.info, r.names, [main]), "main", rt2);
+  const run = (rt: { print: (s: string) => void; world?: World }, f: (args: string[]) => number): Way => (args, start) => {
+    const out: string[] = [], err: string[] = [], d = disk(start);
+    rt.print = (s) => out.push(s);
+    rt.world = world(d.io, err);
+    const code = f(args);
+    return { out, err, code, files: d.left() };
+  };
   return {
-    core: (args, start) => {
-      const out: string[] = [], err: string[] = [], d = disk(start);
-      rt.print = (s) => out.push(s);
-      rt.world = world(d.io, err);
-      const code = core(args);
-      return { out, err, code, files: d.left() };
-    },
+    core: run(rt, core),
+    stored: run(rt2, stored),
     evaluator: (args, start) => {
       const out: string[] = [], err: string[] = [], d = disk(start);
       const code = runProgram(p.code, p.info, main, args, { print: (s) => out.push(s), names: p.pres.names, world: world(d.io, err) });
