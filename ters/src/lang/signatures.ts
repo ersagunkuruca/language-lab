@@ -6,7 +6,8 @@
 //     definition, not at some caller far away);
 //   - callers are checked against the pin, not against the body;
 //   - so checking can stop at a pin: a change inside a pinned definition
-//     never needs its callers rechecked (recheck, below).
+//     never needs its callers rechecked (check-cache.ts keys a caller's
+//     check by its callees' schemes, which a pin keeps).
 //
 // A pin is a side table keyed by id, like names: `signatures.json` next to
 // code.json, and `pins` in a module. Published definitions are always pinned
@@ -14,10 +15,9 @@
 // be more general than its pin (a pin can promise less), never less general
 // and never with more effects.
 
-import { children, type Code, type Id } from "../model.ts";
-import { defDeps } from "../hash.ts";
+import type { Id } from "../model.ts";
 import type { Names } from "../presentation.ts";
-import { infer, type Info, type Options } from "./infer.ts";
+import type { Info } from "./infer.ts";
 import { CONSOLE, schemeArith, schemeNeeds, showType, type Row, type Scheme, type Subst, type Type } from "./types.ts";
 
 // A scheme with its variables numbered 0, 1, … by first appearance, rows
@@ -114,67 +114,4 @@ export function rigid(sc: Scheme): Type {
     return { t: "fn", params: t.params.map(go), ret: go(t.ret), eff };
   };
   return go(sc.type);
-}
-
-// Who calls whom, among the program's definitions.
-export function callers(code: Code): Map<Id, Id[]> {
-  const out = new Map<Id, Id[]>();
-  for (const d of code.defs) for (const t of defDeps(code, d)) if (t !== d) out.set(t, [...(out.get(t) ?? []), d]);
-  return out;
-}
-
-// Check a program after the definitions in `changed` were edited, starting
-// from the check before the edit. Only those definitions are checked again,
-// then the callers of any whose type moved, and so on outwards: a pinned
-// definition's type can't move, so checking stops there. Returns the full
-// result, the same a whole check would give, and which definitions it
-// actually looked at.
-export function recheck(code: Code, names: Names, prev: Info, changed: Iterable<Id>, opts: Options = {}): { info: Info; checked: Set<Id> } {
-  const isValue = (d: Id) => { const n = code.nodes[d]; return n?.kind === "def" && !(n.body && code.nodes[n.body]?.kind === "typedef"); };
-  const typeChanged = [...changed].some((d) => code.nodes[d] && !isValue(d));
-  // A data type's change reaches everything that uses it: check it all.
-  if (typeChanged) { const info = infer(code, names, undefined, opts); return { info, checked: new Set(code.defs.filter(isValue)) }; }
-  const only = new Set([...changed].filter(isValue));
-  const by = callers(code);
-  for (;;) {
-    const info = infer(code, names, { from: prev, only }, opts);
-    const more = [...only]
-      .filter((d) => pinKey(info.schemes.get(d)) !== pinKey(prev.schemes.get(d)))
-      .flatMap((d) => by.get(d) ?? [])
-      .filter((c) => !only.has(c) && isValue(c));
-    if (!more.length) return { info: fill(code, info, prev, only), checked: only };
-    more.forEach((c) => only.add(c));
-  }
-}
-
-// What the definitions not checked again keep from the earlier check.
-function fill(code: Code, info: Info, prev: Info, only: Set<Id>): Info {
-  const inside = new Set<Id>();
-  for (const d of only) {
-    const todo: Id[] = [d];
-    while (todo.length) {
-      const id = todo.pop()!;
-      if (inside.has(id)) continue;
-      inside.add(id);
-      const n = code.nodes[id];
-      if (n) for (const c of children(n)) todo.push(c);
-    }
-  }
-  const z = (t: Type) => prev.subst.zonk(t);
-  for (const [id, t] of prev.typeOf) if (!inside.has(id) && !info.typeOf.has(id) && code.nodes[id]) info.typeOf.set(id, z(t));
-  for (const [id, h] of prev.holes) {
-    if (inside.has(id) || info.holes.has(id) || code.nodes[id]?.kind !== "hole") continue;
-    info.holes.set(id, { ...h, expected: z(h.expected), scope: h.scope.map((b) => ({ id: b.id, type: z(b.type) })), row: prev.subst.resolveRow(h.row) });
-  }
-  info.errors.push(...prev.errors.filter((e) => !inside.has(e.id) && code.nodes[e.id]));
-  // And what a run needs from the check (L144): which calls take a tuple
-  // apart (spread), which inputs get a wrapper (reshape), which divisions
-  // are answered, and which implementation each generic operation is.
-  const keep = (id: Id) => !inside.has(id) && !!code.nodes[id];
-  for (const id of prev.spread ?? []) if (keep(id)) info.spread?.add(id);
-  for (const id of prev.answered ?? []) if (keep(id)) info.answered?.add(id);
-  for (const [id, r] of prev.reshape ?? []) if (keep(id) && !info.reshape?.has(id)) info.reshape?.set(id, r);
-  for (const [id, t] of prev.opAt ?? []) if (keep(id) && !info.opAt?.has(id)) info.opAt?.set(id, z(t));
-  for (const [k, d] of prev.implementations ?? []) if (!info.implementations?.has(k)) info.implementations?.set(k, d);
-  return info;
 }
