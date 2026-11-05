@@ -9,7 +9,7 @@ import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { library } from "./programs.ts";
-import { LITERAL_V, FILE_OPS, NEXT_LINE_OP, WRITE_LINE_OP, NEXT_BYTES_OP, ADD_BYTES_OP, ZONE_OPS, ABORT_OP, ARITH, CELL_OPS, COMPARE, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, TICKET_V, AWAIT_OP, START_TIMER_OP, NOW_OP, WAIT_OP, BRANCH_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, DIVISION_V, SHOWN_V, BITS_V, WORD_SIZES, WORD_V, EXTENDED_V, ALGEBRAIC_OPS, REAL_OPS, CHECK_OP, RANDOM_OP, QUEUE_V, PRIORITY_QUEUE_V, MATRIX_V, LU_FACTORS_V, TENSOR_V, BYTES_V, JSON_V, DATE_V, TIME_OF_DAY_V, INSTANT_V, EMBEDDING_V, STATE_OPS, PIPE_OPS, std } from "./std.ts";
+import { LITERAL_V, FILE_OPS, NEXT_LINE_OP, WRITE_LINE_OP, NEXT_BYTES_OP, ADD_BYTES_OP, ZONE_OPS, ABORT_OP, ARITH, CELL_OPS, COMPARE, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, TICKET_V, AWAIT_OP, START_TIMER_OP, NOW_OP, WAIT_OP, BRANCH_V, FIXED_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, DIVISION_V, SHOWN_V, BITS_V, WORD_SIZES, WORD_V, EXTENDED_V, ALGEBRAIC_OPS, REAL_OPS, CHECK_OP, RANDOM_OP, QUEUE_V, PRIORITY_QUEUE_V, MATRIX_V, LU_FACTORS_V, TENSOR_V, BYTES_V, JSON_V, DATE_V, TIME_OF_DAY_V, INSTANT_V, EMBEDDING_V, STATE_OPS, PIPE_OPS, std } from "./std.ts";
 
 export function buildPrelude(): Module {
   const k = new Lang();
@@ -882,15 +882,6 @@ export function buildPrelude(): Module {
       ]) },
     ]), rest!) },
   ])));
-  const units = (size: 2 | 3 | 4) => k.list(...Array.from({ length: size }, (_, i) => k.list(...Array.from({ length: size }, (_, j) =>
-    k.call(MAT_V[size], ...Array.from({ length: size * size }, (_, c) => k.lit(c === i * size + j ? 1 : 0)))))));
-  const matTables = ([2, 3, 4] as const).map((size) => { const d = k.def(`mat${size} table`); k.define(d, k.call(matrixTable, units(size))); return d; });
-  // + − and −x part by part, at any record of Float64s.
-  const partwise = (name: string, op: Id) => { const d = k.def(name); k.define(d, k.fn(["a", "b"], (a, b) => k.call(S.zipParts, op, a, b))); return d; };
-  const addParts = partwise("add parts", B.add), subParts = partwise("subtract parts", B.sub);
-  const negParts = k.def("negate parts");
-  k.define(negParts, k.fn(["a"], (a) => k.call(S.mapParts, k.x(B.neg), a)));
-  const matProducts = matTables.map((t, i) => { const d = k.def(`multiply mat${i + 2}`); k.define(d, k.fn(["a", "b"], (a, b) => k.call(tableProduct, k.x(t), a, b))); return d; });
 
   // Each number type's + − · −x and < (INTERFACES.md step 4): the one +
   // at a type is its Arithmetic's, found by the type. Not offered: + is.
@@ -943,15 +934,6 @@ export function buildPrelude(): Module {
     impl("ordered at rational", ORDERED_V, [lessF]),
     impl("ordered at algebraic", ORDERED_V, [ALGEBRAIC_OPS.less]),
     impl("arithmetic at fixed", ARITHMETIC_V, [addX, subX, mulX, negX]),
-    ...matProducts.map((m, i) => impl(`arithmetic at mat${i + 2}`, ARITHMETIC_V, [addParts, subParts, m, negParts])),
-    // A number at a matrix is that many times the identity (L204c): 2 is
-    // 2 down the diagonal and 0 elsewhere.
-    ...([2, 3, 4] as const).map((size) => {
-      const d = k.def(`literal at mat${size}`);
-      k.define(d, k.call(LITERAL_V, k.fn(["top", "bottom"], (t, b) => k.let("x", k.call(dividedOr, k.call(INT_OPS.toNumber, t), k.call(INT_OPS.toNumber, b), k.lit(0)), (x) =>
-        k.call(MAT_V[size], ...Array.from({ length: size * size }, (_, c) => (c % (size + 1) === 0 ? x : k.lit(0))))))));
-      return d;
-    }),
     // A number written at Rational, Algebraic or Fixed (L204d): its digits
     // as top/bottom, kept exactly; at Fixed rounded once to the nearest
     // step of 2⁻³², halves up, so 0.1 is the same steps on every target.
@@ -2759,7 +2741,7 @@ export function buildPrelude(): Module {
     [tableProduct]: "a · b in an algebra given by its multiplication table: each line says what two basis elements multiply to, as times(i, i, −1). Complex numbers, dual numbers and quaternions are each one table (ALGEBRA-TABLES.md).",
     ...Object.fromEntries(numberOnly.map((d) => [d, "The Float64-only version from before the one generic <, kept so programs saved before still open. Not offered: the generic one is."])),
     [trigF]: "How Float64 does Trig: its builtin sin, cos, tan, exp and log. Found by its type, so not offered: sin is.",
-    [matrixTable]: "The multiplication table of n × n matrices, for table product, from rows of basis elements: E_ij · E_jl = E_il and every other product of two of them is 0. Mat2, Mat3 and Mat4 use it for their ·.",
+    [matrixTable]: "The multiplication table of n × n matrices, for table product, from rows of basis elements: E_ij · E_jl = E_il and every other product of two of them is 0. The numbers module's Mat2, Mat3 and Mat4 use it for their ·.",
     [cliffordReverse]: "x̃, the reverse of x in the algebra (clifford algebra makes one): each blade's vectors in the opposite order, so e₁₂ becomes −e₁₂ and vectors stay. A rotor R turns a vector v into R · v · R̃. In Cl(3, 0) the rotor that turns by θ in the e₁e₂ plane is cos(θ/2) − sin(θ/2)e₁₂, and the rotors 1, e₂₃, e₁₃, e₁₂ multiply as the quaternions do.",
     [cliffordSandwich]: "r · x · r̃ in the algebra (clifford algebra makes one): how a rotor or a motor moves x. In Cl(3, 0) a rotor turns vectors; in projective geometric algebra ([1, 1, 1, 0]) a motor turns and moves points, and two motors compose by their product.",
     [cliffordInverse]: "v⁻¹ for a versor v, ṽ / (v ṽ): a non-null vector's, a rotor's, a motor's or a blade's, for which v ṽ is a number. No answer when v ṽ isn't a number (v isn't a versor, such as 1 + e₁) or is 0 (a null vector such as e₀ in projective geometric algebra). clifford versor inverse(algebra, 2e₁) is ½e₁.",
