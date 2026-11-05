@@ -186,6 +186,7 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
     switch (f) {
       case "builtin.int.less": { const [a, b] = xs(); return bool((a as number) < (b as number)); }
       case "builtin.int.add": { const [a, b] = xs(); return (a as number) + (b as number); }
+      case "builtin.int.mul": { const [a, b] = xs(); return (a as number) * (b as number); }
       case "builtin.int.sub": { const [a, b] = xs(); return (a as number) - (b as number); }
       case "builtin.and": return bool(truth(evaluate(n.args[0], env)) && truth(evaluate(n.args[1], env)));
       case "builtin.or": return bool(truth(evaluate(n.args[0], env)) || truth(evaluate(n.args[1], env)));
@@ -227,6 +228,18 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
       else if (t && test !== "is digit") out.set(t, { pass: n.args[1] });
       if (t && test === "is digit") out.set(t, "digits");
     }
+  }
+  // Whether the text's character at `at` passes every test a guard puts
+  // on t's first character, `p(slice(t, 0, 1))` with p a definition.
+  function firstPasses(cond: Id, t: Id, at: number): boolean {
+    const n = node(cond);
+    if (n?.kind !== "call" || isUse(n as never)) return true;
+    const f = target(n.fn);
+    if (f === "builtin.and") return firstPasses(n.args[0], t, at) && firstPasses(n.args[1], t, at);
+    const sl = node(n.args[0]);
+    if (f && code.nodes[f]?.kind === "def" && n.args.length === 1 && sl?.kind === "call" && !isUse(sl as never) && target(sl.fn) === "builtin.text.slice" && target(sl.args[0]) === t && node(sl.args[1])?.value === 0 && node(sl.args[2])?.value === 1)
+      return at < text.length && passesDef(f, text[at]);
+    return true;
   }
   // The program's own test of one character (a definition, or a function
   // written in place), worked out forward.
@@ -392,6 +405,9 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
       if (b?.kind === "match") hint(b.scrutinee, h);
       const k0 = h.get(fn.params[0]);
       if (!k0 || typeof k0 !== "object") throw new Unsupported(`reads inverse of ${named(g)}, whose characters nothing says`);
+      // A guard on its first character, `p(slice(t, 0, 1))` (json escape
+      // start): none here unless that character passes.
+      if (b?.kind === "match" && !firstPasses(b.scrutinee, fn.params[0], at)) { expect(at, `what ${named(g)} reads`); return null; }
       let end = at;
       while (end < text.length && passes(k0.pass, text[end], env)) end++;
       for (let e = end; e > at; e--) {
@@ -436,7 +452,41 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
         // writes for each of the first 128 characters, worked out forward
         // once, read back longest first; any other character, itself where
         // the function writes it as itself.
-        if (chars) {
+        // A Choice of ways to write a character (L72e1c: json string
+        // character, `if one of([…]) then inverse(g, c) else f(c)`): each
+        // way read, the one that reads farther kept.
+        const cb = node(fn.body), cs = cb?.kind === "match" ? node(cb.scrutinee) : undefined;
+        if (chars && cs?.kind === "call" && !isUse(cs as never) && target(cs.fn) === S.oneOf) {
+          let best: [number, Value] | null = null;
+          for (const arm of cb!.arms.map((x) => node(x)!)) {
+            const a = node(arm.body);
+            if (a?.kind !== "call" || isUse(a as never) || target(a.args[a.args.length - 1]) !== fn.params[0]) throw new Unsupported("reads a way to write a character other than a call on it");
+            const f2 = target(a.fn), args = a.args;
+            let r: [number, Value] | null = null;
+            if (named(f2) === "inverse") {
+              const e = read(arm.body, new Map(env).set(fn.params[0], { unknown: "int" }), at);
+              const v = e?.[1].get(fn.params[0]);
+              r = e && v !== undefined && !isUnknown(v) ? [e[0], v] : null;
+            } else if (f2 && code.nodes[f2]?.kind === "def" && args.length === 1) {
+              r = characterOf(f2, at);
+            } else throw new Unsupported("reads a way to write a character other than a definition or inverse");
+            if (r && (!best || r[0] > best[0])) best = r;
+          }
+          return best;
+        }
+        if (chars) return characterOf(gt ?? null, at, fn);
+        const r = read(fn.body, new Map(env).set(fn.params[0], { unknown: "int" }), at);
+        const v = r?.[1].get(fn.params[0]);
+        if (!r || v === undefined || isUnknown(v)) return null;
+        return [r[0], v];
+      };
+      // One character written by a function of one character (L72d,
+      // json's escapes): what it writes for each of the first 128
+      // characters, worked out forward once, read back longest first; any
+      // other character, itself where the function writes it as itself.
+      const characterOf = (gt: Id | null, at: number, given?: Any): [number, Value] | null => {
+        const fn = given ?? lambdaOf(gt!)!;
+        {
           // A definition writes c the same way wherever it is called: kept.
           const closed = !!gt && code.nodes[gt]?.kind === "def";
           const out = (c: string) => {
@@ -454,10 +504,6 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
           const c = String.fromCodePoint(text.codePointAt(at)!);
           return out(c).includes(c) ? [at + c.length, c] : null;
         }
-        const r = read(fn.body, new Map(env).set(fn.params[0], { unknown: "int" }), at);
-        const v = r?.[1].get(fn.params[0]);
-        if (!r || v === undefined || isUnknown(v)) return null;
-        return [r[0], v];
       };
       const items: Value[] = [];
       let end = at;
