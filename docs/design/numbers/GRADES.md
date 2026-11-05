@@ -226,8 +226,26 @@ GPU version of the same fixture has 32 products in its WGSL instead of
 96. Only what the open definitions reach counts, so a definition no one
 runs widens nothing.
 
+Bounce didn't get them: its bodies live in a cell and go through `map`
+and folds over lists, which the masks of the program as written don't
+follow, so its compiled step multiplied all 8 parts of every value. The
+core IR's JavaScript now reads parts known to be 0 again after lowering
+(compiler/src/zero-parts.ts, L43f1), where every type is known: per
+record field and per data case's field (a list is one summary of its
+items), per call (a function copied for each set of parts its callers
+give), through closures, and through cells (a cell gives back what was
+put in it). Two things the arithmetic alone can't show are added: a sum
+of products that is 0 as a polynomial (a velocity reflected in a wall's
+normal has no trivector part, the terms cancel), and the exponential's
+rule above (exp of a bivector is even). Bounce's bodies come out with the
+masks the physics has: positions and velocities vectors, spins
+bivectors, turns rotors. Its compiled program multiplies 751 times
+instead of 1914, and 3000 steps of the solid world take about 80 ms
+instead of 125.
+
 Still to do: storing only the masked parts (a record per mask, a smaller
-struct on the GPU).
+struct on the GPU). By hand, Bounce's step with records of only the
+masked parts is about 40% faster again in JavaScript.
 
 ## Ersagun's answer: each blade combination is its own type
 
