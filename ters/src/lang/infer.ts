@@ -2315,9 +2315,20 @@ export function resultsDirection(code: Code, d: Id, names: Names = {}): { why: s
 }
 
 export function fillings(code: Code, info: Info, hole: Id): Filling[] {
-  // On the library's layer, as its check is (E253e): the scans of every
-  // node, of the program and of each filled one, read the library's picks.
-  if (layerOf(code) && !derived.has(code)) return scanningOnLayer(code, () => fillings(code, info, hole));
+  const next = fillingsInPieces(code, info, hole);
+  for (;;) { const out = next(); if (out) return out; }
+}
+// The same, a piece at a time (I167j): each call runs a few dozen
+// candidates and gives null, until the last gives the fillings, so the
+// editor can give the page back between pieces. On the library's layer,
+// as its check is (E253e): the scans of every node, of the program and of
+// each filled one, read the library's picks, piece by piece.
+export function fillingsInPieces(code: Code, info: Info, hole: Id): () => Filling[] | null {
+  const steps = fillingSteps(code, info, hole), layered = !!layerOf(code) && !derived.has(code);
+  return () => { const r = layered ? scanningOnLayer(code, () => steps.next()) : steps.next(); return r.done ? r.value : null; };
+}
+const PIECE = 40;
+function* fillingSteps(code: Code, info: Info, hole: Id): Generator<void, Filling[]> {
   const h = info.holes.get(hole);
   if (!h) return [];
   const out: Filling[] = [];
@@ -2567,10 +2578,12 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   }
   // Referring to the group itself, or to a def that depends on it, makes a
   // recursive group whose checks (does it end?) see the body: confirmed.
+  let tried = 0;
   for (const [d, sc] of info.schemes) {
     if (info.hidden.has(d)) continue;
     if (h.group.includes(d)) consider(d, sc.type, true);
     else consider(d, instantiate(sc, info.subst), affected.has(d));
+    if (++tried % PIECE === 0) yield;
   }
   // One + for every number type (NUMBERS.md, "One `+`"): the palette
   // offers the generic arithmetic, not each type's own, which stored
@@ -2581,7 +2594,7 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
     const v = call && code.nodes[call.fn]?.kind === "ref" ? code.nodes[(code.nodes[call.fn] as NodeOf<"ref">).target] : null;
     return v?.kind === "variant" && waysIn(code).has(v.fields[call!.args.indexOf(hole)]);
   };
-  for (const [id, sig] of Object.entries(SIGS)) if (!PER_TYPE.has(id) && (id !== S.byItsWays || wayField())) consider(id, sig(info.subst));
+  for (const [id, sig] of Object.entries(SIGS)) if (!PER_TYPE.has(id) && (id !== S.byItsWays || wayField())) { consider(id, sig(info.subst)); if (++tried % PIECE === 0) yield; }
   // A private constructor only where the checker would take it.
   const insiders = info.options?.insiders ? new Set(info.options.insiders) : null;
   const outside = !!insiders && !h.group.every((d) => insiders.has(d));
@@ -2599,6 +2612,7 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
     // Arithmetic's and Ordered's operations are offered as the one + − · <.
     else if (code.nodes[part].kind === "field" && (def === "std.arithmetic" || def === "std.ordered")) continue;
     else if (code.nodes[part].kind === "field") { const t = fieldType(code, info.subst, def, part); if (t) consider(part, t, isInterface(code, def) && "field"); }
+    if (++tried % PIECE === 0) yield;
   }
   const lit = (of: "number" | "text" | "int", t: Type) => { const f: Filling = { kind: "lit", of }; const s = fits(t, false); if (s && safe(s, f, false)) out.push(f); };
   lit("number", num);
