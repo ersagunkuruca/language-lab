@@ -1760,6 +1760,8 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         const tl = f.locals.push("text") - 1, t: SExpr = { k: "local", i: tl };
         return { k: "let", i: tl, value: s.args[0], body: { k: "call", fn: fused.fn, args: [t, { k: "rt", fn: "text.size", args: [t] }, fused.start, ...outside], tail } };
       }
+      const sum = result === "int" && !underBudget ? summed(st, arms, free, env, f) : null;
+      if (sum !== null) return { k: "call", fn: sum, args: [s, { k: "int", v: 0n }, ...outside], tail };
       return { k: "call", fn: loop(st, result, arms, free, env, f), args: [s, { k: "new", t: framesOf(st), c: 0, args: [] }, ...outside], tail };
     }
     const params = [st, ...free.map((b) => f.locals[env.get(b)!])];
@@ -1835,6 +1837,73 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     d.cases.push({ variant: `${key}.done`, name: "done", fields: [] }, { variant: `${key}.frame`, name: "frame", fields: [{ name: "value", t: st }, { name: "next", t: d }] });
     datas.set(key, d);
     return d;
+  }
+  // A fold to an Int whose arms that fold a child each add something to
+  // the child's result (count, a length, a sum: `if p(x) then r + 1 else
+  // r`), run as one loop that adds as it goes down, with no stack
+  // (C137d26). Int addition is exact, so the order of the additions can't
+  // change the sum, and what each arm adds is only reading and comparing
+  // (`pure` below), which can't fail, stop or act, so nobody can tell the
+  // order it was worked out in either. Null where the arms aren't so.
+  function summed(st: DType, arms: NodeOf<"arm">[], free: Id[], env: Map<Id, number>, f: SFunc): number | null {
+    const caps = free.map((b) => f.locals[env.get(b)!]);
+    const params: LType[] = [st, "int", ...caps];
+    const g: SFunc = { def: arms[0]?.id ?? st.def, name: `${f.name}.fold.sum`, params, result: "int", locals: [...params], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
+    const R = g.locals.push("int") - 1;
+    const has = (e: SExpr): boolean => (e.k === "local" && e.i === R) || kids(e).some(has);
+    const zero = (e: SExpr) => e.k === "int" && e.v === 0n;
+    const plus = (a: SExpr, b: SExpr): SExpr => (zero(a) ? b : zero(b) ? a : { k: "rt", fn: "int.add", args: [a, b] });
+    // e as R plus something without R: that something, or null.
+    const added = (e: SExpr): SExpr | null => {
+      if (e.k === "local" && e.i === R) return { k: "int", v: 0n };
+      if (e.k === "let" && !has(e.value)) { const b = added(e.body); return b && { ...e, body: b }; }
+      if (e.k === "if" && !e.check && !has(e.cond)) { const a = added(e.then), b = added(e.else); return a && b && { ...e, then: a, else: b }; }
+      if (e.k === "rt" && e.fn === "int.add" && e.args.length === 2) {
+        const [x, y] = e.args;
+        if (has(x) && !has(y)) { const d = added(x); return d && plus(d, y); }
+        if (has(y) && !has(x)) { const d = added(y); return d && plus(x, d); }
+      }
+      return null;
+    };
+    const PURE = new Set(["int.add", "int.sub", "int.equal", "int.less", "text.equal", "text.less", "text.length", "text.size"]);
+    const pure = (e: SExpr): boolean =>
+      (["num", "int", "text", "bool", "local", "let", "field", "tag", "if"].includes(e.k) || (e.k === "rt" && PURE.has(e.fn)) || (e.k === "op" && e.op !== "stop")) && kids(e).every(pure);
+    const x: SExpr = { k: "local", i: 0 }, acc: SExpr = { k: "local", i: 1 };
+    const capsIn: SExpr[] = free.map((_, j) => ({ k: "local", i: 2 + j }));
+    const body = (a: NodeOf<"arm">, ci: number): SExpr => {
+      let inner = new Map(free.map((b, j) => [b, 2 + j]));
+      const lets: { i: number; value: SExpr }[] = [];
+      a.binds.forEach((b, j) => {
+        const i = g.locals.push(st.cases[ci].fields[j].t) - 1;
+        inner = new Map(inner).set(b, i);
+        lets.push({ i, value: { k: "field", rec: x, t: st, c: ci, i: j } });
+      });
+      const r = a.results.find((y) => y);
+      if (r) inner = new Map(inner).set(r, R);
+      return lets.reduceRight<SExpr>((e, l) => ({ k: "let", i: l.i, value: l.value, body: e }), expr(a.body, inner, g, false));
+    };
+    const at = funcs.push(g) - 1;
+    const out: (SExpr | null)[] = [];
+    for (const [ci] of st.cases.entries()) {
+      const a = arms.find((y) => y.variant === st.cases[ci].variant);
+      if (!a) { out.push(null); continue; }
+      const j = a.results.findIndex((y) => y);
+      const e = body(a, ci);
+      if (j < 0) { out.push(has(e) ? null : plus(acc, e)); if (has(e)) break; continue; }
+      const d = added(e);
+      if (!d || has(d) || !pure(d)) break;
+      out.push({ k: "call", fn: at, args: [{ k: "field", rec: x, t: st, c: ci, i: j }, plus(acc, d), ...capsIn], tail: true });
+    }
+    if (out.length !== st.cases.length) {
+      // Not a sum: the loop with its stack instead. What lowering the arms
+      // made stays, unused, so g gets a body of its own type.
+      g.body = { k: "int", v: 0n };
+      if (funcs.length === at + 1) funcs.pop();
+      return null;
+    }
+    g.body = { k: "case", scrut: x, s: 0, t: st, result: "int", arms: out };
+    if (fails(g.body, funcs)) g.partial = true;
+    return at;
   }
   // A fold whose arms each fold at most one child (a list, a chain) as a
   // loop, the evaluator's own order: `down` walks to the end, keeping
