@@ -79,3 +79,12 @@ test("a solve is given only the lambdas of closures of a type it takes (C167e)",
   const n = Object.keys(solverCode(ir, emitCoreJs(ir).js).nodes).length;
   assert.ok(n > 0 && n < 500, `${n} nodes`);
 });
+
+// A builtin that is one JavaScript operator is printed as it, not called
+// through the runtime by its id (C170b): chapters joins its texts with +.
+test("operator builtins are printed as operators (C170b)", () => {
+  const p = load("chapters"), main = p.named("main");
+  const js = emitCoreJs(lowerCore(p.code, p.info, p.pres.names, [main])).js;
+  assert.doesNotMatch(js, /R\.rt\("(text\.concat|text\.equal|int\.equal|int\.less)"/);
+  assert.match(js, /\("chapters: " \+ l\d+\)/);
+});
