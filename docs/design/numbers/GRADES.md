@@ -243,9 +243,17 @@ bivectors, turns rotors. Its compiled program multiplies 751 times
 instead of 1914, and 3000 steps of the solid world take about 80 ms
 instead of 125.
 
-Still to do: storing only the masked parts (a record per mask, a smaller
-struct on the GPU). By hand, Bounce's step with records of only the
-masked parts is about 40% faster again in JavaScript.
+Then each value holds only its masked parts (L43f2): a vector of the 3D
+algebra is a record of 3 numbers, a rotor of 4, not 8 each. A record's
+fields, a list's items and a closure's captures take the mask of
+everything put there in the whole program, so a list of bodies is never
+copied; a function's inputs and answer take its copy's; where two meet
+the value is copied into the other's record. What the runtime or the
+world sees keeps every part. The best of eight runs of 3000 solid steps
+is about 33 ms, against 41 ms with every part stored and 65 ms before
+L43f1.
+
+Still to do: the same smaller struct on the GPU (WGSL).
 
 ## Ersagun's answer: each blade combination is its own type
 
