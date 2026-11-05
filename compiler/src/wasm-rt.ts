@@ -6625,6 +6625,32 @@ ${drop}
 // int.of) around a call to it. Inside the bodies every call is to the i64
 // one.
 
+// A byte a slot (L189f2b, as L189f1 in JS and L189f2a in C): an Array of
+// Ints made by `array.of` with 16 or more items, all 0 to 255, keeps them
+// in a $bytes beside its buffer (the buffer's field 3) and none in $items.
+// Reads go through `array.slot`; anything that writes widens the buffer
+// back to $items first (`array.widen`), the same values. `byteSlots`
+// writes an Int array's functions that way; wasm.ts calls it.
+export function byteSlots(f: RtFn): RtFn {
+  const a = f.array;
+  if (a === undefined || /^array\.(slot|widen|narrow)\./.test(f.name)) return f;
+  let body = f.body.replace(/struct\.new \$buf/g, "ref.null $bytes\nstruct.new $buf");
+  const uses = [...f.uses];
+  const base = f.name.replace(/\.a\d+(\.i64)?$/, "");
+  if (["array.items", "array.at", "array.get", "array.first"].includes(base) && /struct\.get \$buf 0/.test(body)) {
+    // The buffer kept where its items were, and each item read from it.
+    body = body.replace(/struct\.get \$arr 0\s*struct\.get \$buf 0([\s\S]*?)array\.get \$items/, `$1call $array.slot.a${a}`);
+    uses.push(`array.slot.a${a}`);
+  } else if (["array.replaceAt", "array.pushFront", "array.push"].includes(base)) {
+    body = `local.get $a\ncall $array.widen.a${a}\n${body}`;
+    uses.push(`array.widen.a${a}`);
+  } else if (base === "array.of") {
+    body = `${body}\ncall $array.narrow.a${a}`;
+    uses.push(`array.narrow.a${a}`);
+  }
+  return { ...f, body, uses, locals: f.locals.map(([n, t]) => [n, base === "array.items" && n === "it" ? "array" : t]) };
+}
+
 // std's Array (C66): a view, a start and a length, on a buffer with free
 // room at both ends ($buf: its items, and the lowest and highest slots in
 // use), as compiled JS keeps it (runtime.js, C30d1: Ersagun's two-ended
@@ -6633,6 +6659,165 @@ ${drop}
 // has taken it, and copies the view into a new buffer otherwise, so an
 // array never changes. One copy of each per item type: `array.push.a0`.
 const ARRAYS: Record<string, Omit<RtFn, "name">> = {
+  // An Int array's item i, from its bytes when it has them (L189f2b).
+  "array.slot": {
+    params: [["a", "array"], ["i", "i32"]], result: "item", locals: [["b", "buf"]], uses: [],
+    body: `
+      local.get $a
+      struct.get $arr 0
+      local.tee $b
+      struct.get $buf 3
+      ref.is_null
+      if item
+        local.get $b
+        struct.get $buf 0
+        local.get $i
+        array.get $items
+      else
+        local.get $b
+        struct.get $buf 3
+        local.get $i
+        array.get_u $bytes
+        ref.i31
+      end`,
+  },
+  // Its bytes back to items, before anything writes (L189f2b).
+  "array.widen": {
+    params: [["a", "array"]], result: "void", locals: [["b", "buf"], ["y", "text"], ["it", "items"], ["n", "i32"], ["i", "i32"]], uses: [],
+    body: `
+      local.get $a
+      struct.get $arr 0
+      local.tee $b
+      struct.get $buf 3
+      local.tee $y
+      ref.is_null
+      br_if 0
+      local.get $y
+      array.len
+      local.tee $n
+      array.new_default $items
+      local.set $it
+      block void
+      loop void
+        local.get $i
+        local.get $n
+        i32.ge_u
+        br_if 1
+        local.get $it
+        local.get $i
+        local.get $y
+        local.get $i
+        array.get_u $bytes
+        ref.i31
+        array.set $items
+        local.get $i
+        i32.const 1
+        i32.add
+        local.set $i
+        br 0
+      end
+      end
+      local.get $b
+      local.get $it
+      struct.set $buf 0
+      local.get $b
+      ref.null $bytes
+      struct.set $buf 3`,
+  },
+  // A new Int array of 16 or more items, all 0 to 255, kept as bytes
+  // (L189f2b); the slots outside lo to hi are 0.
+  "array.narrow": {
+    params: [["a", "array"]], result: "array", locals: [["b", "buf"], ["it", "items"], ["y", "text"], ["lo", "i32"], ["hi", "i32"], ["i", "i32"], ["x", "item"]], uses: [],
+    body: `
+      local.get $a
+      struct.get $arr 0
+      local.tee $b
+      struct.get $buf 1
+      local.set $lo
+      local.get $b
+      struct.get $buf 2
+      local.set $hi
+      local.get $hi
+      local.get $lo
+      i32.sub
+      i32.const 16
+      i32.lt_s
+      if void
+        local.get $a
+        return
+      end
+      local.get $b
+      struct.get $buf 0
+      local.set $it
+      local.get $lo
+      local.set $i
+      block void
+      loop void
+        local.get $i
+        local.get $hi
+        i32.ge_u
+        br_if 1
+        local.get $it
+        local.get $i
+        array.get $items
+        local.tee $x
+        ref.test i31
+        i32.eqz
+        if void
+          local.get $a
+          return
+        end
+        local.get $x
+        ref.cast i31
+        i31.get_s
+        i32.const 255
+        i32.gt_u
+        if void
+          local.get $a
+          return
+        end
+        local.get $i
+        i32.const 1
+        i32.add
+        local.set $i
+        br 0
+      end
+      end
+      local.get $it
+      array.len
+      array.new_default $bytes
+      local.set $y
+      local.get $lo
+      local.set $i
+      block void
+      loop void
+        local.get $i
+        local.get $hi
+        i32.ge_u
+        br_if 1
+        local.get $y
+        local.get $i
+        local.get $it
+        local.get $i
+        array.get $items
+        ref.cast i31
+        i31.get_s
+        array.set $bytes
+        local.get $i
+        i32.const 1
+        i32.add
+        local.set $i
+        br 0
+      end
+      end
+      local.get $b
+      local.get $y
+      struct.set $buf 3
+      local.get $b
+      ref.null $items
+      struct.set $buf 0
+      local.get $a`,
+  },
   "array.empty": {
     params: [], result: "array", locals: [], uses: [],
     body: `
