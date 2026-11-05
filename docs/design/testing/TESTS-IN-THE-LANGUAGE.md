@@ -141,7 +141,7 @@ evaluator with compiled JS.
   each reading undoing its writing, as prelude laws; bytes.test.ts keeps
   only what compares with the host. Dates, instants and durations
   through their ISO 8601 text the same way (T7e5), and times of day
-  through theirs (T7e6).
+  through theirs (T7e6). JSON and CSV through their text (T7e9).
 - **L97e**, the complex laws: `polar` and `unpolar` round trips as tests in
   the prelude (built: the prelude's first laws, run by
   test/prelude-laws.test.ts).

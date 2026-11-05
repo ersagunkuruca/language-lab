@@ -16,7 +16,7 @@ import type { Names } from "../presentation.ts";
 import type { Info } from "./infer.ts";
 import { discharge } from "./ledger.ts";
 import { bool, makeRunner, showerFor, toList, unit, type Runtime, type Value } from "./run.ts";
-import { ABORT_OP, BOOL, CHECK, CHECK_OP, LIST, RATIO, RATIONAL, UNIT } from "./std.ts";
+import { ABORT_OP, BOOL, CHECK, CHECK_OP, FALSE, LIST, RATIO, RATIONAL, TRUE, UNIT } from "./std.ts";
 import { Lang } from "./dsl.ts";
 import { CHOICE, INT, NUMBER, STRING, type Type } from "./types.ts";
 import { parseValue } from "./values.ts";
@@ -197,6 +197,16 @@ export function checkedTests(code: Code, names: Names, tests: Id[]): { code: Cod
     wrappers.set(d, w);
   }
   return { code: { nodes: { ...code.nodes, ...k.code.nodes }, defs: [...code.defs, ...k.code.defs] }, names: { ...names, ...k.names }, wrappers };
+}
+
+// An evaluator's value as compiled JavaScript takes it (core-js.ts): the
+// same, but a Bool is a boolean wherever it sits, in a field or a list
+// (T7e9: a Json value holding a Bool compared unequal to itself compiled).
+export function compiledValue(v: Value): Value {
+  if (typeof v !== "object" || v === null || !("tag" in v) || !Array.isArray(v.fields)) return v;
+  if ((v.tag === TRUE || v.tag === FALSE) && v.fields.length === 0) return (v.tag === TRUE) as unknown as Value;
+  const fields = v.fields.map(compiledValue);
+  return fields.every((f, i) => f === v.fields[i]) ? v : { ...v, fields };
 }
 
 // The tests again, from another way of running the program (T7e2):

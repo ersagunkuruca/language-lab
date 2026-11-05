@@ -9,7 +9,7 @@ import { infer } from "../../ters/src/lang/infer.ts";
 import { base, baseNames } from "../../ters/src/lang/load.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
 import type { Value } from "../../ters/src/lang/run.ts";
-import { checkedTests, checksAgain, testsIn } from "../../ters/src/lang/tests.ts";
+import { checkedTests, checksAgain, compiledValue, testsIn } from "../../ters/src/lang/tests.ts";
 import { FAIL, loadCoreJs, lowerCore } from "../src/core-js.ts";
 
 test("the prelude's laws hold on the compiled program too", () => {
@@ -26,7 +26,7 @@ test("the prelude's laws hold on the compiled program too", () => {
     if (why) return why;
     const i = ir.funcs.findIndex((g) => g.def === w && !g.inner);
     if (i < 0 || ir.funcs[i].multi) return "searches";
-    return (args) => { try { return { value: fns[i](...args) as Value }; } catch (e) { if (e === FAIL) return { none: true }; throw e; } };
+    return (args) => { try { return { value: fns[i](...args.map(compiledValue)) as Value }; } catch (e) { if (e === FAIL) return { none: true }; throw e; } };
   });
   assert.ok(results.length >= 9, `${results.length} laws`);
   for (const r of results) {
