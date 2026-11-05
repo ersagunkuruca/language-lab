@@ -19,6 +19,10 @@ import { TRUE } from "../../ters/src/lang/std.ts";
 import { isRecord, lowerScalar, type DType, type LType, type CoreIR, type RType } from "../src/scalar.ts";
 import { CFLAGS, emitC } from "../src/c.ts";
 import { load } from "../src/program.ts";
+import { withInverses } from "../src/inverses.ts";
+import type { Code, Id } from "../../ters/src/model.ts";
+import type { Info } from "../../ters/src/lang/infer.ts";
+import type { Names } from "../../ters/src/presentation.ts";
 import { area, choices, numberTexts, fuzzFinds, fuzzFindInputs, caseNameInputs, caseNames, changeInputs, changes, escapes, randomInputs, randoms, fractionInputs, fractions, maths, ordered, orderedInputs, roses, sameLists, showInputs, shows, stopsWith, worldly } from "../src/fixtures.ts";
 
 import { build, compile, dir, hex, skip } from "./c-harness.ts";
@@ -184,9 +188,12 @@ test("equal on data in C, and folds over nested data: a rose tree's List of chil
 });
 
 // The functions of name that are in C, by name.
+// A program as `lab native` lowers it: inverse(f, …) of a named f written
+// out (inverses.ts), which C can't solve (calc's reader, C110).
+const native = (code: Code, info: Info, names: Names, roots: Id[]) => { const q = withInverses(code, info, names); return lowerScalar(q.code, q.info, q.names, roots, { data: true }); };
 function inC(name: string) {
   const p = load(name);
-  const lowered = lowerScalar(p.code, p.info, p.pres.names, p.own.defs, { data: true });
+  const lowered = native(p.code, p.info, p.pres.names, p.own.defs);
   const { refused } = emitC(lowered);
   const r = makeRunner(p.code, p.info, { print: () => {} });
   const at = (fn: string, partial?: boolean) => {
@@ -279,7 +286,7 @@ test("Text in C: parsing, words, slugs and tallies give the evaluator's texts", 
   sameAndFreed(build(c.lowered), [
     ...lines.map((t): [number, Value[]] => [tokens, [t]]),
     ...lines.map((t): [number, Value[]] => [describe, [toks(t)]]),
-    ...lines.map((t): [number, Value[]] => [whole, [toks(t)]]),
+    ...lines.map((t): [number, Value[]] => [whole, [t]]),
   ], c.want, c.label);
   const texts = ["# One\nsome words here\n", "Hello, World! Ça va?", "", "  many   spaces\tand\ttabs  ", "emoji 🙂 and ünïcödé", "## Two: The Return", "x".repeat(3000)];
   const ch = inC("chapters");
@@ -323,7 +330,7 @@ test("whole programs in C: files, console, arguments and exit codes as the evalu
   const argsets = [[], ["a.txt", "Ünï 🎉.txt"], ["-l", "a.txt", "nope", "out"], ["book.md", "out"], ["book.md", "gone"], ["ledger.csv"], ["big.csv"], ["out", "a.txt"], ["."], ["a.txt/x"]];
   let runs = 0;
   for (const p of programs) {
-    const exe = compile(emitC(lowerScalar(p.code, p.info, p.names, p.roots, { data: true }), { main: p.main }).c);
+    const exe = compile(emitC(native(p.code, p.info, p.names, p.roots), { main: p.main }).c);
     // The console's input matters to calc and worldly (read line), the
     // arguments to the rest.
     const inputs = ["calc", "worldly"].includes(p.name) ? ["3*4\nlet\n", "a\r\nb", "(((2)))^10 % 7\n-(5 - 8) * 2 / 0\nzz\n"] : ["3*4\n"];
@@ -351,7 +358,7 @@ test("whole programs in C: files, console, arguments and exit codes as the evalu
   assert.equal(runs, 70);
   // Nesting 100,000 deep: main's thread has the stack for it.
   const calc = load("calc");
-  const exe = compile(emitC(lowerScalar(calc.code, calc.info, calc.pres.names, calc.own.defs, { data: true }), { main: calc.named("main") }).c);
+  const exe = compile(emitC(native(calc.code, calc.info, calc.pres.names, calc.own.defs), { main: calc.named("main") }).c);
   const deep = spawnSync(exe, [], { input: `${"(".repeat(1e5)}1${")".repeat(1e5)}\n` });
   assert.equal(deep.stdout.toString(), "1\n", deep.stderr.toString());
 });
