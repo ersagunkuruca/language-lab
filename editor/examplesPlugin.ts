@@ -27,7 +27,7 @@ export type Manifest = { programs: { program: string; label: string; folders?: s
 
 // Which file holds which table. A folder has names.default.json, or
 // names.short.json beside names.descriptive.json (quadratic).
-const TABLES: [string, string][] = [["code", "code"], ["names", "names.default"], ["names", "names.short"], ["descriptive", "names.descriptive"], ["comments", "comments"], ["examples", "examples"], ["layout", "layout"], ["hints", "hints"]];
+const TABLES: [string, string][] = [["code", "code"], ["names", "names.default"], ["names", "names.short"], ["descriptive", "names.descriptive"], ["comments", "comments"], ["examples", "examples"], ["layout", "layout"], ["hints", "hints"], ["signatures", "signatures"]];
 
 const foldersOf = (manifest: Manifest) => [...new Set(manifest.programs.filter((p) => p.editor !== false).flatMap((p) => p.folders ?? []))];
 // The files a program's main reads when Run gives it its arguments (E212):

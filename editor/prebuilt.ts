@@ -17,7 +17,10 @@ export const prebuiltKey = (kind: string, code: Code, roots: Record<string, Id>,
 };
 
 let index: Promise<Set<string>> | null = null;
-const keys = (): Promise<Set<string>> => (index ??= fetch("prebuilt/index.json").then((r) => (r.ok ? r.json() : [])).then((ks: string[]) => new Set(ks), () => new Set()));
+// Opened from disk (file://) the browser blocks the fetch and says so in
+// the console (I173), so it isn't asked: every lookup is a miss there.
+const fromDisk = typeof location === "object" && location.protocol === "file:";
+const keys = (): Promise<Set<string>> => (index ??= fromDisk ? Promise.resolve(new Set<string>()) : fetch("prebuilt/index.json").then((r) => (r.ok ? r.json() : [])).then((ks: string[]) => new Set(ks), () => new Set()));
 
 // What the build made for this key, or null.
 export async function prebuilt<T>(key: string): Promise<T | null> {

@@ -2391,6 +2391,13 @@ export function buildPrelude(): Module {
     const row = (r: Id) => k.call(map, cols, k.fn(["column"], (c) => value(r, c)));
     return k.call(csvPrinted, k.call(CONS, cols, k.call(map, rs, k.fn(["record"], row))));
   });
+  // CSV records read back as a law (T7e12): records written under their
+  // columns' header are the records read, each a map from column to field.
+  const recordsUndo = k.def("csv records undoes csv of records");
+  k.define(recordsUndo, k.fn(["fields"], (fs) => k.let("records", k.call(map, fs, k.fn(["field"], (f) =>
+    k.call(asMap, k.list(k.call(PAIR_V, k.lit("name"), k.call(S.concat, f, k.lit(",\"\n"))), k.call(PAIR_V, k.lit("note"), f))))), (rs) =>
+    expect(k.equal(k.call(csvRecords, k.call(csvOfRecords, k.list(k.lit("name"), k.lit("note")), rs)), rs), "csv records(csv of records(columns, records)) is records"))));
+  laws.push(recordsUndo);
   // Bytes as text (L189d): hex, two digits a byte, and Base64 (RFC 4648 §4),
   // three bytes as four characters, = filling the last group.
   const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
