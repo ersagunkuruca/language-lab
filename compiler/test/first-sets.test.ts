@@ -1,6 +1,7 @@
 // What each arm of calc's printer can print first (C110 s2): the report
 // recursive descent will be built on (GRAMMAR-DESCENT-2026-11-05.md).
-// literal starts with a digit, variable with a letter, negative with "-"
+// literal starts with a digit, variable with what calc's own `letter`
+// passes (its guard tests the name's first character, C110 s5a), negative with "-"
 // or the "(" its optional parentheses give, and binary with itself (left
 // recursion, read by precedence climbing) or "(".
 
@@ -14,7 +15,7 @@ test("calc's printer: each arm's first characters, the arms they overlap on, and
   const r = firstSets(p.code, p.named("expression text"), p.pres.names);
   assert.deepEqual(r.arms.map((a) => [a.name, a.first]), [
     ["literal", ["digit"]],
-    ["variable", ["letter"]],
+    ["variable", [`test:${p.named("letter")}`]],
     ["negative", ["(", "-"]],
     ["binary", ["(", "itself"]],
   ]);

@@ -27,11 +27,11 @@ const descent = descentReader(p.code, p.named("expression text"), p.pres.names);
 const read = (line: string) => { const v = descent(line, 0); return v === null ? [] : [shown(v)]; };
 
 test("calc's lines without an operator read by descent as the search reads them (C110 s3)", () => {
-  for (const line of ["12", "x", "abc", "-2", "--x", "(-x)", "((1))", "-(-x)", "(x)", "-(12)"]) assert.deepEqual(read(line), searched(line), line);
+  for (const line of ["12", "x", "abc", "-2", "--x", "(-x)", "((1))", "-(-x)", "(x)", "-(12)", "x1", "v9", "a1b2", "_x"]) assert.deepEqual(read(line), searched(line), line);
 });
 
 test("a line that isn't an expression has no reading by descent either (C110 s3)", () => {
-  for (const line of ["", "-", "(1", "1)", "x1", "1x", "( 1)"]) assert.deepEqual(read(line), searched(line), line);
+  for (const line of ["", "-", "(1", "1)", "1x", "9v", "( 1)"]) assert.deepEqual(read(line), searched(line), line);
 });
 
 // The binary arm starts with the printer itself: read by precedence
