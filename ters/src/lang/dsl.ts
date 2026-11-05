@@ -193,8 +193,8 @@ export class Lang extends Builder {
 
   // Written with binders and a body, a use is kept as today's: it gives its
   // produced ports, and the body is a let of them (L211i, ports.ts
-  // usesGiveTheirPorts). A use whose ports aren't known yet, or that binds
-  // a port with a unit, stays as written.
+  // usesGiveTheirPorts). A use whose ports aren't known yet stays as
+  // written.
   private bare(id: Id): Id {
     usesGiveTheirPorts(this.code.nodes, this.known.nodes, [id]);
     return id;
