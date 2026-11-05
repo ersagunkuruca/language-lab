@@ -1,6 +1,7 @@
 (module
   (import "Math" "sin" (func $Math.sin (param f64) (result f64)))
   (import "Math" "cos" (func $Math.cos (param f64) (result f64)))
+  (import "Math" "stop" (func $Math.stop (param f64) (result f64)))
   ;; cubic
   (func $cubic0 (export "cubic") (param $p0 f64) (result f64)
     local.get $p0
@@ -21,6 +22,17 @@
   ;; kink
   (func $kink2 (export "kink") (param $p0 f64) (result f64)
     local.get $p0
+    local.get $p0
+    f64.sub
+    f64.const 0
+    f64.eq
+    i32.eqz
+    (if (result f64)
+      (then
+        f64.const 22
+        call $Math.stop)
+      (else
+        local.get $p0))
     f64.const 0
     f64.lt
     (if (result f64)
@@ -76,6 +88,17 @@
   ;; kink′
   (func $kink_8 (export "kink′") (param $p0 f64) (result f64)
     local.get $p0
+    local.get $p0
+    f64.sub
+    f64.const 0
+    f64.eq
+    i32.eqz
+    (if (result f64)
+      (then
+        f64.const 54
+        call $Math.stop)
+      (else
+        local.get $p0))
     f64.const 0
     f64.lt
     (if (result f64)

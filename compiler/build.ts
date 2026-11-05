@@ -1,9 +1,11 @@
-// Compiles the example programs of ters/examples to out/*.js.
+// Prints the example programs of ters/examples to out/*.js, as the core
+// IR's JavaScript (the functions, without the runtime), for reading.
 // Run: node build.ts   (or npm run build)
 
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { compileProgram, load } from "./src/program.ts";
+import { load } from "./src/program.ts";
+import { emitCoreJs, lowerCore } from "./src/core-js.ts";
 import { lowerScalar } from "./src/scalar.ts";
 import { emitWasm } from "./src/wasm.ts";
 import { emitWgsl } from "./src/wgsl.ts";
@@ -21,7 +23,8 @@ const programs: Record<string, string[]> = {
 };
 
 for (const [name, exports] of Object.entries(programs)) {
-  const source = compileProgram(name, exports, "../src/runtime.js");
+  const p = load(name);
+  const source = emitCoreJs(lowerCore(p.code, p.info, p.pres.names, exports.map((e) => p.named(e)))).js;
   writeFileSync(join(import.meta.dirname, "out", `${name}.js`), source);
   console.log(`out/${name}.js: ${source.split("\n").length} lines`);
 }
