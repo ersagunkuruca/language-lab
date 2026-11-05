@@ -290,7 +290,7 @@ test("Random: seeded draws are the evaluator's bit for bit, with and without Cho
       print(show(k, draw())),
     )));
     return main;
-  }, {}, "", { bug: "C178" });
+  });
   assert.equal(r.lines[0], "5950297428061403 1006121846472570");
   assert.equal(r.lines[1], r.lines[2]);
   assert.deepEqual(r.lines.slice(3), ["0.25", "0.75"]);

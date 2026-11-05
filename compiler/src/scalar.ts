@@ -328,7 +328,7 @@ export type SExpr =
   | { k: "if"; cond: SExpr; then: SExpr; else: SExpr; t: LType; check?: true }
   // `check`: a value named for a finiteness check (L125c2), used once
   // without it.
-  | { k: "let"; i: number; value: SExpr; body: SExpr; check?: true }
+  | { k: "let"; i: number; value: SExpr; body: SExpr; check?: true; seeded?: true }
   // `cps`: a call of a function with several answers (W4d), the rest of
   // the search passed as its last input.
   | { k: "call"; fn: number; args: SExpr[]; tail: boolean; cps?: true }
@@ -2541,6 +2541,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       // A wait is given the rest of the handler (C40 step 4).
       case "world": if (e.suspends && !e.cps) return inOrder(e.args, (vs) => ({ ...e, args: [...vs, restOf(e.t, k, g)], t: "i32", cps: true }), tail, g); break;
       case "let":
+        if (several(e.value) && e.seeded) return seededAround(e, k, g);
         if (several(e.value)) return cps(e.value, { gen: (v, tl) => ({ k: "let", i: e.i, value: v, body: cps(e.body, k, tl, g) }) }, tail, g);
         return { k: "let", i: e.i, value: untail(e.value), body: cps(e.body, k, tail, g) };
       case "if": {
@@ -2591,6 +2592,34 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     const r = g.locals.push("i32") - 1, put = (then: SExpr): SExpr => ({ k: "let", i: g.locals.push("f64") - 1, value: swap(got), body: then });
     const wrapped: SExpr = { k: "attempt", body: inside, res: r, ok: put({ k: "if", cond: ranOut, then: fail, else: local(r), t: "i32" }), otherwise: put(fail), t: "i32" };
     return { k: "let", i: b, value: { k: "make", t: box, args: [{ k: "rt", fn: "fuel.get", args: [] }] }, body: wrapped };
+  }
+  // `seeded` around several answers (C178): the inside draws from its own
+  // generator, which goes on from answer to answer as the evaluator's
+  // handler's state does, and each answer goes on to the rest of the
+  // search on the generator outside, so the two are swapped around it.
+  // The outside's state is kept in boxes (the rest may be moved into a
+  // join or a closure), put back once the inside has no more answers.
+  function seededAround(e: Extract<SExpr, { k: "let" }>, k: Cont, g: SFunc): SExpr {
+    const after = e.body;
+    if (after.k !== "let" || after.value.k !== "rt" || after.value.fn !== "rand.restore") throw new Refused("seeds Random around several answers in a way not lowered yet");
+    const box = boxOf("f64"), boxes = after.value.args.map(() => g.locals.push(box) - 1);
+    const got = (b: number): SExpr => ({ k: "get", rec: local(b), t: box, i: 0 });
+    const rt = (fn: string, ...args: SExpr[]): SExpr => ({ k: "rt", fn, args });
+    const fail: SExpr = { k: "fail" };
+    const restore = (xs: SExpr[], then: SExpr): SExpr => ({ k: "let", i: g.locals.push("f64") - 1, value: rt("rand.restore", ...xs), body: then });
+    const rest: Cont = {
+      gen: (v) => {
+        const inner = boxes.map(() => g.locals.push("f64") - 1), r = g.locals.push("i32") - 1;
+        // Back inside: the outside's state as the rest left it, then the inside's.
+        const back = (then: SExpr): SExpr => boxes.reduceRight<SExpr>((x, b, j) => ({ k: "set", rec: local(b), t: box, i: 0, value: rt(`rand.s${j}`), then: x }), restore(inner.map(local), then));
+        const run: SExpr = { k: "attempt", body: cps(after.body, k, false, g), res: r, ok: back(local(r)), otherwise: back(fail), t: "i32" };
+        const swapped = restore(boxes.map(got), run);
+        return { k: "let", i: e.i, value: v, body: inner.reduceRight<SExpr>((x, l, j) => ({ k: "let", i: l, value: rt(`rand.s${j}`), body: x }), swapped) };
+      },
+    };
+    const r = g.locals.push("i32") - 1, put = (then: SExpr): SExpr => restore(boxes.map(got), then);
+    const wrapped: SExpr = { k: "attempt", body: cps(e.value, rest, false, g), res: r, ok: put(local(r)), otherwise: put(fail), t: "i32" };
+    return boxes.reduceRight<SExpr>((x, b, j) => ({ k: "let", i: b, value: { k: "make", t: box, args: [after.value.k === "rt" ? after.value.args[j] : fail] }, body: x }), wrapped);
   }
   // A handler's search, now that it's known whether it has several answers.
   function handled(e: Extract<SExpr, { k: "search" }>, g: SFunc): SExpr {
@@ -2827,7 +2856,9 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       [v, body],
       [done, rt("rand.restore", ...keep.map((l): SExpr => ({ k: "local", i: l })))],
     ];
-    return lets.reduceRight<SExpr>((e, [i, value]) => ({ k: "let", i, value, body: e }), { k: "local", i: v });
+    // The let of the body's value is marked: a body with several answers
+    // keeps its own generator from answer to answer (cps, seededAround).
+    return lets.reduceRight<SExpr>((e, [i, value]) => ({ k: "let", i, value, body: e, ...(i === v ? { seeded: true as const } : {}) }), { k: "local", i: v });
   }
   // value of(o): o's value if it's some, no answer if it's none.
   function valueOf(n: Call, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
