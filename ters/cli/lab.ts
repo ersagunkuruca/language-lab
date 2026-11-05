@@ -43,7 +43,7 @@ import type { Names } from "../src/presentation.ts";
 import { fromFile } from "../src/files.ts";
 import { infer, type Info, type Options } from "../src/lang/infer.ts";
 import { LIBRARY } from "../src/lang/library.ts";
-import { lineageOf, publishVersion, sameLines, upgradeOwn, verify, type Module } from "../src/lang/modules.ts";
+import { lineageOf, publishVersion, sameLines, upgradeNames, upgradeOwn, verify, type Module } from "../src/lang/modules.ts";
 import { base, baseNames, loadProgram, optionsWith, programModules } from "../src/lang/load.ts";
 import { equal, mainProblem, pageProblem, runMain, runProgram, showerFor, valueMain, type Value, type World } from "../src/lang/run.ts";
 import { Cells } from "../src/lang/cells.ts";
@@ -94,9 +94,10 @@ usage:
                                         publish the named definitions, and the drafts they use, as their next
                                         versions in a module (default <program>.module.json): the old versions
                                         stay, and each keeps its draft's id as its lineage (SHARING.md §1)
-  lab upgrade <program>                 move a program onto the newest versions of what it uses from the
+  lab upgrade <program> [--take-names]  move a program onto the newest versions of what it uses from the
                                         modules in its modules folder, where each new pin is at least as
-                                        general as the old, and keep it only if its tests still pass (§2)
+                                        general as the old, and keep it only if its tests still pass (§2);
+                                        its names stay its own unless --take-names takes the author's (§5)
   lab render <program> in.wav [-o out.wav] [--block n] [--compiled]
                                         play the sound main makes over a WAV file, n samples a block (default 128)
 options:
@@ -524,10 +525,18 @@ switch (command) {
     const failed = runTests(code, info, p.names, own.defs, saved, { world: nodeWorld(), hosts }).filter((t) => t.error || t.failures.length);
     if (failed.length) fail(`after upgrading, ${failed.map((t) => t.name).join(", ")} fail${failed.length === 1 ? "s" : ""} (lab test says how); nothing written`);
     writeFileSync(join(path, "code.json"), JSON.stringify(r.own, null, 2) + "\n");
+    // The program's names stay its own (L112): the author's renames are
+    // said once, and taken only with --take-names.
+    const namesFile = join(path, "names.default.json");
+    const ownNames = existsSync(namesFile) ? JSON.parse(readFileSync(namesFile, "utf8")) as Names : {};
+    const take = rest.includes("--take-names");
+    const nn = upgradeNames(r.moved, modules, ownNames, take);
+    if (JSON.stringify(nn.names) !== JSON.stringify(ownNames)) writeFileSync(namesFile, JSON.stringify(nn.names, null, 2) + "\n");
+    if (nn.renamed.length) console.log(`names  the author renamed ${nn.renamed.map((x) => `${x.from} → ${x.to}`).join(", ")}: ${take ? "taken" : "your names kept (--take-names takes theirs)"}`);
     for (const m of r.moved) {
       const l = modules.map((x) => x.lineages ?? {}).find((ls) => lineageOf(ls, m.to));
       const n = l ? l[lineageOf(l, m.to)!].indexOf(m.to) + 1 : 0;
-      console.log(`moved  ${p.names[m.to] ?? m.to} to version ${n} (${m.uses} use${m.uses === 1 ? "" : "s"})`);
+      console.log(`moved  ${nn.names[m.to] ?? p.names[m.to] ?? m.to} to version ${n} (${m.uses} use${m.uses === 1 ? "" : "s"})`);
     }
     break;
   }

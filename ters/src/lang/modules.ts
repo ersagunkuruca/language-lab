@@ -529,3 +529,28 @@ export function upgradeOwn(own: Code, modules: Module[], names: Names = {}): { o
   }
   return { own: { nodes: Object.fromEntries(Object.entries(work.nodes).filter(([id]) => ownIds.has(id))), defs: own.defs }, moved, refused };
 }
+
+// The names a program shows after an upgrade (SHARING.md §5, L112). Names
+// are the program's own copy, taken at the version it used: a name the
+// program gave itself stays, and a name the module's author changed in the
+// new version is kept as it was unless `take` says to take the author's,
+// one answer for the whole upgrade. Parameters go by place. Returns the
+// program's names and the author's renames, said once.
+export function upgradeNames(moved: Moved[], modules: Module[], own: Names, take = false): { names: Names; renamed: { from: string; to: string }[] } {
+  const theirs = layer<Names>({}, ...modules.map((m) => m.names));
+  const code = merge(...modules.map((m) => m.code));
+  const params = (d: Id) => { const n = code.nodes[d]; const b = n?.kind === "def" && n.body ? code.nodes[n.body] : undefined; return b?.kind === "lambda" ? b.params : []; };
+  const names: Names = { ...own };
+  const renamed: { from: string; to: string }[] = [];
+  for (const { from, to } of moved) {
+    const pa = params(from), pb = params(to);
+    for (const [a, b] of [[from, to] as const, ...pa.map((p, i) => [p, pb[i]] as const).filter(([, q]) => q)]) {
+      if (own[a] !== undefined) { names[b] = own[a]; continue; }
+      const was = theirs[a], now = theirs[b];
+      if (was === undefined || was === now) continue;
+      renamed.push({ from: was, to: now ?? b });
+      if (!take) names[b] = was;
+    }
+  }
+  return { names, renamed };
+}

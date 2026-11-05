@@ -7,6 +7,7 @@ are BACKLOG rows L109 to L115, which take over L17 and L68.
 saying which std they were published on, ids saying their recipe.
 §1 built (L110): a module's `lineages`, `lab publish`, `replacing`.
 §2 built (L111): upgrades by pin generality, `lab upgrade`, a program's `modules` folder.
+§5 built (L112): names kept per program on upgrade, `--take-names`.
 
 **In one sentence:** a definition (or a library) keeps one **lineage id**
 for its whole life and gets a **version hash** each time it's published;
@@ -212,6 +213,11 @@ version's names, and the names Bob changed himself:
 - **Alice reused a name for something different**: Bob's refs are on the
   old lineage, so nothing breaks; the question shows the clash and Bob's
   old `parse` keeps its name in his program.
+
+Built (L112, 2026-11-05) on the command line: `lab upgrade` keeps the
+program's names, says the author's renames in one line, and takes them
+with `--take-names` (modules.ts `upgradeNames`). The editor's question is
+E254's.
 
 So everything a program takes from a library, code, types and names, is
 pinned locally and offered as an upgrade. Types follow by themselves when
