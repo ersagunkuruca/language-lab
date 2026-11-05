@@ -48,7 +48,9 @@ module, `lab check` lists its errors and each definition's type, and
 The editor has no packages of its own and uses `ters/`'s: run `npm ci` in
 `ters/`, then `npm run build-editor`. `lab build-web <program>` builds
 one app as a page, and `editor/build.ts` builds every app onto the site
-(`docs/design/targets/WEB.md`).
+(`docs/design/targets/WEB.md`). Open the built site over http (for example
+`python3 -m http.server` at the repo's root, where it is built): opened from disk, the editor can't read
+what the build compiled, so Run compiles on the page, a few times slower.
 
 ## Goals
 
