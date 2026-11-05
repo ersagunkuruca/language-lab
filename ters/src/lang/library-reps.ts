@@ -19,12 +19,14 @@ import { infer, type Info } from "./infer.ts";
 import { Lang } from "./dsl.ts";
 import { LIBRARY, TREES } from "./library.ts";
 import { choose, represent, uses, type Representation } from "./represent.ts";
+import { listGroups } from "./rep-groups.ts";
+import { splitLists } from "./rep-split.ts";
 import { ARRAY_OPS, COMPARE, CONS, LIST, MAP, MAP_V, NIL, PAIR_V, S, SET_TYPE, SHOW_ANY, SIGS } from "./std.ts";
 import { INT, STRING, Subst, type Type } from "./types.ts";
 
 // What equal, show and compare see of a value: these, given a stored one,
 // are its row's (byType), which go through its meaning.
-const BY_VALUE: Record<Id, "equal" | "show" | "compare"> = { [S.equal]: "equal", [SHOW_ANY]: "show", [COMPARE]: "compare" };
+export const BY_VALUE: Record<Id, "equal" | "show" | "compare"> = { [S.equal]: "equal", [SHOW_ANY]: "show", [COMPARE]: "compare" };
 
 // `insiders`: the representations' definitions, which may call the
 // private constructors they represent (infer.ts Options). The library's
@@ -44,7 +46,9 @@ export interface Chosen { code: Code; names: Names; chosen: string[]; insiders: 
 // have their own Map and Set tables for Int and Text keys and tuples and
 // records of them (C63h, C63i, C63k: compiler/src/c.ts `tableC`; C63j:
 // compiler/src/wasm-table.ts).
-export interface LibraryOptions { hostMaps?: boolean; tables?: boolean }
+// `split`: false keeps one representation of List for the whole program
+// (trees where parts of it would take arrays, C93 s3b).
+export interface LibraryOptions { hostMaps?: boolean; tables?: boolean; split?: boolean }
 
 export function withLibraryRepresentations(code: Code, info: Info, names: Names, main: Id, defs: Id[], asked: Representation[] = [], options: LibraryOptions = {}): Chosen {
   const skip = new Set<Id>();
@@ -84,6 +88,13 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
     if (!rows.length || !uses(code, main, [spec, ...rows]).length) continue;
     const tree = choose(code, main, [spec, ...rows]).rep;
     if (tree === spec || keyed(info, defs, code, ty) || generic(info, defs, code, tree)) continue;
+    // Lists as trees for the whole, where parts of it would have arrays
+    // (machine's step loop): those parts as arrays, the rest as written,
+    // converted where a list crosses (rep-split.ts, C93 s3b).
+    if (tree.of === LIST && tree.name === "tree of List" && !chosen.length && options.split !== false) {
+      const s = splitByGroups(code, info, names, main, defs);
+      if (s) return s;
+    }
     // Lists as arrays (C30d3b): alone, and only where every list the
     // program reaches can be one (listBoundary).
     if (tree.of === LIST && (chosen.length || !listBoundary(merge(treesFor(code, [tree]), code), info, defs, tree, asked))) continue;
@@ -186,6 +197,28 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
   const kept = [...made.filter((d) => !own.includes(d)), ...(boundary ? boundary.made : [])];
   const out = chosen.reduce((c, rep) => represent(c, own, rep, kept), all);
   return { code: out, names: { ...names, ...k.names }, chosen: chosen.map((r) => `${names[r.of] ?? LIBRARY.names[r.of]} as ${r.name}`), insiders: made, reps: chosen };
+}
+
+// The program's groups that would take arrays (rep-groups.ts) as seeds of
+// a split: all of them, else each that can be one with those before it.
+function splitByGroups(code: Code, info: Info, names: Names, main: Id, defs: Id[]): (Chosen & { reps: Representation[] }) | null {
+  const array = LIBRARY.reps.find((r) => r.of === LIST && r.name === "array of List");
+  if (!array) return null;
+  const roots = listGroups(code, main, defs).groups.filter((g) => g.rep === array.name && g.root !== main).map((g) => g.root);
+  // Not one called from a loop of the rest's: its lists would be
+  // converted at every turn (machine's `items of words`, once a line).
+  const refs = (d: Id) => new Set(subtree(code, d).flatMap((x) => { const n = code.nodes[x]; return n.kind === "ref" && code.nodes[n.target]?.kind === "def" ? [n.target] : []; }));
+  const calls = new Map(defs.map((d) => [d, refs(d)]));
+  const loops = (d: Id) => { const seen = new Set<Id>(), todo = [...(calls.get(d) ?? [])]; while (todo.length) { const x = todo.pop()!; if (x === d) return true; if (seen.has(x)) continue; seen.add(x); todo.push(...(calls.get(x) ?? [])); } return false; };
+  roots.splice(0, roots.length, ...roots.filter((r) => !defs.some((d) => d !== r && calls.get(d)?.has(r) && loops(d))));
+  if (!roots.length) return null;
+  let s = splitLists(code, info, names, defs, main, roots, array);
+  if (!s) {
+    let seeds: Id[] = [];
+    for (const r of roots) { const t = splitLists(code, info, names, defs, main, [...seeds, r], array); if (t) { s = t; seeds = [...seeds, r]; } }
+  }
+  if (!s) return null;
+  return { code: s.code, names: s.names, chosen: [`List as array of List from ${s.seeds.filter((d) => roots.includes(d)).map((d) => names[d] ?? d).join(", ")}`], insiders: [], reps: [array] };
 }
 
 // A list as written, stored: the row's own way (`store by`), else one

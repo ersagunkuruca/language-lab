@@ -551,11 +551,16 @@ test("a program that changes a list by position in a loop gets trees, and prints
   const { code, names, main, defs, info } = byPosition(40);
   assert.deepEqual(info.errors.map((e) => e.message), []);
   const before = printed(code, names, main);
-  const c = withLibraryRepresentations(code, info, names, main, defs);
+  const c = withLibraryRepresentations(code, info, names, main, defs, [], { split: false });
   assert.deepEqual(c.chosen, ["List as tree of List"]);
   assert.deepEqual(printed(c.code, c.names, main, c.insiders), before);
   assert.deepEqual(before.slice(1, 5), ["80", "[1, 9, 3]", "[1, 2]", "true"]);
   assert.equal(before[5], String((120 * 119) / 2));
+  // By default its loop's reach takes arrays and the rest keeps its lists
+  // as written, and it prints the same (C93 s3b, rep-split.ts).
+  const split = withLibraryRepresentations(code, info, names, main, defs);
+  assert.deepEqual(split.chosen, ["List as array of List from at"]);
+  assert.deepEqual(printed(split.code, split.names, main, split.insiders), before);
 });
 
 test("lists as trees lower to WebAssembly and C too, with the evaluator's answers (C45)", async () => {
@@ -563,7 +568,7 @@ test("lists as trees lower to WebAssembly and C too, with the evaluator's answer
   const { emitC } = await import("../../compiler/src/c.ts");
   const { emitWasm, instantiate } = await import("../../compiler/src/wasm.ts");
   const { code, names, main, at, defs, info } = byPosition(40);
-  const c = withLibraryRepresentations(code, info, names, main, defs);
+  const c = withLibraryRepresentations(code, info, names, main, defs, [], { split: false });
   assert.deepEqual(c.chosen, ["List as tree of List"]);
   const info2 = infer(c.code, c.names, undefined, { ...checkOptions, insiders: [...checkOptions.insiders!, ...c.insiders] });
   const want = (i: number) => { let s = 0; for (let j = 0; j < 120; j++) if ((j * 7) % 40 === i) s += j; return i >= 0 && i < 40 ? s : -1; };
@@ -584,7 +589,7 @@ test("lists as trees lower to WebAssembly and C too, with the evaluator's answer
 // walk's 17.5 ms in REVIEW-2026-11-01b §4).
 test("a fold over a list stored as a tree that doesn't read the rest walks its items (C75)", () => {
   const { code, names, main, defs, info } = byPosition(40);
-  const c = withLibraryRepresentations(code, info, names, main, defs);
+  const c = withLibraryRepresentations(code, info, names, main, defs, [], { split: false });
   assert.deepEqual(c.chosen, ["List as tree of List"]);
   const named = (n: string) => Object.keys(c.names).find((d) => c.names[d] === n && c.code.nodes[d]?.kind === "def")!;
   const items = named("items of list tree");
@@ -612,7 +617,7 @@ test("a fold over a list stored as a tree that doesn't read the rest walks its i
 // where it was one cons a time, each relinking the tree (n log n).
 test("a list stored as a tree is built by the row's own store, balanced, in n steps (C76)", () => {
   const { code, names, main, defs, info } = byPosition(40);
-  const c = withLibraryRepresentations(code, info, names, main, defs);
+  const c = withLibraryRepresentations(code, info, names, main, defs, [], { split: false });
   assert.deepEqual(c.chosen, ["List as tree of List"]);
   const named = (n: string) => Object.keys(c.names).find((d) => c.names[d] === n && c.code.nodes[d]?.kind === "def")!;
   assert.equal(named("stored list"), undefined, "no cons-a-time rebuild is written");
