@@ -39,3 +39,17 @@ test("a kept result's key follows what the test uses", () => {
   assert.equal(ka.has(a.dice), false);
   assert.match(evaluatorHash(), /^[0-9a-f]{64}$/);
 });
+
+test("a law with a function input is kept by every function it may run on (T7e14a)", () => {
+  const keyOf = (limit: number) => {
+    const k = new Lang(LIBRARY.code);
+    const def = (name: string, params: string[], body: (...xs: Id[]) => Id) => { const d = k.def(name); k.define(d, k.fn(params, body)); return d; };
+    const inc = def("add", ["n"], (n) => k.call(INT_OPS.add, n, k.int(limit)));
+    const grows = def("grows", ["f", "x"], (f, x) => k.call(CHECK_OP, k.call(INT_OPS.less, x, k.call(f, x)), k.lit("f(x) > x")));
+    const code = base(k.code), names = { ...baseNames(), ...k.names }, info = infer(code, names);
+    return resultKeys(code, info, [inc, grows], {}, "b").get(grows);
+  };
+  // `grows` doesn't name `add`, but runs on it: a change to it is a new key.
+  assert.ok(keyOf(1));
+  assert.notEqual(keyOf(1), keyOf(0));
+});

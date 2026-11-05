@@ -180,20 +180,27 @@ export function testInputs(code: Code, info: Info, names: Names, d: Id, saved: R
     const vs = s.inputs.map((x) => parseValue(x, code, names));
     if (vs.every((v) => "value" in v)) inputs.push(vs.map((v) => (v as { value: Value }).value));
   }
-  const fitting = (p: Type): Value[] | null => {
-    if (p.t !== "fn" || !given) return null;
-    const out: Value[] = [];
-    for (const c of given.functions) {
+  // Each way of filling the function inputs, with the types that way
+  // fixes: a law over any `a → b` takes `x` at what each f takes.
+  type Way = { s: typeof info.subst; fns: Map<number, Value> };
+  let ways: Way[] = [{ s: info.subst, fns: new Map() }];
+  t.params.forEach((p, i) => {
+    if (info.subst.zonk(p).t !== "fn") return;
+    const next: Way[] = [];
+    for (const w of ways) for (const c of given?.functions ?? []) {
       const sc = c === d ? undefined : info.schemes.get(c);
       if (!sc || sc.type.t !== "fn") continue;
-      const s = info.subst.clone();
-      try { s.unify(instantiate(sc, s), p); } catch { continue; }
-      out.push(given.fn(c));
+      const s = w.s.clone();
+      try { s.unify(instantiate(sc, s), s.zonk(p)); } catch { continue; }
+      next.push({ s, fns: new Map([...w.fns, [i, given!.fn(c)]]) });
     }
-    return out.length ? out : null;
-  };
-  const smalls = t.params.map((p) => { const z = info.subst.zonk(p); return z.t === "fn" ? fitting(z) : smallValues(z, code); });
-  if (smalls.every((x) => x)) inputs.push(...bySize(smalls as Value[][], CASES - inputs.length));
+    ways = next;
+  });
+  const per = Math.max(1, Math.floor((CASES - inputs.length) / Math.max(1, ways.length)));
+  for (const w of ways) {
+    const smalls = t.params.map((p, i) => w.fns.has(i) ? [w.fns.get(i)!] : smallValues(w.s.zonk(p), code));
+    if (smalls.every((x) => x)) inputs.push(...bySize(smalls as Value[][], per));
+  }
   return inputs;
 }
 
