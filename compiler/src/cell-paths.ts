@@ -194,6 +194,7 @@ export function trackReads(ir: CoreIR): number {
         case "budget": return join(ev(e.body), ev(e.otherwise));
         case "attempt": { env[e.res] = ev(e.body); return join(ev(e.ok), ev(e.otherwise)); }
         case "handle": return join(ev(e.body), ev(e.arm));
+        case "released": return join(ev(e.body), ev(e.release));
         case "set": {
           const rec = ev(e.rec), v = ev(e.value);
           for (const c of v.clos) for (const y of c.caps) need(y, false);

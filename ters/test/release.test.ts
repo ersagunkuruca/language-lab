@@ -11,7 +11,7 @@ import { infer } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
 import { Aborted, runMain } from "../src/lang/run.ts";
 import { compile } from "../../compiler/src/compile.ts";
-import { lowerCore } from "../../compiler/src/core-js.ts";
+import { lowerCore, runCoreMain } from "../../compiler/src/core-js.ts";
 import { ABORT_OP, INT_OPS, LOG_OP, S, SHOW_ANY } from "../src/lang/std.ts";
 import type { Id } from "../src/model.ts";
 
@@ -93,8 +93,52 @@ test("a release may only log, and a handler with one can't let a Choice through"
 test("compiled code says a release isn't compiled yet", () => {
   const p = program((k, ask) => ask());
   assert.throws(() => compile(p.code, p.info, p.names, { runtime: "x", exports: ["main"] }), /release isn't compiled yet/);
+  // The core IR lowers the release (L213a3); this handler's normal
+  // finish it doesn't yet (L57).
   const l = lowerCore(p.code, p.info, p.names, [p.main]);
-  assert.match([...l.refused.values()].join("\n"), /release, which isn't lowered yet/);
+  assert.match([...l.refused.values()].join("\n"), /case for the normal finish, which isn't lowered yet/);
+});
+
+// As program() without the normal finish's case (L57), run by the
+// evaluator and by the core IR (L213a3, a4): the logs, the printed lines
+// and how the run ended (an Abort out of main: the evaluator throws it,
+// the core's main says it as an error).
+function bothWays(body: (k: Lang, ask: () => Id) => Id, around?: (k: Lang, inner: Id) => Id) {
+  const k = new Lang();
+  const ask = k.effect("Ask", [["ask", [], () => k.tref("type.int")]]);
+  const main = k.def("main");
+  const log = (t: string) => k.call(LOG_OP, k.lit(t));
+  const handled = () => k.handle(body(k, () => k.call(ask.op.ask)),
+    [{ variant: ask.op.ask, names: [], body: () => k.seq(log("opened"), k.int(41)) }], undefined, () => log("closed"));
+  k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, around ? around(k, handled()) : handled()))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const run = (go: (rt: never) => void) => {
+    const out: string[] = [];
+    try { go({ print: (l: string) => out.push(`print ${l}`), names, world: { log: (l: string) => out.push(`log ${l}`), error: (l: string) => out.push(`aborted ${l}`) } } as never); } catch (e) { out.push(`aborted ${(e as { reason?: unknown }).reason}`); }
+    return out;
+  };
+  const evaluator = run((rt) => runMain(code, info, main, rt));
+  const l = lowerCore(code, info, names, [main]);
+  assert.deepEqual([...l.refused.values()], []);
+  return { evaluator, core: run((rt) => runCoreMain(l, "main", [], rt)) };
+}
+
+test("the core IR runs a release after the handler, on a normal exit, as the evaluator does (L213a3)", () => {
+  const r = bothWays((k, ask) => k.call(INT_OPS.add, ask(), ask()));
+  assert.deepEqual(r.evaluator, ["log opened", "log opened", "log closed", "print 82"]);
+  assert.deepEqual(r.core, r.evaluator);
+});
+
+test("the core IR runs a release on an Abort, handled further out or not, as the evaluator does (L213a4)", () => {
+  const out = bothWays((k, ask) => k.seq(ask(), k.call(ABORT_OP, k.lit("gave up")), ask()),
+    (k, inner) => k.handle(inner, [{ variant: ABORT_OP, names: ["why"], body: ([why]) => k.seq(k.call(LOG_OP, k.text(k.lit("caught "), why)), k.int(0)) }]));
+  assert.deepEqual(out.evaluator, ["log opened", "log closed", "log caught gave up", "print 0"]);
+  assert.deepEqual(out.core, out.evaluator);
+  const uncaught = bothWays((k, ask) => k.seq(ask(), k.call(ABORT_OP, k.lit("gave up")), ask()));
+  assert.deepEqual(uncaught.evaluator, ["log opened", "log closed", "aborted gave up"]);
+  assert.deepEqual(uncaught.core, uncaught.evaluator);
 });
 
 test("a with fuel outside running out ends the handler: its release runs once, and the run goes on", () => {

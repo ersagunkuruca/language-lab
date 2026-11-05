@@ -364,6 +364,14 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
           pre.push(`${d}${save}let ${t};`, `${d}try {`, ...within(null, () => block(e.body, { set: t }, d + "  ")), `${d}} catch (x) {`, `${d}  if (!(x instanceof R.Aborted) || x.esc !== ${e.esc ?? 0}) throw x;`, `${d}  ${back}${local(e.reason)} = x.reason;`, ...block(e.arm, { set: t }, d + "  "), `${d}}`);
           return t;
         }
+        // A handler's release (L213a3/a4): after its body on every exit, a
+        // normal one or a throw (an abort, no answer), but not a page's
+        // Pending, which comes back to the body later.
+        case "released": {
+          const t = temp(), r = temp();
+          pre.push(`${d}let ${t}, ${r};`, `${d}try {`, ...within(null, () => block(e.body, { set: t }, d + "  ")), `${d}} catch (x) {`, `${d}  if (!(x instanceof R.Pending)) {`, ...within(null, () => block(e.release, { set: r }, d + "    ")), `${d}  }`, `${d}  throw x;`, `${d}}`, ...block(e.release, { set: r }, d));
+          return t;
+        }
         case "set": { const r = ex(e.rec, pre, d); pre.push(`${d}${r}.f${e.i} = ${ex(e.value, pre, d)};`); return ex(e.then, pre, d); }
         case "choose": case "search": throw new Error(`${e.k} is gone after lowering`);
       }
@@ -543,6 +551,7 @@ function kidsOf(e: SExpr): SExpr[] {
     case "attempt": return [e.body, e.ok, e.otherwise];
     case "abort": return [e.reason];
     case "handle": return [e.body, e.arm];
+    case "released": return [e.body, e.release];
     case "set": return [e.rec, e.value, e.then];
     default: return [];
   }

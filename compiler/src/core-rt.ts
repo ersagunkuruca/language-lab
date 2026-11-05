@@ -277,7 +277,7 @@ export const moded = (make: (...a: unknown[]) => (...xs: unknown[]) => Iterable<
   return planned(() => (...xs: unknown[]) => solve(...xs.map(inn)), all, none, true);
 };
 export const RUNTIME = {
-  FAIL, OUT, Aborted, Unsupported, planned, moded,
+  FAIL, OUT, Aborted, Pending, Unsupported, planned, moded,
   fail: (): never => { throw FAIL; },
   // A printed partial function says it has no answer by giving FAIL
   // (C137c15), which is cheap; where that answer is used inside an
@@ -403,6 +403,7 @@ function worldFn(op: string, rt: Runtime, timers: Timers, handlers: Map<string, 
     case "now": return () => (rt.world?.now ?? Date.now)();
     case "random": return () => (rt.world?.random ?? worldRandom)();
     case "print": return (s) => { rt.print(s as string); return []; };
+    case "log": return (s) => { (rt.world?.log ?? rt.print)(s as string); return []; };
     case "printError": return (s) => { w("error")(s as string); return []; };
     case "readInput": return () => tried(() => w("input")());
     case "readLine": return () => tried(() => { const l = w("readLine")(); return l === null ? { tag: NONE, fields: [] } : { tag: SOME, fields: [l] }; });
