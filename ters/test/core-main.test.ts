@@ -84,3 +84,13 @@ test("machine's Run main, opened as the editor opens it, prints its programs' re
   assert.equal(end.error, undefined, String(end.error));
   assert.ok(printedLines(said).includes("== primes.asm"), printedLines(said).join("\n"));
 });
+
+// Round 11's program in the picker: Run main on its plan, as the editor
+// opens it, prints the critical path and the crews' table.
+test("crew's Run main, opened as the editor opens it, runs its plan", async () => {
+  const { code, names, pins, files, def, run } = example("crew");
+  const said = await inWorker({ code, names, pins, def, title: "crew", files, args: run?.args });
+  const end = said.at(-1)!;
+  assert.equal(end.error, undefined, String(end.error));
+  assert.ok(printedLines(said).includes("critical path: fetch → compile-core → test → package (23 minutes)"), printedLines(said).join("\n"));
+});

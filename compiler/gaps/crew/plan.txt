@@ -1,0 +1,9 @@
+# A made-up release: each task, its minutes, and what it waits for.
+fetch 3
+compile-core 12 after fetch
+compile-ui 8 after fetch
+docs 4 after fetch
+test 6 after compile-core compile-ui
+lint 2 after fetch
+package 2 after test docs lint
+workers 2

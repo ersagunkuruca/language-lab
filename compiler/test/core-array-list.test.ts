@@ -103,3 +103,29 @@ test("a fold over an array list reads the array in place, from the last item", a
   }
   if (!skip) assert.deepEqual(build(ir)([0, 7].map((n) => [ir.funcs.findIndex((g) => g.def === alternating && !g.inner), [n]])).map((x) => x.value), [ev(0), ev(7)]);
 });
+
+// The rest an array's fold hands each arm (C30 s2b): a view of the
+// array from that item on, not an array pushed item by item, with the
+// evaluator's answers where an arm reads it.
+test("a fold over an array list whose arms read the rest gets views of the array", () => {
+  const k = new Lang(LIBRARY.code);
+  const xs = k.def("xs");
+  k.define(xs, k.call(L("map"), k.call(S.range, k.lit(20)), k.fn(["i"], (i) => k.call(B.mul, i, i))));
+  // Each item times how many come after it, added up; the end is the
+  // item at n, so the chooser picks an array.
+  const weighted = k.def("weighted");
+  k.define(weighted, k.fn(["n"], (n) => k.fold(k.x(xs), [
+    { variant: NIL, names: [], body: () => k.call(L("item at"), k.x(xs), n, k.lit(-1)) },
+    { variant: CONS, names: ["x", "rest"], results: [null, "r"], body: ([x, rest], [, r]) => k.call(B.add, k.call(B.mul, x, k.call(L("length"), rest)), r!) },
+  ])));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  const c = withLibraryRepresentations(code, info, names, weighted, [xs, weighted]);
+  assert.deepEqual(c.chosen, ["List as array of List"]);
+  const info2 = infer(c.code, c.names, undefined, { ...checkOptions, insiders: [...checkOptions.insiders!, ...c.insiders] });
+  const core = lowerCore(c.code, info2, c.names, [weighted]);
+  assert.ok(emitCoreJs(core).js.includes("array.from"), "the rest is a view");
+  const r = makeRunner(code, info, { print: () => {}, names });
+  const fn = loadCoreJs(core)[core.funcs.findIndex((g) => g.def === weighted && !g.inner)];
+  for (const n of [0, 5]) assert.equal(fn(n), [...r.call(r.value(weighted), n)][0]);
+});

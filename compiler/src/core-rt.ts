@@ -4,7 +4,7 @@
 // function is named with the builtin's id where it has one (the printer
 // reads scalar.ts's tables), so nothing here needs the compiler.
 
-import { arrayView, CONS, FALSE, HASH_SET_OPS, NIL, NONE, S, SOME, STD_IMPL, STD_MANY, TABLE_OPS, TICKET_V, TRUE } from "../../ters/src/lang/std.ts";
+import { ArrayView, arrayView, CONS, FALSE, HASH_SET_OPS, NIL, NONE, S, SOME, STD_IMPL, STD_MANY, TABLE_OPS, TICKET_V, TRUE } from "../../ters/src/lang/std.ts";
 import { LIST_SHAPE, META, cellOps, equal, finiteFloat, unit, type Data, toList, type Runtime, type Value, type World } from "../../ters/src/lang/run.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { answerByShapes, type HostOp } from "../../ters/src/lang/hosts.ts";
@@ -55,6 +55,9 @@ const OWN: Record<string, (...xs: never[]) => unknown> = {
   // reads each item so, where wrapping the place as a BigInt for std's
   // array.at was an eighth of chapters' run).
   "array.get": (a: Parameters<typeof arrayView>[0], k: number) => { const v = arrayView(a), i = Number(k); if (!(i >= 0 && i < v.n)) throw FAIL; return v.buf.items[v.start + i]; },
+  // The array's items from place k on, a view of the same buffer (C30 s2b:
+  // the rest an array's fold hands its arm, scalar.ts restAsView).
+  "array.from": (a: Parameters<typeof arrayView>[0], k: number) => { const v = arrayView(a), i = Number(k); if (!(i >= 0 && i <= v.n)) throw FAIL; return new ArrayView(v.ver, v.start + i, v.n - i); },
   "text.before": (t: string, i: number) => { if (ascii(t)) return i - 1; const b = utf8Of(t); do i--; while (i > 0 && (b[i] & 0xc0) === 0x80); return i; },
 };
 // A Table or Hash set (C63h, C63i) is the evaluator's (std.ts Table: a
