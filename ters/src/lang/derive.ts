@@ -54,7 +54,7 @@
 
 import { FN } from "../../../invertible/src/expr.js";
 import type { Code, Id, Node, NodeData, NodeOf } from "../model.ts";
-import { children, freshId, ownerOfTypeParts, useTarget, useNode, isCall, type Call, isUse, isBound } from "../model.ts";
+import { children, freshId, ownerOfTypeParts, useTarget, isCall, type Call, isUse, isBound } from "../model.ts";
 import { fieldShapes } from "./nested.ts";
 import type { Names } from "../presentation.ts";
 import { impl } from "../prelude.ts";
@@ -324,7 +324,8 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
           // With no body (L211f), the copy has none either.
           if (!isBound(n)) return add({ kind: "call", fn: add({ kind: "ref", target: useTarget(nodes, n) }), given } as NodeData);
           const binds = Object.fromEntries(Object.entries(n.binds).map(([k, b]) => [k, fresh([b], sub)[0]]));
-          return add(useNode(add, useTarget(nodes, n), given, binds, copy(n.body, { ...ctx, sub })));
+          const body = copy(n.body, { ...ctx, sub });
+          return add({ kind: "call", fn: add({ kind: "ref", target: useTarget(nodes, n) }), given, binds, body });
 
         }
         return add({ kind: "call", fn: copy(n.fn, ctx), args: n.args.map((a) => copy(a, ctx)) });
