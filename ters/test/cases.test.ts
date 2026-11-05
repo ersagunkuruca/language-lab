@@ -104,16 +104,17 @@ test("the cases module's collated orders text as the host's root order does", ()
 // A locale's own letters (L214e5b2): Turkish's ç after c and ı before i,
 // Spanish's ñ, Czech's č ř š ž, Slovenian's č š ž, Polish's ł and
 // Hungarian's accents and ö ü (L214e5b2b), and Russian's and
-// Ukrainian's Cyrillic before Latin (L214e5b3), as the host orders
+// Ukrainian's Cyrillic, Armenian's and Georgian's own letters before Latin
+// (L214e5b3), as the host orders
 // them, on random words of each language's letters.
-test("the cases module's collated orders text as the host does in Turkish, Spanish, Czech, Slovenian, Polish, Hungarian, Russian and Ukrainian", () => {
+test("the cases module's collated orders text as the host does in Turkish, Spanish, Czech, Slovenian, Polish, Hungarian, Russian, Ukrainian, Armenian and Georgian", () => {
   const k = new Lang(LIBRARY.code);
   const code = base(k.code), names = baseNames(k.names);
   const r = makeRunner(code, infer(code, names, undefined, checkOptions), { print: () => {} });
   const f = r.value(cases("table collated"));
   const SIGN = { "std.order.before": -1, "std.order.same": 0, "std.order.after": 1 } as Record<string, number>;
   const wrong: string[] = [];
-  for (const [tag, own] of [["tr", "çğıİöşüÇĞÖŞÜ"], ["es", "ñÑáé"], ["cs", "čďěňřšťůžČŘŠŽ"], ["sl", "čćđšžČŠŽ"], ["pl", "ąćęłńóśźżŁŻ"], ["hu", "áéíóöőúüűÖŐÜŰ"], ["ru", "абвгдеёжзийклмнопрстуфхцчшщъыьэюяЁЯ"], ["uk", "абвгґдеєжзиіїйклмнопрстуфхцчшщьюяІЇҐ"]]) {
+  for (const [tag, own] of [["tr", "çğıİöşüÇĞÖŞÜ"], ["es", "ñÑáé"], ["cs", "čďěňřšťůžČŘŠŽ"], ["sl", "čćđšžČŠŽ"], ["pl", "ąćęłńóśźżŁŻ"], ["hu", "áéíóöőúüűÖŐÜŰ"], ["ru", "абвгдеёжзийклмнопрстуфхцчшщъыьэюяЁЯ"], ["uk", "абвгґдеєжзиіїйклмнопрстуфхцчшщьюяІЇҐ"], ["hy", "աբգդեզէըթժիլխծկհձղճմյնշոչպջռսվտրցւփքօֆԱԲ"], ["ka", "აბგდევზთიკლმნოპჟრსტუფქღყშჩცძწჭხჯჰ"]]) {
     const host = new Intl.Collator(tag, { usage: "sort" }), pool = [..."abcghinostuyzAIZ -" + own];
     let seed = 5;
     const rnd = (n: number) => (seed = (seed * 1103515245 + 12345) % 2147483648) % n;

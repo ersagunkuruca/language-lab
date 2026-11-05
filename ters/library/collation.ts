@@ -9,10 +9,12 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildCollationTables, elementsByCode, saveCollation, tailoring, TAILORED, type Element } from "../src/lang/collation-tables.ts";
 
-// Latin-script languages, and Cyrillic and Greek ones, which put their
-// own script first (L214e5b3), tried in turn.
+// Latin-script languages, and Cyrillic, Greek, Armenian and Georgian ones,
+// which put their own script first (L214e5b3), tried in turn.
 const CYRILLIC = ["be", "bg", "kk", "ky", "mk", "mn", "ru", "sr", "uk"];
-const LANGUAGES = [...CYRILLIC, "el", "af", "az", "bs", "ca", "cs", "cy", "da", "de", "en", "eo", "es", "et", "fi", "fil", "fo", "fr", "gl", "ha", "hr", "hu", "id", "is", "it", "lt", "lv", "ms", "mt", "nb", "nl", "nn", "pl", "pt", "ro", "se", "sk", "sl", "sq", "sv", "sw", "tk", "to", "tr", "uz", "vi", "wo", "yo", "zu"];
+// Each language's own script, when it isn't Latin: its letters are checked too.
+const SCRIPT: Record<string, [number, number]> = { ...Object.fromEntries(CYRILLIC.map((l) => [l, [0x400, 0x530]])), el: [0x370, 0x400], hy: [0x530, 0x590], ka: [0x10a0, 0x1100] };
+const LANGUAGES = [...CYRILLIC, "el", "hy", "ka", "af", "az", "bs", "ca", "cs", "cy", "da", "de", "en", "eo", "es", "et", "fi", "fil", "fo", "fr", "gl", "ha", "hr", "hu", "id", "is", "it", "lt", "lv", "ms", "mt", "nb", "nl", "nn", "pl", "pt", "ro", "se", "sk", "sl", "sq", "sv", "sw", "tk", "to", "tr", "uz", "vi", "wo", "yo", "zu"];
 
 const t = performance.now();
 const root = buildCollationTables(), all = elementsByCode(root);
@@ -45,7 +47,7 @@ function agrees(language: string, ov: Map<number, Element[]>): boolean {
     }
     return 0;
   };
-  const letters = [...new Set([..."abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ -", ...[...ov.keys()].filter((c) => c < 0x250 || (CYRILLIC.includes(language) && c >= 0x400 && c < 0x530) || (language === "el" && c >= 0x370 && c < 0x400)).map((c) => String.fromCodePoint(c))])];
+  const letters = [...new Set([..."abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ -", ...[...ov.keys()].filter((c) => c < 0x250 || (SCRIPT[language] && c >= SCRIPT[language][0] && c < SCRIPT[language][1])).map((c) => String.fromCodePoint(c))])];
   let seed = 7;
   const rnd = (n: number) => (seed = (seed * 16807) % 2147483647) % n;
   const words = Array.from({ length: 400 }, () => Array.from({ length: 1 + rnd(4) }, () => letters[rnd(letters.length)]).join("").normalize("NFC"));
