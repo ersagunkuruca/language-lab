@@ -29,6 +29,9 @@ export function parentsOf(code: Code): { get(id: Id): Parent | undefined } {
   layered.set(code, l);
   return l;
 }
+// The library's parents, found while the page is idle after it opens, so
+// the first click or edit doesn't (I167l: 0.1 s of the first edit).
+export const warmParents = (lib: Code): void => { parentsIn(lib); };
 function parentsIn(code: Code, only?: Set<Id>) {
   let m = only ? undefined : parents.get(code);
   if (m) return m;

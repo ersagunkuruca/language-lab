@@ -42,7 +42,7 @@ import { backwards } from "./backwards.ts";
 import { selectedParts } from "./selectedParts.ts";
 import { palette, typeName } from "./palette.ts";
 import { structure } from "./structure.ts";
-import { parentsOf, selection } from "./selection.ts";
+import { parentsOf, selection, warmParents } from "./selection.ts";
 import { filesPanels, fnv, userCode } from "./filesPanel.ts";
 import { graphMenu as graphMenuOf } from "./graphMenu.ts";
 import { shower } from "./shown.ts";
@@ -2521,3 +2521,5 @@ if (!EMBED && ASKED.has("code")) void unpackSnippet(ASKED.get("code")!).then((p)
 }, () => { ui.note = UNREADABLE; ui.refused = true; render(); });
 
 render();
+// What every first click asks, found before it (selection.ts).
+setTimeout(() => warmParents(LIBRARY.code), 1500);
