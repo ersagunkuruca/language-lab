@@ -56,6 +56,8 @@
 import { FDLIBM_C } from "./c-math.ts";
 import { BASE, cName, POSIX, RESERVED, RT_C, runtimeC, WORLD_H, type ListNames } from "./c-rt.ts";
 import { runtime } from "./wasm-rt.ts";
+import type { HostOps } from "./core-rt.ts";
+import { hostCName as hostName, type Shape } from "../../ters/src/lang/hosts.ts";
 const UOPS: Partial<Record<Op, string>> = { uadd: "+", usub: "-", umul: "*", uand: "&", uor: "|", uxor: "^" };
 const U64OPS: Partial<Record<Op, string>> = { u64add: "+", u64sub: "-", u64mul: "*", u64and: "&", u64or: "|", u64xor: "^" };
 import { SITES, STOPS } from "./stops.ts";
@@ -181,7 +183,33 @@ interface Target { label: string; keep: Set<number>; pending: number }
 // `math`: where sin, cos, tan, exp, log, pow and atan2 come from: the
 // platform's libm (the default), or V8's fdlibm carried in the program, the
 // same bits as Node's Math (the agreement tests).
-export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string; math?: "platform" | "fdlibm" } = {}): CProgram {
+// A program's own operation, performed (scalar.ts): its effect and number.
+const isPerform = (fn: string) => fn.startsWith("perform:");
+// What crosses to a C host (L69b1): each shape's type in the program and
+// at the host.
+const HOST_C: Partial<Record<Shape["k"], { lab: string; host: string }>> = {
+  int: { lab: "lab_int", host: "int64_t" }, float: { lab: "double", host: "double" }, text: { lab: "lab_cell *", host: "const char *" },
+  bool: { lab: "int32_t", host: "int" }, unit: { lab: "int32_t", host: "void" },
+};
+// What every host wrapper uses: the host's way to fail (lab_host_fail,
+// which hosts/c.c may call), a Text as a C string, and the Abort.
+const HOST_RT = `static const char *lab_host_why = 0;
+static void lab_host_fail(const char *why) { lab_host_why = why ? why : "no reason given"; }
+static char *lab__host_str(lab_cell *t) { char *s = malloc((size_t)LAB_TN(t) + 1); if (!s) lab_oom(); memcpy(s, LAB_TB(t), LAB_TN(t)); s[LAB_TN(t)] = 0; return s; }
+static void lab__host_abort(const char *name, const char *what, const char *detail) {
+  size_t n = strlen(name) + strlen(what) + strlen(detail) + 16;
+  char *s = malloc(n);
+  if (!s) lab_oom();
+  int k = snprintf(s, n, "the host's %s %s%s", name, what, detail);
+  lab_drop(lab_reason);
+  lab_reason = lab__text_of(s, (size_t)k);
+  free(s);
+  lab_st = 2;
+}`;
+
+// `hosts`: the program's own operations (core-js.ts hostOpsOf) and its
+// hosts/c.c, which answers those nothing in the program handles (L69b1).
+export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string; math?: "platform" | "fdlibm"; hosts?: { ops: HostOps; c?: string } } = {}): CProgram {
   const LIBRARY = opts.math === "fdlibm" ? FDLIBM : PLATFORM;
   const { shapes } = lowered;
   // A value that can't be had (a search's k given no answer) is the
@@ -217,11 +245,28 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     : isArray(t) ? why(t.item)
     : isTable(t) ? why(t.value)
     : [...(t as FType).params, (t as FType).result].map(why).find(Boolean) ?? null;
+  // A program's own operation that nothing in it handles (FOREIGN.md,
+  // L69b1): answered by hosts/c.c's host_<its id>, its values crossing
+  // as C's own (an Int as int64_t, a Float64 as double, a Text as a
+  // C string, a Bool as int), checked on the way back as the evaluator's
+  // border checks hosts/js.js's. One that isn't there is a refusal that
+  // names the operation.
+  const hostOf = (fn: string) => { const [, e, op] = fn.split(":"); return opts.hosts?.ops[`${e}:${op}`]; };
+  const hostWhy = (fn: string): string | null => {
+    const h = hostOf(fn);
+    if (!h) return null;
+    const bad = [...h.ins.filter((x) => x.k !== "unit"), h.out].find((x) => !HOST_C[x.k]) ?? h.ins.find((x) => x.k === "unit");
+    if (bad) return `${h.name} takes or gives ${bad.k === "list" ? "a list" : bad.k === "record" ? "a record" : "a value"}, which doesn't cross to a C host yet`;
+    if (lowered.int32 && [...h.ins, h.out].some((x) => x.k === "int")) return `${h.name} takes or gives an Int, which a C host gets as int64_t, not in 32 bits`;
+    if (!opts.hosts?.c) return `${h.name} is answered by the host, and the program has no hosts/c.c`;
+    if (!new RegExp(`\\b${hostName(h.op)}\\s*\\(`).test(opts.hosts.c)) return `hosts/c.c has no answer for ${h.name} (${h.op}): no ${hostName(h.op)}`;
+    return null;
+  };
   funcs.forEach((f, i) => {
     const t = [...f.locals, f.result].map(why).find(Boolean);
     if (t) return refused.set(i, t);
-    const k = walk(f.body).find((e) => !PRINTED.has(e.k) || (e.k === "rt" && !RT_C.has(e.fn) && !ARRAY_FN.test(e.fn) && !TABLE_FN.test(e.fn)) || (e.k === "world" && !RT_C.has(`world.${e.op}`)));
-    if (k) refused.set(i, k.k === "rt" ? `${k.fn} isn't in C's runtime` : k.k === "world" ? `the world's ${k.op} isn't in C's runtime` : `${k.k} isn't printed as C`);
+    const k = walk(f.body).find((e) => !PRINTED.has(e.k) || (e.k === "rt" && (isPerform(e.fn) ? !!hostWhy(e.fn) : !RT_C.has(e.fn) && !ARRAY_FN.test(e.fn) && !TABLE_FN.test(e.fn))) || (e.k === "world" && !RT_C.has(`world.${e.op}`)));
+    if (k) refused.set(i, k.k === "rt" ? hostWhy(k.fn) ?? `${k.fn} isn't in C's runtime` : k.k === "world" ? `the world's ${k.op} isn't in C's runtime` : `${k.k} isn't printed as C`);
   });
   const callees = (e: SExpr) => walk(e).flatMap((x) => (x.k === "call" || x.k === "closure" ? [x.fn] : []));
   for (let changed = true; changed;) {
@@ -256,7 +301,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
       if (tb) collect(lowered.tables[Number(tb[2])]);
       // A runtime function that makes or takes a list of texts (split,
       // join all): its list type, though no function here names it.
-      if (e.k === "rt" && !a && !tb) {
+      if (e.k === "rt" && !a && !tb && !isPerform(e.fn)) {
         const r = runtime(e.fn);
         if (r.result === "list" || r.params.some(([, t]) => t === "list")) { const d = lowered.data.find((x) => x.key === (r.list ?? LIST_TEXT)); if (d) collect(d); }
       }
@@ -309,6 +354,8 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   // Text and big Int constants, as static cells that are never counted;
   // and the runtime functions called.
   const statics = new Map<string, { name: string; decl: string }>(), rts = new Set<string>(), arrayFns = new Set<string>();
+  // The host's operations called (L69b1), each a wrapper lab_host_<n>.
+  const hostsUsed = new Map<string, number>(), hostTypes = new Map<string, LType>();
   const textLit = (v: string) => {
     const k = `t ${v}`;
     if (!statics.has(k)) {
@@ -375,7 +422,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   for (const [i, ps] of [...lent]) if (!ps.size) lent.delete(i);
   const bnames = new Map([...lent.keys()].map((i) => [i, ident(`${names.get(i)}_b`)]));
   const text = kept.map((i) => func(funcs[i], i));
-  const ints = opts.main !== undefined || rts.size > 0 || arrayFns.size > 0 || statics.size > 0 || kept.some((i) => [...funcs[i].params, ...funcs[i].locals, funcs[i].result].some((t) => mentions(t)));
+  const ints = opts.main !== undefined || rts.size > 0 || hostsUsed.size > 0 || arrayFns.size > 0 || statics.size > 0 || kept.some((i) => [...funcs[i].params, ...funcs[i].locals, funcs[i].result].some((t) => mentions(t)));
   const cells = ints || tnum.size > 0 || kept.some((i) => funcs[i].partial);
   const tests = opts.harness ? harness() : "";
 
@@ -494,6 +541,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
       "static double lab_stop(double i) { if (lab_stop_at) { lab_stopped = (int)i; longjmp(*lab_stop_at, 1); } fflush(stdout); int s = (int)i / " + SITES + " - 1; if (i < 0) fprintf(stderr, \"%.*s\\n\", (int)lab_stop_n, lab_stop_why); else if (s >= 0 && s < " + (lowered.stops?.length ?? 0) + " && lab_sites[s][0]) fprintf(stderr, \"%s (in %s)\\n\", lab_stops[(int)i % " + SITES + "], lab_sites[s]); else fprintf(stderr, \"%s\\n\", lab_stops[(int)i % " + SITES + "]); exit(1); }"] : []),
     ...[...statics.values()].map((x) => x.decl),
     ...(rts.size ? ["", runtimeC(rts, listNames)] : []),
+    ...(hostsUsed.size ? ["", HOST_RT, "// hosts/c.c", opts.hosts!.c!, "", ...[...hostsUsed].map(([op, n]) => hostWrapper(opts.hosts!.ops[Object.keys(opts.hosts!.ops).find((k) => opts.hosts!.ops[k].op === op)!], n, hostTypes.get(op)!))] : []),
     ...[...arrays.values()].flatMap((a) => arrayC(a)),
     ...[...tables.values()].flatMap((t) => tableC(t)),
     "",
@@ -506,6 +554,42 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     "",
   ].join("\n");
   return { c, names, refused };
+
+  // The wrapper of a host's operation: the program's values to C's, the
+  // host's answer back, checked as hosts.ts's border checks one from
+  // hosts/js.js; a wrong answer, or the host's lab_host_fail, is the
+  // program's Abort with the reason. It owns its inputs, as the runtime's
+  // functions do.
+  function hostWrapper(h: HostOps[string], n: number, t: LType): string {
+    const ps = h.ins.map((x, j) => `${HOST_C[x.k]!.lab} p${j}`), name = JSON.stringify(h.name).slice(1, -1);
+    const lines = [`static ${ty(t)} lab_host_${n}(${ps.join(", ") || "void"}) {`];
+    const fail = (what: string, detail = '""') => [`lab__host_abort("${name}", ${JSON.stringify(what)}, ${detail});`, `return ${zero(t)};`];
+    const args: string[] = [], after: string[] = [];
+    h.ins.forEach((x, j) => {
+      if (x.k === "int") {
+        lines.push(`  int big${j} = !LAB_IS_SMALL(p${j}); int64_t a${j} = big${j} ? 0 : LAB_VAL(p${j}); lab_int_drop(p${j});`);
+        lines.push(`  if (big${j}) { ${fail("was given an Int too big for int64_t").join(" ")} }`);
+        args.push(`a${j}`);
+      } else if (x.k === "text") {
+        lines.push(`  char *a${j} = lab__host_str(p${j}); lab_drop(p${j});`);
+        args.push(`a${j}`); after.push(`free(a${j});`);
+      } else if (x.k === "unit") { /* nothing crosses */ } else args.push(`p${j}`);
+    });
+    const call = `${hostName(h.op)}(${args.join(", ")})`;
+    lines.push("  lab_host_why = 0;");
+    if (h.out.k === "unit") lines.push(`  ${call};`); else lines.push(`  ${HOST_C[h.out.k]!.host} r = ${call};`);
+    lines.push(...after.map((x) => `  ${x}`));
+    lines.push(`  if (lab_host_why) { ${fail("failed: ", "lab_host_why").join(" ")} }`);
+    switch (h.out.k) {
+      case "unit": lines.push(`  return ${zero(t)};`); break;
+      case "float": lines.push(`  if (!isfinite(r)) { char g[48]; snprintf(g, sizeof g, "%s, not a finite number", isnan(r) ? "NaN" : r > 0 ? "Infinity" : "-Infinity"); ${fail("gave ", "g").join(" ")} }`, "  return r;"); break;
+      case "bool": lines.push(`  if (r != 0 && r != 1) { char g[48]; snprintf(g, sizeof g, "%d, not true (1) or false (0)", r); ${fail("gave ", "g").join(" ")} }`, "  return r;"); break;
+      case "int": lines.push("  return lab__int64(r);"); break;
+      case "text": lines.push(`  if (!r) { ${fail("gave nothing, not a text").join(" ")} }`, "  return lab__text_of(r, strlen(r));"); break;
+    }
+    lines.push("}");
+    return lines.join("\n");
+  }
 
   function program(def: string): string {
     const i = kept.find((j) => funcs[j].def === def && !funcs[j].inner);
@@ -693,6 +777,13 @@ int main(int argc, char **argv) {
         case "int": return lowered.int32 ? `((int32_t)${e.v})` : intLit(e.v);
         case "text": return textLit(e.v);
         case "rt": {
+          if (isPerform(e.fn)) {
+            const h = hostOf(e.fn)!;
+            let n = hostsUsed.get(h.op);
+            if (n === undefined) hostsUsed.set(h.op, (n = hostsUsed.size));
+            hostTypes.set(h.op, e.host!.t);
+            return checked(`lab_host_${n}(${args(e.args, pre, d, after).join(", ")})`, e.host!.t, pre, d, after);
+          }
           (ARRAY_FN.test(e.fn) || TABLE_FN.test(e.fn) ? arrayFns : rts).add(e.fn);
           const c = `${cName(e.fn)}(${args(e.args, pre, d, after).join(", ")})`;
           return runtime(e.fn).partial ? checked(c, rtType(e.fn), pre, d, after) : stated(c, rtType(e.fn), pre, d);
@@ -1079,7 +1170,7 @@ int main(int argc, char **argv) {
       case "if": case "budget": case "attempt": case "handle": return e.t;
       case "int": return lowered.int32 ? "int32" : "int";
       case "text": return "text";
-      case "rt": return rtType(e.fn);
+      case "rt": return isPerform(e.fn) ? e.host!.t : rtType(e.fn);
       case "world": return e.t;
       case "case": return e.result;
       case "closure": return shapes[e.shape].t;
@@ -1649,7 +1740,7 @@ function readFirst(f: SFunc, funcs: SFunc[]): SExpr {
         if (!["make", "call", "new", "rt", "op", "get", "local", "num", "int", "text", "bool"].includes(n.k)) { pure = false; return; }
         if (n.k === "call" && n.args.some((a) => a.k === "local" && a.i === x) && n.args.every((a) => a.k === "local" || !kids(a).length)) { first.push(n); return; }
         for (const k of kids(n)) order(k);
-        if (n.k === "call" || n.k === "apply" || n.k === "world" || n.k === "fail" || (n.k === "rt" && runtime(n.fn).partial)) pure = false;
+        if (n.k === "call" || n.k === "apply" || n.k === "world" || n.k === "fail" || (n.k === "rt" && (isPerform(n.fn) || runtime(n.fn).partial))) pure = false;
       };
       order(t);
       const ls: { i: number; value: SExpr }[] = [];

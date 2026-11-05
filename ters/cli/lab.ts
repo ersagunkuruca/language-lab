@@ -8,7 +8,7 @@
 //     where main doesn't lower there; --core: the core IR only, --compile-ts: compile.ts only
 //   lab native <program> [-o out]        compile to a native program through C (NATIVE.md)
 //   lab check <program>                  type-check, and list the definitions with their types
-//   lab hosts <program>                  print a hosts/js.js to start from: the program's own effects (FOREIGN.md)
+//   lab hosts <program> [--c]            print a hosts/js.js (or with --c a hosts/c.c) to start from: the program's own effects (FOREIGN.md)
 //   lab test <program> [--fresh]         run the tests: definitions whose row has Check (TESTS-IN-THE-LANGUAGE.md);
 //                                        results kept by hash in .lab/checks.json, --fresh ignores them
 //   lab build-web <program> [-o app.html] [--core|--compile-ts]  a page: one HTML file, opened anywhere (WEB.md)
@@ -65,7 +65,7 @@ import { audioProblem, BLOCK, playBlocks } from "../src/lang/audio.ts";
 import { answersAgain, checkedTests, checksAgain, runTests, savedFrom, testsIn, type Called, type Saved } from "../src/lang/tests.ts";
 import { representationLaws } from "../src/lang/rep-laws.ts";
 import { embeddingLaws } from "../src/lang/embed-laws.ts";
-import { hostSkeleton, type Hosts } from "../src/lang/hosts.ts";
+import { effectOfOperation, hostSkeleton, hostSkeletonC, ownOperations, type Hosts } from "../src/lang/hosts.ts";
 import { evaluatorHash, readKept, resultKeys, writeKept } from "./checks.ts";
 
 const USAGE = `lab: the command line for Ters, the language
@@ -78,7 +78,8 @@ usage:
                                         where main doesn't lower there; --core: only the core IR, --compile-ts: only compile.ts
   lab native <program> [-o out]         compile to a native program through C, with $CC (default cc)
   lab check <program>                   type-check, and list the definitions and their types
-  lab hosts <program>                   print a hosts/js.js answering the program's own effects, to start from (FOREIGN.md)
+  lab hosts <program> [--c]             print a hosts/js.js answering the program's own effects, to start from;
+                                        with --c a hosts/c.c, for lab native (FOREIGN.md)
   lab test <program> [--fresh]          run each definition that performs Check, check each accepted answer in examples.json
     [--compiled]                        and each representation's jobs against its type's through meaning;
                                         an unchanged test's result is kept by hash (.lab/checks.json), --fresh runs it again;
@@ -216,7 +217,11 @@ function entry(p: Program, name: string, web = false): Id {
   const def = p.own.find((d) => p.names[d] === name);
   if (!def) fail(`${p.title} has no definition named ${name}`);
   if (!web && !pageProblem(p.info, def, p.names)) { staticPage = true; return def; }
-  const problem = web ? pageProblem(p.info, def, p.names) : mainProblem(p.info, def, p.names);
+  // The program's own effects, when its host file for this command is
+  // there (FOREIGN.md): hosts/c.c for a native program, else hosts/js.js.
+  const hostsAt = existsSync(path) && statSync(path).isDirectory() ? join(path, "hosts", command === "native" ? "c.c" : "js.js") : "";
+  const hosted = new Set(hostsAt && existsSync(hostsAt) ? ownOperations(p.code).flatMap((op) => effectOfOperation(p.code, op) ?? []) : []);
+  const problem = web ? pageProblem(p.info, def, p.names) : mainProblem(p.info, def, p.names, hosted);
   if (problem) fail(`${name} can't be ${web ? "a page" : "run from the command line"}: ${problem}`);
   return def;
 }
@@ -446,9 +451,12 @@ switch (command) {
     // with the flags that keep the evaluator's numbers (compiler/src/c.ts).
     const o = rest.indexOf("-o");
     const out = o >= 0 ? rest[o + 1] ?? fail("-o needs a file") : basename(resolve(path)).replace(/\.json$/, "");
-    const lowered = lowerScalar(p.code, p.info, p.names, [main], { data: true });
+    // Its own effects' operations nothing handles, from hosts/c.c (L69b1).
+    const cHost = existsSync(path) && statSync(path).isDirectory() ? join(path, "hosts", "c.c") : "";
+    const hosts = { ops: hostOpsOf(p.code, p.names), c: cHost && existsSync(cHost) ? readFileSync(cHost, "utf8") : undefined };
+    const lowered = lowerScalar(p.code, p.info, p.names, [main], { data: true, hosted: new Set(ownOperations(p.code).flatMap((op) => effectOfOperation(p.code, op) ?? [])) });
     let c: string;
-    try { c = emitC(lowered, { main }).c; } catch (e) { fail((e as Error).message); }
+    try { c = emitC(lowered, { main, hosts }).c; } catch (e) { fail((e as Error).message); }
     writeFileSync(`${out}.c`, c);
     const cc = process.env.CC ?? "cc", flags = [...CFLAGS, "-pthread", "-o", out, `${out}.c`, "-lm"];
     try { execFileSync(cc, flags, { stdio: "inherit" }); } catch {
@@ -524,7 +532,7 @@ switch (command) {
     break;
   }
   case "hosts": {
-    process.stdout.write(hostSkeleton(p.code, p.names, p.own));
+    process.stdout.write(rest.includes("--c") ? hostSkeletonC(p.code, p.names, p.own) : hostSkeleton(p.code, p.names, p.own));
     break;
   }
   case "test": {
