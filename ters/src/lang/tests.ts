@@ -174,7 +174,10 @@ export const mainCall = (m: MainAnswer) => `main(${m.arguments.map((a) => JSON.s
 // Runs every test, and every definition with an accepted answer: an
 // accepted answer is a test without the word, `expect(f(inputs) =
 // answer)`, compared as printed (so how a value is stored doesn't matter).
-export function runTests(code: Code, info: Info, names: Names, defs: Id[], saved: Record<Id, Saved[]> = {}, rt: Partial<Runtime> = {}): TestResult[] {
+// `mains`: the program main's accepted answers run in, when it isn't this
+// one: `lab test` gives the program as `lab run` runs it, after the
+// chooser (T7e15e), so main's answers say what `lab run` does.
+export function runTests(code: Code, info: Info, names: Names, defs: Id[], saved: Record<Id, Saved[]> = {}, rt: Partial<Runtime> = {}, mains?: { code: Code; info: Info }): TestResult[] {
   const tests = new Set(testsIn(info, defs));
   const shower = showerFor(code, info, names);
   const show = (v: Value) => shower(v);
@@ -195,7 +198,7 @@ export function runTests(code: Code, info: Info, names: Names, defs: Id[], saved
         if (s.main) {
           // main in its recorded world (T7e15).
           cases++;
-          const m = s.main, what = mainDiffers(runMainIn(code, info, names, d, m, rt), m);
+          const m = s.main, what = mainDiffers(runMainIn(mains?.code ?? code, mains?.info ?? info, names, d, m, rt), m);
           if (what.length) failures.push({ inputs: [mainCall(m)], what });
           continue;
         }

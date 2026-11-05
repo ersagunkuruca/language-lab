@@ -544,7 +544,12 @@ switch (command) {
     const keys = p.info.errors.length ? new Map<Id, string>() : resultKeys(p.code, p.info, p.own, saved, evaluatorHash());
     const kept = rest.includes("--fresh") ? {} : readKept();
     const old = new Map(p.own.filter((d) => kept[keys.get(d) ?? ""]).map((d) => [d, { def: d, ...kept[keys.get(d)!], kept: true }]));
-    const ran = p.info.errors.length ? [] : runTests(p.code, p.info, p.names, p.own.filter((d) => !old.has(d)), saved, { world: nodeWorld(), hosts });
+    // main's accepted answers on the program as lab run runs it, after the
+    // chooser (T7e15e): numbers' main counts in Peano Nat as defined.
+    const mainDef = p.own.find((d) => p.names[d] === mainName && (saved[d] ?? []).some((x) => x.main));
+    let mains: Program | undefined;
+    if (mainDef && !p.info.errors.length && defined < 0) { try { mains = representedOr(p, mainDef, true); } catch { /* as defined */ } }
+    const ran = p.info.errors.length ? [] : runTests(p.code, p.info, p.names, p.own.filter((d) => !old.has(d)), saved, { world: nodeWorld(), hosts }, mains);
     const results = [...ran, ...old.values()].sort((a, b) => p.own.indexOf(a.def) - p.own.indexOf(b.def));
     if (ran.some((r) => keys.has(r.def))) {
       const now = readKept();
@@ -561,7 +566,7 @@ switch (command) {
     // the core IR, which must give them too (T7e), and each test, run
     // compiled under a handler of its Check (T7e2); a definition that
     // doesn't lower is said, not failed.
-    const again = rest.includes("--compiled") && !p.info.errors.length ? [...compiledAnswers(p, saved), ...compiledChecks(p, saved), ...compiledMains(p, saved)] : [];
+    const again = rest.includes("--compiled") && !p.info.errors.length ? [...compiledAnswers(p, saved), ...compiledChecks(p, saved), ...compiledMains(mains ?? p, saved)] : [];
     for (const r of again) {
       if (r.skipped) console.log(`– ${r.name} compiled: not checked, it ${r.skipped}`);
       else if (r.error) console.log(`✗ ${r.name} compiled: ${r.error}`);
