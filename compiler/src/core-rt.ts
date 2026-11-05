@@ -390,7 +390,9 @@ function worldFn(op: string, rt: Runtime, timers: Timers, handlers: Map<string, 
     // Text from the world enters in NFC (L214a), as the evaluator's.
     return bordered(rt.world!, k, f);
   };
-  const tried = <T>(f: () => T): T => { try { return f(); } catch (e) { if (e instanceof Aborted) throw e; throw new Aborted((e as Error).message, 0); } };
+  // A page's wait (Pending) isn't a failure: it goes past the program's
+  // handlers to the page, which keeps what it showed (C179).
+  const tried = <T>(f: () => T): T => { try { return f(); } catch (e) { if (e instanceof Aborted || e instanceof Pending) throw e; throw new Aborted((e as Error).message, 0); } };
   const clock = () => (rt.world?.now ?? Date.now)();
   const sleep = (ms: number) => w("wait")(ms);
   const paused = (e: unknown, then: () => unknown): never => {
