@@ -554,3 +554,47 @@ test("the editor refuses an edit that would change published code", async () => 
   const lit = subtree(code, prelude("length")).find((id) => code.nodes[id].kind === "lit")!;
   assert.equal(changesPublished({ nodes: { ...code.nodes, [lit]: { ...code.nodes[lit], value: 5 } as never }, defs: code.defs }), prelude("length"));
 });
+
+// E254: a saved file carries the modules it uses beyond the library and
+// its store; opened where its module has a newer version of what it uses,
+// it is offered the move, kept once it checks and runs.
+test("a saved file using version 1 of a module's definition, opened with version 2 there, moves onto it (E254)", async () => {
+  const { toFile, fromFile, fileModules, upgradeFile, versionOf } = await import("../src/files.ts");
+  const k = new Lang(LIBRARY.code);
+  const twice = k.def("twice");
+  k.define(twice, k.fn(["x"], (x) => k.call(B.mul, x, k.lit(2))));
+  const step = (prev: Module | null) => { const r = publishVersion(prev, "doubling", base(k.code), baseNames(k.names), [twice], LIBRARY.code, LIBRARY.pins); assert.ok(r.ok); return r.module; };
+  const m1 = step(null), v1 = m1.exports[0];
+  k.define(twice, k.fn(["x"], (x) => k.call(ARITH.add, x, x)));
+  const m2 = step(m1), v2 = m2.exports[0];
+  // Saved on version 1, with the module as it is now.
+  const bob = new Lang(merge(LIBRARY.code, m2.code));
+  const main = bob.def("main");
+  bob.define(main, bob.thunk(() => bob.call(S.print, bob.call(SHOW_ANY, bob.call(v1, bob.lit(21))))));
+  const text = toFile({ title: "Doubles", typed: true, code: base(bob.code), names: bob.names, descriptive: {}, comments: {}, layout: { known: {} }, examples: {}, modules: [m2] }, LIBRARY.code);
+  const saved = JSON.parse(text);
+  assert.equal(Object.keys(saved.code.nodes).filter(isPublished).length, 0, "the module's nodes are in its module, not the program's own");
+  assert.deepEqual(Object.values(saved.needs), ["twice from doubling"]);
+  const opened = fromFile(text, () => LIBRARY.code);
+  assert.ok(!("error" in opened), "error" in opened ? opened.error : "");
+  assert.ok(opened.code.nodes[v2], "the module's code is there");
+  assert.equal(versionOf(fileModules(opened.file), v1), 1);
+  const own = opened.file.code;
+  const run = (o: Code) => { const code = base(merge(m2.code, o)); const info = infer(code, baseNames(m2.names, bob.names), undefined, checkOptions); if (info.errors.length) return { error: info.errors[0].message }; const out: string[] = []; runMain(code, info, main, { print: (x) => out.push(x) }); return { out }; };
+  const up = upgradeFile(own, opened.file, bob.names, (o) => { const r = run(o); return "error" in r ? r.error ?? "error" : null; });
+  assert.ok(up.ok, up.ok ? "" : up.reason);
+  assert.deepEqual(up.moved.map((x) => [x.from, x.to, versionOf([m2], x.to)]), [[v1, v2, 2]]);
+  assert.deepEqual(run(up.own), { out: ["42"] });
+  assert.deepEqual(Object.values(up.store.lineages!), [[v1, v2]]);
+  // Saved again: the store goes with it, and opens.
+  const again = fromFile(toFile({ title: "Doubles", typed: true, code: { nodes: { ...opened.code.nodes, ...up.own.nodes }, defs: opened.code.defs }, names: up.names, descriptive: {}, comments: {}, layout: { known: {} }, examples: {}, modules: [m2], store: up.store }, LIBRARY.code), () => LIBRARY.code);
+  assert.ok(!("error" in again) && again.file.store && !upgradeFile(again.file.code, again.file, up.names, () => null).ok, "nothing more to upgrade");
+  // A check that fails keeps it where it was.
+  const kept = upgradeFile(own, opened.file, bob.names, () => "main fails");
+  assert.ok(!kept.ok && kept.reason === "main fails");
+  // A module that isn't what it says is refused.
+  const bad = JSON.parse(text);
+  bad.modules[0].code.nodes[v2] = { ...bad.modules[0].code.nodes[v2], body: bad.modules[0].code.nodes[v1].body };
+  const r = fromFile(JSON.stringify(bad), () => LIBRARY.code);
+  assert.ok("error" in r && /its module doubling/.test(r.error), "error" in r ? r.error : "opened");
+});

@@ -50,7 +50,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E254 | The editor offers a program's upgrades and moves them with a note, as `lab upgrade` does (modules.ts `upgradeOwn`, L111): a newer version of a module definition the program uses, whose pin is at least as general, its tests run before it is kept. Example: a saved file using version 1 of a module's `sort`, opened with version 2 there, says so and moves on a click | L111 | P3 | M | |
 
 ### Speed of editing
 
