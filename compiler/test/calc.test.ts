@@ -1,5 +1,5 @@
 // calc (ters/examples/calc), the program of GAPS.md round 1: the
-// evaluator, the compiled code and the hand-written ideal must print the
+// evaluator, the core IR's JavaScript and the hand-written ideal must print the
 // same thing on every session.
 
 import { test } from "node:test";
@@ -26,19 +26,17 @@ test("calc: definitions, every operator, how it parses, and the errors", () => {
   for (const [way, run] of Object.entries(w)) assert.deepEqual(run(input), want, way);
 });
 
-test("calc: random sessions agree four ways (the core IR's too)", () => {
+test("calc: random sessions agree three ways", () => {
   for (const seed of [1, 2, 3]) {
     const input = session(200, seed);
     const want = w.evaluator(input);
-    for (const way of ["ideal", "compiled", "core"] as const) assert.deepEqual(w[way](input), want, way);
+    for (const way of ["ideal", "core"] as const) assert.deepEqual(w[way](input), want, way);
   }
 });
 
 test("calc: parentheses 100,000 deep, and an error 5,000 deep, on the default stack (C21)", () => {
   // JavaScript's stack holds about 1,500 of them: the core IR's written
   // reader keeps its depth on the heap (C110 s5b).
-  // compile.ts's written reader recurses on JavaScript's stack, so this
-  // is the core IR's way only.
   assert.deepEqual(w.core(deep(100_000)), { out: ["1"], err: [], code: 0 });
   const bad = "(".repeat(5000) + "1 +" + ")".repeat(5000);
   const input = [deep(5000), bad, "7 / 0", "1 + 1"].join("\n");
