@@ -140,6 +140,48 @@ That is not enough where bits matter:
   program allows approximate ways, as shaders do already (#528: WGSL's
   cos differs by 2⁻¹¹).
 
+## A direction is a way of its relation (L182c1, 2026-11-05)
+
+A def node carries two flags that say the same kind of thing. `way`
+names an interface field the definition is one way to compute. Since
+POLAR.md, `direction` names a relation the definition computes in one
+direction (`unpolar` is `polar` given x and y). Both say "a cheaper or
+better-behaved computation of something written elsewhere, which must
+agree with it". FOUNDATIONS-2026-11-03 §8 counts both among the flags
+that act as hidden kinds, so `direction` goes and `way` covers both:
+
+- **What a way may name.** An interface field, as today, or a definition
+  with results (a relation). Naming a relation, the way is a direction of
+  it: its results are the ports it gives, its other parameters the ports
+  it is given, matched by position as `direction` is today
+  (directions.ts `directionProblem`).
+- **What reads it.** arith.ts's search reads only ways of fields, as now.
+  directions.ts's `directionsIn` reads ways whose target is a definition,
+  so `useDirections` rewrites a solve of `polar` given x and y into a call
+  of `unpolar` as it does today. One flag, two readers, each by what the
+  target is, the way a `ref` means a variable or a definition by its
+  target.
+- **Costs.** A direction may then carry `cost` like any way. Two
+  directions of one relation in the same mode, which `directionProblem`
+  refuses today, become a choice by cost, as two ways of one field are.
+- **Laws.** Unchanged: each direction's answers hold for the relation
+  (directions.test.ts, L201), as each way agrees with its field (the
+  prelude's `… agrees at Float64` laws).
+- **Saved programs and hashes.** hash.ts already hashes `direction` and
+  `way` the same way (each a `defRef`). A def saved with `direction: r`
+  is read as `way: r` by a SHAPE_STEPS entry, so the hash of a published
+  direction changes once. The prelude's directions (`unpolar` and the
+  inverse trig ones) are republished with it, as L184 keeps ids.
+- **The editor.** Its "A direction of polar" panel (main.ts) and the
+  check that keeps a direction out of a merge (typed.ts) read `way` with
+  a definition as its target. Asked of the Editor lane with step (c2).
+
+Step (c2) is that move: model.ts drops `direction`, SCHEMA keeps `way`
+as a ref, directions.ts and infer.ts read the way's target, the
+SHAPE_STEPS entry moves saved programs, and the prelude is rebuilt.
+Step (c3), `field.ports`, is separate: a field's ports are its function
+type's parameter names, read from the type the field already has.
+
 ## Compared with what exists
 
 - **Haskell's default methods and `MINIMAL` pragma** (GHC 7.8). `Eq`
