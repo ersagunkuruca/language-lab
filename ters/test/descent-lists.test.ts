@@ -56,3 +56,26 @@ test("the written reader reads the nested lists as descent does (L72b2)", async 
     assert.equal(showValue(got, all, allNames), want === null ? "none" : `some(${shown(want)})`, line);
   }
 });
+
+// Float64s as show writes them (L72c): read back to the number whose show
+// is that text, as the search reads them.
+test("Float64s read back by descent as show writes them (L72c)", async () => {
+  const { NUMBER } = await import("../src/lang/types.ts");
+  const k2 = new Lang(LIBRARY.code);
+  const V = k2.type("Values", [], [["one", [["x", () => k2.tref(NUMBER)]]], ["many", [["items", (self) => k2.tref(LIST, k2.tref(self))]]]]);
+  const pr = k2.def("values text");
+  k2.define(pr, k2.fn(["v"], (v) => k2.match(v, [
+    { variant: V.v.one, names: ["x"], body: ([x]) => k2.call(S.show, x) },
+    { variant: V.v.many, names: ["items"], body: ([items]) => k2.call(S.concat, k2.lit("("), k2.call(S.concat, k2.call(L("join all"), k2.call(L("map"), items, k2.x(pr)), k2.lit(" ")), k2.lit(")"))) },
+  ])));
+  const c2 = { nodes: { ...LIBRARY.code.nodes, ...k2.code.nodes }, defs: [...LIBRARY.code.defs, ...k2.code.defs.filter((d) => !LIBRARY.code.defs.includes(d))] }, n2 = { ...LIBRARY.names, ...k2.names };
+  const r2 = makeRunner(c2, infer(c2, n2), { print: () => {}, names: n2 });
+  const rd = descentReader(c2, pr, n2);
+  for (const line of ["1", "-2.5", "0.3", "(1 2.25 (-0.5) ())", "1e-12", "(3 1e-7)"]) {
+    const v = rd(line, 0);
+    assert.ok(v !== null, line);
+    assert.equal([...(r2.call(r2.value(pr), v) as Iterable<Value>)][0], line, line);
+  }
+  // Spellings show doesn't write have no reading.
+  for (const line of ["1.0", "+1", "0.30", ".5", "1e3", "(1  2)"]) assert.equal(rd(line, 0), null, line);
+});

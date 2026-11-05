@@ -115,6 +115,7 @@ export function firstSets(code: Code, printer: Id, names: Record<Id, string>): F
     const text = (x: Id) => { const v = value(x, env, depth); return v.k === "text" ? v.f : ANY; };
     if (f === "builtin.concat") return { k: "text", f: then(text(n.args[0]), text(n.args[1])) };
     if (f === "builtin.fail") return { k: "text", f: NONE };
+    if (f === "builtin.show") return { k: "text", f: union(one("digit"), one("-")) };
     if (f === "builtin.int.show") { const v = value(n.args[0], env, depth); return { k: "text", f: v.k === "int" && v.nonNegative ? one("digit") : union(one("digit"), one("-")) }; }
     if (f === printer) return { k: "text", f: one("itself") };
     // A list's items between separators (L72b): none, or what an item starts with.
