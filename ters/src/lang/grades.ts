@@ -37,7 +37,7 @@ import { children as childIds, dependencies, subtree, type Code, type Id, type N
 import type { Info } from "./infer.ts";
 import { LIBRARY } from "./library.ts";
 import { makeRunner, type Value } from "./run.ts";
-import { ALGEBRA_V, ARITH, CONS, LIST, NIL, S, SET as S_SET, TRUE, writtenItems } from "./std.ts";
+import { ALGEBRA, ALGEBRA_V, ARITH, CONS, LIST, NIL, S, SET as S_SET, TABLE_ENTRY, TRUE, writtenItems } from "./std.ts";
 import { B } from "../prelude.ts";
 import { hashes } from "../hash.ts";
 import { MASK_TYPES, NUMBER, type Type } from "./types.ts";
@@ -58,6 +58,9 @@ export interface Algebra {
   // running the program's own operation the first time it is asked for).
   pair(op: Binary, i: number, j: number): number;
   one(op: Unary, i: number): number;
+  // A record of Float64s with a multiplication table but no algebra
+  // (L203f): its masks are its parts', and it has no blades or grades.
+  record?: boolean;
 }
 type Binary = "product" | "outer" | "inner" | "regressive";
 type Unary = "reverse" | "involute" | "dual" | "undual";
@@ -149,13 +152,16 @@ export function algebrasOf(code: Code, info: Info): Map<Id, Algebra> {
   if (found) return found;
   found = new Map();
   cache.set(code, found);
-  if (!CL.algebra) return found;
   const r = makeRunner(code, info, { print: () => {} });
   const first = (xs: Iterable<Value>) => { for (const x of xs) return x; };
   for (const d of code.defs) {
     const def = code.nodes[d] as NodeOf<"def">;
+    // A definition with no inputs whose value is an Algebra, however it
+    // is made (clifford algebra, a function of the program's own, the
+    // record written out): found by its type, not a name (L203g).
     const body = def?.kind === "def" && def.body ? code.nodes[def.body] : undefined;
-    if (!isCall(body) || (code.nodes[body.fn] as Node)?.kind !== "ref" || cliffordOps(code).get((code.nodes[body.fn] as NodeOf<"ref">).target) !== "algebra") continue;
+    const t0 = info.typeOf.get(d), t = t0 && info.subst.zonk(t0);
+    if (!body || body.kind === "lambda" || body.kind === "typedef" || t?.t !== "con" || t.id !== ALGEBRA) continue;
     try {
       const al = r.value(d) as { tag: Id; fields: Value[] };
       if (al?.tag !== ALGEBRA_V) continue;
@@ -216,6 +222,37 @@ export function algebrasOf(code: Code, info: Info): Map<Id, Algebra> {
   return found;
 }
 
+// The records a program's own table multiplies (L203f): a definition of
+// the program's, not the library's, whose value is a `List (Table entry
+// R)`, R one case of Float64s that no algebra the program writes down is
+// on. A library of its own, written without clifford algebra, gets its
+// products' masks this way, read from the table by its own code. (std's
+// Complex, Dual and matrices have tables too, and are left as they are.)
+const recordCache = new WeakMap<Code, Map<Id, Algebra>>();
+export function recordsOf(code: Code, info: Info): Map<Id, Algebra> {
+  let found = recordCache.get(code);
+  if (found) return found;
+  found = new Map();
+  recordCache.set(code, found);
+  const taken = new Set([...algebrasOf(code, info).values()].map((a) => a.variant));
+  for (const d of code.defs) {
+    const def = code.nodes[d] as NodeOf<"def">;
+    if (LIBRARY.code.nodes[d] || def?.kind !== "def" || !def.body || code.nodes[def.body]?.kind === "lambda") continue;
+    const t0 = info.typeOf.get(d), t = t0 && info.subst.zonk(t0);
+    const entry = t?.t === "con" && t.id === LIST ? t.args[0] : undefined;
+    const r = entry?.t === "con" && entry.id === TABLE_ENTRY ? entry.args[0] : undefined;
+    if (r?.t !== "con") continue;
+    const td = code.nodes[(code.nodes[r.id] as NodeOf<"def">)?.body ?? ""];
+    if (td?.kind !== "typedef" || td.effect || td.variants.length !== 1) continue;
+    const variant = td.variants[0], fields = (code.nodes[variant] as NodeOf<"variant">).fields;
+    if (taken.has(variant) || found.has(variant) || !fields.length || fields.length > 30) continue;
+    if (!fields.every((f) => { const ty = code.nodes[(code.nodes[f] as NodeOf<"field">).type]; return ty?.kind === "tref" && ty.target === NUMBER; })) continue;
+    const full = (1 << fields.length) - 1;
+    found.set(variant, { def: d, variant, value: [] as unknown as Value, parts: fields.length, blades: [], full, pair: () => full, one: () => full, record: true });
+  }
+  return found;
+}
+
 const binary = (alg: Algebra, op: Binary, a: number, b: number) => {
   let m = 0;
   for (const i of bits(a)) for (const j of bits(b)) m |= alg.pair(op, i, j);
@@ -242,7 +279,7 @@ interface Hooks { onCall?: (call: Call, args: V[]) => V | undefined; onValue?: (
 function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: Hooks = {}) {
   const algebras = algebrasOf(code, info);
   const ops = cliffordOps(code);
-  const byVariant = new Map([...algebras.values()].map((a) => [a.variant, a]));
+  const byVariant = new Map([...algebras.values(), ...recordsOf(code, info).values()].map((a) => [a.variant, a]));
   const nodes = code.nodes;
   const lam = (id: Id): NodeOf<"lambda"> | null => {
     let n: Node | undefined = nodes[id];
@@ -317,7 +354,7 @@ function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: H
   // A value the reading lost: a Float64 is still a number, and a
   // multivector of a known algebra still has every part.
   const byType = new Map<Id, Algebra>();
-  for (const a of algebras.values()) {
+  for (const a of byVariant.values()) {
     const t = code.defs.find((d) => { const b = (nodes[d] as NodeOf<"def">)?.body; const n = b ? nodes[b] : undefined; return n?.kind === "typedef" && n.variants.includes(a.variant); });
     if (t) byType.set(t, a);
   }
@@ -345,7 +382,7 @@ function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: H
       const named = ty?.kind === "tref" ? MASK_TYPES[ty.target] : undefined;
       const arg = named && ty?.kind === "tref" && ty.args.length === 1 ? nodes[ty.args[0]] : undefined;
       const alg = arg?.kind === "tref" ? byType.get(arg.target) : undefined;
-      if (!named || !alg) continue;
+      if (!named || !alg || alg.record) continue;
       const m = alg.blades.reduce((acc, bl, i) => ((named.grades === "even" ? bl.length % 2 === 0 : named.grades.includes(bl.length)) ? acc | (1 << i) : acc), 0);
       (listed ? declaredItems : declared).set(f, { alg, m, name: listed ? `a list of ${named.name}` : named.name });
     }
@@ -408,7 +445,10 @@ function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: H
         const t = nodes[n.target];
         if (t?.kind === "def" && t.body && depth < DEPTH) {
           const b = nodes[t.body];
-          return b?.kind === "lambda" ? { k: "closure", lambda: b, env: new Map() } : ev(t.body, new Map(), depth + 1);
+          if (b?.kind === "lambda") return { k: "closure", lambda: b, env: new Map() };
+          // A definition's value that runs is known (a table written down).
+          const kv = valueOf(n.target);
+          return kv !== undefined && typeof kv === "object" ? lower({ k: "known", v: kv }) : ev(t.body, new Map(), depth + 1);
         }
         return TOP;
       }
@@ -697,12 +737,13 @@ function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: H
 }
 
 export function bladeMask(code: Code, info: Info, fn: Id, given: (number | null)[] = [], mistakes?: Map<Id, string>): { algebra: Algebra; mask: number } | null {
-  if (!algebrasOf(code, info).size) return null;
+  if (!algebrasOf(code, info).size && !recordsOf(code, info).size) return null;
   const { algebras, ev, lam } = makeReader(code, info, mistakes);
   const l = lam(fn);
   const env = new Map<Id, V>();
-  // An input given as a mask: of which algebra, if there's only one.
-  const only = algebras.size === 1 ? [...algebras.values()][0] : null;
+  // An input given as a mask: of which algebra (or record), if there's only one.
+  const all = [...algebras.values(), ...recordsOf(code, info).values()];
+  const only = all.length === 1 ? all[0] : null;
   l?.params.forEach((p, i) => env.set(p, given[i] != null && only ? { k: "mask", alg: only, m: given[i]! } : TOP));
   const v = l ? ev(l.body, env, 0) : ev(fn, env, 0);
   return v.k === "mask" ? { algebra: v.alg, mask: v.m } : null;
@@ -722,7 +763,7 @@ export function bladeMask(code: Code, info: Info, fn: Id, given: (number | null)
 // too small. Off still means 0 in exact arithmetic, as above.
 export function valueMasks(code: Code, info: Info, open: Iterable<Id>): Map<Id, { algebra: Algebra; mask: number }> {
   const out = new Map<Id, { algebra: Algebra; mask: number }>();
-  if (!algebrasOf(code, info).size) return out;
+  if (!algebrasOf(code, info).size && !recordsOf(code, info).size) return out;
   const nodes = code.nodes;
   // The program's own definitions; the library's are read as before.
   const fnDefs = code.defs.filter((d) => { const n = nodes[d] as NodeOf<"def">; return !LIBRARY.code.nodes[d] && n?.kind === "def" && !n.way && !!n.body && nodes[n.body]?.kind === "lambda"; });
@@ -886,6 +927,7 @@ const GRADE = ["a scalar", "a vector", "a bivector", "a trivector"];
 export function describeMask(alg: Algebra, mask: number): string {
   const on = bits(mask);
   if (!on.length) return "0";
+  if (alg.record) return on.length === alg.parts ? "every part" : `parts ${on.map((i) => i + 1).join(", ")}`;
   const grades = new Set(on.map((i) => gradeOf(alg, i)));
   const all = (g: (k: number) => boolean) => alg.blades.every((b, i) => !g(b.length) || ((mask >> i) & 1));
   if (grades.size === 1) {

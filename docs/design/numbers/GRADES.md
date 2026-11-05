@@ -185,6 +185,24 @@ keep grades, the projection builds on the reflection, the exponential is
 a closure under the product, and `part` and `with part` find a blade from
 literal vectors.
 
+**L203f, built.** A record of Float64s that one of the program's own
+definitions multiplies, a value of type `List (Table entry R)`, gets masks
+of its parts with no algebra (`recordsOf`): no blades and no grades, so no
+named masks, and `describeMask` names its parts by number. A definition's
+value that runs is now known wherever it is read, so `table product(my
+table, x, y)` reads the table line by line. std's own tables (Complex,
+Dual, the matrices) are left out for now: masks on them would change the
+compiled code of every program that uses them, which belongs with L209.
+What is left of the plan: an algebra is still found by `clifford
+algebra`'s name.
+
+**L203g, built.** An algebra is found by its type: a definition with no
+inputs whose value is an `Algebra`, however it is made. That closes the
+plan. What is still read by name is kept on purpose, each rule being
+sharper than its code (the sandwich, the reflection, the projection, the
+exponential, `part` and `with part`); masks on std's own tables went to
+L209.
+
 ## In the compiler (L43c)
 
 `valueMasks` (grades.ts) works out each definition's input masks from all

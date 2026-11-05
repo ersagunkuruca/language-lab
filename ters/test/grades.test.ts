@@ -293,3 +293,45 @@ test("the prelude's Clifford products read from their code give the blades' mask
     for (const j of [1, 6, 15]) for (const op of binaries) assert.equal(mask(two[op], [1 << i, 1 << j]), alg.pair(op, i, j), `${op} e${i} e${j}`);
   }
 });
+
+// L203f: a record of Float64s a program's own table multiplies, with no
+// clifford algebra, has masks of its parts too: here the dual numbers
+// written as a library of one's own would (a + bε, ε² = 0).
+test("a program's own record with its own multiplication table gets masks, with no algebra", () => {
+  const k = new Lang(LIBRARY.code);
+  const D = k.type("My dual", [], [["my dual", [["a", () => k.tref(NUMBER)], ["b", () => k.tref(NUMBER)]]]]);
+  const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
+  const of = (a: Id, b: Id) => k.call(D.v["my dual"], a, b);
+  const one = () => of(k.lit(1), k.lit(0)), eps = () => of(k.lit(0), k.lit(1));
+  const table = def("my table", () => k.list(k.call(TIMES_V, one(), one(), one()), k.call(TIMES_V, one(), eps(), eps()), k.call(TIMES_V, eps(), one(), eps())));
+  const times = (x: Id, y: Id) => k.call(lib("table product"), k.x(table), x, y);
+  const real = def("real times real", () => k.fn(["x", "y"], (x, y) => times(of(x, k.lit(0)), of(y, k.lit(0)))));
+  const mixed = def("real times ε", () => k.fn(["x", "y"], (x, y) => times(of(x, k.lit(0)), of(k.lit(0), y))));
+  const nil = def("ε times ε", () => k.fn(["x", "y"], (x, y) => times(of(k.lit(0), x), of(k.lit(0), y))));
+  const code = base(k.code), names = { ...baseNames(), ...k.names }, info = infer(code, names);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const mask = (d: Id) => bladeMask(code, info, d)?.mask;
+  assert.equal(mask(real), 0b01);
+  assert.equal(mask(mixed), 0b10);
+  // ε · ε has no line in the table: nothing on.
+  assert.equal(mask(nil), 0);
+  const r = bladeMask(code, info, mixed)!;
+  assert.equal(describeMask(r.algebra, r.mask), "parts 2");
+});
+
+// L203g: an algebra is found by its type, however its value is made: here
+// through a function of the program's own rather than clifford algebra.
+test("an algebra made by the program's own function is found by its type", () => {
+  const k = new Lang(LIBRARY.code);
+  const M = k.type("Multivector", [], [["multivector", Array.from({ length: 4 }, (_, i) => [`p${i}`, () => k.tref(NUMBER)] as [string, () => Id])]]);
+  const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
+  const at = (parts: Record<number, number | Id>) => k.call(M.v.multivector, ...Array.from({ length: 4 }, (_, i) => (typeof parts[i] === "string" ? parts[i] as Id : k.lit((parts[i] as number) ?? 0))));
+  const made = def("made", () => k.fn(["squares", "basis"], (sq, es) => k.call(lib("clifford algebra"), sq, es)));
+  const al = def("plane", () => k.call(made, k.list(k.lit(1), k.lit(1)), k.list(...Array.from({ length: 4 }, (_, i) => at({ [i]: 1 })))));
+  // Parts: 1, e1, e2, e12. Two vectors' product: a scalar and a bivector.
+  const product = def("product", () => k.fn(["x", "y"], (x, y) => k.call(lib("clifford product"), k.x(al), at({ 1: x, 2: y }), at({ 1: y, 2: x }))));
+  const code = base(k.code), names = { ...baseNames(), ...k.names }, info = infer(code, names);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  assert.deepEqual([...algebrasOf(code, info).keys()], [al]);
+  assert.equal(bladeMask(code, info, product)?.mask, 0b1001);
+});
