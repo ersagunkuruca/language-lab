@@ -28,5 +28,26 @@
   "f1n9ttn882jm0o9laafiu1fin8": [
     "29.62",
     "5"
+  ],
+  "jabh26ietsm6hd10lgu0rt2a6k": [
+    {
+      "main": {
+        "arguments": [],
+        "input": "",
+        "files": {},
+        "printed": [
+          "period(1, 9.81) = 2.006066681",
+          "fall(29.62, 5, 9.81, 2) = true",
+          "landing times(29.62, 5) = 2 -3.019367992",
+          "rotate (1, 0) by a quarter turn = (0, 1)",
+          "what lands on (0, 2) after a quarter turn = (2, 0)",
+          "polar(0, 2, 2, π/2) = false",
+          "for some y, angle: polar(1, y, 2, angle) = true",
+          "for some y, angle: polar(3, y, 2, angle) = false"
+        ],
+        "errors": [],
+        "exit": 0
+      }
+    }
   ]
 }
