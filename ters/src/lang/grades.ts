@@ -659,8 +659,15 @@ function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: H
     // program's own nodes) reads the same for the same inputs: kept.
     const key = target && LIBRARY.code.nodes[target] ? keyOf(target, vs) : null;
     if (key !== null) { const was = libReads.get(key); if (was) return was; }
+    // The program's own too, within this reading: without it, definitions
+    // calling each other in several arms (examples/agent's funnel: pull,
+    // pull left, restart) are read again for every path to the depth, which
+    // is exponential in it. What a first reading put and found stays.
+    const ownKey = key === null && target && nodes[target]?.kind === "def" ? keyOf(target, vs) : null;
+    if (ownKey !== null) { const was = ownReads.get(ownKey); if (was) return was; }
     const out = apply(f, vs, depth);
     if (key !== null) libReads.set(key, out);
+    if (ownKey !== null) ownReads.set(ownKey, out);
     return out;
   };
 
@@ -672,6 +679,7 @@ function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: H
   // What a library call's inputs are, as a key; null when one is or holds
   // a function.
   const libReads = readsOf(code);
+  const ownReads = new Map<string, V>();
   const keyOf = (target: Id, vs: V[]): string | null => {
     const part = (v: V): string | null => {
       switch (v.k) {

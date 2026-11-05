@@ -25,6 +25,7 @@ import { toList, type Runtime } from "../../ters/src/lang/run.ts";
 import { fusedProgram } from "./handlers.ts";
 import { infer, type Info } from "../../ters/src/lang/infer.ts";
 import { useDirections } from "../../ters/src/lang/directions.ts";
+import { interfaceOps, waysIn } from "../../ters/src/lang/ways.ts";
 import { withInverses } from "./inverses.ts";
 import { hoistInvariants } from "./hoist.ts";
 import { dependencies, ownerOfTypeParts, type Code, type Id, type NodeOf } from "../../ters/src/model.ts";
@@ -366,7 +367,21 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
           // Around several answers or a wait (C182): an abort while the
           // rest of the search runs isn't this handler's.
           const fr = e.frame === undefined ? "" : local(e.frame);
-          pre.push(`${d}${save}let ${t};`, ...(fr ? [`${d}${fr} = { inRest: false };`] : []), `${d}try {`, ...within(null, () => block(e.body, { set: t }, d + "  ")), `${d}} catch (x) {`, `${d}  if (!(x instanceof R.Aborted) || x.esc !== ${e.esc ?? 0}${fr ? ` || ${fr}.inRest` : ""}) throw x;`, `${d}  ${back}${local(e.reason)} = x.reason;`, ...block(e.arm, { set: t }, d + "  "), `${d}}`);
+          if (fr) {
+            // The case as a function, so a page's wait (Pending) going out
+            // through the handler is resumed inside it again (R.caught).
+            const h = temp();
+            // On the program's stack of handlers too (C185), so a rest a
+            // handler outside keeps for later, run once this has
+            // returned, still has its aborts caught by it (core-rt.ts).
+            const n = temp();
+            pre.push(`${d}${save}let ${t};`, `${d}const ${h} = (x) => {`, `${d}  if (!(x instanceof R.Aborted) || x.esc !== ${e.esc ?? 0} || ${fr}.inRest) throw x;`, `${d}  ${back}${local(e.reason)} = x.reason;`,
+              ...within("return R.FAIL;", () => block(e.arm, { set: t }, d + "  ")), `${d}  return ${t};`, `${d}};`, `${d}${fr} = { inRest: false, abort: ${h} };`, `${d}const ${n} = R.hin(${fr});`,
+              `${d}try {`, ...within(null, () => block(e.body, { set: t }, d + "  ")), `${d}} catch (x) {`, `${d}  R.hout(${n});`, `${d}  ${t} = R.caught(x, ${h});`, `${d}} finally {`, `${d}  R.hout(${n});`, `${d}}`);
+            if (onFail) pre.push(`${d}if (${t} === R.FAIL) ${onFail}`);
+            return t;
+          }
+          pre.push(`${d}${save}let ${t};`, `${d}try {`, ...within(null, () => block(e.body, { set: t }, d + "  ")), `${d}} catch (x) {`, `${d}  if (!(x instanceof R.Aborted) || x.esc !== ${e.esc ?? 0}) throw x;`, `${d}  ${back}${local(e.reason)} = x.reason;`, ...block(e.arm, { set: t }, d + "  "), `${d}}`);
           return t;
         }
         // A handler's release (L213a3/a4): after its body on every exit, a
@@ -470,9 +485,17 @@ function reachedImplementing(code: Code, roots: Id[], info: Info): Code {
   const used = new Set<Id>(), more: Id[] = [], kept = new Set<Id>();
   const use = (r: Id) => { if (used.has(r)) return; used.add(r); for (const d of dependencies(code, r)) used.add(d); };
   roots.forEach(use);
+  // The ways of a kept implementation's interface too (WAYS.md): arith.ts
+  // puts one in for a field the implementation leaves `by its ways`, so it
+  // is reached by no reference (examples/impact's `first touch by
+  // advancing`, L120c).
+  const ops = interfaceOps(code), ways = waysIn(code, ops);
+  const ifaceOf = new Map(impls.map(([, d]) => [d, [...(info.implementations ?? [])].find(([, x]) => x === d)![0].split("|")[0]]));
   for (let grew = true; grew;) {
     grew = false;
     for (const [ts, d] of impls) if (!kept.has(d) && ts.every((t) => used.has(t) || t.startsWith("type."))) { kept.add(d); more.push(d); use(d); grew = true; }
+    const ifaces = new Set([...kept].map((d) => ifaceOf.get(d)));
+    for (const [field, ws] of ways) if (ifaces.has(ops.get(field))) for (const w of ws) if (!used.has(w.def)) { more.push(w.def); use(w.def); grew = true; }
   }
   return reachedWithShows(code, [...roots, ...more], info);
 }

@@ -79,7 +79,7 @@ export type Node =
   //
   // `row` (HOSTS.md, L58): a named row, no variants, standing for these
   // effects wherever a function type lists it (`() -[View]-> Text`).
-  | { id: Id; kind: "typedef"; params: Id[]; variants: Id[]; effect?: true; interface?: true; unique?: string; row?: Id[] }
+  | { id: Id; kind: "typedef"; params: Id[]; variants: Id[]; effect?: true; interface?: true; unique?: string; row?: Id[]; pure?: true }
   // An operation's own type variables (BACKLOG L71a, ANSWERED-LATER.md):
   // binders its fields and result may name besides its effect's, fresh at
   // each call and rigid in the case that handles it. `await(ticket: Ticket
@@ -343,7 +343,7 @@ export const SCHEMA: Schema = {
   def: { body: "child", way: "ref", cost: "meaning" },
   builtin: { op: "meaning" },
   hole: {},
-  typedef: { params: "child", variants: "child", effect: "meaning", interface: "meaning", unique: "meaning", row: "ref" },
+  typedef: { params: "child", variants: "child", effect: "meaning", interface: "meaning", unique: "meaning", row: "ref", pure: "meaning" },
   variant: { params: "child", fields: "child", returns: "child", later: "meaning", private: "meaning" },
   field: { type: "child", ports: "meaning", same: "ref" },
   tref: { target: "ref", args: "child" },
@@ -455,20 +455,43 @@ export function parentOf(code: Code, id: Id): { parent: Id; slot: string; index?
 // scans every time, since an edit in progress changes its nodes in place.
 type Parent = NonNullable<ReturnType<typeof parentOf>>;
 const parentIndex = new WeakMap<Code, Map<Id, Parent>>();
+// On the library's layer only the program's own nodes are indexed, and a
+// library node's parent is the layer's, indexed once (I167: the ~27,000
+// nodes were indexed again at each edit's panels, 27 ms of + New
+// definition's Create in Chromium).
 export function parentAt(code: Code, id: Id): Parent | null {
+  const layer = layers.get(code);
+  if (layer && !derived.has(code) && !parentIndex.has(code)) {
+    let own = ownParents.get(code);
+    if (!own) ownParents.set(code, (own = parentsOf(ownNodes(code))));
+    const p = own.get(id);
+    if (p) return p;
+    // A node of the program's own has its parent among its own, or none.
+    if (!layer.nodes[id]) return null;
+    if (code.nodes[id] !== layer.nodes[id]) return parentAtFull(code, id);
+    const q = parentAt(layer, id);
+    return !q || code.nodes[q.parent] === layer.nodes[q.parent] ? q : parentAtFull(code, id);
+  }
+  return parentAtFull(code, id);
+}
+const ownParents = new WeakMap<Code, Map<Id, Parent>>();
+function parentAtFull(code: Code, id: Id): Parent | null {
   let m = parentIndex.get(code);
-  if (!m) {
+  if (!m) parentIndex.set(code, (m = parentsOf(Object.values(code.nodes))));
+  return m.get(id) ?? null;
+}
+function parentsOf(nodes: Iterable<Node>): Map<Id, Parent> {
+  {
     const at = new Map<Id, Parent>();
     const put = (child: Id | null | undefined, p: Parent) => { if (child != null && !at.has(child)) at.set(child, p); };
-    for (const n of Object.values(code.nodes)) {
+    for (const n of nodes) {
       if (isCall(n)) { put(n.fn, { parent: n.id, slot: "fn" }); n.args.forEach((a, i) => put(a, { parent: n.id, slot: "args", index: i })); }
       else if (n.kind === "lambda" || n.kind === "arm" || n.kind === "def") put(n.body, { parent: n.id, slot: "body" });
       else if (n.kind === "match" || n.kind === "fold") { put(n.scrutinee, { parent: n.id, slot: "scrutinee" }); if (n.kind === "match") put(n.otherwise, { parent: n.id, slot: "otherwise" }); }
       else if (isUse(n)) { put(n.fn, { parent: n.id, slot: "fn" }); put(n.body, { parent: n.id, slot: "body" }); for (const key of Object.keys(n.given)) put(n.given[key], { parent: n.id, slot: "given", key }); }
     }
-    parentIndex.set(code, (m = at));
+    return at;
   }
-  return m.get(id) ?? null;
 }
 
 // Semantic edit: put a different node in the slot `id` occupies. The old

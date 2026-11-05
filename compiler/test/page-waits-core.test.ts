@@ -15,7 +15,7 @@ import { Cells } from "../../ters/src/lang/cells.ts";
 import { browserWorld } from "../../ters/src/lang/browser.ts";
 import { mountHtml } from "../../ters/src/lang/html.ts";
 import { equal, type Value } from "../../ters/src/lang/run.ts";
-import { AWAIT_OP, CELL_OPS, HTML_V, INT_OPS, S, START_TIMER_OP, TEXT_OPS, WAIT_OP } from "../../ters/src/lang/std.ts";
+import { ABORT_OP, AWAIT_OP, CELL_OPS, HTML_V, INT_OPS, S, START_TIMER_OP, TEXT_OPS, WAIT_OP } from "../../ters/src/lang/std.ts";
 import type { Id } from "../../ters/src/model.ts";
 import { fakeDoc, FakeEl, FakeText } from "../../ters/test/fakedom.ts";
 import { coreCall, loadCoreJs, lowerCore } from "../src/core-js.ts";
@@ -115,4 +115,18 @@ test("on the core IR, a main that waits prints and waits as the evaluator's", as
   assert.equal(runCoreMain(l, "main", [], { print: (s) => got.push(s), world: world(got) }), 0);
   assert.deepEqual(got, want);
   assert.deepEqual(got, ["a", "wait 100", "b", "wait 50", "c"]);
+});
+
+// C182: a handler of Abort around the wait catches an abort after it,
+// once the page has resumed the run: the handler is still around it.
+test("on the core IR, a click whose wait is inside a handler of Abort: an abort after the wait is caught", async () => {
+  const o = open(saver((k) => k.handle(k.seq(k.call(WAIT_OP, k.lit(500)), k.call(ABORT_OP, k.lit("late"))), [
+    { variant: ABORT_OP, names: ["why"], body: ([why]) => k.call(S.print, why) },
+  ])));
+  o.button.fire("click");
+  assert.equal(o.shown(), "saving… 0");
+  o.timers[0].go();
+  await settle();
+  assert.deepEqual(o.printed, ["start", "late", "done"]);
+  assert.equal(o.shown(), "saved 1");
 });

@@ -26,7 +26,9 @@ test("Bounce's compiled step multiplies only the parts its vectors, bivectors an
     let b = fns[at(`${world.toLowerCase()} bodies`)]();
     for (let i = 0; i < 200; i++) b = fns[at(`step at ${world} at ${world.toLowerCase()}`)](b);
     const out: number[] = [];
-    JSON.stringify(plainValue(b), (_, v) => { if (typeof v === "number") out.push(v); return v; });
+    // A smaller record leaves out the parts that are 0: only the others
+    // are compared (with every part, they are about 1e-17 or 0).
+    JSON.stringify(plainValue(b), (_, v) => { if (typeof v === "number" && Math.abs(v) > 1e-12) out.push(v); return v; });
     return out;
   };
   for (const world of ["Flat", "Solid"]) {

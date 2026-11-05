@@ -8,7 +8,7 @@ are more ways of their own, so what a target lacks is filled in from the
 laws, and nothing about targets enters the language.
 
 **Status (2026-10-30).** Steps 1 and 2 are built (L96a to L96c: ways,
-"nothing grounds" in the checker, costs). Step 3 is L97, mostly built
+"nothing grounds" in the checker, costs). Since 2026-11-05 (L120c) a field left to its ways compiles through the core IR too, and a program's own interface works with no implementation at Float64 (examples/impact's `Collider`). Step 3 is L97, mostly built
 (POLAR.md); steps 4 and 5 are open.
 
 ## Short answer

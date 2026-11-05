@@ -56,6 +56,24 @@ estimate, which the design note proposed, was measured in a JavaScript
 prototype first: on this map it looked at as many states (about 4,900
 against 5,100), so the straight line stays.
 
+Two chasers follow the blue agent (L124), thrusting at it as hard as
+they can, 2 m/s², at the target less half a second of their own
+velocity. Both have a top speed of 3 m/s, held two ways (§"Drag or
+rapidity for the top speed?" in the design note):
+
+- the green one has linear drag, so its speed levels off at 3 m/s
+  (`drag step`, moved exactly as the coupled search moves);
+- the purple one has a speed cap like light's. Its velocity is a boost
+  in Cl(2, 1), the plane and time (`Plane time`, made by `clifford
+  algebra` from the squares −1, 1, 1), and each frame's thrust is a
+  small boost e^(½ dφ d e0) multiplied on its right, with dφ = a·dτ/c
+  and dτ = dt/γ (`rocket step`). Its speed only gets closer to 3 m/s,
+  and near it the rocket turns and brakes weakly, so it overshoots the
+  goal where the green one stops.
+
+The page says both speeds and the rocket's γ each frame. Neither chaser
+sees the pillar.
+
 Credits (on the page too): A* is Peter Hart, Nils Nilsson and Bertram Raphael's (prior art).
 Navigation-mesh pathfinding is from Douglas Demyen and Michael Buro's
 "Efficient triangulation-based pathfinding" (2006) (prior art). The
@@ -69,3 +87,5 @@ The hole grown by the agent's radius is Tomás Lozano-Pérez and Michael
 Wesley's configuration space (1979) (prior art).
 The coupled search is Dmitri Dolgov, Sebastian Thrun, Michael Montemerlo
 and James Diebel's Hybrid A* (2010) (prior art).
+Boosts as rotors are David Hestenes' space-time algebra (1966), and
+rapidity is Alfred Robb's (1911) (prior art).

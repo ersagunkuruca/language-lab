@@ -6,12 +6,14 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { compiledMain } from "../../compiler/src/core-js.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
 import { runMain } from "../src/lang/run.ts";
 import { hostSkeleton } from "../src/lang/hosts.ts";
-import { ABORT_OP, S } from "../src/lang/std.ts";
+import { ABORT_OP, INT_OPS, S } from "../src/lang/std.ts";
+const INT_ADD = INT_OPS.add;
 import { B } from "../src/prelude.ts";
 import type { Id } from "../src/model.ts";
 import { hostOpsOf, loadCoreJs, lowerCore } from "../../compiler/src/core-js.ts";
@@ -141,4 +143,57 @@ test("the clock answered by the program's hosts/js.js in place of the world's, c
   // Uncaught, the Abort ends the run with the reason; Abort itself is the
   // language's own, so a host entry for it isn't asked.
   assert.throws(() => run(main, { world, hosts: { [ABORT_OP]: () => undefined, [NOW_OP]: () => "soon" } }), /now gave "soon", not a finite number/);
+  // The core IR's JavaScript the same (L69d1, core-rt.ts worldFn).
+  const compiled = (name: string, rt: object) => { const out: string[] = []; compiledMain(code, info, names, { print: (s: string) => out.push(s), ...rt } as never, name); return out; };
+  assert.deepEqual(compiled("main", { world }), ["5"]);
+  assert.deepEqual(compiled("main", { world, hosts: { [NOW_OP]: () => 1234 } }), ["1234"]);
+  assert.match(compiled("careful", { world, hosts: { [NOW_OP]: () => NaN } })[0], /the host's now gave null, not a finite number/);
+});
+
+// L69d2: an effect the program marks pure is answered by its host as any
+// of its own, and is in no row, on the program's word: only for what is a
+// function of its inputs (FOREIGN.md, Ersagun 2026-11-05).
+test("a pure effect's operations are answered by the host and are in no row (L69d2)", async () => {
+  const { showType } = await import("../src/lang/types.ts");
+  const k = new Lang();
+  const hash = k.effect("Hash", [["digest", [["text", () => k.tref("type.string")]], () => k.tref("type.int")]], [], { pure: true });
+  const twice = k.def("digest twice");
+  k.define(twice, k.fn(["t"], (t) => k.call(INT_ADD, k.call(hash.op.digest, t), k.call(hash.op.digest, t))));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.call(S.print, k.call(S.show, k.call(twice, k.lit("abc"))))));
+  const careful = k.def("careful");
+  k.define(careful, k.thunk(() => k.call(S.print, k.handle(k.call(S.show, k.call(hash.op.digest, k.lit("x"))), [{ variant: ABORT_OP, names: ["why"], body: ([why]) => why }]))));
+  // A test may still answer it with a match.
+  const faked = k.def("faked");
+  k.define(faked, k.thunk(() => k.call(S.print, k.call(S.show, k.handle(k.call(twice, k.lit("abc")), [{ variant: hash.op.digest, names: ["t"], body: () => k.int(5) }])))));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names);
+  assert.deepEqual(info.errors, []);
+  assert.doesNotMatch(showType(info.subst.zonk(info.typeOf.get(twice)!), names), /Hash/, "Hash is in no row");
+  const hosts = { [hash.op.digest]: (t: unknown) => String(t).length };
+  const run = (def: Id, h?: Record<string, (...xs: never[]) => unknown>) => { const out: string[] = []; runMain(code, info, def, { print: (s) => out.push(s), names, ...(h ? { hosts: h as never } : {}) }); return out; };
+  assert.deepEqual(run(main, hosts), ["6"]);
+  assert.deepEqual(run(faked), ["10"]);
+  assert.deepEqual(run(careful), [`hosts/js.js has no answer for digest (${hash.op.digest})`], "no host: an Abort where it was asked");
+  // The core IR's JavaScript asks the same host.
+  const ir = lowerCore(code, info, names, k.code.defs);
+  const out: string[] = [];
+  loadCoreJs(ir, { print: (s) => out.push(s), hosts }, hostOpsOf(code, names))[ir.funcs.findIndex((g) => g.name === "main" && !g.inner && !g.budgeted)]();
+  assert.deepEqual(out, ["6"]);
+  // Only an operation that answers at once can be pure.
+  const bad = new Lang();
+  bad.effect("Stop", [["stop", [], null]], [], { pure: true });
+  assert.match(infer(base(bad.code), baseNames(bad.names)).errors.map((e) => e.message).join(), /operation of a pure effect, so it gives an answer at once/);
+});
+
+test("an effect is marked pure in the editor only when every operation answers at once (L69d2)", async () => {
+  const { setPure } = await import("../src/lang/toplevel.ts");
+  const k = new Lang();
+  const hash = k.effect("Hash", [["digest", [["text", () => k.tref("type.string")]], () => k.tref("type.int")]]);
+  const stop = k.effect("Stop", [["stop", [], null]]);
+  const on = setPure(k.code, k.names, hash.def, true);
+  assert.ok(on.ok && /pure now/.test(on.note));
+  assert.ok(on.ok && (on.code.nodes[(on.code.nodes[hash.def] as { body: Id }).body] as { pure?: true }).pure);
+  const no = setPure(k.code, k.names, stop.def, true);
+  assert.ok(!no.ok && /doesn't give an answer at once/.test(no.reason));
+  assert.ok(on.ok && setPure(on.code, on.names, hash.def, false).ok);
 });

@@ -396,3 +396,15 @@ test("text from the world is NFC: a decomposed é read from a file and a line eq
   }, { [`caf${decomposed}.txt`]: "x", "name.txt": decomposed }, decomposed);
   assert.deepEqual(r.lines, ["true", "1", "true", `["café.txt", "name.txt"]`, "false", "true"]);
 });
+
+// C183: Random handled by the program beside seeded. Inside seeded, a
+// handler of the program's answers its draws; inside a handler, seeded's
+// generator answers the body's, compiled as evaluated.
+test("Random handled beside seeded, either inside the other, compiled too", async () => {
+  const fixed = (k: Lang, body: Id) => k.handle(body, [{ variant: RANDOM_OP, names: [], body: () => k.lit(0.5) }]);
+  const two = (k: Lang) => k.call(B.add, k.call(RANDOM_OP), k.call(B.mul, k.lit(10), k.call(RANDOM_OP)));
+  const show = (k: Lang, body: (k: Lang) => Id) => { const main = k.def("main"); k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, body(k))))); return main; };
+  const inside = await both((k) => show(k, (k) => k.call(S.seeded, k.lit(1), k.thunk(() => k.call(B.add, k.call(RANDOM_OP), fixed(k, k.call(RANDOM_OP)))))));
+  const outside = await both((k) => show(k, (k) => fixed(k, k.call(B.add, k.call(RANDOM_OP), k.call(S.seeded, k.lit(1), k.thunk(() => two(k)))))));
+  assert.deepEqual([inside.lines, outside.lines], [["1.068605995"], ["9.962545363"]]);
+});

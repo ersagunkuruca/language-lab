@@ -27,10 +27,12 @@
 // value gets its mask (positions and velocities vectors, spins bivectors,
 // turns rotors): its compiled program multiplies 751 times instead of
 // 1914, and a step of the solid world takes about a third less (L43).
+// Then each value is held in a record of only its masked parts (L43f2,
+// narrowing below): half the time of every part, all told.
 
 import type { Id } from "../../ters/src/model.ts";
 import { algebrasOf, type Algebra } from "../../ters/src/lang/grades.ts";
-import type { CoreIR, DType, FType, LType, SExpr, SFunc } from "./scalar.ts";
+import type { CoreIR, DType, FType, LType, RType, SExpr, SFunc } from "./scalar.ts";
 import { OPS, isData, isFn, isRecord, kids, mapKids, mapLocals, tidied } from "./scalar.ts";
 
 // What a value may be: null nothing yet (no value reaches here), false a
@@ -160,7 +162,7 @@ function inlineLeaves(funcs: SFunc[]): SFunc[] {
 }
 
 export function zeroParts(ir0: CoreIR, roots: number[]): { ir: CoreIR; copies: number; dropped: number } {
-  const ir = { ...ir0, funcs: inlineLeaves(ir0.funcs) };
+  const ir: CoreIR = { ...ir0, funcs: inlineLeaves(ir0.funcs) };
   const funcs = ir.funcs;
   // A closure's code, by its function type: what every apply of that type
   // may call.
@@ -485,13 +487,21 @@ export function zeroParts(ir0: CoreIR, roots: number[]): { ir: CoreIR; copies: n
     for (const i of list) if (i.index <= -2) i.index = groups[-2 - i.index].index;
   }
   let dropped = 0;
-  for (const i of groups) {
+  // Each copy read once more, for what each expression may be.
+  const reads = groups.map((i) => {
     const calls = new Map<SExpr, number>();
     const values = new Map<SExpr, Abs>();
     read(i, { call: (e, c) => calls.set(e, c.index), value: (e, a) => { const was = values.has(e) ? values.get(e)! : null; values.set(e, join(was, a)); } });
+    return { calls, values };
+  });
+  // The 0s put for parts known to be 0, which a smaller record leaves out.
+  const zeros = new Set<SExpr>();
+  groups.forEach((i, n) => {
+    const { calls, values } = reads[n];
     const f = funcs[i.fn];
     const pure = (e: SExpr): boolean => ["local", "num", "get", "field", "cap"].includes(e.k) && kids(e).every(pure) || (e.k === "op" && kids(e).every(pure));
     const zero: SExpr = { k: "num", v: 0 };
+    zeros.add(zero);
     // Only a 0 put here is dropped from a sum: a 0 the program adds itself
     // may be there to make −0 into 0 (atan2 reads them apart).
     const isZero = (e: SExpr) => e === zero;
@@ -513,9 +523,329 @@ export function zeroParts(ir0: CoreIR, roots: number[]): { ir: CoreIR; copies: n
       }
       return r;
     };
-    const body = rw(f.body);
-    out[i.index] = tidied({ ...f, body }, i.index);
+    out[i.index] = { ...f, body: rw(f.body) };
+  });
+
+  // A smaller record per mask (L43f2): a multivector whose parts known to
+  // be 0 are left out holds only the others, so a vector of the 3D
+  // projective algebra is 4 numbers, not 16. Each value's record is the
+  // one its type says: a function's inputs and answer have the mask of
+  // what its copy is given and gives, a field of a record or a data type
+  // the mask of everything put there in the whole program (so a list of
+  // bodies is never copied), a let the mask of what it is set to. Where
+  // two meet (an argument, a field, an arm's answer), the value is copied
+  // into the other's record: wider, with 0s, or narrower, leaving out
+  // parts that are 0 there. What the runtime or the world is given or
+  // gives, and what a page's handlers take, keep every part.
+  const narrowed = new Map<string, { base: RType; m: number }>();
+  if (!process.env.NO_NARROW) {
+    const algT = (t: RType) => !t.mutable && algebras.has(t.variant) && t.fields.length > 0 && t.fields.length <= 30 && t.fields.every((x) => x.t === "f64");
+    const full = (A: RType) => 2 ** A.fields.length - 1;
+    const baseOf = (t: LType | null | undefined): RType | null => {
+      if (!t || typeof t !== "object" || !isRecord(t)) return null;
+      const n = narrowed.get(t.key);
+      return n ? n.base : algT(t) ? t : null;
+    };
+    const maskOfT = (t: RType) => narrowed.get(t.key)?.m ?? full(t);
+    const made = new Map<string, RType>();
+    const narrow = (A: RType, m: number): RType => {
+      if (m === full(A)) return A;
+      const k = `${A.key}~${m}`;
+      let r = made.get(k);
+      if (!r) { r = { key: k, name: A.name, def: A.def, variant: A.variant, fields: A.fields.filter((_, j) => (m >> j) & 1) }; made.set(k, r); narrowed.set(k, { base: A, m }); }
+      return r;
+    };
+    const maskOf = (a: Abs, A: RType): number => (a === null ? 0 : typeof a === "object" && "f" in a ? a.f.reduce<number>((m, x, j) => (x === false || x === null ? m : m | (1 << j)), 0) : full(A));
+    const pos = (m: number, j: number) => { let n = 0; for (let b = 0; b < j; b++) if ((m >> b) & 1) n++; return n; };
+    // A 0 put here, maybe under lets of reads (a leaf put in place).
+    const still = (e: SExpr): boolean => ["local", "num", "get", "field", "cap", "op"].includes(e.k) && kids(e).every(still);
+    const isZ = (e: SExpr): boolean => zeros.has(e) || (e.k === "let" && still(e.value) && isZ(e.body));
+    const isCont = (t: LType | null): t is RType | DType => !!t && typeof t === "object" && ((isRecord(t) && !algT(t)) || isData(t));
+
+    // Types whose values the runtime or the world sees or makes keep every
+    // part, with every type inside them.
+    const exposed = new Set<string>();
+    let unknown = false;
+    const seenX = new Set<object>();
+    const expose = (t: LType | null | undefined): void => {
+      if (!t || typeof t !== "object" || seenX.has(t)) return;
+      seenX.add(t);
+      if (isFn(t)) { t.params.forEach((p) => expose(p)); expose(t.result); if (t.answer) expose(t.answer); return; }
+      if (isRecord(t)) { exposed.add(t.key); t.fields.forEach((x) => expose(x.t)); }
+      else if (isData(t)) { exposed.add(t.key); t.cases.forEach((c) => c.fields.forEach((x) => expose(x.t))); }
+      else if ("item" in t) expose(t.item);
+      else if ("keyT" in t) { expose(t.keyT as LType); expose(t.value); }
+    };
+    // A cell only holds what it's given (builtin.cells cell, write and
+    // read): unless the program takes cells' values apart by path, or
+    // edits a list in one, what's in them isn't the runtime's to read.
+    const CELLS = /^host:builtin\.cells\./;
+    const otherCells = funcs.some((f) => { const w = (e: SExpr): boolean => (e.k === "rt" && CELLS.test(e.fn) && !CELL_PUT.test(e.fn) && !CELL_READ.test(e.fn)) || kids(e).some(w); return w(f.body); });
+    const scanX = (f: SFunc, e: SExpr) => {
+      const held = e.k === "rt" && !otherCells && (CELL_PUT.test(e.fn) || CELL_READ.test(e.fn));
+      if ((e.k === "rt" || e.k === "world") && !held) {
+        // What the runtime gives is its own: only the program's values
+        // need a type at hand.
+        for (const a of e.args) { const t = typeOf(f, a); if (t) expose(t); else if (a.k !== "rt" && a.k !== "world") unknown = true; }
+        expose(e.k === "rt" ? e.host?.t : e.t);
+        if (e.k === "world") e.ins?.forEach((t) => expose(t));
+      }
+      if (e.k === "search") { expose(e.t); expose(e.bt); }
+      kids(e).forEach((x) => scanX(f, x));
+    };
+    funcs.forEach((f) => scanX(f, f.body));
+    for (const r of roots) { funcs[r].params.forEach((p) => expose(p)); expose(funcs[r].result); }
+    for (const t of ir.fns) if (wide.has(fkey(t)) || t.several || t.chooses || t.answer) expose(t);
+    for (const t of ir.records) if (t.mutable) expose(t);
+    ir.arrays.forEach((t) => expose(t)); ir.tables.forEach((t) => expose(t)); ir.escapes.forEach((t) => expose(t));
+    funcs.forEach((f) => { if (f.multi) { f.params.forEach((p) => expose(p)); expose(f.result); if (f.answer) expose(f.answer); } });
+
+    if (!unknown) {
+      // What every value of each record and data type may be, over the
+      // whole program.
+      const joined = new Map<string, Abs>();
+      groups.forEach((i, n) => {
+        const f = funcs[i.fn];
+        for (const [e, a] of reads[n].values) { const t = typeOf(f, e); if (isCont(t)) joined.set(t.key, join(joined.has(t.key) ? joined.get(t.key)! : null, a)); }
+      });
+      // Every record and data type object, by key.
+      const objs = new Map<string, (RType | DType)[]>();
+      const seenT = new Set<object>();
+      const collect = (t: LType | null | undefined): void => {
+        if (!t || typeof t !== "object" || seenT.has(t)) return;
+        seenT.add(t);
+        if (isFn(t)) { t.params.forEach((p) => collect(p)); collect(t.result); return; }
+        if (isCont(t)) (objs.get(t.key) ?? objs.set(t.key, []).get(t.key)!).push(t);
+        if (isRecord(t)) t.fields.forEach((x) => collect(x.t));
+        else if (isData(t)) t.cases.forEach((c) => c.fields.forEach((x) => collect(x.t)));
+        else if ("item" in t) collect(t.item);
+        else if ("keyT" in t) { collect(t.keyT as LType); collect(t.value); }
+      };
+      const collectE = (e: SExpr) => {
+        if ("t" in e && typeof e.t === "object") collect(e.t as LType);
+        if (e.k === "case") collect(e.result);
+        if (e.k === "rt") collect(e.host?.t);
+        kids(e).forEach(collectE);
+      };
+      ir.records.forEach((t) => collect(t)); ir.data.forEach((t) => collect(t)); ir.fns.forEach((t) => collect(t));
+      ir.shapes.forEach((s) => s.caps.forEach((t) => collect(t)));
+      out.forEach((f) => { f.params.forEach((t) => collect(t)); f.locals.forEach((t) => collect(t)); collect(f.result); collectE(f.body); });
+      // Their fields' records, from what was put there.
+      const sets: [{ t: LType }, RType][] = [];
+      for (const [k, list] of objs) {
+        if (exposed.has(k) || !joined.has(k)) continue;
+        const J = joined.get(k)!, t0 = list[0];
+        if (isRecord(t0)) t0.fields.forEach((x, i) => { const A = baseOf(x.t); if (A) for (const o of list) sets.push([(o as RType).fields[i], narrow(A, maskOf(fieldOf(J, i), A))]); });
+        else t0.cases.forEach((c, ci) => c.fields.forEach((x, i) => { const A = baseOf(x.t); if (A) for (const o of list) sets.push([(o as DType).cases[ci].fields[i], narrow(A, maskOf(caseField(J, ci, i), A))]); }));
+      }
+      for (const [x, t] of sets) x.t = t;
+      // A closure's captures, from what every closure of its shape
+      // captured; the runtime's closures (its solver reads them) keep all.
+      ir.shapes = ir.shapes.map((s, si) => (wide.has(fkey(s.t)) ? s : { ...s, caps: s.caps.map((t, i) => { const A = baseOf(t); return A ? narrow(A, maskOf(caps[si][i], A)) : t; }) }));
+      // A function type's inputs and answer, from every closure code of it.
+      const fnSig = new Map<string, { params: LType[]; result: LType }>();
+      const codeKey = new Map<number, string>();
+      for (const [k, codes] of codesOf) {
+        const cs = [...codes], g = funcs[cs[0]];
+        cs.forEach((c) => codeKey.set(c, k));
+        const ft = ir.fns.find((t) => fkey(t) === k);
+        const whole = wide.has(k) || !ft || ft.several || ft.chooses || ft.answer || cs.some((c) => funcs[c].multi || funcs[c].params.length !== g.params.length);
+        const of = (t: LType, pick: (i: Inst) => Abs): LType => {
+          const A = baseOf(t);
+          if (!A || whole) return t;
+          let a: Abs = null;
+          for (const c of cs) { const i = byKey.get(`c${c}`); if (i) a = join(a, pick(i)); }
+          return narrow(A, maskOf(a, A));
+        };
+        fnSig.set(k, { params: g.params.slice(1).map((p, j) => of(p, (i) => i.params[j + 1] ?? null)), result: of(g.result, (i) => i.result) });
+      }
+      // Each copy's inputs and answer.
+      for (const i of groups) {
+        const f = out[i.index];
+        if ((roots.includes(i.fn) && i.index === i.fn) || f.multi || f.value) continue;
+        const k = codeKey.get(i.fn);
+        if (k !== undefined) {
+          const s = fnSig.get(k)!;
+          out[i.index] = { ...f, params: [f.params[0], ...s.params], result: s.result };
+          continue;
+        }
+        const of = (t: LType, a: Abs) => { const A = baseOf(t); return A ? narrow(A, maskOf(a, A)) : t; };
+        out[i.index] = { ...f, params: f.params.map((p, j) => of(p, i.params[j] ?? null)), result: of(f.result, i.result) };
+      }
+
+      // Every body, given those: each value's record, and a copy where
+      // two meet.
+      const narrowBody = (f: SFunc): SFunc => {
+        const locals = f.locals.map((t, j) => (j < f.params.length ? f.params[j] : t));
+        const base = locals.length;
+        // Locals set by a let (or an attempt's or a budget's answer):
+        // their record is what they're set to.
+        const letLike = new Set<number>();
+        const scanL = (e: SExpr) => {
+          const i = e.k === "let" ? e.i : e.k === "attempt" || e.k === "budget" ? e.res : -1;
+          if (i >= f.params.length && baseOf(locals[i])) letLike.add(i);
+          kids(e).forEach(scanL);
+        };
+        scanL(f.body);
+        const lr = new Map<number, RType>();
+        type R = RType | null | undefined;
+        const J = (a: R, b: R): R => (a === undefined ? b : b === undefined ? a : a === null ? b : b === null ? a : a.key === b.key ? a : narrow(baseOf(a)!, maskOfT(a) | maskOfT(b)));
+        const alg = (t: LType | null | undefined): R => (baseOf(t) ? (t as RType) : undefined);
+        let memo = new WeakMap<SExpr, R>();
+        const ty = (e: SExpr): R => {
+          if (memo.has(e)) return memo.get(e);
+          const r = ty0(e);
+          memo.set(e, r);
+          return r;
+        };
+        const ty0 = (e: SExpr): R => {
+          switch (e.k) {
+            case "local": return letLike.has(e.i) ? lr.get(e.i) ?? null : alg(locals[e.i]);
+            case "make": return alg(e.t);
+            case "get": return alg(e.t.fields[e.i]?.t);
+            case "field": return alg(e.t.cases[e.c]?.fields[e.i]?.t);
+            case "call": return alg(out[e.fn].result);
+            case "apply": return alg(fnSig.get(fkey(e.t))?.result ?? e.t.result);
+            case "cap": return alg(ir.shapes[e.shape].caps[e.i]);
+            case "let": return ty(e.body);
+            case "if": return J(ty(e.then), ty(e.else));
+            case "case": return e.arms.reduce<R>((r, a) => (a ? J(r, ty(a)) : r), null);
+            case "attempt": return J(ty(e.ok), ty(e.otherwise));
+            case "budget": return J(ty(e.body), ty(e.otherwise));
+            case "handle": return J(ty(e.body), ty(e.arm));
+            case "released": return ty(e.body);
+            case "set": return ty(e.then);
+            case "rt": return alg(e.host?.t);
+            case "world": return alg(e.t);
+            case "zero": return alg(e.t);
+            case "fail": case "abort": return null;
+            default: return undefined;
+          }
+        };
+        // e as a value of record `to`.
+        const conv = (e: SExpr, to: LType | null | undefined): SExpr => {
+          const A = baseOf(to);
+          if (!A) return e;
+          const from = ty(e);
+          if (!from || from.key === (to as RType).key) return e;
+          const mf = maskOfT(from), mt = maskOfT(to as RType), into = narrow(A, mt);
+          const bits: number[] = [];
+          for (let j = 0; j < A.fields.length; j++) if ((mt >> j) & 1) bits.push(j);
+          // Made right here: its parts, when what's left out is only 0s.
+          const had: number[] = [];
+          for (let j = 0; j < A.fields.length; j++) if ((mf >> j) & 1) had.push(j);
+          if (e.k === "make" && e.args.every((x, n) => x.k === "num" || (mt >> had[n]) & 1)) {
+            return { k: "make", t: into, args: bits.map((j) => ((mf >> j) & 1 ? e.args[pos(mf, j)] : { k: "num", v: 0 })) };
+          }
+          const parts = (x: SExpr): SExpr[] => bits.map((j) => ((mf >> j) & 1 ? { k: "get", rec: x, t: from, i: pos(mf, j) } : { k: "num", v: 0 }));
+          if (e.k === "local") return { k: "make", t: into, args: parts(e) };
+          const tmp = locals.push(from) - 1;
+          return { k: "let", i: tmp, value: e, body: { k: "make", t: into, args: parts({ k: "local", i: tmp }) } };
+        };
+        let grew = false;
+        const setLet = (i: number, v: SExpr) => {
+          if (!letLike.has(i)) return;
+          const now = J(lr.get(i) ?? null, ty(v));
+          if (now && now.key !== lr.get(i)?.key) { lr.set(i, now); grew = true; }
+        };
+        // An expression with several answers (arms): each into their join.
+        const arms = <T extends SExpr>(r: T, t: LType, set: (r: T, to: RType) => T): T => {
+          const j = ty(r);
+          if (!j || !baseOf(t)) return r;
+          return set(r, j);
+        };
+        const nar = (e: SExpr): SExpr => {
+          switch (e.k) {
+            case "let": {
+              const value = nar(e.value);
+              setLet(e.i, value);
+              return { ...e, value: letLike.has(e.i) ? conv(value, lr.get(e.i)) : conv(value, locals[e.i]), body: nar(e.body) };
+            }
+            case "make": {
+              const args = e.args.map(nar);
+              if (algT(e.t) && !narrowed.has(e.t.key)) {
+                let m = 0;
+                args.forEach((a, j) => { if (!isZ(a)) m |= 1 << j; });
+                return { ...e, t: narrow(e.t, m), args: args.filter((a) => !isZ(a)) };
+              }
+              return { ...e, args: args.map((a, j) => conv(a, e.t.fields[j]?.t)) };
+            }
+            case "get": {
+              const rec = nar(e.rec);
+              const A = baseOf(e.t);
+              if (!A) return { ...e, rec };
+              const r = ty(rec);
+              if (!r) return { ...e, rec };
+              const m = maskOfT(r);
+              if ((m >> e.i) & 1) return { ...e, rec, t: r, i: pos(m, e.i) };
+              if (rec.k === "local" || rec.k === "cap") return { k: "num", v: 0 };
+              const tmp = locals.push(r) - 1;
+              return { k: "let", i: tmp, value: rec, body: { k: "num", v: 0 } };
+            }
+            case "new": { const args = e.args.map(nar); return { ...e, args: args.map((a, j) => conv(a, e.t.cases[e.c].fields[j]?.t)) }; }
+            case "list": {
+              const fs = e.t.cases[e.c].fields;
+              const h = fs.findIndex((x) => !(x.t === e.t || (isData(x.t) && x.t.key === e.t.key)));
+              if (h >= 0 && baseOf(fs[h].t)) locals[e.item] = fs[h].t;
+              return { ...e, items: e.items.map((x) => conv(nar(x), h >= 0 ? fs[h].t : null)) };
+            }
+            case "set": { const rec = nar(e.rec), value = nar(e.value); return { ...e, rec, value: conv(value, e.t.fields[e.i]?.t), then: nar(e.then) }; }
+            case "call": { const g = out[e.fn]; return { ...e, args: e.args.map((a, j) => conv(nar(a), g.params[j])) }; }
+            case "closure": { const s = ir.shapes[e.shape]; return { ...e, caps: e.caps.map((a, j) => conv(nar(a), s.caps[j])) }; }
+            case "apply": {
+              const fn = nar(e.fn), s = fnSig.get(fkey(e.t));
+              return { ...e, fn, args: e.args.map((a, j) => (s ? conv(nar(a), s.params[j]) : nar(a))) };
+            }
+            case "rt": case "world": return { ...e, args: e.args.map((a) => { const x = nar(a), t = ty(x); return t ? conv(x, baseOf(t)) : x; }) } as SExpr;
+            case "if": {
+              const r = { ...e, cond: nar(e.cond), then: nar(e.then), else: nar(e.else) };
+              return arms(r, e.t, (r, to) => ({ ...r, t: to, then: conv(r.then, to), else: conv(r.else, to) }));
+            }
+            case "case": {
+              const r = { ...e, scrut: nar(e.scrut), arms: e.arms.map((a) => a && nar(a)) };
+              return arms(r, e.result, (r, to) => ({ ...r, result: to, arms: r.arms.map((a) => a && conv(a, to)) }));
+            }
+            case "attempt": {
+              const body = nar(e.body);
+              setLet(e.res, body);
+              const r = { ...e, body: letLike.has(e.res) ? conv(body, lr.get(e.res)) : body, ok: nar(e.ok), otherwise: nar(e.otherwise) };
+              return arms(r, e.t, (r, to) => ({ ...r, t: to, ok: conv(r.ok, to), otherwise: conv(r.otherwise, to) }));
+            }
+            case "budget": {
+              const body = nar(e.body);
+              setLet(e.res, body);
+              const r = { ...e, body, otherwise: nar(e.otherwise) };
+              // The answer is res's, and the budget's.
+              const to = letLike.has(e.res) ? lr.get(e.res) : undefined;
+              const r2 = to ? { ...r, body: conv(r.body, to), otherwise: conv(r.otherwise, to), t: to } : r;
+              return to ? r2 : arms(r2, e.t, (r, t2) => ({ ...r, t: t2, body: conv(r.body, t2), otherwise: conv(r.otherwise, t2) }));
+            }
+            case "handle": {
+              const r = { ...e, body: nar(e.body), arm: nar(e.arm) };
+              return arms(r, e.t, (r, to) => ({ ...r, t: to, body: conv(r.body, to), arm: conv(r.arm, to) }));
+            }
+            case "released": {
+              const r = { ...e, body: nar(e.body), release: nar(e.release) };
+              return arms(r, e.t, (r, to) => ({ ...r, t: to }));
+            }
+            default: return mapKids(e, nar);
+          }
+        };
+        let body = f.body;
+        do {
+          grew = false;
+          locals.length = base;
+          memo = new WeakMap();
+          body = conv(nar(f.body), f.result);
+        } while (grew);
+        for (const [i, t] of lr) locals[i] = t;
+        return { ...f, locals, body };
+      };
+      for (let n = 0; n < out.length; n++) out[n] = narrowBody(out[n]);
+      ir.records = [...ir.records, ...made.values()];
+    }
   }
+  for (const i of groups) out[i.index] = tidied(out[i.index], i.index);
   // A copy that came out the same as a copy given more (its calls made
   // the same first) is that one: nothing was dropped in it.
   const to = new Map<number, number>();
@@ -528,8 +858,9 @@ export function zeroParts(ir0: CoreIR, roots: number[]): { ir: CoreIR; copies: n
       const gs = list.filter((g, n) => groups.includes(g) && list.indexOf(g) === n && !to.has(g.index));
       for (const g of gs) {
         if (g.index === g.fn) continue;
-        const mine = shape(out[g.index].body);
-        const w = gs.find((h) => h !== g && !to.has(h.index) && wider(h.params, g.params) && shape(out[h.index].body) === mine);
+        // The whole function: its inputs' and answer's records too.
+        const mine = shape(out[g.index] as unknown as SExpr);
+        const w = gs.find((h) => h !== g && !to.has(h.index) && wider(h.params, g.params) && shape(out[h.index] as unknown as SExpr) === mine);
         if (w) { to.set(g.index, w.index); again = true; }
       }
     }

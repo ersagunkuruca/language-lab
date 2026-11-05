@@ -48,6 +48,16 @@ export function effectOfOperation(code: Code, op: Id): Id | null {
 const NOT_HOSTED = new Set<Id>([ABORT_OP, CHECK_OP]);
 export const stdHosted = (op: Id, hosts: Hosts): boolean => typeof hosts[op] === "function" && op.startsWith("std.") && !NOT_HOSTED.has(op);
 
+// An effect the program marks pure (L69d2): its operations are functions
+// of their inputs (a hash, a parser) that the host answers, so the checker
+// keeps it out of every row, on the program's word. Allowed only for what
+// is a function of its inputs (Ersagun, 2026-11-05: "If it is actually
+// pure, yes. Reading the clock isn't pure.").
+export function pureEffect(code: Code, effect: Id): boolean {
+  const b = (code.nodes[effect] as NodeOf<"def">)?.body, td = b ? code.nodes[b] : undefined;
+  return td?.kind === "typedef" && !!td.effect && !!td.pure;
+}
+
 // The effects the host answers: each with an operation in `hosts`.
 export function hostedEffects(code: Code, hosts: Hosts | undefined): Set<Id> {
   const out = new Set<Id>();

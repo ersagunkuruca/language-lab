@@ -50,9 +50,9 @@ for (const gives of ["sin", "cos"] as const) test(`Trig giving only ${gives}: th
   const evaluated = NAMES.map((n) => r.value(at(n)));
   near(evaluated[0], Math.cos(0.3));
   near(evaluated[1], Math.sin(0.3));
-  // What the core IR doesn't compile yet (C137's gaps), by why.
+  // Compiled through the core IR too, the way put in (L120c).
   const { defs, gaps } = compiledEach(p.code, p.info, p.names, NAMES);
-  for (const why of Object.values(gaps)) assert.match(why, /to its ways/);
+  assert.deepEqual(gaps, {});
   for (const [i, n] of NAMES.entries()) if (defs[n]) assert.deepEqual(plainValue(defs[n]()), evaluated[i], n);
 });
 

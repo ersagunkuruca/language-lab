@@ -1,0 +1,21 @@
+{
+  "1st5g0g997nafdd1lvn2khc4tn": [
+    {
+      "main": {
+        "arguments": [],
+        "input": "",
+        "files": {},
+        "printed": [
+          "At 60 m/s, spinning 20 rad/s: a step a frame finds it in the wall at frame 5 (0.0833 s); conservative advancement finds it touching at 0.0826 s, in 12 steps.",
+          "At 80 m/s, spinning 15 rad/s: a step a frame never finds it in the wall; conservative advancement finds it touching at 0.0611 s, in 11 steps.",
+          "At 60 m/s at a plank turning 1.0 rad/s: a step a frame finds them overlapping at frame 5 (0.0833 s); conservative advancement finds them touching at 0.0825 s, in 14 steps.",
+          "At 80 m/s at a plank turning 1.0 rad/s: a step a frame never finds them overlapping; conservative advancement finds them touching at 0.0607 s, in 11 steps.",
+          "One first touch: a 5 cm ball at 80 m/s touches at 0.0619 s, in 4 steps; the stick touches at 0.0611 s, in 11 steps.",
+          "Credits: conservative advancement is Brian Mirtich's (1996); a frame's motion as one turn about a point, Michel Chasles' theorem (1830); that turn as a motor of projective geometric algebra, Charles Gunn's (2011), written as Steven De Keninck's ganja.js does; the separating axis theorem for convex shapes, Minkowski's (1896)."
+        ],
+        "errors": [],
+        "exit": 0
+      }
+    }
+  ]
+}

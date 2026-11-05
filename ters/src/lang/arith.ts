@@ -605,6 +605,11 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
     const n = code.nodes[d];
     if (n?.kind !== "def" || !n.body) continue;
     const sc = schemes.get(d);
+    // A definition that needs an interface its default type has no
+    // implementation of (examples/impact's `first touch by advancing`,
+    // Collider a, while Float64 is no Collider) runs only as the copies
+    // its uses make, at their types.
+    if (sc?.needs?.some(([v, iface]) => !implementationOf(info, iface, otherwise(v)))) continue;
     resolve(n.body, new Map((sc ? constrained(sc) : []).map((v) => [v, otherwise(v)])));
   }
   while (todo.length) { const { root, env } = todo.pop()!; resolve(root, env); }
