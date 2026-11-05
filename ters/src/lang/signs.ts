@@ -24,7 +24,8 @@
 
 import { children, parentLookup, type Code, type Id, type NodeOf, isUse, isCall } from "../model.ts";
 import { B } from "../prelude.ts";
-import { ARITH, FALSE, INT_OPS, RATIO, S, TRUE } from "./std.ts";
+import { ARITH, FALSE, INT_OPS, S, TRUE } from "./std.ts";
+import { fractionCase } from "./prelude-ids.ts";
 
 // A set of signs: which of −, 0, + the value can be.
 export type Signs = number;
@@ -185,7 +186,7 @@ export function signAnalysis(code: Code) {
       else { const v = letValue(b); if (v) s = of(v, env, depth + 1); }
       // A type's rule: a Rational's bottom is positive.
       const p = parentOf(b), pn = p ? code.nodes[p] : undefined;
-      if (pn?.kind === "arm" && pn.variant === RATIO && pn.binds.indexOf(b) === 1) s = POS;
+      if (pn?.kind === "arm" && pn.variant === fractionCase(code)?.variant && pn.binds.indexOf(b) === 1) s = POS;
       return s & guarded(id, b, env);
     }
     if (n.kind === "match") {

@@ -9,13 +9,13 @@ import { loadCoreJs, lowerCore } from "../../compiler/src/core-js.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { embeddingLaws, embeddingsIn } from "../src/lang/embed-laws.ts";
 import { infer } from "../src/lang/infer.ts";
-import { COMPLEX_V, LIBRARY } from "../src/lang/library.ts";
+import { COMPLEX_V, LIBRARY, RATIO_V as RATIO } from "../src/lang/library.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import type { Id } from "../src/model.ts";
 import { ARITH, EMBEDDING_V, INT_OPS, S, SHOW_ANY, TEXT_OPS } from "../src/lang/std.ts";
 import { runMain } from "../src/lang/run.ts";
 import { relate } from "../src/lang/relate.ts";
-import { RATIO } from "../src/lang/std.ts";
+
 import type { Pins } from "../src/lang/signatures.ts";
 import { INT, NUMBER, type Type } from "../src/lang/types.ts";
 import { B } from "../src/prelude.ts";

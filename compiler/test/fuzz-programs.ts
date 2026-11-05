@@ -4,8 +4,8 @@
 import { Lang } from "../../ters/src/lang/dsl.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
-import { COMPLEX_V, LIBRARY } from "../../ters/src/lang/library.ts";
-import { ABORT_OP, ARRAY_OPS, CONS, RATIO, LIST, FALSE, FIRST, INT_OPS, NIL, PAIR_V, RANDOM_OP, S, SECOND, SET, SHOW_ANY, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
+import { COMPLEX_V, LIBRARY, RATIO_V as RATIO } from "../../ters/src/lang/library.ts";
+import { ABORT_OP, ARRAY_OPS, CONS, LIST, FALSE, FIRST, INT_OPS, NIL, PAIR_V, RANDOM_OP, S, SECOND, SET, SHOW_ANY, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
 import { INT, NUMBER, STRING } from "../../ters/src/lang/types.ts";
 import { B } from "../../ters/src/prelude.ts";
 import type { Id } from "../../ters/src/model.ts";

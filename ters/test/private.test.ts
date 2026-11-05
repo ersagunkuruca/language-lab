@@ -11,9 +11,9 @@ import type { Id } from "../src/model.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { fillings, infer } from "../src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
-import { LIBRARY } from "../src/lang/library.ts";
+import { LIBRARY, RATIO_V as RATIO } from "../src/lang/library.ts";
 import { makeRunner } from "../src/lang/run.ts";
-import { MAP_V, PAIR_V, RATIO, SET_V, SHOW_ANY } from "../src/lang/std.ts";
+import { MAP_V, PAIR_V, SET_V, SHOW_ANY } from "../src/lang/std.ts";
 import { INT } from "../src/lang/types.ts";
 
 const lib = (name: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === name)!;
