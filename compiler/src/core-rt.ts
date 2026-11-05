@@ -220,7 +220,15 @@ export const usePlans = (p: Record<string, unknown>) => { PLANS = p; };
 export const planned = (make: (p: Record<string, unknown>) => (...xs: unknown[]) => Iterable<unknown>, all: boolean, none: string, own = false) => {
   if (!PLANS && !own) return () => { throw new Unsupported("a written-out solve without plan-rt.js"); };
   const answers = make(PLANS ?? {});
-  return all ? (...xs: unknown[]) => lazyList(answers(...xs)[Symbol.iterator]()) : (...xs: unknown[]) => { for (const bound of answers(...xs)) return bound; throw new Error(none); };
+  // Answers a written-out plan gave all at once, an array, are the List
+  // made at once (C137d22); the evaluator's solver's, made as it is read.
+  const listed = (r: Iterable<unknown>) => {
+    if (!Array.isArray(r)) return lazyList(r[Symbol.iterator]());
+    let l: unknown = { tag: NIL, fields: [] };
+    for (let i = r.length - 1; i >= 0; i--) l = { tag: CONS, fields: [r[i], l] };
+    return l;
+  };
+  return all ? (...xs: unknown[]) => listed(answers(...xs)) : (...xs: unknown[]) => { for (const bound of answers(...xs)) return bound; throw new Error(none); };
 };
 // Cells' operations (run.ts cellOps) on the runtime's handler, calling the
 // program's closures: no answer is a formula with no value.
