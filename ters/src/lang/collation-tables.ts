@@ -15,7 +15,8 @@
 //    and within it the letters it calls different at the second
 //    ("accent") and third ("variant") levels take their places;
 //  - the code points the host calls equal to nothing at the first level
-//    are the combining marks: each is sorted after an `a`, and gives a
+//    are the combining marks: each is sorted after a letter (`a`, or one
+//    no mark makes a letter of its own with), and gives a
 //    secondary weight alone;
 //  - a letter that sorts as two (æ as ae, ß as ss, ﬁ as fi, ½ as 1⁄2)
 //    is found by its compatibility decomposition, or by the host calling
@@ -74,13 +75,15 @@ export function buildCollationTables(locale = "und"): CollationTables {
     list.sort((a, b) => b[0].length - a[0].length);
     tables.contractions.set(first, list);
   }
-  // The marks, each after an `a`: one secondary for each the host tells
-  // apart at the second level, one representative each.
-  marks.sort((a, b) => V.compare("a" + ch(a), "a" + ch(b)) || a - b);
+  // The marks, each after a letter none of them makes a letter of its own
+  // with (`a`, but Swedish makes a and a diaeresis ä): one secondary for
+  // each the host tells apart at the second level, one representative each.
+  const base = ["a", "x", "q", "z"].find((l) => marks.every((m) => B.compare(l + ch(m), l) === 0)) ?? "a";
+  marks.sort((a, b) => V.compare(base + ch(a), base + ch(b)) || a - b);
   const reps: string[] = [];
   let prev: string | null = null, sec = MARKS_FROM, ter = 0;
   for (const c of marks) {
-    const x = "a" + ch(c);
+    const x = base + ch(c);
     if (prev === null) reps.push(ch(c));
     else if (A.compare(prev, x)) { sec++; ter = 0; reps.push(ch(c)); }
     else if (V.compare(prev, x)) ter++;
@@ -104,22 +107,26 @@ export function buildCollationTables(locale = "und"): CollationTables {
   interface Group { head: string; members: { c: number; tertiary: number; secondary: number | null }[]; expands: string | null }
   const groups: Group[] = [];
   let g: Group | null = null, same = "";
+  let secondary: number | null = null;
   prev = null; ter = 0;
   for (const c of letters) {
     const x = ch(c);
     if (!g || B.compare(g.head, x)) {
       g = { head: x, members: [{ c, tertiary: 0, secondary: null }], expands: null };
-      groups.push(g); same = x; ter = 0; prev = x;
+      groups.push(g); same = x; ter = 0; prev = x; secondary = null;
       continue;
     }
-    if (A.compare(same, x)) { same = x; ter = 0; } else if (V.compare(prev!, x)) ter++;
-    let secondary: number | null = null;
-    if (same !== g.head) {
-      // Where its secondary falls among the marks', after the head.
+    if (A.compare(same, x)) {
+      same = x; ter = 0;
+      // Where its secondary falls among the marks', after the head; past
+      // the last member's when that is the same place (Swedish puts ü and
+      // ű both after every mark).
       let lo = 0, hi = reps.length;
       while (lo < hi) { const m = (lo + hi) >> 1; if (A.compare(g.head + reps[m], same) < 0) lo = m + 1; else hi = m; }
-      secondary = MARKS_FROM + lo - (lo < reps.length && A.compare(g.head + reps[lo], same) === 0 ? 0 : 0.5);
-    }
+      const at = MARKS_FROM + lo - (lo < reps.length && A.compare(g.head + reps[lo], same) === 0 ? 0 : 0.5);
+      const last = g.members.at(-1)!.secondary;
+      secondary = last !== null && at <= last ? last + 1 / 64 : at;
+    } else if (V.compare(prev!, x)) ter++;
     g.members.push({ c, tertiary: ter, secondary });
     prev = x;
   }

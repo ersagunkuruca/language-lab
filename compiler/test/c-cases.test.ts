@@ -18,7 +18,7 @@ import { emitWasm, runMain } from "../src/wasm.ts";
 import { compile, skip } from "./c-harness.ts";
 
 // Pairs collate orders, each in a locale with a tailoring and in root.
-const PAIRS: [string, string, string][] = [["çay", "cevap", "tr"], ["ıl", "il", "tr"], ["ñu", "nz", "es"], ["бык", "bus", "ru"], ["łza", "lza", "pl"], ["cote", "côte", "en"]];
+const PAIRS: [string, string, string][] = [["çay", "cevap", "tr"], ["ıl", "il", "tr"], ["ñu", "nz", "es"], ["бык", "bus", "ru"], ["łza", "lza", "pl"], ["cote", "côte", "en"], ["ärm", "zon", "sv"]];
 const LINES = ["Hello, World", "straße", "İstanbul DIŞ ıi Iİ", "ΟΔΟΣ ΟΔΟΣ. Σ ΑΣ", "ǅungla ﬃ", "é 👍🏽 🇹🇷 각"];
 
 function program() {
