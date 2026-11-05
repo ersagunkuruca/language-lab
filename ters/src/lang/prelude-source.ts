@@ -1535,6 +1535,35 @@ export function buildPrelude(): Module {
   const has = def("has item", ["set", "item"], (st, x) => itemsOf(st, (xs) => k.call(hasItem_, xs, x)));
   const items = def("items of", ["set"], (st) => itemsOf(st, (xs) => xs));
   const setSize = def("set size", ["set"], (st) => itemsOf(st, (xs) => k.call(length, xs)));
+  // Maps' and sets' own laws (T7e8), over small lists of Ints as keys
+  // and items: what was put or added is there, what was removed isn't,
+  // and putting a key counts it once.
+  const isFalse = (b: Id) => k.equal(b, k.x(FALSE));
+  const all = (...bs: Id[]) => bs.reduce((a, b) => k.call(S.and, a, b));
+  const mapOf = (xs: Id) => k.fold(xs, [
+    { variant: NIL, names: [], body: () => k.x(emptyMap) },
+    { variant: CONS, names: ["item", "rest"], results: [null, "map of rest"], body: ([x], [, m]) => k.call(put, m!, x, x) },
+  ]);
+  const mapLaw = k.def("put and remove key keep their key");
+  k.define(mapLaw, k.fn(["numbers", "key"], (ns, key0) => k.let("map", mapOf(ints(ns)), (m) => k.let("key", k.call(INT_OPS.add, key0, k.int(0)), (key) =>
+    k.let("put", k.call(put, m, key, k.int(7)), (p) => expect(all(
+      k.call(hasKey, p, key),
+      isFalse(k.call(hasKey, k.call(remove, m, key), key)),
+      k.equal(k.call(mapSize, p), k.call(INT_OPS.add, k.call(mapSize, m), k.if(k.call(hasKey, m, key), k.int(0), k.int(1)))),
+      k.equal(k.call(mapSize, k.call(put, p, key, k.int(8))), k.call(mapSize, p)),
+    ), "put has its key, once; remove key hasn't it"))))));
+  const setLaw = k.def("add item and remove item keep their item");
+  k.define(setLaw, k.fn(["numbers", "item"], (ns, x0) => k.let("set", k.call(asSet, ints(ns)), (st) => k.let("item", k.call(INT_OPS.add, x0, k.int(0)), (x) =>
+    k.let("added", k.call(addItem, st, x), (a) => expect(all(
+      k.call(has, a, x),
+      isFalse(k.call(has, k.call(removeItem, a, x), x)),
+      k.equal(k.call(setSize, k.call(addItem, a, x)), k.call(setSize, a)),
+      k.equal(k.call(items, a), k.call(sort, k.call(items, a))),
+    ), "add item has its item, once and in order; remove item hasn't it"))))));
+  const reverseLaw = k.def("reverse undoes reverse");
+  k.define(reverseLaw, k.fn(["numbers"], (ns) => k.let("list", ints(ns), (xs) =>
+    expect(k.equal(k.call(reverse, k.call(reverse, xs)), xs), "reverse(reverse(list)) is list"))));
+  laws.push(mapLaw, setLaw, reverseLaw);
   // The two ends of a set, and of a map's keys (L102, routes' LG1): the
   // items are sorted, so the smallest is the first and the largest the
   // last. Each is a Choice with no answer when there is none, as value at
