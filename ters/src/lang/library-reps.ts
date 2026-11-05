@@ -87,6 +87,7 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
     // Lists as arrays (C30d3b): alone, and only where every list the
     // program reaches can be one (listBoundary).
     if (tree.of === LIST && (chosen.length || !listBoundary(merge(treesFor(code, [tree]), code), info, defs, tree, asked))) continue;
+    if (tree.of !== LIST && !plainBoundary(code, defs, tree)) continue;
     chosen.push(tree);
   }
   if (!chosen.length) return { code, names, chosen: [], insiders: [], reps: [] };
@@ -124,6 +125,7 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
   const typeOf = (id: Id) => { const t = info.typeOf.get(id); return t && info.subst.zonk(t); };
   const rowOf = (id: Id) => { const t = typeOf(id); return t?.t === "con" ? chosen.find((r) => r.of === t.id) : undefined; };
   const call = (fn: Id, arg: Id): Id => { const r = freshId(), c = freshId(); nodes[r] = { id: r, kind: "ref", target: fn }; nodes[c] = { id: c, kind: "call", fn: r, args: [arg] }; return c; };
+  for (const r of chosen) if (r.of !== LIST) Object.assign(nodes, plainBoundary(code, defs, r));
   for (const d of defs) for (const id of subtree(code, d)) {
     const n = code.nodes[id];
     // A match on a stored value's items (keys, entries) whose cons case
@@ -561,6 +563,43 @@ function listBoundary(code: Code, info: Info, defs: Id[], rep: Representation, a
   return { nodes, reached: [...reached], made };
 }
 
+// A builtin whose own type names a stored type with no parameters (Bytes:
+// `read bytes`, `write bytes`, L189b) is given the meaning where it takes
+// one, and what it gives is stored by the row's `store by`: the nodes that
+// do so, or null where a builtin names the type any other way (a
+// Response's body, a list of Bytes), and the program keeps the definition.
+// A builtin that only passes a value on (first, a match's) has a type
+// variable there, and is left alone.
+function plainBoundary(code: Code, defs: Id[], rep: Representation): Record<Id, Node> | null {
+  const typedef = code.nodes[(code.nodes[rep.of] as NodeOf<"def"> | undefined)?.body ?? ""];
+  if (typedef?.kind !== "typedef" || typedef.params.length || !rep.meaning || !rep.store) return {};
+  const inside = holdsType(code, rep.of);
+  const plain = (t: Type) => t.t === "con" && t.id === rep.of && !t.args.length;
+  const names = (t: Type): boolean => t.t === "con" ? t.id === rep.of || inside(t.id) || t.args.some(names) : t.t === "fn" ? [...t.params, t.ret].some(names) : false;
+  const nodes: Record<Id, Node> = {};
+  const call = (fn: Id, arg: Id): Id => { const r = freshId(), c = freshId(); nodes[r] = { id: r, kind: "ref", target: fn }; nodes[c] = { id: c, kind: "call", fn: r, args: [arg] }; return c; };
+  const calledBy = new Map<Id, Call>();
+  for (const d of defs) for (const id of subtree(code, d)) { const n = code.nodes[id]; if (isCall(n)) calledBy.set(n.fn, n); }
+  for (const d of defs) for (const id of subtree(code, d)) {
+    const n = code.nodes[id];
+    if (n.kind !== "ref" || !SIGS[n.target] || code.nodes[n.target]?.kind === "def" || n.target in BY_VALUE) continue;
+    const sig = SIGS[n.target](new Subst());
+    if (!names(sig)) continue;
+    const c = calledBy.get(id);
+    if (!c || sig.t !== "fn") return null;
+    if (sig.params.some((p) => names(p) && !plain(p)) || (names(sig.ret) && !plain(sig.ret))) return null;
+    const args = c.args.map((a, i) => (sig.params[i] && plain(sig.params[i]) ? call(rep.meaning!, a) : a));
+    if (plain(sig.ret)) {
+      // The call keeps its id, so its name and comments stay on it.
+      const inner = freshId(), of = freshId();
+      nodes[inner] = { ...c, id: inner, args };
+      nodes[of] = { id: of, kind: "ref", target: rep.store };
+      nodes[c.id] = { id: c.id, kind: "call", fn: of, args: [inner] };
+    } else nodes[c.id] = { ...c, args };
+  }
+  return nodes;
+}
+
 // Does a type's definition name `of` in its fields, itself or through
 // another type that does?
 function holdsType(code: Code, of: Id): (id: Id) => boolean {
@@ -588,7 +627,7 @@ function holdsType(code: Code, of: Id): (id: Id) => boolean {
 function treesFor(code: Code, rows: Representation[]): Code {
   const all = merge(TREES.code, code);
   const keep = new Set<Id>();
-  const roots = rows.flatMap((r) => [...(r.def ? [r.def] : []), ...Object.values(r.impl), ...(r.meaning ? [r.meaning] : []), ...Object.values(r.byType ?? {}), ...Object.values(r.heads ?? {})]);
+  const roots = rows.flatMap((r) => [...(r.def ? [r.def] : []), ...Object.values(r.impl), ...(r.meaning ? [r.meaning] : []), ...Object.values(r.byType ?? {}), ...Object.values(r.heads ?? {}), ...(r.store ? [r.store] : [])]);
   for (const d of roots) for (const x of [d, ...dependencies(all, d)]) if (TREES.code.nodes[x]) keep.add(x);
   const defs = TREES.code.defs.filter((d) => keep.has(d));
   const nodes: Record<Id, Node> = {};

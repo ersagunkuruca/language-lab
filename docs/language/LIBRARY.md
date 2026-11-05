@@ -402,6 +402,7 @@ Bytes are a sequence of whole numbers from 0 to 255, for binary formats, files, 
 - **bytes of** : `(List Int) -[Abort]-> Bytes`. The bytes with these items, each a whole number from 0 to 255: bytes of([104, 105]) is the bytes of "hi". Stops when an item isn't a byte.
 - **byte items** : `(Bytes) -> List Int`. The bytes as their list of Ints, each 0 to 255.
 - **byte count** : `(Bytes) -> Int`. How many bytes there are.
+- **byte at** : `(Bytes, Int, Int) -> Int`. The byte at a position counted from 0, or otherwise where there is none: byte at(utf8 of("hi"), 1, 0) is 105.
 - **utf8 of** : `(Text) -> Bytes`. The text's UTF-8 bytes (RFC 3629): each character's code point in one to four bytes. utf8 of("é") is [195, 169].
 - **text of utf8** : `(Bytes) -[Abort]-> Text`. The text UTF-8 bytes spell, the other way from utf8 of. Stops on bytes that aren't UTF-8: a following byte where a character starts, or the bytes ending inside a character.
 - **base64 of** : `(Bytes) -> Text`. The bytes as Base64 text (RFC 4648): every three bytes as four characters from A to Z, a to z, 0 to 9, + and /, with = filling the last group: base64 of(utf8 of("hi")) is "aGk=".
