@@ -126,7 +126,18 @@ of text; they were these cells logging every finished row).
 ## Doing an item
 
 - One item, one PR (one change per PR, never bundled). An L item may be
-  split into several rows first.
+  split into several rows first. The exception: tiny steps of one row
+  (a law, a problem-table row, a renamed message), each well under an
+  hour, go together in one PR, so a step doesn't cost a whole check and
+  merge cycle (Ersagun 2026-11-05).
+- A row that takes more than about an hour is split into one-hour steps
+  before a run starts, each its own line in the row, so finished steps
+  show and a run isn't spent on rows that never close.
+- Measure an idea by hand before building it (a scratch script, a profile,
+  a timing of the slow path), and build it only if it buys at least 10%
+  of what it targets. Speed work stops when the next stage buys less (the
+  10-hour run of 2026-11-04/05 spent about three hours in two lanes on
+  speed ideas that gained 4% or less).
 - The PR body says which item: `Backlog: E3`. The same PR moves the row to
   the table of the lane that did it in [DONE.md](DONE.md) (its own table,
   at the top, whatever the row's letter, so two lanes never edit the same
@@ -136,7 +147,16 @@ of text; they were these cells logging every finished row).
   number isn't known before the PR exists, so write "this PR" and fill it
   in with the lane's next PR: a push only for the number costs a CI run.
 - Credit external ideas as the project instructions say.
-- Before pushing, run the fast set of the tests your change reaches:
+- Before pushing, type-check and run the test files that test what you
+  changed, by name (`node --test test/….test.ts`): the file of the module
+  or feature you edited, and the ones `npm run affected -- --list` names
+  that exercise the changed behaviour. Leave the rest of the list to
+  Check main after the merge and the nightly run (Ersagun 2026-11-05: in
+  the 10-hour run a whole `npm run affected` took 5 to 8 minutes a PR in
+  two lanes and the full suite 12 to 20 in the third, for changes a
+  single file covered). A change to a module everything reaches (infer.ts,
+  types.ts, model.ts, run.ts, std.ts) or one you think is risky runs the
+  fast set of everything it reaches:
   `npm run affected` in ters (unit tests in all three packages; `-- --list`
   says which). It leaves out the files measured at 5 s or more
   (`ters/test/slow.json`), unless your change edits that test file, and
