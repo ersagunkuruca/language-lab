@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { LIBRARY } from "../src/lang/library.ts";
-import { analyzer } from "../src/lang/modes.ts";
+import { analyzer, keptMode, keptReturned } from "../src/lang/modes.ts";
 
 const steady = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === `steady ${name}`)!;
 
@@ -34,4 +34,22 @@ test("a function of value ifs in a row, run forward, ends with one answer", () =
     const v = analyzer(LIBRARY.code, names).ofMode(steady(f), [...known]);
     assert.deepEqual([f, v.ends, v.answers, v.loops], [f, true, { fail: false, many: false }, []]);
   }
+});
+
+// L215c3: what the checker asks of a published definition given only
+// published functions (ofMode, ofReturned) is kept between programs, so a
+// later program's check reads it without an analyzer of its own.
+test("a published definition's checked mode, given published functions, is read without an analyzer", () => {
+  const keep = LIBRARY.code.defs.find((d) => LIBRARY.names[d] === "keep")!;
+  const not = "builtin.not";
+  assert.ok(keep);
+  const names = { [keep]: "keep, kept between programs" };
+  const spec = new Map([[1, { k: "builtin" as const, id: not }]]);
+  assert.equal(keptMode(LIBRARY.code, names, keep, ["0", "1"], spec), undefined);
+  const v = analyzer(LIBRARY.code, names).ofMode(keep, ["0", "1"], spec);
+  assert.equal(keptMode(LIBRARY.code, names, keep, ["0", "1"], spec), v);
+  assert.equal(keptMode(LIBRARY.code, names, keep, ["1", "0"], spec), v);
+  // A function of the program's own isn't published: always asked.
+  assert.equal(keptMode(LIBRARY.code, names, keep, ["0", "1"], new Map([[1, { k: "lambda" as const, id: "a lambda" }]])), undefined);
+  assert.equal(keptReturned(names, keep, spec), undefined);
 });
