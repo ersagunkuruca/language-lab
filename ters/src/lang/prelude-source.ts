@@ -2398,6 +2398,12 @@ export function buildPrelude(): Module {
     k.call(asMap, k.list(k.call(PAIR_V, k.lit("name"), k.call(S.concat, f, k.lit(",\"\n"))), k.call(PAIR_V, k.lit("note"), f))))), (rs) =>
     expect(k.equal(k.call(csvRecords, k.call(csvOfRecords, k.list(k.lit("name"), k.lit("note")), rs)), rs), "csv records(csv of records(columns, records)) is records"))));
   laws.push(recordsUndo);
+  // Split undoes join all (T7e13), for parts without the separator and
+  // at least one of them: one empty text splits into one empty part.
+  const splitUndoes = k.def("split undoes join all");
+  k.define(splitUndoes, k.fn(["texts"], (ts) => k.let("parts", k.call(CONS, k.lit("first"), ts), (ps) =>
+    expect(k.equal(k.call(TEXT_OPS.split, k.call(TEXT_OPS.joinAll, ps, k.lit(", ")), k.lit(", ")), ps), "split(join all(parts, \", \"), \", \") is parts"))));
+  laws.push(splitUndoes);
   // Bytes as text (L189d): hex, two digits a byte, and Base64 (RFC 4648 §4),
   // three bytes as four characters, = filling the last group.
   const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
