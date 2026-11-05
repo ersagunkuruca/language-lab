@@ -292,16 +292,10 @@ for (const [id, name] of [[TRIG_ASIN, "asin"], [TRIG_ACOS, "acos"]]) {
   named(node({ id, kind: "field", type }), name);
   (nodes.find((n) => n.id === TRIG_V) as NodeOf<"variant">).fields.push(id);
 }
-// Dual numbers (INTERFACES.md step 3, BACKLOG L40g): value + slope·ε with
-// ε² = 0, so f(dual(x, 1)) carries f′(x) along with f(x). A record of two
-// Float64s, like Complex: + and − part by part, · the product rule (the
-// prelude's), no <, and Trig by the chain rule. After Trig, so ids above
-// don't move.
-export const DUAL = typedef("std.dual", "Dual", [], [
-  ["dual", [["value", () => tref(NUMBER)], ["slope", () => tref(NUMBER)]]],
-// the same shape as Complex, so it says it is its own type
-], false, false, "dual numbers");
-export const DUAL_V = "std.dual.dual";
+// Dual numbers were here: they are the numbers module's now (numbers-
+// source.ts, BACKLOG L207a). Their two field types' numbers stay taken,
+// so the type nodes numbered after them don't move.
+tn += 2;
 // The one + − · −x and < as interfaces (INTERFACES.md step 4, BACKLOG L40h):
 // the generic builtins (ARITH) are these fields' operations, so a type of
 // your own joins them with an implementation, `arithmetic at quaternion =
@@ -1647,7 +1641,7 @@ export function onTodaysIds<T>(x: T, from = (x as { shape?: unknown } | null)?.s
 }
 export const tupleSize = (id: Id): number | null => { const m = /^std\.tuple(\d)$/.exec(id); return m ? Number(m[1]) : null; };
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ROW_TYPE, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, MATRIX, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS, WORD16, TENSOR, BYTES, JSON_TYPE, DATE, TIME_OF_DAY, INSTANT, EMBEDDING, REQUEST, RESPONSE, LOCALE, SETTINGS, RELEASE, OPEN_FILE, KEPT_FILES, LITERAL, REAL, LU_FACTORS] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ROW_TYPE, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, MATRIX, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS, WORD16, TENSOR, BYTES, JSON_TYPE, DATE, TIME_OF_DAY, INSTANT, EMBEDDING, REQUEST, RESPONSE, LOCALE, SETTINGS, RELEASE, OPEN_FILE, KEPT_FILES, LITERAL, REAL, LU_FACTORS] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one

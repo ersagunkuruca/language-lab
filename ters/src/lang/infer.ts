@@ -34,7 +34,7 @@ import { fieldPath, fieldPaths, placePath, readPaths } from "./records.ts";
 import { leftToWays, pickWays, waysIn, type Ways } from "./ways.ts";
 import { fresh, rigid, RIGID, type Pins } from "./signatures.ts";
 import {
-  ALGEBRAIC_TYPE, ARRAY, MASK_TYPES, isRowCarrier, rowCarrier, BUILTIN_EFFECTS, NAMED_ROWS, writtenRow, CELL, PATH, CHOICE, COMPLEX_TYPE, CONSOLE, DUAL_TYPE, FIXED_TYPE, DIVERGE, EffectError, ArithError, FractionError, WORLD, WorldError, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, RATIONAL_TYPE, schemeArith, schemeNeeds, showType as showT, STRING, Subst, TypeError,
+  ALGEBRAIC_TYPE, ARRAY, MASK_TYPES, isRowCarrier, rowCarrier, BUILTIN_EFFECTS, NAMED_ROWS, writtenRow, CELL, PATH, CHOICE, COMPLEX_TYPE, CONSOLE, FIXED_TYPE, DIVERGE, EffectError, ArithError, FractionError, WORLD, WorldError, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, RATIONAL_TYPE, schemeArith, schemeNeeds, showType as showT, STRING, Subst, TypeError,
   type Row, type Scheme, type Type,
   OverMap, OverSet,
 } from "./types.ts";
@@ -978,7 +978,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         // A literal at Rational is a whole number or top/bottom; at
         // Complex, a Float64 (its real part). arith.ts spells them out.
         if ((n.of === RATIONAL_TYPE || n.of === ALGEBRAIC_TYPE) && !ratioParts(n.value)) err(id, `${JSON.stringify(n.value)} isn't a fraction: write a whole number, or top/bottom with the bottom not 0`);
-        if ((n.of === COMPLEX_TYPE || n.of === DUAL_TYPE) && typeof n.value !== "number") err(id, `${JSON.stringify(n.value)} isn't a number`);
+        if (n.of === COMPLEX_TYPE && typeof n.value !== "number") err(id, `${JSON.stringify(n.value)} isn't a number`);
         break;
       }
       case "ref": t = refType(id, n.target, env); break;

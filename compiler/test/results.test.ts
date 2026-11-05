@@ -11,11 +11,11 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { Id } from "../../ters/src/model.ts";
 import { Lang } from "../../ters/src/lang/dsl.ts";
-import { LIBRARY } from "../../ters/src/lang/library.ts";
+import { DUAL_V, LIBRARY } from "../../ters/src/lang/library.ts";
 import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { makeRunner } from "../../ters/src/lang/run.ts";
-import { DUAL_V, FIXED_V, INT_OPS, SHOW_ANY, TRIG_UNPOLAR } from "../../ters/src/lang/std.ts";
+import { FIXED_V, INT_OPS, SHOW_ANY, TRIG_UNPOLAR } from "../../ters/src/lang/std.ts";
 import { B } from "../../ters/src/prelude.ts";
 import { compile } from "../src/compile.ts";
 

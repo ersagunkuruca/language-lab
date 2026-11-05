@@ -9,7 +9,7 @@ import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { library } from "./programs.ts";
-import { LITERAL_V, FILE_OPS, NEXT_LINE_OP, WRITE_LINE_OP, NEXT_BYTES_OP, ADD_BYTES_OP, ZONE_OPS, ABORT_OP, ARITH, CELL_OPS, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, TICKET_V, AWAIT_OP, START_TIMER_OP, NOW_OP, WAIT_OP, BRANCH_V, DUAL_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, DIVISION_V, SHOWN_V, BITS_V, WORD_SIZES, WORD_V, EXTENDED_V, ALGEBRAIC_OPS, REAL_OPS, CHECK_OP, RANDOM_OP, QUEUE_V, PRIORITY_QUEUE_V, MATRIX_V, LU_FACTORS_V, TENSOR_V, BYTES_V, JSON_V, DATE_V, TIME_OF_DAY_V, INSTANT_V, EMBEDDING_V, STATE_OPS, PIPE_OPS, std } from "./std.ts";
+import { LITERAL_V, FILE_OPS, NEXT_LINE_OP, WRITE_LINE_OP, NEXT_BYTES_OP, ADD_BYTES_OP, ZONE_OPS, ABORT_OP, ARITH, CELL_OPS, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, TICKET_V, AWAIT_OP, START_TIMER_OP, NOW_OP, WAIT_OP, BRANCH_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, DIVISION_V, SHOWN_V, BITS_V, WORD_SIZES, WORD_V, EXTENDED_V, ALGEBRAIC_OPS, REAL_OPS, CHECK_OP, RANDOM_OP, QUEUE_V, PRIORITY_QUEUE_V, MATRIX_V, LU_FACTORS_V, TENSOR_V, BYTES_V, JSON_V, DATE_V, TIME_OF_DAY_V, INSTANT_V, EMBEDDING_V, STATE_OPS, PIPE_OPS, std } from "./std.ts";
 
 export function buildPrelude(): Module {
   const k = new Lang();
@@ -449,56 +449,6 @@ export function buildPrelude(): Module {
     polarAgrees,
   ];
   const laws = [lawFromPolar, lawPolar, ...wayLaws];
-
-  // Dual numbers (INTERFACES.md step 3): value + slope·ε with ε² = 0, so
-  // a function given dual(x, 1) gives its value and its slope at x.
-  // + − · −x at Dual are these (arith.ts); · is the product rule,
-  // (a + a′ε)(b + b′ε) = ab + (ab′ + a′b)ε. Trig is the chain rule. The
-  // textbook construction (W. K. Clifford, 1873; forward-mode automatic
-  // differentiation, Wengert 1964).
-  const du = (v: Id, f: (a: Id, a1: Id) => Id, names = ["value", "slope"]) => k.match(v, [{ variant: DUAL_V, names, body: ([a, b]) => f(a, b) }]);
-  const D = (a: Id, b: Id) => k.call(DUAL_V, a, b);
-  const twoD = (name: string, f: (a: Id, a1: Id, b: Id, b1: Id) => Id) => {
-    const d = k.def(name);
-    k.define(d, k.fn(["x", "y"], (x, y) => du(x, (a, a1) => du(y, (b, b1) => f(a, a1, b, b1), ["value₂", "slope₂"]))));
-    return d;
-  };
-  const oneD = (name: string, f: (a: Id, a1: Id) => Id) => {
-    const d = k.def(name);
-    k.define(d, k.fn(["x"], (x) => du(x, f)));
-    return d;
-  };
-  const addD = twoD("add duals", (a, a1, b, b1) => D(n.add(a, b), n.add(a1, b1)));
-  const subD = twoD("subtract duals", (a, a1, b, b1) => D(n.sub(a, b), n.sub(a1, b1)));
-  const mulD = twoD("multiply duals", (a, a1, b, b1) => D(n.mul(a, b), n.add(n.mul(a, b1), n.mul(a1, b))));
-  const negD = oneD("negate dual", (a, a1) => D(k.call(B.neg, a), k.call(B.neg, a1)));
-  const divD = twoD("divide duals", (a, a1, b, b1) => k.if(k.call(S.equal, b, k.lit(0)), k.call(S.fail),
-    D(n.div(a, b), n.div(n.sub(n.mul(a1, b), n.mul(a, b1)), n.mul(b, b)))));
-  const sinD = oneD("dual sin", (a, a1) => D(k.call(B.sin, a), n.mul(k.call(B.cos, a), a1)));
-  const cosD = oneD("dual cos", (a, a1) => D(k.call(B.cos, a), k.call(B.neg, n.mul(k.call(B.sin, a), a1))));
-  // tan′ = 1 + tan², which needs no division (cos is never exactly 0 at a Float64).
-  const tanD = oneD("dual tan", (a, a1) => k.let("tan", k.call(B.tan, a), (t) => D(t, n.mul(a1, n.add(k.lit(1), n.mul(t, t))))));
-  const expD = oneD("dual exp", (a, a1) => k.let("eᵃ", k.call(B.exp, a), (e) => D(e, n.mul(e, a1))));
-  const logD = oneD("dual log", (a, a1) => D(k.call(B.log, a), n.div(a1, a)));
-  // Unpolar by the chain rule: for r = √(x² + y²), r′ = (x·x′ + y·y′)/r,
-  // and atan2(y, x)′ = (x·y′ − y·x′)/r².
-  const unpolarD = k.def("dual unpolar");
-  const xy = (x: Id, y: Id, f: (a: Id, a1: Id, b: Id, b1: Id) => Id) => du(x, (a, a1) => du(y, (b, b1) => f(a, a1, b, b1), ["y value", "y slope"]), ["x value", "x slope"]);
-  const sq = (a: Id, b: Id) => n.add(n.mul(a, a), n.mul(b, b));
-  // At the origin the slopes are taken as 0, as atan2(0, 0) is taken as 0.
-  k.define(unpolarD, k.fn(["length", "angle", "x", "y"], (r, t, x, y) => k.and(
-    k.equal(r, xy(x, y, (a, a1, b, b1) => k.let("r", k.call(B.sqrt, sq(a, b)), (rr) => D(rr, k.if(k.call(S.equal, rr, k.lit(0)), k.lit(0), n.div(n.add(n.mul(a, a1), n.mul(b, b1)), rr)))))),
-    k.equal(t, xy(x, y, (a, a1, b, b1) => k.let("r²", sq(a, b), (r2) => D(k.call(B.atan2, b, a), k.if(k.call(S.equal, r2, k.lit(0)), k.lit(0), n.div(n.sub(n.mul(a, b1), n.mul(b, a1)), r2)))))))));
-  k.results(unpolarD, "length", "angle");
-  const trigD = k.def("trig at dual");
-  k.define(trigD, k.call(TRIG_V, ...[sinD, cosD, tanD, expD, logD].map((d) => k.x(d)), k.x(S.byItsWays), k.x(unpolarD), k.x(S.byItsWays), k.x(S.byItsWays)));
-  const slopeAt = k.def("slope by duals");
-  k.define(slopeAt, k.fn(["f", "x"], (f, x) => du(k.call(f, D(x, k.lit(1))), (_, a1) => a1)));
-  const dualTable = k.def("dual table");
-  k.define(dualTable, k.list(...([[1, 0, 1, 0, 1, 0], [1, 0, 0, 1, 0, 1], [0, 1, 1, 0, 0, 1]] as const).map(([a, b, c, d, e, f]) =>
-    k.call(TIMES_V, D(k.lit(a), k.lit(b)), D(k.lit(c), k.lit(d)), D(k.lit(e), k.lit(f))))));
-  const showD = oneD("show dual", (a, a1) => k.call(S.concat, k.call(S.show, a), k.call(S.concat,
-    k.if(k.call(S.less, a1, k.lit(0)), k.lit(" − "), k.lit(" + ")), k.call(S.concat, k.call(S.show, k.call(S.abs, a1)), k.lit("ε")))));
 
   // Fixed (FIXED-POINT.md, BACKLOG L89): an Int counting steps of 2⁻³². + −
   // and −x are the Int's own; a · b is the steps' product shifted down 32,
@@ -1070,7 +1020,6 @@ export function buildPrelude(): Module {
     impl("arithmetic at int", ARITHMETIC_V, [INT_OPS.add, INT_OPS.sub, INT_OPS.mul, INT_OPS.neg]),
     impl("arithmetic at rational", ARITHMETIC_V, [addF, subF, mulF, negF]),
     impl("arithmetic at complex", ARITHMETIC_V, [addC, subC, mulC, negC]),
-    impl("arithmetic at dual", ARITHMETIC_V, [addD, subD, mulD, negD]),
     impl("arithmetic at algebraic", ARITHMETIC_V, [ALGEBRAIC_OPS.add, ALGEBRAIC_OPS.sub, ALGEBRAIC_OPS.mul, ALGEBRAIC_OPS.neg]),
     impl("ordered at float64", ORDERED_V, [S.less]),
     impl("ordered at int", ORDERED_V, [INT_OPS.less]),
@@ -1108,7 +1057,6 @@ export function buildPrelude(): Module {
     impl("division at float64", DIVISION_V, [B.div]),
     impl("division at rational", DIVISION_V, [divF]),
     impl("division at complex", DIVISION_V, [divC]),
-    impl("division at dual", DIVISION_V, [divD]),
     impl("division at fixed", DIVISION_V, [divX]),
     impl("division at algebraic", DIVISION_V, [ALGEBRAIC_OPS.divide]),
   ];
@@ -2635,22 +2583,17 @@ export function buildPrelude(): Module {
   // Embeddings (EMBEDDINGS.md, L208b): the one canonical map from a type
   // into a larger one that keeps + − · and <. Into Float64 it holds only
   // as closely as Float64 rounds, so lab test checks those with near.
-  // A Float64 as a dual number with no derivative part, named so the
-  // embedding (and a literal at Dual, through it) is a plain call.
-  const asD = k.def("as dual");
-  k.define(asD, k.fn(["x"], (x) => k.call(DUAL_V, x, k.lit(0))));
   const embed = (name: string, map: Id) => { const d = k.def(name); k.define(d, k.call(EMBEDDING_V, map)); return d; };
   const embeddings = [
     embed("int in rational", k.x(whole)),
     embed("int in float64", k.x(INT_OPS.toNumber)),
     embed("rational in float64", k.x(toNum)),
     embed("float64 in complex", k.x(asC)),
-    embed("float64 in dual", k.x(asD)),
   ];
-  const offered: Id[] = [...embeddings, extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, spaced, optionalParens, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, asD, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, sortWith, collated, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, factored, solvedWith, determinant, inverted, leastSquares, tensorOf, tensorShape, tensorItems, rank, tensorSize, tensorEntry, tensorMap, tensorZipWith, reshaped, contracted, transposedBy, traced, bytesOf, byteItems, byteCount, byteAt, utf8Of, textOfUtf8, base64Of, bytesOfBase64, hexOf, bytesOfHex, jsonPrinted, jsonIndented, jsonRead, jsonSpelled, blank, jsonField, jsonAsNumber, jsonAsText, jsonAsBool, jsonAsList, csvPrinted, csvRows, csvRecords, csvOfRecords, dateOf, dateYear, dateMonth, dateDay, leapYear, daysInMonth, dayNumber, dateOfDay, weekday, addedDays, daysBetween, dateText, dateRead, timeOf, timeHour, timeMinute, timeSecond, secondsOfDay, timeOfSeconds, timeText, timeRead, secondsD, minute, hour, day, instantOf, secondsSince, laterBy, durationBetween, instantAt, dateAt, timeAt, instantText, instantRead, offsetText, instantTextIn, instantTextInZone, instantInZone, durationText, durationRead, currentInstant, waitFor, withState, changeState, withOpenFile, piped, ticketId, ...wordMakers, anyOf, together, race, within, simulated, near];
+  const offered: Id[] = [...embeddings, extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, spaced, optionalParens, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, asFixed, fixedF, sqrtX, sort, sortBy, sortWith, collated, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, factored, solvedWith, determinant, inverted, leastSquares, tensorOf, tensorShape, tensorItems, rank, tensorSize, tensorEntry, tensorMap, tensorZipWith, reshaped, contracted, transposedBy, traced, bytesOf, byteItems, byteCount, byteAt, utf8Of, textOfUtf8, base64Of, bytesOfBase64, hexOf, bytesOfHex, jsonPrinted, jsonIndented, jsonRead, jsonSpelled, blank, jsonField, jsonAsNumber, jsonAsText, jsonAsBool, jsonAsList, csvPrinted, csvRows, csvRecords, csvOfRecords, dateOf, dateYear, dateMonth, dateDay, leapYear, daysInMonth, dayNumber, dateOfDay, weekday, addedDays, daysBetween, dateText, dateRead, timeOf, timeHour, timeMinute, timeSecond, secondsOfDay, timeOfSeconds, timeText, timeRead, secondsD, minute, hour, day, instantOf, secondsSince, laterBy, durationBetween, instantAt, dateAt, timeAt, instantText, instantRead, offsetText, instantTextIn, instantTextInZone, instantInZone, durationText, durationRead, currentInstant, waitFor, withState, changeState, withOpenFile, piped, ticketId, ...wordMakers, anyOf, together, race, within, simulated, near];
   // Each number's own show, from before the generic one showed every number
   // (L153, L156): kept so programs saved before still open, not offered.
-  const perTypeShows = [showF, showC, showD, showX];
+  const perTypeShows = [showF, showC, showX];
   const mapHelpers = [lastItem, putEntry, updateEntry, removeEntry, lookupEntry, hasEntry, pairsAsEntries, addItem_, removeItem_, hasItem_, unionItems, interItems, diffItems];
   const comments: Record<Id, string> = {
     [each]: "Runs the action on each item of the list in turn, for what it does (prints, writes a cell).",
@@ -2845,7 +2788,6 @@ export function buildPrelude(): Module {
     [embeddings[1]]: "Int in Float64: n as the Float64 nearest it, exact up to 2⁵³; + − · agree as closely as Float64 rounds.",
     [embeddings[2]]: "Rational in Float64: top ÷ bottom, the Float64 nearest the fraction; + − · agree as closely as Float64 rounds.",
     [embeddings[3]]: "Float64 in Complex: x as x + 0i.",
-    [embeddings[4]]: "Float64 in Dual: x as the dual number x + 0ε, a constant, whose slope is 0.",
     [jsonIndented]: "The Json value as text over lines, each item and field on a line of its own and indented step spaces a level: the same text as JavaScript's JSON.stringify(value, null, step). A step below 1 prints it on one line, as json printed.",
     [jsonField]: "The value of an object's field with this name, the first if there are several. No answer for a missing field or a value that isn't an object.",
     [jsonAsNumber]: "The Float64 a json number holds; no answer for any other kind.",
@@ -2897,7 +2839,6 @@ export function buildPrelude(): Module {
     [mergeSorted]: "Two sorted lists as one. A helper of sort, not offered.",
     [addRun]: "A helper of sort: a sorted run added to the slots of runs, like adding 1 to a binary number. Not offered.",
     [asC]: "The Float64 x as a complex number, x + 0i.",
-    [asD]: "The Float64 x as a dual number whose derivative part is 0: a constant.",
     [unitI]: "i, the square root of −1: i · i is −1.",
     [conjC]: "a − bi for a + bi: the same point mirrored across the real line. z · conjugate(z) is |z|².",
     [modulus]: "|z|, how far z is from 0 (the vectors module's magnitude says the same).",
@@ -2920,18 +2861,6 @@ export function buildPrelude(): Module {
     [negC]: "What −x is at Complex. Not offered on its own: − is.",
     ...Object.fromEntries(numberOnly.map((d) => [d, "The Float64-only version from before the one generic <, kept so programs saved before still open. Not offered: the generic one is."])),
     [trigF]: "How Float64 does Trig: its builtin sin, cos, tan, exp and log. Found by its type, so not offered: sin is.",
-    [addD]: "What + is at Dual. Not offered on its own: + is.",
-    [subD]: "What − is at Dual. Not offered on its own: − is.",
-    [mulD]: "What · is at Dual, the product rule: (a + a′ε)(b + b′ε) = ab + (ab′ + a′b)ε, since ε · ε is 0. Not offered on its own: · is.",
-    [negD]: "What −x is at Dual. Not offered on its own: − is.",
-    [divD]: "x ÷ y for dual numbers, the quotient rule; no answer when y's value is 0. Not offered: the one divide works on every number but Int; kept so programs saved before still open.",
-    [sinD]: "sin at Dual, by the chain rule: sin(a + a′ε) = sin a + cos a · a′ε. Not offered on its own: sin is.",
-    [cosD]: "cos at Dual: cos a − sin a · a′ε. Not offered on its own: cos is.",
-    [tanD]: "tan at Dual: tan a + a′/cos² a · ε. Not offered on its own: tan is.",
-    [expD]: "exp at Dual: eᵃ + eᵃ · a′ε. Not offered on its own: exp is.",
-    [logD]: "log at Dual: log a + a′/a · ε. Not offered on its own: log is.",
-    [trigD]: "How Dual does Trig: the chain rule for each. Found by its type, so not offered: sin is.",
-    [slopeAt]: "f′(x), worked out by giving f the dual number x + 1ε and reading the slope of what comes back (forward-mode automatic differentiation). f must work on duals: write it with the generic + − · and Trig. derivative(f) gives the same number by differentiating f's code.",
     [matrixTable]: "The multiplication table of n × n matrices, for table product, from rows of basis elements: E_ij · E_jl = E_il and every other product of two of them is 0. Mat2, Mat3 and Mat4 use it for their ·.",
     [cliffordReverse]: "x̃, the reverse of x in the algebra (clifford algebra makes one): each blade's vectors in the opposite order, so e₁₂ becomes −e₁₂ and vectors stay. A rotor R turns a vector v into R · v · R̃. In Cl(3, 0) the rotor that turns by θ in the e₁e₂ plane is cos(θ/2) − sin(θ/2)e₁₂, and the rotors 1, e₂₃, e₁₃, e₁₂ multiply as the quaternions do.",
     [cliffordSandwich]: "r · x · r̃ in the algebra (clifford algebra makes one): how a rotor or a motor moves x. In Cl(3, 0) a rotor turns vectors; in projective geometric algebra ([1, 1, 1, 0]) a motor turns and moves points, and two motors compose by their product.",
@@ -2950,8 +2879,6 @@ export function buildPrelude(): Module {
     [cliffordProduct]: "a · b, the geometric product in the algebra (clifford algebra makes one): table product with the algebra's table.",
     [cliffordAlgebra]: "A Clifford algebra, built once: its basis vectors square to `squares` (1, −1 or 0 each) and `basis` is your record type's basis elements, in clifford table's order. It holds the multiplication table, so clifford sandwich, reflect, exp and the others take it and don't build a table on every call. Make it once, as a definition: pga = clifford algebra([1, 1, 1, 0], basis).",
     [cliffordTable]: "The multiplication table of a Clifford algebra, for table product: its basis vectors square to `squares` (1, −1 or 0 each; Cl(p, q, r) is p ones, q minus ones, r zeros), and `basis` is your record type's basis elements in the order 1, e₁, e₂, e₁e₂, e₃, e₁e₃, e₂e₃, e₁e₂e₃, … . clifford table([−1], …) is the complex numbers, [0] the dual numbers, [1] the split-complex ones, [−1, −1] the quaternions (i = e₁, j = e₂, k = e₁e₂), [1, 1, 1] Cl(3, 0) and [1, 1, 1, 0] projective geometric algebra (ALGEBRA-TABLES.md).",
-    [dualTable]: "Dual numbers' multiplication table: 1 · 1 = 1, 1 · ε = ε, ε · 1 = ε, and ε · ε = 0, which needs no line. table product(dual table, x, y) is x · y.",
-    [showD]: "A dual number as 3 + 2ε. Not offered: the one show shows every number; kept so programs saved before still open.",
     [asFixed]: "A whole number as a Fixed, exactly.",
     [fixedF]: "A Fixed as the nearest Float64, for drawing or printing. Past 2⁵³ steps (about 2 million) it drops the last bits; the Fixed keeps them.",
     [showX]: "A Fixed as text: the shortest decimal that reads back to the same steps, so 0.1 shows as 0.1 and every step shows differently. Not offered: the one show shows every number; kept so programs saved before still open.",
@@ -2973,9 +2900,9 @@ export function buildPrelude(): Module {
     ...Object.fromEntries(awaitHelpers.map((d) => [d, simulatedHelpers.includes(d) ? "A helper of simulated. Not offered in the palette." : "A helper of together and race. Not offered in the palette."])),
     [applied]: "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette.",
   };
-  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, ...awaitHelpers, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarD, unpolarX, vector, asinBy, acosBy, asinF, acosF, asinX, acosX, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, divF, divC, divD, divX, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...matrixHelpers, pipeOf, ...laws], merge(prelude, std));
+  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, ...awaitHelpers, ...arithmetics, trigF, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarX, vector, asinBy, acosBy, asinF, acosF, asinX, acosX, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, divF, divC, divX, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...matrixHelpers, pipeOf, ...laws], merge(prelude, std));
   if (!p.ok) throw new Error(`the prelude can't be published: ${p.reason}`);
   const at = (d: Id) => p.rename.get(d)!;
   const notes = Object.fromEntries(Object.entries(comments).map(([d, c]) => [at(d), c]));
-  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [...awaitHelpers, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, divF, divC, divD, divX, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...matrixHelpers, pipeOf, ...arithmetics, trigF, addD, subD, mulD, negD, sinD, cosD, tanD, expD, logD, trigD, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarD, unpolarX, vector, asinBy, acosBy, asinF, acosF, asinX, acosX, ...laws].map(at));
+  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [...awaitHelpers, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, divF, divC, divX, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...matrixHelpers, pipeOf, ...arithmetics, trigF, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarX, vector, asinBy, acosBy, asinF, acosF, asinX, acosX, ...laws].map(at));
 }

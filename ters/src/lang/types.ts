@@ -75,9 +75,6 @@ export const COMPLEX_TYPE = "std.complex";
 // std.ts's Algebraic: exact roots of polynomials (EXACT-REALS.md), ordered,
 // with builtin arithmetic (src/lang/algebraic.ts).
 export const ALGEBRAIC_TYPE = "std.algebraic";
-// std.ts's Dual: value + slope·ε, a record of two Float64s with the
-// prelude's · (the product rule) and no <.
-export const DUAL_TYPE = "std.dual";
 export const FIXED_TYPE = "std.fixed";
 // The square matrices and their sizes (std.ts MAT2 to MAT4).
 // A cell holding an `a` (src/lang/cells.ts). Not plain data: two cells
