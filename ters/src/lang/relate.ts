@@ -1526,6 +1526,9 @@ export function interpreter(given: Code, opts: Options = {}) {
       case S.fail: return failG;
       case S.first: case S.all: case S.count: case S.optional: return aggregate(id, args, out);
       case S.mapParts: case S.zipParts: case S.total: return parts(id, args, out);
+      // Its answer depends only on its record's type, so nothing about the
+      // record comes back from it.
+      case S.unitParts: throw new NotInvertible("unit parts answers only from its record's type, so it says nothing about the record to run backwards to");
       // Forward only: once the seed and the action are known, the action runs
       // with random() answered by the evaluator's generator (random.ts).
       // Backwards it would have to search the seeds.
