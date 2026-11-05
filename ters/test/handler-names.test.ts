@@ -8,6 +8,11 @@
 // handlers are the prior art.
 
 import { test } from "node:test";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { $setPrint } from "../../compiler/src/runtime.js";
 import assert from "node:assert/strict";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
@@ -56,9 +61,18 @@ test("a name goes only to its own effect's operations", () => {
   assert.ok(p.info.errors.some((e) => /inner names a handler of Ask, so only Ask's operations take it/.test(e.message)), p.info.errors.map((e) => e.message).join("\n"));
 });
 
-test("compiled code refuses a named handler, with the reason", () => {
-  const p = program((_k, ask, { outer }) => ask(outer));
-  assert.throws(() => compile(p.code, p.info, p.names, { runtime: "x", exports: ["main"] }), /a handler with a name isn't compiled yet/);
+// compile.ts (L213b4): the same copies, so compiled JS prints what the
+// evaluator does.
+test("compiled JavaScript answers a named operation by its handler, as the evaluator does", async () => {
+  const p = program((k, ask, { outer, inner }) => k.call(INT_OPS.add, k.call(INT_OPS.add, ask(outer), ask(inner)), k.call(INT_OPS.add, ask(), k.call(k.lambda([], () => ask(outer))))));
+  p.run();
+  const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
+  const file = join(mkdtempSync(join(tmpdir(), "named-")), "main.mjs");
+  writeFileSync(file, compile(p.code, p.info, p.names, { runtime, exports: ["main"] }));
+  const out: string[] = [];
+  $setPrint((s: string) => out.push(s));
+  try { (await import(pathToFileURL(file).href)).defs.main(); } finally { $setPrint((s: string) => console.log(s)); }
+  assert.deepEqual([out, p.printed], [["1012"], ["1012"]]);
 });
 
 // The core IR (L213b3): each named handler handles a copy of its effect
