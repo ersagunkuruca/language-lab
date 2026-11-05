@@ -90,6 +90,8 @@ const SMALLEST: Record<string, (k: Lang) => unknown> = {
   "handler-name-other-effect": (k) => { const a = ask(k), b = k.effect("Other", [["other", [], () => k.tref(NUMBER)]]); k.define(k.def("p"), k.thunk(() => k.handleNamed("n", (n) => k.call(b.op.other, k.x(n)), answered(k, a, () => k.lit(1))))); },
   "handler-name-out-of-scope": (k) => { const a = ask(k); let kept = ""; k.define(k.def("p"), k.thunk(() => k.seq(k.handleNamed("n", (n) => { kept = n; return k.lit(1); }, answered(k, a, () => k.lit(1))), k.call(a.op.ask, k.x(kept))))); },
   "handler-name-escapes": (k) => { const a = ask(k); k.define(k.def("p"), k.thunk(() => k.handleNamed("n", (n) => k.thunk(() => k.call(a.op.ask, k.x(n))), answered(k, a, () => k.lit(1))))); },
+  "fold-by-value": (k) => k.define(k.def("p"), k.fn(["x"], (x) => { const m = k.byValue(x, [[k.lit(1), k.lit(2)]], k.lit(3)); (k.code.nodes[m] as { kind: string }).kind = "fold"; return m; })),
+  "arithmetic-on-other": (k) => k.define(k.def("p"), k.fn(["a"], (a) => k.call(ARITH.add, k.call(S.show, a), k.lit("x")))),
   "name-on-plain-match": (k) => k.define(k.def("p"), k.fn(["b"], (b) => { const m = k.if(b, k.lit(1), k.lit(2)); (k.code.nodes[m] as { name?: string }).name = (k as unknown as { binder: (n: string) => string }).binder("n"); return m; })),
   "named-operation-inputs": (k) => { const a = ask(k); k.define(k.def("p"), k.thunk(() => k.handleNamed("n", (n) => k.call(a.op.ask, k.x(n), k.lit(1)), answered(k, a, () => k.lit(1))))); },
   "release-given-something": (k) => { const a = ask(k); k.define(k.def("p"), k.thunk(() => k.match(k.call(a.op.ask), [...answered(k, a, () => k.lit(1)), { variant: RELEASE_V, names: ["x"], body: () => k.x("std.unit.unit") }]))); },
