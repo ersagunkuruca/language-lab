@@ -90,7 +90,7 @@ const FDLIBM: Partial<Record<Op, string>> = {
 const PLATFORM: Partial<Record<Op, string>> = { sin: "sin", cos: "cos", tan: "tan", exp: "exp", log: "log", pow: "pow", atan2: "atan2" };
 const PRINTED = new Set<SExpr["k"]>([
   "num", "bool", "local", "let", "if", "op", "call", "make", "get", "budget", "new", "list", "field", "tag", "case",
-  "closure", "cap", "apply", "fail", "attempt", "set", "zero", "int", "text", "rt", "abort", "handle", "world",
+  "closure", "cap", "apply", "fail", "attempt", "set", "zero", "int", "text", "rt", "abort", "handle", "world", "released",
 ]);
 // std's Array's runtime functions, one copy per item type (scalar.ts).
 const ARRAY_FN = /^array\.(\w+)\.a(\d+)$/;
@@ -821,7 +821,7 @@ int main(int argc, char **argv) {
           if (isCounted(e.i) && !body.has(e.i) && !after.has(e.i)) pre.push(`${d}${drop(f.locals[e.i], local(e.i))}`);
           return ex(e.body, pre, d, after);
         }
-        case "if": case "case": case "attempt": case "budget": case "handle": {
+        case "if": case "case": case "attempt": case "budget": case "handle": case "released": {
           const t = temp(e.k === "case" ? e.result : e.t);
           pre.push(...block(e, { set: t }, d, after));
           return t;
@@ -1087,6 +1087,26 @@ int main(int argc, char **argv) {
         if (to !== "return") lines.push(`${d}${done}:;`);
         return [...pre, ...lines];
       }
+      if (e.k === "released") {
+        // A handler's release (L213a6): the body; then the release, and its
+        // answer. Ended with no answer or an Abort (any status), the
+        // release runs with the status put aside, then out as before.
+        const keep = union(after, free(e.release));
+        const done = `L${labels++}`, given = temp(e.t), st = temp("i32"), why = temp("text");
+        const lines: string[] = [];
+        let label = "";
+        within(keep, (l) => {
+          label = l;
+          lines.push(`${d}${given} = ${ex(e.body, lines, d, keep)};`);
+        });
+        lines.push(...block(e.release, { set: temp(typeOf(e.release, f.locals)) }, d, union(after, new Set())), give(given));
+        if (to !== "return") lines.push(`${d}goto ${done};`);
+        lines.push(...at(d, label), `${d}${st} = lab_st;`, `${d}${why} = lab_reason;`, `${d}lab_st = 0;`);
+        lines.push(...block(e.release, { set: temp(typeOf(e.release, f.locals)) }, d, after));
+        lines.push(`${d}lab_st = ${st};`, `${d}lab_reason = ${why};`, ...out(d, after));
+        if (to !== "return") lines.push(`${d}${done}:;`);
+        return [...pre, ...lines];
+      }
       if (e.k === "attempt" && lowered.int32) {
         // The plain profile's search (C166): no answer inside is the flag
         // lab_none, saved and cleared around the body, as a shader's.
@@ -1180,7 +1200,7 @@ int main(int argc, char **argv) {
       case "make": case "zero": return e.t;
       case "call": return funcs[e.fn].result;
       case "let": case "set": return typeOf(e.k === "let" ? e.body : e.then, locals);
-      case "if": case "budget": case "attempt": case "handle": return e.t;
+      case "if": case "budget": case "attempt": case "handle": case "released": return e.t;
       case "int": return lowered.int32 ? "int32" : "int";
       case "text": return "text";
       case "rt": return isPerform(e.fn) ? e.host!.t : rtType(e.fn);
