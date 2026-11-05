@@ -6,7 +6,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import { compiledDefs } from "../../compiler/src/core-js.ts";
 import { hashDef } from "../src/hash.ts";
 import type { Id, NodeOf } from "../src/model.ts";
@@ -19,7 +18,6 @@ import { S, SET, SHOW_ANY } from "../src/lang/std.ts";
 import { INT, NUMBER, STRING } from "../src/lang/types.ts";
 const L = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY.names[d] === name)!;
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 
 // Instr = jump(to: Int) | add(into: Int, a: Int) | jz(a: Int, to: Int)
 // | halt, with jz's `to` the same as jump's. Timer = running(id: Text,

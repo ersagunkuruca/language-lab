@@ -6,10 +6,6 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { pathToFileURL } from "node:url";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { makeRunner, type Value } from "../src/lang/run.ts";
@@ -19,9 +15,8 @@ import { COMPARE, NONE, SHOW_ANY, SOME } from "../src/lang/std.ts";
 import { NUMBER, RATIONAL_TYPE, STRING, showType } from "../src/lang/types.ts";
 import { subtree, type Id } from "../src/model.ts";
 import { B } from "../src/prelude.ts";
-import { compile } from "../../compiler/src/compile.ts";
+import { compiledEach, plainValue } from "../../compiler/src/core-js.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 const lib = (name: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === name)!;
 
 function program() {
@@ -95,13 +90,13 @@ test("compiled JavaScript gives the evaluator's answers", async () => {
   const ok = new Set(NAMES.map((n) => p.code.defs.find((d) => p.names[d] === n)!));
   const clean = { ...p.info, errors: p.info.errors.filter((e) => [...ok].some((d) => subtree(p.code, d).includes(e.id))) };
   const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });
-  const path = join(mkdtempSync(join(tmpdir(), "order-")), "order.js");
-  writeFileSync(path, compile(p.code, clean, p.names, { runtime, exports: NAMES }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
-  for (const n of NAMES) {
-    const c = typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n];
+  // What the core IR doesn't compile yet (C137's gaps), by why.
+  const { defs, gaps } = compiledEach(p.code, clean, p.names, NAMES);
+  for (const n of Object.keys(defs)) {
+    const c = plainValue(defs[n]());
     assert.deepEqual(c, r.value(p.code.defs.find((d) => p.names[d] === n)!), n);
   }
+  assert.deepEqual(Object.values(gaps), ["fractions isn't compiled through the core IR: it uses a value that isn't a Float64, Int or Text"]);
 });
 
 // REVIEW-2026-10-26.md §1.1: an order a set relies on has to be one. With

@@ -10,26 +10,9 @@ import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
 import { Aborted, runMain } from "../src/lang/run.ts";
-import { compile } from "../../compiler/src/compile.ts";
 import { lowerCore, runCoreMain } from "../../compiler/src/core-js.ts";
 import { ABORT_OP, INT_OPS, LOG_OP, S, SHOW_ANY } from "../src/lang/std.ts";
 import type { Id } from "../src/model.ts";
-import { $setPrint, $setWorld } from "../../compiler/src/runtime.js";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
-
-const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
-// main compiled by compile.ts and run, its prints and logs into out (L213a).
-async function compiled(code: Parameters<typeof compile>[0], info: Parameters<typeof compile>[1], names: Parameters<typeof compile>[2], out: string[]) {
-  const file = join(mkdtempSync(join(tmpdir(), "release-")), "main.mjs");
-  writeFileSync(file, compile(code, info, names, { runtime, exports: ["main"] }));
-  $setPrint((l: string) => out.push(`print ${l}`));
-  $setWorld({ log: (l: string) => out.push(`log ${l}`) });
-  try { (await import(pathToFileURL(file).href)).defs.main(); } catch (e) { out.push(`aborted ${(e as { reason?: unknown }).reason}`); } finally { $setPrint((l: string) => console.log(l)); $setWorld(undefined); }
-  return out;
-}
 
 // Ask answers 41; the handler logs "opened" when asked and "closed" when
 // it ends. `body` is what runs under it.
@@ -106,10 +89,8 @@ test("a release may only log, and a handler with one can't let a Choice through"
   assert.match(errors.join("\n"), /can't let a Choice through/);
 });
 
-test("compiled code runs a release after the normal finish's case, as the evaluator does (L213a)", async () => {
+test("the core IR doesn't yet compile a release after the normal finish's case (L57)", () => {
   const p = program((k, ask) => k.call(INT_OPS.add, ask(), ask()));
-  const out = await compiled(p.code, p.info, p.names, []);
-  assert.deepEqual(out, ["log opened", "log opened", "log finished", "log closed", "print 83"]);
   // The core IR lowers the release (L213a3); this handler's normal
   // finish it doesn't yet (L57).
   const l = lowerCore(p.code, p.info, p.names, [p.main]);
@@ -139,17 +120,16 @@ function bothWays(body: (k: Lang, ask: () => Id) => Id, around?: (k: Lang, inner
   const evaluator = run((rt) => runMain(code, info, main, rt));
   const l = lowerCore(code, info, names, [main]);
   assert.deepEqual([...l.refused.values()], []);
-  return { evaluator, core: run((rt) => runCoreMain(l, "main", [], rt)), compiled: () => compiled(code, info, names, []) };
+  return { evaluator, core: run((rt) => runCoreMain(l, "main", [], rt)) };
 }
 
-test("the core IR and compile.ts run a release after the handler, on a normal exit, as the evaluator does (L213a3)", async () => {
+test("the core IR runs a release after the handler, on a normal exit, as the evaluator does (L213a3)", async () => {
   const r = bothWays((k, ask) => k.call(INT_OPS.add, ask(), ask()));
   assert.deepEqual(r.evaluator, ["log opened", "log opened", "log closed", "print 82"]);
   assert.deepEqual(r.core, r.evaluator);
-  assert.deepEqual(await r.compiled(), r.evaluator);
 });
 
-test("the core IR and compile.ts run a release on an Abort, handled further out or not, as the evaluator does (L213a4)", async () => {
+test("the core IR runs a release on an Abort, handled further out or not, as the evaluator does (L213a4)", async () => {
   const out = bothWays((k, ask) => k.seq(ask(), k.call(ABORT_OP, k.lit("gave up")), ask()),
     (k, inner) => k.handle(inner, [{ variant: ABORT_OP, names: ["why"], body: ([why]) => k.seq(k.call(LOG_OP, k.text(k.lit("caught "), why)), k.int(0)) }]));
   assert.deepEqual(out.evaluator, ["log opened", "log closed", "log caught gave up", "print 0"]);
@@ -157,9 +137,6 @@ test("the core IR and compile.ts run a release on an Abort, handled further out 
   const uncaught = bothWays((k, ask) => k.seq(ask(), k.call(ABORT_OP, k.lit("gave up")), ask()));
   assert.deepEqual(uncaught.evaluator, ["log opened", "log closed", "aborted gave up"]);
   assert.deepEqual(uncaught.core, uncaught.evaluator);
-  // compile.ts too (L213a).
-  assert.deepEqual(await out.compiled(), out.evaluator);
-  assert.deepEqual(await uncaught.compiled(), uncaught.evaluator);
 });
 
 test("a with fuel outside running out ends the handler: its release runs once, and the run goes on", () => {

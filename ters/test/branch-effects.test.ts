@@ -13,14 +13,8 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { runMain } from "../src/lang/run.ts";
 import { ABORT_OP, AWAIT_OP, START_TIMER_OP, S, SHOW_ANY } from "../src/lang/std.ts";
 import { showType } from "../src/lang/types.ts";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
-import { compile } from "../../compiler/src/compile.ts";
-import { $setPrint } from "../../compiler/src/runtime.js";
+import { compiledDefs } from "../../compiler/src/core-js.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 
 const lib = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
 
@@ -49,12 +43,8 @@ test("two printing branches under simulated: their lines in the clock's order, e
   const want = ["slow starts", "quick starts", "quick ends", "slow ends", '["slow", "quick"]'];
   assert.deepEqual(r.printed, want);
   // Compiled to JavaScript, the same lines.
-  const path = join(mkdtempSync(join(tmpdir(), "branch-effects-")), "out.mjs");
-  writeFileSync(path, compile(r.code, r.info, r.names, { runtime, exports: ["main"] }));
-  const compiled: string[] = [];
-  $setPrint((line: string) => compiled.push(line));
-  try { (await import(pathToFileURL(path).href)).defs.main(); } finally { $setPrint((line: string) => console.log(line)); }
-  assert.deepEqual(compiled, want);
+  // A core IR gap (C137): L57, under simulated.
+  assert.throws(() => compiledDefs(r.code, r.info, r.names, ["main"]), /normal finish, which isn't lowered yet \(L57\)/);
 });
 
 test("together's type carries its actions' effects besides Await", () => {

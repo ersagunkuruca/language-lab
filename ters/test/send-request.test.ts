@@ -7,12 +7,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
-import { compile } from "../../compiler/src/compile.ts";
-import { $main, $setPrint, $setWorld } from "../../compiler/src/runtime.js";
+import { compiledMain } from "../../compiler/src/core-js.ts";
 import type { Id } from "../src/model.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
@@ -24,7 +19,6 @@ import { REQUEST_V, RESPONSE_V } from "../src/lang/network.ts";
 import { IO, S, SHOW_ANY, tupleVariant } from "../src/lang/std.ts";
 import { NETWORK } from "../src/lang/types.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 
 // A server in another process (sending blocks this one): /echo answers 201
 // with the method, the x-test header and the body; /hits says how many
@@ -84,12 +78,8 @@ test("send request: method, headers and body go out; any status comes back; each
     runMain(p.code, p.info, p.main, { print: (l) => ran.push(l), names: p.names, world: nodeWorld() });
     assert.deepEqual(ran, ["201 POST yes hi", "201 POST yes hi", "201 PUT yes there", "404 no such page", "3", "3"]);
 
-    const file = join(mkdtempSync(join(tmpdir(), "send-request-")), "main.mjs");
-    writeFileSync(file, compile(p.code, p.info, p.names, { runtime, exports: ["main"] }));
     const compiled: string[] = [];
-    $setPrint((l: string) => compiled.push(l));
-    $setWorld(nodeWorld());
-    try { await $main((await import(pathToFileURL(file).href)).defs.main()); } finally { $setPrint((l: string) => console.log(l)); $setWorld({}); }
+    compiledMain(p.code, p.info, p.names, { print: (s: string) => compiled.push(s), world: nodeWorld() } as never);
     // A new run sends again: three more, so the server has seen six.
     assert.deepEqual(compiled, [...ran.slice(0, 5), "6"]);
   } finally { s.stop(); }
@@ -124,12 +114,8 @@ test("a body is Bytes: bytes that aren't text go out and come back as they are",
     const ran: string[] = [];
     runMain(p.code, p.info, p.main, { print: (l) => ran.push(l), names: p.names, world: nodeWorld() });
     assert.deepEqual(ran, ["[1, 128, 255, 0]"]);
-    const file = join(mkdtempSync(join(tmpdir(), "send-bytes-")), "main.mjs");
-    writeFileSync(file, compile(p.code, p.info, p.names, { runtime, exports: ["main"] }));
     const compiled: string[] = [];
-    $setPrint((l: string) => compiled.push(l));
-    $setWorld(nodeWorld());
-    try { await $main((await import(pathToFileURL(file).href)).defs.main()); } finally { $setPrint((l: string) => console.log(l)); $setWorld({}); }
+    compiledMain(p.code, p.info, p.names, { print: (s: string) => compiled.push(s), world: nodeWorld() } as never);
     assert.deepEqual(compiled, ran);
   } finally { s.stop(); }
 });

@@ -4,12 +4,8 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
-import { compile } from "../../compiler/src/compile.ts";
-import { $main, $setWorld } from "../../compiler/src/runtime.js";
+import { compiledDefs } from "../../compiler/src/core-js.ts";
 import type { Id } from "../src/model.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
@@ -18,7 +14,6 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { runMain } from "../src/lang/run.ts";
 import { MY_LOCALE_OP, MY_ZONE_OP, S, SHOW_ANY, ZONE_OPS } from "../src/lang/std.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 const lib = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
 
 test("zone offsets by name, summer time, an unknown zone, and my time zone", async () => {
@@ -41,13 +36,7 @@ test("zone offsets by name, summer time, an unknown zone, and my time zone", asy
   const want = shown(["10800", "2026-07-01T10:30:00+01:00", "2026-01-01T09:30:00Z", "2026-01-01T06:00:00-03:30", "no such zone", "2026-11-04T12:30:00+03:00", "2026-11-04T09:30:00Z"]);
   const world = { timeZone: () => "Europe/Istanbul" };
   assert.equal(runMain(code, info, main, { print: () => {}, names, world: world as never }), want);
-  const path = join(mkdtempSync(join(tmpdir(), "zones-")), "main.mjs");
-  writeFileSync(path, compile(code, info, names, { runtime, exports: ["main"] }));
-  $setWorld(world);
-  try {
-    const defs = (await import(pathToFileURL(path).href)).defs as Record<string, () => unknown>;
-    assert.equal(await $main(typeof defs.main === "function" ? defs.main() : defs.main), want);
-  } finally { $setWorld({}); }
+  assert.equal(compiledDefs(code, info, names, ["main"], { print: () => {}, world } as never).main(), want);
 });
 
 test("a local date and time read back in a zone, across the jump ahead and the going back (L188c3)", async () => {
@@ -70,8 +59,5 @@ test("a local date and time read back in a zone, across the jump ahead and the g
   const shown = (xs: string[]) => `[${xs.map((x) => JSON.stringify(x)).join(", ")}]`;
   const want = shown(["2026-07-01T09:30:00Z", "2026-01-01T09:30:00Z", "2026-03-29T01:30:00Z", "2026-03-29T11:00:00Z", "2026-10-25T00:30:00Z", "2026-03-08T07:30:00Z", "2026-11-04T09:30:00Z", "no such zone"]);
   assert.equal(runMain(code, info, main, { print: () => {}, names }), want);
-  const path = join(mkdtempSync(join(tmpdir(), "zones-")), "main.mjs");
-  writeFileSync(path, compile(code, info, names, { runtime, exports: ["main"] }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, () => unknown>;
-  assert.equal(await $main(typeof defs.main === "function" ? defs.main() : defs.main), want);
+  assert.equal(compiledDefs(code, info, names, ["main"], { print: () => {} } as never).main(), want);
 });

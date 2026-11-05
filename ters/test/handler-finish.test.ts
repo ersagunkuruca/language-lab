@@ -5,22 +5,17 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { pathToFileURL } from "node:url";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
-import { makeRunner, type Value } from "../src/lang/run.ts";
+import { makeRunner } from "../src/lang/run.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { ABORT_OP, NONE, S, SHOW_ANY, SOME } from "../src/lang/std.ts";
 import { B } from "../src/prelude.ts";
 import { showType } from "../src/lang/types.ts";
 import type { Id } from "../src/model.ts";
-import { compile } from "../../compiler/src/compile.ts";
+import { compiledDefs } from "../../compiler/src/core-js.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 
 function program(extra?: (k: Lang) => void) {
   const k = new Lang(LIBRARY.code);
@@ -47,10 +42,8 @@ test("a handler's normal finish changes the result's type, evaluated and compile
   const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });
   const evaluated = NAMES.map((n) => r.value(at(n)));
   assert.deepEqual(evaluated, ["some(3)", "none", "10"]);
-  const path = join(mkdtempSync(join(tmpdir(), "finish-")), "finish.js");
-  writeFileSync(path, compile(p.code, p.info, p.names, { runtime, exports: NAMES }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
-  assert.deepEqual(NAMES.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), evaluated);
+  // A core IR gap (C137): L57.
+  assert.throws(() => compiledDefs(p.code, p.info, p.names, NAMES), /L57/);
 });
 
 test("the normal finish must be a function written in place, of the computation's value", () => {

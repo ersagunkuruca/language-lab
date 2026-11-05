@@ -5,10 +5,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { pathToFileURL } from "node:url";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { makeRunner, type Value } from "../src/lang/run.ts";
@@ -17,9 +14,8 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { ARITH, S } from "../src/lang/std.ts";
 import { showType } from "../src/lang/types.ts";
 import { subtree, type Id } from "../src/model.ts";
-import { compile } from "../../compiler/src/compile.ts";
+import { compiledDefs, plainValue } from "../../compiler/src/core-js.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 const lib = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
 
 function program() {
@@ -71,10 +67,8 @@ async function both() {
   // A definition that acts (all runs a Choice) is a computation: run it.
   const run = (v: Value): Value => { if (typeof v !== "function") return v; for (const x of r.call(v)) return x; throw new Error("no value"); };
   const evaluated = Object.fromEntries(NAMES.map((n) => [n, items(run(r.value(byName(n))))]));
-  const path = join(mkdtempSync(join(tmpdir(), "rational-")), "rational.js");
-  writeFileSync(path, compile(p.code, p.info, p.names, { runtime, exports: NAMES }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, () => Value>;
-  const compiled = Object.fromEntries(NAMES.map((n) => [n, items(defs[n]())]));
+  const defs = compiledDefs(p.code, p.info, p.names, NAMES);
+  const compiled = Object.fromEntries(NAMES.map((n) => [n, items(plainValue(defs[n]()) as Value)]));
   return { evaluated, compiled };
 }
 
@@ -145,12 +139,9 @@ test("literals at Rational and Complex: exact, in lowest terms, checked, and pri
   assert.equal(r.value(sum), "3/2");
   assert.equal(r.value(lowest), "3/4");
   assert.equal(r.value(cx), "0 + 2.5i");
-  const path = join(mkdtempSync(join(tmpdir(), "literal-")), "literal.js");
   const clean = { ...info, errors: info.errors.filter((e) => !subtree(code, bad).includes(e.id)) };
-  writeFileSync(path, compile(code, clean, names, { runtime, exports: ["sum of literals", "lowest literal", "complex literal"] }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
-  const val = (x: unknown) => (typeof x === "function" ? (x as () => unknown)() : x);
-  assert.deepEqual([val(defs["sum of literals"]), val(defs["lowest literal"]), val(defs["complex literal"])], ["3/2", "3/4", "0 + 2.5i"]);
+  const defs = compiledDefs(code, clean, names, ["sum of literals", "lowest literal", "complex literal"]);
+  assert.deepEqual([defs["sum of literals"](), defs["lowest literal"](), defs["complex literal"]()], ["3/2", "3/4", "0 + 2.5i"]);
   // Drawn as written: 1/2, not "1/2".
   const pres = { names, comments: {}, hints: {}, style: { view: "blocks", notation: {} } } as unknown as Parameters<typeof renderBlocks>[1];
   assert.match(renderBlocks(code, pres, info, sum), /1\/2/);

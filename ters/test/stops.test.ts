@@ -3,8 +3,6 @@
 // Abort stop on the evaluator and in compiled JavaScript alike.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import { compiledDefs } from "../../compiler/src/core-js.ts";
 import type { Id } from "../src/model.ts";
 import { Lang } from "../src/lang/dsl.ts";
@@ -15,7 +13,6 @@ import { runMain } from "../src/lang/run.ts";
 import { ABORT_OP, S } from "../src/lang/std.ts";
 import { B } from "../src/prelude.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 
 async function underHandler(inner: (k: Lang) => Id, why: RegExp) {
   const k = new Lang(LIBRARY.code);

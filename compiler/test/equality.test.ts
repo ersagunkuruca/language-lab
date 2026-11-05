@@ -5,10 +5,6 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { pathToFileURL } from "node:url";
 import { equal, sameNumber } from "../../ters/src/lang/run.ts";
 import { $eq } from "../src/runtime.js";
 import { Cells } from "../../ters/src/lang/cells.ts";
@@ -18,7 +14,7 @@ import { base, baseNames } from "../../ters/src/lang/load.ts";
 import { TRUE } from "../../ters/src/lang/std.ts";
 import { B } from "../../ters/src/prelude.ts";
 import { PAIRS } from "../../ters/test/helpers.ts";
-import { compile } from "../src/compile.ts";
+import { compiledDefs } from "../src/core-js.ts";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitWasm, instantiate } from "../src/wasm.ts";
 
@@ -33,9 +29,7 @@ test("compiled equal gives the evaluator's answer on every boundary pair, at eve
   const code = base(k.code), names = { ...baseNames(), ...k.names };
   const info = infer(code, names);
   assert.deepEqual(info.errors, []);
-  const path = join(mkdtempSync(join(tmpdir(), "equality-")), "equality.js");
-  writeFileSync(path, compile(code, info, names, { runtime: pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href, exports: ["numbers", "generic", "lists"] }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, (...a: number[]) => unknown>;
+  const defs = compiledDefs(code, info, names, ["numbers", "generic", "lists"]) as Record<string, (...a: number[]) => unknown>;
   const wasm = await instantiate(emitWasm(lowerScalar(code, info, names, [num])));
   const yes = (v: unknown) => v === true || (v as { tag?: string })?.tag === TRUE;
   for (const [a, b] of PAIRS) {

@@ -3,8 +3,6 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import { compiledDefs } from "../../compiler/src/core-js.ts";
 import type { Id } from "../src/model.ts";
 import { Lang } from "../src/lang/dsl.ts";
@@ -15,7 +13,6 @@ import { relate, toValue } from "../src/lang/relate.ts";
 import { runMain } from "../src/lang/run.ts";
 import { S, SHOW_ANY } from "../src/lang/std.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 
 function program(build: (k: Lang) => { main: Id }) {
   const k = new Lang(LIBRARY.code);

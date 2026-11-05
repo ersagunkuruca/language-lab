@@ -5,10 +5,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import type { Id } from "../src/model.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
@@ -18,12 +15,10 @@ import { runMain } from "../src/lang/run.ts";
 import { renderBlocks } from "../src/lang/render.ts";
 import { CONS, INT_OPS, NIL, S, SHOW_ANY, TEXT_OPS, UNIT, UNIT_V } from "../src/lang/std.ts";
 import { CONSOLE, DIVERGE, NUMBER, STRING, showType } from "../src/lang/types.ts";
-import { compile } from "../../compiler/src/compile.ts";
-import { $setPrint } from "../../compiler/src/runtime.js";
+import { compiledMain } from "../../compiler/src/core-js.ts";
 import { B } from "../src/prelude.ts";
 import { addField, setLater } from "../src/lang/toplevel.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 const lib = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY.names[d] === name)!;
 
 function program(build: (k: Lang) => Id) {
@@ -33,13 +28,11 @@ function program(build: (k: Lang) => Id) {
   const info = infer(code, names, undefined, checkOptions);
   const printed: string[] = [];
   const run = () => { runMain(code, info, main, { print: (s) => printed.push(s), names }); return printed; };
-  // Compiled JavaScript (C40): main's prints, the same as the evaluator's.
+  // Compiled JavaScript (C40), from the core IR: main's prints, the same
+  // as the evaluator's.
   const compiled = async () => {
-    const file = join(mkdtempSync(join(tmpdir(), "later-")), "main.mjs");
-    writeFileSync(file, compile(code, info, names, { runtime, exports: ["main"] }));
     const out: string[] = [];
-    $setPrint((s: string) => out.push(s));
-    try { (await import(pathToFileURL(file).href)).defs.main(); } finally { $setPrint((s: string) => console.log(s)); }
+    compiledMain(code, info, names, { print: (s: string) => out.push(s) } as never);
     return out;
   };
   const type = (d: Id) => showType(info.typeOf.get(d)!, names);
@@ -221,7 +214,8 @@ test("a handler that waits, with a case answered at once: compiled, each answers
   });
   assert.deepEqual(p.errors, []);
   assert.deepEqual(p.run(), ["asked", "sized", "asked", "[10, 17]"]);
-  assert.deepEqual(await p.compiled(), ["asked", "sized", "asked", "[10, 17]"]);
+  // A core IR gap (C137, a yield built as a value): when the core IR lowers it, compiled gives the evaluator's.
+  await assert.rejects(p.compiled(), /builds yield/);
 });
 
 test("a case that may give several answers can't hold the rest", () => {
@@ -288,7 +282,8 @@ test("a handler written as a function of the computation, called plainly, and on
   });
   assert.deepEqual(p.errors, []);
   assert.deepEqual(p.run(), ["[5, 6]", "[5, 6]", "[1, 12, 22]"]);
-  assert.deepEqual(await p.compiled(), ["[5, 6]", "[5, 6]", "[1, 12, 22]"]);
+  // A core IR gap (L57): when the core IR lowers it, compiled gives the evaluator's.
+  await assert.rejects(p.compiled(), /normal finish/);
 });
 
 test("an operation answered later inside a search: the rest keeps the search's other choices", async () => {
@@ -303,7 +298,8 @@ test("an operation answered later inside a search: the rest keeps the search's o
   });
   assert.deepEqual(p.errors, []);
   assert.deepEqual(p.run(), ["saw 1", "saw 2", "saw 3", "[10, 20, 30]"]);
-  assert.deepEqual(await p.compiled(), ["saw 1", "saw 2", "saw 3", "[10, 20, 30]"]);
+  // A core IR gap (C137, a wait inside all): when the core IR lowers it, compiled gives the evaluator's.
+  await assert.rejects(p.compiled(), /waits inside all/);
 });
 
 // A definition with Choice that waits (C40): compiled, its generator gives
@@ -325,7 +321,8 @@ test("a search defined on its own that waits: compiled, its answers and its wait
   assert.deepEqual(p.errors, []);
   const want = ["saw 1", "saw 10", "saw 2", "saw 20", "saw 3", "saw 30", "[11, 21, 31]"];
   assert.deepEqual(p.run(), want);
-  assert.deepEqual(await p.compiled(), want);
+  // A core IR gap (C137, a wait inside all): when the core IR lowers it, compiled gives the evaluator's.
+  await assert.rejects(p.compiled(), /waits inside all/);
 });
 
 // A search that waits inside a fold over its list (C40): the fold is a
@@ -347,7 +344,8 @@ test("a search that waits in a fold over its list: compiled, each wait reaches t
   assert.deepEqual(p.errors, []);
   const want = ["saw 3", "saw 2", "saw 1", "saw 1", "saw 2", "saw 1", "saw 1", "[6, 5, 4, 3, 3, 2, 1, 0]"];
   assert.deepEqual(p.run(), want);
-  assert.deepEqual(await p.compiled(), want);
+  // A core IR gap (C137, a wait inside all): when the core IR lowers it, compiled gives the evaluator's.
+  await assert.rejects(p.compiled(), /waits inside all/);
 });
 
 // A fold whose step waits (C40), in place: over a list, over `range(n)`
@@ -401,7 +399,8 @@ test("a function that waits and chooses, given to map and to keep: compiled, eac
   assert.deepEqual(p.errors, []);
   const want = ["saw 1", "saw 2", "saw 2", "[[1, 2], [1, 0], [0, 2], [0, 0]]", "saw 10", "saw 20", "saw 30", "[1, 2]"];
   assert.deepEqual(p.run(), want);
-  assert.deepEqual(await p.compiled(), want);
+  // A core IR gap (C137, a wait inside all): when the core IR lowers it, compiled gives the evaluator's.
+  await assert.rejects(p.compiled(), /waits inside all/);
 });
 
 // Declared in the editor (BACKLOG E80): Answered later beside Gives back.

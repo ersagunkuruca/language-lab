@@ -3,7 +3,6 @@
 // order, or the one value when it produces one.
 import { test } from "node:test";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import { compiledDefs } from "../../compiler/src/core-js.ts";
 import assert from "node:assert/strict";
 import type { Code, Id, NodeOf } from "../src/model.ts";
@@ -16,7 +15,6 @@ import { SHAPE_STEPS } from "../src/model.ts";
 import { showType } from "../src/lang/types.ts";
 import { B } from "../src/prelude.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 async function compiled(p: ReturnType<typeof program>): Promise<unknown> {
   const defs = compiledDefs(p.code, p.info, p.names, ["main"]) as unknown as Record<string, () => unknown>;
   return typeof defs.main === "function" ? defs.main() : defs.main;

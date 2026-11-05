@@ -5,12 +5,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
-import { compile } from "../../compiler/src/compile.ts";
-import { $setPrint } from "../../compiler/src/runtime.js";
+import { compiledMain } from "../../compiler/src/core-js.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
@@ -52,7 +47,6 @@ function program() {
   return { code: base(k.code), names: baseNames(k.names), quiet, main };
 }
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 const EXPECTED = ["> a", "> b", "done", "the text of notes.txt", "after"];
 
 test("a match handles print and read file; what nothing handles goes to the world", () => {
@@ -68,11 +62,8 @@ test("a match handles print and read file; what nothing handles goes to the worl
 test("compiled, the same", async () => {
   const { code, names } = program();
   const info = infer(code, names);
-  const path = join(mkdtempSync(join(tmpdir(), "world-")), "world.mjs");
-  writeFileSync(path, compile(code, info, names, { runtime, exports: ["main"] }));
   const out: string[] = [];
-  $setPrint((s: string) => out.push(s));
-  try { (await import(pathToFileURL(path).href)).defs.main(); } finally { $setPrint((s: string) => console.log(s)); }
+  compiledMain(code, info, names, { print: (s: string) => out.push(s) } as never);
   assert.deepEqual(out, EXPECTED);
 });
 
@@ -102,10 +93,7 @@ test("Console's print performed by name goes to the world when nothing handles i
   const out: string[] = [];
   runMain(code, info, main, { print: (s) => out.push(s), names });
   assert.deepEqual(out, want);
-  const path = join(mkdtempSync(join(tmpdir(), "world-")), "by-name.mjs");
-  writeFileSync(path, compile(code, info, names, { runtime, exports: ["main"] }));
   const compiled: string[] = [];
-  $setPrint((s: string) => compiled.push(s));
-  try { (await import(pathToFileURL(path).href)).defs.main(); } finally { $setPrint((s: string) => console.log(s)); }
+  compiledMain(code, info, names, { print: (s: string) => compiled.push(s) } as never);
   assert.deepEqual(compiled, want);
 });

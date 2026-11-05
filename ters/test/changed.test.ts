@@ -5,8 +5,6 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
@@ -16,7 +14,6 @@ import { CELL_OPS, LIST, SHOW_ANY } from "../src/lang/std.ts";
 import { INT, showType } from "../src/lang/types.ts";
 import { compiledDefs } from "../../compiler/src/core-js.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 
 function program() {
   const k = new Lang(LIBRARY.code);
