@@ -141,3 +141,55 @@ the written reader carries as a second result.
   (c.test, wasm.test), and the stuck position as a second result.
 - Then the Language lane moves calc's run line onto `read expression`
   and deletes the hand parser.
+
+## JSON: one relation, written once, read leniently (L72e, 2026-11-05)
+
+Descent now reads `json printed` backwards (L72b to L72d). That reads
+only the text `json printed` writes: no spaces, a number as `show` writes
+it, `\u0009` for a tab. `json read` accepts all of RFC 8259: whitespace
+between tokens, `1.0`, `1e3`, `\t`, `\/`, surrogate pairs. So `json read`
+can't simply become `json printed` run backwards. That would refuse
+JSON every other program writes.
+
+The language already has what the difference needs. A printer may give
+several texts (a Choice), with the one it prints first. **`json spelled`**
+is JSON's grammar as one relation: every text that spells a value, the
+canonical one first. Then:
+
+- `json printed(v) = first(json spelled(v))`: printing takes the first
+  spelling;
+- `json read(t)` = `json spelled` run backwards: any spelling reads.
+
+Where a spelling has a choice, the piece says so, and the canonical
+alternative comes first:
+
+- `blank` between tokens: `""` first, then any run of spaces, tabs, line
+  ends;
+- a number: `show(x)` first, then any RFC 8259 number that reads to x
+  (`read number`'s inverse, kept to the JSON number grammar);
+- a character in a string: `json character(c)` first, then `\uXXXX` for
+  any c, `\t` and the other short escapes, `\/` for `/`.
+
+`optional parens` is already this kind of piece: it prints none where
+none is needed and reads any number. These pieces are ordinary Choice
+definitions in the prelude, not grammar operations named in relate.ts.
+
+**What descent needs.** It must read a piece with several answers by
+trying the alternatives in order, within the piece, the way a match's
+arms are tried. A run of `blank` is read greedily, as `spaced` is. That
+is the one new rule. The rest (lists between separators, a function of
+one character, Float64 show) is built.
+
+**The indented printer.** `json indented(v, n)` becomes one more choice
+of blanks (a line end and `n` spaces a level), so `first` of a variant
+of `json spelled` with that blank first. Its law with `json read` holds
+by construction.
+
+Steps: (e1) the pieces `blank` and the number and character
+alternatives in the prelude, with `json spelled`; `json printed` as its
+first spelling, the same text as today (hash moves via library/moved.json);
+(e2) descent reads a Choice piece by its alternatives in order, and
+blanks greedily; (f) `json read` as `json spelled` run backwards, its
+error messages from L70c's "where it stopped", and the hand-written
+reader (prelude-source.ts `json value` and the eight definitions under
+it) deleted, with the JSON laws (T7e9, T7e11) as its test.
