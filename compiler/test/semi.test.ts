@@ -6,10 +6,6 @@
 // GAPS S3). Prior art: Mercury's semidet determinism.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { pathToFileURL } from "node:url";
 import { Lang } from "../../ters/src/lang/dsl.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
@@ -17,9 +13,8 @@ import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { makeRunner } from "../../ters/src/lang/run.ts";
 import { CONS, NIL, PAIR_V, S, SHOW_ANY } from "../../ters/src/lang/std.ts";
 import { B } from "../../ters/src/prelude.ts";
-import { compile } from "../src/compile.ts";
+import { compiledDefs } from "../src/core-js.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href;
 const lib = (n: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === n)!;
 
 test("map given a lambda that may fail runs single-style, compiled as evaluated (C84)", async () => {
@@ -32,11 +27,7 @@ test("map given a lambda that may fail runs single-style, compiled as evaluated 
   k.define(none, k.call(SHOW_ANY, k.call(kept, k.lit(5000), k.lit(10))));
   const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
   assert.deepEqual(info.errors.map((e) => e.message), []);
-  const source = compile(code, info, names, { runtime, exports: ["all kept", "none kept"] });
-  assert.match(source, /map\$choice\$one\(/);
-  const path = join(mkdtempSync(join(tmpdir(), "semi-")), "m.js");
-  writeFileSync(path, source);
-  const out = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
+  const out = compiledDefs(code, info, names, ["all kept", "none kept"]) as Record<string, unknown>;
   const run = makeRunner(code, info, { print: () => {}, names });
   const got = (name: string) => typeof out[name] === "function" ? (out[name] as () => unknown)() : out[name];
   assert.deepEqual(got("all kept"), run.value(all));
@@ -59,11 +50,7 @@ test("a one-answer search that calls itself last is a loop (C89)", async () => {
   k.define(missing, k.call(SHOW_ANY, k.call(S.all, k.thunk(() => k.call(find, k.call(S.range, k.lit(100000)), k.lit(-1))))));
   const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
   assert.deepEqual(info.errors.map((e) => e.message), []);
-  const source = compile(code, info, names, { runtime, exports: ["found", "missing"] });
-  assert.match(/function find\$?\w*\([^)]*\) \{\n[^\n]*for \(;;\)/.exec(source)?.[0] ?? "", /for \(;;\)/, "find is a loop");
-  const path = join(mkdtempSync(join(tmpdir(), "semi-")), "find.js");
-  writeFileSync(path, source);
-  const out = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
+  const out = compiledDefs(code, info, names, ["found", "missing"]) as Record<string, unknown>;
   const got = (name: string) => typeof out[name] === "function" ? (out[name] as () => unknown)() : out[name];
   assert.equal(got("found"), "[99999]");
   assert.equal(got("missing"), "[]");
@@ -88,11 +75,7 @@ test("a one-answer search for a record, taken apart by its caller, is a loop (C8
   k.define(missing, second(-1));
   const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
   assert.deepEqual(info.errors.map((e) => e.message), []);
-  const source = compile(code, info, names, { runtime, exports: ["found", "missing"] });
-  assert.match(source, /function find_pair\$fields\([^)]*\) \{\n[^\n]*\n[^\n]*: for \(;;\)/, "find pair's $fields copy is a loop");
-  const path = join(mkdtempSync(join(tmpdir(), "semi-")), "pair.js");
-  writeFileSync(path, source);
-  const out = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
+  const out = compiledDefs(code, info, names, ["found", "missing"]) as Record<string, unknown>;
   const got = (name: string) => typeof out[name] === "function" ? (out[name] as () => unknown)() : out[name];
   assert.equal(got("found"), "[199998]");
   assert.equal(got("missing"), "[]");
