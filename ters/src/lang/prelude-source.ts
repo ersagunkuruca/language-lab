@@ -2317,77 +2317,21 @@ export function buildPrelude(): Module {
     { variant: CONS, names: ["field", "rest"], body: ([f, r]) => entry(f, (fname, v) => k.if(k.equal(fname, n), v, k.call(jFieldIn, r, n)), ["field name", "value"]) },
   ])));
   const jsonField = def("json field", ["json", "name"], (j, n) => k.match(j, [{ variant: JSON_V.object, names: ["fields"], body: ([fs]) => k.call(jFieldIn, fs, n) }], k.call(S.fail)));
-  // Reading JSON (L190b, RFC 8259): a recursive descent over the text's
-  // characters, each reader giving its value and the characters after it.
-  // \u escapes outside the Basic Multilingual Plane come as surrogate
-  // pairs and are joined (json escape code).
+  // Reading JSON (L72f): json spelled run backwards, by descent (L72e),
+  // with blanks around the value taken off first. Text that isn't JSON
+  // has no reading, and json read stops.
   const jChars = (t: string) => k.call(TEXT_OPS.characters, k.lit(t));
   const jIs = (c: Id, t: string) => k.equal(c, k.lit(t));
-  const jBad = (why: string) => k.call(ABORT_OP, k.lit(`json read: ${why}`));
-  const jPair = (a: Id, b: Id) => k.call(PAIR_V, a, b);
-  const jHead = (cs: Id, ends: string, f: (c: Id, rest: Id) => Id) => k.match(cs, [
-    { variant: NIL, names: [], body: () => jBad(ends) },
-    { variant: CONS, names: ["character", "rest"], body: ([c, r]) => f(c, r) },
-  ]);
-  const jSkipped = k.def("json skipped");
-  k.define(jSkipped, k.fn(["characters"], (cs) => k.match(cs, [
-    { variant: NIL, names: [], body: () => k.x(NIL) },
-    { variant: CONS, names: ["character", "rest"], body: ([c, r]) => k.if(k.call(contains, jChars(" \n\t\r"), c), k.call(jSkipped, r), cs) },
-  ])));
-  const jValue = k.def("json value"), jString = k.def("json string"), jItems = k.def("json items"), jFields = k.def("json fields"), jNumber = k.def("json number span"), jHex = k.def("json hex");
-  k.define(jHex, k.fn(["digits", "so far"], (ds, acc) => k.match(ds, [
-    { variant: NIL, names: [], body: () => acc },
-    { variant: CONS, names: ["digit", "rest"], body: ([d, r]) => k.match(k.call(positionOf, jChars("0123456789abcdef"), k.call(lowercase, d)), [
-      { variant: NONE, names: [], body: () => jBad("\\u needs four hex digits") },
-      { variant: SOME, names: ["value"], body: ([i]) => k.call(jHex, r, iAdd(iMul(acc, k.int(16)), i)) },
-    ]) },
-  ])));
-  const jEscaped = (e: Id) => k.if(jIs(e, "n"), k.lit("\n"), k.if(jIs(e, "t"), k.lit("\t"), k.if(jIs(e, "r"), k.lit("\r"), k.if(jIs(e, "b"), k.lit("\b"), k.if(jIs(e, "f"), k.lit("\f"), e)))));
-  // A \u escape's code, joining a surrogate pair (RFC 8259 §7) into the one
-  // character outside the Basic Multilingual Plane it spells; a lone
-  // surrogate is no character, and fromCode says so.
-  const jSub = (a: Id, b: Id) => k.call(INT_OPS.sub, a, b);
-  const jCode = k.def("json escape code");
-  const jWithin = (x: Id, lo: number, hi: number, yes: () => Id, no: () => Id) => k.if(iLess(x, k.int(lo)), no(), k.if(iLess(x, k.int(hi)), yes(), no()));
-  k.define(jCode, k.fn(["characters"], (cs) => k.let("high", k.call(jHex, k.call(take, cs, k.int(4)), k.int(0)), (hi) => k.let("after", k.call(drop, cs, k.int(4)), (after) =>
-    jWithin(hi, 0xd800, 0xdc00, () => k.if(k.equal(k.call(take, after, k.int(2)), jChars("\\u")),
-      k.let("low", k.call(jHex, k.call(take, k.call(drop, after, k.int(2)), k.int(4)), k.int(0)), (lo) => jWithin(lo, 0xdc00, 0xe000,
-        () => jPair(iAdd(k.int(0x10000), iAdd(iMul(jSub(hi, k.int(0xd800)), k.int(0x400)), jSub(lo, k.int(0xdc00)))), k.call(drop, after, k.int(6))),
-        () => jPair(hi, after))),
-      jPair(hi, after)), () => jPair(hi, after))))));
-  k.define(jString, k.fn(["characters", "so far"], (cs, acc) => jHead(cs, "the text ends inside a string", (c, r) =>
-    k.if(jIs(c, "\""), jPair(acc, r), k.if(jIs(c, "\\"), jHead(r, "the text ends inside a string", (e, r2) =>
-      k.if(jIs(e, "u"), entry(k.call(jCode, r2), (code, r3) => k.call(jString, r3, k.call(S.concat, acc, k.call(S.first,
-        k.thunk(() => k.call(TEXT_OPS.fromCode, code)), k.thunk(() => jBad("a \\u escape that is no character"))))), ["code", "rest"]),
-      k.call(jString, r2, k.call(S.concat, acc, jEscaped(e))))),
-    k.call(jString, r, k.call(S.concat, acc, c)))))));
-  k.define(jNumber, k.fn(["characters", "so far"], (cs, acc) => k.match(cs, [
-    { variant: NIL, names: [], body: () => jPair(acc, k.x(NIL)) },
-    { variant: CONS, names: ["character", "rest"], body: ([c, r]) => k.if(k.call(contains, jChars("0123456789+-.eE"), c), k.call(jNumber, r, k.call(S.concat, acc, c)), jPair(acc, cs)) },
-  ])));
-  const jWord = (cs: Id, word: string, v: () => Id) => k.if(k.equal(k.call(take, cs, k.int(word.length)), jChars(word)), jPair(v(), k.call(drop, cs, k.int(word.length))), jBad(`expected ${word}`));
-  k.define(jValue, k.fn(["characters"], (cs0) => k.let("start", k.call(jSkipped, cs0), (cs) => jHead(cs, "the text ends where a value goes", (c, r) =>
-    k.if(jIs(c, "n"), jWord(cs, "null", () => k.x(JSON_V.null)),
-    k.if(jIs(c, "t"), jWord(cs, "true", () => k.call(JSON_V.bool, k.true)),
-    k.if(jIs(c, "f"), jWord(cs, "false", () => k.call(JSON_V.bool, k.false)),
-    k.if(jIs(c, "\""), entry(k.call(jString, r, k.lit("")), (t, rest) => jPair(k.call(JSON_V.text, t), rest), ["text", "rest"]),
-    k.if(jIs(c, "["), k.let("inside", k.call(jSkipped, r), (ins) => jHead(ins, "the text ends inside a list", (c2, r2) => k.if(jIs(c2, "]"), jPair(k.call(JSON_V.list, k.x(NIL)), r2), k.call(jItems, ins, k.x(NIL))))),
-    k.if(jIs(c, "{"), k.let("inside", k.call(jSkipped, r), (ins) => jHead(ins, "the text ends inside an object", (c2, r2) => k.if(jIs(c2, "}"), jPair(k.call(JSON_V.object, k.x(NIL)), r2), k.call(jFields, ins, k.x(NIL))))),
-    entry(k.call(jNumber, cs, k.lit("")), (digits, rest) => jPair(k.call(JSON_V.number, k.call(S.first, k.thunk(() => k.call(TEXT_OPS.readNumber, digits)), k.thunk(() => jBad("expected a value")))), rest), ["digits", "rest"])))))))))));
-  k.define(jItems, k.fn(["characters", "so far"], (cs, acc) => entry(k.call(jValue, cs), (v, rest) => k.let("after", k.call(jSkipped, rest), (a) =>
-    jHead(a, "the text ends inside a list", (c, r) => k.if(jIs(c, ","), k.call(jItems, r, k.call(CONS, v, acc)),
-      k.if(jIs(c, "]"), jPair(k.call(JSON_V.list, k.call(reverse, k.call(CONS, v, acc))), r), jBad("expected , or ] in a list"))))), ["value", "rest"])));
-  k.define(jFields, k.fn(["characters", "so far"], (cs0, acc) => k.let("at", k.call(jSkipped, cs0), (cs) => jHead(cs, "the text ends inside an object", (c, r) =>
-    k.if(jIs(c, "\""), entry(k.call(jString, r, k.lit("")), (name, r2) => k.let("colon", k.call(jSkipped, r2), (cl) => jHead(cl, "the text ends inside an object", (c2, r3) =>
-      k.if(jIs(c2, ":"), entry(k.call(jValue, r3), (v, r4) => k.let("next", k.call(jSkipped, r4), (nx) => jHead(nx, "the text ends inside an object", (c3, r5) =>
-        k.if(jIs(c3, ","), k.call(jFields, r5, k.call(CONS, jPair(name, v), acc)),
-        k.if(jIs(c3, "}"), jPair(k.call(JSON_V.object, k.call(reverse, k.call(CONS, jPair(name, v), acc))), r5), jBad("expected , or } in an object"))))), ["value", "rest"]),
-      jBad("expected : after a field's name")))), ["name", "rest"]),
-    jBad("expected a field's name in quotes"))))));
-  const jsonRead = def("json read", ["text"], (t) => entry(k.call(jValue, k.call(TEXT_OPS.characters, t)), (v, rest) => k.match(k.call(jSkipped, rest), [
-    { variant: NIL, names: [], body: () => v },
-    { variant: CONS, names: ["character", "after"], body: () => jBad("text after the value") },
-  ]), ["value", "rest"]));
+  const isBlank = (c: Id) => k.byValue(c, [" ", "\t", "\n", "\r"].map((x) => [k.lit(x), k.true] as [Id, Id]), k.false);
+  const unblanked = k.def("json unblanked");
+  k.define(unblanked, k.fn(["text"], (t) => {
+    const n = () => k.call(TEXT_OPS.length, t);
+    return k.if(isBlank(k.call(TEXT_OPS.slice, t, k.int(0), k.int(1))), k.call(unblanked, k.call(TEXT_OPS.slice, t, k.int(1), n())),
+      k.if(isBlank(k.call(TEXT_OPS.slice, t, k.call(INT_OPS.sub, n(), k.int(1)), n())), k.call(unblanked, k.call(TEXT_OPS.slice, t, k.int(0), k.call(INT_OPS.sub, n(), k.int(1)))), t));
+  }));
+  const jsonRead = def("json read", ["text"], (t) => k.call(S.first,
+    k.thunk(() => k.call(inverse, k.fn(["json"], (j) => k.call(jsonSpelled, j)), k.call(unblanked, t))),
+    k.thunk(() => k.call(ABORT_OP, k.call(S.concat, k.lit("json read: not JSON: "), k.call(TEXT_OPS.slice, t, k.int(0), k.int(60)))))));
   // Calendar dates (L188a): the proleptic Gregorian calendar, a date
   // counted as days from 1970-01-01 both ways by Howard Hinnant's
   // days_from_civil and civil_from_days ("chrono-Compatible Low-Level Date
@@ -2851,7 +2795,7 @@ export function buildPrelude(): Module {
     [solvedWith]: "The list x with matrix times vector(m, x) = b, from m's factors (factored): the elimination solved does, done once for all the vectors solved this way. No answer when the matrix is singular (a pivot is 0).",
     [solved]: "The list x with matrix times vector(m, x) = b, for a square Float64 matrix, by Gaussian elimination with partial pivoting. No answer when the matrix is singular (a pivot is 0).",
     [determinant]: "The determinant of a square Float64 matrix: 0 when it is singular. Other sizes stop the program.",
-    [jsonRead]: "The Json value a JSON text spells (RFC 8259), the other way from json printed: json read(\"[1, true]\") is json list([json number(1), json bool(true)]). Stops on text that isn't JSON, saying where.",
+    [jsonRead]: "The Json value a JSON text spells (RFC 8259), json spelled run backwards: json read(\"[1, true]\") is json list([json number(1), json bool(true)]). Stops on text that isn't JSON.",
     [dateOf]: "The calendar date of a year, a month (1 to 12) and a day of that month: date of(2026, 11, 3). Stops on a month or day the calendar hasn't, such as 30 February.",
     [dateYear]: "The date's year.",
     [dateMonth]: "The date's month, 1 to 12.",
