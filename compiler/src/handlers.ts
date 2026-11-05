@@ -59,9 +59,10 @@ export function fuseHandlers(code: Code, info: Info, names: Names): { code: Code
   const kids = (id: Id) => subtree({ nodes, defs }, id);
 
   // A handler this can take: cases that answer, perform nothing, and no
-  // case for the finish or for an operation answered later.
+  // case for the finish or for an operation answered later, and no name
+  // (L213b: a named handler runs in the evaluator for now).
   const handlerEffect = (n: Node): Id | null => {
-    if (n.kind !== "match" || !n.arms.length || n.otherwise) return null;
+    if (n.kind !== "match" || !n.arms.length || n.otherwise || n.name) return null;
     const arms = n.arms.map((a) => nodes[a] as NodeOf<"arm">);
     const e = effectOf(arms[0].variant);
     if (!e) return null;

@@ -1277,6 +1277,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       case "match": {
         const arms = n.arms.map((a) => code.nodes[a] as NodeOf<"arm">);
         if (arms.some((a) => a.variant === RELEASE_V)) throw new Refused("handles an effect with a release, which isn't lowered yet (L213a): it runs in the evaluator");
+        if (n.name) throw new Refused("handles an effect under a name, which isn't lowered yet (L213b): it runs in the evaluator");
         if (n.otherwise && arms.length && effectOps.has(arms[0].variant)) throw new Refused("handles an effect with a case for the normal finish, which isn't lowered yet (L57)");
         if (opts.data && arms.length === 1 && arms[0].variant === ABORT_OP) {
           // A handler of Abort: the scrutinee is the computation.
