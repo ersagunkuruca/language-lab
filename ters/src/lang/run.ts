@@ -1403,9 +1403,8 @@ export function showValue(v: Value, code: Code, names: Names, asNumber = false, 
   // ratio(1, 3), which parseValue reads back (a seed, L205). Algebraic is
   // host code, with no Shown of its own.
   if (v.tag === ALGEBRAIC_V) return Alg.show(algebraicOf(v));
-  // An Extended number reads as the number, or −∞ and +∞ (L125d).
-  if (asNumber && v.tag === EXTENDED_V.finite) return go(v.fields[0]);
-  if (asNumber && (v.tag === EXTENDED_V.minus || v.tag === EXTENDED_V.plus)) return v.tag === EXTENDED_V.minus ? "−∞" : "+∞";
+  // An Extended number reads as the number, or −∞ and +∞, through its own
+  // Shown (the prelude's, C139).
   // A tuple reads as its type does, (1, "a") for an (Int, Text) (L143).
   if (TUPLE_TAG.test(v.tag)) return `(${v.fields.map((x) => go(x)).join(", ")})`;
   const name = names[v.tag] ?? v.tag;
