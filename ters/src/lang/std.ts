@@ -802,7 +802,7 @@ export const TEXT_OPS = {
   length: builtin("text.length", "length", pure([str], int), T.length),
   slice: builtin("text.slice", "slice", pure([str, int, int], str), T.slice),
   characters: builtin("text.characters", "characters", pure([str], list(str)), (t: string) => listOf(T.characters(t))),
-  split: builtin("text.split", "split", pure([str, str], list(str)), (t: string, by: string) => listOf(T.split(t, by))),
+  split: builtin("text.split", "split", pure([str, str], list(str)), (t: string, by: string) => new ItemsList(T.split(t, by), 0)),
   joinAll: builtin("text.joinAll", "join all", pure([list(str), str], str), (l: { tag: Id; fields: unknown[] }, by: string) => T.joinAll(itemsOf(l) as string[], by)),
   find: choice("text.find", "find", [str, str], int, T.find),
   less: builtin("text.less", "comes before", pure([str, str], bool), (a: string, b: string) => truth(T.less(a, b))),
