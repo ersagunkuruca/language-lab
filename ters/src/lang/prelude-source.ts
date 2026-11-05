@@ -2484,6 +2484,22 @@ export function buildPrelude(): Module {
       k.let("total", k.call(durationParts, k.call(TEXT_OPS.characters, k.call(TEXT_OPS.slice, t, k.if(neg, k.int(3), k.int(2)), k.call(TEXT_OPS.length, t))), k.int(-1), k.int(0), k.int(0)), (n) =>
         k.call(secondsD, k.call(INT_OPS.toNumber, k.if(neg, iSub(k.int(0), n), n)))),
       durBad())));
+  // Dates', instants' and durations' text read back as laws (T7e5): each
+  // reading undoes its writing. Three small whole numbers spread over
+  // centuries of days, decades of seconds and days of a duration, both
+  // sides of 1970 and of zero.
+  const spread = (a: Id, b: Id, c: Id, x: number, y: number, z: number) => iAdd(iAdd(iMul(a, k.int(x)), iMul(b, k.int(y))), iMul(c, k.int(z)));
+  const readsBack = (name: string, value: (a: Id, b: Id, c: Id) => Id, read: Id, written: Id) => {
+    const d = k.def(name);
+    k.define(d, k.fn(["a", "b", "c"], (a, b, c) => k.let("value", value(a, b, c), (v) =>
+      expect(k.equal(k.call(read, k.call(written, v)), v), `${name}: the same value back`))));
+    return d;
+  };
+  laws.push(
+    readsBack("date read undoes date text", (a, b, c) => k.call(dateOfDay, spread(a, b, c, 36524, 397, 29)), dateRead, dateText),
+    readsBack("instant read undoes instant text", (a, b, c) => k.call(instantOf, k.call(INT_OPS.toNumber, spread(a, b, c, 1000000007, 86413, 3607))), instantRead, instantText),
+    readsBack("duration read undoes duration text", (a, b, c) => k.call(secondsD, k.call(INT_OPS.toNumber, spread(a, b, c, 93784, 3600, 61))), durationRead, durationText),
+  );
   // Embeddings (EMBEDDINGS.md, L208b): the one canonical map from a type
   // into a larger one that keeps + − · and <. Into Float64 it holds only
   // as closely as Float64 rounds, so lab test checks those with near.
