@@ -1797,6 +1797,13 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         const tl = f.locals.push("text") - 1, t: SExpr = { k: "local", i: tl };
         return { k: "let", i: tl, value: s.args[0], body: { k: "call", fn: fused.fn, args: [t, { k: "rt", fn: "text.size", args: [t] }, fused.start, ...outside], tail } };
       }
+      // The same over an array's items (`array of List`'s fold, C30 s2):
+      // the items read in place by position, from the last back.
+      const ai = s.k === "rt" && /^array\.items\.a\d+$/.test(s.fn) ? arrayItems(st, result, arms, free, env, f, [...arrays.values()][Number(/\d+$/.exec(s.fn)![0])]) : null;
+      if (ai && s.k === "rt") {
+        const al = f.locals.push(ai.array) - 1, a: SExpr = { k: "local", i: al };
+        return { k: "let", i: al, value: s.args[0], body: { k: "call", fn: ai.fn, args: [a, { k: "rt", fn: `array.length.a${ai.array.index}`, args: [a] }, ai.start, ...outside], tail } };
+      }
       const sum = result === "int" && !underBudget ? summed(st, arms, free, env, f) : null;
       if (sum !== null) return { k: "call", fn: sum, args: [s, { k: "int", v: 0n }, ...outside], tail };
       return { k: "call", fn: loop(st, result, arms, free, env, f), args: [s, { k: "new", t: framesOf(st), c: 0, args: [] }, ...outside], tail };
@@ -2040,6 +2047,39 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     if (fails(g.body, funcs)) g.partial = true;
     // The end's arm, where the fold is (it binds nothing of the list's).
     return { fn: gi, start: expr(nil.body, env, f, false) };
+  }
+  // A fold over `items of array(a)` whose arms don't use the rest of the
+  // list itself, as `characters` above: no list and no stack, the items
+  // read from the array by position, the last first. One function: the
+  // array, how many items are still to go, the result so far.
+  function arrayItems(st: DType, result: LType, arms: NodeOf<"arm">[], free: Id[], env: Map<Id, number>, f: SFunc, array: AType): { fn: number; start: SExpr; array: AType } | null {
+    const nil = arms.find((a) => !a.results.some((x) => x)), cons = arms.find((a) => a.results.some((x) => x));
+    if (!nil || !cons || arms.length !== 2 || st.cases.length !== 2) return null;
+    const c = st.cases.find((x) => x.variant === cons.variant)!;
+    const head = c.fields.findIndex((x) => x.t !== st), tail = c.fields.findIndex((x) => x.t === st);
+    if (head < 0 || tail < 0) return null;
+    if (cons.binds[tail] && refsIn(cons.body).includes(cons.binds[tail]!)) return null;
+    const caps = free.map((b) => f.locals[env.get(b)!]);
+    const params: LType[] = [array, "int", result, ...caps];
+    const g: SFunc = { def: cons.id, name: `${f.name}.fold.items`, params, result, locals: [...params], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
+    const gi = funcs.push(g) - 1;
+    let inner = new Map(free.map((b, j) => [b, 3 + j]));
+    const k = g.locals.push("int") - 1, x = g.locals.push(c.fields[head].t) - 1;
+    if (cons.binds[head]) inner = new Map(inner).set(cons.binds[head]!, x);
+    inner = new Map(inner).set(cons.results[tail]!, 2);
+    const a: SExpr = { k: "local", i: 0 }, left: SExpr = { k: "local", i: 1 };
+    g.body = {
+      k: "if", t: result, cond: { k: "rt", fn: "int.equal", args: [left, { k: "int", v: 0n }] }, then: { k: "local", i: 2 },
+      else: {
+        k: "let", i: k, value: { k: "rt", fn: "int.sub", args: [left, { k: "int", v: 1n }] },
+        body: {
+          k: "let", i: x, value: { k: "rt", fn: `array.get.a${array.index}`, args: [a, { k: "local", i: k }] },
+          body: { k: "call", fn: gi, args: [a, { k: "local", i: k }, expr(cons.body, inner, g, false), ...free.map((_, j): SExpr => ({ k: "local", i: 3 + j }))], tail: true },
+        },
+      },
+    };
+    if (fails(g.body, funcs)) g.partial = true;
+    return { fn: gi, start: expr(nil.body, env, f, false), array };
   }
   // What p's type variables stand for, where c is p at known types.
   function bindVars(p: Type, c: Type, types: At) {
