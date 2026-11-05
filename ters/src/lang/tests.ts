@@ -18,7 +18,7 @@ import { discharge } from "./ledger.ts";
 import { bool, makeRunner, showerFor, toList, unit, type Data, type Runtime, type Value } from "./run.ts";
 import { ABORT_OP, BOOL, CHECK, CHECK_OP, FALSE, LIST, RATIO, RATIONAL, TRUE, UNIT } from "./std.ts";
 import { Lang } from "./dsl.ts";
-import { CHOICE, INT, NUMBER, STRING, type Type } from "./types.ts";
+import { CHOICE, instantiate, INT, NUMBER, STRING, type Type } from "./types.ts";
 import { parseValue } from "./values.ts";
 
 export const TEST_HANDLES = discharge("a test run by lab test", [CHECK, CHOICE],
@@ -148,12 +148,16 @@ export function runTests(code: Code, info: Info, names: Names, defs: Id[], saved
         if (failed.length) failures.push({ inputs: s.inputs, what: failed });
       }
       if (tests.has(d)) {
-        for (const args of testInputs(code, info, names, d, saved)) {
+        // A function input is each of the program's definitions that fit
+        // (T7e14a), shown by its name.
+        const named = new Map<Value, string>();
+        const fn = (c: Id) => { const v = r.value(c); named.set(v, names[c] ?? c); return v; };
+        for (const args of testInputs(code, info, names, d, saved, { functions: defs, fn })) {
           cases++;
           failed = [];
           let paths = 0;
           for (const _ of r.call(r.value(d), ...args) as Iterable<Value>) if (++paths >= PATHS) break;
-          if (failed.length) failures.push({ inputs: args.map(show), what: failed });
+          if (failed.length) failures.push({ inputs: args.map((a) => named.get(a) ?? show(a)), what: failed });
         }
       }
     } catch (e) {
@@ -164,8 +168,11 @@ export function runTests(code: Code, info: Info, names: Names, defs: Id[], saved
 }
 
 // What a test runs on: its saved inputs (examples.json, the editor's Run),
-// then small values of its inputs' types, smallest first.
-export function testInputs(code: Code, info: Info, names: Names, d: Id, saved: Record<Id, Saved[]>): Value[][] {
+// then small values of its inputs' types, smallest first. A function
+// input takes each of `functions` whose type fits it, as `fn` gives it
+// (TESTS-IN-THE-LANGUAGE §2, T7e14a): a law over every function of a type
+// sweeps the program's (`inverse(f, f(x))` gives x back, for each f).
+export function testInputs(code: Code, info: Info, names: Names, d: Id, saved: Record<Id, Saved[]>, given?: { functions: Id[]; fn: (d: Id) => Value }): Value[][] {
   const t = info.typeOf.get(d) as Type & { t: "fn" };
   const inputs: Value[][] = [];
   for (const s of saved[d] ?? []) {
@@ -173,7 +180,19 @@ export function testInputs(code: Code, info: Info, names: Names, d: Id, saved: R
     const vs = s.inputs.map((x) => parseValue(x, code, names));
     if (vs.every((v) => "value" in v)) inputs.push(vs.map((v) => (v as { value: Value }).value));
   }
-  const smalls = t.params.map((p) => smallValues(info.subst.zonk(p), code));
+  const fitting = (p: Type): Value[] | null => {
+    if (p.t !== "fn" || !given) return null;
+    const out: Value[] = [];
+    for (const c of given.functions) {
+      const sc = c === d ? undefined : info.schemes.get(c);
+      if (!sc || sc.type.t !== "fn") continue;
+      const s = info.subst.clone();
+      try { s.unify(instantiate(sc, s), p); } catch { continue; }
+      out.push(given.fn(c));
+    }
+    return out.length ? out : null;
+  };
+  const smalls = t.params.map((p) => { const z = info.subst.zonk(p); return z.t === "fn" ? fitting(z) : smallValues(z, code); });
   if (smalls.every((x) => x)) inputs.push(...bySize(smalls as Value[][], CASES - inputs.length));
   return inputs;
 }
