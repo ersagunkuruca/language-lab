@@ -11,11 +11,11 @@
 // (W. K. Clifford, 1873; forward-mode automatic differentiation,
 // Wengert 1964).
 
-import { merge, type Id } from "../model.ts";
+import { merge, type Id, type NodeOf } from "../model.ts";
 import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
-import { ABORT_OP, ARITH, ARITHMETIC_V, CHECK_OP, ORDERED_V, CONS, LIST, NIL, PAIR_V, tupleType, DIVISION_V, EMBEDDING_V, INT_OPS, LITERAL_V, S, SHOWN_V, TIMES_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_V, std } from "./std.ts";
+import { ALGEBRAIC_OPS, REAL_OPS, ABORT_OP, ARITH, ARITHMETIC_V, CHECK_OP, ORDERED_V, CONS, LIST, NIL, PAIR_V, tupleType, DIVISION_V, EMBEDDING_V, INT_OPS, LITERAL_V, S, SHOWN_V, TIMES_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_V, std } from "./std.ts";
 import { INT, NUMBER } from "./types.ts";
 
 // On the prelude, whose laws give Trig's fields Dual leaves to their ways.
@@ -559,14 +559,73 @@ export function buildNumbers(pre: Module): Module {
     k.thunk(() => k.call(INT_OPS.quotient, k.call(INT_OPS.add, k.call(INT_OPS.mul, t, k.int(2 ** 33)), b), k.call(INT_OPS.mul, b, k.int(2)))),
     k.thunk(() => k.int(0))))));
 
+  // Rational (L207f4): exact fractions, kept in lowest terms with the
+  // bottom positive, so every fraction has one spelling and equal and
+  // hashes stay right. Its case is private: a fraction is made by
+  // fraction, as fraction or a literal, which keep that rule.
+  const RT = k.type("Rational", [], [["ratio", [["top", () => k.tref(INT)], ["bottom", () => k.tref(INT)]]]], "exact fractions");
+  const RV = RT.v.ratio;
+  (k.code.nodes[RV] as NodeOf<"variant">).private = true;
+
+  // Fractions: exact, kept in lowest terms by `lowest terms` (std.ts), so
+  // each has one spelling. The arithmetic is what the one generic `+ − ·
+  // <` resolves to at Rational (arith.ts), so it isn't offered on its own;
+  // `fraction` makes one, `÷` divides, `show fraction` prints 3/4.
+  const pair = (v: Id, f: (a: Id, b: Id) => Id) => k.match(v, [{ variant: PAIR_V, names: ["top", "bottom"], body: ([a, b]) => f(a, b) }]);
+  const ratio = (v: Id, f: (top: Id, bottom: Id) => Id, names = ["top", "bottom"]) => k.match(v, [{ variant: RV, names, body: ([a, b]) => f(a, b) }]);
+  const reduced = (top: Id, bottom: Id) => pair(k.call(INT_OPS.lowestTerms, top, bottom), (a, b) => k.call(RV, a, b));
+  const i = { add: (a: Id, b: Id) => k.call(INT_OPS.add, a, b), sub: (a: Id, b: Id) => k.call(INT_OPS.sub, a, b), mul: (a: Id, b: Id) => k.call(INT_OPS.mul, a, b) };
+  const two = (name: string, f: (p: Id, q: Id, r: Id, t: Id) => Id) => {
+    const d = k.def(name);
+    k.define(d, k.fn(["a", "b"], (a, b) => ratio(a, (p, q) => ratio(b, (r, t) => f(p, q, r, t), ["top₂", "bottom₂"]))));
+    return d;
+  };
+  const fraction = k.def("fraction");
+  k.define(fraction, k.fn(["top", "bottom"], (top, bottom) => k.if(k.call(S.equal, bottom, k.int(0)), k.call(S.fail), reduced(top, bottom))));
+  const whole = k.def("as fraction");
+  k.define(whole, k.fn(["n"], (n) => k.call(RV, n, k.int(1))));
+  const addF = two("add fractions", (p, q, r, t) => reduced(i.add(i.mul(p, t), i.mul(r, q)), i.mul(q, t)));
+  const subF = two("subtract fractions", (p, q, r, t) => reduced(i.sub(i.mul(p, t), i.mul(r, q)), i.mul(q, t)));
+  const mulF = two("multiply fractions", (p, q, r, t) => reduced(i.mul(p, r), i.mul(q, t)));
+  const lessF = two("fraction less than", (p, q, r, t) => k.call(INT_OPS.less, i.mul(p, t), i.mul(r, q)));
+  const negF = k.def("negate fraction");
+  k.define(negF, k.fn(["a"], (a) => ratio(a, (p, q) => k.call(RV, k.call(INT_OPS.neg, p), q))));
+  const divF = two("divide fractions", (p, q, r, t) => k.if(k.call(S.equal, r, k.int(0)), k.call(S.fail), reduced(i.mul(p, t), i.mul(q, r))));
+  const showF = k.def("show fraction");
+  k.define(showF, k.fn(["a"], (a) => ratio(a, (p, q) => k.if(k.call(S.equal, q, k.int(1)), k.call(INT_OPS.show, p), k.call(S.concat, k.call(INT_OPS.show, p), k.call(S.concat, k.lit("/"), k.call(INT_OPS.show, q)))))));
+  // Rational into Algebraic and Real, and back from Algebraic (L207f1):
+  // through their builtins' top and bottom, so no builtin names Rational.
+  const ratAlg = k.def("as algebraic");
+  k.define(ratAlg, k.fn(["fraction"], (r) => ratio(r, (p, q) => k.call(ALGEBRAIC_OPS.fraction, p, q))));
+  const ratReal = k.def("as real");
+  k.define(ratReal, k.fn(["fraction"], (r) => ratio(r, (p, q) => k.call(REAL_OPS.fraction, p, q))));
+  const algRat = k.def("algebraic as fraction");
+  k.define(algRat, k.fn(["x"], (x) => pair(k.call(ALGEBRAIC_OPS.fractionParts, x), (p, q) => k.call(RV, p, q))));
+  const toNum = k.def("as float64");
+  // The bottom is never 0, so divided or's otherwise is never taken; it
+  // keeps the map pure for the embedding, here where nothing says the
+  // bottom is positive yet.
+  k.define(toNum, k.fn(["a"], (a) => ratio(a, (p, q) => k.call(lib("divided or"), k.call(INT_OPS.toNumber, p), k.call(INT_OPS.toNumber, q), k.lit(0)))));
+  const rationalLiteral = k.def("rational literal");
+  k.define(rationalLiteral, k.fn(["top", "bottom"], (t, b) => reduced(t, b)));
+
   const impl = (name: string, v: Id, ops: Id[]) => { const d = k.def(name); k.define(d, k.call(v, ...ops.map((o) => k.x(o)))); return d; };
   const trigD = k.def("trig at dual");
   k.define(trigD, k.call(TRIG_V, ...[sinD, cosD, tanD, expD, logD].map((d) => k.x(d)), k.x(S.byItsWays), k.x(unpolarD), k.x(S.byItsWays), k.x(S.byItsWays)));
   const embedD = k.def("float64 in dual");
   k.define(embedD, k.call(EMBEDDING_V, k.x(asD)));
+  const embedIR = k.def("int in rational");
+  k.define(embedIR, k.call(EMBEDDING_V, k.x(whole)));
+  const embedRF = k.def("rational in float64");
+  k.define(embedRF, k.call(EMBEDDING_V, k.x(toNum)));
   const embedC = k.def("float64 in complex");
   k.define(embedC, k.call(EMBEDDING_V, k.x(asC)));
   const impls = [
+    impl("arithmetic at rational", ARITHMETIC_V, [addF, subF, mulF, negF]),
+    impl("ordered at rational", ORDERED_V, [lessF]),
+    impl("literal at rational", LITERAL_V, [rationalLiteral]),
+    impl("division at rational", DIVISION_V, [divF]),
+    impl("shown at rational", SHOWN_V, [showF]),
     impl("arithmetic at complex", ARITHMETIC_V, [addC, subC, mulC, negC]),
     impl("division at complex", DIVISION_V, [divC]),
     impl("shown at complex", SHOWN_V, [showC]),
@@ -583,10 +642,26 @@ export function buildNumbers(pre: Module): Module {
     trigX,
   ];
 
-  const offered = [TC.def, embedC, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, complexTable, T.def, embedD, asD, slopeAt, dualTable, ...mats.map((m) => m.def), MX.def, LU.def, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, factored, solvedWith, determinant, inverted, leastSquares, FX.def, asFixed, fixedF, sqrtX];
+  const offered = [RT.def, embedIR, embedRF, fraction, whole, toNum, ratAlg, ratReal, algRat, TC.def, embedC, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, complexTable, T.def, embedD, asD, slopeAt, dualTable, ...mats.map((m) => m.def), MX.def, LU.def, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, factored, solvedWith, determinant, inverted, leastSquares, FX.def, asFixed, fixedF, sqrtX];
   const laws = [lawFromPolar, lawPolar];
-  const helpers = [addC, subC, mulC, negC, divC, showC, addD, subD, mulD, negD, divD, sinD, cosD, tanD, expD, logD, unpolarD, showD, ...matTables, addParts, subParts, negParts, ...matProducts, listDot, eliminated, backSubstituted, determinantOf, addX, subX, mulX, lessX, negX, divX, showX, fractionDigits, showSteps, cordic, sinCos, sinX, cosX, tanX, expX, bits, logX, vector, unpolarX, asinX, acosX, polarX, fixedLiteral];
+  const helpers = [addF, subF, mulF, negF, lessF, divF, showF, rationalLiteral, addC, subC, mulC, negC, divC, showC, addD, subD, mulD, negD, divD, sinD, cosD, tanD, expD, logD, unpolarD, showD, ...matTables, addParts, subParts, negParts, ...matProducts, listDot, eliminated, backSubstituted, determinantOf, addX, subX, mulX, lessX, negX, divX, showX, fractionDigits, showSteps, cordic, sinCos, sinX, cosX, tanX, expX, bits, logX, vector, unpolarX, asinX, acosX, polarX, fixedLiteral];
   const comments: Record<Id, string> = {
+    [RT.def]: "An exact fraction, top/bottom, always in lowest terms. The same + − · < work on it. Make one with fraction(1, 3) or as fraction(n); its constructor ratio is private to the library, which keeps the rule.",
+    [embedIR]: "Int in Rational: n as the fraction n/1, the one map that keeps + − · and <.",
+    [embedRF]: "Rational in Float64: top ÷ bottom, the Float64 nearest the fraction; + − · agree as closely as Float64 rounds.",
+    [fraction]: "top/bottom, exactly, in lowest terms (Euclid's algorithm, textbook); no answer when bottom is 0.",
+    [whole]: "The whole number n as a fraction, n/1.",
+    [toNum]: "The nearest Float64.",
+    [ratAlg]: "A fraction as an Algebraic number, exactly.",
+    [ratReal]: "A fraction as a Real, exactly.",
+    [algRat]: "The fraction an Algebraic number is, when it is one: algebraic as fraction(√2 · √2) is 2. No answer (Choice) for √2.",
+    [divF]: "a ÷ b for fractions, exactly; no answer when b is 0. Not offered: the one divide works on every number but Int; kept so programs saved before still open.",
+    [showF]: "A fraction as 3/4, or 3 when it is whole. Not offered: the one show shows every number; kept so programs saved before still open.",
+    [addF]: "What + is at Rational. Not offered on its own: + is.",
+    [subF]: "What − is at Rational. Not offered on its own: − is.",
+    [mulF]: "What · is at Rational. Not offered on its own: · is.",
+    [negF]: "What −x is at Rational. Not offered on its own: − is.",
+    [lessF]: "What < is at Rational. Not offered on its own: < is.",
     [TC.def]: "A complex number re + im·i, a record of two Float64s. The same + − · work on it (· is the complex product); it has no <.",
     [embedC]: "Float64 in Complex: x as x + 0i.",
     [asC]: "The Float64 x as a complex number, x + 0i.",

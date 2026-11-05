@@ -16,10 +16,11 @@ import type { Names } from "../presentation.ts";
 import type { Info } from "./infer.ts";
 import { discharge } from "./ledger.ts";
 import { bool, makeRunner, runProgram, showerFor, toList, unit, type Data, type Runtime, type Value, type World } from "./run.ts";
-import { ABORT_OP, BOOL, CHECK, CHECK_OP, FALSE, LIST, RATIO, RATIONAL, TRUE, UNIT } from "./std.ts";
+import { ABORT_OP, BOOL, CHECK, CHECK_OP, FALSE, LIST, TRUE, UNIT } from "./std.ts";
 import { Lang } from "./dsl.ts";
 import { CHOICE, instantiate, INT, NUMBER, STRING, type Type } from "./types.ts";
 import { parseValue } from "./values.ts";
+import { fractionCase } from "./prelude-ids.ts";
 
 export const TEST_HANDLES = discharge("a test run by lab test", [CHECK, CHOICE],
   "the test runner handles Check, collecting every expect that failed, and runs each path a search takes");
@@ -38,7 +39,8 @@ export function smallValues(t: Type, code: Code, depth = 3): Value[] | null {
   if (t.id === UNIT) return [unit];
   // Fractions in lowest terms over a positive bottom, as `fraction` makes
   // them: a record's own small values would give 1/0 and 2/2 (L208b).
-  if (t.id === RATIONAL) return [[0, 1], [1, 1], [-1, 1], [1, 2], [-1, 2], [2, 1], [1, 3], [3, 2]].map((f) => ({ tag: RATIO, fields: f }));
+  const fr = fractionCase(code);
+  if (fr && t.id === fr.type) return [[0, 1], [1, 1], [-1, 1], [1, 2], [-1, 2], [2, 1], [1, 3], [3, 2]].map((f) => ({ tag: fr.variant, fields: f }));
   if (t.id === LIST) {
     const xs = depth > 0 ? smallValues(t.args[0], code, depth - 1) : [];
     if (!xs) return [toList([])];

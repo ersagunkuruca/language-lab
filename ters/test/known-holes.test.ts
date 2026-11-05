@@ -11,11 +11,11 @@ import { get, type Code, type Id, type NodeData } from "../src/model.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
-import { LIBRARY } from "../src/lang/library.ts";
+import { LIBRARY, RATIO_V as RATIO, RATIONAL_TYPE } from "../src/lang/library.ts";
 import { relate } from "../src/lang/relate.ts";
 import { runMain } from "../src/lang/run.ts";
-import { CELL_OPS, COMPARE, CONS, NIL, RATIO, S, SET_V, SHOW_ANY } from "../src/lang/std.ts";
-import { DIVERGE, RATIONAL_TYPE } from "../src/lang/types.ts";
+import { CELL_OPS, COMPARE, CONS, NIL, S, SET_V, SHOW_ANY } from "../src/lang/std.ts";
+import { DIVERGE } from "../src/lang/types.ts";
 import { B } from "../src/prelude.ts";
 
 function program(build: (k: Lang) => Id) {

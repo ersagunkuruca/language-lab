@@ -6,9 +6,9 @@ import assert from "node:assert/strict";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
-import { COMPLEX_TYPE, LIBRARY } from "../src/lang/library.ts";
+import { COMPLEX_TYPE, LIBRARY, RATIO_V, RATIONAL_TYPE } from "../src/lang/library.ts";
 import { PROBLEMS, problemOf } from "../src/lang/problems.ts";
-import { NUMBER, RATIONAL_TYPE } from "../src/lang/types.ts";
+import { NUMBER } from "../src/lang/types.ts";
 import { ARITH, CELL_OPS, DIVIDE, EMBEDDING_V, FALSE, FIELDS, INT_OPS, JSON_OPS, LOG_OP, RELEASE_V, S, SET, SHOWN_V, SOME, TRIG_OPS, TRUE, tupleVariant, JOBS, REPRESENTATION_V, COST, TRIG_V } from "../src/lang/std.ts";
 import type { Id, NodeData } from "../src/model.ts";
 import { B } from "../src/prelude.ts";
@@ -55,7 +55,7 @@ const SMALLEST: Record<string, (k: Lang) => unknown> = {
   "type-as-value": (k) => k.define(k.def("p"), k.x(NUMBER)),
   "fields-type-unknown": (k) => k.define(k.def("p"), k.fn(["v"], (v) => k.call(FIELDS.listed, v))),
   "json-type-unknown": (k) => k.define(k.def("p"), k.fn(["v"], (v) => k.call(JSON_OPS.of, v))),
-  "private-to-library": (k) => k.define(k.def("p"), k.x("std.rational.ratio")),
+  "private-to-library": (k) => k.define(k.def("p"), k.x(RATIO_V)),
   "effect-two-types": (k) => { const y = k.effect("Yield", [["yield", [["v", (ps) => k.tref(ps[0])]], () => k.tref("std.unit")]], ["a"]); k.define(k.def("p"), k.thunk(() => k.seq(k.call(y.op.yield, k.x(TRUE)), k.call(y.op.yield, k.lit("hi"))))); },
   "unhandled-effect": (k) => { const a = ask(k); k.define(k.def("p"), k.call(a.op.ask)); },
   "no-cases": (k) => k.define(k.def("p"), k.fn(["b"], (b) => k.match(b, []))),

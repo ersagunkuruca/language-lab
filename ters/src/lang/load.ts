@@ -9,7 +9,7 @@ import { layer, type Names, type Presentation, type Style } from "../presentatio
 import { root } from "../io.ts";
 import type { Options } from "./infer.ts";
 import type { Pins } from "./signatures.ts";
-import { LIBRARY, PRELUDE, TREES } from "./library.ts";
+import { LIBRARY, NUMBERS, PRELUDE, TREES } from "./library.ts";
 import { onTodaysIds } from "./std.ts";
 
 // A saved file, with ids since renamed read as today's (std.ts RENAMED_IDS).
@@ -23,10 +23,10 @@ export const baseNames = (...layers: Names[]): Names => layer<Names>(LIBRARY.nam
 // What the checker is given with every program: the modules' pins, and
 // which of their definitions are helpers.
 // The prelude keeps the rules of the types whose constructors are private
-// (std.ts SMART), and the trees module stands in for Map and Set, so their
+// (std.ts SMART; the numbers module Rational's, L207f4), and the trees module stands in for Map and Set, so their
 // definitions are the insiders. A private case of a type the program
 // declares is the program's own to build (L165).
-export const checkOptions: Options = { pins: LIBRARY.pins, hidden: LIBRARY.hidden, insiders: [...PRELUDE.code.defs, ...TREES.code.defs], library: LIBRARY.code.defs };
+export const checkOptions: Options = { pins: LIBRARY.pins, hidden: LIBRARY.hidden, insiders: [...PRELUDE.code.defs, ...TREES.code.defs, ...NUMBERS.code.defs], library: LIBRARY.code.defs };
 
 // The checker's options for a program with pins of its own (signatures.ts):
 // a folder's signatures.json, a saved file's `signatures`.
