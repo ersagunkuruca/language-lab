@@ -151,7 +151,10 @@ real arithmetic.
    −4 and 3, and `x · x = −1` gives none. Not yet: a coefficient that
    isn't a fraction (`√2 · x = 2`), which needs norms by resultants, and
    two unknowns at once.
-4. **`Real`** when a program needs π exactly.
+4. **`Real`.** Step e1 built (real.ts): a Real is held by how it was made, a
+   fraction or + − · of Reals, and `approximate(x, p)` gives an Int m with
+   |x − m/2ᵖ| < 2⁻ᵖ, its parts asked for only the precision needed and the
+   answers kept. Next: π and digits (e2), comparisons with fuel (e3).
 
 ## Prior art
 

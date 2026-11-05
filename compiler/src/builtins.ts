@@ -9,7 +9,7 @@
 
 import type { Id } from "../../ters/src/model.ts";
 import { B } from "../../ters/src/prelude.ts";
-import { ZONE_OPS, ALGEBRAIC_OPS, ARITH, ARRAY_OPS, HASH_SET_OPS, TABLE_OPS, CELL_OPS, COMPARE, INT_OPS, IO, JOBS, S, SET, SHOW_ANY, CASE_NAME, TEXT_OPS } from "../../ters/src/lang/std.ts";
+import { ZONE_OPS, ALGEBRAIC_OPS, REAL_OPS, ARITH, ARRAY_OPS, HASH_SET_OPS, TABLE_OPS, CELL_OPS, COMPARE, INT_OPS, IO, JOBS, S, SET, SHOW_ANY, CASE_NAME, TEXT_OPS } from "../../ters/src/lang/std.ts";
 import type { Op } from "./scalar.ts";
 
 // JavaScript for a call, from its arguments' JavaScript. `narrow[i]`:
@@ -159,6 +159,8 @@ export const TARGETS: Record<Id, Target> = {
     js: ["divide", "root", "sqrt", "asFraction"].includes(k) ? "partial" : "impl",
     scalar: no("an Algebraic is a polynomial with BigInt coefficients: the scalar profile is Float64s"),
   }])),
+  // Reals (EXACT-REALS.md step 4): std.ts's implementation, on BigInt.
+  ...Object.fromEntries(Object.values(REAL_OPS).map((id): [Id, Target] => [id, { js: "impl", scalar: no("a Real narrows on BigInt approximations: the scalar profile is Float64s") }])),
   [INT_OPS.add]: { js: op(([a, b]) => `$int.add(${a}, ${b})`), scalar: INT },
   [INT_OPS.sub]: { js: op(([a, b]) => `$int.sub(${a}, ${b})`), scalar: INT },
   [INT_OPS.mul]: { js: op(([a, b]) => `$int.mul(${a}, ${b})`), scalar: INT },
