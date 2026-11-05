@@ -178,3 +178,20 @@ test("a record in scope with one field changed is offered where its type goes", 
   const c2 = base(k2.code);
   assert.equal(fillings(c2, infer(c2), h2).filter((f) => f.kind === "set").length, 0);
 });
+
+// A definition whose result is free until it's filled: each offer pins it
+// to a type of its own, and a caller that uses the result as a number
+// refuses those that aren't (E103f, checked before any whole check).
+test("where a definition's result is open, only what its callers can use is offered, as a whole check says", () => {
+  const k = new Lang();
+  let hole = "";
+  const f = k.def("f"), g = k.def("g");
+  k.define(f, k.fn(["x"], () => (hole = k.hole())));
+  k.define(g, k.fn(["y"], (y) => k.call(B.add, k.call(f, y), k.lit(1))));
+  const code = base(k.code), info = infer(code);
+  const offered = fillings(code, info, hole);
+  assert.ok(offered.length > 0);
+  for (const o of offered) assert.equal(infer(fillHole(code, {}, hole, o).code).errors.length, info.errors.length, JSON.stringify(o));
+  // What a whole check would refuse (true, a Bool) isn't offered.
+  assert.ok(!offered.some((o) => "target" in o && o.target === "std.bool.true"));
+});
