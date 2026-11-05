@@ -49,8 +49,9 @@ for (const program of ["queens", "relations", "physics"]) test(`${program}: a do
     assert.match(dotHandles(r.code, d, r.names)[dot], /^•\d+$/);
     // Running main is most of the time, so a sample where it's slow:
     // queens searches every board, and physics' main takes about 2.9 s
-    // (T14l: 85 of 98 s on 29 dots, measured by stage), so one in eight.
-    const every = program === "queens" ? 40 : program === "physics" ? 8 : 1;
+    // (T14l: 85 of 98 s on 29 dots, measured by stage), so one in eight;
+    // relations' about 1.3 s (T14m: 28 of 37 s on 21 dots), one in four.
+    const every = program === "queens" ? 40 : program === "physics" ? 8 : program === "relations" ? 4 : 1;
     if (tried % every === 1 % every) assert.deepEqual(output(r.code, r.names, main), before);
     const back = removeDot(r.code, r.names, after, d, dot);
     assert.ok(back.ok, back.ok ? "" : back.reason);
@@ -67,7 +68,12 @@ test("a dot shared by two inputs can't be removed until one goes", () => {
       if (!r.ok) continue;
       const i2 = infer(r.code, r.names);
       const dot = r.select!;
-      const other = under(r.code, d).find((s) => !under(r.code, s).some((x) => usesOf(r.code, dot).includes(x)) && useVar(r.code, r.names, i2, d, dot, s).ok);
+      // Only dots of a known type, onto slots of that type (T14m: each
+      // useVar checks the whole program, 100 ms, and most slots can't take it).
+      const head = (id: Id) => { const t = i2.typeOf.get(id), z = t && i2.subst.zonk(t); return z?.t === "con" ? z.id : null; };
+      const want = head(dot);
+      if (want === null) continue;
+      const other = under(r.code, d).find((s) => head(s) === want && !under(r.code, s).some((x) => usesOf(r.code, dot).includes(x)) && useVar(r.code, r.names, i2, d, dot, s).ok);
       if (!other) continue;
       const shared = useVar(r.code, r.names, i2, d, dot, other);
       assert.ok(shared.ok);
