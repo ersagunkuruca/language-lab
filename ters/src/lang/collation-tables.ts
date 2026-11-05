@@ -34,7 +34,8 @@
 // level, here to check the tables against the host (test/collation-
 // tables.test.ts) and to be written in Ters next.
 
-export type Element = [primary: number, secondary: number, tertiary: number];
+// A mark's has its canonical combining class's rank too (0 or none for the rest).
+export type Element = [primary: number, secondary: number, tertiary: number, combining?: number];
 // Each code point's elements, and the contractions: a letter's code point
 // → the marks after it that make one letter with it, longest first, and
 // that letter's code point (its elements are in `elements`).
@@ -84,6 +85,17 @@ export function buildCollationTables(): CollationTables {
     tables.elements.set(c, [[0, sec, ter]]);
     prev = x;
   }
+  // The marks' canonical combining classes, as ranks: NFD puts two marks
+  // in a row the other way round when the first's is higher. A text read
+  // in NFC (the cases module's) puts its marks in that order by them.
+  const swaps = (a: string, b: string) => ("a" + a + b).normalize("NFD") !== "a" + a + b;
+  const combining = marks.map((c) => ch(c)).filter((m) => m === "\u0345" || swaps("\u0345", m));
+  combining.sort((a, b) => (swaps(a, b) ? 1 : swaps(b, a) ? -1 : 0));
+  let cls = 0;
+  combining.forEach((m, i) => {
+    if (i === 0 || swaps(m, combining[i - 1])) cls++;
+    tables.elements.get(m.codePointAt(0)!)![0][3] = cls;
+  });
   // The letters, in the host's order, into primaries: each a head (its
   // first letter) and its others' second- and third-level places.
   letters.sort((a, b) => V.compare(ch(a), ch(b)) || a - b);
@@ -114,7 +126,7 @@ export function buildCollationTables(): CollationTables {
   // among the single primaries goes wrong past one not yet found.
   for (const grp of groups) {
     const k = grp.head.normalize("NFKD");
-    if (k !== grp.head && [...k].length > 1 && B.compare(k, grp.head) === 0) grp.expands = k;
+    if (k !== grp.head.normalize("NFD") && [...k].length > 1 && B.compare(k, grp.head) === 0) grp.expands = k;
   }
   for (let found = true; found;) {
     found = false;
@@ -156,6 +168,18 @@ export function buildCollationTables(): CollationTables {
 // each a shorter list first. A letter's own secondary and tertiary are
 // the lowest, 0, as UTS #10's common weights are.
 export function collationCompare(t: CollationTables, x: string, y: string): number {
+  const a = textElements(t, x), b = textElements(t, y);
+  for (let level = 0; level < 3; level++) {
+    const ws = (es: Element[]) => es.map((e) => e[level] as number).filter((w) => level > 0 || w !== 0);
+    const wa = ws(a), wb = ws(b);
+    for (let i = 0; i < Math.min(wa.length, wb.length); i++) if (wa[i] !== wb[i]) return wa[i] < wb[i] ? -1 : 1;
+    if (wa.length !== wb.length) return wa.length < wb.length ? -1 : 1;
+  }
+  return 0;
+}
+
+// A text's elements, through its NFD and the contractions.
+export function textElements(t: CollationTables, s: string): Element[] {
   const els = (s: string): Element[] => {
     const cps = [...s.normalize("NFD")].map((c) => c.codePointAt(0)!), out: Element[] = [];
     const own = (c: number) => t.elements.get(c) ?? [];
@@ -181,12 +205,39 @@ export function collationCompare(t: CollationTables, x: string, y: string): numb
     }
     return out;
   };
-  const a = els(x), b = els(y);
-  for (let level = 0; level < 3; level++) {
-    const ws = (es: Element[]) => es.map((e) => e[level]).filter((w) => level > 0 || w !== 0);
-    const wa = ws(a), wb = ws(b);
-    for (let i = 0; i < Math.min(wa.length, wb.length); i++) if (wa[i] !== wb[i]) return wa[i] < wb[i] ? -1 : 1;
-    if (wa.length !== wb.length) return wa.length < wb.length ? -1 : 1;
+  return els(s);
+}
+
+// The tables as saved (library/collation.json) for the cases module's
+// `table collated` (L214e4b), which reads NFC text as it comes: a code
+// point NFD would take apart (é, Ǽ) has the elements its NFD gives, and
+// Hangul syllables are taken apart by arithmetic, so they aren't here.
+// Secondaries are numbered 0, 1, 2… in order. `runs` are [from, count,
+// primary, secondary, tertiary, combining class]: count code points from `from`, each one
+// primary after the last; `multi` the code points of several elements;
+// `contractions` [code points, the letter they make].
+export interface SavedCollation { unicode: string; runs: [number, number, number, number, number, number][]; multi: [number, Element[]][]; contractions: [number[], number][] }
+export const HANGUL = { from: 0xac00, to: 0xd7a3 };
+
+export function saveCollation(t: CollationTables): SavedCollation {
+  const all = new Map(t.elements);
+  for (let c = 0; c < 0x110000; c++) {
+    if (all.has(c) || (c >= HANGUL.from && c <= HANGUL.to) || (c >= 0xd800 && c < 0xe000)) continue;
+    const s = ch(c), d = s.normalize("NFD");
+    if (d === s || !ASSIGNED.test(s)) continue;
+    const es = textElements(t, s);
+    if (es.length) all.set(c, es);
   }
-  return 0;
+  const secs = [...new Set([...all.values()].flatMap((es) => es.map((e) => e[1])))].sort((a, b) => a - b);
+  const rank = new Map(secs.map((s, i) => [s, i]));
+  const runs: SavedCollation["runs"] = [], multi: SavedCollation["multi"] = [];
+  for (const c of [...all.keys()].sort((a, b) => a - b)) {
+    const es = all.get(c)!.map(([p, s, x, cc]) => [p, rank.get(s)!, x, cc ?? 0] as Element);
+    if (es.length !== 1) { multi.push([c, es]); continue; }
+    const [p, s, x, cc] = es[0], last = runs.at(-1);
+    if (last && last[0] + last[1] === c && last[2] + last[1] === p && last[3] === s && last[4] === x && last[5] === cc) last[1]++;
+    else runs.push([c, 1, p, s, x, cc!]);
+  }
+  const contractions = [...t.contractions].flatMap(([first, xs]) => xs.map(([rest, c]) => [[first, ...rest], c] as [number[], number]));
+  return { unicode: process.versions.unicode ?? "", runs, multi, contractions };
 }
