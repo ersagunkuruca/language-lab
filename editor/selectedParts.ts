@@ -3,6 +3,7 @@
 // unit, and what the open definition is the same as. What they read of the
 // editor comes through `SelectedHost`.
 import type { Code, Id, Node } from "../ters/src/model.ts";
+import { ownNodes } from "../ters/src/model.ts";
 import type { Presentation } from "../ters/src/presentation.ts";
 import type { Namer } from "../ters/src/render/namer.ts";
 import { formatUnit, infer as unitInfer, NAMED, type Unit } from "../ters/src/units.ts";
@@ -18,7 +19,7 @@ import type { Doc, UI } from "./main.ts";
 const declaring = new WeakMap<Code, boolean>();
 export function declaresUnits(code: Code): boolean {
   let d = declaring.get(code);
-  if (d === undefined) declaring.set(code, (d = Object.values(code.nodes).some((x) => (x as { unit?: Unit }).unit && !LIBRARY.code.nodes[x.id])));
+  if (d === undefined) declaring.set(code, (d = ownNodes(code).some((x) => (x as { unit?: Unit }).unit && !LIBRARY.code.nodes[x.id])));
   return d;
 }
 export interface SelectedHost {

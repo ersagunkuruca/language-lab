@@ -6,7 +6,7 @@
 // checked by re-inferring the whole program and refused if it adds an error.
 
 import type { Code, Id, Node, NodeData, NodeOf } from "../ters/src/model.ts";
-import { children, collect, derived, freshId, layerOf, onLayer, parentAt, parentOf, portsOf, replace, subtree, swapIn } from "../ters/src/model.ts";
+import { children, collect, derived, freshId, layerOf, onLayer, parentAt, parentOf, portsOf, refTargets, replace, subtree, swapIn } from "../ters/src/model.ts";
 import type { Names, Notation, Presentation } from "../ters/src/presentation.ts";
 import blocksStyle from "../ters/styles/blocks.json" with { type: "json" };
 import { fillings, implementationKey, implementationOf, infer as check, type Filling, type Info, type Options } from "../ters/src/lang/infer.ts";
@@ -1701,7 +1701,7 @@ export const isDot = (code: Code, defId: Id, b: Id) => lets(code, defId).some((l
 const readSets = new WeakMap<Code["nodes"], Set<Id>>();
 function readTargets(code: Code): Set<Id> {
   let r = readSets.get(code.nodes);
-  if (!r) readSets.set(code.nodes, (r = new Set(Object.values(code.nodes).flatMap((n) => (n.kind === "ref" ? [n.target] : [])))));
+  if (!r) readSets.set(code.nodes, (r = refTargets(code)));
   return r;
 }
 export function dotHandles(code: Code, defId: Id, names: Names): Names {
