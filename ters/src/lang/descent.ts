@@ -28,7 +28,7 @@ import { isUse, useTarget } from "../model.ts";
 import { answerKeys } from "./ports.ts";
 import { intLit } from "./int.ts";
 import { INT } from "./types.ts";
-import { FALSE, S, STD_IMPL, TRUE } from "./std.ts";
+import { FALSE, S, STD_IMPL, STD_MANY, TRUE } from "./std.ts";
 import { META, fromList, toList, type Value } from "./run.ts";
 import { firstSets } from "./first-sets.ts";
 import * as T from "./text.ts";
@@ -180,6 +180,8 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
       try { return evaluate(thunk(n.args[0]), env); } catch (e) { if (!(e instanceof NoAnswer)) throw e; return evaluate(thunk(n.args[1]), env); }
     }
     if (f === S.listOf) return toList(xs());
+    // A builtin with Choice (read number): its first answer, or none.
+    if (f && STD_MANY[f] && f !== S.oneOf) { const r = STD_MANY[f](...xs()); if (!r.length) throw new NoAnswer(); return r[0] as Value; }
     const bool = (b: boolean) => (b ? TRUE_V : FALSE_V), truth = (v: Value) => (v as { tag?: Id }).tag === TRUE;
     switch (f) {
       case "builtin.int.less": { const [a, b] = xs(); return bool((a as number) < (b as number)); }
@@ -378,6 +380,25 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
         else if (!best || at + x.length > best[0]) best = [at + x.length, env];
       }
       return best;
+    }
+    // inverse(g, x) with x to be read (L72e1b: json number spelled): g a
+    // function of a Text whose guard says which characters it takes (`all
+    // pass(characters t, p)`); the longest run of those that g gives an
+    // answer for, x that answer.
+    if (named(f) === "inverse") {
+      const x = target(n.args[1]), g = target(n.args[0]), fn = g && code.nodes[g]?.kind === "def" ? lambdaOf(g) : undefined;
+      if (!x || !isUnknown(env.get(x)) || !fn || fn.params.length !== 1) throw new Unsupported("reads inverse other than of a definition, for an input");
+      const b = node(fn.body), h = new Map<Id, Kind>();
+      if (b?.kind === "match") hint(b.scrutinee, h);
+      const k0 = h.get(fn.params[0]);
+      if (!k0 || typeof k0 !== "object") throw new Unsupported(`reads inverse of ${named(g)}, whose characters nothing says`);
+      let end = at;
+      while (end < text.length && passes(k0.pass, text[end], env)) end++;
+      for (let e = end; e > at; e--) {
+        try { const v = evaluate(fn.body, new Map(env).set(fn.params[0], text.slice(at, e))); return [e, new Map(env).set(x, v)]; } catch (err) { if (!(err instanceof NoAnswer)) throw err; }
+      }
+      expect(at, `what ${named(g)} reads`);
+      return null;
     }
     if (named(f) === "spaced") { const r = read(n.args[0], env, spaces(at)); return r && [spaces(r[0]), r[1]]; }
     // Any number of parentheses round it, as the search reads them; at
