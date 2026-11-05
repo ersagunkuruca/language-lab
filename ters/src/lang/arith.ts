@@ -600,6 +600,7 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
 
   // Every definition at its own types, its number-type variables Float64;
   // then each copy that made, until none is new.
+  const unresolved = new Set<Id>();
   for (const d of code.defs) {
     if (seed && d in seed.layer.nodes) continue;
     const n = code.nodes[d];
@@ -609,7 +610,7 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
     // implementation of (examples/impact's `first touch by advancing`,
     // Collider a, while Float64 is no Collider) runs only as the copies
     // its uses make, at their types.
-    if (sc?.needs?.some(([v, iface]) => !implementationOf(info, iface, otherwise(v)))) continue;
+    if (sc?.needs?.some(([v, iface]) => !implementationOf(info, iface, otherwise(v)))) { unresolved.add(d); continue; }
     resolve(n.body, new Map((sc ? constrained(sc) : []).map((v) => [v, otherwise(v)])));
   }
   while (todo.length) { const { root, env } = todo.pop()!; resolve(root, env); }
@@ -633,6 +634,9 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
   };
   for (const [id, t] of typeOf) typeOf.set(id, open(t));
   for (const [d, sc] of schemes) {
+    // One left as it was keeps its scheme, so resolving the program again
+    // (a runner made of it: grades.ts algebrasOf) leaves it as it is too.
+    if (unresolved.has(d)) continue;
     const vars = constrained(sc).filter((v) => !(sc.numbers ?? []).includes(v));
     if (!vars.length) continue;
     const { arith: _a, less: _l, ordered: _o, fractional: _f, whole: _w, needs: _n, ...rest } = sc;
