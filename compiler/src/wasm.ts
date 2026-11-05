@@ -610,6 +610,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       }
       // abort(reason): the reason in its global, then status 2.
       case "abort": return [...code1(e.reason), 0x24, ...u(e.esc ? escapeG : reasonG), ...(fl < 0 ? [0x00] : [0x41, ...s(2 + (e.esc ?? 0)), 0x0c, ...to(d, fl)])];
+      case "released": throw new Error("a handler's release is lowered for JavaScript only");
       case "handle": {
         // As an attempt for status 2, which puts the fuel back as it was
         // when the handler started, as the evaluator does; the reason is the arm's.
@@ -757,6 +758,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
         wat(e.otherwise, f, d + "  ", ld + 1, fl) + ")",
       ].join("\n");
       case "abort": return [w(e.reason), `${d}global.set $${e.esc ? "escape" : "reason"}`, ...(fl < 0 ? [`${d}unreachable ;; an abort, nowhere to go`] : [`${d}i32.const ${2 + (e.esc ?? 0)}`, `${d}br ${to(ld)} ;; aborted`])].join("\n");
+      case "released": throw new Error("a handler's release is lowered for JavaScript only");
       case "handle": return [
         ...(fuel ? [`${d}global.get $fuel`, `${d}local.set ${local(f, e.save)}`] : []),
         `${d}(block (result ${ty(e.t)})`, `${d}  (block (result i32) ;; aborted`, wat(e.body, f, d + "    ", ld + 2, ld + 1), `${d}    br 1)`,

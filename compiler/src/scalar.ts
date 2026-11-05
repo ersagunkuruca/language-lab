@@ -58,7 +58,7 @@ import { bindsOf, bodyOf, withBodies } from "./uses.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { ARRAY, TABLE, HASH_SET, CELL, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, PATH as PATH_T, STRING, BUILTIN_EFFECTS, Subst, type Row, type Type } from "../../ters/src/lang/types.ts";
-import { RELEASE_V, tupleType, ABORT, ABORT_OP, CHECK, CHECK_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, HASH_SET_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, NOW_OP, OPTIONAL, ORDER_V, PAIR_V, RATIO, S, SET, SHOW_ANY, shownImplementations, implementationsOf, ORDERED, SOME, TEXT_OPS, TRUE, ZONE_OPS } from "../../ters/src/lang/std.ts";
+import { RELEASE_V, LOG_OP, tupleType, ABORT, ABORT_OP, CHECK, CHECK_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, HASH_SET_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, NOW_OP, OPTIONAL, ORDER_V, PAIR_V, RATIO, S, SET, SHOW_ANY, shownImplementations, implementationsOf, ORDERED, SOME, TEXT_OPS, TRUE, ZONE_OPS } from "../../ters/src/lang/std.ts";
 import { liftLets } from "../../ters/src/lang/lift-lets.ts";
 import { solvesOnce } from "../../ters/src/lang/run.ts";
 import { inlineLists } from "./inline-lets.ts";
@@ -221,6 +221,7 @@ export function kids(e: SExpr): SExpr[] {
     case "attempt": return [e.body, e.ok, e.otherwise];
     case "abort": return [e.reason];
     case "handle": return [e.body, e.arm];
+    case "released": return [e.body, e.release];
     case "choose": return [e.list];
     case "search": return [e.body, ...(e.dflt ? [e.dflt] : [])];
     case "set": return [e.rec, e.value, e.then];
@@ -242,6 +243,7 @@ export function mapKids(e: SExpr, f: (x: SExpr) => SExpr): SExpr {
     case "attempt": return { ...e, body: f(e.body), ok: f(e.ok), otherwise: f(e.otherwise) };
     case "abort": return { ...e, reason: f(e.reason) };
     case "handle": return { ...e, body: f(e.body), arm: f(e.arm) };
+    case "released": return { ...e, body: f(e.body), release: f(e.release) };
     case "choose": return { ...e, list: f(e.list) };
     case "search": { const body = f(e.body); return { ...e, body, ...(e.dflt ? { dflt: f(e.dflt) } : {}) }; }
     case "set": { const rec = f(e.rec), value = f(e.value); return { ...e, rec, value, then: f(e.then) }; }
@@ -358,6 +360,10 @@ export type SExpr =
   // operation in WebAssembly, L69b2).
   | { k: "world"; op: string; aborts: boolean; args: SExpr[]; t: LType; suspends?: true; cps?: true; ins?: LType[] }
   | { k: "handle"; body: SExpr; reason: number; arm: SExpr; t: LType; save: number; esc?: number }
+  // A handler's release (L213a, core IR only): body's value, with release
+  // run once after it however body ends (its value, an Abort, a stop),
+  // as the evaluator runs it on every exit.
+  | { k: "released"; body: SExpr; release: SExpr; t: LType }
   // W4d, gone after lowering: `one of` a list (t), anywhere, and a
   // handler's search (first, optional, all, count) to be made into code
   // once it's known whether it has several answers.
@@ -1195,6 +1201,13 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         // The clock, for JavaScript from the core IR (C137c10): the world's,
         // as the evaluator answers a `now` nothing handles.
         if (opts.host && target === NOW_OP) return { k: "world", op: "now", aborts: false, args: [], t: "f64" };
+        // A log line nothing handles (L213a3, for a release that logs): the
+        // world's log, as the evaluator writes it.
+        if (opts.host && target === LOG_OP && !tailOps.has(LOG_OP)) {
+          const t = stype(zonk(id));
+          if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(id))}`);
+          return { k: "world", op: "log", aborts: false, args: args(), t };
+        }
         // A page handler's waits (C40 step 4): the world's timers, as the
         // evaluator's (run.ts `unhandled`); a wait or an await goes on by
         // the rest of the handler, given to it (cps).
@@ -1276,7 +1289,20 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       }
       case "match": {
         const arms = n.arms.map((a) => code.nodes[a] as NodeOf<"arm">);
-        if (arms.some((a) => a.variant === RELEASE_V)) throw new Refused("handles an effect with a release, which isn't lowered yet (L213a): it runs in the evaluator");
+        // A handler's release (L213a3, a4): the handler without it, then
+        // the release however that ends, a normal exit or an Abort, as the
+        // evaluator runs it after the handler's last case.
+        const release = arms.find((a) => a.variant === RELEASE_V);
+        if (release) {
+          if (!opts.host) throw new Refused("handles an effect with a release, which is only lowered for JavaScript yet (L213a): it runs in the evaluator");
+          const t = stype(zonk(id));
+          if (!t) throw new Refused(`handles an effect with a release, and gives ${OTHER}`);
+          const kept = code.nodes[id];
+          code.nodes[id] = { ...n, arms: n.arms.filter((a) => a !== release.id) };
+          let body: SExpr;
+          try { body = expr(id, env, f, false); } finally { code.nodes[id] = kept; }
+          return { k: "released", body, release: expr(release.body, env, f, false), t };
+        }
         if (n.name) throw new Refused("handles an effect under a name, which isn't lowered yet (L213b): it runs in the evaluator");
         if (n.otherwise && arms.length && effectOps.has(arms[0].variant)) throw new Refused("handles an effect with a case for the normal finish, which isn't lowered yet (L57)");
         if (opts.data && arms.length === 1 && arms[0].variant === ABORT_OP) {
@@ -2263,7 +2289,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       case "op": return OPS[e.op].t;
       case "call": return funcs[e.fn].multi ? "i32" : funcs[e.fn].result;
       case "world": return e.cps ? "i32" : e.t;
-      case "make": case "new": case "list": case "closure": case "if": case "attempt": case "handle": case "budget": case "search": case "choose": case "zero": return e.k === "choose" ? e.t.cases.find((c) => c.variant === CONS)!.fields[0].t : e.t;
+      case "make": case "new": case "list": case "closure": case "if": case "attempt": case "handle": case "released": case "budget": case "search": case "choose": case "zero": return e.k === "choose" ? e.t.cases.find((c) => c.variant === CONS)!.fields[0].t : e.t;
       case "get": return e.t.fields[e.i].t;
       case "field": return e.t.cases[e.c].fields[e.i].t;
       case "apply": return e.t.several && !e.cps ? e.t.answer! : e.t.result;
@@ -2918,7 +2944,7 @@ function niches(funcs: SFunc[], records: RType[], datas: DType[], arrays: AType[
           const body = e.arms.slice(0, -1).reduceRight<SExpr>((rest, _, c) => ({ k: "if", cond: n.test(c, x), then: arm(c), else: rest, t: result }), arm(last));
           return { k: "let", i: e.s, value: e.scrut, body };
         }
-        case "if": case "budget": case "attempt": case "world": case "handle": case "zero": return { ...e, t: ty(e.t) } as SExpr;
+        case "if": case "budget": case "attempt": case "world": case "handle": case "released": case "zero": return { ...e, t: ty(e.t) } as SExpr;
         default: return e;
       }
     };
