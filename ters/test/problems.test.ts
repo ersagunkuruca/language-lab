@@ -54,6 +54,7 @@ const SMALLEST: Record<string, (k: Lang) => unknown> = {
   "effect-two-types": (k) => { const y = k.effect("Yield", [["yield", [["v", (ps) => k.tref(ps[0])]], () => k.tref("std.unit")]], ["a"]); k.define(k.def("p"), k.thunk(() => k.seq(k.call(y.op.yield, k.x(TRUE)), k.call(y.op.yield, k.lit("hi"))))); },
   "unhandled-effect": (k) => { const a = ask(k); k.define(k.def("p"), k.call(a.op.ask)); },
   "no-cases": (k) => k.define(k.def("p"), k.fn(["b"], (b) => k.match(b, []))),
+  "not-float-record": (k) => k.define(k.def("p"), k.call(S.mapParts, k.fn(["x"], (x) => x), k.lit("hi"))),
   "functions-in-data": (k) => k.define(k.def("p"), k.call(S.equal, k.fn(["x"], (x) => x), k.fn(["x"], (x) => x))),
   "no-port": (k) => { const f = k.def("f"); k.define(f, k.fn(["a"], (a) => k.call(ARITH.add, a, k.lit(1)))); k.define(k.def("p"), k.solve(f, { nope: k.lit(1), out: k.lit(3) }, { [param(k, f, 0)]: "x" }, (b) => b[param(k, f, 0)])); },
   // A use with no body gives its produced ports (L211); one given every port has none to give.
