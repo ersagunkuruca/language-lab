@@ -2499,6 +2499,9 @@ export function buildPrelude(): Module {
     readsBack("date read undoes date text", (a, b, c) => k.call(dateOfDay, spread(a, b, c, 36524, 397, 29)), dateRead, dateText),
     readsBack("instant read undoes instant text", (a, b, c) => k.call(instantOf, k.call(INT_OPS.toNumber, spread(a, b, c, 1000000007, 86413, 3607))), instantRead, instantText),
     readsBack("duration read undoes duration text", (a, b, c) => k.call(secondsD, k.call(INT_OPS.toNumber, spread(a, b, c, 93784, 3600, 61))), durationRead, durationText),
+    // Times of day (T7e6): seconds spread over the day, both sides of
+    // midnight, wrapped into it by time of seconds.
+    readsBack("time read undoes time text", (a, b, c) => k.call(timeOfSeconds, spread(a, b, c, 21601, 3607, 61)), timeRead, timeText),
   );
   // Embeddings (EMBEDDINGS.md, L208b): the one canonical map from a type
   // into a larger one that keeps + − · and <. Into Float64 it holds only
