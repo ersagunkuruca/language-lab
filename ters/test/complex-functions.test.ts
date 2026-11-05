@@ -6,10 +6,10 @@ import assert from "node:assert/strict";
 import type { Id } from "../src/model.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
-import { LIBRARY } from "../src/lang/library.ts";
+import { COMPLEX_V, LIBRARY } from "../src/lang/library.ts";
 import { base, baseNames } from "../src/lang/load.ts";
 import { makeRunner } from "../src/lang/run.ts";
-import { COMPLEX_V, S } from "../src/lang/std.ts";
+import { S } from "../src/lang/std.ts";
 import { showType } from "../src/lang/types.ts";
 
 const lib = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;

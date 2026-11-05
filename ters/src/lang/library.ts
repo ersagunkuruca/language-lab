@@ -31,8 +31,12 @@ export const CASES = cases0 as unknown as Module;
 // The number types written in the language (numbers-source.ts, L207):
 // Dual so far.
 export const NUMBERS = numbers0 as unknown as Module;
-// Dual's one case, by its name (its id is its hash).
-export const DUAL_V = Object.keys(NUMBERS.code.nodes).find((d) => NUMBERS.code.nodes[d].kind === "variant" && NUMBERS.names[d] === "dual")!;
+// The numbers module's types and their one case, by name (their ids are
+// their hashes).
+const numbersNode = (kind: string, name: string) => Object.keys(NUMBERS.code.nodes).find((d) => NUMBERS.code.nodes[d].kind === kind && NUMBERS.names[d] === name)!;
+export const DUAL_V = numbersNode("variant", "dual");
+export const COMPLEX_V = numbersNode("variant", "complex");
+export const COMPLEX_TYPE = numbersNode("def", "Complex");
 export const MODULES: Module[] = [PRELUDE, VECTORS, HTML_MODULE, TREES, STEADY, CASES, NUMBERS];
 export const CORE: Code = merge(prelude, std);
 // Every program is checked on top of the library, so the trees (about

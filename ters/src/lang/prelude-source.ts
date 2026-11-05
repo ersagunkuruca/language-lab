@@ -9,7 +9,7 @@ import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { library } from "./programs.ts";
-import { LITERAL_V, FILE_OPS, NEXT_LINE_OP, WRITE_LINE_OP, NEXT_BYTES_OP, ADD_BYTES_OP, ZONE_OPS, ABORT_OP, ARITH, CELL_OPS, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, TICKET_V, AWAIT_OP, START_TIMER_OP, NOW_OP, WAIT_OP, BRANCH_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, DIVISION_V, SHOWN_V, BITS_V, WORD_SIZES, WORD_V, EXTENDED_V, ALGEBRAIC_OPS, REAL_OPS, CHECK_OP, RANDOM_OP, QUEUE_V, PRIORITY_QUEUE_V, MATRIX_V, LU_FACTORS_V, TENSOR_V, BYTES_V, JSON_V, DATE_V, TIME_OF_DAY_V, INSTANT_V, EMBEDDING_V, STATE_OPS, PIPE_OPS, std } from "./std.ts";
+import { LITERAL_V, FILE_OPS, NEXT_LINE_OP, WRITE_LINE_OP, NEXT_BYTES_OP, ADD_BYTES_OP, ZONE_OPS, ABORT_OP, ARITH, CELL_OPS, COMPARE, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, TICKET_V, AWAIT_OP, START_TIMER_OP, NOW_OP, WAIT_OP, BRANCH_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, DIVISION_V, SHOWN_V, BITS_V, WORD_SIZES, WORD_V, EXTENDED_V, ALGEBRAIC_OPS, REAL_OPS, CHECK_OP, RANDOM_OP, QUEUE_V, PRIORITY_QUEUE_V, MATRIX_V, LU_FACTORS_V, TENSOR_V, BYTES_V, JSON_V, DATE_V, TIME_OF_DAY_V, INSTANT_V, EMBEDDING_V, STATE_OPS, PIPE_OPS, std } from "./std.ts";
 
 export function buildPrelude(): Module {
   const k = new Lang();
@@ -263,75 +263,7 @@ export function buildPrelude(): Module {
   const toNum = k.def("as float64");
   k.define(toNum, k.fn(["a"], (a) => ratio(a, (p, q) => k.call(B.div, k.call(INT_OPS.toNumber, p), k.call(INT_OPS.toNumber, q)))));
 
-  // Complex numbers: a record of two Float64s (std.ts), re + im·i. + − ·
-  // and −x at Complex are these (arith.ts), so they aren't offered on
-  // their own; · is (a + bi)(c + di) = (ac − bd) + (ad + bc)i.
-  const cx = (v: Id, f: (re: Id, im: Id) => Id, names = ["re", "im"]) => k.match(v, [{ variant: COMPLEX_V, names, body: ([a, b]) => f(a, b) }]);
   const n = { add: (a: Id, b: Id) => k.call(B.add, a, b), sub: (a: Id, b: Id) => k.call(B.sub, a, b), mul: (a: Id, b: Id) => k.call(B.mul, a, b), div: (a: Id, b: Id) => k.call(B.div, a, b) };
-  const twoC = (name: string, f: (a: Id, b: Id, c: Id, d: Id) => Id) => {
-    const d = k.def(name);
-    k.define(d, k.fn(["z", "w"], (z, w) => cx(z, (a, b) => cx(w, (c, e) => f(a, b, c, e), ["re₂", "im₂"]))));
-    return d;
-  };
-  const C = (re: Id, im: Id) => k.call(COMPLEX_V, re, im);
-  const addC = twoC("add complex", (a, b, c, d) => C(n.add(a, c), n.add(b, d)));
-  const subC = twoC("subtract complex", (a, b, c, d) => C(n.sub(a, c), n.sub(b, d)));
-  const mulC = twoC("multiply complex", (a, b, c, d) => C(n.sub(n.mul(a, c), n.mul(b, d)), n.add(n.mul(a, d), n.mul(b, c))));
-  const negC = k.def("negate complex");
-  k.define(negC, k.fn(["z"], (z) => cx(z, (a, b) => C(k.call(B.neg, a), k.call(B.neg, b)))));
-  const asC = k.def("as complex");
-  k.define(asC, k.fn(["x"], (x) => C(x, k.lit(0))));
-  const unitI = k.def("i");
-  k.define(unitI, C(k.lit(0), k.lit(1)));
-  const conjC = k.def("complex conjugate");
-  k.define(conjC, k.fn(["z"], (z) => cx(z, (a, b) => C(a, k.call(B.neg, b)))));
-  const modulus = k.def("modulus");
-  k.define(modulus, k.fn(["z"], (z) => cx(z, (a, b) => k.call(B.sqrt, n.add(n.mul(a, a), n.mul(b, b))))));
-  const angle = k.def("angle of");
-  k.define(angle, k.fn(["z"], (z) => cx(z, (a, b) => k.call(B.atan2, b, a))));
-  const polar = k.def("from polar");
-  k.define(polar, k.fn(["size", "angle"], (r, t) => C(n.mul(r, k.call(B.cos, t)), n.mul(r, k.call(B.sin, t)))));
-  const divC = twoC("divide complex", (a, b, c, d) => k.let("c² + d²", n.add(n.mul(c, c), n.mul(d, d)), (m) =>
-    k.if(k.call(S.equal, m, k.lit(0)), k.call(S.fail), C(n.div(n.add(n.mul(a, c), n.mul(b, d)), m), n.div(n.sub(n.mul(b, c), n.mul(a, d)), m)))));
-  const expC = k.def("complex exp");
-  k.define(expC, k.fn(["z"], (z) => cx(z, (a, b) => k.let("eᵃ", k.call(B.exp, a), (e) => C(n.mul(e, k.call(B.cos, b)), n.mul(e, k.call(B.sin, b)))))));
-  // What Float64 has no answer for, on Complex (BACKLOG L127): principal
-  // values, each branch cut's points taken from above (counter-clockwise),
-  // as C99's csqrt, clog, cpow, casin and cacos give for a +0 imaginary
-  // part, so √−4 is 2i, log(−1) is iπ and asin(2) is π/2 + 1.317i. asin
-  // and acos pick, of the two logs w and 1/w that give them, the one whose
-  // input is the larger, so nothing cancels (Kahan, "Branch cuts for
-  // complex elementary functions", 1987, on why that matters).
-  const zero = () => C(k.lit(0), k.lit(0));
-  const csqrt = k.def("complex sqrt");
-  k.define(csqrt, k.fn(["z"], (z) => cx(z, (a, b) => k.let("r", k.call(modulus, z), (r) => {
-    const half = (x: Id) => k.call(B.sqrt, k.call(larger, n.div(x, k.lit(2)), k.lit(0)));
-    return k.let("im", half(n.sub(r, a)), (im) => C(half(n.add(r, a)), k.if(k.call(S.less, b, k.lit(0)), k.call(B.neg, im), im)));
-  }))));
-  const clog = k.def("complex log");
-  k.define(clog, k.fn(["z"], (z) => cx(z, (a, b) => C(k.call(B.log, k.call(modulus, z)), k.call(B.atan2, b, a)))));
-  const cpow = k.def("complex power");
-  k.define(cpow, k.fn(["z", "w"], (z, w) => k.if(k.call(S.equal, z, zero()),
-    cx(w, (c) => k.if(k.call(S.less, k.lit(0), c), zero(), k.call(S.fail)), ["re₂", "im₂"]),
-    k.call(expC, k.call(mulC, w, k.call(clog, z))))));
-  // −i · log(w), from w and its reciprocal's sum: the larger one's log
-  // (its input is at least 1 away from 0, so there is always an answer).
-  const minusILog = (w: Id, v: Id) => k.let("up", w, (up) => k.let("down", v, (down) => k.let("log", k.call(S.first,
-    k.thunk(() => k.if(k.call(S.less, k.call(modulus, up), k.call(modulus, down)), k.call(negC, k.call(clog, down)), k.call(clog, up))),
-    k.thunk(zero)), (l) => cx(l, (p, q) => C(q, k.call(B.neg, p)), ["p", "q"]))));
-  // √(1 − z²), from above on the cut: for a real z above 1, −i√(z² − 1).
-  const rootOneMinus = (z: Id, a: Id, b: Id) => k.let("s", k.call(csqrt, k.call(subC, C(k.lit(1), k.lit(0)), k.call(mulC, z, z))), (s) =>
-    k.if(k.and(k.call(S.equal, b, k.lit(0)), k.call(S.less, k.lit(0), a)), k.call(conjC, s), s));
-  const casin = k.def("complex asin");
-  k.define(casin, k.fn(["z"], (z) => cx(z, (a, b) => k.let("s", rootOneMinus(z, a, b), (s) =>
-    k.let("iz", C(k.call(B.neg, b), a), (iz) => minusILog(k.call(addC, s, iz), k.call(subC, s, iz)))))));
-  const cacos = k.def("complex acos");
-  k.define(cacos, k.fn(["z"], (z) => cx(z, (a, b) => k.let("s", rootOneMinus(z, a, b), (s) =>
-    k.let("is", cx(s, (c, d) => C(k.call(B.neg, d), c), ["re₂", "im₂"]), (is) => minusILog(k.call(addC, z, is), k.call(subC, z, is)))))));
-  const showC = k.def("show complex");
-  k.define(showC, k.fn(["z"], (z) => cx(z, (a, b) => k.call(S.concat, k.call(S.show, a), k.call(S.concat,
-    k.if(k.call(S.less, b, k.lit(0)), k.lit(" − "), k.lit(" + ")), k.call(S.concat, k.call(S.show, k.call(S.abs, b)), k.lit("i")))))));
-
   // An algebra's product from its multiplication table (ALGEBRA-TABLES.md):
   // a and b are records of Float64s, each line says what two basis
   // elements multiply to, and the product is the sum over the lines of
@@ -348,9 +280,6 @@ export function buildPrelude(): Module {
         k.call(S.zipParts, B.add, k.call(S.mapParts, k.fn(["part"], (x) => n.mul(w, x)), g), rest!)) },
     ]) },
   ])));
-  const complexTable = k.def("complex table");
-  k.define(complexTable, k.list(...([[1, 0, 1, 0, 1, 0], [1, 0, 0, 1, 0, 1], [0, 1, 1, 0, 0, 1], [0, 1, 0, 1, -1, 0]] as const).map(([a, b, c, d, e, f]) =>
-    k.call(TIMES_V, C(k.lit(a), k.lit(b)), C(k.lit(c), k.lit(d)), C(k.lit(e), k.lit(f))))));
 
   // Trig at Float64 (INTERFACES.md, L40f): its builtins. Found by its type
   // when a use of sin needs Float64's, so not offered.
@@ -394,11 +323,9 @@ export function buildPrelude(): Module {
   const trigF = k.def("trig at float64");
   k.define(trigF, k.call(TRIG_V, ...[B.sin, B.cos, B.tan, B.exp, B.log, polarF, unpolarF, asinF, acosF].map((b) => k.x(b))));
 
-  // Complex laws (POLAR.md L97e), tests in the language (T7): each performs
-  // Check, so `lab test` and test/prelude-laws.test.ts run them on small
-  // complex numbers. The first is the prelude's own from polar against
-  // modulus and angle of; the second is Trig's polar and unpolar fields,
-  // one direction undoing the other.
+  // Laws, tests in the language (T7): each performs Check, so `lab test`
+  // and test/prelude-laws.test.ts run them on small values. Complex's are
+  // the numbers module's (L207b).
   const expect = (holds: Id, what: string) => k.call(CHECK_OP, holds, k.lit(what));
   // Two Float64s that agree to the precision floats carry: within 1e-9 of
   // each other, relative to their size. `equal` is exact (L197, Ersagun's
@@ -408,15 +335,6 @@ export function buildPrelude(): Module {
   const near = k.def("near");
   k.define(near, k.fn(["a", "b"], (a, b) => k.let("gap", k.call(S.abs, n.sub(a, b)), (gap) =>
     k.call(S.not, k.call(S.less, n.mul(k.lit(1e-9), n.add(n.add(k.lit(1), k.call(S.abs, a)), k.call(S.abs, b))), gap)))));
-  // Two complex numbers near part by part: what the laws below check.
-  const nearC = (w: Id, z: Id) => cx(w, (a, b) => cx(z, (c, d) => k.and(k.call(near, a, c), k.call(near, b, d)), ["re2", "im2"]));
-  const lawFromPolar = k.def("from polar undoes modulus and angle");
-  k.define(lawFromPolar, k.fn(["z"], (z) => expect(nearC(k.call(polar, k.call(modulus, z), k.call(angle, z)), z), "from polar(modulus z, angle of z) is near z")));
-  const lawPolar = k.def("polar undoes unpolar");
-  k.define(lawPolar, k.fn(["z"], (z) => cx(z, (a, b) =>
-    k.solve(TRIG_UNPOLAR, { 0: a, 1: b, out: k.true }, { 2: "length", 3: "angle" }, ({ 2: r, 3: t }) =>
-      k.solve(TRIG_POLAR, { 0: r, 1: t, out: k.true }, { 2: "x", 3: "y" }, ({ 2: x, 3: y }) =>
-        expect(nearC(C(x, y), z), "polar(unpolar(x, y)) is near (x, y)"))))));
   // Ways agree (WAYS.md step 4, BACKLOG L96d): each way of a Trig field
   // against Float64's own field on small values, as T7 laws, so `lab test`
   // and test/prelude-laws.test.ts run them, with `near`: the ways are other
@@ -448,7 +366,7 @@ export function buildPrelude(): Module {
     agrees(acosBy, (v) => k.call(acosF, v), "acos by unpolar", (x) => k.call(B.cos, x)),
     polarAgrees,
   ];
-  const laws = [lawFromPolar, lawPolar, ...wayLaws];
+  const laws = wayLaws;
 
   // Fixed (FIXED-POINT.md, BACKLOG L89): an Int counting steps of 2⁻³². + −
   // and −x are the Int's own; a · b is the steps' product shifted down 32,
@@ -1019,7 +937,6 @@ export function buildPrelude(): Module {
     impl("arithmetic at float64", ARITHMETIC_V, [B.add, B.sub, B.mul, B.neg]),
     impl("arithmetic at int", ARITHMETIC_V, [INT_OPS.add, INT_OPS.sub, INT_OPS.mul, INT_OPS.neg]),
     impl("arithmetic at rational", ARITHMETIC_V, [addF, subF, mulF, negF]),
-    impl("arithmetic at complex", ARITHMETIC_V, [addC, subC, mulC, negC]),
     impl("arithmetic at algebraic", ARITHMETIC_V, [ALGEBRAIC_OPS.add, ALGEBRAIC_OPS.sub, ALGEBRAIC_OPS.mul, ALGEBRAIC_OPS.neg]),
     impl("ordered at float64", ORDERED_V, [S.less]),
     impl("ordered at int", ORDERED_V, [INT_OPS.less]),
@@ -1056,7 +973,6 @@ export function buildPrelude(): Module {
   const divisions = [
     impl("division at float64", DIVISION_V, [B.div]),
     impl("division at rational", DIVISION_V, [divF]),
-    impl("division at complex", DIVISION_V, [divC]),
     impl("division at fixed", DIVISION_V, [divX]),
     impl("division at algebraic", DIVISION_V, [ALGEBRAIC_OPS.divide]),
   ];
@@ -1064,7 +980,6 @@ export function buildPrelude(): Module {
   // How each number type shows (L205): `show any` asks the type's Shown.
   const showns = [
     impl("shown at rational", SHOWN_V, [showF]),
-    impl("shown at complex", SHOWN_V, [showC]),
     impl("shown at fixed", SHOWN_V, [showX]),
     ...wordDefs.map((d) => impl(`shown at word${d.w}`, SHOWN_V, [d.show])),
   ];
@@ -2588,12 +2503,11 @@ export function buildPrelude(): Module {
     embed("int in rational", k.x(whole)),
     embed("int in float64", k.x(INT_OPS.toNumber)),
     embed("rational in float64", k.x(toNum)),
-    embed("float64 in complex", k.x(asC)),
   ];
-  const offered: Id[] = [...embeddings, extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, spaced, optionalParens, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, asFixed, fixedF, sqrtX, sort, sortBy, sortWith, collated, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, factored, solvedWith, determinant, inverted, leastSquares, tensorOf, tensorShape, tensorItems, rank, tensorSize, tensorEntry, tensorMap, tensorZipWith, reshaped, contracted, transposedBy, traced, bytesOf, byteItems, byteCount, byteAt, utf8Of, textOfUtf8, base64Of, bytesOfBase64, hexOf, bytesOfHex, jsonPrinted, jsonIndented, jsonRead, jsonSpelled, blank, jsonField, jsonAsNumber, jsonAsText, jsonAsBool, jsonAsList, csvPrinted, csvRows, csvRecords, csvOfRecords, dateOf, dateYear, dateMonth, dateDay, leapYear, daysInMonth, dayNumber, dateOfDay, weekday, addedDays, daysBetween, dateText, dateRead, timeOf, timeHour, timeMinute, timeSecond, secondsOfDay, timeOfSeconds, timeText, timeRead, secondsD, minute, hour, day, instantOf, secondsSince, laterBy, durationBetween, instantAt, dateAt, timeAt, instantText, instantRead, offsetText, instantTextIn, instantTextInZone, instantInZone, durationText, durationRead, currentInstant, waitFor, withState, changeState, withOpenFile, piped, ticketId, ...wordMakers, anyOf, together, race, within, simulated, near];
+  const offered: Id[] = [...embeddings, extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, spaced, optionalParens, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, tableProduct, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, asFixed, fixedF, sqrtX, sort, sortBy, sortWith, collated, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, factored, solvedWith, determinant, inverted, leastSquares, tensorOf, tensorShape, tensorItems, rank, tensorSize, tensorEntry, tensorMap, tensorZipWith, reshaped, contracted, transposedBy, traced, bytesOf, byteItems, byteCount, byteAt, utf8Of, textOfUtf8, base64Of, bytesOfBase64, hexOf, bytesOfHex, jsonPrinted, jsonIndented, jsonRead, jsonSpelled, blank, jsonField, jsonAsNumber, jsonAsText, jsonAsBool, jsonAsList, csvPrinted, csvRows, csvRecords, csvOfRecords, dateOf, dateYear, dateMonth, dateDay, leapYear, daysInMonth, dayNumber, dateOfDay, weekday, addedDays, daysBetween, dateText, dateRead, timeOf, timeHour, timeMinute, timeSecond, secondsOfDay, timeOfSeconds, timeText, timeRead, secondsD, minute, hour, day, instantOf, secondsSince, laterBy, durationBetween, instantAt, dateAt, timeAt, instantText, instantRead, offsetText, instantTextIn, instantTextInZone, instantInZone, durationText, durationRead, currentInstant, waitFor, withState, changeState, withOpenFile, piped, ticketId, ...wordMakers, anyOf, together, race, within, simulated, near];
   // Each number's own show, from before the generic one showed every number
   // (L153, L156): kept so programs saved before still open, not offered.
-  const perTypeShows = [showF, showC, showX];
+  const perTypeShows = [showF, showX];
   const mapHelpers = [lastItem, putEntry, updateEntry, removeEntry, lookupEntry, hasEntry, pairsAsEntries, addItem_, removeItem_, hasItem_, unionItems, interItems, diffItems];
   const comments: Record<Id, string> = {
     [each]: "Runs the action on each item of the list in turn, for what it does (prints, writes a cell).",
@@ -2787,7 +2701,6 @@ export function buildPrelude(): Module {
     [embeddings[0]]: "Int in Rational: n as the fraction n/1, the one map that keeps + − · and <.",
     [embeddings[1]]: "Int in Float64: n as the Float64 nearest it, exact up to 2⁵³; + − · agree as closely as Float64 rounds.",
     [embeddings[2]]: "Rational in Float64: top ÷ bottom, the Float64 nearest the fraction; + − · agree as closely as Float64 rounds.",
-    [embeddings[3]]: "Float64 in Complex: x as x + 0i.",
     [jsonIndented]: "The Json value as text over lines, each item and field on a line of its own and indented step spaces a level: the same text as JavaScript's JSON.stringify(value, null, step). A step below 1 prints it on one line, as json printed.",
     [jsonField]: "The value of an object's field with this name, the first if there are several. No answer for a missing field or a value that isn't an object.",
     [jsonAsNumber]: "The Float64 a json number holds; no answer for any other kind.",
@@ -2838,27 +2751,8 @@ export function buildPrelude(): Module {
     ...Object.fromEntries(mapHelpers.map((d) => [d, "A helper of the map and set operations: a walk down the sorted list. Not offered."])),
     [mergeSorted]: "Two sorted lists as one. A helper of sort, not offered.",
     [addRun]: "A helper of sort: a sorted run added to the slots of runs, like adding 1 to a binary number. Not offered.",
-    [asC]: "The Float64 x as a complex number, x + 0i.",
-    [unitI]: "i, the square root of −1: i · i is −1.",
-    [conjC]: "a − bi for a + bi: the same point mirrored across the real line. z · conjugate(z) is |z|².",
-    [modulus]: "|z|, how far z is from 0 (the vectors module's magnitude says the same).",
     [near]: "Whether two Float64s agree to the precision floats carry: within 1e-9 of each other, relative to their size. equal is exact, so √2 · √2 isn't equal to 2, but it is near it.",
-    [angle]: "The angle from the positive real line to z, in radians, between −π and π (atan2).",
-    [polar]: "The complex number size away from 0 at this angle: size·(cos angle + i sin angle).",
-    [divC]: "z ÷ w for complex numbers; no answer when w is 0. Not offered: the one divide works on every number but Int; kept so programs saved before still open.",
-    [expC]: "e to the z: eᵃ(cos b + i sin b) for a + bi, Euler's formula (textbook). complex exp(i · π) is −1.",
-    [csqrt]: "√z for a complex number, the root with a real part of 0 or more: complex sqrt(−4) is 2i. Float64's sqrt has no answer below 0; this one always has.",
-    [clog]: "log z for a complex number: log|z| + i·(its angle, between −π and π). complex log(−1) is iπ. No answer at 0.",
-    [cpow]: "z to the power w, e^(w · log z), the principal value: complex power(−8, 1/3) is 1 + 1.732i. 0 to a power with a real part above 0 is 0; to any other, no answer.",
-    [casin]: "asin z for a complex number, the principal value: complex asin(2) is π/2 + 1.317i. Float64's asin has no answer outside −1 to 1; this one always has.",
-    [cacos]: "acos z for a complex number, the principal value: complex acos(2) is −1.317i. Float64's acos has no answer outside −1 to 1; this one always has.",
-    [showC]: "A complex number as 3 + 4i or 3 − 4i. Not offered: the one show shows every number; kept so programs saved before still open.",
-    [addC]: "What + is at Complex. Not offered on its own: + is.",
-    [subC]: "What − is at Complex. Not offered on its own: − is.",
     [tableProduct]: "a · b in an algebra given by its multiplication table: each line says what two basis elements multiply to, as times(i, i, −1). Complex numbers, dual numbers and quaternions are each one table (ALGEBRA-TABLES.md).",
-    [complexTable]: "Complex's multiplication table: 1 · 1 = 1, 1 · i = i, i · 1 = i, i · i = −1. table product(complex table, z, w) is z · w.",
-    [mulC]: "What · is at Complex: (a + bi)(c + di) = (ac − bd) + (ad + bc)i. Not offered on its own: · is.",
-    [negC]: "What −x is at Complex. Not offered on its own: − is.",
     ...Object.fromEntries(numberOnly.map((d) => [d, "The Float64-only version from before the one generic <, kept so programs saved before still open. Not offered: the generic one is."])),
     [trigF]: "How Float64 does Trig: its builtin sin, cos, tan, exp and log. Found by its type, so not offered: sin is.",
     [matrixTable]: "The multiplication table of n × n matrices, for table product, from rows of basis elements: E_ij · E_jl = E_il and every other product of two of them is 0. Mat2, Mat3 and Mat4 use it for their ·.",
@@ -2900,9 +2794,9 @@ export function buildPrelude(): Module {
     ...Object.fromEntries(awaitHelpers.map((d) => [d, simulatedHelpers.includes(d) ? "A helper of simulated. Not offered in the palette." : "A helper of together and race. Not offered in the palette."])),
     [applied]: "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette.",
   };
-  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, ...awaitHelpers, ...arithmetics, trigF, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarX, vector, asinBy, acosBy, asinF, acosF, asinX, acosX, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, divF, divC, divX, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...matrixHelpers, pipeOf, ...laws], merge(prelude, std));
+  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, ...awaitHelpers, ...arithmetics, trigF, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarX, vector, asinBy, acosBy, asinF, acosF, asinX, acosX, addF, subF, mulF, negF, lessF, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, divF, divX, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...matrixHelpers, pipeOf, ...laws], merge(prelude, std));
   if (!p.ok) throw new Error(`the prelude can't be published: ${p.reason}`);
   const at = (d: Id) => p.rename.get(d)!;
   const notes = Object.fromEntries(Object.entries(comments).map(([d, c]) => [at(d), c]));
-  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [...awaitHelpers, addF, subF, mulF, negF, lessF, addC, subC, mulC, negC, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, divF, divC, divX, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...matrixHelpers, pipeOf, ...arithmetics, trigF, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarX, vector, asinBy, acosBy, asinF, acosF, asinX, acosX, ...laws].map(at));
+  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [...awaitHelpers, addF, subF, mulF, negF, lessF, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, divF, divX, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...matrixHelpers, pipeOf, ...arithmetics, trigF, sinX, cosX, tanX, expX, logX, trigX, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, unpolarX, vector, asinBy, acosBy, asinF, acosF, asinX, acosX, ...laws].map(at));
 }

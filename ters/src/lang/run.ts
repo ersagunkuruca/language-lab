@@ -1334,12 +1334,34 @@ export function pageProblem(info: Info, def: Id, names: Names = {}): string | nu
   return leftover(t, names);
 }
 
+// A main that is a value, not a function (lockstep's text, T7e15): run
+// from the command line, it prints what it is (a text as itself, anything
+// else as show gives it) and exits with 0.
+export function valueMain(info: Info, def: Id): boolean {
+  const t = info.typeOf.get(def);
+  return !!t && t.t !== "fn";
+}
+
 // A program run from the command line (cli/lab.ts): `main` takes the
 // arguments as a list of texts, or nothing, and returns the exit code (an
 // Int or a Float64), or anything else for 0. An Abort that nothing handles
-// prints its reason to standard error and exits with 1.
+// prints its reason to standard error and exits with 1. A main that is a
+// value prints it (valueMain).
 export function runProgram(code: Code, info: Info, def: Id, args: string[], rt: Runtime): number {
   const t = info.typeOf.get(def);
+  if (t && t.t !== "fn") {
+    const problem = typeError(code, info, def, rt.names ?? {});
+    if (problem) throw new Error(problem);
+    try {
+      const v = makeRunner(code, info, rt.cells || tracks(code, def) ? rt : { ...rt, cells: new Cells(equal, true) }).value(def);
+      rt.print(typeof v === "string" ? v : showerFor(code, info, rt.names ?? {})(v, true));
+      return 0;
+    } catch (e) {
+      if (!(e instanceof Aborted)) throw e;
+      (rt.world?.error ?? rt.print)(e.reason);
+      return 1;
+    }
+  }
   if (!t || t.t !== "fn" || t.params.length > 1) throw new Error("main takes the arguments (a list of texts), or nothing");
   try {
     const v = start(code, info, def, t, t.params.length ? [toList(args)] : [], rt);
