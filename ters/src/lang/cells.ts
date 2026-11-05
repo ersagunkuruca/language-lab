@@ -159,7 +159,7 @@ function replaced(v: Value, old: Value, now: Value, lists: Lists, depth: number)
   if (d.tag === (old as unknown as Data).tag && !list) return v;
   let fields: Value[] | null = null;
   d.fields.forEach((x, i) => { const y = replaced(x, old, now, lists, list && i === d.fields.length - 1 ? depth : depth + 1); if (y !== x) (fields ??= d.fields.slice())[i] = y; });
-  return fields ? ({ ...d, fields } as unknown as Value) : v;
+  return fields ? ({ tag: d.tag, fields } as unknown as Value) : v;
 }
 // The part at steps, a list's items walked to along its cons cells when
 // that's how lists are (partAt makes the whole list first).
@@ -227,7 +227,7 @@ export function changeAt(v: Value, steps: Step[], change: (part: Value) => Value
     if (inner === d.fields[s.field]) return v;
     const fields = d.fields.slice();
     fields[s.field] = inner;
-    return { ...d, fields } as unknown as Value;
+    return { tag: d.tag, fields } as unknown as Value;
   }
   const xs = lists.from(v);
   if (!(s.item >= 0 && s.item < xs.length)) return v;
@@ -617,7 +617,7 @@ export class Cells {
         return ys.some((y, i) => y !== xs[i]) ? lists.to(ys) : x;
       }
       const d = x as unknown as Data, fields = d.fields.map(out);
-      return fields.some((f, i) => f !== d.fields[i]) ? ({ ...d, fields } as unknown as Value) : x;
+      return fields.some((f, i) => f !== d.fields[i]) ? ({ tag: d.tag, fields } as unknown as Value) : x;
     };
     return out(v);
   }
