@@ -5,7 +5,7 @@
 // adds a hole arm to every case analysis that needs one.
 
 import type { Code, Id, Node, NodeData, NodeOf } from "../model.ts";
-import { children, freshId, ownerOfTypeParts, portsOf, useNode } from "../model.ts";
+import { children, freshId, ownerOfTypeParts, portsOf } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import type { Filling } from "./infer.ts";
 import { INT, NUMBER, STRING, type Type } from "./types.ts";
@@ -145,22 +145,23 @@ export function fillHole(code: Code, names: Names, hole: Id, f: Filling, library
       data = { kind: "lambda", params, body: add({ kind: "hole" }) };
       break;
     }
-    // A use of a definition with results (RESULTS.md): `x, y = polar(□, □)`,
-    // its inputs holes, its results bound by their names in a body still
-    // to write.
+    // A use of a definition with results (RESULTS.md), written as L211
+    // decided: the use gives its results itself, with no binds or body.
+    // It is let-bound, so the code after it is still to write: `x =
+    // f(□)` for one result, named after it, and for several their tuple,
+    // `polar result = polar(□, □)`, read by each port's name
+    // (`polar result.x`). Its inputs are holes.
     case "use": {
       const d = code.nodes[f.target] as NodeOf<"def">;
       const ports = portsOf(code.nodes, d.id), inputs = ports?.condition ? ports.inputs : (code.nodes[d.body!] as NodeOf<"lambda">).params, results = ports?.condition ? ports.results : [];
       const taken = namesInScope(code, names, hole);
       const given: Record<string, Id> = Object.fromEntries(inputs.map((p) => [p, add({ kind: "hole" })]));
       given.out = add({ kind: "ref", target: TRUE });
-      const binds = Object.fromEntries(results.map((r) => {
-        const b = add({ kind: "binder" });
-        nn[b] = unique({ ...library, ...names }[r] ?? "result", taken);
-        taken.add(nn[b]);
-        return [r, b];
-      }));
-      data = useNode(add, f.target, given, binds, add({ kind: "hole" }));
+      const use = add({ kind: "call", fn: add({ kind: "ref", target: f.target }), given } as NodeData);
+      const b = add({ kind: "binder" });
+      const all = { ...library, ...names };
+      nn[b] = unique(results.length === 1 ? all[results[0]] ?? "result" : `${all[f.target] ?? "its"} result`, taken);
+      data = { kind: "call", fn: add({ kind: "lambda", params: [b], body: add({ kind: "hole" }) }), args: [use] };
       break;
     }
     // A match on values (L164c): one arm, its value a literal of the

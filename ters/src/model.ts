@@ -36,10 +36,11 @@ export type Node =
   // `results`: the parameters it gives, in order, when given the others
   // (RESULTS.md): a predicate read as a function with several results.
   // `cost`: a way's own declared cost (WAYS.md "Costs"), 1 when not given.
-  // `direction`: this definition, with results, computes another direction
-  // of that one (POLAR.md): the same ports in the same order, so a solve of
-  // that one given this one's inputs is a solve of this one.
-  | { id: Id; kind: "def"; body: Id | null; way?: Id; cost?: number; direction?: Id }
+  // A `way` naming a definition with results rather than a field is a
+  // direction of that relation (POLAR.md, WAYS.md "A direction is a way of
+  // its relation", L182c2): the same ports in the same order, so a solve of
+  // it given this one's inputs is a solve of this one.
+  | { id: Id; kind: "def"; body: Id | null; way?: Id; cost?: number }
   | { id: Id; kind: "builtin"; op: string }
   // A hole: an expression not written yet. Programs with holes still render,
   // hash and can be edited; they just can't be evaluated through the hole.
@@ -213,6 +214,25 @@ function unpolarInOrder(nodes: Record<Id, unknown>): void {
     if (n.kind === "call" && n.given && n.binds && f?.kind === "ref" && f.target === "std.trig.trig.unpolar") nodes[id] = { ...n, given: re(n.given), binds: re(n.binds) };
   }
 }
+// A definition that was a `direction` of a relation is a way of it now.
+function directionsAsWays(nodes: Record<Id, unknown>): void {
+  for (const [id, x] of Object.entries(nodes)) {
+    const n = x as { kind?: string; direction?: Id };
+    if (n.kind !== "def" || !n.direction) continue;
+    const { direction, ...rest } = n;
+    nodes[id] = { ...rest, way: direction };
+  }
+}
+// The relation a definition is a direction of (a way whose target is a
+// definition), or the field it is a way of (any other target).
+export const directionOf = (nodes: Record<Id, Node>, d: Id): Id | undefined => {
+  const n = nodes[d];
+  return n?.kind === "def" && n.way && nodes[n.way]?.kind === "def" ? n.way : undefined;
+};
+export const fieldWayOf = (nodes: Record<Id, Node>, d: Id): Id | undefined => {
+  const n = nodes[d];
+  return n?.kind === "def" && n.way && nodes[n.way]?.kind !== "def" ? n.way : undefined;
+};
 // A step that needs to know the library's definitions (a use's ports) is
 // given them here by src/lang/library.ts once the library is built; until
 // then it leaves the nodes as they are, which is a shape it still reads.
@@ -222,6 +242,7 @@ export const SHAPE_STEPS: { what: string; step: (nodes: Record<Id, unknown>) => 
   { what: "unpolar's ports in the order of its function, (x, y) → length, angle (L128d3)", step: unpolarInOrder },
   { what: "a use gives its produced ports, its body a let of them (L211g)", step: (nodes) => shapeHooks.usesGiveTheirPorts?.(nodes) },
   { what: "a definition's results are its lambda's, among its parameters (L225d)", step: resultsOnTheLambda },
+  { what: "a direction of a relation is a way of it (L182c2)", step: directionsAsWays },
 ];
 export const SHAPE = SHAPE_STEPS.length;
 export const toTodaysShape = (nodes: Record<Id, unknown>, from = 0): void => { for (const s of SHAPE_STEPS.slice(from)) s.step(nodes); };
@@ -271,7 +292,7 @@ export function mapIds(n: Node, f: (id: Id) => Id): Node {
     case "ref": return { ...n, id: f(n.id), target: f(n.target) };
     case "call": return n.given ? { ...n, id: f(n.id), fn: f(n.fn), given: rec(n.given), ...(n.binds && { binds: rec(n.binds) }), ...(n.body !== undefined && { body: f(n.body) }) } : { ...n, id: f(n.id), fn: f(n.fn), args: n.args.map(f) };
     case "lambda": return { ...n, id: f(n.id), params: n.params.map(f), body: f(n.body), ...(n.results ? { results: n.results.map(f) } : {}) };
-    case "def": return { ...n, id: f(n.id), body: n.body === null ? null : f(n.body), ...(n.direction ? { direction: f(n.direction) } : {}) };
+    case "def": return { ...n, id: f(n.id), body: n.body === null ? null : f(n.body), ...(n.way ? { way: f(n.way) } : {}) };
     case "typedef": return { ...n, id: f(n.id), params: n.params.map(f), variants: n.variants.map(f), ...(n.row ? { row: n.row.map(f) } : {}) };
     case "variant": return { ...n, id: f(n.id), fields: n.fields.map(f), ...(n.params ? { params: n.params.map(f) } : {}) };
     case "field": return { ...n, id: f(n.id), type: f(n.type), ...(n.same ? { same: f(n.same) } : {}) };
@@ -307,7 +328,7 @@ export const SCHEMA: Schema = {
   // `results` names the parts of the tuple the body gives: binders, so
   // children, which the hash leaves out (the body's tuple says how many).
   lambda: { params: "child", body: "child", results: "child" },
-  def: { body: "child", way: "ref", cost: "meaning", direction: "ref" },
+  def: { body: "child", way: "ref", cost: "meaning" },
   builtin: { op: "meaning" },
   hole: {},
   typedef: { params: "child", variants: "child", effect: "meaning", interface: "meaning", unique: "meaning", row: "ref" },

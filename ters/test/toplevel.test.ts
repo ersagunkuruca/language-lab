@@ -953,12 +953,12 @@ test("a relation's other direction: the same ports, others given, a hole for how
   const back = s.ok(Top.addDirection(s.code, s.names, polar, [0, 1], ""));
   const d = s.code.nodes[back] as NodeOf<"def">;
   assert.equal(s.names[back], "polar for length, angle");
-  assert.equal(d.direction, polar);
+  assert.equal(d.way, polar);
   const ps = (s.code.nodes[d.body!] as NodeOf<"lambda">).params;
   assert.deepEqual(ps.map((p) => s.names[p]), ["length", "angle", "x", "y"]);
   assert.deepEqual((s.code.nodes[d.body!] as NodeOf<"lambda">).results, ps.slice(0, 2));
   s.ok(Top.dropDirection(s.code, s.names, back));
-  assert.equal((s.code.nodes[back] as NodeOf<"def">).direction, undefined);
+  assert.equal((s.code.nodes[back] as NodeOf<"def">).way, undefined);
   s.ok(Top.newDefinition(s.code, s.names, "plain", { kind: "function", params: ["a"] }));
   const plain = s.def("plain");
   assert.match(s.refused(Top.addDirection(s.code, s.names, plain, [0], "")), /only a definition with results/);

@@ -14,7 +14,7 @@ import blocksStyle from "../ters/styles/blocks.json" with { type: "json" };
 import mathStyle from "../ters/styles/math.json" with { type: "json" };
 import plainStyle from "../ters/styles/plain.json" with { type: "json" };
 import lispStyle from "../ters/styles/lisp.json" with { type: "json" };
-import { children, freshId, ID_PATTERN, isCall, isUse, portsOf, useTarget, type Call, merge, parentOf, resolveRefs, subtree, type Code, type Id, type Node, type NodeOf } from "../ters/src/model.ts";
+import { children, directionOf, freshId, ID_PATTERN, isCall, isUse, portsOf, useTarget, type Call, merge, parentOf, resolveRefs, subtree, type Code, type Id, type Node, type NodeOf } from "../ters/src/model.ts";
 import { INT } from "../ters/src/lang/types.ts";
 import { layer, type Comments, type Hints, type Names, type Presentation, type Style } from "../ters/src/presentation.ts";
 import { implementationOps, isOperation } from "../ters/src/lang/records.ts";
@@ -1083,7 +1083,7 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
     // Its other directions (POLAR.md, E210b): definitions over the same
     // ports that give others of them, used by a solve given those.
     if (rs.length) {
-      const dirs = doc.code.defs.filter((d) => (node(d) as NodeOf<"def">).direction === id);
+      const dirs = doc.code.defs.filter((d) => directionOf(doc.code.nodes, d) === id);
       const want = new Set(fnBody.params.map((q, i) => (rs.includes(q) ? -1 : i)).filter((i) => i >= 0));
       const ticks = fnBody.params.map((q, i) => {
         const cb = h("input", { type: "checkbox", id: `f-dir-${i}`, checked: want.has(i) }) as HTMLInputElement;
@@ -1098,10 +1098,11 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
     }
   }
   // A direction of a relation (E210b): which, and back to ordinary.
-  if (n.kind === "def" && n.direction) {
+  const rel = directionOf(doc.code.nodes, id);
+  if (n.kind === "def" && rel) {
     const r = Top.dropDirection(doc.code, doc.names.short, id);
-    out.append(h("div", { class: "sub-head" }, "A direction of ", pick(n.direction, names[n.direction] ?? "a relation"), " · code.json"),
-      h("p", { class: "hint" }, `The same ports as ${names[n.direction] ?? "it"}, in the same order: a solve of it given this one's inputs calls this instead of searching. They must agree; the law tests check it.`),
+    out.append(h("div", { class: "sub-head" }, "A direction of ", pick(rel, names[rel] ?? "a relation"), " · code.json"),
+      h("p", { class: "hint" }, `The same ports as ${names[rel] ?? "it"}, in the same order: a solve of it given this one's inputs calls this instead of searching. They must agree; the law tests check it.`),
       h("div", { class: "acts" }, edit("Make it ordinary", "No longer a direction: a definition like any other, with its results", r, () => runTop(info, r))));
   }
 
