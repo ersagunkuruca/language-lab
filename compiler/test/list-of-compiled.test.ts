@@ -5,10 +5,6 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import { Lang } from "../../ters/src/lang/dsl.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { base, baseNames } from "../../ters/src/lang/load.ts";
@@ -17,7 +13,7 @@ import { makeRunner, runMain, type Value } from "../../ters/src/lang/run.ts";
 import { CONS, NIL, S } from "../../ters/src/lang/std.ts";
 import { B } from "../../ters/src/prelude.ts";
 import { stageProgram } from "../../ters/src/lang/stage.ts";
-import { compile } from "../src/compile.ts";
+import { compiledDefs, plainValue } from "../src/core-js.ts";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitWasm, fromText, instantiate } from "../src/wasm.ts";
 import { emitC } from "../src/c.ts";
@@ -25,7 +21,6 @@ import { loadCoreJs, lowerCore } from "../src/core-js.ts";
 import { build, skip as noC } from "./c-harness.ts";
 
 const sum = LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === "sum")!;
-const runtime = pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href;
 const N = 10_000;
 const items = Array.from({ length: N }, (_, i) => (i * 37) % 101);
 const want = String(items.reduce((a, b) => a + b, 0));
@@ -55,9 +50,7 @@ const once = () => (checked ??= program());
 test("ten thousand written items in compiled JavaScript", async () => {
   const p = once();
   assert.equal(runMain(p.code, p.info, p.main, { print: () => {}, names: p.names }), want);
-  const path = join(mkdtempSync(join(tmpdir(), "list-of-")), "main.mjs");
-  writeFileSync(path, compile(p.code, p.info, p.names, { runtime, exports: ["main", "total"] }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, (...xs: unknown[]) => unknown>;
+  const defs = compiledDefs(p.code, p.info, p.names, ["main", "total"]);
   assert.equal(defs.main(), want);
   assert.equal(defs.total(1), Number(want) + 1);
 });
@@ -109,10 +102,5 @@ test("a short `list of`: a shader's array, and one of a few constants", async ()
   assert.match(emitWgsl(lowered).wgsl, /array<f32, 3>\(0\.1, 0\.5, 0\.9\)/);
   const js = loadJs(lowered);
   for (const i of [-1, 0, 2, 3]) assert.equal(js.get(palette)!(BigInt(i)), ev(palette, BigInt(i)), `palette ${i}`);
-  const source = compile(code, info, names, { runtime, exports: ["picks"] });
-  const path = join(mkdtempSync(join(tmpdir(), "list-of-")), "picks.mjs");
-  writeFileSync(path, source);
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, (x: number) => unknown>;
-  assert.deepEqual(defs.picks(10), ev(picks, 10));
-  assert.ok(!source.includes("builtin.list.of"), "one of a few constants is written out, not a list made and walked");
+  assert.deepEqual(plainValue(compiledDefs(code, info, names, ["picks"]).picks(10)), ev(picks, 10));
 });

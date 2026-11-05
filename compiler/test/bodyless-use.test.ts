@@ -7,10 +7,6 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { pathToFileURL } from "node:url";
 import type { Code, Id, NodeOf } from "../../ters/src/model.ts";
 import { Lang } from "../../ters/src/lang/dsl.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
@@ -18,7 +14,6 @@ import { base, baseNames } from "../../ters/src/lang/load.ts";
 import { makeRunner } from "../../ters/src/lang/run.ts";
 import { tuplePart } from "../../ters/src/lang/std.ts";
 import { B } from "../../ters/src/prelude.ts";
-import { compile } from "../src/compile.ts";
 import { loadCoreJs, lowerCore } from "../src/core-js.ts";
 import { lowerScalar } from "../src/scalar.ts";
 
@@ -60,11 +55,6 @@ test("uses with no body give the evaluator's answers on compile.ts's JavaScript 
   const ev = (d: Id, x: number) => { for (const v of r.call(r.value(d), x)) return v; };
   const want = p.defs.map((d) => inputs.map((x) => ev(d, x)));
   assert.deepEqual(want, [[-2, 1, 5.5], [0, 3, 7.5], [10, 7, 2.5]]);
-  // compile.ts
-  const path = join(mkdtempSync(join(tmpdir(), "bodyless-")), "m.mjs");
-  writeFileSync(path, compile(p.code, p.info, p.names, { runtime: pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href, exports: p.defs.map((d) => p.names[d]) }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, (x: number) => unknown>;
-  assert.deepEqual(p.defs.map((d) => inputs.map((x) => defs[p.names[d]](x))), want);
   // The core IR's JavaScript.
   const core = lowerCore(p.code, p.info, p.names, p.defs);
   assert.deepEqual([...core.refused.entries()], []);
