@@ -70,10 +70,12 @@ export function stepsOf(k: Lang, effect: Id): Steps {
   const v: Record<Id, Id> = {};
   ops.forEach((op) => (v[op] = T.v[opNames[op]]));
   const steps = k.def(`steps of ${effectName}`);
-  k.define(steps, k.fn(["computation"], (c) => k.handle(k.call(c), ops.map((op) => {
+  // done(value) made inside the handler, not by a case for the normal
+  // finish: the same steps, and what every target lowers already.
+  k.define(steps, k.fn(["computation"], (c) => k.handle(k.call(T.v.done, k.call(c)), ops.map((op) => {
     const o = k.code.nodes[op] as NodeOf<"variant">;
     const names = [...o.fields.map((f) => k.names[f] ?? "x"), "rest"];
     return { variant: op, names, body: (xs: Id[]) => k.call(v[op], ...xs) };
-  }), ["value", (x) => k.call(T.v.done, x)])));
+  }))));
   return { type: T.def, v, done: T.v.done, steps };
 }
