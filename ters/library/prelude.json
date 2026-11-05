@@ -107277,6 +107277,402 @@
         ],
         "body": "@cts9af36tq0a7hq767qovbqpng:3"
       },
+      "@f9li0g0qfd78qcc0aslrcmnosm": {
+        "id": "@f9li0g0qfd78qcc0aslrcmnosm",
+        "kind": "def",
+        "body": "@f9li0g0qfd78qcc0aslrcmnosm:1"
+      },
+      "@f9li0g0qfd78qcc0aslrcmnosm:2": {
+        "id": "@f9li0g0qfd78qcc0aslrcmnosm:2",
+        "kind": "binder"
+      },
+      "@f9li0g0qfd78qcc0aslrcmnosm:3": {
+        "id": "@f9li0g0qfd78qcc0aslrcmnosm:3",
+        "kind": "binder"
+      },
+      "@f9li0g0qfd78qcc0aslrcmnosm:4": {
+        "id": "@f9li0g0qfd78qcc0aslrcmnosm:4",
+        "kind": "binder"
+      },
+      "@f9li0g0qfd78qcc0aslrcmnosm:31": {
+        "id": "@f9li0g0qfd78qcc0aslrcmnosm:31",
+        "kind": "lit",
+        "value": "\"\\\n\u0001é"
+      },
+      "@f9li0g0qfd78qcc0aslrcmnosm:29": {
+        "id": "@f9li0g0qfd78qcc0aslrcmnosm:29",
+        "kind": "ref",
+        "target": "builtin.list.of"
+      },
+      "@f9li0g0qfd78qcc0aslrcmnosm:30": {
+        "id": "@f9li0g0qfd78qcc0aslrcmnosm:30",
+        "kind": "ref",
+        "target": "@f9li0g0qfd78qcc0aslrcmnosm:3"
+      },
+      "@f9li0g0qfd78qcc0aslrcmnosm:32": {
+        "id": "@f9li0g0qfd78qcc0aslrcmnosm:32",
+        "kind": "ref",
+        "target": "@f9li0g0qfd78qcc0aslrcmnosm:4"
+      },
+      "@f9li0g0qfd78qcc0aslrcmnosm:28": {
+        "id": "@f9li0g0qfd78qcc0aslrcmnosm:28",
+        "kind": "call",
+        "fn": "@f9li0g0qfd78qcc0aslrcmnosm:29",
+        "args": [
+          "@f9li0g0qfd78qcc0aslrcmnosm:30",
+          "@f9li0g0qfd78qcc0aslrcmnosm:31",
+          "@f9li0g0qfd78qcc0aslrcmnosm:32"
+        ]
+      },
+      "@f9li0g0qfd78qcc0aslrcmnosm:33": {
+        "id": "@f9li0g0qfd78qcc0aslrcmnosm:33",
+        "kind": "lit",
+        "value": ""
+      },
+      "@f9li0g0qfd78qcc0aslrcmnosm:27": {
+        "id": "@f9li0g0qfd78qcc0aslrcmnosm:27",
+        "kind": "ref",
+        "target": "builtin.text.joinAll"
+      },
+      "@f9li0g0qfd78qcc0aslrcmnosm:26": {
+        "id": "@f9li0g0qfd78qcc0aslrcmnosm:26",
+        "kind": "call",
+        "fn": "@f9li0g0qfd78qcc0aslrcmnosm:27",
+        "args": [
+          "@f9li0g0qfd78qcc0aslrcmnosm:28",
+          "@f9li0g0qfd78qcc0aslrcmnosm:33"
+        ]
+      },
+      "@f9li0g0qfd78qcc0aslrcmnosm:25": {
+        "id": "@f9li0g0qfd78qcc0aslrcmnosm:25",
+        "kind": "ref",
+        "target": "std.json.json text"
+      },
+      "@f9li0g0qfd78qcc0aslrcmnosm:24": {
+        "id": "@f9li0g0qfd78qcc0aslrcmnosm:24",
+        "kind": "call",
+        "fn": "@f9li0g0qfd78qcc0aslrcmnosm:25",
+        "args": [
+          "@f9li0g0qfd78qcc0aslrcmnosm:26"
+        ]
+      },
+      "@f9li0g0qfd78qcc0aslrcmnosm:22": {
+        "id": "@f9li0g0qfd78qcc0aslrcmnosm:22",
+        "kind": "ref",
+        "target": "builtin.list.of"
+      },
+      "@f9li0g0qfd78qcc0aslrcmnosm:23": {
+        "id": "@f9li0g0qfd78qcc0aslrcmnosm:23",
+        "kind": "ref",
+        "target": "@f9li0g0qfd78qcc0aslrcmnosm:2"
+      },
+      "@f9li0g0qfd78qcc0aslrcmnosm:21": {
+        "id": "@f9li0g0qfd78qcc0aslrcmnosm:21",
+        "kind": "call",
+        "fn": "@f9li0g0qfd78qcc0aslrcmnosm:22",
+        "args": [
+          "@f9li0g0qfd78qcc0aslrcmnosm:23",
+          "@f9li0g0qfd78qcc0aslrcmnosm:24"
+        ]
+      },
+      "@f9li0g0qfd78qcc0aslrcmnosm:20": {
+        "id": "@f9li0g0qfd78qcc0aslrcmnosm:20",
+        "kind": "ref",
+        "target": "std.json.json list"
+      },
+      "@f9li0g0qfd78qcc0aslrcmnosm:19": {
+        "id": "@f9li0g0qfd78qcc0aslrcmnosm:19",
+        "kind": "call",
+        "fn": "@f9li0g0qfd78qcc0aslrcmnosm:20",
+        "args": [
+          "@f9li0g0qfd78qcc0aslrcmnosm:21"
+        ]
+      },
+      "@f9li0g0qfd78qcc0aslrcmnosm:7": {
+        "id": "@f9li0g0qfd78qcc0aslrcmnosm:7",
+        "kind": "binder"
+      },
+      "@f9li0g0qfd78qcc0aslrcmnosm:15": {
+        "id": "@f9li0g0qfd78qcc0aslrcmnosm:15",
+        "kind": "ref",
+        "target": "@i3605cgohlm9dad70qrhpqq5hv"
+      },
+      "@f9li0g0qfd78qcc0aslrcmnosm:16": {
+        "id": "@f9li0g0qfd78qcc0aslrcmnosm:16",
+        "kind": "ref",
+        "target": "@f9li0g0qfd78qcc0aslrcmnosm:7"
+      },
+      "@f9li0g0qfd78qcc0aslrcmnosm:14": {
+        "id": "@f9li0g0qfd78qcc0aslrcmnosm:14",
+        "kind": "call",
+        "fn": "@f9li0g0qfd78qcc0aslrcmnosm:15",
+        "args": [
+          "@f9li0g0qfd78qcc0aslrcmnosm:16"
+        ]
+      },
+      "@f9li0g0qfd78qcc0aslrcmnosm:13": {
+        "id": "@f9li0g0qfd78qcc0aslrcmnosm:13",
+        "kind": "ref",
+        "target": "@cioc8klncm8kthdbfunn9g22dd"
+      },
+      "@f9li0g0qfd78qcc0aslrcmnosm:12": {
+        "id": "@f9li0g0qfd78qcc0aslrcmnosm:12",
+        "kind": "call",
+        "fn": "@f9li0g0qfd78qcc0aslrcmnosm:13",
+        "args": [
+          "@f9li0g0qfd78qcc0aslrcmnosm:14"
+        ]
+      },
+      "@f9li0g0qfd78qcc0aslrcmnosm:11": {
+        "id": "@f9li0g0qfd78qcc0aslrcmnosm:11",
+        "kind": "ref",
+        "target": "builtin.equal"
+      },
+      "@f9li0g0qfd78qcc0aslrcmnosm:17": {
+        "id": "@f9li0g0qfd78qcc0aslrcmnosm:17",
+        "kind": "ref",
+        "target": "@f9li0g0qfd78qcc0aslrcmnosm:7"
+      },
+      "@f9li0g0qfd78qcc0aslrcmnosm:10": {
+        "id": "@f9li0g0qfd78qcc0aslrcmnosm:10",
+        "kind": "call",
+        "fn": "@f9li0g0qfd78qcc0aslrcmnosm:11",
+        "args": [
+          "@f9li0g0qfd78qcc0aslrcmnosm:12",
+          "@f9li0g0qfd78qcc0aslrcmnosm:17"
+        ]
+      },
+      "@f9li0g0qfd78qcc0aslrcmnosm:18": {
+        "id": "@f9li0g0qfd78qcc0aslrcmnosm:18",
+        "kind": "lit",
+        "value": "json read(json printed(value)) is value"
+      },
+      "@f9li0g0qfd78qcc0aslrcmnosm:9": {
+        "id": "@f9li0g0qfd78qcc0aslrcmnosm:9",
+        "kind": "ref",
+        "target": "std.check.expect"
+      },
+      "@f9li0g0qfd78qcc0aslrcmnosm:8": {
+        "id": "@f9li0g0qfd78qcc0aslrcmnosm:8",
+        "kind": "call",
+        "fn": "@f9li0g0qfd78qcc0aslrcmnosm:9",
+        "args": [
+          "@f9li0g0qfd78qcc0aslrcmnosm:10",
+          "@f9li0g0qfd78qcc0aslrcmnosm:18"
+        ]
+      },
+      "@f9li0g0qfd78qcc0aslrcmnosm:6": {
+        "id": "@f9li0g0qfd78qcc0aslrcmnosm:6",
+        "kind": "lambda",
+        "params": [
+          "@f9li0g0qfd78qcc0aslrcmnosm:7"
+        ],
+        "body": "@f9li0g0qfd78qcc0aslrcmnosm:8"
+      },
+      "@f9li0g0qfd78qcc0aslrcmnosm:5": {
+        "id": "@f9li0g0qfd78qcc0aslrcmnosm:5",
+        "kind": "call",
+        "fn": "@f9li0g0qfd78qcc0aslrcmnosm:6",
+        "args": [
+          "@f9li0g0qfd78qcc0aslrcmnosm:19"
+        ]
+      },
+      "@f9li0g0qfd78qcc0aslrcmnosm:1": {
+        "id": "@f9li0g0qfd78qcc0aslrcmnosm:1",
+        "kind": "lambda",
+        "params": [
+          "@f9li0g0qfd78qcc0aslrcmnosm:2",
+          "@f9li0g0qfd78qcc0aslrcmnosm:3",
+          "@f9li0g0qfd78qcc0aslrcmnosm:4"
+        ],
+        "body": "@f9li0g0qfd78qcc0aslrcmnosm:5"
+      },
+      "@hi608ec2b5l5hig3vbdrh088e2": {
+        "id": "@hi608ec2b5l5hig3vbdrh088e2",
+        "kind": "def",
+        "body": "@hi608ec2b5l5hig3vbdrh088e2:1"
+      },
+      "@hi608ec2b5l5hig3vbdrh088e2:2": {
+        "id": "@hi608ec2b5l5hig3vbdrh088e2:2",
+        "kind": "binder"
+      },
+      "@hi608ec2b5l5hig3vbdrh088e2:21": {
+        "id": "@hi608ec2b5l5hig3vbdrh088e2:21",
+        "kind": "binder"
+      },
+      "@hi608ec2b5l5hig3vbdrh088e2:24": {
+        "id": "@hi608ec2b5l5hig3vbdrh088e2:24",
+        "kind": "lit",
+        "value": "row"
+      },
+      "@hi608ec2b5l5hig3vbdrh088e2:28": {
+        "id": "@hi608ec2b5l5hig3vbdrh088e2:28",
+        "kind": "lit",
+        "value": ",\"\n"
+      },
+      "@hi608ec2b5l5hig3vbdrh088e2:26": {
+        "id": "@hi608ec2b5l5hig3vbdrh088e2:26",
+        "kind": "ref",
+        "target": "builtin.concat"
+      },
+      "@hi608ec2b5l5hig3vbdrh088e2:27": {
+        "id": "@hi608ec2b5l5hig3vbdrh088e2:27",
+        "kind": "ref",
+        "target": "@hi608ec2b5l5hig3vbdrh088e2:21"
+      },
+      "@hi608ec2b5l5hig3vbdrh088e2:25": {
+        "id": "@hi608ec2b5l5hig3vbdrh088e2:25",
+        "kind": "call",
+        "fn": "@hi608ec2b5l5hig3vbdrh088e2:26",
+        "args": [
+          "@hi608ec2b5l5hig3vbdrh088e2:27",
+          "@hi608ec2b5l5hig3vbdrh088e2:28"
+        ]
+      },
+      "@hi608ec2b5l5hig3vbdrh088e2:23": {
+        "id": "@hi608ec2b5l5hig3vbdrh088e2:23",
+        "kind": "ref",
+        "target": "builtin.list.of"
+      },
+      "@hi608ec2b5l5hig3vbdrh088e2:29": {
+        "id": "@hi608ec2b5l5hig3vbdrh088e2:29",
+        "kind": "ref",
+        "target": "@hi608ec2b5l5hig3vbdrh088e2:21"
+      },
+      "@hi608ec2b5l5hig3vbdrh088e2:22": {
+        "id": "@hi608ec2b5l5hig3vbdrh088e2:22",
+        "kind": "call",
+        "fn": "@hi608ec2b5l5hig3vbdrh088e2:23",
+        "args": [
+          "@hi608ec2b5l5hig3vbdrh088e2:24",
+          "@hi608ec2b5l5hig3vbdrh088e2:25",
+          "@hi608ec2b5l5hig3vbdrh088e2:29"
+        ]
+      },
+      "@hi608ec2b5l5hig3vbdrh088e2:20": {
+        "id": "@hi608ec2b5l5hig3vbdrh088e2:20",
+        "kind": "lambda",
+        "params": [
+          "@hi608ec2b5l5hig3vbdrh088e2:21"
+        ],
+        "body": "@hi608ec2b5l5hig3vbdrh088e2:22"
+      },
+      "@hi608ec2b5l5hig3vbdrh088e2:18": {
+        "id": "@hi608ec2b5l5hig3vbdrh088e2:18",
+        "kind": "ref",
+        "target": "@9902gjnadddgv3jrh6ir29nf4q"
+      },
+      "@hi608ec2b5l5hig3vbdrh088e2:19": {
+        "id": "@hi608ec2b5l5hig3vbdrh088e2:19",
+        "kind": "ref",
+        "target": "@hi608ec2b5l5hig3vbdrh088e2:2"
+      },
+      "@hi608ec2b5l5hig3vbdrh088e2:17": {
+        "id": "@hi608ec2b5l5hig3vbdrh088e2:17",
+        "kind": "call",
+        "fn": "@hi608ec2b5l5hig3vbdrh088e2:18",
+        "args": [
+          "@hi608ec2b5l5hig3vbdrh088e2:19",
+          "@hi608ec2b5l5hig3vbdrh088e2:20"
+        ]
+      },
+      "@hi608ec2b5l5hig3vbdrh088e2:5": {
+        "id": "@hi608ec2b5l5hig3vbdrh088e2:5",
+        "kind": "binder"
+      },
+      "@hi608ec2b5l5hig3vbdrh088e2:13": {
+        "id": "@hi608ec2b5l5hig3vbdrh088e2:13",
+        "kind": "ref",
+        "target": "@e2mg6v3g7lcjgim6558dmg1o7f"
+      },
+      "@hi608ec2b5l5hig3vbdrh088e2:14": {
+        "id": "@hi608ec2b5l5hig3vbdrh088e2:14",
+        "kind": "ref",
+        "target": "@hi608ec2b5l5hig3vbdrh088e2:5"
+      },
+      "@hi608ec2b5l5hig3vbdrh088e2:12": {
+        "id": "@hi608ec2b5l5hig3vbdrh088e2:12",
+        "kind": "call",
+        "fn": "@hi608ec2b5l5hig3vbdrh088e2:13",
+        "args": [
+          "@hi608ec2b5l5hig3vbdrh088e2:14"
+        ]
+      },
+      "@hi608ec2b5l5hig3vbdrh088e2:11": {
+        "id": "@hi608ec2b5l5hig3vbdrh088e2:11",
+        "kind": "ref",
+        "target": "@cts9af36tq0a7hq767qovbqpng"
+      },
+      "@hi608ec2b5l5hig3vbdrh088e2:10": {
+        "id": "@hi608ec2b5l5hig3vbdrh088e2:10",
+        "kind": "call",
+        "fn": "@hi608ec2b5l5hig3vbdrh088e2:11",
+        "args": [
+          "@hi608ec2b5l5hig3vbdrh088e2:12"
+        ]
+      },
+      "@hi608ec2b5l5hig3vbdrh088e2:9": {
+        "id": "@hi608ec2b5l5hig3vbdrh088e2:9",
+        "kind": "ref",
+        "target": "builtin.equal"
+      },
+      "@hi608ec2b5l5hig3vbdrh088e2:15": {
+        "id": "@hi608ec2b5l5hig3vbdrh088e2:15",
+        "kind": "ref",
+        "target": "@hi608ec2b5l5hig3vbdrh088e2:5"
+      },
+      "@hi608ec2b5l5hig3vbdrh088e2:8": {
+        "id": "@hi608ec2b5l5hig3vbdrh088e2:8",
+        "kind": "call",
+        "fn": "@hi608ec2b5l5hig3vbdrh088e2:9",
+        "args": [
+          "@hi608ec2b5l5hig3vbdrh088e2:10",
+          "@hi608ec2b5l5hig3vbdrh088e2:15"
+        ]
+      },
+      "@hi608ec2b5l5hig3vbdrh088e2:16": {
+        "id": "@hi608ec2b5l5hig3vbdrh088e2:16",
+        "kind": "lit",
+        "value": "csv rows(csv printed(rows)) is rows"
+      },
+      "@hi608ec2b5l5hig3vbdrh088e2:7": {
+        "id": "@hi608ec2b5l5hig3vbdrh088e2:7",
+        "kind": "ref",
+        "target": "std.check.expect"
+      },
+      "@hi608ec2b5l5hig3vbdrh088e2:6": {
+        "id": "@hi608ec2b5l5hig3vbdrh088e2:6",
+        "kind": "call",
+        "fn": "@hi608ec2b5l5hig3vbdrh088e2:7",
+        "args": [
+          "@hi608ec2b5l5hig3vbdrh088e2:8",
+          "@hi608ec2b5l5hig3vbdrh088e2:16"
+        ]
+      },
+      "@hi608ec2b5l5hig3vbdrh088e2:4": {
+        "id": "@hi608ec2b5l5hig3vbdrh088e2:4",
+        "kind": "lambda",
+        "params": [
+          "@hi608ec2b5l5hig3vbdrh088e2:5"
+        ],
+        "body": "@hi608ec2b5l5hig3vbdrh088e2:6"
+      },
+      "@hi608ec2b5l5hig3vbdrh088e2:3": {
+        "id": "@hi608ec2b5l5hig3vbdrh088e2:3",
+        "kind": "call",
+        "fn": "@hi608ec2b5l5hig3vbdrh088e2:4",
+        "args": [
+          "@hi608ec2b5l5hig3vbdrh088e2:17"
+        ]
+      },
+      "@hi608ec2b5l5hig3vbdrh088e2:1": {
+        "id": "@hi608ec2b5l5hig3vbdrh088e2:1",
+        "kind": "lambda",
+        "params": [
+          "@hi608ec2b5l5hig3vbdrh088e2:2"
+        ],
+        "body": "@hi608ec2b5l5hig3vbdrh088e2:3"
+      },
       "@n4rdeot09oefmif8tpa05i7ve7": {
         "id": "@n4rdeot09oefmif8tpa05i7ve7",
         "kind": "def",
@@ -120841,6 +121237,8 @@
       "@gt0dd33r0dlugjf9p7t1dj1gim",
       "@s934i1reb2bh43k7fp5liro95d",
       "@hf37ab29f2fcdhqlbvht0emvl8",
+      "@f9li0g0qfd78qcc0aslrcmnosm",
+      "@hi608ec2b5l5hig3vbdrh088e2",
       "@f5elide8cqkud5fq2c0qjdfm2u",
       "@kjnioeormvpnbitto13ugdqa5g",
       "@tme5kko5ettktqv6cfn7eims1j",
@@ -141117,6 +141515,81 @@
       },
       "plain": []
     },
+    "@f9li0g0qfd78qcc0aslrcmnosm": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.json",
+            "args": []
+          },
+          {
+            "t": "con",
+            "id": "type.string",
+            "args": []
+          },
+          {
+            "t": "con",
+            "id": "type.string",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.unit",
+          "args": []
+        },
+        "eff": {
+          "effs": [
+            "effect.diverge",
+            "std.abort",
+            "std.check"
+          ],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
+    "@hi608ec2b5l5hig3vbdrh088e2": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.list",
+            "args": [
+              {
+                "t": "con",
+                "id": "type.string",
+                "args": []
+              }
+            ]
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.unit",
+          "args": []
+        },
+        "eff": {
+          "effs": [
+            "std.abort",
+            "std.check"
+          ],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
     "@f5elide8cqkud5fq2c0qjdfm2u": {
       "vars": [],
       "rows": [
@@ -144158,6 +144631,15 @@
     "@fhvhg9sk4p5l7g82qa6iqvv63m:25": "after",
     "@cts9af36tq0a7hq767qovbqpng": "csv rows",
     "@cts9af36tq0a7hq767qovbqpng:2": "text",
+    "@f9li0g0qfd78qcc0aslrcmnosm": "json read undoes json printed",
+    "@f9li0g0qfd78qcc0aslrcmnosm:2": "json",
+    "@f9li0g0qfd78qcc0aslrcmnosm:3": "a",
+    "@f9li0g0qfd78qcc0aslrcmnosm:4": "b",
+    "@f9li0g0qfd78qcc0aslrcmnosm:7": "value",
+    "@hi608ec2b5l5hig3vbdrh088e2": "csv rows undoes csv printed",
+    "@hi608ec2b5l5hig3vbdrh088e2:2": "fields",
+    "@hi608ec2b5l5hig3vbdrh088e2:21": "field",
+    "@hi608ec2b5l5hig3vbdrh088e2:5": "rows",
     "@n4rdeot09oefmif8tpa05i7ve7": "csv records",
     "@n4rdeot09oefmif8tpa05i7ve7:2": "text",
     "@n4rdeot09oefmif8tpa05i7ve7:10": "header",

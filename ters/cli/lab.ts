@@ -62,7 +62,7 @@ import { appFolder } from "./app.ts";
 import { soundOf } from "./sound.ts";
 import { readWav, writeWav } from "./wav.ts";
 import { audioProblem, BLOCK, playBlocks } from "../src/lang/audio.ts";
-import { answersAgain, checkedTests, checksAgain, runTests, savedFrom, testsIn, type Called, type Saved } from "../src/lang/tests.ts";
+import { answersAgain, checkedTests, checksAgain, compiledValue, runTests, savedFrom, testsIn, type Called, type Saved } from "../src/lang/tests.ts";
 import { representationLaws } from "../src/lang/rep-laws.ts";
 import { embeddingLaws } from "../src/lang/embed-laws.ts";
 import { effectOfOperation, hostSkeleton, hostSkeletonC, ownOperations, type Hosts } from "../src/lang/hosts.ts";
@@ -136,7 +136,7 @@ function compiledAnswers(p: Program, saved: Record<Id, Saved[]>) {
     if (i < 0) return "isn't among the compiled functions";
     if (ir.funcs[i].multi) return "gives several answers, which a call from here doesn't take yet";
     return (args): Called => {
-      try { return { value: fns[i](...args) as Value }; } catch (e) {
+      try { return { value: fns[i](...args.map(compiledValue)) as Value }; } catch (e) {
         if (e === FAIL) return { none: true };
         throw e instanceof Error ? e : new Error(String((e as { reason?: unknown }).reason ?? e));
       }
@@ -167,7 +167,7 @@ function compiledChecks(p: Program, saved: Record<Id, Saved[]>) {
     if (i < 0) return "isn't among the compiled functions";
     if (ir.funcs[i].multi) return "searches, and a search's paths aren't taken from here yet";
     return (args): Called => {
-      try { return { value: fns[i](...args) as Value }; } catch (e) {
+      try { return { value: fns[i](...args.map(compiledValue)) as Value }; } catch (e) {
         if (e === FAIL) return { none: true };
         throw e instanceof Error ? e : new Error(String((e as { reason?: unknown }).reason ?? e));
       }

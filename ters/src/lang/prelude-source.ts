@@ -2361,6 +2361,19 @@ export function buildPrelude(): Module {
     ], k.call(cRows, r, f, row, rows)), k.call(cQuote, r, k.call(S.concat, f, c), row, rows)) },
   ])));
   const csvRows = def("csv rows", ["text"], (t) => k.call(cRows, k.call(TEXT_OPS.characters, t), k.lit(""), k.x(NIL), k.x(NIL)));
+  // JSON's and CSV's text read back as laws (T7e9). Any small Json value
+  // beside a text with a quote, a backslash, a line break and a control
+  // character in it; CSV rows of fields with a comma, a quote and a line
+  // break, each row led by a plain field so no row prints as an empty line.
+  const jsonUndoes = k.def("json read undoes json printed");
+  k.define(jsonUndoes, k.fn(["json", "a", "b"], (j, a, b) => k.let("value", k.call(JSON_V.list, k.list(j,
+    k.call(JSON_V.text, k.call(TEXT_OPS.joinAll, k.list(a, k.lit("\"\\\n\u0001é"), b), k.lit(""))))), (v) =>
+    expect(k.equal(k.call(jsonRead, k.call(jsonPrinted, v)), v), "json read(json printed(value)) is value"))));
+  const csvUndoes = k.def("csv rows undoes csv printed");
+  k.define(csvUndoes, k.fn(["fields"], (fs) => k.let("rows", k.call(map, fs, k.fn(["field"], (f) =>
+    k.list(k.lit("row"), k.call(S.concat, f, k.lit(",\"\n")), f))), (rows) =>
+    expect(k.equal(k.call(csvRows, k.call(csvPrinted, rows)), rows), "csv rows(csv printed(rows)) is rows"))));
+  laws.push(jsonUndoes, csvUndoes);
   // A CSV with a header line, read as records (L190g, as Python's
   // csv.DictReader): each later row a map from the header's names to its
   // fields. A row shorter than the header leaves the last names out.
