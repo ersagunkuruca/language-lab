@@ -82,3 +82,15 @@ test("a compiled module carries no node ids: its own cases by number, its stops 
   assert.match(ours, /\.prototype\.tag = \d+;/);
   assert.doesNotMatch(ours, /R2?\.stop\(\w+, "/);
 });
+
+// A page saved or built carries no node ids either (C143): the editor's
+// preview keeps them for Show where it stopped.
+test("a saved page's script carries no node ids; the preview's keeps its stops' (C143)", async () => {
+  const { corePageScript } = await import("../src/core-js.ts");
+  const p = load("dice"), main = p.named("main");
+  const ir = lowerCore(p.code, p.info, p.pres.names, [main]);
+  const ids = new Set(Object.keys(ir.code.nodes).filter((id) => /^[a-z0-9]{26}$/.test(id)));
+  const idsIn = (js: string) => [...js.matchAll(/"([a-z0-9]{26})"/g)].map((x) => x[1]).filter((x) => ids.has(x));
+  assert.deepEqual(idsIn(corePageScript(ir, p.pres.names[main], "$core", "dice", undefined, undefined, true)), []);
+  assert.ok(idsIn(corePageScript(ir, p.pres.names[main], "$core", "dice")).length > 0);
+});
