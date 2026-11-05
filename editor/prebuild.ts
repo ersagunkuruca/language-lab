@@ -11,6 +11,7 @@ import { merge } from "../ters/src/model.ts";
 import type { Names } from "../ters/src/presentation.ts";
 import { LIBRARY } from "../ters/src/lang/library.ts";
 import { onTodaysIds } from "../ters/src/lang/std.ts";
+import type { Pins } from "../ters/src/lang/signatures.ts";
 import { hasSound } from "../ters/src/lang/page.ts";
 import { compilePageProgram } from "./pageCompile.ts";
 import { buildPicture, pictureEntries } from "./picture.ts";
@@ -19,7 +20,7 @@ import { prebuiltKey } from "./prebuilt.ts";
 import { exampleTables, type Manifest } from "./examplesPlugin.ts";
 import { checkedForRun, coreMain } from "./coreMain.ts";
 
-type Tables = { code?: Code; names?: Names };
+type Tables = { code?: Code; names?: Names; signatures?: Pins };
 
 export async function prebuild(manifest: Manifest, site: string, core: boolean): Promise<string[]> {
   const dir = site + "prebuilt/";
@@ -32,14 +33,17 @@ export async function prebuild(manifest: Manifest, site: string, core: boolean):
     const code = merge(LIBRARY.code, fs.map((f) => f.code as Code).reduce((a, b) => merge(a, b)));
     const short = Object.assign({}, ...fs.map((f) => f.names ?? {})) as Names;
     const names = { ...LIBRARY.names, ...short };
+    // The folders' own pins (signatures.json, L173c), as the editor opens
+    // the example with them (main.ts initialFor) and keys what it looks up.
+    const pins = Object.assign({}, ...fs.map((f) => f.signatures ?? {})) as Pins;
     // A picture (pagePanel.ts pictureSection): the drawing without the
     // evaluator's check, which the editor doesn't make.
     const entries = pictureEntries(code.defs.filter((d) => !LIBRARY.code.nodes[d]), names);
     if (entries) try {
       setDisplayNames(names);
-      setProgramPins({});
+      setProgramPins(pins);
       const info = infer(code, names);
-      write(prebuiltKey("picture", code, entries, {}), await buildPicture(code, info, names, entries, false));
+      write(prebuiltKey("picture", code, entries, pins), await buildPicture(code, info, names, entries, false));
     } catch (e) { console.log(`prebuilt: ${m.program}'s picture didn't compile (${(e as Error).message})`); }
     const main = code.defs.find((d) => !LIBRARY.code.nodes[d] && names[d] === "main");
     // Run main (E245c, coreMain.ts): printed from the core IR as the run
@@ -49,15 +53,15 @@ export async function prebuild(manifest: Manifest, site: string, core: boolean):
     // A page's main is a view, which Run shows the evaluator's way.
     if (main && !m.page) try {
       setDisplayNames(names);
-      setProgramPins({});
+      setProgramPins(pins);
       const lib = checkedForRun(code, names, main), made = coreMain(lib.code, lib.info, lib.names, main, !!m.run);
-      if (made && !made.printed.code && !made.printed.checked) write(prebuiltKey("main", code, { main }, {}), made);
+      if (made && !made.printed.code && !made.printed.checked) write(prebuiltKey("main", code, { main }, pins), made);
     } catch (e) { console.log(`prebuilt: ${m.program}'s main didn't lower (${(e as Error).message})`); }
     if (!m.page) continue;
     // A page with sound stays interpreted in the editor (pagePanel.ts).
     if (!main || hasSound(code)) continue;
     try {
-      write(prebuiltKey("page", code, { main }, {}), compilePageProgram(code, names, {}, main, core));
+      write(prebuiltKey("page", code, { main }, pins), compilePageProgram(code, names, pins, main, core));
     } catch (e) { console.log(`prebuilt: ${m.program} didn't compile (${(e as Error).message})`); }
   }
   writeFileSync(dir + "index.json", JSON.stringify(keys));
