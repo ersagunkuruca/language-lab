@@ -31,7 +31,7 @@ import { firstSets } from "./first-sets.ts";
 
 export class Unsupported extends Error {}
 
-type Any = { kind: string; target: Id; value: unknown; fn: Id; args: Id[]; params: Id[]; body: Id; scrutinee: Id; arms: Id[]; variant: Id; binds: (Id | null)[] };
+type Any = { id: Id; kind: string; target: Id; value: unknown; fn: Id; args: Id[]; params: Id[]; body: Id; scrutinee: Id; arms: Id[]; variant: Id; binds: (Id | null)[] };
 type Env = Map<Id, Value | { unknown: "letters" | "digits" | "int" }>;
 const isUnknown = (v: unknown): v is { unknown: string } => typeof v === "object" && v !== null && "unknown" in v;
 const LETTER = /[A-Za-z]/, DIGIT = /[0-9]/;
@@ -64,12 +64,30 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
   // whose other values fail (calc's `binding strength`).
   interface Infix { arm: Any; lets: [Id, Id][]; cond: Id | null; left: Id; rest: Id; op: Id; ops: string[] }
   const literalsOf = (def: Id, j: number): string[] | null => {
-    const fn = lambdaOf(def), m = fn && node(fn.body);
-    if (!fn || m?.kind !== "match" || target(m.scrutinee) !== fn.params[j]) return null;
-    const otherwise = (m as unknown as { otherwise?: Id }).otherwise, o = otherwise && node(otherwise);
-    if (o && !(o.kind === "call" && target(o.fn) === "builtin.fail")) return null;
-    const lits = m.arms.map((a) => node(node(a)!.value as Id)).map((l) => (l?.kind === "lit" && typeof l.value === "string" ? l.value : null));
-    return lits.every((l) => l !== null) ? (lits as string[]) : null;
+    const fn = lambdaOf(def);
+    return fn ? literals(fn.body, fn.params[j]) : null;
+  };
+  // The Texts x may be for e not to fail: a match on x by literal arms
+  // whose other values fail, or the chain of equality tests the lowering
+  // makes of one (x = "+" then …, else x = "-" then …, else fail).
+  const literals = (e: Id, x: Id): string[] | null => {
+    const m = node(e);
+    if (!m) return null;
+    if (m.kind === "call" && target(m.fn) === "builtin.fail") return [];
+    if (m.kind === "call" && node(m.fn)?.kind === "lambda" && m.args.length === 1 && target(m.args[0]) === x) return literals(node(m.fn)!.body, node(m.fn)!.params[0]);
+    if (m.kind !== "match") return null;
+    const otherwise = (m as unknown as { otherwise?: Id | null }).otherwise;
+    if (target(m.scrutinee) === x) {
+      const o = otherwise ? literals(otherwise, x) : [];
+      const lits = m.arms.map((a) => node(node(a)!.value as Id)).map((l) => (l?.kind === "lit" && typeof l.value === "string" ? l.value : null));
+      return o && lits.every((l) => l !== null) ? [...(lits as string[]), ...o] : null;
+    }
+    const t = node(m.scrutinee), [l, r] = t?.kind === "call" && target(t.fn) === "builtin.equal" ? t.args.map((y) => node(y)) : [];
+    const lit = l && r && (target(l.id) === x && r.kind === "lit" ? r.value : target(r.id) === x && l.kind === "lit" ? l.value : null);
+    if (typeof lit !== "string" || otherwise) return null;
+    const no = m.arms.map((a) => node(a)!).find((a) => a.variant === FALSE);
+    const rest = no ? literals(no.body, x) : [];
+    return rest && [lit, ...rest];
   };
   const infixes: Infix[] = body.arms.map((a) => node(a)!).filter((a) => report.leftRecursive.includes(names[a.variant] ?? a.variant)).map((a) => {
     const lets: [Id, Id][] = [];
@@ -122,6 +140,7 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
       case "builtin.int.add": { const [a, b] = xs(); return (a as number) + (b as number); }
       case "builtin.int.sub": { const [a, b] = xs(); return (a as number) - (b as number); }
       case "builtin.and": return bool(truth(evaluate(n.args[0], env)) && truth(evaluate(n.args[1], env)));
+      case "builtin.equal": { const [a, b] = xs(); if (typeof a === "object" || typeof b === "object") throw new Unsupported("compares data"); return bool(a === b); }
       case "builtin.text.length": return [...(evaluate(n.args[0], env) as string)].length;
     }
     if (named(f) === "all pass") {

@@ -7,6 +7,11 @@ import assert from "node:assert/strict";
 import { load } from "../src/program.ts";
 import { descentReader } from "../src/descent.ts";
 import { makeRunner, showValue, type Value } from "../../ters/src/lang/run.ts";
+import { Lang } from "../../ters/src/lang/dsl.ts";
+import { infer } from "../../ters/src/lang/infer.ts";
+import { merge } from "../../ters/src/model.ts";
+import { S, SHOW_ANY } from "../../ters/src/lang/std.ts";
+import { lowerCore, loadCoreJs } from "../src/core-js.ts";
 
 const p = load("calc");
 const r = makeRunner(p.code, p.info, { print: () => {} });
@@ -52,5 +57,23 @@ test("calc's printer, read back by descent, gives each of 300 random expressions
   for (let i = 0; i < 300; i++) {
     const e = make(4), line = print(e);
     assert.equal(read(line)[0], shown(e), line);
+  }
+});
+
+// Compiled, calc's `read expression` (inverse of `e ↦ expression text(e,
+// 0)`) is a solve on the printer itself (inverses.ts), read by descent
+// (core-solve.ts) with the evaluator's answers (C110 s5): about 0.4 ms
+// a line on the core IR's JavaScript, where the search took 760.
+test("calc's read expression, compiled, reads by descent with the evaluator's answers (C110 s5)", () => {
+  const k = new Lang(p.code), go = k.def("go");
+  k.define(go, k.fn(["line"], (line) => k.call(S.first, k.thunk(() => k.call(SHOW_ANY, k.call(p.named("read expression"), line))), k.thunk(() => k.lit("no reading")))));
+  const code = merge(k.code, p.code), names = { ...p.pres.names, ...k.names };
+  const info = infer(code, names, undefined, p.options);
+  const core = lowerCore(code, info, names, [go]);
+  assert.deepEqual([...core.refused.values()], []);
+  const f = (loadCoreJs(core, { print: () => {} }) as ((line: string) => string)[])[core.funcs.findIndex((g) => g.name === "go" && !g.inner)];
+  for (const line of ["1 + 2 * 3 - 4 / x ^ 2 + (y - 1) * -z", "2 ^ 3 ^ 2", "-(1 + 2)", "((1))", "1 +", "2 ^ -3", ""]) {
+    const want = searched(line);
+    assert.equal(f(line), want.length ? want[0] : "no reading", line);
   }
 });
