@@ -196,6 +196,13 @@ compiled code of every program that uses them, which belongs with L209.
 What is left of the plan: an algebra is still found by `clifford
 algebra`'s name.
 
+**L203g, built.** An algebra is found by its type: a definition with no
+inputs whose value is an `Algebra`, however it is made. That closes the
+plan. What is still read by name is kept on purpose, each rule being
+sharper than its code (the sandwich, the reflection, the projection, the
+exponential, `part` and `with part`); masks on std's own tables went to
+L209.
+
 ## In the compiler (L43c)
 
 `valueMasks` (grades.ts) works out each definition's input masks from all

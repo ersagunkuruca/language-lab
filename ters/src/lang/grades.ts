@@ -37,7 +37,7 @@ import { children as childIds, dependencies, subtree, type Code, type Id, type N
 import type { Info } from "./infer.ts";
 import { LIBRARY } from "./library.ts";
 import { makeRunner, type Value } from "./run.ts";
-import { ALGEBRA_V, ARITH, CONS, LIST, NIL, S, SET as S_SET, TABLE_ENTRY, TRUE, writtenItems } from "./std.ts";
+import { ALGEBRA, ALGEBRA_V, ARITH, CONS, LIST, NIL, S, SET as S_SET, TABLE_ENTRY, TRUE, writtenItems } from "./std.ts";
 import { B } from "../prelude.ts";
 import { hashes } from "../hash.ts";
 import { MASK_TYPES, NUMBER, type Type } from "./types.ts";
@@ -152,13 +152,16 @@ export function algebrasOf(code: Code, info: Info): Map<Id, Algebra> {
   if (found) return found;
   found = new Map();
   cache.set(code, found);
-  if (!CL.algebra) return found;
   const r = makeRunner(code, info, { print: () => {} });
   const first = (xs: Iterable<Value>) => { for (const x of xs) return x; };
   for (const d of code.defs) {
     const def = code.nodes[d] as NodeOf<"def">;
+    // A definition with no inputs whose value is an Algebra, however it
+    // is made (clifford algebra, a function of the program's own, the
+    // record written out): found by its type, not a name (L203g).
     const body = def?.kind === "def" && def.body ? code.nodes[def.body] : undefined;
-    if (!isCall(body) || (code.nodes[body.fn] as Node)?.kind !== "ref" || cliffordOps(code).get((code.nodes[body.fn] as NodeOf<"ref">).target) !== "algebra") continue;
+    const t0 = info.typeOf.get(d), t = t0 && info.subst.zonk(t0);
+    if (!body || body.kind === "lambda" || body.kind === "typedef" || t?.t !== "con" || t.id !== ALGEBRA) continue;
     try {
       const al = r.value(d) as { tag: Id; fields: Value[] };
       if (al?.tag !== ALGEBRA_V) continue;

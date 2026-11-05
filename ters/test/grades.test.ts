@@ -318,3 +318,20 @@ test("a program's own record with its own multiplication table gets masks, with 
   const r = bladeMask(code, info, mixed)!;
   assert.equal(describeMask(r.algebra, r.mask), "parts 2");
 });
+
+// L203g: an algebra is found by its type, however its value is made: here
+// through a function of the program's own rather than clifford algebra.
+test("an algebra made by the program's own function is found by its type", () => {
+  const k = new Lang(LIBRARY.code);
+  const M = k.type("Multivector", [], [["multivector", Array.from({ length: 4 }, (_, i) => [`p${i}`, () => k.tref(NUMBER)] as [string, () => Id])]]);
+  const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
+  const at = (parts: Record<number, number | Id>) => k.call(M.v.multivector, ...Array.from({ length: 4 }, (_, i) => (typeof parts[i] === "string" ? parts[i] as Id : k.lit((parts[i] as number) ?? 0))));
+  const made = def("made", () => k.fn(["squares", "basis"], (sq, es) => k.call(lib("clifford algebra"), sq, es)));
+  const al = def("plane", () => k.call(made, k.list(k.lit(1), k.lit(1)), k.list(...Array.from({ length: 4 }, (_, i) => at({ [i]: 1 })))));
+  // Parts: 1, e1, e2, e12. Two vectors' product: a scalar and a bivector.
+  const product = def("product", () => k.fn(["x", "y"], (x, y) => k.call(lib("clifford product"), k.x(al), at({ 1: x, 2: y }), at({ 1: y, 2: x }))));
+  const code = base(k.code), names = { ...baseNames(), ...k.names }, info = infer(code, names);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  assert.deepEqual([...algebrasOf(code, info).keys()], [al]);
+  assert.equal(bladeMask(code, info, product)?.mask, 0b1001);
+});
