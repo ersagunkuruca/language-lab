@@ -214,7 +214,7 @@ export interface SavedCollation { unicode: string; runs: [number, number, number
 export const HANGUL = { from: 0xac00, to: 0xd7a3 };
 // A root primary is TAILORED · its number, so a locale's letters fit
 // between two of root's (L214e5b2).
-export const TAILORED = 64;
+export const TAILORED = 1024;
 
 // Every code point's elements as NFC text reads it: a code point NFD
 // would take apart (é, Ǽ) has the elements its NFD gives; Hangul

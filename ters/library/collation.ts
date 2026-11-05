@@ -9,9 +9,10 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildCollationTables, elementsByCode, saveCollation, tailoring, TAILORED, type Element } from "../src/lang/collation-tables.ts";
 
-// Latin-script languages, tried in turn; those that put their own script
-// first, or sort two letters as one, are later steps (BACKLOG L214e5b3 on).
-const LANGUAGES = ["af", "az", "bs", "ca", "cs", "cy", "da", "de", "en", "eo", "es", "et", "fi", "fil", "fo", "fr", "gl", "ha", "hr", "hu", "id", "is", "it", "lt", "lv", "ms", "mt", "nb", "nl", "nn", "pl", "pt", "ro", "se", "sk", "sl", "sq", "sv", "sw", "tk", "to", "tr", "uz", "vi", "wo", "yo", "zu"];
+// Latin-script languages, and Cyrillic and Greek ones, which put their
+// own script first (L214e5b3), tried in turn.
+const CYRILLIC = ["be", "bg", "kk", "ky", "mk", "mn", "ru", "sr", "uk"];
+const LANGUAGES = [...CYRILLIC, "el", "af", "az", "bs", "ca", "cs", "cy", "da", "de", "en", "eo", "es", "et", "fi", "fil", "fo", "fr", "gl", "ha", "hr", "hu", "id", "is", "it", "lt", "lv", "ms", "mt", "nb", "nl", "nn", "pl", "pt", "ro", "se", "sk", "sl", "sq", "sv", "sw", "tk", "to", "tr", "uz", "vi", "wo", "yo", "zu"];
 
 const t = performance.now();
 const root = buildCollationTables(), all = elementsByCode(root);
@@ -30,7 +31,8 @@ console.log(`collation: Unicode ${saved.unicode}, ${saved.runs.length} runs, ${s
 if (left.length) console.log(`left as root: ${left.join(", ")}`);
 
 // The tailored tables against the host, on random words of the language's
-// letters (each letter the locale moves, and a to z either case).
+// letters (each letter of its script the locale moves, Latin and its own,
+// and a to z either case).
 function agrees(language: string, ov: Map<number, Element[]>): boolean {
   const els = (s: string) => [...s].flatMap((x) => { const c = x.codePointAt(0)!; return ov.get(c) ?? (all.get(c) ?? []).map(([p, sec, ter, cc]) => [p * TAILORED, sec, ter, cc ?? 0] as Element); });
   const compare = (x: string, y: string) => {
@@ -43,7 +45,7 @@ function agrees(language: string, ov: Map<number, Element[]>): boolean {
     }
     return 0;
   };
-  const letters = [...new Set([..."abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ -", ...[...ov.keys()].filter((c) => c < 0x250).map((c) => String.fromCodePoint(c))])];
+  const letters = [...new Set([..."abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ -", ...[...ov.keys()].filter((c) => c < 0x250 || (CYRILLIC.includes(language) && c >= 0x400 && c < 0x530) || (language === "el" && c >= 0x370 && c < 0x400)).map((c) => String.fromCodePoint(c))])];
   let seed = 7;
   const rnd = (n: number) => (seed = (seed * 16807) % 2147483647) % n;
   const words = Array.from({ length: 400 }, () => Array.from({ length: 1 + rnd(4) }, () => letters[rnd(letters.length)]).join("").normalize("NFC"));
