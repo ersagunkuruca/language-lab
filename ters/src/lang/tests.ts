@@ -101,7 +101,7 @@ export function testsIn(info: Info, defs: Id[]): Id[] {
   });
 }
 
-const CASES = 200, PATHS = 100;
+const CASES = 200, PATHS = 100, FN_CASES = 6;
 
 // What examples.json keeps for a definition: inputs, and the answer you
 // accepted for them (T7b). The editor's older form, one list of input
@@ -196,7 +196,9 @@ export function testInputs(code: Code, info: Info, names: Names, d: Id, saved: R
     }
     ways = next;
   });
-  const per = Math.max(1, Math.floor((CASES - inputs.length) / Math.max(1, ways.length)));
+  // A few cases a function, as agreement.test takes six: a law over every
+  // function sweeps the functions, not each one's inputs (T7e14c).
+  const per = given && ways.some((w) => w.fns.size) ? Math.min(FN_CASES, Math.max(1, Math.floor((CASES - inputs.length) / ways.length))) : CASES - inputs.length;
   for (const w of ways) {
     const smalls = t.params.map((p, i) => w.fns.has(i) ? [w.fns.get(i)!] : smallValues(w.s.zonk(p), code));
     if (smalls.every((x) => x)) inputs.push(...bySize(smalls as Value[][], per));

@@ -109,7 +109,8 @@ test("a function input takes each of the program's definitions that fit, shown b
   // add one and double fit Int → Int; size, and the law itself, do not.
   assert.deepEqual([...new Set(r.failures.map((f) => f.inputs[0]))], ["double"]);
   assert.deepEqual(r.failures[0], { inputs: ["double", "0"], what: ["f(x) > x"] });
-  assert.ok(r.cases >= 10, `${r.cases}`);
+  // Six cases a function (T7e14c), as agreement.test takes.
+  assert.equal(r.cases, 12);
 });
 
 test("a law over any function takes its other inputs at each function's own types", () => {
