@@ -23,7 +23,7 @@ language, then more targets or speed (WORKFLOW.md "Priority").
 | E Editor | "Editor lane" | E237 (after L204), E103 (after infer.ts's idea) |
 | C Compiler and targets | "Compiler lane" | C180, C181, C30, C93 |
 | L Language and library | "Language lane" | L43, L69d1, L69d2, L21, L118c (evaluator side), L88, L182 (core, run.ts, infer.ts, hosts.ts) |
-| L Language and library | "Language lane B" | sharing chain L109, L110, L111, L112, L115, L114, then L17 (modules.ts, publishing); then L120, L122, L123, L124 (new example programs). Skip L107 (waits on Ersagun) and L24 (research). Take a row from the other list only after telling that lane. |
+| L Language and library | "Language lane B" | L120, L122, L123, L124 (new example programs). Skip L107 (waits on Ersagun) and L24 (research). Take a row from the other list only after telling that lane. |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -201,7 +201,6 @@ all of these.
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | L72 | JSON as one relation: `json spelled` gives every spelling, `json read` is it run backwards (a to f done, DONE.md). Example: `json printed` is `json spelled`'s first on every target (e1d); done when it is. It waits for the core IR to run a `first` of a Choice without nesting the rest in it: 300 records run out of stack now, though the evaluator prints them in 0.29 s. Beyond it, rows if they earn them: json read's message saying where it stopped (f3), `json printed indented` as a variant (e4) | Ersagun 2026-10-24 | P3 | L | low priority |
-| L17 | Data-type upgrades (migrations when constructors and fields move); path namespaces are a name layer (SHARING.md §5) | ROADMAP 5 | P3 | L | |
 
 ### Physics and planning ([PHYSICS-AND-PLANNING.md](docs/design/physics/PHYSICS-AND-PLANNING.md), later goals)
 
