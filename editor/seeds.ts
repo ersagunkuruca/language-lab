@@ -4,7 +4,7 @@
 // handlers run, a picture at a pixel or two), and a port's text read as a
 // value. What it reads of the editor comes through `SeedHost`.
 import type { Code, Id, Node, NodeOf } from "../ters/src/model.ts";
-import { isCall } from "../ters/src/model.ts";
+import { isCall, nodesWhere, scanningOnLayer, type Call } from "../ters/src/model.ts";
 import type { Names, Presentation } from "../ters/src/presentation.ts";
 import { CONS, FALSE, HTML_V, NIL, S, TRUE } from "../ters/src/lang/std.ts";
 import { STRING, type Type } from "../ters/src/lang/types.ts";
@@ -84,8 +84,11 @@ export function seeds(host: SeedHost) {
       }
       return null;
     };
-    for (const n of Object.values(nodes)) {
-      if (!isCall(n)) continue;
+    // The calls on the library's layer are the library's, picked once, and
+    // the program's own (I167h: walking every node was 50 ms of each edit).
+    const code = doc().code;
+    for (const id of scanningOnLayer(code, () => nodesWhere(code, "call", isCall))) {
+      const n = nodes[id] as Call;
       const f = nodes[n.fn];
       if (f?.kind !== "ref" || f.target !== def) continue;
       const args = n.args.map(text);
