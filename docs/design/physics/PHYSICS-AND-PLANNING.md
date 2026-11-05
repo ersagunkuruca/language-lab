@@ -205,7 +205,7 @@ Both cap the speed smoothly. They feel different and plan differently.
 
 Rapidity is a lovely demo, a sibling of the Spacetime page: the same path
 driven with drag and with a rapidity cap, side by side. That is row
-**L124**, optional.
+**L124**, optional. Built (L124): examples/agent's two chasers, one capped each way.
 
 ### Where geometric algebra helps, honestly
 
