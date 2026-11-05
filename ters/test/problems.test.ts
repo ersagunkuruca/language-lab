@@ -9,7 +9,7 @@ import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { PROBLEMS, problemOf } from "../src/lang/problems.ts";
 import { COMPLEX_TYPE, NUMBER, RATIONAL_TYPE } from "../src/lang/types.ts";
-import { ARITH, CELL_OPS, DIVIDE, EMBEDDING_V, FALSE, FIELDS, INT_OPS, JSON_OPS, LOG_OP, RELEASE_V, S, SET, SHOWN_V, SOME, TRIG_OPS, TRUE, tupleVariant } from "../src/lang/std.ts";
+import { ARITH, CELL_OPS, DIVIDE, EMBEDDING_V, FALSE, FIELDS, INT_OPS, JSON_OPS, LOG_OP, RELEASE_V, S, SET, SHOWN_V, SOME, TRIG_OPS, TRUE, tupleVariant, JOBS, REPRESENTATION_V, COST } from "../src/lang/std.ts";
 import type { Id, NodeData } from "../src/model.ts";
 
 const bools = (k: Lang, b: string, extra: Parameters<Lang["match"]>[1] = []) =>
@@ -95,6 +95,7 @@ const SMALLEST: Record<string, (k: Lang) => unknown> = {
   "arithmetic-on-other": (k) => k.define(k.def("p"), k.fn(["a"], (a) => k.call(ARITH.add, k.call(S.show, a), k.lit("x")))),
   "set-shared-tuple": (k) => { const t = k.type("Shape", [], [["dot", [["r", () => k.tref(NUMBER)], ["q", () => k.tref(NUMBER)]]], ["disc", [["r", () => k.tref(NUMBER)], ["q", () => k.tref(NUMBER)]]]]); (k.code.nodes[t.f["disc.r"]] as { same?: string }).same = t.f["dot.r"]; (k.code.nodes[t.f["disc.q"]] as { same?: string }).same = t.f["dot.q"]; k.define(k.def("p"), k.fn(["s"], (s) => k.call(SET, k.fn(["x"], (x) => k.call(tupleVariant(2), k.call(t.f["dot.r"], x), k.call(t.f["dot.q"], x))), s, k.call(tupleVariant(2), k.lit(1), k.lit(2))))); },
   "reshape-inside": (k) => { const f = k.def("f"); k.define(f, k.fn(["fs"], (fs) => k.call(LIB("map"), fs, k.fn(["g"], (g) => k.call(g, k.call(tupleVariant(2), k.lit(1), k.lit(2))))))); k.define(k.def("p"), k.thunk(() => k.call(f, k.list(k.fn(["a", "b"], (a, b) => k.call(ARITH.add, a, b)))))); },
+  "job-wrong-type": (k) => { const B = k.type("Box", [], [["box", [["n", () => k.tref("type.int")]]]]); const m = k.def("box meaning"); k.define(m, k.fn(["b"], (b) => k.call(LIB("utf8 of"), k.call(INT_OPS.show, k.call(B.f["box.n"], b))))); const bad = k.def("box count"); k.define(bad, k.fn(["b"], () => k.lit("x"))); k.define(k.def("box of Bytes"), k.call(REPRESENTATION_V, k.x(m), k.x(`${COST}.linear`), k.list(k.call(JOBS.job, k.x(LIB("byte count")), k.x(bad), k.x(`${COST}.constant`))))); },
   "name-on-plain-match": (k) => k.define(k.def("p"), k.fn(["b"], (b) => { const m = k.if(b, k.lit(1), k.lit(2)); (k.code.nodes[m] as { name?: string }).name = (k as unknown as { binder: (n: string) => string }).binder("n"); return m; })),
   "named-operation-inputs": (k) => { const a = ask(k); k.define(k.def("p"), k.thunk(() => k.handleNamed("n", (n) => k.call(a.op.ask, k.x(n), k.lit(1)), answered(k, a, () => k.lit(1))))); },
   "release-given-something": (k) => { const a = ask(k); k.define(k.def("p"), k.thunk(() => k.match(k.call(a.op.ask), [...answered(k, a, () => k.lit(1)), { variant: RELEASE_V, names: ["x"], body: () => k.x("std.unit.unit") }]))); },
