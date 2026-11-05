@@ -9,8 +9,9 @@ import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { PROBLEMS, problemOf } from "../src/lang/problems.ts";
 import { COMPLEX_TYPE, NUMBER, RATIONAL_TYPE } from "../src/lang/types.ts";
-import { ARITH, CELL_OPS, DIVIDE, EMBEDDING_V, FALSE, FIELDS, INT_OPS, JSON_OPS, LOG_OP, RELEASE_V, S, SET, SHOWN_V, SOME, TRIG_OPS, TRUE, tupleVariant, JOBS, REPRESENTATION_V, COST } from "../src/lang/std.ts";
+import { ARITH, CELL_OPS, DIVIDE, EMBEDDING_V, FALSE, FIELDS, INT_OPS, JSON_OPS, LOG_OP, RELEASE_V, S, SET, SHOWN_V, SOME, TRIG_OPS, TRUE, tupleVariant, JOBS, REPRESENTATION_V, COST, TRIG_V } from "../src/lang/std.ts";
 import type { Id, NodeData } from "../src/model.ts";
+import { B } from "../src/prelude.ts";
 
 const bools = (k: Lang, b: string, extra: Parameters<Lang["match"]>[1] = []) =>
   k.match(b, [{ variant: TRUE, names: [], body: () => k.lit(1) }, { variant: FALSE, names: [], body: () => k.lit(2) }, ...extra]);
@@ -23,6 +24,9 @@ const answered = (k: Lang, a: ReturnType<typeof ask>, answer: () => string): Par
 
 // A definition's nth input: the port a solve gives or asks by.
 const param = (k: Lang, f: string, i: number): string => { const d = k.code.nodes[f]; const l = d?.kind === "def" && d.body ? k.code.nodes[d.body] : undefined; return l?.kind === "lambda" ? l.params[i] : ""; };
+
+// A search wrapped in first, so that the Choice it brings is handled.
+const firstOf = (k: Lang, body: () => string) => k.call(S.first, k.fn([], body), k.fn([], () => k.lit(0)));
 
 // An entry may give pins: each definition held to the type another
 // definition of the program has unpinned.
@@ -133,6 +137,25 @@ const SMALLEST: Record<string, (k: Lang) => unknown> = {
   "search-unhandled": (k) => { const f = k.def("f"); k.define(f, k.fn(["a"], (a) => k.call(ARITH.add, a, k.lit(1)))); k.define(k.def("p"), k.solve(f, { [param(k, f, 0)]: k.lit(1), out: k.lit(2) }, {}, () => k.lit(0))); },
   "results-not-ports": (k) => { const f = k.def("f"); k.define(f, k.fn(["a", "b"], (a, b) => k.call(ARITH.less, a, b))); k.results(f, "b", "b"); },
   "direction-types": (k) => { const r = k.def("r"), d = k.def("d"); k.define(r, k.fn(["a", "b"], (a, b) => k.call(S.equal, b, k.call(ARITH.add, a, k.lit(1))))); k.results(r, "b"); k.define(d, k.fn(["a", "b"], (a, b) => k.call(S.equal, b, k.call(S.show, a)))); k.results(d, "b"); k.direction(d, r); },
+  // floor forgets the fraction, so nothing gives its x back.
+  "search-stuck": (k) => { const f = k.def("f"); k.define(f, k.fn(["x"], (x) => k.call(S.equal, k.call(S.floor, x), k.lit(1)))); k.define(k.def("p"), k.thunk(() => firstOf(k, () => k.solve(f, { out: k.x(TRUE) }, { [param(k, f, 0)]: "x" }, (b) => b[param(k, f, 0)])))); },
+  // (A hole beside the function keeps the search's own stuck step out.)
+  "function-port": (k) => { const f = k.def("f"); k.define(f, k.fn(["g", "x"], (g, x) => k.call(S.equal, k.call(g, x), k.hole()))); k.define(k.def("p"), k.thunk(() => firstOf(k, () => k.solve(f, { out: k.x(TRUE), [param(k, f, 1)]: k.x(TRUE) }, { [param(k, f, 0)]: "g" }, () => k.lit(0))))); },
+  // Trig at a type of one Float64 with sin, cos and polar all left to their
+  // ways: each one's ways need another of them (ways.test.ts).
+  "left-to-ways": (k) => {
+    const A = k.type("Angle", [], [["angle", [["radians", () => k.tref(NUMBER)]]]]);
+    const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
+    const lift = (name: string, f: Id) => def(name, () => k.fn(["a"], (a) => k.match(a, [{ variant: A.v.angle, names: ["r"], body: ([r]) => k.call(A.v.angle, k.call(f, r)) }])));
+    const [tan, exp, log] = (["tan", "exp", "log"] as const).map((op) => lift(`angle ${op}`, B[op]));
+    const rad = (a: Id) => k.call(A.f["angle.radians"], a);
+    const unpolar = def("angle unpolar", () => k.fn(["length", "angle", "x", "y"], (l, t, x, y) => k.and(
+      k.equal(l, k.call(A.v.angle, k.call(B.sqrt, k.call(B.add, k.call(B.mul, rad(x), rad(x)), k.call(B.mul, rad(y), rad(y)))))),
+      k.equal(t, k.call(A.v.angle, k.call(B.atan2, rad(y), rad(x)))))));
+    k.results(unpolar, "length", "angle");
+    const left = () => k.x(S.byItsWays);
+    def("trig at angle", () => k.call(TRIG_V, left(), left(), k.x(tan), k.x(exp), k.x(log), left(), k.x(unpolar), left(), left()));
+  },
   "not-a-number": (k) => k.define(k.def("p"), k.fn(["b"], (b) => k.match(b, [{ variant: TRUE, names: [], body: () => k.lit(1) }, { variant: FALSE, names: [], body: () => k.lit("a") }]))),
 };
 

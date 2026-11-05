@@ -233,7 +233,6 @@ agent with inertia. All later goals.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L187 | Error messages as one table with a smallest program per problem (src/lang/problems.ts); L187a to L187ae done, 86 problems (DONE.md). Example: every message a program meets in the editor has its row; the err( sites left are internal (extern, a node kind that isn't an expression) or need field ports (POLAR), so this row is done when nothing else is met, and a new message is a new row | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §8 | P3 | M | Editor lane |
 
 ### What a good language needs ([ASPECTS-2026-11-03](docs/reports/reviews/ASPECTS-2026-11-03.md))
 
