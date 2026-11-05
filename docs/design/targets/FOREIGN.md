@@ -165,6 +165,12 @@ handles it, and nothing in the program can. Two ways:
 
 L69a doesn't depend on the answer: option 2 is one flag added later.
 
+**Answered (Ersagun, 2026-11-05): "If it is actually pure, yes. Reading
+the clock isn't pure."** So option 2 is allowed, but only for an operation
+that is a function of its inputs (a hash, a parser). The clock, files,
+the network and randomness stay effects in every row, whoever answers
+them, std's World or a host file.
+
 ## Prior art
 
 - Gleam's `@external` (one declaration, a body per target, any missing).
