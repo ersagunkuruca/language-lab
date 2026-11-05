@@ -188,6 +188,14 @@ that is a function of its inputs (a hash, a parser). The clock, files,
 the network and randomness stay effects in every row, whoever answers
 them, std's World or a host file.
 
+**Built (L69d2).** An effect the program declares may be marked pure
+(the typedef's `pure`): its operations are then in no row, answered by
+the host as the program's own are, in the evaluator and the core IR's
+JavaScript, and a test may still answer them with a match. Each must
+give an answer at once (one that never returns, or answers later, is
+refused). With no host, asking one is an Abort where it is asked, since
+no row said it was needed. LANGUAGE.md's guarantee table has the line.
+
 ## Prior art
 
 - Gleam's `@external` (one declaration, a body per target, any missing).

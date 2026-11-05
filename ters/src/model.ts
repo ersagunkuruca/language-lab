@@ -79,7 +79,7 @@ export type Node =
   //
   // `row` (HOSTS.md, L58): a named row, no variants, standing for these
   // effects wherever a function type lists it (`() -[View]-> Text`).
-  | { id: Id; kind: "typedef"; params: Id[]; variants: Id[]; effect?: true; interface?: true; unique?: string; row?: Id[] }
+  | { id: Id; kind: "typedef"; params: Id[]; variants: Id[]; effect?: true; interface?: true; unique?: string; row?: Id[]; pure?: true }
   // An operation's own type variables (BACKLOG L71a, ANSWERED-LATER.md):
   // binders its fields and result may name besides its effect's, fresh at
   // each call and rigid in the case that handles it. `await(ticket: Ticket
@@ -343,7 +343,7 @@ export const SCHEMA: Schema = {
   def: { body: "child", way: "ref", cost: "meaning" },
   builtin: { op: "meaning" },
   hole: {},
-  typedef: { params: "child", variants: "child", effect: "meaning", interface: "meaning", unique: "meaning", row: "ref" },
+  typedef: { params: "child", variants: "child", effect: "meaning", interface: "meaning", unique: "meaning", row: "ref", pure: "meaning" },
   variant: { params: "child", fields: "child", returns: "child", later: "meaning", private: "meaning" },
   field: { type: "child", ports: "meaning", same: "ref" },
   tref: { target: "ref", args: "child" },

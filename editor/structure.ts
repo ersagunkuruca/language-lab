@@ -233,6 +233,13 @@ export function structure(host: StructureHost) {
       // in its words.
       const w = words(ui.def);
       if (!body.row) out.append(typeParams(info, names, ui.def, body.params, w.effect ? "effect" : "type"));
+      // Pure (L69d2): a host's function of its inputs, in no row.
+      if (w.effect && !body.row) {
+        const cb = h("input", { id: "f-pure", type: "checkbox", checked: !!body.pure }) as HTMLInputElement;
+        cb.addEventListener("change", () => runTop(info, Top.setPure(code, sh, ui.def, cb.checked)));
+        out.append(h("label", { class: "field check", for: "f-pure" }, cb, h("span", {}, "Pure")),
+          h("p", { class: "hint" }, body.pure ? `Its operations are in no row: the program's host answers them (hosts/js.js), on your word that each is a function of its inputs, as a hash or a parser is. A test may still answer them with a match.` : `Tick it only if every operation is a function of its inputs that the host answers (a hash, a parser): it then leaves every row. Never the clock, files, the network or randomness.`));
+      }
       out.append(h("div", { class: "sub-head" }, `${cap(w.cases)} of ${dname} · code.json`));
       for (const v of body.variants) {
         const fs = get(code, v, "variant").fields;

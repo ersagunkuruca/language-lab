@@ -64,7 +64,7 @@ export class Lang extends Builder {
   // answers' types are built from them.
   // An operation's own type variables (L71a) come after the effect's in
   // the binders its types are given: ["ask", …, null, undefined, ["a"]].
-  effect(name: string, ops: [string, [string, (ps: Id[]) => Id][], ((ps: Id[]) => Id) | null, ("later" | undefined)?, string[]?][], params: string[] = []) {
+  effect(name: string, ops: [string, [string, (ps: Id[]) => Id][], ((ps: Id[]) => Id) | null, ("later" | undefined)?, string[]?][], params: string[] = [], opts: { pure?: boolean } = {}) {
     const def = this.def(name);
     const ps = params.map((p) => this.binder(p));
     const ids: Record<string, Id> = {};
@@ -73,7 +73,7 @@ export class Lang extends Builder {
       const fids = fs.map(([fname, ty]) => this.named(this.add({ kind: "field", type: ty(all) }), fname));
       return (ids[oname] = this.named(this.add({ kind: "variant", fields: fids, ...(returns ? { returns: returns(all) } : {}), ...(later ? { later: true as const } : {}), ...(mine.length ? { params: mine } : {}) }), oname));
     });
-    this.code.nodes[def] = { id: def, kind: "def", body: this.add({ kind: "typedef", params: ps, variants: vs, effect: true }) };
+    this.code.nodes[def] = { id: def, kind: "def", body: this.add({ kind: "typedef", params: ps, variants: vs, effect: true, ...(opts.pure ? { pure: true as const } : {}) }) };
     return { def, op: ids };
   }
 
