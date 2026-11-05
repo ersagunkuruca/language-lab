@@ -21,6 +21,10 @@ test("lab test --compiled checks each accepted answer on the compiled program to
   const next = def("next", ["n"], (n) => k.call(INT_OPS.add, n, k.int(1)));
   const pair = def("pair", ["n"], (n) => k.call(P.v.point, n, k.call(INT_OPS.add, n, k.int(1))));
   const small = def("small", ["n"], (n) => k.if(k.call(INT_OPS.less, n, k.int(3)), n, k.call(S.fail)));
+  // A Bool taken and given, alone and in a list (T7e10): compiled code
+  // holds a boolean where the evaluator holds a case.
+  const both = def("both", ["a", "b"], (a, b) => k.call(S.and, a, b));
+  const flags = def("flags", ["a"], (a) => k.list(a, k.call(S.and, a, a)));
   const dir = mkdtempSync(join(tmpdir(), "lab-test-"));
   writeFileSync(join(dir, "code.json"), JSON.stringify(k.code));
   writeFileSync(join(dir, "names.default.json"), JSON.stringify(k.names));
@@ -28,12 +32,14 @@ test("lab test --compiled checks each accepted answer on the compiled program to
     [next]: [{ inputs: ["2"], answer: wrong ? "4" : "3" }, { inputs: ["100000000000000000000"], answer: "100000000000000000001" }],
     [pair]: [{ inputs: ["2"], answer: "point(2, 3)" }],
     [small]: [{ inputs: ["1"], answer: "1" }],
+    [both]: [{ inputs: ["true", "false"], answer: "false" }, { inputs: ["true", "true"], answer: "true" }],
+    [flags]: [{ inputs: ["true"], answer: "[true, true]" }],
   }));
   const lab = (...args: string[]) => spawnSync(process.execPath, [join(import.meta.dirname, "../../ters/cli/lab.ts"), "test", dir, "--fresh", ...args], { encoding: "utf8" });
   examples(false);
   const ok = lab("--compiled");
   assert.equal(ok.status, 0, ok.stdout + ok.stderr);
-  for (const n of ["next", "pair", "small"]) assert.match(ok.stdout, new RegExp(`^✓ ${n} compiled \\(\\d+ cases?\\)$`, "m"), ok.stdout);
+  for (const n of ["next", "pair", "small", "both", "flags"]) assert.match(ok.stdout, new RegExp(`^✓ ${n} compiled \\(\\d+ cases?\\)$`, "m"), ok.stdout);
   // Without the flag, only the evaluator's.
   assert.doesNotMatch(lab().stdout, /compiled/);
   // A wrong accepted answer fails both ways.
