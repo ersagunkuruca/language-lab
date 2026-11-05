@@ -25,7 +25,7 @@ import { fusedProgram } from "./handlers.ts";
 import { infer, type Info } from "../../ters/src/lang/infer.ts";
 import { expandInverses } from "./inverses.ts";
 import { hoistInvariants } from "./hoist.ts";
-import { ownerOfTypeParts, type Code, type Id, type NodeOf } from "../../ters/src/model.ts";
+import { dependencies, ownerOfTypeParts, type Code, type Id, type NodeOf } from "../../ters/src/model.ts";
 import { effectOfOperation, hostOp, ownOperations } from "../../ters/src/lang/hosts.ts";
 import * as I from "../../ters/src/lang/int.ts";
 import { ARRAY_RT, kids, listSteps, RT, isData, isRecord, lowerScalar, reachedWithShows, type CoreIR, type LType, type Op, type SExpr, type SFunc, type TType } from "./scalar.ts";
@@ -439,12 +439,39 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
 // printer takes: handlers the compiler can see put into the code they
 // handle (handlers.ts, C64b), so a program's own effect answered in place
 // (effects' Ask) needs no handler at run time (C137c17).
+// What the roots reach (reachedWithShows), and the implementations at the
+// types that reaches: arith.ts, Shown and Ordered find those by type, not
+// by a reference, so they're added until nothing more is reached.
+function reachedImplementing(code: Code, roots: Id[], info: Info): Code {
+  // Each with the types it is at: an Embedding's are its two (int in
+  // float64), kept by the interface's own type around them.
+  const impls = [...(info.implementations ?? [])].map(([key, d]) => {
+    const iface = key.slice(0, key.indexOf("|")), rest = key.slice(iface.length + 1);
+    const ts = rest.startsWith("@") ? [rest.slice(1)] : [...rest.matchAll(/"t":"con","id":"([^"]+)"/g)].map((m) => m[1]).filter((t) => t !== iface);
+    return [ts, d] as const;
+  });
+  // The types the roots use: what they refer to, types included (model.ts
+  // dependencies); the builtin ones (Float64, Int, Text) always.
+  const used = new Set<Id>(), more: Id[] = [], kept = new Set<Id>();
+  const use = (r: Id) => { if (used.has(r)) return; used.add(r); for (const d of dependencies(code, r)) used.add(d); };
+  roots.forEach(use);
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const [ts, d] of impls) if (!kept.has(d) && ts.every((t) => used.has(t) || t.startsWith("type."))) { kept.add(d); more.push(d); use(d); grew = true; }
+  }
+  return reachedWithShows(code, [...roots, ...more], info);
+}
+
 export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roots: Id[]): CoreIR {
   // Work a lambda redoes on every call though nothing in it changes, done
   // once before (hoist.ts, C81), as compile.ts has it: sheet's columns
   // used, walked again for every row (C137d16). On what the roots reach,
   // so its check again isn't over the whole library.
-  const h = hoistInvariants(reachedWithShows(code, roots, info), info, names);
+  // The passes below walk every node they're given, so they're given only
+  // what the roots reach, hoisted or not, not the whole library (C174:
+  // sort's lowering 451 to about 200 ms, wc's about 500 to 120).
+  code = reachedImplementing(code, roots, info);
+  const h = hoistInvariants(code, info, names);
   if (h.hoisted) ({ code, info, names } = h);
   // inverse(f, …) of a named f is a solve on f (inverses.ts), as compile.ts
   // has it: the equations' solver or a mode's plan, not the relational
