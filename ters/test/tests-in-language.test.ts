@@ -10,7 +10,7 @@ import { infer } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { bool } from "../src/lang/run.ts";
-import { CHECK_OP, INT_OPS, LIST } from "../src/lang/std.ts";
+import { CHECK_OP, INT_OPS, LIST, S } from "../src/lang/std.ts";
 import { bySize, runTests, savedFrom, smallValues, testsIn } from "../src/lang/tests.ts";
 import { INT, NUMBER } from "../src/lang/types.ts";
 import type { Id } from "../src/model.ts";
@@ -110,4 +110,18 @@ test("a function input takes each of the program's definitions that fit, shown b
   assert.deepEqual([...new Set(r.failures.map((f) => f.inputs[0]))], ["double"]);
   assert.deepEqual(r.failures[0], { inputs: ["double", "0"], what: ["f(x) > x"] });
   assert.ok(r.cases >= 10, `${r.cases}`);
+});
+
+test("a law over any function takes its other inputs at each function's own types", () => {
+  const k = new Lang(LIBRARY.code);
+  const def = (name: string, params: string[], body: (...xs: Id[]) => Id) => { const d = k.def(name); k.define(d, k.fn(params, body)); return d; };
+  const one = def("add one", ["n"], (n) => k.call(INT_OPS.add, n, k.int(1)));
+  const rev = def("reversed", ["xs"], (xs) => k.call(lib("reverse"), xs));
+  const changes = def("changes", ["f", "x"], (f, x) => k.call(CHECK_OP, k.call(S.not, k.equal(k.call(f, x), x)), k.lit("f(x) isn't x")));
+  const code = base(k.code), names = { ...baseNames(), ...k.names }, info = infer(code, names);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const r = runTests(code, info, names, [one, rev, changes]).find((x) => x.def === changes)!;
+  // add one runs on Ints and always changes them; reversed on lists, and
+  // the empty list and a one-item list come back the same.
+  assert.deepEqual(r.failures.slice(0, 2).map((f) => f.inputs), [["reversed", "[]"], ["reversed", "[0]"]]);
 });
