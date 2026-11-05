@@ -501,6 +501,7 @@ superseded.
 ## C: Compiler and targets
 
 | id | item | PR |
+| C172d | A WebAssembly run keeps L186's log too: given a logged world (worldlog.ts `logged`), its answers are logged as the evaluator's are, and Random's seed, which wasm.ts's world now asks of the World (`randomSeed`, nodeWorld's from worldRandom) rather than of Math.random, is logged as C's is (C172c), so `lab run --replay` draws the same numbers (compiler/test/world-log-compiled.test.ts) | this PR |
 |---|---|---|
 | C67k | **Bug.** compile.ts's reading of each body's names (C67j) took a `//` inside a string for a comment, so a definition called after an address on the same line (`request(…, "http://…", …, utf8 of(…))`) was left out and the compiled run stopped: `utf8_of is not defined`. Strings are taken out first. Test: strings-in-code.test.ts | this PR |
 | C67j | compile.ts keeps the functions its exports reach by reading each body's names once, not testing each name against each kept body with a regular expression (quadratic): Bounce, Spacetime, Constructions compile 2.54, 3.06, 1.73 → 2.37, 2.76, 1.66 s (with C154, C155 measured before it), the same output. Under 10%, so C67 stops again | #1356 |
