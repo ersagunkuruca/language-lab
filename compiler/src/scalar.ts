@@ -721,6 +721,10 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     const td = code.nodes[n.body];
     if (td?.kind === "typedef" && td.effect && td.variants.length && td.variants.every((v: Id) => { const x = code.nodes[v] as NodeOf<"variant">; return x.returns && answeredLater.has(v); })) td.variants.forEach((v: Id) => laterOps.set(v, n.id));
   }
+  // std's Await where the program handles it (start branch, under
+  // together, race and within, C180): an await or a timer no handler of
+  // the program's answers is the world's (core-rt.ts `perform:`).
+  if (opts.host && Object.values(code.nodes).some((n) => n.kind === "arm" && (n.variant === AWAIT_OP || n.variant === START_TIMER_OP))) { laterOps.set(AWAIT_OP, AWAIT); laterOps.set(START_TIMER_OP, AWAIT); }
   const laterEffs = new Set(laterOps.values());
   const tailEffs = new Set([...tailOps.values(), ...laterEffs]);
   // The program's own effects C keeps on its handler stack (L213c4): not
@@ -779,6 +783,10 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     }
     if (opts.data && unconstrained(t)) return "f64";
     if (t.t !== "con") return null;
+    // A type an operation keeps its own (Await's `a`, pinned where a case
+    // takes it): its values only pass through the case, as the host's
+    // (start branch's tickets, C180).
+    if (opts.host && t.id.startsWith("pin.any.")) return "host";
     // A part nothing constrains (the items of `[]` nobody adds to, what a
     // function given to map over it takes, C101): no value of it is ever
     // made, so any type holds it; Float64's.
@@ -1462,7 +1470,31 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           return { k: "released", body, release: expr(release.body, env, f, false), t, st: f.locals.push("i32") - 1 };
         }
         if (n.name) throw new Refused("handles an effect under a name, which isn't lowered yet (L213b): it runs in the evaluator");
-        if (n.otherwise && arms.length && effectOps.has(arms[0].variant)) throw new Refused("handles an effect with a case for the normal finish, which isn't lowered yet (L57)");
+        if (n.otherwise && arms.length && effectOps.has(arms[0].variant)) {
+          // A case for the normal finish (L57, C180) runs outside the
+          // handler, on the computation's value; an escape's value passes
+          // as it is.
+          const fin = code.nodes[n.otherwise], ft = zonk(n.otherwise), e = laterOps.get(arms[0].variant) ?? tailOps.get(arms[0].variant) ?? opOf.get(arms[0].variant);
+          const why = "handles an effect with a case for the normal finish that uses the effect again, which is only lowered for JavaScript yet (L57)";
+          if (fin?.kind !== "lambda" || fin.params.length !== 1 || ft.t !== "fn" || e === undefined) throw new Refused(why);
+          if (!ft.eff.effs.includes(e)) {
+            // One that doesn't use the handled effect runs the same inside
+            // it, on every target: the handler's computation is then the
+            // finish called on the old one (a let).
+            const call = `${id}·finish` as Id;
+            code.nodes[call] = { id: call, kind: "call", fn: n.otherwise, args: [n.scrutinee] };
+            info.typeOf.set(call, info.typeOf.get(id)!);
+            const kept = code.nodes[id];
+            code.nodes[id] = { ...n, scrutinee: call, otherwise: null };
+            try { return expr(id, env, f, tail); } finally { code.nodes[id] = kept; }
+          }
+          // One that does: the runtime's handler runs it once the
+          // computation has finished, with the handler taken off.
+          const later = laterOps.get(arms[0].variant), pushed = tailOps.get(arms[0].variant);
+          if (opts.host && later && arms.every((a) => laterOps.get(a.variant) === later)) return handleOps(n, later, id, env, f, true, fin);
+          if (opts.host && pushed && !tailOwn.has(pushed) && arms.every((a) => tailOps.get(a.variant) === pushed)) return handleOps(n, pushed, id, env, f, false, fin);
+          throw new Refused(why);
+        }
         if (opts.data && arms.length === 1 && arms[0].variant === ABORT_OP) {
           // A handler of Abort: the scrutinee is the computation.
           const t = stype(zonk(id));
@@ -1883,9 +1915,18 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // as in the evaluator.
   // `later`: each case is given the rest, last, and the code it handles
   // takes the rest of the run (several_): core-rt.ts `handleK:`.
-  function handleOps(n: NodeOf<"match">, e: Id, id: Id, env: Map<Id, number>, f: SFunc, later = false): SExpr {
+  function handleOps(n: NodeOf<"match">, e: Id, id: Id, env: Map<Id, number>, f: SFunc, later = false, fin?: NodeOf<"lambda">): SExpr {
     const t = stype(zonk(id));
     if (!t) throw new Refused(`handles ${nm(e)} with a value that is ${OTHER}`);
+    // A handler of std's Await whose value is a function (the simulated
+    // world's clock passed along) keeps the rest for later, past the
+    // handlers inside it (start branch's), which the runtime's handlers,
+    // called and returning, can't yet.
+    if (e === AWAIT && isFn(t)) throw new Refused("handles Await keeping the rest for later (the simulated world), which isn't lowered yet (C180)");
+    // With a case for the normal finish (C180), the computation's value
+    // is the finish's input.
+    const tb = fin ? stype(zonk(n.scrutinee)) : t;
+    if (!tb) throw new Refused(`handles ${nm(e)} around ${whyNot(zonk(n.scrutinee))}`);
     const ops = (code.nodes[(code.nodes[e] as NodeOf<"def">).body!] as NodeOf<"typedef">).variants;
     const arms = n.arms.map((a) => code.nodes[a] as NodeOf<"arm">);
     if (!ops.every((v) => arms.some((a) => a.variant === v))) throw new Refused(`handles only some of ${nm(e)}'s operations`);
@@ -1902,12 +1943,18 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       ps.forEach((p, j) => { if (!p) throw new Refused(`handles ${nm(v)} given ${whyNot(zonk(a.binds[j]))}`); });
       return closureOf(a.id, a.binds, ps as LType[], a.body, r);
     });
-    const body = closureOf(n.scrutinee, [], [], n.scrutinee, t);
+    const body = closureOf(n.scrutinee, [], [], n.scrutinee, tb);
+    const cps = (c: SExpr) => c.k === "closure" && (c.t.several || waits(funcs[c.fn].body));
+    const finished = fin ? [closureOf(fin.id, fin.params, [tb], fin.body, t)] : [];
+    const finTag = !fin ? "" : cps(finished[0]) ? ":finK" : ":fin";
+    // A computation that doesn't wait after all (together's actions that
+    // never await) is called directly (`d`), its value the end.
+    const how = cps(body) ? "k" : "d";
     // A case that leaves the rest out answers at once (L63, L229e): the
     // runtime resumes the rest with its value.
     const now = later ? ops.flatMap((v, i) => (arms.find((x) => x.variant === v)!.binds.length === (code.nodes[v] as NodeOf<"variant">).fields.length ? [i] : [])) : [];
-    if (later) return { k: "rt", fn: `handleK:${e}${now.length ? `:${now.join(",")}` : ""}`, args: [body, ...cases], host: { t, partial: true } };
-    if (body.k === "closure" && (body.t.several || waits(funcs[body.fn].body))) throw new Refused(`handles ${nm(e)} around a wait or several answers (not lowered yet)`);
+    if (later) return { k: "rt", fn: `handleK:${e}:${now.join(",")}:${finTag.slice(1) || "-"}:${how}`, args: [body, ...cases, ...finished], host: { t, partial: true } };
+    if (cps(body) || finTag === ":finK") throw new Refused(`handles ${nm(e)} around a wait or several answers (not lowered yet)`);
     if (tailOwn.has(e)) {
       // C (L213c4): the cases pushed, the code run, and popped however it
       // ends (a release).
@@ -1916,7 +1963,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       return { k: "let", i, value: { k: "rt", fn: `hpush:${e}`, args: cases, host: { t: "i32", partial: false } },
         body: { k: "released", body: { k: "apply", fn: body, t: bt, args: [], tail: false, tmp: f.locals.push(bt) - 1 }, release: { k: "rt", fn: `hpop:${e}`, args: [], host: { t: "i32", partial: false } }, t, st: f.locals.push("i32") - 1 } };
     }
-    return { k: "rt", fn: `handleOps:${e}${t === "i32" ? ":bool" : ""}`, args: [body, ...cases], host: { t, partial: true } };
+    return { k: "rt", fn: `handleOps:${e}${t === "i32" ? ":bool" : ""}${finTag}`, args: [body, ...cases, ...finished], host: { t, partial: true } };
   }
   // A partial function type of these, keyed as stype keys one.
   // One whose closures turned out to take the rest (NeedsSeveral) is

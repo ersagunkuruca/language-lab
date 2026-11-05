@@ -42,8 +42,9 @@ test("a handler's normal finish changes the result's type, evaluated and compile
   const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });
   const evaluated = NAMES.map((n) => r.value(at(n)));
   assert.deepEqual(evaluated, ["some(3)", "none", "10"]);
-  // A core IR gap (C137): L57.
-  assert.throws(() => compiledDefs(p.code, p.info, p.names, NAMES), /L57/);
+  // Compiled through the core IR (C180).
+  const js = compiledDefs(p.code, p.info, p.names, NAMES) as Record<string, unknown>;
+  assert.deepEqual(NAMES.map((n) => (js[n] as () => unknown)()), evaluated);
 });
 
 test("the normal finish must be a function written in place, of the computation's value", () => {

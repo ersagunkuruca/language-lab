@@ -31,15 +31,15 @@ async function both(body: (k: Lang) => Id) {
   const world = () => ({ now: () => clock, wait: (ms: number) => { clock += ms; }, fetchText: (u: string) => { fetched.push(u); if (u.includes("missing")) throw new Error("404 Not Found"); return `<${u}>`; } });
   const ran: string[] = [];
   runMain(code, info, main, { print: (s) => ran.push(s), names, world: world() } as Parameters<typeof runMain>[3]);
-  // Core IR gaps (C137): together and race need L57, and start fetch
-  // and an attempt around a search aren't lowered yet. Until then, why
+  // Core IR gaps (C182): start fetch and an attempt around a search
+  // aren't lowered yet. Until then, why
   // main isn't compiled.
   const compiled = gap(() => compiledMain(code, info, names, { print: () => {}, world: world() } as never));
   return { ran, compiled, fetched };
 }
 
 // Why main isn't compiled through the core IR yet (C137's gaps).
-const GAP = /normal finish, which isn't lowered yet \(L57\)|handles Abort around a search|uses start fetch/;
+const GAP = /handles Abort around a search|uses start fetch/;
 function gap(run: () => unknown): string {
   try { run(); } catch (e) { return (e as Error).message; }
   return "compiled";
