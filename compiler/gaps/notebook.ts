@@ -1,28 +1,24 @@
-// notebook in six ways, in one process: the evaluator and the compiler's
-// output on the program as defined (maps as their sorted lists), the
-// evaluator and the compiled code on the weight-balanced trees the chooser
-// picks, the compiled code with Map as a hash table where it may be one
+// notebook in six ways, in one process: the evaluator and the core IR's
+// JavaScript on the program as defined (maps as their sorted lists), the
+// evaluator and the core IR's on the weight-balanced trees the chooser
+// picks, the core IR's with Map as a hash table where it may be one
 // (C63b), and the hand-written ideal (notebook.ideal.js). Each gets the same
 // arguments and a world whose files are kept in memory, and the comparison
 // is what it printed and how it exited. Used by bench-notebook.ts and by
 // test/notebook.test.ts.
 
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { pathToFileURL } from "node:url";
 import { runProgram, type World } from "../../ters/src/lang/run.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { withLibraryRepresentations } from "../../ters/src/lang/library-reps.ts";
-import { compile } from "../src/compile.ts";
 import { coreMain, lowerCore } from "../src/core-js.ts";
 import { examples, load } from "../src/program.ts";
-import { $setPrint, $setWorld, $Aborted, $toList } from "../src/runtime.js";
 import { notebook as ideal } from "./notebook.ideal.js";
 
 export interface Run { out: string[]; err: string[]; code: number }
 export type Way = (args: string[], files: Record<string, string>) => Run;
-export type Name = "evaluator" | "evaluator, trees" | "compiled" | "compiled, trees" | "compiled, table" | "core, trees" | "core, table" | "ideal";
+export type Name = "evaluator" | "evaluator, trees" | "core" | "core, trees" | "core, table" | "ideal";
 
 function reader(files: Record<string, string>) {
   return (p: string) => {
@@ -52,26 +48,12 @@ export function programs() {
 
 export async function ways(): Promise<Record<Name, Way> & { chosen: Record<string, string[]> }> {
   const { main, plain, trees, table } = programs();
-  const dir = mkdtempSync(join(tmpdir(), "notebook-"));
-  const runtime = pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href;
-  const built = async (p: typeof plain, file: string) => {
-    writeFileSync(join(dir, file), compile(p.code, p.info, p.names, { runtime, exports: ["main"] }));
-    return (await import(pathToFileURL(join(dir, file)).href)).defs.main as (args: unknown) => number;
-  };
   const evaluator = (p: typeof plain): Way => (args, files) => {
     const out: string[] = [], err: string[] = [];
     const code = runProgram(p.code, p.info, main, args, { print: (s) => out.push(s), names: p.names, world: world(files, err) });
     return { out, err, code };
   };
-  const compiled = (f: (args: unknown) => number): Way => (args, files) => {
-    const out: string[] = [], err: string[] = [];
-    $setPrint((s: string) => out.push(s));
-    $setWorld(world(files, err));
-    let code: number;
-    try { code = Number(f($toList(args))); } catch (e) { if (!(e instanceof $Aborted)) throw e; err.push(e.reason); code = 1; }
-    return { out, err, code };
-  };
-  // Printed from the core IR (C137d15), which compile.ts gives way to.
+  // Printed from the core IR (C137d15).
   const core = (p: typeof plain): Way => {
     const rt: { print: (s: string) => void; world?: World } = { print: () => {} };
     const run = coreMain(lowerCore(p.code, p.info, p.names, [main]), "main", rt);
@@ -88,9 +70,7 @@ export async function ways(): Promise<Record<Name, Way> & { chosen: Record<strin
     "core, table": core(table),
     evaluator: evaluator(plain),
     "evaluator, trees": evaluator(trees),
-    compiled: compiled(await built(plain, "notebook.js")),
-    "compiled, trees": compiled(await built(trees, "notebook-trees.js")),
-    "compiled, table": compiled(await built(table, "notebook-table.js")),
+    core: core(plain),
     ideal: (args, files) => {
       const out: string[] = [], err: string[] = [];
       const code = ideal(args, { readFile: reader(files), print: (s: string) => out.push(s), printError: (s: string) => err.push(s) });
