@@ -18,6 +18,7 @@
 //   lab upgrade <program>                move a program onto its modules' newest versions, if its tests pass (§2)
 //   lab downgrade <program> <name>       back to the version before, from the program's store (§4b)
 //   lab broken <module.json> <name> <n> <reason…>  mark a version broken in the module's signed log (§4)
+//   lab fetch <program> <url>            a module from any host into the program's modules, checked by hash (§4)
 //   lab diff <before.json> <after.json>  what changed, by definition and name (merge-files.ts)
 //   lab merge <base> <ours> <theirs> [path]
 //                                        git's merge driver for program files: id by id, ours
@@ -101,6 +102,8 @@ usage:
                                         mark version n of name broken in the module's log, signed with your key
                                         (default ~/.lab/key.pem, made on first use); lab publish signs each new
                                         version into the same log, and lab upgrade warns and won't move to it (§4)
+  lab fetch <program> <url or path>     a module from any host into the program's modules folder, every definition
+                                        checked by its hash, and its log beside it by its author's key (§4)
   lab downgrade <program> <name>        move what the program calls name back to the version before, from its
                                         store (store.json, every version it has used, kept by upgrade and
                                         downgrade, so it runs when a module's file is gone; §4b)
@@ -337,6 +340,35 @@ if (command === "diff" || command === "merge") {
   const named = beside && existsSync(beside) ? { names: json(beside), ...(o && typeof o === "object" ? o : {}) } : o;
   process.stderr.write(`lab: ${shown ?? ours}: ${conflicts.length} conflict${conflicts.length === 1 ? "" : "s"}, ours kept:\n${describe(conflicts, named, t).map((l) => `  ${l}\n`).join("")}`);
   process.exit(1);
+}
+// A module from any host, into a program's modules folder (SHARING.md §4,
+// L114b): a URL or a path. Code fetched by hash checks itself, so where it
+// came from needn't be trusted: verify rehashes every definition, and its
+// log, fetched beside it, must be signed by the authors the program took.
+if (command === "fetch") {
+  const url = rest[0];
+  if (!path || !url) fail("fetch needs a program folder and a module's URL or path");
+  const get = async (u: string): Promise<string | null> => {
+    if (/^https?:\/\//.test(u)) { const r = await fetch(u); return r.ok ? await r.text() : null; }
+    return existsSync(u) ? readFileSync(u, "utf8") : null;
+  };
+  const text = (await get(url)) ?? fail(`nothing at ${url}`);
+  let m: Module;
+  try { m = JSON.parse(text); } catch { fail(`${url} isn't a module`); }
+  const wrong = verify(m, LIBRARY.code);
+  if (wrong) fail(`${url} isn't what it says: ${wrong}`);
+  const logText = await get(url.replace(/\.json$/, "") + ".log.json");
+  const log = logText ? JSON.parse(logText) : [];
+  const store = programStore(path);
+  const r = readLineageLog(log, store?.authors ?? {});
+  if (r.problem) fail(`${url}'s log is refused: ${r.problem}`);
+  const file = basename(url.replace(/[?#].*$/, ""));
+  mkdirSync(join(path, "modules"), { recursive: true });
+  writeFileSync(join(path, "modules", file), JSON.stringify(m, null, 2) + "\n");
+  if (log.length) writeFileSync(join(path, "modules", logFile(file)), JSON.stringify(log, null, 2) + "\n");
+  const ls = m.lineages ?? {};
+  console.log(`fetched ${m.title}: ${m.code.defs.length} definitions checked by hash${Object.keys(ls).length ? `, ${Object.values(ls).map((vs) => `${m.names[vs.at(-1)!] ?? vs.at(-1)} at version ${vs.length}`).join(", ")}` : ""}${log.length ? `, its log signed by its author${Object.keys(r.broken).length ? ` (${Object.keys(r.broken).length} marked broken)` : ""}` : ", no log"}; lab upgrade moves the program onto it`);
+  process.exit(0);
 }
 // A version marked broken in a module's log (SHARING.md §4, L114a).
 if (command === "broken") {
