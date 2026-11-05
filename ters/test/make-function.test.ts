@@ -50,7 +50,8 @@ test("a group of several values out gives them back as a tuple", () => {
   assert.deepEqual(infer(r.code, r.names).errors, []);
   // Its results are named for where the values went (L128b, E165b), so the
   // graph draws a port each and reads first(results) as .r.
-  const lam = Object.values(r.code.nodes).find((n): n is NodeOf<"lambda"> => n.kind === "lambda" && !!n.results?.length);
+  // Inside hsi colour: a library definition's lambda has results too since L225d.
+  const lam = subtree(r.code, hsi).map((id) => r.code.nodes[id]).find((n): n is NodeOf<"lambda"> => n.kind === "lambda" && !!n.results?.length);
   assert.deepEqual(lam?.results?.map((b) => r.names[b]), ["r", "g"]);
 });
 
