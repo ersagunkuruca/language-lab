@@ -56,8 +56,7 @@ test("simulated: ties go by the seed, the same every run, and some seed gives an
   assert.deepEqual(program(3, three), ['["a", "b", "c"]']);
 });
 
-// Why a definition isn't compiled through the core IR yet (C137's gaps).
-const GAP = /isn't compiled through the core IR/;
+// What a compiled definition gave, or why it threw.
 function gap(run: () => unknown): string {
   try { return String(run()); } catch (e) { return (e as Error).message; }
 }
@@ -73,9 +72,8 @@ test("simulated compiled to JavaScript picks what the evaluator picks, seed by s
   assert.deepEqual(info.errors.map((e) => e.message), []);
   const compiled = (seed: number) => gap(() => compiledDefs(code, info, names, ["winner"]).winner(seed));
   const r = makeRunner(code, info, { print: () => {}, names });
-  for (let seed = 1; seed <= 8; seed++) assert.ok((r.call(r.value(winner), seed) as Iterable<unknown>)[Symbol.iterator]().next().value !== undefined);
-  // A core IR gap (C137): race needs L57.
-  assert.match(compiled(1), GAP);
+  // Compiled through the core IR (C185), the same winner for each seed.
+  for (let seed = 1; seed <= 8; seed++) assert.equal(compiled(seed), String((r.call(r.value(winner), seed) as Iterable<unknown>)[Symbol.iterator]().next().value));
 });
 
 // Time and Wait on the virtual clock too (L138, REVIEW-2026-11-01b §2):
@@ -94,8 +92,8 @@ test("simulated: now and wait read and move the virtual clock, evaluated and com
   const real = { now: () => assert.fail("a simulated run read the real clock"), wait: () => assert.fail("a simulated run waited for real") };
   const r = makeRunner(code, info, { print: () => {}, names, world: real } as Parameters<typeof makeRunner>[2]);
   for (const seed of [1, 2]) assert.equal([...(r.call(r.value(elapsed), seed) as Iterable<unknown>)][0], 5300);
-  // A core IR gap (C137): simulated's handler needs L57.
-  assert.match(gap(() => compiledDefs(code, info, names, ["elapsed"]).elapsed(1)), GAP);
+  // Compiled through the core IR (C185): the same, the real clock unread.
+  for (const seed of [1, 2]) assert.equal(gap(() => compiledDefs(code, info, names, ["elapsed"], { print: () => {}, world: real } as never).elapsed(seed)), "5300");
 });
 
 // Await, Time, Wait and Random are answered; an Abort (a ticket from
@@ -127,6 +125,8 @@ test("simulated: an extra random draw in the action doesn't change the schedule"
   const winners = seeds.map((s) => run(plain, s));
   assert.ok(new Set(winners).size > 1, `one winner for every seed: ${winners[0]}`);
   assert.deepEqual(seeds.map((s) => run(drawing, s)), winners);
-  // A core IR gap (C137): race needs L57.
-  assert.match(gap(() => compiledDefs(code, info, names, ["drawing"]).drawing(1)), GAP);
+  // Compiled through the core IR (C185): the same winners.
+  const compiled = compiledDefs(code, info, names, ["plain", "drawing"]);
+  assert.deepEqual(seeds.map((s) => String(compiled.plain(s))), winners.map(String));
+  assert.deepEqual(seeds.map((s) => String(compiled.drawing(s))), winners.map(String));
 });
