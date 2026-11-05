@@ -2621,9 +2621,30 @@ function* fillingSteps(code: Code, info: Info, hole: Id): Generator<void, Fillin
     }
     return [{ tails: [...tails], lets: new Set([...own.effs, CONSOLE]) }];
   });
+  // And its inputs keep the pin's types (E103i): a filling that makes an
+  // input of a definition held at (a, a, a) -> a a Float64 can't keep it,
+  // which the whole check says ("… and this makes it (Float64, a, a) -> a").
+  // The body's inputs, as the filling leaves them, are unified with the
+  // pin's held rigid; only its result is left to the check, which may
+  // lift it (liftPinned).
+  const pinInputs = h.group.flatMap((d) => {
+    const pin = info.options?.pins?.[d], body = (code.nodes[d] as NodeOf<"def"> | undefined)?.body;
+    const t = pin && body ? info.typeOf.get(body) : undefined, r = t && info.subst.resolve(t);
+    return pin && r?.t === "fn" ? [{ pin, params: r.params }] : [];
+  });
+  const keepsPinInputs = (s: Subst) => pinInputs.every(({ pin, params }) => {
+    const t = s.trial(), plainArgs = t.plainArgs;
+    t.plainArgs = (id, args) => (id.startsWith(`${RIGID}any.`) ? null : plainArgs(id, args));
+    const want = rigid(fresh(pin, t));
+    if (want.t !== "fn" || want.params.length !== params.length) return true;
+    try { params.forEach((x, i) => t.unify(x, want.params[i])); return true; } catch (e) { if (e instanceof TypeError) return false; throw e; }
+  });
   const keepsPin = (s: Subst) => pinRows.every((p) => p.tails.every((tail) => s.resolveRow({ effs: [], tail }).effs.every((e) => p.lets.has(e))));
   const safe = (s: Subst, f: Filling, risky: boolean | "field", mix?: string, brings = "") => {
     if (pinRows.length && !keepsPin(s)) return false;
+    // (A literal's type is settled by the whole check, which may take it
+    // as the pin's: it is left to that check.)
+    if (pinInputs.length && f.kind !== "lit" && !keepsPinInputs(s)) return false;
     if (mix && !risky) { const m = mixChecked(f, mix); if (m !== undefined) return m; }
     const dir = directions.size ? direction(f) : "same";
     if (dir === "lost") return false;
