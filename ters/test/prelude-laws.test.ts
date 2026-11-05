@@ -3,7 +3,7 @@
 // program's. First laws: the complex ones (POLAR.md L97e); Bytes' round
 // trips through Base64, hex and UTF-8 (T7e4); dates', instants' and
 // durations' text read back (T7e5); times of day (T7e6); sort and
-// append (T7e7).
+// append (T7e7); maps, sets and reverse (T7e8).
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -16,7 +16,7 @@ import { isUse, subtree, useTarget } from "../src/model.ts";
 test("the prelude's laws hold on small values", () => {
   const code = base(LIBRARY.code), names = { ...baseNames(), ...LIBRARY.names }, info = infer(code, names);
   const laws = testsIn(info, LIBRARY.code.defs);
-  assert.deepEqual(laws.map((d) => names[d]).sort(), ["acos by unpolar agrees at Float64", "append is associative", "asin by unpolar agrees at Float64", "bytes of base64 undoes base64 of", "bytes of hex undoes hex of", "cos by polar agrees at Float64", "cos by sin agrees at Float64", "date read undoes date text", "duration read undoes duration text", "from polar undoes modulus and angle", "instant read undoes instant text", "polar by sincos agrees at Float64", "polar undoes unpolar", "sin by cos agrees at Float64", "sin by polar agrees at Float64", "sort gives its items in order", "sort keeps every item", "text of utf8 undoes utf8 of", "time read undoes time text"]);
+  assert.deepEqual(laws.map((d) => names[d]).sort(), ["acos by unpolar agrees at Float64", "add item and remove item keep their item", "append is associative", "asin by unpolar agrees at Float64", "bytes of base64 undoes base64 of", "bytes of hex undoes hex of", "cos by polar agrees at Float64", "cos by sin agrees at Float64", "date read undoes date text", "duration read undoes duration text", "from polar undoes modulus and angle", "instant read undoes instant text", "polar by sincos agrees at Float64", "polar undoes unpolar", "put and remove key keep their key", "reverse undoes reverse", "sin by cos agrees at Float64", "sin by polar agrees at Float64", "sort gives its items in order", "sort keeps every item", "text of utf8 undoes utf8 of", "time read undoes time text"]);
   for (const r of runTests(code, info, names, laws)) {
     assert.equal(r.error, undefined, r.name);
     assert.ok(r.cases >= 10, `${r.name}: ${r.cases}`);
