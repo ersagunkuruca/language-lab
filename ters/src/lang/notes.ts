@@ -64,6 +64,7 @@ export const NOTES: Comments = {
   "std.bits": "An interface: and, or, xor and shifts on a type's bits. Int and the words implement it, so a hash written with bits xor works at Word32 and Word64 alike.",
   "std.shown": "An interface: how a type's values show as text. show any shows a value of a type that implements it through its as shown, so a type of your own shows its own way with a definition of type Shown T. Rational, Complex and Fixed do (the prelude's).",
   "std.matrix": "A matrix of any size: its row and column counts and its items row by row. Built with matrix of rows; a size mismatch stops the program and names both sizes, as the size isn't in the type.",
+  "std.lu factors": "A square matrix's Gaussian elimination, done once by factored and kept: the pivots in the order taken, each pivot's row of U and the multiples taken off the rows below. solved with uses it to solve the matrix for any vector.",
   "std.embedding": "An embedding of a in b: a map from a into b that keeps the operations (ι(x + y) = ι(x) + ι(y), ι(x · y) = ι(x) · ι(y), ι(−x) = −ι(x), and x < y exactly when ι(x) < ι(y)), written embedding(map: …), at most one for a pair of types. lab test checks those laws. EMBEDDINGS.md.",
   "std.instant": "An instant: seconds since 1970-01-01 00:00:00 UTC, leap seconds not counted, made by instant of. A duration is a Float64 in seconds.",
   "std.timeofday": "A time of day in whole seconds: an hour 0 to 23, a minute and a second 0 to 59, made by time of, which checks it.",
