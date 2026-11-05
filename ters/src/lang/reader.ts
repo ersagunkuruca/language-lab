@@ -230,13 +230,6 @@ export function writeReader(code: Code, printer: Id, names: Record<Id, string>):
       const d = pieceReader(f);
       return then(k.call(d, text, at, ...n.args.map((a) => copy(a, env, inputs))), (a) => next(a, env));
     }
-    // inverse(g, x) with x to be read (L72e1b, as descent.ts): the longest
-    // run of the characters g's guard takes that g gives an answer for.
-    if (named(f) === "inverse") {
-      const x = target(n.args[1]), sx = x ? env.get(x) : undefined, g = target(n.args[0]);
-      if (!x || !sx || "b" in sx || !g) throw new Unsupported("reads inverse other than of a definition, for an input");
-      return then(k.call(inverseOf(g), text, at, k.call(run, text, at, passTest(g))), (a, v) => next(a, new Map(env).set(x, { b: v })));
-    }
     if (named(f) === "spaced") return k.let("at", k.call(spaces, text, at), (a) => piece(n.args[0], text, a, env, inputs, tops, (a2, e) => k.let("at", k.call(spaces, text, a2), (a3) => next(a3, e))));
     // Needing no parentheses, the arm itself; needing some, the reader's
     // own parentheses path reads it (at the outermost inputs, where it
@@ -306,32 +299,6 @@ export function writeReader(code: Code, printer: Id, names: Record<Id, string>):
     pieceReaders.set(f, d);
     k.define(d, k.fn(["text", "at", ...fn.params.map((p) => named(p) || "x")], (text, at, ...ps) =>
       piece(fn.body, text, at, new Map(), new Map(fn.params.map((p, j) => [p, ps[j]] as const)), [], (end) => some(end, k.x(end)))));
-    return d;
-  }
-
-  // The test of a character g's guard puts on its Text (`all pass(characters
-  // t, p)`), and read inverse of g(text, at, end): the longest text from
-  // at, ending by end, that g gives an answer for, and that answer.
-  const passTest = (g: Id): Id => {
-    const fn = lambdaOf(g), b = fn && node(fn.body), env: Env = new Map(fn ? [[fn.params[0], { unknown: "int" }]] : []);
-    if (b?.kind === "match") hint(b.scrutinee, env);
-    const sl = fn && env.get(fn.params[0]);
-    if (!sl || !("pass" in sl)) throw new Unsupported(`reads inverse of ${named(g)}, whose characters nothing says`);
-    return copy(sl.pass, new Map(), new Map());
-  };
-  const inverses = new Map<Id, Id>();
-  function inverseOf(g: Id): Id {
-    if (inverses.has(g)) return inverses.get(g)!;
-    const d = k.def(`read inverse of ${named(g) || "a function"}`);
-    inverses.set(g, d);
-    k.define(d, k.fn(["text", "at", "end"], (text, at, end) => {
-      const shorter = () => k.call(d, text, at, k.call(INT_OPS.sub, end, k.int(1)));
-      return k.if(k.call(INT_OPS.less, at, end), k.let("spelling", k.call(TEXT_OPS.slice, text, at, end), (t) =>
-        k.match(k.call(S.optional, k.thunk(() => k.call(g, t))), [
-          { variant: SOME, names: ["x"], body: ([x]) => some(end, k.x(x)) },
-          { variant: NONE, names: [], body: () => shorter() },
-        ])), none());
-    }));
     return d;
   }
 

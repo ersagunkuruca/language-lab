@@ -2248,18 +2248,13 @@ export function buildPrelude(): Module {
     k.call(S.oneOf, k.if(iLess(c, k.int(65536)),
       k.list(k.call(jsonChar, ch), uEscape("0123456789abcdef", c), uEscape("0123456789ABCDEF", c), shortEscapes.reduceRight((acc, [code, esc]) => k.if(iSame(c, k.int(code)), k.lit(esc), acc), k.call(jsonChar, ch))),
       k.list(k.call(jsonChar, ch))))));
-  // A number any way json read reads it (L72e1b): show's spelling first,
-  // then any run of digits, signs, ".", e and E that read number reads as it.
-  const jsonNumberChar = def("json number character", ["character"], (c) => k.byValue(c, [..."0123456789+-.eE"].map((x) => [k.lit(x), k.true] as [Id, Id]), k.false));
-  const jsonNumberRead = def("json number read", ["text"], (t) => k.if(k.call(allPass, k.call(TEXT_OPS.characters, t), k.x(jsonNumberChar)), k.call(TEXT_OPS.readNumber, t), k.call(S.fail)));
-  const jsonNumberSpelled = def("json number spelled", ["number"], (x) => k.if(k.call(S.oneOf, k.list(k.false, k.true)), k.call(inverse, k.x(jsonNumberRead), x), k.call(S.show, x)));
   const jsonQuotedSpelled = def("json quoted spelled", ["text"], (t) => texts(k.lit("\""), k.call(TEXT_OPS.joinAll, k.call(map, k.call(TEXT_OPS.characters, t), k.x(jsonCharSpelled)), k.lit("")), k.lit("\"")));
   const jsonSpelled = k.def("json spelled");
   const blanked = (x: Id) => texts(k.call(blank), x, k.call(blank));
   k.define(jsonSpelled, k.fn(["json"], (j) => k.match(j, [
     { variant: JSON_V.null, names: [], body: () => k.lit("null") },
     { variant: JSON_V.bool, names: ["value"], body: ([b]) => k.if(b, k.lit("true"), k.lit("false")) },
-    { variant: JSON_V.number, names: ["value"], body: ([x]) => k.call(jsonNumberSpelled, x) },
+    { variant: JSON_V.number, names: ["value"], body: ([x]) => k.call(S.show, x) },
     { variant: JSON_V.text, names: ["value"], body: ([t]) => k.call(jsonQuotedSpelled, t) },
     { variant: JSON_V.list, names: ["items"], body: ([xs]) => texts(k.lit("["), k.call(blank), k.call(TEXT_OPS.joinAll, k.call(map, xs, k.fn(["item"], (x) => blanked(k.call(jsonSpelled, x)))), k.lit(",")), k.lit("]")) },
     { variant: JSON_V.object, names: ["fields"], body: ([fs]) => texts(k.lit("{"), k.call(blank), k.call(TEXT_OPS.joinAll, k.call(map, fs, k.fn(["field"], (f) =>
@@ -2887,7 +2882,7 @@ export function buildPrelude(): Module {
     [csvRecords]: "The records of a CSV text whose first line names its columns, each a map from those names to the row's fields: csv records(\"name,age\\nAda,36\") is one map, name to Ada and age to 36 (Python's csv.DictReader). A short row leaves the last names out.",
     [csvOfRecords]: "A CSV text of records, the other way from csv records: the column names as its first line, then each record's value at each name, empty where it has none (Python's csv.DictWriter).",
     [csvRows]: "The rows of fields a CSV text holds (RFC 4180), the other way from csv printed: quoted fields may hold commas, doubled quotes and line breaks; lines end in LF or CRLF. Stops when the text ends inside a quoted field.",
-    [jsonSpelled]: "Every JSON text that spells a Json value (RFC 8259), the one json printed writes first: blanks between the tokens, and each character as itself or escaped. Run backwards it reads JSON. A number is spelled as show writes it first, then any way json read reads it (1.0, 1e3).",
+    [jsonSpelled]: "Every JSON text that spells a Json value (RFC 8259), the one json printed writes first: blanks between the tokens, and each character as itself or escaped. Run backwards it reads JSON. Numbers are spelled as show writes them, for now.",
     [blank]: "Spaces, tabs, line ends and carriage returns between a text's tokens: \"\" first, then any run of them. A printer that writes it prints none, and reads any.",
     [jsonCharSpelled]: "Every way a JSON string spells a character: as json character writes it first, then \\uXXXX in lower and upper case, then its short escape (\\t, \\/ and the others).",
     [jsonPrinted]: "The JSON text of a Json value (RFC 8259): json printed(json object([(\"a\", json list([json number(1), json null]))])) is {\"a\":[1,null]}. Text is quoted with \", \\ and control characters escaped.",
