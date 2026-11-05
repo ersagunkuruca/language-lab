@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { load } from "../src/program.ts";
-import { descentReader } from "../src/descent.ts";
+import { descentReader } from "../../ters/src/lang/descent.ts";
 import { makeRunner, showValue, type Value } from "../../ters/src/lang/run.ts";
 import { Lang } from "../../ters/src/lang/dsl.ts";
 import { infer } from "../../ters/src/lang/infer.ts";

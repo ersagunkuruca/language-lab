@@ -37,13 +37,14 @@ test("printing an expression read back gives the fewest parentheses (L70b)", () 
 
 // Where a line that has no reading stopped (L70c, relate.ts Reading): the
 // furthest character any try read to or looked for something at, and
-// what it looked for there. The editor marks it in the text.
+// what it looked for there. The editor marks it in the text. Read by
+// descent since C110 s6, which names every arm that could start there.
 test("a line with no reading says where it stopped and what was expected (L70c)", async () => {
   const { stuckReading } = await import("../src/lang/relate.ts");
   let last: Parameters<typeof stuckReading>[0] | null = null;
   const rs = makeRunner(p.code, infer(p.code, p.pres.names), { print: () => {}, stuck: (x) => { last = x; } });
   const stuck = (line: string) => { last = null; assert.deepEqual([...rs.call(rs.value(p.named("read expression")), line)], [], line); return last as { at: number; expected: Set<string> } | null; };
-  assert.deepEqual([stuck("1 +")!.at, [...stuck("1 +")!.expected]], [3, ["a whole number", '"-"']]);
+  assert.deepEqual([stuck("1 +")!.at, [...stuck("1 +")!.expected]], [3, ["a digit", "a letter", '"("', '"-"']]);
   assert.deepEqual([stuck("(1 + 2")!.at, [...stuck("(1 + 2")!.expected]], [6, ['")"']]);
   assert.equal(stuck("1 + x)")!.at, 5);
   assert.equal(stuckReading(stuck("1 + x)") as never), `the text can't be read back: it stops after "1 + x", before ")"`);
@@ -52,4 +53,15 @@ test("a line with no reading says where it stopped and what was expected (L70c)"
   last = null;
   assert.equal([...rs.call(rs.value(p.named("read expression")), "1 + 2")].length, 1);
   assert.equal(last, null);
+});
+
+// The evaluator reads a line by recursive descent (C110 s6, descent.ts),
+// in one pass, where its search tried every way the printer could have
+// printed it: about a second for this line before, under a millisecond now.
+test("the evaluator reads calc's lines by descent (C110 s6)", () => {
+  const line = "1 + 2 * 3 - 4 / x ^ 2 + (y - 1) * -z";
+  read(line);
+  const t = performance.now();
+  for (let i = 0; i < 10; i++) read(line);
+  assert.ok(performance.now() - t < 200, `10 reads took ${performance.now() - t} ms`);
 });

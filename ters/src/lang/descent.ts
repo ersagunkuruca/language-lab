@@ -23,11 +23,15 @@
 // The answer is the evaluator's value (run.ts Value), or null where the
 // line has no reading.
 
-import type { Code, Id } from "../../ters/src/model.ts";
-import { isUse } from "../../ters/src/model.ts";
-import { FALSE, TRUE } from "../../ters/src/lang/std.ts";
-import type { Value } from "../../ters/src/lang/run.ts";
+import type { Code, Id, Use } from "../model.ts";
+import { isUse, useTarget } from "../model.ts";
+import { answerKeys } from "./ports.ts";
+import { intLit } from "./int.ts";
+import { INT } from "./types.ts";
+import { FALSE, TRUE } from "./std.ts";
+import { META, type Value } from "./run.ts";
 import { firstSets } from "./first-sets.ts";
+import type { Reading } from "./relate.ts";
 
 export class Unsupported extends Error {}
 
@@ -37,7 +41,13 @@ const isUnknown = (v: unknown): v is { unknown: string } => typeof v === "object
 const LETTER = /[A-Za-z]/, DIGIT = /[0-9]/;
 const TRUE_V: Value = { tag: TRUE, fields: [] }, FALSE_V: Value = { tag: FALSE, fields: [] };
 
-export function descentReader(code: Code, printer: Id, names: Record<Id, string>): (text: string, ...given: Value[]) => Value | null {
+// Where the last line with no reading stopped (L70c, relate.ts Reading):
+// the furthest place a piece was read to or looked for, and what was
+// looked for there.
+export interface Stopped { at: number; expected: Set<string> }
+export type Reader = ((text: string, ...given: Value[]) => Value | null) & { stopped: Stopped };
+
+export function descentReader(code: Code, printer: Id, names: Record<Id, string>): Reader {
   const node = (id: Id) => code.nodes[id] as unknown as Any | undefined;
   const target = (id: Id): Id | null => { const n = node(id); return n?.kind === "ref" ? n.target : null; };
   const named = (id: Id | null) => (id ? names[id] ?? "" : "");
@@ -108,6 +118,11 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
   });
 
   let text = "";
+  const stopped: Stopped = { at: 0, expected: new Set() };
+  const expect = (at: number, what?: string) => {
+    if (at > stopped.at) { stopped.at = at; stopped.expected = new Set(what ? [what] : []); } else if (at === stopped.at && what) stopped.expected.add(what);
+  };
+  const described = (c: string) => (c === "digit" ? "a digit" : c === "letter" ? "a letter" : JSON.stringify(c));
   // Forward, the little a guard or a printer's input needs.
   function evaluate(id: Id, env: Env): Value {
     const n = node(id);
@@ -173,7 +188,7 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
   function read(id: Id, env: Env, at: number): [number, Env] | null {
     const n = node(id);
     if (!n) return null;
-    if (n.kind === "lit") { const s = String(n.value); return text.startsWith(s, at) ? [at + s.length, env] : null; }
+    if (n.kind === "lit") { const s = String(n.value); if (text.startsWith(s, at)) return [at + s.length, env]; expect(at, JSON.stringify(s)); return null; }
     if (n.kind === "ref") {
       const v = env.get(n.target);
       if (v === undefined) throw new Unsupported(`reads ${named(n.target)}, which nothing says the characters of`);
@@ -182,6 +197,7 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
       const re = v.unknown === "letters" ? LETTER : DIGIT;
       let end = at;
       while (end < text.length && re.test(text[end])) end++;
+      if (end === at) expect(at, v.unknown === "letters" ? "a letter" : "a digit");
       return [end, new Map(env).set(n.target, text.slice(at, end))];
     }
     if (n.kind === "match") {
@@ -207,7 +223,7 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
       if (text[end] === "-") end++;
       const digits = end;
       while (end < text.length && DIGIT.test(text[end])) end++;
-      if (end === digits) return null;
+      if (end === digits) { expect(digits, "a whole number"); return null; }
       const v = Number(text.slice(at, end));
       return [end, new Map(env).set(b, Number.isSafeInteger(v) ? v : BigInt(text.slice(at, end)))];
     }
@@ -221,7 +237,8 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
         if (text[at] === "(") {
           const r = parens(at + 1, false);
           if (r && text[r[0]] === ")") return [r[0] + 1, r[1]];
-        }
+          if (r) expect(r[0], '")"');
+        } else if (must) expect(at, '"("');
         return must ? null : read(n.args[1], env, at);
       };
       return parens(at, needed);
@@ -275,7 +292,7 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
   // The arms that don't start with the printer itself.
   function primary(at: number, given: Value[]): [number, Value] | null {
     for (const a of arms) {
-      if (!starts(a.variant, text[at])) continue;
+      if (!starts(a.variant, text[at])) { for (const c of firsts.get(a.variant)!) if (c !== "itself" && c !== "anything") expect(at, described(c)); continue; }
       const env: Env = new Map();
       top.params.slice(1).forEach((p, j) => env.set(p, given[j]));
       // An arm's binders start unknown: show reads an Int, a guard says
@@ -292,14 +309,79 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
     if (infixes.length && text[at] === "(") {
       const r = expression(at + 1, outermost);
       if (r && text[r[0]] === ")") return [r[0] + 1, r[1]];
-    }
+      if (r) expect(r[0], '")"');
+    } else if (infixes.length) expect(at, '"("');
     return null;
   }
   let outermost: Value[] = [];
-  return (line, ...given) => {
+  const reader = (line: string, ...given: Value[]) => {
     text = line;
     outermost = given;
+    stopped.at = 0;
+    stopped.expected = new Set();
     const r = expression(0, given);
-    return r && r[0] === line.length ? r[1] : null;
+    if (r && r[0] === line.length) return r[1];
+    if (r) expect(r[0]);
+    return null;
   };
+  return Object.assign(reader, { stopped });
+}
+
+// A solve the evaluator would search that reads by descent instead (C110
+// s6): a printer run backwards for its first input, its others given, or
+// the prelude's `applied` (what inverse solves) given `e ↦ F(e, …)` with F
+// a printer and the rest of its inputs known. Its answers, one or none;
+// null where the solve isn't one of these, or descent can't read the
+// printer, so the search reads it as before.
+const readers = new WeakMap<Code, Map<Id, ReturnType<typeof descentReader> | null>>();
+function readerFor(code: Code, f: Id, names: Record<Id, string>) {
+  let m = readers.get(code);
+  if (!m) readers.set(code, (m = new Map()));
+  if (!m.has(f)) {
+    let r: ReturnType<typeof descentReader> | null = null;
+    try { r = descentReader(code, f, names); } catch { r = null; }
+    m.set(f, r);
+  }
+  return m.get(f)!;
+}
+export function readByDescent(code: Code, n: Use, known: Record<string, unknown>, names: Record<Id, string>, stuck?: (r: Reading) => void): Value[][] | null {
+  const node = (id: Id | undefined) => (id ? (code.nodes[id] as unknown as Any | undefined) : undefined);
+  const lambdaOf = (def: Id) => { const d = node(def); return d?.kind === "def" ? node(d.body) : undefined; };
+  const keys = answerKeys(code, n), out = known.out;
+  if (keys.length !== 1 || typeof out !== "string") return null;
+  const f = useTarget(code.nodes, n), fn = lambdaOf(f);
+  if (fn?.kind !== "lambda") return null;
+  let printer: Id, given: Value[];
+  if (keys[0] === fn.params[0] && fn.params.slice(1).every((q) => q in known)) {
+    printer = f;
+    given = fn.params.slice(1).map((q) => known[q] as Value);
+  } else {
+    // applied: (g, x) ↦ g(x), g given and x asked.
+    const call = node(fn.body);
+    if (fn.params.length !== 2 || keys[0] !== fn.params[1] || call?.kind !== "call" || isUse(call as never) || node(call.fn)?.kind !== "ref" || node(call.fn)!.target !== fn.params[0]) return null;
+    const meta = (known[fn.params[0]] as unknown as Record<symbol, { lambda?: Id; env?: Map<Id, Value> }> | undefined)?.[META];
+    const lam = node(meta?.lambda), body = node(lam?.body);
+    if (!meta?.env || lam?.kind !== "lambda" || lam.params.length !== 1 || body?.kind !== "call" || isUse(body as never)) return null;
+    const head = node(body.fn), first = node(body.args[0]);
+    if (head?.kind !== "ref" || first?.kind !== "ref" || first.target !== lam.params[0]) return null;
+    printer = head.target;
+    const vals: Value[] = [];
+    for (const a of body.args.slice(1)) {
+      const x = node(a) as (Any & { of?: unknown }) | undefined;
+      if (x?.kind === "lit") vals.push(x.of === INT ? intLit(x.value as number) : (x.value as Value));
+      else if (x?.kind === "ref" && meta.env.has(x.target)) vals.push(meta.env.get(x.target)!);
+      else return null;
+    }
+    given = vals;
+  }
+  const read = readerFor(code, printer, names);
+  if (!read) return null;
+  try {
+    const v = read(out, ...given);
+    if (v === null) stuck?.({ text: out, at: read.stopped.at, expected: new Set(read.stopped.expected), found: new Map() });
+    return v === null ? [] : [[v]];
+  } catch (e) {
+    if (e instanceof Unsupported) return null;
+    throw e;
+  }
 }
