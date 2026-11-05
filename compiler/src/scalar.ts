@@ -1101,6 +1101,18 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           const item = a.item;
           return { k: "search", kind: "optional", body: { k: "rt", fn: `array.first.a${a.index}`, args: args() }, res: f.locals.push(item) - 1, t, bt: item };
         }
+        if (opts.data && target === ARRAY_OPS.front) {
+          // The first item and the rest at once (C137 s3e): `optional` of
+          // the pair of array first and array rest, none of an empty array.
+          const a = stype(zonk(n.args[0])), t = stype(zonk(id));
+          if (!a || !isArray(a) || !t || !isData(t)) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(n.args[0]))}`);
+          const pair = t.cases.find((c) => c.fields.length)!.fields[0].t;
+          const arr = f.locals.push(a) - 1, at: SExpr = { k: "local", i: arr };
+          return {
+            k: "let", i: arr, value: args()[0],
+            body: { k: "search", kind: "optional", body: { k: "make", t: pair as RType, args: [{ k: "rt", fn: `array.first.a${a.index}`, args: [at] }, { k: "rt", fn: `array.rest.a${a.index}`, args: [at] }] }, res: f.locals.push(pair) - 1, t, bt: pair },
+          };
+        }
         if (opts.data && (ARRAY_RT[target] || target === ARRAY_OPS.replaceAt)) {
           // The array's type, from the argument or the answer that is one;
           // List of its items too where the job takes or gives a list.

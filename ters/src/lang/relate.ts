@@ -65,7 +65,7 @@ import { analyzer, type Choice, type Exec, type Fn, type Mode, type Plan } from 
 import { seededGenerator } from "./random.ts";
 import { needsResolving, preludeDef } from "./arith.ts";
 import { infer } from "./infer.ts";
-import { ALGEBRAIC_OPS, ALGEBRAIC_V, ofAlg, toAlg } from "./std.ts";
+import { ALGEBRAIC_OPS, ALGEBRAIC_V, ARRAY_OPS, PAIR_V, ofAlg, toAlg } from "./std.ts";
 import * as Alg from "./algebraic.ts";
 import { realRoots, type Algebraic } from "./algebraic.ts";
 import { lowest, type Q as Frac } from "./poly.ts";
@@ -1665,6 +1665,34 @@ export function interpreter(given: Code, opts: Options = {}) {
           const p = s.read && placeOf(s.read, t);
           if (p !== undefined) { if (ok) reached(s.read!, p + t.length); else expect(s.read!, p, "a whole number"); }
           return ok ? eq(n, intLit(t))(s) : null;
+        },
+      });
+    }
+    // An array's front (C137 s3e): forward once the array is known;
+    // backwards, once the Option is known, the array made from its first
+    // item and rest, or the empty array. So `array of List`'s match runs
+    // backwards as a cons cell's does.
+    if (id === ARRAY_OPS.front) {
+      const push = STD_IMPL[ARRAY_OPS.pushFront], empty = STD_IMPL[ARRAY_OPS.empty], front = STD_IMPL[id];
+      return wait({
+        k: "later", text: "front of array", on: [a, out], ready: (s) => ground(a, s) !== undefined || ground(out, s) !== undefined, then: (s) => {
+          if (ground(a, s) !== undefined) return eq(out, fromValue(front(toValue(deep(a, s)))))(s);
+          const o = toValue(deep(out, s)) as { tag: string; fields: { tag: string; fields: unknown[] }[] };
+          if (o.tag !== SOME) return eq(a, fromValue(empty()))(s);
+          const p = o.fields[0];
+          return p.tag === PAIR_V ? eq(a, fromValue(push(p.fields[1], p.fields[0])))(s) : null;
+        },
+      });
+    }
+    // Push front run backwards: the array known, its first item and the
+    // rest (none of an empty array).
+    if (id === ARRAY_OPS.pushFront) {
+      const push = STD_IMPL[id], front = STD_IMPL[ARRAY_OPS.front];
+      return wait({
+        k: "later", text: "push front", on: [a, b, out], ready: (s) => (ground(a, s) !== undefined && ground(b, s) !== undefined) || ground(out, s) !== undefined, then: (s) => {
+          if (ground(a, s) !== undefined && ground(b, s) !== undefined) return eq(out, fromValue(push(toValue(deep(a, s)), toValue(deep(b, s)))))(s);
+          const f = front(toValue(deep(out, s))) as { tag: string; fields: { fields: unknown[] }[] };
+          return f.tag === SOME ? conj(eq(b, fromValue(f.fields[0].fields[0])), eq(a, fromValue(f.fields[0].fields[1])))(s) : null;
         },
       });
     }
