@@ -14,7 +14,7 @@ import { jsonProblem } from "./json-by-type.ts";
 import { diamonds, type Edge } from "./diamonds.ts";
 import { sharing } from "./shared-fields.ts";
 import { PARTIAL, signAnalysis } from "./signs.ts";
-import type { Code, Id, Node, NodeOf, Use } from "../model.ts";
+import type { Bound, Code, Id, Node, NodeOf, Use } from "../model.ts";
 import { directionOf, isUse, useTarget, isCall, fieldPorts, type Call, bindsOf, bodyOf } from "../model.ts";
 import { conditionResults, dependencies, derived, layerOf, nodesWhere, offLayer, ownerOfTypeParts, portsOf, scanningOnLayer, subtree } from "../model.ts";
 import { liftRelations } from "./results-fn.ts";
@@ -2294,7 +2294,7 @@ export function resultsDirection(code: Code, d: Id, names: Names = {}): { why: s
   given.out = add({ id: `${d}:true`, kind: "ref", target: TRUE });
   const binds = Object.fromEntries(conditionResults(code.nodes, d)!.map((r) => [r, add({ id: `${d}:as:${r}`, kind: "binder" })]));
   const fn = add({ id: `${d}:fn`, kind: "ref", target: d });
-  const use: Use = { id: `${d}:results`, kind: "call", fn, given, binds, body: add({ id: `${d}:body`, kind: "hole" }) };
+  const use: Bound = { id: `${d}:results`, kind: "call", fn, given, binds, body: add({ id: `${d}:body`, kind: "hole" }) };
   add(use);
   const asked = { nodes, defs };
   try {
