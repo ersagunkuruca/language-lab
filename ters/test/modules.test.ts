@@ -19,6 +19,7 @@ import { library as listHelpers } from "../src/lang/programs.ts";
 import { atLeastAsGeneral, pinsOf } from "../src/lang/signatures.ts";
 import { CheckCache } from "../src/lang/check-cache.ts";
 import { runMain } from "../src/lang/run.ts";
+import { NUMBER } from "../src/lang/types.ts";
 import { ARITH, CONS, INT_OPS, NIL, S, SHOW_ANY } from "../src/lang/std.ts";
 import { root } from "../src/io.ts";
 
@@ -471,6 +472,47 @@ test("a program's store keeps every version it used: it runs without the module,
   const own = { nodes: Object.fromEntries(Object.entries(back.code.nodes).filter(([id]) => up.own.nodes[id])), defs: up.own.defs };
   assert.ok(Object.values(own.nodes).some((n) => n.kind === "ref" && n.target === v1));
   assert.deepEqual(run(own), ["42"]);
+});
+
+// SHARING.md §2 (L17): a module's type that changes its fields comes with
+// its author's migration, and a program on the old version is moved
+// through it: what it builds is migrated, what it reads is the new field.
+test("a program on a type whose fields changed moves through the author's migration (L17)", () => {
+  const k = new Lang(LIBRARY.code);
+  const P = k.type("Point", [], [["point", [["x", () => k.tref(NUMBER)], ["y", () => k.tref(NUMBER)]]]]);
+  const norm = k.def("norm");
+  const sq = (a: Id) => k.call(B.mul, a, a);
+  k.define(norm, k.fn(["p"], (p) => k.call(B.add, sq(k.call(P.f["point.x"], p)), sq(k.call(P.f["point.y"], p)))));
+  const step = (prev: Module | null, defs: Id[]) => { const r = publishVersion(prev, "points", base(k.code), baseNames(k.names), defs, LIBRARY.code, LIBRARY.pins); assert.ok(r.ok, r.ok ? "" : r.reason); return r.module; };
+  const m1 = step(null, [P.def, norm]);
+  const at1 = (name: string) => m1.code.defs.concat(Object.keys(m1.code.nodes)).find((d) => m1.names[d] === name)!;
+  const [point1, x1, y1, norm1] = [at1("point"), at1("x"), at1("y"), at1("norm")];
+  // Version 2: a third field, and its migration.
+  (k as unknown as { known: Code }).known = merge((k as unknown as { known: Code }).known, m1.code);
+  const P2 = k.type("Point next", [], [["point", [["x", () => k.tref(NUMBER)], ["y", () => k.tref(NUMBER)], ["z", () => k.tref(NUMBER)]]]]);
+  k.code.nodes[P.def] = { ...k.code.nodes[P.def], body: (k.code.nodes[P2.def] as NodeOf<"def">).body } as Node;
+  k.code.defs = k.code.defs.filter((d) => d !== P2.def);
+  k.define(norm, k.fn(["p"], (p) => k.call(B.add, k.call(B.add, sq(k.call(P2.f["point.x"], p)), sq(k.call(P2.f["point.y"], p))), sq(k.call(P2.f["point.z"], p)))));
+  const migrate = k.def("point from version 1");
+  k.define(migrate, k.fn(["p"], (p) => k.call(P2.v.point, k.call(x1, p), k.call(y1, p), k.lit(0))));
+  const m2 = step(m1, [P.def, norm, migrate]);
+  // Bob builds a point and reads its x on version 1.
+  const bob = new Lang(merge(LIBRARY.code, m2.code));
+  const main = bob.def("main");
+  const pt = () => bob.call(point1, bob.lit(3), bob.lit(4));
+  bob.define(main, bob.thunk(() => bob.call(S.print, bob.call(SHOW_ANY, bob.list(bob.call(norm1, pt()), bob.call(x1, pt()))))));
+  const up = upgradeOwn(bob.code, [m2], baseNames(m2.names));
+  assert.deepEqual(up.refused, []);
+  assert.equal(up.moved.length, 2);
+  const code = base(merge(m2.code, up.own));
+  const info = infer(code, baseNames(m2.names, bob.names), undefined, checkOptions);
+  assert.deepEqual(info.errors, []);
+  const out: string[] = [];
+  runMain(code, info, main, { print: (x) => out.push(x) });
+  assert.deepEqual(out, ["[25, 3]"]);
+  // Without a migration it stays, saying why.
+  const m2bare = { ...m2, exports: m2.exports.filter((d) => m2.names[d] !== "point from version 1") };
+  assert.match(upgradeOwn(bob.code, [m2bare], baseNames(m2.names)).refused[0].reason, /no migration/);
 });
 
 test("a saved file lists what it uses from modules, and opening it without them says which", async () => {

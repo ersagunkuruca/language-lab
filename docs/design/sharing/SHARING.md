@@ -92,7 +92,9 @@ the lineage has a newer version:
   version range; this is "the compiler chooses" applied to versions;
 - **the type changed**: the editor shows both types and where Bob's
   program uses it. Data-type changes need a migration (L17's half that
-  stays).
+  stays). Built (L17, 2026-11-05): the author publishes a function from
+  the old type to the new, and `lab upgrade` moves what the program builds
+  through it and what it reads to the new fields of the same names.
 
 Built (L111, 2026-11-05): signatures.ts `atLeastAsGeneral`; a program
 folder's `modules` folder holds the modules it uses beyond the library;

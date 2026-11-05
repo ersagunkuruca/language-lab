@@ -21,13 +21,13 @@
 // Unison's (https://www.unison-lang.org/docs/the-big-idea/); visibility and
 // pins are what REVIEW.md §4.5 and §4.6 add.
 
-import { children, collect, isPublished, mapIds, merge, subtree, type Code, type Id, type Node, isUse, bindsOf } from "../model.ts";
+import { children, collect, freshId, isPublished, mapIds, merge, subtree, type Code, type Id, type Node, type NodeOf, isUse, bindsOf } from "../model.ts";
 import { defDeps, defGroups, hashes, RECIPE, recipeOf } from "../hash.ts";
 import { layer, type Comments, type Names } from "../presentation.ts";
 import { infer } from "./infer.ts";
 import type { Representation } from "./represent.ts";
-import { atLeastAsGeneral, pinKey, pinsOf, type Pins } from "./signatures.ts";
-import { schemeArith, showType } from "./types.ts";
+import { atLeastAsGeneral, pinKey, pinsOf, type Pin, type Pins } from "./signatures.ts";
+import { schemeArith, showType, type Type } from "./types.ts";
 
 export const MODULE_FORMAT = "projectional-module";
 
@@ -487,8 +487,10 @@ export function sameLines(code: Code, names: Names, lib: Library): string[] {
 // any place it's run backwards, now lead to the new one. Done only when the
 // new one's pin is at least as general as the old one's (L111): then
 // nothing that uses it can break. A narrower type is refused, with both.
-export function upgrade(code: Code, from: Id, to: Id, pins: Pins, names: Names = {}): Result<{ code: Code; uses: number }> {
-  const a = pins[from], b = pins[to];
+// `types`: data types the program has already moved to a newer version
+// (L17): the old pin is read with them as the new.
+export function upgrade(code: Code, from: Id, to: Id, pins: Pins, names: Names = {}, types: ReadonlyMap<Id, Id> = new Map()): Result<{ code: Code; uses: number }> {
+  const a = pins[from] && types.size ? retyped(pins[from], types) : pins[from], b = pins[to];
   if (!a || !b) return { ok: false, reason: "both definitions need pins" };
   if (pinKey(a) !== pinKey(b) && !atLeastAsGeneral(b, a)) return { ok: false, reason: `its type changed from ${showType(a.type, names, schemeArith(a))} to ${showType(b.type, names, schemeArith(b))}` };
   const old = code.nodes[from], neu = code.nodes[to];
@@ -519,14 +521,30 @@ export function upgradeOwn(own: Code, modules: Module[], names: Names = {}, brok
   let work = merge(...modules.map((m) => m.code), own);
   const moved: Moved[] = [], refused: { from: Id; to: Id; reason: string }[] = [];
   const uses = (code: Code) => new Set(Object.values(code.nodes).filter((n) => ownIds.has(n.id)).flatMap(pointsAt));
-  for (const vs of lines) {
+  // Data types first (L17): a newer version of a type the program uses is
+  // taken through its author's migration, and the functions over it after,
+  // with their old pins read at the new type.
+  const types = new Map<Id, Id>();
+  const migrations = migrationsIn(modules, work);
+  for (const vs of lines.filter((vs) => isTypeDef(work, vs[0]))) {
+    const used = uses(work);
+    const from = vs.slice(0, -1).find((v) => typeParts(work, v).some((p) => used.has(p)));
+    const to = vs.filter((v) => !broken.has(v)).at(-1);
+    if (!from || !to || from === to || vs.indexOf(to) < vs.indexOf(from)) continue;
+    const by = migrations.find((m) => m.from === from && m.to === to)?.by;
+    if (!by) { refused.push({ from, to, reason: "its cases or fields changed, and its author gave no migration from the old to the new" }); continue; }
+    const r = migrateType(work, ownIds, from, to, by, layer<Names>({}, ...modules.map((m) => m.names), names));
+    if (!r.ok) { refused.push({ from, to, reason: r.reason }); continue; }
+    work = r.code; types.set(from, to); moved.push({ from, to, uses: r.uses });
+  }
+  for (const vs of lines.filter((vs) => !isTypeDef(work, vs[0]))) {
     const used = uses(work);
     for (const from of vs.slice(0, -1)) {
       if (!used.has(from)) continue;
       // The newest that fits, else the next older one.
       // A version its author's log marks broken isn't moved to (L114a).
       for (const to of vs.slice(vs.indexOf(from) + 1).reverse().filter((v) => !broken.has(v))) {
-        const r = upgrade(work, from, to, pins, names);
+        const r = upgrade(work, from, to, pins, names, types);
         if (r.ok) { work = r.code; moved.push({ from, to, uses: r.uses }); break; }
         if (to === vs.filter((v) => !broken.has(v)).at(-1)) refused.push({ from, to, reason: r.reason });
       }
@@ -607,4 +625,83 @@ export function previousVersion(store: Module, current: Id): Id | null {
   const vs = store.lineages![l];
   const i = vs.indexOf(current);
   return i > 0 ? vs[i - 1] : null;
+}
+
+// ---------------------------------------------------------------- migrations
+
+// Data-type upgrades (L17, SHARING.md §2): when a module's type changes its
+// cases or fields, its author publishes a migration with it, an offered
+// function from the old version to the new (`(Point) -> Point`, the two in
+// one lineage), and a program on the old version is moved through it.
+const isTypeDef = (code: Code, d: Id) => { const n = code.nodes[d]; return n?.kind === "def" && !!n.body && code.nodes[n.body]?.kind === "typedef"; };
+const typedefOf = (code: Code, d: Id) => code.nodes[(code.nodes[d] as NodeOf<"def">).body!] as NodeOf<"typedef">;
+// A type and its cases and fields: what a program's use of it points at.
+const typeParts = (code: Code, d: Id): Id[] => [d, ...typedefOf(code, d).variants.flatMap((v) => [v, ...(code.nodes[v] as NodeOf<"variant">).fields])];
+
+export function migrationsIn(modules: Module[], code: Code): { from: Id; to: Id; by: Id }[] {
+  const out: { from: Id; to: Id; by: Id }[] = [];
+  for (const m of modules) for (const d of m.exports) {
+    const t = m.pins[d]?.type;
+    if (t?.t !== "fn" || t.params.length !== 1 || t.params[0].t !== "con" || t.ret.t !== "con") continue;
+    const from = t.params[0].id, to = t.ret.id;
+    const l = lineageOf(m.lineages ?? {}, from);
+    if (from !== to && l && l === lineageOf(m.lineages ?? {}, to) && isTypeDef(code, from)) out.push({ from, to, by: d });
+  }
+  return out;
+}
+
+// A pin read with some data types as others.
+function retyped(p: Pin, types: ReadonlyMap<Id, Id>): Pin {
+  const go = (t: Type): Type => t.t === "var" ? t : t.t === "con" ? { t: "con", id: types.get(t.id) ?? t.id, args: t.args.map(go) } : { ...t, params: t.params.map(go), ret: go(t.ret) };
+  return { ...p, type: go(p.type) };
+}
+
+// The program's own nodes moved from type `from` to `to`: each value it
+// builds goes through the migration `by`, each field it reads is the new
+// type's field of the same name, and each case it matches the new case of
+// that name when its fields are the same. What can't move is said, and
+// nothing moves. `ownIds` gets the nodes made for the migration's calls.
+export function migrateType(code: Code, ownIds: Set<Id>, from: Id, to: Id, by: Id, names: Names): Result<{ code: Code; uses: number }> {
+  const a = typedefOf(code, from), b = typedefOf(code, to);
+  const fieldsOf = (v: Id) => (code.nodes[v] as NodeOf<"variant">).fields;
+  const variants = new Map<Id, Id>(), fields = new Map<Id, Id>();
+  for (const v of a.variants) {
+    const w = b.variants.find((x) => names[x] === names[v]);
+    if (!w) continue;
+    variants.set(v, w);
+    for (const f of fieldsOf(v)) { const g = fieldsOf(w).find((x) => names[x] === names[f]); if (g) fields.set(f, g); }
+  }
+  const oldVariants = new Set(a.variants), oldFields = new Set(a.variants.flatMap(fieldsOf));
+  const nodes: Record<Id, Node> = { ...code.nodes };
+  const fnOfCall = new Set<Id>();
+  for (const id of ownIds) { const n = code.nodes[id]; if (n?.kind === "call" && !isUse(n)) fnOfCall.add(n.fn); }
+  const problems: string[] = [];
+  let uses = 0;
+  for (const id of [...ownIds]) {
+    const n = code.nodes[id];
+    if (!n) continue;
+    if (n.kind === "call" && !isUse(n)) {
+      const f = code.nodes[n.fn];
+      if (f?.kind === "ref" && oldVariants.has(f.target)) {
+        // Built as before, then through the migration.
+        const inner = freshId(), fn = freshId();
+        nodes[inner] = { ...n, id: inner } as Node;
+        nodes[fn] = { id: fn, kind: "ref", target: by } as Node;
+        nodes[id] = { id, kind: "call", fn, args: [inner] } as Node;
+        ownIds.add(inner); ownIds.add(fn);
+        uses++;
+      }
+    } else if (n.kind === "ref" && oldFields.has(n.target)) {
+      const g = fields.get(n.target);
+      if (g) { nodes[id] = { ...n, target: g }; uses++; } else problems.push(`it reads ${names[n.target] ?? n.target}, which the new ${names[to] ?? to} doesn't have`);
+    } else if (n.kind === "ref" && oldVariants.has(n.target) && !fnOfCall.has(id)) {
+      problems.push(`it passes ${names[n.target] ?? n.target} as a value`);
+    } else if (n.kind === "arm" && oldVariants.has(n.variant)) {
+      const w = variants.get(n.variant);
+      const same = w && fieldsOf(n.variant).length === fieldsOf(w).length && fieldsOf(n.variant).every((f, i) => fields.get(f) === fieldsOf(w)[i]);
+      if (same) { nodes[id] = { ...n, variant: w! }; uses++; } else problems.push(`it matches on ${names[n.variant] ?? n.variant}, whose fields changed: by hand`);
+    } else if (n.kind === "tref" && n.target === from) { nodes[id] = { ...n, target: to }; uses++; }
+  }
+  if (problems.length) return { ok: false, reason: problems.join("; ") };
+  return { ok: true, code: { nodes, defs: code.defs }, uses };
 }
