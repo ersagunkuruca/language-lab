@@ -478,7 +478,9 @@ export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roo
   // interpreter calling a function it is handed (the pedal's atanh, C137d8).
   const inv = expandInverses(code, names);
   if (inv.expanded.length) {
-    const checked = infer(inv.code, inv.names);
+    // Checked with the program's options: a represented program's
+    // insiders (library-reps.ts) may call the constructors they stand for.
+    const checked = infer(inv.code, inv.names, undefined, info.options);
     if (checked.errors.length <= info.errors.length) ({ code, names, info } = { code: inv.code, names: inv.names, info: checked });
   }
   const f = fusedProgram(code, info, names);
