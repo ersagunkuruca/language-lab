@@ -113,6 +113,11 @@ Row L215, one PR each:
   embedding's record are in every group's key; other values are groups
   like the rest, so a constant's edit rechecks only what reads it
   (Constructions 370 to 100 ms an edit).
+- (c2) Done: a definition's nodes in a key are a number standing for
+  their text, answered from the node objects it was last asked with, and
+  a program on its layer isn't walked for layer nodes gone when every one
+  is there (Spacetime about 11 ms less an edit, Physics and Constructions
+  2 to 3).
 - (b) The `Checker` cache in the editor's edit path, timed on I157 and
   I158's steps and on a one-character edit in Constructions.
 - (c) Typedef groups and the per-program parts above in the cache.

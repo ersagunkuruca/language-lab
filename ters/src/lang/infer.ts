@@ -166,7 +166,13 @@ function under(code: Code, opts: Options): { info: Info; only: Set<Id> } | null 
   const libDefs = new Set(lib.defs);
   const only = new Set(code.defs.filter((d) => !libDefs.has(d)));
   if (!only.size || code.defs.length !== libDefs.size + only.size) return null;
-  const same = (a: Options) => a.pins === opts.pins && a.hidden === opts.hidden && a.insiders === opts.insiders && a.library === opts.library;
+  // The library's check reads only the pins of its own definitions: a
+  // program's pins of its own (a type the editor holds while a hole is
+  // filled) don't make another (T14).
+  const libPins = (a: Options) => (a.pins ? Object.entries(a.pins).filter(([d]) => libDefs.has(d)) : []);
+  const mine = libPins(opts);
+  const samePins = (a: Options) => { if (a.pins === opts.pins) return true; const p = libPins(a); return p.length === mine.length && p.every(([d, x], i) => mine[i][0] === d && mine[i][1] === x); };
+  const same = (a: Options) => a.hidden === opts.hidden && a.insiders === opts.insiders && a.library === opts.library && samePins(a);
   let kept = underChecks.find((c) => c.lib === lib && same(c.opts));
   if (!kept) {
     checkingUnder = true;

@@ -183,3 +183,13 @@ test("an edit to a constant keeps other groups; an edit to an implementation rec
   check({ ...code1, nodes: { ...code1.nodes, [call.args[0]]: { id: call.args[0], kind: "ref", target: lower } as Node } });
   assert.equal(cache.hits, hits2, "no group is kept across an implementation's edit");
 });
+
+test("a program's own pins, made anew, don't check the library again (T14f)", () => {
+  // The editor holds a type while a hole is filled, making the object of
+  // pins anew each time with the library's the same: the library's kept
+  // check is found by the library's own pins.
+  const p = loadProgram(join(root, "examples", "physics"));
+  const a = infer(p.code, p.pres.names, undefined, { ...checkOptions, pins: { ...checkOptions.pins } });
+  const b = infer(p.code, p.pres.names, undefined, { ...checkOptions, pins: { ...checkOptions.pins } });
+  assert.ok(a.layer && a.layer === b.layer);
+});

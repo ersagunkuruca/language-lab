@@ -15,6 +15,7 @@ import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { withLibraryRepresentations } from "../src/lang/library-reps.ts";
 import { CONS, INT_OPS, IO, NIL, S, SHOW_ANY, TEXT_OPS } from "../src/lang/std.ts";
+import { REQUEST_V, RESPONSE_V } from "../src/lang/network.ts";
 import { nodeWorld } from "../src/lang/world.ts";
 import type { Code, Id } from "../src/model.ts";
 
@@ -94,6 +95,34 @@ test("read bytes and write bytes meet stored bytes at the border", () => {
   };
   assert.deepEqual(run(c.code, c.names, c.insiders), ["12", "80", "-1"]);
   assert.deepEqual([...readFileSync(made)], [...readFileSync(given)]);
+});
+
+// Bytes inside a record a builtin takes or gives (L189e): a Request's
+// body and a Response's. The program gets its own copy of each type, whose
+// body the byte array is; the call goes from one to the other, the body
+// stored on the way out and given as its meaning on the way in.
+test("a Response's body read by position is stored too, through the program's copy of Response", () => {
+  const k = new Lang(LIBRARY.code);
+  const main = k.def("main");
+  const show = (x: Id) => k.call(S.print, k.call(SHOW_ANY, x));
+  k.define(main, k.thunk(() => k.let("r", k.call(IO.sendRequest, k.call(REQUEST_V, k.lit("POST"), k.lit("https://example.org"), k.x(NIL), k.call(L("utf8 of"), k.lit("hi")))), (r) =>
+    k.seq(show(r), k.match(r, [{ variant: RESPONSE_V, names: ["status", "headers", "body"], body: ([, , b]) => k.seq(
+      show(k.call(L("byte count"), b)),
+      show(k.call(L("byte at"), b, k.int(3), k.int(-1)))) }])))));
+  const p = { code: base(k.code), names: baseNames(k.names), main, own: [main] };
+  const c = chosen(p);
+  assert.deepEqual(c.chosen, ["Bytes as byte array of Bytes"]);
+  // The world echoes the body after three bytes of its own.
+  const world = { ...nodeWorld(), sendRequest: (q: { body: Uint8Array }) => ({ status: 200, headers: [] as [string, string][], body: Uint8Array.from([7, 8, 9, ...q.body]) }) };
+  const run = (code: Code, names: Record<Id, string>, insiders: Id[] = []) => {
+    const info = infer(code, names, undefined, { ...checkOptions, insiders: [...checkOptions.insiders!, ...insiders] });
+    assert.deepEqual(info.errors.map((e) => e.message), []);
+    const lines: string[] = [];
+    runMain(code, info, main, { print: (s) => lines.push(s), names, world });
+    return lines;
+  };
+  assert.deepEqual(run(c.code, c.names, c.insiders), ["response(200, [], bytes([7, 8, 9, 104, 105]))", "5", "104"]);
+  assert.deepEqual(run(p.code, p.names), run(c.code, c.names, c.insiders));
 });
 
 // The same through the core IR (compiled JavaScript, C137): the byte

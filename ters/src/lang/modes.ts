@@ -152,6 +152,10 @@ interface St {
   soft?: boolean;
   // Goals already posted as constraints (see Goal.posts).
   posted?: Set<Goal>;
+  // An arm's own goals, searched on their own to join after the choice
+  // (L227): with nothing ready, it stops rather than solving equations
+  // together, which the rest of the lambda might still make unneeded.
+  local?: boolean;
   sizes: Map<Id, Size>;
   goals: Goal[];
   answers: Answers;
@@ -323,11 +327,18 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
     return c;
   };
   const memo = new Map<string, Verdict>();
-  const running = new Set<string>();
+  // The modes being worked out now, each by how deep it started.
+  const running = new Map<string, number>();
   const kept = keptFor(names, plansOnly);
-  // How many published lambdas are being worked out now: one is kept only
-  // when none is, so no recursion of its own is still open.
-  let keeping = 0;
+  // A published lambda's verdict is kept once no recursion it went through
+  // is still open (T14): the shallowest mode still being worked out that
+  // its work was answered from for now (`running` above), as Tarjan's
+  // lowlink. Kept only for the outermost published one before, so steady
+  // pow's own helpers (two to, scaled) were worked out again under each
+  // of pow, sin and atan2, half a second each. A verdict remembered in
+  // `memo` that was answered so says so here, for whoever reads it next.
+  let lowest = Infinity;
+  const memoLow = new Map<string, number>();
   const reachable = (from: string) => {
     const reach = new Set([from]);
     for (let grew = true; grew;) { grew = false; for (const g of graphs) if (reach.has(g.from) && !reach.has(g.to)) { reach.add(g.to); grew = true; } }
@@ -360,15 +371,16 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
     const key = modeKey(lam, known, spec, outer);
     const ports: Port[] = [...l.params.map((_, i) => String(i)), "out"];
     const hit = memo.get(key);
-    if (hit) return hit;
-    if (running.has(key)) return { answers: ONE, ends: true, loops: [], stuck: [], dynamic: [], order: [], plan: NO_PLAN };
+    if (hit) { const l = memoLow.get(key); if (l !== undefined) lowest = Math.min(lowest, l); return hit; }
+    const open = running.get(key);
+    if (open !== undefined) { lowest = Math.min(lowest, open); return { answers: ONE, ends: true, loops: [], stuck: [], dynamic: [], order: [], plan: NO_PLAN }; }
     const fixed = isPublished(lam) && [...spec.values(), ...outer.values()].every(fixedFn);
     if (fixed) {
       const k = kept.m.get(kept.prefix + key);
       if (k) { for (const g of k.graphs) graphs.push(g); memo.set(key, k.v); return k.v; }
-      keeping++;
     }
-    running.add(key);
+    const depth = running.size;
+    running.set(key, depth);
     const st: St = { known: new Set(), sizes: new Map(), goals: [], answers: ONE, ends: true, loops: [], dynamic: [], order: [] };
     const fns = new Map<Id, Fn>(outer);
     l.params.forEach((p, i) => {
@@ -382,17 +394,19 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
     const ctx: Ctx = { key, ports, fns, def };
     st.goals = goalsOf(l.body, ctx);
     const need = [...l.params.map(slot), slot(l.body)];
-    const outerPaths = paths;
+    const outerPaths = paths, outerLowest = lowest;
     paths = 0;
-    let v: Verdict;
-    try { v = run(st, need, ctx); } finally { paths = outerPaths; if (fixed) keeping--; }
+    lowest = Infinity;
+    let v: Verdict, low: number;
+    try { v = run(st, need, ctx); } finally { paths = outerPaths; low = lowest; lowest = Math.min(outerLowest, low); }
     running.delete(key);
     // Its own recursion, as far as it's known now (a cycle through a mode
     // still being worked out is checked again at the end, in checked()).
     const t = plansOnly ? { ok: true } : terminates(key);
     if (!t.ok) v = { ...v, ends: false, loops: [...v.loops, `${def ? nm(def) : "a function"} calls itself on something that isn't smaller`] };
     memo.set(key, v);
-    if (fixed && !keeping) kept.m.set(kept.prefix + key, { v, graphs: reachable(key) });
+    if (low < depth) memoLow.set(key, low);
+    else if (fixed) kept.m.set(kept.prefix + key, { v, graphs: reachable(key) });
     return v;
   }
 
@@ -420,6 +434,17 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
   let paths = 0;
   function run(st: St, need: Id[], ctx: Ctx): Verdict {
     const steps: Exec[] = [];
+    // Choices joined (L227): where the steps were, and each arm's own plan,
+    // which the steps after go on from.
+    const joins: { at: number; choice: Omit<Choice, "arms">; arms: { variant: Id | null; binds: Id[]; plan: Plan }[] }[] = [];
+    const planned = (p: Plan): Plan => {
+      let tail: Plan = { steps: p.steps.slice(joins.length ? joins[joins.length - 1].at : 0), ...(p.branch ? { branch: p.branch } : {}) };
+      for (let i = joins.length - 1; i >= 0; i--) {
+        const j = joins[i], from = i ? joins[i - 1].at : 0, after = tail;
+        tail = { steps: p.steps.slice(from, j.at), branch: { ...j.choice, arms: j.arms.map((a) => ({ ...a, plan: then(a.plan, after) })) } };
+      }
+      return tail;
+    };
     // What a goal said when last asked stands until a slot it asked about
     // is known or measured (C155): whether a goal is ready, and how,
     // reads only which slots are known and their sizes (and modes worked
@@ -453,6 +478,7 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
         if (f && (!best || f.cost < best.f.cost)) best = { g, f };
       }
       if (!best) {
+        if (st.local) break;
         // Equations left with several unknowns are solved together, as
         // relate.ts hands them to the solver as a block.
         // Fewest unknowns first, so the solver can start on one it can
@@ -503,7 +529,29 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
         // lambda the search stops and says so, as a run that may give
         // several answers or none and may not end, which is never too
         // little.
-        if ((paths += f.branches.length) > PATHS) return { answers: MANY, ends: false, loops: [`${ctx.def ? nm(ctx.def) : "a function"} has too many paths to follow`], stuck: [], dynamic: [...st.dynamic, "too many paths to follow"], order: st.order, plan: { steps } };
+        if ((paths += f.branches.length) > PATHS) return forked({ answers: MANY, ends: false, loops: [`${ctx.def ? nm(ctx.def) : "a function"} has too many paths to follow`], stuck: [], dynamic: [...st.dynamic, "too many paths to follow"], order: st.order, plan: planned({ steps }) });
+        // Exactly one arm runs, and each finishes on its own, leaving the
+        // rest of the lambda the same to do: the rest is searched once
+        // (L227). Value ifs in a row were 2^k searches: steady's two to,
+        // and pow, log and sin through it, stopped at PATHS, even run
+        // forward with every input known.
+        const g0 = graphs.length, p0 = paths;
+        const one = f.exclusive && nodes[f.at!.node]?.kind === "match" ? joined(st, f, ctx) : null;
+        // A join not made leaves nothing of its trial: the calls its arms
+        // made on their own aren't the program's (the arms are searched
+        // with the rest below, which may call them in other modes).
+        if (!one) { graphs.length = g0; paths = p0; }
+        if (one) {
+          for (const x of one.known) learn(x);
+          for (const [x, z] of one.sizes) { st.sizes.set(x, z); touched(x); }
+          st.answers = both(st.answers, one.answers);
+          if (!one.ends) { st.ends = false; st.loops.push(...one.loops.filter((l) => !st.loops.includes(l))); }
+          for (const d of one.dynamic) if (!st.dynamic.includes(d)) st.dynamic.push(d);
+          if (one.soft) st.soft = true;
+          st.order.push(...one.order);
+          joins.push({ at: steps.length, choice: { ...f.at!, exclusive: true }, arms: one.arms });
+          continue;
+        }
         const out = f.branches.map((b) => {
           const sub: St = { soft: st.soft, posted: new Set(st.posted), known: new Set(st.known), sizes: new Map(st.sizes), goals: [...b.goals, ...st.goals], answers: st.answers, ends: st.ends, loops: [...st.loops], dynamic: [...st.dynamic], order: [...st.order, b.text] };
           for (const s of b.gives) sub.known.add(s);
@@ -515,7 +563,7 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
         if (!f.exclusive && !f.disjoint && live.length > 1) answers.many = true;
         if (f.disjoint) answers.fail = true;
         if (f.exclusive) answers.fail = live.some((v) => v.answers.fail) || live.length < out.length;
-        return {
+        return forked({
           answers: live.length ? answers : CHECK,
           ends: out.every((v) => v.ends),
           loops: [...new Set(out.flatMap((v) => v.loops))],
@@ -524,8 +572,8 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
           stuck: live.length ? [] : [...new Set(out.flatMap((v) => v.stuck))],
           dynamic: [...new Set(out.flatMap((v) => v.dynamic))],
           order: (live[0] ?? out[0]).order,
-          plan: { steps, branch: { ...f.at!, exclusive: !!f.exclusive, arms: f.branches.map((b, i) => ({ variant: b.variant, binds: b.binds, plan: out[i].plan })) } },
-        };
+          plan: planned({ steps, branch: { ...f.at!, exclusive: !!f.exclusive, arms: f.branches.map((b, i) => ({ variant: b.variant, binds: b.binds, plan: out[i].plan })) } }),
+        } as Verdict);
       }
     }
     const stuck = [...st.goals.map((g) => g.text), ...need.filter((s) => !st.known.has(s)).map((s) => `nothing gives ${describe(s)}`)];
@@ -533,7 +581,63 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
     // once what it needs is known, and an answer that leaves one waiting
     // isn't pinned down.
     steps.push(...st.goals.map((g): Exec => ({ ...g.exec, waits: true })));
-    return { answers: st.answers, ends: st.ends, loops: st.loops, stuck, dynamic: st.dynamic, order: st.order, plan: { steps } };
+    return { answers: st.answers, ends: st.ends, loops: st.loops, stuck, dynamic: st.dynamic, order: st.order, plan: planned({ steps }) };
+  }
+
+  // A plan, then another from where each of its arms ends.
+  const then = (p: Plan, after: Plan): Plan => p.branch
+    ? { steps: p.steps, branch: { ...p.branch, arms: p.branch.arms.map((a) => ({ ...a, plan: then(a.plan, after) })) } }
+    : { steps: [...p.steps, ...after.steps], ...(after.branch ? { branch: after.branch } : {}) };
+  // Runs that ended in arms searched apart, whose state at the end is
+  // each arm's own.
+  const forks = new WeakSet<Verdict>();
+  const forked = (v: Verdict) => { forks.add(v); return v; };
+  // The slots of a match's arms that nothing outside it reads, by match.
+  const inside = new Map<Id, Set<Id>>();
+  const insideOf = (m: Id, lam: Id): Set<Id> => {
+    let out = inside.get(m);
+    if (!out) {
+      const mine = new Set(subtree(code, m));
+      const outer = new Set(subtree(code, lam).filter((id) => !mine.has(id)).map(slot));
+      outer.add(slot(m));
+      inside.set(m, (out = new Set([...mine].map(slot).filter((x) => !outer.has(x)))));
+    }
+    return out;
+  };
+  // An exclusive choice whose arms each finish on their own, with nothing
+  // searched apart and one answer at most, giving nothing outside it but
+  // its value, of the same size in each: what that is, and each arm's own
+  // plan. An arm that gives something outside it would have been searched
+  // with the rest, which might give that first.
+  function joined(st: St, f: Firing, ctx: Ctx) {
+    const lam = ctx.key.split("|")[0], mine = insideOf(f.at!.node, lam), value = slot(f.at!.node);
+    let first: { known: Id[]; sizes: [Id, Size][]; text: string } | null = null;
+    const arms: { variant: Id | null; binds: Id[]; plan: Plan }[] = [];
+    const answers: Answers = { fail: false, many: false };
+    let ends = true, soft = false;
+    const loops: string[] = [], dynamic: string[] = [];
+    let order: string[] = [];
+    for (const b of f.branches!) {
+      const sub: St = { local: true, soft: st.soft, posted: new Set(st.posted), known: new Set(st.known), sizes: new Map(st.sizes), goals: [...b.goals], answers: ONE, ends: true, loops: [], dynamic: [], order: [] };
+      for (const x of b.gives) sub.known.add(x);
+      for (const [x, z] of b.sizes) sub.sizes.set(x, mergeSize(sub.sizes.get(x), z));
+      const v = run(sub, [], ctx);
+      if (forks.has(v) || v.stuck.length || v.answers.many) return null;
+      const known = [...sub.known].filter((x) => !st.known.has(x) && !mine.has(x));
+      const sizes = [...sub.sizes].filter(([x, z]) => !mine.has(x) && st.sizes.get(x) !== z);
+      if (known.some((x) => x !== value) || sizes.some(([x]) => x !== value)) return null;
+      const text = JSON.stringify([known, sizes.map(([x, z]) => [x, [...z].sort()])]);
+      if (first && first.text !== text) return null;
+      first ??= { known, sizes, text };
+      arms.push({ variant: b.variant, binds: b.binds, plan: v.plan });
+      answers.fail ||= v.answers.fail;
+      if (!v.ends) ends = false;
+      loops.push(...v.loops);
+      dynamic.push(...v.dynamic);
+      soft ||= !!sub.soft;
+      if (!order.length) order = [b.text, ...v.order];
+    }
+    return { known: first!.known, sizes: first!.sizes, answers, ends, loops: [...new Set(loops)], dynamic: [...new Set(dynamic)], soft, order, arms };
   }
 
   function mergeSize(a: Size | undefined, b: Size): Size {
@@ -1046,6 +1150,7 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
   function checked(get: () => { v: Verdict | null; key: string | null }): Verdict | null {
     graphs.length = 0;
     memo.clear();
+    memoLow.clear();
     const { v, key } = get();
     if (!v) return null;
     if (!key) return v;

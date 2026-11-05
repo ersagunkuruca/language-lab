@@ -15,3 +15,12 @@ test("the core IR's JavaScript has no comments naming definitions (C170a)", () =
   assert.doesNotMatch(js, /run lines|tokens/);
   assert.ok(ir.funcs.some((f) => f.name === "run lines"));
 });
+
+test("a match picks its case by number, not by tag text (C170c)", () => {
+  const p = load("calc"), main = p.named("main");
+  const { js } = emitCoreJs(lowerCore(p.code, p.info, p.pres.names, [main]));
+  assert.match(js, /switch \(\(\w+\.\$c \?\?/);
+  assert.doesNotMatch(js, /case "/);
+  assert.doesNotMatch(js, /this\.tag =/);
+  assert.match(js, /K\d+\.prototype\.\$c = \d+;/);
+});

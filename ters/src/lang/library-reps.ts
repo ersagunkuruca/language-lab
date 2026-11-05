@@ -13,7 +13,7 @@
 // type (C52). A map's keys or a set's items that hold one would be ordered
 // by the tree's shape, so such a program keeps the definition.
 
-import { dependencies, freshId, mapIds, merge, subtree, type Code, type Id, type Node, type NodeOf, isUse, isCall, type Call } from "../model.ts";
+import { dependencies, freshId, mapIds, merge, subtree, type Code, type Id, type Node, type NodeData, type NodeOf, isUse, isCall, type Call } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { infer, type Info } from "./infer.ts";
 import { Lang } from "./dsl.ts";
@@ -120,12 +120,15 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
   // equal, show and compare on a stored value: the row's own, through its
   // meaning; on a value with one inside, given that value as meanings.
   const k = new Lang(code);
-  const meanings = asMeanings(k, code, info, names, chosen);
+  const bounds = chosen.filter((r) => r.of !== LIST).map((r) => plainBoundary(code, defs, r, names)!);
+  const copyOf = new Map(bounds.flatMap((b) => [...b.copyOf]));
+  const meanings = asMeanings(k, code, info, names, chosen, copyOf);
   const nodes: Record<Id, Node> = { ...code.nodes };
   const typeOf = (id: Id) => { const t = info.typeOf.get(id); return t && info.subst.zonk(t); };
   const rowOf = (id: Id) => { const t = typeOf(id); return t?.t === "con" ? chosen.find((r) => r.of === t.id) : undefined; };
   const call = (fn: Id, arg: Id): Id => { const r = freshId(), c = freshId(); nodes[r] = { id: r, kind: "ref", target: fn }; nodes[c] = { id: c, kind: "call", fn: r, args: [arg] }; return c; };
-  for (const r of chosen) if (r.of !== LIST) Object.assign(nodes, plainBoundary(code, defs, r));
+  for (const b of bounds) { Object.assign(nodes, b.nodes); Object.assign(names, b.names); }
+  const copied = bounds.flatMap((b) => b.made);
   for (const d of defs) for (const id of subtree(code, d)) {
     const n = code.nodes[id];
     // A match on a stored value's items (keys, entries) whose cons case
@@ -159,7 +162,7 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
   }
   // main's answer, for whoever shows it: main gives what it gave, as meanings.
   const answer = (() => { const t = typeOf(main); return t?.t === "fn" ? meanings(info.subst.zonk(t.ret)) : t ? meanings(t) : null; })();
-  let own = [...defs, ...copies];
+  let own = [...defs, ...copies, ...copied];
   // main's inputs, from whoever runs it (the command line's arguments): a
   // plain list comes as written and is stored on the way in (C93).
   const mainType = typeOf(main), mainBody = code.nodes[(nodes[main] as NodeOf<"def">).body!];
@@ -177,7 +180,7 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
     own = [...own, inner];
   }
   const made = k.code.defs.filter((d) => !code.nodes[d]);
-  const all = { nodes: { ...k.code.nodes, ...nodes }, defs: [...code.defs, ...made] };
+  const all = { nodes: { ...k.code.nodes, ...nodes }, defs: [...code.defs, ...copied, ...made] };
   // The way back from a builtin's list (listBoundary's `made`) is written
   // on List, and stays so.
   const kept = [...made.filter((d) => !own.includes(d)), ...(boundary ? boundary.made : [])];
@@ -204,11 +207,11 @@ const prelude = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY
 // value with each one as its meaning (null if it has none): a list item by
 // item, a case field by field, a map's values. The definitions aren't the
 // program's, so representing it leaves the meanings they build alone.
-function asMeanings(k: Lang, code: Code, info: Info, names: Names, chosen: Representation[]) {
+function asMeanings(k: Lang, code: Code, info: Info, names: Names, chosen: Representation[], copyOf: Map<Id, Id> = new Map()) {
   const made = new Map<string, Id | null>();
   // A case of another type has one if its own fields do (GAPS.md M2: the
   // program's record holding a map).
-  const has = (t: Type): boolean => t.t === "con" && (chosen.some((r) => r.of === t.id) || t.args.some((a) => has(info.subst.zonk(a))) || holds(t.id));
+  const has = (t: Type): boolean => t.t === "con" && (chosen.some((r) => r.of === t.id) || t.args.some((a) => has(info.subst.zonk(a))) || holds(t.id) || copyOf.has(t.id));
   const key = (t: Type): string => (t.t === "con" ? `${t.id}(${t.args.map((a) => key(info.subst.zonk(a))).join(",")})` : t.t);
   const meanings = (t: Type): Id | null => {
     t = info.subst.zonk(t);
@@ -259,11 +262,13 @@ function asMeanings(k: Lang, code: Code, info: Info, names: Names, chosen: Repre
     };
     // A type whose own fields hold a stored value is rewritten too, so its
     // meanings are built in a copy that isn't (GAPS.md M2).
-    const into = holds(t.id) ? (k.code.nodes[(k.code.nodes[shadow(t.id)] as NodeOf<"def">).body!] as NodeOf<"typedef">).variants : td.variants;
+    // A builtin's type the program has its own copy of (plainBoundary,
+    // L189e): the copy's value, as the builtin's type.
+    const into = copyOf.has(t.id) ? td.variants : holds(t.id) ? (k.code.nodes[(k.code.nodes[shadow(t.id)] as NodeOf<"def">).body!] as NodeOf<"typedef">).variants : td.variants;
     k.define(d, k.fn(["value"], (v) => k.match(v, td.variants.map((variant, j) => {
       const fields = (code.nodes[variant] as NodeOf<"variant">).fields;
       const each = fields.map((f) => meanings(fieldType((code.nodes[f] as NodeOf<"field">).type)));
-      return { variant, names: fields.map((_, i) => `field ${i + 1}`), body: (xs: Id[]) => (fields.length ? k.call(into[j], ...xs.map((x, i) => (each[i] ? k.call(each[i]!, x) : x))) : k.x(into[j])) };
+      return { variant: copyOf.get(variant) ?? variant, names: fields.map((_, i) => `field ${i + 1}`), body: (xs: Id[]) => (fields.length ? k.call(into[j], ...xs.map((x, i) => (each[i] ? k.call(each[i]!, x) : x))) : k.x(into[j])) };
     }))));
     return d;
   };
@@ -566,39 +571,110 @@ function listBoundary(code: Code, info: Info, defs: Id[], rep: Representation, a
 // A builtin whose own type names a stored type with no parameters (Bytes:
 // `read bytes`, `write bytes`, L189b) is given the meaning where it takes
 // one, and what it gives is stored by the row's `store by`: the nodes that
-// do so, or null where a builtin names the type any other way (a
-// Response's body, a list of Bytes), and the program keeps the definition.
+// do so. A record of no parameters it takes or gives with the type in
+// its own fields (a Request's body, a Response's: L189e) becomes the
+// program's own copy, whose fields the representation rewrites as it does
+// the program's types; the call goes from one to the other. Null where a
+// builtin names the type any other way (a list of Bytes), and the program
+// keeps the definition.
 // A builtin that only passes a value on (first, a match's) has a type
 // variable there, and is left alone.
-function plainBoundary(code: Code, defs: Id[], rep: Representation): Record<Id, Node> | null {
+function plainBoundary(code: Code, defs: Id[], rep: Representation, given: Names = {}): Boundary | null {
+  const nodes: Record<Id, Node> = {}, made: Id[] = [], names: Names = {};
   const typedef = code.nodes[(code.nodes[rep.of] as NodeOf<"def"> | undefined)?.body ?? ""];
-  if (typedef?.kind !== "typedef" || typedef.params.length || !rep.meaning || !rep.store) return {};
+  const copies = new Map<Id, Id>(), copyOf = new Map<Id, Id>();
+  if (typedef?.kind !== "typedef" || typedef.params.length || !rep.meaning || !rep.store) return { nodes, made, names, copyOf };
   const inside = holdsType(code, rep.of);
   const plain = (t: Type) => t.t === "con" && t.id === rep.of && !t.args.length;
-  const names = (t: Type): boolean => t.t === "con" ? t.id === rep.of || inside(t.id) || t.args.some(names) : t.t === "fn" ? [...t.params, t.ret].some(names) : false;
-  const nodes: Record<Id, Node> = {};
-  const call = (fn: Id, arg: Id): Id => { const r = freshId(), c = freshId(); nodes[r] = { id: r, kind: "ref", target: fn }; nodes[c] = { id: c, kind: "call", fn: r, args: [arg] }; return c; };
+  const named = (t: Type): boolean => t.t === "con" ? t.id === rep.of || inside(t.id) || t.args.some(named) : t.t === "fn" ? [...t.params, t.ret].some(named) : false;
+  const add = (n: NodeData): Id => { const i = freshId(); nodes[i] = { ...n, id: i } as Node; return i; };
+  const call = (fn: Id, ...args: Id[]): Id => add({ kind: "call", fn: add({ kind: "ref", target: fn }), args });
+  const mentions = (n: Id): boolean => { const x = code.nodes[n]; return x?.kind === "tref" ? x.target === rep.of || inside(x.target) || x.args.some(mentions) : x?.kind === "tfun" ? [...x.params, x.result].some(mentions) : false; };
+  // A type of no parameters a builtin takes or gives whose fields are the
+  // type itself or don't name it (a Request, a Response): its variants,
+  // with which of each one's fields are the type.
+  const fieldsOf = (t: Type): [Id, boolean[]][] | null => {
+    if (t.t !== "con" || t.args.length || t.id === rep.of) return null;
+    const td = code.nodes[(code.nodes[t.id] as NodeOf<"def"> | undefined)?.body ?? ""];
+    if (td?.kind !== "typedef" || td.params.length) return null;
+    const out: [Id, boolean[]][] = [];
+    for (const v of td.variants) {
+      const flags: boolean[] = [];
+      for (const f of (code.nodes[v] as NodeOf<"variant">).fields) {
+        const ty = (code.nodes[f] as NodeOf<"field">).type, x = code.nodes[ty];
+        if (x?.kind === "tref" && x.target === rep.of && !x.args.length) flags.push(true);
+        else if (!mentions(ty)) flags.push(false);
+        else return null;
+      }
+      out.push([v, flags]);
+    }
+    return out;
+  };
+  // The program's own copy of such a type (L189e), whose fields the
+  // representation rewrites as it does the program's own types; the
+  // builtin keeps std's, and the call goes from one to the other.
+  const copy = (t: Id): void => {
+    if (copies.has(t)) return;
+    const td = code.nodes[(code.nodes[t] as NodeOf<"def">).body!] as NodeOf<"typedef">;
+    const ty = (n: Id): Id => { const x = code.nodes[n]; return x?.kind === "tref" ? add({ kind: "tref", target: x.target, args: x.args.map(ty) }) : n; };
+    const variants = td.variants.map((v) => {
+      const fields = (code.nodes[v] as NodeOf<"variant">).fields.map((f) => { const c = add({ kind: "field", type: ty((code.nodes[f] as NodeOf<"field">).type) }); names[c] = given[f] ?? "field"; return c; });
+      const c = add({ kind: "variant", fields });
+      copyOf.set(v, c); names[c] = given[v] ?? "case";
+      return c;
+    });
+    const d = add({ kind: "def", body: add({ kind: "typedef", params: [], variants }) });
+    copies.set(t, d); copyOf.set(t, d); names[d] = given[t] ?? "copy";
+    made.push(d);
+  };
+  // `value` matched and built again as `to`'s (each variant's own, or its
+  // copy's), each field that is the type given to `by`.
+  const each = (value: Id, variants: [Id, boolean[]][], from: (v: Id) => Id, to: (v: Id) => Id, by: Id): Id =>
+    add({ kind: "match", scrutinee: value, otherwise: null, arms: variants.map(([v, flags]) => {
+      const binds = flags.map(() => add({ kind: "binder" }));
+      const xs = binds.map((b, i) => { const r = add({ kind: "ref", target: b }); return flags[i] ? call(by, r) : r; });
+      return add({ kind: "arm", variant: from(v), binds, results: [], body: xs.length ? call(to(v), ...xs) : add({ kind: "ref", target: to(v) }) });
+    }) } as NodeData);
   const calledBy = new Map<Id, Call>();
   for (const d of defs) for (const id of subtree(code, d)) { const n = code.nodes[id]; if (isCall(n)) calledBy.set(n.fn, n); }
+  const calls: [Call, Type & { t: "fn" }][] = [];
   for (const d of defs) for (const id of subtree(code, d)) {
     const n = code.nodes[id];
     if (n.kind !== "ref" || !SIGS[n.target] || code.nodes[n.target]?.kind === "def" || n.target in BY_VALUE) continue;
     const sig = SIGS[n.target](new Subst());
-    if (!names(sig)) continue;
+    if (!named(sig)) continue;
     const c = calledBy.get(id);
     if (!c || sig.t !== "fn") return null;
-    if (sig.params.some((p) => names(p) && !plain(p)) || (names(sig.ret) && !plain(sig.ret))) return null;
-    const args = c.args.map((a, i) => (sig.params[i] && plain(sig.params[i]) ? call(rep.meaning!, a) : a));
-    if (plain(sig.ret)) {
-      // The call keeps its id, so its name and comments stay on it.
-      const inner = freshId(), of = freshId();
-      nodes[inner] = { ...c, id: inner, args };
-      nodes[of] = { id: of, kind: "ref", target: rep.store };
-      nodes[c.id] = { id: c.id, kind: "call", fn: of, args: [inner] };
-    } else nodes[c.id] = { ...c, args };
+    if ([...sig.params, sig.ret].some((t) => named(t) && !plain(t) && !fieldsOf(t))) return null;
+    for (const t of [...sig.params, sig.ret]) if (t.t === "con" && named(t) && !plain(t)) copy(t.id);
+    calls.push([c, sig]);
   }
-  return nodes;
+  // The program's own definitions on the copies: its constructors,
+  // matches and types.
+  const own = (id: Id) => copyOf.get(id) ?? id;
+  if (copies.size) for (const d of defs) for (const id of subtree(code, d)) {
+    const n = code.nodes[id];
+    if ((n.kind === "ref" || n.kind === "tref") && copyOf.has(n.target)) nodes[id] = { ...n, target: own(n.target) };
+    else if (n.kind === "arm" && copyOf.has(n.variant)) nodes[id] = { ...n, variant: own(n.variant) };
+  }
+  const same = (v: Id) => v;
+  for (const [c0, sig] of calls) {
+    const c = (nodes[c0.id] as Call | undefined) ?? c0;
+    const across = (t: Type, x: Id, into: boolean): Id => {
+      if (plain(t)) return call(into ? rep.store! : rep.meaning!, x);
+      const vs = named(t) ? fieldsOf(t) : null;
+      return vs ? (into ? each(x, vs, same, own, rep.store!) : each(x, vs, own, same, rep.meaning!)) : x;
+    };
+    const args = c.args.map((a, i) => (sig.params[i] ? across(sig.params[i], a, false) : a));
+    if (!named(sig.ret)) { nodes[c.id] = { ...c, args }; continue; }
+    // The call keeps its id, so its name and comments stay on it.
+    const inner = add({ ...c, args } as NodeData);
+    nodes[c.id] = { ...nodes[across(sig.ret, inner, true)], id: c.id };
+  }
+  return { nodes, made, names, copyOf };
 }
+// `copyOf`: each type copied, and each of its variants, to the copy's.
+interface Boundary { nodes: Record<Id, Node>; made: Id[]; names: Names; copyOf: Map<Id, Id> }
 
 // Does a type's definition name `of` in its fields, itself or through
 // another type that does?

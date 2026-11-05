@@ -43,6 +43,7 @@ import type { Id } from "../../ters/src/model.ts";
 import { answerByShapes, type Shape } from "../../ters/src/lang/hosts.ts";
 import { norm } from "../../ters/src/lang/int.ts";
 import { FALSE, TRUE } from "../../ters/src/lang/std.ts";
+import { zoneOffset } from "../../ters/src/lang/text.ts";
 import type { HostOps } from "./core-rt.ts";
 import { fails, listSteps, isArray, isTable, isData, isFn, isRecord, kids, mapKids, OPS, STOPS, type AType, type DType, type FType, type LType, type CoreIR, type Op, type RType, type SExpr, type SFunc, type SType, type TType } from "./scalar.ts";
 
@@ -873,6 +874,8 @@ function worldOf(rt: Runtime, exports: () => Record<string, (...xs: unknown[]) =
     writeFile: (p: unknown, t: unknown) => unit(() => w("writeFile")(text(p), text(t))),
     appendFile: (p: unknown, t: unknown) => unit(() => w("appendFile")(text(p), text(t))),
     fileExists: (p: unknown) => (w("fileExists")(text(p)) ? 1 : 0),
+    // A zone's offset (L188): the host's Intl, NaN for a zone it doesn't know.
+    zoneOffset: (z: unknown, s: number) => zoneOffset(text(z), s)[0] ?? NaN,
     listFolder: (p: unknown) => tried(() => textList(exports(), w("listFolder")(text(p)))),
     reason: () => make(reason),
     // The program's own operations (L69b2): hosts/js.js's answers, checked
