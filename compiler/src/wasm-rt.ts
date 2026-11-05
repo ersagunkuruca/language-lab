@@ -7191,6 +7191,9 @@ export function wasiStop(sites: { name?: string }[]): Omit<RtFn, "name"> {
 }
 
 export const runtime = (name: string): RtFn => {
+  // A program's own handlers (L213c8): only their shapes here; wasm.ts
+  // writes each (`stackRt`), knowing its cases and its effect's number.
+  if (/^(hpush|hpop|handler):/.test(name)) return { name, params: [], result: "i32", locals: [], uses: [], body: "unreachable", native: true };
   const tb = /^table\.(\w+)\.t\d+(?:\.e\d+)?$/.exec(name);
   if (tb) {
     if (!TABLES[tb[1]]) throw new Error(`no runtime function ${name}`);
