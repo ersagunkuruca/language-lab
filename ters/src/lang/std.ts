@@ -14,6 +14,7 @@ import * as I from "./int.ts";
 import * as T from "./text.ts";
 import * as A from "./algebraic.ts";
 import * as RL from "./real.ts";
+import { BytesList } from "./bytes.ts";
 
 const nodes: Node[] = [];
 const node = (n: Node) => (nodes.push(n), n.id);
@@ -378,6 +379,7 @@ const truth = (b: boolean) => ({ tag: b ? "std.bool.true" : "std.bool.false", fi
 // Lists as std builds them, for builtins that take or give one.
 const listOf = (xs: unknown[]) => xs.reduceRight<object>((tail, x) => ({ tag: "std.list.cons", fields: [x, tail] }), { tag: "std.list.nil", fields: [] });
 function itemsOf(l: { tag: Id; fields: unknown[] }): unknown[] {
+  if (l instanceof BytesList) return l.items();
   const out: unknown[] = [];
   for (let d = l; d.tag === "std.list.cons"; d = d.fields[1] as typeof l) out.push(d.fields[0]);
   return out;

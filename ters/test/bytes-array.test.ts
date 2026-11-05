@@ -14,7 +14,8 @@ import { runMain } from "../src/lang/run.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { withLibraryRepresentations } from "../src/lang/library-reps.ts";
-import { CONS, INT_OPS, IO, NIL, S, SHOW_ANY, TEXT_OPS } from "../src/lang/std.ts";
+import { ARRAY_OPS, ArrayView, CONS, INT_OPS, IO, NIL, S, SHOW_ANY, STD_IMPL, TEXT_OPS } from "../src/lang/std.ts";
+import { BytesList, bytesValue, plainBytes } from "../src/lang/bytes.ts";
 import { REQUEST_V, RESPONSE_V } from "../src/lang/network.ts";
 import { nodeWorld } from "../src/lang/world.ts";
 import type { Code, Id } from "../src/model.ts";
@@ -145,4 +146,18 @@ test("stored bytes compile through the core IR", () => {
   assert.deepEqual([...l.refused.values()], []);
   const fs = loadCoreJs(l);
   assert.equal(fs[l.funcs.findIndex((g) => g.name === "answer" && !g.inner)](), "169 3 aMOp");
+});
+
+// The world's bytes cross as a copy (L189e2): the list `read bytes`
+// gives is made from the bytes as it is walked, so storing it copies
+// them and writing it back copies them out, with no list made between.
+test("bytes from the world are stored and written back as copies, with no list made", () => {
+  const b = Uint8Array.from([1, 2, 3, 250]);
+  const v = bytesValue(b);
+  assert.deepEqual((STD_IMPL[ARRAY_OPS.of](v.fields[0]) as ArrayView).fields, [4, 1, 2, 3, 250]);
+  assert.equal((v.fields[0] as BytesList)["f"], null);
+  assert.deepEqual([...plainBytes(v)], [1, 2, 3, 250]);
+  // Walked, it is the list the bytes are.
+  assert.deepEqual(JSON.parse(JSON.stringify(v.fields[0])).fields[0], 1);
+  assert.deepEqual([...plainBytes({ tag: v.tag, fields: [(v.fields[0] as BytesList).fields[1]] })], [2, 3, 250]);
 });
