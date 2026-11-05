@@ -293,3 +293,28 @@ test("the prelude's Clifford products read from their code give the blades' mask
     for (const j of [1, 6, 15]) for (const op of binaries) assert.equal(mask(two[op], [1 << i, 1 << j]), alg.pair(op, i, j), `${op} e${i} e${j}`);
   }
 });
+
+// L203f: a record of Float64s a program's own table multiplies, with no
+// clifford algebra, has masks of its parts too: here the dual numbers
+// written as a library of one's own would (a + bε, ε² = 0).
+test("a program's own record with its own multiplication table gets masks, with no algebra", () => {
+  const k = new Lang(LIBRARY.code);
+  const D = k.type("My dual", [], [["my dual", [["a", () => k.tref(NUMBER)], ["b", () => k.tref(NUMBER)]]]]);
+  const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
+  const of = (a: Id, b: Id) => k.call(D.v["my dual"], a, b);
+  const one = () => of(k.lit(1), k.lit(0)), eps = () => of(k.lit(0), k.lit(1));
+  const table = def("my table", () => k.list(k.call(TIMES_V, one(), one(), one()), k.call(TIMES_V, one(), eps(), eps()), k.call(TIMES_V, eps(), one(), eps())));
+  const times = (x: Id, y: Id) => k.call(lib("table product"), k.x(table), x, y);
+  const real = def("real times real", () => k.fn(["x", "y"], (x, y) => times(of(x, k.lit(0)), of(y, k.lit(0)))));
+  const mixed = def("real times ε", () => k.fn(["x", "y"], (x, y) => times(of(x, k.lit(0)), of(k.lit(0), y))));
+  const nil = def("ε times ε", () => k.fn(["x", "y"], (x, y) => times(of(k.lit(0), x), of(k.lit(0), y))));
+  const code = base(k.code), names = { ...baseNames(), ...k.names }, info = infer(code, names);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const mask = (d: Id) => bladeMask(code, info, d)?.mask;
+  assert.equal(mask(real), 0b01);
+  assert.equal(mask(mixed), 0b10);
+  // ε · ε has no line in the table: nothing on.
+  assert.equal(mask(nil), 0);
+  const r = bladeMask(code, info, mixed)!;
+  assert.equal(describeMask(r.algebra, r.mask), "parts 2");
+});
