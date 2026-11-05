@@ -14,6 +14,12 @@ import { Lang } from "../../ters/src/lang/dsl.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { RANDOM_OP, S, SHOW_ANY } from "../../ters/src/lang/std.ts";
 import { skip } from "./c-harness.ts";
+import { base, baseNames } from "../../ters/src/lang/load.ts";
+import { infer } from "../../ters/src/lang/infer.ts";
+import { nodeWorld } from "../../ters/src/lang/world.ts";
+import { logged, logText } from "../../ters/src/lang/worldlog.ts";
+import { lowerScalar } from "../src/scalar.ts";
+import { emitWasm, runMain as runWasm } from "../src/wasm.ts";
 
 test("a compiled run's log of the world's answers replays on the evaluator (C172a)", () => {
   const lab = join(import.meta.dirname, "../../ters/cli/lab.ts"), wc = join(import.meta.dirname, "../../ters/examples/wc");
@@ -71,4 +77,39 @@ test("a native program logs Random's seed, and the replay draws the same numbers
   assert.deepEqual(log.map((e) => e.op), ["randomSeed"]);
   assert.deepEqual(run(process.execPath, [lab, "run", dir, "--replay", "run.json"]), native);
   assert.notDeepEqual(run(process.execPath, [lab, "run", dir]), native);
+});
+
+// [a world draw, a draw under seeded(7), a world draw], shown, in a folder.
+function draws() {
+  const k = new Lang(LIBRARY.code);
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.let("a", k.call(RANDOM_OP), (a) =>
+    k.let("b", k.call(S.seeded, k.lit(7), k.thunk(() => k.call(RANDOM_OP))), (b) =>
+      k.let("c", k.call(RANDOM_OP), (c) => k.call(S.print, k.call(SHOW_ANY, k.list(a, b, c))))))));
+  const dir = mkdtempSync(join(tmpdir(), "log-seed-"));
+  writeFileSync(join(dir, "code.json"), JSON.stringify(k.code));
+  writeFileSync(join(dir, "names.default.json"), JSON.stringify(k.names));
+  const run = (file: string, args: string[], env: Record<string, string> = {}) => {
+    const r = spawnSync(file, args, { cwd: dir, encoding: "utf8", env: { ...process.env, ...env } });
+    return [r.stdout, r.stderr, r.status] as const;
+  };
+  return { k, main, dir, run };
+}
+
+test("a WebAssembly run keeps the log, Random's seed too, and replays on the evaluator as a module's does (C172d)", async () => {
+  const lab = join(import.meta.dirname, "../../ters/cli/lab.ts");
+  const { k, main, dir, run } = draws();
+  // A module from `lab compile` asks the world each draw, as the evaluator does.
+  assert.equal(run(process.execPath, [lab, "compile", dir, "--core", "-o", "p.mjs"])[2], 0);
+  const js = run(process.execPath, ["p.mjs"], { TERS_LOG: "js.json" });
+  assert.deepEqual((JSON.parse(readFileSync(join(dir, "js.json"), "utf8")) as { op: string }[]).map((e) => e.op), ["random", "random"]);
+  assert.deepEqual(run(process.execPath, [lab, "run", dir, "--replay", "js.json"]), js);
+  // WebAssembly given a logged world: its log replays on the evaluator.
+  const code = base(k.code), names = baseNames(k.names), lowered = lowerScalar(code, infer(code, names), names, [main], { data: true });
+  const out: string[] = [], w = logged(nodeWorld());
+  assert.equal(await runWasm(lowered, emitWasm(lowered), names[main], [], { print: (s) => out.push(s), world: w.world }), 0);
+  assert.deepEqual(w.log.map((e) => e.op), ["randomSeed"]);
+  writeFileSync(join(dir, "wasm.json"), logText(w.log));
+  assert.deepEqual(run(process.execPath, [lab, "run", dir, "--replay", "wasm.json"]), [out.map((l) => l + "\n").join(""), "", 0]);
+  assert.notDeepEqual(run(process.execPath, [lab, "run", dir])[0], out.join("\n") + "\n");
 });

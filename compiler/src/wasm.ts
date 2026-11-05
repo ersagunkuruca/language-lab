@@ -849,7 +849,7 @@ function worldOf(rt: Runtime, exports: () => Record<string, (...xs: unknown[]) =
   const unit = (f: () => void) => tried(f)[1];
   return {
     // A seed for Random's generator, 32 bits (C136).
-    randomSeed: () => Math.floor(Math.random() * 4294967296),
+    randomSeed: () => (rt.world?.randomSeed ?? (() => Math.floor(Math.random() * 4294967296)))(),
     // A stop with a reason (L51c): the program ends, as an overflow's stop.
     stopWith: (t: unknown) => { throw new Aborted(text(t)); },
     print: (t: unknown) => rt.print(text(t)),
