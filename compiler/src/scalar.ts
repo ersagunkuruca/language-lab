@@ -99,6 +99,9 @@ const TABLE_RT: Record<Id, string> = {
   [HASH_SET_OPS.empty]: "empty", [HASH_SET_OPS.add]: "put", [HASH_SET_OPS.remove]: "remove", [HASH_SET_OPS.has]: "has",
   [HASH_SET_OPS.size]: "size", [HASH_SET_OPS.items]: "entries",
 };
+// Log's effect, written to the world by a target that runs releases.
+const LOG_EFFECT = "std.log";
+
 export const ARRAY_RT: Record<Id, string> = {
   [ARRAY_OPS.empty]: "array.empty", [ARRAY_OPS.of]: "array.of", [ARRAY_OPS.items]: "array.items",
   [ARRAY_OPS.length]: "array.length", [ARRAY_OPS.at]: "array.at", [ARRAY_OPS.push]: "array.push",
@@ -493,7 +496,7 @@ export function reachedFrom(code: Code, roots: Id[]): Code {
 // `hosted`: the program's own effects its host answers where nothing
 // handles them (FOREIGN.md; for C, hosts/c.c, L69b1): their operations
 // are performed, as compiled JavaScript's are.
-export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id> } = {}): CoreIR {
+export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean } = {}): CoreIR {
   // The function types whose closures give several answers: found as
   // lowering meets one, and lowered again with them (C137c22). Only those
   // types' closures pay for taking the rest.
@@ -506,11 +509,11 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   }
 }
 
-function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id> }, severalTypes: Set<string>): CoreIR {
+function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean }, severalTypes: Set<string>): CoreIR {
   const outer = stopSite;
   try { return lowerOnceIn(code, info, names, roots, opts, severalTypes); } finally { stopSite = outer; }
 }
-function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id> }, severalTypes: Set<string>): CoreIR {
+function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean }, severalTypes: Set<string>): CoreIR {
   // Where each stop is lowered from (C143): the node being lowered, and
   // the sites met so far, one a node.
   let here: { node: Id; def: Id } | null = null;
@@ -674,7 +677,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // not finish (running out of a budget), or abort; and the world's effects.
   const partialEff = (e: Id) => e === CHOICE || e === DIVERGE || escaping(e);
   // Random under a `seeded` (C106), or drawn from the world (C136).
-  const allowedEff = (e: Id) => partialEff(e) || e === CONSOLE || e === FILES || (!!opts.data && e === RANDOM) || (!!opts.host && (PAGE_EFFECTS.has(e) || tailEffs.has(e) || e === KEPT_FILES));
+  const allowedEff = (e: Id) => partialEff(e) || e === CONSOLE || e === FILES || (!!opts.data && e === RANDOM) || (!!opts.host && (PAGE_EFFECTS.has(e) || tailEffs.has(e) || e === KEPT_FILES)) || (!!opts.releases && e === LOG_EFFECT);
   // Some root draws a number nobody seeds (C136): the world seeds
   // Random's generator then, at the first draw.
   const worldRandom = !!opts.data && roots.some((r) => {
@@ -926,7 +929,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     // lowered as its arithmetic, so no answer isn't seen here yet (L125c2,
     // L125c3); a Choice of the program's own (fail, one of) is refused
     // where it's used.
-    const effs = all.filter((e) => !BUDGETED.includes(e) && !(partial && partialEff(e)) && !(opts.data && (e === CONSOLE || e === FILES || e === RANDOM)) && !(opts.host && (PAGE_EFFECTS.has(e) || tailEffs.has(e) || e === KEPT_FILES)) && !(opts.hosted?.has(e) && tailEffs.has(e)) && !(e === CHOICE && !opts.data && !opts.shader));
+    const effs = all.filter((e) => !BUDGETED.includes(e) && !(partial && partialEff(e)) && !(opts.data && (e === CONSOLE || e === FILES || e === RANDOM)) && !(opts.host && (PAGE_EFFECTS.has(e) || tailEffs.has(e) || e === KEPT_FILES)) && !(opts.releases && e === LOG_EFFECT) && !(opts.hosted?.has(e) && tailEffs.has(e)) && !(e === CHOICE && !opts.data && !opts.shader));
     if (effs.length) fail(`has effects (${effs.map(nm).join(", ")})`);
     const budgeted = !constant && !opts.data && diverges(ft);
 
@@ -1239,10 +1242,11 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         }
         // A log line nothing handles (L213a3, for a release that logs): the
         // world's log, as the evaluator writes it.
-        if (opts.host && target === LOG_OP && !tailOps.has(LOG_OP)) {
+        if ((opts.host || opts.releases) && target === LOG_OP && !tailOps.has(LOG_OP)) {
           const t = stype(zonk(id));
           if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(id))}`);
-          return { k: "world", op: "log", aborts: false, args: args(), t };
+          // C's is logLine: its world.log is the replay's log (C172b).
+          return { k: "world", op: opts.host ? "log" : "logLine", aborts: false, args: args(), t };
         }
         // A page handler's waits (C40 step 4): the world's timers, as the
         // evaluator's (run.ts `unhandled`); a wait or an await goes on by
@@ -1330,7 +1334,8 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         // evaluator runs it after the handler's last case.
         const release = arms.find((a) => a.variant === RELEASE_V);
         if (release) {
-          if (!opts.host) throw new Refused("handles an effect with a release, which is only lowered for JavaScript yet (L213a): it runs in the evaluator");
+          // `releases`: the target runs one (C too, L213a6).
+          if (!opts.host && !opts.releases) throw new Refused("handles an effect with a release, which is only lowered for JavaScript and C yet (L213a): it runs in the evaluator");
           const t = stype(zonk(id));
           if (!t) throw new Refused(`handles an effect with a release, and gives ${OTHER}`);
           const kept = code.nodes[id];

@@ -797,6 +797,9 @@ static double lab_world_randomSeed(void) {
   if (lab__log_begin("randomSeed")) { lab__log_answer(); fprintf(lab_log, "%u", (unsigned)s); lab__log_close(); }
   return (double)s;
 }` },
+  // A line of the program's Log nothing handles (L213a6, a release's):
+  // standard error, as Node's world writes it.
+  "world.logLine": { uses: [], c: `static void lab_world_logLine(lab_cell *t) { fflush(stdout); fwrite(LAB_TB(t), 1, LAB_TN(t), stderr); fputc('\\n', stderr); lab_drop(t); }` },
   "world.printError": { uses: ["world.log"], c: `static void lab_world_printError(lab_cell *t) { if (lab__log_begin("error")) { lab__log_text(t); lab__log_write(); } fflush(stdout); fwrite(LAB_TB(t), 1, LAB_TN(t), stderr); fputc('\\n', stderr); lab_drop(t); }` },
   // All of a stream that's left.
   "world.readAll": {
