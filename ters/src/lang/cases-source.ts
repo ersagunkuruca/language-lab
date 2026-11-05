@@ -301,8 +301,8 @@ export function buildCases(): Module {
   // A language's tailoring (L214e5b2, collation-tables.ts `tailoring`):
   // the code points whose elements aren't root's, as records of 8
   // characters (the code point 4, where its elements start 3, how many 1)
-  // found by halves, and their elements, 8 characters each (the primary
-  // 4, in TAILORED steps, the secondary 2, the tertiary 1, the combining
+  // found by halves, and their elements, 9 characters each (the primary
+  // 5, in TAILORED steps, the secondary 2, the tertiary 1, the combining
   // class 1).
   const Tailoring = k.type("Collation tailoring", [], [["collation tailoring", [["language", () => k.tref(STRING)], ["records", () => k.tref(STRING)], ["elements", () => k.tref(STRING)]]]]);
   defs.push(Tailoring.def);
@@ -311,8 +311,8 @@ export function buildCases(): Module {
   k.define(tailorings, k.list(...Object.entries(col.tailorings ?? {}).map(([language, entries]) => {
     let records = "", elements = "";
     for (const [c, es] of entries) {
-      records += enc(c, 4) + enc(elements.length / 8, 3) + enc(es.length, 1);
-      for (const [p, sec, ter, cc] of es) elements += enc(p, 4) + enc(sec, 2) + enc(ter, 1) + enc(cc ?? 0, 1);
+      records += enc(c, 4) + enc(elements.length / 9, 3) + enc(es.length, 1);
+      for (const [p, sec, ter, cc] of es) elements += enc(p, 5) + enc(sec, 2) + enc(ter, 1) + enc(cc ?? 0, 1);
     }
     return k.call(tailoringV, k.lit(language), k.lit(records), k.lit(elements));
   })));
@@ -325,7 +325,7 @@ export function buildCases(): Module {
   const tFind = def("collation tailored find", ["code", "records", "lo", "hi"], (c, recs, lo, hi) => k.if(same(lo, hi), lo,
     k.let("mid", quot(add(lo, hi), k.int(2)), (mid) => k.if(less(tField(recs, mid, 0, 4), c), k.call(me, c, recs, add(mid, k.int(1)), hi), k.call(me, c, recs, lo, mid)))));
   const tElements = def("collation tailored elements", ["elements", "at", "count"], (els, at, n) => k.if(same(n, k.int(0)), k.list(),
-    k.call(CONS, element(k.call(num, els, mul(at, k.int(8)), k.int(4)), k.call(num, els, add(mul(at, k.int(8)), k.int(4)), k.int(2)), k.call(num, els, add(mul(at, k.int(8)), k.int(6)), k.int(1)), k.call(num, els, add(mul(at, k.int(8)), k.int(7)), k.int(1))),
+    k.call(CONS, element(k.call(num, els, mul(at, k.int(9)), k.int(5)), k.call(num, els, add(mul(at, k.int(9)), k.int(5)), k.int(2)), k.call(num, els, add(mul(at, k.int(9)), k.int(7)), k.int(1)), k.call(num, els, add(mul(at, k.int(9)), k.int(8)), k.int(1))),
       k.call(me, els, add(at, k.int(1)), sub(n, k.int(1))))));
   // A code point's elements in the tailoring, or root's.
   const tailoredOf = def("collation tailored elements of", ["code", "records", "elements"], (c, recs, els) => k.if(same(recs, k.lit("")), k.call(elementsOf, c),
