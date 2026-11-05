@@ -18,6 +18,11 @@ import type { Bound, Code, Id, Node, NodeOf } from "../../ters/src/model.ts";
 import { freshId, isCall, subtree } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
+import { Lang } from "../../ters/src/lang/dsl.ts";
+import { writeReader } from "../../ters/src/lang/reader.ts";
+import { PRELUDE_DEFS } from "../../ters/src/lang/prelude-ids.ts";
+import { NONE, S, SOME } from "../../ters/src/lang/std.ts";
+import { infer, type Info } from "../../ters/src/lang/infer.ts";
 
 const prelude = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name);
 const INVERSE = prelude("inverse"), CONJUGATE = prelude("conjugate");
@@ -82,12 +87,45 @@ export function expandInverses(code: Code, names: Names): { code: Code; names: N
     if (at !== 0 || m?.kind !== "match" || (out.nodes[m.scrutinee] as NodeOf<"ref"> | undefined)?.target !== body.params[0]) return null;
     return { f: f.target, params: body.params, at, args: c.args };
   };
+  // A printer's reader, written once as a definition (reader.ts, C110
+  // s7c): every target runs it, C and WebAssembly too, where a solve on
+  // the printer runs only where the evaluator's solver does.
+  const readers = new Map<Id, Id | null>();
+  const readerOf = (f: Id): Id | null => {
+    if (!readers.has(f)) {
+      let line: Id | null = null;
+      try {
+        const w = writeReader(out, f, { ...Object.fromEntries(Object.entries(PRELUDE_DEFS).map(([n, d]) => [d, n])), ...LIBRARY.names, ...names });
+        Object.assign(out.nodes, w.code.nodes);
+        out.defs.push(...w.code.defs);
+        Object.assign(more, w.names);
+        line = w.line;
+      } catch { line = null; }
+      readers.set(f, line);
+    }
+    return readers.get(f)!;
+  };
   for (const id of Object.keys(out.nodes)) {
     const c = calls(INVERSE, id);
     if (!c || c.args.length !== 2) continue;
     if (param(c.args[0])) { inverse(id, c.args[0], c.args[1]); expanded.push(id); continue; }
     const a = around(c.args[0]);
     if (!a) continue;
+    // The line read by the printer's reader: its reading, or no answer.
+    const line = readerOf(a.f);
+    if (line) {
+      const k = new Lang(out);
+      const read = k.match(k.call(line, c.args[1], ...a.args.filter((_, j) => j !== a.at)), [
+        { variant: SOME, names: ["read"], body: ([v]) => k.x(v) },
+        { variant: NONE, names: [], body: () => k.call(S.fail) },
+      ]);
+      Object.assign(out.nodes, k.code.nodes);
+      out.nodes[id] = { ...out.nodes[read], id } as Node;
+      delete out.nodes[read];
+      Object.assign(more, k.names);
+      expanded.push(id);
+      continue;
+    }
     const x = add({ kind: "binder" } as Omit<Node, "id">);
     more[x] = names[a.params[a.at]] ?? "x";
     const given: Record<string, Id> = { out: c.args[1] };
@@ -96,4 +134,15 @@ export function expandInverses(code: Code, names: Names): { code: Code; names: N
     expanded.push(id);
   }
   return expanded.length ? { code: out, names: { ...names, ...more }, expanded } : { code, names, expanded };
+}
+
+// The program with its inverses expanded, checked again with its own
+// options; as it was where the expansion doesn't check (core-js.ts's
+// lowering, and `lab native` and WebAssembly's, which lower scalar.ts's
+// core IR straight).
+export function withInverses(code: Code, info: Info, names: Names): { code: Code; info: Info; names: Names } {
+  const inv = expandInverses(code, names);
+  if (!inv.expanded.length) return { code, info, names };
+  const checked = infer(inv.code, inv.names, undefined, info.options);
+  return checked.errors.length <= info.errors.length ? { code: inv.code, info: checked, names: inv.names } : { code, info, names };
 }
