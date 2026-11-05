@@ -1,6 +1,7 @@
 // calc's grammar written once, as the printer `expression text`, and read
 // back by running it backwards (L70b, GRAMMARS-2026-11-02): it reads
-// every line the hand parser does, to the same expression.
+// every line the hand parser did, and calc reads its lines this way now
+// (C110 s5): whole expression is `read expression` or an Abort.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
@@ -13,7 +14,7 @@ const p = loadProgram(join(root, "examples", "calc"));
 const r = makeRunner(p.code, infer(p.code, p.pres.names), { print: () => {} });
 const call = (name: string, ...xs: Value[]) => [...r.call(r.value(p.named(name)), ...xs)];
 const shown = (v: Value) => showValue(v, p.code, p.pres.names);
-const parsed = (line: string) => { try { return call("whole expression", call("tokens", line)[0]).map(shown); } catch { return []; } };
+const parsed = (line: string) => { try { return call("whole expression", line).map(shown); } catch { return []; } };
 const read = (line: string) => call("read expression", line).map(shown);
 
 const lines = [
@@ -21,7 +22,7 @@ const lines = [
   "-2 ^ 2", "-(1 + 2)", "--x", "((1))", "a * (b + c) / d", "1 + 2 * 3 - 4 / x ^ 2 + (y - 1) * -z",
 ];
 
-test("calc's printer read backwards gives what the hand parser gives (L70b)", () => {
+test("calc's whole expression is its printer read backwards (L70b, C110 s5)", () => {
   for (const line of lines) assert.deepEqual(read(line), parsed(line), line);
 });
 
