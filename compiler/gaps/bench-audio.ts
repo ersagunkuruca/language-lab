@@ -63,4 +63,4 @@ for (const [name, play, n] of ways) {
   rate[name] = 1000 / ms;
   console.log(`${name.padEnd(10)} ${ms.toFixed(4)} ms a block, ${Math.round(1000 / ms)} blocks/s, ${(1000 / ms / 375).toFixed(1)}× real time`);
 }
-console.log(`compiled is ${(rate["by hand"] / rate.compiled).toFixed(1)}× the hand-written pedal's time`);
+console.log(`the core IR is ${(rate["by hand"] / rate["core IR"]).toFixed(1)}× the hand-written pedal's time`);
