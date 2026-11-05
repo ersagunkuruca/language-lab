@@ -35,3 +35,19 @@ test("json spelled read backwards reads blanks and escapes as json read does (L7
   }
   for (const bad of ["[1,]", "{\"a\" 1}", "[1 2]", "\"\\x\"", "nul"]) assert.equal(read(bad, 0), null, bad);
 });
+
+// json spelled's written reader (reader.ts, L72e2b): what compiled targets
+// run, the same readings as descent.
+test("json spelled's written reader reads as descent does (L72e2b)", async () => {
+  const { writeReader } = await import("../src/lang/reader.ts");
+  const w = writeReader(code, L("json spelled"), names);
+  const all = { nodes: { ...code.nodes, ...w.code.nodes }, defs: [...code.defs, ...w.code.defs.filter((d) => !code.defs.includes(d))] }, allNames = { ...names, ...w.names };
+  const info = infer(all, allNames);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const rr = makeRunner(all, info, { print: () => {}, names: allNames });
+  for (const line of [...lines, "[ 1 , 2.5 ,\n -3 ]", "{ \"a\" : [ 1 ,null ] ,\t\"b\":\"x\\\"y\" }", "\"tab\\t \\u0041 \\/\"", "[ ]", "[1,]", "{\"a\" 1}"]) {
+    const got = [...(rr.call(rr.value(w.line), line) as Iterable<Value>)][0];
+    const want = read(line, 0);
+    assert.equal(showValue(got, all, allNames), want === null ? "none" : `some(${shown(want)})`, JSON.stringify(line));
+  }
+});
