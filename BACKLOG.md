@@ -22,8 +22,8 @@ language, then more targets or speed (WORKFLOW.md "Priority").
 |---|---|---|
 | E Editor | "Editor lane" | E103, then Language or Compiler rows agreed with those lanes |
 | C Compiler and targets | "Compiler lane" | C185, C181 (C184 and C30 with the Editor lane), C93 |
-| L Language and library | "Language lane" | L43, L21, L118c (evaluator side), L88, L182 (core, run.ts, infer.ts, hosts.ts) |
-| L Language and library | "Language lane B" | L120 (new example programs). Skip L107 (waits on Ersagun) and L24 (research). Take a row from the other list only after telling that lane. |
+| L Language and library | "Language lane" | L43, L88, L182 (core, run.ts, infer.ts, hosts.ts) |
+| L Language and library | "Language lane B" | L21, L118c (evaluator side), both handed over by the Language lane 2026-11-05 22:16; then L120 (the compiler choosing a way). Skip L107 (waits on Ersagun) and L24 (research). Take a row from the other list only after telling that lane. |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -207,7 +207,7 @@ agent with inertia. All later goals.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L120 | **Later goal**: time of impact for rotating shapes along a PGA motor (screw motion) by conservative advancement (Mirtich); the compiler choosing it or the closed form by cost (WAYS.md). Done (L120a): examples/impact, a convex polygon against a wall. Left: (b) convex shape against convex shape (the distance between two polygons as the gap, each body's reach about its own screw centre), (c) the compiler choosing it or the closed form by cost | Ersagun 2026-11-01 | P3 | L | a done |
+| L120 | **Later goal**: the compiler choosing conservative advancement (examples/impact, L120a, b) or a closed form (Bounce's balls, L119) for a time of impact by cost (WAYS.md); the time when two things touch as a relation solved for t | Ersagun 2026-11-01 | P3 | L | a, b done |
 
 ### Someday
 
