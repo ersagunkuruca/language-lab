@@ -1,8 +1,9 @@
 // Bytes across the border (BACKLOG L189c): std's `Bytes` as the evaluator
 // and compiled JavaScript hold it (its list of Ints, each 0 to 255), and
 // the Uint8Array a world reads and writes. Both runtimes convert here, so
-// they agree. A buffer representation (L189b) would make this a copy of
-// the buffer instead of a walk down the list.
+// they agree. Where a program's bytes are a byte array (bytes-array.ts,
+// L189b), the program stores what comes in from here at the border
+// (library-reps.ts plainBoundary), so this is still a walk down the list.
 
 export const BYTES_V = "std.bytes.bytes";
 const CONS = "std.list.cons", NIL = "std.list.nil";
