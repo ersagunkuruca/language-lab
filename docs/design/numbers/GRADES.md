@@ -131,7 +131,21 @@ through known data:
 Every rule over-approximates, so a mask is still never too small, and
 grades.test.ts's tables stay the check: the general reading must give the
 same masks as the named one on Bounce, Constructions and Spacetime before
-the names go. Steps 1 to 3 are one PR each; step 4 retires `CL`.
+the names go. Step 4 retires `CL`.
+
+**L203b, built (steps 1 to 3).** grades.ts reads a value known before
+running (`known`): the algebra's own value, taken apart by a match, and a
+definition's value that runs when a match or a fold takes it apart. A
+match on known data runs only its case's arm, and a fold over known data
+reads each case with its fields known and its recursive fields' results
+folded first, so a table's lines are read one by one. `zip parts` with ·
+(a zero on either side gives zero) keeps the parts both have, `map parts`
+of a function that zeroes any part (a weight known to be 0) keeps none,
+and `total` is zero when no part is on. So a product a program writes
+itself, its own fold over the algebra's table, has the prelude's masks
+(grades.test.ts); step 2's rule comes out of reading `table product`'s
+own code, with no name for it. The prelude's operations are still read by
+their names (faster); step 4 is left.
 
 ## In the compiler (L43c)
 
