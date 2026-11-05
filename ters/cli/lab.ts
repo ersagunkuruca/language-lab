@@ -42,7 +42,7 @@ import { fromFile } from "../src/files.ts";
 import { infer, type Info } from "../src/lang/infer.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { sameLines } from "../src/lang/modules.ts";
-import { baseNames, checkOptions, loadProgram } from "../src/lang/load.ts";
+import { baseNames, loadProgram, optionsWith } from "../src/lang/load.ts";
 import { equal, mainProblem, pageProblem, runMain, runProgram, type World } from "../src/lang/run.ts";
 import { Cells } from "../src/lang/cells.ts";
 import { evaluatorCall, htmlText } from "../src/lang/html.ts";
@@ -112,8 +112,10 @@ function load(path: string): Program {
   const r = fromFile(readFileSync(path, "utf8"), () => LIBRARY.code);
   if ("error" in r) fail(`can't open ${path}: ${r.error}`);
   const names = baseNames(r.file.names);
-  const info = infer(r.code, names, undefined, checkOptions);
-  return { title: r.file.title, code: r.code, own: r.file.code.defs, names, info, reps: representationsIn(r.code, info, names, r.file.code.defs) };
+  // The file's own pins too (L173c), as the editor checks it.
+  const options = optionsWith(r.file.signatures);
+  const info = infer(r.code, names, undefined, options);
+  return { title: r.file.title, code: r.code, own: r.file.code.defs, names, info, reps: representationsIn(r.code, info, names, r.file.code.defs), options };
 }
 
 // The program from `main`, with each type it uses stored the way the

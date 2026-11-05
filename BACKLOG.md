@@ -163,7 +163,6 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L173b | The rest of REVIEW-2026-11-02d §5, which `lab mcp` couldn't write: machine's `args mapped` as `fields mapped(instruction, f)` is refused ("fields mapped needs the value's data type known here") because a replaced body loses the parameter's type: the text has no way to say `instruction : Instr`, and a program folder keeps no pins (signatures.json is the editor's saved file's, files.ts; `load` and `lab mcp` don't read one). Needs a parameter's type written in the text, or a folder's pins. Done: board's `card of` (L173b1); machine's `zeros` is `copies(count, 0)` already | [REVIEW-2026-11-02d](docs/reports/reviews/REVIEW-2026-11-02d.md) §5, L173 | P3 | S | |
 
 ### Ersagun's current asks
 
