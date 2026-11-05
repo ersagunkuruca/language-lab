@@ -169,7 +169,7 @@ const same = (s: Size | undefined): Size => new Map(s ?? []);
 export { derivedFrom };
 const slotsOf = new WeakMap<Code, { parent: Map<Id, Id>; seen: Set<Id> }>();
 function baseSlots(code: Code) {
-  if (!slotsOf.has(code)) analyzer(code);
+  if (!slotsOf.has(code)) analyzer(code, {}, { keepSlots: true });
   return slotsOf.get(code)!;
 }
 
@@ -222,7 +222,7 @@ function letsOf(code: Code): Map<Id, Named> {
 // plansOnly: for relate.ts, which needs the schedules and not whether
 // they end (the size-change check, run again for each mode planned while
 // the search runs, would be most of its time).
-export function analyzer(program: Code, names: Record<Id, string> = {}, { plansOnly = false } = {}) {
+export function analyzer(program: Code, names: Record<Id, string> = {}, { plansOnly = false, keepSlots = false } = {}) {
   // A use with no body is read with its ports bound (L211e).
   const code = filled(program);
   const nodes = code.nodes;
@@ -268,7 +268,14 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
     under = base.parent;
     for (const id of from!.changed) if (nodes[id]) scan(nodes[id]);
   } else refresh();
-  if (!from && !slotsOf.has(code)) slotsOf.set(code, { parent: new Map(parent), seen });
+  // A derived program's are kept when they are a base's (baseSlots): its
+  // base's with its own read over them (E253e: a program on the library's
+  // layer is derived from it while its palette is found, and each offer,
+  // derived from it in turn, scanned every node again without them).
+  if (!slotsOf.has(code)) {
+    if (!from) slotsOf.set(code, { parent: new Map(parent), seen });
+    else if (keepSlots && base) slotsOf.set(code, { parent: new Map([...base.parent, ...parent]), seen: new Set([...base.seen, ...seen]) });
+  }
   const slot = find;
   // The plans of a lambda made after the analyzer was.
   const fresh = (lam: Id) => { if (!seen.has(lam) && (!base?.seen.has(lam) || from!.changed.has(lam))) { refresh(); verdicts.clear(); } };

@@ -100,7 +100,14 @@ const filledOnce = new WeakMap<Code, Code>();
 const bareIn = (code: Code, ids: Iterable<Id>) => [...ids].filter((id) => { const n = code.nodes[id]; return n?.kind === "call" && !!(n as Use).given && (n as Use).body === undefined; });
 export function filled(code: Code): Code {
   let out = filledOnce.get(code);
-  if (!out && derived.has(code)) out = filledFrom(code);
+  if (!out && derived.has(code)) {
+    out = filledFrom(code);
+    // A program on its layer (model.ts scanningOnLayer) is a base its
+    // palette's offers are filled from, each asking for it again: kept, as
+    // a program not derived is (E253e), unless it is the mirror, which the
+    // next offer changes.
+    if (derived.get(code)!.stable && out.nodes !== mirrors.get(code.nodes)?.nodes) filledOnce.set(code, out);
+  }
   if (!out) {
     const bare = bareIn(code, Object.keys(code.nodes));
     if (!bare.length) out = code;
