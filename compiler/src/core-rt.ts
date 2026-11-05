@@ -164,6 +164,10 @@ function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Re
       return frame.box.v;
     };
   }
+  // A handler of Abort around several answers or a wait (C182): whether
+  // the rest outside it is running.
+  if (name === "rest.in") return (f) => { (f as { inRest: boolean }).inRest = true; return true; };
+  if (name === "rest.out") return (f) => { (f as { inRest: boolean }).inRest = false; return true; };
   if (name.startsWith("handled:")) { const e = name.slice(8); return () => !!handlers.get(e)?.length; }
   if (name.startsWith("perform:")) {
     const [, e, op, bool] = name.split(":");
@@ -450,6 +454,9 @@ function worldFn(op: string, rt: Runtime, timers: Timers, handlers: Map<string, 
     case "myLocale": return () => ({ tag: LOCALE_V, fields: [(rt.world?.locale ?? hostLocale)()] });
     case "myTimeZone": return () => (rt.world?.timeZone ?? hostZone)();
     case "fetchText": return (u) => tried(() => w("fetchText")(u as string));
+    // A fetch as a ticket (L150b, C182), as run.ts starts one: in the
+    // background where the world can, else fetched now and ready at once.
+    case "startFetch": return (u) => tried(() => rt.world?.startFetch ? timers.fetch(w("startFetch")!(u as string)) : { tag: TICKET_V.timer, fields: [0, w("fetchText")(u as string)] });
     case "sendRequest": return (r) => tried(() => responseValue(w("sendRequest")!(plainRequest(r))));
     case "random": return () => (rt.world?.random ?? worldRandom)();
     case "print": return (s) => { rt.print(s as string); return []; };

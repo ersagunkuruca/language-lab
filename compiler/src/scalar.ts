@@ -143,6 +143,8 @@ export const WORLD_OPS: Record<Id, { op: string; aborts: boolean }> = {
 const HOST_WORLD: Record<Id, { op: string; aborts: boolean }> = {
   [IO.readBytes]: { op: "readBytes", aborts: true }, [IO.writeBytes]: { op: "writeBytes", aborts: true }, [IO.fetchText]: { op: "fetchText", aborts: true },
   [IO.sendRequest]: { op: "sendRequest", aborts: true },
+  // A fetch as a ticket (L150, C182): ready when the body comes.
+  [IO.startFetch]: { op: "startFetch", aborts: true },
 };
 const worldCall = (b: Id, args: SExpr[], t: LType): SExpr | null => {
   const w = WORLD_OPS[b] ?? HOST_WORLD[b];
@@ -283,7 +285,7 @@ export function mapLocals(e: SExpr, m: (i: number) => number): SExpr {
     case "attempt": case "search": return { ...r, res: m(r.res) };
     case "apply": return { ...r, tmp: m(r.tmp) };
     case "list": return { ...r, item: m(r.item), acc: m(r.acc) };
-    case "handle": return { ...r, reason: m(r.reason), save: m(r.save) };
+    case "handle": return { ...r, reason: m(r.reason), save: m(r.save), ...(r.frame !== undefined ? { frame: m(r.frame) } : {}) };
     case "budget": return { ...r, save: m(r.save), res: m(r.res) };
     default: return r;
   }
@@ -302,7 +304,7 @@ export function tidied(f: SFunc, self: number): SFunc {
       case "attempt": case "search": wrote(e.res); break;
       case "apply": wrote(e.tmp); if (e.tail) loops = true; break;
       case "list": wrote(e.item); wrote(e.acc); break;
-      case "handle": wrote(e.reason); wrote(e.save); break;
+      case "handle": wrote(e.reason); wrote(e.save); if (e.frame !== undefined) wrote(e.frame); break;
       case "budget": wrote(e.save); wrote(e.res); break;
       case "released": if (e.st !== undefined) wrote(e.st); break;
       case "call": if (e.tail && e.fn === self) loops = true; break;
@@ -342,7 +344,7 @@ function freeLocals(e: SExpr): number[] {
       case "attempt": case "search": set.add(x.res); break;
       case "apply": set.add(x.tmp); break;
       case "list": set.add(x.item); set.add(x.acc); break;
-      case "handle": set.add(x.reason); set.add(x.save); break;
+      case "handle": set.add(x.reason); set.add(x.save); if (x.frame !== undefined) set.add(x.frame); break;
       case "budget": set.add(x.save); set.add(x.res); break;
     }
     kids(x).forEach(walk);
@@ -425,7 +427,7 @@ export type SExpr =
   // `ins`: its inputs' types, where they aren't texts (a host's
   // operation in WebAssembly, L69b2).
   | { k: "world"; op: string; aborts: boolean; args: SExpr[]; t: LType; suspends?: true; cps?: true; ins?: LType[] }
-  | { k: "handle"; body: SExpr; reason: number; arm: SExpr; t: LType; save: number; esc?: number }
+  | { k: "handle"; body: SExpr; reason: number; arm: SExpr; t: LType; save: number; esc?: number; frame?: number }
   // A handler's release (L213a, core IR only): body's value, with release
   // run once after it however body ends (its value, an Abort, a stop),
   // as the evaluator runs it on every exit.
@@ -2485,7 +2487,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     if (e.k === "apply" && !e.cps && e.t.several) return true;
     if (e.k === "world" && e.suspends && !e.cps) return true;
     if (e.k === "search") return !!e.dflt && several(e.dflt);
-    if (e.k === "handle" && several(e.body)) throw new Refused("handles Abort around a search with several answers (not in WebAssembly yet)");
+    if (e.k === "handle" && several(e.body)) { if (!opts.host) throw new Refused("handles Abort around a search with several answers (not in WebAssembly yet)"); return true; }
     return kids(e).some(several);
   }
   // Whether e may wait (C40 step 4): a search or a budget around a wait
@@ -2647,6 +2649,23 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         return { ...e, arms: e.arms.map((a) => a && cps(a, j, tail, g)), result: "i32" };
       }
       case "budget": if (waits(e.body)) throw new Refused("waits inside with fuel (not lowered yet)"); if (!several(e.otherwise)) return outside(e, k, g); break;
+      // A handler of Abort around several answers, or a wait (C182): each
+      // answer goes on to the rest outside it, so an abort in the rest
+      // isn't the handler's. Its frame says when the rest is running
+      // (core-rt.ts `rest.in`, `rest.out`); the arm's answer goes on too.
+      case "handle": {
+        const fr = g.locals.push("host") - 1, j = join(k, e.t, g, 2), at = local(fr);
+        const mark = (fn: string): SExpr => ({ k: "rt", fn, args: [at], host: { t: "i32", partial: false } });
+        // The answer worked out first, inside; the rest's own no answer
+        // (going back for the next) ends the rest too.
+        const out = (x: SExpr): SExpr => ({ k: "let", i: g.locals.push("i32") - 1, value: mark("rest.out"), body: x });
+        const rest: Cont = { gen: (v) => {
+          const a = g.locals.push(e.t) - 1, r = g.locals.push("i32") - 1;
+          const run: SExpr = { k: "attempt", body: j.gen(local(a), false), res: r, ok: out(local(r)), otherwise: out({ k: "fail" }), t: "i32" };
+          return { k: "let", i: a, value: v, body: { k: "let", i: g.locals.push("i32") - 1, value: mark("rest.in"), body: run } };
+        } };
+        return { ...e, body: cps(e.body, rest, false, g), arm: cps(e.arm, j, false, g), t: "i32", frame: fr };
+      }
       case "attempt": {
         if (several(e.body)) break;
         const j = join(k, e.t, g, arms([e.ok, e.otherwise]));
