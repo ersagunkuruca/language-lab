@@ -171,9 +171,11 @@ export function fillOnce(lib: Code): Code {
 // (`value.second` for the second produced port), or the variable itself
 // when the use produces one. A body that only gives the one binder back is
 // the use itself. A use whose ports aren't known here, one that binds a
-// port it doesn't produce, or one whose binder carries a unit (a let's
-// variable can't say a part's) stays as it is: binds and body are still
-// read. `library`: the definitions a use may run, besides the program's.
+// port it doesn't produce, stays as it is: binds and body are still read.
+// A port's binder that carries a unit is kept, bound by a let of its part
+// inside (`(r ↦ body)(value.first)`), since the let's one variable can't
+// say each part's unit. `library`: the definitions a use may run, besides
+// the program's.
 // `only`: the uses to move, when not every one.
 export function usesGiveTheirPorts(nodes: Record<Id, unknown>, library: Record<Id, Node>, only?: Id[]): void {
   const all = Object.assign(Object.create(library) as Record<Id, Node>, nodes as Record<Id, Node>);
@@ -186,21 +188,37 @@ export function usesGiveTheirPorts(nodes: Record<Id, unknown>, library: Record<I
     const produced = (usePorts(code, n) ?? []).filter((k) => !(k in n.given!));
     const binds = n.binds, body = n.body;
     if (!produced.length || produced.length > TUPLE_MAX || Object.keys(binds).some((k) => !produced.includes(k))) continue;
-    if (Object.values(binds).some((b) => (nodes[b] as { unit?: unknown } | undefined)?.unit)) continue;
+    const united = (b: Id) => !!(nodes[b] as { unit?: unknown } | undefined)?.unit;
     const bare = { ...n } as Record<string, unknown>;
     delete bare.binds; delete bare.body;
     const only = produced.length === 1 ? binds[produced[0]] : undefined;
     const b = nodes[body] as Node | undefined;
-    if (only !== undefined && b?.kind === "ref" && b.target === only && (reads.get(only) ?? []).length === 1) {
+    if (only !== undefined && !united(only) && b?.kind === "ref" && b.target === only && (reads.get(only) ?? []).length === 1) {
       nodes[id] = bare; delete nodes[body]; delete nodes[only];
       continue;
     }
     const use = `${id}.use`, fn = `${id}.let`, value = `${id}.value`;
     nodes[use] = { ...bare, id: use };
     nodes[value] = { id: value, kind: "binder" };
-    nodes[fn] = { id: fn, kind: "lambda", params: [value], body };
+    let inner = body;
     nodes[id] = { id, kind: "call", fn, args: [use] };
     for (const [port, binder] of Object.entries(binds)) {
+      if (united(binder)) {
+        // (binder ↦ inner)(value's part)
+        const at = `${id}.${port}.at`, lam = `${id}.${port}.let`, of = `${id}.${port}.of`;
+        nodes[of] = { id: of, kind: "ref", target: value };
+        if (produced.length === 1) nodes[at] = { id: at, kind: "call", fn: lam, args: [of] };
+        else {
+          const part = `${id}.${port}.part`;
+          nodes[part] = { id: part, kind: "ref", target: tuplePart(produced.length, produced.indexOf(port)) };
+          const read = `${id}.${port}.read`;
+          nodes[read] = { id: read, kind: "call", fn: part, args: [of] };
+          nodes[at] = { id: at, kind: "call", fn: lam, args: [read] };
+        }
+        nodes[lam] = { id: lam, kind: "lambda", params: [binder], body: inner };
+        inner = at;
+        continue;
+      }
       for (const r of reads.get(binder) ?? []) {
         if (produced.length === 1) { nodes[r] = { id: r, kind: "ref", target: value }; continue; }
         const part = `${r}.part`, of = `${r}.of`;
@@ -210,5 +228,6 @@ export function usesGiveTheirPorts(nodes: Record<Id, unknown>, library: Record<I
       }
       delete nodes[binder];
     }
+    nodes[fn] = { id: fn, kind: "lambda", params: [value], body: inner };
   }
 }
