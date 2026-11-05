@@ -1,5 +1,5 @@
-// board in four ways, in one process: the evaluator, the compiler's
-// output and the JavaScript printed from the core IR (C137d19) drawing the page (main) into a fake document, and the
+// board in three ways, in one process: the evaluator and the JavaScript
+// printed from the core IR (C137d19) drawing the page (main) into a fake document, and the
 // hand-written ideal (board.ideal.js) drawing the same page by hand. Each
 // gets the same scripted session (cards added through the quick-add field,
 // moved, renamed, pointed, filtered, searched, undone and redone, a focus
@@ -7,23 +7,18 @@
 // comparison is the page after each phase. Used by bench-board.ts and by
 // test/board.test.ts.
 
-import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { pathToFileURL } from "node:url";
 import { loadProgram } from "../../ters/src/lang/load.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { Cells } from "../../ters/src/lang/cells.ts";
 import { equal, runMain, type World } from "../../ters/src/lang/run.ts";
-import { compiledCall, evaluatorCall, mountHtml } from "../../ters/src/lang/html.ts";
+import { evaluatorCall, mountHtml } from "../../ters/src/lang/html.ts";
 import { FakeEl, FakeText, fakeDoc } from "../../ters/test/fakedom.ts";
-import { compile } from "../src/compile.ts";
 import { loadCoreJs, lowerCore } from "../src/core-js.ts";
 import { coreCall } from "../src/core-rt.ts";
-import { $eq, $setCells, $setWorld } from "../src/runtime.js";
 import { mount as ideal } from "./board.ideal.js";
 
-export type Name = "evaluator" | "compiled" | "core" | "ideal";
+export type Name = "evaluator" | "core" | "ideal";
 
 // Frames: the page asks for one with requestAnimationFrame; frame() runs
 // what's waiting, at 60 a second.
@@ -58,10 +53,6 @@ export type Mount = () => FakeEl;
 
 export async function ways(): Promise<Record<Name, Mount>> {
   const { code, info, names, main } = program();
-  const dir = mkdtempSync(join(tmpdir(), "board-"));
-  const runtime = pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href;
-  writeFileSync(join(dir, "board.js"), compile(code, info, names, { runtime, exports: ["main"] }));
-  const compiled = (await import(pathToFileURL(join(dir, "board.js")).href)).defs.main as () => unknown;
   // Lowered to the core IR once, and loaded on each mount's cells, which
   // its runtime holds from the start (core-rt.ts), as core-page.ts does.
   const ir = lowerCore(code, info, names, [main]), fi = ir.funcs.findIndex((g) => g.name === names[main] && !g.inner);
@@ -70,12 +61,6 @@ export async function ways(): Promise<Record<Name, Mount>> {
       const cells = new Cells(equal);
       const v = runMain(code, info, main, { print: () => {}, names, cells, world: world({}) });
       return mountHtml(v, { cells, doc: fakeDoc(), call: evaluatorCall }) as FakeEl;
-    },
-    compiled: () => {
-      const cells = new Cells($eq);
-      $setCells(cells);
-      $setWorld(world({}));
-      return mountHtml(compiled() as never, { cells, doc: fakeDoc(), call: compiledCall }) as FakeEl;
     },
     core: () => {
       const cells = new Cells(equal);
