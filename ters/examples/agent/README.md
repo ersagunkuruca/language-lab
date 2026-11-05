@@ -35,23 +35,22 @@ docs/design/physics/PHYSICS-AND-PLANNING.md §2), Hybrid A*-style: A*
 over place and velocity at once. Each step holds one of nine thrusts
 (none, or 2 m/s² one of eight ways) for half a second, moved exactly
 under linear drag (top speed 3 m/s), checked on the mesh four times
-along the way, and the search keeps one state for each cell of a 1 m
+along the way, and the search keeps one state for each cell of a 0.5 m
 grid, a quarter of the top speed and a sixteenth of a turn. Its estimate
 is the straight line to the goal at the top speed. It is done within
 half a metre of the goal, slower than half a metre a second.
 
 | trip | path, then speed | coupled search |
 |---|---|---|
-| (1, 2) to (8, 9) | 5.79 s | 6.00 s, 1,603 states |
-| (9, 1) to (2, 8) | 6.02 s | 6.00 s, 1,664 states |
+| (1, 2) to (8, 9) | 5.79 s | 6.00 s, 5,217 states |
+| (9, 1) to (2, 8) | 6.02 s | 6.00 s, 5,308 states |
 
 The coupled one takes the corners wide to keep its speed, and is no
 faster here: its choices come every half second, and drag slows it near
 the top speed where the first one's acceleration doesn't. Both searches
-run when the page starts, in 0.8 s compiled. On a 0.5 m grid the
-coupled search looks at about 5,200 states and takes 9 s, since Map
-with Float64 keys and Priority queue are entry lists in compiled
-JavaScript (BACKLOG C186). L122's path length from each cell as the
+run when the page starts, in 0.8 s compiled: Map and Priority queue
+are weight-balanced trees there (BACKLOG C186; as entry lists they took
+9 s). L122's path length from each cell as the
 estimate, which the design note proposed, was measured in a JavaScript
 prototype first: on this map it looked at as many states (about 4,900
 against 5,100), so the straight line stays.

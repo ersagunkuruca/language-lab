@@ -326,6 +326,46 @@ function freshUses(code: Code, defs: Id[], reps: Representation[]): Set<Id> {
   return out;
 }
 
+// The types, other than T, whose fields name T and whose cases a
+// definition makes or matches on: a library type holding a Map (Priority
+// queue's entries, std.ts), whose field is the representation too where
+// the definitions reaching it are rewritten, and so is every definition
+// making or matching one (C186).
+function holders(code: Code, def: Id, t: Id): Id[] {
+  const out = new Set<Id>();
+  for (const id of subtree(code, def)) {
+    const n = code.nodes[id];
+    const v = n.kind === "ref" ? n.target : n.kind === "arm" ? n.variant : null;
+    const owner = v && code.nodes[v]?.kind === "variant" ? ownerOf(code, v) : null;
+    if (owner && owner !== t && !out.has(owner) && namesType(code, owner, t)) out.add(owner);
+  }
+  return [...out];
+}
+function makesOrMatches(code: Code, def: Id, typedef: Id): boolean {
+  return subtree(code, def).some((id) => { const n = code.nodes[id]; const v = n.kind === "ref" ? n.target : n.kind === "arm" ? n.variant : null; return !!v && code.nodes[v]?.kind === "variant" && ownerOf(code, v) === typedef; });
+}
+let owners: { code: Code; of: Map<Id, Id> } | null = null;
+function ownerOf(code: Code, variant: Id): Id | null {
+  if (owners?.code !== code) {
+    const of = new Map<Id, Id>();
+    for (const d of code.defs) {
+      const td = code.nodes[(code.nodes[d] as NodeOf<"def">).body ?? ""];
+      if (td?.kind === "typedef") for (const v of td.variants) of.set(v, d);
+    }
+    owners = { code, of };
+  }
+  return owners.of.get(variant) ?? null;
+}
+function namesType(code: Code, typedef: Id, t: Id): boolean {
+  const td = code.nodes[(code.nodes[typedef] as NodeOf<"def">).body ?? ""];
+  // A holder of no parameters a builtin takes or gives (a Response's
+  // Bytes) gets the program's own copy instead (library-reps.ts
+  // plainBoundary), the builtin's type left as it is.
+  if (td?.kind !== "typedef" || !td.params.length) return false;
+  const mentions = (x: Id): boolean => { const n = code.nodes[x]; return n?.kind === "tref" ? n.target === t || n.args.some(mentions) : n?.kind === "tfun" ? [...n.params, n.result].some(mentions) : false; };
+  return td.variants.some((v) => (code.nodes[v] as NodeOf<"variant">).fields.some((f) => mentions((code.nodes[f] as NodeOf<"field">).type)));
+}
+
 function directRefs(code: Code, def: Id): Id[] {
   const out: Id[] = [];
   for (const id of subtree(code, def)) {
@@ -431,6 +471,9 @@ export function represent(code: Code, entries: Id[], rep: Representation, keep: 
     if (todo.has(def) || own.has(def) || rep.impl[def]) return;
     todo.add(def);
     for (const d of directRefs(code, def)) reach(d);
+    // A holder's every definition goes with it, reached or not, since the
+    // program is checked again whole.
+    for (const h of holders(code, def, t)) if (!todo.has(h)) { reach(h); for (const d of code.defs) if (makesOrMatches(code, d, h)) reach(d); }
   };
   entries.forEach(reach);
 
