@@ -250,7 +250,7 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
     if (!fn || fn.params.length !== 1) throw new Unsupported(`can't test a character with ${named(f) || "this"}`);
     return (evaluate(fn.body, new Map(env).set(fn.params[0], c)) as { tag?: Id }).tag === TRUE;
   }
-  const escapes = new Map<object, [string, string][]>();
+  const escapes = new Map<object, [string, string][]>(), spellingsOf = new Map<object, Map<string, string[]>>();
   // What a function of one character writes for c, or null.
   // Every way it writes c, where its body is `one of(spellings)` (L72e1:
   // json character spelled), the first one its printing.
@@ -437,7 +437,16 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
         // once, read back longest first; any other character, itself where
         // the function writes it as itself.
         if (chars) {
-          const out = (c: string) => written(fn, c, env);
+          // A definition writes c the same way wherever it is called: kept.
+          const closed = !!gt && code.nodes[gt]?.kind === "def";
+          const out = (c: string) => {
+            if (!closed) return written(fn, c, env);
+            let m = spellingsOf.get(fn);
+            if (!m) spellingsOf.set(fn, (m = new Map()));
+            let w = m.get(c);
+            if (!w) m.set(c, (w = written(fn, c, env)));
+            return w;
+          };
           const table = characterTable(fn, env);
           const hit = table.find(([o]) => text.startsWith(o, at));
           if (hit) return [at + hit[0].length, hit[1]];
