@@ -12,7 +12,8 @@ import { base, baseNames, loadProgram } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { makeRunner, type Value } from "../src/lang/run.ts";
 import { algebrasOf, bladeMask, describeMask, gradeMistakes } from "../src/lang/grades.ts";
-import { ARITH, CONS, LIST, NIL } from "../src/lang/std.ts";
+import { ALGEBRA_V, ARITH, CONS, LIST, NIL, S, TIMES_V } from "../src/lang/std.ts";
+import { B } from "../src/prelude.ts";
 import { NUMBER } from "../src/lang/types.ts";
 import { SET } from "../src/lang/std.ts";
 import type { Id } from "../src/model.ts";
@@ -238,4 +239,30 @@ test("the mask tables worked out from the blades are what running each operation
         for (const op of ["product", "outer", "inner", "regressive"] as const) assert.equal(alg.pair(op, i, j), run(op, basis[i], basis[j]), `${squares} ${op} ${i} ${j}`);
     }
   }
+});
+
+// L203b: a program's own product, written its own way over the algebra's
+// table (not the prelude's by id or hash), is read from the table: the
+// reading follows the fold over the known lines.
+test("a product of the program's own, folded over the algebra's table, has the prelude's masks", () => {
+  const a = algebra([1, 1, 1]);
+  const { k, def, at, call } = a;
+  const vec = (x: Id, y: Id, z: Id) => at({ 1: x, 2: y, 4: z });
+  const along = (x: Id, e: Id) => k.call(S.total, k.call(S.zipParts, B.mul, x, e));
+  const al = Object.keys(k.names).find((d) => k.names[d] === "algebra")!;
+  const mine = def("my product", () => k.fn(["a", "b"], (x, y) => k.match(k.x(al), [{ variant: ALGEBRA_V, names: ["squares", "basis", "pairs", "table"], body: ([, , , t]) => k.fold(t, [
+    { variant: NIL, names: [], body: () => k.call(S.mapParts, k.fn(["p"], () => k.lit(0)), x) },
+    { variant: CONS, names: ["line", "rest"], results: [null, "sum"], body: ([line], [, rest]) => k.match(line, [
+      { variant: TIMES_V, names: ["e", "f", "g"], body: ([e, f, g]) => k.call(S.zipParts, B.add, k.call(S.mapParts, k.fn(["p"], (p) => k.call(B.mul, k.call(B.mul, along(x, e), along(y, f)), p)), g), rest!) },
+    ]) },
+  ]) }])));
+  const theirs = def("theirs", () => k.fn(["x", "y"], (x, y) => call("product", vec(x, y, k.lit(0)), vec(y, x, k.lit(1)))));
+  const ours = def("ours", () => k.fn(["x", "y"], (x, y) => k.call(mine, vec(x, y, k.lit(0)), vec(y, x, k.lit(1)))));
+  const rotorish = def("ours of bivectors", () => k.fn(["x"], (x) => k.call(mine, at({ 3: x }), at({ 6: x }))));
+  const { code, info } = a.done();
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const mask = (d: Id) => bladeMask(code, info, d)?.mask;
+  assert.equal(mask(ours), mask(theirs));
+  // A scalar and a bivector: e12 e23 is e13 alone.
+  assert.equal(mask(rotorish), 1 << 5);
 });
