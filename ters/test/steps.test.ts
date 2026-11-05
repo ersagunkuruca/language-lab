@@ -14,6 +14,15 @@ import { runMain } from "../src/lang/run.ts";
 import { stepsOf } from "../src/lang/steps.ts";
 import { CONS, NIL, S, UNIT, UNIT_V } from "../src/lang/std.ts";
 import { showType } from "../src/lang/types.ts";
+import { lowerCore, runCoreMain } from "../../compiler/src/core-js.ts";
+import { compile } from "../../compiler/src/compile.ts";
+import { $setPrint } from "../../compiler/src/runtime.js";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+
+const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 
 const lib = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY.names[d] === name)!;
 
@@ -24,11 +33,27 @@ function program(build: (k: Lang) => Id) {
   const info = infer(code, names, undefined, checkOptions);
   const printed: string[] = [];
   const run = () => { runMain(code, info, main, { print: (s) => printed.push(s), names }); return printed; };
-  return { errors: info.errors.map((e) => e.message), run, type: (d: Id) => showType(info.typeOf.get(d)!, names) };
+  // Compiled JS (compile.ts) and JS from the core IR (L229d).
+  const compiled = async () => {
+    const file = join(mkdtempSync(join(tmpdir(), "steps-")), "main.mjs");
+    writeFileSync(file, compile(code, info, names, { runtime, exports: ["main"] }));
+    const out: string[] = [];
+    $setPrint((s: string) => out.push(s));
+    try { (await import(pathToFileURL(file).href)).defs.main(); } finally { $setPrint((s: string) => console.log(s)); }
+    return out;
+  };
+  const core = () => {
+    const l = lowerCore(code, info, names, [main]);
+    assert.deepEqual([...l.refused.values()], []);
+    const out: string[] = [];
+    runCoreMain(l, "main", [], { print: (s: string) => out.push(s), names } as never);
+    return out;
+  };
+  return { errors: info.errors.map((e) => e.message), run, compiled, core, type: (d: Id) => showType(info.typeOf.get(d)!, names) };
 }
 const say = (k: Lang, ...parts: Id[]) => k.call(S.print, parts.length === 1 ? parts[0] : k.text(...parts));
 
-test("a scheduler of two fibers on the steps of Yield: no Step type of its own", () => {
+test("a scheduler of two fibers on the steps of Yield: no Step type of its own", async () => {
   let steps = "", first = "";
   const p = program((k) => {
     const Y = k.effect("Yield", [["yield", [], () => k.tref(UNIT), "later"]]);
@@ -55,6 +80,8 @@ test("a scheduler of two fibers on the steps of Yield: no Step type of its own",
   });
   assert.deepEqual(p.errors, []);
   assert.deepEqual(p.run(), ["a1", "b1", "a2", "b2", "a3", "b3"]);
+  assert.deepEqual(await p.compiled(), ["a1", "b1", "a2", "b2", "a3", "b3"]);
+  assert.deepEqual(p.core(), ["a1", "b1", "a2", "b2", "a3", "b3"]);
   assert.equal(p.type(steps), "(() -[Yield, e]-> a) -[e]-> Steps of Yield a [e]");
   // A rest's row is the computation's less Yield: Console, no Diverge.
   assert.equal(p.type(first), "() -[Console, e]-> Steps of Yield Unit [Console, e]");
