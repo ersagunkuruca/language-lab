@@ -237,39 +237,51 @@ export function elementsByCode(t: CollationTables): Map<number, Element[]> {
 // where those keep root's order (the longest run that does); one that
 // doesn't, or a letter of its own (Turkish ç), comes just after the last
 // kept, one up for each; a locale that puts more than TAILORED − 1
-// letters after one throws. Secondaries keep their values, numbered
-// with root's when saved.
+// letters after one throws. Its accents' secondaries are put in root's
+// the same way, numbered with root's when saved.
 export function tailoring(root: Map<number, Element[]>, loc: Map<number, Element[]>): Map<number, Element[]> {
-  const shared = new Map<number, Set<number>>();
-  for (const [c, es] of loc) {
-    const r = root.get(c);
-    if (es.length !== 1 || !es[0][0] || r?.length !== 1 || !r[0][0]) continue;
-    if (!shared.has(es[0][0])) shared.set(es[0][0], new Set());
-    shared.get(es[0][0])!.add(r[0][0]);
-  }
-  const qs = [...new Set([...loc.values()].flatMap((es) => es.map((e) => e[0])).filter((p) => p > 0))].sort((a, b) => a - b);
-  const r = qs.map((q) => { const s = shared.get(q); return s?.size === 1 ? [...s][0] : -1; });
-  // The longest run of them in root's order.
-  const tails: number[] = [], before: number[] = [];
-  for (let i = 0; i < qs.length; i++) {
-    if (r[i] < 0) continue;
-    let lo = 0, hi = tails.length;
-    while (lo < hi) { const m = (lo + hi) >> 1; if (r[tails[m]] < r[i]) lo = m + 1; else hi = m; }
-    before[i] = lo ? tails[lo - 1] : -1;
-    tails[lo] = i;
-  }
-  const kept = new Set<number>();
-  for (let i = tails.at(-1) ?? -1; i >= 0; i = before[i]) kept.add(i);
-  const primary = new Map<number, number>();
-  let last = 0, up = 0;
-  qs.forEach((q, i) => {
-    if (kept.has(i)) { last = r[i] * TAILORED; up = 0; } else if (++up >= TAILORED) throw new Error(`more than ${TAILORED - 1} letters after one`);
-    primary.set(q, last + up);
-  });
-  const scaled = (es: Element[], f: (p: number) => number) => es.map(([p, sec, ter, cc]) => [p ? f(p) : 0, sec, ter, cc ?? 0] as Element);
+  // The locale's weights at a level in root's: each the root weight its
+  // elements share, where they keep
+  // root's order (the longest run that does), and one that doesn't just
+  // after the last kept, a step up for each.
+  const inRoot = (level: 0 | 1, of: (e: Element) => boolean, step: number, scale: number) => {
+    const shared = new Map<number, Set<number>>();
+    for (const [c, es] of loc) {
+      const r = root.get(c);
+      if (r?.length !== es.length) continue;
+      es.forEach((e, i) => {
+        if (!of(e) || !of(r[i])) return;
+        if (!shared.has(e[level])) shared.set(e[level], new Set());
+        shared.get(e[level])!.add(r[i][level]);
+      });
+    }
+    const qs = [...new Set([...loc.values()].flatMap((es) => es.map((e) => e[level])).filter((w) => w > 0))].sort((a, b) => a - b);
+    const r = qs.map((q) => { const s = shared.get(q); return s?.size === 1 ? [...s][0] : -1; });
+    const tails: number[] = [], before: number[] = [];
+    for (let i = 0; i < qs.length; i++) {
+      if (r[i] < 0) continue;
+      let lo = 0, hi = tails.length;
+      while (lo < hi) { const m = (lo + hi) >> 1; if (r[tails[m]] < r[i]) lo = m + 1; else hi = m; }
+      before[i] = lo ? tails[lo - 1] : -1;
+      tails[lo] = i;
+    }
+    const kept = new Set<number>();
+    for (let i = tails.at(-1) ?? -1; i >= 0; i = before[i]) kept.add(i);
+    const to = new Map<number, number>([[0, 0]]);
+    let last = 0, up = 0;
+    qs.forEach((q, i) => {
+      if (kept.has(i)) { last = r[i] * scale; up = 0; } else if (++up * step >= scale) throw new Error(`more than ${scale / step - 1} ${level ? "accents" : "letters"} after one`);
+      to.set(q, last + up * step);
+    });
+    return to;
+  };
+  // Each element against root's for the same code point, where both have
+  // as many: primaries by letters' elements, secondaries by all.
+  const primary = inRoot(0, (e) => e[0] > 0, 1, TAILORED), secondary = inRoot(1, () => true, 1 / 64, 1);
   const out = new Map<number, Element[]>();
   for (const [c, es] of loc) {
-    const mine = scaled(es, (p) => primary.get(p)!), theirs = scaled(root.get(c) ?? [], (p) => p * TAILORED);
+    const mine = es.map(([p, sec, ter, cc]) => [primary.get(p)!, secondary.get(sec)!, ter, cc ?? 0] as Element);
+    const theirs = (root.get(c) ?? []).map(([p, sec, ter, cc]) => [p * TAILORED, sec, ter, cc ?? 0] as Element);
     if (JSON.stringify(mine) !== JSON.stringify(theirs)) out.set(c, mine);
   }
   for (const c of root.keys()) if (!loc.has(c)) out.set(c, []);
