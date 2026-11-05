@@ -1160,7 +1160,7 @@ export function toReal(v: RealData): RL.Real {
   if (r) return r;
   const [op, parts, top, bottom] = v.fields as [I.Int, RealData, I.Int, I.Int];
   const ps = itemsOf(parts as { tag: Id; fields: unknown[] }).map((p) => toReal(p as RealData));
-  r = Number(op) === 0 ? RL.fraction(BigInt(top), BigInt(bottom)) : Number(op) === 4 ? RL.pi() : Number(op) === 5 ? RL.exp(ps[0]) : Number(op) === 6 ? RL.log(ps[0]) : Number(op) === 1 ? RL.add(ps[0], ps[1]) : Number(op) === 2 ? RL.negate(ps[0]) : RL.multiply(ps[0], ps[1]);
+  r = Number(op) === 0 ? RL.fraction(BigInt(top), BigInt(bottom)) : Number(op) === 4 ? RL.pi() : Number(op) === 5 ? RL.exp(ps[0]) : Number(op) === 6 ? RL.log(ps[0]) : Number(op) === 7 ? RL.sin(ps[0]) : Number(op) === 8 ? RL.cos(ps[0]) : Number(op) === 1 ? RL.add(ps[0], ps[1]) : Number(op) === 2 ? RL.negate(ps[0]) : RL.multiply(ps[0], ps[1]);
   reals.set(v, r);
   return r;
 }
@@ -1181,6 +1181,9 @@ export const REAL_OPS = {
   // eˣ and the natural log, exactly (L88e4): as narrow as asked.
   exp: builtin("real.exp", "real exp", pure([real], real), (x: RealData) => realOf(5, [x])),
   log: builtin("real.log", "real log", pure([real], real), (x: RealData) => realOf(6, [x])),
+  // sin and cos, exactly (L88e5).
+  sin: builtin("real.sin", "real sin", pure([real], real), (x: RealData) => realOf(7, [x])),
+  cos: builtin("real.cos", "real cos", pure([real], real), (x: RealData) => realOf(8, [x])),
   // x rounded to n decimals, right to within one in the last place.
   digits: builtin("real.digits", "real digits", pure([real, int], str), (x: RealData, n: I.Int) => RL.digits(toReal(x), Number(n))),
   // An Int m with |x − m/2ᵖ| < 2⁻ᵖ: x is between (m − 1)/2ᵖ and (m + 1)/2ᵖ.

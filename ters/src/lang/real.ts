@@ -16,7 +16,7 @@ export type Real =
   | { op: "fraction"; n: bigint; d: bigint; kept: Map<number, bigint> }
   | { op: "pi"; kept: Map<number, bigint> }
   | { op: "add" | "multiply"; parts: [Real, Real]; kept: Map<number, bigint> }
-  | { op: "negate" | "exp" | "log"; parts: [Real]; kept: Map<number, bigint> };
+  | { op: "negate" | "exp" | "log" | "sin" | "cos"; parts: [Real]; kept: Map<number, bigint> };
 
 export const fraction = (n: bigint, d: bigint): Real => {
   if (d === 0n) throw new Error("a fraction's bottom can't be 0");
@@ -32,6 +32,9 @@ export const multiply = (x: Real, y: Real): Real => ({ op: "multiply", parts: [x
 // eˣ and the natural log (L88e4), worked out as far as asked.
 export const exp = (x: Real): Real => ({ op: "exp", parts: [x], kept: new Map() });
 export const log = (x: Real): Real => ({ op: "log", parts: [x], kept: new Map() });
+// sin and cos (L88e5), the same way.
+export const sin = (x: Real): Real => ({ op: "sin", parts: [x], kept: new Map() });
+export const cos = (x: Real): Real => ({ op: "cos", parts: [x], kept: new Map() });
 
 // n/2ᵏ rounded to the nearest Int, halves away from 0.
 function scale(n: bigint, k: number): bigint {
@@ -59,6 +62,8 @@ export function approximate(x: Real, p: number): bigint {
     case "pi": m = piTo(p); break;
     case "exp": m = expTo(x.parts[0], p); break;
     case "log": m = logTo(x.parts[0], p); break;
+    case "sin": m = sinCosTo(x.parts[0], p, 0); break;
+    case "cos": m = sinCosTo(x.parts[0], p, 1); break;
     case "negate": m = -approximate(x.parts[0], p); break;
     // Each to 2⁻⁽ᵖ⁺²⁾, off by under 2·2⁻⁽ᵖ⁺²⁾, and the sum rounded to 2⁻ᵖ, off
     // by half of it more: under 2⁻ᵖ in all.
@@ -138,6 +143,25 @@ function logTo(x: Real, p: number): bigint {
   const logF = 2n * atanhW(((f - one) << BigInt(w)) / (f + one), w);
   const ln2 = 2n * atanhW(one / 3n, w);
   return scale(BigInt(e) * ln2 + logF, w - p);
+}
+
+// sin x (which 0) or cos x (which 1) to 2⁻ᵖ (L88e5). Both move by at
+// most the change in x, so x is asked to q = p + 4. Then, in Ints scaled
+// by 2ʷ, x less the nearest multiple k of 2π (π asked to w and k's bits
+// more, so k·2π is off by under 2⁻ʷ), and the Taylor series summed at
+// |y| ≤ π, each term cut; 32 guard bits cover the cuts and the terms'
+// size before they fall (πⁿ/n! is at most 2⁵).
+function sinCosTo(x: Real, p: number, which: 0 | 1): bigint {
+  const q = Math.max(0, p) + 4, xm = approximate(x, q);
+  const kb = Math.max(0, bits(xm) - q) + 2, w = q + kb + 32, one = 1n << BigInt(w);
+  let y = xm << BigInt(w - q);
+  const twoPi = scale(2n * piTo(w + kb), kb);
+  const k = (y < 0n ? -1n : 1n) * ((2n * abs(y) + twoPi) / (2n * twoPi));
+  y -= k * twoPi;
+  const yy = scale(y * y, w);
+  let sum = 0n, term = which === 0 ? y : one;
+  for (let i = BigInt(2 - which); term !== 0n; i += 2n) { sum += term; term = -(term * yy) / (one * i * (i + 1n)); }
+  return scale(sum, w - p);
 }
 
 // x rounded to n decimals, as text, right to within one in the last place:
