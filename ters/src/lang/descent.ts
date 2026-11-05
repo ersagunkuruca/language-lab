@@ -35,44 +35,27 @@ import type { Reading } from "./relate.ts";
 
 export class Unsupported extends Error {}
 
-type Any = { id: Id; kind: string; target: Id; value: unknown; fn: Id; args: Id[]; params: Id[]; body: Id; scrutinee: Id; arms: Id[]; variant: Id; binds: (Id | null)[] };
+export type Any = { id: Id; kind: string; target: Id; value: unknown; fn: Id; args: Id[]; params: Id[]; body: Id; scrutinee: Id; arms: Id[]; variant: Id; binds: (Id | null)[] };
 type Env = Map<Id, Value | { unknown: "letters" | "digits" | "int" }>;
 const isUnknown = (v: unknown): v is { unknown: string } => typeof v === "object" && v !== null && "unknown" in v;
 const LETTER = /[A-Za-z]/, DIGIT = /[0-9]/;
 const TRUE_V: Value = { tag: TRUE, fields: [] }, FALSE_V: Value = { tag: FALSE, fields: [] };
 
-// Where the last line with no reading stopped (L70c, relate.ts Reading):
-// the furthest place a piece was read to or looked for, and what was
-// looked for there.
-export interface Stopped { at: number; expected: Set<string> }
-export type Reader = ((text: string, ...given: Value[]) => Value | null) & { stopped: Stopped };
-
-export function descentReader(code: Code, printer: Id, names: Record<Id, string>): Reader {
+// The arms that start with the printer itself, as infix operators: for
+// descent here and the reader written as a definition (reader.ts, s7b).
+export interface Infix { arm: Any; lets: [Id, Id][]; cond: Id | null; left: Id; rest: Id; op: Id; ops: string[] }
+export function infixesOf(code: Code, printer: Id, names: Record<Id, string>, report: ReturnType<typeof firstSets>): Infix[] {
   const node = (id: Id) => code.nodes[id] as unknown as Any | undefined;
   const target = (id: Id): Id | null => { const n = node(id); return n?.kind === "ref" ? n.target : null; };
   const named = (id: Id | null) => (id ? names[id] ?? "" : "");
   const lambdaOf = (def: Id) => { const d = code.nodes[def] as { body?: Id } | undefined; const b = d?.body ? node(d.body) : undefined; return b?.kind === "lambda" ? b : undefined; };
-  const top = lambdaOf(printer)!;
-  const body = node(top.body)!;
-  const report = firstSets(code, printer, names);
-  // The arms read here, with what they may start with backwards: their
-  // first set, and "(" (optional parens read with parentheses whatever
-  // the printer would have needed).
-  const arms = body.arms.map((a) => node(a)!).filter((a) => !report.leftRecursive.includes(names[a.variant] ?? a.variant));
-  const firsts = new Map(report.arms.map((a) => [a.variant, new Set(a.first)]));
-  const starts = (variant: Id, c: string | undefined) => {
-    const f = firsts.get(variant)!;
-    if (c === undefined) return false;
-    return c === "(" || f.has(c) || f.has("anything") || (f.has("digit") && DIGIT.test(c)) || (f.has("letter") && LETTER.test(c));
-  };
-
+  const body = node(lambdaOf(printer)!.body)!;
   // An arm that starts with the printer itself, as an infix operator
   // (precedence climbing, step 4): its functions of the operator (`s`,
   // `right`), the condition its optional parens put round it, its left
   // operand, the rest (the operator and the right operand), and the
   // operators it can print: the literal arms of a match on the operator
   // whose other values fail (calc's `binding strength`).
-  interface Infix { arm: Any; lets: [Id, Id][]; cond: Id | null; left: Id; rest: Id; op: Id; ops: string[] }
   const literalsOf = (def: Id, j: number): string[] | null => {
     const fn = lambdaOf(def);
     return fn ? literals(fn.body, fn.params[j]) : null;
@@ -99,7 +82,7 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
     const rest = no ? literals(no.body, x) : [];
     return rest && [lit, ...rest];
   };
-  const infixes: Infix[] = body.arms.map((a) => node(a)!).filter((a) => report.leftRecursive.includes(names[a.variant] ?? a.variant)).map((a) => {
+  return body.arms.map((a) => node(a)!).filter((a) => report.leftRecursive.includes(names[a.variant] ?? a.variant)).map((a) => {
     const lets: [Id, Id][] = [];
     let e = node(a.body)!;
     while (e.kind === "call" && node(e.fn)?.kind === "lambda") { const l = node(e.fn)!; lets.push([l.params[0], e.args[0]]); e = node(l.body)!; }
@@ -116,6 +99,34 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
     if (!ops.size) throw new Unsupported(`${names[a.variant]}: its operators aren't a known few`);
     return { arm: a, lets, cond, left: l, rest: e.args[1], op, ops: [...ops].sort((x, y) => y.length - x.length) };
   });
+}
+
+// Where the last line with no reading stopped (L70c, relate.ts Reading):
+// the furthest place a piece was read to or looked for, and what was
+// looked for there.
+export interface Stopped { at: number; expected: Set<string> }
+export type Reader = ((text: string, ...given: Value[]) => Value | null) & { stopped: Stopped };
+
+export function descentReader(code: Code, printer: Id, names: Record<Id, string>): Reader {
+  const node = (id: Id) => code.nodes[id] as unknown as Any | undefined;
+  const target = (id: Id): Id | null => { const n = node(id); return n?.kind === "ref" ? n.target : null; };
+  const named = (id: Id | null) => (id ? names[id] ?? "" : "");
+  const lambdaOf = (def: Id) => { const d = code.nodes[def] as { body?: Id } | undefined; const b = d?.body ? node(d.body) : undefined; return b?.kind === "lambda" ? b : undefined; };
+  const top = lambdaOf(printer)!;
+  const body = node(top.body)!;
+  const report = firstSets(code, printer, names);
+  // The arms read here, with what they may start with backwards: their
+  // first set, and "(" (optional parens read with parentheses whatever
+  // the printer would have needed).
+  const arms = body.arms.map((a) => node(a)!).filter((a) => !report.leftRecursive.includes(names[a.variant] ?? a.variant));
+  const firsts = new Map(report.arms.map((a) => [a.variant, new Set(a.first)]));
+  const starts = (variant: Id, c: string | undefined) => {
+    const f = firsts.get(variant)!;
+    if (c === undefined) return false;
+    return c === "(" || f.has(c) || f.has("anything") || (f.has("digit") && DIGIT.test(c)) || (f.has("letter") && LETTER.test(c));
+  };
+
+  const infixes = infixesOf(code, printer, names, report);
 
   let text = "";
   const stopped: Stopped = { at: 0, expected: new Set() };
