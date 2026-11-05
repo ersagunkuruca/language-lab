@@ -200,14 +200,24 @@ export function pagePanels(host: PageHost) {
       page.now = showPage({
         code: prog(), info, names: pres().names, main, program: titleOf(doc()),
         doc: page.maker as unknown as PageDoc, store: localStorage, worklet: workletRuntimeText(), recordings: "apps/",
-        frame: (f) => requestAnimationFrame(f), ran: flashRan, keepCells: true,
+        frame: (f) => requestAnimationFrame(f), ran: flashRan, keepCells: true, stopped: (e) => sayStopped("A handler stopped", e),
       });
       page.root = page.now.root as unknown as globalThis.Node;
     } catch (e) {
-      page.status.textContent = `The page stopped: ${e instanceof Error ? e.message : String(e)}.`;
+      sayStopped("The page stopped", e);
       return;
     }
     compilePage(main);
+  }
+  // A stop said under the page: why, and where when the compiled page
+  // knows (C143: its stops carry the node and its definition), as Run's
+  // panel offers for main (C143f).
+  function sayStopped(what: string, e: unknown) {
+    const at = e && typeof e === "object" ? e as { node?: unknown; def?: unknown; reason?: unknown } : {};
+    const why = e instanceof Error ? e.message : at.reason !== undefined ? `aborted: ${String(at.reason)}` : String(e);
+    page.status.replaceChildren(`${what}: ${why}.`);
+    if (typeof at.node === "string" && typeof at.def === "string" && doc().code.nodes[at.def])
+      page.status.append(" ", h("button", { class: "btn mini", type: "button", "data-act": "goto-stop", "data-def": at.def, "data-target": at.node }, "Show where it stopped"));
   }
   // Each time a part of the page runs again, outlined when "Outline updates" is on.
   function flashRan(n: Node_) {
@@ -281,7 +291,7 @@ export function pagePanels(host: PageHost) {
     type Core = { mountCorePage(...a: unknown[]): Mounted };
     let m;
     try {
-      const o = { doc: page.maker, store: localStorage, frame: (f: () => void) => requestAnimationFrame(f), ran: flashRan };
+      const o = { doc: page.maker, store: localStorage, frame: (f: () => void) => requestAnimationFrame(f), ran: flashRan, stopped: (e: unknown) => sayStopped("A handler of the compiled page stopped", e) };
       if (made.core) {
         const core = new Function(`${corePageRuntimeText()}\nreturn $core;`)() as Core & Record<string, unknown>;
         let given: unknown[] | null = null;
@@ -298,7 +308,7 @@ export function pagePanels(host: PageHost) {
     } catch (e) {
       m?.stop();
       compiledPages.set(code, null);
-      page.status.textContent = `Interpreted: the compiled page stopped (${e instanceof Error ? e.message : String(e)}).`;
+      sayStopped("Interpreted: the compiled page stopped", e);
       return;
     }
     const old = page.root;
