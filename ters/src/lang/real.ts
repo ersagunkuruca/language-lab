@@ -14,6 +14,7 @@
 
 export type Real =
   | { op: "fraction"; n: bigint; d: bigint; kept: Map<number, bigint> }
+  | { op: "pi"; kept: Map<number, bigint> }
   | { op: "add" | "multiply"; parts: [Real, Real]; kept: Map<number, bigint> }
   | { op: "negate"; parts: [Real]; kept: Map<number, bigint> };
 
@@ -21,6 +22,9 @@ export const fraction = (n: bigint, d: bigint): Real => {
   if (d === 0n) throw new Error("a fraction's bottom can't be 0");
   return d < 0n ? { op: "fraction", n: -n, d: -d, kept: new Map() } : { op: "fraction", n, d, kept: new Map() };
 };
+// π, worked out as far as asked (L88e2), the same value wherever it's made.
+export const pi = (): Real => PI;
+const PI: Real = { op: "pi", kept: new Map() };
 export const add = (x: Real, y: Real): Real => ({ op: "add", parts: [x, y], kept: new Map() });
 export const negate = (x: Real): Real => ({ op: "negate", parts: [x], kept: new Map() });
 export const subtract = (x: Real, y: Real): Real => add(x, negate(y));
@@ -49,6 +53,7 @@ export function approximate(x: Real, p: number): bigint {
       m = 2n * abs(r) >= d ? q + (t < 0n ? -1n : 1n) : q;
       break;
     }
+    case "pi": m = piTo(p); break;
     case "negate": m = -approximate(x.parts[0], p); break;
     // Each to 2⁻⁽ᵖ⁺²⁾, off by under 2·2⁻⁽ᵖ⁺²⁾, and the sum rounded to 2⁻ᵖ, off
     // by half of it more: under 2⁻ᵖ in all.
@@ -65,6 +70,37 @@ export function approximate(x: Real, p: number): bigint {
   }
   x.kept.set(p, m);
   return m;
+}
+
+// π to 2⁻ᵖ by Machin's formula, π = 16·atan(1/5) − 4·atan(1/239) (John
+// Machin, 1706), each atan summed as its series in Ints scaled by 2^(p+g):
+// every term is cut toward 0, off by under one unit, and the guard bits g
+// keep the sum of those cuts below a quarter of 2⁻ᵖ.
+function piTo(p: number): bigint {
+  if (p < 0) return scale(piTo(0), -p);
+  const terms = Math.ceil((p + 4) / 4.6) + 2, g = bits(BigInt(20 * terms)) + 2, one = 1n << BigInt(p + g);
+  // atan(1/k) · 2^(p+g): Σ (−1)ⁱ / ((2i + 1) k^(2i+1)).
+  const atanInv = (k: bigint): bigint => {
+    let sum = 0n, power = one / k, i = 0n;
+    const kk = k * k;
+    while (power !== 0n) { const t = power / (2n * i + 1n); sum += i % 2n === 0n ? t : -t; power /= kk; i++; }
+    return sum;
+  };
+  return scale(16n * atanInv(5n) - 4n * atanInv(239n), g);
+}
+
+// x rounded to n decimals, as text, right to within one in the last place:
+// whether a Real is just below or just above a decimal (0.4999… or 0.5)
+// can't always be told, so its digits are rounded, not cut.
+export function digits(x: Real, n: number): string {
+  const places = Math.max(0, n), ten = 10n ** BigInt(places);
+  const p = Math.ceil(places * 3.33) + 4;
+  // m/2ᵖ is within 2⁻ᵖ, under a sixteenth of a unit in the last place.
+  const whole = scale(approximate(x, p) * ten, p);
+  const negative = whole < 0n;
+  const a = abs(whole).toString().padStart(places + 1, "0");
+  const text = places > 0 ? `${a.slice(0, a.length - places)}.${a.slice(a.length - places)}` : a;
+  return negative ? `−${text}` : text;
 }
 
 // The interval x is in at precision p, as fractions (bottom 2ᵖ, or 1).

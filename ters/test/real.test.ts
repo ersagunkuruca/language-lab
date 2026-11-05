@@ -45,6 +45,19 @@ test("asked again, narrower or the same, a Real reuses what it worked out", () =
   assert.ok(lo * 21n < 13n * d1 && 13n * d2 < hi * 21n, "13/21 is inside the interval");
 });
 
+test("π to as many decimals as asked, and digits rounded within one in the last place", () => {
+  assert.equal(R.digits(R.pi(), 50), "3.14159265358979323846264338327950288419716939937511");
+  // 200 decimals agree with 260 of them rounded at the 200th.
+  const many = R.digits(R.pi(), 260), cut = BigInt(many.replace(".", "").slice(0, 201)) + (Number(many[202]) >= 5 ? 1n : 0n);
+  assert.equal(R.digits(R.pi(), 200).replace(".", ""), cut.toString());
+  assert.equal(R.digits(R.pi(), 0), "3");
+  assert.equal(R.digits(R.negate(R.pi()), 5), "−3.14159");
+  assert.equal(R.digits(R.fraction(1n, 3n), 4), "0.3333");
+  assert.equal(R.digits(R.fraction(-1n, 8n), 2), "−0.13");
+  // π · π − π² as fractions of π's digits: within 2⁻ᵖ at every p.
+  for (const p of [0, 10, 300]) assert.ok(R.approximate(R.subtract(R.multiply(R.pi(), R.pi()), R.multiply(R.pi(), R.pi())), p) ** 2n <= 4n);
+});
+
 function program() {
   const k = new Lang(LIBRARY.code);
   const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
@@ -54,12 +67,14 @@ function program() {
   def("to 0", () => k.call(RO.approximate, k.x(x), k.int(0)));
   def("to 20", () => k.call(RO.approximate, k.x(x), k.int(20)));
   def("to 100", () => k.call(RO.approximate, k.call(RO.neg, k.x(x)), k.int(100)));
+  // π and digits (L88e2): 2π to 30 decimals.
+  def("two pi", () => k.call(RO.digits, k.call(ARITH.mul, k.lit(2), k.call(RO.pi)), k.int(30)));
   // The one + − · at Real, and a number written there (1/2 + x · x − 1).
   def("with operators", () => k.call(RO.approximate, k.call(ARITH.sub, k.call(ARITH.add, k.lit(0.5), k.call(ARITH.mul, k.x(x), k.x(x))), k.lit(1)), k.int(40)));
   const code = base(k.code), names = baseNames(k.names);
   return { code, names, info: infer(code, names, undefined, checkOptions) };
 }
-const NAMES = ["to 0", "to 20", "to 100", "with operators"];
+const NAMES = ["to 0", "to 20", "to 100", "with operators", "two pi"];
 
 test("a Real's approximation in a program, evaluated and compiled", async () => {
   const p = program();
@@ -67,7 +82,8 @@ test("a Real's approximation in a program, evaluated and compiled", async () => 
   const at = (n: string) => p.code.defs.find((d) => p.names[d] === n)!;
   assert.equal(showType(p.info.schemes.get(at("x"))!.type, p.names), "Real");
   const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });
-  const got = NAMES.map((n) => BigInt(r.value(at(n)) as number | bigint));
+  assert.equal(r.value(at("two pi")), "6.283185307179586476925286766559");
+  const got = NAMES.slice(0, 4).map((n) => BigInt(r.value(at(n)) as number | bigint));
   // 1/2 + 169/194481 − 1 = (169 − 97240.5·2)/388962
   assert.ok(within(13n, 441n, got[0], 0) && within(13n, 441n, got[1], 20) && within(-13n, 441n, got[2], 100) && within(2n * 169n - 194481n, 2n * 194481n, got[3], 40), String(got));
   const path = join(mkdtempSync(join(tmpdir(), "real-")), "real.js");

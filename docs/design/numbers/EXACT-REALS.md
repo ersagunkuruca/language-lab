@@ -154,7 +154,9 @@ real arithmetic.
 4. **`Real`.** Step e1 built (real.ts): a Real is held by how it was made, a
    fraction or + − · of Reals, and `approximate(x, p)` gives an Int m with
    |x − m/2ᵖ| < 2⁻ᵖ, its parts asked for only the precision needed and the
-   answers kept. Next: π and digits (e2), comparisons with fuel (e3).
+   answers kept. Step e2 built: `real pi()` by Machin's formula, and
+   `real digits(x, n)` rounded within one in the last place. Next:
+   comparisons with fuel (e3).
 
 ## Prior art
 
