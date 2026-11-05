@@ -91,16 +91,17 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
     if (!rows.length || !uses(code, main, [spec, ...rows]).length) continue;
     const tree = choose(code, main, [spec, ...rows]).rep;
     if (tree === spec || keyed(info, defs, code, ty) || generic(info, defs, code, tree)) continue;
-    // Lists as trees for the whole, where parts of it would have arrays
-    // (machine's step loop): those parts as arrays, the rest as written,
-    // converted where a list crosses (rep-split.ts, C93 s3b).
-    if (tree.of === LIST && tree.name === "tree of List" && !chosen.length && options.hostMaps && options.split !== false) {
-      const s = splitByGroups(code, info, names, main, defs);
-      if (s) return s;
-    }
     // Lists as arrays (C30d3b): alone, and only where every list the
     // program reaches can be one (listBoundary).
     if (tree.of === LIST && (chosen.length || !listBoundary(merge(treesFor(code, [tree]), code), info, defs, tree, asked))) continue;
+    // Lists as trees for the whole, where parts of it would have arrays
+    // (machine's step loop): those parts as arrays, the rest as written,
+    // converted where a list crosses (rep-split.ts, C93 s3b). Only where
+    // the trees could be had, so a program kept as written stays so.
+    if (tree.of === LIST && tree.name === "tree of List" && options.hostMaps && options.split !== false) {
+      const s = splitByGroups(code, info, names, main, defs);
+      if (s) return s;
+    }
     if (tree.of !== LIST && !plainBoundary(code, defs, tree)) continue;
     chosen.push(tree);
   }
