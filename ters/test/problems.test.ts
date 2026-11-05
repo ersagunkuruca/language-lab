@@ -58,12 +58,12 @@ const SMALLEST: Record<string, (k: Lang) => unknown> = {
   "functions-in-data": (k) => k.define(k.def("p"), k.call(S.equal, k.fn(["x"], (x) => x), k.fn(["x"], (x) => x))),
   "no-port": (k) => { const f = k.def("f"); k.define(f, k.fn(["a"], (a) => k.call(ARITH.add, a, k.lit(1)))); k.define(k.def("p"), k.solve(f, { nope: k.lit(1), out: k.lit(3) }, { [param(k, f, 0)]: "x" }, (b) => b[param(k, f, 0)])); },
   // A use with no body gives its produced ports (L211); one given every port has none to give.
-  "produces-nothing": (k) => { const f = k.def("f"); k.define(f, k.fn(["a"], (a) => k.call(ARITH.add, a, k.lit(1)))); const add = (n: NodeData) => (k as unknown as { add(n: NodeData): Id }).add(n); k.define(k.def("p"), k.thunk(() => k.call(S.first, k.thunk(() => add({ kind: "call", fn: add({ kind: "ref", target: f }), given: { [param(k, f, 0)]: k.lit(2), out: k.lit(3) }, binds: {} } as NodeData)), k.thunk(() => k.lit(1))))); },
+  "produces-nothing": (k) => { const f = k.def("f"); k.define(f, k.fn(["a"], (a) => k.call(ARITH.add, a, k.lit(1)))); const add = (n: NodeData) => (k as unknown as { add(n: NodeData): Id }).add(n); k.define(k.def("p"), k.thunk(() => k.call(S.first, k.thunk(() => add({ kind: "call", fn: add({ kind: "ref", target: f }), given: { [param(k, f, 0)]: k.lit(2), out: k.lit(3) } } as NodeData)), k.thunk(() => k.lit(1))))); },
   "too-many-ports": (k) => {
     const ns = ["a", "b", "c", "d", "e", "f", "g", "h", "i"], r = k.def("r");
     k.define(r, k.fn(ns, (...xs) => xs.slice(1).reduce((acc, x) => k.and(acc, k.equal(x, k.lit(1))), k.equal(xs[0], k.lit(1)))));
     const add = (n: NodeData) => (k as unknown as { add(n: NodeData): Id }).add(n);
-    k.define(k.def("p"), add({ kind: "call", fn: add({ kind: "ref", target: r }), given: { out: k.x(TRUE) }, binds: {} } as NodeData));
+    k.define(k.def("p"), add({ kind: "call", fn: add({ kind: "ref", target: r }), given: { out: k.x(TRUE) } } as NodeData));
   },
   "needs-more-ports": (k) => { const f = k.def("f"); k.define(f, k.fn(["a", "b"], (a, b) => k.call(ARITH.add, a, b))); k.define(k.def("p"), k.solve(f, {}, { [param(k, f, 0)]: "x", [param(k, f, 1)]: "y" }, (b) => b[param(k, f, 0)])); },
   "not-backwards": (k) => { const v = k.def("v"); k.define(v, k.lit(1)); k.define(k.def("p"), k.solve(v, { out: k.lit(3) }, {}, () => k.lit(0))); },
