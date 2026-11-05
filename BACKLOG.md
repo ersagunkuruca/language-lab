@@ -23,7 +23,7 @@ language, then more targets or speed (WORKFLOW.md "Priority").
 | E Editor | "Editor lane" | E103, then Language or Compiler rows agreed with those lanes |
 | C Compiler and targets | "Compiler lane" | C183, C185, C181 (C184 and C30 with the Editor lane), C93 |
 | L Language and library | "Language lane" | L43, L21, L118c (evaluator side), L88, L182 (core, run.ts, infer.ts, hosts.ts) |
-| L Language and library | "Language lane B" | L120, L124 (new example programs). Skip L107 (waits on Ersagun) and L24 (research). Take a row from the other list only after telling that lane. |
+| L Language and library | "Language lane B" | L120 (new example programs). Skip L107 (waits on Ersagun) and L24 (research). Take a row from the other list only after telling that lane. |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -209,7 +209,6 @@ agent with inertia. All later goals.
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | L120 | **Later goal**: time of impact for rotating shapes along a PGA motor (screw motion) by conservative advancement (Mirtich); the compiler choosing it or the closed form by cost (WAYS.md) | Ersagun 2026-11-01 | P3 | L | shapes other than balls |
-| L124 | **Later goal**: a rapidity speed cap (velocity as a boost in Cl(2, 1)) beside linear drag on L122's page; optional | Ersagun 2026-11-01 | P3 | M | |
 
 ### Someday
 
