@@ -126,3 +126,27 @@ test("a law over any function takes its other inputs at each function's own type
   // the empty list and a one-item list come back the same.
   assert.deepEqual(r.failures.slice(0, 2).map((f) => f.inputs), [["reversed", "[]"], ["reversed", "[0]"]]);
 });
+
+// A main's accepted answer (T7e15): run in its recorded world, its
+// arguments, input and files given, and compared line by line with what
+// it printed, wrote as errors, left in files and exited with.
+test("main's accepted answer is checked in its recorded world", async () => {
+  const { load } = await import("../../compiler/src/program.ts");
+  const { readFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  for (const name of ["wc", "calc"]) {
+    const p = load(name), main = p.own.defs.find((d) => p.pres.names[d] === "main")!;
+    const saved = savedFrom(JSON.parse(readFileSync(join(import.meta.dirname, "../examples", name, "examples.json"), "utf8")));
+    assert.ok(saved[main].length >= 2 && saved[main].every((s) => s.main), name);
+    const [r] = runTests(p.code, p.info, p.pres.names, [main], saved);
+    assert.deepEqual([r.failures, r.cases], [[], saved[main].length], name);
+    // A changed answer is said, with the line that differs.
+    const changed = { [main]: saved[main].map((s) => ({ ...s, main: { ...s.main!, printed: s.main!.printed.map((l) => `${l}!`), exit: s.main!.exit + 1 } })) };
+    const [w] = runTests(p.code, p.info, p.pres.names, [main], changed);
+    assert.equal(w.failures.length, saved[main].length, name);
+    assert.ok(w.failures.every((f) => f.what.some((x) => x.startsWith("exits with"))), name);
+  }
+  // wc on two files: what it printed, line by line.
+  const wc = savedFrom(JSON.parse(readFileSync(join(import.meta.dirname, "../examples/wc/examples.json"), "utf8")));
+  assert.deepEqual(Object.values(wc)[0][1].main!.printed, ["       2       5      28 notes.txt", "       0       0       0 empty.txt", "       2       5      28 total"]);
+});
