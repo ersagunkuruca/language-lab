@@ -38,8 +38,7 @@ import * as Alg from "./algebraic.ts";
 import { hostLocale, hostZone } from "./text.ts";
 import { ArrayView, FILE_OPS, KEPT_FILES, tupleVariant, floatText, LOCALE_V, MY_LOCALE_OP, MY_ZONE_OP, RELEASE_V, SETTINGS, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, shownImplementations, implementationsOf, ORDERED, CASE_NAME, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std.ts";
 import { intLit } from "./int.ts";
-import { JETS } from "./jets.ts";
-import { answerFromHost, effectOfOperation, hostedEffects, type Hosts } from "./hosts.ts";
+import { answerFromHost, effectOfOperation, hostedEffects, pureHosts, type Hosts } from "./hosts.ts";
 import * as I from "./int.ts";
 import * as T from "./text.ts";
 import { Cells, NoValue, Pending, changeAt, listEdits, nodeOf, pathValue, stepsOf } from "./cells.ts";
@@ -328,9 +327,9 @@ export interface Runtime {
   // The handler of Cells (cells.ts). Without one, each run gets its own,
   // which still computes formulas on demand and remembers them.
   cells?: Cells;
-  // false runs every library definition as written, never its jet
-  // (jets.ts); test/jets.test.ts compares the two.
-  jets?: boolean;
+  // false runs every library definition as written, never its host way
+  // (library/hosts.ts, L206); test/jets.test.ts compares the two.
+  libraryHosts?: boolean;
   // Told each time a function written as a lambda is called, with the
   // values it's called with (the editor seeds a definition's Run with them).
   // `copy`: the lambda entered, when it's a copy at another number type.
@@ -1195,8 +1194,8 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
           // Definition values are pure (the checker sees to it), so exactly
           // one result.
           for (const v of run((m) => m.eval(t.body!, null))) { defs.set(target, v); if (typeof v === "function") defOf.set(v, target); break; }
-          // A library definition with a host way runs it (jets.ts).
-          const jet = rt.jets === false ? undefined : JETS[target], self = defs.get(target);
+          // A library definition with a host way runs it (library/hosts.ts).
+          const jet = rt.libraryHosts === false ? undefined : pureHosts[target], self = defs.get(target);
           if (jet && typeof self === "function") { const j = jet(self as Fn); defs.set(target, j); defOf.set(j, target); }
         }
         return defs.get(target)!;

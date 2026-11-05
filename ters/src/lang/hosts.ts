@@ -23,6 +23,7 @@ import type { Names } from "../presentation.ts";
 import { isInt, norm } from "./int.ts";
 import { BOOL, CONS, FALSE, LIST, NIL, TRUE, UNIT, UNIT_V } from "./std.ts";
 import { INT, NUMBER, STRING } from "./types.ts";
+import type { Value as RunValue } from "./run.ts";
 
 export type Hosts = Record<Id, (...args: unknown[]) => unknown>;
 type Value = unknown;
@@ -42,6 +43,22 @@ export function hostedEffects(code: Code, hosts: Hosts | undefined): Set<Id> {
   const out = new Set<Id>();
   for (const op of Object.keys(hosts ?? {})) { const e = effectOfOperation(code, op); if (e) out.add(e); }
   return out;
+}
+
+// Host ways for pure library definitions (L206): the library declares
+// them by name (library/hosts.ts), and library.ts gives them here by the
+// definition's id, which the evaluator runs in place of the definition.
+// Given the definition's own value, the value to run.
+export type PureHost = (self: (...xs: RunValue[]) => Iterable<RunValue>) => (...xs: RunValue[]) => Iterable<RunValue>;
+export const pureHosts: Record<Id, PureHost> = {};
+// The library's definition by each name, or the names it has none for.
+export function declarePureHosts(byName: Record<string, PureHost>, defs: Id[], names: Names): string[] {
+  const missing: string[] = [];
+  for (const [name, host] of Object.entries(byName)) {
+    const d = defs.filter((x) => names[x] === name);
+    if (d.length === 1) pureHosts[d[0]] = host; else missing.push(name);
+  }
+  return missing;
 }
 
 class Border extends Error {}
