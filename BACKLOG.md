@@ -269,7 +269,7 @@ docs/process/TESTING.md. T7 is in lane L.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| T14 | The single slow tests left after L216: editing's swapAndUndo, 63 s since E248, about 41 s now (core-js done: T14a; tree of List: T14b; Tumble's clear: T14c; every builtin backwards is under a second now; the palette's modes of steady's functions 13 to 7 s of it: T14d). What is left of swapAndUndo: the graph's wire values running fall backwards after each pick (editor/main.ts traceInputs, 9 s, Editor lane), and steady pow's own modes, 2 to 3 s each of the two asked. Each becomes a sweep or gets a smaller input, toward 5 s a file | [TEST-SPEED-2026-11-03](docs/reports/TEST-SPEED-2026-11-03.md) | P3 | M | |
+| T14 | The single slow tests left after L216: editing's swapAndUndo, 63 s since E248, about 41 s now (core-js done: T14a; tree of List: T14b; Tumble's clear: T14c; every builtin backwards is under a second now; the palette's modes of steady's functions 13 to 7 s of it: T14d). What is left of swapAndUndo: the graph's wire values running fall backwards after each pick (editor/main.ts traceInputs, 9 s; the search's cache keyed by each version of the code, not a hash of it: 8.2 to 5.8 s, T14e; left is resolving arith.ts for each version's search, ~4 s), and steady pow's own modes, 2 to 3 s each of the two asked. Each becomes a sweep or gets a smaller input, toward 5 s a file | [TEST-SPEED-2026-11-03](docs/reports/TEST-SPEED-2026-11-03.md) | P3 | M | |
 
 ## Coordinator and process
 
