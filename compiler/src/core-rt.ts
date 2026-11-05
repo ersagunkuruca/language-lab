@@ -8,7 +8,7 @@ import { bordered } from "../../ters/src/lang/border.ts";
 import { ArrayView, arrayView, CONS, FALSE, HASH_SET_OPS, LOCALE_V, NIL, NONE, S, SOME, STD_IMPL, STD_MANY, TABLE_OPS, TICKET_V, TRUE } from "../../ters/src/lang/std.ts";
 import { hostLocale, hostZone } from "../../ters/src/lang/text.ts";
 import { plainRequest, responseValue } from "../../ters/src/lang/network.ts";
-import { LIST_SHAPE, META, cellOps, equal, finiteFloat, unit, type Data, toList, type Runtime, type Value, type World } from "../../ters/src/lang/run.ts";
+import { LIST_SHAPE, META, cellOps, equal, finiteFloat, spendStep, unit, type Data, toList, type Runtime, type Value, type World } from "../../ters/src/lang/run.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { answerByShapes, type HostOp } from "../../ters/src/lang/hosts.ts";
 import { Cells, NoValue, Pending } from "../../ters/src/lang/cells.ts";
@@ -283,6 +283,10 @@ export const moded = (make: (...a: unknown[]) => (...xs: unknown[]) => Iterable<
 export const RUNTIME = {
   FAIL, OUT, Aborted, Pending, Unsupported, planned, moded,
   fail: (): never => { throw FAIL; },
+  // A step of a definition that may not finish: free, except under a
+  // page's budget (run.ts withSteps), where running out is the part's
+  // "didn't finish" (C179).
+  step: spendStep,
   // A printed partial function says it has no answer by giving FAIL
   // (C137c15), which is cheap; where that answer is used inside an
   // expression, or by the evaluator's runtime, it is thrown, as before.
