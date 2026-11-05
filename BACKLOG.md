@@ -22,7 +22,8 @@ language, then more targets or speed (WORKFLOW.md "Priority").
 |---|---|---|
 | E Editor | "Editor lane" | E237 (after L204), E103 (after infer.ts's idea) |
 | C Compiler and targets | "Compiler lane" | C180, C181, C30, C93 |
-| L Language and library | "Language lane" | next by priority from the table below |
+| L Language and library | "Language lane" | L43, L69d1, L69d2, L21, L118c (evaluator side), L88, L182 (core, run.ts, infer.ts, hosts.ts) |
+| L Language and library | "Language lane B" | sharing chain L109, L110, L111, L112, L115, L114, then L17 (modules.ts, publishing); then L120, L122, L123, L124 (new example programs). Skip L107 (waits on Ersagun) and L24 (research). Take a row from the other list only after telling that lane. |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
