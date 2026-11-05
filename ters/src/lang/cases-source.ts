@@ -29,7 +29,7 @@ import { caseTables, type CaseTable } from "./case-tables.ts";
 import { loadGraphemes, type GraphemeClass, type SavedGraphemes } from "./grapheme-tables.ts";
 import savedGraphemes from "../../library/graphemes.json" with { type: "json" };
 import savedCollation from "../../library/collation.json" with { type: "json" };
-import { HANGUL, type SavedCollation } from "./collation-tables.ts";
+import { HANGUL, TAILORED, type SavedCollation } from "./collation-tables.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { CONS, FALSE, INT_OPS, LIST, LOCALE_V, NIL, NONE, ORDER_V, S, SOME, std, TEXT_OPS, TRUE } from "./std.ts";
@@ -247,7 +247,7 @@ export function buildCases(): Module {
   // are in chunks of 256, each with its first code point, found by halves
   // within. An element is one Int, primary · 2^21 + secondary · 2^12 +
   // tertiary · 2^6 + combining class.
-  const col = savedCollation as SavedCollation;
+  const col = savedCollation as unknown as SavedCollation;
   const enc = (v: number, w: number) => { let out = ""; for (let i = w - 1; i >= 0; i--) out += String.fromCharCode(48 + (Math.floor(v / 64 ** i) % 64)); return out; };
   let multiText = "";
   const records = [
@@ -279,9 +279,12 @@ export function buildCases(): Module {
   // The last record from lo to hi whose first code point isn't after c.
   const find = def("collation find", ["code", "records", "lo", "hi"], (c, recs, lo, hi) => k.if(same(lo, hi), lo,
     k.let("mid", quot(add(add(lo, hi), k.int(1)), k.int(2)), (mid) => k.if(less(c, field(recs, mid, 0, 4)), k.call(me, c, recs, lo, sub(mid, k.int(1))), k.call(me, c, recs, mid, hi)))));
+  // A root primary counts TAILORED times its number, so a locale's own
+  // letters fit between two of root's (L214e5b2).
+  const rootElement = (p: Id, sec: Id, ter: Id, cc: Id) => element(mul(p, k.int(TAILORED)), sec, ter, cc);
   const element = (p: Id, sec: Id, ter: Id, cc: Id) => add(add(add(mul(p, k.int(2 ** 21)), mul(sec, k.int(4096))), mul(ter, k.int(64))), cc);
   const several = def("collation several of", ["at", "count"], (at, n) => k.if(same(n, k.int(0)), k.list(),
-    k.call(CONS, element(k.call(num, k.x(multis), mul(at, k.int(7)), k.int(3)), k.call(num, k.x(multis), add(mul(at, k.int(7)), k.int(3)), k.int(2)), k.call(num, k.x(multis), add(mul(at, k.int(7)), k.int(5)), k.int(1)), k.call(num, k.x(multis), add(mul(at, k.int(7)), k.int(6)), k.int(1))),
+    k.call(CONS, rootElement(k.call(num, k.x(multis), mul(at, k.int(7)), k.int(3)), k.call(num, k.x(multis), add(mul(at, k.int(7)), k.int(3)), k.int(2)), k.call(num, k.x(multis), add(mul(at, k.int(7)), k.int(5)), k.int(1)), k.call(num, k.x(multis), add(mul(at, k.int(7)), k.int(6)), k.int(1))),
       k.call(me, add(at, k.int(1)), sub(n, k.int(1))))));
   // A code point's elements, none for one the tables don't have.
   const elementsOf = def("collation elements of", ["code"], (c) => k.let("records", k.call(chunkOf, c, k.x(chunks), k.lit("")), (recs) =>
@@ -290,13 +293,46 @@ export function buildCases(): Module {
         k.let("from", field(recs, i, 0, 4), (from) => k.let("count", field(recs, i, 4, 3), (count) =>
           k.if(same(count, k.int(0)),
             k.if(same(from, c), k.call(several, field(recs, i, 7, 3), field(recs, i, 10, 2)), k.list()),
-            k.if(less(sub(c, from), count), k.list(element(add(field(recs, i, 7, 3), sub(c, from)), field(recs, i, 10, 2), field(recs, i, 12, 1), field(recs, i, 13, 1))), k.list()))))))));
+            k.if(less(sub(c, from), count), k.list(rootElement(add(field(recs, i, 7, 3), sub(c, from)), field(recs, i, 10, 2), field(recs, i, 12, 1), field(recs, i, 13, 1))), k.list()))))))));
   // A Hangul syllable's jamo (Unicode §3.12), each looked up.
   const hangul = def("collation hangul", ["code"], (c) => k.let("s", sub(c, k.int(HANGUL.from)), (sv) =>
     k.call(then, k.call(elementsOf, add(k.int(0x1100), quot(sv, k.int(588)))), k.call(then, k.call(elementsOf, add(k.int(0x1161), quot(rem(sv, k.int(588)), k.int(28)))),
       k.if(same(rem(sv, k.int(28)), k.int(0)), k.list(), k.call(elementsOf, add(k.int(0x11a7), rem(sv, k.int(28)))))))));
-  const textElements = def("collation text elements", ["codes"], (cs) => list(cs, () => k.list(), (c, rest) =>
-    k.call(then, k.if(and(not(less(c, k.int(HANGUL.from))), not(less(k.int(HANGUL.to), c))), k.call(hangul, c), k.call(elementsOf, c)), k.call(me, rest))));
+  // A language's tailoring (L214e5b2, collation-tables.ts `tailoring`):
+  // the code points whose elements aren't root's, as records of 8
+  // characters (the code point 4, where its elements start 3, how many 1)
+  // found by halves, and their elements, 8 characters each (the primary
+  // 4, in TAILORED steps, the secondary 2, the tertiary 1, the combining
+  // class 1).
+  const Tailoring = k.type("Collation tailoring", [], [["collation tailoring", [["language", () => k.tref(STRING)], ["records", () => k.tref(STRING)], ["elements", () => k.tref(STRING)]]]]);
+  defs.push(Tailoring.def);
+  const tailoringV = Tailoring.v["collation tailoring"];
+  const tailorings = k.def("collation tailorings");
+  k.define(tailorings, k.list(...Object.entries(col.tailorings ?? {}).map(([language, entries]) => {
+    let records = "", elements = "";
+    for (const [c, es] of entries) {
+      records += enc(c, 4) + enc(elements.length / 8, 3) + enc(es.length, 1);
+      for (const [p, sec, ter, cc] of es) elements += enc(p, 4) + enc(sec, 2) + enc(ter, 1) + enc(cc ?? 0, 1);
+    }
+    return k.call(tailoringV, k.lit(language), k.lit(records), k.lit(elements));
+  })));
+  defs.push(tailorings);
+  // The language's tailoring, one with no records for root.
+  const tailoringOf = def("collation tailoring of", ["language", "tailorings"], (l, ts) => list(ts, () => k.call(tailoringV, l, k.lit(""), k.lit("")), (x, rest) =>
+    k.match(x, [{ variant: tailoringV, names: ["language", "records", "elements"], body: ([tl]) => k.if(same(tl, l), x, k.call(me, l, rest)) }])));
+  const tField = (recs: Id, i: Id, off: number, w: number) => k.call(num, recs, add(mul(i, k.int(8)), k.int(off)), k.int(w));
+  // The first record from lo to hi whose code point isn't before c.
+  const tFind = def("collation tailored find", ["code", "records", "lo", "hi"], (c, recs, lo, hi) => k.if(same(lo, hi), lo,
+    k.let("mid", quot(add(lo, hi), k.int(2)), (mid) => k.if(less(tField(recs, mid, 0, 4), c), k.call(me, c, recs, add(mid, k.int(1)), hi), k.call(me, c, recs, lo, mid)))));
+  const tElements = def("collation tailored elements", ["elements", "at", "count"], (els, at, n) => k.if(same(n, k.int(0)), k.list(),
+    k.call(CONS, element(k.call(num, els, mul(at, k.int(8)), k.int(4)), k.call(num, els, add(mul(at, k.int(8)), k.int(4)), k.int(2)), k.call(num, els, add(mul(at, k.int(8)), k.int(6)), k.int(1)), k.call(num, els, add(mul(at, k.int(8)), k.int(7)), k.int(1))),
+      k.call(me, els, add(at, k.int(1)), sub(n, k.int(1))))));
+  // A code point's elements in the tailoring, or root's.
+  const tailoredOf = def("collation tailored elements of", ["code", "records", "elements"], (c, recs, els) => k.if(same(recs, k.lit("")), k.call(elementsOf, c),
+    k.let("i", k.call(tFind, c, recs, k.int(0), quot(k.call(TEXT_OPS.length, recs), k.int(8))), (i) =>
+      k.if(k.call(S.and, less(i, quot(k.call(TEXT_OPS.length, recs), k.int(8))), same(tField(recs, i, 0, 4), c)), k.call(tElements, els, tField(recs, i, 4, 3), tField(recs, i, 7, 1)), k.call(elementsOf, c)))));
+  const textElements = def("collation text elements", ["codes", "records", "elements"], (cs, recs, els) => list(cs, () => k.list(), (c, rest) =>
+    k.call(then, k.if(and(not(less(c, k.int(HANGUL.from))), not(less(k.int(HANGUL.to), c))), k.call(hangul, c), k.call(tailoredOf, c, recs, els)), k.call(me, rest, recs, els))));
   // Each level's weights: the primaries but the marks' zeros, all the secondaries, all the tertiaries.
   // The marks after a letter in canonical order (NFD's), by their combining
   // class: NFC text may have a letter's own accent before a mark with a
@@ -318,17 +354,18 @@ export function buildCases(): Module {
     { variant: ORDER_V.before, names: [], body: () => order(ORDER_V.before) },
     { variant: ORDER_V.after, names: [], body: () => order(ORDER_V.after) },
   ]);
-  const collated = def("table collated", ["a", "b"], (a, b) => k.let("x", k.call(canonical, k.call(textElements, k.call(codes, a)), k.list()), (x) => k.let("y", k.call(canonical, k.call(textElements, k.call(codes, b)), k.list()), (y) =>
+  const collated = def("table collated", ["a", "b", "locale"], (a, b, l) => k.match(k.call(tailoringOf, k.call(language, l), k.x(tailorings)), [{ variant: tailoringV, names: ["language", "records", "elements"], body: ([, recs, els]) =>
+    k.let("x", k.call(canonical, k.call(textElements, k.call(codes, a), recs, els), k.list()), (x) => k.let("y", k.call(canonical, k.call(textElements, k.call(codes, b), recs, els), k.list()), (y) =>
     orSame(k.call(compareWeights, k.call(primaries, x), k.call(primaries, y)), () =>
       orSame(k.call(compareWeights, k.call(secondaries, x), k.call(secondaries, y)), () =>
-        k.call(compareWeights, k.call(tertiaries, x), k.call(tertiaries, y)))))));
+        k.call(compareWeights, k.call(tertiaries, x), k.call(tertiaries, y)))))) }]));
 
   const offered = [upper, lower, graphemes, collated];
   const comments: Record<Id, string> = {
     [upper]: "The text in capitals as `uppercase` gives it, written in Ters over the Unicode case tables, so a target with no host to ask (WebAssembly, C) gives the same.",
     [graphemes]: "The text's grapheme clusters, the characters a reader sees, as `graphemes` gives them, written in Ters over the Unicode grapheme tables (UAX #29), so a target with no host to ask (WebAssembly, C) gives the same.",
     [lower]: "The text in small letters as `lowercase` gives it (final sigma included), written in Ters over the Unicode case tables, so a target with no host to ask (WebAssembly, C) gives the same.",
-    [collated]: "Which of two texts comes first in the Unicode Collation Algorithm's root order, as `collate` gives it in the root locale, written in Ters over the Unicode collation tables, so a target with no host to ask (WebAssembly, C) gives the same.",
+    [collated]: "Which of two texts comes first in the locale's order, as `collate` gives it, written in Ters over the Unicode Collation Algorithm's tables, so a target with no host to ask (WebAssembly, C) gives the same: the root order, with the locale's own letters where its language has a tailoring the tables hold (Turkish, Spanish, Polish, Swedish and others; L214e5b2).",
   };
   const p = publish(merge(prelude, std, k.code), k.names, offered, merge(prelude, std));
   if (!p.ok) throw new Error(`the cases module can't be published: ${p.reason}`);
