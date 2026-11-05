@@ -15,7 +15,7 @@
 // partial evaluation (Futamura, 1971; Jones, Gomard and Sestoft, 1993).
 
 import type { Code, Id, Node, NodeOf } from "../../ters/src/model.ts";
-import { freshId, isCall } from "../../ters/src/model.ts";
+import { freshId, isCall, subtree } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
 
@@ -61,10 +61,38 @@ export function expandInverses(code: Code, names: Names): { code: Code; names: N
     out.nodes[id] = { id, kind: "lambda", params: [x], body: inner } as Node;
     expanded.push(id);
   }
+  // inverse(e ↦ F(e, …), y), F a printer (its first input matched on)
+  // and the others not depending on e → solve F given out = y and the
+  // others, for that input (C110 s5: calc's `read expression`, whose printer
+  // takes the level it prints at as well, can then be read by descent,
+  // core-solve.ts).
+  const around = (fn: Id): { f: Id; params: Id[]; at: number; args: Id[] } | null => {
+    const l = out.nodes[fn];
+    if (l?.kind !== "lambda" || l.params.length !== 1) return null;
+    const c = out.nodes[l.body];
+    if (!isCall(c)) return null;
+    const f = out.nodes[c.fn], def = f?.kind === "ref" ? out.nodes[f.target] : null, body = def?.kind === "def" && def.body ? out.nodes[def.body] : null;
+    if (f?.kind !== "ref" || body?.kind !== "lambda" || body.params.length !== c.args.length) return null;
+    const uses = (a: Id) => subtree(out, a).some((x) => { const r = out.nodes[x]; return r?.kind === "ref" && r.target === l.params[0]; });
+    const at = c.args.findIndex((a) => { const r = out.nodes[a]; return r?.kind === "ref" && r.target === l.params[0]; });
+    if (at < 0 || c.args.some((a, j) => j !== at && uses(a))) return null;
+    // Only a printer for now: its first input matched on, read by descent.
+    // (pedal's multiband ran wrong as a solve on its function this way.)
+    const m = out.nodes[body.body];
+    if (at !== 0 || m?.kind !== "match" || (out.nodes[m.scrutinee] as NodeOf<"ref"> | undefined)?.target !== body.params[0]) return null;
+    return { f: f.target, params: body.params, at, args: c.args };
+  };
   for (const id of Object.keys(out.nodes)) {
     const c = calls(INVERSE, id);
-    if (!c || c.args.length !== 2 || !param(c.args[0])) continue;
-    inverse(id, c.args[0], c.args[1]);
+    if (!c || c.args.length !== 2) continue;
+    if (param(c.args[0])) { inverse(id, c.args[0], c.args[1]); expanded.push(id); continue; }
+    const a = around(c.args[0]);
+    if (!a) continue;
+    const x = add({ kind: "binder" } as Omit<Node, "id">);
+    more[x] = names[a.params[a.at]] ?? "x";
+    const given: Record<string, Id> = { out: c.args[1] };
+    a.params.forEach((p, j) => { if (j !== a.at) given[p] = a.args[j]; });
+    out.nodes[id] = { id, kind: "call", fn: ref(a.f), given, binds: { [a.params[a.at]]: x }, body: ref(x) } as Node;
     expanded.push(id);
   }
   return expanded.length ? { code: out, names: { ...names, ...more }, expanded } : { code, names, expanded };

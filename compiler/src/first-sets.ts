@@ -127,7 +127,11 @@ export function firstSets(code: Code, printer: Id, names: Record<Id, string>): F
   const body = fn && node(fn.body);
   if (!fn || body?.kind !== "match" || target(body.scrutinee) !== fn.params[0]) throw new Error(`${names[printer] ?? printer} isn't a printer: its first input isn't matched on`);
   const arms = body.arms.map((x) => node(x)!).map((a): ArmFirst & { set: First } => {
-    const v = value(a.body, new Map(), 0), set = v.k === "text" ? v.f : ANY;
+    const v = value(a.body, new Map(), 0);
+    // An arm whose value isn't read as Text: not a printer (pedal's
+    // haar join run backwards, a solve on a function over lists).
+    if (v.k !== "text") throw new Error(`${names[printer] ?? printer} isn't a printer: ${names[a.variant] ?? a.variant} doesn't give Text`);
+    const set = v.f;
     return { variant: a.variant, name: names[a.variant] ?? a.variant, first: [...set.starts].sort(), set };
   });
   const overlaps: [string, string, string[]][] = [];
