@@ -17,6 +17,7 @@
 //                                        publish definitions as their next versions in a module (SHARING.md §1)
 //   lab upgrade <program>                move a program onto its modules' newest versions, if its tests pass (§2)
 //   lab downgrade <program> <name>       back to the version before, from the program's store (§4b)
+//   lab broken <module.json> <name> <n> <reason…>  mark a version broken in the module's signed log (§4)
 //   lab diff <before.json> <after.json>  what changed, by definition and name (merge-files.ts)
 //   lab merge <base> <ours> <theirs> [path]
 //                                        git's merge driver for program files: id by id, ours
@@ -36,7 +37,7 @@
 
 import type { Plugin } from "esbuild";
 import { gradeMistakes } from "../src/lang/grades.ts";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { merge, type Code, type Id } from "../src/model.ts";
@@ -70,6 +71,7 @@ import { representationLaws } from "../src/lang/rep-laws.ts";
 import { embeddingLaws } from "../src/lang/embed-laws.ts";
 import { effectOfOperation, hostSkeleton, hostSkeletonC, ownOperations, type Hosts } from "../src/lang/hosts.ts";
 import { evaluatorHash, readKept, resultKeys, writeKept } from "./checks.ts";
+import { append, logFile, readLog as readLineageLog, readLogFile, signingKey } from "./logs.ts";
 
 const USAGE = `lab: the command line for Ters, the language
 usage:
@@ -95,6 +97,10 @@ usage:
                                         publish the named definitions, and the drafts they use, as their next
                                         versions in a module (default <program>.module.json): the old versions
                                         stay, and each keeps its draft's id as its lineage (SHARING.md §1)
+  lab broken <module.json> <name> <n> <reason…> [--key file]
+                                        mark version n of name broken in the module's log, signed with your key
+                                        (default ~/.lab/key.pem, made on first use); lab publish signs each new
+                                        version into the same log, and lab upgrade warns and won't move to it (§4)
   lab downgrade <program> <name>        move what the program calls name back to the version before, from its
                                         store (store.json, every version it has used, kept by upgrade and
                                         downgrade, so it runs when a module's file is gone; §4b)
@@ -111,6 +117,21 @@ options:
                    without it a run reaches everything
 A program is a file saved by the editor, or a folder like examples/sort.`;
 
+
+// What the logs beside a program's modules say (L114a): versions marked
+// broken, and each lineage's author. A log that doesn't check out is
+// refused whole, and said.
+function moduleLogs(dir: string, store: Module | null): { broken: Record<Id, string>; authors: Record<Id, string> } {
+  const at = join(dir, "modules"), out = { broken: {} as Record<Id, string>, authors: {} as Record<Id, string> };
+  if (!existsSync(at)) return out;
+  for (const f of readdirSync(at).filter((x) => x.endsWith(".json") && !x.endsWith(".log.json")).sort()) {
+    const r = readLineageLog(readLogFile(join(at, f)), store?.authors ?? {});
+    if (r.problem) { console.log(`warn   modules/${f}'s log is refused: ${r.problem}`); continue; }
+    Object.assign(out.broken, r.broken);
+    for (const [l, k] of Object.entries(r.authors)) out.authors[l] ??= k;
+  }
+  return out;
+}
 
 function fail(message: string): never {
   process.stderr.write(`lab: ${message}\n`);
@@ -317,6 +338,22 @@ if (command === "diff" || command === "merge") {
   process.stderr.write(`lab: ${shown ?? ours}: ${conflicts.length} conflict${conflicts.length === 1 ? "" : "s"}, ours kept:\n${describe(conflicts, named, t).map((l) => `  ${l}\n`).join("")}`);
   process.exit(1);
 }
+// A version marked broken in a module's log (SHARING.md §4, L114a).
+if (command === "broken") {
+  const [name, n, ...why] = rest.filter((a, i, xs) => a !== "--key" && xs[i - 1] !== "--key");
+  const ki = rest.indexOf("--key");
+  if (!path || !name || !n || !why.length) fail("broken needs a module file, a name, a version number and a reason");
+  const m = JSON.parse(readFileSync(path, "utf8")) as Module;
+  const lineages = m.lineages ?? {};
+  const l = Object.keys(lineages).find((x) => lineages[x].some((v) => m.names[v] === name)) ?? fail(`${path} has no lineage named ${name}`);
+  const v = lineages[l][Number(n) - 1] ?? fail(`${name} has ${lineages[l].length} version${lineages[l].length === 1 ? "" : "s"}`);
+  const log = append(readLogFile(path), signingKey(ki >= 0 ? rest[ki + 1] : undefined), { kind: "broken", lineage: l, version: v, reason: why.join(" ") });
+  const r = readLineageLog(log);
+  if (r.problem) fail(`the log refuses it: ${r.problem}`);
+  writeFileSync(logFile(path), JSON.stringify(log, null, 2) + "\n");
+  console.log(`${name} version ${n} marked broken`);
+  process.exit(0);
+}
 if (!command || command === "help" || command === "--help" || !path) {
   process.stdout.write(USAGE + "\n");
   process.exit(command && command !== "help" && command !== "--help" ? 2 : 0);
@@ -495,6 +532,8 @@ switch (command) {
     const o = rest.indexOf("-o");
     const out = o >= 0 ? rest[o + 1] ?? fail("-o needs a file") : `${resolve(path).replace(/[\\/]$/, "").replace(/\.json$/, "")}.module.json`;
     const wanted = rest.filter((_, i) => o < 0 || (i !== o && i !== o + 1));
+    const ki = wanted.indexOf("--key");
+    const keyFile = ki >= 0 ? wanted.splice(ki, 2)[1] : undefined;
     if (!wanted.length) fail("publish needs the names of the definitions to publish");
     if (p.info.errors.length) fail(`${p.title} has errors; lab check says which`);
     const defs = wanted.map((n) => p.own.find((d) => p.names[d] === n) ?? fail(`${p.title} has no definition named ${n}`));
@@ -505,6 +544,16 @@ switch (command) {
     if (wrong) fail(`the module isn't what it says: ${wrong}`);
     writeFileSync(out, JSON.stringify(r.module, null, 2) + "\n");
     const lineages = r.module.lineages ?? {};
+    // Each new version said current in the module's log, signed (L114a).
+    if (r.added.length) {
+      const key = signingKey(keyFile);
+      let log = readLogFile(out);
+      for (const v of r.added) {
+        const l = lineageOf(lineages, v)!, i = lineages[l].indexOf(v);
+        log = append(log, key, { kind: "current", lineage: l, version: v, ...(i > 0 ? { was: lineages[l][i - 1] } : {}) });
+      }
+      writeFileSync(logFile(out), JSON.stringify(log, null, 2) + "\n");
+    }
     for (const v of r.added) {
       const l = lineageOf(lineages, v)!;
       console.log(`${r.module.names[v] ?? v}: version ${lineages[l].indexOf(v) + 1}, ${v}`);
@@ -523,7 +572,12 @@ switch (command) {
     const modules = [...programModules(path), ...(store0 ? [store0] : [])];
     const own = JSON.parse(readFileSync(join(path, "code.json"), "utf8")) as Code;
     let r: ReturnType<typeof upgradeOwn>;
-    if (up) r = upgradeOwn(own, modules, p.names);
+    // What the modules' authors say in their logs (L114a): a used version
+    // marked broken is said, and isn't moved to.
+    const logs = moduleLogs(path, store0);
+    const usedNow = new Set(Object.values(own.nodes).flatMap(pointsAt));
+    for (const [v, why] of Object.entries(logs.broken)) if (usedNow.has(v)) console.log(`warn   ${p.names[v] ?? v} (${v}) is marked broken by its author: ${why}`);
+    if (up) r = upgradeOwn(own, modules, p.names, new Set(Object.keys(logs.broken)));
     else {
       const name = rest.find((a) => !a.startsWith("--")) ?? fail("downgrade needs the name of what to move back");
       const used = new Set(Object.values(own.nodes).flatMap(pointsAt));
@@ -546,7 +600,10 @@ switch (command) {
     if (failed.length) fail(`after the ${command}, ${failed.map((t) => t.name).join(", ")} fail${failed.length === 1 ? "s" : ""} (lab test says how); nothing written`);
     writeFileSync(join(path, "code.json"), JSON.stringify(r.own, null, 2) + "\n");
     // Both versions into the store (SHARING.md §4b, L115).
-    writeFileSync(join(path, "store.json"), JSON.stringify(addToStore(addToStore(store0, own, modules), r.own, modules), null, 2) + "\n");
+    const stored = addToStore(addToStore(store0, own, modules), r.own, modules);
+    // The authors' keys pinned the first time the program took a lineage.
+    const authors = { ...logs.authors, ...(store0?.authors ?? {}) };
+    writeFileSync(join(path, "store.json"), JSON.stringify(Object.keys(authors).length ? { ...stored, authors } : stored, null, 2) + "\n");
     // The program's names stay its own (L112): the author's renames are
     // said once, and taken only with --take-names; going back takes the
     // names that version had.

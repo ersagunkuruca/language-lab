@@ -39,7 +39,7 @@ export const optionsWith = (pins: Pins | undefined): Options => (pins && Object.
 export function programModules(dir: string): Module[] {
   const at = join(dir, "modules");
   if (!existsSync(at)) return [];
-  return readdirSync(at).filter((f) => f.endsWith(".json")).sort().map((f) => readModule(join(at, f), `modules/${f}`));
+  return readdirSync(at).filter((f) => f.endsWith(".json") && !f.endsWith(".log.json")).sort().map((f) => readModule(join(at, f), `modules/${f}`));
 }
 const readModule = (path: string, shown: string): Module => {
   const m = JSON.parse(readFileSync(path, "utf8")) as Module;

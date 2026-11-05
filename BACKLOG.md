@@ -202,7 +202,7 @@ all of these.
 |---|---|---|---|---|---|
 | L72 | JSON as one relation: `json spelled` gives every spelling, `json read` is it run backwards (a to f done, DONE.md). Example: `json printed` is `json spelled`'s first on every target (e1d); done when it is. It waits for the core IR to run a `first` of a Choice without nesting the rest in it: 300 records run out of stack now, though the evaluator prints them in 0.29 s. Beyond it, rows if they earn them: json read's message saying where it stopped (f3), `json printed indented` as a variant (e4) | Ersagun 2026-10-24 | P3 | L | low priority |
 | L17 | Data-type upgrades (migrations when constructors and fields move); path namespaces are a name layer (SHARING.md §5) | ROADMAP 5 | P3 | L | |
-| L114 | Lineage logs: signed, append-only, "current" and "broken" entries; code fetched by hash from any host; a browser over logs (was L68) | SHARING.md §4 | P3 | L | |
+| L114 | Lineage logs, the rest (signed logs, "current" and "broken" entries and authors pinned per program done as L114a, DONE.md). Example: `lab upgrade` of a program whose module file is gone fetching the version its log names by hash from a URL the log gives (any static host), and `verify` checking what came (b). Beyond it, a row if it earns one: a browser over logs (c) | SHARING.md §4 | P3 | M | |
 
 ### Physics and planning ([PHYSICS-AND-PLANNING.md](docs/design/physics/PHYSICS-AND-PLANNING.md), later goals)
 
