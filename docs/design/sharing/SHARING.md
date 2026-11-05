@@ -8,6 +8,7 @@ saying which std they were published on, ids saying their recipe.
 §1 built (L110): a module's `lineages`, `lab publish`, `replacing`.
 §2 built (L111): upgrades by pin generality, `lab upgrade`, a program's `modules` folder.
 §5 built (L112): names kept per program on upgrade, `--take-names`.
+§4b built (L115): a program's store.json, `lab downgrade`.
 
 **In one sentence:** a definition (or a library) keeps one **lineage id**
 for its whole life and gets a **version hash** each time it's published;
@@ -193,6 +194,12 @@ changed. Nothing to remember, nothing to choose.
 - **Size.** The editor can show what the store holds and offer to drop
   versions no program in the project refers to any more; dropping is the
   only way anything leaves it.
+
+Built (L115, 2026-11-05) on the command line: a program folder's
+`store.json` is filled by `lab upgrade` and `lab downgrade`, loads like a
+module, and `lab downgrade <program> <name>` goes back a version. The
+editor's view of the store and dropping versions are later rows if they
+earn one.
 
 Prior art: vendoring (Go's `vendor/`, Cargo's `cargo vendor`), Nix's
 store and its garbage collection by roots, Unison's local codebase,

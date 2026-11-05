@@ -13,7 +13,7 @@ import { Lang } from "../src/lang/dsl.ts";
 import { fillings, infer } from "../src/lang/infer.ts";
 import { CORE, HTML_MODULE, LIBRARY, PRELUDE } from "../src/lang/library.ts";
 import { base, baseNames, checkOptions, loadProgram } from "../src/lang/load.ts";
-import { addVersions, adopt, lineageOf, orderFreeHash, publishVersion, replacing, upgradeNames, upgradeOwn, publish, sameAs, sameLines, sameUpToOrder, upgrade, verify, type Module } from "../src/lang/modules.ts";
+import { addToStore, addVersions, adopt, previousVersion, lineageOf, orderFreeHash, publishVersion, replacing, upgradeNames, upgradeOwn, publish, sameAs, sameLines, sameUpToOrder, upgrade, verify, type Module } from "../src/lang/modules.ts";
 import { buildPrelude } from "../src/lang/prelude-source.ts";
 import { library as listHelpers } from "../src/lang/programs.ts";
 import { atLeastAsGeneral, pinsOf } from "../src/lang/signatures.ts";
@@ -442,6 +442,35 @@ test("after an upgrade the program keeps its names: the author's renames are sai
   const mine = upgradeNames(moved, [m2], { [v1]: "area" }, true);
   assert.equal(mine.names[v2], "area");
   assert.deepEqual(mine.renamed, []);
+});
+
+// SHARING.md §4b (L115): the project keeps every version it has used, so it
+// runs when the module is gone, and can go back.
+test("a program's store keeps every version it used: it runs without the module, and goes back a version (L115)", () => {
+  const k = new Lang(LIBRARY.code);
+  const twice = k.def("twice");
+  k.define(twice, k.fn(["x"], (x) => k.call(ARITH.add, x, x)));
+  const step = (prev: Module | null) => { const r = publishVersion(prev, "doubling", base(k.code), baseNames(k.names), [twice], LIBRARY.code, LIBRARY.pins); assert.ok(r.ok); return r.module; };
+  const m1 = step(null), v1 = m1.exports[0];
+  k.define(twice, k.fn(["x"], (x) => k.call(ARITH.add, k.call(ARITH.add, x, x), k.lit(0))));
+  const m2 = step(m1), v2 = m2.exports[0];
+  const bob = new Lang(merge(LIBRARY.code, m2.code));
+  const main = bob.def("main");
+  bob.define(main, bob.thunk(() => bob.call(S.print, bob.call(SHOW_ANY, bob.call(v1, bob.lit(21))))));
+  const up = upgradeOwn(bob.code, [m2]);
+  const store = addToStore(addToStore(null, bob.code, [m2]), up.own, [m2]);
+  assert.deepEqual(Object.values(store.lineages!), [[v1, v2]]);
+  assert.equal(verify(store, LIBRARY.code, true), null);
+  // The module gone: the program runs from its store.
+  const run = (own: Code) => { const code = base(merge(store.code, own)); const out: string[] = []; runMain(code, infer(code, baseNames(bob.names), undefined, checkOptions), main, { print: (x) => out.push(x) }); return out; };
+  assert.deepEqual(run(up.own), ["42"]);
+  // And back to version 1.
+  assert.equal(previousVersion(store, v2), v1);
+  const back = upgrade(merge(store.code, up.own), v2, v1, store.pins);
+  assert.ok(back.ok);
+  const own = { nodes: Object.fromEntries(Object.entries(back.code.nodes).filter(([id]) => up.own.nodes[id])), defs: up.own.defs };
+  assert.ok(Object.values(own.nodes).some((n) => n.kind === "ref" && n.target === v1));
+  assert.deepEqual(run(own), ["42"]);
 });
 
 test("a saved file lists what it uses from modules, and opening it without them says which", async () => {
