@@ -32,6 +32,7 @@
     { "program": "chapters", "label": "Bigger program: chapters, a book split into chapters", "folders": ["chapters"], "run": { "args": ["book.md", "out"], "files": ["book.md"] } },
     { "program": "calc", "label": "Bigger program: calc, a calculator for big numbers", "folders": ["calc"] },
     { "program": "clinic", "label": "Bigger program: clinic, a waiting-room simulation", "folders": ["compiler/gaps/clinic"] },
+    { "program": "crew", "label": "Bigger program: crew, workers as fibers", "folders": ["compiler/gaps/crew"], "run": { "args": ["plan.txt"], "files": ["plan.txt"] } },
     { "program": "compass", "label": "Compass", "folders": ["compass"], "page": true, "editor": false }
   ]
 }
