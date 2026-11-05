@@ -4,7 +4,7 @@
 // else, becomes that match's cases in its place; an inner otherwise is _
 // there. The rows are the leaves of the decision tree, in its order.
 
-import { children, freshId, mapIds, subtree, type Code, type Id, type Node, type NodeOf } from "../model.ts";
+import { freshId, parentLookup, scanningOnLayer, mapIds, subtree, type Code, type Id, type Node, type NodeOf } from "../model.ts";
 import type { Info } from "./infer.ts";
 import { CONS, FALSE, NIL, TRUE } from "./std.ts";
 
@@ -126,14 +126,16 @@ export function sameEverywhere(before: Code, after: Code, info: Info | null): { 
   const none = { code: after, copied: [], places: 0 };
   const changed = Object.keys(after.nodes).filter((id) => before.nodes[id] !== after.nodes[id]);
   if (!changed.length) return none;
-  const up = new Map<Id, Id>();
-  for (const n of Object.values(after.nodes)) for (const c of children(n)) up.set(c, n.id);
+  // Each node's parent, from the library's parents found once where the
+  // program is on it (T14h: two walks of every node at each edit).
+  const parentsOf = (c: Code) => scanningOnLayer(c, () => parentLookup(c));
+  const up = parentsOf(after);
   const matches = new Set<Id>();
-  for (const id of changed) for (let x: Id | undefined = id; x; x = up.get(x)) if (after.nodes[x].kind === "match" && before.nodes[x]?.kind === "match") matches.add(x);
+  for (const id of changed) for (let x: Id | undefined = id; x; x = up(x)) if (after.nodes[x].kind === "match" && before.nodes[x]?.kind === "match") matches.add(x);
+  if (!matches.size) return none;
   // A match drawn as rows of the one around it isn't drawn on its own.
-  const was = new Map<Id, Id>();
-  for (const n of Object.values(before.nodes)) for (const c of children(n)) was.set(c, n.id);
-  const inner = new Set([...matches].flatMap((m) => matchRows(before, info, before.nodes[m] as NodeOf<"match">).map((r) => (before.nodes[r.at].kind === "arm" ? was.get(r.at)! : r.at)).filter((x) => x !== m)));
+  const was = parentsOf(before);
+  const inner = new Set([...matches].flatMap((m) => matchRows(before, info, before.nodes[m] as NodeOf<"match">).map((r) => (before.nodes[r.at].kind === "arm" ? was(r.at)! : r.at)).filter((x) => x !== m)));
   let code = after, places = 0;
   const copied: [Id, Id][] = [];
   for (const m of matches) {

@@ -39,6 +39,10 @@ export function openEditor(saved?: string) {
   // What Node has and happy-dom doesn't pass on, a worker that never
   // answers, and no canvas to draw on (a shader's preview says so).
   w.structuredClone = structuredClone;
+  // No server: what the page fetches beside itself (prebuilt.ts's compiled
+  // examples) isn't there, as when the editor is opened from a file. happy-dom
+  // would ask port 80 and report the refused connection as the page's error.
+  w.fetch = async () => new (window.Response as unknown as typeof Response)("", { status: 404 });
   // Each one is kept, so a scenario can answer for it (workers, below).
   const workers: { onmessage: ((e: { data: unknown }) => void) | null; asked: unknown[] }[] = [];
   w.Worker = class { onmessage = null; onerror = null; asked: unknown[] = []; constructor() { workers.push(this as never); } postMessage(m: unknown) { this.asked.push(m); } terminate() {} addEventListener() {} };
