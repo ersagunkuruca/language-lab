@@ -48,8 +48,7 @@ import { Cells } from "../src/lang/cells.ts";
 import { evaluatorCall, htmlText } from "../src/lang/html.ts";
 import { hasSound, pageDocument } from "../src/lang/page.ts";
 import { showType } from "../src/lang/types.ts";
-import { choose, jobProblem, represent, representationsIn, type Representation } from "../src/lang/represent.ts";
-import { withLibraryRepresentations } from "../src/lang/library-reps.ts";
+import { choose, representationsIn } from "../src/lang/represent.ts";
 import { allowedOnly, nodeWorld } from "../src/lang/world.ts";
 import { readLog, replaying, type LogEntry } from "../src/lang/worldlog.ts";
 import { compile } from "../../compiler/src/compile.ts";
@@ -61,6 +60,7 @@ import { recordings, webCorePage, webPage } from "./web.ts";
 import { appFolder } from "./app.ts";
 import { soundOf } from "./sound.ts";
 import { readWav, writeWav } from "./wav.ts";
+import { represented as representedOr, type Program } from "./represented.ts";
 import { audioProblem, BLOCK, playBlocks } from "../src/lang/audio.ts";
 import { answersAgain, checkedTests, checksAgain, compiledValue, runTests, savedFrom, testsIn, type Called, type Saved } from "../src/lang/tests.ts";
 import { representationLaws } from "../src/lang/rep-laws.ts";
@@ -96,7 +96,6 @@ options:
                    without it a run reaches everything
 A program is a file saved by the editor, or a folder like examples/sort.`;
 
-interface Program { title: string; code: Code; own: Id[]; names: Names; info: Info; reps: Representation[]; options?: unknown }
 
 function fail(message: string): never {
   process.stderr.write(`lab: ${message}\n`);
@@ -175,38 +174,8 @@ function compiledChecks(p: Program, saved: Record<Id, Saved[]>) {
   });
 }
 
-// The program from `main`, with each type it uses stored the way the
-// chooser picks from the declared costs (the definition itself is one of
-// the choices). Library types (std's Map) are chosen for too, unless the
-// table has a row for them (library-reps.ts, C47). The rewrite is checked
-// again, like any program.
 function represented(p: Program, main: Id, hostMaps: boolean, tables = false): Program {
-  // Every definition the program has, so the ones main shares with others
-  // change together; types stay as they are for its own representations.
-  // The library's are chosen over the types too, so a field typed Map
-  // becomes the tree its code builds (GAPS.md M2).
-  // A representation's own definition says which definitions do the jobs:
-  // it is read, not rewritten or run, so the represented program leaves it out.
-  const reps = new Set(p.reps.map((r) => r.def));
-  const defs = p.own.filter((d) => { const b = (p.code.nodes[d] as { body?: Id | null }).body; return (!b || p.code.nodes[b]?.kind !== "typedef") && !reps.has(d); });
-  const lib = withLibraryRepresentations(p.code, p.info, p.names, main, p.own, p.reps, { hostMaps, tables });
-  let code = lib.code;
-  const names = lib.names, chosen = [...lib.chosen];
-  for (const of of new Set(p.reps.map((r) => r.of))) {
-    const rep = choose(code, main, p.reps.filter((r) => r.of === of)).rep;
-    if (rep.type === rep.of) continue;
-    const problem = jobProblem(p.info, rep, p.names);
-    if (problem) fail(`${p.title} can't be stored as ${rep.name}: ${problem}`);
-    code = represent(code, defs, rep);
-    chosen.push(`${p.names[of] ?? of} as ${rep.name}`);
-  }
-  if (!chosen.length) return p;
-  code = { ...code, defs: code.defs.filter((d) => !reps.has(d)) };
-  // The library's representations may call the constructors they stand for.
-  const options = p.options as Parameters<typeof infer>[3];
-  const info = infer(code, names, undefined, { ...options, insiders: [...(options?.insiders ?? []), ...lib.insiders] });
-  if (info.errors.length) fail(`${p.title} doesn't check on ${chosen.join(", ")}: ${info.errors.map((e) => e.message).join("; ")}`);
-  return { ...p, code, names, info };
+  try { return representedOr(p, main, hostMaps, tables); } catch (e) { fail((e as Error).message); }
 }
 
 // `lab run` takes a page too: it prints, once, as static HTML.
@@ -487,7 +456,9 @@ switch (command) {
     break;
   }
   case "render": {
-    const def = p.own.find((d) => p.names[d] === mainName) ?? fail(`${p.title} has no definition named ${mainName}`);
+    const named = loaded.own.find((d) => loaded.names[d] === mainName) ?? fail(`${loaded.title} has no definition named ${mainName}`);
+    // Stored as `lab compile` stores it, with the sound as the root (C137 s1).
+    const p = rest.includes("--compiled") && defined < 0 ? represented(loaded, named, true) : loaded, def = named;
     const problem = audioProblem(p.info, def, p.names);
     if (problem) fail(`${mainName} can't be a sound: ${problem}`);
     const option = (flag: string) => { const at = rest.indexOf(flag); if (at < 0) return undefined; const v = rest[at + 1] ?? fail(`${flag} needs a value`); rest.splice(at, 2); return v; };
