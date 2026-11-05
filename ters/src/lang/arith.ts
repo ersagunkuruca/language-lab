@@ -86,8 +86,9 @@ const someLiteralNotFloat64 = (code: Code, info: Info) => nodesWhere(code, "plai
 });
 
 // A Float64 literal's digits, as written, as top/bottom: 0.25 is 25/100.
-function decimal(x: number): string {
-  const m = /^(-?)(\d+)(?:\.(\d+))?(?:e([+-]\d+))?$/.exec(String(x));
+// Also a typed literal's digits written as text ("0.25" at Rational).
+function decimal(x: number | string): string {
+  const m = /^(-?)(\d+)(?:\.(\d+))?(?:e([+-]\d+))?$/i.exec(String(x).trim());
   if (!m) return "0";
   const digits = BigInt(m[2] + (m[3] ?? "")), exp = Number(m[4] ?? 0) - (m[3] ?? "").length;
   const [top, bottom] = exp >= 0 ? [digits * 10n ** BigInt(exp), 1n] : [digits, 10n ** BigInt(-exp)];
@@ -522,7 +523,9 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
   // A literal written at one of them, as 1/3 at Rational.
   const literal = (n: NodeOf<"lit">) => {
     const t: Type = { t: "con", id: n.of!, args: [] };
-    if (!throughLiteral(n.id, ratioParts(typeof n.value === "number" ? decimal(n.value) : String(n.value)) ?? [0n, 1n], t) && typeof n.value === "number") throughEmbedding(n.id, n.value, t);
+    // Its digits as written: a whole number, top/bottom or a decimal, exactly.
+    const v = n.value, parts = typeof v === "number" ? ratioParts(decimal(v)) : ratioParts(String(v)) ?? ratioParts(decimal(String(v)));
+    if (!throughLiteral(n.id, parts ?? [0n, 1n], t) && typeof v === "number") throughEmbedding(n.id, v, t);
   };
 
   // A plain number literal at the Number its use needs: an Int, a fraction
