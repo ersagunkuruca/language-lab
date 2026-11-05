@@ -96,7 +96,7 @@ const PRINTED = new Set<SExpr["k"]>([
 const ARRAY_FN = /^array\.(\w+)\.a(\d+)$/;
 // std's Table's runtime functions, one copy per table type (C63h).
 const TABLE_FN = /^table\.(\w+)\.t(\d+)(?:\.e(\d+))?$/;
-const LIST_TEXT = "std.list<type.string<>>", OPTION_TEXT = "std.optional<type.string<>>", OPTION_INT = "std.optional<type.int<>>";
+const LIST_TEXT = "std.list<type.string<>>", OPTION_TEXT = "std.optional<type.string<>>", OPTION_INT = "std.optional<type.int<>>", LIST_INT = "std.list<type.int<>>", BYTES_T = "std.bytes<>";
 
 // The runtime of counted cells. A null cell (a box's value before the
 // search sets it) is never counted.
@@ -358,7 +358,12 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   };
   // The names a runtime function that makes or reads a list needs.
   const listNames = (fn: string): ListNames => {
-    const d = data.get(fn === "world.readLine" || fn === "world.keptLine" ? OPTION_TEXT : fn === "world.keptOpen" ? OPTION_INT : fn.startsWith("world.") ? LIST_TEXT : runtime(fn).list ?? LIST_TEXT)!;
+    const bytes = fn === "world.keptBytes" || fn === "world.keptAddBytes";
+    const d = data.get(fn === "world.readLine" || fn === "world.keptLine" ? OPTION_TEXT : fn === "world.keptOpen" ? OPTION_INT : bytes ? LIST_INT : fn.startsWith("world.") ? LIST_TEXT : runtime(fn).list ?? LIST_TEXT)!;
+    if (bytes) {
+      const tag = d.cases.findIndex((c) => c.fields.length > 0);
+      return { cons: cname(d, tag), nil: cname(d, 1 - tag), type: tnum.get(d.key)!, tag, head: d.cases[tag].fields.findIndex((x) => x.t !== d), record: sname.get(BYTES_T) };
+    }
     const tag = d.cases.findIndex((c) => c.fields.length > 0);
     return { cons: cname(d, tag), nil: cname(d, 1 - tag), type: tnum.get(d.key)!, tag, head: d.cases[tag].fields.findIndex((x) => x.t !== d) };
   };
