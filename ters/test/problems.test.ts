@@ -9,13 +9,14 @@ import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { PROBLEMS, problemOf } from "../src/lang/problems.ts";
 import { COMPLEX_TYPE, NUMBER, RATIONAL_TYPE } from "../src/lang/types.ts";
-import { ARITH, CELL_OPS, DIVIDE, EMBEDDING_V, FALSE, FIELDS, INT_OPS, JSON_OPS, LOG_OP, RELEASE_V, S, SET, SHOWN_V, SOME, TRIG_OPS, TRUE } from "../src/lang/std.ts";
+import { ARITH, CELL_OPS, DIVIDE, EMBEDDING_V, FALSE, FIELDS, INT_OPS, JSON_OPS, LOG_OP, RELEASE_V, S, SET, SHOWN_V, SOME, TRIG_OPS, TRUE, tupleVariant } from "../src/lang/std.ts";
 import type { Id, NodeData } from "../src/model.ts";
 
 const bools = (k: Lang, b: string, extra: Parameters<Lang["match"]>[1] = []) =>
   k.match(b, [{ variant: TRUE, names: [], body: () => k.lit(1) }, { variant: FALSE, names: [], body: () => k.lit(2) }, ...extra]);
 
 // An effect with two operations, and a handler's cases for both.
+const LIB = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY.names[d] === name)!;
 const ask = (k: Lang) => k.effect("Ask", [["ask", [], () => k.tref("type.number")], ["tell", [["n", () => k.tref("type.number")]], () => k.tref("std.unit")]]);
 const answered = (k: Lang, a: ReturnType<typeof ask>, answer: () => string): Parameters<Lang["match"]>[1] =>
   [{ variant: a.op.ask, names: [], body: answer }, { variant: a.op.tell, names: ["n"], body: () => k.x("std.unit.unit") }];
@@ -92,6 +93,8 @@ const SMALLEST: Record<string, (k: Lang) => unknown> = {
   "handler-name-escapes": (k) => { const a = ask(k); k.define(k.def("p"), k.thunk(() => k.handleNamed("n", (n) => k.thunk(() => k.call(a.op.ask, k.x(n))), answered(k, a, () => k.lit(1))))); },
   "fold-by-value": (k) => k.define(k.def("p"), k.fn(["x"], (x) => { const m = k.byValue(x, [[k.lit(1), k.lit(2)]], k.lit(3)); (k.code.nodes[m] as { kind: string }).kind = "fold"; return m; })),
   "arithmetic-on-other": (k) => k.define(k.def("p"), k.fn(["a"], (a) => k.call(ARITH.add, k.call(S.show, a), k.lit("x")))),
+  "set-shared-tuple": (k) => { const t = k.type("Shape", [], [["dot", [["r", () => k.tref(NUMBER)], ["q", () => k.tref(NUMBER)]]], ["disc", [["r", () => k.tref(NUMBER)], ["q", () => k.tref(NUMBER)]]]]); (k.code.nodes[t.f["disc.r"]] as { same?: string }).same = t.f["dot.r"]; (k.code.nodes[t.f["disc.q"]] as { same?: string }).same = t.f["dot.q"]; k.define(k.def("p"), k.fn(["s"], (s) => k.call(SET, k.fn(["x"], (x) => k.call(tupleVariant(2), k.call(t.f["dot.r"], x), k.call(t.f["dot.q"], x))), s, k.call(tupleVariant(2), k.lit(1), k.lit(2))))); },
+  "reshape-inside": (k) => { const f = k.def("f"); k.define(f, k.fn(["fs"], (fs) => k.call(LIB("map"), fs, k.fn(["g"], (g) => k.call(g, k.call(tupleVariant(2), k.lit(1), k.lit(2))))))); k.define(k.def("p"), k.thunk(() => k.call(f, k.list(k.fn(["a", "b"], (a, b) => k.call(ARITH.add, a, b)))))); },
   "name-on-plain-match": (k) => k.define(k.def("p"), k.fn(["b"], (b) => { const m = k.if(b, k.lit(1), k.lit(2)); (k.code.nodes[m] as { name?: string }).name = (k as unknown as { binder: (n: string) => string }).binder("n"); return m; })),
   "named-operation-inputs": (k) => { const a = ask(k); k.define(k.def("p"), k.thunk(() => k.handleNamed("n", (n) => k.call(a.op.ask, k.x(n), k.lit(1)), answered(k, a, () => k.lit(1))))); },
   "release-given-something": (k) => { const a = ask(k); k.define(k.def("p"), k.thunk(() => k.match(k.call(a.op.ask), [...answered(k, a, () => k.lit(1)), { variant: RELEASE_V, names: ["x"], body: () => k.x("std.unit.unit") }]))); },
