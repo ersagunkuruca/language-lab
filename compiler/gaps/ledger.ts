@@ -1,19 +1,13 @@
-// ledger four ways, in one process: the evaluator, the compiler's output,
-// the JavaScript printed from the core IR (core-js.ts, which is to replace
-// compile.ts: C137), and the hand-written ideal (ledger.ideal.js). Each gets the same
+// ledger three ways, in one process: the evaluator, the JavaScript printed
+// from the core IR (core-js.ts), and the hand-written ideal (ledger.ideal.js). Each gets the same
 // arguments and a world whose files are kept in memory, and the comparison
 // is what it printed and how it exited. Used by bench-ledger.ts and by
 // test/ledger.test.ts.
 
-import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { pathToFileURL } from "node:url";
 import { runProgram, type World } from "../../ters/src/lang/run.ts";
-import { compile } from "../src/compile.ts";
 import { loadCoreJs, lowerCore, runCoreFn } from "../src/core-js.ts";
 import { load } from "../src/program.ts";
-import { $setPrint, $setWorld, $Aborted, $toList } from "../src/runtime.js";
 import { ledger as ideal } from "./ledger.ideal.js";
 
 export interface Run { out: string[]; err: string[]; code: number }
@@ -31,12 +25,9 @@ const world = (files: Record<string, string>, err: string[]): World => ({
   fileExists: (p) => p in files, listFolder: () => [],
 });
 
-export async function ways(): Promise<Record<"evaluator" | "compiled" | "core" | "ideal", Way>> {
+export async function ways(): Promise<Record<"evaluator" | "core" | "ideal", Way>> {
   const p = load("ledger");
   const main = p.named("main");
-  const path = join(mkdtempSync(join(tmpdir(), "ledger-")), "ledger.js");
-  writeFileSync(path, compile(p.code, p.info, p.pres.names, { runtime: pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href, exports: ["main"] }));
-  const compiled = (await import(pathToFileURL(path).href)).defs.main as (args: unknown) => number;
   // The core IR's functions are loaded once, on a world each run points
   // at its own files.
   const ir = lowerCore(p.code, p.info, p.pres.names, [main]);
@@ -51,14 +42,6 @@ export async function ways(): Promise<Record<"evaluator" | "compiled" | "core" |
     evaluator: (args, files) => {
       const out: string[] = [], err: string[] = [];
       const code = runProgram(p.code, p.info, main, args, { print: (s) => out.push(s), names: p.pres.names, world: world(files, err) });
-      return { out, err, code };
-    },
-    compiled: (args, files) => {
-      const out: string[] = [], err: string[] = [];
-      $setPrint((s: string) => out.push(s));
-      $setWorld(world(files, err));
-      let code: number;
-      try { code = Number(compiled($toList(args))); } catch (e) { if (!(e instanceof $Aborted)) throw e; err.push(e.reason); code = 1; }
       return { out, err, code };
     },
     core: (args, files) => {

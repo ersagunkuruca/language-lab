@@ -1,4 +1,4 @@
-// chapters: evaluator, compiled and ideal, on books of growing size. The
+// chapters: evaluator, core IR and ideal, on books of growing size. The
 // numbers in GAPS.md, round 2's second program, come from this.
 // Run: node gaps/bench-chapters.ts   (or npm run gaps)
 
@@ -15,18 +15,17 @@ const time = (f: () => unknown, runs: number) => {
 const ms = (x: number) => `${x < 10 ? x.toFixed(2) : x.toFixed(0)} ms`.padStart(10);
 
 console.log(`chapters: split a book into files kept in memory (in one process)\n`);
-console.log(`${"book".padEnd(26)} ${"evaluator".padStart(10)} ${"compiled".padStart(10)} ${"core IR".padStart(10)} ${"stored".padStart(10)} ${"ideal".padStart(10)}  compiled/ideal  core/ideal  stored/ideal`);
+console.log(`${"book".padEnd(26)} ${"evaluator".padStart(10)} ${"core IR".padStart(10)} ${"stored".padStart(10)} ${"ideal".padStart(10)}  core/ideal  stored/ideal`);
 for (const n of [10, 100, 1000, 3000]) {
   const files = { "book.md": book(n) }, args = ["book.md", "out"];
   const want = w.ideal(args, files);
-  assert.deepEqual(w.compiled(args, files), want);
   assert.deepEqual(w.core(args, files), want);
   assert.deepEqual(w.stored(args, files), want);
   const small = n <= 1000;
   if (small) assert.deepEqual(w.evaluator(args, files), want);
   const ev = small ? time(() => w.evaluator(args, files), 1) : NaN;
   const runs = n >= 1000 ? 3 : 20;
-  const c = time(() => w.compiled(args, files), runs), k = time(() => w.core(args, files), runs), st = time(() => w.stored(args, files), runs), i = time(() => w.ideal(args, files), runs);
+  const k = time(() => w.core(args, files), runs), st = time(() => w.stored(args, files), runs), i = time(() => w.ideal(args, files), runs);
   const label = `${n} chapters, ${(files["book.md"].length / 1024).toFixed(0)} KB`;
-  console.log(`${label.padEnd(26)} ${Number.isNaN(ev) ? "(skipped)".padStart(10) : ms(ev)} ${ms(c)} ${ms(k)} ${ms(st)} ${ms(i)}  ${`${(c / i).toFixed(1)}×`.padStart(14)}  ${`${(k / i).toFixed(1)}×`.padStart(10)}  ${(st / i).toFixed(1)}×`);
+  console.log(`${label.padEnd(26)} ${Number.isNaN(ev) ? "(skipped)".padStart(10) : ms(ev)} ${ms(k)} ${ms(st)} ${ms(i)}  ${`${(k / i).toFixed(1)}×`.padStart(10)}  ${(st / i).toFixed(1)}×`);
 }

@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import { sized, source, ways, type Name } from "../gaps/machine.ts";
 
 const w = await ways();
-const all = (args: string[], files: Record<string, string>, others: Name[] = ["evaluator", "compiled", "core"]) => {
+const all = (args: string[], files: Record<string, string>, others: Name[] = ["evaluator", "core"]) => {
   const want = w.ideal(args, files);
   for (const way of others) assert.deepEqual(w[way](args, files), want, way);
   return want;
@@ -72,6 +72,6 @@ test("machine: its WebAssembly stores lists as trees, and agrees at a bigger siz
 test("machine: the step loop's lists as arrays beside the hash tables, and the same at a bigger size (C93)", () => {
   assert.deepEqual(w.chosen, ["Map as hash table", "Set as hash table", "List as array of List from profile, traced, run of, moved, pass one, labels of"]);
   const t = performance.now();
-  all(["p.asm"], { "p.asm": sized("primes", 20000) }, ["compiled"]);
+  all(["p.asm"], { "p.asm": sized("primes", 20000) }, ["core"]);
   assert.ok(performance.now() - t < 10000, "primes 20000 compiled in under 10 s (47.9 s as cons lists, under 1 s as trees)");
 });
