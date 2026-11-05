@@ -1810,7 +1810,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       const bt = (body as Extract<SExpr, { k: "closure" }>).t;
       const i = f.locals.push("i32") - 1;
       return { k: "let", i, value: { k: "rt", fn: `hpush:${e}`, args: cases, host: { t: "i32", partial: false } },
-        body: { k: "released", body: { k: "apply", fn: body, t: bt, args: [], tail: false, tmp: f.locals.push(bt) - 1 }, release: { k: "rt", fn: `hpop:${e}`, args: [], host: { t: "i32", partial: false } }, t } };
+        body: { k: "released", body: { k: "apply", fn: body, t: bt, args: [], tail: false, tmp: f.locals.push(bt) - 1 }, release: { k: "rt", fn: `hpop:${e}`, args: [], host: { t: "i32", partial: false } }, t, st: f.locals.push("i32") - 1 } };
     }
     return { k: "rt", fn: `handleOps:${e}${t === "i32" ? ":bool" : ""}`, args: [body, ...cases], host: { t, partial: true } };
   }
