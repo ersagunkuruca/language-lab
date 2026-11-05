@@ -103,6 +103,22 @@ export function digits(x: Real, n: number): string {
   return negative ? `−${text}` : text;
 }
 
+// Which of x and y is larger (L88e3), narrowing both until their
+// intervals come apart: −1 when x < y, 1 when x > y. Two Reals that are
+// equal never come apart, and no number of steps can tell them from two
+// that differ far down, so it narrows to at most 2⁻ᶠᵘᵉˡ and gives null if
+// they are still that close.
+export function compare(x: Real, y: Real, fuel: number): -1 | 1 | null {
+  const d = subtract(x, y);
+  for (let p = 0; ; p = Math.min(fuel, Math.max(8, 2 * p))) {
+    // |d − m/2ᵖ| < 2⁻ᵖ, so m ≥ 2 means d > 2⁻ᵖ, and m ≤ −2 means d < −2⁻ᵖ.
+    const m = approximate(d, p);
+    if (m >= 2n) return 1;
+    if (m <= -2n) return -1;
+    if (p >= fuel) return null;
+  }
+}
+
 // The interval x is in at precision p, as fractions (bottom 2ᵖ, or 1).
 export function interval(x: Real, p: number): [[bigint, bigint], [bigint, bigint]] {
   const m = approximate(x, p), d = p >= 0 ? 1n << BigInt(p) : 1n, k = p >= 0 ? 1n : 1n << BigInt(-p);

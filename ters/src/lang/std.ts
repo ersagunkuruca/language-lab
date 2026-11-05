@@ -1148,6 +1148,9 @@ export const REAL_OPS = {
   // top/bottom, which a literal at Real becomes, as at Algebraic.
   fraction: builtin("real.fraction", "real fraction", pure([int, int], real), (n: I.Int, d: I.Int) => realOf(0, [], n, d)),
   ofRational: builtin("real.ofRational", "as real", pure([rational], real), (r: { fields: I.Int[] }) => realOf(0, [], r.fields[0], r.fields[1])),
+  // a < b, narrowing both until they come apart, to at most 2⁻ᶠᵘᵉˡ (L88e3):
+  // no answer when they are still that close, which equal Reals always are.
+  less: choice("real.less", "real less than", [real, real, int], bool, (a: RealData, b: RealData, fuel: I.Int) => { const c = RL.compare(toReal(a), toReal(b), Number(fuel)); return c === null ? [] : [truth(c < 0)]; }),
   // π, exactly (L88e2): as many of its digits as are asked for.
   pi: builtin("real.pi", "real pi", pure([], real), () => realOf(4, [])),
   // x rounded to n decimals, right to within one in the last place.

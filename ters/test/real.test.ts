@@ -13,7 +13,7 @@ import { infer } from "../src/lang/infer.ts";
 import { makeRunner, type Value } from "../src/lang/run.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
-import { ARITH, REAL_OPS as RO } from "../src/lang/std.ts";
+import { ARITH, REAL_OPS as RO, FALSE, S, TRUE } from "../src/lang/std.ts";
 import { showType } from "../src/lang/types.ts";
 import type { Id } from "../src/model.ts";
 import { compile } from "../../compiler/src/compile.ts";
@@ -58,6 +58,18 @@ test("π to as many decimals as asked, and digits rounded within one in the last
   for (const p of [0, 10, 300]) assert.ok(R.approximate(R.subtract(R.multiply(R.pi(), R.pi()), R.multiply(R.pi(), R.pi())), p) ** 2n <= 4n);
 });
 
+test("comparisons narrow until they decide, or say they can't with the fuel given", () => {
+  const third = R.fraction(1n, 3n);
+  assert.equal(R.compare(R.pi(), R.fraction(22n, 7n), 64), -1);
+  assert.equal(R.compare(R.pi(), R.fraction(314159n, 100000n), 64), 1);
+  // They differ only at 2⁻¹⁰⁰: 64 bits can't tell, 128 can.
+  const near = R.add(third, R.fraction(1n, 1n << 100n));
+  assert.equal(R.compare(near, third, 64), null);
+  assert.equal(R.compare(near, third, 128), 1);
+  // Equal ones never come apart: no answer however much fuel.
+  assert.equal(R.compare(R.multiply(third, R.fraction(3n, 1n)), R.fraction(1n, 1n), 500), null);
+});
+
 function program() {
   const k = new Lang(LIBRARY.code);
   const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
@@ -67,6 +79,10 @@ function program() {
   def("to 0", () => k.call(RO.approximate, k.x(x), k.int(0)));
   def("to 20", () => k.call(RO.approximate, k.x(x), k.int(20)));
   def("to 100", () => k.call(RO.approximate, k.call(RO.neg, k.x(x)), k.int(100)));
+  // A comparison in a program (L88e3): π < 22/7, and 1/3 · 3 < 1 has no
+  // answer, so first gives its other, true (decided, it would be false).
+  def("below", () => k.call(S.first, k.thunk(() => k.call(RO.less, k.call(RO.pi), frac(22, 7), k.int(64))), k.thunk(() => k.x(FALSE))));
+  def("undecided", () => k.call(S.first, k.thunk(() => k.call(RO.less, k.call(ARITH.mul, frac(1, 3), frac(3, 1)), frac(1, 1), k.int(64))), k.thunk(() => k.x(TRUE))));
   // π and digits (L88e2): 2π to 30 decimals.
   def("two pi", () => k.call(RO.digits, k.call(ARITH.mul, k.lit(2), k.call(RO.pi)), k.int(30)));
   // The one + − · at Real, and a number written there (1/2 + x · x − 1).
@@ -74,7 +90,7 @@ function program() {
   const code = base(k.code), names = baseNames(k.names);
   return { code, names, info: infer(code, names, undefined, checkOptions) };
 }
-const NAMES = ["to 0", "to 20", "to 100", "with operators", "two pi"];
+const NAMES = ["to 0", "to 20", "to 100", "with operators", "two pi", "below", "undecided"];
 
 test("a Real's approximation in a program, evaluated and compiled", async () => {
   const p = program();
@@ -83,6 +99,7 @@ test("a Real's approximation in a program, evaluated and compiled", async () => 
   assert.equal(showType(p.info.schemes.get(at("x"))!.type, p.names), "Real");
   const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });
   assert.equal(r.value(at("two pi")), "6.283185307179586476925286766559");
+  assert.deepEqual([r.value(at("below")), r.value(at("undecided"))], [{ tag: TRUE, fields: [] }, { tag: TRUE, fields: [] }]);
   const got = NAMES.slice(0, 4).map((n) => BigInt(r.value(at(n)) as number | bigint));
   // 1/2 + 169/194481 − 1 = (169 − 97240.5·2)/388962
   assert.ok(within(13n, 441n, got[0], 0) && within(13n, 441n, got[1], 20) && within(-13n, 441n, got[2], 100) && within(2n * 169n - 194481n, 2n * 194481n, got[3], 40), String(got));

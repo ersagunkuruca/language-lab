@@ -155,8 +155,10 @@ real arithmetic.
    fraction or + − · of Reals, and `approximate(x, p)` gives an Int m with
    |x − m/2ᵖ| < 2⁻ᵖ, its parts asked for only the precision needed and the
    answers kept. Step e2 built: `real pi()` by Machin's formula, and
-   `real digits(x, n)` rounded within one in the last place. Next:
-   comparisons with fuel (e3).
+   `real digits(x, n)` rounded within one in the last place. Step e3
+   built: `real less than(a, b, fuel)`, narrowing until they come apart,
+   with no answer within 2⁻ᶠᵘᵉˡ. Left: e, exp, sin and log as Reals, and the
+   one < at Real carrying Diverge instead of fuel.
 
 ## Prior art
 
