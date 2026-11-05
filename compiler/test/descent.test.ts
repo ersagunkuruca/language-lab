@@ -82,16 +82,19 @@ test("calc's read expression, compiled, reads by descent with the evaluator's an
   }
 });
 
-// The reader written as a definition in the language (C110 s7a, reader.ts),
-// for the arms that don't start with the printer: it reads each line as
-// descent.ts does, in the evaluator and compiled to C.
-test("calc's reader, written as a definition, reads lines without an operator as descent does, in the evaluator and in C (C110 s7a)", { skip }, () => {
+// The reader written as a definition in the language (reader.ts): the
+// arms that don't start with the printer (C110 s7a), and its operators by
+// precedence climbing (s7b). It reads each line as descent.ts does, in the
+// evaluator and compiled to C.
+test("calc's reader, written as a definition, reads each line as descent does, in the evaluator and in C (C110 s7a, s7b)", { skip }, () => {
   const names = { ...Object.fromEntries(Object.entries(PRELUDE_DEFS).map(([n, d]) => [d, n])), ...p.pres.names };
   const w = writeReader(p.code, p.named("expression text"), names);
   const code = merge(w.code, p.code), all = { ...names, ...w.names };
   const info = infer(code, all, undefined, p.options);
   assert.deepEqual(info.errors.map((e) => e.message), []);
-  const lines = ["12", "x", "abc", "-2", "--x", "(-x)", "((1))", "-(-x)", "(x)", "-(12)", "", "-", "(1", "1)", "x1", "1x", "( 1)"];
+  const lines = ["12", "x", "abc", "-2", "--x", "(-x)", "((1))", "-(-x)", "(x)", "-(12)", "", "-", "(1", "1)", "x1", "1x", "( 1)",
+    "1 + 2", "1+2*x", "1 + 2 * 3", "(1 + 2) * 3", "1 - 2 - 3", "1 - (2 - 3)", "2 ^ 3 ^ 2", "(2 ^ 3) ^ 2", "-2 ^ 2", "-(1 + 2)", "a * (b + c) / d",
+    "1 + 2 * 3 - 4 / x ^ 2 + (y - 1) * -z", "((1 + 2)) * (3)", "2 ^ -3", "1 +", "(1 + 2", "1 2", "+", "1 + + 2", "(1 + 2))"];
   const rw = makeRunner(code, info, { print: () => {} });
   const want = lines.map((line) => { const v = descent(line, 0); return v === null ? "none" : shown(v); });
   const evaluated = lines.map((line) => [...rw.call(rw.value(w.line), line, 0)].map((v) => { const o = v as { tag: string; fields: Value[] }; return o.tag === "std.optional.some" ? shown(o.fields[0]) : "none"; })[0]);

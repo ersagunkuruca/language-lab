@@ -1,13 +1,14 @@
 // A printer's reader written as a definition in the language (C110 s7a,
 // GRAMMAR-DESCENT-2026-11-05.md "step 7"): what descent.ts does by walking
 // the printer's nodes for each line, written out once as code, so every
-// target can run it with the Text operations it already has. This step
-// writes the arms that don't start with the printer itself (calc's
-// literal, variable and negative, and parentheses); s7b adds the infix
-// loop.
+// target can run it with the Text operations it already has: the arms
+// that don't start with the printer itself (calc's literal, variable and
+// negative, and parentheses, s7a) as `read <printer> primary`, and the
+// infix arms by precedence climbing (s7b) as `read <printer> operators`.
 //
 // The reader, `read <printer>(text, at, given…, top…)`, gives
-// `some((at after, value))` or `none`: each arm tried in turn, its pieces
+// `some((at after, value))` or `none`: a primary, then the operators after
+// it. A primary is each arm tried in turn, its pieces
 // read left to right, each one's continuation written after it (so an arm
 // whose guard picks among ways tries each way with the rest of the arm
 // after it); then "(" with the whole printer read inside at the outermost
@@ -28,7 +29,7 @@ import { isUse } from "../model.ts";
 import { Lang } from "./dsl.ts";
 import { FALSE, INT_OPS, NONE, S, SOME, TEXT_OPS, TRUE, tupleVariant } from "./std.ts";
 import { firstSets } from "./first-sets.ts";
-import { Unsupported } from "./descent.ts";
+import { infixesOf, Unsupported } from "./descent.ts";
 import { INT } from "./types.ts";
 
 type Any = { id: Id; kind: string; target: Id; value: unknown; of?: Id; fn: Id; args: Id[]; params: Id[]; body: Id; scrutinee: Id; arms: Id[]; variant: Id; binds: (Id | null)[] };
@@ -49,13 +50,15 @@ export function writeReader(code: Code, printer: Id, names: Record<Id, string>):
   const body = top && node(top.body);
   if (!top || body?.kind !== "match") throw new Unsupported(`${named(printer)} isn't a printer`);
   const report = firstSets(code, printer, names);
-  // Arms that start with the printer itself are left out until s7b.
+  // Arms that start with the printer itself: infix operators, read by
+  // precedence climbing (descent.ts `Infix`, s7b).
   const left = new Set(report.leftRecursive);
+  const infixes = infixesOf(code, printer, names, report);
   const given = top.params.slice(1);
 
   const k = new Lang(code);
   const title = named(printer) || "printer";
-  const read = k.def(`read ${title}`), line = k.def(`read ${title} line`), run = k.def(`run of`), spaces = k.def(`spaces from`);
+  const read = k.def(`read ${title}`), primary = k.def(`read ${title} primary`), more = k.def(`read ${title} operators`), line = k.def(`read ${title} line`), run = k.def(`run of`), spaces = k.def(`spaces from`);
   const none = () => k.x(NONE);
   const some = (at: Id, v: Id) => k.call(SOME, k.call(tupleVariant(2), at, v));
   const plus = (a: Id, n: number) => k.call(INT_OPS.add, a, k.int(n));
@@ -97,9 +100,12 @@ export function writeReader(code: Code, printer: Id, names: Record<Id, string>):
     }
     if (n.kind === "call" && !isUse(n as never)) return k.call(copy(n.fn, env, inputs), ...n.args.map((a) => copy(a, env, inputs)));
     if (n.kind === "match") {
-      const arms = n.arms.map((a) => node(a)!);
-      if (arms.some((a) => a.binds.length || (a as unknown as { value?: Id }).value)) throw new Unsupported("copies a match with fields");
-      return k.match(copy(n.scrutinee, env, inputs), arms.map((a) => ({ variant: a.variant, names: [], body: () => copy(a.body, env, inputs) })));
+      const arms = n.arms.map((a) => node(a)! as Any & { value?: Id }), otherwise = (n as unknown as { otherwise?: Id | null }).otherwise;
+      const other = otherwise ? copy(otherwise, env, inputs) : undefined;
+      if (arms.some((a) => a.binds.length)) throw new Unsupported("copies a match with fields");
+      // A match on values (L164c): each arm a literal.
+      if (arms.some((a) => a.value)) return k.byValue(copy(n.scrutinee, env, inputs), arms.map((a) => [copy(a.value!, env, inputs), copy(a.body, env, inputs)]), other);
+      return k.match(copy(n.scrutinee, env, inputs), arms.map((a) => ({ variant: a.variant, names: [], body: () => copy(a.body, env, inputs) })), other);
     }
     throw new Unsupported(`copies a ${n.kind}`);
   };
@@ -185,7 +191,34 @@ export function writeReader(code: Code, printer: Id, names: Record<Id, string>):
     return go(0, inputs);
   };
 
-  k.define(read, k.fn(["text", "at", ...given.map((g) => named(g) || "given"), ...given.map((g) => `top ${named(g) || "given"}`)], (text, at, ...rest) => {
+  const params = ["text", "at", ...given.map((g) => named(g) || "given"), ...given.map((g) => `top ${named(g) || "given"}`)];
+  // The printer read from `at`: a primary, then the operators after it.
+  k.define(read, k.fn(params, (text, at, ...rest) =>
+    then(k.call(primary, text, at, ...rest), (a, x) => k.call(more, text, a, x, ...rest))));
+  // While the next operator needs no parentheses at this level (its arm's
+  // condition false), it takes x as its left operand and reads its right
+  // one at the level the printer gives it; then on from there. Otherwise
+  // x, as read.
+  k.define(more, k.fn(["text", "at", "left so far", ...params.slice(2)], (text, at, x, ...rest) => {
+    const ins = rest.slice(0, given.length), tops = rest.slice(given.length);
+    const ways = infixes.map((f) => k.let("at", k.call(spaces, text, at), (p) => f.ops.reduceRight<Id>((otherwise, op) =>
+      k.if(startsWith(text, p, k.lit(op), k.int([...op].length)), k.let(named(f.op) || "op", k.lit(op), (o) => {
+        const lets = (i: number, inputs: Map<Id, Id>): Id => i < f.lets.length
+          ? k.let(named(f.lets[i][0]) || "x", copy(f.lets[i][1], new Map(), inputs), (b) => lets(i + 1, new Map(inputs).set(f.lets[i][0], b)))
+          : k.if(f.cond ? copy(f.cond, new Map(), inputs) : k.x(FALSE), none(), (() => {
+            const env: Env = new Map(f.arm.binds.filter((b): b is Id => !!b && b !== f.left && b !== f.op).map((b) => [b, { unknown: "int" }]));
+            env.set(f.left, { b: x });
+            env.set(f.op, { b: o });
+            return piece(f.rest, text, at, env, inputs, tops, (end, e) => {
+              const fields = f.arm.binds.map((b) => { const sl = b ? e.get(b) : undefined; if (!sl || !("b" in sl)) throw new Unsupported(`${named(f.arm.variant)} doesn't read all its fields`); return k.x(sl.b); });
+              return k.call(more, text, end, k.call(f.arm.variant, ...fields), ...rest);
+            });
+          })());
+        return lets(0, new Map([...given.map((g, j) => [g, ins[j]] as const), [f.op, o] as const]));
+      }), otherwise), none())));
+    return [...ways, some(k.x(at), k.x(x))].reduceRight((r, w) => orElse(w, r));
+  }));
+  k.define(primary, k.fn(params, (text, at, ...rest) => {
     const ins = rest.slice(0, given.length), tops = rest.slice(given.length);
     const inputs = new Map(given.map((g, j) => [g, ins[j]] as const));
     const arms = body.arms.map((a) => node(a)!).filter((a) => !left.has(names[a.variant] ?? a.variant)).map((a) => {
