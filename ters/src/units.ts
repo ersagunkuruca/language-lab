@@ -11,7 +11,7 @@
 // isn't in scope.
 
 import type { Code, Id, Node } from "./model.ts";
-import { get, useTarget, isCall, isUse, bindsOf, isPublished, children } from "./model.ts";
+import { get, useTarget, isCall, isUse, bindsOf, isPublished, children, nodesWhere } from "./model.ts";
 
 // Angles are plain numbers, as in SI: a radian is a length over a length.
 export const BASE = ["m", "s", "kg", "A"] as const;
@@ -351,7 +351,7 @@ const declares = new WeakMap<Code, boolean>();
 const UNITLESS: Inference = { ok: true, conflicts: [], unit: () => undefined };
 export function infer(code: Code, defId: Id, extra: Constraint[] = []): Inference {
   let any = declares.get(code);
-  if (any === undefined) declares.set(code, (any = Object.values(code.nodes).some((n) => unitOf(n))));
+  if (any === undefined) declares.set(code, (any = nodesWhere(code, "has a unit", (n) => !!unitOf(n)).length > 0));
   if (!any && extra.every((c) => c.rhs.every((x) => x === 0))) return UNITLESS;
   const sys = new System();
   const conflicts: Inference["conflicts"] = [];
@@ -421,7 +421,9 @@ function conflictsWith(code: Code, d: Id, before?: UnitsBefore): Inference["conf
 // program was checked for units, and tumble's took minutes (inlining
 // calls 20 deep). A program that declares a unit sees a library
 // definition's units where it calls it.
-const declaresUnit = (code: Code) => Object.values(code.nodes).some((n) => unitOf(n) && !isPublished(n.id));
+// A pick (model.ts nodesWhere), so a program on the library's layer reads
+// the library's once and looks only at its own nodes (E253b).
+const declaresUnit = (code: Code) => nodesWhere(code, "declares a unit", (n) => !!unitOf(n) && !isPublished(n.id)).length > 0;
 
 export function unitProblems(code: Code, names: Record<Id, string> = {}, only?: Set<Id>, before?: UnitsBefore): { id: Id; message: string }[] {
   if (!(before ? before.anyUnit : declaresUnit(code))) return [];

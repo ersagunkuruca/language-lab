@@ -147,6 +147,27 @@ itself, its own fold over the algebra's table, has the prelude's masks
 own code, with no name for it. The prelude's operations are still read by
 their names (faster); step 4 is left.
 
+**L203c, built (step 4, first half).** The geometric, outer and inner
+products, the reverse and the involution are read from their own code,
+not by name. The outer and inner products build their table with
+`clifford table where(squares, basis, wanted)`, so the reading runs a
+call when every input is known (a function written in place counts when
+it reads nothing around it), the callee's type says it is pure, and it
+isn't one that may not stop; the table is then known and step 2's fold
+reads it. A call's inputs are read once, and a library call given no
+function is kept by what its inputs are, so reading through the code is
+faster than the names were (Constructions' masks 894 ms to 192 ms).
+Bounce, Spacetime and Constructions compile to the same JavaScript.
+Still read by name: the duals, the regressive product and the versor
+inverse, whose code finds a blade's element in the known list or checks
+a number, which the reading doesn't follow yet (it gives every part in
+PGA); and, because their rules are sharper than their code, the sandwich
+and the reflection (they keep grades, a cancellation a fold over the
+table can't see), the projection, the exponential (a closure under the
+product) and `part` and `with part` (a blade from literal vectors). Left
+of step 4: those, and masks over any record of Float64s, for a library
+with no `Algebra`.
+
 ## In the compiler (L43c)
 
 `valueMasks` (grades.ts) works out each definition's input masks from all
