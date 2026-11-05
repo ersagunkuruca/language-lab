@@ -23,7 +23,7 @@ const time = (what: string, n: number, f: () => unknown) => {
   const p = loadProgram("examples/spacetime");
   const info = infer(p.code, p.pres.names);
   const id = (n: string) => p.code.defs.find((d) => p.pres.names[d] === n)!;
-  const r = makeRunner(p.code, info, { print: () => {}, names: p.pres.names, jets });
+  const r = makeRunner(p.code, info, { print: () => {}, names: p.pres.names, libraryHosts: jets });
   const F = first(r.call(r.value(id("field")), 0, 0.5, 0, 0, 0, 1) as Iterable<Value>)!;
   const reps = Number(process.env.REPS ?? 1);
   time(`Spacetime's charge path, 400 steps${reps > 1 ? ` × ${reps}` : ""}`, reps, () => { for (let i = 0; i < reps; i++) first(r.call(r.value(id("motion")), F, 400, 0.06) as Iterable<Value>); });
@@ -38,6 +38,6 @@ const time = (what: string, n: number, f: () => unknown) => {
   for (let i = 0; i < N; i++) e = k.call(id("step"), k.x(solid), e);
   k.define(bench, e);
   const code = merge(p.code, k.code), names = { ...p.pres.names, ...k.names };
-  const r = makeRunner(code, infer(code, names), { print: () => {}, names, jets });
+  const r = makeRunner(code, infer(code, names), { print: () => {}, names, libraryHosts: jets });
   time(`Bounce, ${N} solid steps`, N, () => r.value(bench));
 }

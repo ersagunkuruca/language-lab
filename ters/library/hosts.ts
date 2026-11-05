@@ -1,20 +1,21 @@
-// Host ways for library definitions the evaluator spends its time in
-// (BACKLOG L118, a faster evaluator). A jet is a definition of the
-// language run by native code that computes exactly what the definition
-// says, operation for operation in the same order, so its answers are the
-// same bits; the definition stays the meaning, and anything the jet
-// doesn't take (a part that isn't a Float64) runs the definition itself.
-// test/jets.test.ts checks each jet against its definition, and that the
-// library's id is still the one named here: a changed definition has a new
-// hash, so its jet stops applying until it is written again.
+// The library's host ways for its pure definitions (L206): native code
+// that computes exactly what a definition says, operation for operation in
+// the same order, so its answers are the same bits. The definition stays
+// the meaning, and anything the host way doesn't take (a part that isn't
+// a Float64) runs the definition itself. Each is declared here by the
+// definition's name, beside the library's other host code (collation.ts,
+// graphemes.ts); library.ts finds the definition, and test/jets.test.ts
+// checks each against it. A changed definition keeps its host way only
+// while that test passes.
 //
 // Prior art: Urbit's jets (native code standing in for Nock formulas,
-// recognised by hash, checked against them); Unison's builtins by hash.
-// CREDITS.md.
+// checked against them); Unison's builtins; Gleam's `@external` beside a
+// definition. CREDITS.md.
 
-import type { Id } from "../model.ts";
-import type { Value } from "./run.ts";
-import { CONS, NIL } from "./std.ts";
+import type { PureHost } from "../src/lang/hosts.ts";
+import type { Value } from "../src/lang/run.ts";
+import { CONS, NIL } from "../src/lang/std.ts";
+import type { Id } from "../src/model.ts";
 
 type Data = { tag: Id; fields: Value[] };
 const nums = (v: Value): number[] | null => {
@@ -24,12 +25,11 @@ const nums = (v: Value): number[] | null => {
   return f as number[];
 };
 
-// The prelude's `table product` (ALGEBRA-TABLES.md): a fold over the
+// `table product` (ALGEBRA-TABLES.md): a fold over the
 // table's lines, each line `times(e, f, g)` adding (a along e)·(b along f)
 // times g to the rest's sum, where x along e is x and e multiplied part by
 // part and added left to right. The fold builds the sum from the last line
 // back, starting from a's shape with every part 0.
-export const TABLE_PRODUCT = "@ilortmfvkbjt9bs8q02goksirf";
 // A table read once: values don't change, so each line's e, f and g are
 // checked and kept by the table's identity.
 type Line = { e: number[]; f: number[]; g: Data; gs: number[] };
@@ -69,9 +69,9 @@ function tableProduct(table: Value, a: Value, b: Value): Value | null {
   return acc;
 }
 
-// By definition id: given the definition's own value, the value to run.
-export const JETS: Record<Id, (self: (...xs: Value[]) => Iterable<Value>) => (...xs: Value[]) => Iterable<Value>> = {
-  [TABLE_PRODUCT]: (self) => (table, a, b) => {
+// By the definition's name in the library.
+export const LIBRARY_HOSTS: Record<string, PureHost> = {
+  "table product": (self) => (table, a, b) => {
     const v = tableProduct(table, a, b);
     return v === null ? self(table, a, b) : [v];
   },

@@ -16,6 +16,8 @@ import { adopt, library, type Module } from "./modules.ts";
 import { checkOnce } from "./infer.ts";
 import { std, stdNames } from "./std.ts";
 import { NOTES } from "./notes.ts";
+import { declarePureHosts } from "./hosts.ts";
+import { LIBRARY_HOSTS } from "../../library/hosts.ts";
 
 export const PRELUDE = prelude0 as unknown as Module;
 export const VECTORS = vectors0 as unknown as Module;
@@ -51,6 +53,8 @@ const lib = library(CORE, layer<Names>(preludeNames, stdNames), MODULES.filter((
 export const LIBRARY = { ...lib, comments: { ...NOTES, ...lib.comments }, reps: TREES.representations ?? [] };
 // Saved uses move to today's shape knowing the library's ports (L211g).
 shapeHooks.usesGiveTheirPorts = (nodes) => usesGiveTheirPorts(nodes, LIBRARY.code.nodes);
+// The library's host ways for its pure definitions, by id (L206).
+export const UNHOSTED = declarePureHosts(LIBRARY_HOSTS, LIBRARY.code.defs, LIBRARY.names);
 // Checked once, under every program that leaves it as it is (L216); and
 // so is the copy the compilers read, its uses with no body filled (C161).
 checkOnce(LIBRARY.code, LIBRARY.names, [fillOnce(LIBRARY.code)]);
