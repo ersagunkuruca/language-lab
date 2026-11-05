@@ -192,11 +192,22 @@ function parenthesized(e) {
   return vals[0];
 }
 
-function whole(ts) {
-  const e = expression(ts);
-  if (rest !== NIL) abort("expected an operator or the end of the line, got " + describe(rest));
-  return e;
+// The program reads a line with `read expression`, the printer run
+// backwards (C110 s5): a text it can't read is one error, whatever the
+// hand parser below would have said about it.
+function whole(text) {
+  try {
+    const e = expression(tokens(text));
+    if (rest !== NIL) abort("expected an operator or the end of the line, got " + describe(rest));
+    return e;
+  } catch (e) {
+    if (e instanceof Abort) abort("not an expression: " + text);
+    throw e;
+  }
 }
+// The spaces around a text taken off, as `spaced` run backwards does.
+const stripped = (t) => t.replace(/^ +| +$/g, "");
+const after = (line, m) => stripped(line.slice(line.indexOf(m) + 1));
 
 function runLine(line, bs) {
   const ts = tokens(line);
@@ -207,12 +218,13 @@ function runLine(line, bs) {
   if (t.tag === WORD && t.fields[0] === "let") {
     if (more === NIL || more[0].tag !== WORD) abort("let needs a name, got " + describe(more));
     const name = more[0].fields[0];
-    const v = evaluate(whole(expect("=", more[1])), bs);
+    expect("=", more[1]);
+    const v = evaluate(whole(after(line, "=")), bs);
     print(name + " = " + String(v));
     return [{ tag: 0, fields: [name, v] }, bs];
   }
-  if (mark(t, "?")) { print(parenthesized(whole(more))); return bs; }
-  print(String(evaluate(whole(ts), bs)));
+  if (mark(t, "?")) { print(parenthesized(whole(after(line, "?")))); return bs; }
+  print(String(evaluate(whole(stripped(line)), bs)));
   return bs;
 }
 

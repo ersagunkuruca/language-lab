@@ -322,6 +322,8 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
       const digits = end;
       while (end < text.length && DIGIT.test(text[end])) end++;
       if (end === digits) { expect(digits, "a whole number"); return null; }
+      // show writes no leading zeros and no "-0": "007" reads only its "0".
+      if (text[digits] === "0") { end = digits + 1; if (digits > at) { expect(at, "a whole number"); return null; } }
       const v = Number(text.slice(at, end));
       return [end, new Map(env).set(b, Number.isSafeInteger(v) ? v : BigInt(text.slice(at, end)))];
     }
