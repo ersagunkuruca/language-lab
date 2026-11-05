@@ -53185,6 +53185,70 @@
           "@k8mice5ebistb8hbuqbvhrm8hj:3"
         ]
       },
+      "@la3u29sp8b0rqu6kv7gkpi8ar8": {
+        "id": "@la3u29sp8b0rqu6kv7gkpi8ar8",
+        "kind": "def",
+        "body": "@la3u29sp8b0rqu6kv7gkpi8ar8:1"
+      },
+      "@la3u29sp8b0rqu6kv7gkpi8ar8:3": {
+        "id": "@la3u29sp8b0rqu6kv7gkpi8ar8:3",
+        "kind": "ref",
+        "target": "builtin.real.add"
+      },
+      "@la3u29sp8b0rqu6kv7gkpi8ar8:4": {
+        "id": "@la3u29sp8b0rqu6kv7gkpi8ar8:4",
+        "kind": "ref",
+        "target": "builtin.real.sub"
+      },
+      "@la3u29sp8b0rqu6kv7gkpi8ar8:5": {
+        "id": "@la3u29sp8b0rqu6kv7gkpi8ar8:5",
+        "kind": "ref",
+        "target": "builtin.real.mul"
+      },
+      "@la3u29sp8b0rqu6kv7gkpi8ar8:6": {
+        "id": "@la3u29sp8b0rqu6kv7gkpi8ar8:6",
+        "kind": "ref",
+        "target": "builtin.real.neg"
+      },
+      "@la3u29sp8b0rqu6kv7gkpi8ar8:2": {
+        "id": "@la3u29sp8b0rqu6kv7gkpi8ar8:2",
+        "kind": "ref",
+        "target": "std.arithmetic.arithmetic"
+      },
+      "@la3u29sp8b0rqu6kv7gkpi8ar8:1": {
+        "id": "@la3u29sp8b0rqu6kv7gkpi8ar8:1",
+        "kind": "call",
+        "fn": "@la3u29sp8b0rqu6kv7gkpi8ar8:2",
+        "args": [
+          "@la3u29sp8b0rqu6kv7gkpi8ar8:3",
+          "@la3u29sp8b0rqu6kv7gkpi8ar8:4",
+          "@la3u29sp8b0rqu6kv7gkpi8ar8:5",
+          "@la3u29sp8b0rqu6kv7gkpi8ar8:6"
+        ]
+      },
+      "@n8ior373arqngll2f4m2rr0c96": {
+        "id": "@n8ior373arqngll2f4m2rr0c96",
+        "kind": "def",
+        "body": "@n8ior373arqngll2f4m2rr0c96:1"
+      },
+      "@n8ior373arqngll2f4m2rr0c96:3": {
+        "id": "@n8ior373arqngll2f4m2rr0c96:3",
+        "kind": "ref",
+        "target": "builtin.real.fraction"
+      },
+      "@n8ior373arqngll2f4m2rr0c96:2": {
+        "id": "@n8ior373arqngll2f4m2rr0c96:2",
+        "kind": "ref",
+        "target": "std.literal.literal"
+      },
+      "@n8ior373arqngll2f4m2rr0c96:1": {
+        "id": "@n8ior373arqngll2f4m2rr0c96:1",
+        "kind": "call",
+        "fn": "@n8ior373arqngll2f4m2rr0c96:2",
+        "args": [
+          "@n8ior373arqngll2f4m2rr0c96:3"
+        ]
+      },
       "@r9ictm8koh1973tk5o5uf4b73e": {
         "id": "@r9ictm8koh1973tk5o5uf4b73e",
         "kind": "def",
@@ -121658,6 +121722,8 @@
       "@lqb89d5scvmjsf57qfmaor4239",
       "@g9q5jlp5kg108qsl8loqhv15gc",
       "@k8mice5ebistb8hbuqbvhrm8hj",
+      "@la3u29sp8b0rqu6kv7gkpi8ar8",
+      "@n8ior373arqngll2f4m2rr0c96",
       "@8996sj4dfpsvpqdvasnr3cgmsp",
       "@rbst2omgv93upbl5olfb7g36u8",
       "@0llqo3hc2frri343kejl2p4c4k",
@@ -140390,6 +140456,38 @@
       },
       "plain": []
     },
+    "@la3u29sp8b0rqu6kv7gkpi8ar8": {
+      "vars": [],
+      "rows": [],
+      "type": {
+        "t": "con",
+        "id": "std.arithmetic",
+        "args": [
+          {
+            "t": "con",
+            "id": "std.real",
+            "args": []
+          }
+        ]
+      },
+      "plain": []
+    },
+    "@n8ior373arqngll2f4m2rr0c96": {
+      "vars": [],
+      "rows": [],
+      "type": {
+        "t": "con",
+        "id": "std.literal",
+        "args": [
+          {
+            "t": "con",
+            "id": "std.real",
+            "args": []
+          }
+        ]
+      },
+      "plain": []
+    },
     "@8996sj4dfpsvpqdvasnr3cgmsp": {
       "vars": [
         0
@@ -143819,6 +143917,8 @@
     "@lqb89d5scvmjsf57qfmaor4239": "arithmetic at word64",
     "@g9q5jlp5kg108qsl8loqhv15gc": "ordered at word64",
     "@k8mice5ebistb8hbuqbvhrm8hj": "ordered at text",
+    "@la3u29sp8b0rqu6kv7gkpi8ar8": "arithmetic at real",
+    "@n8ior373arqngll2f4m2rr0c96": "literal at real",
     "@r9ictm8koh1973tk5o5uf4b73e": "division at float64",
     "@o2fg7r2d8v2ifq43pvkbc7lbit": "division at rational",
     "@8c7bd814ualjc5m7q21q3ls2uq": "division at complex",
@@ -145820,6 +145920,8 @@
     "@lqb89d5scvmjsf57qfmaor4239": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
     "@g9q5jlp5kg108qsl8loqhv15gc": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
     "@k8mice5ebistb8hbuqbvhrm8hj": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
+    "@la3u29sp8b0rqu6kv7gkpi8ar8": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
+    "@n8ior373arqngll2f4m2rr0c96": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
     "@8996sj4dfpsvpqdvasnr3cgmsp": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
     "@e9fsfaqqmkbqi45m9thp36ep42": "The same ticket with what it gives forgotten (a Ticket Unit), so tickets of different types can go in one list for any of.",
     "@s80979s95urnfent649ge9ikvu": "A ticket for whichever of these tickets is ready first: await(any of(tickets)) gives its position, from 0.",

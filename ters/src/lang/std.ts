@@ -13,6 +13,7 @@ import { MASK_TYPES, NAMED_ROWS, ARRAY, TABLE, HASH_SET, CELL, PATH, JOB, CELLS,
 import * as I from "./int.ts";
 import * as T from "./text.ts";
 import * as A from "./algebraic.ts";
+import * as RL from "./real.ts";
 
 const nodes: Node[] = [];
 const node = (n: Node) => (nodes.push(n), n.id);
@@ -238,6 +239,14 @@ export const ALGEBRAIC = typedef("std.algebraic", "Algebraic", [], [
   ["algebraic", [["polynomial", () => tref(LIST, tref(INT))], ["root", () => tref(INT)]]],
 ]);
 export const ALGEBRAIC_V = "std.algebraic.algebraic";
+// Real numbers as intervals that narrow on demand (EXACT-REALS.md step 4,
+// BACKLOG L88e1): a Real is held by how it was made, a fraction (op 0,
+// top and bottom) or + (1), −x (2) or · (3) of its parts, and gives an
+// approximation as close as asked (src/lang/real.ts, the builtins below).
+export const REAL = typedef("std.real", "Real", [], [
+  ["real", [["op", () => tref(INT)], ["parts", () => tref(LIST, tref("std.real"))], ["top", () => tref(INT)], ["bottom", () => tref(INT)]]],
+]);
+export const REAL_V = "std.real.real";
 // Trig, the first interface (INTERFACES.md, BACKLOG L40f): sin, cos, tan,
 // exp and log at any type that has them. Float64's implementation is the
 // prelude's `trig at float64`, its builtins; dual numbers are next. A use
@@ -1113,6 +1122,33 @@ export const ALGEBRAIC_OPS = {
   show: builtin("algebraic.show", "show", pure([alg], str), (a: { fields: unknown[] }) => A.show(toAlg(a))),
 };
 
+// Real's operations (src/lang/real.ts): each makes the Real it is, and
+// `approximate` works one out as far as asked, keeping what it worked out
+// with the value.
+const real: Type = { t: "con", id: "std.real", args: [] };
+type RealData = { tag: Id; fields: unknown[] };
+const reals = new WeakMap<object, RL.Real>();
+export function toReal(v: RealData): RL.Real {
+  let r = reals.get(v);
+  if (r) return r;
+  const [op, parts, top, bottom] = v.fields as [I.Int, RealData, I.Int, I.Int];
+  const ps = itemsOf(parts as { tag: Id; fields: unknown[] }).map((p) => toReal(p as RealData));
+  r = Number(op) === 0 ? RL.fraction(BigInt(top), BigInt(bottom)) : Number(op) === 1 ? RL.add(ps[0], ps[1]) : Number(op) === 2 ? RL.negate(ps[0]) : RL.multiply(ps[0], ps[1]);
+  reals.set(v, r);
+  return r;
+}
+const realOf = (op: number, parts: RealData[], top: I.Int = 0, bottom: I.Int = 1): RealData => ({ tag: REAL_V, fields: [op, listOf(parts), top, bottom] });
+export const REAL_OPS = {
+  add: builtin("real.add", "add", pure([real, real], real), (a: RealData, b: RealData) => realOf(1, [a, b])),
+  sub: builtin("real.sub", "subtract", pure([real, real], real), (a: RealData, b: RealData) => realOf(1, [a, realOf(2, [b])])),
+  mul: builtin("real.mul", "multiply", pure([real, real], real), (a: RealData, b: RealData) => realOf(3, [a, b])),
+  neg: builtin("real.neg", "negate", pure([real], real), (a: RealData) => realOf(2, [a])),
+  // top/bottom, which a literal at Real becomes, as at Algebraic.
+  fraction: builtin("real.fraction", "real fraction", pure([int, int], real), (n: I.Int, d: I.Int) => realOf(0, [], n, d)),
+  ofRational: builtin("real.ofRational", "as real", pure([rational], real), (r: { fields: I.Int[] }) => realOf(0, [], r.fields[0], r.fields[1])),
+  // An Int m with |x − m/2ᵖ| < 2⁻ᵖ: x is between (m − 1)/2ᵖ and (m + 1)/2ᵖ.
+  approximate: builtin("real.approximate", "approximate", pure([real, int], int), (x: RealData, p: I.Int) => I.norm(RL.approximate(toReal(x), Number(p)))),
+};
 
 // show for any plain value: [1, 2, 3], circle(2), "text". Cases print
 // with the program's names, which the runtime is given (names are
@@ -1563,7 +1599,7 @@ export function onTodaysIds<T>(x: T, from = (x as { shape?: unknown } | null)?.s
 }
 export const tupleSize = (id: Id): number | null => { const m = /^std\.tuple(\d)$/.exec(id); return m ? Number(m[1]) : null; };
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, MATRIX, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS, WORD16, TENSOR, BYTES, JSON_TYPE, DATE, TIME_OF_DAY, INSTANT, EMBEDDING, REQUEST, RESPONSE, LOCALE, SETTINGS, RELEASE, OPEN_FILE, KEPT_FILES, LITERAL] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, MATRIX, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS, WORD16, TENSOR, BYTES, JSON_TYPE, DATE, TIME_OF_DAY, INSTANT, EMBEDDING, REQUEST, RESPONSE, LOCALE, SETTINGS, RELEASE, OPEN_FILE, KEPT_FILES, LITERAL, REAL] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one
