@@ -172,3 +172,27 @@ test("a byte array's items cross to the world as a copy, with no list made", () 
   assert.equal(items["f"], null);
   assert.deepEqual(JSON.parse(JSON.stringify(items)), { tag: CONS, fields: [5, { tag: CONS, fields: [6, { tag: CONS, fields: [7, { tag: NIL, fields: [] }] }] }] });
 });
+
+// A byte a slot (L189f1): an array of Ints all from 0 to 255 is kept in a
+// Uint8Array, in the evaluator and compiled JS alike (both run std's
+// arrays), and is the same array as one kept an Int a slot: an item that
+// isn't a byte widens it, a push copies it, older versions stay.
+test("an array of bytes is kept a byte a slot, and stays the same array when changed", () => {
+  const of = STD_IMPL[ARRAY_OPS.of], replace = STD_IMPL[ARRAY_OPS.replaceAt], push = STD_IMPL[ARRAY_OPS.push], front = STD_IMPL[ARRAY_OPS.pushFront];
+  const list = (xs: unknown[]) => xs.reduceRight((rest: unknown, x) => ({ tag: CONS, fields: [x, rest] }), { tag: NIL, fields: [] });
+  const xs = Array.from({ length: 20 }, (_, i) => i * 13);
+  const a = of(list(xs)) as ArrayView;
+  assert.ok(a.buf.items instanceof Uint8Array);
+  assert.ok(!((of(list([...xs, 256])) as ArrayView).buf.items instanceof Uint8Array));
+  assert.ok(!((of(list([...xs, -1])) as ArrayView).buf.items instanceof Uint8Array));
+  const from = of(new ItemsList(Uint8Array.from(xs), 2)) as ArrayView;
+  assert.ok(from.buf.items instanceof Uint8Array);
+  assert.deepEqual(from.fields, [18, ...xs.slice(2)]);
+  const b = replace(a, 3, 1000) as ArrayView, c = push(a, 300) as ArrayView, d = front(a, 7) as ArrayView;
+  assert.deepEqual(b.fields, [20, ...xs.slice(0, 3), 1000, ...xs.slice(4)]);
+  assert.deepEqual(c.fields, [21, ...xs, 300]);
+  assert.deepEqual(d.fields, [21, 7, ...xs]);
+  assert.deepEqual((replace(a, 0, 5) as ArrayView).fields, [20, 5, ...xs.slice(1)]);
+  assert.deepEqual(a.fields, [20, ...xs]);
+  assert.deepEqual(plainBytes({ tag: "x", fields: [STD_IMPL[ARRAY_OPS.items](a)] }), Uint8Array.from(xs));
+});
