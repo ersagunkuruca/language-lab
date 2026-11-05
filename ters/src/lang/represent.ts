@@ -171,6 +171,20 @@ function headRefs(code: Code): Set<Id> {
 }
 const jobOf = (code: Code, n: NodeOf<"ref">) => (headRefs(code).has(n.id) ? HEAD + n.target : n.target);
 
+// Which variant's field each binder of a match arm over T is: once per
+// program and type, as headRefs is (rep-groups.ts asks for every
+// definition's jobs, and this walked the whole library each time).
+const fieldsRead = new WeakMap<Code, Map<Id, Map<Id, [Id, number]>>>();
+function fieldsOf(code: Code, t: Id, variants: Set<Id>): Map<Id, [Id, number]> {
+  let byType = fieldsRead.get(code);
+  if (!byType) fieldsRead.set(code, (byType = new Map()));
+  let r = byType.get(t);
+  if (r) return r;
+  byType.set(t, (r = new Map()));
+  for (const n of Object.values(code.nodes)) if (n.kind === "arm" && variants.has(n.variant)) n.binds.forEach((b, i) => r!.set(b, [n.variant, i]));
+  return r;
+}
+
 export function uses(code: Code, entry: Id, reps: Representation[]): string[] {
   const t = reps[0].of;
   const variants = new Set(variantsOf(code, t));
@@ -192,9 +206,7 @@ export function uses(code: Code, entry: Id, reps: Representation[]): string[] {
       }
     }
   };
-  // Which variant's field each binder of a match arm over T is.
-  const fieldOf = new Map<Id, [Id, number]>();
-  for (const n of Object.values(code.nodes)) if (n.kind === "arm" && variants.has(n.variant)) n.binds.forEach((b, i) => fieldOf.set(b, [n.variant, i]));
+  const fieldOf = fieldsOf(code, t, variants);
   // A function some representation implements is one job: don't look
   // inside it, since its body is what gets replaced (`add item` builds a
   // `set of`, which the tree never does).
