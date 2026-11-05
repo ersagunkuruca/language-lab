@@ -22,11 +22,6 @@ import { runTests } from "../src/lang/tests.ts";
 import { CHOICE, DIVERGE, NUMBER, type Type } from "../src/lang/types.ts";
 import { sweep } from "./helpers.ts";
 
-// Their forward runs at the law's Float64 small value 1e9 build a list of
-// a billion (`range(1e9)`, T7e14i): left out until the law's inputs for
-// a function that counts up to its input stay small.
-const SKIP = new Set(["numbers/nat", "queens/queens"]);
-
 const examples = readdirSync(join(root, "examples")).filter((e) => existsSync(join(root, "examples", e, "code.json"))).sort();
 
 for (const ex of sweep(examples)) {
@@ -51,7 +46,7 @@ for (const ex of sweep(examples)) {
     // The program's own pure one-input functions, by what they give.
     const fns = own.filter((d) => {
       const t = info.typeOf.get(d);
-      return t?.t === "fn" && t.params.length === 1 && !t.eff.effs.some((e) => e !== CHOICE && e !== DIVERGE) && !info.divergent.has(d) && !SKIP.has(`${ex}/${names[d]}`);
+      return t?.t === "fn" && t.params.length === 1 && !t.eff.effs.some((e) => e !== CHOICE && e !== DIVERGE) && !info.divergent.has(d);
     });
     const floats = (d: Id) => { const r = info.subst.zonk((info.typeOf.get(d) as Type & { t: "fn" }).ret); return r.t === "con" && r.id === NUMBER; };
     const results = [

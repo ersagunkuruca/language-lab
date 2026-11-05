@@ -87,7 +87,7 @@ test("examples.json: the old form reads as inputs, the new form keeps answers", 
 
 test("small values: smallest first, and records from their fields", () => {
   const p = program();
-  assert.deepEqual(smallValues({ t: "con", id: NUMBER, args: [] }, p.code), [0, 1, -1, 0.5, 1e-9, 1e9]);
+  assert.deepEqual(smallValues({ t: "con", id: NUMBER, args: [] }, p.code), [0, 1, -1, 0.5, 1e-9, 3]);
   const lists = smallValues({ t: "con", id: LIST, args: [{ t: "con", id: INT, args: [] }] }, p.code)!;
   assert.equal(lists.length, 1 + 3 + 9 + 27);
   const points = smallValues({ t: "con", id: p.P.def, args: [] }, p.code)!;
