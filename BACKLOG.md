@@ -21,7 +21,7 @@ language, then more targets or speed (WORKFLOW.md "Priority").
 | lane | thread | next, in order |
 |---|---|---|
 | E Editor | "Editor lane" | E237 (after L204), E103 (after infer.ts's idea) |
-| C Compiler and targets | "Compiler lane" | C30, C93 |
+| C Compiler and targets | "Compiler lane" | C180, C181, C30, C93 |
 | L Language and library | "Language lane" | next by priority from the table below |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
@@ -87,11 +87,16 @@ New targets and speed rank below every language item (Ersagun,
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| C180 | A handler of a program's own effect with a case for the normal finish (L57) through the core IR: today it is refused, so main runs only in the evaluator, and Save page and `lab compile` refuse it. Example: ters/test/await.test.ts's "a handler that waits with a case for the normal finish" compiled, as the evaluator gives it (handler-finish.test, branch-effects.test and release.test pin the same refusal) | Ersagun 2026-11-05 20:00 (what compile.ts did that the core IR doesn't yet) | P1 | M | |
+| C181 | Waiting (`await`, a fetch) inside a fold or `with fuel` through the core IR: refused today ("waits inside count", "waits inside with fuel"). Example: core-js.test.ts's `unlowered()` program compiled by `lab compile`, printing what `lab run` prints | Ersagun 2026-11-05 20:00 (what compile.ts did that the core IR doesn't yet) | P1 | M | |
+| C182 | Handling Abort around a search with several answers, and `start fetch`, through the core IR on JavaScript: refused today. Example: effects.test.ts's "an abort under Choice cuts the alternatives" and start-fetch.test.ts's programs compiled, their `gap` options gone | Ersagun 2026-11-05 20:00 (what compile.ts did that the core IR doesn't yet) | P2 | M | |
+| C183 | A program's own handler of the world's Console or Files (L145), and Random handled beside `seeded`, through the core IR: refused today (no example program uses them yet). Example: a main that answers `read line` from a list, compiled, as the evaluator gives it | Ersagun 2026-11-05 20:00 (what compile.ts did that the core IR doesn't yet) | P2 | S | |
 
 ### Speed of compiled code
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| C184 | The pedal's sound from the core IR as quick as compile.ts made it: 0.063 ms a block now (42× real time), compile.ts's last 0.036 ms, by hand 0.015 ms. Example: compiler/gaps/bench-audio.ts's core IR row at 0.036 ms a block or less | Ersagun 2026-11-05 20:00 (what compile.ts did that the core IR doesn't yet) | P3 | S | |
 | C175 | Tidy the scalar printer's output (WGSL, and the core IR's other printers that share it). Example: raymarch's WGSL (511 lines). Copies, negations and unread lets done (scalar.ts `tidied`: 511 to 460 lines). Left: share what the gradient's per-axis copies have in common (`sin(0.7 · t)` is computed 20 times); build only the parts of `Pga_2` that are read; work out the time-only motor once per frame, not per pixel | Ersagun 2026-11-05 12:38 (Learn thread: the ray marcher) | P2 | M | |
 | C93 | Lists read and written by position stay cons lists (primes 20000 compiled 47.9 s against 43 ms ideal); steps 1 to 3, (c) and s1 to s3b done (DONE.md). Example: machine's primes 20000 on JavaScript, aim 0.11 s (155 ms now on the core IR, split lists); done when it gets there. Left: (s4) that, and a cost for the split against the trees. WebAssembly and C keep trees until arrays are replaced in place there (C56) | [GAPS round 9](docs/reports/GAPS.md#round-9-machine-an-assembler-and-interpreter-on-every-target-2026-11-02) M1 | P3 | L | |
 | C30 | Lists as arrays, chosen from use (REPRESENTATIONS.md); the JavaScript stages, Ersagun's two-ended arrays on every target, and s1 to s2c2 done (DONE.md). Example: chapters' word count stored as arrays on WebAssembly and C as on JavaScript (s3); done when it runs there no slower than its cons lists. Beyond it, a row if it earns one: block-in-array (s4), measured first | GAPS.md round 4 P4 | P2 | L | |
