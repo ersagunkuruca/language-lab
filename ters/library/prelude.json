@@ -88833,6 +88833,93 @@
         ],
         "body": "@g4uh0bhreupa92v4h56ipb6grb:3"
       },
+      "@9eqeok61gb74r2d0kqctjock35": {
+        "id": "@9eqeok61gb74r2d0kqctjock35",
+        "kind": "def",
+        "body": "@9eqeok61gb74r2d0kqctjock35:1"
+      },
+      "@9eqeok61gb74r2d0kqctjock35:2": {
+        "id": "@9eqeok61gb74r2d0kqctjock35:2",
+        "kind": "binder"
+      },
+      "@9eqeok61gb74r2d0kqctjock35:3": {
+        "id": "@9eqeok61gb74r2d0kqctjock35:3",
+        "kind": "binder"
+      },
+      "@9eqeok61gb74r2d0kqctjock35:4": {
+        "id": "@9eqeok61gb74r2d0kqctjock35:4",
+        "kind": "binder"
+      },
+      "@9eqeok61gb74r2d0kqctjock35:6": {
+        "id": "@9eqeok61gb74r2d0kqctjock35:6",
+        "kind": "ref",
+        "target": "@9eqeok61gb74r2d0kqctjock35:2"
+      },
+      "@9eqeok61gb74r2d0kqctjock35:8": {
+        "id": "@9eqeok61gb74r2d0kqctjock35:8",
+        "kind": "binder"
+      },
+      "@9eqeok61gb74r2d0kqctjock35:10": {
+        "id": "@9eqeok61gb74r2d0kqctjock35:10",
+        "kind": "ref",
+        "target": "@k8goc3glumjd1d6t7gejcpupa9"
+      },
+      "@9eqeok61gb74r2d0kqctjock35:11": {
+        "id": "@9eqeok61gb74r2d0kqctjock35:11",
+        "kind": "ref",
+        "target": "@9eqeok61gb74r2d0kqctjock35:8"
+      },
+      "@9eqeok61gb74r2d0kqctjock35:12": {
+        "id": "@9eqeok61gb74r2d0kqctjock35:12",
+        "kind": "ref",
+        "target": "@9eqeok61gb74r2d0kqctjock35:3"
+      },
+      "@9eqeok61gb74r2d0kqctjock35:13": {
+        "id": "@9eqeok61gb74r2d0kqctjock35:13",
+        "kind": "ref",
+        "target": "@9eqeok61gb74r2d0kqctjock35:4"
+      },
+      "@9eqeok61gb74r2d0kqctjock35:9": {
+        "id": "@9eqeok61gb74r2d0kqctjock35:9",
+        "kind": "call",
+        "fn": "@9eqeok61gb74r2d0kqctjock35:10",
+        "args": [
+          "@9eqeok61gb74r2d0kqctjock35:11",
+          "@9eqeok61gb74r2d0kqctjock35:12",
+          "@9eqeok61gb74r2d0kqctjock35:13"
+        ]
+      },
+      "@9eqeok61gb74r2d0kqctjock35:7": {
+        "id": "@9eqeok61gb74r2d0kqctjock35:7",
+        "kind": "arm",
+        "variant": "std.bytes.bytes",
+        "binds": [
+          "@9eqeok61gb74r2d0kqctjock35:8"
+        ],
+        "results": [
+          null
+        ],
+        "body": "@9eqeok61gb74r2d0kqctjock35:9"
+      },
+      "@9eqeok61gb74r2d0kqctjock35:5": {
+        "id": "@9eqeok61gb74r2d0kqctjock35:5",
+        "kind": "match",
+        "scrutinee": "@9eqeok61gb74r2d0kqctjock35:6",
+        "arms": [
+          "@9eqeok61gb74r2d0kqctjock35:7"
+        ],
+        "otherwise": null
+      },
+      "@9eqeok61gb74r2d0kqctjock35:1": {
+        "id": "@9eqeok61gb74r2d0kqctjock35:1",
+        "kind": "lambda",
+        "params": [
+          "@9eqeok61gb74r2d0kqctjock35:2",
+          "@9eqeok61gb74r2d0kqctjock35:3",
+          "@9eqeok61gb74r2d0kqctjock35:4"
+        ],
+        "body": "@9eqeok61gb74r2d0kqctjock35:5"
+      },
       "@l5ad0efsk3ocnknnf85j80ig23": {
         "id": "@l5ad0efsk3ocnknnf85j80ig23",
         "kind": "def",
@@ -116316,6 +116403,7 @@
       "@3v53osblg28arqlj21pp7mq2a7",
       "@f04ut431f50rop67al0672lsou",
       "@g4uh0bhreupa92v4h56ipb6grb",
+      "@9eqeok61gb74r2d0kqctjock35",
       "@l5ad0efsk3ocnknnf85j80ig23",
       "@atapm06lljumhq92fumkvge5ps",
       "@4qc6npb6ald3ao0cpd0mtfthkm",
@@ -127315,6 +127403,42 @@
           {
             "t": "con",
             "id": "std.bytes",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "type.int",
+          "args": []
+        },
+        "eff": {
+          "effs": [],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
+    "@9eqeok61gb74r2d0kqctjock35": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.bytes",
+            "args": []
+          },
+          {
+            "t": "con",
+            "id": "type.int",
+            "args": []
+          },
+          {
+            "t": "con",
+            "id": "type.int",
             "args": []
           }
         ],
@@ -139085,6 +139209,11 @@
     "@g4uh0bhreupa92v4h56ipb6grb": "byte count",
     "@g4uh0bhreupa92v4h56ipb6grb:2": "bytes",
     "@g4uh0bhreupa92v4h56ipb6grb:6": "items",
+    "@9eqeok61gb74r2d0kqctjock35": "byte at",
+    "@9eqeok61gb74r2d0kqctjock35:2": "bytes",
+    "@9eqeok61gb74r2d0kqctjock35:3": "position",
+    "@9eqeok61gb74r2d0kqctjock35:4": "otherwise",
+    "@9eqeok61gb74r2d0kqctjock35:8": "items",
     "@l5ad0efsk3ocnknnf85j80ig23": "utf8 code",
     "@l5ad0efsk3ocnknnf85j80ig23:2": "code point",
     "@atapm06lljumhq92fumkvge5ps": "utf8 of",
@@ -139716,6 +139845,7 @@
     "@3v53osblg28arqlj21pp7mq2a7": "The bytes with these items, each a whole number from 0 to 255: bytes of([104, 105]) is the bytes of \"hi\". Stops when an item isn't a byte.",
     "@f04ut431f50rop67al0672lsou": "The bytes as their list of Ints, each 0 to 255.",
     "@g4uh0bhreupa92v4h56ipb6grb": "How many bytes there are.",
+    "@9eqeok61gb74r2d0kqctjock35": "The byte at a position counted from 0, or otherwise where there is none: byte at(utf8 of(\"hi\"), 1, 0) is 105.",
     "@atapm06lljumhq92fumkvge5ps": "The text's UTF-8 bytes (RFC 3629): each character's code point in one to four bytes. utf8 of(\"é\") is [195, 169].",
     "@7avl8famv2n50mrbn3vmpi4bha": "The text UTF-8 bytes spell, the other way from utf8 of. Stops on bytes that aren't UTF-8: a following byte where a character starts, or the bytes ending inside a character.",
     "@d13mqpfibo1jp9rklhvqm88tis": "The tensor with this shape and these items, the last axis changing fastest: tensor of([2, 3], [1, 2, 3, 4, 5, 6]) has rows [1, 2, 3] and [4, 5, 6]. Stops when the items don't fill the shape.",
@@ -140138,6 +140268,7 @@
     "@3v53osblg28arqlj21pp7mq2a7",
     "@f04ut431f50rop67al0672lsou",
     "@g4uh0bhreupa92v4h56ipb6grb",
+    "@9eqeok61gb74r2d0kqctjock35",
     "@atapm06lljumhq92fumkvge5ps",
     "@7avl8famv2n50mrbn3vmpi4bha",
     "@iq044k6dto1s16ehvfe3vm8iuc",

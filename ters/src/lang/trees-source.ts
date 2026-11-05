@@ -4,7 +4,8 @@
 // Set, and the representation rows it carries (LIBRARY.reps) let the
 // chooser store them as trees (DATA-STRUCTURES.md, C47). It also carries
 // `array of List` (array-list.ts), for the compiler's lists as arrays,
-// and `tree of List` (list-tree.ts), for lists changed by position.
+// and `tree of List` (list-tree.ts), for lists changed by position, and
+// `byte array of Bytes` (bytes-array.ts), for bytes read by position.
 
 import { merge, type Id } from "../model.ts";
 import { prelude } from "../prelude.ts";
@@ -12,6 +13,7 @@ import { Lang } from "./dsl.ts";
 import { buildTrees } from "./map-tree.ts";
 import { buildArrayList } from "./array-list.ts";
 import { buildListTree } from "./list-tree.ts";
+import { buildByteArray } from "./bytes-array.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { infer } from "./infer.ts";
 import { representationsIn } from "./represent.ts";
@@ -27,7 +29,9 @@ export function buildTreesModule(preludeModule: Module): Module {
   const arrays = buildArrayList(k, byName);
   // Lists as trees by position (list-tree.ts, C45): after the arrays.
   const listTree = buildListTree(k, byName);
-  const t = { defs: [...trees.defs, ...arrays.defs, ...listTree.defs], representations: [...trees.representations, ...arrays.representations, listTree.representation] };
+  // Bytes side by side (bytes-array.ts, L189b): after the list's tree.
+  const bytes = buildByteArray(k, byName);
+  const t = { defs: [...trees.defs, ...arrays.defs, ...listTree.defs, ...bytes.defs], representations: [...trees.representations, ...arrays.representations, listTree.representation, ...bytes.representations] };
   const p = publish(merge(base, k.code), k.names, t.defs, base);
   if (!p.ok) throw new Error(`the trees can't be published: ${p.reason}`);
   const at = (d: Id) => p.rename.get(d) ?? d;
