@@ -7,9 +7,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
@@ -21,7 +19,7 @@ import { SHOW_ANY } from "../src/lang/std.ts";
 import { B } from "../src/prelude.ts";
 import { NUMBER } from "../src/lang/types.ts";
 import { subtree, type Id } from "../src/model.ts";
-import { compile } from "../../compiler/src/compile.ts";
+import { compiledDefs } from "../../compiler/src/core-js.ts";
 
 const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 
@@ -68,9 +66,7 @@ test("one definition at two types, through their implementations, evaluated and 
   const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });
   const evaluated = NAMES.map((n) => r.value(at(p, n)));
   assert.deepEqual(evaluated, ["2.5", "pair(2, -1)", "pair(8, -4)", "[0.5, 1.5]", "4.5"]);
-  const path = join(mkdtempSync(join(tmpdir(), "interfaces-")), "interfaces.js");
-  writeFileSync(path, compile(p.code, p.info, p.names, { runtime, exports: NAMES }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
+  const defs = compiledDefs(p.code, p.info, p.names, NAMES) as unknown as Record<string, unknown>;
   assert.deepEqual(NAMES.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), evaluated);
 });
 

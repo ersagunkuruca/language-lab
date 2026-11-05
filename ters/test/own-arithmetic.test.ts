@@ -7,9 +7,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
@@ -21,7 +19,7 @@ import { ARITH, ARITHMETIC_V, COMPARE, INT_OPS, ORDERED_V, S, SHOW_ANY, SHOWN_V 
 import { B } from "../src/prelude.ts";
 import { INT, NUMBER } from "../src/lang/types.ts";
 import { subtree, type Id } from "../src/model.ts";
-import { compile } from "../../compiler/src/compile.ts";
+import { compiledDefs } from "../../compiler/src/core-js.ts";
 import { loadCoreJs, lowerCore } from "../../compiler/src/core-js.ts";
 
 const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
@@ -69,9 +67,7 @@ test("a type's own · and < through the one · and <, evaluated and compiled", a
   const at = (n: string) => p.code.defs.find((d) => p.names[d] === n)!;
   const evaluated = NAMES.map((n) => r.value(at(n)));
   assert.deepEqual(evaluated, ["quaternion(0, 0, 0, 1)", "quaternion(0, 0, 0, -1)", "quaternion(-1, 0, 0, 0)", "quaternion(5, 5, 5, 5)", "version(1, 9)"]);
-  const path = join(mkdtempSync(join(tmpdir(), "own-")), "own.js");
-  writeFileSync(path, compile(p.code, p.info, p.names, { runtime, exports: NAMES }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
+  const defs = compiledDefs(p.code, p.info, p.names, NAMES) as unknown as Record<string, unknown>;
   assert.deepEqual(NAMES.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), evaluated);
 });
 
@@ -110,9 +106,7 @@ test("a type's own show through Shown: show any shows a version as 1.9 (L205), c
   assert.equal(r.value(at("a sum")), "quaternion(5, 5, 5, 5)");
   assert.equal(r.value(at("which shows as 2.0")), "2.0");
   assert.equal(r.value(at("versions shown")), "[1.9, 2.0]");
-  const path = join(mkdtempSync(join(tmpdir(), "own-")), "shown.js");
-  writeFileSync(path, compile(p.code, p.info, p.names, { runtime, exports: ["the older", "a sum", "versions shown"] }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
+  const defs = compiledDefs(p.code, p.info, p.names, ["the older", "a sum", "versions shown"]) as unknown as Record<string, unknown>;
   assert.deepEqual(["the older", "a sum", "versions shown"].map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), ["1.9", "quaternion(5, 5, 5, 5)", "[1.9, 2.0]"]);
   // And JavaScript printed from the core IR, which WebAssembly and C share.
   const ds = ["the older", "a sum", "versions shown"].map(at);
@@ -186,9 +180,7 @@ test("compare and sort order a type with an Ordered of its own by it, evaluated 
   const names = ["one against two", "two against two", "sorted"];
   assert.deepEqual(names.map((n) => r.value(out[n])), ["after", "same", "[priority(3), priority(2), priority(1)]"]);
   // Compiled the same (L204h): compile.ts orders a Priority by its less.
-  const path = join(mkdtempSync(join(tmpdir(), "own-")), "own.js");
-  writeFileSync(path, compile(p.code, p.info, p.names, { runtime, exports: names }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
+  const defs = compiledDefs(p.code, p.info, p.names, names) as unknown as Record<string, unknown>;
   assert.deepEqual(names.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), ["after", "same", "[priority(3), priority(2), priority(1)]"]);
 });
 

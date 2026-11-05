@@ -3,9 +3,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
@@ -15,7 +13,7 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { SHOW_ANY } from "../src/lang/std.ts";
 import { showType } from "../src/lang/types.ts";
 import type { Id } from "../src/model.ts";
-import { compile } from "../../compiler/src/compile.ts";
+import { compiledDefs } from "../../compiler/src/core-js.ts";
 
 const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 const lib = (name: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === name)!;
@@ -39,8 +37,6 @@ test("item at and replace at: by position from 0, outside the list harmless", as
   const r = makeRunner(code, info, { print: () => {}, names: nm });
   const got = names.map((n) => r.value(code.defs.find((d) => nm[d] === n)!));
   assert.deepEqual(got, cases.map(([, , want]) => want));
-  const path = join(mkdtempSync(join(tmpdir(), "item-at-")), "item-at.js");
-  writeFileSync(path, compile(code, info, nm, { runtime, exports: names }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
+  const defs = compiledDefs(code, info, nm, names) as unknown as Record<string, unknown>;
   assert.deepEqual(names.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), got);
 });

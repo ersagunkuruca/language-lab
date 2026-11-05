@@ -5,12 +5,9 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { compile } from "../../compiler/src/compile.ts";
-import { $setPrint } from "../../compiler/src/runtime.js";
+import { compiledDefs } from "../../compiler/src/core-js.ts";
 import { hashDef } from "../src/hash.ts";
 import type { Id, NodeOf } from "../src/model.ts";
 import { Lang } from "../src/lang/dsl.ts";
@@ -60,11 +57,8 @@ async function both(build: (k: Lang, p: ReturnType<typeof program>) => Id[]): Pr
   assert.deepEqual(info.errors.map((e) => e.message), []);
   const ran: string[] = [];
   runMain(code, info, main, { print: (s) => ran.push(s), names });
-  const path = join(mkdtempSync(join(tmpdir(), "shared-fields-")), "out.mjs");
-  writeFileSync(path, compile(code, info, names, { runtime, exports: ["main"] }));
   const compiled: string[] = [];
-  $setPrint((s: string) => compiled.push(s));
-  try { (await import(pathToFileURL(path).href)).defs.main(); } finally { $setPrint((s: string) => console.log(s)); }
+  compiledDefs(code, info, names, ["main"], { print: (s: string) => compiled.push(s) })["main"]();
   return [ran, compiled];
 }
 

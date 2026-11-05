@@ -5,9 +5,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
@@ -16,7 +14,7 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { makeRunner, type Value } from "../src/lang/run.ts";
 import { CELL_OPS, LIST, SHOW_ANY } from "../src/lang/std.ts";
 import { INT, showType } from "../src/lang/types.ts";
-import { compile } from "../../compiler/src/compile.ts";
+import { compiledDefs } from "../../compiler/src/core-js.ts";
 
 const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 
@@ -52,9 +50,7 @@ test("changed: one field, one item, one inside the other, a place that isn't the
   const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });
   const [v] = r.call(r.value(p.demo));
   assert.deepEqual(listOf(v), EXPECTED);
-  const path = join(mkdtempSync(join(tmpdir(), "changed-")), "out.js");
-  writeFileSync(path, compile(p.code, p.info, p.names, { runtime, exports: ["demo"] }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, () => Value>;
+  const defs = compiledDefs(p.code, p.info, p.names, ["demo"]) as unknown as Record<string, () => Value>;
   const got = defs.demo() as unknown;
   assert.deepEqual(Array.isArray(got) ? got : listOf(got as Value), EXPECTED);
 });

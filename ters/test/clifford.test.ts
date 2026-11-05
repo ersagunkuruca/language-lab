@@ -6,9 +6,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
@@ -19,7 +17,7 @@ import { ARITH, ARITHMETIC_V, COMPLEX_V, DUAL_V, S, SHOW_ANY } from "../src/lang
 import { B } from "../src/prelude.ts";
 import { NUMBER } from "../src/lang/types.ts";
 import type { Id } from "../src/model.ts";
-import { compile } from "../../compiler/src/compile.ts";
+import { compiledDefs } from "../../compiler/src/core-js.ts";
 
 const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 const lib = (name: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === name)!;
@@ -71,9 +69,7 @@ test("clifford table: quaternions, complex, dual and Cl(3, 0), evaluated and com
     "11 + 2i", "dual(15, 11)",
     "multivector(1, 0, 0, 0, 0, 0, 0, 0)", "multivector(-1, 0, 0, 0, 0, 0, 0, 0)", "multivector(-1, 0, 0, 0, 0, 0, 0, 0)", "multivector(0, 0, 0, 0, 0, 0, 0, 1)",
   ]);
-  const path = join(mkdtempSync(join(tmpdir(), "clifford-")), "cl.js");
-  writeFileSync(path, compile(code, info, nm, { runtime, exports: names }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
+  const defs = compiledDefs(code, info, nm, names) as unknown as Record<string, unknown>;
   assert.deepEqual(names.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), got);
 });
 
@@ -111,9 +107,7 @@ test("clifford reverse: rotors of Cl(3, 0) turn vectors and multiply as quaterni
   near(got[1], [0, Math.cos(Math.PI / 3), Math.sin(Math.PI / 3), 0, 0, 0, 0, 0]);
   near(got[2], [Math.cos(0.45), 0, 0, -Math.sin(0.45), 0, 0, 0, 0]);
   PAIRS.forEach(([a, b], i) => near(got[3 + i], quat(hamilton(a, b))));
-  const path = join(mkdtempSync(join(tmpdir(), "rotor-")), "rotor.js");
-  writeFileSync(path, compile(code, info, nm, { runtime, exports: names }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
+  const defs = compiledDefs(code, info, nm, names) as unknown as Record<string, unknown>;
   assert.deepEqual(names.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), got);
 });
 
@@ -167,9 +161,7 @@ test("clifford sandwich, reflect, project and exp: rotors, mirrors and PGA motor
   near(got[4], { 7: 1, 14: -6, 13: 2, 11: -3 });
   near(got[5], { 7: 1, 14: -3, 13: 1, 11: -3 });
   near(got[6], { 7: -1, 14: -1, 13: -2, 11: 3 });
-  const path = join(mkdtempSync(join(tmpdir(), "geometry-")), "geometry.js");
-  writeFileSync(path, compile(code, info, nm, { runtime, exports: names }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
+  const defs = compiledDefs(code, info, nm, names) as unknown as Record<string, unknown>;
   assert.deepEqual(names.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), got);
 });
 
@@ -238,9 +230,7 @@ test("clifford outer, inner, grade, dual, undual and regressive, evaluated and c
   const got = names.map((n) => r.value(code.defs.find((d) => nm[d] === n)!));
   const parts = (v: Value) => { const s = String(v); return s.slice(s.indexOf("(") + 1, -1).split(", ").map(Number); };
   cases.forEach(([n, , want], i) => parts(got[i]).forEach((x, j) => assert.ok(Math.abs(x - (want[j] ?? 0)) < 1e-9, `${n}: ${got[i]}`)));
-  const path = join(mkdtempSync(join(tmpdir(), "products-")), "products.js");
-  writeFileSync(path, compile(code, info, nm, { runtime, exports: names }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
+  const defs = compiledDefs(code, info, nm, names) as unknown as Record<string, unknown>;
   assert.deepEqual(names.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), got);
 });
 
@@ -269,9 +259,7 @@ test("clifford exp by series when b² has a pseudoscalar part, evaluated and com
     const want: Record<number, number> = { 0: Math.cosh(a) * Math.cos(c), 3: Math.sinh(a) * Math.cos(c), 12: Math.cosh(a) * Math.sin(c), 15: Math.sinh(a) * Math.sin(c) };
     parts(got[i]).forEach((x, j) => assert.ok(Math.abs(x - (want[j] ?? 0)) < 1e-9, `e^(${a} e01 + ${c} e23): ${got[i]}`));
   });
-  const path = join(mkdtempSync(join(tmpdir(), "series-")), "series.js");
-  writeFileSync(path, compile(code, info, nm, { runtime, exports: names }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
+  const defs = compiledDefs(code, info, nm, names) as unknown as Record<string, unknown>;
   assert.deepEqual(names.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), got);
 });
 
@@ -308,8 +296,6 @@ test("clifford part and clifford with part: read and write by blade, evaluated a
   const r = makeRunner(code, info, { print: () => {}, names: nm });
   const got = names.map((n) => r.value(code.defs.find((d) => nm[d] === n)!));
   assert.deepEqual(got, cases.map(([, , want]) => want));
-  const path = join(mkdtempSync(join(tmpdir(), "parts-")), "parts.js");
-  writeFileSync(path, compile(code, info, nm, { runtime, exports: names }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
+  const defs = compiledDefs(code, info, nm, names) as unknown as Record<string, unknown>;
   assert.deepEqual(names.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), got);
 });

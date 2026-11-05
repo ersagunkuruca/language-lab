@@ -4,9 +4,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
@@ -15,7 +13,7 @@ import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { ARITH, MAT_V, SHOW_ANY } from "../src/lang/std.ts";
 import type { Id } from "../src/model.ts";
-import { compile } from "../../compiler/src/compile.ts";
+import { compiledDefs } from "../../compiler/src/core-js.ts";
 
 const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 const product = (n: number, a: number[], b: number[]) => a.map((_, c) => Array.from({ length: n }, (_, j) => a[Math.floor(c / n) * n + j] * b[j * n + (c % n)]).reduce((x, y) => x + y, 0));
@@ -45,8 +43,6 @@ test("Mat2 to Mat4: the one · is the matrix product, evaluated and compiled", a
     "mat2(19, 22, 43, 50)", "mat2(23, 34, 31, 46)", shown(3, product(3, A3, B3)), shown(4, product(4, A4, B4)),
     "mat2(3, 2, 3, 6)", shown(4, A4), shown(3, A3.map((x, i) => x - B3[i])),
   ]);
-  const path = join(mkdtempSync(join(tmpdir(), "mat-")), "mat.js");
-  writeFileSync(path, compile(code, info, nm, { runtime, exports: names }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
+  const defs = compiledDefs(code, info, nm, names) as unknown as Record<string, unknown>;
   assert.deepEqual(names.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), got);
 });

@@ -4,11 +4,9 @@
 // evaluator and compiled JavaScript give the same answers.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { compile } from "../../compiler/src/compile.ts";
+import { compiledDefs } from "../../compiler/src/core-js.ts";
 import type { Id } from "../src/model.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
@@ -31,9 +29,7 @@ function program(body: (k: Lang, t: Id) => Id) {
 }
 const ran = (p: ReturnType<typeof program>) => runMain(p.code, p.info, p.main, { print: () => {}, names: p.names });
 async function compiled(p: ReturnType<typeof program>): Promise<unknown> {
-  const path = join(mkdtempSync(join(tmpdir(), "tensors-")), "main.mjs");
-  writeFileSync(path, compile(p.code, p.info, p.names, { runtime, exports: ["main"] }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, () => unknown>;
+  const defs = compiledDefs(p.code, p.info, p.names, ["main"]) as unknown as Record<string, () => unknown>;
   return typeof defs.main === "function" ? defs.main() : defs.main;
 }
 const both = async (body: (k: Lang, t: Id) => Id) => {

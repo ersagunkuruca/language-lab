@@ -8,17 +8,14 @@
 // handlers are the prior art.
 
 import { test } from "node:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { $setPrint } from "../../compiler/src/runtime.js";
 import assert from "node:assert/strict";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
 import { runMain } from "../src/lang/run.ts";
-import { compile } from "../../compiler/src/compile.ts";
+import { compiledDefs } from "../../compiler/src/core-js.ts";
 import { lowerCore, runCoreMain } from "../../compiler/src/core-js.ts";
 import { INT_OPS, S, SHOW_ANY } from "../src/lang/std.ts";
 import type { Id } from "../src/model.ts";
@@ -67,11 +64,8 @@ test("compiled JavaScript answers a named operation by its handler, as the evalu
   const p = program((k, ask, { outer, inner }) => k.call(INT_OPS.add, k.call(INT_OPS.add, ask(outer), ask(inner)), k.call(INT_OPS.add, ask(), k.call(k.lambda([], () => ask(outer))))));
   p.run();
   const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
-  const file = join(mkdtempSync(join(tmpdir(), "named-")), "main.mjs");
-  writeFileSync(file, compile(p.code, p.info, p.names, { runtime, exports: ["main"] }));
   const out: string[] = [];
-  $setPrint((s: string) => out.push(s));
-  try { (await import(pathToFileURL(file).href)).defs.main(); } finally { $setPrint((s: string) => console.log(s)); }
+  compiledDefs(p.code, p.info, p.names, ["main"], { print: (s: string) => out.push(s) })["main"]();
   assert.deepEqual([out, p.printed], [["1012"], ["1012"]]);
 });
 

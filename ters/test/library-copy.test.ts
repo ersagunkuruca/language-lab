@@ -8,9 +8,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
@@ -22,7 +20,7 @@ import { renameCode } from "../src/lang/modules.ts";
 import { SHOW_ANY } from "../src/lang/std.ts";
 import { NUMBER } from "../src/lang/types.ts";
 import { subtree, type Code, type Id } from "../src/model.ts";
-import { compile } from "../../compiler/src/compile.ts";
+import { compiledDefs } from "../../compiler/src/core-js.ts";
 
 const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 const L = LIBRARY.code, N = LIBRARY.names;
@@ -77,9 +75,7 @@ test("the prelude's Clifford definitions copied under new ids check and give the
   const evaluated = Object.fromEntries(names.map((n) => [n, r.value(at(n))]));
   const half = names.length / 2;
   for (const n of names.slice(0, half)) assert.equal(evaluated[n.replace("prelude", "copy")], evaluated[n], n);
-  const path = join(mkdtempSync(join(tmpdir(), "library-copy-")), "copy.js");
-  writeFileSync(path, compile(code, info, nm, { runtime, exports: names }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
+  const defs = compiledDefs(code, info, nm, names) as unknown as Record<string, unknown>;
   const compiled = Object.fromEntries(names.map((n) => [n, typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n]]));
   assert.deepEqual(compiled, evaluated);
   // The copy's definitions are known by their meaning's hash (L203a), so
