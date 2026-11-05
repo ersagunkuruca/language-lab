@@ -128,14 +128,13 @@ const knownKey = (v: Value): string => {
 
 // The operations still read by name (L203): each has a rule sharper than
 // reading its code gives. The sandwich and the reflection keep grades
-// (the grade rule below), the exponential is closed under the product, a
-// part named by literal vectors is found by its blade, and the versor
-// inverse is the reverse's blades (its code checks a number, which the
-// reading doesn't follow). The others (the geometric, outer, inner and
-// regressive products, the duals, the reverse and the involution) are
-// read from their own code, folds over the algebra's known table and
-// blades, with the same masks (grades.test.ts).
-const NAMED = new Set(["versor inverse", "sandwich", "reflect", "project", "exp", "grade", "part", "with part"]);
+// (the grade rule below), the exponential is closed under the product,
+// and a part named by literal vectors is found by its blade. The others
+// (the geometric, outer, inner and regressive products, the duals, the
+// reverse, the involution and the versor inverse) are read from their own
+// code, folds over the algebra's known table and blades, with the same
+// masks (grades.test.ts).
+const NAMED = new Set(["sandwich", "reflect", "project", "exp", "grade", "part", "with part"]);
 
 const ADD = new Set<Id>([ARITH.add, B.add]), SUB = new Set<Id>([ARITH.sub, B.sub]);
 const MUL = new Set<Id>([ARITH.mul, B.mul]), DIV = new Set<Id>([B.div]), NEG = new Set<Id>([ARITH.neg, B.neg]);
@@ -445,7 +444,9 @@ function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: H
           const f = nodes[a.variant]?.kind === "variant" ? fieldsOf(a.variant)[i] : undefined;
           return f && declared.has(f) ? held(f) : f && declaredItems.has(f) ? heldItems(f) : TOP;
         };
-        const outs = [...arms.map((a) => ev(a.body, new Map([...env, ...a.binds.map((b, i) => [b, bind(a, b, i)] as const)]), depth + 1)), ...(n.otherwise ? [ev(n.otherwise, env, depth + 1)] : [])];
+        // An arm that fails gives no value, so nothing to the union (L203e).
+        const fails = (id: Id) => { const b = nodes[id]; const f = isCall(b) ? nodes[b.fn] : undefined; return f?.kind === "ref" && f.target === S.fail; };
+        const outs = [...arms.filter((a) => !fails(a.body)).map((a) => ev(a.body, new Map([...env, ...a.binds.map((b, i) => [b, bind(a, b, i)] as const)]), depth + 1)), ...(n.otherwise && !fails(n.otherwise) ? [ev(n.otherwise, env, depth + 1)] : [])];
         return outs.length ? outs.reduce(join) : TOP;
       }
       case "fold": {
