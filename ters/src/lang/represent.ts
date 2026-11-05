@@ -185,16 +185,19 @@ function fieldsOf(code: Code, t: Id, variants: Set<Id>): Map<Id, [Id, number]> {
   return r;
 }
 
-export function uses(code: Code, entry: Id, reps: Representation[]): string[] {
+// `absorbed`: leave out a job every use of which is on a list just made
+// (freshUses), as `choose` does.
+export function uses(code: Code, entry: Id, reps: Representation[], absorbed = false): string[] {
   const t = reps[0].of;
   const variants = new Set(variantsOf(code, t));
   const implemented = new Set(reps.flatMap((r) => Object.keys(r.impl)));
   const costed = new Set(reps.flatMap((r) => Object.keys(r.cost)));
   const out = new Set<string>();
+  let fresh = new Set<Id>();
   const walk = (def: Id) => {
     for (const id of subtree(code, def)) {
       const n = code.nodes[id];
-      if (n.kind === "ref" && (variants.has(n.target) || costed.has(n.target))) out.add(jobOf(code, n));
+      if (n.kind === "ref" && (variants.has(n.target) || costed.has(n.target)) && !fresh.has(id)) out.add(jobOf(code, n));
       if ((n.kind === "match" || n.kind === "fold") && armsOver(code, n, variants)) out.add(foldJob(code, n, t));
       // A constructor given a field a match took out of another value
       // (`x :: rest` in a cons arm): its own job, since a representation
@@ -215,10 +218,12 @@ export function uses(code: Code, entry: Id, reps: Representation[]): string[] {
     if (seen.has(def)) return;
     seen.add(def);
     if (implemented.has(def) && def !== entry) return;
-    walk(def);
     for (const d of directRefs(code, def)) visit(d);
   };
   visit(entry);
+  const walked = [...seen].filter((d) => !implemented.has(d) || d === entry);
+  if (absorbed) fresh = freshUses(code, walked, reps);
+  walked.forEach(walk);
   return [...out];
 }
 
@@ -248,6 +253,7 @@ export function looped(code: Code, entry: Id, reps: Representation[]): Set<strin
     while (todo.length) { const x = todo.pop()!; if (x === d) return true; if (seen.has(x)) continue; seen.add(x); todo.push(...(graph.get(x) ?? [])); }
     return false;
   };
+  const onFresh = freshUses(code, [...graph.keys()], reps);
   const done = new Set<string>();
   const visit = (d: Id, loop: boolean) => {
     loop ||= callsItself(d);
@@ -262,7 +268,7 @@ export function looped(code: Code, entry: Id, reps: Representation[]): Set<strin
     const n = code.nodes[id];
     if (!n) return;
     if (loop) {
-      if (n.kind === "ref" && (variants.has(n.target) || costed.has(n.target))) out.add(jobOf(code, n));
+      if (n.kind === "ref" && (variants.has(n.target) || costed.has(n.target)) && !onFresh.has(id)) out.add(jobOf(code, n));
       if ((n.kind === "match" || n.kind === "fold") && armsOver(code, n, variants)) out.add(foldJob(code, n, t));
     }
     if (n.kind === "ref" && graph.has(n.target)) visit(n.target, loop);
@@ -276,6 +282,44 @@ export function looped(code: Code, entry: Id, reps: Representation[]): Set<strin
     for (const c of children(n)) walk(c, loop);
   };
   visit(entry, false);
+  return out;
+}
+
+// A priced function of one list whose steps are at most linear
+// (`length`), given a list a call has just made (`length(keep(…))`, chapters' `words`), or a
+// let has just bound to one (`length(chapters)`), takes no more steps than
+// making it took, which the jobs inside that call count: its order is the
+// making's. So it isn't weighed once per item of a loop it is in (only
+// over the list it was given), and where every use is so, it isn't a job
+// to choose by. A list read from elsewhere (a field, a parameter, a job's
+// answer such as `rest`) isn't one just made. The refs, by node id.
+function freshUses(code: Code, defs: Id[], reps: Representation[]): Set<Id> {
+  const variants = new Set(variantsOf(code, reps[0].of));
+  const implemented = new Set(reps.flatMap((r) => Object.keys(r.impl)));
+  const costed = new Set(reps.flatMap((r) => Object.keys(r.cost)));
+  const linear = (j: Id) => reps.some((r) => r.cost[j] === "n") && reps.every((r) => LADDER.indexOf(r.cost[j] ?? "1") <= LADDER.indexOf("n"));
+  const made = (x: Id | undefined): boolean => {
+    const a = x ? code.nodes[x] : undefined;
+    if (!a || !isCall(a)) return false;
+    const g = code.nodes[a.fn];
+    return g?.kind === "ref" && code.nodes[g.target]?.kind === "def" && !costed.has(g.target) && !implemented.has(g.target);
+  };
+  const bound = new Set<Id>(), out = new Set<Id>();
+  const all = defs.flatMap((d) => subtree(code, d));
+  // A let: a lambda called where it is written.
+  for (const id of all) {
+    const n = code.nodes[id];
+    if (!isCall(n)) continue;
+    const l = code.nodes[n.fn];
+    if (l?.kind === "lambda") l.params.forEach((p, i) => { if (made(n.args[i])) bound.add(p); });
+  }
+  for (const id of all) {
+    const n = code.nodes[id];
+    if (!isCall(n) || n.args?.length !== 1) continue;
+    const f = code.nodes[n.fn], a = code.nodes[n.args[0]];
+    if (f?.kind !== "ref" || variants.has(f.target) || !costed.has(f.target) || !linear(f.target)) continue;
+    if (made(n.args[0]) || (a?.kind === "ref" && bound.has(a.target))) out.add(f.id);
+  }
   return out;
 }
 
@@ -305,7 +349,7 @@ export interface Choice {
 // representation doesn't implement is done by its definition, which costs what it costs
 // in T's own terms; one with no cost at all is NEVER.
 export function choose(code: Code, entry: Id, reps: Representation[]): Choice {
-  const jobs = uses(code, entry, reps);
+  const jobs = uses(code, entry, reps, true);
   const spec = reps.find((r) => r.type === r.of && !Object.keys(r.impl).length)!;
   // Building a v onto a field taken out of another value costs v's
   // constructor where the field is a value kept (the definition as
