@@ -323,11 +323,18 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
     return c;
   };
   const memo = new Map<string, Verdict>();
-  const running = new Set<string>();
+  // The modes being worked out now, each by how deep it started.
+  const running = new Map<string, number>();
   const kept = keptFor(names, plansOnly);
-  // How many published lambdas are being worked out now: one is kept only
-  // when none is, so no recursion of its own is still open.
-  let keeping = 0;
+  // A published lambda's verdict is kept once no recursion it went through
+  // is still open (T14): the shallowest mode still being worked out that
+  // its work was answered from for now (`running` above), as Tarjan's
+  // lowlink. Kept only for the outermost published one before, so steady
+  // pow's own helpers (two to, scaled) were worked out again under each
+  // of pow, sin and atan2, half a second each. A verdict remembered in
+  // `memo` that was answered so says so here, for whoever reads it next.
+  let lowest = Infinity;
+  const memoLow = new Map<string, number>();
   const reachable = (from: string) => {
     const reach = new Set([from]);
     for (let grew = true; grew;) { grew = false; for (const g of graphs) if (reach.has(g.from) && !reach.has(g.to)) { reach.add(g.to); grew = true; } }
@@ -360,15 +367,16 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
     const key = modeKey(lam, known, spec, outer);
     const ports: Port[] = [...l.params.map((_, i) => String(i)), "out"];
     const hit = memo.get(key);
-    if (hit) return hit;
-    if (running.has(key)) return { answers: ONE, ends: true, loops: [], stuck: [], dynamic: [], order: [], plan: NO_PLAN };
+    if (hit) { const l = memoLow.get(key); if (l !== undefined) lowest = Math.min(lowest, l); return hit; }
+    const open = running.get(key);
+    if (open !== undefined) { lowest = Math.min(lowest, open); return { answers: ONE, ends: true, loops: [], stuck: [], dynamic: [], order: [], plan: NO_PLAN }; }
     const fixed = isPublished(lam) && [...spec.values(), ...outer.values()].every(fixedFn);
     if (fixed) {
       const k = kept.m.get(kept.prefix + key);
       if (k) { for (const g of k.graphs) graphs.push(g); memo.set(key, k.v); return k.v; }
-      keeping++;
     }
-    running.add(key);
+    const depth = running.size;
+    running.set(key, depth);
     const st: St = { known: new Set(), sizes: new Map(), goals: [], answers: ONE, ends: true, loops: [], dynamic: [], order: [] };
     const fns = new Map<Id, Fn>(outer);
     l.params.forEach((p, i) => {
@@ -382,17 +390,19 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
     const ctx: Ctx = { key, ports, fns, def };
     st.goals = goalsOf(l.body, ctx);
     const need = [...l.params.map(slot), slot(l.body)];
-    const outerPaths = paths;
+    const outerPaths = paths, outerLowest = lowest;
     paths = 0;
-    let v: Verdict;
-    try { v = run(st, need, ctx); } finally { paths = outerPaths; if (fixed) keeping--; }
+    lowest = Infinity;
+    let v: Verdict, low: number;
+    try { v = run(st, need, ctx); } finally { paths = outerPaths; low = lowest; lowest = Math.min(outerLowest, low); }
     running.delete(key);
     // Its own recursion, as far as it's known now (a cycle through a mode
     // still being worked out is checked again at the end, in checked()).
     const t = plansOnly ? { ok: true } : terminates(key);
     if (!t.ok) v = { ...v, ends: false, loops: [...v.loops, `${def ? nm(def) : "a function"} calls itself on something that isn't smaller`] };
     memo.set(key, v);
-    if (fixed && !keeping) kept.m.set(kept.prefix + key, { v, graphs: reachable(key) });
+    if (low < depth) memoLow.set(key, low);
+    else if (fixed) kept.m.set(kept.prefix + key, { v, graphs: reachable(key) });
     return v;
   }
 
@@ -1046,6 +1056,7 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
   function checked(get: () => { v: Verdict | null; key: string | null }): Verdict | null {
     graphs.length = 0;
     memo.clear();
+    memoLow.clear();
     const { v, key } = get();
     if (!v) return null;
     if (!key) return v;
