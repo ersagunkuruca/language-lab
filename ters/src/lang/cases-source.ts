@@ -119,18 +119,53 @@ export function buildCases(): Module {
 
   // xs then ys.
   const then = def("case then", ["xs", "ys"], (xs, ys) => list(xs, () => ys, (x, rest) => k.call(CONS, x, k.call(me, rest, ys))));
+  // Greek uppercase drops the accents after a Greek letter (L214e2c, as
+  // ICU's GreekUpper does): the marks that follow it are read with it, an
+  // accent among them dropped, a dialytika kept as U+0308, an
+  // ypogegrammeni a capital iota after the rest. Text is NFC, so these are
+  // the marks no precomposed letter took in.
+  const GREEK_ACCENTS = [0x300, 0x301, 0x302, 0x303, 0x311, 0x340, 0x341, 0x342, 0x344];
+  const greekMarks = flat("greek marks", [...GREEK_ACCENTS, 0x304, 0x306, 0x308, 0x313, 0x314, 0x343, 0x345].sort((a, b) => a - b));
+  const greekAccents = flat("greek accents", GREEK_ACCENTS), dialytikas = flat("greek dialytikas", [0x308, 0x344]);
+  const isGreekMark = (c: Id) => k.call(among, c, k.x(greekMarks));
+  // One of `of` among the marks that come next.
+  const marksHave = def("greek marks have", ["codes", "of"], (cs, of) => list(cs, () => k.x(FALSE), (n, rest) =>
+    k.if(isGreekMark(n), k.if(k.call(among, n, of), k.x(TRUE), k.call(me, rest, of)), k.x(FALSE))));
+  // A capital iota for each ypogegrammeni among the marks that come next.
+  const marksIotas = def("greek marks iotas", ["codes"], (cs) => list(cs, () => k.list(), (n, rest) =>
+    k.if(isGreekMark(n), k.if(same(n, k.int(0x345)), k.call(CONS, k.int(0x399), k.call(me, rest)), k.call(me, rest)), k.list())));
+  // What comes after the marks.
+  const afterMarks = def("after greek marks", ["codes"], (cs) => list(cs, () => k.list(), (n, rest) => k.if(isGreekMark(n), k.call(me, rest), cs)));
+  const isGreek = (c: Id) => or(and(not(less(c, k.int(0x370))), less(c, k.int(0x400))), and(not(less(c, k.int(0x1f00))), less(c, k.int(0x2000))));
+  const isVowel = (m: Id) => list(m, () => k.x(FALSE), (x) => or(...VOWELS.map((v) => same(x, k.int(v)))));
+  const iotaOrUpsilon = (m: Id) => or(one(m, 0x399), one(m, 0x3a5));
   // "accented vowel": the letter before was a Greek vowel whose accent was
-  // dropped; "soft dot": an i or j before, and only marks not above since.
-  const upperAll = def("upper codes", ["codes", "own", "greek", "lithuanian", "after cased", "accented vowel", "soft dot"], (cs, o, el, lt, after, acc, soft) => list(cs, () => k.list(), (c, rest) =>
-    k.if(and(lt, and(soft, same(c, k.int(0x307)))), k.call(me, rest, o, el, lt, after, acc, soft),
+  // dropped, "combining accent" the same with the accent a mark of its own
+  // (the iota or upsilon after it then gets U+0308, not Ϊ or Ϋ); "soft
+  // dot": an i or j before, and only marks not above since.
+  const upperAll = def("upper codes", ["codes", "own", "greek", "lithuanian", "after cased", "accented vowel", "soft dot", "combining accent"], (cs, o, el, lt, after, acc, soft, acc2) => list(cs, () => k.list(), (c, rest) =>
+    k.if(and(lt, and(soft, same(c, k.int(0x307)))), k.call(me, rest, o, el, lt, after, acc, soft, acc2),
       k.let("mapped", k.call(mapped, c, o, k.x(upperSeveral), k.x(upperRuns)), (m0) =>
       k.let("accented", and(el, k.call(among, c, k.x(greekAccented))), (accented) =>
+      k.if(and(el, and(isGreek(c), list(rest, () => k.x(FALSE), (n) => isGreekMark(n)))),
+        // A Greek letter with marks of its own.
+        k.let("base", k.if(and(acc, one(m0, 0x399)), k.list(k.int(0x3aa)), k.if(and(acc, one(m0, 0x3a5)), k.list(k.int(0x3ab)), m0)), (base) =>
+        k.let("marks accent", k.call(marksHave, rest, k.x(greekAccents)), (runAcc) =>
+        k.let("next", k.call(afterMarks, rest), (next) =>
+        k.let("dialytika", and(or(k.call(marksHave, rest, k.x(dialytikas)), and(acc2, iotaOrUpsilon(m0))), not(or(one(base, 0x3aa), one(base, 0x3ab)))), (dial) =>
+        k.let("tonos", and(one(m0, 0x397), and(or(runAcc, accented), and(not(k.call(marksHave, rest, k.list(k.int(0x345)))), and(not(after), not(k.call(casedNext, next)))))), (tonos) =>
+        // The letter (Ή when it had its own tonos), its dialytika and
+        // tonos, then the iotas: its own ypogegrammeni's and the marks'.
+        list(base, () => k.list(), (head, tail) =>
+        k.call(CONS, k.if(and(tonos, accented), k.int(0x389), head), k.call(then, k.if(dial, k.list(k.int(0x308)), k.list()), k.call(then, k.if(and(tonos, not(accented)), k.list(k.int(0x301)), k.list()), k.call(then, tail, k.call(then, k.call(marksIotas, rest),
+          k.call(me, next, o, el, lt, afterNow(c, after), and(accented, isVowel(base)), k.x(FALSE), and(not(accented), and(runAcc, isVowel(base))))))))))))))),
       k.let("upper", k.if(and(el, and(acc, one(m0, 0x399))), k.list(k.int(0x3aa)),
         k.if(and(el, and(acc, one(m0, 0x3a5))), k.list(k.int(0x3ab)),
-          k.if(and(accented, and(one(m0, 0x397), and(not(after), not(k.call(casedNext, rest))))), k.list(k.int(0x389)), m0))), (m) =>
+          k.if(and(el, and(acc2, iotaOrUpsilon(m0))), k.call(then, m0, k.list(k.int(0x308))),
+            k.if(and(accented, and(one(m0, 0x397), and(not(after), not(k.call(casedNext, rest))))), k.list(k.int(0x389)), m0)))), (m) =>
       k.call(then, m, k.call(me, rest, o, el, lt, afterNow(c, after),
-        and(accented, list(m, () => k.x(FALSE), (x) => or(...VOWELS.map((v) => same(x, k.int(v)))))),
-        and(lt, k.call(S.or, k.call(among, c, k.x(softDotted)), and(soft, and(isIgnorable(c), not(k.call(among, c, k.x(above)))))))))))))));
+        and(accented, isVowel(m)),
+        and(lt, k.call(S.or, k.call(among, c, k.x(softDotted)), and(soft, and(isIgnorable(c), not(k.call(among, c, k.x(above))))))), k.x(FALSE))))))))));
   // An accent above comes next, other marks looked through.
   const aboveNext0 = def("accent above next", ["codes"], (cs) => list(cs, () => k.x(FALSE), (n, rest) =>
     k.if(k.call(among, n, k.x(above)), k.x(TRUE), k.if(isIgnorable(n), k.call(me, rest), k.x(FALSE)))));
@@ -147,7 +182,7 @@ export function buildCases(): Module {
             k.call(me, rest, o, afterNow(c, after), tk, lt, k.x(FALSE)))))))))));
 
   const upper = def("table uppercase", ["text", "locale"], (t, l) => k.let("language", k.call(language, l), (lang) =>
-    k.call(text, k.call(upperAll, k.call(codes, t), own(lang, trUpper, ltUpper, elUpper), same(lang, k.lit("el")), same(lang, k.lit("lt")), k.x(FALSE), k.x(FALSE), k.x(FALSE)))));
+    k.call(text, k.call(upperAll, k.call(codes, t), own(lang, trUpper, ltUpper, elUpper), same(lang, k.lit("el")), same(lang, k.lit("lt")), k.x(FALSE), k.x(FALSE), k.x(FALSE), k.x(FALSE)))));
   const lower = def("table lowercase", ["text", "locale"], (t, l) => k.let("language", k.call(language, l), (lang) =>
     k.call(text, k.call(lowerAll, k.call(codes, t), own(lang, trLower, ltLower), k.x(FALSE), turkic(lang), same(lang, k.lit("lt")), k.x(FALSE)))));
 
