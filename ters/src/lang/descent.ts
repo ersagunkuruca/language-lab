@@ -29,7 +29,7 @@ import { answerKeys } from "./ports.ts";
 import { intLit } from "./int.ts";
 import { INT } from "./types.ts";
 import { FALSE, S, STD_IMPL, TRUE } from "./std.ts";
-import { META, toList, type Value } from "./run.ts";
+import { META, fromList, toList, type Value } from "./run.ts";
 import { firstSets } from "./first-sets.ts";
 import * as T from "./text.ts";
 import type { Reading } from "./relate.ts";
@@ -179,6 +179,7 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
       const thunk = (x: Id) => { const l = node(x); if (l?.kind !== "lambda" || l.params.length) throw new Unsupported("first of something other than thunks"); return l.body; };
       try { return evaluate(thunk(n.args[0]), env); } catch (e) { if (!(e instanceof NoAnswer)) throw e; return evaluate(thunk(n.args[1]), env); }
     }
+    if (f === S.listOf) return toList(xs());
     const bool = (b: boolean) => (b ? TRUE_V : FALSE_V), truth = (v: Value) => (v as { tag?: Id }).tag === TRUE;
     switch (f) {
       case "builtin.int.less": { const [a, b] = xs(); return bool((a as number) < (b as number)); }
@@ -299,6 +300,18 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
         }
         return null;
       }
+      // A Choice of arms (L72e2): `if one of([…]) then a else b` prints
+      // either; every arm is read and the one that reads farthest kept,
+      // the first of those that tie (a blank greedily, a number longest).
+      const sc = node(n.scrutinee);
+      if (sc?.kind === "call" && !isUse(sc as never) && target(sc.fn) === S.oneOf) {
+        let best: [number, Env] | null = null;
+        for (const a of n.arms.map((x) => node(x)!)) {
+          const r = read(a.body, env, at);
+          if (r && (!best || r[0] > best[0])) best = r;
+        }
+        return best;
+      }
       // Each arm that prints something, then its guard checked.
       for (const a of n.arms.map((x) => node(x)!)) {
         const inner = new Map(env);
@@ -341,6 +354,18 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
       }
       expect(at, "a number");
       return null;
+    }
+    // one of(texts) (L72e2): the longest of them there, the first of those
+    // that tie.
+    if (f === S.oneOf) {
+      const xs = evaluate(n.args[0], env);
+      let best: [number, Env] | null = null;
+      for (const x of fromList(xs)) {
+        if (typeof x !== "string") throw new Unsupported("reads one of something other than texts");
+        if (!text.startsWith(x, at)) expect(at, JSON.stringify(x));
+        else if (!best || at + x.length > best[0]) best = [at + x.length, env];
+      }
+      return best;
     }
     if (named(f) === "spaced") { const r = read(n.args[0], env, spaces(at)); return r && [spaces(r[0]), r[1]]; }
     // Any number of parentheses round it, as the search reads them; at
