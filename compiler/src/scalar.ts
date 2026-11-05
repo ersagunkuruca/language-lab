@@ -1826,9 +1826,6 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     const one = (v: Id, fts: LType[], part: (j: number) => SExpr): SExpr => {
       const fields = fts.map((ft, j) => shown(part(j), ft, g, false));
       const list = (open: string, close: string) => joined(text(open), ...fields.flatMap((x, j) => (j ? [text(", "), x] : [x])), text(close));
-      if (v === EXTENDED_V.minus) return text("−∞");
-      if (v === EXTENDED_V.plus) return text("+∞");
-      if (v === EXTENDED_V.finite) return fields[0];
       if (/^std\.tuple[2-8]\.tuple$/.test(v)) return list("(", ")");
       return fts.length ? list(`${nm(v)}(`, ")") : text(nm(v));
     };
