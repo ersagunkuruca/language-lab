@@ -17,15 +17,11 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { pathToFileURL } from "node:url";
 import { makeRunner, toList, type Value } from "../../ters/src/lang/run.ts";
 import { norm } from "../../ters/src/lang/int.ts";
 import { CONS, NIL } from "../../ters/src/lang/std.ts";
 import type { Id } from "../../ters/src/model.ts";
-import { compile } from "../src/compile.ts";
 import { isData, lowerScalar, type LType } from "../src/scalar.ts";
 import { emitWasm, fromText, instantiate, toInt } from "../src/wasm.ts";
 import { FAIL, Unsupported, loadCoreJs } from "../src/core-js.ts";
@@ -35,7 +31,6 @@ import { withLibraryRepresentations } from "../../ters/src/lang/library-reps.ts"
 import { infer } from "../../ters/src/lang/infer.ts";
 import { checkOptions } from "../../ters/src/lang/load.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href;
 const SEED = Number(process.env.SEED ?? 1), COUNT = Number(process.env.FUZZ ?? 40);
 
 // The inputs every definition is called with.
@@ -77,12 +72,23 @@ test(`generated programs: the evaluator, compiled JavaScript, WebAssembly and C 
   type Built = { code: typeof p.code; info: typeof p.info; names: typeof p.names };
   const engines = async (q: Built, tag: string, js = true, native = true, entry = false) => {
     const roots = entry ? p.entries : p.defs.map((d) => d.def), name = (i: number) => `${entry ? "e" : "g"}${i}`;
+    // JavaScript printed from the core IR (C137c), lowered as `lab compile
+    // --core` lowers it (`host`: the evaluator's builtins where the core IR
+    // has none). What it can't run yet throws Unsupported, and isn't compared.
     if (js) {
-    const path = join(mkdtempSync(join(tmpdir(), "fuzz-")), "out.mjs");
-    writeFileSync(path, compile(q.code, q.info, q.names, { runtime, exports: p.defs.map((_, i) => name(i)) }));
-    const js = (await import(pathToFileURL(path).href)).defs as Record<string, (...a: Value[]) => string>;
-    p.defs.forEach((_, i) => INPUTS.forEach(([x, n, xs], j) => check(stopped(() => js[name(i)](...(entry ? [x, norm(n), norm(BigInt(j))] : args(x, n, xs)))), i, j, `JavaScript${tag}`)));
+    const hosted = lowerScalar(q.code, q.info, q.names, roots, { data: true, host: true });
+    assert.deepEqual([...hosted.refused.entries()].map(([d, why]) => `${q.names[d]}: ${why}`), [], `seed ${SEED}${tag}, host`);
+    const cj = loadCoreJs(hosted);
+    roots.map((def) => hosted.funcs.findIndex((g) => g.def === def && !g.inner)).forEach((fi, i) => INPUTS.forEach(([x, n, xs], j) => {
+      let got: unknown;
+      try { got = cj[fi](x, norm(n), entry ? norm(BigInt(j)) : toList(xs.map(norm))); } catch (e) {
+        if (e instanceof Unsupported) { unsupported.add(e.message); return; }
+        got = e === FAIL ? "no answer" : "stop";
+      }
+      compared++; check(got, i, j, `JavaScript from the core IR${tag}`);
+    }));
     }
+
     if (!native) return;
 
     const lowered = lowerScalar(q.code, q.info, q.names, roots, { data: true });
@@ -102,23 +108,6 @@ test(`generated programs: the evaluator, compiled JavaScript, WebAssembly and C 
         check(stopped(() => fromText(w, w[f.name](x, toInt(w, n), entry ? toInt(w, BigInt(j)) : list(xs, f.params[2])) as never)), i, j, `WebAssembly${tag}`);
       });
     });
-    }
-
-    // JavaScript printed from the core IR (C137c), lowered as `lab compile
-    // --core` lowers it (`host`: the evaluator's builtins where the core IR
-    // has none). What it can't run yet throws Unsupported, and isn't compared.
-    {
-    const hosted = lowerScalar(q.code, q.info, q.names, roots, { data: true, host: true });
-    assert.deepEqual([...hosted.refused.entries()].map(([d, why]) => `${q.names[d]}: ${why}`), [], `seed ${SEED}${tag}, host`);
-    const cj = loadCoreJs(hosted);
-    roots.map((def) => hosted.funcs.findIndex((g) => g.def === def && !g.inner)).forEach((fi, i) => INPUTS.forEach(([x, n, xs], j) => {
-      let got: unknown;
-      try { got = cj[fi](x, norm(n), entry ? norm(BigInt(j)) : toList(xs.map(norm))); } catch (e) {
-        if (e instanceof Unsupported) { unsupported.add(e.message); return; }
-        got = e === FAIL ? "no answer" : "stop";
-      }
-      compared++; check(got, i, j, `JavaScript from the core IR${tag}`);
-    }));
     }
 
     if (!skip) {
