@@ -131,10 +131,10 @@ function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Re
   // only for the performers of such an effect (selective, as Koka and
   // Effekt).
   if (name.startsWith("handleK:")) {
-    const e = name.split(":")[1];
+    const [, e, at] = name.split(":"), now = new Set((at ?? "").split(",").filter(Boolean).map(Number));
     return (body, ...cases) => {
       const s = handlers.get(e) ?? handlers.set(e, []).get(e)!;
-      const frame = Object.assign(cases as Cases, { box: { v: undefined as unknown } });
+      const frame = Object.assign(cases as Cases, { box: { v: undefined as unknown }, now });
       s.push(frame);
       try { (body as { code: (...xs: unknown[]) => unknown }).code(body, (x: unknown) => { frame.box.v = x; return true; }); } finally { s.pop(); }
       return frame.box.v;
@@ -367,9 +367,10 @@ function worldFn(op: string, rt: Runtime, timers: Timers, handlers: Map<string, 
     return (...xs) => {
       const k = xs.pop(), s = handlers.get(e);
       if (!s?.length) throw new Error(`nothing handles ${e}`);
-      const frame = s.pop() as Cases & { box: { v: unknown } };
+      const frame = s.pop() as Cases & { box: { v: unknown }; now?: Set<number> };
       const rest = (y: unknown) => { s.push(frame); try { RUNTIME.ap(k as never, y); } finally { s.pop(); } return frame.box.v; };
-      try { frame.box.v = frame[Number(i)](...xs, rest); } finally { s.push(frame); }
+      // A case that leaves the rest out answers at once (L63, L229e).
+      try { if (frame.now?.has(Number(i))) rest(frame[Number(i)](...xs)); else frame.box.v = frame[Number(i)](...xs, rest); } finally { s.push(frame); }
       return true;
     };
   }

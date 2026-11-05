@@ -28,6 +28,7 @@
 // writing the case in; and lambda lifting (Johnsson, 1985) for the values
 // the cases use.
 
+import { laterOps } from "../../ters/src/lang/later-ops.ts";
 import { freshId, mapIds, subtree, type Code, type Id, type Node, type NodeOf, isCall, type Call } from "../../ters/src/model.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { SIGS } from "../../ters/src/lang/std.ts";
@@ -68,7 +69,7 @@ export function fuseHandlers(code: Code, info: Info, names: Names): { code: Code
     if (!e) return null;
     for (const a of arms) {
       const v = nodes[a.variant] as NodeOf<"variant">;
-      if (!v.returns || v.later || effectOf(a.variant) !== e) return null;
+      if (!v.returns || laterOps(code).has(a.variant) || effectOf(a.variant) !== e) return null;
       if (!quiet(a.body)) return null;
     }
     return e;

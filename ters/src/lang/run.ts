@@ -762,7 +762,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       // Answered later: the case runs outside the match, as for one that
       // never returns, and is given the rest to resume once, or drop. A
       // case that leaves the rest out answers at once (L63).
-      if (variant.later && variant.returns && arm.binds.length === variant.fields.length + 1) {
+      if (variant.returns && arm.binds.length === variant.fields.length + 1) {
         const rest = restOf({ top: this.k, h, cps: this.cps.splice(h.base), fuel: this.fuel, used: false, op });
         this.k = h.next;
         this.fuel = h.fuel;
