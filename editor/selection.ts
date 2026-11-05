@@ -3,7 +3,7 @@
 // click in the Blocks pane is on, and the menu for the selected part from
 // the keyboard. What it reads of the editor comes through
 // `SelectionHost`.
-import { isCall, isUse, SCHEMA, type Code, type Id, type Node } from "../ters/src/model.ts";
+import { isCall, isUse, layerOf, offLayer, scanningOnLayer, SCHEMA, type Code, type Id, type Node } from "../ters/src/model.ts";
 import type { Presentation } from "../ters/src/presentation.ts";
 import * as T from "./typed.ts";
 import type { MenuTarget } from "./typedGraph.ts";
@@ -13,14 +13,30 @@ import type { Doc, UI } from "./main.ts";
 // match or fold holding it, which parentOf doesn't know (I134); one walk
 // of the nodes, not one per step (I135).
 const parents = new WeakMap<Code, Map<Id, { parent: Id; slot: string; index?: number }>>();
-export function parentsOf(code: Code) {
-  let m = parents.get(code);
+type Parent = { parent: Id; slot: string; index?: number };
+// A program on the library's layer (E253d): the library's parents, found
+// once, beside those of the program's own nodes, so an edit walks only
+// those (I167: ~40 ms of each edit's walk was the library's ~27,000).
+const layered = new WeakMap<Code, { get(id: Id): Parent | undefined }>();
+export function parentsOf(code: Code): { get(id: Id): Parent | undefined } {
+  const lib = layerOf(code);
+  if (!lib) return parentsIn(code);
+  let l = layered.get(code);
+  if (l) return l;
+  const changed = scanningOnLayer(code, () => offLayer(code)) ?? new Set<Id>();
+  const under = parentsIn(lib), mine = parentsIn({ nodes: code.nodes, defs: [] }, changed);
+  l = { get: (id) => mine.get(id) ?? (changed.has(under.get(id)?.parent ?? "") ? undefined : under.get(id)) };
+  layered.set(code, l);
+  return l;
+}
+function parentsIn(code: Code, only?: Set<Id>) {
+  let m = only ? undefined : parents.get(code);
   if (m) return m;
   m = new Map();
   const set = (c: Id | null | undefined, parent: Id, slot: string, index?: number) => { if (c && !m!.has(c)) m!.set(c, { parent, slot, ...(index !== undefined ? { index } : {}) }); };
   // Every child slot of every kind, as model.ts SCHEMA lists them (E228o),
   // not a list of kinds of its own: a slot a kind gains is known here too.
-  for (const n of Object.values(code.nodes)) {
+  for (const n of only ? [...only].map((id) => code.nodes[id]).filter(Boolean) : Object.values(code.nodes)) {
     for (const [slot, how] of Object.entries(SCHEMA[n.kind] ?? {})) {
       if (how !== "child") continue;
       const v = (n as unknown as Record<string, unknown>)[slot];
@@ -29,7 +45,7 @@ export function parentsOf(code: Code) {
       else if (v && typeof v === "object") Object.values(v).forEach((c) => typeof c === "string" && set(c, n.id, slot));
     }
   }
-  parents.set(code, m);
+  if (!only) parents.set(code, m);
   return m;
 }
 
