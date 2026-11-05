@@ -429,7 +429,12 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // A number type: Float64, Int, a pin's, or one with + − · of its own in
   // the layer under or here (L204f), for saying a number isn't one.
   const isNumberType = (t: Type) => t.t === "con" && (t.id === NUMBER || t.id === INT || t.id.startsWith("pin.") || lowerHas.has(`std.arithmetic ${t.id}`) || !!implementationOf(info, "std.arithmetic", t));
-  s.waits = (id, iface) => (layer && (id.startsWith("std.") || id.startsWith("type.")) ? lowerHas.has(`${iface} ${id}`) : !!typedefOf(id));
+  // Off the layer (a check of only what the roots reach, as core-js.ts
+  // lowerCore makes) a std or builtin type waits too, so the wanted loop
+  // finds its implementation in the code or says it has none: Text isn't
+  // a typedef, and its < had been refused there (C176).
+  const stdType = (id: Id) => id.startsWith("std.") || id.startsWith("type.");
+  s.waits = (id, iface) => (layer && stdType(id) ? lowerHas.has(`${iface} ${id}`) : !!typedefOf(id) || stdType(id));
 
   // --- strict positivity
   // A data type may not take itself as an input in its own fields, directly

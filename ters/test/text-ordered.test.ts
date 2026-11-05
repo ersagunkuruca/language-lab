@@ -54,9 +54,9 @@ test("smaller, larger, at most and <, at Text: alphabetical, evaluated and compi
   });
   const want = ['"a"', '"banana"', "true", "false", "true", '"fig"', "2"];
   assert.deepEqual(ran, want);
-  // A core IR bug (C137): < at Text through a definition of your own
-  // stops as a Float64's overflow.
-  assert.deepEqual(compiled, ["the answer is too big for a Float64 (overflow) (in main)"]);
+  // The core IR the same (C176: its check of what the roots reach had
+  // refused Text's <, and the call fell to Float64).
+  assert.deepEqual(compiled, want);
 });
 
 test("a definition over < says `a has <`; Text still has no +, and one over + and < still wants a Number", () => {
