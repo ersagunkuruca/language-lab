@@ -39,7 +39,11 @@ export function resultKeys(code: Code, info: Info, defs: Id[], saved: Record<Id,
     const row = t?.t === "fn" ? info.subst.zonkRow(t.eff) : { effs: [] as Id[] };
     // An open tail is the row being general, not an effect the test performs.
     if (!row.effs.every((e) => KEPT.has(e)) || !memo.has(d)) continue;
-    out.set(d, sha(JSON.stringify([memo.get(d), saved[d] ?? [], build])));
+    // A function input runs on the program's functions that fit (T7e14a),
+    // so the result hangs on each of them too.
+    const takesFn = t?.t === "fn" && t.params.some((p) => info.subst.zonk(p).t === "fn");
+    const fns = takesFn ? defs.filter((c) => c !== d && info.typeOf.get(c)?.t === "fn").map((c) => memo.get(c) ?? c) : [];
+    out.set(d, sha(JSON.stringify([memo.get(d), saved[d] ?? [], build, fns])));
   }
   return out;
 }
