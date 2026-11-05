@@ -6,6 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Code, Id, NodeOf } from "../src/model.ts";
+import { isUse } from "../src/model.ts";
 import type { Presentation, Style } from "../src/presentation.ts";
 import blocksStyle from "../styles/blocks.json" with { type: "json" };
 import { Lang } from "../src/lang/dsl.ts";
@@ -119,9 +120,10 @@ test("another direction names what it's given, and gives the ports left, in orde
   assert.equal(runMain(code, info, main, { print: () => {}, names }), "-4 7");
 });
 
-// The palette writes a use (I65): where a value goes, `a, b = sum and
-// difference(□, □)` is offered, and filling it gives a use whose results
-// are named after them, inputs and body still to fill.
+// The palette writes a use (I65): where a value goes, a use of sum and
+// difference is offered, and filling it gives the use, which gives its
+// results as a tuple (L211k), let-bound, its inputs and what follows still
+// to fill.
 test("the palette offers a use of a definition with results, and fills it in", async () => {
   const { fillings } = await import("../src/lang/infer.ts");
   const { fillHole } = await import("../src/lang/refactor.ts");
@@ -140,7 +142,11 @@ test("the palette offers a use of a definition with results, and fills it in", a
   const filled = infer(e.code, e.names);
   assert.deepEqual(filled.errors.map((x) => x.message), []);
   const pres: Presentation = { names: e.names, comments: {}, hints: {}, style: blocksStyle as unknown as Style };
-  assert.match(renderBlocks(e.code, pres, filled, main), /a, b = ‹sum and difference›\(□, □\)/);
+  assert.match(renderBlocks(e.code, pres, filled, main), /‹sum and difference result› = ‹sum and difference›\(s = □, d = □\)\n\s*□/);
+  // Written as L211 decided: the use gives its results, with no binds or body (L211k).
+  const written = Object.values(e.code.nodes).filter((n) => isUse(n) && !code.nodes[n.id]);
+  assert.equal(written.length, 1);
+  assert.ok(written.every((n) => isUse(n) && n.binds === undefined && n.body === undefined));
 });
 
 test("a relation written where it is used is the function of its declared direction, and runs as its use (L225e)", () => {
