@@ -431,7 +431,9 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
     }
 
     // One from the budget per call, and per round of the loop.
-    const spend = (d: string) => (f.spends ? [`${d}if (--fuel < 0) throw R.OUT;`] : []);
+    // A definition that may not finish takes a step each time round, which
+    // only a page's budget counts (C179): a formula that never ends stops.
+    const spend = (d: string) => [...(f.spends ? [`${d}if (--fuel < 0) throw R.OUT;`] : []), ...(ir.info.divergent.has(f.def) ? [`${d}R.step();`] : [])];
     const params = f.params.map((_, j) => local(j)), locals = f.locals.map((_, j) => local(f.params.length + j));
     const body = loops ? ["  for (;;) {", ...spend("    "), ...block(f.body, "return", "    "), "  }"] : [...spend("  "), ...block(f.body, "return", "  ")];
     // A definition that isn't a function is worked out once, at its first

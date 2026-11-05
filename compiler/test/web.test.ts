@@ -202,10 +202,10 @@ test("a formula that never ends: its part says it didn't finish, and comes back 
     seen.push(root.html());
     return seen.map((h) => h.replace(/<button.*/, ""));
   };
-  // C179: on the core IR a formula that never ends runs on, with no
-  // steps to stop it, so only the evaluator's page is drawn here.
+  // On the core IR a definition that may not finish takes steps too (C179).
   const e = draw("evaluator");
   assert.deepEqual(e, ["<p>0", "<p>didn't finish", "<p>0"]);
+  assert.deepEqual(draw("compiled"), e);
 });
 
 test("for each keeps an item's row when the list changes, compiled the same", async () => {
