@@ -46,6 +46,15 @@ export function palette(host: PaletteHost) {
     Object.defineProperty(l, 1, { get: () => (t ??= type()), set: (v: string) => { t = v; }, enumerable: true, configurable: true });
     return l;
   }
+  // The row named anew, its name and type still worked out when first
+  // read (unsearched, only the 40 drawn are).
+  function renamed(l: [string, string, string], name: () => string): [string, string, string] {
+    const m: [string, string, string] = ["", "", l[2]];
+    let n: string | undefined;
+    Object.defineProperty(m, 0, { get: () => (n ??= name()), set: (v: string) => { n = v; }, enumerable: true, configurable: true });
+    Object.defineProperty(m, 1, Object.getOwnPropertyDescriptor(l, 1)!);
+    return m;
+  }
   function fillLabel(f: T.Filling, info: T.Info, names: Names): [string, string, string] {
     const nm = (id: Id) => names[id] ?? id;
     switch (f.kind) {
@@ -194,8 +203,10 @@ export function palette(host: PaletteHost) {
     for (const { l } of all) seen.set(l[0], (seen.get(l[0]) ?? 0) + 1);
     for (const x of all) {
       const t = x.f.kind === "call" ? info.subst.resolve(x.f.type) : null;
-      if (seen.get(x.l[0])! > 1 && x.f.kind === "call" && t?.t === "fn" && t.params.length)
-        x.l = [`${names[x.f.target] ?? x.f.target}(${t.params.map((p) => `□: ${typeName(info, p, names)}`).join(", ")})`, x.l[1], x.l[2]];
+      if (seen.get(x.l[0])! > 1 && x.f.kind === "call" && t?.t === "fn" && t.params.length) {
+        const target = x.f.target;
+        x.l = renamed(x.l, () => `${names[target] ?? target}(${t.params.map((p) => `□: ${typeName(info, p, names)}`).join(", ")})`);
+      }
     }
     // A definition of the program's own named like the library's (values
     // of) says it's its own, beside the library's (E182).

@@ -468,6 +468,9 @@ async function matchByValue() {
   await p.locator("#f-def-inputs").fill("name");
   await p.locator("button", { hasText: "Create" }).click();
   await p.locator(".hole").first().click();
+  // Rows that would read alike say what their holes take, worked out only
+  // for the rows drawn (I167g).
+  if (!(await p.locator(".palette .opt").allInnerTexts()).some((r) => r.startsWith("show(□: Int)"))) errors.push(`${where}: no show(□: Int) among the rows drawn`);
   await p.locator("#f-query").fill("by value"); await p.waitForTimeout(400);
   await p.locator(".opt", { hasText: "a case per Text value" }).click({ timeout: 5000 }).catch(() => errors.push(`${where}: no match name · by value for a Text`));
   await p.locator(".p-text .kw", { hasText: "match" }).first().click({ timeout: 2000 }).catch(() => {});
