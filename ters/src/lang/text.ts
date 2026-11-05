@@ -13,7 +13,20 @@ const wide = /[\uD800-\uDFFF]/;
 const chars = (t: string): string[] => (wide.test(t) ? Array.from(t) : t.split(""));
 const small = (i: Int): number => (typeof i === "bigint" ? (i < 0n ? -Infinity : Infinity) : i);
 
-export const length = (t: string): Int => (wide.test(t) ? Array.from(t).length : t.length);
+// The last long text found to have no characters outside the basic
+// plane: a reader walking one line slices it again and again, and a test
+// of the whole line each time made reading it n² (C110 s5b, calc's
+// parentheses 10,000 deep). The same string again is the same object, and
+// === on it doesn't read it.
+let narrow: string | undefined;
+const isNarrow = (t: string): boolean => {
+  if (t === narrow) return true;
+  if (wide.test(t)) return false;
+  if (t.length > 64) narrow = t;
+  return true;
+};
+
+export const length = (t: string): Int => (isNarrow(t) ? t.length : Array.from(t).length);
 
 // The characters from `from` up to, not including, `to`. Out-of-range
 // positions are clamped, so it never fails: slice("abc", 1, 99) = "bc".
@@ -22,6 +35,7 @@ export const length = (t: string): Int => (wide.test(t) ? Array.from(t).length :
 export function slice(t: string, from: Int, to: Int): string {
   const a = Math.max(0, small(from)), b = small(to);
   if (b <= a) return "";
+  if (isNarrow(t)) return t.slice(a, b);
   let i = 0, at = 0, start = -1;
   for (; at < b && i < t.length; at++) {
     if (at === a) start = i;

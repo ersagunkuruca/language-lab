@@ -78,6 +78,18 @@ test("Float64s read back by descent as show writes them (L72c)", async () => {
   }
   // Spellings show doesn't write have no reading.
   for (const line of ["1.0", "+1", "0.30", ".5", "1e3", "(1  2)"]) assert.equal(rd(line, 0), null, line);
+  // The written reader (reader.ts, L72c2) reads them the same.
+  const { writeReader } = await import("../src/lang/reader.ts");
+  const w = writeReader(c2, pr, n2);
+  const all = { nodes: { ...c2.nodes, ...w.code.nodes }, defs: [...c2.defs, ...w.code.defs.filter((d) => !c2.defs.includes(d))] }, allNames = { ...n2, ...w.names };
+  const info = infer(all, allNames);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const rr = makeRunner(all, info, { print: () => {}, names: allNames });
+  for (const line of ["1", "-2.5", "0.3", "(1 2.25 (-0.5) ())", "1e-12", "(3 1e-7)", "1.0", "+1", "0.30", ".5", "1e3", "(1  2)"]) {
+    const got = [...(rr.call(rr.value(w.line), line) as Iterable<Value>)][0];
+    const want = rd(line, 0);
+    assert.equal(showValue(got, all, allNames), want === null ? "none" : `some(${showValue(want, c2, n2)})`, line);
+  }
 });
 
 // A Text's characters each written by a function of one character
@@ -114,4 +126,22 @@ test("json printed reads back by descent as json read reads it (L72d)", () => {
     assert.equal(showValue(v, LIBRARY.code, LIBRARY.names), showValue(viaRead, LIBRARY.code, LIBRARY.names), t);
   }
   for (const t of ["[1,]", "{\"a\"}", "nul", "[1 2]"]) assert.equal(rd(t, 0), null, t);
+});
+
+// The same reading written as a definition (reader.ts, L72d2), as
+// compiled targets run it.
+test("json printed's written reader reads as descent does (L72d2)", async () => {
+  const { writeReader } = await import("../src/lang/reader.ts");
+  const jp = L("json printed");
+  const w = writeReader(LIBRARY.code, jp, LIBRARY.names);
+  const all = { nodes: { ...LIBRARY.code.nodes, ...w.code.nodes }, defs: [...LIBRARY.code.defs, ...w.code.defs.filter((d) => !LIBRARY.code.defs.includes(d))] }, allNames = { ...LIBRARY.names, ...w.names };
+  const info = infer(all, allNames);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const rr = makeRunner(all, info, { print: () => {}, names: allNames });
+  const rd = descentReader(LIBRARY.code, jp, LIBRARY.names);
+  for (const t of ["null", "true", "[]", "{}", '[1,true,"a\\"b"]', '{"a":[1,{"b":null}],"c":false}', '"tab\\u0009there \\n\\u0001 çağ"', "[1,]", "{\"a\"}", "nul"]) {
+    const got = [...(rr.call(rr.value(w.line), t) as Iterable<Value>)][0];
+    const want = rd(t, 0);
+    assert.equal(showValue(got, all, allNames), want === null ? "none" : `some(${showValue(want, all, allNames)})`, t);
+  }
 });

@@ -26,6 +26,7 @@ import { computedForward, directionProblem, useDirections } from "./directions.t
 import { analyzer, derivedFrom, determinism, keptMode, keptReturned, oneAnswer, solveMode, type Fn } from "./modes.ts";
 import { smoothDerivative as hasSmoothDerivative, smoothGradient as hasSmoothGradient, recordVariant, forgetDerived } from "./derive.ts";
 import { answerKeys } from "./ports.ts";
+import { laterOps } from "./later-ops.ts";
 import { LITERAL, FILE_OPS, KEPT_FILES, JSON_OPS, RELEASE_V, ARITH, BOOL, CELL_OPS, EMBEDDING, EMBEDDING_V, LIST, DIVISION, FIELDS, JOBS, S, SET, SIGS, SMART, TRUE, TUPLE_MAX, tupleType } from "./std.ts";
 import { countedCalls } from "./counting.ts";
 import { ratioParts } from "./int.ts";
@@ -1598,7 +1599,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       // does and gives what the match gives (ANSWERED-LATER.md).
       // Its case may also leave the rest out and answer at once, as any
       // operation's does (L63): resuming at once is answering.
-      const later = op.later && op.returns ? 1 : 0;
+      const later = laterOps(code).has(arm.variant) ? 1 : 0;
       if (arm.binds.length !== fs.length + later && !(later && arm.binds.length === fs.length)) err(arm.id, later ? `${nm(arm.variant)} has ${fs.length} inputs and the rest of the computation (or only its inputs, to answer at once), ${arm.binds.length} bound` : `${nm(arm.variant)} has ${fs.length} inputs, ${arm.binds.length} bound`);
       const inner = new Map(env);
       arm.binds.forEach((b, i) => { if (fs[i]) { inner.set(b, fs[i]); info.typeOf.set(b, fs[i]); } });

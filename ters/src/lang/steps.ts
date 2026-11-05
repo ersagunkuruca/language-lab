@@ -37,8 +37,8 @@ export function cantStep(code: Code, effect: Id): string | null {
   if (td.params.length) return "it takes types (not yet)";
   const ops = td.variants.map((v) => code.nodes[v] as NodeOf<"variant">);
   if (!ops.length) return "it has no operations";
-  const now = ops.find((o) => !o.later || !o.returns || o.params?.length);
-  if (now) return `its operation ${now.id} isn't answered later with an answer`;
+  const now = ops.find((o) => !o.returns || o.params?.length);
+  if (now) return `its operation ${now.id} has no answer, or types of its own (not yet)`;
   return null;
 }
 
