@@ -221,6 +221,18 @@ own, for its part known, its result known, or neither, and runs in a
 frame of its own (on a fresh stack, so reading back a long text isn't
 bounded by the JS stack).
 
+A choice whose value examined is known, and whose arms each finish on
+their own (one answer at most, nothing searched apart, nothing given
+outside the choice but its value, of the same size in each), is joined
+(L227): the goals after it are searched once, from where every arm leaves
+them, and that one plan is copied after each arm's own goals. The plan
+relate.ts runs is the same shape. The search had explored the goals after
+it once per arm, so k value ifs in a row were 2^k searches; steady's `two
+to` has 20, and pow stopped at the analysis's limit of paths, even run
+forward with every input known. A trial join that fails leaves nothing
+behind: the calls its arms made on their own are taken out of the
+size-change graphs.
+
 What the analysis can't decide stays at run time, as planned under
 "Where it can't decide":
 
