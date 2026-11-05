@@ -13,6 +13,7 @@ import { worldTimers, type Timers } from "../../ters/src/lang/timers.ts";
 import { NoAnswer } from "../../ters/src/lang/html.ts";
 import { worldRandom } from "../../ters/src/lang/random.ts";
 import * as I from "../../ters/src/lang/int.ts";
+import { bytesValue, plainBytes } from "../../ters/src/lang/bytes.ts";
 import * as T from "../../ters/src/lang/text.ts";
 import type { Code, Id } from "../../ters/src/model.ts";
 import { reasonOf, STOPS } from "./stops.ts";
@@ -403,6 +404,14 @@ function worldFn(op: string, rt: Runtime, timers: Timers, handlers: Map<string, 
     case "now": return () => (rt.world?.now ?? Date.now)();
     case "random": return () => (rt.world?.random ?? worldRandom)();
     case "print": return (s) => { rt.print(s as string); return []; };
+    // The files `with open file` keeps open (L213c3), as run.ts answers
+    // them: what goes wrong is an answer (none, false), never a throw.
+    case "keptOpen": return (p) => { try { return { tag: SOME, fields: [w("openFile")!(p as string)] }; } catch { return { tag: NONE, fields: [] }; } };
+    case "keptLine": return (f) => { let l: string | null = null; try { l = w("fileLine")!(Number(f)); } catch { /* none */ } return l === null ? { tag: NONE, fields: [] } : { tag: SOME, fields: [l.normalize("NFC")] }; };
+    case "keptAddLine": return (f, s) => { try { w("fileAddLine")!(Number(f), s as string); return true; } catch { return false; } };
+    case "keptBytes": return (f, n) => { let b: Uint8Array | null = null; try { b = w("fileBytes")!(Number(f), Math.max(0, Number(n))); } catch { /* none */ } return bytesValue(b ?? new Uint8Array(0)); };
+    case "keptAddBytes": return (f, b) => { try { w("fileAddBytes")!(Number(f), plainBytes(b)); return true; } catch { return false; } };
+    case "keptClose": return (f) => { try { w("closeFile")!(Number(f)); } catch { /* closing can't fail */ } return []; };
     case "log": return (s) => { (rt.world?.log ?? rt.print)(s as string); return []; };
     case "printError": return (s) => { w("error")(s as string); return []; };
     case "readInput": return () => tried(() => w("input")());
