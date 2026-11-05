@@ -50,14 +50,15 @@ import { pagePanels } from "./pagePanel.ts";
 import { whereRuns } from "./whereRuns.ts";
 import { answersView, lawPanel, profileView, stuckView, valueView } from "./runViews.ts";
 import type { LogEntry } from "../ters/src/lang/worldlog.ts";
-import { fromFile, toFile } from "../ters/src/files.ts";
+import { fileModules, fromFile, toFile, upgradeFile, versionOf } from "../ters/src/files.ts";
+import type { Module } from "../ters/src/lang/modules.ts";
 import { flattened, matchRows, sameEverywhere } from "../ters/src/lang/patterns.ts";
 import { showPin, type Pins } from "../ters/src/lang/signatures.ts";
 import { problemOf } from "../ters/src/lang/problems.ts";
 import { inlinable, inlineView, type InlineView } from "./inline.ts";
 import * as Top from "../ters/src/lang/toplevel.ts";
 import { pictureEntries } from "./picture.ts";
-import type { Saved } from "../ters/src/lang/tests.ts";
+import { runTests, savedFrom, type Saved } from "../ters/src/lang/tests.ts";
 import { algebrasOf, describeMask, maskOfValue, type Algebra } from "../ters/src/lang/grades.ts";
 import { pageMain } from "../ters/src/lang/page.ts";
 import { browserWorld } from "../ters/src/lang/browser.ts";
@@ -145,6 +146,12 @@ export interface Doc {
   opened?: boolean;
   allowed?: Id[];
   denied?: Id[];
+  // Opened from a file that carries them (E254): the modules it uses
+  // beyond the library, and its store of every version it has used. Their
+  // code is in `code`, under the program's own; Upgrade moves it onto
+  // their newest versions.
+  modules?: Module[];
+  store?: Module;
 }
 
 export interface UI {
@@ -192,6 +199,8 @@ const own = (id: Id) => !id.includes(".") && !id.startsWith("@");
 // and the modules (src/lang/library.ts). A file holds only what's on top.
 const BASE = LIBRARY.code;
 const baseFor = (_typed: boolean) => BASE;
+// With the modules a file brought (E254) on top.
+const baseOf = (d: Pick<Doc, "modules" | "store">): Code => { const ms = fileModules(d); return ms.length ? merge(BASE, ...ms.map((m) => m.code)) : BASE; };
 
 // An example is a folder of the same side tables a saved file holds
 // (examples/unpack.ts writes one from a file the editor saved).
@@ -287,9 +296,10 @@ function onToday(d: Doc): Doc {
   // Renamed library ids (std's Pair is Tuple2, L139) read as today's, as
   // load.ts and files.ts do; else its own nodes would name ids that are gone.
   d = { ...d, code: onTodaysIds(d.code), names: onTodaysIds(d.names) };
+  const under = baseOf(d);
   return { ...d, code: {
-    nodes: { ...BASE.nodes, ...Object.fromEntries(Object.entries(d.code.nodes).filter(([id]) => own(id))) },
-    defs: [...BASE.defs, ...d.code.defs.filter(own)],
+    nodes: { ...under.nodes, ...Object.fromEntries(Object.entries(d.code.nodes).filter(([id]) => own(id))) },
+    defs: [...under.defs, ...d.code.defs.filter(own)],
   } };
 }
 
@@ -567,7 +577,7 @@ function newProgram() {
 const slug = (s: string) => s.trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "") || "program";
 
 function saveFile() {
-  const text = toFile({ title: titleOf(doc), typed: true, code: prog(), drafts: draftsOf(doc), names: doc.names.short, descriptive: doc.names.descriptive, comments: doc.comments, layout: doc.layout, examples: doc.examples ?? {}, signatures: doc.signatures ?? {} }, baseFor(doc.typed));
+  const text = toFile({ title: titleOf(doc), typed: true, code: prog(), drafts: draftsOf(doc), names: doc.names.short, descriptive: doc.names.descriptive, comments: doc.comments, layout: doc.layout, examples: doc.examples ?? {}, signatures: doc.signatures ?? {}, ...(doc.modules ? { modules: doc.modules } : {}), ...(doc.store ? { store: doc.store } : {}) }, baseFor(doc.typed));
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([text], { type: "application/json" }));
   a.download = `${slug(titleOf(doc))}.json`;
@@ -589,10 +599,45 @@ function openFile() {
     if ("error" in r) { ui.note = `Can't open ${f.name}: ${r.error}. Nothing changed.`; ui.refused = true; ui.touched = []; return render(); }
     const x = r.file;
     if (!x.typed) { ui.note = `Can't open ${f.name}: it's from before every program was typed, and its networks are gone. Nothing changed.`; ui.refused = true; ui.touched = []; return render(); }
-    addProgram({ opened: true, title: x.title, typed: x.typed, code: x.drafts ? join(r.code, x.drafts) : r.code, names: { short: x.names, descriptive: x.descriptive }, comments: x.comments, hints: {}, layout: x.layout, examples: x.examples, signatures: x.signatures, loose: x.drafts?.of, home: x.drafts?.home },
+    addProgram({ opened: true, title: x.title, typed: x.typed, code: x.drafts ? join(r.code, x.drafts) : r.code, names: { short: x.names, descriptive: x.descriptive }, comments: x.comments, hints: {}, layout: x.layout, examples: x.examples, signatures: x.signatures, loose: x.drafts?.of, home: x.drafts?.home, ...(x.modules ? { modules: x.modules } : {}), ...(x.store ? { store: x.store } : {}) },
       `Opened ${f.name} as a program of your own. Edits are kept in this browser; Save file writes them out.`);
+    // Newer versions of what it uses (E254): said, and moved on a click.
+    const newer = upgrades();
+    if (newer.length) { ui.note = `${ui.note} Its modules have newer versions of ${newer.join(", ")}: Upgrade, in the Program tab, moves it onto them.`; ui.panel = "program"; render(); }
   });
   input.click();
+}
+
+// What Upgrade would move, as "sort (version 1 to 2)" (E254).
+function upgrades(): string[] {
+  const ms = fileModules(doc);
+  if (!ms.length) return [];
+  const r = upgradeFile(ownCode(), doc, doc.names.short, () => null);
+  return r.moved.map((m) => `${pres().names[m.from] ?? m.from} (version ${versionOf(ms, m.from)} to ${versionOf(ms, m.to)})`);
+}
+const ownCode = (): Code => { const c = prog(), b = baseOf(doc); return { nodes: Object.fromEntries(Object.entries(c.nodes).filter(([id]) => !b.nodes[id])), defs: c.defs.filter((d) => !b.nodes[d]) }; };
+
+// The program onto its modules' newest versions, as lab upgrade does
+// (L111): kept only if it still checks and its tests pass; every version
+// it had goes into its store.
+function upgradeModules() {
+  const ms = fileModules(doc);
+  const r = upgradeFile(ownCode(), doc, doc.names.short, (o) => {
+    const code = { nodes: { ...doc.code.nodes, ...o.nodes }, defs: doc.code.defs };
+    const names = layer<Names>(pres().names, doc.names.short);
+    const info = T.infer(code, names);
+    if (info.errors.length) return `${info.errors.length} error${info.errors.length === 1 ? "" : "s"} after it (${info.errors[0].message})`;
+    // Its tests and accepted answers, as Run's test does (runViews.ts).
+    const saved = savedFrom(Object.fromEntries(Object.entries(doc.examples ?? {}).map(([d, v]) => [d, (v as unknown[]).filter((x) => !(x && typeof x === "object" && "main" in (x as object)))])) as Record<Id, string[] | Saved[]>);
+    const failed = runTests(code, info, names, o.defs, saved).filter((t) => t.error || t.failures.length);
+    return failed.length ? `${failed.map((t) => t.name).join(", ")} fail${failed.length === 1 ? "s" : ""} after it` : null;
+  });
+  if (!r.ok) { ui.note = `Not upgraded: ${r.reason}. Nothing changed.`; ui.refused = true; ui.touched = []; return render(); }
+  const said = r.moved.map((m) => `${pres().names[m.to] ?? m.to} to version ${versionOf(ms, m.to)} (${m.uses} use${m.uses === 1 ? "" : "s"})`).join(", ");
+  const kept = r.refused.map((x) => ` ${pres().names[x.from] ?? x.from} stays: ${x.reason}.`).join("");
+  const renamed = r.renamed.length ? ` Its author renamed ${r.renamed.map((x) => `${x.from} to ${x.to}`).join(", ")}; your names are kept.` : "";
+  commit({ code: { nodes: { ...doc.code.nodes, ...r.own.nodes }, defs: doc.code.defs }, names: { ...doc.names, short: r.names }, store: r.store }, Object.keys(r.own.nodes),
+    `Upgraded: moved ${said}. It checks and its tests pass; every version it had is in its store, saved with it.${kept}${renamed}`);
 }
 
 function deleteProgram() {
@@ -805,9 +850,9 @@ const defBody = (d: Id) => { const n = node(d); return n?.kind === "def" && n.bo
 // panel calls it hundreds of times a render (QA9 M1). Read only.
 let shown: { from: unknown[]; names: Names } | null = null;
 function shownNames(): Names {
-  const from = [doc.code, doc.loose, doc.names.short, doc.names.descriptive, ui.layer];
+  const from = [doc.code, doc.loose, doc.names.short, doc.names.descriptive, ui.layer, doc.modules, doc.store];
   if (!shown || from.some((x, i) => x !== shown!.from[i]))
-    shown = { from, names: layer<Names>(LIBRARY.names, looseNames(), doc.names.short, ui.layer === "descriptive" ? doc.names.descriptive : {}) };
+    shown = { from, names: layer<Names>(LIBRARY.names, ...fileModules(doc).map((m) => m.names), looseNames(), doc.names.short, ui.layer === "descriptive" ? doc.names.descriptive : {}) };
   return shown.names;
 }
 const pres = (names: Names = {}, comments: Comments = doc.comments): Presentation => ({
@@ -1353,6 +1398,13 @@ function programPanel(): HTMLElement {
     h("p", { class: "hint" }, "Every edit is kept in this browser as you go. A file holds the code, names, comments and layout together."));
   // The program's comment, as a definition has one: what it is, and whose
   // code or ideas it uses, links as links.
+  // The modules it brought from its file, and their newer versions (E254).
+  const ms = fileModules(doc);
+  if (ms.length) {
+    const newer = upgrades();
+    out.append(h("p", { class: "hint" }, `It uses ${(doc.modules ?? []).map((m) => m.title).join(", ") || "only its store"} beyond the library${doc.store ? ", and keeps every version it has used in its store" : ""}. ${newer.length ? `Newer versions: ${newer.join(", ")}.` : "It uses their newest versions."}`),
+      ...(newer.length ? [h("div", { class: "acts" }, h("button", { class: "btn", type: "button", "data-act": "upgrade-modules", title: "Kept only if it still checks and its tests pass" }, "Upgrade"))] : []));
+  }
   const shown = noteView(noteOf(doc));
   if (shown) out.append(shown);
   const ta = h("textarea", { id: "f-program-comment", rows: "4", placeholder: "What this program is. Whose code it adapts or whose idea it follows: who, and a link." }) as HTMLTextAreaElement;
@@ -2361,6 +2413,7 @@ document.addEventListener("click", (e) => {
     if (a === "save-file") return saveFile();
     if (a === "embed-link") return void copyEmbedLink();
     if (a === "delete-program") return deleteProgram();
+    if (a === "upgrade-modules") return upgradeModules();
     if (a === "t-swap" && ui.selected) return menuAction("swap", ui.selected);
     if (a === "t-replace" && ui.selected) return menuAction("replace", ui.selected);
     if (a === "t-wrap" && ui.selected) return menuAction("wrap", ui.selected);
