@@ -26,13 +26,18 @@ import { compilePageProgram } from "./pageCompile.ts";
 import { searchBackwards, type BackAsk, type Found } from "./backSearch.ts";
 import { stuckReading, type Reading } from "../ters/src/lang/relate.ts";
 import { lowerScalar } from "../compiler/src/scalar.ts";
+import { receivedCode, type SentCode } from "./runCode.ts";
 
 // `core`: main printed from the core IR, by an earlier run of this same
 // code or built with the site (E245c), so the run needs no checking or
 // lowering again.
 // `replay`: answer from an earlier run's log instead of the world (E232b);
 // `until`: give only that many of its answers, then pause (E232c).
-export type RunAsk = { code: Code; names: Names; pins: Pins; def: Id; title: string; files: [string, string][]; args?: string[]; core?: CoreMain; deny?: Id[]; stdin?: string; replay?: LogEntry[]; until?: number };
+export type RunAsk = { code: SentCode; names: Names; pins: Pins; def: Id; title: string; files: [string, string][]; args?: string[]; core?: CoreMain; deny?: Id[]; stdin?: string; replay?: LogEntry[]; until?: number };
+// Run's worker is kept between runs and started before the first (I177):
+// `warm` checks the program, so the library's check is kept by the time
+// Run main is pressed.
+export type WarmAsk = { warm: true; code: SentCode; names: Names; pins: Pins; def: Id };
 // args: main takes the command line's words, as `lab run` gives them (E212).
 // A page compiled the way "Open in a tab" does (page.ts corePageFile), off the
 // page's thread: the preview swaps it in when it's ready (main.ts startPage).
@@ -83,8 +88,13 @@ function withInput(world: World, stdin: string | undefined): World {
   };
 }
 
-self.onmessage = (e: MessageEvent<RunAsk | BackAsk | CompileAsk | WhereAsk>) => {
+self.onmessage = (e: MessageEvent<RunAsk | WarmAsk | BackAsk | CompileAsk | WhereAsk>) => {
   answers = null; paused = false;
+  if ("warm" in e.data) {
+    const { code, names, pins, def } = e.data;
+    try { setDisplayNames(names); setProgramPins(pins); checkedForRun(receivedCode(code), names, def); } catch { /* the run says what's wrong */ }
+    return;
+  }
   if ("whereRuns" in e.data) {
     const { code, names, pins } = e.data;
     try {
@@ -113,7 +123,8 @@ self.onmessage = (e: MessageEvent<RunAsk | BackAsk | CompileAsk | WhereAsk>) => 
     const { code, def, values, names } = e.data, until = Date.now() + 60000;
     return post(searchBackwards(code, def, values, names, () => Date.now() > until));
   }
-  const { code, names, pins, def, title, files, args, core, deny, stdin, replay, until } = e.data;
+  const { code: given, names, pins, def, title, files, args, core, deny, stdin, replay, until } = e.data;
+  const code = receivedCode(given);
   const kept = new Map(files), wrote = new Map<string, string>();
   const store: Store = {
     getItem: (k) => kept.get(k) ?? null,

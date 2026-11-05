@@ -11,6 +11,7 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { onTodaysIds } from "../src/lang/std.ts";
 import { exampleTables, type Manifest } from "../../editor/examplesPlugin.ts";
 import type { CoreMain } from "../../editor/coreMain.ts";
+import { sendCode } from "../../editor/runCode.ts";
 
 const manifest = JSON.parse(readFileSync(new URL("../../editor/examples.json", import.meta.url), "utf8")) as Manifest;
 function example(program: string) {
@@ -31,7 +32,9 @@ async function inWorker(ask: unknown): Promise<Record<string, unknown>[]> {
   self.self ??= globalThis;
   self.postMessage = (m) => said.push(m as Record<string, unknown>);
   await import("../../editor/runWorker.ts");
-  self.onmessage!({ data: ask });
+  // As Run sends it: the program's own nodes (editor/runCode.ts, I177).
+  const a = ask as { code?: Code };
+  self.onmessage!({ data: a.code && "nodes" in a.code ? { ...a, code: sendCode(a.code) } : ask });
   return said;
 }
 const printedLines = (said: Record<string, unknown>[]) => said.flatMap((m) => (m.lines as string[] | undefined) ?? []);
