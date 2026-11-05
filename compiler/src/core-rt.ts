@@ -29,6 +29,8 @@ export class Unsupported extends Error {}
 export class Stopped extends Error { node?: Id; def?: Id; defName?: string; constructor(why: string, at?: { node: Id; def: Id; name?: string }, name?: string) { super(why); if (at) { this.node = at.node; this.def = at.def; if (at.name) this.defName = at.name; } else if (name) this.defName = name; } }
 export class Aborted { reason: unknown; esc: number; constructor(reason: unknown, esc: number) { this.reason = reason; this.esc = esc; } }
 export const FAIL = { fail: true }, OUT = { out: true };
+// The mark a seeded generator leaves on Random's handlers (C183).
+const SEEDED = { seeded: true };
 
 const big = (x: I.Int) => BigInt(x);
 // UTF-8 as a browser has it too (a page's script, C137c9).
@@ -168,7 +170,11 @@ function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Re
   // the rest outside it is running.
   if (name === "rest.in") return (f) => { (f as { inRest: boolean }).inRest = true; return true; };
   if (name === "rest.out") return (f) => { (f as { inRest: boolean }).inRest = false; return true; };
-  if (name.startsWith("handled:")) { const e = name.slice(8); return () => !!handlers.get(e)?.length; }
+  // A seeded generator (C183) is the nearest handler of Random while its
+  // body runs: a draw then isn't a handler's of the program's.
+  if (name.startsWith("seeded.in:")) { const e = name.slice(10); return () => { (handlers.get(e) ?? handlers.set(e, []).get(e)!).push(SEEDED as never); return true; }; }
+  if (name.startsWith("seeded.out:")) { const e = name.slice(11); return () => { handlers.get(e)?.pop(); return true; }; }
+  if (name.startsWith("handled:")) { const e = name.slice(8); return () => { const s = handlers.get(e); return !!s?.length && s[s.length - 1] !== (SEEDED as never); }; }
   if (name.startsWith("perform:")) {
     const [, e, op, bool] = name.split(":");
     // The program's own operation nothing in it handles: its host's
@@ -352,6 +358,17 @@ export const RUNTIME = {
     if (f.code) return f.code(f, ...xs);
     try { return f(...xs); } catch (e) { if (e === FAIL) return FAIL; throw e; }
   },
+  // What a handler of Abort around a wait does with what its body threw
+  // (C182): its case, or, for a page's wait, the same once the run is
+  // resumed there, inside the handler as the evaluator's machine has it.
+  caught: (x: unknown, h: (x: unknown) => unknown): unknown => {
+    if (x instanceof Pending && x.resume) {
+      const go = x.resume;
+      x.resume = () => { try { return go(); } catch (y) { RUNTIME.caught(y, h); return []; } };
+    }
+    if (x instanceof Pending) throw x;
+    return h(x);
+  },
   // A module's stop has its definition's name and no ids (core-js.ts moduleTags).
   stop: (i: number, node?: Id | 0, def?: Id | 0, name?: string): never => { throw new Stopped(reasonOf(i), node && def ? { node, def, name } : undefined, name); },
   mod: (a: number, b: number) => ((a % b) + b) % b,
@@ -450,7 +467,16 @@ function worldFn(op: string, rt: Runtime, timers: Timers, handlers: Map<string, 
     case "randomSeed": return () => (rt.world?.randomSeed ?? (() => Math.floor(Math.random() * 4294967296)))();
     // A stop with a reason (L51c): the program ends, as an overflow's stop.
     case "stopWith": return (why) => { throw new Stopped(why as string); };
-    case "now": return () => (rt.world?.now ?? Date.now)();
+    // The clock the program's hosts/js.js answers in place of the world's
+    // (L69d1), checked at the border as the evaluator checks it.
+    case "now": return () => {
+      const host = (rt.hosts as Record<string, (() => unknown) | undefined> | undefined)?.["std.time.now"];
+      if (!host) return (rt.world?.now ?? Date.now)();
+      let v: unknown;
+      try { v = host(); } catch (e) { throw new Aborted((e as Error).message, 0); }
+      if (typeof v !== "number" || !Number.isFinite(v)) throw new Aborted(`the host's now gave ${JSON.stringify(v) ?? String(v)}, not a finite number`, 0);
+      return v;
+    };
     case "myLocale": return () => ({ tag: LOCALE_V, fields: [(rt.world?.locale ?? hostLocale)()] });
     case "myTimeZone": return () => (rt.world?.timeZone ?? hostZone)();
     case "fetchText": return (u) => tried(() => w("fetchText")(u as string));

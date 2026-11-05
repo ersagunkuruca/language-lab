@@ -6,6 +6,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { compiledMain } from "../../compiler/src/core-js.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
@@ -142,6 +143,11 @@ test("the clock answered by the program's hosts/js.js in place of the world's, c
   // Uncaught, the Abort ends the run with the reason; Abort itself is the
   // language's own, so a host entry for it isn't asked.
   assert.throws(() => run(main, { world, hosts: { [ABORT_OP]: () => undefined, [NOW_OP]: () => "soon" } }), /now gave "soon", not a finite number/);
+  // The core IR's JavaScript the same (L69d1, core-rt.ts worldFn).
+  const compiled = (name: string, rt: object) => { const out: string[] = []; compiledMain(code, info, names, { print: (s: string) => out.push(s), ...rt } as never, name); return out; };
+  assert.deepEqual(compiled("main", { world }), ["5"]);
+  assert.deepEqual(compiled("main", { world, hosts: { [NOW_OP]: () => 1234 } }), ["1234"]);
+  assert.match(compiled("careful", { world, hosts: { [NOW_OP]: () => NaN } })[0], /the host's now gave null, not a finite number/);
 });
 
 // L69d2: an effect the program marks pure is answered by its host as any

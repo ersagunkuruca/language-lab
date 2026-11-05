@@ -366,7 +366,17 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
           // Around several answers or a wait (C182): an abort while the
           // rest of the search runs isn't this handler's.
           const fr = e.frame === undefined ? "" : local(e.frame);
-          pre.push(`${d}${save}let ${t};`, ...(fr ? [`${d}${fr} = { inRest: false };`] : []), `${d}try {`, ...within(null, () => block(e.body, { set: t }, d + "  ")), `${d}} catch (x) {`, `${d}  if (!(x instanceof R.Aborted) || x.esc !== ${e.esc ?? 0}${fr ? ` || ${fr}.inRest` : ""}) throw x;`, `${d}  ${back}${local(e.reason)} = x.reason;`, ...block(e.arm, { set: t }, d + "  "), `${d}}`);
+          if (fr) {
+            // The case as a function, so a page's wait (Pending) going out
+            // through the handler is resumed inside it again (R.caught).
+            const h = temp();
+            pre.push(`${d}${save}let ${t};`, `${d}${fr} = { inRest: false };`, `${d}const ${h} = (x) => {`, `${d}  if (!(x instanceof R.Aborted) || x.esc !== ${e.esc ?? 0} || ${fr}.inRest) throw x;`, `${d}  ${back}${local(e.reason)} = x.reason;`,
+              ...within("return R.FAIL;", () => block(e.arm, { set: t }, d + "  ")), `${d}  return ${t};`, `${d}};`,
+              `${d}try {`, ...within(null, () => block(e.body, { set: t }, d + "  ")), `${d}} catch (x) {`, `${d}  ${t} = R.caught(x, ${h});`, `${d}}`);
+            if (onFail) pre.push(`${d}if (${t} === R.FAIL) ${onFail}`);
+            return t;
+          }
+          pre.push(`${d}${save}let ${t};`, `${d}try {`, ...within(null, () => block(e.body, { set: t }, d + "  ")), `${d}} catch (x) {`, `${d}  if (!(x instanceof R.Aborted) || x.esc !== ${e.esc ?? 0}) throw x;`, `${d}  ${back}${local(e.reason)} = x.reason;`, ...block(e.arm, { set: t }, d + "  "), `${d}}`);
           return t;
         }
         // A handler's release (L213a3/a4): after its body on every exit, a
