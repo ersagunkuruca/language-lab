@@ -312,6 +312,8 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
           const xs = e.args.map((a) => ex(a, pre, d));
           // The fuel is this module's own (C137c21).
           if (e.fn === "fuel.get") return "fuel";
+          // One of an answer's values (core-rt.ts pick), read where it is used.
+          { const m = /^pick:(\d+)$/.exec(e.fn); if (m && xs.length === 1) return `(${xs[0]})[${m[1]}]`; }
           if (e.fn === "fuel.swap") { const t = temp(); pre.push(`${d}const ${t} = fuel;`, `${d}fuel = ${xs[0]};`); return t; }
           return `${rtName(e.fn)}(${xs.join(", ")})`;
         }
