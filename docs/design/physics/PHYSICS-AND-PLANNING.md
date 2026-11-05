@@ -101,7 +101,7 @@ and a bound on how fast any point can approach (linear speed plus angular
 speed times the shape's radius), step forward by the largest time that
 can't cause a collision, and repeat. It converges in a few iterations and
 never skips an impact. That is row **L120**, after Bounce has shapes
-other than balls.
+other than balls. Built first against a wall (L120a): examples/impact, a spinning stick that a step a frame misses.
 
 A language-specific angle: "the time when these two touch" is a relation
 run backwards (`gap(a at t, b at t) = 0`, solved for t), which our
