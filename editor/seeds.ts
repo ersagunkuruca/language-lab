@@ -127,7 +127,7 @@ export function seeds(host: SeedHost) {
     const was = doc().code, open = ui.def;
     const go = () => {
       if (doc().code !== was || longRuns.has(was)) return;
-      if (mainCalls(info, entry, true).get(body.id) && ui.def === open) render();
+      longCalls(info, entry, () => { if (doc().code === was && longRuns.get(was)?.get(body.id) && ui.def === open) render(); });
     };
     if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => setTimeout(go, 0)); else setTimeout(go, 0);
     return undefined;
@@ -213,7 +213,10 @@ export function seeds(host: SeedHost) {
   // ANOTHER_TAP of each place's handlers run, one per drawing (a second tap
   // on the board picks a neighbour; each lane's timer).
   const ANOTHER_TAP = 3;
-  function explore(page: Value, over: () => boolean, started: () => void) {
+  // A piece at a time (I172): it yields after the first drawing, and after
+  // each handler and the drawing after it, so the long run can give the
+  // page back between pieces.
+  function* exploring(page: Value, over: () => boolean, started: () => void): Generator<void> {
     const fired = new Map<unknown, number>(), todo: Value[] = [];
     const draw = () => {
       const fresh: Value[] = [];
@@ -225,11 +228,51 @@ export function seeds(host: SeedHost) {
     };
     draw();
     started();
-    while (todo.length && !over()) { tryCall(todo.shift()!, NO_EVENT); draw(); }
+    yield;
+    while (todo.length && !over()) { tryCall(todo.shift()!, NO_EVENT); draw(); yield; }
+  }
+  // main run once at `args`, what each function is first called with put in
+  // `got`: main's run and the page's first drawing now, and what is left (its
+  // handlers, each with the page drawn again after it) as pieces to run,
+  // each with what is left of the handlers' time, which counts only while
+  // they run.
+  function runFrom(info: T.Info, main: Id, args: Value[], [steps, mainMs, handlersMs]: number[], got: Map<Id, Value[]>, copies: Map<Id, Id>): Generator<void> | undefined {
+    let end = performance.now() + mainMs;
+    // A function main made (newton's slope) keeps this hook: called
+    // later, from a helper's own Run, it is no longer main's run (I78).
+    let done = false, pieces: Generator<void> | undefined;
+    try {
+      withSteps(steps, () => {
+        const tr = trace(doc().code, info, main, args, dryWorld(), (l, args, copy) => {
+          if (done) return;
+          if (!got.has(l)) { got.set(l, args); if (copy !== l) copies.set(l, copy); }
+          if (performance.now() > end) throw new OutOfSteps();
+        });
+        // A page's views run later, as it's drawn: draw it once here, so
+        // what they call has values too (I29 b).
+        if (tr.result !== undefined) { pieces = exploring(tr.result, () => performance.now() > end, () => { end = performance.now() + handlersMs; }); pieces.next(); }
+      });
+    } finally { if (!pieces) done = true; }
+    if (!pieces) return undefined;
+    const rest = pieces;
+    return (function* () {
+      let left = Math.max(0, end - performance.now());
+      try {
+        while (left > 0) {
+          const from = performance.now();
+          end = from + left;
+          let more = false;
+          try { more = withSteps(steps, () => !rest.next().done); } catch { more = false; }
+          left -= performance.now() - from;
+          if (!more) break;
+          yield;
+        }
+      } finally { done = true; }
+    })();
   }
   function mainCalls(info: T.Info, main: Id, long = false): Map<Id, Value[]> {
     const runs = long ? longRuns : mainRuns;
-    const [steps, mainMs, handlersMs] = long ? [LONG.steps, LONG.main, LONG.handlers] : [MAIN_STEPS, MAIN_MS, HANDLERS_MS];
+    const budget = long ? [LONG.steps, LONG.main, LONG.handlers] : [MAIN_STEPS, MAIN_MS, HANDLERS_MS];
     let calls = runs.get(doc().code);
     if (!calls) {
       const got = new Map<Id, Value[]>(), copies = mainCopies.get(doc().code) ?? new Map<Id, Id>();
@@ -238,24 +281,9 @@ export function seeds(host: SeedHost) {
       // main takes nothing; a picture's function takes its pixel.
       const pixel = body?.kind === "lambda" && body.params.length ? pixelSeed(main) : [];
       const runAt = (seed: string[]) => {
-        const args = body?.kind === "lambda" ? body.params.map((q, i) => readPort(info, q, seed[i] ?? "")) : [];
-        if (!args.every((a) => !("error" in a))) return;
-        let end = performance.now() + mainMs;
-        // A function main made (newton's slope) keeps this hook: called
-        // later, from a helper's own Run, it is no longer main's run (I78).
-        let done = false;
-        try {
-          withSteps(steps, () => {
-            const tr = trace(doc().code, info, main, args.map((a) => (a as { value: Value }).value), dryWorld(), (l, args, copy) => {
-              if (done) return;
-              if (!got.has(l)) { got.set(l, args); if (copy !== l) copies.set(l, copy); }
-              if (performance.now() > end) throw new OutOfSteps();
-            });
-            // A page's views run later, as it's drawn: draw it once here, so
-            // what they call has values too (I29 b).
-            if (tr.result !== undefined) explore(tr.result, () => performance.now() > end, () => { end = performance.now() + handlersMs; });
-          });
-        } finally { done = true; }
+        const args = mainArgs(info, main, seed);
+        const rest = args && runFrom(info, main, args, budget, got, copies);
+        if (rest) for (const _ of rest);
       };
       if (pixel) {
         runAt(pixel);
@@ -268,6 +296,37 @@ export function seeds(host: SeedHost) {
       runs.set(doc().code, (calls = got));
     }
     return calls;
+  }
+  // main's inputs read from `seed`, or null where one doesn't read.
+  function mainArgs(info: T.Info, main: Id, seed: string[]): Value[] | null {
+    const body = defBody(main);
+    const args = body?.kind === "lambda" ? body.params.map((q, i) => readPort(info, q, seed[i] ?? "")) : [];
+    return args.every((a) => !("error" in a)) ? args.map((a) => (a as { value: Value }).value) : null;
+  }
+  // The long run, once per version of the code, after the definition has
+  // drawn (I158), and given back to the page between its pieces (I172: as
+  // one task, up to 1.6 s, it froze Tumble after `contains` drew). `then`
+  // once it has ended, unless the code changed meanwhile.
+  const longGoing = new WeakSet<Code>();
+  function longCalls(info: T.Info, main: Id, then: () => void): void {
+    const code = doc().code;
+    if (longRuns.has(code)) return then();
+    if (longGoing.has(code)) return;
+    const body = defBody(main);
+    // A picture's function runs at its pixels, a few short runs: at once.
+    if (body?.kind === "lambda" && body.params.length) { mainCalls(info, main, true); return then(); }
+    const got = new Map<Id, Value[]>(), copies = mainCopies.get(code) ?? new Map<Id, Id>();
+    mainCopies.set(code, copies);
+    const args = mainArgs(info, main, []);
+    const rest = args && runFrom(info, main, args, [LONG.steps, LONG.main, LONG.handlers], got, copies);
+    const ended = () => { longGoing.delete(code); longRuns.set(code, got); then(); };
+    if (!rest) return ended();
+    longGoing.add(code);
+    const piece = () => {
+      if (doc().code !== code) { rest.return(undefined); longGoing.delete(code); return; }
+      if (rest.next().done) ended(); else setTimeout(piece, 0);
+    };
+    setTimeout(piece, 0);
   }
 
   // A port's text read as a value, the way values print. Where a Text goes,
