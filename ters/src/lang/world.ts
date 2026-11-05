@@ -161,6 +161,7 @@ export function nodeWorld(): World {
       };
     },
     random: worldRandom,
+    randomSeed: () => Math.floor(worldRandom() * 4294967296),
     now: Date.now,
     // Sleeping without spinning: wait on a word nobody will ever change.
     wait: (ms) => { if (ms > 0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); },

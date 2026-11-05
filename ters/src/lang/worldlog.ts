@@ -82,8 +82,9 @@ export function replaying(log: LogEntry[], like: World, until?: number, onPause?
     if (typeof f !== "function") continue;
     if (WRITES.has(op)) out[op] = (...args: unknown[]) => { if (!paused) next(op, args); };
     else if (op === "startFetch") out[op] = (url: string) => () => (log[at]?.op === "fetchArrived" && same(log[at].args, [url]) ? next("fetchArrived", [url]).answer : null);
-    // A native program draws Random's numbers from a generator the world
-    // seeds at its first draw (C136), and logs the seed (C172c): from
+    // A native or WebAssembly program draws Random's numbers from a
+    // generator the world seeds at its first draw (C136), and logs the
+    // seed (C172c, C172d): from
     // there on the draws are the seeded generator's, as the program's were.
     else if (op === "random") out[op] = () => {
       if (paused) pause();

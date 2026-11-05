@@ -5,7 +5,7 @@ The world's answers in one log (L186, 2026-11-03) is a design rule. The evaluato
 (E232a, 2026-11-04): ters/src/lang/worldlog.ts `logged` and `replaying`, and the editor's Run
 shows the log. A JavaScript module from `lab compile` logs its world too, with TERS_LOG=file set,
 and `lab run --replay file` gives the evaluator those answers (C172a), and so does a native program from
-`lab native` (C172b; its Random's seed too, C172c, from which the replay draws the same numbers). Pages' events and the WebAssembly runtime's world aren't logged yet.
+`lab native` (C172b; its Random's seed too, C172c, from which the replay draws the same numbers). A WebAssembly run given a logged world keeps the log too, Random's seed asked of the world (C172d). Pages' events aren't logged yet.
 L58 named View, Handler and Sound, the rows written in std's types. Main
 and a sound's maker stay ledger entries, since no type spells them. This note covers BACKLOG
 L58 (named rows for the hosts) and L55 (Console, Files and Network declared

@@ -81,6 +81,7 @@ const PAGE_EFFECTS = new Set<Id>([...PAGE_VIEW, ...PAGE_HANDLER, ...AUDIO_BLOCK,
 const HOST_CELLS = new Set(Object.values(CELL_OPS).filter((id) => id !== CELL_OPS.path));
 import { runtime } from "./wasm-rt.ts";
 import { machineWords } from "./machine-words.ts";
+import { loopRecords } from "./loop-records.ts";
 import { wideProducts } from "./wide-products.ts";
 
 // A shader (or a ray marcher's loop) may call what might not finish only
@@ -352,7 +353,9 @@ export type SExpr =
   // `suspends` (C40 step 4): a page handler's wait or await, which goes on
   // by the rest of the handler; `cps`, that rest given last (t is then
   // the i32 it answers).
-  | { k: "world"; op: string; aborts: boolean; args: SExpr[]; t: LType; suspends?: true; cps?: true }
+  // `ins`: its inputs' types, where they aren't texts (a host's
+  // operation in WebAssembly, L69b2).
+  | { k: "world"; op: string; aborts: boolean; args: SExpr[]; t: LType; suspends?: true; cps?: true; ins?: LType[] }
   | { k: "handle"; body: SExpr; reason: number; arm: SExpr; t: LType; save: number; esc?: number }
   // W4d, gone after lowering: `one of` a list (t), anywhere, and a
   // handler's search (first, optional, all, count) to be made into code
@@ -888,7 +891,9 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     // that spends from a budget: running out is having no answer there,
     // which the nearest handler sees, as in the evaluator.
     const all = constant ? [] : info.subst.resolveRow(ft.eff).effs;
-    const partial = (!!opts.data && (all.includes(CHOICE) || all.some(escaping) || (!constant && info.divergent.has(def)))) || (!!opts.shader && all.includes(CHOICE));
+    // A host's operation may fail, with its reason (L69b1, L69b2): a
+    // function that performs one is partial, as one that aborts is.
+    const partial = (!!opts.data && (all.includes(CHOICE) || all.some(escaping) || all.some((e) => !!opts.hosted?.has(e)) || (!constant && info.divergent.has(def)))) || (!!opts.shader && all.includes(CHOICE));
     // Without `data` or `shader`, a Choice is let through: one from a
     // partial builtin (x / 0, the square root of a negative; L125b) is
     // lowered as its arithmetic, so no answer isn't seen here yet (L125c2,
@@ -2697,6 +2702,9 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   const ir: CoreIR = { stops: sites, funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()].filter((d) => !niche.has(d.key)), arrays: [...arrays.values()], tables: [...tables.values()], fns: [...fns.values()], shapes, code, info, escapes: escapes.map((e) => stype({ t: "con", id: e, args: [] }) as DType), rounded, ...(opts.shader && !opts.data ? { shader: true as const } : {}), ...(!opts.data ? { int32: true as const } : {}) };
   // A record's Int field proved to fit 32 bits, stored as a machine word
   // (C150e): WebAssembly and C, not core JS, whose values the host reads.
+  // A record a loop carries, its fields as values of their own (C68a); a
+  // shader's records are its own values (vectors, structs) already.
+  if (opts.data) loopRecords(ir);
   if (opts.data && !opts.host) { machineWords(ir); wideProducts(ir); }
   // The fuel is endless outside a budget, so where no budget is set
   // (`with fuel`, or the fuel a search outside one swaps in) nothing

@@ -119,10 +119,13 @@ test("a multivector carried in a record keeps its blade mask through each step (
 });
 
 // The guard (C77, REVIEW-2026-11-01b §7): a definition nobody open
-// reaches, compiled anyway, reads every part rather than zeros.
+// reaches, compiled anyway, reads every part rather than zeros. A value
+// known before it runs is read as it is wherever it is (L203f: the motor,
+// a definition's value), so only what comes from the inputs counts here.
 test("a definition the open ones don't reach gets every part, not zeros (C77)", () => {
   const p = pga();
-  const inMoved = new Set(subtree(p.code, p.times.movedN));
+  const known = (id: Id) => { const n = p.code.nodes[id], d = n?.kind === "ref" ? p.code.nodes[n.target] : undefined; return d?.kind === "def" && !!d.body && p.code.nodes[d.body]?.kind !== "lambda"; };
+  const inMoved = new Set(subtree(p.code, p.times.movedN).filter((id) => !known(id)));
   const read = (open: Id[]) => [...valueMasks(p.code, p.info, open)].filter(([id]) => inMoved.has(id)).map(([, m]) => m);
   // Reached: some of its values are narrower than every part.
   assert.ok(read([p.times.moveN]).some((m) => m.mask !== m.algebra.full));
