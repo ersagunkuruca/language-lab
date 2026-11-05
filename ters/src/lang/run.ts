@@ -36,7 +36,7 @@ import { computedForward } from "./directions.ts";
 import { discharge } from "./ledger.ts";
 import * as Alg from "./algebraic.ts";
 import { hostLocale, hostZone } from "./text.ts";
-import { ArrayView, FILE_OPS, KEPT_FILES, tupleVariant, floatText, LOCALE_V, MY_LOCALE_OP, MY_ZONE_OP, RELEASE_V, SETTINGS, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RATIO, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, shownImplementations, implementationsOf, ORDERED, CASE_NAME, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std.ts";
+import { ArrayView, FILE_OPS, KEPT_FILES, tupleVariant, floatText, LOCALE_V, MY_LOCALE_OP, MY_ZONE_OP, RELEASE_V, SETTINGS, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, shownImplementations, implementationsOf, ORDERED, CASE_NAME, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std.ts";
 import { intLit } from "./int.ts";
 import { answerFromHost, effectOfOperation, hostedEffects, pureHosts, type Hosts } from "./hosts.ts";
 import * as I from "./int.ts";
@@ -187,7 +187,7 @@ export const overflowed = (): never => { throw new Aborted("the answer is too bi
 // The order on plain data (L66): numbers by value (Int and Float64;
 // Float64 exactly, numberOrder), text by code point, a value of a type with
 // an Ordered implementation by its `less` (`by`, the runner's orderedBy:
-// Rational and Algebraic are the prelude's, L204g; stdOrdered without one), and other cases by
+// Rational and Algebraic are the prelude's, L204g; stdOrdered without one, Algebraic only), and other cases by
 // their declaration order (`order`: a variant's place in its type,
 // variantOrder), then their fields left to right, so lists go
 // lexicographically with [] first. OCaml's `compare` and Erlang's term
@@ -209,14 +209,10 @@ export function compareValues(a: Value, b: Value, order: Map<Id, number>, by: (x
   return 0;
 }
 
-// Rational's and Algebraic's order where no runner's orderedBy is given:
-// compiled code's `compare` (runtime.js $compare), until compile.ts orders
-// through Ordered too. The same order as the prelude's implementations.
+// Algebraic's order where no runner's orderedBy is given, the same as the
+// prelude's implementation. Rational has none here: its order is its
+// Ordered implementation's (L207f2), as a module's type's is.
 export function stdOrdered(x: Data, y: Data): number | undefined {
-  if (x.tag === RATIO && y.tag === RATIO) {
-    const l = I.mul(x.fields[0] as I.Int, y.fields[1] as I.Int), r = I.mul(y.fields[0] as I.Int, x.fields[1] as I.Int);
-    return l === r ? 0 : I.less(l, r) ? -1 : 1;
-  }
   if (x.tag === ALGEBRAIC_V && y.tag === ALGEBRAIC_V) return Alg.compare(algebraicOf(x), algebraicOf(y));
   return undefined;
 }
