@@ -69,9 +69,18 @@ async function swapAndUndo() {
   const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
   await p.goto(page);
-  await p.locator("[data-def]", { hasText: /^fall$/ }).click();
-  const distance = async () => (await p.locator(".p-text").innerText()).split("\n").find((l) => l.includes("distance ="))?.trim();
-  where = "change the function, then undo";
+  // A small program of its own (T14j): on physics' fall each palette here
+  // took 1.5 to 3 s; units are checked on fall below.
+  await p.locator(".nav-row", { hasText: "+ New program" }).click();
+  await p.locator(".nav-row", { hasText: "+ New definition" }).click();
+  await p.locator('[data-panel="node"]').click().catch(() => {});
+  await p.locator("#f-def-name").fill("distance");
+  await p.locator("#f-def-inputs").fill("drift, drop, speed");
+  await p.locator("button", { hasText: "Create" }).click();
+  await p.locator(".hole").first().click();
+  await p.locator("#f-query").fill("drift + drop · speed"); await p.waitForTimeout(400);
+  await p.keyboard.press("Enter");
+  const distance = async () => (await p.locator(".p-text").innerText()).split("\n").find((l) => l.startsWith("distance("))?.replace(/^distance\(drift, drop, speed\) = /, "").trim();
   await p.locator(".p-graph g:has(> text:text-is('+')) > rect.cn").first().click({ button: "right" });
   // Each item says what it does, and a greyed one says why (BACKLOG E88).
   const greyed = await p.locator(".ctx-menu .ctx-item:disabled").count(), why = await p.locator(".ctx-menu .ctx-item:disabled .ctx-why.cant").count();
@@ -82,19 +91,9 @@ async function swapAndUndo() {
   const subtracts = await p.locator(".ctx-menu .palette .opt", { hasText: /^subtract/ }).allInnerTexts();
   if (subtracts.length !== 1 || !subtracts[0].includes("where a is a Number")) errors.push(`${where}: the palette lists subtract as ${JSON.stringify(subtracts)}`);
   await p.locator("button", { hasText: /^subtract/ }).first().click();
-  if ((await distance()) !== "distance = drift − drop") errors.push(`${where}: after picking subtract the text reads ${await distance()}`);
+  if ((await distance()) !== "drift − drop · speed") errors.push(`${where}: after picking subtract the text reads ${await distance()}`);
   await p.locator('button[data-act="undo"]').first().click();
-  if ((await distance()) !== "distance = drift + drop") errors.push(`${where}: one Undo leaves ${await distance()}`);
-  // A function that doesn't fit, named in full, says why: speed · time is
-  // m/s by s, and subtract would take two of one unit (BACKLOG E126).
-  await p.locator(".p-graph g:has(> text:text-is('·')) > rect.cn").first().click({ button: "right" });
-  await p.locator('[data-menu="swap"]').click();
-  await p.locator("#m-query").fill("subtract"); await p.waitForTimeout(400);
-  const refusal = await p.locator(".ctx-menu .palette").innerText();
-  if (!/subtract doesn't fit here: .*(m\/s|s\b)/s.test(refusal)) errors.push(`${where}: subtract over speed · time is refused with ${JSON.stringify(refusal)}`);
-  // Escape before anything is picked puts the · back (QA8 M2).
-  await p.keyboard.press("Escape");
-  if ((await p.locator(".p-text .body").innerText()).includes("□") || !(await p.locator(".p-graph text:text-is('·')").count())) errors.push(`${where}: Escape left a hole where · was`);
+  if ((await distance()) !== "drift + drop · speed") errors.push(`${where}: one Undo leaves ${await distance()}`);
   // Insert a node after it says so, not "Wrapped it" (I33).
   await p.locator(".p-graph g:has(> text:text-is('·')) > rect.cn").first().click({ button: "right" });
   await p.locator('[data-menu="wrap"]').click();
@@ -108,16 +107,16 @@ async function swapAndUndo() {
   await p.locator(".blocks-wrap .op", { hasText: "+" }).first().click({ button: "right" });
   await p.locator('.ctx-menu [data-menu="swap"]').click({ timeout: 2000 }).catch(() => errors.push(`${where}: no Change the function in its menu`));
   await p.locator("button", { hasText: /^subtract/ }).first().click({ timeout: 2000 }).catch(() => {});
-  if ((await distance()) !== "distance = drift − drop") errors.push(`${where}: after picking subtract the text reads ${await distance()}`);
+  if ((await distance()) !== "drift − drop · speed") errors.push(`${where}: after picking subtract the text reads ${await distance()}`);
   // Any part is replaced in one step from its panel, and one Undo puts it
   // back (BACKLOG E86).
   where = "replace a part with another";
   await p.locator(".blocks-wrap .ref.var", { hasText: /^drop$/ }).last().click();
   await p.locator('[data-act="t-replace"]').click({ timeout: 2000 }).catch(() => errors.push(`${where}: a selected variable's panel has no Replace with`));
   await p.locator(".palette .opt", { hasText: /^drift/ }).first().click({ timeout: 2000 }).catch(() => errors.push(`${where}: Replace with doesn't offer drift`));
-  if ((await distance()) !== "distance = drift − drift") errors.push(`${where}: after picking drift the text reads ${await distance()}`);
+  if ((await distance()) !== "drift − drift · speed") errors.push(`${where}: after picking drift the text reads ${await distance()}`);
   await p.locator('button[data-act="undo"]').first().click();
-  if ((await distance()) !== "distance = drift − drop") errors.push(`${where}: one Undo leaves ${await distance()}`);
+  if ((await distance()) !== "drift − drop · speed") errors.push(`${where}: one Undo leaves ${await distance()}`);
   // Right-click on the blocks' empty space adds a value, as the graph's
   // canvas does (BACKLOG E100); Undo takes it back.
   where = "add a value from the blocks";
@@ -129,16 +128,33 @@ async function swapAndUndo() {
   if ((await steps()) !== had + 1) errors.push(`${where}: no new named value (${had} before, ${await steps()} after)`);
   await p.keyboard.press("Escape");
   await p.locator('button[data-act="undo"]').first().click();
+  await p.close();
+  // On physics' fall, with its units.
+  where = "a function that doesn't fit";
+  const q = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  q.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  await q.goto(page);
+  await q.locator("[data-def]", { hasText: /^fall$/ }).click();
+  // A function that doesn't fit, named in full, says why: speed · time is
+  // m/s by s, and subtract would take two of one unit (BACKLOG E126).
+  await q.locator(".p-graph g:has(> text:text-is('·')) > rect.cn").first().click({ button: "right" });
+  await q.locator('[data-menu="swap"]').click();
+  await q.locator("#m-query").fill("subtract"); await q.waitForTimeout(400);
+  const refusal = await q.locator(".ctx-menu .palette").innerText();
+  if (!/subtract doesn't fit here: .*(m\/s|s\b)/s.test(refusal)) errors.push(`${where}: subtract over speed · time is refused with ${JSON.stringify(refusal)}`);
+  // Escape before anything is picked puts the · back (QA8 M2).
+  await q.keyboard.press("Escape");
+  if ((await q.locator(".p-text .body").innerText()).includes("□") || !(await q.locator(".p-graph text:text-is('·')").count())) errors.push(`${where}: Escape left a hole where · was`);
   // A function's name picks its whole call, whose panel changes the
   // function (BACKLOG E92).
   where = "a function's name in the blocks";
-  await p.locator("[data-def]", { hasText: /^main$/ }).first().click();
-  await p.locator(".blocks-wrap .head", { hasText: /^print$/ }).first().click({ timeout: 2000 }).catch(() => errors.push(`${where}: main shows no print by name`));
-  const head = (await p.locator(".insp-head").first().innerText()).trim();
+  await q.locator("[data-def]", { hasText: /^main$/ }).first().click();
+  await q.locator(".blocks-wrap .head", { hasText: /^print$/ }).first().click({ timeout: 2000 }).catch(() => errors.push(`${where}: main shows no print by name`));
+  const head = (await q.locator(".insp-head").first().innerText()).trim();
   if (head !== "Step (call)") errors.push(`${where}: clicking it selects a ${JSON.stringify(head)}, not the call`);
-  await p.locator('[data-act="t-swap"]').click({ timeout: 2000 }).catch(() => errors.push(`${where}: the call's panel has no Change the function`));
-  if (!(await p.locator("#f-query").count())) errors.push(`${where}: Change the function doesn't open the palette`);
-  await p.close();
+  await q.locator('[data-act="t-swap"]').click({ timeout: 2000 }).catch(() => errors.push(`${where}: the call's panel has no Change the function`));
+  if (!(await q.locator("#f-query").count())) errors.push(`${where}: Change the function doesn't open the palette`);
+  await q.close();
 }
 
 // A data type's panel lists the interfaces, and Implement writes one: the
