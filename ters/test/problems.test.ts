@@ -22,7 +22,9 @@ const answered = (k: Lang, a: ReturnType<typeof ask>, answer: () => string): Par
 // A definition's nth input: the port a solve gives or asks by.
 const param = (k: Lang, f: string, i: number): string => { const d = k.code.nodes[f]; const l = d?.kind === "def" && d.body ? k.code.nodes[d.body] : undefined; return l?.kind === "lambda" ? l.params[i] : ""; };
 
-const SMALLEST: Record<string, (k: Lang) => void> = {
+// An entry may give pins: each definition held to the type another
+// definition of the program has unpinned.
+const SMALLEST: Record<string, (k: Lang) => unknown> = {
   "wrong-type": (k) => {
     k.define(k.def("p"), k.call(S.not, k.lit("a")));
     const t = k.type("Colour", [], [["red", []]]);
@@ -89,6 +91,11 @@ const SMALLEST: Record<string, (k: Lang) => void> = {
   "shared-different-types": (k) => { const t = k.type("Shape", [], [["dot", [["r", () => k.tref(NUMBER)]]], ["disc", [["r", () => k.tref("type.text")]]]]); (k.code.nodes[t.f["disc.r"]] as { same?: string }).same = t.f["dot.r"]; k.define(k.def("p"), k.fn(["s"], (s) => k.call(t.f["dot.r"], s))); },
   "shared-field-wrong": (k) => { const t = k.type("Shape", [], [["dot", [["r", () => k.tref(NUMBER)], ["q", () => k.tref(NUMBER)]]], ["disc", [["r", () => k.tref(NUMBER)]]]]); (k.code.nodes[t.f["dot.q"]] as { same?: string }).same = t.f["dot.r"]; k.define(k.def("p"), k.fn(["s"], (s) => k.call(t.f["dot.r"], s))); },
   "mask-takes-one": (k) => { const t = k.type("Trail", [], [["trail", [["at", () => k.tref("type.vector of")]]]]); k.define(k.def("p"), k.fn(["s"], (s) => k.call(t.f["trail.at"], s))); },
+  // A pin is the scheme another definition has (q's), held for p.
+  "pinned-type": (k) => { const q = k.def("q"), p = k.def("p"); k.define(q, k.fn(["x"], (x) => k.call(S.not, x))); k.define(p, k.fn(["x"], (x) => k.call(S.show, x))); return { [p]: q }; },
+  "search-unhandled": (k) => { const f = k.def("f"); k.define(f, k.fn(["a"], (a) => k.call(ARITH.add, a, k.lit(1)))); k.define(k.def("p"), k.solve(f, { [param(k, f, 0)]: k.lit(1), out: k.lit(2) }, {}, () => k.lit(0))); },
+  "results-not-ports": (k) => { const f = k.def("f"); k.define(f, k.fn(["a", "b"], (a, b) => k.call(ARITH.less, a, b))); k.results(f, "b", "b"); },
+  "direction-types": (k) => { const r = k.def("r"), d = k.def("d"); k.define(r, k.fn(["a", "b"], (a, b) => k.call(S.equal, b, k.call(ARITH.add, a, k.lit(1))))); k.results(r, "b"); k.define(d, k.fn(["a", "b"], (a, b) => k.call(S.equal, b, k.call(S.show, a)))); k.results(d, "b"); k.direction(d, r); },
   "not-a-number": (k) => k.define(k.def("p"), k.fn(["b"], (b) => k.match(b, [{ variant: TRUE, names: [], body: () => k.lit(1) }, { variant: FALSE, names: [], body: () => k.lit("a") }]))),
 };
 
@@ -97,9 +104,11 @@ test("every problem has its smallest program, and its message is that row's alon
   assert.equal(new Set(PROBLEMS.map((p) => p.id)).size, PROBLEMS.length);
   for (const p of PROBLEMS) {
     const k = new Lang(LIBRARY.code);
-    SMALLEST[p.id](k);
+    const gave = SMALLEST[p.id](k), held = gave && typeof gave === "object" ? (gave as Record<string, string>) : null;
     const code = base(k.code), names = baseNames(k.names);
-    const messages = infer(code, names, undefined, checkOptions).errors.map((e) => e.message);
+    const unpinned = held ? infer(code, names, undefined, checkOptions) : null;
+    const opts = held ? { ...checkOptions, pins: { ...checkOptions.pins, ...Object.fromEntries(Object.entries(held).map(([d, like]) => [d, unpinned!.schemes.get(like)!])) } } : checkOptions;
+    const messages = infer(code, names, undefined, opts).errors.map((e) => e.message);
     assert.ok(messages.length, `${p.id}: no problem`);
     for (const m of messages) {
       assert.deepEqual(PROBLEMS.filter((q) => q.says.test(m)).map((q) => q.id), [p.id], `${p.id}: "${m}"`);

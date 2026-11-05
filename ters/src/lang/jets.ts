@@ -55,7 +55,7 @@ function tableProduct(table: Value, a: Value, b: Value): Value | null {
   const lines = av && bv ? linesOf(table) : null;
   if (!av || !bv || !lines) return null;
   const along = (x: number[], e: number[]) => { let s = x[0] * e[0]; for (let i = 1; i < x.length; i++) s = s + x[i] * e[i]; return s; };
-  let acc: Data = { ...(a as Data), fields: av.map(() => 0) };
+  let acc: Data = { tag: (a as Data).tag, fields: av.map(() => 0) };
   for (let l = lines.length - 1; l >= 0; l--) {
     const { e, f, g, gs } = lines[l];
     if (e.length !== av.length || f.length !== bv.length) return null;
