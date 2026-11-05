@@ -48,6 +48,8 @@ export interface Algebra {
   // multivectors.
   def: Id;
   variant: Id;
+  // The algebra's own value: its squares, basis, pairs and table.
+  value: Value;
   parts: number;
   // Each part's blade: the basis vectors in it, numbered from 1.
   blades: number[][];
@@ -73,6 +75,9 @@ type V =
   // A value of a case with fields (a record, a tuple) and what each field
   // is (C77): a state record's multivectors keep their masks through it.
   | { k: "rec"; variant: Id; fields: V[] }
+  // A value known before running (L203b): a definition's value that runs
+  // (a table), the algebra's fields, a part of either.
+  | { k: "known"; v: Value }
   | { k: "top" };
 
 const TOP: V = { k: "top" };
@@ -174,7 +179,7 @@ export function algebrasOf(code: Code, info: Info): Map<Id, Algebra> {
         return m;
       };
       const alg: Algebra = {
-        def: d, variant: elements[0].tag, parts, blades, full,
+        def: d, variant: elements[0].tag, value: al, parts, blades, full,
         pair: (op, i, j) => (unit ? table[op](vecs[i], vecs[j]) : once(`${op} ${i} ${j}`, () => run(op, el(i), el(j)))),
         one: (op, i) => (unit ? table[op](vecs[i]) : once(`${op} ${i}`, () => run(op, el(i)))),
       };
@@ -218,7 +223,52 @@ function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: H
     return n?.kind === "lambda" ? n : null;
   };
   const maskIn = (v: V, alg: Algebra) => (v.k === "mask" && v.alg === alg ? v.m : alg.full);
-  const join = (a: V, b: V): V => {
+  // A known value read as the reading's own: a number is a number, zero or
+  // not, and a multivector of an algebra its mask of nonzero parts.
+  const lower = (v: V): V => {
+    if (v.k !== "known") return v;
+    const x = v.v as { tag?: Id; fields?: Value[] };
+    if (typeof v.v === "number") return { k: "num", zero: v.v === 0 };
+    const alg = x && typeof x === "object" && x.tag !== undefined ? byVariant.get(x.tag) : undefined;
+    if (alg && x.fields!.every((f) => typeof f === "number")) return { k: "mask", alg, m: (x.fields as number[]).reduce((m, f, i) => (f !== 0 ? m | (1 << i) : m), 0) };
+    return v;
+  };
+  const knownOf = (v: V): Value | undefined => (v.k === "known" ? v.v : v.k === "alg" ? v.alg.value : undefined);
+  // What a scrutinee is known to be: read so, or a definition's value.
+  const knownAt = (id: Id, v: V): Value | undefined => {
+    const k = knownOf(v);
+    if (k !== undefined) return k;
+    const n = nodes[id];
+    return n?.kind === "ref" && nodes[n.target]?.kind === "def" ? valueOf(n.target) : undefined;
+  };
+  // A definition's value that runs, kept (a table written down or worked
+  // out from literals); undefined when it doesn't run or isn't data.
+  let runner: ReturnType<typeof makeRunner> | undefined;
+  const ran = new Map<Id, Value | undefined>();
+  const valueOf = (d: Id): Value | undefined => {
+    if (ran.has(d)) return ran.get(d);
+    let v: Value | undefined;
+    const def = nodes[d] as NodeOf<"def"> | undefined, t = info.typeOf.get(d), z = t && info.subst.zonk(t);
+    if (def?.kind === "def" && def.body && nodes[def.body]?.kind !== "lambda" && z?.t === "con") {
+      try { v = (runner ??= makeRunner(code, info, { print: () => {} })).value(d); } catch { v = undefined; }
+    }
+    ran.set(d, v);
+    return v;
+  };
+  // Known data taken apart by a fold: each case's body read with its
+  // fields known and its recursive fields' results folded first.
+  const foldKnown = (x: Value, arms: NodeOf<"arm">[], env: Map<Id, V>, depth: number, left: { n: number }): V => {
+    const r = x as { tag?: Id; fields?: Value[] };
+    if (!r || typeof r !== "object" || r.tag === undefined || --left.n < 0) return TOP;
+    const arm = arms.find((a) => a.variant === r.tag);
+    if (!arm) return TOP;
+    const inner = new Map(env);
+    arm.binds.forEach((b, i) => inner.set(b, { k: "known", v: r.fields![i] }));
+    for (const [i, res] of arm.results.entries()) if (res) inner.set(res, foldKnown(r.fields![i], arms, env, depth, left));
+    return ev(arm.body, inner, depth + 1);
+  };
+  const join = (a0: V, b0: V): V => {
+    const a = lower(a0), b = lower(b0);
     if (a.k === "mask" && b.k === "mask" && a.alg === b.alg) return { k: "mask", alg: a.alg, m: a.m | b.m, l: a.l || b.l };
     if (a.k === "num" && b.k === "num") return { k: "num", zero: a.zero && b.zero };
     if (a.k === "list" && b.k === "list") return { k: "list", item: a.item && b.item ? join(a.item, b.item) : a.item ?? b.item };
@@ -327,8 +377,15 @@ function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: H
       case "call": return isUse(n) ? TOP : call(n, env, depth);
       case "match": {
         // A record taken apart: its parts are numbers, zero where masked off.
-        const s = ev(n.scrutinee, env, depth + 1);
+        const s0 = ev(n.scrutinee, env, depth + 1);
         const arms = n.arms.map((a) => nodes[a] as NodeOf<"arm">);
+        // Known data: only its case's arm, its fields known (L203b).
+        const kv = knownAt(n.scrutinee, s0) as { tag?: Id; fields?: Value[] } | undefined;
+        if (kv && typeof kv === "object" && kv.tag !== undefined) {
+          const arm = arms.find((a) => a.variant === kv.tag && a.value === undefined);
+          if (arm) return ev(arm.body, new Map([...env, ...arm.binds.map((b, i) => [b, { k: "known", v: kv.fields![i] } as V] as const)]), depth + 1);
+        }
+        const s = lower(s0);
         if (s.k === "mask" && arms.length === 1 && arms[0].variant === s.alg.variant) {
           const inner = new Map(env);
           arms[0].binds.forEach((b, i) => inner.set(b, { k: "num", zero: !((s.m >> i) & 1) }));
@@ -352,6 +409,11 @@ function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: H
         const outs = [...arms.map((a) => ev(a.body, new Map([...env, ...a.binds.map((b, i) => [b, bind(a, b, i)] as const)]), depth + 1)), ...(n.otherwise ? [ev(n.otherwise, env, depth + 1)] : [])];
         return outs.length ? outs.reduce(join) : TOP;
       }
+      case "fold": {
+        // Known data folded case by case (a table's lines): exact (L203b).
+        const kv = knownAt(n.scrutinee, ev(n.scrutinee, env, depth + 1));
+        return kv === undefined ? TOP : foldKnown(kv, n.arms.map((a) => nodes[a] as NodeOf<"arm">), env, depth, { n: 1 << 16 });
+      }
       default: return TOP;
     }
   };
@@ -366,7 +428,8 @@ function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: H
   const call = (n: Call, env: Map<Id, V>, depth: number): V => {
     const fnNode = nodes[n.fn];
     const target = fnNode?.kind === "ref" ? fnNode.target : null;
-    const arg = (i: number) => ev(n.args[i], env, depth + 1);
+    const raw = (i: number) => ev(n.args[i], env, depth + 1);
+    const arg = (i: number) => lower(raw(i));
     if (target && byVariant.has(target)) {
       const alg = byVariant.get(target)!;
       return { k: "mask", alg, m: n.args.reduce((m, a, i) => { const v = ev(a, env, depth + 1); return v.k === "num" && v.zero ? m : m | (1 << i); }, 0) };
@@ -381,6 +444,11 @@ function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: H
     // A field read from a case value whose fields are known; a named mask
     // where it says more.
     if (target && nodes[target]?.kind === "field" && n.args.length === 1) {
+      const kx = knownOf(raw(0)) as { tag?: Id; fields?: Value[] } | undefined;
+      if (kx && typeof kx === "object" && kx.tag !== undefined && nodes[kx.tag]?.kind === "variant") {
+        const j = fieldsOf(kx.tag).indexOf(target);
+        if (j >= 0) return { k: "known", v: kx.fields![j] };
+      }
       const x = arg(0), i = x.k === "rec" ? fieldsOf(x.variant).indexOf(target) : -1;
       const v = x.k === "rec" && i >= 0 ? x.fields[i] : TOP;
       if (declared.has(target) && !(v.k === "mask" && !v.l)) return held(target);
@@ -424,15 +492,24 @@ function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: H
       const op = nodes[n.args[0]]?.kind === "ref" ? (nodes[n.args[0]] as NodeOf<"ref">).target : null;
       if (a.k === "mask" && b.k === "mask" && a.alg === b.alg) {
         // A part is off when f of two zeros is zero, as for + and −.
-        const z = op && (ADD.has(op) || SUB.has(op)) ? { k: "num", zero: true } as V : apply(f, [{ k: "num", zero: true }, { k: "num", zero: true }], depth);
+        const Z: V = { k: "num", zero: true };
+        const z = op && (ADD.has(op) || SUB.has(op)) ? Z : apply(f, [Z, Z], depth);
+        // Off where either is, when a zero on either side gives zero (·).
+        const zeroes = (v: V) => v.k === "num" && v.zero;
+        if (op && MUL.has(op) || (zeroes(apply(f, [Z, NUM], depth)) && zeroes(apply(f, [NUM, Z], depth)))) return { k: "mask", alg: a.alg, m: a.m & b.m, l: a.l || b.l };
         return z.k === "num" && z.zero ? { k: "mask", alg: a.alg, m: a.m | b.m, l: a.l || b.l } : { k: "mask", alg: a.alg, m: a.alg.full, l: a.l || b.l };
       }
       return TOP;
     }
+    // The sum of a multivector's parts: zero when none is on.
+    if (target === S.total && n.args.length === 1) { const x = arg(0); return x.k === "mask" ? { k: "num", zero: x.m === 0 } : x.k === "num" ? x : NUM; }
     if (target === S.mapParts) {
       const [f, x] = [arg(0), arg(1)];
       if (x.k !== "mask") return TOP;
       const z = apply(f, [{ k: "num", zero: true }], depth);
+      // Every part made zero (0 · part, a weight known to be 0): none on.
+      const any = apply(f, [NUM], depth);
+      if (any.k === "num" && any.zero) return { ...x, m: 0 };
       return z.k === "num" && z.zero ? x : { ...x, m: x.alg.full };
     }
     const op = target ? ops.get(target) : undefined;

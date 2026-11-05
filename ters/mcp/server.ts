@@ -98,6 +98,12 @@ export const TOOLS: Tool[] = [
     call: (a) => program().comment(String(a.at), String(a.text)),
   },
   {
+    name: "pin",
+    description: "Pin a definition at its type now (off: unpin): edits inside keep it, so a body can rely on its inputs' types. Kept in signatures.json.",
+    inputSchema: obj({ at: str("definition"), off: { type: "boolean", description: "unpin" } }, ["at"]),
+    call: (a) => program().pin(String(a.at), a.off === true),
+  },
+  {
     name: "define",
     description: "New definition with a hole body (function, value) or one case (type, effect, interface).",
     inputSchema: obj({ name: str("name"), kind: { type: "string", enum: ["function", "value", "type", "effect", "interface"] }, params: { type: "array", items: { type: "string" }, description: "function inputs" }, first: str("first case or operation") }, ["name", "kind"]),

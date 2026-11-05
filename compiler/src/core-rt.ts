@@ -328,7 +328,12 @@ export const RUNTIME = {
     // Called from outside (a page's mount, the host): the first answer,
     // and none is FAIL.
     const whole = (...xs: unknown[]) => { let out: unknown = FAIL; RUNTIME.ck(code(c, ...xs, (v: unknown) => { out = v; return true; })); if (out === FAIL) throw FAIL; return out; };
-    const c: ((...xs: unknown[]) => unknown) & { caps: unknown[]; code: typeof code } = Object.assign(rest ? whole : (...xs: unknown[]) => RUNTIME.ck(code(c, ...xs)), { caps, code });
+    // Its fields set one by one, not by Object.assign: a closure is made
+    // per call of a several-answer function (Countdown's rest of the
+    // search), and every one then has the same shape (C137d25).
+    const c = (rest ? whole : (...xs: unknown[]) => RUNTIME.ck(code(c, ...xs))) as ((...xs: unknown[]) => unknown) & { caps: unknown[]; code: typeof code };
+    c.caps = caps;
+    c.code = code;
     if (src) Object.assign(c, { [META]: "prim" in src ? src : { lambda: src.lambda, env: new Map(src.binders.map((b, j) => [b, src.bools.includes(j) ? { tag: caps[j] ? TRUE : FALSE, fields: [] } : caps[j]])) } });
     return c;
   },

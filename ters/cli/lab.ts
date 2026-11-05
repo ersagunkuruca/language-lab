@@ -42,8 +42,8 @@ import { fromFile } from "../src/files.ts";
 import { infer, type Info } from "../src/lang/infer.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { sameLines } from "../src/lang/modules.ts";
-import { baseNames, checkOptions, loadProgram } from "../src/lang/load.ts";
-import { equal, mainProblem, pageProblem, runMain, runProgram, type World } from "../src/lang/run.ts";
+import { baseNames, loadProgram, optionsWith } from "../src/lang/load.ts";
+import { equal, mainProblem, pageProblem, runMain, runProgram, type Value, type World } from "../src/lang/run.ts";
 import { Cells } from "../src/lang/cells.ts";
 import { evaluatorCall, htmlText } from "../src/lang/html.ts";
 import { hasSound, pageDocument } from "../src/lang/page.ts";
@@ -55,14 +55,14 @@ import { readLog, replaying, type LogEntry } from "../src/lang/worldlog.ts";
 import { compile } from "../../compiler/src/compile.ts";
 import { CFLAGS, emitC } from "../../compiler/src/c.ts";
 import { lowerScalar } from "../../compiler/src/scalar.ts";
-import { codeLines, coreMap, coreModule, hostOpsOf, lowerCore, solvesSlowly } from "../../compiler/src/core-js.ts";
+import { FAIL, codeLines, coreMap, coreModule, hostOpsOf, loadCoreJs, lowerCore, solvesSlowly } from "../../compiler/src/core-js.ts";
 import { execFileSync } from "node:child_process";
 import { recordings, webCorePage, webPage } from "./web.ts";
 import { appFolder } from "./app.ts";
 import { soundOf } from "./sound.ts";
 import { readWav, writeWav } from "./wav.ts";
 import { audioProblem, BLOCK, playBlocks } from "../src/lang/audio.ts";
-import { runTests, savedFrom } from "../src/lang/tests.ts";
+import { answersAgain, runTests, savedFrom, type Called, type Saved } from "../src/lang/tests.ts";
 import { representationLaws } from "../src/lang/rep-laws.ts";
 import { embeddingLaws } from "../src/lang/embed-laws.ts";
 import { hostSkeleton, type Hosts } from "../src/lang/hosts.ts";
@@ -80,8 +80,9 @@ usage:
   lab check <program>                   type-check, and list the definitions and their types
   lab hosts <program>                   print a hosts/js.js answering the program's own effects, to start from (FOREIGN.md)
   lab test <program> [--fresh]          run each definition that performs Check, check each accepted answer in examples.json
-                                        and each representation's jobs against its type's through meaning;
-                                        an unchanged test's result is kept by hash (.lab/checks.json), --fresh runs it again
+    [--compiled]                        and each representation's jobs against its type's through meaning;
+                                        an unchanged test's result is kept by hash (.lab/checks.json), --fresh runs it again;
+                                        --compiled: each accepted answer again, compiled to JavaScript through the core IR
   lab build-web <program> [-o app.html] [--core|--compile-ts]  one HTML file running the page main returns (from the core IR where it lowers)
   lab build-app <program> [-o folder]   that page as an app for phones: a PWA in folder/www, and a Capacitor project
   lab mcp [program]                     an MCP server over stdio: an LLM views, edits, runs and tests programs
@@ -112,8 +113,34 @@ function load(path: string): Program {
   const r = fromFile(readFileSync(path, "utf8"), () => LIBRARY.code);
   if ("error" in r) fail(`can't open ${path}: ${r.error}`);
   const names = baseNames(r.file.names);
-  const info = infer(r.code, names, undefined, checkOptions);
-  return { title: r.file.title, code: r.code, own: r.file.code.defs, names, info, reps: representationsIn(r.code, info, names, r.file.code.defs) };
+  // The file's own pins too (L173c), as the editor checks it.
+  const options = optionsWith(r.file.signatures);
+  const info = infer(r.code, names, undefined, options);
+  return { title: r.file.title, code: r.code, own: r.file.code.defs, names, info, reps: representationsIn(r.code, info, names, r.file.code.defs), options };
+}
+
+// Each definition with an accepted answer as the core IR's JavaScript
+// prints it (T7e), called on the evaluator's values, which it takes as
+// they are; its first answer, or none.
+function compiledAnswers(p: Program, saved: Record<Id, Saved[]>) {
+  const defs = p.own.filter((d) => (saved[d] ?? []).some((x) => x.answer !== undefined));
+  if (!defs.length) return [];
+  let ir: ReturnType<typeof lowerCore>, fns: ((...xs: unknown[]) => unknown)[];
+  try { ir = lowerCore(p.code, p.info, p.names, defs); fns = loadCoreJs(ir, { print: () => {}, world: nodeWorld() }); }
+  catch (e) { const why = `didn't lower (${(e as Error).message})`; return answersAgain(p.code, p.info, p.names, defs, saved, () => why); }
+  return answersAgain(p.code, p.info, p.names, defs, saved, (d) => {
+    const why = ir.refused.get(d);
+    if (why) return why;
+    const i = ir.funcs.findIndex((g) => g.def === d && !g.inner);
+    if (i < 0) return "isn't among the compiled functions";
+    if (ir.funcs[i].multi) return "gives several answers, which a call from here doesn't take yet";
+    return (args): Called => {
+      try { return { value: fns[i](...args) as Value }; } catch (e) {
+        if (e === FAIL) return { none: true };
+        throw e instanceof Error ? e : new Error(String((e as { reason?: unknown }).reason ?? e));
+      }
+    };
+  });
 }
 
 // The program from `main`, with each type it uses stored the way the
@@ -491,6 +518,17 @@ switch (command) {
       for (const f of r.failures.slice(0, 3)) console.log(`✗ ${r.name}(${f.inputs.join(", ")}): ${f.what.join("; ")}`);
       if (r.failures.length > 3) console.log(`  … and ${r.failures.length - 3} more`);
     }
+    // --compiled: the accepted answers again, compiled to JavaScript through
+    // the core IR, which must give them too (T7e). A test's Check isn't
+    // compiled yet, so only answers; a definition that doesn't lower is
+    // said, not failed.
+    const again = rest.includes("--compiled") && !p.info.errors.length ? compiledAnswers(p, saved) : [];
+    for (const r of again) {
+      if (r.skipped) console.log(`– ${r.name} compiled: not checked, it ${r.skipped}`);
+      else if (r.error) console.log(`✗ ${r.name} compiled: ${r.error}`);
+      else if (!r.failures.length) console.log(`✓ ${r.name} compiled (${r.cases} case${r.cases === 1 ? "" : "s"})`);
+      for (const f of r.failures.slice(0, 3)) console.log(`✗ ${r.name} compiled(${f.inputs.join(", ")}): ${f.what.join("; ")}`);
+    }
     // The program's own representations: each job agrees with its type's through meaning (L108d).
     const laws = p.info.errors.length ? [] : representationLaws(p.code, p.info, p.names, p.reps);
     for (const l of laws) {
@@ -508,7 +546,7 @@ switch (command) {
     }
     laws.push(...embedded.map((l) => ({ rep: l.embedding, job: l.law, cases: l.cases, failures: l.error ? [{ inputs: [], what: l.error }] : l.failures.map((f) => ({ inputs: f.inputs, what: f.what.join("; ") })) })));
     if (!results.length && !laws.length && !p.info.errors.length) console.log("no tests: a test is a definition that performs Check (expect), or an accepted answer in examples.json");
-    process.exitCode = p.info.errors.length || results.some((r) => r.error || r.failures.length) || laws.some((l) => l.failures.length) ? 1 : 0;
+    process.exitCode = p.info.errors.length || [...results, ...again].some((r) => r.error || r.failures.length) || laws.some((l) => l.failures.length) ? 1 : 0;
     break;
   }
   default:

@@ -19,7 +19,8 @@ import { root } from "../src/io.ts";
 import { infer, type Info } from "../src/lang/infer.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { sameLines } from "../src/lang/modules.ts";
-import { base, baseNames, checkOptions } from "../src/lang/load.ts";
+import { base, baseNames, optionsWith } from "../src/lang/load.ts";
+import { pinsOf, type Pins } from "../src/lang/signatures.ts";
 import { blocksOf, pieceText, type Blk, type Piece } from "../src/lang/render.ts";
 import { showType } from "../src/lang/types.ts";
 import { fromFile, own, toFile, type ProgramFile } from "../src/files.ts";
@@ -49,6 +50,10 @@ export class Session {
   comments!: Comments;
   file?: ProgramFile;
   info!: Info;
+  // The program's own pins (signatures.ts): a definition's type held, so
+  // an edit inside it is checked against it and its callers against the
+  // pin (L173c). A folder keeps them in signatures.json.
+  pins: Pins = {};
   private short = new Map<Id, string>();
 
   constructor(path: string) {
@@ -59,6 +64,7 @@ export class Session {
       this.code = base(read<Code>(join(this.path, "code.json"), { nodes: {}, defs: [] }));
       this.names = read<Names>(join(this.path, "names.default.json"), {});
       this.comments = read<Comments>(join(this.path, "comments.json"), {});
+      this.pins = read<Pins>(join(this.path, "signatures.json"), {});
     } else {
       const r = fromFile(readFileSync(this.path, "utf8"), () => LIBRARY.code);
       if ("error" in r) throw new Error(`can't open ${path}: ${r.error}`);
@@ -67,6 +73,7 @@ export class Session {
       this.code = r.code;
       this.names = r.file.names;
       this.comments = r.file.comments ?? {};
+      this.pins = r.file.signatures ?? {};
     }
     this.recheck();
   }
@@ -75,7 +82,9 @@ export class Session {
   get own(): Id[] { return this.code.defs.filter((d) => !LIBRARY.code.nodes[d]); }
 
   recheck() {
-    this.info = infer(this.code, this.allNames, undefined, checkOptions);
+    // The editor's gestures check with the same pins (typed.ts infer).
+    T.setProgramPins(this.pins);
+    this.info = infer(this.code, this.allNames, undefined, optionsWith(this.pins));
     // Shortest unique prefixes, over the program's own nodes.
     const ids = Object.keys(this.code.nodes).filter((id) => !LIBRARY.code.nodes[id]).sort();
     this.short.clear();
@@ -88,13 +97,14 @@ export class Session {
   save() {
     const mine = own(this.code, LIBRARY.code);
     if (this.file) {
-      writeFileSync(this.path, toFile({ ...this.file, code: this.code, names: this.names, comments: this.comments }, LIBRARY.code));
+      writeFileSync(this.path, toFile({ ...this.file, code: this.code, names: this.names, comments: this.comments, signatures: this.pins }, LIBRARY.code));
       return;
     }
     const json = (x: unknown) => JSON.stringify(x, null, 2) + "\n";
     writeFileSync(join(this.path, "code.json"), json(mine));
     writeFileSync(join(this.path, "names.default.json"), json(this.names));
     if (Object.keys(this.comments).length || existsSync(join(this.path, "comments.json"))) writeFileSync(join(this.path, "comments.json"), json(this.comments));
+    if (Object.keys(this.pins).length || existsSync(join(this.path, "signatures.json"))) writeFileSync(join(this.path, "signatures.json"), json(this.pins));
   }
 
   id(id: Id): string { return this.short.get(id) ?? id; }
@@ -239,7 +249,7 @@ export class Session {
   // kept only if the program has no more type errors than before, then
   // saved; the answer is the changed lines of the definition, or why not.
 
-  private undos: { code: Code; names: Names; comments: Comments }[] = [];
+  private undos: { code: Code; names: Names; comments: Comments; pins?: Pins }[] = [];
 
   private apply(def: Id | null, make: () => { ok: true; code: Code; names: Names } | { ok: false; reason: string }, after?: (code: Code) => Id | null, share = true): string {
     setDisplayNames(LIBRARY.names);
@@ -345,6 +355,33 @@ export class Session {
     return "ok";
   }
 
+  // Pin a definition at the type it has now (or with `off`, unpin it):
+  // edits inside it must keep that type, and its callers are checked
+  // against it, as the editor's pin does (signatures.ts). With a pin, a
+  // body that doesn't say its inputs' types itself (fields mapped of an
+  // input) is still checked at them (L173c).
+  pin(at: string, off = false): string {
+    const def = this.resolve(at);
+    if (this.code.nodes[def]?.kind !== "def" || LIBRARY.code.nodes[def]) throw new Error("pin takes one of the program's definitions");
+    const was = { code: this.code, names: this.names, comments: this.comments, pins: this.pins };
+    const pins = { ...this.pins };
+    if (off) delete pins[def];
+    else { const p = pinsOf(this.info, [def])[def]; if (!p) throw new Error(`${this.name(def)} has no type to pin`); pins[def] = p; }
+    const errs = this.info.errors.length;
+    this.pins = pins;
+    this.recheck();
+    // Unpinning a body that needs the pin (fields mapped of an input) is refused.
+    if (this.info.errors.length > errs) {
+      const why = this.info.errors.at(-1)!.message;
+      Object.assign(this, was);
+      this.recheck();
+      throw new Error(why);
+    }
+    this.undos.push(was);
+    this.save();
+    return off ? "ok" : `ok: ${this.name(def)} : ${this.typeOf(def)}`;
+  }
+
   // A let before `before` (or at the top of the body): `name = value`.
   step(at: string, name: string, value: string): string {
     const before = this.resolve(at);
@@ -406,7 +443,7 @@ export class Session {
     const hole = (made.code.nodes[def] as NodeOf<"def">).body!;
     const r = T.fillValue(made.code, made.names, editorInfo(made.code, made.names), hole, text, def);
     if (!r.ok) throw new Error(r.reason);
-    const info = infer(r.code, baseNames(r.names), undefined, checkOptions);
+    const info = infer(r.code, baseNames(r.names), undefined, optionsWith(this.pins));
     const own = new Set(subtree(r.code, def));
     const e = info.errors.find((x) => own.has(x.id));
     if (e) throw new Error(e.message);

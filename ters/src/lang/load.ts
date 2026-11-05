@@ -8,6 +8,7 @@ import { merge, onLayer, type Code, type Id } from "../model.ts";
 import { layer, type Names, type Presentation, type Style } from "../presentation.ts";
 import { root } from "../io.ts";
 import type { Options } from "./infer.ts";
+import type { Pins } from "./signatures.ts";
 import { LIBRARY, PRELUDE, TREES } from "./library.ts";
 import { onTodaysIds } from "./std.ts";
 
@@ -27,8 +28,14 @@ export const baseNames = (...layers: Names[]): Names => layer<Names>(LIBRARY.nam
 // declares is the program's own to build (L165).
 export const checkOptions: Options = { pins: LIBRARY.pins, hidden: LIBRARY.hidden, insiders: [...PRELUDE.code.defs, ...TREES.code.defs], library: LIBRARY.code.defs };
 
+// The checker's options for a program with pins of its own (signatures.ts):
+// a folder's signatures.json, a saved file's `signatures`.
+export const optionsWith = (pins: Pins | undefined): Options => (pins && Object.keys(pins).length ? { ...checkOptions, pins: { ...LIBRARY.pins, ...pins } } : checkOptions);
+
 export function loadProgram(dir: string, style = "blocks") {
   const own = read<Code>(join(dir, "code.json"), { nodes: {}, defs: [] });
+  // Its own pins, beside code.json as the editor's file keeps them (L173c).
+  const pins = read<Pins>(join(dir, "signatures.json"), {});
   const code = base(own);
   const pres: Presentation = {
     names: baseNames(read<Names>(join(dir, "names.default.json"), {})),
@@ -44,5 +51,5 @@ export function loadProgram(dir: string, style = "blocks") {
     if (!id) throw new Error(`no definition named ${name}`);
     return id;
   };
-  return { code, own, pres, named, options: checkOptions };
+  return { code, own, pres, named, pins, options: optionsWith(pins) };
 }
