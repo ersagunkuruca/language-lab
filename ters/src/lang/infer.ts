@@ -15,7 +15,7 @@ import { diamonds, type Edge } from "./diamonds.ts";
 import { sharing } from "./shared-fields.ts";
 import { PARTIAL, signAnalysis } from "./signs.ts";
 import type { Code, Id, Node, NodeOf, Use } from "../model.ts";
-import { isUse, useTarget, isCall, fieldPorts, type Call, bindsOf, bodyOf } from "../model.ts";
+import { directionOf, isUse, useTarget, isCall, fieldPorts, type Call, bindsOf, bodyOf } from "../model.ts";
 import { conditionResults, dependencies, derived, layerOf, nodesWhere, offLayer, ownerOfTypeParts, portsOf, scanningOnLayer, subtree } from "../model.ts";
 import { liftRelations } from "./results-fn.ts";
 import type { Names } from "../presentation.ts";
@@ -1732,13 +1732,14 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       if (why) err(d, `${nm(d)}'s results can't all be found from ${from}: ${why}`);
       // Another direction of a relation (POLAR.md, L97b): its ports, in
       // order, are the relation's, of the same types.
-      if (!def.direction || why) continue;
+      const rel = directionOf(code.nodes, d);
+      if (!rel || why) continue;
       const wrong = directionProblem(code, d, nm);
       if (wrong) { err(d, wrong); continue; }
-      const theirs = info.schemes.get(def.direction);
+      const theirs = info.schemes.get(rel);
       // Compared as conditions on their ports, in order (L128d2): each is
       // the function of its own direction.
-      if (sc && theirs) { try { const c = s.clone(); c.unify(asPredicate(instantiate(sc, c), d), asPredicate(instantiate(theirs, c), def.direction)); } catch { err(d, `${nm(d)} is a direction of ${nm(def.direction)}, so its ports have ${nm(def.direction)}'s types: ${show(asPredicate(sc.type, d))} isn't ${show(asPredicate(theirs.type, def.direction))}`); } }
+      if (sc && theirs) { try { const c = s.clone(); c.unify(asPredicate(instantiate(sc, c), d), asPredicate(instantiate(theirs, c), rel)); } catch { err(d, `${nm(d)} is a direction of ${nm(rel)}, so its ports have ${nm(rel)}'s types: ${show(asPredicate(sc.type, d))} isn't ${show(asPredicate(theirs.type, rel))}`); } }
     }
     // A relation written where it is used (L225e) runs as the definition
     // it is lifted into (results-fn.ts), what it uses from around it given

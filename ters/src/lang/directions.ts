@@ -13,7 +13,7 @@
 // one predicate with a definition per mode, promised to agree.
 
 import type { Code, Id, Node, NodeOf, Use } from "../model.ts";
-import { conditionResults, isUse, useTarget, isCall, fieldPorts, type Call, bindsOf } from "../model.ts";
+import { conditionResults, directionOf, isUse, useTarget, isCall, fieldPorts, type Call, bindsOf } from "../model.ts";
 import { derivedFrom, nodesWhere, portsOf, subtree } from "../model.ts";
 import { S } from "./std.ts";
 
@@ -28,7 +28,8 @@ export function directionsIn(code: Code): Map<Id, Id[]> {
   const out = new Map<Id, Id[]>();
   for (const d of code.defs) {
     const n = code.nodes[d];
-    if (n?.kind === "def" && n.direction) out.set(n.direction, [...(out.get(n.direction) ?? []), d]);
+    const of = directionOf(code.nodes, d);
+    if (of) out.set(of, [...(out.get(of) ?? []), d]);
   }
   return out;
 }
@@ -36,11 +37,11 @@ export function directionsIn(code: Code): Map<Id, Id[]> {
 // What's wrong with a direction definition, or null: it has results, of a
 // relation with results, and the same number of ports.
 export function directionProblem(code: Code, d: Id, nm: (id: Id) => string): string | null {
-  const n = code.nodes[d] as NodeOf<"def">, of = code.nodes[n.direction!];
-  if (of?.kind !== "def" || !conditionResults(code.nodes, of.id)) return `${nm(d)} is a direction of ${nm(n.direction!)}, which has no results to give another direction of`;
-  if (!conditionResults(code.nodes, d)) return `${nm(d)} is a direction of ${nm(n.direction!)}, so it names its results`;
-  const mine = paramsOf(code, d), theirs = paramsOf(code, n.direction!);
-  if (!mine || !theirs || mine.length !== theirs.length) return `${nm(d)} is a direction of ${nm(n.direction!)}, so it has ${nm(n.direction!)}'s ${theirs?.length ?? 0} ports, in order`;
+  const rel = directionOf(code.nodes, d)!, of = code.nodes[rel];
+  if (of?.kind !== "def" || !conditionResults(code.nodes, of.id)) return `${nm(d)} is a direction of ${nm(rel)}, which has no results to give another direction of`;
+  if (!conditionResults(code.nodes, d)) return `${nm(d)} is a direction of ${nm(rel)}, so it names its results`;
+  const mine = paramsOf(code, d), theirs = paramsOf(code, rel);
+  if (!mine || !theirs || mine.length !== theirs.length) return `${nm(d)} is a direction of ${nm(rel)}, so it has ${nm(rel)}'s ${theirs?.length ?? 0} ports, in order`;
   return null;
 }
 

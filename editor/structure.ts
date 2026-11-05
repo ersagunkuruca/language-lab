@@ -3,7 +3,7 @@
 // the implementations a type has, the type pickers they use, and the
 // + New definition form. What it reads of the editor comes through
 // `StructureHost`.
-import { get, isCall, isPublished, type Id, type Node, type NodeOf } from "../ters/src/model.ts";
+import { fieldWayOf, get, isCall, isPublished, type Id, type Node, type NodeOf } from "../ters/src/model.ts";
 import type { Names } from "../ters/src/presentation.ts";
 import type { Pos } from "./canvas.ts";
 import type { Pins } from "../ters/src/lang/signatures.ts";
@@ -265,7 +265,7 @@ export function structure(host: StructureHost) {
       out.append(pinRow(info, dname));
       // A way of an interface's operation (E210): which, what it costs, and
       // back to an ordinary definition.
-      const way = (node(ui.def) as NodeOf<"def">).way;
+      const way = fieldWayOf(code.nodes, ui.def);
       if (way) {
         const cost = (node(ui.def) as NodeOf<"def">).cost;
         const iface = info.owner.get(way);

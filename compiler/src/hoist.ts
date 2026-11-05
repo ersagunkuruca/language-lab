@@ -20,7 +20,7 @@
 // doesn't keep it in.
 
 import type { Code, Id, NodeOf } from "../../ters/src/model.ts";
-import { isUse, isCall, type Call } from "../../ters/src/model.ts";
+import { fieldWayOf, isUse, isCall, type Call } from "../../ters/src/model.ts";
 import { freshId, subtree } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { infer, type Info } from "../../ters/src/lang/infer.ts";
@@ -43,7 +43,7 @@ export function hoistInvariants(code: Code, info: Info, names: Names): { code: C
     let own: Type | undefined;
     if (target?.kind === "builtin" && !defsOnly) own = SIGS[f.target]?.(new Subst());
     else if (target?.kind === "def") {
-      if (target.way || !target.body || nodes[target.body]?.kind !== "lambda" || info.divergent.has(f.target)) return false;
+      if (fieldWayOf(nodes, f.target) || !target.body || nodes[target.body]?.kind !== "lambda" || info.divergent.has(f.target)) return false;
       own = info.schemes.get(f.target)?.type;
     }
     if (own?.t !== "fn" || own.eff.effs.length) return false;

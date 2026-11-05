@@ -176,7 +176,6 @@ export function pointsAt(n: Node): Id[] {
   if (n.kind === "typedef") out.push(...(n.row ?? []));
   if (n.kind === "lit" && n.of) out.push(n.of);
   if (n.kind === "def" && n.way) out.push(n.way);
-  if (n.kind === "def" && n.direction) out.push(n.direction);
   return out;
 }
 

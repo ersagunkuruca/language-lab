@@ -32,7 +32,7 @@
 // do.
 
 import type { Code, Id, Node, NodeData, NodeOf } from "../model.ts";
-import { conditionResults, isUse, isCall, bindsOf } from "../model.ts";
+import { conditionResults, fieldWayOf, isUse, isCall, bindsOf } from "../model.ts";
 import { children, freshId, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { impl, type Op } from "../prelude.ts";
@@ -95,7 +95,7 @@ export function stageCalls(code: Code, info: Info, names: Names, only?: Id[], co
     const f = nodes[n.fn];
     if (f?.kind !== "ref" || nodes[f.target]?.kind !== "def") continue;
     const def = nodes[f.target] as NodeOf<"def">;
-    if (def.way || !def.body || nodes[def.body]?.kind !== "lambda") continue;
+    if (fieldWayOf(nodes, f.target) || !def.body || nodes[def.body]?.kind !== "lambda") continue;
     if (!shape(id)) continue;
     // Which arguments are known now: closed, and worked out (once each).
     const known = n.args.map((a) => {
@@ -282,7 +282,7 @@ export function specialiseCalls(code: Code, info: Info, names: Names, calls: Id[
     if (f?.kind !== "ref" || nodes[f.target]?.kind !== "def") continue;
     const def = nodes[f.target] as NodeOf<"def">;
     const lam = def.body ? nodes[def.body] : null;
-    if (def.way || conditionResults(nodes, f.target) || lam?.kind !== "lambda" || lam.params.length !== n.args.length) continue;
+    if (fieldWayOf(nodes, f.target) || conditionResults(nodes, f.target) || lam?.kind !== "lambda" || lam.params.length !== n.args.length) continue;
     const keys = n.args.map(known);
     if (!keys.some((k) => k)) continue;
     // (Calls stageCalls could work out whole are gone by now; those it
@@ -640,7 +640,7 @@ class Stager {
   defValue(def: Id): PV {
     if (this.defValues.has(def)) { const v = this.defValues.get(def); return v ?? stop(); }
     const d = this.code.nodes[def] as NodeOf<"def">;
-    if (!d.body || d.way) { this.defValues.set(def, null); return stop(); }
+    if (!d.body || fieldWayOf(this.code.nodes, def)) { this.defValues.set(def, null); return stop(); }
     const body = this.code.nodes[d.body];
     if (body.kind === "typedef") return stop();
     // A function is a closure; a constant is worked out once, if it can be.

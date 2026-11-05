@@ -27,7 +27,7 @@
 // j-th basis vector.
 
 import type { Code, Id, NodeOf } from "../model.ts";
-import { isUse } from "../model.ts";
+import { fieldWayOf, isUse } from "../model.ts";
 import { impl, type Op } from "../prelude.ts";
 import { ARITH } from "./std.ts";
 import { NUMBER } from "./types.ts";
@@ -208,7 +208,7 @@ function read(code: Code, fn: Id): LinearMap {
         if (t.kind === "builtin") return { k: "op", op: t.op };
         if (t.kind === "variant") return { k: "ctor", variant: n.target };
         if (t.kind === "field") return { k: "part", field: n.target };
-        if (t.kind === "def" && t.body && !t.way) {
+        if (t.kind === "def" && t.body && !fieldWayOf(nodes, n.target)) {
           if (defValues.has(n.target)) return defValues.get(n.target)!;
           if (++depth > 64) return no();
           const v = ev(t.body, new Map());

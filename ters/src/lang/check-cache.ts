@@ -276,7 +276,7 @@ export class CheckCache {
         missed.forEach((m, i) => {
           for (const d of m.group) {
             const n = code.nodes[d] as NodeOf<"def">;
-            if (conditionResults(code.nodes, d) || n.direction || n.way || subtree(code, d).some((id) => isUse(code.nodes[id]))) bad.add(i);
+            if (conditionResults(code.nodes, d) || n.way || subtree(code, d).some((id) => isUse(code.nodes[id]))) bad.add(i);
           }
         });
         // Each variable's group, from every type the check gave: one met

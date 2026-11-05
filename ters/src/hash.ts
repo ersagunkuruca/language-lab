@@ -32,12 +32,12 @@ export const digest = (x: unknown): string => base32(sha256(JSON.stringify(x)));
 // backwards, or through one of a data type's cases and fields.
 export function defDeps(code: Code, def: Id, owner = ownerOfTypeParts(code)): Id[] {
   const out = new Set<Id>();
-  const d0 = code.nodes[def] as { body?: Id | null; direction?: Id; way?: Id };
+  const d0 = code.nodes[def] as { body?: Id | null; way?: Id };
   const body = d0?.body;
   if (!body) return [];
   // The relation a direction is of, and the type whose operation a way
   // gives, are hashed into it (L178a).
-  for (let t of [d0.direction, d0.way]) {
+  for (let t of [d0.way]) {
     if (t && owner.has(t)) t = owner.get(t)!;
     if (t && t !== def && code.nodes[t]?.kind === "def") out.add(t);
   }
@@ -261,8 +261,8 @@ function canon(code: Code, defId: Id, group: Map<Id, number | null>, memo: Map<I
   const d = code.nodes[defId] as NodeOf<"def">, lam = code.nodes[def.body], rs = conditionResults(code.nodes, defId);
   const marks = [
     ...(rs ? [["results", rs.map((r) => (lam?.kind === "lambda" ? lam.params.indexOf(r) : -1))]] : []),
-    ...(d.direction ? [["direction", defRef(d.direction)]] : []),
-    ...(d.way ? [["way", part(d.way)]] : []),
+    // A way of a relation is a direction of it, hashed as it was (L182c2).
+    ...(d.way ? [code.nodes[d.way]?.kind === "def" ? ["direction", defRef(d.way)] : ["way", part(d.way)]] : []),
     ...(d.cost !== undefined ? [["cost", d.cost]] : []),
   ];
   return marks.length ? ["def", body, ...marks] : body;
