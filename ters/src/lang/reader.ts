@@ -35,8 +35,8 @@ import { INT } from "./types.ts";
 type Any = { id: Id; kind: string; target: Id; value: unknown; of?: Id; fn: Id; args: Id[]; params: Id[]; body: Id; scrutinee: Id; arms: Id[]; variant: Id; binds: (Id | null)[] };
 // What a binder of an arm stands for in the reader: an expression's binder
 // once read, or still to be read (as a number, or as a run of letters or
-// digits).
-type Slot = { b: Id } | { unknown: "int" | "letters" | "digits" };
+// digits, or of characters the program's own test passes, C110 s5a).
+type Slot = { b: Id } | { unknown: "int" | "letters" | "digits" } | { pass: Id };
 type Env = Map<Id, Slot>;
 
 export interface Written { code: Code; names: Record<Id, string>; read: Id; line: Id }
@@ -99,6 +99,8 @@ export function writeReader(code: Code, printer: Id, names: Record<Id, string>):
       return k.x(n.target);
     }
     if (n.kind === "call" && !isUse(n as never)) return k.call(copy(n.fn, env, inputs), ...n.args.map((a) => copy(a, env, inputs)));
+    // A function written in place (a test of a character, C110 s5a).
+    if (n.kind === "lambda") return k.fn(n.params.map((p) => named(p) || "x"), (...ps) => copy(n.body, env, new Map([...inputs, ...n.params.map((p, j) => [p, ps[j]] as const)])));
     if (n.kind === "match") {
       const arms = n.arms.map((a) => node(a)! as Any & { value?: Id }), otherwise = (n as unknown as { otherwise?: Id | null }).otherwise;
       const other = otherwise ? copy(otherwise, env, inputs) : undefined;
@@ -119,6 +121,7 @@ export function writeReader(code: Code, printer: Id, names: Record<Id, string>):
       const s = t ? env.get(t) : undefined;
       if (t && s && !("b" in s) && test === "is letter") env.set(t, { unknown: "letters" });
       if (t && s && !("b" in s) && test === "is digit") env.set(t, { unknown: "digits" });
+      if (t && s && !("b" in s) && test !== "is letter" && test !== "is digit") env.set(t, { pass: n.args[1] });
     }
   };
 
@@ -139,6 +142,8 @@ export function writeReader(code: Code, printer: Id, names: Record<Id, string>):
         return k.if(startsWith(text, at, k.x(i), k.call(TEXT_OPS.length, i)), k.let("at", k.call(INT_OPS.add, at, k.call(TEXT_OPS.length, i)), (a) => next(a, env)), none());
       }
       if ("b" in s) return k.if(startsWith(text, at, k.x(s.b), k.call(TEXT_OPS.length, s.b)), k.let("at", k.call(INT_OPS.add, at, k.call(TEXT_OPS.length, s.b)), (a) => next(a, env)), none());
+      if ("pass" in s) return k.let("end", k.call(run, text, at, copy(s.pass, env, inputs)), (end) =>
+        k.let(named(n.target) || "run", k.call(TEXT_OPS.slice, text, at, end), (v) => next(end, new Map(env).set(n.target, { b: v }))));
       if (s.unknown === "int") throw new Unsupported(`reads ${named(n.target)} as text`);
       const test = s.unknown === "letters" ? isLetter : isDigit;
       if (!test) throw new Unsupported("no is letter or is digit");

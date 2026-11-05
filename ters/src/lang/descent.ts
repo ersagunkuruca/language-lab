@@ -31,13 +31,17 @@ import { INT } from "./types.ts";
 import { FALSE, TRUE } from "./std.ts";
 import { META, type Value } from "./run.ts";
 import { firstSets } from "./first-sets.ts";
+import * as T from "./text.ts";
 import type { Reading } from "./relate.ts";
 
 export class Unsupported extends Error {}
 
 export type Any = { id: Id; kind: string; target: Id; value: unknown; fn: Id; args: Id[]; params: Id[]; body: Id; scrutinee: Id; arms: Id[]; variant: Id; binds: (Id | null)[] };
-type Env = Map<Id, Value | { unknown: "letters" | "digits" | "int" }>;
-const isUnknown = (v: unknown): v is { unknown: string } => typeof v === "object" && v !== null && "unknown" in v;
+// A Text binder still to be read: a run of letters, digits, or characters
+// a predicate passes (`all pass(characters(t), p)` with p the program's own).
+type Kind = "letters" | "digits" | { pass: Id };
+type Env = Map<Id, Value | { unknown: Kind | "int" }>;
+const isUnknown = (v: unknown): v is { unknown: Kind | "int" } => typeof v === "object" && v !== null && "unknown" in v;
 const LETTER = /[A-Za-z]/, DIGIT = /[0-9]/;
 const TRUE_V: Value = { tag: TRUE, fields: [] }, FALSE_V: Value = { tag: FALSE, fields: [] };
 
@@ -123,7 +127,8 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
   const starts = (variant: Id, c: string | undefined) => {
     const f = firsts.get(variant)!;
     if (c === undefined) return false;
-    return c === "(" || f.has(c) || f.has("anything") || (f.has("digit") && DIGIT.test(c)) || (f.has("letter") && LETTER.test(c));
+    return c === "(" || f.has(c) || f.has("anything") || (f.has("digit") && DIGIT.test(c)) || (f.has("letter") && LETTER.test(c))
+      || [...f].some((t) => t.startsWith("test:") && passesDef(t.slice(5), c));
   };
 
   const infixes = infixesOf(code, printer, names, report);
@@ -133,7 +138,7 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
   const expect = (at: number, what?: string) => {
     if (at > stopped.at) { stopped.at = at; stopped.expected = new Set(what ? [what] : []); } else if (at === stopped.at && what) stopped.expected.add(what);
   };
-  const described = (c: string) => (c === "digit" ? "a digit" : c === "letter" ? "a letter" : JSON.stringify(c));
+  const described = (c: string) => (c === "digit" ? "a digit" : c === "letter" ? "a letter" : c.startsWith("test:") ? describeTest(c.slice(5)) : JSON.stringify(c));
   // Forward, the little a guard or a printer's input needs.
   function evaluate(id: Id, env: Env): Value {
     const n = node(id);
@@ -166,6 +171,10 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
       case "builtin.int.add": { const [a, b] = xs(); return (a as number) + (b as number); }
       case "builtin.int.sub": { const [a, b] = xs(); return (a as number) - (b as number); }
       case "builtin.and": return bool(truth(evaluate(n.args[0], env)) && truth(evaluate(n.args[1], env)));
+      case "builtin.or": return bool(truth(evaluate(n.args[0], env)) || truth(evaluate(n.args[1], env)));
+      case "builtin.not": return bool(!truth(evaluate(n.args[0], env)));
+      case "builtin.text.less": { const [a, b] = xs(); return bool(T.less(a as string, b as string)); }
+      case "builtin.text.slice": { const [t, a, b] = xs(); return T.slice(t as string, a as never, b as never); }
       case "builtin.equal": { const [a, b] = xs(); if (typeof a === "object" || typeof b === "object") throw new Unsupported("compares data"); return bool(a === b); }
       case "builtin.text.length": return [...(evaluate(n.args[0], env) as string)].length;
     }
@@ -175,13 +184,17 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
         const t = evaluate(ch.args[0], env) as string;
         return bool([...t].every((c) => (test === "is letter" ? LETTER : DIGIT).test(c)));
       }
+      if (ch?.kind === "call" && target(ch.fn) === "builtin.text.characters") {
+        const t = evaluate(ch.args[0], env) as string;
+        return bool([...t].every((c) => passes(n.args[1], c, env)));
+      }
     }
     const fn = f && code.nodes[f]?.kind === "def" ? lambdaOf(f) : node(n.fn)?.kind === "lambda" ? node(n.fn) : undefined;
     if (fn) { const inner: Env = new Map(env); fn.params.forEach((p, j) => inner.set(p, evaluate(n.args[j], env))); return evaluate(fn.body, inner); }
     throw new Unsupported(`can't work out ${named(f) || f}`);
   }
   // What a guard being true says a Text binder holds (first-sets.ts facts).
-  function hint(cond: Id, out: Map<Id, "letters" | "digits">) {
+  function hint(cond: Id, out: Map<Id, Kind>) {
     const n = node(cond);
     if (n?.kind !== "call") return;
     const f = target(n.fn);
@@ -189,8 +202,31 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
     if (named(f) === "all pass") {
       const ch = node(n.args[0]), test = named(target(n.args[1])), t = ch?.kind === "call" && target(ch.fn) === "builtin.text.characters" ? target(ch.args[0]) : null;
       if (t && test === "is letter") out.set(t, "letters");
+      else if (t && test !== "is digit") out.set(t, { pass: n.args[1] });
       if (t && test === "is digit") out.set(t, "digits");
     }
+  }
+  // The program's own test of one character (a definition, or a function
+  // written in place), worked out forward.
+  // A test of a character, as an error says it: by what it passes among
+  // the printable ASCII characters, so it reads the same with or without
+  // the program's names.
+  function describeTest(def: Id): string {
+    let passed = "";
+    for (let i = 33; i < 127; i++) { const c = String.fromCharCode(i); try { if (passesDef(def, c)) passed += c; } catch { return `a ${named(def) || "character"}`; } }
+    if (/^[0-9]+$/.test(passed) && passed.length === 10) return "a digit";
+    if (/^[A-Za-z_]+$/.test(passed) && passed.replace("_", "").length === 52) return "a letter";
+    return `a ${named(def) || "character"}`;
+  }
+  function passesDef(def: Id, c: string): boolean {
+    const fn = lambdaOf(def);
+    if (!fn || fn.params.length !== 1) throw new Unsupported(`can't test a character with ${named(def)}`);
+    return (evaluate(fn.body, new Map([[fn.params[0], c]])) as { tag?: Id }).tag === TRUE;
+  }
+  function passes(test: Id, c: string, env: Env): boolean {
+    const f = target(test), fn = f && code.nodes[f]?.kind === "def" ? lambdaOf(f) : node(test)?.kind === "lambda" ? node(test) : undefined;
+    if (!fn || fn.params.length !== 1) throw new Unsupported(`can't test a character with ${named(f) || "this"}`);
+    return (evaluate(fn.body, new Map(env).set(fn.params[0], c)) as { tag?: Id }).tag === TRUE;
   }
   const spaces = (at: number) => { while (text[at] === " ") at++; return at; };
 
@@ -205,17 +241,18 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
       if (v === undefined) throw new Unsupported(`reads ${named(n.target)}, which nothing says the characters of`);
       if (!isUnknown(v)) return typeof v === "string" && text.startsWith(v, at) ? [at + v.length, env] : null;
       if (v.unknown === "int") throw new Unsupported(`reads ${named(n.target)} as text`);
-      const re = v.unknown === "letters" ? LETTER : DIGIT;
+      const u = v.unknown, re = u === "letters" ? LETTER : DIGIT;
+      const ok = typeof u === "object" ? (c: string) => passes(u.pass, c, env) : (c: string) => re.test(c);
       let end = at;
-      while (end < text.length && re.test(text[end])) end++;
-      if (end === at) expect(at, v.unknown === "letters" ? "a letter" : "a digit");
+      while (end < text.length && ok(text[end])) end++;
+      if (end === at) expect(at, u === "letters" ? "a letter" : u === "digits" ? "a digit" : undefined);
       return [end, new Map(env).set(n.target, text.slice(at, end))];
     }
     if (n.kind === "match") {
       // Each arm that prints something, then its guard checked.
       for (const a of n.arms.map((x) => node(x)!)) {
         const inner = new Map(env);
-        if (a.variant === TRUE) { const h = new Map<Id, "letters" | "digits">(); hint(n.scrutinee, h); for (const [b, k] of h) if (isUnknown(inner.get(b))) inner.set(b, { unknown: k }); }
+        if (a.variant === TRUE) { const h = new Map<Id, Kind>(); hint(n.scrutinee, h); for (const [b, k] of h) if (isUnknown(inner.get(b))) inner.set(b, { unknown: k }); }
         const r = read(a.body, inner, at);
         if (!r) continue;
         const s = evaluate(n.scrutinee, r[1]);
