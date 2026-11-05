@@ -13,7 +13,7 @@ angle answered by unpolar. L97d (Fixed's polar by CORDIC, sin and cos
 from it) and L97e (the complex laws) are built too.
 (2026-11-01) C55a is built: compiled code runs a Dual's, a Fixed's or a
 program type's polar and unpolar as a function per result it binds, so `_,
-y = polar(1, t)` computes no x (compiler/src/results.ts). C55b, results
+y = polar(1, t)` computes no x (compiler/src/results.ts, which only compile.ts used; both are gone since #1964, the core IR doesn't do this yet). C55b, results
 that share work done once, is built too: binding both of a Fixed's
 unpolar runs CORDIC's vectoring once.
 
