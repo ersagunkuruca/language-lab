@@ -73,7 +73,7 @@ import { infer } from "../../ters/src/lang/infer.ts";
 import { discharge } from "../../ters/src/lang/ledger.ts";
 import { scalarOp, TARGETS } from "./builtins.ts";
 import { WORLD_OPS as OP_OF_BUILTIN } from "../../ters/src/lang/std.ts";
-import { AUDIO_BLOCK, AWAIT, AWAIT_OP, START_TIMER_OP, WAIT, WAIT_OP, HANDLER_ROW, LIST, PAGE_HANDLER, PAGE_VIEW, SIGS, SOUND_ROW, VIEW_ROW, STD_IMPL, STD_MANY } from "../../ters/src/lang/std.ts";
+import { AUDIO_BLOCK, AWAIT, AWAIT_OP, START_TIMER_OP, TIME, WAIT, WAIT_OP, HANDLER_ROW, LIST, PAGE_HANDLER, PAGE_VIEW, SIGS, SOUND_ROW, VIEW_ROW, STD_IMPL, STD_MANY } from "../../ters/src/lang/std.ts";
 // Cells' operations JavaScript from the core IR takes from the evaluator
 // (run.ts cellOps), `path` aside: it looks inside its function.
 // The effects a page's views and handlers may have (std.ts PAGE_VIEW,
@@ -724,7 +724,12 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // std's Await where the program handles it (start branch, under
   // together, race and within, C180): an await or a timer no handler of
   // the program's answers is the world's (core-rt.ts `perform:`).
-  if (opts.host && Object.values(code.nodes).some((n) => n.kind === "arm" && (n.variant === AWAIT_OP || n.variant === START_TIMER_OP))) { laterOps.set(AWAIT_OP, AWAIT); laterOps.set(START_TIMER_OP, AWAIT); }
+  // Wait and Time too (the simulated clock's, C180): a case that answers
+  // at once may await, so the performer goes on by the rest.
+  const handledHere = (v: Id) => opts.host && Object.values(code.nodes).some((n) => n.kind === "arm" && n.variant === v);
+  if (handledHere(AWAIT_OP) || handledHere(START_TIMER_OP)) { laterOps.set(AWAIT_OP, AWAIT); laterOps.set(START_TIMER_OP, AWAIT); }
+  if (handledHere(WAIT_OP)) laterOps.set(WAIT_OP, WAIT);
+  if (handledHere(NOW_OP)) laterOps.set(NOW_OP, TIME);
   const laterEffs = new Set(laterOps.values());
   const tailEffs = new Set([...tailOps.values(), ...laterEffs]);
   // The program's own effects C keeps on its handler stack (L213c4): not

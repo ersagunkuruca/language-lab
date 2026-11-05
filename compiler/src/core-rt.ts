@@ -395,10 +395,12 @@ function worldFn(op: string, rt: Runtime, timers: Timers, handlers: Map<string, 
     const [, e, i] = op.split(":");
     // std's Await, which the program handles somewhere (C180): with no
     // handler of the program's open, the world's await and timers.
-    const world = e === "std.await" ? [worldFn("await", rt, timers, handlers), worldFn("startTimer", rt, timers, handlers)] : undefined;
+    // Wait and Time likewise: the world's wait, and its clock.
+    const world = e === "std.await" ? [worldFn("await", rt, timers, handlers), worldFn("startTimer", rt, timers, handlers)]
+      : e === "std.wait" ? [worldFn("wait", rt, timers, handlers)] : e === "std.time" ? [worldFn("now", rt, timers, handlers)] : undefined;
     return (...xs) => {
       const k = xs.pop(), s = handlers.get(e);
-      if (!s?.length && world) return i === "0" ? world[0](xs[0], k) : RUNTIME.ap(k as never, world[1](xs[0]));
+      if (!s?.length && world) return e === "std.time" ? RUNTIME.ap(k as never, world[0]()) : i === "0" ? world[0](xs[0], k) : RUNTIME.ap(k as never, world[1](xs[0]));
       if (!s?.length) throw new Error(`nothing handles ${e}`);
       const frame = s.pop() as Cases & { box: { v: unknown }; now?: Set<number> };
       // A rest runs once, as the evaluator's (run.ts).
