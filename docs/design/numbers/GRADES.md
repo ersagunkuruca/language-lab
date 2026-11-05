@@ -94,6 +94,45 @@ rule falls back to the product rule.
 | L43d | The editor shows a value's mask in words | E | S |
 | L43e | Masks are types (built: a part read outside a value's mask is refused by `lab check`; named masks `Scalar of`, `Vector of`, `Bivector of`, `Trivector of` and `Rotor of` on record fields, checked where a value is put in and known where it is read): named masks (`Vector of`, `Rotor of`, ...) in std, checked where a definition or a field names one, and a part read outside a value's mask refused (Ersagun's answer) | L | M |
 
+## Any library's algebra (L203, plan 2026-11-05)
+
+Today the reading knows the prelude's Clifford operations by id (or, since
+L203a, by their meaning's hash), and an algebra by std's `Algebra`
+constructor. A library of its own, written differently, gets every part.
+What the operations share is not their names but one mechanism: each
+bilinear one is `table product(T, a, b)` over a table T of lines
+`times(e, f, g)` (the structure constants), and the linear ones are folds
+over the algebra's known blades. So the general reading follows the code
+through known data:
+
+1. **Known values.** A new kind of reading result, a value known before
+   running: a definition with no inputs that runs (stage.ts already
+   evaluates such tables, C65), a literal, a record of known parts, and a
+   field of a known record (`parts(al, …)` taking an algebra apart). A
+   call whose inputs are all known runs (pure only), so `clifford table
+   where(squares, basis, wanted)` is a known table too.
+2. **`table product` with a known table.** mask(table product(T, a, b))
+   is the union of nz(g) over T's lines (e, f, g) where mask(a) meets
+   nz(e) and mask(b) meets nz(f), nz being a known record's nonzero
+   parts. That is the product rule above, read from the table instead of
+   from the blades, and it covers the product, the outer and inner
+   products, the sandwich and the reflection without their names. Each
+   table's pair masks are worked out once, by the table's identity.
+3. **Folds over known lists.** A fold over a known list is read line by
+   line, each item known, the results joined (reverse, involute, dual and
+   anything a library writes the same way). An unknown list stays as
+   today (the fixpoint over its item).
+4. **Masks per record, not per algebra.** A mask is over a record of
+   Float64s' parts; blades and grades are needed only by named masks and
+   the sandwich's grade rule, which stay with an algebra the program
+   writes down. A library without one still gets its products' masks,
+   and the sandwich falls back to the product rule (wider, still sound).
+
+Every rule over-approximates, so a mask is still never too small, and
+grades.test.ts's tables stay the check: the general reading must give the
+same masks as the named one on Bounce, Constructions and Spacetime before
+the names go. Steps 1 to 3 are one PR each; step 4 retires `CL`.
+
 ## In the compiler (L43c)
 
 `valueMasks` (grades.ts) works out each definition's input masks from all
