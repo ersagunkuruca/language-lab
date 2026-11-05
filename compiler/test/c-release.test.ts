@@ -13,6 +13,7 @@ import { ABORT_OP, INT_OPS, LOG_OP, S, SHOW_ANY } from "../../ters/src/lang/std.
 import type { Id } from "../../ters/src/model.ts";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitC } from "../src/c.ts";
+import { emitWasm, runMain as runWasm } from "../src/wasm.ts";
 import { compile, skip } from "./c-harness.ts";
 
 // Quit never returns, and its handler gives 7; the handler logs "closed"
@@ -39,7 +40,12 @@ function both(body: (k: Lang, quit: () => Id) => Id, around?: (k: Lang, inner: I
   const c = r.stdout.toString().split("\n").filter((x) => x);
   const err = r.stderr.toString().split("\n").filter((x) => x);
   const logged = (r.status ? err.slice(0, -1) : err).map((x) => `log ${x}`);
-  return { evaluator: { out: evaluator.filter((x) => !x.startsWith("log ")), log: evaluator.filter((x) => x.startsWith("log ")) }, c: { out: [...c, ...(r.status ? [`aborted ${err.at(-1)}`] : [])], log: logged } };
+  const wasm = async () => {
+    const out: string[] = [], log: string[] = [];
+    const status = await runWasm(l, emitWasm(l), "main", [], { print: (x: string) => out.push(x), world: { log: (x: string) => log.push(`log ${x}`), error: (x: string) => out.push(`aborted ${x}`) } } as never);
+    return { out, log, status };
+  };
+  return { wasm, evaluator: { out: evaluator.filter((x) => !x.startsWith("log ")), log: evaluator.filter((x) => x.startsWith("log ")) }, c: { out: [...c, ...(r.status ? [`aborted ${err.at(-1)}`] : [])], log: logged } };
 }
 
 const work = (k: Lang) => k.call(LOG_OP, k.lit("working"));
@@ -58,4 +64,18 @@ test("C runs a release after the handler: on a normal exit, after its own case, 
   const uncaught = both((k) => k.seq(work(k), k.call(ABORT_OP, k.lit("gave up")), k.int(1)));
   assert.deepEqual(uncaught.evaluator, { out: ["aborted gave up"], log: ["log working", "log closed"] });
   assert.deepEqual(uncaught.c, uncaught.evaluator);
+});
+
+test("WebAssembly runs a release too (L213a7), in the same four ways", async () => {
+  const ways = [
+    both((k) => k.seq(work(k), k.call(INT_OPS.add, k.int(40), k.int(42)))),
+    both((k, q) => k.seq(work(k), q(), k.int(1))),
+    both((k) => k.seq(work(k), k.call(ABORT_OP, k.lit("gave up")), k.int(1)),
+      (k, inner) => k.handle(inner, [{ variant: ABORT_OP, names: ["why"], body: ([why]) => k.seq(k.call(S.print, k.text(k.lit("caught "), why)), k.int(0)) }])),
+    both((k) => k.seq(work(k), k.call(ABORT_OP, k.lit("gave up")), k.int(1))),
+  ];
+  for (const w of ways) {
+    const got = await w.wasm();
+    assert.deepEqual({ out: got.out, log: got.log }, w.evaluator);
+  }
 });
