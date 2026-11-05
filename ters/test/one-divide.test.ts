@@ -10,10 +10,10 @@ import type { Id } from "../src/model.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
-import { COMPLEX_TYPE, LIBRARY } from "../src/lang/library.ts";
+import { COMPLEX_TYPE, LIBRARY, FIXED_TYPE } from "../src/lang/library.ts";
 import { runMain } from "../src/lang/run.ts";
 import { DIVIDE, INT_OPS, S, SHOW_ANY } from "../src/lang/std.ts";
-import { FIXED_TYPE, RATIONAL_TYPE, schemeNeeds, showType } from "../src/lang/types.ts";
+import { RATIONAL_TYPE, schemeNeeds, showType } from "../src/lang/types.ts";
 const L = (name: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === name)!;
 
 

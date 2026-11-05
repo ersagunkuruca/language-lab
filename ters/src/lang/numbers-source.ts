@@ -1,8 +1,8 @@
 // The numbers module (BACKLOG L207): the library's number types written in
 // the language, out of std.ts, each with its + − · ÷, its Trig and its
 // embedding as implementations found by its type. Dual (L207a),
-// Complex (L207b) and Mat2 to Mat4 (L207c) and Matrix (L207d) so far; Rational and
-// Fixed follow.
+// Complex (L207b) and Mat2 to Mat4 (L207c), Matrix (L207d) and Fixed (L207e) so far;
+// Rational follows.
 //
 // Dual numbers (INTERFACES.md step 3): value + slope·ε with ε² = 0, so a
 // function given dual(x, 1) gives its value and its slope at x. + and −
@@ -15,7 +15,7 @@ import { merge, type Id } from "../model.ts";
 import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
-import { ABORT_OP, ARITH, ARITHMETIC_V, CHECK_OP, CONS, LIST, NIL, PAIR_V, tupleType, DIVISION_V, EMBEDDING_V, INT_OPS, LITERAL_V, S, SHOWN_V, TIMES_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_V, std } from "./std.ts";
+import { ABORT_OP, ARITH, ARITHMETIC_V, CHECK_OP, ORDERED_V, CONS, LIST, NIL, PAIR_V, tupleType, DIVISION_V, EMBEDDING_V, INT_OPS, LITERAL_V, S, SHOWN_V, TIMES_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_V, std } from "./std.ts";
 import { INT, NUMBER } from "./types.ts";
 
 // On the prelude, whose laws give Trig's fields Dual leaves to their ways.
@@ -369,6 +369,196 @@ export function buildNumbers(pre: Module): Module {
       k.let("flipped", k.call(transposed, m), (t) => k.call(solved, k.call(matrixProduct, t, m), k.call(matrixTimesVector, t, v))),
       k.call(ABORT_OP, texts(k.lit("least squares: a "), sizeText(r, c), k.lit(" matrix and a vector of "), k.call(INT_OPS.show, k.call(length, v)), k.lit("; it needs one item per row"))))));
 
+  // Fixed (FIXED-POINT.md, BACKLOG L89, L207e): a number counted in steps
+  // of 2⁻³², an Int of steps, so it has the same bits on every target and
+  // the same step size everywhere in a big world.
+  const FX = k.type("Fixed", [], [["fixed", [["steps", () => k.tref(INT)]]]], "fixed-point numbers");
+  const FXV = FX.v.fixed;
+  // Fixed (FIXED-POINT.md, BACKLOG L89): an Int counting steps of 2⁻³². + −
+  // and −x are the Int's own; a · b is the steps' product shifted down 32,
+  // rounded towards −∞, the same on every machine; < is the Int's. Doom's
+  // fixed_t (16.16, id Software, 1993) is the classic one.
+  const fx = (v: Id, f: (s: Id) => Id, name = "steps") => k.match(v, [{ variant: FXV, names: [name], body: ([s]) => f(s) }]);
+  const F = (s: Id) => k.call(FXV, s);
+  const twoX = (name: string, f: (a: Id, b: Id) => Id) => {
+    const d = k.def(name);
+    k.define(d, k.fn(["x", "y"], (x, y) => fx(x, (a) => fx(y, (b) => f(a, b), "steps₂"))));
+    return d;
+  };
+  const addX = twoX("add fixed", (a, b) => F(k.call(INT_OPS.add, a, b)));
+  const subX = twoX("subtract fixed", (a, b) => F(k.call(INT_OPS.sub, a, b)));
+  const mulX = twoX("multiply fixed", (a, b) => F(k.call(INT_OPS.shiftDown, k.call(INT_OPS.mul, a, b), k.int(32))));
+  const lessX = twoX("fixed less than", (a, b) => k.call(INT_OPS.less, a, b));
+  const negX = k.def("negate fixed");
+  k.define(negX, k.fn(["x"], (x) => fx(x, (a) => F(k.call(INT_OPS.neg, a)))));
+  const asFixed = k.def("as fixed");
+  k.define(asFixed, k.fn(["whole"], (w) => F(k.call(INT_OPS.shiftDown, w, k.int(-32)))));
+  const fixedF = k.def("as float64");
+  k.define(fixedF, k.fn(["x"], (x) => fx(x, (a) => n.div(k.call(INT_OPS.toNumber, a), k.lit(2 ** 32)))));
+  // a ÷ b: floor(a · 2³² / b), no answer when b is 0, as at Rational.
+  const divX = twoX("divide fixed", (a, b) => k.if(k.call(S.equal, b, k.int(0)), k.call(S.fail),
+    F(k.call(INT_OPS.quotient, k.call(INT_OPS.shiftDown, a, k.int(-32)), b))));
+  // The shortest decimal that reads back to the same steps: Steele and
+  // White's free-format digits (1990), in integers. r is what is left of
+  // the fraction and m half a step, both in units of 2⁻³³; each digit
+  // multiplies both by 10, and the digits stop once what is left is
+  // within half a step of either end. Ten digits always suffice for
+  // steps of 2⁻³², so it is a fold over ten, and m = 0 marks done.
+  const z = { add: (a: Id, b: Id) => k.call(INT_OPS.add, a, b), sub: (a: Id, b: Id) => k.call(INT_OPS.sub, a, b), mul: (a: Id, b: Id) => k.call(INT_OPS.mul, a, b), less: (a: Id, b: Id) => k.call(INT_OPS.less, a, b), up: (a: Id, n: number) => k.call(INT_OPS.shiftDown, a, k.int(-n)), down: (a: Id, n: number) => k.call(INT_OPS.shiftDown, a, k.int(n)) };
+  const unit = () => z.up(k.int(1), 33);
+  const state = (text: Id, r: Id, m: Id) => k.call(PAIR_V, text, k.call(PAIR_V, r, m));
+  const fractionDigits = k.def("fraction digits");
+  k.define(fractionDigits, k.fn(["fraction"], (fr) => k.match(k.fold(k.call(INT_OPS.range, k.int(10)), [
+    { variant: NIL, names: [], body: () => state(k.lit(""), z.mul(k.int(2), fr), k.int(1)) },
+    { variant: CONS, names: ["place", "places"], results: [null, "digits so far"], body: (_, [, sofar]) => k.match(sofar!, [
+      { variant: PAIR_V, names: ["text", "left"], body: ([text, left]) => k.match(left, [
+        { variant: PAIR_V, names: ["r", "m"], body: ([r, m]) => k.if(k.call(S.equal, m, k.int(0)), sofar!,
+          k.let("r₁₀", z.mul(r, k.int(10)), (r10) => k.let("m₁₀", z.mul(m, k.int(10)), (m10) => k.let("digit", z.down(r10, 33), (d) =>
+            k.let("rest", z.sub(r10, z.up(d, 33)), (rest) => k.let("low", z.less(rest, m10), (low) => k.let("high", z.less(z.sub(unit(), m10), rest), (high) =>
+              k.if(k.call(S.or, low, high),
+                state(k.call(S.concat, text, k.call(INT_OPS.show, k.if(k.call(S.and, low, k.call(S.or, k.call(S.not, high), z.less(z.mul(k.int(2), rest), unit()))), d, z.add(d, k.int(1))))), k.int(0), k.int(0)),
+                state(k.call(S.concat, text, k.call(INT_OPS.show, d)), rest, m10))))))))) },
+      ]) },
+    ]) },
+  ]), [{ variant: PAIR_V, names: ["digits", "done"], body: ([ds]) => ds }])));
+  const showSteps = k.def("show fixed steps");
+  k.define(showSteps, k.fn(["steps"], (s) => k.let("whole", z.down(s, 32), (w) => k.let("fraction", z.sub(s, z.up(w, 32)), (fr) =>
+    k.if(k.call(S.equal, fr, k.int(0)), k.call(INT_OPS.show, w),
+      k.call(S.concat, k.call(INT_OPS.show, w), k.call(S.concat, k.lit("."), k.call(fractionDigits, fr))))))));
+  const showX = k.def("show fixed");
+  k.define(showX, k.fn(["x"], (x) => fx(x, (s) => k.if(z.less(s, k.int(0)),
+    k.call(S.concat, k.lit("-"), k.call(showSteps, k.call(INT_OPS.neg, s))), k.call(showSteps, s)))));
+
+  // Trig at Fixed, all in Ints, so the same bits on every machine.
+  // sin and cos are CORDIC (Volder, 1959): the angle, brought into
+  // [−π/2, π/2], is turned to 0 by ±atan(2⁻ⁱ) for i = 0 … 31, and (K, 0)
+  // turned the same way ends at (cos, sin), each turn only shifts and
+  // adds. exp is e^r · 2ᵏ for x = k·ln 2 + r, e^r by its series; log is
+  // e·ln 2 + 2·atanh((m − 1)/(m + 1)) for x = m · 2ᵉ with m in [1, 2).
+  // The divisions are by numbers that are never 0, so `first` gives the
+  // one answer; the defaults only say so to the checker.
+  const ONE = 2 ** 32, PI = 13493037705, HALF_PI = 6746518852, TWO_PI = 26986075409, K_GAIN = 2608131496;
+  const LN2 = 2977044472n, LN2_64 = 12786308645202655660n;
+  const ATANS = [3373259426, 1991351318, 1052175346, 534100635, 268086748, 134174063, 67103403, 33553749, 16777131, 8388597, 4194303, 2097152, 1048576, 524288, 262144, 131072, 65536, 32768, 16384, 8192, 4096, 2048, 1024, 512, 256, 128, 64, 32, 16, 8, 4, 2];
+  const only = (body: () => Id, otherwise: () => Id) => k.call(S.first, k.thunk(body), k.thunk(otherwise));
+  const quot = (a: Id, b: Id) => k.call(INT_OPS.quotient, a, b);
+  const shift = (a: Id, by: Id) => k.call(INT_OPS.shiftDown, a, by);
+  const triple = (a: Id, b: Id, c: Id) => k.call(PAIR_V, a, k.call(PAIR_V, b, c));
+  const third = (t: Id, f: (a: Id, b: Id, c: Id) => Id, names = ["a", "b", "c"]) => k.match(t, [{ variant: PAIR_V, names: [names[0], "rest"], body: ([a, r]) => k.match(r, [{ variant: PAIR_V, names: [names[1], names[2]], body: ([b, c]) => f(a, b, c) }]) }]);
+  const cordic = k.def("cordic");
+  // The table from i = 31 down to 0: a fold reaches the last item first.
+  k.define(cordic, k.fn(["angle"], (angle) => k.fold(k.list(...ATANS.map((t, j) => k.call(PAIR_V, k.int(j), k.int(t))).reverse()), [
+    { variant: NIL, names: [], body: () => triple(k.int(K_GAIN), k.int(0), angle) },
+    { variant: CONS, names: ["turn", "turns"], results: [null, "turned"], body: ([turn], [, done]) => k.match(turn, [
+      { variant: PAIR_V, names: ["i", "atan"], body: ([j, at]) => third(done!, (x, y, z0) => k.if(z.less(z0, k.int(0)),
+        triple(z.add(x, shift(y, j)), z.sub(y, shift(x, j)), z.add(z0, at)),
+        triple(z.sub(x, shift(y, j)), z.add(y, shift(x, j)), z.sub(z0, at))), ["x", "y", "left"]) },
+    ]) },
+  ])));
+  // (cos, sin) of an angle in steps.
+  const sinCos = k.def("fixed cosine and sine");
+  k.define(sinCos, k.fn(["angle"], (angle) => k.let("turns", only(() => quot(angle, k.int(TWO_PI)), () => k.int(0)), (t) =>
+    k.let("r", z.sub(angle, z.mul(t, k.int(TWO_PI))), (r0) => k.let("r₂", k.if(z.less(k.int(PI), r0), z.sub(r0, k.int(TWO_PI)), r0), (r) => {
+      const at = (a: Id, flip: boolean) => third(k.call(cordic, a), (c, sn) => k.call(PAIR_V, flip ? k.call(INT_OPS.neg, c) : c, sn), ["cos", "sin", "left"]);
+      return k.if(z.less(k.int(HALF_PI), r), at(z.sub(k.int(PI), r), true),
+        k.if(z.less(r, k.int(-HALF_PI)), at(z.sub(k.int(-PI), r), true), at(r, false)));
+    })))));
+  const cs = (x: Id, f: (c: Id, sn: Id) => Id) => fx(x, (st) => k.match(k.call(sinCos, st), [{ variant: PAIR_V, names: ["cos", "sin"], body: ([c, sn]) => f(c, sn) }]));
+  const sinX = k.def("fixed sin");
+  k.define(sinX, k.fn(["x"], (x) => cs(x, (_, sn) => F(sn))));
+  const cosX = k.def("fixed cos");
+  k.define(cosX, k.fn(["x"], (x) => cs(x, (c) => F(c))));
+  const tanX = k.def("fixed tan");
+  k.define(tanX, k.fn(["x"], (x) => cs(x, (c, sn) => F(only(() => quot(z.up(sn, 32), c), () => z.up(sn, 32))))));
+  const expX = k.def("fixed exp");
+  k.define(expX, k.fn(["x"], (x) => fx(x, (st) => F(only(() => k.let("k", quot(st, k.int(LN2)), (kk) => k.let("r", z.sub(st, z.mul(kk, k.int(LN2))), (r) =>
+    shift(k.fold(k.call(INT_OPS.range, k.int(14)), [
+      { variant: NIL, names: [], body: () => k.int(ONE) },
+      { variant: CONS, names: ["n", "ns"], results: [null, "the rest of the series"], body: ([nn], [, acc]) =>
+        z.add(k.int(ONE), quot(z.down(z.mul(r, acc!), 32), z.add(nn, k.int(1)))) },
+    ]), k.call(INT_OPS.neg, kk)))), () => k.int(0))))));
+  // The number of bits of a positive Int, by halving the range 17 times
+  // (up to 2¹⁶ bits).
+  const bits = k.def("bit length");
+  k.define(bits, k.fn(["n"], (nn) => k.match(k.fold(k.call(INT_OPS.range, k.int(17)), [
+    { variant: NIL, names: [], body: () => k.call(PAIR_V, k.int(0), k.int(65536)) },
+    { variant: CONS, names: ["step", "steps"], results: [null, "narrowed"], body: (_, [, lh]) => k.match(lh!, [
+      { variant: PAIR_V, names: ["low", "high"], body: ([lo, hi]) => k.let("middle", z.down(z.add(lo, hi), 1), (mid) =>
+        k.if(k.call(S.equal, shift(nn, mid), k.int(0)), k.call(PAIR_V, lo, mid), k.call(PAIR_V, mid, hi))) },
+    ]) },
+  ]), [{ variant: PAIR_V, names: ["low", "high"], body: ([, hi]) => hi }])));
+  const logX = k.def("fixed log");
+  k.define(logX, k.fn(["x"], (x) => fx(x, (st) => F(k.if(z.less(st, k.int(1)), k.int(0), only(() =>
+    k.let("e", z.sub(k.call(bits, st), k.int(33)), (e) => k.let("m", shift(st, e), (m) =>
+      k.let("t", quot(z.up(z.sub(m, k.int(ONE)), 32), z.add(m, k.int(ONE))), (t) => k.let("t²", z.down(z.mul(t, t), 32), (t2) =>
+        z.add(z.down(z.mul(e, k.int(LN2_64)), 32), z.mul(k.int(2), z.down(z.mul(t, k.fold(k.call(INT_OPS.range, k.int(12)), [
+          { variant: NIL, names: [], body: () => k.int(0) },
+          { variant: CONS, names: ["j", "js"], results: [null, "the rest of the series"], body: ([j], [, acc]) =>
+            z.add(quot(k.int(ONE), z.add(z.mul(k.int(2), j), k.int(1))), z.down(z.mul(t2, acc!), 32)) },
+        ])), 32))))))), () => k.int(0)))))));
+  // Unpolar is CORDIC's other mode, vectoring (L97c2): (x, y), brought
+  // into the right half-plane, is turned onto the x axis by ±atan(2⁻ⁱ),
+  // which adds up to the angle, and x ends as the length over K. Each of
+  // length and angle runs it once.
+  const vector = k.def("cordic vector");
+  k.define(vector, k.fn(["x", "y"], (x0, y0) => k.fold(k.list(...ATANS.map((t, j) => k.call(PAIR_V, k.int(j), k.int(t))).reverse()), [
+    { variant: NIL, names: [], body: () => triple(x0, y0, k.int(0)) },
+    { variant: CONS, names: ["turn", "turns"], results: [null, "turned"], body: ([turn], [, done]) => k.match(turn, [
+      { variant: PAIR_V, names: ["i", "atan"], body: ([j, at]) => third(done!, (x, y, z0) => k.if(z.less(y, k.int(0)),
+        triple(z.sub(x, shift(y, j)), z.add(y, shift(x, j)), z.sub(z0, at)),
+        triple(z.add(x, shift(y, j)), z.sub(y, shift(x, j)), z.add(z0, at))), ["x", "y", "angle"]) },
+    ]) },
+  ])));
+  // (x, y) in steps, mirrored through 0 when x < 0 (then the angle is π
+  // more, or less when y < 0): what `cordic vector` reads.
+  const halfPlane = (sx: Id, sy: Id, f: (len: Id, ang: Id) => Id) => {
+    const at = (a: Id, b: Id, off: number) => third(k.call(vector, a, b), (len, _, ang) => f(z.down(z.mul(len, k.int(K_GAIN)), 32), off ? z.add(ang, k.int(off)) : ang), ["x", "y", "angle"]);
+    return k.if(z.less(sx, k.int(0)), k.if(z.less(sy, k.int(0)), at(k.call(INT_OPS.neg, sx), k.call(INT_OPS.neg, sy), -PI), at(k.call(INT_OPS.neg, sx), k.call(INT_OPS.neg, sy), PI)), at(sx, sy, 0));
+  };
+  const unpolarX = k.def("fixed unpolar");
+  k.define(unpolarX, k.fn(["length", "angle", "x", "y"], (r, t, x, y) => k.and(
+    k.equal(r, fx(x, (sx) => fx(y, (sy) => halfPlane(sx, sy, (len) => F(len)), "y steps"), "x steps")),
+    k.equal(t, fx(x, (sx) => fx(y, (sy) => halfPlane(sx, sy, (_, ang) => F(ang)), "y steps"), "x steps")))));
+  k.results(unpolarX, "length", "angle");
+  // √x: the whole square root of x's steps · 2³² by Newton's method from
+  // above (Heron's), which only goes down and stops at the floor; no
+  // answer below 0.
+  const sqrtX = k.def("square root fixed");
+  k.define(sqrtX, k.fn(["x"], (x) => fx(x, (st) => k.if(z.less(st, k.int(0)), k.call(S.fail), k.if(k.call(S.equal, st, k.int(0)), F(k.int(0)),
+    k.let("n", z.up(st, 32), (nn) => F(k.fold(k.call(INT_OPS.range, k.int(12)), [
+      { variant: NIL, names: [], body: () => shift(k.int(1), k.call(INT_OPS.neg, z.down(z.add(k.call(bits, nn), k.int(1)), 1))) },
+      { variant: CONS, names: ["step", "steps"], results: [null, "closer"], body: (_, [, g]) => k.let("next", z.down(z.add(g!, quot(nn, g!)), 1), (nx) =>
+        k.if(z.less(nx, g!), nx, g!)) },
+    ]))))))));
+  // asin and acos at Fixed (L97c3): the angle of (√(1 − s²), s) and of
+  // (c, √(1 − c²)) by CORDIC's vectoring, with Fixed's own exact square
+  // root, so asin(1) is π/2 to the step. Outside [−1, 1] the square root
+  // has no answer and the angle is 0's.
+  const cut = (v: Id) => only(() => k.call(sqrtX, k.call(ARITH.sub, F(k.int(ONE)), k.call(ARITH.mul, v, v))), () => F(k.int(0)));
+  const angleOf = (x: Id, y: Id) => fx(x, (sx) => fx(y, (sy) => halfPlane(sx, sy, (_, ang) => F(ang)), "y steps"), "x steps");
+  const asinX = k.def("fixed asin");
+  k.define(asinX, k.fn(["s"], (sv) => angleOf(cut(sv), sv)));
+  const acosX = k.def("fixed acos");
+  k.define(acosX, k.fn(["c"], (cv) => angleOf(cv, cut(cv))));
+  // Polar at Fixed is CORDIC's rotating mode (L97d): (cos, sin) of the
+  // angle, each times the length with Fixed's own ·. sin and cos are
+  // Trig's ways from it, length 1, which gives the same bits as `fixed
+  // sin` and `fixed cos` (1 · s is s to the step). Each result runs the
+  // rotation on its own until a direction that reads one drops the other
+  // (C55).
+  const polarX = k.def("fixed polar");
+  k.define(polarX, k.fn(["length", "angle", "x", "y"], (r, t, x, y) => k.and(
+    k.equal(x, cs(t, (c) => k.call(mulX, r, F(c)))),
+    k.equal(y, cs(t, (_, sn) => k.call(mulX, r, F(sn)))))));
+  k.results(polarX, "x", "y");
+  const trigX = k.def("trig at fixed");
+  k.define(trigX, k.call(TRIG_V, ...[S.byItsWays, S.byItsWays, tanX, expX, logX, polarX, unpolarX, asinX, acosX].map((d) => k.x(d))));
+
+  const fixedLiteral = k.def("fixed literal");
+  k.define(fixedLiteral, k.fn(["top", "bottom"], (t, b) => F(k.call(S.first,
+    k.thunk(() => k.call(INT_OPS.quotient, k.call(INT_OPS.add, k.call(INT_OPS.mul, t, k.int(2 ** 33)), b), k.call(INT_OPS.mul, b, k.int(2)))),
+    k.thunk(() => k.int(0))))));
+
   const impl = (name: string, v: Id, ops: Id[]) => { const d = k.def(name); k.define(d, k.call(v, ...ops.map((o) => k.x(o)))); return d; };
   const trigD = k.def("trig at dual");
   k.define(trigD, k.call(TRIG_V, ...[sinD, cosD, tanD, expD, logD].map((d) => k.x(d)), k.x(S.byItsWays), k.x(unpolarD), k.x(S.byItsWays), k.x(S.byItsWays)));
@@ -385,11 +575,17 @@ export function buildNumbers(pre: Module): Module {
     trigD,
     ...matProducts.map((m, i) => impl(`arithmetic at mat${sizes[i]}`, ARITHMETIC_V, [addParts, subParts, m, negParts])),
     ...matLiterals,
+    impl("arithmetic at fixed", ARITHMETIC_V, [addX, subX, mulX, negX]),
+    impl("literal at fixed", LITERAL_V, [fixedLiteral]),
+    impl("ordered at fixed", ORDERED_V, [lessX]),
+    impl("division at fixed", DIVISION_V, [divX]),
+    impl("shown at fixed", SHOWN_V, [showX]),
+    trigX,
   ];
 
-  const offered = [TC.def, embedC, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, complexTable, T.def, embedD, asD, slopeAt, dualTable, ...mats.map((m) => m.def), MX.def, LU.def, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, factored, solvedWith, determinant, inverted, leastSquares];
+  const offered = [TC.def, embedC, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, complexTable, T.def, embedD, asD, slopeAt, dualTable, ...mats.map((m) => m.def), MX.def, LU.def, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, factored, solvedWith, determinant, inverted, leastSquares, FX.def, asFixed, fixedF, sqrtX];
   const laws = [lawFromPolar, lawPolar];
-  const helpers = [addC, subC, mulC, negC, divC, showC, addD, subD, mulD, negD, divD, sinD, cosD, tanD, expD, logD, unpolarD, showD, ...matTables, addParts, subParts, negParts, ...matProducts, listDot, eliminated, backSubstituted, determinantOf];
+  const helpers = [addC, subC, mulC, negC, divC, showC, addD, subD, mulD, negD, divD, sinD, cosD, tanD, expD, logD, unpolarD, showD, ...matTables, addParts, subParts, negParts, ...matProducts, listDot, eliminated, backSubstituted, determinantOf, addX, subX, mulX, lessX, negX, divX, showX, fractionDigits, showSteps, cordic, sinCos, sinX, cosX, tanX, expX, bits, logX, vector, unpolarX, asinX, acosX, polarX, fixedLiteral];
   const comments: Record<Id, string> = {
     [TC.def]: "A complex number re + im·i, a record of two Float64s. The same + − · work on it (· is the complex product); it has no <.",
     [embedC]: "Float64 in Complex: x as x + 0i.",
@@ -455,6 +651,13 @@ export function buildNumbers(pre: Module): Module {
     [eliminated]: "A helper of the matrix operations. Not offered.",
     [backSubstituted]: "A helper of the matrix operations. Not offered.",
     [determinantOf]: "A helper of the matrix operations. Not offered.",
+    [FX.def]: "A fixed-point number: an Int counting steps of 2⁻³², so 1.5 is fixed(6442450944). The same + − · < work on it, with · rounded down to a step, and the answer has the same bits on every machine. A step is 2⁻³² anywhere, so a position far from the origin keeps its precision (FIXED-POINT.md).",
+    [asFixed]: "A whole number as a Fixed, exactly.",
+    [fixedF]: "A Fixed as the nearest Float64, for drawing or printing. Past 2⁵³ steps (about 2 million) it drops the last bits; the Fixed keeps them.",
+    [showX]: "A Fixed as text: the shortest decimal that reads back to the same steps, so 0.1 shows as 0.1 and every step shows differently. Not offered: the one show shows every number; kept so programs saved before still open.",
+    [divX]: "a ÷ b for Fixed, rounded down to a step; no answer when b is 0. Not offered: the one divide works on every number but Int; kept so programs saved before still open.",
+    [sqrtX]: "√x for Fixed, rounded down to a step, the same bits on every machine; no answer below 0.",
+    [trigX]: "How Fixed does Trig: CORDIC and series, all in Ints, so the same bits on every machine. Found by its type, so not offered: sin is.",
   };
   const p = publish(merge(prelude, std, pre.code, k.code), k.names, [...offered, ...impls, ...helpers, ...laws], merge(prelude, std, pre.code));
   if (!p.ok) throw new Error(`the numbers module can't be published: ${p.reason}`);

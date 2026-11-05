@@ -33,11 +33,7 @@ import { ratioParts } from "./int.ts";
 import { fieldPath, fieldPaths, placePath, readPaths } from "./records.ts";
 import { leftToWays, pickWays, waysIn, type Ways } from "./ways.ts";
 import { fresh, rigid, RIGID, type Pins } from "./signatures.ts";
-import {
-  ALGEBRAIC_TYPE, ARRAY, MASK_TYPES, isRowCarrier, rowCarrier, BUILTIN_EFFECTS, NAMED_ROWS, writtenRow, CELL, PATH, CHOICE, CONSOLE, FIXED_TYPE, DIVERGE, EffectError, ArithError, FractionError, WORLD, WorldError, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, RATIONAL_TYPE, schemeArith, schemeNeeds, showType as showT, STRING, Subst, TypeError,
-  type Row, type Scheme, type Type,
-  OverMap, OverSet,
-} from "./types.ts";
+import { ALGEBRAIC_TYPE, ARRAY, MASK_TYPES, isRowCarrier, rowCarrier, BUILTIN_EFFECTS, NAMED_ROWS, writtenRow, CELL, PATH, CHOICE, CONSOLE, DIVERGE, EffectError, ArithError, FractionError, WORLD, WorldError, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, RATIONAL_TYPE, schemeArith, schemeNeeds, showType as showT, STRING, Subst, TypeError, type Row, type Scheme, type Type, OverMap, OverSet } from "./types.ts";
 const FILE_OP_IDS = new Set<Id>(Object.values(FILE_OPS));
 import { DECLARED, discharge } from "./ledger.ts";
 import type { CheckCache } from "./check-cache.ts";
@@ -2595,7 +2591,34 @@ function* fillingSteps(code: Code, info: Info, hole: Id): Generator<void, Fillin
     }
     return out;
   };
+  // A held definition keeps its pin only while a filling brings no effect
+  // into its body's row that the pin doesn't let through (E103h): a
+  // search's Choice or an Abort in a definition held pure makes its type
+  // smaller than the pin, which the whole check refuses ("is pinned to
+  // (a, a, a) -> a …, and this makes it (a, a, a) -[Choice]-> a"). The row
+  // is the body's own (the definition's type is the pin's, met after the
+  // check), with every row whose effects are kept in it; a pin lets
+  // through what the body did already, and Console, the world effect a
+  // pin's open row carries (signatures.ts rigid).
+  const pinRows = h.group.filter((d) => info.options?.pins?.[d]).flatMap((d) => {
+    const body = (code.nodes[d] as NodeOf<"def"> | undefined)?.body;
+    const t = body ? info.typeOf.get(body) : undefined, r = t && info.subst.resolve(t);
+    if (r?.t !== "fn") return [];
+    const own = info.subst.resolveRow(r.eff);
+    if (own.tail === null) return [];
+    const tails = new Set([own.tail]);
+    for (let more = true; more; ) {
+      more = false;
+      for (const c of info.subst.subs) {
+        const from = info.subst.resolveRow(c.from).tail, to = info.subst.resolveRow(c.to).tail;
+        if (from !== null && to !== null && tails.has(to) && !tails.has(from)) { tails.add(from); more = true; }
+      }
+    }
+    return [{ tails: [...tails], lets: new Set([...own.effs, CONSOLE]) }];
+  });
+  const keepsPin = (s: Subst) => pinRows.every((p) => p.tails.every((tail) => s.resolveRow({ effs: [], tail }).effs.every((e) => p.lets.has(e))));
   const safe = (s: Subst, f: Filling, risky: boolean | "field", mix?: string, brings = "") => {
+    if (pinRows.length && !keepsPin(s)) return false;
     if (mix && !risky) { const m = mixChecked(f, mix); if (m !== undefined) return m; }
     const dir = directions.size ? direction(f) : "same";
     if (dir === "lost") return false;

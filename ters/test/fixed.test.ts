@@ -10,9 +10,9 @@ import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { makeRunner } from "../src/lang/run.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
-import { LIBRARY } from "../src/lang/library.ts";
-import { ARITH, FIXED_V, INT_OPS, PAIR_V, S, SHOW_ANY, TRIG_OPS } from "../src/lang/std.ts";
-import { FIXED_TYPE } from "../src/lang/types.ts";
+import { LIBRARY, FIXED_V, FIXED_TYPE } from "../src/lang/library.ts";
+import { ARITH, INT_OPS, PAIR_V, S, SHOW_ANY, TRIG_OPS } from "../src/lang/std.ts";
+import {  } from "../src/lang/types.ts";
 import type { Id } from "../src/model.ts";
 import { compiledEach, plainValue } from "../../compiler/src/core-js.ts";
 
@@ -80,7 +80,7 @@ test("Fixed: exact literals, a physics loop and a big world, evaluated and compi
   assert.equal(got[9 + SHOWN.length], "[]");
   // What the core IR doesn't compile yet (C137's gaps), by why.
   const { defs, gaps } = compiledEach(code, info, nm, names);
-  for (const why of Object.values(gaps)) assert.match(why, /a value that isn't a Float64, Int or Text/);
+  for (const why of Object.values(gaps)) assert.match(why, /a value that isn.t a Float64, Int or Text/);
   for (const [i, n] of names.entries()) if (defs[n]) assert.deepEqual(plainValue(defs[n]()), got[i], n);
 });
 

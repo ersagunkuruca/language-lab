@@ -557,7 +557,9 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
     const x = t.t === "fn" ? t.params[0] : num;
     // The library's types' own are their implementations (above); one they
     // don't have (< at Complex) is a type error, and the generic is left.
-    if (x.t === "con" && x.id.startsWith("std.")) return;
+    // A module's types are the library's too (published, so their ids are
+    // hashes: the numbers module's Fixed, L207e).
+    if (x.t === "con" && (x.id.startsWith("std.") || x.id.startsWith("@"))) return;
     if (x.t === "con" && (x.id === NUMBER || x.id === INT)) {
       nodes[id] = { id, kind: "ref", target: x.id === INT ? at.int : at.number };
       typeOf.set(id, t);

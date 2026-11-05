@@ -37,6 +37,7 @@ const numbersNode = (kind: string, name: string) => Object.keys(NUMBERS.code.nod
 export const DUAL_V = numbersNode("variant", "dual");
 export const COMPLEX_V = numbersNode("variant", "complex");
 export const COMPLEX_TYPE = numbersNode("def", "Complex");
+export const FIXED_V = numbersNode("variant", "fixed"), FIXED_TYPE = numbersNode("def", "Fixed");
 export const MAT_V = { 2: numbersNode("variant", "mat2"), 3: numbersNode("variant", "mat3"), 4: numbersNode("variant", "mat4") } as const;
 export const MODULES: Module[] = [PRELUDE, VECTORS, HTML_MODULE, TREES, STEADY, CASES, NUMBERS];
 export const CORE: Code = merge(prelude, std);

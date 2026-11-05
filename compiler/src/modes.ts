@@ -75,7 +75,7 @@ export function modeCompiler(code: Code, names: Record<Id, string>) {
     if (made.has(key)) return made.get(key)!;
     const lam = nodes[(nodes[def] as NodeOf<"def">).body!] as NodeOf<"lambda">;
     if (lam?.kind !== "lambda") throw new Unsupported("not a function");
-    const name = `${(names[def] ?? def).replace(/[^\p{ID_Continue}$]+/gu, "_")}$mode${made.size}${into ? "$into" : ""}`;
+    const name = `${(names[def] ?? def).replace(/[^\p{ID_Continue}$]+/gu, "_").replace(/^(?=[^\p{ID_Start}$_])/u, "_")}$mode${made.size}${into ? "$into" : ""}`;
     made.set(key, name);
     const was = [built, calls, handed, self] as const;
     try {

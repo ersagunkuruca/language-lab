@@ -1,13 +1,11 @@
 // Relational solves whose mode has one answer or none compile to their
 // plan written out (src/modes.ts, MODES.md step 5): the same answers as
-// the evaluator, and no relational interpreter in the module.
+// the evaluator. (That the module has no relational interpreter was read
+// from compile.ts's output, and went with it: C137.)
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { pathToFileURL } from "node:url";
 import { fromList, makeRunner, toList, type Value } from "../../ters/src/lang/run.ts";
 import type { Id, NodeOf } from "../../ters/src/model.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
@@ -15,12 +13,8 @@ import { Lang } from "../../ters/src/lang/dsl.ts";
 import { base, baseNames } from "../../ters/src/lang/load.ts";
 import { CONS, INT_OPS, NIL, PAIR_V, S, SHOW_ANY } from "../../ters/src/lang/std.ts";
 import { B } from "../../ters/src/prelude.ts";
-import { compile } from "../src/compile.ts";
-import { compileProgram } from "../src/program.ts";
-import { $fromList, $toList } from "../src/runtime.js";
+import { FAIL, compiledDefs, plainValue } from "../src/core-js.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href;
-const dir = mkdtempSync(join(tmpdir(), "modes-"));
 const paramsOf = (k: Lang, def: Id) => (k.code.nodes[(k.code.nodes[def] as NodeOf<"def">).body!] as NodeOf<"lambda">).params;
 
 test("det and semidet solves are plain functions, with the evaluator's answers", async () => {
@@ -63,17 +57,7 @@ test("det and semidet solves are plain functions, with the evaluator's answers",
   const info = infer(code, names);
   assert.deepEqual(info.errors, []);
   const exports = ["sum of", "name in", "name twice in", "unshift", "unmark", "which"];
-  const source = compile(code, info, names, { runtime, exports });
-  writeFileSync(join(dir, "modes.js"), source);
-  const defs = (await import(pathToFileURL(join(dir, "modes.js")).href)).defs as Record<string, (...a: unknown[]) => unknown>;
-  // Without label's solve, the module has no interpreter, and functions
-  // are plain ones (no metadata for it to read).
-  const plain = compile(code, info, names, { runtime, exports: exports.filter((x) => x !== "which") });
-  assert.doesNotMatch(plain, /\$relate|\$program|\$meta\(/);
-  // Only label's solve goes to the interpreter.
-  assert.equal(source.match(/\$relate\(\$program/g)?.length, 1);
-  assert.match(source, /label, run backwards by the relational interpreter/);
-  assert.match(source, /function greet\$mode\d+\(/);
+  const defs = compiledDefs(code, info, names, exports) as Record<string, (...a: unknown[]) => unknown>;
 
   const r = makeRunner(code, info, { print: () => {} });
   const ev = (name: string, ...args: Value[]) => [...r.call(r.value(Object.keys(names).find((d) => names[d] === name && code.nodes[d]?.kind === "def")!), ...args)][0];
@@ -89,12 +73,6 @@ test("det and semidet solves are plain functions, with the evaluator's answers",
   for (const t of ["yes", "no", "maybe"]) assert.equal(defs.which(t), ev("which", t));
   assert.equal(defs["name twice in"]("hello, hello, Ada"), "Ada");
   assert.equal(defs.unmark(r.value("std.bool.true"), "hi"), "?");
-});
-
-test("backwards: greet runs as a function, the searches with several answers stay with the interpreter", () => {
-  const source = compileProgram("backwards", ["main"], runtime);
-  assert.match(source, /greet, run backwards \(semidet\)/);
-  assert.match(source, /\$relate\(/);
 });
 
 // Haar's split in lifting steps (Sweldens): each step has one unknown run
@@ -117,20 +95,16 @@ test("a split written as lifting steps runs backwards as arithmetic, with the ev
   const code = base(k.code), names = { ...baseNames(), ...k.names };
   const info = infer(code, names);
   assert.deepEqual(info.errors, []);
-  const source = compile(code, info, names, { runtime, exports: ["split", "join"] });
-  assert.match(source, /split, run backwards \(semidet\)/);
-  assert.doesNotMatch(source, /\$relate|\$program/);
-  writeFileSync(join(dir, "haar.js"), source);
-  const defs = (await import(pathToFileURL(join(dir, "haar.js")).href)).defs as Record<string, (...a: unknown[]) => unknown>;
+  const defs = compiledDefs(code, info, names, ["split", "join"]) as Record<string, (...a: unknown[]) => unknown>;
   const r = makeRunner(code, info, { print: () => {} });
   const ev = (name: string, ...args: Value[]) => [...r.call(r.value(Object.keys(names).find((d) => names[d] === name && code.nodes[d]?.kind === "def")!), ...args)][0];
   for (const samples of [[], [3, 1], [0.5, -0.25, 1, 7]]) {
-    // split may fail (Choice), so it gives its answers in turn.
-    const [bands] = defs.split($toList(samples)) as Iterable<unknown>;
-    assert.deepEqual($fromList(defs.join(bands)), samples);
+    // split may fail (Choice): its first answer.
+    const bands = defs.split(toList(samples));
+    assert.deepEqual(fromList(plainValue(defs.join(bands)) as Value), samples);
     assert.deepEqual(fromList(ev("join", ev("split", toList(samples)))), samples);
   }
-  assert.deepEqual([...(defs.split($toList([1, 2, 3])) as Iterable<unknown>)], []);
+  assert.throws(() => defs.split(toList([1, 2, 3])), (e) => e === FAIL);
 });
 
 // C30: a mode whose unknown is a list built front to back (Haar's join run
@@ -158,11 +132,7 @@ test("a list a written-out mode builds is pushed onto an array where it's only t
   const names = { ...baseNames(), ...k.names };
   const info = infer(code, names);
   assert.deepEqual(info.errors, []);
-  const source = compile(code, info, names, { runtime, exports: ["samples total"] });
-  assert.match(source, /function pairs\$mode\d+\$into\(/);
-  assert.match(source, /total\$arr\(/);
-  writeFileSync(join(dir, "modes-into.js"), source);
-  const defs = (await import(pathToFileURL(join(dir, "modes-into.js")).href)).defs as Record<string, (...a: unknown[]) => unknown>;
+  const defs = compiledDefs(code, info, names, ["samples total"]) as Record<string, (...a: unknown[]) => unknown>;
   const r = makeRunner(code, info, { print: () => {} });
   const main = Object.keys(names).find((d) => names[d] === "samples total" && code.nodes[d]?.kind === "def")!;
   const pair = (a: number, b: number) => [...r.call(r.value(PAIR_V), a, b)][0];
