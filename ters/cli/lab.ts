@@ -52,7 +52,7 @@ import { allowedOnly, nodeWorld } from "../src/lang/world.ts";
 import { readLog, replaying, type LogEntry } from "../src/lang/worldlog.ts";
 import { CFLAGS, emitC } from "../../compiler/src/c.ts";
 import { lowerScalar } from "../../compiler/src/scalar.ts";
-import { FAIL, codeLines, coreMap, coreModule, hostOpsOf, loadCoreJs, lowerCore, plainValue, runCoreMain } from "../../compiler/src/core-js.ts";
+import { FAIL, Unsupported, codeLines, coreMap, coreModule, hostOpsOf, loadCoreJs, lowerCore, plainValue, runCoreMain } from "../../compiler/src/core-js.ts";
 import { withInverses } from "../../compiler/src/inverses.ts";
 import { execFileSync } from "node:child_process";
 import { recordings, webCorePage } from "./web.ts";
@@ -69,7 +69,9 @@ import { evaluatorHash, readKept, resultKeys, writeKept } from "./checks.ts";
 
 const USAGE = `lab: the command line for Ters, the language
 usage:
-  lab run <program> [arguments…]        run main with the evaluator (a page prints as static HTML)
+  lab run <program> [arguments…]        run main, compiled through the core IR, or with the evaluator when it
+                                        doesn't compile (a page prints as static HTML)
+    [--evaluator]                       with the evaluator always
     [--replay log.json]                 answering from a run's log of the world's answers, such as a compiled
                                         program writes when TERS_LOG=log.json is set
   lab compile <program> [-o out.mjs]    compile to a JavaScript module that runs main, through the core IR,
@@ -269,6 +271,9 @@ const replayed = (log: LogEntry[]): World => {
   const shown = (op: "error" | "log") => (...a: unknown[]) => { r[op](...a); return (real[op] as (...x: unknown[]) => unknown)(...a); };
   return { ...r, error: shown("error"), log: shown("log") } as unknown as World;
 };
+// `--evaluator`: run on the evaluator even when main compiles (L118c).
+const evalAt = argv.indexOf("--evaluator");
+if (evalAt >= 0) argv.splice(evalAt, 1);
 const world = () => (replay ? replayed(replay) : allow ? allowedOnly(nodeWorld(), allow) : nodeWorld());
 const [command, path, ...rest] = argv;
 // An MCP server for an LLM to read, change and run programs (mcp/server.ts).
@@ -326,6 +331,22 @@ switch (command) {
       const page = runMain(p.code, p.info, main, { print: (s) => console.error(s), names: p.names, cells, world: world(), hosts });
       process.stdout.write(pageDocument(p.title, htmlText(page, evaluatorCall)));
       break;
+    }
+    // Through the core IR's JavaScript when main lowers (L118c): tens of
+    // times faster than the evaluator on a long run. The evaluator when it
+    // doesn't, when the program has its own hosts, for a main that is a
+    // value (printed as the evaluator shows it), or with --evaluator.
+    if (evalAt < 0 && !hosts && !valueMain(p.info, main)) {
+      const ir = lowerCore(p.code, p.info, p.names, [main]);
+      if (!ir.refused.get(main)) {
+        let wrote = false;
+        const rt = { print: (s: string) => { wrote = true; console.log(s); }, names: p.names, world: world() };
+        try { process.exitCode = runCoreMain(ir, p.names[main] ?? "main", rest, rt as never); break; } catch (e) {
+          // A part the printed code doesn't have yet: the evaluator, if
+          // nothing was printed. (A world effect done before it is done again.)
+          if (!(e instanceof Unsupported) || wrote) throw e;
+        }
+      }
     }
     process.exitCode = runProgram(p.code, p.info, main, rest, { print: (s) => console.log(s), names: p.names, world: world(), hosts });
     break;
