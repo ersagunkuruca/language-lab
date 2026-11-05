@@ -797,6 +797,32 @@ static double lab_world_randomSeed(void) {
   if (lab__log_begin("randomSeed")) { lab__log_answer(); fprintf(lab_log, "%u", (unsigned)s); lab__log_close(); }
   return (double)s;
 }` },
+  // A program's own handlers of operations answered at once (L213c4): a
+  // stack of frames, each an effect's number and its cases' closures,
+  // pushed while the code it handles runs; a perform calls the nearest
+  // frame's case (given a count of it). Koka's evidence, as the core IR's
+  // JavaScript keeps it.
+  "handlers": { uses: [], c: `typedef struct { int e, n; lab_cell *c[16]; } lab_hframe;
+static lab_hframe lab_hs[4096];
+static int lab_hn;
+static int lab_handlers_push(int e, int n, lab_cell **cs) {
+  if (lab_hn == 4096 || n > 16) { fputs("too many handlers\\n", stderr); exit(3); }
+  lab_hframe *f = &lab_hs[lab_hn++];
+  f->e = e; f->n = n;
+  for (int k = 0; k < n; k++) f->c[k] = cs[k];
+  return 0;
+}
+static int lab_handlers_pop(int e) {
+  lab_hframe *f = &lab_hs[--lab_hn];
+  (void)e;
+  for (int k = 0; k < f->n; k++) lab_drop(f->c[k]);
+  return 0;
+}
+static lab_cell *lab_handlers_case(int e, int i) {
+  for (int k = lab_hn; k-- > 0;) if (lab_hs[k].e == e) { lab_dup(lab_hs[k].c[i]); return lab_hs[k].c[i]; }
+  fputs("nothing handles an operation\\n", stderr);
+  exit(3);
+}` },
   // A line of the program's Log nothing handles (L213a6, a release's):
   // standard error, as Node's world writes it.
   "world.logLine": { uses: [], c: `static void lab_world_logLine(lab_cell *t) { fflush(stdout); fwrite(LAB_TB(t), 1, LAB_TN(t), stderr); fputc('\\n', stderr); lab_drop(t); }` },
