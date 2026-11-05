@@ -27,5 +27,6 @@ export function tableText(code: Code, info: Info, names: Names): { code: Code; i
   const defs = [...new Set([...LIBRARY.code.defs, ...code.defs])];
   const all = { ...LIBRARY.names, ...names };
   const next = { ...code, nodes, defs };
-  return { code: next, info: infer(next, all), names: all };
+  // Checked again as the program was (its pins, insiders and library).
+  return { code: next, info: infer(next, all, undefined, info.options && { ...info.options, cache: undefined }), names: all };
 }
