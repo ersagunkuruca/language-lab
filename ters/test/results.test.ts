@@ -194,3 +194,16 @@ test("a relation written where it is used whose results its inputs don't pin dow
   assert.equal(errs.length, 1, String(errs));
   assert.match(errs[0], /^this relation's results can't all be found from s: /);
 });
+
+test("a definition's direction is asked again when a node it reaches changes (E253c)", () => {
+  // The direction an earlier check found is kept while the nodes it reaches
+  // are the same objects; one fewer condition and it can't find b.
+  const p = program(["a", "b"], false);
+  assert.deepEqual(p.info.errors.map((e) => e.message), []);
+  const lam = p.code.nodes[(p.code.nodes[p.sd] as NodeOf<"def">).body!] as NodeOf<"lambda">;
+  const both = p.code.nodes[lam.body] as NodeOf<"call">;
+  const code: Code = base({ nodes: { ...p.k.code.nodes, [lam.id]: { ...lam, body: both.args![0] } }, defs: p.k.code.defs });
+  const errs = infer(code, p.names).errors.filter((e) => e.id === p.sd).map((e) => e.message);
+  assert.equal(errs.length, 1, String(errs));
+  assert.match(errs[0], /results can't all be found from s, d/);
+});

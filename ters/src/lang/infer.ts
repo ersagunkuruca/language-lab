@@ -16,7 +16,7 @@ import { sharing } from "./shared-fields.ts";
 import { PARTIAL, signAnalysis } from "./signs.ts";
 import type { Code, Id, Node, NodeOf, Use } from "../model.ts";
 import { isUse, useTarget, isCall, fieldPorts, type Call, bindsOf, bodyOf } from "../model.ts";
-import { conditionResults, dependencies, derived, layerOf, nodesWhere, ownerOfTypeParts, portsOf, scanningOnLayer, subtree } from "../model.ts";
+import { conditionResults, dependencies, derived, layerOf, nodesWhere, offLayer, ownerOfTypeParts, portsOf, scanningOnLayer, subtree } from "../model.ts";
 import { liftRelations } from "./results-fn.ts";
 import type { Names } from "../presentation.ts";
 import { unitProblems, UnitsBefore } from "../units.ts";
@@ -151,7 +151,14 @@ let underAll: { codes: Code[]; names: Names } | null = null;
 const underChecks: { lib: Code; opts: Options; info: Info }[] = [];
 export function checkOnce(code: Code | null, names: Names = {}, also: Code[] = []) { underAll = code && { codes: [code, ...also], names }; underChecks.length = 0; }
 let checkingUnder = false;
-const onLib = (code: Code, lib: Code) => { for (const id in lib.nodes) if (code.nodes[id] !== lib.nodes[id]) return false; return true; };
+// On its layer (E253b), the nodes that aren't the layer's are known: the
+// program is on the library just when none of them is one of its.
+const onLib = (code: Code, lib: Code) => {
+  const off = layerOf(code) === lib ? offLayer(code) : undefined;
+  if (off) { for (const id of off) if (id in lib.nodes) return false; return true; }
+  for (const id in lib.nodes) if (code.nodes[id] !== lib.nodes[id]) return false;
+  return true;
+};
 function under(code: Code, opts: Options): { info: Info; only: Set<Id> } | null {
   if (!underAll || checkingUnder) return null;
   const lib = underAll.codes.find((c) => onLib(code, c));
@@ -2255,6 +2262,7 @@ const isInterface = (code: Code, def: Id): boolean => {
 // it: the other ports given, out true. Either why its results can't all be
 // found, or the effects that direction has (Choice for more than one
 // answer, Diverge for a search that may not end).
+const directionsKept = new Map<Id, { nodes: Node[]; effects: Id[] }>();
 export function resultsDirection(code: Code, d: Id, names: Names = {}): { why: string } | { effects: Id[] } {
   const def = code.nodes[d] as NodeOf<"def">;
   const lam = code.nodes[def.body!] as NodeOf<"lambda">;
@@ -2264,8 +2272,13 @@ export function resultsDirection(code: Code, d: Id, names: Names = {}): { why: s
   const reach = new Set([d, ...dependencies(code, d)]);
   const defs = code.defs.filter((x) => reach.has(x) || code.nodes[(code.nodes[x] as NodeOf<"def">).body ?? ""]?.kind === "typedef");
   const nodes: Record<Id, Node> = {};
-  for (const [id, n] of Object.entries(code.nodes)) if (n.kind === "builtin") nodes[id] = n;
+  for (const id of nodesWhere(code, "builtin", (n) => n.kind === "builtin")) nodes[id] = code.nodes[id];
   for (const x of defs) for (const id of subtree(code, x)) nodes[id] = code.nodes[id];
+  // The same nodes as an earlier ask of d's: its effects stand (E253c: two
+  // of physics' definitions with results took 26 ms of each edit's check).
+  // A why isn't kept, since it says the names.
+  const mine = Object.values(nodes), was = directionsKept.get(d);
+  if (was && was.nodes.length === mine.length && was.nodes.every((n, i) => n === mine[i])) return { effects: was.effects };
   const add = (n: Node) => { nodes[n.id] = n; return n.id; };
   const given = Object.fromEntries(ins.map((p) => [p, add({ id: `${d}:given:${p}`, kind: "hole" })]));
   given.out = add({ id: `${d}:true`, kind: "ref", target: TRUE });
@@ -2285,7 +2298,9 @@ export function resultsDirection(code: Code, d: Id, names: Names = {}): { why: s
       if (stuck.length) return { why: stuck.find((x) => x.startsWith("nothing gives")) ?? `${stuck[0]} never gets what it needs` };
       ends = !!v?.ends;
     } else if (p.status !== "solved") return { why: `it needs ${p.needMore} more known port${p.needMore === 1 ? "" : "s"}` };
-    return { effects: [...(oneAnswer(asked, use) ? [] : [CHOICE]), ...(ends ? [] : [DIVERGE])] };
+    const effects = [...(oneAnswer(asked, use) ? [] : [CHOICE]), ...(ends ? [] : [DIVERGE])];
+    directionsKept.set(d, { nodes: mine, effects });
+    return { effects };
   } catch (e) { return { why: (e as Error).message }; }
 }
 
