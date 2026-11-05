@@ -64,6 +64,10 @@ const SMALLEST: Record<string, (k: Lang) => unknown> = {
   "field-of-one-case": (k) => { const t = k.type("Shape", [], [["dot", []], ["disc", [["r", () => k.tref(NUMBER)]]]]); k.define(k.def("p"), k.fn(["s"], (s) => k.call(t.f["disc.r"], s))); },
   "not-folded": (k) => { const t = k.type("Disc", [], [["disc", [["r", () => k.tref(NUMBER)]]]]); k.define(k.def("p"), k.fn(["s"], (s) => k.fold(s, [{ variant: t.v.disc, names: ["r"], results: ["rr"], body: (b) => b[0] }]))); },
   "might-not-finish": (k) => { const loop = k.def("loop"); k.define(loop, k.fn(["v"], (v) => k.call(S.mapParts, loop, v))); },
+  "field-must-finish": (k) => {
+    const t = k.type("Stream", [], [["node", [["next", (self) => k.tfun([], k.tref(self))]]]]), make = k.def("make");
+    k.define(make, k.fn(["u"], (u) => k.call(t.v.node, k.thunk(() => k.match(k.call(make, u), [{ variant: t.v.node, names: ["n"], body: ([n]) => k.call(n) }])))));
+  },
   "cant-fold": (k) => { const t = k.type("Stream", [], [["more", [["next", (self) => k.tfun([], k.tref(self))]]]]); k.define(k.def("p"), k.fn(["s"], (s) => k.fold(s, [{ variant: t.v.more, names: ["next"], results: ["rest"], body: (_b, r) => r[0]! }]))); },
   "effect-folded": (k) => { const a = ask(k); k.define(k.def("p"), k.thunk(() => k.fold(k.call(a.op.ask), answered(k, a, () => k.lit(1))))); },
   "too-many-results": (k) => k.define(k.def("p"), k.gives(["a"], ["r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9"], (a) => a)),
