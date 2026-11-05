@@ -9,10 +9,11 @@ gap below gets its evidence, a fix and a rank.
 
 The programs are original, written for this purpose.
 
-**Rounds so far (2026-11-02):** 1 calc, 2 Countdown and chapters, 3
+**Rounds so far (2026-11-05):** 1 calc, 2 Countdown and chapters, 3
 ledger, 4 the guitar pedal, 5 routes, 6 notebook, 7 sheet (written in the
 editor), 8 board (a page, written in the editor), 9 machine (an assembler
-and interpreter, on every target). Each round's gaps are
+and interpreter, on every target), 10 clinic (a simulation, written in
+the editor), 11 crew (workers as fibers). Each round's gaps are
 below, as written then. The gaps still open are rows in BACKLOG.md, lane
 C (C30, C31, C59, C63, C64, C70 to C73, C85 to C88, C91 to C96), and the next round's
 program is chosen when the weekly round is due.
@@ -2587,3 +2588,158 @@ lacks something:
 3. L175 (and K1's Fixed), C106 (seeded on C and WebAssembly).
 4. C105 with L167, then C107.
 5. E221, E223, E224, L174, L176, L177.
+
+## Round 11: crew, workers as fibers (2026-11-05)
+
+`compiler/gaps/crew` reads a project plan (each task's minutes and what
+it waits for, `workers 3`), checks it (whole numbers, a name twice, an
+unknown task, a cycle, each with its line), sorts it (Kahn, 1962), finds
+the critical path and every task's slack with the critical path method's
+forward and backward passes (Kelley and Walker, 1959), and runs the plan
+with a crew in simulated minutes, ready tasks handed out longest tail
+first (Hu 1961, Graham 1966) or by line. It prints the run's log, how busy
+each worker was, and a table of crews of 1 to n+2 workers both ways
+against the lower bound.
+
+What is new for the rounds: **each worker is a fiber**. A worker is a
+loop that performs `next job`, `spend(minutes)` and `done with(task)`
+from the `Work` effect, whose three operations are answered later
+(L54a). The scheduler is written in the language: `fiber` runs a worker
+under a handler that turns each operation into a `Step` holding the rest
+of the run; the `Floor` keeps the idle workers' rests and a timer per
+spending worker, and `run floor` moves the clock to the earliest timer
+and resumes that rest. It is the first round with a hand-written
+scheduler of continuations, file input through `read file`, and a usage
+exit code. **66 definitions** (8 types, an effect, 57 functions), 2,594
+nodes with the library. It was generated once with the DSL (build script
+in the project's files, `gaps-round11/build.ts`), not built through `lab
+mcp` or the editor.
+
+Files:
+- `compiler/gaps/crew/`: the program, its README (credits) and a sample
+  `plan.txt`.
+- `compiler/gaps/crew.ideal.js`: the same program by hand. Each worker
+  is a JS generator resumed by the scheduler with its answer; maps are JS
+  Maps and the ready tasks and timers binary heaps, changed in place.
+- `compiler/gaps/crew.ts`: the four ways in one process (the evaluator,
+  compile.ts's module, the core IR's, the ideal) on the representations
+  `lab run` and `lab compile` choose, with a world whose files are in
+  memory, and a generator of made-up plans.
+- `compiler/test/crew.test.ts`: the four print the same and exit the same
+  way on the sample, ties, eleven failures and a usage error, and the
+  compiled ones and the ideal on 300 tasks.
+- `compiler/gaps/bench-crew.ts`: the table below.
+
+All four agree on everything tried, failures included: the evaluator,
+compile.ts and the core IR needed no fix. The program reads the plan
+with folds from the end, so of two bad `workers` lines the last is the
+one reported, and a task named twice is reported at its second-last
+line; the ideal does the same on purpose.
+
+### Results
+
+```
+ tasks  way          whole report   against the ideal
+    50  evaluator        819 ms        354x
+    50  compiled          18 ms          8.0x
+    50  core              20 ms          8.4x
+    50  ideal            2.3 ms
+   200  evaluator       4868 ms        852x
+   200  compiled          75 ms         13x
+   200  core              66 ms         12x
+   200  ideal            5.7 ms
+  1000  compiled         393 ms         19x
+  1000  core             354 ms         17x
+  1000  ideal             21 ms
+```
+
+`node compiler/gaps/bench-crew.ts 50 200 1000`, in one process, after a
+warm-up run. The report runs the crew 13 times (the run it logs, then 1
+to 6 workers, both ways of ranking). At 4,000 tasks the core IR's module
+takes 1.2 to 1.4 s and the ideal 0.10 to 0.14 s.
+
+Before the harness used the representations lab chooses, it ran the
+program as defined (maps and sets as sorted lists): compiled 70x the ideal
+at 1,000 tasks and 570x at 5,000 (`value at` and `put` walking lists).
+That was the harness's mistake, not lab's; it is noted because a program
+handed to `compile` directly, as the older harnesses do, still gets it.
+
+A profile of the core IR's module at 4,000 tasks (`lab compile`, then
+node): `simulate` 76% inclusive of `main`, of which `step` 54% and
+`released` 28%; the weight-balanced tree's insert, balance and lookup are
+the largest self times, then `text.less` with its surrogate regular
+expression (about 10% of the samples together), and the collector 7%.
+
+### The gaps, ranked
+
+**K1. One representation per type, so every Map is a tree (perf, C93).**
+On JavaScript the chooser may store a Map as a hash table changed in
+place (C63b), and crew's maps each have one holder. It still picks the
+weight-balanced tree for all of them: the cost of a type's representation
+is its dearest job, and one map (`idle`, the parked workers) is read with
+`smallest key`, which a hash table does in n log n. So `waiting`,
+`rank`, `busy`, `tasks`, `users`, `start` and `tail`, which only `put`,
+`value at` and walk, pay log n tree steps with text comparisons.
+*Measured* by making the hash table's costs all constant for one run (the
+rows in `LIBRARY.reps`, in a script): at 4,000 tasks the core IR's module
+goes from 1.2 to 1.4 s down to 0.53 to 0.66 s, about 2.2x, and prints the
+same. Sets stay trees: `ready` and `timers` are priority queues read with
+`smallest item`, and as hash sets the run took 45 to 50 s. The same
+holds for any program that uses std's `Priority queue` (a Map) or
+`smallest key` once: all of its maps lose the table. The fix is C93's
+choice per value (its steps s1 to s5), with crew as the Map witness beside
+machine's List: crew's maps split into one group read in order (`idle`)
+and one only looked up.
+
+**K2. Text comparison tests both texts for surrogates on every compare
+(perf, small).** `text.ts less` runs `/[\uD800-\uDFFF]/` over both texts
+before `<`, and the trees compare task names at every step. *Measured* by
+comparing code units up to the first difference and looking at
+surrogates only there: 1.56 to 1.70 s → 1.54 to 1.59 s at 4,000 tasks,
+under 5%. Below the 10% bar, so no row; worth folding into any change to
+`text.ts`.
+
+**K3. What is left after K1 (about 5x at 4,000 tasks).** Not attributed
+yet: the ideal's heaps are arrays, the program's priority queues are
+persistent trees of pairs; every change to the ten-field `Floor` is a new
+record (C105 makes a chain of sets one copy; C107 found the rest is the
+structures each step makes); each worker's rest is a closure where the
+ideal resumes a generator. No row until K1 is done and the profile is
+taken again.
+
+**K4. The evaluator (not the compiler's).** 0.8 s at 50 tasks, 4.9 s at
+200, 350x to 850x the ideal. L118c again.
+
+The compiled module is 211 KB for the 66 definitions: the trees module,
+and a generator twin (`$h`) beside every recursive function for deep
+recursion. Not measured as a cost; noted for the size of a page.
+
+### Language gaps
+
+- **CL1. A scheduler of fibers writes the effect twice.** `Step`'s cases
+  (`asking`, `spending`, `finishing`, each with its `rest`) are `Work`'s
+  three operations again, and `fiber`'s handler is three cases that only
+  wrap the operation and its rest in a `Step`. Every program that drives
+  fibers itself (the scheduler in ters/test/later.test.ts, crew) writes
+  this pair by hand, and must spell each rest's type with `Diverge`. A
+  library form that runs a computation to its next operation and gives
+  back the operation as data, with its rest, would replace both: a
+  shallow handler's view (Hillerström and Lindley, "Shallow effect
+  handlers", APLAS 2018; OCaml 5's `Effect.Shallow`). L229.
+- **CL2. Error order from folds from the end.** Reading lines with a
+  fold reports the last bad line, not the first (above). Folding the
+  lines reversed, or a `first where` over the lines, fixes it in the
+  program; the fold's direction is the language's (G15, G23) and well
+  documented. No row.
+- **CL3. `value at` with a default.** All 21 of crew's `value at`s sit
+  in a `first(…, else …)` (0, nil, a task's needs). `update at` took a default for the
+  same reason (round 5, LG2); a lookup with one is the other half. Small;
+  no row unless another round shows it.
+
+### Proposed order
+
+1. C93's choice per value (s1 to s5), with crew's maps as a second
+   witness: the largest measured gap here (2.2x).
+2. L229, the steps of an effect, in the language lane, before more
+   programs write schedulers.
+3. After C93, the K3 profile again.
