@@ -23,6 +23,7 @@ import { ARRAY_OPS, FALSE, TRUE } from "../../ters/src/lang/std.ts";
 import { toList, type Runtime } from "../../ters/src/lang/run.ts";
 import { fusedProgram } from "./handlers.ts";
 import { infer, type Info } from "../../ters/src/lang/infer.ts";
+import { useDirections } from "../../ters/src/lang/directions.ts";
 import { withInverses } from "./inverses.ts";
 import { hoistInvariants } from "./hoist.ts";
 import { dependencies, ownerOfTypeParts, type Code, type Id, type NodeOf } from "../../ters/src/model.ts";
@@ -478,7 +479,9 @@ export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roo
   // The passes below walk every node they're given, so they're given only
   // what the roots reach, hoisted or not, not the whole library (C174:
   // sort's lowering 451 to about 200 ms, wc's about 500 to 120).
-  code = reachedImplementing(code, roots, info);
+  // A solve a relation's direction answers is that direction (directions.ts,
+  // POLAR.md), as the checker reads it: the same nodes, its types (C177).
+  code = reachedImplementing(useDirections(code), roots, info);
   const h = hoistInvariants(code, info, names);
   if (h.hoisted) ({ code, info, names } = h);
   // inverse(f, …) of a named f is a solve on f (inverses.ts), as compile.ts

@@ -19,7 +19,7 @@ import { relate } from "../src/lang/relate.ts";
 import { SHOW_ANY } from "../src/lang/std.ts";
 import { showType } from "../src/lang/types.ts";
 import { B } from "../src/prelude.ts";
-import { compiledDefs, FAIL } from "../../compiler/src/core-js.ts";
+import { compiledDefs } from "../../compiler/src/core-js.ts";
 
 
 function program(direction = true, ports = 4) {
@@ -58,8 +58,7 @@ test("without the direction the same solve is the search, with its Choice", () =
 
 test("the direction is compiled the same as it's evaluated", async () => {
   const p = program();
-  // A core IR bug (C137): main, compiled as a search, finds no answer.
-  assert.throws(() => compiledDefs(p.code, p.info, p.names, ["main"]).main(), (e) => e === FAIL);
+  assert.equal(compiledDefs(p.code, p.info, p.names, ["main"]).main(), "2 1.570796327");
 });
 
 test("a direction has the relation's ports, in order", () => {
