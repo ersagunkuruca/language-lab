@@ -177,6 +177,14 @@ JavaScript. Still read by name: the versor inverse (its code checks that
 v ṽ is a number, and the reading doesn't follow the check), the sandwich,
 the reflection, the projection, the exponential, `part` and `with part`.
 
+**L203e, built.** The versor inverse is read from its code: an arm (or an
+otherwise) that fails gives no value, so it adds nothing to the union of
+a match's arms, and what is left is ṽ scaled. What is still read by name
+is what has a rule sharper than its code: the sandwich and the reflection
+keep grades, the projection builds on the reflection, the exponential is
+a closure under the product, and `part` and `with part` find a blade from
+literal vectors.
+
 ## In the compiler (L43c)
 
 `valueMasks` (grades.ts) works out each definition's input masks from all
