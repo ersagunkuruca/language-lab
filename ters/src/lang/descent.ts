@@ -35,6 +35,9 @@ import * as T from "./text.ts";
 import type { Reading } from "./relate.ts";
 
 export class Unsupported extends Error {}
+// A piece worked out forward that has no answer (fail, a character code
+// of something not one character).
+class NoAnswer extends Error {}
 const SHOW_FLOAT = (x: number) => (STD_IMPL[S.show] as (x: number) => string)(x);
 
 export type Any = { id: Id; kind: string; target: Id; value: unknown; fn: Id; args: Id[]; params: Id[]; body: Id; scrutinee: Id; arms: Id[]; variant: Id; binds: (Id | null)[] };
@@ -157,7 +160,12 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
       const v = evaluate(n.scrutinee, env);
       for (const a of n.arms.map((x) => node(x)!)) {
         const lit = a.value ? node(a.value as Id) : undefined;
-        if (lit?.kind === "lit" ? lit.value === v : (v as { tag?: Id }).tag === a.variant) return evaluate(a.body, env);
+        if (lit?.kind === "lit" ? lit.value === v : (v as { tag?: Id }).tag === a.variant) {
+          // A case's fields, bound (L72d: a list walked forward).
+          const fs = (v as { fields?: Value[] }).fields, inner = new Map(env);
+          (a.binds ?? []).forEach((b, j) => { if (b && fs) inner.set(b, fs[j]); });
+          return evaluate(a.body, inner);
+        }
       }
       const otherwise = (n as unknown as { otherwise?: Id }).otherwise;
       if (otherwise) return evaluate(otherwise, env);
@@ -165,7 +173,12 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
     }
     if (n.kind !== "call" || isUse(n as never)) throw new Unsupported(`can't work out a ${n.kind}`);
     const f = target(n.fn), xs = () => n.args.map((a) => evaluate(a, env));
-    if (f === "builtin.fail") throw new Unsupported("fails");
+    if (f === "builtin.fail") throw new NoAnswer();
+    // first(a, b): a's answer, or b's where a has none (thunks).
+    if (f === "builtin.first") {
+      const thunk = (x: Id) => { const l = node(x); if (l?.kind !== "lambda" || l.params.length) throw new Unsupported("first of something other than thunks"); return l.body; };
+      try { return evaluate(thunk(n.args[0]), env); } catch (e) { if (!(e instanceof NoAnswer)) throw e; return evaluate(thunk(n.args[1]), env); }
+    }
     const bool = (b: boolean) => (b ? TRUE_V : FALSE_V), truth = (v: Value) => (v as { tag?: Id }).tag === TRUE;
     switch (f) {
       case "builtin.int.less": { const [a, b] = xs(); return bool((a as number) < (b as number)); }
@@ -177,6 +190,11 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
       case "builtin.text.less": { const [a, b] = xs(); return bool(T.less(a as string, b as string)); }
       case "builtin.text.slice": { const [t, a, b] = xs(); return T.slice(t as string, a as never, b as never); }
       case "builtin.equal": { const [a, b] = xs(); if (typeof a === "object" || typeof b === "object") throw new Unsupported("compares data"); return bool(a === b); }
+      case "builtin.text.code": { const c = [...(evaluate(n.args[0], env) as string)]; if (c.length !== 1) throw new NoAnswer(); return c[0].codePointAt(0)!; }
+      case "builtin.concat": { const [a, b] = xs(); if (typeof a !== "string" || typeof b !== "string") throw new Unsupported("joins something other than text"); return a + b; }
+      case "builtin.text.characters": return toList([...(evaluate(n.args[0], env) as string)]);
+      case "builtin.int.shiftDown": { const [a, b] = xs(); return Number(a) >> Number(b); }
+      case "builtin.int.bitAnd": { const [a, b] = xs(); return Number(a) & Number(b); }
       case "builtin.text.length": return [...(evaluate(n.args[0], env) as string)].length;
     }
     if (named(f) === "all pass") {
@@ -229,6 +247,7 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
     if (!fn || fn.params.length !== 1) throw new Unsupported(`can't test a character with ${named(f) || "this"}`);
     return (evaluate(fn.body, new Map(env).set(fn.params[0], c)) as { tag?: Id }).tag === TRUE;
   }
+  const escapes = new Map<object, [string, string][]>();
   const spaces = (at: number) => { while (text[at] === " ") at++; return at; };
 
   // Read the Text id prints from `at`: where it ends, the binders it
@@ -250,6 +269,25 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
       return [end, new Map(env).set(n.target, text.slice(at, end))];
     }
     if (n.kind === "match") {
+      // A match on an input still to be read (L72d: json's Bool, an
+      // object's field pairs): each arm read with its fields still to be
+      // read, and the input is that case with them.
+      const sx = target(n.scrutinee);
+      if (sx && isUnknown(env.get(sx))) {
+        for (const a of n.arms.map((x) => node(x)!)) {
+          if (!a.variant || (a as { value?: Id }).value) throw new Unsupported("reads a match by value on an input");
+          const binds = (a.binds ?? []).filter((b): b is Id => !!b);
+          const inner = new Map(env);
+          for (const b of binds) inner.set(b, { unknown: "int" });
+          const r = read(a.body, inner, at);
+          if (!r) continue;
+          const fields = (a.binds ?? []).map((b) => (b ? r[1].get(b) : undefined));
+          if (fields.some((v) => v === undefined || isUnknown(v))) continue;
+          const back = new Map([...env, ...[...r[1]].filter(([b]) => env.has(b))]);
+          return [r[0], back.set(sx, { tag: a.variant, fields: fields as Value[] })];
+        }
+        return null;
+      }
       // Each arm that prints something, then its guard checked.
       for (const a of n.arms.map((x) => node(x)!)) {
         const inner = new Map(env);
@@ -323,6 +361,20 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
         if (gt === printer) { if (top.params.length !== 1) throw new Unsupported("reads the printer with other inputs in a list"); return expression(at, []); }
         const fn = gt && code.nodes[gt]?.kind === "def" ? lambdaOf(gt) : g?.kind === "lambda" ? g : undefined;
         if (!fn || fn.params.length !== 1) throw new Unsupported(`reads a list's items by ${named(gt) || "this"}`);
+        // A function of one character (L72d, json's escapes): what it
+        // writes for each of the first 128 characters, worked out forward
+        // once, read back longest first; any other character, itself where
+        // the function writes it as itself.
+        if (chars) {
+          const out = (c: string) => { try { const v = evaluate(fn.body, new Map(env).set(fn.params[0], c)); return typeof v === "string" ? v : null; } catch (e) { if (e instanceof NoAnswer) return null; throw e; } };
+          let table = escapes.get(fn);
+          if (!table) { table = []; for (let i = 0; i < 128; i++) { const c = String.fromCharCode(i), o = out(c); if (o !== null && o !== c && o !== "") table.push([o, c]); } table.sort((a, b) => b[0].length - a[0].length); escapes.set(fn, table); }
+          const hit = table.find(([o]) => text.startsWith(o, at));
+          if (hit) return [at + hit[0].length, hit[1]];
+          if (at >= text.length) return null;
+          const c = String.fromCodePoint(text.codePointAt(at)!);
+          return out(c) === c ? [at + c.length, c] : null;
+        }
         const r = read(fn.body, new Map(env).set(fn.params[0], { unknown: "int" }), at);
         const v = r?.[1].get(fn.params[0]);
         if (!r || v === undefined || isUnknown(v)) return null;
@@ -351,9 +403,18 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
     const fn = f && code.nodes[f]?.kind === "def" ? lambdaOf(f) : node(n.fn)?.kind === "lambda" ? node(n.fn) : undefined;
     if (!fn) throw new Unsupported(`reads ${named(f) || f}`);
     const inner: Env = new Map(env);
-    fn.params.forEach((p, j) => inner.set(p, evaluate(n.args[j], env)));
+    // An input still to be read passes in as one, and what the body reads
+    // for it comes back out (L72d: json quoted(t) read for t).
+    const passed: [Id, Id][] = [];
+    fn.params.forEach((p, j) => {
+      const x = target(n.args[j]), v = x ? env.get(x) : undefined;
+      if (x && isUnknown(v)) { inner.set(p, v); passed.push([p, x]); } else inner.set(p, evaluate(n.args[j], env));
+    });
     const r = read(fn.body, inner, at);
-    return r && [r[0], new Map([...env, ...[...r[1]].filter(([b]) => env.has(b))])];
+    if (!r) return null;
+    const back = new Map([...env, ...[...r[1]].filter(([b]) => env.has(b))]);
+    for (const [p, x] of passed) { const v = r[1].get(p); if (v !== undefined && !isUnknown(v)) back.set(x, v); }
+    return [r[0], back];
   }
   // The printer read from `at` with its other inputs given: the arm the
   // next character starts, its binders read and made into the value.

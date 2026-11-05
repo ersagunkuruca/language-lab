@@ -79,3 +79,39 @@ test("Float64s read back by descent as show writes them (L72c)", async () => {
   // Spellings show doesn't write have no reading.
   for (const line of ["1.0", "+1", "0.30", ".5", "1e3", "(1  2)"]) assert.equal(rd(line, 0), null, line);
 });
+
+// A Text's characters each written by a function of one character
+// (L72d): json quoted's escapes read back.
+test("json quoted text reads back by descent, its escapes too (L72d)", async () => {
+  const { STRING } = await import("../src/lang/types.ts");
+  const k3 = new Lang(LIBRARY.code);
+  const Q = k3.type("Quoted", [], [["quoted", [["t", () => k3.tref(STRING)]]]]);
+  const pr = k3.def("quoted text");
+  k3.define(pr, k3.fn(["q"], (q) => k3.match(q, [{ variant: Q.v.quoted, names: ["t"], body: ([t]) => k3.call(L("json quoted"), t) }])));
+  const c3 = { nodes: { ...LIBRARY.code.nodes, ...k3.code.nodes }, defs: [...LIBRARY.code.defs, ...k3.code.defs.filter((d) => !LIBRARY.code.defs.includes(d))] }, n3 = { ...LIBRARY.names, ...k3.names };
+  const r3 = makeRunner(c3, infer(c3, n3), { print: () => {}, names: n3 });
+  const rd = descentReader(c3, pr, n3);
+  const print = (t: string) => [...(r3.call(r3.value(pr), { tag: Q.v.quoted, fields: [t] }) as Iterable<Value>)][0] as string;
+  for (const t of ["", "abc", 'say "hi"', "back\\slash", "two\nlines", "tab\there", "\u0001", "çağ 🙂"]) {
+    const line = print(t), v = rd(line, 0) as { fields: Value[] } | null;
+    assert.equal(v?.fields[0], t, line);
+  }
+  for (const line of ['"a', 'a"', '"\\q"', '"a"b"']) assert.equal(rd(line, 0), null, line);
+});
+
+// The prelude's `json printed` read backwards by descent (L72d): what
+// `json read` reads, for the compact text json printed writes.
+test("json printed reads back by descent as json read reads it (L72d)", () => {
+  const jp = L("json printed"), jr = L("json read");
+  const rl = makeRunner(LIBRARY.code, infer(LIBRARY.code, LIBRARY.names), { print: () => {}, names: LIBRARY.names });
+  const rd = descentReader(LIBRARY.code, jp, LIBRARY.names);
+  for (const t of ["null", "true", "[]", "{}", '[1,2.5,"a\\"b"]', '{"a":[1,{"b":null}],"c":false}', '"tab\\u0009there \\n\\u0001"', "-0.125"]) {
+    const v = rd(t, 0);
+    assert.ok(v !== null, t);
+    const back = [...(rl.call(rl.value(jp), v) as Iterable<Value>)][0];
+    assert.equal(back, t, t);
+    const viaRead = [...(rl.call(rl.value(jr), t) as Iterable<Value>)][0];
+    assert.equal(showValue(v, LIBRARY.code, LIBRARY.names), showValue(viaRead, LIBRARY.code, LIBRARY.names), t);
+  }
+  for (const t of ["[1,]", "{\"a\"}", "nul", "[1 2]"]) assert.equal(rd(t, 0), null, t);
+});
