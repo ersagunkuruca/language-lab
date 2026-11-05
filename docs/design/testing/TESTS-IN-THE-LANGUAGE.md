@@ -147,7 +147,8 @@ evaluator with compiled JS.
   test/prelude-laws.test.ts).
 - **The library checks itself.** Prelude laws (`append` associative,
   `sort` sorted and a permutation) ship as definitions, cached like the
-  rest.
+  rest (T7e7, built: `sort gives its items in order`, `sort keeps every
+  item`, `append is associative`, over small lists of Ints).
 
 ## Steps
 
