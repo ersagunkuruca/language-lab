@@ -697,10 +697,11 @@ sin, cos, exp, ^ and the rest are each platform's own (JavaScript's, C's, a GPU'
 
 ## Capitals the same on every machine
 
-uppercase and lowercase are each host's own (its Unicode version, its locale data). The cases module's are written in Ters over the Unicode case tables, read off the host when the library is built, so a target with no host to ask (WebAssembly, C) gives what JavaScript gives: final sigma and Turkish, Azeri, Lithuanian and Greek capitals included.
+uppercase and lowercase are each host's own (its Unicode version, its locale data). The cases module's are written in Ters over the Unicode case tables, read off the host when the library is built, so a target with no host to ask (WebAssembly, C) gives what JavaScript gives: final sigma and Turkish, Azeri, Lithuanian and Greek capitals included, and grapheme clusters by UAX #29.
 
 - **table uppercase** : `(Text, Locale) -> Text` (cases module). The text in capitals as `uppercase` gives it, written in Ters over the Unicode case tables, so a target with no host to ask (WebAssembly, C) gives the same.
 - **table lowercase** : `(Text, Locale) -> Text` (cases module). The text in small letters as `lowercase` gives it (final sigma included), written in Ters over the Unicode case tables, so a target with no host to ask (WebAssembly, C) gives the same.
+- **table graphemes** : `(Text) -> List Text` (cases module). The text's grapheme clusters, the characters a reader sees, as `graphemes` gives them, written in Ters over the Unicode grapheme tables (UAX #29), so a target with no host to ask (WebAssembly, C) gives the same.
 
 ## Points, colours and slopes
 

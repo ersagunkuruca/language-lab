@@ -40,3 +40,22 @@ test("the cases module's uppercase and lowercase are the host's", () => {
   }
   assert.deepEqual(wrong, []);
 });
+
+// Grapheme clusters (L214e3b): the module's, over the grapheme tables,
+// are the host's `graphemes`.
+test("the cases module's graphemes are the host's", () => {
+  const k = new Lang(LIBRARY.code);
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  const r = makeRunner(code, info, { print: () => {} });
+  const items = (l: Value): string[] => { const out: string[] = []; for (let c = l as { tag: string; fields: Value[] }; c.fields.length; c = c.fields[1] as never) out.push(c.fields[0] as string); return out; };
+  const seg = new Intl.Segmenter("en", { granularity: "grapheme" });
+  const wrong: string[] = [];
+  for (const t of ["", "a", "Hello", "é؀a", "\r\n\n", "\u{1f1e6}\u{1f1e8}\u{1f1e6}", "\u{1f468}‍\u{1f469}‍\u{1f467} and \u{1f44d}\u{1f3fd}",
+    "क्षि क्‍क", "각각", "กำ العربية", "a‍\u{1f600}", ...WORDS]) {
+    const got = items([...r.call(r.value(cases("table graphemes")), t)][0]);
+    const want = [...seg.segment(t)].map((x) => x.segment);
+    if (got.join("|") !== want.join("|")) wrong.push(`${JSON.stringify(t)}: ${JSON.stringify(got)}`);
+  }
+  assert.deepEqual(wrong, []);
+});
