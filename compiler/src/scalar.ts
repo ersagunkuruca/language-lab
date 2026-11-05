@@ -82,6 +82,7 @@ const HOST_CELLS = new Set(Object.values(CELL_OPS).filter((id) => id !== CELL_OP
 import { runtime } from "./wasm-rt.ts";
 import { machineWords } from "./machine-words.ts";
 import { loopRecords } from "./loop-records.ts";
+import { closureArgs } from "./closure-args.ts";
 import { wideProducts } from "./wide-products.ts";
 
 // A shader (or a ray marcher's loop) may call what might not finish only
@@ -2799,6 +2800,9 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // (C150e): WebAssembly and C, not core JS, whose values the host reads.
   // A record a loop carries, its fields as values of their own (C68a); a
   // shader's records are its own values (vectors, structs) already.
+  // A function written where a definition is called, called directly in
+  // that definition's own copy (C30 s2c1), on the core IR's JavaScript.
+  if (opts.data && opts.host) closureArgs(ir);
   if (opts.data) loopRecords(ir);
   if (opts.data && !opts.host) { machineWords(ir); wideProducts(ir); }
   // The fuel is endless outside a budget, so where no budget is set
