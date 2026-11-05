@@ -4,6 +4,7 @@
 // prelude): a printed program imports this only when it solves, and the
 // program hands core-rt.ts these (useSolver).
 
+import { STD_IMPL, STD_MANY } from "../../ters/src/lang/std.ts";
 import { META, equal, makeRunner, resolvedFor, solveAnswers, type Value } from "../../ters/src/lang/run.ts";
 import type { Runtime } from "../../ters/src/lang/run.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
@@ -134,11 +135,17 @@ export function modePlan(given: Code, id: Id): { code: string; forwards: Id[]; c
         return { js: `F[${forwards.length - 1}](${args.join(", ")})`, partial: true };
       },
       tag: (v) => JSON.stringify(v),
+      builtin(id, args) {
+        // A builtin with one answer, called as itself.
+        if (STD_IMPL[id] && !STD_MANY[id]) { consts.push(STD_IMPL[id]); return `K[${consts.length - 1}](${args.join(", ")})`; }
+        forwards.push(id);
+        return `F[${forwards.length - 1}](${args.join(", ")})`;
+      },
     };
     const modes = modeCompiler(code, {});
     if (!modes.solver(n, "solve$", emit)) return null;
     return { code: modes.code.join("\n"), forwards, consts };
-  } catch {
+  } catch (e) {
     return null;
   }
 }

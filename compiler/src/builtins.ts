@@ -198,6 +198,7 @@ export const TARGETS: Record<Id, Target> = {
   [ARRAY_OPS.rest]: { js: "impl", scalar: ARRAYS },
   [ARRAY_OPS.pushFront]: { js: "impl", scalar: ARRAYS },
   [ARRAY_OPS.firstIfAny]: { js: "impl", scalar: ARRAYS },
+  [ARRAY_OPS.front]: { js: "impl", scalar: ARRAYS },
   // Replacing an item (C93c): in JS a new version of the buffer (Baker's,
   // std.ts); in C in place when the array has one holder, otherwise and in
   // WebAssembly a copy. Not on shaders.

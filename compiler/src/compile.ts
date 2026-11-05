@@ -561,6 +561,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
       return { js: spends(id) ? `($spendOrThrow(), ${v})` : v };
     },
     tag,
+    builtin: (id, args) => (implOf(id) ? `${implOf(id)}(${args.join(", ")})` : null),
   });
   const dryEmit = modeEmit(false);
   // Only nodes the definitions hold: an expanded derivative leaves its old

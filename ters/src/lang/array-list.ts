@@ -42,10 +42,12 @@ export function buildArrayList(k: Lang, prelude: (name: string) => Id): ArrayLis
   // A cons adds the item at the front, into the free slot before the
   // items when no other array has taken it.
   const cons = def("array cons", ["item", "rest"], (x, rest) => k.call(ARRAY_OPS.pushFront, rest, x));
-  // A match: the first item, and the rest, the same items from one later.
-  const match = def("array match", ["array", "if empty", "if not"], (a, empty, not) => k.match(k.call(ARRAY_OPS.firstIfAny, a), [
+  // A match: the first item, and the rest, the same items from one later,
+  // read in one call, so the match runs backwards too, the array made
+  // from them (C137 s3e).
+  const match = def("array match", ["array", "if empty", "if not"], (a, empty, not) => k.match(k.call(ARRAY_OPS.front, a), [
     { variant: NONE, names: [], body: () => k.call(empty) },
-    { variant: SOME, names: ["item"], body: ([x]) => k.call(not, x, k.call(ARRAY_OPS.rest, a)) },
+    { variant: SOME, names: ["front"], body: ([f]) => k.match(f, [{ variant: PAIR_V, names: ["item", "rest"], body: ([x, r]) => k.call(not, x, r) }]) },
   ]));
   // A fold from the last item back, as a list's fold runs its arms. Each
   // arm's rest is built from the back as the fold goes, one push front an

@@ -973,6 +973,13 @@ export const ARRAY_OPS = {
     const v = arrayView(arr);
     return v.n > 0 ? { tag: SOME, fields: [v.buf.items[v.start]] } : { tag: NONE, fields: [] };
   }),
+  // The front at once (C137 s3e): the first item and the rest, or none of
+  // an empty array. One call, so it runs backwards too (modes.ts,
+  // relate.ts): the array from its first item and rest.
+  front: builtin("array.front", "front of array", ofItem((a) => [[arrayOf_(a)], optional({ t: "con", id: PAIR, args: [a, arrayOf_(a)] })]), (arr: ArrayValue) => {
+    const v = arrayView(arr);
+    return v.n > 0 ? { tag: SOME, fields: [{ tag: PAIR_V, fields: [v.buf.items[v.start], restOf(arr)] }] } : { tag: NONE, fields: [] };
+  }),
 };
 
 // A hash table changed in place (C63b, IN-PLACE.md step 2): Map's

@@ -10,9 +10,10 @@ import { infer } from "../src/lang/infer.ts";
 import { makeRunner } from "../src/lang/run.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY, TREES } from "../src/lang/library.ts";
-import { ARRAY_OPS, CONS, LIST, NIL, SHOW_ANY } from "../src/lang/std.ts";
+import { ARRAY_OPS, CONS, LIST, NIL, S, SHOW_ANY } from "../src/lang/std.ts";
 import { ARRAY } from "../src/lang/types.ts";
 import { merge, type Id } from "../src/model.ts";
+import { B } from "../src/prelude.ts";
 
 test("array of List: its row, and its jobs agree with List's through items of array", () => {
   const rep = LIBRARY.reps.find((r) => r.name === "array of List")!;
@@ -64,6 +65,31 @@ test("array of List: its row, and its jobs agree with List's through items of ar
   const r = makeRunner(code, info, { print: () => {}, names: nm });
   const got = names.map((n) => r.value(code.defs.find((d) => nm[d] === n)!));
   assert.deepEqual(got, ["[]", "[1, 2, 3]", "[1, 2, 3]", "[0]", "[2, 1, 1, 2, 0, 3]", "3", "[1, 2, 3]", "[0, 10, 20, 30, 0]", "[[10, 5, 30], [10, 20, 30], [10, 5, 30], [7, 20, 30], [10, 5, 30]]", "\"[1, 2]\"", "after"]);
+});
+
+// C137 s3e: a list stored as an array runs backwards as a cons list does.
+// `array match` reads the front in one call (front of array), whose
+// backward mode makes the array from its first item and rest, and `array
+// cons` and `array nil` are seen as push front and the empty array, two
+// ends that are never the same array: so a definition over arrays run
+// from its answer ends, with one answer at most.
+test("a definition over lists stored as arrays runs backwards, with one answer", () => {
+  const all = merge(LIBRARY.code, TREES.code);
+  const k = new Lang(all);
+  const tree = (n: string) => TREES.code.defs.find((d) => TREES.names[d] === n)!;
+  const arr = (...xs: number[]) => k.call(ARRAY_OPS.of, k.list(...xs.map((x) => k.lit(x))));
+  const doubled = k.def("doubled");
+  const lam = k.fn(["a"], (a) => k.call(tree("array match"), a, k.thunk(() => k.x(tree("array nil"))),
+    k.fn(["x", "rest"], (x, rest) => k.call(tree("array cons"), k.call(B.add, x, x), k.call(doubled, rest)))));
+  k.define(doubled, lam);
+  const a = (k.code.nodes[lam] as { params: Id[] }).params[0];
+  const halves = k.def("halves");
+  k.define(halves, k.call(SHOW_ANY, k.call(ARRAY_OPS.items, k.call(S.first, k.thunk(() => k.solve(doubled, { out: arr(2, 4, 6) }, { [a]: "a" }, (b) => k.x(b[a]))), k.thunk(() => arr())))));
+  const code = merge(base(TREES.code), k.code), nm = { ...baseNames(k.names), ...TREES.names };
+  const info = infer(code, nm, undefined, { ...checkOptions, insiders: [...(checkOptions.insiders ?? []), ...TREES.code.defs] });
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const r = makeRunner(code, info, { print: () => {}, names: nm });
+  assert.equal(r.value(halves), "[1, 2, 3]");
 });
 
 // I106c: a list taken apart item by item doesn't keep its first buffer.
