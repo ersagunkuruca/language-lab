@@ -55,7 +55,7 @@ import { readLog, replaying, type LogEntry } from "../src/lang/worldlog.ts";
 import { compile } from "../../compiler/src/compile.ts";
 import { CFLAGS, emitC } from "../../compiler/src/c.ts";
 import { lowerScalar } from "../../compiler/src/scalar.ts";
-import { coreMap, coreModule, hostOpsOf, lowerCore, solvesSlowly } from "../../compiler/src/core-js.ts";
+import { codeLines, coreMap, coreModule, hostOpsOf, lowerCore, solvesSlowly } from "../../compiler/src/core-js.ts";
 import { execFileSync } from "node:child_process";
 import { recordings, webCorePage, webPage } from "./web.ts";
 import { appFolder } from "./app.ts";
@@ -344,19 +344,20 @@ switch (command) {
     };
     // Beside the module, its map (C143c): ids only, the editor and tools
     // join the names.
-    let map: object | null = null;
+    let map: object | null = null, printed = "";
     if (esbuild) {
       await esbuild.build({
-        stdin: { contents: source(false), resolveDir: import.meta.dirname, sourcefile: basename(out), loader: "js" },
+        stdin: { contents: (printed = source(false)), resolveDir: import.meta.dirname, sourcefile: basename(out), loader: "js" },
         bundle: true, platform: "node", format: "esm", outfile: out, logLevel: "warning",
         banner: { js: `// ${p.title}, compiled by lab (ters/cli/lab.ts), with its runtime. Run: node <this file> [arguments…]` },
         plugins: [onlyWhatIsUsed],
       });
     } else {
-      writeFileSync(out, source(true));
+      writeFileSync(out, (printed = source(true)));
       process.stderr.write("lab: esbuild isn't installed (npm install in ters/), so the output imports the runtime from this checkout\n");
     }
-    if (map) writeFileSync(`${out}.map.json`, `${JSON.stringify(map, null, 1)}\n`);
+    // Each function's lines in the module as written (C143e).
+    if (map) writeFileSync(`${out}.map.json`, `${JSON.stringify({ ...map, lines: codeLines(printed, readFileSync(out, "utf8")) }, null, 1)}\n`);
     process.stderr.write(`lab: wrote ${out}${map ? ` (and ${out}.map.json)` : ""}; run it with: node ${out} [arguments…]\n`);
     break;
   }

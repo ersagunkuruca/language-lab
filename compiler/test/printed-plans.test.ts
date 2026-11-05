@@ -30,6 +30,9 @@ test("mode plans are printed, with builtins run forward (C167b)", () => {
   const { js } = emitCoreJs(ir);
   assert.match(js, /R\.moded\(/);
   assert.match(js, /"builtin\.div"/);
+  // An answer's value is read where it is used, not through the runtime
+  // (C137d22).
+  assert.doesNotMatch(js, /R\.rt\("pick:/);
   assert.equal(usesSolver(ir), false);
   const b = load("backwards"), main = b.named("main");
   assert.match(emitCoreJs(lowerCore(b.code, b.info, b.pres.names, [main])).js, /R\.moded\([\s\S]*"hello, "/);
