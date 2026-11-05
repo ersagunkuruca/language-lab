@@ -1,24 +1,19 @@
 // A library definition given a Choice function (map with a function that
 // has two answers): the library is checked apart, so its body names its
 // rows with variables of its own, and its copy for a Choice function must
-// switch those on too (compile.ts bodyRho). Before, map's copy called the
+// switch those on too (compile.ts bodyRho, now the core IR). Before, map's copy called the
 // function as if it had one answer and put its stream in the list. A
 // page's view may do Choice since L125b, so every view that maps did this.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { pathToFileURL } from "node:url";
 import { Lang } from "../../ters/src/lang/dsl.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { makeRunner } from "../../ters/src/lang/run.ts";
 import { CONS, INT_OPS, NIL, S, SHOW_ANY } from "../../ters/src/lang/std.ts";
-import { compile } from "../src/compile.ts";
+import { compiledDefs, plainValue } from "../src/core-js.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href;
 const lib = (n: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === n)!;
 
 test("map given a function with two answers gives every list of answers, compiled as evaluated", async () => {
@@ -28,11 +23,9 @@ test("map given a function with two answers gives every list of answers, compile
   const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
   assert.deepEqual(info.errors.map((e) => e.message), []);
   const evaluated = makeRunner(code, info, { print: () => {}, names }).value(m);
-  const path = join(mkdtempSync(join(tmpdir(), "choice-callback-")), "m.js");
-  writeFileSync(path, compile(code, info, names, { runtime, exports: ["each way"] }));
-  const out = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
+  const out = compiledDefs(code, info, names, ["each way"]) as Record<string, unknown>;
   const compiled = typeof out["each way"] === "function" ? (out["each way"] as () => unknown)() : out["each way"];
-  assert.deepEqual(compiled, evaluated);
+  assert.deepEqual(plainValue(compiled), evaluated);
   assert.match(JSON.stringify(evaluated), /"\[1, 2\]".*"\[1, 9\]".*"\[9, 2\]".*"\[9, 9\]"/);
 });
 
@@ -52,10 +45,8 @@ test("a search's function input that shares its row, given a lambda that doesn't
   const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
   assert.deepEqual(info.errors.map((e) => e.message), []);
   const evaluated = makeRunner(code, info, { print: () => {}, names }).value(m);
-  const path = join(mkdtempSync(join(tmpdir(), "choice-callback-")), "m.js");
-  writeFileSync(path, compile(code, info, names, { runtime, exports: ["found"] }));
-  const out = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
+  const out = compiledDefs(code, info, names, ["found"]) as Record<string, unknown>;
   const compiled = typeof out["found"] === "function" ? (out["found"] as () => unknown)() : out["found"];
-  assert.deepEqual(compiled, evaluated);
+  assert.deepEqual(plainValue(compiled), evaluated);
   assert.equal(evaluated, "[5]");
 });

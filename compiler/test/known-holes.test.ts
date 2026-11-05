@@ -12,11 +12,7 @@ import { infer } from "../../ters/src/lang/infer.ts";
 import { DIVERGE } from "../../ters/src/lang/types.ts";
 import { B } from "../../ters/src/prelude.ts";
 import { ABORT_OP, S } from "../../ters/src/lang/std.ts";
-import { compile } from "../src/compile.ts";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { pathToFileURL } from "node:url";
+import { Aborted as CoreAborted, Stopped, compiledDefs } from "../src/core-js.ts";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitWgsl } from "../src/wgsl.ts";
 
@@ -52,12 +48,10 @@ test("R8 §1 an overflow inside a handler of Abort stops, compiled as evaluated"
   k.define(caught, k.fn(["a", "b"], (a, b) => k.call(S.show, k.handle(k.call(B.mul, k.call(B.add, a, k.lit(0)), k.call(B.add, b, k.lit(0))), [{ variant: ABORT_OP, names: ["why"], body: () => k.lit(0) }]))));
   const code = base(k.code), names = { ...baseNames(), ...k.names }, info = infer(code, names, undefined, checkOptions);
   assert.deepEqual(info.errors.map((e) => e.message), []);
-  const said = (f: () => unknown) => { try { return String(f()); } catch (e) { if (e instanceof Aborted) return `stops: ${e.reason}`; throw e; } };
+  const said = (f: () => unknown) => { try { return String(f()); } catch (e) { if (e instanceof Aborted || e instanceof CoreAborted) return `stops: ${e.reason}`; if (e instanceof Stopped) return `stops: ${e.message}`; throw e; } };
   const r = makeRunner(code, info, { print: () => {}, names });
   const evaluated = said(() => { for (const v of r.call(r.value(caught), 1e300, 1e300)) return v; });
   assert.equal(evaluated, "stops: the answer is too big for a Float64 (overflow)");
-  const path = join(mkdtempSync(join(tmpdir(), "holes-")), "holes.js");
-  writeFileSync(path, compile(code, info, names, { runtime: pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href, exports: ["caught"] }));
-  const js = (await import(pathToFileURL(path).href)).defs as Record<string, (a: number, b: number) => unknown>;
+  const js = compiledDefs(code, info, names, ["caught"]) as Record<string, (a: number, b: number) => unknown>;
   assert.equal(said(() => js.caught(1e300, 1e300)), evaluated);
 });
