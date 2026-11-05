@@ -15,7 +15,7 @@
 // partial evaluation (Futamura, 1971; Jones, Gomard and Sestoft, 1993).
 
 import type { Bound, Code, Id, Node, NodeOf } from "../../ters/src/model.ts";
-import { freshId, isCall, subtree } from "../../ters/src/model.ts";
+import { dependencies, freshId, isCall, subtree } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { Lang } from "../../ters/src/lang/dsl.ts";
@@ -94,6 +94,18 @@ export function expandInverses(code: Code, names: Names): { code: Code; names: N
   const readerOf = (f: Id): Id | null => {
     if (!readers.has(f)) {
       let line: Id | null = null;
+      // The prelude's character tests the reader reads names and numbers
+      // with, which the code it's given (what the roots reach, core-js.ts)
+      // may have left out (C110 s5b).
+      for (const name of ["is letter", "is digit"]) {
+        const d = PRELUDE_DEFS[name as keyof typeof PRELUDE_DEFS];
+        if (!d || out.nodes[d]) continue;
+        for (const x of [d, ...dependencies(LIBRARY.code, d)]) {
+          if (out.nodes[x]) continue;
+          for (const id of subtree(LIBRARY.code, x)) out.nodes[id] ??= LIBRARY.code.nodes[id];
+          out.defs.push(x);
+        }
+      }
       try {
         const w = writeReader(out, f, { ...Object.fromEntries(Object.entries(PRELUDE_DEFS).map(([n, d]) => [d, n])), ...LIBRARY.names, ...names });
         Object.assign(out.nodes, w.code.nodes);
