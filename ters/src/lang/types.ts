@@ -268,7 +268,8 @@ export class Subst {
     s.whole = new OverSet(this.whole);
     s.noWorld = new Set(this.noWorld);
     s.subs = [...this.subs];
-    s.needs = new Map([...this.needs].map(([v, m]) => [v, new Map(m)]));
+    // Each variable's map is replaced, never changed (requireInterface).
+    s.needs = new OverMap(this.needs);
     s.wanted = [...this.wanted];
     return s;
   }
@@ -318,9 +319,10 @@ export class Subst {
   requireInterface(t: Type, iface: Id, at: Id): void {
     t = this.resolve(t);
     if (t.t === "var") {
-      let m = this.needs.get(t.v);
-      if (!m) this.needs.set(t.v, (m = new Map()));
-      if (!m.has(iface)) m.set(iface, at);
+      // A new map rather than the one there, which a trial may share with
+      // the substitution it reads through to.
+      const m = this.needs.get(t.v);
+      if (!m?.has(iface)) this.needs.set(t.v, new Map([...(m ?? []), [iface, at]]));
       return;
     }
     this.wanted.push({ t, iface, at: at || this.site });
