@@ -7,7 +7,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { compile } from "../../compiler/src/compile.ts";
+import { loadCoreJs, lowerCore } from "../../compiler/src/core-js.ts";
 import type { Id } from "../src/model.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
@@ -31,10 +31,13 @@ const ran = (p: ReturnType<typeof program>) => runMain(p.code, p.info, p.main, {
 async function both(body: (k: Lang) => Id) {
   const p = program(body);
   const v = ran(p);
-  const path = join(mkdtempSync(join(tmpdir(), "json-")), "main.mjs");
-  writeFileSync(path, compile(p.code, p.info, p.names, { runtime, exports: ["main"] }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, () => unknown>;
-  assert.equal(typeof defs.main === "function" ? defs.main() : defs.main, v);
+  // The core IR's JavaScript, as the editor and `lab build` run it: it
+  // reads JSON through json read's written reader where compile.ts would
+  // search (L72f).
+  const core = lowerCore(p.code, p.info, p.names, [p.main]);
+  assert.deepEqual([...core.refused.values()], []);
+  const main = loadCoreJs(core)[core.funcs.findIndex((g) => g.def === p.main && !g.inner)];
+  assert.equal(main(), v);
   return v;
 }
 test("json printed writes null, Bools, numbers, quoted text, lists and objects, as JSON.parse reads them", async () => {
