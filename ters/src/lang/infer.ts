@@ -1401,7 +1401,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       if (!portType(k)) err(n.id, `${nm(useTarget(code.nodes, n))} has no port ${k}`);
       // An answer is a value found by search; a function can't be guessed.
       try { s.requirePlain(pt); } catch (e) {
-        if (e instanceof PlainError) err(n.id, `${b === undefined ? `port ${k}` : nm(b)} can't be solved for: it has functions in it, and functions can't be guessed`); else throw e;
+        if (e instanceof PlainError) err(n.id, `${b !== undefined ? nm(b) : names[k] ?? `port ${k}`} can't be solved for: it has functions in it, and functions can't be guessed`); else throw e;
       }
       setPort(n, k, b, pt, inner);
     }

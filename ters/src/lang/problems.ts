@@ -79,6 +79,10 @@ export const PROBLEMS: Problem[] = [
   { id: "shared-field-wrong", says: /^.+ (is the same as a field of another type|is the same as a field that is itself another's|is in one case twice)$/, fix: "Say a field is the same as one field of another case of the same type, once per case: point it at that case's own field, not at one that is itself shared, or at a field of another type." },
   { id: "mask-takes-one", says: /^.+ takes one type, the algebra's multivectors$/, fix: "Give the mask the algebra's multivector type, Vector of M." },
   { id: "type-as-value", says: /^.+ is a type, not a value$/, fix: "A type says what values look like and can't be used as one: use one of its cases, or a value of that type." },
+  { id: "pinned-type", says: /^.+ is pinned to .+, and this makes it .+$/, fix: "The definition's type is held: change the body back so it fits that type, or let the type go so it becomes what the body now says.", gesture: "Click Let it loosen in the definition's panel." },
+  { id: "search-unhandled", says: /may give several answers or none \(Choice\).*, which nothing here handles$/, fix: "Running a function backwards is a search, which may find several answers or none: say which you want by wrapping it in first, all, count or optional.", gesture: "Select the use, Wrap in…, then pick first or all." },
+  { id: "results-not-ports", says: /^.+'s results are some of its own ports, each once: .+ isn't$/, fix: "Name as results only the definition's own inputs, each once: take off the one named twice or the one that isn't an input." },
+  { id: "direction-types", says: /^.+ is a direction of .+, so its ports have .+'s types: .+ isn't .+$/, fix: "A direction takes and gives the same things as the relation it is a direction of, in the same order: make each input the relation's type there (or give the relation the types this one has)." },
 ];
 
 // The row a message belongs to, if one does.
