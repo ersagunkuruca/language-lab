@@ -1251,7 +1251,8 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         if ((opts.host || (opts.handlers && C_KEPT.has(target))) && KEPT_OPS[target]) {
           const t = stype(zonk(id));
           if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(id))}`);
-          return { k: "world", op: KEPT_OPS[target], aborts: false, args: args(), t };
+          // Their inputs' types, for WebAssembly's imports (L213c9).
+          return { k: "world", op: KEPT_OPS[target], aborts: false, args: args(), t, ins: n.args.map((x) => stype(zonk(x))!) };
         }
         // A log line nothing handles (L213a3, for a release that logs): the
         // world's log, as the evaluator writes it.

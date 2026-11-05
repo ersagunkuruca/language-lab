@@ -459,9 +459,11 @@ test("a program whose lists meet a set gets the set as a tree, then lists as arr
 
 // I105: a choice that doesn't check is no choice, and isn't reported.
 // chapters once failed its check with lists as arrays; since C93 (a list of
-// lists is no reason to keep List) it takes them and checks, and
-// examples-agree runs it the same every way.
-test("a representation the program doesn't check on is dropped, not reported; chapters checks with arrays (I105, C93)", async () => {
+// lists is no reason to keep List) it checked with them. The chooser keeps its lists as written: the
+// `length` that made arrays look cheaper is of lists just made (each
+// line's words, the chapters), which a cons list counts in no more steps
+// than making them took, and as arrays it ran about 40% slower.
+test("a representation the program doesn't check on is dropped, not reported; chapters keeps lists as written (I105, C93)", async () => {
   const { join } = await import("node:path");
   const { loadProgram } = await import("../src/lang/load.ts");
   const p = loadProgram(join(import.meta.dirname, "../examples/chapters"));
@@ -469,8 +471,27 @@ test("a representation the program doesn't check on is dropped, not reported; ch
   assert.deepEqual(info.errors.map((e) => e.message), []);
   const main = p.named("main");
   const c = withLibraryRepresentations(p.code, info, names, main, p.own.defs);
-  assert.deepEqual(c.chosen, ["List as array of List"]);
-  assert.deepEqual(c.info!.errors.map((e) => e.message), []);
+  assert.deepEqual(c.chosen, []);
+});
+
+// A priced function of one list (`length`) on a list a call has just
+// made costs no more steps than making it, so it isn't weighed by a loop
+// it is in, and isn't a job when every use is so.
+test("length of a list just made isn't a job the chooser weighs", async () => {
+  const { choose } = await import("../src/lang/represent.ts");
+  const k = new Lang(LIBRARY.code);
+  const upto = k.def("upto"), words = k.def("words");
+  k.define(upto, k.fn(["n"], (n) => k.call(S.range, n)));
+  k.define(words, k.fn(["n"], (n) => k.call(L("length"), k.call(upto, n))));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.call(words, k.lit(5))))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const reps = LIBRARY.reps.filter((r) => r.name === "array of List" || (r.of === LIST && r.canonical));
+  const c = choose(code, main, reps);
+  assert.ok(!c.jobs.includes(L("length")), String(c.jobs));
+  assert.equal(c.rep.name, "List as written");
 });
 
 // I106: a cons onto a match's rest copies the array (the rest is a view

@@ -36,7 +36,7 @@
 import { bordered } from "../../ters/src/lang/border.ts";
 import { Aborted, type Runtime, type World } from "../../ters/src/lang/run.ts";
 import { MATH_DATA, MATH_DATA_AT } from "./wasm-math.ts";
-import { assemble, POW5, runtime, textBytes, WASI_IMPORTS, wasiStop, type RtFn, type VT } from "./wasm-rt.ts";
+import { assemble, byteSlots, POW5, runtime, textBytes, WASI_IMPORTS, wasiStop, type RtFn, type VT } from "./wasm-rt.ts";
 import { TABLE_RT, tableRt } from "./wasm-table.ts";
 import { reasonOf, siteOf } from "./stops.ts";
 import type { Id } from "../../ters/src/model.ts";
@@ -51,7 +51,7 @@ import { fails, listSteps, isArray, isTable, isData, isFn, isRecord, kids, mapKi
 const VAL: Record<SType | "i64", number> = { f64: 0x7c, i32: 0x7f, int32: 0x7f, i64: 0x7e };
 // A type in the module: the program's (scalar.ts), or a machine word the runtime computes with.
 type MType = LType | "i64" | "mag";
-const LIST_TEXT = "std.list<type.string<>>", OPTION_TEXT = "std.optional<type.string<>>";
+const LIST_TEXT = "std.list<type.string<>>", OPTION_TEXT = "std.optional<type.string<>>", OPTION_INT = "std.optional<type.int<>>", LIST_INT = "std.list<type.int<>>", BYTES_T = "std.bytes<>";
 const HOST: Partial<Record<Op, { name: string; params: number }>> = {
   sin: { name: "sin", params: 1 }, cos: { name: "cos", params: 1 }, tan: { name: "tan", params: 1 },
   exp: { name: "exp", params: 1 }, log: { name: "log", params: 1 }, pow: { name: "pow", params: 2 }, atan2: { name: "atan2", params: 2 },
@@ -193,7 +193,15 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       ].join("\n"),
     };
   };
-  const rt = (name: string): RtFn => (STACK.test(name) ? stackRt(name) : TABLE_RT.test(name) ? tableRt(name, lowered.tables) : name === "wasi.stop" ? { ...wasiStop(lowered.stops ?? []), name } : runtime(name));
+  // An Array of Ints, which keeps a byte a slot when it can (L189f2b).
+  const byteArray = (a?: AType) => !!a && a.item === "int" && !lowered.int32;
+  const rt = (name: string): RtFn => {
+    if (STACK.test(name)) return stackRt(name);
+    if (TABLE_RT.test(name)) return tableRt(name, lowered.tables);
+    if (name === "wasi.stop") return { ...wasiStop(lowered.stops ?? []), name };
+    const f = runtime(name);
+    return f.array !== undefined && byteArray(lowered.arrays[f.array]) ? byteSlots(f) : f;
+  };
   const need = (name: string) => {
     if (rtNames.includes(name)) return;
     if (name.startsWith("wasi_")) { if (!wasiImports.includes(name)) wasiImports.push(name); return; }
@@ -329,7 +337,8 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   for (const a of lowered.arrays) {
     const k = structs.length;
     structs.push({ name: `items${a.index}`, fields: [], final: true, items: a.item });
-    structs.push({ name: `buf${a.index}`, fields: [{ name: "items", t: "i32", ref: k }, { name: "lo", t: "i32" }, { name: "hi", t: "i32" }], final: true, mutable: true });
+    // An Int array's buffer has its bytes too (L189f2b, wasm-rt.ts byteSlots).
+    structs.push({ name: `buf${a.index}`, fields: [{ name: "items", t: "i32", ref: k }, { name: "lo", t: "i32" }, { name: "hi", t: "i32" }, ...(byteArray(a) ? [{ name: "bytes", t: "i32" as const, ref: bytesIndex }] : [])], final: true, mutable: true });
     structs.push({ name: `array${a.index}`, fields: [{ name: "buf", t: "i32", ref: k + 1 }, { name: "start", t: "i32" }, { name: "n", t: "i32" }], final: true });
     arrIndex.set(a.key, k + 2);
   }
@@ -470,14 +479,25 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   const stackG = randG + (rand ? 4 : 0) + kept.size;
   if (aborts) helpers.push({ name: "Abort.reason", key: "", params: [], result: "text", code: [0x23, ...u(reasonG)], wat: ["global.get $reason"] });
   // For the world's host: lists and optionals of texts, by fixed names
-  // (TextList.cons, TextOption.some), whatever else the module has.
-  for (const [key, as] of [[LIST_TEXT, "TextList"], [OPTION_TEXT, "TextOption"]] as const) {
+  // (TextList.cons, TextOption.some), whatever else the module has; for
+  // the files `with open file` keeps (L213c9), Option Int and Bytes, whose
+  // List Int it reads too (IntList.case, IntList.cons.head …).
+  for (const [key, as] of [[LIST_TEXT, "TextList"], [OPTION_TEXT, "TextOption"], [OPTION_INT, "IntOption"], [LIST_INT, "IntList"]] as const) {
     const d = datas.find((x) => x.key === key);
     if (!d) continue;
+    const b = baseIndex.get(d.key)!;
+    if (as === "IntList") helpers.push({ name: `${as}.case`, key: d.key, params: [d], result: "i32", code: [0x20, 0x00, 0xfb, 0x02, ...u(b), 0x00], wat: ["local.get 0", `struct.get $${structs[b].name} 0`] });
     d.cases.forEach((c, ci) => {
-      const k = caseIndex(d, ci);
-      helpers.push({ name: `${as}.${c.name}`, key: d.key, params: c.fields.map((x) => x.t), result: d, code: [0x41, ...s(ci), ...c.fields.flatMap((_, j) => [0x20, ...u(j)]), 0xfb, 0x00, ...u(k)], wat: [`i32.const ${ci}`, ...c.fields.map((_, j) => `local.get ${j}`), `struct.new $${structs[k].name}`] });
+      const k = caseIndex(d, ci), sn = `$${structs[k].name}`;
+      helpers.push({ name: `${as}.${c.name}`, key: d.key, params: c.fields.map((x) => x.t), result: d, code: [0x41, ...s(ci), ...c.fields.flatMap((_, j) => [0x20, ...u(j)]), 0xfb, 0x00, ...u(k)], wat: [`i32.const ${ci}`, ...c.fields.map((_, j) => `local.get ${j}`), `struct.new ${sn}`] });
+      if (as === "IntList") c.fields.forEach((x, j) => helpers.push({ name: `${as}.${c.name}.${x.name}`, key: d.key, params: [d], result: x.t, code: [0x20, 0x00, 0xfb, 0x16, ...s(k), 0xfb, 0x02, ...u(k), ...u(j + 1)], wat: ["local.get 0", `ref.cast (ref ${sn})`, `struct.get ${sn} ${j + 1}`] }));
     });
+  }
+  const bytesRec = recs.find((r) => r.key === BYTES_T);
+  if (bytesRec) {
+    const k = recIndex.get(bytesRec.key)!;
+    helpers.push({ name: "Bytes.make", key: bytesRec.key, params: [bytesRec.fields[0].t], result: bytesRec, code: [0x20, 0x00, 0xfb, 0x00, ...u(k)], wat: ["local.get 0", `struct.new $${structs[k].name}`] });
+    helpers.push({ name: "Bytes.items", key: bytesRec.key, params: [bytesRec], result: bytesRec.fields[0].t, code: [0x20, 0x00, 0xfb, 0x02, ...u(k), 0x00], wat: ["local.get 0", `struct.get $${structs[k].name} 0`] });
   }
   helpers.forEach((x, k) => { if (helpers.findIndex((y) => y.name === x.name) !== k) x.name = `${x.name}(${x.key})`; });
   const helperSig = helpers.map((x) => sig(x.params, x.result));
@@ -949,6 +969,25 @@ function worldOf(rt: Runtime, exports: () => Record<string, (...xs: unknown[]) =
     zoneOffset: (z: unknown, s: number) => zoneOffset(text(z), s)[0] ?? NaN,
     listFolder: (p: unknown) => tried(() => textList(exports(), w("listFolder")(text(p)))),
     reason: () => make(reason),
+    // The files `with open file` keeps open (L213c9), as run.ts answers
+    // them: what goes wrong is an answer (none, false), never a throw.
+    keptOpen: (p: unknown) => { const ex = exports(); try { return ex["IntOption.some"](toInt(ex, BigInt(w("openFile")!(text(p))))); } catch { return ex["IntOption.none"](); } },
+    keptLine: (f: unknown) => { const ex = exports(); let l: string | null = null; try { l = w("fileLine")!(Number(fromInt(ex, f))); } catch { /* none */ } return l === null ? ex["TextOption.none"]() : ex["TextOption.some"](make(l.normalize("NFC"))); },
+    keptAddLine: (f: unknown, t: unknown) => { try { w("fileAddLine")!(Number(fromInt(exports(), f)), text(t)); return 1; } catch { return 0; } },
+    keptBytes: (f: unknown, n: unknown) => {
+      const ex = exports();
+      let b: Uint8Array | null = null;
+      try { b = w("fileBytes")!(Number(fromInt(ex, f)), Math.max(0, Number(fromInt(ex, n)))); } catch { /* none */ }
+      let l = ex["IntList.nil"]();
+      for (let i = (b?.length ?? 0) - 1; i >= 0; i--) l = ex["IntList.cons"](toInt(ex, BigInt(b![i])), l);
+      return ex["Bytes.make"](l);
+    },
+    keptAddBytes: (f: unknown, b: unknown) => {
+      const ex = exports(), nil = ex["IntList.case"](ex["IntList.nil"]()), out: number[] = [];
+      for (let l = ex["Bytes.items"](b); ex["IntList.case"](l) !== nil; l = ex["IntList.cons.tail"](l)) out.push(Number(fromInt(ex, ex["IntList.cons.head"](l))));
+      try { w("fileAddBytes")!(Number(fromInt(ex, f)), Uint8Array.from(out)); return 1; } catch { return 0; }
+    },
+    keptClose: (f: unknown) => { try { w("closeFile")!(Number(fromInt(exports(), f))); } catch { /* closing can't fail */ } },
     // The program's own operations (L69b2): hosts/js.js's answers, checked
     // at hosts.ts's border, a wrong one failing with the reason.
     ...Object.fromEntries(Object.entries(hosts ?? {}).map(([k, h]) => {
