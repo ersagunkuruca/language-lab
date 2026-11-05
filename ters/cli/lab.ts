@@ -13,6 +13,8 @@
 //   lab build-web <program> [-o app.html]  a page: one HTML file, opened anywhere (WEB.md)
 //   lab build-app <program> [-o folder]  a page as an installable, offline app, and a Capacitor project
 //   lab mcp [program]                    an MCP server on stdin/stdout (mcp/server.ts)
+//   lab publish <program> <name…> [-o module.json]
+//                                        publish definitions as their next versions in a module (SHARING.md §1)
 //   lab diff <before.json> <after.json>  what changed, by definition and name (merge-files.ts)
 //   lab merge <base> <ours> <theirs> [path]
 //                                        git's merge driver for program files: id by id, ours
@@ -40,7 +42,7 @@ import type { Names } from "../src/presentation.ts";
 import { fromFile } from "../src/files.ts";
 import { infer, type Info } from "../src/lang/infer.ts";
 import { LIBRARY } from "../src/lang/library.ts";
-import { sameLines } from "../src/lang/modules.ts";
+import { lineageOf, publishVersion, sameLines, verify, type Module } from "../src/lang/modules.ts";
 import { baseNames, loadProgram, optionsWith } from "../src/lang/load.ts";
 import { equal, mainProblem, pageProblem, runMain, runProgram, showerFor, valueMain, type Value, type World } from "../src/lang/run.ts";
 import { Cells } from "../src/lang/cells.ts";
@@ -87,6 +89,10 @@ usage:
   lab build-web <program> [-o app.html]  one HTML file running the page main returns, from the core IR
   lab build-app <program> [-o folder]   that page as an app for phones: a PWA in folder/www, and a Capacitor project
   lab mcp [program]                     an MCP server over stdio: an LLM views, edits, runs and tests programs
+  lab publish <program> <name…> [-o module.json]
+                                        publish the named definitions, and the drafts they use, as their next
+                                        versions in a module (default <program>.module.json): the old versions
+                                        stay, and each keeps its draft's id as its lineage (SHARING.md §1)
   lab render <program> in.wav [-o out.wav] [--block n] [--compiled]
                                         play the sound main makes over a WAV file, n samples a block (default 128)
 options:
@@ -473,6 +479,28 @@ switch (command) {
       console.log(`${p.names[of] ?? of} is stored as ${c.rep.name}, the cheapest for the jobs ${mainName} uses`);
     }
     process.exitCode = p.info.errors.length || wrongGrades.length ? 1 : 0;
+    break;
+  }
+  case "publish": {
+    // The named definitions as the next versions in a module file (L110).
+    const o = rest.indexOf("-o");
+    const out = o >= 0 ? rest[o + 1] ?? fail("-o needs a file") : `${resolve(path).replace(/[\\/]$/, "").replace(/\.json$/, "")}.module.json`;
+    const wanted = rest.filter((_, i) => o < 0 || (i !== o && i !== o + 1));
+    if (!wanted.length) fail("publish needs the names of the definitions to publish");
+    if (p.info.errors.length) fail(`${p.title} has errors; lab check says which`);
+    const defs = wanted.map((n) => p.own.find((d) => p.names[d] === n) ?? fail(`${p.title} has no definition named ${n}`));
+    const prev = existsSync(out) ? (JSON.parse(readFileSync(out, "utf8")) as Module) : null;
+    const r = publishVersion(prev, prev?.title ?? p.title, p.code, p.names, defs, LIBRARY.code, LIBRARY.pins);
+    if (!r.ok) fail(r.reason);
+    const wrong = verify(r.module, LIBRARY.code);
+    if (wrong) fail(`the module isn't what it says: ${wrong}`);
+    writeFileSync(out, JSON.stringify(r.module, null, 2) + "\n");
+    const lineages = r.module.lineages ?? {};
+    for (const v of r.added) {
+      const l = lineageOf(lineages, v)!;
+      console.log(`${r.module.names[v] ?? v}: version ${lineages[l].indexOf(v) + 1}, ${v}`);
+    }
+    if (!r.added.length) console.log("nothing changed since the last publish");
     break;
   }
   case "hosts": {

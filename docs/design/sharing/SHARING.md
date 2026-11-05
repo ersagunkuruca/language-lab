@@ -5,6 +5,7 @@ versioning". **Status (2026-10-31):** proposal, nothing built. The steps
 are BACKLOG rows L109 to L115, which take over L17 and L68.
 **2026-11-05:** §3 built (L109): std's versions kept by lineage, modules
 saying which std they were published on, ids saying their recipe.
+§1 built (L110): a module's `lineages`, `lab publish`, `replacing`.
 
 **In one sentence:** a definition (or a library) keeps one **lineage id**
 for its whole life and gets a **version hash** each time it's published;
@@ -49,6 +50,12 @@ Two ids, two jobs:
 | changes | never | every publish |
 | comes from | the draft's born id, kept when published | SHA-256 of the content, as now |
 | like | a git branch, an IPNS name | a git commit, an IPFS CID |
+
+Built (L110, 2026-11-05): `lab publish <program> <name…>` publishes into a
+module file whose `lineages` list each lineage's versions, oldest first;
+the old versions stay and only the newest is offered; `replacing(module)`
+reads what replaces what. A program's ref is the exact version (its `@`
+id), and its lineage is found from the module.
 
 Publishing keeps the draft id as the lineage id instead of replacing it.
 Publishing again from the same lineage makes a new version that replaces
