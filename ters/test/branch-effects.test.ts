@@ -44,8 +44,9 @@ test("two printing branches under simulated: their lines in the clock's order, e
   assert.deepEqual(r.errors, []);
   const want = ["slow starts", "quick starts", "quick ends", "slow ends", '["slow", "quick"]'];
   assert.deepEqual(r.printed, want);
-  // A core IR gap: the simulated world keeps the rest for later (C180).
-  assert.throws(() => r.compiled(), /keeping the rest for later/);
+  // Compiled, the simulated world keeps start branch's rests for later,
+  // past the handlers inside it (C185).
+  assert.deepEqual(r.compiled(), want);
 });
 
 test("together's type carries its actions' effects besides Await", () => {
@@ -64,4 +65,27 @@ test("an aborting branch under attempt: together stops, and attempt has the reas
   });
   assert.deepEqual(r.errors, []);
   assert.deepEqual(r.printed, ["slow starts", 'refused("no luck")']);
+  assert.deepEqual(r.compiled(), r.printed);
+});
+
+// C185: the simulated world compiled, its schedule and clock the
+// evaluator's: tied timers in the order each seed picks, race and within
+// dropping the slower branch, and now after a wait.
+test("the simulated world compiled: ties by seed, race, within and its clock as evaluated", () => {
+  const sim = (seed: number, body: (k: Lang) => string) => run((k) => {
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.call(lib("simulated"), k.lit(seed), k.thunk(() => body(k)))))));
+    return main;
+  });
+  const three = (k: Lang) => k.call(lib("together"), k.list(chatty(k, "a", 10), chatty(k, "b", 10), chatty(k, "c", 10)));
+  for (const r of [
+    sim(1, three), sim(7, three),
+    sim(1, (k) => k.call(lib("race"), k.list(chatty(k, "slow", 2000), chatty(k, "quick", 1000)))),
+    sim(1, (k) => k.call(lib("within"), k.lit(500), chatty(k, "slow", 2000))),
+    sim(1, (k) => k.seq(k.call(lib("wait for"), k.call(lib("seconds"), k.lit(5))), k.call(lib("instant text"), k.call(lib("current instant"))))),
+  ]) {
+    assert.deepEqual(r.errors, []);
+    assert.deepEqual(r.compiled(), r.printed);
+  }
+  assert.notDeepEqual(sim(1, three).printed, sim(7, three).printed);
 });
