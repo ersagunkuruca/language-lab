@@ -59,7 +59,7 @@ import { children, dependencies, ownerOfTypeParts, subtree, useTarget, type Call
 import { derivativeLambda, gradientLambda } from "./derive.ts";
 import { fieldShapes, look, type TypeEnv } from "./nested.ts";
 import { B, impl } from "../prelude.ts";
-import { bool, close, DEF_VALUE, fromList, makeRunner, resolvedFor, META, equal as valueEqual, showValue, caseName, compareValues, variantOrder, ORDER_VALUES, type Data, type Value } from "./run.ts";
+import { bool, close, DEF_VALUE, fromList, makeRunner, resolvedAlready, resolvedFor, META, equal as valueEqual, showValue, caseName, compareValues, variantOrder, ORDER_VALUES, type Data, type Value } from "./run.ts";
 import { NUMERIC, relationFor } from "./equations.ts";
 import { analyzer, type Choice, type Exec, type Fn, type Mode, type Plan } from "./modes.ts";
 import { seededGenerator } from "./random.ts";
@@ -843,6 +843,7 @@ export function interpreter(given: Code, opts: Options = {}) {
     const r = needsResolving(given) ? resolvedFor(given, opts.info ?? infer(given), opts.names) : { code: given, info: opts.info };
     // A use with no body is read with its ports bound (L211e).
     const code = filled(r.code);
+    if (r.info && r.code !== given) resolvedAlready(code, r.info);
     prepared.set(given, (ready = { code, info: r.info, owner: ownerOfTypeParts(code), recursive: new Map() }));
   }
   const code = ready.code;

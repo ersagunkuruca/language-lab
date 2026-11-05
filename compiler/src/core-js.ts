@@ -135,8 +135,15 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
   for (const f of ir.funcs) if (f.multi) framesIn(f.body, shared);
   const stack = (t: { inner?: boolean; key: string }) => !!t.inner && t.key.endsWith(".frames") && !shared.has(t.key);
   const named = (x: string, pre: string[], d: string) => { if (/^[\w$]+$/.test(x)) return x; const t = `r${reads++}`; pre.push(`${d}const ${t} = ${x};`); return t; };
-  const label = (t: { inner?: boolean; key: string; cases: { variant: string }[] }, c: number) => (stack(t) ? String(c) : JSON.stringify(t.cases[c].variant));
-  const scrutOf = (t: { inner?: boolean; key: string }, x: string) => (stack(t) ? `(${x}.length === 0 ? 0 : 1)` : `${x}.tag`);
+  // A case matched by its number in its type (C170c): each case's class
+  // keeps it on its prototype as `$c`, beside the `tag` the evaluator's
+  // runtime and the borders read. A value made outside (a builtin's, the
+  // world's) has no `$c` and is looked up by its tag.
+  const caseNo = new Map<string, number | null>();
+  const noted = (variant: string, c: number) => { const was = caseNo.get(variant); caseNo.set(variant, was === undefined || was === c ? c : null); };
+  const label = (t: { inner?: boolean; key: string; cases: { variant: string }[] }, c: number) => { if (!stack(t)) noted(t.cases[c].variant, c); return String(c); };
+  const caseOf = (t: { cases: { variant: string }[] }, x: string) => `(${x}.$c ?? R.caseOf(${x}, ${constName(JSON.stringify(t.cases.map((c) => c.variant)))}))`;
+  const scrutOf = (t: { inner?: boolean; key: string; cases: { variant: string }[] }, x: string) => (stack(t) ? `(${x}.length === 0 ? 0 : 1)` : caseOf(t, x));
   // Deep recursion on the heap (C137c18, compile.ts's C21): a function in
   // a cycle of calls that aren't all its own tail calls (`x + sum(rest)`)
   // takes a JavaScript frame per call, and the stack holds some thousands.
@@ -179,7 +186,8 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
     ...[...classes].map(([key, c]) => {
       const variant = key.slice(0, key.lastIndexOf("/")), n = Number(key.slice(key.lastIndexOf("/") + 1));
       const fs = Array.from({ length: n }, (_, j) => `x${j}`);
-      return `class ${c} { constructor(${fs.join(", ")}) { this.tag = ${JSON.stringify(variant)};${fs.map((x, j) => ` this.f${j} = ${x};`).join("")} } get fields() { return [${fs.map((_, j) => `this.f${j}`).join(", ")}]; } }`;
+      const no = caseNo.get(variant);
+      return `class ${c} { constructor(${fs.join(", ")}) {${fs.map((x, j) => ` this.f${j} = ${x};`).join("")} } get fields() { return [${fs.map((_, j) => `this.f${j}`).join(", ")}]; } }\n${c}.prototype.tag = ${JSON.stringify(variant)};${typeof no === "number" ? ` ${c}.prototype.$c = ${no};` : ""}`;
     }),
     ...[...consts].map(([src, v]) => `const ${v} = ${src};`),
     // A backwards search spends the budget too (C137c12).
@@ -282,6 +290,7 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
             const x = named(ex(e.args[0], pre, d), pre, d), a = named(ex(e.args[1], pre, d), pre, d);
             return `(${a}.push(${x}), ${a})`;
           }
+          noted(e.t.cases[e.c].variant, e.c);
           const v = made(e.t.cases[e.c].variant, e.args.map((a) => ex(a, pre, d)));
           return constant(e) ? constName(v) : v;
         }
@@ -295,7 +304,7 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
           if (stack(e.t)) { const a = named(ex(e.rec, pre, d), pre, d); return e.i === 0 ? `${a}[${a}.length - 1]` : `(${a}.pop(), ${a})`; }
           return read(ex(e.rec, pre, d), e.i, pre, d);
         }
-        case "tag": return `R.caseOf(${ex(e.rec, pre, d)}, ${JSON.stringify(e.t.cases.map((c) => c.variant))})`;
+        case "tag": { e.t.cases.forEach((c, i) => noted(c.variant, i)); return caseOf(e.t, named(ex(e.rec, pre, d), pre, d)); }
         // One of a type that waits takes the rest last (C40 step 4): called
         // from outside, it's given a rest that keeps the answer.
         // A closure that takes the rest (it waits, or gives several

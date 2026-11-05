@@ -171,9 +171,12 @@ export function deleteDefinition(code: Code, names: Names, def: Id): Top {
     return { ok: false, reason: `${nameOf(names, def)} is used by ${list(where) || "other code"}; change those first` };
   }
   const defs = code.defs.filter((d) => d !== def);
-  const next = collect({ nodes: code.nodes, defs });
-  const nn = Object.fromEntries(Object.entries(names).filter(([id]) => next.nodes[id]));
-  return { ok: true, code: next, names: nn, select: defs.find((d) => !d.startsWith("std.") && !d.startsWith("builtin")) ?? defs[0], note: `Deleted ${nameOf(names, def)}. Nothing used it.` };
+  // What's left is worked out when the edit is made, not when its button
+  // is drawn: the editor's panel asks for every definition it shows, and
+  // collecting the program on the library is ~60 ms (I167).
+  let next: Code | undefined, nn: Names | undefined;
+  const left = () => (next ??= collect({ nodes: code.nodes, defs }));
+  return { ok: true, get code() { return left(); }, get names() { return (nn ??= Object.fromEntries(Object.entries(names).filter(([id]) => left().nodes[id]))); }, select: defs.find((d) => !d.startsWith("std.") && !d.startsWith("builtin")) ?? defs[0], note: `Deleted ${nameOf(names, def)}. Nothing used it.` };
 }
 
 // ---------------------------------------------------------------- parameters
@@ -267,10 +270,11 @@ export function removeParameter(code: Code, names: Names, def: Id, param: Id, le
     const { [param]: _, ...given } = sv.given;
     nodes[sv.id] = { ...sv, given };
   }
-  const next = collect({ nodes, defs: code.defs });
+  // Collected when the edit is made, not when its button is drawn (I167).
+  let next: Code | undefined;
   const nn = { ...names };
   delete nn[param];
-  return { ok: true, code: next, names: nn, select: uses[0]?.id ?? def,
+  return { ok: true, get code() { return (next ??= collect({ nodes, defs: code.defs })); }, names: nn, select: uses[0]?.id ?? def,
     note: `Removed the input ${nameOf(names, param)}.${uses.length ? ` ${uses.length === 1 ? "Its use is a hole now" : `Its ${uses.length} uses are holes now`}.` : ""}${calls.length ? ` Its argument was dropped from ${calls.length} call${calls.length === 1 ? "" : "s"}.` : ""}` };
 }
 

@@ -440,8 +440,17 @@ export function resolvedFor(code: Code, info: Info, names: Names | undefined): {
   let byInfo = resolved.get(code);
   if (!byInfo) resolved.set(code, (byInfo = new WeakMap()));
   let r = byInfo.get(info);
-  if (!r) { const { code: c, info: i } = resolveArithmetic(code, info, names ?? {}); byInfo.set(info, (r = { code: c, info: i })); }
+  if (!r) { const { code: c, info: i } = resolveArithmetic(code, info, names ?? {}); byInfo.set(info, (r = { code: c, info: i })); resolvedAlready(c, i); }
   return r;
+}
+// A program resolved already, or made from one without new arithmetic
+// (relate.ts `filled` binds a bare use's ports), resolves to itself:
+// resolving it again found nothing to do, after scanning every node of it
+// and the library (T14i: 150 ms for each search's runner in swapAndUndo).
+export function resolvedAlready(code: Code, info: Info): void {
+  let byInfo = resolved.get(code);
+  if (!byInfo) resolved.set(code, (byInfo = new WeakMap()));
+  if (!byInfo.has(info)) byInfo.set(info, { code, info });
 }
 
 export function makeRunner(code: Code, info: Info, rt: Runtime) {
