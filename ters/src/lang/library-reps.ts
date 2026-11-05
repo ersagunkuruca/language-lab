@@ -489,8 +489,10 @@ function looked(code: Code, info: Info): (def: Id) => Set<number> {
 const PASSES_ON = new Set<Id>([S.first, S.optional, S.all]);
 // Builtins that only move values of a variable type about (C70).
 const STRUCTURAL = new Set<Id>([S.oneOf, S.fail, ...Object.values(ARRAY_OPS)]);
-function listBoundary(code: Code, info: Info, defs: Id[], rep: Representation, asked: Representation[] = []): { nodes: Record<Id, Node>; reached: Id[]; made: Id[] } | null {
-  const program = new Set(defs), inside = holdsType(code, LIST), stored = new Set(asked.map((r) => r.of));
+// `owned`: the program's own types the rewrite leaves as they are, whose
+// lists are converted where they're read and made (rep-split.ts, C93 s3).
+export function listBoundary(code: Code, info: Info, defs: Id[], rep: Representation, asked: Representation[] = [], owned: Set<Id> = new Set()): { nodes: Record<Id, Node>; reached: Id[]; made: Id[] } | null {
+  const program = new Set([...defs, ...owned]), inside = holdsType(code, LIST), stored = new Set(asked.map((r) => r.of));
   const hasList = (t: Type): boolean => { t = info.subst.zonk(t); return t.t === "con" ? t.id === LIST || inside(t.id) || t.args.some(hasList) : t.t === "fn" ? [...t.params, t.ret].some(hasList) : false; };
   // A type the library defines with a list in it (Set and Map as written,
   // Algebra): its definition isn't the program's, so the rewrite leaves
@@ -700,7 +702,7 @@ function holdsType(code: Code, of: Id): (id: Id) => boolean {
 // The part of the trees' module the rows use: their definitions (the
 // checker reads a row's match from it), their jobs, and what those
 // reach in the module.
-function treesFor(code: Code, rows: Representation[]): Code {
+export function treesFor(code: Code, rows: Representation[]): Code {
   const all = merge(TREES.code, code);
   const keep = new Set<Id>();
   const roots = rows.flatMap((r) => [...(r.def ? [r.def] : []), ...Object.values(r.impl), ...(r.meaning ? [r.meaning] : []), ...Object.values(r.byType ?? {}), ...Object.values(r.heads ?? {}), ...(r.store ? [r.store] : [])]);
