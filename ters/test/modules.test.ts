@@ -13,7 +13,7 @@ import { Lang } from "../src/lang/dsl.ts";
 import { fillings, infer } from "../src/lang/infer.ts";
 import { CORE, HTML_MODULE, LIBRARY, PRELUDE } from "../src/lang/library.ts";
 import { base, baseNames, checkOptions, loadProgram } from "../src/lang/load.ts";
-import { addVersions, adopt, orderFreeHash, publish, sameAs, sameLines, sameUpToOrder, upgrade, verify, type Module } from "../src/lang/modules.ts";
+import { addVersions, adopt, lineageOf, orderFreeHash, publishVersion, replacing, publish, sameAs, sameLines, sameUpToOrder, upgrade, verify, type Module } from "../src/lang/modules.ts";
 import { buildPrelude } from "../src/lang/prelude-source.ts";
 import { library as listHelpers } from "../src/lang/programs.ts";
 import { pinsOf } from "../src/lang/signatures.ts";
@@ -75,6 +75,43 @@ test("a change to a std declaration adds a version and keeps the old, and html, 
   const d = HTML_MODULE.exports[0], later = `@w${d.slice(1)}`;
   const m: Module = { ...HTML_MODULE, code: { ...HTML_MODULE.code, defs: HTML_MODULE.code.defs.map((x) => (x === d ? later : x)) } };
   assert.match(verify(m, base)!, /is hashed by recipe w, which this version doesn't know/);
+});
+
+// SHARING.md §1 (L110): a definition keeps its draft id as its lineage, so
+// publishing it again after an edit is its next version, and the module
+// keeps the old one and says what replaces what.
+test("publishing a draft again after an edit adds a version to its lineage, keeps the old and derives what replaces it (L110)", () => {
+  const k = new Lang(LIBRARY.code);
+  const area = k.def("area");
+  k.define(area, k.fn(["r"], (r) => k.call(B.mul, k.call(B.mul, r, r), k.lit(3))));
+  const p1 = publishVersion(null, "shapes", base(k.code), baseNames(k.names), [area], LIBRARY.code, LIBRARY.pins);
+  assert.ok(p1.ok);
+  const v1 = p1.module.exports[0];
+  assert.deepEqual(p1.module.lineages, { [area]: [v1] });
+  // Again with nothing changed: nothing added.
+  const again = publishVersion(p1.module, "shapes", base(k.code), baseNames(k.names), [area], LIBRARY.code, LIBRARY.pins);
+  assert.ok(again.ok);
+  assert.deepEqual(again.added, []);
+  // The draft edited, then published again.
+  k.define(area, k.fn(["r"], (r) => k.call(B.mul, k.call(B.mul, r, r), k.lit(3.14159))));
+  const p2 = publishVersion(p1.module, "shapes", base(k.code), baseNames(k.names), [area], LIBRARY.code, LIBRARY.pins);
+  assert.ok(p2.ok);
+  const m = p2.module, v2 = p2.added[0];
+  assert.notEqual(v2, v1);
+  assert.deepEqual(m.lineages, { [area]: [v1, v2] });
+  assert.equal(lineageOf(m.lineages!, v1), area);
+  assert.deepEqual(m.exports, [v2]);
+  assert.ok(m.code.defs.includes(v1), "the old version stays");
+  assert.deepEqual(replacing(m), { [v2]: v1 });
+  assert.equal(m.names[v2], "area");
+  assert.equal(verify(m, LIBRARY.code, true), null);
+  // A program on the first version moves to the second: the same type.
+  const u = new Lang(merge(LIBRARY.code, m.code));
+  const main = u.def("main");
+  u.define(main, u.thunk(() => u.call(v1, u.lit(2))));
+  const code = merge(LIBRARY.code, m.code, u.code);
+  const up = upgrade(code, v1, replacing(m)[v2] === v1 ? v2 : v1, m.pins);
+  assert.ok(up.ok && up.uses === 1);
 });
 
 test("a published definition that is changed no longer matches its name", () => {

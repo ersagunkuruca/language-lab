@@ -1796,8 +1796,10 @@ already shows both with their types, and the hash says which is which;
 paths like `list.map` would be one more layer, and nothing has needed them
 yet.
 
-**Updates.** A new version is a new hash. A module can say which old
-definition a new one replaces (`replaces`), and `upgrade(code, old, new)`
+**Updates.** A new version is a new hash. A definition keeps the id it
+had as a draft as its lineage, and a module lists each lineage's versions,
+oldest first (`lineages`; `lab publish` adds the next ones, and the old
+stay). What replaces what is read from there (`replacing`), and `upgrade(code, old, new)`
 moves a program over: every ref, and the ports of every place it's run
 backwards. It does it only when the two have the same pin, so nothing that
 uses it can break and nothing needs checking again; a changed type is

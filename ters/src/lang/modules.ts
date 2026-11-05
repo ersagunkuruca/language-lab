@@ -42,8 +42,12 @@ export interface Module {
   comments?: Comments;
   // What the palette offers from it.
   exports: Id[];
-  // Updates: a new definition and the one it replaces (upgrade, below).
-  replaces?: Record<Id, Id>;
+  // Every version of each definition it has published, oldest first, by
+  // lineage: the id the definition had as a draft, which it keeps for its
+  // whole life (SHARING.md §1, L110). Old versions stay in the module, so
+  // a program that uses one keeps running; only the newest is offered.
+  // What replaces what is read from here (`replacing`), never written.
+  lineages?: Record<Id, Id[]>;
   // Ways to store a type, in its definitions (represent.ts): the trees
   // module's rows for Map and Set.
   representations?: Representation[];
@@ -157,6 +161,45 @@ export function addVersions(kept: Versions, code: Code, defs: Id[]): Versions {
     if (vs.at(-1) !== v) vs.push(v);
   }
   return Object.fromEntries(Object.keys(out).sort().map((d) => [d, out[d]]));
+}
+
+// ----------------------------------------------------------------- lineages
+
+// Publish `defs` of a program as the next versions in a module (SHARING.md
+// §1, L110). Each published definition's lineage is the id it has as a
+// draft, so the program keeps its drafts and publishing them again after an
+// edit adds a version under the same lineage; `prev`, the module as it was,
+// keeps every old version (published code is never deleted) and offers
+// only each lineage's newest. Publishing what didn't change changes nothing.
+// `basePins`: the pins of library definitions it uses, which travel with it.
+export function publishVersion(prev: Module | null, title: string, code: Code, names: Names, defs: Id[], base: Code, basePins: Pins = {}, comments: Comments = {}): Result<{ module: Module; added: Id[] }> {
+  const all = prev ? merge(code, prev.code) : code;
+  const p = publish(all, names, defs, merge(base, ...(prev ? [prev.code] : [])));
+  if (!p.ok) return p;
+  const lineages: Record<Id, Id[]> = Object.fromEntries(Object.entries(prev?.lineages ?? {}).map(([l, vs]) => [l, [...vs]]));
+  const added: Id[] = [];
+  for (const [draft, id] of p.rename) {
+    if (!isPublished(id) || id.includes(":") || code.nodes[draft]?.kind !== "def") continue;
+    const vs = (lineages[draft] ??= []);
+    if (!vs.includes(id)) { vs.push(id); added.push(id); }
+  }
+  const newestOf = (d: Id) => { const l = lineageOf(lineages, d); return l ? lineages[l].at(-1)! : d; };
+  const offered = [...new Set([...defs.map((d) => p.rename.get(d) ?? d), ...(prev?.exports ?? [])].map(newestOf))];
+  const kept = [...new Set([...(prev?.code.defs ?? []), ...p.published])];
+  const pins = { ...basePins, ...(prev?.pins ?? {}), ...p.pins };
+  const m = makeModule(title, p.code, layer<Names>(prev?.names ?? {}, p.names), offered, pins, { ...(prev?.comments ?? {}), ...renameKeys(comments, p.rename) }, kept);
+  return { ok: true, module: { ...m, std: { ...(prev?.std ?? {}), ...m.std }, lineages }, added };
+}
+
+// The lineage a version belongs to, or null.
+export const lineageOf = (lineages: Record<Id, Id[]>, version: Id): Id | null =>
+  Object.keys(lineages).find((l) => lineages[l].includes(version)) ?? null;
+
+// What replaces what, read from the lineages: each version and the one
+// before it in its lineage, newest first (`upgrade` moves a program along
+// it when the pins allow).
+export function replacing(m: Module): Record<Id, Id> {
+  return Object.fromEntries(Object.values(m.lineages ?? {}).flatMap((vs) => vs.slice(1).map((v, i) => [v, vs[i]] as const)));
 }
 
 // ------------------------------------------------------------------- verify
