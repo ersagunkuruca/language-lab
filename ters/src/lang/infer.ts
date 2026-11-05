@@ -2479,7 +2479,7 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
     }
     return out;
   };
-  const safe = (s: Subst, f: Filling, risky: boolean | "field", mix?: string) => {
+  const safe = (s: Subst, f: Filling, risky: boolean | "field", mix?: string, brings = "") => {
     if (mix && !risky) { const m = mixChecked(f, mix); if (m !== undefined) return m; }
     const dir = directions.size ? direction(f) : "same";
     if (dir === "lost") return false;
@@ -2489,10 +2489,10 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
     // what their variables need included (sin and cos at Trig), pass or
     // fail together: one check answers for both (I167: a new definition's
     // 35 operations were 35 checks, 0.3 s).
-    if (risky === "field" && !(withResults && (f.kind === "match" || f.kind === "fold"))) return byKind(`field ${f.kind}|${groupKey(s, [...groupTypes, ...around])}`, f);
+    if (risky === "field" && !(withResults && (f.kind === "match" || f.kind === "fold"))) return byKind(`field ${f.kind}|${groupKey(s, [...groupTypes, ...around])}${brings}`, f);
     if (risky || (withResults && (f.kind === "match" || f.kind === "fold"))) return whole(f);
     const plan = solves.length ? newPlans(f) : null;
-    if (plan !== null) return byKind(`plan ${plan}|${groupKey(s, [...groupTypes, ...around])}`, f);
+    if (plan !== null) return byKind(`plan ${plan}|${groupKey(s, [...groupTypes, ...around])}${brings}`, f);
     // A row only renamed pins nothing: a pure call's empty row joining the
     // definition's. (A type variable renamed may still be pinned: the new
     // one can carry a constraint, records of Float64s say.)
@@ -2515,7 +2515,7 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
     // constraints (I157: a new definition's 1,068 offers asked ~500
     // checks of it, 3.7 s). Its units are still its own.
     if (!callers && !held) return unitsHold(f);
-    return byKind(groupKey(s, [...groupTypes, ...(pinnedGroup ? around : [])]), f);
+    return byKind(groupKey(s, [...groupTypes, ...(pinnedGroup ? around : [])]) + brings, f);
   };
   // A filling that brings Choice or the world where the other is may break
   // the rule that the world isn't touched under Choice, which only the
@@ -2533,13 +2533,20 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
     const ft = info.subst.resolve(t);
     const effs = ft.t === "fn" ? info.subst.resolveRow(ft.eff).effs : [];
     const mix = mixes(effs) ? [...effs].sort().join(",") : undefined;
+    // A caller sees the group's Choice dropped where the inputs answer
+    // each builtin that brings it (L125b, signs.ts totalCall), which
+    // asks what each one is (mod's b not 0, sqrt's x not negative) and
+    // keeps a search's: two fillings bringing Choice answer for each other
+    // only when they are the same builtin or both not one (steady pow's
+    // check refused mod in fall).
+    const brings = effs.includes(CHOICE) ? (PARTIAL[target] ? `|partial ${target}` : "|choice") : "";
     const asRef = fits(t, false);
     const ref: Filling = { kind: "ref", target, type: t };
-    if (asRef && safe(asRef, ref, risky, mix)) out.push(ref);
+    if (asRef && safe(asRef, ref, risky, mix, brings)) out.push(ref);
     const r = info.subst.resolve(t);
     const asCall = r.t === "fn" ? fits(t, true) : null;
     const call: Filling = { kind: "call", target, arity: r.t === "fn" ? r.params.length : 0, type: t };
-    if (asCall && safe(asCall, call, risky, mix)) out.push(call);
+    if (asCall && safe(asCall, call, risky, mix, brings)) out.push(call);
   };
   for (const b of h.scope) consider(b.id, b.type);
   // An input nothing has given a type yet can still be called: calling it
