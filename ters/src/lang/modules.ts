@@ -48,6 +48,10 @@ export interface Module {
   // a program that uses one keeps running; only the newest is offered.
   // What replaces what is read from here (`replacing`), never written.
   lineages?: Record<Id, Id[]>;
+  // A store's only (L114a): each lineage's author's public key, pinned the
+  // first time the program took it, so a log rewritten under another key
+  // is refused (cli/logs.ts).
+  authors?: Record<Id, string>;
   // Ways to store a type, in its definitions (represent.ts): the trees
   // module's rows for Map and Set.
   representations?: Representation[];
@@ -508,7 +512,7 @@ export function upgrade(code: Code, from: Id, to: Id, pins: Pins, names: Names =
 // whose pin is narrower than the one the program uses stays, with why.
 // The program's own nodes only come back; the caller checks and tests it.
 export interface Moved { from: Id; to: Id; uses: number }
-export function upgradeOwn(own: Code, modules: Module[], names: Names = {}): { own: Code; moved: Moved[]; refused: { from: Id; to: Id; reason: string }[] } {
+export function upgradeOwn(own: Code, modules: Module[], names: Names = {}, broken: ReadonlySet<Id> = new Set()): { own: Code; moved: Moved[]; refused: { from: Id; to: Id; reason: string }[] } {
   const ownIds = new Set(Object.keys(own.nodes));
   const pins: Pins = Object.assign({}, ...modules.map((m) => m.pins));
   const lines = modules.flatMap((m) => Object.values(m.lineages ?? {}));
@@ -520,10 +524,11 @@ export function upgradeOwn(own: Code, modules: Module[], names: Names = {}): { o
     for (const from of vs.slice(0, -1)) {
       if (!used.has(from)) continue;
       // The newest that fits, else the next older one.
-      for (const to of vs.slice(vs.indexOf(from) + 1).reverse()) {
+      // A version its author's log marks broken isn't moved to (L114a).
+      for (const to of vs.slice(vs.indexOf(from) + 1).reverse().filter((v) => !broken.has(v))) {
         const r = upgrade(work, from, to, pins, names);
         if (r.ok) { work = r.code; moved.push({ from, to, uses: r.uses }); break; }
-        if (to === vs.at(-1)) refused.push({ from, to, reason: r.reason });
+        if (to === vs.filter((v) => !broken.has(v)).at(-1)) refused.push({ from, to, reason: r.reason });
       }
     }
   }
@@ -591,6 +596,7 @@ export function addToStore(store: Module | null, own: Code, modules: Module[]): 
     exports: [],
     std: { ...(store?.std ?? {}), ...baseVersions(code, defs) },
     lineages,
+    ...(store?.authors ? { authors: store.authors } : {}),
   };
 }
 

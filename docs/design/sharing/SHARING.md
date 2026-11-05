@@ -9,6 +9,7 @@ saying which std they were published on, ids saying their recipe.
 §2 built (L111): upgrades by pin generality, `lab upgrade`, a program's `modules` folder.
 §5 built (L112): names kept per program on upgrade, `--take-names`.
 §4b built (L115): a program's store.json, `lab downgrade`.
+§4 logs built (L114a): signed logs beside module files, `lab broken`; fetching by hash is L114.
 
 **In one sentence:** a definition (or a library) keeps one **lineage id**
 for its whole life and gets a **version hash** each time it's published;
@@ -152,6 +153,14 @@ kind of entry. Scenarios, with Alice's `json` and Bob's program using
    runs; his editor warns him and offers `@def`.
 4. **Finding things.** A search site indexes logs. If it disappears, the
    code and the logs are still wherever they were hosted.
+
+Built (L114a, 2026-11-05): a module file's log sits beside it
+(`json.log.json`), each entry signed with Ed25519 and chained to the one
+before by its hash. `lab publish` signs new versions in, `lab broken`
+marks one, and `lab upgrade` warns about a broken version in use and never
+moves to one. A program's store pins each lineage's author key the first
+time it takes it (trust on first use, as SSH does with host keys), which
+is how the impostor in scenario 2 is refused.
 
 Without logs, sharing still works by passing hashes around, and stays
 correct, but gets no updates, no authors and no warnings.
