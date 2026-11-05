@@ -28,13 +28,14 @@ import { isUse, useTarget } from "../model.ts";
 import { answerKeys } from "./ports.ts";
 import { intLit } from "./int.ts";
 import { INT } from "./types.ts";
-import { FALSE, TRUE } from "./std.ts";
+import { FALSE, S, STD_IMPL, TRUE } from "./std.ts";
 import { META, toList, type Value } from "./run.ts";
 import { firstSets } from "./first-sets.ts";
 import * as T from "./text.ts";
 import type { Reading } from "./relate.ts";
 
 export class Unsupported extends Error {}
+const SHOW_FLOAT = (x: number) => (STD_IMPL[S.show] as (x: number) => string)(x);
 
 export type Any = { id: Id; kind: string; target: Id; value: unknown; fn: Id; args: Id[]; params: Id[]; body: Id; scrutinee: Id; arms: Id[]; variant: Id; binds: (Id | null)[] };
 // A Text binder still to be read: a run of letters, digits, or characters
@@ -274,6 +275,21 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
       if (end === digits) { expect(digits, "a whole number"); return null; }
       const v = Number(text.slice(at, end));
       return [end, new Map(env).set(b, Number.isSafeInteger(v) ? v : BigInt(text.slice(at, end)))];
+    }
+    // show of a Float64 (L72c): the longest spelling there that show
+    // writes, as relate.ts accepts it (a number's text, which show of it
+    // gives back exactly).
+    if (f === S.show) {
+      const b = target(n.args[0]);
+      if (!b || !isUnknown(env.get(b))) throw new Unsupported("reads show of something other than an input");
+      let end = at;
+      while (end < text.length && /[-+0-9.eE]/.test(text[end])) end++;
+      for (; end > at; end--) {
+        const t = text.slice(at, end), x = Number(t);
+        if (Number.isFinite(x) && SHOW_FLOAT(x) === t) return [end, new Map(env).set(b, x)];
+      }
+      expect(at, "a number");
+      return null;
     }
     if (named(f) === "spaced") { const r = read(n.args[0], env, spaces(at)); return r && [spaces(r[0]), r[1]]; }
     // Any number of parentheses round it, as the search reads them; at
