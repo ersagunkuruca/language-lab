@@ -6,7 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { replace, type NodeOf, isCall, type Call } from "../src/model.ts";
+import { replace, subtree, type NodeOf, isCall, type Call } from "../src/model.ts";
 import { fillings, infer } from "../src/lang/infer.ts";
 import { checkOptions, loadProgram } from "../src/lang/load.ts";
 import { pinsOf } from "../src/lang/signatures.ts";
@@ -49,6 +49,21 @@ test("a call's function as a hole: every function of the right type is offered, 
   const offered = fillings(code, info, mul.fn).flatMap((f) => (f.kind === "ref" ? [f.target] : []));
   for (const op of ["builtin.arith.mul", "builtin.arith.add", "builtin.arith.sub"]) assert.ok(offered.includes(op), `${op} is offered`);
   for (const target of offered) assert.equal(infer(fillHole(code, {}, mul.fn, { kind: "ref", target, type: null as never }).code).errors.length, info.errors.length, target);
+});
+
+// A caller sees a definition's Choice dropped where its inputs answer each
+// builtin that brings one (L125b): mod in fall's + does that, steady pow
+// there doesn't, and physics' main prints. The two leave fall's types and
+// its search the same, so pow's check, refused, used to refuse mod too.
+test("a builtin that brings Choice is checked apart from a search that does", () => {
+  const p = loadProgram(join(import.meta.dirname, "../examples/physics"));
+  const fall = p.named("fall");
+  const add = Object.values(p.code.nodes).find((n): n is Call => isCall(n) && n.args.length === 2 && p.code.nodes[n.fn].kind === "ref" && p.pres.names[(p.code.nodes[n.fn] as NodeOf<"ref">).target] === "add" && new Set(subtree(p.code, fall)).has(n.id))!;
+  const code = replace(p.code, add.fn, () => ({ kind: "hole" }));
+  const info = infer(code, p.pres.names);
+  const offered = fillings(code, info, add.fn).flatMap((f) => (f.kind === "ref" ? [f.target] : []));
+  assert.ok(offered.includes("builtin.mod"), "mod is offered");
+  assert.equal(infer(fillHole(code, {}, add.fn, { kind: "ref", target: "builtin.mod", type: null as never }).code).errors.length, info.errors.length);
 });
 
 // One + for every number type (NUMBERS.md, "One `+`"): where a Float64 or
