@@ -17,6 +17,7 @@ import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { ARITH, INT_OPS, S } from "../src/lang/std.ts";
 import { resolveArithmetic, usesGenericArithmetic } from "../src/lang/arith.ts";
+import { usesLiteralMatch } from "../src/lang/literal-match.ts";
 import { NUMBER, STRING, schemeArith, showType } from "../src/lang/types.ts";
 import { subtree, type Id, type NodeOf } from "../src/model.ts";
 import { compile } from "../../compiler/src/compile.ts";
@@ -205,4 +206,14 @@ test("a use at Float64 of a definition whose default is Int gets a Float64 copy"
     assert.ok(called && called.kind === "ref", names[d]);
     assert.equal(showType(r.info.subst.zonk(r.info.typeOf.get(called.target)!), names), "(Float64) -> Float64", names[d]);
   }
+});
+
+// The library's own resolving is made once and every program's goes on
+// from it (L217b), only when the steps before it leave the library as it
+// is. A match on values in the library is rewritten by one of them
+// (literal-match.ts), so the library's definitions write a character test
+// as ifs: one byValue (json's character tests had four) made every run
+// resolve the whole library again, about 2 s in node.
+test("the library has no match on values, so its resolving is made once for every program", () => {
+  assert.equal(usesLiteralMatch(LIBRARY.code), false);
 });
