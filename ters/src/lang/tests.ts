@@ -165,3 +165,35 @@ export function runTests(code: Code, info: Info, names: Names, defs: Id[], saved
     return { def: d, name, cases, failures };
   });
 }
+
+// The accepted answers again, from another way of running the program
+// (`lab test --compiled`, T7e): `callOf` gives a definition's function on
+// the evaluator's values, or why it has none there (it isn't compiled),
+// and its answer must print as the accepted one. A function's first
+// answer, as the evaluator's above; `none` for no answer.
+export type Called = { value: Value } | { none: true };
+export interface Again { def: Id; name: string; cases: number; failures: Failure[]; skipped?: string; error?: string }
+export function answersAgain(code: Code, info: Info, names: Names, defs: Id[], saved: Record<Id, Saved[]>, callOf: (d: Id) => ((args: Value[]) => Called) | string): Again[] {
+  const show = showerFor(code, info, names);
+  return defs.filter((d) => (saved[d] ?? []).some((x) => x.answer !== undefined)).map((d) => {
+    const name = names[d] ?? d;
+    const call = callOf(d);
+    if (typeof call === "string") return { def: d, name, cases: 0, failures: [], skipped: call };
+    const failures: Failure[] = [];
+    let cases = 0;
+    try {
+      for (const s of saved[d] ?? []) {
+        if (s.answer === undefined) continue;
+        const vs = s.inputs.map((x) => parseValue(x, code, names));
+        if (!vs.every((v) => "value" in v)) { failures.push({ inputs: s.inputs, what: ["its saved inputs don't read as values any more"] }); continue; }
+        cases++;
+        const r = call(vs.map((v) => (v as { value: Value }).value));
+        const got = "value" in r ? show(r.value) : undefined;
+        if (got !== s.answer) failures.push({ inputs: s.inputs, what: [got === undefined ? `no answer, accepted ${s.answer}` : `gives ${got}, accepted ${s.answer}`] });
+      }
+    } catch (e) {
+      return { def: d, name, cases, failures, error: (e as Error).message };
+    }
+    return { def: d, name, cases, failures };
+  });
+}
