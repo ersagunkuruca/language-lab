@@ -201,6 +201,9 @@ export function usesGiveTheirPorts(nodes: Record<Id, unknown>, library: Record<I
     nodes[use] = { ...bare, id: use };
     nodes[value] = { id: value, kind: "binder" };
     let inner = body;
+    // Written here and again below with the lets of kept binders inside,
+    // so the nodes keep the order they had (the published prelude's bytes).
+    nodes[fn] = { id: fn, kind: "lambda", params: [value], body };
     nodes[id] = { id, kind: "call", fn, args: [use] };
     for (const [port, binder] of Object.entries(binds)) {
       if (united(binder)) {
