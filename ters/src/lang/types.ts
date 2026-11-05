@@ -72,7 +72,6 @@ export const RATIONAL_TYPE = "std.rational";
 // std.ts's Algebraic: exact roots of polynomials (EXACT-REALS.md), ordered,
 // with builtin arithmetic (src/lang/algebraic.ts).
 export const ALGEBRAIC_TYPE = "std.algebraic";
-export const FIXED_TYPE = "std.fixed";
 // A cell holding an `a` (src/lang/cells.ts). Not plain data: two cells
 // holding the same value are still two cells.
 export const CELL = "type.cell";

@@ -9,6 +9,7 @@ import { infer } from "../../ters/src/lang/infer.ts";
 import { makeRunner, type Value } from "../../ters/src/lang/run.ts";
 import { base, baseNames } from "../../ters/src/lang/load.ts";
 import { INT_OPS } from "../../ters/src/lang/std.ts";
+import { FIXED_V } from "../../ters/src/lang/library.ts";
 import { norm } from "../../ters/src/lang/int.ts";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitWasm, fromInt, instantiate, toInt } from "../src/wasm.ts";
@@ -91,7 +92,7 @@ test("Fixed's arithmetic in C: lockstep's multiply and step, as evaluated", { sk
   assert.deepEqual([...lowered.refused.values()], []);
   assert.deepEqual([...emitC(lowered).refused.values()], []);
   const r = makeRunner(p.code, p.info, { print: () => {} });
-  const fx = (n: bigint): Value => ({ tag: "std.fixed.fixed", fields: [norm(n)] }) as unknown as Value;
+  const fx = (n: bigint): Value => ({ tag: FIXED_V, fields: [norm(n)] }) as unknown as Value;
   const at = (name: string) => lowered.funcs.findIndex((f) => f.name === name && !f.inner);
   const calls: [number, Value[]][] = [];
   for (const a of [0n, 1n, -1n, 65536n, -98304n, 123456789n, -(2n ** 40n), 2n ** 70n]) for (const b of [3n, -65536n, 2n ** 33n, -7n]) calls.push([at("multiply fixed"), [fx(a), fx(b)]]);

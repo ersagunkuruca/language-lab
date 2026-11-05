@@ -3,12 +3,13 @@
 // (examples.json), the rest worked out by a short search here and the whole
 // one in a worker, with the program it derives for that direction. What it
 // reads of the editor comes through `BackHost`.
+import { FIXED_V } from "../ters/src/lang/library.ts";
 import type { Code, Id } from "../ters/src/model.ts";
 import type { Presentation } from "../ters/src/presentation.ts";
 import { relationFor } from "../ters/src/lang/equations.ts";
 import { analyze } from "../invertible/src/index.js";
 import { Namer } from "../ters/src/render/namer.ts";
-import { FIXED_V, TRUE } from "../ters/src/lang/std.ts";
+import { TRUE } from "../ters/src/lang/std.ts";
 import { CHOICE, DIVERGE, NUMBER, type Type } from "../ters/src/lang/types.ts";
 import type { Value } from "../ters/src/lang/run.ts";
 import type { Trace } from "../ters/src/lang/trace.ts";

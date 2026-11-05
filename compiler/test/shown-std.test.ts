@@ -3,7 +3,7 @@
 // the evaluator shows them, in the core IR's JavaScript, WebAssembly and
 // C. Fixed was refused on WebAssembly and C before.
 
-import { COMPLEX_V } from "../../ters/src/lang/library.ts";
+import { COMPLEX_V, FIXED_V } from "../../ters/src/lang/library.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { load } from "../src/program.ts";
@@ -15,7 +15,7 @@ import { Lang } from "../../ters/src/lang/dsl.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { makeRunner, type Value } from "../../ters/src/lang/run.ts";
 import { merge, type Id } from "../../ters/src/model.ts";
-import { CONS, NIL, FIXED_V, SHOW_ANY } from "../../ters/src/lang/std.ts";
+import { CONS, NIL, SHOW_ANY } from "../../ters/src/lang/std.ts";
 
 const p = load("sort");
 const named = (n: string) => Object.entries(p.pres.names).find(([id, x]) => x === n && p.code.nodes[id]?.kind === "def")![0];

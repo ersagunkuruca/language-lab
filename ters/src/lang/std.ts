@@ -304,15 +304,9 @@ export const ORDERED = typedef("std.ordered", "Ordered", ["a"], [
   ["ordered", [["less", ([a]) => tfun([tref(a), tref(a)], tref(BOOL), [])]]],
 ], false, true);
 export const ORDERED_V = "std.ordered.ordered";
-// Fixed (FIXED-POINT.md, BACKLOG L89): a number counted in steps of 2⁻³²,
-// an Int of steps, so it has the same bits on every target and the same
-// step size everywhere in a big world. + − · < are the prelude's, Int
-// arithmetic with · rounded down; a literal at Fixed is its digits rounded
-// once to the nearest step. After Ordered, so ids above don't move.
-export const FIXED = typedef("std.fixed", "Fixed", [], [
-  ["fixed", [["steps", () => tref(INT)]]],
-], false, false, "fixed-point numbers");
-export const FIXED_V = "std.fixed.fixed";
+// Fixed is the numbers module's (numbers-source.ts, L207e): its tref
+// keeps its number so the ids after it don't move.
+tn += 1;
 // Mat2, Mat3 and Mat4 are the numbers module's (numbers-source.ts, L207c):
 // one tref per entry, so the ids after them don't move.
 tn += 4 + 9 + 16;
@@ -1614,7 +1608,7 @@ export function onTodaysIds<T>(x: T, from = (x as { shape?: unknown } | null)?.s
 }
 export const tupleSize = (id: Id): number | null => { const m = /^std\.tuple(\d)$/.exec(id); return m ? Number(m[1]) : null; };
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, ARITHMETIC, ORDERED, FIXED, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ROW_TYPE, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS, WORD16, TENSOR, BYTES, JSON_TYPE, DATE, TIME_OF_DAY, INSTANT, EMBEDDING, REQUEST, RESPONSE, LOCALE, SETTINGS, RELEASE, OPEN_FILE, KEPT_FILES, LITERAL, REAL] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, ARITHMETIC, ORDERED, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ROW_TYPE, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS, WORD16, TENSOR, BYTES, JSON_TYPE, DATE, TIME_OF_DAY, INSTANT, EMBEDDING, REQUEST, RESPONSE, LOCALE, SETTINGS, RELEASE, OPEN_FILE, KEPT_FILES, LITERAL, REAL] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one
