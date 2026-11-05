@@ -135,8 +135,10 @@ ideal at 3000 notes. one-holder.ts stays for C56's other values.
 STABLE-REFERENCES.md §1 makes a cell's write an edit at a path (L98). When
 the cell is the only holder of its value, which it is unless a read kept
 it, that edit can be done in place. The `setPath` copies in records.ts
-become writes. This waits for L98's later steps, and for a program that
-measures it: the reactive to-do list (L100) is the candidate.
+become writes. Measured (L98c, 2026-11-05) on the to-do outline (L100)
+grown to 1,000 items: the path copies are about 2% of adding and ticking,
+so this isn't built. The time was an each keeping copies of every edit
+(fixed there) and a write looking at every reader of the cell.
 
 ### 4. Counting at run time, where the compiler can't tell
 
