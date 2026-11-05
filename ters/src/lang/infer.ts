@@ -1542,7 +1542,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       unifyAt(arm.body, result, expr(arm.body, env, row), "this case");
     }
     if (n.kind === "match" && n.otherwise) unifyAt(n.otherwise, result, expr(n.otherwise, env, row), "the other cases");
-    else err(n.id, "a choice by value needs a case for every other value");
+    else if (n.kind === "match") err(n.id, "a choice by value needs a case for every other value");
     return result;
   }
 
