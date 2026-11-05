@@ -1,0 +1,37 @@
+{
+  "6ocnq3rgs4iscku9qq5fun9q39": [
+    {
+      "main": {
+        "arguments": [
+          "roads.txt"
+        ],
+        "input": "",
+        "files": {
+          "roads.txt": "# Made-up towns and roads, in km.\nroad Arden Brisk 120\nroad Arden Colm 300\nroad Brisk Colm 150\nroad Brisk Dunmore 200\nroad Colm Dunmore 90\nroad Colm Eskar 260\nroad Dunmore Eskar 140\nroad Fallow Gant 70\n\ntrip Arden Eskar\ntrip Eskar Arden\ntrip Arden Gant\nnear Brisk 250\ntrip Gant Fallow\n"
+        },
+        "printed": [
+          "7 towns, 8 roads, 2 parts\ncheapest network: 570 km in 5 roads\nfarthest from Arden: Eskar, 460 km",
+          "Arden → Brisk → Dunmore → Eskar: 460 km",
+          "Eskar → Dunmore → Brisk → Arden: 460 km",
+          "Arden → Gant: no route",
+          "within 250 km of Brisk: Arden 120, Colm 150, Dunmore 200",
+          "Gant → Fallow: 70 km"
+        ],
+        "errors": [],
+        "exit": 0
+      }
+    },
+    {
+      "main": {
+        "arguments": [],
+        "input": "",
+        "files": {},
+        "printed": [],
+        "errors": [
+          "usage: routes roads.txt"
+        ],
+        "exit": 2
+      }
+    }
+  ]
+}

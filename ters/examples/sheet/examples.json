@@ -1,0 +1,44 @@
+{
+  "v8d7tqiv26jlqqkoe1fpdgotm9": [
+    {
+      "main": {
+        "arguments": [
+          "budget.txt"
+        ],
+        "input": "",
+        "files": {
+          "budget.txt": "# a small budget\nA1 = 1200\nA2 = 450\nA3 = 380\nA4 = sum(A1:A3)\nB1 = A1 * 12\nB2 = A2 * 12\nB3 = A3 * 12\nB4 = SUM(B1:B3)\nC1 = (B1 - B2) / 12\nC2 = max(A1:A3) - min(A1:A3)\nC3 = average(A1:A3)\nC4 = -C3 + count(A1:B3)\nD1 = D2 + 1\nD2 = D1 * 2\nD3 = A1 / (A2 - 450)\nD4 = 2 + * 3\n"
+        },
+        "printed": [
+          "           A       B       C       D",
+          "   1    1200   14400     750  #cycle",
+          "   2     450    5400     820  #cycle",
+          "   3     380    4560     676  #div/0",
+          "   4    2030   24360    -670  #parse",
+          "line 14: D1 is #cycle",
+          "line 15: D2 is #cycle",
+          "line 16: D3 is #div/0",
+          "line 17: D4 is #parse"
+        ],
+        "errors": [],
+        "filesAfter": {
+          "budget.txt": "# a small budget\nA1 = 1200\nA2 = 450\nA3 = 380\nA4 = sum(A1:A3)\nB1 = A1 * 12\nB2 = A2 * 12\nB3 = A3 * 12\nB4 = SUM(B1:B3)\nC1 = (B1 - B2) / 12\nC2 = max(A1:A3) - min(A1:A3)\nC3 = average(A1:A3)\nC4 = -C3 + count(A1:B3)\nD1 = D2 + 1\nD2 = D1 * 2\nD3 = A1 / (A2 - 450)\nD4 = 2 + * 3\n",
+          "budget.txt.out": "A1 = 1200 → 1200\nA2 = 450 → 450\nA3 = 380 → 380\nA4 = SUM(A1:A3) → 2030\nB1 = (A1 * 12) → 14400\nB2 = (A2 * 12) → 5400\nB3 = (A3 * 12) → 4560\nB4 = SUM(B1:B3) → 24360\nC1 = ((B1 - B2) / 12) → 750\nC2 = (MAX(A1:A3) - MIN(A1:A3)) → 820\nC3 = AVERAGE(A1:A3) → 676\nC4 = (-C3 + COUNT(A1:B3)) → -670\nD1 = (D2 + 1) → #cycle\nD2 = (D1 * 2) → #cycle\nD3 = (A1 / (A2 - 450)) → #div/0\nD4 = ? → #parse"
+        },
+        "exit": 1
+      }
+    },
+    {
+      "main": {
+        "arguments": [],
+        "input": "",
+        "files": {},
+        "printed": [
+          "usage: sheet <file>"
+        ],
+        "errors": [],
+        "exit": 2
+      }
+    }
+  ]
+}
