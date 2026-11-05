@@ -26,7 +26,7 @@ import { infer } from "../../ters/src/lang/infer.ts";
 import { B } from "../../ters/src/prelude.ts";
 import type { Id } from "../../ters/src/model.ts";
 import { lowerScalar } from "../src/scalar.ts";
-import { FAIL, loadCoreJs, lowerCore, runCoreMain } from "../src/core-js.ts";
+import { FAIL, loadCoreJs, loadPrinted, lowerCore, printed, runCoreMain } from "../src/core-js.ts";
 import { examples, load } from "../src/program.ts";
 import { book as chaptersBook } from "../gaps/chapters.ts";
 import { book as ledgerBook } from "../gaps/ledger.ts";
@@ -214,11 +214,14 @@ test("for some in JavaScript from the core IR: the evaluator's relational interp
   const l = lowerScalar(code, info, names, [root, between], { data: true, host: true });
   assert.deepEqual([...l.refused.values()], []);
   const r = makeRunner(code, info, { print: () => {}, names });
-  const fs = loadCoreJs(l);
+  const fs = loadCoreJs(l), shown = printed(l), small = loadPrinted(shown, undefined, shown.code, info);
+  assert.ok(Object.keys(shown.code!.nodes).length < Object.keys(code.nodes).length / 10);
   const asked: [Id, number[]][] = [[root, [4]], [root, [2]], [root, [0]], [between, [5, 3]], [between, [5, 1]], [between, [-3, 0]]];
   for (const [def, xs] of asked) {
     const fi = l.funcs.findIndex((g) => g.def === def && !g.inner);
     const want = [...(r.value(def) as (...a: number[]) => Iterable<Value>)(...xs)].map((v) => (v as Data).tag === TRUE);
     assert.deepEqual([fs[fi](...xs)], want, `${names[def]}(${xs.join(", ")})`);
+    // And given only the nodes it reaches, as a module is (C167d).
+    assert.deepEqual([small[fi](...xs)], want, `${names[def]}(${xs.join(", ")}), its nodes only`);
   }
 });

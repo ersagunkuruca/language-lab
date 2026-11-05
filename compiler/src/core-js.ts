@@ -615,12 +615,12 @@ const codeFor = (ir: CoreIR, js: string) => (solving(js) ? `JSON.parse(${JSON.st
 // The nodes the evaluator's solver reads (C167c): those a solve's use
 // reaches, through any id a node holds, and those of the lambdas a printed
 // closure carries. spacetime's one solve reads 15 of its 39,966 nodes
-// (5.2 MB of them). A derivative or `for some` is given a function made
-// anywhere, so a program with one gets all of them.
+// (5.2 MB of them). A derivative or `for some` looks inside the function
+// it is given, a printed closure carrying its lambda, so it reads what that
+// reaches, and the derivative's own definition what it reaches (C167d).
 export function solverCode(ir: CoreIR, js: string): Code {
-  if (/R\.rt\("(exists"|derive:)/.test(js)) return { nodes: ir.code.nodes, defs: ir.code.defs };
   const nodes = ir.code.nodes as Record<string, unknown>;
-  const roots = [...js.matchAll(/R\.rt\("(?:solve|solveAll):([^"]*)"/g), ...js.matchAll(/\\?"lambda\\?":\\?"([^"\\]*)/g)].map((m) => JSON.parse(`"${m[1]}"`) as string);
+  const roots = [...js.matchAll(/R\.rt\("(?:solve|solveAll|derive):([^"]*)"/g), ...js.matchAll(/\\?"lambda\\?":\\?"([^"\\]*)/g)].map((m) => JSON.parse(`"${m[1]}"`) as string);
   const seen = new Set<string>(roots.filter((r) => r in nodes)), todo = [...seen];
   const walk = (v: unknown): void => {
     if (typeof v === "string") { if (v in nodes && !seen.has(v)) { seen.add(v); todo.push(v); } }
@@ -633,6 +633,9 @@ export function solverCode(ir: CoreIR, js: string): Code {
   const owner = ownerOfTypeParts(ir.code);
   const add = (id: string | undefined) => { if (id && id in nodes && !seen.has(id)) { seen.add(id); todo.push(id); } };
   for (const d of ir.info.implementations?.values() ?? []) add(d);
+  // A derivative's rules name the builtins they differentiate by id
+  // (builtin.pow), not through a node, so it gets them all.
+  if (/R\.rt\("derive:/.test(js)) for (const id of Object.keys(nodes)) if (id.startsWith("builtin.")) add(id);
   for (let before = -1; before !== seen.size; ) {
     before = seen.size;
     while (todo.length) walk(nodes[todo.pop()!]);
