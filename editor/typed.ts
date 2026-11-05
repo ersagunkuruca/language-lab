@@ -11,7 +11,7 @@ import type { Names, Notation, Presentation } from "../ters/src/presentation.ts"
 import blocksStyle from "../ters/styles/blocks.json" with { type: "json" };
 import { fillings, implementationKey, implementationOf, infer as check, type Filling, type Info, type Options } from "../ters/src/lang/infer.ts";
 import { CheckCache } from "../ters/src/lang/check-cache.ts";
-import { isCall, isPublished, isUse, useNode, useTarget, type Call, type Use } from "../ters/src/model.ts";
+import { isCall, isPublished, isUse, isBound, useTarget, type Call, type Use } from "../ters/src/model.ts";
 import { answerKeys } from "../ters/src/lang/ports.ts";
 import { LIBRARY, PRELUDE, TREES } from "../ters/src/lang/library.ts";
 import { B } from "../ters/src/prelude.ts";
@@ -36,9 +36,10 @@ import { nfc } from "../ters/src/lang/border.ts";
 // A copy of use `n` of `target` with its given ports `given`: its bound
 // ports through `bind` and its body through `go`, when it has them. A use
 // that gives its ports as a tuple (L211) has neither.
-function useCopy(add: (n: NodeData) => Id, target: Id, given: Record<string, Id>, n: Use, go: (id: Id) => Id, bind: (id: Id) => Id = go): Omit<Use, "id"> {
-  if (!n.binds || n.body === undefined) return { kind: "call", fn: add({ kind: "ref", target }), given } as Omit<Use, "id">;
-  return useNode(add, target, given, Object.fromEntries(Object.entries(n.binds).map(([k, b]) => [k, bind(b)])), go(n.body));
+function useCopy(add: (n: NodeData) => Id, target: Id, given: Record<string, Id>, n: Use, go: (id: Id) => Id, bind: (id: Id) => Id = go): NodeData {
+  if (!isBound(n)) return { kind: "call", fn: add({ kind: "ref", target }), given };
+  const binds = Object.fromEntries(Object.entries(n.binds).map(([k, b]) => [k, bind(b)])), body = go(n.body);
+  return { kind: "call", fn: add({ kind: "ref", target }), given, binds, body };
 }
 
 // A builtin's own type (std.ts SIGS), made once per check of the program:
@@ -1632,7 +1633,7 @@ export function turnAround(code: Code, names: Names, info: Info, call: Id, k: nu
   const fn = freshId();
   const given: Record<string, Id> = { out: n.args[k] };
   t.params.forEach((q, i) => { if (i !== k) given[q] = n.args[i]; });
-  const next = replace(code, call, () => ({ kind: "call", fn, given }) as Omit<Use, "id">);
+  const next = replace(code, call, (): NodeData => ({ kind: "call", fn, given }));
   next.nodes[fn] = { id: fn, kind: "ref", target: t.def.id };
   // A search that can't get from the result back to this input (split:
   // nothing gives sum), said as what it means.

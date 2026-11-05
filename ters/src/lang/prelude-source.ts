@@ -9,7 +9,7 @@ import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { library } from "./programs.ts";
-import { LITERAL_V, FILE_OPS, NEXT_LINE_OP, WRITE_LINE_OP, NEXT_BYTES_OP, ADD_BYTES_OP, ZONE_OPS, ABORT_OP, ARITH, CELL_OPS, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, TICKET_V, AWAIT_OP, START_TIMER_OP, NOW_OP, WAIT_OP, BRANCH_V, DUAL_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, DIVISION_V, SHOWN_V, BITS_V, WORD_SIZES, WORD_V, EXTENDED_V, ALGEBRAIC_OPS, REAL_OPS, CHECK_OP, RANDOM_OP, QUEUE_V, PRIORITY_QUEUE_V, MATRIX_V, TENSOR_V, BYTES_V, JSON_V, DATE_V, TIME_OF_DAY_V, INSTANT_V, EMBEDDING_V, STATE_OPS, PIPE_OPS, std } from "./std.ts";
+import { LITERAL_V, FILE_OPS, NEXT_LINE_OP, WRITE_LINE_OP, NEXT_BYTES_OP, ADD_BYTES_OP, ZONE_OPS, ABORT_OP, ARITH, CELL_OPS, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, TICKET_V, AWAIT_OP, START_TIMER_OP, NOW_OP, WAIT_OP, BRANCH_V, DUAL_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, DIVISION_V, SHOWN_V, BITS_V, WORD_SIZES, WORD_V, EXTENDED_V, ALGEBRAIC_OPS, REAL_OPS, CHECK_OP, RANDOM_OP, QUEUE_V, PRIORITY_QUEUE_V, MATRIX_V, LU_FACTORS_V, TENSOR_V, BYTES_V, JSON_V, DATE_V, TIME_OF_DAY_V, INSTANT_V, EMBEDDING_V, STATE_OPS, PIPE_OPS, std } from "./std.ts";
 
 export function buildPrelude(): Module {
   const k = new Lang();
@@ -1715,6 +1715,46 @@ export function buildPrelude(): Module {
     k.if(k.call(S.and, iSame(r, c), iSame(r, k.call(length, v))),
       k.call(backSubstituted, k.call(eliminated, k.call(map, k.call(zipped, k.call(rowsOf, m), v), k.fn(["pair"], (p) => entry(p, (row, b) => k.call(append, row, k.call(CONS, b, k.x(NIL))), ["row", "b"]))), r)),
       k.call(ABORT_OP, texts(k.lit("solved: a "), sizeText(r, c), k.lit(" matrix and a vector of "), k.call(INT_OPS.show, k.call(length, v)), k.lit("; it needs a square matrix and one item per row"))))));
+  // Elimination kept (L44g): `factored` does solved's elimination once and
+  // keeps what it did, LAPACK's getrf: the pivots in the order taken, each
+  // pivot's row (U), and the multiple of it taken off each row below (L),
+  // by that row's place in the matrix. `solved with` then does to a vector
+  // what elimination did to the matrix's last column (getrs), and reads
+  // the triangle back as solved does: one elimination for many vectors.
+  const factorsOf = k.def("factors of rows");
+  const placed = (pr: Id, f: (place: Id, row: Id) => Id) => entry(pr, f, ["place", "row"]);
+  k.define(factorsOf, k.fn(["rows", "count"], (rs, n) => k.if(iLess(n, k.int(1)), k.call(LU_FACTORS_V, k.x(NIL), k.x(NIL), k.x(NIL)),
+    k.match(k.call(sortBy, rs, k.fn(["pair"], (pr) => placed(pr, (_i, row) => k.call(B.sub, k.lit(0), k.call(S.abs, headOr0(row)))))), [
+      { variant: NIL, names: [], body: () => k.call(LU_FACTORS_V, k.x(NIL), k.x(NIL), k.x(NIL)) },
+      { variant: CONS, names: ["pivot", "others"], body: ([pp, others]) => placed(pp, (i, p) => k.let("pivot first", headOr0(p), (a) =>
+        k.let("factors", k.call(map, others, k.fn(["pair"], (pr) => placed(pr, (j, row) => k.call(PAIR_V, j, k.call(B.div, headOr0(row), a))))), (fs) =>
+          k.match(k.call(factorsOf, k.call(map, others, k.fn(["pair"], (pr) => placed(pr, (j, row) => k.let("factor", k.call(B.div, headOr0(row), a), (f) =>
+            k.call(PAIR_V, j, k.call(map, k.call(zipped, tailOf(row), tailOf(p)), k.fn(["pair"], (xy) => entry(xy, (x, y) => k.call(B.sub, x, k.call(B.mul, f, y)), ["x", "y"])))))))), k.call(INT_OPS.sub, n, k.int(1))), [
+            { variant: LU_FACTORS_V, names: ["pivots", "uppers", "multipliers"], body: ([ps, us, ms]) => k.call(LU_FACTORS_V, k.call(CONS, i, ps), k.call(CONS, p, us), k.call(CONS, fs, ms)) },
+          ])))) },
+    ]))));
+  const factored = def("factored", ["matrix"], (m) => matOf(m, (r, c) => k.if(iSame(r, c), k.call(factorsOf, k.call(numbered, k.call(rowsOf, m)), r),
+    k.call(ABORT_OP, texts(k.lit("factored: a "), sizeText(r, c), k.lit(" matrix; it needs a square one"))))));
+  // The vector's item at a place, among (place, item) pairs.
+  const atPlace = k.def("item at place");
+  k.define(atPlace, k.fn(["pairs", "place"], (ps, i) => k.match(ps, [
+    { variant: NIL, names: [], body: () => k.lit(0) },
+    { variant: CONS, names: ["pair", "rest"], body: ([pr, rest]) => entry(pr, (j, x) => k.if(iSame(j, i), x, k.call(atPlace, rest, i)), ["place", "item"]) },
+  ])));
+  // Forward: each pivot's item, the rows below it less its multiple.
+  const forward = k.def("forward substituted");
+  k.define(forward, k.fn(["pivots", "multipliers", "vector"], (ps, ms, bs) => k.match(ps, [
+    { variant: NIL, names: [], body: () => k.x(NIL) },
+    { variant: CONS, names: ["pivot", "later"], body: ([i, later]) => k.let("y", k.call(atPlace, bs, i), (y) => k.match(ms, [
+      { variant: NIL, names: [], body: () => k.call(CONS, y, k.x(NIL)) },
+      { variant: CONS, names: ["below", "more"], body: ([below, more]) => k.call(CONS, y, k.call(forward, later, more,
+        k.call(map, below, k.fn(["pair"], (pr) => entry(pr, (j, f) => k.call(PAIR_V, j, k.call(B.sub, k.call(atPlace, bs, j), k.call(B.mul, f, y))), ["place", "factor"]))))) },
+    ])) },
+  ])));
+  const solvedWith = def("solved with", ["factors", "vector"], (lu, v) => k.match(lu, [{ variant: LU_FACTORS_V, names: ["pivots", "uppers", "multipliers"], body: ([ps, us, ms]) =>
+    k.if(iSame(k.call(length, ps), k.call(length, v)),
+      k.call(backSubstituted, k.call(map, k.call(zipped, us, k.call(forward, ps, ms, k.call(numbered, v))), k.fn(["pair"], (p) => entry(p, (row, y) => k.call(append, row, k.call(CONS, y, k.x(NIL))), ["row", "y"])))),
+      k.call(ABORT_OP, texts(k.lit("solved with: factors of a "), sizeText(k.call(length, ps), k.call(length, ps)), k.lit(" matrix and a vector of "), k.call(INT_OPS.show, k.call(length, v))))) }]));
   // The determinant and the inverse (L44e), at Float64. The determinant is
   // the elimination's pivots multiplied, the sign turned for each row a
   // pivot was moved past (partial pivoting, as LAPACK's getrf); a 0 pivot
@@ -2605,7 +2645,7 @@ export function buildPrelude(): Module {
     embed("float64 in complex", k.x(asC)),
     embed("float64 in dual", k.x(asD)),
   ];
-  const offered: Id[] = [...embeddings, extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, spaced, optionalParens, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, asD, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, sortWith, collated, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, determinant, inverted, leastSquares, tensorOf, tensorShape, tensorItems, rank, tensorSize, tensorEntry, tensorMap, tensorZipWith, reshaped, contracted, transposedBy, traced, bytesOf, byteItems, byteCount, byteAt, utf8Of, textOfUtf8, base64Of, bytesOfBase64, hexOf, bytesOfHex, jsonPrinted, jsonIndented, jsonRead, jsonField, jsonAsNumber, jsonAsText, jsonAsBool, jsonAsList, csvPrinted, csvRows, csvRecords, csvOfRecords, dateOf, dateYear, dateMonth, dateDay, leapYear, daysInMonth, dayNumber, dateOfDay, weekday, addedDays, daysBetween, dateText, dateRead, timeOf, timeHour, timeMinute, timeSecond, secondsOfDay, timeOfSeconds, timeText, timeRead, secondsD, minute, hour, day, instantOf, secondsSince, laterBy, durationBetween, instantAt, dateAt, timeAt, instantText, instantRead, offsetText, instantTextIn, instantTextInZone, instantInZone, durationText, durationRead, currentInstant, waitFor, withState, changeState, withOpenFile, piped, ticketId, ...wordMakers, anyOf, together, race, within, simulated, near];
+  const offered: Id[] = [...embeddings, extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, spaced, optionalParens, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, fraction, whole, toNum, asC, asD, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, tableProduct, complexTable, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, slopeAt, dualTable, asFixed, fixedF, sqrtX, sort, sortBy, sortWith, collated, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, factored, solvedWith, determinant, inverted, leastSquares, tensorOf, tensorShape, tensorItems, rank, tensorSize, tensorEntry, tensorMap, tensorZipWith, reshaped, contracted, transposedBy, traced, bytesOf, byteItems, byteCount, byteAt, utf8Of, textOfUtf8, base64Of, bytesOfBase64, hexOf, bytesOfHex, jsonPrinted, jsonIndented, jsonRead, jsonField, jsonAsNumber, jsonAsText, jsonAsBool, jsonAsList, csvPrinted, csvRows, csvRecords, csvOfRecords, dateOf, dateYear, dateMonth, dateDay, leapYear, daysInMonth, dayNumber, dateOfDay, weekday, addedDays, daysBetween, dateText, dateRead, timeOf, timeHour, timeMinute, timeSecond, secondsOfDay, timeOfSeconds, timeText, timeRead, secondsD, minute, hour, day, instantOf, secondsSince, laterBy, durationBetween, instantAt, dateAt, timeAt, instantText, instantRead, offsetText, instantTextIn, instantTextInZone, instantInZone, durationText, durationRead, currentInstant, waitFor, withState, changeState, withOpenFile, piped, ticketId, ...wordMakers, anyOf, together, race, within, simulated, near];
   // Each number's own show, from before the generic one showed every number
   // (L153, L156): kept so programs saved before still open, not offered.
   const perTypeShows = [showF, showC, showD, showX];
@@ -2752,6 +2792,8 @@ export function buildPrelude(): Module {
     [matrixSum]: "The two matrices added item by item. Different sizes stop the program, with both sizes.",
     [matrixProduct]: "The first matrix times the second: row by column, for any number type. The first's columns must be the second's rows, or the program stops with both sizes.",
     [matrixTimesVector]: "The matrix times the list as a column: one item per row. The list must have one item per column, or the program stops with both sizes.",
+    [factored]: "A square Float64 matrix's LU factors, its Gaussian elimination with partial pivoting done once and kept, for solved with: factor once, then solve for many vectors. A singular matrix's factors have a 0 pivot, and solved with has no answer with them.",
+    [solvedWith]: "The list x with matrix times vector(m, x) = b, from m's factors (factored): the elimination solved does, done once for all the vectors solved this way. No answer when the matrix is singular (a pivot is 0).",
     [solved]: "The list x with matrix times vector(m, x) = b, for a square Float64 matrix, by Gaussian elimination with partial pivoting. No answer when the matrix is singular (a pivot is 0).",
     [determinant]: "The determinant of a square Float64 matrix: 0 when it is singular. Other sizes stop the program.",
     [jsonRead]: "The Json value a JSON text spells (RFC 8259), the other way from json printed: json read(\"[1, true]\") is json list([json number(1), json bool(true)]). Stops on text that isn't JSON, saying where.",

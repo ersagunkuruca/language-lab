@@ -19,11 +19,15 @@ export type Node =
   // A call (L130d): `fn` is any expression, a def or field by a ref to it.
   // With `args` it gives every input by position. With `given` it is a use
   // of a relation in one direction (src/lang/solve.ts): `given` ports get
-  // their values from expressions, `binds` ports are solved for and bound
-  // to binders in scope in `body`, Choice when not unique. Read the two
+  // their values from expressions, and the ports not given are its value,
+  // their tuple or the one, Choice when not unique (L211). Read the two
   // through isCall/Call and isUse/Use.
   | { id: Id; kind: "call"; fn: Id; args: Id[]; given?: undefined; binds?: undefined; body?: undefined }
-  | { id: Id; kind: "call"; fn: Id; args?: undefined; given: Record<string, Id>; binds?: Record<string, Id>; body?: Id }
+  | { id: Id; kind: "call"; fn: Id; args?: undefined; given: Record<string, Id>; binds?: undefined; body?: undefined }
+  // A use with the ports it solves for bound to binders in scope in `body`
+  // (Bound below): only for the passes that read ports.ts `filled`, and a
+  // saved use whose ports aren't known (SHAPE_STEPS).
+  | { id: Id; kind: "call"; fn: Id; args?: undefined; given: Record<string, Id>; binds: Record<string, Id>; body: Id }
   // `results`: binders naming the function's result ports, when it gives
   // several (PORTS-2026-11-01.md, L128b): its body gives a tuple of that
   // many, and each binder names one part. Names only: nothing refers to
@@ -124,7 +128,7 @@ export type Use = Extract<NodeOf<"call">, { given: Record<string, Id> }>;
 // makes for the passes whose slots are binders, and what a saved use whose
 // ports aren't known keeps (SHAPE_STEPS). A reader that takes either asks
 // isBound, so the model's use can drop the two fields (L211 l3).
-export type Bound = Use & { binds: Record<string, Id>; body: Id };
+export type Bound = Extract<Use, { body: Id }>;
 export const isBound = (n: Node | undefined | null): n is Bound => isUse(n) && n.body !== undefined;
 export const bindsOf = (n: Use): Record<string, Id> => (isBound(n) ? n.binds : {});
 export function bodyOf(n: Use): Id {
@@ -177,9 +181,6 @@ export const useTarget = (nodes: Record<Id, Node>, u: Use): Id => {
   const f = nodes[u.fn];
   return f?.kind === "ref" ? f.target : u.fn;
 };
-// A new use of `target`: adds the ref to it through `add`.
-export const useNode = (add: (n: NodeData) => Id, target: Id, given: Record<string, Id>, binds: Record<string, Id>, body: Id): Omit<Use, "id"> =>
-  ({ kind: "call", fn: add({ kind: "ref", target }), given, binds, body });
 // An interface's field with results (POLAR.md, L97c): a field whose type
 // is a function and whose ports are named, its inputs first and then its
 // results (L128d3). Which positions are its inputs and which its results;
@@ -296,7 +297,7 @@ export function mapIds(n: Node, f: (id: Id) => Id): Node {
     case "lit": return n.of ? { ...n, id: f(n.id), of: f(n.of) } : { ...n, id: f(n.id) };
     case "binder": case "builtin": case "hole": return { ...n, id: f(n.id) };
     case "ref": return { ...n, id: f(n.id), target: f(n.target) };
-    case "call": return n.given ? { ...n, id: f(n.id), fn: f(n.fn), given: rec(n.given), ...(isBound(n) && { binds: rec(n.binds), body: f(n.body) }) } : { ...n, id: f(n.id), fn: f(n.fn), args: n.args.map(f) };
+    case "call": return isBound(n) ? { ...n, id: f(n.id), fn: f(n.fn), given: rec(n.given), binds: rec(n.binds), body: f(n.body) } : n.given ? { ...n, id: f(n.id), fn: f(n.fn), given: rec(n.given) } : { ...n, id: f(n.id), fn: f(n.fn), args: n.args.map(f) };
     case "lambda": return { ...n, id: f(n.id), params: n.params.map(f), body: f(n.body), ...(n.results ? { results: n.results.map(f) } : {}) };
     case "def": return { ...n, id: f(n.id), body: n.body === null ? null : f(n.body), ...(n.way ? { way: f(n.way) } : {}) };
     case "typedef": return { ...n, id: f(n.id), params: n.params.map(f), variants: n.variants.map(f), ...(n.row ? { row: n.row.map(f) } : {}) };
