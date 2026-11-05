@@ -21,6 +21,8 @@ import { pathToFileURL } from "node:url";
 import { compile } from "../../compiler/src/compile.ts";
 import { hostOpsOf, loadCoreJs, lowerCore } from "../../compiler/src/core-js.ts";
 import { $setPrint } from "../../compiler/src/runtime.js";
+import { lowerScalar } from "../../compiler/src/scalar.ts";
+import { emitWasm, runMain as runWasm } from "../../compiler/src/wasm.ts";
 
 function program() {
   const k = new Lang();
@@ -126,4 +128,21 @@ test("compiled JavaScript asks the same host, checked at the same border", async
   assert.deepEqual(await run(`${op("battery")}: () => 0.5, ${op("name of")}: (id) => "phone " + id, ${op("ready")}: () => true`, "main"), ["phone 7 at 50", "ready"]);
   assert.deepEqual(await run(`${op("name of")}: () => 42`, "careful"), ["aborted: the host's name of gave 42, not a text"]);
   assert.deepEqual(await run(`${op("battery")}: () => 1`, "careful"), [`aborted: hosts/js.js has no answer for name of (${p.dev.op["name of"]})`]);
+});
+
+// WebAssembly (L69b2): each operation nothing handles is an import from
+// "world" that hosts/js.js answers, at the same border.
+test("WebAssembly asks the same host, checked at the same border (L69b2)", async () => {
+  const p = program();
+  const lowered = lowerScalar(p.code, p.info, p.names, [p.main, p.careful], { data: true, hosted: new Set([p.dev.def]) });
+  const m = emitWasm(lowered, { hosts: hostOpsOf(p.code, p.names) });
+  const run = async (hosts: Record<string, (...xs: unknown[]) => unknown>, def: Id) => {
+    const out: string[] = [];
+    const code = await runWasm(lowered, m, p.names[def], [], { print: (s) => out.push(s), hosts, world: { error: (s: string) => out.push(`error: ${s}`) } as never });
+    return [...out, ...(code ? [`exit ${code}`] : [])];
+  };
+  assert.deepEqual(await run({ [p.dev.op.battery]: () => 0.5, [p.dev.op["name of"]]: (id) => `phone ${String(id)}`, [p.dev.op.ready]: () => true }, p.main), ["phone 7 at 50", "ready"]);
+  assert.deepEqual(await run({ [p.dev.op["name of"]]: () => 42 }, p.careful), ["aborted: the host's name of gave 42, not a text"]);
+  assert.deepEqual(await run({ [p.dev.op.battery]: () => 1 }, p.careful), [`aborted: hosts/js.js has no answer for name of (${p.dev.op["name of"]})`]);
+  assert.deepEqual(await run({ [p.dev.op.battery]: () => NaN, [p.dev.op["name of"]]: () => "x", [p.dev.op.ready]: () => true }, p.main), ["error: the host's battery gave null, not a finite number", "exit 1"]);
 });
