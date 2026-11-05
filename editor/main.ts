@@ -26,7 +26,7 @@ import { BOOL, CHECK, CONS, onTodaysIds, SOME, TRUE } from "../ters/src/lang/std
 import { CHOICE, DIVERGE, WORLD, showIn, type Type } from "../ters/src/lang/types.ts";
 import { renderBlocks } from "../ters/src/lang/render.ts";
 import { needsHandling, OutOfSteps, type Data, type Value } from "../ters/src/lang/run.ts";
-import type { Profile, Stuck } from "./runWorker.ts";
+import type { Profile, StopAt, Stuck } from "./runWorker.ts";
 import { hostSkeleton } from "../ters/src/lang/hosts.ts";
 import { trace, type Trace } from "../ters/src/lang/trace.ts";
 import * as T from "./typed.ts";
@@ -166,7 +166,7 @@ export interface UI {
   newKind: "function" | "value" | "type" | "effect" | "interface";
   query: string;
   refused: boolean;
-  output: { def: Id; lines: string[]; error?: string; running?: boolean; stuck?: Stuck; profile?: Profile; compiled?: boolean; answers?: LogEntry[]; replayed?: boolean; paused?: number } | null;
+  output: { def: Id; lines: string[]; error?: string; running?: boolean; stuck?: Stuck; profile?: Profile; compiled?: boolean; answers?: LogEntry[]; replayed?: boolean; paused?: number; at?: StopAt } | null;
   // What Run gives a program that reads standard input, by program (I168).
   stdin?: Record<string, string>;
   // Values on the wires shown a step at a time (E232d): only the first
@@ -1813,6 +1813,9 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
       box.append(h("pre", { class: "text out", role: "log", "aria-live": "polite", "aria-label": `What ${namer.name(ui.def)} printed` }, ui.output.lines.join("\n") || (going ? "Running…" : "(no output)")));
       if (ui.output.error) box.append(h("p", { class: "status-line bad", role: "alert" }, ui.output.error));
       if (ui.output.stuck) box.append(stuckView(ui.output.stuck));
+      // Where compiled main stopped (C143f): its definition opened, the node selected.
+      const at = ui.output.at;
+      if (at && doc.code.nodes[at.def]) box.append(h("button", { class: "btn", type: "button", "data-act": "goto-stop", "data-def": at.def, "data-target": at.node }, at.def === ui.def ? "Show where it stopped" : `Show where it stopped, in ${namer.name(at.def)}`));
       if (ui.output.profile) box.append(profileView(namer, ui.output.profile, doc.code, pick));
       if (ui.output.paused !== undefined) box.append(h("p", { class: "hint", role: "status" }, `Paused after answer ${ui.output.paused} of ${ui.output.answers?.filter((e) => !e.write).length ?? 0}: what it printed by then. Step on, or Run again with these answers for the rest.`));
       if (ui.output.answers?.some((e) => !e.write)) box.append(answersView(ui.output.answers, ui.output.replayed, ui.output.paused));
@@ -2329,6 +2332,7 @@ document.addEventListener("click", (e) => {
     if (a === "inline") return toggleInline(act.dataset.target!);
     if (a === "named") return toggleNamed(act.dataset.target!);
     if (a === "goto-node") return select(act.dataset.target!);
+    if (a === "goto-stop") { const d = act.dataset.def!, n = act.dataset.target!; if (d !== ui.def) openDef(d); return select(doc.code.nodes[n] ? n : null); }
     // The form is in the side panel's first tab: show it, whichever tab
     // (the Guide, on a first visit) was open.
     if (a === "new-def") { ui.mode = ui.mode === "new-def" ? null : "new-def"; if (ui.mode) { ui.panel = "node"; if (onePane()) ui.pane = "side"; } render(); document.getElementById("f-def-name")?.focus(); return; }
