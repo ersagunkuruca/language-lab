@@ -69,7 +69,7 @@ import { ALGEBRAIC_OPS, ALGEBRAIC_V, ARRAY_OPS, PAIR_V, ofAlg, toAlg } from "./s
 import * as Alg from "./algebraic.ts";
 import { realRoots, type Algebraic } from "./algebraic.ts";
 import { lowest, type Q as Frac } from "./poly.ts";
-import { CELL_OPS, COMPARE, CONS, FALSE, INT_OPS, IO, NIL, NONE, RANDOM_OP, RATIO, S, SET, SHOW_ANY, CASE_NAME, SIGS, SOME, STD_IMPL, STD_MANY, stdNames, TEXT_OPS, TRUE } from "./std.ts";
+import { CELL_OPS, COMPARE, CONS, FALSE, INT_OPS, IO, NIL, NONE, RANDOM_OP, S, SET, SHOW_ANY, CASE_NAME, SIGS, SOME, STD_IMPL, STD_MANY, stdNames, TEXT_OPS, TRUE } from "./std.ts";
 import { add as intAdd, divides, intLit, show as intShow, lowestTerms, mul as intMul, neg as intNeg, squareRoots, sub as intSub, type Int } from "./int.ts";
 import { fieldIndex, fieldPath, setPath } from "./records.ts";
 import { CHOICE, DIVERGE, INT, type Type } from "./types.ts";
@@ -858,6 +858,19 @@ export function interpreter(given: Code, opts: Options = {}) {
     const d = preludeDef(name), n = d ? nodes[d] : undefined;
     if (n?.kind === "def" && n.body) fractionOps.set(n.body, name);
   }
+  // Rational's case, read off negate fraction's own match (L207f2), so
+  // this file names no number type of the library's.
+  const ratio = (() => {
+    const d = preludeDef("negate fraction"), n = d ? nodes[d] : undefined;
+    const todo = n?.kind === "def" && n.body ? [n.body] : [];
+    for (let id; (id = todo.pop());) {
+      const x = nodes[id];
+      if (!x) continue;
+      if (x.kind === "arm") return x.variant;
+      todo.push(...children(x));
+    }
+    return undefined;
+  })();
   // The grammar pieces (L70a), by their definitions' bodies.
   const grammarOps = new Map<Id, GrammarOp>();
   for (const name of GRAMMAR_OPS) {
@@ -1411,7 +1424,7 @@ export function interpreter(given: Code, opts: Options = {}) {
     const sides = [...args, out];
     const value = (t: Term, s: State): Q | undefined => {
       const g = ground(t, s);
-      return isData(g) && g.tag === RATIO ? [g.fields[0] as Int, g.fields[1] as Int] : undefined;
+      return isData(g) && g.tag === ratio ? [g.fields[0] as Int, g.fields[1] as Int] : undefined;
     };
     const known = (s: State) => sides.map((t) => value(t, s));
     return wait({
@@ -1421,7 +1434,7 @@ export function interpreter(given: Code, opts: Options = {}) {
         const at = i < 0 ? sides.length - 1 : i;
         const r = solveFraction(op, at, xs);
         // Free: every value fits (0 · x = 0), so the side stays unknown.
-        return r === "free" ? succeed(s) : r ? eq(sides[at], dataT(RATIO, r))(s) : null;
+        return r === "free" ? succeed(s) : r ? eq(sides[at], dataT(ratio!, r))(s) : null;
       },
     });
   }
