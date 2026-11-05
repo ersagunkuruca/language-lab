@@ -3,12 +3,9 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { compile } from "../../compiler/src/compile.ts";
-import { $setPrint } from "../../compiler/src/runtime.js";
+import { compiledDefs } from "../../compiler/src/core-js.ts";
 import type { Id } from "../src/model.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
@@ -51,11 +48,8 @@ test("L164c: a match on values, by Text and by number, evaluated and compiled", 
   runMain(p.code, p.info, p.main, { print: (s) => ran.push(s), names: p.names });
   const want = ["2", "3", "0", '"two"', '"many"'];
   assert.deepEqual(ran, want);
-  const path = join(mkdtempSync(join(tmpdir(), "literal-match-")), "out.mjs");
-  writeFileSync(path, compile(p.code, p.info, p.names, { runtime, exports: ["main"] }));
   const compiled: string[] = [];
-  $setPrint((s: string) => compiled.push(s));
-  try { (await import(pathToFileURL(path).href)).defs.main(); } finally { $setPrint((s: string) => console.log(s)); }
+  compiledDefs(p.code, p.info, p.names, ["main"], { print: (s: string) => compiled.push(s) })["main"]();
   assert.deepEqual(compiled, want);
   // Backwards too: which names give 2.
   const param = (fn: Id) => ((p.code.nodes[(p.code.nodes[fn] as { body: Id }).body] as { params: Id[] }).params[0]);

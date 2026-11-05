@@ -4,12 +4,9 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { compile } from "../../compiler/src/compile.ts";
-import { $setPrint } from "../../compiler/src/runtime.js";
+import { compiledDefs } from "../../compiler/src/core-js.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
@@ -63,11 +60,8 @@ test("L162b: fields mapped and fields listed, evaluated and compiled", async () 
   const ran: string[] = [];
   runMain(code, info, main, { print: (s) => ran.push(s), names });
   assert.deepEqual(ran, want);
-  const path = join(mkdtempSync(join(tmpdir(), "fields-")), "out.mjs");
-  writeFileSync(path, compile(code, info, names, { runtime, exports: ["main"] }));
   const compiled: string[] = [];
-  $setPrint((s: string) => compiled.push(s));
-  try { (await import(pathToFileURL(path).href)).defs.main(); } finally { $setPrint((s: string) => console.log(s)); }
+  compiledDefs(code, info, names, ["main"], { print: (s: string) => compiled.push(s) })["main"]();
   assert.deepEqual(compiled, want);
 });
 

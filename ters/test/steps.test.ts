@@ -15,10 +15,7 @@ import { stepsOf } from "../src/lang/steps.ts";
 import { CONS, NIL, S, UNIT, UNIT_V } from "../src/lang/std.ts";
 import { showType } from "../src/lang/types.ts";
 import { lowerCore, runCoreMain } from "../../compiler/src/core-js.ts";
-import { compile } from "../../compiler/src/compile.ts";
-import { $setPrint } from "../../compiler/src/runtime.js";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { compiledDefs } from "../../compiler/src/core-js.ts";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -35,11 +32,8 @@ function program(build: (k: Lang) => Id) {
   const run = () => { runMain(code, info, main, { print: (s) => printed.push(s), names }); return printed; };
   // Compiled JS (compile.ts) and JS from the core IR (L229d).
   const compiled = async () => {
-    const file = join(mkdtempSync(join(tmpdir(), "steps-")), "main.mjs");
-    writeFileSync(file, compile(code, info, names, { runtime, exports: ["main"] }));
     const out: string[] = [];
-    $setPrint((s: string) => out.push(s));
-    try { (await import(pathToFileURL(file).href)).defs.main(); } finally { $setPrint((s: string) => console.log(s)); }
+    compiledDefs(code, info, names, ["main"], { print: (s: string) => out.push(s) })["main"]();
     return out;
   };
   const core = () => {
