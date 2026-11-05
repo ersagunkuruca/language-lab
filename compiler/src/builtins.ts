@@ -157,7 +157,7 @@ export const TARGETS: Record<Id, Target> = {
   // Algebraic numbers (EXACT-REALS.md): std.ts's implementation, exact,
   // on BigInt polynomials.
   ...Object.fromEntries(Object.entries(ALGEBRAIC_OPS).map(([k, id]): [Id, Target] => [id, {
-    js: ["divide", "root", "sqrt", "asFraction"].includes(k) ? "partial" : "impl",
+    js: ["divide", "root", "sqrt", "fractionParts"].includes(k) ? "partial" : "impl",
     scalar: no("an Algebraic is a polynomial with BigInt coefficients: the scalar profile is Float64s"),
   }])),
   // Reals (EXACT-REALS.md step 4): std.ts's implementation, on BigInt.

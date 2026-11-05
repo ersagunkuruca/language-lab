@@ -1099,7 +1099,6 @@ export const HASH_SET_OPS = {
 // Algebraic's operations (src/lang/algebraic.ts). The one + − · −x <
 // resolves to these at Algebraic (arith.ts); a literal there is `fraction`.
 const alg: Type = { t: "con", id: "std.algebraic", args: [] };
-const rational: Type = { t: "con", id: "std.rational", args: [] };
 export const toAlg = (v: { fields: unknown[] }): A.Algebraic => ({ p: itemsOf(v.fields[0] as { tag: Id; fields: unknown[] }).map((c) => BigInt(c as I.Int)), k: Number(v.fields[1]) });
 export const ofAlg = (x: A.Algebraic) => ({ tag: ALGEBRAIC_V, fields: [listOf(x.p.map(I.norm)), x.k] });
 const one = (f: (...xs: A.Algebraic[]) => A.Algebraic) => (...vs: { fields: unknown[] }[]) => ofAlg(f(...vs.map(toAlg)));
@@ -1117,11 +1116,12 @@ export const ALGEBRAIC_OPS = {
   // top/bottom, which a literal at Algebraic becomes (the checker has made
   // sure bottom isn't 0). Not offered: `as algebraic` is.
   fraction: builtin("algebraic.fraction", "algebraic fraction", pure([int, int], alg), (n: I.Int, d: I.Int) => ofAlg(A.fraction(BigInt(n), BigInt(d)))),
-  ofRational: builtin("algebraic.ofRational", "as algebraic", pure([rational], alg), (r: { fields: I.Int[] }) => ofAlg(A.fraction(BigInt(r.fields[0]), BigInt(r.fields[1])))),
-  // The fraction it is, when it is one: √2 · √2 is 2.
-  asFraction: choice("algebraic.asFraction", "as fraction", [alg], rational, (a: { fields: unknown[] }) => {
+  // The fraction it is, when it is one, as its top and bottom in lowest
+  // terms (the bottom positive): √2 · √2 is (2, 1). Not offered: the
+  // prelude's `algebraic as fraction` gives the Rational.
+  fractionParts: choice("algebraic.fractionParts", "algebraic fraction parts", [alg], { t: "con", id: PAIR, args: [int, int] }, (a: { fields: unknown[] }) => {
     const f = A.asFraction(toAlg(a));
-    return f ? [{ tag: RATIO, fields: f.map(I.norm) }] : [];
+    return f ? [{ tag: PAIR_V, fields: f.map(I.norm) }] : [];
   }),
   digits: builtin("algebraic.digits", "digits", pure([alg, int], str), (a: { fields: unknown[] }, n: I.Int) => A.digits(toAlg(a), Number(n))),
   toNumber: builtin("algebraic.toNumber", "as float64", pure([alg], num), (a: { fields: unknown[] }) => A.toNumber(toAlg(a))),
@@ -1151,7 +1151,6 @@ export const REAL_OPS = {
   neg: builtin("real.neg", "negate", pure([real], real), (a: RealData) => realOf(2, [a])),
   // top/bottom, which a literal at Real becomes, as at Algebraic.
   fraction: builtin("real.fraction", "real fraction", pure([int, int], real), (n: I.Int, d: I.Int) => realOf(0, [], n, d)),
-  ofRational: builtin("real.ofRational", "as real", pure([rational], real), (r: { fields: I.Int[] }) => realOf(0, [], r.fields[0], r.fields[1])),
   // a < b, narrowing both until they come apart, to at most 2⁻ᶠᵘᵉˡ (L88e3):
   // no answer when they are still that close, which equal Reals always are.
   less: choice("real.less", "real less than", [real, real, int], bool, (a: RealData, b: RealData, fuel: I.Int) => { const c = RL.compare(toReal(a), toReal(b), Number(fuel)); return c === null ? [] : [truth(c < 0)]; }),
