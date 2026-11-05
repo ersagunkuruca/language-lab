@@ -15,7 +15,7 @@ import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { withLibraryRepresentations } from "../src/lang/library-reps.ts";
 import { ARRAY_OPS, ArrayView, CONS, INT_OPS, IO, NIL, S, SHOW_ANY, STD_IMPL, TEXT_OPS } from "../src/lang/std.ts";
-import { BytesList, bytesValue, plainBytes } from "../src/lang/bytes.ts";
+import { ItemsList, bytesValue, plainBytes } from "../src/lang/bytes.ts";
 import { REQUEST_V, RESPONSE_V } from "../src/lang/network.ts";
 import { nodeWorld } from "../src/lang/world.ts";
 import type { Code, Id } from "../src/model.ts";
@@ -155,9 +155,20 @@ test("bytes from the world are stored and written back as copies, with no list m
   const b = Uint8Array.from([1, 2, 3, 250]);
   const v = bytesValue(b);
   assert.deepEqual((STD_IMPL[ARRAY_OPS.of](v.fields[0]) as ArrayView).fields, [4, 1, 2, 3, 250]);
-  assert.equal((v.fields[0] as BytesList)["f"], null);
+  assert.equal((v.fields[0] as ItemsList)["f"], null);
   assert.deepEqual([...plainBytes(v)], [1, 2, 3, 250]);
   // Walked, it is the list the bytes are.
   assert.deepEqual(JSON.parse(JSON.stringify(v.fields[0])).fields[0], 1);
-  assert.deepEqual([...plainBytes({ tag: v.tag, fields: [(v.fields[0] as BytesList).fields[1]] })], [2, 3, 250]);
+  assert.deepEqual([...plainBytes({ tag: v.tag, fields: [(v.fields[0] as ItemsList).fields[1]] })], [2, 3, 250]);
+});
+
+// And on the way out (L189e3): a stored array's items are a list read
+// from a copy of them as it is walked, which `write bytes` copies out.
+test("a byte array's items cross to the world as a copy, with no list made", () => {
+  const a = STD_IMPL[ARRAY_OPS.of](bytesValue(Uint8Array.from([5, 6, 7])).fields[0]);
+  const items = STD_IMPL[ARRAY_OPS.items](a) as ItemsList;
+  assert.ok(items instanceof ItemsList);
+  assert.deepEqual([...plainBytes({ tag: "std.bytes.bytes", fields: [items] })], [5, 6, 7]);
+  assert.equal(items["f"], null);
+  assert.deepEqual(JSON.parse(JSON.stringify(items)), { tag: CONS, fields: [5, { tag: CONS, fields: [6, { tag: CONS, fields: [7, { tag: NIL, fields: [] }] }] }] });
 });
