@@ -87,8 +87,29 @@ test("a scheduler of two fibers on the steps of Yield: no Step type of its own",
   assert.equal(p.type(first), "() -[Console, e]-> Steps of Yield Unit [Console, e]");
 });
 
-test("an effect whose operations are answered now has no steps yet", () => {
-  const k = new Lang(LIBRARY.code);
-  const A = k.effect("Ask", [["ask", [], () => k.tref(UNIT)]]);
-  assert.throws(() => stepsOf(k, A.def), /can't take the steps of Ask: its operation .* isn't answered later/);
+// L229e: an effect whose operations are answered now has steps too: the
+// generated handler takes the rest, so the rest is kept only there, and a
+// handler elsewhere still answers at once.
+test("the steps of an effect answered now: Ask stepped, and answered at once elsewhere", async () => {
+  const p = program((k) => {
+    const A = k.effect("Ask", [["ask", [["question", () => k.tref("type.string")]], () => k.tref("type.string")]]);
+    const St = stepsOf(k, A.def);
+    const talk = k.def("talk");
+    k.define(talk, k.thunk(() => k.seq(say(k, k.lit("hi "), k.call(A.op.ask, k.lit("name"))), say(k, k.lit("from "), k.call(A.op.ask, k.lit("town"))))));
+    // Answered by stepping: each question's answer given to its rest.
+    const drive = k.def("drive");
+    k.define(drive, k.fn(["step"], (st) => k.match(st, [
+      { variant: St.done, names: ["value"], body: () => k.x(UNIT_V) },
+      { variant: St.v[A.op.ask], names: ["question", "rest"], body: ([q, rest]) => k.call(drive, k.call(rest, k.text(q, k.lit("?")))) },
+    ])));
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.seq(k.call(drive, k.call(St.steps, k.x(talk))),
+      k.handle(k.call(talk), [{ variant: A.op.ask, names: ["question"], body: ([q]) => k.text(q, k.lit("!")) }]))));
+    return main;
+  });
+  assert.deepEqual(p.errors, []);
+  const want = ["hi name?", "from town?", "hi name!", "from town!"];
+  assert.deepEqual(p.run(), want);
+  assert.deepEqual(await p.compiled(), want);
+  assert.deepEqual(p.core(), want);
 });

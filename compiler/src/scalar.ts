@@ -50,6 +50,7 @@
 // answer, fallback and all. n is a number written down, so the bound is
 // known when the shader is built.
 
+import { laterOps as laterOpsOf } from "../../ters/src/lang/later-ops.ts";
 import { givenInOrder } from "../../ters/src/lang/ports.ts";
 import { resolveArithmetic } from "../../ters/src/lang/arith.ts";
 import type { Code, Id, NodeOf } from "../../ters/src/model.ts";
@@ -626,13 +627,13 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   const arms = new Set(Object.values(code.nodes).flatMap((n) => (n.kind === "arm" && n.variant ? [n.variant] : [])));
   const notOwn = (n: NodeOf<"def">, td: NodeOf<"typedef">) => n.id.startsWith("std.") || (BUILTIN_EFFECTS.includes(n.id) && !td.variants.some((v) => arms.has(v)));
   const builtinOf = new Map(Object.entries(OP_OF_BUILTIN).map(([b, v]) => [v, b]));
-  const tailOps = new Map<Id, Id>();
+  const tailOps = new Map<Id, Id>(), answeredLater = laterOpsOf(code);
   // Without `host`, only the effects `hosted` names (C's hosts/c.c).
   // And the file `with open file` keeps open (L213c3), the library's.
   for (const n of opts.host ? Object.values(code.nodes) : [...opts.hosted ?? []].flatMap((e) => code.nodes[e] ?? [])) {
     if (n.kind !== "def" || !n.body || (n.id.startsWith("std.") ? !(opts.host && n.id === OPEN_FILE) : code.nodes[n.body]?.kind === "typedef" && notOwn(n, code.nodes[n.body] as NodeOf<"typedef">))) continue;
     const td = code.nodes[n.body];
-    if (td?.kind === "typedef" && td.effect && td.variants.length && td.variants.every((v: Id) => { const x = code.nodes[v] as NodeOf<"variant">; return x.returns && !x.later; })) td.variants.forEach((v: Id) => tailOps.set(v, n.id));
+    if (td?.kind === "typedef" && td.effect && td.variants.length && td.variants.every((v: Id) => { const x = code.nodes[v] as NodeOf<"variant">; return x.returns && !answeredLater.has(v); })) td.variants.forEach((v: Id) => tailOps.set(v, n.id));
   }
   // Random too, where the program handles it (Pig's `recorded into`): a
   // draw no handler of the program's answers is the world's, as before.
@@ -650,7 +651,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   for (const n of opts.host ? Object.values(code.nodes) : []) {
     if (n.kind !== "def" || !n.body || (code.nodes[n.body]?.kind === "typedef" && notOwn(n, code.nodes[n.body] as NodeOf<"typedef">)) || n.id.startsWith("std.")) continue;
     const td = code.nodes[n.body];
-    if (td?.kind === "typedef" && td.effect && td.variants.length && td.variants.every((v: Id) => { const x = code.nodes[v] as NodeOf<"variant">; return x.returns && x.later; })) td.variants.forEach((v: Id) => laterOps.set(v, n.id));
+    if (td?.kind === "typedef" && td.effect && td.variants.length && td.variants.every((v: Id) => { const x = code.nodes[v] as NodeOf<"variant">; return x.returns && answeredLater.has(v); })) td.variants.forEach((v: Id) => laterOps.set(v, n.id));
   }
   const laterEffs = new Set(laterOps.values());
   const tailEffs = new Set([...tailOps.values(), ...laterEffs]);
@@ -1773,7 +1774,10 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       return closureOf(a.id, a.binds, ps as LType[], a.body, r);
     });
     const body = closureOf(n.scrutinee, [], [], n.scrutinee, t);
-    if (later) return { k: "rt", fn: `handleK:${e}`, args: [body, ...cases], host: { t, partial: true } };
+    // A case that leaves the rest out answers at once (L63, L229e): the
+    // runtime resumes the rest with its value.
+    const now = later ? ops.flatMap((v, i) => (arms.find((x) => x.variant === v)!.binds.length === (code.nodes[v] as NodeOf<"variant">).fields.length ? [i] : [])) : [];
+    if (later) return { k: "rt", fn: `handleK:${e}${now.length ? `:${now.join(",")}` : ""}`, args: [body, ...cases], host: { t, partial: true } };
     if (body.k === "closure" && (body.t.several || waits(funcs[body.fn].body))) throw new Refused(`handles ${nm(e)} around a wait or several answers (not lowered yet)`);
     return { k: "rt", fn: `handleOps:${e}${t === "i32" ? ":bool" : ""}`, args: [body, ...cases], host: { t, partial: true } };
   }

@@ -31,6 +31,7 @@
 // emitted as straight-line code (src/relation.ts). Plans that need numeric
 // search fall back to the solver at run time, with the plan made once.
 
+import { laterOps } from "../../ters/src/lang/later-ops.ts";
 import { givenInOrder } from "../../ters/src/lang/ports.ts";
 import { reachedWithShows } from "./scalar.ts";
 import { resolveArithmetic } from "../../ters/src/lang/arith.ts";
@@ -227,7 +228,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // effect with such an operation is a generator function, and calls of it
   // are `yield*`. Prior art: generators as one-shot continuations, as
   // OCaml 5 checks them (ANSWERED-LATER.md, "Prior art").
-  const isLater = (op: Id) => !!(code.nodes[op] as NodeOf<"variant">).later;
+  const later = laterOps(code), isLater = (op: Id) => later.has(op);
   const laterEffects = new Set(Object.keys(code.nodes).filter((id) => code.nodes[id].kind === "variant" && isLater(id)).map((id) => effectOf(id)!));
   // `lat`: row variables that stand for a row with such an effect in the
   // copy being written (`map` given a function that waits: its row is any).
