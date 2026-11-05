@@ -130,6 +130,8 @@ Mercury compiles each mode.
    anything runs it is lifted out into a definition with results of its
    own (results-fn.ts), taking what it uses from around it as further
    inputs first, so the evaluator and every compiler run its use. Its hash
-   says which inputs are its results. The editor writing one is E252.
+   says which inputs are its results. The editor writing one is E252. One
+   whose inputs don't pin its results down is told at the lambda, by the
+   lifted definition's direction check (L225f).
 
 Then L97 puts Trig behind polar, with L96 choosing how each is computed.

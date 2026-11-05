@@ -70,7 +70,9 @@ function inlineRelation(code: Code): NodeOf<"lambda"> | null {
   return null;
 }
 
-function liftRelations(code: Code, names: Names): { code: Code; names: Names } {
+// `lifted`, when given, gets each relation's lambda and the definition it
+// became (infer.ts checks the definition's direction for the lambda).
+export function liftRelations(code: Code, names: Names, lifted?: Map<Id, Id>): { code: Code; names: Names } {
   if (!inlineRelation(code)) return { code, names };
   const nodes: Record<Id, Node> = { ...code.nodes }, defs = [...code.defs], out: Names = { ...names };
   const binder = (like: Id): Id => { const id = freshId(); nodes[id] = { ...(nodes[like] as NodeOf<"binder">), id }; out[id] = out[like] ?? "x"; return id; };
@@ -92,6 +94,7 @@ function liftRelations(code: Code, names: Names): { code: Code; names: Names } {
     nodes[lam] = { id: lam, kind: "lambda", params: [...outer, ...fn.params], results: fn.results, body: fn.body };
     nodes[helper] = { id: helper, kind: "def", body: lam };
     defs.push(helper);
+    lifted?.set(fn.id, helper);
     out[helper] = out[fn.id] ?? "relation";
     if (!free.length) { nodes[fn.id] = { id: fn.id, kind: "ref", target: helper }; continue; }
     const ins = fn.params.filter((p) => !fn.results!.includes(p)).map(binder);

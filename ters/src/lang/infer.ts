@@ -17,6 +17,7 @@ import { PARTIAL, signAnalysis } from "./signs.ts";
 import type { Code, Id, Node, NodeOf, Use } from "../model.ts";
 import { isUse, useTarget, isCall, fieldPorts, type Call, bindsOf, bodyOf } from "../model.ts";
 import { conditionResults, dependencies, nodesWhere, ownerOfTypeParts, portsOf, subtree } from "../model.ts";
+import { liftRelations } from "./results-fn.ts";
 import type { Names } from "../presentation.ts";
 import { unitProblems, UnitsBefore } from "../units.ts";
 import { fillHole } from "./refactor.ts";
@@ -1716,6 +1717,23 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       // Compared as conditions on their ports, in order (L128d2): each is
       // the function of its own direction.
       if (sc && theirs) { try { const c = s.clone(); c.unify(asPredicate(instantiate(sc, c), d), asPredicate(instantiate(theirs, c), def.direction)); } catch { err(d, `${nm(d)} is a direction of ${nm(def.direction)}, so its ports have ${nm(def.direction)}'s types: ${show(asPredicate(sc.type, d))} isn't ${show(asPredicate(theirs.type, def.direction))}`); } }
+    }
+    // A relation written where it is used (L225e) runs as the definition
+    // it is lifted into (results-fn.ts), what it uses from around it given
+    // first, so that definition's direction is checked, and told here.
+    const relations = valueDefs.filter((d) => !reuse || reuse.only.has(d)).flatMap((d) => {
+      const body = (code.nodes[d] as NodeOf<"def">).body;
+      return body ? subtree(code, body).filter((id) => { const n = code.nodes[id]; return id !== body && n?.kind === "lambda" && !!n.results?.length && n.results.every((r) => n.params.includes(r)); }) : [];
+    });
+    if (relations.length) {
+      const lifted = new Map<Id, Id>(), l = liftRelations(code, names, lifted);
+      for (const id of relations) {
+        const helper = lifted.get(id), lam = code.nodes[id] as NodeOf<"lambda">;
+        if (!helper) continue;
+        const r = resultsDirection(l.code, helper, l.names);
+        const ins = lam.params.filter((p) => !lam.results!.includes(p));
+        if ("why" in r) err(id, `this relation's results can't all be found from ${ins.length ? ins.map(nm).join(", ") : "nothing"}: ${r.why}`);
+      }
     }
   }
 
