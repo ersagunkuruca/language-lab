@@ -247,7 +247,7 @@ export function buildCases(): Module {
   // are in chunks of 256, each with its first code point, found by halves
   // within. An element is one Int, primary · 2^21 + secondary · 2^12 +
   // tertiary · 2^6 + combining class.
-  const col = savedCollation as SavedCollation;
+  const col = savedCollation as unknown as SavedCollation;
   const enc = (v: number, w: number) => { let out = ""; for (let i = w - 1; i >= 0; i--) out += String.fromCharCode(48 + (Math.floor(v / 64 ** i) % 64)); return out; };
   let multiText = "";
   const records = [
