@@ -161,6 +161,10 @@ function inlineLeaves(funcs: SFunc[]): SFunc[] {
   });
 }
 
+// A switch from the environment, where there is one: the editor runs
+// this in a browser, which has no `process`.
+export const envSet = (k: string): boolean => typeof process !== "undefined" && !!process.env?.[k];
+
 export function zeroParts(ir0: CoreIR, roots: number[]): { ir: CoreIR; copies: number; dropped: number } {
   const ir: CoreIR = { ...ir0, funcs: inlineLeaves(ir0.funcs) };
   const funcs = ir.funcs;
@@ -538,7 +542,7 @@ export function zeroParts(ir0: CoreIR, roots: number[]): { ir: CoreIR; copies: n
   // parts that are 0 there. What the runtime or the world is given or
   // gives, and what a page's handlers take, keep every part.
   const narrowed = new Map<string, { base: RType; m: number }>();
-  if (!process.env.NO_NARROW) {
+  if (!envSet("NO_NARROW")) {
     const algT = (t: RType) => !t.mutable && algebras.has(t.variant) && t.fields.length > 0 && t.fields.length <= 30 && t.fields.every((x) => x.t === "f64");
     const full = (A: RType) => 2 ** A.fields.length - 1;
     const baseOf = (t: LType | null | undefined): RType | null => {
