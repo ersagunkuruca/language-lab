@@ -23,7 +23,7 @@ language, then more targets or speed (WORKFLOW.md "Priority").
 | E Editor | "Editor lane" | E237 (after L204), E103 (after infer.ts's idea) |
 | C Compiler and targets | "Compiler lane" | C181, C182, C183, C184, C185, C30, C93 |
 | L Language and library | "Language lane" | L43, L69d1, L69d2, L21, L118c (evaluator side), L88, L182 (core, run.ts, infer.ts, hosts.ts) |
-| L Language and library | "Language lane B" | L120, L122, L123, L124 (new example programs). Skip L107 (waits on Ersagun) and L24 (research). Take a row from the other list only after telling that lane. |
+| L Language and library | "Language lane B" | L120, L123, L124 (new example programs). Skip L107 (waits on Ersagun) and L24 (research). Take a row from the other list only after telling that lane. |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -210,7 +210,6 @@ agent with inertia. All later goals.
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | L120 | **Later goal**: time of impact for rotating shapes along a PGA motor (screw motion) by conservative advancement (Mirtich); the compiler choosing it or the closed form by cost (WAYS.md) | Ersagun 2026-11-01 | P3 | L | shapes other than balls |
-| L122 | **Later goal**: an agent with inertia, decoupled (PHYSICS-AND-PLANNING.md §2 step 1); examples/agent has its path, its arcs and its fastest speed (L122a, b). Example: the agent on a page crossing the room round the pillar at that speed. Left, about an hour: (c) a follower giving the agent's place at each time along the legs, and the page drawing the room, the path and the agent | Ersagun 2026-11-01 | P3 | L | a, b done |
 | L123 | **Later goal**: the coupled search: Hybrid A*-style over position and velocity, motion primitives exact under linear drag, L122's path length / top speed as the heuristic; compared with L122 on the same map | Ersagun 2026-11-01 | P3 | L | after L122 |
 | L124 | **Later goal**: a rapidity speed cap (velocity as a boost in Cl(2, 1)) beside linear drag on L122's page; optional | Ersagun 2026-11-01 | P3 | M | after L122 |
 
