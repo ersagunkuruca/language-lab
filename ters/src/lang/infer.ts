@@ -612,6 +612,9 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // only log (checked where it is), and the computation it watches may not
   // let a Choice out (checked when every row is known).
   const releases: { n: Id; handled: Row }[] = [];
+  // Named handlers' values (L213b2): a function in one that uses the name
+  // would take it out of the handler's scope.
+  const escapes: { n: Id; name: Id; tag: Id; types: Type[] }[] = [];
   const mono = new Map<Id, Type>();
   // A let's binders whose value is generic, and their schemes (L224).
   const letSchemes = new Map<Id, Scheme>();
@@ -1573,6 +1576,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     let inside = env;
     if (name) { inside = new Map(env); inside.set(name, NAME_TYPE); info.typeOf.set(name, NAME_TYPE); }
     unifyAt(n.scrutinee, value, expr(n.scrutinee, inside, handled), "the handled computation");
+    if (name) escapes.push({ n: n.id, name, tag: handles, types: [value, result] });
     if (done) {
       if (code.nodes[done].kind !== "lambda") err(done, `a handler's normal finish is a function written in place, given the computation's value: done(x) → …`);
       else unifyAt(done, { t: "fn", params: [value], ret: result, eff: row }, expr(done, env, row), "the normal finish");
@@ -1899,6 +1903,16 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       if (!(e instanceof TypeError)) throw e;
       err(n.args[1], `this does ${show(of)}'s job at ${show(r)}, so its type is ${show(want)}, not ${show(by)}`);
     }
+  }
+  for (const e of escapes) {
+    const mentions = (t: Type): boolean => {
+      const r = s.resolve(t);
+      if (r.t === "var") return false;
+      if (r.t === "con") return r.args.some(mentions);
+      const row = s.resolveRow(r.eff);
+      return row.effs.includes(e.tag) || Object.values(row.args ?? {}).some((xs) => xs.some(mentions)) || r.params.some(mentions) || mentions(r.ret);
+    };
+    if (e.types.some(mentions)) err(e.n, `a function that uses ${nm(e.name)} leaves the handler it names: ${nm(e.name)} is in scope only inside that handler, so perform its operations there`);
   }
   for (const r of releases) {
     if (s.resolveRow(r.handled).effs.includes(CHOICE)) err(r.n, "a handler with a release can't let a Choice through, since a search could leave it and come back after the release: handle the Choice inside it (first, all, count or optional)");

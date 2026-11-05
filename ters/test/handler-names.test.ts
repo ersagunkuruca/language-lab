@@ -3,7 +3,8 @@
 // name first is answered by that handler, so two of the same effect can be
 // open at once. Operations given no name go to the innermost handler
 // without one, as before. A name is not a value: an operation's first
-// input is the one place it may go. Effekt's capabilities and Koka's named
+// input is the one place it may go, and a function that uses it can't
+// leave its handler (L213b2). Effekt's capabilities and Koka's named
 // handlers are the prior art.
 
 import { test } from "node:test";
@@ -60,4 +61,16 @@ test("compiled code refuses a named handler, with the reason", () => {
   assert.throws(() => compile(p.code, p.info, p.names, { runtime: "x", exports: ["main"] }), /a handler with a name isn't compiled yet/);
   const l = lowerCore(p.code, p.info, p.names, [p.main]);
   assert.match([...l.refused.values()].join("\n"), /under a name, which isn't lowered yet/);
+});
+
+test("a function that uses a name can't leave its handler", () => {
+  // The handler gives back `() => ask(outer)`: called later, outer's
+  // handler would be gone (L213b2).
+  const k = new Lang();
+  const ask = k.effect("Ask", [["ask", [], () => k.tref("type.int")]]);
+  const main = k.def("main");
+  const kept = k.handleNamed("outer", (outer) => k.thunk(() => k.call(ask.op.ask, k.x(outer))), [{ variant: ask.op.ask, names: [], body: () => k.int(1) }]);
+  k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.call(kept)))));
+  const info = infer(base(k.code), baseNames(k.names));
+  assert.ok(info.errors.some((e) => e.message.startsWith("a function that uses outer leaves the handler it names")), info.errors.map((e) => e.message).join("\n"));
 });
