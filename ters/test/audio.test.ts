@@ -25,7 +25,7 @@ import { corePageFile, coreWorkletFile } from "../src/lang/page.ts";
 import { close } from "../src/lang/run.ts";
 import { CELL_OPS, NOW_OP, RANDOM_OP, S } from "../src/lang/std.ts";
 import { recordingWorld } from "../src/lang/audio-page.ts";
-import { replaying } from "../src/lang/audio-worklet.ts";
+import { replaying } from "../src/lang/sound-thread.ts";
 import type { World } from "../src/lang/run.ts";
 import { B } from "../src/prelude.ts";
 import { soundOf } from "../cli/sound.ts";

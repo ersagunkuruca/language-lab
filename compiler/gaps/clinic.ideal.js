@@ -4,13 +4,12 @@
 // report. The waiting room and the events are binary heaps in arrays, the
 // desks an array changed in place, the last events a ring of 8.
 import { seededGenerator } from "../../ters/src/lang/random.ts";
-import { $show } from "../src/runtime.js";
 
 const share = (a, b) => { const r = a / b; return Number.isFinite(r) ? r : 0; };
 const intOf = (x) => Math.floor(x);
 const showDecimals = (x, places) => {
   const scale = 10 ** places, m = Math.floor(Math.abs(x) * scale + 0.5), w = Math.floor(m / scale);
-  const text = places < 0.5 ? $show(w) : $show(w) + "." + String(m - w * scale).padStart(places, "0");
+  const text = places < 0.5 ? String(w) : String(w) + "." + String(m - w * scale).padStart(places, "0");
   return x < 0 && 0 < m ? "-" + text : text;
 };
 const one = (x) => showDecimals(x, 1);
@@ -111,7 +110,7 @@ const right = (s, n) => String(s).padStart(n, " "), left = (s, n) => String(s).p
 
 function report(c) {
   const vs = c.visits, ws = waitsOf(vs), cfg = c.cfg, out = [];
-  out.push(`${cfg.desks} desks, ${cfg.order}, ${cfg.pick}, seed ${$show(cfg.seed)}`);
+  out.push(`${cfg.desks} desks, ${cfg.order}, ${cfg.pick}, seed ${String(cfg.seed)}`);
   out.push(`Patients ${vs.length}, seen ${vs.length - walked(vs)}, walked out ${walked(vs)} (${pct(share(100 * walked(vs), vs.length))})`);
   out.push("Wait " + statsLine(stats(ws)));
   out.push(`Median ${one(percentile(ws, 0.5))}, 90th percentile ${one(percentile(ws, 0.9))}`);
