@@ -1,0 +1,21 @@
+{
+  "qec7lrrj0ftdb00r3joh8c6tm7": [
+    {
+      "main": {
+        "arguments": [],
+        "input": "",
+        "files": {},
+        "printed": [
+          "at Int 10: 1705",
+          "at Float64 0.1: 4.972",
+          "at the fraction 1/3: 128/27",
+          "summed at Int 1 to 100000: 49999999990000450000",
+          "summed at Float64 0 to 10 by 0.0001: 40499150.00442095",
+          "summed at fractions 0 to 100 by 1/3: 146018150"
+        ],
+        "errors": [],
+        "exit": 0
+      }
+    }
+  ]
+}

@@ -105,7 +105,7 @@ export function lawPanel(info: T.Info, box: HTMLElement, at: { code: Code; names
   const key = `${at.def}\u0000${JSON.stringify(at.examples[at.def] ?? null)}`;
   let r = m.get(key);
   if (!r) {
-    try { r = runTests(at.code, info, at.names, [at.def], savedFrom(at.examples), { world: at.world })[0]; }
+    try { r = runTests(at.code, info, at.names, [at.def], savedFrom(Object.fromEntries(Object.entries(at.examples).map(([d, v]) => [d, (v as unknown[]).filter((x) => !(x && typeof x === "object" && "main" in (x as object)))]))  as typeof at.examples), { world: at.world })[0]; }
     catch (e) { r = { def: at.def, name: "", cases: 0, failures: [], error: (e as Error).message }; }
     m.set(key, r);
   }

@@ -66,8 +66,15 @@ export function backwards(host: BackHost) {
   // graph shows what every node makes of them.
   // A definition's saved inputs and accepted answers (T7d), when it has
   // the newer form; the inputs Run shows, in either form.
-  const savedOf = (d: Id): Saved[] | null => { const v = doc().examples?.[d]; return v?.length && typeof v[0] === "object" ? v as Saved[] : null; };
-  const exampleTexts = (d: Id): string[] | undefined => savedOf(d)?.[0].inputs ?? (doc().examples?.[d] as string[] | undefined);
+  // A main's accepted answer in its recorded world (T7e15) is kept as it
+  // is: the inputs here are a function's.
+  const mains = (d: Id): Saved[] => ((doc().examples?.[d] ?? []) as unknown[]).filter((x) => !!x && typeof x === "object" && "main" in (x as object)) as Saved[];
+  const savedOf = (d: Id): Saved[] | null => {
+    const v = doc().examples?.[d];
+    const xs = v?.length && typeof v[0] === "object" ? (v as Saved[]).filter((x) => Array.isArray(x.inputs)) : [];
+    return xs.length ? xs : null;
+  };
+  const exampleTexts = (d: Id): string[] | undefined => { const v = doc().examples?.[d] as unknown[] | undefined; return savedOf(d)?.[0].inputs ?? (v?.every((x) => typeof x === "string") ? v as string[] : undefined); };
   function portText(info: T.Info, p: Id): string {
     const i = portsOfDef(ui.def).indexOf(p);
     return exampleTexts(ui.def)?.[i] ?? seeded(info, ui.def)?.[i] ?? (p === "out" && returnsBool(info, ui.def) ? "true" : "");
@@ -81,7 +88,8 @@ export function backwards(host: BackHost) {
     ui.touched = [];
     // With answers accepted, new inputs go first, and the accepted ones stay.
     const saved = savedOf(ui.def), inputs = cur.slice(0, ports.filter((q) => q !== "out").length);
-    const next = !saved ? cur : saved[0].answer === undefined ? [{ inputs }, ...saved.slice(1)] : [{ inputs }, ...saved];
+    const kept = mains(ui.def);
+    const next = !saved ? (kept.length ? [{ inputs }, ...kept] : cur) : [...(saved[0].answer === undefined ? [{ inputs }, ...saved.slice(1)] : [{ inputs }, ...saved]), ...kept];
     commit({ examples: { ...(doc().examples ?? {}), [ui.def]: next } }, ["examples.json"], "Ran it again with that value. Values live in examples.json, never in the code.");
   }
 
@@ -90,7 +98,7 @@ export function backwards(host: BackHost) {
   function acceptAnswer(inputs: string[], answer: string) {
     const same = (e: Saved) => e.inputs.length === inputs.length && e.inputs.every((x, i) => x === inputs[i]);
     const others = (savedOf(ui.def) ?? []).filter((e) => !same(e));
-    commit({ examples: { ...(doc().examples ?? {}), [ui.def]: [{ inputs, answer }, ...others] } }, ["examples.json"],
+    commit({ examples: { ...(doc().examples ?? {}), [ui.def]: [{ inputs, answer }, ...others, ...mains(ui.def)] } }, ["examples.json"],
       `Accepted ${answer} for these inputs. The program's tests check it from now on (lab test, on the command line).`);
   }
 
