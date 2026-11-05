@@ -1,7 +1,7 @@
 // The numbers module (BACKLOG L207): the library's number types written in
 // the language, out of std.ts, each with its + − · ÷, its Trig and its
-// embedding as implementations found by its type. Dual is the first
-// (L207a); Rational, Complex, Fixed and the matrices follow.
+// embedding as implementations found by its type. Dual (L207a) and
+// Complex (L207b) so far; Rational, Fixed and the matrices follow.
 //
 // Dual numbers (INTERFACES.md step 3): value + slope·ε with ε² = 0, so a
 // function given dual(x, 1) gives its value and its slope at x. + and −
@@ -14,12 +14,14 @@ import { merge, type Id } from "../model.ts";
 import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
-import { ARITHMETIC_V, DIVISION_V, EMBEDDING_V, S, TIMES_V, TRIG_V, std } from "./std.ts";
+import { ARITHMETIC_V, CHECK_OP, DIVISION_V, EMBEDDING_V, S, SHOWN_V, TIMES_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_V, std } from "./std.ts";
 import { NUMBER } from "./types.ts";
 
 // On the prelude, whose laws give Trig's fields Dual leaves to their ways.
 export function buildNumbers(pre: Module): Module {
   const k = new Lang(merge(prelude, std, pre.code));
+  // The prelude's own definitions, by name.
+  const lib = (name: string) => pre.code.defs.find((d) => pre.names[d] === name)!;
   const n = { add: (a: Id, b: Id) => k.call(B.add, a, b), sub: (a: Id, b: Id) => k.call(B.sub, a, b), mul: (a: Id, b: Id) => k.call(B.mul, a, b), div: (a: Id, b: Id) => k.call(B.div, a, b) };
 
   // A record of two Float64s, the same shape as Complex, so it says it is
@@ -72,20 +74,141 @@ export function buildNumbers(pre: Module): Module {
   const asD = k.def("as dual");
   k.define(asD, k.fn(["x"], (x) => D(x, k.lit(0))));
 
+
+  // Complex (L207b): one case of two Float64s. A record of Float64s, so
+  // the parts builtins and the vectors module work on it (its magnitude
+  // is |z|), but a number type of its own: · is the complex product, and
+  // there is no <.
+  const TC = k.type("Complex", [], [["complex", [["re", () => k.tref(NUMBER)], ["im", () => k.tref(NUMBER)]]]]);
+  const CV = TC.v.complex;
+  // Complex numbers: a record of two Float64s, re + im·i. + − ·
+  // and −x at Complex are these (arith.ts), so they aren't offered on
+  // their own; · is (a + bi)(c + di) = (ac − bd) + (ad + bc)i.
+  const cx = (v: Id, f: (re: Id, im: Id) => Id, names = ["re", "im"]) => k.match(v, [{ variant: CV, names, body: ([a, b]) => f(a, b) }]);
+  const twoC = (name: string, f: (a: Id, b: Id, c: Id, d: Id) => Id) => {
+    const d = k.def(name);
+    k.define(d, k.fn(["z", "w"], (z, w) => cx(z, (a, b) => cx(w, (c, e) => f(a, b, c, e), ["re₂", "im₂"]))));
+    return d;
+  };
+  const C = (re: Id, im: Id) => k.call(CV, re, im);
+  const addC = twoC("add complex", (a, b, c, d) => C(n.add(a, c), n.add(b, d)));
+  const subC = twoC("subtract complex", (a, b, c, d) => C(n.sub(a, c), n.sub(b, d)));
+  const mulC = twoC("multiply complex", (a, b, c, d) => C(n.sub(n.mul(a, c), n.mul(b, d)), n.add(n.mul(a, d), n.mul(b, c))));
+  const negC = k.def("negate complex");
+  k.define(negC, k.fn(["z"], (z) => cx(z, (a, b) => C(k.call(B.neg, a), k.call(B.neg, b)))));
+  const asC = k.def("as complex");
+  k.define(asC, k.fn(["x"], (x) => C(x, k.lit(0))));
+  const unitI = k.def("i");
+  k.define(unitI, C(k.lit(0), k.lit(1)));
+  const conjC = k.def("complex conjugate");
+  k.define(conjC, k.fn(["z"], (z) => cx(z, (a, b) => C(a, k.call(B.neg, b)))));
+  const modulus = k.def("modulus");
+  k.define(modulus, k.fn(["z"], (z) => cx(z, (a, b) => k.call(B.sqrt, n.add(n.mul(a, a), n.mul(b, b))))));
+  const angle = k.def("angle of");
+  k.define(angle, k.fn(["z"], (z) => cx(z, (a, b) => k.call(B.atan2, b, a))));
+  const polar = k.def("from polar");
+  k.define(polar, k.fn(["size", "angle"], (r, t) => C(n.mul(r, k.call(B.cos, t)), n.mul(r, k.call(B.sin, t)))));
+  const divC = twoC("divide complex", (a, b, c, d) => k.let("c² + d²", n.add(n.mul(c, c), n.mul(d, d)), (m) =>
+    k.if(k.call(S.equal, m, k.lit(0)), k.call(S.fail), C(n.div(n.add(n.mul(a, c), n.mul(b, d)), m), n.div(n.sub(n.mul(b, c), n.mul(a, d)), m)))));
+  const expC = k.def("complex exp");
+  k.define(expC, k.fn(["z"], (z) => cx(z, (a, b) => k.let("eᵃ", k.call(B.exp, a), (e) => C(n.mul(e, k.call(B.cos, b)), n.mul(e, k.call(B.sin, b)))))));
+  // What Float64 has no answer for, on Complex (BACKLOG L127): principal
+  // values, each branch cut's points taken from above (counter-clockwise),
+  // as C99's csqrt, clog, cpow, casin and cacos give for a +0 imaginary
+  // part, so √−4 is 2i, log(−1) is iπ and asin(2) is π/2 + 1.317i. asin
+  // and acos pick, of the two logs w and 1/w that give them, the one whose
+  // input is the larger, so nothing cancels (Kahan, "Branch cuts for
+  // complex elementary functions", 1987, on why that matters).
+  const zero = () => C(k.lit(0), k.lit(0));
+  const csqrt = k.def("complex sqrt");
+  k.define(csqrt, k.fn(["z"], (z) => cx(z, (a, b) => k.let("r", k.call(modulus, z), (r) => {
+    const half = (x: Id) => k.call(B.sqrt, k.call(lib("larger"), n.div(x, k.lit(2)), k.lit(0)));
+    return k.let("im", half(n.sub(r, a)), (im) => C(half(n.add(r, a)), k.if(k.call(S.less, b, k.lit(0)), k.call(B.neg, im), im)));
+  }))));
+  const clog = k.def("complex log");
+  k.define(clog, k.fn(["z"], (z) => cx(z, (a, b) => C(k.call(B.log, k.call(modulus, z)), k.call(B.atan2, b, a)))));
+  const cpow = k.def("complex power");
+  k.define(cpow, k.fn(["z", "w"], (z, w) => k.if(k.call(S.equal, z, zero()),
+    cx(w, (c) => k.if(k.call(S.less, k.lit(0), c), zero(), k.call(S.fail)), ["re₂", "im₂"]),
+    k.call(expC, k.call(mulC, w, k.call(clog, z))))));
+  // −i · log(w), from w and its reciprocal's sum: the larger one's log
+  // (its input is at least 1 away from 0, so there is always an answer).
+  const minusILog = (w: Id, v: Id) => k.let("up", w, (up) => k.let("down", v, (down) => k.let("log", k.call(S.first,
+    k.thunk(() => k.if(k.call(S.less, k.call(modulus, up), k.call(modulus, down)), k.call(negC, k.call(clog, down)), k.call(clog, up))),
+    k.thunk(zero)), (l) => cx(l, (p, q) => C(q, k.call(B.neg, p)), ["p", "q"]))));
+  // √(1 − z²), from above on the cut: for a real z above 1, −i√(z² − 1).
+  const rootOneMinus = (z: Id, a: Id, b: Id) => k.let("s", k.call(csqrt, k.call(subC, C(k.lit(1), k.lit(0)), k.call(mulC, z, z))), (s) =>
+    k.if(k.and(k.call(S.equal, b, k.lit(0)), k.call(S.less, k.lit(0), a)), k.call(conjC, s), s));
+  const casin = k.def("complex asin");
+  k.define(casin, k.fn(["z"], (z) => cx(z, (a, b) => k.let("s", rootOneMinus(z, a, b), (s) =>
+    k.let("iz", C(k.call(B.neg, b), a), (iz) => minusILog(k.call(addC, s, iz), k.call(subC, s, iz)))))));
+  const cacos = k.def("complex acos");
+  k.define(cacos, k.fn(["z"], (z) => cx(z, (a, b) => k.let("s", rootOneMinus(z, a, b), (s) =>
+    k.let("is", cx(s, (c, d) => C(k.call(B.neg, d), c), ["re₂", "im₂"]), (is) => minusILog(k.call(addC, z, is), k.call(subC, z, is)))))));
+  const showC = k.def("show complex");
+  k.define(showC, k.fn(["z"], (z) => cx(z, (a, b) => k.call(S.concat, k.call(S.show, a), k.call(S.concat,
+    k.if(k.call(S.less, b, k.lit(0)), k.lit(" − "), k.lit(" + ")), k.call(S.concat, k.call(S.show, k.call(S.abs, b)), k.lit("i")))))));
+
+  const complexTable = k.def("complex table");
+  k.define(complexTable, k.list(...([[1, 0, 1, 0, 1, 0], [1, 0, 0, 1, 0, 1], [0, 1, 1, 0, 0, 1], [0, 1, 0, 1, -1, 0]] as const).map(([a, b, c, d, e, f]) =>
+    k.call(TIMES_V, C(k.lit(a), k.lit(b)), C(k.lit(c), k.lit(d)), C(k.lit(e), k.lit(f))))));
+  // Complex laws (POLAR.md L97e), tests in the language (T7): each performs
+  // Check, so `lab test` and test/prelude-laws.test.ts run them on small
+  // complex numbers. The first is from polar against modulus and angle
+  // of; the second is Trig's polar and unpolar fields, one direction
+  // undoing the other.
+  const expect = (holds: Id, what: string) => k.call(CHECK_OP, holds, k.lit(what));
+  // Two complex numbers near part by part: what the laws below check.
+  const nearC = (w: Id, z: Id) => cx(w, (a, b) => cx(z, (c, d) => k.and(k.call(lib("near"), a, c), k.call(lib("near"), b, d)), ["re2", "im2"]));
+  const lawFromPolar = k.def("from polar undoes modulus and angle");
+  k.define(lawFromPolar, k.fn(["z"], (z) => expect(nearC(k.call(polar, k.call(modulus, z), k.call(angle, z)), z), "from polar(modulus z, angle of z) is near z")));
+  const lawPolar = k.def("polar undoes unpolar");
+  k.define(lawPolar, k.fn(["z"], (z) => cx(z, (a, b) =>
+    k.solve(TRIG_UNPOLAR, { 0: a, 1: b, out: k.true }, { 2: "length", 3: "angle" }, ({ 2: r, 3: t }) =>
+      k.solve(TRIG_POLAR, { 0: r, 1: t, out: k.true }, { 2: "x", 3: "y" }, ({ 2: x, 3: y }) =>
+        expect(nearC(C(x, y), z), "polar(unpolar(x, y)) is near (x, y)"))))));
+
   const impl = (name: string, v: Id, ops: Id[]) => { const d = k.def(name); k.define(d, k.call(v, ...ops.map((o) => k.x(o)))); return d; };
   const trigD = k.def("trig at dual");
   k.define(trigD, k.call(TRIG_V, ...[sinD, cosD, tanD, expD, logD].map((d) => k.x(d)), k.x(S.byItsWays), k.x(unpolarD), k.x(S.byItsWays), k.x(S.byItsWays)));
   const embedD = k.def("float64 in dual");
   k.define(embedD, k.call(EMBEDDING_V, k.x(asD)));
+  const embedC = k.def("float64 in complex");
+  k.define(embedC, k.call(EMBEDDING_V, k.x(asC)));
   const impls = [
+    impl("arithmetic at complex", ARITHMETIC_V, [addC, subC, mulC, negC]),
+    impl("division at complex", DIVISION_V, [divC]),
+    impl("shown at complex", SHOWN_V, [showC]),
     impl("arithmetic at dual", ARITHMETIC_V, [addD, subD, mulD, negD]),
     impl("division at dual", DIVISION_V, [divD]),
     trigD,
   ];
 
-  const offered = [T.def, embedD, asD, slopeAt, dualTable];
-  const helpers = [addD, subD, mulD, negD, divD, sinD, cosD, tanD, expD, logD, unpolarD, showD];
+  const offered = [TC.def, embedC, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, complexTable, T.def, embedD, asD, slopeAt, dualTable];
+  const laws = [lawFromPolar, lawPolar];
+  const helpers = [addC, subC, mulC, negC, divC, showC, addD, subD, mulD, negD, divD, sinD, cosD, tanD, expD, logD, unpolarD, showD];
   const comments: Record<Id, string> = {
+    [TC.def]: "A complex number re + im·i, a record of two Float64s. The same + − · work on it (· is the complex product); it has no <.",
+    [embedC]: "Float64 in Complex: x as x + 0i.",
+    [asC]: "The Float64 x as a complex number, x + 0i.",
+    [unitI]: "i, the square root of −1: i · i is −1.",
+    [conjC]: "a − bi for a + bi: the same point mirrored across the real line. z · conjugate(z) is |z|².",
+    [modulus]: "|z|, how far z is from 0 (the vectors module's magnitude says the same).",
+    [angle]: "The angle from the positive real line to z, in radians, between −π and π (atan2).",
+    [polar]: "The complex number size away from 0 at this angle: size·(cos angle + i sin angle).",
+    [divC]: "z ÷ w for complex numbers; no answer when w is 0. Not offered: the one divide works on every number but Int; kept so programs saved before still open.",
+    [expC]: "e to the z: eᵃ(cos b + i sin b) for a + bi, Euler's formula (textbook). complex exp(i · π) is −1.",
+    [csqrt]: "√z for a complex number, the root with a real part of 0 or more: complex sqrt(−4) is 2i. Float64's sqrt has no answer below 0; this one always has.",
+    [clog]: "log z for a complex number: log|z| + i·(its angle, between −π and π). complex log(−1) is iπ. No answer at 0.",
+    [cpow]: "z to the power w, e^(w · log z), the principal value: complex power(−8, 1/3) is 1 + 1.732i. 0 to a power with a real part above 0 is 0; to any other, no answer.",
+    [casin]: "asin z for a complex number, the principal value: complex asin(2) is π/2 + 1.317i. Float64's asin has no answer outside −1 to 1; this one always has.",
+    [cacos]: "acos z for a complex number, the principal value: complex acos(2) is −1.317i. Float64's acos has no answer outside −1 to 1; this one always has.",
+    [showC]: "A complex number as 3 + 4i or 3 − 4i. Not offered: the one show shows every number; kept so programs saved before still open.",
+    [addC]: "What + is at Complex. Not offered on its own: + is.",
+    [subC]: "What − is at Complex. Not offered on its own: − is.",
+    [complexTable]: "Complex's multiplication table: 1 · 1 = 1, 1 · i = i, i · 1 = i, i · i = −1. table product(complex table, z, w) is z · w.",
+    [mulC]: "What · is at Complex: (a + bi)(c + di) = (ac − bd) + (ad + bc)i. Not offered on its own: · is.",
+    [negC]: "What −x is at Complex. Not offered on its own: − is.",
     [T.def]: "A dual number, value + slope·ε where ε · ε is 0: a record of two Float64s. The same + − · work on it, · by the product rule, and sin, cos, tan, exp and log by the chain rule, so f(dual(x, 1)) carries f′(x) along with f(x) (forward-mode automatic differentiation).",
     [embedD]: "Float64 in Dual: x as the dual number x + 0ε, a constant, whose slope is 0.",
     [asD]: "The Float64 x as a dual number whose derivative part is 0: a constant.",
@@ -104,9 +227,9 @@ export function buildNumbers(pre: Module): Module {
     [dualTable]: "Dual numbers' multiplication table: 1 · 1 = 1, 1 · ε = ε, ε · 1 = ε, and ε · ε = 0, which needs no line. table product(dual table, x, y) is x · y.",
     [showD]: "A dual number as 3 + 2ε. Not offered: the one show shows every number; kept so programs saved before still open.",
   };
-  const p = publish(merge(prelude, std, pre.code, k.code), k.names, [...offered, ...impls, ...helpers], merge(prelude, std, pre.code));
+  const p = publish(merge(prelude, std, pre.code, k.code), k.names, [...offered, ...impls, ...helpers, ...laws], merge(prelude, std, pre.code));
   if (!p.ok) throw new Error(`the numbers module can't be published: ${p.reason}`);
   const at = (d: Id) => p.rename.get(d)!;
   const notes = Object.fromEntries(Object.entries(comments).map(([d, c]) => [at(d), c]));
-  return makeModule("numbers", p.code, p.names, offered.map(at), p.pins, notes, [...impls, ...helpers].map(at));
+  return makeModule("numbers", p.code, p.names, offered.map(at), { ...pre.pins, ...p.pins }, notes, [...impls, ...helpers, ...laws].map(at));
 }

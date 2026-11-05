@@ -16,11 +16,11 @@ import type { Id } from "../src/model.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
-import { LIBRARY } from "../src/lang/library.ts";
+import { COMPLEX_TYPE, LIBRARY } from "../src/lang/library.ts";
 import { runMain } from "../src/lang/run.ts";
 import { ARITH, S, SHOW_ANY } from "../src/lang/std.ts";
-import { COMPLEX_TYPE, schemeArith, showType } from "../src/lang/types.ts";
-const L = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY.names[d] === name)!;
+import { schemeArith, showType } from "../src/lang/types.ts";
+const L = (name: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === name)!;
 
 const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 
@@ -84,5 +84,5 @@ test("a definition over < says `a has <`; Text still has no +, and one over + an
   // Complex has + but no <.
   const cx = check((k) => { const d = k.def("use"); k.define(d, k.call(L("smaller"), k.at(COMPLEX_TYPE, 1), k.at(COMPLEX_TYPE, 2))); });
   assert.equal(cx.info.errors.length, 1);
-  assert.match(cx.info.errors[0].message, /works only on a type with </);
+  assert.match(cx.info.errors[0].message, /Complex isn.t a type with </);
 });

@@ -11,8 +11,8 @@ import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { makeRunner, type Value } from "../src/lang/run.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
-import { LIBRARY } from "../src/lang/library.ts";
-import { ARITH, COMPLEX_V, S } from "../src/lang/std.ts";
+import { COMPLEX_V, LIBRARY } from "../src/lang/library.ts";
+import { ARITH, S } from "../src/lang/std.ts";
 import { showType } from "../src/lang/types.ts";
 import { subtree, type Id } from "../src/model.ts";
 import { compiledDefs } from "../../compiler/src/core-js.ts";
@@ -60,7 +60,7 @@ const errorsIn = (p: ReturnType<typeof program>, d: Id) => p.info.errors.filter(
 test("Complex takes the one + − · −x, a generic definition takes it, and < is refused", () => {
   const p = program();
   for (const [name, d] of Object.entries(p.defs)) if (name !== "ordered") assert.deepEqual(errorsIn(p, d), [], name);
-  assert.match(errorsIn(p, p.defs.ordered).join("; "), /less than/);
+  assert.match(errorsIn(p, p.defs.ordered).join("; "), /Complex isn.t a type with </);
   assert.equal(showType(p.info.schemes.get(p.defs.added)!.type, p.names), "Text");
 });
 

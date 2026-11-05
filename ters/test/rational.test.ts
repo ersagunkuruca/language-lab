@@ -126,7 +126,8 @@ test("smaller, larger and at most work on Int and fractions too; the old Float64
 // number) or at Complex (its real part), so ratio(1, 2) + 1 needs no
 // `as fraction`. arith.ts spells each as its constructor's call.
 test("literals at Rational and Complex: exact, in lowest terms, checked, and printed as written", async () => {
-  const { COMPLEX_TYPE, RATIONAL_TYPE } = await import("../src/lang/types.ts");
+  const { RATIONAL_TYPE } = await import("../src/lang/types.ts");
+  const { COMPLEX_TYPE } = await import("../src/lang/library.ts");
   const { renderBlocks } = await import("../src/lang/render.ts");
   const k = new Lang(LIBRARY.code);
   const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
