@@ -449,6 +449,10 @@ export const S = {
   mapParts: builtin("mapParts", "map parts", (s) => { const r = s.fresh(false, true); return fn([fn([num], num, { effs: [], tail: null }), r], r, s.freshRow()); }),
   zipParts: builtin("zipParts", "zip parts", (s) => { const r = s.fresh(false, true); return fn([fn([num, num], num, { effs: [], tail: null }), r, r], r, s.freshRow()); }),
   total: builtin("total", "total", (s) => fn([s.fresh(false, true)], num, s.freshRow())),
+  // A record of Float64s' unit parts (BACKLOG L230): one record per field,
+  // 1 in that field and 0 in the rest, in field order; a Float64's is [1].
+  // `unit parts(1)` at a multivector type is its basis for clifford algebra.
+  unitParts: builtin("unitParts", "unit parts", (s) => { const r = s.fresh(false, true); return fn([r], list(r), s.freshRow()); }),
   // Console
   print: builtin("print", "print", (s) => fn([str], unit, s.freshRow([CONSOLE]))),
   // Handlers. Each takes thunks and removes an effect from them.

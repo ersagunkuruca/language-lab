@@ -37,7 +37,7 @@ import { children, freshId, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { impl, type Op } from "../prelude.ts";
 import { equal, type Value } from "./run.ts";
-import { ARITH, FALSE, S, STD_IMPL, TRUE } from "./std.ts";
+import { ARITH, CONS, FALSE, NIL, S, STD_IMPL, TRUE } from "./std.ts";
 import { NUMBER, type Type } from "./types.ts";
 import { infer, type Info } from "./infer.ts";
 import { recordVariant } from "./derive.ts";
@@ -694,6 +694,12 @@ class Stager {
           return { ...args[1], fields: args[1].fields.map((x, i) => this.apply(args[0], [x, b.fields[i]])) };
         }
         return this.apply(args[0], [args[1], b]);
+      }
+      // Known once its record's case is (its parts needn't be).
+      case S.unitParts: {
+        const r = args[0];
+        const units: PV[] = typeof r === "object" && r.k === "data" ? r.fields.map((_, i) => ({ k: "data", tag: r.tag, fields: r.fields.map((__, j) => (i === j ? 1 : 0)) })) : later(r) ? stop() : [1];
+        return units.reduceRight<PV>((rest, u) => ({ k: "data", tag: CONS, fields: [u, rest] }), { k: "data", tag: NIL, fields: [] });
       }
       case S.total: {
         const r = args[0];
