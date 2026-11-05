@@ -857,19 +857,23 @@ function rerootArray(t: Version) {
   }
 }
 export class ArrayView {
-  readonly tag = ARRAY_TAG;
-  readonly ver: Version;
-  readonly start: number;
-  readonly n: number;
-  private f: unknown[] | null = null;
+  // Fields set in the constructor only, in one order, and the tag on the
+  // prototype, as the core IR's own records are (C93: a replace makes a
+  // view, so its shape is on machine's every step).
+  declare readonly tag: typeof ARRAY_TAG;
+  declare readonly ver: Version;
+  declare readonly start: number;
+  declare readonly n: number;
+  declare private f: unknown[] | null;
   // Its rest, when that was copied out of a much bigger buffer (I106c).
-  rest: ArrayView | null = null;
-  constructor(ver: Version, start: number, n: number) { this.ver = ver; this.start = start; this.n = n; }
+  declare rest: ArrayView | null;
+  constructor(ver: Version, start: number, n: number) { this.ver = ver; this.start = start; this.n = n; this.f = null; this.rest = null; }
   // The buffer as this view's version has it.
-  get buf(): Buffer { rerootArray(this.ver); return this.ver.cur!; }
+  get buf(): Buffer { if (!this.ver.cur) rerootArray(this.ver); return this.ver.cur!; }
   get fields(): unknown[] { return (this.f ??= [this.n, ...this.buf.items.slice(this.start, this.start + this.n)]); }
   toJSON() { return { tag: this.tag, fields: this.fields }; }
 }
+(ArrayView.prototype as { tag: string }).tag = ARRAY_TAG;
 type ArrayValue = ArrayView | { tag: Id; fields: unknown[] };
 // A buffer holding xs[from, to) in its middle, with room for as many
 // again on each side.
@@ -925,12 +929,14 @@ const restOf = (a: ArrayValue): ArrayView => {
 // outside it, as `replace at` on a list: written into the buffer, and the
 // version given becomes the change back.
 const replaceIn = (a: ArrayValue, i: I.Int, x: unknown): ArrayView => {
-  const v = arrayView(a), k = Number(i);
-  if (!(Number.isInteger(k) && k >= 0 && k < v.n)) return v;
-  const b = v.buf, slot = v.start + k, t = v.ver;
+  const v = a instanceof ArrayView ? a : arrayView(a), k = typeof i === "number" ? i : Number(i);
+  if (!(k >= 0 && k < v.n && Math.floor(k) === k)) return v;
+  const t = v.ver;
+  if (!t.cur) rerootArray(t);
+  const b = t.cur!, slot = v.start + k, items = b.items;
   const newest: Version = { cur: b, next: null, slot: 0, old: undefined };
-  t.cur = null; t.next = newest; t.slot = slot; t.old = b.items[slot];
-  if (b.items instanceof Uint8Array && !isByte(x)) b.items = Array.from(b.items);
+  t.cur = null; t.next = newest; t.slot = slot; t.old = items[slot];
+  if (items instanceof Uint8Array && !isByte(x)) b.items = Array.from(items);
   b.items[slot] = x;
   return new ArrayView(newest, v.start, v.n);
 };
