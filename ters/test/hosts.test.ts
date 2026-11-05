@@ -118,3 +118,27 @@ test("WebAssembly asks the same host, checked at the same border (L69b2)", async
   assert.deepEqual(await run({ [p.dev.op.battery]: () => 1 }, p.careful), [`aborted: hosts/js.js has no answer for name of (${p.dev.op["name of"]})`]);
   assert.deepEqual(await run({ [p.dev.op.battery]: () => NaN, [p.dev.op["name of"]]: () => "x", [p.dev.op.ready]: () => true }, p.main), ["error: the host's battery gave null, not a finite number", "exit 1"]);
 });
+
+// L69d1: std's world operations are answered by the runner's World, the
+// host every target gives; a program's hosts/js.js may answer one in its
+// place, by the operation's id, checked at the same border. The clock
+// stays the Time effect in every row (FOREIGN.md: reading it isn't pure).
+test("the clock answered by the program's hosts/js.js in place of the world's, checked at the border (L69d1)", async () => {
+  const { NOW_OP, TIME, SHOW_ANY } = await import("../src/lang/std.ts");
+  const { showType } = await import("../src/lang/types.ts");
+  const k = new Lang();
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.call(NOW_OP)))));
+  const careful = k.def("careful");
+  k.define(careful, k.thunk(() => k.call(S.print, k.handle(k.call(SHOW_ANY, k.call(NOW_OP)), [{ variant: ABORT_OP, names: ["why"], body: ([why]) => why }]))));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names);
+  assert.ok(showType(info.subst.zonk(info.typeOf.get(main)!), names).includes(names[TIME] ?? "Time"), "Time stays in main's row");
+  const run = (def: Id, rt: object) => { const out: string[] = []; runMain(code, info, def, { print: (s) => out.push(s), names, ...rt }); return out; };
+  const world = { now: () => 5 } as never;
+  assert.deepEqual(run(main, { world }), ["5"], "the world's clock");
+  assert.deepEqual(run(main, { world, hosts: { [NOW_OP]: () => 1234 } }), ["1234"], "the host's clock in its place");
+  assert.match(run(careful, { world, hosts: { [NOW_OP]: () => NaN } })[0], /the host's now gave null, not a finite number/);
+  // Uncaught, the Abort ends the run with the reason; Abort itself is the
+  // language's own, so a host entry for it isn't asked.
+  assert.throws(() => run(main, { world, hosts: { [ABORT_OP]: () => undefined, [NOW_OP]: () => "soon" } }), /now gave "soon", not a finite number/);
+});

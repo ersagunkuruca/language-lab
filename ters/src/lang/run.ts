@@ -38,7 +38,7 @@ import * as Alg from "./algebraic.ts";
 import { hostLocale, hostZone } from "./text.ts";
 import { ArrayView, FILE_OPS, KEPT_FILES, tupleVariant, floatText, LOCALE_V, MY_LOCALE_OP, MY_ZONE_OP, RELEASE_V, SETTINGS, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, shownImplementations, implementationsOf, ORDERED, CASE_NAME, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std.ts";
 import { intLit } from "./int.ts";
-import { answerFromHost, effectOfOperation, hostedEffects, pureHosts, type Hosts } from "./hosts.ts";
+import { answerFromHost, effectOfOperation, hostedEffects, pureHosts, stdHosted, type Hosts } from "./hosts.ts";
 import * as I from "./int.ts";
 import * as T from "./text.ts";
 import { Cells, NoValue, Pending, changeAt, listEdits, nodeOf, pathValue, stepsOf } from "./cells.ts";
@@ -806,6 +806,15 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     // standard error, an Abort ends the run, and the world draws Random's
     // numbers, reads the clock and waits.
     unhandled(op: Id, args: Value[]): void {
+      // One of std's world operations the program's hosts/js.js answers
+      // (L69d1): its entry, by the operation's id, in place of the
+      // world's, checked at the border as a program's own; the effect
+      // stays in every row.
+      if (rt.hosts && stdHosted(op, rt.hosts)) {
+        let v: Value;
+        try { v = answerFromHost(code, rt.names ?? {}, rt.hosts, op, args) as Value; } catch (e) { return this.perform(ABORT_OP, [(e as Error).message]); }
+        return this.ret(v);
+      }
       if (op === LOG_OP) return ((rt.world?.log ?? rt.print)(args[0] as string), this.ret(unit));
       if (op === ABORT_OP) throw new Aborted(args[0] as string);
       if (op === RANDOM_OP) return this.ret((rt.world?.random ?? worldRandom)());
