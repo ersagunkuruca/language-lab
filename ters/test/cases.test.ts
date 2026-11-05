@@ -34,9 +34,6 @@ test("the cases module's uppercase and lowercase are the host's", () => {
   const run = (f: string, t: string, tag: string) => [...r.call(r.value(cases(f)), t, { tag: LOCALE_V, fields: [tag] } as Value)][0];
   const wrong: string[] = [];
   for (const tag of ["en", "tr", "az", "lt", "el"]) for (const t of [...WORDS, SWEEP]) {
-    // Left (L214e2b): a combining accent Greek uppercase drops after a
-    // letter, which text in NFC mostly doesn't have.
-    if (tag === "el" && /[\u0300-\u036f]/.test(t)) continue;
     const up = run("table uppercase", t, tag), down = run("table lowercase", t, tag);
     if (up !== t.toLocaleUpperCase(tag)) wrong.push(`${tag} upper ${JSON.stringify(t.slice(0, 20))}: ${JSON.stringify(String(up).slice(0, 40))}`);
     if (down !== t.toLocaleLowerCase(tag)) wrong.push(`${tag} lower ${JSON.stringify(t.slice(0, 20))}: ${JSON.stringify(String(down).slice(0, 40))}`);
@@ -49,6 +46,15 @@ test("the cases module's uppercase and lowercase are the host's", () => {
     const t = Array.from({ length: 1 + rnd(6) }, () => pool[rnd(pool.length)]).join("");
     const up = run("table uppercase", t, "el");
     if (up !== t.toLocaleUpperCase("el")) wrong.push(`el upper ${JSON.stringify(t)}: ${JSON.stringify(up)}`);
+  }
+  // And Greek with marks no precomposed letter takes in (L214e2c): the
+  // accents dropped, the dialytika kept, the ypogegrammeni an iota.
+  const marks = ["\u0300", "\u0301", "\u0342", "\u0308", "\u0313", "\u0314", "\u0345", "\u0306", "\u0344", "\u0302", ""];
+  const letters = [..."αεηιουωάέήίϊΐΑΗΕἀῆ ab-"];
+  for (let i = 0; i < 400; i++) {
+    const t = Array.from({ length: 1 + rnd(5) }, () => letters[rnd(letters.length)] + marks[rnd(marks.length)] + (rnd(3) ? "" : marks[rnd(marks.length)])).join("").normalize("NFC");
+    const up = run("table uppercase", t, "el");
+    if (up !== t.toLocaleUpperCase("el")) wrong.push(`el upper ${JSON.stringify(t)}: ${JSON.stringify(up)} not ${JSON.stringify(t.toLocaleUpperCase("el"))}`);
   }
   assert.deepEqual(wrong, []);
 });
