@@ -39,17 +39,25 @@ export const optionsWith = (pins: Pins | undefined): Options => (pins && Object.
 export function programModules(dir: string): Module[] {
   const at = join(dir, "modules");
   if (!existsSync(at)) return [];
-  return readdirSync(at).filter((f) => f.endsWith(".json")).sort().map((f) => {
-    const m = JSON.parse(readFileSync(join(at, f), "utf8")) as Module;
-    const wrong = verify(m, LIBRARY.code);
-    if (wrong) throw new Error(`modules/${f}: ${wrong}`);
-    return m;
-  });
+  return readdirSync(at).filter((f) => f.endsWith(".json")).sort().map((f) => readModule(join(at, f), `modules/${f}`));
+}
+const readModule = (path: string, shown: string): Module => {
+  const m = JSON.parse(readFileSync(path, "utf8")) as Module;
+  const wrong = verify(m, LIBRARY.code);
+  if (wrong) throw new Error(`${shown}: ${wrong}`);
+  return m;
+};
+// The program's store (SHARING.md §4b, L115): every version it has used,
+// kept with it, so it opens when a module's file is gone.
+export function programStore(dir: string): Module | null {
+  const at = join(dir, "store.json");
+  return existsSync(at) ? readModule(at, "store.json") : null;
 }
 
 export function loadProgram(dir: string, style = "blocks") {
   const own = read<Code>(join(dir, "code.json"), { nodes: {}, defs: [] });
-  const modules = programModules(dir);
+  const store = programStore(dir);
+  const modules = [...programModules(dir), ...(store ? [store] : [])];
   // Its own pins, beside code.json as the editor's file keeps them (L173c),
   // over its modules'.
   const pins = { ...Object.assign({}, ...modules.map((m) => m.pins)), ...read<Pins>(join(dir, "signatures.json"), {}) } as Pins;
@@ -69,7 +77,8 @@ export function loadProgram(dir: string, style = "blocks") {
     return id;
   };
   // A module's helpers are hidden, as the library's are.
-  const hidden = modules.flatMap((m) => m.code.defs.filter((d) => !m.exports.includes(d)));
+  const offered = new Set(modules.flatMap((m) => m.exports));
+  const hidden = modules.flatMap((m) => m.code.defs.filter((d) => !offered.has(d)));
   const options = optionsWith(pins);
   return { code, own, pres, named, pins, modules, options: hidden.length ? { ...options, hidden: new Set([...(options.hidden ?? []), ...hidden]) } : options };
 }

@@ -554,3 +554,51 @@ export function upgradeNames(moved: Moved[], modules: Module[], own: Names, take
   }
   return { names, renamed };
 }
+
+// ------------------------------------------------------------------- store
+
+// A project's store (SHARING.md §4b, L115): every published definition a
+// program has used from its modules, kept by hash with the program, and the
+// versions of each lineage it has had, oldest first. Filled by default on
+// every upgrade and downgrade, before and after, so the program still opens
+// and runs when a module's file is gone, and can go back to any version it
+// had. Content addressing shares what two versions have in common. Nothing
+// is offered from it; the program's modules offer.
+export const STORE = "store";
+export function addToStore(store: Module | null, own: Code, modules: Module[]): Module {
+  const from = [...modules, ...(store ? [store] : [])];
+  const code = merge(...from.map((m) => m.code), own);
+  const inModules = (d: Id) => from.some((m) => m.code.nodes[d]);
+  const used = defGroups(code, own.defs).flat().filter((d) => isPublished(d) && inModules(d));
+  const defs = [...new Set([...(store?.code.defs ?? []), ...used])];
+  const nodes = Object.fromEntries(defs.flatMap((d) => nodeIds(code, d)).map((id) => [id, code.nodes[id]]));
+  const pick = <T>(t: Record<Id, T>) => Object.fromEntries(Object.entries(t).filter(([k]) => nodes[k.split("/")[0]]));
+  // Each lineage's versions the program has had, in the module's order.
+  const lineages: Record<Id, Id[]> = Object.fromEntries(Object.entries(store?.lineages ?? {}).map(([l, vs]) => [l, [...vs]]));
+  for (const m of modules) for (const [l, vs] of Object.entries(m.lineages ?? {})) {
+    const had = vs.filter((v) => defs.includes(v));
+    if (!had.length) continue;
+    const list = (lineages[l] ??= []);
+    for (const v of had) if (!list.includes(v)) list.push(v);
+  }
+  const names = layer<Names>({}, ...from.map((m) => m.names));
+  const pins: Pins = Object.assign({}, ...from.map((m) => m.pins));
+  return {
+    format: MODULE_FORMAT, version: 1, title: STORE,
+    code: { nodes, defs },
+    pins: Object.fromEntries(defs.filter((d) => pins[d]).map((d) => [d, pins[d]])),
+    names: pick(names),
+    exports: [],
+    std: { ...(store?.std ?? {}), ...baseVersions(code, defs) },
+    lineages,
+  };
+}
+
+// The version before `current` that the store kept, in its lineage.
+export function previousVersion(store: Module, current: Id): Id | null {
+  const l = lineageOf(store.lineages ?? {}, current);
+  if (!l) return null;
+  const vs = store.lineages![l];
+  const i = vs.indexOf(current);
+  return i > 0 ? vs[i - 1] : null;
+}

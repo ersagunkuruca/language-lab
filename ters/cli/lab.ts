@@ -16,6 +16,7 @@
 //   lab publish <program> <name…> [-o module.json]
 //                                        publish definitions as their next versions in a module (SHARING.md §1)
 //   lab upgrade <program>                move a program onto its modules' newest versions, if its tests pass (§2)
+//   lab downgrade <program> <name>       back to the version before, from the program's store (§4b)
 //   lab diff <before.json> <after.json>  what changed, by definition and name (merge-files.ts)
 //   lab merge <base> <ours> <theirs> [path]
 //                                        git's merge driver for program files: id by id, ours
@@ -43,8 +44,8 @@ import type { Names } from "../src/presentation.ts";
 import { fromFile } from "../src/files.ts";
 import { infer, type Info, type Options } from "../src/lang/infer.ts";
 import { LIBRARY } from "../src/lang/library.ts";
-import { lineageOf, publishVersion, sameLines, upgradeNames, upgradeOwn, verify, type Module } from "../src/lang/modules.ts";
-import { base, baseNames, loadProgram, optionsWith, programModules } from "../src/lang/load.ts";
+import { addToStore, lineageOf, pointsAt, previousVersion, publishVersion, sameLines, upgrade, upgradeNames, upgradeOwn, verify, type Module } from "../src/lang/modules.ts";
+import { base, baseNames, loadProgram, optionsWith, programModules, programStore } from "../src/lang/load.ts";
 import { equal, mainProblem, pageProblem, runMain, runProgram, showerFor, valueMain, type Value, type World } from "../src/lang/run.ts";
 import { Cells } from "../src/lang/cells.ts";
 import { evaluatorCall, htmlText } from "../src/lang/html.ts";
@@ -94,6 +95,9 @@ usage:
                                         publish the named definitions, and the drafts they use, as their next
                                         versions in a module (default <program>.module.json): the old versions
                                         stay, and each keeps its draft's id as its lineage (SHARING.md §1)
+  lab downgrade <program> <name>        move what the program calls name back to the version before, from its
+                                        store (store.json, every version it has used, kept by upgrade and
+                                        downgrade, so it runs when a module's file is gone; §4b)
   lab upgrade <program> [--take-names]  move a program onto the newest versions of what it uses from the
                                         modules in its modules folder, where each new pin is at least as
                                         general as the old, and keep it only if its tests still pass (§2);
@@ -508,31 +512,50 @@ switch (command) {
     if (!r.added.length) console.log("nothing changed since the last publish");
     break;
   }
-  case "upgrade": {
-    // The program onto its modules' newest versions, kept only if it still
-    // checks and its tests pass (L111).
-    if (!statSync(path).isDirectory()) fail("upgrade takes a program folder, whose modules folder holds what it uses");
-    const modules = programModules(path);
+  case "upgrade":
+  case "downgrade": {
+    // The program onto its modules' newest versions (L111), or back to the
+    // version before (L115), kept only if it still checks and its tests
+    // pass. Every version it had stays in its store either way.
+    const up = command === "upgrade";
+    if (!statSync(path).isDirectory()) fail(`${command} takes a program folder, whose modules folder holds what it uses`);
+    const store0 = programStore(path);
+    const modules = [...programModules(path), ...(store0 ? [store0] : [])];
     const own = JSON.parse(readFileSync(join(path, "code.json"), "utf8")) as Code;
-    const r = upgradeOwn(own, modules, p.names);
+    let r: ReturnType<typeof upgradeOwn>;
+    if (up) r = upgradeOwn(own, modules, p.names);
+    else {
+      const name = rest.find((a) => !a.startsWith("--")) ?? fail("downgrade needs the name of what to move back");
+      const used = new Set(Object.values(own.nodes).flatMap(pointsAt));
+      const current = [...used].find((d) => p.names[d] === name && store0 && lineageOf(store0.lineages ?? {}, d)) ?? fail(`${p.title} uses nothing named ${name} that its store has versions of`);
+      const back = previousVersion(store0!, current) ?? fail(`the store has no version of ${name} before this one`);
+      const pins = Object.assign({}, ...modules.map((m) => m.pins));
+      const u = upgrade(merge(...modules.map((m) => m.code), own), current, back, pins, p.names);
+      if (!u.ok) fail(`${name} can't go back: ${u.reason}`);
+      const ids = new Set(Object.keys(own.nodes));
+      r = { own: { nodes: Object.fromEntries(Object.entries(u.code.nodes).filter(([id]) => ids.has(id))), defs: own.defs }, moved: [{ from: current, to: back, uses: u.uses }], refused: [] };
+    }
     for (const x of r.refused) console.log(`kept   ${p.names[x.from] ?? x.from}: the newest version can't take its place, ${x.reason}`);
     if (!r.moved.length) { if (!r.refused.length) console.log("nothing to upgrade"); process.exitCode = r.refused.length ? 1 : 0; break; }
     const code = base(merge(...modules.map((m) => m.code), r.own));
     const info = infer(code, p.names, undefined, p.options as Options);
-    if (info.errors.length) fail(`after upgrading, ${info.errors.length} error${info.errors.length === 1 ? "" : "s"}:\n${info.errors.map((e) => `  ${p.names[e.id] ?? e.id}: ${e.message}`).join("\n")}\nnothing written`);
+    if (info.errors.length) fail(`after the ${command}, ${info.errors.length} error${info.errors.length === 1 ? "" : "s"}:\n${info.errors.map((e) => `  ${p.names[e.id] ?? e.id}: ${e.message}`).join("\n")}\nnothing written`);
     const file = join(path, "examples.json");
     const saved = existsSync(file) ? savedFrom(JSON.parse(readFileSync(file, "utf8"))) : {};
     const failed = runTests(code, info, p.names, own.defs, saved, { world: nodeWorld(), hosts }).filter((t) => t.error || t.failures.length);
-    if (failed.length) fail(`after upgrading, ${failed.map((t) => t.name).join(", ")} fail${failed.length === 1 ? "s" : ""} (lab test says how); nothing written`);
+    if (failed.length) fail(`after the ${command}, ${failed.map((t) => t.name).join(", ")} fail${failed.length === 1 ? "s" : ""} (lab test says how); nothing written`);
     writeFileSync(join(path, "code.json"), JSON.stringify(r.own, null, 2) + "\n");
+    // Both versions into the store (SHARING.md §4b, L115).
+    writeFileSync(join(path, "store.json"), JSON.stringify(addToStore(addToStore(store0, own, modules), r.own, modules), null, 2) + "\n");
     // The program's names stay its own (L112): the author's renames are
-    // said once, and taken only with --take-names.
+    // said once, and taken only with --take-names; going back takes the
+    // names that version had.
     const namesFile = join(path, "names.default.json");
     const ownNames = existsSync(namesFile) ? JSON.parse(readFileSync(namesFile, "utf8")) as Names : {};
-    const take = rest.includes("--take-names");
+    const take = !up || rest.includes("--take-names");
     const nn = upgradeNames(r.moved, modules, ownNames, take);
     if (JSON.stringify(nn.names) !== JSON.stringify(ownNames)) writeFileSync(namesFile, JSON.stringify(nn.names, null, 2) + "\n");
-    if (nn.renamed.length) console.log(`names  the author renamed ${nn.renamed.map((x) => `${x.from} → ${x.to}`).join(", ")}: ${take ? "taken" : "your names kept (--take-names takes theirs)"}`);
+    if (up && nn.renamed.length) console.log(`names  the author renamed ${nn.renamed.map((x) => `${x.from} → ${x.to}`).join(", ")}: ${take ? "taken" : "your names kept (--take-names takes theirs)"}`);
     for (const m of r.moved) {
       const l = modules.map((x) => x.lineages ?? {}).find((ls) => lineageOf(ls, m.to));
       const n = l ? l[lineageOf(l, m.to)!].indexOf(m.to) + 1 : 0;
