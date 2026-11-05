@@ -16,9 +16,10 @@ import { base, baseNames, checkOptions, loadProgram } from "../src/lang/load.ts"
 import { adopt, orderFreeHash, publish, sameAs, sameLines, sameUpToOrder, upgrade, verify, type Module } from "../src/lang/modules.ts";
 import { buildPrelude } from "../src/lang/prelude-source.ts";
 import { library as listHelpers } from "../src/lang/programs.ts";
-import { pinsOf, recheck } from "../src/lang/signatures.ts";
+import { pinsOf } from "../src/lang/signatures.ts";
+import { CheckCache } from "../src/lang/check-cache.ts";
 import { runMain } from "../src/lang/run.ts";
-import { ARITH, CONS, INT_OPS, NIL, S, SHOW_ANY, tupleVariant } from "../src/lang/std.ts";
+import { ARITH, CONS, INT_OPS, NIL, S, SHOW_ANY } from "../src/lang/std.ts";
 import { root } from "../src/io.ts";
 
 const prelude = (name: string) => PRELUDE.exports.find((d) => PRELUDE.names[d] === name) ?? PRELUDE.code.defs.find((d) => PRELUDE.names[d] === name)!;
@@ -248,50 +249,40 @@ test("a pin holds a definition's type: a change that breaks it is an error there
   assert.match(infer(prints, k.names, undefined, { pins }).errors[0]?.message ?? "", /pinned/);
 });
 
-test("checking stops at pins: an edit inside a pinned definition rechecks only it", () => {
+// Checking stops at pins (L215d1, check-cache.ts): an edit inside a pinned
+// definition that keeps its type checks only its group again, since its
+// callers' keys hold its pin; an edit that changes a type checks its
+// callers too, and the kept check finds what a whole one finds.
+test("checking stops at pins: an edit inside a pinned definition checks only it again", () => {
   const p = loadProgram(join(root, "examples", "algebra"));
-  const full = infer(p.code, p.pres.names);
+  const full = infer(p.code, p.pres.names, undefined, checkOptions);
   const evaluate = p.named("evaluate");
-  const ownDefs = p.own.defs.filter((d) => full.schemes.has(d));
-  // an edit that keeps the type: swap a number literal inside evaluate
-  const lit = subtree(p.code, evaluate).find((id) => p.code.nodes[id].kind === "lit" && typeof (p.code.nodes[id] as { value: unknown }).value === "number");
-  const code = lit ? { nodes: { ...p.code.nodes, [lit]: { ...p.code.nodes[lit], value: 7 } as never }, defs: p.code.defs } : p.code;
-  const pins = pinsOf(full, ownDefs);
-  const unpinned = recheck(code, p.pres.names, full, [evaluate]);
-  const pinned = recheck(code, p.pres.names, full, [evaluate], { pins });
-  assert.deepEqual([...pinned.checked], [evaluate]);
-  assert.ok(unpinned.checked.size >= 1);
-  assert.deepEqual(pinned.info.errors, infer(code, p.pres.names, undefined, { pins }).errors);
-  // An edit that changes a type does reach the callers, and finds what
-  // a whole check finds.
-  const k = new Lang();
+  const pins = { ...checkOptions.pins, ...pinsOf(full, p.own.defs.filter((d) => full.schemes.has(d))) };
+  const cache = new CheckCache();
+  const opts = { ...checkOptions, pins, cache };
+  infer(p.code, p.pres.names, undefined, opts);
+  // an edit that keeps the type: a number literal inside evaluate
+  const lit = subtree(p.code, evaluate).find((id) => p.code.nodes[id].kind === "lit" && typeof (p.code.nodes[id] as { value: unknown }).value === "number")!;
+  const code = { nodes: { ...p.code.nodes, [lit]: { ...p.code.nodes[lit], value: 7 } as never }, defs: p.code.defs };
+  const misses = cache.misses;
+  const kept = infer(code, p.pres.names, undefined, opts);
+  assert.equal(cache.misses - misses, 1);
+  assert.deepEqual(kept.errors, infer(code, p.pres.names, undefined, { ...checkOptions, pins }).errors);
+  // An edit that changes a type does reach the callers.
+  const k = new Lang(LIBRARY.code);
   const f = k.def("f"), g = k.def("g"), h = k.def("h");
   k.define(f, k.fn(["x"], (x) => x));
-  k.define(g, k.fn(["x"], (x) => k.call(B.add, k.call(f, x), k.lit(1))));
-  k.define(h, k.thunk(() => k.call(g, k.lit(1))));
-  const c0 = merge(CORE, k.code);
-  const i0 = infer(c0, k.names);
+  k.define(g, k.fn(["x"], (x) => k.call(INT_OPS.add, k.call(f, x), k.int(1))));
+  k.define(h, k.thunk(() => k.call(g, k.int(1))));
+  const c0 = base(k.code), names = baseNames(k.names);
+  const cache2 = new CheckCache();
+  infer(c0, names, undefined, { ...checkOptions, cache: cache2 });
   const fl = ((c0.nodes[(c0.nodes[f] as { body: Id }).body]) as { body: Id }).body;
   const c1: Code = { nodes: { ...c0.nodes, [fl]: { id: fl, kind: "lit", value: "text" } }, defs: c0.defs };
-  const r = recheck(c1, k.names, i0, [f]);
-  assert.ok(r.checked.has(g));
-  assert.deepEqual(r.info.errors.map((e) => e.id).sort(), infer(c1, k.names).errors.map((e) => e.id).sort());
-});
-
-// L144: what a run needs from the check is kept for the definitions not
-// checked again: a call that takes a tuple apart stays marked.
-test("recheck keeps the definitions not checked again runnable: their spread calls", () => {
-  const k = new Lang();
-  const times = k.def("times"), use = k.def("use"), other = k.def("other");
-  k.define(times, k.fn(["a", "b"], (a, b) => k.call(B.mul, a, b)));
-  k.define(use, k.fn(["x"], (x) => k.call(times, k.call(tupleVariant(2), x, x))));
-  k.define(other, k.thunk(() => k.lit(1)));
-  const code = base(k.code), names = baseNames(k.names);
-  const full = infer(code, names, undefined, checkOptions);
-  assert.equal(full.spread!.size, 1);
-  const r = recheck(code, names, full, [other], checkOptions);
-  assert.ok(!r.checked.has(use));
-  assert.deepEqual([...r.info.spread!], [...full.spread!]);
+  const m2 = cache2.misses;
+  const r = infer(c1, names, undefined, { ...checkOptions, cache: cache2 });
+  assert.ok(cache2.misses - m2 >= 2, "f and g are checked again");
+  assert.deepEqual(r.errors.map((e) => e.id).sort(), infer(c1, names, undefined, checkOptions).errors.map((e) => e.id).sort());
 });
 
 test("a module's helpers are used where they are, and never offered in the palette", () => {
