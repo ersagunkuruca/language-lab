@@ -15,6 +15,7 @@
 //   lab mcp [program]                    an MCP server on stdin/stdout (mcp/server.ts)
 //   lab publish <program> <name…> [-o module.json]
 //                                        publish definitions as their next versions in a module (SHARING.md §1)
+//   lab upgrade <program>                move a program onto its modules' newest versions, if its tests pass (§2)
 //   lab diff <before.json> <after.json>  what changed, by definition and name (merge-files.ts)
 //   lab merge <base> <ours> <theirs> [path]
 //                                        git's merge driver for program files: id by id, ours
@@ -37,13 +38,13 @@ import { gradeMistakes } from "../src/lang/grades.ts";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import type { Code, Id } from "../src/model.ts";
+import { merge, type Code, type Id } from "../src/model.ts";
 import type { Names } from "../src/presentation.ts";
 import { fromFile } from "../src/files.ts";
-import { infer, type Info } from "../src/lang/infer.ts";
+import { infer, type Info, type Options } from "../src/lang/infer.ts";
 import { LIBRARY } from "../src/lang/library.ts";
-import { lineageOf, publishVersion, sameLines, verify, type Module } from "../src/lang/modules.ts";
-import { baseNames, loadProgram, optionsWith } from "../src/lang/load.ts";
+import { lineageOf, publishVersion, sameLines, upgradeOwn, verify, type Module } from "../src/lang/modules.ts";
+import { base, baseNames, loadProgram, optionsWith, programModules } from "../src/lang/load.ts";
 import { equal, mainProblem, pageProblem, runMain, runProgram, showerFor, valueMain, type Value, type World } from "../src/lang/run.ts";
 import { Cells } from "../src/lang/cells.ts";
 import { evaluatorCall, htmlText } from "../src/lang/html.ts";
@@ -93,6 +94,9 @@ usage:
                                         publish the named definitions, and the drafts they use, as their next
                                         versions in a module (default <program>.module.json): the old versions
                                         stay, and each keeps its draft's id as its lineage (SHARING.md §1)
+  lab upgrade <program>                 move a program onto the newest versions of what it uses from the
+                                        modules in its modules folder, where each new pin is at least as
+                                        general as the old, and keep it only if its tests still pass (§2)
   lab render <program> in.wav [-o out.wav] [--block n] [--compiled]
                                         play the sound main makes over a WAV file, n samples a block (default 128)
 options:
@@ -501,6 +505,30 @@ switch (command) {
       console.log(`${r.module.names[v] ?? v}: version ${lineages[l].indexOf(v) + 1}, ${v}`);
     }
     if (!r.added.length) console.log("nothing changed since the last publish");
+    break;
+  }
+  case "upgrade": {
+    // The program onto its modules' newest versions, kept only if it still
+    // checks and its tests pass (L111).
+    if (!statSync(path).isDirectory()) fail("upgrade takes a program folder, whose modules folder holds what it uses");
+    const modules = programModules(path);
+    const own = JSON.parse(readFileSync(join(path, "code.json"), "utf8")) as Code;
+    const r = upgradeOwn(own, modules, p.names);
+    for (const x of r.refused) console.log(`kept   ${p.names[x.from] ?? x.from}: the newest version can't take its place, ${x.reason}`);
+    if (!r.moved.length) { if (!r.refused.length) console.log("nothing to upgrade"); process.exitCode = r.refused.length ? 1 : 0; break; }
+    const code = base(merge(...modules.map((m) => m.code), r.own));
+    const info = infer(code, p.names, undefined, p.options as Options);
+    if (info.errors.length) fail(`after upgrading, ${info.errors.length} error${info.errors.length === 1 ? "" : "s"}:\n${info.errors.map((e) => `  ${p.names[e.id] ?? e.id}: ${e.message}`).join("\n")}\nnothing written`);
+    const file = join(path, "examples.json");
+    const saved = existsSync(file) ? savedFrom(JSON.parse(readFileSync(file, "utf8"))) : {};
+    const failed = runTests(code, info, p.names, own.defs, saved, { world: nodeWorld(), hosts }).filter((t) => t.error || t.failures.length);
+    if (failed.length) fail(`after upgrading, ${failed.map((t) => t.name).join(", ")} fail${failed.length === 1 ? "s" : ""} (lab test says how); nothing written`);
+    writeFileSync(join(path, "code.json"), JSON.stringify(r.own, null, 2) + "\n");
+    for (const m of r.moved) {
+      const l = modules.map((x) => x.lineages ?? {}).find((ls) => lineageOf(ls, m.to));
+      const n = l ? l[lineageOf(l, m.to)!].indexOf(m.to) + 1 : 0;
+      console.log(`moved  ${p.names[m.to] ?? m.to} to version ${n} (${m.uses} use${m.uses === 1 ? "" : "s"})`);
+    }
     break;
   }
   case "hosts": {

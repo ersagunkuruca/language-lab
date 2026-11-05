@@ -1801,9 +1801,11 @@ had as a draft as its lineage, and a module lists each lineage's versions,
 oldest first (`lineages`; `lab publish` adds the next ones, and the old
 stay). What replaces what is read from there (`replacing`), and `upgrade(code, old, new)`
 moves a program over: every ref, and the ports of every place it's run
-backwards. It does it only when the two have the same pin, so nothing that
-uses it can break and nothing needs checking again; a changed type is
-refused with both types named. Data type upgrades (where constructors and
+backwards. It does it only when the new pin is at least as general as the
+old, so nothing that uses it can break; a narrower type is refused with
+both types named. `lab upgrade` does it for a program folder, from the
+modules in its `modules` folder, and keeps the result only if its tests
+still pass. Data type upgrades (where constructors and
 fields move too) need a migration, which is a next step. How others share and version code (a lineage id kept
 for life, a version hash per publish, names pinned per program) is
 proposed in [SHARING.md](../design/sharing/SHARING.md).

@@ -18,7 +18,7 @@
 import type { Id } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import type { Info } from "./infer.ts";
-import { CONSOLE, schemeArith, schemeNeeds, showType, type Row, type Scheme, type Subst, type Type } from "./types.ts";
+import { CONSOLE, instantiate, schemeArith, schemeNeeds, showType, Subst, TypeError, type Row, type Scheme, type Type } from "./types.ts";
 
 // A scheme with its variables numbered 0, 1, … by first appearance, rows
 // after them. Equal pins are equal JSON.
@@ -114,4 +114,27 @@ export function rigid(sc: Scheme): Type {
     return { t: "fn", params: t.params.map(go), ret: go(t.ret), eff };
   };
   return go(sc.type);
+}
+
+// Can a definition pinned `neu` take the place of one pinned `old` in every
+// program that uses it (SHARING.md §2, L111)? When the new pin is at least
+// as general: its type, instantiated, unifies with the old one's held rigid
+// (as a body is checked against its pin), it does no effect the old one
+// didn't, and every interface it needs of a variable the old one said.
+// `(List a) -> List a` may replace `(List Float64) -> List Float64`; the
+// other way round may not.
+export function atLeastAsGeneral(neu: Pin, old: Pin): boolean {
+  const s = new Subst();
+  const vars = (p: Pin) => [...p.vars, ...p.rows];
+  s.next = Math.max(0, ...vars(neu), ...vars(old)) + 1;
+  const o = fresh(old, s);
+  s.plainArgs = (id, args) => (id.startsWith(`${RIGID}any.`) ? null : args);
+  try { s.unify(instantiate(neu, s), rigid(o)); }
+  catch (e) { if (e instanceof TypeError) return false; throw e; }
+  const said = new Set((o.needs ?? []).map(([v, i]) => `${v}|${i}`));
+  return s.wanted.every((w) => {
+    const r = s.resolve(w.t);
+    if (r.t !== "con" || !r.id.startsWith(RIGID)) return true;
+    return said.has(`${r.id.slice(r.id.lastIndexOf(".") + 1)}|${w.iface}`);
+  });
 }
