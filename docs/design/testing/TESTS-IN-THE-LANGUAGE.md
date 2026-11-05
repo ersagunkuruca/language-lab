@@ -148,7 +148,9 @@ evaluator with compiled JS.
 - **The library checks itself.** Prelude laws (`append` associative,
   `sort` sorted and a permutation) ship as definitions, cached like the
   rest (T7e7, built: `sort gives its items in order`, `sort keeps every
-  item`, `append is associative`, over small lists of Ints).
+  item`, `append is associative`, over small lists of Ints; T7e8:
+  maps' `put` and `remove key`, sets' `add item` and `remove item`, and
+  `reverse undoes reverse`).
 
 ## Steps
 
