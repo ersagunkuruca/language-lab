@@ -17,7 +17,7 @@ import { Lang } from "../../ters/src/lang/dsl.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { merge } from "../../ters/src/model.ts";
 import { S, SHOW_ANY } from "../../ters/src/lang/std.ts";
-import { lowerCore, loadCoreJs } from "../src/core-js.ts";
+import { emitCoreJs, lowerCore, loadCoreJs } from "../src/core-js.ts";
 
 const p = load("calc");
 const r = makeRunner(p.code, p.info, { print: () => {} });
@@ -153,4 +153,23 @@ test("inverse of spaced, compiled, reads any spaces around, or none (C110 s5c)",
     const want = [...ev.call(ev.value(go), t)][0];
     assert.equal(f(t), want, JSON.stringify(t));
   }
+});
+
+// calc's read expression on the core IR reads through the written reader,
+// not the evaluator's solver: the code it's given (what main reaches) has
+// no `is digit` of its own, so inverses.ts brings the prelude's in. And on
+// parentheses 100,000 deep it neither runs out of stack (the reader's
+// recursion has heap copies, C137c18) nor slows down past linear (text.ts
+// slices a long line without testing it whole each time) (C110 s5b).
+test("calc's read expression on the core IR reads parentheses 100,000 deep (C110 s5b)", () => {
+  const k = new Lang(p.code), go = k.def("go");
+  k.define(go, k.fn(["line"], (line) => k.call(S.first, k.thunk(() => k.call(SHOW_ANY, k.call(p.named("read expression"), line))), k.thunk(() => k.lit("no reading")))));
+  const code = merge(k.code, p.code), names = { ...p.pres.names, ...k.names };
+  const info = infer(code, names, undefined, p.options);
+  const core = lowerCore(code, info, names, [go]);
+  assert.ok(!emitCoreJs(core).js.includes("solveAll"), "no solve through the evaluator's solver");
+  const f = (loadCoreJs(core, { print: () => {} }) as ((line: string) => string)[])[core.funcs.findIndex((g) => g.name === "go" && !g.inner)];
+  const t0 = performance.now();
+  assert.equal(f("(".repeat(100_000) + "1" + ")".repeat(100_000)), "literal(1)");
+  assert.ok(performance.now() - t0 < 10_000);
 });
