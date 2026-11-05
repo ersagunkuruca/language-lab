@@ -253,6 +253,11 @@ export function structure(host: StructureHost) {
       out.append(h("p", { class: "hint" }, body.effect
         ? "Calling an operation performs it; a match on the computation that performs it handles it, one case per operation, and every such match gets a case for a new one. Select an operation to give it inputs and say what it gives back."
         : "Every match and fold over this type gets an arm for a new case, with a hole to fill. Select a case to give it fields."), c.el, h("div", { class: "acts" }, add));
+      // The steps of an effect (L229): a derived type and handler, made once.
+      if (body.effect) {
+        const r = Top.makeSteps(code, sh, ui.def);
+        out.append(h("div", { class: "acts" }, edit(`Make steps of ${dname}`, `A Steps of ${dname} type and a steps of ${dname} function that runs a computation to its next operation`, r, () => runTop(info, r))));
+      }
       if (!body.effect && !body.params.length) out.append(interfacesOfType(info, names));
     } else if (sel === ui.def && isPublished(ui.def)) {
       // A published definition is read-only; copying it in is how you change it.
