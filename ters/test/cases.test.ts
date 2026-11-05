@@ -95,8 +95,32 @@ test("the cases module's collated orders text as the host's root order does", ()
   const wrong: string[] = [];
   for (let i = 0; i < texts.length; i++) for (const j of [i + 1, i + 7, i + 23]) {
     const x = texts[i], y = texts[j % texts.length];
-    const got = SIGN[([...r.call(f, x, y)][0] as { tag: string }).tag], want = Math.sign(host.compare(x, y));
+    const got = SIGN[([...r.call(f, x, y, { tag: LOCALE_V, fields: ["und"] })][0] as { tag: string }).tag], want = Math.sign(host.compare(x, y));
     if (got !== want) wrong.push(`${JSON.stringify(x)} ${JSON.stringify(y)}: host ${want}, table ${got}`);
+  }
+  assert.deepEqual(wrong, []);
+});
+
+// A locale's own letters (L214e5b2): Turkish's ç after c and ı before i,
+// Spanish's ñ, Czech's č ř š ž, Slovenian's č š ž, as the host orders
+// them, on random words of each language's letters.
+test("the cases module's collated orders text as the host does in Turkish, Spanish, Czech and Slovenian", () => {
+  const k = new Lang(LIBRARY.code);
+  const code = base(k.code), names = baseNames(k.names);
+  const r = makeRunner(code, infer(code, names, undefined, checkOptions), { print: () => {} });
+  const f = r.value(cases("table collated"));
+  const SIGN = { "std.order.before": -1, "std.order.same": 0, "std.order.after": 1 } as Record<string, number>;
+  const wrong: string[] = [];
+  for (const [tag, own] of [["tr", "çğıİöşüÇĞÖŞÜ"], ["es", "ñÑáé"], ["cs", "čďěňřšťůžČŘŠŽ"], ["sl", "čćđšžČŠŽ"]]) {
+    const host = new Intl.Collator(tag, { usage: "sort" }), pool = [..."abcghinostuyzAIZ -" + own];
+    let seed = 5;
+    const rnd = (n: number) => (seed = (seed * 1103515245 + 12345) % 2147483648) % n;
+    const texts = Array.from({ length: 80 }, () => Array.from({ length: 1 + rnd(4) }, () => pool[rnd(pool.length)]).join("").normalize("NFC"));
+    for (let i = 0; i < texts.length; i++) for (const j of [i + 1, i + 5, i + 17]) {
+      const x = texts[i], y = texts[j % texts.length];
+      const got = SIGN[([...r.call(f, x, y, { tag: LOCALE_V, fields: [tag] })][0] as { tag: string }).tag], want = Math.sign(host.compare(x, y));
+      if (got !== want) wrong.push(`${tag} ${JSON.stringify(x)} ${JSON.stringify(y)}: host ${want}, table ${got}`);
+    }
   }
   assert.deepEqual(wrong, []);
 });

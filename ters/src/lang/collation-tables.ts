@@ -47,8 +47,10 @@ const ASSIGNED = /[^\p{Cn}\p{Cs}\p{Co}]/u;
 // secondary difference sits between two marks', so halves.
 const MARKS_FROM = 100;
 
-export function buildCollationTables(): CollationTables {
-  const at = (sensitivity: "base" | "accent" | "variant") => new Intl.Collator("und", { sensitivity, usage: "sort" });
+// `locale`: the order of that locale's own Intl.Collator (L214e5b2), from
+// which a tailoring is the difference with the root order's.
+export function buildCollationTables(locale = "und"): CollationTables {
+  const at = (sensitivity: "base" | "accent" | "variant") => new Intl.Collator(locale, { sensitivity, usage: "sort" });
   const B = at("base"), A = at("accent"), V = at("variant");
   const letters: number[] = [], marks: number[] = [], contractions: [string, number][] = [];
   for (let c = 0; c < 0x110000; c++) {
@@ -208,18 +210,16 @@ export function textElements(t: CollationTables, s: string): Element[] {
   return els(s);
 }
 
-// The tables as saved (library/collation.json) for the cases module's
-// `table collated` (L214e4b), which reads NFC text as it comes: a code
-// point NFD would take apart (é, Ǽ) has the elements its NFD gives, and
-// Hangul syllables are taken apart by arithmetic, so they aren't here.
-// Secondaries are numbered 0, 1, 2… in order. `runs` are [from, count,
-// primary, secondary, tertiary, combining class]: count code points from `from`, each one
-// primary after the last; `multi` the code points of several elements;
-// `contractions` [code points, the letter they make].
-export interface SavedCollation { unicode: string; runs: [number, number, number, number, number, number][]; multi: [number, Element[]][]; contractions: [number[], number][] }
+export interface SavedCollation { unicode: string; runs: [number, number, number, number, number, number][]; multi: [number, Element[]][]; contractions: [number[], number][]; tailorings: Record<string, [number, Element[]][]> }
 export const HANGUL = { from: 0xac00, to: 0xd7a3 };
+// A root primary is TAILORED · its number, so a locale's letters fit
+// between two of root's (L214e5b2).
+export const TAILORED = 64;
 
-export function saveCollation(t: CollationTables): SavedCollation {
+// Every code point's elements as NFC text reads it: a code point NFD
+// would take apart (é, Ǽ) has the elements its NFD gives; Hangul
+// syllables are left out, taken apart by arithmetic.
+export function elementsByCode(t: CollationTables): Map<number, Element[]> {
   const all = new Map(t.elements);
   for (let c = 0; c < 0x110000; c++) {
     if (all.has(c) || (c >= HANGUL.from && c <= HANGUL.to) || (c >= 0xd800 && c < 0xe000)) continue;
@@ -228,7 +228,64 @@ export function saveCollation(t: CollationTables): SavedCollation {
     const es = textElements(t, s);
     if (es.length) all.set(c, es);
   }
-  const secs = [...new Set([...all.values()].flatMap((es) => es.map((e) => e[1])))].sort((a, b) => a - b);
+  return all;
+}
+
+// A locale's tailoring (L214e5b2): the code points whose elements in its
+// order aren't root's, with primaries in root's numbers times TAILORED.
+// Each of the locale's primaries is the root primary its letters share,
+// where those keep root's order (the longest run that does); one that
+// doesn't, or a letter of its own (Turkish ç), comes just after the last
+// kept, one up for each; a locale that puts more than TAILORED − 1
+// letters after one throws. Secondaries keep their values, numbered
+// with root's when saved.
+export function tailoring(root: Map<number, Element[]>, loc: Map<number, Element[]>): Map<number, Element[]> {
+  const shared = new Map<number, Set<number>>();
+  for (const [c, es] of loc) {
+    const r = root.get(c);
+    if (es.length !== 1 || !es[0][0] || r?.length !== 1 || !r[0][0]) continue;
+    if (!shared.has(es[0][0])) shared.set(es[0][0], new Set());
+    shared.get(es[0][0])!.add(r[0][0]);
+  }
+  const qs = [...new Set([...loc.values()].flatMap((es) => es.map((e) => e[0])).filter((p) => p > 0))].sort((a, b) => a - b);
+  const r = qs.map((q) => { const s = shared.get(q); return s?.size === 1 ? [...s][0] : -1; });
+  // The longest run of them in root's order.
+  const tails: number[] = [], before: number[] = [];
+  for (let i = 0; i < qs.length; i++) {
+    if (r[i] < 0) continue;
+    let lo = 0, hi = tails.length;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (r[tails[m]] < r[i]) lo = m + 1; else hi = m; }
+    before[i] = lo ? tails[lo - 1] : -1;
+    tails[lo] = i;
+  }
+  const kept = new Set<number>();
+  for (let i = tails.at(-1) ?? -1; i >= 0; i = before[i]) kept.add(i);
+  const primary = new Map<number, number>();
+  let last = 0, up = 0;
+  qs.forEach((q, i) => {
+    if (kept.has(i)) { last = r[i] * TAILORED; up = 0; } else if (++up >= TAILORED) throw new Error(`more than ${TAILORED - 1} letters after one`);
+    primary.set(q, last + up);
+  });
+  const scaled = (es: Element[], f: (p: number) => number) => es.map(([p, sec, ter, cc]) => [p ? f(p) : 0, sec, ter, cc ?? 0] as Element);
+  const out = new Map<number, Element[]>();
+  for (const [c, es] of loc) {
+    const mine = scaled(es, (p) => primary.get(p)!), theirs = scaled(root.get(c) ?? [], (p) => p * TAILORED);
+    if (JSON.stringify(mine) !== JSON.stringify(theirs)) out.set(c, mine);
+  }
+  for (const c of root.keys()) if (!loc.has(c)) out.set(c, []);
+  return out;
+}
+
+// The tables as saved (library/collation.json) for the cases module's
+// `table collated` (L214e4b), which reads NFC text as it comes (see
+// elementsByCode). Secondaries are numbered 0, 1, 2… in order. `runs` are
+// [from, count, primary, secondary, tertiary, combining class]: count code
+// points from `from`, each one primary after the last; `multi` the code
+// points of several elements; `contractions` [code points, the letter
+// they make]; `tailorings` each locale's (L214e5b2), by its language.
+export function saveCollation(t: CollationTables, tailored: Record<string, Map<number, Element[]>> = {}, all = elementsByCode(t)): SavedCollation {
+  const secs = [...new Set([...all.values(), ...Object.values(tailored).flatMap((m) => [...m.values()])].flatMap((es) => es.map((e) => e[1])))].sort((a, b) => a - b);
+  if (secs.length > 512) throw new Error(`${secs.length} secondaries, more than an element holds`);
   const rank = new Map(secs.map((s, i) => [s, i]));
   const runs: SavedCollation["runs"] = [], multi: SavedCollation["multi"] = [];
   for (const c of [...all.keys()].sort((a, b) => a - b)) {
@@ -239,5 +296,6 @@ export function saveCollation(t: CollationTables): SavedCollation {
     else runs.push([c, 1, p, s, x, cc!]);
   }
   const contractions = [...t.contractions].flatMap(([first, xs]) => xs.map(([rest, c]) => [[first, ...rest], c] as [number[], number]));
-  return { unicode: process.versions.unicode ?? "", runs, multi, contractions };
+  const tailorings = Object.fromEntries(Object.entries(tailored).map(([l, m]) => [l, [...m].sort((a, b) => a[0] - b[0]).map(([c, es]) => [c, es.map(([p, s, x, cc]) => [p, rank.get(s)!, x, cc ?? 0] as Element)] as [number, Element[]])]));
+  return { unicode: process.versions.unicode ?? "", runs, multi, contractions, tailorings };
 }
