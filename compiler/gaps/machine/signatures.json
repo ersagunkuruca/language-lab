@@ -1,0 +1,47 @@
+{
+  "hgga5aep87lt7hu3sfs8osbo7f": {
+    "vars": [],
+    "rows": [
+      0
+    ],
+    "type": {
+      "t": "fn",
+      "params": [
+        {
+          "t": "con",
+          "id": "eekg6rio5ccfujiuvlfl3ndrge",
+          "args": []
+        },
+        {
+          "t": "fn",
+          "params": [
+            {
+              "t": "con",
+              "id": "asnjv71a18gr4r7j4k1bkbqqna",
+              "args": []
+            }
+          ],
+          "ret": {
+            "t": "con",
+            "id": "asnjv71a18gr4r7j4k1bkbqqna",
+            "args": []
+          },
+          "eff": {
+            "effs": [],
+            "tail": 0
+          }
+        }
+      ],
+      "ret": {
+        "t": "con",
+        "id": "eekg6rio5ccfujiuvlfl3ndrge",
+        "args": []
+      },
+      "eff": {
+        "effs": [],
+        "tail": 0
+      }
+    },
+    "plain": []
+  }
+}

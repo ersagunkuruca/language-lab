@@ -6,7 +6,7 @@ import { handle, call } from "../mcp/server.ts";
 
 const text = (name: string, args: Record<string, unknown> = {}) => {
   const r = call(name, args);
-  assert.equal(r.error, false, r.text);
+  assert.equal(r.error, false, `${name}: ${r.text}`);
   return r.text;
 };
 
@@ -86,4 +86,34 @@ test("a split's cases show folded as otherwise; case= changes one, otherwise cha
   text("replace", { at: "loud", find: "moment name(m)", text: '"!"' });
   assert.equal(text("eval", { text: "map([swapped, fell, filled], loud)" }), '= ["swap!", "!", "!"] : List Text');
   assert.match(text("search", { text: "swap!" }), /^\w+ +loud: "swap!"$/m);
+});
+
+test("pin holds a definition's type, kept in the folder's signatures.json, so a body can rely on it (L173c)", async () => {
+  const { cpSync, existsSync, mkdtempSync, readFileSync, rmSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const { loadProgram } = await import("../src/lang/load.ts");
+  const { infer } = await import("../src/lang/infer.ts");
+  const dir = join(mkdtempSync(join(tmpdir(), "ters-mcp-")), "machine");
+  cpSync("../compiler/gaps/machine", dir, { recursive: true });
+  const errors = () => { const p = loadProgram(dir); return infer(p.code, p.pres.names, undefined, p.options).errors.map((e) => e.message); };
+  // machine's args mapped is fields mapped of its input, which says
+  // nothing of the input's type: its pin does.
+  assert.deepEqual(errors(), []);
+  text("open", { path: dir });
+  const pins = readFileSync(join(dir, "signatures.json"), "utf8");
+  const off = call("pin", { at: "args mapped", off: true });
+  assert.equal(off.error, true);
+  assert.match(off.text, /fields mapped needs the value's data type known here/);
+  assert.equal(readFileSync(join(dir, "signatures.json"), "utf8"), pins);
+  // An edit inside is checked at the pinned type.
+  assert.match(text("replace", { at: "args mapped", find: "fields mapped(instruction, f)", text: "fields mapped(instruction, (a) => f(a))" }), /\(a#\w+\) => f\(a\)/);
+  assert.match(text("view", { at: "args mapped", depth: 1 }), /: \(Instr, \(Arg\) -\[e\]-> Arg\) -\[e\]-> Instr/);
+  // Without its pins the folder doesn't check; with them, from a pin made here, it does.
+  rmSync(join(dir, "signatures.json"));
+  assert.match(errors().join("; "), /fields mapped needs/);
+  // A pin made here is written there again.
+  text("open", { path: dir });
+  assert.match(text("pin", { at: "zeros" }), /^ok: zeros : /);
+  assert.ok(existsSync(join(dir, "signatures.json")));
 });

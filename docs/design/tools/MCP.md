@@ -59,6 +59,7 @@ Uses of a name show the name alone: it is bound once, with its id, in sight.
 | `split(at, on, find?)` | a part becomes a match on a variable, one case per variant |
 | `rename(at, name)`, `comment(at, text)` | side tables only; uses follow the id |
 | `define(name, kind, params?)`, `add_input(at, name)`, `remove(at)` | definitions |
+| `pin(at, off?)` | a definition's type held as it is now (signatures.ts), so edits inside keep it and a body can rely on its inputs' types; a folder keeps pins in signatures.json, which `lab` reads too (L173c) |
 | `undo()` | the last edit |
 
 `find` picks a part inside `at` by its text, copied from `view` (the `#id`s
