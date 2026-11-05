@@ -55,6 +55,7 @@ import { compile } from "../../compiler/src/compile.ts";
 import { CFLAGS, emitC } from "../../compiler/src/c.ts";
 import { lowerScalar } from "../../compiler/src/scalar.ts";
 import { FAIL, codeLines, coreMap, coreModule, hostOpsOf, loadCoreJs, lowerCore, solvesSlowly } from "../../compiler/src/core-js.ts";
+import { withInverses } from "../../compiler/src/inverses.ts";
 import { execFileSync } from "node:child_process";
 import { recordings, webCorePage, webPage } from "./web.ts";
 import { appFolder } from "./app.ts";
@@ -423,7 +424,10 @@ switch (command) {
     // Its own effects' operations nothing handles, from hosts/c.c (L69b1).
     const cHost = existsSync(path) && statSync(path).isDirectory() ? join(path, "hosts", "c.c") : "";
     const hosts = { ops: hostOpsOf(p.code, p.names), c: cHost && existsSync(cHost) ? readFileSync(cHost, "utf8") : undefined };
-    const lowered = lowerScalar(p.code, p.info, p.names, [main], { data: true, hosted: new Set(ownOperations(p.code).flatMap((op) => effectOfOperation(p.code, op) ?? [])) });
+    // inverse(f, …) of a named f, as the core IR's JavaScript has it: a
+    // printer's by its reader written out (C110 s7c), C can't solve.
+    const q = withInverses(p.code, p.info, p.names);
+    const lowered = lowerScalar(q.code, q.info, q.names, [main], { data: true, hosted: new Set(ownOperations(q.code).flatMap((op) => effectOfOperation(q.code, op) ?? [])) });
     let c: string;
     try { c = emitC(lowered, { main, hosts }).c; } catch (e) { fail((e as Error).message); }
     writeFileSync(`${out}.c`, c);

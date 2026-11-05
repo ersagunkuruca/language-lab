@@ -9,6 +9,7 @@ import { descentReader } from "../../ters/src/lang/descent.ts";
 import { writeReader } from "../../ters/src/lang/reader.ts";
 import { PRELUDE_DEFS } from "../../ters/src/lang/prelude-ids.ts";
 import { lowerScalar } from "../src/scalar.ts";
+import { withInverses } from "../src/inverses.ts";
 import { build, skip } from "./c-harness.ts";
 import { makeRunner, showValue, type Value } from "../../ters/src/lang/run.ts";
 import { Lang } from "../../ters/src/lang/dsl.ts";
@@ -104,4 +105,21 @@ test("calc's reader, written as a definition, reads each line as descent does, i
   const fi = lowered.funcs.findIndex((f) => f.def === w.line);
   const inC = build(lowered)(lines.map((line) => [fi, [line, 0]])).map((r) => { const o = r.value as { tag: string; fields: Value[] } | undefined; return o?.tag === "std.optional.some" ? shown(o.fields[0]) : "none"; });
   assert.deepEqual(inC, want);
+});
+
+// calc's `read expression` compiled (C110 s7c): its inverse of the printer
+// is a call of the printer's reader written out (inverses.ts), so C runs
+// it, where it couldn't run the solve, and reads each line as the
+// evaluator does.
+test("calc's read expression compiled to C reads through the written reader (C110 s7c)", { skip }, () => {
+  const k = new Lang(p.code), go = k.def("go");
+  k.define(go, k.fn(["line"], (line) => k.call(S.first, k.thunk(() => k.call(SHOW_ANY, k.call(p.named("read expression"), line))), k.thunk(() => k.lit("no reading")))));
+  const code = merge(k.code, p.code), names = { ...p.pres.names, ...k.names };
+  const q = withInverses(code, infer(code, names, undefined, p.options), names);
+  const lowered = lowerScalar(q.code, q.info, q.names, [go], { data: true });
+  assert.deepEqual([...lowered.refused.values()], []);
+  const lines = ["1 + 2 * 3 - 4 / x ^ 2 + (y - 1) * -z", "2 ^ 3 ^ 2", "-(1 + 2)", "((1))", "1 +", "2 ^ -3", ""];
+  const fi = lowered.funcs.findIndex((f) => f.def === go);
+  const got = build(lowered)(lines.map((line) => [fi, [line]])).map((r) => r.value);
+  assert.deepEqual(got, lines.map((line) => { const w = searched(line); return w.length ? w[0] : "no reading"; }));
 });

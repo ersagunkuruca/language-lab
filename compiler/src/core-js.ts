@@ -23,7 +23,7 @@ import { ARRAY_OPS } from "../../ters/src/lang/std.ts";
 import { toList, type Runtime } from "../../ters/src/lang/run.ts";
 import { fusedProgram } from "./handlers.ts";
 import { infer, type Info } from "../../ters/src/lang/infer.ts";
-import { expandInverses } from "./inverses.ts";
+import { withInverses } from "./inverses.ts";
 import { hoistInvariants } from "./hoist.ts";
 import { dependencies, ownerOfTypeParts, type Code, type Id, type NodeOf } from "../../ters/src/model.ts";
 import { effectOfOperation, hostOp, ownOperations } from "../../ters/src/lang/hosts.ts";
@@ -476,13 +476,9 @@ export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roo
   // inverse(f, …) of a named f is a solve on f (inverses.ts), as compile.ts
   // has it: the equations' solver or a mode's plan, not the relational
   // interpreter calling a function it is handed (the pedal's atanh, C137d8).
-  const inv = expandInverses(code, names);
-  if (inv.expanded.length) {
-    // Checked with the program's options: a represented program's
-    // insiders (library-reps.ts) may call the constructors they stand for.
-    const checked = infer(inv.code, inv.names, undefined, info.options);
-    if (checked.errors.length <= info.errors.length) ({ code, names, info } = { code: inv.code, names: inv.names, info: checked });
-  }
+  // Checked with the program's options: a represented program's insiders
+  // (library-reps.ts) may call the constructors they stand for.
+  ({ code, info, names } = withInverses(code, info, names));
   const f = fusedProgram(code, info, names);
   const ir = lowerScalar(f.code, f.info, f.names, roots, { data: true, host: true });
   // Reads that wait on the places their values are used at (C162).
