@@ -23,7 +23,7 @@
 // avoidance by interface fingerprints, and "Build systems à la carte"
 // (Mokhov, Mitchell and Peyton Jones, ICFP 2018) for early cutoff.
 
-import type { Code, Id, NodeOf } from "../model.ts";
+import type { Code, Id, Node, NodeOf } from "../model.ts";
 import { conditionResults, isCall, isUse, subtree } from "../model.ts";
 import { EMBEDDING_V } from "./std.ts";
 import type { Info, Options } from "./infer.ts";
@@ -138,7 +138,30 @@ const idsText = (xs?: Iterable<Id>) => { if (!xs) return null; let t = idsTexts.
 // The data types a layer checked (its parts' owners).
 const layerTypes = new WeakMap<Info, { types: Set<Id> }>();
 const layerParts = (l: Info) => { let p = layerTypes.get(l); if (!p) layerTypes.set(l, (p = { types: new Set(l.owner.values()) })); return p; };
-const nodesText = (code: Code, d: Id) => subtree(code, d).map((id) => { const n = code.nodes[id]; let t = nodeText.get(n); if (t === undefined) nodeText.set(n, (t = JSON.stringify(n))); return t; }).join(",");
+const textOf = (n: Node) => { let t = nodeText.get(n); if (t === undefined) nodeText.set(n, (t = JSON.stringify(n))); return t; };
+// A definition's nodes as a number standing for their text (L215c2), the
+// same number for the same text. The nodes it was last asked with are
+// kept by its id, so after an edit elsewhere the same node objects are
+// answered without writing the text out again (an edit's keys wrote out
+// every group's, 11 ms of an edit in Spacetime). A number is never given
+// to two texts: when the texts are forgotten, numbering goes on.
+const defTexts = new Map<Id, { nodes: Node[]; n: number }>();
+const textNumbers = new Map<string, number>();
+let textCount = 0;
+const defText = (code: Code, d: Id): number => {
+  const ids = subtree(code, d);
+  const was = defTexts.get(d);
+  if (was && was.nodes.length === ids.length && ids.every((id, i) => code.nodes[id] === was.nodes[i])) return was.n;
+  const nodes = ids.map((id) => code.nodes[id]);
+  const text = nodes.map(textOf).join(",");
+  let n = textNumbers.get(text);
+  if (n === undefined) {
+    if (textNumbers.size > 50_000) { textNumbers.clear(); defTexts.clear(); }
+    textNumbers.set(text, (n = ++textCount));
+  }
+  defTexts.set(d, { nodes, n });
+  return n;
+};
 // Long texts that recur (what every group sees) by a short number, so a
 // key doesn't repeat them.
 const interned = new Map<string, number>();
@@ -188,8 +211,8 @@ export class CheckCache {
     };
     const global = intern(JSON.stringify([
       layerId(layer), idsText(opts.hidden), idsText(opts.insiders), idsText(opts.library),
-      a.typeDefs.filter((d) => !under.types.has(d)).map((d) => nodesText(code, d)),
-      a.valueDefs.filter((d) => !layer.schemes.has(d) && isImplementation(d)).map((d) => nodesText(code, d)),
+      a.typeDefs.filter((d) => !under.types.has(d)).map((d) => defText(code, d)),
+      a.valueDefs.filter((d) => !layer.schemes.has(d) && isImplementation(d)).map((d) => defText(code, d)),
     ]));
     const missed: { group: Id[]; key: string; from: number; to: number }[] = [];
     const keyOf = (group: Id[]): string | null => {
@@ -200,7 +223,7 @@ export class CheckCache {
         if (!sc) return null;
         seen.push(d, canonical(sc, s, layer?.schemes.get(d) === sc), info.divergent.has(d) ? "!" : "");
       }
-      return JSON.stringify([global, group.map((d) => nodesText(code, d)), group.map((d) => opts.pins?.[d] ?? null), seen]);
+      return JSON.stringify([global, group.map((d) => defText(code, d)), group.map((d) => opts.pins?.[d] ?? null), seen]);
     };
     const finish = () => { const last = missed[missed.length - 1]; if (last && last.to < 0) last.to = s.wanted.length; };
     return {
