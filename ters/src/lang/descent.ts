@@ -250,14 +250,26 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
   }
   const escapes = new Map<object, [string, string][]>();
   // What a function of one character writes for c, or null.
-  function written(fn: Any, c: string, env: Env = new Map()): string | null {
-    try { const v = evaluate(fn.body, new Map(env).set(fn.params[0], c)); return typeof v === "string" ? v : null; } catch (e) { if (e instanceof NoAnswer) return null; throw e; }
+  // Every way it writes c, where its body is `one of(spellings)` (L72e1:
+  // json character spelled), the first one its printing.
+  function written(fn: Any, c: string, env: Env = new Map()): string[] {
+    const all = (id: Id, inner: Env): string[] => {
+      const b = node(id);
+      if (b?.kind === "call" && !isUse(b as never)) {
+        if (target(b.fn) === S.oneOf) return fromList(evaluate(b.args[0], inner)).filter((v): v is string => typeof v === "string");
+        // A let: its value bound, then its body.
+        const l = node(b.fn);
+        if (l?.kind === "lambda") { const e = new Map(inner); l.params.forEach((p, j) => e.set(p, evaluate(b.args[j], inner))); return all(l.body, e); }
+      }
+      const v = evaluate(id, inner); return typeof v === "string" ? [v] : [];
+    };
+    try { return all(fn.body, new Map(env).set(fn.params[0], c)); } catch (e) { if (e instanceof NoAnswer) return []; throw e; }
   }
   // The characters among the first 128 it writes as something else, by
   // what it writes, longest first (L72d).
   function characterTable(fn: Any, env: Env = new Map()): [string, string][] {
     let table = escapes.get(fn);
-    if (!table) { table = []; for (let i = 0; i < 128; i++) { const c = String.fromCharCode(i), o = written(fn, c, env); if (o !== null && o !== c && o !== "") table.push([o, c]); } table.sort((a, b) => b[0].length - a[0].length); escapes.set(fn, table); }
+    if (!table) { table = []; for (let i = 0; i < 128; i++) { const c = String.fromCharCode(i); for (const o of new Set(written(fn, c, env))) if (o !== c && o !== "") table.push([o, c]); } table.sort((a, b) => b[0].length - a[0].length); escapes.set(fn, table); }
     return table;
   }
   const spaces = (at: number) => { while (text[at] === " ") at++; return at; };
@@ -410,7 +422,7 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
           if (hit) return [at + hit[0].length, hit[1]];
           if (at >= text.length) return null;
           const c = String.fromCodePoint(text.codePointAt(at)!);
-          return out(c) === c ? [at + c.length, c] : null;
+          return out(c).includes(c) ? [at + c.length, c] : null;
         }
         const r = read(fn.body, new Map(env).set(fn.params[0], { unknown: "int" }), at);
         const v = r?.[1].get(fn.params[0]);
