@@ -351,7 +351,7 @@ const declares = new WeakMap<Code, boolean>();
 const UNITLESS: Inference = { ok: true, conflicts: [], unit: () => undefined };
 export function infer(code: Code, defId: Id, extra: Constraint[] = []): Inference {
   let any = declares.get(code);
-  if (any === undefined) declares.set(code, (any = Object.values(code.nodes).some((n) => unitOf(n))));
+  if (any === undefined) declares.set(code, (any = nodesWhere(code, "has a unit", (n) => !!unitOf(n)).length > 0));
   if (!any && extra.every((c) => c.rhs.every((x) => x === 0))) return UNITLESS;
   const sys = new System();
   const conflicts: Inference["conflicts"] = [];
