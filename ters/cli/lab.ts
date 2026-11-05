@@ -62,7 +62,7 @@ import { appFolder } from "./app.ts";
 import { soundOf } from "./sound.ts";
 import { readWav, writeWav } from "./wav.ts";
 import { audioProblem, BLOCK, playBlocks } from "../src/lang/audio.ts";
-import { answersAgain, runTests, savedFrom, type Called, type Saved } from "../src/lang/tests.ts";
+import { answersAgain, checkedTests, checksAgain, runTests, savedFrom, testsIn, type Called, type Saved } from "../src/lang/tests.ts";
 import { representationLaws } from "../src/lang/rep-laws.ts";
 import { embeddingLaws } from "../src/lang/embed-laws.ts";
 import { hostSkeleton, type Hosts } from "../src/lang/hosts.ts";
@@ -134,6 +134,37 @@ function compiledAnswers(p: Program, saved: Record<Id, Saved[]>) {
     const i = ir.funcs.findIndex((g) => g.def === d && !g.inner);
     if (i < 0) return "isn't among the compiled functions";
     if (ir.funcs[i].multi) return "gives several answers, which a call from here doesn't take yet";
+    return (args): Called => {
+      try { return { value: fns[i](...args) as Value }; } catch (e) {
+        if (e === FAIL) return { none: true };
+        throw e instanceof Error ? e : new Error(String((e as { reason?: unknown }).reason ?? e));
+      }
+    };
+  });
+}
+
+// Each test of the program's own, as the core IR's JavaScript runs it
+// (T7e2): its checked definition (tests.ts checkedTests), called on the
+// inputs the evaluator's run uses; the first expect that failed, or none.
+function compiledChecks(p: Program, saved: Record<Id, Saved[]>) {
+  const tests = testsIn(p.info, p.own);
+  if (!tests.length) return [];
+  const c = checkedTests(p.code, p.names, tests);
+  let ir: ReturnType<typeof lowerCore>, fns: ((...xs: unknown[]) => unknown)[];
+  try {
+    const info = infer(c.code, c.names, undefined, p.info.options);
+    if (info.errors.length) throw new Error(info.errors[0].message);
+    ir = lowerCore(c.code, info, c.names, [...c.wrappers.values()]);
+    fns = loadCoreJs(ir, { print: () => {}, world: nodeWorld() });
+  } catch (e) { const why = `didn't lower (${(e as Error).message})`; return checksAgain(p.code, p.info, p.names, tests, saved, () => why); }
+  return checksAgain(p.code, p.info, p.names, tests, saved, (d) => {
+    const w = c.wrappers.get(d);
+    if (!w) return "isn't a function written in place";
+    const why = ir.refused.get(w);
+    if (why) return why;
+    const i = ir.funcs.findIndex((g) => g.def === w && !g.inner);
+    if (i < 0) return "isn't among the compiled functions";
+    if (ir.funcs[i].multi) return "searches, and a search's paths aren't taken from here yet";
     return (args): Called => {
       try { return { value: fns[i](...args) as Value }; } catch (e) {
         if (e === FAIL) return { none: true };
@@ -519,10 +550,10 @@ switch (command) {
       if (r.failures.length > 3) console.log(`  … and ${r.failures.length - 3} more`);
     }
     // --compiled: the accepted answers again, compiled to JavaScript through
-    // the core IR, which must give them too (T7e). A test's Check isn't
-    // compiled yet, so only answers; a definition that doesn't lower is
-    // said, not failed.
-    const again = rest.includes("--compiled") && !p.info.errors.length ? compiledAnswers(p, saved) : [];
+    // the core IR, which must give them too (T7e), and each test, run
+    // compiled under a handler of its Check (T7e2); a definition that
+    // doesn't lower is said, not failed.
+    const again = rest.includes("--compiled") && !p.info.errors.length ? [...compiledAnswers(p, saved), ...compiledChecks(p, saved)] : [];
     for (const r of again) {
       if (r.skipped) console.log(`– ${r.name} compiled: not checked, it ${r.skipped}`);
       else if (r.error) console.log(`✗ ${r.name} compiled: ${r.error}`);
