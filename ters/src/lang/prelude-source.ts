@@ -2373,6 +2373,22 @@ export function buildPrelude(): Module {
     ], hexBad()) },
   ])));
   const bytesOfHex = def("bytes of hex", ["text"], (t) => Bt(k.call(hexBytes, k.call(TEXT_OPS.characters, t))));
+  // The round trips as laws (T7e4, TESTS-IN-THE-LANGUAGE.md §6: a sweep
+  // of TypeScript asserts becomes laws over small values): each reading
+  // undoes its writing. A list of whole numbers becomes bytes by its low
+  // eight bits, so every small list is some bytes.
+  const someBytes = (xs: Id) => k.call(bytesOf, k.call(map, xs, k.fn(["n"], (x) => band(x, 255))));
+  const undoes = (name: string, read: Id, written: Id) => {
+    const d = k.def(name);
+    k.define(d, k.fn(["numbers"], (xs) => k.let("bytes", someBytes(xs), (b) =>
+      expect(k.equal(k.call(byteItems, k.call(read, k.call(written, b))), k.call(byteItems, b)), `${name}: the same bytes back`))));
+    return d;
+  };
+  const textUndoes = k.def("text of utf8 undoes utf8 of");
+  // Small texts with characters of two, three and four bytes between them.
+  k.define(textUndoes, k.fn(["a", "b", "c"], (a, b, c) => k.let("text", k.call(TEXT_OPS.joinAll, k.list(a, k.lit("é"), b, k.lit("€😀"), c), k.lit("")), (t) =>
+    expect(k.equal(k.call(textOfUtf8, k.call(utf8Of, t)), t), "text of utf8(utf8 of t) is t"))));
+  laws.push(undoes("bytes of base64 undoes base64 of", bytesOfBase64, base64Of), undoes("bytes of hex undoes hex of", bytesOfHex, hexOf), textUndoes);
   // Times of day (L188c): whole seconds from midnight, 0 to 86399.
   const secsIn = (t: Id, f: (x: Id) => Id) => k.match(t, [{ variant: TIME_OF_DAY_V, names: ["seconds"], body: ([x]) => f(x) }]);
   const timeIn = (t: Id, f: (h: Id, m: Id, sec: Id) => Id) => secsIn(t, (x) => f(fdiv(x, 3600), fmod(fdiv(x, 60), 60), fmod(x, 60)));

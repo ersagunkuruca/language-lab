@@ -10,6 +10,7 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { PROBLEMS, problemOf } from "../src/lang/problems.ts";
 import { COMPLEX_TYPE, NUMBER, RATIONAL_TYPE } from "../src/lang/types.ts";
 import { ARITH, CELL_OPS, DIVIDE, EMBEDDING_V, FALSE, FIELDS, INT_OPS, JSON_OPS, LOG_OP, RELEASE_V, S, SET, SHOWN_V, SOME, TRIG_OPS, TRUE } from "../src/lang/std.ts";
+import type { Id, NodeData } from "../src/model.ts";
 
 const bools = (k: Lang, b: string, extra: Parameters<Lang["match"]>[1] = []) =>
   k.match(b, [{ variant: TRUE, names: [], body: () => k.lit(1) }, { variant: FALSE, names: [], body: () => k.lit(2) }, ...extra]);
@@ -50,14 +51,23 @@ const SMALLEST: Record<string, (k: Lang) => unknown> = {
   "fields-type-unknown": (k) => k.define(k.def("p"), k.fn(["v"], (v) => k.call(FIELDS.listed, v))),
   "json-type-unknown": (k) => k.define(k.def("p"), k.fn(["v"], (v) => k.call(JSON_OPS.of, v))),
   "private-to-library": (k) => k.define(k.def("p"), k.x("std.rational.ratio")),
+  "effect-two-types": (k) => { const y = k.effect("Yield", [["yield", [["v", (ps) => k.tref(ps[0])]], () => k.tref("std.unit")]], ["a"]); k.define(k.def("p"), k.thunk(() => k.seq(k.call(y.op.yield, k.x(TRUE)), k.call(y.op.yield, k.lit("hi"))))); },
   "unhandled-effect": (k) => { const a = ask(k); k.define(k.def("p"), k.call(a.op.ask)); },
   "no-cases": (k) => k.define(k.def("p"), k.fn(["b"], (b) => k.match(b, []))),
+  "not-float-record": (k) => k.define(k.def("p"), k.call(S.mapParts, k.fn(["x"], (x) => x), k.lit("hi"))),
   "functions-in-data": (k) => k.define(k.def("p"), k.call(S.equal, k.fn(["x"], (x) => x), k.fn(["x"], (x) => x))),
   "no-port": (k) => { const f = k.def("f"); k.define(f, k.fn(["a"], (a) => k.call(ARITH.add, a, k.lit(1)))); k.define(k.def("p"), k.solve(f, { nope: k.lit(1), out: k.lit(3) }, { [param(k, f, 0)]: "x" }, (b) => b[param(k, f, 0)])); },
+  // A use with no body gives its produced ports (L211); one given every port has none to give.
+  "produces-nothing": (k) => { const f = k.def("f"); k.define(f, k.fn(["a"], (a) => k.call(ARITH.add, a, k.lit(1)))); const add = (n: NodeData) => (k as unknown as { add(n: NodeData): Id }).add(n); k.define(k.def("p"), k.thunk(() => k.call(S.first, k.thunk(() => add({ kind: "call", fn: add({ kind: "ref", target: f }), given: { [param(k, f, 0)]: k.lit(2), out: k.lit(3) }, binds: {} } as NodeData)), k.thunk(() => k.lit(1))))); },
   "needs-more-ports": (k) => { const f = k.def("f"); k.define(f, k.fn(["a", "b"], (a, b) => k.call(ARITH.add, a, b))); k.define(k.def("p"), k.solve(f, {}, { [param(k, f, 0)]: "x", [param(k, f, 1)]: "y" }, (b) => b[param(k, f, 0)])); },
   "not-backwards": (k) => { const v = k.def("v"); k.define(v, k.lit(1)); k.define(k.def("p"), k.solve(v, { out: k.lit(3) }, {}, () => k.lit(0))); },
   "field-of-one-case": (k) => { const t = k.type("Shape", [], [["dot", []], ["disc", [["r", () => k.tref(NUMBER)]]]]); k.define(k.def("p"), k.fn(["s"], (s) => k.call(t.f["disc.r"], s))); },
   "not-folded": (k) => { const t = k.type("Disc", [], [["disc", [["r", () => k.tref(NUMBER)]]]]); k.define(k.def("p"), k.fn(["s"], (s) => k.fold(s, [{ variant: t.v.disc, names: ["r"], results: ["rr"], body: (b) => b[0] }]))); },
+  "might-not-finish": (k) => { const loop = k.def("loop"); k.define(loop, k.fn(["v"], (v) => k.call(S.mapParts, loop, v))); },
+  "field-must-finish": (k) => {
+    const t = k.type("Stream", [], [["node", [["next", (self) => k.tfun([], k.tref(self))]]]]), make = k.def("make");
+    k.define(make, k.fn(["u"], (u) => k.call(t.v.node, k.thunk(() => k.match(k.call(make, u), [{ variant: t.v.node, names: ["n"], body: ([n]) => k.call(n) }])))));
+  },
   "cant-fold": (k) => { const t = k.type("Stream", [], [["more", [["next", (self) => k.tfun([], k.tref(self))]]]]); k.define(k.def("p"), k.fn(["s"], (s) => k.fold(s, [{ variant: t.v.more, names: ["next"], results: ["rest"], body: (_b, r) => r[0]! }]))); },
   "effect-folded": (k) => { const a = ask(k); k.define(k.def("p"), k.thunk(() => k.fold(k.call(a.op.ask), answered(k, a, () => k.lit(1))))); },
   "too-many-results": (k) => k.define(k.def("p"), k.gives(["a"], ["r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9"], (a) => a)),
@@ -79,6 +89,12 @@ const SMALLEST: Record<string, (k: Lang) => unknown> = {
   "embedding-open": (k) => k.define(k.def("p"), k.call(EMBEDDING_V, k.fn(["x"], (x) => x))),
   "embedding-not-record": (k) => k.define(k.def("p"), k.let("e", k.call(EMBEDDING_V, k.fn(["x"], (x) => k.call(S.show, x))), (e) => e)),
   "embedding-itself": (k) => k.define(k.def("p"), k.call(EMBEDDING_V, k.fn(["x"], (x) => k.call(INT_OPS.add, x, k.int(0))))),
+  // Two ways from A to D, through B and through C, and none straight.
+  "embedding-ways": (k) => {
+    const t = Object.fromEntries(["a", "b", "c", "d"].map((n) => [n, k.type(n.toUpperCase(), [], [[n, []]]).v[n]]));
+    const into = (from: string, to: string) => k.define(k.def(`${from} to ${to}`), k.call(EMBEDDING_V, k.fn(["x"], (x) => k.match(x, [{ variant: t[from], names: [], body: () => k.x(t[to]) }]))));
+    into("a", "b"); into("b", "d"); into("a", "c"); into("c", "d");
+  },
   "embedding-twice": (k) => k.define(k.def("p"), k.call(EMBEDDING_V, k.x(INT_OPS.toNumber))),
   "implementation-not-record": (k) => { const t = k.type("Colour", [], [["red", []]]); k.define(k.def("p"), k.let("s", k.call(SHOWN_V, k.fn(["c"], (c) => k.match(c, [{ variant: t.v.red, names: [], body: () => k.lit("red") }]))), (s) => s)); },
   "set-not-field": (k) => { k.type("Pt", [], [["pt", [["x", () => k.tref(NUMBER)]]]]); k.define(k.def("p"), k.fn(["r"], (r) => k.call(SET, k.fn(["q"], () => k.lit(1)), r, k.lit(2)))); },
