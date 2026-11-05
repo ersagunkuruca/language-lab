@@ -1,8 +1,8 @@
 // crew (compiler/gaps/crew), GAPS.md round 11's program: a plan of tasks
 // sorted (Kahn), its critical path found, and a crew of workers, each a
 // fiber answered later by a scheduler written in the language, run in
-// simulated minutes. The evaluator, the compiled module, the core IR's
-// and the hand-written ideal must print the same and exit the same way.
+// simulated minutes. The evaluator, the core IR's module and the
+// hand-written ideal must print the same and exit the same way.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -13,7 +13,7 @@ import { folder, plan, ways } from "../gaps/crew.ts";
 const w = await ways();
 const all = (args: string[], files: Record<string, string>, slow = false) => {
   const want = w.ideal(args, files);
-  for (const way of slow ? (["compiled", "core"] as const) : (["evaluator", "compiled", "core"] as const)) assert.deepEqual(w[way](args, files), want, way);
+  for (const way of slow ? (["core"] as const) : (["evaluator", "core"] as const)) assert.deepEqual(w[way](args, files), want, way);
   return want;
 };
 const sample = readFileSync(join(folder, "plan.txt"), "utf8");

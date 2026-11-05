@@ -1,28 +1,22 @@
 // crew (GAPS.md round 11), a crew of workers scheduling a plan of tasks,
-// in four ways, in one process: the evaluator, the compiled module
-// (compile.ts, `lab compile --compile-ts`), the one printed from the core
-// IR (`lab compile --core`) and the hand-written ideal (crew.ideal.js).
+// in three ways, in one process: the evaluator, the module printed from the
+// core IR (`lab compile --core`) and the hand-written ideal (crew.ideal.js).
 // Each gets the same arguments and a world whose files are kept in memory,
 // and the comparison is what it printed and how it exited. Used by
 // bench-crew.ts and test/crew.test.ts.
 
-import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { pathToFileURL } from "node:url";
 import { runProgram, type World } from "../../ters/src/lang/run.ts";
 import { loadProgram } from "../../ters/src/lang/load.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { representationsIn } from "../../ters/src/lang/represent.ts";
 import { represented } from "../../ters/cli/represented.ts";
-import { compile } from "../src/compile.ts";
 import { coreMain, lowerCore } from "../src/core-js.ts";
-import { $setPrint, $setWorld, $Aborted, $toList } from "../src/runtime.js";
 import { crew as ideal } from "./crew.ideal.js";
 
 export interface Run { out: string[]; err: string[]; code: number }
 export type Way = (args: string[], files: Record<string, string>) => Run;
-export type Name = "evaluator" | "compiled" | "core" | "ideal";
+export type Name = "evaluator" | "core" | "ideal";
 export const folder = join(import.meta.dirname, "crew");
 
 function reader(files: Record<string, string>) {
@@ -54,24 +48,12 @@ export function program(asDefined = false) {
 
 export async function ways(): Promise<Record<Name, Way>> {
   const p = program();
-  const dir = mkdtempSync(join(tmpdir(), "crew-"));
-  const runtime = pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href;
-  writeFileSync(join(dir, "crew.js"), compile(p.code, p.info, p.names, { runtime, exports: ["main"] }));
-  const built = (await import(pathToFileURL(join(dir, "crew.js")).href)).defs.main as (args: unknown) => number;
   const rt: { print: (s: string) => void; world?: World } = { print: () => {} };
   const fromCore = coreMain(lowerCore(p.code, p.info, p.names, [p.main]), "main", rt);
   return {
     evaluator: (args, files) => {
       const out: string[] = [], err: string[] = [];
       const code = runProgram(p.code, p.info, p.main, args, { print: (s) => out.push(s), names: p.names, world: world(files, err) });
-      return { out, err, code };
-    },
-    compiled: (args, files) => {
-      const out: string[] = [], err: string[] = [];
-      $setPrint((s: string) => out.push(s));
-      $setWorld(world(files, err));
-      let code: number;
-      try { code = Number(built($toList(args))); } catch (e) { if (!(e instanceof $Aborted)) throw e; err.push(e.reason); code = 1; }
       return { out, err, code };
     },
     core: (args, files) => {
