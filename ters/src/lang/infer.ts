@@ -23,7 +23,7 @@ import { unitProblems, UnitsBefore } from "../units.ts";
 import { fillHole } from "./refactor.ts";
 import { planSolve, runsBackwards, solvesInWholeNumbers } from "./solve.ts";
 import { computedForward, directionProblem, useDirections } from "./directions.ts";
-import { analyzer, derivedFrom, determinism, oneAnswer, solveMode, type Fn } from "./modes.ts";
+import { analyzer, derivedFrom, determinism, keptMode, keptReturned, oneAnswer, solveMode, type Fn } from "./modes.ts";
 import { smoothDerivative as hasSmoothDerivative, smoothGradient as hasSmoothGradient, recordVariant, forgetDerived } from "./derive.ts";
 import { answerKeys } from "./ports.ts";
 import { LITERAL, FILE_OPS, KEPT_FILES, JSON_OPS, RELEASE_V, ARITH, BOOL, CELL_OPS, EMBEDDING, EMBEDDING_V, LIST, DIVISION, FIELDS, JOBS, S, SET, SIGS, SMART, TRUE, TUPLE_MAX, tupleType } from "./std.ts";
@@ -1087,9 +1087,12 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
               return drop.length ? { ...row, effs: row.effs.filter((e) => !drop.includes(e)) } : null;
             };
             if (spec.size && !acts) {
-              modes ??= analyzer(code, names);
-              const mine = r && dropped(r, modes.ofMode(given.target, args.map((_, i) => String(i)), spec));
-              const theirs = rr && ret.t === "fn" && dropped(rr, modes.ofReturned(given.target, spec));
+              // A published definition's answer, kept, needs no analyzer.
+              const ports = args.map((_, i) => String(i));
+              const asked = r ? keptMode(code, names, given.target, ports, spec) : null, back = rr && ret.t === "fn" ? keptReturned(names, given.target, spec) : null;
+              const an = () => (modes ??= analyzer(code, names));
+              const mine = r && dropped(r, asked !== undefined ? asked : an().ofMode(given.target, ports, spec));
+              const theirs = rr && ret.t === "fn" && dropped(rr, back !== undefined ? back : an().ofReturned(given.target, spec));
               if (mine || theirs) fr = { ...fr, ...(mine ? { eff: mine } : {}), ...(theirs && ret.t === "fn" ? { ret: { ...ret, eff: theirs } } : {}) };
             }
           }
