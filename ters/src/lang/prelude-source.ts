@@ -2262,9 +2262,18 @@ export function buildPrelude(): Module {
     k.call(hexNumber, k.call(TEXT_OPS.slice, t, k.int(1), k.call(TEXT_OPS.length, t)), k.call(INT_OPS.add, k.call(INT_OPS.mul, acc, k.int(16)), k.call(hexDigitValue, k.call(TEXT_OPS.slice, t, k.int(0), k.int(1))))))));
   const jsonEscapeChar = def("json escape character", ["character"], (c) => k.byValue(c, [..."\\u0123456789abcdefABCDEF"].map((x) => [k.lit(x), k.true] as [Id, Id]), k.false));
   const jsonEscapeStart = def("json escape start", ["character"], (c) => k.equal(c, k.lit("\\")));
+  const u4 = (t: Id, from: number) => k.call(hexNumber, k.call(TEXT_OPS.slice, t, k.int(from), k.int(from + 4)), k.int(0));
+  const startsU = (t: Id, at: number) => k.equal(k.call(TEXT_OPS.slice, t, k.int(at), k.int(at + 2)), k.lit("\\u"));
+  const codeIn = (x: Id, lo: number, hi: number) => k.call(S.and, k.call(S.not, iLess(x, k.int(lo))), iLess(x, k.int(hi + 1)));
+  // \uXXXX, or a surrogate pair \uD83C\uDF89 for a character past the
+  // Basic Multilingual Plane, joined as RFC 8259 §7 says.
   const jsonEscapeRead = def("json escape read", ["text"], (t) => k.if(k.call(S.and, k.call(jsonEscapeStart, k.call(TEXT_OPS.slice, t, k.int(0), k.int(1))), k.call(allPass, k.call(TEXT_OPS.characters, t), k.x(jsonEscapeChar))),
-    k.if(k.call(S.and, k.equal(k.call(TEXT_OPS.length, t), k.int(6)), k.equal(k.call(TEXT_OPS.slice, t, k.int(0), k.int(2)), k.lit("\\u"))),
-      k.call(TEXT_OPS.fromCode, k.call(hexNumber, k.call(TEXT_OPS.slice, t, k.int(2), k.int(6)), k.int(0))), k.call(S.fail)), k.call(S.fail)));
+    k.if(k.call(S.and, k.equal(k.call(TEXT_OPS.length, t), k.int(6)), startsU(t, 0)), k.call(TEXT_OPS.fromCode, u4(t, 2)),
+      k.if(k.call(S.and, k.equal(k.call(TEXT_OPS.length, t), k.int(12)), k.call(S.and, startsU(t, 0), startsU(t, 6))),
+        k.let("high", u4(t, 2), (hi) => k.let("low", u4(t, 8), (lo) => k.if(k.call(S.and, codeIn(hi, 0xd800, 0xdbff), codeIn(lo, 0xdc00, 0xdfff)),
+          k.call(TEXT_OPS.fromCode, k.call(INT_OPS.add, k.int(0x10000), k.call(INT_OPS.add, k.call(INT_OPS.mul, k.call(INT_OPS.sub, hi, k.int(0xd800)), k.int(1024)), k.call(INT_OPS.sub, lo, k.int(0xdc00))))),
+          k.call(S.fail)))),
+        k.call(S.fail))), k.call(S.fail)));
   const jsonStringChar = def("json string character", ["character"], (c) => k.if(k.call(S.oneOf, k.list(k.false, k.true)), k.call(inverse, k.x(jsonEscapeRead), c), k.call(jsonCharSpelled, c)));
   const jsonQuotedSpelled = def("json quoted spelled", ["text"], (t) => texts(k.lit("\""), k.call(TEXT_OPS.joinAll, k.call(map, k.call(TEXT_OPS.characters, t), k.x(jsonStringChar)), k.lit("")), k.lit("\"")));
   const jsonSpelled = k.def("json spelled");

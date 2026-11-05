@@ -1,0 +1,24 @@
+{
+  "skoqg60c1j6mlrj98qbqrp8et5": [
+    {
+      "main": {
+        "arguments": [
+          "notes.txt"
+        ],
+        "input": "",
+        "files": {
+          "notes.txt": "note tea green tea with mint\nnote coffee black coffee\nfind tea\nany mint coffee\nlike tea\nseen black\n"
+        },
+        "printed": [
+          "2 notes, 5 terms, 5 different terms\nmost common: black 1, coffee 1, green 1, mint 1, tea 1\nlongest: tea, 3 terms",
+          "find tea: tea 2000",
+          "any mint coffee: coffee 2000, tea 2000",
+          "like tea: nothing",
+          "seen black: coffee 1"
+        ],
+        "errors": [],
+        "exit": 0
+      }
+    }
+  ]
+}

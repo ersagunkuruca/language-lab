@@ -469,7 +469,9 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   // A function type's code takes the closure, then the inputs.
   for (const a of arrays.values()) {
     const n = aname.get(a.key)!;
-    types.push(`typedef struct { lab_cell h; uint32_t lo, hi, cap; ${ty(a.item)} it[]; } ${n.buf}; // an array's buffer: items lo..hi used`,
+    // An array of Ints keeps bytes one a slot (L189f2): `bytes` set, its
+    // items are uint8_t, as the evaluator's Uint8Array (std.ts arrayOfItems).
+    types.push(`typedef struct { lab_cell h; uint32_t lo, hi, cap;${a.item === "int" ? " uint8_t bytes;" : ""} ${ty(a.item)} it[]; } ${n.buf}; // an array's buffer: items lo..hi used`,
       `typedef struct { lab_cell h; lab_cell *b; uint32_t s, n; } ${n.view}; // an array: n items from s`);
   }
   for (const t of tables.values()) {
@@ -504,7 +506,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   for (const a of arrays.values()) {
     const n = aname.get(a.key)!;
     fieldsOf.push(`case ${tnum.get(`array ${a.key}`)}: lab_dec(((${n.view} *)c)->b); break;`);
-    if (counted(a.item)) fieldsOf.push(`case ${tnum.get(`buf ${a.key}`)}: { ${n.buf} *b = (${n.buf} *)c; for (uint32_t k = b->lo; k < b->hi; k++) ${dec(a.item, "b->it[k]")} } break;`);
+    if (counted(a.item)) fieldsOf.push(`case ${tnum.get(`buf ${a.key}`)}: { ${n.buf} *b = (${n.buf} *)c; ${a.item === "int" ? "if (!b->bytes) " : ""}for (uint32_t k = b->lo; k < b->hi; k++) ${dec(a.item, "b->it[k]")} } break;`);
   }
   for (const t of tables.values()) {
     const T = `lab_Table_t${t.index}`, k = counted(t.keyT) ? dec(t.keyT, "b->ks[j]") : "";
@@ -1471,35 +1473,55 @@ static lab_cell *lab_table_entries_t${i}_e${j}(lab_cell *c) {
     const tv = tnum.get(`array ${a.key}`), tb = tnum.get(`buf ${a.key}`);
     const cp = (x: string) => (counted(a.item) ? dup(a.item, x) : x);
     const l = a.list && (() => { const d = a.list!, tag = d.cases.findIndex((c) => c.fields.length > 0); return { cons: cname(d, tag), nil: cname(d, 1 - tag), type: tnum.get(d.key)!, tag, head: d.cases[tag].fields.findIndex((x) => x.t !== d) }; })();
+    // Ints a byte a slot (L189f2): 16 or more Ints all 0 to 255 are kept as
+    // bytes, and a buffer of them is copied wide when an Int that isn't a
+    // byte goes in. Read (rd) and written (wr) through these; other arrays
+    // as plain slots.
+    const bytes = a.item === "int";
+    const rd = (b: string, k: string) => (bytes ? `lab__rd_a${i}(${b}, ${k})` : `${b}->it[${k}]`);
+    const wr = (b: string, k: string, x: string) => (bytes ? `lab__wr_a${i}(${b}, ${k}, ${x});` : `${b}->it[${k}] = ${x};`);
+    // In place only where x fits the buffer.
+    const fits = (b: string, x: string) => (bytes ? ` && (!${b}->bytes || LAB_IS_BYTE(${x}))` : "");
     const out = [`// Array ${i}: of ${T}.
-static lab_cell *lab__view_a${i}(lab_cell *b, uint32_t s, uint32_t n) { ${V} *v = lab_new(sizeof(${V}), ${tv}, 0); v->b = b; v->s = s; v->n = n; return (lab_cell *)v; }
-// A buffer holding a copy of n items in its middle, with room for as many again on each side.
-static lab_cell *lab__copy_a${i}(${T} *xs, uint32_t n) {
+static lab_cell *lab__view_a${i}(lab_cell *b, uint32_t s, uint32_t n) { ${V} *v = lab_new(sizeof(${V}), ${tv}, 0); v->b = b; v->s = s; v->n = n; return (lab_cell *)v; }${bytes ? `
+#define LAB_IS_BYTE(x) (LAB_IS_SMALL(x) && LAB_VAL(x) >= 0 && LAB_VAL(x) <= 255)
+static inline lab_int lab__rd_a${i}(${B} *b, uint32_t k) { return b->bytes ? LAB_SMALL(((uint8_t *)b->it)[k]) : b->it[k]; }
+static inline void lab__wr_a${i}(${B} *b, uint32_t k, lab_int x) { if (b->bytes) ((uint8_t *)b->it)[k] = (uint8_t)LAB_VAL(x); else b->it[k] = x; }` : ""}
+// A buffer of n slots in its middle, with room for as many again on each
+// side${bytes ? ", a byte each when `small`" : ""}.
+static ${B} *lab__buf_a${i}(uint32_t n, int small) {
   uint32_t room = n > 4 ? n : 4;
   if ((uint64_t)n + 2 * (uint64_t)room > UINT32_MAX) lab_oom();
-  ${B} *b = lab_new(sizeof(${B}) + ((size_t)n + 2 * (size_t)room) * sizeof(${T}), ${tb}, 0);
-  b->lo = room; b->hi = room + n; b->cap = n + 2 * room;
-  for (uint32_t k = 0; k < n; k++) b->it[room + k] = ${cp("xs[k]")};
-  return lab__view_a${i}((lab_cell *)b, room, n);
+  ${B} *b = lab_new(sizeof(${B}) + ((size_t)n + 2 * (size_t)room) * (small ? 1 : sizeof(${T})), ${tb}, 0);
+  b->lo = room; b->hi = room + n; b->cap = n + 2 * room;${bytes ? "\n  b->bytes = (uint8_t)small;" : "\n  (void)small;"}
+  return b;
+}
+// A copy of n items of buffer src from s (bytes still if \`small\`).
+static lab_cell *lab__copy_a${i}(${B} *src, uint32_t s, uint32_t n, int small) {
+  ${B} *b = lab__buf_a${i}(n, small);
+  for (uint32_t k = 0; k < n; k++) ${wr("b", "b->lo + k", cp(rd("src", "s + k")))}
+  return lab__view_a${i}((lab_cell *)b, b->lo, n);
 }`];
     const has = (op: string) => arrayFns.has(`array.${op}.a${i}`);
-    if (has("empty")) out.push(`static lab_cell *lab_array_empty_a${i}(void) { return lab__copy_a${i}(0, 0); }`);
+    const keep = (b: string) => (bytes ? `${b}->bytes` : "0");
+    if (has("empty")) out.push(`static lab_cell *lab_array_empty_a${i}(void) { return lab__view_a${i}((lab_cell *)lab__buf_a${i}(0, 0), 4, 0); }`);
     if (has("of")) out.push(`static lab_cell *lab_array_of_a${i}(lab_cell *l) {
   uint32_t n = 0;
-  for (lab_cell *p = l; p->tag == ${l!.tag}; p = ((${l!.cons} *)p)->f${1 - l!.head}) n++;
-  uint32_t room = n > 4 ? n : 4, k = room;
-  ${B} *b = lab_new(sizeof(${B}) + ((size_t)n + 2 * (size_t)room) * sizeof(${T}), ${tb}, 0);
-  b->lo = room; b->hi = room + n; b->cap = n + 2 * room;
-  for (lab_cell *p = l; p->tag == ${l!.tag}; p = ((${l!.cons} *)p)->f${1 - l!.head}) b->it[k++] = ${cp(`((${l!.cons} *)p)->f${l!.head}`)};
-  lab_cell *a = lab__view_a${i}((lab_cell *)b, room, n);
+  int small = 1;
+  for (lab_cell *p = l; p->tag == ${l!.tag}; p = ((${l!.cons} *)p)->f${1 - l!.head}) { n++;${bytes ? ` if (!LAB_IS_BYTE(((${l!.cons} *)p)->f${l!.head})) small = 0;` : ""} }
+  ${B} *b = lab__buf_a${i}(n, ${bytes ? "small && n >= 16" : "0"});
+  (void)small;
+  uint32_t k = b->lo;
+  for (lab_cell *p = l; p->tag == ${l!.tag}; p = ((${l!.cons} *)p)->f${1 - l!.head}) { ${wr("b", "k", cp(`((${l!.cons} *)p)->f${l!.head}`))} k++; }
+  lab_cell *a = lab__view_a${i}((lab_cell *)b, b->lo, n);
   lab_drop(l);
   return a;
 }`);
     if (has("items")) out.push(`static lab_cell *lab_array_items_a${i}(lab_cell *a) {
   ${V} *v = (${V} *)a;
-  ${T} *it = ((${B} *)v->b)->it + v->s;
+  ${B} *b = (${B} *)v->b;
   lab_cell *acc = &${l!.nil};
-  for (uint32_t k = v->n; k-- > 0;) { ${l!.cons} *c = lab_new(sizeof(${l!.cons}), ${l!.type}, ${l!.tag}); c->f${l!.head} = ${cp("it[k]")}; c->f${1 - l!.head} = acc; acc = (lab_cell *)c; }
+  for (uint32_t k = v->n; k-- > 0;) { ${l!.cons} *c = lab_new(sizeof(${l!.cons}), ${l!.type}, ${l!.tag}); c->f${l!.head} = ${cp(rd("b", "v->s + k"))}; c->f${1 - l!.head} = acc; acc = (lab_cell *)c; }
   lab_drop(a);
   return acc;
 }`);
@@ -1511,12 +1533,13 @@ static lab_cell *lab__copy_a${i}(${T} *xs, uint32_t n) {
   ${V} *v = (${V} *)a;
   if (!LAB_IS_SMALL(k) || LAB_VAL(k) < 0 || LAB_VAL(k) >= (int64_t)v->n) { lab_int_drop(k); ${dropX("x")} return a; }
   uint32_t at = (uint32_t)LAB_VAL(k);
-  if (a->rc == 1 && v->b->rc == 1) { ${B} *b = (${B} *)v->b; ${T} old = b->it[v->s + at]; b->it[v->s + at] = x; ${dropX("old")} (void)old; return a; }
-  lab_cell *r = lab__copy_a${i}(((${B} *)v->b)->it + v->s, v->n);
+  ${B} *b = (${B} *)v->b;
+  if (a->rc == 1 && v->b->rc == 1${fits("b", "x")}) { ${T} old = ${rd("b", "v->s + at")}; ${wr("b", "v->s + at", "x")} ${dropX("old")} (void)old; return a; }
+  lab_cell *r = lab__copy_a${i}(b, v->s, v->n, ${bytes ? "b->bytes && LAB_IS_BYTE(x)" : "0"});
   ${V} *w = (${V} *)r;
   ${B} *c = (${B} *)w->b;
-  ${T} old = c->it[w->s + at];
-  c->it[w->s + at] = x;
+  ${T} old = ${rd("c", "w->s + at")};
+  ${wr("c", "w->s + at", "x")}
   ${dropX("old")} (void)old;
   lab_drop(a);
   return r;
@@ -1526,13 +1549,13 @@ static lab_cell *lab__copy_a${i}(${T} *xs, uint32_t n) {
     if (has("at")) out.push(`static ${T} lab_array_at_a${i}(lab_cell *a, lab_int k) {
   ${V} *v = (${V} *)a;
   if (!LAB_IS_SMALL(k) || LAB_VAL(k) < 0 || LAB_VAL(k) >= (int64_t)v->n) { lab_int_drop(k); lab_drop(a); lab_st = 1; return ${zero(a.item)}; }
-  ${T} x = ${cp(`((${B} *)v->b)->it[v->s + LAB_VAL(k)]`)};
+  ${T} x = ${cp(rd(`((${B} *)v->b)`, "v->s + LAB_VAL(k)"))};
   lab_drop(a);
   return x;
 }`);
     // Item k where k is known to be in the array (equal and compare's loop).
     if (has("get")) out.push(`static ${T} lab_array_get_a${i}(lab_cell *a, lab_int k) {
-  ${T} x = ${cp(`((${B} *)((${V} *)a)->b)->it[((${V} *)a)->s + LAB_VAL(k)]`)};
+  ${T} x = ${cp(rd(`((${B} *)((${V} *)a)->b)`, `((${V} *)a)->s + LAB_VAL(k)`))};
   lab_drop(a);
   return x;
 }`);
@@ -1540,7 +1563,7 @@ static lab_cell *lab__copy_a${i}(${T} *xs, uint32_t n) {
     if (has("first")) out.push(`static ${T} lab_array_first_a${i}(lab_cell *a) {
   ${V} *v = (${V} *)a;
   if (v->n == 0) { lab_drop(a); lab_st = 1; return ${zero(a.item)}; }
-  ${T} x = ${cp(`((${B} *)v->b)->it[v->s]`)};
+  ${T} x = ${cp(rd(`((${B} *)v->b)`, "v->s"))};
   lab_drop(a);
   return x;
 }`);
@@ -1560,15 +1583,15 @@ static lab_cell *lab__copy_a${i}(${T} *xs, uint32_t n) {
   ${V} *v = (${V} *)a;
   ${B} *b = (${B} *)v->b;
   lab_cell *r;
-  if (v->s == b->lo && v->s > 0) {
-    b->it[--b->lo] = x;
+  if (v->s == b->lo && v->s > 0${fits("b", "x")}) {
+    --b->lo; ${wr("b", "b->lo", "x")}
     if (a->rc == 1) { v->s--; v->n++; return a; }
     r = lab__view_a${i}(lab_dup(v->b), v->s - 1, v->n + 1);
   } else {
-    r = lab__copy_a${i}(b->it + v->s, v->n);
+    r = lab__copy_a${i}(b, v->s, v->n, ${bytes ? "b->bytes && LAB_IS_BYTE(x)" : "0"});
     ${V} *w = (${V} *)r;
     ${B} *c = (${B} *)w->b;
-    c->it[--c->lo] = x; w->s--; w->n++;
+    --c->lo; ${wr("c", "c->lo", "x")} w->s--; w->n++;
   }
   lab_drop(a);
   return r;
@@ -1578,19 +1601,20 @@ static lab_cell *lab__copy_a${i}(${T} *xs, uint32_t n) {
   ${B} *b = (${B} *)v->b;
   uint32_t end = v->s + v->n;
   lab_cell *r;
-  if (end == b->hi && end < b->cap) {
-    b->it[end] = x; b->hi++;
+  if (end == b->hi && end < b->cap${fits("b", "x")}) {
+    ${wr("b", "end", "x")} b->hi++;
     if (a->rc == 1) { v->n++; return a; }
     r = lab__view_a${i}(lab_dup(v->b), v->s, v->n + 1);
   } else {
-    r = lab__copy_a${i}(b->it + v->s, v->n);
+    r = lab__copy_a${i}(b, v->s, v->n, ${bytes ? "b->bytes && LAB_IS_BYTE(x)" : "0"});
     ${V} *w = (${V} *)r;
     ${B} *c = (${B} *)w->b;
-    c->it[c->hi++] = x; w->n++;
+    ${wr("c", "c->hi", "x")} c->hi++; w->n++;
   }
   lab_drop(a);
   return r;
 }`);
+    void keep;
     return out;
   }
 

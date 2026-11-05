@@ -1,0 +1,40 @@
+{
+  "4b25f3a0": [
+    {
+      "main": {
+        "arguments": [],
+        "input": "",
+        "files": {},
+        "printed": [
+          "f(x)  = x·x − 2",
+          "f′(x) = x + x",
+          "f(2)  = 2",
+          "root near 1: 1.414213562",
+          "",
+          "f(x)  = cos(x) − x",
+          "f′(x) = −sin(x) − 1",
+          "f(2)  = -2.416146837",
+          "root near 1: 0.739085133",
+          "",
+          "f(x)  = x·x·x − x − 1",
+          "f′(x) = (x + x)·x + x·x − 1",
+          "f(2)  = 5",
+          "root near 1: 1.324717957",
+          "",
+          "f(x)  = 1 / x",
+          "f′(x) = −1 / (x·x)",
+          "f(2)  = 0.5",
+          "root near 1: none found",
+          "",
+          "f(x)  = sin(x) / (x − x)",
+          "f′(x) = cos(x)·(x − x) / ((x − x)·(x − x))",
+          "f(2)  = undefined",
+          "root near 1: none found",
+          ""
+        ],
+        "errors": [],
+        "exit": 0
+      }
+    }
+  ]
+}

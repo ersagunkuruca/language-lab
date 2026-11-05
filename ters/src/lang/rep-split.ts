@@ -20,8 +20,8 @@
 
 import { dependencies, freshId, mapIds, merge, subtree, isCall, type Code, type Id, type Node, type NodeOf } from "../model.ts";
 import type { Names } from "../presentation.ts";
-import { infer, type Info } from "./infer.ts";
-import { listBoundary, treesFor } from "./library-reps.ts";
+import type { Info } from "./infer.ts";
+import { BY_VALUE, listBoundary, treesFor } from "./library-reps.ts";
 import { represent, type Representation } from "./represent.ts";
 import { LIST } from "./std.ts";
 import type { Type } from "./types.ts";
@@ -76,8 +76,8 @@ export function splitLists(code: Code, info: Info, names: Names, own: Id[], main
   // Copied for the seeds' side: what the other side reaches too, and the
   // library's.
   const shared = [...aw].filter((d) => bw.has(d) || !ownSet.has(d));
-  const fresh = new Map<Id, Id>();
-  for (const d of shared) for (const id of subtree(code, d)) fresh.set(id, freshId());
+  const fresh = new Map<Id, Id>(), origin = new Map<Id, Id>();
+  for (const d of shared) for (const id of subtree(code, d)) { const x = freshId(); fresh.set(id, x); origin.set(x, id); }
   const f = (id: Id) => fresh.get(id) ?? id;
   for (const d of shared) for (const id of subtree(code, d)) { const n = mapIds(code.nodes[id], f); nodes[n.id] = n; }
   const aOnly = [...aw].filter((d) => !fresh.has(d));
@@ -86,12 +86,11 @@ export function splitLists(code: Code, info: Info, names: Names, own: Id[], main
   const bDefs = [...bw];
   seeds = [...seedSet];
 
-  // Checked with the copies, before anything is converted.
   const outNames: Names = { ...names, ...Object.fromEntries(shared.map((d) => [f(d), names[d] ?? d])) };
-  const checked = infer({ nodes, defs: [...code.defs, ...shared.map(f)] }, outNames, undefined, info.options);
-  if (checked.errors.length > info.errors.length) return null;
   const wrapped = new Map<Id, Id>();
-  const typeOf = (id: Id): Type | undefined => { const t = checked.typeOf.get(wrapped.get(id) ?? id); return t && checked.subst.zonk(t); };
+  // A copy's node has its original's type.
+  const typed = { ...info, typeOf: { get: (id: Id) => info.typeOf.get(origin.get(id) ?? id) } as Info["typeOf"] };
+  const typeOf = (id: Id): Type | undefined => { const t = typed.typeOf.get(wrapped.get(id) ?? id); return t && info.subst.zonk(t); };
   const hasList = (t: Type): boolean => t.t === "con" ? t.id === LIST || t.args.some(hasList) : t.t === "fn" ? [...t.params, t.ret].some(hasList) : false;
   const plain = (t: Type | undefined) => !!t && t.t === "con" && t.id === LIST && !t.args.some(hasList);
   // Whether a value of type t can cross as it is: no list but inside the
@@ -144,6 +143,9 @@ export function splitLists(code: Code, info: Info, names: Names, own: Id[], main
       const fn = nodes[n.fn];
       if (fn?.kind !== "ref") continue;
       const target = fn.target;
+      // equal, show or compare on a list of the seeds' side, which the
+      // whole program's row rewrites by type: not here.
+      if (a && target in BY_VALUE && n.args.some((x) => !crosses(typeOf(x)))) { refused = true; continue; }
       const field = code.nodes[target]?.kind === "field" && holders.has(target) && other(holders.get(target)!);
       const variant = code.nodes[target]?.kind === "variant" && holders.has(target) && other(holders.get(target)!);
       const seed = !a && seedSet.has(target);
@@ -160,7 +162,7 @@ export function splitLists(code: Code, info: Info, names: Names, own: Id[], main
   // Builtins on lists the seeds' side calls: given its lists as written
   // and theirs stored, as with one representation (library-reps.ts).
   const types = [...aTypes];
-  const boundary = listBoundary(out, checked, aDefs, rep, [], new Set(own.filter(isType)));
+  const boundary = listBoundary(out, typed, aDefs, rep, [], new Set(own.filter(isType)));
   if (!boundary) return null;
   out = { nodes: { ...out.nodes, ...boundary.nodes }, defs: [...out.defs, ...boundary.made] };
   out = represent(out, [...aDefs, ...types], rep, [...boundary.made, ...bDefs, ...own.filter((d) => isType(d) && !aTypes.has(d))]);
