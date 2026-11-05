@@ -27871,6 +27871,122 @@
           "@qnk9v8aglbvsfje1g0c84k0h1n:3"
         ]
       },
+      "@occ9qiqbunndfmpdt9vpcl2jov": {
+        "id": "@occ9qiqbunndfmpdt9vpcl2jov",
+        "kind": "def",
+        "body": "@occ9qiqbunndfmpdt9vpcl2jov:1"
+      },
+      "@occ9qiqbunndfmpdt9vpcl2jov:2": {
+        "id": "@occ9qiqbunndfmpdt9vpcl2jov:2",
+        "kind": "binder"
+      },
+      "@occ9qiqbunndfmpdt9vpcl2jov:4": {
+        "id": "@occ9qiqbunndfmpdt9vpcl2jov:4",
+        "kind": "ref",
+        "target": "@occ9qiqbunndfmpdt9vpcl2jov:2"
+      },
+      "@occ9qiqbunndfmpdt9vpcl2jov:6": {
+        "id": "@occ9qiqbunndfmpdt9vpcl2jov:6",
+        "kind": "lit",
+        "value": "−∞"
+      },
+      "@occ9qiqbunndfmpdt9vpcl2jov:5": {
+        "id": "@occ9qiqbunndfmpdt9vpcl2jov:5",
+        "kind": "arm",
+        "variant": "std.extended.minus infinity",
+        "binds": [],
+        "results": [],
+        "body": "@occ9qiqbunndfmpdt9vpcl2jov:6"
+      },
+      "@occ9qiqbunndfmpdt9vpcl2jov:8": {
+        "id": "@occ9qiqbunndfmpdt9vpcl2jov:8",
+        "kind": "binder"
+      },
+      "@occ9qiqbunndfmpdt9vpcl2jov:10": {
+        "id": "@occ9qiqbunndfmpdt9vpcl2jov:10",
+        "kind": "ref",
+        "target": "builtin.showAny"
+      },
+      "@occ9qiqbunndfmpdt9vpcl2jov:11": {
+        "id": "@occ9qiqbunndfmpdt9vpcl2jov:11",
+        "kind": "ref",
+        "target": "@occ9qiqbunndfmpdt9vpcl2jov:8"
+      },
+      "@occ9qiqbunndfmpdt9vpcl2jov:9": {
+        "id": "@occ9qiqbunndfmpdt9vpcl2jov:9",
+        "kind": "call",
+        "fn": "@occ9qiqbunndfmpdt9vpcl2jov:10",
+        "args": [
+          "@occ9qiqbunndfmpdt9vpcl2jov:11"
+        ]
+      },
+      "@occ9qiqbunndfmpdt9vpcl2jov:7": {
+        "id": "@occ9qiqbunndfmpdt9vpcl2jov:7",
+        "kind": "arm",
+        "variant": "std.extended.finite",
+        "binds": [
+          "@occ9qiqbunndfmpdt9vpcl2jov:8"
+        ],
+        "results": [
+          null
+        ],
+        "body": "@occ9qiqbunndfmpdt9vpcl2jov:9"
+      },
+      "@occ9qiqbunndfmpdt9vpcl2jov:13": {
+        "id": "@occ9qiqbunndfmpdt9vpcl2jov:13",
+        "kind": "lit",
+        "value": "+∞"
+      },
+      "@occ9qiqbunndfmpdt9vpcl2jov:12": {
+        "id": "@occ9qiqbunndfmpdt9vpcl2jov:12",
+        "kind": "arm",
+        "variant": "std.extended.plus infinity",
+        "binds": [],
+        "results": [],
+        "body": "@occ9qiqbunndfmpdt9vpcl2jov:13"
+      },
+      "@occ9qiqbunndfmpdt9vpcl2jov:3": {
+        "id": "@occ9qiqbunndfmpdt9vpcl2jov:3",
+        "kind": "match",
+        "scrutinee": "@occ9qiqbunndfmpdt9vpcl2jov:4",
+        "arms": [
+          "@occ9qiqbunndfmpdt9vpcl2jov:5",
+          "@occ9qiqbunndfmpdt9vpcl2jov:7",
+          "@occ9qiqbunndfmpdt9vpcl2jov:12"
+        ],
+        "otherwise": null
+      },
+      "@occ9qiqbunndfmpdt9vpcl2jov:1": {
+        "id": "@occ9qiqbunndfmpdt9vpcl2jov:1",
+        "kind": "lambda",
+        "params": [
+          "@occ9qiqbunndfmpdt9vpcl2jov:2"
+        ],
+        "body": "@occ9qiqbunndfmpdt9vpcl2jov:3"
+      },
+      "@hs5ku30v27ovjdq2evp2qkatrt": {
+        "id": "@hs5ku30v27ovjdq2evp2qkatrt",
+        "kind": "def",
+        "body": "@hs5ku30v27ovjdq2evp2qkatrt:1"
+      },
+      "@hs5ku30v27ovjdq2evp2qkatrt:3": {
+        "id": "@hs5ku30v27ovjdq2evp2qkatrt:3",
+        "kind": "ref",
+        "target": "@occ9qiqbunndfmpdt9vpcl2jov"
+      },
+      "@hs5ku30v27ovjdq2evp2qkatrt:2": {
+        "id": "@hs5ku30v27ovjdq2evp2qkatrt:2",
+        "kind": "ref",
+        "target": "std.shown.shown"
+      },
+      "@hs5ku30v27ovjdq2evp2qkatrt:1": {
+        "id": "@hs5ku30v27ovjdq2evp2qkatrt:1",
+        "kind": "call",
+        "fn": "@hs5ku30v27ovjdq2evp2qkatrt:2",
+        "args": [
+          "@hs5ku30v27ovjdq2evp2qkatrt:3"
+        ]
+      },
       "@g432cmbkfts1dql8188d9p9cv6": {
         "id": "@g432cmbkfts1dql8188d9p9cv6",
         "kind": "def",
@@ -92148,11 +92264,13 @@
       "@2dilt1b3f9hjpds2aonqamb6h8",
       "@jicapf5pqmv60o38snigitpipg",
       "@2bsqu5k0de084n0uo4u01gsahq",
+      "@occ9qiqbunndfmpdt9vpcl2jov",
       "@oibbb5951dfie4ggdg41hmht58",
       "@asph5j4jqbhglhup8u6ff8eluk",
       "@5bnaqbbd4u4mtb07mi3pvic9fa",
       "@r9ictm8koh1973tk5o5uf4b73e",
       "@qnk9v8aglbvsfje1g0c84k0h1n",
+      "@hs5ku30v27ovjdq2evp2qkatrt",
       "@vpveh0ptjn1e1dn1ag9eurd6rj",
       "@g432cmbkfts1dql8188d9p9cv6",
       "@7lme2sdiqpakucoud24hilfhpv",
@@ -105778,6 +105896,41 @@
       },
       "plain": []
     },
+    "@occ9qiqbunndfmpdt9vpcl2jov": {
+      "vars": [
+        0
+      ],
+      "rows": [
+        1
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.extended",
+            "args": [
+              {
+                "t": "var",
+                "v": 0
+              }
+            ]
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "type.string",
+          "args": []
+        },
+        "eff": {
+          "effs": [],
+          "tail": 1
+        }
+      },
+      "plain": [
+        0
+      ]
+    },
     "@oibbb5951dfie4ggdg41hmht58": {
       "vars": [],
       "rows": [
@@ -105902,6 +106055,31 @@
         ]
       },
       "plain": []
+    },
+    "@hs5ku30v27ovjdq2evp2qkatrt": {
+      "vars": [
+        0
+      ],
+      "rows": [],
+      "type": {
+        "t": "con",
+        "id": "std.shown",
+        "args": [
+          {
+            "t": "con",
+            "id": "std.extended",
+            "args": [
+              {
+                "t": "var",
+                "v": 0
+              }
+            ]
+          }
+        ]
+      },
+      "plain": [
+        0
+      ]
     },
     "@vpveh0ptjn1e1dn1ag9eurd6rj": {
       "vars": [],
@@ -110125,6 +110303,10 @@
     "@n8ior373arqngll2f4m2rr0c96": "literal at real",
     "@r9ictm8koh1973tk5o5uf4b73e": "division at float64",
     "@qnk9v8aglbvsfje1g0c84k0h1n": "division at algebraic",
+    "@occ9qiqbunndfmpdt9vpcl2jov": "show extended",
+    "@occ9qiqbunndfmpdt9vpcl2jov:2": "x",
+    "@occ9qiqbunndfmpdt9vpcl2jov:8": "value",
+    "@hs5ku30v27ovjdq2evp2qkatrt": "shown at extended",
     "@g432cmbkfts1dql8188d9p9cv6": "shown at word8",
     "@d4ln7hhjcfnia8sfp38tgeeep8": "shown at word16",
     "@4fur55lrh08f87nnmopigop995": "shown at word32",
@@ -111743,6 +111925,7 @@
     "@mca1th7em28pbvqqojkmr6cai1": "The multiplication table of a Clifford algebra, for table product: its basis vectors square to `squares` (1, −1 or 0 each; Cl(p, q, r) is p ones, q minus ones, r zeros), and `basis` is your record type's basis elements in the order 1, e₁, e₂, e₁e₂, e₃, e₁e₃, e₂e₃, e₁e₂e₃, … . clifford table([−1], …) is the complex numbers, [0] the dual numbers, [1] the split-complex ones, [−1, −1] the quaternions (i = e₁, j = e₂, k = e₁e₂), [1, 1, 1] Cl(3, 0) and [1, 1, 1, 0] projective geometric algebra (ALGEBRA-TABLES.md).",
     "@r9ictm8koh1973tk5o5uf4b73e": "How this number type divides (Division): its own divide. Found by its type, so not offered: divide is.",
     "@qnk9v8aglbvsfje1g0c84k0h1n": "How this number type divides (Division): its own divide. Found by its type, so not offered: divide is.",
+    "@hs5ku30v27ovjdq2evp2qkatrt": "How this number type shows (Shown): `show any` uses it. Found by its type, so not offered.",
     "@g432cmbkfts1dql8188d9p9cv6": "How this number type shows (Shown): `show any` uses it. Found by its type, so not offered.",
     "@d4ln7hhjcfnia8sfp38tgeeep8": "How this number type shows (Shown): `show any` uses it. Found by its type, so not offered.",
     "@4fur55lrh08f87nnmopigop995": "How this number type shows (Shown): `show any` uses it. Found by its type, so not offered.",

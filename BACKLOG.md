@@ -82,7 +82,6 @@ New targets and speed rank below every language item (Ersagun,
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| C139 | Library types out of the core passes. Example: Extended shows the same on every target through its own Shown. Left: Extended's and the algebras' show (they have no Shown yet). | [FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md) §7 | P3 | M | |
 
 ### Bugs and gaps found by programs
 

@@ -65,9 +65,11 @@ test("minimum and maximum: +∞ and −∞ for no numbers, at any ordered number
 test("an Extended reads as its number or ±∞, and ±∞ can be typed", async () => {
   const { std: s, stdNames: n } = await import("../src/lang/std.ts");
   const { parseValue } = await import("../src/lang/values.ts");
-  const { showValue: show } = await import("../src/lang/run.ts");
+  const { showValue: show, showerFor } = await import("../src/lang/run.ts");
   const v = parseValue("[−∞, finite(2.5), +∞, ∞, -∞]", s, n);
   assert.ok("value" in v);
-  assert.equal(show(v.value, s, n, true), "[−∞, 2.5, +∞, +∞, −∞]");
+  // Through Extended's own Shown, the prelude's (C139).
+  const code = base({ nodes: {}, defs: [] }), names = baseNames();
+  assert.equal(showerFor(code, infer(code, names, undefined, checkOptions), names)(v.value), "[−∞, 2.5, +∞, +∞, −∞]");
   assert.equal(show(v.value, s, n), "[minus infinity, finite(2.5), plus infinity, plus infinity, minus infinity]");
 });
