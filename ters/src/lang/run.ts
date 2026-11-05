@@ -524,8 +524,8 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     [S.hence]: (a, b) => one(bool((a as Data).tag === TRUE && (b as Data).tag === TRUE)),
     [S.fail]: () => [],
     // A record of Float64s, part by part. Float64 is a record of one part.
-    [S.mapParts]: (f, r) => one(typeof r === "number" ? only(f as Fn, r) : { ...(r as Data), fields: (r as Data).fields.map((x) => only(f as Fn, x)) }),
-    [S.zipParts]: (f, a, b) => one(typeof a === "number" ? only(f as Fn, a, b) : { ...(a as Data), fields: (a as Data).fields.map((x, i) => only(f as Fn, x, (b as Data).fields[i])) }),
+    [S.mapParts]: (f, r) => one(typeof r === "number" ? only(f as Fn, r) : { tag: (r as Data).tag, fields: (r as Data).fields.map((x) => only(f as Fn, x)) }),
+    [S.zipParts]: (f, a, b) => one(typeof a === "number" ? only(f as Fn, a, b) : { tag: (a as Data).tag, fields: (a as Data).fields.map((x, i) => only(f as Fn, x, (b as Data).fields[i])) }),
     [S.total]: (r) => one(typeof r === "number" ? r : ((r as Data).fields as number[]).reduce((x, y) => x + y)),
     [S.print]: (s) => (rt.print(s as string), one(unit)),
     [IO.printError]: (s) => (world("error")(s as string), one(unit)),
