@@ -610,7 +610,17 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       }
       // abort(reason): the reason in its global, then status 2.
       case "abort": return [...code1(e.reason), 0x24, ...u(e.esc ? escapeG : reasonG), ...(fl < 0 ? [0x00] : [0x41, ...s(2 + (e.esc ?? 0)), 0x0c, ...to(d, fl)])];
-      case "released": throw new Error("a handler's release is lowered for JavaScript only");
+      // A handler's release (L213a7): block $done (block $out (result i32)
+      // body; release; drop; br $done) status saved; release; drop; status
+      // on out.
+      case "released": {
+        const rel = (dd: number) => [...code(e.release, dd, fl < 0 ? fl : fl), 0x1a];
+        if (fl < 0) return [...code1(e.body), ...rel(d)];
+        return [
+          0x02, ...typeOf(e.t), 0x02, 0x7f, ...code(e.body, d + 2, d + 1), ...rel(d + 2), 0x0c, 0x01, 0x0b,
+          0x21, ...u(e.st!), ...rel(d + 1), 0x20, ...u(e.st!), 0x0c, ...to(d + 1, fl), 0x0b,
+        ];
+      }
       case "handle": {
         // As an attempt for status 2, which puts the fuel back as it was
         // when the handler started, as the evaluator does; the reason is the arm's.
@@ -758,7 +768,14 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
         wat(e.otherwise, f, d + "  ", ld + 1, fl) + ")",
       ].join("\n");
       case "abort": return [w(e.reason), `${d}global.set $${e.esc ? "escape" : "reason"}`, ...(fl < 0 ? [`${d}unreachable ;; an abort, nowhere to go`] : [`${d}i32.const ${2 + (e.esc ?? 0)}`, `${d}br ${to(ld)} ;; aborted`])].join("\n");
-      case "released": throw new Error("a handler's release is lowered for JavaScript only");
+      case "released": {
+        const rel = (dd: string, l: number) => [wat(e.release, f, dd, l, fl), `${dd}drop`];
+        if (fl < 0) return [w(e.body), ...rel(d, ld)].join("\n");
+        return [
+          `${d}(block (result ${ty(e.t)})`, `${d}  (block (result i32) ;; ended with no answer or an abort`, wat(e.body, f, d + "    ", ld + 2, ld + 1), ...rel(d + "    ", ld + 2), `${d}    br 1)`,
+          `${d}  local.set ${local(f, e.st!)}`, ...rel(d + "  ", ld + 1), `${d}  local.get ${local(f, e.st!)}`, `${d}  br ${to(ld + 1)})`,
+        ].join("\n");
+      }
       case "handle": return [
         ...(fuel ? [`${d}global.get $fuel`, `${d}local.set ${local(f, e.save)}`] : []),
         `${d}(block (result ${ty(e.t)})`, `${d}  (block (result i32) ;; aborted`, wat(e.body, f, d + "    ", ld + 2, ld + 1), `${d}    br 1)`,
@@ -870,6 +887,8 @@ function worldOf(rt: Runtime, exports: () => Record<string, (...xs: unknown[]) =
     stopWith: (t: unknown) => { throw new Aborted(text(t)); },
     print: (t: unknown) => rt.print(text(t)),
     printError: (t: unknown) => w("error")(text(t)),
+    // A line of Log nothing handles (L213a6, a release's).
+    logLine: (t: unknown) => w("log")(text(t)),
     readInput: () => tried(() => make(w("input")())),
     readLine: () => tried(() => { const l = w("readLine")(), ex = exports(); return l === null ? ex["TextOption.none"]() : ex["TextOption.some"](make(l)); }),
     readFile: (p: unknown) => tried(() => make(w("readFile")(text(p)))),

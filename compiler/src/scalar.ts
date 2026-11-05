@@ -376,7 +376,7 @@ export type SExpr =
   // A handler's release (L213a, core IR only): body's value, with release
   // run once after it however body ends (its value, an Abort, a stop),
   // as the evaluator runs it on every exit.
-  | { k: "released"; body: SExpr; release: SExpr; t: LType }
+  | { k: "released"; body: SExpr; release: SExpr; t: LType; st?: number }
   // W4d, gone after lowering: `one of` a list (t), anywhere, and a
   // handler's search (first, optional, all, count) to be made into code
   // once it's known whether it has several answers.
@@ -1355,7 +1355,8 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           code.nodes[id] = { ...n, arms: n.arms.filter((a) => a !== release.id) };
           let body: SExpr;
           try { body = expr(id, env, f, false); } finally { code.nodes[id] = kept; }
-          return { k: "released", body, release: expr(release.body, env, f, false), t };
+          // st: where WebAssembly keeps the status while the release runs.
+          return { k: "released", body, release: expr(release.body, env, f, false), t, st: f.locals.push("i32") - 1 };
         }
         if (n.name) throw new Refused("handles an effect under a name, which isn't lowered yet (L213b): it runs in the evaluator");
         if (n.otherwise && arms.length && effectOps.has(arms[0].variant)) throw new Refused("handles an effect with a case for the normal finish, which isn't lowered yet (L57)");
