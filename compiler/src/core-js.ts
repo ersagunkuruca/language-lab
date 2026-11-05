@@ -593,6 +593,32 @@ export function coreMap(ir: CoreIR): { version: 1; functions: Record<string, Id>
   return { version: 1, functions: Object.fromEntries(names.map((n, i) => [n, ir.funcs[i].def])), locals, stops: (ir.stops ?? []).map(({ node, def }) => ({ node, def })) };
 }
 
+// Where each printed function is in the written module (C143e), the
+// map's output positions: its first and last line, counted from 1, by its
+// printed name (fN and its copies), so a stack trace's line:column finds
+// the function, and the map's `functions` its node. Read off the module as
+// written, after the bundler, which may rename one whose name the runtime
+// has too (f1 written f12): `printed` is the module as printed, and its
+// functions are written in the same order, so the nth function in the
+// definitions there is the nth printed.
+export function codeLines(printed: string, written: string): Record<string, [number, number]> {
+  const decl = /^(\s*)(?:async\s+)?function\*?\s*([\w$]+)\(/;
+  const ours = [...printed.matchAll(/function\*?\s*(f\d+(?:\$[bhw])?)\(/g)].map((m) => m[1]);
+  const lines = written.split("\n"), out: Record<string, [number, number]> = {};
+  const start = lines.findIndex((l) => /^(?:var|const|let) defs = \(function\s*\(/.test(l));
+  if (start < 0) return out;
+  let k = 0, indent: string | null = null;
+  for (let i = start + 1; i < lines.length && k < ours.length; i++) {
+    const m = decl.exec(lines[i]);
+    if (!m || (indent ??= m[1]) !== m[1]) continue;
+    // One written on its line ends there; else at the brace at its indent.
+    let end = i;
+    if (!/}\s*$/.test(lines[i])) while (end + 1 < lines.length && !lines[++end].startsWith(`${indent}}`));
+    out[ours[k++]] = [i + 1, end + 1];
+  }
+  return out;
+}
+
 // The program's nodes, for a module whose solves the evaluator's solver
 // runs (C137c11): only when it has one.
 // As a string parsed once, which is smaller and quicker to load than
