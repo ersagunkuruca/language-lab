@@ -294,6 +294,9 @@ export function looped(code: Code, entry: Id, reps: Representation[]): Set<strin
 // to choose by. A list read from elsewhere (a field, a parameter, a job's
 // answer such as `rest`) isn't one just made. The refs, by node id.
 function freshUses(code: Code, defs: Id[], reps: Representation[]): Set<Id> {
+  // Only a List's: making one costs n in every representation, which a
+  // Nat stored as an Int doesn't (numbers' `number(factorial(n))`).
+  if (reps[0].of !== LIST) return new Set();
   const variants = new Set(variantsOf(code, reps[0].of));
   const implemented = new Set(reps.flatMap((r) => Object.keys(r.impl)));
   const costed = new Set(reps.flatMap((r) => Object.keys(r.cost)));
