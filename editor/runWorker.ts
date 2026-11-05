@@ -15,9 +15,9 @@ import type { Pins } from "../ters/src/lang/signatures.ts";
 import { browserWorld, type Store } from "../ters/src/lang/browser.ts";
 import { shower } from "./shown.ts";
 import { loadPrinted } from "../compiler/src/core-js.ts";
-import { checkedForRun, coreMain, runsBackwards, unitAction, type CoreMain } from "./coreMain.ts";
+import { checkedForRun, coreMain, type CoreMain } from "./coreMain.ts";
 import { Aborted as CoreAborted, Stopped as CoreStopped } from "../compiler/src/core-rt.ts";
-import { mainProblem, runMain, runProgram, toList, type World } from "../ters/src/lang/run.ts";
+import { runMain, runProgram, toList, type World } from "../ters/src/lang/run.ts";
 import type { Info } from "../ters/src/lang/infer.ts";
 import { FILES, NETWORK } from "../ters/src/lang/types.ts";
 import { LIBRARY } from "../ters/src/lang/library.ts";
@@ -25,26 +25,21 @@ import { infer, setDisplayNames, setProgramPins } from "./typed.ts";
 import { compilePageProgram } from "./pageCompile.ts";
 import { searchBackwards, type BackAsk, type Found } from "./backSearch.ts";
 import { stuckReading, type Reading } from "../ters/src/lang/relate.ts";
-import { compile } from "../compiler/src/compile.ts";
 import { lowerScalar } from "../compiler/src/scalar.ts";
-import * as runtime from "../compiler/src/runtime.js";
-import { $Aborted } from "../compiler/src/runtime.js";
 
-// `compiled`: main as compiled JavaScript from an earlier run of this same
-// code (E238), so the run needs no checking or compiling again.
 // `core`: main printed from the core IR, by an earlier run of this same
-// code or built with the site (E245c): the same, with no lowering.
+// code or built with the site (E245c), so the run needs no checking or
+// lowering again.
 // `replay`: answer from an earlier run's log instead of the world (E232b);
 // `until`: give only that many of its answers, then pause (E232c).
-export type RunAsk = { code: Code; names: Names; pins: Pins; def: Id; title: string; files: [string, string][]; args?: string[]; compiled?: Compiled; core?: CoreMain; deny?: Id[]; stdin?: string; replay?: LogEntry[]; until?: number };
-export type Compiled = { program: string; name: string };
+export type RunAsk = { code: Code; names: Names; pins: Pins; def: Id; title: string; files: [string, string][]; args?: string[]; core?: CoreMain; deny?: Id[]; stdin?: string; replay?: LogEntry[]; until?: number };
 // args: main takes the command line's words, as `lab run` gives them (E212).
-// A page compiled the way "Open in a tab" does (page.ts pageFile), off the
+// A page compiled the way "Open in a tab" does (page.ts corePageFile), off the
 // page's thread: the preview swaps it in when it's ready (main.ts startPage).
-export type CompileAsk = { compilePage: true; code: Code; names: Names; pins: Pins; main: Id; core?: boolean };
-// `core`: printed from the core IR (core-js.ts corePageScript), the
-// script calling $core.startCorePage; else compile.ts's (E244).
-export type CompileSays = { program: string; core?: true } | { error: string };
+export type CompileAsk = { compilePage: true; code: Code; names: Names; pins: Pins; main: Id };
+// Printed from the core IR (core-js.ts corePageScript), the script
+// calling $core.startCorePage (E244).
+export type CompileSays = { program: string; core: true } | { error: string };
 // Where the program's own definitions can run (whereRuns.ts, L22a): the
 // ones a shader can't hold, and the ones WebAssembly and C can't, each
 // with the compiler's reason.
@@ -57,13 +52,12 @@ export type Stuck = { text: string; at: number; expected: string[]; said: string
 // Where a run went (E233): each of the program's own definitions entered,
 // how many times, and about how long the run spent in it.
 export type Profile = { def: Id; calls: number; ms: number }[];
-// `compiled`: main ran as compiled JavaScript (E238), so there's no profile.
-// `core`: main ran printed from the core IR (E244); `printed`: what it ran,
-// to keep for running the same code again (E245c).
+// `core`: main ran printed from the core IR (E244), so there's no profile;
+// `printed`: what it ran, to keep for running the same code again (E245c).
 // `answers`: what the world answered the run, in order (E232a).
 // `at`: where a compiled main stopped, its node and definition (C143f).
 export type StopAt = { node: Id; def: Id };
-export type RunSays = { lines: string[] } | { done: true; shown: string; files: [string, string][]; stuck?: Stuck; profile?: Profile; compiled?: Compiled; core?: true; printed?: CoreMain; answers?: LogEntry[]; paused?: true; at?: StopAt } | { error: string; files: [string, string][]; stuck?: Stuck; compiled?: Compiled; core?: true; printed?: CoreMain; answers?: LogEntry[]; paused?: true; at?: StopAt };
+export type RunSays = { lines: string[] } | { done: true; shown: string; files: [string, string][]; stuck?: Stuck; profile?: Profile; core?: true; printed?: CoreMain; answers?: LogEntry[]; paused?: true; at?: StopAt } | { error: string; files: [string, string][]; stuck?: Stuck; core?: true; printed?: CoreMain; answers?: LogEntry[]; paused?: true; at?: StopAt };
 
 // The run's log of the world's answers (worldlog.ts), sent with its end.
 let answers: LogEntry[] | null = null, paused = false;
@@ -105,10 +99,10 @@ self.onmessage = (e: MessageEvent<RunAsk | BackAsk | CompileAsk | WhereAsk>) => 
     }
   }
   if ("compilePage" in e.data) {
-    const { code, names, pins, main, core } = e.data;
+    const { code, names, pins, main } = e.data;
     try {
-      // From the core IR where main lowers there, as Save page does.
-      return post(compilePageProgram(code, names, pins, main, !!core));
+      // From the core IR, as Save page does.
+      return post(compilePageProgram(code, names, pins, main));
     } catch (err) {
       return post({ error: (err as Error).message });
     }
@@ -119,7 +113,7 @@ self.onmessage = (e: MessageEvent<RunAsk | BackAsk | CompileAsk | WhereAsk>) => 
     const { code, def, values, names } = e.data, until = Date.now() + 60000;
     return post(searchBackwards(code, def, values, names, () => Date.now() > until));
   }
-  const { code, names, pins, def, title, files, args, compiled: before, core, deny, stdin, replay, until } = e.data;
+  const { code, names, pins, def, title, files, args, core, deny, stdin, replay, until } = e.data;
   const kept = new Map(files), wrote = new Map<string, string>();
   const store: Store = {
     getItem: (k) => kept.get(k) ?? null,
@@ -137,7 +131,6 @@ self.onmessage = (e: MessageEvent<RunAsk | BackAsk | CompileAsk | WhereAsk>) => 
     const logging = logged(replay ? replaying(replay, real, until, () => { paused = true; }) : real);
     const world = logging.world;
     answers = logging.log;
-    if (before && runCompiled(before, args, world, print, flush, () => [...wrote])) return;
     if (core && core.args === !!args && runPrinted(core, undefined, args, world, print, flush, () => [...wrote])) return;
     setDisplayNames(names);
     setProgramPins(pins);
@@ -163,18 +156,11 @@ self.onmessage = (e: MessageEvent<RunAsk | BackAsk | CompileAsk | WhereAsk>) => 
       names: lib.names, world,
       stuck: (r: Reading) => { stuck = { text: r.text, at: r.at, expected: [...r.expected], said: stuckReading(r), times: (stuck?.times ?? 0) + 1 }; },
     };
-    // main as compiled JavaScript when it compiles (E238): machine's run
-    // takes 12 s in the evaluator, 0.2 s compiled (plus 3 s compiling, once
-    // per version of the code). A function run backwards inside main (a
-    // text read back, L70c) says where its reading stopped only in the
-    // evaluator, so such a main runs there.
-    const backwards = runsBackwards(lib.code, def);
-    // From the core IR first, as lab build does (E244); compile.ts where
-    // main doesn't lower there.
+    // main printed from the core IR, as lab compile does (E244): machine's
+    // run takes 12 s in the evaluator, a fraction of a second printed. The
+    // evaluator where main doesn't lower there.
     const printed = coreMain(lib.code, info, lib.names, def, !!args);
     if (printed && runPrinted(printed, info, args, rt.world, rt.print, flush, () => [...wrote])) return;
-    const made = !backwards && (args || unitAction(info, def)) ? compiledMain(lib.code, info, lib.names, def) : undefined;
-    if (made && runCompiled(made, args, rt.world, rt.print, flush, () => [...wrote])) return;
     // With its arguments main gives an exit code, which shows when it isn't 0.
     const exit = (c: number) => (c ? `exit ${c}` : "unit");
     const shown = args ? exit(runProgram(lib.code, info, def, args, rt)) : shower(lib.code, info, lib.names)(runMain(lib.code, info, def, rt));
@@ -198,26 +184,14 @@ function denied(world: World, deny: Id[], names: Names): World {
   return out as unknown as World;
 }
 
-// main compiled (compiler/src/compile.ts) for the runtime linked here.
-// undefined when main has a problem or doesn't compile: the evaluator then
-// runs it, and says what's wrong as it always has.
-function compiledMain(code: Code, info: Info, names: Names, def: Id): Compiled | undefined {
-  if (mainProblem(info, def, names)) return undefined;
-  const name = names[def];
-  if (!name) return undefined;
-  try {
-    const program = compile(code, info, names, { runtime: "$lab", exports: [name], link: "global", steps: false });
-    // The program's own effects answered by a hosts/js.js: not in the editor.
-    return /\$setHosts\(/.test(program) ? undefined : { program, name };
-  } catch { return undefined; }
-}
-
 // Run main printed from the core IR (coreMain.ts), answering the same
-// world and printing the same way, as runCompiled below does compile.ts's.
+// world and printing the same way as the evaluator's run (run.ts
+// runProgram, runMain): an Abort nothing handles prints its reason to
+// standard error and, with arguments, exits with 1.
 // `info`: the check's, for a derivative; without it (a kept or a built
 // main) one that takes a derivative is lowered again. What ran goes back
 // with the end, to keep for the next run of this code (E245c). false when
-// it doesn't load: then compile.ts.
+// it doesn't load: then the evaluator.
 function runPrinted(m: CoreMain, info: Info | undefined, args: string[] | undefined, world: World, print: (line: string) => void, flush: () => void, files: () => [string, string][]): boolean {
   if (!info && m.printed.checked) return false;
   let fns;
@@ -237,24 +211,3 @@ function runPrinted(m: CoreMain, info: Info | undefined, args: string[] | undefi
   return true;
 }
 
-// Run main compiled, answering the same world and printing the same way as
-// the evaluator's run (run.ts runProgram, runMain): an Abort nothing
-// handles prints its reason to standard error and, with arguments, exits
-// with 1. false when it can't be linked, so the evaluator runs it.
-function runCompiled(c: Compiled, args: string[] | undefined, world: World, print: (line: string) => void, flush: () => void, files: () => [string, string][]): boolean {
-  let f: unknown;
-  try { f = (new Function("$lab", `${c.program}\nreturn defs;`)(runtime) as Record<string, unknown>)[c.name]; } catch { return false; }
-  if (typeof f !== "function") return false;
-  const ended = (shown: string) => { flush(); post({ done: true, shown, files: files(), compiled: c }); };
-  const settle = (v: unknown) => ended(args ? ((n: number) => (n ? `exit ${n}` : "unit"))(typeof v === "number" || typeof v === "bigint" ? Number(v) : 0) : "unit");
-  const failed = (e: unknown) => {
-    if (!(e instanceof $Aborted)) { flush(); return post({ error: (e as Error).message, files: files(), compiled: c }); }
-    const reason = (e as { reason: string }).reason;
-    if (args) { world.error(reason); return ended("exit 1"); }
-    flush(); post({ error: reason, files: files(), compiled: c });
-  };
-  runtime.$setWorld(world);
-  runtime.$setPrint(print);
-  try { const v = runtime.$main(args ? f(runtime.$toList(args)) : f()); if (v instanceof Promise) v.then(settle, failed); else settle(v); } catch (e) { failed(e); }
-  return true;
-}
