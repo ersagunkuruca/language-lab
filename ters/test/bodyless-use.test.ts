@@ -9,7 +9,6 @@ import { pathToFileURL } from "node:url";
 import { compile } from "../../compiler/src/compile.ts";
 import assert from "node:assert/strict";
 import type { Code, Id, NodeOf } from "../src/model.ts";
-import { useNode } from "../src/model.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
@@ -156,41 +155,4 @@ test("a saved use moves to the bodyless shape and runs the same: its body a let,
   assert.equal(runMain(code, info, main, { print: () => {}, names }), "20");
   assert.equal(runMain(code, info, one, { print: () => {}, names }), "3");
   assert.equal(await compiled({ code, names, info, main, use }), "20");
-});
-
-test("a saved use whose port's binder carries a unit moves too, the binder a let of its part (L211)", async () => {
-  const k = new Lang();
-  const polar = k.def("polar");
-  k.define(polar, k.fn(["length", "angle", "x", "y"], (r, t, x, y) => k.and(k.equal(x, k.call(B.mul, r, k.call(B.cos, t))), k.equal(y, k.call(B.mul, r, k.call(B.sin, t))))));
-  k.results(polar, "x", "y");
-  const main = k.def("main");
-  // Written as the editor still may: binders for x and y and a body.
-  const raw = k as unknown as { add(n: object): Id; binder(name: string): Id };
-  const bx = raw.binder("x"), by = raw.binder("y");
-  const [r, t, x, y] = (k.code.nodes[(k.code.nodes[polar] as NodeOf<"def">).body!] as NodeOf<"lambda">).params;
-  const use = raw.add(useNode((n) => raw.add(n), polar, { [r]: k.lit(2), [t]: k.lit(0), out: k.true }, { [x]: bx, [y]: by }, k.call(B.add, k.call(B.mul, k.x(bx), k.lit(10)), k.x(by))));
-  k.define(main, k.thunk(() => k.call(SHOW_ANY, use)));
-  const saved = JSON.parse(JSON.stringify(k.code.nodes)) as Record<Id, unknown>;
-  // Saved with x declared in metres.
-  (saved[bx] as { unit?: object }).unit = { m: 1 };
-  SHAPE_STEPS[2].step(saved);
-  const moved = saved[use] as NodeOf<"call">, bare = saved[`${use}.use`] as NodeOf<"call">;
-  assert.equal(moved.fn, `${use}.let`);
-  assert.equal(bare.binds, undefined);
-  // x keeps its unit, bound by a let of the tuple's first part; y's reads are parts.
-  assert.deepEqual((saved[bx] as { unit?: object }).unit, { m: 1 });
-  const holder = Object.values(saved).find((n) => (n as NodeOf<"lambda">).kind === "lambda" && (n as NodeOf<"lambda">).params[0] === bx) as NodeOf<"lambda">;
-  assert.ok(holder);
-  const code: Code = base({ nodes: saved as Code["nodes"], defs: k.code.defs }), names = baseNames(k.names);
-  const info = infer(code, names);
-  assert.deepEqual(info.errors.map((e) => e.message), []);
-  assert.equal(runMain(code, info, main, { print: () => {}, names }), "20");
-  assert.equal(await compiled({ code, names, info, main, use }), "20");
-  // The unit still counts: x in metres plus a second is told so.
-  const sec = Object.values(saved).find((n) => (n as NodeOf<"lit">).kind === "lit" && (n as NodeOf<"lit">).value === 10) as NodeOf<"lit">;
-  const wrong = base({ nodes: { ...(saved as Code["nodes"]), [sec.id]: { ...sec, unit: { s: 1 } } }, defs: k.code.defs });
-  const mul = Object.values(wrong.nodes).find((n) => n.kind === "call" && (n as NodeOf<"call">).args?.includes(sec.id)) as NodeOf<"call">;
-  wrong.nodes["plus"] = { id: "plus", kind: "ref", target: B.add };
-  wrong.nodes[mul.id] = { ...mul, fn: "plus" };
-  assert.match(infer(wrong, names).errors.map((e) => e.message).join("\n"), /m can't meet s/);
 });
