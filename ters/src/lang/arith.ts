@@ -88,11 +88,22 @@ const someLiteralNotFloat64 = (code: Code, info: Info) => nodesWhere(code, "plai
 // A Float64 literal's digits, as written, as top/bottom: 0.25 is 25/100.
 // Also a typed literal's digits written as text ("0.25" at Rational).
 function decimal(x: number | string): string {
-  const m = /^(-?)(\d+)(?:\.(\d+))?(?:e([+-]\d+))?$/i.exec(String(x).trim());
-  if (!m) return "0";
+  const m = /^(-?)(\d*)(?:\.(\d*))?(?:e([+-]?\d+))?$/i.exec(String(x).trim());
+  if (!m || !(m[2] + (m[3] ?? ""))) return "0";
   const digits = BigInt(m[2] + (m[3] ?? "")), exp = Number(m[4] ?? 0) - (m[3] ?? "").length;
   const [top, bottom] = exp >= 0 ? [digits * 10n ** BigInt(exp), 1n] : [digits, 10n ** BigInt(-exp)];
   return `${m[1]}${top}/${bottom}`;
+}
+
+// A typed literal's text as top/bottom, exactly: "3", "6/8", "0.25" and
+// "1.5/2" (a decimal over a whole number, 3/4), as the checker lets
+// through (infer.ts); null when the bottom is 0.
+function textParts(text: string): [bigint, bigint] | null {
+  const [top, bottom] = text.split("/");
+  const t = ratioParts(decimal(top));
+  if (!t || bottom === undefined) return t;
+  const b = BigInt(bottom.trim());
+  return b === 0n ? null : ratioParts(`${t[0]}/${t[1] * b}`);
 }
 
 // costOf: what each builtin costs on the target being compiled for, which
@@ -524,7 +535,7 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
   const literal = (n: NodeOf<"lit">) => {
     const t: Type = { t: "con", id: n.of!, args: [] };
     // Its digits as written: a whole number, top/bottom or a decimal, exactly.
-    const v = n.value, parts = typeof v === "number" ? ratioParts(decimal(v)) : ratioParts(String(v)) ?? ratioParts(decimal(String(v)));
+    const v = n.value, parts = typeof v === "number" ? ratioParts(decimal(v)) : textParts(String(v));
     if (!throughLiteral(n.id, parts ?? [0n, 1n], t) && typeof v === "number") throughEmbedding(n.id, v, t);
   };
 

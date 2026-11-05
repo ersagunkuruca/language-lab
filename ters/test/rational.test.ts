@@ -130,16 +130,19 @@ test("literals at Rational and Complex: exact, in lowest terms, checked, and pri
   const cx = def("complex literal", () => k.call(lib("show complex"), k.call(ARITH.mul, k.at(COMPLEX_TYPE, 2.5), k.x(lib("i")))));
   // Digits as written, exactly, as at any type with a Literal (L207f3).
   const dec = def("decimal literal", () => k.call(lib("show fraction"), k.at(RATIONAL_TYPE, "0.25")));
+  // A decimal over a whole number, as the checker lets it through.
+  const decOver = def("decimal over literal", () => k.call(lib("show fraction"), k.at(RATIONAL_TYPE, "1.5/2")));
   const bad = def("bad literal", () => k.at(RATIONAL_TYPE, "1/0"));
   const code = base(k.code), names = baseNames(k.names);
   const info = infer(code, names, undefined, checkOptions);
   const errs = (d: Id) => info.errors.filter((e) => subtree(code, d).includes(e.id)).map((e) => e.message);
-  for (const d of [sum, lowest, cx, dec]) assert.deepEqual(errs(d), [], names[d]);
+  for (const d of [sum, lowest, cx, dec, decOver]) assert.deepEqual(errs(d), [], names[d]);
   assert.match(errs(bad).join("; "), /isn't a fraction/);
   const r = makeRunner(code, info, { print: () => {} });
   assert.equal(r.value(sum), "3/2");
   assert.equal(r.value(lowest), "3/4");
   assert.equal(r.value(dec), "1/4");
+  assert.equal(r.value(decOver), "3/4");
   assert.equal(r.value(cx), "0 + 2.5i");
   const clean = { ...info, errors: info.errors.filter((e) => !subtree(code, bad).includes(e.id)) };
   const defs = compiledDefs(code, clean, names, ["sum of literals", "lowest literal", "complex literal"]);
