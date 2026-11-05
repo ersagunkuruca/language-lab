@@ -519,7 +519,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // Only what the roots reach is staged and checked again, as compile
   // does (C67): the editor's picture of the ray marcher, with its PGA
   // motor, was checked over the whole library each time (C90).
-  code = reachedWithShows(code, roots, info, true);
+  code = reachedWithShows(code, roots, info);
   if (opts.data) opts = { ...opts, records: true };
   // Calls given data written down (an algebra's signature and basis) are
   // worked out as far as that data goes (stage.ts, C65): what's left is
@@ -1603,14 +1603,16 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     const key = `$${t.key}`;
     if (index.has(key)) return index.get(key)!;
     const variants = isRecord(t) ? [t.variant] : t.cases.map((c) => c.variant);
-    if (variants.includes(FIXED_V) || variants.includes(ALGEBRAIC_V)) throw new Refused(`shows ${t.name} (not in WebAssembly and C yet)`);
+    if (variants.includes(ALGEBRAIC_V)) throw new Refused(`shows ${t.name} (not in WebAssembly and C yet)`);
     const g: SFunc = { def: t.def, name: `${t.name}.show`, params: [t], result: "text", locals: [t], body: { k: "text", v: "" }, spends: false, budgeted: false, inner: true };
     index.set(key, funcs.push(g) - 1);
     const a: SExpr = { k: "local", i: 0 }, text = (v: string): SExpr => ({ k: "text", v });
     // A type of the program's own with a Shown implementation shows through
-    // its `show`, as in the evaluator (L205, C148). std's number types
-    // (Rational, Complex, Fixed, the words) show as below for now.
-    const impl = opts.data && !t.def.startsWith("std.") ? showns.get(t.def) : undefined;
+    // its `show`, as in the evaluator (L205, C148), and so do std's number
+    // types that have one (the prelude's Rational, Complex, Fixed and the
+    // words, C139a): no case of theirs is named here. Extended and the
+    // algebras have none yet.
+    const impl = opts.data ? showns.get(t.def) : undefined;
     if (impl && code.defs.includes(impl)) {
       const it = info.typeOf.get(impl) && stype(info.subst.zonk(info.typeOf.get(impl)!));
       const ft = it && isRecord(it) ? it.fields[0]?.t : undefined;
@@ -1623,14 +1625,6 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     const one = (v: Id, fts: LType[], part: (j: number) => SExpr): SExpr => {
       const fields = fts.map((ft, j) => shown(part(j), ft, g, false));
       const list = (open: string, close: string) => joined(text(open), ...fields.flatMap((x, j) => (j ? [text(", "), x] : [x])), text(close));
-      if (v === RATIO) {
-        const bottom = g.locals.push("int") - 1;
-        return { k: "let", i: bottom, value: part(1), body: { k: "if", cond: { k: "rt", fn: "int.equal", args: [{ k: "local", i: bottom }, { k: "int", v: 1n }] }, then: fields[0], else: joined(fields[0], text("/"), shown({ k: "local", i: bottom }, "int", g, false)), t: "text" } };
-      }
-      if (v === COMPLEX_V) {
-        const im = g.locals.push("f64") - 1, at: SExpr = { k: "local", i: im };
-        return { k: "let", i: im, value: part(1), body: joined(fields[0], { k: "if", cond: { k: "op", op: "less", args: [at, { k: "num", v: 0 }] }, then: text(" − "), else: text(" + "), t: "text" }, shown({ k: "op", op: "abs", args: [at] }, "f64", g, false), text("i")) };
-      }
       if (v === EXTENDED_V.minus) return text("−∞");
       if (v === EXTENDED_V.plus) return text("+∞");
       if (v === EXTENDED_V.finite) return fields[0];
