@@ -49,8 +49,9 @@ for (const program of ["queens", "relations", "physics"]) test(`${program}: a do
     assert.match(dotHandles(r.code, d, r.names)[dot], /^•\d+$/);
     // Running main is most of the time, so a sample where it's slow:
     // queens searches every board, and physics' main takes about 2.9 s
-    // (T14l: 85 of 98 s on 29 dots, measured by stage), so one in eight.
-    const every = program === "queens" ? 40 : program === "physics" ? 8 : 1;
+    // (T14l: 85 of 98 s on 29 dots, measured by stage), so one in eight;
+    // relations' about 1.3 s (T14m: 28 of 37 s on 21 dots), one in four.
+    const every = program === "queens" ? 40 : program === "physics" ? 8 : program === "relations" ? 4 : 1;
     if (tried % every === 1 % every) assert.deepEqual(output(r.code, r.names, main), before);
     const back = removeDot(r.code, r.names, after, d, dot);
     assert.ok(back.ok, back.ok ? "" : back.reason);
