@@ -282,8 +282,8 @@ test("a handler written as a function of the computation, called plainly, and on
   });
   assert.deepEqual(p.errors, []);
   assert.deepEqual(p.run(), ["[5, 6]", "[5, 6]", "[1, 12, 22]"]);
-  // A core IR gap (L57): when the core IR lowers it, compiled gives the evaluator's.
-  await assert.rejects(p.compiled(), /normal finish/);
+  // Compiled through the core IR (C180), as the evaluator gives it.
+  assert.deepEqual(await p.compiled(), ["[5, 6]", "[5, 6]", "[1, 12, 22]"]);
 });
 
 test("an operation answered later inside a search: the rest keeps the search's other choices", async () => {

@@ -13,7 +13,7 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { runMain } from "../src/lang/run.ts";
 import { ABORT_OP, AWAIT_OP, START_TIMER_OP, S, SHOW_ANY } from "../src/lang/std.ts";
 import { showType } from "../src/lang/types.ts";
-import { compiledDefs } from "../../compiler/src/core-js.ts";
+import { compiledMain } from "../../compiler/src/core-js.ts";
 
 
 const lib = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
@@ -25,7 +25,9 @@ function run(build: (k: Lang) => string) {
   const info = infer(code, names, undefined, checkOptions);
   const printed: string[] = [];
   if (main && !info.errors.length) runMain(code, info, main, { print: (s) => printed.push(s), names, world: { now: () => 0, wait: () => assert.fail("waited for real") } } as Parameters<typeof runMain>[3]);
-  return { errors: info.errors.map((e) => e.message), printed, info, names, code, main };
+  // main compiled through the core IR, the same world (C180).
+  const compiled = () => { const out: string[] = []; compiledMain(code, info, names, { print: (s: string) => out.push(s), world: { now: () => 0, wait: () => assert.fail("waited for real") } } as never); return out; };
+  return { errors: info.errors.map((e) => e.message), printed, info, names, code, main, compiled };
 }
 
 // Each branch prints, waits on a timer, and prints again.
@@ -42,9 +44,8 @@ test("two printing branches under simulated: their lines in the clock's order, e
   assert.deepEqual(r.errors, []);
   const want = ["slow starts", "quick starts", "quick ends", "slow ends", '["slow", "quick"]'];
   assert.deepEqual(r.printed, want);
-  // Compiled to JavaScript, the same lines.
-  // A core IR gap (C137): L57, under simulated.
-  assert.throws(() => compiledDefs(r.code, r.info, r.names, ["main"]), /normal finish, which isn't lowered yet \(L57\)/);
+  // A core IR gap: the simulated world keeps the rest for later (C180).
+  assert.throws(() => r.compiled(), /keeping the rest for later/);
 });
 
 test("together's type carries its actions' effects besides Await", () => {
