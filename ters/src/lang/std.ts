@@ -902,6 +902,18 @@ export const arrayOf = (xs: unknown[], from = 0, to = xs.length): ArrayView => {
   for (let i = 0; i < n; i++) items[room + i] = xs[from + i];
   return new ArrayView(versionOf({ items, lo: room, hi: room + n }), room, n);
 };
+// An array made of a list (`array of`): a byte a slot (a Uint8Array, with
+// no room at its ends) while every item is an Int from 0 to 255, as the
+// byte array bytes-array.ts picks is (L189f1); otherwise as arrayOf. A
+// push or an item that isn't a byte copies or widens it (pushBack,
+// replaceIn), so it is the same array either way.
+const isByte = (x: unknown) => typeof x === "number" && Number.isInteger(x) && x >= 0 && x <= 255 && !Object.is(x, -0);
+const byteArray = (b: Uint8Array): ArrayView => new ArrayView(versionOf({ items: b as unknown as unknown[], lo: 0, hi: b.length }), 0, b.length);
+export const arrayOfItems = (l: { tag: Id; fields: unknown[] }): ArrayView => {
+  if (l instanceof ItemsList && l.b instanceof Uint8Array) return byteArray(l.b.slice(l.i));
+  const xs = itemsOf(l);
+  return xs.length >= 16 && xs.every(isByte) ? byteArray(Uint8Array.from(xs as number[])) : arrayOf(xs);
+};
 // Either kind of array value: a view, or { tag, fields } made elsewhere
 // (a value read back from JSON).
 export const arrayView = (a: ArrayValue): ArrayView => (a instanceof ArrayView ? a : arrayOf(a.fields, 1));
@@ -942,6 +954,7 @@ const replaceIn = (a: ArrayValue, i: I.Int, x: unknown): ArrayView => {
   const b = v.buf, slot = v.start + k, t = v.ver;
   const newest: Version = { cur: b, next: null, slot: 0, old: undefined };
   t.cur = null; t.next = newest; t.slot = slot; t.old = b.items[slot];
+  if (b.items instanceof Uint8Array && !isByte(x)) b.items = Array.from(b.items);
   b.items[slot] = x;
   return new ArrayView(newest, v.start, v.n);
 };
@@ -956,7 +969,7 @@ const arrayFirst = builtin("array.first", "first of array", ofItem((a) => [[arra
 STD_MANY[arrayFirst] = (arr: ArrayValue) => { const v = arrayView(arr); return v.n > 0 ? [v.buf.items[v.start]] : []; };
 export const ARRAY_OPS = {
   empty: builtin("array.empty", "empty array", ofItem((a) => [[], arrayOf_(a)]), () => arrayOf([])),
-  of: builtin("array.of", "array of", ofItem((a) => [[list(a)], arrayOf_(a)]), (l: { tag: Id; fields: unknown[] }) => arrayOf(itemsOf(l))),
+  of: builtin("array.of", "array of", ofItem((a) => [[list(a)], arrayOf_(a)]), (l: { tag: Id; fields: unknown[] }) => arrayOfItems(l)),
   // A list read from a copy of the items as it is walked (L189e3).
   items: builtin("array.items", "items of array", ofItem((a) => [[arrayOf_(a)], list(a)]), (arr: ArrayValue) => new ItemsList(itemsIn(arr), 0)),
   length: builtin("array.length", "array length", ofItem((a) => [[arrayOf_(a)], int]), (arr: ArrayValue) => arrayView(arr).n),
