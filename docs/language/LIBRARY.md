@@ -132,6 +132,9 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 - **slope by duals** : `((Dual) -[e]-> Dual, Float64) -[e]-> Float64`. f′(x), worked out by giving f the dual number x + 1ε and reading the slope of what comes back (forward-mode automatic differentiation). f must work on duals: write it with the generic + − · and Trig. derivative(f) gives the same number by differentiating f's code.
 - **dual table** : `List (Table entry Dual)`. Dual numbers' multiplication table: 1 · 1 = 1, 1 · ε = ε, ε · 1 = ε, and ε · ε = 0, which needs no line. table product(dual table, x, y) is x · y.
 - **Algebraic** (type). An exact real number that solves a polynomial equation with whole-number coefficients, like √2 (x² = 2) or the golden ratio (x² = x + 1). Held by that equation and which of its roots it is, so √2 · √2 is exactly 2 and < always answers. The same + − · < work on it. Make one with square root, root, or as algebraic; digits shows as many digits as you ask for (EXACT-REALS.md).
+- **Real** (type). An exact real number, held by how it was made (fractions, + − ·), that works itself out as closely as you ask: approximate(x, p) is within 1/2ᵖ. The same + − · work on it. π, digits and comparisons come next (EXACT-REALS.md, step 4).
+- **as real** : `(Rational) -> Real`. A fraction as a Real, exactly.
+- **approximate** : `(Real, Int) -> Int`. approximate(x, p) is an Int m with x within 1/2ᵖ of m/2ᵖ: x lies between (m − 1)/2ᵖ and (m + 1)/2ᵖ. Asking a larger p narrows it; what it works out is kept with the value.
 - **square root** : `(Algebraic) -[Choice]-> Algebraic`. The positive square root, exactly: square root(2) is √2, the root of x² − 2 between 1 and 2. No answer (Choice) for a negative number.
 - **root** : `(Algebraic, Int) -[Choice]-> Algebraic`. The real k-th root: root(8, 3) is 2, root(2, 2) is √2. For an even k the positive one, and no answer (Choice) for a negative number.
 - **divide** : `(Algebraic, Algebraic) -[Choice]-> Algebraic`. a ÷ b exactly. No answer (Choice) when b is 0.
@@ -161,6 +164,11 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 - **negate** : `(Algebraic) -> Algebraic`. −a for an Algebraic number: what the generic − is at Algebraic.
 - **less than** : `(Algebraic, Algebraic) -> Bool`. a < b for Algebraic numbers. It always answers: two different algebraic numbers can always be told apart.
 - **algebraic fraction** : `(Int, Int) -> Algebraic`. top/bottom as an Algebraic number: what a literal at Algebraic becomes. Not offered: as algebraic is.
+- **add** : `(Real, Real) -> Real`. a + b for Reals, exactly: what the generic + is at Real.
+- **subtract** : `(Real, Real) -> Real`. a − b for Reals, exactly: what the generic − is at Real.
+- **multiply** : `(Real, Real) -> Real`. a · b for Reals, exactly: what the generic · is at Real.
+- **negate** : `(Real) -> Real`. −a for a Real: what the generic − is at Real.
+- **real fraction** : `(Int, Int) -> Real`. top/bottom as a Real: what a literal at Real becomes. Not offered: as real is.
 
 ## True and false, sameness and order
 
