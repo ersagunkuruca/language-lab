@@ -151,10 +151,10 @@ test("fetching in a page: a view keeps what it shows until the reply, a handler 
     return { seen, asked };
   };
   const e = await draw("evaluator"), c = await draw("compiled");
-  // C179: on the core IR, a view waiting for its fetch shows the wait's
-  // message where the evaluator's shows nothing. Fails when that's fixed.
+  // A view waiting for its fetch keeps what it showed on the core IR too:
+  // the wait goes past the program's Abort handler (C179).
   assert.deepEqual(c.asked, e.asked);
-  assert.notDeepEqual(c.seen, e.seen, "C179 is fixed: check the pages are the same again");
+  assert.deepEqual(c.seen, e.seen);
   assert.deepEqual(e.seen.map((h) => [...h.matchAll(/<p>(.*?)<\/p>/g)].map((m) => m[1]).join(" | ")), [
     " |  | nothing yet",
     "hello |  | nothing yet",
