@@ -94,3 +94,20 @@ test("small values: smallest first, and records from their fields", () => {
   assert.deepEqual(points.slice(0, 3).map((v) => (v as { fields: number[] }).fields), [[0, 0], [0, 1], [1, 0]]);
   assert.deepEqual(bySize([[1, 2], [bool(false), bool(true)]], 3), [[1, bool(false)], [1, bool(true)], [2, bool(false)]]);
 });
+
+test("a function input takes each of the program's definitions that fit, shown by name (T7e14a)", () => {
+  const k = new Lang(LIBRARY.code);
+  const def = (name: string, params: string[], body: (...xs: Id[]) => Id) => { const d = k.def(name); k.define(d, k.fn(params, body)); return d; };
+  const one = def("add one", ["n"], (n) => k.call(INT_OPS.add, n, k.int(1)));
+  const dbl = def("double", ["n"], (n) => k.call(INT_OPS.add, n, n));
+  const len = def("size", ["xs"], (xs) => k.call(lib("length"), xs));
+  const grows = def("grows", ["f", "x"], (f, x) => k.call(CHECK_OP, k.call(INT_OPS.less, x, k.call(f, x)), k.lit("f(x) > x")));
+  const defs = [one, dbl, len, grows];
+  const code = base(k.code), names = { ...baseNames(), ...k.names }, info = infer(code, names);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const r = runTests(code, info, names, defs).find((x) => x.def === grows)!;
+  // add one and double fit Int → Int; size, and the law itself, do not.
+  assert.deepEqual([...new Set(r.failures.map((f) => f.inputs[0]))], ["double"]);
+  assert.deepEqual(r.failures[0], { inputs: ["double", "0"], what: ["f(x) > x"] });
+  assert.ok(r.cases >= 10, `${r.cases}`);
+});
