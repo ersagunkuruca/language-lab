@@ -115,7 +115,8 @@ type Cases = ((...xs: unknown[]) => unknown)[];
 // are given where their answer goes, last (continuation passing).
 // `abort`: a handler of Abort around a wait (core-js.ts `handle`), its
 // case as a function.
-type Frame = Cases & { e: string; k?: (v: unknown) => unknown; now?: Set<number>; ks?: Set<number>; seeded?: true; abort?: (x: unknown) => unknown };
+// `box`: a handler called and returning keeps its value there.
+type Frame = Cases & { e: string; k?: (v: unknown) => unknown; box?: { v: unknown }; now?: Set<number>; ks?: Set<number>; seeded?: true; abort?: (x: unknown) => unknown };
 const nearest = (s: Frame[], e: string) => { for (let i = s.length - 1; i >= 0; i--) if (s[i].e === e) return i; return -1; };
 // A handler whose cases may take the rest (scalar.ts handleOps `later`,
 // C137c24): the code it handles takes the rest of its run, and its value
@@ -132,8 +133,10 @@ function handleK(name: string, handlers: Frame[]): (...xs: unknown[]) => unknown
     // this handler off, what it gives being what the handler gives
     // (given where that goes when it waits, `finK`).
     const fin = fk ? cases.pop() : undefined;
-    let box: unknown;
-    const frame = Object.assign(cases as Cases, { e, now, ks, k: out ?? ((v: unknown) => { box = v; return true; }) }) as Frame;
+    // Called and returning: one box, which whatever ends last (the code,
+    // or a case) leaves the handler's value in.
+    const box = { v: undefined as unknown };
+    const frame = Object.assign(cases as Cases, { e, now, ks, box: out ? undefined : box, k: out ?? ((v: unknown) => { box.v = v; return true; }) }) as Frame;
     const end = (x: unknown) => {
       if (x === FAIL) return out ? FAIL : frame.k!(x);
       const i = handlers.lastIndexOf(frame);
@@ -146,7 +149,7 @@ function handleK(name: string, handlers: Frame[]): (...xs: unknown[]) => unknown
     try {
       if (how === "d") { const v = (body as () => unknown)(); r = end(v); } else r = (body as { code: (...xs: unknown[]) => unknown }).code(body, end);
     } finally { handlers.length = n; }
-    return out ? r : box;
+    return out ? r : box.v;
   };
 }
 function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Record<string, (...xs: never[]) => unknown>, cells?: Record<Id, (...xs: Value[]) => Value | undefined>, code?: Code, spend?: () => boolean, info?: Info, rt?: Runtime, handlers: Frame[] = [], hostOps?: HostOps): (...xs: unknown[]) => unknown {
@@ -379,6 +382,39 @@ export const RUNTIME = {
     if (x instanceof Pending) throw x;
     return h(x);
   },
+  // What comes after an attempt whose body waits (C181, core-js.ts): for
+  // a page's wait, run once the run resumed there is done, on what it
+  // gave; always thrown on.
+  // `spent`: running out of fuel is no answer there too.
+  later: (x: unknown, after: (v: unknown) => unknown, spent?: boolean): never => {
+    if (x instanceof Pending && x.resume) {
+      const go = x.resume;
+      x.resume = () => {
+        let v: unknown;
+        try { v = [...go()][0]; } catch (y) { if (y === FAIL || (spent && y === OUT)) v = FAIL; else RUNTIME.later(y, after, spent); }
+        return [after(v)];
+      };
+    }
+    throw x;
+  },
+  // A budget whose code waits (C181, core-js.ts): for a page's wait, the
+  // run resumed there goes on with the budget's fuel as it was, `swap`
+  // putting it in and the outside's back; running out is no answer.
+  fuelLater: (x: unknown, inner: number, swap: (v: number) => number): never => {
+    if (x instanceof Pending && x.resume) {
+      const go = x.resume;
+      x.resume = () => {
+        const outer = swap(inner);
+        try { return go(); } catch (y) {
+          if (y === OUT || y === FAIL) return [FAIL];
+          // Waiting again: the fuel it has now kept for that resume.
+          if (y instanceof Pending) RUNTIME.fuelLater(y, swap(outer), swap);
+          throw y;
+        } finally { swap(outer); }
+      };
+    }
+    throw x;
+  },
   // A module's stop has its definition's name and no ids (core-js.ts moduleTags).
   stop: (i: number, node?: Id | 0, def?: Id | 0, name?: string): never => { throw new Stopped(reasonOf(i), node && def ? { node, def, name } : undefined, name); },
   mod: (a: number, b: number) => ((a % b) + b) % b,
@@ -440,17 +476,24 @@ function worldFn(op: string, rt: Runtime, timers: Timers, handlers: Frame[]): (.
       // (or keeps it, called and returning).
       const off = handlers.splice(i) as Frame[], frame = off[0], kk = frame.k!;
       // A rest runs once, as the evaluator's (run.ts).
-      let used = false;
+      // A rest run while its case runs, called and returning: what the
+      // code's rest answered (FAIL: a search in it goes on to its next
+      // choice), which the perform answers.
+      let used = false, answered: unknown = true;
       const rest = (y: unknown, kr?: (v: unknown) => unknown) => {
         if (used) throw new Error("the rest of the operation was resumed a second time: a rest runs once");
         used = true;
-        let box: unknown;
-        frame.k = kr ?? ((v: unknown) => { box = v; return true; });
+        // (A case called and returning, in a handler that isn't: the
+        // handler's value from here kept for it.)
+        const box = frame.box ?? { v: undefined as unknown };
+        if (kr) frame.k = kr;
+        else if (!frame.box) frame.k = (v: unknown) => { box.v = v; return true; };
         const n = handlers.length;
         handlers.push(...off);
         try {
           const r = RUNTIME.ap(k as never, y);
-          return kr ? r : box;
+          if (!kr) answered = r;
+          return kr ? r : box.v;
         } catch (x0) {
           // What the rest threw, to the handlers of Abort it was inside
           // when this kept it, innermost first, as their try/catch would
@@ -461,7 +504,7 @@ function worldFn(op: string, rt: Runtime, timers: Timers, handlers: Frame[]): (.
             if (!h) continue;
             handlers.length = n;
             handlers.push(...off.slice(0, j));
-            try { const r = RUNTIME.caught(x, h); return kr ? r : box; } catch (y2) { x = y2; }
+            try { const r = RUNTIME.caught(x, h); if (!kr) answered = r; return kr ? r : box.v; } catch (y2) { x = y2; }
           }
           throw x;
         } finally { handlers.length = n; }
@@ -469,8 +512,12 @@ function worldFn(op: string, rt: Runtime, timers: Timers, handlers: Frame[]): (.
       const j = Number(i_), c = frame[j];
       try {
         // A case that leaves the rest out answers at once (L63, L229e).
-        if (frame.now?.has(j)) return frame.ks?.has(j) ? RUNTIME.ap(c as never, ...xs, (v: unknown) => rest(v, kk)) : rest(c(...xs), kk);
-        return frame.ks?.has(j) ? RUNTIME.ap(c as never, ...xs, rest, kk) : kk(c(...xs, rest));
+        if (frame.now?.has(j)) return frame.ks?.has(j) ? RUNTIME.ap(c as never, ...xs, (v: unknown) => rest(v, kk)) : frame.box ? (rest(c(...xs)), answered) : rest(c(...xs), kk);
+        if (frame.ks?.has(j)) return RUNTIME.ap(c as never, ...xs, rest, kk);
+        const v = c(...xs, rest);
+        if (!frame.box) return kk(v);
+        frame.box.v = v;
+        return answered;
       } finally { handlers.push(...off); }
     };
   }
@@ -486,7 +533,7 @@ function worldFn(op: string, rt: Runtime, timers: Timers, handlers: Frame[]): (.
   const clock = () => (rt.world?.now ?? Date.now)();
   const sleep = (ms: number) => w("wait")(ms);
   const paused = (e: unknown, then: () => unknown): never => {
-    if (e instanceof Pending && e.resume === undefined) { let used = false; e.resume = () => { if (used) throw new Error("a page's run was resumed twice"); used = true; then(); return []; }; }
+    if (e instanceof Pending && e.resume === undefined) { let used = false; e.resume = () => { if (used) throw new Error("a page's run was resumed twice"); used = true; return [then()]; }; }
     throw e;
   };
   const awaited = (t: Data, k: unknown): unknown => {

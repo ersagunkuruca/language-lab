@@ -298,8 +298,8 @@ test("an operation answered later inside a search: the rest keeps the search's o
   });
   assert.deepEqual(p.errors, []);
   assert.deepEqual(p.run(), ["saw 1", "saw 2", "saw 3", "[10, 20, 30]"]);
-  // A core IR gap (C137, a wait inside all): when the core IR lowers it, compiled gives the evaluator's.
-  await assert.rejects(p.compiled(), /waits inside all/);
+  // Compiled through the core IR (C181), as the evaluator gives it.
+  assert.deepEqual(await p.compiled(), ["saw 1", "saw 2", "saw 3", "[10, 20, 30]"]);
 });
 
 // A definition with Choice that waits (C40): compiled, its generator gives
@@ -321,8 +321,8 @@ test("a search defined on its own that waits: compiled, its answers and its wait
   assert.deepEqual(p.errors, []);
   const want = ["saw 1", "saw 10", "saw 2", "saw 20", "saw 3", "saw 30", "[11, 21, 31]"];
   assert.deepEqual(p.run(), want);
-  // A core IR gap (C137, a wait inside all): when the core IR lowers it, compiled gives the evaluator's.
-  await assert.rejects(p.compiled(), /waits inside all/);
+  // Compiled through the core IR (C181), as the evaluator gives it.
+  assert.deepEqual(await p.compiled(), want);
 });
 
 // A search that waits inside a fold over its list (C40): the fold is a
@@ -344,8 +344,8 @@ test("a search that waits in a fold over its list: compiled, each wait reaches t
   assert.deepEqual(p.errors, []);
   const want = ["saw 3", "saw 2", "saw 1", "saw 1", "saw 2", "saw 1", "saw 1", "[6, 5, 4, 3, 3, 2, 1, 0]"];
   assert.deepEqual(p.run(), want);
-  // A core IR gap (C137, a wait inside all): when the core IR lowers it, compiled gives the evaluator's.
-  await assert.rejects(p.compiled(), /waits inside all/);
+  // Compiled through the core IR (C181), as the evaluator gives it.
+  assert.deepEqual(await p.compiled(), want);
 });
 
 // A fold whose step waits (C40), in place: over a list, over `range(n)`
@@ -399,8 +399,8 @@ test("a function that waits and chooses, given to map and to keep: compiled, eac
   assert.deepEqual(p.errors, []);
   const want = ["saw 1", "saw 2", "saw 2", "[[1, 2], [1, 0], [0, 2], [0, 0]]", "saw 10", "saw 20", "saw 30", "[1, 2]"];
   assert.deepEqual(p.run(), want);
-  // A core IR gap (C137, a wait inside all): when the core IR lowers it, compiled gives the evaluator's.
-  await assert.rejects(p.compiled(), /waits inside all/);
+  // Compiled through the core IR (C181), as the evaluator gives it.
+  assert.deepEqual(await p.compiled(), want);
 });
 
 // Declared in the editor (BACKLOG E80): Answered later beside Gives back.

@@ -403,7 +403,8 @@ export type SExpr =
   // first(() => with fuel(n, () => body), () => otherwise): body with n
   // calls to spend, or otherwise if it ran out. `save` is a Float64 local
   // for the budget around this one, `res` one for body's value.
-  | { k: "budget"; n: number; body: SExpr; otherwise: SExpr; t: LType; save: number; res: number }
+  // `resumes`: body may wait (C181), as an attempt's.
+  | { k: "budget"; n: number; body: SExpr; otherwise: SExpr; t: LType; save: number; res: number; resumes?: true }
   // No answer here (Choice, `data`): the nearest attempt gives its
   // otherwise, or the function, being partial, says it has none.
   | { k: "fail" }
@@ -412,7 +413,9 @@ export type SExpr =
   // none, otherwise is.
   // `spent`: running out of fuel inside is no answer here too, where a
   // printer tells the two apart (core-js.ts; C137c21's rest of a search).
-  | { k: "attempt"; body: SExpr; res: number; ok: SExpr; otherwise: SExpr; t: LType; spent?: true }
+  // `resumes`: body may wait (C181): a page's wait (Pending) going out
+  // through it runs ok or otherwise once the rest it resumes is done.
+  | { k: "attempt"; body: SExpr; res: number; ok: SExpr; otherwise: SExpr; t: LType; spent?: true; resumes?: true }
   // abort(reason) (`data`): the computation ends, out to the nearest
   // handler of Abort, which gets the reason in local `reason` and gives
   // arm's value instead (a match on Abort). With `esc`, another operation
@@ -2513,7 +2516,9 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     if (e.k === "call" && !e.cps && funcs[e.fn].multi) return true;
     if (e.k === "apply" && !e.cps && e.t.several) return true;
     if (e.k === "world" && e.suspends && !e.cps) return true;
-    if (e.k === "search") return !!e.dflt && several(e.dflt);
+    // A search that waits (C181): what comes after it is the rest a wait
+    // takes, so it is one that goes on to the rest too.
+    if (e.k === "search") return (!!e.dflt && several(e.dflt)) || (!!opts.host && waits(e.body));
     if (e.k === "handle" && several(e.body)) { if (!opts.host) throw new Refused("handles Abort around a search with several answers (not in WebAssembly yet)"); return true; }
     return kids(e).some(several);
   }
@@ -2675,7 +2680,8 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         const j = join(k, e.result, g, arms(e.arms));
         return { ...e, arms: e.arms.map((a) => a && cps(a, j, tail, g)), result: "i32" };
       }
-      case "budget": if (waits(e.body)) throw new Refused("waits inside with fuel (not lowered yet)"); if (!several(e.otherwise)) return outside(e, k, g); break;
+      case "search": if (opts.host && waits(e.body)) return handledThen(e, k, g); break;
+      case "budget": if (waits(e.body) && !opts.host) throw new Refused("waits inside with fuel (not lowered yet)"); if (!several(e.otherwise)) return outside(e, k, g); break;
       // A handler of Abort around several answers, or a wait (C182): each
       // answer goes on to the rest outside it, so an abort in the rest
       // isn't the handler's. Its frame says when the rest is running
@@ -2772,7 +2778,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         : e.kind === "optional" ? [made(SOME, [answer]), made(NONE, [])] : [made(CONS, [answer, made(NIL, [])]), made(NIL, [])];
       return { k: "attempt", body: e.body, res: e.res, ok, otherwise, t: e.t };
     }
-    if (waits(e.body)) throw new Refused(`waits inside ${e.kind} (not lowered yet)`);
+    if (waits(e.body) && !opts.host) throw new Refused(`waits inside ${e.kind} (not lowered yet)`);
     const acc: LType = e.kind === "count" ? e.t : e.kind === "all" ? e.t : e.bt, box = boxOf(acc);
     const b = g.locals.push(box) - 1, got: SExpr = { k: "get", rec: local(b), t: box, i: 0 };
     const set = (value: SExpr, then: SExpr): SExpr => ({ k: "set", rec: local(b), t: box, i: 0, value, then });
@@ -2786,8 +2792,24 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     const [ok, otherwise]: [SExpr, SExpr] = e.kind === "first" ? [got, dflt()] : e.kind === "optional" ? [made(SOME, [got]), made(NONE, [])] : e.kind === "all" ? [back, back] : [got, got];
     return { k: "let", i: b, value: { k: "make", t: box, args: [start] }, body: { k: "attempt", body: run, res: r, ok, otherwise, t: e.t } };
   }
+  // A search that waits (C181), its value going on to k: the collector,
+  // with k after its ok and its otherwise.
+  function handledThen(e: Extract<SExpr, { k: "search" }>, k: Cont, g: SFunc): SExpr {
+    const h = handled(e, g);
+    const into = (x: SExpr): SExpr => {
+      if (x.k === "let") return { ...x, body: into(x.body) };
+      if (x.k !== "attempt") throw new Refused(`waits inside ${e.kind} in a way not lowered yet`);
+      const j = join(k, e.t, g, 2);
+      const then = (v: SExpr): SExpr => { const i = g.locals.push(e.t) - 1; return { k: "let", i, value: v, body: j.gen(local(i), false) }; };
+      return { ...x, ok: then(x.ok), otherwise: then(x.otherwise), t: "i32" };
+    };
+    return into(h);
+  }
   // The handlers' searches in e made code, innermost first.
-  const handle = (e: SExpr, g: SFunc): SExpr => { const r = mapKids(e, (x) => handle(x, g)); return r.k === "search" ? handled(r, g) : r; };
+  // One that waits is left to cps (handledThen).
+  const handle = (e: SExpr, g: SFunc): SExpr => { const r = mapKids(e, (x) => handle(x, g)); return r.k === "search" && !(opts.host && waits(r.body)) ? handled(r, g) : r; };
+  // Every attempt whose body may wait (C181): see `resumes`.
+  const resuming = (e: SExpr): SExpr => { const r = mapKids(e, resuming); return (r.k === "attempt" || r.k === "budget") && opts.host && waits(r.body) ? { ...r, resumes: true } : r; };
   // After a root and what it calls are lowered: which have several
   // answers, then their code, and every handler's.
   function several_(from: number) {
@@ -2821,6 +2843,12 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       g.inner = true;
       const k: Cont = { direct: local(p), gen: (v, tail) => ({ k: "apply", fn: local(p), t: kt, args: [v], tail, tmp: g.locals.push(kt) - 1 }) };
       g.body = cps(handle(body, g), k, true, g);
+    }
+    // The functions made for the rest (joins, a choice's loop) included,
+    // which may wait too (C181).
+    if (opts.host) {
+      for (let changed = true; changed;) { changed = false; for (let i = from; i < funcs.length; i++) if (!waiting.has(i) && waits(funcs[i].body)) { waiting.add(i); changed = true; } }
+      for (let i = from; i < funcs.length; i++) funcs[i].body = resuming(funcs[i].body);
     }
   }
   // A function whose answer, somewhere it ends, is cons(x, itself(…))

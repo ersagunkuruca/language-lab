@@ -58,7 +58,7 @@ import { allowedOnly, nodeWorld } from "../src/lang/world.ts";
 import { readLog, replaying, type LogEntry } from "../src/lang/worldlog.ts";
 import { CFLAGS, emitC } from "../../compiler/src/c.ts";
 import { lowerScalar } from "../../compiler/src/scalar.ts";
-import { FAIL, Unsupported, codeLines, coreMap, coreModule, hostOpsOf, loadCoreJs, lowerCore, plainValue, runCoreMain } from "../../compiler/src/core-js.ts";
+import { FAIL, Unsupported, codeLines, coreCall, coreMap, coreModule, hostOpsOf, loadCoreJs, lowerCore, plainValue, runCoreMain } from "../../compiler/src/core-js.ts";
 import { withInverses } from "../../compiler/src/inverses.ts";
 import { execFileSync } from "node:child_process";
 import { recordings, webCorePage } from "./web.ts";
@@ -411,6 +411,21 @@ switch (command) {
     if (staticPage) {
       // Every text, part and attribute called once, and the handlers left
       // out: server-side rendering without a server.
+      // Through the core IR, as `lab build-web` makes it (C186: agent's
+      // first frame took minutes on the evaluator); the evaluator where
+      // main doesn't lower, with the program's own hosts, or --evaluator.
+      if (evalAt < 0 && !hosts) {
+        const ir = lowerCore(p.code, p.info, p.names, [main]);
+        const fi = ir.funcs.findIndex((g) => g.def === main && !g.inner && !g.budgeted);
+        if (!ir.refused.get(main) && fi >= 0) {
+          try {
+            const cells = new Cells(equal);
+            const page = loadCoreJs(ir, { print: (s: string) => console.error(s), cells, world: world() } as never)[fi]() as Value;
+            process.stdout.write(pageDocument(p.title, htmlText(page, coreCall)));
+            break;
+          } catch (e) { if (!(e instanceof Unsupported)) throw e; }
+        }
+      }
       const cells = new Cells(equal);
       const page = runMain(p.code, p.info, main, { print: (s) => console.error(s), names: p.names, cells, world: world(), hosts });
       process.stdout.write(pageDocument(p.title, htmlText(page, evaluatorCall)));

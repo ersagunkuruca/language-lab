@@ -561,9 +561,11 @@ export function zeroParts(ir0: CoreIR, roots: number[]): { ir: CoreIR; copies: n
     };
     const maskOf = (a: Abs, A: RType): number => (a === null ? 0 : typeof a === "object" && "f" in a ? a.f.reduce<number>((m, x, j) => (x === false || x === null ? m : m | (1 << j)), 0) : full(A));
     const pos = (m: number, j: number) => { let n = 0; for (let b = 0; b < j; b++) if ((m >> b) & 1) n++; return n; };
-    // A 0 put here, maybe under lets of reads (a leaf put in place).
+    // A part that is 0 where it's made: one put here, or written (a +0,
+    // which a part left out reads back as exactly), maybe under lets of
+    // reads (a leaf put in place).
     const still = (e: SExpr): boolean => ["local", "num", "get", "field", "cap", "op"].includes(e.k) && kids(e).every(still);
-    const isZ = (e: SExpr): boolean => zeros.has(e) || (e.k === "let" && still(e.value) && isZ(e.body));
+    const isZ = (e: SExpr): boolean => zeros.has(e) || (e.k === "num" && Object.is(e.v, 0)) || (e.k === "let" && still(e.value) && isZ(e.body));
     const isCont = (t: LType | null): t is RType | DType => !!t && typeof t === "object" && ((isRecord(t) && !algT(t)) || isData(t));
 
     // Types whose values the runtime or the world sees or makes keep every

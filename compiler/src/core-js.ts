@@ -351,13 +351,25 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
         // parser spent 41% of its time throwing it).
         case "fail": if (onFail) { pre.push(`${d}${onFail}`); return "undefined"; } return "R.fail()";
         case "attempt": {
+          // (Not in a heap copy, whose calls yield: there it is plain.)
+          if (e.resumes && !cycle) {
+            // Its body may wait (C181): ok or otherwise as a function, run
+            // now, or, past a page's wait, once the rest it resumes is done
+            // (R.later), given what that rest gave.
+            const t = temp(), a = temp(), v = temp(), r = local(e.res), [save, back] = keep();
+            pre.push(`${d}${save}let ${t};`, `${d}const ${a} = (${v}) => {`, `${d}  ${r} = ${v};`, `${d}  if (${v} !== R.FAIL) {`, ...within("return R.FAIL;", () => block(e.ok, { set: t, fails: true }, d + "    ")), `${d}  } else {`, ...within("return R.FAIL;", () => block(e.otherwise, { set: t, fails: true }, d + "    ")), `${d}  }`, `${d}  return ${t};`, `${d}};`);
+            const body = within(`{ ${r} = R.FAIL; break ${v}; }`, () => block(e.body, { set: r, fails: true }, d + "  "));
+            pre.push(`${d}${v}: try {`, ...body, `${d}} catch (x) {`, `${d}  if (x !== R.FAIL${e.spent ? " && x !== R.OUT" : ""}) R.later(x, ${a}${e.spent ? ", true" : ""});`, `${d}  ${back}${r} = R.FAIL;`, `${d}}`, `${d}${t} = ${a}(${r});`);
+            pre.push(onFail ? `${d}if (${t} === R.FAIL) ${onFail}` : `${d}R.ck(${t});`);
+            return t;
+          }
           const ok = tried(e, pre, d), t = temp();
           pre.push(`${d}let ${t};`, `${d}if (${ok}) {`, ...block(e.ok, { set: t }, d + "  "), `${d}} else {`, ...block(e.otherwise, { set: t }, d + "  "), `${d}}`);
           return t;
         }
         case "budget": {
           const s = temp(), out = temp(), t = temp(), [save, back] = keep();
-          pre.push(`${d}${save}const ${s} = fuel;`, `${d}fuel = ${e.n};`, `${d}let ${t}, ${out} = false;`, `${d}try {`, ...within(null, () => block(e.body, { set: t }, d + "  ")), `${d}} catch (x) {`, `${d}  if (x !== R.OUT) { fuel = ${s}; throw x; }`, `${d}  ${back}${out} = true;`, `${d}}`, `${d}fuel = ${s};`);
+          pre.push(`${d}${save}const ${s} = fuel;`, `${d}fuel = ${e.n};`, `${d}let ${t}, ${out} = false;`, `${d}try {`, ...within(null, () => block(e.body, { set: t }, d + "  ")), `${d}} catch (x) {`, (e.resumes ? `${d}  if (x !== R.OUT) { const inner = fuel; fuel = ${s}; R.fuelLater(x, inner, (v) => { const o = fuel; fuel = v; return o; }); }` : `${d}  if (x !== R.OUT) { fuel = ${s}; throw x; }`), `${d}  ${back}${out} = true;`, `${d}}`, `${d}fuel = ${s};`);
           pre.push(`${d}if (${out}) {`, ...block(e.otherwise, { set: t }, d + "  "), `${d}}`);
           return t;
         }
@@ -406,7 +418,7 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
       const give = (x: string) => [...out, to === "return" ? `${d}return ${x};` : `${d}${to.set} = ${x};`];
       if (failable && e.k === "fail") return give("R.FAIL");
       if (failable && e.k === "call" && ir.funcs[e.fn].partial && !(to === "return" && e.fn === i && e.tail)) return give(call(e.fn, inputs(e.args, out, d)));
-      if (failable && e.k === "attempt") {
+      if (failable && e.k === "attempt" && !(e.resumes && !cycle)) {
         const ok = tried(e, out, d);
         return [...out, `${d}if (${ok}) {`, ...block(e.ok, to, d + "  "), `${d}} else {`, ...block(e.otherwise, to, d + "  "), `${d}}`];
       }

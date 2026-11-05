@@ -253,7 +253,10 @@ world sees keeps every part. The best of eight runs of 3000 solid steps
 is about 33 ms, against 41 ms with every part stored and 65 ms before
 L43f1.
 
-Still to do: the same smaller struct on the GPU (WGSL).
+A picture's lowering for the GPU goes through the same pass (L43f3,
+editor/picture.ts): raymarch's motors and points are WGSL structs of 6
+and 2 parts instead of the projective algebra's 16, and a part that is
+written 0 where the value is made counts as known to be 0 too.
 
 ## Ersagun's answer: each blade combination is its own type
 
