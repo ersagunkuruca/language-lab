@@ -1318,7 +1318,6 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         }
         if (tailOps.has(target) && !drawn) {
           if (target === RANDOM_OP) {
-            if (Object.values(code.nodes).some((x) => x.kind === "ref" && x.target === S.seeded)) throw new Refused("handles Random beside seeded (not lowered yet)");
             drawn = true;
             let world: SExpr;
             try { world = expr(id, env, f, false); } finally { drawn = false; }
@@ -2961,10 +2960,17 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       : (() => { const ft = stype(zonk(n.args[1])); if (!ft || !isFn(ft)) throw new Refused("seeds Random around a function it can't call"); return { k: "apply", fn: expr(n.args[1], env, f, false), t: ft, args: [], tail: false, tmp: f.locals.push(ft) - 1 } as SExpr; })();
     const keep = [0, 1, 2, 3].map(() => f.locals.push("f64") - 1), seedL = f.locals.push("f64") - 1, done = f.locals.push("f64") - 1, v = f.locals.push(t) - 1;
     const rt = (fn: string, ...args: SExpr[]): SExpr => ({ k: "rt", fn, args });
+    // Where the program handles Random too (C183): the seeded generator is
+    // the nearest handler while the body runs, so a handler of the
+    // program's further out doesn't answer its draws (core-rt.ts
+    // `seeded.in`, `seeded.out`, however the body ends).
+    const own = tailOps.get(RANDOM_OP) === RANDOM;
+    const ran: SExpr = !own ? body : { k: "let", i: f.locals.push("i32") - 1, value: { k: "rt", fn: `seeded.in:${RANDOM}`, args: [], host: { t: "i32", partial: false } },
+      body: { k: "released", body, release: { k: "rt", fn: `seeded.out:${RANDOM}`, args: [], host: { t: "i32", partial: false } }, t, st: f.locals.push("i32") - 1 } };
     const lets: [number, SExpr][] = [
       ...keep.map((l, k): [number, SExpr] => [l, rt(`rand.s${k}`)]),
       [seedL, rt("rand.seed", expr(n.args[0], env, f, false))],
-      [v, body],
+      [v, ran],
       [done, rt("rand.restore", ...keep.map((l): SExpr => ({ k: "local", i: l })))],
     ];
     // The let of the body's value is marked: a body with several answers
