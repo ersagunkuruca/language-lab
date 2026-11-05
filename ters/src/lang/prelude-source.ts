@@ -2244,10 +2244,13 @@ export function buildPrelude(): Module {
   const uEscape = (digits: string, c: Id) => texts(k.lit("\\u"), ...[12, 8, 4, 0].map((sh) =>
     k.call(itemAt, k.call(TEXT_OPS.characters, k.lit(digits)), k.call(INT_OPS.bitAnd, k.call(INT_OPS.shiftDown, c, k.int(sh)), k.int(15)), k.lit("0"))));
   const shortEscapes: [number, string][] = [[8, "\\b"], [12, "\\f"], [13, "\\r"], [9, "\\t"], [47, "\\/"]];
-  const jsonCharSpelled = def("json character spelled", ["character"], (ch) => k.let("code", k.call(S.first, k.thunk(() => k.call(TEXT_OPS.code, ch)), k.thunk(() => k.int(0))), (c) =>
-    k.call(S.oneOf, k.if(iLess(c, k.int(65536)),
-      k.list(k.call(jsonChar, ch), uEscape("0123456789abcdef", c), uEscape("0123456789ABCDEF", c), shortEscapes.reduceRight((acc, [code, esc]) => k.if(iSame(c, k.int(code)), k.lit(esc), acc), k.call(jsonChar, ch))),
-      k.list(k.call(jsonChar, ch))))));
+  // Each spelling is worked out only when it's asked for (L72e1d): the
+  // first, json character's, costs no more than json printed's.
+  const orElse = (first: Id, rest: () => Id) => k.if(k.call(S.oneOf, k.list(k.false, k.true)), rest(), first);
+  const jsonCharSpelled = def("json character spelled", ["character"], (ch) => orElse(k.call(jsonChar, ch), () =>
+    k.let("code", k.call(S.first, k.thunk(() => k.call(TEXT_OPS.code, ch)), k.thunk(() => k.int(0))), (c) => k.if(iLess(c, k.int(65536)),
+      orElse(uEscape("0123456789abcdef", c), () => orElse(uEscape("0123456789ABCDEF", c), () => shortEscapes.reduceRight((acc, [code, esc]) => k.if(iSame(c, k.int(code)), k.lit(esc), acc), k.call(jsonChar, ch)))),
+      k.call(jsonChar, ch)))));
   // A number any way json read reads it (L72e1b): show's spelling first,
   // then any run of digits, signs, ".", e and E that read number reads as it.
   const jsonNumberChar = def("json number character", ["character"], (c) => k.byValue(c, [..."0123456789+-.eE"].map((x) => [k.lit(x), k.true] as [Id, Id]), k.false));

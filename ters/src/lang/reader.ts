@@ -389,10 +389,14 @@ export function writeReader(code: Code, printer: Id, names: Record<Id, string>):
     const table = descentReader(code, printer, names).characterTable(viaTable);
     const d = k.def(`read characters by ${named(g) || "a function"}`);
     charReaders.set(g, d);
+    // What f writes for c first: a Choice of ways is taken at its first
+    // here, so reading a long text doesn't nest a way per character (the
+    // core IR runs the rest of a Choice inside it, L72e1d).
+    const written = (c: Id) => k.call(S.first, k.thunk(() => k.call(viaTable, c)), k.thunk(() => k.lit("")));
     k.define(d, k.fn(["text", "at", "so far"], (text, at, acc) => {
       // One character there by f's table, or itself: (where it ends, it).
       const self = k.if(k.call(INT_OPS.less, at, k.call(TEXT_OPS.length, text)), k.let("character", at1(text, at), (c) =>
-        k.if(k.call(S.equal, k.call(viaTable, c), c), some(plus(at, 1), k.x(c)), none())), none());
+        k.if(k.call(S.equal, written(c), c), some(plus(at, 1), k.x(c)), none())), none());
       const one = table.reduceRight<Id>((rest, [o, c]) => k.if(startsWith(text, at, k.lit(o), k.int([...o].length)), some(plus(at, [...o].length), k.lit(c)), rest), self);
       const h = viaInverse && target(viaInverse.args[0]);
       const both = h ? farther(one, inverseAt(h, text, at)) : one;
