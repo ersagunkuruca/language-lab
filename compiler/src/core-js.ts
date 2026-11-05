@@ -76,6 +76,9 @@ function builtinOf(name: string): BuiltinOf | undefined {
 export const tableSpec = (t: TType): TableSpec => ({ set: t.set });
 
 const INFIX: Partial<Record<Op, string>> = { add: "+", sub: "-", mul: "*", div: "/", less: "<", equal: "===", beq: "===", and: "&&", or: "||" };
+// The runtime's builtins that are one operator on how values are held
+// (core-rt.ts OWN, std.ts concat): Ints normalised, so equal ones are ===.
+const RT_INFIX: Record<string, string> = { "text.concat": "+", "text.equal": "===", "int.equal": "===", "int.less": "<" };
 const MATH: Partial<Record<Op, string>> = { sqrt: "sqrt", abs: "abs", floor: "floor", float32: "fround", sin: "sin", cos: "cos", tan: "tan", exp: "exp", log: "log", pow: "pow", atan2: "atan2" };
 
 
@@ -326,6 +329,8 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
           // One of an answer's values (core-rt.ts pick), read where it is used.
           { const m = /^pick:(\d+)$/.exec(e.fn); if (m && xs.length === 1) return `(${xs[0]})[${m[1]}]`; }
           if (e.fn === "fuel.swap") { const t = temp(); pre.push(`${d}const ${t} = fuel;`, `${d}fuel = ${xs[0]};`); return t; }
+          // A builtin that is one JavaScript operator, printed as it (C170b).
+          { const op = RT_INFIX[e.fn]; if (op && xs.length === 2) return `(${xs[0]} ${op} ${xs[1]})`; }
           return `${rtName(e.fn)}(${xs.join(", ")})`;
         }
         case "world": { const xs = e.args.map((a) => ex(a, pre, d)); return `${worldName(e.op)}(${xs.join(", ")})`; }

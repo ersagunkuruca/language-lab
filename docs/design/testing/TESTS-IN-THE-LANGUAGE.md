@@ -123,7 +123,7 @@ Unison's cached test results.
 
 `lab test <program>` runs every test and accepted answer in the program
 with the evaluator, and prints each failure with its values. With
-`--compiled` it runs them compiled to JS too, and the two must agree. (T7e1: accepted answers, on the core IR's JavaScript; a test's Check isn't compiled yet.)
+`--compiled` it runs them compiled to JS too, and the two must agree. (T7e1: accepted answers, on the core IR's JavaScript. T7e2: each test too, as a definition written in the language that handles its Check and gives the first expect that failed, compiled like any other; a test that searches isn't run compiled yet.)
 That one flag replaces most of the TypeScript sweeps that compare the
 evaluator with compiled JS.
 

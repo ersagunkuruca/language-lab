@@ -172,6 +172,9 @@ function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Re
   const out = builtin![1] ? (v: unknown) => (typeof v === "object" && v !== null && "tag" in v ? (v as { tag: Id }).tag === TRUE : v) : (v: unknown) => v;
   // array.get's place is an i32; array.at's an Int.
   const conv = base === "array.get" ? (xs: unknown[]) => [xs[0], I.norm(BigInt(xs[1] as number))] : (xs: unknown[]) => xs;
+  // A builtin whose values cross as they are is bound as itself (C170b):
+  // no wrapper spreading its arguments on every call.
+  if (one && !builtin![1] && base !== "array.get") return one as (...xs: unknown[]) => unknown;
   if (one) return (...xs) => out(one(...conv(xs)));
   return (...xs) => { const r = many!(...conv(xs)); if (!r.length) throw FAIL; return out(r[0]); };
 }
