@@ -38,7 +38,7 @@ import { NUMERIC } from "./equations.ts";
 import { planSolve, type SolvePlan } from "./solve.ts";
 import { computedForward } from "./directions.ts";
 import { countedCalls } from "./counting.ts";
-import { INT_OPS, S, SET, STD_IMPL, STD_MANY, TEXT_OPS } from "./std.ts";
+import { ARRAY_OPS, INT_OPS, S, SET, STD_IMPL, STD_MANY, TEXT_OPS } from "./std.ts";
 import { filled } from "./ports.ts";
 import { spineTerminates } from "./spine.ts";
 
@@ -257,6 +257,29 @@ function letsOf(code: Code): Map<Id, Named> {
 // plansOnly: for relate.ts, which needs the schedules and not whether
 // they end (the size-change check, run again for each mode planned while
 // the search runs, would be most of its time).
+// What an array is made with, as a case: two that are never the same
+// value (an empty array, and one with an item put at its front), so arms
+// that build them are a choice of one (C137 s3e).
+const ARRAY_ENDS: Record<Id, string> = { [ARRAY_OPS.empty]: "array:empty", [ARRAY_OPS.pushFront]: "array:front" };
+
+// A definition whose body only calls a builtin on its inputs, each
+// once, in some order (or a value that is one with none): the builtin
+// and where each of its inputs comes from.
+export function wrapperOf(nodes: Code["nodes"], def: Id): { builtin: Id; args: number[] } | null {
+  const d = nodes[def];
+  if (d?.kind !== "def" || !d.body) return null;
+  const b = nodes[d.body];
+  const lam = b?.kind === "lambda" ? b : null;
+  const call = nodes[lam ? lam.body : d.body];
+  if (!isCall(call) || isUse(call) || nodes[call.fn]?.kind === "lambda") return null;
+  const head = nodes[call.fn];
+  if (head?.kind !== "ref" || nodes[head.target]?.kind !== "builtin") return null;
+  const params = lam?.params ?? [];
+  const args = call.args.map((a) => { const r = nodes[a]; return r?.kind === "ref" ? params.indexOf(r.target) : -1; });
+  if (args.some((i) => i < 0) || new Set(args).size !== params.length || args.length !== params.length) return null;
+  return { builtin: head.target, args };
+}
+
 export function analyzer(program: Code, names: Record<Id, string> = {}, { plansOnly = false, keepSlots = false } = {}) {
   // A use with no body is read with its ports bound (L211e).
   const code = filled(program);
@@ -813,6 +836,11 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
       ]);
     }
     if (fn.k === "builtin") return builtinGoal(fn.id, text, n, sides, ctx);
+    // A definition that only calls a builtin on its inputs (`array of
+    // List`'s cons, C137 s3e): the builtin's own ways, so what it gives
+    // back is known smaller, as a constructor's fields are.
+    const w = fn.k === "def" ? wrapperOf(nodes, fn.id) : null;
+    if (w && w.args.length === o) { const args = w.args.map((i) => n.args[i]); return builtinGoal(w.builtin, text, { ...n, args }, [...args, n.id], ctx); }
     // A definition or a lambda: its own mode, with what's known here.
     return {
       text, slots: sides.map(slot), exec: call,
@@ -923,6 +951,12 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
     // separator, the one list of parts that hold none of it, as show run
     // backwards reads the one way a number is written.
     if (id === TEXT_OPS.joinAll) return sided(text, sides, call, [forward, { needs: [1, 2], gives: [0], answers: ONE }]);
+    // An array's front run backwards (C137 s3e): the first item and the
+    // rest known, the array they make; so `array of List`'s match and
+    // cons run backwards as a cons cell's do.
+    if (id === ARRAY_OPS.front) return sided(text, sides, call, [forward, { needs: [o], gives: [0], answers: ONE }]);
+    if (id === ARRAY_OPS.pushFront) return sided(text, sides, call, [forward, { needs: [o], gives: [0, 1], answers: CHECK, sizes: within(o, [0, 1], () => [true, false]) }]);
+    if (id === ARRAY_OPS.empty) return sided(text, sides, call, [forward, { needs: [o], gives: [], answers: CHECK }]);
     if (id === SET || STD_IMPL[id] || STD_MANY[id]) return sided(text, sides, call, [forward]);
     return sided(text, sides, call, [forward]);
   }
@@ -948,6 +982,11 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
   // that ends in one, or `fail`, which builds nothing.
   function heads(id: Id): Set<Id> | null {
     const n = nodes[id];
+    if (n?.kind === "ref" && nodes[n.target]?.kind === "def") { const w = wrapperOf(nodes, n.target); return w && ARRAY_ENDS[w.builtin] ? new Set([ARRAY_ENDS[w.builtin]]) : null; }
+    if (isCall(n) && !isLet(n) && nodes[n.fn]?.kind === "ref" && nodes[(nodes[n.fn] as NodeOf<"ref">).target]?.kind === "def") {
+      const w = wrapperOf(nodes, (nodes[n.fn] as NodeOf<"ref">).target);
+      if (w && ARRAY_ENDS[w.builtin]) return new Set([ARRAY_ENDS[w.builtin]]);
+    }
     if (n?.kind === "ref") return nodes[n.target]?.kind === "variant" ? new Set([n.target]) : null;
     if (isCall(n)) {
       if (isLet(n)) return heads((nodes[n.fn] as NodeOf<"lambda">).body);

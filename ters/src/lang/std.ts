@@ -802,7 +802,7 @@ export const TEXT_OPS = {
   length: builtin("text.length", "length", pure([str], int), T.length),
   slice: builtin("text.slice", "slice", pure([str, int, int], str), T.slice),
   characters: builtin("text.characters", "characters", pure([str], list(str)), (t: string) => listOf(T.characters(t))),
-  split: builtin("text.split", "split", pure([str, str], list(str)), (t: string, by: string) => listOf(T.split(t, by))),
+  split: builtin("text.split", "split", pure([str, str], list(str)), (t: string, by: string) => new ItemsList(T.split(t, by), 0)),
   joinAll: builtin("text.joinAll", "join all", pure([list(str), str], str), (l: { tag: Id; fields: unknown[] }, by: string) => T.joinAll(itemsOf(l) as string[], by)),
   find: choice("text.find", "find", [str, str], int, T.find),
   less: builtin("text.less", "comes before", pure([str, str], bool), (a: string, b: string) => truth(T.less(a, b))),
@@ -972,6 +972,13 @@ export const ARRAY_OPS = {
   firstIfAny: builtin("array.firstIfAny", "first of array if any", ofItem((a) => [[arrayOf_(a)], optional(a)]), (arr: ArrayValue) => {
     const v = arrayView(arr);
     return v.n > 0 ? { tag: SOME, fields: [v.buf.items[v.start]] } : { tag: NONE, fields: [] };
+  }),
+  // The front at once (C137 s3e): the first item and the rest, or none of
+  // an empty array. One call, so it runs backwards too (modes.ts,
+  // relate.ts): the array from its first item and rest.
+  front: builtin("array.front", "front of array", ofItem((a) => [[arrayOf_(a)], optional({ t: "con", id: PAIR, args: [a, arrayOf_(a)] })]), (arr: ArrayValue) => {
+    const v = arrayView(arr);
+    return v.n > 0 ? { tag: SOME, fields: [{ tag: PAIR_V, fields: [v.buf.items[v.start], restOf(arr)] }] } : { tag: NONE, fields: [] };
   }),
 };
 

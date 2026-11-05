@@ -26,8 +26,8 @@ import { givenInOrder } from "../../ters/src/lang/ports.ts";
 import type { Code, Id, NodeOf, Use } from "../../ters/src/model.ts";
 import { useTarget, type Call } from "../../ters/src/model.ts";
 import { bindsOf } from "./uses.ts";
-import { analyzer, determinism, type Exec, type Plan } from "../../ters/src/lang/modes.ts";
-import { CONS, INT_OPS, NIL, S } from "../../ters/src/lang/std.ts";
+import { analyzer, determinism, wrapperOf, type Exec, type Plan } from "../../ters/src/lang/modes.ts";
+import { ARRAY_OPS, CONS, INT_OPS, NIL, NONE, S, SOME } from "../../ters/src/lang/std.ts";
 import { B } from "../../ters/src/prelude.ts";
 
 export class Unsupported extends Error {}
@@ -40,6 +40,9 @@ export interface ModeEmit {
   // be. `partial`: the answer may be $no (a builtin with Choice).
   forward(call: Call, args: string[]): { js: string; partial?: boolean } | null;
   tag(variant: Id): string;
+  // A builtin run forward on values the plan made (an array built from
+  // its front run backwards, C137 s3e); null when it can't be.
+  builtin?(id: Id, args: string[]): string | null;
 }
 
 export function modeCompiler(code: Code, names: Record<Id, string>) {
@@ -191,7 +194,10 @@ export function modeCompiler(code: Code, names: Record<Id, string>) {
     if (e.waits) throw new Unsupported("a goal waits");
     switch (e.k) {
       case "given": {
-        const js = sc.emit.value(e.node);
+        // A value that is a builtin's answer (`array of List`'s nil, the
+        // empty array, C137 s3e): the builtin run here.
+        const r = nodes[e.node], w = r?.kind === "ref" ? wrapperOf(nodes, r.target) : null;
+        const js = sc.emit.value(e.node) ?? (w && !w.args.length ? sc.emit.builtin?.(w.builtin, []) ?? null : null);
         if (js === null) throw new Unsupported("a value only known in its scope");
         const n = nodes[e.node];
         bind(sc, e.node, js, n.kind === "ref" && nodes[n.target]?.kind === "variant" ? n.target : undefined);
@@ -224,6 +230,9 @@ export function modeCompiler(code: Code, names: Record<Id, string>) {
   }
 
   function call(n: Call, callee: string[] | null, specs: number, sc: Scope) {
+    // A definition that only calls a builtin on its inputs: that builtin
+    // (modes.ts wrapperOf, as the analysis took it).
+    const wh = nodes[n.fn], w = wh?.kind === "ref" ? wrapperOf(nodes, wh.target) : null;
     const head = nodes[n.fn];
     if (head.kind !== "ref" || nodes[head.target]?.kind === "binder") throw new Unsupported("a function known only when it runs");
     const t = nodes[head.target];
@@ -237,6 +246,7 @@ export function modeCompiler(code: Code, names: Record<Id, string>) {
       check(r);
       return bind(sc, n.id, r);
     }
+    if (w && w.args.length === n.args.length && res !== undefined && arrayBack(w.builtin, w.args.map((i) => n.args[i]), res, sc)) return;
     if (t.kind === "def") {
       if (!callee || specs) throw new Unsupported("a call in a mode not planned");
       const lam = nodes[t.body!] as NodeOf<"lambda">;
@@ -283,7 +293,38 @@ export function modeCompiler(code: Code, names: Record<Id, string>) {
       if (id === B.mul && literal(b)) return bind(sc, n.args[0], `(${res} / ${b})`);
       if (id === B.div && literal(b)) return bind(sc, n.args[0], `(${res} * ${b})`);
     }
+    if (t.kind === "builtin" && res !== undefined && arrayBack(head.target, n.args, res, sc)) return;
     throw new Unsupported("a call with no backwards reading here");
+  }
+
+  // An array's builtins run backwards (C137 s3e), the answer known: its
+  // front, the array made from the first item and the rest (or the empty
+  // array); push front, the first item and the rest (none of an empty
+  // array); the empty array, a check. False where it isn't one of these.
+  function arrayBack(id: Id, argNodes: Id[], res: string, sc: Scope): boolean {
+    const run = (b: Id, xs: string[]) => sc.emit.builtin?.(b, xs) ?? null;
+    if (id === ARRAY_OPS.front) {
+      const push = run(ARRAY_OPS.pushFront, [`${res}.fields[0].fields[1]`, `${res}.fields[0].fields[0]`]), empty = run(ARRAY_OPS.empty, []);
+      if (!push || !empty) return false;
+      bind(sc, argNodes[0], `(${res}.tag === ${sc.emit.tag(SOME)} ? ${push} : ${empty})`);
+      return true;
+    }
+    if (id === ARRAY_OPS.pushFront) {
+      const front = run(ARRAY_OPS.front, [res]);
+      if (!front) return false;
+      const f = fresh(sc, front);
+      sc.lines.push(`if (${f} === $no || ${f}.tag !== ${sc.emit.tag(SOME)}) ${sc.fail}`);
+      bind(sc, argNodes[1], `${f}.fields[0].fields[0]`);
+      bind(sc, argNodes[0], `${f}.fields[0].fields[1]`);
+      return true;
+    }
+    if (id === ARRAY_OPS.empty) {
+      const front = run(ARRAY_OPS.front, [res]);
+      if (!front) return false;
+      sc.lines.push(`if (${front}.tag !== ${sc.emit.tag(NONE)}) ${sc.fail}`);
+      return true;
+    }
+    return false;
   }
 
   // A choice of arms. The value known: its arm. Else each arm in turn, in

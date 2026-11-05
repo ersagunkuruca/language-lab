@@ -82,6 +82,7 @@ const HOST_CELLS = new Set(Object.values(CELL_OPS).filter((id) => id !== CELL_OP
 import { runtime } from "./wasm-rt.ts";
 import { machineWords } from "./machine-words.ts";
 import { loopRecords } from "./loop-records.ts";
+import { closureArgs } from "./closure-args.ts";
 import { wideProducts } from "./wide-products.ts";
 
 // A shader (or a ray marcher's loop) may call what might not finish only
@@ -1100,6 +1101,18 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           const item = a.item;
           return { k: "search", kind: "optional", body: { k: "rt", fn: `array.first.a${a.index}`, args: args() }, res: f.locals.push(item) - 1, t, bt: item };
         }
+        if (opts.data && target === ARRAY_OPS.front) {
+          // The first item and the rest at once (C137 s3e): `optional` of
+          // the pair of array first and array rest, none of an empty array.
+          const a = stype(zonk(n.args[0])), t = stype(zonk(id));
+          if (!a || !isArray(a) || !t || !isData(t)) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(n.args[0]))}`);
+          const pair = t.cases.find((c) => c.fields.length)!.fields[0].t;
+          const arr = f.locals.push(a) - 1, at: SExpr = { k: "local", i: arr };
+          return {
+            k: "let", i: arr, value: args()[0],
+            body: { k: "search", kind: "optional", body: { k: "make", t: pair as RType, args: [{ k: "rt", fn: `array.first.a${a.index}`, args: [at] }, { k: "rt", fn: `array.rest.a${a.index}`, args: [at] }] }, res: f.locals.push(pair) - 1, t, bt: pair },
+          };
+        }
         if (opts.data && (ARRAY_RT[target] || target === ARRAY_OPS.replaceAt)) {
           // The array's type, from the argument or the answer that is one;
           // List of its items too where the job takes or gives a list.
@@ -1276,6 +1289,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       case "match": {
         const arms = n.arms.map((a) => code.nodes[a] as NodeOf<"arm">);
         if (arms.some((a) => a.variant === RELEASE_V)) throw new Refused("handles an effect with a release, which isn't lowered yet (L213a): it runs in the evaluator");
+        if (n.name) throw new Refused("handles an effect under a name, which isn't lowered yet (L213b): it runs in the evaluator");
         if (n.otherwise && arms.length && effectOps.has(arms[0].variant)) throw new Refused("handles an effect with a case for the normal finish, which isn't lowered yet (L57)");
         if (opts.data && arms.length === 1 && arms[0].variant === ABORT_OP) {
           // A handler of Abort: the scrutinee is the computation.
@@ -2799,6 +2813,9 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // (C150e): WebAssembly and C, not core JS, whose values the host reads.
   // A record a loop carries, its fields as values of their own (C68a); a
   // shader's records are its own values (vectors, structs) already.
+  // A function written where a definition is called, called directly in
+  // that definition's own copy (C30 s2c1), on the core IR's JavaScript.
+  if (opts.data && opts.host) closureArgs(ir);
   if (opts.data) loopRecords(ir);
   if (opts.data && !opts.host) { machineWords(ir); wideProducts(ir); }
   // The fuel is endless outside a budget, so where no budget is set

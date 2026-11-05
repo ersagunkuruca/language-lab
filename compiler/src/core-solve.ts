@@ -4,6 +4,7 @@
 // prelude): a printed program imports this only when it solves, and the
 // program hands core-rt.ts these (useSolver).
 
+import { STD_IMPL, STD_MANY } from "../../ters/src/lang/std.ts";
 import { META, equal, makeRunner, resolvedFor, solveAnswers, type Value } from "../../ters/src/lang/run.ts";
 import type { Runtime } from "../../ters/src/lang/run.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
@@ -20,8 +21,6 @@ import { bindsOf } from "./uses.ts";
 import { $FN, $clean, $close, $key, $ok, $planned, $solveRuntime, plans } from "./plan-rt.js";
 import { ownerOfTypeParts, useTarget, type Code, type Id, type NodeOf, type Use } from "../../ters/src/model.ts";
 import { FAIL, Unsupported, inn, lazyList, usePlans, useSolver, type Solver } from "./core-rt.ts";
-import { descentReader, Unsupported as NotRead } from "../../ters/src/lang/descent.ts";
-import { LIBRARY } from "../../ters/src/lang/library.ts";
 
 // derivative(f) or gradient(f) of a function value (C137c20, scalar.ts):
 // the evaluator's, on the program's code, which looks inside f (a printed
@@ -80,8 +79,6 @@ function planWritten(given: Code, id: Id): ((...xs: unknown[]) => Iterable<Value
     if (!n) return null;
     const binds = Object.keys(bindsOf(n));
     if (binds.join() !== answerKeys(given, given.nodes[id] as Use).join()) return null;
-    const read = descended(given, n);
-    if (read) return read;
     const p = planSolve(code, n);
     if (p.mode === "solver") {
       const w = solverPlan(given, id);
@@ -103,28 +100,6 @@ function planWritten(given: Code, id: Id): ((...xs: unknown[]) => Iterable<Value
   } catch {
     return null;
   }
-}
-// A printer run backwards for its first input, the others given (calc's
-// `read expression`, inverses.ts): read by recursive descent (descent.ts,
-// C110 s5), in one pass, where the evaluator's solve searches every way
-// it could have printed the text. A piece descent can't read gives the
-// line to the search after all. Null when the solve isn't one.
-function descended(code: Code, n: Use): ((...xs: unknown[]) => Iterable<Value[]>) | null {
-  const f = useTarget(code.nodes, n), def = code.nodes[f], fn = def?.kind === "def" && def.body ? code.nodes[def.body] : null;
-  const binds = Object.keys(bindsOf(n)), order = givenInOrder(code, n);
-  if (fn?.kind !== "lambda" || binds.length !== 1 || binds[0] !== fn.params[0] || !order.includes("out") || fn.params.slice(1).some((q) => !order.includes(q))) return null;
-  let reader: ReturnType<typeof descentReader>;
-  try { reader = descentReader(code, f, { ...LIBRARY.names }); } catch { return null; }
-  return (...xs) => {
-    const at = (k: string) => xs[order.indexOf(k)] as Value;
-    try {
-      const v = reader(at("out") as string, ...fn.params.slice(1).map(at));
-      return v === null ? [] : [[v]];
-    } catch (e) {
-      if (!(e instanceof NotRead)) throw e;
-      return solveAnswers(code, n, Object.fromEntries(order.map((k, i) => [k, xs[i] as Value])), {});
-    }
-  };
 }
 // A relational solve whose mode has one answer or none (MODES.md), its
 // plan written out by modes.ts as `solve$` over $no, $eq (run.ts equal),
@@ -160,11 +135,17 @@ export function modePlan(given: Code, id: Id): { code: string; forwards: Id[]; c
         return { js: `F[${forwards.length - 1}](${args.join(", ")})`, partial: true };
       },
       tag: (v) => JSON.stringify(v),
+      builtin(id, args) {
+        // A builtin with one answer, called as itself.
+        if (STD_IMPL[id] && !STD_MANY[id]) { consts.push(STD_IMPL[id]); return `K[${consts.length - 1}](${args.join(", ")})`; }
+        forwards.push(id);
+        return `F[${forwards.length - 1}](${args.join(", ")})`;
+      },
     };
     const modes = modeCompiler(code, {});
     if (!modes.solver(n, "solve$", emit)) return null;
     return { code: modes.code.join("\n"), forwards, consts };
-  } catch {
+  } catch (e) {
     return null;
   }
 }

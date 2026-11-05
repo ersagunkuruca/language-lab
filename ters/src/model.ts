@@ -100,7 +100,12 @@ export type Node =
   // Case analysis. There is one arm per variant (the editor makes them from
   // the type), or arms for some and `otherwise` for the rest, so a missing
   // case can't be written down.
-  | { id: Id; kind: "match"; scrutinee: Id; arms: Id[]; otherwise: Id | null }
+  // `name` (a handler's, L213b, RESOURCES-2026-11-03.md §2): a binder in
+  // scope in the scrutinee, given as the first input of one of the effect's
+  // operations to have this handler answer it, when two of the same effect
+  // are open. It is not a value: an operation's first input is the one
+  // place it may go.
+  | { id: Id; kind: "match"; scrutinee: Id; arms: Id[]; otherwise: Id | null; name?: Id }
   // Structural recursion: like match, but each recursive field also gets the
   // already-folded result (a paramorphism). Always terminates.
   | { id: Id; kind: "fold"; scrutinee: Id; arms: Id[] }
@@ -305,7 +310,7 @@ export function mapIds(n: Node, f: (id: Id) => Id): Node {
     case "field": return { ...n, id: f(n.id), type: f(n.type), ...(n.same ? { same: f(n.same) } : {}) };
     case "tref": return { ...n, id: f(n.id), target: f(n.target), args: n.args.map(f) };
     case "tfun": return { ...n, id: f(n.id), params: n.params.map(f), result: f(n.result), ...(n.effects ? { effects: n.effects.map(f) } : {}) };
-    case "match": return { ...n, id: f(n.id), scrutinee: f(n.scrutinee), arms: n.arms.map(f), otherwise: n.otherwise === null ? null : f(n.otherwise) };
+    case "match": return { ...n, id: f(n.id), scrutinee: f(n.scrutinee), arms: n.arms.map(f), otherwise: n.otherwise === null ? null : f(n.otherwise), ...(n.name ? { name: f(n.name) } : {}) };
     case "fold": return { ...n, id: f(n.id), scrutinee: f(n.scrutinee), arms: n.arms.map(f) };
     case "arm": return { ...n, id: f(n.id), variant: f(n.variant), ...(n.value ? { value: f(n.value) } : {}), binds: n.binds.map(f), results: n.results.map((r) => (r === null ? null : f(r))), body: f(n.body) };
   }
@@ -343,7 +348,7 @@ export const SCHEMA: Schema = {
   field: { type: "child", ports: "meaning", same: "ref" },
   tref: { target: "ref", args: "child" },
   tfun: { params: "child", result: "child", effects: "ref" },
-  match: { scrutinee: "child", arms: "child", otherwise: "child" },
+  match: { name: "child", scrutinee: "child", arms: "child", otherwise: "child" },
   fold: { scrutinee: "child", arms: "child" },
   arm: { value: "child", variant: "ref", binds: "child", results: "child", body: "child" },
 };

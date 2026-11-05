@@ -31,7 +31,7 @@ export function smallValues(t: Type, code: Code, depth = 3): Value[] | null {
   // default a type variable to one type.
   if (t.t === "var") return smallValues({ t: "con", id: INT, args: [] }, code, depth);
   if (t.t !== "con") return null;
-  if (t.id === NUMBER) return [0, 1, -1, 0.5, 1e-9, 1e9];
+  if (t.id === NUMBER) return [0, 1, -1, 0.5, 1e-9, 3];
   if (t.id === INT) return [0, 1, -1, 2, -2, 3, -3];
   if (t.id === STRING) return ["", "a", "ab"];
   if (t.id === BOOL) return [bool(false), bool(true)];

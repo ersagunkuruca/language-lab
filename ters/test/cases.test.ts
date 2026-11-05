@@ -71,3 +71,26 @@ test("the cases module's graphemes are the host's", () => {
   }
   assert.deepEqual(wrong, []);
 });
+
+test("the cases module's collated orders text as the host's root order does", () => {
+  const k = new Lang(LIBRARY.code);
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  const r = makeRunner(code, info, { print: () => {} });
+  const f = r.value(cases("table collated"));
+  const host = new Intl.Collator("und", { sensitivity: "variant", usage: "sort" });
+  const SIGN = { "std.order.before": -1, "std.order.same": 0, "std.order.after": 1 } as Record<string, number>;
+  const texts = [...WORDS.flatMap((w) => w.split(" ")), "", "a", "A", "á", "ae", "æ", "Æ", "ss", "ß", "ﬁ", "fi", "½", "1/2", "o", "ø", "ǫ", "й", "и", "آ", "ا", "각", "가", "갂", "ㄱ", "😀", "10", "9", "a-b", "ab", "a b", "Zebra", "zebra", "Ελλάδα", "Москва", "東京", "ไทย", "कि"].map((t) => t.normalize("NFC"));
+  // And random text: letters with accents, Greek, Cyrillic, Hangul, marks.
+  const pool = [..."aeiosAEIOSßæøØ1-. ÀÉÎÕÜāăąǽαβγΑΒΓάἀйиЙИабв각가ㄱ\u0300\u0301\u0316\u0327\u0308"];
+  let seed = 11;
+  const rnd = (n: number) => (seed = (seed * 1103515245 + 12345) % 2147483648) % n;
+  for (let i = 0; i < 300; i++) texts.push(Array.from({ length: 1 + rnd(4) }, () => pool[rnd(pool.length)]).join("").normalize("NFC"));
+  const wrong: string[] = [];
+  for (let i = 0; i < texts.length; i++) for (const j of [i + 1, i + 7, i + 23]) {
+    const x = texts[i], y = texts[j % texts.length];
+    const got = SIGN[([...r.call(f, x, y)][0] as { tag: string }).tag], want = Math.sign(host.compare(x, y));
+    if (got !== want) wrong.push(`${JSON.stringify(x)} ${JSON.stringify(y)}: host ${want}, table ${got}`);
+  }
+  assert.deepEqual(wrong, []);
+});

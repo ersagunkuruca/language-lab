@@ -9,7 +9,7 @@ import type { Code, Id, Node, NodeData, NodeOf } from "../ters/src/model.ts";
 import { children, collect, derived, freshId, layerOf, onLayer, parentAt, parentOf, portsOf, refTargets, replace, subtree, swapIn } from "../ters/src/model.ts";
 import type { Names, Notation, Presentation } from "../ters/src/presentation.ts";
 import blocksStyle from "../ters/styles/blocks.json" with { type: "json" };
-import { fillings, implementationKey, implementationOf, infer as check, type Filling, type Info, type Options } from "../ters/src/lang/infer.ts";
+import { fillings, fillingsInPieces, implementationKey, implementationOf, infer as check, type Filling, type Info, type Options } from "../ters/src/lang/infer.ts";
 import { CheckCache } from "../ters/src/lang/check-cache.ts";
 import { isCall, isPublished, isUse, isBound, useTarget, type Call, type Use } from "../ters/src/model.ts";
 import { answerKeys } from "../ters/src/lang/ports.ts";
@@ -2079,7 +2079,7 @@ export function addCase(code: Code, names: Names, info: Info, type: Id, name: st
   return { ...r, note: `Added ${name.trim()}. ${holes ? `${holes} match${holes === 1 ? "" : "es"} and fold${holes === 1 ? "" : "s"} got a new case with a hole to fill, so none is missing a case.` : "Nothing matches on this type yet."}` };
 }
 
-export { fillings, litLabel, type Filling, type Info };
+export { fillings, fillingsInPieces, litLabel, type Filling, type Info };
 
 // ---------------------------------------------------------------- pins and copies
 //

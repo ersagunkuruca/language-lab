@@ -176,7 +176,21 @@ export function palette(host: PaletteHost) {
     const later = field === "f-query" && !fitting.get(info)?.has(hole);
     if (later && (finding?.info !== info || finding.hole !== hole)) {
       const at = (finding = { info, hole }), was = doc();
-      const go = () => { if (finding !== at) return; finding = null; if (doc() !== was || (ui.selected !== hole && !document.getElementById(field))) return; fillingsAt(info, hole); render(); };
+      // A piece of the candidates per task, the page given back between
+      // them (I167j: finding them was one task of 0.3 to 0.45 s).
+      let next: (() => T.Filling[] | null) | null = null;
+      const go = () => {
+        if (finding !== at) return;
+        if (doc() !== was || (ui.selected !== hole && !document.getElementById(field))) { finding = null; return; }
+        next ??= T.fillingsInPieces(doc().code, info, hole);
+        const done = next();
+        if (!done) { setTimeout(go, 0); return; }
+        finding = null;
+        let m = fitting.get(info);
+        if (!m) fitting.set(info, (m = new Map()));
+        m.set(hole, done);
+        render();
+      };
       if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => setTimeout(go, 0)); else setTimeout(go, 0);
     }
     const all = (later ? [] : fillingsAt(info, hole)).map((f) => ({ f, l: label(f) })).sort((a, b) => order.indexOf(a.l[2]) - order.indexOf(b.l[2]) || often(b.f) - often(a.f) || reach(a.f) - reach(b.f));
