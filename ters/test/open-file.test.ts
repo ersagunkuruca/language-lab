@@ -16,7 +16,7 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { Aborted, runMain } from "../src/lang/run.ts";
 import { nodeWorld } from "../src/lang/world.ts";
-import { ABORT_OP, FILE_OPS, LOG_OP, NEXT_LINE_OP, S, SHOW_ANY, WRITE_LINE_OP } from "../src/lang/std.ts";
+import { ABORT_OP, ADD_BYTES_OP, FILE_OPS, LOG_OP, NEXT_BYTES_OP, NEXT_LINE_OP, S, SHOW_ANY, WRITE_LINE_OP } from "../src/lang/std.ts";
 
 const lib = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
 
@@ -70,4 +70,23 @@ test("the file's number stays in the library, and next line outside it is answer
   // A release of the program's own may still only log.
   const r = program((k) => k.handle(k.int(1), [{ variant: LOG_OP, names: ["line"], body: () => k.unitValue }], undefined, () => k.call(S.print, k.lit("bye"))));
   assert.match(r.info.errors.map((e) => e.message).join("\n"), /may only log/);
+});
+
+// Bytes (L213c2): next bytes reads from where next line left off, fewer at
+// the end and none after it; add bytes adds them at the end, any byte.
+test("with open file reads and adds bytes from the place lines are read from", () => {
+  const path = join(mkdtempSync(join(tmpdir(), "open-file-")), "data.bin");
+  writeFileSync(path, Uint8Array.from([...Buffer.from("head\n"), 0xff, 0x00, 0x80]));
+  const items = (k: Lang, b: Id) => k.call(lib("byte items"), b);
+  const p = program((k) => k.call(lib("with open file"), k.lit(path), k.thunk(() => k.listOf(
+    k.call(SHOW_ANY, k.call(NEXT_LINE_OP)),
+    k.call(SHOW_ANY, items(k, k.call(NEXT_BYTES_OP, k.int(2)))),
+    k.seq(k.call(ADD_BYTES_OP, k.call(lib("bytes of"), k.list(k.int(7), k.int(255)))), k.call(SHOW_ANY, items(k, k.call(NEXT_BYTES_OP, k.int(10))))),
+    k.call(SHOW_ANY, items(k, k.call(NEXT_BYTES_OP, k.int(4))))))));
+  assert.deepEqual(p.info.errors.map((e) => e.message), []);
+  const r = run(p);
+  r.go();
+  assert.deepEqual(r.printed, ['["some(\\"head\\")", "[255, 0]", "[128, 7, 255]", "[]"]']);
+  assert.deepEqual([...readFileSync(path)].slice(-5), [0xff, 0x00, 0x80, 7, 255]);
+  assert.equal(r.closed.length, 1);
 });

@@ -84,7 +84,9 @@ test("typed text reads a function's named results back in", async () => {
   const made = makeFunction(code, names, infer(code, names), hsi, [...valueOf("r"), ...valueOf("g")]);
   assert.ok(made.ok);
   if (!made.ok) return;
-  const lam = Object.values(made.code.nodes).find((n): n is NodeOf<"lambda"> => n.kind === "lambda" && !!n.results?.length)!;
+  // The one made in hsi colour: the library's lambdas have results too
+  // since L225d (polar by sincos's).
+  const lam = subtree(made.code, hsi).map((id) => made.code.nodes[id]).find((n): n is NodeOf<"lambda"> => n.kind === "lambda" && !!n.results?.length)!;
   const open = replace(made.code, lam.id, () => ({ kind: "hole" }));
   const info = infer(open, made.names);
   for (const arrow of ["→", "->"]) {
@@ -597,4 +599,36 @@ test("typed text reads √ and a function called where it is written", () => {
   assert.match(shown("√(z.re + 1)"), /sqrt\(re\(z\) \+ 1\)|√\(re\(z\) \+ 1\)|√\(z\.re \+ 1\)/);
   // One let per input, each printed here as the function it is, called.
   assert.match(shown("((t, u) => t · u)(z.re, 2)"), /\(\(t\) => \(\(u\) => t · u\)\(2\)\)\(re\(z\)\)/);
+});
+
+// A relation written where it is used (L225e, E252), typed as render.ts
+// prints one: its results among its inputs, the condition its body, and
+// it runs as the definition with results it is lifted into.
+test("typed text reads a relation written where it is used", async () => {
+  const { Lang } = await import("../src/lang/dsl.ts");
+  const { base, baseNames } = await import("../src/lang/load.ts");
+  const { runMain } = await import("../src/lang/run.ts");
+  const { renderBlocks } = await import("../src/lang/render.ts");
+  const { SHOW_ANY } = await import("../src/lang/std.ts");
+  const { readFileSync } = await import("node:fs");
+  const k = new Lang();
+  const plain = k.def("plain");
+  let h = "";
+  k.define(plain, k.thunk(() => k.call(SHOW_ANY, k.call(k.fn(["g"], (g) => k.call(g, k.lit(9), k.lit(1))), (h = k.hole())))));
+  const code = base(k.code), names = baseNames(k.names);
+  for (const arrow of ["→", "->"]) {
+    const r = fillValue(code, names, infer(code, names), h, `(s, d) ${arrow} a, b = s = a + b and d = a − b`, plain);
+    assert.ok(r.ok, !r.ok ? r.reason : "");
+    if (!r.ok) return;
+    const lam = r.code.nodes[h] as NodeOf<"lambda">;
+    assert.deepEqual(lam.params.map((b) => r.names[b]), ["s", "d", "a", "b"]);
+    assert.deepEqual(lam.results?.map((b) => r.names[b]), ["a", "b"]);
+    const info = infer(r.code, r.names);
+    assert.deepEqual(info.errors.map((e) => e.message), []);
+    const pres = { names: r.names, comments: {}, hints: {}, style: JSON.parse(readFileSync(join(root, "styles", "blocks.json"), "utf8")) };
+    assert.match(renderBlocks(r.code, pres, info, plain), /\(s, d\) → a, b = s = a \+ b and d = a − b/);
+    assert.equal(runMain(r.code, info, plain, { print: () => {}, names: r.names }), "(5, 4)");
+  }
+  // A name twice is no relation.
+  assert.equal(fillValue(code, names, infer(code, names), h, "(s, a) → a = s = a", plain).ok, false);
 });

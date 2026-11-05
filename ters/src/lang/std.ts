@@ -1479,8 +1479,14 @@ export const RELEASE = typedef("std.release", "Release", [], [["release", []]]);
 export const OPEN_FILE = typedef("std.open file", "Open file", [], [
   ["next line", [], () => fixedTref("std.open file.next line.returns", OPTIONAL, fixedTref("std.open file.next line.returns.a", STRING))],
   ["write line", [["text", () => fixedTref("std.open file.write line.text.type", STRING)]], () => fixedTref("std.open file.write line.returns", UNIT)],
+  // Bytes (L213c2, after L189): the next count of them from where the
+  // reading is, fewer at the end and none after it, and bytes added at
+  // its end. Lines and bytes read from one place.
+  ["next bytes", [["count", () => fixedTref("std.open file.next bytes.count.type", INT)]], () => fixedTref("std.open file.next bytes.returns", "std.bytes")],
+  ["add bytes", [["bytes", () => fixedTref("std.open file.add bytes.bytes.type", "std.bytes")]], () => fixedTref("std.open file.add bytes.returns", UNIT)],
 ], true);
 export const NEXT_LINE_OP = "std.open file.next line", WRITE_LINE_OP = "std.open file.write line";
+export const NEXT_BYTES_OP = "std.open file.next bytes", ADD_BYTES_OP = "std.open file.add bytes";
 // The files the prelude's `with open file` keeps open, by number (L213c):
 // a world effect of their own, which only the runtime answers, its
 // operations private to the library, so a file's number never reaches a
@@ -1488,13 +1494,18 @@ export const NEXT_LINE_OP = "std.open file.next line", WRITE_LINE_OP = "std.open
 // at the end, and adding a line false when it couldn't be written. A
 // release may close a file (it can't fail or wait).
 export const KEPT_FILES = "std.kept files";
-typedef(KEPT_FILES, "Kept files", [], (["open file", "file line", "file add line", "close file"] as const).map((op): [string, [string, TypeOf][], TypeOf] => {
+typedef(KEPT_FILES, "Kept files", [], (["open file", "file line", "file add line", "close file", "file bytes", "file add bytes"] as const).map((op): [string, [string, TypeOf][], TypeOf] => {
   const at = (part: string, target: Id, ...args: Id[]) => fixedTref(`${KEPT_FILES}.${op}.${part}`, target, ...args);
   if (op === "open file") return [op, [["path", () => at("path.type", STRING)]], () => at("returns", OPTIONAL, at("returns.a", INT))];
+  // After the four, so their ids don't move: bytes from where the reading
+  // is (none at the end, or of a closed file), and bytes added at the end,
+  // false when they couldn't be.
+  if (op === "file bytes") return [op, [["file", () => at("file.type", INT)], ["count", () => at("count.type", INT)]], () => at("returns", "std.bytes")];
+  if (op === "file add bytes") return [op, [["file", () => at("file.type", INT)], ["bytes", () => at("bytes.type", "std.bytes")]], () => at("returns", BOOL)];
   const fields: [string, TypeOf][] = [["file", () => at("file.type", INT)], ...(op === "file add line" ? [["text", () => at("text.type", STRING)] as [string, TypeOf]] : [])];
   return [op, fields, () => (op === "file line" ? at("returns", OPTIONAL, at("returns.a", STRING)) : at("returns", op === "file add line" ? BOOL : UNIT))];
 }), true);
-export const FILE_OPS = { open: `${KEPT_FILES}.open file`, line: `${KEPT_FILES}.file line`, addLine: `${KEPT_FILES}.file add line`, close: `${KEPT_FILES}.close file` };
+export const FILE_OPS = { open: `${KEPT_FILES}.open file`, line: `${KEPT_FILES}.file line`, addLine: `${KEPT_FILES}.file add line`, close: `${KEPT_FILES}.close file`, bytes: `${KEPT_FILES}.file bytes`, addBytes: `${KEPT_FILES}.file add bytes` };
 for (const v of Object.values(FILE_OPS)) (nodes.find((n) => n.id === v) as NodeOf<"variant">).private = true;
 // A number written where a type of the program's own goes (L204b,
 // INTERFACES.md "from a fraction", Haskell's fromRational): 0.25 at it is

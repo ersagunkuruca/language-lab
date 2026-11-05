@@ -124,7 +124,13 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
   // A fold's stack (scalar.ts framesOf), which only its own loop down and
   // loop up see and each uses once: a JavaScript array pushed on the way
   // down and popped on the way up, not a frame object a value (C137d21).
-  const stack = (t: { inner?: boolean; key: string }) => !!t.inner && t.key.endsWith(".frames");
+  // Not where a function giving several answers takes it: its answers
+  // after the first go on from the same stack again (countdown's
+  // permutations), which one array popped can't give.
+  const shared = new Set<string>();
+  const framesIn = (e: SExpr, out: Set<string>) => { const t = (e as { t?: { inner?: boolean; key?: string } }).t; if (t?.inner && t.key?.endsWith(".frames")) out.add(t.key); kids(e).forEach((k) => framesIn(k, out)); };
+  for (const f of ir.funcs) if (f.multi) framesIn(f.body, shared);
+  const stack = (t: { inner?: boolean; key: string }) => !!t.inner && t.key.endsWith(".frames") && !shared.has(t.key);
   const named = (x: string, pre: string[], d: string) => { if (/^[\w$]+$/.test(x)) return x; const t = `r${reads++}`; pre.push(`${d}const ${t} = ${x};`); return t; };
   const label = (t: { inner?: boolean; key: string; cases: { variant: string }[] }, c: number) => (stack(t) ? String(c) : JSON.stringify(t.cases[c].variant));
   const scrutOf = (t: { inner?: boolean; key: string }, x: string) => (stack(t) ? `(${x}.length === 0 ? 0 : 1)` : `${x}.tag`);
@@ -566,6 +572,23 @@ export function coreModule(ir: CoreIR, name: string, runtime: string, world: str
     "})(R);",
     `process.exitCode = runCoreFn(defs.${names[fi]}, ${JSON.stringify(m)}, process.argv.slice(2), rt);`,
   ].join("\n");
+}
+
+// What a tool needs to go from the printed JavaScript back to the program
+// (C143c, DEBUG-AND-SPEED-2026-11-04 §4), kept beside the output, never in
+// it, and ids only: the node each printed function was lowered from (a
+// definition, or a lambda or a fold's arm inside one), by its name (fN;
+// its copies are fN$b, fN$h, fN$w and fN$v), and each stop site's node and
+// definition, by the number a stop carries (C143a, stops.ts).
+// `locals`: for each function, the binder whose value each local lN holds
+// (C143d), where the lowering knows it.
+export function coreMap(ir: CoreIR): { version: 1; functions: Record<string, Id>; locals: Record<string, Record<string, Id>>; stops: { node: Id; def: Id }[] } {
+  const { names } = emitCoreJs(ir);
+  const locals = Object.fromEntries(names.flatMap((n, i) => {
+    const b = Object.entries(ir.funcs[i].binders ?? {}).filter(([, id]) => id);
+    return b.length ? [[n, Object.fromEntries(b.map(([j, id]) => [`l${j}`, id]))]] : [];
+  }));
+  return { version: 1, functions: Object.fromEntries(names.map((n, i) => [n, ir.funcs[i].def])), locals, stops: (ir.stops ?? []).map(({ node, def }) => ({ node, def })) };
 }
 
 // The program's nodes, for a module whose solves the evaluator's solver

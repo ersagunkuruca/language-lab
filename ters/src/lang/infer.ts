@@ -583,7 +583,10 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // A let's binders whose value is generic, and their schemes (L224).
   const letSchemes = new Map<Id, Scheme>();
   // Each binder given to a call, where (L29 closingUse).
-  let passed: Map<Id, [Call, number][]> | null = null;
+  // Built from the group being checked, the only place its inputs are used
+  // (a whole program's nodes on every check made the palette's rechecks of
+  // one hole take a minute).
+  let passed: Map<Id, [Call, number][]> | null = null, passedFor: Id[] | null = null;
   let current: Id[] = [];
   const recursiveCalls: { call: Call; params: Type[]; args: Type[] }[] = [];
   const cached = opts.cache?.begin({ code, info, s, deps, layer, opts, valueDefs, typeDefs: code.defs.filter((d) => isTypeDef(d)) });
@@ -739,9 +742,10 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // the call's instead of making the handler's its own; order no longer
   // decides. Only these two uses: their types are known before the body.
   function closingUse(p: Id): Type | null {
-    if (!passed) {
+    if (!passed || passedFor !== current) {
       passed = new Map();
-      for (const x of Object.values(code.nodes)) {
+      passedFor = current;
+      for (const x of current.flatMap((d) => subtree(code, d)).map((id) => code.nodes[id])) {
         if (!isCall(x)) continue;
         x.args.forEach((a, i) => { const r = code.nodes[a]; if (r?.kind === "ref" && code.nodes[r.target]?.kind === "binder") passed!.set(r.target, [...(passed!.get(r.target) ?? []), [x, i]]); });
       }
@@ -2465,7 +2469,12 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   // A filling that brings Choice or the world where the other is may break
   // the rule that the world isn't touched under Choice, which only the
   // whole check sees.
-  const near = new Set(info.subst.resolveRow(h.row).effs);
+  // A hole whose row is still open (an `else` given to first, which runs
+  // outside first's handler) may join the definition's own row, so what
+  // the definition does counts as near too.
+  const hereRow = info.subst.resolveRow(h.row);
+  const groupEffs = hereRow.tail === null ? [] : groupTypes.flatMap((t) => { const r = info.subst.resolve(t); return r.t === "fn" ? info.subst.resolveRow(r.eff).effs : []; });
+  const near = new Set([...hereRow.effs, ...groupEffs]);
   const expected = info.subst.resolve(h.expected);
   const underChoice = near.has(CHOICE) || (expected.t === "fn" && info.subst.resolveRow(expected.eff).effs.includes(CHOICE));
   const mixes = (effs: Id[]) => effs.some((e) => (e === CHOICE ? [...near].some((x) => WORLD.includes(x)) : WORLD.includes(e) && underChoice));

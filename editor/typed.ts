@@ -656,7 +656,8 @@ function readings(t: Typed): Typed[] {
 // binders, in scope in its body) and its body.
 // One that names its results, (speed, time) → drift, drop => speed · time,
 // time · time, gives that many (L128b, the text L128c prints): the parts
-// written out are its tuple.
+// written out are its tuple. A relation, (s, d) → a, b = condition, has
+// its results among its inputs and the condition as its body (L225e).
 type Typed = { value: Value; float?: true } | { ref: Id } | { hole: true } | { let: { id: Id; name: string }; be: Typed; rest: Typed } | { op: Id; args: Typed[]; alts?: Id[] } | { params: { id: Id; name: string }[]; body: Typed; results?: { id: Id; name: string }[] } | { cond: Typed; then: Typed; else: Typed };
 // The operators are read from the notation itself (styles/blocks.json),
 // loosest first: each glyph is every function drawn with it, and the first
@@ -760,6 +761,25 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
       const body: Typed | { error: string } = each ? (each.find((x) => "error" in x) ?? { op: tupleVariant(outs.length), args: each as Typed[] }) : typedOut(fn[3], code, names, inner);
       if ("error" in body) return body;
       return outs.length ? { params, body, results: outs.map((name) => ({ id: freshId(), name })) } : { params, body };
+    }
+  }
+  // A relation written where it is used (L225e, E252), as render.ts prints
+  // one: (s, d) → a, b = s = a + b and d = a − b. Its results are among its
+  // inputs, every one in scope in the condition, which is its body; the
+  // first = after the results starts it, since a result's name has none.
+  const rel = /^\(([^()]*)\)\s*(?:→|->)\s*([^()=]+?)\s*=(?!>)\s*(\S[\s\S]*)$/.exec(t);
+  if (rel) {
+    const list = (x: string) => (x.trim() ? x.split(",").map((w) => w.trim()) : []);
+    const words = list(rel[1]), outs = list(rel[2]);
+    const ok = (w: string) => /^[^\s()[\],"=<>]+( [^\s()[\],"=<>]+)*$/u.test(w);
+    const all = [...words, ...outs];
+    if (outs.length && all.every(ok) && new Set(all).size === all.length) {
+      const ins = words.map((name) => ({ id: freshId(), name })), results = outs.map((name) => ({ id: freshId(), name }));
+      const inner = new Map(scope);
+      for (const p of [...ins, ...results]) inner.set(p.name, p.id);
+      const body = typedOut(rel[3], code, names, inner);
+      if ("error" in body) return body;
+      return { params: [...ins, ...results], body, results };
     }
   }
   // if c then a else b, as the blocks print a match on a Bool (BACKLOG
