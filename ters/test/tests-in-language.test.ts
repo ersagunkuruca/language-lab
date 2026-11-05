@@ -150,3 +150,12 @@ test("main's accepted answer is checked in its recorded world", async () => {
   const wc = savedFrom(JSON.parse(readFileSync(join(import.meta.dirname, "../examples/wc/examples.json"), "utf8")));
   assert.deepEqual(Object.values(wc)[0][1].main!.printed, ["       2       5      28 notes.txt", "       0       0       0 empty.txt", "       2       5      28 total"]);
 });
+
+// And compiled (T7e16): `lab test --compiled` runs main compiled to
+// JavaScript through the core IR in each recorded world.
+test("lab test --compiled checks main's accepted answers compiled", async () => {
+  const { spawnSync } = await import("node:child_process");
+  const { join } = await import("node:path");
+  const r = spawnSync(process.execPath, [join(import.meta.dirname, "../cli/lab.ts"), "test", join(import.meta.dirname, "../examples/calc"), "--compiled"], { encoding: "utf8" });
+  assert.match(r.stdout, /✓ main compiled \(2 cases\)/, r.stdout + r.stderr);
+});
