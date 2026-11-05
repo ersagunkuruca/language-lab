@@ -1,28 +1,24 @@
-// sheet in five ways, in one process: the evaluator and the compiler's
-// output on the program as defined (maps as their sorted lists), the same
-// two on the program as `lab run` and `lab compile` store it (the chooser's
+// sheet in five ways, in one process: the evaluator and the core IR's
+// JavaScript on the program as defined (maps as their sorted lists), the
+// same two on the program as `lab run` and `lab compile` store it (the chooser's
 // representations, Map as a hash table where it may be one), and the
 // hand-written ideal (sheet.ideal.js). Each gets the same arguments and a
 // world whose files are kept in memory, and the comparison is what it
 // printed, the report it wrote and how it exited. Used by bench-sheet.ts and
 // by test/sheet.test.ts.
 
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { pathToFileURL } from "node:url";
 import { runProgram, type World } from "../../ters/src/lang/run.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { withLibraryRepresentations } from "../../ters/src/lang/library-reps.ts";
-import { compile } from "../src/compile.ts";
 import { coreMain, lowerCore } from "../src/core-js.ts";
 import { examples, load } from "../src/program.ts";
-import { $setPrint, $setWorld, $Aborted, $toList } from "../src/runtime.js";
 import { sheet as ideal } from "./sheet.ideal.js";
 
 export interface Run { out: string[]; err: string[]; code: number; wrote: Record<string, string> }
 export type Way = (args: string[], files: Record<string, string>) => Run;
-export type Name = "evaluator" | "evaluator, chosen" | "compiled" | "compiled, chosen" | "core, chosen" | "ideal";
+export type Name = "evaluator" | "evaluator, chosen" | "core" | "core, chosen" | "ideal";
 
 function reader(files: Record<string, string>) {
   return (p: string) => {
@@ -49,23 +45,9 @@ export function programs() {
 
 export async function ways(): Promise<Record<Name, Way> & { chosen: string[] }> {
   const { main, plain, chosen } = programs();
-  const dir = mkdtempSync(join(tmpdir(), "sheet-"));
-  const runtime = pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href;
-  const built = async (p: typeof plain, file: string) => {
-    writeFileSync(join(dir, file), compile(p.code, p.info, p.names, { runtime, exports: ["main"] }));
-    return (await import(pathToFileURL(join(dir, file)).href)).defs.main as (args: unknown) => number;
-  };
   const evaluator = (p: typeof plain): Way => (args, files) => {
     const out: string[] = [], err: string[] = [], wrote: Record<string, string> = {};
     const code = runProgram(p.code, p.info, main, args, { print: (s) => out.push(s), names: p.names, world: world(files, err, wrote) });
-    return { out, err, code, wrote };
-  };
-  const compiled = (f: (args: unknown) => number): Way => (args, files) => {
-    const out: string[] = [], err: string[] = [], wrote: Record<string, string> = {};
-    $setPrint((s: string) => out.push(s));
-    $setWorld(world(files, err, wrote));
-    let code: number;
-    try { code = Number(f($toList(args))); } catch (e) { if (!(e instanceof $Aborted)) throw e; err.push(e.reason); code = 1; }
     return { out, err, code, wrote };
   };
   // Printed from the core IR (C137d15), which compile.ts gives way to.
@@ -84,8 +66,7 @@ export async function ways(): Promise<Record<Name, Way> & { chosen: string[] }> 
     "core, chosen": core(chosen),
     evaluator: evaluator(plain),
     "evaluator, chosen": evaluator(chosen),
-    compiled: compiled(await built(plain, "sheet.js")),
-    "compiled, chosen": compiled(await built(chosen, "sheet-chosen.js")),
+    core: core(plain),
     ideal: (args, files) => {
       const out: string[] = [], err: string[] = [], wrote: Record<string, string> = {};
       const code = ideal(args, { readFile: reader(files), writeFile: (p: string, t: string) => { wrote[p] = t; }, print: (s: string) => out.push(s), printError: (s: string) => err.push(s) });

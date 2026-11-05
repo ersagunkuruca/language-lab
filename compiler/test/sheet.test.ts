@@ -7,13 +7,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { programs, sheetText, ways, type Name } from "../gaps/sheet.ts";
-import { compile } from "../src/compile.ts";
+import { sheetText, ways, type Name } from "../gaps/sheet.ts";
 
 const w = await ways();
 const all = (args: string[], files: Record<string, string>) => {
   const want = w.ideal(args, files);
-  const others: Name[] = ["evaluator", "evaluator, chosen", "compiled", "compiled, chosen", "core, chosen"];
+  const others: Name[] = ["evaluator", "evaluator, chosen", "core", "core, chosen"];
   for (const way of others) assert.deepEqual(w[way](args, files), want, way);
   return want;
 };
@@ -48,19 +47,5 @@ test("sheet: a made-up sheet, no arguments, a missing file, a line without =", (
 // about 6,000 cells. Its copy is plain now; 1,000 rows are 6,000 cells.
 test("sheet: compiled, 1,000 rows (6,000 cells) print what the ideal prints", () => {
   const files = { "s.txt": sheetText(1000) };
-  assert.deepEqual(w["compiled, chosen"](["s.txt"], files), w.ideal(["s.txt"], files));
-});
-
-// C82b: `classify` (a number or a word, or no answer) calls `uppercase`,
-// whose row is open only so a caller's row can stand there. It was counted
-// as a call that may choose, so classify, flush and tokens each took the
-// rest of the search as a continuation, a closure per character. They are
-// one-answer functions now, which return the answer or none.
-test("sheet: the tokenizer, which has at most one answer, isn't compiled as a search (C82b)", () => {
-  const { chosen } = programs();
-  const source = compile(chosen.code, chosen.info, chosen.names, { exports: ["main"] });
-  for (const f of ["tokens", "flush", "classify"]) {
-    assert.doesNotMatch(source, new RegExp(`^function ${f}\\$k\\(`, "m"), f);
-    assert.match(source, new RegExp(`^function ${f}\\(`, "m"), f);
-  }
+  assert.deepEqual(w["core, chosen"](["s.txt"], files), w.ideal(["s.txt"], files));
 });
