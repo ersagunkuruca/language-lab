@@ -11,7 +11,7 @@ import type { Names, Notation, Presentation } from "../ters/src/presentation.ts"
 import blocksStyle from "../ters/styles/blocks.json" with { type: "json" };
 import { fillings, implementationKey, implementationOf, infer as check, type Filling, type Info, type Options } from "../ters/src/lang/infer.ts";
 import { CheckCache } from "../ters/src/lang/check-cache.ts";
-import { isCall, isPublished, isUse, isBound, useNode, useTarget, type Call, type Use } from "../ters/src/model.ts";
+import { isCall, isPublished, isUse, isBound, useTarget, type Call, type Use } from "../ters/src/model.ts";
 import { answerKeys } from "../ters/src/lang/ports.ts";
 import { LIBRARY, PRELUDE, TREES } from "../ters/src/lang/library.ts";
 import { B } from "../ters/src/prelude.ts";
@@ -38,7 +38,8 @@ import { nfc } from "../ters/src/lang/border.ts";
 // that gives its ports as a tuple (L211) has neither.
 function useCopy(add: (n: NodeData) => Id, target: Id, given: Record<string, Id>, n: Use, go: (id: Id) => Id, bind: (id: Id) => Id = go): NodeData {
   if (!isBound(n)) return { kind: "call", fn: add({ kind: "ref", target }), given };
-  return useNode(add, target, given, Object.fromEntries(Object.entries(n.binds).map(([k, b]) => [k, bind(b)])), go(n.body));
+  const binds = Object.fromEntries(Object.entries(n.binds).map(([k, b]) => [k, bind(b)])), body = go(n.body);
+  return { kind: "call", fn: add({ kind: "ref", target }), given, binds, body };
 }
 
 // A builtin's own type (std.ts SIGS), made once per check of the program:

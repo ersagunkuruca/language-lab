@@ -181,9 +181,6 @@ export const useTarget = (nodes: Record<Id, Node>, u: Use): Id => {
   const f = nodes[u.fn];
   return f?.kind === "ref" ? f.target : u.fn;
 };
-// A new use of `target`: adds the ref to it through `add`.
-export const useNode = (add: (n: NodeData) => Id, target: Id, given: Record<string, Id>, binds: Record<string, Id>, body: Id): NodeData =>
-  ({ kind: "call", fn: add({ kind: "ref", target }), given, binds, body });
 // An interface's field with results (POLAR.md, L97c): a field whose type
 // is a function and whose ports are named, its inputs first and then its
 // results (L128d3). Which positions are its inputs and which its results;

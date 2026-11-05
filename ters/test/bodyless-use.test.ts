@@ -9,7 +9,6 @@ import { pathToFileURL } from "node:url";
 import { compile } from "../../compiler/src/compile.ts";
 import assert from "node:assert/strict";
 import type { Code, Id, NodeOf } from "../src/model.ts";
-import { useNode } from "../src/model.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
@@ -168,7 +167,8 @@ test("a saved use whose port's binder carries a unit moves too, the binder a let
   const raw = k as unknown as { add(n: object): Id; binder(name: string): Id };
   const bx = raw.binder("x"), by = raw.binder("y");
   const [r, t, x, y] = (k.code.nodes[(k.code.nodes[polar] as NodeOf<"def">).body!] as NodeOf<"lambda">).params;
-  const use = raw.add(useNode((n) => raw.add(n), polar, { [r]: k.lit(2), [t]: k.lit(0), out: k.true }, { [x]: bx, [y]: by }, k.call(B.add, k.call(B.mul, k.x(bx), k.lit(10)), k.x(by))));
+  const given = { [r]: k.lit(2), [t]: k.lit(0), out: k.true }, body = k.call(B.add, k.call(B.mul, k.x(bx), k.lit(10)), k.x(by));
+  const use = raw.add({ kind: "call", fn: raw.add({ kind: "ref", target: polar }), given, binds: { [x]: bx, [y]: by }, body });
   k.define(main, k.thunk(() => k.call(SHOW_ANY, use)));
   const saved = JSON.parse(JSON.stringify(k.code.nodes)) as Record<Id, unknown>;
   // Saved with x declared in metres.
