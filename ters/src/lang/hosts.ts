@@ -21,7 +21,7 @@
 import type { Code, Id, NodeOf } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { isInt, norm } from "./int.ts";
-import { BOOL, CONS, FALSE, LIST, NIL, TRUE, UNIT, UNIT_V } from "./std.ts";
+import { ABORT_OP, BOOL, CHECK_OP, CONS, FALSE, LIST, NIL, TRUE, UNIT, UNIT_V } from "./std.ts";
 import { INT, NUMBER, STRING } from "./types.ts";
 import type { Value as RunValue } from "./run.ts";
 
@@ -37,6 +37,16 @@ export function effectOfOperation(code: Code, op: Id): Id | null {
   }
   return null;
 }
+
+// std's world operations (the clock, Random, Settings, Console, Files,
+// Network) are answered by the runner's World, the host every target
+// gives (run.ts World); a program's hosts/js.js may answer one in its
+// place, by the operation's id ("std.time.now": a fixed clock), as it
+// answers the program's own (L69d1). Abort and Check are the language's
+// own, never a host's. The effect stays in every row, whoever answers it
+// (Ersagun, 2026-11-05: "Reading the clock isn't pure").
+const NOT_HOSTED = new Set<Id>([ABORT_OP, CHECK_OP]);
+export const stdHosted = (op: Id, hosts: Hosts): boolean => typeof hosts[op] === "function" && op.startsWith("std.") && !NOT_HOSTED.has(op);
 
 // The effects the host answers: each with an operation in `hosts`.
 export function hostedEffects(code: Code, hosts: Hosts | undefined): Set<Id> {

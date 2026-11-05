@@ -20,9 +20,9 @@ language, then more targets or speed (WORKFLOW.md "Priority").
 
 | lane | thread | next, in order |
 |---|---|---|
-| E Editor | "Editor lane" | E103, then Language or Compiler rows agreed with those lanes |
+| E Editor | "Editor lane" | L69d2 (with the Language lane), E103 |
 | C Compiler and targets | "Compiler lane" | C183, C185, C181 (C184 and C30 with the Editor lane), C93 |
-| L Language and library | "Language lane" | L43, L69d1, L69d2, L21, L118c (evaluator side), L88, L182 (core, run.ts, infer.ts, hosts.ts) |
+| L Language and library | "Language lane" | L43, L21, L118c (evaluator side), L88, L182 (core, run.ts, infer.ts, hosts.ts) |
 | L Language and library | "Language lane B" | L120, L124 (new example programs). Skip L107 (waits on Ersagun) and L24 (research). Take a row from the other list only after telling that lane. |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
@@ -188,7 +188,7 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L69 | Foreign definitions ([FOREIGN.md](docs/design/targets/FOREIGN.md)). Example: one of std's world operations (the clock) answered by `hosts/js.js` instead of the evaluator's own code. Left: L69d (optional), std's world operations as host files. Ersagun 2026-11-05: a foreign operation may be declared pure only if it is ("reading the clock isn't pure"; FOREIGN.md). Next steps: L69d1 the clock answered from a std host entry that a program's hosts/js.js can override, still the Time effect; L69d2 a `pure` mark on a program's effect type for host functions of their inputs, dropped from rows, with a line in the guarantee table. Measured 2026-11-05 (L69d): std's world operations are answered by the runner's World (run.ts `World`, given per target: Node, the browser, tests' fixed clocks), which is a host already; the clock from a host file means World.now becoming a std hosts entry that a program's hosts/js.js can override, and hosts.ts taking std's effects (effectOfOperation finds only a program's own). Touches every World a caller builds (editor, lab, tests) | LANGUAGE-NEEDS §5 | P2 | M | a-c done |
+| L69 | Foreign definitions ([FOREIGN.md](docs/design/targets/FOREIGN.md)). Example: one of std's world operations (the clock) answered by `hosts/js.js` instead of the evaluator's own code. Left: L69d (optional), std's world operations as host files. Ersagun 2026-11-05: a foreign operation may be declared pure only if it is ("reading the clock isn't pure"; FOREIGN.md). L69d1 done (DONE.md: the evaluator; left: the core IR's JavaScript asking `hosts[std.time.now]` before the World's clock, core-rt.ts worldFn, a Compiler lane line). Next: L69d2 a `pure` mark on a program's effect type for host functions of their inputs, dropped from rows, with a line in the guarantee table. Measured 2026-11-05 (L69d): std's world operations are answered by the runner's World (run.ts `World`, given per target: Node, the browser, tests' fixed clocks), which is a host already; the clock from a host file means World.now becoming a std hosts entry that a program's hosts/js.js can override, and hosts.ts taking std's effects (effectOfOperation finds only a program's own). Touches every World a caller builds (editor, lab, tests) | LANGUAGE-NEEDS §5 | P2 | M | a-c done |
 
 ### Relations and totality (BACKWARDS.md, MODES.md)
 

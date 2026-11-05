@@ -138,6 +138,23 @@ text`) are hosts in this sense already, and they could later move to
 std's own host files (`std/hosts/js.js`), so that std and a program
 answer their effects the same way. That move is optional (L69d).
 
+**The clock from a host file (L69d1, built).** std's world operations
+are answered by the runner's World (run.ts `World`: Node's, the
+browser's, a test's fixed clock), which is std's host already. A
+program's `hosts/js.js` may answer one of them in its place, under the
+operation's id, as it answers the program's own:
+
+```
+export default { "std.time.now": () => 1234 }   // a fixed clock
+```
+
+The answer is checked at the same border (a NaN is an Abort with the
+reason), and the effect stays in every row: the clock is Time whoever
+reads it. Abort and Check are the language's own and never a host's.
+The evaluator does this (hosts.ts `stdHosted`), so `lab run` and `lab
+test`, which run a program with its own hosts on the evaluator, do; the
+core IR's JavaScript still reads the World's clock.
+
 ## Steps
 
 | step | what | lane | size |
