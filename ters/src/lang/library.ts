@@ -6,6 +6,7 @@ import vectors0 from "../../library/vectors.json" with { type: "json" };
 import html0 from "../../library/html.json" with { type: "json" };
 import trees0 from "../../library/trees.json" with { type: "json" };
 import steady0 from "../../library/steady.json" with { type: "json" };
+import cases0 from "../../library/cases.json" with { type: "json" };
 import { merge, shapeHooks, type Code, type Id } from "../model.ts";
 import { fillOnce, usesGiveTheirPorts } from "./ports.ts";
 import { layer, type Comments, type Names } from "../presentation.ts";
@@ -23,7 +24,10 @@ export const HTML_MODULE = html0 as unknown as Module;
 export const TREES = trees0 as unknown as Module;
 // sin, cos, exp and log with the same bits everywhere (steady-source.ts).
 export const STEADY = steady0 as unknown as Module;
-export const MODULES: Module[] = [PRELUDE, VECTORS, HTML_MODULE, TREES, STEADY];
+// uppercase and lowercase over the Unicode case tables, for the targets
+// with no host to ask (cases-source.ts, L214e2).
+export const CASES = cases0 as unknown as Module;
+export const MODULES: Module[] = [PRELUDE, VECTORS, HTML_MODULE, TREES, STEADY, CASES];
 export const CORE: Code = merge(prelude, std);
 // Every program is checked on top of the library, so the trees (about
 // 1,500 nodes nobody edits) aren't in it: they're merged in only when a

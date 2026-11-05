@@ -14,7 +14,7 @@
 //    to one only with a combining mark after (İ lowercase is i̇);
 //  - each tailored locale's differences from the root's, code point by
 //    code point (Turkish and Azeri dotted and dotless i, Lithuanian's
-//    kept dot). The rules that look at the letters around (final sigma,
+//    kept dot, Greek capitals without their accents). The rules that look at the letters around (final sigma,
 //    Lithuanian's dot before an accent) are the library's code, in
 //    e2, not a table.
 // Built in about half a second, once per process: a block of 1,024 code
@@ -29,9 +29,10 @@ export interface CaseTables {
   locales: Record<string, { upper: [number, number[]][]; lower: [number, number[]][] }>;
 }
 
-// The locales whose case mapping isn't the root's (CLDR's SpecialCasing
-// conditions: tr, az, lt).
-export const TAILORED = ["tr", "az", "lt"];
+// The locales whose case mapping isn't the root's: SpecialCasing's
+// conditions (tr, az, lt) and CLDR's Greek uppercase, which drops the
+// accents (el).
+export const TAILORED = ["tr", "az", "lt", "el"];
 
 let built: CaseTables | undefined;
 export const caseTables = (): CaseTables => (built ??= build());

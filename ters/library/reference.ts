@@ -11,7 +11,7 @@ import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { Id } from "../src/model.ts";
 import { infer } from "../src/lang/infer.ts";
-import { HTML_MODULE, LIBRARY, PRELUDE, STEADY, VECTORS } from "../src/lang/library.ts";
+import { CASES, HTML_MODULE, LIBRARY, PRELUDE, STEADY, VECTORS } from "../src/lang/library.ts";
 import { checkOptions } from "../src/lang/load.ts";
 import type { Module } from "../src/lang/modules.ts";
 import { DIVIDE, SIGS, std } from "../src/lang/std.ts";
@@ -23,7 +23,7 @@ const of = (m: Module) => (...names: string[]): Id[] => names.map((name) => {
   if (!d) throw new Error(`${name} isn't in the ${m.title} module`);
   return d;
 });
-const prelude = of(PRELUDE), vectors = of(VECTORS), html = of(HTML_MODULE), steady = of(STEADY);
+const prelude = of(PRELUDE), vectors = of(VECTORS), html = of(HTML_MODULE), steady = of(STEADY), cases = of(CASES);
 // Rational's and Fixed's `as float64`, the one name (L156), in that order.
 const [ratioAsFloat, fixedAsFloat] = PRELUDE.exports.filter((e) => LIBRARY.names[e] === "as float64");
 const b = (...ops: string[]) => ops.map((op) => `builtin.${op}`);
@@ -96,6 +96,8 @@ export const SECTIONS: Section[] = [
       ...html("div", "span", "p", "h1", "h2", "section", "footer", "label", "ul", "li", "strong", "tag", "words", "button", "input", "attribute", "with", "styled", "named", "classed", "for each", "rule", "media", "style sheet", "px", "joined")] },
   { title: "The same bits on every machine", intro: "sin, cos, exp, ^ and the rest are each platform's own (JavaScript's, C's, a GPU's), so two machines can differ in the last bit or two. The steady module's are written in Ters as fdlibm writes them, with only + − · / and comparisons, so every machine gives the same bits: for a lockstep game or a replay that must agree. Steady is a Float64 that uses them: sin, cos, exp and the rest written at a Steady are the steady ones, and its + − · ÷ and < are Float64's, so a program's Steady numbers agree everywhere and its other numbers keep the platform's.",
     ids: steady("Steady", "steady sin", "steady cos", "steady tan", "steady exp", "steady log", "steady pow", "steady atan", "steady atan2", "steady asin", "steady acos") },
+  { title: "Capitals the same on every machine", intro: "uppercase and lowercase are each host's own (its Unicode version, its locale data). The cases module's are written in Ters over the Unicode case tables, read off the host when the library is built, so a target with no host to ask (WebAssembly, C) gives what JavaScript gives: final sigma and Turkish, Azeri, Lithuanian and Greek capitals included.",
+    ids: cases("table uppercase", "table lowercase") },
   { title: "Points, colours and slopes", intro: "A record whose fields are all Float64s (a point, a direction, a colour) can be worked on part by part, and the vectors module is written that way.",
     ids: [...b("mapParts", "zipParts", "total", "set", "fields.mapped", "fields.listed", "derivative", "gradient"), ...vectors("plus", "minus", "times", "scale", "dot", "magnitude", "distance", "unit", "mix", "clamp", "reflect")] },
 ];

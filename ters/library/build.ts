@@ -16,6 +16,7 @@ import { buildVectors } from "../src/lang/vectors-source.ts";
 import { buildHtml } from "../src/lang/html-source.ts";
 import { buildTreesModule } from "../src/lang/trees-source.ts";
 import { buildSteady } from "../src/lang/steady-source.ts";
+import { buildCases } from "../src/lang/cases-source.ts";
 import { verify } from "../src/lang/modules.ts";
 
 const here = import.meta.dirname;
@@ -28,7 +29,7 @@ const before = (file: string): Record<string, string> => {
   const old = JSON.parse(readFileSync(join(here, file), "utf8")) as { code: { defs: string[] }; names: Record<string, string> };
   return Object.fromEntries(old.code.defs.map((d) => [old.names[d] ?? d, d]));
 };
-const oldIds = { ...before("prelude.json"), ...before("vectors.json"), ...before("html.json"), ...before("steady.json") };
+const oldIds = { ...before("prelude.json"), ...before("vectors.json"), ...before("html.json"), ...before("steady.json"), ...before("cases.json") };
 
 const m = buildPrelude();
 const wrong = verify(m, merge(prelude, std), true);
@@ -51,6 +52,11 @@ const stwrong = verify(st, merge(prelude, std), true);
 if (stwrong) throw new Error(`steady: ${stwrong}`);
 save(join(here, "steady.json"), st);
 console.log(`steady: ${st.code.defs.length} definitions, ${st.exports.length} offered, ${Object.keys(st.code.nodes).length} nodes`);
+const cs = buildCases();
+const cswrong = verify(cs, merge(prelude, std), true);
+if (cswrong) throw new Error(`cases: ${cswrong}`);
+save(join(here, "cases.json"), cs);
+console.log(`cases: ${cs.code.defs.length} definitions, ${cs.exports.length} offered, ${Object.keys(cs.code.nodes).length} nodes`);
 
 const t = buildTreesModule(m);
 const twrong = verify(t, merge(prelude, std, m.code), true);

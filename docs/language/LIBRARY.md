@@ -695,6 +695,13 @@ sin, cos, exp, ^ and the rest are each platform's own (JavaScript's, C's, a GPU'
 - **steady asin** : `(Float64) -[Choice]-> Float64` (steady module). The angle whose sine is x, with the same bits on every machine: fdlibm's, written in Ters. No answer outside −1 to 1.
 - **steady acos** : `(Float64) -[Choice]-> Float64` (steady module). The angle whose cosine is x, with the same bits on every machine: fdlibm's, written in Ters. No answer outside −1 to 1.
 
+## Capitals the same on every machine
+
+uppercase and lowercase are each host's own (its Unicode version, its locale data). The cases module's are written in Ters over the Unicode case tables, read off the host when the library is built, so a target with no host to ask (WebAssembly, C) gives what JavaScript gives: final sigma and Turkish, Azeri, Lithuanian and Greek capitals included.
+
+- **table uppercase** : `(Text, Locale) -> Text` (cases module). The text in capitals as `uppercase` gives it, written in Ters over the Unicode case tables, so a target with no host to ask (WebAssembly, C) gives the same.
+- **table lowercase** : `(Text, Locale) -> Text` (cases module). The text in small letters as `lowercase` gives it (final sigma included), written in Ters over the Unicode case tables, so a target with no host to ask (WebAssembly, C) gives the same.
+
 ## Points, colours and slopes
 
 A record whose fields are all Float64s (a point, a direction, a colour) can be worked on part by part, and the vectors module is written that way.
