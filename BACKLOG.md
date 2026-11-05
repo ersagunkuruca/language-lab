@@ -32,7 +32,7 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I167 | + New definition freezes the editor. Example: Create of `extra(x)` on Insertion sort; done when it runs in tasks of at most 0.1 s. Left: the edit's own task, about 0.23 s in node (the check, the inspector and the Run panel). Was 1.3 to 1.8 s; what took it down is in DONE.md (I167b to I167l) | QA 11-04 L1 | 2026-11-04 |
+| I167 | + New definition freezes the editor. Example: Create of `extra(x)` on Insertion sort; done when it runs in tasks of at most 0.1 s. Left: the edit's own task, about 0.12 s in Chromium (2026-11-05 23:40, a loaded machine; 0.14 before I167m), of which the guard's check is about 35 ms, the new definition 26 ms and the inspector's draw about 57 ms. Was 1.3 to 1.8 s; what took it down is in DONE.md (I167b to I167l) | QA 11-04 L1 | 2026-11-04 |
 
 ## E: Editor
 
