@@ -24,6 +24,8 @@
 import { merge, type Id } from "../model.ts";
 import { prelude } from "../prelude.ts";
 import { caseTables, type CaseTable } from "./case-tables.ts";
+import { loadGraphemes, type GraphemeClass, type SavedGraphemes } from "./grapheme-tables.ts";
+import savedGraphemes from "../../library/graphemes.json" with { type: "json" };
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { CONS, FALSE, INT_OPS, LIST, LOCALE_V, NIL, NONE, S, SOME, std, TEXT_OPS, TRUE } from "./std.ts";
@@ -115,9 +117,58 @@ export function buildCases(): Module {
   const lower = def("table lowercase", ["text", "locale"], (t, l) => k.let("language", k.call(language, l), (lang) =>
     k.call(text, k.call(lowerAll, k.call(codes, t), own(lang, trLower, ltLower), k.x(FALSE), turkic(lang), k.x(FALSE)))));
 
-  const offered = [upper, lower];
+  // Grapheme clusters (L214e3b): UAX #29's rules over the grapheme tables
+  // (grapheme-tables.ts), as `graphemeBreaks` there has them. The tables
+  // are one list of Ints, three a run: its first and last code point, and
+  // its kind, the class times 8, plus 4 if it is pictographic, plus its
+  // conjunct (1 consonant, 2 linker, 3 extend).
+  const CLASSES: GraphemeClass[] = ["Other", "CR", "LF", "Control", "Extend", "ZWJ", "Regional_Indicator", "Prepend", "SpacingMark", "L", "V", "T", "LV", "LVT"];
+  const cl = (c: GraphemeClass) => CLASSES.indexOf(c);
+  const CONJ = { "": 0, Consonant: 1, Linker: 2, Extend: 3 } as const;
+  const gruns = k.def("grapheme runs");
+  k.define(gruns, k.list(...loadGraphemes(savedGraphemes as SavedGraphemes).flatMap((r) => [r.from, r.to, cl(r.g.cls) * 8 + (r.g.pictographic ? 4 : 0) + CONJ[r.g.conjunct]].map((x) => k.int(x)))));
+  defs.push(gruns);
+  const kindIn = def("grapheme kind in", ["code", "runs"], (c, rs) => list(rs, () => k.int(0), (from, r1) => list(r1, () => k.int(0), (to, r2) => list(r2, () => k.int(0), (kind, rest) =>
+    k.if(less(c, from), k.int(0), k.if(less(to, c), k.call(me, c, rest), kind))))));
+  const clsOf = (kind: Id) => k.call(INT_OPS.shiftDown, kind, k.int(3));
+  const pictOf = (kind: Id) => same(k.call(INT_OPS.bitAnd, kind, k.int(4)), k.int(4));
+  const conjOf = (kind: Id) => k.call(INT_OPS.bitAnd, kind, k.int(3));
+  const or = (...xs: Id[]) => xs.reduce((a, b) => k.call(S.or, a, b));
+  const isCls = (x: Id, ...cs: GraphemeClass[]) => or(...cs.map((c) => same(x, k.int(cl(c)))));
+  // Whether the clusters join between a and b, given what the rules that
+  // look further know through a: flags in a row, an emoji then Extends
+  // before a, a conjunct with a linker.
+  const joins = def("graphemes join", ["a", "b", "flags", "emoji before", "conjunct"], (a, b, ri, emoji, conj) =>
+    k.let("A", clsOf(a), (A) => k.let("B", clsOf(b), (B) =>
+      k.if(and(isCls(A, "CR"), isCls(B, "LF")), k.x(TRUE),
+        k.if(or(isCls(A, "CR", "LF", "Control"), isCls(B, "CR", "LF", "Control")), k.x(FALSE),
+          k.if(and(isCls(A, "L"), isCls(B, "L", "V", "LV", "LVT")), k.x(TRUE),
+            k.if(and(isCls(A, "LV", "V"), isCls(B, "V", "T")), k.x(TRUE),
+              k.if(and(isCls(A, "LVT", "T"), isCls(B, "T")), k.x(TRUE),
+                k.if(isCls(B, "Extend", "ZWJ", "SpacingMark"), k.x(TRUE),
+                  k.if(isCls(A, "Prepend"), k.x(TRUE),
+                    k.if(and(same(conj, k.int(2)), same(conjOf(b), k.int(1))), k.x(TRUE),
+                      k.if(and(isCls(A, "ZWJ"), and(emoji, pictOf(b))), k.x(TRUE),
+                        and(isCls(A, "Regional_Indicator"), and(isCls(B, "Regional_Indicator"), same(k.call(INT_OPS.bitAnd, ri, k.int(1)), k.int(1))))))))))))))));
+  // The clusters of the characters left, `so far` the one being made and
+  // `a` its last character's kind.
+  const clusters = def("grapheme clusters", ["characters", "a", "flags", "emoji", "conjunct", "so far"], (chs, a, ri, emoji, conj, cur) =>
+    list(chs, () => k.list(cur), (ch, rest) =>
+      k.let("b", k.call(kindIn, k.call(S.first, k.thunk(() => k.call(TEXT_OPS.code, ch)), k.thunk(() => k.int(0))), k.x(gruns)), (b) =>
+      k.let("flags now", k.if(isCls(clsOf(a), "Regional_Indicator"), add(ri, k.int(1)), k.int(0)), (ri2) =>
+      k.let("emoji now", k.call(S.or, pictOf(a), and(emoji, isCls(clsOf(a), "Extend"))), (emoji2) =>
+      k.let("conjunct now", k.if(same(conjOf(a), k.int(1)), k.int(1),
+        k.if(and(not(same(conj, k.int(0))), or(same(conjOf(a), k.int(2)), same(conjOf(a), k.int(3)))), k.if(same(conjOf(a), k.int(2)), k.int(2), conj), k.int(0))), (conj2) =>
+      k.if(k.call(joins, a, b, ri2, emoji, conj2),
+        k.call(me, rest, b, ri2, emoji2, conj2, k.text(cur, ch)),
+        k.call(CONS, cur, k.call(me, rest, b, ri2, emoji2, conj2, ch)))))))));
+  const graphemes = def("table graphemes", ["text"], (t) => list(k.call(TEXT_OPS.characters, t), () => k.list(), (ch, rest) =>
+    k.call(clusters, rest, k.call(kindIn, k.call(S.first, k.thunk(() => k.call(TEXT_OPS.code, ch)), k.thunk(() => k.int(0))), k.x(gruns)), k.int(0), k.x(FALSE), k.int(0), ch)));
+
+  const offered = [upper, lower, graphemes];
   const comments: Record<Id, string> = {
     [upper]: "The text in capitals as `uppercase` gives it, written in Ters over the Unicode case tables, so a target with no host to ask (WebAssembly, C) gives the same.",
+    [graphemes]: "The text's grapheme clusters, the characters a reader sees, as `graphemes` gives them, written in Ters over the Unicode grapheme tables (UAX #29), so a target with no host to ask (WebAssembly, C) gives the same.",
     [lower]: "The text in small letters as `lowercase` gives it (final sigma included), written in Ters over the Unicode case tables, so a target with no host to ask (WebAssembly, C) gives the same.",
   };
   const p = publish(merge(prelude, std, k.code), k.names, offered, merge(prelude, std));
