@@ -21,7 +21,9 @@ import { bordered } from "./border.ts";
 import { answerKeys, givenInOrder } from "./ports.ts";
 import { dependencies, subtree, type Code, type Id, type NodeOf, type Use, useTarget, isCall, type Call, isUse, bindsOf } from "../model.ts";
 import type { Names } from "../presentation.ts";
-import { impl } from "../prelude.ts";
+import { impl, preludeNames } from "../prelude.ts";
+import { PRELUDE_DEFS } from "./prelude-ids.ts";
+import { readByDescent } from "./descent.ts";
 import type { Info } from "./infer.ts";
 import { derivativeLambda, gradientLambda } from "./derive.ts";
 import { fieldShapes, shapeOf, spread, type Shape } from "./nested.ts";
@@ -102,9 +104,14 @@ export const solvesOnce = (code: Code, n: Use): boolean => (planSolve(code, n).m
 // its binds, in order. A relation run backwards is the relational
 // interpreter's (relate.ts); one the solver plans, its equations' (solve.ts).
 // The evaluator's, and JavaScript printed from the core IR's (core-js.ts).
+const PRELUDE_NAMES = { ...preludeNames, ...Object.fromEntries(Object.entries(PRELUDE_DEFS).map(([k, v]) => [v, k])) };
 export function* solveAnswers(code: Code, n: Use, known: Record<string, unknown>, opts: { spend?: () => boolean; names?: Names; stuck?: (r: Reading) => void; info?: Info; shown?: (v: Data) => string | undefined; ordered?: (x: Data, y: Data) => number | undefined } = {}): Generator<Value[]> {
   const p = planSolve(code, n);
   if (p.mode === "relational") {
+    // A printer run backwards reads by descent, in one pass (C110 s6),
+    // and says where a line with no reading stopped (L70c).
+    const read = readByDescent(code, n, known, { ...PRELUDE_NAMES, ...opts.names }, opts.stuck);
+    if (read) { yield* read; return; }
     for (const sol of relate(code, useTarget(code.nodes, n), known, opts)) {
       const bound = answerKeys(code, n).map((k) => toValue(sol.values[k]));
       if (bound.some((v) => v === undefined)) continue; // not pinned down: not an answer

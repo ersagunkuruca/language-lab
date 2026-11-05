@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { load } from "../src/program.ts";
-import { firstSets } from "../src/first-sets.ts";
+import { firstSets } from "../../ters/src/lang/first-sets.ts";
 
 test("calc's printer: each arm's first characters, the arms they overlap on, and its left recursion (C110 s2)", () => {
   const p = load("calc");

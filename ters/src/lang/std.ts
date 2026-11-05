@@ -14,7 +14,7 @@ import * as I from "./int.ts";
 import * as T from "./text.ts";
 import * as A from "./algebraic.ts";
 import * as RL from "./real.ts";
-import { BytesList } from "./bytes.ts";
+import { ItemsList } from "./bytes.ts";
 
 const nodes: Node[] = [];
 const node = (n: Node) => (nodes.push(n), n.id);
@@ -379,7 +379,7 @@ const truth = (b: boolean) => ({ tag: b ? "std.bool.true" : "std.bool.false", fi
 // Lists as std builds them, for builtins that take or give one.
 const listOf = (xs: unknown[]) => xs.reduceRight<object>((tail, x) => ({ tag: "std.list.cons", fields: [x, tail] }), { tag: "std.list.nil", fields: [] });
 function itemsOf(l: { tag: Id; fields: unknown[] }): unknown[] {
-  if (l instanceof BytesList) return l.items();
+  if (l instanceof ItemsList) return l.items();
   const out: unknown[] = [];
   for (let d = l; d.tag === "std.list.cons"; d = d.fields[1] as typeof l) out.push(d.fields[0]);
   return out;
@@ -957,7 +957,8 @@ STD_MANY[arrayFirst] = (arr: ArrayValue) => { const v = arrayView(arr); return v
 export const ARRAY_OPS = {
   empty: builtin("array.empty", "empty array", ofItem((a) => [[], arrayOf_(a)]), () => arrayOf([])),
   of: builtin("array.of", "array of", ofItem((a) => [[list(a)], arrayOf_(a)]), (l: { tag: Id; fields: unknown[] }) => arrayOf(itemsOf(l))),
-  items: builtin("array.items", "items of array", ofItem((a) => [[arrayOf_(a)], list(a)]), (arr: ArrayValue) => listOf(itemsIn(arr))),
+  // A list read from a copy of the items as it is walked (L189e3).
+  items: builtin("array.items", "items of array", ofItem((a) => [[arrayOf_(a)], list(a)]), (arr: ArrayValue) => new ItemsList(itemsIn(arr), 0)),
   length: builtin("array.length", "array length", ofItem((a) => [[arrayOf_(a)], int]), (arr: ArrayValue) => arrayView(arr).n),
   at: arrayItem,
   push: builtin("array.push", "push", ofItem((a) => [[arrayOf_(a), a], arrayOf_(a)]), pushBack),

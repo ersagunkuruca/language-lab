@@ -16,9 +16,9 @@
 // each arm it can take, and fail nothing. Anything else may start with
 // anything.
 
-import type { Code, Id } from "../../ters/src/model.ts";
-import { isUse } from "../../ters/src/model.ts";
-import { FALSE, TRUE } from "../../ters/src/lang/std.ts";
+import type { Code, Id } from "../model.ts";
+import { isUse } from "../model.ts";
+import { FALSE, TRUE } from "./std.ts";
 
 // The first characters: single characters, or the classes "digit" and
 // "letter", "itself" for the printer's own call, "anything"; `empty`: it
