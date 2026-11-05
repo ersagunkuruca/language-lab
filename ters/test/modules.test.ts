@@ -13,10 +13,10 @@ import { Lang } from "../src/lang/dsl.ts";
 import { fillings, infer } from "../src/lang/infer.ts";
 import { CORE, HTML_MODULE, LIBRARY, PRELUDE } from "../src/lang/library.ts";
 import { base, baseNames, checkOptions, loadProgram } from "../src/lang/load.ts";
-import { addVersions, adopt, lineageOf, orderFreeHash, publishVersion, replacing, publish, sameAs, sameLines, sameUpToOrder, upgrade, verify, type Module } from "../src/lang/modules.ts";
+import { addVersions, adopt, lineageOf, orderFreeHash, publishVersion, replacing, upgradeOwn, publish, sameAs, sameLines, sameUpToOrder, upgrade, verify, type Module } from "../src/lang/modules.ts";
 import { buildPrelude } from "../src/lang/prelude-source.ts";
 import { library as listHelpers } from "../src/lang/programs.ts";
-import { pinsOf } from "../src/lang/signatures.ts";
+import { atLeastAsGeneral, pinsOf } from "../src/lang/signatures.ts";
 import { CheckCache } from "../src/lang/check-cache.ts";
 import { runMain } from "../src/lang/run.ts";
 import { ARITH, CONS, INT_OPS, NIL, S, SHOW_ANY } from "../src/lang/std.ts";
@@ -392,6 +392,34 @@ test("upgrade moves a program to a new version only when the type is the same", 
   }
   const no = upgrade(p.code, prelude("sum"), p.rename.get(half)!, pins, baseNames(p.names));
   assert.ok(!no.ok && /type changed from \(List a\) -> a where a is a Number to \(Float64\) -> Float64/.test(no.reason));
+});
+
+// SHARING.md §2 (L111): a new version takes an old one's place when its pin
+// is at least as general, so a program on it can't break.
+test("a program moves onto a newer version whose pin is at least as general, and stays on one whose pin is narrower (L111)", () => {
+  const k = new Lang(LIBRARY.code);
+  const twice = k.def("twice");
+  const narrow = () => k.fn(["x"], (x) => k.call(B.mul, x, k.lit(2)));
+  k.define(twice, narrow());
+  const step = (prev: Module | null) => { const r = publishVersion(prev, "doubling", base(k.code), baseNames(k.names), [twice], LIBRARY.code, LIBRARY.pins); assert.ok(r.ok); return r.module; };
+  const m1 = step(null), v1 = m1.exports[0];
+  // Version 2: the generic +, for every number type.
+  k.define(twice, k.fn(["x"], (x) => k.call(ARITH.add, x, x)));
+  const m2 = step(m1), v2 = m2.exports[0];
+  assert.ok(atLeastAsGeneral(m2.pins[v2], m1.pins[v1]));
+  assert.ok(!atLeastAsGeneral(m1.pins[v1], m2.pins[v2]));
+  const bob = new Lang(merge(LIBRARY.code, m2.code));
+  const main = bob.def("main");
+  bob.define(main, bob.thunk(() => bob.call(v1, bob.lit(4))));
+  const up = upgradeOwn(bob.code, [m2]);
+  assert.deepEqual(up.moved.map((x) => [x.from, x.to]), [[v1, v2]]);
+  assert.ok(Object.values(up.own.nodes).some((n) => n.kind === "ref" && n.target === v2));
+  // Version 3: Float64 only again, narrower than version 2: a program on 2 stays.
+  k.define(twice, k.fn(["x"], (x) => k.call(B.add, x, x)));
+  const m3 = step(m2);
+  const stays = upgradeOwn(up.own, [m3], baseNames(m3.names));
+  assert.deepEqual(stays.moved, []);
+  assert.match(stays.refused[0].reason, /type changed from/);
 });
 
 test("a saved file lists what it uses from modules, and opening it without them says which", async () => {

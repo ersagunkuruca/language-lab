@@ -26,7 +26,7 @@ import { defDeps, defGroups, hashes, RECIPE, recipeOf } from "../hash.ts";
 import { layer, type Comments, type Names } from "../presentation.ts";
 import { infer } from "./infer.ts";
 import type { Representation } from "./represent.ts";
-import { pinKey, pinsOf, type Pins } from "./signatures.ts";
+import { atLeastAsGeneral, pinKey, pinsOf, type Pins } from "./signatures.ts";
 import { schemeArith, showType } from "./types.ts";
 
 export const MODULE_FORMAT = "projectional-module";
@@ -180,8 +180,10 @@ export function publishVersion(prev: Module | null, title: string, code: Code, n
   const added: Id[] = [];
   for (const [draft, id] of p.rename) {
     if (!isPublished(id) || id.includes(":") || code.nodes[draft]?.kind !== "def") continue;
+    // A version published again after a newer one (an edit undone) is the
+    // newest again.
     const vs = (lineages[draft] ??= []);
-    if (!vs.includes(id)) { vs.push(id); added.push(id); }
+    if (vs.at(-1) !== id) { if (vs.includes(id)) vs.splice(vs.indexOf(id), 1); vs.push(id); added.push(id); }
   }
   const newestOf = (d: Id) => { const l = lineageOf(lineages, d); return l ? lineages[l].at(-1)! : d; };
   const offered = [...new Set([...defs.map((d) => p.rename.get(d) ?? d), ...(prev?.exports ?? [])].map(newestOf))];
@@ -477,14 +479,14 @@ export function sameLines(code: Code, names: Names, lib: Library): string[] {
 // ------------------------------------------------------------------ upgrade
 
 // Move a program from one published definition to another (a module's
-// `replaces`). Every reference to the old one, and the ports of any place
-// it's run backwards, now lead to the new one. Done only when the new one
-// has the same pin: then nothing that uses it can break, and nothing needs
-// checking again. A different type is refused, with the places that use it.
+// lineage, `replacing`). Every reference to the old one, and the ports of
+// any place it's run backwards, now lead to the new one. Done only when the
+// new one's pin is at least as general as the old one's (L111): then
+// nothing that uses it can break. A narrower type is refused, with both.
 export function upgrade(code: Code, from: Id, to: Id, pins: Pins, names: Names = {}): Result<{ code: Code; uses: number }> {
   const a = pins[from], b = pins[to];
   if (!a || !b) return { ok: false, reason: "both definitions need pins" };
-  if (pinKey(a) !== pinKey(b)) return { ok: false, reason: `its type changed from ${showType(a.type, names, schemeArith(a))} to ${showType(b.type, names, schemeArith(b))}` };
+  if (pinKey(a) !== pinKey(b) && !atLeastAsGeneral(b, a)) return { ok: false, reason: `its type changed from ${showType(a.type, names, schemeArith(a))} to ${showType(b.type, names, schemeArith(b))}` };
   const old = code.nodes[from], neu = code.nodes[to];
   if (old?.kind !== "def" || neu?.kind !== "def") return { ok: false, reason: "both definitions need to be loaded" };
   const params = (d: Node) => (d.kind === "def" && d.body && code.nodes[d.body]?.kind === "lambda" ? (code.nodes[d.body] as { params: Id[] }).params : []);
@@ -499,4 +501,31 @@ export function upgrade(code: Code, from: Id, to: Id, pins: Pins, names: Names =
     if (JSON.stringify(m) !== JSON.stringify(n)) { nodes[n.id] = m; uses++; }
   }
   return { ok: true, code: collect({ nodes, defs: code.defs.map((d) => (d === from ? to : d)) }), uses };
+}
+
+// A program's own code moved onto the newest version of every module
+// definition it uses (SHARING.md §2, L111), along each lineage. A version
+// whose pin is narrower than the one the program uses stays, with why.
+// The program's own nodes only come back; the caller checks and tests it.
+export interface Moved { from: Id; to: Id; uses: number }
+export function upgradeOwn(own: Code, modules: Module[], names: Names = {}): { own: Code; moved: Moved[]; refused: { from: Id; to: Id; reason: string }[] } {
+  const ownIds = new Set(Object.keys(own.nodes));
+  const pins: Pins = Object.assign({}, ...modules.map((m) => m.pins));
+  const lines = modules.flatMap((m) => Object.values(m.lineages ?? {}));
+  let work = merge(...modules.map((m) => m.code), own);
+  const moved: Moved[] = [], refused: { from: Id; to: Id; reason: string }[] = [];
+  const uses = (code: Code) => new Set(Object.values(code.nodes).filter((n) => ownIds.has(n.id)).flatMap(pointsAt));
+  for (const vs of lines) {
+    const used = uses(work);
+    for (const from of vs.slice(0, -1)) {
+      if (!used.has(from)) continue;
+      // The newest that fits, else the next older one.
+      for (const to of vs.slice(vs.indexOf(from) + 1).reverse()) {
+        const r = upgrade(work, from, to, pins, names);
+        if (r.ok) { work = r.code; moved.push({ from, to, uses: r.uses }); break; }
+        if (to === vs.at(-1)) refused.push({ from, to, reason: r.reason });
+      }
+    }
+  }
+  return { own: { nodes: Object.fromEntries(Object.entries(work.nodes).filter(([id]) => ownIds.has(id))), defs: own.defs }, moved, refused };
 }

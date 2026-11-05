@@ -6,6 +6,7 @@ are BACKLOG rows L109 to L115, which take over L17 and L68.
 **2026-11-05:** §3 built (L109): std's versions kept by lineage, modules
 saying which std they were published on, ids saying their recipe.
 §1 built (L110): a module's `lineages`, `lab publish`, `replacing`.
+§2 built (L111): upgrades by pin generality, `lab upgrade`, a program's `modules` folder.
 
 **In one sentence:** a definition (or a library) keeps one **lineage id**
 for its whole life and gets a **version hash** each time it's published;
@@ -89,6 +90,12 @@ the lineage has a newer version:
 - **the type changed**: the editor shows both types and where Bob's
   program uses it. Data-type changes need a migration (L17's half that
   stays).
+
+Built (L111, 2026-11-05): signatures.ts `atLeastAsGeneral`; a program
+folder's `modules` folder holds the modules it uses beyond the library;
+`lab upgrade <program>` moves it onto the newest versions that fit and
+keeps the result only if the program checks and its tests pass. The
+editor's half is E254.
 
 Two versions of one library in one program are two hashes side by side,
 so there's no diamond problem; only a value of a data type passed between

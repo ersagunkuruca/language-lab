@@ -50,6 +50,7 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| E254 | The editor offers a program's upgrades and moves them with a note, as `lab upgrade` does (modules.ts `upgradeOwn`, L111): a newer version of a module definition the program uses, whose pin is at least as general, its tests run before it is kept. Example: a saved file using version 1 of a module's `sort`, opened with version 2 there, says so and moves on a click | L111 | P3 | M | |
 
 ### Speed of editing
 
@@ -201,10 +202,9 @@ all of these.
 |---|---|---|---|---|---|
 | L72 | JSON as one relation: `json spelled` gives every spelling, `json read` is it run backwards (a to f done, DONE.md). Example: `json printed` is `json spelled`'s first on every target (e1d); done when it is. It waits for the core IR to run a `first` of a Choice without nesting the rest in it: 300 records run out of stack now, though the evaluator prints them in 0.29 s. Beyond it, rows if they earn them: json read's message saying where it stopped (f3), `json printed indented` as a variant (e4) | Ersagun 2026-10-24 | P3 | L | low priority |
 | L17 | Data-type upgrades (migrations when constructors and fields move); path namespaces are a name layer (SHARING.md §5) | ROADMAP 5 | P3 | L | |
-| L111 | Upgrades by pin generality (new pin at least as general), moved by the editor with a note; Bob's tests must pass once T7 exists | SHARING.md §2 | P3 | M | |
 | L112 | Names pinned per program; one question per upgrade for the author's renames; the program's own renames win | SHARING.md §5 | P3 | M | |
 | L115 | Project store: every published node the project used, kept by hash with it by default; runs when a source is gone; downgrade to any kept version (Ersagun 2026-10-31) | SHARING.md §4b | P3 | M | |
-| L114 | Lineage logs: signed, append-only, "current" and "broken" entries; code fetched by hash from any host; a browser over logs (was L68) | SHARING.md §4 | P3 | L | after L111 |
+| L114 | Lineage logs: signed, append-only, "current" and "broken" entries; code fetched by hash from any host; a browser over logs (was L68) | SHARING.md §4 | P3 | L | |
 
 ### Physics and planning ([PHYSICS-AND-PLANNING.md](docs/design/physics/PHYSICS-AND-PLANNING.md), later goals)
 
