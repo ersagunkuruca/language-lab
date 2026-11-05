@@ -32,7 +32,6 @@
 
 import type { Id } from "../../ters/src/model.ts";
 import { algebrasOf, type Algebra } from "../../ters/src/lang/grades.ts";
-import { EMBEDDING } from "../../ters/src/lang/std.ts";
 import type { CoreIR, DType, FType, LType, RType, SExpr, SFunc } from "./scalar.ts";
 import { OPS, isData, isFn, isRecord, kids, mapKids, mapLocals, tidied } from "./scalar.ts";
 
@@ -544,15 +543,7 @@ export function zeroParts(ir0: CoreIR, roots: number[]): { ir: CoreIR; copies: n
   // gives, and what a page's handlers take, keep every part.
   const narrowed = new Map<string, { base: RType; m: number }>();
   if (!envSet("NO_NARROW")) {
-    // A multivector, or a record a declared embedding maps into (L209,
-    // EMBEDDINGS.md): a Complex in the image of Float64's is one with no
-    // imaginary part, its mask the real part's.
-    const embedded = new Set<string>();
-    for (const [k] of ir.info.implementations ?? []) {
-      if (!k.startsWith(`${EMBEDDING}|`)) continue;
-      try { const t = JSON.parse(k.slice(EMBEDDING.length + 1)); const to = t?.args?.[1]; if (to?.t === "con") embedded.add(to.id); } catch { /* not a type */ }
-    }
-    const algT = (t: RType) => !t.mutable && (algebras.has(t.variant) || embedded.has(t.def)) && t.fields.length > 0 && t.fields.length <= 30 && t.fields.every((x) => x.t === "f64");
+    const algT = (t: RType) => !t.mutable && algebras.has(t.variant) && t.fields.length > 0 && t.fields.length <= 30 && t.fields.every((x) => x.t === "f64");
     const full = (A: RType) => 2 ** A.fields.length - 1;
     const baseOf = (t: LType | null | undefined): RType | null => {
       if (!t || typeof t !== "object" || !isRecord(t)) return null;
@@ -857,27 +848,7 @@ export function zeroParts(ir0: CoreIR, roots: number[]): { ir: CoreIR; copies: n
         return { ...f, locals, body };
       };
       for (let n = 0; n < out.length; n++) out[n] = narrowBody(out[n]);
-      // A record of one part is that number (L209): a Complex with no
-      // imaginary part is a Float64.
-      const one = (t: LType | null | undefined): t is RType => !!t && typeof t === "object" && isRecord(t) && narrowed.has(t.key) && t.fields.length === 1;
-      const flat = (t: LType): LType => (one(t) ? "f64" : t);
-      const unboxed = (e: SExpr): SExpr => {
-        const r = mapKids(e, unboxed);
-        switch (r.k) {
-          case "make": return one(r.t) ? r.args[0] : r;
-          case "get": return one(r.t) ? r.rec : r;
-          case "zero": return one(r.t) ? { k: "num", v: 0 } : r;
-          case "if": case "budget": case "attempt": case "handle": case "released": case "world": return one(r.t) ? { ...r, t: "f64" } as SExpr : r;
-          case "case": return one(r.result) ? { ...r, result: "f64" } : r;
-          default: return r;
-        }
-      };
-      if ([...made.values()].some((t) => t.fields.length === 1)) {
-        for (const [x] of sets) x.t = flat(x.t);
-        ir.shapes = ir.shapes.map((s) => (s.caps.some(one) ? { ...s, caps: s.caps.map(flat) } : s));
-        for (let n = 0; n < out.length; n++) { const f = out[n]; out[n] = { ...f, params: f.params.map(flat), locals: f.locals.map(flat), result: flat(f.result), body: unboxed(f.body) }; }
-      }
-      ir.records = [...ir.records, ...[...made.values()].filter((t) => t.fields.length !== 1)];
+      ir.records = [...ir.records, ...made.values()];
     }
   }
   for (const i of groups) out[i.index] = tidied(out[i.index], i.index);

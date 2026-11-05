@@ -108,13 +108,6 @@ ask him before E work starts.
   of B by A with meaning ι: the compiler keeps a B that stays in the image
   as an A. Needs the image analysis that grade masks do by name (which
   cases of a value can be non-zero); grade masks become its first user.
-  Done as L209 (compiler/src/zero-parts.ts): a record a declared
-  embedding maps into is narrowed to the parts known not to be 0, as a
-  multivector is (GRADES.md), and one left with a single part is that
-  number, so a Complex with no imaginary part is a Float64 in compiled
-  code. This reads the image by parts (the image of complex(x, 0) is
-  "imaginary part 0"); an embedding whose image isn't a set of parts
-  (Int into Rational, a bottom of 1) would need its own row.
 
 ## Prior art (influences)
 
