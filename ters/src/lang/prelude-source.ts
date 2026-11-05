@@ -2116,17 +2116,21 @@ export function buildPrelude(): Module {
       k.call(jsonChar, ch)))));
   // A number any way json read reads it (L72e1b): show's spelling first,
   // then any run of digits, signs, ".", e and E that read number reads as it.
-  const jsonNumberChar = def("json number character", ["character"], (c) => k.byValue(c, [..."0123456789+-.eE"].map((x) => [k.lit(x), k.true] as [Id, Id]), k.false));
+  // A character among some, as an if per character: a match on values
+  // (k.byValue) in the library is rewritten by literal-match.ts when the
+  // library is resolved, and then arith.ts can't keep the library's
+  // resolving for every program (L217b), which cost each run 1.5 s.
+  const amongChars = (c: Id, chars: string[], yes: (x: string, i: number) => Id, no: Id) => chars.reduceRight((acc, x, i) => k.if(k.equal(c, k.lit(x)), yes(x, i), acc), no);
+  const jsonNumberChar = def("json number character", ["character"], (c) => amongChars(c, [..."0123456789+-.eE"], () => k.true, k.false));
   const jsonNumberRead = def("json number read", ["text"], (t) => k.if(k.call(allPass, k.call(TEXT_OPS.characters, t), k.x(jsonNumberChar)), k.call(TEXT_OPS.readNumber, t), k.call(S.fail)));
   const jsonNumberSpelled = def("json number spelled", ["number"], (x) => k.if(k.call(S.oneOf, k.list(k.false, k.true)), k.call(inverse, k.x(jsonNumberRead), x), k.call(S.show, x)));
   // Any character as \uXXXX (L72e1c): the four hex digits read back by
   // `json escape read`, a character's spelling read by its inverse.
-  const hexDigitValue = def("hex digit value", ["character"], (c) => k.byValue(c,
-    [...[..."0123456789abcdef"].map((x, i) => [k.lit(x), k.int(i)] as [Id, Id]), ...[..."ABCDEF"].map((x, i) => [k.lit(x), k.int(10 + i)] as [Id, Id])], k.call(S.fail)));
+  const hexDigitValue = def("hex digit value", ["character"], (c) => amongChars(c, [..."0123456789abcdefABCDEF"], (_, i) => k.int(i < 16 ? i : i - 6), k.call(S.fail)));
   const hexNumber = k.def("hex number");
   k.define(hexNumber, k.fn(["text", "so far"], (t, acc) => k.if(k.equal(t, k.lit("")), acc,
     k.call(hexNumber, k.call(TEXT_OPS.slice, t, k.int(1), k.call(TEXT_OPS.length, t)), k.call(INT_OPS.add, k.call(INT_OPS.mul, acc, k.int(16)), k.call(hexDigitValue, k.call(TEXT_OPS.slice, t, k.int(0), k.int(1))))))));
-  const jsonEscapeChar = def("json escape character", ["character"], (c) => k.byValue(c, [..."\\u0123456789abcdefABCDEF"].map((x) => [k.lit(x), k.true] as [Id, Id]), k.false));
+  const jsonEscapeChar = def("json escape character", ["character"], (c) => amongChars(c, [..."\\u0123456789abcdefABCDEF"], () => k.true, k.false));
   const jsonEscapeStart = def("json escape start", ["character"], (c) => k.equal(c, k.lit("\\")));
   const u4 = (t: Id, from: number) => k.call(hexNumber, k.call(TEXT_OPS.slice, t, k.int(from), k.int(from + 4)), k.int(0));
   const startsU = (t: Id, at: number) => k.equal(k.call(TEXT_OPS.slice, t, k.int(at), k.int(at + 2)), k.lit("\\u"));
@@ -2188,7 +2192,7 @@ export function buildPrelude(): Module {
   // has no reading, and json read stops.
   const jChars = (t: string) => k.call(TEXT_OPS.characters, k.lit(t));
   const jIs = (c: Id, t: string) => k.equal(c, k.lit(t));
-  const isBlank = (c: Id) => k.byValue(c, [" ", "\t", "\n", "\r"].map((x) => [k.lit(x), k.true] as [Id, Id]), k.false);
+  const isBlank = (c: Id) => k.let("character", c, (cv) => amongChars(cv, [" ", "\t", "\n", "\r"], () => k.true, k.false));
   const unblanked = k.def("json unblanked");
   k.define(unblanked, k.fn(["text"], (t) => {
     const n = () => k.call(TEXT_OPS.length, t);

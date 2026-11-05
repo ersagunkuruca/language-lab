@@ -79,7 +79,9 @@ export function buildNumbers(pre: Module): Module {
   // the parts builtins and the vectors module work on it (its magnitude
   // is |z|), but a number type of its own: · is the complex product, and
   // there is no <.
-  const TC = k.type("Complex", [], [["complex", [["re", () => k.tref(NUMBER)], ["im", () => k.tref(NUMBER)]]]]);
+  // A unique name, as Dual has: a program's own record of two Float64s
+  // (tumble's Spot) would otherwise hash as Complex and be taken for it.
+  const TC = k.type("Complex", [], [["complex", [["re", () => k.tref(NUMBER)], ["im", () => k.tref(NUMBER)]]]], "complex numbers");
   const CV = TC.v.complex;
   // Complex numbers: a record of two Float64s, re + im·i. + − ·
   // and −x at Complex are these (arith.ts), so they aren't offered on
