@@ -29,7 +29,7 @@ import { isUse } from "../model.ts";
 import { Lang } from "./dsl.ts";
 import { CONS, FALSE, INT_OPS, NIL, NONE, S, SOME, TEXT_OPS, TRUE, tupleVariant } from "./std.ts";
 import { firstSets } from "./first-sets.ts";
-import { infixesOf, Unsupported } from "./descent.ts";
+import { descentReader, infixesOf, Unsupported } from "./descent.ts";
 import { INT } from "./types.ts";
 
 type Any = { id: Id; kind: string; target: Id; value: unknown; of?: Id; fn: Id; args: Id[]; params: Id[]; body: Id; scrutinee: Id; arms: Id[]; variant: Id; binds: (Id | null)[] };
@@ -151,6 +151,21 @@ export function writeReader(code: Code, printer: Id, names: Record<Id, string>):
         k.let(named(n.target) || "run", k.call(TEXT_OPS.slice, text, at, end), (v) => next(end, new Map(env).set(n.target, { b: v }))));
     }
     if (n.kind === "match") {
+      // A match on an input still to be read (L72d2, as descent.ts): each
+      // case read with its fields still to be read; the input is that case.
+      const sx = target(n.scrutinee), ss = sx ? env.get(sx) : undefined;
+      if (sx && ss && !("b" in ss)) {
+        const ways = n.arms.map((x) => node(x)! as Any & { value?: Id }).map((a) => {
+          if (!a.variant || a.value) throw new Unsupported("reads a match by value on an input");
+          const inner: Env = new Map(env);
+          for (const b of a.binds) if (b) inner.set(b, { unknown: "int" });
+          return piece(a.body, text, at, inner, inputs, tops, (end, e) => {
+            const fields = a.binds.map((b) => { const sl = b ? e.get(b) : undefined; if (!sl || !("b" in sl)) throw new Unsupported(`${named(a.variant)} doesn't read all its fields`); return k.x(sl.b); });
+            return k.let(named(sx) || "case", fields.length ? k.call(a.variant, ...fields) : k.x(a.variant), (v) => next(end, new Map(e).set(sx, { b: v })));
+          });
+        });
+        return ways.reduceRight((rest, w) => orElse(w, rest));
+      }
       // Each arm of the guard, read, then the guard checked.
       const ways = n.arms.map((x) => node(x)!).map((a) => {
         if (a.variant !== TRUE && a.variant !== FALSE) throw new Unsupported("reads a match that isn't on a Bool");
@@ -193,9 +208,19 @@ export function writeReader(code: Code, printer: Id, names: Record<Id, string>):
     // join all(map(xs, the printer), sep): the items read by the reader,
     // with sep between them, none too (L72b2, as descent.ts).
     if (named(f) === "join all") {
-      const m = node(n.args[0]), x = m?.kind === "call" && !isUse(m as never) && named(target(m.fn)) === "map" ? target(m.args[0]) : null, s = x ? env.get(x) : undefined;
-      if (!x || !s || "b" in s || target(m!.args[1]) !== printer || given.length) throw new Unsupported("reads join all of something other than an input list of the printer's");
-      return k.let("items", orElse(k.call(listOf(), text, at, copy(n.args[1], env, inputs)), some(at, k.x(NIL))), (r) =>
+      const m = node(n.args[0]);
+      if (m?.kind !== "call" || isUse(m as never) || named(target(m.fn)) !== "map") throw new Unsupported("reads join all of something other than a map");
+      // The characters of an input Text, each written by a function of one
+      // character (L72d2): read back by its table, as descent.ts reads them.
+      const src = node(m.args[0]), t = src?.kind === "call" && !isUse(src as never) && target(src.fn) === "builtin.text.characters" ? target(src.args[0]) : null, st = t ? env.get(t) : undefined;
+      if (t && st && !("b" in st)) {
+        const g = target(m.args[1]), sep = node(n.args[1]);
+        if (!g || sep?.kind !== "lit" || sep.value !== "") throw new Unsupported("reads characters other than by a definition with no separator");
+        return then(k.call(charactersOf(g), text, at, k.lit("")), (end, v) => next(end, new Map(env).set(t, { b: v })));
+      }
+      const x = target(m.args[0]), s = x ? env.get(x) : undefined;
+      if (!x || !s || "b" in s || given.length) throw new Unsupported("reads join all of something other than an input list");
+      return k.let("items", orElse(k.call(listOf(m.args[1]), text, at, copy(n.args[1], env, inputs)), some(at, k.x(NIL))), (r) =>
         then(k.x(r), (end, v) => next(end, new Map(env).set(x, { b: v }))));
     }
     if (f === printer) {
@@ -207,8 +232,17 @@ export function writeReader(code: Code, printer: Id, names: Record<Id, string>):
     // body with its inputs copied in.
     const fn = f && code.nodes[f]?.kind === "def" ? lambdaOf(f) : node(n.fn)?.kind === "lambda" ? node(n.fn) : undefined;
     if (!fn) throw new Unsupported(`reads ${named(f) || f}`);
-    const lets = fn.params.map((p, j) => [p, copy(n.args[j], env, inputs)] as const);
-    const go = (i: number, ins: Map<Id, Id>): Id => i === lets.length ? piece(fn.body, text, at, env, ins, tops, next)
+    // An input still to be read passes in as one, and what the body reads
+    // for it comes back out (L72d2: json quoted(t)).
+    const passed: [Id, Id][] = [], lets: (readonly [Id, Id])[] = [];
+    fn.params.forEach((p, j) => {
+      const x = target(n.args[j]), sl = x ? env.get(x) : undefined;
+      if (x && sl && !("b" in sl)) passed.push([p, x]); else lets.push([p, copy(n.args[j], env, inputs)] as const);
+    });
+    const inner: Env = new Map(env);
+    for (const [p, x] of passed) inner.set(p, env.get(x)!);
+    const back: Next = (a, e) => { const out = new Map(e); for (const [p, x] of passed) { const v = e.get(p); if (v && "b" in v) out.set(x, v); } return next(a, out); };
+    const go = (i: number, ins: Map<Id, Id>): Id => i === lets.length ? piece(fn.body, text, at, inner, ins, tops, back)
       : k.let(named(lets[i][0]) || "x", lets[i][1], (b) => go(i + 1, new Map(ins).set(lets[i][0], b)));
     return go(0, inputs);
   };
@@ -232,15 +266,43 @@ export function writeReader(code: Code, printer: Id, names: Record<Id, string>):
     return float;
   }
 
-  // read <printer> list(text, at, sep): one item or more, sep between.
-  let items: Id | null = null;
-  function listOf(): Id {
-    if (items) return items;
-    items = k.def(`read ${title} list`);
+  // read characters by g(text, at, so far): the longest run of characters
+  // read back through g's table, or as themselves where g keeps them.
+  const charReaders = new Map<Id, Id>();
+  function charactersOf(g: Id): Id {
+    if (charReaders.has(g)) return charReaders.get(g)!;
+    const table = descentReader(code, printer, names).characterTable(g);
+    const d = k.def(`read characters by ${named(g) || "a function"}`);
+    charReaders.set(g, d);
+    k.define(d, k.fn(["text", "at", "so far"], (text, at, acc) => {
+      const more = (end: Id, c: Id) => k.call(d, text, end, k.call(S.concat, acc, c));
+      const self = k.if(k.call(INT_OPS.less, at, k.call(TEXT_OPS.length, text)), k.let("character", at1(text, at), (c) =>
+        k.if(k.call(S.equal, k.call(g, c), c), more(plus(at, 1), k.x(c)), some(at, k.x(acc)))), some(at, k.x(acc)));
+      return table.reduceRight<Id>((rest, [o, c]) => k.if(startsWith(text, at, k.lit(o), k.int([...o].length)), more(plus(at, [...o].length), k.lit(c)), rest), self);
+    }));
+    return d;
+  }
+  // read <printer> list(text, at, sep): one item or more, sep between,
+  // each item the printer's, or read by another function of one input
+  // through its body (L72d2: json's object fields).
+  const lists = new Map<Id, Id>();
+  function listOf(itemFn: Id): Id {
+    const g = target(itemFn) ?? itemFn;
+    if (lists.has(g)) return lists.get(g)!;
+    const items = k.def(lists.size ? `read ${title} list ${lists.size + 1}` : `read ${title} list`);
+    lists.set(g, items);
+    const fn = g === printer ? null : code.nodes[g]?.kind === "def" ? lambdaOf(g) : node(itemFn)?.kind === "lambda" ? node(itemFn) : undefined;
+    if (fn === undefined || (fn && fn.params.length !== 1)) throw new Unsupported(`reads a list's items by ${named(g) || "this"}`);
+    const item = (text: Id, at: Id): Id => !fn ? k.call(read, text, at)
+      : piece(fn.body, text, at, new Map([[fn.params[0], { unknown: "int" }]]), new Map(), [], (end, e) => {
+        const sl = e.get(fn.params[0]);
+        if (!sl || !("b" in sl)) throw new Unsupported("a list's item isn't read");
+        return some(end, k.x(sl.b));
+      });
     k.define(items, k.fn(["text", "at", "sep"], (text, at, sep) =>
-      then(k.call(read, text, at), (a, x) => {
+      then(item(text, at), (a, x) => {
         const len = () => k.call(TEXT_OPS.length, sep), one = () => some(a, k.call(CONS, x, k.x(NIL)));
-        const rest = (from: Id) => orElse(then(k.call(items!, text, from, sep), (b, xs) => some(b, k.call(CONS, x, xs))), one());
+        const rest = (from: Id) => orElse(then(k.call(items, text, from, sep), (b, xs) => some(b, k.call(CONS, x, xs))), one());
         return k.if(k.call(INT_OPS.less, k.int(0), len()), k.if(startsWith(text, a, k.x(sep), len()), rest(k.call(INT_OPS.add, a, len())), one()), rest(k.x(a)));
       })));
     return items;

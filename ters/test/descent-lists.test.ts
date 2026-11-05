@@ -127,3 +127,21 @@ test("json printed reads back by descent as json read reads it (L72d)", () => {
   }
   for (const t of ["[1,]", "{\"a\"}", "nul", "[1 2]"]) assert.equal(rd(t, 0), null, t);
 });
+
+// The same reading written as a definition (reader.ts, L72d2), as
+// compiled targets run it.
+test("json printed's written reader reads as descent does (L72d2)", async () => {
+  const { writeReader } = await import("../src/lang/reader.ts");
+  const jp = L("json printed");
+  const w = writeReader(LIBRARY.code, jp, LIBRARY.names);
+  const all = { nodes: { ...LIBRARY.code.nodes, ...w.code.nodes }, defs: [...LIBRARY.code.defs, ...w.code.defs.filter((d) => !LIBRARY.code.defs.includes(d))] }, allNames = { ...LIBRARY.names, ...w.names };
+  const info = infer(all, allNames);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const rr = makeRunner(all, info, { print: () => {}, names: allNames });
+  const rd = descentReader(LIBRARY.code, jp, LIBRARY.names);
+  for (const t of ["null", "true", "[]", "{}", '[1,true,"a\\"b"]', '{"a":[1,{"b":null}],"c":false}', '"tab\\u0009there \\n\\u0001 çağ"', "[1,]", "{\"a\"}", "nul"]) {
+    const got = [...(rr.call(rr.value(w.line), t) as Iterable<Value>)][0];
+    const want = rd(t, 0);
+    assert.equal(showValue(got, all, allNames), want === null ? "none" : `some(${showValue(want, all, allNames)})`, t);
+  }
+});
