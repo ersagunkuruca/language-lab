@@ -102,6 +102,33 @@ the host file's entry.
    run backwards, and isn't performed while a `Choice` is open (the rule
    effects.test.ts already checks for `Console` and `Files`).
 
+## In a native program (L69b1)
+
+`lab native` reads `hosts/c.c` beside the program and puts it in the C
+file. Each operation is a C function named by its id, `host_<id>`, and
+what crosses is C's own:
+
+| in the program | at the host |
+|---|---|
+| `Int` | `int64_t` (an Int too big for it is an Abort before the call) |
+| `Float64` | `double` (NaN or ±∞ given back is a wrong answer) |
+| `Text` | `const char *`: the program's copy, freed after the call; one given back is copied, so it may be the host's own (NULL is a wrong answer) |
+| `Bool` | `int`, 0 or 1 (anything else given back is a wrong answer) |
+| `Unit` | `void`, given back only |
+
+A host fails by calling `lab_host_fail(reason)`; the program sees an
+Abort, "the host's ‹name› failed: ‹reason›", as it does for a wrong
+answer. Lists and records don't cross to C yet. An operation with no
+`host_<id>` in the file is a refusal to build that names it, and
+`lab hosts <program> --c` prints a file with each one, to start from.
+In WebAssembly (L69b2) each such operation is an import from "world",
+`host:<effect>:<number>`, which `instantiate` answers from the
+Runtime's `hosts` (hosts/js.js) through hosts.ts's border, as the
+evaluator does; an Int, a Float64, a Text and a Bool cross, and a
+function that performs one is partial, so a wrong answer is an Abort
+there too. Not yet: L186's log doesn't keep a host's answers, in C,
+WebAssembly or JavaScript.
+
 ## What std's own builtins become
 
 Nothing, at first. Arithmetic, text and lists stay builtins: the
@@ -116,7 +143,7 @@ answer their effects the same way. That move is optional (L69d).
 | step | what | lane | size |
 |---|---|---|---|
 | L69a | An effect's unhandled operations answered from `hosts/js.js` in the evaluator and the compiled JS, results checked at the border; `lab hosts` writes the skeleton | L | M |
-| L69b | The same from `hosts/c.c` for native C, and WebAssembly imports from `hosts/js.js` | C | M |
+| L69b | The same from `hosts/c.c` for native C (L69b1, done), and WebAssembly imports from `hosts/js.js` (L69b2, done) | C | M |
 | L69c | The editor: "needs its host" on a definition whose host side is missing; the host file shown read-only in the Program tab | E | S |
 | L69d | Optional: std's world operations move to std's own host files | L | M |
 

@@ -58,7 +58,7 @@ import { bindsOf, bodyOf, withBodies } from "./uses.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { ARRAY, TABLE, HASH_SET, CELL, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, PATH as PATH_T, STRING, BUILTIN_EFFECTS, Subst, type Row, type Type } from "../../ters/src/lang/types.ts";
-import { RELEASE_V, tupleType, ABORT, ABORT_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, HASH_SET_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, NOW_OP, OPTIONAL, ORDER_V, PAIR_V, RATIO, S, SET, SHOW_ANY, shownImplementations, implementationsOf, ORDERED, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
+import { RELEASE_V, tupleType, ABORT, ABORT_OP, CHECK, CHECK_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, HASH_SET_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, NOW_OP, OPTIONAL, ORDER_V, PAIR_V, RATIO, S, SET, SHOW_ANY, shownImplementations, implementationsOf, ORDERED, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
 import { liftLets } from "../../ters/src/lang/lift-lets.ts";
 import { solvesOnce } from "../../ters/src/lang/run.ts";
 import { inlineLists } from "./inline-lets.ts";
@@ -353,7 +353,9 @@ export type SExpr =
   // `suspends` (C40 step 4): a page handler's wait or await, which goes on
   // by the rest of the handler; `cps`, that rest given last (t is then
   // the i32 it answers).
-  | { k: "world"; op: string; aborts: boolean; args: SExpr[]; t: LType; suspends?: true; cps?: true }
+  // `ins`: its inputs' types, where they aren't texts (a host's
+  // operation in WebAssembly, L69b2).
+  | { k: "world"; op: string; aborts: boolean; args: SExpr[]; t: LType; suspends?: true; cps?: true; ins?: LType[] }
   | { k: "handle"; body: SExpr; reason: number; arm: SExpr; t: LType; save: number; esc?: number }
   // W4d, gone after lowering: `one of` a list (t), anywhere, and a
   // handler's search (first, optional, all, count) to be made into code
@@ -473,7 +475,10 @@ export function reachedFrom(code: Code, roots: Id[]): Code {
 // C166: inside the search's body, and in what it calls (lowered again for
 // it), a partial builtin with no answer raises the flag instead of
 // stopping, so raymarch's colour needs no budget around its trace.
-export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean } = {}): CoreIR {
+// `hosted`: the program's own effects its host answers where nothing
+// handles them (FOREIGN.md; for C, hosts/c.c, L69b1): their operations
+// are performed, as compiled JavaScript's are.
+export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id> } = {}): CoreIR {
   // The function types whose closures give several answers: found as
   // lowering meets one, and lowered again with them (C137c22). Only those
   // types' closures pay for taking the rest.
@@ -486,11 +491,11 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   }
 }
 
-function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean }, severalTypes: Set<string>): CoreIR {
+function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id> }, severalTypes: Set<string>): CoreIR {
   const outer = stopSite;
   try { return lowerOnceIn(code, info, names, roots, opts, severalTypes); } finally { stopSite = outer; }
 }
-function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean }, severalTypes: Set<string>): CoreIR {
+function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id> }, severalTypes: Set<string>): CoreIR {
   // Where each stop is lowered from (C143): the node being lowered, and
   // the sites met so far, one a node.
   let here: { node: Id; def: Id } | null = null;
@@ -607,7 +612,8 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   const notOwn = (n: NodeOf<"def">, td: NodeOf<"typedef">) => n.id.startsWith("std.") || (BUILTIN_EFFECTS.includes(n.id) && !td.variants.some((v) => arms.has(v)));
   const builtinOf = new Map(Object.entries(OP_OF_BUILTIN).map(([b, v]) => [v, b]));
   const tailOps = new Map<Id, Id>();
-  for (const n of opts.host ? Object.values(code.nodes) : []) {
+  // Without `host`, only the effects `hosted` names (C's hosts/c.c).
+  for (const n of opts.host ? Object.values(code.nodes) : [...opts.hosted ?? []].flatMap((e) => code.nodes[e] ?? [])) {
     if (n.kind !== "def" || !n.body || (code.nodes[n.body]?.kind === "typedef" && notOwn(n, code.nodes[n.body] as NodeOf<"typedef">)) || n.id.startsWith("std.")) continue;
     const td = code.nodes[n.body];
     if (td?.kind === "typedef" && td.effect && td.variants.length && td.variants.every((v: Id) => { const x = code.nodes[v] as NodeOf<"variant">; return x.returns && !x.later; })) td.variants.forEach((v: Id) => tailOps.set(v, n.id));
@@ -617,6 +623,9 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // Not with `seeded` as well, whose draws aren't on that stack.
   const handlesRandom = !!opts.host && Object.values(code.nodes).some((n) => n.kind === "arm" && n.variant === RANDOM_OP);
   if (handlesRandom) tailOps.set(RANDOM_OP, RANDOM);
+  // Check too, where the program handles it (T7e2: `lab test --compiled`
+  // runs a test under a handler of its expects).
+  if (opts.host && Object.values(code.nodes).some((n) => n.kind === "arm" && n.variant === CHECK_OP)) tailOps.set(CHECK_OP, CHECK);
   // A program's own effect whose operations are answered later (step 3:
   // tumble's Animate, ANSWERED-LATER.md): its case is given the rest, so
   // the performer runs in continuation passing (several_), and a perform
@@ -882,13 +891,15 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     // that spends from a budget: running out is having no answer there,
     // which the nearest handler sees, as in the evaluator.
     const all = constant ? [] : info.subst.resolveRow(ft.eff).effs;
-    const partial = (!!opts.data && (all.includes(CHOICE) || all.some(escaping) || (!constant && info.divergent.has(def)))) || (!!opts.shader && all.includes(CHOICE));
+    // A host's operation may fail, with its reason (L69b1, L69b2): a
+    // function that performs one is partial, as one that aborts is.
+    const partial = (!!opts.data && (all.includes(CHOICE) || all.some(escaping) || all.some((e) => !!opts.hosted?.has(e)) || (!constant && info.divergent.has(def)))) || (!!opts.shader && all.includes(CHOICE));
     // Without `data` or `shader`, a Choice is let through: one from a
     // partial builtin (x / 0, the square root of a negative; L125b) is
     // lowered as its arithmetic, so no answer isn't seen here yet (L125c2,
     // L125c3); a Choice of the program's own (fail, one of) is refused
     // where it's used.
-    const effs = all.filter((e) => !BUDGETED.includes(e) && !(partial && partialEff(e)) && !(opts.data && (e === CONSOLE || e === FILES || e === RANDOM)) && !(opts.host && (PAGE_EFFECTS.has(e) || tailEffs.has(e))) && !(e === CHOICE && !opts.data && !opts.shader));
+    const effs = all.filter((e) => !BUDGETED.includes(e) && !(partial && partialEff(e)) && !(opts.data && (e === CONSOLE || e === FILES || e === RANDOM)) && !(opts.host && (PAGE_EFFECTS.has(e) || tailEffs.has(e))) && !(opts.hosted?.has(e) && tailEffs.has(e)) && !(e === CHOICE && !opts.data && !opts.shader));
     if (effs.length) fail(`has effects (${effs.map(nm).join(", ")})`);
     const budgeted = !constant && !opts.data && diverges(ft);
 

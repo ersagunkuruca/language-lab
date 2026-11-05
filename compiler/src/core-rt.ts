@@ -390,7 +390,7 @@ function worldFn(op: string, rt: Runtime, timers: Timers, handlers: Map<string, 
     case "startTimer": return (ms) => timers.start(clock(), ms as number);
     case "wait": return (ms, k) => { try { sleep(ms as number); } catch (e) { paused(e, () => RUNTIME.ap(k as never, unit)); } return RUNTIME.ap(k as never, unit); };
     case "await": return (t, k) => awaited(t as Data, k);
-    case "randomSeed": return () => Math.floor(Math.random() * 4294967296);
+    case "randomSeed": return () => (rt.world?.randomSeed ?? (() => Math.floor(Math.random() * 4294967296)))();
     // A stop with a reason (L51c): the program ends, as an overflow's stop.
     case "stopWith": return (why) => { throw new Stopped(why as string); };
     case "now": return () => (rt.world?.now ?? Date.now)();

@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Lang } from "../../ters/src/lang/dsl.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
-import { INT_OPS, S } from "../../ters/src/lang/std.ts";
+import { CHECK_OP, INT_OPS, S } from "../../ters/src/lang/std.ts";
 import { INT } from "../../ters/src/lang/types.ts";
 
 test("lab test --compiled checks each accepted answer on the compiled program too (T7e)", () => {
@@ -42,4 +42,26 @@ test("lab test --compiled checks each accepted answer on the compiled program to
   assert.equal(bad.status, 1);
   assert.match(bad.stdout, /^✗ next\(2\): gives 3, accepted 4$/m);
   assert.match(bad.stdout, /^✗ next compiled\(2\): gives 3, accepted 4$/m);
+});
+
+// T7e2: a test's Check runs compiled too, under a handler of its expects
+// written in the language (tests.ts checkedTests), on the same inputs as
+// the evaluator's run.
+test("lab test --compiled runs each test's Check on the compiled program too (T7e2)", () => {
+  type Id = string;
+  const k = new Lang(LIBRARY.code);
+  const def = (name: string, params: string[], body: (...xs: Id[]) => Id) => { const d = k.def(name); k.define(d, k.fn(params, body)); return d; };
+  const expect = (holds: Id, what: string) => k.call(CHECK_OP, holds, k.lit(what));
+  const double = def("double", ["n"], (n) => k.call(INT_OPS.add, n, n));
+  def("double is even", ["n"], (n) => expect(k.call(S.equal, k.call(INT_OPS.sub, k.call(double, n), n), n), "double n - n = n"));
+  def("double grows", ["n"], (n) => expect(k.call(INT_OPS.less, n, k.call(double, n)), "n < double n"));
+  const dir = mkdtempSync(join(tmpdir(), "lab-test-"));
+  writeFileSync(join(dir, "code.json"), JSON.stringify(k.code));
+  writeFileSync(join(dir, "names.default.json"), JSON.stringify(k.names));
+  const r = spawnSync(process.execPath, [join(import.meta.dirname, "../../ters/cli/lab.ts"), "test", dir, "--fresh", "--compiled"], { encoding: "utf8" });
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.match(r.stdout, /^✓ double is even compiled \(\d+ cases\)$/m, r.stdout);
+  // n < 2n fails at 0 (and below) both ways, with the same text.
+  assert.match(r.stdout, /^✗ double grows\(0\): n < double n$/m, r.stdout);
+  assert.match(r.stdout, /^✗ double grows compiled\(0\): n < double n$/m, r.stdout);
 });

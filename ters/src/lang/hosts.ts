@@ -156,3 +156,31 @@ export function hostSkeleton(code: Code, names: Names, own: Id[]): string {
   lines.push("};", "");
   return lines.join("\n");
 }
+
+// The C function a native program's hosts/c.c defines for an operation
+// (L69b1), by its id.
+export const hostCName = (op: Id) => `host_${op.replace(/[^A-Za-z0-9_]/g, "_")}`;
+const C_TYPE: Partial<Record<Shape["k"], string>> = { int: "int64_t", float: "double", text: "const char *", bool: "int", unit: "void" };
+
+// `lab hosts --c`: a hosts/c.c to start from. What crosses is C's own: an
+// Int is int64_t, a Float64 a double, a Text a C string (the program's
+// copy, freed after the call; a Text given back is copied, so it may be
+// the host's own), a Bool 0 or 1. A host fails with lab_host_fail(reason),
+// which is the program's Abort.
+export function hostSkeletonC(code: Code, names: Names, own: Id[]): string {
+  const lines = ["// Answers for this program's own effects in a native program (FOREIGN.md),", "// one function per operation, named by its id: renaming an operation", "// changes nothing here. lab_host_fail(reason) makes the program's Abort."];
+  for (const d of own) {
+    const b = (code.nodes[d] as NodeOf<"def">)?.body, td = b ? code.nodes[b] : undefined;
+    if (td?.kind !== "typedef" || !td.effect) continue;
+    lines.push("", `// ${names[d] ?? d}`);
+    for (const op of td.variants) {
+      const h = hostOp(code, names, op), out = C_TYPE[h.out.k];
+      const ins = h.ins.map((s, j) => { const v = code.nodes[op] as NodeOf<"variant">, t = C_TYPE[s.k] ?? "/* doesn't cross to C yet */ void *"; return `${t}${t.endsWith("*") ? "" : " "}${(names[v.fields[j]] ?? `x${j}`).replace(/[^A-Za-z0-9_]+/g, "_")}`; });
+      lines.push(`// ${h.name}`);
+      const ret = out ?? "/* doesn't cross to C yet */ void";
+      lines.push(`${ret}${ret.endsWith("*") ? "" : " "}${hostCName(op)}(${ins.join(", ") || "void"}) { lab_host_fail("not written yet");${out && out !== "void" ? ` return ${h.out.k === "text" ? '""' : "0"};` : ""} }`);
+    }
+  }
+  lines.push("");
+  return lines.join("\n");
+}

@@ -109,6 +109,10 @@ Row L215, one PR each:
   backwards (its modes are the callee's body's), definitions with results
   or directions, and a group sharing a type variable with another.
   `reuse` stays until (d).
+- (c1) Done: only the values written as an implementation's or an
+  embedding's record are in every group's key; other values are groups
+  like the rest, so a constant's edit rechecks only what reads it
+  (Constructions 370 to 100 ms an edit).
 - (b) The `Checker` cache in the editor's edit path, timed on I157 and
   I158's steps and on a one-character edit in Constructions.
 - (c) Typedef groups and the per-program parts above in the cache.

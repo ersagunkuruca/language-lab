@@ -364,6 +364,10 @@ export interface World {
   closeFile?(file: number): void;
   // Random's answer when the program has no handler: a Float64 in [0, 1).
   random(): number;
+  // The seed, 32 bits, of the generator a compiled program draws Random's
+  // numbers from (C136), asked at its first draw. A world without it gives
+  // the host's; one that has it gets the seed logged (C172c, C172d).
+  randomSeed?(): number;
   // Settings' (L214b2): the user's language as a BCP 47 tag. A world
   // without one answers the host's (Intl).
   locale?(): string;
@@ -1280,10 +1284,12 @@ function leftover(t: Type, names: Names, hosted: Set<Id> = new Set()): string | 
 }
 
 // Can `def` be a command-line main? Null if it can, else why not.
-export function mainProblem(info: Info, def: Id, names: Names = {}): string | null {
+// `hosted`: effects a host answers (hosts.ts, FOREIGN.md), which main may
+// leave unhandled.
+export function mainProblem(info: Info, def: Id, names: Names = {}, hosted: Set<Id> = new Set()): string | null {
   const t = info.typeOf.get(def);
   if (!t || t.t !== "fn" || t.params.length > 1) return "main takes the arguments (a list of texts), or nothing";
-  return leftover(t, names);
+  return leftover(t, names, hosted);
 }
 
 // Can `def` be a page's main (WEB.md, `lab build-web`)? It takes nothing

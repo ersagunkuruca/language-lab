@@ -8,7 +8,7 @@
 //     where main doesn't lower there; --core: the core IR only, --compile-ts: compile.ts only
 //   lab native <program> [-o out]        compile to a native program through C (NATIVE.md)
 //   lab check <program>                  type-check, and list the definitions with their types
-//   lab hosts <program>                  print a hosts/js.js to start from: the program's own effects (FOREIGN.md)
+//   lab hosts <program> [--c]            print a hosts/js.js (or with --c a hosts/c.c) to start from: the program's own effects (FOREIGN.md)
 //   lab test <program> [--fresh]         run the tests: definitions whose row has Check (TESTS-IN-THE-LANGUAGE.md);
 //                                        results kept by hash in .lab/checks.json, --fresh ignores them
 //   lab build-web <program> [-o app.html] [--core|--compile-ts]  a page: one HTML file, opened anywhere (WEB.md)
@@ -62,10 +62,10 @@ import { appFolder } from "./app.ts";
 import { soundOf } from "./sound.ts";
 import { readWav, writeWav } from "./wav.ts";
 import { audioProblem, BLOCK, playBlocks } from "../src/lang/audio.ts";
-import { answersAgain, runTests, savedFrom, type Called, type Saved } from "../src/lang/tests.ts";
+import { answersAgain, checkedTests, checksAgain, runTests, savedFrom, testsIn, type Called, type Saved } from "../src/lang/tests.ts";
 import { representationLaws } from "../src/lang/rep-laws.ts";
 import { embeddingLaws } from "../src/lang/embed-laws.ts";
-import { hostSkeleton, type Hosts } from "../src/lang/hosts.ts";
+import { effectOfOperation, hostSkeleton, hostSkeletonC, ownOperations, type Hosts } from "../src/lang/hosts.ts";
 import { evaluatorHash, readKept, resultKeys, writeKept } from "./checks.ts";
 
 const USAGE = `lab: the command line for Ters, the language
@@ -78,7 +78,8 @@ usage:
                                         where main doesn't lower there; --core: only the core IR, --compile-ts: only compile.ts
   lab native <program> [-o out]         compile to a native program through C, with $CC (default cc)
   lab check <program>                   type-check, and list the definitions and their types
-  lab hosts <program>                   print a hosts/js.js answering the program's own effects, to start from (FOREIGN.md)
+  lab hosts <program> [--c]             print a hosts/js.js answering the program's own effects, to start from;
+                                        with --c a hosts/c.c, for lab native (FOREIGN.md)
   lab test <program> [--fresh]          run each definition that performs Check, check each accepted answer in examples.json
     [--compiled]                        and each representation's jobs against its type's through meaning;
                                         an unchanged test's result is kept by hash (.lab/checks.json), --fresh runs it again;
@@ -143,6 +144,37 @@ function compiledAnswers(p: Program, saved: Record<Id, Saved[]>) {
   });
 }
 
+// Each test of the program's own, as the core IR's JavaScript runs it
+// (T7e2): its checked definition (tests.ts checkedTests), called on the
+// inputs the evaluator's run uses; the first expect that failed, or none.
+function compiledChecks(p: Program, saved: Record<Id, Saved[]>) {
+  const tests = testsIn(p.info, p.own);
+  if (!tests.length) return [];
+  const c = checkedTests(p.code, p.names, tests);
+  let ir: ReturnType<typeof lowerCore>, fns: ((...xs: unknown[]) => unknown)[];
+  try {
+    const info = infer(c.code, c.names, undefined, p.info.options);
+    if (info.errors.length) throw new Error(info.errors[0].message);
+    ir = lowerCore(c.code, info, c.names, [...c.wrappers.values()]);
+    fns = loadCoreJs(ir, { print: () => {}, world: nodeWorld() });
+  } catch (e) { const why = `didn't lower (${(e as Error).message})`; return checksAgain(p.code, p.info, p.names, tests, saved, () => why); }
+  return checksAgain(p.code, p.info, p.names, tests, saved, (d) => {
+    const w = c.wrappers.get(d);
+    if (!w) return "isn't a function written in place";
+    const why = ir.refused.get(w);
+    if (why) return why;
+    const i = ir.funcs.findIndex((g) => g.def === w && !g.inner);
+    if (i < 0) return "isn't among the compiled functions";
+    if (ir.funcs[i].multi) return "searches, and a search's paths aren't taken from here yet";
+    return (args): Called => {
+      try { return { value: fns[i](...args) as Value }; } catch (e) {
+        if (e === FAIL) return { none: true };
+        throw e instanceof Error ? e : new Error(String((e as { reason?: unknown }).reason ?? e));
+      }
+    };
+  });
+}
+
 // The program from `main`, with each type it uses stored the way the
 // chooser picks from the declared costs (the definition itself is one of
 // the choices). Library types (std's Map) are chosen for too, unless the
@@ -185,7 +217,11 @@ function entry(p: Program, name: string, web = false): Id {
   const def = p.own.find((d) => p.names[d] === name);
   if (!def) fail(`${p.title} has no definition named ${name}`);
   if (!web && !pageProblem(p.info, def, p.names)) { staticPage = true; return def; }
-  const problem = web ? pageProblem(p.info, def, p.names) : mainProblem(p.info, def, p.names);
+  // The program's own effects, when its host file for this command is
+  // there (FOREIGN.md): hosts/c.c for a native program, else hosts/js.js.
+  const hostsAt = existsSync(path) && statSync(path).isDirectory() ? join(path, "hosts", command === "native" ? "c.c" : "js.js") : "";
+  const hosted = new Set(hostsAt && existsSync(hostsAt) ? ownOperations(p.code).flatMap((op) => effectOfOperation(p.code, op) ?? []) : []);
+  const problem = web ? pageProblem(p.info, def, p.names) : mainProblem(p.info, def, p.names, hosted);
   if (problem) fail(`${name} can't be ${web ? "a page" : "run from the command line"}: ${problem}`);
   return def;
 }
@@ -415,9 +451,12 @@ switch (command) {
     // with the flags that keep the evaluator's numbers (compiler/src/c.ts).
     const o = rest.indexOf("-o");
     const out = o >= 0 ? rest[o + 1] ?? fail("-o needs a file") : basename(resolve(path)).replace(/\.json$/, "");
-    const lowered = lowerScalar(p.code, p.info, p.names, [main], { data: true });
+    // Its own effects' operations nothing handles, from hosts/c.c (L69b1).
+    const cHost = existsSync(path) && statSync(path).isDirectory() ? join(path, "hosts", "c.c") : "";
+    const hosts = { ops: hostOpsOf(p.code, p.names), c: cHost && existsSync(cHost) ? readFileSync(cHost, "utf8") : undefined };
+    const lowered = lowerScalar(p.code, p.info, p.names, [main], { data: true, hosted: new Set(ownOperations(p.code).flatMap((op) => effectOfOperation(p.code, op) ?? [])) });
     let c: string;
-    try { c = emitC(lowered, { main }).c; } catch (e) { fail((e as Error).message); }
+    try { c = emitC(lowered, { main, hosts }).c; } catch (e) { fail((e as Error).message); }
     writeFileSync(`${out}.c`, c);
     const cc = process.env.CC ?? "cc", flags = [...CFLAGS, "-pthread", "-o", out, `${out}.c`, "-lm"];
     try { execFileSync(cc, flags, { stdio: "inherit" }); } catch {
@@ -493,7 +532,7 @@ switch (command) {
     break;
   }
   case "hosts": {
-    process.stdout.write(hostSkeleton(p.code, p.names, p.own));
+    process.stdout.write(rest.includes("--c") ? hostSkeletonC(p.code, p.names, p.own) : hostSkeleton(p.code, p.names, p.own));
     break;
   }
   case "test": {
@@ -519,10 +558,10 @@ switch (command) {
       if (r.failures.length > 3) console.log(`  … and ${r.failures.length - 3} more`);
     }
     // --compiled: the accepted answers again, compiled to JavaScript through
-    // the core IR, which must give them too (T7e). A test's Check isn't
-    // compiled yet, so only answers; a definition that doesn't lower is
-    // said, not failed.
-    const again = rest.includes("--compiled") && !p.info.errors.length ? compiledAnswers(p, saved) : [];
+    // the core IR, which must give them too (T7e), and each test, run
+    // compiled under a handler of its Check (T7e2); a definition that
+    // doesn't lower is said, not failed.
+    const again = rest.includes("--compiled") && !p.info.errors.length ? [...compiledAnswers(p, saved), ...compiledChecks(p, saved)] : [];
     for (const r of again) {
       if (r.skipped) console.log(`– ${r.name} compiled: not checked, it ${r.skipped}`);
       else if (r.error) console.log(`✗ ${r.name} compiled: ${r.error}`);

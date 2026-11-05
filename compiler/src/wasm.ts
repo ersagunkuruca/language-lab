@@ -40,6 +40,10 @@ import { assemble, POW5, runtime, textBytes, WASI_IMPORTS, wasiStop, type RtFn, 
 import { TABLE_RT, tableRt } from "./wasm-table.ts";
 import { reasonOf, siteOf } from "./stops.ts";
 import type { Id } from "../../ters/src/model.ts";
+import { answerByShapes, type Shape } from "../../ters/src/lang/hosts.ts";
+import { norm } from "../../ters/src/lang/int.ts";
+import { FALSE, TRUE } from "../../ters/src/lang/std.ts";
+import type { HostOps } from "./core-rt.ts";
 import { fails, listSteps, isArray, isTable, isData, isFn, kids, mapKids, OPS, STOPS, type AType, type DType, type FType, type LType, type CoreIR, type Op, type RType, type SExpr, type SFunc, type SType, type TType } from "./scalar.ts";
 
 // int32 (an Int in 32 bits) is the shaders' only (C66c); WebAssembly has Int.
@@ -82,7 +86,9 @@ const flagged = (e: SExpr): boolean => e.k === "attempt" || (e.k === "rt" && /^a
 // checks as it leaves for the host (SPEC §3.3, C156); partial ones give
 // it with their status.
 // `stops`: the lowering's stop sites (C143), so a stop says where.
-export interface Module { bytes: Uint8Array; wat: string; exports: string[]; floats?: { name: string; partial: boolean }[]; stops?: { node: Id; def: Id }[] }
+// `hosts`: the program's own operations its host answers (core-js.ts
+// hostOpsOf), which instantiate asks rt.hosts for (L69b2).
+export interface Module { bytes: Uint8Array; wat: string; exports: string[]; floats?: { name: string; partial: boolean }[]; stops?: { node: Id; def: Id }[]; hosts?: HostOps }
 
 // `wasi`: a WASI command instead, its world written over
 // wasi_snapshot_preview1 (wasm-rt.ts) and `_start` running main as
@@ -95,7 +101,15 @@ function stopped(m: Module, code: number): Aborted {
   return e;
 }
 
-export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean } = {}): Module {
+// What crosses to the host as itself (L69b2): a Text as the module's
+// bytes, made and read as the world's texts are.
+const HOST_TYPES: Partial<Record<Shape["k"], LType>> = { int: "int", float: "f64", text: "text", bool: "i32" };
+const performsIn = (e: SExpr): boolean => (e.k === "rt" && e.fn.startsWith("perform:")) || kids(e).some(performsIn);
+
+// `hosts`: the program's own operations (core-js.ts hostOpsOf); one that
+// nothing handles is an import from "world" that hosts/js.js answers
+// (FOREIGN.md, L69b2).
+export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOps } = {}): Module {
   const wasi = !!opts.wasi;
   // A shader's lowering (C66c, `lowered.shader`): Int in 32 bits, and no
   // answer is the flag $none that `first` and `count` look at, as WGSL
@@ -114,7 +128,18 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean } = {}): Module
     if (!m || x.k !== "rt") return x;
     return { ...x, fn: `array.${m[1] === "of" ? `of${x.args.length}` : m[1] === "length" ? "size32" : "at32"}.${m[2]}` };
   };
-  const funcs = shader ? lowered.funcs.map((f) => ({ ...f, partial: undefined, body: shaderArrays(f.body) })) : lowered.funcs;
+  // A program's own operation nothing handles (scalar.ts `perform:`): a
+  // world operation the host answers, which may fail with the reason.
+  const performs = (e: SExpr): SExpr => {
+    const x = mapKids(e, performs);
+    if (x.k !== "rt" || !x.fn.startsWith("perform:")) return x;
+    const [, eff, i] = x.fn.split(":"), h = opts.hosts?.[`${eff}:${i}`];
+    if (!h || wasi) throw new Error(`${h?.name ?? "an operation of an effect"} is performed with nothing handling it, and ${wasi ? "a WASI command has no host" : "no host answers it here"}`);
+    const bad = [...h.ins, ...(h.out.k === "unit" ? [] : [h.out])].find((y) => !HOST_TYPES[y.k]);
+    if (bad) throw new Error(`${h.name} takes or gives ${bad.k === "list" ? "a list" : bad.k === "record" ? "a record" : "a value"}, which doesn't cross to the host in WebAssembly yet`);
+    return { k: "world", op: `host:${eff}:${i}`, aborts: true, args: x.args, t: x.host!.t, ins: h.ins.map((y) => HOST_TYPES[y.k]!) };
+  };
+  const funcs = shader ? lowered.funcs.map((f) => ({ ...f, partial: undefined, body: shaderArrays(f.body) })) : lowered.funcs.map((f) => (performsIn(f.body) ? { ...f, body: performs(f.body) } : f));
   // Host functions used, in a fixed order: they take the first indices.
   // A WASI host has no Math: there sin and the rest are V8's fdlibm,
   // compiled to WebAssembly (wasm-math.ts), with a memory of their own.
@@ -339,7 +364,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean } = {}): Module
   // A world operation giving the unit gives nothing (the module makes it);
   // one that can fail gives a status after.
   const isUnit = (t: LType) => isRec(t) && !isData(t) && !isFn(t) && !isArray(t) && !isTable(t) && t.fields.length === 0;
-  const worldSig = wasi ? [] : worldOps.map((x) => sig(x.args.map(() => "text" as LType), isUnit(x.t) ? null : x.t, x.aborts));
+  const worldSig = wasi ? [] : worldOps.map((x) => sig(x.args.map((_, j) => x.ins?.[j] ?? ("text" as LType)), isUnit(x.t) ? null : x.t, x.aborts));
   const reasonSig = worldReason && !wasi ? sig([], "text") : 0;
   const wasiSig = wasiImports.map((n) => sig(WASI_IMPORTS[n.slice(5)].params, WASI_IMPORTS[n.slice(5)].result));
   // A closure's code has its function type's code type, so call_ref takes it.
@@ -753,7 +778,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean } = {}): Module
     }),
     ...(structs.length ? ["  )"] : []),
     ...hosts.map((op) => `  (import "Math" "${HOST[op]!.name}" (func $Math.${op} (param${" f64".repeat(HOST[op]!.params)}) (result f64)))`),
-    ...worldOps.filter(() => !wasi).map((x) => `  (import "world" "${x.op}" (func $world.${x.op}${x.args.length ? ` (param${" (ref null $bytes)".repeat(x.args.length)})` : ""}${isUnit(x.t) && !x.aborts ? "" : ` (result${isUnit(x.t) ? "" : ` ${ty(x.t)}`}${x.aborts ? " i32" : ""})`}))`),
+    ...worldOps.filter(() => !wasi).map((x) => `  (import "world" "${x.op}" (func $world.${x.op}${x.args.length ? ` (param${x.args.map((_, j) => ` ${ty((x.ins?.[j] ?? "text") as MType)}`).join("")})` : ""}${isUnit(x.t) && !x.aborts ? "" : ` (result${isUnit(x.t) ? "" : ` ${ty(x.t)}`}${x.aborts ? " i32" : ""})`}))`),
     ...(worldReason && !wasi ? [`  (import "world" "reason" (func $world.reason (result (ref null $bytes))))`] : []),
     ...wasiImports.map((n) => { const t = WASI_IMPORTS[n.slice(5)]; return `  (import "wasi_snapshot_preview1" "${n.slice(5)}" (func $${n} (param ${t.params.join(" ")})${t.result ? ` (result ${t.result})` : ""}))`; }),
     ...(wasi ? [`  (memory (export "memory") 1)`] : []),
@@ -783,7 +808,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean } = {}): Module
   ].join("\n");
 
   const floats = shader ? [] : entries.filter(([f]) => f.result === "f64").map(([f]) => ({ name: exportName(f), partial: !!f.partial }));
-  return { bytes, wat: text + "\n", exports: [...entries.map(([f]) => exportName(f)), ...helpers.map((x) => x.name), ...rtExports.map((f) => RT_EXPORTS[f.name])], floats, ...(lowered.stops?.length ? { stops: lowered.stops } : {}) };
+  return { bytes, wat: text + "\n", exports: [...entries.map(([f]) => exportName(f)), ...helpers.map((x) => x.name), ...rtExports.map((f) => RT_EXPORTS[f.name])], floats, ...(lowered.stops?.length ? { stops: lowered.stops } : {}), ...(opts.hosts && worldOps.some((x) => x.op.startsWith("host:")) ? { hosts: opts.hosts } : {}) };
 }
 
 const uses = (e: SExpr, op: Op): boolean => (e.k === "op" && e.op === op) || kids(e).some((k) => uses(k, op));
@@ -796,7 +821,7 @@ const mentions = (e: SExpr, k: SExpr["k"]): boolean => e.k === k || kids(e).some
 // operation the world doesn't have fails saying so, as there.
 export async function instantiate(m: Module, rt: Runtime = { print: () => {} }): Promise<Record<string, (...xs: number[]) => number>> {
   let ex: Record<string, (...xs: unknown[]) => unknown> = {};
-  const { instance } = await WebAssembly.instantiate(m.bytes, { Math: { sin: Math.sin, cos: Math.cos, tan: Math.tan, exp: Math.exp, log: Math.log, pow: Math.pow, atan2: Math.atan2, stop: (i: number) => { throw stopped(m, i); } }, world: worldOf(rt, () => ex) });
+  const { instance } = await WebAssembly.instantiate(m.bytes, { Math: { sin: Math.sin, cos: Math.cos, tan: Math.tan, exp: Math.exp, log: Math.log, pow: Math.pow, atan2: Math.atan2, stop: (i: number) => { throw stopped(m, i); } }, world: worldOf(rt, () => ex, m.hosts) });
   ex = instance.exports as unknown as typeof ex;
   if (!m.floats?.length) return instance.exports as unknown as Record<string, (...xs: number[]) => number>;
   // A Float64 handed back to the host is a use of it: too big, it stops.
@@ -812,7 +837,7 @@ export async function instantiate(m: Module, rt: Runtime = { print: () => {} }):
 // The imports from "world": texts in and out through the module's own
 // makers. One that fails gives status 2 after its answer, and the reason
 // the module then asks for.
-function worldOf(rt: Runtime, exports: () => Record<string, (...xs: unknown[]) => unknown>) {
+function worldOf(rt: Runtime, exports: () => Record<string, (...xs: unknown[]) => unknown>, hosts?: HostOps) {
   let reason = "";
   const w = <K extends keyof World>(k: K): World[K] => {
     const f = rt.world?.[k];
@@ -824,7 +849,7 @@ function worldOf(rt: Runtime, exports: () => Record<string, (...xs: unknown[]) =
   const unit = (f: () => void) => tried(f)[1];
   return {
     // A seed for Random's generator, 32 bits (C136).
-    randomSeed: () => Math.floor(Math.random() * 4294967296),
+    randomSeed: () => (rt.world?.randomSeed ?? (() => Math.floor(Math.random() * 4294967296)))(),
     // A stop with a reason (L51c): the program ends, as an overflow's stop.
     stopWith: (t: unknown) => { throw new Aborted(text(t)); },
     print: (t: unknown) => rt.print(text(t)),
@@ -837,6 +862,14 @@ function worldOf(rt: Runtime, exports: () => Record<string, (...xs: unknown[]) =
     fileExists: (p: unknown) => (w("fileExists")(text(p)) ? 1 : 0),
     listFolder: (p: unknown) => tried(() => textList(exports(), w("listFolder")(text(p)))),
     reason: () => make(reason),
+    // The program's own operations (L69b2): hosts/js.js's answers, checked
+    // at hosts.ts's border, a wrong one failing with the reason.
+    ...Object.fromEntries(Object.entries(hosts ?? {}).map(([k, h]) => {
+      const inn = (s: Shape, x: unknown): unknown => (s.k === "text" ? text(x) : s.k === "int" ? norm(fromInt(exports(), x)) : s.k === "bool" ? { tag: x ? TRUE : FALSE, fields: [] } : x);
+      const ask = (xs: unknown[]) => answerByShapes(h, rt.hosts ?? {}, h.op, xs.map((x, j) => inn(h.ins[j], x)) as never[]);
+      const out = (v: unknown): unknown => (h.out.k === "text" ? make(v as string) : h.out.k === "int" ? toInt(exports(), BigInt(v as number | bigint)) : h.out.k === "bool" ? ((v as { tag: Id }).tag === TRUE ? 1 : 0) : v);
+      return [`host:${k}`, h.out.k === "unit" ? (...xs: unknown[]) => unit(() => { ask(xs); }) : (...xs: unknown[]) => tried(() => out(ask(xs)))];
+    })),
   };
 }
 
