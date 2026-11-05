@@ -124,7 +124,13 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
   // A fold's stack (scalar.ts framesOf), which only its own loop down and
   // loop up see and each uses once: a JavaScript array pushed on the way
   // down and popped on the way up, not a frame object a value (C137d21).
-  const stack = (t: { inner?: boolean; key: string }) => !!t.inner && t.key.endsWith(".frames");
+  // Not where a function giving several answers takes it: its answers
+  // after the first go on from the same stack again (countdown's
+  // permutations), which one array popped can't give.
+  const shared = new Set<string>();
+  const framesIn = (e: SExpr, out: Set<string>) => { const t = (e as { t?: { inner?: boolean; key?: string } }).t; if (t?.inner && t.key?.endsWith(".frames")) out.add(t.key); kids(e).forEach((k) => framesIn(k, out)); };
+  for (const f of ir.funcs) if (f.multi) framesIn(f.body, shared);
+  const stack = (t: { inner?: boolean; key: string }) => !!t.inner && t.key.endsWith(".frames") && !shared.has(t.key);
   const named = (x: string, pre: string[], d: string) => { if (/^[\w$]+$/.test(x)) return x; const t = `r${reads++}`; pre.push(`${d}const ${t} = ${x};`); return t; };
   const label = (t: { inner?: boolean; key: string; cases: { variant: string }[] }, c: number) => (stack(t) ? String(c) : JSON.stringify(t.cases[c].variant));
   const scrutOf = (t: { inner?: boolean; key: string }, x: string) => (stack(t) ? `(${x}.length === 0 ? 0 : 1)` : `${x}.tag`);
