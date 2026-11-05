@@ -277,7 +277,10 @@ interface HandlerFrame { t: "handler"; h: Id; acc: Value[]; otherwise: Value; ba
 // choice points there were when it started, which an operation that never
 // returns cuts back to.
 // `release`: its release case (L213a), run once when it ends.
-interface HandleFrame { t: "handle"; effect: Id; arms: Map<Id, NodeOf<"arm">>; done: Id | null; release: NodeOf<"arm"> | null; env: Env; base: number; fuel: Fuel | null; next: Frame | null }
+// A named handler's name (L213b): what its binder holds while the handled
+// computation runs, the token an operation given it is answered by.
+class HandlerName {}
+interface HandleFrame { t: "handle"; effect: Id; arms: Map<Id, NodeOf<"arm">>; done: Id | null; release: NodeOf<"arm"> | null; env: Env; base: number; fuel: Fuel | null; next: Frame | null; name?: HandlerName }
 // An arm of a fold: the fields with folded values, and whether each holds
 // the type nested in a container (List Tree) rather than directly.
 interface FoldArm { arm: NodeOf<"arm">; rec: number[]; nested: boolean[]; shapes: (Shape | null)[] }
@@ -735,14 +738,19 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     // Whether a match around here handles the effect.
     handled(effect: Id): boolean {
       let f = this.k;
-      while (f && !(f.t === "handle" && f.effect === effect)) f = f.t === "answer" ? f.handler.next : f.next;
+      while (f && !(f.t === "handle" && f.effect === effect && !f.name)) f = f.t === "answer" ? f.handler.next : f.next;
       return !!f;
     }
 
     perform(op: Id, args: Value[]) {
       const effect = effectOf(op)!;
       let f = this.k;
-      while (f && !((f.t === "handle" || f.t === "seeded") && f.effect === effect)) f = f.t === "answer" ? f.handler.next : f.next;
+      // Given a handler's name first, that handler answers it; otherwise
+      // the innermost handler of the effect that has no name.
+      const name = args[0] instanceof HandlerName ? args[0] : null;
+      if (name) args = args.slice(1);
+      if (name) while (f && !(f.t === "handle" && f.name === name)) f = f.t === "answer" ? f.handler.next : f.next;
+      else while (f && !((f.t === "handle" || f.t === "seeded") && f.effect === effect && !(f.t === "handle" && f.name))) f = f.t === "answer" ? f.handler.next : f.next;
       if (!f) return this.unhandled(op, args);
       if (f.t === "seeded") return this.ret(f.gen.next());
       const h = f as HandleFrame;
@@ -999,9 +1007,10 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         }
         case "match": case "fold": {
           const h = n.kind === "match" ? handlerOf(n) : null;
-          if (h) this.push({ t: "handle", effect: h.effect, arms: h.arms, done: (n as NodeOf<"match">).otherwise, release: h.release, env, base: this.cps.length, fuel: this.fuel, next: null });
+          const named = h && n.kind === "match" ? n.name : undefined, token = named ? new HandlerName() : undefined;
+          if (h) this.push({ t: "handle", effect: h.effect, arms: h.arms, done: (n as NodeOf<"match">).otherwise, release: h.release, env, base: this.cps.length, fuel: this.fuel, next: null, ...(token ? { name: token } : {}) });
           else this.push({ t: n.kind, n, env, next: null } as Frame);
-          return this.eval(n.scrutinee, env);
+          return this.eval(n.scrutinee, named ? bind(env, [named], [token as unknown as Value]) : env);
         }
         case "hole": throw new Error("the program reached a hole");
         default: throw new Error(`can't evaluate a ${n.kind}`);

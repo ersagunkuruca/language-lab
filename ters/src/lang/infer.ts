@@ -225,7 +225,14 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     if (layer.solveAt) info.solveAt = new OverMap(layer.solveAt);
   }
   const err = (id: Id, message: string, missing?: Problem["missing"]) => info.errors.push(missing ? { id, message, missing } : { id, message });
-  const nm = (id: Id) => names[id] ?? id;
+  // A named handler's effect in a row is the effect tagged with the name's
+  // binder (L213b): "E@b", shown as "E source".
+  const nm = (id: Id): string => { const at = id.indexOf("@"); return at > 0 && !names[id] ? `${names[id.slice(0, at)] ?? id.slice(0, at)} ${names[id.slice(at + 1)] ?? "named"}` : names[id] ?? id; };
+  // The handlers' names (L213b): each binder's effect, read off the
+  // program before anything is checked, so a use checked before its
+  // handler is known for what it is.
+  const handlerNames = new Map<Id, Id>();
+  const NAME_TYPE: Type = { t: "con", id: "std.handler name", args: [] };
   const show = (t: Type) => showT(s.zonk(t), names);
   // A use with no body (L211c) gives its produced ports, the ones not
   // given, as one value: the port alone, or their tuple in port order.
@@ -308,6 +315,12 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   const isTypeDef = (id: Id) => !!typedefOf(id);
   // An effect is a typedef whose variants are operations.
   const isEffect = (id: Id) => !!typedefOf(id)?.effect;
+  for (const x of Object.values(code.nodes)) {
+    if (x.kind !== "match" || !x.name) continue;
+    const first = code.nodes[x.arms[0] ?? ""];
+    const e = first?.kind === "arm" ? owner.get(first.variant) : undefined;
+    if (e && isEffect(e)) handlerNames.set(x.name, e);
+  }
   const fieldTypes = (def: Id) => typedefOf(def)!.variants.flatMap((v) => (code.nodes[v] as NodeOf<"variant"> | undefined)?.fields ?? [])
     .flatMap((f) => { const n = code.nodes[f]; return n?.kind === "field" ? [{ field: f, type: n.type }] : []; });
 
@@ -861,6 +874,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     if (!t) { err(id, "points at nothing"); return s.fresh(); }
     switch (t.kind) {
       case "binder":
+        if (handlerNames.has(target)) { err(id, `${nm(target)} is a handler's name, not a value: give it to one of ${nm(handlerNames.get(target)!)}'s operations as its first input`); return s.fresh(); }
         if (env.has(target)) return opened(letSchemes.has(target) ? instantiate(letSchemes.get(target)!, s, id) : env.get(target)!);
         err(id, `${nm(target)} has no value here: it is used outside the function or case that introduces it`);
         return s.fresh();
@@ -1007,6 +1021,10 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
           t = solveType(n, env, row);
           break;
         }
+        // An operation given a handler's name first (L213b): that handler
+        // answers it, so its row has the effect tagged with the name.
+        const named = namedOperation(n as Call, env, row);
+        if (named) { t = named; break; }
         // gradient(f) needs f's type first: which record it's over. In
         // gradient(f)(p), p's type says so too, when f is generic.
         const isGradient = (c: Node | undefined) => isCall(c) && c.args.length === 1 && code.nodes[c.fn]?.kind === "ref" && (code.nodes[c.fn] as NodeOf<"ref">).target === S.gradient;
@@ -1436,12 +1454,34 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     return f.kind === "ref" ? nm(f.target) : "this function";
   }
 
+  // `op(name, inputs…)`, where name is a handler's (L213b): the operation's
+  // type with its effect tagged with the name. null for any other call.
+  function namedOperation(n: Call, env: Map<Id, Type>, row: Row): Type | null {
+    const f = code.nodes[n.fn], first = code.nodes[n.args[0] ?? ""];
+    if (f?.kind !== "ref" || first?.kind !== "ref" || !handlerNames.has(first.target)) return null;
+    const op = code.nodes[f.target], effect = handlerNames.get(first.target)!;
+    {
+      if (op?.kind !== "variant" || owner.get(op.id) !== effect) { err(n.fn, `${nm(first.target)} names a handler of ${nm(effect)}, so only ${nm(effect)}'s operations take it`); return s.fresh(); }
+      if (!env.has(first.target)) { err(n.args[0], `${nm(first.target)} has no handler here: it is used outside the handler it names`); return s.fresh(); }
+      const ft = refType(n.fn, op.id, env);
+      if (ft.t !== "fn") return s.fresh();
+      const tag = `${effect}@${first.target}`, r = s.resolveRow(ft.eff);
+      const eff: Row = { ...r, effs: r.effs.map((e) => (e === effect ? tag : e)), ...(r.args?.[effect] ? { args: { [tag]: r.args[effect] } } : {}) };
+      const given = n.args.slice(1);
+      if (given.length !== ft.params.length) { err(n.id, `${nm(op.id)} takes the handler's name and ${ft.params.length} input${ft.params.length === 1 ? "" : "s"}, given ${given.length}`); return ft.ret; }
+      given.forEach((a, i) => unifyAt(a, ft.params[i], expr(a, env, row), `${nm(op.id)}'s input`));
+      try { s.unifyRow(eff, row); } catch (e) { if (e instanceof EffectError) err(n.id, `this performs ${effName(e)}, which nothing here handles`); else throw e; }
+      return ft.ret;
+    }
+  }
+
   function cases(n: NodeOf<"match"> | NodeOf<"fold">, env: Map<Id, Type>, row: Row): Type {
     const result = s.fresh();
     const arms = n.arms.map((a) => code.nodes[a] as NodeOf<"arm">);
     if (arms.some((a) => a.value)) return byValue(n, arms, env, row, result);
     const def = arms.length ? owner.get(arms[0].variant) : undefined;
     if (def && isEffect(def)) return handle(n, def, arms, env, row, result);
+    if (n.kind === "match" && n.name) err(n.name, "only a handler has a name: a match on an effect's operations");
     const scrut = expr(n.scrutinee, env, row);
     if (!def) {
       if (n.kind === "fold" || !n.otherwise) err(n.id, "a case analysis needs at least one case");
@@ -1523,10 +1563,16 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     const rest = s.next++;
     s.unifyRow({ effs: [], tail: rest }, row);
     const { params, self } = dataType(effect);
-    const handled: Row = { effs: [effect], tail: rest, ...(params.size ? { args: { [effect]: (self as { args: Type[] }).args } } : {}) };
+    // A named handler (L213b) answers only the operations given its name:
+    // its row's entry is the effect tagged with the name.
+    const name = n.kind === "match" ? n.name : undefined;
+    const handles = name ? `${effect}@${name}` : effect;
+    const handled: Row = { effs: [handles], tail: rest, ...(params.size ? { args: { [handles]: (self as { args: Type[] }).args } } : {}) };
     const done = n.kind === "match" ? n.otherwise : null;
     const value = done ? s.fresh() : result;
-    unifyAt(n.scrutinee, value, expr(n.scrutinee, env, handled), "the handled computation");
+    let inside = env;
+    if (name) { inside = new Map(env); inside.set(name, NAME_TYPE); info.typeOf.set(name, NAME_TYPE); }
+    unifyAt(n.scrutinee, value, expr(n.scrutinee, inside, handled), "the handled computation");
     if (done) {
       if (code.nodes[done].kind !== "lambda") err(done, `a handler's normal finish is a function written in place, given the computation's value: done(x) → …`);
       else unifyAt(done, { t: "fn", params: [value], ret: result, eff: row }, expr(done, env, row), "the normal finish");

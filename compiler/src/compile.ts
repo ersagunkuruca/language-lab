@@ -166,6 +166,7 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // program that reaches one (the prelude's with open file, L213c) isn't
   // compiled.
   for (const n of Object.values(code.nodes)) if (n.kind === "arm" && n.variant === RELEASE_V) throw new Error("a handler with a release isn't compiled yet (L213a): run it in the evaluator");
+  for (const n of Object.values(code.nodes)) if (n.kind === "match" && n.name) throw new Error("a handler with a name isn't compiled yet (L213b): run it in the evaluator");
   // Cells kept plainly when nothing reads them reactively (L99f): no
   // formula, each or each of, and no page (Html), whose watchers do.
   const refs = Object.values(code.nodes).flatMap((n) => (n.kind === "ref" ? [n.target] : []));

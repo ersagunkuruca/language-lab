@@ -85,6 +85,15 @@ export class Lang extends Builder {
     return this.match(body, release ? [...cases, { variant: RELEASE_V, names: [], body: release }] : cases, done && this.fn([done[0]], done[1]));
   }
 
+  // A handler with a name (L213b): `body` is given the name's binder, to
+  // give an operation as its first input.
+  handleNamed(name: string, body: (name: Id) => Id, cases: Case[], done?: [string, (x: Id) => Id], release?: () => Id): Id {
+    const b = this.binder(name);
+    const m = this.handle(body(b), cases, done, release);
+    (this.code.nodes[m] as NodeOf<"match">).name = b;
+    return m;
+  }
+
   tref(target: Id, ...args: Id[]): Id {
     return this.add({ kind: "tref", target, args });
   }
