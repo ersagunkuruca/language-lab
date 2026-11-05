@@ -18,6 +18,7 @@ import { prebuilt, prebuiltKey } from "./prebuilt.ts";
 import type { CompiledPage } from "./pageCompile.ts";
 import { PAGE_BASE, corePageFile, hasSound, pageFile, pageMain, showPage, type Preview } from "../ters/src/lang/page.ts";
 import type { Doc as PageDoc, Node_ } from "../ters/src/lang/html.ts";
+import type { LogEntry } from "../ters/src/lang/worldlog.ts";
 
 export interface PageHost {
   doc(): Doc;
@@ -83,6 +84,10 @@ export function pagePanels(host: PageHost) {
     // Where the page's elements are made (adopted into the frame's document).
     maker: document.implementation.createHTMLDocument("page"),
     for: null as Code | null, root: null as globalThis.Node | null, now: null as Preview | null, program: null as Program | null,
+    // This run's log (C172e): the world's answers and the events its
+    // handlers were given, in order, from the interpreted page and then
+    // the compiled one that takes over.
+    log: [] as LogEntry[],
     flashBox: h("input", { type: "checkbox" }) as HTMLInputElement,
     // A page with sound: stop everything it plays, whatever its own buttons say.
     hushBtn: h("button", { class: "btn", type: "button", "data-act": "page-hush", title: "Stop every sound this page is playing" }, "Stop sound") as HTMLButtonElement,
@@ -94,7 +99,8 @@ export function pagePanels(host: PageHost) {
       h("button", { class: "btn", type: "button", "data-act": "page-restart", title: "Run main again from the start: every cell back to its first value" }, "Restart"),
       h("label", { class: "hint", title: "Outline each text, attribute or part of the page when it runs again, so you can see that only what read a changed cell does" }, page.flashBox, " Outline updates"),
       h("button", { class: "btn", type: "button", "data-act": "page-tab", title: "The page compiled to JavaScript, in a tab of its own" }, "Open in a tab"),
-      h("button", { class: "btn", type: "button", "data-act": "page-save", title: "The page compiled to JavaScript as one HTML file that runs anywhere, like lab build-web" }, "Save page")));
+      h("button", { class: "btn", type: "button", "data-act": "page-save", title: "The page compiled to JavaScript as one HTML file that runs anywhere, like lab build-web" }, "Save page"),
+      h("button", { class: "btn", type: "button", "data-act": "page-log", title: "This run's log as a JSON file: every event the page's handlers were given and every answer of the world, in order" }, "Save run log")));
   // The program version a page will run for once the edit has drawn.
   let pageSoon: Code | null = null;
   function pageSection(info: T.Info | null): HTMLElement | null {
@@ -196,8 +202,10 @@ export function pagePanels(host: PageHost) {
     page.for = prog();
     page.program = doc().program;
     page.status.textContent = "";
+    page.log = [];
     try {
       page.now = showPage({
+        log: page.log,
         code: prog(), info, names: pres().names, main, program: titleOf(doc()),
         doc: page.maker as unknown as PageDoc, store: localStorage, worklet: workletRuntimeText(), recordings: "apps/",
         frame: (f) => requestAnimationFrame(f), ran: flashRan, keepCells: true, stopped: (e) => sayStopped("A handler stopped", e),
@@ -291,7 +299,7 @@ export function pagePanels(host: PageHost) {
     type Core = { mountCorePage(...a: unknown[]): Mounted };
     let m;
     try {
-      const o = { doc: page.maker, store: localStorage, frame: (f: () => void) => requestAnimationFrame(f), ran: flashRan, stopped: (e: unknown) => sayStopped("A handler of the compiled page stopped", e) };
+      const o = { doc: page.maker, store: localStorage, frame: (f: () => void) => requestAnimationFrame(f), ran: flashRan, stopped: (e: unknown) => sayStopped("A handler of the compiled page stopped", e), log: page.log };
       if (made.core) {
         const core = new Function(`${corePageRuntimeText()}\nreturn $core;`)() as Core & Record<string, unknown>;
         let given: unknown[] | null = null;
@@ -357,5 +365,18 @@ export function pagePanels(host: PageHost) {
     }
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
   }
-  return { page, pageSection, pictureSection, savePage };
+  // The run's log, saved (C172e): what the page was given and what the
+  // world answered it, for a replay to give it again.
+  function saveLog() {
+    const events = page.log.filter((x) => x.op === "event").length, answers = page.log.filter((x) => x.op !== "event" && !x.write).length;
+    const url = URL.createObjectURL(new Blob([JSON.stringify(page.log, (_, v) => (v instanceof Uint8Array ? [...v] : v), 1)], { type: "application/json" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${slug(titleOf(doc()))}-run.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    ui.note = `Saved this run's log: ${events} event${events === 1 ? "" : "s"} the page's handlers were given and ${answers} answer${answers === 1 ? "" : "s"} of the world, in order.`;
+    render();
+  }
+  return { page, pageSection, pictureSection, savePage, saveLog };
 }
