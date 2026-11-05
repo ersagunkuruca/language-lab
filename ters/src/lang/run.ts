@@ -356,6 +356,11 @@ export interface World {
   openFile?(path: string): number;
   fileLine?(file: number): string | null;
   fileAddLine?(file: number, text: string): void;
+  // Its next count bytes from where the reading is (fewer at the end,
+  // none after), lines and bytes read from one place, and bytes added at
+  // its end (L213c2).
+  fileBytes?(file: number, count: number): Uint8Array | null;
+  fileAddBytes?(file: number, bytes: Uint8Array): void;
   closeFile?(file: number): void;
   // Random's answer when the program has no handler: a Float64 in [0, 1).
   random(): number;
@@ -786,6 +791,8 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       if (op === FILE_OPS.open) { try { return this.ret({ tag: SOME, fields: [world("openFile")!(args[0] as string)] }); } catch { return this.ret({ tag: NONE, fields: [] }); } }
       if (op === FILE_OPS.line) { let l: string | null = null; try { l = world("fileLine")!(args[0] as number); } catch { /* none */ } return this.ret(l === null ? { tag: NONE, fields: [] } : { tag: SOME, fields: [l.normalize("NFC")] }); }
       if (op === FILE_OPS.addLine) { try { world("fileAddLine")!(args[0] as number, args[1] as string); return this.ret(bool(true)); } catch { return this.ret(bool(false)); } }
+      if (op === FILE_OPS.bytes) { let b: Uint8Array | null = null; try { b = world("fileBytes")!(args[0] as number, Math.max(0, Number(args[1]))); } catch { /* none */ } return this.ret(bytesValue(b ?? new Uint8Array(0)) as Value); }
+      if (op === FILE_OPS.addBytes) { try { world("fileAddBytes")!(args[0] as number, plainBytes(args[1])); return this.ret(bool(true)); } catch { return this.ret(bool(false)); } }
       if (op === FILE_OPS.close) { try { world("closeFile")!(args[0] as number); } catch { /* closing can't fail */ } return this.ret(unit); }
       // A page's handler waits by stopping here (C40): the world throws
       // Pending, and the run goes on from here when it's ready, answered.
