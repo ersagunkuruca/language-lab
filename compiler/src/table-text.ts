@@ -1,7 +1,7 @@
-// Case and graphemes on a target with no host to ask (L214e5, TEXT-2026-
-// 11-03 "How each target does it"): C and WebAssembly run the cases
-// module's own `table uppercase`, `table lowercase` and `table graphemes`
-// (cases-source.ts), written in Ters over tables read off the host. A use
+// Case, graphemes and collation on a target with no host to ask (L214e5,
+// TEXT-2026-11-03 "How each target does it"): C and WebAssembly run the
+// cases module's own `table uppercase`, `table lowercase`, `table
+// graphemes` and `table collated` (cases-source.ts, L214e5b4), written in Ters over tables read off the host. A use
 // of the builtin is pointed at the module's definition and the module
 // joins the program, so lowering sees plain Ters.
 
@@ -13,6 +13,7 @@ import { infer, type Info } from "../../ters/src/lang/infer.ts";
 
 const BY_TABLE: Record<Id, string> = {
   [TEXT_OPS.uppercase]: "table uppercase", [TEXT_OPS.lowercase]: "table lowercase", [TEXT_OPS.graphemes]: "table graphemes",
+  [TEXT_OPS.collate]: "table collated",
 };
 const tables = (): Record<Id, Id> => Object.fromEntries(Object.entries(BY_TABLE).map(([op, name]) =>
   [op, CASES.exports.find((d) => LIBRARY.names[d] === name)!]));
