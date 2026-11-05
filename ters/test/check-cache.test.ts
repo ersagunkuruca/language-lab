@@ -136,3 +136,50 @@ test("a hole's fillings on the library's layer are those off it (E253e)", async 
   assert.ok(on.length > 100, String(on.length));
   assert.deepEqual(on, offers(plain));
 });
+
+// L215c: a value that isn't an implementation is a group like the others,
+// so an edit to a constant rechecks only what reads it; an implementation
+// is still what every group may be resolved through, so an edit to one
+// rechecks everything (here, compare at Priority has no Ordered after it).
+test("an edit to a constant keeps other groups; an edit to an implementation rechecks them", async () => {
+  const { Lang } = await import("../src/lang/dsl.ts");
+  const { COMPARE, INT_OPS, ORDERED_V, SHOW_ANY } = await import("../src/lang/std.ts");
+  const { INT } = await import("../src/lang/types.ts");
+  const { baseNames } = await import("../src/lang/load.ts");
+  const k = new Lang(LIBRARY.code);
+  const P = k.type("Priority", [], [["priority", [["level", () => k.tref(INT)]]]]);
+  const level = (x: Id, f: (l: Id) => Id) => k.match(x, [{ variant: P.v.priority, names: ["level"], body: ([l]) => f(l) }]);
+  const higher = k.def("higher");
+  k.define(higher, k.fn(["a", "b"], (a, b) => level(a, (la) => level(b, (lb) => k.call(INT_OPS.less, lb, la)))));
+  const impl = k.def("ordered at priority");
+  k.define(impl, k.call(ORDERED_V, k.x(higher)));
+  const limit = k.def("limit");
+  k.define(limit, k.int(3));
+  const compared = k.def("compared");
+  k.define(compared, k.fn(["a"], (a) => k.call(SHOW_ANY, k.call(COMPARE, a, k.call(P.v.priority, k.int(2))))));
+  const capped = k.def("capped");
+  k.define(capped, k.fn(["n"], (n) => k.call(INT_OPS.less, n, k.x(limit))));
+  const code0 = base(k.code);
+  const names = { ...baseNames(), ...k.names, };
+  const cache = new CheckCache();
+  const opts = { ...checkOptions, cache };
+  const check = (code: Code) => {
+    const cached = seen(infer(code, names, undefined, opts), names);
+    assert.deepEqual(cached, seen(infer(code, names, undefined, checkOptions), names));
+    return cached;
+  };
+  assert.deepEqual(check(code0).errors, []);
+  // The constant changed: `compared` is kept, `capped` is checked again.
+  const lit = (code0.nodes[limit] as Node & { body: Id }).body;
+  const hits = cache.hits;
+  check({ ...code0, nodes: { ...code0.nodes, [lit]: { ...code0.nodes[lit], value: 4 } as Node } });
+  assert.ok(cache.hits > hits, "the groups that don't read limit are kept");
+  // The implementation changed (another order): every group is checked again.
+  const hits2 = cache.hits;
+  const lower = k.def("lower");
+  k.define(lower, k.fn(["a", "b"], (a, b) => level(a, (la) => level(b, (lb) => k.call(INT_OPS.less, la, lb)))));
+  const code1 = base(k.code);
+  const body = (code1.nodes[impl] as Node & { body: Id }).body, call = code1.nodes[body] as Node & { args: Id[] };
+  check({ ...code1, nodes: { ...code1.nodes, [call.args[0]]: { id: call.args[0], kind: "ref", target: lower } as Node } });
+  assert.equal(cache.hits, hits2, "no group is kept across an implementation's edit");
+});

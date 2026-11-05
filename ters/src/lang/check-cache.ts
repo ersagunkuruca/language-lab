@@ -24,7 +24,8 @@
 // (Mokhov, Mitchell and Peyton Jones, ICFP 2018) for early cutoff.
 
 import type { Code, Id, NodeOf } from "../model.ts";
-import { conditionResults, isUse, subtree } from "../model.ts";
+import { conditionResults, isCall, isUse, subtree } from "../model.ts";
+import { EMBEDDING_V } from "./std.ts";
 import type { Info, Options } from "./infer.ts";
 import type { Arith, Row, Scheme, Subst, Type } from "./types.ts";
 
@@ -172,11 +173,23 @@ export class CheckCache {
     // and embeddings are values), the options and the layer under. The
     // layer's own definitions are as it checked them.
     const under = layerParts(layer);
-    const isValue = (d: Id) => { const b = (code.nodes[d] as NodeOf<"def">).body; return !b || code.nodes[b]?.kind !== "lambda"; };
+    // An implementation or an embedding is a value written as its record
+    // (infer.ts implementations, embedding): what every group may be
+    // resolved through. Other values are groups like the rest (L215c).
+    const isImplementation = (d: Id) => {
+      const b = (code.nodes[d] as NodeOf<"def">).body, n = b ? code.nodes[b] : undefined;
+      if (!n) return true;
+      if (n.kind === "lambda") return false;
+      const f = isCall(n) ? code.nodes[n.fn] : undefined;
+      if (f?.kind !== "ref") return false;
+      if (f.target === EMBEDDING_V) return true;
+      const t = info.owner.get(f.target), td = t ? code.nodes[(code.nodes[t] as NodeOf<"def">)?.body ?? ""] : undefined;
+      return td?.kind === "typedef" && !!td.interface;
+    };
     const global = intern(JSON.stringify([
       layerId(layer), idsText(opts.hidden), idsText(opts.insiders), idsText(opts.library),
       a.typeDefs.filter((d) => !under.types.has(d)).map((d) => nodesText(code, d)),
-      a.valueDefs.filter((d) => !layer.schemes.has(d) && isValue(d)).map((d) => nodesText(code, d)),
+      a.valueDefs.filter((d) => !layer.schemes.has(d) && isImplementation(d)).map((d) => nodesText(code, d)),
     ]));
     const missed: { group: Id[]; key: string; from: number; to: number }[] = [];
     const keyOf = (group: Id[]): string | null => {
