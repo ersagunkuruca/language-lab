@@ -535,12 +535,17 @@ export const layerOf = (code: Code): Code | undefined => layers.get(code);
 // The nodes of a program on its layer that aren't the layer's, while
 // `scanningOnLayer` reads it so.
 export const offLayer = (code: Code): Set<Id> | undefined => { const d = derived.get(code); return d?.stable ? d.changed : undefined; };
+const sizes = new WeakMap<object, number>();
+const sizeOf = (nodes: Record<Id, Node>) => { let n = sizes.get(nodes); if (n === undefined) sizes.set(nodes, (n = Object.keys(nodes).length)); return n; };
 export function scanningOnLayer<T>(code: Code, step: () => T): T {
   const layer = layers.get(code);
   if (!layer || derived.has(code)) return step();
   const under = layer.nodes, changed = new Set<Id>();
-  for (const id in code.nodes) if (code.nodes[id] !== under[id]) changed.add(id);
-  for (const id in under) if (!(id in code.nodes)) changed.add(id);
+  let same = 0;
+  for (const id in code.nodes) if (code.nodes[id] !== under[id]) changed.add(id); else same++;
+  // A layer node gone is changed too; when every one is there as it was,
+  // none is gone, and the layer's ~27,000 needn't be walked again (L215c2).
+  if (same !== sizeOf(under)) for (const id in under) if (!(id in code.nodes)) changed.add(id);
   derived.set(code, { base: layer, changed, stable: true });
   try { return step(); } finally { derived.delete(code); }
 }
