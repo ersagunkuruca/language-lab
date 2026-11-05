@@ -6,7 +6,7 @@
 // checked by re-inferring the whole program and refused if it adds an error.
 
 import type { Code, Id, Node, NodeData, NodeOf } from "../ters/src/model.ts";
-import { children, collect, freshId, parentAt, parentOf, portsOf, replace, subtree, swapIn } from "../ters/src/model.ts";
+import { children, collect, derived, freshId, layerOf, onLayer, parentAt, parentOf, portsOf, replace, subtree, swapIn } from "../ters/src/model.ts";
 import type { Names, Notation, Presentation } from "../ters/src/presentation.ts";
 import blocksStyle from "../ters/styles/blocks.json" with { type: "json" };
 import { fillings, implementationKey, implementationOf, infer as check, type Filling, type Info, type Options } from "../ters/src/lang/infer.ts";
@@ -202,7 +202,14 @@ const CACHE = new CheckCache();
 // library's kept check (L216, infer.ts `under`) is found again: made anew
 // for each check, they missed it, and every edit checked the library too.
 let lastOptions: { pins: Pins; own: [Id, unknown][]; options: Options } | null = null;
+// A program merged onto the library is checked on its layer (model.ts
+// onLayer, E253d), as load.ts base puts one: the check's scans of every
+// node read the library's picks, made once, and look only at the
+// program's own. Each edit makes a new code, so each is put on it here.
+const LIBRARY_DEFS = LIBRARY.code.defs.map((d) => [d, LIBRARY.code.nodes[d]] as const);
+const onLibrary = (code: Code) => LIBRARY_DEFS.every(([d, n]) => code.nodes[d] === n);
 export const infer = (code: Code, names: Names = {}): Info => {
+  if (!layerOf(code) && !derived.has(code) && onLibrary(code)) onLayer(code, LIBRARY.code);
   const own = Object.entries(programPins).filter(([d]) => code.nodes[d]?.kind === "def");
   const same = lastOptions && lastOptions.pins === programPins && lastOptions.own.length === own.length && own.every(([d, p], i) => lastOptions!.own[i][0] === d && lastOptions!.own[i][1] === p);
   // As load.ts checkOptions: the modules' private cases are theirs to

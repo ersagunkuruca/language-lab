@@ -107,3 +107,13 @@ test("a program on the library's layer finds its units' conflicts as off it (E25
   assert.ok(on.errors.some((e) => /unit/.test(e)), JSON.stringify(on.errors));
   assert.deepEqual(on, seen(infer(plain, p.pres.names, undefined, checkOptions), p.pres.names));
 });
+
+test("the editor checks a program merged onto the library on its layer, as off it (E253d)", async () => {
+  const T = await import("../../editor/typed.ts");
+  const { layerOf, merge } = await import("../src/model.ts");
+  const p = loadProgram(join(root, "examples", "constructions"));
+  const code = merge(LIBRARY.code, p.own), plain: Code = { nodes: { ...code.nodes }, defs: [...code.defs] };
+  const on = seen(T.infer(code, p.pres.names), p.pres.names);
+  assert.equal(layerOf(code), LIBRARY.code);
+  assert.deepEqual(on, seen(infer(plain, p.pres.names, undefined, checkOptions), p.pres.names));
+});
