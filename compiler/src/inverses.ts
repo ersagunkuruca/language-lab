@@ -148,6 +148,11 @@ export function expandInverses(code: Code, names: Names): { code: Code; names: N
       expanded.push(id);
       continue;
     }
+    // The library's own inverses of a definition (json number read, json
+    // escape read, L72e1b): left as they are; descent and the written reader
+    // read them where the library's printers are read, and a solve on them
+    // doesn't check.
+    if (LIBRARY.code.nodes[id]) continue;
     if (param(c.args[0])) { inverse(id, c.args[0], c.args[1]); expanded.push(id); continue; }
     const a = around(c.args[0]);
     if (!a) continue;
