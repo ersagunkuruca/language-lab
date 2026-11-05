@@ -132,9 +132,12 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 - **slope by duals** : `((Dual) -[e]-> Dual, Float64) -[e]-> Float64`. f′(x), worked out by giving f the dual number x + 1ε and reading the slope of what comes back (forward-mode automatic differentiation). f must work on duals: write it with the generic + − · and Trig. derivative(f) gives the same number by differentiating f's code.
 - **dual table** : `List (Table entry Dual)`. Dual numbers' multiplication table: 1 · 1 = 1, 1 · ε = ε, ε · 1 = ε, and ε · ε = 0, which needs no line. table product(dual table, x, y) is x · y.
 - **Algebraic** (type). An exact real number that solves a polynomial equation with whole-number coefficients, like √2 (x² = 2) or the golden ratio (x² = x + 1). Held by that equation and which of its roots it is, so √2 · √2 is exactly 2 and < always answers. The same + − · < work on it. Make one with square root, root, or as algebraic; digits shows as many digits as you ask for (EXACT-REALS.md).
-- **Real** (type). An exact real number, held by how it was made (fractions, + − ·), that works itself out as closely as you ask: approximate(x, p) is within 1/2ᵖ. The same + − · work on it. π, digits and comparisons come next (EXACT-REALS.md, step 4).
+- **Real** (type). An exact real number, held by how it was made (fractions, + − ·), that works itself out as closely as you ask: approximate(x, p) is within 1/2ᵖ. The same + − · work on it. real pi() is π, and real digits shows as many decimals as you ask, and real less than compares two, narrowing until they come apart or the fuel runs out (EXACT-REALS.md, step 4).
 - **as real** : `(Rational) -> Real`. A fraction as a Real, exactly.
 - **approximate** : `(Real, Int) -> Int`. approximate(x, p) is an Int m with x within 1/2ᵖ of m/2ᵖ: x lies between (m − 1)/2ᵖ and (m + 1)/2ᵖ. Asking a larger p narrows it; what it works out is kept with the value.
+- **real pi** : `() -> Real`. π as a Real, exactly: real digits(real pi(), 50) gives fifty of its decimals (Machin's formula).
+- **real digits** : `(Real, Int) -> Text`. real digits(x, n) is x rounded to n decimals, as text: right to within one in the last place, since whether a Real is just below or just above a decimal can't always be told.
+- **real less than** : `(Real, Real, Int) -[Choice]-> Bool`. real less than(a, b, fuel) is a < b, worked out by narrowing both until they come apart, to at most 1/2^fuel. Two equal Reals never come apart, so when they are still that close it has no answer (Choice): real less than(real pi(), 22/7, 64) is true.
 - **square root** : `(Algebraic) -[Choice]-> Algebraic`. The positive square root, exactly: square root(2) is √2, the root of x² − 2 between 1 and 2. No answer (Choice) for a negative number.
 - **root** : `(Algebraic, Int) -[Choice]-> Algebraic`. The real k-th root: root(8, 3) is 2, root(2, 2) is √2. For an even k the positive one, and no answer (Choice) for a negative number.
 - **divide** : `(Algebraic, Algebraic) -[Choice]-> Algebraic`. a ÷ b exactly. No answer (Choice) when b is 0.
@@ -691,6 +694,13 @@ sin, cos, exp, ^ and the rest are each platform's own (JavaScript's, C's, a GPU'
 - **steady atan2** : `(Float64, Float64) -> Float64` (steady module). The angle of the point (x, y), from −π to π, with the same bits on every machine: fdlibm's, written in Ters.
 - **steady asin** : `(Float64) -[Choice]-> Float64` (steady module). The angle whose sine is x, with the same bits on every machine: fdlibm's, written in Ters. No answer outside −1 to 1.
 - **steady acos** : `(Float64) -[Choice]-> Float64` (steady module). The angle whose cosine is x, with the same bits on every machine: fdlibm's, written in Ters. No answer outside −1 to 1.
+
+## Capitals the same on every machine
+
+uppercase and lowercase are each host's own (its Unicode version, its locale data). The cases module's are written in Ters over the Unicode case tables, read off the host when the library is built, so a target with no host to ask (WebAssembly, C) gives what JavaScript gives: final sigma and Turkish, Azeri, Lithuanian and Greek capitals included.
+
+- **table uppercase** : `(Text, Locale) -> Text` (cases module). The text in capitals as `uppercase` gives it, written in Ters over the Unicode case tables, so a target with no host to ask (WebAssembly, C) gives the same.
+- **table lowercase** : `(Text, Locale) -> Text` (cases module). The text in small letters as `lowercase` gives it (final sigma included), written in Ters over the Unicode case tables, so a target with no host to ask (WebAssembly, C) gives the same.
 
 ## Points, colours and slopes
 

@@ -3,13 +3,15 @@
 // text is read left to right once, each arm picked by the next character
 // from its first set (first-sets.ts), each piece of the arm's Text read in
 // turn, instead of relate.ts searching every way the printer could have
-// printed it. Step 3 reads printers with no left recursion: an arm that
-// starts with the printer itself is left out here (step 4 reads it by
-// precedence climbing), so a line that needs it has no reading.
+// printed it. An arm that starts with the printer itself is an infix
+// operator, read by precedence climbing (step 4): its own condition for
+// parentheses says which operators go on at a level, and the levels it
+// prints its operands at say the rest (`Infix` below).
 //
 // The pieces read, each as relate.ts's grammar pieces read them (the
 // prelude's `spaced` any spaces around, none too; `optional parens` the
-// text with any number of parentheses round it, none too):
+// text with any number of parentheses round it, none too where the printer
+// would print none):
 // a literal; `++`; show of a whole number (its digits); a Text binder an
 // arm's guard says is all letters or digits (the longest such run); a
 // call of the printer itself (read again, with what it is given worked
@@ -54,6 +56,39 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
     return c === "(" || f.has(c) || f.has("anything") || (f.has("digit") && DIGIT.test(c)) || (f.has("letter") && LETTER.test(c));
   };
 
+  // An arm that starts with the printer itself, as an infix operator
+  // (precedence climbing, step 4): its functions of the operator (`s`,
+  // `right`), the condition its optional parens put round it, its left
+  // operand, the rest (the operator and the right operand), and the
+  // operators it can print: the literal arms of a match on the operator
+  // whose other values fail (calc's `binding strength`).
+  interface Infix { arm: Any; lets: [Id, Id][]; cond: Id | null; left: Id; rest: Id; op: Id; ops: string[] }
+  const literalsOf = (def: Id, j: number): string[] | null => {
+    const fn = lambdaOf(def), m = fn && node(fn.body);
+    if (!fn || m?.kind !== "match" || target(m.scrutinee) !== fn.params[j]) return null;
+    const otherwise = (m as unknown as { otherwise?: Id }).otherwise, o = otherwise && node(otherwise);
+    if (o && !(o.kind === "call" && target(o.fn) === "builtin.fail")) return null;
+    const lits = m.arms.map((a) => node(node(a)!.value as Id)).map((l) => (l?.kind === "lit" && typeof l.value === "string" ? l.value : null));
+    return lits.every((l) => l !== null) ? (lits as string[]) : null;
+  };
+  const infixes: Infix[] = body.arms.map((a) => node(a)!).filter((a) => report.leftRecursive.includes(names[a.variant] ?? a.variant)).map((a) => {
+    const lets: [Id, Id][] = [];
+    let e = node(a.body)!;
+    while (e.kind === "call" && node(e.fn)?.kind === "lambda") { const l = node(e.fn)!; lets.push([l.params[0], e.args[0]]); e = node(l.body)!; }
+    let cond: Id | null = null;
+    if (e.kind === "call" && named(target(e.fn)) === "optional parens") { cond = e.args[0]; e = node(e.args[1])!; }
+    const left = e.kind === "call" && target(e.fn) === "builtin.concat" ? node(e.args[0]) : undefined;
+    if (!left || left.kind !== "call" || target(left.fn) !== printer) throw new Unsupported(`${names[a.variant]} starts with the printer but isn't an infix operator`);
+    const l = target(left.args[0])!, ops = new Set<string>(), op = a.binds.find((b) => b && b !== l && lets.some(([, x]) => { const c = node(x); return c?.kind === "call" && c.args.some((y) => target(y) === b); }));
+    if (!op) throw new Unsupported(`${names[a.variant]}: no operator`);
+    for (const [, x] of lets) {
+      const c = node(x);
+      if (c?.kind === "call" && code.nodes[target(c.fn) ?? ""]?.kind === "def") c.args.forEach((y, j) => { if (target(y) === op) for (const o of literalsOf(target(c.fn)!, j) ?? []) ops.add(o); });
+    }
+    if (!ops.size) throw new Unsupported(`${names[a.variant]}: its operators aren't a known few`);
+    return { arm: a, lets, cond, left: l, rest: e.args[1], op, ops: [...ops].sort((x, y) => y.length - x.length) };
+  });
+
   let text = "";
   // Forward, the little a guard or a printer's input needs.
   function evaluate(id: Id, env: Env): Value {
@@ -67,8 +102,20 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
       if (v === undefined || isUnknown(v)) throw new Unsupported(`${named(n.target)} isn't known`);
       return v;
     }
+    // A match on a Bool, or on a Text by its literal arms.
+    if (n.kind === "match") {
+      const v = evaluate(n.scrutinee, env);
+      for (const a of n.arms.map((x) => node(x)!)) {
+        const lit = a.value ? node(a.value as Id) : undefined;
+        if (lit?.kind === "lit" ? lit.value === v : (v as { tag?: Id }).tag === a.variant) return evaluate(a.body, env);
+      }
+      const otherwise = (n as unknown as { otherwise?: Id }).otherwise;
+      if (otherwise) return evaluate(otherwise, env);
+      throw new Unsupported("a match no arm of which is taken");
+    }
     if (n.kind !== "call" || isUse(n as never)) throw new Unsupported(`can't work out a ${n.kind}`);
     const f = target(n.fn), xs = () => n.args.map((a) => evaluate(a, env));
+    if (f === "builtin.fail") throw new Unsupported("fails");
     const bool = (b: boolean) => (b ? TRUE_V : FALSE_V), truth = (v: Value) => (v as { tag?: Id }).tag === TRUE;
     switch (f) {
       case "builtin.int.less": { const [a, b] = xs(); return bool((a as number) < (b as number)); }
@@ -84,6 +131,8 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
         return bool([...t].every((c) => (test === "is letter" ? LETTER : DIGIT).test(c)));
       }
     }
+    const fn = f && code.nodes[f]?.kind === "def" ? lambdaOf(f) : node(n.fn)?.kind === "lambda" ? node(n.fn) : undefined;
+    if (fn) { const inner: Env = new Map(env); fn.params.forEach((p, j) => inner.set(p, evaluate(n.args[j], env))); return evaluate(fn.body, inner); }
     throw new Unsupported(`can't work out ${named(f) || f}`);
   }
   // What a guard being true says a Text binder holds (first-sets.ts facts).
@@ -144,16 +193,19 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
       return [end, new Map(env).set(b, Number.isSafeInteger(v) ? v : BigInt(text.slice(at, end)))];
     }
     if (named(f) === "spaced") { const r = read(n.args[0], env, spaces(at)); return r && [spaces(r[0]), r[1]]; }
-    // Any number of parentheses round it, as the search reads them.
+    // Any number of parentheses round it, as the search reads them; at
+    // least one where they are needed.
     if (named(f) === "optional parens") {
-      const parens = (at: number): [number, Env] | null => {
+      let needed = false;
+      try { needed = (evaluate(n.args[0], env) as { tag?: Id }).tag === TRUE; } catch (e) { if (!(e instanceof Unsupported)) throw e; }
+      const parens = (at: number, must: boolean): [number, Env] | null => {
         if (text[at] === "(") {
-          const r = parens(at + 1);
+          const r = parens(at + 1, false);
           if (r && text[r[0]] === ")") return [r[0] + 1, r[1]];
         }
-        return read(n.args[1], env, at);
+        return must ? null : read(n.args[1], env, at);
       };
-      return parens(at);
+      return parens(at, needed);
     }
     if (f === printer) {
       const x = target(n.args[0]);
@@ -172,6 +224,37 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
   // The printer read from `at` with its other inputs given: the arm the
   // next character starts, its binders read and made into the value.
   function expression(at: number, given: Value[]): [number, Value] | null {
+    const first = primary(at, given);
+    if (!first) return null;
+    let [end, x] = first;
+    // Precedence climbing: while the next operator needs no parentheses
+    // at this level (its arm's condition false), it takes x as its left
+    // operand and reads its right one at the level the printer gives it.
+    for (let more = true; more;) {
+      more = false;
+      for (const f of infixes) {
+        const p = spaces(end), op = f.ops.find((o) => text.startsWith(o, p));
+        if (op === undefined) continue;
+        const env: Env = new Map();
+        top.params.slice(1).forEach((q, j) => env.set(q, given[j]));
+        env.set(f.op, op);
+        for (const [q, v] of f.lets) env.set(q, evaluate(v, env));
+        if (f.cond && (evaluate(f.cond, env) as { tag?: Id }).tag !== FALSE) continue;
+        env.set(f.left, x);
+        for (const b of f.arm.binds) if (b && !env.has(b)) env.set(b, { unknown: "int" });
+        const r = read(f.rest, env, end);
+        if (!r) continue;
+        const fields = f.arm.binds.map((b) => (b ? r[1].get(b) : undefined));
+        if (fields.some((v) => v === undefined || isUnknown(v))) continue;
+        [end, x] = [r[0], { tag: f.arm.variant, fields: fields as Value[] }];
+        more = true;
+        break;
+      }
+    }
+    return [end, x];
+  }
+  // The arms that don't start with the printer itself.
+  function primary(at: number, given: Value[]): [number, Value] | null {
     for (const a of arms) {
       if (!starts(a.variant, text[at])) continue;
       const env: Env = new Map();
@@ -185,10 +268,18 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
       if (fields.some((v) => v === undefined || isUnknown(v))) continue;
       return [r[0], { tag: a.variant, fields: fields as Value[] }];
     }
+    // An infix operator's own parentheses: what it prints inside them is
+    // read as the whole line is, from the lowest level.
+    if (infixes.length && text[at] === "(") {
+      const r = expression(at + 1, outermost);
+      if (r && text[r[0]] === ")") return [r[0] + 1, r[1]];
+    }
     return null;
   }
+  let outermost: Value[] = [];
   return (line, ...given) => {
     text = line;
+    outermost = given;
     const r = expression(0, given);
     return r && r[0] === line.length ? r[1] : null;
   };
