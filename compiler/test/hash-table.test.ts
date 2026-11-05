@@ -7,10 +7,6 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { pathToFileURL } from "node:url";
 import { B } from "../../ters/src/prelude.ts";
 import { Lang } from "../../ters/src/lang/dsl.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
@@ -21,8 +17,7 @@ import { withLibraryRepresentations } from "../../ters/src/lang/library-reps.ts"
 import { CONS, INT_OPS, NIL, PAIR_V, S, SHOW_ANY } from "../../ters/src/lang/std.ts";
 import type { Id } from "../../ters/src/model.ts";
 import { INT, NUMBER, STRING } from "../../ters/src/lang/types.ts";
-import { compile } from "../src/compile.ts";
-import { $setPrint } from "../src/runtime.js";
+import { compiledDefs } from "../src/core-js.ts";
 import { execFileSync } from "node:child_process";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitC } from "../src/c.ts";
@@ -116,12 +111,8 @@ test("a map keyed by pairs of an Int and a Text is a hash table too, evaluated a
   const { lines, info } = printed(c.code, c.names, p.main, c.insiders);
   assert.deepEqual(lines, want);
   assert.equal(want[0], "38");
-  const source = compile(c.code, info, c.names, { runtime: pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href, exports: ["main"] });
-  const file = join(mkdtempSync(join(tmpdir(), "hash-pairs-")), "counts.js");
-  writeFileSync(file, source);
-  const defs = (await import(pathToFileURL(file).href)).defs as Record<string, () => void>;
   const got: string[] = [];
-  $setPrint((s: string) => got.push(s));
+  const defs = compiledDefs(c.code, info, c.names, ["main"], { print: (s: string) => got.push(s) }) as Record<string, () => void>;
   defs.main();
   assert.deepEqual(got, lines);
 });
@@ -138,12 +129,8 @@ test("a map keyed by a record of Ints and Texts is a hash table, evaluated and c
   assert.deepEqual(lines, want);
   assert.equal(want[0], "38");
   assert.match(want[want.length - 3], /^\[\(spot\(0, "0"\), 8\), /);
-  const source = compile(c.code, info, c.names, { runtime: pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href, exports: ["main"] });
-  const file = join(mkdtempSync(join(tmpdir(), "hash-records-")), "counts.js");
-  writeFileSync(file, source);
-  const defs = (await import(pathToFileURL(file).href)).defs as Record<string, () => void>;
   const got: string[] = [];
-  $setPrint((s: string) => got.push(s));
+  const defs = compiledDefs(c.code, info, c.names, ["main"], { print: (s: string) => got.push(s) }) as Record<string, () => void>;
   defs.main();
   assert.deepEqual(got, lines);
   assert.deepEqual(chosen(program(300, { record: "floats" })).chosen, ["Map as weight-balanced tree"]);
@@ -164,12 +151,8 @@ test("compiled JavaScript on the hash table prints what the evaluator prints", a
   const p = program(300, { remove: true });
   const c = chosen(p);
   const { lines, info } = printed(c.code, c.names, p.main, c.insiders);
-  const source = compile(c.code, info, c.names, { runtime: pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href, exports: ["main"] });
-  const file = join(mkdtempSync(join(tmpdir(), "hash-table-")), "counts.js");
-  writeFileSync(file, source);
-  const defs = (await import(pathToFileURL(file).href)).defs as Record<string, () => void>;
   const got: string[] = [];
-  $setPrint((s: string) => got.push(s));
+  const defs = compiledDefs(c.code, info, c.names, ["main"], { print: (s: string) => got.push(s) }) as Record<string, () => void>;
   defs.main();
   assert.deepEqual(got, lines);
 });
@@ -203,12 +186,8 @@ test("a set only built, asked and changed by its one holder is a hash table, com
   const { lines, info } = printed(c.code, c.names, p.main, c.insiders);
   assert.deepEqual(lines, printed(p.code, p.names, p.main).lines);
   assert.deepEqual(lines, ["100", "true", "false", "99", "false"]);
-  const source = compile(c.code, info, c.names, { runtime: pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href, exports: ["main"] });
-  const file = join(mkdtempSync(join(tmpdir(), "hash-set-")), "seen.js");
-  writeFileSync(file, source);
-  const defs = (await import(pathToFileURL(file).href)).defs as Record<string, () => void>;
   const got: string[] = [];
-  $setPrint((s: string) => got.push(s));
+  const defs = compiledDefs(c.code, info, c.names, ["main"], { print: (s: string) => got.push(s) }) as Record<string, () => void>;
   defs.main();
   assert.deepEqual(got, lines);
   assert.deepEqual(chosen(setProgram(400), false).chosen, ["Set as weight-balanced tree"]);

@@ -9,11 +9,10 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { closeSync, mkdtempSync, openSync, readFileSync, writeFileSync } from "node:fs";
+import { closeSync, mkdtempSync, openSync, readFileSync } from "node:fs";
 import { WASI } from "node:wasi";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { pathToFileURL } from "node:url";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { Lang } from "../../ters/src/lang/dsl.ts";
 import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
@@ -22,11 +21,10 @@ import { nodeWorld } from "../../ters/src/lang/world.ts";
 import { ABORT_OP, S } from "../../ters/src/lang/std.ts";
 import { B } from "../../ters/src/prelude.ts";
 import type { Id } from "../../ters/src/model.ts";
-import { compile } from "../src/compile.ts";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitWasm, fromText, instantiate } from "../src/wasm.ts";
 import { build, skip as noC } from "./c-harness.ts";
-import { loadCoreJs, lowerCore } from "../src/core-js.ts";
+import { compiledDefs, FAIL, loadCoreJs, lowerCore } from "../src/core-js.ts";
 import { Stopped } from "../src/core-rt.ts";
 
 // Each definition takes two Float64s and shows its answer.
@@ -71,16 +69,16 @@ const INPUTS = [[1, 0], [0, 0], [-4, 2], [0, -1], [-8, 0.5], [6, 4], [1e300, 1e3
 
 test("compiled JavaScript stops where the evaluator does, with the same reason", async () => {
   const { code, names, info, defs } = program();
-  const path = join(mkdtempSync(join(tmpdir(), "finite-")), "finite.js");
-  writeFileSync(path, compile(code, info, names, { runtime: pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href, exports: defs.map(([n]) => n) }));
-  const js = (await import(pathToFileURL(path).href)).defs as Record<string, (a: number, b: number) => unknown>;
+  const fs = compiledDefs(code, info, names, defs.map(([n]) => n));
+  // The core IR's JavaScript: no answer is FAIL, a stop is Stopped.
+  const js = Object.fromEntries(defs.map(([n]) => [n, (a: number, b: number) => { try { return fs[n](a, b); } catch (e) { if (e === FAIL) return undefined; if (e instanceof Stopped) throw new Aborted(e.message); throw e; } }]));
   const r = makeRunner(code, info, { print: () => {}, names });
   const evaluated = (d: Id, a: number, b: number) => said(() => { for (const v of r.call(r.value(d), a, b)) return v; });
   const inputs = INPUTS;
   const stops = new Set<string>();
   const none = new Set<string>();
   for (const [name, d] of defs) for (const [a, b] of inputs) {
-    const want = evaluated(d, a, b), got = said(() => { const v = js[name](a, b) as { next?: unknown } & Iterable<unknown>; return typeof v?.next === "function" ? [...v][0] : v; });
+    const want = evaluated(d, a, b), got = said(() => js[name](a, b));
     if (want === "undefined") none.add(name);
     if (name !== "less") assert.equal(got, want, `${name}(${a}, ${b})`);
     else assert.equal(got.startsWith("stops"), want.startsWith("stops"), `${name}(${a}, ${b}): ${got} vs ${want}`);
@@ -88,7 +86,7 @@ test("compiled JavaScript stops where the evaluator does, with the same reason",
   }
   // No answer (L125b) is no answer here too (L125c3): x / 0 in caught is a
   // Choice, not an Abort its handler sees. Every partial operation had none.
-  assert.equal(said(() => [...(js.caught(1, 0) as Iterable<unknown>)][0]), "undefined");
+  assert.equal(said(() => js.caught(1, 0)), "undefined");
   // The evaluator stops only on overflow now.
   assert.deepEqual([...stops].sort(), ["stops: the answer is too big for a Float64 (overflow)"]);
   assert.deepEqual([...none].sort(), ["caught", "divide", "log", "mod", "over", "power", "root"]);
@@ -168,10 +166,6 @@ test("an overflow nothing uses never stops: every engine answers 5", async () =>
   const evaluated = defs.map(([, d]) => said(() => { for (const v of r.call(r.value(d), 1e10)) return v; }));
   const OVER = "stops: the answer is too big for a Float64 (overflow)";
   assert.deepEqual(evaluated, ["5", OVER, OVER, OVER, OVER, OVER]);
-  const path = join(mkdtempSync(join(tmpdir(), "unused-")), "unused.js");
-  writeFileSync(path, compile(code, info, names, { runtime: pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href, exports: defs.map(([n]) => n) }));
-  const js = (await import(pathToFileURL(path).href)).defs as Record<string, (x: number) => unknown>;
-  assert.deepEqual(defs.map(([n]) => said(() => { const v = js[n](1e10) as { next?: unknown } & Iterable<unknown>; return typeof v?.next === "function" ? [...v][0] : v; })), evaluated);
   const lowered = lowerScalar(code, info, names, defs.map(([, d]) => d), { data: true });
   const w = (await instantiate(emitWasm(lowered))) as unknown as Record<string, (x: number) => unknown>;
   const wasm = defs.map(([, d]) => { const f = lowered.funcs.find((g) => g.def === d)!; return said(() => { let v = w[f.name](1e10); if (f.partial) { const [x, st] = v as [unknown, number]; if (st !== 0) return undefined; v = x; } return f.result === "text" ? fromText(w as never, v) : v; }); });

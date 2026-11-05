@@ -5,10 +5,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import type { Id } from "../../ters/src/model.ts";
 import { Lang } from "../../ters/src/lang/dsl.ts";
 import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
@@ -18,9 +15,8 @@ import { ARITH, tuplePart, tupleType, tupleVariant } from "../../ters/src/lang/s
 import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { INT } from "../../ters/src/lang/types.ts";
 import { showType } from "../../ters/src/lang/types.ts";
-import { compile } from "../src/compile.ts";
+import { compiledDefs } from "../src/core-js.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href;
 
 function program() {
   const k = new Lang();
@@ -43,10 +39,7 @@ test("a tuple given for several inputs: checked, evaluated and compiled the same
   assert.deepEqual(info.errors.map((e) => e.message), []);
   assert.equal(showType(info.typeOf.get(sd)!, names, info.subst.arith), "(a, a) -> (a, a) where a is a Number");
   const exports = ["product of sum and difference", "straight through", "three", "second part"];
-  const js = compile(code, info, names, { runtime, exports });
-  const path = join(mkdtempSync(join(tmpdir(), "tuples-")), "tuples.js");
-  writeFileSync(path, js);
-  const out = (await import(pathToFileURL(path).href)).defs as Record<string, (...x: number[]) => unknown>;
+  const out = compiledDefs(code, info, names, exports) as Record<string, (...x: number[]) => unknown>;
   const r = makeRunner(code, info, { print: () => {}, names });
   const at = (n: string) => code.defs.find((d) => names[d] === n)!;
   const first = (v: unknown) => (v && typeof v === "object" && Symbol.iterator in (v as object) ? [...(v as Iterable<unknown>)][0] : v);
@@ -96,10 +89,7 @@ test("a function of two inputs and a function of one pair meet anywhere a functi
   const info = infer(code, names, undefined, checkOptions);
   assert.deepEqual(info.errors.map((e) => e.message), []);
   const exports = ["use apply", "use map", "use keep", "use record", "other way"];
-  const js = compile(code, info, names, { runtime, exports });
-  const path = join(mkdtempSync(join(tmpdir(), "reshape-")), "reshape.js");
-  writeFileSync(path, js);
-  const out = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
+  const out = compiledDefs(code, info, names, exports) as Record<string, unknown>;
   const r = makeRunner(code, info, { print: () => {}, names });
   const at = (n: string) => code.defs.find((d) => names[d] === n)!;
   const first = (v: unknown) => (v && typeof v === "object" && Symbol.iterator in (v as object) ? [...(v as Iterable<unknown>)][0] : v);

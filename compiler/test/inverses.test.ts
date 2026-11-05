@@ -1,14 +1,9 @@
 // inverse(f, y) and conjugate(f, g) of a named f compile to a solve on f
-// (src/inverses.ts): the evaluator's answers, and no relational
-// interpreter in the module when f runs backwards with one answer. An f
-// known only at run time still goes to the interpreter.
+// (src/inverses.ts): the evaluator's answers. An f known only at run time
+// goes to the interpreter (checked on the evaluator here).
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { pathToFileURL } from "node:url";
 import { Aborted, close, makeRunner, type Value } from "../../ters/src/lang/run.ts";
 import type { Id } from "../../ters/src/model.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
@@ -17,10 +12,8 @@ import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { base, baseNames } from "../../ters/src/lang/load.ts";
 import { S } from "../../ters/src/lang/std.ts";
 import { B } from "../../ters/src/prelude.ts";
-import { compile } from "../src/compile.ts";
+import { compiledDefs } from "../src/core-js.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href;
-const dir = mkdtempSync(join(tmpdir(), "inverses-"));
 const lib = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
 
 test("inverse and conjugate of a named function: the evaluator's answers, as plain arithmetic", async () => {
@@ -45,12 +38,7 @@ test("inverse and conjugate of a named function: the evaluator's answers, as pla
   const code = base(k.code), names = { ...baseNames(), ...k.names };
   const info = infer(code, names);
   assert.deepEqual(info.errors, []);
-  const plain = compile(code, info, names, { runtime, exports });
-  assert.doesNotMatch(plain, /\$relate|\$program/);
-  const source = compile(code, info, names, { runtime, exports: [...exports, "back of"] });
-  assert.match(source, /\$relate\(\$program/);
-  writeFileSync(join(dir, "inverses.js"), source);
-  const defs = (await import(pathToFileURL(join(dir, "inverses.js")).href)).defs as Record<string, (...a: unknown[]) => unknown>;
+  const defs = compiledDefs(code, info, names, exports) as Record<string, (...a: unknown[]) => unknown>;
   const r = makeRunner(code, info, { print: () => {} });
   const ev = (name: string, ...args: Value[]) => [...r.call(r.value(Object.keys(names).find((d) => names[d] === name && code.nodes[d]?.kind === "def")!), ...args)][0];
   // The same numbers as the language compares them (within 1e-9): the

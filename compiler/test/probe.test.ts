@@ -8,19 +8,14 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { pathToFileURL } from "node:url";
 import { Lang } from "../../ters/src/lang/dsl.ts";
 import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { CONS, INT_OPS, NIL, TEXT_OPS } from "../../ters/src/lang/std.ts";
-import { compile } from "../src/compile.ts";
-import { $toList } from "../src/runtime.js";
+import { compiledDefs } from "../src/core-js.ts";
+import { toList } from "../../ters/src/lang/run.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href;
 const lib = (name: string) => LIBRARY.code.defs.find((x) => LIBRARY.names[x] === name)!;
 
 test("a view copy whose body splits a text it works out compiles and runs (I155)", async () => {
@@ -45,10 +40,8 @@ test("a view copy whose body splits a text it works out compiles and runs (I155)
   const code = base(k.code), names = baseNames(k.names);
   const info = infer(code, names, undefined, checkOptions);
   assert.deepEqual(info.errors.map((e) => e.message), []);
-  const dir = mkdtempSync(join(tmpdir(), "probe-"));
-  writeFileSync(join(dir, "out.mjs"), compile(code, info, names, { runtime, exports: ["main"] }));
-  const defs = (await import(pathToFileURL(join(dir, "out.mjs")).href)).defs as Record<string, (l: unknown) => unknown>;
+  const defs = compiledDefs(code, info, names, ["main"]);
   // 2 2 101 101 3 3: "2" is one piece, "101" three ("", "0", ""), each
   // paired with at most the items after it (5 4 3 2 1 0).
-  assert.equal(Number(defs.main($toList([2n, 101n, 3n]))), 1 + 1 + 3 + 2 + 1 + 0);
+  assert.equal(Number(defs.main(toList([2n, 101n, 3n]))), 1 + 1 + 3 + 2 + 1 + 0);
 });

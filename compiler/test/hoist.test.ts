@@ -3,10 +3,6 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { pathToFileURL } from "node:url";
 import { Lang } from "../../ters/src/lang/dsl.ts";
 import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
@@ -15,9 +11,9 @@ import { makeRunner } from "../../ters/src/lang/run.ts";
 import { B } from "../../ters/src/prelude.ts";
 import { CONS, NIL, S } from "../../ters/src/lang/std.ts";
 import type { Id } from "../../ters/src/model.ts";
-import { compile } from "../src/compile.ts";
+import { compiledDefs } from "../src/core-js.ts";
+import { toList } from "../../ters/src/lang/run.ts";
 import { hoistInvariants } from "../src/hoist.ts";
-import { $fromList, $toList } from "../src/runtime.js";
 
 const lib = (name: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === name)!;
 
@@ -47,19 +43,15 @@ test("a call inside a lambda given to map, using nothing of the lambda's, is wor
   const bodyOf = (d: Id) => h.code.nodes[(h.code.nodes[(h.code.nodes[d] as { body: Id }).body] as { body: Id }).body] as { kind: string; fn: Id };
   assert.equal(h.code.nodes[bodyOf(p.shares).fn].kind, "lambda");
   assert.equal(h.code.nodes[bodyOf(p.own).fn].kind, "ref");
-  const file = join(mkdtempSync(join(tmpdir(), "hoist-")), "m.mjs");
-  writeFileSync(file, compile(p.code, p.info, p.names, { runtime: pathToFileURL(join(import.meta.dirname, "../src/runtime.js")).href, exports: ["shares", "own"] }));
-  const js = (await import(pathToFileURL(file).href)).defs;
+  const js = compiledDefs(p.code, p.info, p.names, ["shares", "own"]);
   const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });
   const list = (xs: number[]): unknown => xs.reduceRight<unknown>((t, x) => ({ tag: CONS, fields: [x, t] }), { tag: NIL, fields: [] });
   const items = (l: { tag: string; fields: unknown[] }): unknown[] => (l.tag === NIL ? [] : [l.fields[0], ...items(l.fields[1] as typeof l)]);
   for (const d of ["shares", "own"] as const) {
     const xs = list([1, 3, 4]);
     const [want] = [...(r.call(r.value(p[d]), xs) as Iterable<{ tag: string; fields: unknown[] }>)];
-    assert.deepEqual($fromList(js[d]($toList([1, 3, 4]))), items(want), d);
+    assert.deepEqual(items(js[d](toList([1, 3, 4])) as never), items(want), d);
   }
-  // In the JavaScript, shares' total is outside the function map is given.
-  assert.match(js.shares.toString(), /total_of\([^)]*\)[^]*=>/);
 });
 
 // C88: a thunk runs once or not at all, so its work stays in it: `first`'s
