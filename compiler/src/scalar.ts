@@ -51,6 +51,7 @@
 // known when the shader is built.
 
 import { tableText } from "./table-text.ts";
+import { unnameHandlers } from "./handler-names.ts";
 import { laterOps as laterOpsOf } from "../../ters/src/lang/later-ops.ts";
 import { givenInOrder } from "../../ters/src/lang/ports.ts";
 import { resolveArithmetic } from "../../ters/src/lang/arith.ts";
@@ -524,6 +525,8 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   ({ code, info } = withBodies(code, info, names));
   // Case and graphemes with no host to ask run the cases module (L214e5).
   if (!opts.host) ({ code, info, names } = tableText(code, info, names));
+  // A named handler handles a copy of its effect of its own (L213b).
+  ({ code, info, names } = unnameHandlers(code, info, names));
   // The generic + resolved to each type's own operation first
   // (ters/src/lang/arith.ts): nothing here sees a generic one.
   ({ code, info, names } = resolveArithmetic(code, info, names));

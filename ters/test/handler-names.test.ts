@@ -14,7 +14,7 @@ import { infer } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
 import { runMain } from "../src/lang/run.ts";
 import { compile } from "../../compiler/src/compile.ts";
-import { lowerCore } from "../../compiler/src/core-js.ts";
+import { lowerCore, runCoreMain } from "../../compiler/src/core-js.ts";
 import { INT_OPS, S, SHOW_ANY } from "../src/lang/std.ts";
 import type { Id } from "../src/model.ts";
 
@@ -59,8 +59,20 @@ test("a name goes only to its own effect's operations", () => {
 test("compiled code refuses a named handler, with the reason", () => {
   const p = program((_k, ask, { outer }) => ask(outer));
   assert.throws(() => compile(p.code, p.info, p.names, { runtime: "x", exports: ["main"] }), /a handler with a name isn't compiled yet/);
+});
+
+// The core IR (L213b3): each named handler handles a copy of its effect
+// of its own (compiler/src/handler-names.ts), so what it prints is the
+// evaluator's.
+test("JavaScript from the core IR answers a named operation by its handler, as the evaluator does", () => {
+  const p = program((k, ask, { outer, inner }) => k.call(INT_OPS.add, k.call(INT_OPS.add, ask(outer), ask(inner)), k.call(INT_OPS.add, ask(), k.call(k.lambda([], () => ask(outer))))));
+  assert.deepEqual(p.info.errors.map((e) => e.message), []);
+  p.run();
   const l = lowerCore(p.code, p.info, p.names, [p.main]);
-  assert.match([...l.refused.values()].join("\n"), /under a name, which isn't lowered yet/);
+  assert.deepEqual([...l.refused.values()], []);
+  const out: string[] = [];
+  runCoreMain(l, "main", [], { print: (s: string) => out.push(s), names: p.names } as never);
+  assert.deepEqual([out, p.printed], [["1012"], ["1012"]]);
 });
 
 test("a function that uses a name can't leave its handler", () => {
