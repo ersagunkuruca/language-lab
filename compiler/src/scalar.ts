@@ -288,6 +288,49 @@ export function mapLocals(e: SExpr, m: (i: number) => number): SExpr {
     default: return r;
   }
 }
+// A function's body tidied for every printer (C175), changing no bit of
+// any answer: `let a = b` of a local set once is b where a is read, and
+// -(-x) is x, a + (-b) is a − b (IEEE's a − b is a + (−b), exactly).
+export function tidied(f: SFunc, self: number): SFunc {
+  const writes = new Map<number, number>();
+  const wrote = (i: number) => writes.set(i, (writes.get(i) ?? 0) + 1);
+  let loops = false;
+  const scan = (e: SExpr) => {
+    switch (e.k) {
+      case "let": wrote(e.i); break;
+      case "case": wrote(e.s); break;
+      case "attempt": case "search": wrote(e.res); break;
+      case "apply": wrote(e.tmp); if (e.tail) loops = true; break;
+      case "list": wrote(e.item); wrote(e.acc); break;
+      case "handle": wrote(e.reason); wrote(e.save); break;
+      case "budget": wrote(e.save); wrote(e.res); break;
+      case "released": if (e.st !== undefined) wrote(e.st); break;
+      case "call": if (e.tail && e.fn === self) loops = true; break;
+    }
+    kids(e).forEach(scan);
+  };
+  scan(f.body);
+  // A parameter is set again each time round a loop.
+  const once = (i: number) => (i < f.params.length ? !loops && !writes.has(i) : writes.get(i) === 1);
+  // A let nothing reads whose value can't stop, fail or draw is dropped.
+  const reads = new Map<number, number>();
+  const count = (e: SExpr) => { if (e.k === "local") reads.set(e.i, (reads.get(e.i) ?? 0) + 1); kids(e).forEach(count); };
+  count(f.body);
+  const PURE = new Set<string>(["add", "sub", "mul", "div", "neg", "sqrt", "abs", "floor", "float32", "sin", "cos", "tan", "exp", "log", "pow", "atan2", "less", "equal", "beq", "and", "or", "not", "itof"]);
+  const pure = (e: SExpr): boolean => ["local", "num", "bool", "text", "zero"].includes(e.k) || ((e.k === "op" && PURE.has(e.op)) || e.k === "make" || e.k === "get") && kids(e).every(pure);
+  const tidy = (e: SExpr): SExpr => {
+    if (e.k === "let" && !reads.get(e.i) && once(e.i) && !e.check && !e.seeded && pure(e.value)) return tidy(e.body);
+    if (e.k === "let" && e.value.k === "local" && e.value.i !== e.i && once(e.i) && once(e.value.i) && f.locals[e.i] === f.locals[e.value.i] && !e.check && !e.seeded) {
+      const j = e.value.i, i = e.i;
+      return tidy(mapLocals(e.body, (x) => (x === i ? j : x)));
+    }
+    const r = mapKids(e, tidy);
+    if (r.k === "op" && r.op === "neg" && r.args[0].k === "op" && r.args[0].op === "neg") return r.args[0].args[0];
+    if (r.k === "op" && r.op === "add" && r.args.length === 2 && r.args[1].k === "op" && r.args[1].op === "neg") return { k: "op", op: "sub", args: [r.args[0], r.args[1].args[0]] };
+    return r;
+  };
+  return { ...f, body: tidy(f.body) };
+}
 // The locals e reads that it doesn't set itself, in the order first read.
 function freeLocals(e: SExpr): number[] {
   const read: number[] = [], set = new Set<number>();
@@ -2979,6 +3022,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     }
   }
   for (const [r, why] of unstarted) if (!refused.has(r)) refused.set(r, why);
+  funcs.forEach((g, j) => { g.body = tidied(g, j).body; });
   // Refusals by definition; those of one specialization stay inside.
   const niche = opts.data ? niches(funcs, [...records.values()], [...datas.values()], [...arrays.values()], [...fns.values()], shapes, [...tables.values()]) : new Set<string>();
   const ir: CoreIR = { stops: sites, funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()].filter((d) => !niche.has(d.key)), arrays: [...arrays.values()], tables: [...tables.values()], fns: [...fns.values()], shapes, code, info, escapes: escapes.map((e) => stype({ t: "con", id: e, args: [] }) as DType), rounded, ...(opts.shader && !opts.data ? { shader: true as const } : {}), ...(!opts.data ? { int32: true as const } : {}) };

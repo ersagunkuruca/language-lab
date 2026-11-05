@@ -47,11 +47,6 @@ const CELLS = no("cells are a runtime handler: the scalar profile has none");
 const INT = no("Int has no scalar type yet (f64 only)");
 const ARRAYS = written("scalar.ts ARRAY_RT: with `data`, runtime functions on the two-ended buffer, one copy per item type (C66)");
 
-// Float64's operations with no answer at some inputs (L125b): where the
-// checker didn't find a call always answered (info.answered), it gives no
-// answer as the evaluator does, through these, which give $no (L125c3).
-export const NO_ANSWER_JS: Record<Id, string> = { [B.div]: "$divN", [B.sqrt]: "$sqrtN", [B.log]: "$logN", [B.pow]: "$powN", [S.mod]: "$modN" };
-
 export const TARGETS: Record<Id, Target> = {
   [B.add]: { js: op(([a, b]) => `(${a} + ${b})`), scalar: "add" },
   [B.sub]: { js: op(([a, b]) => `(${a} - ${b})`), scalar: "sub" },
@@ -234,10 +229,5 @@ export const TARGETS: Record<Id, Target> = {
   ...Object.fromEntries(Object.values(ARITH).map((id) => [id, { js: written("never: arith.ts resolves it to its type's own operation before compiling"), scalar: written("never: arith.ts resolves it to its type's own operation before lowering") }])),
 };
 
-// The builtins whose JavaScript is an expression, by id.
-export const INLINE: Record<Id, { js: Inline; bool?: true; boolArgs?: true }> = Object.fromEntries(
-  Object.entries(TARGETS).flatMap(([id, t]) => (typeof t.js === "object" && "op" in t.js ? [[id, { js: t.js.op, ...(t.js.bool ? { bool: t.js.bool } : {}), ...(t.js.boolArgs ? { boolArgs: t.js.boolArgs } : {}) }]] : [])),
-);
-export const jsKind = (id: Id) => TARGETS[id]?.js;
 // The scalar operation for a builtin, when it is one.
 export const scalarOp = (id: Id): Op | null => (typeof TARGETS[id]?.scalar === "string" ? (TARGETS[id].scalar as Op) : null);

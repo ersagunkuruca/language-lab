@@ -192,7 +192,7 @@ test("records are structs (or vectors): built by their case, read by fields or a
   // A Tuple2, at Float64 and Float64.
   assert.match(s.wgsl, /\/\/ Tuple2 is a vec2f: first is \.x, second is \.y\./);
   // origin + t · direction, written field by field, is one vector expression.
-  assert.match(s.wgsl, /let l3 = l2\.origin;\n {2}let l4 = l2\.direction;\n {2}return l3 \+ \(p1 \* l4\);/);
+  assert.match(s.wgsl, /let l3 = p0\.origin;\n {2}let l4 = p0\.direction;\n {2}return l3 \+ \(p1 \* l4\);/);
   assert.match(s.wgsl, /fn length_\d+\(p0: vec3f\) -> f32 \{\n {2}return length\(p0\);/);
   assert.match(s.wgsl, /fn unit_\d+\(p0: vec3f\) -> vec3f \{\n {2}return normalize\(p0\);/);
   assert.match(s.wgsl, /fn diagonal_\d+\(p0: f32\) -> vec3f \{\n {2}return vec3f\(p0\);/);
