@@ -81,6 +81,7 @@ const PAGE_EFFECTS = new Set<Id>([...PAGE_VIEW, ...PAGE_HANDLER, ...AUDIO_BLOCK,
 const HOST_CELLS = new Set(Object.values(CELL_OPS).filter((id) => id !== CELL_OPS.path));
 import { runtime } from "./wasm-rt.ts";
 import { machineWords } from "./machine-words.ts";
+import { loopRecords } from "./loop-records.ts";
 import { wideProducts } from "./wide-products.ts";
 
 // A shader (or a ray marcher's loop) may call what might not finish only
@@ -2701,6 +2702,9 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   const ir: CoreIR = { stops: sites, funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()].filter((d) => !niche.has(d.key)), arrays: [...arrays.values()], tables: [...tables.values()], fns: [...fns.values()], shapes, code, info, escapes: escapes.map((e) => stype({ t: "con", id: e, args: [] }) as DType), rounded, ...(opts.shader && !opts.data ? { shader: true as const } : {}), ...(!opts.data ? { int32: true as const } : {}) };
   // A record's Int field proved to fit 32 bits, stored as a machine word
   // (C150e): WebAssembly and C, not core JS, whose values the host reads.
+  // A record a loop carries, its fields as values of their own (C68a); a
+  // shader's records are its own values (vectors, structs) already.
+  if (opts.data) loopRecords(ir);
   if (opts.data && !opts.host) { machineWords(ir); wideProducts(ir); }
   // The fuel is endless outside a budget, so where no budget is set
   // (`with fuel`, or the fuel a search outside one swaps in) nothing
