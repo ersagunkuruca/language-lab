@@ -16,7 +16,8 @@ import type { Pins } from "../ters/src/lang/signatures.ts";
 import type * as T from "./typed.ts";
 import { h } from "./dom.ts";
 import { newWorker } from "./runViews.ts";
-import type { RunAsk, RunSays } from "./runWorker.ts";
+import type { RunAsk, RunSays, WarmAsk } from "./runWorker.ts";
+import { sendCode } from "./runCode.ts";
 import type { CoreMain } from "./coreMain.ts";
 import { prebuilt, prebuiltKey } from "./prebuilt.ts";
 import type { Doc, UI } from "./main.ts";
@@ -40,6 +41,18 @@ export function runPanel(host: RunHost) {
   // Run main in a worker (editor/runWorker.ts): the page keeps drawing, the
   // printing shows as it comes, and Stop ends it.
   let running: Worker | null = null;
+  // The worker between runs (I177): a new one for each run checked the
+  // whole library again first, about 1.8 s of a small program's 2.5. It
+  // is started before the first run (warmRun) and kept after each; Stop
+  // ends it, and the next run starts another.
+  let idle: Worker | null = null;
+  const worker = () => { const w = idle ?? newWorker(); idle = null; return w; };
+  function warmRun(def: Id) {
+    if (idle || running) return;
+    idle = newWorker();
+    const warm: WarmAsk = { warm: true, code: sendCode(prog()), names: pres().names, pins: pins(), def };
+    idle.postMessage(warm);
+  }
   function stopRun(why?: string) {
     running?.terminate();
     running = null;
@@ -106,13 +119,13 @@ export function runPanel(host: RunHost) {
     // of the same name (E212).
     const given = runGiven();
     if (given) for (const [name, text] of Object.entries(given.files)) if (!files.some(([k]) => k === prefix + name)) files.push([prefix + name, text]);
-    const w = (running = newWorker());
+    const w = (running = worker());
     const code = prog(), sameAs = (k: { code: Code; def: Id; args?: string[] } | null) => !!k && k.code === code && k.def === def && JSON.stringify(k.args) === JSON.stringify(given?.args);
     const kept = sameAs(printedFor) ? printedFor!.core : undefined;
     // A program from a file runs with only what was allowed (E229).
     const asked = permissionsAsked(def), deny = asked.filter((e) => !doc().allowed?.includes(e));
     const stdin = readsInput() ? ui.stdin?.[doc().program] ?? "" : undefined;
-    const ask: RunAsk = { code, names: pres().names, pins: pins(), def, title, files, args: given?.args, ...(kept ? { core: kept } : {}), ...(deny.length ? { deny } : {}), ...(stdin !== undefined && !replay ? { stdin } : {}), ...(replay ? { replay, ...(until !== undefined ? { until } : {}) } : {}) };
+    const ask: RunAsk = { code: sendCode(code), names: pres().names, pins: pins(), def, title, files, args: given?.args, ...(kept ? { core: kept } : {}), ...(deny.length ? { deny } : {}), ...(stdin !== undefined && !replay ? { stdin } : {}), ...(replay ? { replay, ...(until !== undefined ? { until } : {}) } : {}) };
     ui.output = { def, lines: [], running: true };
     w.onmessage = (e: MessageEvent<RunSays>) => {
       if (running !== w || !ui.output) return;
@@ -121,9 +134,10 @@ export function runPanel(host: RunHost) {
       try { for (const [k, v] of m.files) localStorage.setItem(k, v); } catch { /* no storage */ }
       const lines = "done" in m && m.shown !== "unit" ? [...ui.output.lines, `→ ${m.shown}`] : ui.output.lines;
       ui.output = { def, lines, error: "error" in m ? m.error : undefined, running: false, ...(m.stuck ? { stuck: m.stuck } : {}), ...("profile" in m && m.profile?.length ? { profile: m.profile } : {}), ...(m.core ? { compiled: true } : {}), ...(replay ? { answers: replay, replayed: true } : m.answers?.length ? { answers: m.answers } : {}), ...(m.paused ? { paused: until, error: undefined } : {}), ...("at" in m && m.at ? { at: m.at } : {}) };
-      printedFor = m.printed ? { code: ask.code, def, args: ask.args, core: m.printed } : null;
+      printedFor = m.printed ? { code, def, args: ask.args, core: m.printed } : null;
       running = null;
-      w.terminate();
+      idle ??= w;
+      if (idle !== w) w.terminate();
       render();
     };
     w.onerror = (e) => { e.preventDefault(); stopRun(e.message || "the run failed"); };
@@ -136,5 +150,5 @@ export function runPanel(host: RunHost) {
 
   // Ends a run without a word: opening another program.
   const endRun = () => { running?.terminate(); running = null; };
-  return { stopRun, endRun, runGiven, permissionsAsked, permissionsPanel, runTyped, readsInput, stdinBox };
+  return { stopRun, endRun, warmRun, runGiven, permissionsAsked, permissionsPanel, runTyped, readsInput, stdinBox };
 }
