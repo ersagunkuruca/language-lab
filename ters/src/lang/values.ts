@@ -8,7 +8,17 @@ import type { Names } from "../presentation.ts";
 import { DEF_VALUE, toList, type Value } from "./run.ts";
 import { EXTENDED_V } from "./std.ts";
 
-export function parseValue(text: string, code: Code, names: Names): { value: Value } | { error: string } {
+// What a text's names may be, found once for each version of the code and
+// its names (T14g): the editor reads every port's text after each edit,
+// and each read scanned the whole program with its library.
+type Named = { variants: Map<string, Id[]>; defs: Map<string, Id>; byLength: string[] };
+const namedIn = new WeakMap<Code, WeakMap<Names, Named>>();
+
+function namesOf(code: Code, names: Names): Named {
+  let byNames = namedIn.get(code);
+  if (!byNames) namedIn.set(code, (byNames = new WeakMap()));
+  let got = byNames.get(names);
+  if (got) return got;
   // Cases of one name in several types (a program's own done, std's
   // done(value)) are told apart by how many values they take (E188).
   // An effect's operation (random) is a call, not a value (E188).
@@ -20,6 +30,14 @@ export function parseValue(text: string, code: Code, names: Names): { value: Val
   const defs = new Map<string, Id>();
   for (const d of code.defs) if (code.nodes[d]?.kind === "def" && names[d] !== undefined && !defs.has(names[d])) defs.set(names[d], d);
   const byLength = [...defs.keys()].filter((n) => !/^[\p{L}_][\p{L}\p{N}_′' ]*$/u.test(n)).sort((a, b) => b.length - a.length);
+  byNames.set(names, (got = { variants, defs, byLength }));
+  return got;
+}
+
+export function parseValue(text: string, code: Code, names: Names): { value: Value } | { error: string } {
+  // Found only when the text names something: a number or a list of them doesn't.
+  let found: Named | undefined;
+  const known = () => (found ??= namesOf(code, names));
   let i = 0;
   const ws = () => { while (/\s/.test(text[i] ?? "")) i++; };
   const fail = (what: string): never => { throw new Error(`${what} at ${i + 1}`); };
@@ -54,6 +72,7 @@ export function parseValue(text: string, code: Code, names: Names): { value: Val
     if (num) { i += num[0].length; return Number(num[0]); }
     // A definition named with other marks (as °C, as km/h, x² − 2): the
     // longest such name the text goes on with (I29).
+    const { byLength, defs, variants } = known();
     const named = byLength.find((d) => text.startsWith(d, i) && /^\s*(?:$|[,\])])/.test(text.slice(i + d.length)));
     if (named) { i += named.length; return { tag: DEF_VALUE, fields: [defs.get(named)!] }; }
     // A case name: letters, digits, spaces between words, primes.
