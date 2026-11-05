@@ -85,3 +85,13 @@ test("checking the same program again checks none of its groups", () => {
   infer(p.code, p.pres.names, undefined, opts);
   assert.equal(cache.misses, misses);
 });
+
+test("a program on the library's layer checks as the same nodes off it (E253)", () => {
+  // On its layer, the check's scans read the library's picks, made once,
+  // and look only at the program's own nodes.
+  for (const example of ["tumble", "constructions"]) {
+    const p = loadProgram(join(root, "examples", example));
+    const plain: Code = { nodes: { ...p.code.nodes }, defs: [...p.code.defs] };
+    assert.deepEqual(seen(infer(p.code, p.pres.names, undefined, checkOptions), p.pres.names), seen(infer(plain, p.pres.names, undefined, checkOptions), p.pres.names), example);
+  }
+});

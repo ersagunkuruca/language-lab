@@ -16,7 +16,7 @@ import { sharing } from "./shared-fields.ts";
 import { PARTIAL, signAnalysis } from "./signs.ts";
 import type { Code, Id, Node, NodeOf, Use } from "../model.ts";
 import { isUse, useTarget, isCall, fieldPorts, type Call, bindsOf, bodyOf } from "../model.ts";
-import { conditionResults, dependencies, nodesWhere, ownerOfTypeParts, portsOf, subtree } from "../model.ts";
+import { conditionResults, dependencies, derived, layerOf, nodesWhere, ownerOfTypeParts, portsOf, scanningOnLayer, subtree } from "../model.ts";
 import { liftRelations } from "./results-fn.ts";
 import type { Names } from "../presentation.ts";
 import { unitProblems, UnitsBefore } from "../units.ts";
@@ -176,6 +176,12 @@ function under(code: Code, opts: Options): { info: Info; only: Set<Id> } | null 
 // library's, L216), which this check reads through to rather than copies:
 // its substitution, and each node's type.
 export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only: Set<Id>; units?: UnitsBefore; noUnits?: boolean; layer?: boolean }, opts: Options = {}): Info {
+  // A program on the library's layer (load.ts base, L217): the check's
+  // scans of every node (uses, calls, number literals, each node's parent)
+  // read the library's, made once per process, and look only at the
+  // program's own nodes (E253: 40 ms of a one-literal edit's 120 ms in
+  // Constructions scanned its 32,000 nodes).
+  if (layerOf(code) && !derived.has(code)) return scanningOnLayer(code, () => infer(code, names, reuse, opts));
   if (!reuse) { const u = under(code, opts); if (u) return infer(code, names, { from: u.info, only: u.only, layer: true }, opts); }
   // A solve that one of its relation's directions answers is checked as a
   // solve of that direction (directions.ts, POLAR.md).
