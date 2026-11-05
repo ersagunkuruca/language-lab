@@ -278,6 +278,12 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     });
   }
   const kept = funcs.map((_, i) => i).filter((i) => !refused.has(i));
+  // A definition's value worked out once (C173b), as WebAssembly and the
+  // core IR's JavaScript keep it: what a function of no inputs gives (a
+  // record, data or a text) is held in a static of its own from its first
+  // call, each call after given one more count of it. The test harness
+  // lets go of them after each call, so its count of cells left is still 0.
+  const once = new Set(kept.filter((i) => { const f = funcs[i]; return f.value && !f.params.length && !f.partial && !f.spends && (f.result === "text" || isRecord(f.result) || isData(f.result)); }));
 
   // Types: every record, data type and function type the kept functions
   // mention, and the shapes of their closures.
@@ -547,6 +553,8 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     "",
     ...kept.map((i) => `${header(i)};`),
     ...[...lent.keys()].map((i) => `${header(i, true)};`),
+    ...[...once].map((i) => `static ${ty(funcs[i].result)} lab_m${i}; static int lab_m${i}_has = 0;`),
+    ...(opts.harness ? [`static void lab_memo_clear(void) { ${[...once].map((i) => `if (lab_m${i}_has) { ${counted(funcs[i].result) ? drop(funcs[i].result, `lab_m${i}`) : ""} lab_m${i}_has = 0; }`).join(" ")} }`] : []),
     "",
     text.join("\n\n"),
     ...(opts.harness ? ["", tests] : []),
@@ -852,6 +860,11 @@ int main(int argc, char **argv) {
         case "tag": return borrow(e.rec, "i32", (r) => `(int32_t)${r}->tag`, pre, d, after);
         case "call": {
           const ps = lent.get(e.fn);
+          if (once.has(e.fn)) {
+            const m = `lab_m${e.fn}`, t = funcs[e.fn].result, v = temp(t);
+            pre.push(`${d}if (!${m}_has) { ${m} = ${names.get(e.fn)}(); ${m}_has = 1; }`, `${d}${v} = ${counted(t) ? dup(t, m) : m};`);
+            return v;
+          }
           if (!ps) {
             const c = `${names.get(e.fn)}(${args(e.args, pre, d, after).join(", ")})`;
             return funcs[e.fn].partial ? checked(c, funcs[e.fn].result, pre, d, after) : stated(c, funcs[e.fn].result, pre, d);
@@ -1642,10 +1655,11 @@ int main(void) {
   jmp_buf at;
   lab_stop_at = &at;
   while (scanf("%d", &i) == 1) {
-    if (setjmp(at)) { const char *w = lab_stopped < 0 ? lab_stop_why : lab_stops[lab_stopped % ${SITES}]; printf(" ! x"); for (size_t j = 0; lab_stopped < 0 ? j < lab_stop_n : w[j] != 0; j++) printf("%02x", (unsigned char)w[j]); printf(" ;0\\n"); ${cells ? "lab_live = 0; " : ""}continue; }
+    if (setjmp(at)) { const char *w = lab_stopped < 0 ? lab_stop_why : lab_stops[lab_stopped % ${SITES}]; printf(" ! x"); for (size_t j = 0; lab_stopped < 0 ? j < lab_stop_n : w[j] != 0; j++) printf("%02x", (unsigned char)w[j]); printf(" ;0\\n"); lab_memo_clear(); ${cells ? "lab_live = 0; " : ""}continue; }
     switch (i) {
 ${cases.join("\n")}
     }
+    lab_memo_clear();
     printf(" ;%lld\\n", (long long)${cells ? "lab_live" : "0"});
   }
   return 0;
