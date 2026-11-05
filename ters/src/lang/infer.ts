@@ -2554,7 +2554,7 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   for (const b of h.scope) {
     if (info.subst.resolve(b.type).t !== "var") continue;
     for (const arity of [1, 2, 3]) {
-      const s = info.subst.clone();
+      const s = info.subst.trial();
       const t: Type = { t: "fn", params: Array.from({ length: arity }, () => s.fresh()), ret: s.fresh(), eff: s.freshRow() };
       try { s.unify(b.type, t); s.unify(h.expected, t.ret); s.unifyRow(t.eff, h.row); } catch (e) { if (e instanceof TypeError) continue; throw e; }
       const call: Filling = { kind: "call", target: b.id, arity, type: s.zonk(t) };
@@ -2605,7 +2605,7 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
   // Where any type goes (a new value, say), a function is one too: of one
   // input or two, so a local helper can be started there (BACKLOG E128).
   else if (ex.t === "var") for (const arity of [1, 2]) {
-    const s = info.subst.clone();
+    const s = info.subst.trial();
     const t: Type = { t: "fn", params: Array.from({ length: arity }, () => s.fresh()), ret: s.fresh(), eff: s.freshRow() };
     try { s.unify(h.expected, t); } catch (e) { if (e instanceof TypeError) continue; throw e; }
     const f: Filling = { kind: "lambda", arity };
@@ -2656,7 +2656,7 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
       // a variable down.
       for (const type of splittable) {
         const td = code.nodes[(code.nodes[type] as NodeOf<"def">).body!] as NodeOf<"typedef">;
-        const s = info.subst.clone();
+        const s = info.subst.trial();
         try { s.unify(bt, { t: "con", id: type, args: td.params.map(() => s.fresh()) }); } catch (e) { if (e instanceof TypeError) continue; throw e; }
         for (const kind of recursiveType(code, type) ? ["match", "fold"] as const : ["match"] as const) {
           const f: Filling = { kind, on: b.id, type };
@@ -2665,7 +2665,7 @@ export function fillings(code: Code, info: Info, hole: Id): Filling[] {
       }
       // Or by its values, as a Text or an Int (E225).
       for (const type of [STRING, INT]) {
-        const s = info.subst.clone();
+        const s = info.subst.trial();
         try { s.unify(bt, { t: "con", id: type, args: [] }); } catch (e) { if (e instanceof TypeError) continue; throw e; }
         const f: Filling = { kind: "values", on: b.id, type };
         if (safe(s, f, false)) out.push(f);
@@ -2701,15 +2701,22 @@ function recursiveType(code: Code, type: Id): boolean {
 }
 
 // The definitions in `group` and every definition that reaches one of them.
+// The library a program is on (model.ts layerOf), with none of its nodes
+// changed, reads none of the program's definitions: where the group is
+// the program's own, the library's definitions aren't walked (I167: a new
+// definition's fillings walked all ~30,000 nodes, 30 ms of 300).
 function dependents(code: Code, group: Id[]): Set<Id> {
   const owner = ownerOfTypeParts(code);
   const usedBy = new Map<Id, Id[]>();
+  const lib = layerOf(code);
+  const libAsIs = !!lib && !group.some((d) => d in lib.nodes) && Object.keys(code.nodes).every((id) => code.nodes[id] === lib.nodes[id] || !(id in lib.nodes));
   for (const d of code.defs) {
+    if (libAsIs && d in lib!.nodes) continue;
     for (const id of subtree(code, d)) {
       const n = code.nodes[id];
       let t = n.kind === "ref" ? n.target : isUse(n) ? useTarget(code.nodes, n) : null;
       if (t && owner.has(t)) t = owner.get(t)!;
-      if (t && t !== d) usedBy.set(t, [...(usedBy.get(t) ?? []), d]);
+      if (t && t !== d) { const us = usedBy.get(t); if (us) us.push(d); else usedBy.set(t, [d]); }
     }
   }
   const out = new Set(group);
