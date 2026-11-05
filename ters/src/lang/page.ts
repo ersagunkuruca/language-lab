@@ -19,7 +19,7 @@ import { corePageScript, coreSoundScript, lowerCore } from "../../../compiler/sr
 import type { CoreIR } from "../../../compiler/src/scalar.ts";
 import { HTML_V } from "./std.ts";
 import { recordingWorld, soundPlayer } from "./audio-page.ts";
-import { logged, type LogEntry } from "./worldlog.ts";
+import { heardInto, logged, type LogEntry } from "./worldlog.ts";
 
 // The definition a page starts from: the one named `main` that returns an
 // Html and takes nothing. Null when the program has none, so it isn't a page.
@@ -95,9 +95,6 @@ export function showPage(o: PageOptions): Preview {
   cells.kept = null;
   return { root, cells, kept, stop: () => { stopped = true; sound?.stop(); }, hush: sound ? () => sound.hush() : undefined };
 }
-
-// A handler's event, kept in a page run's log (C172e).
-export const heardInto = (log: LogEntry[]) => (name: string, at: [string, string, number, number, number]) => { log.push({ op: "event", args: [name, ...at] }); };
 
 // A page as one HTML file around its scripts: what `lab build-web` writes,
 // and what the editor's "Save page" gives you. Nothing is loaded from

@@ -50,6 +50,10 @@ export function logged(world: World, log: LogEntry[] = []): { world: World; log:
   return { world: out as unknown as World, log };
 }
 
+// A handler's event, kept in a page run's log (C172e) where it comes
+// among the world's answers: html.ts Mount `heard`.
+export const heardInto = (log: LogEntry[]) => (name: string, at: [string, string, number, number, number]) => { log.push({ op: "event", args: [name, ...at] }); };
+
 // Two arguments or answers alike: what JSON keeps of them, bytes as bytes.
 const same = (a: unknown, b: unknown): boolean => JSON.stringify(a, plain) === JSON.stringify(b, plain);
 const plain = (_: string, v: unknown) => (v instanceof Uint8Array ? [...v] : v);
