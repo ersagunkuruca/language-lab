@@ -67,3 +67,28 @@ test("raymarch's picture holds its multivectors in smaller structs and draws the
   assert.ok(widest(masked.wgsl.wgsl) < 8, `widest Pga struct ${widest(masked.wgsl.wgsl)}`);
   assert.equal(masked.out, all.out);
 });
+
+// Embeddings (L209, EMBEDDINGS.md): a Complex that stays in the image of
+// Float64's embedding, one with no imaginary part, is kept as a Float64.
+test("a Complex with no imaginary part is a Float64 in compiled JavaScript", async () => {
+  const { Lang } = await import("../../ters/src/lang/dsl.ts");
+  const { infer } = await import("../../ters/src/lang/infer.ts");
+  const { base, baseNames, checkOptions } = await import("../../ters/src/lang/load.ts");
+  const { LIBRARY } = await import("../../ters/src/lang/library.ts");
+  const { ARITH } = await import("../../ters/src/lang/std.ts");
+  const lib = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
+  const k = new Lang(LIBRARY.code);
+  const sq = k.def("sq");
+  k.define(sq, k.fn(["z"], (z) => k.call(ARITH.mul, z, z)));
+  const g = k.def("g");
+  k.define(g, k.fn(["x"], (x) => k.call(lib("modulus"), k.call(sq, k.call(sq, k.call(lib("as complex"), x))))));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
+  const ir = lowerCore(code, info, names, [g]);
+  const at = ir.funcs.findIndex((f) => f.def === g);
+  // What g reaches makes no record: the square of a real is a Float64.
+  const reached = new Set<number>(), walk = (i: number) => { if (reached.has(i)) return; reached.add(i); const w = (e: SExpr) => { if (e.k === "call") walk(e.fn); kids(e).forEach(w); }; w(ir.funcs[i].body); };
+  walk(at);
+  const makes = [...reached].flatMap((i) => { const out: string[] = []; const w = (e: SExpr) => { if (e.k === "make") out.push(e.t.name); kids(e).forEach(w); }; w(ir.funcs[i].body); return out; });
+  assert.deepEqual(makes, []);
+  assert.equal(loadCoreJs(ir, { print: () => {} })[at](3), 81);
+});
