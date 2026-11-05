@@ -483,7 +483,7 @@ text, characters outside the basic plane, `range(0)`.
    in one pass), and `array`. Part of `build` is done in the compiler: a
    chain of `keep`- and `map`-shaped steps between `split`/`characters`
    and a fold, `joinAll` or a list runs as one loop (COMPILER.md, "Folds
-   are loops"; GAPS.md G16). `array` is designed below.
+   are loops"; GAPS.md G16). `array` is designed below. Measured 2026-11-05 through the core IR (L21, not built): queens counting the 2,680 boards of 11 spends 12% building ranges, calc's `keep` after its tokenizer's fold about 1% of a 20,000-line run; neither is a need yet.
 
 **The `array` row (design, GAPS.md G21).** chapters is still 2.3× the
 hand-written ideal. Most of what's left is lists that a builtin made as
