@@ -140,7 +140,8 @@ evaluator with compiled JS.
 - **Round trips** (T7e4, built): Bytes through Base64, hex and UTF-8,
   each reading undoing its writing, as prelude laws; bytes.test.ts keeps
   only what compares with the host. Dates, instants and durations
-  through their ISO 8601 text the same way (T7e5).
+  through their ISO 8601 text the same way (T7e5), and times of day
+  through theirs (T7e6).
 - **L97e**, the complex laws: `polar` and `unpolar` round trips as tests in
   the prelude (built: the prelude's first laws, run by
   test/prelude-laws.test.ts).

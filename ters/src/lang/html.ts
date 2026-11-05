@@ -43,6 +43,9 @@ export interface Mount {
   steps?: number;
   // What plays an element's sound (audio-page.ts), when the page can.
   listen?: (el: El, a: Data) => void;
+  // A handler that stopped (an Abort, an overflow), beside the console's
+  // line: the editor's preview says it under the page, and where (C143).
+  stopped?: (e: unknown) => void;
 }
 
 // What a part of the page shows when its update ran out of steps: a
@@ -229,7 +232,7 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
                 if (err instanceof Pending && !err.resume && !err.again) console.error(`${name} handler waits, and this page can't go on from a wait yet: it runs in the editor's preview (C40)`);
                 else if (err instanceof Pending) { const go = err.resume; err.ready.then(() => fire(go ? () => { for (const v of go()) return v; } : run)); }
                 else if (err instanceof OutOfSteps) console.error(`${name} handler ${STUCK}`);
-                else console.error(err);
+                else { console.error(err); m.stopped?.(err); }
               } finally { cells.event = was; }
             };
             fire(() => m.call(then, { tag: HTML_V.event, fields: [value, ev.key ?? "", x, y, ev.seconds ?? 0] }));

@@ -9,6 +9,10 @@ import { infer } from "../src/lang/infer.ts";
 import { loadProgram } from "../src/lang/load.ts";
 import { pageMain, showPage } from "../src/lang/page.ts";
 import { FakeEl, fakeDoc } from "./fakedom.ts";
+import { merge } from "../src/model.ts";
+import { Lang } from "../src/lang/dsl.ts";
+import { HTML_MODULE, LIBRARY } from "../src/lang/library.ts";
+import { ABORT_OP } from "../src/lang/std.ts";
 
 const store = () => {
   const m = new Map<string, string>();
@@ -101,4 +105,24 @@ test("a program whose main isn't a page has no page main", () => {
   const p = loadProgram(join(import.meta.dirname, "../examples/wc"));
   const info = infer(p.code, p.pres.names, undefined, p.options);
   assert.equal(pageMain(p.own.defs, info, p.pres.names), null);
+});
+
+// A handler that aborts says so through `stopped`, which the editor's
+// preview shows under the page (C143), beside the console's line.
+test("a handler that aborts is told to the preview's stopped", () => {
+  const lib = (name: string) => HTML_MODULE.exports.find((d) => HTML_MODULE.names[d] === name)!;
+  const k = new Lang(LIBRARY.code);
+  const main = k.def("main");
+  const go = k.call(lib("button"), k.lit("go"), k.fn(["e"], () => k.call(ABORT_OP, k.lit("no more"))));
+  k.define(main, k.thunk(() => k.call(lib("div"), k.list(go))));
+  const code = merge(LIBRARY.code, k.code), names = { ...LIBRARY.names, ...k.names };
+  const info = infer(code, names);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const said: unknown[] = [];
+  const page = showPage({ code, info, names, main, program: "abort", doc: fakeDoc(), store: store(), console: { log() {}, error() {} }, frame: () => {}, stopped: (e) => said.push(e) });
+  const real = console.error;
+  console.error = () => {};
+  try { ((page.root as FakeEl).kids.find((e) => e instanceof FakeEl && e.tag === "button") as FakeEl).fire("click"); } finally { console.error = real; }
+  assert.equal(said.length, 1);
+  assert.match((said[0] as Error).message, /no more/);
 });
