@@ -126,3 +126,29 @@ test("a handler that aborts is told to the preview's stopped", () => {
   assert.equal(said.length, 1);
   assert.match((said[0] as Error).message, /no more/);
 });
+
+// C172g: a page's run, logged (the world's answers and the events its
+// handlers were given, with where their elements are), replays in the
+// evaluator to the same page: dice's status reads the clock, which the
+// log answers, and the clicks are given again to the same buttons.
+test("a page's logged run replays to the same page (C172g)", () => {
+  const p = loadProgram(join(import.meta.dirname, "../examples", "dice"));
+  const info = infer(p.code, p.pres.names, undefined, p.options);
+  const main = pageMain(p.own.defs, info, p.pres.names)!;
+  const log: import("../src/lang/worldlog.ts").LogEntry[] = [];
+  const base = { code: p.code, info, names: p.pres.names, main, program: "dice", console: { log() {}, error() {} }, frame: () => {} };
+  const first = showPage({ ...base, doc: fakeDoc(), store: store(), log });
+  const root = first.root as FakeEl;
+  root.find("hundred").fire("click");
+  root.find("hundred").fire("click");
+  const events = log.filter((e) => e.op === "event");
+  assert.equal(events.length, 2);
+  assert.ok(log.some((e) => e.op === "now"));
+  const again = showPage({ ...base, doc: fakeDoc(), store: store(), replay: log });
+  assert.equal((again.root as FakeEl).find("said").textContent, root.find("said").textContent);
+  assert.equal((again.root as FakeEl).find("status").textContent, root.find("status").textContent);
+  assert.match(root.find("status").textContent, /^Rolls: 200;/);
+  // A log whose event's element isn't there says so.
+  const wrong = log.map((e) => (e.op === "event" ? { ...e, args: [...e.args.slice(0, 6), [9, 9, 9]] } : e));
+  assert.throws(() => showPage({ ...base, doc: fakeDoc(), store: store(), replay: wrong }), /went another way/);
+});

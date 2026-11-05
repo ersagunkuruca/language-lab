@@ -1865,7 +1865,7 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
   return box;
 }
 
-const { page, pageSection, pictureSection, savePage } = pagePanels({
+const { page, pageSection, pictureSection, savePage, saveLog } = pagePanels({
   doc: () => doc, prog: () => prog(), pres: () => pres(), ownDefs: () => ownDefs(), typesOf, render, ui,
   errorsIn, holesIn, noteOf, noteView, titleOf, slug, pins: () => heldPins?.all ?? doc.signatures ?? NO_PINS,
 });
@@ -2387,6 +2387,7 @@ document.addEventListener("click", (e) => {
     if (a === "page-restart") { page.for = null; ui.note = "Started the page again: every cell is back to its first value."; return render(); }
     if (a === "page-hush") { page.now?.hush?.(); ui.note = "Stopped every sound the page was playing."; return render(); }
     if (a === "page-tab" || a === "page-save") return savePage(a === "page-tab");
+    if (a === "page-log") return saveLog();
     if (a === "t-undot" && ui.selected && typesOf()) return void applyT(T.removeDot(doc.code, doc.names.short, typesOf()!, ui.def, ui.selected));
     return;
   }

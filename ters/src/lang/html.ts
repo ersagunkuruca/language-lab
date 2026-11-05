@@ -46,6 +46,35 @@ export interface Mount {
   // A handler that stopped (an Abort, an overflow), beside the console's
   // line: the editor's preview says it under the page, and where (C143).
   stopped?: (e: unknown) => void;
+  // Each event a handler is given, before it runs (C172e: a page's run
+  // logs its events beside the world's answers): the event's name and
+  // what the handler is given of it (value, key, x, y, seconds).
+  // `path`: where its element is under the page's root (pathOf), so a
+  // replay finds it again (C172g).
+  heard?: (name: string, at: [string, string, number, number, number], path: number[]) => void;
+}
+
+// Where each drawn node is: its parent and its place among the parent's
+// children as drawn, and each element's children, so an event's element
+// can be named by its path from the page's root and found again in a
+// replay of the page's run (C172g). And each element's handlers, by event.
+const placed = new WeakMap<Node_, { parent: Node_; i: number }>();
+const kidsOf = new WeakMap<Node_, Node_[]>();
+const handlersOf = new WeakMap<Node_, Map<string, (at: [string, string, number, number, number]) => void>>();
+const place = (parent: Node_, kids: Node_[]) => { kidsOf.set(parent, kids); kids.forEach((k, i) => placed.set(k, { parent, i })); };
+export function pathOf(n: Node_): number[] {
+  const path: number[] = [];
+  for (let p = placed.get(n); p && kidsOf.get(p.parent)?.[p.i] === n; n = p.parent, p = placed.get(n)) path.unshift(p.i);
+  return path;
+}
+export const nodeAt = (root: Node_, path: number[]): Node_ | undefined => path.reduce<Node_ | undefined>((n, i) => (n ? kidsOf.get(n)?.[i] : undefined), root);
+// A logged event given again (C172g): the handler of `name` on the element
+// at `path`, given what it was given then. False where there is none.
+export function replayEvent(root: Node_, name: string, path: number[], at: [string, string, number, number, number]): boolean {
+  const f = (() => { const n = nodeAt(root, path); return n && handlersOf.get(n)?.get(name); })();
+  if (!f) return false;
+  f(at);
+  return true;
 }
 
 // What a part of the page shows when its update ran out of steps: a
@@ -174,7 +203,7 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
       const e = inSvg ? doc.createElementNS!(SVG, "g") : doc.createElement("lab-part");
       if (!inSvg) e.setAttribute("style", "display: contents");
       let now: Node_ | undefined;
-      watch(e, "part", () => { const v = viewOf(m.call, d.fields[0]); if (v === null) { now = undefined; e.replaceChildren(); } else e.replaceChildren((now = mountHtml(v, m, svg))); }, () => { e.replaceChildren((now = doc.createTextNode(STUCK))); }, () => (now ? fresh(now) : []));
+      watch(e, "part", () => { const v = viewOf(m.call, d.fields[0]); if (v === null) { now = undefined; e.replaceChildren(); place(e, []); } else { e.replaceChildren((now = mountHtml(v, m, svg))); place(e, [now]); } }, () => { e.replaceChildren((now = doc.createTextNode(STUCK))); place(e, [now]); }, () => (now ? fresh(now) : []));
       return e;
     }
     case HTML_V.element: {
@@ -209,6 +238,10 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
             // What was typed enters in NFC (L214a, border.ts).
             const value = target.type === "checkbox" ? String(!!target.checked) : nfc(String(target.value ?? ""));
             const [x, y] = pointer(e, ev);
+            given([value, ev.key ?? "", x, y, ev.seconds ?? 0]);
+          };
+          const given = ([value, key, x, y, seconds]: [string, string, number, number, number]) => {
+            m.heard?.(name, [value, key, x, y, seconds], pathOf(e));
             // One batch per event: the page updates once, after every write.
             // A handler that fetched what hasn't come stops there, what it
             // did so far kept, and goes on from the fetch when the reply
@@ -235,8 +268,11 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
                 else { console.error(err); m.stopped?.(err); }
               } finally { cells.event = was; }
             };
-            fire(() => m.call(then, { tag: HTML_V.event, fields: [value, ev.key ?? "", x, y, ev.seconds ?? 0] }));
+            fire(() => m.call(then, { tag: HTML_V.event, fields: [value, key, x, y, seconds] }));
           };
+          let hs = handlersOf.get(e);
+          if (!hs) handlersOf.set(e, (hs = new Map()));
+          hs.set(name, given);
           // "frame": once each time the browser draws, while the element is
           // on the page, so a simulation steps without a hidden CSS
           // animation to listen to (I80). Elsewhere it never comes. It
@@ -251,6 +287,7 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
       }
       const kids = fromList(d.fields[2]).map((c) => mountHtml(c, m, inSvg));
       e.append(...kids);
+      place(e, kids);
       // A browser focuses an autofocus field only as the page loads; one a
       // click opens later gets it here, once it's on the page.
       if (focus) queueMicrotask(() => (e as El & { focus?: () => void }).focus?.());

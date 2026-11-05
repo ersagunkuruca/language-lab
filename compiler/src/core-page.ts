@@ -11,6 +11,7 @@ import { recordingWorld, soundPlayer } from "../../ters/src/lang/audio-page.ts";
 import { coreCall, coreRuntime, type HostOps, type TableSpec } from "./core-rt.ts";
 import type { Hosts } from "../../ters/src/lang/hosts.ts";
 import type { Code } from "../../ters/src/model.ts";
+import { heardInto, logged, type LogEntry } from "../../ters/src/lang/worldlog.ts";
 
 type Defs = Record<string, (...xs: unknown[]) => unknown>;
 
@@ -23,14 +24,20 @@ type Defs = Record<string, (...xs: unknown[]) => unknown>;
 export function startCorePage(tables: TableSpec[], worlds: string[], defs: (R: ReturnType<typeof coreRuntime>) => Defs, main: string, program: string, code?: Code, worklet?: string, hosts?: { answers: Hosts; ops: HostOps }): void {
   const cells = new Cells(equal);
   // What main is answered is kept for the audio thread's run of it (L60).
-  const world = recordingWorld(browserWorld(pageStorage(), program, console, { cells, frame: (f) => requestAnimationFrame(f) }));
+  // The run's log (C172f), as the editor's preview keeps it (C172e), when
+  // the page is opened with ?ters-log: in globalThis.tersLog, which the
+  // console can copy out (copy(JSON.stringify(tersLog))).
+  const log = typeof location !== "undefined" && /[?&]ters-log(?:[=&]|$)/.test(location.search) ? ((globalThis as { tersLog?: LogEntry[] }).tersLog = []) : undefined;
+  if (log) console.info("ters: this run's log is in tersLog; copy(JSON.stringify(tersLog)) copies it");
+  const browser = browserWorld(pageStorage(), program, console, { cells, frame: (f) => requestAnimationFrame(f) });
+  const world = recordingWorld(log ? logged(browser, log).world : browser);
   // A handler run that's taken back prints nothing (cells.ts attempt).
   const rt = { print: (line: string) => cells.later(() => console.log(line)), world, cells, hosts: hosts?.answers };
   const fns = defs(coreRuntime(tables, worlds, rt, code, undefined, hosts?.ops));
   const doc = document as unknown as Doc & { body: { append(n: Node_): void } };
   const run = () => fns[main]() as Value;
   const sound = worklet ? soundPlayer(cells, worklet, run, undefined, world) : null;
-  doc.body.append(mountHtml((sound ? sound.page : run()) as never, { cells, doc, call: coreCall, listen: sound?.listen }));
+  doc.body.append(mountHtml((sound ? sound.page : run()) as never, { cells, doc, call: coreCall, listen: sound?.listen, heard: log && heardInto(log) }));
 }
 
 // The same page mounted where the caller says (E244): the editor's
@@ -38,14 +45,16 @@ export function startCorePage(tables: TableSpec[], worlds: string[], defs: (R: R
 // hands over what was done on it (cells.ts handOver), as page-runtime.ts
 // mountPage does for compile.ts's. `kept` is the cells made while main ran,
 // in order; `stop` ends its frames.
-export function mountCorePage(tables: TableSpec[], worlds: string[], defs: (R: ReturnType<typeof coreRuntime>) => Defs, main: string, program: string, code: Code | undefined, o: { doc: Doc; store: Store; frame: (f: () => void) => void; ran?: (el: Node_) => void; stopped?: (e: unknown) => void }): { root: Node_; cells: Cells; kept: NonNullable<Cells["kept"]>; stop(): void } {
+export function mountCorePage(tables: TableSpec[], worlds: string[], defs: (R: ReturnType<typeof coreRuntime>) => Defs, main: string, program: string, code: Code | undefined, o: { doc: Doc; store: Store; frame: (f: () => void) => void; ran?: (el: Node_) => void; stopped?: (e: unknown) => void; log?: LogEntry[] }): { root: Node_; cells: Cells; kept: NonNullable<Cells["kept"]>; stop(): void } {
   let stopped = false;
   const cells = new Cells(equal);
-  const world = browserWorld(o.store, program, console, { cells, frame: (f) => { if (!stopped) o.frame(() => { if (!stopped) f(); }); } });
+  // The run's log (C172e), as page.ts showPage keeps it.
+  const browser = browserWorld(o.store, program, console, { cells, frame: (f) => { if (!stopped) o.frame(() => { if (!stopped) f(); }); } });
+  const world = o.log ? logged(browser, o.log).world : browser;
   const rt = { print: (line: string) => cells.later(() => console.log(line)), world, cells };
   const fns = defs(coreRuntime(tables, worlds, rt, code));
   cells.kept = [];
-  const root = mountHtml(fns[main]() as never, { cells, doc: o.doc, call: coreCall, ran: o.ran, stopped: o.stopped });
+  const root = mountHtml(fns[main]() as never, { cells, doc: o.doc, call: coreCall, ran: o.ran, stopped: o.stopped, heard: o.log && heardInto(o.log) });
   const kept = cells.kept;
   cells.kept = null;
   return { root, cells, kept, stop: () => { stopped = true; } };

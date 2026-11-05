@@ -12,13 +12,14 @@ import type { Names } from "../presentation.ts";
 import type { Info } from "./infer.ts";
 import { browserWorld, type Store } from "./browser.ts";
 import { Cells } from "./cells.ts";
-import { evaluatorCall, mountHtml, type Doc, type Node_ } from "./html.ts";
+import { evaluatorCall, mountHtml, replayEvent, type Doc, type Node_ } from "./html.ts";
 import { equal, pageProblem, runMain } from "./run.ts";
 import { compile } from "../../../compiler/src/compile.ts";
 import { corePageScript, coreSoundScript, lowerCore } from "../../../compiler/src/core-js.ts";
 import type { CoreIR } from "../../../compiler/src/scalar.ts";
 import { HTML_V } from "./std.ts";
 import { recordingWorld, soundPlayer } from "./audio-page.ts";
+import { heardInto, logged, replaying, WentAnotherWay, type LogEntry } from "./worldlog.ts";
 
 // The definition a page starts from: the one named `main` that returns an
 // Html and takes nothing. Null when the program has none, so it isn't a page.
@@ -53,6 +54,15 @@ export interface PageOptions {
   send?: (request: PlainRequest) => Promise<PlainResponse>;
   // How the page waits (a test's; by default setTimeout): C40.
   after?: (ms: number) => Promise<void>;
+  // Where the run's log goes (C172e): the world's answers (worldlog.ts)
+  // and, in their places among them, the events its handlers are given
+  // (`{ op: "event", args: [name, value, key, x, y, seconds] }`).
+  log?: LogEntry[];
+  // A run's log to replay (C172g): the world answers as it says, and
+  // after main has drawn the page, each event it logged is given again,
+  // in order, to the handler of the element it was given to. Frames come
+  // only from the log then.
+  replay?: LogEntry[];
   // Keep the cells the page starts with, for handOver (cells.ts).
   keepCells?: boolean;
   // A handler that stopped (html.ts Mount).
@@ -80,14 +90,27 @@ export function showPage(o: PageOptions): Preview {
   const cells = new Cells(equal);
   // The cells main and the first drawing make, for handOver (cells.ts).
   if (o.keepCells) cells.kept = [];
-  const world = recordingWorld(browserWorld(o.store, o.program, out as Console, { cells, frame: (f) => { if (!stopped) o.frame(() => { if (!stopped) f(); }); }, fetch: o.fetch, send: o.send, after: o.after }));
+  const browser = browserWorld(o.store, o.program, out as Console, { cells, frame: (f) => { if (!stopped) o.frame(() => { if (!stopped) f(); }); }, fetch: o.fetch, send: o.send, after: o.after });
+  const answered = o.replay ? replaying(o.replay.filter((e) => e.op !== "event"), browser) : browser;
+  const world = recordingWorld(o.log ? logged(answered, o.log).world : answered);
   const run = () => runMain(o.code, o.info, o.main, { print: (line) => cells.later(() => out.log(line)), names: o.names, cells, world });
   const sound = o.worklet && hasSound(o.code) ? soundPlayer(cells, workletFile(o.worklet, o.code, o.info, o.names, o.main), run, o.recordings, world) : null;
   const value = sound ? sound.page : run();
-  const root = mountHtml(value, { cells, doc: o.doc, call: evaluatorCall, ran: o.ran, listen: sound?.listen, stopped: o.stopped });
+  const root = mountHtml(value, { cells, doc: o.doc, call: evaluatorCall, ran: o.ran, listen: sound?.listen, stopped: o.stopped, heard: o.log && heardInto(o.log) });
   const kept = cells.kept;
   cells.kept = null;
+  if (o.replay) replayEvents(root, o.replay);
   return { root, cells, kept, stop: () => { stopped = true; sound?.stop(); }, hush: sound ? () => sound.hush() : undefined };
+}
+
+// The logged events given again, in order (C172g). One whose element
+// isn't there any more stops the replay, saying which.
+export function replayEvents(root: Node_, log: LogEntry[]): void {
+  log.forEach((e, i) => {
+    if (e.op !== "event") return;
+    const [name, value, key, x, y, seconds, path] = e.args as [string, string, string, number, number, number, number[]];
+    if (!replayEvent(root, name, path ?? [], [value, key, x, y, seconds])) throw new WentAnotherWay(`the replay went another way at entry ${i + 1}: the page has no ${name} handler where the log's event was given`);
+  });
 }
 
 // A page as one HTML file around its scripts: what `lab build-web` writes,

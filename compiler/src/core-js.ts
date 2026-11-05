@@ -616,7 +616,8 @@ export function coreMain(ir: CoreIR, name: string, rt: Runtime): (args: string[]
 // (hostOpsOf), which it answers where nothing in the program handles them.
 export function coreModule(ir: CoreIR, name: string, runtime: string, world: string, hosts?: Hosts): string {
   const [fi, m] = mainOf(ir, name);
-  const { js, names, worlds } = emitCoreJs(ir);
+  const { names, worlds } = emitCoreJs(ir);
+  const { js } = moduleTags(ir, !!hosts);
   const code = codeFor(ir, js);
   return [
     `import { coreRuntime, runCoreFn } from ${JSON.stringify(runtime)};`,
@@ -646,13 +647,36 @@ export function coreModule(ir: CoreIR, name: string, runtime: string, world: str
 // definition, by the number a stop carries (C143a, stops.ts).
 // `locals`: for each function, the binder whose value each local lN holds
 // (C143d), where the lowering knows it.
-export function coreMap(ir: CoreIR): { version: 1; functions: Record<string, Id>; locals: Record<string, Record<string, Id>>; stops: { node: Id; def: Id }[] } {
+// `tags`: the variant each of the program's own cases is tagged with, by
+// the number it is tagged with in the module (moduleTags), when it is.
+export function coreMap(ir: CoreIR, hosts = false): { version: 1; functions: Record<string, Id>; locals: Record<string, Record<string, Id>>; stops: { node: Id; def: Id }[]; tags?: Record<string, Id> } {
   const { names } = emitCoreJs(ir);
+  const { tags } = moduleTags(ir, hosts);
   const locals = Object.fromEntries(names.flatMap((n, i) => {
     const b = Object.entries(ir.funcs[i].binders ?? {}).filter(([, id]) => id);
     return b.length ? [[n, Object.fromEntries(b.map(([j, id]) => [`l${j}`, id]))]] : [];
   }));
-  return { version: 1, functions: Object.fromEntries(names.map((n, i) => [n, ir.funcs[i].def])), locals, stops: (ir.stops ?? []).map(({ node, def }) => ({ node, def })) };
+  return { version: 1, functions: Object.fromEntries(names.map((n, i) => [n, ir.funcs[i].def])), locals, stops: (ir.stops ?? []).map(({ node, def }) => ({ node, def })), ...(Object.keys(tags).length ? { tags } : {}) };
+}
+
+// A module's own tags as small numbers (C170d): each case of the
+// program's own types (and the core IR's boxes) is tagged in the module by
+// a number, not its node id, and the map (coreMap `tags`) says which
+// variant each number is. The library's cases keep their ids, which the
+// runtime reads (std.ts's Bool, List, Optional…). Not where something
+// outside the module makes the program's own values by their ids: the
+// evaluator's solver (a module carrying the nodes) or its hosts/js.js.
+// A stop names its definition there but carries no ids: the map has its
+// node and definition by the number it stops with (C143c).
+export function moduleTags(ir: CoreIR, hosts: boolean): { js: string; tags: Record<string, Id> } {
+  const js = emitCoreJs(ir).js.replace(/R\.stop\(([^,()]+), "[^"]*", "[^"]*"(, "(?:[^"\\]|\\.)*")?\)/g, (_, c: string, name = "") => `R.stop(${c}, 0, 0${name})`);
+  if (hosts || solving(js)) return { js, tags: {} };
+  const own = [...new Set([...js.matchAll(/\.prototype\.tag = ("(?:[^"\\]|\\.)*");/g)].map((m) => JSON.parse(m[1]) as string))]
+    .filter((t) => !/^(std|builtin|type|effect)\./.test(t));
+  if (!own.length) return { js, tags: {} };
+  const num = new Map(own.map((t, i) => [JSON.stringify(t), i]));
+  const tags = Object.fromEntries(own.map((t, i) => [String(i), t]));
+  return { js: js.replace(/"(?:[^"\\]|\\.)*"/g, (lit) => (num.has(lit) ? String(num.get(lit)) : lit)), tags };
 }
 
 // Where each printed function is in the written module (C143e), the
