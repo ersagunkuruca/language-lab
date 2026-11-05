@@ -137,6 +137,9 @@ evaluator with compiled JS.
 - **L108d**, representation laws: for each representation, the compiler
   writes the law `job(meaning(x)) = meaning(job′(x))` as a test definition,
   and the same runner checks it with small values of the stored type.
+- **Round trips** (T7e4, built): Bytes through Base64, hex and UTF-8,
+  each reading undoing its writing, as prelude laws; bytes.test.ts keeps
+  only what compares with the host.
 - **L97e**, the complex laws: `polar` and `unpolar` round trips as tests in
   the prelude (built: the prelude's first laws, run by
   test/prelude-laws.test.ts).

@@ -1,6 +1,7 @@
 // The library checks itself (TESTS-IN-THE-LANGUAGE.md): the prelude's
 // laws are definitions that perform Check, run here as `lab test` runs a
-// program's. First laws: the complex ones (POLAR.md L97e).
+// program's. First laws: the complex ones (POLAR.md L97e); Bytes' round
+// trips through Base64, hex and UTF-8 (T7e4).
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -13,7 +14,7 @@ import { isUse, subtree, useTarget } from "../src/model.ts";
 test("the prelude's laws hold on small values", () => {
   const code = base(LIBRARY.code), names = { ...baseNames(), ...LIBRARY.names }, info = infer(code, names);
   const laws = testsIn(info, LIBRARY.code.defs);
-  assert.deepEqual(laws.map((d) => names[d]).sort(), ["acos by unpolar agrees at Float64", "asin by unpolar agrees at Float64", "cos by polar agrees at Float64", "cos by sin agrees at Float64", "from polar undoes modulus and angle", "polar by sincos agrees at Float64", "polar undoes unpolar", "sin by cos agrees at Float64", "sin by polar agrees at Float64"]);
+  assert.deepEqual(laws.map((d) => names[d]).sort(), ["acos by unpolar agrees at Float64", "asin by unpolar agrees at Float64", "bytes of base64 undoes base64 of", "bytes of hex undoes hex of", "cos by polar agrees at Float64", "cos by sin agrees at Float64", "from polar undoes modulus and angle", "polar by sincos agrees at Float64", "polar undoes unpolar", "sin by cos agrees at Float64", "sin by polar agrees at Float64", "text of utf8 undoes utf8 of"]);
   for (const r of runTests(code, info, names, laws)) {
     assert.equal(r.error, undefined, r.name);
     assert.ok(r.cases >= 10, `${r.name}: ${r.cases}`);

@@ -107783,6 +107783,585 @@
         ],
         "body": "@trfpks30lsfctf9pocjp3vlsic:3"
       },
+      "@tme5kko5ettktqv6cfn7eims1j": {
+        "id": "@tme5kko5ettktqv6cfn7eims1j",
+        "kind": "def",
+        "body": "@tme5kko5ettktqv6cfn7eims1j:1"
+      },
+      "@tme5kko5ettktqv6cfn7eims1j:2": {
+        "id": "@tme5kko5ettktqv6cfn7eims1j:2",
+        "kind": "binder"
+      },
+      "@tme5kko5ettktqv6cfn7eims1j:3": {
+        "id": "@tme5kko5ettktqv6cfn7eims1j:3",
+        "kind": "binder"
+      },
+      "@tme5kko5ettktqv6cfn7eims1j:4": {
+        "id": "@tme5kko5ettktqv6cfn7eims1j:4",
+        "kind": "binder"
+      },
+      "@tme5kko5ettktqv6cfn7eims1j:24": {
+        "id": "@tme5kko5ettktqv6cfn7eims1j:24",
+        "kind": "lit",
+        "value": "é"
+      },
+      "@tme5kko5ettktqv6cfn7eims1j:26": {
+        "id": "@tme5kko5ettktqv6cfn7eims1j:26",
+        "kind": "lit",
+        "value": "€😀"
+      },
+      "@tme5kko5ettktqv6cfn7eims1j:22": {
+        "id": "@tme5kko5ettktqv6cfn7eims1j:22",
+        "kind": "ref",
+        "target": "builtin.list.of"
+      },
+      "@tme5kko5ettktqv6cfn7eims1j:23": {
+        "id": "@tme5kko5ettktqv6cfn7eims1j:23",
+        "kind": "ref",
+        "target": "@tme5kko5ettktqv6cfn7eims1j:2"
+      },
+      "@tme5kko5ettktqv6cfn7eims1j:25": {
+        "id": "@tme5kko5ettktqv6cfn7eims1j:25",
+        "kind": "ref",
+        "target": "@tme5kko5ettktqv6cfn7eims1j:3"
+      },
+      "@tme5kko5ettktqv6cfn7eims1j:27": {
+        "id": "@tme5kko5ettktqv6cfn7eims1j:27",
+        "kind": "ref",
+        "target": "@tme5kko5ettktqv6cfn7eims1j:4"
+      },
+      "@tme5kko5ettktqv6cfn7eims1j:21": {
+        "id": "@tme5kko5ettktqv6cfn7eims1j:21",
+        "kind": "call",
+        "fn": "@tme5kko5ettktqv6cfn7eims1j:22",
+        "args": [
+          "@tme5kko5ettktqv6cfn7eims1j:23",
+          "@tme5kko5ettktqv6cfn7eims1j:24",
+          "@tme5kko5ettktqv6cfn7eims1j:25",
+          "@tme5kko5ettktqv6cfn7eims1j:26",
+          "@tme5kko5ettktqv6cfn7eims1j:27"
+        ]
+      },
+      "@tme5kko5ettktqv6cfn7eims1j:28": {
+        "id": "@tme5kko5ettktqv6cfn7eims1j:28",
+        "kind": "lit",
+        "value": ""
+      },
+      "@tme5kko5ettktqv6cfn7eims1j:20": {
+        "id": "@tme5kko5ettktqv6cfn7eims1j:20",
+        "kind": "ref",
+        "target": "builtin.text.joinAll"
+      },
+      "@tme5kko5ettktqv6cfn7eims1j:19": {
+        "id": "@tme5kko5ettktqv6cfn7eims1j:19",
+        "kind": "call",
+        "fn": "@tme5kko5ettktqv6cfn7eims1j:20",
+        "args": [
+          "@tme5kko5ettktqv6cfn7eims1j:21",
+          "@tme5kko5ettktqv6cfn7eims1j:28"
+        ]
+      },
+      "@tme5kko5ettktqv6cfn7eims1j:7": {
+        "id": "@tme5kko5ettktqv6cfn7eims1j:7",
+        "kind": "binder"
+      },
+      "@tme5kko5ettktqv6cfn7eims1j:15": {
+        "id": "@tme5kko5ettktqv6cfn7eims1j:15",
+        "kind": "ref",
+        "target": "@atapm06lljumhq92fumkvge5ps"
+      },
+      "@tme5kko5ettktqv6cfn7eims1j:16": {
+        "id": "@tme5kko5ettktqv6cfn7eims1j:16",
+        "kind": "ref",
+        "target": "@tme5kko5ettktqv6cfn7eims1j:7"
+      },
+      "@tme5kko5ettktqv6cfn7eims1j:14": {
+        "id": "@tme5kko5ettktqv6cfn7eims1j:14",
+        "kind": "call",
+        "fn": "@tme5kko5ettktqv6cfn7eims1j:15",
+        "args": [
+          "@tme5kko5ettktqv6cfn7eims1j:16"
+        ]
+      },
+      "@tme5kko5ettktqv6cfn7eims1j:13": {
+        "id": "@tme5kko5ettktqv6cfn7eims1j:13",
+        "kind": "ref",
+        "target": "@7avl8famv2n50mrbn3vmpi4bha"
+      },
+      "@tme5kko5ettktqv6cfn7eims1j:12": {
+        "id": "@tme5kko5ettktqv6cfn7eims1j:12",
+        "kind": "call",
+        "fn": "@tme5kko5ettktqv6cfn7eims1j:13",
+        "args": [
+          "@tme5kko5ettktqv6cfn7eims1j:14"
+        ]
+      },
+      "@tme5kko5ettktqv6cfn7eims1j:11": {
+        "id": "@tme5kko5ettktqv6cfn7eims1j:11",
+        "kind": "ref",
+        "target": "builtin.equal"
+      },
+      "@tme5kko5ettktqv6cfn7eims1j:17": {
+        "id": "@tme5kko5ettktqv6cfn7eims1j:17",
+        "kind": "ref",
+        "target": "@tme5kko5ettktqv6cfn7eims1j:7"
+      },
+      "@tme5kko5ettktqv6cfn7eims1j:10": {
+        "id": "@tme5kko5ettktqv6cfn7eims1j:10",
+        "kind": "call",
+        "fn": "@tme5kko5ettktqv6cfn7eims1j:11",
+        "args": [
+          "@tme5kko5ettktqv6cfn7eims1j:12",
+          "@tme5kko5ettktqv6cfn7eims1j:17"
+        ]
+      },
+      "@tme5kko5ettktqv6cfn7eims1j:18": {
+        "id": "@tme5kko5ettktqv6cfn7eims1j:18",
+        "kind": "lit",
+        "value": "text of utf8(utf8 of t) is t"
+      },
+      "@tme5kko5ettktqv6cfn7eims1j:9": {
+        "id": "@tme5kko5ettktqv6cfn7eims1j:9",
+        "kind": "ref",
+        "target": "std.check.expect"
+      },
+      "@tme5kko5ettktqv6cfn7eims1j:8": {
+        "id": "@tme5kko5ettktqv6cfn7eims1j:8",
+        "kind": "call",
+        "fn": "@tme5kko5ettktqv6cfn7eims1j:9",
+        "args": [
+          "@tme5kko5ettktqv6cfn7eims1j:10",
+          "@tme5kko5ettktqv6cfn7eims1j:18"
+        ]
+      },
+      "@tme5kko5ettktqv6cfn7eims1j:6": {
+        "id": "@tme5kko5ettktqv6cfn7eims1j:6",
+        "kind": "lambda",
+        "params": [
+          "@tme5kko5ettktqv6cfn7eims1j:7"
+        ],
+        "body": "@tme5kko5ettktqv6cfn7eims1j:8"
+      },
+      "@tme5kko5ettktqv6cfn7eims1j:5": {
+        "id": "@tme5kko5ettktqv6cfn7eims1j:5",
+        "kind": "call",
+        "fn": "@tme5kko5ettktqv6cfn7eims1j:6",
+        "args": [
+          "@tme5kko5ettktqv6cfn7eims1j:19"
+        ]
+      },
+      "@tme5kko5ettktqv6cfn7eims1j:1": {
+        "id": "@tme5kko5ettktqv6cfn7eims1j:1",
+        "kind": "lambda",
+        "params": [
+          "@tme5kko5ettktqv6cfn7eims1j:2",
+          "@tme5kko5ettktqv6cfn7eims1j:3",
+          "@tme5kko5ettktqv6cfn7eims1j:4"
+        ],
+        "body": "@tme5kko5ettktqv6cfn7eims1j:5"
+      },
+      "@f5elide8cqkud5fq2c0qjdfm2u": {
+        "id": "@f5elide8cqkud5fq2c0qjdfm2u",
+        "kind": "def",
+        "body": "@f5elide8cqkud5fq2c0qjdfm2u:1"
+      },
+      "@f5elide8cqkud5fq2c0qjdfm2u:2": {
+        "id": "@f5elide8cqkud5fq2c0qjdfm2u:2",
+        "kind": "binder"
+      },
+      "@f5elide8cqkud5fq2c0qjdfm2u:27": {
+        "id": "@f5elide8cqkud5fq2c0qjdfm2u:27",
+        "kind": "binder"
+      },
+      "@f5elide8cqkud5fq2c0qjdfm2u:31": {
+        "id": "@f5elide8cqkud5fq2c0qjdfm2u:31",
+        "kind": "lit",
+        "value": 255,
+        "of": "type.int"
+      },
+      "@f5elide8cqkud5fq2c0qjdfm2u:29": {
+        "id": "@f5elide8cqkud5fq2c0qjdfm2u:29",
+        "kind": "ref",
+        "target": "builtin.int.bitAnd"
+      },
+      "@f5elide8cqkud5fq2c0qjdfm2u:30": {
+        "id": "@f5elide8cqkud5fq2c0qjdfm2u:30",
+        "kind": "ref",
+        "target": "@f5elide8cqkud5fq2c0qjdfm2u:27"
+      },
+      "@f5elide8cqkud5fq2c0qjdfm2u:28": {
+        "id": "@f5elide8cqkud5fq2c0qjdfm2u:28",
+        "kind": "call",
+        "fn": "@f5elide8cqkud5fq2c0qjdfm2u:29",
+        "args": [
+          "@f5elide8cqkud5fq2c0qjdfm2u:30",
+          "@f5elide8cqkud5fq2c0qjdfm2u:31"
+        ]
+      },
+      "@f5elide8cqkud5fq2c0qjdfm2u:26": {
+        "id": "@f5elide8cqkud5fq2c0qjdfm2u:26",
+        "kind": "lambda",
+        "params": [
+          "@f5elide8cqkud5fq2c0qjdfm2u:27"
+        ],
+        "body": "@f5elide8cqkud5fq2c0qjdfm2u:28"
+      },
+      "@f5elide8cqkud5fq2c0qjdfm2u:24": {
+        "id": "@f5elide8cqkud5fq2c0qjdfm2u:24",
+        "kind": "ref",
+        "target": "@9902gjnadddgv3jrh6ir29nf4q"
+      },
+      "@f5elide8cqkud5fq2c0qjdfm2u:25": {
+        "id": "@f5elide8cqkud5fq2c0qjdfm2u:25",
+        "kind": "ref",
+        "target": "@f5elide8cqkud5fq2c0qjdfm2u:2"
+      },
+      "@f5elide8cqkud5fq2c0qjdfm2u:23": {
+        "id": "@f5elide8cqkud5fq2c0qjdfm2u:23",
+        "kind": "call",
+        "fn": "@f5elide8cqkud5fq2c0qjdfm2u:24",
+        "args": [
+          "@f5elide8cqkud5fq2c0qjdfm2u:25",
+          "@f5elide8cqkud5fq2c0qjdfm2u:26"
+        ]
+      },
+      "@f5elide8cqkud5fq2c0qjdfm2u:22": {
+        "id": "@f5elide8cqkud5fq2c0qjdfm2u:22",
+        "kind": "ref",
+        "target": "@3v53osblg28arqlj21pp7mq2a7"
+      },
+      "@f5elide8cqkud5fq2c0qjdfm2u:21": {
+        "id": "@f5elide8cqkud5fq2c0qjdfm2u:21",
+        "kind": "call",
+        "fn": "@f5elide8cqkud5fq2c0qjdfm2u:22",
+        "args": [
+          "@f5elide8cqkud5fq2c0qjdfm2u:23"
+        ]
+      },
+      "@f5elide8cqkud5fq2c0qjdfm2u:5": {
+        "id": "@f5elide8cqkud5fq2c0qjdfm2u:5",
+        "kind": "binder"
+      },
+      "@f5elide8cqkud5fq2c0qjdfm2u:15": {
+        "id": "@f5elide8cqkud5fq2c0qjdfm2u:15",
+        "kind": "ref",
+        "target": "@iq044k6dto1s16ehvfe3vm8iuc"
+      },
+      "@f5elide8cqkud5fq2c0qjdfm2u:16": {
+        "id": "@f5elide8cqkud5fq2c0qjdfm2u:16",
+        "kind": "ref",
+        "target": "@f5elide8cqkud5fq2c0qjdfm2u:5"
+      },
+      "@f5elide8cqkud5fq2c0qjdfm2u:14": {
+        "id": "@f5elide8cqkud5fq2c0qjdfm2u:14",
+        "kind": "call",
+        "fn": "@f5elide8cqkud5fq2c0qjdfm2u:15",
+        "args": [
+          "@f5elide8cqkud5fq2c0qjdfm2u:16"
+        ]
+      },
+      "@f5elide8cqkud5fq2c0qjdfm2u:13": {
+        "id": "@f5elide8cqkud5fq2c0qjdfm2u:13",
+        "kind": "ref",
+        "target": "@p2l9l22tkbu6olnjqcqhbmmd85"
+      },
+      "@f5elide8cqkud5fq2c0qjdfm2u:12": {
+        "id": "@f5elide8cqkud5fq2c0qjdfm2u:12",
+        "kind": "call",
+        "fn": "@f5elide8cqkud5fq2c0qjdfm2u:13",
+        "args": [
+          "@f5elide8cqkud5fq2c0qjdfm2u:14"
+        ]
+      },
+      "@f5elide8cqkud5fq2c0qjdfm2u:11": {
+        "id": "@f5elide8cqkud5fq2c0qjdfm2u:11",
+        "kind": "ref",
+        "target": "@f04ut431f50rop67al0672lsou"
+      },
+      "@f5elide8cqkud5fq2c0qjdfm2u:10": {
+        "id": "@f5elide8cqkud5fq2c0qjdfm2u:10",
+        "kind": "call",
+        "fn": "@f5elide8cqkud5fq2c0qjdfm2u:11",
+        "args": [
+          "@f5elide8cqkud5fq2c0qjdfm2u:12"
+        ]
+      },
+      "@f5elide8cqkud5fq2c0qjdfm2u:18": {
+        "id": "@f5elide8cqkud5fq2c0qjdfm2u:18",
+        "kind": "ref",
+        "target": "@f04ut431f50rop67al0672lsou"
+      },
+      "@f5elide8cqkud5fq2c0qjdfm2u:19": {
+        "id": "@f5elide8cqkud5fq2c0qjdfm2u:19",
+        "kind": "ref",
+        "target": "@f5elide8cqkud5fq2c0qjdfm2u:5"
+      },
+      "@f5elide8cqkud5fq2c0qjdfm2u:17": {
+        "id": "@f5elide8cqkud5fq2c0qjdfm2u:17",
+        "kind": "call",
+        "fn": "@f5elide8cqkud5fq2c0qjdfm2u:18",
+        "args": [
+          "@f5elide8cqkud5fq2c0qjdfm2u:19"
+        ]
+      },
+      "@f5elide8cqkud5fq2c0qjdfm2u:9": {
+        "id": "@f5elide8cqkud5fq2c0qjdfm2u:9",
+        "kind": "ref",
+        "target": "builtin.equal"
+      },
+      "@f5elide8cqkud5fq2c0qjdfm2u:8": {
+        "id": "@f5elide8cqkud5fq2c0qjdfm2u:8",
+        "kind": "call",
+        "fn": "@f5elide8cqkud5fq2c0qjdfm2u:9",
+        "args": [
+          "@f5elide8cqkud5fq2c0qjdfm2u:10",
+          "@f5elide8cqkud5fq2c0qjdfm2u:17"
+        ]
+      },
+      "@f5elide8cqkud5fq2c0qjdfm2u:20": {
+        "id": "@f5elide8cqkud5fq2c0qjdfm2u:20",
+        "kind": "lit",
+        "value": "bytes of base64 undoes base64 of: the same bytes back"
+      },
+      "@f5elide8cqkud5fq2c0qjdfm2u:7": {
+        "id": "@f5elide8cqkud5fq2c0qjdfm2u:7",
+        "kind": "ref",
+        "target": "std.check.expect"
+      },
+      "@f5elide8cqkud5fq2c0qjdfm2u:6": {
+        "id": "@f5elide8cqkud5fq2c0qjdfm2u:6",
+        "kind": "call",
+        "fn": "@f5elide8cqkud5fq2c0qjdfm2u:7",
+        "args": [
+          "@f5elide8cqkud5fq2c0qjdfm2u:8",
+          "@f5elide8cqkud5fq2c0qjdfm2u:20"
+        ]
+      },
+      "@f5elide8cqkud5fq2c0qjdfm2u:4": {
+        "id": "@f5elide8cqkud5fq2c0qjdfm2u:4",
+        "kind": "lambda",
+        "params": [
+          "@f5elide8cqkud5fq2c0qjdfm2u:5"
+        ],
+        "body": "@f5elide8cqkud5fq2c0qjdfm2u:6"
+      },
+      "@f5elide8cqkud5fq2c0qjdfm2u:3": {
+        "id": "@f5elide8cqkud5fq2c0qjdfm2u:3",
+        "kind": "call",
+        "fn": "@f5elide8cqkud5fq2c0qjdfm2u:4",
+        "args": [
+          "@f5elide8cqkud5fq2c0qjdfm2u:21"
+        ]
+      },
+      "@f5elide8cqkud5fq2c0qjdfm2u:1": {
+        "id": "@f5elide8cqkud5fq2c0qjdfm2u:1",
+        "kind": "lambda",
+        "params": [
+          "@f5elide8cqkud5fq2c0qjdfm2u:2"
+        ],
+        "body": "@f5elide8cqkud5fq2c0qjdfm2u:3"
+      },
+      "@kjnioeormvpnbitto13ugdqa5g": {
+        "id": "@kjnioeormvpnbitto13ugdqa5g",
+        "kind": "def",
+        "body": "@kjnioeormvpnbitto13ugdqa5g:1"
+      },
+      "@kjnioeormvpnbitto13ugdqa5g:2": {
+        "id": "@kjnioeormvpnbitto13ugdqa5g:2",
+        "kind": "binder"
+      },
+      "@kjnioeormvpnbitto13ugdqa5g:27": {
+        "id": "@kjnioeormvpnbitto13ugdqa5g:27",
+        "kind": "binder"
+      },
+      "@kjnioeormvpnbitto13ugdqa5g:31": {
+        "id": "@kjnioeormvpnbitto13ugdqa5g:31",
+        "kind": "lit",
+        "value": 255,
+        "of": "type.int"
+      },
+      "@kjnioeormvpnbitto13ugdqa5g:29": {
+        "id": "@kjnioeormvpnbitto13ugdqa5g:29",
+        "kind": "ref",
+        "target": "builtin.int.bitAnd"
+      },
+      "@kjnioeormvpnbitto13ugdqa5g:30": {
+        "id": "@kjnioeormvpnbitto13ugdqa5g:30",
+        "kind": "ref",
+        "target": "@kjnioeormvpnbitto13ugdqa5g:27"
+      },
+      "@kjnioeormvpnbitto13ugdqa5g:28": {
+        "id": "@kjnioeormvpnbitto13ugdqa5g:28",
+        "kind": "call",
+        "fn": "@kjnioeormvpnbitto13ugdqa5g:29",
+        "args": [
+          "@kjnioeormvpnbitto13ugdqa5g:30",
+          "@kjnioeormvpnbitto13ugdqa5g:31"
+        ]
+      },
+      "@kjnioeormvpnbitto13ugdqa5g:26": {
+        "id": "@kjnioeormvpnbitto13ugdqa5g:26",
+        "kind": "lambda",
+        "params": [
+          "@kjnioeormvpnbitto13ugdqa5g:27"
+        ],
+        "body": "@kjnioeormvpnbitto13ugdqa5g:28"
+      },
+      "@kjnioeormvpnbitto13ugdqa5g:24": {
+        "id": "@kjnioeormvpnbitto13ugdqa5g:24",
+        "kind": "ref",
+        "target": "@9902gjnadddgv3jrh6ir29nf4q"
+      },
+      "@kjnioeormvpnbitto13ugdqa5g:25": {
+        "id": "@kjnioeormvpnbitto13ugdqa5g:25",
+        "kind": "ref",
+        "target": "@kjnioeormvpnbitto13ugdqa5g:2"
+      },
+      "@kjnioeormvpnbitto13ugdqa5g:23": {
+        "id": "@kjnioeormvpnbitto13ugdqa5g:23",
+        "kind": "call",
+        "fn": "@kjnioeormvpnbitto13ugdqa5g:24",
+        "args": [
+          "@kjnioeormvpnbitto13ugdqa5g:25",
+          "@kjnioeormvpnbitto13ugdqa5g:26"
+        ]
+      },
+      "@kjnioeormvpnbitto13ugdqa5g:22": {
+        "id": "@kjnioeormvpnbitto13ugdqa5g:22",
+        "kind": "ref",
+        "target": "@3v53osblg28arqlj21pp7mq2a7"
+      },
+      "@kjnioeormvpnbitto13ugdqa5g:21": {
+        "id": "@kjnioeormvpnbitto13ugdqa5g:21",
+        "kind": "call",
+        "fn": "@kjnioeormvpnbitto13ugdqa5g:22",
+        "args": [
+          "@kjnioeormvpnbitto13ugdqa5g:23"
+        ]
+      },
+      "@kjnioeormvpnbitto13ugdqa5g:5": {
+        "id": "@kjnioeormvpnbitto13ugdqa5g:5",
+        "kind": "binder"
+      },
+      "@kjnioeormvpnbitto13ugdqa5g:15": {
+        "id": "@kjnioeormvpnbitto13ugdqa5g:15",
+        "kind": "ref",
+        "target": "@0o3crs7sp83qlu0plvg1u24stc"
+      },
+      "@kjnioeormvpnbitto13ugdqa5g:16": {
+        "id": "@kjnioeormvpnbitto13ugdqa5g:16",
+        "kind": "ref",
+        "target": "@kjnioeormvpnbitto13ugdqa5g:5"
+      },
+      "@kjnioeormvpnbitto13ugdqa5g:14": {
+        "id": "@kjnioeormvpnbitto13ugdqa5g:14",
+        "kind": "call",
+        "fn": "@kjnioeormvpnbitto13ugdqa5g:15",
+        "args": [
+          "@kjnioeormvpnbitto13ugdqa5g:16"
+        ]
+      },
+      "@kjnioeormvpnbitto13ugdqa5g:13": {
+        "id": "@kjnioeormvpnbitto13ugdqa5g:13",
+        "kind": "ref",
+        "target": "@trfpks30lsfctf9pocjp3vlsic"
+      },
+      "@kjnioeormvpnbitto13ugdqa5g:12": {
+        "id": "@kjnioeormvpnbitto13ugdqa5g:12",
+        "kind": "call",
+        "fn": "@kjnioeormvpnbitto13ugdqa5g:13",
+        "args": [
+          "@kjnioeormvpnbitto13ugdqa5g:14"
+        ]
+      },
+      "@kjnioeormvpnbitto13ugdqa5g:11": {
+        "id": "@kjnioeormvpnbitto13ugdqa5g:11",
+        "kind": "ref",
+        "target": "@f04ut431f50rop67al0672lsou"
+      },
+      "@kjnioeormvpnbitto13ugdqa5g:10": {
+        "id": "@kjnioeormvpnbitto13ugdqa5g:10",
+        "kind": "call",
+        "fn": "@kjnioeormvpnbitto13ugdqa5g:11",
+        "args": [
+          "@kjnioeormvpnbitto13ugdqa5g:12"
+        ]
+      },
+      "@kjnioeormvpnbitto13ugdqa5g:18": {
+        "id": "@kjnioeormvpnbitto13ugdqa5g:18",
+        "kind": "ref",
+        "target": "@f04ut431f50rop67al0672lsou"
+      },
+      "@kjnioeormvpnbitto13ugdqa5g:19": {
+        "id": "@kjnioeormvpnbitto13ugdqa5g:19",
+        "kind": "ref",
+        "target": "@kjnioeormvpnbitto13ugdqa5g:5"
+      },
+      "@kjnioeormvpnbitto13ugdqa5g:17": {
+        "id": "@kjnioeormvpnbitto13ugdqa5g:17",
+        "kind": "call",
+        "fn": "@kjnioeormvpnbitto13ugdqa5g:18",
+        "args": [
+          "@kjnioeormvpnbitto13ugdqa5g:19"
+        ]
+      },
+      "@kjnioeormvpnbitto13ugdqa5g:9": {
+        "id": "@kjnioeormvpnbitto13ugdqa5g:9",
+        "kind": "ref",
+        "target": "builtin.equal"
+      },
+      "@kjnioeormvpnbitto13ugdqa5g:8": {
+        "id": "@kjnioeormvpnbitto13ugdqa5g:8",
+        "kind": "call",
+        "fn": "@kjnioeormvpnbitto13ugdqa5g:9",
+        "args": [
+          "@kjnioeormvpnbitto13ugdqa5g:10",
+          "@kjnioeormvpnbitto13ugdqa5g:17"
+        ]
+      },
+      "@kjnioeormvpnbitto13ugdqa5g:20": {
+        "id": "@kjnioeormvpnbitto13ugdqa5g:20",
+        "kind": "lit",
+        "value": "bytes of hex undoes hex of: the same bytes back"
+      },
+      "@kjnioeormvpnbitto13ugdqa5g:7": {
+        "id": "@kjnioeormvpnbitto13ugdqa5g:7",
+        "kind": "ref",
+        "target": "std.check.expect"
+      },
+      "@kjnioeormvpnbitto13ugdqa5g:6": {
+        "id": "@kjnioeormvpnbitto13ugdqa5g:6",
+        "kind": "call",
+        "fn": "@kjnioeormvpnbitto13ugdqa5g:7",
+        "args": [
+          "@kjnioeormvpnbitto13ugdqa5g:8",
+          "@kjnioeormvpnbitto13ugdqa5g:20"
+        ]
+      },
+      "@kjnioeormvpnbitto13ugdqa5g:4": {
+        "id": "@kjnioeormvpnbitto13ugdqa5g:4",
+        "kind": "lambda",
+        "params": [
+          "@kjnioeormvpnbitto13ugdqa5g:5"
+        ],
+        "body": "@kjnioeormvpnbitto13ugdqa5g:6"
+      },
+      "@kjnioeormvpnbitto13ugdqa5g:3": {
+        "id": "@kjnioeormvpnbitto13ugdqa5g:3",
+        "kind": "call",
+        "fn": "@kjnioeormvpnbitto13ugdqa5g:4",
+        "args": [
+          "@kjnioeormvpnbitto13ugdqa5g:21"
+        ]
+      },
+      "@kjnioeormvpnbitto13ugdqa5g:1": {
+        "id": "@kjnioeormvpnbitto13ugdqa5g:1",
+        "kind": "lambda",
+        "params": [
+          "@kjnioeormvpnbitto13ugdqa5g:2"
+        ],
+        "body": "@kjnioeormvpnbitto13ugdqa5g:3"
+      },
       "@7plivrfraknc5cpfoogvdoj73p": {
         "id": "@7plivrfraknc5cpfoogvdoj73p",
         "kind": "def",
@@ -116850,7 +117429,10 @@
       "@dqtkd4qu716gfdnjh1baac17o9",
       "@ddq3iu3t4r510tmtam65k885vf",
       "@e85oqnjaa3cmdudl3t5ibega9m",
-      "@g301vb65vh2lu120ro8e08qaf1"
+      "@g301vb65vh2lu120ro8e08qaf1",
+      "@f5elide8cqkud5fq2c0qjdfm2u",
+      "@kjnioeormvpnbitto13ugdqa5g",
+      "@tme5kko5ettktqv6cfn7eims1j"
     ]
   },
   "pins": {
@@ -136883,6 +137465,115 @@
         }
       },
       "plain": []
+    },
+    "@f5elide8cqkud5fq2c0qjdfm2u": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.list",
+            "args": [
+              {
+                "t": "con",
+                "id": "type.int",
+                "args": []
+              }
+            ]
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.unit",
+          "args": []
+        },
+        "eff": {
+          "effs": [
+            "std.abort",
+            "std.check"
+          ],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
+    "@kjnioeormvpnbitto13ugdqa5g": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "std.list",
+            "args": [
+              {
+                "t": "con",
+                "id": "type.int",
+                "args": []
+              }
+            ]
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.unit",
+          "args": []
+        },
+        "eff": {
+          "effs": [
+            "std.abort",
+            "std.check"
+          ],
+          "tail": 0
+        }
+      },
+      "plain": []
+    },
+    "@tme5kko5ettktqv6cfn7eims1j": {
+      "vars": [],
+      "rows": [
+        0
+      ],
+      "type": {
+        "t": "fn",
+        "params": [
+          {
+            "t": "con",
+            "id": "type.string",
+            "args": []
+          },
+          {
+            "t": "con",
+            "id": "type.string",
+            "args": []
+          },
+          {
+            "t": "con",
+            "id": "type.string",
+            "args": []
+          }
+        ],
+        "ret": {
+          "t": "con",
+          "id": "std.unit",
+          "args": []
+        },
+        "eff": {
+          "effs": [
+            "std.abort",
+            "std.check"
+          ],
+          "tail": 0
+        }
+      },
+      "plain": []
     }
   },
   "names": {
@@ -139659,6 +140350,19 @@
     "@kf5135uoqcidc8picpu2ld4sh1:52": "value",
     "@trfpks30lsfctf9pocjp3vlsic": "bytes of hex",
     "@trfpks30lsfctf9pocjp3vlsic:2": "text",
+    "@tme5kko5ettktqv6cfn7eims1j": "text of utf8 undoes utf8 of",
+    "@tme5kko5ettktqv6cfn7eims1j:2": "a",
+    "@tme5kko5ettktqv6cfn7eims1j:3": "b",
+    "@tme5kko5ettktqv6cfn7eims1j:4": "c",
+    "@tme5kko5ettktqv6cfn7eims1j:7": "text",
+    "@f5elide8cqkud5fq2c0qjdfm2u": "bytes of base64 undoes base64 of",
+    "@f5elide8cqkud5fq2c0qjdfm2u:2": "numbers",
+    "@f5elide8cqkud5fq2c0qjdfm2u:27": "n",
+    "@f5elide8cqkud5fq2c0qjdfm2u:5": "bytes",
+    "@kjnioeormvpnbitto13ugdqa5g": "bytes of hex undoes hex of",
+    "@kjnioeormvpnbitto13ugdqa5g:2": "numbers",
+    "@kjnioeormvpnbitto13ugdqa5g:27": "n",
+    "@kjnioeormvpnbitto13ugdqa5g:5": "bytes",
     "@7plivrfraknc5cpfoogvdoj73p": "time of",
     "@7plivrfraknc5cpfoogvdoj73p:2": "hour",
     "@7plivrfraknc5cpfoogvdoj73p:3": "minute",
