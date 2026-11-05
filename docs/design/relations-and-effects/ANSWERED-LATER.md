@@ -296,6 +296,74 @@ knows what that does) isn't marked. The runtime decides by cost whether to
 use it (C41); the editor may show it. Haskell's `par` without the
 annotation (Marlow et al., "Seq no more", 2010).
 
+## The steps of an effect (L229, 2026-11-05)
+
+A program that drives fibers itself writes the effect twice today. crew
+(GAPS round 11, CL1) and the scheduler in `ters/test/later.test.ts` each
+declare a `Step` type whose cases are their effect's operations again,
+each with a `rest`, and a handler whose cases only wrap the operation and
+its rest in that type. **`steps(E, c)`** does both: it runs the
+computation `c` to its first operation of `E` and gives that operation
+back as data, with its rest.
+
+```
+effect Work = next job() returns Task, later
+            | spend(minutes: Int) returns Unit, later
+            | done with(task: Task) returns Unit, later
+
+match steps(Work, worker(3))
+| next job() with rest       → park(rest)
+| spend(minutes) with rest   → timer(now + minutes, rest)
+| done with(task) with rest  → finish(task); resume(rest(unit))
+| done(value)                → value
+```
+
+**The type it gives back.** For an effect `E` whose operations are
+`op_i(fields_i) returns T_i`, a computation `c : () -[E, ε]-> R` gives
+`Steps E R ε`, a type the checker derives from `E` the way a record's
+variant is derived from it (no new node kind, as with `later`'s flag):
+
+- one case per operation, `op_i(fields_i, rest: (T_i) -[ε]-> Steps E R ε)`;
+- and `done(value: R)` for a computation that ends without performing.
+
+A step is matched with the same arms as a handler of `E`, `with rest`
+included, plus `done`, so the text and the editor show it as they show a
+match on the effect. `E` comes out of the row: what is left, `ε`, is what
+`c` does besides, and the rest carries it. `E`'s operations need not be
+declared `later`: the rest is a value either way, and a `steps` over
+operations answered now costs the kept continuation only where it is used.
+
+**The rests' `Diverge`.** A hand-written `Step` spells each rest's type in
+full, so it has to name every effect the rest may have, `Diverge`
+included (crew's rests and later.test's are `-[Console, Diverge]->`): a
+type's fields can't say "whatever the computation does". The derived type
+can: a rest's row is `ε`, the computation's own row less `E`. A rest runs
+a piece of `c`, from one operation to the next, so it finishes whenever
+`c` does, and needs no `Diverge` that `c` doesn't have. The loop that
+drives the steps is the program's own: a scheduler that takes rests from
+a queue and resumes them is not structural recursion, so it keeps
+`Diverge` (or `with fuel`), as crew's `run floor` does today. Only the
+rests lose it.
+
+**Deep or shallow.** `steps` is the shallow handler's view (Hillerström
+and Lindley, "Shallow effect handlers", APLAS 2018; OCaml 5's
+`Effect.Shallow`): the rest is not under any handler of `E`, it runs to
+the next operation and gives the next step. It is defined by a deep
+handler whose cases are generated, which is exactly the pair programs
+write by hand now, so the evaluator, the checker and the compiled targets
+need nothing new below it: the handler of `later` operations (L54a, C40)
+already keeps the rest. The steps of L229, about an hour each: (a) this
+note; (b) the evaluator and the checker, `Steps` derived per effect;
+(c) crew rewritten on it, the same output four ways
+(compiler/test/crew.test.ts); (d) compiled JS and the core IR.
+
+**Open.** Whether `steps` takes the effect by name or reads it from the
+arms (a match naming `Work`'s operations could only mean `Work`): by name
+first, since a computation with two effects could be stepped over
+either. Whether `Steps E R ε` shows its row argument in the text; it
+reads as `steps of Work giving Unit` with the row left to inference, as
+rows are elsewhere.
+
 ## Prior art
 
 - Algebraic effect handlers: Plotkin and Pretnar (2009); Eff (Bauer and
@@ -313,3 +381,7 @@ annotation (Marlow et al., "Seq no more", 2010).
   as in LANGUAGE-NEEDS-2026-10-24.
 - An operation's own type variables: OCaml 5's effects as GADT
   constructors, and Koka's polymorphic operations.
+- An effect's operations as data with their rests: shallow handlers
+  (Hillerström and Lindley, APLAS 2018), OCaml 5's `Effect.Shallow`, and
+  free monads' views of a computation (Swierstra, "Data types à la
+  carte", 2008).
