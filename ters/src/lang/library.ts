@@ -7,6 +7,7 @@ import html0 from "../../library/html.json" with { type: "json" };
 import trees0 from "../../library/trees.json" with { type: "json" };
 import steady0 from "../../library/steady.json" with { type: "json" };
 import cases0 from "../../library/cases.json" with { type: "json" };
+import numbers0 from "../../library/numbers.json" with { type: "json" };
 import { merge, shapeHooks, type Code, type Id } from "../model.ts";
 import { fillOnce, usesGiveTheirPorts } from "./ports.ts";
 import { layer, type Comments, type Names } from "../presentation.ts";
@@ -27,7 +28,12 @@ export const STEADY = steady0 as unknown as Module;
 // uppercase and lowercase over the Unicode case tables, for the targets
 // with no host to ask (cases-source.ts, L214e2).
 export const CASES = cases0 as unknown as Module;
-export const MODULES: Module[] = [PRELUDE, VECTORS, HTML_MODULE, TREES, STEADY, CASES];
+// The number types written in the language (numbers-source.ts, L207):
+// Dual so far.
+export const NUMBERS = numbers0 as unknown as Module;
+// Dual's one case, by its name (its id is its hash).
+export const DUAL_V = Object.keys(NUMBERS.code.nodes).find((d) => NUMBERS.code.nodes[d].kind === "variant" && NUMBERS.names[d] === "dual")!;
+export const MODULES: Module[] = [PRELUDE, VECTORS, HTML_MODULE, TREES, STEADY, CASES, NUMBERS];
 export const CORE: Code = merge(prelude, std);
 // Every program is checked on top of the library, so the trees (about
 // 1,500 nodes nobody edits) aren't in it: they're merged in only when a
