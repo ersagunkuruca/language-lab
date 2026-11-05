@@ -17,6 +17,7 @@ import { edit, h, type Kid } from "./dom.ts";
 import { typeName } from "./palette.ts";
 import type { Doc, UI } from "./main.ts";
 import type { Where } from "./whereRuns.ts";
+import { gpuRefusals } from "../ters/src/lang/profiles.ts";
 
 export interface StructureHost {
   doc(): Doc;
@@ -295,7 +296,14 @@ export function structure(host: StructureHost) {
       // §5): a profile is told, never asked for, as an effect is.
       const where = whereRuns(ui.def);
       out.append(h("div", { class: "sub-head" }, "Where it runs · the compiler's answer"));
-      if (where === undefined) out.append(h("p", { class: "hint" }, "Finding out where it can run…"));
+      if (where === undefined) {
+        // Told from types at once (L22b, profiles.ts), while the compiler
+        // works out its own answer: a definition that takes or gives what a
+        // shader can't hold, or calls one, can't run on the GPU.
+        const told = gpuRefusals(code, info, names, ownDefs()).get(ui.def);
+        if (told) out.append(row(h("span", {}, "A shader, on the GPU"), h("span", { class: "opt-d" }, ` no: ${dname} ${told}`)));
+        out.append(h("p", { class: "hint" }, told ? "Told from its type. Finding out the rest…" : "Finding out where it can run…"));
+      }
       else if (where === "failed") out.append(h("p", { class: "hint" }, "The compiler couldn't say where it runs."));
       else {
         const said = (why: string | null) => (why === null ? "yes" : `no: ${dname} ${why}`);
