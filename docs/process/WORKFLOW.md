@@ -133,6 +133,11 @@ of text; they were these cells logging every finished row).
 - A row that takes more than about an hour is split into one-hour steps
   before a run starts, each its own line in the row, so finished steps
   show and a run isn't spent on rows that never close.
+- Each row names one example, and is done when that example works
+  (Ersagun 2026-11-05, PROGRESS-2026-11-05.md). Anything beyond it is a
+  new row, which has to earn its place by priority like any other. A row
+  says only what is left; what was done is its rows in DONE.md, not a
+  history in the row.
 - Measure an idea by hand before building it (a scratch script, a profile,
   a timing of the slow path), and build it only if it buys at least 10%
   of what it targets. Speed work stops when the next stage buys less (the
