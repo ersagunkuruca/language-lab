@@ -55,6 +55,8 @@ export interface PageOptions {
   after?: (ms: number) => Promise<void>;
   // Keep the cells the page starts with, for handOver (cells.ts).
   keepCells?: boolean;
+  // A handler that stopped (html.ts Mount).
+  stopped?: (e: unknown) => void;
 }
 
 export interface Preview {
@@ -82,7 +84,7 @@ export function showPage(o: PageOptions): Preview {
   const run = () => runMain(o.code, o.info, o.main, { print: (line) => cells.later(() => out.log(line)), names: o.names, cells, world });
   const sound = o.worklet && hasSound(o.code) ? soundPlayer(cells, workletFile(o.worklet, o.code, o.info, o.names, o.main), run, o.recordings, world) : null;
   const value = sound ? sound.page : run();
-  const root = mountHtml(value, { cells, doc: o.doc, call: evaluatorCall, ran: o.ran, listen: sound?.listen });
+  const root = mountHtml(value, { cells, doc: o.doc, call: evaluatorCall, ran: o.ran, listen: sound?.listen, stopped: o.stopped });
   const kept = cells.kept;
   cells.kept = null;
   return { root, cells, kept, stop: () => { stopped = true; sound?.stop(); }, hush: sound ? () => sound.hush() : undefined };
