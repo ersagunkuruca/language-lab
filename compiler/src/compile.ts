@@ -60,6 +60,7 @@ import { expandDerivatives, recordVariant } from "../../ters/src/lang/derive.ts"
 import { hoistInvariants } from "./hoist.ts";
 import { stageProgram } from "../../ters/src/lang/stage.ts";
 import { expandInverses } from "./inverses.ts";
+import { unnameHandlers } from "./handler-names.ts";
 import { solvesAsCalls } from "./results.ts";
 import { infer, type Info } from "../../ters/src/lang/infer.ts";
 
@@ -163,7 +164,9 @@ export function compile(code: Code, info: Info, names: Names, opts: Options): st
   // Before hoisting, whose check again was over the whole library too
   // (sheet: 1.6 s of its 2.4 s compile).
   code = reachedFromExports(code, names, opts.exports, info);
-  for (const n of Object.values(code.nodes)) if (n.kind === "match" && n.name) throw new Error("a handler with a name isn't compiled yet (L213b): run it in the evaluator");
+  // A named handler handles a copy of its effect of its own (L213b4, as
+  // the core IR's JS does, handler-names.ts).
+  ({ code, info, names } = unnameHandlers(code, info, names));
   // Cells kept plainly when nothing reads them reactively (L99f): no
   // formula, each or each of, and no page (Html), whose watchers do.
   const refs = Object.values(code.nodes).flatMap((n) => (n.kind === "ref" ? [n.target] : []));
