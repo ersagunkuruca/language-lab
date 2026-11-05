@@ -912,6 +912,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
+| T7e14d | Measured: the inverse law's Float64 failures (calculus's cubic, wave and bump, mandelbrot's zoom) are all the solver's answers rounded to 12 digits, f of them within about 1e-11 of y: the solver's tolerance (L197), against `=`, which is exact. Not a bug; the law compares Float64 with `near` | this PR |
 | I174 | `with fuel` bounds a search's later answers too: a choice point resumed after the fuel's body gave its first answer ran the search's next step with no fuel at all (run.ts sets the machine's fuel only after pulling the next answer; now before), so `with fuel(10, inverse(most, y))` over dice's `most` ran for minutes and takes 1.3 s now. Found by T7e14e's inverse law. Test: fuel-later-answers.test.ts | #1809 |
 | T7e14e | Measured: where the inverse law over the examples hangs, function by function in wc, dice and countdown. wc's `options`, dice's `most`, countdown's `subsequence` and `choices` take over 20 s alone even at `with fuel(10, …)`, and 2 s at fuel 0: the fuel doesn't bound the backward search's time, recorded as bug I174 (fixed, #1809: 28 of 34 examples finish after). A Choice function (countdown's `permutation`) needs the law as "one of f(z)'s answers" | #1805 |
 | T7e14c | A law with function inputs takes six cases a function (tests.ts `FN_CASES`, as agreement.test takes six), not 200 shared: the inverse law over each example's pure functions now finishes on 23 of 34 examples (was 20), in 3 to 26 s. Test: tests-in-language.test.ts | #1802 |
