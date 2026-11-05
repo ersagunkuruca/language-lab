@@ -7460,6 +7460,7 @@ const WASI: Record<string, Omit<RtFn, "name">> = {
       i32.load
       f64.convert_i32_u` },
   "wasi.print": { params: [["t", "text"]], result: "void", locals: [], uses: ["wasi.line"], body: "i32.const 1\nlocal.get $t\ncall $wasi.line" },
+  "wasi.logLine": { params: [["t", "text"]], result: "void", locals: [], uses: ["wasi.line"], body: "i32.const 2\nlocal.get $t\ncall $wasi.line" },
   "wasi.printError": { params: [["t", "text"]], result: "void", locals: [], uses: ["wasi.line"], body: "i32.const 2\nlocal.get $t\ncall $wasi.line" },
   // Error e on path: its reason, as Node's world gives it, and status 2.
   "wasi.fail": {

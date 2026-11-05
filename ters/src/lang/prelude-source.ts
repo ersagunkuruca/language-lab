@@ -2253,7 +2253,20 @@ export function buildPrelude(): Module {
   const jsonNumberChar = def("json number character", ["character"], (c) => k.byValue(c, [..."0123456789+-.eE"].map((x) => [k.lit(x), k.true] as [Id, Id]), k.false));
   const jsonNumberRead = def("json number read", ["text"], (t) => k.if(k.call(allPass, k.call(TEXT_OPS.characters, t), k.x(jsonNumberChar)), k.call(TEXT_OPS.readNumber, t), k.call(S.fail)));
   const jsonNumberSpelled = def("json number spelled", ["number"], (x) => k.if(k.call(S.oneOf, k.list(k.false, k.true)), k.call(inverse, k.x(jsonNumberRead), x), k.call(S.show, x)));
-  const jsonQuotedSpelled = def("json quoted spelled", ["text"], (t) => texts(k.lit("\""), k.call(TEXT_OPS.joinAll, k.call(map, k.call(TEXT_OPS.characters, t), k.x(jsonCharSpelled)), k.lit("")), k.lit("\"")));
+  // Any character as \uXXXX (L72e1c): the four hex digits read back by
+  // `json escape read`, a character's spelling read by its inverse.
+  const hexDigitValue = def("hex digit value", ["character"], (c) => k.byValue(c,
+    [...[..."0123456789abcdef"].map((x, i) => [k.lit(x), k.int(i)] as [Id, Id]), ...[..."ABCDEF"].map((x, i) => [k.lit(x), k.int(10 + i)] as [Id, Id])], k.call(S.fail)));
+  const hexNumber = k.def("hex number");
+  k.define(hexNumber, k.fn(["text", "so far"], (t, acc) => k.if(k.equal(t, k.lit("")), acc,
+    k.call(hexNumber, k.call(TEXT_OPS.slice, t, k.int(1), k.call(TEXT_OPS.length, t)), k.call(INT_OPS.add, k.call(INT_OPS.mul, acc, k.int(16)), k.call(hexDigitValue, k.call(TEXT_OPS.slice, t, k.int(0), k.int(1))))))));
+  const jsonEscapeChar = def("json escape character", ["character"], (c) => k.byValue(c, [..."\\u0123456789abcdefABCDEF"].map((x) => [k.lit(x), k.true] as [Id, Id]), k.false));
+  const jsonEscapeStart = def("json escape start", ["character"], (c) => k.equal(c, k.lit("\\")));
+  const jsonEscapeRead = def("json escape read", ["text"], (t) => k.if(k.call(S.and, k.call(jsonEscapeStart, k.call(TEXT_OPS.slice, t, k.int(0), k.int(1))), k.call(allPass, k.call(TEXT_OPS.characters, t), k.x(jsonEscapeChar))),
+    k.if(k.call(S.and, k.equal(k.call(TEXT_OPS.length, t), k.int(6)), k.equal(k.call(TEXT_OPS.slice, t, k.int(0), k.int(2)), k.lit("\\u"))),
+      k.call(TEXT_OPS.fromCode, k.call(hexNumber, k.call(TEXT_OPS.slice, t, k.int(2), k.int(6)), k.int(0))), k.call(S.fail)), k.call(S.fail)));
+  const jsonStringChar = def("json string character", ["character"], (c) => k.if(k.call(S.oneOf, k.list(k.false, k.true)), k.call(inverse, k.x(jsonEscapeRead), c), k.call(jsonCharSpelled, c)));
+  const jsonQuotedSpelled = def("json quoted spelled", ["text"], (t) => texts(k.lit("\""), k.call(TEXT_OPS.joinAll, k.call(map, k.call(TEXT_OPS.characters, t), k.x(jsonStringChar)), k.lit("")), k.lit("\"")));
   const jsonSpelled = k.def("json spelled");
   const blanked = (x: Id) => texts(k.call(blank), x, k.call(blank));
   k.define(jsonSpelled, k.fn(["json"], (j) => k.match(j, [

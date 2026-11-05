@@ -96,7 +96,7 @@ const PRINTED = new Set<SExpr["k"]>([
 const ARRAY_FN = /^array\.(\w+)\.a(\d+)$/;
 // std's Table's runtime functions, one copy per table type (C63h).
 const TABLE_FN = /^table\.(\w+)\.t(\d+)(?:\.e(\d+))?$/;
-const LIST_TEXT = "std.list<type.string<>>", OPTION_TEXT = "std.optional<type.string<>>";
+const LIST_TEXT = "std.list<type.string<>>", OPTION_TEXT = "std.optional<type.string<>>", OPTION_INT = "std.optional<type.int<>>";
 
 // The runtime of counted cells. A null cell (a box's value before the
 // search sets it) is never counted.
@@ -185,6 +185,11 @@ interface Target { label: string; keep: Set<number>; pending: number }
 // same bits as Node's Math (the agreement tests).
 // A program's own operation, performed (scalar.ts): its effect and number.
 const isPerform = (fn: string) => fn.startsWith("perform:");
+// A program's own handler of operations answered at once (L213c4): its
+// cases pushed while the code it handles runs, and a perform's case the
+// nearest's (scalar.ts handleOps with `handlers`).
+const STACK = /^(hpush|hpop|handler):([^:]+)(?::(\d+))?$/;
+const isStack = (fn: string) => STACK.test(fn);
 // What crosses to a C host (L69b1): each shape's type in the program and
 // at the host.
 const HOST_C: Partial<Record<Shape["k"], { lab: string; host: string }>> = {
@@ -265,7 +270,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   funcs.forEach((f, i) => {
     const t = [...f.locals, f.result].map(why).find(Boolean);
     if (t) return refused.set(i, t);
-    const k = walk(f.body).find((e) => !PRINTED.has(e.k) || (e.k === "rt" && (isPerform(e.fn) ? !!hostWhy(e.fn) : !RT_C.has(e.fn) && !ARRAY_FN.test(e.fn) && !TABLE_FN.test(e.fn))) || (e.k === "world" && !RT_C.has(`world.${e.op}`)));
+    const k = walk(f.body).find((e) => !PRINTED.has(e.k) || (e.k === "rt" && (isPerform(e.fn) ? !!hostWhy(e.fn) : !isStack(e.fn) && !RT_C.has(e.fn) && !ARRAY_FN.test(e.fn) && !TABLE_FN.test(e.fn))) || (e.k === "world" && !RT_C.has(`world.${e.op}`)));
     if (k) refused.set(i, k.k === "rt" ? hostWhy(k.fn) ?? `${k.fn} isn't in C's runtime` : k.k === "world" ? `the world's ${k.op} isn't in C's runtime` : `${k.k} isn't printed as C`);
   });
   const callees = (e: SExpr) => walk(e).flatMap((x) => (x.k === "call" || x.k === "closure" ? [x.fn] : []));
@@ -307,7 +312,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
       if (tb) collect(lowered.tables[Number(tb[2])]);
       // A runtime function that makes or takes a list of texts (split,
       // join all): its list type, though no function here names it.
-      if (e.k === "rt" && !a && !tb && !isPerform(e.fn)) {
+      if (e.k === "rt" && !a && !tb && !isPerform(e.fn) && !isStack(e.fn)) {
         const r = runtime(e.fn);
         if (r.result === "list" || r.params.some(([, t]) => t === "list")) { const d = lowered.data.find((x) => x.key === (r.list ?? LIST_TEXT)); if (d) collect(d); }
       }
@@ -353,7 +358,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   };
   // The names a runtime function that makes or reads a list needs.
   const listNames = (fn: string): ListNames => {
-    const d = data.get(fn === "world.readLine" ? OPTION_TEXT : fn.startsWith("world.") ? LIST_TEXT : runtime(fn).list ?? LIST_TEXT)!;
+    const d = data.get(fn === "world.readLine" || fn === "world.keptLine" ? OPTION_TEXT : fn === "world.keptOpen" ? OPTION_INT : fn.startsWith("world.") ? LIST_TEXT : runtime(fn).list ?? LIST_TEXT)!;
     const tag = d.cases.findIndex((c) => c.fields.length > 0);
     return { cons: cname(d, tag), nil: cname(d, 1 - tag), type: tnum.get(d.key)!, tag, head: d.cases[tag].fields.findIndex((x) => x.t !== d) };
   };
@@ -362,6 +367,8 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   const statics = new Map<string, { name: string; decl: string }>(), rts = new Set<string>(), arrayFns = new Set<string>();
   // The host's operations called (L69b1), each a wrapper lab_host_<n>.
   const hostsUsed = new Map<string, number>(), hostTypes = new Map<string, LType>();
+  // The effects a program handles itself on the handler stack, numbered.
+  const effectNums = new Map<string, number>();
   const textLit = (v: string) => {
     const k = `t ${v}`;
     if (!statics.has(k)) {
@@ -785,6 +792,15 @@ int main(int argc, char **argv) {
         case "int": return lowered.int32 ? `((int32_t)${e.v})` : intLit(e.v);
         case "text": return textLit(e.v);
         case "rt": {
+          const st = STACK.exec(e.fn);
+          if (st) {
+            rts.add("handlers");
+            let n = effectNums.get(st[2]);
+            if (n === undefined) effectNums.set(st[2], (n = effectNums.size));
+            const xs = args(e.args, pre, d, after);
+            const c = st[1] === "hpush" ? `lab_handlers_push(${n}, ${xs.length}, (lab_cell *[]){ ${xs.join(", ")} })` : st[1] === "hpop" ? `lab_handlers_pop(${n})` : `lab_handlers_case(${n}, ${st[3]})`;
+            return stated(c, e.host!.t, pre, d);
+          }
           if (isPerform(e.fn)) {
             const h = hostOf(e.fn)!;
             let n = hostsUsed.get(h.op);
@@ -1203,7 +1219,7 @@ int main(int argc, char **argv) {
       case "if": case "budget": case "attempt": case "handle": case "released": return e.t;
       case "int": return lowered.int32 ? "int32" : "int";
       case "text": return "text";
-      case "rt": return isPerform(e.fn) ? e.host!.t : rtType(e.fn);
+      case "rt": return isPerform(e.fn) || isStack(e.fn) ? e.host!.t : rtType(e.fn);
       case "world": return e.t;
       case "case": return e.result;
       case "closure": return shapes[e.shape].t;
@@ -1774,7 +1790,7 @@ function readFirst(f: SFunc, funcs: SFunc[]): SExpr {
         if (!["make", "call", "new", "rt", "op", "get", "local", "num", "int", "text", "bool"].includes(n.k)) { pure = false; return; }
         if (n.k === "call" && n.args.some((a) => a.k === "local" && a.i === x) && n.args.every((a) => a.k === "local" || !kids(a).length)) { first.push(n); return; }
         for (const k of kids(n)) order(k);
-        if (n.k === "call" || n.k === "apply" || n.k === "world" || n.k === "fail" || (n.k === "rt" && (isPerform(n.fn) || runtime(n.fn).partial))) pure = false;
+        if (n.k === "call" || n.k === "apply" || n.k === "world" || n.k === "fail" || (n.k === "rt" && (isPerform(n.fn) || isStack(n.fn) || runtime(n.fn).partial))) pure = false;
       };
       order(t);
       const ls: { i: number; value: SExpr }[] = [];

@@ -15,7 +15,7 @@ import type { Code, Id, NodeOf } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import type { Info } from "./infer.ts";
 import { discharge } from "./ledger.ts";
-import { bool, makeRunner, showerFor, toList, unit, type Data, type Runtime, type Value } from "./run.ts";
+import { bool, makeRunner, runProgram, showerFor, toList, unit, type Data, type Runtime, type Value, type World } from "./run.ts";
 import { ABORT_OP, BOOL, CHECK, CHECK_OP, FALSE, LIST, RATIO, RATIONAL, TRUE, UNIT } from "./std.ts";
 import { Lang } from "./dsl.ts";
 import { CHOICE, instantiate, INT, NUMBER, STRING, type Type } from "./types.ts";
@@ -106,13 +106,51 @@ const CASES = 200, PATHS = 100, FN_CASES = 6;
 // What examples.json keeps for a definition: inputs, and the answer you
 // accepted for them (T7b). The editor's older form, one list of input
 // texts, reads as inputs with no answer.
-export interface Saved { inputs: string[]; answer?: string }
+export interface Saved { inputs: string[]; answer?: string; main?: MainAnswer }
+// A main's accepted answer (T7e15): the world it's given (its arguments,
+// standard input, and the files there are), and what it does there: the
+// lines it prints and writes as errors, the files left, its exit code.
+export interface MainAnswer {
+  arguments: string[]; input: string; files: Record<string, string>;
+  printed: string[]; errors: string[]; filesAfter?: Record<string, string>; exit: number;
+}
 export function savedFrom(json: Record<Id, unknown>): Record<Id, Saved[]> {
   return Object.fromEntries(Object.entries(json).map(([d, v]) => {
     if (Array.isArray(v) && v.every((x) => typeof x === "string")) return [d, [{ inputs: v as string[] }]];
-    const xs = (Array.isArray(v) ? v : []) as { inputs?: unknown; answer?: unknown }[];
-    return [d, xs.filter((x) => Array.isArray(x?.inputs)).map((x) => ({ inputs: x.inputs as string[], ...(typeof x.answer === "string" ? { answer: x.answer } : {}) }))];
+    const xs = (Array.isArray(v) ? v : []) as { inputs?: unknown; answer?: unknown; main?: unknown }[];
+    return [d, xs.flatMap((x): Saved[] => {
+      if (x?.main && typeof x.main === "object") {
+        const m = x.main as Partial<MainAnswer>;
+        return [{ inputs: [], main: { arguments: m.arguments ?? [], input: m.input ?? "", files: m.files ?? {}, printed: m.printed ?? [], errors: m.errors ?? [], ...(m.filesAfter ? { filesAfter: m.filesAfter } : {}), exit: m.exit ?? 0 } }];
+      }
+      return Array.isArray(x?.inputs) ? [{ inputs: x.inputs as string[], ...(typeof x.answer === "string" ? { answer: x.answer } : {}) }] : [];
+    })];
   }));
+}
+
+// main run in a recorded world (T7e15): its files in memory, standard
+// input given, the rest (the clock, Random) the world it's handed. What it
+// did, in MainAnswer's words, for comparing with an accepted one or
+// accepting.
+export function runMainIn(code: Code, info: Info, names: Names, main: Id, given: Pick<MainAnswer, "arguments" | "input" | "files">, rt: Partial<Runtime> = {}): Pick<MainAnswer, "printed" | "errors" | "filesAfter" | "exit"> {
+  const files = new Map(Object.entries(given.files)), printed: string[] = [], errors: string[] = [];
+  let input = given.input;
+  const missing = (p: string): never => { throw new Error(`no file ${p}`); };
+  const world: World = {
+    ...(rt.world as World),
+    error: (l) => errors.push(l), log: (l) => errors.push(l),
+    input: () => { const all = input; input = ""; return all; },
+    readLine: () => { if (!input) return null; const i = input.indexOf("\n"), l = i < 0 ? input : input.slice(0, i); input = i < 0 ? "" : input.slice(i + 1); return l.endsWith("\r") ? l.slice(0, -1) : l; },
+    readFile: (p) => files.get(p) ?? missing(p),
+    writeFile: (p, t) => void files.set(p, t),
+    appendFile: (p, t) => void files.set(p, (files.get(p) ?? "") + t),
+    fileExists: (p) => files.has(p) || [...files.keys()].some((f) => f.startsWith(`${p}/`)),
+    listFolder: (p) => [...new Set([...files.keys()].filter((f) => f.startsWith(`${p}/`)).map((f) => f.slice(p.length + 1).split("/")[0]))].sort(),
+  };
+  const exit = runProgram(code, info, main, given.arguments, { ...rt, names, print: (l) => printed.push(l), world } as Runtime);
+  const after = Object.fromEntries(files);
+  const same = JSON.stringify(after) === JSON.stringify(given.files);
+  return { printed, errors, ...(same ? {} : { filesAfter: after }), exit };
 }
 
 // Runs every test, and every definition with an accepted answer: an
@@ -126,7 +164,7 @@ export function runTests(code: Code, info: Info, names: Names, defs: Id[], saved
     const vs = texts.map((x) => parseValue(x, code, names));
     return vs.every((v) => "value" in v) ? vs.map((v) => (v as { value: Value }).value) : null;
   };
-  return defs.filter((d) => tests.has(d) || (saved[d] ?? []).some((x) => x.answer !== undefined)).map((d) => {
+  return defs.filter((d) => tests.has(d) || (saved[d] ?? []).some((x) => x.answer !== undefined || x.main)).map((d) => {
     const t = info.typeOf.get(d) as Type & { t: "fn" };
     const name = names[d] ?? d;
     const failures: Failure[] = [];
@@ -136,6 +174,22 @@ export function runTests(code: Code, info: Info, names: Names, defs: Id[], saved
     try {
       // Accepted answers first.
       for (const s of saved[d] ?? []) {
+        if (s.main) {
+          // main in its recorded world (T7e15).
+          cases++;
+          const m = s.main, got = runMainIn(code, info, names, d, m, rt);
+          const what: string[] = [];
+          const lines = (a: string[], b: string[], where: string) => {
+            const i = a.findIndex((x, j) => x !== b[j]), at = i < 0 ? a.length : i;
+            if (a.length !== b.length || i >= 0) what.push(`${where} line ${at + 1} is ${JSON.stringify(a[at] ?? "nothing")}, accepted ${JSON.stringify(b[at] ?? "nothing")}`);
+          };
+          lines(got.printed, m.printed, "printed");
+          lines(got.errors, m.errors, "error");
+          if (JSON.stringify(got.filesAfter ?? m.files) !== JSON.stringify(m.filesAfter ?? m.files)) what.push("leaves other files than accepted");
+          if (got.exit !== m.exit) what.push(`exits with ${got.exit}, accepted ${m.exit}`);
+          if (what.length) failures.push({ inputs: [`main(${m.arguments.map((a) => JSON.stringify(a)).join(", ")})`], what });
+          continue;
+        }
         if (s.answer === undefined) continue;
         const args = parse(s.inputs);
         if (!args) { failures.push({ inputs: s.inputs, what: ["its saved inputs don't read as values any more"] }); continue; }

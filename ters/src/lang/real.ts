@@ -16,7 +16,7 @@ export type Real =
   | { op: "fraction"; n: bigint; d: bigint; kept: Map<number, bigint> }
   | { op: "pi"; kept: Map<number, bigint> }
   | { op: "add" | "multiply"; parts: [Real, Real]; kept: Map<number, bigint> }
-  | { op: "negate"; parts: [Real]; kept: Map<number, bigint> };
+  | { op: "negate" | "exp" | "log"; parts: [Real]; kept: Map<number, bigint> };
 
 export const fraction = (n: bigint, d: bigint): Real => {
   if (d === 0n) throw new Error("a fraction's bottom can't be 0");
@@ -29,6 +29,9 @@ export const add = (x: Real, y: Real): Real => ({ op: "add", parts: [x, y], kept
 export const negate = (x: Real): Real => ({ op: "negate", parts: [x], kept: new Map() });
 export const subtract = (x: Real, y: Real): Real => add(x, negate(y));
 export const multiply = (x: Real, y: Real): Real => ({ op: "multiply", parts: [x, y], kept: new Map() });
+// eˣ and the natural log (L88e4), worked out as far as asked.
+export const exp = (x: Real): Real => ({ op: "exp", parts: [x], kept: new Map() });
+export const log = (x: Real): Real => ({ op: "log", parts: [x], kept: new Map() });
 
 // n/2ᵏ rounded to the nearest Int, halves away from 0.
 function scale(n: bigint, k: number): bigint {
@@ -54,6 +57,8 @@ export function approximate(x: Real, p: number): bigint {
       break;
     }
     case "pi": m = piTo(p); break;
+    case "exp": m = expTo(x.parts[0], p); break;
+    case "log": m = logTo(x.parts[0], p); break;
     case "negate": m = -approximate(x.parts[0], p); break;
     // Each to 2⁻⁽ᵖ⁺²⁾, off by under 2·2⁻⁽ᵖ⁺²⁾, and the sum rounded to 2⁻ᵖ, off
     // by half of it more: under 2⁻ᵖ in all.
@@ -87,6 +92,52 @@ function piTo(p: number): bigint {
     return sum;
   };
   return scale(16n * atanInv(5n) - 4n * atanInv(239n), g);
+}
+
+// eˣ to 2⁻ᵖ (L88e4). |x| < M, so eˣ and e^(x') for x' within 2⁻ᵠ of x
+// differ by under 2^(eb + 2 − q), eb the bits of e^M: x is asked to q =
+// p + eb + 4. Then x' halved s times to under ½, its series summed in
+// Ints scaled by 2ʷ, and squared back s times; the guard bits in w
+// (twice s and eb, and 32 more) keep the cuts of the sums, the squarings'
+// doubling of them, and the size of the answer below a quarter of 2⁻ᵖ.
+// Prior art: Boehm's constructive reals, which reduce the range the same
+// way.
+function expTo(x: Real, p: number): bigint {
+  const M = Math.abs(Number(approximate(x, 0))) + 1, eb = Math.ceil(M * Math.LOG2E) + 1;
+  const q = Math.max(0, p) + eb + 4, xm = approximate(x, q);
+  const s = Math.max(0, bits(xm) - q + 1), w = Math.max(0, p) + 2 * s + 2 * eb + 32, one = 1n << BigInt(w);
+  const y = scale(xm, q + s - w);
+  let sum = one, term = one;
+  for (let i = 1n; term !== 0n; i++) { term = (term * y) / (one * i); sum += term; }
+  for (let i = 0; i < s; i++) sum = scale(sum * sum, w);
+  return scale(sum, w - p);
+}
+// atanh(z) · 2ʷ for z = zw/2ʷ under ⅓: Σ z^(2i+1)/(2i+1), each term cut.
+function atanhW(zw: bigint, w: number): bigint {
+  const zz = scale(zw * zw, w);
+  let sum = 0n, power = zw;
+  for (let i = 1n; power !== 0n; i += 2n) { sum += power / i; power = scale(power * zz, w); }
+  return sum;
+}
+// The natural log of x to 2⁻ᵖ (L88e4), x above 0. x is narrowed until it
+// is surely above some 2ᴸ, so a change of 2⁻ᵠ in it, q = p + 4 − L, moves
+// the log by under 2⁻⁽ᵖ⁺⁴⁾. Then x' = 2ᵏ·f with f in [1, 2), and log x' =
+// k·ln 2 + 2·atanh((f − 1)/(f + 1)), ln 2 being 2·atanh(⅓), in Ints scaled
+// by 2ʷ with guard bits for the cuts and for k. Not above 0 (or too close
+// to 0 to tell within a few thousand bits): an error.
+function logTo(x: Real, p: number): bigint {
+  let r = 0, m = approximate(x, 0);
+  for (; m < 4n; r = r ? 2 * r : 8, m = approximate(x, r)) {
+    if (m <= -2n) throw new Error("the log of a Real below 0");
+    if (r > 4096 + Math.max(0, p)) throw new Error("the log of a Real that isn't above 0, or too close to 0 to tell");
+  }
+  const L = bits(m - 1n) - 1 - r, q = Math.max(0, p) + 4 - L, xm = approximate(x, q);
+  const k = bits(xm) - 1, e = k - q;
+  const w = Math.max(0, p) + bits(BigInt(Math.abs(e))) + 16, one = 1n << BigInt(w);
+  const f = scale(xm, k - w);
+  const logF = 2n * atanhW(((f - one) << BigInt(w)) / (f + one), w);
+  const ln2 = 2n * atanhW(one / 3n, w);
+  return scale(BigInt(e) * ln2 + logF, w - p);
 }
 
 // x rounded to n decimals, as text, right to within one in the last place:

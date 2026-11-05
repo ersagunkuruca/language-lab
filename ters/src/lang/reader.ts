@@ -235,7 +235,7 @@ export function writeReader(code: Code, printer: Id, names: Record<Id, string>):
     if (named(f) === "inverse") {
       const x = target(n.args[1]), sx = x ? env.get(x) : undefined, g = target(n.args[0]);
       if (!x || !sx || "b" in sx || !g) throw new Unsupported("reads inverse other than of a definition, for an input");
-      return then(k.call(inverseOf(g), text, at, k.call(run, text, at, passTest(g))), (a, v) => next(a, new Map(env).set(x, { b: v })));
+      return then(inverseAt(g, text, at), (a, v) => next(a, new Map(env).set(x, { b: v })));
     }
     if (named(f) === "spaced") return k.let("at", k.call(spaces, text, at), (a) => piece(n.args[0], text, a, env, inputs, tops, (a2, e) => k.let("at", k.call(spaces, text, a2), (a3) => next(a3, e))));
     // Needing no parentheses, the arm itself; needing some, the reader's
@@ -319,6 +319,24 @@ export function writeReader(code: Code, printer: Id, names: Record<Id, string>):
     if (!sl || !("pass" in sl)) throw new Unsupported(`reads inverse of ${named(g)}, whose characters nothing says`);
     return copy(sl.pass, new Map(), new Map());
   };
+  // A test g's guard puts on its Text's first character, `p(slice(t, 0, 1))`
+  // (json escape start), tried before the run is.
+  const headTest = (g: Id): Id | null => {
+    const fn = lambdaOf(g), b = fn && node(fn.body);
+    const find = (id: Id): Id | null => {
+      const n = node(id);
+      if (n?.kind !== "call" || isUse(n as never)) return null;
+      const f = target(n.fn);
+      if (f === "builtin.and") return find(n.args[0]) ?? find(n.args[1]);
+      const sl = node(n.args[0]);
+      return f && code.nodes[f]?.kind === "def" && n.args.length === 1 && sl?.kind === "call" && !isUse(sl as never) && target(sl.fn) === "builtin.text.slice" && target(sl.args[0]) === fn!.params[0] && node(sl.args[1])?.value === 0 && node(sl.args[2])?.value === 1 ? f : null;
+    };
+    return b?.kind === "match" ? find(b.scrutinee) : null;
+  };
+  const inverseAt = (g: Id, text: Id, at: Id): Id => {
+    const p = headTest(g), go = k.call(inverseOf(g), text, at, k.call(run, text, at, passTest(g)));
+    return p ? k.if(k.call(INT_OPS.less, at, k.call(TEXT_OPS.length, text)), k.if(k.call(p, at1(text, at)), go, none()), none()) : go;
+  };
   const inverses = new Map<Id, Id>();
   function inverseOf(g: Id): Id {
     if (inverses.has(g)) return inverses.get(g)!;
@@ -355,18 +373,33 @@ export function writeReader(code: Code, printer: Id, names: Record<Id, string>):
   }
 
   // read characters by g(text, at, so far): the longest run of characters
-  // read back through g's table, or as themselves where g keeps them.
+  // read back through g's table, or as themselves where g keeps them. A g
+  // that is a Choice of ways (L72e1c: json string character, `if one of([…])
+  // then inverse(h, c) else f(c)`) reads each character each way, the one
+  // that reads farther kept.
   const charReaders = new Map<Id, Id>();
   function charactersOf(g: Id): Id {
     if (charReaders.has(g)) return charReaders.get(g)!;
-    const table = descentReader(code, printer, names).characterTable(g);
+    const gb = node(lambdaOf(g)?.body), gs = gb?.kind === "match" ? node(gb.scrutinee) : undefined;
+    const choice = gs?.kind === "call" && !isUse(gs as never) && target(gs.fn) === S.oneOf;
+    const ways = choice ? gb!.arms.map((x) => node(node(x)!.body)!) : [];
+    const viaTable = choice ? ways.map((w) => target(w.fn)).find((f) => f && named(f) !== "inverse" && code.nodes[f]?.kind === "def") : g;
+    const viaInverse = choice ? ways.find((w) => named(target(w.fn)) === "inverse") : undefined;
+    if (!viaTable || (choice && ways.length !== (viaInverse ? 2 : 1))) throw new Unsupported(`reads characters by ${named(g)}`);
+    const table = descentReader(code, printer, names).characterTable(viaTable);
     const d = k.def(`read characters by ${named(g) || "a function"}`);
     charReaders.set(g, d);
     k.define(d, k.fn(["text", "at", "so far"], (text, at, acc) => {
-      const more = (end: Id, c: Id) => k.call(d, text, end, k.call(S.concat, acc, c));
+      // One character there by f's table, or itself: (where it ends, it).
       const self = k.if(k.call(INT_OPS.less, at, k.call(TEXT_OPS.length, text)), k.let("character", at1(text, at), (c) =>
-        k.if(k.call(S.equal, k.call(g, c), c), more(plus(at, 1), k.x(c)), some(at, k.x(acc)))), some(at, k.x(acc)));
-      return table.reduceRight<Id>((rest, [o, c]) => k.if(startsWith(text, at, k.lit(o), k.int([...o].length)), more(plus(at, [...o].length), k.lit(c)), rest), self);
+        k.if(k.call(S.equal, k.call(viaTable, c), c), some(plus(at, 1), k.x(c)), none())), none());
+      const one = table.reduceRight<Id>((rest, [o, c]) => k.if(startsWith(text, at, k.lit(o), k.int([...o].length)), some(plus(at, [...o].length), k.lit(c)), rest), self);
+      const h = viaInverse && target(viaInverse.args[0]);
+      const both = h ? farther(one, inverseAt(h, text, at)) : one;
+      return k.match(both, [
+        { variant: SOME, names: ["read"], body: ([p]) => k.match(k.x(p), [{ variant: tupleVariant(2), names: ["at", "character"], body: ([e, c]) => k.call(d, text, e, k.call(S.concat, acc, c)) }]) },
+        { variant: NONE, names: [], body: () => some(at, k.x(acc)) },
+      ]);
     }));
     return d;
   }

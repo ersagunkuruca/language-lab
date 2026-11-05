@@ -111,3 +111,34 @@ test("a Real's approximation in a program, evaluated and compiled", async () => 
     assert.deepEqual(c, r.value(at(n)), n);
   }
 });
+
+// eˣ and the natural log (L88e4): e and ln 2 to sixty decimals, rounded as
+// digits rounds; each against Math within a double's error; log undoing
+// exp; and a program's real exp and real log, evaluated.
+test("e, exp and log as Reals, as close as asked", () => {
+  const one = R.fraction(1n, 1n);
+  assert.equal(R.digits(R.exp(one), 60), "2.718281828459045235360287471352662497757247093699959574966968");
+  assert.equal(R.digits(R.log(R.fraction(2n, 1n)), 60), "0.693147180559945309417232121458176568075500134360255254120680");
+  for (const [n, d] of [[-7n, 2n], [-1n, 1n], [0n, 1n], [1n, 10n], [1n, 1000000000n], [2n, 1n], [10n, 1n]] as const) {
+    const x = Number(n) / Number(d), e = Number(R.approximate(R.exp(R.fraction(n, d)), 64)) / 2 ** 64;
+    assert.ok(Math.abs(e - Math.exp(x)) <= 4 * Number.EPSILON * Math.exp(x), `exp(${x})`);
+    if (x > 0) {
+      const l = Number(R.approximate(R.log(R.fraction(n, d)), 64)) / 2 ** 64;
+      assert.ok(Math.abs(l - Math.log(x)) <= 4 * Number.EPSILON * Math.max(1, Math.abs(Math.log(x))), `log(${x})`);
+    }
+  }
+  const x = R.fraction(7n, 3n);
+  assert.equal(R.digits(R.log(R.exp(x)), 50), `2.${"3".repeat(50)}`);
+  assert.equal(R.digits(R.exp(R.log(R.pi())), 40), R.digits(R.pi(), 40));
+  assert.throws(() => R.approximate(R.log(R.fraction(-1n, 2n)), 10), /below 0/);
+  // In a program.
+  const k = new Lang(LIBRARY.code);
+  const e50 = k.def("e50");
+  k.define(e50, k.call(RO.digits, k.call(RO.exp, k.call(RO.fraction, k.int(1), k.int(1))), k.int(20)));
+  const ln = k.def("ln10");
+  k.define(ln, k.call(RO.digits, k.call(RO.log, k.call(RO.fraction, k.int(10), k.int(1))), k.int(20)));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((m) => m.message), []);
+  const r = makeRunner(code, info, { print: () => {}, names });
+  assert.deepEqual([r.value(e50), r.value(ln)], ["2.71828182845904523536", "2.30258509299404568402"]);
+});

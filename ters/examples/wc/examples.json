@@ -1,0 +1,50 @@
+{
+  "v5gbgjvpaap2fg298qdgujgmnl": [
+    {
+      "main": {
+        "arguments": [],
+        "input": "one two\nthree\n",
+        "files": {},
+        "printed": [
+          "       2       3      14"
+        ],
+        "errors": [],
+        "exit": 0
+      }
+    },
+    {
+      "main": {
+        "arguments": [
+          "notes.txt",
+          "empty.txt"
+        ],
+        "input": "",
+        "files": {
+          "notes.txt": "first line\nsecond line here\n",
+          "empty.txt": ""
+        },
+        "printed": [
+          "       2       5      28 notes.txt",
+          "       0       0       0 empty.txt",
+          "       2       5      28 total"
+        ],
+        "errors": [],
+        "exit": 0
+      }
+    },
+    {
+      "main": {
+        "arguments": [
+          "missing.txt"
+        ],
+        "input": "",
+        "files": {},
+        "printed": [],
+        "errors": [
+          "wc: no file missing.txt"
+        ],
+        "exit": 1
+      }
+    }
+  ]
+}
