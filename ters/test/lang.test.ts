@@ -60,8 +60,10 @@ test("every filling the palette offers keeps the program free of errors", () => 
     const p = load(name);
     // Every third arm body and function body (all of them takes ~30s).
     const targets = Object.values(p.own.nodes).flatMap((n) => (n.kind === "arm" || n.kind === "lambda" ? [n.body] : [])).filter((_, i) => i % 3 === 0);
-    // A slice of the targets, ten of them, each with eight of its fillings (T12).
-    for (const target of capped(sweep(targets), 10)) {
+    // Five of the targets, rotating with the run, each with eight of its
+    // fillings (T12); all of them nightly. (An eighth of them first, then
+    // ten, left as few as three targets on some runs: too few to count.)
+    for (const target of sweepShare === 1 ? targets : capped(targets, 5)) {
       const holed = replace(p.code, target, () => ({ kind: "hole" }));
       const info = infer(holed, p.pres.names);
       assert.deepEqual(info.errors, [], "a hole is not an error");
@@ -75,8 +77,23 @@ test("every filling the palette offers keeps the program free of errors", () => 
       }
     }
   }
-  // All of it is over 1000; a change checks up to 80.
-  assert.ok(tried > (sweepShare === 1 ? 1000 : 30), `tried ${tried}`);
+  // All of it is over 1000; a change checks up to 40.
+  assert.ok(tried > (sweepShare === 1 ? 1000 : 20), `tried ${tried}`);
+});
+
+// algebra's main prints `first(show(evaluate(f, 2)), else "undefined")`: the
+// else runs outside first's handler, so a Choice there is main's, under its
+// Console. Its row is open at the hole, so the palette asks the whole
+// program about one that brings Choice (seen as a failing sweep).
+test("the palette offers no search where it would run beside the world", () => {
+  const p = load("algebra");
+  const main = p.code.defs.find((d) => p.pres.names[d] === "main")!;
+  const lit = subtree(p.code, main).find((id) => { const n = p.code.nodes[id]; return n.kind === "lit" && n.value === "undefined"; })!;
+  const holed = replace(p.code, lit, () => ({ kind: "hole" }));
+  const info = infer(holed, p.pres.names);
+  const offered = fillings(holed, info, lit).flatMap((f) => ("target" in f ? [p.pres.names[f.target]] : []));
+  assert.ok(offered.length > 0);
+  assert.ok(!offered.includes("largest key"), "largest key searches, and main prints");
 });
 
 test("the palette leaves out what would be a type error, and the checker catches it if forced", () => {

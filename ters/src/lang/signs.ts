@@ -22,7 +22,7 @@
 // Haskell's path-sensitive refinements, which a divisor `{v /= 0}` asks
 // for by annotation; here it's inferred. CREDITS.md.
 
-import { children, type Code, type Id, type NodeOf, isUse, isCall } from "../model.ts";
+import { children, parentLookup, type Code, type Id, type NodeOf, isUse, isCall } from "../model.ts";
 import { B } from "../prelude.ts";
 import { ARITH, FALSE, INT_OPS, RATIO, S, TRUE } from "./std.ts";
 
@@ -70,15 +70,10 @@ type Env = Map<Id, { signs: Signs; lit: number | null }>;
 const NONE: Env = new Map();
 
 export function signAnalysis(code: Code) {
-  // Each node's parent, built once.
-  let parents: Map<Id, Id> | null = null;
-  const parentOf = (id: Id) => {
-    if (!parents) {
-      parents = new Map();
-      for (const [pid, n] of Object.entries(code.nodes)) for (const c of children(n)) parents.set(c, pid);
-    }
-    return parents.get(id);
-  };
+  // Each node's parent, built once (a program made from another, as the
+  // palette's fillings are, reuses its base's).
+  let parents: ((id: Id) => Id | undefined) | null = null;
+  const parentOf = (id: Id) => (parents ??= parentLookup(code))(id);
   const target = (id: Id): Id | undefined => { const n = code.nodes[id]; return n?.kind === "ref" ? n.target : undefined; };
   // Two expressions that are the same value: the same name, or the same
   // field or arithmetic of the same values (rad(x) · rad(x) is a square).

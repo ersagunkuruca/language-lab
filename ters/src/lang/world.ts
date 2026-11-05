@@ -89,6 +89,21 @@ export function nodeWorld(): World {
       return line.endsWith("\r") ? line.slice(0, -1) : line;
     },
     fileAddLine: (fd, text) => { if (!open.has(fd)) throw new Error("that file is closed"); writeSync(fd, text + "\n"); },
+    // Bytes from the same place lines are read from: what a line read
+    // left over first.
+    fileBytes: (fd, count) => {
+      const f = open.get(fd);
+      if (!f) return null;
+      while (!f.ended && f.rest.length < count) {
+        const n = readSync(fd, piece, 0, piece.length, f.at);
+        if (n === 0) f.ended = true;
+        else { f.at += n; f.rest = Buffer.concat([f.rest, piece.subarray(0, n)]); }
+      }
+      const out = Uint8Array.from(f.rest.subarray(0, count));
+      f.rest = f.rest.subarray(out.length);
+      return out;
+    },
+    fileAddBytes: (fd, bytes) => { if (!open.has(fd)) throw new Error("that file is closed"); writeSync(fd, bytes); },
     closeFile: (fd) => { if (open.delete(fd)) closeSync(fd); },
     error: (line) => process.stderr.write(line + "\n"),
     log: (line) => process.stderr.write(line + "\n"),

@@ -9,7 +9,7 @@ import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { library } from "./programs.ts";
-import { LITERAL_V, FILE_OPS, NEXT_LINE_OP, WRITE_LINE_OP, ZONE_OPS, ABORT_OP, ARITH, CELL_OPS, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, TICKET_V, AWAIT_OP, START_TIMER_OP, NOW_OP, WAIT_OP, BRANCH_V, DUAL_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, DIVISION_V, SHOWN_V, BITS_V, WORD_SIZES, WORD_V, EXTENDED_V, ALGEBRAIC_OPS, CHECK_OP, RANDOM_OP, QUEUE_V, PRIORITY_QUEUE_V, MATRIX_V, TENSOR_V, BYTES_V, JSON_V, DATE_V, TIME_OF_DAY_V, INSTANT_V, EMBEDDING_V, STATE_OPS, PIPE_OPS, std } from "./std.ts";
+import { LITERAL_V, FILE_OPS, NEXT_LINE_OP, WRITE_LINE_OP, NEXT_BYTES_OP, ADD_BYTES_OP, ZONE_OPS, ABORT_OP, ARITH, CELL_OPS, COMPARE, COMPLEX_V, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, RATIO, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, TICKET_V, AWAIT_OP, START_TIMER_OP, NOW_OP, WAIT_OP, BRANCH_V, DUAL_V, FIXED_V, MAT_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, DIVISION_V, SHOWN_V, BITS_V, WORD_SIZES, WORD_V, EXTENDED_V, ALGEBRAIC_OPS, CHECK_OP, RANDOM_OP, QUEUE_V, PRIORITY_QUEUE_V, MATRIX_V, TENSOR_V, BYTES_V, JSON_V, DATE_V, TIME_OF_DAY_V, INSTANT_V, EMBEDDING_V, STATE_OPS, PIPE_OPS, std } from "./std.ts";
 
 export function buildPrelude(): Module {
   const k = new Lang();
@@ -1836,6 +1836,8 @@ export function buildPrelude(): Module {
     { variant: SOME, names: ["file"], body: ([f]) => k.handle(k.call(body), [
       { variant: NEXT_LINE_OP, names: [], body: () => k.call(FILE_OPS.line, f) },
       { variant: WRITE_LINE_OP, names: ["text"], body: ([t]) => k.if(k.call(FILE_OPS.addLine, f, t), k.unitValue, k.call(ABORT_OP, texts(k.lit("with open file: can't write to "), p))) },
+      { variant: NEXT_BYTES_OP, names: ["count"], body: ([n]) => k.call(FILE_OPS.bytes, f, n) },
+      { variant: ADD_BYTES_OP, names: ["bytes"], body: ([b]) => k.if(k.call(FILE_OPS.addBytes, f, b), k.unitValue, k.call(ABORT_OP, texts(k.lit("with open file: can't write to "), p))) },
     ], undefined, () => k.call(FILE_OPS.close, f)) },
   ]));
   const changeState = def("change state", ["f"], (f) => k.call(STATE_OPS.put, k.call(f, k.call(STATE_OPS.get))));
@@ -2712,7 +2714,7 @@ export function buildPrelude(): Module {
     [transposedBy]: "The tensor with its axes reordered: axis order[k] becomes axis k. transposed by(m, [1, 0]) is a matrix's transpose.",
     [traced]: "The sum over the diagonal of two axes of the same length: traced(m, 0, 1) is a square matrix's trace.",
     [leastSquares]: "The x making matrix times vector(m, x) nearest the vector, by least squares, for a Float64 matrix with at least as many rows as columns: a line through points. No answer when the columns aren't independent.",
-    [withOpenFile]: "Runs body with the file at path kept open: next line() is its next line (none at the end), from its start, and write line(text) adds a line at its end; the file is made if it isn't there. It is closed once when body ends, however it ends, so a file is never left open or used after closing: with open file(\"log.txt\", () => write line(\"started\")). Aborts if the file can't be opened or written.",
+    [withOpenFile]: "Runs body with the file at path kept open: next line() is its next line (none at the end), from its start, and write line(text) adds a line at its end; next bytes(count) and add bytes(bytes) do the same with bytes, read from the same place; the file is made if it isn't there. It is closed once when body ends, however it ends, so a file is never left open or used after closing: with open file(\"log.txt\", () => write line(\"started\")). Aborts if the file can't be opened or written.",
     [withState]: "Runs the action with get state and put state answered, starting from initial, and gives (its value, the last state): with state(0, () ↦ put state(get state() + 1)) is ((), 1).",
     [changeState]: "Puts f(the state) as the state: change state((n) ↦ n + 1).",
     [piped]: "Runs the consumer with each receive() answered by the producer's next send(item): some(item), or none once the producer has finished. The producer runs only as far as the consumer asks.",
