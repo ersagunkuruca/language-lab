@@ -128,7 +128,10 @@ of text; they were these cells logging every finished row).
 - One item, one PR (one change per PR, never bundled). An L item may be
   split into several rows first.
 - The PR body says which item: `Backlog: E3`. The same PR moves the row to
-  its lane's table in [DONE.md](DONE.md) with its PR number, takes it off its
+  the table of the lane that did it in [DONE.md](DONE.md) (its own table,
+  at the top, whatever the row's letter, so two lanes never edit the same
+  lines; QA, reviews, rounds and the coordinator use the last table) with
+  its PR number, takes it off its
   lane's line in "Next up" at the top of BACKLOG.md, and adds any follow-up rows it found. The
   number isn't known before the PR exists, so write "this PR" and fill it
   in with the lane's next PR: a push only for the number costs a CI run.
