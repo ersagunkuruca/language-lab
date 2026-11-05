@@ -4,9 +4,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
@@ -16,7 +14,7 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { ARITH, SHOW_ANY } from "../src/lang/std.ts";
 import { showType } from "../src/lang/types.ts";
 import type { Id } from "../src/model.ts";
-import { compile } from "../../compiler/src/compile.ts";
+import { compiledDefs } from "../../compiler/src/core-js.ts";
 
 const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 const lib = (name: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === name)!;
@@ -47,9 +45,7 @@ test("curry, uncurry, partially and flip: their types, and what they give, evalu
   const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });
   const at = (n: string) => p.code.defs.find((d) => p.names[d] === n)!;
   assert.deepEqual(NAMES.map((n) => r.value(at(n))), ["2", "2", "[2, 3, 4]", "-2"]);
-  const path = join(mkdtempSync(join(tmpdir(), "curry-")), "curry.js");
-  writeFileSync(path, compile(p.code, p.info, p.names, { runtime, exports: NAMES }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
+  const defs = compiledDefs(p.code, p.info, p.names, NAMES) as unknown as Record<string, unknown>;
   for (const n of NAMES) {
     const c = typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n];
     assert.deepEqual(c, r.value(at(n)), n);

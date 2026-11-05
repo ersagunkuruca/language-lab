@@ -3,11 +3,9 @@
 // Abort stop on the evaluator and in compiled JavaScript alike.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { compile } from "../../compiler/src/compile.ts";
+import { compiledDefs } from "../../compiler/src/core-js.ts";
 import type { Id } from "../src/model.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
@@ -26,9 +24,7 @@ async function underHandler(inner: (k: Lang) => Id, why: RegExp) {
   const code = base(k.code), names = baseNames(k.names), info = infer(code, names);
   assert.deepEqual(info.errors.map((e) => e.message), []);
   assert.throws(() => runMain(code, info, main, { print: () => {}, names }), why);
-  const path = join(mkdtempSync(join(tmpdir(), "stops-")), "main.mjs");
-  writeFileSync(path, compile(code, info, names, { runtime, exports: ["main"] }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, () => unknown>;
+  const defs = compiledDefs(code, info, names, ["main"]) as unknown as Record<string, () => unknown>;
   assert.throws(() => (typeof defs.main === "function" ? defs.main() : defs.main), why);
 }
 

@@ -4,11 +4,10 @@
 // stack of every pass (I154).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { compile } from "../../compiler/src/compile.ts";
+import { compiledDefs } from "../../compiler/src/core-js.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
@@ -36,9 +35,7 @@ test("list of with three inputs is the list of them: a List Float64, its sum 6",
   assert.deepEqual(p.info.errors.map((e) => e.message), []);
   assert.equal(showType(p.info.typeOf.get(p.list)!, p.names), "List Float64");
   assert.equal(runMain(p.code, p.info, p.main, { print: () => {}, names: p.names }), "6");
-  const path = join(mkdtempSync(join(tmpdir(), "list-of-")), "main.mjs");
-  writeFileSync(path, compile(p.code, p.info, p.names, { runtime, exports: ["main"] }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, () => unknown>;
+  const defs = compiledDefs(p.code, p.info, p.names, ["main"]) as unknown as Record<string, () => unknown>;
   assert.equal(typeof defs.main === "function" ? defs.main() : defs.main, "6");
 });
 

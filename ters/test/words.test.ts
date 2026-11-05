@@ -6,9 +6,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
@@ -17,7 +15,7 @@ import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { ARITH, BITS_V, INT_OPS, SHOW_ANY, WORD_V } from "../src/lang/std.ts";
 import type { Id } from "../src/model.ts";
-import { compile } from "../../compiler/src/compile.ts";
+import { compiledDefs } from "../../compiler/src/core-js.ts";
 
 const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 const lib = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
@@ -82,9 +80,7 @@ test("words wrap, compare unsigned, and hash and generate as C's unsigned types 
   // 0x85944171f73967e8.
   assert.equal(got["fnv1a 32 of foobar"], String(0xbf9cf968));
   assert.equal(got["fnv1a 64 of foobar"], String(0x85944171f73967e8n));
-  const path = join(mkdtempSync(join(tmpdir(), "words-")), "words.js");
-  writeFileSync(path, compile(code, info, nm, { runtime, exports: names }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
+  const defs = compiledDefs(code, info, nm, names) as unknown as Record<string, unknown>;
   assert.deepEqual(Object.fromEntries(names.map((n) => [n, typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n]])), got);
 });
 

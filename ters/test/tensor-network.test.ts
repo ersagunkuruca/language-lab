@@ -7,11 +7,9 @@
 // give the answer worked out by hand in plain JavaScript below.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { compile } from "../../compiler/src/compile.ts";
+import { compiledDefs } from "../../compiler/src/core-js.ts";
 import type { Id } from "../src/model.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
@@ -54,8 +52,6 @@ test("a two-layer network's forward pass, evaluated and compiled, is the hand-wo
   assert.deepEqual(p.info.errors.map((e) => e.message), []);
   const want = `[${expected.join(", ")}]`;
   assert.equal(runMain(p.code, p.info, p.main, { print: () => {}, names: p.names }), want);
-  const path = join(mkdtempSync(join(tmpdir(), "tensor-network-")), "main.mjs");
-  writeFileSync(path, compile(p.code, p.info, p.names, { runtime, exports: ["main"] }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, () => unknown>;
+  const defs = compiledDefs(p.code, p.info, p.names, ["main"]) as unknown as Record<string, () => unknown>;
   assert.equal(typeof defs.main === "function" ? defs.main() : defs.main, want);
 });

@@ -2,11 +2,9 @@
 // it gives the ports it produces, the ones not given, as a tuple in port
 // order, or the one value when it produces one.
 import { test } from "node:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { compile } from "../../compiler/src/compile.ts";
+import { compiledDefs } from "../../compiler/src/core-js.ts";
 import assert from "node:assert/strict";
 import type { Code, Id, NodeOf } from "../src/model.ts";
 import { Lang } from "../src/lang/dsl.ts";
@@ -20,9 +18,7 @@ import { B } from "../src/prelude.ts";
 
 const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 async function compiled(p: ReturnType<typeof program>): Promise<unknown> {
-  const path = join(mkdtempSync(join(tmpdir(), "bodyless-")), "main.mjs");
-  writeFileSync(path, compile(p.code, p.info, p.names, { runtime, exports: ["main"] }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, () => unknown>;
+  const defs = compiledDefs(p.code, p.info, p.names, ["main"]) as unknown as Record<string, () => unknown>;
   return typeof defs.main === "function" ? defs.main() : defs.main;
 }
 
