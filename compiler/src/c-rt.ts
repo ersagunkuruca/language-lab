@@ -786,12 +786,15 @@ static int lab__kind(const char *p) { struct stat st; return stat(p, &st) ? 0 : 
   "world.print": { uses: [], c: `static void lab_world_print(lab_cell *t) { fwrite(LAB_TB(t), 1, LAB_TN(t), stdout); putchar('\\n'); lab_drop(t); }` },
   // A seed from the world for Random's generator (C136): four bytes of
   // /dev/urandom, or the time and an address where there is none.
-  "world.randomSeed": { uses: [], c: `#include <time.h>
+  // The seed is an answer L186's log keeps (C172c), so a replay draws
+  // the same numbers from it.
+  "world.randomSeed": { uses: ["world.log"], c: `#include <time.h>
 static double lab_world_randomSeed(void) {
   uint32_t s = 0;
   FILE *f = fopen("/dev/urandom", "rb");
   if (f) { if (fread(&s, sizeof s, 1, f) != 1) s = 0; fclose(f); }
   if (!s) s = (uint32_t)time(NULL) ^ (uint32_t)clock() ^ (uint32_t)(uintptr_t)&s;
+  if (lab__log_begin("randomSeed")) { lab__log_answer(); fprintf(lab_log, "%u", (unsigned)s); lab__log_close(); }
   return (double)s;
 }` },
   "world.printError": { uses: ["world.log"], c: `static void lab_world_printError(lab_cell *t) { if (lab__log_begin("error")) { lab__log_text(t); lab__log_write(); } fflush(stdout); fwrite(LAB_TB(t), 1, LAB_TN(t), stderr); fputc('\\n', stderr); lab_drop(t); }` },
