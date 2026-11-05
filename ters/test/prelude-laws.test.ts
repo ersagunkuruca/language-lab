@@ -15,7 +15,7 @@ import { isUse, subtree, useTarget } from "../src/model.ts";
 test("the prelude's laws hold on small values", () => {
   const code = base(LIBRARY.code), names = { ...baseNames(), ...LIBRARY.names }, info = infer(code, names);
   const laws = testsIn(info, LIBRARY.code.defs);
-  assert.deepEqual(laws.map((d) => names[d]).sort(), ["acos by unpolar agrees at Float64", "asin by unpolar agrees at Float64", "bytes of base64 undoes base64 of", "bytes of hex undoes hex of", "cos by polar agrees at Float64", "cos by sin agrees at Float64", "date read undoes date text", "duration read undoes duration text", "from polar undoes modulus and angle", "instant read undoes instant text", "polar by sincos agrees at Float64", "polar undoes unpolar", "sin by cos agrees at Float64", "sin by polar agrees at Float64", "text of utf8 undoes utf8 of"]);
+  assert.deepEqual(laws.map((d) => names[d]).sort(), ["acos by unpolar agrees at Float64", "asin by unpolar agrees at Float64", "bytes of base64 undoes base64 of", "bytes of hex undoes hex of", "cos by polar agrees at Float64", "cos by sin agrees at Float64", "date read undoes date text", "duration read undoes duration text", "from polar undoes modulus and angle", "instant read undoes instant text", "polar by sincos agrees at Float64", "polar undoes unpolar", "sin by cos agrees at Float64", "sin by polar agrees at Float64", "text of utf8 undoes utf8 of", "time read undoes time text"]);
   for (const r of runTests(code, info, names, laws)) {
     assert.equal(r.error, undefined, r.name);
     assert.ok(r.cases >= 10, `${r.name}: ${r.cases}`);
