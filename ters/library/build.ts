@@ -18,7 +18,7 @@ import { buildTreesModule } from "../src/lang/trees-source.ts";
 import { buildSteady } from "../src/lang/steady-source.ts";
 import { buildCases } from "../src/lang/cases-source.ts";
 import { buildNumbers } from "../src/lang/numbers-source.ts";
-import { verify } from "../src/lang/modules.ts";
+import { addVersions, verify } from "../src/lang/modules.ts";
 
 const here = import.meta.dirname;
 const save = (path: string, value: unknown) => writeFileSync(path, JSON.stringify(value, null, 2) + "\n");
@@ -73,7 +73,7 @@ console.log(`trees: ${t.code.defs.length} definitions, ${t.representations!.leng
 
 // Definitions whose content changed: old id to new, by name.
 const newIds: Record<string, string> = {};
-for (const mod of [m, v, h, st, nu]) for (const d of mod.code.defs) newIds[mod.names[d] ?? d] = d;
+for (const mod of [m, v, h, st, cs, nu]) for (const d of mod.code.defs) newIds[mod.names[d] ?? d] = d;
 const moved = Object.entries(oldIds).flatMap(([name, old]) => (newIds[name] && newIds[name] !== old ? [[old, newIds[name]] as const] : []));
 // A saved program refers to library definitions by id, so one whose content
 // changed keeps opening: its old id is read as the new one (moved.json, read
@@ -84,6 +84,12 @@ const kept: Record<string, string> = existsSync(movedPath) ? JSON.parse(readFile
 for (const [a, b] of moved) kept[a] = b;
 const today = (id: string) => { for (const seen = new Set<string>(); kept[id] && !seen.has(id);) { seen.add(id); id = kept[id]; } return id; };
 save(movedPath, Object.fromEntries(Object.keys(kept).sort().map((a) => [a, today(a)] as const).filter(([a, b]) => a !== b)));
+
+// Every version each std definition has had (SHARING.md §3, L109): a
+// change to a declaration adds one and keeps the old.
+const versionsPath = join(here, "std-versions.json");
+const keptVersions = existsSync(versionsPath) ? JSON.parse(readFileSync(versionsPath, "utf8")) : {};
+save(versionsPath, addVersions(keptVersions, merge(prelude, std), std.defs));
 
 // Examples, with the library just written.
 const { adoptLibrary } = await import("../src/lang/library.ts");
