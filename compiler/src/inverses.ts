@@ -61,9 +61,9 @@ export function expandInverses(code: Code, names: Names): { code: Code; names: N
     out.nodes[id] = { id, kind: "lambda", params: [x], body: inner } as Node;
     expanded.push(id);
   }
-  // inverse(e ↦ F(…, e, …), y), F a definition and e one of its inputs,
-  // the others not depending on e → solve F given out = y and the others,
-  // for that input (C110 s5: calc's `read expression`, whose printer
+  // inverse(e ↦ F(e, …), y), F a printer (its first input matched on)
+  // and the others not depending on e → solve F given out = y and the
+  // others, for that input (C110 s5: calc's `read expression`, whose printer
   // takes the level it prints at as well, can then be read by descent,
   // core-solve.ts).
   const around = (fn: Id): { f: Id; params: Id[]; at: number; args: Id[] } | null => {
@@ -76,6 +76,10 @@ export function expandInverses(code: Code, names: Names): { code: Code; names: N
     const uses = (a: Id) => subtree(out, a).some((x) => { const r = out.nodes[x]; return r?.kind === "ref" && r.target === l.params[0]; });
     const at = c.args.findIndex((a) => { const r = out.nodes[a]; return r?.kind === "ref" && r.target === l.params[0]; });
     if (at < 0 || c.args.some((a, j) => j !== at && uses(a))) return null;
+    // Only a printer for now: its first input matched on, read by descent.
+    // (pedal's multiband ran wrong as a solve on its function this way.)
+    const m = out.nodes[body.body];
+    if (at !== 0 || m?.kind !== "match" || (out.nodes[m.scrutinee] as NodeOf<"ref"> | undefined)?.target !== body.params[0]) return null;
     return { f: f.target, params: body.params, at, args: c.args };
   };
   for (const id of Object.keys(out.nodes)) {
