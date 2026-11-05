@@ -6,7 +6,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { load } from "../src/program.ts";
-import { coreModule, emitCoreJs, lowerCore, solverCode, usesSolver } from "../src/core-js.ts";
+import { coreModule, emitCoreJs, loadPrinted, lowerCore, printed, solverCode, usesSolver } from "../src/core-js.ts";
+import { runProgram } from "../../ters/src/lang/run.ts";
 
 test("relations' solves are printed plans: no node table, no evaluator (C167a)", () => {
   const p = load("relations"), main = p.named("main");
@@ -42,4 +43,21 @@ test("a solve the evaluator runs is given only the nodes it reaches (C167c)", ()
   const c = solverCode(ir, emitCoreJs(ir).js);
   const n = Object.keys(c.nodes).length;
   assert.ok(n > 0 && n < Object.keys(ir.code.nodes).length / 4, `${n} nodes`);
+});
+
+// A derivative and `for some` too (C167d): what they look inside is the
+// printed closure's lambda, so they read only what it reaches, and a
+// derivative's rules the builtins by id. calculus given only those nodes,
+// as its module is, prints what the evaluator does.
+test("a derivative is given only the nodes it reaches, and calculus says the same (C167d)", () => {
+  const p = load("calculus"), main = p.named("main");
+  const ir = lowerCore(p.code, p.info, p.pres.names, [main]);
+  const shown = printed(ir), n = Object.keys(shown.code!.nodes).length;
+  assert.ok(n > 0 && n < Object.keys(ir.code.nodes).length / 2, `${n} nodes`);
+  const want: string[] = [], got: string[] = [];
+  runProgram(p.code, p.info, main, [], { print: (s) => want.push(s), names: p.pres.names });
+  const fi = ir.funcs.findIndex((g) => g.name === "main" && !g.inner && !g.budgeted);
+  const fs = loadPrinted(shown, { print: (s) => got.push(s) }, shown.code);
+  fs[fi](...(ir.funcs[fi].params.length ? [null] : []));
+  assert.deepEqual(got, want);
 });
