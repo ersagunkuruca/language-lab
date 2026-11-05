@@ -8,8 +8,13 @@
 // with nothing to print, so the compiled side is left to the page tests.
 // Would have caught I105 (the chooser broke chapters) and I107.
 //
-// It spawns `lab` three times per example, so it is a sweep: an eighth
-// of the examples per change, all of them nightly (helpers.ts).
+// An example whose main has accepted answers (examples.json, T7e15) is
+// checked through them instead (T7e16b): `lab test --compiled` runs main
+// after the chooser and compiled against them, and `lab test --as-defined`
+// runs it as defined against them, each in the world the answer records.
+//
+// It spawns `lab` two or three times per example, so it is a sweep: an
+// eighth of the examples per change, all of them nightly (helpers.ts).
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -49,11 +54,29 @@ function run(args: string[], seconds: number): Run | null {
 
 const all = readdirSync(examples, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort();
 
+// Does main have accepted answers? (Any entry with `main`, examples.json.)
+const answered = (name: string) => {
+  const f = join(examples, name, "examples.json");
+  return existsSync(f) && Object.values(JSON.parse(readFileSync(f, "utf8")) as Record<string, unknown>).some((v) => Array.isArray(v) && v.some((x) => x && typeof x === "object" && "main" in x));
+};
+
 test("every example says the same evaluated as defined, after the chooser, and compiled", () => {
   // EXAMPLES=a,b runs just those.
   const only = process.env.EXAMPLES?.split(",");
   for (const name of only ?? sweep(all)) {
     const ex = join(examples, name), args = setup[name]?.() ?? [];
+    if (answered(name)) {
+      // `--fresh`: no kept result stands in for a run.
+      const compiled = run([lab, "test", ex, "--compiled", "--fresh"], 300);
+      assert.ok(compiled, `${name}: lab test --compiled finished`);
+      assert.equal(compiled!.code, 0, `${name}: main's accepted answers, after the chooser and compiled:\n${compiled!.out}${compiled!.err}`);
+      assert.match(compiled!.out, /✓ main compiled/, `${name}: main ran compiled`);
+      // As defined can be far slower (numbers counts in Peano Nat); one
+      // that doesn't finish in time isn't compared.
+      const defined = run([lab, "test", ex, "--as-defined", "--fresh"], 60);
+      if (defined) assert.equal(defined.code, 0, `${name}: main as defined says what its accepted answers say:\n${defined.out}${defined.err}`);
+      continue;
+    }
     const chosen = run([lab, "run", ex, ...args], 60);
     assert.ok(chosen, `${name}: lab run finished`);
     // As defined can be far slower (numbers counts in Peano Nat); one that

@@ -85,7 +85,7 @@ export async function webCorePage(title: string, code: Code, info: Info, names: 
   const { build } = await esbuild();
   const asked = hosts ? { file: hosts, ops: hostOpsOf(code, names) } : undefined;
   const worklet = hasSound(code) ? await coreSoundWorklet(lowered, names[main] ?? "main", asked) : undefined;
-  const script = corePageScript(lowered, names[main] ?? "main", JSON.parse(at("../../compiler/src/core-page.ts")), title, worklet, asked);
+  const script = corePageScript(lowered, names[main] ?? "main", JSON.parse(at("../../compiler/src/core-page.ts")), title, worklet, asked, true);
   const out = await build({
     stdin: { contents: script, resolveDir: here, sourcefile: "page.js", loader: "js" },
     bundle: true, platform: "browser", format: "iife", target: "es2022", minify: true, write: false, logLevel: "warning",

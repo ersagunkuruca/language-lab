@@ -177,7 +177,7 @@ export function corePageFile(title: string, runtime: string, code: Code, info: I
   const why = ir.refused.get(main);
   if (why) throw new Error(`${names[main] ?? "main"} isn't compiled through the core IR: it ${why}`);
   const sound = worklet && hasSound(code) ? coreWorkletFile(worklet, ir, names[main]) : undefined;
-  return pageShell(title, runtime, corePageScript(ir, names[main], "$core", title, sound));
+  return pageShell(title, runtime, corePageScript(ir, names[main], "$core", title, sound, undefined, true));
 }
 // The audio thread's script for it: `runtime` is coreWorkletRuntime.
 export const coreWorkletFile = (runtime: string, ir: CoreIR, name: string): string => `${runtime}\n${coreSoundScript(ir, name, "$core")}`;
