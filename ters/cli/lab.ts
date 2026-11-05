@@ -427,7 +427,7 @@ switch (command) {
     // inverse(f, …) of a named f, as the core IR's JavaScript has it: a
     // printer's by its reader written out (C110 s7c), C can't solve.
     const q = withInverses(p.code, p.info, p.names);
-    const lowered = lowerScalar(q.code, q.info, q.names, [main], { data: true, releases: true, hosted: new Set(ownOperations(q.code).flatMap((op) => effectOfOperation(q.code, op) ?? [])) });
+    const lowered = lowerScalar(q.code, q.info, q.names, [main], { data: true, releases: true, handlers: true, hosted: new Set(ownOperations(q.code).flatMap((op) => effectOfOperation(q.code, op) ?? [])) });
     let c: string;
     try { c = emitC(lowered, { main, hosts }).c; } catch (e) { fail((e as Error).message); }
     writeFileSync(`${out}.c`, c);
