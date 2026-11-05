@@ -21,7 +21,7 @@ language, then more targets or speed (WORKFLOW.md "Priority").
 | lane | thread | next, in order |
 |---|---|---|
 | E Editor | "Editor lane" | E103, then Language or Compiler rows agreed with those lanes |
-| C Compiler and targets | "Compiler lane" | C181 (C184 and C30 with the Editor lane), C93 |
+| C Compiler and targets | "Compiler lane" | C41 or C58; C93 to Language lane B; C184 and C30 with the Editor lane |
 | L Language and library | "Language lane" | L43, L88, L182 (core, run.ts, infer.ts, hosts.ts) |
 | L Language and library | "Language lane B" | L118c (evaluator side, handed over by the Language lane 2026-11-05 22:16; waits on Ersagun, who stopped L118 after step 2), L120 (the compiler choosing a way). Skip L107 (waits on Ersagun) and L24 (research). Take a row from the other list only after telling that lane. |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
@@ -91,7 +91,6 @@ New targets and speed rank below every language item (Ersagun,
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| C181 | Waiting (`await`, a fetch) inside a fold or `with fuel` through the core IR: refused today ("waits inside count", "waits inside with fuel"). Example: core-js.test.ts's `unlowered()` program compiled by `lab compile`, printing what `lab run` prints | Ersagun 2026-11-05 20:00 (what compile.ts did that the core IR doesn't yet) | P1 | M | |
 
 ### Speed of compiled code
 
