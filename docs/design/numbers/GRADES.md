@@ -168,6 +168,15 @@ product) and `part` and `with part` (a blade from literal vectors). Left
 of step 4: those, and masks over any record of Float64s, for a library
 with no `Algebra`.
 
+**L203d, built.** The duals and the regressive product are read from
+their code too. A multivector with no part on is known, as the record of
+zeros, so a dual's `element of(blades, blade, zero)` runs with every input
+known, and a known call's result is read as a mask. Constructions' masks
+take 365 ms (894 before L203c), and the three examples compile to the same
+JavaScript. Still read by name: the versor inverse (its code checks that
+v ṽ is a number, and the reading doesn't follow the check), the sandwich,
+the reflection, the projection, the exponential, `part` and `with part`.
+
 ## In the compiler (L43c)
 
 `valueMasks` (grades.ts) works out each definition's input masks from all

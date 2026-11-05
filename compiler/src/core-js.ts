@@ -512,7 +512,10 @@ function kidsOf(e: SExpr): SExpr[] {
 // The functions, by their place in ir.funcs. `rt`: the console and files.
 // `hostOps`: the operations rt.hosts answers (hostOpsOf).
 export function loadCoreJs(ir: CoreIR, rt: Runtime = { print: () => {} }, hostOps?: HostOps): ((...xs: unknown[]) => unknown)[] {
-  return loadPrinted(printed(ir), rt, ir.code, ir.info, hostOps);
+  // With the nodes a module ships (solverCode), not the whole program's,
+  // so a run here is a module's run (C167e).
+  const p = printed(ir);
+  return loadPrinted(p, rt, p.code, ir.info, hostOps);
 }
 
 // A lowered program as printed, which is plain data (E245c): kept for a
@@ -657,9 +660,64 @@ const codeFor = (ir: CoreIR, js: string) => (solving(js) ? `JSON.parse(${JSON.st
 // (5.2 MB of them). A derivative or `for some` looks inside the function
 // it is given, a printed closure carrying its lambda, so it reads what that
 // reaches, and the derivative's own definition what it reaches (C167d).
+// The lambdas of the printed closures the evaluator's solver can be
+// given (C167e): a closure of a function type that can reach a call that
+// looks inside one (a solve, `for some`, a derivative, `set` and `path`)
+// through its inputs' types, or through what such a closure captured.
+// spacetime's one solve is given a Float64 → Text, so the lambdas of its
+// other closures stay behind. Null where an input's type can't be told
+// (then every closure's lambda, as before).
+function lambdasLookedIn(ir: CoreIR): string[] | null {
+  const keys = new Set<string>(), seen = new Set<string>();
+  let unknown = false;
+  const add = (t: LType): void => {
+    if (t === "host") unknown = true;
+    if (typeof t !== "object") return;
+    if (seen.has(t.key)) return;
+    seen.add(t.key);
+    if ("result" in t) { keys.add(t.key); t.params.forEach(add); add(t.result); if (t.answer) add(t.answer); }
+    else if ("cases" in t) t.cases.forEach((c) => c.fields.forEach((x) => add(x.t)));
+    else if ("variant" in t) t.fields.forEach((x) => add(x.t));
+    else if ("item" in t) add(t.item);
+    else if ("keyT" in t) { add(t.keyT); add(t.value); }
+  };
+  const typeOf = (e: SExpr, f: SFunc): LType | null => {
+    switch (e.k) {
+      case "local": return f.locals[e.i];
+      case "closure": return e.t;
+      case "cap": return ir.shapes[e.shape].caps[e.i];
+      case "field": return e.t.cases[e.c].fields[e.i].t;
+      case "get": return e.t.fields[e.i].t;
+      case "num": return "f64";
+      case "text": return "text";
+      case "int": return "int";
+      case "bool": return "i32";
+      default: return null;
+    }
+  };
+  const closures: Extract<SExpr, { k: "closure" }>[] = [];
+  for (const f of ir.funcs) {
+    const walk = (e: SExpr): void => {
+      if (e.k === "closure") closures.push(e);
+      if (e.k === "rt" && LOOKS_INSIDE.test(e.fn)) for (const a of e.args) { const t = typeOf(a, f); if (t === null) unknown = true; else add(t); }
+      kids(e).forEach(walk);
+    };
+    walk(f.body);
+  }
+  if (unknown) return null;
+  // What a closure looked inside captured, the solver may call too.
+  for (let before = -1; before !== keys.size; ) {
+    before = keys.size;
+    for (const c of closures) if (keys.has(c.t.key)) ir.shapes[c.shape].caps.forEach(add);
+  }
+  if (unknown) return null;
+  return closures.filter((c) => keys.has(c.t.key) && c.src && "lambda" in c.src).map((c) => (c.src as { lambda: Id }).lambda);
+}
 export function solverCode(ir: CoreIR, js: string): Code {
   const nodes = ir.code.nodes as Record<string, unknown>;
-  const roots = [...js.matchAll(/R\.rt\("(?:solve|solveAll|derive):([^"]*)"/g), ...js.matchAll(/\\?"lambda\\?":\\?"([^"\\]*)/g)].map((m) => JSON.parse(`"${m[1]}"`) as string);
+  const roots = [...js.matchAll(/R\.rt\("(?:solve|solveAll|derive):([^"]*)"/g)].map((m) => JSON.parse(`"${m[1]}"`) as string);
+  const lambdas = lambdasLookedIn(ir);
+  roots.push(...(lambdas ?? [...js.matchAll(/\\?"lambda\\?":\\?"([^"\\]*)/g)].map((m) => JSON.parse(`"${m[1]}"`) as string)));
   const seen = new Set<string>(roots.filter((r) => r in nodes)), todo = [...seen];
   const walk = (v: unknown): void => {
     if (typeof v === "string") { if (v in nodes && !seen.has(v)) { seen.add(v); todo.push(v); } }
