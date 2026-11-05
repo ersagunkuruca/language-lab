@@ -281,12 +281,15 @@ test("the prelude's Clifford products read from their code give the blades' mask
   const unaries = ["reverse", "dual", "undual"] as const;
   const two = Object.fromEntries(binaries.map((op) => [op, def(`my ${op}`, () => k.fn(["a", "b"], (x, y) => call(op, x, y)))]));
   const one = Object.fromEntries(unaries.map((op) => [op, def(`my ${op}`, () => k.fn(["a"], (x) => call(op, x)))]));
+  const inverse = def("my inverse", () => k.fn(["a"], (x) => call("versor inverse", x)));
   const { code, info } = a.done();
   assert.deepEqual(info.errors.map((e) => e.message), []);
   const alg = [...algebrasOf(code, info).values()][0];
   const mask = (d: Id, given: number[]) => bladeMask(code, info, d, given)?.mask;
   for (let i = 0; i < alg.parts; i++) {
     for (const op of unaries) assert.equal(mask(one[op], [1 << i]), alg.one(op, i), `${op} e${i}`);
+    // ṽ / ⟨v ṽ⟩₀ (or no answer): the reverse's blades.
+    assert.equal(mask(inverse, [1 << i]), alg.one("reverse", i), `inverse e${i}`);
     for (const j of [1, 6, 15]) for (const op of binaries) assert.equal(mask(two[op], [1 << i, 1 << j]), alg.pair(op, i, j), `${op} e${i} e${j}`);
   }
 });
