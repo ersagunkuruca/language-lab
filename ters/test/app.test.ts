@@ -60,3 +60,18 @@ test("lab build-app: the manifest names the app and icons that are there, at the
   assert.equal(cap.webDir, "www");
   assert.match(cap.appId, /^[a-z][a-z0-9_]*(\.[a-z_][a-z0-9_]*)+$/);
 });
+
+// `lab build-app`'s page is `lab build-web`'s, from the core IR (C137d24),
+// where it was compile.ts's.
+test("lab build-app: its page is the one lab build-web makes, from the core IR", async () => {
+  const { execFile } = await import("node:child_process");
+  const { mkdtempSync, readFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = mkdtempSync(join(tmpdir(), "app-")), lab = join(import.meta.dirname, "../cli/lab.ts"), dice = join(import.meta.dirname, "../examples/dice");
+  const run = (args: string[]) => new Promise<string>((done, fail) => { execFile(process.execPath, [lab, ...args], { encoding: "utf8" }, (e, _out, err) => (e ? fail(e) : done(err))); });
+  const [, made] = await Promise.all([run(["build-app", dice, "-o", join(dir, "app")]), run(["build-web", dice, "-o", join(dir, "dice.html")])]);
+  assert.doesNotMatch(made, /compile\.ts/);
+  const html = readFileSync(join(dir, "app/www/index.html"), "utf8");
+  assert.equal(html.replace(/<link rel="manifest"[\s\S]*?(?=<\/head>)/, ""), readFileSync(join(dir, "dice.html"), "utf8"));
+});
