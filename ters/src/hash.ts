@@ -236,8 +236,9 @@ function canon(code: Code, defId: Id, group: Map<Id, number | null>, memo: Map<I
       case "typedef": {
         if (n.row) return ["row", n.row.map(defRef)];
         // An effect and an interface aren't a data type of the same shape
-        // (L178a): said only when so, so a data type's hash stays.
-        const marks = [...(n.unique ? [["unique", n.unique]] : []), ...(n.effect ? [["effect"]] : []), ...(n.interface ? [["interface"]] : [])];
+        // (L178a): said only when so, so a data type's hash stays. Nor is
+        // an effect whose operations are pure (L69d) one that isn't.
+        const marks = [...(n.unique ? [["unique", n.unique]] : []), ...(n.effect ? [["effect"]] : []), ...(n.interface ? [["interface"]] : []), ...(n.pure ? [["pure"]] : [])];
         return ["type", n.params.map(go), n.variants.map(go), ...marks];
       }
       // An operation's own type variables, only when it has some, so every

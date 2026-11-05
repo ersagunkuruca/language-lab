@@ -19,7 +19,7 @@
 // the evaluator's (C137c2), Random seeded is random.ts's generator, and
 // the world is the evaluator's Runtime (C137c3, runCoreMain).
 
-import { zeroParts } from "./zero-parts.ts";
+import { envSet, zeroParts } from "./zero-parts.ts";
 import { ARRAY_OPS, FALSE, TRUE } from "../../ters/src/lang/std.ts";
 import { toList, type Runtime } from "../../ters/src/lang/run.ts";
 import { fusedProgram } from "./handlers.ts";
@@ -523,7 +523,7 @@ export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roo
   let ir = lowerScalar(f.code, f.info, f.names, roots, { data: true, host: true });
   // Parts always 0 (a vector's bivector parts) dropped, with a copy of a
   // function for each set of parts its callers give (zero-parts.ts, L43).
-  if (!process.env.NO_ZP) ir = zeroParts(ir, ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : []))).ir;
+  if (!envSet("NO_ZP")) ir = zeroParts(ir, ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : []))).ir;
   // Reads that wait on the places their values are used at (C162).
   trackReads(ir);
   return ir;
