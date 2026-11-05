@@ -84,7 +84,9 @@ test("typed text reads a function's named results back in", async () => {
   const made = makeFunction(code, names, infer(code, names), hsi, [...valueOf("r"), ...valueOf("g")]);
   assert.ok(made.ok);
   if (!made.ok) return;
-  const lam = Object.values(made.code.nodes).find((n): n is NodeOf<"lambda"> => n.kind === "lambda" && !!n.results?.length)!;
+  // The one made in hsi colour: the library's lambdas have results too
+  // since L225d (polar by sincos's).
+  const lam = subtree(made.code, hsi).map((id) => made.code.nodes[id]).find((n): n is NodeOf<"lambda"> => n.kind === "lambda" && !!n.results?.length)!;
   const open = replace(made.code, lam.id, () => ({ kind: "hole" }));
   const info = infer(open, made.names);
   for (const arrow of ["→", "->"]) {
