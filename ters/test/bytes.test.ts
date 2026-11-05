@@ -40,11 +40,13 @@ async function both(body: (k: Lang) => Id) {
 const ints = (k: Lang, xs: number[]) => k.listOf(...xs.map((x) => k.int(x)));
 const text = "hé€😀";
 
-test("utf8 of gives the host's UTF-8 bytes, one to four a character, and text of utf8 reads them back", async () => {
+// Reading back what was written is a law in the prelude (T7e4,
+// prelude-laws.test.ts and its compiled twin): `text of utf8 undoes utf8
+// of`, `bytes of base64 undoes base64 of`, `bytes of hex undoes hex of`.
+test("utf8 of gives the host's UTF-8 bytes, one to four a character, and text of utf8 reads them", async () => {
   const want = `[${[...new TextEncoder().encode(text)].join(", ")}]`;
   assert.equal(await both((k) => k.call(lib("byte items"), k.call(lib("utf8 of"), k.lit(text)))), want);
   assert.equal(await both((k) => k.call(lib("byte count"), k.call(lib("utf8 of"), k.lit(text)))), "10");
-  assert.equal(await both((k) => k.call(lib("text of utf8"), k.call(lib("utf8 of"), k.lit(text)))), JSON.stringify(text));
   assert.equal(await both((k) => k.call(lib("text of utf8"), k.call(lib("bytes of"), ints(k, [104, 105])))), '"hi"');
 });
 
@@ -55,13 +57,12 @@ test("bytes of stops on an item that isn't a byte, and text of utf8 on bytes tha
   stops((k) => k.call(lib("text of utf8"), k.call(lib("bytes of"), ints(k, [0xc3]))), /end inside a character/);
 });
 
-test("base64 of and hex of match Node's Buffer, and read back (L189d)", async () => {
+test("base64 of and hex of match Node's Buffer, and hex is read in capitals too (L189d)", async () => {
   for (const n of [0, 1, 2, 3, 4, 5, 6, 7]) {
     const xs = Array.from({ length: n }, (_, i) => (i * 97 + 200) % 256);
     const bytes = (k: Lang) => k.call(lib("bytes of"), ints(k, xs));
     assert.equal(await both((k) => k.call(lib("base64 of"), bytes(k))), JSON.stringify(Buffer.from(xs).toString("base64")));
     assert.equal(await both((k) => k.call(lib("hex of"), bytes(k))), JSON.stringify(Buffer.from(xs).toString("hex")));
-    assert.equal(await both((k) => k.call(lib("byte items"), k.call(lib("bytes of base64"), k.call(lib("base64 of"), bytes(k))))), `[${xs.join(", ")}]`);
     assert.equal(await both((k) => k.call(lib("byte items"), k.call(lib("bytes of hex"), k.lit(Buffer.from(xs).toString("hex").toUpperCase())))), `[${xs.join(", ")}]`);
   }
   const p = program((k) => k.call(lib("byte items"), k.call(lib("bytes of hex"), k.lit("abc"))));
