@@ -852,10 +852,15 @@ const wrapped = (from: string, lines: string[]) => (from.startsWith("$") ? ["(()
 // a prebuilt core-page-runtime.ts) drawing main.
 // `worklet`: a page with sound, its audio thread's script (coreSoundScript
 // bundled), which the page plays (C137d4).
-export function corePageScript(ir: CoreIR, name: string, page: string, title: string, worklet?: string, hosts?: Hosts): string {
+// `bare`: a page saved or built (C143), with no node ids, as a module has
+// none (moduleTags): its stops name their definition only, and its own
+// cases are numbers where no audio thread runs main again beside it. The
+// editor's preview keeps them, for Show where it stopped (C143g).
+export function corePageScript(ir: CoreIR, name: string, page: string, title: string, worklet?: string, hosts?: Hosts, bare = false): string {
   const fi = ir.funcs.findIndex((g) => g.name === name && !g.inner && !g.budgeted);
   if (fi < 0 || ir.funcs[fi].params.length) throw new Error(`${name}: not compiled, or not a page's main`);
-  const { js, names, worlds } = emitCoreJs(ir);
+  const { names, worlds } = emitCoreJs(ir);
+  const js = bare ? moduleTags(ir, !!hosts || worklet !== undefined).js : emitCoreJs(ir).js;
   const code = codeFor(ir, js);
   return wrapped(page, [
     using("startCorePage", page),
