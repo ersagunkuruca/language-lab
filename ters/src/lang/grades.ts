@@ -7,16 +7,15 @@
 // matrix: literals and records built by position give their mask
 // directly (a part written as the literal 0 is off), + and − take the
 // union, a number times a multivector keeps its mask, and the prelude's
-// Clifford operations follow the algebra's own table. The product, the
-// outer and inner products, the regressive product, the dual, the reverse
-// and the involution are linear in each input, so their mask is the
-// union over the input blades of what each pair of basis elements gives;
-// that table of masks is worked out from the blades and the squares as
-// the prelude defines each operation (so in PGA a product landing on
-// e₀e₀ = 0 drops out), or, for a basis that isn't one 1 per element, by
-// running the operation on the basis elements. The sandwich, a reflection, an inverse and the
-// exponential are built from those (the exponential as a closure under
-// the product). Anything the reading doesn't follow is every part, so a
+// Clifford operations are read through their own code (L203): the
+// products are folds over the algebra's table, known before running, and
+// the duals, the reverse and the involution folds over its blades. A few
+// keep a rule by name that is sharper than their code (NAMED below). Those
+// rules use each operation's table of masks over pairs of basis elements,
+// worked out from the blades and the squares as the prelude defines each
+// operation (so in PGA a product landing on e₀e₀ = 0 drops out), or, for
+// a basis that isn't one 1 per element, by running the operation on the
+// basis elements. Anything the reading doesn't follow is every part, so a
 // mask is never too small.
 //
 // Off means 0 in exact arithmetic. When a rule sees a cancellation (the
@@ -108,6 +107,36 @@ function cliffordOps(code: Code): Map<Id, string> {
   opsCache.set(code, ops);
   return ops;
 }
+
+// A mask says which parts of a record can be nonzero, so two algebras on
+// one record (a program's own and a copy's, or Cl(3, 0) and Cl(2, 1) on
+// eight parts) have masks that mean the same.
+const sameRecord = (a: Algebra, b: Algebra) => a === b || (a.variant === b.variant && a.parts === b.parts);
+
+// Library calls already read, by their inputs, per program.
+const readsCache = new WeakMap<Code, Map<string, V>>();
+const readsOf = (code: Code) => { let m = readsCache.get(code); if (!m) readsCache.set(code, (m = new Map())); return m; };
+// A known value's key: its identity.
+const knownKeys = new WeakMap<object, number>();
+let knownCount = 0;
+const knownKey = (v: Value): string => {
+  if (typeof v !== "object" || v === null) return JSON.stringify(v);
+  let k = knownKeys.get(v);
+  if (k === undefined) knownKeys.set(v, (k = ++knownCount));
+  return `#${k}`;
+};
+
+// The operations still read by name (L203c): each has a rule sharper than
+// reading its code gives. The sandwich and the reflection keep grades
+// (the grade rule below), the exponential is closed under the product,
+// and a part named by literal vectors is found by its blade. The duals,
+// the regressive product and the versor inverse look up a blade's
+// element or check a number, which the reading doesn't follow, so their
+// code gives every part. The others (the geometric, outer and inner
+// products, the reverse and the involution) are read from their own
+// code, folds over the algebra's known table and blades, with the same
+// masks (grades.test.ts).
+const NAMED = new Set(["regressive", "dual", "undual", "versor inverse", "sandwich", "reflect", "project", "exp", "grade", "part", "with part"]);
 
 const ADD = new Set<Id>([ARITH.add, B.add]), SUB = new Set<Id>([ARITH.sub, B.sub]);
 const MUL = new Set<Id>([ARITH.mul, B.mul]), DIV = new Set<Id>([B.div]), NEG = new Set<Id>([ARITH.neg, B.neg]);
@@ -222,7 +251,7 @@ function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: H
     if (n?.kind === "def") n = n.body ? nodes[n.body] : undefined;
     return n?.kind === "lambda" ? n : null;
   };
-  const maskIn = (v: V, alg: Algebra) => (v.k === "mask" && v.alg === alg ? v.m : alg.full);
+  const maskIn = (v: V, alg: Algebra) => (v.k === "mask" && sameRecord(v.alg, alg) ? v.m : alg.full);
   // A known value read as the reading's own: a number is a number, zero or
   // not, and a multivector of an algebra its mask of nonzero parts.
   const lower = (v: V): V => {
@@ -269,7 +298,7 @@ function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: H
   };
   const join = (a0: V, b0: V): V => {
     const a = lower(a0), b = lower(b0);
-    if (a.k === "mask" && b.k === "mask" && a.alg === b.alg) return { k: "mask", alg: a.alg, m: a.m | b.m, l: a.l || b.l };
+    if (a.k === "mask" && b.k === "mask" && sameRecord(a.alg, b.alg)) return { k: "mask", alg: a.alg, m: a.m | b.m, l: a.l || b.l };
     if (a.k === "num" && b.k === "num") return { k: "num", zero: a.zero && b.zero };
     if (a.k === "list" && b.k === "list") return { k: "list", item: a.item && b.item ? join(a.item, b.item) : a.item ?? b.item };
     if (a.k === "rec" && b.k === "rec" && a.variant === b.variant) return { k: "rec", variant: a.variant, fields: a.fields.map((f, i) => join(f, b.fields[i] ?? TOP)) };
@@ -325,7 +354,7 @@ function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: H
   // and has a part the name doesn't allow.
   const put = (at: Id, field: Id, v: V) => {
     const want = declared.get(field)!;
-    if (mistakes && v.k === "mask" && v.alg === want.alg && !v.l && v.m & ~want.m && !mistakes.has(at))
+    if (mistakes && v.k === "mask" && sameRecord(v.alg, want.alg) && !v.l && v.m & ~want.m && !mistakes.has(at))
       mistakes.set(at, `puts a value that is ${describeMask(want.alg, v.m)} where ${want.name} goes, ${describeMask(want.alg, want.m)}`);
   };
   const held = (field: Id): V => { const w = declared.get(field)!; return { k: "mask", alg: w.alg, m: w.m }; };
@@ -335,7 +364,7 @@ function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: H
   const putItems = (at: Id, field: Id, env: Map<Id, V>, depth: number) => {
     const want = declaredItems.get(field)!;
     const check = (where: Id, v: V) => {
-      if (mistakes && v.k === "mask" && v.alg === want.alg && !v.l && v.m & ~want.m && !mistakes.has(where))
+      if (mistakes && v.k === "mask" && sameRecord(v.alg, want.alg) && !v.l && v.m & ~want.m && !mistakes.has(where))
         mistakes.set(where, `puts an item that is ${describeMask(want.alg, v.m)} where ${want.name} goes, ${describeMask(want.alg, want.m)} each`);
     };
     let id = at;
@@ -490,7 +519,7 @@ function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: H
     if (target === S.zipParts) {
       const [f, a, b] = [arg(0), arg(1), arg(2)];
       const op = nodes[n.args[0]]?.kind === "ref" ? (nodes[n.args[0]] as NodeOf<"ref">).target : null;
-      if (a.k === "mask" && b.k === "mask" && a.alg === b.alg) {
+      if (a.k === "mask" && b.k === "mask" && sameRecord(a.alg, b.alg)) {
         // A part is off when f of two zeros is zero, as for + and −.
         const Z: V = { k: "num", zero: true };
         const z = op && (ADD.has(op) || SUB.has(op)) ? Z : apply(f, [Z, Z], depth);
@@ -513,19 +542,15 @@ function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: H
       return z.k === "num" && z.zero ? x : { ...x, m: x.alg.full };
     }
     const op = target ? ops.get(target) : undefined;
-    if (op && op !== "algebra") {
+    if (op && NAMED.has(op)) {
       const al = arg(0);
       if (al.k !== "alg") return TOP;
       const alg = al.alg;
       // A result is loose when a multivector it was made from is.
       let loose = false;
-      const m = (i: number) => { const v = arg(i); if (!(v.k === "mask" && v.alg === alg && !v.l)) loose = true; return maskIn(v, alg); };
+      const m = (i: number) => { const v = arg(i); if (!(v.k === "mask" && sameRecord(v.alg, alg) && !v.l)) loose = true; return maskIn(v, alg); };
       const mask = (x: number): V => ({ k: "mask", alg, m: x, l: loose });
       switch (op) {
-        case "product": case "outer": case "inner": case "regressive": return mask(binary(alg, op, m(1), m(2)));
-        case "reverse": case "involute": case "dual": case "undual": return mask(unary(alg, op, m(1)));
-        // ṽ / ⟨v ṽ⟩₀: the reverse's blades.
-        case "versor inverse": return mask(unary(alg, "reverse", m(1)));
         // A reflection in a vector keeps grades (it is an outermorphism).
         // So does R x R̃ for any even R when no blade has more than three
         // vectors: it keeps x's parity (even · x · even) and its sign under
@@ -561,15 +586,85 @@ function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: H
         }
       }
     }
+    // A definition called with only known inputs (functions among them
+    // written in place, reading nothing around them) runs, when its type
+    // says it is pure and it isn't one that may not stop: `clifford table
+    // where(squares, basis, wanted)` gives the outer product's table this
+    // way (GRADES.md "Any library's algebra", step 1).
+    // Each input read once from here on.
+    const vs = n.args.map((a) => ev(a, env, depth + 1));
+    if (target && nodes[target]?.kind === "def" && lam(target) && n.args.length && !info.divergent.has(target)) {
+      const known = knownCall(n, vs, env);
+      if (known !== undefined) return { k: "known", v: known };
+    }
     // A let, a lambda applied, a definition of the program: read through.
     if (target && hooks.onCall && nodes[target]?.kind === "def") {
-      const r = hooks.onCall(n, n.args.map((a) => ev(a, env, depth + 1)));
+      const r = hooks.onCall(n, vs);
       if (r) return r;
     }
     const f = ev(n.fn, env, depth + 1);
     if (f.k !== "closure") return TOP;
-    return apply(f, n.args.map((a) => ev(a, env, depth + 1)), depth);
+    // A library definition given no function (whose reading would be the
+    // program's own nodes) reads the same for the same inputs: kept.
+    const key = target && LIBRARY.code.nodes[target] ? keyOf(target, vs) : null;
+    if (key !== null) { const was = libReads.get(key); if (was) return was; }
+    const out = apply(f, vs, depth);
+    if (key !== null) libReads.set(key, out);
+    return out;
   };
+
+  const pure = (t: Type | undefined) => {
+    const z = t && info.subst.zonk(t);
+    return z?.t === "fn" && info.subst.resolveRow(z.eff).effs.length === 0;
+  };
+  const runs = new Map<Id, { args: Value[]; v: Value | undefined }[]>();
+  // What a library call's inputs are, as a key; null when one is or holds
+  // a function.
+  const libReads = readsOf(code);
+  const keyOf = (target: Id, vs: V[]): string | null => {
+    const part = (v: V): string | null => {
+      switch (v.k) {
+        case "mask": return `m${v.alg.def}.${v.m}${v.l ? "l" : ""}`;
+        case "alg": return `a${v.alg.def}`;
+        case "num": return v.zero ? "0" : "n";
+        case "top": return "t";
+        case "known": return `k${knownKey(v.v)}`;
+        case "list": { if (!v.item) return "[]"; const i = part(v.item); return i === null ? null : `[${i}]`; }
+        case "rec": { const fs = v.fields.map(part); return fs.includes(null) ? null : `r${v.variant}(${fs.join(",")})`; }
+        default: return null;
+      }
+    };
+    const ps = vs.map(part);
+    return ps.includes(null) ? null : `${target}|${ps.join("|")}`;
+  };
+  const knownCall = (n: Call, vs: V[], env: Map<Id, V>): Value | undefined => {
+    const target = (nodes[n.fn] as NodeOf<"ref">).target;
+    if (!pure(info.schemes.get(target)?.type)) return undefined;
+    const args: (Value | Id)[] = [];
+    for (const a of n.args) {
+      const x = nodes[a];
+      if (x?.kind === "lambda") {
+        if (!pure(info.typeOf.get(a)) || subtree(code, a).some((id) => { const r = nodes[id]; return r?.kind === "ref" && env.has(r.target); })) return undefined;
+        args.push(a);
+        continue;
+      }
+      const k = knownOf(vs[args.length]);
+      if (k === undefined) return undefined;
+      args.push(k);
+    }
+    const r = (runner ??= makeRunner(code, info, { print: () => {} }));
+    const values = args.map((a, i) => (nodes[n.args[i]]?.kind === "lambda" && a === n.args[i] ? undefined : (a as Value)));
+    const was = runs.get(n.id)?.find((x) => x.args.every((v, i) => v === values[i]));
+    if (was) return was.v;
+    let v: Value | undefined;
+    try {
+      const given = args.map((a, i) => (values[i] === undefined ? first(r.ev(a as Id, new Map())) : a)) as Value[];
+      v = first(r.call(r.value(target), ...given));
+    } catch { v = undefined; }
+    runs.set(n.id, [...(runs.get(n.id) ?? []), { args: values as Value[], v }]);
+    return v;
+  };
+  const first = (xs: Iterable<Value>) => { for (const x of xs) return x; };
 
   // The blade a list of literal vectors names: its index, -1 when it
   // names none, -2 when the list isn't literals.
@@ -693,7 +788,7 @@ export function valueMasks(code: Code, info: Info, open: Iterable<Id>): Map<Id, 
   // What was so far, and v besides: a mask's parts added; one that isn't
   // a known mask of the same algebra (lost, loose) is every part.
   const grow = (was: V, v: V | undefined): V => {
-    if (was.k === "mask") return { ...was, m: was.m | (v && v.k === "mask" && v.alg === was.alg && !v.l ? v.m : was.alg.full) };
+    if (was.k === "mask") return { ...was, m: was.m | (v && v.k === "mask" && sameRecord(v.alg, was.alg) && !v.l ? v.m : was.alg.full) };
     if (was.k === "rec") return { ...was, fields: was.fields.map((f, i) => grow(f, v?.k === "rec" && v.variant === was.variant ? v.fields[i] : undefined)) };
     return was;
   };
@@ -756,7 +851,7 @@ export function valueMasks(code: Code, info: Info, open: Iterable<Id>): Map<Id, 
   return out;
 }
 
-const joinMasks = (a: V, b: V): V => (a.k === "mask" && b.k === "mask" && a.alg === b.alg ? { k: "mask", alg: a.alg, m: a.m | b.m, l: a.l || b.l } : { k: "top" });
+const joinMasks = (a: V, b: V): V => (a.k === "mask" && b.k === "mask" && sameRecord(a.alg, b.alg) ? { k: "mask", alg: a.alg, m: a.m | b.m, l: a.l || b.l } : { k: "top" });
 
 // Wrong grades (L43e's first step): every place a definition reads a part
 // its value can't have, which is always 0. Each definition is read with
