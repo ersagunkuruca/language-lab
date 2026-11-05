@@ -954,7 +954,11 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
             else this.apply(f.otherwise, []);
             continue;
           }
+          // The stream's next answer is searched for under the fuel it
+          // was made under: a search resumed after its `with fuel` body
+          // gave a first answer still spends from it (I174).
           ambient = cp.fuel;
+          this.fuel = cp.fuel;
           const r = cp.it.next();
           if (r.done) { this.cps.pop(); continue; }
           this.releaseUntil(cp.k);
