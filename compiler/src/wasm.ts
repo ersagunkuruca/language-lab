@@ -114,6 +114,7 @@ const performsIn = (e: SExpr): boolean => (e.k === "rt" && e.fn.startsWith("perf
 // `hosts`: the program's own operations (core-js.ts hostOpsOf); one that
 // nothing handles is an import from "world" that hosts/js.js answers
 // (FOREIGN.md, L69b2).
+const TEXT_PIECE = 10000;
 export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOps } = {}): Module {
   const wasi = !!opts.wasi;
   // A shader's lowering (C66c, `lowered.shader`): Int in 32 bits, and no
@@ -144,7 +145,19 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     if (bad) throw new Error(`${h.name} takes or gives ${bad.k === "list" ? "a list" : bad.k === "record" ? "a record" : "a value"}, which doesn't cross to the host in WebAssembly yet`);
     return { k: "world", op: `host:${eff}:${i}`, aborts: true, args: x.args, t: x.host!.t, ins: h.ins.map((y) => HOST_TYPES[y.k]!) };
   };
-  const funcs = shader ? lowered.funcs.map((f) => ({ ...f, partial: undefined, body: shaderArrays(f.body) })) : lowered.funcs.map((f) => (performsIn(f.body) ? { ...f, body: performs(f.body) } : f));
+  const funcs0 = shader ? lowered.funcs.map((f) => ({ ...f, partial: undefined, body: shaderArrays(f.body) })) : lowered.funcs.map((f) => (performsIn(f.body) ? { ...f, body: performs(f.body) } : f));
+  // A text constant longer than array.new_fixed takes (10,000 bytes; the
+  // cases module's collation tables, L214e5b4) is made of pieces joined.
+  const longIn = (e: SExpr): boolean => (e.k === "text" && e.v.length > TEXT_PIECE / 4) || kids(e).some(longIn);
+  const pieces = (e: SExpr): SExpr => {
+    const x = mapKids(e, pieces);
+    if (x.k !== "text" || textBytes(x.v).length <= TEXT_PIECE) return x;
+    const parts: string[] = [""];
+    let n = 0;
+    for (const c of x.v) { const b = textBytes(c).length; if (n + b > TEXT_PIECE) { parts.push(""); n = 0; } parts[parts.length - 1] += c; n += b; }
+    return parts.map((v): SExpr => ({ k: "text", v })).reduce((a, b) => ({ k: "rt", fn: "text.concat", args: [a, b] }));
+  };
+  const funcs = funcs0.map((f) => (longIn(f.body) ? { ...f, body: pieces(f.body) } : f));
   // Host functions used, in a fixed order: they take the first indices.
   // A WASI host has no Math: there sin and the rest are V8's fdlibm,
   // compiled to WebAssembly (wasm-math.ts), with a memory of their own.
