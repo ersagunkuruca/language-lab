@@ -13,7 +13,7 @@ import { Lang } from "../src/lang/dsl.ts";
 import { fillings, infer } from "../src/lang/infer.ts";
 import { CORE, HTML_MODULE, LIBRARY, PRELUDE } from "../src/lang/library.ts";
 import { base, baseNames, checkOptions, loadProgram } from "../src/lang/load.ts";
-import { addVersions, adopt, lineageOf, orderFreeHash, publishVersion, replacing, upgradeOwn, publish, sameAs, sameLines, sameUpToOrder, upgrade, verify, type Module } from "../src/lang/modules.ts";
+import { addVersions, adopt, lineageOf, orderFreeHash, publishVersion, replacing, upgradeNames, upgradeOwn, publish, sameAs, sameLines, sameUpToOrder, upgrade, verify, type Module } from "../src/lang/modules.ts";
 import { buildPrelude } from "../src/lang/prelude-source.ts";
 import { library as listHelpers } from "../src/lang/programs.ts";
 import { atLeastAsGeneral, pinsOf } from "../src/lang/signatures.ts";
@@ -420,6 +420,28 @@ test("a program moves onto a newer version whose pin is at least as general, and
   const stays = upgradeOwn(up.own, [m3], baseNames(m3.names));
   assert.deepEqual(stays.moved, []);
   assert.match(stays.refused[0].reason, /type changed from/);
+});
+
+// SHARING.md §5 (L112): a program's names are its own copy. The author's
+// renames are one question for the upgrade; the program's renames win.
+test("after an upgrade the program keeps its names: the author's renames are said once and taken only when asked (L112)", () => {
+  const k = new Lang(LIBRARY.code);
+  const sq = k.def("square");
+  k.define(sq, k.fn(["x"], (x) => k.call(B.mul, x, x)));
+  const step = (prev: Module | null) => { const r = publishVersion(prev, "shapes", base(k.code), baseNames(k.names), [sq], LIBRARY.code, LIBRARY.pins); assert.ok(r.ok); return r.module; };
+  const m1 = step(null), v1 = m1.exports[0];
+  k.define(sq, k.fn(["x"], (x) => k.call(ARITH.mul, x, x)));
+  k.names[sq] = "squared";
+  const m2 = step(m1), v2 = m2.exports[0];
+  const moved = [{ from: v1, to: v2, uses: 1 }];
+  const kept = upgradeNames(moved, [m2], { main: "main" });
+  assert.deepEqual(kept.renamed, [{ from: "square", to: "squared" }]);
+  assert.equal(kept.names[v2], "square");
+  assert.equal(upgradeNames(moved, [m2], {}, true).names[v2], undefined, "taken: the module's name shows");
+  // A name the program gave itself stays, and isn't asked about.
+  const mine = upgradeNames(moved, [m2], { [v1]: "area" }, true);
+  assert.equal(mine.names[v2], "area");
+  assert.deepEqual(mine.renamed, []);
 });
 
 test("a saved file lists what it uses from modules, and opening it without them says which", async () => {
