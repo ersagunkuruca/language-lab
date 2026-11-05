@@ -1,3 +1,20 @@
 {
-  "q96mq0eg9ue7p4oqrf7orptm3f": ["10", "4"]
+  "q96mq0eg9ue7p4oqrf7orptm3f": [
+    "10",
+    "4"
+  ],
+  "7qsv6i9nll42fpdckdrqu0rf93": [
+    {
+      "main": {
+        "arguments": [],
+        "input": "",
+        "files": {},
+        "printed": [
+          "360 · can't: nobody to share with"
+        ],
+        "errors": [],
+        "exit": 0
+      }
+    }
+  ]
 }

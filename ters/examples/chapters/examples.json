@@ -1,0 +1,43 @@
+{
+  "2ogq1ruf9hej4ui9783smcq4f1": [
+    {
+      "main": {
+        "arguments": [
+          "book.md",
+          "out"
+        ],
+        "input": "",
+        "files": {
+          "book.md": "# One\nfirst words\n\n# Two\nsecond words\nmore\n"
+        },
+        "printed": [
+          "wrote 2 chapters and contents.md to out (5 words)"
+        ],
+        "errors": [],
+        "filesAfter": {
+          "book.md": "# One\nfirst words\n\n# Two\nsecond words\nmore\n",
+          "out/01-one.md": "# One\nfirst words\n\n",
+          "out/chapters.log": "wrote 01-one.md: One\nwrote 02-two.md: Two\n",
+          "out/02-two.md": "# Two\nsecond words\nmore\n\n",
+          "out/contents.md": "# Contents\n\n1. [One](01-one.md) — 2 words\n2. [Two](02-two.md) — 3 words\n"
+        },
+        "exit": 0
+      }
+    },
+    {
+      "main": {
+        "arguments": [
+          "missing.md",
+          "out"
+        ],
+        "input": "",
+        "files": {},
+        "printed": [],
+        "errors": [
+          "chapters: no file missing.md"
+        ],
+        "exit": 1
+      }
+    }
+  ]
+}

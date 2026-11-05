@@ -1,0 +1,32 @@
+{
+  "1o9trcpga0se9ndcngel7b0aq2": [
+    {
+      "main": {
+        "arguments": [
+          "ledger.csv"
+        ],
+        "input": "",
+        "files": {
+          "ledger.csv": "2026-01-01,food,1250,lunch\n2026-01-02,rent,80000,november\n2026-01-03,food,725,bread\n2026-02-01,food,300,tea\n"
+        },
+        "printed": [
+          "By account\nrent                800.00 × 1\nfood                 22.75 × 3\n\nBy month\n2026-01             819.75 × 3\n2026-02               3.00 × 1\n\nsmallest: 3.00 on 2026-02-01, tea\ntotal: 822.75 in 4 entries"
+        ],
+        "errors": [],
+        "exit": 0
+      }
+    },
+    {
+      "main": {
+        "arguments": [],
+        "input": "",
+        "files": {},
+        "printed": [],
+        "errors": [
+          "usage: ledger file.csv"
+        ],
+        "exit": 2
+      }
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "81acb745": [
+    {
+      "main": {
+        "arguments": [],
+        "input": "",
+        "files": {},
+        "printed": [
+          "magnitudes to(5) = -5 5",
+          "who was greeted(\"hello, Ada\") = Ada",
+          "who was greeted(\"goodbye\") = nobody",
+          "cuts(\"abc\") = |abc a|bc ab|c abc|",
+          "read numbers(\"10 20 30\") = [10 20 30]",
+          "read numbers(\"10  20\") = unreadable",
+          "square roots of each([4, 9]) = [2 3] [-2 3] [2 -3] [-2 -3]",
+          "height on the ray(3π/4, −2) = 2",
+          "height on the ray(3π/4, 2) = none"
+        ],
+        "errors": [],
+        "exit": 0
+      }
+    }
+  ]
+}

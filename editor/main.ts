@@ -1767,6 +1767,16 @@ function graphHooks(info: T.Info) {
 }
 
 
+
+// The values a definition is given: a main's accepted answers in their
+// recorded worlds (T7e15) are for lab test, not for the editor's runs.
+function givenOf(d: Id): unknown[] | undefined {
+  const v = (doc.examples?.[d] ?? undefined) as unknown[] | undefined;
+  if (!v) return undefined;
+  const xs = v.filter((x) => !(x && typeof x === "object" && "main" in (x as object)));
+  return xs.length || !v.length ? xs : undefined;
+}
+
 function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
   const box = h("div", { class: "run" });
   const t = info.typeOf.get(ui.def);
@@ -1833,7 +1843,7 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
   } else if (z?.t === "fn") box.append(backwardsPanel(namer, info));
   // Values on the wires: a function shows them for the values above; an
   // action, once you ask (it may take a while, and its printing is left out).
-  const ex = doc.examples?.[ui.def];
+  const ex = givenOf(ui.def);
   const tr = traced(info);
   if ((action || value) && !needs.length) box.append(h("div", { class: "acts" },
     h("button", { class: "btn", type: "button", "data-act": "t-values", title: "Run it and show what every node made, printing left out" }, ex ? "Update values" : "Show values"),
@@ -1850,7 +1860,7 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
   // standard input, which a page hasn't (calc's main reads it, E211).
   if (tr?.error) box.append(tr.error.message === "reached a hole"
     ? h("p", { class: "hint" }, "Values show once the holes on their way are filled.")
-    : !doc.examples?.[ui.def] || LIMIT.test(tr.error.message) || /the graph waits|has no standard input/.test(tr.error.message) ? h("p", { class: "hint" }, `No values on the wires: ${tr.error.message}.`)
+    : !givenOf(ui.def) || LIMIT.test(tr.error.message) || /the graph waits|has no standard input/.test(tr.error.message) ? h("p", { class: "hint" }, `No values on the wires: ${tr.error.message}.`)
     : h("p", { class: "status-line bad" }, `Values stopped: ${tr.error.message}.`));
   return box;
 }
@@ -1880,7 +1890,7 @@ const traces = new WeakMap<Code, Map<string, Trace>>();
 // ports solved for, the first answer. None until every input has one.
 function traceInputs(info: T.Info): string[] | null {
   const body = defBody(ui.def);
-  if (body?.kind !== "lambda") return doc.examples?.[ui.def] ? [] : null;
+  if (body?.kind !== "lambda") return givenOf(ui.def) ? [] : null;
   const known = knownPorts(info);
   const answer = known.length === portsOfDef(ui.def).length - 1 && !known.includes("out") ? null : runBackwards(info, known).answers[0];
   const texts = body.params.map((p) => (known.includes(p) ? portText(info, p) : answer?.values[p] ?? ""));
@@ -1960,7 +1970,7 @@ function traced(info: T.Info): Trace | null {
   if (handledForArgs(z).length) return null;
   // One that reaches the world (prints, writes a file, fetches) runs only
   // when asked (Show values), never just because it's finished being written.
-  if (z?.t === "fn" && z.eff.effs.some((e) => e !== CHOICE && e !== DIVERGE) && !doc.examples?.[ui.def]) return null;
+  if (z?.t === "fn" && z.eff.effs.some((e) => e !== CHOICE && e !== DIVERGE) && !givenOf(ui.def)) return null;
   const key = `${ui.def}\u0000${texts.join("\u0000")}`;
   let m = traces.get(doc.code);
   if (!m) traces.set(doc.code, (m = new Map()));
@@ -1984,7 +1994,7 @@ function traced(info: T.Info): Trace | null {
 const TRACE_MS = 200, GIVEN_MS = 3000;
 function boundedTrace(info: T.Info, args: Value[]): Trace {
   const body = defBody(ui.def), copy = body ? mainCopies.get(doc.code)?.get(body.id) : undefined;
-  const given = !!doc.examples?.[ui.def] || !(body as NodeOf<"lambda">).params.length;
+  const given = !!givenOf(ui.def) || !(body as NodeOf<"lambda">).params.length;
   if (given && info.divergent.has(ui.def)) return trace(doc.code, info, ui.def, args, quietWorld(), undefined, !!copy);
   const ms = given ? GIVEN_MS : TRACE_MS, end = performance.now() + ms;
   const slow = () => Object.assign(new OutOfSteps(), { message: `it runs longer than the ${given ? `${ms / 1000} s` : `${ms} ms`} the graph waits; Run main runs it in full` });
