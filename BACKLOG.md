@@ -183,7 +183,7 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L69 | Foreign definitions ([FOREIGN.md](docs/design/targets/FOREIGN.md)). Example: one of std's world operations (the clock) answered by `hosts/js.js` instead of the evaluator's own code. Left: L69d (optional), std's world operations as host files. Asks Ersagun: may a foreign operation be declared pure | LANGUAGE-NEEDS §5 | P2 | M | a-c done |
+| L69 | Foreign definitions ([FOREIGN.md](docs/design/targets/FOREIGN.md)). Example: one of std's world operations (the clock) answered by `hosts/js.js` instead of the evaluator's own code. Left: L69d (optional), std's world operations as host files. Asks Ersagun: may a foreign operation be declared pure. Measured 2026-11-05 (L69d): std's world operations are answered by the runner's World (run.ts `World`, given per target: Node, the browser, tests' fixed clocks), which is a host already; the clock from a host file means World.now becoming a std hosts entry that a program's hosts/js.js can override, and hosts.ts taking std's effects (effectOfOperation finds only a program's own). Touches every World a caller builds (editor, lab, tests) | LANGUAGE-NEEDS §5 | P2 | M | a-c done |
 
 ### Relations and totality (BACKWARDS.md, MODES.md)
 
