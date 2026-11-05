@@ -91,3 +91,53 @@ position descent fails at, with the first set it wanted there as "expected".
   of calc's grammar, tested against calc-grammar.test.ts's lines.
 - **s5** calc's run line on it, measured against the 0.9 s; then the
   Language lane deletes calc's hand parser.
+
+## What was built, and step 7: descent on every target
+
+Steps 2 to 6 put descent where the line is read: compiler/src/core-solve.ts
+for the core IR's JavaScript (s5) and ters/src/lang/run.ts `solveAnswers`
+for the evaluator (s6), both through ters/src/lang/descent.ts, which
+*interprets* the printer: it walks the printer's nodes for each line.
+WebAssembly and C can't do that. They refuse any solve ("solves a relation,
+not in this profile yet", scalar.ts), and they carry neither the printer's
+nodes nor a TypeScript interpreter. So calc's run line can't move onto
+`read expression` until it reads there too.
+
+Step 7 writes the reader *as a definition in the language*, from the
+printer, before any target lowers it. That is the same shape as
+inverses.ts (a model-to-model pass, C137a), and every target then reads by
+descent with no new runtime: what the printer's arms read becomes ordinary
+Text operations C and WebAssembly already have (`length`, `code` and
+`slice` of a Text, Int compares).
+
+The written reader takes the text, a position, and the printer's other
+inputs (calc's level), and gives `optional (position after, value)`:
+
+- one definition for the primary arms, a match on the next character's
+  class (the first sets, as descent.ts `starts`), each arm's pieces read in
+  turn, a `none` where one fails;
+- one for the infix loop (`Infix` in descent.ts), written as a recursion on
+  the position and the left operand so far, its operators the literal arms
+  of the printer's match on the operator and its levels evaluated from the
+  printer's `lets`, as descent.ts evaluates them now;
+- `spaced` and `optional parens` as two small prelude helpers written once
+  over a position, rather than special cases in the pass.
+
+`inverse(e ↦ F(e, …), y)` then becomes a call of the reader, with
+"the whole line was read" checked, where inverses.ts now makes it a solve
+on F. The evaluator and the core IR run the same definition, so
+descent.ts's interpreter can go, along with core-solve.ts's `descended` and
+run.ts's hook. Where a line stops (L70c) needs the furthest position, which
+the written reader carries as a second result.
+
+- **s7a** the pass writing the reader for calc's printer, with no infix
+  arm (literal, variable, negative, parentheses), checked against
+  descent.ts on descent.test.ts's lines.
+- **s7b** the infix loop written too: every calc-grammar line and the 300
+  random expressions read as descent.ts reads them.
+- **s7c** inverse rewritten to the reader (inverses.ts), on the evaluator
+  and the core IR; descent.ts, `descended` and run.ts's hook removed.
+- **s7d** calc compiled to C and WebAssembly reading lines
+  (c.test, wasm.test), and the stuck position as a second result.
+- Then the Language lane moves calc's run line onto `read expression`
+  and deletes the hand parser.
