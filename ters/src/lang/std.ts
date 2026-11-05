@@ -9,7 +9,7 @@ import { isCall, toTodaysShape } from "../model.ts";
 import moved0 from "../../library/moved.json" with { type: "json" };
 import type { Names } from "../presentation.ts";
 import { B, impl } from "../prelude.ts";
-import { MASK_TYPES, NAMED_ROWS, ARRAY, TABLE, HASH_SET, CELL, PATH, JOB, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NETWORK, NUMBER, STRING, type Row, type Subst, type Type } from "./types.ts";
+import { MASK_TYPES, NAMED_ROWS, ROW_CARRIER, ARRAY, TABLE, HASH_SET, CELL, PATH, JOB, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NETWORK, NUMBER, STRING, type Row, type Subst, type Type } from "./types.ts";
 import * as I from "./int.ts";
 import * as T from "./text.ts";
 import * as A from "./algebraic.ts";
@@ -158,6 +158,10 @@ const namedRow = (id: Id, name: string, effects: readonly Id[]) => {
 export const VIEW_ROW = namedRow("std.row.view", "View", PAGE_VIEW);
 export const HANDLER_ROW = namedRow("std.row.handler", "Handler", PAGE_HANDLER);
 export const SOUND_ROW = namedRow("std.row.sound", "Sound", AUDIO_BLOCK);
+// A row written as a type's argument (L149, L229c): `() -[Diverge]-> Row`
+// stands for the row Diverge where a data type takes a row parameter, as
+// infer.ts's carriers do (types.ts ROW_CARRIER). Its own type, no cases.
+export const ROW_TYPE = typedef(ROW_CARRIER, "Row", [], []);
 export const EVENT = typedef("std.event", "Event", [], [
   ["event", [["value", () => tref(STRING)], ["key", () => tref(STRING)], ["x", () => tref(NUMBER)], ["y", () => tref(NUMBER)], ["seconds", () => tref(NUMBER)]]],
 ]);
@@ -1637,7 +1641,7 @@ export function onTodaysIds<T>(x: T, from = (x as { shape?: unknown } | null)?.s
 }
 export const tupleSize = (id: Id): number | null => { const m = /^std\.tuple(\d)$/.exec(id); return m ? Number(m[1]) : null; };
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, MATRIX, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS, WORD16, TENSOR, BYTES, JSON_TYPE, DATE, TIME_OF_DAY, INSTANT, EMBEDDING, REQUEST, RESPONSE, LOCALE, SETTINGS, RELEASE, OPEN_FILE, KEPT_FILES, LITERAL, REAL, LU_FACTORS] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, COMPLEX, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, DUAL, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ROW_TYPE, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, MATRIX, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS, WORD16, TENSOR, BYTES, JSON_TYPE, DATE, TIME_OF_DAY, INSTANT, EMBEDDING, REQUEST, RESPONSE, LOCALE, SETTINGS, RELEASE, OPEN_FILE, KEPT_FILES, LITERAL, REAL, LU_FACTORS] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one

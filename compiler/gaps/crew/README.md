@@ -22,7 +22,7 @@ there are (`workers 3`; 2 if it doesn't). `#` starts a comment. crew:
    asks for its next job, spends the minutes and says the task is done,
    through the `Work` effect, whose operations are answered later. The
    scheduler is written in the language too: `fiber` runs a worker until
-   it performs, and hands back a `Step` with the rest of its run; the
+   it performs, and hands back a step of `Steps of Work` (derived from the effect, L229) with the rest of its run; the
    floor keeps the idle workers' rests and a timer for each spending one,
    and moves the clock to the next timer. Ready tasks are handed out by
    rank: the longest tail first, or by their line in the file;
@@ -33,7 +33,7 @@ there are (`workers 3`; 2 if it doesn't). `#` starts a comment. crew:
 Usage errors exit with 2, a bad plan with 1 and `crew: …` on stderr.
 
 The program was generated once with the DSL (its build script is in the
-project's files, `gaps-round11/build.ts`); `code.json` is the source.
+project's files, `gaps-round11/build-steps.ts` since L229c); `code.json` is the source.
 
 ## Credits
 
