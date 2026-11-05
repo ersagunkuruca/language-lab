@@ -118,6 +118,10 @@ Row L215, one PR each:
   a program on its layer isn't walked for layer nodes gone when every one
   is there (Spacetime about 11 ms less an edit, Physics and Constructions
   2 to 3).
+- (c3) Done: what the checker asks the modes analysis of a published
+  definition given only published functions is kept between programs,
+  so an edit's check makes no analyzer of the program just to read it
+  (Spacetime about 98 to 82 ms an edit).
 - (b) The `Checker` cache in the editor's edit path, timed on I157 and
   I158's steps and on a one-character edit in Constructions.
 - (c) Typedef groups and the per-program parts above in the cache.

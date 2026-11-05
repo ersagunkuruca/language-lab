@@ -194,6 +194,37 @@ const keptFor = (names: Record<Id, string>, plansOnly: boolean) => {
   return { m, prefix: plansOnly ? "plans|" : "" };
 };
 const fixedFn = (f: Fn) => f.k === "builtin" || isPublished(f.id);
+// The checker's questions about a published definition given only
+// published functions (ofMode, ofReturned), answered with recursion
+// checked, kept between programs like the modes above: the checker asks
+// them at each call given a function, and an analyzer of the program (its
+// filled copy of every node) made only to read a kept answer was 15 to
+// 20 ms of each edit in Spacetime.
+const keptAnswers = new WeakMap<Record<Id, string>, Map<string, Verdict | null>>();
+const answersFor = (names: Record<Id, string>) => {
+  const k = Object.keys(names).length ? names : KEPT_NAMES;
+  let m = keptAnswers.get(k);
+  if (!m) keptAnswers.set(k, (m = new Map()));
+  return m;
+};
+const specText = (spec: Map<number, Fn>) => [...spec].map(([i, f]) => `${i}=${fnKey(f)}`).sort().join(",");
+const modeAsked = (code: Code, def: Id, known: string[], spec: Map<number, Fn>): string | null => {
+  const body = (code.nodes[def] as NodeOf<"def"> | undefined)?.body;
+  if (!isPublished(def) || !body || code.nodes[body]?.kind !== "lambda" || ![...spec.values()].every(fixedFn)) return null;
+  return `mode|${body}|${[...new Set(known)].sort().join(",")}|${specText(spec)}`;
+};
+const returnedAsked = (def: Id, spec: Map<number, Fn>): string | null =>
+  isPublished(def) && [...spec.values()].every(fixedFn) ? `returned|${def}|${specText(spec)}` : null;
+// What ofMode and ofReturned would answer, when it is kept; undefined
+// when it isn't, and an analyzer is needed.
+export function keptMode(code: Code, names: Record<Id, string>, def: Id, known: string[], spec: Map<number, Fn>): Verdict | null | undefined {
+  const k = modeAsked(code, def, known, spec);
+  return k === null ? undefined : answersFor(names).get(k);
+}
+export function keptReturned(names: Record<Id, string>, def: Id, spec: Map<number, Fn>): Verdict | null | undefined {
+  const k = returnedAsked(def, spec);
+  return k === null ? undefined : answersFor(names).get(k);
+}
 
 // Each let's binder whose value names a definition or builtin outright,
 // with the nodes that say so. For a program made from another by a few
@@ -1176,20 +1207,22 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
     return v;
   };
   // known: parameter positions as "0", "1", …, and "out".
+  const answers = plansOnly ? null : answersFor(names);
+  const keeping = <T extends Verdict | null>(k: string | null, v: T): T => { if (k !== null) answers?.set(k, v); return v; };
   const ofMode = (def: Id, known: string[], spec: Map<number, Fn> = new Map()) => once(`mode|${keyOf({ k: "def", id: def }, new Set(known), spec)}`, () =>
-    checked(() => ({ v: mode({ k: "def", id: def }, new Set(known), spec), key: keyOf({ k: "def", id: def }, new Set(known), spec) }))!);
+    keeping(modeAsked(code, def, known, spec), checked(() => ({ v: mode({ k: "def", id: def }, new Set(known), spec), key: keyOf({ k: "def", id: def }, new Set(known), spec) }))!));
 
   // The function a definition gives back (`(f, g) ↦ (x) ↦ …`), run
   // forward with the definition's parameters at spec known to be those
   // functions: the prelude's conjugate, given its f.
-  const ofReturned = (def: Id, spec: Map<number, Fn>): Verdict | null => once(`returned|${def}|${[...spec].map(([i, f]) => `${i}=${fnKey(f)}`).sort().join(",")}`, () => checked(() => {
+  const ofReturned = (def: Id, spec: Map<number, Fn>): Verdict | null => once(`returned|${def}|${[...spec].map(([i, f]) => `${i}=${fnKey(f)}`).sort().join(",")}`, () => keeping(returnedAsked(def, spec), checked(() => {
     const outerLam = nodes[(nodes[def] as NodeOf<"def">).body!];
     const inner = outerLam?.kind === "lambda" ? nodes[outerLam.body] : undefined;
     if (outerLam?.kind !== "lambda" || inner?.kind !== "lambda") return { v: null, key: null };
     const outer = new Map([...spec].map(([i, f]) => [slot(outerLam.params[i]), f] as [Id, Fn]));
     const known = new Set(inner.params.map((_, i) => String(i)));
     return { v: lambdaMode(inner.id, known, new Map(), def, outer), key: modeKey(inner.id, known, new Map(), outer) };
-  }));
+  })));
 
   // The plan relate.ts runs for a function in a mode, and for a value
   // defined once (with its result known or not).
