@@ -130,3 +130,33 @@ test("on the core IR, a click whose wait is inside a handler of Abort: an abort 
   assert.deepEqual(o.printed, ["start", "late", "done"]);
   assert.equal(o.shown(), "saved 1");
 });
+
+// C181: a search that waits, under a collector: each answer's wait a step
+// of its own, the choice before it going on to the next item, and the
+// count, and the rest of the click, once the last is done.
+test("on the core IR, a click that counts the answers of a search that waits: every answer, then the rest", async () => {
+  const o = open(saver((k) => k.call(S.print, k.call(INT_OPS.show, k.call(S.count, k.thunk(() =>
+    k.let("x", k.call(S.oneOf, k.listOf(k.lit(1), k.lit(2), k.lit(3))), (x) => k.seq(k.call(WAIT_OP, k.lit(500)), x))))))));
+  o.button.fire("click");
+  assert.equal(o.shown(), "saving… 0");
+  for (let i = 0; i < 3; i++) {
+    assert.equal(o.timers.length, i + 1, `wait ${i + 1}`);
+    o.timers[i].go();
+    await settle();
+  }
+  assert.deepEqual(o.printed, ["start", "3", "done"]);
+  assert.equal(o.shown(), "saved 1");
+});
+
+test("on the core IR, a click whose search waits inside with fuel: its answers counted, then the rest", async () => {
+  const o = open(saver((k) => k.call(S.print, k.call(INT_OPS.show, k.call(S.count, k.thunk(() => k.call(S.fuel, k.lit(100), k.thunk(() =>
+    k.let("x", k.call(S.oneOf, k.listOf(k.lit(1), k.lit(2))), (x) => k.seq(k.call(WAIT_OP, k.lit(500)), x))))))))));
+  o.button.fire("click");
+  for (let i = 0; i < 2; i++) {
+    assert.equal(o.timers.length, i + 1, `wait ${i + 1}`);
+    o.timers[i].go();
+    await settle();
+  }
+  assert.deepEqual(o.printed, ["start", "2", "done"]);
+  assert.equal(o.shown(), "saved 1");
+});

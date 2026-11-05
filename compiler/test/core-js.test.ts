@@ -19,7 +19,7 @@ import type { Runtime, World } from "../../ters/src/lang/run.ts";
 import { equal, fromList, makeRunner, runProgram, type Data, type Value } from "../../ters/src/lang/run.ts";
 import { Cells } from "../../ters/src/lang/cells.ts";
 import { evaluatorCall, htmlText, NoAnswer } from "../../ters/src/lang/html.ts";
-import { HTML_V, S, TRUE, WAIT_OP } from "../../ters/src/lang/std.ts";
+import { HTML_V, S, SHOW_ANY, TRUE, WAIT_OP } from "../../ters/src/lang/std.ts";
 import { Lang } from "../../ters/src/lang/dsl.ts";
 import { base, baseNames } from "../../ters/src/lang/load.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
@@ -46,18 +46,28 @@ const inputs: Record<string, () => [string[], Record<string, string>]> = {
 // chooser's representations instead).
 const skip = new Set(["numbers"]);
 
-// Every example lowers since C137c24, so a program that doesn't, saved as
-// the editor saves one: a page whose button counts the answers of a search
-// that waits, which isn't lowered yet.
-function unlowered(): string {
-  const k = new Lang();
-  const main = k.def("main");
-  k.define(main, k.thunk(() => k.call(HTML_V.element, k.lit("button"), k.list(k.call(HTML_V.on, k.lit("click"), k.fn(["e"], () =>
-    k.seq(k.call(S.count, k.thunk(() => k.seq(k.call(WAIT_OP, k.lit(5)), k.call(S.oneOf, k.listOf(k.lit(1), k.lit(2)))))), k.call(S.print, k.lit("done")))))), k.list())));
+// A program saved as the editor saves one.
+function saved(k: Lang): string {
   const dir = mkdtempSync(join(tmpdir(), "unlowered-"));
   writeFileSync(join(dir, "code.json"), JSON.stringify(k.code));
   writeFileSync(join(dir, "names.default.json"), JSON.stringify(k.names));
   return dir;
+}
+// Every example lowers since C137c24, and a wait inside count since C181,
+// so a program that doesn't: a page whose button's handler has a hole.
+function unlowered(): string {
+  const k = new Lang();
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.call(HTML_V.element, k.lit("button"), k.list(k.call(HTML_V.on, k.lit("click"), k.fn(["e"], () =>
+    k.call(S.print, k.call(SHOW_ANY, k.hole()))))), k.list())));
+  return saved(k);
+}
+// C181: a main that counts the answers of a search that waits.
+function countsWaiting(): string {
+  const k = new Lang();
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.call(S.count, k.thunk(() => k.seq(k.call(WAIT_OP, k.lit(5)), k.call(S.oneOf, k.listOf(k.lit(1), k.lit(2))))))))));
+  return saved(k);
 }
 
 // A world in memory: files in a map, everything written collected.
@@ -115,16 +125,22 @@ test("lab compile --core writes a module that runs main as lab run does", async 
   // one whose solves the evaluator's solver runs carries the program's
   // nodes (C137c11); one that doesn't lower says why, and writes nothing.
   const args = ["-l", "a.txt", "nope"];
-  const [madeWc, madeRelations, page, wantWc, wantRelations] = await Promise.all([
+  const counts = countsWaiting();
+  const [madeWc, madeRelations, page, wantWc, wantRelations, madeCounts, wantCounts] = await Promise.all([
     run([lab, "compile", wc, "--core", "-o", "wc.mjs"]), run([lab, "compile", relations, "--core", "-o", "relations.mjs"]),
-    run([lab, "compile", unlowered(), "--core", "-o", "waits.mjs"]), run([lab, "run", wc, ...args]), run([lab, "run", relations]),
+    run([lab, "compile", unlowered(), "--core", "-o", "hole.mjs"]), run([lab, "run", wc, ...args]), run([lab, "run", relations]),
+    run([lab, "compile", counts, "--core", "-o", "counts.mjs"]), run([lab, "run", counts]),
   ]);
+  // C181: waiting inside count, as lab run has it.
+  assert.equal(madeCounts[2], 0, madeCounts[1]);
+  assert.deepEqual(await run(["counts.mjs"]), wantCounts);
+  assert.equal(wantCounts[0].trim(), "2");
   assert.equal(madeWc[2], 0, madeWc[1]);
   assert.equal(madeRelations[2], 0, madeRelations[1]);
   assert.deepEqual(await run(["wc.mjs", ...args]), wantWc);
   assert.deepEqual(await run(["relations.mjs"]), wantRelations);
   assert.notEqual(page[2], 0);
-  assert.match(page[1], /isn't compiled through the core IR: .*waits inside count/);
+  assert.match(page[1], /isn't compiled through the core IR: .*has a hole/);
 });
 
 // Pages through the core IR (C137c8): the cells are the evaluator's
@@ -216,7 +232,7 @@ test("lab build-web --core writes a page that draws and reacts as lab build-web'
   for (let i = 0; i < a.length; i++) { a[i].fire("click"); b[i].fire("click"); assert.equal(got.html(), want.html(), `after click ${i}`); }
   // One that doesn't lower says why.
   assert.equal(waits[2], 2);
-  assert.match(waits[1], /isn't compiled through the core IR: .*waits inside count/);
+  assert.match(waits[1], /isn't compiled through the core IR: .*has a hole/);
 });
 
 // for some(x => …) (C137c16): the evaluator's relational interpreter on a
