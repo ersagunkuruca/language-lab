@@ -891,7 +891,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| T7e13 | Text's `split` undoes `join all` as a prelude law, over small lists of texts led by one so there is at least one part (an empty text splits into one empty part), evaluated and compiled | this PR |
+| T7e13 | Text's `split` undoes `join all` as a prelude law, over small lists of texts led by one so there is at least one part (an empty text splits into one empty part), evaluated and compiled | #1742 |
 | T7e12 | CSV records read back as a prelude law: `csv records undoes csv of records`, records of a field with a comma, a quote and a line break and one that may be empty, written under their header and read back as the same maps, evaluated and compiled | #1740 |
 | T7e11 | `json read undoes json printed` reads back `json printed indented` (two spaces a level) as well, so the laid-out printer's lines, `: ` and empty `[]`/`{}` are checked against the reader over every small Json value, evaluated and compiled | #1735 |
 | T7e10 | `lab test --compiled` takes an accepted answer that is a Bool, or holds one: the compiled answer's booleans are turned back into the evaluator's Bool (tests.ts `evaluatorValue`, copying a case by its tag and fields, which compiled code can keep as its class's getters) before it is shown. Before, `both(true, false)` compiled failed with "Cannot read properties of undefined"; lab-test-compiled.test.ts now has a Bool taken and given, alone and in a list | #1733 |
