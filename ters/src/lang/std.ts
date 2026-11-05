@@ -1338,8 +1338,12 @@ export function shownImplementations(info: { implementations?: Map<string, Id> }
 export function implementationsOf(info: { implementations?: Map<string, Id> }, iface: Id): Map<Id, Id> {
   const out = new Map<Id, Id>();
   for (const [key, d] of info.implementations ?? []) {
-    const m = key.startsWith(`${iface}|`) ? /"t":"con","id":"([^"]+)"/.exec(key.slice(iface.length + 1)) : null;
-    if (m) out.set(m[1], d);
+    if (!key.startsWith(`${iface}|`)) continue;
+    // One at a closed type, or with type parameters (L219), kept by its
+    // type constructor alone (infer.ts genericKey): `Shown (Box a)`.
+    const rest = key.slice(iface.length + 1);
+    const m = rest.startsWith("@") ? [rest, rest.slice(1)] : /"t":"con","id":"([^"]+)"/.exec(rest);
+    if (m && !out.has(m[1])) out.set(m[1], d);
   }
   return out;
 }
