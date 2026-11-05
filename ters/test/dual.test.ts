@@ -15,8 +15,8 @@ import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { makeRunner, type Value } from "../src/lang/run.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
-import { LIBRARY } from "../src/lang/library.ts";
-import { ARITH, DUAL_V, S, TRIG_OPS } from "../src/lang/std.ts";
+import { DUAL_V, LIBRARY } from "../src/lang/library.ts";
+import { ARITH, S, TRIG_OPS } from "../src/lang/std.ts";
 import type { Id } from "../src/model.ts";
 import { compile } from "../../compiler/src/compile.ts";
 

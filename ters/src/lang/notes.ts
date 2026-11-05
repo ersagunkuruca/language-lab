@@ -97,7 +97,6 @@ export const NOTES: Comments = {
   "std.branch": "What together keeps of one action: done with its value, or parked on a ticket with how to go on.",
   "std.branch.done": "The action has its value.",
   "std.branch.parked": "The action waits for this ticket; resume goes on once it is ready.",
-  "std.dual": "A dual number, value + slope·ε where ε · ε is 0: a record of two Float64s. The same + − · work on it, · by the product rule, and sin, cos, tan, exp and log by the chain rule, so a function given dual(x, 1) gives back its value and its slope at x. slope by duals does that for you (forward-mode automatic differentiation). No <.",
   "std.real": "An exact real number, held by how it was made (fractions, + − ·), that works itself out as closely as you ask: approximate(x, p) is within 1/2ᵖ. The same + − · work on it. real pi() is π, and real digits shows as many decimals as you ask, and real less than compares two, narrowing until they come apart or the fuel runs out (EXACT-REALS.md, step 4).",
   "std.algebraic": "An exact real number that solves a polynomial equation with whole-number coefficients, like √2 (x² = 2) or the golden ratio (x² = x + 1). Held by that equation and which of its roots it is, so √2 · √2 is exactly 2 and < always answers. The same + − · < work on it. Make one with square root, root, or as algebraic; digits shows as many digits as you ask for (EXACT-REALS.md).",
   "std.complex": "A complex number re + im·i, a record of two Float64s. The same + − · work on it (· is the complex product); it has no <.",

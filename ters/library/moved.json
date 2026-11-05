@@ -694,5 +694,9 @@
   "@vr27og519d1mt702plm7e94gv5": "@nl2lo6kftlgou245veb0mabrsa",
   "@vuub33p1h4dbqp20pm4r9l8pbh": "@qf3oba98rn8qo5s84n9f6r8jhr",
   "@vvap0d0ogtb4oia7gkihjr6euj": "@dmqjd9idhlvrhnq82fgh2rnb78",
-  "@vvo5mc6sck1ibmsiojah9r1dr2": "@0pegafs1dim422vqth7elmmq3f"
+  "@vvo5mc6sck1ibmsiojah9r1dr2": "@0pegafs1dim422vqth7elmmq3f",
+  "std.dual": "@vicmntburnqjb5o6g9sarfvqml",
+  "std.dual.dual": "@vicmntburnqjb5o6g9sarfvqml:2",
+  "std.dual.dual.slope": "@vicmntburnqjb5o6g9sarfvqml:5",
+  "std.dual.dual.value": "@vicmntburnqjb5o6g9sarfvqml:3"
 }

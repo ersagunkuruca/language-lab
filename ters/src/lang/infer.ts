@@ -34,7 +34,7 @@ import { fieldPath, fieldPaths, placePath, readPaths } from "./records.ts";
 import { leftToWays, pickWays, waysIn, type Ways } from "./ways.ts";
 import { fresh, rigid, RIGID, type Pins } from "./signatures.ts";
 import {
-  ALGEBRAIC_TYPE, ARRAY, MASK_TYPES, isRowCarrier, rowCarrier, BUILTIN_EFFECTS, NAMED_ROWS, writtenRow, CELL, PATH, CHOICE, COMPLEX_TYPE, CONSOLE, DUAL_TYPE, FIXED_TYPE, DIVERGE, EffectError, ArithError, FractionError, WORLD, WorldError, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, RATIONAL_TYPE, schemeArith, schemeNeeds, showType as showT, STRING, Subst, TypeError,
+  ALGEBRAIC_TYPE, ARRAY, MASK_TYPES, isRowCarrier, rowCarrier, BUILTIN_EFFECTS, NAMED_ROWS, writtenRow, CELL, PATH, CHOICE, COMPLEX_TYPE, CONSOLE, FIXED_TYPE, DIVERGE, EffectError, ArithError, FractionError, WORLD, WorldError, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, RATIONAL_TYPE, schemeArith, schemeNeeds, showType as showT, STRING, Subst, TypeError,
   type Row, type Scheme, type Type,
   OverMap, OverSet,
 } from "./types.ts";
@@ -978,7 +978,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         // A literal at Rational is a whole number or top/bottom; at
         // Complex, a Float64 (its real part). arith.ts spells them out.
         if ((n.of === RATIONAL_TYPE || n.of === ALGEBRAIC_TYPE) && !ratioParts(n.value)) err(id, `${JSON.stringify(n.value)} isn't a fraction: write a whole number, or top/bottom with the bottom not 0`);
-        if ((n.of === COMPLEX_TYPE || n.of === DUAL_TYPE) && typeof n.value !== "number") err(id, `${JSON.stringify(n.value)} isn't a number`);
+        if (n.of === COMPLEX_TYPE && typeof n.value !== "number") err(id, `${JSON.stringify(n.value)} isn't a number`);
         break;
       }
       case "ref": t = refType(id, n.target, env); break;
@@ -2531,6 +2531,44 @@ function* fillingSteps(code: Code, info: Info, hole: Id): Generator<void, Fillin
   const newPlans = (f: Filling): string | null => { const now = plans(filled(f)); return now === (planned ??= plans(code)) ? null : now; };
   const pinnedGroup = h.group.some((d) => info.options?.pins?.[d]);
   const callers = [...affected].some((d) => !h.group.includes(d));
+  // Where the callers use the group, and the types the program gave each
+  // use (E103f). A filling only narrows the group's types, so a caller
+  // that checks after it uses them at an instance of what it used before:
+  // a filling whose group types can't meet a use's old type fails the
+  // whole check, and is refused without one (physics fall's result,
+  // free before it's filled: 1,063 whole checks for its 2,270 offers, one
+  // for each type it was pinned to, nearly all refused at main).
+  const uses = callers ? [...affected].filter((d) => !h.group.includes(d)).flatMap((d) => subtree(code, d)).flatMap((id) => {
+    const n = code.nodes[id], t = info.typeOf.get(id);
+    return n?.kind === "ref" && h.group.includes(n.target) && t ? [{ def: n.target, t: info.subst.zonk(t) }] : [];
+  }) : [];
+  const meetsUses = (s: Subst): boolean => {
+    if (!uses.length) return true;
+    const t = s.trial();
+    // The group's type under s with every variable fresh: only weaker than
+    // its scheme, so a use it can't meet is one the scheme can't either.
+    const vars = new Map<number, Type>(), rows = new Map<number, number>();
+    const fresh = (x: Type): Type => {
+      x = t.resolve(x);
+      if (x.t === "var") { let v = vars.get(x.v); if (!v) vars.set(x.v, (v = t.fresh())); return v; }
+      if (x.t === "con") return { t: "con", id: x.id, args: x.args.map(fresh) };
+      const r = t.resolveRow(x.eff);
+      const tail = r.tail === null ? null : (rows.get(r.tail) ?? (rows.set(r.tail, t.next++), rows.get(r.tail)!));
+      return { t: "fn", params: x.params.map(fresh), ret: fresh(x.ret), eff: { effs: r.effs, tail } };
+    };
+    try {
+      for (const u of uses) {
+        const sc = info.schemes.get(u.def);
+        if (!sc) continue;
+        vars.clear(); rows.clear();
+        t.unify(fresh(sc.type), u.t);
+      }
+      return true;
+    } catch (e) {
+      if (e instanceof TypeError) return false;
+      throw e;
+    }
+  };
   const around: Type[] = [h.expected, { t: "fn", params: h.scope.map((b) => b.type), ret: h.expected, eff: h.row }];
   let aroundBefore: string | undefined;
   // A definition with results is checked by its direction's verdict too
@@ -2568,7 +2606,7 @@ function* fillingSteps(code: Code, info: Info, hole: Id): Generator<void, Fillin
     if (risky === "field" && !(withResults && (f.kind === "match" || f.kind === "fold"))) return byKind(`field ${f.kind}|${groupKey(s, [...groupTypes, ...around])}${brings}`, f);
     if (risky || (withResults && (f.kind === "match" || f.kind === "fold"))) return whole(f);
     const plan = solves.length ? newPlans(f) : null;
-    if (plan !== null) return byKind(`plan ${plan}|${groupKey(s, [...groupTypes, ...around])}${brings}`, f);
+    if (plan !== null) return meetsUses(s) && byKind(`plan ${plan}|${groupKey(s, [...groupTypes, ...around])}${brings}`, f);
     // A row only renamed pins nothing: a pure call's empty row joining the
     // definition's. (A type variable renamed may still be pinned: the new
     // one can carry a constraint, records of Float64s say.)
@@ -2591,7 +2629,7 @@ function* fillingSteps(code: Code, info: Info, hole: Id): Generator<void, Fillin
     // constraints (I157: a new definition's 1,068 offers asked ~500
     // checks of it, 3.7 s). Its units are still its own.
     if (!callers && !held) return unitsHold(f);
-    return byKind(groupKey(s, [...groupTypes, ...(pinnedGroup ? around : [])]) + brings, f);
+    return meetsUses(s) && byKind(groupKey(s, [...groupTypes, ...(pinnedGroup ? around : [])]) + brings, f);
   };
   // A filling that brings Choice or the world where the other is may break
   // the rule that the world isn't touched under Choice, which only the

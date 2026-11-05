@@ -25,7 +25,8 @@ export class Lang extends Builder {
 
   // A data type. `variants` maps each case to its fields; a field's type is
   // built by a function of (the type itself, its params).
-  type(name: string, params: string[], variants: [string, [string, (self: Id, ps: Id[]) => Id][]][]) {
+  // `unique` keeps it apart from another type of the same shape (model.ts).
+  type(name: string, params: string[], variants: [string, [string, (self: Id, ps: Id[]) => Id][]][], unique?: string) {
     const def = this.def(name);
     const ps = params.map((p) => this.binder(p));
     const ids: Record<string, Id> = {};
@@ -38,7 +39,7 @@ export class Lang extends Builder {
       });
       return (ids[vname] = this.named(this.add({ kind: "variant", fields: fids }), vname));
     });
-    this.code.nodes[def] = { id: def, kind: "def", body: this.add({ kind: "typedef", params: ps, variants: vs }) };
+    this.code.nodes[def] = { id: def, kind: "def", body: this.add({ kind: "typedef", params: ps, variants: vs, ...(unique ? { unique } : {}) }) };
     return { def, v: ids, f: fields };
   }
 
