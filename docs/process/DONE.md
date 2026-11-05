@@ -1,7 +1,11 @@
 # Done
 
 Finished backlog items, recent first, one table per lane so that lanes
-finishing at the same time don't edit the same lines. Open work is in
+finishing at the same time don't edit the same lines. A lane writes only
+in its own table, whatever the row's letter: an L row the Editor lane
+finishes goes in the Editor table (2026-11-05, after the 10-hour run's
+rebases kept conflicting where two lanes wrote the same table). QA,
+reviews, rounds and the coordinator's rows go in the last table. Open work is in
 [BACKLOG.md](../../BACKLOG.md); how an item moves here is in
 [WORKFLOW.md](WORKFLOW.md) ("Doing an item"). Before 2026-10-30 these
 tables were the Done section of BACKLOG.md; older history is in git and
@@ -23,7 +27,7 @@ superseded.
 | P1 (2026-10-22) | PRs #43 and #44, likely superseded by #49 | both were closed unmerged on 2026-11-01 |
 | L95 | Several named results (RESULTS.md) | language side done (L95a, L95b, L95d); the editor half is I65, the compiled half C55 |
 
-## E: Editor
+## Editor lane
 
 | id | item | PR |
 |---|---|---|
@@ -505,7 +509,7 @@ superseded.
 | E1 | Inner lambda parameters: add, remove, reorder | #179 |
 | | Right-click menu edits show what they selected (QA2 H1's last part) | #177 |
 
-## C: Compiler and targets
+## Compiler lane
 
 | id | item | PR |
 |---|---|---|
@@ -887,7 +891,7 @@ superseded.
 | C2 | G21 parts 1 and 2: lists walked whole, and accumulators, stay arrays (chapters about 3.4× → 1.9× the ideal) | #182, #188 |
 | C1 | G16 fusion: steps over a list run as one loop (chapters 550 → 200 ms) | #176 |
 
-## L: Language and library
+## Language lane
 
 | id | item | PR |
 |---|---|---|
@@ -1361,7 +1365,7 @@ superseded.
 | D3 | Two dice restyled in the converter's look (Ersagun 2026-10-30: the HTML demos look too primitive): the converter's colours with a dark version, a filled Roll button, the chart a card with rounded green bars on a track and the red tick for fair dice. A `styles` definition of rules and every element named by its class; the only inline styles left are a bar's width and a tick's place, which are computed. The unit converter (D2) already had its own style sheet and this look, so it is unchanged | this PR |
 | D1 | The nested to-do restyled (Ersagun 2026-10-30: long named buttons on each item, the tick a separate button, add a step taking the top field's title). The tick is the round box before the title; ↑, + and × are small buttons that show on hover; + opens a field under the item for the step's title (Enter adds, Escape closes); a count and a bar at the top. The look is one `styles` definition of rules, every element named by its class, so the code has no inline styles. html.ts focuses an `autofocus` element mounted after the page loaded. Also closes I63 (the buttons wrapping onto 2-3 lines, QA10 L6) | this PR |
 
-## Coordinator and process
+## QA, reviews, rounds and the coordinator
 
 | id | item | PR |
 |---|---|---|
