@@ -136,3 +136,21 @@ test("calc's read expression compiled to C reads through the written reader (C11
   const got = build(lowered)(readLines.map((line) => [fi, [line]])).map((r) => r.value);
   assert.deepEqual(got, readLines.map((line) => { const w = searched(line); return w.length ? w[0] : "no reading"; }));
 });
+
+// inverse(spaced, t) compiled takes off any spaces around t, as the
+// evaluator reads it, not only one either side (C110 s5c).
+test("inverse of spaced, compiled, reads any spaces around, or none (C110 s5c)", () => {
+  const spaced = Object.entries(PRELUDE_DEFS).find(([n]) => n === "spaced")![1];
+  const k = new Lang(p.code), go = k.def("go");
+  k.define(go, k.fn(["t"], (t) => k.call(S.first, k.thunk(() => k.call(p.named("inverse"), k.x(spaced), t)), k.thunk(() => k.lit("no reading")))));
+  const code = merge(k.code, p.code), names = { ...p.pres.names, ...k.names };
+  const info = infer(code, names, undefined, p.options);
+  const core = lowerCore(code, info, names, [go]);
+  assert.deepEqual([...core.refused.values()], []);
+  const f = (loadCoreJs(core, { print: () => {} }) as ((t: string) => string)[])[core.funcs.findIndex((g) => g.name === "go" && !g.inner)];
+  const ev = makeRunner(code, info, { print: () => {} });
+  for (const t of ["x", " x ", "  a b  ", "x   ", "   ", ""]) {
+    const want = [...ev.call(ev.value(go), t)][0];
+    assert.equal(f(t), want, JSON.stringify(t));
+  }
+});

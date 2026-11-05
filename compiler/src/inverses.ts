@@ -21,11 +21,11 @@ import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { Lang } from "../../ters/src/lang/dsl.ts";
 import { writeReader } from "../../ters/src/lang/reader.ts";
 import { PRELUDE_DEFS } from "../../ters/src/lang/prelude-ids.ts";
-import { NONE, S, SOME } from "../../ters/src/lang/std.ts";
+import { INT_OPS, NONE, S, SOME, TEXT_OPS } from "../../ters/src/lang/std.ts";
 import { infer, type Info } from "../../ters/src/lang/infer.ts";
 
 const prelude = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name);
-const INVERSE = prelude("inverse"), CONJUGATE = prelude("conjugate");
+const INVERSE = prelude("inverse"), CONJUGATE = prelude("conjugate"), SPACED = prelude("spaced");
 
 export function expandInverses(code: Code, names: Names): { code: Code; names: Names; expanded: Id[] } {
   const out: Code = { nodes: { ...code.nodes }, defs: [...code.defs] };
@@ -105,9 +105,37 @@ export function expandInverses(code: Code, names: Names): { code: Code; names: N
     }
     return readers.get(f)!;
   };
+  // inverse(spaced, t): t with any spaces around it taken off, as the
+  // evaluator's grammarGoal reads it; a solve on spaced's concatenation
+  // would read only t printed with one space either side (C110 s5c).
+  let unspaced: Id | null = null;
+  const unspacedDef = (): Id => {
+    if (unspaced) return unspaced;
+    const k = new Lang(out);
+    const d = k.def("unspaced"), from = k.def("spaces from"), back = k.def("spaces back to");
+    const space = (text: Id, a: Id, b: Id) => k.call(S.equal, k.call(TEXT_OPS.slice, text, a, b), k.lit(" "));
+    k.define(from, k.fn(["text", "at"], (text, at) =>
+      k.if(k.call(INT_OPS.less, at, k.call(TEXT_OPS.length, text)),
+        k.if(space(text, at, k.call(INT_OPS.add, at, k.int(1))), k.call(from, text, k.call(INT_OPS.add, at, k.int(1))), k.x(at)), k.x(at))));
+    k.define(back, k.fn(["text", "start", "end"], (text, start, end) =>
+      k.if(k.call(INT_OPS.less, start, end),
+        k.if(space(text, k.call(INT_OPS.sub, end, k.int(1)), end), k.call(back, text, start, k.call(INT_OPS.sub, end, k.int(1))), k.x(end)), k.x(end))));
+    k.define(d, k.fn(["text"], (text) => k.let("start", k.call(from, text, k.int(0)), (a) =>
+      k.call(TEXT_OPS.slice, text, a, k.call(back, text, a, k.call(TEXT_OPS.length, text))))));
+    Object.assign(out.nodes, k.code.nodes);
+    out.defs.push(...k.code.defs.filter((x) => !out.defs.includes(x)));
+    Object.assign(more, k.names);
+    return (unspaced = d);
+  };
   for (const id of Object.keys(out.nodes)) {
     const c = calls(INVERSE, id);
     if (!c || c.args.length !== 2) continue;
+    const f0 = out.nodes[c.args[0]];
+    if (SPACED && f0?.kind === "ref" && f0.target === SPACED) {
+      out.nodes[id] = { id, kind: "call", fn: ref(unspacedDef()), args: [c.args[1]] } as Node;
+      expanded.push(id);
+      continue;
+    }
     if (param(c.args[0])) { inverse(id, c.args[0], c.args[1]); expanded.push(id); continue; }
     const a = around(c.args[0]);
     if (!a) continue;
