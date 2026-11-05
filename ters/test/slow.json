@@ -16,7 +16,6 @@
   "compiler/test/wasm.test.ts": 84,
   "ters/test/cli.test.ts": 64.4,
   "ters/test/rep-costs.test.ts": 62.6,
-  "compiler/test/compile.test.ts": 59.2,
   "compiler/test/wgsl.test.ts": 55.4,
   "ters/test/reader.test.ts": 53,
   "compiler/test/hash-table.test.ts": 50.2,

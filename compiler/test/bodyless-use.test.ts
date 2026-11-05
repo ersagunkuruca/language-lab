@@ -49,7 +49,7 @@ function program() {
 
 const inputs = [0, 3, 7.5];
 
-test("uses with no body give the evaluator's answers on compile.ts's JavaScript and the core IR's", async () => {
+test("uses with no body give the evaluator's answers on the core IR's JavaScript", async () => {
   const p = program();
   const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });
   const ev = (d: Id, x: number) => { for (const v of r.call(r.value(d), x)) return v; };

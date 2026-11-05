@@ -100,7 +100,7 @@ const pageInputs = closure(["editor/build.ts", "editor/smoke.ts", "editor/shader
 const page = all || setup || code.some((f) => pageInputs.has(f) || /^(editor\/|ters\/(examples|library|styles)\/)/.test(f));
 const gpu = all || setup || code.some((f) => closure(["compiler/gpu.ts"]).has(f));
 // A page with sound (AUDIO.md): what builds it and what it runs on, and the pedal.
-const soundInputs = closure(["ters/test/sound-browser.ts", "ters/cli/web.ts", "ters/src/lang/page-runtime.ts", "ters/src/lang/audio-worklet.ts"]);
+const soundInputs = closure(["ters/test/sound-browser.ts", "ters/cli/web.ts", "compiler/src/core-sound.ts", "compiler/src/core-page.ts"]);
 const sound = all || setup || code.some((f) => soundInputs.has(f) || f.startsWith("ters/examples/pedal/"));
 
 // The slow files (T13): left for Check main and the nightly run, unless

@@ -8,7 +8,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { makeRunner, showerFor, type Value } from "../src/lang/run.ts";
@@ -22,7 +21,6 @@ import { subtree, type Id } from "../src/model.ts";
 import { compiledDefs } from "../../compiler/src/core-js.ts";
 import { loadCoreJs, lowerCore } from "../../compiler/src/core-js.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 const lib = (name: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === name)!;
 
 function program(extra?: (k: Lang, V: { def: Id; v: Record<string, Id> }) => void) {
@@ -179,21 +177,7 @@ test("compare and sort order a type with an Ordered of its own by it, evaluated 
   const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });
   const names = ["one against two", "two against two", "sorted"];
   assert.deepEqual(names.map((n) => r.value(out[n])), ["after", "same", "[priority(3), priority(2), priority(1)]"]);
-  // Compiled the same (L204h): compile.ts orders a Priority by its less.
+  // Compiled the same (L204h): a Priority ordered by its less.
   const defs = compiledDefs(p.code, p.info, p.names, names) as unknown as Record<string, unknown>;
   assert.deepEqual(names.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), ["after", "same", "[priority(3), priority(2), priority(1)]"]);
-});
-
-// At a type variable compiled code orders through the runtime's general
-// order, given each case's Ordered implementation ($ordered, L204i).
-test("the compiled runtime's general order goes through a case's Ordered", async () => {
-  const { $compareN, $bool } = await import(runtime);
-  const p = (n: number) => ({ tag: "priority", fields: [n] });
-  const ordered = { priority: { tag: "ordered", fields: [(a: { fields: number[] }, b: { fields: number[] }) => $bool(b.fields[0] < a.fields[0])] } };
-  const order = new Map();
-  assert.deepEqual([$compareN(p(1), p(2), order, ordered), $compareN(p(2), p(2), order, ordered), $compareN(p(1), p(2), order)], [1, 0, -1]);
-  // Inside a list too, and Rationals by value without one.
-  const list = (...xs: unknown[]) => xs.reduceRight((t: unknown, h) => ({ tag: "std.list.cons", fields: [h, t] }), { tag: "std.list.nil", fields: [] });
-  assert.equal($compareN(list(p(1)), list(p(2)), order, ordered), 1);
-  assert.equal($compareN({ tag: "std.rational.ratio", fields: [1n, 2n] }, { tag: "std.rational.ratio", fields: [1n, 3n] }, order, ordered), 1);
 });
