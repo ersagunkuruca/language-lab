@@ -5,9 +5,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { Lang } from "../src/lang/dsl.ts";
 import { fillings, infer } from "../src/lang/infer.ts";
@@ -18,7 +16,7 @@ import { ARITH, S, TRIG_OPS } from "../src/lang/std.ts";
 import { B } from "../src/prelude.ts";
 import { showIn } from "../src/lang/types.ts";
 import type { Id } from "../src/model.ts";
-import { compile } from "../../compiler/src/compile.ts";
+import { compiledDefs } from "../../compiler/src/core-js.ts";
 
 const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 
@@ -49,9 +47,7 @@ test("sin, cos, tan, exp and log at Float64 are the builtins, evaluated and comp
   const compiledNames = NAMES.filter((n) => n !== "slope of the wave"); // derivatives are the evaluator's (derive.ts)
   assert.deepEqual(evaluated, [Math.sin(0.5) * Math.cos(0.5), Math.exp(Math.log(2)), Math.tan(1), 1]);
   const clean = { ...p.info, errors: [] };
-  const path = join(mkdtempSync(join(tmpdir(), "trig-")), "trig.js");
-  writeFileSync(path, compile(p.code, clean, p.names, { runtime, exports: compiledNames }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
+  const defs = compiledDefs(p.code, clean, p.names, compiledNames) as unknown as Record<string, unknown>;
   assert.deepEqual(compiledNames.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), evaluated.slice(0, compiledNames.length));
 });
 

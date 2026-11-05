@@ -7,9 +7,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
@@ -20,7 +18,7 @@ import { ARITH, ARITHMETIC_V, INT_OPS, LITERAL_V, S, SHOW_ANY } from "../src/lan
 import { B } from "../src/prelude.ts";
 import { INT, NUMBER } from "../src/lang/types.ts";
 import type { Id } from "../src/model.ts";
-import { compile } from "../../compiler/src/compile.ts";
+import { compiledDefs } from "../../compiler/src/core-js.ts";
 
 const lib = (name: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === name)!;
 const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
@@ -60,9 +58,7 @@ async function values(p: ReturnType<typeof program>, at: string[]) {
   assert.deepEqual(p.info.errors.map((e) => e.message), []);
   const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });
   const evaluated = at.map((n) => r.value(p.code.defs.find((d) => p.names[d] === n)!));
-  const path = join(mkdtempSync(join(tmpdir(), "own-literal-")), "own.js");
-  writeFileSync(path, compile(p.code, p.info, p.names, { runtime, exports: at }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
+  const defs = compiledDefs(p.code, p.info, p.names, at) as unknown as Record<string, unknown>;
   assert.deepEqual(at.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => unknown)() : defs[n])), evaluated);
   return evaluated;
 }

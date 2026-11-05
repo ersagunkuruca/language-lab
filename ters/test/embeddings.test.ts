@@ -3,11 +3,9 @@
 // small values: the library's five keep + − · and <, a wrong map doesn't.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { compile } from "../../compiler/src/compile.ts";
+import { compiledDefs } from "../../compiler/src/core-js.ts";
 import { loadCoreJs, lowerCore } from "../../compiler/src/core-js.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { embeddingLaws, embeddingsIn } from "../src/lang/embed-laws.ts";
@@ -104,9 +102,7 @@ test("Int + Rational lifts the Int through int in rational: 3 + 1/1 is 4, in the
   assert.deepEqual(p.info.errors.map((e) => e.message), []);
   const main = p.code.defs.find((d) => p.names[d] === "main")!;
   assert.equal(runMain(p.code, p.info, main, { print: () => {}, names: p.names }), "4");
-  const path = join(mkdtempSync(join(tmpdir(), "embed-")), "main.mjs");
-  writeFileSync(path, compile(p.code, p.info, p.names, { runtime, exports: ["main"] }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, () => unknown>;
+  const defs = compiledDefs(p.code, p.info, p.names, ["main"]) as unknown as Record<string, () => unknown>;
   assert.equal(typeof defs.main === "function" ? defs.main() : defs.main, "4");
 });
 
@@ -126,9 +122,7 @@ test("a function returning Int given where one returning Float64 goes: its resul
   assert.equal(p.info.embedded?.size, 2);
   const main = p.code.defs.find((d) => p.names[d] === "main")!;
   assert.equal(runMain(p.code, p.info, main, { print: () => {}, names: p.names }), "[1.5, 2.5]");
-  const path = join(mkdtempSync(join(tmpdir(), "embed-")), "main.mjs");
-  writeFileSync(path, compile(p.code, p.info, p.names, { runtime, exports: ["main"] }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, () => unknown>;
+  const defs = compiledDefs(p.code, p.info, p.names, ["main"]) as unknown as Record<string, () => unknown>;
   assert.equal(typeof defs.main === "function" ? defs.main() : defs.main, "[1.5, 2.5]");
   // And JavaScript printed from the core IR.
   const l = lowerCore(p.code, p.info, p.names, [main]);
@@ -153,9 +147,7 @@ test("an Int given where an earlier input says a Float64 goes is lifted: inverse
   assert.equal(p.info.embedded?.size, 1);
   const main = p.code.defs.find((d) => p.names[d] === "main")!;
   assert.equal(runMain(p.code, p.info, main, { print: () => {}, names: p.names }), "6");
-  const path = join(mkdtempSync(join(tmpdir(), "embed-")), "main.mjs");
-  writeFileSync(path, compile(p.code, p.info, p.names, { runtime, exports: ["main"] }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, () => unknown>;
+  const defs = compiledDefs(p.code, p.info, p.names, ["main"]) as unknown as Record<string, () => unknown>;
   assert.equal(typeof defs.main === "function" ? defs.main() : defs.main, "6");
   // Text given there has no embedding into Float64: still an error.
   const q = program((k) => {
@@ -187,9 +179,7 @@ test("a definition pinned to a Float64 whose body gives an Int is lifted: 3 and 
   assert.equal(p.info.embedded?.size, 2);
   const main = p.code.defs.find((d) => p.names[d] === "main")!;
   assert.equal(runMain(p.code, p.info, main, { print: () => {}, names: p.names }), "[3, 4]");
-  const path = join(mkdtempSync(join(tmpdir(), "embed-")), "main.mjs");
-  writeFileSync(path, compile(p.code, p.info, p.names, { runtime, exports: ["main"] }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, () => unknown>;
+  const defs = compiledDefs(p.code, p.info, p.names, ["main"]) as unknown as Record<string, () => unknown>;
   assert.equal(typeof defs.main === "function" ? defs.main() : defs.main, "[3, 4]");
   // A Text body has no embedding into Float64: the pin is still broken.
   const q = program((k) => {

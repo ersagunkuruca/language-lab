@@ -4,9 +4,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
@@ -14,7 +12,7 @@ import { makeRunner, type Value } from "../src/lang/run.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { ARRAY_OPS, S, SHOW_ANY } from "../src/lang/std.ts";
-import { compile } from "../../compiler/src/compile.ts";
+import { compiledDefs } from "../../compiler/src/core-js.ts";
 import { showType } from "../src/lang/types.ts";
 
 const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
@@ -48,9 +46,7 @@ test("Array: built, pushed, read by position and turned back into a list, evalua
   const r = makeRunner(code, info, { print: () => {}, names: nm });
   const got = names.map((n) => r.value(code.defs.find((d) => nm[d] === n)!));
   assert.deepEqual(got, ["array [10, 20, 30, 40]", "4", "some(30)", "none", "[10, 20, 30, 40]", "0", "false", "true", "some(10)", "none", "array [20, 30, 40]", "0", "array [5, 20, 30, 40]", "array [10, 20, 30, 40]"]);
-  const path = join(mkdtempSync(join(tmpdir(), "arrays-")), "arrays.js");
-  writeFileSync(path, compile(code, info, nm, { runtime, exports: names }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
+  const defs = compiledDefs(code, info, nm, names) as unknown as Record<string, unknown>;
   assert.deepEqual(names.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), got);
 });
 
