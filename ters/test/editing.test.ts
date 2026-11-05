@@ -199,8 +199,9 @@ async function implementInterface() {
   const iface = (await p.locator(".p-text .body").innerText()).replace(/\s+/g, " ");
   // It reads as its operations, not as the record that holds them (BACKLOG E151).
   if (!/interface Halving a half : \(a\) -> a twice : \(a\) -> a/.test(iface) || /\bhalving\(/.test(iface)) errors.push(`${where}: the new interface reads ${iface.slice(0, 120)}`);
-  // An operation's Takes and Gives change from its panel (BACKLOG E142).
-  await p.locator('.side button.slink[data-act="goto-node"]', { hasText: /^twice/ }).first().click({ timeout: 5000 }).catch(() => {});
+  // An operation's Takes and Gives change from its panel (BACKLOG E142),
+  // which adding it opens. (A link to it from the side, looked for here
+  // until T14o, isn't there, and waiting 5 s for it was a third of the test.)
   await p.locator("#f-op-takes").selectOption("2", { timeout: 5000 }).catch(() => errors.push(`${where}: an operation's panel has no Takes`));
   await p.locator("#f-op-gives").selectOption({ label: "Bool" }).catch(() => {});
   await p.locator(".side button", { hasText: /^Change$/ }).click({ timeout: 5000 }).catch(() => errors.push(`${where}: an operation's panel has no Change`));
