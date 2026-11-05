@@ -42,7 +42,6 @@ New items land here until the next triage gives them a lane and a priority.
 |---|---|---|---|---|---|
 | I179 | Opening some definitions freezes the page for 1 to 2.2 s. Example: board `stage from key`, 2.3 s with one 2.2 s task (0.8 to 1.1 s in the morning's pass); also Spacetime `scalar part` 2.6 s, machine `all digits` 1.4, board `stage name` 1.3, calc `blank` 1.2. After I179a (2026-11-05 23:50): `stage from key` 0.68 s, its longest task 0.61; `stage name` 0.67; Spacetime `scalar part` 2.2 s (task 1.0), machine `all digits` 1.6 (1.6), calc `blank` 1.3 (1.2). Done when `stage from key` opens in tasks of at most 0.3 s | QA-2026-11-05b M1 | P2 | M | a done |
 | I177 | Run main through the evaluator takes 2.6 to 4.5 s even for a small program (relations 2.6 s, calc 4.1 s to print `→ 0`, numbers 4.5 s; compiled runs 0.8 s; `lab run` of calc is instant). After I177a (2026-11-06 00:20): calc's first Run 1.07 s, then 0.72; relations 0.9 then 0.35-0.44; numbers 2.4 then 1.8. Example: calc → `main` → Run main with empty input; done when it prints within 1 s | QA-2026-11-05b M2 | P2 | M | a done |
-| I178 | Redo's note reads "Redid: code.json changed back.": wrong for Redo, and a file name where words are expected. Example: Insertion sort, cut a part, Ctrl+Z, Ctrl+Shift+Z; done when the note says what was redone in words | QA-2026-11-05b L1 | P3 | S | |
 
 ### Foundations ([FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md))
 
