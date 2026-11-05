@@ -49,3 +49,23 @@ test("Run main again from what its first run printed, with no lowering, prints t
     assert.ok(ms < 500, `${program}: the kept main took ${ms | 0} ms`);
   }
 });
+
+// Where compiled main stopped goes back with the run's end (C143f), for
+// Run's "Show where it stopped": the node the stop was lowered from and
+// its definition.
+test("a compiled main that stops says the node and definition it stopped at (C143f)", async () => {
+  const { Lang } = await import("../src/lang/dsl.ts");
+  const { base, baseNames } = await import("../src/lang/load.ts");
+  const { S } = await import("../src/lang/std.ts");
+  const { B } = await import("../src/prelude.ts");
+  const k = new Lang();
+  const grow = k.def("grow"), main = k.def("main");
+  let shown = "";
+  k.define(grow, k.fn(["x"], (x) => (shown = k.call(S.show, k.call(B.mul, k.call(B.mul, x, k.lit(1e300)), k.lit(1e300))))));
+  k.define(main, k.fn([], () => k.call(S.print, k.call(grow, k.lit(1e10)))));
+  const said = await inWorker({ code: base(k.code), names: { ...baseNames(), ...k.names }, pins: {}, def: main, title: "grow", files: [] });
+  const end = said.at(-1)!;
+  assert.equal(end.core, true, JSON.stringify(end).slice(0, 300));
+  assert.match(String(end.error), /overflow/);
+  assert.deepEqual(end.at, { node: shown, def: grow });
+});
