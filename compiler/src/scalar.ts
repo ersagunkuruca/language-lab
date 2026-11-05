@@ -1275,10 +1275,13 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         if (target === SET && n.args.length === 3) return setField(n, id, env, f);
         if (opts.data && target === RANDOM_OP) {
           const next: SExpr = { k: "rt", fn: "rand.next", args: [] };
-          if (!worldRandom) return next;
           // For JavaScript from the core IR (C137c10), a draw nothing seeded
-          // is the world's, as the evaluator's is (rt.world.random).
+          // is the world's, as the evaluator's is (rt.world.random). Asked
+          // whatever main's row says: a page's handlers draw though main
+          // doesn't (lab build-web lowers main alone, and dice rolled 1 and
+          // 1 every time).
           if (opts.host) return { k: "if", cond: { k: "rt", fn: "rand.unset", args: [] }, then: { k: "world", op: "random", aborts: false, args: [], t: "f64" }, else: next, t: "f64" };
+          if (!worldRandom) return next;
           // Nobody may have seeded it (C136): the world seeds the
           // generator at its first draw, so draws under a seeded still
           // give the seeded numbers and an outer one goes on after.

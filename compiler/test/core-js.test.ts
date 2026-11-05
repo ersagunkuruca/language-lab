@@ -166,6 +166,23 @@ test("the pages whose main lowers show the same HTML, before and after their han
   console.log(`pages ${ran.join(", ")}`);
 });
 
+// Lowered as lab build-web lowers it, main alone: dice's Roll draws from
+// the world though main's own row has no Random (it rolled 1 and 1 every
+// time, the generator's unseeded zeros).
+test("a page lowered from main alone draws its handlers' randomness from the world", () => {
+  const p = load("dice");
+  const main = p.code.defs.find((d) => p.pres.names[d] === "main" && p.own.defs.includes(d))!;
+  const l = lowerCore(p.code, p.info, p.pres.names, [main]);
+  assert.ok(!l.refused.has(main), String(l.refused.get(main)));
+  const fi = l.funcs.findIndex((g) => g.name === "main" && !g.inner && !g.budgeted);
+  const coreCall = (f: Value, ...xs: Value[]): Value => (f as unknown as (...a: Value[]) => Value)(...xs);
+  let draws = 0;
+  const b = loadCoreJs(l, { print: () => {}, cells: new Cells(equal), world: { now: () => 1000, random: () => (draws++, 0.99) } as never })[fi]() as Value;
+  coreCall(handlersOf(b, coreCall)[0], { tag: HTML_V.event, fields: ["1", "", 0, 0, 0] });
+  assert.equal(draws, 2);
+  assert.match(htmlText(b, coreCall), /You rolled 6 and 6: 12/);
+});
+
 // A page's handlers, in the order it lists them, each part's view called once.
 function handlersOf(v: Value, call: (f: Value, ...xs: Value[]) => Value): Value[] {
   const d = v as Data;
