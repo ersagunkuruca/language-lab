@@ -162,7 +162,6 @@ all of these.
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | L107 | **Open question, not decided** (Ersagun 2026-10-30: "I didn't ask to lift strict positivity BTW, I'm not sure if we should lift that"): drop strict positivity, so a data type may take itself as a function's input in its fields (`knot = wrap(f: knot → Float64)`), with taking one apart carrying Diverge so a function without Diverge still always finishes. Recursive data types themselves (a type holding itself, directly or through others) are allowed and always were; TUTORIAL.md §3.8 says so. If decided yes: LANGUAGE.md "Two rules", TUTORIAL.md §3.8 and the guarantees test | Ersagun 2026-10-30 | P3 | S | open question |
-| T7 | Tests in the language ([TESTS-IN-THE-LANGUAGE.md](docs/design/testing/TESTS-IN-THE-LANGUAGE.md)); T7a to T7e14 and T7e16 done (DONE.md). Example: examples-agree.test.ts's sweep runs through `lab test --compiled` for every example with a main; done when it does. Left: (e15) lockstep's main as an accepted answer (`lab run` won't run its main from the command line); the pages, whose mains print nothing, stay on its three-way comparison. Beyond the example, its own rows if they earn them: CI's cache of results by hash (T7c) | TESTING.md T7 | P2 | L | design, T7a and T7b done |
 
 ### Numbers (NUMBERS.md)
 

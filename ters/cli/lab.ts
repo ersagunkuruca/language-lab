@@ -43,7 +43,7 @@ import { infer, type Info } from "../src/lang/infer.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { sameLines } from "../src/lang/modules.ts";
 import { baseNames, loadProgram, optionsWith } from "../src/lang/load.ts";
-import { equal, mainProblem, pageProblem, runMain, runProgram, type Value, type World } from "../src/lang/run.ts";
+import { equal, mainProblem, pageProblem, runMain, runProgram, showerFor, valueMain, type Value, type World } from "../src/lang/run.ts";
 import { Cells } from "../src/lang/cells.ts";
 import { evaluatorCall, htmlText } from "../src/lang/html.ts";
 import { hasSound, pageDocument } from "../src/lang/page.ts";
@@ -54,7 +54,7 @@ import { readLog, replaying, type LogEntry } from "../src/lang/worldlog.ts";
 import { compile } from "../../compiler/src/compile.ts";
 import { CFLAGS, emitC } from "../../compiler/src/c.ts";
 import { lowerScalar } from "../../compiler/src/scalar.ts";
-import { FAIL, codeLines, coreMap, coreModule, hostOpsOf, loadCoreJs, lowerCore, runCoreMain, solvesSlowly } from "../../compiler/src/core-js.ts";
+import { FAIL, codeLines, coreMap, coreModule, hostOpsOf, loadCoreJs, lowerCore, plainValue, runCoreMain, solvesSlowly } from "../../compiler/src/core-js.ts";
 import { withInverses } from "../../compiler/src/inverses.ts";
 import { execFileSync } from "node:child_process";
 import { recordings, webCorePage, webPage } from "./web.ts";
@@ -147,6 +147,14 @@ function compiledAnswers(p: Program, saved: Record<Id, Saved[]>) {
 // main's accepted answers (T7e16), main compiled to JavaScript through
 // the core IR and run in each recorded world, as the evaluator's run is.
 function compiledMains(p: Program, saved: Record<Id, Saved[]>): Again[] {
+  // A main that is a value prints it, as run.ts runProgram does (T7e15).
+  const shown = showerFor(p.code, p.info, p.names);
+  const valueOf = (ir: ReturnType<typeof lowerCore>, d: Id, print: (l: string) => void, world: World): number => {
+    const fi = ir.funcs.findIndex((g) => g.def === d && !g.inner && !g.budgeted);
+    const v = loadCoreJs(ir, { print, names: p.names, world } as never)[fi]();
+    print(typeof v === "string" ? v : shown(plainValue(v) as Value, true));
+    return 0;
+  };
   return p.own.filter((d) => (saved[d] ?? []).some((x) => x.main)).map((d) => {
     const name = p.names[d] ?? d;
     let ir: ReturnType<typeof lowerCore>;
@@ -160,7 +168,7 @@ function compiledMains(p: Program, saved: Record<Id, Saved[]>): Again[] {
         if (!s.main) continue;
         cases++;
         const m = s.main;
-        const got = runMainIn(p.code, p.info, p.names, d, m, {}, (world, print) => runCoreMain(ir, name, m.arguments, { print, names: p.names, world } as never));
+        const got = runMainIn(p.code, p.info, p.names, d, m, {}, (world, print) => (valueMain(p.info, d) ? valueOf(ir, d, print, world) : runCoreMain(ir, name, m.arguments, { print, names: p.names, world } as never)));
         const what = mainDiffers(got, m);
         if (what.length) failures.push({ inputs: [mainCall(m)], what });
       }
@@ -212,6 +220,7 @@ function entry(p: Program, name: string, web = false): Id {
   const def = p.own.find((d) => p.names[d] === name);
   if (!def) fail(`${p.title} has no definition named ${name}`);
   if (!web && !pageProblem(p.info, def, p.names)) { staticPage = true; return def; }
+  if (!web && valueMain(p.info, def)) return def;
   // The program's own effects, when its host file for this command is
   // there (FOREIGN.md): hosts/c.c for a native program, else hosts/js.js.
   const hostsAt = existsSync(path) && statSync(path).isDirectory() ? join(path, "hosts", command === "native" ? "c.c" : "js.js") : "";
