@@ -67,7 +67,12 @@ test("a dot shared by two inputs can't be removed until one goes", () => {
       if (!r.ok) continue;
       const i2 = infer(r.code, r.names);
       const dot = r.select!;
-      const other = under(r.code, d).find((s) => !under(r.code, s).some((x) => usesOf(r.code, dot).includes(x)) && useVar(r.code, r.names, i2, d, dot, s).ok);
+      // Only dots of a known type, onto slots of that type (T14m: each
+      // useVar checks the whole program, 100 ms, and most slots can't take it).
+      const head = (id: Id) => { const t = i2.typeOf.get(id), z = t && i2.subst.zonk(t); return z?.t === "con" ? z.id : null; };
+      const want = head(dot);
+      if (want === null) continue;
+      const other = under(r.code, d).find((s) => head(s) === want && !under(r.code, s).some((x) => usesOf(r.code, dot).includes(x)) && useVar(r.code, r.names, i2, d, dot, s).ok);
       if (!other) continue;
       const shared = useVar(r.code, r.names, i2, d, dot, other);
       assert.ok(shared.ok);
