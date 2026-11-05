@@ -556,9 +556,9 @@ test("a program that changes a list by position in a loop gets trees, and prints
   assert.deepEqual(printed(c.code, c.names, main, c.insiders), before);
   assert.deepEqual(before.slice(1, 5), ["80", "[1, 9, 3]", "[1, 2]", "true"]);
   assert.equal(before[5], String((120 * 119) / 2));
-  // By default its loop's reach takes arrays and the rest keeps its lists
-  // as written, and it prints the same (C93 s3b, rep-split.ts).
-  const split = withLibraryRepresentations(code, info, names, main, defs);
+  // On JavaScript its loop's reach takes arrays and the rest keeps its
+  // lists as written, and it prints the same (C93 s3b, rep-split.ts).
+  const split = withLibraryRepresentations(code, info, names, main, defs, [], { hostMaps: true });
   assert.deepEqual(split.chosen, ["List as array of List from at"]);
   assert.deepEqual(printed(split.code, split.names, main, split.insiders), before);
 });
