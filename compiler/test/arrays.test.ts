@@ -18,7 +18,7 @@ import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { ARRAY_OPS, COMPARE, CONS, INT_OPS, NIL, ORDER_V, S, SHOW_ANY } from "../../ters/src/lang/std.ts";
 import { B } from "../../ters/src/prelude.ts";
-import { compile } from "../src/compile.ts";
+import { compiledDefs } from "../src/core-js.ts";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitWasm, fromInt, instantiate, toInt } from "../src/wasm.ts";
 import { CFLAGS, emitC } from "../src/c.ts";
@@ -48,9 +48,7 @@ test("an array pushed twice gives two arrays, and a long run of pushes is linear
   const r = makeRunner(code, info, { print: () => {}, names: nm });
   const want = names.map((n) => r.value(code.defs.find((d) => nm[d] === n)!));
   assert.deepEqual(want, ["array [1, 2, 3, 4]", "array [1, 2, 3, 5]", "[array [1, 2, 3, 6, 7], array [1, 2, 3, 8], array [1, 2, 3]]", "array [1, 2]"]);
-  const path = join(mkdtempSync(join(tmpdir(), "arrays-")), "arrays.js");
-  writeFileSync(path, compile(code, info, nm, { runtime, exports: [...names, "count", "length after"] }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
+  const defs = compiledDefs(code, info, nm, [...names, "count", "length after"]) as Record<string, unknown>;
   assert.deepEqual(names.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => unknown)() : defs[n])), want);
   // A copy per push would take minutes; free slots take milliseconds.
   const t = performance.now();

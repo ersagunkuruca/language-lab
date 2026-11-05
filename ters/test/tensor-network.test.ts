@@ -8,7 +8,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import { compiledDefs } from "../../compiler/src/core-js.ts";
 import type { Id } from "../src/model.ts";
 import { Lang } from "../src/lang/dsl.ts";
@@ -18,7 +17,6 @@ import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { runMain } from "../src/lang/run.ts";
 import { ARITH, PAIR_V, SHOW_ANY } from "../src/lang/std.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 const lib = (name: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === name)!;
 
 // Small whole weights, so every engine's answer is exact.

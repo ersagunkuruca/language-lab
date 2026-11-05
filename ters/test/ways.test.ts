@@ -6,10 +6,6 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { pathToFileURL } from "node:url";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { makeRunner, runMain, type Value } from "../src/lang/run.ts";
@@ -19,9 +15,8 @@ import { S, SHOW_ANY, TRIG_OPS, TRIG_V } from "../src/lang/std.ts";
 import { B } from "../src/prelude.ts";
 import { NUMBER } from "../src/lang/types.ts";
 import type { Id } from "../src/model.ts";
-import { compile } from "../../compiler/src/compile.ts";
+import { compiledEach, plainValue } from "../../compiler/src/core-js.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 
 // An angle of the program's own, a record of one Float64: + − part by
 // part, and Trig that gives only one of sin and cos.
@@ -55,10 +50,10 @@ for (const gives of ["sin", "cos"] as const) test(`Trig giving only ${gives}: th
   const evaluated = NAMES.map((n) => r.value(at(n)));
   near(evaluated[0], Math.cos(0.3));
   near(evaluated[1], Math.sin(0.3));
-  const path = join(mkdtempSync(join(tmpdir(), "ways-")), "ways.js");
-  writeFileSync(path, compile(p.code, p.info, p.names, { runtime, exports: NAMES }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
-  assert.deepEqual(NAMES.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), evaluated);
+  // What the core IR doesn't compile yet (C137's gaps), by why.
+  const { defs, gaps } = compiledEach(p.code, p.info, p.names, NAMES);
+  for (const why of Object.values(gaps)) assert.match(why, /to its ways/);
+  for (const [i, n] of NAMES.entries()) if (defs[n]) assert.deepEqual(plainValue(defs[n]()), evaluated[i], n);
 });
 
 test("Trig leaving both sin and cos to their ways: nothing ends in given code, and the checker says so at the implementation (L96b)", () => {

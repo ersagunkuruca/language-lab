@@ -313,16 +313,9 @@ export const FIXED = typedef("std.fixed", "Fixed", [], [
   ["fixed", [["steps", () => tref(INT)]]],
 ], false, false, "fixed-point numbers");
 export const FIXED_V = "std.fixed.fixed";
-// Small matrices (BACKLOG L44): Mat2, Mat3 and Mat4, records of Float64s
-// in rows (m11, m12, …). + − part by part, · the matrix product from the
-// matrix-unit table (E_ij · E_jl = E_il, the prelude's matrix table), and
-// a literal is that many times the identity, so 2 + m adds 2 down the
-// diagonal. After Fixed, so ids above don't move.
-const matrix = (n: number) => typedef(`std.mat${n}`, `Mat${n}`, [], [
-  [`mat${n}`, Array.from({ length: n * n }, (_, i): [string, TypeOf] => [`m${Math.floor(i / n) + 1}${(i % n) + 1}`, () => tref(NUMBER)])],
-], false, false, `${n} × ${n} matrices`);
-export const MAT2 = matrix(2), MAT3 = matrix(3), MAT4 = matrix(4);
-export const MAT_V = { 2: "std.mat2.mat2", 3: "std.mat3.mat3", 4: "std.mat4.mat4" } as const;
+// Mat2, Mat3 and Mat4 are the numbers module's (numbers-source.ts, L207c):
+// one tref per entry, so the ids after them don't move.
+tn += 4 + 9 + 16;
 // The constructors whose types have a rule, private to the library that
 // keeps it (the prelude; REVIEW-2026-10-26.md §2): `set of([3, 1, 3])`,
 // `ratio(2, 4)` and `ratio(1, 0)` would break it. What to use instead,
@@ -1635,7 +1628,7 @@ export function onTodaysIds<T>(x: T, from = (x as { shape?: unknown } | null)?.s
 }
 export const tupleSize = (id: Id): number | null => { const m = /^std\.tuple(\d)$/.exec(id); return m ? Number(m[1]) : null; };
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, ARITHMETIC, ORDERED, FIXED, MAT2, MAT3, MAT4, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ROW_TYPE, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, MATRIX, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS, WORD16, TENSOR, BYTES, JSON_TYPE, DATE, TIME_OF_DAY, INSTANT, EMBEDDING, REQUEST, RESPONSE, LOCALE, SETTINGS, RELEASE, OPEN_FILE, KEPT_FILES, LITERAL, REAL, LU_FACTORS] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, RATIONAL, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, ARITHMETIC, ORDERED, FIXED, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ROW_TYPE, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, MATRIX, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS, WORD16, TENSOR, BYTES, JSON_TYPE, DATE, TIME_OF_DAY, INSTANT, EMBEDDING, REQUEST, RESPONSE, LOCALE, SETTINGS, RELEASE, OPEN_FILE, KEPT_FILES, LITERAL, REAL, LU_FACTORS] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one

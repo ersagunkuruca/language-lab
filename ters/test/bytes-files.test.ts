@@ -7,9 +7,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
-import { compile } from "../../compiler/src/compile.ts";
-import { $main, $setPrint, $setWorld } from "../../compiler/src/runtime.js";
+import { compiledMain } from "../../compiler/src/core-js.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
@@ -19,10 +17,9 @@ import { runMain } from "../src/lang/run.ts";
 import { nodeWorld } from "../src/lang/world.ts";
 import { ABORT_OP, IO, S, SHOW_ANY } from "../src/lang/std.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 const lib = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
 
-test("write bytes and read bytes keep every byte; a missing file aborts", async () => {
+test("write bytes and read bytes keep every byte; a missing file aborts", () => {
   const dir = mkdtempSync(join(tmpdir(), "bytes-files-"));
   const given = join(dir, "given.bin");
   // Not UTF-8: 0xff and a lone continuation byte.
@@ -46,12 +43,8 @@ test("write bytes and read bytes keep every byte; a missing file aborts", async 
   assert.deepEqual(ran, ["[255, 128, 65]", "[0, 255, 10, 200]", "é!", "no such file"]);
   assert.deepEqual([...readFileSync(join(dir, "made.bin"))], [0, 255, 10, 200]);
 
-  const file = join(dir, "main.mjs");
-  writeFileSync(file, compile(code, info, names, { runtime, exports: ["main"] }));
   const compiled: string[] = [];
-  $setPrint((l: string) => compiled.push(l));
-  $setWorld(nodeWorld());
-  try { await $main((await import(pathToFileURL(file).href)).defs.main()); } finally { $setPrint((l: string) => console.log(l)); $setWorld({}); }
+  compiledMain(code, info, names, { print: (l: string) => compiled.push(l), world: nodeWorld() } as never);
   assert.deepEqual(compiled, ran);
 });
 

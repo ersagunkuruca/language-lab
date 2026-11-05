@@ -6,21 +6,16 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { pathToFileURL } from "node:url";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
-import { makeRunner, type Value } from "../src/lang/run.ts";
+import { makeRunner } from "../src/lang/run.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { ARITH, FIXED_V, INT_OPS, PAIR_V, S, SHOW_ANY, TRIG_OPS } from "../src/lang/std.ts";
 import { FIXED_TYPE } from "../src/lang/types.ts";
 import type { Id } from "../src/model.ts";
-import { compile } from "../../compiler/src/compile.ts";
+import { compiledEach, plainValue } from "../../compiler/src/core-js.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 const lib = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
 const ONE = 2n ** 32n;
 // The nearest step, halves up, and the product rounded down: by hand.
@@ -83,10 +78,10 @@ test("Fixed: exact literals, a physics loop and a big world, evaluated and compi
   });
   assert.equal(got[8 + SHOWN.length], `[${(ONE * ONE) / (3n * ONE)}]`);
   assert.equal(got[9 + SHOWN.length], "[]");
-  const path = join(mkdtempSync(join(tmpdir(), "fixed-")), "fixed.js");
-  writeFileSync(path, compile(code, info, nm, { runtime, exports: names }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
-  assert.deepEqual(names.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), got);
+  // What the core IR doesn't compile yet (C137's gaps), by why.
+  const { defs, gaps } = compiledEach(code, info, nm, names);
+  for (const why of Object.values(gaps)) assert.match(why, /a value that isn't a Float64, Int or Text/);
+  for (const [i, n] of names.entries()) if (defs[n]) assert.deepEqual(plainValue(defs[n]()), got[i], n);
 });
 
 // Trig at Fixed (FIXED-POINT.md step 2): the one sin, cos, tan, exp and log
@@ -120,8 +115,8 @@ test("Fixed: CORDIC sin and cos, tan, exp, log and square root, evaluated and co
     const value = Number(BigInt(shown)) / 2 ** 32, exact = want(Number(steps(...decimalParts(String(v)))) / 2 ** 32);
     assert.ok(Math.abs(value - exact) <= 2e-8 * Math.max(1, Math.abs(exact)), `${op}(${v}) = ${value}, not ${exact}`);
   }
-  const path = join(mkdtempSync(join(tmpdir(), "fixed-trig-")), "trig.js");
-  writeFileSync(path, compile(code, info, nm, { runtime, exports: names }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
-  assert.deepEqual(names.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), got);
+  // What the core IR doesn't compile yet (C137's gaps), by why.
+  const { defs, gaps } = compiledEach(code, info, nm, names);
+  for (const why of Object.values(gaps)) assert.match(why, /to its ways/);
+  for (const [i, n] of names.entries()) if (defs[n]) assert.deepEqual(plainValue(defs[n]()), got[i], n);
 });

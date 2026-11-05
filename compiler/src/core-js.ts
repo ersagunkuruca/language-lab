@@ -608,10 +608,32 @@ export function compiledDefs(code: Code, info: Info, names: Record<Id, string>, 
   for (const [i, d] of ids.entries()) { const why = ir.refused.get(d); if (why) throw new Error(`${exports[i]} isn't compiled through the core IR: it ${why}`); }
   const fns = loadCoreJs(ir, rt);
   return Object.fromEntries(exports.map((n, i) => {
-    const fi = ir.funcs.findIndex((g) => g.def === ids[i] && !g.inner && !g.budgeted);
+    // By its id, or by its name where a pass before the lowering
+    // made the definition again (withInverses, hoist.ts).
+    const fi = ir.funcs.findIndex((g) => (g.def === ids[i] || g.name === n) && !g.budgeted && (!g.inner || g.multi));
     if (fi < 0) throw new Error(`${n}: not compiled`);
+    // One with several answers takes the rest last (scalar.ts several_):
+    // its first answer, or FAIL with none, as main's run takes it.
+    if (ir.funcs[fi].multi) return [n, (...xs: unknown[]) => { let v: unknown, got = false; fns[fi](...xs, (x: unknown) => { v = x; got = true; return true; }); if (!got) throw FAIL; return v; }];
     return [n, fns[fi]];
   }));
+}
+// The same, each definition on its own: those the core IR compiles, and
+// why it doesn't the others yet (C137's gaps), by name.
+export function compiledEach(code: Code, info: Info, names: Record<Id, string>, exports: string[], rt: Runtime = { print: () => {} }): { defs: Record<string, (...xs: unknown[]) => unknown>; gaps: Record<string, string> } {
+  const defs: Record<string, (...xs: unknown[]) => unknown> = {}, gaps: Record<string, string> = {};
+  for (const n of exports) { try { defs[n] = compiledDefs(code, info, names, [n], rt)[n]; } catch (e) { gaps[n] = (e as Error).message; } }
+  return { defs, gaps };
+}
+// A program's main compiled through the core IR and run on `rt`, as the
+// tests that ran compile.ts's did (C137): its exit status. Throws when
+// main isn't compiled through the core IR, with why.
+export function compiledMain(code: Code, info: Info, names: Record<Id, string>, rt: Runtime, name = "main"): number {
+  const main = code.defs.find((d) => names[d] === name) ?? (() => { throw new Error(`no definition ${name}`); })();
+  const ir = lowerCore(code, info, names, [main]);
+  const why = ir.refused.get(main);
+  if (why) throw new Error(`${name} isn't compiled through the core IR: it ${why}`);
+  return runCoreMain(ir, name, [], rt);
 }
 // A core IR value as the evaluator's: data as plain { tag, fields }, a
 // Bool as its case, inside lists and records too; numbers, texts and

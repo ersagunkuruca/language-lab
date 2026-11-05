@@ -2607,8 +2607,11 @@ function* fillingSteps(code: Code, info: Info, hole: Id): Generator<void, Fillin
     // 35 operations were 35 checks, 0.3 s).
     if (risky === "field" && !(withResults && (f.kind === "match" || f.kind === "fold"))) return byKind(`field ${f.kind}|${groupKey(s, [...groupTypes, ...around])}${brings}`, f);
     if (risky || (withResults && (f.kind === "match" || f.kind === "fold"))) return whole(f);
+    // A filling the callers can't use is refused before its plans are
+    // worked out (each a modes analysis of the group, E103g).
+    if (!meetsUses(s)) return false;
     const plan = solves.length ? newPlans(f) : null;
-    if (plan !== null) return meetsUses(s) && byKind(`plan ${plan}|${groupKey(s, [...groupTypes, ...around])}${brings}`, f);
+    if (plan !== null) return byKind(`plan ${plan}|${groupKey(s, [...groupTypes, ...around])}${brings}`, f);
     // A row only renamed pins nothing: a pure call's empty row joining the
     // definition's. (A type variable renamed may still be pinned: the new
     // one can carry a constraint, records of Float64s say.)
@@ -2631,7 +2634,7 @@ function* fillingSteps(code: Code, info: Info, hole: Id): Generator<void, Fillin
     // constraints (I157: a new definition's 1,068 offers asked ~500
     // checks of it, 3.7 s). Its units are still its own.
     if (!callers && !held) return unitsHold(f);
-    return meetsUses(s) && byKind(groupKey(s, [...groupTypes, ...(pinnedGroup ? around : [])]) + brings, f);
+    return byKind(groupKey(s, [...groupTypes, ...(pinnedGroup ? around : [])]) + brings, f);
   };
   // A filling that brings Choice or the world where the other is may break
   // the rule that the world isn't touched under Choice, which only the

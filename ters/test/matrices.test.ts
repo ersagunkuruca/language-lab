@@ -5,17 +5,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { makeRunner, type Value } from "../src/lang/run.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
-import { LIBRARY } from "../src/lang/library.ts";
-import { ARITH, MAT_V, SHOW_ANY } from "../src/lang/std.ts";
+import { LIBRARY, MAT_V } from "../src/lang/library.ts";
+import { ARITH, SHOW_ANY } from "../src/lang/std.ts";
 import type { Id } from "../src/model.ts";
 import { compiledDefs } from "../../compiler/src/core-js.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 const product = (n: number, a: number[], b: number[]) => a.map((_, c) => Array.from({ length: n }, (_, j) => a[Math.floor(c / n) * n + j] * b[j * n + (c % n)]).reduce((x, y) => x + y, 0));
 const A3 = [1, 2, 0, -1, 3, 4, 2, 0, 1], B3 = [0, 1, 2, 3, -2, 1, 1, 1, 1];
 const A4 = Array.from({ length: 16 }, (_, i) => (i * 7) % 5 - 2), B4 = Array.from({ length: 16 }, (_, i) => (i * 3) % 4 - 1);

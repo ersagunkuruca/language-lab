@@ -6,7 +6,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import { compiledDefs } from "../../compiler/src/core-js.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
@@ -14,7 +13,6 @@ import { base, baseNames } from "../src/lang/load.ts";
 import { runMain } from "../src/lang/run.ts";
 import { SHOW_ANY, TEXT_OPS } from "../src/lang/std.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 
 test("graphemes: a flag, a thumb with a skin tone and an accented e are one each", async () => {
   // "é" written as e and a combining accent, so NFC would join it, but here

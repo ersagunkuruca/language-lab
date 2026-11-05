@@ -7,10 +7,6 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { pathToFileURL } from "node:url";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { makeRunner, type Value } from "../src/lang/run.ts";
@@ -18,9 +14,8 @@ import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { DUAL_V, LIBRARY } from "../src/lang/library.ts";
 import { ARITH, S, TRIG_OPS } from "../src/lang/std.ts";
 import type { Id } from "../src/model.ts";
-import { compile } from "../../compiler/src/compile.ts";
+import { compiledDefs, plainValue } from "../../compiler/src/core-js.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 const lib = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
 const POINTS = [-1.5, 0, 0.3, 2];
 
@@ -70,10 +65,8 @@ test("· is the product rule and agrees with the table; a literal is a constant;
   const evaluated = NAMES.map((n) => r.value(at(n)));
   // (6 + ε) / (3 + 2ε) = 2 + (1·3 − 6·2)/9 ε
   assert.deepEqual([...evaluated.slice(0, 3), (evaluated[3] as { fields: Value[] }).fields[0]], ["7 + 4ε", "6 + 13ε", "6 + 13ε", "2 − 1ε"]);
-  const path = join(mkdtempSync(join(tmpdir(), "dual-")), "dual.js");
-  writeFileSync(path, compile(p.code, p.info, p.names, { runtime, exports: NAMES }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
-  assert.deepEqual(NAMES.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), evaluated);
+  const defs = compiledDefs(p.code, p.info, p.names, NAMES);
+  assert.deepEqual(NAMES.map((n) => plainValue(defs[n]())), evaluated);
 });
 
 test("Dual is its own type, though it has Complex's shape: their operations keep apart", () => {

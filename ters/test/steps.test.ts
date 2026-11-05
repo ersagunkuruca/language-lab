@@ -16,10 +16,7 @@ import { CONS, NIL, S, UNIT, UNIT_V } from "../src/lang/std.ts";
 import { showType } from "../src/lang/types.ts";
 import { lowerCore, runCoreMain } from "../../compiler/src/core-js.ts";
 import { compiledDefs } from "../../compiler/src/core-js.ts";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 
 const lib = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY.names[d] === name)!;
 

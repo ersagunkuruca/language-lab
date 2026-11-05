@@ -4,11 +4,7 @@
 // JavaScript agree, and a type with no spelling is refused.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
-import { compile } from "../../compiler/src/compile.ts";
 import { loadCoreJs, lowerCore } from "../../compiler/src/core-js.ts";
 import type { Id } from "../src/model.ts";
 import { Lang } from "../src/lang/dsl.ts";
@@ -19,7 +15,6 @@ import { runMain } from "../src/lang/run.ts";
 import { BOOL, JSON_OPS, LIST, OPTIONAL, S, SHOW_ANY, NONE, TRUE, FALSE } from "../src/lang/std.ts";
 import { INT, NUMBER, STRING } from "../src/lang/types.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 const lib = (name: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === name)!;
 
 // A shape: a circle with a radius, or a box with a width and a height; a
@@ -47,17 +42,15 @@ function program(build: (k: Lang, t: ReturnType<typeof types>) => Id, pin?: (k: 
   const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
   return { code, names, info, main };
 }
-async function both(p: ReturnType<typeof program>, way: "core" | "compile.ts" = "core") {
+async function both(p: ReturnType<typeof program>, way: "core" | "evaluator" = "core") {
   assert.deepEqual(p.info.errors.map((e) => e.message), []);
   const v = runMain(p.code, p.info, p.main, { print: () => {}, names: p.names });
   // The core IR's JavaScript, as the editor and `lab build` run it: it
-  // reads JSON through json read's written reader where compile.ts would
-  // search (L72f).
-  if (way === "compile.ts") {
-    const path = join(mkdtempSync(join(tmpdir(), "json-type-")), "main.mjs");
-    writeFileSync(path, compile(p.code, p.info, p.names, { runtime, exports: ["main"] }));
-    const defs = (await import(pathToFileURL(path).href)).defs as Record<string, () => unknown>;
-    assert.equal(typeof defs.main === "function" ? defs.main() : defs.main, v);
+  // reads JSON through json read's written reader (L72f).
+  // A core IR gap (C137): a Map, a Set or Bytes needs the library's
+  // bytes of base64 in the program; until then the evaluator's alone.
+  if (way === "evaluator") {
+    assert.throws(() => lowerCore(p.code, p.info, p.names, [p.main]), /bytes of base64, which this program doesn't have/);
     return v as string;
   }
   const core = lowerCore(p.code, p.info, p.names, [p.main]);
@@ -131,7 +124,7 @@ test("a Map with Text keys is an object, one with other keys a list of [key, val
     k.define(typed, k.fn(["x"], (x) => k.match(x, [{ variant: "std.tuple4.tuple", names: ["a", "b", "c", "d"], body: ([a, b, c, d]) => k.call("std.tuple4.tuple", k.call(lib("put"), a, k.lit("z"), k.int(0)), k.call(lib("put"), b, k.int(0), k.x(FALSE)), k.call(lib("add item"), c, k.lit("w")), k.call(lib("utf8 of"), k.call(lib("text of utf8"), d))) }])));
     k.define(back, k.fn(["json"], (js) => k.let("v", k.call(JSON_OPS.from, js), (v) => k.let("same", k.call(typed, v), () => v))));
   });
-  const out = JSON.parse(await both(p, "compile.ts")) as string[];
+  const out = JSON.parse(await both(p, "evaluator")) as string[];
   assert.deepEqual(JSON.parse(out[0]), [{ a: 1, b: 2 }, [[3, true]], ["x", "y"], "aGkh"]);
   assert.deepEqual(JSON.parse(out[1]), JSON.parse(out[0]));
 });
