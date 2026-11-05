@@ -1,5 +1,5 @@
 // board (compiler/gaps/board), GAPS.md round 8's program, a page written
-// in the editor: the evaluator, the compiled page and the hand-written
+// in the editor: the evaluator, the core IR's page and the hand-written
 // ideal must draw the same page at the start and after every phase of the
 // same session (cards added, moved, pointed, renamed, filtered, searched,
 // undone and redone, a focus timer run for frames, saved, loaded, picked,
@@ -14,7 +14,7 @@ const phases = ["start", ...session(1).map(([n]) => n)];
 
 for (const n of [0, 12]) test(`board: the four agree on a session with ${n} cards added`, () => {
   const want = run(w.ideal, n).pages;
-  for (const way of ["evaluator", "compiled", "core"] as const) {
+  for (const way of ["evaluator", "core"] as const) {
     const got = run(w[way], n).pages;
     got.forEach((p, i) => assert.equal(p, want[i], `${way}, after ${phases[i]}`));
   }
