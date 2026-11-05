@@ -312,7 +312,14 @@ export function tidied(f: SFunc, self: number): SFunc {
   scan(f.body);
   // A parameter is set again each time round a loop.
   const once = (i: number) => (i < f.params.length ? !loops && !writes.has(i) : writes.get(i) === 1);
+  // A let nothing reads whose value can't stop, fail or draw is dropped.
+  const reads = new Map<number, number>();
+  const count = (e: SExpr) => { if (e.k === "local") reads.set(e.i, (reads.get(e.i) ?? 0) + 1); kids(e).forEach(count); };
+  count(f.body);
+  const PURE = new Set<string>(["add", "sub", "mul", "div", "neg", "sqrt", "abs", "floor", "float32", "sin", "cos", "tan", "exp", "log", "pow", "atan2", "less", "equal", "beq", "and", "or", "not", "itof"]);
+  const pure = (e: SExpr): boolean => ["local", "num", "bool", "text", "zero"].includes(e.k) || ((e.k === "op" && PURE.has(e.op)) || e.k === "make" || e.k === "get") && kids(e).every(pure);
   const tidy = (e: SExpr): SExpr => {
+    if (e.k === "let" && !reads.get(e.i) && once(e.i) && !e.check && !e.seeded && pure(e.value)) return tidy(e.body);
     if (e.k === "let" && e.value.k === "local" && e.value.i !== e.i && once(e.i) && once(e.value.i) && f.locals[e.i] === f.locals[e.value.i] && !e.check && !e.seeded) {
       const j = e.value.i, i = e.i;
       return tidy(mapLocals(e.body, (x) => (x === i ? j : x)));
