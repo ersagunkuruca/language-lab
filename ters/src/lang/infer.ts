@@ -33,7 +33,7 @@ import { ratioParts } from "./int.ts";
 import { fieldPath, fieldPaths, placePath, readPaths } from "./records.ts";
 import { leftToWays, pickWays, waysIn, type Ways } from "./ways.ts";
 import { fresh, rigid, RIGID, type Pins } from "./signatures.ts";
-import { ALGEBRAIC_TYPE, ARRAY, MASK_TYPES, isRowCarrier, rowCarrier, BUILTIN_EFFECTS, NAMED_ROWS, writtenRow, CELL, PATH, CHOICE, CONSOLE, DIVERGE, EffectError, ArithError, FractionError, WORLD, WorldError, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, RATIONAL_TYPE, schemeArith, schemeNeeds, showType as showT, STRING, Subst, TypeError, type Row, type Scheme, type Type, OverMap, OverSet } from "./types.ts";
+import { ALGEBRAIC_TYPE, ARRAY, MASK_TYPES, isRowCarrier, rowCarrier, BUILTIN_EFFECTS, NAMED_ROWS, writtenRow, CELL, PATH, CHOICE, CONSOLE, DIVERGE, EffectError, ArithError, FractionError, WORLD, WorldError, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, schemeArith, schemeNeeds, showType as showT, STRING, Subst, TypeError, type Row, type Scheme, type Type, OverMap, OverSet } from "./types.ts";
 const FILE_OP_IDS = new Set<Id>(Object.values(FILE_OPS));
 import { DECLARED, discharge } from "./ledger.ts";
 import type { CheckCache } from "./check-cache.ts";
@@ -976,12 +976,14 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
           else s.whole.add(v.v);
           t = v;
         } else t = n.of ? { t: "con", id: n.of, args: [] } : str;
-        // A literal at Rational is a whole number or top/bottom. arith.ts
+        // A literal at Algebraic is a whole number or top/bottom. arith.ts
         // spells it out.
-        if ((n.of === RATIONAL_TYPE || n.of === ALGEBRAIC_TYPE) && !ratioParts(n.value)) err(id, `${JSON.stringify(n.value)} isn't a fraction: write a whole number, or top/bottom with the bottom not 0`);
-        // At any other type, digits as written (a whole number, a decimal,
-        // top/bottom), which its Literal or embedding spells out.
+        if (n.of === ALGEBRAIC_TYPE && !ratioParts(n.value)) err(id, `${JSON.stringify(n.value)} isn't a fraction: write a whole number, or top/bottom with the bottom not 0`);
+        // At any other type (Rational too, L207f3), digits as written (a
+        // whole number, a decimal, top/bottom), which its Literal or
+        // embedding spells out; a bottom of 0 is no number.
         else if (n.of && n.of !== STRING && typeof n.value === "string" && !/^\s*-?(\d+(\.\d*)?|\.\d+)(e[+-]?\d+)?\s*(\/\s*\d+\s*)?$/i.test(n.value)) err(id, `${JSON.stringify(n.value)} isn't a number`);
+        else if (n.of && n.of !== STRING && typeof n.value === "string" && /\/\s*0+\s*$/.test(n.value)) err(id, `${JSON.stringify(n.value)} isn't a fraction: its bottom is 0`);
         break;
       }
       case "ref": t = refType(id, n.target, env); break;
