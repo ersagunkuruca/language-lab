@@ -9,6 +9,7 @@ import { norm } from "../../ters/src/lang/int.ts";
 import { isData, isFn, isRecord, lowerScalar, type LType } from "../src/scalar.ts";
 import { emitWasm, fromInt, fromText, instantiate, runMain, toInt, toText } from "../src/wasm.ts";
 import { runCoreMain } from "../src/core-js.ts";
+import { withInverses } from "../src/inverses.ts";
 import { load } from "../src/program.ts";
 import { area, caseNameInputs, caseNames, changeInputs, changes, choices, numberTexts, fuzzFinds, randomInputs, randoms, recursiveLets, closures, escapes, fractionInputs, fractions, maths, ordered, orderedInputs, roses, sameLists, searches, several, showInputs, shows, stopsWith, texts, worldly } from "../src/fixtures.ts";
 import { nodeWorld } from "../../ters/src/lang/world.ts";
@@ -510,21 +511,21 @@ test("choosing one of a list in WebAssembly: a loop per choice, keep with a test
 });
 
 test("Abort in WebAssembly: status 2 and a reason, through first and budgets; calc parses and ledger reads and reports as the evaluator does", async () => {
-  // calc: tokens, then the parser (which aborts on what it can't read), then evaluate.
+  // calc: the line read by its printer run backwards (which aborts on
+  // what it can't read, C110 s5), then evaluate. The reader is written as
+  // code first (inverses.ts), as compiled targets read it.
   const calc = load("calc");
-  const lc = lowerScalar(calc.code, calc.info, calc.pres.names, calc.own.defs, { data: true });
-  for (const fn of ["tokens", "whole expression", "evaluate"]) assert.ok(lc.funcs.some((g) => g.name === fn && !g.inner), `calc: ${fn} compiles (${lc.refused.get(calc.named(fn))})`);
+  const ci = withInverses(calc.code, calc.info, calc.pres.names);
+  const lc = lowerScalar(ci.code, ci.info, ci.names, calc.own.defs, { data: true });
+  for (const fn of ["whole expression", "evaluate"]) assert.ok(lc.funcs.some((g) => g.name === fn && !g.inner), `calc: ${fn} compiles (${lc.refused.get(calc.named(fn))})`);
   const wc = await instantiate(emitWasm(lc)) as unknown as Exports;
   const rc = makeRunner(calc.code, calc.info, { print: () => {} });
   const fnOf = (l: typeof lc, name: string) => l.funcs.find((g) => g.name === name && !g.inner)!;
-  const [tokens, whole, evaluate] = ["tokens", "whole expression", "evaluate"].map((x) => fnOf(lc, x));
+  const [whole, evaluate] = ["whole expression", "evaluate"].map((x) => fnOf(lc, x));
   let aborted = 0;
   for (const line of ["1 + 2*3", "(1+2)*3", "2^10", "2^-1", "7 - -2", "10 / 3", "10 / 0", "x", "1 +", ")", "((4))", "", "3 4", "1+2+3+4+5+6+7+8+9", "-(2*3)^2"]) {
-    const t = first(rc.call(rc.value(tokens.def), line))!;
-    const wt = wc.tokens(toText(wc, line));
-    assert.equal(flat(fromWasm(wc, wt, tokens.result)), flat(t), `tokens(${line})`);
-    const e = outcome(rc, whole.def, [t]);
-    const we = wc["whole expression"](wt) as [unknown, number];
+    const e = outcome(rc, whole.def, [line]);
+    const we = wc["whole expression"](toText(wc, line)) as [unknown, number];
     assert.equal(flat(answer(wc, whole, we)), flat(e), `whole expression(${line})`);
     if (e && typeof e === "object" && "aborted" in e) { aborted++; continue; }
     const none = toList([]);
@@ -646,8 +647,8 @@ test("whole programs in WebAssembly and in JavaScript from the core IR: wc, ledg
   };
   const argsets = [[], ["a.txt"], ["u.txt"], ["-l", "a.txt", "nope"], ["-w", "-c", "book.md"], ["book.md", "out"], ["sums.txt"], ["ledger.csv"], ["big.csv"], ["nope"]];
   for (const name of ["wc", "ledger", "chapters", "calc"]) {
-    const p = load(name);
-    const l = lowerScalar(p.code, p.info, p.pres.names, p.own.defs, { data: true });
+    const p = load(name), q = withInverses(p.code, p.info, p.pres.names);
+    const l = lowerScalar(q.code, q.info, q.names, p.own.defs, { data: true });
     assert.ok(l.funcs.some((g) => g.name === "main"), `${name}: main compiles (${l.refused.get(p.named("main"))})`);
     const m = emitWasm(l);
     // wc's count folds over characters with no list between (C23).
@@ -696,7 +697,7 @@ test("whole programs as WASI commands: files, console, arguments and exit codes 
     .map((p) => [p, statSync(join(dir, p)).isDirectory() ? "(folder)" : readFileSync(join(dir, p), "utf8")]));
   const w = worldly();
   const programs = [
-    ...["wc", "ledger", "chapters", "calc"].map((name) => { const p = load(name); return { name, code: p.code, info: p.info, names: p.pres.names, roots: p.own.defs, main: p.named("main") }; }),
+    ...["wc", "ledger", "chapters", "calc"].map((name) => { const p = load(name), q = withInverses(p.code, p.info, p.pres.names); return { name, code: q.code, info: q.info, names: q.names, roots: p.own.defs, main: p.named("main") }; }),
     { name: "worldly", code: w.code, info: w.info, names: w.names, roots: [w.main], main: w.main },
   ];
   const argsets = [[], ["a.txt", "Ünï 🎉.txt"], ["-l", "a.txt", "nope", "out"], ["book.md", "out"], ["book.md", "gone"], ["ledger.csv"], ["big.csv"], ["out", "a.txt"], ["."]];
