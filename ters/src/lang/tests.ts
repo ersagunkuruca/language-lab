@@ -132,7 +132,9 @@ export function savedFrom(json: Record<Id, unknown>): Record<Id, Saved[]> {
 // input given, the rest (the clock, Random) the world it's handed. What it
 // did, in MainAnswer's words, for comparing with an accepted one or
 // accepting.
-export function runMainIn(code: Code, info: Info, names: Names, main: Id, given: Pick<MainAnswer, "arguments" | "input" | "files">, rt: Partial<Runtime> = {}): Pick<MainAnswer, "printed" | "errors" | "filesAfter" | "exit"> {
+// `run` runs main some other way (T7e16: compiled), given the world and
+// where to print.
+export function runMainIn(code: Code, info: Info, names: Names, main: Id, given: Pick<MainAnswer, "arguments" | "input" | "files">, rt: Partial<Runtime> = {}, run?: (world: World, print: (l: string) => void) => number): Pick<MainAnswer, "printed" | "errors" | "filesAfter" | "exit"> {
   const files = new Map(Object.entries(given.files)), printed: string[] = [], errors: string[] = [];
   let input = given.input;
   const missing = (p: string): never => { throw new Error(`no file ${p}`); };
@@ -147,11 +149,27 @@ export function runMainIn(code: Code, info: Info, names: Names, main: Id, given:
     fileExists: (p) => files.has(p) || [...files.keys()].some((f) => f.startsWith(`${p}/`)),
     listFolder: (p) => [...new Set([...files.keys()].filter((f) => f.startsWith(`${p}/`)).map((f) => f.slice(p.length + 1).split("/")[0]))].sort(),
   };
-  const exit = runProgram(code, info, main, given.arguments, { ...rt, names, print: (l) => printed.push(l), world } as Runtime);
+  const print = (l: string) => void printed.push(l);
+  const exit = run ? run(world, print) : runProgram(code, info, main, given.arguments, { ...rt, names, print, world } as Runtime);
   const after = Object.fromEntries(files);
   const same = JSON.stringify(after) === JSON.stringify(given.files);
   return { printed, errors, ...(same ? {} : { filesAfter: after }), exit };
 }
+
+// How what main did differs from its accepted answer, line by line.
+export function mainDiffers(got: Pick<MainAnswer, "printed" | "errors" | "filesAfter" | "exit">, m: MainAnswer): string[] {
+  const what: string[] = [];
+  const lines = (a: string[], b: string[], where: string) => {
+    const i = a.findIndex((x, j) => x !== b[j]), at = i < 0 ? a.length : i;
+    if (a.length !== b.length || i >= 0) what.push(`${where} line ${at + 1} is ${JSON.stringify(a[at] ?? "nothing")}, accepted ${JSON.stringify(b[at] ?? "nothing")}`);
+  };
+  lines(got.printed, m.printed, "printed");
+  lines(got.errors, m.errors, "error");
+  if (JSON.stringify(got.filesAfter ?? m.files) !== JSON.stringify(m.filesAfter ?? m.files)) what.push("leaves other files than accepted");
+  if (got.exit !== m.exit) what.push(`exits with ${got.exit}, accepted ${m.exit}`);
+  return what;
+}
+export const mainCall = (m: MainAnswer) => `main(${m.arguments.map((a) => JSON.stringify(a)).join(", ")})`;
 
 // Runs every test, and every definition with an accepted answer: an
 // accepted answer is a test without the word, `expect(f(inputs) =
@@ -177,17 +195,8 @@ export function runTests(code: Code, info: Info, names: Names, defs: Id[], saved
         if (s.main) {
           // main in its recorded world (T7e15).
           cases++;
-          const m = s.main, got = runMainIn(code, info, names, d, m, rt);
-          const what: string[] = [];
-          const lines = (a: string[], b: string[], where: string) => {
-            const i = a.findIndex((x, j) => x !== b[j]), at = i < 0 ? a.length : i;
-            if (a.length !== b.length || i >= 0) what.push(`${where} line ${at + 1} is ${JSON.stringify(a[at] ?? "nothing")}, accepted ${JSON.stringify(b[at] ?? "nothing")}`);
-          };
-          lines(got.printed, m.printed, "printed");
-          lines(got.errors, m.errors, "error");
-          if (JSON.stringify(got.filesAfter ?? m.files) !== JSON.stringify(m.filesAfter ?? m.files)) what.push("leaves other files than accepted");
-          if (got.exit !== m.exit) what.push(`exits with ${got.exit}, accepted ${m.exit}`);
-          if (what.length) failures.push({ inputs: [`main(${m.arguments.map((a) => JSON.stringify(a)).join(", ")})`], what });
+          const m = s.main, what = mainDiffers(runMainIn(code, info, names, d, m, rt), m);
+          if (what.length) failures.push({ inputs: [mainCall(m)], what });
           continue;
         }
         if (s.answer === undefined) continue;

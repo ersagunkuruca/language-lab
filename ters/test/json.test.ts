@@ -63,6 +63,14 @@ test("json read reads what JSON.stringify writes, and json printed gives it back
   assert.equal(JSON.parse(shown as string), JSON.stringify(value));
 });
 
+// json read's written reader on the core IR read a text's characters
+// through json character spelled's Choice, which nested the rest of the
+// reading in each character's: 300 bytes ran out of stack (L72e1d).
+test("json read reads a long text compiled, without running out of stack", async () => {
+  const text = JSON.stringify(Array.from({ length: 200 }, (_, i) => ({ id: i, name: `item ${i} "q"`, tags: ["a", "b"], price: i * 1.25, ok: i % 2 === 0 })));
+  assert.equal(await both((k) => k.call(lib("json printed"), k.call(lib("json read"), k.lit(text)))), JSON.stringify(text));
+});
+
 test("json read stops on text that isn't JSON", () => {
   const stops = (text: string, why: RegExp) => {
     const p = program((k) => k.call(lib("json read"), k.lit(text)));

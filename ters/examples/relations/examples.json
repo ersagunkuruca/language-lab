@@ -1,0 +1,20 @@
+{
+  "enaqcbhup47mdfq7kgvcp33l6v": [
+    {
+      "main": {
+        "arguments": [],
+        "input": "",
+        "files": {},
+        "printed": [
+          "split(10, 4) = 7, 3",
+          "missing addend(3, 10) = 7",
+          "to polar(0, 2), canonical = 2, 1.570796327",
+          "square roots(9) = 3 -3",
+          "square roots(−1) = []"
+        ],
+        "errors": [],
+        "exit": 0
+      }
+    }
+  ]
+}

@@ -54,7 +54,7 @@ import { readLog, replaying, type LogEntry } from "../src/lang/worldlog.ts";
 import { compile } from "../../compiler/src/compile.ts";
 import { CFLAGS, emitC } from "../../compiler/src/c.ts";
 import { lowerScalar } from "../../compiler/src/scalar.ts";
-import { FAIL, codeLines, coreMap, coreModule, hostOpsOf, loadCoreJs, lowerCore, solvesSlowly } from "../../compiler/src/core-js.ts";
+import { FAIL, codeLines, coreMap, coreModule, hostOpsOf, loadCoreJs, lowerCore, runCoreMain, solvesSlowly } from "../../compiler/src/core-js.ts";
 import { withInverses } from "../../compiler/src/inverses.ts";
 import { execFileSync } from "node:child_process";
 import { recordings, webCorePage, webPage } from "./web.ts";
@@ -63,7 +63,7 @@ import { soundOf } from "./sound.ts";
 import { readWav, writeWav } from "./wav.ts";
 import { represented as representedOr, type Program } from "./represented.ts";
 import { audioProblem, BLOCK, playBlocks } from "../src/lang/audio.ts";
-import { answersAgain, checkedTests, checksAgain, compiledValue, runTests, savedFrom, testsIn, type Called, type Saved } from "../src/lang/tests.ts";
+import { answersAgain, checkedTests, checksAgain, compiledValue, mainCall, mainDiffers, runMainIn, runTests, savedFrom, testsIn, type Again, type Called, type Failure, type Saved } from "../src/lang/tests.ts";
 import { representationLaws } from "../src/lang/rep-laws.ts";
 import { embeddingLaws } from "../src/lang/embed-laws.ts";
 import { effectOfOperation, hostSkeleton, hostSkeletonC, ownOperations, type Hosts } from "../src/lang/hosts.ts";
@@ -141,6 +141,31 @@ function compiledAnswers(p: Program, saved: Record<Id, Saved[]>) {
         throw e instanceof Error ? e : new Error(String((e as { reason?: unknown }).reason ?? e));
       }
     };
+  });
+}
+
+// main's accepted answers (T7e16), main compiled to JavaScript through
+// the core IR and run in each recorded world, as the evaluator's run is.
+function compiledMains(p: Program, saved: Record<Id, Saved[]>): Again[] {
+  return p.own.filter((d) => (saved[d] ?? []).some((x) => x.main)).map((d) => {
+    const name = p.names[d] ?? d;
+    let ir: ReturnType<typeof lowerCore>;
+    try { ir = lowerCore(p.code, p.info, p.names, [d]); } catch (e) { return { def: d, name, cases: 0, failures: [], skipped: `didn't lower (${(e as Error).message})` }; }
+    const why = ir.refused.get(d);
+    if (why) return { def: d, name, cases: 0, failures: [], skipped: why };
+    const failures: Failure[] = [];
+    let cases = 0;
+    try {
+      for (const s of saved[d] ?? []) {
+        if (!s.main) continue;
+        cases++;
+        const m = s.main;
+        const got = runMainIn(p.code, p.info, p.names, d, m, {}, (world, print) => runCoreMain(ir, name, m.arguments, { print, names: p.names, world } as never));
+        const what = mainDiffers(got, m);
+        if (what.length) failures.push({ inputs: [mainCall(m)], what });
+      }
+    } catch (e) { return { def: d, name, cases, failures, error: (e as Error).message }; }
+    return { def: d, name, cases, failures };
   });
 }
 
@@ -536,7 +561,7 @@ switch (command) {
     // the core IR, which must give them too (T7e), and each test, run
     // compiled under a handler of its Check (T7e2); a definition that
     // doesn't lower is said, not failed.
-    const again = rest.includes("--compiled") && !p.info.errors.length ? [...compiledAnswers(p, saved), ...compiledChecks(p, saved)] : [];
+    const again = rest.includes("--compiled") && !p.info.errors.length ? [...compiledAnswers(p, saved), ...compiledChecks(p, saved), ...compiledMains(p, saved)] : [];
     for (const r of again) {
       if (r.skipped) console.log(`– ${r.name} compiled: not checked, it ${r.skipped}`);
       else if (r.error) console.log(`✗ ${r.name} compiled: ${r.error}`);
