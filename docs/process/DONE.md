@@ -1534,6 +1534,14 @@ superseded.
 | L93 | Bug: shaders smoke on main, the GPU 0.45 from the evaluator on the Mandelbrot shader after #524. zoom used 1 − cos(θ), which near θ = 0 keeps only the GPU cos's error (WGSL allows 2^-11), and a pixel on the set's edge then escapes on a different step. Now a smoothstep triangle wave, only + − · abs mod and one power, 0.0005 from the evaluator | #527 |
 | L94 | The Mandelbrot zoom back to Ersagun's simpler form, 3 · 0.002^((1 − cos(τ·t/30))/2), and the GPU check (editor/picture.ts) lets up to 1 point in 20 differ, because on the set's edge the GPU's cos (good to 2^-11, each vendor's own) flips a point's step count. Corrects L93's reasoning: the error is cos's, in any form, not 1 − cos's cancellation | #528 |
 
+## Language lane B
+
+The second Language lane, from the 10-hour run of 2026-11-05/06: the sharing chain (L109 to L115, L17) and the physics programs (L120 to L124).
+
+| id | item | PR |
+|---|---|---|
+| L109 | std published with lineages and versions, and hashes that carry their recipe (SHARING.md §3). std's ids are its lineage ids; library/std-versions.json (kept by library/build.ts, modules.ts `addVersions`) lists every version each std definition has had, oldest first, so a change to a declaration adds one and keeps the old. Each module records the version of every std definition its code refers to (`std`, modules.ts `baseVersions`), and verify says "html was published against another version of std's std.attribute: publish it again" instead of that its code changed. An id says its recipe (hash.ts `recipeOf`): today's is the unlettered one, a later one a letter w to z after the `@`, and verify refuses an id of a recipe it doesn't know as that. Also: build.ts now records the cases module's moved definitions in moved.json, and cases.json was stale on main (rebuilt). Example: modules.test.ts's "a change to a std declaration adds a version and keeps the old" | this PR |
+
 ## Demos
 
 | id | item | PR |

@@ -3,6 +3,8 @@
 Written 2026-10-31 from the thread "Design sharing libraries and
 versioning". **Status (2026-10-31):** proposal, nothing built. The steps
 are BACKLOG rows L109 to L115, which take over L17 and L68.
+**2026-11-05:** §3 built (L109): std's versions kept by lineage, modules
+saying which std they were published on, ids saying their recipe.
 
 **In one sentence:** a definition (or a library) keeps one **lineage id**
 for its whole life and gets a **version hash** each time it's published;
@@ -101,6 +103,15 @@ away. Two things break that today, and both get a rule:
   carries its recipe version** (a format letter after `@`). A new recipe
   comes with a table from old hashes to new, which `upgrade` reads like
   any other replacement.
+
+Built (L109, 2026-11-05): std's ids are its lineage ids, and
+`ters/library/std-versions.json` keeps every version each std definition
+has had. Each module records the std versions it was published against,
+so verify can say a module stands on an older std rather than that its
+code changed. Today's recipe is written as no letter (every id so far was
+made by it); the next will be a letter w to z, outside base32's
+alphabet. The table from old hashes to new already exists for content
+changes: `ters/library/moved.json` (L184).
 
 And: **published code is never deleted.** An author can mark a version
 broken (§4); programs that use it keep running and get a warning.

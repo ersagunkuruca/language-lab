@@ -22,7 +22,7 @@
 // pins are what REVIEW.md §4.5 and §4.6 add.
 
 import { children, collect, isPublished, mapIds, merge, subtree, type Code, type Id, type Node, isUse, bindsOf } from "../model.ts";
-import { defGroups, hashes } from "../hash.ts";
+import { defDeps, defGroups, hashes, RECIPE, recipeOf } from "../hash.ts";
 import { layer, type Comments, type Names } from "../presentation.ts";
 import { infer } from "./infer.ts";
 import type { Representation } from "./represent.ts";
@@ -47,6 +47,11 @@ export interface Module {
   // Ways to store a type, in its definitions (represent.ts): the trees
   // module's rows for Map and Set.
   representations?: Representation[];
+  // The version of each std definition its code refers to, as it was when
+  // the module was published (SHARING.md §3, L109): std is the base every
+  // module stands on, so this is what verify compares to say a module was
+  // published against another std, rather than that its code changed.
+  std?: Record<Id, string>;
 }
 
 export type Result<T> = ({ ok: true } & T) | { ok: false; reason: string };
@@ -121,7 +126,37 @@ export function makeModule(title: string, code: Code, names: Names, exports: Id[
     names: pick(names),
     comments: pick(comments),
     exports,
+    std: baseVersions(code, defs),
   };
+}
+
+// The base definitions (std's) that `defs` refer to directly, with the
+// version hash each has in `code`. Direct ones are enough: a std
+// definition's hash takes in those it refers to.
+export function baseVersions(code: Code, defs: Id[]): Record<Id, string> {
+  const used = [...new Set(defs.flatMap((d) => defDeps(code, d)))].filter((d) => !isPublished(d)).sort();
+  const memo = hashes(code, used);
+  return Object.fromEntries(used.map((d) => [d, memo.get(d)!]));
+}
+
+// ----------------------------------------------------------------- versions
+
+// Every version each std definition has had, oldest first, by its id
+// (SHARING.md §3, L109). std's ids are its lineage ids: they never change,
+// and a change to a declaration adds a version to the list and keeps the
+// old ones (library/std-versions.json, kept by library/build.ts). A
+// definition no longer in std keeps its list.
+export type Versions = Record<Id, string[]>;
+export function addVersions(kept: Versions, code: Code, defs: Id[]): Versions {
+  const memo = hashes(code, defs.filter((d) => code.nodes[d]?.kind === "def"));
+  const out: Versions = Object.fromEntries(Object.entries(kept).map(([d, vs]) => [d, [...vs]]));
+  for (const d of defs) {
+    const v = memo.get(d);
+    if (!v) continue;
+    const vs = (out[d] ??= []);
+    if (vs.at(-1) !== v) vs.push(v);
+  }
+  return Object.fromEntries(Object.keys(out).sort().map((d) => [d, out[d]]));
 }
 
 // ------------------------------------------------------------------- verify
@@ -133,7 +168,19 @@ export function makeModule(title: string, code: Code, names: Names, exports: Id[
 export function verify(m: Module, base: Code, checkPins = false): string | null {
   if (m.format !== MODULE_FORMAT) return "it isn't a module";
   const code = merge(base, m.code);
-  for (const d of m.code.defs) if (!isPublished(d) || code.nodes[d]?.kind !== "def") return `${d} isn't a published definition`;
+  for (const d of m.code.defs) {
+    const r = recipeOf(d);
+    if (r !== null && r !== RECIPE) return `${m.names[d] ?? d} is hashed by recipe ${r}, which this version doesn't know`;
+  }
+  for (const d of m.code.defs) if (recipeOf(d) === null || code.nodes[d]?.kind !== "def") return `${d} isn't a published definition`;
+  // Published against another std: say which, before its own hashes do.
+  if (m.std) {
+    const today = hashes(code, Object.keys(m.std).filter((d) => code.nodes[d]?.kind === "def"));
+    for (const [d, v] of Object.entries(m.std)) {
+      if (!code.nodes[d]) return `${m.title} was published against std's ${d}, which this std doesn't have`;
+      if (today.get(d) !== v) return `${m.title} was published against another version of std's ${d}: publish it again (library/build.ts)`;
+    }
+  }
   const memo = hashes(code, m.code.defs);
   const seen = new Set<Id>();
   for (const d of m.code.defs) {

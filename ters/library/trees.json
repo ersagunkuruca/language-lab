@@ -35759,6 +35759,19 @@
   },
   "comments": {},
   "exports": [],
+  "std": {
+    "std.abort": "5d1s9oerrlmo3qk3e9jk0i7fub",
+    "std.bool": "i9j62f4s0b1kd43c3ko5obqfg3",
+    "std.bytes": "9rt9goujnhi85mgb3onk66gl21",
+    "std.cost": "i9koj9blq1dntg0kiciuujljo8",
+    "std.list": "7ghcbb3eg5tato2rvcvbisl10h",
+    "std.map": "bmu7ps9pptniqcht1udekgni1i",
+    "std.optional": "mg9rf79fffmtc854o0k3rg26rb",
+    "std.order": "5onfchl95mf48ivk5nagfbcrl4",
+    "std.representation": "kapesqajfvf9lviho4rpqk1e9v",
+    "std.set": "9obev2760mo15mgi6ifepfbg6r",
+    "std.tuple2": "v3c5mu6dk39ukgo2go20clcrlh"
+  },
   "representations": [
     {
       "def": "@f5ofvuhp36gqkl9ojfcu93c7kk",

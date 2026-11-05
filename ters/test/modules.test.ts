@@ -11,9 +11,9 @@ import { hashDef } from "../src/hash.ts";
 import { hex, sha256 } from "../src/sha256.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { fillings, infer } from "../src/lang/infer.ts";
-import { CORE, LIBRARY, PRELUDE } from "../src/lang/library.ts";
+import { CORE, HTML_MODULE, LIBRARY, PRELUDE } from "../src/lang/library.ts";
 import { base, baseNames, checkOptions, loadProgram } from "../src/lang/load.ts";
-import { adopt, orderFreeHash, publish, sameAs, sameLines, sameUpToOrder, upgrade, verify, type Module } from "../src/lang/modules.ts";
+import { addVersions, adopt, orderFreeHash, publish, sameAs, sameLines, sameUpToOrder, upgrade, verify, type Module } from "../src/lang/modules.ts";
 import { buildPrelude } from "../src/lang/prelude-source.ts";
 import { library as listHelpers } from "../src/lang/programs.ts";
 import { pinsOf } from "../src/lang/signatures.ts";
@@ -54,6 +54,27 @@ test("the prelude is what it says it is, and publishing it again gives the same 
   assert.equal(verify(PRELUDE, CORE, true), null);
   assert.equal(JSON.stringify(buildPrelude()), JSON.stringify(PRELUDE));
   for (const d of PRELUDE.code.defs) assert.equal(d, `@${hashDef(LIBRARY.code, d)}`);
+});
+
+// SHARING.md §3 (L109): std's ids are lineages, and a change to one of its
+// declarations is a new version beside the old, which a module published
+// before it is told about by name.
+test("a change to a std declaration adds a version and keeps the old, and html, published before it, is told so (L109)", () => {
+  const base = merge(CORE, PRELUDE.code);
+  assert.equal(verify(HTML_MODULE, base), null);
+  const attr = base.nodes["std.attribute"] as NodeOf<"def">;
+  const changed: Code = { ...base, nodes: { ...base.nodes, [attr.body!]: { ...base.nodes[attr.body!], unique: "another Attribute" } as Node } };
+  const before = addVersions({}, base, ["std.attribute", "std.list"]);
+  const after = addVersions(before, changed, ["std.attribute", "std.list"]);
+  assert.equal(after["std.attribute"].length, 2);
+  assert.equal(after["std.attribute"][0], before["std.attribute"][0]);
+  assert.deepEqual(after["std.list"], before["std.list"]);
+  assert.equal(verify(HTML_MODULE, changed), "html was published against another version of std's std.attribute: publish it again (library/build.ts)");
+  // An id made by a recipe this version doesn't know is refused as that,
+  // not as changed code.
+  const d = HTML_MODULE.exports[0], later = `@w${d.slice(1)}`;
+  const m: Module = { ...HTML_MODULE, code: { ...HTML_MODULE.code, defs: HTML_MODULE.code.defs.map((x) => (x === d ? later : x)) } };
+  assert.match(verify(m, base)!, /is hashed by recipe w, which this version doesn't know/);
 });
 
 test("a published definition that is changed no longer matches its name", () => {
