@@ -121,7 +121,13 @@ Abort, "the host's ‹name› failed: ‹reason›", as it does for a wrong
 answer. Lists and records don't cross to C yet. An operation with no
 `host_<id>` in the file is a refusal to build that names it, and
 `lab hosts <program> --c` prints a file with each one, to start from.
-Not yet: L186's log doesn't keep a host's answers, in C or JavaScript.
+In WebAssembly (L69b2) each such operation is an import from "world",
+`host:<effect>:<number>`, which `instantiate` answers from the
+Runtime's `hosts` (hosts/js.js) through hosts.ts's border, as the
+evaluator does; an Int, a Float64, a Text and a Bool cross, and a
+function that performs one is partial, so a wrong answer is an Abort
+there too. Not yet: L186's log doesn't keep a host's answers, in C,
+WebAssembly or JavaScript.
 
 ## What std's own builtins become
 
@@ -137,7 +143,7 @@ answer their effects the same way. That move is optional (L69d).
 | step | what | lane | size |
 |---|---|---|---|
 | L69a | An effect's unhandled operations answered from `hosts/js.js` in the evaluator and the compiled JS, results checked at the border; `lab hosts` writes the skeleton | L | M |
-| L69b | The same from `hosts/c.c` for native C (L69b1, done), and WebAssembly imports from `hosts/js.js` (L69b2) | C | M |
+| L69b | The same from `hosts/c.c` for native C (L69b1, done), and WebAssembly imports from `hosts/js.js` (L69b2, done) | C | M |
 | L69c | The editor: "needs its host" on a definition whose host side is missing; the host file shown read-only in the Program tab | E | S |
 | L69d | Optional: std's world operations move to std's own host files | L | M |
 

@@ -352,7 +352,9 @@ export type SExpr =
   // `suspends` (C40 step 4): a page handler's wait or await, which goes on
   // by the rest of the handler; `cps`, that rest given last (t is then
   // the i32 it answers).
-  | { k: "world"; op: string; aborts: boolean; args: SExpr[]; t: LType; suspends?: true; cps?: true }
+  // `ins`: its inputs' types, where they aren't texts (a host's
+  // operation in WebAssembly, L69b2).
+  | { k: "world"; op: string; aborts: boolean; args: SExpr[]; t: LType; suspends?: true; cps?: true; ins?: LType[] }
   | { k: "handle"; body: SExpr; reason: number; arm: SExpr; t: LType; save: number; esc?: number }
   // W4d, gone after lowering: `one of` a list (t), anywhere, and a
   // handler's search (first, optional, all, count) to be made into code
@@ -888,7 +890,9 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     // that spends from a budget: running out is having no answer there,
     // which the nearest handler sees, as in the evaluator.
     const all = constant ? [] : info.subst.resolveRow(ft.eff).effs;
-    const partial = (!!opts.data && (all.includes(CHOICE) || all.some(escaping) || (!constant && info.divergent.has(def)))) || (!!opts.shader && all.includes(CHOICE));
+    // A host's operation may fail, with its reason (L69b1, L69b2): a
+    // function that performs one is partial, as one that aborts is.
+    const partial = (!!opts.data && (all.includes(CHOICE) || all.some(escaping) || all.some((e) => !!opts.hosted?.has(e)) || (!constant && info.divergent.has(def)))) || (!!opts.shader && all.includes(CHOICE));
     // Without `data` or `shader`, a Choice is let through: one from a
     // partial builtin (x / 0, the square root of a negative; L125b) is
     // lowered as its arithmetic, so no answer isn't seen here yet (L125c2,
