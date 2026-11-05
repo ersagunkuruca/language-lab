@@ -276,6 +276,15 @@ export function descentReader(code: Code, printer: Id, names: Record<Id, string>
         const l = node(b.fn);
         if (l?.kind === "lambda") { const e = new Map(inner); l.params.forEach((p, j) => e.set(p, evaluate(b.args[j], inner))); return all(l.body, e); }
       }
+      // `if one of([…]) then a else b` (L72e1d): every arm's ways; another
+      // match on what's known: its arm's.
+      if (b?.kind === "match" && b.arms.every((a) => !(node(a)?.binds ?? []).length)) {
+        const s = node(b.scrutinee);
+        if (s?.kind === "call" && !isUse(s as never) && target(s.fn) === S.oneOf) return b.arms.flatMap((a) => all(node(a)!.body, inner));
+        const v = evaluate(b.scrutinee, inner) as { tag?: Id };
+        const arm = b.arms.map((a) => node(a)!).find((a) => a.variant === v?.tag);
+        if (arm) return all(arm.body, inner);
+      }
       const v = evaluate(id, inner); return typeof v === "string" ? [v] : [];
     };
     try { return all(fn.body, new Map(env).set(fn.params[0], c)); } catch (e) { if (e instanceof NoAnswer) return []; throw e; }
