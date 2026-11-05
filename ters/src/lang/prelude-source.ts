@@ -1379,6 +1379,32 @@ export function buildPrelude(): Module {
       { variant: SOME, names: ["held"], body: ([held]) => k.call(CONS, k.x(NONE), k.call(addRunWith, order, k.call(mergeWith, order, run, held), higher)) },
     ]) },
   ])));
+  // The library checks itself (TESTS-IN-THE-LANGUAGE.md §6, T7e7): sort
+  // gives its items in order and keeps every one, as often as it came;
+  // append is associative. Over small lists of whole numbers: `ints`
+  // pins a law's list to Int (n + 0), as compiled code needs one type.
+  const ints = (xs: Id) => k.call(map, xs, k.fn(["n"], (n) => k.call(INT_OPS.add, n, k.int(0))));
+  const countIn = (x: Id, xs: Id) => k.fold(xs, [
+    { variant: NIL, names: [], body: () => k.int(0) },
+    { variant: CONS, names: ["item", "rest"], results: [null, "count in rest"], body: ([y], [, r]) => k.call(INT_OPS.add, k.if(k.equal(y, x), k.int(1), k.int(0)), r!) },
+  ]);
+  const sortInOrder = k.def("sort gives its items in order");
+  k.define(sortInOrder, k.fn(["list"], (xs) => expect(k.fold(k.call(sort, ints(xs)), [
+    { variant: NIL, names: [], body: () => k.x(TRUE) },
+    { variant: CONS, names: ["item", "rest"], results: [null, "rest in order"], body: ([x, rest], [, r]) => k.match(rest, [
+      { variant: CONS, names: ["next", "after"], body: ([y]) => k.match(k.call(COMPARE, y, x), [{ variant: ORDER_V.before, names: [], body: () => k.x(FALSE) }], r!) },
+    ], r!) },
+  ]), "each item of sort(list) comes no later than the next")));
+  const sortKeeps = k.def("sort keeps every item");
+  k.define(sortKeeps, k.fn(["numbers"], (ns) => k.let("list", ints(ns), (xs) => k.let("sorted", k.call(sort, xs), (s) =>
+    expect(k.call(S.and, k.equal(k.call(length, s), k.call(length, xs)), k.fold(xs, [
+      { variant: NIL, names: [], body: () => k.x(TRUE) },
+      { variant: CONS, names: ["item", "rest"], results: [null, "rest kept"], body: ([x], [, r]) => k.call(S.and, k.equal(countIn(x, s), countIn(x, xs)), r!) },
+    ])), "sort(list) has each item as often as list")))));
+  const appendAssociative = k.def("append is associative");
+  k.define(appendAssociative, k.fn(["a", "b", "c"], (a0, b0, c0) => k.let("a", ints(a0), (a) => k.let("b", ints(b0), (b) => k.let("c", ints(c0), (c) => expect(
+    k.equal(k.call(append, k.call(append, a, b), c), k.call(append, a, k.call(append, b, c))), "append(append(a, b), c) is append(a, append(b, c))"))))));
+  laws.push(sortInOrder, sortKeeps, appendAssociative);
   const sortWith = k.def("sort with");
   k.define(sortWith, k.fn(["list", "order"], (xs, order) => k.fold(
     k.fold(xs, [

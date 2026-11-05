@@ -579,6 +579,9 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   const zonk = (id: Id): Type => put(info.subst.zonk(info.typeOf.get(id) ?? { t: "var", v: -1 }), at);
   const nm = (id: Id) => names[id] ?? id;
   const records = new Map<string, RType>();
+  // The type each record or data type was made from, for an implementation
+  // with type parameters (L219) made at it (implementedAt).
+  const sources = new Map<string, Type>();
   const datas = new Map<string, DType>();
   const fns = new Map<string, FType>();
   const arrays = new Map<string, AType>();
@@ -733,6 +736,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     }
     if (!opts.records) return null;
     const key = `${t.id}<${t.args.map(show).join(",")}>`;
+    if (!sources.has(key)) sources.set(key, t);
     if (records.has(key)) return records.get(key)!;
     if (datas.has(key)) return datas.get(key)!;
     // A type inside itself at other arguments (List (List Tree)) is
@@ -1502,6 +1506,20 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // for a type that contains itself): different cases by their places,
   // the same case field by field, the last a tail call, so two long lists
   // compare in constant stack.
+  // An interface's implementation (Shown, Ordered) at record or data type
+  // t: its value, the record it is and the function it holds first. One
+  // with type parameters (L219, `Ordered (Tagged a)`) is made at t's
+  // arguments.
+  function implementedAt(impl: Id | undefined, t: RType | DType): { value: SExpr; it: RType; ft: FType } | undefined {
+    if (!impl || !code.defs.includes(impl)) return undefined;
+    const raw = info.typeOf.get(impl) && info.subst.zonk(info.typeOf.get(impl)!), src = sources.get(t.key);
+    if (!raw) return undefined;
+    const types: At = new Map();
+    if (src && raw.t === "con" && raw.args[0]) bindVars(raw.args[0], src, types);
+    const it = stype(put(raw, types));
+    const ft = it && isRecord(it) ? it.fields[0]?.t : undefined;
+    return it && isRecord(it) && ft && isFn(ft) ? { value: { k: "call", fn: func(impl, types), args: [], tail: false }, it, ft } : undefined;
+  }
   function ordering(t: RType | DType): number {
     const key = `<${t.key}`;
     if (index.has(key)) return index.get(key)!;
@@ -1513,15 +1531,11 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     // evaluator's orderedBy does (L204g): before when a's less than b,
     // after when b's less than a, else the same. The prelude's Rational's
     // is one, so no case of its is named here (C139b).
-    const od = opts.data ? ordereds.get(t.def) : undefined;
-    if (od && code.defs.includes(od)) {
-      const it = info.typeOf.get(od) && stype(info.subst.zonk(info.typeOf.get(od)!));
-      const ft = it && isRecord(it) ? it.fields[0]?.t : undefined;
-      if (it && isRecord(it) && ft && isFn(ft)) {
-        const less = (x: SExpr, y: SExpr): SExpr => ({ k: "apply", fn: { k: "get", rec: { k: "call", fn: func(od), args: [], tail: false }, t: it, i: 0 }, t: ft, args: [x, y], tail: false, tmp: g.locals.push(ft) - 1 });
-        g.body = { k: "if", cond: less(a, b), then: num(-1), else: { k: "if", cond: less(b, a), then: num(1), else: num(0), t: "f64" }, t: "f64" };
-        return index.get(key)!;
-      }
+    const od = opts.data ? implementedAt(ordereds.get(t.def), t) : undefined;
+    if (od) {
+      const less = (x: SExpr, y: SExpr): SExpr => ({ k: "apply", fn: { k: "get", rec: od.value, t: od.it, i: 0 }, t: od.ft, args: [x, y], tail: false, tmp: g.locals.push(od.ft) - 1 });
+      g.body = { k: "if", cond: less(a, b), then: num(-1), else: { k: "if", cond: less(b, a), then: num(1), else: num(0), t: "f64" }, t: "f64" };
+      return index.get(key)!;
     }
     const all = (pairs: [SExpr, SExpr, LType][]): SExpr => {
       if (!pairs.length) return num(0);
@@ -1620,14 +1634,10 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     // types that have one (the prelude's Rational, Complex, Fixed and the
     // words, C139a): no case of theirs is named here. Extended and the
     // algebras have none yet.
-    const impl = opts.data ? showns.get(t.def) : undefined;
-    if (impl && code.defs.includes(impl)) {
-      const it = info.typeOf.get(impl) && stype(info.subst.zonk(info.typeOf.get(impl)!));
-      const ft = it && isRecord(it) ? it.fields[0]?.t : undefined;
-      if (it && isRecord(it) && ft && isFn(ft)) {
-        g.body = { k: "apply", fn: { k: "get", rec: { k: "call", fn: func(impl), args: [], tail: false }, t: it, i: 0 }, t: ft, args: [a], tail: true, tmp: g.locals.push(ft) - 1 };
-        return index.get(key)!;
-      }
+    const impl = opts.data ? implementedAt(showns.get(t.def), t) : undefined;
+    if (impl) {
+      g.body = { k: "apply", fn: { k: "get", rec: impl.value, t: impl.it, i: 0 }, t: impl.ft, args: [a], tail: true, tmp: g.locals.push(impl.ft) - 1 };
+      return index.get(key)!;
     }
     // Case c's text, from its fields (part j) and their types.
     const one = (v: Id, fts: LType[], part: (j: number) => SExpr): SExpr => {
