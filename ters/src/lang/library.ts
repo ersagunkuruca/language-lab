@@ -14,7 +14,7 @@ import { layer, type Comments, type Names } from "../presentation.ts";
 import { prelude, preludeNames } from "../prelude.ts";
 import { adopt, library, type Module } from "./modules.ts";
 import { checkOnce } from "./infer.ts";
-import { std, stdNames } from "./std.ts";
+import { SMART, std, stdNames } from "./std.ts";
 import { NOTES } from "./notes.ts";
 import { declarePureHosts } from "./hosts.ts";
 import { LIBRARY_HOSTS } from "../../library/hosts.ts";
@@ -40,6 +40,9 @@ export const DUAL_V = numbersNode("variant", "dual");
 export const COMPLEX_V = numbersNode("variant", "complex");
 export const COMPLEX_TYPE = numbersNode("def", "Complex");
 export const FIXED_V = numbersNode("variant", "fixed"), FIXED_TYPE = numbersNode("def", "Fixed");
+export const RATIO_V = numbersNode("variant", "ratio"), RATIONAL_TYPE = numbersNode("def", "Rational");
+// Its case is private (L207f4): a program makes a fraction this way.
+SMART[RATIO_V] = "fraction or as fraction";
 export const MAT_V = { 2: numbersNode("variant", "mat2"), 3: numbersNode("variant", "mat3"), 4: numbersNode("variant", "mat4") } as const;
 export const MODULES: Module[] = [PRELUDE, VECTORS, HTML_MODULE, TREES, STEADY, CASES, NUMBERS];
 export const CORE: Code = merge(prelude, std);

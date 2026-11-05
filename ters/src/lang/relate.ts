@@ -64,6 +64,7 @@ import { NUMERIC, relationFor } from "./equations.ts";
 import { analyzer, type Choice, type Exec, type Fn, type Mode, type Plan } from "./modes.ts";
 import { seededGenerator } from "./random.ts";
 import { needsResolving, preludeDef } from "./arith.ts";
+import { fractionCase } from "./prelude-ids.ts";
 import { infer } from "./infer.ts";
 import { ALGEBRAIC_OPS, ALGEBRAIC_V, ARRAY_OPS, PAIR_V, ofAlg, toAlg } from "./std.ts";
 import * as Alg from "./algebraic.ts";
@@ -858,19 +859,9 @@ export function interpreter(given: Code, opts: Options = {}) {
     const d = preludeDef(name), n = d ? nodes[d] : undefined;
     if (n?.kind === "def" && n.body) fractionOps.set(n.body, name);
   }
-  // Rational's case, read off negate fraction's own match (L207f2), so
-  // this file names no number type of the library's.
-  const ratio = (() => {
-    const d = preludeDef("negate fraction"), n = d ? nodes[d] : undefined;
-    const todo = n?.kind === "def" && n.body ? [n.body] : [];
-    for (let id; (id = todo.pop());) {
-      const x = nodes[id];
-      if (!x) continue;
-      if (x.kind === "arm") return x.variant;
-      todo.push(...children(x));
-    }
-    return undefined;
-  })();
+  // Rational's case (L207f2), so this file names no number type of the
+  // library's.
+  const ratio = fractionCase(code)?.variant;
   // The grammar pieces (L70a), by their definitions' bodies.
   const grammarOps = new Map<Id, GrammarOp>();
   for (const name of GRAMMAR_OPS) {

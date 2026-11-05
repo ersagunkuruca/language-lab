@@ -13,7 +13,7 @@ import { fillings, fillingsInPieces, implementationKey, implementationOf, infer 
 import { CheckCache } from "../ters/src/lang/check-cache.ts";
 import { isCall, isPublished, isUse, isBound, useTarget, type Call, type Use } from "../ters/src/model.ts";
 import { answerKeys } from "../ters/src/lang/ports.ts";
-import { LIBRARY, PRELUDE, TREES } from "../ters/src/lang/library.ts";
+import { LIBRARY, NUMBERS, PRELUDE, TREES } from "../ters/src/lang/library.ts";
 import { B } from "../ters/src/prelude.ts";
 import { pinsOf, type Pins } from "../ters/src/lang/signatures.ts";
 import { dropLoose, setLoose, wireIn } from "./drafts.ts";
@@ -194,7 +194,7 @@ export const setDisplayNames = (n: Names) => { display = n; };
 // definition that's gone is dropped.
 let programPins: Pins = {};
 export const setProgramPins = (p: Pins) => { programPins = p; };
-const INSIDERS = [...PRELUDE.code.defs, ...TREES.code.defs];
+const INSIDERS = [...PRELUDE.code.defs, ...TREES.code.defs, ...NUMBERS.code.defs];
 // Each definition group's check is kept between checks (L215b,
 // check-cache.ts): an edit checks the groups it changed, and their callers
 // only where a type changed.

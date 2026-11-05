@@ -1,3 +1,4 @@
+import { RATIONAL_TYPE } from "../src/lang/library.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { isPublished, subtree, type Code, type Id, type Node, type NodeOf, isCall, type Call, type Use, isUse, useTarget } from "../src/model.ts";
@@ -9,7 +10,7 @@ import { addVariant, fillHole, paramName } from "../src/lang/refactor.ts";
 import { runMain, showValue } from "../src/lang/run.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { ARITH, BOOL, S } from "../src/lang/std.ts";
-import { INT, NUMBER, RATIONAL_TYPE, STRING, showType } from "../src/lang/types.ts";
+import { INT, NUMBER, STRING, showType } from "../src/lang/types.ts";
 import * as Top from "../src/lang/toplevel.ts";
 
 // A program written from nothing with the editor's gestures only: the same

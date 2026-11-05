@@ -56,10 +56,10 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 - **whole of** : `(Float64) -> Int`. The whole number at or below x, as an Int: whole of(2.7) is 2, whole of(-0.5) is -1. Always an answer, since a Float64 is finite (whole part is the same as a Choice).
 - **divided or** : `(Float64, Float64, Float64) -> Float64`. a / b, or otherwise when b is 0: divided or(waited, patients, 0) is the mean, or 0 with no patients.
 - **range from** : `(Int, Int) -> List Int`. The Ints from start up to end, end left out: range from(2, 5) is [2, 3, 4]. Empty when end is not after start.
-- **Rational** (type). An exact fraction, top/bottom, always in lowest terms. The same + − · < work on it. Make one with fraction(1, 3) or as fraction(n); its constructor ratio is private to the library, which keeps the rule.
-- **fraction** : `(Int, Int) -[Choice]-> Rational`. top/bottom, exactly, in lowest terms (Euclid's algorithm, textbook); no answer when bottom is 0.
-- **as fraction** : `(Int) -> Rational`. The whole number n as a fraction, n/1.
-- **as float64** : `(Rational) -> Float64`. The nearest Float64.
+- **Rational** (type) (numbers module). An exact fraction, top/bottom, always in lowest terms. The same + − · < work on it. Make one with fraction(1, 3) or as fraction(n); its constructor ratio is private to the library, which keeps the rule.
+- **fraction** : `(Int, Int) -[Choice]-> Rational` (numbers module). top/bottom, exactly, in lowest terms (Euclid's algorithm, textbook); no answer when bottom is 0.
+- **as fraction** : `(Int) -> Rational` (numbers module). The whole number n as a fraction, n/1.
+- **as float64** : `(Rational) -> Float64` (numbers module). The nearest Float64.
 - **Complex** (type) (numbers module). A complex number re + im·i, a record of two Float64s. The same + − · work on it (· is the complex product); it has no <.
 - **as complex** : `(Float64) -> Complex` (numbers module). The Float64 x as a complex number, x + 0i.
 - **i** : `Complex` (numbers module). i, the square root of −1: i · i is −1.
@@ -133,9 +133,9 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 - **dual table** : `List (Table entry Dual)` (numbers module). Dual numbers' multiplication table: 1 · 1 = 1, 1 · ε = ε, ε · 1 = ε, and ε · ε = 0, which needs no line. table product(dual table, x, y) is x · y.
 - **Algebraic** (type). An exact real number that solves a polynomial equation with whole-number coefficients, like √2 (x² = 2) or the golden ratio (x² = x + 1). Held by that equation and which of its roots it is, so √2 · √2 is exactly 2 and < always answers. The same + − · < work on it. Make one with square root, root, or as algebraic; digits shows as many digits as you ask for (EXACT-REALS.md).
 - **Real** (type). An exact real number, held by how it was made (fractions, + − ·), that works itself out as closely as you ask: approximate(x, p) is within 1/2ᵖ. The same + − · work on it. real pi() is π, and real digits shows as many decimals as you ask, and real less than compares two, narrowing until they come apart or the fuel runs out (EXACT-REALS.md, step 4).
-- **as algebraic** : `(Rational) -> Algebraic`. A fraction as an Algebraic number, exactly.
-- **as real** : `(Rational) -> Real`. A fraction as a Real, exactly.
-- **algebraic as fraction** : `(Algebraic) -[Choice]-> Rational`. The fraction an Algebraic number is, when it is one: algebraic as fraction(√2 · √2) is 2. No answer (Choice) for √2.
+- **as algebraic** : `(Rational) -> Algebraic` (numbers module). A fraction as an Algebraic number, exactly.
+- **as real** : `(Rational) -> Real` (numbers module). A fraction as a Real, exactly.
+- **algebraic as fraction** : `(Algebraic) -[Choice]-> Rational` (numbers module). The fraction an Algebraic number is, when it is one: algebraic as fraction(√2 · √2) is 2. No answer (Choice) for √2.
 - **approximate** : `(Real, Int) -> Int`. approximate(x, p) is an Int m with x within 1/2ᵖ of m/2ᵖ: x lies between (m − 1)/2ᵖ and (m + 1)/2ᵖ. Asking a larger p narrows it; what it works out is kept with the value.
 - **real pi** : `() -> Real`. π as a Real, exactly: real digits(real pi(), 50) gives fifty of its decimals (Machin's formula).
 - **real digits** : `(Real, Int) -> Text`. real digits(x, n) is x rounded to n decimals, as text: right to within one in the last place, since whether a Real is just below or just above a decimal can't always be told.
@@ -496,9 +496,9 @@ A Time of day is an hour, a minute and a second, counted as seconds from midnigh
 An Embedding a b is the one map from a type into a larger one that keeps + − · and <, written embedding(map: …), at most one for a pair. lab test checks its laws. EMBEDDINGS.md.
 
 - **Embedding** (type). An embedding of a in b: a map from a into b that keeps the operations (ι(x + y) = ι(x) + ι(y), ι(x · y) = ι(x) · ι(y), ι(−x) = −ι(x), and x < y exactly when ι(x) < ι(y)), written embedding(map: …), at most one for a pair of types. lab test checks those laws. EMBEDDINGS.md.
-- **int in rational** : `Embedding Int Rational`. Int in Rational: n as the fraction n/1, the one map that keeps + − · and <.
+- **int in rational** : `Embedding Int Rational` (numbers module). Int in Rational: n as the fraction n/1, the one map that keeps + − · and <.
 - **int in float64** : `Embedding Int Float64`. Int in Float64: n as the Float64 nearest it, exact up to 2⁵³; + − · agree as closely as Float64 rounds.
-- **rational in float64** : `Embedding Rational Float64`. Rational in Float64: top ÷ bottom, the Float64 nearest the fraction; + − · agree as closely as Float64 rounds.
+- **rational in float64** : `Embedding Rational Float64` (numbers module). Rational in Float64: top ÷ bottom, the Float64 nearest the fraction; + − · agree as closely as Float64 rounds.
 - **float64 in complex** : `Embedding Float64 Complex` (numbers module). Float64 in Complex: x as x + 0i.
 - **float64 in dual** : `Embedding Float64 Dual` (numbers module). Float64 in Dual: x as the dual number x + 0ε, a constant, whose slope is 0.
 

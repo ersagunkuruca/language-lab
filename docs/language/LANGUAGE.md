@@ -371,9 +371,10 @@ equals 2 (REVIEW-2026-10-26.md §1.2). This is
 NUMBERS.md's stage 1: the meaning is the integers, the representation is
 machine numbers with a BigInt fallback. Int literals are ordinary `lit`
 nodes with `of: "type.int"` (digits in a string past 2^53). A literal can
-be at the other number types the same way: `of: "std.rational"` with a
-whole number or `"top/bottom"` (`"6/8"` is 3/4; a zero bottom is an error
-the checker names), and `of: "std.complex"` with a Float64, its real part.
+be at the other number types the same way: `of` Rational's id (the
+numbers module's, L207f4) with a whole number, a decimal or
+`"top/bottom"` (`"6/8"` is 3/4; a zero bottom is an error the checker
+names), and `of` Complex's with a Float64, its real part.
 They're drawn as written (`1/2`), and before anything runs they become
 their constructor's call (`ratio(1, 2)`, `complex(2.5, 0)`; arith.ts), so
 `ratio(1, 2) + 1` needs no `as fraction` once the 1 is at Rational. Its operations
