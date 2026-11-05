@@ -490,7 +490,12 @@ export class Cells {
       return keyIs(at, [...place, ...seen.rel]);
     };
     for (const o of n.observers) {
-      if (o.edits !== undefined) o.edits = what && o.edits ? [...o.edits, what] : null;
+      // An each's edits since it last ran (L99), kept in its own array (it
+      // takes them, leaving a new one). One that waits through many
+      // writes, an item's steps while others are added, matches again when
+      // it runs instead: copying or keeping every edit made adding an item
+      // to a long outline grow with all the edits before it (L98c).
+      if (o.edits) { if (what && o.edits.length < 32) o.edits.push(what); else o.edits = null; }
       const ps = keys === undefined ? undefined : o.paths?.get(n);
       if (!ps || keys!.some((key) => ps.some((p) => meets(p, key))) || ats!.some((at) => o.views?.get(n)?.some(hits(at)))) {
         this.mark(o, DIRTY);
