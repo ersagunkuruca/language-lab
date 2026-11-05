@@ -21,13 +21,13 @@
 // Unison's (https://www.unison-lang.org/docs/the-big-idea/); visibility and
 // pins are what REVIEW.md §4.5 and §4.6 add.
 
-import { children, collect, isPublished, mapIds, merge, subtree, type Code, type Id, type Node, isUse, bindsOf } from "../model.ts";
-import { defGroups, hashes } from "../hash.ts";
+import { children, collect, freshId, isPublished, mapIds, merge, subtree, type Code, type Id, type Node, type NodeOf, isUse, bindsOf } from "../model.ts";
+import { defDeps, defGroups, hashes, RECIPE, recipeOf } from "../hash.ts";
 import { layer, type Comments, type Names } from "../presentation.ts";
 import { infer } from "./infer.ts";
 import type { Representation } from "./represent.ts";
-import { pinKey, pinsOf, type Pins } from "./signatures.ts";
-import { schemeArith, showType } from "./types.ts";
+import { atLeastAsGeneral, pinKey, pinsOf, type Pin, type Pins } from "./signatures.ts";
+import { schemeArith, showType, type Type } from "./types.ts";
 
 export const MODULE_FORMAT = "projectional-module";
 
@@ -42,11 +42,24 @@ export interface Module {
   comments?: Comments;
   // What the palette offers from it.
   exports: Id[];
-  // Updates: a new definition and the one it replaces (upgrade, below).
-  replaces?: Record<Id, Id>;
+  // Every version of each definition it has published, oldest first, by
+  // lineage: the id the definition had as a draft, which it keeps for its
+  // whole life (SHARING.md §1, L110). Old versions stay in the module, so
+  // a program that uses one keeps running; only the newest is offered.
+  // What replaces what is read from here (`replacing`), never written.
+  lineages?: Record<Id, Id[]>;
+  // A store's only (L114a): each lineage's author's public key, pinned the
+  // first time the program took it, so a log rewritten under another key
+  // is refused (cli/logs.ts).
+  authors?: Record<Id, string>;
   // Ways to store a type, in its definitions (represent.ts): the trees
   // module's rows for Map and Set.
   representations?: Representation[];
+  // The version of each std definition its code refers to, as it was when
+  // the module was published (SHARING.md §3, L109): std is the base every
+  // module stands on, so this is what verify compares to say a module was
+  // published against another std, rather than that its code changed.
+  std?: Record<Id, string>;
 }
 
 export type Result<T> = ({ ok: true } & T) | { ok: false; reason: string };
@@ -121,7 +134,78 @@ export function makeModule(title: string, code: Code, names: Names, exports: Id[
     names: pick(names),
     comments: pick(comments),
     exports,
+    std: baseVersions(code, defs),
   };
+}
+
+// The base definitions (std's) that `defs` refer to directly, with the
+// version hash each has in `code`. Direct ones are enough: a std
+// definition's hash takes in those it refers to.
+export function baseVersions(code: Code, defs: Id[]): Record<Id, string> {
+  const used = [...new Set(defs.flatMap((d) => defDeps(code, d)))].filter((d) => !isPublished(d)).sort();
+  const memo = hashes(code, used);
+  return Object.fromEntries(used.map((d) => [d, memo.get(d)!]));
+}
+
+// ----------------------------------------------------------------- versions
+
+// Every version each std definition has had, oldest first, by its id
+// (SHARING.md §3, L109). std's ids are its lineage ids: they never change,
+// and a change to a declaration adds a version to the list and keeps the
+// old ones (library/std-versions.json, kept by library/build.ts). A
+// definition no longer in std keeps its list.
+export type Versions = Record<Id, string[]>;
+export function addVersions(kept: Versions, code: Code, defs: Id[]): Versions {
+  const memo = hashes(code, defs.filter((d) => code.nodes[d]?.kind === "def"));
+  const out: Versions = Object.fromEntries(Object.entries(kept).map(([d, vs]) => [d, [...vs]]));
+  for (const d of defs) {
+    const v = memo.get(d);
+    if (!v) continue;
+    const vs = (out[d] ??= []);
+    if (vs.at(-1) !== v) vs.push(v);
+  }
+  return Object.fromEntries(Object.keys(out).sort().map((d) => [d, out[d]]));
+}
+
+// ----------------------------------------------------------------- lineages
+
+// Publish `defs` of a program as the next versions in a module (SHARING.md
+// §1, L110). Each published definition's lineage is the id it has as a
+// draft, so the program keeps its drafts and publishing them again after an
+// edit adds a version under the same lineage; `prev`, the module as it was,
+// keeps every old version (published code is never deleted) and offers
+// only each lineage's newest. Publishing what didn't change changes nothing.
+// `basePins`: the pins of library definitions it uses, which travel with it.
+export function publishVersion(prev: Module | null, title: string, code: Code, names: Names, defs: Id[], base: Code, basePins: Pins = {}, comments: Comments = {}): Result<{ module: Module; added: Id[] }> {
+  const all = prev ? merge(code, prev.code) : code;
+  const p = publish(all, names, defs, merge(base, ...(prev ? [prev.code] : [])));
+  if (!p.ok) return p;
+  const lineages: Record<Id, Id[]> = Object.fromEntries(Object.entries(prev?.lineages ?? {}).map(([l, vs]) => [l, [...vs]]));
+  const added: Id[] = [];
+  for (const [draft, id] of p.rename) {
+    if (!isPublished(id) || id.includes(":") || code.nodes[draft]?.kind !== "def") continue;
+    // A version published again after a newer one (an edit undone) is the
+    // newest again.
+    const vs = (lineages[draft] ??= []);
+    if (vs.at(-1) !== id) { if (vs.includes(id)) vs.splice(vs.indexOf(id), 1); vs.push(id); added.push(id); }
+  }
+  const newestOf = (d: Id) => { const l = lineageOf(lineages, d); return l ? lineages[l].at(-1)! : d; };
+  const offered = [...new Set([...defs.map((d) => p.rename.get(d) ?? d), ...(prev?.exports ?? [])].map(newestOf))];
+  const kept = [...new Set([...(prev?.code.defs ?? []), ...p.published])];
+  const pins = { ...basePins, ...(prev?.pins ?? {}), ...p.pins };
+  const m = makeModule(title, p.code, layer<Names>(prev?.names ?? {}, p.names), offered, pins, { ...(prev?.comments ?? {}), ...renameKeys(comments, p.rename) }, kept);
+  return { ok: true, module: { ...m, std: { ...(prev?.std ?? {}), ...m.std }, lineages }, added };
+}
+
+// The lineage a version belongs to, or null.
+export const lineageOf = (lineages: Record<Id, Id[]>, version: Id): Id | null =>
+  Object.keys(lineages).find((l) => lineages[l].includes(version)) ?? null;
+
+// What replaces what, read from the lineages: each version and the one
+// before it in its lineage, newest first (`upgrade` moves a program along
+// it when the pins allow).
+export function replacing(m: Module): Record<Id, Id> {
+  return Object.fromEntries(Object.values(m.lineages ?? {}).flatMap((vs) => vs.slice(1).map((v, i) => [v, vs[i]] as const)));
 }
 
 // ------------------------------------------------------------------- verify
@@ -133,7 +217,19 @@ export function makeModule(title: string, code: Code, names: Names, exports: Id[
 export function verify(m: Module, base: Code, checkPins = false): string | null {
   if (m.format !== MODULE_FORMAT) return "it isn't a module";
   const code = merge(base, m.code);
-  for (const d of m.code.defs) if (!isPublished(d) || code.nodes[d]?.kind !== "def") return `${d} isn't a published definition`;
+  for (const d of m.code.defs) {
+    const r = recipeOf(d);
+    if (r !== null && r !== RECIPE) return `${m.names[d] ?? d} is hashed by recipe ${r}, which this version doesn't know`;
+  }
+  for (const d of m.code.defs) if (recipeOf(d) === null || code.nodes[d]?.kind !== "def") return `${d} isn't a published definition`;
+  // Published against another std: say which, before its own hashes do.
+  if (m.std) {
+    const today = hashes(code, Object.keys(m.std).filter((d) => code.nodes[d]?.kind === "def"));
+    for (const [d, v] of Object.entries(m.std)) {
+      if (!code.nodes[d]) return `${m.title} was published against std's ${d}, which this std doesn't have`;
+      if (today.get(d) !== v) return `${m.title} was published against another version of std's ${d}: publish it again (library/build.ts)`;
+    }
+  }
   const memo = hashes(code, m.code.defs);
   const seen = new Set<Id>();
   for (const d of m.code.defs) {
@@ -387,14 +483,16 @@ export function sameLines(code: Code, names: Names, lib: Library): string[] {
 // ------------------------------------------------------------------ upgrade
 
 // Move a program from one published definition to another (a module's
-// `replaces`). Every reference to the old one, and the ports of any place
-// it's run backwards, now lead to the new one. Done only when the new one
-// has the same pin: then nothing that uses it can break, and nothing needs
-// checking again. A different type is refused, with the places that use it.
-export function upgrade(code: Code, from: Id, to: Id, pins: Pins, names: Names = {}): Result<{ code: Code; uses: number }> {
-  const a = pins[from], b = pins[to];
+// lineage, `replacing`). Every reference to the old one, and the ports of
+// any place it's run backwards, now lead to the new one. Done only when the
+// new one's pin is at least as general as the old one's (L111): then
+// nothing that uses it can break. A narrower type is refused, with both.
+// `types`: data types the program has already moved to a newer version
+// (L17): the old pin is read with them as the new.
+export function upgrade(code: Code, from: Id, to: Id, pins: Pins, names: Names = {}, types: ReadonlyMap<Id, Id> = new Map()): Result<{ code: Code; uses: number }> {
+  const a = pins[from] && types.size ? retyped(pins[from], types) : pins[from], b = pins[to];
   if (!a || !b) return { ok: false, reason: "both definitions need pins" };
-  if (pinKey(a) !== pinKey(b)) return { ok: false, reason: `its type changed from ${showType(a.type, names, schemeArith(a))} to ${showType(b.type, names, schemeArith(b))}` };
+  if (pinKey(a) !== pinKey(b) && !atLeastAsGeneral(b, a)) return { ok: false, reason: `its type changed from ${showType(a.type, names, schemeArith(a))} to ${showType(b.type, names, schemeArith(b))}` };
   const old = code.nodes[from], neu = code.nodes[to];
   if (old?.kind !== "def" || neu?.kind !== "def") return { ok: false, reason: "both definitions need to be loaded" };
   const params = (d: Node) => (d.kind === "def" && d.body && code.nodes[d.body]?.kind === "lambda" ? (code.nodes[d.body] as { params: Id[] }).params : []);
@@ -409,4 +507,201 @@ export function upgrade(code: Code, from: Id, to: Id, pins: Pins, names: Names =
     if (JSON.stringify(m) !== JSON.stringify(n)) { nodes[n.id] = m; uses++; }
   }
   return { ok: true, code: collect({ nodes, defs: code.defs.map((d) => (d === from ? to : d)) }), uses };
+}
+
+// A program's own code moved onto the newest version of every module
+// definition it uses (SHARING.md §2, L111), along each lineage. A version
+// whose pin is narrower than the one the program uses stays, with why.
+// The program's own nodes only come back; the caller checks and tests it.
+export interface Moved { from: Id; to: Id; uses: number }
+export function upgradeOwn(own: Code, modules: Module[], names: Names = {}, broken: ReadonlySet<Id> = new Set()): { own: Code; moved: Moved[]; refused: { from: Id; to: Id; reason: string }[] } {
+  const ownIds = new Set(Object.keys(own.nodes));
+  const pins: Pins = Object.assign({}, ...modules.map((m) => m.pins));
+  const lines = modules.flatMap((m) => Object.values(m.lineages ?? {}));
+  let work = merge(...modules.map((m) => m.code), own);
+  const moved: Moved[] = [], refused: { from: Id; to: Id; reason: string }[] = [];
+  const uses = (code: Code) => new Set(Object.values(code.nodes).filter((n) => ownIds.has(n.id)).flatMap(pointsAt));
+  // Data types first (L17): a newer version of a type the program uses is
+  // taken through its author's migration, and the functions over it after,
+  // with their old pins read at the new type.
+  const types = new Map<Id, Id>();
+  const migrations = migrationsIn(modules, work);
+  for (const vs of lines.filter((vs) => isTypeDef(work, vs[0]))) {
+    const used = uses(work);
+    const from = vs.slice(0, -1).find((v) => typeParts(work, v).some((p) => used.has(p)));
+    const to = vs.filter((v) => !broken.has(v)).at(-1);
+    if (!from || !to || from === to || vs.indexOf(to) < vs.indexOf(from)) continue;
+    const by = migrations.find((m) => m.from === from && m.to === to)?.by;
+    if (!by) { refused.push({ from, to, reason: "its cases or fields changed, and its author gave no migration from the old to the new" }); continue; }
+    const r = migrateType(work, ownIds, from, to, by, layer<Names>({}, ...modules.map((m) => m.names), names));
+    if (!r.ok) { refused.push({ from, to, reason: r.reason }); continue; }
+    work = r.code; types.set(from, to); moved.push({ from, to, uses: r.uses });
+  }
+  for (const vs of lines.filter((vs) => !isTypeDef(work, vs[0]))) {
+    const used = uses(work);
+    for (const from of vs.slice(0, -1)) {
+      if (!used.has(from)) continue;
+      // The newest that fits, else the next older one.
+      // A version its author's log marks broken isn't moved to (L114a).
+      for (const to of vs.slice(vs.indexOf(from) + 1).reverse().filter((v) => !broken.has(v))) {
+        const r = upgrade(work, from, to, pins, names, types);
+        if (r.ok) { work = r.code; moved.push({ from, to, uses: r.uses }); break; }
+        if (to === vs.filter((v) => !broken.has(v)).at(-1)) refused.push({ from, to, reason: r.reason });
+      }
+    }
+  }
+  return { own: { nodes: Object.fromEntries(Object.entries(work.nodes).filter(([id]) => ownIds.has(id))), defs: own.defs }, moved, refused };
+}
+
+// The names a program shows after an upgrade (SHARING.md §5, L112). Names
+// are the program's own copy, taken at the version it used: a name the
+// program gave itself stays, and a name the module's author changed in the
+// new version is kept as it was unless `take` says to take the author's,
+// one answer for the whole upgrade. Parameters go by place. Returns the
+// program's names and the author's renames, said once.
+export function upgradeNames(moved: Moved[], modules: Module[], own: Names, take = false): { names: Names; renamed: { from: string; to: string }[] } {
+  const theirs = layer<Names>({}, ...modules.map((m) => m.names));
+  const code = merge(...modules.map((m) => m.code));
+  const params = (d: Id) => { const n = code.nodes[d]; const b = n?.kind === "def" && n.body ? code.nodes[n.body] : undefined; return b?.kind === "lambda" ? b.params : []; };
+  const names: Names = { ...own };
+  const renamed: { from: string; to: string }[] = [];
+  for (const { from, to } of moved) {
+    const pa = params(from), pb = params(to);
+    for (const [a, b] of [[from, to] as const, ...pa.map((p, i) => [p, pb[i]] as const).filter(([, q]) => q)]) {
+      if (own[a] !== undefined) { names[b] = own[a]; continue; }
+      const was = theirs[a], now = theirs[b];
+      if (was === undefined || was === now) continue;
+      renamed.push({ from: was, to: now ?? b });
+      if (!take) names[b] = was;
+    }
+  }
+  return { names, renamed };
+}
+
+// ------------------------------------------------------------------- store
+
+// A project's store (SHARING.md §4b, L115): every published definition a
+// program has used from its modules, kept by hash with the program, and the
+// versions of each lineage it has had, oldest first. Filled by default on
+// every upgrade and downgrade, before and after, so the program still opens
+// and runs when a module's file is gone, and can go back to any version it
+// had. Content addressing shares what two versions have in common. Nothing
+// is offered from it; the program's modules offer.
+export const STORE = "store";
+export function addToStore(store: Module | null, own: Code, modules: Module[]): Module {
+  const from = [...modules, ...(store ? [store] : [])];
+  const code = merge(...from.map((m) => m.code), own);
+  const inModules = (d: Id) => from.some((m) => m.code.nodes[d]);
+  const used = defGroups(code, own.defs).flat().filter((d) => isPublished(d) && inModules(d));
+  const defs = [...new Set([...(store?.code.defs ?? []), ...used])];
+  const nodes = Object.fromEntries(defs.flatMap((d) => nodeIds(code, d)).map((id) => [id, code.nodes[id]]));
+  const pick = <T>(t: Record<Id, T>) => Object.fromEntries(Object.entries(t).filter(([k]) => nodes[k.split("/")[0]]));
+  // Each lineage's versions the program has had, in the module's order.
+  const lineages: Record<Id, Id[]> = Object.fromEntries(Object.entries(store?.lineages ?? {}).map(([l, vs]) => [l, [...vs]]));
+  for (const m of modules) for (const [l, vs] of Object.entries(m.lineages ?? {})) {
+    const had = vs.filter((v) => defs.includes(v));
+    if (!had.length) continue;
+    const list = (lineages[l] ??= []);
+    for (const v of had) if (!list.includes(v)) list.push(v);
+  }
+  const names = layer<Names>({}, ...from.map((m) => m.names));
+  const pins: Pins = Object.assign({}, ...from.map((m) => m.pins));
+  return {
+    format: MODULE_FORMAT, version: 1, title: STORE,
+    code: { nodes, defs },
+    pins: Object.fromEntries(defs.filter((d) => pins[d]).map((d) => [d, pins[d]])),
+    names: pick(names),
+    exports: [],
+    std: { ...(store?.std ?? {}), ...baseVersions(code, defs) },
+    lineages,
+    ...(store?.authors ? { authors: store.authors } : {}),
+  };
+}
+
+// The version before `current` that the store kept, in its lineage.
+export function previousVersion(store: Module, current: Id): Id | null {
+  const l = lineageOf(store.lineages ?? {}, current);
+  if (!l) return null;
+  const vs = store.lineages![l];
+  const i = vs.indexOf(current);
+  return i > 0 ? vs[i - 1] : null;
+}
+
+// ---------------------------------------------------------------- migrations
+
+// Data-type upgrades (L17, SHARING.md §2): when a module's type changes its
+// cases or fields, its author publishes a migration with it, an offered
+// function from the old version to the new (`(Point) -> Point`, the two in
+// one lineage), and a program on the old version is moved through it.
+const isTypeDef = (code: Code, d: Id) => { const n = code.nodes[d]; return n?.kind === "def" && !!n.body && code.nodes[n.body]?.kind === "typedef"; };
+const typedefOf = (code: Code, d: Id) => code.nodes[(code.nodes[d] as NodeOf<"def">).body!] as NodeOf<"typedef">;
+// A type and its cases and fields: what a program's use of it points at.
+const typeParts = (code: Code, d: Id): Id[] => [d, ...typedefOf(code, d).variants.flatMap((v) => [v, ...(code.nodes[v] as NodeOf<"variant">).fields])];
+
+export function migrationsIn(modules: Module[], code: Code): { from: Id; to: Id; by: Id }[] {
+  const out: { from: Id; to: Id; by: Id }[] = [];
+  for (const m of modules) for (const d of m.exports) {
+    const t = m.pins[d]?.type;
+    if (t?.t !== "fn" || t.params.length !== 1 || t.params[0].t !== "con" || t.ret.t !== "con") continue;
+    const from = t.params[0].id, to = t.ret.id;
+    const l = lineageOf(m.lineages ?? {}, from);
+    if (from !== to && l && l === lineageOf(m.lineages ?? {}, to) && isTypeDef(code, from)) out.push({ from, to, by: d });
+  }
+  return out;
+}
+
+// A pin read with some data types as others.
+function retyped(p: Pin, types: ReadonlyMap<Id, Id>): Pin {
+  const go = (t: Type): Type => t.t === "var" ? t : t.t === "con" ? { t: "con", id: types.get(t.id) ?? t.id, args: t.args.map(go) } : { ...t, params: t.params.map(go), ret: go(t.ret) };
+  return { ...p, type: go(p.type) };
+}
+
+// The program's own nodes moved from type `from` to `to`: each value it
+// builds goes through the migration `by`, each field it reads is the new
+// type's field of the same name, and each case it matches the new case of
+// that name when its fields are the same. What can't move is said, and
+// nothing moves. `ownIds` gets the nodes made for the migration's calls.
+export function migrateType(code: Code, ownIds: Set<Id>, from: Id, to: Id, by: Id, names: Names): Result<{ code: Code; uses: number }> {
+  const a = typedefOf(code, from), b = typedefOf(code, to);
+  const fieldsOf = (v: Id) => (code.nodes[v] as NodeOf<"variant">).fields;
+  const variants = new Map<Id, Id>(), fields = new Map<Id, Id>();
+  for (const v of a.variants) {
+    const w = b.variants.find((x) => names[x] === names[v]);
+    if (!w) continue;
+    variants.set(v, w);
+    for (const f of fieldsOf(v)) { const g = fieldsOf(w).find((x) => names[x] === names[f]); if (g) fields.set(f, g); }
+  }
+  const oldVariants = new Set(a.variants), oldFields = new Set(a.variants.flatMap(fieldsOf));
+  const nodes: Record<Id, Node> = { ...code.nodes };
+  const fnOfCall = new Set<Id>();
+  for (const id of ownIds) { const n = code.nodes[id]; if (n?.kind === "call" && !isUse(n)) fnOfCall.add(n.fn); }
+  const problems: string[] = [];
+  let uses = 0;
+  for (const id of [...ownIds]) {
+    const n = code.nodes[id];
+    if (!n) continue;
+    if (n.kind === "call" && !isUse(n)) {
+      const f = code.nodes[n.fn];
+      if (f?.kind === "ref" && oldVariants.has(f.target)) {
+        // Built as before, then through the migration.
+        const inner = freshId(), fn = freshId();
+        nodes[inner] = { ...n, id: inner } as Node;
+        nodes[fn] = { id: fn, kind: "ref", target: by } as Node;
+        nodes[id] = { id, kind: "call", fn, args: [inner] } as Node;
+        ownIds.add(inner); ownIds.add(fn);
+        uses++;
+      }
+    } else if (n.kind === "ref" && oldFields.has(n.target)) {
+      const g = fields.get(n.target);
+      if (g) { nodes[id] = { ...n, target: g }; uses++; } else problems.push(`it reads ${names[n.target] ?? n.target}, which the new ${names[to] ?? to} doesn't have`);
+    } else if (n.kind === "ref" && oldVariants.has(n.target) && !fnOfCall.has(id)) {
+      problems.push(`it passes ${names[n.target] ?? n.target} as a value`);
+    } else if (n.kind === "arm" && oldVariants.has(n.variant)) {
+      const w = variants.get(n.variant);
+      const same = w && fieldsOf(n.variant).length === fieldsOf(w).length && fieldsOf(n.variant).every((f, i) => fields.get(f) === fieldsOf(w)[i]);
+      if (same) { nodes[id] = { ...n, variant: w! }; uses++; } else problems.push(`it matches on ${names[n.variant] ?? n.variant}, whose fields changed: by hand`);
+    } else if (n.kind === "tref" && n.target === from) { nodes[id] = { ...n, target: to }; uses++; }
+  }
+  if (problems.length) return { ok: false, reason: problems.join("; ") };
+  return { ok: true, code: { nodes, defs: code.defs }, uses };
 }

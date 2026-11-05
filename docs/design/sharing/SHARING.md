@@ -3,6 +3,13 @@
 Written 2026-10-31 from the thread "Design sharing libraries and
 versioning". **Status (2026-10-31):** proposal, nothing built. The steps
 are BACKLOG rows L109 to L115, which take over L17 and L68.
+**2026-11-05:** §3 built (L109): std's versions kept by lineage, modules
+saying which std they were published on, ids saying their recipe.
+§1 built (L110): a module's `lineages`, `lab publish`, `replacing`.
+§2 built (L111): upgrades by pin generality, `lab upgrade`, a program's `modules` folder.
+§5 built (L112): names kept per program on upgrade, `--take-names`.
+§4b built (L115): a program's store.json, `lab downgrade`.
+§4 built (L114a, L114): signed logs beside module files, `lab broken`, `lab fetch`.
 
 **In one sentence:** a definition (or a library) keeps one **lineage id**
 for its whole life and gets a **version hash** each time it's published;
@@ -48,6 +55,12 @@ Two ids, two jobs:
 | comes from | the draft's born id, kept when published | SHA-256 of the content, as now |
 | like | a git branch, an IPNS name | a git commit, an IPFS CID |
 
+Built (L110, 2026-11-05): `lab publish <program> <name…>` publishes into a
+module file whose `lineages` list each lineage's versions, oldest first;
+the old versions stay and only the newest is offered; `replacing(module)`
+reads what replaces what. A program's ref is the exact version (its `@`
+id), and its lineage is found from the module.
+
 Publishing keeps the draft id as the lineage id instead of replacing it.
 Publishing again from the same lineage makes a new version that replaces
 the last; `replaces` stops being something an author writes. A library
@@ -79,7 +92,15 @@ the lineage has a newer version:
   version range; this is "the compiler chooses" applied to versions;
 - **the type changed**: the editor shows both types and where Bob's
   program uses it. Data-type changes need a migration (L17's half that
-  stays).
+  stays). Built (L17, 2026-11-05): the author publishes a function from
+  the old type to the new, and `lab upgrade` moves what the program builds
+  through it and what it reads to the new fields of the same names.
+
+Built (L111, 2026-11-05): signatures.ts `atLeastAsGeneral`; a program
+folder's `modules` folder holds the modules it uses beyond the library;
+`lab upgrade <program>` moves it onto the newest versions that fit and
+keeps the result only if the program checks and its tests pass. The
+editor's half is E254.
 
 Two versions of one library in one program are two hashes side by side,
 so there's no diamond problem; only a value of a data type passed between
@@ -101,6 +122,15 @@ away. Two things break that today, and both get a rule:
   carries its recipe version** (a format letter after `@`). A new recipe
   comes with a table from old hashes to new, which `upgrade` reads like
   any other replacement.
+
+Built (L109, 2026-11-05): std's ids are its lineage ids, and
+`ters/library/std-versions.json` keeps every version each std definition
+has had. Each module records the std versions it was published against,
+so verify can say a module stands on an older std rather than that its
+code changed. Today's recipe is written as no letter (every id so far was
+made by it); the next will be a letter w to z, outside base32's
+alphabet. The table from old hashes to new already exists for content
+changes: `ters/library/moved.json` (L184).
 
 And: **published code is never deleted.** An author can mark a version
 broken (§4); programs that use it keep running and get a warning.
@@ -126,6 +156,14 @@ kind of entry. Scenarios, with Alice's `json` and Bob's program using
 4. **Finding things.** A search site indexes logs. If it disappears, the
    code and the logs are still wherever they were hosted.
 
+Built (L114a, 2026-11-05): a module file's log sits beside it
+(`json.log.json`), each entry signed with Ed25519 and chained to the one
+before by its hash. `lab publish` signs new versions in, `lab broken`
+marks one, and `lab upgrade` warns about a broken version in use and never
+moves to one. A program's store pins each lineage's author key the first
+time it takes it (trust on first use, as SSH does with host keys), which
+is how the impostor in scenario 2 is refused.
+
 Without logs, sharing still works by passing hashes around, and stays
 correct, but gets no updates, no authors and no warnings.
 
@@ -135,6 +173,10 @@ a static site, IPFS, an npm package for the JS target. Logs are small
 signed files hosted the same way. There is no global registry the
 language depends on; a registry is just an index of logs, and anyone can
 run one. How signing and fetching work on each host is a host detail.
+
+Built (L114, 2026-11-05): `lab fetch <program> <url or path>` takes a
+module from any host into the program's modules folder, rehashing every
+definition and checking its log against the program's pinned authors.
 
 **Effects are a supply-chain check for free.** A library's pins carry
 its effects, so a `parse` whose pin has no Network can't reach the
@@ -168,6 +210,12 @@ changed. Nothing to remember, nothing to choose.
   versions no program in the project refers to any more; dropping is the
   only way anything leaves it.
 
+Built (L115, 2026-11-05) on the command line: a program folder's
+`store.json` is filled by `lab upgrade` and `lab downgrade`, loads like a
+module, and `lab downgrade <program> <name>` goes back a version. The
+editor's view of the store and dropping versions are later rows if they
+earn one.
+
 Prior art: vendoring (Go's `vendor/`, Cargo's `cargo vendor`), Nix's
 store and its garbage collection by roots, Unison's local codebase,
 which keeps every definition it has seen.
@@ -187,6 +235,11 @@ version's names, and the names Bob changed himself:
 - **Alice reused a name for something different**: Bob's refs are on the
   old lineage, so nothing breaks; the question shows the clash and Bob's
   old `parse` keeps its name in his program.
+
+Built (L112, 2026-11-05) on the command line: `lab upgrade` keeps the
+program's names, says the author's renames in one line, and takes them
+with `--take-names` (modules.ts `upgradeNames`). The editor's question is
+E254's.
 
 So everything a program takes from a library, code, types and names, is
 pinned locally and offered as an upgrade. Types follow by themselves when

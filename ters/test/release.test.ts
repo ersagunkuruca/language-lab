@@ -89,12 +89,15 @@ test("a release may only log, and a handler with one can't let a Choice through"
   assert.match(errors.join("\n"), /can't let a Choice through/);
 });
 
-test("the core IR doesn't yet compile a release after the normal finish's case (L57)", () => {
+test("the core IR runs a release after the normal finish's case, as the evaluator does (C180)", () => {
   const p = program((k, ask) => k.call(INT_OPS.add, ask(), ask()));
-  // The core IR lowers the release (L213a3); this handler's normal
-  // finish it doesn't yet (L57).
+  p.run();
   const l = lowerCore(p.code, p.info, p.names, [p.main]);
-  assert.match([...l.refused.values()].join("\n"), /case for the normal finish, which isn't lowered yet/);
+  assert.deepEqual([...l.refused.values()], []);
+  const logged: string[] = [], printed: string[] = [];
+  runCoreMain(l, "main", [], { print: (s: string) => printed.push(s), names: p.names, world: { log: (s: string) => logged.push(s) } } as never);
+  assert.deepEqual(p.logged, ["opened", "opened", "finished", "closed"]);
+  assert.deepEqual({ logged, printed }, { logged: p.logged, printed: p.printed });
 });
 
 // As program() without the normal finish's case (L57), run by the

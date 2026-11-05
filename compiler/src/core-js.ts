@@ -19,6 +19,7 @@
 // the evaluator's (C137c2), Random seeded is random.ts's generator, and
 // the world is the evaluator's Runtime (C137c3, runCoreMain).
 
+import { zeroParts } from "./zero-parts.ts";
 import { ARRAY_OPS, FALSE, TRUE } from "../../ters/src/lang/std.ts";
 import { toList, type Runtime } from "../../ters/src/lang/run.ts";
 import { fusedProgram } from "./handlers.ts";
@@ -362,7 +363,10 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
         case "abort": return `R.abort(${ex(e.reason, pre, d)}, ${e.esc ?? 0})`;
         case "handle": {
           const t = temp(), [save, back] = keep();
-          pre.push(`${d}${save}let ${t};`, `${d}try {`, ...within(null, () => block(e.body, { set: t }, d + "  ")), `${d}} catch (x) {`, `${d}  if (!(x instanceof R.Aborted) || x.esc !== ${e.esc ?? 0}) throw x;`, `${d}  ${back}${local(e.reason)} = x.reason;`, ...block(e.arm, { set: t }, d + "  "), `${d}}`);
+          // Around several answers or a wait (C182): an abort while the
+          // rest of the search runs isn't this handler's.
+          const fr = e.frame === undefined ? "" : local(e.frame);
+          pre.push(`${d}${save}let ${t};`, ...(fr ? [`${d}${fr} = { inRest: false };`] : []), `${d}try {`, ...within(null, () => block(e.body, { set: t }, d + "  ")), `${d}} catch (x) {`, `${d}  if (!(x instanceof R.Aborted) || x.esc !== ${e.esc ?? 0}${fr ? ` || ${fr}.inRest` : ""}) throw x;`, `${d}  ${back}${local(e.reason)} = x.reason;`, ...block(e.arm, { set: t }, d + "  "), `${d}}`);
           return t;
         }
         // A handler's release (L213a3/a4): after its body on every exit, a
@@ -493,7 +497,10 @@ export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roo
   // (library-reps.ts) may call the constructors they stand for.
   ({ code, info, names } = withInverses(code, info, names));
   const f = fusedProgram(code, info, names);
-  const ir = lowerScalar(f.code, f.info, f.names, roots, { data: true, host: true });
+  let ir = lowerScalar(f.code, f.info, f.names, roots, { data: true, host: true });
+  // Parts always 0 (a vector's bivector parts) dropped, with a copy of a
+  // function for each set of parts its callers give (zero-parts.ts, L43).
+  if (!process.env.NO_ZP) ir = zeroParts(ir, ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : []))).ir;
   // Reads that wait on the places their values are used at (C162).
   trackReads(ir);
   return ir;

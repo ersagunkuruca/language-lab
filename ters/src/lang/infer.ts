@@ -312,11 +312,14 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   const isTypeDef = (id: Id) => !!typedefOf(id);
   // An effect is a typedef whose variants are operations.
   const isEffect = (id: Id) => !!typedefOf(id)?.effect;
-  for (const x of Object.values(code.nodes)) {
-    if (x.kind !== "match" || !x.name) continue;
+  // The named handlers, from the program's own list where a whole check
+  // reads one (nodesWhere): scanning every node was a quarter of an offer's
+  // check (E103j).
+  for (const id of nodesWhere(code, "named match", (n) => n.kind === "match" && !!n.name)) {
+    const x = code.nodes[id] as NodeOf<"match">;
     const first = code.nodes[x.arms[0] ?? ""];
     const e = first?.kind === "arm" ? owner.get(first.variant) : undefined;
-    if (e && isEffect(e)) handlerNames.set(x.name, e);
+    if (e && x.name && isEffect(e)) handlerNames.set(x.name, e);
   }
   const fieldTypes = (def: Id) => typedefOf(def)!.variants.flatMap((v) => (code.nodes[v] as NodeOf<"variant"> | undefined)?.fields ?? [])
     .flatMap((f) => { const n = code.nodes[f]; return n?.kind === "field" ? [{ field: f, type: n.type }] : []; });

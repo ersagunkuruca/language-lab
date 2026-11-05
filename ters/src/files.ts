@@ -14,11 +14,16 @@
 // separate `credits` list of before opens with them in it. `drafts`: the
 // loose parts (editor/drafts.ts), kept apart from the code; a file without
 // them opens with none.
+// `modules` and `store`: modules the program uses beyond the library, and
+// its store of every version it has used (SHARING.md §4b), read as a
+// program folder's modules folder and store.json are (load.ts). A file
+// opened with a newer version of what it uses is offered the upgrade
+// (`upgradeFile`, E254); a file without them opens as before.
 
-import { isPublished, SHAPE, type Code, type Id, type Node } from "./model.ts";
+import { isPublished, merge, SHAPE, type Code, type Id, type Node } from "./model.ts";
 import type { Comments, Names } from "./presentation.ts";
 import { LIBRARY } from "./lang/library.ts";
-import { needs, pointsAt } from "./lang/modules.ts";
+import { addToStore, MODULE_FORMAT, needs, pointsAt, upgradeNames, upgradeOwn, verify, type Module, type Moved } from "./lang/modules.ts";
 import { onTodaysIds } from "./lang/std.ts";
 import type { Pins } from "./lang/signatures.ts";
 import type { Saved } from "./lang/tests.ts";
@@ -48,7 +53,12 @@ export interface ProgramFile {
   needs?: Record<Id, string>;
   signatures?: Pins;
   drafts?: Drafts;
+  modules?: Module[];
+  store?: Module;
 }
+
+// The modules a file's program stands on beyond the library, its store last.
+export const fileModules = (f: { modules?: Module[]; store?: Module }): Module[] => [...(f.modules ?? []), ...(f.store ? [f.store] : [])];
 
 // The program's own nodes: everything not in `base`.
 export function own(code: Code, base: Code): Code {
@@ -59,8 +69,9 @@ export function own(code: Code, base: Code): Code {
 }
 
 export function toFile(p: Omit<ProgramFile, "format" | "version" | "needs">, base: Code): string {
-  const code = own(p.code, base);
-  const file: ProgramFile = { format: FORMAT, version: 2, ...p, shape: SHAPE, code, needs: needs(code, LIBRARY) };
+  const mods = fileModules(p);
+  const code = own(p.code, mods.length ? merge(base, ...mods.map((m) => m.code)) : base);
+  const file: ProgramFile = { format: FORMAT, version: 2, ...p, shape: SHAPE, code, needs: needs(code, { ...LIBRARY, modules: [...LIBRARY.modules, ...mods] }) };
   return JSON.stringify(file, null, 1);
 }
 
@@ -80,7 +91,18 @@ export function fromFile(text: string, baseFor: (typed: boolean) => Code): { fil
   for (const [id, n] of Object.entries(c.nodes)) if (!isObj(n) || n.id !== id || typeof n.kind !== "string") return { error: `node ${id} is malformed` };
   if (!strings(x.names) || (x.descriptive !== undefined && !strings(x.descriptive)) || (x.comments !== undefined && !strings(x.comments))) return { error: "its names or comments are malformed" };
   const typed = x.typed !== false;
-  const base = baseFor(typed);
+  const base0 = baseFor(typed);
+  // Its modules and store, each checked to be what it says (load.ts).
+  if (x.modules !== undefined && !(Array.isArray(x.modules) && x.modules.every(isObj))) return { error: "its modules are malformed" };
+  if (x.store !== undefined && !isObj(x.store)) return { error: "its store is malformed" };
+  const modules = (x.modules ?? []) as unknown as Module[], store = x.store as unknown as Module | undefined;
+  for (const m of [...modules, ...(store ? [store] : [])]) {
+    if (m.format !== MODULE_FORMAT || !isObj(m.code) || !isObj(m.code.nodes) || !Array.isArray(m.code.defs) || !isObj(m.names) || !isObj(m.pins)) return { error: `${m === store ? "its store" : `its module ${typeof m.title === "string" ? m.title : ""}`} is malformed` };
+    const wrong = verify(m, base0);
+    if (wrong) return { error: `${m === store ? "its store" : `its module ${m.title}`}: ${wrong}` };
+  }
+  const mods = fileModules({ modules, store });
+  const base = mods.length ? merge(base0, ...mods.map((m) => m.code)) : base0;
   const code: Code = { nodes: { ...base.nodes, ...(c.nodes as Record<Id, Node>) }, defs: [...base.defs, ...(c.defs as Id[])] };
   for (const d of c.defs as Id[]) if (code.nodes[d]?.kind !== "def") return { error: `definition ${d} is missing` };
   // Every id the program points at must be there. A published one that
@@ -109,6 +131,8 @@ export function fromFile(text: string, baseFor: (typed: boolean) => Code): { fil
     needs: needed,
     signatures: isObj(x.signatures) ? (x.signatures as Pins) : {},
     ...(drafts ? { drafts } : {}),
+    ...(modules.length ? { modules } : {}),
+    ...(store ? { store } : {}),
     title: typeof x.title === "string" && x.title.trim() ? x.title : "Opened program",
     code: c as unknown as Code,
     names: x.names as Names,
@@ -130,6 +154,32 @@ export function fromFile(text: string, baseFor: (typed: boolean) => Code): { fil
     },
   };
   return { file, code };
+}
+
+// A program moved onto the newest versions its modules have of what it
+// uses (SHARING.md §2, L111), as lab upgrade moves a folder's (E254). Kept
+// only if `check` finds nothing wrong with the moved program (its check
+// and its tests: it says why not); then both versions go into its store
+// (L115) and its names stay its own (L112). `own` is the program's own
+// code, `names` its own names.
+export type Upgraded =
+  | { ok: true; own: Code; moved: Moved[]; refused: { from: Id; to: Id; reason: string }[]; store: Module; names: Names; renamed: { from: string; to: string }[] }
+  | { ok: false; reason: string; moved: Moved[]; refused: { from: Id; to: Id; reason: string }[] };
+export function upgradeFile(own: Code, f: { modules?: Module[]; store?: Module }, names: Names, check: (own: Code) => string | null): Upgraded {
+  const modules = fileModules(f);
+  const r = upgradeOwn(own, modules, names);
+  if (!r.moved.length) return { ok: false, reason: r.refused.length ? "no newer version can take its place" : "nothing to upgrade", moved: [], refused: r.refused };
+  const wrong = check(r.own);
+  if (wrong) return { ok: false, reason: wrong, moved: r.moved, refused: r.refused };
+  const store = addToStore(addToStore(f.store ?? null, own, modules), r.own, modules);
+  const nn = upgradeNames(r.moved, modules, names);
+  return { ok: true, own: r.own, moved: r.moved, refused: r.refused, store, names: nn.names, renamed: nn.renamed };
+}
+
+// Which version of its lineage a module definition is, counted from 1.
+export function versionOf(modules: Module[], d: Id): number {
+  for (const m of modules) for (const vs of Object.values(m.lineages ?? {})) if (vs.includes(d)) return vs.indexOf(d) + 1;
+  return 0;
 }
 
 // Credits kept apart, as files saved before had them, become the program's

@@ -11,14 +11,15 @@ import { hashDef } from "../src/hash.ts";
 import { hex, sha256 } from "../src/sha256.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { fillings, infer } from "../src/lang/infer.ts";
-import { CORE, LIBRARY, PRELUDE } from "../src/lang/library.ts";
+import { CORE, HTML_MODULE, LIBRARY, PRELUDE } from "../src/lang/library.ts";
 import { base, baseNames, checkOptions, loadProgram } from "../src/lang/load.ts";
-import { adopt, orderFreeHash, publish, sameAs, sameLines, sameUpToOrder, upgrade, verify, type Module } from "../src/lang/modules.ts";
+import { addToStore, addVersions, adopt, previousVersion, lineageOf, orderFreeHash, publishVersion, replacing, upgradeNames, upgradeOwn, publish, sameAs, sameLines, sameUpToOrder, upgrade, verify, type Module } from "../src/lang/modules.ts";
 import { buildPrelude } from "../src/lang/prelude-source.ts";
 import { library as listHelpers } from "../src/lang/programs.ts";
-import { pinsOf } from "../src/lang/signatures.ts";
+import { atLeastAsGeneral, pinsOf } from "../src/lang/signatures.ts";
 import { CheckCache } from "../src/lang/check-cache.ts";
 import { runMain } from "../src/lang/run.ts";
+import { NUMBER } from "../src/lang/types.ts";
 import { ARITH, CONS, INT_OPS, NIL, S, SHOW_ANY } from "../src/lang/std.ts";
 import { root } from "../src/io.ts";
 
@@ -54,6 +55,64 @@ test("the prelude is what it says it is, and publishing it again gives the same 
   assert.equal(verify(PRELUDE, CORE, true), null);
   assert.equal(JSON.stringify(buildPrelude()), JSON.stringify(PRELUDE));
   for (const d of PRELUDE.code.defs) assert.equal(d, `@${hashDef(LIBRARY.code, d)}`);
+});
+
+// SHARING.md §3 (L109): std's ids are lineages, and a change to one of its
+// declarations is a new version beside the old, which a module published
+// before it is told about by name.
+test("a change to a std declaration adds a version and keeps the old, and html, published before it, is told so (L109)", () => {
+  const base = merge(CORE, PRELUDE.code);
+  assert.equal(verify(HTML_MODULE, base), null);
+  const attr = base.nodes["std.attribute"] as NodeOf<"def">;
+  const changed: Code = { ...base, nodes: { ...base.nodes, [attr.body!]: { ...base.nodes[attr.body!], unique: "another Attribute" } as Node } };
+  const before = addVersions({}, base, ["std.attribute", "std.list"]);
+  const after = addVersions(before, changed, ["std.attribute", "std.list"]);
+  assert.equal(after["std.attribute"].length, 2);
+  assert.equal(after["std.attribute"][0], before["std.attribute"][0]);
+  assert.deepEqual(after["std.list"], before["std.list"]);
+  assert.equal(verify(HTML_MODULE, changed), "html was published against another version of std's std.attribute: publish it again (library/build.ts)");
+  // An id made by a recipe this version doesn't know is refused as that,
+  // not as changed code.
+  const d = HTML_MODULE.exports[0], later = `@w${d.slice(1)}`;
+  const m: Module = { ...HTML_MODULE, code: { ...HTML_MODULE.code, defs: HTML_MODULE.code.defs.map((x) => (x === d ? later : x)) } };
+  assert.match(verify(m, base)!, /is hashed by recipe w, which this version doesn't know/);
+});
+
+// SHARING.md §1 (L110): a definition keeps its draft id as its lineage, so
+// publishing it again after an edit is its next version, and the module
+// keeps the old one and says what replaces what.
+test("publishing a draft again after an edit adds a version to its lineage, keeps the old and derives what replaces it (L110)", () => {
+  const k = new Lang(LIBRARY.code);
+  const area = k.def("area");
+  k.define(area, k.fn(["r"], (r) => k.call(B.mul, k.call(B.mul, r, r), k.lit(3))));
+  const p1 = publishVersion(null, "shapes", base(k.code), baseNames(k.names), [area], LIBRARY.code, LIBRARY.pins);
+  assert.ok(p1.ok);
+  const v1 = p1.module.exports[0];
+  assert.deepEqual(p1.module.lineages, { [area]: [v1] });
+  // Again with nothing changed: nothing added.
+  const again = publishVersion(p1.module, "shapes", base(k.code), baseNames(k.names), [area], LIBRARY.code, LIBRARY.pins);
+  assert.ok(again.ok);
+  assert.deepEqual(again.added, []);
+  // The draft edited, then published again.
+  k.define(area, k.fn(["r"], (r) => k.call(B.mul, k.call(B.mul, r, r), k.lit(3.14159))));
+  const p2 = publishVersion(p1.module, "shapes", base(k.code), baseNames(k.names), [area], LIBRARY.code, LIBRARY.pins);
+  assert.ok(p2.ok);
+  const m = p2.module, v2 = p2.added[0];
+  assert.notEqual(v2, v1);
+  assert.deepEqual(m.lineages, { [area]: [v1, v2] });
+  assert.equal(lineageOf(m.lineages!, v1), area);
+  assert.deepEqual(m.exports, [v2]);
+  assert.ok(m.code.defs.includes(v1), "the old version stays");
+  assert.deepEqual(replacing(m), { [v2]: v1 });
+  assert.equal(m.names[v2], "area");
+  assert.equal(verify(m, LIBRARY.code, true), null);
+  // A program on the first version moves to the second: the same type.
+  const u = new Lang(merge(LIBRARY.code, m.code));
+  const main = u.def("main");
+  u.define(main, u.thunk(() => u.call(v1, u.lit(2))));
+  const code = merge(LIBRARY.code, m.code, u.code);
+  const up = upgrade(code, v1, replacing(m)[v2] === v1 ? v2 : v1, m.pins);
+  assert.ok(up.ok && up.uses === 1);
 });
 
 test("a published definition that is changed no longer matches its name", () => {
@@ -336,6 +395,126 @@ test("upgrade moves a program to a new version only when the type is the same", 
   assert.ok(!no.ok && /type changed from \(List a\) -> a where a is a Number to \(Float64\) -> Float64/.test(no.reason));
 });
 
+// SHARING.md §2 (L111): a new version takes an old one's place when its pin
+// is at least as general, so a program on it can't break.
+test("a program moves onto a newer version whose pin is at least as general, and stays on one whose pin is narrower (L111)", () => {
+  const k = new Lang(LIBRARY.code);
+  const twice = k.def("twice");
+  const narrow = () => k.fn(["x"], (x) => k.call(B.mul, x, k.lit(2)));
+  k.define(twice, narrow());
+  const step = (prev: Module | null) => { const r = publishVersion(prev, "doubling", base(k.code), baseNames(k.names), [twice], LIBRARY.code, LIBRARY.pins); assert.ok(r.ok); return r.module; };
+  const m1 = step(null), v1 = m1.exports[0];
+  // Version 2: the generic +, for every number type.
+  k.define(twice, k.fn(["x"], (x) => k.call(ARITH.add, x, x)));
+  const m2 = step(m1), v2 = m2.exports[0];
+  assert.ok(atLeastAsGeneral(m2.pins[v2], m1.pins[v1]));
+  assert.ok(!atLeastAsGeneral(m1.pins[v1], m2.pins[v2]));
+  const bob = new Lang(merge(LIBRARY.code, m2.code));
+  const main = bob.def("main");
+  bob.define(main, bob.thunk(() => bob.call(v1, bob.lit(4))));
+  const up = upgradeOwn(bob.code, [m2]);
+  assert.deepEqual(up.moved.map((x) => [x.from, x.to]), [[v1, v2]]);
+  assert.ok(Object.values(up.own.nodes).some((n) => n.kind === "ref" && n.target === v2));
+  // Version 3: Float64 only again, narrower than version 2: a program on 2 stays.
+  k.define(twice, k.fn(["x"], (x) => k.call(B.add, x, x)));
+  const m3 = step(m2);
+  const stays = upgradeOwn(up.own, [m3], baseNames(m3.names));
+  assert.deepEqual(stays.moved, []);
+  assert.match(stays.refused[0].reason, /type changed from/);
+});
+
+// SHARING.md §5 (L112): a program's names are its own copy. The author's
+// renames are one question for the upgrade; the program's renames win.
+test("after an upgrade the program keeps its names: the author's renames are said once and taken only when asked (L112)", () => {
+  const k = new Lang(LIBRARY.code);
+  const sq = k.def("square");
+  k.define(sq, k.fn(["x"], (x) => k.call(B.mul, x, x)));
+  const step = (prev: Module | null) => { const r = publishVersion(prev, "shapes", base(k.code), baseNames(k.names), [sq], LIBRARY.code, LIBRARY.pins); assert.ok(r.ok); return r.module; };
+  const m1 = step(null), v1 = m1.exports[0];
+  k.define(sq, k.fn(["x"], (x) => k.call(ARITH.mul, x, x)));
+  k.names[sq] = "squared";
+  const m2 = step(m1), v2 = m2.exports[0];
+  const moved = [{ from: v1, to: v2, uses: 1 }];
+  const kept = upgradeNames(moved, [m2], { main: "main" });
+  assert.deepEqual(kept.renamed, [{ from: "square", to: "squared" }]);
+  assert.equal(kept.names[v2], "square");
+  assert.equal(upgradeNames(moved, [m2], {}, true).names[v2], undefined, "taken: the module's name shows");
+  // A name the program gave itself stays, and isn't asked about.
+  const mine = upgradeNames(moved, [m2], { [v1]: "area" }, true);
+  assert.equal(mine.names[v2], "area");
+  assert.deepEqual(mine.renamed, []);
+});
+
+// SHARING.md §4b (L115): the project keeps every version it has used, so it
+// runs when the module is gone, and can go back.
+test("a program's store keeps every version it used: it runs without the module, and goes back a version (L115)", () => {
+  const k = new Lang(LIBRARY.code);
+  const twice = k.def("twice");
+  k.define(twice, k.fn(["x"], (x) => k.call(ARITH.add, x, x)));
+  const step = (prev: Module | null) => { const r = publishVersion(prev, "doubling", base(k.code), baseNames(k.names), [twice], LIBRARY.code, LIBRARY.pins); assert.ok(r.ok); return r.module; };
+  const m1 = step(null), v1 = m1.exports[0];
+  k.define(twice, k.fn(["x"], (x) => k.call(ARITH.add, k.call(ARITH.add, x, x), k.lit(0))));
+  const m2 = step(m1), v2 = m2.exports[0];
+  const bob = new Lang(merge(LIBRARY.code, m2.code));
+  const main = bob.def("main");
+  bob.define(main, bob.thunk(() => bob.call(S.print, bob.call(SHOW_ANY, bob.call(v1, bob.lit(21))))));
+  const up = upgradeOwn(bob.code, [m2]);
+  const store = addToStore(addToStore(null, bob.code, [m2]), up.own, [m2]);
+  assert.deepEqual(Object.values(store.lineages!), [[v1, v2]]);
+  assert.equal(verify(store, LIBRARY.code, true), null);
+  // The module gone: the program runs from its store.
+  const run = (own: Code) => { const code = base(merge(store.code, own)); const out: string[] = []; runMain(code, infer(code, baseNames(bob.names), undefined, checkOptions), main, { print: (x) => out.push(x) }); return out; };
+  assert.deepEqual(run(up.own), ["42"]);
+  // And back to version 1.
+  assert.equal(previousVersion(store, v2), v1);
+  const back = upgrade(merge(store.code, up.own), v2, v1, store.pins);
+  assert.ok(back.ok);
+  const own = { nodes: Object.fromEntries(Object.entries(back.code.nodes).filter(([id]) => up.own.nodes[id])), defs: up.own.defs };
+  assert.ok(Object.values(own.nodes).some((n) => n.kind === "ref" && n.target === v1));
+  assert.deepEqual(run(own), ["42"]);
+});
+
+// SHARING.md §2 (L17): a module's type that changes its fields comes with
+// its author's migration, and a program on the old version is moved
+// through it: what it builds is migrated, what it reads is the new field.
+test("a program on a type whose fields changed moves through the author's migration (L17)", () => {
+  const k = new Lang(LIBRARY.code);
+  const P = k.type("Point", [], [["point", [["x", () => k.tref(NUMBER)], ["y", () => k.tref(NUMBER)]]]]);
+  const norm = k.def("norm");
+  const sq = (a: Id) => k.call(B.mul, a, a);
+  k.define(norm, k.fn(["p"], (p) => k.call(B.add, sq(k.call(P.f["point.x"], p)), sq(k.call(P.f["point.y"], p)))));
+  const step = (prev: Module | null, defs: Id[]) => { const r = publishVersion(prev, "points", base(k.code), baseNames(k.names), defs, LIBRARY.code, LIBRARY.pins); assert.ok(r.ok, r.ok ? "" : r.reason); return r.module; };
+  const m1 = step(null, [P.def, norm]);
+  const at1 = (name: string) => m1.code.defs.concat(Object.keys(m1.code.nodes)).find((d) => m1.names[d] === name)!;
+  const [point1, x1, y1, norm1] = [at1("point"), at1("x"), at1("y"), at1("norm")];
+  // Version 2: a third field, and its migration.
+  (k as unknown as { known: Code }).known = merge((k as unknown as { known: Code }).known, m1.code);
+  const P2 = k.type("Point next", [], [["point", [["x", () => k.tref(NUMBER)], ["y", () => k.tref(NUMBER)], ["z", () => k.tref(NUMBER)]]]]);
+  k.code.nodes[P.def] = { ...k.code.nodes[P.def], body: (k.code.nodes[P2.def] as NodeOf<"def">).body } as Node;
+  k.code.defs = k.code.defs.filter((d) => d !== P2.def);
+  k.define(norm, k.fn(["p"], (p) => k.call(B.add, k.call(B.add, sq(k.call(P2.f["point.x"], p)), sq(k.call(P2.f["point.y"], p))), sq(k.call(P2.f["point.z"], p)))));
+  const migrate = k.def("point from version 1");
+  k.define(migrate, k.fn(["p"], (p) => k.call(P2.v.point, k.call(x1, p), k.call(y1, p), k.lit(0))));
+  const m2 = step(m1, [P.def, norm, migrate]);
+  // Bob builds a point and reads its x on version 1.
+  const bob = new Lang(merge(LIBRARY.code, m2.code));
+  const main = bob.def("main");
+  const pt = () => bob.call(point1, bob.lit(3), bob.lit(4));
+  bob.define(main, bob.thunk(() => bob.call(S.print, bob.call(SHOW_ANY, bob.list(bob.call(norm1, pt()), bob.call(x1, pt()))))));
+  const up = upgradeOwn(bob.code, [m2], baseNames(m2.names));
+  assert.deepEqual(up.refused, []);
+  assert.equal(up.moved.length, 2);
+  const code = base(merge(m2.code, up.own));
+  const info = infer(code, baseNames(m2.names, bob.names), undefined, checkOptions);
+  assert.deepEqual(info.errors, []);
+  const out: string[] = [];
+  runMain(code, info, main, { print: (x) => out.push(x) });
+  assert.deepEqual(out, ["[25, 3]"]);
+  // Without a migration it stays, saying why.
+  const m2bare = { ...m2, exports: m2.exports.filter((d) => m2.names[d] !== "point from version 1") };
+  assert.match(upgradeOwn(bob.code, [m2bare], baseNames(m2.names)).refused[0].reason, /no migration/);
+});
+
 test("a saved file lists what it uses from modules, and opening it without them says which", async () => {
   const { toFile, fromFile } = await import("../src/files.ts");
   const k = new Lang(LIBRARY.code);
@@ -374,4 +553,48 @@ test("the editor refuses an edit that would change published code", async () => 
   assert.equal(changesPublished(code), null);
   const lit = subtree(code, prelude("length")).find((id) => code.nodes[id].kind === "lit")!;
   assert.equal(changesPublished({ nodes: { ...code.nodes, [lit]: { ...code.nodes[lit], value: 5 } as never }, defs: code.defs }), prelude("length"));
+});
+
+// E254: a saved file carries the modules it uses beyond the library and
+// its store; opened where its module has a newer version of what it uses,
+// it is offered the move, kept once it checks and runs.
+test("a saved file using version 1 of a module's definition, opened with version 2 there, moves onto it (E254)", async () => {
+  const { toFile, fromFile, fileModules, upgradeFile, versionOf } = await import("../src/files.ts");
+  const k = new Lang(LIBRARY.code);
+  const twice = k.def("twice");
+  k.define(twice, k.fn(["x"], (x) => k.call(B.mul, x, k.lit(2))));
+  const step = (prev: Module | null) => { const r = publishVersion(prev, "doubling", base(k.code), baseNames(k.names), [twice], LIBRARY.code, LIBRARY.pins); assert.ok(r.ok); return r.module; };
+  const m1 = step(null), v1 = m1.exports[0];
+  k.define(twice, k.fn(["x"], (x) => k.call(ARITH.add, x, x)));
+  const m2 = step(m1), v2 = m2.exports[0];
+  // Saved on version 1, with the module as it is now.
+  const bob = new Lang(merge(LIBRARY.code, m2.code));
+  const main = bob.def("main");
+  bob.define(main, bob.thunk(() => bob.call(S.print, bob.call(SHOW_ANY, bob.call(v1, bob.lit(21))))));
+  const text = toFile({ title: "Doubles", typed: true, code: base(bob.code), names: bob.names, descriptive: {}, comments: {}, layout: { known: {} }, examples: {}, modules: [m2] }, LIBRARY.code);
+  const saved = JSON.parse(text);
+  assert.equal(Object.keys(saved.code.nodes).filter(isPublished).length, 0, "the module's nodes are in its module, not the program's own");
+  assert.deepEqual(Object.values(saved.needs), ["twice from doubling"]);
+  const opened = fromFile(text, () => LIBRARY.code);
+  assert.ok(!("error" in opened), "error" in opened ? opened.error : "");
+  assert.ok(opened.code.nodes[v2], "the module's code is there");
+  assert.equal(versionOf(fileModules(opened.file), v1), 1);
+  const own = opened.file.code;
+  const run = (o: Code) => { const code = base(merge(m2.code, o)); const info = infer(code, baseNames(m2.names, bob.names), undefined, checkOptions); if (info.errors.length) return { error: info.errors[0].message }; const out: string[] = []; runMain(code, info, main, { print: (x) => out.push(x) }); return { out }; };
+  const up = upgradeFile(own, opened.file, bob.names, (o) => { const r = run(o); return "error" in r ? r.error ?? "error" : null; });
+  assert.ok(up.ok, up.ok ? "" : up.reason);
+  assert.deepEqual(up.moved.map((x) => [x.from, x.to, versionOf([m2], x.to)]), [[v1, v2, 2]]);
+  assert.deepEqual(run(up.own), { out: ["42"] });
+  assert.deepEqual(Object.values(up.store.lineages!), [[v1, v2]]);
+  // Saved again: the store goes with it, and opens.
+  const again = fromFile(toFile({ title: "Doubles", typed: true, code: { nodes: { ...opened.code.nodes, ...up.own.nodes }, defs: opened.code.defs }, names: up.names, descriptive: {}, comments: {}, layout: { known: {} }, examples: {}, modules: [m2], store: up.store }, LIBRARY.code), () => LIBRARY.code);
+  assert.ok(!("error" in again) && again.file.store && !upgradeFile(again.file.code, again.file, up.names, () => null).ok, "nothing more to upgrade");
+  // A check that fails keeps it where it was.
+  const kept = upgradeFile(own, opened.file, bob.names, () => "main fails");
+  assert.ok(!kept.ok && kept.reason === "main fails");
+  // A module that isn't what it says is refused.
+  const bad = JSON.parse(text);
+  bad.modules[0].code.nodes[v2] = { ...bad.modules[0].code.nodes[v2], body: bad.modules[0].code.nodes[v1].body };
+  const r = fromFile(JSON.stringify(bad), () => LIBRARY.code);
+  assert.ok("error" in r && /its module doubling/.test(r.error), "error" in r ? r.error : "opened");
 });

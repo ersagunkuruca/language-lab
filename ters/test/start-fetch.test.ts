@@ -31,18 +31,19 @@ async function both(body: (k: Lang) => Id) {
   const world = () => ({ now: () => clock, wait: (ms: number) => { clock += ms; }, fetchText: (u: string) => { fetched.push(u); if (u.includes("missing")) throw new Error("404 Not Found"); return `<${u}>`; } });
   const ran: string[] = [];
   runMain(code, info, main, { print: (s) => ran.push(s), names, world: world() } as Parameters<typeof runMain>[3]);
-  // Core IR gaps (C137): together and race need L57, and start fetch
-  // and an attempt around a search aren't lowered yet. Until then, why
-  // main isn't compiled.
-  const compiled = gap(() => compiledMain(code, info, names, { print: () => {}, world: world() } as never));
-  return { ran, compiled, fetched };
+  // main compiled through the core IR (C182), on the same kind of world:
+  // what it printed, its fetches after the evaluator's, and how long
+  // it waited.
+  const at = fetched.length, from = clock;
+  const compiled = printedBy((print) => compiledMain(code, info, names, { print, world: world() } as never));
+  return { ran, compiled, fetched: fetched.slice(0, at), fetchedCompiled: fetched.slice(at), took: from - 1000, tookCompiled: clock - from };
 }
 
-// Why main isn't compiled through the core IR yet (C137's gaps).
-const GAP = /normal finish, which isn't lowered yet \(L57\)|handles Abort around a search|uses start fetch/;
-function gap(run: () => unknown): string {
-  try { run(); } catch (e) { return (e as Error).message; }
-  return "compiled";
+// What main printed, compiled, or why it isn't compiled yet.
+function printedBy(run: (print: (s: string) => void) => unknown): string[] | string {
+  const out: string[] = [];
+  try { run((s) => out.push(s)); } catch (e) { return (e as Error).message; }
+  return out;
 }
 
 const fetchAwait = (k: Lang, url: string) => k.thunk(() => k.call(AWAIT_OP, k.call(IO.startFetch, k.lit(url))));
@@ -54,7 +55,7 @@ test("together waits on two fetches and a timer; the values in the actions' orde
     fetchAwait(k, "b"),
   )));
   assert.deepEqual(r.ran, ['["<a>", "timer", "<b>"]']);
-  assert.match(r.compiled, GAP);
+  assert.deepEqual(r.compiled, r.ran);
   assert.deepEqual(r.fetched, ["a", "b"]);
 });
 
@@ -64,16 +65,16 @@ test("race: a fetch wins over a long timer, and within gives some(text)", async 
     fetchAwait(k, "quick"),
   )));
   assert.deepEqual(r.ran, ['"<quick>"']);
-  assert.match(r.compiled, GAP);
+  assert.deepEqual(r.compiled, r.ran);
   const w = await both((k) => k.call(lib("within"), k.lit(1000), fetchAwait(k, "page")));
   assert.deepEqual(w.ran, ['some("<page>")']);
-  assert.match(w.compiled, GAP);
+  assert.deepEqual(w.compiled, w.ran);
 });
 
 test("a failed fetch aborts, which attempt catches; start fetch's type", async () => {
   const r = await both((k) => k.call(lib("attempt"), k.thunk(() => k.call(AWAIT_OP, k.call(IO.startFetch, k.lit("missing"))))));
   assert.deepEqual(r.ran, ['refused("404 Not Found")']);
-  assert.match(r.compiled, GAP);
+  assert.deepEqual(r.compiled, r.ran);
   const k = new Lang(LIBRARY.code);
   const d = k.def("f"); k.define(d, k.fn(["u"], (u) => k.call(IO.startFetch, u)));
   const c2 = base(k.code), n2 = baseNames(k.names), i2 = infer(c2, n2);
@@ -103,15 +104,15 @@ async function background(body: (k: Lang) => Id, delays: Record<string, number>)
   runMain(code, info, main, { print: (s) => ran.push(s), names, world: world() } as Parameters<typeof runMain>[3]);
   const took = clock - 1000;
   clock = 1000;
-  const compiled = gap(() => compiledMain(code, info, names, { print: () => {}, world: world() } as never));
-  return { ran, took, compiled };
+  const compiled = printedBy((print) => compiledMain(code, info, names, { print, world: world() } as never));
+  return { ran, took, compiled, tookCompiled: clock - 1000 };
 }
 
 test("background fetches overlap: together of two waits for the slower, not for both in turn, evaluated and compiled (C111)", async () => {
   const r = await background((k) => k.call(lib("together"), k.list(fetchAwait(k, "a"), fetchAwait(k, "b"))), { a: 300, b: 200 });
   assert.deepEqual(r.ran, ['["<a>", "<b>"]']);
   assert.ok(r.took >= 300 && r.took < 320, `took ${r.took} ms`);
-  assert.match(r.compiled, GAP);
+  assert.deepEqual(r.compiled, r.ran);
 });
 
 test("background fetches: a timer beats a slow fetch in a race, and a failure is an Abort where it's awaited, evaluated and compiled (C111)", async () => {
@@ -121,8 +122,8 @@ test("background fetches: a timer beats a slow fetch in a race, and a failure is
   )), { slow: 5000 });
   assert.deepEqual(r.ran, ['"timer"']);
   assert.ok(r.took >= 100 && r.took < 120, `took ${r.took} ms`);
-  assert.match(r.compiled, GAP);
+  assert.deepEqual(r.compiled, r.ran);
   const f = await background((k) => k.call(lib("attempt"), k.thunk(() => k.call(AWAIT_OP, k.call(IO.startFetch, k.lit("missing"))))), { missing: 50 });
   assert.deepEqual(f.ran, ['refused("404 Not Found")']);
-  assert.match(f.compiled, GAP);
+  assert.deepEqual(f.compiled, f.ran);
 });

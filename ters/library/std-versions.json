@@ -1,0 +1,221 @@
+{
+  "effect.console": [
+    "t9727vucn8vd2r79jkgu8i72sh"
+  ],
+  "effect.files": [
+    "dpfao66aulb4ebb90tm471l688"
+  ],
+  "effect.network": [
+    "0d7rmjft6s16d7uh3gigit97d8"
+  ],
+  "std.abort": [
+    "5d1s9oerrlmo3qk3e9jk0i7fub"
+  ],
+  "std.algebra": [
+    "jf57ka389ov6vj0fhttbl73qvp"
+  ],
+  "std.algebraic": [
+    "nf54uh6g8k86o0j2dsomlh43rl"
+  ],
+  "std.arithmetic": [
+    "0j0i7cfb8bnkc6nk9jv5mvdufr"
+  ],
+  "std.attribute": [
+    "det5mo66dvho3qooftccbt5l18"
+  ],
+  "std.await": [
+    "0aqlsnjom5acg5ccjq99h8vmhu"
+  ],
+  "std.bits": [
+    "njq4ii847vp6t4ga4jf0ena3sp"
+  ],
+  "std.bool": [
+    "i9j62f4s0b1kd43c3ko5obqfg3"
+  ],
+  "std.branch": [
+    "fh313d61n5qaitosu9crta6ijk"
+  ],
+  "std.bytes": [
+    "9rt9goujnhi85mgb3onk66gl21"
+  ],
+  "std.check": [
+    "3b75tc6qaetlpe1fbjdfa1329a"
+  ],
+  "std.cost": [
+    "i9koj9blq1dntg0kiciuujljo8"
+  ],
+  "std.date": [
+    "uq4gnn83htls28m6ve2p0hgaof"
+  ],
+  "std.division": [
+    "ckpeom5tqa3m7i72gfgp1bo852"
+  ],
+  "std.embedding": [
+    "130109agnsvtgbr78reuam6lnk"
+  ],
+  "std.event": [
+    "usf6ltj0586ec7vfm4sr8kqkgh"
+  ],
+  "std.extended": [
+    "g7pfmhep87s6vqgl5deat8o96s"
+  ],
+  "std.html": [
+    "iam6vso97un2hp94dotbmgna08"
+  ],
+  "std.input": [
+    "ht1k8cnv511l1unh0vife736t5"
+  ],
+  "std.instant": [
+    "5fgl0no9un9gbirdj48ctbovdv"
+  ],
+  "std.json": [
+    "in8881icegfpdki3rcmv76ij6o"
+  ],
+  "std.kept files": [
+    "rg15cmdss88gr4dkp8bued9br0"
+  ],
+  "std.list": [
+    "7ghcbb3eg5tato2rvcvbisl10h"
+  ],
+  "std.literal": [
+    "7dcvc79ld19gqtm284v12ik2gb"
+  ],
+  "std.locale": [
+    "hhsvmcllm8h5sc29lr0gfntt7r"
+  ],
+  "std.log": [
+    "6fnhn9dlek4al55thotmfmi3v8"
+  ],
+  "std.map": [
+    "bmu7ps9pptniqcht1udekgni1i"
+  ],
+  "std.open file": [
+    "tabi4a58qldokc82rktrbahqi5"
+  ],
+  "std.optional": [
+    "mg9rf79fffmtc854o0k3rg26rb"
+  ],
+  "std.order": [
+    "5onfchl95mf48ivk5nagfbcrl4"
+  ],
+  "std.ordered": [
+    "l5kgjdofic2jhlrpheoq459cie"
+  ],
+  "std.outcome": [
+    "lmi44oakeqlfmpprr2vvpgh9un"
+  ],
+  "std.pipe": [
+    "ik42jbjsg6nunt58ng7tptmi65"
+  ],
+  "std.priority queue": [
+    "fieirru9rfgi0876dcf1nbapu0"
+  ],
+  "std.queue": [
+    "a6kh6ncquv7la2m69k2ob7fe7t"
+  ],
+  "std.random": [
+    "pujv5k8c2uhl0kn84mtnhv56m0"
+  ],
+  "std.real": [
+    "nsqv8aedva8q9ufc5t4noi3hc3"
+  ],
+  "std.receive": [
+    "ptp6pp31ec3tu767545ftv4o36"
+  ],
+  "std.release": [
+    "3klk5ljf59ubkk54cla27ok3sf"
+  ],
+  "std.representation": [
+    "kapesqajfvf9lviho4rpqk1e9v"
+  ],
+  "std.request": [
+    "0ja0ong1pvmsaf3dji1g0tj671"
+  ],
+  "std.response": [
+    "ss573ha319jphnp3c1sb95t277"
+  ],
+  "std.row": [
+    "8n9fln8pcfdsoorp9ptcro388j"
+  ],
+  "std.row.handler": [
+    "5kbqoinm0vu3rsrvn1mcq1cdpf"
+  ],
+  "std.row.sound": [
+    "9tqjhsc6uum3movotr8ei3uo3d"
+  ],
+  "std.row.view": [
+    "b8uqm0rualm0lbuf75lg3eqa9g"
+  ],
+  "std.send": [
+    "q7v4jkbleqdma3pceuuuh706ht"
+  ],
+  "std.set": [
+    "9obev2760mo15mgi6ifepfbg6r"
+  ],
+  "std.settings": [
+    "10v1j4t9r3ool33mgcl4ktfdqo"
+  ],
+  "std.shown": [
+    "aspvcoq99v60efgutidn1jvk8r"
+  ],
+  "std.state": [
+    "2ghudv8esv65070m0t1medfo6h"
+  ],
+  "std.tableEntry": [
+    "occvq4bnhivirq6092mjk0h8ju"
+  ],
+  "std.tensor": [
+    "a6aei7dllo02lhi8q5fonku2h8"
+  ],
+  "std.ticket": [
+    "67l2f4dhdjmp7nnlnkf1omvp6i"
+  ],
+  "std.time": [
+    "pujv5k8c2uhl0kn84mtnhv56m0"
+  ],
+  "std.timeofday": [
+    "5fk7bn73sfk1lhtgle2l4i4uft"
+  ],
+  "std.trig": [
+    "3lgfcdq42prnmov3o81qte7bd5"
+  ],
+  "std.tuple2": [
+    "v3c5mu6dk39ukgo2go20clcrlh"
+  ],
+  "std.tuple3": [
+    "c3m1ue67ochfd71r2fhvfa2863"
+  ],
+  "std.tuple4": [
+    "obce07b67qsin032cahiepj31k"
+  ],
+  "std.tuple5": [
+    "bgjvlsk3olh126oudjv6vt7gv4"
+  ],
+  "std.tuple6": [
+    "nb2eqi2uqpctr0ie9aldbbgg3n"
+  ],
+  "std.tuple7": [
+    "idoivk6vfbcicipc6baipi1k1u"
+  ],
+  "std.tuple8": [
+    "c22tigeasfhci5ef8ra0khaff0"
+  ],
+  "std.unit": [
+    "3klk5ljf59ubkk54cla27ok3sf"
+  ],
+  "std.wait": [
+    "jqfrc30v69p16pgg9f8cl779mu"
+  ],
+  "std.word16": [
+    "pn68b6k1hbaudt65uoh8s76897"
+  ],
+  "std.word32": [
+    "n7td9j7n0h0137eg5t92kk3ng7"
+  ],
+  "std.word64": [
+    "7qet15abmjiee608pchh411n9v"
+  ],
+  "std.word8": [
+    "d1d7flcdt85d8n9qo1gsdko7hs"
+  ]
+}

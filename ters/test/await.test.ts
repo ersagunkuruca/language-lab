@@ -142,8 +142,9 @@ test("compiled, main's waits are the world's: together, race and within as the e
     worldProgram((k) => k.call(lib("within"), k.lit(10), slow(k, 50, "slow"))),
     worldProgram((k) => k.call(lib("within"), k.lit(100), slow(k, 20, "fast"))),
   ];
-  // A core IR gap (C137): together, race and within need L57.
-  for (const p of cases) await assert.rejects(p.compiled(), /normal finish, which isn't lowered yet \(L57\)/);
+  // Compiled through the core IR (C180): start branch, a handler of
+  // Await with a case for the normal finish.
+  for (const p of cases) assert.deepEqual(await p.compiled(), p.run());
 });
 
 // A handler whose case answered at once waits itself (C78): Wait's `wait`
@@ -167,8 +168,9 @@ test("compiled, a case answered at once that awaits: wait and now answered by ti
   assert.deepEqual(p.info.errors.map((e) => e.message), []);
   const evaluated = p.run();
   assert.deepEqual(evaluated, { printed: ['"7 done"'], waits: [20, 5, 30], clock: 1055 });
-  // A core IR gap (C137): a handler of Wait and Time whose cases await.
-  await assert.rejects(p.compiled(), /matches on data/);
+  // Compiled through the core IR (C180): Wait and Time handled by the
+  // program, their cases awaiting.
+  assert.deepEqual(await p.compiled(), evaluated);
 });
 
 // C40: the same, each handler with a case for the normal finish (L57),
@@ -193,8 +195,8 @@ test("compiled, a handler that waits with a case for the normal finish, as the e
   assert.deepEqual(p.info.errors.map((e) => e.message), []);
   const evaluated = p.run();
   assert.deepEqual(evaluated, { printed: ['"7 done, waited, clocked"'], waits: [20, 30, 5], clock: 1055 });
-  // A core IR gap (C137): L57.
-  await assert.rejects(p.compiled(), /normal finish, which isn't lowered yet \(L57\)/);
+  // Compiled through the core IR (C180).
+  assert.deepEqual(await p.compiled(), evaluated);
 });
 
 // L141 (REVIEW-2026-11-01b §6): an any of inside an any of is ready when
@@ -227,7 +229,8 @@ test("each run has its own timers, and compiled runs one after another agree wit
   assert.deepEqual(two.when(ticket, 1000), { at: 1007 });
   assert.throws(() => worldTimers(abort).when(ticket, 1000), /no ticket 0 from this world/);
   const p = worldProgram((k) => k.call(lib("race"), k.list(slow(k, 50, "slow"), slow(k, 20, "fast"))));
-  // A core IR gap (C137): race needs L57.
-  await assert.rejects(p.compiled(), /normal finish, which isn't lowered yet \(L57\)/);
-  assert.deepEqual(p.run().printed, ['"fast"']);
+  const first = await p.compiled(), second = await p.compiled();
+  assert.deepEqual(first, second);
+  assert.deepEqual(first, p.run());
+  assert.deepEqual(first.printed, ['"fast"']);
 });

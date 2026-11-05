@@ -172,7 +172,7 @@ them, likely tens of thousands, nine primitives each, so a query in the
 tens of milliseconds in compiled JS. Fine for a handful of agents, or
 replanning a few times a second; too slow for hundreds of agents every
 frame, where step 1 plus local avoidance is the right tool. That is row
-**L123**, after L122, compared against it on the same map.
+**L123**, after L122, compared against it on the same map. Built (L123): examples/agent's page, on a ten-metre room, with the straight line as the estimate; see its README for the numbers.
 
 Sampling planners (kinodynamic RRT*) are the other family; they suit high
 dimensions and robots better than game maps, where a lattice search is

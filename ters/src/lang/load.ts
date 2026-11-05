@@ -3,7 +3,7 @@
 // underneath its own, and their pins and hidden helpers for the checker.
 
 import { join } from "node:path";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { merge, onLayer, type Code, type Id } from "../model.ts";
 import { layer, type Names, type Presentation, type Style } from "../presentation.ts";
 import { root } from "../io.ts";
@@ -11,6 +11,7 @@ import type { Options } from "./infer.ts";
 import type { Pins } from "./signatures.ts";
 import { LIBRARY, NUMBERS, PRELUDE, TREES } from "./library.ts";
 import { onTodaysIds } from "./std.ts";
+import { verify, type Module } from "./modules.ts";
 
 // A saved file, with ids since renamed read as today's (std.ts RENAMED_IDS).
 const read = <T>(path: string, fallback: T): T => (existsSync(path) ? onTodaysIds(JSON.parse(readFileSync(path, "utf8"))) : fallback);
@@ -32,13 +33,37 @@ export const checkOptions: Options = { pins: LIBRARY.pins, hidden: LIBRARY.hidde
 // a folder's signatures.json, a saved file's `signatures`.
 export const optionsWith = (pins: Pins | undefined): Options => (pins && Object.keys(pins).length ? { ...checkOptions, pins: { ...LIBRARY.pins, ...pins } } : checkOptions);
 
+// The modules a program folder uses beyond the library: every file in its
+// `modules` folder, such as `lab publish` writes (SHARING.md, L111), each
+// checked to be what it says.
+export function programModules(dir: string): Module[] {
+  const at = join(dir, "modules");
+  if (!existsSync(at)) return [];
+  return readdirSync(at).filter((f) => f.endsWith(".json") && !f.endsWith(".log.json")).sort().map((f) => readModule(join(at, f), `modules/${f}`));
+}
+const readModule = (path: string, shown: string): Module => {
+  const m = JSON.parse(readFileSync(path, "utf8")) as Module;
+  const wrong = verify(m, LIBRARY.code);
+  if (wrong) throw new Error(`${shown}: ${wrong}`);
+  return m;
+};
+// The program's store (SHARING.md §4b, L115): every version it has used,
+// kept with it, so it opens when a module's file is gone.
+export function programStore(dir: string): Module | null {
+  const at = join(dir, "store.json");
+  return existsSync(at) ? readModule(at, "store.json") : null;
+}
+
 export function loadProgram(dir: string, style = "blocks") {
   const own = read<Code>(join(dir, "code.json"), { nodes: {}, defs: [] });
-  // Its own pins, beside code.json as the editor's file keeps them (L173c).
-  const pins = read<Pins>(join(dir, "signatures.json"), {});
-  const code = base(own);
+  const store = programStore(dir);
+  const modules = [...programModules(dir), ...(store ? [store] : [])];
+  // Its own pins, beside code.json as the editor's file keeps them (L173c),
+  // over its modules'.
+  const pins = { ...Object.assign({}, ...modules.map((m) => m.pins)), ...read<Pins>(join(dir, "signatures.json"), {}) } as Pins;
+  const code = base(modules.length ? merge(...modules.map((m) => m.code), own) : own);
   const pres: Presentation = {
-    names: baseNames(read<Names>(join(dir, "names.default.json"), {})),
+    names: baseNames(...modules.map((m) => m.names), read<Names>(join(dir, "names.default.json"), {})),
     comments: { ...LIBRARY.comments, ...read(join(dir, "comments.json"), {}) },
     hints: read(join(dir, "hints.json"), {}),
     style: read<Style>(join(root, "styles", `${style}.json`), { view: "blocks", notation: {} }),
@@ -51,5 +76,9 @@ export function loadProgram(dir: string, style = "blocks") {
     if (!id) throw new Error(`no definition named ${name}`);
     return id;
   };
-  return { code, own, pres, named, pins, options: optionsWith(pins) };
+  // A module's helpers are hidden, as the library's are.
+  const offered = new Set(modules.flatMap((m) => m.exports));
+  const hidden = modules.flatMap((m) => m.code.defs.filter((d) => !offered.has(d)));
+  const options = optionsWith(pins);
+  return { code, own, pres, named, pins, modules, options: hidden.length ? { ...options, hidden: new Set([...(options.hidden ?? []), ...hidden]) } : options };
 }

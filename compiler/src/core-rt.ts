@@ -117,10 +117,16 @@ function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Re
   // (Koka's evidence vectors; Xie and Leijen, ICFP 2021).
   if (name.startsWith("handleOps:")) {
     const e = name.split(":")[1];
+    // A case for the normal finish (C180) runs on the value once the
+    // handler is off.
+    const finished = name.endsWith(":fin");
     return (body, ...cases) => {
+      const fin = finished ? cases.pop() : undefined;
       const s = handlers.get(e) ?? handlers.set(e, []).get(e)!;
       s.push(cases as Cases);
-      try { return (body as () => unknown)(); } finally { s.pop(); }
+      let v: unknown;
+      try { v = (body as () => unknown)(); } finally { s.pop(); }
+      return fin && v !== FAIL ? RUNTIME.ap(fin as never, v) : v;
     };
   }
   // A program's own effect answered later (scalar.ts handleOps `later`,
@@ -134,15 +140,34 @@ function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Re
   // only for the performers of such an effect (selective, as Koka and
   // Effekt).
   if (name.startsWith("handleK:")) {
-    const [, e, at] = name.split(":"), now = new Set((at ?? "").split(",").filter(Boolean).map(Number));
+    const [, e, at, finTag, how] = name.split(":"), now = new Set((at ?? "").split(",").filter(Boolean).map(Number));
+    const fk = finTag === "-" ? undefined : finTag;
     return (body, ...cases) => {
+      // A case for the normal finish (C180): run on the code's value with
+      // this handler off, what it gives being what the handler gives
+      // (given the rest itself when it waits, `finK`).
+      const fin = fk ? cases.pop() : undefined;
       const s = handlers.get(e) ?? handlers.set(e, []).get(e)!;
       const frame = Object.assign(cases as Cases, { box: { v: undefined as unknown }, now });
+      const done = (x: unknown) => { frame.box.v = x; return true; };
+      const end = !fin ? done : (x: unknown) => {
+        if (x === FAIL) return done(x);
+        const i = s.lastIndexOf(frame);
+        s.splice(i, 1);
+        try { if (fk === "finK") RUNTIME.ap(fin as never, x, done); else done(RUNTIME.ap(fin as never, x)); } finally { s.splice(i, 0, frame); }
+        return true;
+      };
       s.push(frame);
-      try { (body as { code: (...xs: unknown[]) => unknown }).code(body, (x: unknown) => { frame.box.v = x; return true; }); } finally { s.pop(); }
+      try {
+        if (how === "d") { const v = (body as () => unknown)(); if (v !== FAIL) end(v); else done(v); } else (body as { code: (...xs: unknown[]) => unknown }).code(body, end);
+      } finally { s.pop(); }
       return frame.box.v;
     };
   }
+  // A handler of Abort around several answers or a wait (C182): whether
+  // the rest outside it is running.
+  if (name === "rest.in") return (f) => { (f as { inRest: boolean }).inRest = true; return true; };
+  if (name === "rest.out") return (f) => { (f as { inRest: boolean }).inRest = false; return true; };
   if (name.startsWith("handled:")) { const e = name.slice(8); return () => !!handlers.get(e)?.length; }
   if (name.startsWith("perform:")) {
     const [, e, op, bool] = name.split(":");
@@ -372,8 +397,14 @@ function worldFn(op: string, rt: Runtime, timers: Timers, handlers: Map<string, 
   // An operation answered later (handleK above): the case gets the rest.
   if (op.startsWith("perform:")) {
     const [, e, i] = op.split(":");
+    // std's Await, which the program handles somewhere (C180): with no
+    // handler of the program's open, the world's await and timers.
+    // Wait and Time likewise: the world's wait, and its clock.
+    const world = e === "std.await" ? [worldFn("await", rt, timers, handlers), worldFn("startTimer", rt, timers, handlers)]
+      : e === "std.wait" ? [worldFn("wait", rt, timers, handlers)] : e === "std.time" ? [worldFn("now", rt, timers, handlers)] : undefined;
     return (...xs) => {
       const k = xs.pop(), s = handlers.get(e);
+      if (!s?.length && world) return e === "std.time" ? RUNTIME.ap(k as never, world[0]()) : i === "0" ? world[0](xs[0], k) : RUNTIME.ap(k as never, world[1](xs[0]));
       if (!s?.length) throw new Error(`nothing handles ${e}`);
       const frame = s.pop() as Cases & { box: { v: unknown }; now?: Set<number> };
       // A rest runs once, as the evaluator's (run.ts).
@@ -423,6 +454,9 @@ function worldFn(op: string, rt: Runtime, timers: Timers, handlers: Map<string, 
     case "myLocale": return () => ({ tag: LOCALE_V, fields: [(rt.world?.locale ?? hostLocale)()] });
     case "myTimeZone": return () => (rt.world?.timeZone ?? hostZone)();
     case "fetchText": return (u) => tried(() => w("fetchText")(u as string));
+    // A fetch as a ticket (L150b, C182), as run.ts starts one: in the
+    // background where the world can, else fetched now and ready at once.
+    case "startFetch": return (u) => tried(() => rt.world?.startFetch ? timers.fetch(w("startFetch")!(u as string)) : { tag: TICKET_V.timer, fields: [0, w("fetchText")(u as string)] });
     case "sendRequest": return (r) => tried(() => responseValue(w("sendRequest")!(plainRequest(r))));
     case "random": return () => (rt.world?.random ?? worldRandom)();
     case "print": return (s) => { rt.print(s as string); return []; };

@@ -188,8 +188,22 @@ test("an abort under Choice cuts the alternatives, compiled too", async () => {
         k.if(k.equal(x, k.lit(2)), k.call(ABORT_OP, k.lit("two")), x)),
       [{ variant: ABORT_OP, names: ["why"], body: () => k.lit(0) }])))))));
     return main;
-  }, {}, "", { gap: /handles Abort around a search with several answers/ });
+  });
   assert.deepEqual(r.lines, ["[1, 0]"]);
+});
+
+// C182: an abort in the rest of the search, after an answer has left the
+// handler, isn't that handler's: it goes on out, here to the one around.
+test("an abort after an answer has left a handler of Abort goes past it, compiled too", async () => {
+  const r = await both((k) => {
+    const main = k.def("main");
+    const caught = (body: Id, v: () => Id) => k.handle(body, [{ variant: ABORT_OP, names: ["why"], body: v }]);
+    k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, caught(k.call(S.all, k.thunk(() =>
+      k.let("v", caught(k.call(S.oneOf, k.list(k.lit(1), k.lit(2))), () => k.lit(0)), (v) =>
+        k.if(k.equal(v, k.lit(2)), k.call(ABORT_OP, k.lit("outside")), v)))), () => k.list(k.lit(9)))))));
+    return main;
+  });
+  assert.deepEqual(r.lines, ["[9]"]);
 });
 
 test("optional and value of", async () => {

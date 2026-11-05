@@ -28,6 +28,19 @@ type Canon = unknown[];
 
 export const digest = (x: unknown): string => base32(sha256(JSON.stringify(x)));
 
+// Which recipe made a published id's hash (SHARING.md §3, L109). Today's,
+// the one every id so far was made by, is written as nothing: `@` and 26
+// base32 characters (0 to 9, a to v). A later recipe will be written as a
+// letter outside that alphabet after the `@` (w, x, y, z), with a table
+// from the old hashes to the new that `upgrade` reads, so an id always says
+// how to check it, and a reader that doesn't know its recipe says so
+// instead of calling the code changed. null: not a published id.
+export const RECIPE = "";
+export const recipeOf = (id: Id): string | null => {
+  const m = /^@([w-z]?)[0-9a-v]{26}$/.exec(id);
+  return m ? m[1] : null;
+};
+
 // The defs a def refers to directly: by ref, as a type, by running it
 // backwards, or through one of a data type's cases and fields.
 export function defDeps(code: Code, def: Id, owner = ownerOfTypeParts(code)): Id[] {

@@ -52,7 +52,7 @@ function carried(f: SFunc, fi: number, p: number, t: RType): boolean {
     }
     if (e.k === "get" && e.rec.k === "local" && e.rec.i === p && e.t.key === t.key) reads++;
     if ((e.k === "let" && e.i === p) || (e.k === "case" && e.s === p) || ((e.k === "attempt" || e.k === "search") && e.res === p)
-      || (e.k === "apply" && e.tmp === p) || (e.k === "list" && (e.item === p || e.acc === p)) || (e.k === "handle" && (e.reason === p || e.save === p))
+      || (e.k === "apply" && e.tmp === p) || (e.k === "list" && (e.item === p || e.acc === p)) || (e.k === "handle" && (e.reason === p || e.save === p || e.frame === p))
       || (e.k === "budget" && (e.save === p || e.res === p))) ok = false;
     kids(e).forEach(walk);
   };
