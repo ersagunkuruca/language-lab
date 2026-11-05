@@ -56,6 +56,13 @@ test("lab runs and compiles numbers on the representation the chooser picks", ()
   assert.match(node([lab, "check", numbers]).out, /^Nat is stored as int, the cheapest for the jobs main uses$/m);
 });
 
+// A main that is a value, not a function: lab run prints what it is (T7e15).
+test("lab run prints a main that is a value: lockstep's text", () => {
+  const r = node([lab, "run", join(import.meta.dirname, "../examples/lockstep")]);
+  assert.equal(r.code, 0);
+  assert.match(r.out, /^position -?\d+\.\d+, velocity -?\d+\.\d+, position in steps of 2⁻³² -?\d+\n$/);
+});
+
 test("lab refuses a program it can't run, and says why", () => {
   const r = node([lab, "run", join(import.meta.dirname, "../examples/queens"), "--main", "queens"]);
   assert.equal(r.code, 2);
