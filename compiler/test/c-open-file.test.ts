@@ -14,7 +14,7 @@ import { infer } from "../../ters/src/lang/infer.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { runMain } from "../../ters/src/lang/run.ts";
 import { nodeWorld } from "../../ters/src/lang/world.ts";
-import { ABORT_OP, NEXT_LINE_OP, S, SHOW_ANY, WRITE_LINE_OP } from "../../ters/src/lang/std.ts";
+import { ABORT_OP, ADD_BYTES_OP, NEXT_BYTES_OP, NEXT_LINE_OP, S, SHOW_ANY, WRITE_LINE_OP } from "../../ters/src/lang/std.ts";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitC } from "../src/c.ts";
 import { compile, skip } from "./c-harness.ts";
@@ -59,4 +59,30 @@ test("an Abort inside the body still closes the file on C, after its lines are w
   assert.notEqual(r.status, 0);
   assert.match(r.stderr.toString(), /gave up/);
   assert.equal(readFileSync(join(cd, "log.txt"), "utf8"), "started\n");
+});
+
+// Bytes too (L213c7): from where the reading is, and added at the end.
+test("C reads and adds bytes with open file, as the evaluator does", { skip }, () => {
+  const k = new Lang(LIBRARY.code);
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.call(lib("with open file"), k.lit("f"), k.thunk(() => k.listOf(
+    k.call(SHOW_ANY, k.call(NEXT_LINE_OP)),
+    k.call(SHOW_ANY, k.call(lib("byte items"), k.call(NEXT_BYTES_OP, k.int(2)))),
+    k.seq(k.call(ADD_BYTES_OP, k.call(lib("bytes of"), k.list(k.int(7), k.int(255)))), k.call(SHOW_ANY, k.call(lib("byte items"), k.call(NEXT_BYTES_OP, k.int(10))))))))))));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const l = lowerScalar(code, info, names, [main], { data: true, releases: true, handlers: true });
+  assert.deepEqual([...l.refused.values()], []);
+  const start = Uint8Array.from([...Buffer.from("head\n"), 0xff, 0x00, 0x80]);
+  const ev = mkdtempSync(join(tmpdir(), "open-file-")), cd = mkdtempSync(join(tmpdir(), "open-file-c-"));
+  writeFileSync(join(ev, "f"), start);
+  writeFileSync(join(cd, "f"), start);
+  const printed: string[] = [], cwd = process.cwd();
+  process.chdir(ev);
+  try { runMain(code, info, main, { print: (x) => printed.push(x), names, world: { ...nodeWorld(), log: () => {} } }); } finally { process.chdir(cwd); }
+  assert.deepEqual(printed, ['["some(\\"head\\")", "[255, 0]", "[128, 7, 255]"]']);
+  const r = spawnSync(compile(emitC(l, { main }).c), [], { cwd: cd });
+  assert.equal(r.status, 0, r.stderr.toString());
+  assert.deepEqual(r.stdout.toString().split("\n").filter((x) => x), printed);
+  assert.deepEqual([...readFileSync(join(cd, "f"))], [...readFileSync(join(ev, "f"))]);
 });

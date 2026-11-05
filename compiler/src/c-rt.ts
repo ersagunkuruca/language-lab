@@ -20,7 +20,7 @@
 // One with no answer (Choice) sets lab_st to 1 and gives a stand-in.
 
 import { nfcC } from "./c-nfc.ts";
-export interface ListNames { cons: string; nil: string; type: number; tag: number; head: number }
+export interface ListNames { cons: string; nil: string; type: number; tag: number; head: number; record?: string }
 // A runtime function: its C, given the names of the list type it makes or
 // reads, and what it calls.
 interface Fn { c: string | ((l: ListNames) => string); uses: string[] }
@@ -857,6 +857,40 @@ static void lab__kept_more(lab_kept_file *k) {
   lab_drop(t);
   return ok;
 }` },
+  // Bytes from where the reading is, and bytes added at the end (L213c7):
+  // Bytes is a record of a list of Ints, its C struct o.record.
+  "world.keptBytes": {
+    uses: ["world.kept"],
+    c: (o) => `static ${o.record} lab_world_keptBytes(lab_int f, lab_int count) {
+  lab_kept_file *k = lab__kept(f);
+  int64_t want = LAB_IS_SMALL(count) ? LAB_VAL(count) : 0;
+  size_t n = 0;
+  if (k && want > 0) {
+    while (!k->ended && k->n < (uint64_t)want) lab__kept_more(k);
+    n = k->n < (uint64_t)want ? k->n : (size_t)want;
+  }
+  lab_cell *acc = &${o.nil};
+  for (size_t i = n; i-- > 0;) { ${o.cons} *c = lab_new(sizeof(${o.cons}), ${o.type}, ${o.tag}); c->f${o.head} = LAB_SMALL(k->rest[i]); c->f${1 - o.head} = acc; acc = (lab_cell *)c; }
+  if (n) { memmove(k->rest, k->rest + n, k->n - n); k->n -= n; }
+  return (${o.record}){ acc };
+}`,
+  },
+  "world.keptAddBytes": {
+    uses: ["world.kept"],
+    c: (o) => `static int32_t lab_world_keptAddBytes(lab_int f, ${o.record} b) {
+  lab_kept_file *k = lab__kept(f);
+  size_t n = 0;
+  for (lab_cell *c = b.f0; c->tag == ${o.tag}; c = ((${o.cons} *)c)->f${1 - o.head}) n++;
+  uint8_t *buf = malloc(n ? n : 1);
+  if (!buf) lab_oom();
+  n = 0;
+  for (lab_cell *c = b.f0; c->tag == ${o.tag}; c = ((${o.cons} *)c)->f${1 - o.head}) buf[n++] = (uint8_t)LAB_VAL(((${o.cons} *)c)->f${o.head});
+  int ok = k && write(k->fd, buf, n) == (ssize_t)n;
+  free(buf);
+  lab_drop(b.f0);
+  return ok;
+}`,
+  },
   "world.keptClose": { uses: ["world.kept"], c: `static void lab_world_keptClose(lab_int f) { lab_kept_file *k = lab__kept(f); if (k) { close(k->fd); k->fd = -1; free(k->rest); k->rest = 0; k->n = 0; } }` },
   // A program's own handlers of operations answered at once (L213c4): a
   // stack of frames, each an effect's number and its cases' closures,

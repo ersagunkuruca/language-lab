@@ -61,7 +61,7 @@ import { bindsOf, bodyOf, withBodies } from "./uses.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { ARRAY, TABLE, HASH_SET, CELL, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, PATH as PATH_T, STRING, BUILTIN_EFFECTS, Subst, type Row, type Type } from "../../ters/src/lang/types.ts";
-import { RELEASE_V, LOG_OP, FILE_OPS, NEXT_BYTES_OP, ADD_BYTES_OP, KEPT_FILES, OPEN_FILE, tupleType, ABORT, ABORT_OP, CHECK, CHECK_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, HASH_SET_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, NOW_OP, OPTIONAL, ORDER_V, PAIR_V, RATIO, S, SET, SHOW_ANY, shownImplementations, implementationsOf, ORDERED, SOME, TEXT_OPS, TRUE, ZONE_OPS } from "../../ters/src/lang/std.ts";
+import { RELEASE_V, LOG_OP, FILE_OPS, KEPT_FILES, OPEN_FILE, tupleType, ABORT, ABORT_OP, CHECK, CHECK_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, HASH_SET_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, NOW_OP, OPTIONAL, ORDER_V, PAIR_V, RATIO, S, SET, SHOW_ANY, shownImplementations, implementationsOf, ORDERED, SOME, TEXT_OPS, TRUE, ZONE_OPS } from "../../ters/src/lang/std.ts";
 import { liftLets } from "../../ters/src/lang/lift-lets.ts";
 import { solvesOnce } from "../../ters/src/lang/run.ts";
 import { inlineLists } from "./inline-lets.ts";
@@ -138,8 +138,8 @@ export const WORLD_OPS: Record<Id, { op: string; aborts: boolean }> = {
   [IO.readFile]: { op: "readFile", aborts: true }, [IO.writeFile]: { op: "writeFile", aborts: true }, [IO.appendFile]: { op: "appendFile", aborts: true },
   [IO.fileExists]: { op: "fileExists", aborts: false }, [IO.listFolder]: { op: "listFolder", aborts: true },
 };
-// C's so far (L213c5): lines, not yet bytes.
-const C_KEPT = new Set([FILE_OPS.open, FILE_OPS.line, FILE_OPS.addLine, FILE_OPS.close]);
+// C's (L213c5, bytes L213c7).
+const C_KEPT = new Set(Object.values(FILE_OPS));
 // The kept files' operations (L213c3), for JavaScript from the core IR.
 const KEPT_OPS: Record<Id, string> = {
   [FILE_OPS.open]: "keptOpen", [FILE_OPS.line]: "keptLine", [FILE_OPS.addLine]: "keptAddLine",
@@ -1794,10 +1794,6 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     const cases = ops.map((v) => {
       const a = arms.find((x) => x.variant === v)!;
       const r = stype(zonk(a.body)), ps = a.binds.map((b) => stype(zonk(b)));
-      // On C's stack (L213c5), Open file's bytes cases have no closure
-      // yet (C's kept files read lines only): performing one stops the
-      // run saying so (c-rt.ts lab_handlers_case).
-      if (tailOwn.has(e) && e === OPEN_FILE && (v === NEXT_BYTES_OP || v === ADD_BYTES_OP)) return { k: "zero", t: "i32" } as SExpr;
       if (!r) throw new Refused(`handles ${nm(e)} with a case giving ${whyNot(zonk(a.body))}`);
       ps.forEach((p, j) => { if (!p) throw new Refused(`handles ${nm(v)} given ${whyNot(zonk(a.binds[j]))}`); });
       return closureOf(a.id, a.binds, ps as LType[], a.body, r);
