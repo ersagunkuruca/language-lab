@@ -142,3 +142,23 @@ test("e, exp and log as Reals, as close as asked", () => {
   const r = makeRunner(code, info, { print: () => {}, names });
   assert.deepEqual([r.value(e50), r.value(ln)], ["2.71828182845904523536", "2.30258509299404568402"]);
 });
+
+// sin and cos (L88e5): against Math within a double's error, sin π and
+// cos π, sin(10³⁰) after taking off its multiples of 2π, and a program's.
+test("sin and cos as Reals, as close as asked", () => {
+  for (const [n, d] of [[0n, 1n], [1n, 1n], [-1n, 1n], [7n, 2n], [1000000n, 1n], [1n, 1000000n]] as const) {
+    const x = Number(n) / Number(d), at = (r: R.Real) => Number(R.approximate(r, 64)) / 2 ** 64;
+    assert.ok(Math.abs(at(R.sin(R.fraction(n, d))) - Math.sin(x)) <= 2 * Number.EPSILON, `sin(${x})`);
+    assert.ok(Math.abs(at(R.cos(R.fraction(n, d))) - Math.cos(x)) <= 2 * Number.EPSILON, `cos(${x})`);
+  }
+  assert.equal(R.digits(R.sin(R.pi()), 40), `0.${"0".repeat(40)}`);
+  assert.equal(R.digits(R.cos(R.pi()), 40), `−1.${"0".repeat(40)}`);
+  assert.equal(R.digits(R.sin(R.fraction(10n ** 30n, 1n)), 20), "−0.09011690191213805803");
+  const k = new Lang(LIBRARY.code);
+  const s1 = k.def("sin1");
+  k.define(s1, k.call(RO.digits, k.call(RO.sin, k.call(RO.fraction, k.int(1), k.int(1))), k.int(20)));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((m) => m.message), []);
+  const r = makeRunner(code, info, { print: () => {}, names });
+  assert.equal(r.value(s1), "0.84147098480789650665");
+});
