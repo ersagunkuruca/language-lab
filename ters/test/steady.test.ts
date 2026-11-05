@@ -2,14 +2,9 @@
 // fdlibm writes them, so every engine gives the same bits. V8's Math.exp
 // and Math.log are fdlibm's (and on Node 22 so are its sin and cos), so
 // the evaluator is checked against them to the bit, and the compiled
-// JavaScript, both printers, against the evaluator.
+// JavaScript against the evaluator.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
-import { compile } from "../../compiler/src/compile.ts";
 import { loadCoreJs, lowerCore } from "../../compiler/src/core-js.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
@@ -17,7 +12,6 @@ import { base, baseNames } from "../src/lang/load.ts";
 import { LIBRARY, STEADY } from "../src/lang/library.ts";
 import { makeRunner, type Value } from "../src/lang/run.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 const steady = (name: string) => STEADY.exports.find((d) => LIBRARY.names[d] === name)!;
 const FNS = { sin: Math.sin, cos: Math.cos, tan: Math.tan, exp: Math.exp, log: Math.log, atan: Math.atan, asin: Math.asin, acos: Math.acos } as const;
 
@@ -57,12 +51,9 @@ test("steady sin, cos, tan, exp, log, atan, asin and acos give fdlibm's bits, wh
   }
 });
 
-test("compiled JavaScript gives the evaluator's bits, from compile.ts and from the core IR", async () => {
+test("compiled JavaScript gives the evaluator's bits, from the core IR", async () => {
   const p = program();
   const r = makeRunner(p.code, p.info, { print: () => {} });
-  const path = join(mkdtempSync(join(tmpdir(), "steady-")), "main.mjs");
-  writeFileSync(path, compile(p.code, p.info, p.names, { runtime, exports: p.own.map((d) => p.names[d]) }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, (x: number) => number>;
   const ir = lowerCore(p.code, p.info, p.names, p.own);
   assert.deepEqual([...ir.refused.values()], []);
   const fs = loadCoreJs(ir);
@@ -73,10 +64,6 @@ test("compiled JavaScript gives the evaluator's bits, from compile.ts and from t
     const core = fs[at];
     for (const x of inputs(f)) {
       const [y] = r.call(r.value(d), x as Value) as Iterable<unknown>;
-      // exp and log have Choice (no answer past their range), so
-      // compile.ts gives their answers as a generator.
-      const c = defs[p.names[d]](x) as unknown;
-      assert.ok(Object.is(typeof c === "object" ? [...(c as Iterable<number>)][0] : c, y), `compile.ts ${f}(${x})`);
       assert.ok(Object.is(core(x), y), `core IR ${f}(${x})`);
     }
   });
@@ -86,14 +73,11 @@ test("compiled JavaScript gives the evaluator's bits, from compile.ts and from t
 // 24-bit pieces, so y1 can differ from fdlibm's in its last bits, and about
 // one answer in 2,000 is the other side of a rounding from V8's (both
 // within an ulp). Every engine still gives these same bits.
-test("sin, cos and tan past 2^20·π/2: V8's bits but for a rare last-bit rounding, and the same from both printers", async () => {
+test("sin, cos and tan past 2^20·π/2: V8's bits but for a rare last-bit rounding, and the same from the core IR", async () => {
   const p = program();
   const r = makeRunner(p.code, p.info, { print: () => {} });
   const ir = lowerCore(p.code, p.info, p.names, p.own);
   const fs = loadCoreJs(ir);
-  const path = join(mkdtempSync(join(tmpdir(), "steady-")), "main.mjs");
-  writeFileSync(path, compile(p.code, p.info, p.names, { runtime, exports: p.own.map((d) => p.names[d]) }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, (x: number) => number>;
   const far = [1647100, 2e6, 1e22, 1.7976931348623157e308, -1.7976931348623157e308, 6381956970095103 * 2 ** 797,
     ...Array.from({ length: 300 }, (_, i) => (1 + rnd()) * 2 ** (21 + ((i * 7) % 1003)) * (i % 2 ? -1 : 1))];
   let off = 0;
@@ -102,8 +86,6 @@ test("sin, cos and tan past 2^20·π/2: V8's bits but for a rare last-bit roundi
     for (const x of far) {
       const [y] = r.call(r.value(d), x as Value) as Iterable<number>, v8 = FNS[f](x);
       if (!Object.is(y, v8)) { off++; assert.ok(Math.abs(y - v8) <= Math.abs(v8) * 2 ** -52, `${f}(${x}) is ${y}, V8's ${v8}`); }
-      const c = defs[p.names[d]](x) as unknown;
-      assert.ok(Object.is(typeof c === "object" ? [...(c as Iterable<number>)][0] : c, y), `compile.ts ${f}(${x})`);
       assert.ok(Object.is(core(x), y), `core IR ${f}(${x})`);
     }
   }
@@ -120,9 +102,6 @@ async function twoInputs(name: "pow" | "atan2", g: (a: number, b: number) => num
   const code = base(k.code), names = baseNames(k.names), info = infer(code, names);
   assert.deepEqual(info.errors.map((e) => e.message), []);
   const r = makeRunner(code, info, { print: () => {} });
-  const path = join(mkdtempSync(join(tmpdir(), `steady-${name}-`)), "main.mjs");
-  writeFileSync(path, compile(code, info, names, { runtime, exports: [`my ${name}`] }));
-  const compiled = (await import(pathToFileURL(path).href)).defs[`my ${name}`] as (x: number, y: number) => unknown;
   const ir = lowerCore(code, info, names, [d]);
   assert.deepEqual([...ir.refused.values()], []);
   const core = loadCoreJs(ir)[ir.funcs.findIndex((f) => f.name === `my ${name}` && !f.inner)];
@@ -131,8 +110,6 @@ async function twoInputs(name: "pow" | "atan2", g: (a: number, b: number) => num
     if (!Number.isFinite(want)) continue;
     const [got] = r.call(r.value(d), x as Value, y as Value) as Iterable<unknown>;
     assert.ok(Object.is(got, want === 0 ? 0 : want), `${name}(${x}, ${y}) = ${got}, Math's ${want}`);
-    const c = compiled(x, y);
-    assert.ok(Object.is(typeof c === "object" ? [...(c as Iterable<number>)][0] : c, got), `compile.ts ${name}(${x}, ${y})`);
     assert.ok(Object.is(core(x, y), got), `core IR ${name}(${x}, ${y})`);
   }
 }

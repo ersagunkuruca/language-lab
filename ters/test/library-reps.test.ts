@@ -216,23 +216,15 @@ test("a representation the program writes for Map wins", () => {
 });
 
 test("the represented program compiles: JavaScript prints the same, and WebAssembly and C take the counts on the tree", async () => {
-  const { mkdtempSync, writeFileSync } = await import("node:fs");
-  const { tmpdir } = await import("node:os");
-  const { join } = await import("node:path");
-  const { pathToFileURL } = await import("node:url");
-  const { compile } = await import("../../compiler/src/compile.ts");
+  const { compiledMain } = await import("../../compiler/src/core-js.ts");
   const { lowerScalar } = await import("../../compiler/src/scalar.ts");
   const { emitC } = await import("../../compiler/src/c.ts");
   const { emitWasm } = await import("../../compiler/src/wasm.ts");
   const p = program(300);
   const c = withLibraryRepresentations(p.code, infer(p.code, p.names, undefined, checkOptions), p.names, p.main, p.own);
   const info = infer(c.code, c.names, undefined, { ...checkOptions, insiders: [...checkOptions.insiders!, ...c.insiders] });
-  const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
-  const path = join(mkdtempSync(join(tmpdir(), "library-reps-")), "p.js");
-  writeFileSync(path, compile(c.code, info, c.names, { runtime, exports: ["main"] }));
   const lines: string[] = [];
-  (await import(runtime)).$setPrint((s: string) => lines.push(s));
-  ((await import(pathToFileURL(path).href)).defs as Record<string, () => unknown>).main();
+  compiledMain(c.code, info, c.names, { print: (s: string) => lines.push(s) } as never);
   assert.deepEqual(lines, printed(p.code, p.names, p.main));
   // The counts on the tree (show isn't in WebAssembly or C yet, so not main).
   const lowered = lowerScalar(c.code, info, c.names, [p.own[0]], { data: true });
@@ -663,12 +655,7 @@ test("a list stored as a tree is built by the row's own store, balanced, in n st
 // out of stack. The match is put in place, so the recursion is plain, and
 // its rest still shrinks for the termination check (no Diverge).
 test("a definition recurring through a stored list's match runs 50,000 deep compiled, and still surely finishes (C93)", async () => {
-  const { compile } = await import("../../compiler/src/compile.ts");
-  const { $setPrint } = await import("../../compiler/src/runtime.js");
-  const { mkdtempSync, writeFileSync } = await import("node:fs");
-  const { join } = await import("node:path");
-  const { tmpdir } = await import("node:os");
-  const { pathToFileURL } = await import("node:url");
+  const { compiledMain } = await import("../../compiler/src/core-js.ts");
   const k = new Lang(LIBRARY.code);
   const xs = k.def("xs");
   k.define(xs, k.call(S.range, k.lit(25000)));
@@ -694,11 +681,7 @@ test("a definition recurring through a stored list's match runs 50,000 deep comp
   assert.deepEqual(info2.errors.map((e) => e.message), []);
   const t = info2.subst.zonk(info2.typeOf.get(count)!);
   assert.ok(t.t === "fn" && !info2.subst.resolveRow(t.eff).effs.includes(DIVERGE), "count surely finishes");
-  const path = join(mkdtempSync(join(tmpdir(), "deep-")), "m.js");
-  writeFileSync(path, compile(c.code, info2, c.names, { runtime: pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href, exports: ["main"] }));
   const out: string[] = [];
-  $setPrint((s: string) => out.push(s));
-  const m = (await import(pathToFileURL(path).href)).defs.main;
-  if (typeof m === "function") m();
+  compiledMain(c.code, info2, c.names, { print: (s: string) => out.push(s) } as never);
   assert.deepEqual(out.join("").trim(), "50000");
 });

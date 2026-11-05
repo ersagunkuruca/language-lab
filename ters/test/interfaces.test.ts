@@ -8,7 +8,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { resolveArithmetic } from "../src/lang/arith.ts";
@@ -21,7 +20,6 @@ import { NUMBER } from "../src/lang/types.ts";
 import { subtree, type Id } from "../src/model.ts";
 import { compiledDefs } from "../../compiler/src/core-js.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 
 // Halving a = halving(half: (a) -> a, twice: (a) -> a), at Float64 (written
 // with functions in place, so arith.ts makes definitions of them) and at a

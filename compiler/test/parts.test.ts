@@ -5,12 +5,10 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { makeRunner, type Value } from "../../ters/src/lang/run.ts";
-import { compile } from "../src/compile.ts";
+import { compiledDefs, plainValue } from "../src/core-js.ts";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitWgsl } from "../src/wgsl.ts";
 import { parts } from "../src/fixtures.ts";
@@ -21,17 +19,12 @@ test("vectors module: compiled JavaScript gives the evaluator's values", async (
   const p = parts();
   assert.deepEqual(p.info.errors, []);
   const names = Object.keys(p.defs);
-  const path = join(mkdtempSync(join(tmpdir(), "parts-")), "parts.js");
-  writeFileSync(path, compile(p.code, p.info, p.names, { runtime, exports: names }));
-  const compiled = (await import(pathToFileURL(path).href)).defs as Record<string, (...a: unknown[]) => unknown>;
+  const compiled = compiledDefs(p.code, p.info, p.names, names) as Record<string, (...a: unknown[]) => unknown>;
   const r = makeRunner(p.code, p.info, { print: () => {} });
   const run = (name: string, ...xs: Value[]) => { for (const v of r.call(r.value(p.defs[name as keyof typeof p.defs]), ...xs)) return v; return undefined; };
   const inputs: Record<string, number[]> = { along: [1, 2, 3, 2], facing: [0.3, 2, -1], far: [4, 6, 3], bounce: [1, -1, 0], fade: [0.2, 0.4, 0.6, 0.25], light: [0.5, 0.8, 1, 1.5], halfway: [4], size: [-3] };
   for (const name of names) {
-    // facing and bounce go through unit, which has no answer for the zero
-    // vector (a Choice, L125b): their copies give their answers as a stream.
-    const out = compiled[name](...inputs[name]) as { next?: unknown } & Iterable<unknown>;
-    const want = run(name, ...inputs[name]), got = typeof out?.next === "function" ? [...out][0] : out;
+    const want = run(name, ...inputs[name]), got = plainValue(compiled[name](...inputs[name]));
     assert.deepEqual(JSON.parse(JSON.stringify(got)), JSON.parse(JSON.stringify(want)), name);
   }
   // A few by hand: (1,2,3) + 2·(0.3,−0.5,1); |(4,6,3) − (1,2,3)| = 5; light clamps.

@@ -61,7 +61,7 @@ import { bindsOf, bodyOf, withBodies } from "./uses.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { ARRAY, TABLE, HASH_SET, CELL, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, PATH as PATH_T, STRING, BUILTIN_EFFECTS, Subst, type Row, type Type } from "../../ters/src/lang/types.ts";
-import { RELEASE_V, LOG_OP, FILE_OPS, KEPT_FILES, OPEN_FILE, tupleType, ABORT, ABORT_OP, CHECK, CHECK_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, HASH_SET_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, NOW_OP, OPTIONAL, ORDER_V, PAIR_V, RATIO, S, SET, SHOW_ANY, shownImplementations, implementationsOf, ORDERED, SOME, TEXT_OPS, TRUE, ZONE_OPS } from "../../ters/src/lang/std.ts";
+import { RELEASE_V, LOG_OP, FILE_OPS, KEPT_FILES, OPEN_FILE, tupleType, ABORT, ABORT_OP, CHECK, CHECK_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, HASH_SET_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, NOW_OP, MY_LOCALE_OP, MY_ZONE_OP, SETTINGS, OPTIONAL, ORDER_V, PAIR_V, RATIO, S, SET, SHOW_ANY, shownImplementations, implementationsOf, ORDERED, SOME, TEXT_OPS, TRUE, ZONE_OPS } from "../../ters/src/lang/std.ts";
 import { liftLets } from "../../ters/src/lang/lift-lets.ts";
 import { solvesOnce } from "../../ters/src/lang/run.ts";
 import { inlineLists } from "./inline-lets.ts";
@@ -137,6 +137,16 @@ export const WORLD_OPS: Record<Id, { op: string; aborts: boolean }> = {
   [IO.readInput]: { op: "readInput", aborts: true }, [IO.readLine]: { op: "readLine", aborts: true },
   [IO.readFile]: { op: "readFile", aborts: true }, [IO.writeFile]: { op: "writeFile", aborts: true }, [IO.appendFile]: { op: "appendFile", aborts: true },
   [IO.fileExists]: { op: "fileExists", aborts: false }, [IO.listFolder]: { op: "listFolder", aborts: true },
+};
+// A world operation of the core IR's JavaScript, by its builtin, on
+// lowered arguments; null for one it doesn't have.
+const HOST_WORLD: Record<Id, { op: string; aborts: boolean }> = {
+  [IO.readBytes]: { op: "readBytes", aborts: true }, [IO.writeBytes]: { op: "writeBytes", aborts: true }, [IO.fetchText]: { op: "fetchText", aborts: true },
+  [IO.sendRequest]: { op: "sendRequest", aborts: true },
+};
+const worldCall = (b: Id, args: SExpr[], t: LType): SExpr | null => {
+  const w = WORLD_OPS[b] ?? HOST_WORLD[b];
+  return w ? { k: "world", ...w, args, t } : null;
 };
 // C's (L213c5, bytes L213c7).
 const C_KEPT = new Set(Object.values(FILE_OPS));
@@ -652,6 +662,9 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // Not with `seeded` as well, whose draws aren't on that stack.
   const handlesRandom = !!opts.host && Object.values(code.nodes).some((n) => n.kind === "arm" && n.variant === RANDOM_OP);
   if (handlesRandom) tailOps.set(RANDOM_OP, RANDOM);
+  // The person's settings too (L214b2), where the program answers them: an
+  // ask no handler of the program's answers is the world's.
+  if (opts.host && Object.values(code.nodes).some((n) => n.kind === "arm" && (n.variant === MY_LOCALE_OP || n.variant === MY_ZONE_OP))) { tailOps.set(MY_LOCALE_OP, SETTINGS); tailOps.set(MY_ZONE_OP, SETTINGS); }
   // Check too, where the program handles it (T7e2: `lab test --compiled`
   // runs a test under a handler of its expects).
   if (opts.host && Object.values(code.nodes).some((n) => n.kind === "arm" && n.variant === CHECK_OP)) tailOps.set(CHECK_OP, CHECK);
@@ -1217,6 +1230,26 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           const e = laterOps.get(target)!, op = (code.nodes[(code.nodes[e] as NodeOf<"def">).body!] as NodeOf<"typedef">).variants.indexOf(target);
           return { k: "world", op: `perform:${e}:${op}`, aborts: false, args: args(), t, suspends: true };
         }
+        // The world's Console and Files where the program handles them
+        // (L145): print, read file and the rest, by name or as builtins,
+        // go to the nearest handler of the program's, and to the world
+        // when there's none, as the evaluator gives them.
+        const worldOp = OP_OF_BUILTIN[target] ?? target, worldBuiltin = OP_OF_BUILTIN[target] ? target : builtinOf.get(target);
+        if (opts.host && worldBuiltin && (tailOps.get(worldOp) === CONSOLE || tailOps.get(worldOp) === FILES)) {
+          const t = stype(zonk(id));
+          if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(id))}`);
+          const e = tailOps.get(worldOp)!, op = (code.nodes[(code.nodes[e] as NodeOf<"def">).body!] as NodeOf<"typedef">).variants.indexOf(worldOp);
+          const xs = n.args.map((a) => {
+            const at = stype(zonk(a));
+            if (!at) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(a))}`);
+            return { i: f.locals.push(at) - 1, value: expr(a, env, f, false) };
+          });
+          const locals = xs.map((x): SExpr => ({ k: "local", i: x.i }));
+          const world = worldCall(worldBuiltin, locals, t);
+          if (!world) throw new Refused(`uses ${nm(target)} under a handler of the program's (not lowered yet)`);
+          const either: SExpr = { k: "if", cond: { k: "rt", fn: `handled:${e}`, args: [], host: { t: "i32", partial: false } }, then: { k: "rt", fn: `perform:${e}:${op}${t === "i32" ? ":bool" : ""}`, args: locals, host: { t, partial: true } }, else: world, t };
+          return xs.reduceRight<SExpr>((body, x) => ({ k: "let", i: x.i, value: x.value, body }), either);
+        }
         if (tailOps.has(target) && !drawn) {
           if (target === RANDOM_OP) {
             if (Object.values(code.nodes).some((x) => x.kind === "ref" && x.target === S.seeded)) throw new Refused("handles Random beside seeded (not lowered yet)");
@@ -1228,6 +1261,12 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           const t = stype(zonk(id));
           if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(id))}`);
           const e = tailOps.get(target)!, op = (code.nodes[(code.nodes[e] as NodeOf<"def">).body!] as NodeOf<"typedef">).variants.indexOf(target);
+          if (e === SETTINGS) {
+            drawn = true;
+            let world: SExpr;
+            try { world = expr(id, env, f, false); } finally { drawn = false; }
+            return { k: "if", cond: { k: "rt", fn: `handled:${SETTINGS}`, args: [], host: { t: "i32", partial: false } }, then: { k: "rt", fn: `perform:${SETTINGS}:${op}`, args: [], host: { t, partial: true } }, else: world, t };
+          }
           if (tailOwn.has(e)) {
             // C (L213c4): the nearest handler's case, called.
             const ps = n.args.map((a) => stype(zonk(a)));
@@ -1245,6 +1284,15 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         // The clock, for JavaScript from the core IR (C137c10): the world's,
         // as the evaluator answers a `now` nothing handles.
         if (opts.host && target === NOW_OP) return { k: "world", op: "now", aborts: false, args: [], t: "f64" };
+        // The person's locale and time zone (L214b2, L188), a file's bytes
+        // (L189c), a fetched text, for JavaScript from the core IR: the
+        // world's, as the evaluator answers them.
+        if (opts.host && (target === MY_LOCALE_OP || target === MY_ZONE_OP || HOST_WORLD[target])) {
+          const t = stype(zonk(id));
+          if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(id))}`);
+          if (HOST_WORLD[target]) return worldCall(target, args(), t)!;
+          return { k: "world", op: target === MY_LOCALE_OP ? "myLocale" : "myTimeZone", aborts: false, args: [], t };
+        }
         // The files `with open file` keeps open (L213c3): the world's, by
         // their number, as the evaluator answers them; only the library
         // performs these, and none of them aborts.
@@ -1378,6 +1426,10 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         const pushed = arms.length ? tailOps.get(arms[0].variant) : undefined;
         if (pushed && arms.every((a) => tailOps.get(a.variant) === pushed) && !n.otherwise) return handleOps(n, pushed, id, env, f);
         const handled = opts.data && arms.length ? opOf.get(arms[0].variant) : undefined;
+        // A match on the world's Console or Files (L145): its operations
+        // answer and go on, and print is performed as the world's, so the
+        // case below (operations that never return) would skip the match.
+        if (handled === CONSOLE || handled === FILES) throw new Refused(`handles ${nm(handled)}, the world's, which isn't lowered yet: it runs in the evaluator`);
         if (handled && handled !== ABORT && arms.every((a) => opOf.get(a.variant) === handled) && !n.otherwise) {
           // A handler of another effect whose operations never return (C34):
           // a case on the operation it was given (the checker wants an arm

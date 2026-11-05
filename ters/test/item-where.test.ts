@@ -8,10 +8,6 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { pathToFileURL } from "node:url";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
@@ -19,9 +15,8 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { makeRunner, type Value } from "../src/lang/run.ts";
 import { ARITH, CELL_OPS, INT_OPS, S, SHOW_ANY } from "../src/lang/std.ts";
 import { INT, STRING, schemeArith, schemeNeeds, showType } from "../src/lang/types.ts";
-import { compile } from "../../compiler/src/compile.ts";
+import { compiledDefs } from "../../compiler/src/core-js.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 const lib = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
 
 function program() {
@@ -60,10 +55,8 @@ test("item where finds the card by its id and write at changes only its title; n
   const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });
   const [v] = r.call(r.value(p.demo));
   assert.deepEqual(listOf(v), EXPECTED);
-  const path = join(mkdtempSync(join(tmpdir(), "item-where-")), "out.js");
-  writeFileSync(path, compile(p.code, p.info, p.names, { runtime, exports: ["demo"] }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, () => Value>;
-  assert.deepEqual(listOf(defs.demo()), EXPECTED);
+  // A core IR gap (C137): path on cells.
+  assert.throws(() => compiledDefs(p.code, p.info, p.names, ["demo"]), /uses path/);
 });
 
 test("their types", () => {

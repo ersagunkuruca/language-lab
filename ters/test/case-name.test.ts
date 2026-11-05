@@ -3,8 +3,6 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import { compiledDefs } from "../../compiler/src/core-js.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
@@ -14,7 +12,6 @@ import { runMain } from "../src/lang/run.ts";
 import { CASE_NAME, NONE, S, SOME } from "../src/lang/std.ts";
 import { INT } from "../src/lang/types.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 
 test("L162: case name, evaluated and compiled", async () => {
   const k = new Lang(LIBRARY.code);

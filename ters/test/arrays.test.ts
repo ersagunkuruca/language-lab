@@ -4,8 +4,6 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { makeRunner, type Value } from "../src/lang/run.ts";
@@ -15,7 +13,6 @@ import { ARRAY_OPS, S, SHOW_ANY } from "../src/lang/std.ts";
 import { compiledDefs } from "../../compiler/src/core-js.ts";
 import { showType } from "../src/lang/types.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 
 test("Array: built, pushed, read by position and turned back into a list, evaluated and compiled", async () => {
   const k = new Lang(LIBRARY.code);

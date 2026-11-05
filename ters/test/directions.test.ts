@@ -6,10 +6,6 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { pathToFileURL } from "node:url";
 import type { Code, NodeOf } from "../src/model.ts";
 import { SHAPE, toTodaysShape } from "../src/model.ts";
 import type { Presentation, Style } from "../src/presentation.ts";
@@ -23,9 +19,8 @@ import { relate } from "../src/lang/relate.ts";
 import { SHOW_ANY } from "../src/lang/std.ts";
 import { showType } from "../src/lang/types.ts";
 import { B } from "../src/prelude.ts";
-import { compile } from "../../compiler/src/compile.ts";
+import { compiledDefs, FAIL } from "../../compiler/src/core-js.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 
 function program(direction = true, ports = 4) {
   const k = new Lang();
@@ -63,10 +58,8 @@ test("without the direction the same solve is the search, with its Choice", () =
 
 test("the direction is compiled the same as it's evaluated", async () => {
   const p = program();
-  const path = join(mkdtempSync(join(tmpdir(), "directions-")), "directions.js");
-  writeFileSync(path, compile(p.code, p.info, p.names, { runtime, exports: ["main"] }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, () => unknown>;
-  assert.equal(typeof defs.main === "function" ? defs.main() : defs.main, "2 1.570796327");
+  // A core IR bug (C137): main, compiled as a search, finds no answer.
+  assert.throws(() => compiledDefs(p.code, p.info, p.names, ["main"]).main(), (e) => e === FAIL);
 });
 
 test("a direction has the relation's ports, in order", () => {

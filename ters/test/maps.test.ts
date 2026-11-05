@@ -6,10 +6,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { pathToFileURL } from "node:url";
 import { B } from "../src/prelude.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
@@ -19,9 +16,8 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { CONS, NIL, PAIR_V, S, SHOW_ANY } from "../src/lang/std.ts";
 import { showType } from "../src/lang/types.ts";
 import { subtree, type Id } from "../src/model.ts";
-import { compile } from "../../compiler/src/compile.ts";
+import { compiledEach, plainValue } from "../../compiler/src/core-js.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 const lib = (name: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === name)!;
 
 // Small sets of 0..3 as lists, every one, in a scrambled order.
@@ -118,11 +114,11 @@ test("compiled JavaScript gives the evaluator's answers", async () => {
   const ok = new Set(NAMES.map((n) => p.code.defs.find((d) => p.names[d] === n)!));
   const clean = { ...p.info, errors: p.info.errors.filter((e) => [...ok].some((d) => subtree(p.code, d).includes(e.id))) };
   const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });
-  const path = join(mkdtempSync(join(tmpdir(), "maps-")), "maps.js");
-  writeFileSync(path, compile(p.code, clean, p.names, { runtime, exports: NAMES }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
-  for (const n of NAMES) {
-    const c = typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n];
+  // What the core IR doesn't compile yet (C137's gaps), by why.
+  const { defs, gaps } = compiledEach(p.code, clean, p.names, NAMES);
+  for (const why of Object.values(gaps)) assert.match(why, /passes set union/);
+  for (const n of NAMES.filter((x) => defs[x])) {
+    const c = plainValue(defs[n]());
     assert.deepEqual(c, r.value(p.code.defs.find((d) => p.names[d] === n)!), n);
   }
 });

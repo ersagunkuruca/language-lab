@@ -9,7 +9,6 @@
 
 import { test } from "node:test";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import assert from "node:assert/strict";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
@@ -63,8 +62,7 @@ test("a name goes only to its own effect's operations", () => {
 test("compiled JavaScript answers a named operation by its handler, as the evaluator does", async () => {
   const p = program((k, ask, { outer, inner }) => k.call(INT_OPS.add, k.call(INT_OPS.add, ask(outer), ask(inner)), k.call(INT_OPS.add, ask(), k.call(k.lambda([], () => ask(outer))))));
   p.run();
-  const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
-  const out: string[] = [];
+    const out: string[] = [];
   compiledDefs(p.code, p.info, p.names, ["main"], { print: (s: string) => out.push(s) })["main"]();
   assert.deepEqual([out, p.printed], [["1012"], ["1012"]]);
 });

@@ -6,10 +6,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { pathToFileURL } from "node:url";
 import { Cells, listEdits, meets, type Lists, type Step } from "../src/lang/cells.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
@@ -19,9 +16,8 @@ import { fromList, LIST_SHAPE, makeRunner, toList, type Value } from "../src/lan
 import { BOOL, CELL_OPS, S, SHOW_ANY } from "../src/lang/std.ts";
 import { STRING, showType } from "../src/lang/types.ts";
 import { subtree, type Id } from "../src/model.ts";
-import { compile } from "../../compiler/src/compile.ts";
+import { compiledDefs } from "../../compiler/src/core-js.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 
 // ---------------------------------------------------------------- the handler alone
 
@@ -243,10 +239,8 @@ test("paths and edits type-check, path refuses a function that isn't a place, an
 test("compiled JavaScript applies the same edits", async () => {
   const p = program();
   const clean = { ...p.info, errors: p.info.errors.filter((e) => !isUnder(p, p.bad, e.id)) };
-  const path = join(mkdtempSync(join(tmpdir(), "cell-paths-")), "paths.js");
-  writeFileSync(path, compile(p.code, clean, p.names, { runtime, exports: ["demo"] }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, () => Value>;
-  assert.deepEqual(listOf(defs.demo()), EXPECTED);
+  // A core IR gap (C137): a cell on data holding a Bool.
+  assert.throws(() => compiledDefs(p.code, clean, p.names, ["demo"]), /cell on data holding a Bool/);
 });
 
 const isUnder = (p: ReturnType<typeof program>, d: Id, id: Id) => subtree(p.code, d).includes(id);

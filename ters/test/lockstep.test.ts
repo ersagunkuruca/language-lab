@@ -6,14 +6,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import { root } from "../src/io.ts";
 import { loadProgram } from "../src/lang/load.ts";
 import { infer } from "../src/lang/infer.ts";
 import { makeRunner, runMain, type Value } from "../src/lang/run.ts";
 import { compiledDefs } from "../../compiler/src/core-js.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 const ONE = 2n ** 32n;
 const steps = (top: bigint, bottom: bigint) => { const t = 2n * top * ONE + bottom, d = 2n * bottom; return t >= 0n ? t / d : -((-t + d - 1n) / d); };
 const times = (a: bigint, b: bigint) => (a * b) >> 32n;

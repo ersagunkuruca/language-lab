@@ -5,10 +5,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { pathToFileURL } from "node:url";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { makeRunner, type Value } from "../src/lang/run.ts";
@@ -20,9 +17,8 @@ import { resolveArithmetic, usesGenericArithmetic } from "../src/lang/arith.ts";
 import { usesLiteralMatch } from "../src/lang/literal-match.ts";
 import { NUMBER, STRING, schemeArith, showType } from "../src/lang/types.ts";
 import { subtree, type Id, type NodeOf } from "../src/model.ts";
-import { compile } from "../../compiler/src/compile.ts";
+import { compiledDefs, plainValue } from "../../compiler/src/core-js.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 
 function program() {
   const k = new Lang(LIBRARY.code);
@@ -128,11 +124,9 @@ async function evaluatedAndCompiled() {
   const r = makeRunner(p.code, p.info, { print: () => {} });
   const byName = (n: string) => p.code.defs.find((d) => p.names[d] === n)!;
   const evaluated = Object.fromEntries(names.map((n) => [n, r.value(byName(n))]));
-  const path = join(mkdtempSync(join(tmpdir(), "arith-")), "arith.js");
   const ok = new Set(names.map(byName));
   const clean = { ...p.info, errors: p.info.errors.filter((e) => [...ok].some((d) => subtree(p.code, d).includes(e.id))) };
-  writeFileSync(path, compile(p.code, clean, p.names, { runtime, exports: names }));
-  const compiled = (await import(pathToFileURL(path).href)).defs as Record<string, unknown>;
+  const compiled = compiledDefs(p.code, clean, p.names, names);
   return { evaluated, compiled, names };
 }
 
@@ -154,7 +148,7 @@ test("the evaluator gives each type's answer", async () => {
 
 test("compiled JavaScript gives the evaluator's values", async () => {
   const { evaluated, compiled, names } = await evaluatedAndCompiled();
-  for (const n of names) assert.deepEqual(plain((compiled[n] as () => unknown)()), plain(evaluated[n]), n);
+  for (const n of names) assert.deepEqual(plain(plainValue(compiled[n]())), plain(evaluated[n]), n);
 });
 
 test("run backwards, a generic definition is its Float64 version: which x has twice(x) = 7?", () => {

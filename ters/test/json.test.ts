@@ -3,10 +3,6 @@
 // JSON.parse reads back what was written.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import { loadCoreJs, lowerCore } from "../../compiler/src/core-js.ts";
 import type { Id } from "../src/model.ts";
 import { Lang } from "../src/lang/dsl.ts";
@@ -16,7 +12,6 @@ import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { runMain } from "../src/lang/run.ts";
 import { JSON_V, NIL as NIL_ID, PAIR_V, S, SHOW_ANY } from "../src/lang/std.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 const lib = (name: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === name)!;
 
 function program(body: (k: Lang) => Id) {

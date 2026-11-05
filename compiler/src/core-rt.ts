@@ -4,7 +4,9 @@
 // function is named with the builtin's id where it has one (the printer
 // reads scalar.ts's tables), so nothing here needs the compiler.
 
-import { ArrayView, arrayView, CONS, FALSE, HASH_SET_OPS, NIL, NONE, S, SOME, STD_IMPL, STD_MANY, TABLE_OPS, TICKET_V, TRUE } from "../../ters/src/lang/std.ts";
+import { ArrayView, arrayView, CONS, FALSE, HASH_SET_OPS, LOCALE_V, NIL, NONE, S, SOME, STD_IMPL, STD_MANY, TABLE_OPS, TICKET_V, TRUE } from "../../ters/src/lang/std.ts";
+import { hostLocale, hostZone } from "../../ters/src/lang/text.ts";
+import { plainRequest, responseValue } from "../../ters/src/lang/network.ts";
 import { LIST_SHAPE, META, cellOps, equal, finiteFloat, unit, type Data, toList, type Runtime, type Value, type World } from "../../ters/src/lang/run.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { answerByShapes, type HostOp } from "../../ters/src/lang/hosts.ts";
@@ -369,7 +371,13 @@ function worldFn(op: string, rt: Runtime, timers: Timers, handlers: Map<string, 
       const k = xs.pop(), s = handlers.get(e);
       if (!s?.length) throw new Error(`nothing handles ${e}`);
       const frame = s.pop() as Cases & { box: { v: unknown }; now?: Set<number> };
-      const rest = (y: unknown) => { s.push(frame); try { RUNTIME.ap(k as never, y); } finally { s.pop(); } return frame.box.v; };
+      // A rest runs once, as the evaluator's (run.ts).
+      let used = false;
+      const rest = (y: unknown) => {
+        if (used) throw new Error("the rest of the operation was resumed a second time: a rest runs once");
+        used = true;
+        s.push(frame); try { RUNTIME.ap(k as never, y); } finally { s.pop(); } return frame.box.v;
+      };
       // A case that leaves the rest out answers at once (L63, L229e).
       try { if (frame.now?.has(Number(i))) rest(frame[Number(i)](...xs)); else frame.box.v = frame[Number(i)](...xs, rest); } finally { s.push(frame); }
       return true;
@@ -404,6 +412,10 @@ function worldFn(op: string, rt: Runtime, timers: Timers, handlers: Map<string, 
     // A stop with a reason (L51c): the program ends, as an overflow's stop.
     case "stopWith": return (why) => { throw new Stopped(why as string); };
     case "now": return () => (rt.world?.now ?? Date.now)();
+    case "myLocale": return () => ({ tag: LOCALE_V, fields: [(rt.world?.locale ?? hostLocale)()] });
+    case "myTimeZone": return () => (rt.world?.timeZone ?? hostZone)();
+    case "fetchText": return (u) => tried(() => w("fetchText")(u as string));
+    case "sendRequest": return (r) => tried(() => responseValue(w("sendRequest")!(plainRequest(r))));
     case "random": return () => (rt.world?.random ?? worldRandom)();
     case "print": return (s) => { rt.print(s as string); return []; };
     // The files `with open file` keeps open (L213c3), as run.ts answers
@@ -422,6 +434,8 @@ function worldFn(op: string, rt: Runtime, timers: Timers, handlers: Map<string, 
     case "writeFile": return (p, s) => tried(() => { w("writeFile")(p as string, s as string); return []; });
     case "appendFile": return (p, s) => tried(() => { w("appendFile")(p as string, s as string); return []; });
     case "fileExists": return (p) => w("fileExists")(p as string);
+    case "readBytes": return (p) => tried(() => bytesValue(w("readBytes")!(p as string)));
+    case "writeBytes": return (p, b) => tried(() => { w("writeBytes")!(p as string, plainBytes(b)); return []; });
     // A zone's offset (L188), NaN for a zone the host doesn't know.
     case "zoneOffset": return (z, s) => T.zoneOffset(z as string, s as number)[0] ?? NaN;
     case "listFolder": return (p) => tried(() => toList(w("listFolder")(p as string)));

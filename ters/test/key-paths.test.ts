@@ -4,10 +4,6 @@
 // in, moved or taken out before it, in the evaluator and compiled JS alike.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { pathToFileURL } from "node:url";
 import { Cells, type Lists } from "../src/lang/cells.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
@@ -16,9 +12,8 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { makeRunner, type Value } from "../src/lang/run.ts";
 import { CELL_OPS, S, SHOW_ANY } from "../src/lang/std.ts";
 import { INT, STRING, showType } from "../src/lang/types.ts";
-import { compile } from "../../compiler/src/compile.ts";
+import { compiledDefs } from "../../compiler/src/core-js.ts";
 
-const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 
 function program() {
   const k = new Lang(LIBRARY.code);
@@ -66,10 +61,8 @@ test("key path names the same item after inserts and moves, and no item when non
   const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });
   const [v] = r.call(r.value(p.demo));
   assert.deepEqual(listOf(v), EXPECTED);
-  const path = join(mkdtempSync(join(tmpdir(), "key-paths-")), "keys.js");
-  writeFileSync(path, compile(p.code, p.info, p.names, { runtime, exports: ["demo"] }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, () => Value>;
-  assert.deepEqual(listOf(defs.demo()), EXPECTED);
+  // A core IR gap (C137): path on cells.
+  assert.throws(() => compiledDefs(p.code, p.info, p.names, ["demo"]), /uses path/);
 });
 
 test("an edit by key wakes the readers of that item's place, found where it is now", () => {

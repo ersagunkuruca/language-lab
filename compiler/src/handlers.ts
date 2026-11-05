@@ -32,7 +32,7 @@ import { laterOps } from "../../ters/src/lang/later-ops.ts";
 import { freshId, mapIds, subtree, type Code, type Id, type Node, type NodeOf, isCall, type Call } from "../../ters/src/model.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { SIGS } from "../../ters/src/lang/std.ts";
-import { DIVERGE, Subst, type Type } from "../../ters/src/lang/types.ts";
+import { CONSOLE, DIVERGE, FILES, Subst, type Type } from "../../ters/src/lang/types.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 
 type Names = Record<Id, string>;
@@ -43,6 +43,9 @@ export function fuseHandlers(code: Code, info: Info, names: Names): { code: Code
   const newNames: Names = { ...names };
   const effectOf = (variant: Id): Id | null => {
     const def = info.owner.get(variant);
+    // The world's Console and Files are performed by builtins too (print,
+    // read file), which a case can't be written into: not fused (L145).
+    if (def === CONSOLE || def === FILES) return null;
     const body = def ? (code.nodes[def] as NodeOf<"def">).body : null;
     return body && (code.nodes[body] as NodeOf<"typedef">)?.effect ? def! : null;
   };

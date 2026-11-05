@@ -4,7 +4,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import { compiledDefs } from "../../compiler/src/core-js.ts";
 import { loadCoreJs, lowerCore } from "../../compiler/src/core-js.ts";
 import { Lang } from "../src/lang/dsl.ts";
@@ -23,7 +22,6 @@ import { B } from "../src/prelude.ts";
 
 const lib = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
 const near = lib("near");
-const runtime = pathToFileURL(join(import.meta.dirname, "../../compiler/src/runtime.js")).href;
 
 // build may give pins (signatures.ts) for its definitions.
 function program(build: (k: Lang) => void | Pins) {
