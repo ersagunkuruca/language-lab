@@ -9,7 +9,7 @@
 import { readFileSync } from "node:fs";
 import { build } from "esbuild";
 import { Window } from "happy-dom";
-import { pageRuntime, workletRuntime } from "../cli/web.ts";
+import { corePageRuntime, coreWorkletRuntime } from "../cli/web.ts";
 import { examplesPlugin } from "../../editor/examplesPlugin.ts";
 
 const editor = new URL("../../editor/", import.meta.url).pathname;
@@ -18,7 +18,7 @@ const editor = new URL("../../editor/", import.meta.url).pathname;
 const bundle = await build({
   entryPoints: [editor + "main.ts"], bundle: true, format: "iife", target: "es2022", write: false,
   plugins: [examplesPlugin(JSON.parse(readFileSync(editor + "examples.json", "utf8")))],
-  define: { PAGE_RUNTIME: JSON.stringify(await pageRuntime()), RUN_WORKER: '""', WORKLET_RUNTIME: JSON.stringify(await workletRuntime()) },
+  define: { CORE_PAGE_RUNTIME: JSON.stringify(await corePageRuntime()), RUN_WORKER: '""', CORE_WORKLET_RUNTIME: JSON.stringify(await coreWorkletRuntime()) },
 });
 const js = bundle.outputFiles[0].text;
 // The page without its script and the web fonts, which happy-dom would fetch.

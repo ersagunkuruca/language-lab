@@ -18,10 +18,10 @@ import { loadProgram } from "../src/lang/load.ts";
 import { audioProblem, playBlocks } from "../src/lang/audio.ts";
 import { createContext, runInContext, runInNewContext } from "node:vm";
 import { runMain } from "../src/lang/run.ts";
-import { corePageRuntime, coreSoundWorklet, coreWorkletRuntime, soundWorklet, webCorePage, workletRuntime, pageRuntime } from "../cli/web.ts";
+import { corePageRuntime, coreSoundWorklet, coreWorkletRuntime, webCorePage } from "../cli/web.ts";
 import { FakeEl, fakeDoc } from "./fakedom.ts";
 import { hostOpsOf, lowerCore, solvesSlowly } from "../../compiler/src/core-js.ts";
-import { corePageFile, coreWorkletFile, pageFile, workletFile } from "../src/lang/page.ts";
+import { corePageFile, coreWorkletFile } from "../src/lang/page.ts";
 import { close } from "../src/lang/run.ts";
 import { CELL_OPS, NOW_OP, RANDOM_OP, S } from "../src/lang/std.ts";
 import { recordingWorld } from "../src/lang/audio-page.ts";
@@ -173,26 +173,6 @@ test("the pedal page's worklet from the core IR plays the pedal, and the page's 
   assert.match(drawn(html), /Clean/);
 });
 
-// The same worklet made in a browser, the editor's way (A4): the prebuilt
-// audio-thread runtime and the program compiled to take its helpers from
-// it. It plays what the bundled one plays; "Save page" carries it.
-test("a worklet made without a bundler plays what the bundled one plays", async () => {
-  const { p, page } = pedal();
-  const play = (source: string) => {
-    const made: (new (o: object) => { process(i: Float32Array[][], o: Float32Array[][]): boolean })[] = [];
-    class AudioWorkletProcessor { port = { onmessage: null, postMessage: () => {} }; }
-    runInNewContext(source, { registerProcessor: (_: string, processor: never) => made.push(processor), AudioWorkletProcessor, console });
-    const node = new made[0]({ processorOptions: { index: 0 } });
-    const out = [new Float32Array(128), new Float32Array(128)];
-    node.process([[Float32Array.from(sine(128, 0.3))]], [out]);
-    return [...out[0]];
-  };
-  const runtime = await workletRuntime();
-  const made = workletFile(runtime, p.code, p.info, p.names, page);
-  assert.deepEqual(play(made), play(await soundWorklet(p.code, p.info, p.names, page)));
-  assert.ok(pageFile("Pedal", await pageRuntime(), p.code, p.info, p.names, page, runtime).includes(JSON.stringify(made).slice(0, 200)));
-});
-
 // The core IR's, made in a browser (C137d6): the prebuilt runtimes and the
 // printed program taking its helpers from them, for the editor's "Save
 // page". Its worklet plays what the bundled one plays; its page draws the
@@ -266,12 +246,12 @@ test("a page with sound may read the clock and draw random numbers in main: the 
   world.random();
   assert.deepEqual(answers, { random: [0.25], now: [1000] });
   // The audio thread's side, given them.
-  const source = await soundWorklet(code, info, names, noisy);
+  const source = await coreSoundWorklet(lowerCore(code, info, names, [noisy]), names[noisy]);
   const start = (processorOptions: object) => {
     const made: (new (o: object) => { port: { onmessage: ((e: { data: unknown }) => void) | null }; process(i: Float32Array[][], o: Float32Array[][]): boolean })[] = [];
     const said: unknown[] = [];
     class AudioWorkletProcessor { port = { onmessage: null, postMessage: (m: unknown) => said.push(m) }; }
-    runInNewContext(source, { registerProcessor: (_: string, processor: never) => made.push(processor), AudioWorkletProcessor, console });
+    runInNewContext(source, { registerProcessor: (_: string, processor: never) => made.push(processor), AudioWorkletProcessor, console, TextEncoder, TextDecoder });
     return { node: new made[0]({ processorOptions }), said };
   };
   const { node, said } = start({ index: 0, answers });

@@ -14,7 +14,6 @@ import { browserWorld, type Store } from "./browser.ts";
 import { Cells } from "./cells.ts";
 import { evaluatorCall, mountHtml, replayEvent, type Doc, type Node_ } from "./html.ts";
 import { equal, pageProblem, runMain } from "./run.ts";
-import { compile } from "../../../compiler/src/compile.ts";
 import { corePageScript, coreSoundScript, lowerCore } from "../../../compiler/src/core-js.ts";
 import type { CoreIR } from "../../../compiler/src/scalar.ts";
 import { HTML_V } from "./std.ts";
@@ -43,8 +42,9 @@ export interface PageOptions {
   frame: (f: () => void) => void;
   // Each time a part runs again: a preview can flash it.
   ran?: (el: Node_) => void;
-  // workletRuntime (cli/web.ts) prebuilt: given it, a page with sound plays
-  // in the preview (AUDIO.md, "Playing a sound from the editor").
+  // coreWorkletRuntime (cli/web.ts) prebuilt: given it, a page with sound
+  // plays in the preview (AUDIO.md, "Playing a sound from the editor"),
+  // main run again on the audio thread from the core IR.
   worklet?: string;
   // Where recordings are read from, when not beside the page (the editor's: apps/).
   recordings?: string;
@@ -94,7 +94,7 @@ export function showPage(o: PageOptions): Preview {
   const answered = o.replay ? replaying(o.replay.filter((e) => e.op !== "event"), browser) : browser;
   const world = recordingWorld(o.log ? logged(answered, o.log).world : answered);
   const run = () => runMain(o.code, o.info, o.main, { print: (line) => cells.later(() => out.log(line)), names: o.names, cells, world });
-  const sound = o.worklet && hasSound(o.code) ? soundPlayer(cells, workletFile(o.worklet, o.code, o.info, o.names, o.main), run, o.recordings, world) : null;
+  const sound = o.worklet && hasSound(o.code) ? soundPlayer(cells, soundFile(o.worklet, o.code, o.info, o.names, o.main), run, o.recordings, world) : null;
   const value = sound ? sound.page : run();
   const root = mountHtml(value, { cells, doc: o.doc, call: evaluatorCall, ran: o.ran, listen: sound?.listen, stopped: o.stopped, heard: o.log && heardInto(o.log) });
   const kept = cells.kept;
@@ -154,22 +154,8 @@ ${body ? `${body}\n` : ""}${scripts.map((js) => `<script>${js.replace(/<\/script
 `;
 }
 
-// The same page made without a bundler, in a browser: `runtime` is
-// page-runtime.ts prebuilt as a script that sets `$lab` (cli/web.ts
-// pageRuntime), and the program is compiled to a script that takes its
-// helpers from there. Bigger than `lab build-web`'s, which keeps only what
-// the program uses, and the same page.
-// A page with sound also gives `worklet`, workletRuntime (cli/web.ts)
-// prebuilt, and plays: its program for the audio thread is made here too.
-export function pageFile(title: string, runtime: string, code: Code, info: Info, names: Names, main: Id, worklet?: string): string {
-  const name = names[main];
-  const program = compile(code, info, names, { runtime: "$lab", exports: [name], link: "global" });
-  const sound = worklet && hasSound(code) ? `, ${JSON.stringify(workletFile(worklet, code, info, names, main))}` : "";
-  return pageShell(title, runtime, `(() => {\n${program}\n$lab.startPage(defs[${JSON.stringify(name)}], ${JSON.stringify(title)}${sound});\n})();`);
-}
-
-// The same page printed from the core IR (C137d6), made without a bundler
-// as pageFile makes compile.ts's: `runtime` is cli/web.ts corePageRuntime
+// The page printed from the core IR (C137d6), made without a bundler, in
+// a browser (the editor's Save page): `runtime` is cli/web.ts corePageRuntime
 // prebuilt, and a page with sound gives `worklet`, coreWorkletRuntime.
 // Throws when main isn't compiled through the core IR, with why.
 export function corePageFile(title: string, runtime: string, code: Code, info: Info, names: Names, own: Id[], main: Id, worklet?: string): string {
@@ -181,19 +167,15 @@ export function corePageFile(title: string, runtime: string, code: Code, info: I
 }
 // The audio thread's script for it: `runtime` is coreWorkletRuntime.
 export const coreWorkletFile = (runtime: string, ir: CoreIR, name: string): string => `${runtime}\n${coreSoundScript(ir, name, "$core")}`;
+// The same for the preview's page (showPage), or why main isn't compiled
+// through the core IR.
+function soundFile(runtime: string, code: Code, info: Info, names: Names, main: Id): string {
+  const ir = lowerCore(code, info, names, [main]);
+  const why = ir.refused.get(main);
+  if (why) throw new Error(`${names[main] ?? "main"}'s sound isn't compiled through the core IR: it ${why}`);
+  return coreWorkletFile(runtime, ir, names[main]);
+}
 
 // Does the program play sound (a `listen` attribute anywhere)?
 export const hasSound = (code: Code) => Object.values(code.nodes).some((n) => n.kind === "ref" && n.target === HTML_V.listen);
 
-// The script the audio thread runs for a page with sound (AUDIO.md, A4),
-// made in a browser: `runtime` is cli/web.ts workletRuntime, and the
-// program, compiled here, takes its helpers from it and runs main again
-// there (audio-worklet.ts startSound). The editor plays a page's sound
-// with it: audio-page.ts soundPlayer(cells, workletFile(…), main) gives
-// the page to mount and the `listen` hook (html.ts Mount.listen) that
-// plays it.
-export function workletFile(runtime: string, code: Code, info: Info, names: Names, main: Id): string {
-  const name = names[main];
-  const program = compile(code, info, names, { runtime: "$lab", exports: [name], link: "global" });
-  return `${runtime}\n(() => {\n${program}\n$lab.startSound(defs[${JSON.stringify(name)}]);\n})();`;
-}
