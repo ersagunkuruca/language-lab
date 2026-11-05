@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { compile } from "../../compiler/src/compile.ts";
+import { loadCoreJs, lowerCore } from "../../compiler/src/core-js.ts";
 import type { Id } from "../src/model.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
@@ -46,13 +47,23 @@ function program(build: (k: Lang, t: ReturnType<typeof types>) => Id, pin?: (k: 
   const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
   return { code, names, info, main };
 }
-async function both(p: ReturnType<typeof program>) {
+async function both(p: ReturnType<typeof program>, way: "core" | "compile.ts" = "core") {
   assert.deepEqual(p.info.errors.map((e) => e.message), []);
   const v = runMain(p.code, p.info, p.main, { print: () => {}, names: p.names });
-  const path = join(mkdtempSync(join(tmpdir(), "json-type-")), "main.mjs");
-  writeFileSync(path, compile(p.code, p.info, p.names, { runtime, exports: ["main"] }));
-  const defs = (await import(pathToFileURL(path).href)).defs as Record<string, () => unknown>;
-  assert.equal(typeof defs.main === "function" ? defs.main() : defs.main, v);
+  // The core IR's JavaScript, as the editor and `lab build` run it: it
+  // reads JSON through json read's written reader where compile.ts would
+  // search (L72f).
+  if (way === "compile.ts") {
+    const path = join(mkdtempSync(join(tmpdir(), "json-type-")), "main.mjs");
+    writeFileSync(path, compile(p.code, p.info, p.names, { runtime, exports: ["main"] }));
+    const defs = (await import(pathToFileURL(path).href)).defs as Record<string, () => unknown>;
+    assert.equal(typeof defs.main === "function" ? defs.main() : defs.main, v);
+    return v as string;
+  }
+  const core = lowerCore(p.code, p.info, p.names, [p.main]);
+  assert.deepEqual([...core.refused.values()], []);
+  const main = loadCoreJs(core)[core.funcs.findIndex((g) => g.def === p.main && !g.inner)];
+  assert.equal(main(), v);
   return v as string;
 }
 const drawingOf = (k: Lang, t: ReturnType<typeof types>, note: Id) => k.call(t.drawing.v.drawing, k.lit("plan"),
@@ -101,6 +112,8 @@ test("a recursive type and a tuple go both ways: what json of writes, from json 
   assert.deepEqual(JSON.parse(shown), { node: { left: { node: { left: "leaf", item: [1, "a"], right: "leaf" } }, item: [2, "b"], right: "leaf" } });
 });
 
+// The core IR doesn't bring in the library's bytes of base64 for json of
+// yet (json-by-type.ts `lib`), so this one runs compile.ts's way.
 test("a Map with Text keys is an object, one with other keys a list of [key, value], a Set a list, Bytes Base64", async () => {
   let back = "";
   const p = program((k) => {
@@ -118,7 +131,7 @@ test("a Map with Text keys is an object, one with other keys a list of [key, val
     k.define(typed, k.fn(["x"], (x) => k.match(x, [{ variant: "std.tuple4.tuple", names: ["a", "b", "c", "d"], body: ([a, b, c, d]) => k.call("std.tuple4.tuple", k.call(lib("put"), a, k.lit("z"), k.int(0)), k.call(lib("put"), b, k.int(0), k.x(FALSE)), k.call(lib("add item"), c, k.lit("w")), k.call(lib("utf8 of"), k.call(lib("text of utf8"), d))) }])));
     k.define(back, k.fn(["json"], (js) => k.let("v", k.call(JSON_OPS.from, js), (v) => k.let("same", k.call(typed, v), () => v))));
   });
-  const out = JSON.parse(await both(p)) as string[];
+  const out = JSON.parse(await both(p, "compile.ts")) as string[];
   assert.deepEqual(JSON.parse(out[0]), [{ a: 1, b: 2 }, [[3, true]], ["x", "y"], "aGkh"]);
   assert.deepEqual(JSON.parse(out[1]), JSON.parse(out[0]));
 });
