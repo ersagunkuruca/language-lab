@@ -824,7 +824,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   const funcs: SFunc[] = [];
   const index = new Map<Id, number>();
   const refused = new Map<Id, string>();
-  const showns = shownImplementations(info);
+  const showns = shownImplementations(info), ordereds = implementationsOf(info, ORDERED);
   const inProgress = new Set<Id>();
   // Whether what's being lowered runs under a budget, so a call to
   // something that might not finish is allowed: inside a budget's body, or
@@ -1509,6 +1509,20 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     index.set(key, funcs.push(g) - 1);
     const a: SExpr = { k: "local", i: 0 }, b: SExpr = { k: "local", i: 1 };
     const num = (v: number): SExpr => ({ k: "num", v });
+    // A type with an Ordered implementation orders by its less, as the
+    // evaluator's orderedBy does (L204g): before when a's less than b,
+    // after when b's less than a, else the same. The prelude's Rational's
+    // is one, so no case of its is named here (C139b).
+    const od = opts.data ? ordereds.get(t.def) : undefined;
+    if (od && code.defs.includes(od)) {
+      const it = info.typeOf.get(od) && stype(info.subst.zonk(info.typeOf.get(od)!));
+      const ft = it && isRecord(it) ? it.fields[0]?.t : undefined;
+      if (it && isRecord(it) && ft && isFn(ft)) {
+        const less = (x: SExpr, y: SExpr): SExpr => ({ k: "apply", fn: { k: "get", rec: { k: "call", fn: func(od), args: [], tail: false }, t: it, i: 0 }, t: ft, args: [x, y], tail: false, tmp: g.locals.push(ft) - 1 });
+        g.body = { k: "if", cond: less(a, b), then: num(-1), else: { k: "if", cond: less(b, a), then: num(1), else: num(0), t: "f64" }, t: "f64" };
+        return index.get(key)!;
+      }
+    }
     const all = (pairs: [SExpr, SExpr, LType][]): SExpr => {
       if (!pairs.length) return num(0);
       const [x, y, ft] = pairs[pairs.length - 1];
@@ -1517,13 +1531,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         return { k: "let", i: c, value: compared(x2, y2, t2, g, false), body: { k: "if", cond: { k: "op", op: "equal", args: [at, num(0)] }, then: rest, else: at, t: "f64" } };
       }, compared(x, y, ft, g, true));
     };
-    if (isRecord(t) ? t.variant === RATIO : t.cases.length === 1 && t.cases[0].variant === RATIO) {
-      // A fraction by value: top · other bottom against other top · bottom.
-      const part = (r: SExpr, j: number): SExpr => (isRecord(t) ? { k: "get", rec: r, t, i: j } : { k: "field", rec: r, t, c: 0, i: j });
-      const times = (u: SExpr, v: SExpr): SExpr => ({ k: "rt", fn: "int.mul", args: [u, v] });
-      const [l, r] = [g.locals.push("int") - 1, g.locals.push("int") - 1];
-      g.body = { k: "let", i: l, value: times(part(a, 0), part(b, 1)), body: { k: "let", i: r, value: times(part(b, 0), part(a, 1)), body: compared({ k: "local", i: l }, { k: "local", i: r }, "int", g, true) } };
-    } else if (isRecord(t)) g.body = all(t.fields.map((x, j) => [{ k: "get", rec: a, t, i: j }, { k: "get", rec: b, t, i: j }, x.t]));
+    if (isRecord(t)) g.body = all(t.fields.map((x, j) => [{ k: "get", rec: a, t, i: j }, { k: "get", rec: b, t, i: j }, x.t]));
     else {
       const arms = t.cases.map((c, ci) => all(c.fields.map((x, j) => [{ k: "field", rec: a, t, c: ci, i: j }, { k: "field", rec: b, t, c: ci, i: j }, x.t])));
       // Different cases: a's place against b's.
