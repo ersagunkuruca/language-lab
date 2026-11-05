@@ -1,7 +1,7 @@
 // The prelude definitions the passes and the solver find by name
 // (arith.ts preludeDef): fractions' and grammars' pieces, `inverse` and
-// `together`. A table, so that a compiled program that solves doesn't
-// carry the library (library/prelude.json, 4 MB) to look them up
+// `together`, and the checks a printer's arms make (descent.ts). A table,
+// so that a compiled program that solves doesn't carry the library (library/prelude.json, 4 MB) to look them up
 // (C137d2); test/prelude-ids.test.ts checks it against the prelude.
 export const PRELUDE_DEFS: Readonly<Record<string, string>> = {
  "add fractions": "@fhlo8c82jls3gierrjehefgoi7",
@@ -13,4 +13,7 @@ export const PRELUDE_DEFS: Readonly<Record<string, string>> = {
  "optional parens": "@9hjf7ci8fb8h0lvmnpjq3go6a2",
  "inverse": "@c8c8umeg8tfsrur401k166n204",
  "together": "@1o5g8v7mf0toapgikplsnlelu1",
+ "all pass": "@ku5ojesmoico158dp65r5o0q8f",
+ "is letter": "@3ghl6cjivv5vaeuti6ht2gip8a",
+ "is digit": "@kns2kgot84jr2lfre0vbl00j9q",
 };

@@ -20,7 +20,7 @@ import { bindsOf } from "./uses.ts";
 import { $FN, $clean, $close, $key, $ok, $planned, $solveRuntime, plans } from "./plan-rt.js";
 import { ownerOfTypeParts, useTarget, type Code, type Id, type NodeOf, type Use } from "../../ters/src/model.ts";
 import { FAIL, Unsupported, inn, lazyList, usePlans, useSolver, type Solver } from "./core-rt.ts";
-import { descentReader, Unsupported as NotRead } from "./descent.ts";
+import { descentReader, Unsupported as NotRead } from "../../ters/src/lang/descent.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
 
 // derivative(f) or gradient(f) of a function value (C137c20, scalar.ts):
