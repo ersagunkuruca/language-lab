@@ -3,7 +3,7 @@
 // by name, symbol, other names and comments, and what's typed read as a
 // value once typing pauses. What it reads of the editor comes through
 // `PaletteHost`.
-import { isCall, portsOf, subtree, type Code, type Id, type NodeOf } from "../ters/src/model.ts";
+import { isCall, ownNodes, portsOf, subtree, type Code, type Id, type NodeOf } from "../ters/src/model.ts";
 import type { Names } from "../ters/src/presentation.ts";
 import { showIn, type Type } from "../ters/src/lang/types.ts";
 import { LIBRARY } from "../ters/src/lang/library.ts";
@@ -142,7 +142,8 @@ export function palette(host: PaletteHost) {
     // at a hole of any type it would otherwise come before calling it.
     // Where a call's function goes (Change the function…), functions are
     // what's wanted, and they will be called.
-    const head = Object.values(doc().code.nodes).some((n) => isCall(n) && n.fn === hole);
+    // A hole is the program's own, never the library's (I167k).
+    const head = ownNodes(doc().code).some((n) => isCall(n) && n.fn === hole);
     // Where a function goes, writing one here is often what's meant.
     // What a representation is written with (match by, match as written)
     // comes last: it's for writing one, not for a program's values (I141).
