@@ -120,6 +120,9 @@ export function firstSets(code: Code, printer: Id, names: Record<Id, string>): F
     if (f === printer) return { k: "text", f: one("itself") };
     // A list's items between separators (L72b): none, or what an item starts with.
     if (named(f) === "join all") return { k: "text", f: ANY };
+    // A Text a function reads back (L72e1b), and one of several texts
+    // (L72e2): anything, for now.
+    if (named(f) === "inverse" || named(f) === "one of") return { k: "text", f: ANY };
     // A definition, or a function written in place, read through its body
     // with what it is given.
     const fn = f && code.nodes[f]?.kind === "def" ? lambdaOf(f) : node(n.fn)?.kind === "lambda" ? node(n.fn) : undefined;

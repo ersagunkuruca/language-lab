@@ -50,6 +50,7 @@
 // answer, fallback and all. n is a number written down, so the bound is
 // known when the shader is built.
 
+import { tableText } from "./table-text.ts";
 import { laterOps as laterOpsOf } from "../../ters/src/lang/later-ops.ts";
 import { givenInOrder } from "../../ters/src/lang/ports.ts";
 import { resolveArithmetic } from "../../ters/src/lang/arith.ts";
@@ -521,6 +522,8 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   };
   // A use with no body, as the use that binds its ports (C161, uses.ts).
   ({ code, info } = withBodies(code, info, names));
+  // Case and graphemes with no host to ask run the cases module (L214e5).
+  if (!opts.host) ({ code, info, names } = tableText(code, info, names));
   // The generic + resolved to each type's own operation first
   // (ters/src/lang/arith.ts): nothing here sees a generic one.
   ({ code, info, names } = resolveArithmetic(code, info, names));
@@ -2600,7 +2603,8 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
             return xs.reduceRight<SExpr>((b, x) => ({ k: "let", i: x.i, value: x.value, body: b }), body);
           }
         }
-        return { k: "call", fn: reverse(t), tail: true, args: [acc, e] };
+        // Not a tail call any more: its answer is turned round onto.
+        return { k: "call", fn: reverse(t), tail: true, args: [acc, "tail" in e && e.tail ? { ...e, tail: false } as SExpr : e] };
       };
       h.body = onto(mapLocals(g.body, (j) => (j < p ? j : j + 1)));
       g.body = { k: "call", fn: hi, tail: true, args: [...g.params.map((_, j): SExpr => ({ k: "local", i: j })), { k: "new", t, c: nil, args: [] }] };
