@@ -797,6 +797,67 @@ static double lab_world_randomSeed(void) {
   if (lab__log_begin("randomSeed")) { lab__log_answer(); fprintf(lab_log, "%u", (unsigned)s); lab__log_close(); }
   return (double)s;
 }` },
+  // The files `with open file` keeps open (L213c5), as Node's world keeps
+  // them (ters/src/lang/world.ts): opened for reading from the start and
+  // adding at the end, read through a buffer that a line or bytes take
+  // from, the reading ended for good once it finds the end. A file's
+  // number is its place here, from 1; only the library sees it.
+  "world.kept": { uses: [], c: `#include <fcntl.h>
+#include <unistd.h>
+typedef struct { int fd; long at; uint8_t *rest; size_t n; int ended; } lab_kept_file;
+static lab_kept_file lab_kept[1024];
+static int lab_kept_n;
+static lab_kept_file *lab__kept(lab_int f) { int64_t i = LAB_IS_SMALL(f) ? LAB_VAL(f) : 0; return i >= 1 && i <= lab_kept_n && lab_kept[i - 1].fd >= 0 ? &lab_kept[i - 1] : 0; }
+static void lab__kept_more(lab_kept_file *k) {
+  uint8_t piece[1 << 16];
+  ssize_t n = pread(k->fd, piece, sizeof piece, k->at);
+  if (n <= 0) { k->ended = 1; return; }
+  k->at += n;
+  k->rest = realloc(k->rest, k->n + (size_t)n);
+  if (!k->rest) lab_oom();
+  memcpy(k->rest + k->n, piece, (size_t)n);
+  k->n += (size_t)n;
+}` },
+  "world.keptOpen": {
+    uses: ["world.kept", "world.fail"],
+    c: (o) => `static lab_cell *lab_world_keptOpen(lab_cell *path) {
+  char *p = lab__cstr(path);
+  lab_drop(path);
+  int fd = lab_kept_n < 1024 ? open(p, O_RDWR | O_CREAT | O_APPEND, 0666) : -1;
+  free(p);
+  if (fd < 0) return &${o.nil};
+  lab_kept[lab_kept_n++] = (lab_kept_file){ fd, 0, 0, 0, 0 };
+  ${o.cons} *r = lab_new(sizeof(${o.cons}), ${o.type}, ${o.tag});
+  r->f${o.head} = LAB_SMALL(lab_kept_n);
+  return (lab_cell *)r;
+}`,
+  },
+  "world.keptLine": {
+    uses: ["world.kept", "world.nfc"],
+    c: (o) => `static lab_cell *lab_world_keptLine(lab_int f) {
+  lab_kept_file *k = lab__kept(f);
+  if (!k) return &${o.nil};
+  while (!k->ended && !(k->n && memchr(k->rest, '\\n', k->n))) lab__kept_more(k);
+  if (!k->n) return &${o.nil};
+  uint8_t *nl = memchr(k->rest, '\\n', k->n);
+  size_t end = nl ? (size_t)(nl - k->rest) : k->n, len = end;
+  if (len && k->rest[len - 1] == '\\r') len--;
+  lab_cell *t = lab__nfc(lab__text_of((const char *)k->rest, len));
+  size_t used = nl ? end + 1 : end;
+  memmove(k->rest, k->rest + used, k->n - used);
+  k->n -= used;
+  ${o.cons} *r = lab_new(sizeof(${o.cons}), ${o.type}, ${o.tag});
+  r->f${o.head} = t;
+  return (lab_cell *)r;
+}`,
+  },
+  "world.keptAddLine": { uses: ["world.kept"], c: `static int32_t lab_world_keptAddLine(lab_int f, lab_cell *t) {
+  lab_kept_file *k = lab__kept(f);
+  int ok = k && write(k->fd, LAB_TB(t), LAB_TN(t)) == (ssize_t)LAB_TN(t) && write(k->fd, "\\n", 1) == 1;
+  lab_drop(t);
+  return ok;
+}` },
+  "world.keptClose": { uses: ["world.kept"], c: `static void lab_world_keptClose(lab_int f) { lab_kept_file *k = lab__kept(f); if (k) { close(k->fd); k->fd = -1; free(k->rest); k->rest = 0; k->n = 0; } }` },
   // A program's own handlers of operations answered at once (L213c4): a
   // stack of frames, each an effect's number and its cases' closures,
   // pushed while the code it handles runs; a perform calls the nearest
@@ -815,11 +876,15 @@ static int lab_handlers_push(int e, int n, lab_cell **cs) {
 static int lab_handlers_pop(int e) {
   lab_hframe *f = &lab_hs[--lab_hn];
   (void)e;
-  for (int k = 0; k < f->n; k++) lab_drop(f->c[k]);
+  for (int k = 0; k < f->n; k++) if (f->c[k]) lab_drop(f->c[k]);
   return 0;
 }
 static lab_cell *lab_handlers_case(int e, int i) {
-  for (int k = lab_hn; k-- > 0;) if (lab_hs[k].e == e) { lab_dup(lab_hs[k].c[i]); return lab_hs[k].c[i]; }
+  for (int k = lab_hn; k-- > 0;) if (lab_hs[k].e == e) {
+    if (!lab_hs[k].c[i]) { fputs("this operation isn't on C yet\\n", stderr); exit(3); }
+    lab_dup(lab_hs[k].c[i]);
+    return lab_hs[k].c[i];
+  }
   fputs("nothing handles an operation\\n", stderr);
   exit(3);
 }` },
