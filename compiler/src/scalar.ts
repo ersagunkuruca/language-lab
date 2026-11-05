@@ -73,7 +73,7 @@ import { infer } from "../../ters/src/lang/infer.ts";
 import { discharge } from "../../ters/src/lang/ledger.ts";
 import { scalarOp, TARGETS } from "./builtins.ts";
 import { WORLD_OPS as OP_OF_BUILTIN } from "../../ters/src/lang/std.ts";
-import { AUDIO_BLOCK, AWAIT, AWAIT_OP, START_TIMER_OP, TIME, WAIT, WAIT_OP, HANDLER_ROW, LIST, PAGE_HANDLER, PAGE_VIEW, SIGS, SOUND_ROW, VIEW_ROW, STD_IMPL, STD_MANY } from "../../ters/src/lang/std.ts";
+import { AUDIO_BLOCK, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V, TIME, WAIT, WAIT_OP, HANDLER_ROW, LIST, PAGE_HANDLER, PAGE_VIEW, SIGS, SOUND_ROW, VIEW_ROW, STD_IMPL, STD_MANY } from "../../ters/src/lang/std.ts";
 // Cells' operations JavaScript from the core IR takes from the evaluator
 // (run.ts cellOps), `path` aside: it looks inside its function.
 // The effects a page's views and handlers may have (std.ts PAGE_VIEW,
@@ -753,7 +753,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // not finish (running out of a budget), or abort; and the world's effects.
   const partialEff = (e: Id) => e === CHOICE || e === DIVERGE || escaping(e);
   // Random under a `seeded` (C106), or drawn from the world (C136).
-  const allowedEff = (e: Id) => partialEff(e) || e === CONSOLE || e === FILES || (!!opts.data && e === RANDOM) || (!!opts.host && (PAGE_EFFECTS.has(e) || tailEffs.has(e) || e === KEPT_FILES)) || (!!opts.releases && e === LOG_EFFECT) || (!!opts.handlers && (tailOwn.has(e) || e === KEPT_FILES));
+  const allowedEff = (e: Id) => partialEff(e) || e === CONSOLE || e === FILES || (!!opts.data && e === RANDOM) || (!!opts.host && (PAGE_EFFECTS.has(e) || tailEffs.has(e) || e === KEPT_FILES)) || (!!opts.releases && e === LOG_EFFECT) || (!!opts.handlers && (tailOwn.has(e) || e === KEPT_FILES || (!opts.host && (e === WAIT || e === AWAIT || e === TIME))));
   // Some root draws a number nobody seeds (C136): the world seeds
   // Random's generator then, at the first draw.
   const worldRandom = !!opts.data && roots.some((r) => {
@@ -1017,7 +1017,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     // lowered as its arithmetic, so no answer isn't seen here yet (L125c2,
     // L125c3); a Choice of the program's own (fail, one of) is refused
     // where it's used.
-    const effs = all.filter((e) => !BUDGETED.includes(e) && !(partial && partialEff(e)) && !(opts.data && (e === CONSOLE || e === FILES || e === RANDOM)) && !(opts.host && (PAGE_EFFECTS.has(e) || tailEffs.has(e) || e === KEPT_FILES)) && !(opts.releases && e === LOG_EFFECT) && !(opts.handlers && (tailOwn.has(e) || e === KEPT_FILES)) && !(opts.hosted?.has(e) && tailEffs.has(e)) && !(e === CHOICE && !opts.data && !opts.shader));
+    const effs = all.filter((e) => !BUDGETED.includes(e) && !(partial && partialEff(e)) && !(opts.data && (e === CONSOLE || e === FILES || e === RANDOM)) && !(opts.host && (PAGE_EFFECTS.has(e) || tailEffs.has(e) || e === KEPT_FILES)) && !(opts.releases && e === LOG_EFFECT) && !(opts.handlers && (tailOwn.has(e) || e === KEPT_FILES || (!opts.host && (e === WAIT || e === AWAIT || e === TIME)))) && !(opts.hosted?.has(e) && tailEffs.has(e)) && !(e === CHOICE && !opts.data && !opts.shader));
     if (effs.length) fail(`has effects (${effs.map(nm).join(", ")})`);
     const budgeted = !constant && !opts.data && diverges(ft);
 
@@ -1351,7 +1351,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         }
         // The clock, for JavaScript from the core IR (C137c10): the world's,
         // as the evaluator answers a `now` nothing handles.
-        if (opts.host && target === NOW_OP) return { k: "world", op: "now", aborts: false, args: [], t: "f64" };
+        if ((opts.host || opts.handlers) && target === NOW_OP) return { k: "world", op: "now", aborts: false, args: [], t: "f64" };
         // The person's locale and time zone (L214b2, L188), a file's bytes
         // (L189c), a fetched text, for JavaScript from the core IR: the
         // world's, as the evaluator answers them.
@@ -1387,6 +1387,9 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           if (target === START_TIMER_OP) return { k: "world", op: "startTimer", aborts: false, args: args(), t };
           return { k: "world", op: target === WAIT_OP ? "wait" : "await", aborts: target === AWAIT_OP, args: args(), t, suspends: true };
         }
+        // C's (C44a): the world's clock, and waits that block. A timer is a
+        // ticket at its deadline; an await sleeps until its ticket's time.
+        if (opts.handlers && !opts.host && (target === WAIT_OP || target === AWAIT_OP || target === START_TIMER_OP)) return blockingWait(n, target, id, env, f);
         if (opts.data && target === CELL_OPS.changed) return changed(n, id, env, f);
         if (target === SET && n.args.length === 3) return setField(n, id, env, f);
         if (opts.data && target === RANDOM_OP) {
@@ -2001,6 +2004,31 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         body: { k: "released", body: { k: "apply", fn: body, t: bt, args: [], tail: false, tmp: f.locals.push(bt) - 1 }, release: { k: "rt", fn: `hpop:${e}`, args: [], host: { t: "i32", partial: false } }, t, st: f.locals.push("i32") - 1 } };
     }
     return { k: "rt", fn: `handleOps:${e}${t === "i32" ? ":bool" : ""}${finTag}`, args: [body, ...cases, ...finished], host: { t, partial: true } };
+  }
+  // C's waits (C44a): a wait sleeps; a timer is the ticket `at` its
+  // deadline on the world's clock; an await of a timer or a ticket at a
+  // time sleeps until then and gives its value. Tickets of fetches and
+  // first ready (together, race) need fibers (C44), and abort.
+  function blockingWait(n: NodeOf<"call">, target: Id, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
+    const unit = stype(zonk(id)), args = n.args ?? [];
+    const now: SExpr = { k: "world", op: "now", aborts: false, args: [], t: "f64" };
+    if (target === WAIT_OP) {
+      if (!unit) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(id))}`);
+      return { k: "world", op: "sleep", aborts: false, args: [expr(args[0], env, f, false)], t: unit };
+    }
+    const tt = stype(zonk(target === START_TIMER_OP ? id : args[0]));
+    if (!tt || !isData(tt)) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(target === START_TIMER_OP ? id : args[0]))}`);
+    const at = tt.cases.findIndex((c) => c.variant === TICKET_V.at), timer = tt.cases.findIndex((c) => c.variant === TICKET_V.timer);
+    if (target === START_TIMER_OP) {
+      const vt = tt.cases[at].fields[1].t;
+      return { k: "new", t: tt, c: at, args: [{ k: "op", op: "add", args: [now, expr(args[0], env, f, false)] }, { k: "zero", t: vt }] };
+    }
+    const r = stype(zonk(id));
+    if (!r) throw new Refused(`awaits ${whyNot(zonk(id))}`);
+    const s = f.locals.push(tt) - 1, scrut: SExpr = { k: "local", i: s };
+    const sleep = (ms: SExpr, c: number): SExpr => ({ k: "let", i: f.locals.push("f64") - 1, value: { k: "world", op: "sleep", aborts: false, args: [ms], t: "f64" }, body: { k: "field", rec: scrut, t: tt, c, i: 1 } });
+    const other: SExpr = { k: "abort", reason: { k: "text", v: "a ticket other than a timer, awaited where there are no fibers yet (C44)" } };
+    return { k: "case", scrut: expr(args[0], env, f, false), s, t: tt, result: r, arms: tt.cases.map((_, c): SExpr => (c === timer ? sleep({ k: "field", rec: scrut, t: tt, c, i: 0 }, c) : c === at ? sleep({ k: "op", op: "sub", args: [{ k: "field", rec: scrut, t: tt, c, i: 0 }, now] }, c) : other)) };
   }
   // A partial function type of these, keyed as stype keys one.
   // One whose closures turned out to take the rest (NeedsSeveral) is
