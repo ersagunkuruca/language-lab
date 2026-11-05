@@ -25,7 +25,6 @@ import { emitWasm, instantiate } from "../src/wasm.ts";
 import { emitWgsl } from "../src/wgsl.ts";
 import type { Id } from "../../ters/src/model.ts";
 import { isCall, subtree } from "../../ters/src/model.ts";
-import { compile } from "../src/compile.ts";
 
 // Builtins whose first input must be written in place, so a plain
 // f(x, …) = builtin(x, …) can't use them; their own tests cover them.
@@ -96,13 +95,10 @@ test("every builtin has one record for the compiler's targets (builtins.ts), agr
   assert.deepEqual(Object.keys(TARGETS).filter((id) => !SIGS[id]), []);
 });
 
-test("every builtin compiles to JavaScript", () => {
-  // All at once, and one at a time only to name the one that doesn't.
-  const exports = builtins.map((id) => all.names[all.fs.get(id)!]);
-  try { compile(all.code, all.info, all.names, { runtime: "./runtime.js", exports }); } catch {
-    for (const [i, id] of builtins.entries()) assert.doesNotThrow(() => compile(all.code, all.info, all.names, { runtime: "./runtime.js", exports: [exports[i]] }), name(id));
-  }
-});
+// "Every builtin compiles to JavaScript" was compile.ts's: it compiled a
+// wrapper of each at no type. The core IR lowers a definition at the types
+// it's used at, so a wrapper of a builtin at a type variable is refused
+// there; each builtin's lowering is checked where programs use it (C137).
 
 test("every builtin runs backwards, or says why it can't", () => {
   for (const id of builtins) {
