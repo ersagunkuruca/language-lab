@@ -176,6 +176,15 @@ export function writeReader(code: Code, printer: Id, names: Record<Id, string>):
             k.let(named(b) || "number", k.call(INT_OPS.read, k.call(TEXT_OPS.slice, text, at, end)), (v) => next(end, new Map(env).set(b, { b: v }))),
             none())));
     }
+    // show of a Float64 (L72c2): the longest spelling there that show
+    // writes, as descent.ts reads it: a number's text (read number) that
+    // show of it gives back exactly.
+    if (f === S.show) {
+      const b = target(n.args[0]), s = b ? env.get(b) : undefined;
+      if (!b || !s || "b" in s) throw new Unsupported("reads show of something other than an input");
+      return k.let("end", k.call(run, text, at, floatChar()), (end) =>
+        then(k.call(floatOf(), text, at, end), (a, v) => next(a, new Map(env).set(b, { b: v }))));
+    }
     if (named(f) === "spaced") return k.let("at", k.call(spaces, text, at), (a) => piece(n.args[0], text, a, env, inputs, tops, (a2, e) => k.let("at", k.call(spaces, text, a2), (a3) => next(a3, e))));
     // Needing no parentheses, the arm itself; needing some, the reader's
     // own parentheses path reads it (at the outermost inputs, where it
@@ -203,6 +212,25 @@ export function writeReader(code: Code, printer: Id, names: Record<Id, string>):
       : k.let(named(lets[i][0]) || "x", lets[i][1], (b) => go(i + 1, new Map(ins).set(lets[i][0], b)));
     return go(0, inputs);
   };
+
+  // A character a Float64's show may write: a digit, a sign, ".", e or E.
+  const floatChar = () => k.fn(["c"], (c) => k.byValue(k.x(c), ["-", "+", ".", "e", "E"].map((x) => [k.lit(x), k.x(TRUE)] as [Id, Id]), isDigit ? k.call(isDigit, c) : k.x(FALSE)));
+  // read float(text, at, end): the longest text from at, ending by end,
+  // that is a number show gives back exactly, with where it ends.
+  let float: Id | null = null;
+  function floatOf(): Id {
+    if (float) return float;
+    float = k.def("read float");
+    k.define(float, k.fn(["text", "at", "end"], (text, at, end) => {
+      const shorter = () => k.call(float!, text, at, k.call(INT_OPS.sub, end, k.int(1)));
+      return k.if(k.call(INT_OPS.less, at, end), k.let("spelling", k.call(TEXT_OPS.slice, text, at, end), (t) =>
+        k.match(k.call(S.optional, k.thunk(() => k.call(TEXT_OPS.readNumber, t))), [
+          { variant: SOME, names: ["x"], body: ([x]) => k.if(k.call(S.equal, k.call(S.show, x), k.x(t)), some(end, k.x(x)), shorter()) },
+          { variant: NONE, names: [], body: () => shorter() },
+        ])), none());
+    }));
+    return float;
+  }
 
   // read <printer> list(text, at, sep): one item or more, sep between.
   let items: Id | null = null;
