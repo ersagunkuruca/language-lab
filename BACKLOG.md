@@ -31,7 +31,7 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I167 | + New definition still freezes about 0.6 s, in two long tasks (Insertion sort, 11-04 evening, after L215's cached checks and I167b): the edit, 0.25 s (its guard 53 ms now, the panel drawn 0.17 s, of it the inspector 0.13 s), then the hole's fillings a frame later, 0.39 s (finding them 0.3 s, mostly the checks of fillings that may pin the new definition's type, byKind 80 ms, whole 62 ms); I167c took finding them from about 345 to 285 ms in node (a filled program's scans keep the base's picks by position, and the names in the hole's scope are found once, not per offer). Was 1.3 to 1.8 s, and 3 to 5 s before I157. | QA 11-04 L1 | 2026-11-04 |
+| I167 | + New definition still freezes about 0.6 s, in two long tasks (Insertion sort, 11-04 evening, after L215's cached checks and I167b): the edit, 0.25 s (its guard 53 ms now, the panel drawn 0.17 s, of it the inspector 0.13 s), then the hole's fillings a frame later, 0.39 s (finding them 0.3 s, mostly the checks of fillings that may pin the new definition's type, byKind 80 ms, whole 62 ms); I167c took finding them from about 345 to 285 ms in node (a filled program's scans keep the base's picks by position, and the names in the hole's scope are found once, not per offer). I167d: the panel no longer collects the program for its Delete and × buttons when it draws them, only when one is pressed, and each node's parent on the library's layer is found from the library's, once (the editor's page in Node: Create 260 to 210 ms, the inspector over four rounds 1.48 to about 0.8 s). Was 1.3 to 1.8 s, and 3 to 5 s before I157. | QA 11-04 L1 | 2026-11-04 |
 
 ## E: Editor
 
