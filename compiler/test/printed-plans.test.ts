@@ -68,3 +68,14 @@ test("a derivative is given only the nodes it reaches, and calculus says the sam
   fs[fi](...(ir.funcs[fi].params.length ? [null] : []));
   assert.deepEqual(got, want);
 });
+
+// The evaluator's solver is given only the lambdas of the closures whose
+// type can reach it (C167e): spacetime's one solve takes a Float64 →
+// Text, so its other closures' lambdas, and the library they reach, stay
+// behind. The pages' sweep in core-js.test.ts runs it with only these.
+test("a solve is given only the lambdas of closures of a type it takes (C167e)", () => {
+  const p = load("spacetime"), main = p.named("main");
+  const ir = lowerCore(p.code, p.info, p.pres.names, [main]);
+  const n = Object.keys(solverCode(ir, emitCoreJs(ir).js).nodes).length;
+  assert.ok(n > 0 && n < 500, `${n} nodes`);
+});
