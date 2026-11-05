@@ -58,7 +58,7 @@ import { bindsOf, bodyOf, withBodies } from "./uses.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { ARRAY, TABLE, HASH_SET, CELL, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, PATH as PATH_T, STRING, BUILTIN_EFFECTS, Subst, type Row, type Type } from "../../ters/src/lang/types.ts";
-import { RELEASE_V, tupleType, ABORT, ABORT_OP, CHECK, CHECK_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, HASH_SET_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, NOW_OP, OPTIONAL, ORDER_V, PAIR_V, RATIO, S, SET, SHOW_ANY, shownImplementations, implementationsOf, ORDERED, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
+import { RELEASE_V, tupleType, ABORT, ABORT_OP, CHECK, CHECK_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, HASH_SET_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, COMPLEX_V, CONS, EXTENDED_V, FALSE, FIXED_V, INT_OPS, IO, NIL, NONE, NOW_OP, OPTIONAL, ORDER_V, PAIR_V, RATIO, S, SET, SHOW_ANY, shownImplementations, implementationsOf, ORDERED, SOME, TEXT_OPS, TRUE, ZONE_OPS } from "../../ters/src/lang/std.ts";
 import { liftLets } from "../../ters/src/lang/lift-lets.ts";
 import { solvesOnce } from "../../ters/src/lang/run.ts";
 import { inlineLists } from "./inline-lets.ts";
@@ -1115,6 +1115,19 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           const l = target === TABLE_OPS.entries || target === HASH_SET_OPS.items ? ts.find(isData) : undefined;
           if (l && !h.entries.includes(l)) h.entries.push(l);
           return { k: "rt", fn: `table.${TABLE_RT[target]}.t${h.index}${l ? `.e${h.entries.indexOf(l)}` : ""}`, args: target === HASH_SET_OPS.add ? [...args(), { k: "bool", v: true }] : args() };
+        }
+        // A zone's offset at an instant (L188): the host's zone database,
+        // asked through the world (C's TZ rules, the JavaScript host's
+        // Intl for WebAssembly), NaN for a zone it doesn't know, which is
+        // no answer here.
+        if (opts.data && target === ZONE_OPS.offset && n.args.length === 2) {
+          const it = stype(zonk(n.args[1]));
+          if (!it || typeof it !== "object" || !(isRecord(it) || isData(it))) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(n.args[1]))}`);
+          const at = expr(n.args[1], env, f, false);
+          const seconds: SExpr = isRecord(it) ? { k: "get", rec: at, t: it, i: 0 } : { k: "field", rec: at, t: it, c: 0, i: 0 };
+          const i = f.locals.push("f64") - 1, x: SExpr = { k: "local", i };
+          return { k: "let", i, value: { k: "world", op: "zoneOffset", aborts: false, args: [expr(n.args[0], env, f, false), seconds], t: "f64", ins: ["text", "f64"] },
+            body: { k: "if", cond: { k: "op", op: "equal", args: [x, x] }, then: x, else: { k: "fail" }, t: "f64" } };
         }
         if (opts.data && RT[target]) {
           // What it takes and gives in, so List Text is one of the module's types.

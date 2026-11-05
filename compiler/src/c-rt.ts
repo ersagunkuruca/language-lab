@@ -863,6 +863,36 @@ static double lab_world_randomSeed(void) {
   },
   "world.writeFile": { uses: ["world.put"], c: `static void lab_world_writeFile(lab_cell *path, lab_cell *t) { lab__put(path, t, "wb"); }` },
   "world.appendFile": { uses: ["world.put"], c: `static void lab_world_appendFile(lab_cell *path, lab_cell *t) { lab__put(path, t, "ab"); }` },
+  // A zone's offset from UTC at an instant, in seconds (L188): the host's
+  // zone database through TZ, NaN for a zone it doesn't have (a file under
+  // TZDIR or /usr/share/zoneinfo). The local time read back as UTC by
+  // Hinnant's days from civil, so no tm_gmtoff is needed.
+  "world.zoneOffset": { uses: ["world.fail"], c: `#include <time.h>
+#include <math.h>
+static double lab_world_zoneOffset(lab_cell *zone, double at) {
+  char *z = lab__cstr(zone); lab_drop(zone);
+  double r = NAN;
+  const char *dir = getenv("TZDIR");
+  size_t n = strlen(z);
+  int ok = n > 0 && z[0] != '/' && !strstr(z, "..") && isfinite(at);
+  if (ok) { char *p = malloc(strlen(dir ? dir : "/usr/share/zoneinfo") + n + 2); if (!p) lab_oom(); sprintf(p, "%s/%s", dir ? dir : "/usr/share/zoneinfo", z); ok = lab__kind(p) == 1; free(p); }
+  if (ok) {
+    char *was = getenv("TZ") ? strdup(getenv("TZ")) : 0;
+    setenv("TZ", z, 1); tzset();
+    time_t t = (time_t)floor(at); struct tm tm;
+    if (localtime_r(&t, &tm)) {
+      long long y = tm.tm_year + 1900LL, m = tm.tm_mon + 1, d = tm.tm_mday;
+      y -= m <= 2; long long era = (y >= 0 ? y : y - 399) / 400, yoe = y - era * 400;
+      long long doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1, doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+      long long local = (era * 146097 + doe - 719468) * 86400LL + tm.tm_hour * 3600LL + tm.tm_min * 60LL + tm.tm_sec;
+      r = (double)(local - (long long)t);
+    }
+    if (was) { setenv("TZ", was, 1); free(was); } else unsetenv("TZ");
+    tzset();
+  }
+  free(z);
+  return r;
+}` },
   "world.fileExists": { uses: ["world.fail"], c: `static int32_t lab_world_fileExists(lab_cell *path) { int L = lab__log_begin("fileExists"); if (L) lab__log_text(path); char *p = lab__cstr(path); int r = lab__kind(p) != 0; free(p); if (L) { lab__log_answer(); lab__log_raw(r ? "true" : "false"); lab__log_close(); } lab_drop(path); return r; }` },
   // A folder's names, sorted as JavaScript sorts texts: by UTF-16 units,
   // so a character past U+FFFF comes before U+E000 to U+FFFF.
