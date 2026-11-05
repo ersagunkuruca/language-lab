@@ -50,9 +50,6 @@ export function logged(world: World, log: LogEntry[] = []): { world: World; log:
   return { world: out as unknown as World, log };
 }
 
-// A handler's event, kept in a page run's log (C172e) where it comes
-// among the world's answers: html.ts Mount `heard`.
-export const heardInto = (log: LogEntry[]) => (name: string, at: [string, string, number, number, number]) => { log.push({ op: "event", args: [name, ...at] }); };
 
 // Two arguments or answers alike: what JSON keeps of them, bytes as bytes.
 const same = (a: unknown, b: unknown): boolean => JSON.stringify(a, plain) === JSON.stringify(b, plain);
@@ -100,6 +97,11 @@ export function replaying(log: LogEntry[], like: World, until?: number, onPause?
   }
   return out as unknown as World;
 }
+
+// A handler's event, kept in a page run's log (C172e) where it comes
+// among the world's answers (html.ts Mount `heard`): its name, what the
+// handler is given, and where its element is (C172g, html.ts pathOf).
+export const heardInto = (log: LogEntry[]) => (name: string, at: [string, string, number, number, number], path: number[]): void => { log.push({ op: "event", args: [name, ...at, path] }); };
 
 // A log as text and back (C172a): what a compiled run writes for the
 // evaluator to replay. JSON, with bytes (read bytes) kept as bytes.
