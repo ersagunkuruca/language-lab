@@ -21,7 +21,8 @@ import { isUse } from "../model.ts";
 import { FALSE, TRUE } from "./std.ts";
 
 // The first characters: single characters, or the classes "digit" and
-// "letter", "itself" for the printer's own call, "anything"; `empty`: it
+// "letter", "test:p" for a character the program's own test p passes,
+// "itself" for the printer's own call, "anything"; `empty`: it
 // may print nothing, so what follows counts too; `none`: it never prints
 // (every way fails).
 export interface First { starts: Set<string>; empty: boolean; none?: true }
@@ -38,7 +39,7 @@ export interface FirstReport {
 type Abs = { k: "text"; f: First } | { k: "bool"; v: boolean } | { k: "int"; nonNegative: boolean } | { k: "other" };
 // What a guard told an arm of a binder: all letters, all digits, not
 // empty, not below 0.
-interface Fact { letters?: true; digits?: true; nonEmpty?: true; nonNegative?: true }
+interface Fact { letters?: true; digits?: true; nonEmpty?: true; nonNegative?: true; pass?: true; head?: Id }
 
 const ANY: First = { starts: new Set(["anything"]), empty: true };
 const NONE: First = { starts: new Set(), empty: false, none: true };
@@ -67,12 +68,21 @@ export function firstSets(code: Code, printer: Id, names: Record<Id, string>): F
       const l = node(b);
       if (l?.kind === "call" && !isUse(l as never) && target(l.fn) === "builtin.text.length") add(target(l.args[0]), { nonEmpty: true });
     }
+    // p(slice(t, 0, 1)) true, p the program's own test of a character: t
+    // starts with a character p passes (C110 s5a), the class "test:p".
+    if (truth && f && code.nodes[f]?.kind === "def" && n.args.length === 1) {
+      const sl = node(a);
+      if (sl?.kind === "call" && !isUse(sl as never) && target(sl.fn) === "builtin.text.slice" && node(sl.args[1])?.value === 0 && node(sl.args[2])?.value === 1) add(target(sl.args[0]), { head: f, nonEmpty: true });
+    }
     // all pass(characters(t), is letter) true: t is all letters.
     if (truth && named(f) === "all pass") {
       const ch = node(a), test = named(target(b));
       if (ch?.kind === "call" && !isUse(ch as never) && target(ch.fn) === "builtin.text.characters") {
         if (test === "is letter") add(target(ch.args[0]), { letters: true });
         if (test === "is digit") add(target(ch.args[0]), { digits: true });
+        // The program's own test of a character (a name's letters and
+        // digits, C110 s5a): it may start with anything that test passes.
+        else if (test !== "is letter") add(target(ch.args[0]), { pass: true });
       }
     }
   }
@@ -120,6 +130,8 @@ export function firstSets(code: Code, printer: Id, names: Record<Id, string>): F
     if (fact.nonNegative) return { k: "int", nonNegative: true };
     const cls = fact.letters ? "letter" : fact.digits ? "digit" : null;
     if (cls) return { k: "text", f: { starts: new Set([cls]), empty: !fact.nonEmpty } };
+    if (fact.head) return { k: "text", f: { starts: new Set([`test:${fact.head}`]), empty: false } };
+    if (fact.pass) return { k: "text", f: { starts: new Set(["anything"]), empty: !fact.nonEmpty } };
     return was ?? { k: "other" };
   }
 

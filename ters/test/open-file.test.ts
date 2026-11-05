@@ -16,6 +16,7 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { Aborted, runMain } from "../src/lang/run.ts";
 import { nodeWorld } from "../src/lang/world.ts";
+import { lowerCore, runCoreMain } from "../../compiler/src/core-js.ts";
 import { ABORT_OP, ADD_BYTES_OP, FILE_OPS, LOG_OP, NEXT_BYTES_OP, NEXT_LINE_OP, S, SHOW_ANY, WRITE_LINE_OP } from "../src/lang/std.ts";
 
 const lib = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
@@ -89,4 +90,37 @@ test("with open file reads and adds bytes from the place lines are read from", (
   assert.deepEqual(r.printed, ['["some(\\"head\\")", "[255, 0]", "[128, 7, 255]", "[]"]']);
   assert.deepEqual([...readFileSync(path)].slice(-5), [0xff, 0x00, 0x80, 7, 255]);
   assert.equal(r.closed.length, 1);
+});
+
+// Compiled to JS from the core IR (L213c3): the same lines, bytes, file
+// and one close as the evaluator, the release a `finally`-like catch.
+test("with open file compiled to JS from the core IR does what the evaluator does", () => {
+  const cases: [string, Uint8Array | string, (k: Lang, path: string) => Id][] = [
+    ["lines", "first\r\nsecond\nthird", (k, path) => k.call(lib("with open file"), k.lit(path), k.thunk(() => k.listOf(
+      k.call(NEXT_LINE_OP), k.seq(k.call(WRITE_LINE_OP, k.lit("added")), k.call(NEXT_LINE_OP)), k.call(NEXT_LINE_OP), k.call(NEXT_LINE_OP))))],
+    ["an abort", "", (k, path) => k.call(lib("with open file"), k.lit(path), k.thunk(() => k.seq(k.call(WRITE_LINE_OP, k.lit("started")), k.call(ABORT_OP, k.lit("gave up")), k.int(1))))],
+    ["bytes", Uint8Array.from([...Buffer.from("head\n"), 0xff, 0x00, 0x80]), (k, path) => k.call(lib("with open file"), k.lit(path), k.thunk(() => k.listOf(
+      k.call(SHOW_ANY, k.call(NEXT_LINE_OP)),
+      k.call(SHOW_ANY, k.call(lib("byte items"), k.call(NEXT_BYTES_OP, k.int(2)))),
+      k.seq(k.call(ADD_BYTES_OP, k.call(lib("bytes of"), k.list(k.int(7), k.int(255)))), k.call(SHOW_ANY, k.call(lib("byte items"), k.call(NEXT_BYTES_OP, k.int(10))))))))],
+  ];
+  for (const [what, start, body] of cases) {
+    const outcome = (core: boolean) => {
+      const path = join(mkdtempSync(join(tmpdir(), "open-file-")), "f");
+      writeFileSync(path, start);
+      const p = program((k) => body(k, path));
+      assert.deepEqual(p.info.errors.map((e) => e.message), [], what);
+      const r = run(p), out: string[] = [];
+      const rt = { print: (l: string) => out.push(l), names: p.names, world: { ...nodeWorld(), closeFile: (f: number) => { r.closed.push(f); }, log: () => {}, error: (l: string) => out.push(`aborted ${l}`) } };
+      if (core) {
+        const l = lowerCore(p.code, p.info, p.names, [p.main]);
+        assert.deepEqual([...l.refused.values()], [], what);
+        runCoreMain(l, "main", [], rt as never);
+      } else try { runMain(p.code, p.info, p.main, rt as never); } catch (e) { if (!(e instanceof Aborted)) throw e; out.push(`aborted ${e.reason}`); }
+      return { out, file: [...readFileSync(path)], closes: r.closed.length };
+    };
+    const want = outcome(false);
+    assert.equal(want.closes, 1, what);
+    assert.deepEqual(outcome(true), want, what);
+  }
 });

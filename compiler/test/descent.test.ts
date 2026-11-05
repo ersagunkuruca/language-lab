@@ -27,11 +27,11 @@ const descent = descentReader(p.code, p.named("expression text"), p.pres.names);
 const read = (line: string) => { const v = descent(line, 0); return v === null ? [] : [shown(v)]; };
 
 test("calc's lines without an operator read by descent as the search reads them (C110 s3)", () => {
-  for (const line of ["12", "x", "abc", "-2", "--x", "(-x)", "((1))", "-(-x)", "(x)", "-(12)"]) assert.deepEqual(read(line), searched(line), line);
+  for (const line of ["12", "x", "abc", "-2", "--x", "(-x)", "((1))", "-(-x)", "(x)", "-(12)", "x1", "v9", "a1b2", "_x"]) assert.deepEqual(read(line), searched(line), line);
 });
 
 test("a line that isn't an expression has no reading by descent either (C110 s3)", () => {
-  for (const line of ["", "-", "(1", "1)", "x1", "1x", "( 1)"]) assert.deepEqual(read(line), searched(line), line);
+  for (const line of ["", "-", "(1", "1)", "1x", "9v", "( 1)"]) assert.deepEqual(read(line), searched(line), line);
 });
 
 // The binary arm starts with the printer itself: read by precedence
@@ -135,4 +135,22 @@ test("calc's read expression compiled to C reads through the written reader (C11
   const fi = lowered.funcs.findIndex((f) => f.def === go);
   const got = build(lowered)(readLines.map((line) => [fi, [line]])).map((r) => r.value);
   assert.deepEqual(got, readLines.map((line) => { const w = searched(line); return w.length ? w[0] : "no reading"; }));
+});
+
+// inverse(spaced, t) compiled takes off any spaces around t, as the
+// evaluator reads it, not only one either side (C110 s5c).
+test("inverse of spaced, compiled, reads any spaces around, or none (C110 s5c)", () => {
+  const spaced = Object.entries(PRELUDE_DEFS).find(([n]) => n === "spaced")![1];
+  const k = new Lang(p.code), go = k.def("go");
+  k.define(go, k.fn(["t"], (t) => k.call(S.first, k.thunk(() => k.call(p.named("inverse"), k.x(spaced), t)), k.thunk(() => k.lit("no reading")))));
+  const code = merge(k.code, p.code), names = { ...p.pres.names, ...k.names };
+  const info = infer(code, names, undefined, p.options);
+  const core = lowerCore(code, info, names, [go]);
+  assert.deepEqual([...core.refused.values()], []);
+  const f = (loadCoreJs(core, { print: () => {} }) as ((t: string) => string)[])[core.funcs.findIndex((g) => g.name === "go" && !g.inner)];
+  const ev = makeRunner(code, info, { print: () => {} });
+  for (const t of ["x", " x ", "  a b  ", "x   ", "   ", ""]) {
+    const want = [...ev.call(ev.value(go), t)][0];
+    assert.equal(f(t), want, JSON.stringify(t));
+  }
 });
