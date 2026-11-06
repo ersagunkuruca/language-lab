@@ -12,7 +12,7 @@ import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { DUAL_V, LIBRARY, FIXED_V } from "../src/lang/library.ts";
 import { pickWays, waysIn } from "../src/lang/ways.ts";
 import { S, SHOW_ANY, TRIG_OPS, TRIG_ACOS, TRIG_ASIN, TRIG_POLAR, TRIG_UNPOLAR, TRIG_V, tupleVariant } from "../src/lang/std.ts";
-import { showType, NUMBER } from "../src/lang/types.ts";
+import { showType, NUMBER, CHOICE } from "../src/lang/types.ts";
 import { B } from "../src/prelude.ts";
 import type { Id } from "../src/model.ts";
 import { compiledDefs, plainValue } from "../../compiler/src/core-js.ts";
@@ -201,4 +201,35 @@ test("asin and acos through unpolar: Float64, Dual, Fixed and a type of the prog
   near(Number(evaluated[3]) / 2 ** 32, Math.PI / 2, 1e-8);
   near(Number(evaluated[4]) / 2 ** 32, Math.acos(0.5), 1e-6);
   near(nums(evaluated[5])[0], Math.asin(0.5), 1e-9);
+});
+
+// A program's own interface whose fields with results have ports of other
+// types than its parameter (I180, examples/impact's Collider): gap is
+// (body, at) → gap, touch the other way (body, gap) → at. The implementation
+// answers with a literal, so its scheme is open; resolving it took every
+// port at the interface's parameter, Ball, and 0.5 became a Ball.
+test("a field with results over ports of several types, given by a definition answering a literal", async () => {
+  const k = new Lang(LIBRARY.code);
+  const num = () => k.tref(NUMBER);
+  const Ball = k.type("Ball", [], [["ball", [["r", num]]]]);
+  const I = k.interface("Toucher", "a", [
+    ["gap", (a) => k.tfun([k.tref(a), k.tref(NUMBER)], k.tref(NUMBER))],
+    ["touch", (a) => k.tfun([k.tref(a), k.tref(NUMBER)], k.tref(NUMBER), [CHOICE])],
+  ]);
+  (k.code.nodes[I.op.gap] as { ports?: string[] }).ports = ["body", "at", "gap"];
+  (k.code.nodes[I.op.touch] as { ports?: string[] }).ports = ["body", "gap", "at"];
+  const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
+  const r = (b: Id) => k.call(Ball.f["ball.r"], b);
+  const gap = def("ball gap", () => k.fn(["b", "s"], (b, s) => k.call(B.sub, r(b), s)));
+  const touch = def("ball touch", () => k.fn(["b", "g"], (b, g) => k.if(k.call(S.less, g, r(b)), k.lit(0.5), k.call(S.fail))));
+  def("ball toucher", () => k.call(I.v, k.x(gap), k.x(touch)));
+  const ball = () => k.call(Ball.v.ball, k.lit(3));
+  def("touch called", () => k.call(S.first, k.thunk(() => k.call(I.op.touch, ball(), k.lit(1))), k.thunk(() => k.lit(9))));
+  def("touch solved", () => k.call(S.first, k.thunk(() => k.solve(I.op.gap, { 0: ball(), 2: k.lit(1), out: k.true }, { 1: "at" }, ({ 1: s }) => k.call(B.mul, s, k.lit(2)))), k.thunk(() => k.lit(9))));
+  def("no touch", () => k.call(S.first, k.thunk(() => k.solve(I.op.gap, { 0: ball(), 2: k.lit(4), out: k.true }, { 1: "at" }, ({ 1: s }) => k.call(B.mul, s, k.lit(2)))), k.thunk(() => k.lit(9))));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const { evaluated, compiled } = await both(code, info, names, ["touch called", "touch solved", "no touch"]);
+  assert.deepEqual(evaluated, [0.5, 1, 9]);
+  assert.deepEqual(compiled, evaluated);
 });

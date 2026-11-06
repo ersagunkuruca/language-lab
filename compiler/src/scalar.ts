@@ -65,6 +65,7 @@ import { RELEASE_V, LOG_OP, FILE_OPS, KEPT_FILES, OPEN_FILE, tupleType, ABORT, A
 import { liftLets } from "../../ters/src/lang/lift-lets.ts";
 import { solvesOnce } from "../../ters/src/lang/run.ts";
 import { inlineLists } from "./inline-lets.ts";
+import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { SITES, STOPS } from "./stops.ts";
 import { fieldIndex, fieldPath } from "../../ters/src/lang/records.ts";
 import { expandDerivatives, recordVariant } from "../../ters/src/lang/derive.ts";
@@ -101,6 +102,9 @@ const TABLE_RT: Record<Id, string> = {
 };
 // Log's effect, written to the world by a target that runs releases.
 const LOG_EFFECT = "std.log";
+// together and race (C44): in C, each action on a fiber.
+const libDef = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name);
+const TOGETHER = libDef("together"), RACE = libDef("race");
 
 export const ARRAY_RT: Record<Id, string> = {
   [ARRAY_OPS.empty]: "array.empty", [ARRAY_OPS.of]: "array.of", [ARRAY_OPS.items]: "array.items",
@@ -721,7 +725,10 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // the performer runs in continuation passing (several_), and a perform
   // hands the case the rest it was given (core-rt.ts `perform:`).
   const laterOps = new Map<Id, Id>();
-  for (const n of opts.host ? Object.values(code.nodes) : []) {
+  // C (C44b): the code a handler of one handles runs on a fiber of its
+  // own, which a perform leaves and the rest goes back to.
+  const fibers = !!opts.handlers && !opts.host;
+  for (const n of opts.host || fibers ? Object.values(code.nodes) : []) {
     if (n.kind !== "def" || !n.body || (code.nodes[n.body]?.kind === "typedef" && notOwn(n, code.nodes[n.body] as NodeOf<"typedef">)) || n.id.startsWith("std.")) continue;
     const td = code.nodes[n.body];
     if (td?.kind === "typedef" && td.effect && td.variants.length && td.variants.every((v: Id) => { const x = code.nodes[v] as NodeOf<"variant">; return x.returns && answeredLater.has(v); })) td.variants.forEach((v: Id) => laterOps.set(v, n.id));
@@ -753,7 +760,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // not finish (running out of a budget), or abort; and the world's effects.
   const partialEff = (e: Id) => e === CHOICE || e === DIVERGE || escaping(e);
   // Random under a `seeded` (C106), or drawn from the world (C136).
-  const allowedEff = (e: Id) => partialEff(e) || e === CONSOLE || e === FILES || (!!opts.data && e === RANDOM) || (!!opts.host && (PAGE_EFFECTS.has(e) || tailEffs.has(e) || e === KEPT_FILES)) || (!!opts.releases && e === LOG_EFFECT) || (!!opts.handlers && (tailOwn.has(e) || e === KEPT_FILES || (!opts.host && (e === WAIT || e === AWAIT || e === TIME))));
+  const allowedEff = (e: Id) => partialEff(e) || e === CONSOLE || e === FILES || (!!opts.data && e === RANDOM) || (!!opts.host && (PAGE_EFFECTS.has(e) || tailEffs.has(e) || e === KEPT_FILES)) || (!!opts.releases && e === LOG_EFFECT) || (!!opts.handlers && (tailOwn.has(e) || e === KEPT_FILES || (!opts.host && (e === WAIT || e === AWAIT || e === TIME || laterEffs.has(e)))));
   // Some root draws a number nobody seeds (C136): the world seeds
   // Random's generator then, at the first draw.
   const worldRandom = !!opts.data && roots.some((r) => {
@@ -1017,7 +1024,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     // lowered as its arithmetic, so no answer isn't seen here yet (L125c2,
     // L125c3); a Choice of the program's own (fail, one of) is refused
     // where it's used.
-    const effs = all.filter((e) => !BUDGETED.includes(e) && !(partial && partialEff(e)) && !(opts.data && (e === CONSOLE || e === FILES || e === RANDOM)) && !(opts.host && (PAGE_EFFECTS.has(e) || tailEffs.has(e) || e === KEPT_FILES)) && !(opts.releases && e === LOG_EFFECT) && !(opts.handlers && (tailOwn.has(e) || e === KEPT_FILES || (!opts.host && (e === WAIT || e === AWAIT || e === TIME)))) && !(opts.hosted?.has(e) && tailEffs.has(e)) && !(e === CHOICE && !opts.data && !opts.shader));
+    const effs = all.filter((e) => !BUDGETED.includes(e) && !(partial && partialEff(e)) && !(opts.data && (e === CONSOLE || e === FILES || e === RANDOM)) && !(opts.host && (PAGE_EFFECTS.has(e) || tailEffs.has(e) || e === KEPT_FILES)) && !(opts.releases && e === LOG_EFFECT) && !(opts.handlers && (tailOwn.has(e) || e === KEPT_FILES || (!opts.host && (e === WAIT || e === AWAIT || e === TIME || (laterEffs.has(e) && !roots.includes(def)))))) && !(opts.hosted?.has(e) && tailEffs.has(e)) && !(e === CHOICE && !opts.data && !opts.shader));
     if (effs.length) fail(`has effects (${effs.map(nm).join(", ")})`);
     const budgeted = !constant && !opts.data && diverges(ft);
 
@@ -1293,10 +1300,20 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           const e = opOf.get(target)!;
           return { k: "abort", reason: build(target, { t: "con", id: e, args: [] }, args()), esc: escapeOf(e) };
         }
+        // together and race in C (C44): each action on a fiber of its own,
+        // which an await parks till its ticket is ready (c.ts
+        // `fbranches:`), not start branch's handler, whose await is of
+        // any type.
+        if (fibers && (target === TOGETHER || target === RACE)) {
+          const t = stype(zonk(id));
+          if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(id))}`);
+          return { k: "rt", fn: `fbranches:${target === TOGETHER ? "all" : "first"}`, args: args(), host: { t, partial: true } };
+        }
         if (laterOps.has(target)) {
           const t = stype(zonk(id));
           if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(id))}`);
           const e = laterOps.get(target)!, op = (code.nodes[(code.nodes[e] as NodeOf<"def">).body!] as NodeOf<"typedef">).variants.indexOf(target);
+          if (fibers) return { k: "rt", fn: `fperform:${e}:${op}`, args: args(), host: { t, partial: true } };
           return { k: "world", op: `perform:${e}:${op}`, aborts: false, args: args(), t, suspends: true };
         }
         // The world's Console and Files where the program handles them
@@ -1503,7 +1520,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           // One that does: the runtime's handler runs it once the
           // computation has finished, with the handler taken off.
           const later = laterOps.get(arms[0].variant), pushed = tailOps.get(arms[0].variant);
-          if (opts.host && later && arms.every((a) => laterOps.get(a.variant) === later)) return handleOps(n, later, id, env, f, true, fin);
+          if ((opts.host || fibers) && later && arms.every((a) => laterOps.get(a.variant) === later)) return handleOps(n, later, id, env, f, true, fin);
           if (opts.host && pushed && !tailOwn.has(pushed) && arms.every((a) => tailOps.get(a.variant) === pushed)) return handleOps(n, pushed, id, env, f, false, fin);
           throw new Refused(why);
         }
@@ -1975,6 +1992,9 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     // A case that leaves the rest out answers at once (L63, L229e): the
     // runtime resumes the rest with its value.
     const now = later ? ops.flatMap((v, i) => (arms.find((x) => x.variant === v)!.binds.length === (code.nodes[v] as NodeOf<"variant">).fields.length ? [i] : [])) : [];
+    // C (C44b): the code on a fiber, the cases called and returning; the
+    // printer writes the handler's driver (c.ts `fhandle:`).
+    if (later && fibers) return { k: "rt", fn: `fhandle:${n.id}:${e}:${now.join(",")}:${fin ? "fin" : "-"}`, args: [body, ...cases, ...finished], host: { t, partial: true } };
     if (later) {
       // The cases given where their answer goes (continuation passing).
       const ks = cases.flatMap((c, i) => (cps(c) ? [i] : []));
@@ -2026,9 +2046,18 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     const r = stype(zonk(id));
     if (!r) throw new Refused(`awaits ${whyNot(zonk(id))}`);
     const s = f.locals.push(tt) - 1, scrut: SExpr = { k: "local", i: s };
-    const sleep = (ms: SExpr, c: number): SExpr => ({ k: "let", i: f.locals.push("f64") - 1, value: { k: "world", op: "sleep", aborts: false, args: [ms], t: "f64" }, body: { k: "field", rec: scrut, t: tt, c, i: 1 } });
-    const other: SExpr = { k: "abort", reason: { k: "text", v: "a ticket other than a timer, awaited where there are no fibers yet (C44)" } };
-    return { k: "case", scrut: expr(args[0], env, f, false), s, t: tt, result: r, arms: tt.cases.map((_, c): SExpr => (c === timer ? sleep({ k: "field", rec: scrut, t: tt, c, i: 0 }, c) : c === at ? sleep({ k: "op", op: "sub", args: [{ k: "field", rec: scrut, t: tt, c, i: 0 }, now] }, c) : other)) };
+    // Till the moment `at`: a branch of together or race parks (C44), and
+    // the program sleeps.
+    const sleep = (at: SExpr, c: number): SExpr => ({ k: "let", i: f.locals.push("i32") - 1, value: { k: "rt", fn: "fpark", args: [at], host: { t: "i32", partial: false } }, body: { k: "field", rec: scrut, t: tt, c, i: 1 } });
+    const other: SExpr = { k: "abort", reason: { k: "text", v: "a ticket of the world's other than a timer, awaited in C (C44)" } };
+    // The first ready of some tickets: the runtime sleeps till the first
+    // is (c.ts `fready:`), and which gives its position.
+    const first = tt.cases.findIndex((c) => c.variant === TICKET_V.firstReady);
+    const ready = (): SExpr => {
+      const lt = tt.cases[first].fields[0].t as DType, wt = tt.cases[first].fields[1].t as FType, i = f.locals.push("int") - 1;
+      return { k: "let", i, value: { k: "rt", fn: `fready:${lt.key}`, args: [{ k: "field", rec: scrut, t: tt, c: first, i: 0 }], host: { t: "int", partial: true } }, body: { k: "apply", fn: { k: "field", rec: scrut, t: tt, c: first, i: 1 }, t: wt, args: [{ k: "local", i }], tail: false, tmp: f.locals.push(wt) - 1 } };
+    };
+    return { k: "case", scrut: expr(args[0], env, f, false), s, t: tt, result: r, arms: tt.cases.map((_, c): SExpr => (c === timer ? sleep({ k: "op", op: "add", args: [now, { k: "field", rec: scrut, t: tt, c, i: 0 }] }, c) : c === at ? sleep({ k: "field", rec: scrut, t: tt, c, i: 0 }, c) : c === first ? ready() : other)) };
   }
   // A partial function type of these, keyed as stype keys one.
   // One whose closures turned out to take the rest (NeedsSeveral) is

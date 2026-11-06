@@ -754,6 +754,10 @@ function cancelPick(): boolean {
   return true;
 }
 
+const FILE_WORDS: Record<string, string> = {
+  "code.json": "the code", "drafts.json": "the loose parts", "names.short.json": "the names", "names.descriptive.json": "the names",
+  "comments.json": "the notes", "layout.json": "the layout", "examples.json": "the example values",
+};
 function travel(from: Doc[], to: Doc[], label: string) {
   if (from === undo && !from.length && deleted) return undeleteProgram();
   const d = from.pop();
@@ -767,7 +771,11 @@ function travel(from: Doc[], to: Doc[], label: string) {
   if (was && doc.code.nodes[was] && was !== ui.def) { ui.def = was; ui.selected = null; }
   if (!doc.code.nodes[ui.def] || doc.loose?.[ui.def]) ui.def = doc.loose?.[ui.def] ?? startDef();
   ui.touched = changed;
-  ui.note = `${label}: ${changed.join(", ") || "nothing"} changed back.`;
+  // In words, not the files' names (I178): what came back, or on Redo
+  // what changed again.
+  const what = [...new Set(changed.map((f) => FILE_WORDS[f] ?? f))];
+  const said = what.length > 1 ? `${what.slice(0, -1).join(", ")} and ${what.at(-1)}` : what[0] ?? "nothing";
+  ui.note = `${label}: ${said} ${label === "Redid" ? "changed again" : "changed back"}.`;
   ui.mode = null;
   save();
   render();
@@ -2054,7 +2062,7 @@ function boundedTrace(info: T.Info, args: Value[]): Trace {
 }
 
 // Run main (editor/runPanel.ts, E228i).
-const { stopRun, endRun, runGiven, permissionsAsked, permissionsPanel, runTyped, readsInput, stdinBox } = runPanel({
+const { stopRun, endRun, warmRun, runGiven, permissionsAsked, permissionsPanel, runTyped, readsInput, stdinBox } = runPanel({
   doc: () => doc, ui, prog: () => prog(), pres: () => pres(), typesOf: () => typesOf(), titleOf, render: () => render(),
   defNamed, pins: () => heldPins?.all ?? doc.signatures ?? NO_PINS,
 });
@@ -2587,3 +2595,6 @@ if (!EMBED && ASKED.has("code")) void unpackSnippet(ASKED.get("code")!).then((p)
 render();
 // What every first click asks, found before it (selection.ts).
 setTimeout(() => warmParents(LIBRARY.code), 1500);
+// Run's worker, started with this program's check while nothing else
+// runs, so Run main doesn't wait for the library's check (I177).
+if (!EMBED) setTimeout(() => { const m = defNamed("main"); if (m && typesOf()) warmRun(m); }, 2500);

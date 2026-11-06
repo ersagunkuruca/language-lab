@@ -276,7 +276,8 @@ job system; Futhark (Henriksen et al. 2017) and Accelerate (Chakravarty et
 al. 2011) for data-parallel code on GPUs; Halide's separation of algorithm
 and schedule (Ragan-Kelley et al. 2013); HVM and Bend (Victor Taelin,
 Higher Order Company), which run interaction-net programs on CPU threads
-or the GPU automatically. Bend 2 not yet read.
+or the GPU automatically. Bend 2 read (C61's first step): the design
+note is [WHERE-IT-RUNS.md](../targets/WHERE-IT-RUNS.md).
 
 ## The demo (L100)
 

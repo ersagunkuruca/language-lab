@@ -58,6 +58,9 @@ const OWN: Record<string, (...xs: never[]) => unknown> = {
   // An item by its place, read in the buffer (C30 s2: an array's fold
   // reads each item so, where wrapping the place as a BigInt for std's
   // array.at was an eighth of chapters' run).
+  // `item at` read in the buffer too, with no answer thrown, not a list
+  // of answers made for each read (C93: machine's registers and memory).
+  "array.at": (a: Parameters<typeof arrayView>[0], k: I.Int) => { const v = arrayView(a), i = Number(k); if (!(Number.isInteger(i) && i >= 0 && i < v.n)) throw FAIL; return v.buf.items[v.start + i]; },
   "array.get": (a: Parameters<typeof arrayView>[0], k: number) => { const v = arrayView(a), i = Number(k); if (!(i >= 0 && i < v.n)) throw FAIL; return v.buf.items[v.start + i]; },
   // The array's items from place k on, a view of the same buffer (C30 s2b:
   // the rest an array's fold hands its arm, scalar.ts restAsView).

@@ -1,6 +1,6 @@
 # Foreign definitions: a program's own effect, answered by the host
 
-**Status (2026-11-01).** BACKLOG L69 (from LANGUAGE-NEEDS-2026-10-24
+**Status (2026-11-06): done** (BACKLOG L69 closed; see DONE.md). BACKLOG L69 (from LANGUAGE-NEEDS-2026-10-24
 §5). L69a's evaluator half is built (src/lang/hosts.ts, test/hosts.test.ts):
 `lab run` and `lab test` load `hosts/js.js` beside the program, an
 operation of the program's own effect that nothing handles is answered
@@ -152,8 +152,9 @@ The answer is checked at the same border (a NaN is an Abort with the
 reason), and the effect stays in every row: the clock is Time whoever
 reads it. Abort and Check are the language's own and never a host's.
 The evaluator does this (hosts.ts `stdHosted`), so `lab run` and `lab
-test`, which run a program with its own hosts on the evaluator, do; the
-core IR's JavaScript still reads the World's clock.
+test`, which run a program with its own hosts on the evaluator, do; so
+does the core IR's JavaScript (core-rt.ts worldFn's `now`, #2016). L69
+is closed with this (2026-11-06); std's own host files stay optional.
 
 ## Steps
 

@@ -942,6 +942,75 @@ static lab_cell *lab_handlers_case(int e, int i) {
   fputs("nothing handles an operation\\n", stderr);
   exit(3);
 }` },
+  // A program's own handlers whose cases keep the rest (C44b): the code
+  // handled runs on a fiber of its own (a stack, ucontext), which a
+  // perform leaves for the handler's driver, taking its frame and those
+  // above it off the stack of frames; the rest puts them back and goes
+  // back in. One-shot, as Koka's and OCaml 5's effect handlers on fibers.
+  "fibers": { uses: [], c: `#include <ucontext.h>
+typedef struct lab__frame lab__frame;
+typedef struct { ucontext_t ctx; void *stack; } lab__fiber;
+struct lab__frame { int e, op, noff; ucontext_t driver; lab__fiber *fiber, *at; void (*entry)(lab__frame *); lab__frame **off; };
+typedef struct { lab_cell h; void (*code)(void); void *k; } lab__frest; // a rest: its handler's frame
+#define LAB_FIBER_STACK ((size_t)1 << 26)
+static lab__frame **lab__fs, *lab__fnew;
+static int lab__fn, lab__fcap;
+static lab__fiber *lab__fcur;
+static void lab__fpush(lab__frame *h) {
+  if (lab__fn == lab__fcap) { lab__fcap = lab__fcap ? 2 * lab__fcap : 16; lab__fs = realloc(lab__fs, lab__fcap * sizeof *lab__fs); if (!lab__fs) lab_oom(); }
+  lab__fs[lab__fn++] = h;
+}
+static void lab__fbody(void) {
+  lab__frame *h = lab__fnew;
+  h->entry(h);
+  for (int k = lab__fn; k-- > 0;) if (lab__fs[k] == h) { lab__fn = k; break; }
+  h->op = -1;
+  setcontext(&h->driver);
+}
+static void lab__fstart(lab__frame *h, int e, void (*entry)(lab__frame *)) {
+  lab__fiber *f = calloc(1, sizeof *f);
+  if (!f || !(f->stack = malloc(LAB_FIBER_STACK))) lab_oom();
+  getcontext(&f->ctx);
+  f->ctx.uc_stack.ss_sp = f->stack; f->ctx.uc_stack.ss_size = LAB_FIBER_STACK; f->ctx.uc_link = 0;
+  makecontext(&f->ctx, lab__fbody, 0);
+  h->e = e; h->entry = entry; h->fiber = h->at = f;
+  lab__fnew = h;
+  lab__fpush(h);
+}
+// Into the fiber where the handled code is, until it performs one of the
+// frame's operations (its number) or finishes (-1).
+static int lab__fgo(lab__frame *h) {
+  lab__fiber *prev = lab__fcur;
+  lab__fcur = h->at;
+  swapcontext(&h->driver, &h->at->ctx);
+  lab__fcur = prev;
+  if (h->op < 0) { free(h->fiber->stack); free(h->fiber); h->fiber = 0; free(h->off); h->off = 0; }
+  return h->op;
+}
+static void lab__fperform(int e, int op) {
+  int k = lab__fn;
+  while (k-- > 0 && lab__fs[k]->e != e) {}
+  if (k < 0) { fflush(stdout); fputs("nothing handles an operation\\n", stderr); exit(3); }
+  lab__frame *h = lab__fs[k];
+  h->noff = lab__fn - k;
+  h->off = realloc(h->off, h->noff * sizeof *h->off);
+  if (!h->off) lab_oom();
+  for (int j = 0; j < h->noff; j++) h->off[j] = lab__fs[k + j];
+  lab__fn = k; h->op = op; h->at = lab__fcur;
+  swapcontext(&lab__fcur->ctx, &h->driver);
+}
+static int lab__fhas(int e) { for (int k = lab__fn; k-- > 0;) if (lab__fs[k]->e == e) return 1; return 0; }
+static void lab__fresume(lab__frame *h) { for (int j = 0; j < h->noff; j++) lab__fpush(h->off[j]); }` },
+  // A branch of together or race waits till a moment (C44): it parks, out
+  // to the nearest scheduler (c.ts `fbranches:`), which goes on with the
+  // branch whose moment is soonest; outside any, the program sleeps.
+  "fibers.park": { uses: ["fibers", "world.now", "world.sleep"], c: `#define LAB_PARK (-2)
+static double lab__park_at;
+static int lab__fpark(double at) {
+  if (lab__fhas(LAB_PARK)) { lab__park_at = at; lab__fperform(LAB_PARK, 0); }
+  else lab_world_sleep(at - lab_world_now());
+  return 0;
+}` },
   // A line of the program's Log nothing handles (L213a6, a release's):
   // standard error, as Node's world writes it.
   "world.logLine": { uses: [], c: `static void lab_world_logLine(lab_cell *t) { fflush(stdout); fwrite(LAB_TB(t), 1, LAB_TN(t), stderr); fputc('\\n', stderr); lab_drop(t); }` },
