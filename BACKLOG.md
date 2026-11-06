@@ -42,7 +42,7 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| I189 | Opening some definitions still freezes the page for a second or more. Measured 2026-11-06 03:00 after I179: Spacetime `scalar part` 1.75 s (its longest task 0.93), machine `all digits` 1.6 s (1.5: runBackwards searching from its seed, relate's one-off library picks and rechecks in fieldsByType and sharedFields). Example: machine `all digits` opens in tasks of at most 0.3 s | I179 (QA-2026-11-05b M1) | P2 | M | |
+| I189 | Opening some definitions still freezes the page for a second or more. Measured 2026-11-06 03:00 after I179: Spacetime `scalar part` 1.75 s (its longest task 0.93), machine `all digits` 1.6 s (1.5). After I189a (03:20): `all digits` 0.37 s (0.32). Left: `scalar part` is reached only by main's long run, whose pieces are one handler each, and one handler's drawing of the page is 0.9 s (seeds.ts drawOnce in exploring). Example: Spacetime `scalar part` opens in tasks of at most 0.3 s | I179 (QA-2026-11-05b M1) | P2 | M | a done |
 
 ### Foundations ([FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md))
 

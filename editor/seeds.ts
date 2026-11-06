@@ -8,7 +8,7 @@ import { isCall, nodesWhere, refTargets, scanningOnLayer, type Call } from "../t
 import type { Names, Presentation } from "../ters/src/presentation.ts";
 import { CONS, FALSE, HTML_V, NIL, S, TRUE } from "../ters/src/lang/std.ts";
 import { STRING, type Type } from "../ters/src/lang/types.ts";
-import { definedAs, fromList, META, OutOfSteps, showValue, toList, withSteps, type Data, type Value, type World } from "../ters/src/lang/run.ts";
+import { definedAs, resolvedFor, fromList, META, OutOfSteps, showValue, toList, withSteps, type Data, type Value, type World } from "../ters/src/lang/run.ts";
 import { trace } from "../ters/src/lang/trace.ts";
 import { parseValue } from "../ters/src/lang/values.ts";
 import { evaluatorCall } from "../ters/src/lang/html.ts";
@@ -314,7 +314,11 @@ export function seeds(host: SeedHost) {
   const warming = new WeakMap<Code, { got: Map<Id, Value[]>; rest: Generator<void> }>();
   function warmCalls(info: T.Info): void {
     const code = doc().code, main = defNamed("main"), body = main ? defBody(main) : undefined;
-    if (!main || mainRuns.has(code) || warming.has(code) || (body?.kind === "lambda" && body.params.length)) return;
+    // Without main's run, the code's arithmetic resolved (run.ts
+    // resolvedFor), which the first trace or search would do (I189:
+    // machine's `all digits` opened in 1.6 s, 1.25 of it this).
+    if (!main || (body?.kind === "lambda" && body.params.length)) { resolvedFor(code, info, pres().names); return; }
+    if (mainRuns.has(code) || warming.has(code)) return;
     const got = new Map<Id, Value[]>(), copies = mainCopies.get(code) ?? new Map<Id, Id>();
     mainCopies.set(code, copies);
     const args = mainArgs(info, main, []);
