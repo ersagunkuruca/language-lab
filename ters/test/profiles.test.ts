@@ -11,7 +11,7 @@ import { gpuRefusals } from "../src/lang/profiles.ts";
 import { lowerScalar } from "../../compiler/src/scalar.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { base, baseNames } from "../src/lang/load.ts";
-import { ARITH } from "../src/lang/std.ts";
+import { ARITH, S, SHOW_ANY } from "../src/lang/std.ts";
 import type { Id } from "../src/model.ts";
 
 test("a definition that gives a List is told it can't run on the GPU, from its type alone; its callers aren't", () => {
@@ -31,9 +31,31 @@ test("a definition that gives a List is told it can't run on the GPU, from its t
   assert.ok(lowerScalar(code, info, names, [wrapped], { records: true, shader: true }).refused.has(wrapped));
 });
 
+// L22c: an effect in a definition's type is carried to its callers, so a
+// caller of one that prints is told it can't run on the GPU from its own
+// type, as the lowering says; one that handles it isn't.
+test("a definition that prints can't run on the GPU, nor can its callers, told from their types", () => {
+  const k = new Lang();
+  const fn = (name: string, params: string[], body: (...xs: Id[]) => Id) => { const d = k.def(name); k.define(d, k.fn(params, body)); return d; };
+  const shout = fn("shout", ["x"], (x) => k.seq(k.call(S.print, k.call(SHOW_ANY, x)), k.call(ARITH.mul, x, k.lit(2))));
+  const caller = fn("caller", ["x"], (x) => k.call(ARITH.add, k.call(shout, x), k.lit(1)));
+  const quiet = fn("quiet", ["x"], (x) => k.call(ARITH.mul, x, x));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const why = gpuRefusals(code, info, names, [shout, caller, quiet]);
+  assert.equal(why.get(shout), "has effects (Console)");
+  assert.equal(why.get(caller), "has effects (Console)");
+  assert.equal(why.get(quiet), undefined);
+  const theirs = lowerScalar(code, info, names, [shout, caller, quiet], { records: true, shader: true }).refused;
+  assert.match(theirs.get(shout)!, /has effects \(Console\)/);
+  assert.ok(theirs.has(caller));
+  assert.ok(!theirs.has(quiet));
+});
+
 test("every no told from types is the compiler's no too, on each example", () => {
   let told = 0;
-  for (const e of ["sort", "queens", "physics", "routes", "shaders", "raymarch", "calc", "wc", "calculus"]) {
+  for (const e of ["sort", "queens", "physics", "routes", "shaders", "raymarch", "calc", "wc", "calculus", "impact", "agent", "effects", "countdown", "dice"]) {
     const p = loadProgram(`examples/${e}`);
     const info = infer(p.code, p.pres.names);
     if (info.errors.length) continue;
