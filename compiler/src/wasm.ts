@@ -115,7 +115,7 @@ const performsIn = (e: SExpr): boolean => (e.k === "rt" && e.fn.startsWith("perf
 // nothing handles is an import from "world" that hosts/js.js answers
 // (FOREIGN.md, L69b2).
 const TEXT_PIECE = 10000;
-export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOps } = {}): Module {
+export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOps; main?: string } = {}): Module {
   const wasi = !!opts.wasi;
   // A shader's lowering (C66c, `lowered.shader`): Int in 32 bits, and no
   // answer is the flag $none that `first` and `count` look at, as WGSL
@@ -236,7 +236,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   const worldOps: Extract<SExpr, { k: "world" }>[] = [];
   const worldCalls = (e: SExpr): void => { if (e.k === "world" && !worldOps.some((x) => x.op === e.op)) worldOps.push(e); kids(e).forEach(worldCalls); };
   funcs.forEach((f) => worldCalls(f.body));
-  const main = wasi ? funcs.find((f) => f.name === "main" && !f.inner && !f.budgeted) : undefined;
+  const main = wasi ? funcs.find((f) => (opts.main ? f.def === opts.main : f.name === "main") && !f.inner && !f.budgeted) : undefined;
   if (wasi && (!main || main.params.length > 1)) throw new Error("a WASI command needs a main that takes the arguments, or nothing");
   if (wasi) {
     worldOps.forEach((x) => need(`wasi.${x.op}`));
