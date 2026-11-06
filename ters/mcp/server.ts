@@ -72,8 +72,8 @@ export const TOOLS: Tool[] = [
   {
     name: "replace",
     description: "Replace a part with an expression written as view prints it (□ for a hole). Typechecked; saved; returns the diff.",
-    inputSchema: obj({ at: str("id"), text: str("e.g. fall(b) + 1, (x) => x * 2, [1, 2], □"), find: str("optional: the exact text of a part inside at"), case: str("optional: at is a match; replace this case's body only") }, ["at", "text"]),
-    call: (a) => program().replace(String(a.at), String(a.text), a.find as string | undefined, a.case as string | undefined),
+    inputSchema: obj({ at: str("id"), text: str("e.g. fall(b) + 1, (x) => x * 2, [1, 2], □"), find: str("optional: the exact text of a part inside at"), case: str("optional: at is a match; replace this case's body only"), as: str("optional: whose field it reads, when several types have one by that name (Pocket)") }, ["at", "text"]),
+    call: (a) => program().replace(String(a.at), String(a.text), a.find as string | undefined, a.case as string | undefined, a.as as string | undefined),
   },
   {
     name: "step",

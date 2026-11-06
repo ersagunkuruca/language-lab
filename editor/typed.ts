@@ -342,8 +342,28 @@ export function fillValue(code: Code, names: Names, info: Info, hole: Id, text: 
 // and picked a wrong one; E216: machine's jump(number(3)).to was said to
 // be html's Attribute's too).
 function fieldsByProbe(code: Code, names: Names, info: Info, hole: Id, t: Typed, defId?: Id): Typed {
+  const variantOf = new Map<Id, Id>();
+  for (const v of Object.values(code.nodes)) if (v.kind === "variant") for (const f of v.fields) variantOf.set(f, v.id);
+  // The type a meaning of one input takes: a field's case's, or a
+  // function's one input's when it is a type.
+  const takes = new Map<Id, Id | null>();
+  const takesOf = (op: Id): Id | null => {
+    if (takes.has(op)) return takes.get(op)!;
+    let out: Id | null = null;
+    if (code.nodes[op]?.kind === "field") out = info.owner.get(variantOf.get(op)!) ?? null;
+    else {
+      const ty = sigType(info, op) ?? info.typeOf.get(op), r = ty && info.subst.resolve(ty);
+      const p = r?.t === "fn" && r.params.length === 1 ? info.subst.resolve(r.params[0]) : undefined;
+      out = p?.t === "con" ? p.id : null;
+    }
+    takes.set(op, out);
+    return out;
+  };
+  // A field several types have, and a function of one input several
+  // types each have their own of (as float64 at Int, Algebraic, Fixed…:
+  // I187, the rack in one expression ran past the 16 readings tried).
   const shared = (x: Typed): x is { op: Id; args: Typed[]; alts: Id[] } =>
-    "op" in x && !!x.alts && x.alts.length > 1 && x.args.length === 1 && x.alts.every((a) => code.nodes[a]?.kind === "field");
+    "op" in x && !!x.alts && x.alts.length > 1 && x.args.length === 1 && (x.alts.every((a) => code.nodes[a]?.kind === "field") || (x.alts.every((a) => takesOf(a) !== null) && new Set(x.alts.map(takesOf)).size > 1));
   const map = (x: Typed, f: (x: Typed) => Typed | null): Typed => {
     const y = f(x);
     if (y) return y;
@@ -356,15 +376,26 @@ function fieldsByProbe(code: Code, names: Names, info: Info, hole: Id, t: Typed,
   // Each such read's value, named by a step of its own in the probe, so
   // its type can be looked up: jump(number(3)).to's is an Instr (E216).
   const at = new Map<Typed, Id>();
-  const probe = map(t, (x) => {
+  // Whether every meaning gives the same type (as float64's each give a
+  // Float64), so leaving the call open loses nothing.
+  const gives = (op: Id): string | null => {
+    const ty = sigType(info, op) ?? info.typeOf.get(op), r = ty && info.subst.resolve(ty);
+    const g = r?.t === "fn" ? info.subst.resolve(r.ret) : undefined;
+    return g?.t === "con" && !g.args.length ? g.id : null;
+  };
+  const sameGives = (alts: Id[]) => { const g = alts.map(gives); return g[0] !== null && g.every((x) => x === g[0]); };
+  // A field's read is left open (its value's type alone is asked); a
+  // function's call is kept, its input named in place, so what it gives
+  // still types what reads it (range(5)'s r).
+  const probing = (x: Typed): Typed | null => {
     if (!shared(x)) return null;
     const id = freshId();
     at.set(x, id);
-    return { let: { id, name: "_" }, be: map(x.args[0], () => null), rest: { hole: true } };
-  });
+    if (x.alts.every((a) => code.nodes[a]?.kind === "field") || sameGives(x.alts)) return { let: { id, name: "_" }, be: map(x.args[0], () => null), rest: { hole: true } };
+    return { ...x, args: [{ let: { id, name: "_" }, be: map(x.args[0], probing), rest: { ref: id } }] };
+  };
+  const probe = map(t, probing);
   if (!at.size) return t;
-  const variantOf = new Map<Id, Id>();
-  for (const v of Object.values(code.nodes)) if (v.kind === "variant") for (const f of v.fields) variantOf.set(f, v.id);
   for (const p of readings(leaveOpen(info, narrow(code, info, probe))).slice(0, 8)) {
     const e = written(code, names, info, hole, "", p, false, defId);
     if (!e.ok) continue;
@@ -373,7 +404,7 @@ function fieldsByProbe(code: Code, names: Names, info: Info, hole: Id, t: Typed,
       if (!shared(x)) return null;
       const of = seen.typeOf.get(at.get(x)!);
       const r = of && seen.subst.resolve(of);
-      const alts = r?.t === "con" ? x.alts.filter((a) => seen.owner.get(variantOf.get(a)!) === r.id) : [];
+      const alts = r?.t === "con" ? x.alts.filter((a) => (code.nodes[a]?.kind === "field" ? seen.owner.get(variantOf.get(a)!) : takesOf(a)) === r.id) : [];
       const args = x.args.map((a) => map(a, narrowed));
       return alts.length ? { op: alts[0], args, ...(alts.length > 1 ? { alts } : {}) } : { ...x, args };
     };
@@ -709,6 +740,10 @@ const PREFIX = [...glyphs("prefix")].filter(([g]) => g !== "−");
 const namesDef = (v: unknown): boolean => !!v && typeof v === "object" && ((v as { tag?: unknown }).tag === DEF_VALUE || ((v as { fields?: unknown[] }).fields ?? []).some(namesDef));
 function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>): Typed | { error: string } {
   const t = text.trim();
+  // A name of several words alone, quoted as the view prints it: map(xs,
+  // ‹rack row›) (I187), as ‹rack row›(r) already reads.
+  const quoted = /^‹([^‹›()]+)›$/.exec(t);
+  if (quoted) return typedOut(quoted[1], code, names, scope);
   const named = scope.get(t);
   if (named) return { ref: named };
   const r = parseValue(text, code, names);
@@ -918,6 +953,12 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
   const cases = Object.keys(names).filter((id) => names[id] === t && code.nodes[id]?.kind === "variant" && (code.nodes[id] as NodeOf<"variant">).fields.length > 0 && !(fromLibrary(id) && (code.nodes[id] as NodeOf<"variant">).private))
     .sort((x, y) => +fromLibrary(x) - +fromLibrary(y));
   if (cases.length) return { ref: cases[0] };
+  // A function out of scope named alone, given as a value: map(ns, show)
+  // (I187), as it reads when called, an operation first.
+  const fns = Object.keys(names).filter((id) => names[id] === t && (isOperation(code, id) || code.nodes[id]?.kind === "builtin" || code.nodes[id]?.kind === "def"))
+    .filter((id) => !(fromLibrary(id) && (code.nodes[id] as NodeOf<"variant"> | undefined)?.private))
+    .sort((x, y) => +fromLibrary(x) - +fromLibrary(y) || +isOperation(code, y) - +isOperation(code, x));
+  if (fns.length) return { ref: fns[0] };
   if (/^[\p{L}_][\p{L}\p{N}_' ]*$/u.test(t) && !/^(if|then|else)$/.test(t)) return { error: `nothing is named ${t} here${closest(t, scope.keys(), scope)}` };
   return inner ?? r;
 }

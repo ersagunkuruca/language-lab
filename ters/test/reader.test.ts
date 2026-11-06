@@ -632,3 +632,21 @@ test("typed text reads a relation written where it is used", async () => {
   // A name twice is no relation.
   assert.equal(fillValue(code, names, infer(code, names), h, "(s, a) → a = s = a", plain).ok, false);
 });
+
+// I187 (round 12's break): a function given as a value (show), a quoted
+// name, and the rack in one expression, where range and as float64
+// each have meanings at several types and the readings tried ran out.
+test("typed text reads a function as a value, a quoted name, and a rack of overloaded calls", () => {
+  const p = loadProgram(join(root, "..", "compiler", "gaps", "break"));
+  const d = "tryDef", h = "tryHole";
+  const code = { nodes: { ...p.code.nodes, [d]: { id: d, kind: "def", body: h }, [h]: { id: h, kind: "hole" } } as never, defs: [...p.code.defs, d] };
+  const names = { ...p.pres.names, [d]: "try" };
+  const info = infer(code, names);
+  const reads = (text: string) => {
+    const r = fillValue(code, names, info, h, text, d);
+    assert.ok(r.ok, !r.ok ? `${text}: ${r.reason}` : "");
+  };
+  reads("map([1, 2], show)");
+  reads("shifted(‹foot spot›, vec(1, 0))");
+  reads("flatten(map(range(5), (r) => map(range(r + 1), (k) => ball(sum(range(r + 1)) + k + 1, shifted(‹foot spot›, vec(‹as float64›(r) · spacing · 0.866, (‹as float64›(k) − ‹as float64›(r) · 0.5) · spacing)), vec(0, 0)))))");
+});

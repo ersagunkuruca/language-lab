@@ -23,7 +23,7 @@ language, then more targets or speed (WORKFLOW.md "Priority").
 | E Editor | "Editor lane" | E103, then Language or Compiler rows agreed with those lanes |
 | C Compiler and targets | "Compiler lane" | C187 (fibers in WASM); C93 to Language lane B; C184 with the Editor lane |
 | L Language and library | "Language lane" | L44, then L88 and L182 when unblocked (core, run.ts, infer.ts, hosts.ts) |
-| L Language and library | "Language lane B" | Round 12's findings (GAPS.md, break): C194; I187. L118c waits on Ersagun, who stopped L118 after step 2. Skip L107 (waits on Ersagun) and L24 (research). Take a row from another list only after telling that lane. |
+| L Language and library | "Language lane B" | Round 12's findings (GAPS.md, break): C194. L118c waits on Ersagun, who stopped L118 after step 2. Skip L107 (waits on Ersagun) and L24 (research). Take a row from another list only after telling that lane. |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -32,7 +32,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I187 | Shared names read wrong, far from the cause: `p.place` where Ball and Pocket both have `place` took Ball's with nothing said (the implementation was then a second `Toucher Ball`); the rack as one expression found no reading ("as float64 needs Fixed here, got Int") where each part reads alone; `show` can't be given as a function. Example: break's `pocket gap at` with `place`, and its rack in one (GAPS.md round 12 M4) | GAPS round 12 M4 | 2026-11-06 |
 
 ## E: Editor
 
