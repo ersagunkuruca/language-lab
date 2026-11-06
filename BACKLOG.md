@@ -23,7 +23,7 @@ language, then more targets or speed (WORKFLOW.md "Priority").
 | E Editor | "Editor lane" | E103, then Language or Compiler rows agreed with those lanes |
 | C Compiler and targets | "Compiler lane" | C187 (fibers in WASM); C93 to Language lane B; C184 and C30 with the Editor lane |
 | L Language and library | "Language lane" | L44, then L88 and L182 when unblocked (core, run.ts, infer.ts, hosts.ts) |
-| L Language and library | "Language lane B" | Round 12's findings (GAPS.md, break): C188, I183 and I184, C189, L231; I185 to I188 after. L118c waits on Ersagun, who stopped L118 after step 2. Skip L107 (waits on Ersagun) and L24 (research). Take a row from another list only after telling that lane. |
+| L Language and library | "Language lane B" | Round 12's findings (GAPS.md, break): I183 and I184, C189, L231; I185 to I188 after. L118c waits on Ersagun, who stopped L118 after step 2. Skip L107 (waits on Ersagun) and L24 (research). Take a row from another list only after telling that lane. |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -126,7 +126,6 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 | C41 | Pure `together` branches on worker_threads / Web Workers past a cost threshold | LANGUAGE-NEEDS-2026-10-24 | P3 | M | after L62 |
 | C42 | Data-parallel `map` and associative folds on a thread pool, later as compute shaders (NESL, Futhark) | LANGUAGE-NEEDS-2026-10-24 | P3 | L | after C30 |
 | C43 | Or-parallel `all`/`count` and speculative `first` in canonical order, with work stealing (Cilk, Aurora/Muse) | LANGUAGE-NEEDS-2026-10-24 | P3 | L | after C41 |
-| C188 | A list read by position, built afresh each step of a loop, stays a cons list: rep-groups.ts wants `array of List` for break's `soonest`, but `splitByGroups` drops a group whose root is called from a loop of the rest's (its lists converted every turn), though here a conversion a step is O(n) against O(n²) of `item at` walks. Example: compiler/gaps/break's main, 59 ms against 27 by hand with the scan made once (GAPS.md round 12 B1) | GAPS round 12 B1 | P3 | M | |
 | C189 | `first(a / b, else c)` and `first(sqrt(x), else c)` printed without a try where nothing in them throws (division and sqrt give no answer as a value), and a small pure function called twice with the same input worked out once. Example: compiler/gaps/break's `moved`, `heading`, `rest time` and `length of`: main 27 to 17-19 ms by hand on top of C188 (GAPS.md round 12 B2, B3) | GAPS round 12 B2, B3 | P3 | M | |
 | C187 | Fibers in WASM (JSPI, or the stack switching proposal): a program's own handlers that keep the rest, and together and race, as C44 runs them natively. Example: fibers-c.test's generator and together, run through `lab build --wasm` printing what lab run prints | C44 | P3 | L | |
 
