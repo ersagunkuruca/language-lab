@@ -32,41 +32,57 @@ const nums = (v: Value): number[] | null => {
 // back, starting from a's shape with every part 0.
 // A table read once: values don't change, so each line's e, f and g are
 // checked and kept by the table's identity.
-type Line = { e: number[]; f: number[]; g: Data; gs: number[] };
-const tables = new WeakMap<object, Line[] | null>();
-function linesOf(table: Value): Line[] | null {
+// Each line's e and f are kept as an index into the table's distinct ones
+// (a 16-part algebra's 256 lines have 16 of each), so each x along e is
+// worked out once a product; and g's parts that aren't 0, since adding
+// w · 0 to the sum leaves it as it is while w is finite (the sum starts at
+// +0 and is never -0). The parts are summed in place, in the same order.
+type Line = { e: number; f: number; g: Data; gs: number[]; nz: number[] };
+type Lines = { lines: Line[]; es: number[][]; fs: number[][] };
+const tables = new WeakMap<object, Lines | null>();
+function linesOf(table: Value): Lines | null {
   if (typeof table !== "object" || table === null) return null;
   const kept = tables.get(table);
   if (kept !== undefined) return kept;
+  const es: number[][] = [], fs: number[][] = [], ek = new Map<string, number>(), fk = new Map<string, number>();
+  const at = (v: number[], all: number[][], keys: Map<string, number>) => {
+    const k = v.map((x) => (Object.is(x, -0) ? "-0" : String(x))).join(",");
+    let i = keys.get(k);
+    if (i === undefined) { i = all.length; all.push(v); keys.set(k, i); }
+    return i;
+  };
   let lines: Line[] | null = [];
   let d = table as Data;
   for (; d?.tag === CONS; d = d.fields[1] as Data) {
     const [e, f, g] = (d.fields[0] as Data).fields;
     const ev = nums(e), fv = nums(f), gv = nums(g);
     if (!ev || !fv || !gv) { lines = null; break; }
-    lines.push({ e: ev, f: fv, g: g as Data, gs: gv });
+    lines.push({ e: at(ev, es, ek), f: at(fv, fs, fk), g: g as Data, gs: gv, nz: gv.flatMap((x, i) => (x === 0 ? [] : [i])) });
   }
   if (lines && d?.tag !== NIL) lines = null;
-  tables.set(table, lines);
-  return lines;
+  const out = lines && { lines, es, fs };
+  tables.set(table, out);
+  return out;
 }
 function tableProduct(table: Value, a: Value, b: Value): Value | null {
   const av = nums(a), bv = nums(b);
-  const lines = av && bv ? linesOf(table) : null;
-  if (!av || !bv || !lines) return null;
+  const t = av && bv ? linesOf(table) : null;
+  if (!av || !bv || !t) return null;
   const along = (x: number[], e: number[]) => { let s = x[0] * e[0]; for (let i = 1; i < x.length; i++) s = s + x[i] * e[i]; return s; };
-  let acc: Data = { tag: (a as Data).tag, fields: av.map(() => 0) };
+  if (t.es.some((e) => e.length !== av.length) || t.fs.some((f) => f.length !== bv.length)) return null;
+  const ae = t.es.map((e) => along(av, e)), bf = t.fs.map((f) => along(bv, f));
+  const { lines } = t;
+  const acc = av.map(() => 0);
+  let shape: Data = { tag: (a as Data).tag, fields: acc };
   for (let l = lines.length - 1; l >= 0; l--) {
-    const { e, f, g, gs } = lines[l];
-    if (e.length !== av.length || f.length !== bv.length) return null;
-    const w = along(av, e) * along(bv, f);
-    const rest = acc.fields as number[];
-    if (rest.length !== gs.length) return null;
-    const out = new Array<number>(gs.length);
-    for (let i = 0; i < gs.length; i++) out[i] = w * gs[i] + rest[i];
-    acc = { ...g, fields: out };
+    const { e, f, g, gs, nz } = lines[l];
+    const w = ae[e] * bf[f];
+    if (acc.length !== gs.length) return null;
+    if (Number.isFinite(w)) for (const i of nz) acc[i] = w * gs[i] + acc[i];
+    else for (let i = 0; i < gs.length; i++) acc[i] = w * gs[i] + acc[i];
+    shape = g;
   }
-  return acc;
+  return { ...shape, fields: acc };
 }
 
 // By the definition's name in the library.

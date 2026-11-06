@@ -139,15 +139,20 @@ export function seeds(host: SeedHost) {
 
   // Calls every view in a page's Html once, outermost first, until `over`.
   // Returns its handlers by the place in the code each is written, in the
-  // order they're drawn (a board's 64 squares share one place).
-  function drawOnce(v: Value, over: () => boolean): Map<unknown, Value[]> {
+  // order they're drawn (a board's 64 squares share one place). It
+  // yields when a piece's time (sliceEnd) is up, so a drawing of many
+  // views gives the page back between them (I189: Spacetime's, 0.8 s of
+  // views of about 30 ms each).
+  function* drawOnce(v: Value, over: () => boolean): Generator<void, Map<unknown, Value[]>> {
     const todo: Value[] = [v], handlers = new Map<unknown, Value[]>();
     while (todo.length && !over()) {
+      if (performance.now() > sliceEnd) yield;
       const d = todo.shift() as Data;
       if (d?.tag === HTML_V.text) tryCall(d.fields[0]);
       else if (d?.tag === HTML_V.part) { const inner = tryCall(d.fields[0]); if (inner !== undefined) todo.push(inner); }
       else if (d?.tag === HTML_V.element) {
         for (const a of fromList(d.fields[1]) as Data[]) {
+          if (performance.now() > sliceEnd) yield;
           if (a.tag === HTML_V.property) tryCall(a.fields[1]);
           // What plays a sound plays a block of one (the pedal's helpers: I29).
           else if (a.tag === HTML_V.listen) tryCall(a.fields[1], BLOCK());
@@ -216,23 +221,27 @@ export function seeds(host: SeedHost) {
   // ANOTHER_TAP of each place's handlers run, one per drawing (a second tap
   // on the board picks a neighbour; each lane's timer).
   const ANOTHER_TAP = 3;
+  // The longest a piece of the run after main's runs before giving the page
+  // back; the first drawing, part of main's own run, isn't cut.
+  const SLICE_MS = 100;
+  let sliceEnd = Infinity;
   // A piece at a time (I172): it yields after the first drawing, and after
   // each handler and the drawing after it, so the long run can give the
   // page back between pieces.
   function* exploring(page: Value, over: () => boolean, started: () => void): Generator<void> {
     const fired = new Map<unknown, number>(), todo: Value[] = [];
-    const draw = () => {
+    const draw = function* () {
       const fresh: Value[] = [];
-      for (const [at, fs] of drawOnce(page, over)) {
+      for (const [at, fs] of yield* drawOnce(page, over)) {
         const n = fired.get(at) ?? 0;
         if (n < ANOTHER_TAP && n < fs.length) { fired.set(at, n + 1); fresh.push(fs[n]); }
       }
       todo.unshift(...fresh);
     };
-    draw();
+    yield* draw();
     started();
     yield;
-    while (todo.length && !over()) { tryCall(todo.shift()!, NO_EVENT); draw(); yield; }
+    while (todo.length && !over()) { tryCall(todo.shift()!, NO_EVENT); yield* draw(); yield; }
   }
   // main run once at `args`, what each function is first called with put in
   // `got`: main's run and the page's first drawing now, and what is left (its
@@ -264,8 +273,9 @@ export function seeds(host: SeedHost) {
         while (left > 0) {
           const from = performance.now();
           end = from + left;
+          sliceEnd = from + SLICE_MS;
           let more = false;
-          try { more = withSteps(steps, () => !rest.next().done); } catch { more = false; }
+          try { more = withSteps(steps, () => !rest.next().done); } catch { more = false; } finally { sliceEnd = Infinity; }
           left -= performance.now() - from;
           if (!more) break;
           yield;
