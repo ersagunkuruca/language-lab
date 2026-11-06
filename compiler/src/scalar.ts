@@ -53,7 +53,7 @@
 import { tableText } from "./table-text.ts";
 import { unnameHandlers } from "./handler-names.ts";
 import { laterOps as laterOpsOf } from "../../ters/src/lang/later-ops.ts";
-import { givenInOrder } from "../../ters/src/lang/ports.ts";
+import { answerKeys, givenInOrder } from "../../ters/src/lang/ports.ts";
 import { resolveArithmetic } from "../../ters/src/lang/arith.ts";
 import type { Code, Id, NodeOf } from "../../ters/src/model.ts";
 import { dependencies, portsOf, subtree, isCall, type Call, isUse, useTarget, type Use } from "../../ters/src/model.ts";
@@ -65,6 +65,8 @@ import { RELEASE_V, LOG_OP, FILE_OPS, KEPT_FILES, OPEN_FILE, tupleType, ABORT, A
 import { liftLets } from "../../ters/src/lang/lift-lets.ts";
 import { solvesOnce } from "../../ters/src/lang/run.ts";
 import { planSolve } from "../../ters/src/lang/solve.ts";
+import { oncePlan } from "./relation.ts";
+import { cleanBody, NotWritten, writtenSteps } from "./solved.ts";
 import { solveMode, determinism } from "../../ters/src/lang/modes.ts";
 import { inlineLists } from "./inline-lets.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
@@ -1122,7 +1124,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       }
       case "call": {
         if (isUse(n)) {
-          if (!opts.host) throw new Refused("solves a relation (not in this profile yet)");
+          if (!opts.host) return writtenSolve(n, env, f, tail);
           return solveUse(n, env, f, tail);
         }
         const head = code.nodes[n.fn];
@@ -1681,6 +1683,48 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       ? { k: "rt", fn: `${single ? "solveOne" : "solve"}:${n.id}`, args: given.map((g) => expr(g, env, f, false)), host: { t: "host", partial: single } }
       : { k: "choose", list: { k: "rt", fn: `solveAll:${n.id}`, args: given.map((g) => expr(g, env, f, false)), host: { t: ANSWERS, partial: false } }, t: ANSWERS };
     return { k: "let", i: all, value: solved, body };
+  }
+  // A solve where nothing runs the solver at run time (WebAssembly, C):
+  // its plan written out, when it has one way to an answer (solved.ts,
+  // C195a). Its answer rounded as the solver rounds it (number.clean).
+  function writtenSolve(n: Use, env: Map<Id, number>, f: SFunc, tail: boolean): SExpr {
+    const name = nm(useTarget(code.nodes, n));
+    const no = new Refused("solves a relation (not in this profile yet)");
+    let p: ReturnType<typeof planSolve>;
+    try { p = planSolve(code, n); } catch { throw no; }
+    if (p.mode !== "solver" || p.status !== "solved" || !p.rel) throw no;
+    const binds = bindsOf(n), keys = Object.keys(binds);
+    if (keys.join() !== answerKeys(code, n).join()) throw no;
+    const steps = oncePlan(p.rel as never, [...p.known]);
+    if (!steps) throw new Refused(`solves ${name} by a plan with more than one way, or numbers searched for (not in this profile yet)`);
+    if (p.known.some((k) => !n.given[k] || stype(zonk(n.given[k])) !== "f64") || keys.some((k) => stype(zonk(binds[k])) !== "f64")) throw new Refused(`solves ${name} for something other than Float64s`);
+    const vars = new Map<string, number>();
+    const at = (v: string) => { let i = vars.get(v); if (i === undefined) vars.set(v, (i = f.locals.push("f64") - 1)); return i; };
+    const known = p.known.map((k) => ({ i: at(k), value: expr(n.given[k], env, f, false) }));
+    let inner = new Map(env);
+    const answers = keys.map((k) => { const i = f.locals.push("f64") - 1; inner = new Map(inner).set(binds[k], i); return { i, v: at(k) }; });
+    // Where it gives no answer: none here, in a search; otherwise the
+    // checker found it always answers, and the evaluator stops saying so.
+    // Where a way gives no answer: none, in a search or a partial function;
+    // otherwise the evaluator's abort, which a shader (no data) can't print.
+    const fail = (): SExpr => {
+      if (f.partial || searching.get(f)) return { k: "fail" };
+      if (!opts.data) throw new Refused(`solves ${name}, which may give no answer, and a shader can't stop`);
+      return { k: "abort", reason: { k: "text", v: `solving ${name} this way gives exactly one answer, and it gave none` } };
+    };
+    let written: SExpr;
+    try {
+      written = writtenSteps(steps, at, () => answers.reduceRight<SExpr>((e, a) => ({ k: "let", i: a.i, value: { k: "call", fn: cleanFn(), args: [{ k: "local", i: a.v }], tail: false }, body: e }), expr(bodyOf(n), inner, f, tail)), fail, stype(zonk(n.id))!);
+    } catch (e) { if (e instanceof NotWritten) throw new Refused(`solves ${name} with ${e.message} (not in this profile yet)`); throw e; }
+    return known.reduceRight<SExpr>((e, k) => ({ k: "let", i: k.i, value: k.value, body: e }), written);
+  }
+  function cleanFn(): number {
+    const key = "number.clean";
+    if (index.has(key)) return index.get(key)!;
+    const g: SFunc = { def: "", name: "number clean", params: ["f64"], result: "f64", locals: ["f64"], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
+    index.set(key, funcs.push(g) - 1);
+    g.body = cleanBody(() => g.locals.push("f64") - 1);
+    return index.get(key)!;
   }
   function atMostOne(code: Code, n: Use): boolean {
     try {
