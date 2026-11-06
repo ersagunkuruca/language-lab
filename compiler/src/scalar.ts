@@ -70,6 +70,7 @@ import { SITES, STOPS } from "./stops.ts";
 import { fieldIndex, fieldPath } from "../../ters/src/lang/records.ts";
 import { expandDerivatives, recordVariant } from "../../ters/src/lang/derive.ts";
 import { stageProgram } from "../../ters/src/lang/stage.ts";
+import { firstArms } from "../../ters/src/lang/first-arms.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { discharge } from "../../ters/src/lang/ledger.ts";
 import { scalarOp, TARGETS } from "./builtins.ts";
@@ -602,6 +603,10 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // uses from around it, since there are no closures here (lift-lets.ts,
   // C54).
   ({ code, info, names } = liftLets(code, info, names, true));
+  // The first answer of a search that can't fail once each choice takes
+  // its first way is that way, as plain code (first-arms.ts, L72e1d):
+  // json printed as json spelled's first, with no choice kept to go back to.
+  ({ code, info, names } = firstArms(code, info, names));
   // Only what the roots reach is staged and checked again, as compile
   // does (C67): the editor's picture of the ray marcher, with its PGA
   // motor, was checked over the whole library each time (C90).
