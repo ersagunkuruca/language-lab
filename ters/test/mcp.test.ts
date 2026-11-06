@@ -176,3 +176,17 @@ test("a saved folder opens as lab reads it: older shapes brought up to today's (
   text("open", { path: "../compiler/gaps/crew" });
   assert.equal(text("check"), "ok");
 });
+
+test("a relation's solve is written as the view prints it, its ports by name (L231)", async () => {
+  const { cpSync, mkdtempSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = join(mkdtempSync(join(tmpdir(), "ters-mcp-")), "break");
+  cpSync("../compiler/gaps/break", dir, { recursive: true });
+  text("open", { path: dir });
+  // break's touch time solves gap at for t; read the other way it is first touch.
+  text("replace", { at: "touch time", find: "‹gap at›(obstacle = o, ball = b, gap = 0)", text: "first touch(o, b, 0)" });
+  assert.match(text("replace", { at: "touch time", find: "‹first touch›(o, b, 0)", text: "gap at(obstacle = o, ball = b, gap = 0)" }), /^\+ .*first\(‹gap at›\(obstacle = o, ball = b, gap = 0\), else never\)$/m);
+  assert.equal(call("replace", { at: "touch time", find: "‹gap at›(obstacle = o, ball = b, gap = 0)", text: "gap at(thing = o, ball = b, gap = 0)" }).text, "gap at has no port thing: its ports are obstacle, ball, t, gap");
+  assert.equal(text("check"), "ok\n= `cushion rests` is the same as `pocket rests` (yours)\n= `pocket rests` is the same as `cushion rests` (yours)");
+});
