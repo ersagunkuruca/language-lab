@@ -516,7 +516,11 @@ switch (command) {
     // A main that is a value prints it, as lab run does: a Text as it
     // is, anything else shown (a definition that prints it is the root).
     const { q, root } = valueMain(q0.info, main) ? printingMain(q0, main) : { q: q0, root: main };
-    const lowered = lowerScalar(q.code, q.info, q.names, [root], { data: true, releases: true, handlers: true, hosted: new Set(ownOperations(q.code).flatMap((op) => effectOfOperation(q.code, op) ?? [])) });
+    // The host answers an effect the program never handles itself; one it
+    // handles is on C's handler stack (L213c4), as effects' Ask is.
+    const handled = new Set(Object.values(q.code.nodes).flatMap((n) => (n.kind === "arm" ? [n.variant] : [])));
+    const hosted = new Set(ownOperations(q.code).flatMap((op) => (handled.has(op) ? [] : effectOfOperation(q.code, op) ?? [])));
+    const lowered = lowerScalar(q.code, q.info, q.names, [root], { data: true, releases: true, handlers: true, hosted });
     let c: string;
     try { c = emitC(lowered, { main: root, hosts }).c; } catch (e) { fail((e as Error).message); }
     writeFileSync(`${out}.c`, c);
