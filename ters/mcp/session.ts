@@ -30,12 +30,14 @@ import { equal, mainProblem, pageProblem, runProgram, runMain, showerFor, withSt
 import { nodeWorld } from "../src/lang/world.ts";
 import { runTests, savedFrom } from "../src/lang/tests.ts";
 import * as T from "../../editor/typed.ts";
-import { S, SIGS } from "../src/lang/std.ts";
+import { onTodaysIds, S, SIGS } from "../src/lang/std.ts";
 import { setDisplayNames } from "../../editor/typed.ts";
 import { addField, addParameter, addWay, deleteDefinition, nameClash, newDefinition, setWay, type Shape } from "../src/lang/toplevel.ts";
 import { readCase, readType, typeNames, type Build } from "./type-text.ts";
 
-const read = <T>(path: string, fallback: T): T => (existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : fallback);
+// A saved folder read as lab reads it (load.ts): older ids and shapes
+// brought up to today's (std.ts onTodaysIds, I185).
+const read = <T>(path: string, fallback: T): T => (existsSync(path) ? onTodaysIds(JSON.parse(readFileSync(path, "utf8"))) : fallback);
 const STYLE: Style = read(join(root, "styles", "blocks.json"), { view: "blocks", notation: {} });
 // A run that doesn't finish is stopped after this many steps.
 export const STEPS = 20_000_000;

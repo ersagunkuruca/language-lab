@@ -23,7 +23,7 @@ language, then more targets or speed (WORKFLOW.md "Priority").
 | E Editor | "Editor lane" | E103, then Language or Compiler rows agreed with those lanes |
 | C Compiler and targets | "Compiler lane" | C187 (fibers in WASM); C93 to Language lane B; C184 with the Editor lane |
 | L Language and library | "Language lane" | L44, then L88 and L182 when unblocked (core, run.ts, infer.ts, hosts.ts) |
-| L Language and library | "Language lane B" | Round 12's findings (GAPS.md, break): L231, C194; I185 to I188 after. L118c waits on Ersagun, who stopped L118 after step 2. Skip L107 (waits on Ersagun) and L24 (research). Take a row from another list only after telling that lane. |
+| L Language and library | "Language lane B" | Round 12's findings (GAPS.md, break): L231, C194; I186 to I188 after; L232. L118c waits on Ersagun, who stopped L118 after step 2. Skip L107 (waits on Ersagun) and L24 (research). Take a row from another list only after telling that lane. |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -32,7 +32,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I185 | **Bug.** The MCP opens compiler/gaps/crew with five errors ("expected (a, b), got std.pair Int Int") where `lab check` finds none: its session doesn't bring a saved program's older shapes up to date. Example: `open` crew, `defs` shows no ✗ (GAPS.md round 12 M6) | GAPS round 12 M6 | 2026-11-06 |
 | I186 | The MCP has no sharing: publish, fetch, upgrade and downgrade as tools, as `lab` has them. Example: publishing break's `shifted` and `apart` through the MCP (GAPS.md round 12 M7) | GAPS round 12 M7 | 2026-11-06 |
 | I187 | Shared names read wrong, far from the cause: `p.place` where Ball and Pocket both have `place` took Ball's with nothing said (the implementation was then a second `Toucher Ball`); the rack as one expression found no reading ("as float64 needs Fixed here, got Int") where each part reads alone; `show` can't be given as a function. Example: break's `pocket gap at` with `place`, and its rack in one (GAPS.md round 12 M4) | GAPS round 12 M4 | 2026-11-06 |
 | I188 | The MCP's eval runs nothing recursive ("performs Diverge, which nothing here handles") and shows a known type as `a` (`= 5 : a`, `List a`). Example: `eval played(break table(6, 0.01)).events` (GAPS.md round 12 M5) | GAPS round 12 M5 | 2026-11-06 |
@@ -234,6 +233,7 @@ agent with inertia. All later goals.
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | L231 | A relation's solve written as text: `t = gap at(obstacle = o, ball = b, gap = 0)` (or as the view prints a solve) reads back, and the view prints a field's ports by their names, not letters, and the binder by its name. Example: compiler/gaps/break's `touch time` written as the solve of `gap at` through the MCP (GAPS.md round 12 M3) | GAPS round 12 M3 | P3 | S | |
+| L232 | **Bug.** The modes say a definition ends where the checker types it Diverge, and the checker is right: examples/agent's funnel (`pull`, `pull left`, `restart`: restart walks back to the portal after a corner, so the portal index doesn't only grow) and impact's `until it touches` (`n = frames` stops it, `n + 1` goes past when n starts above). modes.ts's ofMode finds no loop in either. Example: modes.test's "forward, a definition ends exactly when the checker finds no Diverge of its own" passes with them in | modes.test on main (Editor lane, 2026-11-06) | P2 | M | |
 
 ## T: Testing and fast feedback
 

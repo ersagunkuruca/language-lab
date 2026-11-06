@@ -170,3 +170,9 @@ test("a match's cases are written through the MCP: a split by a type named, a ca
   assert.equal(text("eval", { text: "when(drops(2.5, 3))" }), "= 2.5 : Float64");
   assert.equal(text("eval", { text: "when(meets(1.5, 1, 2))" }), "= 1.5 : Float64");
 });
+
+test("a saved folder opens as lab reads it: older shapes brought up to today's (I185)", () => {
+  // crew was saved when a pair was std.pair; lab check finds nothing wrong.
+  text("open", { path: "../compiler/gaps/crew" });
+  assert.equal(text("check"), "ok");
+});
