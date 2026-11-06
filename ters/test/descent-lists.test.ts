@@ -111,12 +111,13 @@ test("json quoted text reads back by descent, its escapes too (L72d)", async () 
   for (const line of ['"a', 'a"', '"\\q"', '"a"b"']) assert.equal(rd(line, 0), null, line);
 });
 
-// The prelude's `json printed` read backwards by descent (L72d): what
-// `json read` reads, for the compact text json printed writes.
+// The prelude's json printer read backwards by descent (L72d): what
+// `json read` reads, for the compact text json printed writes. Json
+// printed is json spelled's first (L72e1d), so json spelled is what's read.
 test("json printed reads back by descent as json read reads it (L72d)", () => {
   const jp = L("json printed"), jr = L("json read");
   const rl = makeRunner(LIBRARY.code, infer(LIBRARY.code, LIBRARY.names), { print: () => {}, names: LIBRARY.names });
-  const rd = descentReader(LIBRARY.code, jp, LIBRARY.names);
+  const rd = descentReader(LIBRARY.code, L("json spelled"), LIBRARY.names);
   for (const t of ["null", "true", "[]", "{}", '[1,2.5,"a\\"b"]', '{"a":[1,{"b":null}],"c":false}', '"tab\\u0009there \\n\\u0001"', "-0.125"]) {
     const v = rd(t, 0);
     assert.ok(v !== null, t);
@@ -132,7 +133,7 @@ test("json printed reads back by descent as json read reads it (L72d)", () => {
 // compiled targets run it.
 test("json printed's written reader reads as descent does (L72d2)", async () => {
   const { writeReader } = await import("../src/lang/reader.ts");
-  const jp = L("json printed");
+  const jp = L("json spelled");
   const w = writeReader(LIBRARY.code, jp, LIBRARY.names);
   const all = { nodes: { ...LIBRARY.code.nodes, ...w.code.nodes }, defs: [...LIBRARY.code.defs, ...w.code.defs.filter((d) => !LIBRARY.code.defs.includes(d))] }, allNames = { ...LIBRARY.names, ...w.names };
   const info = infer(all, allNames);
