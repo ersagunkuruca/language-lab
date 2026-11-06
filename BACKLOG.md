@@ -89,6 +89,8 @@ New targets and speed rank below every language item (Ersagun,
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| C196 | A page or a Clifford algebra in reach keeps every list in the program a cons list. The chooser (library-reps.ts) wants arrays or trees for 9 of the 32 examples with a main, and gets none of them: listBoundary refuses the whole program when it reaches a library type with a list inside (Html for compass, converter, dice, pig, tumble, pedal and spacetime; Algebra for bounce and impact), since the rewrite can't change a library type's fields, and the split (rep-split.ts, C188) finds no group to take instead. Fix: convert at the library type's fields as at a builtin's list (the meaning going in, `stored list` coming out), or treat Html's and Algebra's lists as the program's own. Example: `lab compile` of examples/spacetime, whose costs pick `array of List`, compiles with its lists as arrays (today `List as written`) | Discussion thread 2026-11-06 (where cons lists remain) | P2 | M | |
+| C197 | The editor lowers some programs without the chooser at all, so they keep cons lists and sorted-list Maps that `lab run` and `lab build-web` would store otherwise: the page preview (editor/pageCompile.ts), Save page and the page's sound (ters/src/lang/page.ts corePageFile, soundFile), and `lab render` without --compiled (ters/cli/sound.ts soundOf); the editor's Run main runs it (coreMain.ts checkedForRun) but without `hostMaps`, so its Maps are trees where `lab run`'s are hash tables (notebook, routes, sheet). Example: notebook's Run main in the editor chooses `Map as hash table; Set as hash table`, as `lab run` does | Discussion thread 2026-11-06 (where cons lists remain) | P2 | S | |
 
 ### Speed of compiled code
 
