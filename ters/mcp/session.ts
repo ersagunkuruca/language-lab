@@ -22,7 +22,7 @@ import { sameLines } from "../src/lang/modules.ts";
 import { base, baseNames, optionsWith } from "../src/lang/load.ts";
 import { pinsOf, type Pins } from "../src/lang/signatures.ts";
 import { blocksOf, pieceText, type Blk, type Piece } from "../src/lang/render.ts";
-import { showType } from "../src/lang/types.ts";
+import { showIn, showType } from "../src/lang/types.ts";
 import { fromFile, own, toFile, type ProgramFile } from "../src/files.ts";
 import { Cells } from "../src/lang/cells.ts";
 import { evaluatorCall, htmlText } from "../src/lang/html.ts";
@@ -642,10 +642,12 @@ export class Session {
   // The value of an expression written as it prints, in the program's scope.
   eval(text: string): string {
     setDisplayNames(LIBRARY.names);
-    const made = newDefinition(this.code, this.names, `eval ${Date.now()}`, { kind: "value" });
+    // An action of no inputs, as main is, so what it performs (Diverge,
+    // Console) is its own row and it runs as main runs (I188).
+    const made = newDefinition(this.code, this.names, `eval ${Date.now()}`, { kind: "function", params: [] });
     if (!made.ok) throw new Error(made.reason);
     const def = made.code.defs.at(-1)!;
-    const hole = (made.code.nodes[def] as NodeOf<"def">).body!;
+    const hole = (made.code.nodes[(made.code.nodes[def] as NodeOf<"def">).body!] as NodeOf<"lambda">).body;
     const r = T.fillValue(made.code, made.names, editorInfo(made.code, made.names), hole, text, def);
     if (!r.ok) throw new Error(r.reason);
     const info = infer(r.code, baseNames(r.names), undefined, optionsWith(this.pins));
@@ -655,10 +657,10 @@ export class Session {
     const out: string[] = [];
     const names = baseNames(r.names);
     const rt = { print: (s: string) => out.push(s), names, world: this.world(out, "") };
-    const t = info.typeOf.get(def);
+    const ft = info.typeOf.get(def), t = ft?.t === "fn" ? ft.ret : ft;
     try {
       const v = withSteps(STEPS, () => showerFor(r.code, info, names)(runMain(r.code, info, def, rt)));
-      return clip([...out, `= ${v} : ${t ? showType(info.subst.zonk(t), names) : "?"}`]).join("\n");
+      return clip([...out, `= ${v} : ${t ? showIn(t, names, info.subst) : "?"}`]).join("\n");
     } catch (x) {
       if (x instanceof OutOfSteps) return clip([...out, `stopped: still running after ${STEPS.toLocaleString("en")} steps`]).join("\n");
       throw x;
