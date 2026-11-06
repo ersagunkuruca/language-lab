@@ -71,8 +71,13 @@ export interface Drawable {
   kernel: string;
   want: (i: number) => number[] | null;
   in32: boolean;
+  // What depends on the time alone, worked out once a frame (C175): `count`
+  // values, from the body of a function of the time (`js`), given to the
+  // fragment shader as a uniform at group 1, binding 0.
+  frame?: Frame;
   cpu: () => CpuProgram;
 }
+export interface Frame { count: number; js: string }
 
 // A Drawable whose every part was built ahead, as JSON.
 export interface Built {
@@ -81,6 +86,7 @@ export interface Built {
   kernel: string;
   want: (number[] | null)[];
   in32: boolean;
+  frame?: Frame;
   cpu: CpuProgram;
 }
 export const drawableOf = (b: Built): Drawable => ({ ...b, want: (i) => b.want[i], cpu: () => b.cpu });
@@ -172,6 +178,11 @@ export async function drawDrawable(p: Drawable, o: DrawOptions): Promise<Picture
   });
   const uniform = d.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
   const group = d.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: uniform } }] });
+  // The values that depend on the time alone, four to a vec4f.
+  const values = p.frame && (new Function("time", p.frame.js) as (time: number) => number[]);
+  const frameData = p.frame && new Float32Array(Math.ceil(p.frame.count / 4) * 4);
+  const frameBuffer = frameData && d.createBuffer({ size: frameData.byteLength, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+  const frameGroup = frameBuffer && d.createBindGroup({ layout: pipeline.getBindGroupLayout(1), entries: [{ binding: 0, resource: { buffer: frameBuffer } }] });
   // A frame of a ray marcher is a lot of work for every pixel, and a GPU
   // given frames faster than it finishes them queues them up until the
   // whole browser, which draws with the same GPU, stops responding. So the
@@ -200,11 +211,14 @@ export async function drawDrawable(p: Drawable, o: DrawOptions): Promise<Picture
   const draw = () => {
     if (stopped) return;
     fit();
-    d.queue.writeBuffer(uniform, 0, new Float32Array([canvas.width, canvas.height, now(), 0]));
+    const t = now();
+    d.queue.writeBuffer(uniform, 0, new Float32Array([canvas.width, canvas.height, t, 0]));
+    if (values && frameData && frameBuffer) { frameData.set(values(t)); d.queue.writeBuffer(frameBuffer, 0, frameData); }
     const enc = d.createCommandEncoder();
     const pass = enc.beginRenderPass({ colorAttachments: [{ view: context.getCurrentTexture().createView(), loadOp: "clear", storeOp: "store", clearValue: [0, 0, 0, 1] }] });
     pass.setPipeline(pipeline);
     pass.setBindGroup(0, group);
+    if (frameGroup) pass.setBindGroup(1, frameGroup);
     pass.draw(3);
     pass.end();
     d.queue.submit([enc.finish()]);

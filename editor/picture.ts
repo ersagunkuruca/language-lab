@@ -99,14 +99,14 @@ export async function drawPicture(o: PictureOptions): Promise<Picture> {
 // none of the evaluator's are worked out.
 export async function buildPicture(code: Code, info: Info, names: Names, entries: Record<string, Id>, answers = true): Promise<Built> {
   const p = await prepare(code, info, names, entries);
-  if (!answers) return { wgsl: p.wgsl, fragment: p.fragment, kernel: p.kernel, in32: p.in32, want: POINTS.map(() => null), cpu: p.cpu() };
+  if (!answers) return { wgsl: p.wgsl, fragment: p.fragment, kernel: p.kernel, in32: p.in32, frame: p.frame, want: POINTS.map(() => null), cpu: p.cpu() };
   // The evaluator's answers in the order the page checks them, for a few
   // seconds of the evaluator (at least 12 points): all 108 of the ray
   // marcher's take two minutes, too long for every build of the site.
   const want: (number[] | null)[] = POINTS.map(() => null);
   const start = performance.now();
   for (let n = 0; n < POINTS.length && (n < 12 || performance.now() - start < 5000); n++) { const i = checkOrder(n); want[i] = p.want(i); }
-  return { wgsl: p.wgsl, fragment: p.fragment, kernel: p.kernel, in32: p.in32, want, cpu: p.cpu() };
+  return { wgsl: p.wgsl, fragment: p.fragment, kernel: p.kernel, in32: p.in32, frame: p.frame, want, cpu: p.cpu() };
 }
 
 // The shaders for the GPU, the evaluator for the check, and the CPU's
@@ -114,7 +114,10 @@ export async function buildPicture(code: Code, info: Info, names: Names, entries
 async function prepare(code: Code, info: Info, names: Names, entries: Record<string, Id>): Promise<Drawable> {
   const keys = Object.keys(entries);
   await pause();
-  const shader = emitWgsl(lowerPicture(code, info, names, entries));
+  // With what depends on the time alone worked out once a frame, on the
+  // CPU, for the picture (C175); the check's kernel gets the time as it is.
+  const shader = emitWgsl(lowerPicture(code, info, names, entries), { frame: 2 });
+  const drawn = shader.framed?.wgsl ?? shader.wgsl;
   await pause();
   const fn = (name: string) => {
     const f = shader.funcs.find((f) => f.name === name);
@@ -134,7 +137,7 @@ async function prepare(code: Code, info: Info, names: Names, entries: Record<str
   const rgb = (x: string, y: string, t: string) => keys.length === 3
     ? `vec3f(${keys.map((e) => `${fn(e).wgsl}(${x}, ${y}, ${t})`).join(", ")})`
     : `${toVec}(${fn("colour").wgsl}(${x}, ${y}, ${t}))`;
-  const fragment = `${shader.wgsl}
+  const fragment = `${drawn}
 ${helper}struct Frame { size: vec2f, time: f32 }
 @group(0) @binding(0) var<uniform> frame: Frame;
 
@@ -189,7 +192,8 @@ fn main(@builtin(global_invocation_id) g: vec3u) {
       : (first(r.call(r.value(entries.colour), x, y, t)) as { fields: number[] }).fields;
   };
   const want = (i: number) => evaluate(Math.fround(POINTS[i][0]), Math.fround(POINTS[i][1]), Math.fround(POINTS[i][2]));
-  return { wgsl: shader.wgsl, fragment, kernel, want, in32: !!in32, cpu: () => cpuProgram(lowerPicture(cpuSide.code, cpuSide.info, cpuSide.names, entries), entries) };
+  const frame = shader.framed && { count: shader.framed.count, js: shader.framed.js };
+  return { wgsl: drawn, fragment, kernel, want, in32: !!in32, frame, cpu: () => cpuProgram(lowerPicture(cpuSide.code, cpuSide.info, cpuSide.names, entries), entries) };
 }
 
 // The CPU's program for a picture: WebAssembly, red, green and blue as
