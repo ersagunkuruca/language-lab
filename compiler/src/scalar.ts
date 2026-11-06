@@ -1657,7 +1657,12 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     // as in the evaluator. Otherwise the solver's answers are `one of` a
     // list of them made as it is read (core-js.ts; a periodic angle has no
     // end, nor may a backwards search), which spends the program's budget.
-    const once = solvesOnce(code, n) || (!f.partial && !searching.get(f));
+    // One the solver can't plan (a relation that can't be run this way) is
+    // refused, so that definition is listed and the rest lower (impact's
+    // `first touch by advancing`, lowered as a root of its own).
+    let planned: boolean;
+    try { planned = solvesOnce(code, n); } catch (e) { throw new Refused(`solves ${name}: ${(e as Error).message}`); }
+    const once = planned || (!f.partial && !searching.get(f));
     // One that gives one answer or none (the solver's single direction, a
     // relational mode that's det or semidet and ends) is its answer, or
     // no answer here: no list of them, no chooser (C184, the pedal's tanh

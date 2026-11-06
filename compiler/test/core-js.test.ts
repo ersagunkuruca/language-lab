@@ -43,8 +43,10 @@ const inputs: Record<string, () => [string[], Record<string, string>]> = {
 
 // numbers counts in Peano Nat as defined: the evaluator runs out of memory
 // and the printer's recursion out of stack (`lab run` runs it through the
-// chooser's representations instead).
-const skip = new Set(["numbers"]);
+// chooser's representations instead). agent's page works its coupled
+// search out (A* over place and velocity, L123), which takes the evaluator
+// minutes (the evaluator's speed is L118c).
+const skip = new Set(["numbers", "agent"]);
 
 // A program saved as the editor saves one.
 function saved(k: Lang): string {
