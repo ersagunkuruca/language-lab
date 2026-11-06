@@ -209,13 +209,15 @@ function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Re
       try { return off[0][Number(op)](...xs); } finally { handlers.push(...off); }
     };
   }
-  if (/^(derive|solve|solveAll):|^exists$/.test(name)) {
+  if (/^(derive|solve|solveOne|solveAll):|^exists$/.test(name)) {
     // The evaluator's solver (core-solve.ts), which a printed program
     // takes in only when it solves: it carries the library.
     if (!SOLVER) return () => { throw new Unsupported(`${name} without core-solve.ts`); };
     if (name.startsWith("derive:")) return SOLVER.derive(name.slice(7), code, info, rt);
     if (name.startsWith("solve:")) return SOLVER.solve(name.slice(6), code, false, spend);
     if (name.startsWith("solveAll:")) return SOLVER.solve(name.slice(9), code, true, spend);
+    // One answer or none (C184): the first of them, or no answer here.
+    if (name.startsWith("solveOne:")) { const all = SOLVER.solve(name.slice(9), code, true, spend); return (...xs) => { const l = all(...xs) as Data; if (l.tag === NIL) throw FAIL; return l.fields[0]; }; }
     return (f) => { if (!code) throw new Unsupported("for some without the program"); return SOLVER!.exists(code, f); };
   }
   if (name.startsWith("pick:")) { const [, j, bool] = name.split(":"); return (xs) => { const v = (xs as Value[])[Number(j)]; return bool ? (v as unknown) === true || (v as { tag?: Id }).tag === TRUE : v; }; }
@@ -278,9 +280,10 @@ export const lazyList = (it: Iterator<unknown>): unknown => new LazyCell(it);
 // solve gave none.
 let PLANS: Record<string, unknown> | undefined;
 export const usePlans = (p: Record<string, unknown>) => { PLANS = p; };
-export const planned = (make: (p: Record<string, unknown>) => (...xs: unknown[]) => Iterable<unknown>, all: boolean, none: string, own = false) => {
+// `all` "one": a solve of one answer or none, the first or no answer (C184).
+export const planned = (make: (p: Record<string, unknown>) => (...xs: unknown[]) => Iterable<unknown>, all: boolean | "one", none: string, own = false) => {
   if (!PLANS && !own) return () => { throw new Unsupported("a written-out solve without plan-rt.js"); };
-  const answers = make(PLANS ?? {});
+  const answers = make(PLANS ?? {}) as ((...xs: unknown[]) => Iterable<unknown>) & { one?: (...xs: unknown[]) => unknown; no?: unknown; wrap?: boolean };
   // Answers a written-out plan gave all at once, an array, are the List
   // made at once (C137d22); the evaluator's solver's, made as it is read.
   const listed = (r: Iterable<unknown>) => {
@@ -289,6 +292,12 @@ export const planned = (make: (p: Record<string, unknown>) => (...xs: unknown[])
     for (let i = r.length - 1; i >= 0; i--) l = { tag: CONS, fields: [r[i], l] };
     return l;
   };
+  if (all === "one") {
+    // A plan written straight through (`one`): its answer with no list.
+    const { one, no, wrap } = answers;
+    if (one) return (...xs: unknown[]) => { const r = one(...xs); if (r === no) throw FAIL; return wrap ? [r] : r; };
+    return (...xs: unknown[]) => { for (const bound of answers(...xs)) return bound; throw FAIL; };
+  }
   return all ? (...xs: unknown[]) => listed(answers(...xs)) : (...xs: unknown[]) => { for (const bound of answers(...xs)) return bound; throw new Error(none); };
 };
 // Cells' operations (run.ts cellOps) on the runtime's handler, calling the
@@ -323,8 +332,9 @@ const forwardBuiltin = (id: Id) => {
   if (many) return (...xs: unknown[]) => { const r = many(...(xs as Value[])); return r.length ? r[0] : NO_ANSWER; };
   return () => { throw new Unsupported(id); };
 };
-export const moded = (make: (...a: unknown[]) => (...xs: unknown[]) => Iterable<unknown>, forwards: Id[], consts: unknown[], all: boolean, none: string) => {
-  const solve = make(NO_ANSWER, equal, { add: I.add, sub: I.sub, neg: I.neg }, forwards.map(forwardBuiltin), consts);
+export const moded = (make: (...a: unknown[]) => (...xs: unknown[]) => Iterable<unknown>, forwards: Id[], consts: unknown[], all: boolean | "one", none: string) => {
+  const solve = make(NO_ANSWER, equal, { add: I.add, sub: I.sub, neg: I.neg }, forwards.map(forwardBuiltin), consts) as ((...xs: unknown[]) => Iterable<unknown>) & { one?: (...xs: unknown[]) => unknown; wrap?: boolean };
+  if (all === "one" && solve.one) { const { one, wrap } = solve; return (...xs: unknown[]) => { const r = one(...xs.map(inn)); if (r === NO_ANSWER) throw FAIL; return wrap ? [r] : r; }; }
   return planned(() => (...xs: unknown[]) => solve(...xs.map(inn)), all, none, true);
 };
 export const RUNTIME = {

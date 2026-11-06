@@ -64,6 +64,8 @@ import { ARRAY, TABLE, HASH_SET, CELL, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, 
 import { RELEASE_V, LOG_OP, FILE_OPS, KEPT_FILES, OPEN_FILE, tupleType, ABORT, ABORT_OP, CHECK, CHECK_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, HASH_SET_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, CONS, EXTENDED_V, FALSE, INT_OPS, IO, NIL, NONE, NOW_OP, MY_LOCALE_OP, MY_ZONE_OP, SETTINGS, OPTIONAL, ORDER_V, PAIR_V, S, SET, SHOW_ANY, shownImplementations, implementationsOf, ORDERED, SOME, TEXT_OPS, TRUE, ZONE_OPS } from "../../ters/src/lang/std.ts";
 import { liftLets } from "../../ters/src/lang/lift-lets.ts";
 import { solvesOnce } from "../../ters/src/lang/run.ts";
+import { planSolve } from "../../ters/src/lang/solve.ts";
+import { solveMode, determinism } from "../../ters/src/lang/modes.ts";
 import { inlineLists } from "./inline-lets.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { SITES, STOPS } from "./stops.ts";
@@ -1651,6 +1653,11 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     // list of them made as it is read (core-js.ts; a periodic angle has no
     // end, nor may a backwards search), which spends the program's budget.
     const once = solvesOnce(code, n) || (!f.partial && !searching.get(f));
+    // One that gives one answer or none (the solver's single direction, a
+    // relational mode that's det or semidet and ends) is its answer, or
+    // no answer here: no list of them, no chooser (C184, the pedal's tanh
+    // and bands). The same answers, as one of a list of one or none is.
+    const single = !once && atMostOne(code, n);
     // In port order (C147), as the evaluator computes them and core-js.ts's
     // solve reads them.
     const given = givenInOrder(code, n).map((k) => n.given[k]), binds = Object.values(bindsOf(n));
@@ -1660,10 +1667,18 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     let inner = new Map(env);
     const lets = binds.map((b, j) => { const i = f.locals.push(ts[j]) - 1; inner = new Map(inner).set(b, i); return { i, value: { k: "rt", fn: `pick:${j}${ts[j] === "i32" ? ":bool" : ""}`, args: [{ k: "local", i: all }], host: { t: ts[j], partial: false } } as SExpr }; });
     const body = lets.reduceRight<SExpr>((e, l) => ({ k: "let", i: l.i, value: l.value, body: e }), expr(bodyOf(n), inner, f, tail));
-    const solved: SExpr = once
-      ? { k: "rt", fn: `solve:${n.id}`, args: given.map((g) => expr(g, env, f, false)), host: { t: "host", partial: false } }
+    const solved: SExpr = once || single
+      ? { k: "rt", fn: `${single ? "solveOne" : "solve"}:${n.id}`, args: given.map((g) => expr(g, env, f, false)), host: { t: "host", partial: single } }
       : { k: "choose", list: { k: "rt", fn: `solveAll:${n.id}`, args: given.map((g) => expr(g, env, f, false)), host: { t: ANSWERS, partial: false } }, t: ANSWERS };
     return { k: "let", i: all, value: solved, body };
+  }
+  function atMostOne(code: Code, n: Use): boolean {
+    try {
+      const p = planSolve(code, n);
+      if (p.mode !== "relational") return p.status === "solved" && !p.many;
+      const v = solveMode(code, n);
+      return !!v && !v.stuck.length && v.ends && (determinism(v.answers) === "det" || determinism(v.answers) === "semidet");
+    } catch { return false; }
   }
   function boolInside(t: LType, seen = new Set<LType>()): boolean {
     if (t === "i32") return true;

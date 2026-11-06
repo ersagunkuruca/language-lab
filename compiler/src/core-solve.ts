@@ -168,7 +168,11 @@ export function solverPlan(given: Code, id: Id): string | null {
     const order = givenInOrder(given, given.nodes[id] as Use), known = [...p.known].sort((a, b) => order.indexOf(a) - order.indexOf(b));
     const c = compileSolve("solve$", p.rel as never, known, binds);
     const at = known.map((k) => order.indexOf(k));
-    return `${c.code}\nreturn (...xs) => solve$(${at.map((i) => `xs[${i}]`).join(", ")});`;
+    const xs = at.map((i) => `xs[${i}]`).join(", ");
+    // With `one`: its one answer's binds (one bind as itself, `wrap`), or
+    // `no` (a solve of one answer or none, C184: no list of them).
+    if (c.once) return `${c.code}\nconst $no = Symbol("no answer");\nconst $all = (...xs) => solve$(${xs});\n$all.one = (...xs) => solve$$one(${xs});\n$all.no = $no;\n$all.wrap = ${binds.length === 1};\nreturn $all;`;
+    return `${c.code}\nreturn (...xs) => solve$(${xs});`;
   } catch {
     return null;
   }

@@ -20,7 +20,7 @@ import { createContext, runInContext, runInNewContext } from "node:vm";
 import { runMain } from "../src/lang/run.ts";
 import { corePageRuntime, coreSoundWorklet, coreWorkletRuntime, webCorePage } from "../cli/web.ts";
 import { FakeEl, fakeDoc } from "./fakedom.ts";
-import { hostOpsOf, lowerCore, solvesSlowly } from "../../compiler/src/core-js.ts";
+import { emitCoreJs, hostOpsOf, lowerCore, solvesSlowly } from "../../compiler/src/core-js.ts";
 import { corePageFile, coreWorkletFile } from "../src/lang/page.ts";
 import { close } from "../src/lang/run.ts";
 import { CELL_OPS, NOW_OP, RANDOM_OP, S } from "../src/lang/std.ts";
@@ -69,7 +69,13 @@ test("the pedal: the evaluator and the core IR's JavaScript play the same sample
 // derivative) runs the evaluator's solver on every call.
 test("the pedal solves quickly on the core IR, calculus's derivative doesn't", () => {
   const { p, main } = pedal();
-  assert.equal(solvesSlowly(lowerCore(p.code, p.info, p.names, [main])), false);
+  const ir = lowerCore(p.code, p.info, p.names, [main]);
+  assert.equal(solvesSlowly(ir), false);
+  // Each gives one answer or none, so each is a call with no list of its
+  // answers to choose from, though it's inside a search (C184).
+  const js = emitCoreJs(ir).js;
+  assert.equal((js.match(/^}, (?:\[[^\]]*\], \[[^\]]*\], )?"one", /gm) ?? []).length, 2);
+  assert.doesNotMatch(js, /solveAll/);
   const c = loadProgram(join(import.meta.dirname, "../examples/calculus"));
   const info = infer(c.code, c.pres.names, undefined, c.options);
   assert.equal(solvesSlowly(lowerCore(c.code, info, c.pres.names, [c.named("main")])), true);
