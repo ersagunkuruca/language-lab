@@ -86,7 +86,34 @@ the round trip, about 0.3 ms. So:
 
 The GPU adds the same shape with bigger numbers: a buffer written, a
 dispatch, and a read back that is always asynchronous on the web
-(`mapAsync`). Measuring it is step (a).
+(`mapAsync`). Measured (step a, `node compiler/gaps/bench-places.ts`):
+Chromium's WebGPU on SwiftShader, which is the GPU emulated on this
+container's 4 CPU cores, so a real GPU will do the work far faster and the
+moving about the same. Each item is x ← √(x² + 1), once or 100 times,
+Float32 there and Float64 on the main thread:
+
+| work per item | items | GPU, there and back | main thread |
+|---|---|---|---|
+| 1 | 1,000 | 3.2 ms | 0.1 ms |
+| 1 | 100,000 | 3.6 ms | 9.0 ms |
+| 1 | 1,000,000 | 24 ms | 5.4 ms |
+| 1 | 4,000,000 | 89 ms | 13 ms |
+| 100 | 1,000 | 2.6 ms | 0.7 ms |
+| 100 | 100,000 | 9.2 ms | 62 ms |
+| 100 | 1,000,000 | 79 ms | 625 ms |
+| 100 | 4,000,000 | 318 ms | 2,554 ms |
+
+A dispatch and its read back cost about 3 ms however small the work, and
+moving costs about 20 ns an item (4 bytes each way), as a worker's copy
+does. So a map with little work per item never pays, at any size: the
+moving alone is several times the work. With 100 steps an item it pays
+from about 10,000 items, and is 8× at a million even emulated. The rule
+for the price list: leave when (work per item − moving per item) × n is
+more than the fixed cost, with a margin. The same bench with a worker:
+one worker is no faster than the main thread at the work itself, as
+expected; what it buys is the main thread free (a page that stays
+responsive) and, with a pool, the cores. GPU=1 runs the bench on a real
+adapter where there is one.
 
 ## The hard constraint: leaving is asynchronous
 
@@ -126,7 +153,7 @@ is chosen per value:
 
 Each about an hour, measured first:
 
-- **(a) Measure the GPU** the way the table above measures a worker:
+- **(a) done: Measure the GPU** the way the table above measures a worker:
   WebGPU compute in Chromium (compiler/gpu.ts already runs a scalar
   function as WGSL), a buffer there and back plus a dispatch, at 1,000 to
   10,000,000 items, against the same loop in JavaScript. Gives the break
