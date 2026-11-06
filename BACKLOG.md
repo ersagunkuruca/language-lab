@@ -207,7 +207,6 @@ agent with inertia. All later goals.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L22 | Profiles inferred like effects and shown in the editor ("runs on the GPU"). L22a done: a definition's panel shows where it runs, from the lowering's refusals; L22b done: told at once from its own type (profiles.ts). Left: the profile carried in the type, as an effect is, so a caller is told without lowering: not by calls alone, since a call given a list written out is one the lowering unrolls (calculus's parabola calling polynomial) | REVIEW-2026-10-22b §5 | P3 | L | |
 | L24 | Research as it becomes blocking: costs from folds, laws proved by fusion, fast invertible parsing | ROADMAP 8 | P3 | L | |
 
 ### Blind spots ([BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md))

@@ -5,6 +5,10 @@
 // This is read off the checked types, with no lowering, so the editor
 // tells it at once. (Not its callers: a call given a list written out is
 // one the lowering can unroll, as calculus's parabola calls polynomial.)
+// What its type's row says is carried to its callers, as any effect is
+// (L22c): one that prints, reads the clock or keeps cells can't run on the
+// GPU, and neither can whatever calls it without handling that, told from
+// the caller's own type.
 // the compiler's own answer (editor/whereRuns.ts, the core IR's lowering)
 // says more, and wins when it comes. Only a "no" is told here: what a type
 // lets through, the lowering still has to manage (test/profiles.test.ts
@@ -13,8 +17,8 @@
 import type { Code, Id, NodeOf } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import type { Info } from "./infer.ts";
-import { BOOL } from "./std.ts";
-import { STRING, type Type } from "./types.ts";
+import { ABORT, BOOL } from "./std.ts";
+import { CHOICE, DIVERGE, STRING, type Type } from "./types.ts";
 
 // Why a type can't be held in a shader, or null when nothing in it says so.
 // A type variable says nothing: a call gives it a type.
@@ -40,7 +44,19 @@ export function gpuRefusals(code: Code, info: Info, names: Names, defs: Id[]): M
     const t = typeOf(d);
     if (!t || t.t !== "fn") continue;
     const why = [...t.params, t.ret].map((p) => notHeld(code, names, p)).find((x) => x);
-    if (why) own.set(d, `takes or gives ${why}`);
+    if (why) { own.set(d, `takes or gives ${why}`); continue; }
+    const effs = gpuEffects(code, subst.resolveRow(t.eff).effs);
+    if (effs.length) own.set(d, `has effects (${effs.map((e) => names[e] ?? e).join(", ")})`);
   }
   return own;
+}
+
+// The effects in a row a shader can't have, as the lowering decides
+// (scalar.ts, `shader`): any but Diverge, which a shader spends from a
+// budget; and with Choice, which sets the shader's flag, neither Choice
+// nor what ends a run early (Abort, an effect of the program's own).
+function gpuEffects(code: Code, effs: readonly Id[]): Id[] {
+  const choice = effs.includes(CHOICE);
+  const ending = (e: Id) => { const td = code.nodes[(code.nodes[e] as NodeOf<"def"> | undefined)?.body ?? ""]; return e === ABORT || (td?.kind === "typedef" && !!td.effect); };
+  return effs.filter((e) => e !== DIVERGE && !(choice && (e === CHOICE || ending(e))));
 }
