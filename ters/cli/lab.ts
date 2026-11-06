@@ -52,7 +52,9 @@ import { equal, mainProblem, pageProblem, runMain, runProgram, showerFor, valueM
 import { Cells } from "../src/lang/cells.ts";
 import { evaluatorCall, htmlText } from "../src/lang/html.ts";
 import { pageDocument } from "../src/lang/page.ts";
-import { showType } from "../src/lang/types.ts";
+import { showType, STRING } from "../src/lang/types.ts";
+import { Lang } from "../src/lang/dsl.ts";
+import { S, SHOW_ANY } from "../src/lang/std.ts";
 import { choose, representationsIn } from "../src/lang/represent.ts";
 import { allowedOnly, nodeWorld } from "../src/lang/world.ts";
 import { readLog, replaying, type LogEntry } from "../src/lang/worldlog.ts";
@@ -248,6 +250,17 @@ function compiledChecks(p: Program, saved: Record<Id, Saved[]>) {
 
 function represented(p: Program, main: Id, hostMaps: boolean, tables = false): Program {
   try { return representedOr(p, main, hostMaps, tables); } catch (e) { fail((e as Error).message); }
+}
+
+// A program whose main is a value, with a main that prints it (`lab
+// native`): a Text as it is, anything else as show shows it.
+function printingMain(q: { code: Code; info: Info; names: Names }, main: Id): { q: { code: Code; info: Info; names: Names }; root: Id } {
+  const k = new Lang(q.code), t = q.info.typeOf.get(main);
+  const root = k.def("main printed");
+  const text = t?.t === "con" && t.id === STRING;
+  k.define(root, k.thunk(() => k.call(S.print, text ? k.x(main) : k.call(SHOW_ANY, k.x(main)))));
+  const code = { nodes: { ...q.code.nodes, ...k.code.nodes }, defs: [...q.code.defs, ...k.code.defs] }, names = { ...q.names, ...k.names };
+  return { q: { code, info: infer(code, names, undefined, q.info.options), names }, root };
 }
 
 // `lab run` takes a page too: it prints, once, as static HTML.
@@ -499,10 +512,17 @@ switch (command) {
     const hosts = { ops: hostOpsOf(p.code, p.names), c: cHost && existsSync(cHost) ? readFileSync(cHost, "utf8") : undefined };
     // inverse(f, …) of a named f, as the core IR's JavaScript has it: a
     // printer's by its reader written out (C110 s7c), C can't solve.
-    const q = withInverses(p.code, p.info, p.names);
-    const lowered = lowerScalar(q.code, q.info, q.names, [main], { data: true, releases: true, handlers: true, hosted: new Set(ownOperations(q.code).flatMap((op) => effectOfOperation(q.code, op) ?? [])) });
+    const q0 = withInverses(p.code, p.info, p.names);
+    // A main that is a value prints it, as lab run does: a Text as it
+    // is, anything else shown (a definition that prints it is the root).
+    const { q, root } = valueMain(q0.info, main) ? printingMain(q0, main) : { q: q0, root: main };
+    // The host answers an effect the program never handles itself; one it
+    // handles is on C's handler stack (L213c4), as effects' Ask is.
+    const handled = new Set(Object.values(q.code.nodes).flatMap((n) => (n.kind === "arm" ? [n.variant] : [])));
+    const hosted = new Set(ownOperations(q.code).flatMap((op) => (handled.has(op) ? [] : effectOfOperation(q.code, op) ?? [])));
+    const lowered = lowerScalar(q.code, q.info, q.names, [root], { data: true, releases: true, handlers: true, hosted });
     let c: string;
-    try { c = emitC(lowered, { main, hosts }).c; } catch (e) { fail((e as Error).message); }
+    try { c = emitC(lowered, { main: root, hosts }).c; } catch (e) { fail((e as Error).message); }
     writeFileSync(`${out}.c`, c);
     const cc = process.env.CC ?? "cc", flags = [...CFLAGS, "-pthread", "-o", out, `${out}.c`, "-lm"];
     try { execFileSync(cc, flags, { stdio: "inherit" }); } catch {
