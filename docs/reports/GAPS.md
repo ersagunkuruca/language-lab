@@ -2888,6 +2888,7 @@ Each was worked around, and the workaround is in the driver or the seed.
   b), got std.pair Int Int") where `lab check` finds none: the session
   doesn't bring a saved program's older shapes up to date as `lab` does.
   Row I185.
+  *Fixed (I185):* the MCP reads a folder through `onTodaysIds`, as lab does.
 - **M7. No sharing.** Nothing publishes, fetches or upgrades: `lab
   publish compiler/gaps/break shifted apart` works from the command line
   (`Vec`, `shifted` and `apart` at version 1), not through the MCP. Row
