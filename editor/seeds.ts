@@ -8,7 +8,8 @@ import { isCall, nodesWhere, refTargets, scanningOnLayer, type Call } from "../t
 import type { Names, Presentation } from "../ters/src/presentation.ts";
 import { CONS, FALSE, HTML_V, NIL, S, TRUE } from "../ters/src/lang/std.ts";
 import { STRING, type Type } from "../ters/src/lang/types.ts";
-import { definedAs, resolvedFor, fromList, META, OutOfSteps, showValue, toList, withSteps, type Data, type Value, type World } from "../ters/src/lang/run.ts";
+import { seedArithmetic } from "../ters/src/lang/arith.ts";
+import { definedAs, resolvedFor, resolvedKnown, fromList, META, OutOfSteps, showValue, toList, withSteps, type Data, type Value, type World } from "../ters/src/lang/run.ts";
 import { trace } from "../ters/src/lang/trace.ts";
 import { parseValue } from "../ters/src/lang/values.ts";
 import { evaluatorCall } from "../ters/src/lang/html.ts";
@@ -322,6 +323,7 @@ export function seeds(host: SeedHost) {
   // once, 0.32 of its 0.64 s task). A page's main, which takes nothing;
   // a picture's runs at its pixels when a function is opened.
   const warming = new WeakMap<Code, { got: Map<Id, Value[]>; rest: Generator<void> }>();
+  const libSeeded = new WeakSet<T.Info>();
   function warmCalls(info: T.Info): void {
     const code = doc().code, main = defNamed("main"), body = main ? defBody(main) : undefined;
     // Without main's run, the code's arithmetic resolved (run.ts
@@ -329,6 +331,11 @@ export function seeds(host: SeedHost) {
     // machine's `all digits` opened in 1.6 s, 1.25 of it this).
     if (!main || (body?.kind === "lambda" && body.params.length)) { resolvedFor(code, info, pres().names); return; }
     if (mainRuns.has(code) || warming.has(code)) return;
+    // The library's resolving first, then the program's, each in a task
+    // of its own, then main's run in pieces (I189e: Numbers' warm-up was
+    // one task of 0.49 s, and the resolving used main's 120 ms).
+    if (!libSeeded.has(info)) { libSeeded.add(info); seedArithmetic(code, info, pres().names); setTimeout(() => { if (doc().code === code) warmCalls(info); }, 0); return; }
+    if (!resolvedKnown(code, info)) { resolvedFor(code, info, pres().names); setTimeout(() => { if (doc().code === code) warmCalls(info); }, 0); return; }
     const got = new Map<Id, Value[]>(), copies = mainCopies.get(code) ?? new Map<Id, Id>();
     mainCopies.set(code, copies);
     const args = mainArgs(info, main, []);

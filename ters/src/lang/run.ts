@@ -484,6 +484,9 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   // this copy, and resolving it again walked every node twice a solve
   // (I176: about 1.2 s opening board's `stage from key`).
   resolvedAlready(code, info);
+  // Whether a derivative has written new nodes into the copy, which the
+  // check doesn't have.
+  let wrote = false;
   const defs = new Map<Id, Value>();
   const one = (x: Value): Iterable<Value> => [x];
   // Closures made by this runner, so the machine can enter them directly
@@ -540,7 +543,10 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     [S.not]: (a) => one(bool((a as Data).tag !== TRUE)),
     [S.range]: (n) => one(toList(Array.from({ length: Math.max(0, n as number) }, (_, i) => i))),
     [S.oneOf]: (xs) => fromList(xs),
-    [S.exists]: (f) => one(bool(satisfiable(code, f))),
+    // With the run's own check, which this copy has until a derivative
+    // writes nodes into it (I190: each `for some` checked the whole program
+    // again, 1.4 s of the editor's 120 ms run of Numbers' main).
+    [S.exists]: (f) => one(bool(satisfiable(code, f, wrote ? {} : { info, names: rt.names }))),
     [S.hence]: (a, b) => one(bool((a as Data).tag === TRUE && (b as Data).tag === TRUE)),
     [S.fail]: () => [],
     // A record of Float64s, part by part. Float64 is a record of one part.
@@ -599,6 +605,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     // Every function value carries its node, so this can always look inside.
     [S.derivative]: (f) => {
       const m = (f as unknown as Record<symbol, { lambda: Id; env: Map<Id, Value> } | { prim: Id }>)[META];
+      wrote = true;
       return run((machine) => machine.eval(derivativeLambda(code, m), fromMap("env" in m ? m.env : new Map())));
     },
     // The record a gradient is over is known once there's a point to take
@@ -606,6 +613,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     [S.gradient]: (f) => {
       const m = (f as unknown as Record<symbol, { lambda: Id; env: Map<Id, Value> } | { prim: Id }>)[META];
       const env = fromMap("env" in m ? m.env : new Map());
+      wrote = true;
       return one(function* (p: Value) {
         const lambda = typeof p === "number" || !("lambda" in m) ? derivativeLambda(code, m) : gradientLambda(code, m, (p as Data).tag);
         for (const g of run((machine) => machine.eval(lambda, env))) yield* (g as Fn)(p);
