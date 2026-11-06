@@ -129,6 +129,7 @@ Each note says why, then gives the plan as steps; each step is a backlog row.
 | [NATIVE.md](design/targets/NATIVE.md) | Native code through C | built (N1 to N5) |
 | [WEB.md](design/targets/WEB.md) | Pages: a page is a value, cells and handlers, `lab build-web` | built |
 | [FOREIGN.md](design/targets/FOREIGN.md) | Foreign definitions: a program's own effect whose outermost handler is a host file per target (`hosts/js.js`, `hosts/c.c`), keyed by id, checked at the border | proposal (L69a to L69d), one question for Ersagun |
+| [WHERE-IT-RUNS.md](design/targets/WHERE-IT-RUNS.md) | Where code runs chosen by cost (workers, the GPU): Bend 2 read, a worker's round trip measured, one-holder arrays transferred, only a caller that can wait | design (C61), steps a to e |
 | [AUDIO.md](design/targets/AUDIO.md) | Sound as a function on blocks of samples; the guitar pedal | built (A1 to A5) |
 
 ### Editor

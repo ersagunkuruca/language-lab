@@ -111,7 +111,7 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 | C58 | Keyed collections as a grow-only array with a free list and generational keys (ECS) | STABLE-REFERENCES.md §4 | P3 | M | |
 | C59 | Flat inline layout for data built once and read, doubling as a file format (FlatBuffers). Measured on notebook after C71/C72 (GAPS.md round 6, N3: about 10% left for it there, 4.4× the ideal with no one hotspot): its index is built once with one holder (8.5× the ideal on trees) and then only read by every question (8×); a frozen map as sorted key and value arrays makes `entries of` free and `value at` a binary search | STABLE-REFERENCES.md §4, GAPS.md round 6 N3 | P3 | M | after C70, C71 |
 | C60 | **Later goal**: a list of records stored as columns when its loops read few fields | STABLE-REFERENCES.md §5 | P3 | L | |
-| C61 | **Later goal**: where code runs chosen by cost, never written (workers, GPU compute, main thread). First step: read Bend 2 and write the design note | STABLE-REFERENCES.md §6 | P3 | L | |
+| C61 | **Later goal**: where code runs chosen by cost, never written (workers, GPU compute, main thread). Designed: [WHERE-IT-RUNS.md](docs/design/targets/WHERE-IT-RUNS.md) (Bend 2 read; a worker measured: a copy is about 20 ns an item there and back, a transfer of a one-holder array nearly free; leaving the main thread is asynchronous, so only a caller that can wait). Next: (a) measure WebGPU the same way, (b) a price list per target, (c) workers for a pure map, (d) the GPU for a map, (e) divide and conquer | STABLE-REFERENCES.md §6 | P3 | L | |
 
 ### Parallel and concurrent code on the targets
 
