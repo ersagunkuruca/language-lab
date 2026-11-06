@@ -29,7 +29,8 @@ import { useDirections } from "../../ters/src/lang/directions.ts";
 import { interfaceOps, waysIn } from "../../ters/src/lang/ways.ts";
 import { withInverses } from "./inverses.ts";
 import { hoistInvariants } from "./hoist.ts";
-import { dependencies, ownerOfTypeParts, type Code, type Id, type NodeOf } from "../../ters/src/model.ts";
+import { dependencies, ownerOfTypeParts, type Code, type Id, type NodeOf, type Use } from "../../ters/src/model.ts";
+import { bindsOf } from "./uses.ts";
 import { effectOfOperation, hostOp, ownOperations } from "../../ters/src/lang/hosts.ts";
 import * as I from "../../ters/src/lang/int.ts";
 import { ARRAY_RT, kids, listSteps, RT, isData, isRecord, lowerScalar, reachedWithShows, type CoreIR, type LType, type Op, type SExpr, type SFunc, type TType } from "./scalar.ts";
@@ -40,7 +41,7 @@ import { Aborted, FAIL, OUT, RUNTIME, Stopped, Unsupported, coreRuntime, runCore
 // tools that print and run in one.
 // The solver too, for the programs run here that solve (core-solve.ts).
 import { PLAN_NAMES, modePlan, noAnswer, solverPlan, writtenOut } from "./core-solve.ts";
-// A solve (`solve:<id>` or `solveAll:<id>`) as its printed plan, or null
+// A solve (`solve:<id>`, `solveOne:<id>` or `solveAll:<id>`) as its printed plan, or null
 // where the evaluator's solver runs it: one the equations' solver plans
 // (C167a), or a mode plan whose forward calls are builtins and whose
 // literals are plain (C167b). Worked out once per program (emitCoreJs is
@@ -48,14 +49,16 @@ import { PLAN_NAMES, modePlan, noAnswer, solverPlan, writtenOut } from "./core-s
 const plans = new WeakMap<Code, Map<string, string | null>>();
 const plain = (v: unknown) => typeof v === "string" || typeof v === "boolean" || (typeof v === "number" && Number.isFinite(v) && !Object.is(v, -0));
 const printSolve = (code: Code, fn: string): string | null => {
-  const m = /^(solve|solveAll):(.*)$/.exec(fn);
+  const m = /^(solve|solveOne|solveAll):(.*)$/.exec(fn);
   if (!m) return null;
-  const [, way, id] = m, rest = `${way === "solveAll"}, ${JSON.stringify(noAnswer(code, id))}`;
+  const [, way, id] = m, rest = `${way === "solveAll" ? "true" : way === "solveOne" ? '"one"' : "false"}, ${JSON.stringify(noAnswer(code, id))}`;
   const sp = solverPlan(code, id);
   if (sp) return `R.planned(({ ${PLAN_NAMES.join(", ")} }) => {\n${sp}\n}, ${rest})`;
   const mp = modePlan(code, id);
   if (!mp || !mp.forwards.every((f) => code.nodes[f]?.kind === "builtin") || !mp.consts.every(plain)) return null;
-  return `R.moded(($no, $eq, $int, F, K) => {\n${mp.code}\nreturn solve$;\n}, ${JSON.stringify(mp.forwards)}, ${JSON.stringify(mp.consts)}, ${rest})`;
+  // `one` (C184): one answer's binds (one bind as itself, `wrap`), or $no.
+  const wrap = Object.keys(bindsOf(code.nodes[id] as Use)).length === 1;
+  return `R.moded(($no, $eq, $int, F, K) => {\n${mp.code}\nif (typeof solve$$one === "function") { solve$.one = solve$$one; solve$.wrap = ${wrap}; }\nreturn solve$;\n}, ${JSON.stringify(mp.forwards)}, ${JSON.stringify(mp.consts)}, ${rest})`;
 };
 const planOf = (code: Code, fn: string): string | null => {
   let m = plans.get(code);
@@ -844,7 +847,7 @@ export function codeLines(printed: string, written: string): Record<string, [num
 const solving = (js: string) => /R\.rt\("(solve|exists"|derive:)/.test(js);
 // The runtime calls that look inside a function given them, by name: the
 // evaluator's solver, and `set` and `path` taking a field's function.
-const LOOKS_INSIDE = /^(solve:|solveAll:|exists$|derive:|host:builtin\.set\b|host:builtin\.cells\.path\b)/;
+const LOOKS_INSIDE = /^(solve:|solveOne:|solveAll:|exists$|derive:|host:builtin\.set\b|host:builtin\.cells\.path\b)/;
 // Whether the program runs the evaluator's solver (a solve, `for some`, a
 // derivative): far slower than compile.ts's plans for now, so a sound
 // isn't played this way (C137d7).
@@ -856,7 +859,7 @@ export const usesSolver = (ir: CoreIR): boolean => solving(emitCoreJs(ir).js);
 // 34 blocks a second of the 375 it needs), so it stays on compile.ts
 // (C137d7, C137d9).
 export const solvesSlowly = (ir: CoreIR): boolean =>
-  [...emitCoreJs(ir).js.matchAll(/R\.rt\("(?:(solve|solveAll):([^"]*)"|exists"|derive:)/g)].some((m) => !m[1] || !writtenOut(ir.code, JSON.parse(`"${m[2]}"`)));
+  [...emitCoreJs(ir).js.matchAll(/R\.rt\("(?:(solve|solveOne|solveAll):([^"]*)"|exists"|derive:)/g)].some((m) => !m[1] || !writtenOut(ir.code, JSON.parse(`"${m[2]}"`)));
 const codeFor = (ir: CoreIR, js: string) => (solving(js) ? `JSON.parse(${JSON.stringify(JSON.stringify(solverCode(ir, js)))})` : "undefined");
 // The nodes the evaluator's solver reads (C167c): those a solve's use
 // reaches, through any id a node holds, and those of the lambdas a printed
@@ -919,7 +922,7 @@ function lambdasLookedIn(ir: CoreIR): string[] | null {
 }
 export function solverCode(ir: CoreIR, js: string): Code {
   const nodes = ir.code.nodes as Record<string, unknown>;
-  const roots = [...js.matchAll(/R\.rt\("(?:solve|solveAll|derive):([^"]*)"/g)].map((m) => JSON.parse(`"${m[1]}"`) as string);
+  const roots = [...js.matchAll(/R\.rt\("(?:solve|solveOne|solveAll|derive):([^"]*)"/g)].map((m) => JSON.parse(`"${m[1]}"`) as string);
   const lambdas = lambdasLookedIn(ir);
   roots.push(...(lambdas ?? [...js.matchAll(/\\?"lambda\\?":\\?"([^"\\]*)/g)].map((m) => JSON.parse(`"${m[1]}"`) as string)));
   const seen = new Set<string>(roots.filter((r) => r in nodes)), todo = [...seen];
