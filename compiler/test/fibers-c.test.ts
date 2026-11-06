@@ -12,7 +12,7 @@ import { join } from "node:path";
 import type { Id } from "../../ters/src/model.ts";
 import { Lang } from "../../ters/src/lang/dsl.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
-import { CONS, NIL, S, SHOW_ANY, UNIT, UNIT_V } from "../../ters/src/lang/std.ts";
+import { ABORT_OP, AWAIT_OP, CONS, NIL, S, SHOW_ANY, START_TIMER_OP, UNIT, UNIT_V } from "../../ters/src/lang/std.ts";
 import { CONSOLE, DIVERGE, NUMBER, STRING } from "../../ters/src/lang/types.ts";
 import { B } from "../../ters/src/prelude.ts";
 import { skip } from "./c-harness.ts";
@@ -95,4 +95,28 @@ test("a scheduler of two fibers, round robin: each rest kept in a list and resum
   });
   assert.deepEqual(want, ["a1\nb1\na2\nb2\na3\nb3\n", "", 0]);
   assert.deepEqual(got, want);
+});
+
+// C44: together and race native, each action on a fiber of its own that an
+// await parks till its ticket is ready (branch-effects.test's programs).
+test("together, race, within, an aborting branch and together inside a branch, native as lab run (C44)", { skip }, () => {
+  const chatty = (k: Lang, name: string, ms: number) => k.thunk(() => k.seq(
+    k.call(S.print, k.lit(`${name} starts`)),
+    k.let("t", k.call(START_TIMER_OP, k.lit(ms)), (t) => k.seq(k.call(AWAIT_OP, t), k.call(S.print, k.lit(`${name} ends`)), k.lit(name)))));
+  const main = (body: (k: Lang) => Id) => (k: Lang) => k.define(k.def("main"), k.thunk(() => k.call(S.print, k.call(SHOW_ANY, body(k)))));
+  const programs: [string, (k: Lang) => void][] = [
+    ["slow starts\nquick starts\nquick ends\nslow ends\n[\"slow\", \"quick\"]\n", main((k) => k.call(lib("together"), k.list(chatty(k, "slow", 60), chatty(k, "quick", 30))))],
+    ["slow starts\nquick starts\nquick ends\n\"quick\"\n", main((k) => k.call(lib("race"), k.list(chatty(k, "slow", 60), chatty(k, "quick", 30))))],
+    ["slow starts\nnone\n", main((k) => k.call(lib("within"), k.lit(20), chatty(k, "slow", 60)))],
+    ["slow starts\nrefused(\"no luck\")\n", main((k) => k.call(lib("attempt"), k.thunk(() => k.call(lib("together"), k.list(chatty(k, "slow", 60),
+      k.thunk(() => k.let("t", k.call(START_TIMER_OP, k.lit(10)), (t) => k.seq(k.call(AWAIT_OP, t), k.call(ABORT_OP, k.lit("no luck"))))))))))],
+    ['a starts\nb starts\nc starts\nb ends\nc ends\na ends\n["\\"a\\"", "[\\"b\\", \\"c\\"]"]\n', main((k) => k.call(lib("together"), k.list(
+      k.thunk(() => k.call(SHOW_ANY, k.call(chatty(k, "a", 60)))),
+      k.thunk(() => k.call(SHOW_ANY, k.call(lib("together"), k.list(chatty(k, "b", 20), chatty(k, "c", 40))))))))],
+  ];
+  for (const [out, build] of programs) {
+    const { want, got } = native(build);
+    assert.deepEqual(want, [out, "", 0]);
+    assert.deepEqual(got, want);
+  }
 });

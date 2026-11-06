@@ -65,6 +65,7 @@ import { RELEASE_V, LOG_OP, FILE_OPS, KEPT_FILES, OPEN_FILE, tupleType, ABORT, A
 import { liftLets } from "../../ters/src/lang/lift-lets.ts";
 import { solvesOnce } from "../../ters/src/lang/run.ts";
 import { inlineLists } from "./inline-lets.ts";
+import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { SITES, STOPS } from "./stops.ts";
 import { fieldIndex, fieldPath } from "../../ters/src/lang/records.ts";
 import { expandDerivatives, recordVariant } from "../../ters/src/lang/derive.ts";
@@ -101,6 +102,9 @@ const TABLE_RT: Record<Id, string> = {
 };
 // Log's effect, written to the world by a target that runs releases.
 const LOG_EFFECT = "std.log";
+// together and race (C44): in C, each action on a fiber.
+const libDef = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name);
+const TOGETHER = libDef("together"), RACE = libDef("race");
 
 export const ARRAY_RT: Record<Id, string> = {
   [ARRAY_OPS.empty]: "array.empty", [ARRAY_OPS.of]: "array.of", [ARRAY_OPS.items]: "array.items",
@@ -1296,6 +1300,15 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           const e = opOf.get(target)!;
           return { k: "abort", reason: build(target, { t: "con", id: e, args: [] }, args()), esc: escapeOf(e) };
         }
+        // together and race in C (C44): each action on a fiber of its own,
+        // which an await parks till its ticket is ready (c.ts
+        // `fbranches:`), not start branch's handler, whose await is of
+        // any type.
+        if (fibers && (target === TOGETHER || target === RACE)) {
+          const t = stype(zonk(id));
+          if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(id))}`);
+          return { k: "rt", fn: `fbranches:${target === TOGETHER ? "all" : "first"}`, args: args(), host: { t, partial: true } };
+        }
         if (laterOps.has(target)) {
           const t = stype(zonk(id));
           if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(id))}`);
@@ -2033,9 +2046,18 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     const r = stype(zonk(id));
     if (!r) throw new Refused(`awaits ${whyNot(zonk(id))}`);
     const s = f.locals.push(tt) - 1, scrut: SExpr = { k: "local", i: s };
-    const sleep = (ms: SExpr, c: number): SExpr => ({ k: "let", i: f.locals.push("f64") - 1, value: { k: "world", op: "sleep", aborts: false, args: [ms], t: "f64" }, body: { k: "field", rec: scrut, t: tt, c, i: 1 } });
-    const other: SExpr = { k: "abort", reason: { k: "text", v: "a ticket other than a timer, awaited where there are no fibers yet (C44)" } };
-    return { k: "case", scrut: expr(args[0], env, f, false), s, t: tt, result: r, arms: tt.cases.map((_, c): SExpr => (c === timer ? sleep({ k: "field", rec: scrut, t: tt, c, i: 0 }, c) : c === at ? sleep({ k: "op", op: "sub", args: [{ k: "field", rec: scrut, t: tt, c, i: 0 }, now] }, c) : other)) };
+    // Till the moment `at`: a branch of together or race parks (C44), and
+    // the program sleeps.
+    const sleep = (at: SExpr, c: number): SExpr => ({ k: "let", i: f.locals.push("i32") - 1, value: { k: "rt", fn: "fpark", args: [at], host: { t: "i32", partial: false } }, body: { k: "field", rec: scrut, t: tt, c, i: 1 } });
+    const other: SExpr = { k: "abort", reason: { k: "text", v: "a ticket of the world's other than a timer, awaited in C (C44)" } };
+    // The first ready of some tickets: the runtime sleeps till the first
+    // is (c.ts `fready:`), and which gives its position.
+    const first = tt.cases.findIndex((c) => c.variant === TICKET_V.firstReady);
+    const ready = (): SExpr => {
+      const lt = tt.cases[first].fields[0].t as DType, wt = tt.cases[first].fields[1].t as FType, i = f.locals.push("int") - 1;
+      return { k: "let", i, value: { k: "rt", fn: `fready:${lt.key}`, args: [{ k: "field", rec: scrut, t: tt, c: first, i: 0 }], host: { t: "int", partial: true } }, body: { k: "apply", fn: { k: "field", rec: scrut, t: tt, c: first, i: 1 }, t: wt, args: [{ k: "local", i }], tail: false, tmp: f.locals.push(wt) - 1 } };
+    };
+    return { k: "case", scrut: expr(args[0], env, f, false), s, t: tt, result: r, arms: tt.cases.map((_, c): SExpr => (c === timer ? sleep({ k: "op", op: "add", args: [now, { k: "field", rec: scrut, t: tt, c, i: 0 }] }, c) : c === at ? sleep({ k: "field", rec: scrut, t: tt, c, i: 0 }, c) : c === first ? ready() : other)) };
   }
   // A partial function type of these, keyed as stype keys one.
   // One whose closures turned out to take the rest (NeedsSeveral) is
