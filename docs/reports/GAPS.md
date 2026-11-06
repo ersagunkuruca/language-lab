@@ -2854,6 +2854,9 @@ Each was worked around, and the workaround is in the driver or the seed.
   The Event type was made a record with a `kind` number instead, and every
   loop over a list became recursion over an index with `item at`. That
   is B1's cause. Row I184.
+  *Fixed (I184):* `split` takes `as`, the type to split by, and
+  `replace` with a name alone takes the nearest in scope, an arm's field
+  first.
 - **M3. A relation's solve can't be written.** `t = gap at(obstacle = o,
   ball = b, gap = 0)` is "nothing is named obstacle here", `gap at(o, b,
   □, 0)` is "takes 3 inputs, given 4", and the form the view prints,

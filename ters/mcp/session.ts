@@ -333,7 +333,15 @@ export class Session {
       // the editor's text reader doesn't take it (I183), so it is put in
       // here; the checker says if no way grounds it.
       if (norm(t) === "by its ways") return { ...holed, code: { nodes: { ...holed.code.nodes, [target]: { id: target, kind: "ref", target: S.byItsWays } }, defs: holed.code.defs } };
-      return T.fillValue(holed.code, holed.names, editorInfo(holed.code, holed.names), target, t, def);
+      const r = T.fillValue(holed.code, holed.names, editorInfo(holed.code, holed.names), target, t, def);
+      if (r.ok || r.reason !== "a name alone is listed already") return r;
+      // A name alone, which the editor's palette lists: the nearest in
+      // scope (a case's field bound in its arm, I184), else a definition.
+      const all = baseNames(holed.names);
+      const near = T.scopeAt(holed.code, def, target).filter((b) => all[b] === norm(t)).at(-1)
+        ?? this.code.defs.find((d) => all[d] === norm(t) && !LIBRARY.code.nodes[d]) ?? this.code.defs.find((d) => all[d] === norm(t));
+      if (!near) return r;
+      return { ...holed, code: { nodes: { ...holed.code.nodes, [target]: { id: target, kind: "ref", target: near } }, defs: holed.code.defs } };
     }, undefined, !kase);
   }
 
@@ -416,12 +424,15 @@ export class Session {
   }
 
   // Replace a part by a match on a variable, one case per variant, each a copy.
-  split(at: string, on: string, find?: string): string {
+  // `as`: the type to split by, where nothing fixes the variable's yet
+  // (I116 in the editor, I184 here): the split fixes it.
+  split(at: string, on: string, find?: string, as?: string): string {
     const target = this.part(at, find);
     const def = this.defOf(target);
     if (!def) throw new Error(`#${this.id(target)} isn't in a definition`);
     const v = this.resolve(on, def);
-    return this.apply(def, () => T.splitOn(this.code, this.names, editorInfo(this.code, this.names), target, v));
+    const type = as?.trim() ? this.resolve(as) : undefined;
+    return this.apply(def, () => T.splitOn(this.code, this.names, editorInfo(this.code, this.names), target, v, type));
   }
 
   // A type's first case may be written with its fields, `ball(number: Int,

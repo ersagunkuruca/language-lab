@@ -82,8 +82,8 @@ export const TOOLS: Tool[] = [
   {
     name: "split",
     description: "Replace a part by a match on a variable: one case per variant, each a copy of the part.",
-    inputSchema: obj({ at: str("id"), on: str("the variable's id"), find: str("optional: text of a part inside at") }, ["at", "on"]),
-    call: (a) => program().split(String(a.at), String(a.on), a.find as string | undefined),
+    inputSchema: obj({ at: str("id"), on: str("the variable's id"), find: str("optional: text of a part inside at"), as: str("optional: the type to split by, where the variable's isn't fixed yet") }, ["at", "on"]),
+    call: (a) => program().split(String(a.at), String(a.on), a.find as string | undefined, a.as as string | undefined),
   },
   {
     name: "rename",
