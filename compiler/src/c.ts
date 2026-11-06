@@ -19,6 +19,7 @@
 // Data (N2) is a pointer to a cell: a count, the cell's type and case,
 // then the fields, one C struct per case. A case with no fields is one
 // static cell whose count is 0, which means it is never counted or freed.
+import { TICKET_V } from "../../ters/src/lang/std.ts";
 // Values are owned: whoever holds one gives it on (to a call, a field, a
 // let) or drops it, so a function owns its inputs. Each use of a local is
 // the last one or a `dup`, and a local that one branch doesn't use is
@@ -192,7 +193,7 @@ const STACK = /^(hpush|hpop|handler):([^:]+)(?::(\d+))?$/;
 const isStack = (fn: string) => STACK.test(fn);
 // A program's own handler whose cases keep the rest (C44b), and a perform
 // of one of its operations: the code handled on a fiber (c-rt "fibers").
-const FIBER = /^f(handle|perform):/;
+const FIBER = /^f(handle|perform|ready|park|branches)(:|$)/;
 const isFiber = (fn: string) => FIBER.test(fn);
 // What crosses to a C host (L69b1): each shape's type in the program and
 // at the host.
@@ -808,6 +809,81 @@ int main(int argc, char **argv) {
     // globals, out of the fiber, and the value it was resumed with.
     function fiber(e: SExpr & { k: "rt" }, pre: string[], d: string, after: Set<number>): string {
       const [kind, ...rest] = e.fn.split(":");
+      // The first ready of some tickets (any of): sleep till then, and
+      // its position, as the world's timers have it (ters timers.ts).
+      if (kind === "fready") {
+        const lt = data.get(rest.join(":"))!, tag = lt.cases.findIndex((c) => c.fields.length > 0), cons = cname(lt, tag);
+        const head = lt.cases[tag].fields.findIndex((x) => x.t !== lt), tt = lt.cases[tag].fields[head].t as DType;
+        const R = `lab__ready_${tnum.get(tt.key)}`, F = `lab__first_${tnum.get(lt.key)}`;
+        const timer = tt.cases.findIndex((c) => c.variant === TICKET_V.timer), at = tt.cases.findIndex((c) => c.variant === TICKET_V.at), first = tt.cases.findIndex((c) => c.variant === TICKET_V.firstReady);
+        if (!fiberC.some((x) => x.includes(`${F}(`))) {
+          rts.add("world.now"); rts.add("world.sleep"); rts.add("fibers.park");
+          const items = (l: string, body: string) => `for (lab_cell *c = ${l}; c->tag == ${tag}; c = ((${cons} *)c)->f${1 - head}) { lab_cell *x = ((${cons} *)c)->f${head}; ${body} }`;
+          const never = (why: string) => `{ lab_reason = ${textLit(why)}; lab_st = 2; return 0; }`;
+          fiberC.push([
+            `static double ${R}(lab_cell *t, double now) {`,
+            `  switch (t->tag) {`,
+            `    case ${timer}: return now + ((${cname(tt, timer)} *)t)->f0;`,
+            `    case ${at}: return ((${cname(tt, at)} *)t)->f0;`,
+            `    case ${first}: { double m = INFINITY; ${items(`((${cname(tt, first)} *)t)->f0`, `double r = ${R}(x, now); if (r < m) m = r;`)} return m; }`,
+            `    default: return NAN;`,
+            "  }",
+            "}",
+            `static lab_int ${F}(lab_cell *ts) {`,
+            `  double now = lab_world_now(), m = INFINITY; int64_t k = 0, i = -1;`,
+            `  ${items("ts", `double r = ${R}(x, now); if (r != r) ${never("a ticket of the world's other than a timer, awaited in C (C44)")} if (i < 0 || r < m) { m = r; i = k; } k++;`)}`,
+            `  lab_drop(ts);`,
+            `  if (i < 0) ${never("any of no tickets is never ready")}`,
+            "  lab__fpark(m);",
+            "  return LAB_SMALL(i);",
+            "}",
+          ].join("\n"));
+        }
+        return checked(`${F}(${args(e.args, pre, d, after).join(", ")})`, "int", pre, d, after);
+      }
+      if (kind === "fpark") { rts.add("world.now"); rts.add("world.sleep"); rts.add("fibers.park"); return stated(`lab__fpark(${args(e.args, pre, d, after)[0]})`, "i32", pre, d); }
+      // together and race (C44): each action on a fiber of its own, run
+      // till it parks or finishes, in order; then the parked one soonest
+      // ready (the first of those tied) goes on, till every one has its
+      // value (together) or one has (race: the first in order).
+      if (kind === "fbranches") {
+        rts.add("world.now"); rts.add("world.sleep"); rts.add("fibers.park");
+        const race = rest[0] === "first", T = e.host!.t, lt = typeOf(e.args[0], f.locals) as DType;
+        const ltag = lt.cases.findIndex((c) => c.fields.length > 0), lcons = cname(lt, ltag), lhead = lt.cases[ltag].fields.findIndex((x) => x.t !== lt);
+        const at = lt.cases[ltag].fields[lhead].t as FType, A = at.result, N = fiberC.length, Bn = `lab__br_${N}`;
+        const call = `((${fname.get(at.key)})((lab_closure *)a)->code)(a)`;
+        const each = (l: string, body: string) => `for (lab_cell *c = ${l}; c->tag == ${ltag}; c = ((${lcons} *)c)->f${1 - lhead}) { lab_cell *x = ((${lcons} *)c)->f${lhead}; ${body} }`;
+        const dropV = (v: string) => (counted(A) ? drop(A, v) : "");
+        let made = "";
+        if (!race) {
+          const rt = T as DType, rtag = rt.cases.findIndex((c) => c.fields.length > 0), rcons = cname(rt, rtag), rhead = rt.cases[rtag].fields.findIndex((x) => x.t !== rt);
+          made = `lab_cell *r = (&${cname(rt, 1 - rtag)}); for (int k = n; k-- > 0;) { ${rcons} *c = lab_new(sizeof(${rcons}), ${tnum.get(rt.key)}, ${rtag}); c->f${rhead} = bs[k]->v; c->f${1 - rhead} = r; r = (lab_cell *)c; free(bs[k]); } free(bs); return r;`;
+        }
+        fiberC.push([
+          `typedef struct { lab__frame f; lab_cell *act; ${ty(A)} v; double at; int done; } ${Bn};`,
+          `static void lab__bre_${N}(lab__frame *f) { ${Bn} *b = (${Bn} *)f; lab_cell *a = b->act; b->act = 0; b->v = ${call}; }`,
+          `static void lab__brs_${N}(${Bn} *b) { if (lab__fgo(&b->f) < 0) b->done = 1; else b->at = lab__park_at; }`,
+          `static ${ty(T)} lab__brun_${N}(lab_cell *acts) {`,
+          `  int n = 0, k = 0;`,
+          `  ${each("acts", "n++;")}`,
+          `  ${Bn} **bs = calloc(n ? n : 1, sizeof *bs);`,
+          `  if (!bs) lab_oom();`,
+          `  ${each("acts", `${Bn} *b = bs[k++] = calloc(1, sizeof *b); if (!b) lab_oom(); lab_dup(x); b->act = x; lab__fstart(&b->f, LAB_PARK, lab__bre_${N}); lab__brs_${N}(b); if (lab_st) { lab_drop(acts); return ${zero(T)}; }`)}`,
+          `  lab_drop(acts);`,
+          "  for (;;) {",
+          ...(race ? [`    for (k = 0; k < n; k++) if (bs[k]->done) { ${ty(A)} r = bs[k]->v; for (int j = k + 1; j < n; j++) if (bs[j]->done) { ${dropV("bs[j]->v")} } return r; }`] : []),
+          "    int m = -1;",
+          "    for (k = 0; k < n; k++) if (!bs[k]->done && (m < 0 || bs[k]->at < bs[m]->at)) m = k;",
+          `    if (m < 0) ${race ? `{ lab_reason = ${textLit("race of no actions has no first")}; lab_st = 2; return ${zero(T)}; }` : "break;"}`,
+          "    lab__fpark(bs[m]->at);",
+          `    lab__fresume(&bs[m]->f); lab__brs_${N}(bs[m]);`,
+          `    if (lab_st) return ${zero(T)};`,
+          "  }",
+          `  ${made}`,
+          "}",
+        ].join("\n"));
+        return checked(`lab__brun_${N}(${args(e.args, pre, d, after).join(", ")})`, T, pre, d, after);
+      }
       if (kind === "fperform") {
         const [eff, op] = rest, n = fiberEffect(eff);
         const xs = args(e.args, pre, d, after);

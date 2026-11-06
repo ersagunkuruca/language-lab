@@ -999,7 +999,18 @@ static void lab__fperform(int e, int op) {
   lab__fn = k; h->op = op; h->at = lab__fcur;
   swapcontext(&lab__fcur->ctx, &h->driver);
 }
+static int lab__fhas(int e) { for (int k = lab__fn; k-- > 0;) if (lab__fs[k]->e == e) return 1; return 0; }
 static void lab__fresume(lab__frame *h) { for (int j = 0; j < h->noff; j++) lab__fpush(h->off[j]); }` },
+  // A branch of together or race waits till a moment (C44): it parks, out
+  // to the nearest scheduler (c.ts `fbranches:`), which goes on with the
+  // branch whose moment is soonest; outside any, the program sleeps.
+  "fibers.park": { uses: ["fibers", "world.now", "world.sleep"], c: `#define LAB_PARK (-2)
+static double lab__park_at;
+static int lab__fpark(double at) {
+  if (lab__fhas(LAB_PARK)) { lab__park_at = at; lab__fperform(LAB_PARK, 0); }
+  else lab_world_sleep(at - lab_world_now());
+  return 0;
+}` },
   // A line of the program's Log nothing handles (L213a6, a release's):
   // standard error, as Node's world writes it.
   "world.logLine": { uses: [], c: `static void lab_world_logLine(lab_cell *t) { fflush(stdout); fwrite(LAB_TB(t), 1, LAB_TN(t), stderr); fputc('\\n', stderr); lab_drop(t); }` },

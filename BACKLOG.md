@@ -21,7 +21,7 @@ language, then more targets or speed (WORKFLOW.md "Priority").
 | lane | thread | next, in order |
 |---|---|---|
 | E Editor | "Editor lane" | E103, then Language or Compiler rows agreed with those lanes |
-| C Compiler and targets | "Compiler lane" | C44 (fibers in C); C93 to Language lane B; C184 and C30 with the Editor lane |
+| C Compiler and targets | "Compiler lane" | C187 (fibers in WASM); C93 to Language lane B; C184 and C30 with the Editor lane |
 | L Language and library | "Language lane" | L44, then L88 and L182 when unblocked (core, run.ts, infer.ts, hosts.ts) |
 | L Language and library | "Language lane B" | L118c (evaluator side, handed over by the Language lane 2026-11-05 22:16; waits on Ersagun, who stopped L118 after step 2). Skip L107 (waits on Ersagun) and L24 (research). Take a row from the other list only after telling that lane. |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
@@ -120,7 +120,7 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 | C41 | Pure `together` branches on worker_threads / Web Workers past a cost threshold | LANGUAGE-NEEDS-2026-10-24 | P3 | M | after L62 |
 | C42 | Data-parallel `map` and associative folds on a thread pool, later as compute shaders (NESL, Futhark) | LANGUAGE-NEEDS-2026-10-24 | P3 | L | after C30 |
 | C43 | Or-parallel `all`/`count` and speculative `first` in canonical order, with work stealing (Cilk, Aurora/Muse) | LANGUAGE-NEEDS-2026-10-24 | P3 | L | after C41 |
-| C44 | Fibers in native C (own stacks, an event loop) and in WASM (JSPI). C44a done: wait, now, and await of one timer in C, blocking. C44b done: a program's own handlers whose cases keep the rest run natively on fibers (ucontext). Next: together and race in C, where start branch's handler keeps the rest (a fiber per branch, swapcontext). Example: branch-effects.test's two printing branches, native, printing what lab run prints | LANGUAGE-NEEDS-2026-10-24 | P3 | L | after C40 |
+| C187 | Fibers in WASM (JSPI, or the stack switching proposal): a program's own handlers that keep the rest, and together and race, as C44 runs them natively. Example: fibers-c.test's generator and together, run through `lab build --wasm` printing what lab run prints | C44 | P3 | L | |
 
 ### Blind spots ([BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md))
 
