@@ -69,8 +69,9 @@ export interface ShaderFunc { def: Id; name: string; wgsl: string; params: GType
 // framed: the same shader with what depends on the time alone worked out
 // once a frame (C175): `wgsl` reads value k as lab_frame.v[k / 4] (group
 // 1, binding 0, a uniform of `count` f32s in vec4fs), which `values` gives
-// for a time.
-export interface Framed { wgsl: string; count: number; values: (time: number) => number[] }
+// for a time; `js`, the body of that function of `time`, for a picture
+// built ahead (shaders.html), which can't carry a function.
+export interface Framed { wgsl: string; count: number; values: (time: number) => number[]; js: string }
 export interface Shader { wgsl: string; funcs: ShaderFunc[]; refused: Map<Id, string>; structs: Map<string, { name: string; fields: string[] }>; matrices: Set<number>; framed?: Framed }
 const INFIX: Partial<Record<Op, string>> = {
   add: "+", sub: "-", mul: "*", div: "/", less: "<", equal: "==", beq: "==", and: "&&", or: "||", iless: "<", ieq: "==",
@@ -233,7 +234,7 @@ export function shaderTidied(ir: CoreIR): CoreIR {
 const FRAME_OPS: Partial<Record<Op, string>> = { add: "+", sub: "-", mul: "*", div: "/" };
 const FRAME_FNS: Partial<Record<Op, string>> = { neg: "-", sqrt: "Math.sqrt", abs: "Math.abs", floor: "Math.floor", sin: "Math.sin", cos: "Math.cos", tan: "Math.tan", exp: "Math.exp", log: "Math.log", pow: "Math.pow", atan2: "Math.atan2", float32: "Math.fround" };
 const FRAME_COSTLY = new Set<Op>(["sqrt", "sin", "cos", "tan", "exp", "log", "pow", "atan2", "div"]);
-function frameValues(lowered: CoreIR, at: number): { ir: CoreIR; count: number; values: (time: number) => number[] } | null {
+function frameValues(lowered: CoreIR, at: number): { ir: CoreIR; count: number; values: (time: number) => number[]; js: string } | null {
   const funcs = lowered.funcs.map((f) => ({ ...f, locals: [...f.locals], body: unrounded(unchecked(f.body)) }));
   const ir = shaderTidied({ ...lowered, funcs });
   const sites: [number, Extract<SExpr, { k: "call" }>][] = [];
@@ -276,15 +277,16 @@ function frameValues(lowered: CoreIR, at: number): { ir: CoreIR; count: number; 
   };
   funcs.forEach((f, i) => { known = new Map(); if (time[i].size) f.body = hoist(f.body, i); });
   if (!values.size) return null;
-  const run = new Function("t", `return [${[...values.values()].map(js).join(", ")}];`) as (t: number) => number[];
-  return { ir, count: values.size, values: (time: number) => run(Math.fround(time)) };
+  const body = `const t = Math.fround(time);\nreturn [${[...values.values()].map(js).join(", ")}];`;
+  const run = new Function("time", body) as (time: number) => number[];
+  return { ir, count: values.size, values: run, js: body };
 }
 
 export function emitWgsl(lowered: CoreIR, opts: { frame?: number; frameCount?: number } = {}): Shader {
   if (opts.frame !== undefined) {
     const plain = emitWgsl(lowered), f = frameValues(lowered, opts.frame);
     if (!f) return plain;
-    return { ...plain, framed: { wgsl: emitWgsl(f.ir, { frameCount: f.count }).wgsl, count: f.count, values: f.values } };
+    return { ...plain, framed: { wgsl: emitWgsl(f.ir, { frameCount: f.count }).wgsl, count: f.count, values: f.values, js: f.js } };
   }
   if (lowered.data.length || lowered.fns.length) throw new Error("a shader can't have data types with several cases: lower without `data`");
   // No finiteness checks (L125c2): a GPU can't stop, and WGSL may assume
