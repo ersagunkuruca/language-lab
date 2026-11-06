@@ -104,11 +104,17 @@ export const split = (t: string, by: string): string[] => (by === "" ? chars(t) 
 export const joinAll = (parts: string[], by: string): string => parts.join(by);
 
 // Code-point order, which is also the order of the characters' numbers.
+// UTF-16 order is the same but where the first unit that differs is half
+// of a pair (a character past U+FFFF) in one and U+E000 to U+FFFF in the
+// other: read there, not by testing each text for pairs first (C59: the
+// tests were a sixth of notebook's sorting).
 export function less(a: string, b: string): boolean {
-  if (!wide.test(a) && !wide.test(b)) return a < b;
-  const x = Array.from(a, (c) => c.codePointAt(0)!), y = Array.from(b, (c) => c.codePointAt(0)!);
-  for (let i = 0; i < Math.min(x.length, y.length); i++) if (x[i] !== y[i]) return x[i] < y[i];
-  return x.length < y.length;
+  const n = Math.min(a.length, b.length);
+  let i = 0;
+  while (i < n && a.charCodeAt(i) === b.charCodeAt(i)) i++;
+  if (i === n) return a.length < b.length;
+  const x = a.charCodeAt(i), y = b.charCodeAt(i), px = x >= 0xd800 && x <= 0xdfff, py = y >= 0xd800 && y <= 0xdfff;
+  return px === py ? x < y : py;
 }
 
 // A one-character text's number, and back. Other texts, and numbers that
