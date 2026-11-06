@@ -277,6 +277,13 @@ export function seeds(host: SeedHost) {
     const runs = long ? longRuns : mainRuns;
     const budget = long ? [LONG.steps, LONG.main, LONG.handlers] : [MAIN_STEPS, MAIN_MS, HANDLERS_MS];
     let calls = runs.get(doc().code);
+    // The short run started on opening (warmCalls): what is left of it.
+    const w = !long && !calls ? warming.get(doc().code) : undefined;
+    if (w) {
+      warming.delete(doc().code);
+      for (const _ of w.rest);
+      runs.set(doc().code, (calls = w.got));
+    }
     if (!calls) {
       const got = new Map<Id, Value[]>(), copies = mainCopies.get(doc().code) ?? new Map<Id, Id>();
       mainCopies.set(doc().code, copies);
@@ -299,6 +306,28 @@ export function seeds(host: SeedHost) {
       runs.set(doc().code, (calls = got));
     }
     return calls;
+  }
+  // The short run, started once the page has opened and given back to it
+  // between its pieces (I179: opening board's `stage from key` ran it at
+  // once, 0.32 of its 0.64 s task). A page's main, which takes nothing;
+  // a picture's runs at its pixels when a function is opened.
+  const warming = new WeakMap<Code, { got: Map<Id, Value[]>; rest: Generator<void> }>();
+  function warmCalls(info: T.Info): void {
+    const code = doc().code, main = defNamed("main"), body = main ? defBody(main) : undefined;
+    if (!main || mainRuns.has(code) || warming.has(code) || (body?.kind === "lambda" && body.params.length)) return;
+    const got = new Map<Id, Value[]>(), copies = mainCopies.get(code) ?? new Map<Id, Id>();
+    mainCopies.set(code, copies);
+    const args = mainArgs(info, main, []);
+    const rest = args && runFrom(info, main, args, [MAIN_STEPS, MAIN_MS, HANDLERS_MS], got, copies);
+    if (!rest) { mainRuns.set(code, got); return; }
+    warming.set(code, { got, rest });
+    const piece = () => {
+      const w = warming.get(code);
+      if (!w) return;
+      if (doc().code !== code) { rest.return(undefined); warming.delete(code); return; }
+      if (rest.next().done) { warming.delete(code); mainRuns.set(code, got); } else setTimeout(piece, 0);
+    };
+    setTimeout(piece, 0);
   }
   // main's inputs read from `seed`, or null where one doesn't read.
   function mainArgs(info: T.Info, main: Id, seed: string[]): Value[] | null {
@@ -346,5 +375,5 @@ export function seeds(host: SeedHost) {
     return parseValue(text, doc().code, pres().names);
   }
 
-  return { PASSED, mainCopies, pixelSeed, readPort, seeded };
+  return { PASSED, mainCopies, pixelSeed, readPort, seeded, warmCalls };
 }
