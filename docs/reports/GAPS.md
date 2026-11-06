@@ -2842,6 +2842,11 @@ Each was worked around, and the workaround is in the driver or the seed.
   ports, an implementation's `by its ways` ("nothing is named by its ways
   here") or a definition's `way` and `cost`. Made with the DSL instead;
   `by its ways` was filled into the saved file after the drive. Row I183.
+  *Fixed (I183):* `define` takes a first case with its fields and an
+  interface's first operation with its type, `add_case`, `add_field`
+  (types as view prints them, ports too), `ports`, `add_way` and `cost`
+  write the rest, `replace` takes `by its ways`, and `view` shows ports
+  and a way's mark.
 - **M2. A match's cases.** `split` on an input whose type nothing fixes yet
   is "that variable's type has no cases" (I116 fixed this in the editor,
   not in the MCP), and once a dummy `if e = quiet` fixed it, `replace`

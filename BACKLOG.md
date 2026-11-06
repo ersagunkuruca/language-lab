@@ -23,7 +23,7 @@ language, then more targets or speed (WORKFLOW.md "Priority").
 | E Editor | "Editor lane" | E103, then Language or Compiler rows agreed with those lanes |
 | C Compiler and targets | "Compiler lane" | C187 (fibers in WASM); C93 to Language lane B; C184 and C30 with the Editor lane |
 | L Language and library | "Language lane" | L44, then L88 and L182 when unblocked (core, run.ts, infer.ts, hosts.ts) |
-| L Language and library | "Language lane B" | Round 12's findings (GAPS.md, break): I183 and I184, C189, L231; I185 to I188 after. L118c waits on Ersagun, who stopped L118 after step 2. Skip L107 (waits on Ersagun) and L24 (research). Take a row from another list only after telling that lane. |
+| L Language and library | "Language lane B" | Round 12's findings (GAPS.md, break): I184, C189, L231; I185 to I188 after. L118c waits on Ersagun, who stopped L118 after step 2. Skip L107 (waits on Ersagun) and L24 (research). Take a row from another list only after telling that lane. |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -32,7 +32,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I183 | The MCP can't write a type's fields (`define` kind type takes one case's name, so `ball(x: Float64, …)` is a case named with all that text), an interface field's ports, an implementation's `by its ways`, or a definition's `way` and `cost`. Example: break's seed (project files gaps-round12/seed.ts) written through the MCP instead (GAPS.md round 12 M1) | GAPS round 12 M1 | 2026-11-06 |
 | I184 | The MCP can't write a match's cases: `split` on an input whose type nothing fixes yet says "that variable's type has no cases" (I116 was the editor's), and `replace` of a case's body with a field's name (`time`) says "a name alone is listed already". Example: break's `time of(e)` on a type of cases (GAPS.md round 12 M2) | GAPS round 12 M2 | 2026-11-06 |
 | I185 | **Bug.** The MCP opens compiler/gaps/crew with five errors ("expected (a, b), got std.pair Int Int") where `lab check` finds none: its session doesn't bring a saved program's older shapes up to date. Example: `open` crew, `defs` shows no ✗ (GAPS.md round 12 M6) | GAPS round 12 M6 | 2026-11-06 |
 | I186 | The MCP has no sharing: publish, fetch, upgrade and downgrade as tools, as `lab` has them. Example: publishing break's `shifted` and `apart` through the MCP (GAPS.md round 12 M7) | GAPS round 12 M7 | 2026-11-06 |
