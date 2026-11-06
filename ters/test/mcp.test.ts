@@ -196,3 +196,26 @@ test("eval runs what may not end, within its steps, and says a type as the view 
   assert.equal(text("eval", { text: "played(break table(6, 0.01)).events" }), "= 47 : Int");
   assert.equal(text("eval", { text: "[1, 2]" }), "= [1, 2] : List a where a is a Number");
 });
+
+test("sharing through the MCP: publish, fetch, upgrade and downgrade, as lab does them (I186)", async () => {
+  const { cpSync, existsSync, mkdirSync, mkdtempSync, writeFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const root = mkdtempSync(join(tmpdir(), "ters-mcp-"));
+  // The signing key goes in a home of the test's own.
+  const home = process.env.HOME;
+  process.env.HOME = root;
+  try {
+    cpSync("../compiler/gaps/break", join(root, "break"), { recursive: true });
+    text("open", { path: join(root, "break") });
+    assert.equal(text("publish", { names: ["shifted", "apart"] }).split("\n").map((l) => l.replace(/, @\w+$/, "")).join("\n"), "Vec: version 1\nshifted: version 1\napart: version 1");
+    assert.ok(existsSync(join(root, "break.module.json")) && existsSync(join(root, "break.module.log.json")));
+    assert.equal(text("publish", { names: ["apart"] }), "nothing changed since the last publish");
+    mkdirSync(join(root, "user"));
+    writeFileSync(join(root, "user", "code.json"), '{"nodes":{},"defs":[]}');
+    text("open", { path: join(root, "user") });
+    assert.match(text("fetch", { from: join(root, "break.module.json") }), /^fetched break: 3 definitions checked by hash, Vec at version 1, shifted at version 1, apart at version 1, its log signed by its author/);
+    assert.equal(text("upgrade"), "nothing to upgrade");
+    assert.equal(call("downgrade", { name: "apart" }).text, "user uses nothing named apart that its store has versions of");
+  } finally { process.env.HOME = home; }
+});
