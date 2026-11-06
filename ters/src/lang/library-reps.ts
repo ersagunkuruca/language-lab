@@ -91,17 +91,19 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
     if (!rows.length || !uses(code, main, [spec, ...rows]).length) continue;
     const tree = choose(code, main, [spec, ...rows]).rep;
     if (tree === spec || keyed(info, defs, code, ty) || generic(info, defs, code, tree)) continue;
-    // Lists as arrays (C30d3b): alone, and only where every list the
-    // program reaches can be one (listBoundary).
-    if (tree.of === LIST && (chosen.length || !listBoundary(merge(treesFor(code, [tree]), code), info, defs, tree, asked))) continue;
     // Lists as trees for the whole, where parts of it would have arrays
     // (machine's step loop): those parts as arrays, the rest as written,
     // converted where a list crosses (rep-split.ts, C93 s3b). Only where
-    // the trees could be had, so a program kept as written stays so.
-    if (tree.of === LIST && tree.name === "tree of List" && options.hostMaps && options.split !== false) {
+    // the trees could be had, so a program kept as written stays so; and
+    // where they couldn't for the whole (break's list of lists, which no
+    // boundary turns into arrays), the parts still can (C188).
+    if (tree.of === LIST && tree.name === "tree of List" && options.hostMaps && options.split !== false && !chosen.length) {
       const s = splitByGroups(code, info, names, main, defs);
       if (s) return s;
     }
+    // Lists as arrays (C30d3b): alone, and only where every list the
+    // program reaches can be one (listBoundary).
+    if (tree.of === LIST && (chosen.length || !listBoundary(merge(treesFor(code, [tree]), code), info, defs, tree, asked))) continue;
     if (tree.of !== LIST && !plainBoundary(code, defs, tree)) continue;
     chosen.push(tree);
   }
@@ -208,13 +210,18 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
 function splitByGroups(code: Code, info: Info, names: Names, main: Id, defs: Id[]): (Chosen & { reps: Representation[] }) | null {
   const array = LIBRARY.reps.find((r) => r.of === LIST && r.name === "array of List");
   if (!array) return null;
-  const roots = listGroups(code, main, defs).groups.filter((g) => g.rep === array.name && g.root !== main).map((g) => g.root);
+  const groups = listGroups(code, main, defs).groups.filter((g) => g.rep === array.name && g.root !== main);
+  const roots = groups.map((g) => g.root);
   // Not one called from a loop of the rest's: its lists would be
   // converted at every turn (machine's `items of words`, once a line).
   const refs = (d: Id) => new Set(subtree(code, d).flatMap((x) => { const n = code.nodes[x]; return n.kind === "ref" && code.nodes[n.target]?.kind === "def" ? [n.target] : []; }));
   const calls = new Map(defs.map((d) => [d, refs(d)]));
   const loops = (d: Id) => { const seen = new Set<Id>(), todo = [...(calls.get(d) ?? [])]; while (todo.length) { const x = todo.pop()!; if (x === d) return true; if (seen.has(x)) continue; seen.add(x); todo.push(...(calls.get(x) ?? [])); } return false; };
-  roots.splice(0, roots.length, ...roots.filter((r) => !defs.some((d) => d !== r && calls.get(d)?.has(r) && loops(d))));
+  // Unless the group itself loops over its lists by position (break's
+  // `soonest from`, `item at` once a turn: n² on a cons list a call), where
+  // converting once a call, n, is the cheaper (GAPS.md round 12 B1).
+  const byPosition = (g: (typeof groups)[number]) => g.defs.some((d) => loops(d) && uses(code, d, [array]).some((j) => LIBRARY.names[j] === "item at"));
+  roots.splice(0, roots.length, ...roots.filter((r) => byPosition(groups.find((g) => g.root === r)!) || !defs.some((d) => d !== r && calls.get(d)?.has(r) && loops(d))));
   if (!roots.length) return null;
   let s = splitLists(code, info, names, defs, main, roots, array);
   if (!s) {

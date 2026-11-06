@@ -2803,6 +2803,10 @@ step is O(n) against O(n²) of walks. *Measured* by scanning the list once
 in the printed module (`soonest` rewritten by hand): 59 to 27 ms, the same
 200 lines. A cheaper fix in the program, a scan written as a match on the
 list, needs a match, which the MCP can't write (I184). Row C188.
+*Fixed (C188):* the split is tried where the whole program can't take
+arrays (break's list of lists), and keeps a group looped by position
+(`item at` in a definition that calls itself) though a loop calls it:
+main 62 to 28 ms, the same 200 lines.
 
 **B2. `first(a / b, else c)` and `first(sqrt(x), else c)` lower to a
 try/catch (perf, with B3 1.4x).** Division and `sqrt` give no answer as a
