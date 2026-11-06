@@ -91,8 +91,11 @@ export interface Resolve {
   func(name: string): number;
   // A global by name (`reason`).
   global(name: string): number;
-  // A memory by name: 0 is WASI's, $math (wasm-math.ts) its own.
-  memory(name: string): number;
+  // A memory by name, and where its addresses start in memory 0: $math
+  // (wasm-math.ts) sits in WASI's memory, above the fixed area (C193).
+  memory(name: string): { index: number; base: number };
+  // An address by name, as `i32.const @buf+16`: WASI's buffer.
+  at(name: string): number;
   // A block type or local type: bytes and text.
   valtype(t: VT): { bytes: number[]; text: string };
 }
@@ -108,15 +111,15 @@ const sLeb = (n: bigint): number[] => {
 export function assemble(f: RtFn, r: Resolve): { code: number[]; wat: string } {
   const names = [...f.params, ...f.locals].map(([n]) => n);
   const out: number[] = [];
-  const lines = f.body.split("\n").map((l) => l.replace(/;;.*/, "").trim()).filter(Boolean);
+  const lines = f.body.split("\n").map((l) => l.replace(/;;.*/, "").trim().replace(/@(\w+)(?:\+(\d+))?/g, (_, n: string, k?: string) => String(r.at(n) + Number(k ?? 0)))).filter(Boolean);
   for (const line of lines) {
     const [op, ...args] = line.split(/\s+/);
     const spec = OPS[op];
     if (!spec) throw new Error(`${f.name}: no instruction ${op}`);
     // A load or store naming its memory and offset: `f64.load $math 8`.
     if (args.length === 2 && /\.(load|store)/.test(op)) {
-      const [code, align] = spec[0], m = r.memory(args[0].slice(1));
-      out.push(code, m ? align | 0x40 : align, ...(m ? u(m) : []), ...u(Number(args[1])));
+      const [code, align] = spec[0], { index: m, base } = r.memory(args[0].slice(1));
+      out.push(code, m ? align | 0x40 : align, ...(m ? u(m) : []), ...u(base + Number(args[1])));
       continue;
     }
     out.push(...spec[0]);
@@ -155,7 +158,7 @@ export function assemble(f: RtFn, r: Resolve): { code: number[]; wat: string } {
     `  (func $${f.name}${f.params.map(([n, t]) => ` (param $${n} ${r.valtype(t).text})`).join("")} ${f.result === "void" ? (f.partial ? " (result i32)" : "") : ` (result ${r.valtype(f.result).text}${f.partial ? " i32" : ""})`}${f.locals.map(([n, t]) => ` (local $${n} ${r.valtype(t).text})`).join("")}`,
     ...lines.map((l) => {
       const [op, ...args] = l.split(/\s+/);
-      if (args.length === 2 && /\.(load|store)/.test(op)) return `    ${op} ${args[0]} offset=${args[1]}`;
+      if (args.length === 2 && /\.(load|store)/.test(op)) { const { index, base } = r.memory(args[0].slice(1)); return `    ${op}${index ? ` ${args[0]}` : ""} offset=${base + Number(args[1])}`; }
       return `    ${op}${args.length ? " " + args.map((a) => (a === "void" ? "" : /^[a-z][a-z0-9]*$/.test(a) && OPS[op]?.[1].includes("bt") ? `(result ${r.valtype(a as VT).text})` : (op === "ref.test" || op === "ref.cast") && !a.startsWith("(") ? `(ref ${a})` : a)).filter(Boolean).join(" ") : ""}`;
     }),
     "  )",
@@ -7505,7 +7508,7 @@ const WASI: Record<string, Omit<RtFn, "name">> = {
     params: [["n", "i32"]], result: "void", locals: [["want", "i32"]], uses: [],
     body: `
       local.get $n
-      i32.const 128
+      i32.const @buf
       i32.add
       local.tee $want
       memory.size
@@ -7536,7 +7539,7 @@ const WASI: Record<string, Omit<RtFn, "name">> = {
       call $wasi.room
       ${loopTo("local.get $i\nlocal.get $n\ni32.ge_u", `
       local.get $i
-      i32.const 128
+      i32.const @buf
       i32.add
       local.get $t
       local.get $i
@@ -7576,7 +7579,7 @@ const WASI: Record<string, Omit<RtFn, "name">> = {
       local.get $t
       call $wasi.put
       local.set $left
-      i32.const 128
+      i32.const @buf
       local.set $p
       ${loopTo("local.get $left\ni32.eqz", `
       i32.const 0
@@ -7714,7 +7717,7 @@ const WASI: Record<string, Omit<RtFn, "name">> = {
       local.set $n
       i32.const 3
       i32.const 1
-      i32.const 128
+      i32.const @buf
       local.get $n
       i32.const 8
       call $wasi_path_filestat_get
@@ -7738,7 +7741,7 @@ const WASI: Record<string, Omit<RtFn, "name">> = {
       local.set $n
       i32.const 3
       i32.const 1
-      i32.const 128
+      i32.const @buf
       local.get $n
       local.get $oflags
       local.get $rights
@@ -7771,7 +7774,7 @@ const WASI: Record<string, Omit<RtFn, "name">> = {
           call $wasi.room
           i32.const 0
           local.get $got
-          i32.const 128
+          i32.const @buf
           i32.add
           i32.store
           i32.const 4
@@ -7823,7 +7826,7 @@ const WASI: Record<string, Omit<RtFn, "name">> = {
         call $wasi.fail
         return
       end
-      i32.const 128
+      i32.const @buf
       local.get $n
       call $wasi.take
       i32.const 0`,
@@ -7844,7 +7847,7 @@ const WASI: Record<string, Omit<RtFn, "name">> = {
         call $wasi.fail
         return
       end
-      i32.const 128
+      i32.const @buf
       local.get $n
       call $wasi.take
       i32.const 0`,
@@ -7862,7 +7865,7 @@ const WASI: Record<string, Omit<RtFn, "name">> = {
           call $wasi.room
           i32.const 0
           local.get $got
-          i32.const 128
+          i32.const @buf
           i32.add
           i32.store
           i32.const 4
@@ -7895,7 +7898,7 @@ const WASI: Record<string, Omit<RtFn, "name">> = {
             br 2
           end
           local.get $got
-          i32.const 128
+          i32.const @buf
           i32.add
           i32.load8_u
           i32.const 10
@@ -7923,7 +7926,7 @@ const WASI: Record<string, Omit<RtFn, "name">> = {
           local.set $got
         end
       end
-      i32.const 128
+      i32.const @buf
       local.get $got
       call $wasi.take
       call $TextOption.some
@@ -7977,7 +7980,7 @@ const WASI: Record<string, Omit<RtFn, "name">> = {
       local.set $n
       i32.const 3
       i32.const 1
-      i32.const 128
+      i32.const @buf
       local.get $n
       i32.const 8
       call $wasi_path_filestat_get
@@ -8050,7 +8053,7 @@ const WASI: Record<string, Omit<RtFn, "name">> = {
           local.get $size
           call $wasi.room
           local.get $fd
-          i32.const 128
+          i32.const @buf
           local.get $size
           i64.const 0
           i32.const 8
@@ -8101,13 +8104,13 @@ const WASI: Record<string, Omit<RtFn, "name">> = {
               i32.gt_u
               br_if 1
               local.get $p
-              i32.const 144
+              i32.const @buf+16
               i32.add
               i32.load
               local.set $n
               ;; skip . and ..
               local.get $p
-              i32.const 152
+              i32.const @buf+24
               i32.add
               i32.load8_u
               i32.const 46
@@ -8119,7 +8122,7 @@ const WASI: Record<string, Omit<RtFn, "name">> = {
               i32.const 2
               i32.eq
               local.get $p
-              i32.const 153
+              i32.const @buf+25
               i32.add
               i32.load8_u
               i32.const 46
@@ -8137,11 +8140,11 @@ const WASI: Record<string, Omit<RtFn, "name">> = {
                   i32.const 1
                 else
                   local.get $p
-                  i32.const 152
+                  i32.const @buf+24
                   i32.add
                   local.get $n
                   local.get $last
-                  i32.const 152
+                  i32.const @buf+24
                   i32.add
                   local.get $ln
                   call $wasi.compare
@@ -8156,11 +8159,11 @@ const WASI: Record<string, Omit<RtFn, "name">> = {
                     i32.const 1
                   else
                     local.get $p
-                    i32.const 152
+                    i32.const @buf+24
                     i32.add
                     local.get $n
                     local.get $best
-                    i32.const 152
+                    i32.const @buf+24
                     i32.add
                     local.get $bn
                     call $wasi.compare
@@ -8189,7 +8192,7 @@ const WASI: Record<string, Omit<RtFn, "name">> = {
           i32.lt_s
           br_if 1
           local.get $best
-          i32.const 152
+          i32.const @buf+24
           i32.add
           local.get $bn
           call $wasi.take
@@ -8223,8 +8226,8 @@ const WASI: Record<string, Omit<RtFn, "name">> = {
       i32.load
       i32.add
       call $wasi.room
-      i32.const 128
-      i32.const 128
+      i32.const @buf
+      i32.const @buf
       local.get $argc
       i32.const 4
       i32.mul
@@ -8242,7 +8245,7 @@ const WASI: Record<string, Omit<RtFn, "name">> = {
       local.tee $i
       i32.const 4
       i32.mul
-      i32.const 128
+      i32.const @buf
       i32.add
       i32.load
       local.set $p

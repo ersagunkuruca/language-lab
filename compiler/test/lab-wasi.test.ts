@@ -21,8 +21,8 @@ async function wasi(file: string, args: string[], dir: string): Promise<[string,
   return [readFileSync(of, "utf8"), code];
 }
 
-test("lab wasi builds examples that print what lab run prints: a value main, own handlers, files", async () => {
-  for (const [ex, args, files] of [["lockstep", [], {}], ["queens", [], {}], ["wc", ["a.txt"], { "a.txt": "one two\nthree\n" }]] as [string, string[], Record<string, string>][]) {
+test("lab wasi builds examples that print what lab run prints: a value main, own handlers, files, sin and the rest (one memory, C193)", async () => {
+  for (const [ex, args, files] of [["lockstep", [], {}], ["queens", [], {}], ["wc", ["a.txt"], { "a.txt": "one two\nthree\n" }], ["algebra", [], {}], ["impact", [], {}]] as [string, string[], Record<string, string>][]) {
     const dir = mkdtempSync(join(tmpdir(), "lab-wasi-"));
     for (const [f, t] of Object.entries(files)) writeFileSync(join(dir, f), t);
     const made = spawnSync(process.execPath, [lab, "wasi", join(examples, ex), "-o", join(dir, "p.wasm")], { encoding: "utf8" });
