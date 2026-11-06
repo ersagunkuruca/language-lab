@@ -17,10 +17,13 @@ const small = (i: Int): number => (typeof i === "bigint" ? (i < 0n ? -Infinity :
 // plane: a reader walking one line slices it again and again, and a test
 // of the whole line each time made reading it n² (C110 s5b, calc's
 // parentheses 10,000 deep). The same string again is the same object, and
-// === on it doesn't read it.
+// === on it doesn't read it. A text equal to it but another string (the
+// evaluator's copy of a program's text, then compiled code's) is compared
+// a character at a time: it is kept from then on, so that is once, not at
+// every slice (a 27,000-character JSON text read in 8 s, L72e1d3).
 let narrow: string | undefined;
 const isNarrow = (t: string): boolean => {
-  if (t === narrow) return true;
+  if (t === narrow) { narrow = t; return true; }
   if (wide.test(t)) return false;
   if (t.length > 64) narrow = t;
   return true;
