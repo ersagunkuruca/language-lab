@@ -1697,15 +1697,6 @@ export function buildPrelude(): Module {
     k.if(iLess(c, k.int(32)), texts(k.lit("\\u00"), hexAt(k.call(INT_OPS.shiftDown, c, k.int(4))), hexAt(k.call(INT_OPS.bitAnd, c, k.int(15)))), ch))))));
   const jsonQuoted = def("json quoted", ["text"], (t) => texts(k.lit("\""), k.call(TEXT_OPS.joinAll, k.call(map, k.call(TEXT_OPS.characters, t), k.x(jsonChar)), k.lit("")), k.lit("\"")));
   const jsonPrinted = k.def("json printed");
-  k.define(jsonPrinted, k.fn(["json"], (j) => k.match(j, [
-    { variant: JSON_V.null, names: [], body: () => k.lit("null") },
-    { variant: JSON_V.bool, names: ["value"], body: ([b]) => k.if(b, k.lit("true"), k.lit("false")) },
-    { variant: JSON_V.number, names: ["value"], body: ([x]) => k.call(S.show, x) },
-    { variant: JSON_V.text, names: ["value"], body: ([t]) => k.call(jsonQuoted, t) },
-    { variant: JSON_V.list, names: ["items"], body: ([xs]) => texts(k.lit("["), k.call(TEXT_OPS.joinAll, k.call(map, xs, k.x(jsonPrinted)), k.lit(",")), k.lit("]")) },
-    { variant: JSON_V.object, names: ["fields"], body: ([fs]) => texts(k.lit("{"), k.call(TEXT_OPS.joinAll, k.call(map, fs, k.fn(["field"], (f) =>
-      entry(f, (name, v) => texts(k.call(jsonQuoted, name), k.lit(":"), k.call(jsonPrinted, v)), ["name", "value"]))), k.lit(",")), k.lit("}")) },
-  ])));
   // JSON as one relation (L72e1, GRAMMAR-DESCENT-2026-11-05.md "JSON: one
   // relation"): `json spelled` gives every text that spells a value, the
   // one json printed writes first, so reading is it run backwards. A
@@ -1768,6 +1759,11 @@ export function buildPrelude(): Module {
     { variant: JSON_V.object, names: ["fields"], body: ([fs]) => texts(k.lit("{"), k.call(blank), k.call(TEXT_OPS.joinAll, k.call(map, fs, k.fn(["field"], (f) =>
       entry(f, (name, v) => texts(blanked(k.call(jsonQuotedSpelled, name)), k.lit(":"), blanked(k.call(jsonSpelled, v))), ["name", "value"]))), k.lit(",")), k.lit("}")) },
   ])));
+  // Json printed is json spelled's first spelling (L72e1d): one relation
+  // gives both the printer and the reader. Compiled, it is plain code, each
+  // choice taken at its first way (first-arms.ts); the "" is never given,
+  // as json spelled always has a spelling.
+  k.define(jsonPrinted, k.fn(["json"], (j) => k.call(S.first, k.thunk(() => k.call(jsonSpelled, j)), k.thunk(() => k.lit("")))));
   // Json printed over lines (L190f), the same text as JSON.stringify(value,
   // null, step): each item and field on its own line, indented by `step`
   // spaces a level, and `: ` after a field's name; an empty list or object
