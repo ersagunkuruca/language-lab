@@ -105,9 +105,39 @@ export const TOOLS: Tool[] = [
   },
   {
     name: "define",
-    description: "New definition with a hole body (function, value) or one case (type, effect, interface).",
+    description: "New definition: a hole body (function, value), or a first case, ball(n: Int, at: Vec) (type), or operation, gap at: (a) -> Float64 (interface, effect).",
     inputSchema: obj({ name: str("name"), kind: { type: "string", enum: ["function", "value", "type", "effect", "interface"] }, params: { type: "array", items: { type: "string" }, description: "function inputs" }, first: str("first case or operation") }, ["name", "kind"]),
     call: (a) => program().define(String(a.name), String(a.kind), (a.params as string[]) ?? [], String(a.first ?? "")),
+  },
+  {
+    name: "add_case",
+    description: "Add a case to a type, with its fields: pocketed(ball: Int, pocket: Pocket). Every match on the type gets a hole for it.",
+    inputSchema: obj({ at: str("type"), case: str("name(field: Type, …)") }, ["at", "case"]),
+    call: (a) => program().addCase(String(a.at), String(a.case)),
+  },
+  {
+    name: "add_field",
+    description: "Add a field to a case or a type's one case, or an operation to an interface; type as view prints it: List Ball, (a, Ball) -[Choice]-> Float64.",
+    inputSchema: obj({ at: str("case or type"), name: str("name"), type: str("type"), ports: { type: "array", items: { type: "string" }, description: "an operation's ports (see ports)" } }, ["at", "name", "type"]),
+    call: (a) => program().addField(String(a.at), String(a.name), String(a.type), a.ports as string[] | undefined),
+  },
+  {
+    name: "ports",
+    description: "Name an operation's ports, one per input then the result, so it is a relation solved for any of them; none takes them off.",
+    inputSchema: obj({ at: str("operation"), ports: { type: "array", items: { type: "string" } } }, ["at", "ports"]),
+    call: (a) => program().ports(String(a.at), (a.ports as string[]) ?? []),
+  },
+  {
+    name: "add_way",
+    description: "New way of an operation, a hole for its body: the compiler picks by cost among ways where an implementation writes `by its ways`.",
+    inputSchema: obj({ at: str("operation"), name: str("name (empty: '<operation> by its way')"), cost: { type: "number", description: "its cost (default: 1 plus what it uses)" } }, ["at"]),
+    call: (a) => program().addWay(String(a.at), String(a.name ?? ""), typeof a.cost === "number" ? a.cost : undefined),
+  },
+  {
+    name: "cost",
+    description: "Set a way's cost (null: the usual), or with off make it an ordinary definition.",
+    inputSchema: obj({ at: str("way"), cost: { type: ["number", "null"] }, off: { type: "boolean" } }, ["at"]),
+    call: (a) => program().cost(String(a.at), typeof a.cost === "number" ? a.cost : null, a.off === true),
   },
   {
     name: "add_input",

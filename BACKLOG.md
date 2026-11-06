@@ -23,7 +23,7 @@ language, then more targets or speed (WORKFLOW.md "Priority").
 | E Editor | "Editor lane" | E103, then Language or Compiler rows agreed with those lanes |
 | C Compiler and targets | "Compiler lane" | C187 (fibers in WASM); C93 to Language lane B; C184 and C30 with the Editor lane |
 | L Language and library | "Language lane" | L44, then L88 and L182 when unblocked (core, run.ts, infer.ts, hosts.ts) |
-| L Language and library | "Language lane B" | Round 12's findings (GAPS.md, break): C188, I183 and I184, C189, L231; I185 to I188 after. L118c waits on Ersagun, who stopped L118 after step 2. Skip L107 (waits on Ersagun) and L24 (research). Take a row from another list only after telling that lane. |
+| L Language and library | "Language lane B" | Round 12's findings (GAPS.md, break): I184, C189, L231; I185 to I188 after. L118c waits on Ersagun, who stopped L118 after step 2. Skip L107 (waits on Ersagun) and L24 (research). Take a row from another list only after telling that lane. |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -32,7 +32,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I183 | The MCP can't write a type's fields (`define` kind type takes one case's name, so `ball(x: Float64, …)` is a case named with all that text), an interface field's ports, an implementation's `by its ways`, or a definition's `way` and `cost`. Example: break's seed (project files gaps-round12/seed.ts) written through the MCP instead (GAPS.md round 12 M1) | GAPS round 12 M1 | 2026-11-06 |
 | I184 | The MCP can't write a match's cases: `split` on an input whose type nothing fixes yet says "that variable's type has no cases" (I116 was the editor's), and `replace` of a case's body with a field's name (`time`) says "a name alone is listed already". Example: break's `time of(e)` on a type of cases (GAPS.md round 12 M2) | GAPS round 12 M2 | 2026-11-06 |
 | I185 | **Bug.** The MCP opens compiler/gaps/crew with five errors ("expected (a, b), got std.pair Int Int") where `lab check` finds none: its session doesn't bring a saved program's older shapes up to date. Example: `open` crew, `defs` shows no ✗ (GAPS.md round 12 M6) | GAPS round 12 M6 | 2026-11-06 |
 | I186 | The MCP has no sharing: publish, fetch, upgrade and downgrade as tools, as `lab` has them. Example: publishing break's `shifted` and `apart` through the MCP (GAPS.md round 12 M7) | GAPS round 12 M7 | 2026-11-06 |
@@ -126,7 +125,6 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 | C41 | Pure `together` branches on worker_threads / Web Workers past a cost threshold | LANGUAGE-NEEDS-2026-10-24 | P3 | M | after L62 |
 | C42 | Data-parallel `map` and associative folds on a thread pool, later as compute shaders (NESL, Futhark) | LANGUAGE-NEEDS-2026-10-24 | P3 | L | after C30 |
 | C43 | Or-parallel `all`/`count` and speculative `first` in canonical order, with work stealing (Cilk, Aurora/Muse) | LANGUAGE-NEEDS-2026-10-24 | P3 | L | after C41 |
-| C188 | A list read by position, built afresh each step of a loop, stays a cons list: rep-groups.ts wants `array of List` for break's `soonest`, but `splitByGroups` drops a group whose root is called from a loop of the rest's (its lists converted every turn), though here a conversion a step is O(n) against O(n²) of `item at` walks. Example: compiler/gaps/break's main, 59 ms against 27 by hand with the scan made once (GAPS.md round 12 B1) | GAPS round 12 B1 | P3 | M | |
 | C189 | `first(a / b, else c)` and `first(sqrt(x), else c)` printed without a try where nothing in them throws (division and sqrt give no answer as a value), and a small pure function called twice with the same input worked out once. Example: compiler/gaps/break's `moved`, `heading`, `rest time` and `length of`: main 27 to 17-19 ms by hand on top of C188 (GAPS.md round 12 B2, B3) | GAPS round 12 B2, B3 | P3 | M | |
 | C187 | Fibers in WASM (JSPI, or the stack switching proposal): a program's own handlers that keep the rest, and together and race, as C44 runs them natively. Example: fibers-c.test's generator and together, run through `lab build --wasm` printing what lab run prints | C44 | P3 | L | |
 
@@ -201,7 +199,7 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L72 | JSON as one relation: `json spelled` gives every spelling, `json read` is it run backwards (a to f done, DONE.md). Example: `json printed` is `json spelled`'s first on every target (e1d); done when it is. The core IR now runs that `first` as plain code (first-arms.ts, L72e1d2): what's left is json printed written so. Beyond it, rows if they earn them: json read's message saying where it stopped (f3), `json printed indented` as a variant (e4) | Ersagun 2026-10-24 | P3 | L | low priority |
+| L72 | JSON as one relation: `json spelled` gives every spelling, `json read` is it run backwards (a to f done, DONE.md). Example: `json printed` is `json spelled`'s first on every target (e1d); done when it is. The core IR runs a search's rest on the heap past a depth now (C188), so first(json spelled) of 3000 records prints compiled, and where each choice's first way can't fail it is plain code (first-arms.ts, L72e1d2). Beyond it, rows if they earn them: json read's message saying where it stopped (f3), `json printed indented` as a variant (e4) | Ersagun 2026-10-24 | P3 | L | low priority |
 
 ### Physics and planning ([PHYSICS-AND-PLANNING.md](docs/design/physics/PHYSICS-AND-PLANNING.md), later goals)
 

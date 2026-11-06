@@ -2803,6 +2803,10 @@ step is O(n) against O(n²) of walks. *Measured* by scanning the list once
 in the printed module (`soonest` rewritten by hand): 59 to 27 ms, the same
 200 lines. A cheaper fix in the program, a scan written as a match on the
 list, needs a match, which the MCP can't write (I184). Row C188.
+*Fixed (C188):* the split is tried where the whole program can't take
+arrays (break's list of lists), and keeps a group looped by position
+(`item at` in a definition that calls itself) though a loop calls it:
+main 62 to 28 ms, the same 200 lines.
 
 **B2. `first(a / b, else c)` and `first(sqrt(x), else c)` lower to a
 try/catch (perf, with B3 1.4x).** Division and `sqrt` give no answer as a
@@ -2838,6 +2842,11 @@ Each was worked around, and the workaround is in the driver or the seed.
   ports, an implementation's `by its ways` ("nothing is named by its ways
   here") or a definition's `way` and `cost`. Made with the DSL instead;
   `by its ways` was filled into the saved file after the drive. Row I183.
+  *Fixed (I183):* `define` takes a first case with its fields and an
+  interface's first operation with its type, `add_case`, `add_field`
+  (types as view prints them, ports too), `ports`, `add_way` and `cost`
+  write the rest, `replace` takes `by its ways`, and `view` shows ports
+  and a way's mark.
 - **M2. A match's cases.** `split` on an input whose type nothing fixes yet
   is "that variable's type has no cases" (I116 fixed this in the editor,
   not in the MCP), and once a dummy `if e = quiet` fixed it, `replace`

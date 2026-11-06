@@ -12,7 +12,7 @@
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import type { Code, Id, NodeOf } from "../src/model.ts";
-import { collect, subtree, isCall, type Call } from "../src/model.ts";
+import { collect, freshId, subtree, isCall, type Call, type NodeData } from "../src/model.ts";
 import { sameEverywhere, sharedPlaces } from "../src/lang/patterns.ts";
 import type { Comments, Names, Presentation, Style } from "../src/presentation.ts";
 import { root } from "../src/io.ts";
@@ -30,9 +30,10 @@ import { equal, mainProblem, pageProblem, runProgram, runMain, showerFor, withSt
 import { nodeWorld } from "../src/lang/world.ts";
 import { runTests, savedFrom } from "../src/lang/tests.ts";
 import * as T from "../../editor/typed.ts";
-import { SIGS } from "../src/lang/std.ts";
+import { S, SIGS } from "../src/lang/std.ts";
 import { setDisplayNames } from "../../editor/typed.ts";
-import { addParameter, deleteDefinition, nameClash, newDefinition, type Shape } from "../src/lang/toplevel.ts";
+import { addField, addParameter, addWay, deleteDefinition, nameClash, newDefinition, setWay, type Shape } from "../src/lang/toplevel.ts";
+import { readCase, readType, typeNames, type Build } from "./type-text.ts";
 
 const read = <T>(path: string, fallback: T): T => (existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : fallback);
 const STYLE: Style = read(join(root, "styles", "blocks.json"), { view: "blocks", notation: {} });
@@ -121,6 +122,10 @@ export class Session {
     const all = this.allNames;
     const named = this.own.find((d) => this.names[d] === r) ?? this.code.defs.find((d) => all[d] === r);
     if (named) return named;
+    // A case or a field (an interface's operation) of the program's own
+    // types, by its name where only one has it.
+    const parts = this.own.flatMap((d) => { const b = this.code.nodes[(this.code.nodes[d] as NodeOf<"def">).body ?? ""]; return b?.kind === "typedef" ? b.variants.flatMap((v) => [v, ...(this.code.nodes[v] as NodeOf<"variant">).fields]) : []; }).filter((x) => this.names[x] === r);
+    if (parts.length === 1 && !within) return parts[0];
     // A variable, case or field by its name, inside a definition.
     if (within) {
       const local = subtree(this.code, within).filter((x) => this.names[x] === r);
@@ -183,7 +188,14 @@ export class Session {
       const ps = sharedPlaces(this.code, this.info, m).filter((p) => p.slot === "body");
       return ps.length ? [`${this.id(x)} otherwise is: ${ps.map((p) => this.name((this.code.nodes[p.parent] as NodeOf<"arm">).variant)).join(", ")}`] : [];
     });
-    return [...head, ...lines, ...folded, ...errors].join("\n");
+    // What the lines don't show: an operation's ports, a way's mark.
+    const marks = subtree(this.code, found ? id : def).flatMap((x) => {
+      const n = this.code.nodes[x];
+      if (n?.kind === "field" && n.ports?.length) return [`${this.id(x)} ports: ${n.ports.slice(0, -1).join(", ")} -> ${n.ports.at(-1)}`];
+      if (n?.kind === "def" && n.way) return [`${this.id(x)} a way of ‹${this.name(n.way)}›${n.cost != null ? `, cost ${n.cost}` : ""}`];
+      return [];
+    });
+    return [...head, ...lines, ...folded, ...marks, ...errors].join("\n");
   }
 
   // The gutter: the id of a block that starts on the line, else blank.
@@ -317,6 +329,10 @@ export class Session {
       const info = editorInfo(this.code, this.names);
       const holed = T.toHole(this.code, this.names, info, target);
       if (!holed.ok || t === "□" || t === "?" || t === "") return holed;
+      // An implementation's field left to the interface's ways (WAYS.md):
+      // the editor's text reader doesn't take it (I183), so it is put in
+      // here; the checker says if no way grounds it.
+      if (norm(t) === "by its ways") return { ...holed, code: { nodes: { ...holed.code.nodes, [target]: { id: target, kind: "ref", target: S.byItsWays } }, defs: holed.code.defs } };
       return T.fillValue(holed.code, holed.names, editorInfo(holed.code, holed.names), target, t, def);
     }, undefined, !kase);
   }
@@ -408,9 +424,120 @@ export class Session {
     return this.apply(def, () => T.splitOn(this.code, this.names, editorInfo(this.code, this.names), target, v));
   }
 
+  // A type's first case may be written with its fields, `ball(number: Int,
+  // place: Vec)`; an interface's first operation with its type, `gap at:
+  // (a, Ball, Float64) -> Float64` (I183).
   define(name: string, kind: string, params: string[] = [], first = ""): string {
-    const shape: Shape = kind === "function" ? { kind, params } : kind === "value" ? { kind } : kind === "type" ? { kind, firstCase: first } : kind === "effect" ? { kind, firstOperation: first } : kind === "interface" ? { kind, firstOperation: first } : (() => { throw new Error("kind: function, value, type, effect or interface"); })();
-    return this.apply(null, () => newDefinition(this.code, this.names, name, shape), (c) => c.defs.at(-1)!);
+    const kase = kind === "type" ? readCase(first) : null;
+    const op = kind === "interface" ? /^([^:]*?)\s*(?::\s*(.*))?$/s.exec(first.trim())! : null;
+    const firstName = kase ? kase.name : op ? op[1] : first;
+    const shape: Shape = kind === "function" ? { kind, params } : kind === "value" ? { kind } : kind === "type" ? { kind, firstCase: firstName } : kind === "effect" ? { kind, firstOperation: first } : kind === "interface" ? { kind, firstOperation: firstName } : (() => { throw new Error("kind: function, value, type, effect or interface"); })();
+    return this.apply(null, () => {
+      const r = newDefinition(this.code, this.names, name, shape);
+      if (!r.ok) return r;
+      const def = r.code.defs.at(-1)!;
+      const td = r.code.nodes[(r.code.nodes[def] as NodeOf<"def">).body!] as NodeOf<"typedef">;
+      if (kase) return this.withFields(r, def, td.variants[0], kase.fields);
+      if (op?.[2]) {
+        const v = r.code.nodes[td.variants[0]] as NodeOf<"variant">;
+        const nodes = { ...r.code.nodes };
+        const add = (n: NodeData): Id => { const id = freshId(); nodes[id] = { id, ...n } as NodeOf<"hole">; return id; };
+        const f = v.fields[0];
+        nodes[f] = { ...(nodes[f] as NodeOf<"field">), type: this.typeIn(op[2], r.code, r.names, def)(add) };
+        return { ...r, code: collect({ nodes, defs: r.code.defs }) };
+      }
+      return r;
+    }, (c) => c.defs.at(-1)!);
+  }
+
+  // Type text read in this program, with a type's own parameters by name.
+  private typeIn(text: string, code: Code, names: Names, type?: Id): Build {
+    const all = baseNames(names);
+    const td = type ? code.nodes[(code.nodes[type] as NodeOf<"def">).body ?? ""] : undefined;
+    const params = new Map<string, Id>(td?.kind === "typedef" ? td.params.map((p) => [all[p] ?? "a", p]) : []);
+    return readType(text, typeNames(code, all, code.defs.filter((d) => !LIBRARY.code.nodes[d])), params);
+  }
+
+  private withFields(r: { ok: true; code: Code; names: Names }, type: Id, variant: Id, fields: [string, string][]) {
+    let cur: { ok: true; code: Code; names: Names } | { ok: false; reason: string } = r;
+    for (const [n, t] of fields) {
+      if (!cur.ok) return cur;
+      const build = this.typeIn(t, cur.code, cur.names, type);
+      cur = addField(cur.code, cur.names, type, variant, n, build);
+    }
+    return cur;
+  }
+
+  // The type and case a node names: a type (its one case), or a case.
+  private caseOf(at: string): { type: Id; variant: Id } {
+    const id = this.resolve(at);
+    const n = this.code.nodes[id];
+    const body = n?.kind === "def" ? this.code.nodes[n.body ?? ""] : undefined;
+    if (body?.kind === "typedef") {
+      if (body.variants.length !== 1) throw new Error(`${this.name(id)} has ${body.variants.length} cases: give the case`);
+      return { type: id, variant: body.variants[0] };
+    }
+    if (n?.kind === "variant") return { type: this.defOf(id)!, variant: id };
+    throw new Error(`#${this.id(id)} isn't a type or a case`);
+  }
+
+  // A new case of a type, with its fields: `pocketed(ball: Int)` (I183).
+  addCase(at: string, text: string): string {
+    const type = this.resolve(at);
+    const kase = readCase(text);
+    return this.apply(type, () => {
+      const e = T.addCase(this.code, this.names, editorInfo(this.code, this.names), type, kase.name, []);
+      if (!e.ok) return e;
+      const td = e.code.nodes[(e.code.nodes[type] as NodeOf<"def">).body!] as NodeOf<"typedef">;
+      return this.withFields({ ok: true, code: e.code, names: e.names }, type, td.variants.at(-1)!, kase.fields);
+    });
+  }
+
+  // A field of a case (or of a type's one case), or an interface's
+  // operation, of a type written as text; an operation's ports, its
+  // inputs' and its result's names, make it a relation (POLAR.md).
+  addField(at: string, name: string, type: string, ports?: string[]): string {
+    const { type: td, variant } = this.caseOf(at);
+    return this.apply(td, () => {
+      const r = addField(this.code, this.names, td, variant, name, this.typeIn(type, this.code, this.names, td));
+      if (!r.ok || !ports?.length) return r;
+      return this.portsIn(r.code, r.names, r.select, ports);
+    });
+  }
+
+  ports(at: string, ports: string[]): string {
+    const field = this.resolve(at);
+    return this.apply(this.defOf(field), () => this.portsIn(this.code, this.names, field, ports));
+  }
+
+  private portsIn(code: Code, names: Names, field: Id, ports: string[]): { ok: true; code: Code; names: Names } | { ok: false; reason: string } {
+    const f = code.nodes[field];
+    if (f?.kind !== "field") return { ok: false, reason: "ports go on an interface's operation" };
+    const t = code.nodes[f.type];
+    const n = t?.kind === "tfun" ? t.params.length + 1 : 0;
+    const ps = ports.map((p) => p.trim());
+    if (!ps.length) { const { ports: _, ...plain } = f; return { ok: true, code: { nodes: { ...code.nodes, [field]: plain }, defs: code.defs }, names }; }
+    if (ps.length !== n) return { ok: false, reason: `${names[field] ?? "it"} has ${n ? `${n - 1} inputs and a result` : "no inputs"}: give ${n} ports, the inputs' then the result's` };
+    return { ok: true, code: { nodes: { ...code.nodes, [field]: { ...f, ports: ps } }, defs: code.defs }, names };
+  }
+
+  // A way of an operation (WAYS.md): a new definition with a hole for its
+  // body, marked as one way of computing it, at a cost.
+  addWay(at: string, name: string, cost?: number): string {
+    const field = this.resolve(at);
+    const iface = this.defOf(field);
+    if (!iface) throw new Error(`#${this.id(field)} isn't an operation`);
+    return this.apply(null, () => {
+      const r = addWay(this.code, this.names, iface, field, name);
+      if (!r.ok || cost === undefined) return r;
+      return setWay(r.code, r.names, r.select, { cost });
+    }, (c) => c.defs.at(-1)!);
+  }
+
+  // A way's cost (none: the usual), or the mark taken off.
+  cost(at: string, cost: number | null, off = false): string {
+    const def = this.resolve(at);
+    return this.apply(def, () => setWay(this.code, this.names, def, off ? null : { cost }));
   }
 
   addInput(at: string, name: string): string {
