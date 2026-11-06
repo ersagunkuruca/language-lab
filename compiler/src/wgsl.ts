@@ -55,7 +55,8 @@
 // The text follows the WGSL spec, https://www.w3.org/TR/WGSL/.
 
 import type { Id } from "../../ters/src/model.ts";
-import { isArray, isRecord, noData, unchecked, type LType, type CoreIR, type Op, type RType, type SExpr, type SFunc, type DType, type FType, type WType, type AType, type TType } from "./scalar.ts";
+import { shareCalls } from "./share-calls.ts";
+import { isArray, isRecord, noData, tidied, unchecked, type LType, type CoreIR, type Op, type RType, type SExpr, type SFunc, type DType, type FType, type WType, type AType, type TType } from "./scalar.ts";
 
 // A shader has no data with several cases (`data` in scalar.ts is for WebAssembly).
 type GType = Exclude<LType, DType | FType | WType | AType | TType>;
@@ -201,7 +202,11 @@ export function emitWgsl(lowered: CoreIR): Shader {
   if (lowered.data.length || lowered.fns.length) throw new Error("a shader can't have data types with several cases: lower without `data`");
   // No finiteness checks (L125c2): a GPU can't stop, and WGSL may assume
   // there's nothing but finite floats, which is Float64's meaning.
-  const funcs = lowered.funcs.map((f) => ({ ...f, body: unrounded(unchecked(f.body)) }));
+  const funcs = lowered.funcs.map((f) => ({ ...f, locals: [...f.locals], body: unrounded(unchecked(f.body)) }));
+  // Arithmetic made twice, made once (C175): a gradient's
+  // per-axis copies each work out the same time-only values.
+  // Then a let of a let's local is that local (tidied).
+  if (shareCalls({ ...lowered, funcs }, { ops: true, calls: false })) funcs.forEach((f, i) => { f.body = tidied(f, i).body; });
   const refused = new Map(lowered.refused);
   const bad = new Map<number, string>();
 

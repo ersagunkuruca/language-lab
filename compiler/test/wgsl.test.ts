@@ -69,6 +69,10 @@ test("examples/raymarch: the ray marcher goes to the GPU whole, normals and all"
   assert.match(s.wgsl, /fn magnitude_\d+\(p0: vec3f\) -> f32 \{\n {2}return length\(p0\);/);
   // The one + on two points is the GPU's + on vec3f.
   assert.match(s.wgsl, /shade_\d+\(l\d+ \+ l\d+, p\d\)/);
+  // The gradient's per-axis copies share what they have in common (C175):
+  // each function works out sin(0.7 · time) once, not once per axis.
+  for (const fn of s.wgsl.split(/\n(?=\/\/ )/)) assert.ok((fn.match(/sin\(0\.7 \* p\d\)/g) ?? []).length <= 1, fn.slice(0, 40));
+  assert.ok((s.wgsl.match(/sin\(/g) ?? []).length < 12);
   assert.match(s.wgsl, /fn smaller_\d+\(p0: f32, p1: f32\) -> f32 \{\n {2}return min\(p0, p1\);/);
   // And the normal is the gradient: close to central differences, away
   // from the blend's seams, both from the code the shader gets and from
