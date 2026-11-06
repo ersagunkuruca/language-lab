@@ -1062,6 +1062,9 @@ class Keyed { key: unknown; value: unknown; constructor(key: unknown, value: unk
 const spelling = (x: unknown): string => (typeof x === "string" ? JSON.stringify(x) : typeof x === "object" && x !== null ? `(${(x as { fields: unknown[] }).fields.map(spelling).join(",")})` : String(x));
 const held = (key: unknown) => (typeof key === "object" && key !== null ? spelling(key) : key);
 const valueOf = (v: unknown) => (v instanceof Keyed ? v.value : v);
+// The value at key, or `none` when there is none: no list of answers made
+// for each read (compiled JS's `value at`, core-rt.ts).
+export const tableRead = (t: Table, key: unknown, none: unknown): unknown => { const h = held(key), v = t.m.get(h); return v === undefined && !t.m.has(h) ? none : valueOf(v); };
 const keyOf = (k: unknown, v: unknown) => (v instanceof Keyed ? v.key : k);
 const tableAt = builtin("table.at", "table value at", ofEntry((k, v) => [[tableOf_(k, v), k], v], [CHOICE]));
 STD_MANY[tableAt] = (t: Table, key: unknown) => { const h = held(key); return t.m.has(h) ? [valueOf(t.m.get(h))] : []; };
