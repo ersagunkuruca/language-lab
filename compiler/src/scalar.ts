@@ -721,7 +721,10 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // the performer runs in continuation passing (several_), and a perform
   // hands the case the rest it was given (core-rt.ts `perform:`).
   const laterOps = new Map<Id, Id>();
-  for (const n of opts.host ? Object.values(code.nodes) : []) {
+  // C (C44b): the code a handler of one handles runs on a fiber of its
+  // own, which a perform leaves and the rest goes back to.
+  const fibers = !!opts.handlers && !opts.host;
+  for (const n of opts.host || fibers ? Object.values(code.nodes) : []) {
     if (n.kind !== "def" || !n.body || (code.nodes[n.body]?.kind === "typedef" && notOwn(n, code.nodes[n.body] as NodeOf<"typedef">)) || n.id.startsWith("std.")) continue;
     const td = code.nodes[n.body];
     if (td?.kind === "typedef" && td.effect && td.variants.length && td.variants.every((v: Id) => { const x = code.nodes[v] as NodeOf<"variant">; return x.returns && answeredLater.has(v); })) td.variants.forEach((v: Id) => laterOps.set(v, n.id));
@@ -753,7 +756,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // not finish (running out of a budget), or abort; and the world's effects.
   const partialEff = (e: Id) => e === CHOICE || e === DIVERGE || escaping(e);
   // Random under a `seeded` (C106), or drawn from the world (C136).
-  const allowedEff = (e: Id) => partialEff(e) || e === CONSOLE || e === FILES || (!!opts.data && e === RANDOM) || (!!opts.host && (PAGE_EFFECTS.has(e) || tailEffs.has(e) || e === KEPT_FILES)) || (!!opts.releases && e === LOG_EFFECT) || (!!opts.handlers && (tailOwn.has(e) || e === KEPT_FILES || (!opts.host && (e === WAIT || e === AWAIT || e === TIME))));
+  const allowedEff = (e: Id) => partialEff(e) || e === CONSOLE || e === FILES || (!!opts.data && e === RANDOM) || (!!opts.host && (PAGE_EFFECTS.has(e) || tailEffs.has(e) || e === KEPT_FILES)) || (!!opts.releases && e === LOG_EFFECT) || (!!opts.handlers && (tailOwn.has(e) || e === KEPT_FILES || (!opts.host && (e === WAIT || e === AWAIT || e === TIME || laterEffs.has(e)))));
   // Some root draws a number nobody seeds (C136): the world seeds
   // Random's generator then, at the first draw.
   const worldRandom = !!opts.data && roots.some((r) => {
@@ -1017,7 +1020,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     // lowered as its arithmetic, so no answer isn't seen here yet (L125c2,
     // L125c3); a Choice of the program's own (fail, one of) is refused
     // where it's used.
-    const effs = all.filter((e) => !BUDGETED.includes(e) && !(partial && partialEff(e)) && !(opts.data && (e === CONSOLE || e === FILES || e === RANDOM)) && !(opts.host && (PAGE_EFFECTS.has(e) || tailEffs.has(e) || e === KEPT_FILES)) && !(opts.releases && e === LOG_EFFECT) && !(opts.handlers && (tailOwn.has(e) || e === KEPT_FILES || (!opts.host && (e === WAIT || e === AWAIT || e === TIME)))) && !(opts.hosted?.has(e) && tailEffs.has(e)) && !(e === CHOICE && !opts.data && !opts.shader));
+    const effs = all.filter((e) => !BUDGETED.includes(e) && !(partial && partialEff(e)) && !(opts.data && (e === CONSOLE || e === FILES || e === RANDOM)) && !(opts.host && (PAGE_EFFECTS.has(e) || tailEffs.has(e) || e === KEPT_FILES)) && !(opts.releases && e === LOG_EFFECT) && !(opts.handlers && (tailOwn.has(e) || e === KEPT_FILES || (!opts.host && (e === WAIT || e === AWAIT || e === TIME || (laterEffs.has(e) && !roots.includes(def)))))) && !(opts.hosted?.has(e) && tailEffs.has(e)) && !(e === CHOICE && !opts.data && !opts.shader));
     if (effs.length) fail(`has effects (${effs.map(nm).join(", ")})`);
     const budgeted = !constant && !opts.data && diverges(ft);
 
@@ -1297,6 +1300,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           const t = stype(zonk(id));
           if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(id))}`);
           const e = laterOps.get(target)!, op = (code.nodes[(code.nodes[e] as NodeOf<"def">).body!] as NodeOf<"typedef">).variants.indexOf(target);
+          if (fibers) return { k: "rt", fn: `fperform:${e}:${op}`, args: args(), host: { t, partial: true } };
           return { k: "world", op: `perform:${e}:${op}`, aborts: false, args: args(), t, suspends: true };
         }
         // The world's Console and Files where the program handles them
@@ -1503,7 +1507,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           // One that does: the runtime's handler runs it once the
           // computation has finished, with the handler taken off.
           const later = laterOps.get(arms[0].variant), pushed = tailOps.get(arms[0].variant);
-          if (opts.host && later && arms.every((a) => laterOps.get(a.variant) === later)) return handleOps(n, later, id, env, f, true, fin);
+          if ((opts.host || fibers) && later && arms.every((a) => laterOps.get(a.variant) === later)) return handleOps(n, later, id, env, f, true, fin);
           if (opts.host && pushed && !tailOwn.has(pushed) && arms.every((a) => tailOps.get(a.variant) === pushed)) return handleOps(n, pushed, id, env, f, false, fin);
           throw new Refused(why);
         }
@@ -1975,6 +1979,9 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     // A case that leaves the rest out answers at once (L63, L229e): the
     // runtime resumes the rest with its value.
     const now = later ? ops.flatMap((v, i) => (arms.find((x) => x.variant === v)!.binds.length === (code.nodes[v] as NodeOf<"variant">).fields.length ? [i] : [])) : [];
+    // C (C44b): the code on a fiber, the cases called and returning; the
+    // printer writes the handler's driver (c.ts `fhandle:`).
+    if (later && fibers) return { k: "rt", fn: `fhandle:${n.id}:${e}:${now.join(",")}:${fin ? "fin" : "-"}`, args: [body, ...cases, ...finished], host: { t, partial: true } };
     if (later) {
       // The cases given where their answer goes (continuation passing).
       const ks = cases.flatMap((c, i) => (cps(c) ? [i] : []));

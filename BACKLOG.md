@@ -120,7 +120,7 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 | C41 | Pure `together` branches on worker_threads / Web Workers past a cost threshold | LANGUAGE-NEEDS-2026-10-24 | P3 | M | after L62 |
 | C42 | Data-parallel `map` and associative folds on a thread pool, later as compute shaders (NESL, Futhark) | LANGUAGE-NEEDS-2026-10-24 | P3 | L | after C30 |
 | C43 | Or-parallel `all`/`count` and speculative `first` in canonical order, with work stealing (Cilk, Aurora/Muse) | LANGUAGE-NEEDS-2026-10-24 | P3 | L | after C41 |
-| C44 | Fibers in native C (own stacks, an event loop) and in WASM (JSPI). C44a done: wait, now, and await of one timer in C, blocking. Next: together and race in C, where start branch's handler keeps the rest (a fiber per branch, swapcontext). Example: branch-effects.test's two printing branches, native, printing what lab run prints | LANGUAGE-NEEDS-2026-10-24 | P3 | L | after C40 |
+| C44 | Fibers in native C (own stacks, an event loop) and in WASM (JSPI). C44a done: wait, now, and await of one timer in C, blocking. C44b done: a program's own handlers whose cases keep the rest run natively on fibers (ucontext). Next: together and race in C, where start branch's handler keeps the rest (a fiber per branch, swapcontext). Example: branch-effects.test's two printing branches, native, printing what lab run prints | LANGUAGE-NEEDS-2026-10-24 | P3 | L | after C40 |
 
 ### Blind spots ([BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md))
 

@@ -190,6 +190,10 @@ const isPerform = (fn: string) => fn.startsWith("perform:");
 // nearest's (scalar.ts handleOps with `handlers`).
 const STACK = /^(hpush|hpop|handler):([^:]+)(?::(\d+))?$/;
 const isStack = (fn: string) => STACK.test(fn);
+// A program's own handler whose cases keep the rest (C44b), and a perform
+// of one of its operations: the code handled on a fiber (c-rt "fibers").
+const FIBER = /^f(handle|perform):/;
+const isFiber = (fn: string) => FIBER.test(fn);
 // What crosses to a C host (L69b1): each shape's type in the program and
 // at the host.
 const HOST_C: Partial<Record<Shape["k"], { lab: string; host: string }>> = {
@@ -270,7 +274,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   funcs.forEach((f, i) => {
     const t = [...f.locals, f.result].map(why).find(Boolean);
     if (t) return refused.set(i, t);
-    const k = walk(f.body).find((e) => !PRINTED.has(e.k) || (e.k === "rt" && (isPerform(e.fn) ? !!hostWhy(e.fn) : !isStack(e.fn) && !RT_C.has(e.fn) && !ARRAY_FN.test(e.fn) && !TABLE_FN.test(e.fn))) || (e.k === "world" && !RT_C.has(`world.${e.op}`)));
+    const k = walk(f.body).find((e) => !PRINTED.has(e.k) || (e.k === "rt" && (isPerform(e.fn) ? !!hostWhy(e.fn) : !isStack(e.fn) && !isFiber(e.fn) && !RT_C.has(e.fn) && !ARRAY_FN.test(e.fn) && !TABLE_FN.test(e.fn))) || (e.k === "world" && !RT_C.has(`world.${e.op}`)));
     if (k) refused.set(i, k.k === "rt" ? hostWhy(k.fn) ?? `${k.fn} isn't in C's runtime` : k.k === "world" ? `the world's ${k.op} isn't in C's runtime` : `${k.k} isn't printed as C`);
   });
   const callees = (e: SExpr) => walk(e).flatMap((x) => (x.k === "call" || x.k === "closure" ? [x.fn] : []));
@@ -312,7 +316,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
       if (tb) collect(lowered.tables[Number(tb[2])]);
       // A runtime function that makes or takes a list of texts (split,
       // join all): its list type, though no function here names it.
-      if (e.k === "rt" && !a && !tb && !isPerform(e.fn) && !isStack(e.fn)) {
+      if (e.k === "rt" && !a && !tb && !isPerform(e.fn) && !isStack(e.fn) && !isFiber(e.fn)) {
         const r = runtime(e.fn);
         if (r.result === "list" || r.params.some(([, t]) => t === "list")) { const d = lowered.data.find((x) => x.key === (r.list ?? LIST_TEXT)); if (d) collect(d); }
       }
@@ -374,6 +378,17 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   const hostsUsed = new Map<string, number>(), hostTypes = new Map<string, LType>();
   // The effects a program handles itself on the handler stack, numbered.
   const effectNums = new Map<string, number>();
+  // Handlers on fibers (C44b): each effect's number, each handler's
+  // driver and the rest's code, and the globals values cross by (an
+  // operation's inputs, the value it's resumed with, the code's value).
+  const fiberEffects = new Map<string, number>(), fiberC: string[] = [], fiberGlobals = new Map<string, string>();
+  // An operation of some type (await's a) has a global for each C type.
+  const fiberGlobal = (name: string, t: LType) => {
+    const c = ty(t), n = `${name}_${c.replace(/[^A-Za-z0-9_]/g, "")}`;
+    fiberGlobals.set(n, c);
+    return n;
+  };
+  const fiberEffect = (e: string) => { let n = fiberEffects.get(e); if (n === undefined) fiberEffects.set(e, (n = fiberEffects.size)); return n; };
   const textLit = (v: string) => {
     const k = `t ${v}`;
     if (!statics.has(k)) {
@@ -565,6 +580,8 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     ...[...arrays.values()].flatMap((a) => arrayC(a)),
     ...[...tables.values()].flatMap((t) => tableC(t)),
     "",
+    ...[...fiberGlobals].map(([n, t]) => `static ${t} ${n};`),
+    ...fiberC,
     ...kept.map((i) => `${header(i)};`),
     ...[...lent.keys()].map((i) => `${header(i, true)};`),
     ...[...once].map((i) => `static ${ty(funcs[i].result)} lab_m${i}; static int lab_m${i}_has = 0;`),
@@ -783,6 +800,57 @@ int main(int argc, char **argv) {
       pre.push(`${d}${v} = ${call};`);
       return v;
     }
+    // A handler on a fiber, or a perform of its operation (C44b). The
+    // handler: its frame made and the code started on a fiber, then its
+    // driver, which goes into the fiber until the code performs (a case
+    // called, given the rest when it takes one) or finishes (its value,
+    // or the finish case's). A perform: its inputs in the operation's
+    // globals, out of the fiber, and the value it was resumed with.
+    function fiber(e: SExpr & { k: "rt" }, pre: string[], d: string, after: Set<number>): string {
+      const [kind, ...rest] = e.fn.split(":");
+      if (kind === "fperform") {
+        const [eff, op] = rest, n = fiberEffect(eff);
+        const xs = args(e.args, pre, d, after);
+        xs.forEach((x, j) => pre.push(`${d}${fiberGlobal(`lab__fa_${n}_${op}_${j}`, typeOf(e.args[j], f.locals))} = ${x};`));
+        pre.push(`${d}lab__fperform(${n}, ${op});`);
+        return stated(fiberGlobal(`lab__fy_${n}_${op}`, e.host!.t), e.host!.t, pre, d);
+      }
+      const [, eff, nowS, finS] = rest, n = fiberEffect(eff), now = nowS ? nowS.split(",").map(Number) : [];
+      const N = fiberC.length, H = `lab__fh_${N}`, T = e.host!.t;
+      const types = e.args.map((x) => typeOf(x, f.locals) as FType);
+      const [bt, ...cts] = types, fin = finS === "fin" ? cts.pop()! : null;
+      const fb = fiberGlobal(`lab__fb_${N}`, bt.result);
+      const call = (fnT: FType, c: string, xs: string[]) => `((${fname.get(fnT.key)})((lab_closure *)${c})->code)(${[c, ...xs].join(", ")})`;
+      const lines = [
+        `typedef struct { lab__frame f; lab_cell *b, *c[${cts.length}], *fin; } ${H};`,
+        `static void lab__fe_${N}(lab__frame *f) { ${H} *h = (${H} *)f; lab_cell *b = h->b; h->b = 0; ${fb} = ${call(bt, "b", [])}; }`,
+        `static ${ty(T)} lab__fd_${N}(${H} *h);`,
+      ];
+      const arms: string[] = [];
+      cts.forEach((ct, i) => {
+        const later = !now.includes(i), ins = later ? ct.params.slice(0, -1) : ct.params;
+        const xs = ins.map((p, j) => fiberGlobal(`lab__fa_${n}_${i}_${j}`, p));
+        if (!later) {
+          arms.push(`case ${i}: { lab_cell *c = h->c[${i}]; lab_dup(c); ${fiberGlobal(`lab__fy_${n}_${i}`, ct.result)} = ${call(ct, "c", xs)}; if (lab_st) return ${zero(T)}; lab__fresume(&h->f); continue; }`);
+          return;
+        }
+        const rt = ct.params[ct.params.length - 1] as FType;
+        lines.push(`static ${ty(rt.result)} lab__fr_${N}_${i}(lab_cell *self, ${ty(rt.params[0])} y) { ${H} *h = ((lab__frest *)self)->k; lab_drop(self); ${fiberGlobal(`lab__fy_${n}_${i}`, rt.params[0])} = y; lab__fresume(&h->f); return lab__fd_${N}(h); }`);
+        arms.push(`case ${i}: { lab__frest *r = lab_new(sizeof(lab__frest), 65535, 0); r->code = (void (*)(void))lab__fr_${N}_${i}; r->k = h; lab_cell *c = h->c[${i}]; lab_dup(c); return ${call(ct, "c", [...xs, "(lab_cell *)r"])}; }`);
+      });
+      const done = fin ? `lab_cell *fin = h->fin; free(h); return ${call(fin, "fin", [fb])};` : `free(h); return ${fb};`;
+      lines.push(
+        `static ${ty(T)} lab__fd_${N}(${H} *h) {`,
+        "  for (;;) switch (lab__fgo(&h->f)) {",
+        ...arms.map((a) => `    ${a}`),
+        `    default: { for (int k = 0; k < ${cts.length}; k++) lab_drop(h->c[k]); if (lab_st) { ${fin ? "lab_drop(h->fin); " : ""}free(h); return ${zero(T)}; } ${done} }`,
+        "  }",
+        "}",
+        `static ${H} *lab__fmk_${N}(${["lab_cell *b", ...cts.map((_, k) => `lab_cell *c${k}`), ...(fin ? ["lab_cell *fin"] : [])].join(", ")}) { ${H} *h = calloc(1, sizeof *h); if (!h) lab_oom(); h->b = b; ${cts.map((_, k) => `h->c[${k}] = c${k};`).join(" ")}${fin ? " h->fin = fin;" : ""} lab__fstart(&h->f, ${n}, lab__fe_${N}); return h; }`,
+      );
+      fiberC.push(lines.filter(Boolean).join("\n"));
+      return checked(`lab__fd_${N}(lab__fmk_${N}(${args(e.args, pre, d, after).join(", ")}))`, T, pre, d, after);
+    }
     // A call of something with one answer or none: if it has none, out.
     function checked(call: string, t: LType, pre: string[], d: string, after: Set<number>): string {
       const v = temp(t);
@@ -808,6 +876,7 @@ int main(int argc, char **argv) {
             const c = st[1] === "hpush" ? `lab_handlers_push(${n}, ${xs.length}, (lab_cell *[]){ ${xs.join(", ")} })` : st[1] === "hpop" ? `lab_handlers_pop(${n})` : `lab_handlers_case(${n}, ${st[3]})`;
             return stated(c, e.host!.t, pre, d);
           }
+          if (isFiber(e.fn)) { rts.add("fibers"); return fiber(e as SExpr & { k: "rt" }, pre, d, after); }
           if (isPerform(e.fn)) {
             const h = hostOf(e.fn)!;
             let n = hostsUsed.get(h.op);
@@ -1226,7 +1295,7 @@ int main(int argc, char **argv) {
       case "if": case "budget": case "attempt": case "handle": case "released": return e.t;
       case "int": return lowered.int32 ? "int32" : "int";
       case "text": return "text";
-      case "rt": return isPerform(e.fn) || isStack(e.fn) ? e.host!.t : rtType(e.fn);
+      case "rt": return isPerform(e.fn) || isStack(e.fn) || isFiber(e.fn) ? e.host!.t : rtType(e.fn);
       case "world": return e.t;
       case "case": return e.result;
       case "closure": return shapes[e.shape].t;
@@ -1819,7 +1888,7 @@ function readFirst(f: SFunc, funcs: SFunc[]): SExpr {
         if (!["make", "call", "new", "rt", "op", "get", "local", "num", "int", "text", "bool"].includes(n.k)) { pure = false; return; }
         if (n.k === "call" && n.args.some((a) => a.k === "local" && a.i === x) && n.args.every((a) => a.k === "local" || !kids(a).length)) { first.push(n); return; }
         for (const k of kids(n)) order(k);
-        if (n.k === "call" || n.k === "apply" || n.k === "world" || n.k === "fail" || (n.k === "rt" && (isPerform(n.fn) || isStack(n.fn) || runtime(n.fn).partial))) pure = false;
+        if (n.k === "call" || n.k === "apply" || n.k === "world" || n.k === "fail" || (n.k === "rt" && (isPerform(n.fn) || isStack(n.fn) || isFiber(n.fn) || runtime(n.fn).partial))) pure = false;
       };
       order(t);
       const ls: { i: number; value: SExpr }[] = [];
