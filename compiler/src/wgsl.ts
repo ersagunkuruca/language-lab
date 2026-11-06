@@ -450,7 +450,10 @@ export function emitWgsl(lowered: CoreIR, opts: { frame?: number; frameCount?: n
       });
       const name = ident(r.name, `_${structs.size}`);
       structs.set(r.key, { name, fields });
-      structText.push(`// ${r.name}\nstruct ${name} {\n${fields.map((n, j) => `  ${n}: ${ts[j]},`).join("\n")}\n}`);
+      // A record of no parts (all known to be 0, L43) holds one unread u32:
+      // WGSL has no empty struct, and `${name}()` is then its zero value.
+      const lines = fields.length ? fields.map((n, j) => `  ${n}: ${ts[j]},`) : ["  none: u32,"];
+      structText.push(`// ${r.name}\nstruct ${name} {\n${lines.join("\n")}\n}`);
     }
     return structs.get(r.key)!.name;
   };

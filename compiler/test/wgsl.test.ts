@@ -6,6 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitWgsl } from "../src/wgsl.ts";
+import { zeroParts } from "../src/zero-parts.ts";
 import { examples, load } from "../src/program.ts";
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -30,6 +31,14 @@ test("calculus: the same definitions the WASM printer takes, as f32 functions", 
   // Names are WGSL identifiers: cubic′ is cubic_5.
   for (const f of s.funcs) assert.match(f.wgsl, /^[A-Za-z][A-Za-z0-9_]*$/);
   assert.match(why(s.refused, p.named("sinc")), /Choice/);
+});
+
+test("mandelbrot: a record of no parts (z = 0, both parts known 0) is a struct WGSL takes", () => {
+  const p = load("mandelbrot"), colour = p.named("colour");
+  const ir = lowerScalar(p.code, p.info, p.pres.names, [colour], { records: true, shader: true });
+  const s = emitWgsl(zeroParts(ir, ir.funcs.flatMap((g, i) => (g.def === colour && !g.inner ? [i] : []))).ir, { frame: 2 });
+  for (const w of [s.wgsl, s.framed!.wgsl]) assert.doesNotMatch(w, /struct \w+ \{\s*\}/);
+  assert.match(s.wgsl, /struct \w+ \{\n {2}none: u32,\n\}/);
 });
 
 test("examples/shaders: red, green and blue, and everything they call, go to the GPU", () => {
