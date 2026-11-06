@@ -87,6 +87,7 @@ test("examples/raymarch: the ray marcher goes to the GPU whole, normals and all"
   assert.equal(at.length, framed.count);
   assert.ok(at.every(Number.isFinite));
   assert.ok(at.some((v) => Math.abs(v - 0.15 * Math.sin(0.7 * 1.5)) < 1e-12), "0.15 · sin(0.7 · t) is one of them");
+  assert.deepEqual((new Function("time", framed.js) as (t: number) => number[])(1.5), at, "js is values' body");
   assert.equal(emitWgsl(lowered).wgsl, s.wgsl, "without frame, the shader as it was");
   assert.match(s.wgsl, /fn smaller_\d+\(p0: f32, p1: f32\) -> f32 \{\n {2}return min\(p0, p1\);/);
   // And the normal is the gradient: close to central differences, away
