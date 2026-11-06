@@ -96,8 +96,10 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
     // converted where a list crosses (rep-split.ts, C93 s3b). Only where
     // the trees could be had, so a program kept as written stays so; and
     // where they couldn't for the whole (break's list of lists, which no
-    // boundary turns into arrays), the parts still can (C188).
-    if (tree.of === LIST && tree.name === "tree of List" && options.hostMaps && options.split !== false && !chosen.length) {
+    // boundary turns into arrays), the parts still can (C188). On every
+    // target, host maps or not: a program using Bytes, which holds a
+    // List, has its table as an array in C and WebAssembly too (C192).
+    if (tree.of === LIST && tree.name === "tree of List" && options.split !== false && !chosen.length) {
       const s = splitByGroups(code, info, names, main, defs);
       if (s) return s;
     }

@@ -196,3 +196,37 @@ test("an array of bytes is kept a byte a slot, and stays the same array when cha
   assert.deepEqual(a.fields, [20, ...xs]);
   assert.deepEqual(plainBytes({ tag: "x", fields: [STD_IMPL[ARRAY_OPS.items](a)] }), Uint8Array.from(xs));
 });
+
+// C192: a table read by position in a program that also uses Bytes (a
+// CRC-32 of texts). Bytes holds a List, so the whole program can't have
+// arrays (listBoundary); its parts that want them do, without host maps
+// too (C, WebAssembly, the editor), and print what the program as written does.
+test("a program using Bytes still gets its table as an array, without host maps", () => {
+  const k = new Lang(LIBRARY.code);
+  const step = k.def("step");
+  k.define(step, k.fn(["c"], (c) => k.call(INT_OPS.bitXor, k.call(INT_OPS.shiftDown, c, k.int(1)), k.call(INT_OPS.bitAnd, k.int(0xedb88320), k.call(INT_OPS.neg, k.call(INT_OPS.bitAnd, c, k.int(1)))))));
+  const table = k.def("table");
+  k.define(table, k.call(L("map"), k.call(INT_OPS.range, k.int(256)), k.fn(["byte"], (b) => k.fold(k.call(INT_OPS.range, k.int(8)), [
+    { variant: NIL, names: [], body: () => b },
+    { variant: CONS, names: ["i", "rest"], results: [null, "c"], body: (_: Id[], [, c]: (Id | null)[]) => k.call(step, c!) },
+  ]))));
+  const go = k.def("crc from");
+  k.define(go, k.fn(["c", "bytes"], (c, bytes) => k.match(bytes, [
+    { variant: NIL, names: [], body: () => c },
+    { variant: CONS, names: ["byte", "rest"], body: ([b, rest]) => k.call(go,
+      k.call(INT_OPS.bitXor, k.call(L("item at"), k.x(table), k.call(INT_OPS.bitAnd, k.call(INT_OPS.bitXor, c, b), k.int(255)), k.int(0)), k.call(INT_OPS.shiftDown, c, k.int(8))), rest) },
+  ])));
+  const crc = k.def("crc");
+  k.define(crc, k.fn(["text"], (t) => k.call(INT_OPS.bitXor, k.call(go, k.int(0xffffffff), k.call(L("byte items"), k.call(L("utf8 of"), t))), k.int(0xffffffff))));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.seq(...["The quick brown fox jumps over the lazy dog", "123456789"].map((t) => k.call(S.print, k.call(SHOW_ANY, k.call(crc, k.lit(t))))))));
+  const code = base(k.code), names = baseNames(k.names), own = [step, table, go, crc, main];
+  const want = printed(code, names, main);
+  assert.deepEqual(want, ["1095738169", "3421780262"]);
+  const info = infer(code, names, undefined, checkOptions);
+  for (const options of [{}, { tables: true }]) {
+    const r = withLibraryRepresentations(code, info, names, main, own, [], options);
+    assert.match(r.chosen.join(), /List as array of List from/);
+    assert.deepEqual(printed(r.code, r.names, main, r.insiders), want);
+  }
+});
