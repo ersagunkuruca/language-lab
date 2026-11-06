@@ -75,6 +75,19 @@ test("examples/raymarch: the ray marcher goes to the GPU whole, normals and all"
   assert.ok((s.wgsl.match(/sin\(/g) ?? []).length < 12);
   // place of reads 3 of a motor's 16 parts: none is built (C175).
   assert.doesNotMatch(s.wgsl, /Pga_\d+\(/);
+  // What depends on the time alone is worked out once a frame (C175):
+  // the framed shader has no sine or cosine left per pixel, and reads them
+  // from the frame's uniform, which `values` fills for a time.
+  const framed = emitWgsl(lowered, { frame: 2 }).framed!;
+  assert.ok(framed.count > 0);
+  assert.doesNotMatch(framed.wgsl, /\b(sin|cos)\(/);
+  assert.match(framed.wgsl, /@group\(1\) @binding\(0\) var<uniform> lab_frame: LabFrame;/);
+  assert.match(framed.wgsl, /struct LabFrame \{ v: array<vec4f, \d+> \}/);
+  const at = framed.values(1.5);
+  assert.equal(at.length, framed.count);
+  assert.ok(at.every(Number.isFinite));
+  assert.ok(at.some((v) => Math.abs(v - 0.15 * Math.sin(0.7 * 1.5)) < 1e-12), "0.15 · sin(0.7 · t) is one of them");
+  assert.equal(emitWgsl(lowered).wgsl, s.wgsl, "without frame, the shader as it was");
   assert.match(s.wgsl, /fn smaller_\d+\(p0: f32, p1: f32\) -> f32 \{\n {2}return min\(p0, p1\);/);
   // And the normal is the gradient: close to central differences, away
   // from the blend's seams, both from the code the shader gets and from
