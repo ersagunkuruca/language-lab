@@ -192,7 +192,7 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L72 | JSON as one relation: `json spelled` gives every spelling, `json read` is it run backwards (a to f done, DONE.md). Example: `json printed` is `json spelled`'s first on every target (e1d); done when it is. The core IR runs a search's rest on the heap past a depth now (C190), so first(json spelled) of 3000 records prints compiled. Beyond it, rows if they earn them: json read's message saying where it stopped (f3), `json printed indented` as a variant (e4) | Ersagun 2026-10-24 | P3 | L | low priority |
+| L72 | JSON as one relation: `json spelled` gives every spelling, `json read` is it run backwards (a to f done, DONE.md). Example: `json printed` is `json spelled`'s first on every target (e1d); done when it is. The core IR runs a search's rest on the heap past a depth now (C190), so first(json spelled) of 3000 records prints compiled, and where each choice's first way can't fail it is plain code (first-arms.ts, L72e1d2). Beyond it, rows if they earn them: json read's message saying where it stopped (f3), `json printed indented` as a variant (e4) | Ersagun 2026-10-24 | P3 | L | low priority |
 
 ### Physics and planning ([PHYSICS-AND-PLANNING.md](docs/design/physics/PHYSICS-AND-PLANNING.md), later goals)
 
