@@ -2898,6 +2898,8 @@ Each was worked around, and the workaround is in the driver or the seed.
   publish compiler/gaps/break shifted apart` works from the command line
   (`Vec`, `shifted` and `apart` at version 1), not through the MCP. Row
   I186.
+  *Fixed (I186):* the MCP has publish, fetch, upgrade and downgrade, which
+  run lab's own command on the open program and open it again after.
 
 ### Proposed order
 
