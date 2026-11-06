@@ -146,3 +146,91 @@ test("types with fields and cases, an interface with ports, a way at a cost, and
   const hole = /□#(\w+)/.exec(text("replace", { at: "pocket toucher", find: "by its ways", text: "□" }))![1];
   assert.match(text("replace", { at: hole, text: "by its ways" }), /^\+ .*‹first touch›#\w+: ‹by its ways›$/m);
 });
+
+test("a match's cases are written through the MCP: a split by a type named, a case's field by its name (I184)", async () => {
+  const { mkdirSync, mkdtempSync, writeFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = join(mkdtempSync(join(tmpdir(), "ters-mcp-")), "events");
+  mkdirSync(dir);
+  writeFileSync(join(dir, "code.json"), '{"nodes":{},"defs":[]}');
+  text("open", { path: dir });
+  text("define", { name: "Event", kind: "type", first: "meets(time: Float64, first: Int, second: Int)" });
+  text("add_case", { at: "Event", case: "drops(time: Float64, ball: Int)" });
+  text("add_case", { at: "Event", case: "never" });
+  const hole = /□#(\w+)/.exec(text("define", { name: "when", kind: "function", params: ["e"] }))![1];
+  // Nothing fixes e's type yet: the split is told it.
+  assert.equal(call("split", { at: hole, on: "e" }).text, "that variable's type has no cases");
+  const holes = [...text("split", { at: hole, on: "e", as: "Event" }).matchAll(/→ □#(\w+)/g)].map((m) => m[1]);
+  assert.equal(holes.length, 3);
+  // Each arm's `time` is its own.
+  text("replace", { at: holes[0], text: "time" });
+  text("replace", { at: holes[1], text: "time" });
+  text("replace", { at: holes[2], text: "1000000" });
+  assert.equal(text("eval", { text: "when(drops(2.5, 3))" }), "= 2.5 : Float64");
+  assert.equal(text("eval", { text: "when(meets(1.5, 1, 2))" }), "= 1.5 : Float64");
+});
+
+test("a saved folder opens as lab reads it: older shapes brought up to today's (I185)", () => {
+  // crew was saved when a pair was std.pair; lab check finds nothing wrong.
+  text("open", { path: "../compiler/gaps/crew" });
+  assert.equal(text("check"), "ok");
+});
+
+test("a relation's solve is written as the view prints it, its ports by name (L231)", async () => {
+  const { cpSync, mkdtempSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = join(mkdtempSync(join(tmpdir(), "ters-mcp-")), "break");
+  cpSync("../compiler/gaps/break", dir, { recursive: true });
+  text("open", { path: dir });
+  // break's touch time solves gap at for t; read the other way it is first touch.
+  text("replace", { at: "touch time", find: "‹gap at›(obstacle = o, ball = b, gap = 0)", text: "first touch(o, b, 0)" });
+  assert.match(text("replace", { at: "touch time", find: "‹first touch›(o, b, 0)", text: "gap at(obstacle = o, ball = b, gap = 0)" }), /^\+ .*first\(‹gap at›\(obstacle = o, ball = b, gap = 0\), else never\)$/m);
+  assert.equal(call("replace", { at: "touch time", find: "‹gap at›(obstacle = o, ball = b, gap = 0)", text: "gap at(thing = o, ball = b, gap = 0)" }).text, "gap at has no port thing: its ports are obstacle, ball, t, gap");
+  assert.equal(text("check"), "ok\n= `cushion rests` is the same as `pocket rests` (yours)\n= `pocket rests` is the same as `cushion rests` (yours)");
+});
+
+test("eval runs what may not end, within its steps, and says a type as the view does (I188)", () => {
+  text("open", { path: "../compiler/gaps/break" });
+  assert.equal(text("eval", { text: "played(break table(6, 0.01)).events" }), "= 47 : Int");
+  assert.equal(text("eval", { text: "[1, 2]" }), "= [1, 2] : List a where a is a Number");
+});
+
+test("sharing through the MCP: publish, fetch, upgrade and downgrade, as lab does them (I186)", async () => {
+  const { cpSync, existsSync, mkdirSync, mkdtempSync, writeFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const root = mkdtempSync(join(tmpdir(), "ters-mcp-"));
+  // The signing key goes in a home of the test's own.
+  const home = process.env.HOME;
+  process.env.HOME = root;
+  try {
+    cpSync("../compiler/gaps/break", join(root, "break"), { recursive: true });
+    text("open", { path: join(root, "break") });
+    assert.equal(text("publish", { names: ["shifted", "apart"] }).split("\n").map((l) => l.replace(/, @\w+$/, "")).join("\n"), "Vec: version 1\nshifted: version 1\napart: version 1");
+    assert.ok(existsSync(join(root, "break.module.json")) && existsSync(join(root, "break.module.log.json")));
+    assert.equal(text("publish", { names: ["apart"] }), "nothing changed since the last publish");
+    mkdirSync(join(root, "user"));
+    writeFileSync(join(root, "user", "code.json"), '{"nodes":{},"defs":[]}');
+    text("open", { path: join(root, "user") });
+    assert.match(text("fetch", { from: join(root, "break.module.json") }), /^fetched break: 3 definitions checked by hash, Vec at version 1, shifted at version 1, apart at version 1, its log signed by its author/);
+    assert.equal(text("upgrade"), "nothing to upgrade");
+    assert.equal(call("downgrade", { name: "apart" }).text, "user uses nothing named apart that its store has versions of");
+  } finally { process.env.HOME = home; }
+});
+
+test("a field two types have, on a value nothing types yet, is refused until `as` says whose (I187)", async () => {
+  const { mkdirSync, mkdtempSync, writeFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = join(mkdtempSync(join(tmpdir(), "ters-mcp-")), "pockets");
+  mkdirSync(dir);
+  writeFileSync(join(dir, "code.json"), '{"nodes":{},"defs":[]}');
+  text("open", { path: dir });
+  text("define", { name: "Ball", kind: "type", first: "ball(place: Float64, speed: Float64)" });
+  text("define", { name: "Pocket", kind: "type", first: "pocket(place: Float64, size: Float64)" });
+  text("define", { name: "pocket gap", kind: "function", params: ["p", "x"] });
+  assert.match(call("replace", { at: "pocket gap", find: "□", text: "p.place - x" }).text, /reads as a Ball or as a Pocket/);
+  assert.match(text("replace", { at: "pocket gap", find: "□", text: "p.place - x", as: "Pocket" }), /\(Pocket, Float64\) -> Float64/);
+});

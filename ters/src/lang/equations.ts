@@ -216,6 +216,9 @@ export const isPredicate = (code: Code, fn: Id) => { try { return relationFor(co
 export function portLabel(code: Code, names: Names, fn: Id | null, key: string): string {
   if (fn && names[`${fn}#${key}`] !== undefined) return names[`${fn}#${key}`];
   if (key === "out") return "=";
+  // An interface's field with results names its ports (POLAR.md, L231).
+  const field = fn ? code.nodes[fn] : undefined;
+  if (field?.kind === "field" && field.ports && /^\d+$/.test(key) && field.ports[+key] !== undefined) return field.ports[+key];
   // A builtin's ports are numbered; a function's are its parameters' ids,
   // which can be all digits too, so a key that names a node isn't a number.
   if (/^\d+$/.test(key) && !code.nodes[key]) {

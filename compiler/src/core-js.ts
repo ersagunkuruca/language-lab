@@ -19,6 +19,7 @@
 // the evaluator's (C137c2), Random seeded is random.ts's generator, and
 // the world is the evaluator's Runtime (C137c3, runCoreMain).
 
+import { shareCalls } from "./share-calls.ts";
 import { envSet, zeroParts } from "./zero-parts.ts";
 import { ARRAY_OPS, FALSE, TRUE } from "../../ters/src/lang/std.ts";
 import { toList, type Runtime } from "../../ters/src/lang/run.ts";
@@ -28,7 +29,8 @@ import { useDirections } from "../../ters/src/lang/directions.ts";
 import { interfaceOps, waysIn } from "../../ters/src/lang/ways.ts";
 import { withInverses } from "./inverses.ts";
 import { hoistInvariants } from "./hoist.ts";
-import { dependencies, ownerOfTypeParts, type Code, type Id, type NodeOf } from "../../ters/src/model.ts";
+import { dependencies, ownerOfTypeParts, type Code, type Id, type NodeOf, type Use } from "../../ters/src/model.ts";
+import { bindsOf } from "./uses.ts";
 import { effectOfOperation, hostOp, ownOperations } from "../../ters/src/lang/hosts.ts";
 import * as I from "../../ters/src/lang/int.ts";
 import { ARRAY_RT, kids, listSteps, RT, isData, isRecord, lowerScalar, reachedWithShows, type CoreIR, type LType, type Op, type SExpr, type SFunc, type TType } from "./scalar.ts";
@@ -39,7 +41,7 @@ import { Aborted, FAIL, OUT, RUNTIME, Stopped, Unsupported, coreRuntime, runCore
 // tools that print and run in one.
 // The solver too, for the programs run here that solve (core-solve.ts).
 import { PLAN_NAMES, modePlan, noAnswer, solverPlan, writtenOut } from "./core-solve.ts";
-// A solve (`solve:<id>` or `solveAll:<id>`) as its printed plan, or null
+// A solve (`solve:<id>`, `solveOne:<id>` or `solveAll:<id>`) as its printed plan, or null
 // where the evaluator's solver runs it: one the equations' solver plans
 // (C167a), or a mode plan whose forward calls are builtins and whose
 // literals are plain (C167b). Worked out once per program (emitCoreJs is
@@ -47,14 +49,16 @@ import { PLAN_NAMES, modePlan, noAnswer, solverPlan, writtenOut } from "./core-s
 const plans = new WeakMap<Code, Map<string, string | null>>();
 const plain = (v: unknown) => typeof v === "string" || typeof v === "boolean" || (typeof v === "number" && Number.isFinite(v) && !Object.is(v, -0));
 const printSolve = (code: Code, fn: string): string | null => {
-  const m = /^(solve|solveAll):(.*)$/.exec(fn);
+  const m = /^(solve|solveOne|solveAll):(.*)$/.exec(fn);
   if (!m) return null;
-  const [, way, id] = m, rest = `${way === "solveAll"}, ${JSON.stringify(noAnswer(code, id))}`;
+  const [, way, id] = m, rest = `${way === "solveAll" ? "true" : way === "solveOne" ? '"one"' : "false"}, ${JSON.stringify(noAnswer(code, id))}`;
   const sp = solverPlan(code, id);
   if (sp) return `R.planned(({ ${PLAN_NAMES.join(", ")} }) => {\n${sp}\n}, ${rest})`;
   const mp = modePlan(code, id);
   if (!mp || !mp.forwards.every((f) => code.nodes[f]?.kind === "builtin") || !mp.consts.every(plain)) return null;
-  return `R.moded(($no, $eq, $int, F, K) => {\n${mp.code}\nreturn solve$;\n}, ${JSON.stringify(mp.forwards)}, ${JSON.stringify(mp.consts)}, ${rest})`;
+  // `one` (C184): one answer's binds (one bind as itself, `wrap`), or $no.
+  const wrap = Object.keys(bindsOf(code.nodes[id] as Use)).length === 1;
+  return `R.moded(($no, $eq, $int, F, K) => {\n${mp.code}\nif (typeof solve$$one === "function") { solve$.one = solve$$one; solve$.wrap = ${wrap}; }\nreturn solve$;\n}, ${JSON.stringify(mp.forwards)}, ${JSON.stringify(mp.consts)}, ${rest})`;
 };
 const planOf = (code: Code, fn: string): string | null => {
   let m = plans.get(code);
@@ -90,8 +94,15 @@ const MATH: Partial<Record<Op, string>> = { sqrt: "sqrt", abs: "abs", floor: "fl
 // R.worlds in that order. Functions are f0, f1, … with no comment naming
 // their definitions (C170a): a stop names its definition through
 // CoreIR.stops (C143b), and the rest of what a tool needs goes in C143's map.
+// What in printed code may throw no answer (R.FAIL) rather than give it:
+// anything of the runtime's but its stop, step and mod, the program's
+// runtime and world functions, a try, a throw, a yield.
+const THROWS = /\bR\.(?!FAIL\b|stop\(|step\(|mod\()|\brt\d+\(|\bw\d+\(|\btry\b|\bthrow\b|\byield\b/;
+
 export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: string[] } {
   const names = ir.funcs.map((_, i) => `f${i}`);
+  // The partial functions, whose bodies may throw no answer (an attempt's try).
+  const partialNames = new Set(names.filter((_, i) => ir.funcs[i].partial));
   // A closure carries its lambda's and captures' ids (C137c13) only for a
   // solver (or set and path) to look inside it: in a program with none, it doesn't
   // (C169), and no Map is made per closure.
@@ -241,6 +252,16 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
     function tried(e: Extract<SExpr, { k: "attempt" }>, pre: string[], d: string): string {
       const ok = temp(), label = temp(), [save, back] = keep();
       const body = within(`{ ${ok} = false; break ${label}; }`, () => block(e.body, { set: local(e.res), fails: true }, d + "  "));
+      // A body whose every no answer leaves by its label, with nothing in
+      // it that throws one (a partial closure's R.ck, the runtime's or the
+      // world's functions, a nested try, a wait, a partial function), needs no try: `/` and
+      // `sqrt` say no answer as a value (C189, GAPS.md round 12 B2).
+      // A partial function's own body may throw it too (its R.ck), so a
+      // call of one keeps the try.
+      if (!e.spent && !e.resumes && !body.some((l) => THROWS.test(l) || [...l.matchAll(/\b([A-Za-z_$][\w$]*)\(/g)].some((m) => partialNames.has(m[1])))) {
+        pre.push(`${d}let ${ok} = true;`, `${d}${label}: {`, ...body, `${d}  if (${local(e.res)} === R.FAIL) ${ok} = false;`, `${d}}`);
+        return ok;
+      }
       pre.push(`${d}${save}let ${ok} = true;`, `${d}${label}: try {`, ...body, `${d}  if (${local(e.res)} === R.FAIL) ${ok} = false;`, `${d}} catch (x) {`, `${d}  if (x !== R.FAIL${e.spent ? " && x !== R.OUT" : ""}) throw x;`, `${d}  ${back}${ok} = false;`, `${d}}`);
       return ok;
     }
@@ -547,6 +568,8 @@ export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roo
   // Parts always 0 (a vector's bivector parts) dropped, with a copy of a
   // function for each set of parts its callers give (zero-parts.ts, L43).
   if (!envSet("NO_ZP")) ir = zeroParts(ir, ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : []))).ir;
+  // A pure call made twice with the same inputs, made once (C189).
+  if (!envSet("NO_SHARE")) shareCalls(ir);
   // Reads that wait on the places their values are used at (C162).
   trackReads(ir);
   return ir;
@@ -824,7 +847,7 @@ export function codeLines(printed: string, written: string): Record<string, [num
 const solving = (js: string) => /R\.rt\("(solve|exists"|derive:)/.test(js);
 // The runtime calls that look inside a function given them, by name: the
 // evaluator's solver, and `set` and `path` taking a field's function.
-const LOOKS_INSIDE = /^(solve:|solveAll:|exists$|derive:|host:builtin\.set\b|host:builtin\.cells\.path\b)/;
+const LOOKS_INSIDE = /^(solve:|solveOne:|solveAll:|exists$|derive:|host:builtin\.set\b|host:builtin\.cells\.path\b)/;
 // Whether the program runs the evaluator's solver (a solve, `for some`, a
 // derivative): far slower than compile.ts's plans for now, so a sound
 // isn't played this way (C137d7).
@@ -836,7 +859,7 @@ export const usesSolver = (ir: CoreIR): boolean => solving(emitCoreJs(ir).js);
 // 34 blocks a second of the 375 it needs), so it stays on compile.ts
 // (C137d7, C137d9).
 export const solvesSlowly = (ir: CoreIR): boolean =>
-  [...emitCoreJs(ir).js.matchAll(/R\.rt\("(?:(solve|solveAll):([^"]*)"|exists"|derive:)/g)].some((m) => !m[1] || !writtenOut(ir.code, JSON.parse(`"${m[2]}"`)));
+  [...emitCoreJs(ir).js.matchAll(/R\.rt\("(?:(solve|solveOne|solveAll):([^"]*)"|exists"|derive:)/g)].some((m) => !m[1] || !writtenOut(ir.code, JSON.parse(`"${m[2]}"`)));
 const codeFor = (ir: CoreIR, js: string) => (solving(js) ? `JSON.parse(${JSON.stringify(JSON.stringify(solverCode(ir, js)))})` : "undefined");
 // The nodes the evaluator's solver reads (C167c): those a solve's use
 // reaches, through any id a node holds, and those of the lambdas a printed
@@ -899,7 +922,7 @@ function lambdasLookedIn(ir: CoreIR): string[] | null {
 }
 export function solverCode(ir: CoreIR, js: string): Code {
   const nodes = ir.code.nodes as Record<string, unknown>;
-  const roots = [...js.matchAll(/R\.rt\("(?:solve|solveAll|derive):([^"]*)"/g)].map((m) => JSON.parse(`"${m[1]}"`) as string);
+  const roots = [...js.matchAll(/R\.rt\("(?:solve|solveOne|solveAll|derive):([^"]*)"/g)].map((m) => JSON.parse(`"${m[1]}"`) as string);
   const lambdas = lambdasLookedIn(ir);
   roots.push(...(lambdas ?? [...js.matchAll(/\\?"lambda\\?":\\?"([^"\\]*)/g)].map((m) => JSON.parse(`"${m[1]}"`) as string)));
   const seen = new Set<string>(roots.filter((r) => r in nodes)), todo = [...seen];

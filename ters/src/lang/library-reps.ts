@@ -96,8 +96,10 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
     // converted where a list crosses (rep-split.ts, C93 s3b). Only where
     // the trees could be had, so a program kept as written stays so; and
     // where they couldn't for the whole (break's list of lists, which no
-    // boundary turns into arrays), the parts still can (C188).
-    if (tree.of === LIST && tree.name === "tree of List" && options.hostMaps && options.split !== false && !chosen.length) {
+    // boundary turns into arrays), the parts still can (C188). On every
+    // target, host maps or not: a program using Bytes, which holds a
+    // List, has its table as an array in C and WebAssembly too (C192).
+    if (tree.of === LIST && tree.name === "tree of List" && options.split !== false && !chosen.length) {
       const s = splitByGroups(code, info, names, main, defs);
       if (s) return s;
     }
@@ -220,7 +222,11 @@ function splitByGroups(code: Code, info: Info, names: Names, main: Id, defs: Id[
   // Unless the group itself loops over its lists by position (break's
   // `soonest from`, `item at` once a turn: n² on a cons list a call), where
   // converting once a call, n, is the cheaper (GAPS.md round 12 B1).
-  const byPosition = (g: (typeof groups)[number]) => g.defs.some((d) => loops(d) && uses(code, d, [array]).some((j) => LIBRARY.names[j] === "item at"));
+  // Its own body reads by position, not a definition it calls: machine's
+  // `items of words` loops over its words and leaves `item at` to `word
+  // at`, read a few times a line, so converting there costs more (10%).
+  const itemAt = (d: Id) => subtree(code, d).some((x) => { const n = code.nodes[x]; return n.kind === "ref" && LIBRARY.names[n.target] === "item at" && !!LIBRARY.code.nodes[n.target]; });
+  const byPosition = (g: (typeof groups)[number]) => g.defs.some((d) => loops(d) && itemAt(d));
   roots.splice(0, roots.length, ...roots.filter((r) => byPosition(groups.find((g) => g.root === r)!) || !defs.some((d) => d !== r && calls.get(d)?.has(r) && loops(d))));
   if (!roots.length) return null;
   let s = splitLists(code, info, names, defs, main, roots, array);

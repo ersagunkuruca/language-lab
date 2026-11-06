@@ -55,7 +55,9 @@
 // The text follows the WGSL spec, https://www.w3.org/TR/WGSL/.
 
 import type { Id } from "../../ters/src/model.ts";
-import { isArray, isRecord, noData, unchecked, type LType, type CoreIR, type Op, type RType, type SExpr, type SFunc, type DType, type FType, type WType, type AType, type TType } from "./scalar.ts";
+import { shareCalls } from "./share-calls.ts";
+import { recordParts } from "./record-parts.ts";
+import { isArray, isRecord, kids as allKids, mapKids, noData, OPS, tidied, unchecked, type LType, type CoreIR, type Op, type RType, type SExpr, type SFunc, type DType, type FType, type WType, type AType, type TType } from "./scalar.ts";
 
 // A shader has no data with several cases (`data` in scalar.ts is for WebAssembly).
 type GType = Exclude<LType, DType | FType | WType | AType | TType>;
@@ -64,7 +66,12 @@ export interface ShaderFunc { def: Id; name: string; wgsl: string; params: GType
 // matrices: the functions (indices in lowered.funcs) that print a linear
 // map as a matrix (C30c); its sums are in another order, so they are close
 // to Float32's, not exact.
-export interface Shader { wgsl: string; funcs: ShaderFunc[]; refused: Map<Id, string>; structs: Map<string, { name: string; fields: string[] }>; matrices: Set<number> }
+// framed: the same shader with what depends on the time alone worked out
+// once a frame (C175): `wgsl` reads value k as lab_frame.v[k / 4] (group
+// 1, binding 0, a uniform of `count` f32s in vec4fs), which `values` gives
+// for a time.
+export interface Framed { wgsl: string; count: number; values: (time: number) => number[] }
+export interface Shader { wgsl: string; funcs: ShaderFunc[]; refused: Map<Id, string>; structs: Map<string, { name: string; fields: string[] }>; matrices: Set<number>; framed?: Framed }
 const INFIX: Partial<Record<Op, string>> = {
   add: "+", sub: "-", mul: "*", div: "/", less: "<", equal: "==", beq: "==", and: "&&", or: "||", iless: "<", ieq: "==",
 };
@@ -197,11 +204,93 @@ function unrounded(e: SExpr): SExpr {
   }
 }
 
-export function emitWgsl(lowered: CoreIR): Shader {
+// A shader's functions tidied (C175), in place; no bit of any answer
+// changes. A record built to be read in parts is built in the parts read
+// (record-parts.ts); then arithmetic made twice is made once (a gradient's
+// per-axis copies each work out the same time-only values), a let of a
+// let's local is that local (tidied), and sharing runs again, since two
+// copies of a gradient's axis read copies of the same locals until then.
+export function shaderTidied(ir: CoreIR): CoreIR {
+  let tidy = recordParts(ir) > 0;
+  for (let round = 0; round < 4; round++) {
+    if (shareCalls(ir, { ops: true, calls: false })) tidy = true;
+    else if (round) break;
+    if (tidy) ir.funcs.forEach((f, i) => { f.body = tidied(f, i).body; });
+    tidy = false;
+  }
+  return ir;
+}
+
+// `frame`: the place of the time among the inputs of the functions
+// nothing calls (a picture's colour of x, y and time): `framed` too.
+// What depends on the time alone (C175): the time is input `at` of the
+// functions nothing calls, and an input of another function is the time
+// where every call gives it the caller's. Each largest piece of arithmetic
+// on Float64s over the time and numbers with a sine or the like in it
+// (sin(0.7 · t), a motor turning with the time) becomes value k of the
+// frame, `frame:k`; `values` works them out from the time, as the GPU gets
+// it (an f32). Null when there is none.
+const FRAME_OPS: Partial<Record<Op, string>> = { add: "+", sub: "-", mul: "*", div: "/" };
+const FRAME_FNS: Partial<Record<Op, string>> = { neg: "-", sqrt: "Math.sqrt", abs: "Math.abs", floor: "Math.floor", sin: "Math.sin", cos: "Math.cos", tan: "Math.tan", exp: "Math.exp", log: "Math.log", pow: "Math.pow", atan2: "Math.atan2", float32: "Math.fround" };
+const FRAME_COSTLY = new Set<Op>(["sqrt", "sin", "cos", "tan", "exp", "log", "pow", "atan2", "div"]);
+function frameValues(lowered: CoreIR, at: number): { ir: CoreIR; count: number; values: (time: number) => number[] } | null {
+  const funcs = lowered.funcs.map((f) => ({ ...f, locals: [...f.locals], body: unrounded(unchecked(f.body)) }));
+  const ir = shaderTidied({ ...lowered, funcs });
+  const sites: [number, Extract<SExpr, { k: "call" }>][] = [];
+  const walk = (i: number, e: SExpr) => { if (e.k === "call") sites.push([i, e]); allKids(e).forEach((k) => walk(i, k)); };
+  funcs.forEach((f, i) => walk(i, f.body));
+  const called = new Set(sites.filter(([i, c]) => i !== c.fn).map(([, c]) => c.fn));
+  // Each function's inputs that are the time.
+  const time = funcs.map((f, i) => new Set(called.has(i) ? f.params.map((_, j) => j) : f.params[at] === "f64" ? [at] : []));
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const [i, c] of sites) for (const j of [...time[c.fn]]) {
+      const a = c.args[j];
+      if (!(a.k === "local" && a.i < funcs[i].params.length && time[i].has(a.i))) { time[c.fn].delete(j); changed = true; }
+    }
+  }
+  // A local given a value again (a loop's inputs, by its call of itself)
+  // is the time only if that call gives it the time: checked above.
+  // A let of such a piece, by its local (each local is given its value once
+  // in a shader's let, but for a loop's inputs).
+  let known = new Map<number, SExpr>();
+  const timed = (e: SExpr, f: number): boolean => e.k === "num" || (e.k === "local" && ((e.i < funcs[f].params.length && time[f].has(e.i)) || known.has(e.i))) || (e.k === "op" && (e.op in FRAME_OPS || e.op in FRAME_FNS) && OPS[e.op].t === "f64" && e.args.every((a) => timed(a, f)));
+  const costly = (e: SExpr): boolean => (e.k === "op" && FRAME_COSTLY.has(e.op)) || allKids(e).some(costly);
+  const reads = (e: SExpr): boolean => e.k === "local" || allKids(e).some(reads);
+  const open = (e: SExpr): SExpr => (e.k === "local" && known.has(e.i) ? known.get(e.i)! : mapKids(e, open));
+  const key = (e: SExpr): string => (e.k === "num" ? String(e.v) : e.k === "local" ? "t" : e.k === "op" ? `${e.op}(${e.args.map(key).join(",")})` : "?");
+  const js = (e: SExpr): string => (e.k === "num" ? `(${e.v})` : e.k === "local" ? "t" : e.k === "op" ? (FRAME_OPS[e.op] ? `(${js(e.args[0])} ${FRAME_OPS[e.op]} ${js(e.args[1])})` : `${FRAME_FNS[e.op]}(${e.args.map(js).join(", ")})`) : "NaN");
+  const values = new Map<string, SExpr>();
+  const hoist = (e: SExpr, f: number): SExpr => {
+    if (e.k === "op" && timed(e, f) && costly(open(e)) && reads(e)) {
+      const x = open(e), k = key(x);
+      if (!values.has(k)) values.set(k, x);
+      return { k: "rt", fn: `frame:${[...values.keys()].indexOf(k)}`, args: [] };
+    }
+    if (e.k === "let" && e.value.k === "op" && timed(e.value, f)) {
+      const value = open(e.value);
+      const body = (known.set(e.i, value), hoist(e.body, f));
+      return { ...e, value: hoist(e.value, f), body };
+    }
+    return mapKids(e, (x) => hoist(x, f));
+  };
+  funcs.forEach((f, i) => { known = new Map(); if (time[i].size) f.body = hoist(f.body, i); });
+  if (!values.size) return null;
+  const run = new Function("t", `return [${[...values.values()].map(js).join(", ")}];`) as (t: number) => number[];
+  return { ir, count: values.size, values: (time: number) => run(Math.fround(time)) };
+}
+
+export function emitWgsl(lowered: CoreIR, opts: { frame?: number; frameCount?: number } = {}): Shader {
+  if (opts.frame !== undefined) {
+    const plain = emitWgsl(lowered), f = frameValues(lowered, opts.frame);
+    if (!f) return plain;
+    return { ...plain, framed: { wgsl: emitWgsl(f.ir, { frameCount: f.count }).wgsl, count: f.count, values: f.values } };
+  }
   if (lowered.data.length || lowered.fns.length) throw new Error("a shader can't have data types with several cases: lower without `data`");
   // No finiteness checks (L125c2): a GPU can't stop, and WGSL may assume
   // there's nothing but finite floats, which is Float64's meaning.
-  const funcs = lowered.funcs.map((f) => ({ ...f, body: unrounded(unchecked(f.body)) }));
+  const funcs = lowered.funcs.map((f) => ({ ...f, locals: [...f.locals], body: unrounded(unchecked(f.body)) }));
+  shaderTidied({ ...lowered, funcs });
   const refused = new Map(lowered.refused);
   const bad = new Map<number, string>();
 
@@ -551,6 +640,7 @@ export function emitWgsl(lowered: CoreIR): Shader {
   const needsFuel = intOps.length > 0 || kept.some((i) => funcs[i].spends || budgets(funcs[i].body));
   const wgsl = [
     "// Generated from the scalar profile by compiler/src/wgsl.ts.",
+    ...(opts.frameCount ? [`// What depends on the time alone, worked out once a frame (C175).\nstruct LabFrame { v: array<vec4f, ${Math.ceil(opts.frameCount / 4)}> }\n@group(1) @binding(0) var<uniform> lab_frame: LabFrame;`] : []),
     ...(needsPow ? [POW] : []),
     ...(needsMod ? [MOD] : []),
     ...(needsFuel ? ["// What's left of the innermost budget: below 0 once it ran out.\nvar<private> lab_fuel: f32;"] : []),
@@ -598,6 +688,8 @@ export function emitWgsl(lowered: CoreIR): Shader {
         }
         // std's Array (C66c): array<T, N>, its size where it's made.
         case "rt": {
+          // A value worked out once a frame (C175).
+          { const m = /^frame:(\d+)$/.exec(e.fn); if (m) return `lab_frame.v[${Number(m[1]) >> 2}].${"xyzw"[Number(m[1]) & 3]}`; }
           const op = /^array\.(\w+)\./.exec(e.fn)?.[1];
           const at = lowered.arrays[Number(/\.a(\d+)$/.exec(e.fn)![1])];
           if (op === "of") return `${tname(at, e.args.length)}(${e.args.map((a) => bare(ex(a, pre, d))).join(", ")})`;

@@ -12,7 +12,7 @@
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import type { Code, Id, NodeOf } from "../src/model.ts";
-import { collect, freshId, subtree, isCall, type Call, type NodeData } from "../src/model.ts";
+import { collect, freshId, portsOf, subtree, isCall, type Call, type NodeData } from "../src/model.ts";
 import { sameEverywhere, sharedPlaces } from "../src/lang/patterns.ts";
 import type { Comments, Names, Presentation, Style } from "../src/presentation.ts";
 import { root } from "../src/io.ts";
@@ -22,7 +22,7 @@ import { sameLines } from "../src/lang/modules.ts";
 import { base, baseNames, optionsWith } from "../src/lang/load.ts";
 import { pinsOf, type Pins } from "../src/lang/signatures.ts";
 import { blocksOf, pieceText, type Blk, type Piece } from "../src/lang/render.ts";
-import { showType } from "../src/lang/types.ts";
+import { showIn, showType } from "../src/lang/types.ts";
 import { fromFile, own, toFile, type ProgramFile } from "../src/files.ts";
 import { Cells } from "../src/lang/cells.ts";
 import { evaluatorCall, htmlText } from "../src/lang/html.ts";
@@ -30,12 +30,14 @@ import { equal, mainProblem, pageProblem, runProgram, runMain, showerFor, withSt
 import { nodeWorld } from "../src/lang/world.ts";
 import { runTests, savedFrom } from "../src/lang/tests.ts";
 import * as T from "../../editor/typed.ts";
-import { S, SIGS } from "../src/lang/std.ts";
+import { onTodaysIds, S, SIGS, TRUE } from "../src/lang/std.ts";
 import { setDisplayNames } from "../../editor/typed.ts";
 import { addField, addParameter, addWay, deleteDefinition, nameClash, newDefinition, setWay, type Shape } from "../src/lang/toplevel.ts";
 import { readCase, readType, typeNames, type Build } from "./type-text.ts";
 
-const read = <T>(path: string, fallback: T): T => (existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : fallback);
+// A saved folder read as lab reads it (load.ts): older ids and shapes
+// brought up to today's (std.ts onTodaysIds, I185).
+const read = <T>(path: string, fallback: T): T => (existsSync(path) ? onTodaysIds(JSON.parse(readFileSync(path, "utf8"))) : fallback);
 const STYLE: Style = read(join(root, "styles", "blocks.json"), { view: "blocks", notation: {} });
 // A run that doesn't finish is stopped after this many steps.
 export const STEPS = 20_000_000;
@@ -307,13 +309,101 @@ export class Session {
     const top = hits.filter((x) => !hits.some((y) => y !== x && subtree(this.code, y).includes(x)));
     if (!top.length) throw new Error(`no part of #${this.id(id)} reads ${find}`);
     if (top.length > 1) throw new Error(`${top.length} parts read ${find}: give the id of a block around just one`);
-    return top[0];
+    // A thunk reads as its body (first's `() => …`): the body is the part.
+    const n = this.code.nodes[top[0]];
+    return n?.kind === "lambda" && !n.params.length && hits.includes(n.body) ? n.body : top[0];
+  }
+
+  // A hole filled from text as the editor reads it, and a relation's solve
+  // as the view prints one (L231): `gap at(body = b, wall = w, gap = 0)`,
+  // the ports given by name and the one left out the value.
+  private fill(code: Code, names: Names, hole: Id, text: string, def: Id, as?: string): { ok: true; code: Code; names: Names } | { ok: false; reason: string } {
+    const solve = this.solveIn(code, names, hole, text);
+    if (!solve) return this.fillOne(code, names, hole, text, def, as);
+    let cur: { ok: true; code: Code; names: Names } | { ok: false; reason: string } = { ok: true, code: solve.code, names };
+    for (const [h, t] of solve.fills) {
+      if (!cur.ok) return cur;
+      cur = this.fillOne(cur.code, cur.names, h, t, def);
+    }
+    return cur;
+  }
+
+  private fillOne(code: Code, names: Names, hole: Id, t: string, def: Id, as?: string): { ok: true; code: Code; names: Names } | { ok: false; reason: string } {
+    // An implementation's field left to the interface's ways (WAYS.md):
+    // the editor's text reader doesn't take it (I183), so it is put in
+    // here; the checker says if no way grounds it.
+    if (norm(t) === "by its ways") return { ok: true, names, code: { nodes: { ...code.nodes, [hole]: { id: hole, kind: "ref", target: S.byItsWays } }, defs: code.defs } };
+    const r = T.fillValue(code, names, editorInfo(code, names), hole, t, def);
+    // A field several types have, read on a value nothing has settled,
+    // fits as each (the editor offers each, E186): none is taken silently
+    // (I187: round 12's p.place took Ball's, and pocket toucher was then
+    // refused two definitions later). `as` names the one meant.
+    if (r.ok && r.choices && r.choices.length > 1) {
+      const labels = r.choices.map((c) => c.label.replace(/^as /, ""));
+      const want = as?.trim().replace(/^(an?|the)\s+/i, "").toLowerCase();
+      const pick = want ? r.choices.find((c, i) => labels[i].replace(/^an?\s+/i, "").toLowerCase() === want) : undefined;
+      if (pick?.edit.ok) return pick.edit;
+      return { ok: false, reason: `${t.trim()} reads ${labels.map((l) => `as ${l}`).join(" or ")}: a field more than one type has, on a value whose type nothing settles yet. Give \`as\` (${labels.map((l) => JSON.stringify(l.replace(/^an?\s+/i, ""))).join(" or ")}), or settle the type first` };
+    }
+    if (r.ok || r.reason !== "a name alone is listed already") return r;
+    // A name alone, which the editor's palette lists: the nearest in
+    // scope (a case's field bound in its arm, I184), else a definition.
+    const all = baseNames(names);
+    const near = T.scopeAt(code, def, hole).filter((b) => all[b] === norm(t)).at(-1)
+      ?? code.defs.find((d) => all[d] === norm(t) && !LIBRARY.code.nodes[d]) ?? code.defs.find((d) => all[d] === norm(t));
+    if (!near) return r;
+    return { ok: true, names, code: { nodes: { ...code.nodes, [hole]: { id: hole, kind: "ref", target: near } }, defs: code.defs } };
+  }
+
+  private solveIn(code: Code, names: Names, hole: Id, text: string): { code: Code; fills: [Id, string][] } | null {
+    const m = /^\s*(.+?)\s*\((.*)\)\s*$/s.exec(text);
+    if (!m || !/=/.test(m[2])) return null;
+    const all = baseNames(names);
+    const head = norm(m[1]);
+    // A field with ports of the program's (an interface's operation), else a
+    // definition with results.
+    const fields = Object.values(code.nodes).filter((n) => n.kind === "field" && n.ports?.length && all[n.id] === head);
+    const defs = code.defs.filter((d) => all[d] === head && portsOf(code.nodes, d));
+    const target = fields.length === 1 ? fields[0].id : defs.length === 1 ? defs[0] : null;
+    if (!target) return null;
+    const f = code.nodes[target];
+    const keys: [string, string][] = f.kind === "field"
+      ? f.ports!.map((p, i) => [p, String(i)])
+      : (code.nodes[(code.nodes[target] as NodeOf<"def">).body!] as NodeOf<"lambda">).params.map((p) => [all[p] ?? p, p]);
+    // Split the inputs on commas outside brackets.
+    const parts: string[] = [];
+    let depth = 0, from = 0;
+    const a = m[2];
+    for (let i = 0; i < a.length; i++) {
+      if ("([{".includes(a[i])) depth++;
+      else if (")]}".includes(a[i])) depth--;
+      else if (a[i] === "," && !depth) { parts.push(a.slice(from, i)); from = i + 1; }
+    }
+    parts.push(a.slice(from));
+    const nodes = { ...code.nodes };
+    const given: Record<string, Id> = {};
+    const fills: [Id, string][] = [];
+    for (const part of parts) {
+      const eq = /^\s*([^=]+?)\s*=(?!=)\s*(.+?)\s*$/s.exec(part);
+      if (!eq) return null;
+      const key = keys.find(([n]) => n === norm(eq[1]))?.[1];
+      if (key === undefined) throw new Error(`${head} has no port ${eq[1].trim()}: its ports are ${keys.map(([n]) => n).join(", ")}`);
+      const h = freshId();
+      nodes[h] = { id: h, kind: "hole" };
+      given[key] = h;
+      fills.push([h, eq[2]]);
+    }
+    const ref = freshId(), yes = freshId();
+    nodes[ref] = { id: ref, kind: "ref", target };
+    nodes[yes] = { id: yes, kind: "ref", target: TRUE };
+    nodes[hole] = { id: hole, kind: "call", fn: ref, given: { ...given, out: yes } } as NodeOf<"call">;
+    return { code: { nodes, defs: code.defs }, fills };
   }
 
   // `kase`: in a match, the body of that one case, even where the view
   // shows it folded into otherwise; else an edit to a folded otherwise is
   // made in every case it stands for, as in the editor.
-  replace(at: string, text: string, find?: string, kase?: string): string {
+  replace(at: string, text: string, find?: string, kase?: string, as?: string): string {
     let target = this.part(at, find);
     if (kase) {
       const m = this.code.nodes[target];
@@ -329,11 +419,7 @@ export class Session {
       const info = editorInfo(this.code, this.names);
       const holed = T.toHole(this.code, this.names, info, target);
       if (!holed.ok || t === "□" || t === "?" || t === "") return holed;
-      // An implementation's field left to the interface's ways (WAYS.md):
-      // the editor's text reader doesn't take it (I183), so it is put in
-      // here; the checker says if no way grounds it.
-      if (norm(t) === "by its ways") return { ...holed, code: { nodes: { ...holed.code.nodes, [target]: { id: target, kind: "ref", target: S.byItsWays } }, defs: holed.code.defs } };
-      return T.fillValue(holed.code, holed.names, editorInfo(holed.code, holed.names), target, t, def);
+      return this.fill(holed.code, holed.names, target, t, def, as);
     }, undefined, !kase);
   }
 
@@ -411,17 +497,20 @@ export class Session {
       const let_ = Object.values(r.code.nodes).find((n): n is Call => isCall(n) && (r.code.nodes[n.fn] as { params?: Id[] }).params?.[0] === r.dot)!;
       const hole = let_.args[0];
       if (!value.trim()) return { ok: true, code: r.code, names };
-      return T.fillValue(r.code, names, editorInfo(r.code, names), hole, value, def);
+      return this.fill(r.code, names, hole, value, def);
     });
   }
 
   // Replace a part by a match on a variable, one case per variant, each a copy.
-  split(at: string, on: string, find?: string): string {
+  // `as`: the type to split by, where nothing fixes the variable's yet
+  // (I116 in the editor, I184 here): the split fixes it.
+  split(at: string, on: string, find?: string, as?: string): string {
     const target = this.part(at, find);
     const def = this.defOf(target);
     if (!def) throw new Error(`#${this.id(target)} isn't in a definition`);
     const v = this.resolve(on, def);
-    return this.apply(def, () => T.splitOn(this.code, this.names, editorInfo(this.code, this.names), target, v));
+    const type = as?.trim() ? this.resolve(as) : undefined;
+    return this.apply(def, () => T.splitOn(this.code, this.names, editorInfo(this.code, this.names), target, v, type));
   }
 
   // A type's first case may be written with its fields, `ball(number: Int,
@@ -564,10 +653,12 @@ export class Session {
   // The value of an expression written as it prints, in the program's scope.
   eval(text: string): string {
     setDisplayNames(LIBRARY.names);
-    const made = newDefinition(this.code, this.names, `eval ${Date.now()}`, { kind: "value" });
+    // An action of no inputs, as main is, so what it performs (Diverge,
+    // Console) is its own row and it runs as main runs (I188).
+    const made = newDefinition(this.code, this.names, `eval ${Date.now()}`, { kind: "function", params: [] });
     if (!made.ok) throw new Error(made.reason);
     const def = made.code.defs.at(-1)!;
-    const hole = (made.code.nodes[def] as NodeOf<"def">).body!;
+    const hole = (made.code.nodes[(made.code.nodes[def] as NodeOf<"def">).body!] as NodeOf<"lambda">).body;
     const r = T.fillValue(made.code, made.names, editorInfo(made.code, made.names), hole, text, def);
     if (!r.ok) throw new Error(r.reason);
     const info = infer(r.code, baseNames(r.names), undefined, optionsWith(this.pins));
@@ -577,10 +668,10 @@ export class Session {
     const out: string[] = [];
     const names = baseNames(r.names);
     const rt = { print: (s: string) => out.push(s), names, world: this.world(out, "") };
-    const t = info.typeOf.get(def);
+    const ft = info.typeOf.get(def), t = ft?.t === "fn" ? ft.ret : ft;
     try {
       const v = withSteps(STEPS, () => showerFor(r.code, info, names)(runMain(r.code, info, def, rt)));
-      return clip([...out, `= ${v} : ${t ? showType(info.subst.zonk(t), names) : "?"}`]).join("\n");
+      return clip([...out, `= ${v} : ${t ? showIn(t, names, info.subst) : "?"}`]).join("\n");
     } catch (x) {
       if (x instanceof OutOfSteps) return clip([...out, `stopped: still running after ${STEPS.toLocaleString("en")} steps`]).join("\n");
       throw x;

@@ -14,6 +14,7 @@
     { "program": "shaders", "label": "Shader: ripples", "folders": ["shaders"] },
     { "program": "raymarch", "label": "Shader: ray marching", "folders": ["raymarch"] },
     { "program": "mandelbrot", "label": "Shader: Mandelbrot set", "folders": ["mandelbrot"] },
+    { "program": "wavetable", "label": "Wavetable: a tone from a table", "folders": ["wavetable"] },
     { "program": "dice", "label": "Page: two dice", "folders": ["dice"], "page": true },
     { "program": "pig", "label": "Page: Pig", "folders": ["pig"], "page": true },
     { "program": "tumble", "label": "Page: Tumble", "folders": ["tumble"], "page": true },
@@ -33,6 +34,7 @@
     { "program": "calc", "label": "Bigger program: calc, a calculator for big numbers", "folders": ["calc"] },
     { "program": "clinic", "label": "Bigger program: clinic, a waiting-room simulation", "folders": ["compiler/gaps/clinic"] },
     { "program": "crew", "label": "Bigger program: crew, workers as fibers", "folders": ["compiler/gaps/crew"], "run": { "args": ["plan.txt"], "files": ["plan.txt"] } },
+    { "program": "break", "label": "Bigger program: break, a pool break event by event", "folders": ["compiler/gaps/break"] },
     { "program": "compass", "label": "Compass", "folders": ["compass"], "page": true, "editor": false }
   ]
 }

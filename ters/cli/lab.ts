@@ -6,6 +6,7 @@
 //   lab compile <program> [-o out.mjs]   compile to a JavaScript module that runs `main`
 //     through the core IR (compiler/src/core-js.ts, C137), as WebAssembly and C are
 //   lab native <program> [-o out]        compile to a native program through C (NATIVE.md)
+//   lab wasi <program> [-o out.wasm]     compile to a WASI command, WebAssembly with GC
 //   lab check <program>                  type-check, and list the definitions with their types
 //   lab hosts <program> [--c]            print a hosts/js.js (or with --c a hosts/c.c) to start from: the program's own effects (FOREIGN.md)
 //   lab test <program> [--fresh]         run the tests: definitions whose row has Check (TESTS-IN-THE-LANGUAGE.md);
@@ -59,6 +60,7 @@ import { choose, representationsIn } from "../src/lang/represent.ts";
 import { allowedOnly, nodeWorld } from "../src/lang/world.ts";
 import { readLog, replaying, type LogEntry } from "../src/lang/worldlog.ts";
 import { CFLAGS, emitC } from "../../compiler/src/c.ts";
+import { emitWasm } from "../../compiler/src/wasm.ts";
 import { lowerScalar } from "../../compiler/src/scalar.ts";
 import { FAIL, Unsupported, codeLines, coreCall, coreMap, coreModule, hostOpsOf, loadCoreJs, lowerCore, plainValue, runCoreMain } from "../../compiler/src/core-js.ts";
 import { withInverses } from "../../compiler/src/inverses.ts";
@@ -86,6 +88,7 @@ usage:
   lab compile <program> [-o out.mjs]    compile to a JavaScript module that runs main, through the core IR,
                                         as WebAssembly and C are
   lab native <program> [-o out]         compile to a native program through C, with $CC (default cc)
+  lab wasi <program> [-o out.wasm]      compile to a WASI command: WebAssembly with GC (wasmtime, Node's WASI)
   lab check <program>                   type-check, and list the definitions and their types
   lab hosts <program> [--c]             print a hosts/js.js answering the program's own effects, to start from;
                                         with --c a hosts/c.c, for lab native (FOREIGN.md)
@@ -252,6 +255,20 @@ function represented(p: Program, main: Id, hostMaps: boolean, tables = false): P
   try { return representedOr(p, main, hostMaps, tables); } catch (e) { fail((e as Error).message); }
 }
 
+// The program lowered for C and WebAssembly (lab native, lab wasi):
+// inverse(f, …) of a named f, as the core IR's JavaScript has it (a
+// printer's by its reader written out, C110 s7c), since they can't solve;
+// a main that is a value prints it, as lab run does; the host answers an
+// effect the program never handles itself, and one it handles is on the
+// handler stack (L213c4), as effects' Ask is.
+function nativeLowered(main: Id) {
+  const q0 = withInverses(p.code, p.info, p.names);
+  const { q, root } = valueMain(q0.info, main) ? printingMain(q0, main) : { q: q0, root: main };
+  const handled = new Set(Object.values(q.code.nodes).flatMap((n) => (n.kind === "arm" ? [n.variant] : [])));
+  const hosted = new Set(ownOperations(q.code).flatMap((op) => (handled.has(op) ? [] : effectOfOperation(q.code, op) ?? [])));
+  return { lowered: lowerScalar(q.code, q.info, q.names, [root], { data: true, releases: true, handlers: true, hosted }), root };
+}
+
 // A program whose main is a value, with a main that prints it (`lab
 // native`): a Text as it is, anything else as show shows it.
 function printingMain(q: { code: Code; info: Info; names: Names }, main: Id): { q: { code: Code; info: Info; names: Names }; root: Id } {
@@ -405,8 +422,8 @@ if (!command || command === "help" || command === "--help" || !path) {
 }
 
 const loaded = load(path);
-const main = command === "run" || command === "compile" || command === "native" || command === "build-web" || command === "build-app" ? entry(loaded, mainName, command.startsWith("build-")) : "";
-const p = main && defined < 0 ? represented(loaded, main, command !== "native", command === "native") : loaded;
+const main = command === "run" || command === "compile" || command === "native" || command === "wasi" || command === "build-web" || command === "build-app" ? entry(loaded, mainName, command.startsWith("build-")) : "";
+const p = main && defined < 0 ? represented(loaded, main, command !== "native" && command !== "wasi", command === "native" || command === "wasi") : loaded;
 // The host's answers to the program's own effects (FOREIGN.md, L69a):
 // hosts/js.js beside the program, if it has one.
 const hostFile = existsSync(path) && statSync(path).isDirectory() ? join(path, "hosts", "js.js") : "";
@@ -510,17 +527,7 @@ switch (command) {
     // Its own effects' operations nothing handles, from hosts/c.c (L69b1).
     const cHost = existsSync(path) && statSync(path).isDirectory() ? join(path, "hosts", "c.c") : "";
     const hosts = { ops: hostOpsOf(p.code, p.names), c: cHost && existsSync(cHost) ? readFileSync(cHost, "utf8") : undefined };
-    // inverse(f, …) of a named f, as the core IR's JavaScript has it: a
-    // printer's by its reader written out (C110 s7c), C can't solve.
-    const q0 = withInverses(p.code, p.info, p.names);
-    // A main that is a value prints it, as lab run does: a Text as it
-    // is, anything else shown (a definition that prints it is the root).
-    const { q, root } = valueMain(q0.info, main) ? printingMain(q0, main) : { q: q0, root: main };
-    // The host answers an effect the program never handles itself; one it
-    // handles is on C's handler stack (L213c4), as effects' Ask is.
-    const handled = new Set(Object.values(q.code.nodes).flatMap((n) => (n.kind === "arm" ? [n.variant] : [])));
-    const hosted = new Set(ownOperations(q.code).flatMap((op) => (handled.has(op) ? [] : effectOfOperation(q.code, op) ?? [])));
-    const lowered = lowerScalar(q.code, q.info, q.names, [root], { data: true, releases: true, handlers: true, hosted });
+    const { lowered, root } = nativeLowered(main);
     let c: string;
     try { c = emitC(lowered, { main: root, hosts }).c; } catch (e) { fail((e as Error).message); }
     writeFileSync(`${out}.c`, c);
@@ -529,6 +536,20 @@ switch (command) {
       fail(`wrote ${out}.c, but ${cc} didn't build it; build it with: cc ${flags.join(" ")}`);
     }
     process.stderr.write(`lab: wrote ${out} (and ${out}.c); run it with: ${out.includes("/") ? out : `./${out}`} [arguments…]\n`);
+    break;
+  }
+  case "wasi": {
+    // The program as a WASI command: WebAssembly with GC, its console and
+    // files over wasi_snapshot_preview1 (compiler/src/wasm.ts), lowered as
+    // lab native lowers it.
+    const o = rest.indexOf("-o");
+    const out = o >= 0 ? rest[o + 1] ?? fail("-o needs a file") : `${basename(resolve(path)).replace(/\.json$/, "")}.wasm`;
+    const { lowered, root } = nativeLowered(main);
+    if (!lowered.funcs.some((f) => f.def === root && !f.inner)) fail(`main isn't in WebAssembly: ${lowered.refused.get(root as never) ?? "it isn't lowered"}`);
+    let m: ReturnType<typeof emitWasm>;
+    try { m = emitWasm(lowered, { wasi: true, main: root }); } catch (e) { fail((e as Error).message); }
+    writeFileSync(out, m.bytes);
+    process.stderr.write(`lab: wrote ${out}; run it with: wasmtime -W gc=y,function-references=y,tail-call=y --dir . ${out} [arguments…]\n`);
     break;
   }
   case "build-web": {

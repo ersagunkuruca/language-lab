@@ -2822,6 +2822,13 @@ through `rest time`), each a square root; nothing inlines or shares them.
 The ideal works each out once. *Measured* with B2: `moved` working
 `heading` and `speed` out once, and `rest time` and `length of` without
 the try, on top of B1: 27 to 17-19 ms, the same lines. Row C189 for both.
+*Fixed in part (C189):* an attempt whose body throws nothing prints with
+no try (core-js.ts; 40 to 20 in break's module, no measurable time on
+V8), and a pure call made twice with the same inputs where both always
+run is made once (share-calls.ts: `moved`'s `heading`): 28 to 25 ms,
+measured in one process against the same module without it. Sharing
+across calls (`speed` in `moved` and again in `rest time`, which it
+calls) needs inlining: row C194.
 
 **B4. What is left (about 4x after B1 to B3).** The collector is 16% of
 the samples: every move makes a new Ball and two Vecs, where the ideal
@@ -2854,6 +2861,9 @@ Each was worked around, and the workaround is in the driver or the seed.
   The Event type was made a record with a `kind` number instead, and every
   loop over a list became recursion over an index with `item at`. That
   is B1's cause. Row I184.
+  *Fixed (I184):* `split` takes `as`, the type to split by, and
+  `replace` with a name alone takes the nearest in scope, an arm's field
+  first.
 - **M3. A relation's solve can't be written.** `t = gap at(obstacle = o,
   ball = b, gap = 0)` is "nothing is named obstacle here", `gap at(o, b,
   □, 0)` is "takes 3 inputs, given 4", and the form the view prints,
@@ -2861,6 +2871,9 @@ Each was worked around, and the workaround is in the driver or the seed.
   shows the solve's ports as letters and its binder as a 26-character id
   (impact's `until it touches`). `touch time` calls `first touch`
   directly, so the program reads the relation one way only. Row L231.
+  *Fixed (L231):* the view names a field's ports (`gap at(body = b, wall
+  = w, gap = 0)`), the MCP reads that form back, and `touch time` is the
+  solve now.
 - **M4. Shared names read wrong, far from the cause.** `p.place` in
   `pocket gap at` read Ball's `place` (Pocket had one too) with nothing
   said, so `pocket toucher` was typed `Toucher Ball` and refused as a
@@ -2873,15 +2886,20 @@ Each was worked around, and the workaround is in the driver or the seed.
   nothing here handles": the loop could only be tried through `main`
   and `lab run`. And eval shows `= 5 : a` and `List a` where the type is
   known. Row I188.
+  *Fixed (I188):* eval runs its text as an action of no inputs, as main
+  runs, within its steps, and shows a type with what it needs.
 - **M6. crew opens with five errors.** The MCP session reports `released`,
   `give`, `step`, `run floor` and `fresh floor` as wrong ("expected (a,
   b), got std.pair Int Int") where `lab check` finds none: the session
   doesn't bring a saved program's older shapes up to date as `lab` does.
   Row I185.
+  *Fixed (I185):* the MCP reads a folder through `onTodaysIds`, as lab does.
 - **M7. No sharing.** Nothing publishes, fetches or upgrades: `lab
   publish compiler/gaps/break shifted apart` works from the command line
   (`Vec`, `shifted` and `apart` at version 1), not through the MCP. Row
   I186.
+  *Fixed (I186):* the MCP has publish, fetch, upgrade and downgrade, which
+  run lab's own command on the open program and open it again after.
 
 ### Proposed order
 

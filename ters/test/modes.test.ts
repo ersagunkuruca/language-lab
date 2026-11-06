@@ -17,6 +17,7 @@ import { analyzer, describeVerdict, type Fn, type Verdict } from "../src/lang/mo
 import { relate } from "../src/lang/relate.ts";
 import { makeRunner, toList, bool } from "../src/lang/run.ts";
 import { planSolve } from "../src/lang/solve.ts";
+import { directionFor } from "../src/lang/directions.ts";
 import { CELL_OPS, CONS, FIRST, INT_OPS, NIL, PAIR_V, S } from "../src/lang/std.ts";
 import { CHOICE, DIVERGE } from "../src/lang/types.ts";
 
@@ -222,7 +223,9 @@ test("every relational solve in the examples has a mode that isn't stuck, and it
     const own = JSON.parse(readFileSync(join(root, "examples", e, "code.json"), "utf8")) as Code;
     const a = analyzer(p.code, p.pres.names);
     for (const n of Object.values(own.nodes)) {
-      if (!isUse(n) || planSolve(p.code, n).mode !== "relational") continue;
+      // A solve a relation's direction answers is a call of it (POLAR.md,
+      // directions.ts): impact's `gap at` solved for s is `first touch`.
+      if (!isUse(n) || directionFor(p.code, n) || planSolve(p.code, n).mode !== "relational") continue;
       const v = a.ofSolve(n)!;
       assert.equal(v.stuck.length, 0, `${e}: ${p.pres.names[useTarget(p.code.nodes, n)]}: ${describeVerdict(v)}`);
       seen.push(`${e}: ${p.pres.names[useTarget(p.code.nodes, n)] ?? useTarget(p.code.nodes, n)}: ${describeVerdict(v)}`);

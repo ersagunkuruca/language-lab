@@ -9,7 +9,9 @@
 // Responses are kept short on purpose: the text asked for, an error, no
 // explanations around it. The one explanation is `instructions`, sent once.
 
+import { spawnSync } from "node:child_process";
 import { createInterface } from "node:readline";
+import { fileURLToPath } from "node:url";
 import { Session, LINES } from "./session.ts";
 
 const INSTRUCTIONS = `Ters programs are trees with stable ids, not text. Names are a side table.
@@ -70,8 +72,8 @@ export const TOOLS: Tool[] = [
   {
     name: "replace",
     description: "Replace a part with an expression written as view prints it (□ for a hole). Typechecked; saved; returns the diff.",
-    inputSchema: obj({ at: str("id"), text: str("e.g. fall(b) + 1, (x) => x * 2, [1, 2], □"), find: str("optional: the exact text of a part inside at"), case: str("optional: at is a match; replace this case's body only") }, ["at", "text"]),
-    call: (a) => program().replace(String(a.at), String(a.text), a.find as string | undefined, a.case as string | undefined),
+    inputSchema: obj({ at: str("id"), text: str("e.g. fall(b) + 1, (x) => x * 2, [1, 2], □"), find: str("optional: the exact text of a part inside at"), case: str("optional: at is a match; replace this case's body only"), as: str("optional: whose field it reads, when several types have one by that name (Pocket)") }, ["at", "text"]),
+    call: (a) => program().replace(String(a.at), String(a.text), a.find as string | undefined, a.case as string | undefined, a.as as string | undefined),
   },
   {
     name: "step",
@@ -82,8 +84,8 @@ export const TOOLS: Tool[] = [
   {
     name: "split",
     description: "Replace a part by a match on a variable: one case per variant, each a copy of the part.",
-    inputSchema: obj({ at: str("id"), on: str("the variable's id"), find: str("optional: text of a part inside at") }, ["at", "on"]),
-    call: (a) => program().split(String(a.at), String(a.on), a.find as string | undefined),
+    inputSchema: obj({ at: str("id"), on: str("the variable's id"), find: str("optional: text of a part inside at"), as: str("optional: the type to split by, where the variable's isn't fixed yet") }, ["at", "on"]),
+    call: (a) => program().split(String(a.at), String(a.on), a.find as string | undefined, a.as as string | undefined),
   },
   {
     name: "rename",
@@ -157,6 +159,32 @@ export const TOOLS: Tool[] = [
     inputSchema: obj({}),
     call: () => program().undo(),
   },
+  // Sharing (SHARING.md), as lab does it: the same command run on the
+  // program, which is opened again after (I186).
+  {
+    name: "publish",
+    description: "Publish definitions as their next versions in a module file (default: <program>.module.json beside it), each version signed in its log.",
+    inputSchema: obj({ names: { type: "array", items: { type: "string" }, description: "definitions to publish" }, out: str("optional: the module file") }, ["names"]),
+    call: (a) => lab("publish", [...((a.names as string[]) ?? []), ...(a.out ? ["-o", String(a.out)] : [])]),
+  },
+  {
+    name: "fetch",
+    description: "Fetch a module (a URL or a path) into the program's modules folder, every definition checked by hash and its log by its author's key.",
+    inputSchema: obj({ from: str("URL or path of a .module.json") }, ["from"]),
+    call: (a) => lab("fetch", [String(a.from)]),
+  },
+  {
+    name: "upgrade",
+    description: "Move the program onto its modules' newest versions, kept only if it still checks and its tests pass; take_names takes the author's renames.",
+    inputSchema: obj({ take_names: { type: "boolean" } }),
+    call: (a) => lab("upgrade", a.take_names === true ? ["--take-names"] : []),
+  },
+  {
+    name: "downgrade",
+    description: "Move one thing the program uses back to the version before, kept only if it still checks and its tests pass.",
+    inputSchema: obj({ name: str("what to move back") }, ["name"]),
+    call: (a) => lab("downgrade", [String(a.name)]),
+  },
   {
     name: "eval",
     description: "Evaluate an expression written as view prints it, using the program's definitions.",
@@ -164,6 +192,18 @@ export const TOOLS: Tool[] = [
     call: (a) => program().eval(String(a.text)),
   },
 ];
+
+// lab itself on the open program, its answer (or why not) given back, and
+// the program opened again since lab may have changed it.
+function lab(command: string, args: string[]): string {
+  const p = program();
+  const r = spawnSync(process.execPath, [LAB, command, p.path, ...args], { encoding: "utf8" });
+  session = new Session(p.path);
+  const out = `${r.stdout ?? ""}${r.stderr ?? ""}`.trim().replace(/^lab: /gm, "");
+  if (r.status !== 0) throw new Error(out || `lab ${command} failed`);
+  return out || "ok";
+}
+const LAB = fileURLToPath(new URL("../cli/lab.ts", import.meta.url));
 
 export function call(name: string, args: Args): { text: string; error: boolean } {
   const tool = TOOLS.find((t) => t.name === name);

@@ -37,6 +37,10 @@ import { bordered } from "../../ters/src/lang/border.ts";
 import { Aborted, type Runtime, type World } from "../../ters/src/lang/run.ts";
 import { MATH_DATA, MATH_DATA_AT } from "./wasm-math.ts";
 import { assemble, byteSlots, POW5, runtime, textBytes, WASI_IMPORTS, wasiStop, type RtFn, type VT } from "./wasm-rt.ts";
+
+// Where the math functions' page starts in WASI's memory: after its fixed
+// area (iovecs, sizes), before its buffer.
+const MATH_AT = 128;
 import { TABLE_RT, tableRt } from "./wasm-table.ts";
 import { reasonOf, siteOf } from "./stops.ts";
 import type { Id } from "../../ters/src/model.ts";
@@ -115,7 +119,7 @@ const performsIn = (e: SExpr): boolean => (e.k === "rt" && e.fn.startsWith("perf
 // nothing handles is an import from "world" that hosts/js.js answers
 // (FOREIGN.md, L69b2).
 const TEXT_PIECE = 10000;
-export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOps } = {}): Module {
+export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOps; main?: string } = {}): Module {
   const wasi = !!opts.wasi;
   // A shader's lowering (C66c, `lowered.shader`): Int in 32 bits, and no
   // answer is the flag $none that `first` and `count` look at, as WGSL
@@ -160,7 +164,9 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   const funcs = funcs0.map((f) => (longIn(f.body) ? { ...f, body: pieces(f.body) } : f));
   // Host functions used, in a fixed order: they take the first indices.
   // A WASI host has no Math: there sin and the rest are V8's fdlibm,
-  // compiled to WebAssembly (wasm-math.ts), with a memory of their own.
+  // compiled to WebAssembly (wasm-math.ts), their tables and stack in
+  // WASI's memory at MATH_AT, between its fixed area and its buffer: one
+  // memory, since Node 22's WASI stops a module with two (C193).
   const maths = (Object.keys(HOST) as Op[]).filter((op) => funcs.some((f) => uses(f.body, op)));
   const hosts = wasi ? [] : maths, math = wasi && maths.some((op) => op !== "stop");
   const hostIndex = new Map(hosts.map((op, i) => [op, i]));
@@ -236,7 +242,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   const worldOps: Extract<SExpr, { k: "world" }>[] = [];
   const worldCalls = (e: SExpr): void => { if (e.k === "world" && !worldOps.some((x) => x.op === e.op)) worldOps.push(e); kids(e).forEach(worldCalls); };
   funcs.forEach((f) => worldCalls(f.body));
-  const main = wasi ? funcs.find((f) => f.name === "main" && !f.inner && !f.budgeted) : undefined;
+  const main = wasi ? funcs.find((f) => (opts.main ? f.def === opts.main : f.name === "main") && !f.inner && !f.budgeted) : undefined;
   if (wasi && (!main || main.params.length > 1)) throw new Error("a WASI command needs a main that takes the arguments, or nothing");
   if (wasi) {
     worldOps.forEach((x) => need(`wasi.${x.op}`));
@@ -396,7 +402,8 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       return h >= 0 ? fnIndex(funcs.length + h) : rtIndex(n);
     },
     global: (n: string) => (n === "reason" ? reasonG : n === "pow5" ? pow5G : n === "msp" ? mspG : n === "none" ? noneG : n === "hs" ? stackG : n === "hn" ? stackG + 1 : /^r[0-3]$/.test(n) ? randG + Number(n[1]) : 0),
-    memory: (n: string) => (n === "math" ? 1 : 0),
+    memory: (n: string) => ({ index: 0, base: n === "math" ? MATH_AT : 0 }),
+    at: (n: string) => { if (n !== "buf") throw new Error(`no address @${n}`); return math ? MATH_AT + 65536 : MATH_AT; },
     valtype: (t: VT) => {
       if (t === "list") return { bytes: typeOf(listOf(f)), text: `(ref null $${structs[baseIndex.get(listOf(f).key)!].name})` };
       if (t === "option") return { bytes: typeOf(optionOf()), text: `(ref null $${structs[baseIndex.get(OPTION_TEXT)!].name})` };
@@ -759,14 +766,14 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   const bytes = new Uint8Array([
     0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
     ...section(1, typeSec), ...(imports ? section(2, importSec) : []), ...section(3, funcSec),
-    // WASI's memory, then the math functions' (wasm-math.ts).
-    ...(wasi ? section(5, vec([[0x00, 0x01], ...(math ? [[0x00, 0x01]] : [])])) : []),
+    // WASI's memory, with the math functions' page when they're used.
+    ...(wasi ? section(5, vec([[0x00, math ? 0x02 : 0x01]])) : []),
     ...(fuel || aborts || ryu || math || escapes || flags || rand || kept.size || stack ? section(6, globalSec) : []), ...section(7, exportSec),
     // ref.func needs the functions declared: one declarative segment.
     ...(codeOf.size ? section(9, vec([[0x03, 0x00, ...vec([...codeOf.keys()].map((i) => u(fnIndex(i))))]])) : []),
     ...section(10, codeSec),
-    // fdlibm's tables, in the math functions' memory.
-    ...(math ? section(11, vec([[0x02, 0x01, 0x41, ...s(MATH_DATA_AT), 0x0b, ...vec(MATH_DATA.map((b) => [b]))]])) : []),
+    // fdlibm's tables, in the math functions' page.
+    ...(math ? section(11, vec([[0x00, 0x41, ...s(MATH_AT + MATH_DATA_AT), 0x0b, ...vec(MATH_DATA.map((b) => [b]))]])) : []),
   ]);
 
   // ---- text, for reading
@@ -898,12 +905,11 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     ...worldOps.filter(() => !wasi).map((x) => `  (import "world" "${x.op}" (func $world.${x.op}${x.args.length ? ` (param${x.args.map((_, j) => ` ${ty((x.ins?.[j] ?? "text") as MType)}`).join("")})` : ""}${isUnit(x.t) && !x.aborts ? "" : ` (result${isUnit(x.t) ? "" : ` ${ty(x.t)}`}${x.aborts ? " i32" : ""})`}))`),
     ...(worldReason && !wasi ? [`  (import "world" "reason" (func $world.reason (result (ref null $bytes))))`] : []),
     ...wasiImports.map((n) => { const t = WASI_IMPORTS[n.slice(5)]; return `  (import "wasi_snapshot_preview1" "${n.slice(5)}" (func $${n} (param ${t.params.join(" ")})${t.result ? ` (result ${t.result})` : ""}))`; }),
-    ...(wasi ? [`  (memory (export "memory") 1)`] : []),
-    ...(math ? ["  (memory $math 1)"] : []),
+    ...(wasi ? [`  (memory (export "memory") ${math ? 2 : 1})`] : []),
     ...(fuel ? ["  (global $fuel (mut f64) (f64.const inf))"] : []),
     ...(aborts ? ["  (global $reason (mut (ref null $bytes)) (ref.null $bytes))"] : []),
     ...(ryu ? [`  (global $pow5 (ref $i64s) (array.new_fixed $i64s ${POW5.length}${POW5.map((v) => ` (i64.const ${v})`).join("")}))`] : []),
-    ...(math ? ["  (global $msp (mut i32) (i32.const 65536))", `  (data (memory $math) (i32.const ${MATH_DATA_AT}) "${MATH_DATA.map((b) => `\\${b.toString(16).padStart(2, "0")}`).join("")}")`] : []),
+    ...(math ? ["  (global $msp (mut i32) (i32.const 65536))", `  (data (i32.const ${MATH_AT + MATH_DATA_AT}) "${MATH_DATA.map((b) => `\\${b.toString(16).padStart(2, "0")}`).join("")}")`] : []),
     ...(escapes ? ["  (global $escape (mut eqref) (ref.null eq))"] : []),
     ...(flags ? ["  (global $none (mut i32) (i32.const 0))"] : []),
     ...(rand ? [0, 1, 2, 3].map((k) => `  (global $r${k} (mut i32) (i32.const 0))`) : []),

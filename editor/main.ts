@@ -14,7 +14,7 @@ import blocksStyle from "../ters/styles/blocks.json" with { type: "json" };
 import mathStyle from "../ters/styles/math.json" with { type: "json" };
 import plainStyle from "../ters/styles/plain.json" with { type: "json" };
 import lispStyle from "../ters/styles/lisp.json" with { type: "json" };
-import { children, directionOf, freshId, ID_PATTERN, isCall, isUse, portsOf, useTarget, type Call, merge, parentOf, resolveRefs, subtree, type Code, type Id, type Node, type NodeOf } from "../ters/src/model.ts";
+import { changedFromLayer, children, directionOf, freshId, ID_PATTERN, isCall, isUse, portsOf, useTarget, type Call, merge, parentOf, resolveRefs, subtree, type Code, type Id, type Node, type NodeOf } from "../ters/src/model.ts";
 import { INT } from "../ters/src/lang/types.ts";
 import { layer, type Comments, type Hints, type Names, type Presentation, type Style } from "../ters/src/presentation.ts";
 import { implementationOps, isOperation } from "../ters/src/lang/records.ts";
@@ -503,7 +503,11 @@ function commit(next: Partial<Doc>, touched: string[], note: string) {
 const keptCode = new WeakMap<Code, Code>();
 const kept = (d: Doc): Doc => {
   let code = keptCode.get(d.code);
-  if (!code) keptCode.set(d.code, (code = { nodes: Object.fromEntries(Object.entries(d.code.nodes).filter(([id]) => own(id))), defs: d.code.defs.filter(own) }));
+  // On the library's layer only the nodes not the library's need looking
+  // at: the program's own are among them (I167: 20 ms an edit, walking
+  // every node).
+  const ids = changedFromLayer(d.code);
+  if (!code) keptCode.set(d.code, (code = { nodes: Object.fromEntries((ids ? [...ids] : Object.keys(d.code.nodes)).filter((id) => own(id) && d.code.nodes[id]).map((id) => [id, d.code.nodes[id]])), defs: d.code.defs.filter(own) }));
   return { ...d, code };
 };
 const UNSAVED = "Not kept in this browser: its storage is full. Save file keeps this program; deleting a program you no longer need makes room.";
@@ -963,7 +967,7 @@ const returnsBool = (info: T.Info, d: Id) => {
 };
 
 // The values a definition opens with (editor/seeds.ts, E228j).
-const { mainCopies, pixelSeed, readPort, seeded } = seeds({
+const { mainCopies, pixelSeed, readPort, seeded, warmCalls } = seeds({
   doc: () => doc, ui, pres: () => pres(), ownDefs: () => ownDefs(), defBody: (d) => defBody(d), defNamed, render: () => render(),
 });
 
@@ -2597,4 +2601,6 @@ render();
 setTimeout(() => warmParents(LIBRARY.code), 1500);
 // Run's worker, started with this program's check while nothing else
 // runs, so Run main doesn't wait for the library's check (I177).
-if (!EMBED) setTimeout(() => { const m = defNamed("main"); if (m && typesOf()) warmRun(m); }, 2500);
+if (!EMBED) setTimeout(() => { const m = defNamed("main"); if (m && typesOf()) warmRun(m); }, 1000);
+// What main first calls each function with, for opening one (I179).
+if (!EMBED) setTimeout(() => { const info = typesOf(); if (info) warmCalls(info); }, 2000);
