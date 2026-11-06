@@ -19,6 +19,7 @@
 // the evaluator's (C137c2), Random seeded is random.ts's generator, and
 // the world is the evaluator's Runtime (C137c3, runCoreMain).
 
+import { shareCalls } from "./share-calls.ts";
 import { envSet, zeroParts } from "./zero-parts.ts";
 import { ARRAY_OPS, FALSE, TRUE } from "../../ters/src/lang/std.ts";
 import { toList, type Runtime } from "../../ters/src/lang/run.ts";
@@ -90,8 +91,15 @@ const MATH: Partial<Record<Op, string>> = { sqrt: "sqrt", abs: "abs", floor: "fl
 // R.worlds in that order. Functions are f0, f1, … with no comment naming
 // their definitions (C170a): a stop names its definition through
 // CoreIR.stops (C143b), and the rest of what a tool needs goes in C143's map.
+// What in printed code may throw no answer (R.FAIL) rather than give it:
+// anything of the runtime's but its stop, step and mod, the program's
+// runtime and world functions, a try, a throw, a yield.
+const THROWS = /\bR\.(?!FAIL\b|stop\(|step\(|mod\()|\brt\d+\(|\bw\d+\(|\btry\b|\bthrow\b|\byield\b/;
+
 export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: string[] } {
   const names = ir.funcs.map((_, i) => `f${i}`);
+  // The partial functions, whose bodies may throw no answer (an attempt's try).
+  const partialNames = new Set(names.filter((_, i) => ir.funcs[i].partial));
   // A closure carries its lambda's and captures' ids (C137c13) only for a
   // solver (or set and path) to look inside it: in a program with none, it doesn't
   // (C169), and no Map is made per closure.
@@ -241,6 +249,16 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
     function tried(e: Extract<SExpr, { k: "attempt" }>, pre: string[], d: string): string {
       const ok = temp(), label = temp(), [save, back] = keep();
       const body = within(`{ ${ok} = false; break ${label}; }`, () => block(e.body, { set: local(e.res), fails: true }, d + "  "));
+      // A body whose every no answer leaves by its label, with nothing in
+      // it that throws one (a partial closure's R.ck, the runtime's or the
+      // world's functions, a nested try, a wait, a partial function), needs no try: `/` and
+      // `sqrt` say no answer as a value (C189, GAPS.md round 12 B2).
+      // A partial function's own body may throw it too (its R.ck), so a
+      // call of one keeps the try.
+      if (!e.spent && !e.resumes && !body.some((l) => THROWS.test(l) || [...l.matchAll(/\b([A-Za-z_$][\w$]*)\(/g)].some((m) => partialNames.has(m[1])))) {
+        pre.push(`${d}let ${ok} = true;`, `${d}${label}: {`, ...body, `${d}  if (${local(e.res)} === R.FAIL) ${ok} = false;`, `${d}}`);
+        return ok;
+      }
       pre.push(`${d}${save}let ${ok} = true;`, `${d}${label}: try {`, ...body, `${d}  if (${local(e.res)} === R.FAIL) ${ok} = false;`, `${d}} catch (x) {`, `${d}  if (x !== R.FAIL${e.spent ? " && x !== R.OUT" : ""}) throw x;`, `${d}  ${back}${ok} = false;`, `${d}}`);
       return ok;
     }
@@ -547,6 +565,8 @@ export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roo
   // Parts always 0 (a vector's bivector parts) dropped, with a copy of a
   // function for each set of parts its callers give (zero-parts.ts, L43).
   if (!envSet("NO_ZP")) ir = zeroParts(ir, ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : []))).ir;
+  // A pure call made twice with the same inputs, made once (C189).
+  if (!envSet("NO_SHARE")) shareCalls(ir);
   // Reads that wait on the places their values are used at (C162).
   trackReads(ir);
   return ir;
