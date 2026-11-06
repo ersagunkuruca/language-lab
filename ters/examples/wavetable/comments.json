@@ -1,0 +1,9 @@
+{
+  "rmtb5pehaaidgenbq4per9ifat": "How many samples the table holds: one period of a sine, 256 places.",
+  "8pb1s6g1qls204nqeb70pub1bt": "One period of a sine: sample i is sin(2π·i/256). Read by position many times a second, so the compiler keeps it as an array (C30).",
+  "ninogdmpo6nqu169n1r2sn0bl3": "How far the phase moves a sample, in 1/65536ths of a place: the table is read 256·hz/48000 places on each time, and 256·65536/48000 is about 350.",
+  "edbs38mlpvp7b4r6i8u0his2r0": "Sample n of a tone: the table at the phase's whole places, wrapped round at 256.",
+  "80dvrug1fee9ad42ubn1imtabc": "The first count samples of a tone.",
+  "79tuanm63191kbv8p1pp280gjm": "A tone's power over its first count samples: the mean of their squares. A full-scale sine's is 1/2.",
+  "qh4cjhmitbna7ej2kh21st0u86": "The table's length, a 440 Hz tone's first samples, and its power over 1/20 of a second (2,400 samples, 2,400 reads of the table)."
+}
