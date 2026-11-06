@@ -2886,6 +2886,8 @@ Each was worked around, and the workaround is in the driver or the seed.
   nothing here handles": the loop could only be tried through `main`
   and `lab run`. And eval shows `= 5 : a` and `List a` where the type is
   known. Row I188.
+  *Fixed (I188):* eval runs its text as an action of no inputs, as main
+  runs, within its steps, and shows a type with what it needs.
 - **M6. crew opens with five errors.** The MCP session reports `released`,
   `give`, `step`, `run floor` and `fresh floor` as wrong ("expected (a,
   b), got std.pair Int Int") where `lab check` finds none: the session

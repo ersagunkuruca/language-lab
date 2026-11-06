@@ -190,3 +190,9 @@ test("a relation's solve is written as the view prints it, its ports by name (L2
   assert.equal(call("replace", { at: "touch time", find: "‹gap at›(obstacle = o, ball = b, gap = 0)", text: "gap at(thing = o, ball = b, gap = 0)" }).text, "gap at has no port thing: its ports are obstacle, ball, t, gap");
   assert.equal(text("check"), "ok\n= `cushion rests` is the same as `pocket rests` (yours)\n= `pocket rests` is the same as `cushion rests` (yours)");
 });
+
+test("eval runs what may not end, within its steps, and says a type as the view does (I188)", () => {
+  text("open", { path: "../compiler/gaps/break" });
+  assert.equal(text("eval", { text: "played(break table(6, 0.01)).events" }), "= 47 : Int");
+  assert.equal(text("eval", { text: "[1, 2]" }), "= [1, 2] : List a where a is a Number");
+});
