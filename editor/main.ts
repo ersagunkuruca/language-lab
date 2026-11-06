@@ -963,7 +963,7 @@ const returnsBool = (info: T.Info, d: Id) => {
 };
 
 // The values a definition opens with (editor/seeds.ts, E228j).
-const { mainCopies, pixelSeed, readPort, seeded } = seeds({
+const { mainCopies, pixelSeed, readPort, seeded, warmCalls } = seeds({
   doc: () => doc, ui, pres: () => pres(), ownDefs: () => ownDefs(), defBody: (d) => defBody(d), defNamed, render: () => render(),
 });
 
@@ -2598,3 +2598,5 @@ setTimeout(() => warmParents(LIBRARY.code), 1500);
 // Run's worker, started with this program's check while nothing else
 // runs, so Run main doesn't wait for the library's check (I177).
 if (!EMBED) setTimeout(() => { const m = defNamed("main"); if (m && typesOf()) warmRun(m); }, 1000);
+// What main first calls each function with, for opening one (I179).
+if (!EMBED) setTimeout(() => { const info = typesOf(); if (info) warmCalls(info); }, 2000);

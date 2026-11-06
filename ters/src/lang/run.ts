@@ -474,6 +474,11 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   // A copy at another number type is entered as the lambda it copies.
   const copyOf = info.copyOf;
   // Our own copy of the node table: `derivative` writes new code into it.
+  // A solve written in the program is read on the code as resolved, which
+  // every run shares, so what is worked out about it once (its mode,
+  // modes.ts solveMode; its plans) is kept between runs (I179: opening
+  // board's `stage from key` worked its modes out again, 0.1 s).
+  const shared = code;
   code = { nodes: { ...code.nodes }, defs: code.defs };
   // It is resolved: a solve inside the run (relate.ts interpreter) reads
   // this copy, and resolving it again walked every node twice a solve
@@ -1136,8 +1141,9 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       // A solve with exactly one answer (oneAnswer, MODES.md), or results
       // each computed from the inputs (directions.ts), leaves no choice
       // point: its first answer is the answer.
-      let answers: Iterable<Value[]> = solveAnswers(code, n, known, { spend, names: rt.names, stuck: rt.stuck, info, shown: shownBy, ordered: orderedBy });
-      if (solvesOnce(code, n)) {
+      const at = shared.nodes[n.id] === n ? shared : code;
+      let answers: Iterable<Value[]> = solveAnswers(at, n, known, { spend, names: rt.names, stuck: rt.stuck, info, shown: shownBy, ordered: orderedBy });
+      if (solvesOnce(at, n)) {
         const r = (answers as Generator<Value[]>).next();
         if (r.done) throw new Error(`solving ${rt.names?.[useTarget(code.nodes, n)] ?? useTarget(code.nodes, n)} this way gives exactly one answer, and it gave none`);
         answers = [r.value];

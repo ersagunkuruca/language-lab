@@ -43,7 +43,7 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| I179 | Opening some definitions freezes the page for 1 to 2.2 s. Example: board `stage from key`, 2.3 s with one 2.2 s task (0.8 to 1.1 s in the morning's pass); also Spacetime `scalar part` 2.6 s, machine `all digits` 1.4, board `stage name` 1.3, calc `blank` 1.2. After I179a (2026-11-05 23:50): `stage from key` 0.68 s, its longest task 0.61; `stage name` 0.67; Spacetime `scalar part` 2.2 s (task 1.0), machine `all digits` 1.6 (1.6), calc `blank` 1.3 (1.2). Done when `stage from key` opens in tasks of at most 0.3 s | QA-2026-11-05b M1 | P2 | M | a done |
+| I189 | Opening some definitions still freezes the page for a second or more. Measured 2026-11-06 03:00 after I179: Spacetime `scalar part` 1.75 s (its longest task 0.93), machine `all digits` 1.6 s (1.5: runBackwards searching from its seed, relate's one-off library picks and rechecks in fieldsByType and sharedFields). Example: machine `all digits` opens in tasks of at most 0.3 s | I179 (QA-2026-11-05b M1) | P2 | M | |
 
 ### Foundations ([FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md))
 
