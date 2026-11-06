@@ -109,7 +109,9 @@ language already does for numbers. For balls the closed form is faster
 and should be what the compiler picks; for screw motions, conservative
 advancement is a safe numeric way to solve that relation. That fits
 [WAYS.md](../numbers/WAYS.md): several ways to compute one operation, the
-compiler choosing by cost. It is a note for L120, not a separate row.
+compiler choosing by cost. Built (L120d): examples/impact's `gap at` is
+such a relation, its other direction `first touch` the ball's closed form
+or, by its way, conservative advancement.
 
 ## 2. A* for an agent with inertia
 

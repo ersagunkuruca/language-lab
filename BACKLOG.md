@@ -23,7 +23,7 @@ language, then more targets or speed (WORKFLOW.md "Priority").
 | E Editor | "Editor lane" | E103, then Language or Compiler rows agreed with those lanes |
 | C Compiler and targets | "Compiler lane" | C44 (fibers in C); C93 to Language lane B; C184 and C30 with the Editor lane |
 | L Language and library | "Language lane" | L44, then L88 and L182 when unblocked (core, run.ts, infer.ts, hosts.ts) |
-| L Language and library | "Language lane B" | L118c (evaluator side, handed over by the Language lane 2026-11-05 22:16; waits on Ersagun, who stopped L118 after step 2), L120 (the compiler choosing a way). Skip L107 (waits on Ersagun) and L24 (research). Take a row from the other list only after telling that lane. |
+| L Language and library | "Language lane B" | L118c (evaluator side, handed over by the Language lane 2026-11-05 22:16; waits on Ersagun, who stopped L118 after step 2). Skip L107 (waits on Ersagun) and L24 (research). Take a row from the other list only after telling that lane. |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -202,7 +202,6 @@ agent with inertia. All later goals.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L120 | **Later goal**: the time when two things touch as a relation (`gap(a at t, b at t) = 0` solved for t), with conservative advancement and the closed forms as its ways. Done: examples/impact (L120a to c), one `first touch` with a ball's closed form and conservative advancement as a way, the compiler choosing by cost | Ersagun 2026-11-01 | P3 | L | a, b, c done |
 
 ### Someday
 

@@ -375,10 +375,23 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
     if (sc && constrained(sc).length) {
       const at: Env = new Map();
       const a = close(opAt.get(id) ?? num, env);
-      // The field's own type, at a (L128d3): its inputs to its results.
+      // The field's own type, at a (L128d3): its inputs to its results,
+      // as the field writes them with a for the interface's parameter
+      // (Trig's ports are all a; a Collider's are a body, a wall and
+      // Floats, I180). A part not written as a plain type is taken at a.
       const f0 = nodes[useTarget(nodes, n)], fp0 = f0?.kind === "field" ? fieldPorts(nodes, f0) : null;
+      const written = (tid: Id): Type | null => {
+        const t = nodes[tid];
+        if (t?.kind !== "tref") return null;
+        if (nodes[t.target]?.kind === "binder") return a;
+        const args = t.args.map(written);
+        return args.every((x): x is Type => x !== null) ? { t: "con", id: t.target, args } : null;
+      };
+      const ft = f0?.kind === "field" ? nodes[f0.type] : null;
       const k = fp0?.outs.length ?? 2;
-      const fieldType = close({ t: "fn", params: (fp0?.ins ?? [0, 1]).map(() => a), ret: k === 1 ? a : { t: "con", id: `std.tuple${k}`, args: Array.from({ length: k }, () => a) }, eff: pure }, env);
+      const fieldType = fp0 && ft?.kind === "tfun"
+        ? close({ t: "fn", params: ft.params.map((p) => written(p) ?? a), ret: written(ft.result) ?? a, eff: pure }, env)
+        : close({ t: "fn", params: (fp0?.ins ?? [0, 1]).map(() => a), ret: k === 1 ? a : { t: "con", id: `std.tuple${k}`, args: Array.from({ length: k }, () => a) }, eff: pure }, env);
       bind(sc.type, fieldType, new Set(constrained(sc)), at);
       target = instance(target, at, sc);
     }
