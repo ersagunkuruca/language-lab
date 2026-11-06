@@ -12,7 +12,7 @@
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import type { Code, Id, NodeOf } from "../src/model.ts";
-import { collect, freshId, subtree, isCall, type Call, type NodeData } from "../src/model.ts";
+import { collect, freshId, portsOf, subtree, isCall, type Call, type NodeData } from "../src/model.ts";
 import { sameEverywhere, sharedPlaces } from "../src/lang/patterns.ts";
 import type { Comments, Names, Presentation, Style } from "../src/presentation.ts";
 import { root } from "../src/io.ts";
@@ -30,7 +30,7 @@ import { equal, mainProblem, pageProblem, runProgram, runMain, showerFor, withSt
 import { nodeWorld } from "../src/lang/world.ts";
 import { runTests, savedFrom } from "../src/lang/tests.ts";
 import * as T from "../../editor/typed.ts";
-import { onTodaysIds, S, SIGS } from "../src/lang/std.ts";
+import { onTodaysIds, S, SIGS, TRUE } from "../src/lang/std.ts";
 import { setDisplayNames } from "../../editor/typed.ts";
 import { addField, addParameter, addWay, deleteDefinition, nameClash, newDefinition, setWay, type Shape } from "../src/lang/toplevel.ts";
 import { readCase, readType, typeNames, type Build } from "./type-text.ts";
@@ -309,7 +309,84 @@ export class Session {
     const top = hits.filter((x) => !hits.some((y) => y !== x && subtree(this.code, y).includes(x)));
     if (!top.length) throw new Error(`no part of #${this.id(id)} reads ${find}`);
     if (top.length > 1) throw new Error(`${top.length} parts read ${find}: give the id of a block around just one`);
-    return top[0];
+    // A thunk reads as its body (first's `() => …`): the body is the part.
+    const n = this.code.nodes[top[0]];
+    return n?.kind === "lambda" && !n.params.length && hits.includes(n.body) ? n.body : top[0];
+  }
+
+  // A hole filled from text as the editor reads it, and a relation's solve
+  // as the view prints one (L231): `gap at(body = b, wall = w, gap = 0)`,
+  // the ports given by name and the one left out the value.
+  private fill(code: Code, names: Names, hole: Id, text: string, def: Id): { ok: true; code: Code; names: Names } | { ok: false; reason: string } {
+    const solve = this.solveIn(code, names, hole, text);
+    if (!solve) return this.fillOne(code, names, hole, text, def);
+    let cur: { ok: true; code: Code; names: Names } | { ok: false; reason: string } = { ok: true, code: solve.code, names };
+    for (const [h, t] of solve.fills) {
+      if (!cur.ok) return cur;
+      cur = this.fillOne(cur.code, cur.names, h, t, def);
+    }
+    return cur;
+  }
+
+  private fillOne(code: Code, names: Names, hole: Id, t: string, def: Id): { ok: true; code: Code; names: Names } | { ok: false; reason: string } {
+    // An implementation's field left to the interface's ways (WAYS.md):
+    // the editor's text reader doesn't take it (I183), so it is put in
+    // here; the checker says if no way grounds it.
+    if (norm(t) === "by its ways") return { ok: true, names, code: { nodes: { ...code.nodes, [hole]: { id: hole, kind: "ref", target: S.byItsWays } }, defs: code.defs } };
+    const r = T.fillValue(code, names, editorInfo(code, names), hole, t, def);
+    if (r.ok || r.reason !== "a name alone is listed already") return r;
+    // A name alone, which the editor's palette lists: the nearest in
+    // scope (a case's field bound in its arm, I184), else a definition.
+    const all = baseNames(names);
+    const near = T.scopeAt(code, def, hole).filter((b) => all[b] === norm(t)).at(-1)
+      ?? code.defs.find((d) => all[d] === norm(t) && !LIBRARY.code.nodes[d]) ?? code.defs.find((d) => all[d] === norm(t));
+    if (!near) return r;
+    return { ok: true, names, code: { nodes: { ...code.nodes, [hole]: { id: hole, kind: "ref", target: near } }, defs: code.defs } };
+  }
+
+  private solveIn(code: Code, names: Names, hole: Id, text: string): { code: Code; fills: [Id, string][] } | null {
+    const m = /^\s*(.+?)\s*\((.*)\)\s*$/s.exec(text);
+    if (!m || !/=/.test(m[2])) return null;
+    const all = baseNames(names);
+    const head = norm(m[1]);
+    // A field with ports of the program's (an interface's operation), else a
+    // definition with results.
+    const fields = Object.values(code.nodes).filter((n) => n.kind === "field" && n.ports?.length && all[n.id] === head);
+    const defs = code.defs.filter((d) => all[d] === head && portsOf(code.nodes, d));
+    const target = fields.length === 1 ? fields[0].id : defs.length === 1 ? defs[0] : null;
+    if (!target) return null;
+    const f = code.nodes[target];
+    const keys: [string, string][] = f.kind === "field"
+      ? f.ports!.map((p, i) => [p, String(i)])
+      : (code.nodes[(code.nodes[target] as NodeOf<"def">).body!] as NodeOf<"lambda">).params.map((p) => [all[p] ?? p, p]);
+    // Split the inputs on commas outside brackets.
+    const parts: string[] = [];
+    let depth = 0, from = 0;
+    const a = m[2];
+    for (let i = 0; i < a.length; i++) {
+      if ("([{".includes(a[i])) depth++;
+      else if (")]}".includes(a[i])) depth--;
+      else if (a[i] === "," && !depth) { parts.push(a.slice(from, i)); from = i + 1; }
+    }
+    parts.push(a.slice(from));
+    const nodes = { ...code.nodes };
+    const given: Record<string, Id> = {};
+    const fills: [Id, string][] = [];
+    for (const part of parts) {
+      const eq = /^\s*([^=]+?)\s*=(?!=)\s*(.+?)\s*$/s.exec(part);
+      if (!eq) return null;
+      const key = keys.find(([n]) => n === norm(eq[1]))?.[1];
+      if (key === undefined) throw new Error(`${head} has no port ${eq[1].trim()}: its ports are ${keys.map(([n]) => n).join(", ")}`);
+      const h = freshId();
+      nodes[h] = { id: h, kind: "hole" };
+      given[key] = h;
+      fills.push([h, eq[2]]);
+    }
+    const ref = freshId(), yes = freshId();
+    nodes[ref] = { id: ref, kind: "ref", target };
+    nodes[yes] = { id: yes, kind: "ref", target: TRUE };
+    nodes[hole] = { id: hole, kind: "call", fn: ref, given: { ...given, out: yes } } as NodeOf<"call">;
+    return { code: { nodes, defs: code.defs }, fills };
   }
 
   // `kase`: in a match, the body of that one case, even where the view
@@ -331,19 +408,7 @@ export class Session {
       const info = editorInfo(this.code, this.names);
       const holed = T.toHole(this.code, this.names, info, target);
       if (!holed.ok || t === "□" || t === "?" || t === "") return holed;
-      // An implementation's field left to the interface's ways (WAYS.md):
-      // the editor's text reader doesn't take it (I183), so it is put in
-      // here; the checker says if no way grounds it.
-      if (norm(t) === "by its ways") return { ...holed, code: { nodes: { ...holed.code.nodes, [target]: { id: target, kind: "ref", target: S.byItsWays } }, defs: holed.code.defs } };
-      const r = T.fillValue(holed.code, holed.names, editorInfo(holed.code, holed.names), target, t, def);
-      if (r.ok || r.reason !== "a name alone is listed already") return r;
-      // A name alone, which the editor's palette lists: the nearest in
-      // scope (a case's field bound in its arm, I184), else a definition.
-      const all = baseNames(holed.names);
-      const near = T.scopeAt(holed.code, def, target).filter((b) => all[b] === norm(t)).at(-1)
-        ?? this.code.defs.find((d) => all[d] === norm(t) && !LIBRARY.code.nodes[d]) ?? this.code.defs.find((d) => all[d] === norm(t));
-      if (!near) return r;
-      return { ...holed, code: { nodes: { ...holed.code.nodes, [target]: { id: target, kind: "ref", target: near } }, defs: holed.code.defs } };
+      return this.fill(holed.code, holed.names, target, t, def);
     }, undefined, !kase);
   }
 
@@ -421,7 +486,7 @@ export class Session {
       const let_ = Object.values(r.code.nodes).find((n): n is Call => isCall(n) && (r.code.nodes[n.fn] as { params?: Id[] }).params?.[0] === r.dot)!;
       const hole = let_.args[0];
       if (!value.trim()) return { ok: true, code: r.code, names };
-      return T.fillValue(r.code, names, editorInfo(r.code, names), hole, value, def);
+      return this.fill(r.code, names, hole, value, def);
     });
   }
 

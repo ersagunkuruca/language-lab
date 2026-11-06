@@ -2871,6 +2871,9 @@ Each was worked around, and the workaround is in the driver or the seed.
   shows the solve's ports as letters and its binder as a 26-character id
   (impact's `until it touches`). `touch time` calls `first touch`
   directly, so the program reads the relation one way only. Row L231.
+  *Fixed (L231):* the view names a field's ports (`gap at(body = b, wall
+  = w, gap = 0)`), the MCP reads that form back, and `touch time` is the
+  solve now.
 - **M4. Shared names read wrong, far from the cause.** `p.place` in
   `pocket gap at` read Ball's `place` (Pocket had one too) with nothing
   said, so `pocket toucher` was typed `Toucher Ball` and refused as a
