@@ -56,6 +56,7 @@
 
 import type { Id } from "../../ters/src/model.ts";
 import { shareCalls } from "./share-calls.ts";
+import { recordParts } from "./record-parts.ts";
 import { isArray, isRecord, noData, tidied, unchecked, type LType, type CoreIR, type Op, type RType, type SExpr, type SFunc, type DType, type FType, type WType, type AType, type TType } from "./scalar.ts";
 
 // A shader has no data with several cases (`data` in scalar.ts is for WebAssembly).
@@ -198,15 +199,29 @@ function unrounded(e: SExpr): SExpr {
   }
 }
 
+// A shader's functions tidied (C175), in place; no bit of any answer
+// changes. A record built to be read in parts is built in the parts read
+// (record-parts.ts); then arithmetic made twice is made once (a gradient's
+// per-axis copies each work out the same time-only values), a let of a
+// let's local is that local (tidied), and sharing runs again, since two
+// copies of a gradient's axis read copies of the same locals until then.
+export function shaderTidied(ir: CoreIR): CoreIR {
+  let tidy = recordParts(ir) > 0;
+  for (let round = 0; round < 4; round++) {
+    if (shareCalls(ir, { ops: true, calls: false })) tidy = true;
+    else if (round) break;
+    if (tidy) ir.funcs.forEach((f, i) => { f.body = tidied(f, i).body; });
+    tidy = false;
+  }
+  return ir;
+}
+
 export function emitWgsl(lowered: CoreIR): Shader {
   if (lowered.data.length || lowered.fns.length) throw new Error("a shader can't have data types with several cases: lower without `data`");
   // No finiteness checks (L125c2): a GPU can't stop, and WGSL may assume
   // there's nothing but finite floats, which is Float64's meaning.
   const funcs = lowered.funcs.map((f) => ({ ...f, locals: [...f.locals], body: unrounded(unchecked(f.body)) }));
-  // Arithmetic made twice, made once (C175): a gradient's
-  // per-axis copies each work out the same time-only values.
-  // Then a let of a let's local is that local (tidied).
-  if (shareCalls({ ...lowered, funcs }, { ops: true, calls: false })) funcs.forEach((f, i) => { f.body = tidied(f, i).body; });
+  shaderTidied({ ...lowered, funcs });
   const refused = new Map(lowered.refused);
   const bad = new Map<number, string>();
 
