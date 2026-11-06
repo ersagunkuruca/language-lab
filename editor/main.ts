@@ -2597,4 +2597,4 @@ render();
 setTimeout(() => warmParents(LIBRARY.code), 1500);
 // Run's worker, started with this program's check while nothing else
 // runs, so Run main doesn't wait for the library's check (I177).
-if (!EMBED) setTimeout(() => { const m = defNamed("main"); if (m && typesOf()) warmRun(m); }, 2500);
+if (!EMBED) setTimeout(() => { const m = defNamed("main"); if (m && typesOf()) warmRun(m); }, 1000);
