@@ -66,6 +66,16 @@ test("json read reads a long text compiled, without running out of stack", async
   assert.equal(await both((k) => k.call(lib("json printed"), k.call(lib("json read"), k.lit(text)))), JSON.stringify(text));
 });
 
+// json spelled's first, compiled, nested each choice's way in the rest
+// of the spelling: 100 records ran out of stack (L72e1d). Each choice
+// taken at its first way has nothing after it that can fail, so it is
+// plain code (first-arms.ts).
+test("json spelled's first compiled spells 300 records as json printed does, without running out of stack", async () => {
+  const text = JSON.stringify(Array.from({ length: 300 }, (_, i) => ({ id: i, name: `item ${i} "q"`, tags: ["a", "b"], price: i * 1.25, ok: i % 2 === 0 })));
+  const spelled = await both((k) => k.let("v", k.call(lib("json read"), k.lit(text)), (v) => k.call(S.first, k.thunk(() => k.call(lib("json spelled"), v)), k.thunk(() => k.lit("")))));
+  assert.equal(spelled, JSON.stringify(text));
+});
+
 test("json read stops on text that isn't JSON", () => {
   const stops = (text: string, why: RegExp) => {
     const p = program((k) => k.call(lib("json read"), k.lit(text)));
