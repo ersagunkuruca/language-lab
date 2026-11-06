@@ -58,6 +58,14 @@ function join(a: Abs, b: Abs): Abs {
   return true;
 }
 const key = (a: Abs | Abs[]) => JSON.stringify(a);
+// The same abstract value (key's equality, without writing it out).
+function same(a: Abs, b: Abs): boolean {
+  if (a === b) return true;
+  if (a === null || b === null || typeof a !== "object" || typeof b !== "object") return false;
+  if ("f" in a) return "f" in b && a.f.length === b.f.length && a.f.every((x, i) => same(x, b.f[i]));
+  if (!("c" in b) || a.c.length !== b.c.length) return false;
+  return a.c.every((x, i) => { const y = b.c[i]; return x === null || y === null ? x === y : x.length === y.length && x.every((z, j) => same(z, y[j])); });
+}
 // A function type's key, whether or not it may have no answer.
 const fkey = (t: FType) => t.key.replace(/!$/, "");
 
@@ -112,7 +120,9 @@ function timesP(a: Poly, b: Poly): Poly | null {
   return out;
 }
 
-interface Inst { fn: number; params: Abs[]; result: Abs; index: number }
+// `dirty`: to be read again (given more, or what it read grew); `readers`:
+// the copies that read its answer.
+interface Inst { fn: number; params: Abs[]; result: Abs; index: number; dirty: boolean; readers: Set<Inst> }
 
 // A small function of arithmetic on records (the vectors module's plus,
 // minus and scale at a multivector type) put where it's called, so the
@@ -233,14 +243,14 @@ export function zeroParts(ir0: CoreIR, roots: number[]): { ir: CoreIR; copies: n
   const ofFn = new Map<number, Inst[]>();
   let changed = true;
   const newInst = (fn: number, params: Abs[]): Inst => {
-    const i: Inst = { fn, params, result: null, index: -1 };
+    const i: Inst = { fn, params, result: null, index: -1, dirty: true, readers: new Set() };
     insts.push(i);
     (ofFn.get(fn) ?? ofFn.set(fn, []).get(fn)!).push(i);
     changed = true;
     return i;
   };
   const grow = (i: Inst, args: Abs[]) => {
-    args.forEach((a, j) => { const now = capped(join(i.params[j] ?? null, a)); if (key(now) !== key(i.params[j] ?? null)) { i.params[j] = now; changed = true; } });
+    args.forEach((a, j) => { const now = capped(join(i.params[j] ?? null, a)); if (!same(now, i.params[j] ?? null)) { i.params[j] = now; i.dirty = true; changed = true; } });
   };
   // One copy per place it's called from (and one for a closure's code,
   // one for a root), given what that place gives in every copy of its
@@ -268,15 +278,17 @@ export function zeroParts(ir0: CoreIR, roots: number[]): { ir: CoreIR; copies: n
   // A value of a type not at hand: a cell may give back anything.
   let lost = false;
   const handed = (t: LType | null, a: Abs) => {
-    if (!t) { if (!lost) { lost = true; changed = true; } return; }
+    if (!t) { if (!lost) { lost = true; changed = true; for (const i of insts) i.dirty = true; } return; }
     const k = tkey(t), was = given.get(k) ?? null, now = capped(join(was, a));
-    if (key(now) !== key(was)) { given.set(k, now); changed = true; }
+    if (!same(now, was)) { given.set(k, now); changed = true; for (const i of givenReaders.get(k) ?? []) i.dirty = true; }
   };
   const CELL_READ = /^host:builtin\.cells\.read$/, CELL_PUT = /^host:builtin\.cells\.(cell|write)$/;
   const caps = ir.shapes.map((s) => s.caps.map((): Abs => null));
+  const capReaders = ir.shapes.map((s) => s.caps.map(() => new Set<Inst>()));
+  const givenReaders = new Map<string, Set<Inst>>();
   const growCap = (shape: number, i: number, a: Abs) => {
     const now = capped(join(caps[shape][i], a));
-    if (key(now) !== key(caps[shape][i])) { caps[shape][i] = now; changed = true; }
+    if (!same(now, caps[shape][i])) { caps[shape][i] = now; changed = true; for (const r of capReaders[shape][i]) r.dirty = true; }
   };
 
   const algebras = new Map<Id, Algebra>();
@@ -287,7 +299,8 @@ export function zeroParts(ir0: CoreIR, roots: number[]): { ir: CoreIR; copies: n
   const read = (me: Inst, at?: { call: (e: SExpr, i: Inst) => void; value: (e: SExpr, a: Abs) => void }): Abs => {
     const f = funcs[me.fn];
     const env: Abs[] = f.locals.map((_, i) => (i < f.params.length ? me.params[i] ?? null : null));
-    const set = (i: number, a: Abs) => { env[i] = capped(join(env[i], a)); };
+    let grew = false;
+    const set = (i: number, a: Abs) => { const now = capped(join(env[i], a)); if (!same(now, env[i])) { env[i] = now; grew = true; } };
     // Exact cancellation: a sum of products that is 0 as a polynomial in
     // what it reads (a velocity turned round by a reflection keeps no
     // trivector part: the terms that would give one cancel), parts known
@@ -394,22 +407,23 @@ export function zeroParts(ir0: CoreIR, roots: number[]): { ir: CoreIR; copies: n
         case "call": {
           const args = e.args.map(ev);
           // Round a loop: the same copy, given more.
-          if (e.tail && e.fn === me.fn) { grow(me, args); at?.call(e, me); return me.result; }
+          if (e.tail && e.fn === me.fn) { grow(me, args); at?.call(e, me); me.readers.add(me); return me.result; }
           const i = instFor(e.fn, args, String(siteOf(e)));
           at?.call(e, i);
+          i.readers.add(me);
           return i.result;
         }
         case "closure": {
           e.caps.forEach((c, i) => growCap(e.shape, i, ev(c)));
           return true;
         }
-        case "cap": return caps[e.shape][e.i];
+        case "cap": capReaders[e.shape][e.i].add(me); return caps[e.shape][e.i];
         case "apply": {
           ev(e.fn);
           const args = e.args.map(ev);
           set(e.tmp, true);
           let out: Abs = null;
-          for (const c of codesOf.get(fkey(e.t)) ?? []) out = join(out, instFor(c, [true, ...args], "apply").result);
+          for (const c of codesOf.get(fkey(e.t)) ?? []) { const i = instFor(c, [true, ...args], "apply"); i.readers.add(me); out = join(out, i.result); }
           // A closure no code here makes (from the runtime): anything.
           return codesOf.has(fkey(e.t)) ? out : true;
         }
@@ -425,7 +439,7 @@ export function zeroParts(ir0: CoreIR, roots: number[]): { ir: CoreIR; copies: n
           const into = e.k === "rt" && CELL_PUT.test(e.fn);
           e.args.forEach((a) => { const v = ev(a); if (into) handed(typeOf(f, a), v); });
           const t = e.k === "rt" ? e.host?.t : e.t;
-          if (e.k === "rt" && CELL_READ.test(e.fn) && t && !lost) return given.get(tkey(t)) ?? null;
+          if (e.k === "rt" && CELL_READ.test(e.fn) && t && !lost) { const k = tkey(t); (givenReaders.get(k) ?? givenReaders.set(k, new Set()).get(k)!).add(me); return given.get(k) ?? null; }
           return true;
         }
         default: kids(e).forEach(ev); return true;
@@ -435,10 +449,10 @@ export function zeroParts(ir0: CoreIR, roots: number[]): { ir: CoreIR; copies: n
     // the body is read until they stop.
     let r: Abs = null;
     for (let n = 0; n < 8; n++) {
-      const before = key(env);
+      grew = false;
       polys.clear();
       r = ev(f.body);
-      if (key(env) === before) break;
+      if (!grew) break;
     }
     return r;
   };
@@ -470,8 +484,11 @@ export function zeroParts(ir0: CoreIR, roots: number[]): { ir: CoreIR; copies: n
     rounds++;
     for (let n = 0; n < insts.length; n++) {
       const i = insts[n];
+      // Only a copy given more, or one whose reads grew, reads again.
+      if (!i.dirty) continue;
+      i.dirty = false;
       const r = capped(join(i.result, ruled(i, read(i))));
-      if (key(r) !== key(i.result)) { i.result = r; changed = true; }
+      if (!same(r, i.result)) { i.result = r; changed = true; for (const x of i.readers) x.dirty = true; }
     }
   }
   // Not settled: nothing is said.
@@ -886,7 +903,7 @@ export function zeroParts(ir0: CoreIR, roots: number[]): { ir: CoreIR; copies: n
   const to = new Map<number, number>();
   const at = (n: number): number => { let m = n; while (to.has(m)) m = to.get(m)!; return m; };
   const shape = (e: SExpr): string => JSON.stringify(e, (k, v) => (typeof v === "bigint" ? `${v}n` : k === "fn" && typeof v === "number" ? at(v) : v && typeof v === "object" && "key" in v && !("k" in v) ? v.key : v));
-  const wider = (a: Abs[], b: Abs[]) => a.every((x, j) => key(join(x, b[j])) === key(x));
+  const wider = (a: Abs[], b: Abs[]) => a.every((x, j) => same(join(x, b[j]), x));
   for (let again = true; again;) {
     again = false;
     for (const [, list] of ofFn) {
