@@ -293,7 +293,9 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   // record, data or a text) is held in a static of its own from its first
   // call, each call after given one more count of it. The test harness
   // lets go of them after each call, so its count of cells left is still 0.
-  const once = new Set(kept.filter((i) => { const f = funcs[i]; return f.value && !f.params.length && !f.partial && !f.spends && (f.result === "text" || isRecord(f.result) || isData(f.result)); }));
+  // An array too (C30): the static's count makes replace at copy it, as
+  // it does any array another holds.
+  const once = new Set(kept.filter((i) => { const f = funcs[i]; return f.value && !f.params.length && !f.partial && !f.spends && (f.result === "text" || isRecord(f.result) || isData(f.result) || isArray(f.result)); }));
 
   // Types: every record, data type and function type the kept functions
   // mention, and the shapes of their closures.

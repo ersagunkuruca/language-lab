@@ -486,9 +486,12 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   // called, as the core IR's JavaScript keeps it (core-js.ts, `$v ??=`);
   // bounce's Clifford table was made again for every step. Only records,
   // data and texts, which nothing changes in place; a value that is null
-  // is worked out again, as before.
+  // is worked out again, as before. And arrays (C30), which don't change
+  // either: a push writes only a slot no other view has taken, and
+  // replace at copies (wasm-rt.ts ARRAYS); a table read by position was
+  // made again for every read.
   const kept = new Map<number, number>();
-  funcs.forEach((f, i) => { if (f.value && !f.params.length && !f.partial && !f.spends && (f.result === "text" || isRecord(f.result) || isData(f.result))) kept.set(i, randG + (rand ? 4 : 0) + kept.size); });
+  funcs.forEach((f, i) => { if (f.value && !f.params.length && !f.partial && !f.spends && (f.result === "text" || isRecord(f.result) || isData(f.result) || isArray(f.result))) kept.set(i, randG + (rand ? 4 : 0) + kept.size); });
   const stackG = randG + (rand ? 4 : 0) + kept.size;
   if (aborts) helpers.push({ name: "Abort.reason", key: "", params: [], result: "text", code: [0x23, ...u(reasonG)], wat: ["global.get $reason"] });
   // For the world's host: lists and optionals of texts, by fixed names
