@@ -910,10 +910,18 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
     }
     const fnArg = (i: number) => fnAt(n.args[i], ctx);
     const forwardOf = (i: number): Way => {
-      // first, all, count and optional run their action forward.
+      // first, all, count and optional run their action forward, and
+      // first its otherwise too (`first(…, else …)`), each a call from here:
+      // a recursion through either is one of this function's (L232, impact's
+      // `until it touches` going on a frame in its otherwise). What the
+      // action reads from here isn't measured, so the call shrinks nothing.
       const f = fnArg(i);
       const v = f ? mode(f, new Set(), new Map()) : null;
-      return { needs: ins, gives: [o], answers: ONE, ends: v ? v.ends && !v.stuck.length : false, why: v ? v.loops[0] : "an action only known when it runs", dynamic: v ? v.dynamic[0] : "an action only known when it runs" };
+      const others = n.args.flatMap((_, j) => { if (j === i) return []; const g = fnArg(j); return g?.k === "lambda" ? [g] : []; });
+      const vs = others.map((g) => mode(g, new Set(), new Map()));
+      if (!plansOnly) for (const g of [...(f?.k === "lambda" ? [f] : []), ...others]) { const k = keyOf(g, new Set(), new Map()); if (k) graphs.push({ from: ctx.key, to: k, arcs: [] }); }
+      const bad = vs.find((x) => !x.ends || x.stuck.length);
+      return { needs: ins, gives: [o], answers: ONE, ends: v ? v.ends && !v.stuck.length && !bad : false, why: v ? v.loops[0] ?? bad?.loops[0] : "an action only known when it runs", dynamic: v ? v.dynamic[0] : "an action only known when it runs" };
     };
     switch (id) {
       case S.concat: {
@@ -1175,12 +1183,17 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
 
   // Run forward, a definition that ends by lengths (spine.ts, I84) ends
   // here too, given functions that don't lead back to it.
+  const groups = new Map<Id, Id[]>();
   const byLength = (k: string) => {
     const [lam, known, ...given] = k.split("|"), body = nodes[lam];
     const d = code.defs.find((d) => (nodes[d] as NodeOf<"def">).body === lam);
     if (!d || body?.kind !== "lambda" || known !== body.params.map((_, i) => String(i)).sort().join(",")) return false;
     const fns = given.join(",").split(",").filter(Boolean).map((x) => x.slice(x.indexOf("=") + 1));
-    return fns.every((f) => f.startsWith("def:") && !dependencies(code, f.slice(4)).includes(d)) && spineTerminates(code, [d], () => body);
+    // The whole group d calls itself through (agent's pull, pull left and
+    // restart), each read by its own body: d alone sees no call back (L232).
+    let group = groups.get(d);
+    if (!group) { const deps = dependencies(code, d); group = [d, ...deps.filter((x) => x !== d && nodes[x]?.kind === "def" && dependencies(code, x).includes(d))]; groups.set(d, group); }
+    return fns.every((f) => f.startsWith("def:") && !dependencies(code, f.slice(4)).includes(d)) && spineTerminates(code, group, (x) => { const b = (nodes[x] as NodeOf<"def">).body; return b ? nodes[b] : null; });
   };
   // Size-change: every composed graph from a mode back to itself that's
   // its own square needs a port that strictly shrinks around it.
