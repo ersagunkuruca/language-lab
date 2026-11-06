@@ -20,6 +20,7 @@
 // the world is the evaluator's Runtime (C137c3, runCoreMain).
 
 import { shareCalls } from "./share-calls.ts";
+import { inlineSmall } from "./inline-small.ts";
 import { envSet, zeroParts } from "./zero-parts.ts";
 import { ARRAY_OPS, FALSE, TRUE } from "../../ters/src/lang/std.ts";
 import { toList, type Runtime } from "../../ters/src/lang/run.ts";
@@ -568,7 +569,10 @@ export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roo
   // Parts always 0 (a vector's bivector parts) dropped, with a copy of a
   // function for each set of parts its callers give (zero-parts.ts, L43).
   if (!envSet("NO_ZP")) ir = zeroParts(ir, ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : []))).ir;
-  // A pure call made twice with the same inputs, made once (C189).
+  // Small pure functions put in place, so that sharing reaches across
+  // them (C194); then a pure call made twice with the same inputs, made
+  // once (C189).
+  if (!envSet("NO_INLINE")) inlineSmall(ir);
   if (!envSet("NO_SHARE")) shareCalls(ir);
   // Reads that wait on the places their values are used at (C162).
   trackReads(ir);
