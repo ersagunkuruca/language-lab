@@ -9,8 +9,15 @@
 // let goes at the smallest part holding both calls that runs each of
 // them whenever it runs, and only where what the calls read is bound
 // outside that part.
+//
+// The same for arithmetic made twice (C175): `sin(0.7 · t)` that each of
+// a gradient's per-axis copies works out, or a shader's `p.x − 0.55 ·
+// sin(1.1 · t)` written in two places. Only what computes on Float64s and
+// Bools and always answers (no Int that may give up past 32 bits, no
+// finiteness check); bit for bit the same, since each is worked out the
+// same way once.
 
-import type { CoreIR, SExpr } from "./scalar.ts";
+import { OPS, type CoreIR, type Op, type SExpr } from "./scalar.ts";
 
 const ONE = ["cond", "then", "else", "value", "body", "rec", "fn", "scrut", "otherwise", "ok", "reason", "arm", "release", "list", "dflt"] as const;
 const MANY = ["args", "items", "caps", "arms"] as const;
@@ -85,6 +92,20 @@ function pureFuncs(ir: CoreIR): Set<number> {
   return new Set([...effectless].filter((i) => !ir.funcs[i].partial && answers[i]));
 }
 
+// Arithmetic that only computes and always answers.
+const PURE_OPS = new Set<Op>(["add", "sub", "mul", "div", "neg", "sqrt", "abs", "floor", "float32", "sin", "cos", "tan", "exp", "log", "pow", "atan2", "mod", "less", "equal", "beq", "and", "or", "not", "itof"]);
+// A value worked out from locals and constants by pure arithmetic, pure
+// calls and records.
+function pureTree(e: SExpr, pure: Set<number>): boolean {
+  switch (e.k) {
+    case "num": case "int": case "bool": case "text": case "local": return true;
+    case "get": case "field": return pureTree(e.rec, pure);
+    case "op": return PURE_OPS.has(e.op) && e.args.every((a) => pureTree(a, pure));
+    case "make": case "new": return e.args.every((a) => pureTree(a, pure));
+    case "call": return !e.cps && !e.tail && pure.has(e.fn) && e.args.every((a) => pureTree(a, pure));
+    default: return false;
+  }
+}
 // An input read as it is: a constant, a local, a field of one.
 function simple(e: SExpr): boolean {
   switch (e.k) {
@@ -98,7 +119,11 @@ function readsOf(e: SExpr, out: Set<number> = new Set()): Set<number> {
   for (const [, k] of kids(e)) readsOf(k, out);
   return out;
 }
-// A simple input as text, and a call of simple inputs.
+// A type as a number, for keys: types are compared by identity.
+const typeIds = new WeakMap<object, number>();
+let typeCount = 0;
+const typeId = (t: object) => { if (!typeIds.has(t)) typeIds.set(t, ++typeCount); return typeIds.get(t)!; };
+// A pure value as text: equal text, the same value.
 function said(e: SExpr): string {
   switch (e.k) {
     case "num": return `n${e.v}`;
@@ -108,10 +133,16 @@ function said(e: SExpr): string {
     case "local": return `l${e.i}`;
     case "get": return `g${e.i}(${said(e.rec)})`;
     case "field": return `f${e.c}.${e.i}(${said(e.rec)})`;
+    case "op": return `${e.op}(${e.args.map(said).join(",")})`;
+    case "make": return `m${typeId(e.t)}(${e.args.map(said).join(",")})`;
+    case "new": return `c${typeId(e.t)}.${e.c}(${e.args.map(said).join(",")})`;
+    case "call": return `${e.fn}(${e.args.map(said).join(",")})`;
     default: return "?";
   }
 }
-const keyOf = (e: Extract<SExpr, { k: "call" }>) => `${e.fn}(${e.args.map(said).join(",")})`;
+// Whether a value has arithmetic or a call in it: worth a local. Not the
+// sign of a local alone (−x costs nothing).
+const works = (e: SExpr): boolean => (e.k === "op" ? !((e.op === "neg" || e.op === "not") && simple(e.args[0])) : e.k === "call" || ((e.k === "get" || e.k === "field") ? works(e.rec) : (e.k === "make" || e.k === "new") && e.args.some(works)));
 // A node and the nodes in it copied; the types they carry kept as they are.
 function copy(e: SExpr): SExpr {
   const out = { ...e } as unknown as Record<string, unknown>;
@@ -120,18 +151,21 @@ function copy(e: SExpr): SExpr {
   return out as unknown as SExpr;
 }
 
-export function shareCalls(ir: CoreIR): number {
+// Shared: a pure call (unless `calls` is false), and (`ops`) pure
+// arithmetic over locals. WGSL keeps its calls, which its printer reads
+// through for the GPU's own (x / |x| is normalize(x)).
+export function shareCalls(ir: CoreIR, opts: { ops?: boolean; calls?: boolean } = {}): number {
   const pure = pureFuncs(ir);
   let shared = 0;
   ir.funcs.forEach((f) => {
     // The body is changed in place: a copy first, as a node may be shared.
     let copied = false;
-    for (let round = 0; round < 32; round++) {
+    for (let round = 0; round < (opts.ops ? 512 : 32); round++) {
       // Each candidate call with its path from the body: the slots taken.
       const seen = new Map<string, { node: SExpr; paths: [SExpr, Slot][][] }>();
       const walk = (e: SExpr, path: [SExpr, Slot][]) => {
-        if (e.k === "call" && !e.cps && !e.tail && pure.has(e.fn) && e.args.every(simple)) {
-          const k = keyOf(e);
+        if (e.k === "call" ? opts.calls !== false && !e.cps && !e.tail && pure.has(e.fn) && e.args.every(opts.ops ? (a) => pureTree(a, pure) : simple) : opts.ops && e.k === "op" && works(e) && pureTree(e, pure) && readsOf(e).size > 0) {
+          const k = said(e);
           const s = seen.get(k) ?? { node: e, paths: [] };
           s.paths.push(path);
           seen.set(k, s);
@@ -157,8 +191,7 @@ export function shareCalls(ir: CoreIR): number {
         if ([...reads].some((r) => bound.has(r))) continue;
         if (!copied) { copied = true; f.body = copy(f.body); done = true; break; }
         // let t = call in top, each call t.
-        const call = node as Extract<SExpr, { k: "call" }>;
-        const t = f.locals.push(ir.funcs[call.fn].result) - 1;
+        const t = f.locals.push(node.k === "call" ? ir.funcs[node.fn].result : OPS[(node as Extract<SExpr, { k: "op" }>).op].t) - 1;
         for (const p of paths) {
           const [parent, slot] = p[p.length - 1];
           const r = parent as unknown as Record<string, unknown>;
@@ -166,7 +199,7 @@ export function shareCalls(ir: CoreIR): number {
           else (r[slot.key] as SExpr[])[slot.at] = { k: "local", i: t };
         }
         const moved = { ...top } as SExpr;
-        const wrapped: SExpr = { k: "let", i: t, value: { ...call, args: call.args.map(copy) }, body: moved };
+        const wrapped: SExpr = { k: "let", i: t, value: copy(node), body: moved };
         // Put the let where top was.
         const holder = n > 0 ? paths[0][n - 1] : null;
         if (!holder) f.body = wrapped;
