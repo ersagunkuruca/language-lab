@@ -43,7 +43,7 @@ test("Bounce's compiled step multiplies only the parts its vectors, bivectors an
 // have, not all 16 of the projective algebra's, and it draws the same.
 test("raymarch's picture holds its multivectors in smaller structs and draws the same", async () => {
   const { lowerPicture } = await import("../../editor/picture.ts");
-  const { emitWgsl } = await import("../src/wgsl.ts");
+  const { emitWgsl, shaderTidied } = await import("../src/wgsl.ts");
   const { loadJs } = await import("../src/js-scalar.ts");
   const p = load("raymarch");
   const colour = p.code.defs.find((d) => p.pres.names[d] === "colour")!;
@@ -51,9 +51,11 @@ test("raymarch's picture holds its multivectors in smaller structs and draws the
     if (every) process.env.NO_ZP = "1"; else delete process.env.NO_ZP;
     try {
       const ir = lowerPicture({ ...p.code }, p.info, p.pres.names, { colour });
-      const f = loadJs(ir).get(colour)!, out: unknown[] = [];
-      for (let i = 0; i < 12; i++) for (let j = 0; j < 12; j++) out.push(f(i / 6 - 1, j / 6 - 1, 1.5));
-      return { wgsl: emitWgsl(ir), out: JSON.stringify(out) };
+      const pixels = (ir2: typeof ir) => { const f = loadJs(ir2).get(colour)!, out: unknown[] = []; for (let i = 0; i < 12; i++) for (let j = 0; j < 12; j++) out.push(f(i / 6 - 1, j / 6 - 1, 1.5)); return JSON.stringify(out); };
+      // The shader's tidied functions (C175) draw the same, bit for bit.
+      const out = pixels(ir), tidy = shaderTidied({ ...ir, funcs: ir.funcs.map((g) => ({ ...g, locals: [...g.locals] })) });
+      assert.equal(pixels(tidy), out);
+      return { wgsl: emitWgsl(ir), out };
     } finally { delete process.env.NO_ZP; }
   };
   const all = drawn(true), masked = drawn(false);
@@ -63,7 +65,9 @@ test("raymarch's picture holds its multivectors in smaller structs and draws the
     const sizes = new Map([...s.matchAll(/struct (Pga\w*) \{([^}]*)\}/g)].map((m) => [m[1], m[2].split(":").length - 1]));
     return Math.max(0, ...[...s.matchAll(/(Pga\w*)\(/g)].map((m) => sizes.get(m[1]) ?? 0));
   };
-  assert.equal(widest(all.wgsl.wgsl), 16);
+  // Every part kept, the shader still builds no 16-part one: each is read
+  // in a few parts where it's built (C175, record-parts.ts).
+  assert.ok(widest(all.wgsl.wgsl) < 16, `widest Pga struct ${widest(all.wgsl.wgsl)}`);
   assert.ok(widest(masked.wgsl.wgsl) < 8, `widest Pga struct ${widest(masked.wgsl.wgsl)}`);
   assert.equal(masked.out, all.out);
 });

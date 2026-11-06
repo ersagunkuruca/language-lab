@@ -73,6 +73,8 @@ test("examples/raymarch: the ray marcher goes to the GPU whole, normals and all"
   // each function works out sin(0.7 · time) once, not once per axis.
   for (const fn of s.wgsl.split(/\n(?=\/\/ )/)) assert.ok((fn.match(/sin\(0\.7 \* p\d\)/g) ?? []).length <= 1, fn.slice(0, 40));
   assert.ok((s.wgsl.match(/sin\(/g) ?? []).length < 12);
+  // place of reads 3 of a motor's 16 parts: none is built (C175).
+  assert.doesNotMatch(s.wgsl, /Pga_\d+\(/);
   assert.match(s.wgsl, /fn smaller_\d+\(p0: f32, p1: f32\) -> f32 \{\n {2}return min\(p0, p1\);/);
   // And the normal is the gradient: close to central differences, away
   // from the blend's seams, both from the code the shader gets and from

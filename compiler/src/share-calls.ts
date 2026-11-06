@@ -44,7 +44,7 @@ function always(e: SExpr, s: Slot): boolean {
 }
 
 // Locals a node gives a value to.
-function binds(e: SExpr): number[] {
+export function binds(e: SExpr): number[] {
   const r = e as unknown as Record<string, unknown>;
   switch (e.k) {
     case "let": return [e.i];
@@ -63,7 +63,7 @@ const SAFE_RT = (fn: string) => /^(int\.|text\.|number\.|pick:|array\.(first|res
 
 // Functions that only compute: no world, no closures called, no effects
 // handled or performed, no boxes set; and that always answer.
-function pureFuncs(ir: CoreIR): Set<number> {
+export function pureFuncs(ir: CoreIR): Set<number> {
   const calls = ir.funcs.map(() => new Set<number>());
   // Effects nowhere in it (but calls), and no answer only inside an attempt.
   const answers = ir.funcs.map(() => true);
@@ -96,7 +96,7 @@ function pureFuncs(ir: CoreIR): Set<number> {
 const PURE_OPS = new Set<Op>(["add", "sub", "mul", "div", "neg", "sqrt", "abs", "floor", "float32", "sin", "cos", "tan", "exp", "log", "pow", "atan2", "mod", "less", "equal", "beq", "and", "or", "not", "itof"]);
 // A value worked out from locals and constants by pure arithmetic, pure
 // calls and records.
-function pureTree(e: SExpr, pure: Set<number>): boolean {
+export function pureTree(e: SExpr, pure: Set<number>): boolean {
   switch (e.k) {
     case "num": case "int": case "bool": case "text": case "local": return true;
     case "get": case "field": return pureTree(e.rec, pure);
@@ -140,9 +140,11 @@ function said(e: SExpr): string {
     default: return "?";
   }
 }
-// Whether a value has arithmetic or a call in it: worth a local. Not the
-// sign of a local alone (−x costs nothing).
-const works = (e: SExpr): boolean => (e.k === "op" ? !((e.op === "neg" || e.op === "not") && simple(e.args[0])) : e.k === "call" || ((e.k === "get" || e.k === "field") ? works(e.rec) : (e.k === "make" || e.k === "new") && e.args.some(works)));
+// Whether a value has a call or costly arithmetic in it (sin, a square
+// root, a division): worth a local. Sums and products of inputs are left
+// as written, which the WGSL printer reads as a matrix times a vector.
+const COSTLY = new Set<Op>(["sin", "cos", "tan", "exp", "log", "pow", "atan2", "sqrt", "div", "mod"]);
+const works = (e: SExpr): boolean => (e.k === "op" && COSTLY.has(e.op)) || e.k === "call" || kids(e).some(([, k]) => works(k));
 // A node and the nodes in it copied; the types they carry kept as they are.
 function copy(e: SExpr): SExpr {
   const out = { ...e } as unknown as Record<string, unknown>;
