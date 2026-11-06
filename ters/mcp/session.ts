@@ -317,9 +317,9 @@ export class Session {
   // A hole filled from text as the editor reads it, and a relation's solve
   // as the view prints one (L231): `gap at(body = b, wall = w, gap = 0)`,
   // the ports given by name and the one left out the value.
-  private fill(code: Code, names: Names, hole: Id, text: string, def: Id): { ok: true; code: Code; names: Names } | { ok: false; reason: string } {
+  private fill(code: Code, names: Names, hole: Id, text: string, def: Id, as?: string): { ok: true; code: Code; names: Names } | { ok: false; reason: string } {
     const solve = this.solveIn(code, names, hole, text);
-    if (!solve) return this.fillOne(code, names, hole, text, def);
+    if (!solve) return this.fillOne(code, names, hole, text, def, as);
     let cur: { ok: true; code: Code; names: Names } | { ok: false; reason: string } = { ok: true, code: solve.code, names };
     for (const [h, t] of solve.fills) {
       if (!cur.ok) return cur;
@@ -328,12 +328,23 @@ export class Session {
     return cur;
   }
 
-  private fillOne(code: Code, names: Names, hole: Id, t: string, def: Id): { ok: true; code: Code; names: Names } | { ok: false; reason: string } {
+  private fillOne(code: Code, names: Names, hole: Id, t: string, def: Id, as?: string): { ok: true; code: Code; names: Names } | { ok: false; reason: string } {
     // An implementation's field left to the interface's ways (WAYS.md):
     // the editor's text reader doesn't take it (I183), so it is put in
     // here; the checker says if no way grounds it.
     if (norm(t) === "by its ways") return { ok: true, names, code: { nodes: { ...code.nodes, [hole]: { id: hole, kind: "ref", target: S.byItsWays } }, defs: code.defs } };
     const r = T.fillValue(code, names, editorInfo(code, names), hole, t, def);
+    // A field several types have, read on a value nothing has settled,
+    // fits as each (the editor offers each, E186): none is taken silently
+    // (I187: round 12's p.place took Ball's, and pocket toucher was then
+    // refused two definitions later). `as` names the one meant.
+    if (r.ok && r.choices && r.choices.length > 1) {
+      const labels = r.choices.map((c) => c.label.replace(/^as /, ""));
+      const want = as?.trim().replace(/^(an?|the)\s+/i, "").toLowerCase();
+      const pick = want ? r.choices.find((c, i) => labels[i].replace(/^an?\s+/i, "").toLowerCase() === want) : undefined;
+      if (pick?.edit.ok) return pick.edit;
+      return { ok: false, reason: `${t.trim()} reads ${labels.map((l) => `as ${l}`).join(" or ")}: a field more than one type has, on a value whose type nothing settles yet. Give \`as\` (${labels.map((l) => JSON.stringify(l.replace(/^an?\s+/i, ""))).join(" or ")}), or settle the type first` };
+    }
     if (r.ok || r.reason !== "a name alone is listed already") return r;
     // A name alone, which the editor's palette lists: the nearest in
     // scope (a case's field bound in its arm, I184), else a definition.
@@ -392,7 +403,7 @@ export class Session {
   // `kase`: in a match, the body of that one case, even where the view
   // shows it folded into otherwise; else an edit to a folded otherwise is
   // made in every case it stands for, as in the editor.
-  replace(at: string, text: string, find?: string, kase?: string): string {
+  replace(at: string, text: string, find?: string, kase?: string, as?: string): string {
     let target = this.part(at, find);
     if (kase) {
       const m = this.code.nodes[target];
@@ -408,7 +419,7 @@ export class Session {
       const info = editorInfo(this.code, this.names);
       const holed = T.toHole(this.code, this.names, info, target);
       if (!holed.ok || t === "□" || t === "?" || t === "") return holed;
-      return this.fill(holed.code, holed.names, target, t, def);
+      return this.fill(holed.code, holed.names, target, t, def, as);
     }, undefined, !kase);
   }
 

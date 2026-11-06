@@ -219,3 +219,18 @@ test("sharing through the MCP: publish, fetch, upgrade and downgrade, as lab doe
     assert.equal(call("downgrade", { name: "apart" }).text, "user uses nothing named apart that its store has versions of");
   } finally { process.env.HOME = home; }
 });
+
+test("a field two types have, on a value nothing types yet, is refused until `as` says whose (I187)", async () => {
+  const { mkdirSync, mkdtempSync, writeFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = join(mkdtempSync(join(tmpdir(), "ters-mcp-")), "pockets");
+  mkdirSync(dir);
+  writeFileSync(join(dir, "code.json"), '{"nodes":{},"defs":[]}');
+  text("open", { path: dir });
+  text("define", { name: "Ball", kind: "type", first: "ball(place: Float64, speed: Float64)" });
+  text("define", { name: "Pocket", kind: "type", first: "pocket(place: Float64, size: Float64)" });
+  text("define", { name: "pocket gap", kind: "function", params: ["p", "x"] });
+  assert.match(call("replace", { at: "pocket gap", find: "□", text: "p.place - x" }).text, /reads as a Ball or as a Pocket/);
+  assert.match(text("replace", { at: "pocket gap", find: "□", text: "p.place - x", as: "Pocket" }), /\(Pocket, Float64\) -> Float64/);
+});
