@@ -556,8 +556,9 @@ async function stuckRead() {
   await p.locator(".status", { hasText: "Filled with" }).waitFor({ timeout: 10000 }).catch(() => errors.push(`${where}: the typed text didn't fill the hole`));
   await p.locator('[data-act="t-run"]').first().click({ timeout: 5000 }).catch(() => errors.push(`${where}: no Run`));
   // The page's worker answered by the worker's own code, here in Node.
-  // Run's worker, not where-it-runs' (whereRuns.ts, L22a), made too.
-  const isRun = (a: unknown) => !!a && typeof a === "object" && !("whereRuns" in a);
+  // Run's worker, not where-it-runs' (whereRuns.ts, L22a), made too; and
+  // the run, not the warm-up the page sent it on opening (I177).
+  const isRun = (a: unknown) => !!a && typeof a === "object" && !("whereRuns" in a) && !("warm" in a);
   const w = p.workers.findLast((x) => x.asked.some(isRun));
   if (!w) { errors.push(`${where}: Run asked no worker`); return p.close(); }
   for (const m of await inWorker(w.asked.find(isRun))) w.onmessage?.({ data: m });

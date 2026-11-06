@@ -17,7 +17,7 @@ import { shower } from "./shown.ts";
 import { loadPrinted } from "../compiler/src/core-js.ts";
 import { checkedForRun, coreMain, type CoreMain } from "./coreMain.ts";
 import { Aborted as CoreAborted, Stopped as CoreStopped } from "../compiler/src/core-rt.ts";
-import { runMain, runProgram, toList, type World } from "../ters/src/lang/run.ts";
+import { resolvedFor, runMain, runProgram, toList, type World } from "../ters/src/lang/run.ts";
 import type { Info } from "../ters/src/lang/infer.ts";
 import { FILES, NETWORK } from "../ters/src/lang/types.ts";
 import { LIBRARY } from "../ters/src/lang/library.ts";
@@ -88,11 +88,28 @@ function withInput(world: World, stdin: string | undefined): World {
   };
 }
 
+// The same program as the last ask keeps its code (I177), so its check
+// for running and its arithmetic resolved (run.ts resolvedFor, kept by
+// the code) are kept too: calc's run was 0.14 s of checking and 0.6 s of
+// resolving each time, then printing `→ 0` at once.
+let lastAsk: { key: string; code: Code; def?: Id; lib?: ReturnType<typeof checkedForRun> } | null = null;
+function checked(given: SentCode, names: Names, pins: Pins, def: Id): ReturnType<typeof checkedForRun> {
+  const key = JSON.stringify([given, names, pins]);
+  if (lastAsk?.key !== key) lastAsk = { key, code: receivedCode(given) };
+  setDisplayNames(names);
+  setProgramPins(pins);
+  if (lastAsk.def === def && lastAsk.lib) return lastAsk.lib;
+  const lib = checkedForRun(lastAsk.code, names, def);
+  lastAsk.def = def;
+  lastAsk.lib = lib;
+  return lib;
+}
+
 self.onmessage = (e: MessageEvent<RunAsk | WarmAsk | BackAsk | CompileAsk | WhereAsk>) => {
   answers = null; paused = false;
   if ("warm" in e.data) {
     const { code, names, pins, def } = e.data;
-    try { setDisplayNames(names); setProgramPins(pins); checkedForRun(receivedCode(code), names, def); } catch { /* the run says what's wrong */ }
+    try { const lib = checked(code, names, pins, def); resolvedFor(lib.code, lib.info, lib.names); } catch { /* the run says what's wrong */ }
     return;
   }
   if ("whereRuns" in e.data) {
@@ -124,7 +141,6 @@ self.onmessage = (e: MessageEvent<RunAsk | WarmAsk | BackAsk | CompileAsk | Wher
     return post(searchBackwards(code, def, values, names, () => Date.now() > until));
   }
   const { code: given, names, pins, def, title, files, args, core, deny, stdin, replay, until } = e.data;
-  const code = receivedCode(given);
   const kept = new Map(files), wrote = new Map<string, string>();
   const store: Store = {
     getItem: (k) => kept.get(k) ?? null,
@@ -143,10 +159,8 @@ self.onmessage = (e: MessageEvent<RunAsk | WarmAsk | BackAsk | CompileAsk | Wher
     const world = logging.world;
     answers = logging.log;
     if (core && core.args === !!args && runPrinted(core, undefined, args, world, print, flush, () => [...wrote])) return;
-    setDisplayNames(names);
-    setProgramPins(pins);
-    const own = code.defs.filter((d) => !LIBRARY.code.nodes[d]);
-    const lib = checkedForRun(code, names, def), info = lib.info;
+    const lib = checked(given, names, pins, def), info = lib.info;
+    const own = lastAsk!.code.defs.filter((d) => !LIBRARY.code.nodes[d]);
     // Each lambda of the program's own definitions, by the definition it's in.
     const ownerOf = new Map<Id, Id>();
     for (const d of own) { const n = lib.code.nodes[d]; if (n?.kind === "def" && n.body) for (const x of subtree(lib.code, n.body)) if (lib.code.nodes[x]?.kind === "lambda") ownerOf.set(x, d); }
