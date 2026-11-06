@@ -222,7 +222,11 @@ function splitByGroups(code: Code, info: Info, names: Names, main: Id, defs: Id[
   // Unless the group itself loops over its lists by position (break's
   // `soonest from`, `item at` once a turn: n² on a cons list a call), where
   // converting once a call, n, is the cheaper (GAPS.md round 12 B1).
-  const byPosition = (g: (typeof groups)[number]) => g.defs.some((d) => loops(d) && uses(code, d, [array]).some((j) => LIBRARY.names[j] === "item at"));
+  // Its own body reads by position, not a definition it calls: machine's
+  // `items of words` loops over its words and leaves `item at` to `word
+  // at`, read a few times a line, so converting there costs more (10%).
+  const itemAt = (d: Id) => subtree(code, d).some((x) => { const n = code.nodes[x]; return n.kind === "ref" && LIBRARY.names[n.target] === "item at" && !!LIBRARY.code.nodes[n.target]; });
+  const byPosition = (g: (typeof groups)[number]) => g.defs.some((d) => loops(d) && itemAt(d));
   roots.splice(0, roots.length, ...roots.filter((r) => byPosition(groups.find((g) => g.root === r)!) || !defs.some((d) => d !== r && calls.get(d)?.has(r) && loops(d))));
   if (!roots.length) return null;
   let s = splitLists(code, info, names, defs, main, roots, array);
