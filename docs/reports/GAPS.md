@@ -2743,3 +2743,144 @@ recursion. Not measured as a cost; noted for the size of a page.
 2. L229, the steps of an effect, in the language lane, before more
    programs write schedulers.
 3. After C93, the K3 profile again.
+
+## Round 12: break, a pool break written through the MCP (2026-11-06)
+
+`compiler/gaps/break` plays a pool break event by event: sixteen balls
+rolling in straight lines and slowing by friction, an elastic collision
+when two meet, a bounce off a cushion, a drop into one of six pockets, a
+rest. Each step finds the soonest of every next event (about 120 pairs,
+the cushions, the pockets, the rests), moves every ball to it and applies
+it. When a ball touches something is a relation (L120d): the `Toucher`
+interface's `gap at(obstacle, ball, t)` read the other way is `first
+touch`, in closed form for a cushion and by its way, conservative
+advancement, for a pocket and for another ball. **86 definitions** (7
+types, an interface, 78 functions and values), against round 11's 66.
+
+What is new for the rounds: **it was written through the MCP server**
+(`lab mcp`'s tools, called in process by a driver script in the project's
+files, `gaps-round12/drive.ts`), one `define` and one `replace` of text a
+definition. What the MCP couldn't write was made first with the DSL
+(`gaps-round12/seed.ts`): the types' fields, the interface's ports and the
+way's mark. Driving all 86 took about 3 minutes, most of it rechecks.
+
+Files:
+- `compiler/gaps/break/`: the program and its README (credits).
+- `compiler/gaps/break.ideal.js`: the same break by hand: balls as objects
+  changed in place, the same order of events and the same arithmetic.
+- `compiler/gaps/break.ts`: the evaluator, the core IR's module and the
+  ideal in one process, on the representations `lab run` chooses.
+- `compiler/test/break.test.ts`: the core IR's main prints the ideal's 200
+  lines.
+- `compiler/gaps/bench-break.ts`: the table below.
+
+All three print the same 200 lines, the evaluator included; nothing needed
+a fix.
+
+### Results
+
+```
+way          main (3 breaks)   against the ideal
+ideal             4.3 ms
+core             62.4 ms           14.6x
+evaluator     42,919   ms       10,026x
+```
+
+`node compiler/gaps/bench-break.ts 9 --evaluator`, the median of 9 runs
+after a warm-up (the evaluator's one run). `lab run` takes the core IR's
+way, 4.7 s in all with the check and the choosing.
+
+### The gaps, ranked
+
+**B1. A list read by position, built afresh each step, stays a cons list
+(perf, 2.2x).** `soonest from(es, i, best)` reads the step's candidate
+events with `item at(es, i)` and `length(es)`, so each step walks the list
+O(n²) times: 55% of the samples. The chooser's groups (rep-groups.ts) do
+want `array of List` for `soonest`, but `splitByGroups` drops a group whose
+root is called from a loop of the rest's, since its lists would be
+converted at every turn (machine's `items of words`). Here a conversion a
+step is O(n) against O(n²) of walks. *Measured* by scanning the list once
+in the printed module (`soonest` rewritten by hand): 59 to 27 ms, the same
+200 lines. A cheaper fix in the program, a scan written as a match on the
+list, needs a match, which the MCP can't write (I184). Row C188.
+
+**B2. `first(a / b, else c)` and `first(sqrt(x), else c)` lower to a
+try/catch (perf, with B3 1.4x).** Division and `sqrt` give no answer as a
+value (R.FAIL), and nothing else in those bodies throws, yet each is
+printed as a try with the depth saved and restored, and checked for FAIL
+too. The module has 274 try blocks. `length of`, `rest time` and
+`heading`, called several times for every ball at every step, are all
+such.
+
+**B3. Small pure functions called again with the same input (perf).**
+`moved(b, t)` calls `heading(b)` twice and `speed(b)` three times (once
+through `rest time`), each a square root; nothing inlines or shares them.
+The ideal works each out once. *Measured* with B2: `moved` working
+`heading` and `speed` out once, and `rest time` and `length of` without
+the try, on top of B1: 27 to 17-19 ms, the same lines. Row C189 for both.
+
+**B4. What is left (about 4x after B1 to B3).** The collector is 16% of
+the samples: every move makes a new Ball and two Vecs, where the ideal
+changes its objects in place (C56's one holder, as in round 11's K3).
+The candidate events are made as records in lists, then flattened. No row
+until B1 to B3 are in and the profile is taken again.
+
+**B5. The evaluator (not the compiler's).** 43 s for main, 10,000x the
+ideal: every ball's motion is many small calls. L118c again.
+
+### What the MCP couldn't do
+
+Each was worked around, and the workaround is in the driver or the seed.
+
+- **M1. A type's fields, an interface's ports, a way's mark.** `define`
+  with kind type takes one case's name, so `ball(x: Float64, …)` became a
+  case named with all that text. Nothing writes an interface field's
+  ports, an implementation's `by its ways` ("nothing is named by its ways
+  here") or a definition's `way` and `cost`. Made with the DSL instead;
+  `by its ways` was filled into the saved file after the drive. Row I183.
+- **M2. A match's cases.** `split` on an input whose type nothing fixes yet
+  is "that variable's type has no cases" (I116 fixed this in the editor,
+  not in the MCP), and once a dummy `if e = quiet` fixed it, `replace`
+  of the `meets` case with `time` was "a name alone is listed already".
+  The Event type was made a record with a `kind` number instead, and every
+  loop over a list became recursion over an index with `item at`. That
+  is B1's cause. Row I184.
+- **M3. A relation's solve can't be written.** `t = gap at(obstacle = o,
+  ball = b, gap = 0)` is "nothing is named obstacle here", `gap at(o, b,
+  □, 0)` is "takes 3 inputs, given 4", and the form the view prints,
+  `gap at(a = o, b = b, d = 0)`, is "nothing is named a here". That view
+  shows the solve's ports as letters and its binder as a 26-character id
+  (impact's `until it touches`). `touch time` calls `first touch`
+  directly, so the program reads the relation one way only. Row L231.
+- **M4. Shared names read wrong, far from the cause.** `p.place` in
+  `pocket gap at` read Ball's `place` (Pocket had one too) with nothing
+  said, so `pocket toucher` was typed `Toucher Ball` and refused as a
+  second implementation two definitions later; the field was renamed
+  `middle`. The rack written as one expression found no reading ("as
+  float64 needs Fixed here, got Int") though each part read alone; it is
+  three definitions now. `show` can't be given as a function
+  (`map(ns, show)`: "nothing is named show here"). Row I187.
+- **M5. eval of anything recursive.** "played performs Diverge, which
+  nothing here handles": the loop could only be tried through `main`
+  and `lab run`. And eval shows `= 5 : a` and `List a` where the type is
+  known. Row I188.
+- **M6. crew opens with five errors.** The MCP session reports `released`,
+  `give`, `step`, `run floor` and `fresh floor` as wrong ("expected (a,
+  b), got std.pair Int Int") where `lab check` finds none: the session
+  doesn't bring a saved program's older shapes up to date as `lab` does.
+  Row I185.
+- **M7. No sharing.** Nothing publishes, fetches or upgrades: `lab
+  publish compiler/gaps/break shifted apart` works from the command line
+  (`Vec`, `shifted` and `apart` at version 1), not through the MCP. Row
+  I186.
+
+### Proposed order
+
+1. C188, a candidate list read by position in a loop stored as an array
+   (2.2x).
+2. M1 and M2 (I183, I184): with them the program could have been
+   written whole through the MCP, cases and all.
+3. C189, `first` over a division without a try and small functions
+   shared (1.4x).
+4. L231, a relation's solve written as text, so a program reads it both
+   ways.
