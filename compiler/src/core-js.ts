@@ -155,6 +155,12 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
   // copy, and R.drive keeps the calls waiting in an array.
   const deep = deepFuncs(ir.funcs);
   const gens = names.map((n) => `${n}$h`);
+  // A closure's code with a heap copy has it as `.h`, and a heap copy's
+  // apply that may call back into its cycle runs it on the heap (R.aph).
+  const coded = new Map<string, Set<number>>();
+  const closures = (e: SExpr): void => { if (e.k === "closure") { const s = coded.get(e.t.key) ?? new Set(); coded.set(e.t.key, s.add(e.fn)); } kidsOf(e).forEach(closures); };
+  ir.funcs.forEach((f) => closures(f.body));
+  const heapCodes = [...deep.keys()].filter((i) => [...coded.values()].some((s) => s.has(i)));
   const text = ir.funcs.flatMap((f, i) => {
     if (!deep.has(i)) return [func(f, i, null)];
     const ps = f.params.map((_, j) => `l${j}`).join(", ");
@@ -198,6 +204,7 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
     ...rtLines,
     ...worlds.map((_, i) => `const w${i} = R.worlds[${i}];`),
     ...text,
+    ...heapCodes.map((i) => `${names[i]}.h = ${gens[i]};`),
     // A partial function given out says no answer by throwing, as the
     // evaluator's runtime expects.
     // A call from outside starts at the depth it found, whatever it threw.
@@ -212,6 +219,9 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
   function func(f: SFunc, i: number, cycle: Set<number> | null): string {
     let temps = 0;
     const call = (fn: number, xs: string[]) => (cycle?.has(fn) ? `(yield [${gens[fn]}, [${xs.join(", ")}]])` : `${names[fn]}(${xs.join(", ")})`);
+    // A closure applied, given out FAIL as a value: on the heap in a heap
+    // copy when it may be one of the cycle's (L72e1d).
+    const ap = (t: { key: string }, xs: string[]) => (cycle && [...coded.get(t.key) ?? []].some((g) => cycle.has(g)) ? `(yield [R.aph, [${xs.join(", ")}]])` : `R.ap(${xs.join(", ")})`);
     // A catch that goes on puts the depth back as it was at its try.
     const keep = () => { if (!deep.size) return ["", ""]; const t = temp(); return [`const ${t} = depth; `, `depth = ${t}; `]; };
     const temp = () => `t${temps++}`;
@@ -246,7 +256,7 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
       if (!onFail || !partial) return ex(e, out, d);
       let c: string;
       if (e.k === "call") c = call(e.fn, inputs(e.args, out, d));
-      else { const fn = ex(e.fn, out, d), xs = inputs(e.args, out, d); out.push(`${d}${local(e.tmp)} = ${fn};`); c = `R.ap(${[local(e.tmp), ...xs].join(", ")})`; }
+      else { const fn = ex(e.fn, out, d), xs = inputs(e.args, out, d); out.push(`${d}${local(e.tmp)} = ${fn};`); c = ap(e.t, [local(e.tmp), ...xs]); }
       const t = temp();
       out.push(`${d}const ${t} = ${c};`, `${d}if (${t} === R.FAIL) ${onFail}`);
       return t;
@@ -324,6 +334,7 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
         case "apply": {
           const c = ex(e.fn, pre, d), xs = e.args.map((a) => ex(a, pre, d));
           pre.push(`${d}${local(e.tmp)} = ${c};`);
+          if (cycle && ap(e.t, []).startsWith("(yield")) return e.t.partial ? `R.ck(${ap(e.t, [local(e.tmp), ...xs])})` : ap(e.t, [local(e.tmp), ...xs]);
           return e.t.partial ? `R.ck(R.ap(${[local(e.tmp), ...xs].join(", ")}))` : `${local(e.tmp)}(${xs.join(", ")})`;
         }
         case "case": {
@@ -425,7 +436,7 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
       if (failable && e.k === "apply" && e.t.partial) {
         const c = ex(e.fn, out, d), xs = inputs(e.args, out, d);
         out.push(`${d}${local(e.tmp)} = ${c};`);
-        return give(`R.ap(${[local(e.tmp), ...xs].join(", ")})`);
+        return give(ap(e.t, [local(e.tmp), ...xs]));
       }
       // A match hands `to` to its arms, so a self call in one is the
       // loop's next round, not a call as deep as the data (L181b).
@@ -558,11 +569,17 @@ const DEPTH = 1000;
 // (the ones it calls that call it back): those in a cycle of two or more,
 // or calling themselves other than as the loop's next round.
 function deepFuncs(funcs: SFunc[]): Map<number, Set<number>> {
+  // An apply may call the code of any closure of its type (L72e1d): a
+  // search's rest, in continuation passing, is such a cycle.
+  const coded = new Map<string, Set<number>>();
+  const closures = (e: SExpr): void => { if (e.k === "closure") { const s = coded.get(e.t.key) ?? new Set(); coded.set(e.t.key, s.add(e.fn)); } kidsOf(e).forEach(closures); };
+  funcs.forEach((f) => closures(f.body));
   const calls = funcs.map((f, me) => {
     const out = new Set<number>();
     let other = false;
     const walk = (e: SExpr, tail: boolean): void => {
       if (e.k === "call") { out.add(e.fn); if (e.fn === me && !(e.tail && tail)) other = true; }
+      if (e.k === "apply") coded.get(e.t.key)?.forEach((g) => { out.add(g); if (g === me) other = true; });
       // Only a call where block() makes the loop counts as the loop.
       const inTail = (x: SExpr) => tail && (e.k === "case" ? x !== e.scrut : e.k === "let" ? x === e.body : e.k === "if" ? x !== e.cond : false);
       kidsOf(e).forEach((x) => walk(x, inTail(x)));
