@@ -619,12 +619,14 @@ export function ownNodes(code: Code): Node[] {
   const own = layers.get(code) && !derived.has(code) ? scanningOnLayer(code, () => offLayer(code)) : undefined;
   return own ? [...own].flatMap((id) => (code.nodes[id] ? [code.nodes[id]] : [])) : Object.values(code.nodes);
 }
-export function scanningOnLayer<T>(code: Code, step: () => T): T {
+// The ids of a program on its layer that aren't the layer's as they are
+// there (its own nodes, a layer node it changed or dropped), or undefined
+// off a layer. Found once per version of the nodes, as sizeOf counts them
+// once: an edit's check, its panels and its hole's fillings each scan on
+// the layer, and each walked the ~27,000 ids again (I167i).
+export function changedFromLayer(code: Code): Set<Id> | undefined {
   const layer = layers.get(code);
-  if (!layer || derived.has(code)) return step();
-  // Found once per version of the nodes, as sizeOf counts them once: an
-  // edit's check, its panels and its hole's fillings each scan on the
-  // layer, and each walked the ~27,000 ids again (I167i).
+  if (!layer) return undefined;
   const kept = changedOnLayer.get(code.nodes);
   let changed = kept?.layer === layer ? kept.changed : undefined;
   if (!changed) {
@@ -637,6 +639,13 @@ export function scanningOnLayer<T>(code: Code, step: () => T): T {
     if (same !== sizeOf(under)) for (const id in under) if (!(id in code.nodes)) changed.add(id);
     changedOnLayer.set(code.nodes, { layer, changed });
   }
+  return changed;
+}
+
+export function scanningOnLayer<T>(code: Code, step: () => T): T {
+  const layer = layers.get(code);
+  if (!layer || derived.has(code)) return step();
+  const changed = changedFromLayer(code)!;
   derived.set(code, { base: layer, changed, stable: true });
   try { return step(); } finally { derived.delete(code); }
 }
