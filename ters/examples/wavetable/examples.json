@@ -1,0 +1,18 @@
+{
+  "qh4cjhmitbna7ej2kh21st0u86": [
+    {
+      "main": {
+        "arguments": [],
+        "input": "",
+        "files": {},
+        "printed": [
+          "table: 256",
+          "440 Hz, its first samples: [0, 0.049067674, 0.09801714, 0.170961889, 0.21910124, 0.266712757]",
+          "440 Hz, its power over 1/20 of a second: 0.49932686"
+        ],
+        "errors": [],
+        "exit": 0
+      }
+    }
+  ]
+}
