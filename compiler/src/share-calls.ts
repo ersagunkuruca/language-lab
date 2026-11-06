@@ -6,9 +6,9 @@
 //
 // Pure: the function and everything it calls does nothing but compute,
 // and always answers (not partial). Nothing is moved past a branch: the
-// let goes at the smallest part holding both calls that runs each of
-// them whenever it runs, and only where what the calls read is bound
-// outside that part.
+// let goes at the smallest part holding the calls, where one of them runs
+// whenever the part does (the others may be under a branch, C194), and
+// only where what the calls read is bound outside that part.
 //
 // The same for arithmetic made twice (C175): `sin(0.7 · t)` that each of
 // a gradient's per-axis copies works out, or a shader's `p.x − 0.55 ·
@@ -184,7 +184,9 @@ export function shareCalls(ir: CoreIR, opts: { ops?: boolean; calls?: boolean } 
         // At n the paths part (or one call holds another, n = its length).
         const top = n < paths[0].length ? paths[0][n][0] : null;
         if (!top || !paths.every((p) => p[n][0] === top)) continue;
-        if (!paths.every((p) => p.slice(n).every(([e, s]) => always(e, s)))) continue;
+        // One of them runs whenever the part does: the others, under a
+        // branch, read what it works out (C194).
+        if (!paths.some((p) => p.slice(n).every(([e, s]) => always(e, s)))) continue;
         // What the calls read is bound outside the part.
         const reads = readsOf(node);
         const bound = new Set<number>();

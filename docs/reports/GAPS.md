@@ -2829,6 +2829,12 @@ run is made once (share-calls.ts: `moved`'s `heading`): 28 to 25 ms,
 measured in one process against the same module without it. Sharing
 across calls (`speed` in `moved` and again in `rest time`, which it
 calls) needs inlining: row C194.
+*Fixed (C194):* a small pure function that calls others, and does no
+attempt of its own, is put where it is called (inline-pure.ts), and a
+call is shared where one of the copies runs whenever the part does (the
+others under a branch read it): `moved` works `rest time`, `heading`,
+`speed` and `friction` out once each, 25 to 19 ms in one process against
+the same module without it, as by hand.
 
 **B4. What is left (about 4x after B1 to B3).** The collector is 16% of
 the samples: every move makes a new Ball and two Vecs, where the ideal
