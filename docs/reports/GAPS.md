@@ -2822,6 +2822,13 @@ through `rest time`), each a square root; nothing inlines or shares them.
 The ideal works each out once. *Measured* with B2: `moved` working
 `heading` and `speed` out once, and `rest time` and `length of` without
 the try, on top of B1: 27 to 17-19 ms, the same lines. Row C189 for both.
+*Fixed in part (C189):* an attempt whose body throws nothing prints with
+no try (core-js.ts; 40 to 20 in break's module, no measurable time on
+V8), and a pure call made twice with the same inputs where both always
+run is made once (share-calls.ts: `moved`'s `heading`): 28 to 25 ms,
+measured in one process against the same module without it. Sharing
+across calls (`speed` in `moved` and again in `rest time`, which it
+calls) needs inlining: row C194.
 
 **B4. What is left (about 4x after B1 to B3).** The collector is 16% of
 the samples: every move makes a new Ball and two Vecs, where the ideal
