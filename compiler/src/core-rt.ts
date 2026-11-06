@@ -374,6 +374,13 @@ export const RUNTIME = {
     if (f.code) return f.code(f, ...xs);
     try { return f(...xs); } catch (e) { if (e === FAIL) return FAIL; throw e; }
   },
+  // A closure applied from a heap copy (L72e1d): its code's heap copy, if
+  // it has one, run by R.drive; otherwise as R.ap.
+  aph: function* (f: { code?: ((...xs: unknown[]) => unknown) & { h?: (...xs: unknown[]) => Generator } } & ((...xs: unknown[]) => unknown), ...xs: unknown[]): Generator<[(...xs: unknown[]) => Generator, unknown[]], unknown, unknown> {
+    const h = f.code?.h;
+    if (h) return yield [h, [f, ...xs]];
+    return RUNTIME.ap(f, ...xs);
+  },
   // What a handler of Abort around a wait does with what its body threw
   // (C182): its case, or, for a page's wait, the same once the run is
   // resumed there, inside the handler as the evaluator's machine has it.
