@@ -436,10 +436,10 @@ Bytes are a sequence of whole numbers from 0 to 255, for binary formats, files, 
 Json is JSON's values as data: null, a Bool, a Float64, a Text, a list, or an object whose fields are named and in order. json printed writes one as JSON text, and json read reads it back.
 
 - **Json** (type). A JSON value (RFC 8259): null, a Bool, a Float64, a Text, a list of them or an object of named ones, in order. json printed writes one as JSON text.
-- **json printed** : `(Json) -> Text`. The JSON text of a Json value (RFC 8259): json printed(json object([("a", json list([json number(1), json null]))])) is {"a":[1,null]}. Text is quoted with ", \ and control characters escaped.
+- **json printed** : `(Json) -[Diverge]-> Text`. The JSON text of a Json value (RFC 8259): json printed(json object([("a", json list([json number(1), json null]))])) is {"a":[1,null]}. Text is quoted with ", \ and control characters escaped.
 - **json spelled** : `(Json) -[Choice, Diverge]-> Text`. Every JSON text that spells a Json value (RFC 8259), the one json printed writes first: blanks between the tokens, and each character as itself or escaped. Run backwards it reads JSON. A number is spelled as show writes it first, then any way json read reads it (1.0, 1e3).
 - **blank** : `() -[Choice, Diverge]-> Text`. Spaces, tabs, line ends and carriage returns between a text's tokens: "" first, then any run of them. A printer that writes it prints none, and reads any.
-- **json printed indented** : `(Json, Int) -> Text`. The Json value as text over lines, each item and field on a line of its own and indented step spaces a level: the same text as JavaScript's JSON.stringify(value, null, step). A step below 1 prints it on one line, as json printed.
+- **json printed indented** : `(Json, Int) -[Diverge]-> Text`. The Json value as text over lines, each item and field on a line of its own and indented step spaces a level: the same text as JavaScript's JSON.stringify(value, null, step). A step below 1 prints it on one line, as json printed.
 - **json read** : `(Text) -[Diverge, Abort]-> Json`. The Json value a JSON text spells (RFC 8259), json spelled run backwards: json read("[1, true]") is json list([json number(1), json bool(true)]). Stops on text that isn't JSON.
 - **json field** : `(Json, Text) -[Choice]-> Json`. The value of an object's field with this name, the first if there are several. No answer for a missing field or a value that isn't an object.
 - **json as number** : `(Json) -[Choice]-> Float64`. The Float64 a json number holds; no answer for any other kind.
